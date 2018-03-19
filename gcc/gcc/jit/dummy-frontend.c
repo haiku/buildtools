@@ -1,5 +1,5 @@
 /* jit.c -- Dummy "frontend" for use during JIT-compilation.
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,36 +20,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "opts.h"
-#include "signop.h"
-#include "hash-set.h"
-#include "fixed-value.h"
-#include "alias.h"
-#include "flags.h"
-#include "symtab.h"
-#include "tree-core.h"
+#include "jit-playback.h"
 #include "stor-layout.h"
-#include "inchash.h"
-#include "tree.h"
 #include "debug.h"
 #include "langhooks.h"
 #include "langhooks-def.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "machmode.h"
-#include "tm.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "ipa-ref.h"
-#include "dumpfile.h"
-#include "cgraph.h"
+#include "diagnostic.h"
 
-#include "jit-common.h"
-#include "jit-logging.h"
-#include "jit-playback.h"
 
 #include <mpfr.h>
 
@@ -114,6 +91,35 @@ struct ggc_root_tab jit_root_tab[] =
     LAST_GGC_ROOT_TAB
   };
 
+/* JIT-specific implementation of diagnostic callbacks.  */
+
+/* Implementation of "begin_diagnostic".  */
+
+static void
+jit_begin_diagnostic (diagnostic_context */*context*/,
+		      diagnostic_info */*diagnostic*/)
+{
+  gcc_assert (gcc::jit::active_playback_ctxt);
+  JIT_LOG_SCOPE (gcc::jit::active_playback_ctxt->get_logger ());
+
+  /* No-op (apart from logging); the real error-handling is done in the
+     "end_diagnostic" hook.  */
+}
+
+/* Implementation of "end_diagnostic".  */
+
+static void
+jit_end_diagnostic (diagnostic_context *context,
+		    diagnostic_info *diagnostic)
+{
+  gcc_assert (gcc::jit::active_playback_ctxt);
+  JIT_LOG_SCOPE (gcc::jit::active_playback_ctxt->get_logger ());
+
+  /* Delegate to the playback context (and thence to the
+     recording context).  */
+  gcc::jit::active_playback_ctxt->add_diagnostic (context, diagnostic);
+}
+
 /* Language hooks.  */
 
 static bool
@@ -129,7 +135,11 @@ jit_langhook_init (void)
       registered_root_tab = true;
     }
 
-  build_common_tree_nodes (false, false);
+  gcc_assert (global_dc);
+  global_dc->begin_diagnostic = jit_begin_diagnostic;
+  global_dc->end_diagnostic = jit_end_diagnostic;
+
+  build_common_tree_nodes (false);
 
   /* I don't know why this has to be done explicitly.  */
   void_list_node = build_tree_list (NULL_TREE, void_type_node);
@@ -161,6 +171,17 @@ jit_langhook_type_for_mode (enum machine_mode mode, int unsignedp)
   if (mode == TYPE_MODE (double_type_node))
     return double_type_node;
 
+  if (mode == TYPE_MODE (intQI_type_node))
+    return unsignedp ? unsigned_intQI_type_node : intQI_type_node;
+  if (mode == TYPE_MODE (intHI_type_node))
+    return unsignedp ? unsigned_intHI_type_node : intHI_type_node;
+  if (mode == TYPE_MODE (intSI_type_node))
+    return unsignedp ? unsigned_intSI_type_node : intSI_type_node;
+  if (mode == TYPE_MODE (intDI_type_node))
+    return unsignedp ? unsigned_intDI_type_node : intDI_type_node;
+  if (mode == TYPE_MODE (intTI_type_node))
+    return unsignedp ? unsigned_intTI_type_node : intTI_type_node;
+
   if (mode == TYPE_MODE (integer_type_node))
     return unsignedp ? unsigned_type_node : integer_type_node;
 
@@ -183,14 +204,6 @@ jit_langhook_type_for_mode (enum machine_mode mode, int unsignedp)
     }
 
   /* gcc_unreachable */
-  return NULL;
-}
-
-static tree
-jit_langhook_type_for_size (unsigned int bits ATTRIBUTE_UNUSED,
-			    int unsignedp ATTRIBUTE_UNUSED)
-{
-  gcc_unreachable ();
   return NULL;
 }
 
@@ -221,21 +234,6 @@ jit_langhook_getdecls (void)
   return NULL;
 }
 
-static void
-jit_langhook_write_globals (void)
-{
-  gcc::jit::playback::context *ctxt = gcc::jit::active_playback_ctxt;
-  gcc_assert (ctxt);
-  JIT_LOG_SCOPE (ctxt->get_logger ());
-
-  ctxt->write_global_decls_1 ();
-
-  /* This is the hook that runs the middle and backends: */
-  symtab->finalize_compilation_unit ();
-
-  ctxt->write_global_decls_2 ();
-}
-
 #undef LANG_HOOKS_NAME
 #define LANG_HOOKS_NAME		"libgccjit"
 
@@ -248,9 +246,6 @@ jit_langhook_write_globals (void)
 #undef LANG_HOOKS_TYPE_FOR_MODE
 #define LANG_HOOKS_TYPE_FOR_MODE	jit_langhook_type_for_mode
 
-#undef LANG_HOOKS_TYPE_FOR_SIZE
-#define LANG_HOOKS_TYPE_FOR_SIZE	jit_langhook_type_for_size
-
 #undef LANG_HOOKS_BUILTIN_FUNCTION
 #define LANG_HOOKS_BUILTIN_FUNCTION	jit_langhook_builtin_function
 
@@ -262,9 +257,6 @@ jit_langhook_write_globals (void)
 
 #undef LANG_HOOKS_GETDECLS
 #define LANG_HOOKS_GETDECLS		jit_langhook_getdecls
-
-#undef LANG_HOOKS_WRITE_GLOBALS
-#define LANG_HOOKS_WRITE_GLOBALS	jit_langhook_write_globals
 
 struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
 

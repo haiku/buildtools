@@ -1,7 +1,7 @@
 /* Miscellaneous utilities for GIMPLE streaming.  Things that are used
    in both input and output are here.
 
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Contributed by Doug Kwan <dougkwan@google.com>
 
 This file is part of GCC.
@@ -23,40 +23,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "toplev.h"
-#include "flags.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
 #include "gimple.h"
-#include "bitmap.h"
-#include "diagnostic-core.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "tree-streamer.h"
+#include "cgraph.h"
 #include "lto-streamer.h"
+#include "toplev.h"
 #include "lto-section-names.h"
-#include "streamer-hooks.h"
 
 /* Statistics gathered during LTO, WPA and LTRANS.  */
 struct lto_stats_d lto_stats;
@@ -291,27 +265,25 @@ struct tree_hash_entry
   intptr_t value;
 };
 
-struct tree_entry_hasher : typed_noop_remove <tree_hash_entry>
+struct tree_entry_hasher : nofree_ptr_hash <tree_hash_entry>
 {
-  typedef tree_hash_entry value_type;
-  typedef tree_hash_entry compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *, const compare_type *);
+  static inline hashval_t hash (const tree_hash_entry *);
+  static inline bool equal (const tree_hash_entry *, const tree_hash_entry *);
 };
 
 inline hashval_t
-tree_entry_hasher::hash (const value_type *e)
+tree_entry_hasher::hash (const tree_hash_entry *e)
 {
   return htab_hash_pointer (e->key);
 }
 
 inline bool
-tree_entry_hasher::equal (const value_type *e1, const compare_type *e2)
+tree_entry_hasher::equal (const tree_hash_entry *e1, const tree_hash_entry *e2)
 {
   return (e1->key == e2->key);
 }
 
-static hash_table<tree_hash_entry> *tree_htab;
+static hash_table<tree_entry_hasher> *tree_htab;
 #endif
 
 /* Initialization common to the LTO reader and writer.  */
@@ -319,16 +291,15 @@ static hash_table<tree_hash_entry> *tree_htab;
 void
 lto_streamer_init (void)
 {
-#ifdef ENABLE_CHECKING
   /* Check that all the TS_* handled by the reader and writer routines
      match exactly the structures defined in treestruct.def.  When a
      new TS_* astructure is added, the streamer should be updated to
      handle it.  */
-  streamer_check_handled_ts_structures ();
-#endif
+  if (flag_checking)
+    streamer_check_handled_ts_structures ();
 
 #ifdef LTO_STREAMER_DEBUG
-  tree_htab = new hash_table<tree_hash_entry> (31);
+  tree_htab = new hash_table<tree_entry_hasher> (31);
 #endif
 }
 
@@ -405,12 +376,13 @@ lto_orig_address_remove (tree t)
 /* Check that the version MAJOR.MINOR is the correct version number.  */
 
 void
-lto_check_version (int major, int minor)
+lto_check_version (int major, int minor, const char *file_name)
 {
   if (major != LTO_major_version || minor != LTO_minor_version)
     fatal_error (input_location,
-		 "bytecode stream generated with LTO version %d.%d instead "
-	         "of the expected %d.%d",
+		 "bytecode stream in file %qs generated with LTO version "
+		 "%d.%d instead of the expected %d.%d",
+		 file_name,
 		 major, minor,
 		 LTO_major_version, LTO_minor_version);
 }

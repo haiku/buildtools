@@ -4,6 +4,7 @@
 /* Test just twice, once with -O0 non-fortified, once with -O2 fortified.  */
 /* { dg-skip-if "" { *-*-* }  { "*" } { "-O0" "-O2" } } */
 /* { dg-skip-if "" { *-*-* }  { "-flto" } { "" } } */
+/* { dg-require-effective-target alloca } */
 
 typedef __SIZE_TYPE__ size_t;
 extern void *memset (void *, int, size_t);
@@ -709,4 +710,4 @@ f4 (char *x, char **y, int z, char w[64])
   return z;
 }
 
-/* { dg-prune-output "\[\n\r\]*will always overflow\[\n\r\]*" } */
+/* { dg-prune-output "\[\n\r\]*writing\[\n\r\]*" } */

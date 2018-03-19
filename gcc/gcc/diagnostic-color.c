@@ -1,5 +1,5 @@
 /* Output colorization.
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -164,9 +164,16 @@ static struct color_cap color_dict[] =
   { "warning", SGR_SEQ (COLOR_BOLD COLOR_SEPARATOR COLOR_FG_MAGENTA),
 	       7, false },
   { "note", SGR_SEQ (COLOR_BOLD COLOR_SEPARATOR COLOR_FG_CYAN), 4, false },
-  { "caret", SGR_SEQ (COLOR_BOLD COLOR_SEPARATOR COLOR_FG_GREEN), 5, false },
+  { "range1", SGR_SEQ (COLOR_FG_GREEN), 6, false },
+  { "range2", SGR_SEQ (COLOR_FG_BLUE), 6, false },
   { "locus", SGR_SEQ (COLOR_BOLD), 5, false },
   { "quote", SGR_SEQ (COLOR_BOLD), 5, false },
+  { "fixit-insert", SGR_SEQ (COLOR_FG_GREEN), 12, false },
+  { "fixit-delete", SGR_SEQ (COLOR_FG_RED), 12, false },
+  { "diff-filename", SGR_SEQ (COLOR_BOLD), 13, false },
+  { "diff-hunk", SGR_SEQ (COLOR_FG_CYAN), 9, false },
+  { "diff-delete", SGR_SEQ (COLOR_FG_RED), 11, false },
+  { "diff-insert", SGR_SEQ (COLOR_FG_GREEN), 11, false },
   { NULL, NULL, 0, false }
 };
 
@@ -195,7 +202,10 @@ colorize_stop (bool show_color)
 }
 
 /* Parse GCC_COLORS.  The default would look like:
-   GCC_COLORS='error=01;31:warning=01;35:note=01;36:caret=01;32:locus=01:quote=01'
+   GCC_COLORS='error=01;31:warning=01;35:note=01;36:\
+   range1=32:range2=34:locus=01:quote=01:\
+   fixit-insert=32:fixit-delete=31'\
+   diff-filename=01:diff-hunk=32:diff-delete=31:diff-insert=32'
    No character escaping is needed or supported.  */
 static bool
 parse_gcc_colors (void)

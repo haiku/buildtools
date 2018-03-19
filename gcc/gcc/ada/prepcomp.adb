@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2003-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 2003-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -661,7 +661,7 @@ package body Prepcomp is
             Scn.Scanner.Initialize_Scanner (Deffile);
             Prep.Parse_Def_File;
 
-            --  Reset the behaviour of the scanner to the default
+            --  Reset the behavior of the scanner to the default
 
             Scn.Scanner.Set_End_Of_Line_As_Token (False);
 

@@ -1,5 +1,5 @@
 /* Natural loop analysis code for GNU compiler.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,39 +20,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
 #include "rtl.h"
-#include "hard-reg-set.h"
-#include "obstack.h"
-#include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "cfgloop.h"
-#include "symtab.h"
-#include "flags.h"
-#include "statistics.h"
-#include "double-int.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "alias.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
+#include "predict.h"
+#include "memmodel.h"
 #include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
+#include "cfgloop.h"
+#include "explow.h"
 #include "expr.h"
 #include "graphds.h"
 #include "params.h"
@@ -257,14 +232,22 @@ average_num_loop_insns (const struct loop *loop)
    value.  */
 
 gcov_type
-expected_loop_iterations_unbounded (const struct loop *loop)
+expected_loop_iterations_unbounded (const struct loop *loop,
+				    bool *read_profile_p)
 {
   edge e;
   edge_iterator ei;
+  gcov_type expected;
+  
+  if (read_profile_p)
+    *read_profile_p = false;
 
-  if (loop->latch->count || loop->header->count)
+  /* If we have no profile at all, use AVG_LOOP_NITER.  */
+  if (profile_status_for_fn (cfun) == PROFILE_ABSENT)
+    expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);
+  else if (loop->latch && (loop->latch->count || loop->header->count))
     {
-      gcov_type count_in, count_latch, expected;
+      gcov_type count_in, count_latch;
 
       count_in = 0;
       count_latch = 0;
@@ -278,9 +261,11 @@ expected_loop_iterations_unbounded (const struct loop *loop)
       if (count_in == 0)
 	expected = count_latch * 2;
       else
-	expected = (count_latch + count_in - 1) / count_in;
-
-      return expected;
+	{
+	  expected = (count_latch + count_in - 1) / count_in;
+	  if (read_profile_p)
+	    *read_profile_p = true;
+	}
     }
   else
     {
@@ -290,23 +275,34 @@ expected_loop_iterations_unbounded (const struct loop *loop)
       freq_latch = 0;
 
       FOR_EACH_EDGE (e, ei, loop->header->preds)
-	if (e->src == loop->latch)
-	  freq_latch = EDGE_FREQUENCY (e);
+	if (flow_bb_inside_loop_p (loop, e->src))
+	  freq_latch += EDGE_FREQUENCY (e);
 	else
 	  freq_in += EDGE_FREQUENCY (e);
 
       if (freq_in == 0)
-	return freq_latch * 2;
-
-      return (freq_latch + freq_in - 1) / freq_in;
+	{
+	  /* If we have no profile at all, use AVG_LOOP_NITER iterations.  */
+	  if (!freq_latch)
+	    expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);
+	  else
+	    expected = freq_latch * 2;
+	}
+      else
+        expected = (freq_latch + freq_in - 1) / freq_in;
     }
+
+  HOST_WIDE_INT max = get_max_loop_iterations_int (loop);
+  if (max != -1 && max < expected)
+    return max;
+  return expected;
 }
 
 /* Returns expected number of LOOP iterations.  The returned value is bounded
    by REG_BR_PROB_BASE.  */
 
 unsigned
-expected_loop_iterations (const struct loop *loop)
+expected_loop_iterations (struct loop *loop)
 {
   gcov_type expected = expected_loop_iterations_unbounded (loop);
   return (expected > REG_BR_PROB_BASE ? REG_BR_PROB_BASE : expected);
@@ -336,9 +332,9 @@ init_set_costs (void)
 {
   int speed;
   rtx_insn *seq;
-  rtx reg1 = gen_raw_REG (SImode, FIRST_PSEUDO_REGISTER);
-  rtx reg2 = gen_raw_REG (SImode, FIRST_PSEUDO_REGISTER + 1);
-  rtx addr = gen_raw_REG (Pmode, FIRST_PSEUDO_REGISTER + 2);
+  rtx reg1 = gen_raw_REG (SImode, LAST_VIRTUAL_REGISTER + 1);
+  rtx reg2 = gen_raw_REG (SImode, LAST_VIRTUAL_REGISTER + 2);
+  rtx addr = gen_raw_REG (Pmode, LAST_VIRTUAL_REGISTER + 3);
   rtx mem = validize_mem (gen_rtx_MEM (SImode, addr));
   unsigned i;
 

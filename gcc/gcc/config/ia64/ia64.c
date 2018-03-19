@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler.
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2017 Free Software Foundation, Inc.
    Contributed by James E. Wilson <wilson@cygnus.com> and
 		  David Mosberger <davidm@hpl.hp.com>.
 
@@ -22,75 +22,37 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
+#include "memmodel.h"
+#include "cfghooks.h"
+#include "df.h"
+#include "tm_p.h"
 #include "stringpool.h"
+#include "optabs.h"
+#include "regs.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "diagnostic-core.h"
+#include "alias.h"
+#include "fold-const.h"
 #include "stor-layout.h"
 #include "calls.h"
 #include "varasm.h"
-#include "regs.h"
-#include "hard-reg-set.h"
-#include "insn-config.h"
-#include "conditions.h"
 #include "output.h"
 #include "insn-attr.h"
 #include "flags.h"
-#include "recog.h"
-#include "hashtab.h"
-#include "function.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
 #include "explow.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
-#include "insn-codes.h"
-#include "optabs.h"
-#include "except.h"
-#include "ggc.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "basic-block.h"
 #include "libfuncs.h"
-#include "diagnostic-core.h"
 #include "sched-int.h"
-#include "timevar.h"
-#include "target.h"
-#include "target-def.h"
 #include "common/common-target.h"
-#include "tm_p.h"
-#include "hash-table.h"
 #include "langhooks.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-fold.h"
-#include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimplify.h"
 #include "intl.h"
-#include "df.h"
 #include "debug.h"
 #include "params.h"
 #include "dbgcnt.h"
@@ -100,6 +62,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "opts.h"
 #include "dumpfile.h"
 #include "builtins.h"
+
+/* This file should be included last.  */
+#include "target-def.h"
 
 /* This is used for communication between ASM_OUTPUT_LABEL and
    ASM_OUTPUT_LABELREF.  */
@@ -254,7 +219,7 @@ static int ia64_register_move_cost (machine_mode, reg_class_t,
                                     reg_class_t);
 static int ia64_memory_move_cost (machine_mode mode, reg_class_t,
 				  bool);
-static bool ia64_rtx_costs (rtx, int, int, int, int *, bool);
+static bool ia64_rtx_costs (rtx, machine_mode, int, int, int *, bool);
 static int ia64_unspec_may_trap_p (const_rtx, unsigned);
 static void fix_range (const char *);
 static struct machine_function * ia64_init_machine_status (void);
@@ -272,11 +237,11 @@ static void ia64_output_function_epilogue (FILE *, HOST_WIDE_INT);
 static void ia64_output_function_end_prologue (FILE *);
 
 static void ia64_print_operand (FILE *, rtx, int);
-static void ia64_print_operand_address (FILE *, rtx);
+static void ia64_print_operand_address (FILE *, machine_mode, rtx);
 static bool ia64_print_operand_punct_valid_p (unsigned char code);
 
 static int ia64_issue_rate (void);
-static int ia64_adjust_cost_2 (rtx_insn *, int, rtx_insn *, int, dw_t);
+static int ia64_adjust_cost (rtx_insn *, int, rtx_insn *, int, dw_t);
 static void ia64_sched_init (FILE *, int, int);
 static void ia64_sched_init_global (FILE *, int, int);
 static void ia64_sched_finish_global (FILE *, int);
@@ -346,7 +311,6 @@ static rtx ia64_struct_value_rtx (tree, int);
 static tree ia64_gimplify_va_arg (tree, tree, gimple_seq *, gimple_seq *);
 static bool ia64_scalar_mode_supported_p (machine_mode mode);
 static bool ia64_vector_mode_supported_p (machine_mode mode);
-static bool ia64_libgcc_floating_mode_supported_p (machine_mode mode);
 static bool ia64_legitimate_constant_p (machine_mode, rtx);
 static bool ia64_legitimate_address_p (machine_mode, rtx, bool);
 static bool ia64_cannot_force_const_mem (machine_mode, rtx);
@@ -359,6 +323,7 @@ static void ia64_trampoline_init (rtx, tree, rtx);
 static void ia64_override_options_after_change (void);
 static bool ia64_member_type_forces_blk (const_tree, machine_mode);
 
+static tree ia64_fold_builtin (tree, int, tree *, bool);
 static tree ia64_builtin_decl (unsigned, bool);
 
 static reg_class_t ia64_preferred_reload_class (rtx, reg_class_t);
@@ -408,6 +373,9 @@ static const struct attribute_spec ia64_attribute_table[] =
 #undef TARGET_INIT_BUILTINS
 #define TARGET_INIT_BUILTINS ia64_init_builtins
 
+#undef TARGET_FOLD_BUILTIN
+#define TARGET_FOLD_BUILTIN ia64_fold_builtin
+
 #undef TARGET_EXPAND_BUILTIN
 #define TARGET_EXPAND_BUILTIN ia64_expand_builtin
 
@@ -451,8 +419,8 @@ static const struct attribute_spec ia64_attribute_table[] =
 #undef TARGET_IN_SMALL_DATA_P
 #define TARGET_IN_SMALL_DATA_P  ia64_in_small_data_p
 
-#undef TARGET_SCHED_ADJUST_COST_2
-#define TARGET_SCHED_ADJUST_COST_2 ia64_adjust_cost_2
+#undef TARGET_SCHED_ADJUST_COST
+#define TARGET_SCHED_ADJUST_COST ia64_adjust_cost
 #undef TARGET_SCHED_ISSUE_RATE
 #define TARGET_SCHED_ISSUE_RATE ia64_issue_rate
 #undef TARGET_SCHED_VARIABLE_ISSUE
@@ -626,19 +594,13 @@ static const struct attribute_spec ia64_attribute_table[] =
 #undef TARGET_VECTOR_MODE_SUPPORTED_P
 #define TARGET_VECTOR_MODE_SUPPORTED_P ia64_vector_mode_supported_p
 
-#undef TARGET_LIBGCC_FLOATING_MODE_SUPPORTED_P
-#define TARGET_LIBGCC_FLOATING_MODE_SUPPORTED_P \
-  ia64_libgcc_floating_mode_supported_p
-
-/* ia64 architecture manual 4.4.7: ... reads, writes, and flushes may occur
-   in an order different from the specified program order.  */
-#undef TARGET_RELAXED_ORDERING
-#define TARGET_RELAXED_ORDERING true
-
 #undef TARGET_LEGITIMATE_CONSTANT_P
 #define TARGET_LEGITIMATE_CONSTANT_P ia64_legitimate_constant_p
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P ia64_legitimate_address_p
+
+#undef TARGET_LRA_P
+#define TARGET_LRA_P hook_bool_void_false
 
 #undef TARGET_CANNOT_FORCE_CONST_MEM
 #define TARGET_CANNOT_FORCE_CONST_MEM ia64_cannot_force_const_mem
@@ -686,6 +648,9 @@ static const struct attribute_spec ia64_attribute_table[] =
 
 #undef TARGET_ATTRIBUTE_TAKES_IDENTIFIER_P
 #define TARGET_ATTRIBUTE_TAKES_IDENTIFIER_P ia64_attribute_takes_identifier_p
+
+#undef TARGET_CUSTOM_FUNCTION_DESCRIPTORS
+#define TARGET_CUSTOM_FUNCTION_DESCRIPTORS 0
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -858,7 +823,7 @@ ia64_vms_output_aligned_decl_common (FILE *file, tree decl, const char *name,
 
   /*  Code from elfos.h.  */
   assemble_name (file, name);
-  fprintf (file, ","HOST_WIDE_INT_PRINT_UNSIGNED",%u",
+  fprintf (file, "," HOST_WIDE_INT_PRINT_UNSIGNED",%u",
            size, align / BITS_PER_UNIT);
 
   fputc ('\n', file);
@@ -1182,15 +1147,15 @@ ia64_expand_load_address (rtx dest, rtx src)
 
       tmp = gen_rtx_HIGH (Pmode, src);
       tmp = gen_rtx_PLUS (Pmode, tmp, pic_offset_table_rtx);
-      emit_insn (gen_rtx_SET (VOIDmode, dest, tmp));
+      emit_insn (gen_rtx_SET (dest, tmp));
 
       tmp = gen_rtx_LO_SUM (Pmode, gen_const_mem (Pmode, dest), src);
-      emit_insn (gen_rtx_SET (VOIDmode, dest, tmp));
+      emit_insn (gen_rtx_SET (dest, tmp));
 
       if (addend)
 	{
 	  tmp = gen_rtx_PLUS (Pmode, dest, GEN_INT (addend));
-	  emit_insn (gen_rtx_SET (VOIDmode, dest, tmp));
+	  emit_insn (gen_rtx_SET (dest, tmp));
 	}
     }
 
@@ -1384,7 +1349,7 @@ ia64_expand_move (rtx op0, rtx op1)
 	{
 	  rtx subtarget = !can_create_pseudo_p () ? op0 : gen_reg_rtx (mode);
 
-	  emit_insn (gen_rtx_SET (VOIDmode, subtarget, op1));
+	  emit_insn (gen_rtx_SET (subtarget, op1));
 
 	  op1 = expand_simple_binop (mode, PLUS, subtarget,
 				     GEN_INT (addend), op0, 1, OPTAB_DIRECT);
@@ -1449,12 +1414,10 @@ ia64_split_tmode (rtx out[2], rtx in, bool reversed, bool dead)
 	/* split_double does not understand how to split a TFmode
 	   quantity into a pair of DImode constants.  */
 	{
-	  REAL_VALUE_TYPE r;
 	  unsigned HOST_WIDE_INT p[2];
 	  long l[4];  /* TFmode is 128 bits */
 
-	  REAL_VALUE_FROM_CONST_DOUBLE (r, in);
-	  real_to_target (l, &r, TFmode);
+	  real_to_target (l, CONST_DOUBLE_REAL_VALUE (in), TFmode);
 
 	  if (FLOAT_WORDS_BIG_ENDIAN)
 	    {
@@ -1629,11 +1592,11 @@ ia64_split_tmode_move (rtx operands[])
 	  || GET_CODE (XEXP (EXP, 0)) == POST_DEC))			\
     add_reg_note (insn, REG_INC, XEXP (XEXP (EXP, 0), 0))
 
-  insn = emit_insn (gen_rtx_SET (VOIDmode, out[0], in[0]));
+  insn = emit_insn (gen_rtx_SET (out[0], in[0]));
   MAYBE_ADD_REG_INC_NOTE (insn, in[0]);
   MAYBE_ADD_REG_INC_NOTE (insn, out[0]);
 
-  insn = emit_insn (gen_rtx_SET (VOIDmode, out[1], in[1]));
+  insn = emit_insn (gen_rtx_SET (out[1], in[1]));
   MAYBE_ADD_REG_INC_NOTE (insn, in[1]);
   MAYBE_ADD_REG_INC_NOTE (insn, out[1]);
 
@@ -1840,7 +1803,7 @@ ia64_expand_compare (rtx *expr, rtx *op0, rtx *op1)
       };
       int magic;
       enum rtx_code ncode;
-      rtx ret, insns;
+      rtx ret;
       
       gcc_assert (cmptf_libfunc && GET_MODE (*op1) == TFmode);
       switch (code)
@@ -1876,11 +1839,10 @@ ia64_expand_compare (rtx *expr, rtx *op0, rtx *op1)
 				     *op0, TFmode, *op1, TFmode,
 				     GEN_INT (magic), DImode);
       cmp = gen_reg_rtx (BImode);
-      emit_insn (gen_rtx_SET (VOIDmode, cmp,
-			      gen_rtx_fmt_ee (ncode, BImode,
-					      ret, const0_rtx)));
+      emit_insn (gen_rtx_SET (cmp, gen_rtx_fmt_ee (ncode, BImode,
+						   ret, const0_rtx)));
 
-      insns = get_insns ();
+      rtx_insn *insns = get_insns ();
       end_sequence ();
 
       emit_libcall_block (insns, cmp, cmp,
@@ -1890,8 +1852,7 @@ ia64_expand_compare (rtx *expr, rtx *op0, rtx *op1)
   else
     {
       cmp = gen_reg_rtx (BImode);
-      emit_insn (gen_rtx_SET (VOIDmode, cmp,
-			      gen_rtx_fmt_ee (code, BImode, *op0, *op1)));
+      emit_insn (gen_rtx_SET (cmp, gen_rtx_fmt_ee (code, BImode, *op0, *op1)));
       code = NE;
     }
 
@@ -1970,8 +1931,7 @@ ia64_expand_vecint_compare (enum rtx_code code, machine_mode mode,
 	case V4HImode:
 	  /* Perform a parallel unsigned saturating subtraction.  */
 	  x = gen_reg_rtx (mode);
-	  emit_insn (gen_rtx_SET (VOIDmode, x,
-				  gen_rtx_US_MINUS (mode, op0, op1)));
+	  emit_insn (gen_rtx_SET (x, gen_rtx_US_MINUS (mode, op0, op1)));
 
 	  code = EQ;
 	  op0 = x;
@@ -1985,7 +1945,7 @@ ia64_expand_vecint_compare (enum rtx_code code, machine_mode mode,
     }
 
   x = gen_rtx_fmt_ee (code, mode, op0, op1);
-  emit_insn (gen_rtx_SET (VOIDmode, dest, x));
+  emit_insn (gen_rtx_SET (dest, x));
 
   return negate;
 }
@@ -2017,12 +1977,12 @@ ia64_expand_vecint_cmov (rtx operands[])
 
       x = gen_rtx_NOT (mode, cmp);
       x = gen_rtx_AND (mode, x, of);
-      emit_insn (gen_rtx_SET (VOIDmode, operands[0], x));
+      emit_insn (gen_rtx_SET (operands[0], x));
     }
   else if (of == CONST0_RTX (mode))
     {
       x = gen_rtx_AND (mode, cmp, ot);
-      emit_insn (gen_rtx_SET (VOIDmode, operands[0], x));
+      emit_insn (gen_rtx_SET (operands[0], x));
     }
   else
     {
@@ -2030,15 +1990,15 @@ ia64_expand_vecint_cmov (rtx operands[])
 
       t = gen_reg_rtx (mode);
       x = gen_rtx_AND (mode, cmp, operands[1+negate]);
-      emit_insn (gen_rtx_SET (VOIDmode, t, x));
+      emit_insn (gen_rtx_SET (t, x));
 
       f = gen_reg_rtx (mode);
       x = gen_rtx_NOT (mode, cmp);
       x = gen_rtx_AND (mode, x, operands[2-negate]);
-      emit_insn (gen_rtx_SET (VOIDmode, f, x));
+      emit_insn (gen_rtx_SET (f, x));
 
       x = gen_rtx_IOR (mode, t, f);
-      emit_insn (gen_rtx_SET (VOIDmode, operands[0], x));
+      emit_insn (gen_rtx_SET (operands[0], x));
     }
 }
 
@@ -2062,7 +2022,7 @@ ia64_expand_vecint_minmax (enum rtx_code code, machine_mode mode,
       rtx x, tmp = gen_reg_rtx (mode);
 
       x = gen_rtx_US_MINUS (mode, operands[1], operands[2]);
-      emit_insn (gen_rtx_SET (VOIDmode, tmp, x));
+      emit_insn (gen_rtx_SET (tmp, x));
 
       emit_insn (gen_addv4hi3 (operands[0], tmp, operands[2]));
       return true;
@@ -3244,8 +3204,7 @@ do_spill (rtx (*move_fn) (rtx, rtx, rtx), rtx reg, HOST_WIDE_INT cfa_off,
 	}
 
       add_reg_note (insn, REG_CFA_OFFSET,
-		    gen_rtx_SET (VOIDmode,
-				 gen_rtx_MEM (GET_MODE (reg),
+		    gen_rtx_SET (gen_rtx_MEM (GET_MODE (reg),
 					      plus_constant (Pmode,
 							     base, off)),
 				 frame_reg));
@@ -3309,9 +3268,8 @@ ia64_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size,
   emit_move_insn (r2, GEN_INT (-(first + size)));
 
   /* Compare current value of BSP and SP registers.  */
-  emit_insn (gen_rtx_SET (VOIDmode, p6,
-			  gen_rtx_fmt_ee (LTU, BImode,
-					  r3, stack_pointer_rtx)));
+  emit_insn (gen_rtx_SET (p6, gen_rtx_fmt_ee (LTU, BImode,
+					      r3, stack_pointer_rtx)));
 
   /* Compute the address of the probe for the Backing Store (which grows
      towards higher addresses).  We probe only at the first offset of
@@ -3321,18 +3279,15 @@ ia64_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size,
      size is at least 4096 - (96 + 2) * 8 = 3312 bytes, which is enough.
      Also compute the address of the last probe for the memory stack
      (which grows towards lower addresses).  */
-  emit_insn (gen_rtx_SET (VOIDmode, r3, plus_constant (Pmode, r3, 4095)));
-  emit_insn (gen_rtx_SET (VOIDmode, r2,
-			  gen_rtx_PLUS (Pmode, stack_pointer_rtx, r2)));
+  emit_insn (gen_rtx_SET (r3, plus_constant (Pmode, r3, 4095)));
+  emit_insn (gen_rtx_SET (r2, gen_rtx_PLUS (Pmode, stack_pointer_rtx, r2)));
 
   /* Compare them and raise SEGV if the former has topped the latter.  */
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
 				gen_rtx_fmt_ee (NE, VOIDmode, p6, const0_rtx),
-				gen_rtx_SET (VOIDmode, p6,
-					     gen_rtx_fmt_ee (GEU, BImode,
-							     r3, r2))));
-  emit_insn (gen_rtx_SET (VOIDmode,
-			  gen_rtx_ZERO_EXTRACT (DImode, r3, GEN_INT (12),
+				gen_rtx_SET (p6, gen_rtx_fmt_ee (GEU, BImode,
+								 r3, r2))));
+  emit_insn (gen_rtx_SET (gen_rtx_ZERO_EXTRACT (DImode, r3, GEN_INT (12),
 						const0_rtx),
 			  const0_rtx));
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
@@ -3353,14 +3308,14 @@ ia64_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size,
   else if (size <= PROBE_INTERVAL)
     emit_stack_probe (r2);
 
-  /* The run-time loop is made up of 8 insns in the generic case while this
+  /* The run-time loop is made up of 9 insns in the generic case while this
      compile-time loop is made up of 5+2*(n-2) insns for n # of intervals.  */
   else if (size <= 4 * PROBE_INTERVAL)
     {
       HOST_WIDE_INT i;
 
       emit_move_insn (r2, GEN_INT (-(first + PROBE_INTERVAL)));
-      emit_insn (gen_rtx_SET (VOIDmode, r2,
+      emit_insn (gen_rtx_SET (r2,
 			      gen_rtx_PLUS (Pmode, stack_pointer_rtx, r2)));
       emit_stack_probe (r2);
 
@@ -3369,12 +3324,12 @@ ia64_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size,
 	 generate any code.  Then probe at FIRST + SIZE.  */
       for (i = 2 * PROBE_INTERVAL; i < size; i += PROBE_INTERVAL)
 	{
-	  emit_insn (gen_rtx_SET (VOIDmode, r2,
+	  emit_insn (gen_rtx_SET (r2,
 				  plus_constant (Pmode, r2, -PROBE_INTERVAL)));
 	  emit_stack_probe (r2);
 	}
 
-      emit_insn (gen_rtx_SET (VOIDmode, r2,
+      emit_insn (gen_rtx_SET (r2,
 			      plus_constant (Pmode, r2,
 					     (i - PROBE_INTERVAL) - size)));
       emit_stack_probe (r2);
@@ -3400,28 +3355,28 @@ ia64_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size,
       /* Step 2: compute initial and final value of the loop counter.  */
 
       /* TEST_ADDR = SP + FIRST.  */
-      emit_insn (gen_rtx_SET (VOIDmode, r2,
+      emit_insn (gen_rtx_SET (r2,
 			      gen_rtx_PLUS (Pmode, stack_pointer_rtx, r2)));
 
       /* LAST_ADDR = SP + FIRST + ROUNDED_SIZE.  */
       if (rounded_size > (1 << 21))
 	{
 	  emit_move_insn (r3, GEN_INT (-rounded_size));
-	  emit_insn (gen_rtx_SET (VOIDmode, r3, gen_rtx_PLUS (Pmode, r2, r3)));
+	  emit_insn (gen_rtx_SET (r3, gen_rtx_PLUS (Pmode, r2, r3)));
 	}
       else
-        emit_insn (gen_rtx_SET (VOIDmode, r3,
-				gen_rtx_PLUS (Pmode, r2,
-					      GEN_INT (-rounded_size))));
+        emit_insn (gen_rtx_SET (r3, gen_rtx_PLUS (Pmode, r2,
+						  GEN_INT (-rounded_size))));
 
 
       /* Step 3: the loop
 
-	 while (TEST_ADDR != LAST_ADDR)
+	 do
 	   {
 	     TEST_ADDR = TEST_ADDR + PROBE_INTERVAL
 	     probe at TEST_ADDR
 	   }
+	 while (TEST_ADDR != LAST_ADDR)
 
 	 probes at FIRST + N * PROBE_INTERVAL for values of N from 1
 	 until it is equal to ROUNDED_SIZE.  */
@@ -3435,9 +3390,8 @@ ia64_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size,
       /* TEMP = SIZE - ROUNDED_SIZE.  */
       if (size != rounded_size)
 	{
-	  emit_insn (gen_rtx_SET (VOIDmode, r2,
-				  plus_constant (Pmode, r2,
-						 rounded_size - size)));
+	  emit_insn (gen_rtx_SET (r2, plus_constant (Pmode, r2,
+						     rounded_size - size)));
 	  emit_stack_probe (r2);
 	}
     }
@@ -3453,35 +3407,32 @@ const char *
 output_probe_stack_range (rtx reg1, rtx reg2)
 {
   static int labelno = 0;
-  char loop_lab[32], end_lab[32];
+  char loop_lab[32];
   rtx xops[3];
 
-  ASM_GENERATE_INTERNAL_LABEL (loop_lab, "LPSRL", labelno);
-  ASM_GENERATE_INTERNAL_LABEL (end_lab, "LPSRE", labelno++);
+  ASM_GENERATE_INTERNAL_LABEL (loop_lab, "LPSRL", labelno++);
 
+  /* Loop.  */
   ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, loop_lab);
 
-  /* Jump to END_LAB if TEST_ADDR == LAST_ADDR.  */
-  xops[0] = reg1;
-  xops[1] = reg2;
-  xops[2] = gen_rtx_REG (BImode, PR_REG (6));
-  output_asm_insn ("cmp.eq %2, %I2 = %0, %1", xops);
-  fprintf (asm_out_file, "\t(%s) br.cond.dpnt ", reg_names [REGNO (xops[2])]);
-  assemble_name_raw (asm_out_file, end_lab);
-  fputc ('\n', asm_out_file);
-
   /* TEST_ADDR = TEST_ADDR + PROBE_INTERVAL.  */
+  xops[0] = reg1;
   xops[1] = GEN_INT (-PROBE_INTERVAL);
   output_asm_insn ("addl %0 = %1, %0", xops);
   fputs ("\t;;\n", asm_out_file);
 
-  /* Probe at TEST_ADDR and branch.  */
+  /* Probe at TEST_ADDR.  */
   output_asm_insn ("probe.w.fault %0, 0", xops);
-  fprintf (asm_out_file, "\tbr ");
+
+  /* Test if TEST_ADDR == LAST_ADDR.  */
+  xops[1] = reg2;
+  xops[2] = gen_rtx_REG (BImode, PR_REG (6));
+  output_asm_insn ("cmp.eq %2, %I2 = %0, %1", xops);
+
+  /* Branch.  */
+  fprintf (asm_out_file, "\t(%s) br.cond.dpnt ", reg_names [PR_REG (7)]);
   assemble_name_raw (asm_out_file, loop_lab);
   fputc ('\n', asm_out_file);
-
-  ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, end_lab);
 
   return "";
 }
@@ -3640,8 +3591,7 @@ ia64_expand_prologue (void)
 	{
 	  RTX_FRAME_RELATED_P (insn) = 1;
 	  add_reg_note (insn, REG_CFA_REGISTER,
-			gen_rtx_SET (VOIDmode,
-				     ar_pfs_save_reg,
+			gen_rtx_SET (ar_pfs_save_reg,
 				     gen_rtx_REG (DImode, AR_PFS_REGNUM)));
 	}
     }
@@ -3683,8 +3633,7 @@ ia64_expand_prologue (void)
 	{
 	  RTX_FRAME_RELATED_P (insn) = 1;
 	  add_reg_note (insn, REG_CFA_ADJUST_CFA,
-			gen_rtx_SET (VOIDmode,
-				     stack_pointer_rtx,
+			gen_rtx_SET (stack_pointer_rtx,
 				     gen_rtx_PLUS (DImode,
 						   stack_pointer_rtx,
 						   frame_size_rtx)));
@@ -3831,8 +3780,7 @@ ia64_expand_prologue (void)
           reg_emitted (reg_save_b0);
 	  insn = emit_move_insn (alt_reg, reg);
 	  RTX_FRAME_RELATED_P (insn) = 1;
-	  add_reg_note (insn, REG_CFA_REGISTER,
-			gen_rtx_SET (VOIDmode, alt_reg, pc_rtx));
+	  add_reg_note (insn, REG_CFA_REGISTER, gen_rtx_SET (alt_reg, pc_rtx));
 
 	  /* Even if we're not going to generate an epilogue, we still
 	     need to save the register so that EH works.  */
@@ -4138,8 +4086,7 @@ ia64_expand_epilogue (int sibcall_p)
 
       RTX_FRAME_RELATED_P (insn) = 1;
       add_reg_note (insn, REG_CFA_ADJUST_CFA,
-		    gen_rtx_SET (VOIDmode,
-				 stack_pointer_rtx,
+		    gen_rtx_SET (stack_pointer_rtx,
 				 gen_rtx_PLUS (DImode,
 					       stack_pointer_rtx,
 					       frame_size_rtx)));
@@ -5305,6 +5252,7 @@ ia64_output_dwarf_dtprel (FILE *file, int size, rtx x)
 
 static void
 ia64_print_operand_address (FILE * stream ATTRIBUTE_UNUSED,
+			    machine_mode /*mode*/,
 			    rtx address ATTRIBUTE_UNUSED)
 {
 }
@@ -5410,9 +5358,7 @@ ia64_print_operand (FILE * file, rtx x, int code)
     case 'G':
       {
 	long val[4];
-	REAL_VALUE_TYPE rv;
-	REAL_VALUE_FROM_CONST_DOUBLE (rv, x);
-	real_to_target (val, &rv, GET_MODE (x));
+	real_to_target (val, CONST_DOUBLE_REAL_VALUE (x), GET_MODE (x));
 	if (GET_MODE (x) == SFmode)
 	  fprintf (file, "0x%08lx", val[0] & 0xffffffff);
 	else if (GET_MODE (x) == DFmode)
@@ -5602,7 +5548,7 @@ ia64_print_operand (FILE * file, rtx x, int code)
     case POST_DEC:
     case POST_MODIFY:
       x = XEXP (x, 0);
-      /* ... fall through ...  */
+      /* fall through */
 
     case REG:
       fputs (reg_names [REGNO (x)], file);
@@ -5639,9 +5585,12 @@ ia64_print_operand_punct_valid_p (unsigned char code)
 /* ??? This is incomplete.  */
 
 static bool
-ia64_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
+ia64_rtx_costs (rtx x, machine_mode mode, int outer_code,
+		int opno ATTRIBUTE_UNUSED,
 		int *total, bool speed ATTRIBUTE_UNUSED)
 {
+  int code = GET_CODE (x);
+
   switch (code)
     {
     case CONST_INT:
@@ -5685,9 +5634,9 @@ ia64_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
          which normally involves copies.  Plus there's the latency
          of the multiply itself, and the latency of the instructions to
          transfer integer regs to FP regs.  */
-      if (FLOAT_MODE_P (GET_MODE (x)))
+      if (FLOAT_MODE_P (mode))
 	*total = COSTS_N_INSNS (4);
-      else if (GET_MODE_SIZE (GET_MODE (x)) > 2)
+      else if (GET_MODE_SIZE (mode) > 2)
         *total = COSTS_N_INSNS (10);
       else
 	*total = COSTS_N_INSNS (2);
@@ -5695,7 +5644,7 @@ ia64_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 
     case PLUS:
     case MINUS:
-      if (FLOAT_MODE_P (GET_MODE (x)))
+      if (FLOAT_MODE_P (mode))
 	{
 	  *total = COSTS_N_INSNS (4);
 	  return true;
@@ -6190,7 +6139,7 @@ struct reg_write_state
 
 /* Cumulative info for the current instruction group.  */
 struct reg_write_state rws_sum[NUM_REGS];
-#ifdef ENABLE_CHECKING
+#if CHECKING_P
 /* Bitmap whether a register has been written in the current insn.  */
 HARD_REG_ELT_TYPE rws_insn[(NUM_REGS + HOST_BITS_PER_WIDEST_FAST_INT - 1)
 			   / HOST_BITS_PER_WIDEST_FAST_INT];
@@ -6615,6 +6564,7 @@ rtx_needs_barrier (rtx x, struct reg_flags flags, int pred)
 	    case USE:
 	    case CALL:
 	    case ASM_OPERANDS:
+	    case ASM_INPUT:
 	      need_barrier |= rtx_needs_barrier (pat, flags, pred);
 	      break;
 
@@ -7188,7 +7138,7 @@ static char mem_ops_in_group[4];
 static int current_cycle;
 
 static rtx ia64_single_set (rtx_insn *);
-static void ia64_emit_insn_before (rtx, rtx);
+static void ia64_emit_insn_before (rtx, rtx_insn *);
 
 /* Map a bundle number to its pseudo-op.  */
 
@@ -7242,8 +7192,8 @@ ia64_single_set (rtx_insn *insn)
    Return the new cost of a dependency of type DEP_TYPE or INSN on DEP_INSN.
    COST is the current cost, DW is dependency weakness.  */
 static int
-ia64_adjust_cost_2 (rtx_insn *insn, int dep_type1, rtx_insn *dep_insn,
-		    int cost, dw_t dw)
+ia64_adjust_cost (rtx_insn *insn, int dep_type1, rtx_insn *dep_insn,
+		  int cost, dw_t dw)
 {
   enum reg_note dep_type = (enum reg_note) dep_type1;
   enum attr_itanium_class dep_class;
@@ -7288,7 +7238,7 @@ ia64_adjust_cost_2 (rtx_insn *insn, int dep_type1, rtx_insn *dep_insn,
    ??? When cycle display notes are implemented, update this.  */
 
 static void
-ia64_emit_insn_before (rtx insn, rtx before)
+ia64_emit_insn_before (rtx insn, rtx_insn *before)
 {
   emit_insn_before (insn, before);
 }
@@ -7358,15 +7308,13 @@ ia64_sched_init (FILE *dump ATTRIBUTE_UNUSED,
 		 int sched_verbose ATTRIBUTE_UNUSED,
 		 int max_ready ATTRIBUTE_UNUSED)
 {
-#ifdef ENABLE_CHECKING
-  rtx_insn *insn;
-
-  if (!sel_sched_p () && reload_completed)
-    for (insn = NEXT_INSN (current_sched_info->prev_head);
-	 insn != current_sched_info->next_tail;
-	 insn = NEXT_INSN (insn))
-      gcc_assert (!SCHED_GROUP_P (insn));
-#endif
+  if (flag_checking && !sel_sched_p () && reload_completed)
+    {
+      for (rtx_insn *insn = NEXT_INSN (current_sched_info->prev_head);
+	   insn != current_sched_info->next_tail;
+	   insn = NEXT_INSN (insn))
+	gcc_assert (!SCHED_GROUP_P (insn));
+    }
   last_scheduled_insn = NULL;
   init_insn_group_barriers ();
 
@@ -8621,18 +8569,16 @@ finish_bundle_states (void)
 
 /* Hashtable helpers.  */
 
-struct bundle_state_hasher : typed_noop_remove <bundle_state>
+struct bundle_state_hasher : nofree_ptr_hash <bundle_state>
 {
-  typedef bundle_state value_type;
-  typedef bundle_state compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *, const compare_type *);
+  static inline hashval_t hash (const bundle_state *);
+  static inline bool equal (const bundle_state *, const bundle_state *);
 };
 
 /* The function returns hash of BUNDLE_STATE.  */
 
 inline hashval_t
-bundle_state_hasher::hash (const value_type *state)
+bundle_state_hasher::hash (const bundle_state *state)
 {
   unsigned result, i;
 
@@ -8645,8 +8591,8 @@ bundle_state_hasher::hash (const value_type *state)
 /* The function returns nonzero if the bundle state keys are equal.  */
 
 inline bool
-bundle_state_hasher::equal (const value_type *state1,
-			    const compare_type *state2)
+bundle_state_hasher::equal (const bundle_state *state1,
+			    const bundle_state *state2)
 {
   return (state1->insn_num == state2->insn_num
 	  && memcmp (state1->dfa_state, state2->dfa_state,
@@ -9366,54 +9312,52 @@ bundling (FILE *dump, int verbose, rtx_insn *prev_head_insn, rtx_insn *tail)
 	}
     }
 
-#ifdef ENABLE_CHECKING
-  {
-    /* Assert right calculation of middle_bundle_stops.  */
-    int num = best_state->middle_bundle_stops;
-    bool start_bundle = true, end_bundle = false;
+  if (flag_checking)
+    {
+      /* Assert right calculation of middle_bundle_stops.  */
+      int num = best_state->middle_bundle_stops;
+      bool start_bundle = true, end_bundle = false;
 
-    for (insn = NEXT_INSN (prev_head_insn);
-	 insn && insn != tail;
-	 insn = NEXT_INSN (insn))
-      {
-	if (!INSN_P (insn))
-	  continue;
-	if (recog_memoized (insn) == CODE_FOR_bundle_selector)
-	  start_bundle = true;
-	else
-	  {
-	    rtx_insn *next_insn;
+      for (insn = NEXT_INSN (prev_head_insn);
+	   insn && insn != tail;
+	   insn = NEXT_INSN (insn))
+	{
+	  if (!INSN_P (insn))
+	    continue;
+	  if (recog_memoized (insn) == CODE_FOR_bundle_selector)
+	    start_bundle = true;
+	  else
+	    {
+	      rtx_insn *next_insn;
 
-	    for (next_insn = NEXT_INSN (insn);
-		 next_insn && next_insn != tail;
-		 next_insn = NEXT_INSN (next_insn))
-	      if (INSN_P (next_insn)
-		  && (ia64_safe_itanium_class (next_insn)
-		      != ITANIUM_CLASS_IGNORE
-		      || recog_memoized (next_insn)
-		      == CODE_FOR_bundle_selector)
-		  && GET_CODE (PATTERN (next_insn)) != USE
-		  && GET_CODE (PATTERN (next_insn)) != CLOBBER)
-		break;
+	      for (next_insn = NEXT_INSN (insn);
+		   next_insn && next_insn != tail;
+		   next_insn = NEXT_INSN (next_insn))
+		if (INSN_P (next_insn)
+		    && (ia64_safe_itanium_class (next_insn)
+			!= ITANIUM_CLASS_IGNORE
+			|| recog_memoized (next_insn)
+			== CODE_FOR_bundle_selector)
+		    && GET_CODE (PATTERN (next_insn)) != USE
+		    && GET_CODE (PATTERN (next_insn)) != CLOBBER)
+		  break;
 
-	    end_bundle = next_insn == NULL_RTX
-	     || next_insn == tail
-	     || (INSN_P (next_insn)
-		 && recog_memoized (next_insn)
-		 == CODE_FOR_bundle_selector);
-	    if (recog_memoized (insn) == CODE_FOR_insn_group_barrier
-		&& !start_bundle && !end_bundle
-		&& next_insn
-		&& !unknown_for_bundling_p (next_insn))
-	      num--;
+	      end_bundle = next_insn == NULL_RTX
+		|| next_insn == tail
+		|| (INSN_P (next_insn)
+		    && recog_memoized (next_insn) == CODE_FOR_bundle_selector);
+	      if (recog_memoized (insn) == CODE_FOR_insn_group_barrier
+		  && !start_bundle && !end_bundle
+		  && next_insn
+		  && !unknown_for_bundling_p (next_insn))
+		num--;
 
-	    start_bundle = false;
-	  }
-      }
+	      start_bundle = false;
+	    }
+	}
 
-    gcc_assert (num == 0);
-  }
-#endif
+      gcc_assert (num == 0);
+    }
 
   free (index_to_bundle_states);
   finish_bundle_state_table ();
@@ -10046,7 +9990,7 @@ process_cfa_adjust_cfa (FILE *asm_out_file, rtx pat, rtx insn,
 	      gcc_assert (!frame_pointer_needed);
 	      if (unwind)
 		fprintf (asm_out_file,
-			 "\t.fframe "HOST_WIDE_INT_PRINT_DEC"\n",
+			 "\t.fframe " HOST_WIDE_INT_PRINT_DEC"\n",
 			 -INTVAL (op1));
 	    }
 	  else
@@ -10387,6 +10331,8 @@ enum ia64_builtins
   IA64_BUILTIN_FLUSHRS,
   IA64_BUILTIN_INFQ,
   IA64_BUILTIN_HUGE_VALQ,
+  IA64_BUILTIN_NANQ,
+  IA64_BUILTIN_NANSQ,
   IA64_BUILTIN_max
 };
 
@@ -10406,23 +10352,30 @@ ia64_init_builtins (void)
   (*lang_hooks.types.register_builtin_type) (fpreg_type, "__fpreg");
 
   /* The __float80 type.  */
-  float80_type = make_node (REAL_TYPE);
-  TYPE_PRECISION (float80_type) = 80;
-  layout_type (float80_type);
+  if (float64x_type_node != NULL_TREE
+      && TYPE_MODE (float64x_type_node) == XFmode)
+    float80_type = float64x_type_node;
+  else
+    {
+      float80_type = make_node (REAL_TYPE);
+      TYPE_PRECISION (float80_type) = 80;
+      layout_type (float80_type);
+    }
   (*lang_hooks.types.register_builtin_type) (float80_type, "__float80");
 
   /* The __float128 type.  */
   if (!TARGET_HPUX)
     {
       tree ftype;
-      tree float128_type = make_node (REAL_TYPE);
+      tree const_string_type
+	= build_pointer_type (build_qualified_type
+			      (char_type_node, TYPE_QUAL_CONST));
 
-      TYPE_PRECISION (float128_type) = 128;
-      layout_type (float128_type);
-      (*lang_hooks.types.register_builtin_type) (float128_type, "__float128");
+      (*lang_hooks.types.register_builtin_type) (float128_type_node,
+						 "__float128");
 
       /* TFmode support builtins.  */
-      ftype = build_function_type_list (float128_type, NULL_TREE);
+      ftype = build_function_type_list (float128_type_node, NULL_TREE);
       decl = add_builtin_function ("__builtin_infq", ftype,
 				   IA64_BUILTIN_INFQ, BUILT_IN_MD,
 				   NULL, NULL_TREE);
@@ -10433,8 +10386,23 @@ ia64_init_builtins (void)
 				   NULL, NULL_TREE);
       ia64_builtins[IA64_BUILTIN_HUGE_VALQ] = decl;
 
-      ftype = build_function_type_list (float128_type,
-					float128_type,
+      ftype = build_function_type_list (float128_type_node,
+					const_string_type,
+					NULL_TREE);
+      decl = add_builtin_function ("__builtin_nanq", ftype,
+				   IA64_BUILTIN_NANQ, BUILT_IN_MD,
+				   "nanq", NULL_TREE);
+      TREE_READONLY (decl) = 1;
+      ia64_builtins[IA64_BUILTIN_NANQ] = decl;
+
+      decl = add_builtin_function ("__builtin_nansq", ftype,
+				   IA64_BUILTIN_NANSQ, BUILT_IN_MD,
+				   "nansq", NULL_TREE);
+      TREE_READONLY (decl) = 1;
+      ia64_builtins[IA64_BUILTIN_NANSQ] = decl;
+
+      ftype = build_function_type_list (float128_type_node,
+					float128_type_node,
 					NULL_TREE);
       decl = add_builtin_function ("__builtin_fabsq", ftype,
 				   IA64_BUILTIN_FABSQ, BUILT_IN_MD,
@@ -10442,9 +10410,9 @@ ia64_init_builtins (void)
       TREE_READONLY (decl) = 1;
       ia64_builtins[IA64_BUILTIN_FABSQ] = decl;
 
-      ftype = build_function_type_list (float128_type,
-					float128_type,
-					float128_type,
+      ftype = build_function_type_list (float128_type_node,
+					float128_type_node,
+					float128_type_node,
 					NULL_TREE);
       decl = add_builtin_function ("__builtin_copysignq", ftype,
 				   IA64_BUILTIN_COPYSIGNQ, BUILT_IN_MD,
@@ -10489,6 +10457,41 @@ ia64_init_builtins (void)
     }
 }
 
+static tree
+ia64_fold_builtin (tree fndecl, int n_args ATTRIBUTE_UNUSED,
+		   tree *args, bool ignore ATTRIBUTE_UNUSED)
+{
+  if (DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_MD)
+    {
+      enum ia64_builtins fn_code = (enum ia64_builtins)
+				   DECL_FUNCTION_CODE (fndecl);
+      switch (fn_code)
+	{
+	case IA64_BUILTIN_NANQ:
+	case IA64_BUILTIN_NANSQ:
+	  {
+	    tree type = TREE_TYPE (TREE_TYPE (fndecl));
+	    const char *str = c_getstr (*args);
+	    int quiet = fn_code == IA64_BUILTIN_NANQ;
+	    REAL_VALUE_TYPE real;
+
+	    if (str && real_nan (&real, str, quiet, TYPE_MODE (type)))
+	      return build_real (type, real);
+	    return NULL_TREE;
+	  }
+
+	default:
+	  break;
+	}
+    }
+
+#ifdef SUBTARGET_FOLD_BUILTIN
+  return SUBTARGET_FOLD_BUILTIN (fndecl, n_args, args, ignore);
+#endif
+
+  return NULL_TREE;
+}
+
 rtx
 ia64_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 		     machine_mode mode ATTRIBUTE_UNUSED,
@@ -10520,7 +10523,7 @@ ia64_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 	rtx tmp;
 
 	real_inf (&inf);
-	tmp = CONST_DOUBLE_FROM_REAL_VALUE (inf, target_mode);
+	tmp = const_double_from_real_value (inf, target_mode);
 
 	tmp = validize_mem (force_const_mem (target_mode, tmp));
 
@@ -10531,6 +10534,8 @@ ia64_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 	return target;
       }
 
+    case IA64_BUILTIN_NANQ:
+    case IA64_BUILTIN_NANSQ:
     case IA64_BUILTIN_FABSQ:
     case IA64_BUILTIN_COPYSIGNQ:
       return expand_call (exp, target, ignore);
@@ -10687,8 +10692,6 @@ ia64_vms_init_libfuncs (void)
   set_optab_libfunc (smod_optab, DImode, "OTS$REM_L");
   set_optab_libfunc (umod_optab, SImode, "OTS$REM_UI");
   set_optab_libfunc (umod_optab, DImode, "OTS$REM_UL");
-  abort_libfunc = init_one_libfunc ("decc$abort");
-  memcmp_libfunc = init_one_libfunc ("decc$memcmp");
 #ifdef MEM_LIBFUNCS_INIT
   MEM_LIBFUNCS_INIT;
 #endif
@@ -11003,36 +11006,6 @@ ia64_vector_mode_supported_p (machine_mode mode)
     }
 }
 
-/* Implement TARGET_LIBGCC_FLOATING_MODE_SUPPORTED_P.  */
-
-static bool
-ia64_libgcc_floating_mode_supported_p (machine_mode mode)
-{
-  switch (mode)
-    {
-    case SFmode:
-    case DFmode:
-      return true;
-
-    case XFmode:
-#ifdef IA64_NO_LIBGCC_XFMODE
-      return false;
-#else
-      return true;
-#endif
-
-    case TFmode:
-#ifdef IA64_NO_LIBGCC_TFMODE
-      return false;
-#else
-      return true;
-#endif
-
-    default:
-      return false;
-    }
-}
-
 /* Implement the FUNCTION_PROFILER macro.  */
 
 void
@@ -11304,7 +11277,7 @@ expand_vselect (rtx target, rtx op0, const unsigned char *perm, unsigned nelt)
 
   x = gen_rtx_PARALLEL (VOIDmode, gen_rtvec_v (nelt, rperm));
   x = gen_rtx_VEC_SELECT (GET_MODE (target), op0, x);
-  x = gen_rtx_SET (VOIDmode, target, x);
+  x = gen_rtx_SET (target, x);
 
   rtx_insn *insn = emit_insn (x);
   if (recog_memoized (insn) < 0)
@@ -11644,14 +11617,14 @@ expand_vec_perm_v4hi_5 (struct expand_vec_perm_d *d)
   gcc_assert (ok);
 
   x = gen_rtx_AND (V4HImode, mask, t0);
-  emit_insn (gen_rtx_SET (VOIDmode, t0, x));
+  emit_insn (gen_rtx_SET (t0, x));
 
   x = gen_rtx_NOT (V4HImode, mask);
   x = gen_rtx_AND (V4HImode, x, t1);
-  emit_insn (gen_rtx_SET (VOIDmode, t1, x));
+  emit_insn (gen_rtx_SET (t1, x));
 
   x = gen_rtx_IOR (V4HImode, t0, t1);
-  emit_insn (gen_rtx_SET (VOIDmode, d->target, x));
+  emit_insn (gen_rtx_SET (d->target, x));
 
   return true;
 }

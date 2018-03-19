@@ -1,5 +1,5 @@
 ;; Constraint definitions for Renesas / SuperH SH.
-;; Copyright (C) 2007-2015 Free Software Foundation, Inc.
+;; Copyright (C) 2007-2017 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -25,15 +25,13 @@
 ;;  Bsc: SCRATCH - for the scratch register in movsi_ie in the
 ;;       fldi0 / fldi0 cases
 ;; Cxx: Constants other than only CONST_INT
-;;  Css: signed 16-bit constant, literal or symbolic
-;;  Csu: unsigned 16-bit constant, literal or symbolic
+;;  Ccl: call site label
 ;;  Csy: label or symbol
 ;;  Cpg: non-explicit constants that can be directly loaded into a general
 ;;       purpose register in PIC code.  Like 's' except we don't allow
 ;;       PIC_ADDR_P
 ;; IJKLMNOP: CONT_INT constants
 ;;  Ixx: signed xx bit
-;;  J16: 0xffffffff00000000 | 0x00000000ffffffff
 ;;  Jmb: 0x000000FF
 ;;  Jmw: 0x0000FFFF
 ;;  Jhb: 0x80000000
@@ -63,9 +61,6 @@
 ;; Register constraints
 (define_register_constraint "a" "ALL_REGS"
   "@internal")
-
-(define_register_constraint "b" "TARGET_REGS"
-  "Branch target registers.")
 
 (define_register_constraint "c" "FPSCR_REGS"
   "Floating-point status register.")
@@ -104,23 +99,13 @@
   "R0 register.")
 
 ;; Integer constraints
-(define_constraint "I06"
-  "A signed 6-bit constant, as used in SHmedia beqi, bnei and xori."
-  (and (match_code "const_int")
-       (match_test "ival >= -32 && ival <= 31")))
-
 (define_constraint "I08"
   "A signed 8-bit constant, as used in add, sub, etc."
   (and (match_code "const_int")
        (match_test "ival >= -128 && ival <= 127")))
 
-(define_constraint "I10"
-  "A signed 10-bit constant, as used in SHmedia andi, ori."
-  (and (match_code "const_int")
-       (match_test "ival >= -512 && ival <= 511")))
-
 (define_constraint "I16"
-  "A signed 16-bit constant, as used in SHmedia movi."
+  "A signed 16-bit constant."
   (and (match_code "const_int")
        (match_test "ival >= -32768 && ival <= 32767")))
 
@@ -136,11 +121,6 @@
        (match_test "ival >=  -134217728 && ival <= 134217727")
        (match_test "(ival & 255) == 0")
        (match_test "TARGET_SH2A")))
-
-(define_constraint "J16"
-  "0xffffffff00000000 or 0x00000000ffffffff."
-  (and (match_code "const_int")
-       (match_test "CONST_OK_FOR_J16 (ival)")))
 
 (define_constraint "Jmb"
   "Low byte mask constant 0x000000FF"
@@ -189,11 +169,6 @@
   (and (match_code "const_int")
        (match_test "ival >= 0 && ival <= 8191")))
 
-(define_constraint "K16"
-  "An unsigned 16-bit constant, as used in SHmedia shori."
-  (and (match_code "const_int")
-       (match_test "ival >= 0 && ival <= 65535")))
- 
 (define_constraint "P27"
   "A constant for shift operand 1,2,8 or 16."
   (and (match_code "const_int")
@@ -233,17 +208,10 @@
    hence mova is being used, hence do not select this pattern."
   (match_code "scratch"))
 
-(define_constraint "Css"
-  "A signed 16-bit constant, literal or symbolic."
-  (and (match_code "const")
-       (match_test "GET_CODE (XEXP (op, 0)) == UNSPEC")
-       (match_test "XINT (XEXP (op, 0), 1) == UNSPEC_EXTRACT_S16")))
-
-(define_constraint "Csu"
-  "An unsigned 16-bit constant, literal or symbolic."
-  (and (match_code "const")
-       (match_test "GET_CODE (XEXP (op, 0)) == UNSPEC")
-       (match_test "XINT (XEXP (op, 0), 1) == UNSPEC_EXTRACT_U16")))
+(define_constraint "Ccl"
+  "A call site label, for bsrf."
+  (and (match_code "unspec")
+       (match_test "XINT (op, 1) == UNSPEC_CALLER")))
 
 (define_constraint "Csy"
   "A label or a symbol."
@@ -307,6 +275,19 @@
 (define_memory_constraint "Snd"
   "A memory reference that excludes displacement addressing."
   (and (match_code "mem")
+       (match_test "! satisfies_constraint_Sdd (op)")))
+
+(define_memory_constraint "Sid"
+  "A memory reference that uses index addressing."
+  (and (match_code "mem")
+       (match_code "plus" "0")
+       (match_code "reg" "00")
+       (match_code "reg" "01")))
+
+(define_memory_constraint "Ssd"
+  "A memory reference that excludes index and displacement addressing."
+  (and (match_code "mem")
+       (match_test "! satisfies_constraint_Sid (op)")
        (match_test "! satisfies_constraint_Sdd (op)")))
 
 (define_memory_constraint "Sbv"

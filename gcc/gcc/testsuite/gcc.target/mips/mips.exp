@@ -1,4 +1,4 @@
-# Copyright (C) 1997-2015 Free Software Foundation, Inc.
+# Copyright (C) 1997-2017 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -142,6 +142,9 @@
 #   isa=loongson
 #	select a Loongson processor
 #
+#   isa=p5600
+#      select a P5600 processor
+#
 #   addressing=absolute
 #	force absolute addresses to be used
 #
@@ -243,6 +246,7 @@ set mips_option_groups {
     mips16 "-mips16|-mno-mips16|-mflip-mips16"
     mips3d "-mips3d|-mno-mips3d"
     pic "-f(no-|)(pic|PIC)"
+    cb "-mcompact-branches=.*"
     profiling "-pg"
     small-data "-G[0-9]+"
     warnings "-w"
@@ -252,8 +256,14 @@ set mips_option_groups {
     ldc "HAS_LDC"
     movn "HAS_MOVN"
     madd "HAS_MADD"
+    madd4_ghost "HAS_MADD4"
     maddps "HAS_MADDPS"
     lsa "(|!)HAS_LSA"
+    lxc1 "HAS_LXC1"
+    section_start "-Wl,--section-start=.*"
+    frame-header "-mframe-header-opt|-mno-frame-header-opt"
+    stack-protector "-fstack-protector"
+    stdlib "REQUIRES_STDLIB"
 }
 
 for { set option 0 } { $option < 32 } { incr option } {
@@ -274,6 +284,8 @@ foreach option {
     gpopt
     local-sdata
     long-calls
+    lxc1-sxc1
+    madd4
     paired-single
     plt
     shared
@@ -283,6 +295,7 @@ foreach option {
     relax-pic-calls
     mcount-ra-address
     odd-spreg
+    msa
 } {
     lappend mips_option_groups $option "-m(no-|)$option"
 }
@@ -352,6 +365,19 @@ set mips_option_tests(-mips16) {
     jalr $3
     move $31,$2
 }
+set mips_option_tests(-mmicromips) {
+    move $2,$31
+    bal 1f
+    .set push
+    .set micromips
+    jraddiusp 0
+    .set pop
+    .align 2
+1:
+    ori $3,$31,1
+    jalr $3
+    move $31,$2
+}
 set mips_option_tests(-mpaired-single) {
     .set mips64
     lui $2,0x3f80
@@ -380,6 +406,27 @@ set mips_option_tests(-mdspr2) {
     .set dspr2
     prepend $2,$3,11
 }
+set mips_option_tests(-mcode-readable=yes) {
+    move $2,$31
+    bal 1f
+    .set mips16
+    la $3,0f
+    lw $3,($3)
+    jr $31
+0:
+    .word 0xfacebead
+    .set nomips16
+    .align 2
+1:
+    ori $3,$31,1
+    jalr $3
+    li $4,0xfacebead
+    beq $3,$4,2f
+    break
+    b .
+2:
+    move $31,$2
+}
 
 # Canonicalize command-line option OPTION.
 proc mips_canonicalize_option { option } {
@@ -405,14 +452,19 @@ proc mips_same_option_p { option1 option2 } {
 
 # Preprocess CODE using target_compile options OPTIONS.  Return the
 # compiler output.
-proc mips_preprocess { options code } {
+proc mips_preprocess { options code ignore_output } {
     global tool
 
     set src dummy[pid].c
     set f [open $src "w"]
     puts $f $code
     close $f
-    set output [${tool}_target_compile $src "" preprocess $options]
+    if { $ignore_output } {
+	set output [${tool}_target_compile $src dummy[pid].i preprocess $options]
+	file delete dummy[pid].i
+    } else {
+	set output [${tool}_target_compile $src "" preprocess $options]
+    }
     file delete $src
 
     return $output
@@ -462,7 +514,7 @@ proc mips_arch_info { arch prop } {
 	    #else
 	    int isa_rev = 0;
 	    #endif
-	}]
+	} 0]
 	foreach lhs { isa isa_rev } {
 	    regsub ".*$lhs = (\[^;\]*).*" $output {\1} rhs
 	    verbose -log "Architecture $arch has $lhs $rhs"
@@ -807,15 +859,33 @@ proc mips-dg-init {} {
 	    "-mno-smartmips",
 	    #endif
 
+	    #ifdef __mips_no_lxc1_sxc1
+	    "-mno-lxc1-sxc1",
+	    #else
+	    "-mlxc1-sxc1"
+	    #endif
+
+	    #ifdef __mips_no_madd4
+	    "-mno-madd4"
+	    #else
+	    "-mmadd4"
+	    #endif
+
 	    #ifdef __mips_synci
 	    "-msynci",
 	    #else
 	    "-mno-synci",
 	    #endif
 
+	    #ifdef __mips_msa
+	    "-mmsa"
+	    #else
+	    "-mno-msa"
+	    #endif
+
 	    0
 	};
-    }]
+    } 0]
     foreach line [split $output "\r\n"] {
 	# Poor man's string concatenation.
 	regsub -all {" "} $line "" line
@@ -1007,6 +1077,10 @@ proc mips-dg-options { args } {
 	    if { ![regexp {^-march=loongson} $arch] } {
 		set arch "-march=loongson2f"
 	    }
+	} elseif { [string equal $spec "isa=p5600"] } {
+	    if { ![regexp {^-march=p5600} $arch] } {
+		set arch "-march=p5600"
+	    }
 	} else {
 	    if { ![regexp {^(isa(?:|_rev))(=|<=|>=)([0-9]*)$} \
 		       $spec dummy prop relation value nocpus] } {
@@ -1044,6 +1118,7 @@ proc mips-dg-options { args } {
     set arch [mips_option options arch]
     set isa [mips_arch_info $arch isa]
     set isa_rev [mips_arch_info $arch isa_rev]
+    set orig_isa_rev $isa_rev
 
     # If the test forces a 32-bit architecture, force -mgp32.
     # Force the current -mgp setting otherwise; if we don't,
@@ -1066,8 +1141,10 @@ proc mips-dg-options { args } {
 	# We need a revision 6 or better ISA for:
 	#
 	#   - When the LSA instruction is required
+	#   - When only using compact branches
 	if { $isa_rev < 6
-	     && ([mips_have_test_option_p options "HAS_LSA"]) } {
+	     && ([mips_have_test_option_p options "HAS_LSA"]
+		 || [mips_have_test_option_p options "-mcompact-branches=always"]) } {
 	    if { $gp_size == 32 } {
 		mips_make_test_option options "-mips32r6"
 	    } else {
@@ -1084,7 +1161,10 @@ proc mips-dg-options { args } {
 		 || [mips_have_test_option_p options "HAS_INS"]
 		 || [mips_have_test_option_p options "HAS_MADD"]
 		 || [mips_have_test_option_p options "HAS_MADDPS"]
-		 || [mips_have_test_option_p options "-mdspr2"]) } {
+		 || [mips_have_test_option_p options "-mdspr2"]
+		 || [mips_have_test_option_p options "-mnan=2008"]
+		 || [mips_have_test_option_p options "-mabs=2008"]
+		 || [mips_have_test_option_p options "-mmicromips"]) } {
 	    if { $gp_size == 32 } {
 		mips_make_test_option options "-mips32r2"
 	    } else {
@@ -1108,8 +1188,10 @@ proc mips-dg-options { args } {
         # We need MIPS IV or higher for:
 	#
 	#
-	} elseif { $isa < 3
-		   && [mips_have_test_option_p options "HAS_MOVN"] } {
+	} elseif { $isa < 4
+		   && ([mips_have_test_option_p options "HAS_LXC1"]
+		       || [mips_have_test_option_p options "HAS_MADD4"]
+		       || [mips_have_test_option_p options "HAS_MOVN"]) } {
 	    mips_make_test_option options "-mips4"
         # We need MIPS III or higher for:
 	#
@@ -1150,18 +1232,24 @@ proc mips-dg-options { args } {
 		       || [mips_have_test_option_p options "-mfp32"]
 		       || [mips_have_test_option_p options "-mfix-r10000"]
 		       || [mips_have_test_option_p options "NOT_HAS_DMUL"]
-		       || [mips_have_test_option_p options "HAS_MOVN"]
+		       || [mips_have_test_option_p options "HAS_LXC1"]
 		       || [mips_have_test_option_p options "HAS_MADD"]
+		       || [mips_have_test_option_p options "HAS_MADD4"]
+		       || [mips_have_test_option_p options "HAS_MOVN"]
 		       || [mips_have_test_option_p options "-mpaired-single"]
 		       || [mips_have_test_option_p options "-mnan=legacy"]
 		       || [mips_have_test_option_p options "-mabs=legacy"]
-		       || [mips_have_test_option_p options "!HAS_LSA"]) } {
+		       || [mips_have_test_option_p options "!HAS_LSA"]
+		       || [mips_have_test_option_p options "-mbranch-likely"]) } {
 	    if { $gp_size == 32 } {
 		mips_make_test_option options "-mips32r5"
 	    } else {
 		mips_make_test_option options "-mips64r5"
 	    }
 	    mips_make_test_option options "-mnan=2008"
+	    if { [mips_have_option_p options "-mcompact-branches=always"] } {
+		mips_make_test_option options "-mcompact-branches=optimal"
+	    }
 	# Check whether we need to switch from a 32-bit processor to the
 	# "nearest" 64-bit processor.
 	} elseif { $gp_size == 64 && [mips_32bit_arch_p $arch] } {
@@ -1188,6 +1276,7 @@ proc mips-dg-options { args } {
 
     # Re-calculate the isa_rev for use in the abi handling code below
     set arch [mips_option options arch]
+    set isa [mips_arch_info $arch isa]
     set isa_rev [mips_arch_info $arch isa_rev]
 
     # Set an appropriate ABI, handling dependencies between the pre-abi
@@ -1278,8 +1367,11 @@ proc mips-dg-options { args } {
     }
 
     # Handle dependencies between the arch option and the post-arch options.
-    # This should mirror the arch and pre-arch code above.
-    if { $arch_test_option_p } {
+    # This should mirror the arch and pre-arch code above.  For pre-r6
+    # architectures this only needs to be done when we've moved down
+    # to a lower architecture and might need to turn features off,
+    # but moving up from pre-r6 to r6 can remove features too.
+    if { $arch_test_option_p || ($orig_isa_rev < 6 && $isa_rev >= 6) } {
 	if { $isa < 2 } {
 	    mips_make_test_option options "-mno-branch-likely"
 	    mips_make_test_option options "-mno-fix-r10000"
@@ -1302,6 +1394,11 @@ proc mips-dg-options { args } {
 	    mips_make_test_option options "-mno-micromips"
 	    mips_make_test_option options "-mnan=legacy"
 	}
+	if { $isa_rev < 6 } {
+	    if { [mips_have_option_p options "-mcompact-branches=always"] } {
+		mips_make_test_option options "-mcompact-branches=optimal"
+	    }
+	}
         if { $isa_rev > 5 } {
 	    mips_make_test_option options "-mno-dsp"
 	    mips_make_test_option options "-mno-mips16"
@@ -1312,6 +1409,7 @@ proc mips-dg-options { args } {
 	    mips_make_test_option options "-mno-paired-single"
 	    mips_make_test_option options "-mnan=2008"
 	    mips_make_test_option options "-mabs=2008"
+	    mips_make_test_option options "-mno-branch-likely"
 	}
 	if { [regexp {^-march=(octeon|loongson)} $arch] } {
 	    mips_make_test_option options "-mno-micromips"
@@ -1342,6 +1440,7 @@ proc mips-dg-options { args } {
     mips_option_dependency options "-mfpxx" "-mno-paired-single"
     mips_option_dependency options "-msoft-float" "-mno-paired-single"
     mips_option_dependency options "-mno-paired-single" "-mno-mips3d"
+    mips_option_dependency options "-mmsa" "-mno-mips16"
 
     # If the test requires an unsupported option, change run tests
     # to link tests.
@@ -1381,6 +1480,28 @@ proc mips-dg-options { args } {
     foreach { group regexp } $mips_option_groups {
 	if { $options(explicit_p,$group) } {
 	    append extra_tool_flags " " $options(option,$group)
+	}
+    }
+
+    # If the test is marked as requiring standard libraries check
+    # that the sysroot has support for the current set of test options.
+    if { [mips_have_test_option_p options "REQUIRES_STDLIB"] } {
+	mips_push_test_options saved_options $extra_tool_flags
+	set output [mips_preprocess "" {
+	      #include <stdlib.h>
+	} 1]
+	mips_pop_test_options saved_options
+
+	# If the preprocessing of the stdlib.h file produced errors,
+	# mark the test as unsupported by changing the second element of
+	# do_what to "N".
+	# The second element of do_what holds information about test selection
+	# and it can have one of two values:
+	# "S" - the test is selected and will be run
+	# "N" - the test is not selected and will not be run
+	# This mirrors the format of dg-do-what from lib/dg.exp in DejaGNU.
+	if { ![string equal $output ""] } {
+	    set do_what [lreplace $do_what 1 1 "N"]
 	}
     }
 

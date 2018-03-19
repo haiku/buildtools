@@ -46,6 +46,7 @@ AC_CANONICAL_BUILD
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
+ACX_NONCANONICAL_HOST
 ACX_NONCANONICAL_TARGET
 
 # Need to pass this down for now :-P
@@ -78,6 +79,11 @@ case "${target}" in
     TOOLS_TARGET_PAIRS="\
     mlib-tgt-specific.adb<mlib-tgt-specific-darwin.adb \
     indepsw.adb<indepsw-darwin.adb"
+    ;;
+  *-*-dragonfly*)
+    TOOLS_TARGET_PAIRS="\
+    mlib-tgt-specific.adb<mlib-tgt-specific-linux.adb \
+    indepsw.adb<indepsw-gnu.adb"
     ;;
   *-*-freebsd*)
     TOOLS_TARGET_PAIRS="\

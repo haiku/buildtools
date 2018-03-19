@@ -7,7 +7,7 @@
 --                                  S p e c                                 --
 --                                                                          --
 --             Copyright (C) 1991-1994, Florida State University            --
---          Copyright (C) 1995-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1995-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -182,7 +182,7 @@ package System.OS_Interface is
    type struct_sigaction is record
       sa_handler  : System.Address;
       sa_mask     : sigset_t;
-      sa_flags    : Interfaces.C.unsigned_long;
+      sa_flags    : int;
       sa_restorer : System.Address;
    end record;
    pragma Convention (C, struct_sigaction);
@@ -223,6 +223,10 @@ package System.OS_Interface is
    subtype timespec  is System.Linux.timespec;
    subtype timeval   is System.Linux.timeval;
    subtype clockid_t is System.Linux.clockid_t;
+
+   function clock_gettime
+     (clock_id : clockid_t; tp : access timespec) return int;
+   pragma Import (C, clock_gettime, "clock_gettime");
 
    function clock_getres
      (clock_id : clockid_t;
@@ -266,6 +270,7 @@ package System.OS_Interface is
    pragma Import (C, getpid, "getpid");
 
    PR_SET_NAME : constant := 15;
+   PR_GET_NAME : constant := 16;
 
    function prctl
      (option                 : int;
@@ -526,6 +531,10 @@ package System.OS_Interface is
       destructor : destructor_pointer) return int;
    pragma Import (C, pthread_key_create, "pthread_key_create");
 
+   ----------------
+   -- Extensions --
+   ----------------
+
    CPU_SETSIZE : constant := 1_024;
    --  Size of the cpu_set_t mask on most linux systems (SUSE 11 uses 4_096).
    --  This is kept for backward compatibility (System.Task_Info uses it), but
@@ -598,8 +607,7 @@ private
    for struct_sigaction use record
       sa_handler at Linux.sa_handler_pos range 0 .. Standard'Address_Size - 1;
       sa_mask    at Linux.sa_mask_pos    range 0 .. 1023;
-      sa_flags   at Linux.sa_flags_pos
-        range 0 .. Interfaces.C.unsigned_long'Size - 1;
+      sa_flags   at Linux.sa_flags_pos   range 0 .. int'Size - 1;
    end record;
    --  We intentionally leave sa_restorer unspecified and let the compiler
    --  append it after the last field, so disable corresponding warning.

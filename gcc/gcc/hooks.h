@@ -1,5 +1,5 @@
 /* General-purpose hooks.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -22,8 +22,6 @@
 #ifndef GCC_HOOKS_H
 #define GCC_HOOKS_H
 
-#include "machmode.h"
-#include "wide-int.h"
 
 extern bool hook_bool_void_false (void);
 extern bool hook_bool_void_true (void);
@@ -57,8 +55,9 @@ extern bool hook_bool_rtx_insn_true (rtx_insn *);
 extern bool hook_bool_rtx_false (rtx);
 extern bool hook_bool_rtx_insn_int_false (rtx_insn *, int);
 extern bool hook_bool_uintp_uintp_false (unsigned int *, unsigned int *);
-extern bool hook_bool_rtx_int_int_int_intp_bool_false (rtx, int, int, int,
-						       int *, bool);
+extern bool hook_bool_reg_class_t_false (reg_class_t regclass);
+extern bool hook_bool_rtx_mode_int_int_intp_bool_false (rtx, machine_mode,
+							int, int, int *, bool);
 extern bool hook_bool_tree_tree_false (tree, tree);
 extern bool hook_bool_tree_tree_true (tree, tree);
 extern bool hook_bool_tree_bool_false (tree, bool);
@@ -78,6 +77,7 @@ extern void hook_void_tree (tree);
 extern void hook_void_tree_treeptr (tree, tree *);
 extern void hook_void_int_int (int, int);
 extern void hook_void_gcc_optionsp (struct gcc_options *);
+extern bool hook_bool_uint_uintp_false (unsigned int, unsigned int *);
 
 extern int hook_int_uint_mode_1 (unsigned int, machine_mode);
 extern int hook_int_const_tree_0 (const_tree);
@@ -90,10 +90,10 @@ extern int hook_int_rtx_mode_as_bool_0 (rtx, machine_mode, addr_space_t,
 					bool);
 
 extern tree hook_tree_const_tree_null (const_tree);
+extern tree hook_tree_void_null (void);
 
 extern tree hook_tree_tree_tree_null (tree, tree);
 extern tree hook_tree_tree_tree_tree_null (tree, tree, tree);
-extern tree hook_tree_tree_tree_tree_3rd_identity (tree, tree, tree);
 extern tree hook_tree_tree_int_treep_bool_null (tree, int, tree *, bool);
 
 extern unsigned hook_uint_void_0 (void);

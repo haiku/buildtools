@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O -fdump-tree-forwprop1" } */
+/* { dg-options "-O -fno-tree-vrp -fdump-tree-forwprop1" } */
 
 #include <new>
 
@@ -21,4 +21,3 @@ double foo (void)
 }
 
 /* { dg-final { scan-tree-dump "Replaced .* != 0B. with .1" "forwprop1" } } */
-/* { dg-final { cleanup-tree-dump "forwprop1" } } */

@@ -1,4 +1,4 @@
-/* Copyright (C) 2006-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2006-2017 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -205,7 +205,8 @@ enum reg_class {
     {0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x3}, /* general regs */ \
     {0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0x3}} /* all regs */
 
-#define REGNO_REG_CLASS(REGNO) (GENERAL_REGS)
+#define REGNO_REG_CLASS(REGNO) ((void)(REGNO), GENERAL_REGS)
+
 
 #define BASE_REG_CLASS GENERAL_REGS
 
@@ -237,7 +238,7 @@ targetm.resolve_overloaded_builtin = spu_resolve_overloaded_builtin;	\
 
 /* Frame Layout */
 
-#define STACK_GROWS_DOWNWARD
+#define STACK_GROWS_DOWNWARD 1
 
 #define FRAME_GROWS_DOWNWARD 1
 
@@ -407,7 +408,7 @@ do {									\
 
 #define MOVE_RATIO(speed) ((speed)? 32 : 4)
 
-#define NO_FUNCTION_CSE
+#define NO_FUNCTION_CSE 1
 
 
 /* Sections */

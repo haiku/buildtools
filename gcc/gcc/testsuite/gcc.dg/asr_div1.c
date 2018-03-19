@@ -1,6 +1,8 @@
 /* Test division by const int generates only one shift.  */
 /* { dg-do run } */
 /* { dg-options "-O2 -fdump-rtl-combine-all" } */
+/* { dg-options "-O2 -fdump-rtl-combine-all -mtune=cortex-a53" { target aarch64*-*-* } } */
+/* { dg-require-effective-target int32plus } */
 
 extern void abort (void);
 
@@ -53,4 +55,3 @@ main ()
 
 /* { dg-final { scan-rtl-dump "\\(const_int 36 " "combine" { target aarch64*-*-* } } } */
 
-/* { dg-final { cleanup-rtl-dump "combine" } } */

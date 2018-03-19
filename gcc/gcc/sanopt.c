@@ -1,5 +1,5 @@
 /* Optimize and expand sanitizer functions.
-   Copyright (C) 2014-2015 Free Software Foundation, Inc.
+   Copyright (C) 2014-2017 Free Software Foundation, Inc.
    Contributed by Marek Polacek <polacek@redhat.com>
 
 This file is part of GCC.
@@ -21,44 +21,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "hash-table.h"
-#include "predict.h"
-#include "tm.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
 #include "gimple.h"
-#include "gimplify.h"
-#include "gimple-iterator.h"
-#include "hash-map.h"
-#include "plugin-api.h"
+#include "ssa.h"
 #include "tree-pass.h"
-#include "asan.h"
+#include "tree-ssa-operands.h"
 #include "gimple-pretty-print.h"
-#include "tm_p.h"
-#include "langhooks.h"
+#include "fold-const.h"
+#include "gimple-iterator.h"
+#include "asan.h"
 #include "ubsan.h"
 #include "params.h"
-#include "tree-ssa-operands.h"
-
+#include "tree-hash-traits.h"
+#include "gimple-ssa.h"
+#include "tree-phinodes.h"
+#include "ssa-iterators.h"
 
 /* This is used to carry information about basic blocks.  It is
    attached to the AUX field of the standard CFG block.  */
@@ -99,27 +77,12 @@ maybe_get_single_definition (tree t)
 {
   if (TREE_CODE (t) == SSA_NAME)
     {
-      gimple g = SSA_NAME_DEF_STMT (t);
+      gimple *g = SSA_NAME_DEF_STMT (t);
       if (gimple_assign_single_p (g))
 	return gimple_assign_rhs1 (g);
     }
   return NULL_TREE;
 }
-
-/* Traits class for tree hash maps below.  */
-
-struct sanopt_tree_map_traits : default_hashmap_traits
-{
-  static inline hashval_t hash (const_tree ref)
-  {
-    return iterative_hash_expr (ref, 0);
-  }
-
-  static inline bool equal_keys (const_tree ref1, const_tree ref2)
-  {
-    return operand_equal_p (ref1, ref2, 0);
-  }
-}; 
 
 /* Tree triplet for vptr_check_map.  */
 struct sanopt_tree_triplet
@@ -129,8 +92,11 @@ struct sanopt_tree_triplet
 
 /* Traits class for tree triplet hash maps below.  */
 
-struct sanopt_tree_triplet_map_traits : default_hashmap_traits
+struct sanopt_tree_triplet_hash : typed_noop_remove <sanopt_tree_triplet>
 {
+  typedef sanopt_tree_triplet value_type;
+  typedef sanopt_tree_triplet compare_type;
+
   static inline hashval_t
   hash (const sanopt_tree_triplet &ref)
   {
@@ -142,39 +108,35 @@ struct sanopt_tree_triplet_map_traits : default_hashmap_traits
   }
 
   static inline bool
-  equal_keys (const sanopt_tree_triplet &ref1, const sanopt_tree_triplet &ref2)
+  equal (const sanopt_tree_triplet &ref1, const sanopt_tree_triplet &ref2)
   {
     return operand_equal_p (ref1.t1, ref2.t1, 0)
 	   && operand_equal_p (ref1.t2, ref2.t2, 0)
 	   && operand_equal_p (ref1.t3, ref2.t3, 0);
   }
 
-  template<typename T>
   static inline void
-  mark_deleted (T &e)
+  mark_deleted (sanopt_tree_triplet &ref)
   {
-    e.m_key.t1 = reinterpret_cast<T *> (1);
+    ref.t1 = reinterpret_cast<tree> (1);
   }
 
-  template<typename T>
   static inline void
-  mark_empty (T &e)
+  mark_empty (sanopt_tree_triplet &ref)
   {
-    e.m_key.t1 = NULL;
+    ref.t1 = NULL;
   }
 
-  template<typename T>
   static inline bool
-  is_deleted (T &e)
+  is_deleted (const sanopt_tree_triplet &ref)
   {
-    return e.m_key.t1 == (void *) 1;
+    return ref.t1 == (void *) 1;
   }
 
-  template<typename T>
   static inline bool
-  is_empty (T &e)
+  is_empty (const sanopt_tree_triplet &ref)
   {
-    return e.m_key.t1 == NULL;
+    return ref.t1 == NULL;
   }
 };
 
@@ -185,22 +147,23 @@ struct sanopt_ctx
 {
   /* This map maps a pointer (the first argument of UBSAN_NULL) to
      a vector of UBSAN_NULL call statements that check this pointer.  */
-  hash_map<tree, auto_vec<gimple> > null_check_map;
+  hash_map<tree, auto_vec<gimple *> > null_check_map;
 
   /* This map maps a pointer (the second argument of ASAN_CHECK) to
      a vector of ASAN_CHECK call statements that check the access.  */
-  hash_map<tree, auto_vec<gimple>, sanopt_tree_map_traits> asan_check_map;
+  hash_map<tree_operand_hash, auto_vec<gimple *> > asan_check_map;
 
   /* This map maps a tree triplet (the first, second and fourth argument
      of UBSAN_VPTR) to a vector of UBSAN_VPTR call statements that check
      that virtual table pointer.  */
-  hash_map<sanopt_tree_triplet, auto_vec<gimple>,
-	   sanopt_tree_triplet_map_traits> vptr_check_map;
+  hash_map<sanopt_tree_triplet_hash, auto_vec<gimple *> > vptr_check_map;
 
   /* Number of IFN_ASAN_CHECK statements.  */
   int asan_num_accesses;
-};
 
+  /* True when the current functions constains an ASAN_MARK.  */
+  bool contains_asan_mark;
+};
 
 /* Return true if there might be any call to free/munmap operation
    on any path in between DOM (which should be imm(BB)) and BB.  */
@@ -249,9 +212,13 @@ imm_dom_path_with_freeing_call (basic_block bb, basic_block dom)
       gimple_stmt_iterator gsi;
       for (gsi = gsi_start_bb (e->src); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gimple stmt = gsi_stmt (gsi);
+	  gimple *stmt = gsi_stmt (gsi);
+	  gasm *asm_stmt;
 
-	  if (is_gimple_call (stmt) && !nonfreeing_call_p (stmt))
+	  if ((is_gimple_call (stmt) && !nonfreeing_call_p (stmt))
+	      || ((asm_stmt = dyn_cast <gasm *> (stmt))
+		  && (gimple_asm_clobbers_memory_p (asm_stmt)
+		      || gimple_asm_volatile_p (asm_stmt))))
 	    {
 	      pred_info->has_freeing_call_p = true;
 	      break;
@@ -300,12 +267,12 @@ imm_dom_path_with_freeing_call (basic_block bb, basic_block dom)
 /* Get the first dominating check from the list of stored checks.
    Non-dominating checks are silently dropped.  */
 
-static gimple
-maybe_get_dominating_check (auto_vec<gimple> &v)
+static gimple *
+maybe_get_dominating_check (auto_vec<gimple *> &v)
 {
   for (; !v.is_empty (); v.pop ())
     {
-      gimple g = v.last ();
+      gimple *g = v.last ();
       sanopt_info *si = (sanopt_info *) gimple_bb (g)->aux;
       if (!si->visited_p)
 	/* At this point we shouldn't have any statements
@@ -318,7 +285,7 @@ maybe_get_dominating_check (auto_vec<gimple> &v)
 /* Optimize away redundant UBSAN_NULL calls.  */
 
 static bool
-maybe_optimize_ubsan_null_ifn (struct sanopt_ctx *ctx, gimple stmt)
+maybe_optimize_ubsan_null_ifn (struct sanopt_ctx *ctx, gimple *stmt)
 {
   gcc_assert (gimple_call_num_args (stmt) == 3);
   tree ptr = gimple_call_arg (stmt, 0);
@@ -326,8 +293,8 @@ maybe_optimize_ubsan_null_ifn (struct sanopt_ctx *ctx, gimple stmt)
   gcc_assert (TREE_CODE (cur_align) == INTEGER_CST);
   bool remove = false;
 
-  auto_vec<gimple> &v = ctx->null_check_map.get_or_insert (ptr);
-  gimple g = maybe_get_dominating_check (v);
+  auto_vec<gimple *> &v = ctx->null_check_map.get_or_insert (ptr);
+  gimple *g = maybe_get_dominating_check (v);
   if (!g)
     {
       /* For this PTR we don't have any UBSAN_NULL stmts recorded, so there's
@@ -374,7 +341,7 @@ maybe_optimize_ubsan_null_ifn (struct sanopt_ctx *ctx, gimple stmt)
    when we can actually optimize.  */
 
 static bool
-maybe_optimize_ubsan_vptr_ifn (struct sanopt_ctx *ctx, gimple stmt)
+maybe_optimize_ubsan_vptr_ifn (struct sanopt_ctx *ctx, gimple *stmt)
 {
   gcc_assert (gimple_call_num_args (stmt) == 5);
   sanopt_tree_triplet triplet;
@@ -382,8 +349,8 @@ maybe_optimize_ubsan_vptr_ifn (struct sanopt_ctx *ctx, gimple stmt)
   triplet.t2 = gimple_call_arg (stmt, 1);
   triplet.t3 = gimple_call_arg (stmt, 3);
 
-  auto_vec<gimple> &v = ctx->vptr_check_map.get_or_insert (triplet);
-  gimple g = maybe_get_dominating_check (v);
+  auto_vec<gimple *> &v = ctx->vptr_check_map.get_or_insert (triplet);
+  gimple *g = maybe_get_dominating_check (v);
   if (!g)
     {
       /* For this PTR we don't have any UBSAN_VPTR stmts recorded, so there's
@@ -399,11 +366,11 @@ maybe_optimize_ubsan_vptr_ifn (struct sanopt_ctx *ctx, gimple stmt)
    if preceded by checks in V.  */
 
 static bool
-can_remove_asan_check (auto_vec<gimple> &v, tree len, basic_block bb)
+can_remove_asan_check (auto_vec<gimple *> &v, tree len, basic_block bb)
 {
   unsigned int i;
-  gimple g;
-  gimple to_pop = NULL;
+  gimple *g;
+  gimple *to_pop = NULL;
   bool remove = false;
   basic_block last_bb = bb;
   bool cleanup = false;
@@ -478,7 +445,7 @@ can_remove_asan_check (auto_vec<gimple> &v, tree len, basic_block bb)
 /* Optimize away redundant ASAN_CHECK calls.  */
 
 static bool
-maybe_optimize_asan_check_ifn (struct sanopt_ctx *ctx, gimple stmt)
+maybe_optimize_asan_check_ifn (struct sanopt_ctx *ctx, gimple *stmt)
 {
   gcc_assert (gimple_call_num_args (stmt) == 4);
   tree ptr = gimple_call_arg (stmt, 1);
@@ -493,10 +460,10 @@ maybe_optimize_asan_check_ifn (struct sanopt_ctx *ctx, gimple stmt)
 
   gimple_set_uid (stmt, info->freeing_call_events);
 
-  auto_vec<gimple> *ptr_checks = &ctx->asan_check_map.get_or_insert (ptr);
+  auto_vec<gimple *> *ptr_checks = &ctx->asan_check_map.get_or_insert (ptr);
 
   tree base_addr = maybe_get_single_definition (ptr);
-  auto_vec<gimple> *base_checks = NULL;
+  auto_vec<gimple *> *base_checks = NULL;
   if (base_addr)
     {
       base_checks = &ctx->asan_check_map.get_or_insert (base_addr);
@@ -504,8 +471,8 @@ maybe_optimize_asan_check_ifn (struct sanopt_ctx *ctx, gimple stmt)
       ptr_checks = ctx->asan_check_map.get (ptr);
     }
 
-  gimple g = maybe_get_dominating_check (*ptr_checks);
-  gimple g2 = NULL;
+  gimple *g = maybe_get_dominating_check (*ptr_checks);
+  gimple *g2 = NULL;
 
   if (base_checks)
     /* Try with base address as well.  */
@@ -560,7 +527,7 @@ sanopt_optimize_walker (basic_block bb, struct sanopt_ctx *ctx)
 
   for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)
     {
-      gimple stmt = gsi_stmt (gsi);
+      gimple *stmt = gsi_stmt (gsi);
       bool remove = false;
 
       if (!is_gimple_call (stmt))
@@ -580,6 +547,28 @@ sanopt_optimize_walker (basic_block bb, struct sanopt_ctx *ctx)
       if (asan_check_optimize && !nonfreeing_call_p (stmt))
 	info->freeing_call_events++;
 
+      /* If __asan_before_dynamic_init ("module"); is followed by
+	 __asan_after_dynamic_init (); without intervening memory loads/stores,
+	 there is nothing to guard, so optimize both away.  */
+      if (asan_check_optimize
+	  && gimple_call_builtin_p (stmt, BUILT_IN_ASAN_BEFORE_DYNAMIC_INIT))
+	{
+	  use_operand_p use;
+	  gimple *use_stmt;
+	  if (single_imm_use (gimple_vdef (stmt), &use, &use_stmt))
+	    {
+	      if (is_gimple_call (use_stmt)
+		  && gimple_call_builtin_p (use_stmt,
+					    BUILT_IN_ASAN_AFTER_DYNAMIC_INIT))
+		{
+		  unlink_stmt_vdef (use_stmt);
+		  gimple_stmt_iterator gsi2 = gsi_for_stmt (use_stmt);
+		  gsi_remove (&gsi2, true);
+		  remove = true;
+		}
+	    }
+	}
+
       if (gimple_call_internal_p (stmt))
 	switch (gimple_call_internal_fn (stmt))
 	  {
@@ -594,6 +583,9 @@ sanopt_optimize_walker (basic_block bb, struct sanopt_ctx *ctx)
 	      remove = maybe_optimize_asan_check_ifn (ctx, stmt);
 	    if (!remove)
 	      ctx->asan_num_accesses++;
+	    break;
+	  case IFN_ASAN_MARK:
+	    ctx->contains_asan_mark = true;
 	    break;
 	  default:
 	    break;
@@ -633,10 +625,11 @@ sanopt_optimize_walker (basic_block bb, struct sanopt_ctx *ctx)
 /* Try to remove redundant sanitizer checks in function FUN.  */
 
 static int
-sanopt_optimize (function *fun)
+sanopt_optimize (function *fun, bool *contains_asan_mark)
 {
   struct sanopt_ctx ctx;
   ctx.asan_num_accesses = 0;
+  ctx.contains_asan_mark = false;
 
   /* Set up block info for each basic block.  */
   alloc_aux_for_blocks (sizeof (sanopt_info));
@@ -651,6 +644,7 @@ sanopt_optimize (function *fun)
 
   free_aux_for_blocks ();
 
+  *contains_asan_mark = ctx.contains_asan_mark;
   return ctx.asan_num_accesses;
 }
 
@@ -684,40 +678,230 @@ public:
 
 }; // class pass_sanopt
 
+/* Sanitize all ASAN_MARK unpoison calls that are not reachable by a BB
+   that contains an ASAN_MARK poison.  All these ASAN_MARK unpoison call
+   can be removed as all variables are unpoisoned in a function prologue.  */
+
+static void
+sanitize_asan_mark_unpoison (void)
+{
+  /* 1) Find all BBs that contain an ASAN_MARK poison call.  */
+  auto_sbitmap with_poison (last_basic_block_for_fn (cfun) + 1);
+  bitmap_clear (with_poison);
+  basic_block bb;
+
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      if (bitmap_bit_p (with_poison, bb->index))
+	continue;
+
+      gimple_stmt_iterator gsi;
+      for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&gsi))
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  if (asan_mark_p (stmt, ASAN_MARK_POISON))
+	    {
+	      bitmap_set_bit (with_poison, bb->index);
+	      break;
+	    }
+	}
+    }
+
+  auto_sbitmap poisoned (last_basic_block_for_fn (cfun) + 1);
+  bitmap_clear (poisoned);
+  auto_sbitmap worklist (last_basic_block_for_fn (cfun) + 1);
+  bitmap_copy (worklist, with_poison);
+
+  /* 2) Propagate the information to all reachable blocks.  */
+  while (!bitmap_empty_p (worklist))
+    {
+      unsigned i = bitmap_first_set_bit (worklist);
+      bitmap_clear_bit (worklist, i);
+      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);
+      gcc_assert (bb);
+
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	if (!bitmap_bit_p (poisoned, e->dest->index))
+	  {
+	    bitmap_set_bit (poisoned, e->dest->index);
+	    bitmap_set_bit (worklist, e->dest->index);
+	  }
+    }
+
+  /* 3) Iterate all BBs not included in POISONED BBs and remove unpoison
+	ASAN_MARK preceding an ASAN_MARK poison (which can still happen).  */
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      if (bitmap_bit_p (poisoned, bb->index))
+	continue;
+
+      gimple_stmt_iterator gsi;
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi);)
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  if (gimple_call_internal_p (stmt, IFN_ASAN_MARK))
+	    {
+	      if (asan_mark_p (stmt, ASAN_MARK_POISON))
+		break;
+	      else
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Removing ASAN_MARK unpoison\n");
+		  unlink_stmt_vdef (stmt);
+		  release_defs (stmt);
+		  gsi_remove (&gsi, true);
+		  continue;
+		}
+	    }
+
+	  gsi_next (&gsi);
+	}
+    }
+}
+
+/* Return true when STMT is either ASAN_CHECK call or a call of a function
+   that can contain an ASAN_CHECK.  */
+
+static bool
+maybe_contains_asan_check (gimple *stmt)
+{
+  if (is_gimple_call (stmt))
+    {
+      if (gimple_call_internal_p (stmt, IFN_ASAN_MARK))
+	return false;
+      else
+	return !(gimple_call_flags (stmt) & ECF_CONST);
+    }
+  else if (is_a<gasm *> (stmt))
+    return true;
+
+  return false;
+}
+
+/* Sanitize all ASAN_MARK poison calls that are not followed by an ASAN_CHECK
+   call.  These calls can be removed.  */
+
+static void
+sanitize_asan_mark_poison (void)
+{
+  /* 1) Find all BBs that possibly contain an ASAN_CHECK.  */
+  auto_sbitmap with_check (last_basic_block_for_fn (cfun) + 1);
+  bitmap_clear (with_check);
+  basic_block bb;
+
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      gimple_stmt_iterator gsi;
+      for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi); gsi_prev (&gsi))
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  if (maybe_contains_asan_check (stmt))
+	    {
+	      bitmap_set_bit (with_check, bb->index);
+	      break;
+	    }
+	}
+    }
+
+  auto_sbitmap can_reach_check (last_basic_block_for_fn (cfun) + 1);
+  bitmap_clear (can_reach_check);
+  auto_sbitmap worklist (last_basic_block_for_fn (cfun) + 1);
+  bitmap_copy (worklist, with_check);
+
+  /* 2) Propagate the information to all definitions blocks.  */
+  while (!bitmap_empty_p (worklist))
+    {
+      unsigned i = bitmap_first_set_bit (worklist);
+      bitmap_clear_bit (worklist, i);
+      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);
+      gcc_assert (bb);
+
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bb->preds)
+	if (!bitmap_bit_p (can_reach_check, e->src->index))
+	  {
+	    bitmap_set_bit (can_reach_check, e->src->index);
+	    bitmap_set_bit (worklist, e->src->index);
+	  }
+    }
+
+  /* 3) Iterate all BBs not included in CAN_REACH_CHECK BBs and remove poison
+	ASAN_MARK not followed by a call to function having an ASAN_CHECK.  */
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      if (bitmap_bit_p (can_reach_check, bb->index))
+	continue;
+
+      gimple_stmt_iterator gsi;
+      for (gsi = gsi_last_bb (bb); !gsi_end_p (gsi);)
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  if (maybe_contains_asan_check (stmt))
+	    break;
+	  else if (asan_mark_p (stmt, ASAN_MARK_POISON))
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Removing ASAN_MARK poison\n");
+	      unlink_stmt_vdef (stmt);
+	      release_defs (stmt);
+	      gimple_stmt_iterator gsi2 = gsi;
+	      gsi_prev (&gsi);
+	      gsi_remove (&gsi2, true);
+	      continue;
+	    }
+
+	  gsi_prev (&gsi);
+	}
+    }
+}
+
 unsigned int
 pass_sanopt::execute (function *fun)
 {
   basic_block bb;
   int asan_num_accesses = 0;
+  bool contains_asan_mark = false;
 
   /* Try to remove redundant checks.  */
   if (optimize
       && (flag_sanitize
 	  & (SANITIZE_NULL | SANITIZE_ALIGNMENT
 	     | SANITIZE_ADDRESS | SANITIZE_VPTR)))
-    asan_num_accesses = sanopt_optimize (fun);
+    asan_num_accesses = sanopt_optimize (fun, &contains_asan_mark);
   else if (flag_sanitize & SANITIZE_ADDRESS)
     {
       gimple_stmt_iterator gsi;
       FOR_EACH_BB_FN (bb, fun)
 	for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	  {
- 	    gimple stmt = gsi_stmt (gsi);
-	    if (is_gimple_call (stmt) && gimple_call_internal_p (stmt)
-		&& gimple_call_internal_fn (stmt) == IFN_ASAN_CHECK)
+	    gimple *stmt = gsi_stmt (gsi);
+	    if (gimple_call_internal_p (stmt, IFN_ASAN_CHECK))
 	      ++asan_num_accesses;
+	    else if (gimple_call_internal_p (stmt, IFN_ASAN_MARK))
+	      contains_asan_mark = true;
 	  }
+    }
+
+  if (contains_asan_mark)
+    {
+      sanitize_asan_mark_unpoison ();
+      sanitize_asan_mark_poison ();
     }
 
   bool use_calls = ASAN_INSTRUMENTATION_WITH_CALL_THRESHOLD < INT_MAX
     && asan_num_accesses >= ASAN_INSTRUMENTATION_WITH_CALL_THRESHOLD;
 
+  hash_map<tree, tree> shadow_vars_mapping;
+  bool need_commit_edge_insert = false;
   FOR_EACH_BB_FN (bb, fun)
     {
       gimple_stmt_iterator gsi;
       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )
 	{
-	  gimple stmt = gsi_stmt (gsi);
+	  gimple *stmt = gsi_stmt (gsi);
 	  bool no_next = false;
 
 	  if (!is_gimple_call (stmt))
@@ -745,6 +929,14 @@ pass_sanopt::execute (function *fun)
 		  break;
 		case IFN_ASAN_CHECK:
 		  no_next = asan_expand_check_ifn (&gsi, use_calls);
+		  break;
+		case IFN_ASAN_MARK:
+		  no_next = asan_expand_mark_ifn (&gsi);
+		  break;
+		case IFN_ASAN_POISON:
+		  no_next = asan_expand_poison_ifn (&gsi,
+						    &need_commit_edge_insert,
+						    shadow_vars_mapping);
 		  break;
 		default:
 		  break;
@@ -777,6 +969,10 @@ pass_sanopt::execute (function *fun)
 	    gsi_next (&gsi);
 	}
     }
+
+  if (need_commit_edge_insert)
+    gsi_commit_edge_inserts ();
+
   return 0;
 }
 

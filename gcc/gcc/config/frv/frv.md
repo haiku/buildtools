@@ -1,5 +1,5 @@
 ;; Frv Machine Description
-;; Copyright (C) 1999-2015 Free Software Foundation, Inc.
+;; Copyright (C) 1999-2017 Free Software Foundation, Inc.
 ;; Contributed by Red Hat, Inc.
 
 ;; This file is part of GCC.
@@ -1870,11 +1870,9 @@
 {
   rtx op0 = operands[0];
   rtx op1 = operands[1];
-  REAL_VALUE_TYPE rv;
   long l[2];
 
-  REAL_VALUE_FROM_CONST_DOUBLE (rv, op1);
-  REAL_VALUE_TO_TARGET_DOUBLE (rv, l);
+  REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (op1), l);
 
   operands[2] = gen_highpart (SImode, op0);
   operands[3] = gen_lowpart (SImode, op0);
@@ -1995,22 +1993,20 @@
 
   start_sequence ();
 
-  emit_insn (gen_rtx_SET (VOIDmode, icr,
-			  gen_rtx_LT (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (icr, gen_rtx_LT (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_movsi (dest, const1_rtx));
 
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
-				gen_rtx_SET (VOIDmode, dest,
+				gen_rtx_SET (dest,
 					     gen_rtx_NEG (SImode, dest))));
 
-  emit_insn (gen_rtx_SET (VOIDmode, icr,
-			  gen_rtx_EQ (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (icr, gen_rtx_EQ (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
-				gen_rtx_SET (VOIDmode, dest, const0_rtx)));
+				gen_rtx_SET (dest, const0_rtx)));
 
   operands[3] = get_insns ();
   end_sequence ();
@@ -2063,8 +2059,7 @@
 
   start_sequence ();
 
-  emit_insn (gen_rtx_SET (VOIDmode, icr,
-			  gen_rtx_GTU (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (icr, gen_rtx_GTU (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_movsi (dest, const1_rtx));
 
@@ -2072,12 +2067,11 @@
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
 				gen_addsi3 (dest, dest, dest)));
 
-  emit_insn (gen_rtx_SET (VOIDmode, icr,
-			  gen_rtx_LTU (CC_CCRmode, icc, const0_rtx)));
+  emit_insn (gen_rtx_SET (icr, gen_rtx_LTU (CC_CCRmode, icc, const0_rtx)));
 
   emit_insn (gen_rtx_COND_EXEC (VOIDmode,
 				gen_rtx_NE (CC_CCRmode, icr, const0_rtx),
-				gen_rtx_SET (VOIDmode, dest, const0_rtx)));
+				gen_rtx_SET (dest, const0_rtx)));
 
   operands[3] = get_insns ();
   end_sequence ();
@@ -2332,8 +2326,7 @@
 				gen_rtx_EQ (CC_CCRmode,
 					    operands[1],
 					    const0_rtx),
-				gen_rtx_SET (VOIDmode, int_op0,
-					     const0_rtx)));
+				gen_rtx_SET (int_op0, const0_rtx)));
 
   operands[2] = get_insns ();
   end_sequence ();
@@ -7354,9 +7347,8 @@
   ""
   "
 {
-  rtx insn;
-
-  insn = emit_insn (gen_symGOT2reg_i (operands[0], operands[1], operands[2], operands[3]));
+  rtx_insn *insn = emit_insn (gen_symGOT2reg_i (operands[0], operands[1],
+						operands[2], operands[3]));
 
   MEM_READONLY_P (SET_SRC (PATTERN (insn))) = 1;
 
@@ -7438,7 +7430,8 @@
   ""
   "
 {
-  rtx insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1], operands[2], operands[3]));
+  rtx_insn *insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1],
+						   operands[2], operands[3]));
 
   set_unique_reg_note (insn, REG_EQUAL, operands[1]);
 
@@ -7464,8 +7457,6 @@
   ""
   "
 {
-  rtx insn;
-
   if (!can_create_pseudo_p ())
     operands[4] = operands[0];
   else
@@ -7473,8 +7464,8 @@
 
   emit_insn (frv_gen_GPsym2reg (operands[4], operands[2]));
 
-  insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1],
-					 operands[4], operands[3]));
+  rtx_insn *insn = emit_insn (gen_symGOTOFF2reg_i (operands[0], operands[1],
+						   operands[4], operands[3]));
 
   set_unique_reg_note (insn, REG_EQUAL, operands[1]);
 
@@ -7490,8 +7481,6 @@
   ""
   "
 {
-  rtx insn;
-
   if (!can_create_pseudo_p ())
     {
       emit_insn (gen_symGOT2reg (operands[0], operands[1], operands[2],
@@ -7503,8 +7492,8 @@
 
   emit_insn (frv_gen_GPsym2reg (operands[4], operands[2]));
 
-  insn = emit_insn (gen_symGOTOFF2reg_hilo (operands[0], operands[1],
-					    operands[4], operands[3]));
+  rtx_insn *insn = emit_insn (gen_symGOTOFF2reg_hilo (operands[0], operands[1],
+						      operands[4], operands[3]));
 
   set_unique_reg_note (insn, REG_EQUAL, operands[1]);
 

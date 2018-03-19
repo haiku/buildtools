@@ -1,6 +1,6 @@
 /* { dg-options "-fcilkplus" } */
-/* { dg-do run { target i?86-*-* x86_64-*-* arm*-*-* } } */
-/* { dg-options "-fcilkplus -lcilkrts" { target { i?86-*-* x86_64-*-* arm*-*-* } } } */
+/* { dg-do run } */
+/* { dg-require-effective-target cilkplus_runtime } */
 
 #include <assert.h>
 #include <unistd.h>
@@ -9,6 +9,16 @@
 #include <cilk/cilk_api.h>
 #endif
 #include <cstdlib>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern int __cilkrts_set_param (const char *, const char *);
+
+#ifdef __cplusplus
+}
+#endif
 
 
 void func(int volatile* steal_me) 
@@ -59,6 +69,10 @@ void my_test()
 
 int main() 
 {
+  /* Ensure more than one worker.  */
+  if (__cilkrts_set_param("nworkers", "2") != 0)
+    __builtin_abort();
+
   my_test();
 #if HAVE_IO
   printf("PASSED\n");

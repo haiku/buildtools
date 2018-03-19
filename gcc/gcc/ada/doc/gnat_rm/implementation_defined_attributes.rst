@@ -44,7 +44,7 @@ Attribute Address_Size
 prefix) is a static constant giving the number of bits in an
 `Address`. It is the same value as System.Address'Size,
 but has the advantage of being static, while a direct
-reference to System.Address'Size is non-static because Address
+reference to System.Address'Size is nonstatic because Address
 is a private type.
 
 Attribute Asm_Input
@@ -233,7 +233,7 @@ Attribute Descriptor_Size
 
 .. index:: Descriptor_Size
 
-Non-static attribute `Descriptor_Size` returns the size in bits of the
+Nonstatic attribute `Descriptor_Size` returns the size in bits of the
 descriptor allocated for a type.  The result is non-zero only for unconstrained
 array types and the returned value is of type universal integer.  In GNAT, an
 array descriptor contains bounds information and is located immediately before
@@ -403,6 +403,21 @@ Attribute Fast_Math
 `Standard'Fast_Math` (`Standard` is the only allowed
 prefix) yields a static Boolean value that is True if pragma
 `Fast_Math` is active, and False otherwise.
+
+Attribute Finalization_Size
+===========================
+.. index:: Finalization_Size
+
+The prefix of attribute `Finalization_Size` must be an object or
+a non-class-wide type. This attribute returns the size of any hidden data
+reserved by the compiler to handle finalization-related actions. The type of
+the attribute is `universal_integer`.
+
+`Finalization_Size` yields a value of zero for a type with no controlled
+parts, an object whose type has no controlled parts, or an object of a
+class-wide type whose tag denotes a type with no controlled parts.
+
+Note that only heap-allocated objects contain finalization data.
 
 Attribute Fixed_Value
 =====================
@@ -670,6 +685,8 @@ passed for a record or other composite object passed by reference.
 There is no way of indicating this without the `Null_Parameter`
 attribute.
 
+.. _Attribute-Object_Size:
+
 Attribute Object_Size
 =====================
 .. index:: Size, used for objects
@@ -760,7 +777,7 @@ Attribute Passed_By_Reference
 a value of type `Boolean` value that is `True` if the type is
 normally passed by reference and `False` if the type is normally
 passed by copy in calls.  For scalar types, the result is always `False`
-and is static.  For non-scalar types, the result is non-static.
+and is static.  For non-scalar types, the result is nonstatic.
 
 Attribute Pool_Address
 ======================
@@ -792,10 +809,6 @@ the number of values represented by the subtype (zero for a null
 range).  The result is static for static subtypes.  `Range_Length`
 applied to the index subtype of a one dimensional array always gives the
 same result as `Length` applied to the array itself.
-
-Attribute Ref
-=============
-.. index:: Ref
 
 Attribute Restriction_Set
 =========================
@@ -905,6 +918,8 @@ The `Safe_Small` attribute is provided for compatibility with Ada 83.  See
 the Ada 83 reference manual for an exact description of the semantics of
 this attribute.
 
+.. _Attribute-Scalar_Storage_Order:
+
 Attribute Scalar_Storage_Order
 ==============================
 .. index:: Endianness
@@ -966,10 +981,7 @@ types. This may be overridden for the derived type by giving an explicit scalar
 storage order for the derived type. For a record extension, the derived type
 must have the same scalar storage order as the parent type.
 
-If a component of `T` is of a record or array type, then that type must
-also have a `Scalar_Storage_Order` attribute definition clause.
-
-A component of a record or array type that is a packed array, or that
+A component of a record or array type that is a bit-packed array, or that
 does not start on a byte boundary, must have the same scalar storage order
 as the enclosing record or array type.
 
@@ -1004,6 +1016,11 @@ If no scalar storage order is specified for a type (either directly, or by
 inheritance in the case of a derived type), then the default is normally
 the native ordering of the target, but this default can be overridden using
 pragma `Default_Scalar_Storage_Order`.
+
+Note that if a component of `T` is itself of a record or array type,
+the specfied `Scalar_Storage_Order` does *not* apply to that nested type:
+an explicit attribute definition clause must be provided for the component
+type as well if desired.
 
 Note that the scalar storage order only affects the in-memory data
 representation. It has no effect on the representation used by stream
@@ -1149,7 +1166,7 @@ a static expression, then the result of the attribute is a
 static expression.  This means that such an expression can be
 used in contexts (e.g., preelaborable packages) which require a
 static expression and where the function call could not be used
-(since the function call is always non-static, even if its
+(since the function call is always nonstatic, even if its
 argument is static). The argument must be in the range
 -(2**(m-1) .. 2**m-1, where m is the memory size
 (typically 32 or 64). Negative values are intepreted in a
@@ -1206,17 +1223,6 @@ Attribute TypeCode
 
 This internal attribute is used for the generation of remote subprogram
 stubs in the context of the Distributed Systems Annex.
-
-Attribute UET_Address
-=====================
-.. index:: UET_Address
-
-The `UET_Address` attribute can only be used for a prefix which
-denotes a library package.  It yields the address of the unit exception
-table when zero cost exception handling is used.  This attribute is
-intended only for use within the GNAT implementation.  See the unit
-`Ada.Exceptions` in files :file:`a-except.ads` and :file:`a-except.adb`
-for details on how this attribute is used in the implementation.
 
 Attribute Unconstrained_Array
 =============================
@@ -1570,6 +1576,8 @@ Object_Size (for example, `Natural'Size` is 32 rather than 31 on
 typical machines).  In addition `'VADS_Size` applied to an object
 gives the result that would be obtained by applying the attribute to
 the corresponding type.
+
+.. _Attribute-Value_Size:
 
 Attribute Value_Size
 ====================

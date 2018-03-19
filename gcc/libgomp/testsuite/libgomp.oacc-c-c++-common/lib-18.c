@@ -1,9 +1,10 @@
-/* { dg-do run } */
+/* Verify that acc_delete unregisters data mappings on the device.  */
 
-#include <stdlib.h>
-#include <openacc.h>
+/* { dg-do run { target openacc_nvidia_accel_selected } } */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <openacc.h>
 
 int
 main (int argc, char **argv)
@@ -24,6 +25,7 @@ main (int argc, char **argv)
 
   acc_free (d);
 
+  fprintf (stderr, "CheCKpOInT\n");
   acc_copyout (h, N);
 
   free (h);
@@ -31,4 +33,6 @@ main (int argc, char **argv)
   return 0;
 }
 
-/* { dg-shouldfail "libgomp: \[\h+,256\] is not mapped" } */
+/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
+/* { dg-output "\\\[\[0-9a-fA-FxX\]+,256\\\] is not mapped" } */
+/* { dg-shouldfail "" } */

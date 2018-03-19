@@ -1,5 +1,5 @@
 /* Common subexpression elimination for GNU compiler.
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,7 +21,8 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_CSELIB_H
 
 /* Describe a value.  */
-struct cselib_val {
+struct cselib_val
+{
   /* The hash value.  */
   unsigned int hash;
 
@@ -79,9 +80,9 @@ extern void cselib_init (int);
 extern void cselib_clear_table (void);
 extern void cselib_finish (void);
 extern void cselib_process_insn (rtx_insn *);
-extern bool fp_setter_insn (rtx);
+extern bool fp_setter_insn (rtx_insn *);
 extern machine_mode cselib_reg_set_mode (const_rtx);
-extern int rtx_equal_for_cselib_p (rtx, rtx);
+extern int rtx_equal_for_cselib_1 (rtx, rtx, machine_mode, int);
 extern int references_value_p (const_rtx, int);
 extern rtx cselib_expand_value_rtx (rtx, bitmap, int);
 typedef rtx (*cselib_expand_callback)(rtx, bitmap, int, void *);
@@ -122,6 +123,18 @@ canonical_cselib_val (cselib_val *val)
   canon = CSELIB_VAL_PTR (val->locs->loc);
   gcc_checking_assert (canonical_cselib_val (canon) == canon);
   return canon;
+}
+
+/* Return nonzero if we can prove that X and Y contain the same value, taking
+   our gathered information into account.  */
+
+static inline int
+rtx_equal_for_cselib_p (rtx x, rtx y)
+{
+  if (x == y)
+    return 1;
+
+  return rtx_equal_for_cselib_1 (x, y, VOIDmode, 0);
 }
 
 #endif /* GCC_CSELIB_H */

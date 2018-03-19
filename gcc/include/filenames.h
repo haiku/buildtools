@@ -5,7 +5,7 @@
    use forward- and back-slash in path names interchangeably, and
    some of them have case-insensitive file names.
 
-   Copyright 2000, 2001, 2007, 2010 Free Software Foundation, Inc.
+   Copyright (C) 2000-2017 Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
 
@@ -44,11 +44,9 @@ extern "C" {
 #  define IS_ABSOLUTE_PATH(f) IS_DOS_ABSOLUTE_PATH (f)
 #else /* not DOSish */
 #  if defined(__APPLE__)
-/*
 #    ifndef HAVE_CASE_INSENSITIVE_FILE_SYSTEM
 #      define HAVE_CASE_INSENSITIVE_FILE_SYSTEM 1
 #    endif
-*/
 #  endif /* __APPLE__ */
 #  define HAS_DRIVE_SPEC(f) (0)
 #  define IS_DIR_SEPARATOR(c) IS_UNIX_DIR_SEPARATOR (c)

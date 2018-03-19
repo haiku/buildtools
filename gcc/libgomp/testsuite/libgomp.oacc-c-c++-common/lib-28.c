@@ -1,5 +1,8 @@
-/* { dg-do run } */
+/* Exercise acc_delete with a NULL address on nvidia targets.  */
 
+/* { dg-do run { target openacc_nvidia_accel_selected } } */
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <openacc.h>
 
@@ -16,6 +19,7 @@ main (int argc, char **argv)
   if (!d)
     abort ();
 
+  fprintf (stderr, "CheCKpOInT\n");
   acc_delete (0, N);
 
   free (h);
@@ -23,4 +27,6 @@ main (int argc, char **argv)
   return 0;
 }
 
-/* { dg-shouldfail "libgomp: \[\(nil\),256\] is not mapped" } */
+/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
+/* { dg-output "\\\[\[^\n\r]*,256\\\] is not mapped" } */
+/* { dg-shouldfail "" } */

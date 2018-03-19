@@ -22,36 +22,37 @@ void StackTrace::Print() const {
     Printf("    <empty stack>\n\n");
     return;
   }
-  const int kMaxAddrFrames = 64;
-  InternalScopedBuffer<AddressInfo> addr_frames(kMaxAddrFrames);
-  for (uptr i = 0; i < kMaxAddrFrames; i++)
-    new(&addr_frames[i]) AddressInfo();
   InternalScopedString frame_desc(GetPageSizeCached() * 2);
+  InternalScopedString dedup_token(GetPageSizeCached());
+  int dedup_frames = common_flags()->dedup_token_length;
   uptr frame_num = 0;
   for (uptr i = 0; i < size && trace[i]; i++) {
     // PCs in stack traces are actually the return addresses, that is,
     // addresses of the next instructions after the call.
     uptr pc = GetPreviousInstructionPc(trace[i]);
-    uptr addr_frames_num = Symbolizer::GetOrInit()->SymbolizePC(
-        pc, addr_frames.data(), kMaxAddrFrames);
-    if (addr_frames_num == 0) {
-      addr_frames[0].address = pc;
-      addr_frames_num = 1;
-    }
-    for (uptr j = 0; j < addr_frames_num; j++) {
-      AddressInfo &info = addr_frames[j];
+    SymbolizedStack *frames = Symbolizer::GetOrInit()->SymbolizePC(pc);
+    CHECK(frames);
+    for (SymbolizedStack *cur = frames; cur; cur = cur->next) {
       frame_desc.clear();
       RenderFrame(&frame_desc, common_flags()->stack_trace_format, frame_num++,
-                  info, common_flags()->strip_path_prefix);
+                  cur->info, common_flags()->symbolize_vs_style,
+                  common_flags()->strip_path_prefix);
       Printf("%s\n", frame_desc.data());
-      info.Clear();
+      if (dedup_frames-- > 0) {
+        if (dedup_token.length())
+          dedup_token.append("--");
+        dedup_token.append(cur->info.function);
+      }
     }
+    frames->ClearAll();
   }
   // Always print a trailing empty line after stack trace.
   Printf("\n");
+  if (dedup_token.length())
+    Printf("DEDUP_TOKEN: %s\n", dedup_token.data());
 }
 
-void BufferedStackTrace::Unwind(uptr max_depth, uptr pc, uptr bp, void *context,
+void BufferedStackTrace::Unwind(u32 max_depth, uptr pc, uptr bp, void *context,
                                 uptr stack_top, uptr stack_bottom,
                                 bool request_fast_unwind) {
   top_frame_bp = (max_depth > 0) ? bp : 0;
@@ -66,13 +67,52 @@ void BufferedStackTrace::Unwind(uptr max_depth, uptr pc, uptr bp, void *context,
     return;
   }
   if (!WillUseFastUnwind(request_fast_unwind)) {
+#if SANITIZER_CAN_SLOW_UNWIND
     if (context)
       SlowUnwindStackWithContext(pc, context, max_depth);
     else
       SlowUnwindStack(pc, max_depth);
+#else
+    UNREACHABLE("slow unwind requested but not available");
+#endif
   } else {
     FastUnwindStack(pc, bp, stack_top, stack_bottom, max_depth);
   }
 }
 
 }  // namespace __sanitizer
+using namespace __sanitizer;
+
+extern "C" {
+SANITIZER_INTERFACE_ATTRIBUTE
+void __sanitizer_symbolize_pc(uptr pc, const char *fmt, char *out_buf,
+                              uptr out_buf_size) {
+  if (!out_buf_size) return;
+  pc = StackTrace::GetPreviousInstructionPc(pc);
+  SymbolizedStack *frame = Symbolizer::GetOrInit()->SymbolizePC(pc);
+  if (!frame) {
+    internal_strncpy(out_buf, "<can't symbolize>", out_buf_size);
+    out_buf[out_buf_size - 1] = 0;
+    return;
+  }
+  InternalScopedString frame_desc(GetPageSizeCached());
+  RenderFrame(&frame_desc, fmt, 0, frame->info,
+              common_flags()->symbolize_vs_style,
+              common_flags()->strip_path_prefix);
+  internal_strncpy(out_buf, frame_desc.data(), out_buf_size);
+  out_buf[out_buf_size - 1] = 0;
+}
+
+SANITIZER_INTERFACE_ATTRIBUTE
+void __sanitizer_symbolize_global(uptr data_addr, const char *fmt,
+                                  char *out_buf, uptr out_buf_size) {
+  if (!out_buf_size) return;
+  out_buf[0] = 0;
+  DataInfo DI;
+  if (!Symbolizer::GetOrInit()->SymbolizeData(data_addr, &DI)) return;
+  InternalScopedString data_desc(GetPageSizeCached());
+  RenderData(&data_desc, fmt, &DI, common_flags()->strip_path_prefix);
+  internal_strncpy(out_buf, data_desc.data(), out_buf_size);
+  out_buf[out_buf_size - 1] = 0;
+}
+}  // extern "C"

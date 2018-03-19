@@ -597,10 +597,13 @@ ac_includes_default="\
 # include <unistd.h>
 #endif"
 
+ac_header_list=
+ac_func_list=
 ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
+get_gcc_base_ver
 OMP_NEST_LOCK_25_KIND
 OMP_LOCK_25_KIND
 OMP_NEST_LOCK_25_ALIGN
@@ -627,10 +630,18 @@ LIBGOMP_BUILD_VERSIONED_SHLIB_FALSE
 LIBGOMP_BUILD_VERSIONED_SHLIB_TRUE
 OPT_LDFLAGS
 SECTION_LDFLAGS
+PLUGIN_HSA_FALSE
+PLUGIN_HSA_TRUE
 PLUGIN_NVPTX_FALSE
 PLUGIN_NVPTX_TRUE
 offload_additional_lib_paths
 offload_additional_options
+PLUGIN_HSA_LIBS
+PLUGIN_HSA_LDFLAGS
+PLUGIN_HSA_CPPFLAGS
+PLUGIN_HSA
+HSA_RUNTIME_LIB
+HSA_RUNTIME_INCLUDE
 PLUGIN_NVPTX_LIBS
 PLUGIN_NVPTX_LDFLAGS
 PLUGIN_NVPTX_CPPFLAGS
@@ -673,6 +684,7 @@ AR
 am__fastdepCC_FALSE
 am__fastdepCC_TRUE
 CCDEPMODE
+am__nodep
 AMDEPBACKSLASH
 AMDEP_FALSE
 AMDEP_TRUE
@@ -781,9 +793,13 @@ enable_maintainer_mode
 with_cuda_driver
 with_cuda_driver_include
 with_cuda_driver_lib
+with_hsa_runtime
+with_hsa_runtime_include
+with_hsa_runtime_lib
 enable_linux_futex
 enable_tls
 enable_symvers
+with_gcc_major_version_only
 '
       ac_precious_vars='build_alias
 host_alias
@@ -1452,6 +1468,18 @@ Optional Packages:
   --with-cuda-driver-lib=PATH
                           specify directory for the installed CUDA driver
                           library
+  --with-hsa-runtime=PATH specify prefix directory for installed HSA run-time
+                          package. Equivalent to
+                          --with-hsa-runtime-include=PATH/include plus
+                          --with-hsa-runtime-lib=PATH/lib
+  --with-hsa-runtime-include=PATH
+                          specify directory for installed HSA run-time include
+                          files
+  --with-hsa-runtime-lib=PATH
+                          specify directory for the installed HSA run-time
+                          library
+  --with-gcc-major-version-only
+                          use only GCC major number in filesystem paths
 
 Some influential environment variables:
   CC          C compiler command
@@ -2493,6 +2521,13 @@ $as_echo "$as_me: creating cache $cache_file" >&6;}
   >$cache_file
 fi
 
+as_fn_append ac_header_list " unistd.h"
+as_fn_append ac_func_list " secure_getenv"
+as_fn_append ac_func_list " __secure_getenv"
+as_fn_append ac_func_list " getuid"
+as_fn_append ac_func_list " geteuid"
+as_fn_append ac_func_list " getgid"
+as_fn_append ac_func_list " getegid"
 # Check that the precious variables saved in the cache have kept the same
 # value.
 ac_cache_corrupted=false
@@ -3255,11 +3290,11 @@ MAKEINFO=${MAKEINFO-"${am_missing_run}makeinfo"}
 
 # We need awk for the "check" target.  The system "awk" is bad on
 # some platforms.
-# Always define AMTAR for backward compatibility.
+# Always define AMTAR for backward compatibility.  Yes, it's still used
+# in the wild :-(  We should find a proper way to deprecate it ...
+AMTAR='$${TAR-tar}'
 
-AMTAR=${AMTAR-"${am_missing_run}tar"}
-
-am__tar='${AMTAR} chof - "$$tardir"'; am__untar='${AMTAR} xf -'
+am__tar='$${TAR-tar} chof - "$$tardir"' am__untar='$${TAR-tar} xf -'
 
 
 
@@ -4157,6 +4192,7 @@ fi
 if test "x$enable_dependency_tracking" != xno; then
   am_depcomp="$ac_aux_dir/depcomp"
   AMDEPBACKSLASH='\'
+  am__nodep='_no'
 fi
  if test "x$enable_dependency_tracking" != xno; then
   AMDEP_TRUE=
@@ -4181,6 +4217,7 @@ else
   # instance it was reported that on HP-UX the gcc test will end up
   # making a dummy file named `D' -- because `-MD' means `put the output
   # in D'.
+  rm -rf conftest.dir
   mkdir conftest.dir
   # Copy depcomp to subdir because otherwise we won't find it if we're
   # using a relative directory.
@@ -4240,7 +4277,7 @@ else
 	break
       fi
       ;;
-    msvisualcpp | msvcmsys)
+    msvc7 | msvc7msys | msvisualcpp | msvcmsys)
       # This compiler won't grok `-c -o', but also, the minuso test has
       # not run yet.  These depmodes are late enough in the game, and
       # so weak that their functioning should not be impacted.
@@ -8189,7 +8226,7 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
       esac
       ;;
 
-    beos* | haiku* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
+    beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
       # PIC is the default for these OSes.
       ;;
 
@@ -8879,8 +8916,8 @@ _LT_EOF
       ;;
 
     haiku*)
-      allow_undefined_flag=unsupported
-      archive_cmds='$CC -nostart $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+      archive_cmds='$CC -shared $libobjs $deplibs $compiler_flags ${wl}-soname $wl$soname -o $lib'
+      link_all_deplibs=yes
       ;;
 
     interix[3-9]*)
@@ -10314,9 +10351,16 @@ gnu*)
   ;;
 
 haiku*)
-  library_names_spec='${libname}${shared_ext}'
-  dynamic_linker="$host_os ld.so"
+  version_type=linux
+  need_lib_prefix=no
+  need_version=no
+  dynamic_linker="$host_os runtime_loader"
+  library_names_spec='${libname}${release}${shared_ext}$versuffix ${libname}${release}${shared_ext}${major} ${libname}${shared_ext}'
+  soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
+  shlibpath_overrides_runpath=yes
+  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
+  hardcode_into_libs=yes
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -11111,7 +11155,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11121 "configure"
+#line 11158 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11217,7 +11261,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11227 "configure"
+#line 11264 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -13955,7 +13999,7 @@ haiku*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
   shlibpath_overrides_runpath=yes
-  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/system/lib'
+  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
   hardcode_into_libs=yes
   ;;
 
@@ -14604,7 +14648,7 @@ $as_echo "#define STRING_WITH_STRINGS 1" >>confdefs.h
 
 fi
 
-for ac_header in pthread.h unistd.h semaphore.h sys/loadavg.h sys/time.h sys/time.h
+for ac_header in pthread.h unistd.h semaphore.h sys/loadavg.h sys/sysctl.h sys/time.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
@@ -15031,6 +15075,12 @@ case "$host" in
   *-*-rtems*)
     # RTEMS supports Pthreads, but the library is not available at GCC build time.
     ;;
+  nvptx*-*-*)
+    # NVPTX does not support Pthreads, has its own code replacement.
+    libgomp_use_pthreads=no
+    # NVPTX is an accelerator-only target
+    libgomp_offloaded_only=yes
+    ;;
   *)
     # Check to see if -pthread or -lpthread is needed.  Prefer the former.
     # In case the pthread.h system header is not found, this test will fail.
@@ -15075,9 +15125,21 @@ rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext
 esac
 
+if test x$libgomp_use_pthreads != xno; then
+
+$as_echo "#define LIBGOMP_USE_PTHREADS 1" >>confdefs.h
+
+fi
+
+if test x$libgomp_offloaded_only = xyes; then
+
+$as_echo "#define LIBGOMP_OFFLOADED_ONLY 1" >>confdefs.h
+
+fi
+
 # Plugins for offload execution, configure.ac fragment.  -*- mode: autoconf -*-
 #
-# Copyright (C) 2014-2015 Free Software Foundation, Inc.
+# Copyright (C) 2014-2017 Free Software Foundation, Inc.
 #
 # Contributed by Mentor Embedded.
 #
@@ -15157,10 +15219,60 @@ if test x"$plugin_support" = xyes; then
 
 $as_echo "#define PLUGIN_SUPPORT 1" >>confdefs.h
 
-  offload_targets=host_nonshm
 elif test "x${enable_offload_targets-no}" != xno; then
   as_fn_error "Can't support offloading without support for plugins" "$LINENO" 5
 fi
+
+
+
+  for ac_header in $ac_header_list
+do :
+  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+ac_fn_c_check_header_compile "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default
+"
+eval as_val=\$$as_ac_Header
+   if test "x$as_val" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+
+done
+
+
+
+
+
+
+
+  for ac_func in $ac_func_list
+do :
+  as_ac_var=`$as_echo "ac_cv_func_$ac_func" | $as_tr_sh`
+ac_fn_c_check_func "$LINENO" "$ac_func" "$as_ac_var"
+eval as_val=\$$as_ac_var
+   if test "x$as_val" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_func" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+done
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Look for the CUDA driver package.
 CUDA_DRIVER_INCLUDE=
@@ -15187,10 +15299,12 @@ if test "${with_cuda_driver_lib+set}" = set; then :
   withval=$with_cuda_driver_lib;
 fi
 
-if test "x$with_cuda_driver" != x; then
-  CUDA_DRIVER_INCLUDE=$with_cuda_driver/include
-  CUDA_DRIVER_LIB=$with_cuda_driver/lib
-fi
+case "x$with_cuda_driver" in
+  x | xno) ;;
+  *) CUDA_DRIVER_INCLUDE=$with_cuda_driver/include
+     CUDA_DRIVER_LIB=$with_cuda_driver/lib
+     ;;
+esac
 if test "x$with_cuda_driver_include" != x; then
   CUDA_DRIVER_INCLUDE=$with_cuda_driver_include
 fi
@@ -15208,6 +15322,60 @@ PLUGIN_NVPTX=0
 PLUGIN_NVPTX_CPPFLAGS=
 PLUGIN_NVPTX_LDFLAGS=
 PLUGIN_NVPTX_LIBS=
+PLUGIN_NVPTX_DYNAMIC=0
+
+
+
+
+
+# Look for HSA run-time, its includes and libraries
+
+HSA_RUNTIME_INCLUDE=
+HSA_RUNTIME_LIB=
+
+
+HSA_RUNTIME_CPPFLAGS=
+HSA_RUNTIME_LDFLAGS=
+
+
+# Check whether --with-hsa-runtime was given.
+if test "${with_hsa_runtime+set}" = set; then :
+  withval=$with_hsa_runtime;
+fi
+
+
+# Check whether --with-hsa-runtime-include was given.
+if test "${with_hsa_runtime_include+set}" = set; then :
+  withval=$with_hsa_runtime_include;
+fi
+
+
+# Check whether --with-hsa-runtime-lib was given.
+if test "${with_hsa_runtime_lib+set}" = set; then :
+  withval=$with_hsa_runtime_lib;
+fi
+
+if test "x$with_hsa_runtime" != x; then
+  HSA_RUNTIME_INCLUDE=$with_hsa_runtime/include
+  HSA_RUNTIME_LIB=$with_hsa_runtime/lib
+fi
+if test "x$with_hsa_runtime_include" != x; then
+  HSA_RUNTIME_INCLUDE=$with_hsa_runtime_include
+fi
+if test "x$with_hsa_runtime_lib" != x; then
+  HSA_RUNTIME_LIB=$with_hsa_runtime_lib
+fi
+if test "x$HSA_RUNTIME_INCLUDE" != x; then
+  HSA_RUNTIME_CPPFLAGS=-I$HSA_RUNTIME_INCLUDE
+fi
+if test "x$HSA_RUNTIME_LIB" != x; then
+  HSA_RUNTIME_LDFLAGS=-L$HSA_RUNTIME_LIB
+fi
+
+PLUGIN_HSA=0
+PLUGIN_HSA_CPPFLAGS=
+PLUGIN_HSA_LDFLAGS=
+PLUGIN_HSA_LIBS=
 
 
 
@@ -15222,6 +15390,7 @@ if test x"$enable_offload_targets" != x; then
   for tgt in `echo $enable_offload_targets | sed -e 's#,# #g'`; do
     tgt_dir=`echo $tgt | grep '=' | sed 's/.*=//'`
     tgt=`echo $tgt | sed 's/=.*//'`
+    tgt_name=
     case $tgt in
       *-intelmic-* | *-intelmicemul-*)
 	tgt_name=intelmic
@@ -15260,21 +15429,75 @@ rm -f core conftest.err conftest.$ac_objext \
 	LIBS=$PLUGIN_NVPTX_save_LIBS
 	case $PLUGIN_NVPTX in
 	  nvptx*)
-	    PLUGIN_NVPTX=0
-	    as_fn_error "CUDA driver package required for nvptx support" "$LINENO" 5
-	    ;;
+	    if test "x$CUDA_DRIVER_INCLUDE" = x \
+	       && test "x$CUDA_DRIVER_LIB" = x; then
+	      PLUGIN_NVPTX=1
+	      PLUGIN_NVPTX_CPPFLAGS='-I$(srcdir)/plugin/cuda'
+	      PLUGIN_NVPTX_LIBS='-ldl'
+	      PLUGIN_NVPTX_DYNAMIC=1
+	    else
+	      PLUGIN_NVPTX=0
+	      as_fn_error "CUDA driver package required for nvptx support" "$LINENO" 5
+	    fi
+	  ;;
 	esac
 	;;
+      hsa*)
+	case "${target}" in
+	  x86_64-*-*)
+	    case " ${CC} ${CFLAGS} " in
+	      *" -m32 "*)
+	        PLUGIN_HSA=0
+		;;
+	      *)
+	        tgt_name=hsa
+	        PLUGIN_HSA=$tgt
+	        PLUGIN_HSA_CPPFLAGS=$HSA_RUNTIME_CPPFLAGS
+	        PLUGIN_HSA_LDFLAGS="$HSA_RUNTIME_LDFLAGS"
+	        PLUGIN_HSA_LIBS="-ldl"
+
+	        PLUGIN_HSA_save_CPPFLAGS=$CPPFLAGS
+	        CPPFLAGS="$PLUGIN_HSA_CPPFLAGS $CPPFLAGS"
+	        PLUGIN_HSA_save_LDFLAGS=$LDFLAGS
+	        LDFLAGS="$PLUGIN_HSA_LDFLAGS $LDFLAGS"
+	        PLUGIN_HSA_save_LIBS=$LIBS
+	        LIBS="$PLUGIN_HSA_LIBS $LIBS"
+
+	        PLUGIN_HSA=1
+	        CPPFLAGS=$PLUGIN_HSA_save_CPPFLAGS
+	        LDFLAGS=$PLUGIN_HSA_save_LDFLAGS
+	        LIBS=$PLUGIN_HSA_save_LIBS
+	        case $PLUGIN_HSA in
+	          hsa*)
+	            HSA_PLUGIN=0
+	            as_fn_error "HSA run-time package required for HSA support" "$LINENO" 5
+	            ;;
+	        esac
+		;;
+	      esac
+    	    ;;
+	  *-*-*)
+	    PLUGIN_HSA=0
+            ;;
+        esac
+        ;;
       *)
 	as_fn_error "unknown offload target specified" "$LINENO" 5
 	;;
     esac
-    if test x"$offload_targets" = x; then
+    if test x"$tgt_name" = x; then
+      # Don't configure libgomp for this offloading target if we don't build
+      # the corresponding plugin.
+      continue
+    elif test x"$offload_targets" = x; then
       offload_targets=$tgt_name
     else
       offload_targets=$offload_targets,$tgt_name
     fi
-    if test x"$tgt_dir" != x; then
+    if test "$tgt_name" = hsa; then
+      # Offloading compilation is all handled by the target compiler.
+      :
+    elif test x"$tgt_dir" != x; then
       offload_additional_options="$offload_additional_options -B$tgt_dir/libexec/gcc/\$(target_alias)/\$(gcc_version) -B$tgt_dir/bin"
       offload_additional_lib_paths="$offload_additional_lib_paths:$tgt_dir/lib64:$tgt_dir/lib:$tgt_dir/lib32"
     else
@@ -15302,6 +15525,34 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
+cat >>confdefs.h <<_ACEOF
+#define PLUGIN_NVPTX_DYNAMIC $PLUGIN_NVPTX_DYNAMIC
+_ACEOF
+
+ if test $PLUGIN_HSA = 1; then
+  PLUGIN_HSA_TRUE=
+  PLUGIN_HSA_FALSE='#'
+else
+  PLUGIN_HSA_TRUE='#'
+  PLUGIN_HSA_FALSE=
+fi
+
+
+cat >>confdefs.h <<_ACEOF
+#define PLUGIN_HSA $PLUGIN_HSA
+_ACEOF
+
+
+if test "$HSA_RUNTIME_LIB" != ""; then
+  HSA_RUNTIME_LIB="$HSA_RUNTIME_LIB/"
+fi
+
+
+cat >>confdefs.h <<_ACEOF
+#define HSA_RUNTIME_LIB "$HSA_RUNTIME_LIB"
+_ACEOF
+
+
 
 # Check for functions needed.
 for ac_func in getloadavg clock_gettime strtoull
@@ -15324,6 +15575,23 @@ case "$host" in
   *-darwin*)
 
 $as_echo "#define HAVE_BROKEN_POSIX_SEMAPHORES 1" >>confdefs.h
+
+    ;;
+esac
+
+# RTEMS specific checks
+case "$host" in
+  *-*-rtems*)
+    ac_fn_c_check_type "$LINENO" "struct _Mutex_Control" "ac_cv_type_struct__Mutex_Control" "#include <sys/lock.h>
+"
+if test "x$ac_cv_type_struct__Mutex_Control" = x""yes; then :
+
+cat >>confdefs.h <<_ACEOF
+#define HAVE_STRUCT__MUTEX_CONTROL 1
+_ACEOF
+
+
+fi
 
     ;;
 esac
@@ -16548,6 +16816,21 @@ fi
 
 CFLAGS="$save_CFLAGS"
 
+# Determine what GCC version number to use in filesystem paths.
+
+  get_gcc_base_ver="cat"
+
+# Check whether --with-gcc-major-version-only was given.
+if test "${with_gcc_major_version_only+set}" = set; then :
+  withval=$with_gcc_major_version_only; if test x$with_gcc_major_version_only = xyes ; then
+        get_gcc_base_ver="sed -e 's/^\([0-9]*\).*\$\$/\1/'"
+      fi
+
+fi
+
+
+
+
 ac_config_files="$ac_config_files omp.h omp_lib.h omp_lib.f90 libgomp_f.h"
 
 ac_config_files="$ac_config_files Makefile testsuite/Makefile libgomp.spec"
@@ -16681,6 +16964,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${PLUGIN_NVPTX_TRUE}" && test -z "${PLUGIN_NVPTX_FALSE}"; then
   as_fn_error "conditional \"PLUGIN_NVPTX\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${PLUGIN_HSA_TRUE}" && test -z "${PLUGIN_HSA_FALSE}"; then
+  as_fn_error "conditional \"PLUGIN_HSA\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${LIBGOMP_BUILD_VERSIONED_SHLIB_TRUE}" && test -z "${LIBGOMP_BUILD_VERSIONED_SHLIB_FALSE}"; then
@@ -17297,7 +17584,6 @@ CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
 CC="$CC"
 CXX="$CXX"
 GFORTRAN="$GFORTRAN"
-GCJ="$GCJ"
 AMDEP_TRUE="$AMDEP_TRUE" ac_aux_dir="$ac_aux_dir"
 
 

@@ -1,7 +1,7 @@
 /* Routines for saving various data types to a file stream.  This deals
    with various data types like strings, integers, enums, etc.
 
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@google.com>
 
 This file is part of GCC.
@@ -23,32 +23,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "predict.h"
-#include "tm.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
 #include "gimple.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
 #include "cgraph.h"
 #include "data-streamer.h"
 
@@ -363,7 +340,6 @@ streamer_write_hwi_stream (struct lto_output_stream *obs, HOST_WIDE_INT work)
 void
 streamer_write_gcov_count_stream (struct lto_output_stream *obs, gcov_type work)
 {
-  gcc_assert (work >= 0);
   gcc_assert ((HOST_WIDE_INT) work == work);
   streamer_write_hwi_stream (obs, work);
 }
@@ -396,5 +372,32 @@ streamer_write_data_stream (struct lto_output_stream *obs, const void *data,
       data = (const char *) data + copy;
       len -= copy;
     }
+}
+
+/* Emit the physical representation of wide_int VAL to output block OB.  */
+
+void
+streamer_write_wide_int (struct output_block *ob, const wide_int &val)
+{
+  int len = val.get_len ();
+
+  streamer_write_uhwi (ob, val.get_precision ());
+  streamer_write_uhwi (ob, len);
+  for (int i = 0; i < len; i++)
+    streamer_write_hwi (ob, val.elt (i));
+}
+
+/* Emit the physical representation of widest_int W to output block OB.  */
+
+void
+streamer_write_widest_int (struct output_block *ob,
+			   const widest_int &w)
+{
+  int len = w.get_len ();
+
+  streamer_write_uhwi (ob, w.get_precision ());
+  streamer_write_uhwi (ob, len);
+  for (int i = 0; i < len; i++)
+    streamer_write_hwi (ob, w.elt (i));
 }
 

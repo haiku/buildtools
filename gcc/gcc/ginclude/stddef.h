@@ -1,4 +1,4 @@
-/* Copyright (C) 1989-2015 Free Software Foundation, Inc.
+/* Copyright (C) 1989-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -167,7 +167,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 /* Define this type if we are doing the whole job,
    or if we want this type in particular.  */
 #if defined (_STDDEF_H) || defined (__need_size_t)
-#ifndef __size_t__	/* BeOS, Haiku */
+#ifndef __size_t__	/* BeOS */
 #ifndef __SIZE_T__	/* Cray Unicos/Mk */
 #ifndef _SIZE_T	/* in case <sys/types.h> has defined it. */
 #ifndef _SYS_SIZE_T_H
@@ -184,7 +184,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 #ifndef _GCC_SIZE_T
 #ifndef _SIZET_
 #ifndef __size_t
-#define __size_t__	/* BeOS, Haiku */
+#define __size_t__	/* BeOS */
 #define __SIZE_T__	/* Cray Unicos/Mk */
 #define _SIZE_T
 #define _SYS_SIZE_T_H
@@ -214,7 +214,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 #endif
 #if !(defined (__GNUG__) && defined (size_t))
 typedef __SIZE_TYPE__ size_t;
-#if defined(__BEOS__)
+#ifdef __BEOS__
 typedef long ssize_t;
 #endif /* __BEOS__ */
 #endif /* !(defined (__GNUG__) && defined (size_t)) */
@@ -247,7 +247,7 @@ typedef long ssize_t;
 /* Define this type if we are doing the whole job,
    or if we want this type in particular.  */
 #if defined (_STDDEF_H) || defined (__need_wchar_t)
-#ifndef __wchar_t__	/* BeOS, Haiku */
+#ifndef __wchar_t__	/* BeOS */
 #ifndef __WCHAR_T__	/* Cray Unicos/Mk */
 #ifndef _WCHAR_T
 #ifndef _T_WCHAR_
@@ -264,7 +264,7 @@ typedef long ssize_t;
 #ifndef ___int_wchar_t_h
 #ifndef __INT_WCHAR_T_H
 #ifndef _GCC_WCHAR_T
-#define __wchar_t__	/* BeOS, Haiku */
+#define __wchar_t__	/* BeOS */
 #define __WCHAR_T__	/* Cray Unicos/Mk */
 #define _WCHAR_T
 #define _T_WCHAR_
@@ -426,6 +426,14 @@ typedef __WINT_TYPE__ wint_t;
 typedef struct {
   long long __max_align_ll __attribute__((__aligned__(__alignof__(long long))));
   long double __max_align_ld __attribute__((__aligned__(__alignof__(long double))));
+  /* _Float128 is defined as a basic type, so max_align_t must be
+     sufficiently aligned for it.  This code must work in C++, so we
+     use __float128 here; that is only available on some
+     architectures, but only on i386 is extra alignment needed for
+     __float128.  */
+#ifdef __i386__
+  __float128 __max_align_f128 __attribute__((__aligned__(__alignof(__float128))));
+#endif
 } max_align_t;
 #endif
 #endif /* C11 or C++11.  */

@@ -1,3 +1,34 @@
+2017-03-15  Yaakov Selkowitz <yselkowitz@redhat.com>
+
+	PR bootstrap/79771
+	* gzguts.h (WIDECHAR): Do not define for __CYGWIN__.
+	* zlib.h (gzopen_w): Do not declare for __CYGWIN__.
+	* win32/zlib.def: Remove gzopen_w.
+		
+2017-01-22  Matthias Klose  <doko@ubuntu.com>
+
+	* Import zlib 1.2.11.
+	* configure: Regenerate.
+
+2017-01-13  Matthias Klose  <doko@ubuntu.com>
+
+	* Import zlib 1.2.10.
+	* configure: Regenerate.
+
+2016-11-15  Matthias Klose  <doko@ubuntu.com>
+
+	* configure: Regenerate.
+
+2015-11-23  Matthias Klose  <doko@ubuntu.com>
+
+	* Imported zlib 1.2.8; merged local changes.
+
+2015-05-13  Michael Haubenwallner  <michael.haubenwallner@ssi-schaefer.com>
+
+	* Makefile.in: Regenerated with automake-1.11.6.
+	* aclocal.m4: Likewise.
+	* configure: Likewise.
+
 2014-11-11  Francois-Xavier Coudert  <fxcoudert@gcc.gnu.org>
 
 	PR target/63610

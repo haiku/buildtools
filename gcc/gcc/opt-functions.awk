@@ -1,4 +1,4 @@
-#  Copyright (C) 2003-2015 Free Software Foundation, Inc.
+#  Copyright (C) 2003-2017 Free Software Foundation, Inc.
 #  Contributed by Kelley Cook, June 2004.
 #  Original code from Neil Booth, May 2003.
 #
@@ -61,10 +61,10 @@ function opt_args(name, flags)
 	if (flags !~ " " name "\\(")
 		return ""
 	sub(".* " name "\\(", "", flags)
-	if (flags ~ "^{")
+	if (flags ~ "^[{]")
 	{
-		sub ("^{", "", flags)
-		sub("}\\).*", "", flags)
+		sub ("^[{]", "", flags)
+		sub ("}\\).*", "", flags)
 	}
 	else
 		sub("\\).*", "", flags)
@@ -105,7 +105,7 @@ function switch_flags (flags)
 	  test_flag("Undocumented", flags,  " | CL_UNDOCUMENTED") \
 	  test_flag("NoDWARFRecord", flags,  " | CL_NO_DWARF_RECORD") \
 	  test_flag("Warning", flags,  " | CL_WARNING") \
-	  test_flag("Optimization", flags,  " | CL_OPTIMIZATION")
+	  test_flag("(Optimization|PerFunction)", flags,  " | CL_OPTIMIZATION")
 	sub( "^0 \\| ", "", result )
 	return result
 }
@@ -324,7 +324,7 @@ function lang_enabled_by(enabledby_langs, enabledby_name, enabledby_posarg, enab
     } else if (enabledby_posarg == "" && enabledby_negarg == "") {
         with_args = ""
     } else {
-        print "#error LangEnabledBy("enabledby_langs","enabledby_name", " \
+        print "#error " opts[i] " LangEnabledBy("enabledby_langs","enabledby_name", " \
             enabledby_posarg", " enabledby_negargs                  \
             ") with three arguments, it should have either 2 or 4"
     }
@@ -333,8 +333,8 @@ function lang_enabled_by(enabledby_langs, enabledby_name, enabledby_posarg, enab
     for (k = 1; k <= n_enabledby_array; k++) {
         enabledby_index = opt_numbers[enabledby_array[k]];
         if (enabledby_index == "") {
-             print "#error LangEnabledBy("enabledby_langs","enabledby_name", " \
-                 enabledby_posarg", " enabledby_negargs") has invalid ENABLEDBY_NAME"
+             print "#error " opts[i] " LangEnabledBy("enabledby_langs","enabledby_name", " \
+                 enabledby_posarg", " enabledby_negargs"), unknown option '" enabledby_name "'"
         } else {
             for (j = 1; j <= n_enabledby_arg_langs; j++) {
                  lang_name = lang_sanitized_name(enabledby_arg_langs[j]);

@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler for Renesas / SuperH SH.
-   Copyright (C) 1993-2015 Free Software Foundation, Inc.
+   Copyright (C) 1993-2017 Free Software Foundation, Inc.
    Contributed by Steve Chamberlain (sac@cygnus.com).
    Improved by Jim Wilson (wilson@cygnus.com).
 
@@ -34,59 +34,6 @@ enum sh_function_kind {
      Some also have a non-standard ABI which precludes dynamic linking.  */
   SFUNC_STATIC
 };
-
-/* Atomic model.  */
-struct sh_atomic_model
-{
-  enum enum_type
-  {
-    none = 0,
-    soft_gusa,
-    hard_llcs,
-    soft_tcb,
-    soft_imask,
-
-    num_models
-  };
-
-  /*  If strict is set, disallow mixing of different models, as it would
-      happen on SH4A.  */
-  bool strict;
-  enum_type type;
-
-  /* Name string as it was specified on the command line.  */
-  const char* name;
-
-  /* Name string as it is used in C/C++ defines.  */
-  const char* cdef_name;
-
-  /* GBR offset variable for TCB model.  */
-  int tcb_gbr_offset;
-};
-
-extern const sh_atomic_model& selected_atomic_model (void);
-
-/* Shortcuts to check the currently selected atomic model.  */
-#define TARGET_ATOMIC_ANY \
-  (selected_atomic_model ().type != sh_atomic_model::none)
-
-#define TARGET_ATOMIC_STRICT \
-  (selected_atomic_model ().strict)
-
-#define TARGET_ATOMIC_SOFT_GUSA \
-  (selected_atomic_model ().type == sh_atomic_model::soft_gusa)
-
-#define TARGET_ATOMIC_HARD_LLCS \
-  (selected_atomic_model ().type == sh_atomic_model::hard_llcs)
-
-#define TARGET_ATOMIC_SOFT_TCB \
-  (selected_atomic_model ().type == sh_atomic_model::soft_tcb)
-
-#define TARGET_ATOMIC_SOFT_TCB_GBR_OFFSET_RTX \
-  GEN_INT (selected_atomic_model ().tcb_gbr_offset)
-
-#define TARGET_ATOMIC_SOFT_IMASK \
-  (selected_atomic_model ().type == sh_atomic_model::soft_imask)
 
 #ifdef RTX_CODE
 extern rtx sh_fsca_sf2int (void);
@@ -124,7 +71,6 @@ extern enum rtx_code prepare_cbranch_operands (rtx *, machine_mode mode,
 extern void expand_cbranchsi4 (rtx *operands, enum rtx_code comparison, int);
 extern bool expand_cbranchdi4 (rtx *operands, enum rtx_code comparison);
 extern void sh_emit_scc_to_t (enum rtx_code, rtx, rtx);
-extern rtx sh_emit_cheap_store_flag (machine_mode, enum rtx_code, rtx, rtx);
 extern void sh_emit_compare_and_branch (rtx *, machine_mode);
 extern void sh_emit_compare_and_set (rtx *, machine_mode);
 extern bool sh_ashlsi_clobbers_t_reg_p (rtx);
@@ -140,7 +86,6 @@ extern bool gen_shl_and (rtx, rtx, rtx, rtx);
 extern int shl_sext_kind (rtx, rtx, int *);
 extern int shl_sext_length (rtx);
 extern bool gen_shl_sext (rtx, rtx, rtx, rtx);
-extern rtx gen_datalabel_ref (rtx);
 extern int regs_used (rtx, int);
 extern void fixup_addr_diff_vecs (rtx_insn *);
 extern int get_dest_uid (rtx, int);
@@ -149,8 +94,6 @@ extern enum tls_model tls_symbolic_operand (rtx, machine_mode);
 extern bool system_reg_operand (rtx, machine_mode);
 extern bool reg_unused_after (rtx, rtx_insn *);
 extern int sh_insn_length_adjustment (rtx_insn *);
-extern void sh_expand_unop_v2sf (enum rtx_code, rtx, rtx);
-extern void sh_expand_binop_v2sf (enum rtx_code, rtx, rtx, rtx);
 extern bool sh_expand_t_scc (rtx *);
 extern rtx sh_gen_truncate (machine_mode, rtx, int);
 extern bool sh_vector_mode_supported_p (machine_mode);
@@ -160,6 +103,7 @@ extern int sh_eval_treg_value (rtx op);
 extern HOST_WIDE_INT sh_disp_addr_displacement (rtx mem_op);
 extern int sh_max_mov_insn_displacement (machine_mode mode, bool consider_sh2a);
 extern bool sh_movsf_ie_ra_split_p (rtx, rtx, rtx);
+extern void sh_expand_sym_label2reg (rtx, rtx, rtx, bool);
 
 /* Result value of sh_find_set_of_reg.  */
 struct set_of_reg
@@ -227,8 +171,12 @@ sh_find_set_of_reg (rtx reg, rtx_insn* insn, F stepfunc,
 	}
     }
 
-  if (result.set_src != NULL)
-    gcc_assert (result.insn != NULL && result.set_rtx != NULL);
+  /* If the searched reg is found inside a (mem (post_inc:SI (reg))), set_of
+     will return NULL and set_rtx will be NULL.
+     In this case report a 'not found'.  result.insn will always be non-null
+     at this point, so no need to check it.  */
+  if (result.set_src != NULL && result.set_rtx == NULL)
+    result.set_src = NULL;
 
   return result;
 }
@@ -287,7 +235,9 @@ extern void sh_split_tst_subregs (rtx_insn* curr_insn,
 
 extern bool sh_is_nott_insn (const rtx_insn* i);
 extern rtx sh_movt_set_dest (const rtx_insn* i);
+extern rtx sh_movt_set_dest (const_rtx i);
 extern rtx sh_movrt_set_dest (const rtx_insn* i);
+extern rtx sh_movrt_set_dest (const_rtx i);
 
 inline bool sh_is_movt_insn (const rtx_insn* i)
 {
@@ -347,13 +297,24 @@ private:
 
 extern sh_treg_insns sh_split_treg_set_expr (rtx x, rtx_insn* curr_insn);
 
+enum
+{
+  /* An effective conditional branch distance of zero bytes is impossible.
+     Hence we can use it to designate an unknown value.  */
+  unknown_cbranch_distance = 0u,
+  infinite_cbranch_distance = ~0u
+};
+
+unsigned int
+sh_cbranch_distance (rtx_insn* cbranch_insn,
+		     unsigned int max_dist = infinite_cbranch_distance);
+
 #endif /* RTX_CODE */
 
 extern void sh_cpu_cpp_builtins (cpp_reader* pfile);
 
 extern const char *output_jump_label_table (void);
 extern rtx get_t_reg_rtx (void);
-extern int sh_media_register_for_return (void);
 extern void sh_expand_prologue (void);
 extern void sh_expand_epilogue (bool);
 extern void sh_set_return_address (rtx, rtx);
@@ -376,18 +337,27 @@ extern void fpscr_set_from_mem (int, HARD_REG_SET);
 extern void sh_pr_interrupt (struct cpp_reader *);
 extern void sh_pr_trapa (struct cpp_reader *);
 extern void sh_pr_nosave_low_regs (struct cpp_reader *);
-extern rtx function_symbol (rtx, const char *, enum sh_function_kind);
+
+struct function_symbol_result
+{
+  function_symbol_result (void) : sym (NULL), lab (NULL) { }
+  function_symbol_result (rtx s, rtx l) : sym (s), lab (l) { }
+
+  rtx sym;
+  rtx lab;
+};
+
+extern function_symbol_result function_symbol (rtx, const char *,
+					       sh_function_kind);
+extern rtx sh_get_fdpic_reg_initial_val (void);
 extern rtx sh_get_pr_initial_val (void);
 
 extern void sh_init_cumulative_args (CUMULATIVE_ARGS *, tree, rtx, tree,
 				     signed int, machine_mode);
 extern rtx sh_dwarf_register_span (rtx);
 
-extern int shmedia_cleanup_truncate (rtx);
-
 extern bool sh_contains_memref_p (rtx);
 extern bool sh_loads_bankedreg_p (rtx);
-extern rtx shmedia_prepare_call_address (rtx fnaddr, int is_sibcall);
 extern int sh2a_get_function_vector_number (rtx);
 extern bool sh2a_is_function_vector_call (rtx);
 extern void sh_fix_range (const char *);
@@ -395,4 +365,5 @@ extern bool sh_hard_regno_mode_ok (unsigned int, machine_mode);
 extern machine_mode sh_hard_regno_caller_save_mode (unsigned int, unsigned int,
 						    machine_mode);
 extern bool sh_can_use_simple_return_p (void);
+extern rtx sh_load_function_descriptor (rtx);
 #endif /* ! GCC_SH_PROTOS_H */

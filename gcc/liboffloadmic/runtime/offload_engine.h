@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2014 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2014-2016 Intel Corporation.  All Rights Reserved.
 
     Redistribution and use in source and binary forms, with or without
     modification, are permitted provided that the following conditions
@@ -32,12 +32,15 @@
 #define OFFLOAD_ENGINE_H_INCLUDED
 
 #include <limits.h>
-
+#include <bitset>
 #include <list>
 #include <set>
 #include <map>
 #include "offload_common.h"
 #include "coi/coi_client.h"
+
+#define SIGNAL_HAS_COMPLETED ((OffloadDescriptor *)-1)
+const int64_t no_stream = -1;
 
 // Address range
 class MemRange {
@@ -80,7 +83,7 @@ public:
     PtrData(const void *addr, uint64_t len) :
         cpu_addr(addr, len), cpu_buf(0),
         mic_addr(0), alloc_disp(0), mic_buf(0), mic_offset(0),
-        ref_count(0), is_static(false)
+        ref_count(0), is_static(false), is_omp_associate(false)
     {}
 
     //
@@ -90,7 +93,9 @@ public:
         cpu_addr(ptr.cpu_addr), cpu_buf(ptr.cpu_buf),
         mic_addr(ptr.mic_addr), alloc_disp(ptr.alloc_disp),
         mic_buf(ptr.mic_buf), mic_offset(ptr.mic_offset),
-        ref_count(ptr.ref_count), is_static(ptr.is_static)
+        ref_count(ptr.ref_count), is_static(ptr.is_static),
+        is_omp_associate(ptr.is_omp_associate),
+        var_alloc_type(0)
     {}
 
     bool operator<(const PtrData &o) const {
@@ -101,7 +106,7 @@ public:
     }
 
     long add_reference() {
-        if (is_static) {
+        if (is_omp_associate || (is_static && !var_alloc_type)) {
             return LONG_MAX;
         }
 #ifndef TARGET_WINNT
@@ -112,7 +117,7 @@ public:
     }
 
     long remove_reference() {
-        if (is_static) {
+        if (is_omp_associate || (is_static && !var_alloc_type)) {
             return LONG_MAX;
         }
 #ifndef TARGET_WINNT
@@ -123,7 +128,7 @@ public:
     }
 
     long get_reference() const {
-        if (is_static) {
+        if (is_omp_associate || (is_static && !var_alloc_type)) {
             return LONG_MAX;
         }
         return ref_count;
@@ -148,6 +153,11 @@ public:
 
     // if true buffers are created from static memory
     bool            is_static;
+
+    // true if MIC buffer created by omp_target_associate
+    bool            is_omp_associate;
+
+    bool            var_alloc_type;
     mutex_t         alloc_ptr_data_lock;
 
 private:
@@ -156,6 +166,50 @@ private:
 };
 
 typedef std::list<PtrData*> PtrDataList;
+
+class PtrDataTable {
+public:
+    typedef std::set<PtrData> PtrSet;
+
+    PtrData* find_ptr_data(const void *ptr) {
+        m_ptr_lock.lock();
+        PtrSet::iterator res = list.find(PtrData(ptr, 0));
+
+        m_ptr_lock.unlock();
+        if (res == list.end()) {
+            return 0;
+        }
+        return const_cast<PtrData*>(res.operator->());
+    }
+
+    PtrData* insert_ptr_data(const void *ptr, uint64_t len, bool &is_new) {
+        m_ptr_lock.lock();
+        std::pair<PtrSet::iterator, bool> res =
+            list.insert(PtrData(ptr, len));
+
+        PtrData* ptr_data = const_cast<PtrData*>(res.first.operator->());
+        m_ptr_lock.unlock();
+
+        is_new = res.second;
+        if (is_new) {
+            // It's necessary to lock as soon as possible.
+            // unlock must be done at call site of insert_ptr_data at
+            // branch for is_new
+            ptr_data->alloc_ptr_data_lock.lock();
+        }
+        return ptr_data;
+    }
+
+    void remove_ptr_data(const void *ptr) {
+        m_ptr_lock.lock();
+        list.erase(PtrData(ptr, 0));
+        m_ptr_lock.unlock();
+    }
+private:
+
+    PtrSet list;
+    mutex_t     m_ptr_lock;
+};
 
 // Data associated with automatic variable
 class AutoData {
@@ -186,7 +240,15 @@ public:
         return _InterlockedDecrement(&ref_count);
 #endif // TARGET_WINNT
     }
-
+    
+    long nullify_reference() {
+#ifndef TARGET_WINNT
+        return __sync_lock_test_and_set(&ref_count, 0);
+#else // TARGET_WINNT
+        return _InterlockedExchange(&ref_count,0);
+#endif // TARGET_WINNT
+    }
+    
     long get_reference() const {
         return ref_count;
     }
@@ -226,18 +288,39 @@ struct TargetImage
 
 typedef std::list<TargetImage> TargetImageList;
 
+// dynamic library and Image associated with lib
+struct DynLib
+{
+    DynLib(const char *_name, const void *_data,
+           COILIBRARY _lib) :
+        name(_name), data(_data), lib(_lib)
+    {}
+    // library name
+    const char* name;
+
+    // contents
+    const void* data;
+ 
+    COILIBRARY lib;
+};
+typedef std::list<DynLib> DynLibList;
+
 // Data associated with persistent auto objects
 struct PersistData
 {
-    PersistData(const void *addr, uint64_t routine_num, uint64_t size) :
-        stack_cpu_addr(addr), routine_id(routine_num)
+    PersistData(const void *addr, uint64_t routine_num,
+                uint64_t size, uint64_t thread) :
+        stack_cpu_addr(addr), routine_id(routine_num), thread_id(thread)
     {
         stack_ptr_data = new PtrData(0, size);
     }
-    // 1-st key value - begining of the stack at CPU
+    // 1-st key value - beginning of the stack at CPU
     const void *   stack_cpu_addr;
     // 2-nd key value - identifier of routine invocation at CPU
     uint64_t   routine_id;
+    // 3-rd key value - thread identifier
+    uint64_t   thread_id;
+
     // corresponded PtrData; only stack_ptr_data->mic_buf is used
     PtrData * stack_ptr_data;
     // used to get offset of the variable in stack buffer
@@ -246,11 +329,95 @@ struct PersistData
 
 typedef std::list<PersistData> PersistDataList;
 
+// Data associated with stream
+struct Stream
+{
+    Stream(int device, int num_of_cpus) :
+       m_number_of_cpus(num_of_cpus), m_pipeline(0), m_last_offload(0),
+       m_device(device)
+    {}
+    ~Stream() {
+        if (m_pipeline) {
+             COI::PipelineDestroy(m_pipeline);
+        }
+    }
+
+    COIPIPELINE get_pipeline(void) {
+        return(m_pipeline);
+    }
+
+    int get_device(void) {
+        return(m_device);
+    }
+
+    int get_cpu_number(void) {
+        return(m_number_of_cpus);
+    }
+
+    void set_pipeline(COIPIPELINE pipeline) {
+        m_pipeline = pipeline;
+    }
+
+    OffloadDescriptor* get_last_offload(void) {
+        return(m_last_offload);
+    }
+
+    void set_last_offload(OffloadDescriptor*   last_offload) {
+        m_last_offload = last_offload;
+    }
+
+    static Stream* find_stream(uint64_t handle, bool remove);
+
+    static _Offload_stream  add_stream(int device, int number_of_cpus) {
+        _Offload_stream result;
+        m_stream_lock.lock();
+        result = ++m_streams_count;
+        all_streams[m_streams_count] = new Stream(device, number_of_cpus);
+        m_stream_lock.unlock();
+        return(result);
+    }
+
+    static uint64_t get_streams_count() {
+        return m_streams_count;
+    }
+
+    typedef std::map<uint64_t, Stream*> StreamMap;
+
+    static uint64_t  m_streams_count;
+    static StreamMap all_streams;
+    static mutex_t   m_stream_lock;
+
+    int m_device;
+
+    // number of cpus
+    int m_number_of_cpus;
+
+    // The pipeline associated with the stream
+    COIPIPELINE         m_pipeline;
+
+    // The last offload occured via the stream
+    OffloadDescriptor*  m_last_offload;
+
+    // Cpus used by the stream
+    std::bitset<COI_MAX_HW_THREADS> m_stream_cpus;
+};
+
+typedef std::map<uint64_t, Stream*> StreamMap;
+typedef std::bitset<COI_MAX_HW_THREADS> micLcpuMask;
+
+// ordered by count double linked list of cpus used by streams
+typedef struct CpuEl{
+    uint64_t      count; // number of streams using the cpu
+    struct CpuEl* prev;  // cpu with the same or lesser count
+    struct CpuEl* next;  // cpu with the same or greater count
+} CpuEl;
+
 // class representing a single engine
 struct Engine {
     friend void __offload_init_library_once(void);
     friend void __offload_fini_library(void);
 
+#define CPU_INDEX(x) (x - m_cpus)
 #define check_result(res, tag, ...) \
     { \
         if (res == COI_PROCESS_DIED) { \
@@ -275,8 +442,17 @@ struct Engine {
         return m_process;
     }
 
+    bool get_ready() {
+        return m_ready;
+    }
+
+    uint64_t get_thread_id(void);
+
     // initialize device
     void init(void);
+
+    // unload library
+    void unload_library(const void *data, const char *name);
 
     // add new library
     void add_lib(const TargetImage &lib)
@@ -288,6 +464,7 @@ struct Engine {
     }
 
     COIRESULT compute(
+        _Offload_stream     stream,
         const std::list<COIBUFFER> &buffers,
         const void*         data,
         uint16_t            data_size,
@@ -323,36 +500,28 @@ struct Engine {
     // Memory association table
     //
     PtrData* find_ptr_data(const void *ptr) {
-        m_ptr_lock.lock();
-        PtrSet::iterator res = m_ptr_set.find(PtrData(ptr, 0));
-        m_ptr_lock.unlock();
-        if (res == m_ptr_set.end()) {
-            return 0;
-        }
-        return const_cast<PtrData*>(res.operator->());
+        return m_ptr_set.find_ptr_data(ptr);
+    }
+
+    PtrData* find_targetptr_data(const void *ptr) {
+        return m_targetptr_set.find_ptr_data(ptr);
     }
 
     PtrData* insert_ptr_data(const void *ptr, uint64_t len, bool &is_new) {
-        m_ptr_lock.lock();
-        std::pair<PtrSet::iterator, bool> res =
-            m_ptr_set.insert(PtrData(ptr, len));
-        PtrData* ptr_data = const_cast<PtrData*>(res.first.operator->());
-        m_ptr_lock.unlock();
+        return m_ptr_set.insert_ptr_data(ptr, len, is_new);
+    }
 
-        is_new = res.second;
-        if (is_new) {
-            // It's necessary to lock as soon as possible.
-            // unlock must be done at call site of insert_ptr_data at
-            // branch for is_new
-            ptr_data->alloc_ptr_data_lock.lock();
-        }
-        return ptr_data;
+    PtrData* insert_targetptr_data(const void *ptr, uint64_t len,
+                                   bool &is_new) {
+        return m_targetptr_set.insert_ptr_data(ptr, len, is_new);
     }
 
     void remove_ptr_data(const void *ptr) {
-        m_ptr_lock.lock();
-        m_ptr_set.erase(PtrData(ptr, 0));
-        m_ptr_lock.unlock();
+        m_ptr_set.remove_ptr_data(ptr);
+    }
+
+    void remove_targetptr_data(const void *ptr) {
+        m_targetptr_set.remove_ptr_data(ptr);
     }
 
     //
@@ -396,13 +565,36 @@ struct Engine {
             if (it != m_signal_map.end()) {
                 desc = it->second;
                 if (remove) {
-                    m_signal_map.erase(it);
+                    it->second = SIGNAL_HAS_COMPLETED;
                 }
             }
         }
         m_signal_lock.unlock();
 
         return desc;
+    }
+
+    void complete_signaled_ofld(const void *signal) {
+
+        m_signal_lock.lock();
+        {
+            SignalMap::iterator it = m_signal_map.find(signal);
+            if (it != m_signal_map.end()) {
+                it->second = SIGNAL_HAS_COMPLETED;
+            }
+        }
+        m_signal_lock.unlock();
+    }
+
+    void stream_destroy(_Offload_stream handle);
+
+    void move_cpu_el_after(CpuEl* cpu_what, CpuEl* cpu_after);
+    void print_stream_cpu_list(const char *);
+
+    COIPIPELINE get_pipeline(_Offload_stream stream);
+
+    StreamMap get_stream_map() {
+        return m_stream_map;
     }
 
     // stop device process
@@ -413,12 +605,21 @@ struct Engine {
 
 private:
     Engine() : m_index(-1), m_physical_index(-1), m_process(0), m_ready(false),
-               m_proc_number(0)
+               m_proc_number(0), m_assigned_cpus(0), m_cpus(0), m_cpu_head(0)
     {}
 
     ~Engine() {
+        m_ready = false;
+        for (StreamMap::iterator it = m_stream_map.begin();
+             it != m_stream_map.end(); it++) {
+            Stream * stream = it->second;
+            delete stream;
+        }
         if (m_process != 0) {
             fini_process(false);
+        }
+        if (m_assigned_cpus) {
+            delete m_assigned_cpus;
         }
     }
 
@@ -426,6 +627,12 @@ private:
     void set_indexes(int logical_index, int physical_index) {
         m_index = logical_index;
         m_physical_index = physical_index;
+    }
+
+    // set CPU mask
+    void set_cpu_mask(micLcpuMask *cpu_mask)
+    {
+        m_assigned_cpus = cpu_mask;
     }
 
     // start process on device
@@ -455,6 +662,9 @@ private:
     int         m_index;
     int         m_physical_index;
 
+    // cpu mask
+    micLcpuMask *m_assigned_cpus;
+
     // number of COI pipes created for the engine
     long        m_proc_number;
 
@@ -469,13 +679,24 @@ private:
     // List of libraries to be loaded
     TargetImageList m_images;
 
-    // var table
-    PtrSet      m_ptr_set;
-    mutex_t     m_ptr_lock;
+    // var tables
+    PtrDataTable m_ptr_set;
+    PtrDataTable m_targetptr_set;
 
     // signals
     SignalMap m_signal_map;
     mutex_t   m_signal_lock;
+
+    // streams
+    StreamMap   m_stream_map;
+    mutex_t     m_stream_lock;
+    int         m_num_cores;
+    int         m_num_threads;
+    CpuEl*      m_cpus;
+    CpuEl*      m_cpu_head;
+
+    // List of dynamic libraries to be registred
+    DynLibList m_dyn_libs;
 
     // constants for accessing device function handles
     enum {
@@ -487,6 +708,7 @@ private:
         c_func_init,
         c_func_var_table_size,
         c_func_var_table_copy,
+        c_func_set_stream_affinity,
         c_funcs_total
     };
     static const char* m_func_names[c_funcs_total];

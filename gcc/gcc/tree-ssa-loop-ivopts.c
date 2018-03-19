@@ -1,5 +1,5 @@
 /* Induction variable optimizations.
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -30,20 +30,25 @@ along with GCC; see the file COPYING3.  If not see
       -- addresses of arrays
       -- comparisons of induction variables
 
+      Note the interesting uses are categorized and handled in group.
+      Generally, address type uses are grouped together if their iv bases
+      are different in constant offset.
+
    2) Candidates for the induction variables are found.  This includes
 
       -- old induction variables
       -- the variables defined by expressions derived from the "interesting
-	 uses" above
+	 groups/uses" above
 
    3) The optimal (w.r. to a cost function) set of variables is chosen.  The
       cost function assigns a cost to sets of induction variables and consists
       of three parts:
 
-      -- The use costs.  Each of the interesting uses chooses the best induction
-	 variable in the set and adds its cost to the sum.  The cost reflects
-	 the time spent on modifying the induction variables value to be usable
-	 for the given purpose (adding base and offset for arrays, etc.).
+      -- The group/use costs.  Each of the interesting groups/uses chooses
+	 the best induction variable in the set and adds its cost to the sum.
+	 The cost reflects the time spent on modifying the induction variables
+	 value to be usable for the given purpose (adding base and offset for
+	 arrays, etc.).
       -- The variable costs.  Each of the variables has a cost assigned that
 	 reflects the costs associated with incrementing the value of the
 	 variable.  The original variables are somewhat preferred.
@@ -64,77 +69,41 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "rtl.h"
 #include "tree.h"
+#include "gimple.h"
+#include "cfghooks.h"
+#include "tree-pass.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "ssa.h"
+#include "expmed.h"
+#include "insn-config.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "cgraph.h"
+#include "gimple-pretty-print.h"
+#include "alias.h"
 #include "fold-const.h"
 #include "stor-layout.h"
-#include "tm_p.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "gimple-pretty-print.h"
-#include "hash-map.h"
-#include "hash-table.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
 #include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimplify.h"
 #include "gimple-iterator.h"
 #include "gimplify-me.h"
-#include "gimple-ssa.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "tree-cfg.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
 #include "tree-ssa-loop-ivopts.h"
 #include "tree-ssa-loop-manip.h"
 #include "tree-ssa-loop-niter.h"
 #include "tree-ssa-loop.h"
-#include "hashtab.h"
-#include "rtl.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
 #include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
 #include "expr.h"
 #include "tree-dfa.h"
 #include "tree-ssa.h"
 #include "cfgloop.h"
-#include "tree-pass.h"
-#include "tree-chrec.h"
 #include "tree-scalar-evolution.h"
 #include "params.h"
-#include "langhooks.h"
 #include "tree-affine.h"
-#include "target.h"
-#include "tree-inline.h"
 #include "tree-ssa-propagate.h"
 #include "tree-ssa-address.h"
 #include "builtins.h"
@@ -143,12 +112,9 @@ along with GCC; see the file COPYING3.  If not see
 /* FIXME: Expressions are expanded to RTL in this pass to determine the
    cost of different addressing modes.  This should be moved to a TBD
    interface between the GIMPLE and RTL worlds.  */
-#include "recog.h"
 
 /* The infinite cost.  */
 #define INFTY 10000000
-
-#define AVG_LOOP_NITER(LOOP) 5
 
 /* Returns the expected number of loop iterations for LOOP.
    The average trip count is computed from profile data if it
@@ -159,10 +125,17 @@ avg_loop_niter (struct loop *loop)
 {
   HOST_WIDE_INT niter = estimated_stmt_executions_int (loop);
   if (niter == -1)
-    return AVG_LOOP_NITER (loop);
+    {
+      niter = likely_max_stmt_executions_int (loop);
+
+      if (niter == -1 || niter > PARAM_VALUE (PARAM_AVG_LOOP_NITER))
+	return PARAM_VALUE (PARAM_AVG_LOOP_NITER);
+    }
 
   return niter;
 }
+
+struct iv_use;
 
 /* Representation of the induction variable.  */
 struct iv
@@ -171,9 +144,11 @@ struct iv
   tree base_object;	/* A memory object to that the induction variable points.  */
   tree step;		/* Step of the iv (constant only).  */
   tree ssa_name;	/* The ssa name with the value.  */
+  struct iv_use *nonlin_use;	/* The identifier in the use if it is the case.  */
   bool biv_p;		/* Is it a biv?  */
-  bool have_use_for;	/* Do we already have a use for it?  */
-  unsigned use_id;	/* The identifier in the use if it is the case.  */
+  bool no_overflow;	/* True if the iv doesn't overflow.  */
+  bool have_address_use;/* For biv, indicate if it's used in any address
+			   type use.  */
 };
 
 /* Per-ssa version information (induction variable descriptions, etc.).  */
@@ -196,49 +171,222 @@ enum use_type
 };
 
 /* Cost of a computation.  */
-typedef struct
+struct comp_cost
 {
+  comp_cost (): cost (0), complexity (0), scratch (0)
+  {}
+
+  comp_cost (int cost, unsigned complexity, int scratch = 0)
+    : cost (cost), complexity (complexity), scratch (scratch)
+  {}
+
+  /* Returns true if COST is infinite.  */
+  bool infinite_cost_p ();
+
+  /* Adds costs COST1 and COST2.  */
+  friend comp_cost operator+ (comp_cost cost1, comp_cost cost2);
+
+  /* Adds COST to the comp_cost.  */
+  comp_cost operator+= (comp_cost cost);
+
+  /* Adds constant C to this comp_cost.  */
+  comp_cost operator+= (HOST_WIDE_INT c);
+
+  /* Subtracts constant C to this comp_cost.  */
+  comp_cost operator-= (HOST_WIDE_INT c);
+
+  /* Divide the comp_cost by constant C.  */
+  comp_cost operator/= (HOST_WIDE_INT c);
+
+  /* Multiply the comp_cost by constant C.  */
+  comp_cost operator*= (HOST_WIDE_INT c);
+
+  /* Subtracts costs COST1 and COST2.  */
+  friend comp_cost operator- (comp_cost cost1, comp_cost cost2);
+
+  /* Subtracts COST from this comp_cost.  */
+  comp_cost operator-= (comp_cost cost);
+
+  /* Returns true if COST1 is smaller than COST2.  */
+  friend bool operator< (comp_cost cost1, comp_cost cost2);
+
+  /* Returns true if COST1 and COST2 are equal.  */
+  friend bool operator== (comp_cost cost1, comp_cost cost2);
+
+  /* Returns true if COST1 is smaller or equal than COST2.  */
+  friend bool operator<= (comp_cost cost1, comp_cost cost2);
+
   int cost;		/* The runtime cost.  */
-  unsigned complexity;	/* The estimate of the complexity of the code for
+  unsigned complexity;  /* The estimate of the complexity of the code for
 			   the computation (in no concrete units --
 			   complexity field should be larger for more
 			   complex expressions and addressing modes).  */
-} comp_cost;
+  int scratch;		/* Scratch used during cost computation.  */
+};
 
-static const comp_cost no_cost = {0, 0};
-static const comp_cost infinite_cost = {INFTY, INFTY};
+static const comp_cost no_cost;
+static const comp_cost infinite_cost (INFTY, INFTY, INFTY);
+
+bool
+comp_cost::infinite_cost_p ()
+{
+  return cost == INFTY;
+}
+
+comp_cost
+operator+ (comp_cost cost1, comp_cost cost2)
+{
+  if (cost1.infinite_cost_p () || cost2.infinite_cost_p ())
+    return infinite_cost;
+
+  cost1.cost += cost2.cost;
+  cost1.complexity += cost2.complexity;
+
+  return cost1;
+}
+
+comp_cost
+operator- (comp_cost cost1, comp_cost cost2)
+{
+  if (cost1.infinite_cost_p ())
+    return infinite_cost;
+
+  gcc_assert (!cost2.infinite_cost_p ());
+
+  cost1.cost -= cost2.cost;
+  cost1.complexity -= cost2.complexity;
+
+  return cost1;
+}
+
+comp_cost
+comp_cost::operator+= (comp_cost cost)
+{
+  *this = *this + cost;
+  return *this;
+}
+
+comp_cost
+comp_cost::operator+= (HOST_WIDE_INT c)
+{
+  if (infinite_cost_p ())
+    return *this;
+
+  this->cost += c;
+
+  return *this;
+}
+
+comp_cost
+comp_cost::operator-= (HOST_WIDE_INT c)
+{
+  if (infinite_cost_p ())
+    return *this;
+
+  this->cost -= c;
+
+  return *this;
+}
+
+comp_cost
+comp_cost::operator/= (HOST_WIDE_INT c)
+{
+  if (infinite_cost_p ())
+    return *this;
+
+  this->cost /= c;
+
+  return *this;
+}
+
+comp_cost
+comp_cost::operator*= (HOST_WIDE_INT c)
+{
+  if (infinite_cost_p ())
+    return *this;
+
+  this->cost *= c;
+
+  return *this;
+}
+
+comp_cost
+comp_cost::operator-= (comp_cost cost)
+{
+  *this = *this - cost;
+  return *this;
+}
+
+bool
+operator< (comp_cost cost1, comp_cost cost2)
+{
+  if (cost1.cost == cost2.cost)
+    return cost1.complexity < cost2.complexity;
+
+  return cost1.cost < cost2.cost;
+}
+
+bool
+operator== (comp_cost cost1, comp_cost cost2)
+{
+  return cost1.cost == cost2.cost
+    && cost1.complexity == cost2.complexity;
+}
+
+bool
+operator<= (comp_cost cost1, comp_cost cost2)
+{
+  return cost1 < cost2 || cost1 == cost2;
+}
+
+struct iv_inv_expr_ent;
 
 /* The candidate - cost pair.  */
 struct cost_pair
 {
   struct iv_cand *cand;	/* The candidate.  */
   comp_cost cost;	/* The cost.  */
+  enum tree_code comp;	/* For iv elimination, the comparison.  */
   bitmap depends_on;	/* The list of invariants that have to be
 			   preserved.  */
   tree value;		/* For final value elimination, the expression for
 			   the final value of the iv.  For iv elimination,
 			   the new bound to compare with.  */
-  enum tree_code comp;	/* For iv elimination, the comparison.  */
-  int inv_expr_id;      /* Loop invariant expression id.  */
+  iv_inv_expr_ent *inv_expr; /* Loop invariant expression.  */
 };
 
 /* Use.  */
 struct iv_use
 {
   unsigned id;		/* The id of the use.  */
+  unsigned group_id;	/* The group id the use belongs to.  */
   enum use_type type;	/* Type of the use.  */
   struct iv *iv;	/* The induction variable it is based on.  */
-  gimple stmt;		/* Statement in that it occurs.  */
+  gimple *stmt;		/* Statement in that it occurs.  */
   tree *op_p;		/* The place where it occurs.  */
-  bitmap related_cands;	/* The set of "related" iv candidates, plus the common
-			   important ones.  */
 
-  unsigned n_map_members; /* Number of candidates in the cost_map list.  */
+  tree addr_base;	/* Base address with const offset stripped.  */
+  unsigned HOST_WIDE_INT addr_offset;
+			/* Const offset stripped from base address.  */
+};
+
+/* Group of uses.  */
+struct iv_group
+{
+  /* The id of the group.  */
+  unsigned id;
+  /* Uses of the group are of the same type.  */
+  enum use_type type;
+  /* The set of "related" IV candidates, plus the important ones.  */
+  bitmap related_cands;
+  /* Number of IV candidates in the cost_map.  */
+  unsigned n_map_members;
+  /* The costs wrto the iv candidates.  */
   struct cost_pair *cost_map;
-			/* The costs wrto the iv candidates.  */
-
+  /* The selected candidate for the group.  */
   struct iv_cand *selected;
-			/* The selected candidate.  */
+  /* Uses in the group.  */
+  vec<struct iv_use *> vuses;
 };
 
 /* The position where the iv is computed.  */
@@ -258,7 +406,7 @@ struct iv_cand
   bool important;	/* Whether this is an "important" candidate, i.e. such
 			   that it should be considered by all uses.  */
   ENUM_BITFIELD(iv_position) pos : 8;	/* Where it is computed.  */
-  gimple incremented_at;/* For original biv, the statement where it is
+  gimple *incremented_at;/* For original biv, the statement where it is
 			   incremented.  */
   tree var_before;	/* The variable used for it before increment.  */
   tree var_after;	/* The variable used for it after increment.  */
@@ -272,36 +420,92 @@ struct iv_cand
 			      where it is incremented.  */
   bitmap depends_on;	/* The list of invariants that are used in step of the
 			   biv.  */
+  struct iv *orig_iv;	/* The original iv if this cand is added from biv with
+			   smaller type.  */
 };
 
-/* Loop invariant expression hashtable entry.  */
-struct iv_inv_expr_ent
+/* Hashtable entry for common candidate derived from iv uses.  */
+struct iv_common_cand
 {
-  tree expr;
-  int id;
+  tree base;
+  tree step;
+  /* IV uses from which this common candidate is derived.  */
+  auto_vec<struct iv_use *> uses;
   hashval_t hash;
 };
 
-/* The data used by the induction variable optimizations.  */
+/* Hashtable helpers.  */
 
-typedef struct iv_use *iv_use_p;
+struct iv_common_cand_hasher : delete_ptr_hash <iv_common_cand>
+{
+  static inline hashval_t hash (const iv_common_cand *);
+  static inline bool equal (const iv_common_cand *, const iv_common_cand *);
+};
 
-typedef struct iv_cand *iv_cand_p;
+/* Hash function for possible common candidates.  */
+
+inline hashval_t
+iv_common_cand_hasher::hash (const iv_common_cand *ccand)
+{
+  return ccand->hash;
+}
+
+/* Hash table equality function for common candidates.  */
+
+inline bool
+iv_common_cand_hasher::equal (const iv_common_cand *ccand1,
+			      const iv_common_cand *ccand2)
+{
+  return (ccand1->hash == ccand2->hash
+	  && operand_equal_p (ccand1->base, ccand2->base, 0)
+	  && operand_equal_p (ccand1->step, ccand2->step, 0)
+	  && (TYPE_PRECISION (TREE_TYPE (ccand1->base))
+	      == TYPE_PRECISION (TREE_TYPE (ccand2->base))));
+}
+
+/* Loop invariant expression hashtable entry.  */
+
+struct iv_inv_expr_ent
+{
+  /* Tree expression of the entry.  */
+  tree expr;
+  /* Unique indentifier.  */
+  int id;
+  /* Hash value.  */
+  hashval_t hash;
+};
+
+/* Sort iv_inv_expr_ent pair A and B by id field.  */
+
+static int
+sort_iv_inv_expr_ent (const void *a, const void *b)
+{
+  const iv_inv_expr_ent * const *e1 = (const iv_inv_expr_ent * const *) (a);
+  const iv_inv_expr_ent * const *e2 = (const iv_inv_expr_ent * const *) (b);
+
+  unsigned id1 = (*e1)->id;
+  unsigned id2 = (*e2)->id;
+
+  if (id1 < id2)
+    return -1;
+  else if (id1 > id2)
+    return 1;
+  else
+    return 0;
+}
 
 /* Hashtable helpers.  */
 
-struct iv_inv_expr_hasher : typed_free_remove <iv_inv_expr_ent>
+struct iv_inv_expr_hasher : free_ptr_hash <iv_inv_expr_ent>
 {
-  typedef iv_inv_expr_ent value_type;
-  typedef iv_inv_expr_ent compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *, const compare_type *);
+  static inline hashval_t hash (const iv_inv_expr_ent *);
+  static inline bool equal (const iv_inv_expr_ent *, const iv_inv_expr_ent *);
 };
 
 /* Hash function for loop invariant expressions.  */
 
 inline hashval_t
-iv_inv_expr_hasher::hash (const value_type *expr)
+iv_inv_expr_hasher::hash (const iv_inv_expr_ent *expr)
 {
   return expr->hash;
 }
@@ -309,7 +513,8 @@ iv_inv_expr_hasher::hash (const value_type *expr)
 /* Hash table equality function for expressions.  */
 
 inline bool
-iv_inv_expr_hasher::equal (const value_type *expr1, const compare_type *expr2)
+iv_inv_expr_hasher::equal (const iv_inv_expr_ent *expr1,
+			   const iv_inv_expr_ent *expr2)
 {
   return expr1->hash == expr2->hash
 	 && operand_equal_p (expr1->expr, expr2->expr, 0);
@@ -338,16 +543,16 @@ struct ivopts_data
   hash_table<iv_inv_expr_hasher> *inv_expr_tab;
 
   /* Loop invariant expression id.  */
-  int inv_expr_id;
+  int max_inv_expr_id;
 
   /* The bitmap of indices in version_info whose value was changed.  */
   bitmap relevant;
 
   /* The uses of induction variables.  */
-  vec<iv_use_p> iv_uses;
+  vec<iv_group *> vgroups;
 
   /* The candidates.  */
-  vec<iv_cand_p> iv_candidates;
+  vec<iv_cand *> vcands;
 
   /* A bitmap of important candidates.  */
   bitmap important_candidates;
@@ -355,8 +560,20 @@ struct ivopts_data
   /* Cache used by tree_to_aff_combination_expand.  */
   hash_map<tree, name_expansion *> *name_expansion_cache;
 
+  /* The hashtable of common candidates derived from iv uses.  */
+  hash_table<iv_common_cand_hasher> *iv_common_cand_tab;
+
+  /* The common candidates.  */
+  vec<iv_common_cand *> iv_common_cands;
+
   /* The maximum invariant id.  */
   unsigned max_inv_id;
+
+  /* Number of no_overflow BIVs which are not used in memory address.  */
+  unsigned bivs_not_used_in_addr;
+
+  /* Obstack for iv structure.  */
+  struct obstack iv_obstack;
 
   /* Whether to consider just related and important candidates when replacing a
      use.  */
@@ -380,10 +597,10 @@ struct iv_ca
   unsigned upto;
 
   /* Number of uses that cannot be expressed by the candidates in the set.  */
-  unsigned bad_uses;
+  unsigned bad_groups;
 
   /* Candidate assigned to a use, together with the related costs.  */
-  struct cost_pair **cand_for_use;
+  struct cost_pair **cand_for_group;
 
   /* Number of times each candidate is used.  */
   unsigned *n_cand_uses;
@@ -406,12 +623,8 @@ struct iv_ca
   /* Number of times each invariant is used.  */
   unsigned *n_invariant_uses;
 
-  /* The array holding the number of uses of each loop
-     invariant expressions created by ivopt.  */
-  unsigned *used_inv_expr;
-
-  /* The number of created loop invariants.  */
-  unsigned num_used_inv_expr;
+  /* Hash set with used invariant expression.  */
+  hash_map <iv_inv_expr_ent *, unsigned> *used_inv_exprs;
 
   /* Total cost of the assignment.  */
   comp_cost cost;
@@ -421,8 +634,8 @@ struct iv_ca
 
 struct iv_ca_delta
 {
-  /* Changed use.  */
-  struct iv_use *use;
+  /* Changed group.  */
+  struct iv_group *group;
 
   /* An old assignment (for rollback purposes).  */
   struct cost_pair *old_cp;
@@ -431,7 +644,7 @@ struct iv_ca_delta
   struct cost_pair *new_cp;
 
   /* Next change in the list.  */
-  struct iv_ca_delta *next_change;
+  struct iv_ca_delta *next;
 };
 
 /* Bound on number of candidates below that all candidates are considered.  */
@@ -442,7 +655,7 @@ struct iv_ca_delta
 /* If there are more iv occurrences, we just give up (it is quite unlikely that
    optimizing such a loop would help, and it would take ages).  */
 
-#define MAX_CONSIDERED_USES \
+#define MAX_CONSIDERED_GROUPS \
   ((unsigned) PARAM_VALUE (PARAM_IV_MAX_CONSIDERED_USES))
 
 /* If there are at most this number of ivs in the set, try removing unnecessary
@@ -457,38 +670,6 @@ struct iv_ca_delta
 static vec<tree> decl_rtl_to_reset;
 
 static comp_cost force_expr_to_var_cost (tree, bool);
-
-/* Number of uses recorded in DATA.  */
-
-static inline unsigned
-n_iv_uses (struct ivopts_data *data)
-{
-  return data->iv_uses.length ();
-}
-
-/* Ith use recorded in DATA.  */
-
-static inline struct iv_use *
-iv_use (struct ivopts_data *data, unsigned i)
-{
-  return data->iv_uses[i];
-}
-
-/* Number of candidates recorded in DATA.  */
-
-static inline unsigned
-n_iv_cands (struct ivopts_data *data)
-{
-  return data->iv_candidates.length ();
-}
-
-/* Ith candidate recorded in DATA.  */
-
-static inline struct iv_cand *
-iv_cand (struct ivopts_data *data, unsigned i)
-{
-  return data->iv_candidates[i];
-}
 
 /* The single loop exit if it dominates the latch, NULL otherwise.  */
 
@@ -506,48 +687,51 @@ single_dom_exit (struct loop *loop)
   return exit;
 }
 
-/* Dumps information about the induction variable IV to FILE.  */
+/* Dumps information about the induction variable IV to FILE.  Don't dump
+   variable's name if DUMP_NAME is FALSE.  The information is dumped with
+   preceding spaces indicated by INDENT_LEVEL.  */
 
 void
-dump_iv (FILE *file, struct iv *iv)
+dump_iv (FILE *file, struct iv *iv, bool dump_name, unsigned indent_level)
 {
-  if (iv->ssa_name)
+  const char *p;
+  const char spaces[9] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '\0'};
+
+  if (indent_level > 4)
+    indent_level = 4;
+  p = spaces + 8 - (indent_level << 1);
+
+  fprintf (file, "%sIV struct:\n", p);
+  if (iv->ssa_name && dump_name)
     {
-      fprintf (file, "ssa name ");
+      fprintf (file, "%s  SSA_NAME:\t", p);
       print_generic_expr (file, iv->ssa_name, TDF_SLIM);
       fprintf (file, "\n");
     }
 
-  fprintf (file, "  type ");
+  fprintf (file, "%s  Type:\t", p);
   print_generic_expr (file, TREE_TYPE (iv->base), TDF_SLIM);
   fprintf (file, "\n");
 
-  if (iv->step)
-    {
-      fprintf (file, "  base ");
-      print_generic_expr (file, iv->base, TDF_SLIM);
-      fprintf (file, "\n");
+  fprintf (file, "%s  Base:\t", p);
+  print_generic_expr (file, iv->base, TDF_SLIM);
+  fprintf (file, "\n");
 
-      fprintf (file, "  step ");
-      print_generic_expr (file, iv->step, TDF_SLIM);
-      fprintf (file, "\n");
-    }
-  else
-    {
-      fprintf (file, "  invariant ");
-      print_generic_expr (file, iv->base, TDF_SLIM);
-      fprintf (file, "\n");
-    }
+  fprintf (file, "%s  Step:\t", p);
+  print_generic_expr (file, iv->step, TDF_SLIM);
+  fprintf (file, "\n");
 
   if (iv->base_object)
     {
-      fprintf (file, "  base object ");
+      fprintf (file, "%s  Object:\t", p);
       print_generic_expr (file, iv->base_object, TDF_SLIM);
       fprintf (file, "\n");
     }
 
-  if (iv->biv_p)
-    fprintf (file, "  is a biv\n");
+  fprintf (file, "%s  Biv:\t%c\n", p, iv->biv_p ? 'Y' : 'N');
+
+  fprintf (file, "%s  Overflowness wrto loop niter:\t%s\n",
+	   p, iv->no_overflow ? "No-overflow" : "Overflow");
 }
 
 /* Dumps information about the USE to FILE.  */
@@ -555,58 +739,39 @@ dump_iv (FILE *file, struct iv *iv)
 void
 dump_use (FILE *file, struct iv_use *use)
 {
-  fprintf (file, "use %d\n", use->id);
-
-  switch (use->type)
-    {
-    case USE_NONLINEAR_EXPR:
-      fprintf (file, "  generic\n");
-      break;
-
-    case USE_ADDRESS:
-      fprintf (file, "  address\n");
-      break;
-
-    case USE_COMPARE:
-      fprintf (file, "  compare\n");
-      break;
-
-    default:
-      gcc_unreachable ();
-    }
-
-  fprintf (file, "  in statement ");
+  fprintf (file, "  Use %d.%d:\n", use->group_id, use->id);
+  fprintf (file, "    At stmt:\t");
   print_gimple_stmt (file, use->stmt, 0, 0);
-  fprintf (file, "\n");
-
-  fprintf (file, "  at position ");
+  fprintf (file, "    At pos:\t");
   if (use->op_p)
     print_generic_expr (file, *use->op_p, TDF_SLIM);
   fprintf (file, "\n");
-
-  dump_iv (file, use->iv);
-
-  if (use->related_cands)
-    {
-      fprintf (file, "  related candidates ");
-      dump_bitmap (file, use->related_cands);
-    }
+  dump_iv (file, use->iv, false, 2);
 }
 
 /* Dumps information about the uses to FILE.  */
 
 void
-dump_uses (FILE *file, struct ivopts_data *data)
+dump_groups (FILE *file, struct ivopts_data *data)
 {
-  unsigned i;
-  struct iv_use *use;
+  unsigned i, j;
+  struct iv_group *group;
 
-  for (i = 0; i < n_iv_uses (data); i++)
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      use = iv_use (data, i);
-
-      dump_use (file, use);
-      fprintf (file, "\n");
+      group = data->vgroups[i];
+      fprintf (file, "Group %d:\n", group->id);
+      if (group->type == USE_NONLINEAR_EXPR)
+	fprintf (file, "  Type:\tGENERIC\n");
+      else if (group->type == USE_ADDRESS)
+	fprintf (file, "  Type:\tADDRESS\n");
+      else
+	{
+	  gcc_assert (group->type == USE_COMPARE);
+	  fprintf (file, "  Type:\tCOMPARE\n");
+	}
+      for (j = 0; j < group->vuses.length (); j++)
+	dump_use (file, group->vuses[j]);
     }
 }
 
@@ -617,30 +782,22 @@ dump_cand (FILE *file, struct iv_cand *cand)
 {
   struct iv *iv = cand->iv;
 
-  fprintf (file, "candidate %d%s\n",
-	   cand->id, cand->important ? " (important)" : "");
-
+  fprintf (file, "Candidate %d:\n", cand->id);
   if (cand->depends_on)
     {
-      fprintf (file, "  depends on ");
+      fprintf (file, "  Depend on: ");
       dump_bitmap (file, cand->depends_on);
-    }
-
-  if (!iv)
-    {
-      fprintf (file, "  final value replacement\n");
-      return;
     }
 
   if (cand->var_before)
     {
-      fprintf (file, "  var_before ");
+      fprintf (file, "  Var befor: ");
       print_generic_expr (file, cand->var_before, TDF_SLIM);
       fprintf (file, "\n");
     }
   if (cand->var_after)
     {
-      fprintf (file, "  var_after ");
+      fprintf (file, "  Var after: ");
       print_generic_expr (file, cand->var_after, TDF_SLIM);
       fprintf (file, "\n");
     }
@@ -648,27 +805,27 @@ dump_cand (FILE *file, struct iv_cand *cand)
   switch (cand->pos)
     {
     case IP_NORMAL:
-      fprintf (file, "  incremented before exit test\n");
+      fprintf (file, "  Incr POS: before exit test\n");
       break;
 
     case IP_BEFORE_USE:
-      fprintf (file, "  incremented before use %d\n", cand->ainc_use->id);
+      fprintf (file, "  Incr POS: before use %d\n", cand->ainc_use->id);
       break;
 
     case IP_AFTER_USE:
-      fprintf (file, "  incremented after use %d\n", cand->ainc_use->id);
+      fprintf (file, "  Incr POS: after use %d\n", cand->ainc_use->id);
       break;
 
     case IP_END:
-      fprintf (file, "  incremented at end\n");
+      fprintf (file, "  Incr POS: at end\n");
       break;
 
     case IP_ORIGINAL:
-      fprintf (file, "  original biv\n");
+      fprintf (file, "  Incr POS: orig biv\n");
       break;
     }
 
-  dump_iv (file, iv);
+  dump_iv (file, iv, false, 1);
 }
 
 /* Returns the info for ssa version VER.  */
@@ -691,7 +848,7 @@ name_info (struct ivopts_data *data, tree name)
    emitted in LOOP.  */
 
 static bool
-stmt_after_ip_normal_pos (struct loop *loop, gimple stmt)
+stmt_after_ip_normal_pos (struct loop *loop, gimple *stmt)
 {
   basic_block bb = ip_normal_pos (loop), sbb = gimple_bb (stmt);
 
@@ -711,7 +868,7 @@ stmt_after_ip_normal_pos (struct loop *loop, gimple stmt)
    if the positions are identical.  */
 
 static bool
-stmt_after_inc_pos (struct iv_cand *cand, gimple stmt, bool true_if_equal)
+stmt_after_inc_pos (struct iv_cand *cand, gimple *stmt, bool true_if_equal)
 {
   basic_block cand_bb = gimple_bb (cand->incremented_at);
   basic_block stmt_bb = gimple_bb (stmt);
@@ -732,7 +889,7 @@ stmt_after_inc_pos (struct iv_cand *cand, gimple stmt, bool true_if_equal)
    CAND is incremented in LOOP.  */
 
 static bool
-stmt_after_increment (struct loop *loop, struct iv_cand *cand, gimple stmt)
+stmt_after_increment (struct loop *loop, struct iv_cand *cand, gimple *stmt)
 {
   switch (cand->pos)
     {
@@ -859,8 +1016,8 @@ niter_for_exit (struct ivopts_data *data, edge exit)
   if (!slot)
     {
       /* Try to determine number of iterations.  We cannot safely work with ssa
-         names that appear in phi nodes on abnormal edges, so that we do not
-         create overlapping life ranges for them (PR 27283).  */
+	 names that appear in phi nodes on abnormal edges, so that we do not
+	 create overlapping life ranges for them (PR 27283).  */
       desc = XNEW (struct tree_niter_desc);
       if (!number_of_iterations_exit (data->current_loop,
 				      exit, desc, true)
@@ -904,12 +1061,15 @@ tree_ssa_iv_optimize_init (struct ivopts_data *data)
   data->important_candidates = BITMAP_ALLOC (NULL);
   data->max_inv_id = 0;
   data->niters = NULL;
-  data->iv_uses.create (20);
-  data->iv_candidates.create (20);
+  data->vgroups.create (20);
+  data->vcands.create (20);
   data->inv_expr_tab = new hash_table<iv_inv_expr_hasher> (10);
-  data->inv_expr_id = 0;
+  data->max_inv_expr_id = 0;
   data->name_expansion_cache = NULL;
+  data->iv_common_cand_tab = new hash_table<iv_common_cand_hasher> (10);
+  data->iv_common_cands.create (20);
   decl_rtl_to_reset.create (20);
+  gcc_obstack_init (&data->iv_obstack);
 }
 
 /* Returns a memory object to that EXPR points.  In case we are able to
@@ -946,7 +1106,7 @@ determine_base_object (tree expr)
 	return determine_base_object (TREE_OPERAND (base, 0));
 
       return fold_convert (ptr_type_node,
-		           build_fold_addr_expr (base));
+			   build_fold_addr_expr (base));
 
     case POINTER_PLUS_EXPR:
       return determine_base_object (TREE_OPERAND (expr, 0));
@@ -990,26 +1150,28 @@ contain_complex_addr_expr (tree expr)
 }
 
 /* Allocates an induction variable with given initial value BASE and step STEP
-   for loop LOOP.  */
+   for loop LOOP.  NO_OVERFLOW implies the iv doesn't overflow.  */
 
 static struct iv *
-alloc_iv (tree base, tree step)
+alloc_iv (struct ivopts_data *data, tree base, tree step,
+	  bool no_overflow = false)
 {
   tree expr = base;
-  struct iv *iv = XCNEW (struct iv);
+  struct iv *iv = (struct iv*) obstack_alloc (&data->iv_obstack,
+					      sizeof (struct iv));
   gcc_assert (step != NULL_TREE);
 
   /* Lower address expression in base except ones with DECL_P as operand.
      By doing this:
        1) More accurate cost can be computed for address expressions;
        2) Duplicate candidates won't be created for bases in different
-          forms, like &a[0] and &a.  */
+	  forms, like &a[0] and &a.  */
   STRIP_NOPS (expr);
   if ((TREE_CODE (expr) == ADDR_EXPR && !DECL_P (TREE_OPERAND (expr, 0)))
       || contain_complex_addr_expr (expr))
     {
       aff_tree comb;
-      tree_to_aff_combination (expr, TREE_TYPE (base), &comb);
+      tree_to_aff_combination (expr, TREE_TYPE (expr), &comb);
       base = fold_convert (TREE_TYPE (base), aff_combination_to_tree (&comb));
     }
 
@@ -1017,24 +1179,31 @@ alloc_iv (tree base, tree step)
   iv->base_object = determine_base_object (base);
   iv->step = step;
   iv->biv_p = false;
-  iv->have_use_for = false;
-  iv->use_id = 0;
+  iv->nonlin_use = NULL;
   iv->ssa_name = NULL_TREE;
+  if (!no_overflow
+       && !iv_can_overflow_p (data->current_loop, TREE_TYPE (base),
+			      base, step))
+    no_overflow = true;
+  iv->no_overflow = no_overflow;
+  iv->have_address_use = false;
 
   return iv;
 }
 
-/* Sets STEP and BASE for induction variable IV.  */
+/* Sets STEP and BASE for induction variable IV.  NO_OVERFLOW implies the IV
+   doesn't overflow.  */
 
 static void
-set_iv (struct ivopts_data *data, tree iv, tree base, tree step)
+set_iv (struct ivopts_data *data, tree iv, tree base, tree step,
+	bool no_overflow)
 {
   struct version_info *info = name_info (data, iv);
 
   gcc_assert (!info->iv);
 
   bitmap_set_bit (data->relevant, SSA_NAME_VERSION (iv));
-  info->iv = alloc_iv (base, step);
+  info->iv = alloc_iv (data, base, step, no_overflow);
   info->iv->ssa_name = iv;
 }
 
@@ -1056,29 +1225,10 @@ get_iv (struct ivopts_data *data, tree var)
 
       if (!bb
 	  || !flow_bb_inside_loop_p (data->current_loop, bb))
-	set_iv (data, var, var, build_int_cst (type, 0));
+	set_iv (data, var, var, build_int_cst (type, 0), true);
     }
 
   return name_info (data, var)->iv;
-}
-
-/* Determines the step of a biv defined in PHI.  Returns NULL if PHI does
-   not define a simple affine biv with nonzero step.  */
-
-static tree
-determine_biv_step (gphi *phi)
-{
-  struct loop *loop = gimple_bb (phi)->loop_father;
-  tree name = PHI_RESULT (phi);
-  affine_iv iv;
-
-  if (virtual_operand_p (name))
-    return NULL_TREE;
-
-  if (!simple_iv (loop, loop, name, &iv, true))
-    return NULL_TREE;
-
-  return integer_zerop (iv.step) ? NULL_TREE : iv.step;
 }
 
 /* Return the first non-invariant ssa var found in EXPR.  */
@@ -1114,6 +1264,7 @@ static bool
 find_bivs (struct ivopts_data *data)
 {
   gphi *phi;
+  affine_iv iv;
   tree step, type, base, stop;
   bool found = false;
   struct loop *loop = data->current_loop;
@@ -1126,10 +1277,16 @@ find_bivs (struct ivopts_data *data)
       if (SSA_NAME_OCCURS_IN_ABNORMAL_PHI (PHI_RESULT (phi)))
 	continue;
 
-      step = determine_biv_step (phi);
-      if (!step)
+      if (virtual_operand_p (PHI_RESULT (phi)))
 	continue;
 
+      if (!simple_iv (loop, loop, PHI_RESULT (phi), &iv, true))
+	continue;
+
+      if (integer_zerop (iv.step))
+	continue;
+
+      step = iv.step;
       base = PHI_ARG_DEF_FROM_EDGE (phi, loop_preheader_edge (loop));
       /* Stop expanding iv base at the first ssa var referred by iv step.
 	 Ideally we should stop at any ssa var, because that's expensive
@@ -1152,7 +1309,7 @@ find_bivs (struct ivopts_data *data)
 	    step = fold_convert (type, step);
 	}
 
-      set_iv (data, PHI_RESULT (phi), base, step);
+      set_iv (data, PHI_RESULT (phi), base, step, iv.no_overflow);
       found = true;
     }
 
@@ -1165,13 +1322,14 @@ static void
 mark_bivs (struct ivopts_data *data)
 {
   gphi *phi;
-  gimple def;
+  gimple *def;
   tree var;
   struct iv *iv, *incr_iv;
   struct loop *loop = data->current_loop;
   basic_block incr_bb;
   gphi_iterator psi;
 
+  data->bivs_not_used_in_addr = 0;
   for (psi = gsi_start_phis (loop->header); !gsi_end_p (psi); gsi_next (&psi))
     {
       phi = psi.phi ();
@@ -1200,6 +1358,10 @@ mark_bivs (struct ivopts_data *data)
 
       iv->biv_p = true;
       incr_iv->biv_p = true;
+      if (iv->no_overflow)
+	data->bivs_not_used_in_addr++;
+      if (incr_iv->no_overflow)
+	data->bivs_not_used_in_addr++;
     }
 }
 
@@ -1207,7 +1369,7 @@ mark_bivs (struct ivopts_data *data)
    parameters to IV.  */
 
 static bool
-find_givs_in_stmt_scev (struct ivopts_data *data, gimple stmt, affine_iv *iv)
+find_givs_in_stmt_scev (struct ivopts_data *data, gimple *stmt, affine_iv *iv)
 {
   tree lhs, stop;
   struct loop *loop = data->current_loop;
@@ -1248,14 +1410,14 @@ find_givs_in_stmt_scev (struct ivopts_data *data, gimple stmt, affine_iv *iv)
 /* Finds general ivs in statement STMT.  */
 
 static void
-find_givs_in_stmt (struct ivopts_data *data, gimple stmt)
+find_givs_in_stmt (struct ivopts_data *data, gimple *stmt)
 {
   affine_iv iv;
 
   if (!find_givs_in_stmt_scev (data, stmt, &iv))
     return;
 
-  set_iv (data, gimple_assign_lhs (stmt), iv.base, iv.step);
+  set_iv (data, gimple_assign_lhs (stmt), iv.base, iv.step, iv.no_overflow);
 }
 
 /* Finds general ivs in basic block BB.  */
@@ -1311,45 +1473,43 @@ find_induction_variables (struct ivopts_data *data)
 	      fprintf (dump_file, "; zero if ");
 	      print_generic_expr (dump_file, niter->may_be_zero, TDF_SLIM);
 	    }
-	  fprintf (dump_file, "\n\n");
-    	};
+	  fprintf (dump_file, "\n");
+	};
 
-      fprintf (dump_file, "Induction variables:\n\n");
-
+      fprintf (dump_file, "\n<Induction Vars>:\n");
       EXECUTE_IF_SET_IN_BITMAP (data->relevant, 0, i, bi)
 	{
-	  if (ver_info (data, i)->iv)
-	    dump_iv (dump_file, ver_info (data, i)->iv);
+	  struct version_info *info = ver_info (data, i);
+	  if (info->iv && info->iv->step && !integer_zerop (info->iv->step))
+	    dump_iv (dump_file, ver_info (data, i)->iv, true, 0);
 	}
     }
 
   return true;
 }
 
-/* Records a use of type USE_TYPE at *USE_P in STMT whose value is IV.  */
+/* Records a use of TYPE at *USE_P in STMT whose value is IV in GROUP.
+   For address type use, ADDR_BASE is the stripped IV base, ADDR_OFFSET
+   is the const offset stripped from IV base; for other types use, both
+   are zero by default.  */
 
 static struct iv_use *
-record_use (struct ivopts_data *data, tree *use_p, struct iv *iv,
-	    gimple stmt, enum use_type use_type)
+record_use (struct iv_group *group, tree *use_p, struct iv *iv,
+	    gimple *stmt, enum use_type type, tree addr_base,
+	    unsigned HOST_WIDE_INT addr_offset)
 {
   struct iv_use *use = XCNEW (struct iv_use);
 
-  use->id = n_iv_uses (data);
-  use->type = use_type;
+  use->id = group->vuses.length ();
+  use->group_id = group->id;
+  use->type = type;
   use->iv = iv;
   use->stmt = stmt;
   use->op_p = use_p;
-  use->related_cands = BITMAP_ALLOC (NULL);
+  use->addr_base = addr_base;
+  use->addr_offset = addr_offset;
 
-  /* To avoid showing ssa name in the dumps, if it was not reset by the
-     caller.  */
-  iv->ssa_name = NULL_TREE;
-
-  if (dump_file && (dump_flags & TDF_DETAILS))
-    dump_use (dump_file, use);
-
-  data->iv_uses.safe_push (use);
-
+  group->vuses.safe_push (use);
   return use;
 }
 
@@ -1380,14 +1540,74 @@ record_invariant (struct ivopts_data *data, tree op, bool nonlinear_use)
   bitmap_set_bit (data->relevant, SSA_NAME_VERSION (op));
 }
 
+static tree
+strip_offset (tree expr, unsigned HOST_WIDE_INT *offset);
+
+/* Record a group of TYPE.  */
+
+static struct iv_group *
+record_group (struct ivopts_data *data, enum use_type type)
+{
+  struct iv_group *group = XCNEW (struct iv_group);
+
+  group->id = data->vgroups.length ();
+  group->type = type;
+  group->related_cands = BITMAP_ALLOC (NULL);
+  group->vuses.create (1);
+
+  data->vgroups.safe_push (group);
+  return group;
+}
+
+/* Record a use of TYPE at *USE_P in STMT whose value is IV in a group.
+   New group will be created if there is no existing group for the use.  */
+
+static struct iv_use *
+record_group_use (struct ivopts_data *data, tree *use_p,
+		  struct iv *iv, gimple *stmt, enum use_type type)
+{
+  tree addr_base = NULL;
+  struct iv_group *group = NULL;
+  unsigned HOST_WIDE_INT addr_offset = 0;
+
+  /* Record non address type use in a new group.  */
+  if (type == USE_ADDRESS && iv->base_object)
+    {
+      unsigned int i;
+
+      addr_base = strip_offset (iv->base, &addr_offset);
+      for (i = 0; i < data->vgroups.length (); i++)
+	{
+	  struct iv_use *use;
+
+	  group = data->vgroups[i];
+	  use = group->vuses[0];
+	  if (use->type != USE_ADDRESS || !use->iv->base_object)
+	    continue;
+
+	  /* Check if it has the same stripped base and step.  */
+	  if (operand_equal_p (iv->base_object, use->iv->base_object, 0)
+	      && operand_equal_p (iv->step, use->iv->step, 0)
+	      && operand_equal_p (addr_base, use->addr_base, 0))
+	    break;
+	}
+      if (i == data->vgroups.length ())
+	group = NULL;
+    }
+
+  if (!group)
+    group = record_group (data, type);
+
+  return record_use (group, use_p, iv, stmt, type, addr_base, addr_offset);
+}
+
 /* Checks whether the use OP is interesting and if so, records it.  */
 
 static struct iv_use *
 find_interesting_uses_op (struct ivopts_data *data, tree op)
 {
   struct iv *iv;
-  struct iv *civ;
-  gimple stmt;
+  gimple *stmt;
   struct iv_use *use;
 
   if (TREE_CODE (op) != SSA_NAME)
@@ -1397,12 +1617,10 @@ find_interesting_uses_op (struct ivopts_data *data, tree op)
   if (!iv)
     return NULL;
 
-  if (iv->have_use_for)
+  if (iv->nonlin_use)
     {
-      use = iv_use (data, iv->use_id);
-
-      gcc_assert (use->type == USE_NONLINEAR_EXPR);
-      return use;
+      gcc_assert (iv->nonlin_use->type == USE_NONLINEAR_EXPR);
+      return iv->nonlin_use;
     }
 
   if (integer_zerop (iv->step))
@@ -1410,18 +1628,12 @@ find_interesting_uses_op (struct ivopts_data *data, tree op)
       record_invariant (data, op, true);
       return NULL;
     }
-  iv->have_use_for = true;
-
-  civ = XNEW (struct iv);
-  *civ = *iv;
 
   stmt = SSA_NAME_DEF_STMT (op);
-  gcc_assert (gimple_code (stmt) == GIMPLE_PHI
-	      || is_gimple_assign (stmt));
+  gcc_assert (gimple_code (stmt) == GIMPLE_PHI || is_gimple_assign (stmt));
 
-  use = record_use (data, NULL, civ, stmt, USE_NONLINEAR_EXPR);
-  iv->use_id = use->id;
-
+  use = record_group_use (data, NULL, iv, stmt, USE_NONLINEAR_EXPR);
+  iv->nonlin_use = use;
   return use;
 }
 
@@ -1434,15 +1646,15 @@ find_interesting_uses_op (struct ivopts_data *data, tree op)
    condition and false is returned.  */
 
 static bool
-extract_cond_operands (struct ivopts_data *data, gimple stmt,
+extract_cond_operands (struct ivopts_data *data, gimple *stmt,
 		       tree **control_var, tree **bound,
 		       struct iv **iv_var, struct iv **iv_bound)
 {
   /* The objects returned when COND has constant operands.  */
   static struct iv const_iv;
   static tree zero;
-  tree *op0 = &zero, *op1 = &zero, *tmp_op;
-  struct iv *iv0 = &const_iv, *iv1 = &const_iv, *tmp_iv;
+  tree *op0 = &zero, *op1 = &zero;
+  struct iv *iv0 = &const_iv, *iv1 = &const_iv;
   bool ret = false;
 
   if (gimple_code (stmt) == GIMPLE_COND)
@@ -1473,16 +1685,16 @@ extract_cond_operands (struct ivopts_data *data, gimple stmt,
   if (integer_zerop (iv0->step))
     {
       /* Control variable may be on the other side.  */
-      tmp_op = op0; op0 = op1; op1 = tmp_op;
-      tmp_iv = iv0; iv0 = iv1; iv1 = tmp_iv;
+      std::swap (op0, op1);
+      std::swap (iv0, iv1);
     }
   ret = !integer_zerop (iv0->step) && integer_zerop (iv1->step);
 
 end:
   if (control_var)
-    *control_var = op0;;
+    *control_var = op0;
   if (iv_var)
-    *iv_var = iv0;;
+    *iv_var = iv0;
   if (bound)
     *bound = op1;
   if (iv_bound)
@@ -1495,10 +1707,10 @@ end:
    records it.  */
 
 static void
-find_interesting_uses_cond (struct ivopts_data *data, gimple stmt)
+find_interesting_uses_cond (struct ivopts_data *data, gimple *stmt)
 {
   tree *var_p, *bound_p;
-  struct iv *var_iv, *civ;
+  struct iv *var_iv;
 
   if (!extract_cond_operands (data, stmt, &var_p, &bound_p, &var_iv, NULL))
     {
@@ -1507,9 +1719,7 @@ find_interesting_uses_cond (struct ivopts_data *data, gimple stmt)
       return;
     }
 
-  civ = XNEW (struct iv);
-  *civ = *var_iv;
-  record_use (data, NULL, civ, stmt, USE_COMPARE);
+  record_group_use (data, NULL, var_iv, stmt, USE_COMPARE);
 }
 
 /* Returns the outermost loop EXPR is obviously invariant in
@@ -1597,6 +1807,149 @@ expr_invariant_in_loop_p (struct loop *loop, tree expr)
   return true;
 }
 
+/* Given expression EXPR which computes inductive values with respect
+   to loop recorded in DATA, this function returns biv from which EXPR
+   is derived by tracing definition chains of ssa variables in EXPR.  */
+
+static struct iv*
+find_deriving_biv_for_expr (struct ivopts_data *data, tree expr)
+{
+  struct iv *iv;
+  unsigned i, n;
+  tree e2, e1;
+  enum tree_code code;
+  gimple *stmt;
+
+  if (expr == NULL_TREE)
+    return NULL;
+
+  if (is_gimple_min_invariant (expr))
+    return NULL;
+
+  code = TREE_CODE (expr);
+  if (IS_EXPR_CODE_CLASS (TREE_CODE_CLASS (code)))
+    {
+      n = TREE_OPERAND_LENGTH (expr);
+      for (i = 0; i < n; i++)
+	{
+	  iv = find_deriving_biv_for_expr (data, TREE_OPERAND (expr, i));
+	  if (iv)
+	    return iv;
+	}
+    }
+
+  /* Stop if it's not ssa name.  */
+  if (code != SSA_NAME)
+    return NULL;
+
+  iv = get_iv (data, expr);
+  if (!iv || integer_zerop (iv->step))
+    return NULL;
+  else if (iv->biv_p)
+    return iv;
+
+  stmt = SSA_NAME_DEF_STMT (expr);
+  if (gphi *phi = dyn_cast <gphi *> (stmt))
+    {
+      ssa_op_iter iter;
+      use_operand_p use_p;
+      basic_block phi_bb = gimple_bb (phi);
+
+      /* Skip loop header PHI that doesn't define biv.  */
+      if (phi_bb->loop_father == data->current_loop)
+	return NULL;
+
+      if (virtual_operand_p (gimple_phi_result (phi)))
+	return NULL;
+
+      FOR_EACH_PHI_ARG (use_p, phi, iter, SSA_OP_USE)
+	{
+	  tree use = USE_FROM_PTR (use_p);
+	  iv = find_deriving_biv_for_expr (data, use);
+	  if (iv)
+	    return iv;
+	}
+      return NULL;
+    }
+  if (gimple_code (stmt) != GIMPLE_ASSIGN)
+    return NULL;
+
+  e1 = gimple_assign_rhs1 (stmt);
+  code = gimple_assign_rhs_code (stmt);
+  if (get_gimple_rhs_class (code) == GIMPLE_SINGLE_RHS)
+    return find_deriving_biv_for_expr (data, e1);
+
+  switch (code)
+    {
+    case MULT_EXPR:
+    case PLUS_EXPR:
+    case MINUS_EXPR:
+    case POINTER_PLUS_EXPR:
+      /* Increments, decrements and multiplications by a constant
+	 are simple.  */
+      e2 = gimple_assign_rhs2 (stmt);
+      iv = find_deriving_biv_for_expr (data, e2);
+      if (iv)
+	return iv;
+      gcc_fallthrough ();
+
+    CASE_CONVERT:
+      /* Casts are simple.  */
+      return find_deriving_biv_for_expr (data, e1);
+
+    default:
+      break;
+    }
+
+  return NULL;
+}
+
+/* Record BIV, its predecessor and successor that they are used in
+   address type uses.  */
+
+static void
+record_biv_for_address_use (struct ivopts_data *data, struct iv *biv)
+{
+  unsigned i;
+  tree type, base_1, base_2;
+  bitmap_iterator bi;
+
+  if (!biv || !biv->biv_p || integer_zerop (biv->step)
+      || biv->have_address_use || !biv->no_overflow)
+    return;
+
+  type = TREE_TYPE (biv->base);
+  if (!INTEGRAL_TYPE_P (type))
+    return;
+
+  biv->have_address_use = true;
+  data->bivs_not_used_in_addr--;
+  base_1 = fold_build2 (PLUS_EXPR, type, biv->base, biv->step);
+  EXECUTE_IF_SET_IN_BITMAP (data->relevant, 0, i, bi)
+    {
+      struct iv *iv = ver_info (data, i)->iv;
+
+      if (!iv || !iv->biv_p || integer_zerop (iv->step)
+	  || iv->have_address_use || !iv->no_overflow)
+	continue;
+
+      if (type != TREE_TYPE (iv->base)
+	  || !INTEGRAL_TYPE_P (TREE_TYPE (iv->base)))
+	continue;
+
+      if (!operand_equal_p (biv->step, iv->step, 0))
+	continue;
+
+      base_2 = fold_build2 (PLUS_EXPR, type, iv->base, iv->step);
+      if (operand_equal_p (base_1, iv->base, 0)
+	  || operand_equal_p (base_2, biv->base, 0))
+	{
+	  iv->have_address_use = true;
+	  data->bivs_not_used_in_addr--;
+	}
+    }
+}
+
 /* Cumulates the steps of indices into DATA and replaces their values with the
    initial ones.  Returns false when the value of the index cannot be determined.
    Callback for for_each_index.  */
@@ -1604,7 +1957,7 @@ expr_invariant_in_loop_p (struct loop *loop, tree expr)
 struct ifs_ivopts_data
 {
   struct ivopts_data *ivopts_data;
-  gimple stmt;
+  gimple *stmt;
   tree step;
 };
 
@@ -1613,6 +1966,7 @@ idx_find_step (tree base, tree *idx, void *data)
 {
   struct ifs_ivopts_data *dta = (struct ifs_ivopts_data *) data;
   struct iv *iv;
+  bool use_overflow_semantics = false;
   tree step, iv_base, iv_step, lbound, off;
   struct loop *loop = dta->ivopts_data->current_loop;
 
@@ -1672,9 +2026,12 @@ idx_find_step (tree base, tree *idx, void *data)
 
   iv_base = iv->base;
   iv_step = iv->step;
+  if (iv->no_overflow && nowrap_type_p (TREE_TYPE (iv_step)))
+    use_overflow_semantics = true;
+
   if (!convert_affine_scev (dta->ivopts_data->current_loop,
 			    sizetype, &iv_base, &iv_step, dta->stmt,
-			    false))
+			    use_overflow_semantics))
     {
       /* The index might wrap.  */
       return false;
@@ -1683,6 +2040,13 @@ idx_find_step (tree base, tree *idx, void *data)
   step = fold_build2 (MULT_EXPR, sizetype, step, iv_step);
   dta->step = fold_build2 (PLUS_EXPR, sizetype, dta->step, step);
 
+  if (dta->ivopts_data->bivs_not_used_in_addr)
+    {
+      if (!iv->biv_p)
+	iv = find_deriving_biv_for_expr (dta->ivopts_data, iv->ssa_name);
+
+      record_biv_for_address_use (dta->ivopts_data, iv);
+    }
   return true;
 }
 
@@ -1808,9 +2172,26 @@ may_be_nonaddressable_p (tree expr)
 	 target, thus they are always addressable.  */
       return false;
 
+    case MEM_REF:
+      /* Likewise for MEM_REFs, modulo the storage order.  */
+      return REF_REVERSE_STORAGE_ORDER (expr);
+
+    case BIT_FIELD_REF:
+      if (REF_REVERSE_STORAGE_ORDER (expr))
+	return true;
+      return may_be_nonaddressable_p (TREE_OPERAND (expr, 0));
+
     case COMPONENT_REF:
+      if (TYPE_REVERSE_STORAGE_ORDER (TREE_TYPE (TREE_OPERAND (expr, 0))))
+	return true;
       return DECL_NONADDRESSABLE_P (TREE_OPERAND (expr, 1))
 	     || may_be_nonaddressable_p (TREE_OPERAND (expr, 0));
+
+    case ARRAY_REF:
+    case ARRAY_RANGE_REF:
+      if (TYPE_REVERSE_STORAGE_ORDER (TREE_TYPE (TREE_OPERAND (expr, 0))))
+	return true;
+      return may_be_nonaddressable_p (TREE_OPERAND (expr, 0));
 
     case VIEW_CONVERT_EXPR:
       /* This kind of view-conversions may wrap non-addressable objects
@@ -1820,11 +2201,6 @@ may_be_nonaddressable_p (tree expr)
       if (is_gimple_reg (TREE_OPERAND (expr, 0))
 	  || !is_gimple_addressable (TREE_OPERAND (expr, 0)))
 	return true;
-
-      /* ... fall through ... */
-
-    case ARRAY_REF:
-    case ARRAY_RANGE_REF:
       return may_be_nonaddressable_p (TREE_OPERAND (expr, 0));
 
     CASE_CONVERT:
@@ -1840,7 +2216,8 @@ may_be_nonaddressable_p (tree expr)
 /* Finds addresses in *OP_P inside STMT.  */
 
 static void
-find_interesting_uses_address (struct ivopts_data *data, gimple stmt, tree *op_p)
+find_interesting_uses_address (struct ivopts_data *data, gimple *stmt,
+			       tree *op_p)
 {
   tree base = *op_p, step = size_zero_node;
   struct iv *civ;
@@ -1946,8 +2323,12 @@ find_interesting_uses_address (struct ivopts_data *data, gimple stmt, tree *op_p
 	}
     }
 
-  civ = alloc_iv (base, step);
-  record_use (data, op_p, civ, stmt, USE_ADDRESS);
+  civ = alloc_iv (data, base, step);
+  /* Fail if base object of this memory reference is unknown.  */
+  if (civ->base_object == NULL_TREE)
+    goto fail;
+
+  record_group_use (data, op_p, civ, stmt, USE_ADDRESS);
   return;
 
 fail:
@@ -1957,7 +2338,7 @@ fail:
 /* Finds and records invariants used in STMT.  */
 
 static void
-find_invariants_stmt (struct ivopts_data *data, gimple stmt)
+find_invariants_stmt (struct ivopts_data *data, gimple *stmt)
 {
   ssa_op_iter iter;
   use_operand_p use_p;
@@ -1973,7 +2354,7 @@ find_invariants_stmt (struct ivopts_data *data, gimple stmt)
 /* Finds interesting uses of induction variables in the statement STMT.  */
 
 static void
-find_interesting_uses_stmt (struct ivopts_data *data, gimple stmt)
+find_interesting_uses_stmt (struct ivopts_data *data, gimple *stmt)
 {
   struct iv *iv;
   tree op, *lhs, *rhs;
@@ -2073,7 +2454,189 @@ find_interesting_uses_outside (struct ivopts_data *data, edge exit)
       phi = psi.phi ();
       def = PHI_ARG_DEF_FROM_EDGE (phi, exit);
       if (!virtual_operand_p (def))
-        find_interesting_uses_op (data, def);
+	find_interesting_uses_op (data, def);
+    }
+}
+
+/* Compute maximum offset of [base + offset] addressing mode
+   for memory reference represented by USE.  */
+
+static HOST_WIDE_INT
+compute_max_addr_offset (struct iv_use *use)
+{
+  int width;
+  rtx reg, addr;
+  HOST_WIDE_INT i, off;
+  unsigned list_index, num;
+  addr_space_t as;
+  machine_mode mem_mode, addr_mode;
+  static vec<HOST_WIDE_INT> max_offset_list;
+
+  as = TYPE_ADDR_SPACE (TREE_TYPE (use->iv->base));
+  mem_mode = TYPE_MODE (TREE_TYPE (*use->op_p));
+
+  num = max_offset_list.length ();
+  list_index = (unsigned) as * MAX_MACHINE_MODE + (unsigned) mem_mode;
+  if (list_index >= num)
+    {
+      max_offset_list.safe_grow (list_index + MAX_MACHINE_MODE);
+      for (; num < max_offset_list.length (); num++)
+	max_offset_list[num] = -1;
+    }
+
+  off = max_offset_list[list_index];
+  if (off != -1)
+    return off;
+
+  addr_mode = targetm.addr_space.address_mode (as);
+  reg = gen_raw_REG (addr_mode, LAST_VIRTUAL_REGISTER + 1);
+  addr = gen_rtx_fmt_ee (PLUS, addr_mode, reg, NULL_RTX);
+
+  width = GET_MODE_BITSIZE (addr_mode) - 1;
+  if (width > (HOST_BITS_PER_WIDE_INT - 1))
+    width = HOST_BITS_PER_WIDE_INT - 1;
+
+  for (i = width; i > 0; i--)
+    {
+      off = (HOST_WIDE_INT_1U << i) - 1;
+      XEXP (addr, 1) = gen_int_mode (off, addr_mode);
+      if (memory_address_addr_space_p (mem_mode, addr, as))
+	break;
+
+      /* For some strict-alignment targets, the offset must be naturally
+	 aligned.  Try an aligned offset if mem_mode is not QImode.  */
+      off = (HOST_WIDE_INT_1U << i);
+      if (off > GET_MODE_SIZE (mem_mode) && mem_mode != QImode)
+	{
+	  off -= GET_MODE_SIZE (mem_mode);
+	  XEXP (addr, 1) = gen_int_mode (off, addr_mode);
+	  if (memory_address_addr_space_p (mem_mode, addr, as))
+	    break;
+	}
+    }
+  if (i == 0)
+    off = 0;
+
+  max_offset_list[list_index] = off;
+  return off;
+}
+
+/* Comparison function to sort group in ascending order of addr_offset.  */
+
+static int
+group_compare_offset (const void *a, const void *b)
+{
+  const struct iv_use *const *u1 = (const struct iv_use *const *) a;
+  const struct iv_use *const *u2 = (const struct iv_use *const *) b;
+
+  if ((*u1)->addr_offset != (*u2)->addr_offset)
+    return (*u1)->addr_offset < (*u2)->addr_offset ? -1 : 1;
+  else
+    return 0;
+}
+
+/* Check if small groups should be split.  Return true if no group
+   contains more than two uses with distinct addr_offsets.  Return
+   false otherwise.  We want to split such groups because:
+
+     1) Small groups don't have much benefit and may interfer with
+	general candidate selection.
+     2) Size for problem with only small groups is usually small and
+	general algorithm can handle it well.
+
+   TODO -- Above claim may not hold when we want to merge memory
+   accesses with conseuctive addresses.  */
+
+static bool
+split_small_address_groups_p (struct ivopts_data *data)
+{
+  unsigned int i, j, distinct = 1;
+  struct iv_use *pre;
+  struct iv_group *group;
+
+  for (i = 0; i < data->vgroups.length (); i++)
+    {
+      group = data->vgroups[i];
+      if (group->vuses.length () == 1)
+	continue;
+
+      gcc_assert (group->type == USE_ADDRESS);
+      if (group->vuses.length () == 2)
+	{
+	  if (group->vuses[0]->addr_offset > group->vuses[1]->addr_offset)
+	    std::swap (group->vuses[0], group->vuses[1]);
+	}
+      else
+	group->vuses.qsort (group_compare_offset);
+
+      if (distinct > 2)
+	continue;
+
+      distinct = 1;
+      for (pre = group->vuses[0], j = 1; j < group->vuses.length (); j++)
+	{
+	  if (group->vuses[j]->addr_offset != pre->addr_offset)
+	    {
+	      pre = group->vuses[j];
+	      distinct++;
+	    }
+
+	  if (distinct > 2)
+	    break;
+	}
+    }
+
+  return (distinct <= 2);
+}
+
+/* For each group of address type uses, this function further groups
+   these uses according to the maximum offset supported by target's
+   [base + offset] addressing mode.  */
+
+static void
+split_address_groups (struct ivopts_data *data)
+{
+  unsigned int i, j;
+  HOST_WIDE_INT max_offset = -1;
+
+  /* Reset max offset to split all small groups.  */
+  if (split_small_address_groups_p (data))
+    max_offset = 0;
+
+  for (i = 0; i < data->vgroups.length (); i++)
+    {
+      struct iv_group *group = data->vgroups[i];
+      struct iv_use *use = group->vuses[0];
+
+      use->id = 0;
+      use->group_id = group->id;
+      if (group->vuses.length () == 1)
+	continue;
+
+      if (max_offset != 0)
+	max_offset = compute_max_addr_offset (use);
+
+      for (j = 1; j < group->vuses.length (); j++)
+	{
+	  struct iv_use *next = group->vuses[j];
+
+	  /* Only uses with offset that can fit in offset part against
+	     the first use can be grouped together.  */
+	  if (next->addr_offset - use->addr_offset
+	      > (unsigned HOST_WIDE_INT) max_offset)
+	    break;
+
+	  next->id = j;
+	  next->group_id = group->id;
+	}
+      /* Split group.  */
+      if (j < group->vuses.length ())
+	{
+	  struct iv_group *new_group = record_group (data, group->type);
+	  new_group->vuses.safe_splice (group->vuses);
+	  new_group->vuses.block_remove (0, j);
+	  group->vuses.truncate (j);
+	}
     }
 }
 
@@ -2086,11 +2649,7 @@ find_interesting_uses (struct ivopts_data *data)
   gimple_stmt_iterator bsi;
   basic_block *body = get_loop_body (data->current_loop);
   unsigned i;
-  struct version_info *info;
   edge e;
-
-  if (dump_file && (dump_flags & TDF_DETAILS))
-    fprintf (dump_file, "Uses:\n\n");
 
   for (i = 0; i < data->current_loop->num_nodes; i++)
     {
@@ -2109,24 +2668,27 @@ find_interesting_uses (struct ivopts_data *data)
 	  find_interesting_uses_stmt (data, gsi_stmt (bsi));
     }
 
+  split_address_groups (data);
+
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       bitmap_iterator bi;
 
-      fprintf (dump_file, "\n");
-
+      fprintf (dump_file, "\n<Invariant Vars>:\n");
       EXECUTE_IF_SET_IN_BITMAP (data->relevant, 0, i, bi)
 	{
-	  info = ver_info (data, i);
+	  struct version_info *info = ver_info (data, i);
 	  if (info->inv_id)
 	    {
-	      fprintf (dump_file, "  ");
+	      fprintf (dump_file, "Inv %d:\t", info->inv_id);
 	      print_generic_expr (dump_file, info->name, TDF_SLIM);
-	      fprintf (dump_file, " is invariant (%d)%s\n",
-		       info->inv_id, info->has_nonlin_use ? "" : ", eliminable");
+	      fprintf (dump_file, "%s\n",
+		       info->has_nonlin_use ? "" : "\t(eliminable)");
 	    }
 	}
 
+      fprintf (dump_file, "\n<IV Groups>:\n");
+      dump_groups (dump_file, data);
       fprintf (dump_file, "\n");
     }
 
@@ -2365,11 +2927,24 @@ find_depends (tree *expr_p, int *ws ATTRIBUTE_UNUSED, void *data)
 static struct iv_cand *
 add_candidate_1 (struct ivopts_data *data,
 		 tree base, tree step, bool important, enum iv_position pos,
-		 struct iv_use *use, gimple incremented_at)
+		 struct iv_use *use, gimple *incremented_at,
+		 struct iv *orig_iv = NULL)
 {
   unsigned i;
   struct iv_cand *cand = NULL;
   tree type, orig_type;
+
+  gcc_assert (base && step);
+
+  /* -fkeep-gc-roots-live means that we have to keep a real pointer
+     live, but the ivopts code may replace a real pointer with one
+     pointing before or after the memory block that is then adjusted
+     into the memory block during the loop.  FIXME: It would likely be
+     better to actually force the pointer live and still use ivopts;
+     for example, it would be enough to write the pointer into memory
+     and keep it there until after the loop.  */
+  if (flag_keep_gc_roots_live && POINTER_TYPE_P (TREE_TYPE (base)))
+    return NULL;
 
   /* For non-original variables, make sure their values are computed in a type
      that does not invoke undefined behavior on overflows (since in general,
@@ -2385,9 +2960,9 @@ add_candidate_1 (struct ivopts_data *data,
 	}
     }
 
-  for (i = 0; i < n_iv_cands (data); i++)
+  for (i = 0; i < data->vcands.length (); i++)
     {
-      cand = iv_cand (data, i);
+      cand = data->vcands[i];
 
       if (cand->pos != pos)
 	continue;
@@ -2397,46 +2972,29 @@ add_candidate_1 (struct ivopts_data *data,
 	      && cand->ainc_use != use))
 	continue;
 
-      if (!cand->iv)
-	{
-	  if (!base && !step)
-	    break;
-
-	  continue;
-	}
-
-      if (!base && !step)
-	continue;
-
       if (operand_equal_p (base, cand->iv->base, 0)
 	  && operand_equal_p (step, cand->iv->step, 0)
-          && (TYPE_PRECISION (TREE_TYPE (base))
-              == TYPE_PRECISION (TREE_TYPE (cand->iv->base))))
+	  && (TYPE_PRECISION (TREE_TYPE (base))
+	      == TYPE_PRECISION (TREE_TYPE (cand->iv->base))))
 	break;
     }
 
-  if (i == n_iv_cands (data))
+  if (i == data->vcands.length ())
     {
       cand = XCNEW (struct iv_cand);
       cand->id = i;
-
-      if (!base && !step)
-	cand->iv = NULL;
-      else
-	cand->iv = alloc_iv (base, step);
-
+      cand->iv = alloc_iv (data, base, step);
       cand->pos = pos;
-      if (pos != IP_ORIGINAL && cand->iv)
+      if (pos != IP_ORIGINAL)
 	{
 	  cand->var_before = create_tmp_var_raw (TREE_TYPE (base), "ivtmp");
 	  cand->var_after = cand->var_before;
 	}
       cand->important = important;
       cand->incremented_at = incremented_at;
-      data->iv_candidates.safe_push (cand);
+      data->vcands.safe_push (cand);
 
-      if (step
-	  && TREE_CODE (step) != INTEGER_CST)
+      if (TREE_CODE (step) != INTEGER_CST)
 	{
 	  fd_ivopts_data = data;
 	  walk_tree (&step, find_depends, &cand->depends_on, NULL);
@@ -2447,24 +3005,16 @@ add_candidate_1 (struct ivopts_data *data,
       else
 	cand->ainc_use = NULL;
 
+      cand->orig_iv = orig_iv;
       if (dump_file && (dump_flags & TDF_DETAILS))
 	dump_cand (dump_file, cand);
     }
 
-  if (important && !cand->important)
-    {
-      cand->important = true;
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	fprintf (dump_file, "Candidate %d is important\n", cand->id);
-    }
+  cand->important |= important;
 
+  /* Relate candidate to the group for which it is added.  */
   if (use)
-    {
-      bitmap_set_bit (use->related_cands, i);
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	fprintf (dump_file, "Candidate %d is related to use %d\n",
-		 cand->id, use->id);
-    }
+    bitmap_set_bit (data->vgroups[use->group_id]->related_cands, i);
 
   return cand;
 }
@@ -2550,20 +3100,20 @@ add_autoinc_candidates (struct ivopts_data *data, tree base, tree step,
 
 /* Adds a candidate BASE + STEP * i.  Important field is set to IMPORTANT and
    position to POS.  If USE is not NULL, the candidate is set as related to
-   it.  The candidate computation is scheduled on all available positions.  */
+   it.  The candidate computation is scheduled before exit condition and at
+   the end of loop.  */
 
 static void
 add_candidate (struct ivopts_data *data,
-	       tree base, tree step, bool important, struct iv_use *use)
+	       tree base, tree step, bool important, struct iv_use *use,
+	       struct iv *orig_iv = NULL)
 {
   if (ip_normal_pos (data->current_loop))
-    add_candidate_1 (data, base, step, important, IP_NORMAL, use, NULL);
+    add_candidate_1 (data, base, step, important,
+		     IP_NORMAL, use, NULL, orig_iv);
   if (ip_end_pos (data->current_loop)
       && allow_ip_end_pos_p (data->current_loop))
-    add_candidate_1 (data, base, step, important, IP_END, use, NULL);
-
-  if (use != NULL && use->type == USE_ADDRESS)
-    add_autoinc_candidates (data, base, step, important, use);
+    add_candidate_1 (data, base, step, important, IP_END, use, NULL, orig_iv);
 }
 
 /* Adds standard iv candidates.  */
@@ -2575,14 +3125,14 @@ add_standard_iv_candidates (struct ivopts_data *data)
 
   /* The same for a double-integer type if it is still fast enough.  */
   if (TYPE_PRECISION
-        (long_integer_type_node) > TYPE_PRECISION (integer_type_node)
+	(long_integer_type_node) > TYPE_PRECISION (integer_type_node)
       && TYPE_PRECISION (long_integer_type_node) <= BITS_PER_WORD)
     add_candidate (data, build_int_cst (long_integer_type_node, 0),
 		   build_int_cst (long_integer_type_node, 1), true, NULL);
 
   /* The same for a double-integer type if it is still fast enough.  */
   if (TYPE_PRECISION
-        (long_long_integer_type_node) > TYPE_PRECISION (long_integer_type_node)
+	(long_long_integer_type_node) > TYPE_PRECISION (long_integer_type_node)
       && TYPE_PRECISION (long_long_integer_type_node) <= BITS_PER_WORD)
     add_candidate (data, build_int_cst (long_long_integer_type_node, 0),
 		   build_int_cst (long_long_integer_type_node, 1), true, NULL);
@@ -2592,13 +3142,28 @@ add_standard_iv_candidates (struct ivopts_data *data)
 /* Adds candidates bases on the old induction variable IV.  */
 
 static void
-add_old_iv_candidates (struct ivopts_data *data, struct iv *iv)
+add_iv_candidate_for_biv (struct ivopts_data *data, struct iv *iv)
 {
-  gimple phi;
+  gimple *phi;
   tree def;
   struct iv_cand *cand;
 
-  add_candidate (data, iv->base, iv->step, true, NULL);
+  /* Check if this biv is used in address type use.  */
+  if (iv->no_overflow  && iv->have_address_use
+      && INTEGRAL_TYPE_P (TREE_TYPE (iv->base))
+      && TYPE_PRECISION (TREE_TYPE (iv->base)) < TYPE_PRECISION (sizetype))
+    {
+      tree base = fold_convert (sizetype, iv->base);
+      tree step = fold_convert (sizetype, iv->step);
+
+      /* Add iv cand of same precision as index part in TARGET_MEM_REF.  */
+      add_candidate (data, base, step, true, NULL, iv);
+      /* Add iv cand of the original type only if it has nonlinear use.  */
+      if (iv->nonlin_use)
+	add_candidate (data, iv->base, iv->step, true, NULL);
+    }
+  else
+    add_candidate (data, iv->base, iv->step, true, NULL);
 
   /* The same, but with initial value zero.  */
   if (POINTER_TYPE_P (TREE_TYPE (iv->base)))
@@ -2621,8 +3186,11 @@ add_old_iv_candidates (struct ivopts_data *data, struct iv *iv)
 	  cand = add_candidate_1 (data,
 				  iv->base, iv->step, true, IP_ORIGINAL, NULL,
 				  SSA_NAME_DEF_STMT (def));
-	  cand->var_before = iv->ssa_name;
-	  cand->var_after = def;
+	  if (cand)
+	    {
+	      cand->var_before = iv->ssa_name;
+	      cand->var_after = def;
+	    }
 	}
       else
 	gcc_assert (gimple_bb (phi) == data->current_loop->header);
@@ -2632,7 +3200,7 @@ add_old_iv_candidates (struct ivopts_data *data, struct iv *iv)
 /* Adds candidates based on the old induction variables.  */
 
 static void
-add_old_ivs_candidates (struct ivopts_data *data)
+add_iv_candidate_for_bivs (struct ivopts_data *data)
 {
   unsigned i;
   struct iv *iv;
@@ -2642,104 +3210,196 @@ add_old_ivs_candidates (struct ivopts_data *data)
     {
       iv = ver_info (data, i)->iv;
       if (iv && iv->biv_p && !integer_zerop (iv->step))
-	add_old_iv_candidates (data, iv);
+	add_iv_candidate_for_biv (data, iv);
     }
 }
 
-/* Adds candidates based on the value of the induction variable IV and USE.  */
+/* Record common candidate {BASE, STEP} derived from USE in hashtable.  */
 
 static void
-add_iv_value_candidates (struct ivopts_data *data,
-			 struct iv *iv, struct iv_use *use)
+record_common_cand (struct ivopts_data *data, tree base,
+		    tree step, struct iv_use *use)
+{
+  struct iv_common_cand ent;
+  struct iv_common_cand **slot;
+
+  ent.base = base;
+  ent.step = step;
+  ent.hash = iterative_hash_expr (base, 0);
+  ent.hash = iterative_hash_expr (step, ent.hash);
+
+  slot = data->iv_common_cand_tab->find_slot (&ent, INSERT);
+  if (*slot == NULL)
+    {
+      *slot = new iv_common_cand ();
+      (*slot)->base = base;
+      (*slot)->step = step;
+      (*slot)->uses.create (8);
+      (*slot)->hash = ent.hash;
+      data->iv_common_cands.safe_push ((*slot));
+    }
+
+  gcc_assert (use != NULL);
+  (*slot)->uses.safe_push (use);
+  return;
+}
+
+/* Comparison function used to sort common candidates.  */
+
+static int
+common_cand_cmp (const void *p1, const void *p2)
+{
+  unsigned n1, n2;
+  const struct iv_common_cand *const *const ccand1
+    = (const struct iv_common_cand *const *)p1;
+  const struct iv_common_cand *const *const ccand2
+    = (const struct iv_common_cand *const *)p2;
+
+  n1 = (*ccand1)->uses.length ();
+  n2 = (*ccand2)->uses.length ();
+  return n2 - n1;
+}
+
+/* Adds IV candidates based on common candidated recorded.  */
+
+static void
+add_iv_candidate_derived_from_uses (struct ivopts_data *data)
+{
+  unsigned i, j;
+  struct iv_cand *cand_1, *cand_2;
+
+  data->iv_common_cands.qsort (common_cand_cmp);
+  for (i = 0; i < data->iv_common_cands.length (); i++)
+    {
+      struct iv_common_cand *ptr = data->iv_common_cands[i];
+
+      /* Only add IV candidate if it's derived from multiple uses.  */
+      if (ptr->uses.length () <= 1)
+	break;
+
+      cand_1 = NULL;
+      cand_2 = NULL;
+      if (ip_normal_pos (data->current_loop))
+	cand_1 = add_candidate_1 (data, ptr->base, ptr->step,
+				  false, IP_NORMAL, NULL, NULL);
+
+      if (ip_end_pos (data->current_loop)
+	  && allow_ip_end_pos_p (data->current_loop))
+	cand_2 = add_candidate_1 (data, ptr->base, ptr->step,
+				  false, IP_END, NULL, NULL);
+
+      /* Bind deriving uses and the new candidates.  */
+      for (j = 0; j < ptr->uses.length (); j++)
+	{
+	  struct iv_group *group = data->vgroups[ptr->uses[j]->group_id];
+	  if (cand_1)
+	    bitmap_set_bit (group->related_cands, cand_1->id);
+	  if (cand_2)
+	    bitmap_set_bit (group->related_cands, cand_2->id);
+	}
+    }
+
+  /* Release data since it is useless from this point.  */
+  data->iv_common_cand_tab->empty ();
+  data->iv_common_cands.truncate (0);
+}
+
+/* Adds candidates based on the value of USE's iv.  */
+
+static void
+add_iv_candidate_for_use (struct ivopts_data *data, struct iv_use *use)
 {
   unsigned HOST_WIDE_INT offset;
   tree base;
   tree basetype;
+  struct iv *iv = use->iv;
 
   add_candidate (data, iv->base, iv->step, false, use);
 
-  /* The same, but with initial value zero.  Make such variable important,
-     since it is generic enough so that possibly many uses may be based
-     on it.  */
+  /* Record common candidate for use in case it can be shared by others.  */
+  record_common_cand (data, iv->base, iv->step, use);
+
+  /* Record common candidate with initial value zero.  */
   basetype = TREE_TYPE (iv->base);
   if (POINTER_TYPE_P (basetype))
     basetype = sizetype;
-  add_candidate (data, build_int_cst (basetype, 0),
-		 iv->step, true, use);
+  record_common_cand (data, build_int_cst (basetype, 0), iv->step, use);
 
-  /* Third, try removing the constant offset.  Make sure to even
-     add a candidate for &a[0] vs. (T *)&a.  */
+  /* Record common candidate with constant offset stripped in base.
+     Like the use itself, we also add candidate directly for it.  */
   base = strip_offset (iv->base, &offset);
-  if (offset
-      || base != iv->base)
-    add_candidate (data, base, iv->step, false, use);
+  if (offset || base != iv->base)
+    {
+      record_common_cand (data, base, iv->step, use);
+      add_candidate (data, base, iv->step, false, use);
+    }
+
+  /* Record common candidate with base_object removed in base.  */
+  base = iv->base;
+  STRIP_NOPS (base);
+  if (iv->base_object != NULL && TREE_CODE (base) == POINTER_PLUS_EXPR)
+    {
+      tree step = iv->step;
+
+      STRIP_NOPS (step);
+      base = TREE_OPERAND (base, 1);
+      step = fold_convert (sizetype, step);
+      record_common_cand (data, base, step, use);
+      /* Also record common candidate with offset stripped.  */
+      base = strip_offset (base, &offset);
+      if (offset)
+	record_common_cand (data, base, step, use);
+    }
+
+  /* At last, add auto-incremental candidates.  Make such variables
+     important since other iv uses with same base object may be based
+     on it.  */
+  if (use != NULL && use->type == USE_ADDRESS)
+    add_autoinc_candidates (data, iv->base, iv->step, true, use);
 }
 
 /* Adds candidates based on the uses.  */
 
 static void
-add_derived_ivs_candidates (struct ivopts_data *data)
+add_iv_candidate_for_groups (struct ivopts_data *data)
 {
   unsigned i;
 
-  for (i = 0; i < n_iv_uses (data); i++)
+  /* Only add candidate for the first use in group.  */
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      struct iv_use *use = iv_use (data, i);
+      struct iv_group *group = data->vgroups[i];
 
-      if (!use)
-	continue;
-
-      switch (use->type)
-	{
-	case USE_NONLINEAR_EXPR:
-	case USE_COMPARE:
-	case USE_ADDRESS:
-	  /* Just add the ivs based on the value of the iv used here.  */
-	  add_iv_value_candidates (data, use->iv, use);
-	  break;
-
-	default:
-	  gcc_unreachable ();
-	}
+      gcc_assert (group->vuses[0] != NULL);
+      add_iv_candidate_for_use (data, group->vuses[0]);
     }
+  add_iv_candidate_derived_from_uses (data);
 }
 
-/* Record important candidates and add them to related_cands bitmaps
-   if needed.  */
+/* Record important candidates and add them to related_cands bitmaps.  */
 
 static void
 record_important_candidates (struct ivopts_data *data)
 {
   unsigned i;
-  struct iv_use *use;
+  struct iv_group *group;
 
-  for (i = 0; i < n_iv_cands (data); i++)
+  for (i = 0; i < data->vcands.length (); i++)
     {
-      struct iv_cand *cand = iv_cand (data, i);
+      struct iv_cand *cand = data->vcands[i];
 
       if (cand->important)
 	bitmap_set_bit (data->important_candidates, i);
     }
 
-  data->consider_all_candidates = (n_iv_cands (data)
+  data->consider_all_candidates = (data->vcands.length ()
 				   <= CONSIDER_ALL_CANDIDATES_BOUND);
 
-  if (data->consider_all_candidates)
+  /* Add important candidates to groups' related_cands bitmaps.  */
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      /* We will not need "related_cands" bitmaps in this case,
-	 so release them to decrease peak memory consumption.  */
-      for (i = 0; i < n_iv_uses (data); i++)
-	{
-	  use = iv_use (data, i);
-	  BITMAP_FREE (use->related_cands);
-	}
-    }
-  else
-    {
-      /* Add important candidates to the related_cands bitmaps.  */
-      for (i = 0; i < n_iv_uses (data); i++)
-	bitmap_ior_into (iv_use (data, i)->related_cands,
-			 data->important_candidates);
+      group = data->vgroups[i];
+      bitmap_ior_into (group->related_cands, data->important_candidates);
     }
 }
 
@@ -2752,93 +3412,38 @@ alloc_use_cost_map (struct ivopts_data *data)
 {
   unsigned i, size, s;
 
-  for (i = 0; i < n_iv_uses (data); i++)
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      struct iv_use *use = iv_use (data, i);
+      struct iv_group *group = data->vgroups[i];
 
       if (data->consider_all_candidates)
-	size = n_iv_cands (data);
+	size = data->vcands.length ();
       else
 	{
-	  s = bitmap_count_bits (use->related_cands);
+	  s = bitmap_count_bits (group->related_cands);
 
 	  /* Round up to the power of two, so that moduling by it is fast.  */
 	  size = s ? (1 << ceil_log2 (s)) : 1;
 	}
 
-      use->n_map_members = size;
-      use->cost_map = XCNEWVEC (struct cost_pair, size);
+      group->n_map_members = size;
+      group->cost_map = XCNEWVEC (struct cost_pair, size);
     }
 }
 
-/* Returns description of computation cost of expression whose runtime
-   cost is RUNTIME and complexity corresponds to COMPLEXITY.  */
-
-static comp_cost
-new_cost (unsigned runtime, unsigned complexity)
-{
-  comp_cost cost;
-
-  cost.cost = runtime;
-  cost.complexity = complexity;
-
-  return cost;
-}
-
-/* Adds costs COST1 and COST2.  */
-
-static comp_cost
-add_costs (comp_cost cost1, comp_cost cost2)
-{
-  cost1.cost += cost2.cost;
-  cost1.complexity += cost2.complexity;
-
-  return cost1;
-}
-/* Subtracts costs COST1 and COST2.  */
-
-static comp_cost
-sub_costs (comp_cost cost1, comp_cost cost2)
-{
-  cost1.cost -= cost2.cost;
-  cost1.complexity -= cost2.complexity;
-
-  return cost1;
-}
-
-/* Returns a negative number if COST1 < COST2, a positive number if
-   COST1 > COST2, and 0 if COST1 = COST2.  */
-
-static int
-compare_costs (comp_cost cost1, comp_cost cost2)
-{
-  if (cost1.cost == cost2.cost)
-    return cost1.complexity - cost2.complexity;
-
-  return cost1.cost - cost2.cost;
-}
-
-/* Returns true if COST is infinite.  */
-
-static bool
-infinite_cost_p (comp_cost cost)
-{
-  return cost.cost == INFTY;
-}
-
-/* Sets cost of (USE, CANDIDATE) pair to COST and record that it depends
+/* Sets cost of (GROUP, CAND) pair to COST and record that it depends
    on invariants DEPENDS_ON and that the value used in expressing it
    is VALUE, and in case of iv elimination the comparison operator is COMP.  */
 
 static void
-set_use_iv_cost (struct ivopts_data *data,
-		 struct iv_use *use, struct iv_cand *cand,
-		 comp_cost cost, bitmap depends_on, tree value,
-		 enum tree_code comp, int inv_expr_id)
+set_group_iv_cost (struct ivopts_data *data,
+		   struct iv_group *group, struct iv_cand *cand,
+		   comp_cost cost, bitmap depends_on, tree value,
+		   enum tree_code comp, iv_inv_expr_ent *inv_expr)
 {
   unsigned i, s;
 
-  if (infinite_cost_p (cost))
+  if (cost.infinite_cost_p ())
     {
       BITMAP_FREE (depends_on);
       return;
@@ -2846,40 +3451,40 @@ set_use_iv_cost (struct ivopts_data *data,
 
   if (data->consider_all_candidates)
     {
-      use->cost_map[cand->id].cand = cand;
-      use->cost_map[cand->id].cost = cost;
-      use->cost_map[cand->id].depends_on = depends_on;
-      use->cost_map[cand->id].value = value;
-      use->cost_map[cand->id].comp = comp;
-      use->cost_map[cand->id].inv_expr_id = inv_expr_id;
+      group->cost_map[cand->id].cand = cand;
+      group->cost_map[cand->id].cost = cost;
+      group->cost_map[cand->id].depends_on = depends_on;
+      group->cost_map[cand->id].value = value;
+      group->cost_map[cand->id].comp = comp;
+      group->cost_map[cand->id].inv_expr = inv_expr;
       return;
     }
 
   /* n_map_members is a power of two, so this computes modulo.  */
-  s = cand->id & (use->n_map_members - 1);
-  for (i = s; i < use->n_map_members; i++)
-    if (!use->cost_map[i].cand)
+  s = cand->id & (group->n_map_members - 1);
+  for (i = s; i < group->n_map_members; i++)
+    if (!group->cost_map[i].cand)
       goto found;
   for (i = 0; i < s; i++)
-    if (!use->cost_map[i].cand)
+    if (!group->cost_map[i].cand)
       goto found;
 
   gcc_unreachable ();
 
 found:
-  use->cost_map[i].cand = cand;
-  use->cost_map[i].cost = cost;
-  use->cost_map[i].depends_on = depends_on;
-  use->cost_map[i].value = value;
-  use->cost_map[i].comp = comp;
-  use->cost_map[i].inv_expr_id = inv_expr_id;
+  group->cost_map[i].cand = cand;
+  group->cost_map[i].cost = cost;
+  group->cost_map[i].depends_on = depends_on;
+  group->cost_map[i].value = value;
+  group->cost_map[i].comp = comp;
+  group->cost_map[i].inv_expr = inv_expr;
 }
 
-/* Gets cost of (USE, CANDIDATE) pair.  */
+/* Gets cost of (GROUP, CAND) pair.  */
 
 static struct cost_pair *
-get_use_iv_cost (struct ivopts_data *data, struct iv_use *use,
-		 struct iv_cand *cand)
+get_group_iv_cost (struct ivopts_data *data, struct iv_group *group,
+		   struct iv_cand *cand)
 {
   unsigned i, s;
   struct cost_pair *ret;
@@ -2889,7 +3494,7 @@ get_use_iv_cost (struct ivopts_data *data, struct iv_use *use,
 
   if (data->consider_all_candidates)
     {
-      ret = use->cost_map + cand->id;
+      ret = group->cost_map + cand->id;
       if (!ret->cand)
 	return NULL;
 
@@ -2897,16 +3502,16 @@ get_use_iv_cost (struct ivopts_data *data, struct iv_use *use,
     }
 
   /* n_map_members is a power of two, so this computes modulo.  */
-  s = cand->id & (use->n_map_members - 1);
-  for (i = s; i < use->n_map_members; i++)
-    if (use->cost_map[i].cand == cand)
-      return use->cost_map + i;
-    else if (use->cost_map[i].cand == NULL)
+  s = cand->id & (group->n_map_members - 1);
+  for (i = s; i < group->n_map_members; i++)
+    if (group->cost_map[i].cand == cand)
+      return group->cost_map + i;
+    else if (group->cost_map[i].cand == NULL)
       return NULL;
   for (i = 0; i < s; i++)
-    if (use->cost_map[i].cand == cand)
-      return use->cost_map + i;
-    else if (use->cost_map[i].cand == NULL)
+    if (group->cost_map[i].cand == cand)
+      return group->cost_map + i;
+    else if (group->cost_map[i].cand == NULL)
       return NULL;
 
   return NULL;
@@ -2959,7 +3564,7 @@ prepare_decl_rtl (tree *expr_p, int *ws, void *data)
 	continue;
       obj = *expr_p;
       if (DECL_P (obj) && HAS_RTL_P (obj) && !DECL_RTL_SET_P (obj))
-        x = produce_memory_decl_rtl (obj, regno);
+	x = produce_memory_decl_rtl (obj, regno);
       break;
 
     case SSA_NAME:
@@ -3030,7 +3635,7 @@ computation_cost (tree expr, bool speed)
     cost += address_cost (XEXP (rslt, 0), TYPE_MODE (type),
 			  TYPE_ADDR_SPACE (type), speed);
   else if (!REG_P (rslt))
-    cost += set_src_cost (rslt, speed);
+    cost += set_src_cost (rslt, TYPE_MODE (type), speed);
 
   return cost;
 }
@@ -3038,7 +3643,7 @@ computation_cost (tree expr, bool speed)
 /* Returns variable containing the value of candidate CAND at statement AT.  */
 
 static tree
-var_at_stmt (struct loop *loop, struct iv_cand *cand, gimple stmt)
+var_at_stmt (struct loop *loop, struct iv_cand *cand, gimple *stmt)
 {
   if (stmt_after_increment (loop, cand, stmt))
     return cand->var_after;
@@ -3088,7 +3693,7 @@ determine_common_wider_type (tree *a, tree *b)
 
 static bool
 get_computation_aff (struct loop *loop,
-		     struct iv_use *use, struct iv_cand *cand, gimple at,
+		     struct iv_use *use, struct iv_cand *cand, gimple *at,
 		     struct aff_tree *aff)
 {
   tree ubase = use->iv->base;
@@ -3113,12 +3718,46 @@ get_computation_aff (struct loop *loop,
   /* If the conversion is not noop, perform it.  */
   if (TYPE_PRECISION (utype) < TYPE_PRECISION (ctype))
     {
+      if (cand->orig_iv != NULL && CONVERT_EXPR_P (cbase)
+	  && (CONVERT_EXPR_P (cstep) || TREE_CODE (cstep) == INTEGER_CST))
+	{
+	  tree inner_base, inner_step, inner_type;
+	  inner_base = TREE_OPERAND (cbase, 0);
+	  if (CONVERT_EXPR_P (cstep))
+	    inner_step = TREE_OPERAND (cstep, 0);
+	  else
+	    inner_step = cstep;
+
+	  inner_type = TREE_TYPE (inner_base);
+	  /* If candidate is added from a biv whose type is smaller than
+	     ctype, we know both candidate and the biv won't overflow.
+	     In this case, it's safe to skip the convertion in candidate.
+	     As an example, (unsigned short)((unsigned long)A) equals to
+	     (unsigned short)A, if A has a type no larger than short.  */
+	  if (TYPE_PRECISION (inner_type) <= TYPE_PRECISION (uutype))
+	    {
+	      cbase = inner_base;
+	      cstep = inner_step;
+	    }
+	}
       cstep = fold_convert (uutype, cstep);
       cbase = fold_convert (uutype, cbase);
       var = fold_convert (uutype, var);
     }
 
-  if (!constant_multiple_of (ustep, cstep, &rat))
+  /* Ratio is 1 when computing the value of biv cand by itself.
+     We can't rely on constant_multiple_of in this case because the
+     use is created after the original biv is selected.  The call
+     could fail because of inconsistent fold behavior.  See PR68021
+     for more information.  */
+  if (cand->pos == IP_ORIGINAL && cand->incremented_at == use->stmt)
+    {
+      gcc_assert (is_gimple_assign (use->stmt));
+      gcc_assert (use->iv->ssa_name == cand->var_after);
+      gcc_assert (gimple_assign_lhs (use->stmt) == cand->var_after);
+      rat = 1;
+    }
+  else if (!constant_multiple_of (ustep, cstep, &rat))
     return false;
 
   /* In case both UBASE and CBASE are shortened to UUTYPE from some common
@@ -3185,7 +3824,7 @@ get_use_type (struct iv_use *use)
 
 static tree
 get_computation_at (struct loop *loop,
-		    struct iv_use *use, struct iv_cand *cand, gimple at)
+		    struct iv_use *use, struct iv_cand *cand, gimple *at)
 {
   aff_tree aff;
   tree type = get_use_type (use);
@@ -3299,12 +3938,12 @@ enum ainc_type
   AINC_NONE		/* Also the number of auto increment types.  */
 };
 
-typedef struct address_cost_data_s
+struct address_cost_data
 {
   HOST_WIDE_INT min_offset, max_offset;
   unsigned costs[2][2][2][2];
   unsigned ainc_costs[AINC_NONE];
-} *address_cost_data;
+};
 
 
 static comp_cost
@@ -3315,9 +3954,9 @@ get_address_cost (bool symbol_present, bool var_present,
 		  bool stmt_after_inc, bool *may_autoinc)
 {
   machine_mode address_mode = targetm.addr_space.address_mode (as);
-  static vec<address_cost_data> address_cost_data_list;
+  static vec<address_cost_data *> address_cost_data_list;
   unsigned int data_index = (int) as * MAX_MACHINE_MODE + (int) mem_mode;
-  address_cost_data data;
+  address_cost_data *data;
   static bool has_preinc[MAX_MACHINE_MODE], has_postinc[MAX_MACHINE_MODE];
   static bool has_predec[MAX_MACHINE_MODE], has_postdec[MAX_MACHINE_MODE];
   unsigned cost, acost, complexity;
@@ -3341,7 +3980,7 @@ get_address_cost (bool symbol_present, bool var_present,
       rtx addr, base;
       rtx reg0, reg1;
 
-      data = (address_cost_data) xcalloc (1, sizeof (*data));
+      data = (address_cost_data *) xcalloc (1, sizeof (*data));
 
       reg1 = gen_raw_REG (address_mode, LAST_VIRTUAL_REGISTER + 1);
 
@@ -3352,7 +3991,7 @@ get_address_cost (bool symbol_present, bool var_present,
 
       for (i = width; i >= 0; i--)
 	{
-	  off = -((unsigned HOST_WIDE_INT) 1 << i);
+	  off = -(HOST_WIDE_INT_1U << i);
 	  XEXP (addr, 1) = gen_int_mode (off, address_mode);
 	  if (memory_address_addr_space_p (mem_mode, addr, as))
 	    break;
@@ -3361,14 +4000,14 @@ get_address_cost (bool symbol_present, bool var_present,
 
       for (i = width; i >= 0; i--)
 	{
-	  off = ((unsigned HOST_WIDE_INT) 1 << i) - 1;
+	  off = (HOST_WIDE_INT_1U << i) - 1;
 	  XEXP (addr, 1) = gen_int_mode (off, address_mode);
 	  if (memory_address_addr_space_p (mem_mode, addr, as))
 	    break;
 	  /* For some strict-alignment targets, the offset must be naturally
 	     aligned.  Try an aligned offset if mem_mode is not QImode.  */
 	  off = mem_mode != QImode
-		? ((unsigned HOST_WIDE_INT) 1 << i)
+		? (HOST_WIDE_INT_1U << i)
 		    - GET_MODE_SIZE (mem_mode)
 		: 0;
 	  if (off > 0)
@@ -3379,7 +4018,7 @@ get_address_cost (bool symbol_present, bool var_present,
 	    }
 	}
       if (i == -1)
-        off = 0;
+	off = 0;
       data->max_offset = off;
 
       if (dump_file && (dump_flags & TDF_DETAILS))
@@ -3511,9 +4150,9 @@ get_address_cost (bool symbol_present, bool var_present,
 	 However, the symbol will have to be loaded in any case before the
 	 loop (and quite likely we have it in register already), so it does not
 	 make much sense to penalize them too heavily.  So make some final
-         tweaks for the SYMBOL_PRESENT modes:
+	 tweaks for the SYMBOL_PRESENT modes:
 
-         If VAR_PRESENT is false, and the mode obtained by changing symbol to
+	 If VAR_PRESENT is false, and the mode obtained by changing symbol to
 	 var is cheaper, use this mode with small penalty.
 	 If VAR_PRESENT is true, try whether the mode with
 	 SYMBOL_PRESENT = false is cheaper even with cost of addition, and
@@ -3535,7 +4174,7 @@ get_address_cost (bool symbol_present, bool var_present,
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
-	  fprintf (dump_file, "Address costs:\n");
+	  fprintf (dump_file, "<Address Costs>:\n");
 
 	  for (i = 0; i < 16; i++)
 	    {
@@ -3567,7 +4206,7 @@ get_address_cost (bool symbol_present, bool var_present,
     }
 
   bits = GET_MODE_BITSIZE (address_mode);
-  mask = ~(~(unsigned HOST_WIDE_INT) 0 << (bits - 1) << 1);
+  mask = ~(HOST_WIDE_INT_M1U << (bits - 1) << 1);
   offset &= mask;
   if ((offset >> (bits - 1) & 1))
     offset |= ~mask;
@@ -3620,17 +4259,17 @@ get_address_cost (bool symbol_present, bool var_present,
   else
     acost = data->costs[symbol_present][var_present][offset_p][ratio_p];
   complexity = (symbol_present != 0) + (var_present != 0) + offset_p + ratio_p;
-  return new_cost (cost + acost, complexity);
+  return comp_cost (cost + acost, complexity);
 }
 
  /* Calculate the SPEED or size cost of shiftadd EXPR in MODE.  MULT is the
-    the EXPR operand holding the shift.  COST0 and COST1 are the costs for
+    EXPR operand holding the shift.  COST0 and COST1 are the costs for
     calculating the operands of EXPR.  Returns true if successful, and returns
     the cost in COST.  */
 
 static bool
 get_shiftadd_cost (tree expr, machine_mode mode, comp_cost cost0,
-                   comp_cost cost1, tree mult, bool speed, comp_cost *cost)
+		   comp_cost cost1, tree mult, bool speed, comp_cost *cost)
 {
   comp_cost res;
   tree op1 = TREE_OPERAND (expr, 1);
@@ -3644,6 +4283,7 @@ get_shiftadd_cost (tree expr, machine_mode mode, comp_cost cost0,
   if (!(m >= 0 && m < maxm))
     return false;
 
+  STRIP_NOPS (op1);
   mult_in_op1 = operand_equal_p (op1, mult, 0);
 
   as_cost = add_cost (speed, mode) + shift_cost (speed, mode, m);
@@ -3651,17 +4291,17 @@ get_shiftadd_cost (tree expr, machine_mode mode, comp_cost cost0,
   /* If the target has a cheap shift-and-add or shift-and-sub instruction,
      use that in preference to a shift insn followed by an add insn.  */
   sa_cost = (TREE_CODE (expr) != MINUS_EXPR
-             ? shiftadd_cost (speed, mode, m)
-             : (mult_in_op1
-                ? shiftsub1_cost (speed, mode, m)
-                : shiftsub0_cost (speed, mode, m)));
+	     ? shiftadd_cost (speed, mode, m)
+	     : (mult_in_op1
+		? shiftsub1_cost (speed, mode, m)
+		: shiftsub0_cost (speed, mode, m)));
 
-  res = new_cost (MIN (as_cost, sa_cost), 0);
-  res = add_costs (res, mult_in_op1 ? cost0 : cost1);
+  res = comp_cost (MIN (as_cost, sa_cost), 0);
+  res += (mult_in_op1 ? cost0 : cost1);
 
   STRIP_NOPS (multop);
   if (!is_gimple_val (multop))
-    res = add_costs (res, force_expr_to_var_cost (multop, speed));
+    res += force_expr_to_var_cost (multop, speed);
 
   *cost = res;
   return true;
@@ -3726,19 +4366,19 @@ force_expr_to_var_cost (tree expr, bool speed)
   if (is_gimple_min_invariant (expr))
     {
       if (TREE_CODE (expr) == INTEGER_CST)
-	return new_cost (integer_cost [speed], 0);
+	return comp_cost (integer_cost [speed], 0);
 
       if (TREE_CODE (expr) == ADDR_EXPR)
 	{
 	  tree obj = TREE_OPERAND (expr, 0);
 
-	  if (TREE_CODE (obj) == VAR_DECL
+	  if (VAR_P (obj)
 	      || TREE_CODE (obj) == PARM_DECL
 	      || TREE_CODE (obj) == RESULT_DECL)
-	    return new_cost (symbol_cost [speed], 0);
+	    return comp_cost (symbol_cost [speed], 0);
 	}
 
-      return new_cost (address_cost [speed], 0);
+      return comp_cost (address_cost [speed], 0);
     }
 
   switch (TREE_CODE (expr))
@@ -3762,7 +4402,7 @@ force_expr_to_var_cost (tree expr, bool speed)
 
     default:
       /* Just an arbitrary value, FIXME.  */
-      return new_cost (target_spill_cost[speed], 0);
+      return comp_cost (target_spill_cost[speed], 0);
     }
 
   if (op0 == NULL_TREE
@@ -3784,22 +4424,22 @@ force_expr_to_var_cost (tree expr, bool speed)
     case PLUS_EXPR:
     case MINUS_EXPR:
     case NEGATE_EXPR:
-      cost = new_cost (add_cost (speed, mode), 0);
+      cost = comp_cost (add_cost (speed, mode), 0);
       if (TREE_CODE (expr) != NEGATE_EXPR)
-        {
-          tree mult = NULL_TREE;
-          comp_cost sa_cost;
-          if (TREE_CODE (op1) == MULT_EXPR)
-            mult = op1;
-          else if (TREE_CODE (op0) == MULT_EXPR)
-            mult = op0;
+	{
+	  tree mult = NULL_TREE;
+	  comp_cost sa_cost;
+	  if (TREE_CODE (op1) == MULT_EXPR)
+	    mult = op1;
+	  else if (TREE_CODE (op0) == MULT_EXPR)
+	    mult = op0;
 
-          if (mult != NULL_TREE
-              && cst_and_fits_in_hwi (TREE_OPERAND (mult, 1))
-              && get_shiftadd_cost (expr, mode, cost0, cost1, mult,
-                                    speed, &sa_cost))
-            return sa_cost;
-        }
+	  if (mult != NULL_TREE
+	      && cst_and_fits_in_hwi (TREE_OPERAND (mult, 1))
+	      && get_shiftadd_cost (expr, mode, cost0, cost1, mult,
+				    speed, &sa_cost))
+	    return sa_cost;
+	}
       break;
 
     CASE_CONVERT:
@@ -3807,28 +4447,28 @@ force_expr_to_var_cost (tree expr, bool speed)
 	tree inner_mode, outer_mode;
 	outer_mode = TREE_TYPE (expr);
 	inner_mode = TREE_TYPE (op0);
-	cost = new_cost (convert_cost (TYPE_MODE (outer_mode),
+	cost = comp_cost (convert_cost (TYPE_MODE (outer_mode),
 				       TYPE_MODE (inner_mode), speed), 0);
       }
       break;
 
     case MULT_EXPR:
       if (cst_and_fits_in_hwi (op0))
-	cost = new_cost (mult_by_coeff_cost (int_cst_value (op0),
+	cost = comp_cost (mult_by_coeff_cost (int_cst_value (op0),
 					     mode, speed), 0);
       else if (cst_and_fits_in_hwi (op1))
-	cost = new_cost (mult_by_coeff_cost (int_cst_value (op1),
+	cost = comp_cost (mult_by_coeff_cost (int_cst_value (op1),
 					     mode, speed), 0);
       else
-	return new_cost (target_spill_cost [speed], 0);
+	return comp_cost (target_spill_cost [speed], 0);
       break;
 
     default:
       gcc_unreachable ();
     }
 
-  cost = add_costs (cost, cost0);
-  cost = add_costs (cost, cost1);
+  cost += cost0;
+  cost += cost1;
 
   /* Bound the cost by target_spill_cost.  The parts of complicated
      computations often are either loop invariant or at least can
@@ -3871,20 +4511,23 @@ split_address_cost (struct ivopts_data *data,
   HOST_WIDE_INT bitpos;
   tree toffset;
   machine_mode mode;
-  int unsignedp, volatilep;
+  int unsignedp, reversep, volatilep;
 
   core = get_inner_reference (addr, &bitsize, &bitpos, &toffset, &mode,
-			      &unsignedp, &volatilep, false);
+			      &unsignedp, &reversep, &volatilep);
 
   if (toffset != 0
       || bitpos % BITS_PER_UNIT != 0
-      || TREE_CODE (core) != VAR_DECL)
+      || reversep
+      || !VAR_P (core))
     {
       *symbol_present = false;
       *var_present = true;
       fd_ivopts_data = data;
-      walk_tree (&addr, find_depends, depends_on, NULL);
-      return new_cost (target_spill_cost[data->speed], 0);
+      if (depends_on)
+	walk_tree (&addr, find_depends, depends_on, NULL);
+
+      return comp_cost (target_spill_cost[data->speed], 0);
     }
 
   *offset += bitpos / BITS_PER_UNIT;
@@ -3984,7 +4627,7 @@ difference_cost (struct ivopts_data *data,
   if (integer_zerop (e1))
     {
       comp_cost cost = force_var_cost (data, e2, depends_on);
-      cost.cost += mult_by_coeff_cost (-1, mode, data->speed);
+      cost += mult_by_coeff_cost (-1, mode, data->speed);
       return cost;
     }
 
@@ -4010,18 +4653,18 @@ compare_aff_trees (aff_tree *aff1, aff_tree *aff2)
   for (i = 0; i < aff1->n; i++)
     {
       if (aff1->elts[i].coef != aff2->elts[i].coef)
-        return false;
+	return false;
 
       if (!operand_equal_p (aff1->elts[i].val, aff2->elts[i].val, 0))
-        return false;
+	return false;
     }
   return true;
 }
 
-/* Stores EXPR in DATA->inv_expr_tab, and assigns it an inv_expr_id.  */
+/* Stores EXPR in DATA->inv_expr_tab, return pointer to iv_inv_expr_ent.  */
 
-static int
-get_expr_id (struct ivopts_data *data, tree expr)
+static iv_inv_expr_ent *
+record_inv_expr (struct ivopts_data *data, tree expr)
 {
   struct iv_inv_expr_ent ent;
   struct iv_inv_expr_ent **slot;
@@ -4029,25 +4672,27 @@ get_expr_id (struct ivopts_data *data, tree expr)
   ent.expr = expr;
   ent.hash = iterative_hash_expr (expr, 0);
   slot = data->inv_expr_tab->find_slot (&ent, INSERT);
-  if (*slot)
-    return (*slot)->id;
 
-  *slot = XNEW (struct iv_inv_expr_ent);
-  (*slot)->expr = expr;
-  (*slot)->hash = ent.hash;
-  (*slot)->id = data->inv_expr_id++;
-  return (*slot)->id;
+  if (!*slot)
+    {
+      *slot = XNEW (struct iv_inv_expr_ent);
+      (*slot)->expr = expr;
+      (*slot)->hash = ent.hash;
+      (*slot)->id = data->max_inv_expr_id++;
+    }
+
+  return *slot;
 }
 
-/* Returns the pseudo expr id if expression UBASE - RATIO * CBASE
+/* Returns the invariant expression if expression UBASE - RATIO * CBASE
    requires a new compiler generated temporary.  Returns -1 otherwise.
    ADDRESS_P is a flag indicating if the expression is for address
    computation.  */
 
-static int
-get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
-                            tree cbase, HOST_WIDE_INT ratio,
-                            bool address_p)
+static iv_inv_expr_ent *
+get_loop_invariant_expr (struct ivopts_data *data, tree ubase,
+			 tree cbase, HOST_WIDE_INT ratio,
+			 bool address_p)
 {
   aff_tree ubase_aff, cbase_aff;
   tree expr, ub, cb;
@@ -4059,7 +4704,7 @@ get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
 
   if ((TREE_CODE (ubase) == INTEGER_CST)
       && (TREE_CODE (cbase) == INTEGER_CST))
-    return -1;
+    return NULL;
 
   /* Strips the constant part. */
   if (TREE_CODE (ubase) == PLUS_EXPR
@@ -4067,7 +4712,7 @@ get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
       || TREE_CODE (ubase) == POINTER_PLUS_EXPR)
     {
       if (TREE_CODE (TREE_OPERAND (ubase, 1)) == INTEGER_CST)
-        ubase = TREE_OPERAND (ubase, 0);
+	ubase = TREE_OPERAND (ubase, 0);
     }
 
   /* Strips the constant part. */
@@ -4076,60 +4721,60 @@ get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
       || TREE_CODE (cbase) == POINTER_PLUS_EXPR)
     {
       if (TREE_CODE (TREE_OPERAND (cbase, 1)) == INTEGER_CST)
-        cbase = TREE_OPERAND (cbase, 0);
+	cbase = TREE_OPERAND (cbase, 0);
     }
 
   if (address_p)
     {
       if (((TREE_CODE (ubase) == SSA_NAME)
-           || (TREE_CODE (ubase) == ADDR_EXPR
-               && is_gimple_min_invariant (ubase)))
-          && (TREE_CODE (cbase) == INTEGER_CST))
-        return -1;
+	   || (TREE_CODE (ubase) == ADDR_EXPR
+	       && is_gimple_min_invariant (ubase)))
+	  && (TREE_CODE (cbase) == INTEGER_CST))
+	return NULL;
 
       if (((TREE_CODE (cbase) == SSA_NAME)
-           || (TREE_CODE (cbase) == ADDR_EXPR
-               && is_gimple_min_invariant (cbase)))
-          && (TREE_CODE (ubase) == INTEGER_CST))
-        return -1;
+	   || (TREE_CODE (cbase) == ADDR_EXPR
+	       && is_gimple_min_invariant (cbase)))
+	  && (TREE_CODE (ubase) == INTEGER_CST))
+	return NULL;
     }
 
   if (ratio == 1)
     {
       if (operand_equal_p (ubase, cbase, 0))
-        return -1;
+	return NULL;
 
       if (TREE_CODE (ubase) == ADDR_EXPR
-          && TREE_CODE (cbase) == ADDR_EXPR)
-        {
-          tree usym, csym;
+	  && TREE_CODE (cbase) == ADDR_EXPR)
+	{
+	  tree usym, csym;
 
-          usym = TREE_OPERAND (ubase, 0);
-          csym = TREE_OPERAND (cbase, 0);
-          if (TREE_CODE (usym) == ARRAY_REF)
-            {
-              tree ind = TREE_OPERAND (usym, 1);
-              if (TREE_CODE (ind) == INTEGER_CST
-                  && tree_fits_shwi_p (ind)
-                  && tree_to_shwi (ind) == 0)
-                usym = TREE_OPERAND (usym, 0);
-            }
-          if (TREE_CODE (csym) == ARRAY_REF)
-            {
-              tree ind = TREE_OPERAND (csym, 1);
-              if (TREE_CODE (ind) == INTEGER_CST
-                  && tree_fits_shwi_p (ind)
-                  && tree_to_shwi (ind) == 0)
-                csym = TREE_OPERAND (csym, 0);
-            }
-          if (operand_equal_p (usym, csym, 0))
-            return -1;
-        }
+	  usym = TREE_OPERAND (ubase, 0);
+	  csym = TREE_OPERAND (cbase, 0);
+	  if (TREE_CODE (usym) == ARRAY_REF)
+	    {
+	      tree ind = TREE_OPERAND (usym, 1);
+	      if (TREE_CODE (ind) == INTEGER_CST
+		  && tree_fits_shwi_p (ind)
+		  && tree_to_shwi (ind) == 0)
+		usym = TREE_OPERAND (usym, 0);
+	    }
+	  if (TREE_CODE (csym) == ARRAY_REF)
+	    {
+	      tree ind = TREE_OPERAND (csym, 1);
+	      if (TREE_CODE (ind) == INTEGER_CST
+		  && tree_fits_shwi_p (ind)
+		  && tree_to_shwi (ind) == 0)
+		csym = TREE_OPERAND (csym, 0);
+	    }
+	  if (operand_equal_p (usym, csym, 0))
+	    return NULL;
+	}
       /* Now do more complex comparison  */
       tree_to_aff_combination (ubase, TREE_TYPE (ubase), &ubase_aff);
       tree_to_aff_combination (cbase, TREE_TYPE (cbase), &cbase_aff);
       if (compare_aff_trees (&ubase_aff, &cbase_aff))
-        return -1;
+	return NULL;
     }
 
   tree_to_aff_combination (ub, TREE_TYPE (ub), &ubase_aff);
@@ -4138,10 +4783,36 @@ get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
   aff_combination_scale (&cbase_aff, -1 * ratio);
   aff_combination_add (&ubase_aff, &cbase_aff);
   expr = aff_combination_to_tree (&ubase_aff);
-  return get_expr_id (data, expr);
+  return record_inv_expr (data, expr);
 }
 
+/* Scale (multiply) the computed COST (except scratch part that should be
+   hoisted out a loop) by header->frequency / AT->frequency,
+   which makes expected cost more accurate.  */
 
+static comp_cost
+get_scaled_computation_cost_at (ivopts_data *data, gimple *at, iv_cand *cand,
+				comp_cost cost)
+{
+   int loop_freq = data->current_loop->header->frequency;
+   int bb_freq = gimple_bb (at)->frequency;
+   if (loop_freq != 0)
+     {
+       gcc_assert (cost.scratch <= cost.cost);
+       int scaled_cost
+	 = cost.scratch + (cost.cost - cost.scratch) * bb_freq / loop_freq;
+
+       if (dump_file && (dump_flags & TDF_DETAILS))
+	 fprintf (dump_file, "Scaling iv_use based on cand %d "
+		  "by %2.2f: %d (scratch: %d) -> %d (%d/%d)\n",
+		  cand->id, 1.0f * bb_freq / loop_freq, cost.cost,
+		  cost.scratch, scaled_cost, bb_freq, loop_freq);
+
+       cost.cost = scaled_cost;
+     }
+
+  return cost;
+}
 
 /* Determines the cost of the computation by that USE is expressed
    from induction variable CAND.  If ADDRESS_P is true, we just need
@@ -4154,9 +4825,9 @@ get_loop_invariant_expr_id (struct ivopts_data *data, tree ubase,
 static comp_cost
 get_computation_cost_at (struct ivopts_data *data,
 			 struct iv_use *use, struct iv_cand *cand,
-			 bool address_p, bitmap *depends_on, gimple at,
+			 bool address_p, bitmap *depends_on, gimple *at,
 			 bool *can_autoinc,
-                         int *inv_expr_id)
+			 iv_inv_expr_ent **inv_expr)
 {
   tree ubase = use->iv->base, ustep = use->iv->step;
   tree cbase, cstep;
@@ -4171,7 +4842,8 @@ get_computation_cost_at (struct ivopts_data *data,
 				? TYPE_MODE (TREE_TYPE (*use->op_p))
 				: VOIDmode);
 
-  *depends_on = NULL;
+  if (depends_on)
+    *depends_on = NULL;
 
   /* Only consider real candidates.  */
   if (!cand->iv)
@@ -4248,7 +4920,7 @@ get_computation_cost_at (struct ivopts_data *data,
 			      ubase, build_int_cst (utype, 0),
 			      &symbol_present, &var_present, &offset,
 			      depends_on);
-      cost.cost /= avg_loop_niter (data->current_loop);
+      cost /= avg_loop_niter (data->current_loop);
     }
   else if (ratio == 1)
     {
@@ -4256,23 +4928,23 @@ get_computation_cost_at (struct ivopts_data *data,
 
       /* Check to see if any adjustment is needed.  */
       if (cstepi == 0 && stmt_is_after_inc)
-        {
-          aff_tree real_cbase_aff;
-          aff_tree cstep_aff;
+	{
+	  aff_tree real_cbase_aff;
+	  aff_tree cstep_aff;
 
-          tree_to_aff_combination (cbase, TREE_TYPE (real_cbase),
-                                   &real_cbase_aff);
-          tree_to_aff_combination (cstep, TREE_TYPE (cstep), &cstep_aff);
+	  tree_to_aff_combination (cbase, TREE_TYPE (real_cbase),
+				   &real_cbase_aff);
+	  tree_to_aff_combination (cstep, TREE_TYPE (cstep), &cstep_aff);
 
-          aff_combination_add (&real_cbase_aff, &cstep_aff);
-          real_cbase = aff_combination_to_tree (&real_cbase_aff);
-        }
+	  aff_combination_add (&real_cbase_aff, &cstep_aff);
+	  real_cbase = aff_combination_to_tree (&real_cbase_aff);
+	}
 
       cost = difference_cost (data,
 			      ubase, real_cbase,
 			      &symbol_present, &var_present, &offset,
 			      depends_on);
-      cost.cost /= avg_loop_niter (data->current_loop);
+      cost /= avg_loop_niter (data->current_loop);
     }
   else if (address_p
 	   && !POINTER_TYPE_P (ctype)
@@ -4280,33 +4952,43 @@ get_computation_cost_at (struct ivopts_data *data,
 		(ratio, mem_mode,
 			TYPE_ADDR_SPACE (TREE_TYPE (utype))))
     {
-      cbase
-	= fold_build2 (MULT_EXPR, ctype, cbase, build_int_cst (ctype, ratio));
+      tree real_cbase = cbase;
+
+      if (cstepi == 0 && stmt_is_after_inc)
+	{
+	  if (POINTER_TYPE_P (ctype))
+	    real_cbase = fold_build2 (POINTER_PLUS_EXPR, ctype, cbase, cstep);
+	  else
+	    real_cbase = fold_build2 (PLUS_EXPR, ctype, cbase, cstep);
+	}
+      real_cbase = fold_build2 (MULT_EXPR, ctype, real_cbase,
+				build_int_cst (ctype, ratio));
       cost = difference_cost (data,
-			      ubase, cbase,
+			      ubase, real_cbase,
 			      &symbol_present, &var_present, &offset,
 			      depends_on);
-      cost.cost /= avg_loop_niter (data->current_loop);
+      cost /= avg_loop_niter (data->current_loop);
     }
   else
     {
       cost = force_var_cost (data, cbase, depends_on);
-      cost = add_costs (cost,
-			difference_cost (data,
-					 ubase, build_int_cst (utype, 0),
-					 &symbol_present, &var_present,
-					 &offset, depends_on));
-      cost.cost /= avg_loop_niter (data->current_loop);
-      cost.cost += add_cost (data->speed, TYPE_MODE (ctype));
+      cost += difference_cost (data, ubase, build_int_cst (utype, 0),
+			       &symbol_present, &var_present, &offset,
+			       depends_on);
+      cost /= avg_loop_niter (data->current_loop);
+      cost += add_cost (data->speed, TYPE_MODE (ctype));
     }
 
-  if (inv_expr_id)
+  /* Record setup cost in scratch field.  */
+  cost.scratch = cost.cost;
+
+  if (inv_expr && depends_on && *depends_on)
     {
-      *inv_expr_id =
-          get_loop_invariant_expr_id (data, ubase, cbase, ratio, address_p);
+      *inv_expr = get_loop_invariant_expr (data, ubase, cbase, ratio,
+					   address_p);
       /* Clear depends on.  */
-      if (*inv_expr_id != -1 && depends_on && *depends_on)
-        bitmap_clear (*depends_on);
+      if (*inv_expr != NULL)
+	bitmap_clear (*depends_on);
     }
 
   /* If we are after the increment, the value of the candidate is higher by
@@ -4318,26 +5000,27 @@ get_computation_cost_at (struct ivopts_data *data,
      (symbol/var1/const parts may be omitted).  If we are looking for an
      address, find the cost of addressing this.  */
   if (address_p)
-    return add_costs (cost,
-		      get_address_cost (symbol_present, var_present,
-					offset, ratio, cstepi,
-					mem_mode,
-					TYPE_ADDR_SPACE (TREE_TYPE (utype)),
-					speed, stmt_is_after_inc,
-					can_autoinc));
+    {
+      cost += get_address_cost (symbol_present, var_present,
+				offset, ratio, cstepi,
+				mem_mode,
+				TYPE_ADDR_SPACE (TREE_TYPE (utype)),
+				speed, stmt_is_after_inc, can_autoinc);
+      return get_scaled_computation_cost_at (data, at, cand, cost);
+    }
 
   /* Otherwise estimate the costs for computing the expression.  */
   if (!symbol_present && !var_present && !offset)
     {
       if (ratio != 1)
-	cost.cost += mult_by_coeff_cost (ratio, TYPE_MODE (ctype), speed);
-      return cost;
+	cost += mult_by_coeff_cost (ratio, TYPE_MODE (ctype), speed);
+      return get_scaled_computation_cost_at (data, at, cand, cost);
     }
 
   /* Symbol + offset should be compile-time computable so consider that they
       are added once to the variable, if present.  */
   if (var_present && (symbol_present || offset))
-    cost.cost += adjust_setup_cost (data,
+    cost += adjust_setup_cost (data,
 				    add_cost (speed, TYPE_MODE (ctype)));
 
   /* Having offset does not affect runtime cost in case it is added to
@@ -4345,29 +5028,30 @@ get_computation_cost_at (struct ivopts_data *data,
   if (offset)
     cost.complexity++;
 
-  cost.cost += add_cost (speed, TYPE_MODE (ctype));
+  cost += add_cost (speed, TYPE_MODE (ctype));
 
   aratio = ratio > 0 ? ratio : -ratio;
   if (aratio != 1)
-    cost.cost += mult_by_coeff_cost (aratio, TYPE_MODE (ctype), speed);
-  return cost;
+    cost += mult_by_coeff_cost (aratio, TYPE_MODE (ctype), speed);
+
+  return get_scaled_computation_cost_at (data, at, cand, cost);
 
 fallback:
   if (can_autoinc)
     *can_autoinc = false;
 
-  {
-    /* Just get the expression, expand it and measure the cost.  */
-    tree comp = get_computation_at (data->current_loop, use, cand, at);
+  /* Just get the expression, expand it and measure the cost.  */
+  tree comp = get_computation_at (data->current_loop, use, cand, at);
 
-    if (!comp)
-      return infinite_cost;
+  if (!comp)
+    return infinite_cost;
 
-    if (address_p)
-      comp = build_simple_mem_ref (comp);
+  if (address_p)
+    comp = build_simple_mem_ref (comp);
 
-    return new_cost (computation_cost (comp, speed), 0);
-  }
+  cost = comp_cost (computation_cost (comp, speed), 0);
+
+  return get_scaled_computation_cost_at (data, at, cand, cost);
 }
 
 /* Determines the cost of the computation by that USE is expressed
@@ -4381,87 +5065,103 @@ static comp_cost
 get_computation_cost (struct ivopts_data *data,
 		      struct iv_use *use, struct iv_cand *cand,
 		      bool address_p, bitmap *depends_on,
-                      bool *can_autoinc, int *inv_expr_id)
+		      bool *can_autoinc, iv_inv_expr_ent **inv_expr)
 {
   return get_computation_cost_at (data,
 				  use, cand, address_p, depends_on, use->stmt,
-				  can_autoinc, inv_expr_id);
+				  can_autoinc, inv_expr);
 }
 
-/* Determines cost of basing replacement of USE on CAND in a generic
+/* Determines cost of computing the use in GROUP with CAND in a generic
    expression.  */
 
 static bool
-determine_use_iv_cost_generic (struct ivopts_data *data,
-			       struct iv_use *use, struct iv_cand *cand)
+determine_group_iv_cost_generic (struct ivopts_data *data,
+				 struct iv_group *group, struct iv_cand *cand)
 {
-  bitmap depends_on;
   comp_cost cost;
-  int inv_expr_id = -1;
+  iv_inv_expr_ent *inv_expr = NULL;
+  bitmap depends_on = NULL;
+  struct iv_use *use = group->vuses[0];
 
   /* The simple case first -- if we need to express value of the preserved
      original biv, the cost is 0.  This also prevents us from counting the
      cost of increment twice -- once at this use and once in the cost of
      the candidate.  */
-  if (cand->pos == IP_ORIGINAL
-      && cand->incremented_at == use->stmt)
-    {
-      set_use_iv_cost (data, use, cand, no_cost, NULL, NULL_TREE,
-                       ERROR_MARK, -1);
-      return true;
-    }
+  if (cand->pos == IP_ORIGINAL && cand->incremented_at == use->stmt)
+    cost = no_cost;
+  else
+    cost = get_computation_cost (data, use, cand, false,
+				 &depends_on, NULL, &inv_expr);
 
-  cost = get_computation_cost (data, use, cand, false, &depends_on,
-                               NULL, &inv_expr_id);
-
-  set_use_iv_cost (data, use, cand, cost, depends_on, NULL_TREE, ERROR_MARK,
-                   inv_expr_id);
-
-  return !infinite_cost_p (cost);
+  set_group_iv_cost (data, group, cand, cost, depends_on,
+		     NULL_TREE, ERROR_MARK, inv_expr);
+  return !cost.infinite_cost_p ();
 }
 
-/* Determines cost of basing replacement of USE on CAND in an address.  */
+/* Determines cost of computing uses in GROUP with CAND in addresses.  */
 
 static bool
-determine_use_iv_cost_address (struct ivopts_data *data,
-			       struct iv_use *use, struct iv_cand *cand)
+determine_group_iv_cost_address (struct ivopts_data *data,
+				 struct iv_group *group, struct iv_cand *cand)
 {
+  unsigned i;
   bitmap depends_on;
   bool can_autoinc;
-  int inv_expr_id = -1;
-  comp_cost cost = get_computation_cost (data, use, cand, true, &depends_on,
-					 &can_autoinc, &inv_expr_id);
+  iv_inv_expr_ent *inv_expr = NULL;
+  struct iv_use *use = group->vuses[0];
+  comp_cost sum_cost = no_cost, cost;
 
-  if (cand->ainc_use == use)
+  cost = get_computation_cost (data, use, cand, true,
+			       &depends_on, &can_autoinc, &inv_expr);
+
+  sum_cost = cost;
+  if (!sum_cost.infinite_cost_p () && cand->ainc_use == use)
     {
       if (can_autoinc)
-	cost.cost -= cand->cost_step;
+	sum_cost -= cand->cost_step;
       /* If we generated the candidate solely for exploiting autoincrement
 	 opportunities, and it turns out it can't be used, set the cost to
 	 infinity to make sure we ignore it.  */
       else if (cand->pos == IP_AFTER_USE || cand->pos == IP_BEFORE_USE)
-	cost = infinite_cost;
+	sum_cost = infinite_cost;
     }
-  set_use_iv_cost (data, use, cand, cost, depends_on, NULL_TREE, ERROR_MARK,
-                   inv_expr_id);
 
-  return !infinite_cost_p (cost);
+  /* Uses in a group can share setup code, so only add setup cost once.  */
+  cost -= cost.scratch;
+  /* Compute and add costs for rest uses of this group.  */
+  for (i = 1; i < group->vuses.length () && !sum_cost.infinite_cost_p (); i++)
+    {
+      struct iv_use *next = group->vuses[i];
+
+      /* TODO: We could skip computing cost for sub iv_use when it has the
+	 same cost as the first iv_use, but the cost really depends on the
+	 offset and where the iv_use is.  */
+	cost = get_computation_cost (data, next, cand, true,
+				     NULL, &can_autoinc, NULL);
+      sum_cost += cost;
+    }
+  set_group_iv_cost (data, group, cand, sum_cost, depends_on,
+		     NULL_TREE, ERROR_MARK, inv_expr);
+
+  return !sum_cost.infinite_cost_p ();
 }
 
 /* Computes value of candidate CAND at position AT in iteration NITER, and
    stores it to VAL.  */
 
 static void
-cand_value_at (struct loop *loop, struct iv_cand *cand, gimple at, tree niter,
+cand_value_at (struct loop *loop, struct iv_cand *cand, gimple *at, tree niter,
 	       aff_tree *val)
 {
   aff_tree step, delta, nit;
   struct iv *iv = cand->iv;
   tree type = TREE_TYPE (iv->base);
-  tree steptype = type;
+  tree steptype;
   if (POINTER_TYPE_P (type))
     steptype = sizetype;
-  steptype = unsigned_type_for (type);
+  else
+    steptype = unsigned_type_for (type);
 
   tree_to_aff_combination (iv->step, TREE_TYPE (iv->step), &step);
   aff_combination_convert (&step, steptype);
@@ -4499,8 +5199,8 @@ iv_period (struct iv *iv)
   pow2div = num_ending_zeros (step);
 
   period = build_low_bits_mask (type,
-                                (TYPE_PRECISION (type)
-                                 - tree_to_uhwi (pow2div)));
+				(TYPE_PRECISION (type)
+				 - tree_to_uhwi (pow2div)));
 
   return period;
 }
@@ -4544,7 +5244,7 @@ difference_cannot_overflow_p (struct ivopts_data *data, tree base, tree offset)
 
   if (TREE_CODE (base) == SSA_NAME)
     {
-      gimple stmt = SSA_NAME_DEF_STMT (base);
+      gimple *stmt = SSA_NAME_DEF_STMT (base);
 
       if (gimple_code (stmt) != GIMPLE_ASSIGN)
 	return false;
@@ -4633,7 +5333,7 @@ difference_cannot_overflow_p (struct ivopts_data *data, tree base, tree offset)
 
 static bool
 iv_elimination_compare_lt (struct ivopts_data *data,
-                           struct iv_cand *cand, enum tree_code *comp_p,
+			   struct iv_cand *cand, enum tree_code *comp_p,
 			   struct tree_niter_desc *niter)
 {
   tree cand_type, a, b, mbz, nit_type = TREE_TYPE (niter->niter), offset;
@@ -4682,10 +5382,10 @@ iv_elimination_compare_lt (struct ivopts_data *data,
 
       /* Handle b < a + 1.  */
       if (TREE_CODE (op1) == PLUS_EXPR && integer_onep (TREE_OPERAND (op1, 1)))
-        {
-          a = TREE_OPERAND (op1, 0);
-          b = TREE_OPERAND (mbz, 0);
-        }
+	{
+	  a = TREE_OPERAND (op1, 0);
+	  b = TREE_OPERAND (mbz, 0);
+	}
       else
 	return false;
     }
@@ -4771,15 +5471,15 @@ may_eliminate_iv (struct ivopts_data *data,
     {
       /* See cand_value_at.  */
       if (stmt_after_increment (loop, cand, use->stmt))
-        {
-          if (!tree_int_cst_lt (desc->niter, period))
-            return false;
-        }
+	{
+	  if (!tree_int_cst_lt (desc->niter, period))
+	    return false;
+	}
       else
-        {
-          if (tree_int_cst_lt (period, desc->niter))
-            return false;
-        }
+	{
+	  if (tree_int_cst_lt (period, desc->niter))
+	    return false;
+	}
     }
 
   /* If not, and if this is the only possible exit of the loop, see whether
@@ -4791,22 +5491,23 @@ may_eliminate_iv (struct ivopts_data *data,
 
       max_niter = desc->max;
       if (stmt_after_increment (loop, cand, use->stmt))
-        max_niter += 1;
+	max_niter += 1;
       period_value = wi::to_widest (period);
       if (wi::gtu_p (max_niter, period_value))
-        {
-          /* See if we can take advantage of inferred loop bound information.  */
-          if (data->loop_single_exit_p)
-            {
-              if (!max_loop_iterations (loop, &max_niter))
-                return false;
-              /* The loop bound is already adjusted by adding 1.  */
-              if (wi::gtu_p (max_niter, period_value))
-                return false;
-            }
-          else
-            return false;
-        }
+	{
+	  /* See if we can take advantage of inferred loop bound
+	     information.  */
+	  if (data->loop_single_exit_p)
+	    {
+	      if (!max_loop_iterations (loop, &max_niter))
+		return false;
+	      /* The loop bound is already adjusted by adding 1.  */
+	      if (wi::gtu_p (max_niter, period_value))
+		return false;
+	    }
+	  else
+	    return false;
+	}
     }
 
   cand_value_at (loop, cand, use->stmt, desc->niter, &bnd);
@@ -4821,7 +5522,7 @@ may_eliminate_iv (struct ivopts_data *data,
     return false;
 
   /* Sometimes, it is possible to handle the situation that the number of
-     iterations may be zero unless additional assumtions by using <
+     iterations may be zero unless additional assumptions by using <
      instead of != in the exit condition.
 
      TODO: we could also calculate the value MAY_BE_ZERO ? 0 : NITER and
@@ -4834,7 +5535,7 @@ may_eliminate_iv (struct ivopts_data *data,
 }
 
  /* Calculates the cost of BOUND, if it is a PARM_DECL.  A PARM_DECL must
-    be copied, if is is used in the loop body and DATA->body_includes_call.  */
+    be copied, if it is used in the loop body and DATA->body_includes_call.  */
 
 static int
 parm_decl_cost (struct ivopts_data *data, tree bound)
@@ -4851,46 +5552,41 @@ parm_decl_cost (struct ivopts_data *data, tree bound)
   return 0;
 }
 
-/* Determines cost of basing replacement of USE on CAND in a condition.  */
+/* Determines cost of computing the use in GROUP with CAND in a condition.  */
 
 static bool
-determine_use_iv_cost_condition (struct ivopts_data *data,
-				 struct iv_use *use, struct iv_cand *cand)
+determine_group_iv_cost_cond (struct ivopts_data *data,
+			      struct iv_group *group, struct iv_cand *cand)
 {
   tree bound = NULL_TREE;
   struct iv *cmp_iv;
   bitmap depends_on_elim = NULL, depends_on_express = NULL, depends_on;
   comp_cost elim_cost, express_cost, cost, bound_cost;
   bool ok;
-  int elim_inv_expr_id = -1, express_inv_expr_id = -1, inv_expr_id;
+  iv_inv_expr_ent *elim_inv_expr = NULL, *express_inv_expr = NULL, *inv_expr;
   tree *control_var, *bound_cst;
   enum tree_code comp = ERROR_MARK;
+  struct iv_use *use = group->vuses[0];
 
-  /* Only consider real candidates.  */
-  if (!cand->iv)
-    {
-      set_use_iv_cost (data, use, cand, infinite_cost, NULL, NULL_TREE,
-		       ERROR_MARK, -1);
-      return false;
-    }
+  gcc_assert (cand->iv);
 
   /* Try iv elimination.  */
   if (may_eliminate_iv (data, use, cand, &bound, &comp))
     {
       elim_cost = force_var_cost (data, bound, &depends_on_elim);
       if (elim_cost.cost == 0)
-        elim_cost.cost = parm_decl_cost (data, bound);
+	elim_cost.cost = parm_decl_cost (data, bound);
       else if (TREE_CODE (bound) == INTEGER_CST)
-        elim_cost.cost = 0;
+	elim_cost.cost = 0;
       /* If we replace a loop condition 'i < n' with 'p < base + n',
 	 depends_on_elim will have 'base' and 'n' set, which implies
 	 that both 'base' and 'n' will be live during the loop.	 More likely,
 	 'base + n' will be loop invariant, resulting in only one live value
 	 during the loop.  So in that case we clear depends_on_elim and set
-        elim_inv_expr_id instead.  */
+	elim_inv_expr_id instead.  */
       if (depends_on_elim && bitmap_count_bits (depends_on_elim) > 1)
 	{
-	  elim_inv_expr_id = get_expr_id (data, bound);
+	  elim_inv_expr = record_inv_expr (data, bound);
 	  bitmap_clear (depends_on_elim);
 	}
       /* The bound is a loop invariant, so it will be only computed
@@ -4912,15 +5608,15 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
      TODO: The constant that we're subtracting from the cost should
      be target-dependent.  This information should be added to the
      target costs for each backend.  */
-  if (!infinite_cost_p (elim_cost) /* Do not try to decrease infinite! */
+  if (!elim_cost.infinite_cost_p () /* Do not try to decrease infinite! */
       && integer_zerop (*bound_cst)
       && (operand_equal_p (*control_var, cand->var_after, 0)
 	  || operand_equal_p (*control_var, cand->var_before, 0)))
-    elim_cost.cost -= 1;
+    elim_cost -= 1;
 
   express_cost = get_computation_cost (data, use, cand, false,
 				       &depends_on_express, NULL,
-                                       &express_inv_expr_id);
+				       &express_inv_expr);
   fd_ivopts_data = data;
   walk_tree (&cmp_iv->base, find_depends, &depends_on_express, NULL);
 
@@ -4930,15 +5626,15 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
     bound_cost.cost = parm_decl_cost (data, *bound_cst);
   else if (TREE_CODE (*bound_cst) == INTEGER_CST)
     bound_cost.cost = 0;
-  express_cost.cost += bound_cost.cost;
+  express_cost += bound_cost;
 
   /* Choose the better approach, preferring the eliminated IV. */
-  if (compare_costs (elim_cost, express_cost) <= 0)
+  if (elim_cost <= express_cost)
     {
       cost = elim_cost;
       depends_on = depends_on_elim;
       depends_on_elim = NULL;
-      inv_expr_id = elim_inv_expr_id;
+      inv_expr = elim_inv_expr;
     }
   else
     {
@@ -4947,36 +5643,37 @@ determine_use_iv_cost_condition (struct ivopts_data *data,
       depends_on_express = NULL;
       bound = NULL_TREE;
       comp = ERROR_MARK;
-      inv_expr_id = express_inv_expr_id;
+      inv_expr = express_inv_expr;
     }
 
-  set_use_iv_cost (data, use, cand, cost, depends_on, bound, comp, inv_expr_id);
+  set_group_iv_cost (data, group, cand, cost,
+		     depends_on, bound, comp, inv_expr);
 
   if (depends_on_elim)
     BITMAP_FREE (depends_on_elim);
   if (depends_on_express)
     BITMAP_FREE (depends_on_express);
 
-  return !infinite_cost_p (cost);
+  return !cost.infinite_cost_p ();
 }
 
-/* Determines cost of basing replacement of USE on CAND.  Returns false
-   if USE cannot be based on CAND.  */
+/* Determines cost of computing uses in GROUP with CAND.  Returns false
+   if USE cannot be represented with CAND.  */
 
 static bool
-determine_use_iv_cost (struct ivopts_data *data,
-		       struct iv_use *use, struct iv_cand *cand)
+determine_group_iv_cost (struct ivopts_data *data,
+			 struct iv_group *group, struct iv_cand *cand)
 {
-  switch (use->type)
+  switch (group->type)
     {
     case USE_NONLINEAR_EXPR:
-      return determine_use_iv_cost_generic (data, use, cand);
+      return determine_group_iv_cost_generic (data, group, cand);
 
     case USE_ADDRESS:
-      return determine_use_iv_cost_address (data, use, cand);
+      return determine_group_iv_cost_address (data, group, cand);
 
     case USE_COMPARE:
-      return determine_use_iv_cost_condition (data, use, cand);
+      return determine_group_iv_cost_cond (data, group, cand);
 
     default:
       gcc_unreachable ();
@@ -5002,7 +5699,7 @@ autoinc_possible_for_pair (struct ivopts_data *data, struct iv_use *use,
 
   BITMAP_FREE (depends_on);
 
-  return !infinite_cost_p (cost) && can_autoinc;
+  return !cost.infinite_cost_p () && can_autoinc;
 }
 
 /* Examine IP_ORIGINAL candidates to see if they are incremented next to a
@@ -5013,17 +5710,18 @@ set_autoinc_for_original_candidates (struct ivopts_data *data)
 {
   unsigned i, j;
 
-  for (i = 0; i < n_iv_cands (data); i++)
+  for (i = 0; i < data->vcands.length (); i++)
     {
-      struct iv_cand *cand = iv_cand (data, i);
+      struct iv_cand *cand = data->vcands[i];
       struct iv_use *closest_before = NULL;
       struct iv_use *closest_after = NULL;
       if (cand->pos != IP_ORIGINAL)
 	continue;
 
-      for (j = 0; j < n_iv_uses (data); j++)
+      for (j = 0; j < data->vgroups.length (); j++)
 	{
-	  struct iv_use *use = iv_use (data, j);
+	  struct iv_group *group = data->vgroups[j];
+	  struct iv_use *use = group->vuses[0];
 	  unsigned uid = gimple_uid (use->stmt);
 
 	  if (gimple_bb (use->stmt) != gimple_bb (cand->incremented_at))
@@ -5058,55 +5756,79 @@ find_iv_candidates (struct ivopts_data *data)
   add_standard_iv_candidates (data);
 
   /* Add old induction variables.  */
-  add_old_ivs_candidates (data);
+  add_iv_candidate_for_bivs (data);
 
   /* Add induction variables derived from uses.  */
-  add_derived_ivs_candidates (data);
+  add_iv_candidate_for_groups (data);
 
   set_autoinc_for_original_candidates (data);
 
   /* Record the important candidates.  */
   record_important_candidates (data);
+
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    {
+      unsigned i;
+
+      fprintf (dump_file, "\n<Important Candidates>:\t");
+      for (i = 0; i < data->vcands.length (); i++)
+	if (data->vcands[i]->important)
+	  fprintf (dump_file, " %d,", data->vcands[i]->id);
+      fprintf (dump_file, "\n");
+
+      fprintf (dump_file, "\n<Group, Cand> Related:\n");
+      for (i = 0; i < data->vgroups.length (); i++)
+	{
+	  struct iv_group *group = data->vgroups[i];
+
+	  if (group->related_cands)
+	    {
+	      fprintf (dump_file, "  Group %d:\t", group->id);
+	      dump_bitmap (dump_file, group->related_cands);
+	    }
+	}
+      fprintf (dump_file, "\n");
+    }
 }
 
-/* Determines costs of basing the use of the iv on an iv candidate.  */
+/* Determines costs of computing use of iv with an iv candidate.  */
 
 static void
-determine_use_iv_costs (struct ivopts_data *data)
+determine_group_iv_costs (struct ivopts_data *data)
 {
   unsigned i, j;
-  struct iv_use *use;
   struct iv_cand *cand;
+  struct iv_group *group;
   bitmap to_clear = BITMAP_ALLOC (NULL);
 
   alloc_use_cost_map (data);
 
-  for (i = 0; i < n_iv_uses (data); i++)
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      use = iv_use (data, i);
+      group = data->vgroups[i];
 
       if (data->consider_all_candidates)
 	{
-	  for (j = 0; j < n_iv_cands (data); j++)
+	  for (j = 0; j < data->vcands.length (); j++)
 	    {
-	      cand = iv_cand (data, j);
-	      determine_use_iv_cost (data, use, cand);
+	      cand = data->vcands[j];
+	      determine_group_iv_cost (data, group, cand);
 	    }
 	}
       else
 	{
 	  bitmap_iterator bi;
 
-	  EXECUTE_IF_SET_IN_BITMAP (use->related_cands, 0, j, bi)
+	  EXECUTE_IF_SET_IN_BITMAP (group->related_cands, 0, j, bi)
 	    {
-	      cand = iv_cand (data, j);
-	      if (!determine_use_iv_cost (data, use, cand))
+	      cand = data->vcands[j];
+	      if (!determine_group_iv_cost (data, group, cand))
 		bitmap_set_bit (to_clear, j);
 	    }
 
 	  /* Remove the candidates for that the cost is infinite from
 	     the list of related candidates.  */
-	  bitmap_and_compl_into (use->related_cands, to_clear);
+	  bitmap_and_compl_into (group->related_cands, to_clear);
 	  bitmap_clear (to_clear);
 	}
     }
@@ -5115,29 +5837,49 @@ determine_use_iv_costs (struct ivopts_data *data)
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
-      fprintf (dump_file, "Use-candidate costs:\n");
+      fprintf (dump_file, "\n<Invariant Expressions>:\n");
+      auto_vec <iv_inv_expr_ent *> list (data->inv_expr_tab->elements ());
 
-      for (i = 0; i < n_iv_uses (data); i++)
+      for (hash_table<iv_inv_expr_hasher>::iterator it
+	   = data->inv_expr_tab->begin (); it != data->inv_expr_tab->end ();
+	   ++it)
+	list.safe_push (*it);
+
+      list.qsort (sort_iv_inv_expr_ent);
+
+      for (i = 0; i < list.length (); ++i)
 	{
-	  use = iv_use (data, i);
+	  fprintf (dump_file, "inv_expr %d: \t", i);
+	  print_generic_expr (dump_file, list[i]->expr, TDF_SLIM);
+	  fprintf (dump_file, "\n");
+	}
 
-	  fprintf (dump_file, "Use %d:\n", i);
-	  fprintf (dump_file, "  cand\tcost\tcompl.\tdepends on\n");
-	  for (j = 0; j < use->n_map_members; j++)
+      fprintf (dump_file, "\n<Group-candidate Costs>:\n");
+
+      for (i = 0; i < data->vgroups.length (); i++)
+	{
+	  group = data->vgroups[i];
+
+	  fprintf (dump_file, "Group %d:\n", i);
+	  fprintf (dump_file, "  cand\tcost\tcompl.\tinv.ex.\tdepends on\n");
+	  for (j = 0; j < group->n_map_members; j++)
 	    {
-	      if (!use->cost_map[j].cand
-		  || infinite_cost_p (use->cost_map[j].cost))
+	      if (!group->cost_map[j].cand
+		  || group->cost_map[j].cost.infinite_cost_p ())
 		continue;
 
 	      fprintf (dump_file, "  %d\t%d\t%d\t",
-		       use->cost_map[j].cand->id,
-		       use->cost_map[j].cost.cost,
-		       use->cost_map[j].cost.complexity);
-	      if (use->cost_map[j].depends_on)
+		       group->cost_map[j].cand->id,
+		       group->cost_map[j].cost.cost,
+		       group->cost_map[j].cost.complexity);
+	      if (group->cost_map[j].inv_expr != NULL)
+		fprintf (dump_file, "%d\t",
+			 group->cost_map[j].inv_expr->id);
+	      else
+		fprintf (dump_file, "\t");
+	      if (group->cost_map[j].depends_on)
 		bitmap_print (dump_file,
-			      use->cost_map[j].depends_on, "","");
-              if (use->cost_map[j].inv_expr_id != -1)
-                fprintf (dump_file, " inv_expr:%d", use->cost_map[j].inv_expr_id);
+			      group->cost_map[j].depends_on, "","");
 	      fprintf (dump_file, "\n");
 	    }
 
@@ -5204,13 +5946,13 @@ determine_iv_costs (struct ivopts_data *data)
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
-      fprintf (dump_file, "Candidate costs:\n");
+      fprintf (dump_file, "<Candidate Costs>:\n");
       fprintf (dump_file, "  cand\tcost\n");
     }
 
-  for (i = 0; i < n_iv_cands (data); i++)
+  for (i = 0; i < data->vcands.length (); i++)
     {
-      struct iv_cand *cand = iv_cand (data, i);
+      struct iv_cand *cand = data->vcands[i];
 
       determine_iv_cost (data, cand);
 
@@ -5247,7 +5989,7 @@ determine_set_costs (struct ivopts_data *data)
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
-      fprintf (dump_file, "Global costs:\n");
+      fprintf (dump_file, "<Global Costs>:\n");
       fprintf (dump_file, "  target_avail_regs %d\n", target_avail_regs);
       fprintf (dump_file, "  target_clobbered_regs %d\n", target_clobbered_regs);
       fprintf (dump_file, "  target_reg_cost %d\n", target_reg_cost[data->speed]);
@@ -5297,19 +6039,16 @@ determine_set_costs (struct ivopts_data *data)
 static bool
 cheaper_cost_pair (struct cost_pair *a, struct cost_pair *b)
 {
-  int cmp;
-
   if (!a)
     return false;
 
   if (!b)
     return true;
 
-  cmp = compare_costs (a->cost, b->cost);
-  if (cmp < 0)
+  if (a->cost < b->cost)
     return true;
 
-  if (cmp > 0)
+  if (b->cost < a->cost)
     return false;
 
   /* In case the costs are the same, prefer the cheaper candidate.  */
@@ -5323,9 +6062,9 @@ cheaper_cost_pair (struct cost_pair *a, struct cost_pair *b)
 /* Returns candidate by that USE is expressed in IVS.  */
 
 static struct cost_pair *
-iv_ca_cand_for_use (struct iv_ca *ivs, struct iv_use *use)
+iv_ca_cand_for_group (struct iv_ca *ivs, struct iv_group *group)
 {
-  return ivs->cand_for_use[use->id];
+  return ivs->cand_for_group[group->id];
 }
 
 /* Computes the cost field of IVS structure.  */
@@ -5335,10 +6074,11 @@ iv_ca_recount_cost (struct ivopts_data *data, struct iv_ca *ivs)
 {
   comp_cost cost = ivs->cand_use_cost;
 
-  cost.cost += ivs->cand_cost;
+  cost += ivs->cand_cost;
 
-  cost.cost += ivopts_global_cost_for_size (data,
-                                            ivs->n_regs + ivs->num_used_inv_expr);
+  cost += ivopts_global_cost_for_size (data,
+				       ivs->n_regs
+				       + ivs->used_inv_exprs->elements ());
 
   ivs->cost = cost;
 }
@@ -5358,7 +6098,7 @@ iv_ca_set_remove_invariants (struct iv_ca *ivs, bitmap invs)
     {
       ivs->n_invariant_uses[iid]--;
       if (ivs->n_invariant_uses[iid] == 0)
-        ivs->n_regs--;
+	ivs->n_regs--;
     }
 }
 
@@ -5366,18 +6106,18 @@ iv_ca_set_remove_invariants (struct iv_ca *ivs, bitmap invs)
 
 static void
 iv_ca_set_no_cp (struct ivopts_data *data, struct iv_ca *ivs,
-		 struct iv_use *use)
+		 struct iv_group *group)
 {
-  unsigned uid = use->id, cid;
+  unsigned gid = group->id, cid;
   struct cost_pair *cp;
 
-  cp = ivs->cand_for_use[uid];
+  cp = ivs->cand_for_group[gid];
   if (!cp)
     return;
   cid = cp->cand->id;
 
-  ivs->bad_uses++;
-  ivs->cand_for_use[uid] = NULL;
+  ivs->bad_groups++;
+  ivs->cand_for_group[gid] = NULL;
   ivs->n_cand_uses[cid]--;
 
   if (ivs->n_cand_uses[cid] == 0)
@@ -5392,15 +6132,16 @@ iv_ca_set_no_cp (struct ivopts_data *data, struct iv_ca *ivs,
       iv_ca_set_remove_invariants (ivs, cp->cand->depends_on);
     }
 
-  ivs->cand_use_cost = sub_costs (ivs->cand_use_cost, cp->cost);
+  ivs->cand_use_cost -= cp->cost;
 
   iv_ca_set_remove_invariants (ivs, cp->depends_on);
 
-  if (cp->inv_expr_id != -1)
+  if (cp->inv_expr != NULL)
     {
-      ivs->used_inv_expr[cp->inv_expr_id]--;
-      if (ivs->used_inv_expr[cp->inv_expr_id] == 0)
-        ivs->num_used_inv_expr--;
+      unsigned *slot = ivs->used_inv_exprs->get (cp->inv_expr);
+      --(*slot);
+      if (*slot == 0)
+	ivs->used_inv_exprs->remove (cp->inv_expr);
     }
   iv_ca_recount_cost (data, ivs);
 }
@@ -5420,30 +6161,30 @@ iv_ca_set_add_invariants (struct iv_ca *ivs, bitmap invs)
     {
       ivs->n_invariant_uses[iid]++;
       if (ivs->n_invariant_uses[iid] == 1)
-        ivs->n_regs++;
+	ivs->n_regs++;
     }
 }
 
-/* Set cost pair for USE in set IVS to CP.  */
+/* Set cost pair for GROUP in set IVS to CP.  */
 
 static void
 iv_ca_set_cp (struct ivopts_data *data, struct iv_ca *ivs,
-	      struct iv_use *use, struct cost_pair *cp)
+	      struct iv_group *group, struct cost_pair *cp)
 {
-  unsigned uid = use->id, cid;
+  unsigned gid = group->id, cid;
 
-  if (ivs->cand_for_use[uid] == cp)
+  if (ivs->cand_for_group[gid] == cp)
     return;
 
-  if (ivs->cand_for_use[uid])
-    iv_ca_set_no_cp (data, ivs, use);
+  if (ivs->cand_for_group[gid])
+    iv_ca_set_no_cp (data, ivs, group);
 
   if (cp)
     {
       cid = cp->cand->id;
 
-      ivs->bad_uses--;
-      ivs->cand_for_use[uid] = cp;
+      ivs->bad_groups--;
+      ivs->cand_for_group[gid] = cp;
       ivs->n_cand_uses[cid]++;
       if (ivs->n_cand_uses[cid] == 1)
 	{
@@ -5457,15 +6198,14 @@ iv_ca_set_cp (struct ivopts_data *data, struct iv_ca *ivs,
 	  iv_ca_set_add_invariants (ivs, cp->cand->depends_on);
 	}
 
-      ivs->cand_use_cost = add_costs (ivs->cand_use_cost, cp->cost);
+      ivs->cand_use_cost += cp->cost;
       iv_ca_set_add_invariants (ivs, cp->depends_on);
 
-      if (cp->inv_expr_id != -1)
-        {
-          ivs->used_inv_expr[cp->inv_expr_id]++;
-          if (ivs->used_inv_expr[cp->inv_expr_id] == 1)
-            ivs->num_used_inv_expr++;
-        }
+      if (cp->inv_expr != NULL)
+	{
+	  unsigned *slot = &ivs->used_inv_exprs->get_or_insert (cp->inv_expr);
+	  ++(*slot);
+	}
       iv_ca_recount_cost (data, ivs);
     }
 }
@@ -5475,38 +6215,38 @@ iv_ca_set_cp (struct ivopts_data *data, struct iv_ca *ivs,
    set IVS don't give any result.  */
 
 static void
-iv_ca_add_use (struct ivopts_data *data, struct iv_ca *ivs,
-	       struct iv_use *use)
+iv_ca_add_group (struct ivopts_data *data, struct iv_ca *ivs,
+	       struct iv_group *group)
 {
   struct cost_pair *best_cp = NULL, *cp;
   bitmap_iterator bi;
   unsigned i;
   struct iv_cand *cand;
 
-  gcc_assert (ivs->upto >= use->id);
+  gcc_assert (ivs->upto >= group->id);
   ivs->upto++;
-  ivs->bad_uses++;
+  ivs->bad_groups++;
 
   EXECUTE_IF_SET_IN_BITMAP (ivs->cands, 0, i, bi)
     {
-      cand = iv_cand (data, i);
-      cp = get_use_iv_cost (data, use, cand);
+      cand = data->vcands[i];
+      cp = get_group_iv_cost (data, group, cand);
       if (cheaper_cost_pair (cp, best_cp))
 	best_cp = cp;
     }
-   
+
   if (best_cp == NULL)
     {
       EXECUTE_IF_SET_IN_BITMAP (data->important_candidates, 0, i, bi)
 	{
-	  cand = iv_cand (data, i);
-	  cp = get_use_iv_cost (data, use, cand);
+	  cand = data->vcands[i];
+	  cp = get_group_iv_cost (data, group, cand);
 	  if (cheaper_cost_pair (cp, best_cp))
 	    best_cp = cp;
 	}
     }
 
-  iv_ca_set_cp (data, ivs, use, best_cp);
+  iv_ca_set_cp (data, ivs, group, best_cp);
 }
 
 /* Get cost for assignment IVS.  */
@@ -5516,7 +6256,7 @@ iv_ca_cost (struct iv_ca *ivs)
 {
   /* This was a conditional expression but it triggered a bug in
      Sun C 5.5.  */
-  if (ivs->bad_uses)
+  if (ivs->bad_groups)
     return infinite_cost;
   else
     return ivs->cost;
@@ -5542,19 +6282,19 @@ iv_ca_has_deps (struct iv_ca *ivs, struct cost_pair *cp)
   return true;
 }
 
-/* Creates change of expressing USE by NEW_CP instead of OLD_CP and chains
-   it before NEXT_CHANGE.  */
+/* Creates change of expressing GROUP by NEW_CP instead of OLD_CP and chains
+   it before NEXT.  */
 
 static struct iv_ca_delta *
-iv_ca_delta_add (struct iv_use *use, struct cost_pair *old_cp,
-		 struct cost_pair *new_cp, struct iv_ca_delta *next_change)
+iv_ca_delta_add (struct iv_group *group, struct cost_pair *old_cp,
+		 struct cost_pair *new_cp, struct iv_ca_delta *next)
 {
   struct iv_ca_delta *change = XNEW (struct iv_ca_delta);
 
-  change->use = use;
+  change->group = group;
   change->old_cp = old_cp;
   change->new_cp = new_cp;
-  change->next_change = next_change;
+  change->next = next;
 
   return change;
 }
@@ -5573,9 +6313,9 @@ iv_ca_delta_join (struct iv_ca_delta *l1, struct iv_ca_delta *l2)
   if (!l1)
     return l2;
 
-  for (last = l1; last->next_change; last = last->next_change)
+  for (last = l1; last->next; last = last->next)
     continue;
-  last->next_change = l2;
+  last->next = l2;
 
   return l1;
 }
@@ -5586,17 +6326,14 @@ static struct iv_ca_delta *
 iv_ca_delta_reverse (struct iv_ca_delta *delta)
 {
   struct iv_ca_delta *act, *next, *prev = NULL;
-  struct cost_pair *tmp;
 
   for (act = delta; act; act = next)
     {
-      next = act->next_change;
-      act->next_change = prev;
+      next = act->next;
+      act->next = prev;
       prev = act;
 
-      tmp = act->old_cp;
-      act->old_cp = act->new_cp;
-      act->new_cp = tmp;
+      std::swap (act->old_cp, act->new_cp);
     }
 
   return prev;
@@ -5615,12 +6352,12 @@ iv_ca_delta_commit (struct ivopts_data *data, struct iv_ca *ivs,
   if (!forward)
     delta = iv_ca_delta_reverse (delta);
 
-  for (act = delta; act; act = act->next_change)
+  for (act = delta; act; act = act->next)
     {
       from = act->old_cp;
       to = act->new_cp;
-      gcc_assert (iv_ca_cand_for_use (ivs, act->use) == from);
-      iv_ca_set_cp (data, ivs, act->use, to);
+      gcc_assert (iv_ca_cand_for_group (ivs, act->group) == from);
+      iv_ca_set_cp (data, ivs, act->group, to);
     }
 
   if (!forward)
@@ -5652,7 +6389,7 @@ iv_ca_delta_free (struct iv_ca_delta **delta)
 
   for (act = *delta; act; act = next)
     {
-      next = act->next_change;
+      next = act->next;
       free (act);
     }
 
@@ -5667,18 +6404,18 @@ iv_ca_new (struct ivopts_data *data)
   struct iv_ca *nw = XNEW (struct iv_ca);
 
   nw->upto = 0;
-  nw->bad_uses = 0;
-  nw->cand_for_use = XCNEWVEC (struct cost_pair *, n_iv_uses (data));
-  nw->n_cand_uses = XCNEWVEC (unsigned, n_iv_cands (data));
+  nw->bad_groups = 0;
+  nw->cand_for_group = XCNEWVEC (struct cost_pair *,
+				 data->vgroups.length ());
+  nw->n_cand_uses = XCNEWVEC (unsigned, data->vcands.length ());
   nw->cands = BITMAP_ALLOC (NULL);
   nw->n_cands = 0;
   nw->n_regs = 0;
   nw->cand_use_cost = no_cost;
   nw->cand_cost = 0;
   nw->n_invariant_uses = XCNEWVEC (unsigned, data->max_inv_id + 1);
+  nw->used_inv_exprs = new hash_map <iv_inv_expr_ent *, unsigned> (13);
   nw->cost = no_cost;
-  nw->used_inv_expr = XCNEWVEC (unsigned, data->inv_expr_id + 1);
-  nw->num_used_inv_expr = 0;
 
   return nw;
 }
@@ -5688,11 +6425,11 @@ iv_ca_new (struct ivopts_data *data)
 static void
 iv_ca_free (struct iv_ca **ivs)
 {
-  free ((*ivs)->cand_for_use);
+  free ((*ivs)->cand_for_group);
   free ((*ivs)->n_cand_uses);
   BITMAP_FREE ((*ivs)->cands);
   free ((*ivs)->n_invariant_uses);
-  free ((*ivs)->used_inv_expr);
+  delete ((*ivs)->used_inv_exprs);
   free (*ivs);
   *ivs = NULL;
 }
@@ -5702,32 +6439,46 @@ iv_ca_free (struct iv_ca **ivs)
 static void
 iv_ca_dump (struct ivopts_data *data, FILE *file, struct iv_ca *ivs)
 {
-  const char *pref = "  invariants ";
   unsigned i;
   comp_cost cost = iv_ca_cost (ivs);
 
-  fprintf (file, "  cost: %d (complexity %d)\n", cost.cost, cost.complexity);
-  fprintf (file, "  cand_cost: %d\n  cand_use_cost: %d (complexity %d)\n",
-           ivs->cand_cost, ivs->cand_use_cost.cost, ivs->cand_use_cost.complexity);
+  fprintf (file, "  cost: %d (complexity %d)\n", cost.cost,
+	   cost.complexity);
+  fprintf (file, "  cand_cost: %d\n  cand_group_cost: %d (complexity %d)\n",
+	   ivs->cand_cost, ivs->cand_use_cost.cost,
+	   ivs->cand_use_cost.complexity);
   bitmap_print (file, ivs->cands, "  candidates: ","\n");
 
-   for (i = 0; i < ivs->upto; i++)
+  for (i = 0; i < ivs->upto; i++)
     {
-      struct iv_use *use = iv_use (data, i);
-      struct cost_pair *cp = iv_ca_cand_for_use (ivs, use);
+      struct iv_group *group = data->vgroups[i];
+      struct cost_pair *cp = iv_ca_cand_for_group (ivs, group);
       if (cp)
-        fprintf (file, "   use:%d --> iv_cand:%d, cost=(%d,%d)\n",
-                 use->id, cp->cand->id, cp->cost.cost, cp->cost.complexity);
+        fprintf (file, "   group:%d --> iv_cand:%d, cost=(%d,%d)\n",
+		 group->id, cp->cand->id, cp->cost.cost,
+		 cp->cost.complexity);
       else
-        fprintf (file, "   use:%d --> ??\n", use->id);
+	fprintf (file, "   group:%d --> ??\n", group->id);
     }
 
+  const char *pref = "";
+  fprintf (file, "  invariant variables: ");
   for (i = 1; i <= data->max_inv_id; i++)
     if (ivs->n_invariant_uses[i])
       {
 	fprintf (file, "%s%d", pref, i);
 	pref = ", ";
       }
+
+  pref = "";
+  fprintf (file, "\n  invariant expressions: ");
+  for (hash_map<iv_inv_expr_ent *, unsigned>::iterator it
+       = ivs->used_inv_exprs->begin (); it != ivs->used_inv_exprs->end (); ++it)
+    {
+	fprintf (file, "%s%d", pref, (*it).first->id);
+	pref = ", ";
+    }
+
   fprintf (file, "\n\n");
 }
 
@@ -5743,20 +6494,20 @@ iv_ca_extend (struct ivopts_data *data, struct iv_ca *ivs,
 {
   unsigned i;
   comp_cost cost;
-  struct iv_use *use;
+  struct iv_group *group;
   struct cost_pair *old_cp, *new_cp;
 
   *delta = NULL;
   for (i = 0; i < ivs->upto; i++)
     {
-      use = iv_use (data, i);
-      old_cp = iv_ca_cand_for_use (ivs, use);
+      group = data->vgroups[i];
+      old_cp = iv_ca_cand_for_group (ivs, group);
 
       if (old_cp
 	  && old_cp->cand == cand)
 	continue;
 
-      new_cp = get_use_iv_cost (data, use, cand);
+      new_cp = get_group_iv_cost (data, group, cand);
       if (!new_cp)
 	continue;
 
@@ -5764,9 +6515,9 @@ iv_ca_extend (struct ivopts_data *data, struct iv_ca *ivs,
 	continue;
 
       if (!min_ncand && !cheaper_cost_pair (new_cp, old_cp))
-        continue;
+	continue;
 
-      *delta = iv_ca_delta_add (use, old_cp, new_cp, *delta);
+      *delta = iv_ca_delta_add (group, old_cp, new_cp, *delta);
     }
 
   iv_ca_delta_commit (data, ivs, *delta, true);
@@ -5788,24 +6539,24 @@ iv_ca_narrow (struct ivopts_data *data, struct iv_ca *ivs,
 	      struct iv_ca_delta **delta)
 {
   unsigned i, ci;
-  struct iv_use *use;
+  struct iv_group *group;
   struct cost_pair *old_cp, *new_cp, *cp;
   bitmap_iterator bi;
   struct iv_cand *cnd;
   comp_cost cost, best_cost, acost;
 
   *delta = NULL;
-  for (i = 0; i < n_iv_uses (data); i++)
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      use = iv_use (data, i);
+      group = data->vgroups[i];
 
-      old_cp = iv_ca_cand_for_use (ivs, use);
+      old_cp = iv_ca_cand_for_group (ivs, group);
       if (old_cp->cand != cand)
 	continue;
 
       best_cost = iv_ca_cost (ivs);
       /* Start narrowing with START.  */
-      new_cp = get_use_iv_cost (data, use, start);
+      new_cp = get_group_iv_cost (data, group, start);
 
       if (data->consider_all_candidates)
 	{
@@ -5814,16 +6565,16 @@ iv_ca_narrow (struct ivopts_data *data, struct iv_ca *ivs,
 	      if (ci == cand->id || (start && ci == start->id))
 		continue;
 
-	      cnd = iv_cand (data, ci);
+	      cnd = data->vcands[ci];
 
-	      cp = get_use_iv_cost (data, use, cnd);
+	      cp = get_group_iv_cost (data, group, cnd);
 	      if (!cp)
 		continue;
 
-	      iv_ca_set_cp (data, ivs, use, cp);
+	      iv_ca_set_cp (data, ivs, group, cp);
 	      acost = iv_ca_cost (ivs);
 
-	      if (compare_costs (acost, best_cost) < 0)
+	      if (acost < best_cost)
 		{
 		  best_cost = acost;
 		  new_cp = cp;
@@ -5832,21 +6583,21 @@ iv_ca_narrow (struct ivopts_data *data, struct iv_ca *ivs,
 	}
       else
 	{
-	  EXECUTE_IF_AND_IN_BITMAP (use->related_cands, ivs->cands, 0, ci, bi)
+	  EXECUTE_IF_AND_IN_BITMAP (group->related_cands, ivs->cands, 0, ci, bi)
 	    {
 	      if (ci == cand->id || (start && ci == start->id))
 		continue;
 
-	      cnd = iv_cand (data, ci);
+	      cnd = data->vcands[ci];
 
-	      cp = get_use_iv_cost (data, use, cnd);
+	      cp = get_group_iv_cost (data, group, cnd);
 	      if (!cp)
 		continue;
 
-	      iv_ca_set_cp (data, ivs, use, cp);
+	      iv_ca_set_cp (data, ivs, group, cp);
 	      acost = iv_ca_cost (ivs);
 
-	      if (compare_costs (acost, best_cost) < 0)
+	      if (acost < best_cost)
 		{
 		  best_cost = acost;
 		  new_cp = cp;
@@ -5854,7 +6605,7 @@ iv_ca_narrow (struct ivopts_data *data, struct iv_ca *ivs,
 	    }
 	}
       /* Restore to old cp for use.  */
-      iv_ca_set_cp (data, ivs, use, old_cp);
+      iv_ca_set_cp (data, ivs, group, old_cp);
 
       if (!new_cp)
 	{
@@ -5862,7 +6613,7 @@ iv_ca_narrow (struct ivopts_data *data, struct iv_ca *ivs,
 	  return infinite_cost;
 	}
 
-      *delta = iv_ca_delta_add (use, old_cp, new_cp, *delta);
+      *delta = iv_ca_delta_add (group, old_cp, new_cp, *delta);
     }
 
   iv_ca_delta_commit (data, ivs, *delta, true);
@@ -5891,14 +6642,14 @@ iv_ca_prune (struct ivopts_data *data, struct iv_ca *ivs,
 
   EXECUTE_IF_SET_IN_BITMAP (ivs->cands, 0, i, bi)
     {
-      cand = iv_cand (data, i);
+      cand = data->vcands[i];
 
       if (cand == except_cand)
 	continue;
 
       acost = iv_ca_narrow (data, ivs, cand, except_cand, &act_delta);
 
-      if (compare_costs (acost, best_cost) < 0)
+      if (acost < best_cost)
 	{
 	  best_cost = acost;
 	  iv_ca_delta_free (&best_delta);
@@ -5923,11 +6674,11 @@ iv_ca_prune (struct ivopts_data *data, struct iv_ca *ivs,
 }
 
 /* Check if CAND_IDX is a candidate other than OLD_CAND and has
-   cheaper local cost for USE than BEST_CP.  Return pointer to
+   cheaper local cost for GROUP than BEST_CP.  Return pointer to
    the corresponding cost_pair, otherwise just return BEST_CP.  */
 
 static struct cost_pair*
-cheaper_cost_with_cand (struct ivopts_data *data, struct iv_use *use,
+cheaper_cost_with_cand (struct ivopts_data *data, struct iv_group *group,
 			unsigned int cand_idx, struct iv_cand *old_cand,
 			struct cost_pair *best_cp)
 {
@@ -5938,8 +6689,8 @@ cheaper_cost_with_cand (struct ivopts_data *data, struct iv_use *use,
   if (cand_idx == old_cand->id)
     return best_cp;
 
-  cand = iv_cand (data, cand_idx);
-  cp = get_use_iv_cost (data, use, cand);
+  cand = data->vcands[cand_idx];
+  cp = get_group_iv_cost (data, group, cand);
   if (cp != NULL && cheaper_cost_pair (cp, best_cp))
     return cp;
 
@@ -5959,7 +6710,6 @@ iv_ca_replace (struct ivopts_data *data, struct iv_ca *ivs,
 {
   bitmap_iterator bi, bj;
   unsigned int i, j, k;
-  struct iv_use *use;
   struct iv_cand *cand;
   comp_cost orig_cost, acost;
   struct iv_ca_delta *act_delta, *tmp_delta;
@@ -5974,33 +6724,33 @@ iv_ca_replace (struct ivopts_data *data, struct iv_ca *ivs,
 	  || ivs->n_cand_uses[i] > ALWAYS_PRUNE_CAND_SET_BOUND)
 	continue;
 
-      cand = iv_cand (data, i);
-  
+      cand = data->vcands[i];
+
       act_delta = NULL;
       /*  Represent uses under current candidate using other ones with
 	  lower local cost.  */
       for (j = 0; j < ivs->upto; j++)
 	{
-	  use = iv_use (data, j);
-	  old_cp = iv_ca_cand_for_use (ivs, use);
+	  struct iv_group *group = data->vgroups[j];
+	  old_cp = iv_ca_cand_for_group (ivs, group);
 
 	  if (old_cp->cand != cand)
 	    continue;
 
 	  best_cp = old_cp;
 	  if (data->consider_all_candidates)
-	    for (k = 0; k < n_iv_cands (data); k++)
-	      best_cp = cheaper_cost_with_cand (data, use, k,
+	    for (k = 0; k < data->vcands.length (); k++)
+	      best_cp = cheaper_cost_with_cand (data, group, k,
 						old_cp->cand, best_cp);
 	  else
-	    EXECUTE_IF_SET_IN_BITMAP (use->related_cands, 0, k, bj)
-	      best_cp = cheaper_cost_with_cand (data, use, k,
+	    EXECUTE_IF_SET_IN_BITMAP (group->related_cands, 0, k, bj)
+	      best_cp = cheaper_cost_with_cand (data, group, k,
 						old_cp->cand, best_cp);
 
 	  if (best_cp == old_cp)
 	    continue;
 
-	  act_delta = iv_ca_delta_add (use, old_cp, best_cp, act_delta);
+	  act_delta = iv_ca_delta_add (group, old_cp, best_cp, act_delta);
 	}
       /* No need for further prune.  */
       if (!act_delta)
@@ -6012,7 +6762,7 @@ iv_ca_replace (struct ivopts_data *data, struct iv_ca *ivs,
       iv_ca_delta_commit (data, ivs, act_delta, false);
       act_delta = iv_ca_delta_join (act_delta, tmp_delta);
 
-      if (compare_costs (acost, orig_cost) < 0)
+      if (acost < orig_cost)
 	{
 	  *delta = act_delta;
 	  return acost;
@@ -6024,14 +6774,14 @@ iv_ca_replace (struct ivopts_data *data, struct iv_ca *ivs,
   return orig_cost;
 }
 
-/* Tries to extend the sets IVS in the best possible way in order
-   to express the USE.  If ORIGINALP is true, prefer candidates from
+/* Tries to extend the sets IVS in the best possible way in order to
+   express the GROUP.  If ORIGINALP is true, prefer candidates from
    the original set of IVs, otherwise favor important candidates not
    based on any memory object.  */
 
 static bool
 try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
-		  struct iv_use *use, bool originalp)
+		  struct iv_group *group, bool originalp)
 {
   comp_cost best_cost, act_cost;
   unsigned i;
@@ -6040,13 +6790,13 @@ try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
   struct iv_ca_delta *best_delta = NULL, *act_delta;
   struct cost_pair *cp;
 
-  iv_ca_add_use (data, ivs, use);
+  iv_ca_add_group (data, ivs, group);
   best_cost = iv_ca_cost (ivs);
-  cp = iv_ca_cand_for_use (ivs, use);
+  cp = iv_ca_cand_for_group (ivs, group);
   if (cp)
     {
-      best_delta = iv_ca_delta_add (use, NULL, cp, NULL);
-      iv_ca_set_no_cp (data, ivs, use);
+      best_delta = iv_ca_delta_add (group, NULL, cp, NULL);
+      iv_ca_set_no_cp (data, ivs, group);
     }
 
   /* If ORIGINALP is true, try to find the original IV for the use.  Otherwise
@@ -6058,9 +6808,9 @@ try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
      too many ivs.  The approach from few ivs to more seems more likely to be
      successful -- starting from few ivs, replacing an expensive use by a
      specific iv should always be a win.  */
-  EXECUTE_IF_SET_IN_BITMAP (data->important_candidates, 0, i, bi)
+  EXECUTE_IF_SET_IN_BITMAP (group->related_cands, 0, i, bi)
     {
-      cand = iv_cand (data, i);
+      cand = data->vcands[i];
 
       if (originalp && cand->pos !=IP_ORIGINAL)
 	continue;
@@ -6069,19 +6819,19 @@ try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
 	continue;
 
       if (iv_ca_cand_used_p (ivs, cand))
-        continue;
+	continue;
 
-      cp = get_use_iv_cost (data, use, cand);
+      cp = get_group_iv_cost (data, group, cand);
       if (!cp)
 	continue;
 
-      iv_ca_set_cp (data, ivs, use, cp);
+      iv_ca_set_cp (data, ivs, group, cp);
       act_cost = iv_ca_extend (data, ivs, cand, &act_delta, NULL,
-                               true);
-      iv_ca_set_no_cp (data, ivs, use);
-      act_delta = iv_ca_delta_add (use, NULL, cp, act_delta);
+			       true);
+      iv_ca_set_no_cp (data, ivs, group);
+      act_delta = iv_ca_delta_add (group, NULL, cp, act_delta);
 
-      if (compare_costs (act_cost, best_cost) < 0)
+      if (act_cost < best_cost)
 	{
 	  best_cost = act_cost;
 
@@ -6092,11 +6842,11 @@ try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
 	iv_ca_delta_free (&act_delta);
     }
 
-  if (infinite_cost_p (best_cost))
+  if (best_cost.infinite_cost_p ())
     {
-      for (i = 0; i < use->n_map_members; i++)
+      for (i = 0; i < group->n_map_members; i++)
 	{
-	  cp = use->cost_map + i;
+	  cp = group->cost_map + i;
 	  cand = cp->cand;
 	  if (!cand)
 	    continue;
@@ -6114,13 +6864,14 @@ try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
 	    continue;
 
 	  act_delta = NULL;
-	  iv_ca_set_cp (data, ivs, use, cp);
+	  iv_ca_set_cp (data, ivs, group, cp);
 	  act_cost = iv_ca_extend (data, ivs, cand, &act_delta, NULL, true);
-	  iv_ca_set_no_cp (data, ivs, use);
-	  act_delta = iv_ca_delta_add (use, iv_ca_cand_for_use (ivs, use),
+	  iv_ca_set_no_cp (data, ivs, group);
+	  act_delta = iv_ca_delta_add (group,
+				       iv_ca_cand_for_group (ivs, group),
 				       cp, act_delta);
 
-	  if (compare_costs (act_cost, best_cost) < 0)
+	  if (act_cost < best_cost)
 	    {
 	      best_cost = act_cost;
 
@@ -6136,7 +6887,7 @@ try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
   iv_ca_delta_commit (data, ivs, best_delta, true);
   iv_ca_delta_free (&best_delta);
 
-  return !infinite_cost_p (best_cost);
+  return !best_cost.infinite_cost_p ();
 }
 
 /* Finds an initial assignment of candidates to uses.  */
@@ -6144,11 +6895,11 @@ try_add_cand_for (struct ivopts_data *data, struct iv_ca *ivs,
 static struct iv_ca *
 get_initial_solution (struct ivopts_data *data, bool originalp)
 {
-  struct iv_ca *ivs = iv_ca_new (data);
   unsigned i;
+  struct iv_ca *ivs = iv_ca_new (data);
 
-  for (i = 0; i < n_iv_uses (data); i++)
-    if (!try_add_cand_for (data, ivs, iv_use (data, i), originalp))
+  for (i = 0; i < data->vgroups.length (); i++)
+    if (!try_add_cand_for (data, ivs, data->vgroups[i], originalp))
       {
 	iv_ca_free (&ivs);
 	return NULL;
@@ -6171,9 +6922,9 @@ try_improve_iv_set (struct ivopts_data *data,
   struct iv_cand *cand;
 
   /* Try extending the set of induction variables by one.  */
-  for (i = 0; i < n_iv_cands (data); i++)
+  for (i = 0; i < data->vcands.length (); i++)
     {
-      cand = iv_cand (data, i);
+      cand = data->vcands[i];
 
       if (iv_ca_cand_used_p (ivs, cand))
 	continue;
@@ -6192,7 +6943,7 @@ try_improve_iv_set (struct ivopts_data *data,
 	  act_delta = iv_ca_delta_join (act_delta, tmp_delta);
 	}
 
-      if (compare_costs (acost, best_cost) < 0)
+      if (acost < best_cost)
 	{
 	  best_cost = acost;
 	  iv_ca_delta_free (&best_delta);
@@ -6226,7 +6977,7 @@ try_improve_iv_set (struct ivopts_data *data,
     }
 
   iv_ca_delta_commit (data, ivs, best_delta, true);
-  gcc_assert (compare_costs (best_cost, iv_ca_cost (ivs)) == 0);
+  gcc_assert (best_cost == iv_ca_cost (ivs));
   iv_ca_delta_free (&best_delta);
   return true;
 }
@@ -6272,9 +7023,8 @@ static struct iv_ca *
 find_optimal_iv_set (struct ivopts_data *data)
 {
   unsigned i;
-  struct iv_ca *set, *origset;
-  struct iv_use *use;
   comp_cost cost, origcost;
+  struct iv_ca *set, *origset;
 
   /* Determine the cost based on a strategy that starts with original IVs,
      and try again using a strategy that prefers candidates not based
@@ -6297,7 +7047,7 @@ find_optimal_iv_set (struct ivopts_data *data)
     }
 
   /* Choose the one with the best cost.  */
-  if (compare_costs (origcost, cost) <= 0)
+  if (origcost <= cost)
     {
       if (set)
 	iv_ca_free (&set);
@@ -6306,10 +7056,10 @@ find_optimal_iv_set (struct ivopts_data *data)
   else if (origset)
     iv_ca_free (&origset);
 
-  for (i = 0; i < n_iv_uses (data); i++)
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      use = iv_use (data, i);
-      use->selected = iv_ca_cand_for_use (set, use)->cand;
+      struct iv_group *group = data->vgroups[i];
+      group->selected = iv_ca_cand_for_group (set, group)->cand;
     }
 
   return set;
@@ -6322,6 +7072,8 @@ create_new_iv (struct ivopts_data *data, struct iv_cand *cand)
 {
   gimple_stmt_iterator incr_pos;
   tree base;
+  struct iv_use *use;
+  struct iv_group *group;
   bool after = false;
 
   if (!cand->iv)
@@ -6351,7 +7103,9 @@ create_new_iv (struct ivopts_data *data, struct iv_cand *cand)
       name_info (data, cand->var_after)->preserve_biv = true;
 
       /* Rewrite the increment so that it uses var_before directly.  */
-      find_interesting_uses_op (data, cand->var_after)->selected = cand;
+      use = find_interesting_uses_op (data, cand->var_after);
+      group = data->vgroups[use->group_id];
+      group->selected = cand;
       return;
     }
 
@@ -6375,7 +7129,7 @@ create_new_ivs (struct ivopts_data *data, struct iv_ca *set)
 
   EXECUTE_IF_SET_IN_BITMAP (set->cands, 0, i, bi)
     {
-      cand = iv_cand (data, i);
+      cand = data->vcands[i];
       create_new_iv (data, cand);
     }
 
@@ -6386,12 +7140,16 @@ create_new_ivs (struct ivopts_data *data, struct iv_ca *set)
       if (data->loop_loc != UNKNOWN_LOCATION)
 	fprintf (dump_file, " at %s:%d", LOCATION_FILE (data->loop_loc),
 		 LOCATION_LINE (data->loop_loc));
+      fprintf (dump_file, ", " HOST_WIDE_INT_PRINT_DEC " avg niters",
+	       avg_loop_niter (data->current_loop));
+      fprintf (dump_file, ", " HOST_WIDE_INT_PRINT_UNSIGNED " expressions",
+	       (unsigned HOST_WIDE_INT) set->used_inv_exprs->elements ());
       fprintf (dump_file, ", %lu IVs:\n", bitmap_count_bits (set->cands));
       EXECUTE_IF_SET_IN_BITMAP (set->cands, 0, i, bi)
-        {
-          cand = iv_cand (data, i);
-          dump_cand (dump_file, cand);
-        }
+	{
+	  cand = data->vcands[i];
+	  dump_cand (dump_file, cand);
+	}
       fprintf (dump_file, "\n");
     }
 }
@@ -6404,7 +7162,7 @@ rewrite_use_nonlinear_expr (struct ivopts_data *data,
 			    struct iv_use *use, struct iv_cand *cand)
 {
   tree comp;
-  tree op, tgt;
+  tree tgt;
   gassign *ass;
   gimple_stmt_iterator bsi;
 
@@ -6415,6 +7173,7 @@ rewrite_use_nonlinear_expr (struct ivopts_data *data,
   if (cand->pos == IP_ORIGINAL
       && cand->incremented_at == use->stmt)
     {
+      tree op = NULL_TREE;
       enum tree_code stmt_code;
 
       gcc_assert (is_gimple_assign (use->stmt));
@@ -6434,14 +7193,19 @@ rewrite_use_nonlinear_expr (struct ivopts_data *data,
 	    op = gimple_assign_rhs2 (use->stmt);
 	  else if (gimple_assign_rhs2 (use->stmt) == cand->var_before)
 	    op = gimple_assign_rhs1 (use->stmt);
-	  else
-	    op = NULL_TREE;
 	}
-      else
-	op = NULL_TREE;
 
-      if (op && expr_invariant_in_loop_p (data->current_loop, op))
-	return;
+      if (op != NULL_TREE)
+	{
+	  if (expr_invariant_in_loop_p (data->current_loop, op))
+	    return;
+	  if (TREE_CODE (op) == SSA_NAME)
+	    {
+	      struct iv *iv = get_iv (data, op);
+	      if (iv != NULL && integer_zerop (iv->step))
+		return;
+	    }
+	}
     }
 
   comp = get_computation (data->current_loop, use, cand);
@@ -6532,7 +7296,7 @@ static void
 adjust_iv_update_pos (struct iv_cand *cand, struct iv_use *use)
 {
   tree var_after;
-  gimple iv_update, stmt;
+  gimple *iv_update, *stmt;
   basic_block bb;
   gimple_stmt_iterator gsi, gsi_iv;
 
@@ -6617,7 +7381,11 @@ rewrite_use_address (struct ivopts_data *data,
     base_hint = var_at_stmt (data->current_loop, cand, use->stmt);
 
   iv = var_at_stmt (data->current_loop, cand, use->stmt);
-  ref = create_mem_ref (&bsi, TREE_TYPE (*use->op_p), &aff,
+  tree type = TREE_TYPE (*use->op_p);
+  unsigned int align = get_object_alignment (*use->op_p);
+  if (align != TYPE_ALIGN (type))
+    type = build_aligned_type (type, align);
+  ref = create_mem_ref (&bsi, type, &aff,
 			reference_alias_ptr_type (*use->op_p),
 			iv, base_hint, data->speed);
   copy_ref_info (ref, *use->op_p);
@@ -6634,7 +7402,8 @@ rewrite_use_compare (struct ivopts_data *data,
   tree comp, *var_p, op, bound;
   gimple_stmt_iterator bsi = gsi_for_stmt (use->stmt);
   enum tree_code compare;
-  struct cost_pair *cp = get_use_iv_cost (data, use, cand);
+  struct iv_group *group = data->vgroups[use->group_id];
+  struct cost_pair *cp = get_group_iv_cost (data, group, cand);
   bool ok;
 
   bound = cp->value;
@@ -6645,10 +7414,10 @@ rewrite_use_compare (struct ivopts_data *data,
       gimple_seq stmts;
 
       if (dump_file && (dump_flags & TDF_DETAILS))
-        {
-          fprintf (dump_file, "Replacing exit test: ");
-          print_gimple_stmt (dump_file, use->stmt, 0, TDF_SLIM);
-        }
+	{
+	  fprintf (dump_file, "Replacing exit test: ");
+	  print_gimple_stmt (dump_file, use->stmt, 0, TDF_SLIM);
+	}
       compare = cp->comp;
       bound = unshare_expr (fold_convert (var_type, bound));
       op = force_gimple_operand (bound, &stmts, true, NULL_TREE);
@@ -6676,48 +7445,46 @@ rewrite_use_compare (struct ivopts_data *data,
 				     true, GSI_SAME_STMT);
 }
 
-/* Rewrites USE using candidate CAND.  */
+/* Rewrite the groups using the selected induction variables.  */
 
 static void
-rewrite_use (struct ivopts_data *data, struct iv_use *use, struct iv_cand *cand)
+rewrite_groups (struct ivopts_data *data)
 {
-  switch (use->type)
+  unsigned i, j;
+
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      case USE_NONLINEAR_EXPR:
-	rewrite_use_nonlinear_expr (data, use, cand);
-	break;
+      struct iv_group *group = data->vgroups[i];
+      struct iv_cand *cand = group->selected;
 
-      case USE_ADDRESS:
-	rewrite_use_address (data, use, cand);
-	break;
-
-      case USE_COMPARE:
-	rewrite_use_compare (data, use, cand);
-	break;
-
-      default:
-	gcc_unreachable ();
-    }
-
-  update_stmt (use->stmt);
-}
-
-/* Rewrite the uses using the selected induction variables.  */
-
-static void
-rewrite_uses (struct ivopts_data *data)
-{
-  unsigned i;
-  struct iv_cand *cand;
-  struct iv_use *use;
-
-  for (i = 0; i < n_iv_uses (data); i++)
-    {
-      use = iv_use (data, i);
-      cand = use->selected;
       gcc_assert (cand);
 
-      rewrite_use (data, use, cand);
+      if (group->type == USE_NONLINEAR_EXPR)
+	{
+	  for (j = 0; j < group->vuses.length (); j++)
+	    {
+	      rewrite_use_nonlinear_expr (data, group->vuses[j], cand);
+	      update_stmt (group->vuses[j]->stmt);
+	    }
+	}
+      else if (group->type == USE_ADDRESS)
+	{
+	  for (j = 0; j < group->vuses.length (); j++)
+	    {
+	      rewrite_use_address (data, group->vuses[j], cand);
+	      update_stmt (group->vuses[j]->stmt);
+	    }
+	}
+      else
+	{
+	  gcc_assert (group->type == USE_COMPARE);
+
+	  for (j = 0; j < group->vuses.length (); j++)
+	    {
+	      rewrite_use_compare (data, group->vuses[j], cand);
+	      update_stmt (group->vuses[j]->stmt);
+	    }
+	}
     }
 }
 
@@ -6741,18 +7508,18 @@ remove_unused_ivs (struct ivopts_data *data)
       if (info->iv
 	  && !integer_zerop (info->iv->step)
 	  && !info->inv_id
-	  && !info->iv->have_use_for
+	  && !info->iv->nonlin_use
 	  && !info->preserve_biv)
 	{
 	  bitmap_set_bit (toremove, SSA_NAME_VERSION (info->iv->ssa_name));
-	  
+
 	  tree def = info->iv->ssa_name;
 
 	  if (MAY_HAVE_DEBUG_STMTS && SSA_NAME_DEF_STMT (def))
 	    {
 	      imm_use_iterator imm_iter;
 	      use_operand_p use_p;
-	      gimple stmt;
+	      gimple *stmt;
 	      int count = 0;
 
 	      FOR_EACH_IMM_USE_STMT (stmt, imm_iter, def)
@@ -6783,9 +7550,9 @@ remove_unused_ivs (struct ivopts_data *data)
 
 	      memset (&dummy_use, 0, sizeof (dummy_use));
 	      dummy_use.iv = info->iv;
-	      for (i = 0; i < n_iv_uses (data) && i < 64; i++)
+	      for (i = 0; i < data->vgroups.length () && i < 64; i++)
 		{
-		  cand = iv_use (data, i)->selected;
+		  cand = data->vgroups[i]->selected;
 		  if (cand == best_cand)
 		    continue;
 		  cand_pref = operand_equal_p (cand->iv->step,
@@ -6820,9 +7587,9 @@ remove_unused_ivs (struct ivopts_data *data)
 		  DECL_ARTIFICIAL (vexpr) = 1;
 		  TREE_TYPE (vexpr) = TREE_TYPE (comp);
 		  if (SSA_NAME_VAR (def))
-		    DECL_MODE (vexpr) = DECL_MODE (SSA_NAME_VAR (def));
+		    SET_DECL_MODE (vexpr, DECL_MODE (SSA_NAME_VAR (def)));
 		  else
-		    DECL_MODE (vexpr) = TYPE_MODE (TREE_TYPE (vexpr));
+		    SET_DECL_MODE (vexpr, TYPE_MODE (TREE_TYPE (vexpr)));
 		  gdebug *def_temp
 		    = gimple_build_debug_bind (vexpr, comp, NULL);
 		  gimple_stmt_iterator gsi;
@@ -6887,7 +7654,6 @@ free_loop_data (struct ivopts_data *data)
       struct version_info *info;
 
       info = ver_info (data, i);
-      free (info->iv);
       info->iv = NULL;
       info->has_nonlin_use = false;
       info->preserve_biv = false;
@@ -6896,30 +7662,33 @@ free_loop_data (struct ivopts_data *data)
   bitmap_clear (data->relevant);
   bitmap_clear (data->important_candidates);
 
-  for (i = 0; i < n_iv_uses (data); i++)
+  for (i = 0; i < data->vgroups.length (); i++)
     {
-      struct iv_use *use = iv_use (data, i);
+      struct iv_group *group = data->vgroups[i];
 
-      free (use->iv);
-      BITMAP_FREE (use->related_cands);
-      for (j = 0; j < use->n_map_members; j++)
-	if (use->cost_map[j].depends_on)
-	  BITMAP_FREE (use->cost_map[j].depends_on);
-      free (use->cost_map);
-      free (use);
+      for (j = 0; j < group->vuses.length (); j++)
+	free (group->vuses[j]);
+      group->vuses.release ();
+
+      BITMAP_FREE (group->related_cands);
+      for (j = 0; j < group->n_map_members; j++)
+	if (group->cost_map[j].depends_on)
+	  BITMAP_FREE (group->cost_map[j].depends_on);
+
+      free (group->cost_map);
+      free (group);
     }
-  data->iv_uses.truncate (0);
+  data->vgroups.truncate (0);
 
-  for (i = 0; i < n_iv_cands (data); i++)
+  for (i = 0; i < data->vcands.length (); i++)
     {
-      struct iv_cand *cand = iv_cand (data, i);
+      struct iv_cand *cand = data->vcands[i];
 
-      free (cand->iv);
       if (cand->depends_on)
 	BITMAP_FREE (cand->depends_on);
       free (cand);
     }
-  data->iv_candidates.truncate (0);
+  data->vcands.truncate (0);
 
   if (data->version_info_size < num_ssa_names)
     {
@@ -6936,7 +7705,10 @@ free_loop_data (struct ivopts_data *data)
   decl_rtl_to_reset.truncate (0);
 
   data->inv_expr_tab->empty ();
-  data->inv_expr_id = 0;
+  data->max_inv_expr_id = 0;
+
+  data->iv_common_cand_tab->empty ();
+  data->iv_common_cands.truncate (0);
 }
 
 /* Finalizes data structures used by the iv optimization pass.  LOOPS is the
@@ -6951,11 +7723,15 @@ tree_ssa_iv_optimize_finalize (struct ivopts_data *data)
   BITMAP_FREE (data->important_candidates);
 
   decl_rtl_to_reset.release ();
-  data->iv_uses.release ();
-  data->iv_candidates.release ();
+  data->vgroups.release ();
+  data->vcands.release ();
   delete data->inv_expr_tab;
   data->inv_expr_tab = NULL;
   free_affine_expand_cache (&data->name_expansion_cache);
+  delete data->iv_common_cand_tab;
+  data->iv_common_cand_tab = NULL;
+  data->iv_common_cands.release ();
+  obstack_free (&data->iv_obstack, NULL);
 }
 
 /* Returns true if the loop body BODY includes any function calls.  */
@@ -6969,8 +7745,9 @@ loop_body_includes_call (basic_block *body, unsigned num_nodes)
   for (i = 0; i < num_nodes; i++)
     for (gsi = gsi_start_bb (body[i]); !gsi_end_p (gsi); gsi_next (&gsi))
       {
-	gimple stmt = gsi_stmt (gsi);
+	gimple *stmt = gsi_stmt (gsi);
 	if (is_gimple_call (stmt)
+	    && !gimple_call_internal_p (stmt)
 	    && !is_inexpensive_builtin (gimple_call_fndecl (stmt)))
 	  return true;
       }
@@ -7025,7 +7802,7 @@ tree_ssa_iv_optimize_loop (struct ivopts_data *data, struct loop *loop)
 
   /* Finds interesting uses (item 1).  */
   find_interesting_uses (data);
-  if (n_iv_uses (data) > MAX_CONSIDERED_USES)
+  if (data->vgroups.length () > MAX_CONSIDERED_GROUPS)
     goto finish;
 
   /* Finds candidates for the induction variables (item 2).  */
@@ -7033,7 +7810,7 @@ tree_ssa_iv_optimize_loop (struct ivopts_data *data, struct loop *loop)
 
   /* Calculates the costs (item 3, part 1).  */
   determine_iv_costs (data);
-  determine_use_iv_costs (data);
+  determine_group_iv_costs (data);
   determine_set_costs (data);
 
   /* Find the optimal set of induction variables (item 3, part 2).  */
@@ -7047,7 +7824,7 @@ tree_ssa_iv_optimize_loop (struct ivopts_data *data, struct loop *loop)
   iv_ca_free (&iv_ca);
 
   /* Rewrite the uses (item 4, part 2).  */
-  rewrite_uses (data);
+  rewrite_groups (data);
 
   /* Remove the ivs that are unused after rewriting.  */
   remove_unused_ivs (data);

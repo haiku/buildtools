@@ -28,4 +28,3 @@ t (void)
 // And as a result also contained control flow.
 // { dg-final { scan-tree-dump-times "Removing unreachable" 4 "ehcleanup1" } }
 //
-// { dg-final { cleanup-tree-dump "ehcleanup1" } }

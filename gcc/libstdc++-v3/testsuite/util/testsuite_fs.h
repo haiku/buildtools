@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // Filesystem utils for the C++ library testsuite.
 //
-// Copyright (C) 2014-2015 Free Software Foundation, Inc.
+// Copyright (C) 2014-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -23,7 +23,7 @@
 #define _TESTSUITE_FS_H 1
 
 #include <experimental/filesystem>
-#include <iostream>
+#include <fstream>
 #include <string>
 #include <cstdio>
 #include <stdlib.h>
@@ -40,7 +40,6 @@ namespace __gnu_test
   compare_paths(const std::experimental::filesystem::path& p1,
 		const std::experimental::filesystem::path& p2)
   {
-    // std::cout << "Comparing " << p1 << " and " << p2 << std::endl;
     PATH_CHK( p1, p2, string );
     PATH_CHK( p1, p2, empty );
     PATH_CHK( p1, p2, has_root_path );
@@ -73,7 +72,7 @@ namespace __gnu_test
   {
     std::experimental::filesystem::path p;
 #if defined(_GNU_SOURCE) || _XOPEN_SOURCE >= 500 || _POSIX_C_SOURCE >= 200112L
-    char tmp[] = "test.XXXXXX";
+    char tmp[] = "filesystem-ts-test.XXXXXX";
     int fd = ::mkstemp(tmp);
     if (fd == -1)
       throw std::experimental::filesystem::filesystem_error("mkstemp failed",
@@ -84,12 +83,34 @@ namespace __gnu_test
 #else
     char buf[64];
     static int counter;
-    std::sprintf(buf, "filesystem-ts-test.%d.%lu", counter++,
-		 (unsigned long) ::getpid());
+#if _GLIBCXX_USE_C99_STDIO
+    std::snprintf(buf, 64,
+#else
+    std::sprintf(buf,
+#endif
+      "filesystem-ts-test.%d.%lu", counter++, (unsigned long) ::getpid());
     p = buf;
 #endif
     return p;
   }
+
+  // RAII helper to remove a file on scope exit.
+  struct scoped_file
+  {
+    using path_type = std::experimental::filesystem::path;
+
+    enum adopt_file_t { adopt_file };
+
+    explicit
+    scoped_file(const path_type& p = nonexistent_path()) : path(p)
+    { std::ofstream{p.native()}; }
+
+    scoped_file(path_type p, adopt_file_t) : path(p) { }
+
+    ~scoped_file() { if (!path.empty()) remove(path); }
+
+    path_type path;
+  };
 
 } // namespace __gnu_test
 #endif

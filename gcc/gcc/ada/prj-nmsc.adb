@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2000-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 2000-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -580,7 +580,7 @@ package body Prj.Nmsc is
          Canonical_Case_File_Name (Suf);
 
          --  The file name must end with the suffix (which is not an extension)
-         --  For instance a suffix "configure.in" must match a file with the
+         --  For instance a suffix "configure.ac" must match a file with the
          --  same name. To avoid dummy cases, though, a suffix starting with
          --  '.' requires a file that is at least one character longer ('.cpp'
          --  should not match a file with the same name).
@@ -1501,9 +1501,9 @@ package body Prj.Nmsc is
                            Lang_Index.Config.Compiler_Driver :=
                              File_Name_Type (Element.Value.Value);
 
-                        when Name_Required_Switches
-                           | Name_Leading_Required_Switches
-                           =>
+                        when Name_Leading_Required_Switches
+                           | Name_Required_Switches
+                        =>
                            Put (Into_List =>
                                   Lang_Index.Config.
                                     Compiler_Leading_Required_Switches,
@@ -1808,8 +1808,9 @@ package body Prj.Nmsc is
                     and then Element.Value.Value /= No_Name
                   then
                      case Current_Array.Name is
-                        when Name_Spec_Suffix | Name_Specification_Suffix =>
-
+                        when Name_Spec_Suffix
+                           | Name_Specification_Suffix
+                        =>
                            --  Attribute Spec_Suffix (<language>)
 
                            Get_Name_String (Element.Value.Value);
@@ -1818,8 +1819,9 @@ package body Prj.Nmsc is
                            Lang_Index.Config.Naming_Data.Spec_Suffix :=
                              Name_Find;
 
-                        when Name_Implementation_Suffix | Name_Body_Suffix =>
-
+                        when Name_Body_Suffix
+                           | Name_Implementation_Suffix
+                        =>
                            Get_Name_String (Element.Value.Value);
                            Canonical_Case_File_Name
                              (Name_Buffer (1 .. Name_Len));
@@ -2513,6 +2515,7 @@ package body Prj.Nmsc is
                                  & """ for Objects_Linked",
                                  Element.Value.Location, Project);
                         end;
+
                      when others =>
                         null;
                   end case;
@@ -3448,7 +3451,9 @@ package body Prj.Nmsc is
                      Lib_Name.Location, Project);
                end if;
 
-            when Library | Aggregate_Library =>
+            when Aggregate_Library
+               | Library
+            =>
                if not Project.Library then
                   if Project.Library_Name = No_Name then
                      Error_Msg
@@ -4043,7 +4048,9 @@ package body Prj.Nmsc is
 
       begin
          case Kind is
-            when Impl | Sep =>
+            when Impl
+               | Sep
+            =>
                Exceptions :=
                  Value_Of
                    (Name_Implementation_Exceptions,
@@ -4139,7 +4146,9 @@ package body Prj.Nmsc is
 
       begin
          case Kind is
-            when Impl | Sep =>
+            when Impl
+               | Sep
+            =>
                Exceptions :=
                  Value_Of
                    (Name_Body,
@@ -4403,11 +4412,11 @@ package body Prj.Nmsc is
                Lang_Id := Project.Languages;
                while Lang_Id /= No_Language_Index loop
                   case Lang_Id.Config.Kind is
-                  when File_Based =>
-                     Process_Exceptions_File_Based (Lang_Id, Kind);
+                     when File_Based =>
+                        Process_Exceptions_File_Based (Lang_Id, Kind);
 
-                  when Unit_Based =>
-                     Process_Exceptions_Unit_Based (Lang_Id, Kind);
+                     when Unit_Based =>
+                        Process_Exceptions_Unit_Based (Lang_Id, Kind);
                   end case;
 
                   Lang_Id := Lang_Id.Next;
@@ -4452,7 +4461,7 @@ package body Prj.Nmsc is
             --  An extending project inherits its parent projects' languages
             --  so if needed we should create entries for those languages
 
-            if Lang = null  then
+            if Lang = null then
                Extended := Project.Extends;
                while Extended /= null loop
                   Lang := Get_Language_From_Name
@@ -5589,7 +5598,9 @@ package body Prj.Nmsc is
             end if;
          end if;
 
-      elsif not No_Sources and then Subdirs /= null then
+      elsif not No_Sources
+        and then (Subdirs /= null or else Build_Tree_Dir /= null)
+      then
          Name_Len := 1;
          Name_Buffer (1) := '.';
          Locate_Directory
@@ -5999,7 +6010,9 @@ package body Prj.Nmsc is
                   end if;
                end loop;
 
-            when Mixed_Case | Unknown =>
+            when Mixed_Case
+               | Unknown
+            =>
                null;
          end case;
       end if;
@@ -6204,7 +6217,44 @@ package body Prj.Nmsc is
       The_Name        : File_Name_Type;
 
    begin
-      Get_Name_String (Name);
+      --  Check if we have a root-object dir specified, if so relocate all
+      --  artefact directories to it.
+
+      if Build_Tree_Dir /= null
+        and then Create /= ""
+        and then not Is_Absolute_Path (Get_Name_String (Name))
+      then
+         Name_Len := 0;
+         Add_Str_To_Name_Buffer (Build_Tree_Dir.all);
+
+         if The_Parent_Last - The_Parent'First  + 1 < Root_Dir'Length then
+            Err_Vars.Error_Msg_File_1 := Name;
+            Error_Or_Warning
+              (Data.Flags, Error,
+               "{ cannot relocate deeper than " & Create & " directory",
+               No_Location, Project);
+         end if;
+
+         Add_Str_To_Name_Buffer
+           (Relative_Path
+              (The_Parent (The_Parent'First .. The_Parent_Last),
+               Root_Dir.all));
+         Add_Str_To_Name_Buffer (Get_Name_String (Name));
+
+      else
+         if Build_Tree_Dir /= null and then Create /= "" then
+
+            --  Issue a warning that we cannot relocate absolute obj dir
+
+            Err_Vars.Error_Msg_File_1 := Name;
+            Error_Or_Warning
+              (Data.Flags, Warning,
+               "{ cannot relocate absolute object directory",
+               No_Location, Project);
+         end if;
+
+         Get_Name_String (Name);
+      end if;
 
       --  Add Subdirs.all if it is a directory that may be created and
       --  Subdirs is not null;
@@ -8373,11 +8423,13 @@ package body Prj.Nmsc is
          when Silent =>
             null;
 
-         when Warning | Error =>
+         when Error
+            | Warning
+         =>
             declare
                Msg : constant String :=
-                      "<there are no "
-                      & Lang_Name & " sources in this project";
+                       "<there are no " & Lang_Name
+                         & " sources in this project";
 
             begin
                Error_Msg_Warn := Data.Flags.When_No_Sources = Warning;

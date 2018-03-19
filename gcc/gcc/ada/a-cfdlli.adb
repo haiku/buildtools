@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2010-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 2010-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -25,12 +25,11 @@
 -- <http://www.gnu.org/licenses/>.                                          --
 ------------------------------------------------------------------------------
 
-with System;  use type System.Address;
+with System; use type System.Address;
 
 package body Ada.Containers.Formal_Doubly_Linked_Lists with
   SPARK_Mode => Off
 is
-   pragma Annotate (CodePeer, Skip_Analysis);
 
    -----------------------
    -- Local Subprograms --
@@ -581,7 +580,7 @@ is
    -- Generic_Sorting --
    ---------------------
 
-   package body Generic_Sorting is
+   package body Generic_Sorting with SPARK_Mode => Off is
 
       ---------------
       -- Is_Sorted --

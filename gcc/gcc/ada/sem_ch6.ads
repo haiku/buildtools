@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -44,31 +44,6 @@ package Sem_Ch6 is
    procedure Analyze_Simple_Return_Statement         (N : Node_Id);
    procedure Analyze_Subprogram_Declaration          (N : Node_Id);
    procedure Analyze_Subprogram_Body                 (N : Node_Id);
-
-   procedure Analyze_Subprogram_Body_Contract (Body_Id : Entity_Id);
-   --  Analyze all delayed aspects chained on the contract of subprogram body
-   --  Body_Id as if they appeared at the end of a declarative region. Aspects
-   --  in question are:
-   --    Contract_Cases   (stand alone body)
-   --    Depends          (stand alone body)
-   --    Global           (stand alone body)
-   --    Postcondition    (stand alone body)
-   --    Precondition     (stand alone body)
-   --    Refined_Depends
-   --    Refined_Global
-   --    Refined_Post
-   --    Test_Case        (stand alone body)
-
-   procedure Analyze_Subprogram_Contract (Subp_Id : Entity_Id);
-   --  Analyze all delayed aspects chained on the contract of subprogram
-   --  Subp_Id as if they appeared at the end of a declarative region. The
-   --  aspects in question are:
-   --    Contract_Cases
-   --    Depends
-   --    Global
-   --    Postcondition
-   --    Precondition
-   --    Test_Case
 
    function Analyze_Subprogram_Specification (N : Node_Id) return Entity_Id;
    --  Analyze subprogram specification in both subprogram declarations
@@ -146,6 +121,15 @@ package Sem_Ch6 is
    --  argument Get_Inst is set to True when this is a check against a
    --  formal access-to-subprogram type, indicating that mapping of types
    --  is needed.
+
+   procedure Check_Synchronized_Overriding
+     (Def_Id          : Entity_Id;
+      Overridden_Subp : out Entity_Id);
+   --  First determine if Def_Id is an entry or a subprogram either defined in
+   --  the scope of a task or protected type, or that is a primitive of such
+   --  a type. Check whether Def_Id overrides a subprogram of an interface
+   --  implemented by the synchronized type, returning the overridden entity
+   --  or Empty.
 
    procedure Check_Type_Conformant
      (New_Id  : Entity_Id;

@@ -1,5 +1,5 @@
 /* Generic partial redundancy elimination with lazy code motion support.
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -51,28 +51,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "rtl.h"
-#include "regs.h"
-#include "hard-reg-set.h"
-#include "flags.h"
-#include "insn-config.h"
-#include "recog.h"
-#include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
+#include "backend.h"
 #include "cfganal.h"
 #include "lcm.h"
-#include "basic-block.h"
-#include "tm_p.h"
-#include "sbitmap.h"
-#include "dumpfile.h"
 
 /* Edge based LCM routines.  */
 static void compute_antinout_edge (sbitmap *, sbitmap *, sbitmap *, sbitmap *);
@@ -189,15 +170,12 @@ compute_earliest (struct edge_list *edge_list, int n_exprs, sbitmap *antin,
 		  sbitmap *antout, sbitmap *avout, sbitmap *kill,
 		  sbitmap *earliest)
 {
-  sbitmap difference, temp_bitmap;
   int x, num_edges;
   basic_block pred, succ;
 
   num_edges = NUM_EDGES (edge_list);
 
-  difference = sbitmap_alloc (n_exprs);
-  temp_bitmap = sbitmap_alloc (n_exprs);
-
+  auto_sbitmap difference (n_exprs), temp_bitmap (n_exprs);
   for (x = 0; x < num_edges; x++)
     {
       pred = INDEX_EDGE_PRED_BB (edge_list, x);
@@ -218,9 +196,6 @@ compute_earliest (struct edge_list *edge_list, int n_exprs, sbitmap *antin,
 	    }
 	}
     }
-
-  sbitmap_free (temp_bitmap);
-  sbitmap_free (difference);
 }
 
 /* later(p,s) is dependent on the calculation of laterin(p).
@@ -613,15 +588,12 @@ compute_farthest (struct edge_list *edge_list, int n_exprs,
 		  sbitmap *st_avout, sbitmap *st_avin, sbitmap *st_antin,
 		  sbitmap *kill, sbitmap *farthest)
 {
-  sbitmap difference, temp_bitmap;
   int x, num_edges;
   basic_block pred, succ;
 
   num_edges = NUM_EDGES (edge_list);
 
-  difference = sbitmap_alloc (n_exprs);
-  temp_bitmap = sbitmap_alloc (n_exprs);
-
+  auto_sbitmap difference (n_exprs), temp_bitmap (n_exprs);
   for (x = 0; x < num_edges; x++)
     {
       pred = INDEX_EDGE_PRED_BB (edge_list, x);
@@ -642,9 +614,6 @@ compute_farthest (struct edge_list *edge_list, int n_exprs,
 	    }
 	}
     }
-
-  sbitmap_free (temp_bitmap);
-  sbitmap_free (difference);
 }
 
 /* Compute nearer and nearerout vectors for edge based lcm.

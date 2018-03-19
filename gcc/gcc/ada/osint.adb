@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -45,6 +45,8 @@ pragma Warnings (On);
 with GNAT.HTable;
 
 package body Osint is
+
+   use type CRTL.size_t;
 
    Running_Program : Program_Type := Unspecified;
    --  comment required here ???
@@ -135,12 +137,12 @@ package body Osint is
    --  A version of Smart_Find_File that also returns a cache of the file
    --  attributes for later reuse
 
-   function C_String_Length (S : Address) return Integer;
+   function C_String_Length (S : Address) return CRTL.size_t;
    --  Returns length of a C string (zero for a null address)
 
    function To_Path_String_Access
      (Path_Addr : Address;
-      Path_Len  : Integer) return String_Access;
+      Path_Len  : CRTL.size_t) return String_Access;
    --  Converts a C String to an Ada String. Are we doing this to avoid withing
    --  Interfaces.C.Strings ???
    --  Caller must free result.
@@ -155,7 +157,7 @@ package body Osint is
    EOL : constant Character := ASCII.LF;
    --  End of line character
 
-   Number_File_Names : Int := 0;
+   Number_File_Names : Nat := 0;
    --  Number of file names found on command line and placed in File_Names
 
    Look_In_Primary_Directory_For_Current_Main : Boolean := False;
@@ -419,27 +421,18 @@ package body Osint is
          pragma Import (C, C_Get_Libraries_From_Registry,
                         "__gnat_get_libraries_from_registry");
 
-         function Strlen (Str : Address) return Integer;
-         pragma Import (C, Strlen, "strlen");
-
-         procedure Strncpy (X : Address; Y : Address; Length : Integer);
-         pragma Import (C, Strncpy, "strncpy");
-
-         procedure C_Free (Str : Address);
-         pragma Import (C, C_Free, "free");
-
          Result_Ptr    : Address;
-         Result_Length : Integer;
+         Result_Length : CRTL.size_t;
          Out_String    : String_Ptr;
 
       begin
          Result_Ptr := C_Get_Libraries_From_Registry;
-         Result_Length := Strlen (Result_Ptr);
+         Result_Length := CRTL.strlen (Result_Ptr);
 
-         Out_String := new String (1 .. Result_Length);
-         Strncpy (Out_String.all'Address, Result_Ptr, Result_Length);
+         Out_String := new String (1 .. Integer (Result_Length));
+         CRTL.strncpy (Out_String.all'Address, Result_Ptr, Result_Length);
 
-         C_Free (Result_Ptr);
+         CRTL.free (Result_Ptr);
 
          return Out_String;
       end Get_Libraries_From_Registry;
@@ -673,14 +666,12 @@ package body Osint is
    -- C_String_Length --
    ---------------------
 
-   function C_String_Length (S : Address) return Integer is
-      function Strlen (S : Address) return Integer;
-      pragma Import (C, Strlen, "strlen");
+   function C_String_Length (S : Address) return CRTL.size_t is
    begin
       if S = Null_Address then
          return 0;
       else
-         return Strlen (S);
+         return CRTL.strlen (S);
       end if;
    end C_String_Length;
 
@@ -1986,7 +1977,6 @@ package body Osint is
       Dir_Name := new String'(File_Name (File_Name'First .. Fptr - 1));
 
       case Running_Program is
-
          when Compiler =>
             Src_Search_Directories.Table (Primary_Directory) := Dir_Name;
             Look_In_Primary_Directory_For_Current_Main := True;
@@ -1998,7 +1988,9 @@ package body Osint is
                Look_In_Primary_Directory_For_Current_Main := True;
             end if;
 
-         when Binder | Gnatls =>
+         when Binder
+            | Gnatls
+          =>
             Dir_Name := Normalize_Directory_Name (Dir_Name.all);
             Lib_Search_Directories.Table (Primary_Directory) := Dir_Name;
 
@@ -2103,7 +2095,7 @@ package body Osint is
    -- Number_Of_Files --
    ---------------------
 
-   function Number_Of_Files return Int is
+   function Number_Of_Files return Nat is
    begin
       return Number_File_Names;
    end Number_Of_Files;
@@ -2212,31 +2204,6 @@ package body Osint is
       Start_Of_Suffix : Positive;
 
    begin
-      --  GNAAMP tool names require special treatment
-
-      if AAMP_On_Target then
-
-         --  The name "gcc" is mapped to "gnaamp" (the compiler driver)
-
-         if Nam = "gcc" then
-            return new String'("gnaamp");
-
-         --  Tool names starting with "gnat" are mapped by substituting the
-         --  string "gnaamp" for "gnat" (for example, "gnatpp" => "gnaamppp").
-
-         elsif Nam'Length >= 4
-           and then Nam (Nam'First .. Nam'First + 3) = "gnat"
-         then
-            return new String'("gnaamp" & Nam (Nam'First + 4 .. Nam'Last));
-
-         --  No other mapping rules, so we continue and handle any other forms
-         --  of tool names the same as on other targets.
-
-         else
-            null;
-         end if;
-      end if;
-
       --  Get the name of the current program being executed
 
       Find_Program_Name;
@@ -2761,7 +2728,7 @@ package body Osint is
          end if;
       end if;
 
-      if Path (Prefix'Range) = Prefix then
+      if Path'Last >= Prefix'Last and then Path (Prefix'Range) = Prefix then
          if Std_Prefix.all /= "" then
             S := new String
               (1 .. Std_Prefix'Length + Path'Last - Prefix'Last);
@@ -2959,7 +2926,7 @@ package body Osint is
 
       C_Host_Dir         : String (1 .. Host_Dir'Length + 1);
       Canonical_Dir_Addr : Address;
-      Canonical_Dir_Len  : Integer;
+      Canonical_Dir_Len  : CRTL.size_t;
 
    begin
       C_Host_Dir (1 .. Host_Dir'Length) := Host_Dir;
@@ -3023,7 +2990,7 @@ package body Osint is
       declare
          Canonical_File_List : String_Access_List (1 .. Num_Files);
          Canonical_File_Addr : Address;
-         Canonical_File_Len  : Integer;
+         Canonical_File_Len  : CRTL.size_t;
 
       begin
          --  Retrieve the expanded directory names and build the list
@@ -3056,7 +3023,7 @@ package body Osint is
 
       C_Host_File         : String (1 .. Host_File'Length + 1);
       Canonical_File_Addr : Address;
-      Canonical_File_Len  : Integer;
+      Canonical_File_Len  : CRTL.size_t;
 
    begin
       C_Host_File (1 .. Host_File'Length) := Host_File;
@@ -3091,7 +3058,7 @@ package body Osint is
 
       C_Host_Path         : String (1 .. Host_Path'Length + 1);
       Canonical_Path_Addr : Address;
-      Canonical_Path_Len  : Integer;
+      Canonical_Path_Len  : CRTL.size_t;
 
    begin
       C_Host_Path (1 .. Host_Path'Length) := Host_Path;
@@ -3126,7 +3093,7 @@ package body Osint is
 
       C_Canonical_Dir : String (1 .. Canonical_Dir'Length + 1);
       Host_Dir_Addr   : Address;
-      Host_Dir_Len    : Integer;
+      Host_Dir_Len    : CRTL.size_t;
 
    begin
       C_Canonical_Dir (1 .. Canonical_Dir'Length) := Canonical_Dir;
@@ -3158,7 +3125,7 @@ package body Osint is
 
       C_Canonical_File      : String (1 .. Canonical_File'Length + 1);
       Host_File_Addr : Address;
-      Host_File_Len  : Integer;
+      Host_File_Len  : CRTL.size_t;
 
    begin
       C_Canonical_File (1 .. Canonical_File'Length) := Canonical_File;
@@ -3181,9 +3148,9 @@ package body Osint is
 
    function To_Path_String_Access
      (Path_Addr : Address;
-      Path_Len  : Integer) return String_Access
+      Path_Len  : CRTL.size_t) return String_Access
    is
-      subtype Path_String is String (1 .. Path_Len);
+      subtype Path_String is String (1 .. Integer (Path_Len));
       type Path_String_Access is access Path_String;
 
       function Address_To_Access is new
@@ -3196,9 +3163,9 @@ package body Osint is
       Return_Val : String_Access;
 
    begin
-      Return_Val := new String (1 .. Path_Len);
+      Return_Val := new String (1 .. Integer (Path_Len));
 
-      for J in 1 .. Path_Len loop
+      for J in 1 .. Integer (Path_Len) loop
          Return_Val (J) := Path_Access (J);
       end loop;
 
@@ -3214,27 +3181,21 @@ package body Osint is
       function C_Update_Path (Path, Component : Address) return Address;
       pragma Import (C, C_Update_Path, "update_path");
 
-      function Strlen (Str : Address) return Integer;
-      pragma Import (C, Strlen, "strlen");
-
-      procedure Strncpy (X : Address; Y : Address; Length : Integer);
-      pragma Import (C, Strncpy, "strncpy");
-
       In_Length      : constant Integer := Path'Length;
       In_String      : String (1 .. In_Length + 1);
       Component_Name : aliased String := "GCC" & ASCII.NUL;
       Result_Ptr     : Address;
-      Result_Length  : Integer;
+      Result_Length  : CRTL.size_t;
       Out_String     : String_Ptr;
 
    begin
       In_String (1 .. In_Length) := Path.all;
       In_String (In_Length + 1) := ASCII.NUL;
       Result_Ptr := C_Update_Path (In_String'Address, Component_Name'Address);
-      Result_Length := Strlen (Result_Ptr);
+      Result_Length := CRTL.strlen (Result_Ptr);
 
-      Out_String := new String (1 .. Result_Length);
-      Strncpy (Out_String.all'Address, Result_Ptr, Result_Length);
+      Out_String := new String (1 .. Integer (Result_Length));
+      CRTL.strncpy (Out_String.all'Address, Result_Ptr, Result_Length);
       return Out_String;
    end Update_Path;
 
@@ -3284,12 +3245,9 @@ package body Osint is
 
    procedure Write_With_Check (A  : Address; N  : Integer) is
       Ignore : Boolean;
-      pragma Warnings (Off, Ignore);
-
    begin
       if N = Write (Output_FD, A, N) then
          return;
-
       else
          Write_Str ("error: disk full writing ");
          Write_Name_Decoded (Output_File_Name);

@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O -ftree-vectorize -fdump-tree-vect-details -fexceptions" } */
+/* { dg-additional-options "-O -fexceptions" } */
 
 typedef __attribute__ ((const)) int (*bart) (void);
 
@@ -11,4 +11,3 @@ int foo (bart bar, int m)
   return j;
 }
 
-/* { dg-final { cleanup-tree-dump "vect" } } */

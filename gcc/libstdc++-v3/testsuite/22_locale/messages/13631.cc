@@ -1,6 +1,6 @@
-// { dg-require-namedlocale "fr_FR" }
+// { dg-require-namedlocale "fr_FR.ISO8859-15" }
 
-// Copyright (C) 2014-2015 Free Software Foundation, Inc.
+// Copyright (C) 2014-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,12 +22,10 @@
 
 void test01()
 {
-  bool test __attribute__((unused)) = true;
-
   // This is defined through CXXFLAGS in scripts/testsuite_flags[.in].
   const char* dir = LOCALEDIR;
 
-  std::locale l("fr_FR");
+  std::locale l(ISO_8859(15,fr_FR));
 
   typedef std::messages<char> messages;
 
@@ -57,12 +55,11 @@ void test01()
 
 void test02()
 {
-  bool test __attribute__((unused)) = true;
-
+#ifdef _GLIBCXX_USE_WCHAR_T
   // This is defined through CXXFLAGS in scripts/testsuite_flags[.in].
   const char* dir = LOCALEDIR;
 
-  std::locale l("fr_FR");
+  std::locale l(ISO_8859(15,fr_FR));
 
   typedef std::messages<wchar_t> messages;
 
@@ -89,6 +86,7 @@ void test02()
   msgs_facet.close(msgs);
 
   VERIFY( translation1 == translation2 );
+#endif
 }
 
 int main()

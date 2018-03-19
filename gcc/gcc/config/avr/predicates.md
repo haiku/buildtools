@@ -1,5 +1,5 @@
 ;; Predicate definitions for ATMEL AVR micro controllers.
-;; Copyright (C) 2006-2015 Free Software Foundation, Inc.
+;; Copyright (C) 2006-2017 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -46,7 +46,7 @@
 (define_special_predicate "low_io_address_operand"
   (ior (and (match_code "const_int")
 	    (match_test "IN_RANGE (INTVAL (op) - avr_arch->sfr_offset,
-				   0, 0x20 - GET_MODE_SIZE (mode))"))
+				   0, 0x1F)"))
        (and (match_code "symbol_ref")
 	    (match_test "SYMBOL_REF_FLAGS (op) & SYMBOL_FLAG_IO_LOW"))))
 
@@ -60,7 +60,7 @@
 (define_special_predicate "io_address_operand"
   (ior (and (match_code "const_int")
 	    (match_test "IN_RANGE (INTVAL (op) - avr_arch->sfr_offset,
-				   0, 0x40 - GET_MODE_SIZE (mode))"))
+				   0, 0x3F)"))
        (and (match_code "symbol_ref")
 	    (match_test "SYMBOL_REF_FLAGS (op) & SYMBOL_FLAG_IO"))))
 
@@ -75,13 +75,6 @@
   (and (match_operand 0 "general_operand")
        (not (match_test "avr_load_libgcc_p (op)"))
        (not (match_test "avr_mem_memx_p (op)"))))
-
-;; Return 1 if OP is a memory operand in one of the __flash* address spaces
-(define_predicate "flash_operand"
-  (and (match_operand 0 "memory_operand")
-       (match_test "Pmode == mode")
-       (ior (match_test "!MEM_P (op)")
-            (match_test "avr_mem_flash_p (op)"))))
 
 ;; Return 1 if OP is the zero constant for MODE.
 (define_predicate "const0_operand"
@@ -113,6 +106,11 @@
 (define_predicate "const_2_to_6_operand"
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 2, 6)")))
+
+;; Return 1 if OP is constant integer -255..-1.
+(define_predicate "const_m255_to_m1_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), -255, -1)")))
 
 ;; Returns true if OP is either the constant zero or a register.
 (define_predicate "reg_or_0_operand"
@@ -179,6 +177,10 @@
 (define_predicate "simple_comparison_operator"
   (and (match_operand 0 "comparison_operator")
        (not (match_code "gt,gtu,le,leu"))))
+
+;; True for SIGN_EXTEND, ZERO_EXTEND.
+(define_predicate "extend_operator"
+  (match_code "sign_extend,zero_extend"))
 
 ;; Return true if OP is a valid call operand.
 (define_predicate "call_insn_operand"

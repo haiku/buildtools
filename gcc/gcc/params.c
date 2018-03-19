@@ -1,5 +1,5 @@
 /* params.c - Run-time parameters.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
    Written by Mark Mitchell <mark@codesourcery.com>.
 
 This file is part of GCC.
@@ -23,7 +23,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "common/common-target.h"
 #include "params.h"
+#include "params-enum.h"
 #include "diagnostic-core.h"
+#include "spellcheck.h"
 
 /* An array containing the compiler parameters and their current
    values.  */
@@ -37,12 +39,23 @@ static size_t num_compiler_params;
    default values determined.  */
 static bool params_finished;
 
+#define DEFPARAM(ENUM, OPTION, HELP, DEFAULT, MIN, MAX)
+#define DEFPARAMENUM5(ENUM, OPTION, HELP, DEFAULT, V0, V1, V2, V3, V4)	\
+  static const char *values_ ## ENUM [] = { #V0, #V1, #V2, #V3, #V4, NULL };
+#include "params.def"
+#undef DEFPARAMENUM5
+#undef DEFPARAM
+
 static const param_info lang_independent_params[] = {
 #define DEFPARAM(ENUM, OPTION, HELP, DEFAULT, MIN, MAX) \
-  { OPTION, DEFAULT, MIN, MAX, HELP },
+  { OPTION, DEFAULT, MIN, MAX, HELP, NULL },
+#define DEFPARAMENUM5(ENUM, OPTION, HELP, DEFAULT,	     \
+		      V0, V1, V2, V3, V4)		     \
+  { OPTION, (int)ENUM ## _KIND_ ## DEFAULT, 0, 4, HELP, values_ ## ENUM },
 #include "params.def"
 #undef DEFPARAM
-  { NULL, 0, 0, 0, NULL }
+#undef DEFPARAMENUM5
+  { NULL, 0, 0, 0, NULL, NULL }
 };
 
 /* Add the N PARAMS to the current list of compiler parameters.  */
@@ -114,6 +127,58 @@ set_param_value_internal (compiler_param num, int value,
     params_set[i] = true;
 }
 
+/* Return true if it can find the matching entry for NAME in the parameter
+   table, and assign the entry index to INDEX.  Return false otherwise.  */
+
+bool
+find_param (const char *name, enum compiler_param *index)
+{
+  for (size_t i = 0; i < num_compiler_params; ++i)
+    if (strcmp (compiler_params[i].option, name) == 0)
+      {
+	*index = (enum compiler_param) i;
+	return true;
+      }
+
+  return false;
+}
+
+/* Look for the closest match for NAME in the parameter table, returning it
+   if it is a reasonable suggestion for a misspelling.  Return NULL
+   otherwise.  */
+
+const char *
+find_param_fuzzy (const char *name)
+{
+  best_match <const char *, const char *> bm (name);
+  for (size_t i = 0; i < num_compiler_params; ++i)
+    bm.consider (compiler_params[i].option);
+  return bm.get_best_meaningful_candidate ();
+}
+
+/* Return true if param with entry index INDEX should be defined using strings.
+   If so, return the value corresponding to VALUE_NAME in *VALUE_P.  */
+
+bool
+param_string_value_p (enum compiler_param index, const char *value_name,
+		      int *value_p)
+{
+  param_info *entry = &compiler_params[(int) index];
+  if (entry->value_names == NULL)
+    return false;
+
+  *value_p = -1;
+
+  for (int i = 0; entry->value_names[i] != NULL; ++i)
+    if (strcmp (entry->value_names[i], value_name) == 0)
+      {
+	*value_p = i;
+	return true;
+      }
+
+  return true;
+}
+
 /* Set the VALUE associated with the parameter given by NAME in PARAMS
    and PARAMS_SET.  */
 
@@ -126,27 +191,27 @@ set_param_value (const char *name, int value,
   /* Make sure nobody tries to set a parameter to an invalid value.  */
   gcc_assert (value != INVALID_PARAM_VAL);
 
-  /* Scan the parameter table to find a matching entry.  */
-  for (i = 0; i < num_compiler_params; ++i)
-    if (strcmp (compiler_params[i].option, name) == 0)
-      {
-	if (value < compiler_params[i].min_value)
-	  error ("minimum value of parameter %qs is %u",
-		 compiler_params[i].option,
-		 compiler_params[i].min_value);
-	else if (compiler_params[i].max_value > compiler_params[i].min_value
-		 && value > compiler_params[i].max_value)
-	  error ("maximum value of parameter %qs is %u",
-		 compiler_params[i].option,
-		 compiler_params[i].max_value);
-	else
-	  set_param_value_internal ((compiler_param) i, value,
-				    params, params_set, true);
-	return;
-      }
+  enum compiler_param index;
+  if (!find_param (name, &index))
+    {
+      /* If we didn't find this parameter, issue an error message.  */
+      error ("invalid parameter %qs", name);
+      return;
+    }
+  i = (size_t)index;
 
-  /* If we didn't find this parameter, issue an error message.  */
-  error ("invalid parameter %qs", name);
+  if (value < compiler_params[i].min_value)
+    error ("minimum value of parameter %qs is %u",
+	   compiler_params[i].option,
+	   compiler_params[i].min_value);
+  else if (compiler_params[i].max_value > compiler_params[i].min_value
+	   && value > compiler_params[i].max_value)
+    error ("maximum value of parameter %qs is %u",
+	   compiler_params[i].option,
+	   compiler_params[i].max_value);
+  else
+    set_param_value_internal ((compiler_param) i, value,
+			      params, params_set, true);
 }
 
 /* Set the value of the parameter given by NUM to VALUE in PARAMS and

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -25,11 +25,13 @@
 
 --  This package deals with the implementation of the Restrictions pragma
 
-with Namet;  use Namet;
-with Rident; use Rident;
+with Aspects; use Aspects;
+with Namet;   use Namet;
+with Rident;  use Rident;
+with Snames;  use Snames;
 with Table;
-with Types;  use Types;
-with Uintp;  use Uintp;
+with Types;   use Types;
+with Uintp;   use Uintp;
 
 package Restrict is
 
@@ -105,7 +107,7 @@ package Restrict is
    --  to implement pragma Restrictions (No_Implementation_Restrictions) (which
    --  is why this restriction itself is excluded from the list).
 
-   Implementation_Restriction : array (All_Restrictions) of Boolean :=
+   Implementation_Restriction : constant array (All_Restrictions) of Boolean :=
      (Simple_Barriers                    => True,
       No_Calendar                        => True,
       No_Default_Initialization          => True,
@@ -145,6 +147,7 @@ package Restrict is
       No_Wide_Characters                 => True,
       Static_Priorities                  => True,
       Static_Storage_Size                => True,
+      Pure_Barriers                      => True,
       SPARK_05                           => True,
       others                             => False);
 
@@ -280,17 +283,17 @@ package Restrict is
 
    procedure Check_Restriction_No_Specification_Of_Aspect (N : Node_Id);
    --  N is the node id for an N_Aspect_Specification. An error message
-   --  (warning) will be issued if a restriction (warning) was previous set
+   --  (warning) will be issued if a restriction (warning) was previously set
    --  for this aspect using Set_No_Specification_Of_Aspect.
 
    procedure Check_Restriction_No_Use_Of_Attribute (N : Node_Id);
-   --  N is the node of an attribute definition clause. An error message
-   --  (warning) will be issued if a restriction (warning) was previously set
-   --  for this attribute using Set_No_Use_Of_Attribute.
+   --  N denotes an attribute definition clause or an attribute reference. An
+   --  error message (warning) will be issued if a restriction (warning) was
+   --  previously set for this attribute using Set_No_Use_Of_Attribute.
 
    procedure Check_Restriction_No_Use_Of_Entity (N : Node_Id);
    --  N is the node id for an entity reference. An error message (warning)
-   --  will be issued if a restriction (warning) was previous set for this
+   --  will be issued if a restriction (warning) was previously set for this
    --  entity name using Set_No_Use_Of_Entity.
 
    procedure Check_Restriction_No_Use_Of_Pragma (N : Node_Id);
@@ -313,7 +316,10 @@ package Restrict is
    --  the SPARK_05 restriction is set, then an error is issued on N. Msg
    --  is appended to the restriction failure message.
 
-   procedure Check_SPARK_05_Restriction (Msg1, Msg2 : String; N : Node_Id);
+   procedure Check_SPARK_05_Restriction
+     (Msg1 : String;
+      Msg2 : String;
+      N    : Node_Id);
    --  Same as Check_SPARK_05_Restriction except there is a continuation
    --  message Msg2 following the initial message Msg1.
 
@@ -333,6 +339,15 @@ package Restrict is
 
    procedure Check_No_Implicit_Heap_Alloc (N : Node_Id);
    --  Equivalent to Check_Restriction (No_Implicit_Heap_Allocations, N).
+   --  Provided for easy use by back end, which has to check this restriction.
+
+   procedure Check_No_Implicit_Task_Alloc (N : Node_Id);
+   --  Equivalent to Check_Restriction (No_Implicit_Task_Allocations, N).
+   --  Provided for easy use by back end, which has to check this restriction.
+
+   procedure Check_No_Implicit_Protected_Alloc (N : Node_Id);
+   --  Equivalent to:
+   --    Check_Restriction (No_Implicit_Protected_Object_Allocations, N)
    --  Provided for easy use by back end, which has to check this restriction.
 
    procedure Check_Obsolescent_2005_Entity (E : Entity_Id; N : Node_Id);
@@ -409,10 +424,10 @@ package Restrict is
    --  executing this code only if needed.
 
    function Restricted_Profile return Boolean;
-   --  Tests if set of restrictions corresponding to Profile (Restricted) is
-   --  currently in effect (set by pragma Profile, or by an appropriate set of
-   --  individual Restrictions pragmas). Returns True only if all the required
-   --  restrictions are set.
+   --  Tests if set of restrictions corresponding to Restricted_Tasking profile
+   --  is currently in effect (set by pragma Profile, or by an appropriate set
+   --  of individual Restrictions pragmas). Returns True only if all the
+   --  required restrictions are set.
 
    procedure Set_Hidden_Part_In_SPARK (Loc1, Loc2 : Source_Ptr);
    --  Insert a new hidden region range in the SPARK hides table. The effect
@@ -463,6 +478,9 @@ package Restrict is
    --  case of a Restriction_Warnings pragma specifying this restriction and
    --  False for a Restrictions pragma specifying this restriction.
 
+   procedure Set_Restriction_No_Specification_Of_Aspect (A_Id : Aspect_Id);
+   --  Version used by Get_Target_Parameters (via Tbuild)
+
    procedure Set_Restriction_No_Use_Of_Attribute
      (N       : Node_Id;
       Warning : Boolean);
@@ -470,9 +488,12 @@ package Restrict is
    --  No_Use_Of_Attribute. Caller has verified that this is a valid attribute
    --  designator.
 
+   procedure Set_Restriction_No_Use_Of_Attribute (A_Id : Attribute_Id);
+   --  Version used by Get_Target_Parameters (via Tbuild)
+
    procedure Set_Restriction_No_Use_Of_Entity
      (Entity  : Node_Id;
-      Warn    : Boolean;
+      Warning : Boolean;
       Profile : Profile_Name := No_Profile);
    --  Sets given No_Use_Of_Entity restriction in table if not there already.
    --  Warn is True if from Restriction_Warnings, or for Restrictions if the
@@ -480,13 +501,16 @@ package Restrict is
    --  and this flag is not set. Profile is set to a non-default value if the
    --  No_Dependence restriction comes from a Profile pragma. This procedure
    --  also takes care of setting the Boolean2 flag of the simple name for
-   --  the entity  (to optimize table searches).
+   --  the entity (to optimize table searches).
 
    procedure Set_Restriction_No_Use_Of_Pragma
      (N       : Node_Id;
       Warning : Boolean);
    --  N is the node id for the identifier in a pragma Restrictions for
    --  No_Use_Of_Pragma. Caller has verified that this is a valid pragma id.
+
+   procedure Set_Restriction_No_Use_Of_Pragma (A_Id : Pragma_Id);
+   --  Version used in call from Get_Target_Parameters (via Tbuild).
 
    function Tasking_Allowed return Boolean;
    pragma Inline (Tasking_Allowed);
@@ -526,7 +550,7 @@ package Restrict is
    function Cunit_Boolean_Restrictions_Save
      return Save_Cunit_Boolean_Restrictions;
    --  This function saves the compilation unit restriction settings, leaving
-   --  then unchanged. This is used e.g. at the start of processing a context
+   --  them unchanged. This is used e.g. at the start of processing a context
    --  clause, so that the main unit restrictions can be restored after all
    --  the with'ed units have been processed.
 

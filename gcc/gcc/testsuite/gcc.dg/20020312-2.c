@@ -7,6 +7,7 @@
 
 /* { dg-do run } */
 /* { dg-options "-O -fno-pic" } */
+/* { dg-require-effective-target nonlocal_goto } */
 
 extern void abort (void);
 
@@ -66,6 +67,8 @@ extern void abort (void);
 # else
 #  define PIC_REG  "30"
 # endif
+#elif defined(__riscv)
+/* No pic register.  */
 #elif defined(__RX__)
 /* No pic register.  */
 #elif defined(__s390__)

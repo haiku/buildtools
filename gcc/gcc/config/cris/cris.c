@@ -1,5 +1,5 @@
 /* Definitions for GCC.  Part of the machine description for CRIS.
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2017 Free Software Foundation, Inc.
    Contributed by Axis Communications.  Written by Hans-Peter Nilsson.
 
 This file is part of GCC.
@@ -21,69 +21,35 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
+#include "tree.h"
+#include "cfghooks.h"
+#include "df.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "optabs.h"
 #include "regs.h"
-#include "hard-reg-set.h"
-#include "insn-config.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "cgraph.h"
+#include "diagnostic-core.h"
 #include "conditions.h"
 #include "insn-attr.h"
-#include "flags.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
 #include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "fold-const.h"
 #include "varasm.h"
 #include "stor-layout.h"
 #include "calls.h"
-#include "stmt.h"
-#include "hashtab.h"
-#include "function.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
 #include "explow.h"
-#include "emit-rtl.h"
 #include "expr.h"
-#include "except.h"
-#include "diagnostic-core.h"
-#include "recog.h"
 #include "reload.h"
-#include "tm_p.h"
-#include "debug.h"
 #include "output.h"
 #include "tm-constrs.h"
-#include "target.h"
-#include "target-def.h"
-#include "ggc.h"
-#include "insn-codes.h"
-#include "optabs.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "predict.h"
-#include "basic-block.h"
-#include "df.h"
-#include "opts.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "builtins.h"
+
+/* This file should be included last.  */
+#include "target-def.h"
 
 /* Usable when we have an amount to add or subtract, and want the
    optimal size of the insn.  */
@@ -149,7 +115,7 @@ static int cris_reg_saved_in_regsave_area  (unsigned int, bool);
 
 static void cris_print_operand (FILE *, rtx, int);
 
-static void cris_print_operand_address (FILE *, rtx);
+static void cris_print_operand_address (FILE *, machine_mode, rtx);
 
 static bool cris_print_operand_punct_valid_p (unsigned char code);
 
@@ -167,7 +133,7 @@ static reg_class_t cris_preferred_reload_class (rtx, reg_class_t);
 
 static int cris_register_move_cost (machine_mode, reg_class_t, reg_class_t);
 static int cris_memory_move_cost (machine_mode, reg_class_t, bool);
-static bool cris_rtx_costs (rtx, int, int, int, int *, bool);
+static bool cris_rtx_costs (rtx, machine_mode, int, int, int *, bool);
 static int cris_address_cost (rtx, machine_mode, addr_space_t, bool);
 static bool cris_pass_by_reference (cumulative_args_t, machine_mode,
 				    const_tree, bool);
@@ -179,7 +145,9 @@ static rtx cris_function_incoming_arg (cumulative_args_t,
 				       machine_mode, const_tree, bool);
 static void cris_function_arg_advance (cumulative_args_t, machine_mode,
 				       const_tree, bool);
-static tree cris_md_asm_clobbers (tree, tree, tree);
+static rtx_insn *cris_md_asm_adjust (vec<rtx> &, vec<rtx> &,
+				     vec<const char *> &,
+				     vec<rtx> &, HARD_REG_SET &);
 static bool cris_cannot_force_const_mem (machine_mode, rtx);
 
 static void cris_option_override (void);
@@ -245,6 +213,9 @@ int cris_cpu_version = CRIS_DEFAULT_CPU_VERSION;
 #undef TARGET_INIT_LIBFUNCS
 #define TARGET_INIT_LIBFUNCS cris_init_libfuncs
 
+#undef TARGET_LRA_P
+#define TARGET_LRA_P hook_bool_void_false
+
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P cris_legitimate_address_p
 
@@ -283,8 +254,8 @@ int cris_cpu_version = CRIS_DEFAULT_CPU_VERSION;
 #define TARGET_FUNCTION_INCOMING_ARG cris_function_incoming_arg
 #undef TARGET_FUNCTION_ARG_ADVANCE
 #define TARGET_FUNCTION_ARG_ADVANCE cris_function_arg_advance
-#undef TARGET_MD_ASM_CLOBBERS
-#define TARGET_MD_ASM_CLOBBERS cris_md_asm_clobbers
+#undef TARGET_MD_ASM_ADJUST
+#define TARGET_MD_ASM_ADJUST cris_md_asm_adjust
 
 #undef TARGET_CANNOT_FORCE_CONST_MEM
 #define TARGET_CANNOT_FORCE_CONST_MEM cris_cannot_force_const_mem
@@ -574,11 +545,9 @@ cris_op_str (rtx x)
     {
     case PLUS:
       return "add";
-      break;
 
     case MINUS:
       return "sub";
-      break;
 
     case MULT:
       /* This function is for retrieving a part of an instruction name for
@@ -590,46 +559,36 @@ cris_op_str (rtx x)
 
     case DIV:
       return "div";
-      break;
 
     case AND:
       return "and";
-      break;
 
     case IOR:
       return "or";
-      break;
 
     case XOR:
       return "xor";
-      break;
 
     case NOT:
       return "not";
-      break;
 
     case ASHIFT:
       return "lsl";
-      break;
 
     case LSHIFTRT:
       return "lsr";
-      break;
 
     case ASHIFTRT:
       return "asr";
-      break;
 
     case UMIN:
       /* Used to control the sign/zero-extend character for the 'E' modifier.
 	 BOUND has none.  */
       cris_output_insn_is_bound = 1;
       return "bound";
-      break;
 
     default:
       return "Unknown operator";
-      break;
   }
 }
 
@@ -836,7 +795,7 @@ cris_print_operand (FILE *file, rtx x, int code)
 		return;
 	      }
 	  }
-	output_address (addr);
+	output_address (VOIDmode, addr);
       }
       return;
 
@@ -975,7 +934,7 @@ cris_print_operand (FILE *file, rtx x, int code)
 	      adj_mem
 		= adjust_address (adj_mem, GET_MODE (adj_mem), size / 2);
 
-	    output_address (XEXP (adj_mem, 0));
+	    output_address (VOIDmode, XEXP (adj_mem, 0));
 	    return;
 	  }
 
@@ -1162,7 +1121,7 @@ cris_print_operand (FILE *file, rtx x, int code)
       return;
 
     case MEM:
-      output_address (XEXP (operand, 0));
+      output_address (GET_MODE (operand), XEXP (operand, 0));
       return;
 
     case CONST_DOUBLE:
@@ -1172,14 +1131,11 @@ cris_print_operand (FILE *file, rtx x, int code)
       else
 	{
 	  /* Only single precision is allowed as plain operands the
-	     moment.  FIXME:  REAL_VALUE_FROM_CONST_DOUBLE isn't
-	     documented.  */
-	  REAL_VALUE_TYPE r;
+	     moment.  */
 	  long l;
 
 	  /* FIXME:  Perhaps check overflow of the "single".  */
-	  REAL_VALUE_FROM_CONST_DOUBLE (r, operand);
-	  REAL_VALUE_TO_TARGET_SINGLE (r, l);
+	  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (operand), l);
 
 	  fprintf (file, "0x%lx", l);
 	}
@@ -1236,7 +1192,7 @@ cris_print_operand_punct_valid_p (unsigned char code)
 /* The PRINT_OPERAND_ADDRESS worker.  */
 
 static void
-cris_print_operand_address (FILE *file, rtx x)
+cris_print_operand_address (FILE *file, machine_mode /*mode*/, rtx x)
 {
   /* All these were inside MEM:s so output indirection characters.  */
   putc ('[', file);
@@ -1318,8 +1274,7 @@ cris_return_address_on_stack_for_return (void)
     : cris_return_address_on_stack ();
 }
 
-/* This used to be the INITIAL_FRAME_POINTER_OFFSET worker; now only
-   handles FP -> SP elimination offset.  */
+/* This handles FP -> SP elimination offset.  */
 
 static int
 cris_initial_frame_pointer_offset (void)
@@ -1642,7 +1597,7 @@ cris_preferred_reload_class (rtx x ATTRIBUTE_UNUSED, reg_class_t rclass)
       && rclass != SRP_REGS
       && rclass != CC0_REGS
       && rclass != SPECIAL_REGS)
-    return GENERAL_REGS;
+    return GENNONACR_REGS;
 
   return rclass;
 }
@@ -2116,9 +2071,11 @@ cris_expand_return (bool on_stack)
    scanned.  In either case, *TOTAL contains the cost result.  */
 
 static bool
-cris_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
-		bool speed)
+cris_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno,
+		int *total, bool speed)
 {
+  int code = GET_CODE (x);
+
   switch (code)
     {
     case CONST_INT:
@@ -2148,7 +2105,7 @@ cris_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
       return true;
 
     case CONST_DOUBLE:
-      if (x != CONST0_RTX (GET_MODE (x) == VOIDmode ? DImode : GET_MODE (x)))
+      if (x != CONST0_RTX (mode == VOIDmode ? DImode : mode))
 	*total = 12;
       else
         /* Make 0.0 cheap, else test-insns will not be used.  */
@@ -2210,9 +2167,9 @@ cris_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
 	  && !satisfies_constraint_I (XEXP (x, 1)))
 	{
 	  *total
-	    = (rtx_cost (XEXP (x, 0), (enum rtx_code) outer_code,
+	    = (rtx_cost (XEXP (x, 0), mode, (enum rtx_code) outer_code,
 			 opno, speed) + 2
-	       + 2 * GET_MODE_NUNITS (GET_MODE (XEXP (x, 0))));
+	       + 2 * GET_MODE_NUNITS (mode));
 	  return true;
 	}
       return false;
@@ -2223,7 +2180,8 @@ cris_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
       /* fall through */
 
     case ZERO_EXTEND: case SIGN_EXTEND:
-      *total = rtx_cost (XEXP (x, 0), (enum rtx_code) outer_code, opno, speed);
+      *total = rtx_cost (XEXP (x, 0), VOIDmode, (enum rtx_code) outer_code,
+			 opno, speed);
       return true;
 
     default:
@@ -2440,7 +2398,7 @@ cris_side_effect_mode_ok (enum rtx_code code, rtx *ops,
    insn for other reasons.  */
 
 bool
-cris_cc0_user_requires_cmp (rtx insn)
+cris_cc0_user_requires_cmp (rtx_insn *insn)
 {
   rtx_insn *cc0_user = NULL;
   rtx body;
@@ -2619,11 +2577,11 @@ cris_asm_output_ident (const char *string)
 /* The ASM_OUTPUT_CASE_END worker.  */
 
 void
-cris_asm_output_case_end (FILE *stream, int num, rtx table)
+cris_asm_output_case_end (FILE *stream, int num, rtx_insn *table)
 {
   /* Step back, over the label for the table, to the actual casejump and
      assert that we find only what's expected.  */
-  rtx whole_jump_insn = prev_nonnote_nondebug_insn (table);
+  rtx_insn *whole_jump_insn = prev_nonnote_nondebug_insn (table);
   gcc_assert (whole_jump_insn != NULL_RTX && LABEL_P (whole_jump_insn));
   whole_jump_insn = prev_nonnote_nondebug_insn (whole_jump_insn);
   gcc_assert (whole_jump_insn != NULL_RTX
@@ -2631,15 +2589,15 @@ cris_asm_output_case_end (FILE *stream, int num, rtx table)
 		  || (TARGET_V32 && INSN_P (whole_jump_insn)
 		      && GET_CODE (PATTERN (whole_jump_insn)) == SEQUENCE)));
   /* Get the pattern of the casejump, so we can extract the default label.  */
-  whole_jump_insn = PATTERN (whole_jump_insn);
+  rtx whole_jump_pat = PATTERN (whole_jump_insn);
 
   if (TARGET_V32)
     {
       /* This can be a SEQUENCE, meaning the delay-slot of the jump is
 	 filled.  We also output the offset word a little differently.  */
       rtx parallel_jump
-	= (GET_CODE (whole_jump_insn) == SEQUENCE
-	   ? PATTERN (XVECEXP (whole_jump_insn, 0, 0)) : whole_jump_insn);
+	= (GET_CODE (whole_jump_pat) == SEQUENCE
+	   ? PATTERN (XVECEXP (whole_jump_pat, 0, 0)) : whole_jump_pat);
 
       asm_fprintf (stream,
 		   "\t.word %LL%d-.%s\n",
@@ -2654,7 +2612,7 @@ cris_asm_output_case_end (FILE *stream, int num, rtx table)
 	       "\t.word %LL%d-%LL%d%s\n",
 	       CODE_LABEL_NUMBER (XEXP
 				  (XEXP
-				   (XEXP (XVECEXP (whole_jump_insn, 0, 0), 1), 
+				   (XEXP (XVECEXP (whole_jump_pat, 0, 0), 1),
 				    2), 0)),
 	       num,
 	       (TARGET_PDEBUG ? "; default" : ""));
@@ -2805,18 +2763,18 @@ cris_asm_output_mi_thunk (FILE *stream,
 	{
 	  fprintf (stream, "\tba ");
 	  assemble_name (stream, name);
-	  fprintf (stream, "%s\n", CRIS_PLT_PCOFFSET_SUFFIX);
+	  fprintf (stream, "%s\n\tnop\n", CRIS_PLT_PCOFFSET_SUFFIX);
 	}
       else
 	{
-	  fprintf (stream, "add.d ");
+	  fprintf (stream, "\tadd.d ");
 	  assemble_name (stream, name);
 	  fprintf (stream, "%s,$pc\n", CRIS_PLT_PCOFFSET_SUFFIX);
 	}
     }
   else
     {
-      fprintf (stream, "jump ");
+      fprintf (stream, "\tjump ");
       assemble_name (stream, XSTR (XEXP (DECL_RTL (funcdecl), 0), 0));
       fprintf (stream, "\n");
 
@@ -2922,12 +2880,10 @@ cris_split_movdx (rtx *operands)
 	  /* We normally copy the low-numbered register first.  However, if
 	     the first register operand 0 is the same as the second register of
 	     operand 1, we must copy in the opposite order.  */
-	  emit_insn (gen_rtx_SET (VOIDmode,
-				  operand_subword (dest, reverse, TRUE, mode),
+	  emit_insn (gen_rtx_SET (operand_subword (dest, reverse, TRUE, mode),
 				  operand_subword (src, reverse, TRUE, mode)));
 
-	  emit_insn (gen_rtx_SET (VOIDmode,
-				  operand_subword (dest, !reverse, TRUE, mode),
+	  emit_insn (gen_rtx_SET (operand_subword (dest, !reverse, TRUE, mode),
 				  operand_subword (src, !reverse, TRUE, mode)));
 	}
       /* Constant-to-reg copy.  */
@@ -2935,12 +2891,10 @@ cris_split_movdx (rtx *operands)
 	{
 	  rtx words[2];
 	  split_double (src, &words[0], &words[1]);
-	  emit_insn (gen_rtx_SET (VOIDmode,
-				  operand_subword (dest, 0, TRUE, mode),
+	  emit_insn (gen_rtx_SET (operand_subword (dest, 0, TRUE, mode),
 				  words[0]));
 
-	  emit_insn (gen_rtx_SET (VOIDmode,
-				  operand_subword (dest, 1, TRUE, mode),
+	  emit_insn (gen_rtx_SET (operand_subword (dest, 1, TRUE, mode),
 				  words[1]));
 	}
       /* Mem-to-reg copy.  */
@@ -2969,8 +2923,7 @@ cris_split_movdx (rtx *operands)
 		 manually.  */
 	      mem = change_address (src, SImode, addr);
 	      insn
-		= gen_rtx_SET (VOIDmode,
-			       operand_subword (dest, 0, TRUE, mode), mem);
+		= gen_rtx_SET (operand_subword (dest, 0, TRUE, mode), mem);
 	      insn = emit_insn (insn);
 	      if (GET_CODE (XEXP (mem, 0)) == POST_INC)
 		REG_NOTES (insn)
@@ -2979,8 +2932,7 @@ cris_split_movdx (rtx *operands)
 
 	      mem = copy_rtx (mem);
 	      insn
-		= gen_rtx_SET (VOIDmode,
-			       operand_subword (dest, 1, TRUE, mode), mem);
+		= gen_rtx_SET (operand_subword (dest, 1, TRUE, mode), mem);
 	      insn = emit_insn (insn);
 	      if (GET_CODE (XEXP (mem, 0)) == POST_INC)
 		REG_NOTES (insn)
@@ -2997,15 +2949,13 @@ cris_split_movdx (rtx *operands)
 		fatal_insn ("unexpected side-effects in address", addr);
 
 	      emit_insn (gen_rtx_SET
-			 (VOIDmode,
-			  operand_subword (dest, reverse, TRUE, mode),
+			 (operand_subword (dest, reverse, TRUE, mode),
 			  change_address
 			  (src, SImode,
 			   plus_constant (Pmode, addr,
 					  reverse * UNITS_PER_WORD))));
 	      emit_insn (gen_rtx_SET
-			 (VOIDmode,
-			  operand_subword (dest, ! reverse, TRUE, mode),
+			 (operand_subword (dest, ! reverse, TRUE, mode),
 			  change_address
 			  (src, SImode,
 			   plus_constant (Pmode, addr,
@@ -3033,8 +2983,7 @@ cris_split_movdx (rtx *operands)
 	     ourselves, we must add a post-inc note manually.  */
 	  mem = change_address (dest, SImode, addr);
 	  insn
-	    = gen_rtx_SET (VOIDmode,
-			   mem, operand_subword (src, 0, TRUE, mode));
+	    = gen_rtx_SET (mem, operand_subword (src, 0, TRUE, mode));
 	  insn = emit_insn (insn);
 	  if (GET_CODE (XEXP (mem, 0)) == POST_INC)
 	    REG_NOTES (insn)
@@ -3042,10 +2991,7 @@ cris_split_movdx (rtx *operands)
 				 REG_NOTES (insn));
 
 	  mem = copy_rtx (mem);
-	  insn
-	    = gen_rtx_SET (VOIDmode,
-			   mem,
-			   operand_subword (src, 1, TRUE, mode));
+	  insn = gen_rtx_SET (mem, operand_subword (src, 1, TRUE, mode));
 	  insn = emit_insn (insn);
 	  if (GET_CODE (XEXP (mem, 0)) == POST_INC)
 	    REG_NOTES (insn)
@@ -3061,13 +3007,11 @@ cris_split_movdx (rtx *operands)
 	    fatal_insn ("unexpected side-effects in address", addr);
 
 	  emit_insn (gen_rtx_SET
-		     (VOIDmode,
-		      change_address (dest, SImode, addr),
+		     (change_address (dest, SImode, addr),
 		      operand_subword (src, 0, TRUE, mode)));
 
 	  emit_insn (gen_rtx_SET
-		     (VOIDmode,
-		      change_address (dest, SImode,
+		     (change_address (dest, SImode,
 				      plus_constant (Pmode, addr,
 						     UNITS_PER_WORD)),
 		      operand_subword (src, 1, TRUE, mode)));
@@ -3138,8 +3082,7 @@ cris_expand_prologue (void)
 	   stdarg_regs > 0;
 	   regno--, pretend -= 4, stdarg_regs--)
 	{
-	  insn = emit_insn (gen_rtx_SET (VOIDmode,
-					 stack_pointer_rtx,
+	  insn = emit_insn (gen_rtx_SET (stack_pointer_rtx,
 					 plus_constant (Pmode,
 							stack_pointer_rtx,
 							-4)));
@@ -3151,7 +3094,7 @@ cris_expand_prologue (void)
 
 	  mem = gen_rtx_MEM (SImode, stack_pointer_rtx);
 	  set_mem_alias_set (mem, get_varargs_alias_set ());
-	  insn = emit_move_insn (mem, gen_rtx_raw_REG (SImode, regno));
+	  insn = emit_move_insn (mem, gen_raw_REG (SImode, regno));
 
 	  /* Note the absence of RTX_FRAME_RELATED_P on the above insn:
 	     the value isn't restored, so we don't want to tell dwarf2
@@ -3167,8 +3110,7 @@ cris_expand_prologue (void)
   /* Save SRP if not a leaf function.  */
   if (return_address_on_stack)
     {
-      insn = emit_insn (gen_rtx_SET (VOIDmode,
-				     stack_pointer_rtx,
+      insn = emit_insn (gen_rtx_SET (stack_pointer_rtx,
 				     plus_constant (Pmode, stack_pointer_rtx,
 						    -4 - pretend)));
       pretend = 0;
@@ -3176,7 +3118,7 @@ cris_expand_prologue (void)
 
       mem = gen_rtx_MEM (SImode, stack_pointer_rtx);
       set_mem_alias_set (mem, get_frame_alias_set ());
-      insn = emit_move_insn (mem, gen_rtx_raw_REG (SImode, CRIS_SRP_REGNUM));
+      insn = emit_move_insn (mem, gen_raw_REG (SImode, CRIS_SRP_REGNUM));
       RTX_FRAME_RELATED_P (insn) = 1;
       framesize += 4;
     }
@@ -3184,8 +3126,7 @@ cris_expand_prologue (void)
   /* Set up the frame pointer, if needed.  */
   if (frame_pointer_needed)
     {
-      insn = emit_insn (gen_rtx_SET (VOIDmode,
-				     stack_pointer_rtx,
+      insn = emit_insn (gen_rtx_SET (stack_pointer_rtx,
 				     plus_constant (Pmode, stack_pointer_rtx,
 						    -4 - pretend)));
       pretend = 0;
@@ -3250,8 +3191,7 @@ cris_expand_prologue (void)
 		  else
 		    {
 		      insn
-			= gen_rtx_SET (VOIDmode,
-				       stack_pointer_rtx,
+			= gen_rtx_SET (stack_pointer_rtx,
 				       plus_constant (Pmode, stack_pointer_rtx,
 						      -(n_saved * 4 + size)));
 		      insn = emit_insn (insn);
@@ -3268,8 +3208,7 @@ cris_expand_prologue (void)
 		  size = 0;
 		}
 
-	      insn = emit_insn (gen_rtx_SET (VOIDmode,
-					     stack_pointer_rtx,
+	      insn = emit_insn (gen_rtx_SET (stack_pointer_rtx,
 					     plus_constant (Pmode,
 							    stack_pointer_rtx,
 							    -4 - size)));
@@ -3277,7 +3216,7 @@ cris_expand_prologue (void)
 
 	      mem = gen_rtx_MEM (SImode, stack_pointer_rtx);
 	      set_mem_alias_set (mem, get_frame_alias_set ());
-	      insn = emit_move_insn (mem, gen_rtx_raw_REG (SImode, regno));
+	      insn = emit_move_insn (mem, gen_raw_REG (SImode, regno));
 	      RTX_FRAME_RELATED_P (insn) = 1;
 
 	      framesize += 4 + size;
@@ -3310,8 +3249,7 @@ cris_expand_prologue (void)
       else
 	{
 	  insn
-	    = gen_rtx_SET (VOIDmode,
-			   stack_pointer_rtx,
+	    = gen_rtx_SET (stack_pointer_rtx,
 			   plus_constant (Pmode, stack_pointer_rtx,
 					  -(n_saved * 4 + size)));
 	  insn = emit_insn (insn);
@@ -3326,8 +3264,7 @@ cris_expand_prologue (void)
       /* We have to put outgoing argument space after regs.  */
       if (cfoa_size)
 	{
-	  insn = emit_insn (gen_rtx_SET (VOIDmode,
-					 stack_pointer_rtx,
+	  insn = emit_insn (gen_rtx_SET (stack_pointer_rtx,
 					 plus_constant (Pmode,
 							stack_pointer_rtx,
 							-cfoa_size)));
@@ -3337,8 +3274,7 @@ cris_expand_prologue (void)
     }
   else if ((size + cfoa_size) > 0)
     {
-      insn = emit_insn (gen_rtx_SET (VOIDmode,
-				     stack_pointer_rtx,
+      insn = emit_insn (gen_rtx_SET (stack_pointer_rtx,
 				     plus_constant (Pmode,
 						    stack_pointer_rtx,
 						    -(cfoa_size + size))));
@@ -3436,8 +3372,7 @@ cris_expand_epilogue (void)
 	  {
 	    /* There is an area for outgoing parameters located before
 	       the saved registers.  We have to adjust for that.  */
-	    emit_insn (gen_rtx_SET (VOIDmode,
-				    stack_pointer_rtx,
+	    emit_insn (gen_rtx_SET (stack_pointer_rtx,
 				    plus_constant (Pmode, stack_pointer_rtx,
 						   argspace_offset)));
 	    /* Make sure we only do this once.  */
@@ -3447,7 +3382,7 @@ cris_expand_epilogue (void)
 	mem = gen_rtx_MEM (SImode, gen_rtx_POST_INC (SImode,
 						     stack_pointer_rtx));
 	set_mem_alias_set (mem, get_frame_alias_set ());
-	insn = emit_move_insn (gen_rtx_raw_REG (SImode, regno), mem);
+	insn = emit_move_insn (gen_raw_REG (SImode, regno), mem);
 
 	/* Whenever we emit insns with post-incremented addresses
 	   ourselves, we must add a post-inc note manually.  */
@@ -3462,8 +3397,7 @@ cris_expand_epilogue (void)
 
       if (argspace_offset)
 	{
-	  emit_insn (gen_rtx_SET (VOIDmode,
-				  stack_pointer_rtx,
+	  emit_insn (gen_rtx_SET (stack_pointer_rtx,
 				  plus_constant (Pmode, stack_pointer_rtx,
 						 argspace_offset)));
 	  argspace_offset = 0;
@@ -3521,8 +3455,7 @@ cris_expand_epilogue (void)
 	 yet.  */
       size += argspace_offset;
 
-      emit_insn (gen_rtx_SET (VOIDmode,
-			      stack_pointer_rtx,
+      emit_insn (gen_rtx_SET (stack_pointer_rtx,
 			      plus_constant (Pmode, stack_pointer_rtx, size)));
     }
 
@@ -3535,7 +3468,7 @@ cris_expand_epilogue (void)
 	{
 	  rtx mem;
 	  rtx insn;
-	  rtx srpreg = gen_rtx_raw_REG (SImode, CRIS_SRP_REGNUM);
+	  rtx srpreg = gen_raw_REG (SImode, CRIS_SRP_REGNUM);
 	  mem = gen_rtx_MEM (SImode,
 			     gen_rtx_POST_INC (SImode,
 					       stack_pointer_rtx));
@@ -3550,8 +3483,7 @@ cris_expand_epilogue (void)
 	  if (crtl->calls_eh_return)
 	    emit_insn (gen_addsi3 (stack_pointer_rtx,
 				   stack_pointer_rtx,
-				   gen_rtx_raw_REG (SImode,
-						    CRIS_STACKADJ_REG)));
+				   gen_raw_REG (SImode, CRIS_STACKADJ_REG)));
 	  cris_expand_return (false);
 	}
       else
@@ -3568,7 +3500,7 @@ cris_expand_epilogue (void)
       if (return_address_on_stack)
 	{
 	  rtx mem;
-	  rtx srpreg = gen_rtx_raw_REG (SImode, CRIS_SRP_REGNUM);
+	  rtx srpreg = gen_raw_REG (SImode, CRIS_SRP_REGNUM);
 	  rtx insn;
 
 	  mem = gen_rtx_MEM (SImode,
@@ -3583,8 +3515,7 @@ cris_expand_epilogue (void)
 	    = alloc_EXPR_LIST (REG_INC, stack_pointer_rtx, REG_NOTES (insn));
 	}
 
-      emit_insn (gen_rtx_SET (VOIDmode,
-			      stack_pointer_rtx,
+      emit_insn (gen_rtx_SET (stack_pointer_rtx,
 			      plus_constant (Pmode, stack_pointer_rtx,
 					     pretend)));
     }
@@ -3593,8 +3524,7 @@ cris_expand_epilogue (void)
   if (crtl->calls_eh_return)
     emit_insn (gen_addsi3 (stack_pointer_rtx,
 			   stack_pointer_rtx,
-			   gen_rtx_raw_REG (SImode,
-					    CRIS_STACKADJ_REG)));
+			   gen_raw_REG (SImode, CRIS_STACKADJ_REG)));
   cris_expand_return (false);
 }
 
@@ -3634,20 +3564,19 @@ cris_gen_movem_load (rtx src, rtx nregs_rtx, int nprefix)
   if (GET_CODE (XEXP (src, 0)) == POST_INC)
     {
       RTVEC_ELT (vec, nprefix + 1)
-	= gen_rtx_SET (VOIDmode, srcreg,
-		       plus_constant (Pmode, srcreg, nregs * 4));
+	= gen_rtx_SET (srcreg, plus_constant (Pmode, srcreg, nregs * 4));
       eltno++;
     }
 
   src = replace_equiv_address (src, srcreg);
   RTVEC_ELT (vec, nprefix)
-    = gen_rtx_SET (VOIDmode, gen_rtx_REG (SImode, regno), src);
+    = gen_rtx_SET (gen_rtx_REG (SImode, regno), src);
   regno += regno_inc;
 
   for (i = 1; i < nregs; i++, eltno++)
     {
       RTVEC_ELT (vec, nprefix + eltno)
-	= gen_rtx_SET (VOIDmode, gen_rtx_REG (SImode, regno),
+	= gen_rtx_SET (gen_rtx_REG (SImode, regno),
 		       adjust_address_nv (src, SImode, i * 4));
       regno += regno_inc;
     }
@@ -3690,7 +3619,7 @@ cris_emit_movem_store (rtx dest, rtx nregs_rtx, int increment,
      registers so there's a three cycles penalty for use.  */
   if (nregs == 1)
     {
-      rtx mov = gen_rtx_SET (VOIDmode, dest, gen_rtx_REG (SImode, 0));
+      rtx mov = gen_rtx_SET (dest, gen_rtx_REG (SImode, 0));
 
       if (increment == 0)
 	{
@@ -3705,9 +3634,8 @@ cris_emit_movem_store (rtx dest, rtx nregs_rtx, int increment,
       vec = rtvec_alloc (2);
 
       RTVEC_ELT (vec, 0) = mov;
-      RTVEC_ELT (vec, 1) = gen_rtx_SET (VOIDmode, destreg,
-					plus_constant (Pmode, destreg,
-						       increment));
+      RTVEC_ELT (vec, 1) = gen_rtx_SET (destreg, plus_constant (Pmode, destreg,
+								increment));
       if (frame_related)
 	{
 	  RTX_FRAME_RELATED_P (mov) = 1;
@@ -3718,8 +3646,7 @@ cris_emit_movem_store (rtx dest, rtx nregs_rtx, int increment,
     {
       vec = rtvec_alloc (nregs + (increment != 0 ? 1 : 0));
       RTVEC_ELT (vec, 0)
-	= gen_rtx_SET (VOIDmode,
-		       replace_equiv_address (dest,
+	= gen_rtx_SET (replace_equiv_address (dest,
 					      plus_constant (Pmode, destreg,
 							     increment)),
 		       gen_rtx_REG (SImode, regno));
@@ -3734,10 +3661,9 @@ cris_emit_movem_store (rtx dest, rtx nregs_rtx, int increment,
       if (increment != 0)
 	{
 	  RTVEC_ELT (vec, 1)
-	    = gen_rtx_SET (VOIDmode, destreg,
-			   plus_constant (Pmode, destreg,
-					  increment != 0
-					  ? increment : nregs * 4));
+	    = gen_rtx_SET (destreg, plus_constant (Pmode, destreg,
+						   increment != 0
+						   ? increment : nregs * 4));
 	  eltno++;
 
 	  if (frame_related)
@@ -3752,7 +3678,7 @@ cris_emit_movem_store (rtx dest, rtx nregs_rtx, int increment,
       for (i = 1; i < nregs; i++, eltno++)
 	{
 	  RTVEC_ELT (vec, eltno)
-	    = gen_rtx_SET (VOIDmode, adjust_address_nv (dest, SImode, i * 4),
+	    = gen_rtx_SET (adjust_address_nv (dest, SImode, i * 4),
 			   gen_rtx_REG (SImode, regno));
 	  if (frame_related)
 	    RTX_FRAME_RELATED_P (RTVEC_ELT (vec, eltno)) = 1;
@@ -4219,55 +4145,41 @@ cris_function_arg_advance (cumulative_args_t ca_v, machine_mode mode,
   ca->regs += (3 + CRIS_FUNCTION_ARG_SIZE (mode, type)) / 4;
 }
 
-/* Worker function for TARGET_MD_ASM_CLOBBERS.  */
+/* Worker function for TARGET_MD_ASM_ADJUST.  */
 
-static tree
-cris_md_asm_clobbers (tree outputs, tree inputs, tree in_clobbers)
+static rtx_insn *
+cris_md_asm_adjust (vec<rtx> &outputs, vec<rtx> &inputs,
+		    vec<const char *> &constraints,
+		    vec<rtx> &clobbers, HARD_REG_SET &clobbered_regs)
 {
-  HARD_REG_SET mof_set;
-  tree clobbers;
-  tree t;
+  /* For the time being, all asms clobber condition codes.
+     Revisit when there's a reasonable use for inputs/outputs
+     that mention condition codes.  */
+  clobbers.safe_push (gen_rtx_REG (CCmode, CRIS_CC0_REGNUM));
+  SET_HARD_REG_BIT (clobbered_regs, CRIS_CC0_REGNUM);
 
-  CLEAR_HARD_REG_SET (mof_set);
-  SET_HARD_REG_BIT (mof_set, CRIS_MOF_REGNUM);
+  /* Determine if the source using MOF.  If it is, automatically
+     clobbering MOF would cause it to have impossible constraints.  */
 
-  /* For the time being, all asms clobber condition codes.  Revisit when
-     there's a reasonable use for inputs/outputs that mention condition
-     codes.  */
-  clobbers
-    = tree_cons (NULL_TREE,
-		 build_string (strlen (reg_names[CRIS_CC0_REGNUM]),
-			       reg_names[CRIS_CC0_REGNUM]),
-		 in_clobbers);
+  /* Look for a use of the MOF constraint letter: h.  */
+  for (unsigned i = 0, n = constraints.length(); i < n; ++i)
+    if (strchr (constraints[i], 'h') != NULL)
+      return NULL;
 
-  for (t = outputs; t != NULL; t = TREE_CHAIN (t))
-    {
-      tree val = TREE_VALUE (t);
+  /* Look for an output or an input that touches MOF.  */
+  rtx mof_reg = gen_rtx_REG (SImode, CRIS_MOF_REGNUM);
+  for (unsigned i = 0, n = outputs.length(); i < n; ++i)
+    if (reg_overlap_mentioned_p (mof_reg, outputs[i]))
+      return NULL;
+  for (unsigned i = 0, n = inputs.length(); i < n; ++i)
+    if (reg_overlap_mentioned_p (mof_reg, inputs[i]))
+      return NULL;
 
-      /* The constraint letter for the singleton register class of MOF
-	 is 'h'.  If it's mentioned in the constraints, the asm is
-	 MOF-aware and adding it to the clobbers would cause it to have
-	 impossible constraints.  */
-      if (strchr (TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (t))),
-		  'h') != NULL
-	  || tree_overlaps_hard_reg_set (val, &mof_set) != NULL_TREE)
-	return clobbers;
-    }
-
-  for (t = inputs; t != NULL; t = TREE_CHAIN (t))
-    {
-      tree val = TREE_VALUE (t);
-
-      if (strchr (TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (t))),
-		  'h') != NULL
-	  || tree_overlaps_hard_reg_set (val, &mof_set) != NULL_TREE)
-	return clobbers;
-    }
-
-  return tree_cons (NULL_TREE,
-		    build_string (strlen (reg_names[CRIS_MOF_REGNUM]),
-				  reg_names[CRIS_MOF_REGNUM]),
-		    clobbers);
+  /* No direct reference to MOF or its constraint.
+     Clobber it for backward compatibility.  */
+  clobbers.safe_push (mof_reg);
+  SET_HARD_REG_BIT (clobbered_regs, CRIS_MOF_REGNUM);
+  return NULL;
 }
 
 /* Implement TARGET_FRAME_POINTER_REQUIRED.

@@ -1,22 +1,118 @@
-2016-06-03  Release Manager
+2018-01-25  Release Manager
 
-	* GCC 5.4.0 released.
+	* GCC 7.3.0 released.
 
-2016-02-01  John David Anglin  <danglin@gcc.gnu.org>
+2017-08-14  Release Manager
+
+	* GCC 7.2.0 released.
+
+2017-05-02  Release Manager
+
+	* GCC 7.1.0 released.
+
+2017-02-25  John David Anglin  <danglin@gcc.gnu.org>
+
+	PR target/68739
+	* inclhack.def (hpux11_pthread_pointer): New fix.
+	(hpux11_pthread_const): Adjust to remove void * cast from define.
+	* fixincl.x: Regenerate.
+
+2017-02-11  John David Anglin  <danglin@gcc.gnu.org>
+
+	* tests/base/alloca.h: New file.
+	* inclhack.def (hppa_hpux11_alloca): New fix.
+	* fixincl.x: Regenerate.
+
+2017-01-17  Jakub Jelinek  <jakub@redhat.com>
+
+	PR other/79046
+	* configure.ac: Add GCC_BASE_VER.
+	* Makefile.in (gcc_version): Use @get_gcc_base_ver@ instead of cat to
+	get version from BASE-VER file.
+	* configure: Regenerated.
+
+2017-01-13  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR libstdc++/78979
+	* inclhack.def (solaris_gets_c11, solaris_gets_cxx14)
+	(solaris_std_gets_cxx14, solaris_stdlib_noreturn): New fixes.
+	* fixincl.x: Regenerate.
+	* tests/base/iso/stdio_iso.h [SOLARIS_GETS_C11_CHECK,
+	SOLARIS_GETS_CXX14_CHECK, SOLARIS_STD_GETS_CXX14_CHECK,
+	SOLARIS_STDLIB_NORETURN_CHECK]: New tests.
+
+2016-11-21  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* inclhack.def (solaris_math_12): New fix.
+	(hpux11_fabsf): Replace bypass by *-hp-hpux11* mach selector.
+	* fixincl.x: Regenerate.
+	* tests/base/math.h [SOLARIS_MATH_12_CHECK]: New test.
+
+2016-11-20  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR sanitizer/78267
+	* inclhack.def (darwin_availabilityinternal, darwin_os_trace_1)
+	(darwin_os_trace_2, darwin_os_trace_3): New fixes.
+	(hpux_stdint_least_fast): Remove spurious _EOFix_.
+	* fixincl.x: Regenerate.
+	* tests/bases/AvailabilityInternal.h: New file.
+	* tests/bases/os/trace.h: New file.
+
+2016-09-30  Tadek Kijkowski  <tkijkowski@gmail.com>
+
+	* check.tpl: Convert line endings to unix on test outputs
+	* fixfixes.c: Fixed passing file name to apply_fix when
+	SEPARATE_FIX_PROC is defined
+	* fixincl.c: Use system_with_shell, fixes for MinGW and DJGPP
+	* fixlib.c, fixlib.h: Added system_with_shell and fix_path_separators
+
+2016-09-04  John David Anglin  <danglin@gcc.gnu.org>
+
+	* inclhack.def (hpux_longjmp): Adjust select regular expression.
+	* fixincl.x: Regenerate.
+
+2016-08-13  John David Anglin  <danglin@gcc.gnu.org>
+
+	* inclhack.def (hpux_longjmp): New fix.
+	* fixincl.x: Regenerate.
+	* tests/base/setjmp.h: New test file.
+
+2016-08-09  Bernd Edlinger  <bernd.edlinger@hotmail.de>
+
+	PR bootstrap/72833
+	* fixincl.tpl (version-compare): Fix generation with autogen 5.18.
+	* inclhack.def (darwin_longjmp_noreturn): New fix.
+	* fixincl.x: Regenerated.
+	* tests/base/i386/setjmp.h [DARWIN_LONGJMP_NORETURN_CHECK]: new test.
+
+2016-08-01  Muhammad Bilal  <mbilal@codesourcery.com>
+
+	* fixinc.in: Use --parents option to make LIB directory.
+
+2016-06-21  Trevor Saunders  <tbsaunde+gcc@tbsaunde.org>
+
+	* mkfixinc.sh: Remove interix support.
+
+2016-06-13  David Edelsohn  <dje.gcc@gmail.com>
+
+	* inclhack.def (aix_stdlib_malloc): New fix.
+	(aix_stdlib_realloc): New fix.
+	(aix_stdlib_calloc): New fix.
+	(aix_stdlib_valloc): New fix.
+	* fixincl.x: Regenerate.
+	* tests/base/stdlib.h [AIX_STDLIB_MALLOC]: New test.
+	[AIX_STDLIB_REALLOC]: New test.
+	[AIX_STDLIB_CALLOC]: New test.
+	[AIX_STDLIB_VALLOC]: New test.
+
+2016-01-31  John David Anglin  <danglin@gcc.gnu.org>
 
 	PR target/68741
 	* inclhack.def (hpux_vsscanf): New fix.
 	* fixincl.x: Regenerated.
 	* tests/base/stdio.h [HPUX_VSSCANF_CHECK]: New test.
 
-2015-12-04  Release Manager
-
-	* GCC 5.3.0 released.
-
 2015-08-14  David Edelsohn  <dje.gcc@gmail.com>
-
-	Backport from mainline.
-	2015-08-14  David Edelsohn  <dje.gcc@gmail.com>
 
 	* inclhack.def (aix_stdio_inline): New fix.
 	(aix_strtof_const): Limit to *-*-aix*.
@@ -26,14 +122,11 @@
 	* fixincl.x: Regenerated.
 	* test/base/stdio.h [AIX_STDIO_INLINE]: New test.
 
-2015-07-16  Release Manager
+2015-07-28  Eric Gallager  <egall@gwmail.gwu.edu>
 
-	* GCC 5.2.0 released.
+	* check.tpl: Ignore .DS_Store directories.
 
-2015-05-22  David Edelsohn  <dje.gcc@gmail.com>
-
-	Backport from mainline.
-	2015-05-21  David Edelsohn  <dje.gcc@gmail.com>
+2015-05-21  David Edelsohn  <dje.gcc@gmail.com>
 
 	* inclhack.def (aix_externc): New fix.
 	(aix_externcpp[12]): New fix.
@@ -42,9 +135,13 @@
 	* test/base/sys/socket.h [AIX_EXTERNCPP[12]_CHECK]: New test.
 	* test/base/fcntl.h: New file.
 
-2015-04-22  Release Manager
+2015-05-13  Michael Haubenwallner  <michael.haubenwallner@ssi-schaefer.com>
 
-	* GCC 5.1.0 released.
+	* aclocal.m4: Regenerated with automake-1.11.6.
+
+2015-04-22  Gregor Richards  <gregor.richards@uwaterloo.ca>
+
+	* mkfixinc.sh: Add *-musl* with no fixes.
 
 2015-03-28  John David Anglin  <danglin@gcc.gnu.org>
 

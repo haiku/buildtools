@@ -1,5 +1,5 @@
 /* Allocation for dataflow support routines.
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2017 Free Software Foundation, Inc.
    Originally contributed by Michael P. Hayes
              (m.hayes@elec.canterbury.ac.nz, mhayes@redhat.com)
    Major rewrite contributed by Danny Berlin (dberlin@dberlin.org)
@@ -377,31 +377,13 @@ are write-only operations.
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
 #include "rtl.h"
-#include "tm_p.h"
-#include "insn-config.h"
-#include "recog.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "vec.h"
-#include "machmode.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "regs.h"
-#include "alloc-pool.h"
-#include "flags.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfganal.h"
-#include "basic-block.h"
-#include "sbitmap.h"
-#include "bitmap.h"
 #include "df.h"
+#include "memmodel.h"
+#include "emit-rtl.h"
+#include "cfganal.h"
 #include "tree-pass.h"
-#include "params.h"
 #include "cfgloop.h"
 
 static void *df_get_bb_info (struct dataflow *, unsigned int);
@@ -430,7 +412,7 @@ struct df_d *df;
 /* Add PROBLEM (and any dependent problems) to the DF instance.  */
 
 void
-df_add_problem (struct df_problem *problem)
+df_add_problem (const struct df_problem *problem)
 {
   struct dataflow *dflow;
   int i;
@@ -603,7 +585,7 @@ df_set_blocks (bitmap blocks)
 void
 df_remove_problem (struct dataflow *dflow)
 {
-  struct df_problem *problem;
+  const struct df_problem *problem;
   int i;
 
   if (!dflow)
@@ -642,7 +624,6 @@ void
 df_finish_pass (bool verify ATTRIBUTE_UNUSED)
 {
   int i;
-  int removed = 0;
 
 #ifdef ENABLE_DF_CHECKING
   int saved_flags;
@@ -658,21 +639,15 @@ df_finish_pass (bool verify ATTRIBUTE_UNUSED)
   saved_flags = df->changeable_flags;
 #endif
 
-  for (i = 0; i < df->num_problems_defined; i++)
+  /* We iterate over problems by index as each problem removed will
+     lead to problems_in_order to be reordered.  */
+  for (i = 0; i < DF_LAST_PROBLEM_PLUS1; i++)
     {
-      struct dataflow *dflow = df->problems_in_order[i];
-      struct df_problem *problem = dflow->problem;
+      struct dataflow *dflow = df->problems_by_index[i];
 
-      if (dflow->optional_p)
-	{
-	  gcc_assert (problem->remove_problem_fun);
-	  (problem->remove_problem_fun) ();
-	  df->problems_in_order[i] = NULL;
-	  df->problems_by_index[problem->id] = NULL;
-	  removed++;
-	}
+      if (dflow && dflow->optional_p)
+	df_remove_problem (dflow);
     }
-  df->num_problems_defined -= removed;
 
   /* Clear all of the flags.  */
   df->changeable_flags = 0;
@@ -701,10 +676,8 @@ df_finish_pass (bool verify ATTRIBUTE_UNUSED)
 #endif
 #endif
 
-#ifdef ENABLE_CHECKING
-  if (verify)
+  if (flag_checking && verify)
     df->changeable_flags |= DF_VERIFY_SCHEDULED;
-#endif
 }
 
 
@@ -1054,10 +1027,7 @@ df_worklist_dataflow_doublequeue (struct dataflow *dataflow,
       bitmap_iterator bi;
       unsigned int index;
 
-      /* Swap pending and worklist. */
-      bitmap temp = worklist;
-      worklist = pending;
-      pending = temp;
+      std::swap (pending, worklist);
 
       EXECUTE_IF_SET_IN_BITMAP (worklist, 0, index, bi)
 	{
@@ -1094,7 +1064,7 @@ df_worklist_dataflow_doublequeue (struct dataflow *dataflow,
   /* Dump statistics. */
   if (dump_file)
     fprintf (dump_file, "df_worklist_dataflow_doublequeue:"
-	     "n_basic_blocks %d n_edges %d"
+	     " n_basic_blocks %d n_edges %d"
 	     " count %d (%5.2g)\n",
 	     n_basic_blocks_for_fn (cfun), n_edges_for_fn (cfun),
 	     dcount, dcount / (float)n_basic_blocks_for_fn (cfun));
@@ -1114,7 +1084,6 @@ df_worklist_dataflow (struct dataflow *dataflow,
                       int n_blocks)
 {
   bitmap pending = BITMAP_ALLOC (&df_bitmap_obstack);
-  sbitmap considered = sbitmap_alloc (last_basic_block_for_fn (cfun));
   bitmap_iterator bi;
   unsigned int *bbindex_to_postorder;
   int i;
@@ -1132,6 +1101,7 @@ df_worklist_dataflow (struct dataflow *dataflow,
     bbindex_to_postorder[i] = last_basic_block_for_fn (cfun);
 
   /* Initialize the considered map.  */
+  auto_sbitmap considered (last_basic_block_for_fn (cfun));
   bitmap_clear (considered);
   EXECUTE_IF_SET_IN_BITMAP (blocks_to_consider, 0, index, bi)
     {
@@ -1155,7 +1125,6 @@ df_worklist_dataflow (struct dataflow *dataflow,
 				    blocks_in_postorder,
 				    bbindex_to_postorder,
 				    n_blocks);
-  sbitmap_free (considered);
   free (bbindex_to_postorder);
 }
 
@@ -1295,12 +1264,14 @@ df_analyze (void)
   for (i = 0; i < df->n_blocks; i++)
     bitmap_set_bit (current_all_blocks, df->postorder[i]);
 
-#ifdef ENABLE_CHECKING
-  /* Verify that POSTORDER_INVERTED only contains blocks reachable from
-     the ENTRY block.  */
-  for (i = 0; i < df->n_blocks_inverted; i++)
-    gcc_assert (bitmap_bit_p (current_all_blocks, df->postorder_inverted[i]));
-#endif
+  if (flag_checking)
+    {
+      /* Verify that POSTORDER_INVERTED only contains blocks reachable from
+	 the ENTRY block.  */
+      for (i = 0; i < df->n_blocks_inverted; i++)
+	gcc_assert (bitmap_bit_p (current_all_blocks,
+				  df->postorder_inverted[i]));
+    }
 
   /* Make sure that we have pruned any unreachable blocks from these
      sets.  */
@@ -1863,6 +1834,7 @@ df_verify (void)
   if (df_live)
     df_live_verify_transfer_functions ();
 #endif
+  df->changeable_flags &= ~DF_VERIFY_SCHEDULED;
 }
 
 #ifdef DF_DEBUG_CFG

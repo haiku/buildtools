@@ -1,6 +1,6 @@
 /* OpenACC Runtime initialization routines
 
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
    Contributed by Mentor Embedded.
 
@@ -31,11 +31,12 @@
 #include "libgomp.h"
 #include "gomp-constants.h"
 #include "oacc-int.h"
-#include "splay-tree.h"
 #include <stdint.h>
+#include <string.h>
 #include <assert.h>
 
-/* Return block containing [H->S), or NULL if not contained.  */
+/* Return block containing [H->S), or NULL if not contained.  The device lock
+   for DEV must be locked on entry, and remains locked on exit.  */
 
 static splay_tree_key
 lookup_host (struct gomp_device_descr *dev, void *h, size_t s)
@@ -46,9 +47,7 @@ lookup_host (struct gomp_device_descr *dev, void *h, size_t s)
   node.host_start = (uintptr_t) h;
   node.host_end = (uintptr_t) h + s;
 
-  gomp_mutex_lock (&dev->lock);
   key = splay_tree_lookup (&dev->mem_map, &node);
-  gomp_mutex_unlock (&dev->lock);
 
   return key;
 }
@@ -56,7 +55,8 @@ lookup_host (struct gomp_device_descr *dev, void *h, size_t s)
 /* Return block containing [D->S), or NULL if not contained.
    The list isn't ordered by device address, so we have to iterate
    over the whole array.  This is not expected to be a common
-   operation.  */
+   operation.  The device lock associated with TGT must be locked on entry, and
+   remains locked on exit.  */
 
 static splay_tree_key
 lookup_dev (struct target_mem_desc *tgt, void *d, size_t s)
@@ -67,15 +67,11 @@ lookup_dev (struct target_mem_desc *tgt, void *d, size_t s)
   if (!tgt)
     return NULL;
 
-  gomp_mutex_lock (&tgt->device_descr->lock);
-
   for (t = tgt; t != NULL; t = t->prev)
     {
       if (t->tgt_start <= (uintptr_t) d && t->tgt_end >= (uintptr_t) d + s)
         break;
     }
-
-  gomp_mutex_unlock (&tgt->device_descr->lock);
 
   if (!t)
     return NULL;
@@ -109,6 +105,9 @@ acc_malloc (size_t s)
 
   assert (thr->dev);
 
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return malloc (s);
+
   return thr->dev->alloc_func (thr->dev->target_id, s);
 }
 
@@ -119,26 +118,39 @@ void
 acc_free (void *d)
 {
   splay_tree_key k;
-  struct goacc_thread *thr = goacc_thread ();
 
   if (!d)
     return;
 
+  struct goacc_thread *thr = goacc_thread ();
+
   assert (thr && thr->dev);
+
+  struct gomp_device_descr *acc_dev = thr->dev;
+
+  if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return free (d);
+
+  gomp_mutex_lock (&acc_dev->lock);
 
   /* We don't have to call lazy open here, as the ptr value must have
      been returned by acc_malloc.  It's not permitted to pass NULL in
      (unless you got that null from acc_malloc).  */
-  if ((k = lookup_dev (thr->dev->openacc.data_environ, d, 1)))
-   {
-     void *offset;
+  if ((k = lookup_dev (acc_dev->openacc.data_environ, d, 1)))
+    {
+      void *offset;
 
-     offset = d - k->tgt->tgt_start + k->tgt_offset;
+      offset = d - k->tgt->tgt_start + k->tgt_offset;
 
-     acc_unmap_data ((void *)(k->host_start + offset));
-   }
+      gomp_mutex_unlock (&acc_dev->lock);
 
-  thr->dev->free_func (thr->dev->target_id, d);
+      acc_unmap_data ((void *)(k->host_start + offset));
+    }
+  else
+    gomp_mutex_unlock (&acc_dev->lock);
+
+  if (!acc_dev->free_func (acc_dev->target_id, d))
+    gomp_fatal ("error in freeing device memory in %s", __FUNCTION__);
 }
 
 void
@@ -150,7 +162,14 @@ acc_memcpy_to_device (void *d, void *h, size_t s)
 
   assert (thr && thr->dev);
 
-  thr->dev->host2dev_func (thr->dev->target_id, d, h, s);
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    {
+      memmove (d, h, s);
+      return;
+    }
+
+  if (!thr->dev->host2dev_func (thr->dev->target_id, d, h, s))
+    gomp_fatal ("error in %s", __FUNCTION__);
 }
 
 void
@@ -162,7 +181,14 @@ acc_memcpy_from_device (void *h, void *d, size_t s)
 
   assert (thr && thr->dev);
 
-  thr->dev->dev2host_func (thr->dev->target_id, h, d, s);
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    {
+      memmove (h, d, s);
+      return;
+    }
+
+  if (!thr->dev->dev2host_func (thr->dev->target_id, h, d, s))
+    gomp_fatal ("error in %s", __FUNCTION__);
 }
 
 /* Return the device pointer that corresponds to host data H.  Or NULL
@@ -178,15 +204,26 @@ acc_deviceptr (void *h)
   goacc_lazy_initialize ();
 
   struct goacc_thread *thr = goacc_thread ();
+  struct gomp_device_descr *dev = thr->dev;
 
-  n = lookup_host (thr->dev, h, 1);
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return h;
+
+  gomp_mutex_lock (&dev->lock);
+
+  n = lookup_host (dev, h, 1);
 
   if (!n)
-    return NULL;
+    {
+      gomp_mutex_unlock (&dev->lock);
+      return NULL;
+    }
 
   offset = h - n->host_start;
 
   d = n->tgt->tgt_start + n->tgt_offset + offset;
+
+  gomp_mutex_unlock (&dev->lock);
 
   return d;
 }
@@ -204,15 +241,26 @@ acc_hostptr (void *d)
   goacc_lazy_initialize ();
 
   struct goacc_thread *thr = goacc_thread ();
+  struct gomp_device_descr *acc_dev = thr->dev;
 
-  n = lookup_dev (thr->dev->openacc.data_environ, d, 1);
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return d;
+
+  gomp_mutex_lock (&acc_dev->lock);
+
+  n = lookup_dev (acc_dev->openacc.data_environ, d, 1);
 
   if (!n)
-    return NULL;
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      return NULL;
+    }
 
   offset = d - n->tgt->tgt_start + n->tgt_offset;
 
   h = n->host_start + offset;
+
+  gomp_mutex_unlock (&acc_dev->lock);
 
   return h;
 }
@@ -232,12 +280,19 @@ acc_is_present (void *h, size_t s)
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
+  if (thr->dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return h != NULL;
+
+  gomp_mutex_lock (&acc_dev->lock);
+
   n = lookup_host (acc_dev, h, s);
 
   if (n && ((uintptr_t)h < n->host_start
 	    || (uintptr_t)h + s > n->host_end
 	    || s > n->host_end - n->host_start))
     n = NULL;
+
+  gomp_mutex_unlock (&acc_dev->lock);
 
   return n != NULL;
 }
@@ -247,7 +302,7 @@ acc_is_present (void *h, size_t s)
 void
 acc_map_data (void *h, void *d, size_t s)
 {
-  struct target_mem_desc *tgt;
+  struct target_mem_desc *tgt = NULL;
   size_t mapnum = 1;
   void *hostaddrs = h;
   void *devaddrs = d;
@@ -263,8 +318,6 @@ acc_map_data (void *h, void *d, size_t s)
     {
       if (d != h)
         gomp_fatal ("cannot map data on shared-memory system");
-
-      tgt = gomp_map_vars (NULL, 0, NULL, NULL, NULL, NULL, true, false);
     }
   else
     {
@@ -274,20 +327,32 @@ acc_map_data (void *h, void *d, size_t s)
 	gomp_fatal ("[%p,+%d]->[%p,+%d] is a bad map",
                     (void *)h, (int)s, (void *)d, (int)s);
 
+      gomp_mutex_lock (&acc_dev->lock);
+
       if (lookup_host (acc_dev, h, s))
-	gomp_fatal ("host address [%p, +%d] is already mapped", (void *)h,
-		    (int)s);
+        {
+	  gomp_mutex_unlock (&acc_dev->lock);
+	  gomp_fatal ("host address [%p, +%d] is already mapped", (void *)h,
+		      (int)s);
+	}
 
       if (lookup_dev (thr->dev->openacc.data_environ, d, s))
-	gomp_fatal ("device address [%p, +%d] is already mapped", (void *)d,
-		    (int)s);
+        {
+	  gomp_mutex_unlock (&acc_dev->lock);
+	  gomp_fatal ("device address [%p, +%d] is already mapped", (void *)d,
+		      (int)s);
+	}
+
+      gomp_mutex_unlock (&acc_dev->lock);
 
       tgt = gomp_map_vars (acc_dev, mapnum, &hostaddrs, &devaddrs, &sizes,
-			   &kinds, true, false);
+			   &kinds, true, GOMP_MAP_VARS_OPENACC);
     }
 
+  gomp_mutex_lock (&acc_dev->lock);
   tgt->prev = acc_dev->openacc.data_environ;
   acc_dev->openacc.data_environ = tgt;
+  gomp_mutex_unlock (&acc_dev->lock);
 }
 
 void
@@ -298,18 +363,31 @@ acc_unmap_data (void *h)
 
   /* No need to call lazy open, as the address must have been mapped.  */
 
+  /* This is a no-op on shared-memory targets.  */
+  if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return;
+
   size_t host_size;
+
+  gomp_mutex_lock (&acc_dev->lock);
+
   splay_tree_key n = lookup_host (acc_dev, h, 1);
   struct target_mem_desc *t;
 
   if (!n)
-    gomp_fatal ("%p is not a mapped block", (void *)h);
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("%p is not a mapped block", (void *)h);
+    }
 
   host_size = n->host_end - n->host_start;
 
   if (n->host_start != (uintptr_t) h)
-    gomp_fatal ("[%p,%d] surrounds1 %p",
-		(void *) n->host_start, (int) host_size, (void *) h);
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("[%p,%d] surrounds %p",
+		  (void *) n->host_start, (int) host_size, (void *) h);
+    }
 
   t = n->tgt;
 
@@ -323,8 +401,6 @@ acc_unmap_data (void *h)
       t->tgt_end = 0;
       t->to_free = 0;
 
-      gomp_mutex_lock (&acc_dev->lock);
-
       for (tp = NULL, t = acc_dev->openacc.data_environ; t != NULL;
 	   tp = t, t = t->prev)
 	if (n->tgt == t)
@@ -336,9 +412,9 @@ acc_unmap_data (void *h)
 
 	    break;
 	  }
-
-      gomp_mutex_unlock (&acc_dev->lock);
     }
+
+  gomp_mutex_unlock (&acc_dev->lock);
 
   gomp_unmap_vars (t, true);
 }
@@ -361,6 +437,11 @@ present_create_copy (unsigned f, void *h, size_t s)
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
+  if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return h;
+
+  gomp_mutex_lock (&acc_dev->lock);
+
   n = lookup_host (acc_dev, h, s);
   if (n)
     {
@@ -368,13 +449,22 @@ present_create_copy (unsigned f, void *h, size_t s)
       d = (void *) (n->tgt->tgt_start + n->tgt_offset);
 
       if (!(f & FLAG_PRESENT))
-        gomp_fatal ("[%p,+%d] already mapped to [%p,+%d]",
-            (void *)h, (int)s, (void *)d, (int)s);
+        {
+	  gomp_mutex_unlock (&acc_dev->lock);
+          gomp_fatal ("[%p,+%d] already mapped to [%p,+%d]",
+        	      (void *)h, (int)s, (void *)d, (int)s);
+	}
       if ((h + s) > (void *)n->host_end)
-        gomp_fatal ("[%p,+%d] not mapped", (void *)h, (int)s);
+	{
+	  gomp_mutex_unlock (&acc_dev->lock);
+	  gomp_fatal ("[%p,+%d] not mapped", (void *)h, (int)s);
+	}
+
+      gomp_mutex_unlock (&acc_dev->lock);
     }
   else if (!(f & FLAG_CREATE))
     {
+      gomp_mutex_unlock (&acc_dev->lock);
       gomp_fatal ("[%p,+%d] not mapped", (void *)h, (int)s);
     }
   else
@@ -389,8 +479,10 @@ present_create_copy (unsigned f, void *h, size_t s)
       else
 	kinds = GOMP_MAP_ALLOC;
 
+      gomp_mutex_unlock (&acc_dev->lock);
+
       tgt = gomp_map_vars (acc_dev, mapnum, &hostaddrs, NULL, &s, &kinds, true,
-			   false);
+			   GOMP_MAP_VARS_OPENACC);
 
       gomp_mutex_lock (&acc_dev->lock);
 
@@ -431,7 +523,7 @@ acc_present_or_copyin (void *h, size_t s)
 #define FLAG_COPYOUT (1 << 0)
 
 static void
-delete_copyout (unsigned f, void *h, size_t s)
+delete_copyout (unsigned f, void *h, size_t s, const char *libfnname)
 {
   size_t host_size;
   splay_tree_key n;
@@ -439,13 +531,21 @@ delete_copyout (unsigned f, void *h, size_t s)
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
+  if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return;
+
+  gomp_mutex_lock (&acc_dev->lock);
+
   n = lookup_host (acc_dev, h, s);
 
   /* No need to call lazy open, as the data must already have been
      mapped.  */
 
   if (!n)
-    gomp_fatal ("[%p,%d] is not mapped", (void *)h, (int)s);
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("[%p,%d] is not mapped", (void *)h, (int)s);
+    }
 
   d = (void *) (n->tgt->tgt_start + n->tgt_offset
 		+ (uintptr_t) h - n->host_start);
@@ -453,26 +553,33 @@ delete_copyout (unsigned f, void *h, size_t s)
   host_size = n->host_end - n->host_start;
 
   if (n->host_start != (uintptr_t) h || host_size != s)
-    gomp_fatal ("[%p,%d] surrounds2 [%p,+%d]",
-		(void *) n->host_start, (int) host_size, (void *) h, (int) s);
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("[%p,%d] surrounds2 [%p,+%d]",
+		  (void *) n->host_start, (int) host_size, (void *) h, (int) s);
+    }
+
+  gomp_mutex_unlock (&acc_dev->lock);
 
   if (f & FLAG_COPYOUT)
     acc_dev->dev2host_func (acc_dev->target_id, h, d, s);
 
   acc_unmap_data (h);
 
-  acc_dev->free_func (acc_dev->target_id, d);
+  if (!acc_dev->free_func (acc_dev->target_id, d))
+    gomp_fatal ("error in freeing device memory in %s", libfnname);
 }
 
 void
 acc_delete (void *h , size_t s)
 {
-  delete_copyout (0, h, s);
+  delete_copyout (0, h, s, __FUNCTION__);
 }
 
-void acc_copyout (void *h, size_t s)
+void
+acc_copyout (void *h, size_t s)
 {
-  delete_copyout (FLAG_COPYOUT, h, s);
+  delete_copyout (FLAG_COPYOUT, h, s, __FUNCTION__);
 }
 
 static void
@@ -480,16 +587,24 @@ update_dev_host (int is_dev, void *h, size_t s)
 {
   splay_tree_key n;
   void *d;
+
+  goacc_lazy_initialize ();
+
   struct goacc_thread *thr = goacc_thread ();
   struct gomp_device_descr *acc_dev = thr->dev;
 
+  if (acc_dev->capabilities & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    return;
+
+  gomp_mutex_lock (&acc_dev->lock);
+
   n = lookup_host (acc_dev, h, s);
 
-  /* No need to call lazy open, as the data must already have been
-     mapped.  */
-
   if (!n)
-    gomp_fatal ("[%p,%d] is not mapped", h, (int)s);
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("[%p,%d] is not mapped", h, (int)s);
+    }
 
   d = (void *) (n->tgt->tgt_start + n->tgt_offset
 		+ (uintptr_t) h - n->host_start);
@@ -498,6 +613,8 @@ update_dev_host (int is_dev, void *h, size_t s)
     acc_dev->host2dev_func (acc_dev->target_id, d, h, s);
   else
     acc_dev->dev2host_func (acc_dev->target_id, h, d, s);
+
+  gomp_mutex_unlock (&acc_dev->lock);
 }
 
 void
@@ -522,10 +639,13 @@ gomp_acc_insert_pointer (size_t mapnum, void **hostaddrs, size_t *sizes,
 
   gomp_debug (0, "  %s: prepare mappings\n", __FUNCTION__);
   tgt = gomp_map_vars (acc_dev, mapnum, hostaddrs,
-		       NULL, sizes, kinds, true, false);
+		       NULL, sizes, kinds, true, GOMP_MAP_VARS_OPENACC);
   gomp_debug (0, "  %s: mappings prepared\n", __FUNCTION__);
+
+  gomp_mutex_lock (&acc_dev->lock);
   tgt->prev = acc_dev->openacc.data_environ;
   acc_dev->openacc.data_environ = tgt;
+  gomp_mutex_unlock (&acc_dev->lock);
 }
 
 void
@@ -537,18 +657,21 @@ gomp_acc_remove_pointer (void *h, bool force_copyfrom, int async, int mapnum)
   struct target_mem_desc *t;
   int minrefs = (mapnum == 1) ? 2 : 3;
 
+  gomp_mutex_lock (&acc_dev->lock);
+
   n = lookup_host (acc_dev, h, 1);
 
   if (!n)
-    gomp_fatal ("%p is not a mapped block", (void *)h);
+    {
+      gomp_mutex_unlock (&acc_dev->lock);
+      gomp_fatal ("%p is not a mapped block", (void *)h);
+    }
 
   gomp_debug (0, "  %s: restore mappings\n", __FUNCTION__);
 
   t = n->tgt;
 
   struct target_mem_desc *tp;
-
-  gomp_mutex_lock (&acc_dev->lock);
 
   if (t->refcount == minrefs)
     {
@@ -573,7 +696,7 @@ gomp_acc_remove_pointer (void *h, bool force_copyfrom, int async, int mapnum)
     }
 
   if (force_copyfrom)
-    t->list[0]->copy_from = 1;
+    t->list[0].copy_from = 1;
 
   gomp_mutex_unlock (&acc_dev->lock);
 
@@ -581,10 +704,7 @@ gomp_acc_remove_pointer (void *h, bool force_copyfrom, int async, int mapnum)
   if (async < acc_async_noval)
     gomp_unmap_vars (t, true);
   else
-    {
-      gomp_copy_from_async (t);
-      acc_dev->openacc.register_async_cleanup_func (t);
-    }
+    t->device_descr->openacc.register_async_cleanup_func (t, async);
 
   gomp_debug (0, "  %s: mappings restored\n", __FUNCTION__);
 }

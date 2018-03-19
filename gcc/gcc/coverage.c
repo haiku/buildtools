@@ -1,5 +1,5 @@
 /* Read and write coverage files, and associated functionality.
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
    Further mangling by Bob Manson, Cygnus Support.
@@ -27,67 +27,29 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "stringpool.h"
-#include "stor-layout.h"
-#include "flags.h"
-#include "output.h"
-#include "regs.h"
-#include "hashtab.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "toplev.h"
+#include "tree-pass.h"
+#include "memmodel.h"
 #include "tm_p.h"
-#include "ggc.h"
+#include "stringpool.h"
+#include "cgraph.h"
 #include "coverage.h"
+#include "diagnostic-core.h"
+#include "fold-const.h"
+#include "stor-layout.h"
+#include "output.h"
+#include "toplev.h"
 #include "langhooks.h"
-#include "hash-table.h"
 #include "tree-iterator.h"
 #include "context.h"
 #include "pass_manager.h"
-#include "tree-pass.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
-#include "dumpfile.h"
-#include "diagnostic-core.h"
 #include "intl.h"
-#include "filenames.h"
-#include "target.h"
 #include "params.h"
 #include "auto-profile.h"
 
-#include "gcov-io.h"
 #include "gcov-io.c"
 
 struct GTY((chain_next ("%h.next"))) coverage_data
@@ -101,7 +63,7 @@ struct GTY((chain_next ("%h.next"))) coverage_data
 };
 
 /* Counts information for a function.  */
-typedef struct counts_entry
+struct counts_entry : pointer_hash <counts_entry>
 {
   /* We hash by  */
   unsigned ident;
@@ -114,12 +76,10 @@ typedef struct counts_entry
   struct gcov_ctr_summary summary;
 
   /* hash_table support.  */
-  typedef counts_entry value_type;
-  typedef counts_entry compare_type;
-  static inline hashval_t hash (const value_type *);
-  static int equal (const value_type *, const compare_type *);
-  static void remove (value_type *);
-} counts_entry_t;
+  static inline hashval_t hash (const counts_entry *);
+  static int equal (const counts_entry *, const counts_entry *);
+  static void remove (counts_entry *);
+};
 
 static GTY(()) struct coverage_data *functions_head = 0;
 static struct coverage_data **functions_tail = &functions_head;
@@ -183,7 +143,8 @@ static void coverage_obj_finish (vec<constructor_elt, va_gc> *);
 tree
 get_gcov_type (void)
 {
-  machine_mode mode = smallest_mode_for_size (GCOV_TYPE_SIZE, MODE_INT);
+  machine_mode mode
+    = smallest_mode_for_size (LONG_LONG_TYPE_SIZE > 32 ? 64 : 32, MODE_INT);
   return lang_hooks.types.type_for_mode (mode, false);
 }
 
@@ -197,20 +158,19 @@ get_gcov_unsigned_t (void)
 }
 
 inline hashval_t
-counts_entry::hash (const value_type *entry)
+counts_entry::hash (const counts_entry *entry)
 {
   return entry->ident * GCOV_COUNTERS + entry->ctr;
 }
 
 inline int
-counts_entry::equal (const value_type *entry1,
-		     const compare_type *entry2)
+counts_entry::equal (const counts_entry *entry1, const counts_entry *entry2)
 {
   return entry1->ident == entry2->ident && entry1->ctr == entry2->ctr;
 }
 
 inline void
-counts_entry::remove (value_type *entry)
+counts_entry::remove (counts_entry *entry)
 {
   free (entry->counts);
   free (entry);
@@ -306,7 +266,7 @@ read_counts_file (void)
 	}
       else if (GCOV_TAG_IS_COUNTER (tag) && fn_ident)
 	{
-	  counts_entry_t **slot, *entry, elt;
+	  counts_entry **slot, *entry, elt;
 	  unsigned n_counts = GCOV_TAG_COUNTER_NUM (length);
 	  unsigned ix;
 
@@ -317,7 +277,7 @@ read_counts_file (void)
 	  entry = *slot;
 	  if (!entry)
 	    {
-	      *slot = entry = XCNEW (counts_entry_t);
+	      *slot = entry = XCNEW (counts_entry);
 	      entry->ident = fn_ident;
 	      entry->ctr = elt.ctr;
 	      entry->lineno_checksum = lineno_checksum;
@@ -367,7 +327,9 @@ read_counts_file (void)
       gcov_sync (offset, length);
       if ((is_error = gcov_is_error ()))
 	{
-	  error (is_error < 0 ? "%qs has overflowed" : "%qs is corrupted",
+	  error (is_error < 0
+		 ? G_("%qs has overflowed")
+		 : G_("%qs is corrupted"),
 		 da_file_name);
 	  delete counts_hash;
 	  counts_hash = NULL;
@@ -385,7 +347,7 @@ get_coverage_counts (unsigned counter, unsigned expected,
                      unsigned cfg_checksum, unsigned lineno_checksum,
 		     const struct gcov_ctr_summary **summary)
 {
-  counts_entry_t *entry, elt;
+  counts_entry *entry, elt;
 
   /* No hash table, no counts.  */
   if (!counts_hash)
@@ -595,7 +557,8 @@ coverage_compute_lineno_checksum (void)
     = expand_location (DECL_SOURCE_LOCATION (current_function_decl));
   unsigned chksum = xloc.line;
 
-  chksum = coverage_checksum_string (chksum, xloc.file);
+  if (xloc.file)
+    chksum = coverage_checksum_string (chksum, xloc.file);
   chksum = coverage_checksum_string
     (chksum, IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (current_function_decl)));
 
@@ -622,7 +585,8 @@ coverage_compute_profile_id (struct cgraph_node *n)
       bool use_name_only = (PARAM_VALUE (PARAM_PROFILE_FUNC_INTERNAL_ID) == 0);
 
       chksum = (use_name_only ? 0 : xloc.line);
-      chksum = coverage_checksum_string (chksum, xloc.file);
+      if (xloc.file)
+	chksum = coverage_checksum_string (chksum, xloc.file);
       chksum = coverage_checksum_string
 	(chksum, IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (n->decl)));
       if (!use_name_only && first_global_object_name)
@@ -767,6 +731,18 @@ coverage_end_function (unsigned lineno_checksum, unsigned cfg_checksum)
     }
 }
 
+/* Remove coverage file if opened.  */
+
+void
+coverage_remove_note_file (void)
+{
+  if (bbg_file_name)
+    {
+      gcov_close ();
+      unlink (bbg_file_name);
+    }
+}
+
 /* Build a coverage variable of TYPE for function FN_DECL.  If COUNTER
    >= 0 it is a counter array, otherwise it is the function structure.  */
 
@@ -787,17 +763,13 @@ build_var (tree fn_decl, tree type, int counter)
   else
     sprintf (buf, "__gcov%u_", counter);
   len = strlen (buf);
-#ifndef NO_DOT_IN_LABEL
-  buf[len - 1] = '.';
-#elif !defined NO_DOLLAR_IN_LABEL
-  buf[len - 1] = '$';
-#endif
+  buf[len - 1] = symbol_table::symbol_suffix_separator ();
   memcpy (buf + len, fn_name, fn_name_len + 1);
   DECL_NAME (var) = get_identifier (buf);
   TREE_STATIC (var) = 1;
   TREE_ADDRESSABLE (var) = 1;
   DECL_NONALIASED (var) = 1;
-  DECL_ALIGN (var) = TYPE_ALIGN (type);
+  SET_DECL_ALIGN (var, TYPE_ALIGN (type));
 
   return var;
 }
@@ -1099,7 +1071,34 @@ build_init_ctor (tree gcov_info_type)
   append_to_statement_list (stmt, &ctor);
 
   /* Generate a constructor to run it.  */
-  cgraph_build_static_cdtor ('I', ctor, DEFAULT_INIT_PRIORITY);
+  int priority = SUPPORTS_INIT_PRIORITY
+    ? MAX_RESERVED_INIT_PRIORITY: DEFAULT_INIT_PRIORITY;
+  cgraph_build_static_cdtor ('I', ctor, priority);
+}
+
+/* Generate the destructor function to call __gcov_exit.  */
+
+static void
+build_gcov_exit_decl (void)
+{
+  tree init_fn = build_function_type_list (void_type_node, void_type_node,
+					   NULL);
+  init_fn = build_decl (BUILTINS_LOCATION, FUNCTION_DECL,
+			get_identifier ("__gcov_exit"), init_fn);
+  TREE_PUBLIC (init_fn) = 1;
+  DECL_EXTERNAL (init_fn) = 1;
+  DECL_ASSEMBLER_NAME (init_fn);
+
+  /* Generate a call to __gcov_exit ().  */
+  tree dtor = NULL;
+  tree stmt = build_call_expr (init_fn, 0);
+  append_to_statement_list (stmt, &dtor);
+
+  /* Generate a destructor to run it.  */
+  int priority = SUPPORTS_INIT_PRIORITY
+    ? MAX_RESERVED_INIT_PRIORITY: DEFAULT_INIT_PRIORITY;
+
+  cgraph_build_static_cdtor ('D', dtor, priority);
 }
 
 /* Create the gcov_info types and object.  Generate the constructor
@@ -1142,9 +1141,10 @@ coverage_obj_init (void)
   /* Build the info and fn_info types.  These are mutually recursive.  */
   gcov_info_type = lang_hooks.types.make_type (RECORD_TYPE);
   gcov_fn_info_type = lang_hooks.types.make_type (RECORD_TYPE);
+  build_fn_info_type (gcov_fn_info_type, n_counters, gcov_info_type);
+  gcov_info_type = lang_hooks.types.make_type (RECORD_TYPE);
   gcov_fn_info_ptr_type = build_pointer_type
     (build_qualified_type (gcov_fn_info_type, TYPE_QUAL_CONST));
-  build_fn_info_type (gcov_fn_info_type, n_counters, gcov_info_type);
   build_info_type (gcov_info_type, gcov_fn_info_ptr_type);
   
   /* Build the gcov info var, this is referred to in its own
@@ -1156,6 +1156,7 @@ coverage_obj_init (void)
   DECL_NAME (gcov_info_var) = get_identifier (name_buf);
 
   build_init_ctor (gcov_info_type);
+  build_gcov_exit_decl ();
 
   return true;
 }

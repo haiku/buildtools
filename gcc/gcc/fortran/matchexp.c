@@ -1,5 +1,5 @@
 /* Expression parser.
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2017 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -25,7 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "arith.h"
 #include "match.h"
 
-static char expression_syntax[] = N_("Syntax error in expression at %C");
+static const char expression_syntax[] = N_("Syntax error in expression at %C");
 
 
 /* Match a user-defined operator name.  This is a normal name with a
@@ -69,7 +69,7 @@ gfc_match_defined_op_name (char *result, int error_flag)
   for (i = 0; name[i]; i++)
     if (!ISALPHA (name[i]))
       {
-	gfc_error ("Bad character %<%c%> in OPERATOR name at %C", name[i]);
+	gfc_error ("Bad character %qc in OPERATOR name at %C", name[i]);
 	return MATCH_ERROR;
       }
 

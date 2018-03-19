@@ -1,5 +1,5 @@
 /* Output dbx-format symbol table information from GNU compiler.
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -69,55 +69,28 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "target.h"
+#include "function.h"
+#include "rtl.h"
 #include "tree.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "stringpool.h"
+#include "insn-config.h"
+#include "emit-rtl.h"
+#include "cgraph.h"
+#include "diagnostic-core.h"
 #include "fold-const.h"
 #include "varasm.h"
 #include "stor-layout.h"
-#include "rtl.h"
-#include "flags.h"
-#include "regs.h"
-#include "insn-config.h"
 #include "reload.h"
 #include "output.h"
 #include "dbxout.h"
-#include "diagnostic-core.h"
 #include "toplev.h"
-#include "tm_p.h"
-#include "ggc.h"
 #include "debug.h"
-#include "hashtab.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "target.h"
 #include "common/common-target.h"
 #include "langhooks.h"
-#include "obstack.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
-#include "stringpool.h"
 
 #ifdef XCOFF_DEBUGGING_INFO
 #include "xcoffout.h"
@@ -350,7 +323,8 @@ static int dbxout_symbol_location (tree, tree, const char *, rtx);
 static void dbxout_symbol_name (tree, const char *, int);
 static void dbxout_common_name (tree, const char *, stab_code_type);
 static const char *dbxout_common_check (tree, int *);
-static void dbxout_global_decl (tree);
+static void dbxout_early_global_decl (tree);
+static void dbxout_late_global_decl (tree);
 static void dbxout_type_decl (tree, int);
 static void dbxout_handle_pch (unsigned);
 static void debug_free_queue (void);
@@ -358,8 +332,9 @@ static void debug_free_queue (void);
 /* The debug hooks structure.  */
 #if defined (DBX_DEBUGGING_INFO)
 
-static void dbxout_source_line (unsigned int, const char *, int, bool);
-static void dbxout_begin_prologue (unsigned int, const char *);
+static void dbxout_source_line (unsigned int, unsigned int, const char *,
+				int, bool);
+static void dbxout_begin_prologue (unsigned int, unsigned int, const char *);
 static void dbxout_source_file (const char *);
 static void dbxout_function_end (tree);
 static void dbxout_begin_function (tree);
@@ -371,6 +346,7 @@ const struct gcc_debug_hooks dbx_debug_hooks =
 {
   dbxout_init,
   dbxout_finish,
+  debug_nothing_charstar,
   debug_nothing_void,
   debug_nothing_int_charstar,
   debug_nothing_int_charstar,
@@ -392,7 +368,8 @@ const struct gcc_debug_hooks dbx_debug_hooks =
   debug_nothing_int,		         /* end_function */
   debug_nothing_tree,			 /* register_main_translation_unit */
   dbxout_function_decl,
-  dbxout_global_decl,		         /* global_decl */
+  dbxout_early_global_decl,		 /* early_global_decl */
+  dbxout_late_global_decl,		 /* late_global_decl */
   dbxout_type_decl,			 /* type_decl */
   debug_nothing_tree_tree_tree_bool,	 /* imported_module_or_decl */
   debug_nothing_tree,		         /* deferred_inline_function */
@@ -400,6 +377,7 @@ const struct gcc_debug_hooks dbx_debug_hooks =
   debug_nothing_rtx_code_label,	         /* label */
   dbxout_handle_pch,		         /* handle_pch */
   debug_nothing_rtx_insn,	         /* var_location */
+  debug_nothing_tree,			 /* size_function */
   debug_nothing_void,                    /* switch_text_section */
   debug_nothing_tree_tree,		 /* set_name */
   0,                                     /* start_end_main_source_file */
@@ -412,6 +390,7 @@ const struct gcc_debug_hooks xcoff_debug_hooks =
 {
   dbxout_init,
   dbxout_finish,
+  debug_nothing_charstar,
   debug_nothing_void,
   debug_nothing_int_charstar,
   debug_nothing_int_charstar,
@@ -429,7 +408,8 @@ const struct gcc_debug_hooks xcoff_debug_hooks =
   xcoffout_end_function,
   debug_nothing_tree,			 /* register_main_translation_unit */
   debug_nothing_tree,		         /* function_decl */
-  dbxout_global_decl,		         /* global_decl */
+  dbxout_early_global_decl,		 /* early_global_decl */
+  dbxout_late_global_decl,		 /* late_global_decl */
   dbxout_type_decl,			 /* type_decl */
   debug_nothing_tree_tree_tree_bool,	 /* imported_module_or_decl */
   debug_nothing_tree,		         /* deferred_inline_function */
@@ -437,6 +417,7 @@ const struct gcc_debug_hooks xcoff_debug_hooks =
   debug_nothing_rtx_code_label,	         /* label */
   dbxout_handle_pch,		         /* handle_pch */
   debug_nothing_rtx_insn,	         /* var_location */
+  debug_nothing_tree,			 /* size_function */
   debug_nothing_void,                    /* switch_text_section */
   debug_nothing_tree_tree,	         /* set_name */
   0,                                     /* start_end_main_source_file */
@@ -1261,7 +1242,9 @@ dbxout_source_file (const char *filename)
    function scope  */
 
 static void
-dbxout_begin_prologue (unsigned int lineno, const char *filename)
+dbxout_begin_prologue (unsigned int lineno,
+		       unsigned int column ATTRIBUTE_UNUSED,
+		       const char *filename)
 {
   if (use_gnu_debug_info_extensions
       && !NO_DBX_FUNCTION_END
@@ -1272,7 +1255,7 @@ dbxout_begin_prologue (unsigned int lineno, const char *filename)
   /* pre-increment the scope counter */
   scope_labelno++;
 
-  dbxout_source_line (lineno, filename, 0, true);
+  dbxout_source_line (lineno, 0, filename, 0, true);
   /* Output function begin block at function scope, referenced
      by dbxout_block, dbxout_source_line and dbxout_function_end.  */
   emit_pending_bincls_if_required ();
@@ -1283,8 +1266,8 @@ dbxout_begin_prologue (unsigned int lineno, const char *filename)
    number LINENO.  */
 
 static void
-dbxout_source_line (unsigned int lineno, const char *filename,
-                    int discriminator ATTRIBUTE_UNUSED,
+dbxout_source_line (unsigned int lineno, unsigned int column ATTRIBUTE_UNUSED,
+		    const char *filename, int discriminator ATTRIBUTE_UNUSED,
                     bool is_stmt ATTRIBUTE_UNUSED)
 {
   dbxout_source_file (filename);
@@ -1343,12 +1326,18 @@ dbxout_function_decl (tree decl)
 
 #endif /* DBX_DEBUGGING_INFO  */
 
+static void
+dbxout_early_global_decl (tree decl ATTRIBUTE_UNUSED)
+{
+  /* NYI for non-dwarf.  */
+}
+
 /* Debug information for a global DECL.  Called from toplev.c after
    compilation proper has finished.  */
 static void
-dbxout_global_decl (tree decl)
+dbxout_late_global_decl (tree decl)
 {
-  if (TREE_CODE (decl) == VAR_DECL && !DECL_EXTERNAL (decl))
+  if (VAR_P (decl) && !DECL_EXTERNAL (decl))
     {
       int saved_tree_used = TREE_USED (decl);
       TREE_USED (decl) = 1;
@@ -1493,6 +1482,7 @@ dbxout_type_fields (tree type)
 
       /* Omit here local type decls until we know how to support them.  */
       if (TREE_CODE (tem) == TYPE_DECL
+	  || TREE_CODE (tem) == TEMPLATE_DECL
 	  /* Omit here the nameless fields that are used to skip bits.  */
 	  || DECL_IGNORED_P (tem)
 	  /* Omit fields whose position or size are variable or too large to
@@ -1526,7 +1516,7 @@ dbxout_type_fields (tree type)
 			&& DECL_BIT_FIELD_TYPE (tem))
 		       ? DECL_BIT_FIELD_TYPE (tem) : TREE_TYPE (tem), 0);
 
-	  if (TREE_CODE (tem) == VAR_DECL)
+	  if (VAR_P (tem))
 	    {
 	      if (TREE_STATIC (tem) && use_gnu_debug_info_extensions)
 		{
@@ -2416,8 +2406,8 @@ dbxout_type_name (tree type)
   stabstr_I (t);
 }
 
-/* Output leading leading struct or class names needed for qualifying
-   type whose scope is limited to a struct or class.  */
+/* Output leading struct or class names needed for qualifying type
+   whose scope is limited to a struct or class.  */
 
 static void
 dbxout_class_name_qualifiers (tree decl)
@@ -2496,11 +2486,11 @@ dbxout_expand_expr (tree expr)
 	machine_mode mode;
 	HOST_WIDE_INT bitsize, bitpos;
 	tree offset, tem;
-	int volatilep = 0, unsignedp = 0;
+	int unsignedp, reversep, volatilep = 0;
 	rtx x;
 
-	tem = get_inner_reference (expr, &bitsize, &bitpos, &offset,
-				   &mode, &unsignedp, &volatilep, true);
+	tem = get_inner_reference (expr, &bitsize, &bitpos, &offset, &mode,
+				   &unsignedp, &reversep, &volatilep);
 
 	x = dbxout_expand_expr (tem);
 	if (x == NULL || !MEM_P (x))
@@ -2625,7 +2615,7 @@ dbxout_symbol (tree decl, int local ATTRIBUTE_UNUSED)
 
   if (flag_debug_only_used_symbols
       && (!TREE_USED (decl)
-          && (TREE_CODE (decl) != VAR_DECL || !DECL_INITIAL (decl))))
+          && (!VAR_P (decl) || !DECL_INITIAL (decl))))
     DBXOUT_DECR_NESTING_AND_RETURN (0);
 
   /* If dbxout_init has not yet run, queue this symbol for later.  */
@@ -2880,9 +2870,9 @@ dbxout_symbol (tree decl, int local ATTRIBUTE_UNUSED)
       /* PARM_DECLs go in their own separate chain and are output by
 	 dbxout_reg_parms and dbxout_parms, except for those that are
 	 disguised VAR_DECLs like Out parameters in Ada.  */
-      gcc_assert (TREE_CODE (decl) == VAR_DECL);
+      gcc_assert (VAR_P (decl));
 
-      /* ... fall through ...  */
+      /* fall through */
 
     case RESULT_DECL:
     case VAR_DECL:
@@ -3287,7 +3277,7 @@ dbxout_common_check (tree decl, int *value)
      ??? DECL_THREAD_LOCAL_P check prevents problems with improper .stabs
      for thread-local symbols.  Can be handled via same mechanism as used
      in dwarf2out.c.  */
-  if (TREE_CODE (decl) != VAR_DECL
+  if (!VAR_P (decl)
       || !TREE_STATIC (decl)
       || !DECL_HAS_VALUE_EXPR_P (decl)
       || DECL_THREAD_LOCAL_P (decl)

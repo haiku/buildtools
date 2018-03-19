@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2014 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2014-2016 Intel Corporation.  All Rights Reserved.
 
     Redistribution and use in source and binary forms, with or without
     modification, are permitted provided that the following conditions
@@ -43,6 +43,7 @@ public:
     ~OffloadDescriptor() {
         if (m_vars != 0) {
             free(m_vars);
+            free(m_vars_extra);
         }
     }
 
@@ -96,19 +97,27 @@ private:
     VarDesc* m_vars;
     int      m_vars_total;
     int      m_offload_number;
+
+    // extra data associated with each variable descriptor
+    struct VarExtra {
+        uint16_t type_src;
+        uint16_t type_dst;
+    };
+
+    VarExtra* m_vars_extra;
 };
 
 // one time target initialization in main
-extern void __offload_target_init(void);
+DLL_LOCAL extern void __offload_target_init(void);
 
 // logical device index
-extern int mic_index;
+DLL_LOCAL extern int mic_index;
 
 // total number of available logical devices
-extern int mic_engines_total;
+DLL_LOCAL extern int mic_engines_total;
 
 // device frequency (from COI)
-extern uint64_t mic_frequency;
+DLL_LOCAL extern uint64_t mic_frequency;
 
 struct RefInfo {
     RefInfo(bool is_add, long amount):is_added(is_add),count(amount)

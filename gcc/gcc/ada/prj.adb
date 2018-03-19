@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -76,6 +76,9 @@ package body Prj is
                           All_Upper_Case => All_Upper_Case_Image'Access,
                           Mixed_Case     => Mixed_Case_Image'Access);
 
+   package Name_Id_Set is
+      new Ada.Containers.Ordered_Sets (Element_Type => Name_Id);
+
    procedure Free (Project : in out Project_Id);
    --  Free memory allocated for Project
 
@@ -140,7 +143,7 @@ package body Prj is
 
       while Last + S'Length > To'Last loop
          declare
-            New_Buffer : constant  String_Access :=
+            New_Buffer : constant String_Access :=
                            new String (1 .. 2 * To'Length);
          begin
             New_Buffer (1 .. Last) := To (1 .. Last);
@@ -187,7 +190,7 @@ package body Prj is
       pragma Warnings (Off, Dont_Care);
 
    begin
-      if not Opt.Keep_Temporary_Files  then
+      if not Opt.Keep_Temporary_Files then
          if Current_Verbosity = High then
             Write_Line ("Removing temp file: " & Get_Name_String (Path));
          end if;
@@ -303,7 +306,9 @@ package body Prj is
          when Makefile =>
             return Extend_Name (Source_File_Name, Makefile_Dependency_Suffix);
 
-         when ALI_File | ALI_Closure =>
+         when ALI_Closure
+            | ALI_File
+         =>
             return Extend_Name (Source_File_Name, ALI_Dependency_Suffix);
       end case;
    end Dependency_Name;
@@ -590,11 +595,13 @@ package body Prj is
          From_Encapsulated_Lib : Boolean)
       is
          package Name_Id_Set is
-           new Ada.Containers.Ordered_Sets (Element_Type => Name_Id);
+           new Ada.Containers.Ordered_Sets (Element_Type => Path_Name_Type);
 
          Seen_Name : Name_Id_Set.Set;
          --  This set is needed to ensure that we do not handle the same
          --  project twice in the context of aggregate libraries.
+         --  Since duplicate project names are possible in the context of
+         --  aggregated projects, we need to check the full paths.
 
          procedure Recursive_Check
            (Project               : Project_Id;
@@ -673,12 +680,12 @@ package body Prj is
          --  Start of processing for Recursive_Check
 
          begin
-            if not Seen_Name.Contains (Project.Name) then
+            if not Seen_Name.Contains (Project.Path.Name) then
 
                --  Even if a project is aggregated multiple times in an
                --  aggregated library, we will only return it once.
 
-               Seen_Name.Include (Project.Name);
+               Seen_Name.Include (Project.Path.Name);
 
                if not Imported_First then
                   Action
@@ -1245,7 +1252,9 @@ package body Prj is
          Free_List (Project.Languages);
 
          case Project.Qualifier is
-            when Aggregate | Aggregate_Library =>
+            when Aggregate
+               | Aggregate_Library
+            =>
                Free (Project.Aggregated_Projects);
 
             when others =>
@@ -1894,12 +1903,9 @@ package body Prj is
    begin
       if Source.Unit /= No_Unit_Index then
          case Source.Kind is
-            when Impl =>
-               return Source.Unit.File_Names (Spec);
-            when Spec =>
-               return Source.Unit.File_Names (Impl);
-            when Sep =>
-               return No_Source;
+            when Impl => return Source.Unit.File_Names (Spec);
+            when Spec => return Source.Unit.File_Names (Impl);
+            when Sep  => return No_Source;
          end case;
       else
          return No_Source;

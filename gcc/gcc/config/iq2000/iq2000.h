@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.  
    Vitesse IQ2000 processors
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -230,7 +230,7 @@ enum reg_class
 
 /* Basic Stack Layout.  */
 
-#define STACK_GROWS_DOWNWARD
+#define STACK_GROWS_DOWNWARD 1
 
 #define FRAME_GROWS_DOWNWARD 0
 
@@ -258,7 +258,7 @@ enum reg_class
     : (rtx) 0)
 
 /* Before the prologue, RA lives in r31.  */
-#define INCOMING_RETURN_ADDR_RTX  gen_rtx_REG (VOIDmode, GP_REG_FIRST + 31)
+#define INCOMING_RETURN_ADDR_RTX  gen_rtx_REG (Pmode, GP_REG_FIRST + 31)
 
 
 /* Register That Address the Stack Frame.  */
@@ -541,7 +541,7 @@ while (0)
 
 #define CASE_VECTOR_MODE SImode
 
-#define WORD_REGISTER_OPERATIONS
+#define WORD_REGISTER_OPERATIONS 1
 
 #define LOAD_EXTEND_OP(MODE) ZERO_EXTEND
 

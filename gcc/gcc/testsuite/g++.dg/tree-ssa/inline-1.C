@@ -3,7 +3,7 @@
 /* { dg-add-options bind_pic_locally } */
 
 namespace std {
-  extern "C" void puts(const char *s);
+  extern "C" int puts(const char *s);
 }
 
 template <class T, class E> void
@@ -33,4 +33,3 @@ int main(int argc, char **argv)
 
 /* { dg-final { scan-tree-dump-times "Inlining void inline_me\\(" 1 "einline"} } */
 /* { dg-final { scan-tree-dump-times "Inlining void inline_me_too\\(" 1 "einline"} } */
-/* { dg-final { cleanup-tree-dump "einline" } } */

@@ -1,5 +1,5 @@
 /* Header file for openMP lowering directives.
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,16 +20,12 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_OMP_LOW_H
 #define GCC_OMP_LOW_H
 
-struct omp_region;
-
-extern tree find_omp_clause (tree, enum omp_clause_code);
-extern void omp_expand_local (basic_block);
-extern void free_omp_regions (void);
+extern tree omp_reduction_init_op (location_t, enum tree_code, tree);
 extern tree omp_reduction_init (tree, tree);
-extern bool make_gimple_omp_edges (basic_block, struct omp_region **, int *);
-extern void omp_finish_file (void);
+extern tree omp_member_access_dummy_var (tree);
+extern tree omp_find_combined_for (gimple_stmt_iterator *gsi_p,
+				   bool *handled_ops_p,
+				   struct walk_stmt_info *wi);
 
-extern GTY(()) vec<tree, va_gc> *offload_funcs;
-extern GTY(()) vec<tree, va_gc> *offload_vars;
 
 #endif /* GCC_OMP_LOW_H */

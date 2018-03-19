@@ -6,4 +6,4 @@
 #include "atomic_loaddi_relaxed.x"
 
 /* { dg-final { scan-assembler-times "ldrexd\tr\[0-9\]+, r\[0-9\]+, \\\[r\[0-9\]+\\\]" 1 } } */
-/* { dg-final { scan-assembler-not "dmb\tsy" } } */
+/* { dg-final { scan-assembler-not "dmb\tish" } } */

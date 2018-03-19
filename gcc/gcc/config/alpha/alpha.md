@@ -1,5 +1,5 @@
 ;; Machine description for DEC Alpha for GNU C compiler
-;; Copyright (C) 1992-2015 Free Software Foundation, Inc.
+;; Copyright (C) 1992-2017 Free Software Foundation, Inc.
 ;; Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 ;;
 ;; This file is part of GCC.
@@ -337,8 +337,8 @@
   "! sext_add_operand (operands[2], SImode) && INTVAL (operands[2]) > 0
    && INTVAL (operands[2]) % 4 == 0"
   [(set (match_dup 3) (match_dup 4))
-   (set (match_dup 0) (sign_extend:DI (plus:SI (mult:SI (match_dup 3)
-							(match_dup 5))
+   (set (match_dup 0) (sign_extend:DI (plus:SI (ashift:SI (match_dup 3)
+							  (match_dup 5))
 					       (match_dup 1))))]
 {
   HOST_WIDE_INT val = INTVAL (operands[2]) / 4;
@@ -348,7 +348,7 @@
     val /= 2, mult = 8;
 
   operands[4] = GEN_INT (val);
-  operands[5] = GEN_INT (mult);
+  operands[5] = GEN_INT (exact_log2 (mult));
 })
 
 (define_split
@@ -519,38 +519,71 @@
 (define_insn "*sadd<modesuffix>"
   [(set (match_operand:I48MODE 0 "register_operand" "=r,r")
 	(plus:I48MODE
-	 (mult:I48MODE (match_operand:I48MODE 1 "reg_not_elim_operand" "r,r")
-		       (match_operand:I48MODE 2 "const48_operand" "I,I"))
+	 (ashift:I48MODE (match_operand:I48MODE 1 "reg_not_elim_operand" "r,r")
+			 (match_operand:I48MODE 2 "const23_operand" "I,I"))
 	 (match_operand:I48MODE 3 "sext_add_operand" "rI,O")))]
   ""
   "@
-   s%2add<modesuffix> %1,%3,%0
-   s%2sub<modesuffix> %1,%n3,%0")
+   s%P2add<modesuffix> %1,%3,%0
+   s%P2sub<modesuffix> %1,%n3,%0")
+
+(define_insn_and_split "*saddsi_1"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(plus:SI
+	 (subreg:SI
+	  (ashift:DI (match_operand:DI 1 "reg_not_elim_operand" "r,r")
+		     (match_operand:DI 2 "const23_operand" "I,I")) 0)
+	 (match_operand:SI 3 "sext_add_operand" "rI,O")))]
+  ""
+  "#"
+  ""
+  [(set (match_dup 0)
+	(plus:SI (ashift:SI (match_dup 1) (match_dup 2))
+		 (match_dup 3)))]
+  "operands[1] = gen_lowpart (SImode, operands[1]);")
 
 (define_insn "*saddl_se"
   [(set (match_operand:DI 0 "register_operand" "=r,r")
 	(sign_extend:DI
-	 (plus:SI (mult:SI (match_operand:SI 1 "reg_not_elim_operand" "r,r")
-			   (match_operand:SI 2 "const48_operand" "I,I"))
-		  (match_operand:SI 3 "sext_add_operand" "rI,O"))))]
+	 (plus:SI
+	  (ashift:SI (match_operand:SI 1 "reg_not_elim_operand" "r,r")
+		     (match_operand:SI 2 "const23_operand" "I,I"))
+	 (match_operand:SI 3 "sext_add_operand" "rI,O"))))]
   ""
   "@
-   s%2addl %1,%3,%0
-   s%2subl %1,%n3,%0")
+   s%P2addl %1,%3,%0
+   s%P2subl %1,%n3,%0")
+
+(define_insn_and_split "*saddl_se_1"
+  [(set (match_operand:DI 0 "register_operand" "=r,r")
+	(sign_extend:DI
+	 (plus:SI
+	  (subreg:SI
+	   (ashift:DI (match_operand:DI 1 "reg_not_elim_operand" "r,r")
+		      (match_operand:DI 2 "const23_operand" "I,I")) 0)
+	 (match_operand:SI 3 "sext_add_operand" "rI,O"))))]
+  ""
+  "#"
+  ""
+  [(set (match_dup 0)
+	(sign_extend:DI
+	 (plus:SI (ashift:SI (match_dup 1) (match_dup 2))
+		  (match_dup 3))))]
+  "operands[1] = gen_lowpart (SImode, operands[1]);")
 
 (define_split
   [(set (match_operand:DI 0 "register_operand")
 	(sign_extend:DI
-	 (plus:SI (mult:SI (match_operator:SI 1 "comparison_operator"
+	 (plus:SI (ashift:SI (match_operator:SI 1 "comparison_operator"
 					      [(match_operand 2)
 					       (match_operand 3)])
-			   (match_operand:SI 4 "const48_operand"))
+			   (match_operand:SI 4 "const23_operand"))
 		  (match_operand:SI 5 "sext_add_operand"))))
    (clobber (match_operand:DI 6 "reg_not_elim_operand"))]
   ""
   [(set (match_dup 6) (match_dup 7))
    (set (match_dup 0)
-	(sign_extend:DI (plus:SI (mult:SI (match_dup 8) (match_dup 4))
+	(sign_extend:DI (plus:SI (ashift:SI (match_dup 8) (match_dup 4))
 				 (match_dup 5))))]
 {
   operands[7] = gen_rtx_fmt_ee (GET_CODE (operands[1]), DImode,
@@ -621,20 +654,53 @@
 (define_insn "*ssub<modesuffix>"
   [(set (match_operand:I48MODE 0 "register_operand" "=r")
 	(minus:I48MODE
-	 (mult:I48MODE (match_operand:I48MODE 1 "reg_not_elim_operand" "r")
-		       (match_operand:I48MODE 2 "const48_operand" "I"))
+	 (ashift:I48MODE (match_operand:I48MODE 1 "reg_not_elim_operand" "r")
+			 (match_operand:I48MODE 2 "const23_operand" "I"))
 		  (match_operand:I48MODE 3 "reg_or_8bit_operand" "rI")))]
   ""
-  "s%2sub<modesuffix> %1,%3,%0")
+  "s%P2sub<modesuffix> %1,%3,%0")
+
+(define_insn_and_split "*ssubsi_1"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(minus:SI
+	 (subreg:SI
+	  (ashift:DI (match_operand:DI 1 "reg_not_elim_operand" "r")
+		     (match_operand:DI 2 "const23_operand" "I")) 0)
+	 (match_operand:SI 3 "reg_or_8bit_operand" "rI")))]
+  ""
+  "#"
+  ""
+  [(set (match_dup 0)
+	(minus:SI (ashift:SI (match_dup 1) (match_dup 2))
+		  (match_dup 3)))]
+  "operands[1] = gen_lowpart (SImode, operands[1]);")
 
 (define_insn "*ssubl_se"
   [(set (match_operand:DI 0 "register_operand" "=r")
 	(sign_extend:DI
-	 (minus:SI (mult:SI (match_operand:SI 1 "reg_not_elim_operand" "r")
-			    (match_operand:SI 2 "const48_operand" "I"))
-		   (match_operand:SI 3 "reg_or_8bit_operand" "rI"))))]
+	 (minus:SI
+	  (ashift:SI (match_operand:SI 1 "reg_not_elim_operand" "r")
+		     (match_operand:SI 2 "const23_operand" "I"))
+	 (match_operand:SI 3 "reg_or_8bit_operand" "rI"))))]
   ""
-  "s%2subl %1,%3,%0")
+  "s%P2subl %1,%3,%0")
+
+(define_insn_and_split "*ssubl_se_1"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	 (minus:SI
+	  (subreg:SI
+	   (ashift:DI (match_operand:DI 1 "reg_not_elim_operand" "r")
+		      (match_operand:DI 2 "const23_operand" "I")) 0)
+	 (match_operand:SI 3 "reg_or_8bit_operand" "rI"))))]
+  ""
+  "#"
+  ""
+  [(set (match_dup 0)
+	(sign_extend:DI
+	 (minus:SI (ashift:SI (match_dup 1) (match_dup 2))
+		   (match_dup 3))))]
+  "operands[1] = gen_lowpart (SImode, operands[1]);")
 
 (define_insn "subv<mode>3"
   [(set (match_operand:I48MODE 0 "register_operand" "=r")
@@ -922,7 +988,7 @@
 (define_insn "*andsi_internal"
   [(set (match_operand:SI 0 "register_operand" "=r,r,r")
 	(and:SI (match_operand:SI 1 "reg_or_0_operand" "%rJ,rJ,rJ")
-		(match_operand:SI 2 "and_operand" "rI,N,MH")))]
+		(match_operand:SI 2 "and_operand" "rI,N,M")))]
   ""
   "@
    and %r1,%2,%0
@@ -933,7 +999,7 @@
 (define_insn "anddi3"
   [(set (match_operand:DI 0 "register_operand" "=r,r,r")
 	(and:DI (match_operand:DI 1 "reg_or_0_operand" "%rJ,rJ,rJ")
-		(match_operand:DI 2 "and_operand" "rI,N,MH")))]
+		(match_operand:DI 2 "and_operand" "rI,N,M")))]
   ""
   "@
    and %r1,%2,%0
@@ -951,7 +1017,7 @@
   [(set (match_operand:DI 0 "register_operand")
 	(and:DI (match_operand:DI 1 "register_operand")
 		(match_operand:DI 2 "const_int_operand")))]
-  "HOST_BITS_PER_WIDE_INT == 64 && ! and_operand (operands[2], DImode)"
+  "! and_operand (operands[2], DImode)"
   [(set (match_dup 0) (and:DI (match_dup 1) (match_dup 3)))
    (set (match_dup 0) (and:DI (match_dup 0) (match_dup 4)))]
 {
@@ -1200,7 +1266,7 @@
 	 (subreg:SI (ashift:DI (match_operand:DI 1 "reg_or_0_operand" "rJ")
 			       (match_operand:DI 2 "const_int_operand" "P"))
 		    0)))]
-  "INTVAL (operands[2]) >= 1 && INTVAL (operands[2]) <= 3"
+  "IN_RANGE (INTVAL (operands[2]), 1, 3)"
 {
   if (operands[2] == const1_rtx)
     return "addl %r1,%r1,%0";
@@ -1235,7 +1301,7 @@
 
 (define_expand "extendqidi2"
   [(set (match_operand:DI 0 "register_operand")
-	(sign_extend:DI (match_operand:QI 1 "some_operand")))]
+	(sign_extend:DI (match_operand:QI 1 "general_operand")))]
   ""
 {
   if (TARGET_BWX)
@@ -1280,7 +1346,7 @@
 
 (define_expand "extendhidi2"
   [(set (match_operand:DI 0 "register_operand")
-	(sign_extend:DI (match_operand:HI 1 "some_operand")))]
+	(sign_extend:DI (match_operand:HI 1 "general_operand")))]
   ""
 {
   if (TARGET_BWX)
@@ -1508,17 +1574,14 @@
   [(set (match_operand:DI 0 "register_operand" "=r")
 	(and:DI (ashift:DI (match_operand:DI 1 "register_operand" "r")
 		   	   (match_operand:DI 2 "mul8_operand" "I"))
-		(match_operand:DI 3 "immediate_operand" "i")))]
-  "HOST_BITS_PER_WIDE_INT == 64
-   && CONST_INT_P (operands[3])
-   && (((unsigned HOST_WIDE_INT) 0xff << INTVAL (operands[2])
+		(match_operand:DI 3 "const_int_operand" "i")))]
+  "((unsigned HOST_WIDE_INT) 0xff << INTVAL (operands[2])
+    == (unsigned HOST_WIDE_INT) INTVAL (operands[3]))
+    || ((unsigned HOST_WIDE_INT) 0xffff << INTVAL (operands[2])
         == (unsigned HOST_WIDE_INT) INTVAL (operands[3]))
-       || ((unsigned HOST_WIDE_INT) 0xffff << INTVAL (operands[2])
-        == (unsigned HOST_WIDE_INT) INTVAL (operands[3]))
-       || ((unsigned HOST_WIDE_INT) 0xffffffff << INTVAL (operands[2])
-        == (unsigned HOST_WIDE_INT) INTVAL (operands[3])))"
+    || ((unsigned HOST_WIDE_INT) 0xffffffff << INTVAL (operands[2])
+        == (unsigned HOST_WIDE_INT) INTVAL (operands[3]))"
 {
-#if HOST_BITS_PER_WIDE_INT == 64
   if ((unsigned HOST_WIDE_INT) 0xff << INTVAL (operands[2])
       == (unsigned HOST_WIDE_INT) INTVAL (operands[3]))
     return "insbl %1,%s2,%0";
@@ -1528,7 +1591,7 @@
   if ((unsigned HOST_WIDE_INT) 0xffffffff << INTVAL (operands[2])
       == (unsigned HOST_WIDE_INT) INTVAL (operands[3]))
     return "insll %1,%s2,%0";
-#endif
+
   gcc_unreachable ();
 }
   [(set_attr "type" "shift")])
@@ -1619,13 +1682,7 @@
 		   (abs:TF (match_operand:TF 1 "reg_or_0_operand")))
 	      (use (match_dup 2))])]
   "TARGET_HAS_XFLOATING_LIBS"
-{
-#if HOST_BITS_PER_WIDE_INT >= 64
-  operands[2] = force_reg (DImode, GEN_INT ((HOST_WIDE_INT) 1 << 63));
-#else
-  operands[2] = force_reg (DImode, immed_double_const (0, 0x80000000, DImode));
-#endif
-})
+  "operands[2] = force_reg (DImode, GEN_INT (HOST_WIDE_INT_1U << 63));")
 
 (define_insn_and_split "*abstf_internal"
   [(set (match_operand:TF 0 "register_operand" "=r")
@@ -1649,13 +1706,7 @@
 		   (neg:TF (match_operand:TF 1 "reg_or_0_operand")))
 	      (use (match_dup 2))])]
   "TARGET_HAS_XFLOATING_LIBS"
-{
-#if HOST_BITS_PER_WIDE_INT >= 64
-  operands[2] = force_reg (DImode, GEN_INT ((HOST_WIDE_INT) 1 << 63));
-#else
-  operands[2] = force_reg (DImode, immed_double_const (0, 0x80000000, DImode));
-#endif
-})
+  "operands[2] = force_reg (DImode, GEN_INT (HOST_WIDE_INT_1U << 63));")
 
 (define_insn_and_split "*negtf_internal"
   [(set (match_operand:TF 0 "register_operand" "=r")
@@ -2336,8 +2387,7 @@
      bit at bit 48 of the fraction, which is representable in DFmode,
      which prevents rounding error in the final conversion to SFmode.  */
 
-  emit_insn (gen_rtx_SET (VOIDmode, sticky,
-			  gen_rtx_NE (DImode, lo, const0_rtx)));
+  emit_insn (gen_rtx_SET (sticky, gen_rtx_NE (DImode, lo, const0_rtx)));
   emit_insn (gen_iordi3 (hi, hi, sticky));
   emit_insn (gen_trunctfdf2 (tmpf, arg));
   emit_insn (gen_truncdfsf2 (operands[0], tmpf));
@@ -2918,8 +2968,8 @@
 
 (define_expand "cbranchdi4"
   [(use (match_operator 0 "alpha_cbranch_operator"
-         [(match_operand:DI 1 "some_operand")
-          (match_operand:DI 2 "some_operand")]))
+         [(match_operand:DI 1 "general_operand")
+          (match_operand:DI 2 "general_operand")]))
    (use (match_operand 3))]
   ""
   "alpha_emit_conditional_branch (operands, DImode); DONE;")
@@ -2952,8 +3002,8 @@
 
 (define_expand "cstoredi4"
   [(use (match_operator:DI 1 "alpha_cbranch_operator"
-         [(match_operand:DI 2 "some_operand")
-          (match_operand:DI 3 "some_operand")]))
+         [(match_operand:DI 2 "general_operand")
+          (match_operand:DI 3 "general_operand")]))
    (clobber (match_operand:DI 0 "register_operand"))]
   ""
 {
@@ -3155,9 +3205,10 @@
   [(set (match_dup 5)
 	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(plus:DI (mult:DI (match_dup 5) (match_dup 3))
+	(plus:DI (ashift:DI (match_dup 5) (match_dup 3))
 		 (match_dup 4)))]
 {
+  operands[3] = GEN_INT (exact_log2 (INTVAL (operands [3])));
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
@@ -3180,9 +3231,10 @@
   [(set (match_dup 5)
 	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(plus:SI (mult:SI (match_dup 6) (match_dup 3))
+	(plus:SI (ashift:SI (match_dup 6) (match_dup 3))
 		 (match_dup 4)))]
 {
+  operands[3] = GEN_INT (exact_log2 (INTVAL (operands [3])));
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
@@ -3208,9 +3260,10 @@
   [(set (match_dup 5)
 	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(sign_extend:DI (plus:SI (mult:SI (match_dup 6) (match_dup 3))
+	(sign_extend:DI (plus:SI (ashift:SI (match_dup 6) (match_dup 3))
 				 (match_dup 4))))]
 {
+  operands[3] = GEN_INT (exact_log2 (INTVAL (operands [3])));
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
@@ -3235,9 +3288,10 @@
   [(set (match_dup 5)
 	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(minus:DI (mult:DI (match_dup 5) (match_dup 3))
+	(minus:DI (ashift:DI (match_dup 5) (match_dup 3))
 		  (match_dup 4)))]
 {
+  operands[3] = GEN_INT (exact_log2 (INTVAL (operands [3])));
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
@@ -3260,9 +3314,10 @@
   [(set (match_dup 5)
 	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(minus:SI (mult:SI (match_dup 6) (match_dup 3))
+	(minus:SI (ashift:SI (match_dup 6) (match_dup 3))
 		 (match_dup 4)))]
 {
+  operands[3] = GEN_INT (exact_log2 (INTVAL (operands [3])));
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
@@ -3288,9 +3343,10 @@
   [(set (match_dup 5)
 	(match_op_dup:DI 1 [(match_dup 2) (const_int 0)]))
    (set (match_dup 0)
-	(sign_extend:DI (minus:SI (mult:SI (match_dup 6) (match_dup 3))
+	(sign_extend:DI (minus:SI (ashift:SI (match_dup 6) (match_dup 3))
 				  (match_dup 4))))]
 {
+  operands[3] = GEN_INT (exact_log2 (INTVAL (operands [3])));
   if (can_create_pseudo_p ())
     operands[5] = gen_reg_rtx (DImode);
   else if (reg_overlap_mentioned_p (operands[5], operands[4]))
@@ -3662,7 +3718,7 @@
 {
   int i;
 
-  emit_call_insn (GEN_CALL (operands[0], const0_rtx, NULL, const0_rtx));
+  emit_call_insn (gen_call (operands[0], const0_rtx, NULL, const0_rtx));
 
   for (i = 0; i < XVECLEN (operands[2], 0); i++)
     {
@@ -3884,7 +3940,7 @@
     operands[1] = force_reg (TFmode, operands[1]);
 })
 
-(define_insn_and_split "*movtf"
+(define_insn_and_split "*movtf_internal"
   [(set (match_operand:TF 0 "nonimmediate_operand" "=r,o")
 	(match_operand:TF 1 "input_operand" "roG,rG"))]
   "register_operand (operands[0], TFmode)
@@ -4170,8 +4226,7 @@
   /* We must put 64-bit constants in memory.  We could keep the
      32-bit constants in TImode and rely on the splitter, but
      this doesn't seem to be worth the pain.  */
-  else if (CONST_INT_P (operands[1])
-	   || GET_CODE (operands[1]) == CONST_DOUBLE)
+  else if (CONST_SCALAR_INT_P (operands[1]))
     {
       rtx in[2], out[2], target;
 
@@ -4204,7 +4259,7 @@
       emit_insn (gen_movdi (operand_subword (target, 1, 0, TImode), out[1]));
 
       if (target != operands[0])
-	emit_insn (gen_rtx_SET (VOIDmode, operands[0], target));
+	emit_insn (gen_rtx_SET (operands[0], target));
 
       DONE;
     }
@@ -5159,7 +5214,7 @@
   "TARGET_ABI_OSF"
 {
   if (flag_reorder_blocks_and_partition)
-    operands[0] = alpha_gp_save_rtx ();
+    operands[0] = copy_rtx (alpha_gp_save_rtx ());
   else
     operands[0] = const0_rtx;
 })
@@ -5442,7 +5497,7 @@
    (match_operand:DI 2 "reg_or_8bit_operand")]
   ""
 {
-  rtx mask = immed_double_const (0xffffffff, 0, DImode);
+  rtx mask = gen_int_mode (0xffffffff, DImode);
   emit_insn (gen_mskxl (operands[0], operands[1], mask, operands[2]));
   DONE;
 })
@@ -5544,16 +5599,8 @@
   [(const_int 0)]
 {
   rtx mask = alpha_expand_zap_mask (INTVAL (operands[2]));
-  if (HOST_BITS_PER_WIDE_INT >= 64 || CONST_INT_P (mask))
-    operands[1] = gen_int_mode (INTVAL (operands[1]) & INTVAL (mask), DImode);
-  else
-    {
-      HOST_WIDE_INT c_lo = INTVAL (operands[1]);
-      HOST_WIDE_INT c_hi = (c_lo < 0 ? -1 : 0);
-      operands[1] = immed_double_const (c_lo & CONST_DOUBLE_LOW (mask),
-					c_hi & CONST_DOUBLE_HIGH (mask),
-					DImode);
-    }
+
+  operands[1] = gen_int_mode (INTVAL (operands[1]) & INTVAL (mask), DImode);
   emit_move_insn (operands[0], operands[1]);
   DONE;
 })

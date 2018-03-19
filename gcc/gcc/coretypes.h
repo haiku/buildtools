@@ -1,5 +1,5 @@
 /* GCC core type declarations.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -82,9 +82,8 @@ typedef const struct hwivec_def *const_hwivec;
 union tree_node;
 typedef union tree_node *tree;
 typedef const union tree_node *const_tree;
-typedef struct gimple_statement_base *gimple;
-typedef const struct gimple_statement_base *const_gimple;
-typedef gimple gimple_seq;
+struct gimple;
+typedef gimple *gimple_seq;
 struct gimple_stmt_iterator;
 
 /* Forward decls for leaf gimple subclasses (for individual gimple codes).
@@ -113,6 +112,7 @@ struct gomp_atomic_load;
 struct gomp_atomic_store;
 struct gomp_continue;
 struct gomp_critical;
+struct gomp_ordered;
 struct gomp_for;
 struct gomp_parallel;
 struct gomp_task;
@@ -174,6 +174,13 @@ enum offload_abi {
   OFFLOAD_ABI_ILP32
 };
 
+/* Types of profile update methods.  */
+enum profile_update {
+  PROFILE_UPDATE_SINGLE,
+  PROFILE_UPDATE_ATOMIC,
+  PROFILE_UPDATE_PREFER_ATOMIC
+};
+
 /* Types of unwind/exception handling info that can be generated.  */
 
 enum unwind_info_type
@@ -200,6 +207,18 @@ enum node_frequency {
   NODE_FREQUENCY_HOT
 };
 
+/* Ways of optimizing code.  */
+enum optimization_type {
+  /* Prioritize speed over size.  */
+  OPTIMIZE_FOR_SPEED,
+
+  /* Only do things that are good for both size and speed.  */
+  OPTIMIZE_FOR_BOTH,
+
+  /* Prioritize size over speed.  */
+  OPTIMIZE_FOR_SIZE
+};
+
 /* Possible initialization status of a variable.   When requested
    by the user, this information is tracked and recorded in the DWARF
    debug information, along with the variable's location.  */
@@ -210,6 +229,37 @@ enum var_init_status
   VAR_INIT_STATUS_INITIALIZED
 };
 
+/* Names for the different levels of -Wstrict-overflow=N.  The numeric
+   values here correspond to N.  */
+enum warn_strict_overflow_code
+{
+  /* Overflow warning that should be issued with -Wall: a questionable
+     construct that is easy to avoid even when using macros.  Example:
+     folding (x + CONSTANT > x) to 1.  */
+  WARN_STRICT_OVERFLOW_ALL = 1,
+  /* Overflow warning about folding a comparison to a constant because
+     of undefined signed overflow, other than cases covered by
+     WARN_STRICT_OVERFLOW_ALL.  Example: folding (abs (x) >= 0) to 1
+     (this is false when x == INT_MIN).  */
+  WARN_STRICT_OVERFLOW_CONDITIONAL = 2,
+  /* Overflow warning about changes to comparisons other than folding
+     them to a constant.  Example: folding (x + 1 > 1) to (x > 0).  */
+  WARN_STRICT_OVERFLOW_COMPARISON = 3,
+  /* Overflow warnings not covered by the above cases.  Example:
+     folding ((x * 10) / 5) to (x * 2).  */
+  WARN_STRICT_OVERFLOW_MISC = 4,
+  /* Overflow warnings about reducing magnitude of constants in
+     comparison.  Example: folding (x + 2 > y) to (x + 1 >= y).  */
+  WARN_STRICT_OVERFLOW_MAGNITUDE = 5
+};
+
+/* The type of an alias set.  Code currently assumes that variables of
+   this type can take the values 0 (the alias set which aliases
+   everything) and -1 (sometimes indicating that the alias set is
+   unknown, sometimes indicating a memory barrier) and -2 (indicating
+   that the alias set should be set to a unique value but has not been
+   set yet).  */
+typedef int alias_set_type;
 
 struct edge_def;
 typedef struct edge_def *edge;
@@ -218,9 +268,16 @@ struct basic_block_def;
 typedef struct basic_block_def *basic_block;
 typedef const struct basic_block_def *const_basic_block;
 
-#define obstack_chunk_alloc	xmalloc
-#define obstack_chunk_free	free
-#define OBSTACK_CHUNK_SIZE	0
+#if !defined (GENERATOR_FILE)
+# define OBSTACK_CHUNK_SIZE     memory_block_pool::block_size
+# define obstack_chunk_alloc    mempool_obstack_chunk_alloc
+# define obstack_chunk_free     mempool_obstack_chunk_free
+#else
+# define OBSTACK_CHUNK_SIZE     0
+# define obstack_chunk_alloc    xmalloc
+# define obstack_chunk_free     free
+#endif
+
 #define gcc_obstack_init(OBSTACK)				\
   obstack_specify_allocation ((OBSTACK), OBSTACK_CHUNK_SIZE, 0,	\
 			      obstack_chunk_alloc,		\
@@ -236,6 +293,8 @@ class rtl_opt_pass;
 namespace gcc {
   class context;
 }
+
+typedef std::pair <tree, tree> tree_pair;
 
 #else
 
@@ -263,32 +322,32 @@ enum function_class {
   function_c11_misc
 };
 
-/* Suppose that higher bits are target dependent. */
-#define MEMMODEL_MASK ((1<<16)-1)
-
-/* Legacy sync operations set this upper flag in the memory model.  This allows
-   targets that need to do something stronger for sync operations to
-   differentiate with their target patterns and issue a more appropriate insn
-   sequence.  See bugzilla 65697 for background.  */
-#define MEMMODEL_SYNC (1<<15)
-
-/* Memory model without SYNC bit for targets/operations that do not care.  */
-#define MEMMODEL_BASE_MASK (MEMMODEL_SYNC-1)
-
-/* Memory model types for the __atomic* builtins. 
-   This must match the order in libstdc++-v3/include/bits/atomic_base.h.  */
-enum memmodel
+/* Enumerate visibility settings.  This is deliberately ordered from most
+   to least visibility.  */
+enum symbol_visibility
 {
-  MEMMODEL_RELAXED = 0,
-  MEMMODEL_CONSUME = 1,
-  MEMMODEL_ACQUIRE = 2,
-  MEMMODEL_RELEASE = 3,
-  MEMMODEL_ACQ_REL = 4,
-  MEMMODEL_SEQ_CST = 5,
-  MEMMODEL_LAST = 6,
-  MEMMODEL_SYNC_ACQUIRE = MEMMODEL_ACQUIRE | MEMMODEL_SYNC,
-  MEMMODEL_SYNC_RELEASE = MEMMODEL_RELEASE | MEMMODEL_SYNC,
-  MEMMODEL_SYNC_SEQ_CST = MEMMODEL_SEQ_CST | MEMMODEL_SYNC
+  VISIBILITY_DEFAULT,
+  VISIBILITY_PROTECTED,
+  VISIBILITY_HIDDEN,
+  VISIBILITY_INTERNAL
+};
+
+/* enums used by the targetm.excess_precision hook.  */
+
+enum flt_eval_method
+{
+  FLT_EVAL_METHOD_UNPREDICTABLE = -1,
+  FLT_EVAL_METHOD_PROMOTE_TO_FLOAT = 0,
+  FLT_EVAL_METHOD_PROMOTE_TO_DOUBLE = 1,
+  FLT_EVAL_METHOD_PROMOTE_TO_LONG_DOUBLE = 2,
+  FLT_EVAL_METHOD_PROMOTE_TO_FLOAT16 = 16
+};
+
+enum excess_precision_type
+{
+  EXCESS_PRECISION_TYPE_IMPLICIT,
+  EXCESS_PRECISION_TYPE_STANDARD,
+  EXCESS_PRECISION_TYPE_FAST
 };
 
 /* Support for user-provided GGC and PCH markers.  The first parameter
@@ -298,5 +357,20 @@ typedef void (*gt_pointer_operator) (void *, void *);
 #if !defined (HAVE_UCHAR)
 typedef unsigned char uchar;
 #endif
+
+/* Most host source files will require the following headers.  */
+#if !defined (GENERATOR_FILE) && !defined (USED_FOR_TARGET)
+#include "machmode.h"
+#include "signop.h"
+#include "wide-int.h" 
+#include "double-int.h"
+#include "real.h"
+#include "fixed-value.h"
+#include "hash-table.h"
+#include "hash-set.h"
+#include "input.h"
+#include "is-a.h"
+#include "memory-block.h"
+#endif /* GENERATOR_FILE && !USED_FOR_TARGET */
 
 #endif /* coretypes.h */

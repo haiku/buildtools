@@ -1,6 +1,5 @@
 /* Internal demangler interface for g++ V3 ABI.
-   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2010
-   Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@wasabisystems.com>.
 
    This file is part of the libiberty library, which is part of GCC.
@@ -135,11 +134,36 @@ struct d_info
    - call d_check_char(di, '\0')
    Everything else is safe.  */
 #define d_peek_char(di) (*((di)->n))
-#define d_peek_next_char(di) ((di)->n[1])
-#define d_advance(di, i) ((di)->n += (i))
+#ifndef CHECK_DEMANGLER
+#  define d_peek_next_char(di) ((di)->n[1])
+#  define d_advance(di, i) ((di)->n += (i))
+#endif
 #define d_check_char(di, c) (d_peek_char(di) == c ? ((di)->n++, 1) : 0)
 #define d_next_char(di) (d_peek_char(di) == '\0' ? '\0' : *((di)->n++))
 #define d_str(di) ((di)->n)
+
+#ifdef CHECK_DEMANGLER
+static inline char
+d_peek_next_char (const struct d_info *di)
+{
+  if (!di->n[0])
+    abort ();
+  return di->n[1];
+}
+
+static inline void
+d_advance (struct d_info *di, int i)
+{
+  if (i < 0)
+    abort ();
+  while (i--)
+    {
+      if (!di->n[0])
+	abort ();
+      di->n++;
+    }
+}
+#endif
 
 /* Functions and arrays in cp-demangle.c which are referenced by
    functions in cp-demint.c.  */

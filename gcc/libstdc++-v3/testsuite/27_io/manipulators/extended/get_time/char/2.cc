@@ -1,9 +1,9 @@
-// { dg-require-namedlocale "de_DE.utf8" }
-// { dg-options " -std=gnu++11 " }
+// { dg-do run { target c++11 } }
+// { dg-require-namedlocale "de_DE.UTF-8" }
 
 // 2014-04-14 Rüdiger Sonderfeld  <ruediger@c-plusplus.de>
 
-// Copyright (C) 2014-2015 Free Software Foundation, Inc.
+// Copyright (C) 2014-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,9 +30,8 @@
 void test01()
 {
   using namespace std;
-  bool test __attribute__((unused)) = true;
   locale loc_c = locale::classic();
-  locale loc_de = locale("de_DE.utf8");
+  locale loc_de = locale("de_DE.UTF-8");
   VERIFY( loc_de != loc_c );
   istringstream iss;
   iss.imbue(loc_de);

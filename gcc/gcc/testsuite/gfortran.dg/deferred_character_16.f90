@@ -1,24 +1,19 @@
 ! { dg-do run }
-
-program truc
-implicit none
-
-type t_env_table
-    character(len=:), allocatable :: key
-end type
-
-type(t_env_table), dimension(:), allocatable :: environment_table
-
-character(len=:), allocatable :: s
-
-allocate(environment_table(1))
-environment_table(1)%key='tt'
-
-allocate(s, source=environment_table(1)%key)
-
-if ( .not. allocated(s) ) call abort()
-if ( s /= "tt" ) call abort()
-if ( len(s) /= 2 ) call abort()
-!print *, 's:"', s, '" derived:"',environment_table(1)%key,'"'
-
-end program
+! PR70592 dynamically-allocated character array
+! Contributed by Peter Knowles <KnowlesPJ@Cardiff.ac.uk>
+!
+PROGRAM main
+ character(len=7) :: res
+ CHARACTER(len=:), DIMENSION(:), POINTER :: cp
+ INTEGER :: i
+ ALLOCATE(CHARACTER(len=1) :: cp(1:6))
+ if (SIZE(cp) /= 6 .or. LBOUND(cp,1) /= 1 .or. UBOUND(cp,1) /= 6) call abort()
+ cp(1)='1'
+ cp(2)='2'
+ cp(3)='3'
+ cp(4)='4'
+ cp(5)='5'
+ cp(6)='6'
+ write (res, *) cp
+ if (res /= ' 123456') call abort()
+END PROGRAM main

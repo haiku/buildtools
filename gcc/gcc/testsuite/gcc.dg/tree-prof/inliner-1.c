@@ -25,7 +25,7 @@ int
 main ()
 {
   int i;
-  for (i = 0; i < 100; i++)
+  for (i = 0; i < 1000000; i++)
     {
       if (a)
         cold_function ();
@@ -40,4 +40,3 @@ main ()
    declaration or other appearances of the string in dump.  */
 /* { dg-final-use { scan-tree-dump "cold_function ..;" "optimized"} } */
 /* { dg-final-use { scan-tree-dump-not "hot_function ..;" "optimized"} } */
-/* { dg-final-use { cleanup-tree-dump "optimized" } } */

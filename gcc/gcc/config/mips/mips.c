@@ -1,5 +1,5 @@
 /* Subroutines used for MIPS code generation.
-   Copyright (C) 1989-2015 Free Software Foundation, Inc.
+   Copyright (C) 1989-2017 Free Software Foundation, Inc.
    Contributed by A. Lichnewsky, lich@inria.inria.fr.
    Changes by Michael Meissner, meissner@osf.org.
    64-bit r4000 support by Ian Lance Taylor, ian@cygnus.com, and
@@ -24,85 +24,47 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "regs.h"
-#include "hard-reg-set.h"
-#include "insn-config.h"
-#include "conditions.h"
-#include "insn-attr.h"
-#include "recog.h"
-#include "output.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
+#include "memmodel.h"
+#include "gimple.h"
+#include "cfghooks.h"
+#include "df.h"
+#include "tm_p.h"
+#include "stringpool.h"
+#include "optabs.h"
+#include "regs.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "cgraph.h"
+#include "diagnostic.h"
+#include "insn-attr.h"
+#include "output.h"
+#include "alias.h"
 #include "fold-const.h"
 #include "varasm.h"
-#include "stringpool.h"
 #include "stor-layout.h"
 #include "calls.h"
-#include "function.h"
-#include "hashtab.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
 #include "explow.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
-#include "insn-codes.h"
-#include "optabs.h"
 #include "libfuncs.h"
 #include "reload.h"
-#include "tm_p.h"
-#include "ggc.h"
-#include "gstab.h"
-#include "hash-table.h"
-#include "debug.h"
-#include "target.h"
-#include "target-def.h"
 #include "common/common-target.h"
 #include "langhooks.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "cfgrtl.h"
 #include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "predict.h"
-#include "basic-block.h"
 #include "sched-int.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-fold.h"
-#include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimplify.h"
-#include "bitmap.h"
-#include "diagnostic.h"
 #include "target-globals.h"
-#include "opts.h"
 #include "tree-pass.h"
 #include "context.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "builtins.h"
 #include "rtl-iter.h"
+
+/* This file should be included last.  */
+#include "target-def.h"
 
 /* True if X is an UNSPEC wrapper around a SYMBOL_REF or LABEL_REF.  */
 #define UNSPEC_ADDRESS_P(X)					\
@@ -199,7 +161,8 @@ along with GCC; see the file COPYING3.  If not see
 /* Return the opcode to jump to register DEST.  When the JR opcode is not
    available use JALR $0, DEST.  */
 #define MIPS_JR(DEST) \
-  (((DEST) << 21) | (ISA_HAS_JR ? 0x8 : 0x9))
+  (TARGET_CB_ALWAYS ? ((0x1b << 27) | ((DEST) << 16)) \
+		    : (((DEST) << 21) | (ISA_HAS_JR ? 0x8 : 0x9)))
 
 /* Return the opcode for:
 
@@ -282,6 +245,10 @@ enum mips_builtin_type {
   /* As above, but the instruction only sets a single $fcc register.  */
   MIPS_BUILTIN_CMP_SINGLE,
 
+  /* The function corresponds to an MSA conditional branch instruction
+     combined with a compare instruction.  */
+  MIPS_BUILTIN_MSA_TEST_BRANCH,
+
   /* For generating bposge32 branch instructions in MIPS32 DSP ASE.  */
   MIPS_BUILTIN_BPOSGE32
 };
@@ -349,125 +316,6 @@ static struct {
      when optimizing for speed.  */
   bool fast_mult_zero_zero_p;
 } mips_tuning_info;
-
-/* Information about a function's frame layout.  */
-struct GTY(())  mips_frame_info {
-  /* The size of the frame in bytes.  */
-  HOST_WIDE_INT total_size;
-
-  /* The number of bytes allocated to variables.  */
-  HOST_WIDE_INT var_size;
-
-  /* The number of bytes allocated to outgoing function arguments.  */
-  HOST_WIDE_INT args_size;
-
-  /* The number of bytes allocated to the .cprestore slot, or 0 if there
-     is no such slot.  */
-  HOST_WIDE_INT cprestore_size;
-
-  /* Bit X is set if the function saves or restores GPR X.  */
-  unsigned int mask;
-
-  /* Likewise FPR X.  */
-  unsigned int fmask;
-
-  /* Likewise doubleword accumulator X ($acX).  */
-  unsigned int acc_mask;
-
-  /* The number of GPRs, FPRs, doubleword accumulators and COP0
-     registers saved.  */
-  unsigned int num_gp;
-  unsigned int num_fp;
-  unsigned int num_acc;
-  unsigned int num_cop0_regs;
-
-  /* The offset of the topmost GPR, FPR, accumulator and COP0-register
-     save slots from the top of the frame, or zero if no such slots are
-     needed.  */
-  HOST_WIDE_INT gp_save_offset;
-  HOST_WIDE_INT fp_save_offset;
-  HOST_WIDE_INT acc_save_offset;
-  HOST_WIDE_INT cop0_save_offset;
-
-  /* Likewise, but giving offsets from the bottom of the frame.  */
-  HOST_WIDE_INT gp_sp_offset;
-  HOST_WIDE_INT fp_sp_offset;
-  HOST_WIDE_INT acc_sp_offset;
-  HOST_WIDE_INT cop0_sp_offset;
-
-  /* Similar, but the value passed to _mcount.  */
-  HOST_WIDE_INT ra_fp_offset;
-
-  /* The offset of arg_pointer_rtx from the bottom of the frame.  */
-  HOST_WIDE_INT arg_pointer_offset;
-
-  /* The offset of hard_frame_pointer_rtx from the bottom of the frame.  */
-  HOST_WIDE_INT hard_frame_pointer_offset;
-};
-
-struct GTY(())  machine_function {
-  /* The next floating-point condition-code register to allocate
-     for ISA_HAS_8CC targets, relative to ST_REG_FIRST.  */
-  unsigned int next_fcc;
-
-  /* The register returned by mips16_gp_pseudo_reg; see there for details.  */
-  rtx mips16_gp_pseudo_rtx;
-
-  /* The number of extra stack bytes taken up by register varargs.
-     This area is allocated by the callee at the very top of the frame.  */
-  int varargs_size;
-
-  /* The current frame information, calculated by mips_compute_frame_info.  */
-  struct mips_frame_info frame;
-
-  /* The register to use as the function's global pointer, or INVALID_REGNUM
-     if the function doesn't need one.  */
-  unsigned int global_pointer;
-
-  /* How many instructions it takes to load a label into $AT, or 0 if
-     this property hasn't yet been calculated.  */
-  unsigned int load_label_num_insns;
-
-  /* True if mips_adjust_insn_length should ignore an instruction's
-     hazard attribute.  */
-  bool ignore_hazard_length_p;
-
-  /* True if the whole function is suitable for .set noreorder and
-     .set nomacro.  */
-  bool all_noreorder_p;
-
-  /* True if the function has "inflexible" and "flexible" references
-     to the global pointer.  See mips_cfun_has_inflexible_gp_ref_p
-     and mips_cfun_has_flexible_gp_ref_p for details.  */
-  bool has_inflexible_gp_insn_p;
-  bool has_flexible_gp_insn_p;
-
-  /* True if the function's prologue must load the global pointer
-     value into pic_offset_table_rtx and store the same value in
-     the function's cprestore slot (if any).  Even if this value
-     is currently false, we may decide to set it to true later;
-     see mips_must_initialize_gp_p () for details.  */
-  bool must_initialize_gp_p;
-
-  /* True if the current function must restore $gp after any potential
-     clobber.  This value is only meaningful during the first post-epilogue
-     split_insns pass; see mips_must_initialize_gp_p () for details.  */
-  bool must_restore_gp_when_clobbered_p;
-
-  /* True if this is an interrupt handler.  */
-  bool interrupt_handler_p;
-
-  /* True if this is an interrupt handler that uses shadow registers.  */
-  bool use_shadow_register_set_p;
-
-  /* True if this is an interrupt handler that should keep interrupts
-     masked.  */
-  bool keep_interrupts_masked_p;
-
-  /* True if this is an interrupt handler that should use DERET
-     instead of ERET.  */
-  bool use_debug_exception_return_p;
-};
 
 /* Information about a single argument.  */
 struct mips_arg_info {
@@ -676,6 +524,9 @@ const char *mips_hi_relocs[NUM_SYMBOL_TYPES];
 /* Target state for MIPS16.  */
 struct target_globals *mips16_globals;
 
+/* Target state for MICROMIPS.  */
+struct target_globals *micromips_globals;
+
 /* Cached value of can_issue_more. This is cached in mips_variable_issue hook
    and returned from mips_sched_reorder2.  */
 static int cached_can_issue_more;
@@ -737,6 +588,10 @@ const enum reg_class mips_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   ALL_REGS,	ALL_REGS,	ALL_REGS,	ALL_REGS
 };
 
+static tree mips_handle_interrupt_attr (tree *, tree, tree, int, bool *);
+static tree mips_handle_use_shadow_register_set_attr (tree *, tree, tree, int,
+						      bool *);
+
 /* The value of TARGET_ATTRIBUTE_TABLE.  */
 static const struct attribute_spec mips_attribute_table[] = {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req, handler,
@@ -754,8 +609,10 @@ static const struct attribute_spec mips_attribute_table[] = {
   { "nomicromips", 0, 0, true,  false, false, NULL, false },
   { "nocompression", 0, 0, true,  false, false, NULL, false },
   /* Allow functions to be specified as interrupt handlers */
-  { "interrupt",   0, 0, false, true,  true, NULL, false },
-  { "use_shadow_register_set",	0, 0, false, true,  true, NULL, false },
+  { "interrupt",   0, 1, false, true,  true, mips_handle_interrupt_attr,
+    false },
+  { "use_shadow_register_set",	0, 1, false, true,  true,
+    mips_handle_use_shadow_register_set_attr, false },
   { "keep_interrupts_masked",	0, 0, false, true,  true, NULL, false },
   { "use_debug_exception_return", 0, 0, false, true,  true, NULL, false },
   { NULL,	   0, 0, false, false, false, NULL, false }
@@ -1241,7 +1098,7 @@ static const struct mips_rtx_cost_data
 		    2,            /* branch_cost */
 		    4             /* memory_latency */
   },
-  { /* W32 */
+  { /* M5100 */
     COSTS_N_INSNS (4),            /* fp_add */
     COSTS_N_INSNS (4),            /* fp_mult_sf */
     COSTS_N_INSNS (5),            /* fp_mult_df */
@@ -1249,23 +1106,23 @@ static const struct mips_rtx_cost_data
     COSTS_N_INSNS (32),           /* fp_div_df */
     COSTS_N_INSNS (5),            /* int_mult_si */
     COSTS_N_INSNS (5),            /* int_mult_di */
-    COSTS_N_INSNS (41),           /* int_div_si */
-    COSTS_N_INSNS (41),           /* int_div_di */
+    COSTS_N_INSNS (34),           /* int_div_si */
+    COSTS_N_INSNS (68),           /* int_div_di */
 		     1,           /* branch_cost */
 		     4            /* memory_latency */
   },
-  { /* W64 */
+  { /* I6400 */
     COSTS_N_INSNS (4),            /* fp_add */
-    COSTS_N_INSNS (4),            /* fp_mult_sf */
+    COSTS_N_INSNS (5),            /* fp_mult_sf */
     COSTS_N_INSNS (5),            /* fp_mult_df */
-    COSTS_N_INSNS (17),           /* fp_div_sf */
+    COSTS_N_INSNS (32),           /* fp_div_sf */
     COSTS_N_INSNS (32),           /* fp_div_df */
     COSTS_N_INSNS (5),            /* int_mult_si */
     COSTS_N_INSNS (5),            /* int_mult_di */
-    COSTS_N_INSNS (41),           /* int_div_si */
-    COSTS_N_INSNS (41),           /* int_div_di */
-		     1,           /* branch_cost */
-		     4            /* memory_latency */
+    COSTS_N_INSNS (36),           /* int_div_si */
+    COSTS_N_INSNS (36),           /* int_div_di */
+		    2,            /* branch_cost */
+		    4             /* memory_latency */
   }
 };
 
@@ -1274,21 +1131,11 @@ static int mips_register_move_cost (machine_mode, reg_class_t,
 				    reg_class_t);
 static unsigned int mips_function_arg_boundary (machine_mode, const_tree);
 static machine_mode mips_get_reg_raw_mode (int regno);
+static rtx mips_gen_const_int_vector_shuffle (machine_mode, int);
 
-struct mips16_flip_traits : default_hashmap_traits
-{
-  static hashval_t hash (const char *s) { return htab_hash_string (s); }
-  static bool
-  equal_keys (const char *a, const char *b)
-  {
-    return !strcmp (a, b);
-  }
-};
-
 /* This hash table keeps track of implicit "mips16" and "nomips16" attributes
    for -mflip_mips16.  It maps decl names onto a boolean mode setting.  */
-static GTY (()) hash_map<const char *, bool, mips16_flip_traits> *
-  mflip_mips16_htab;
+static GTY (()) hash_map<nofree_string_hash, bool> *mflip_mips16_htab;
 
 /* True if -mflip-mips16 should next add an attribute for the default MIPS16
    mode, false if it should next add an attribute for the opposite mode.  */
@@ -1309,8 +1156,7 @@ mflip_mips16_use_mips16_p (tree decl)
     return !base_is_mips16;
 
   if (!mflip_mips16_htab)
-    mflip_mips16_htab
-      = hash_map<const char *, bool, mips16_flip_traits>::create_ggc (37);
+    mflip_mips16_htab = hash_map<nofree_string_hash, bool>::create_ggc (37);
 
   name = IDENTIFIER_POINTER (DECL_NAME (decl));
 
@@ -1349,13 +1195,65 @@ mips_interrupt_type_p (tree type)
   return lookup_attribute ("interrupt", TYPE_ATTRIBUTES (type)) != NULL;
 }
 
-/* Check if the attribute to use shadow register set is set for a function.  */
+/* Return the mask for the "interrupt" attribute.  */
 
-static bool
-mips_use_shadow_register_set_p (tree type)
+static enum mips_int_mask
+mips_interrupt_mask (tree type)
 {
-  return lookup_attribute ("use_shadow_register_set",
-			   TYPE_ATTRIBUTES (type)) != NULL;
+  tree attr = lookup_attribute ("interrupt", TYPE_ATTRIBUTES (type));
+  tree args, cst;
+  const char *str;
+
+  /* For missing attributes or no arguments then return 'eic' as a safe
+     fallback.  */
+  if (attr == NULL)
+    return INT_MASK_EIC;
+
+  args = TREE_VALUE (attr);
+
+  if (args == NULL)
+    return INT_MASK_EIC;
+
+  cst = TREE_VALUE (args);
+
+  if (strcmp (TREE_STRING_POINTER (cst), "eic") == 0)
+    return INT_MASK_EIC;
+
+  /* The validation code in mips_handle_interrupt_attr guarantees that the
+     argument is now in the form:
+     vector=(sw0|sw1|hw0|hw1|hw2|hw3|hw4|hw5).  */
+  str = TREE_STRING_POINTER (cst);
+
+  gcc_assert (strlen (str) == strlen ("vector=sw0"));
+
+  if (str[7] == 's')
+    return (enum mips_int_mask) (INT_MASK_SW0 + (str[9] - '0'));
+
+  return (enum mips_int_mask) (INT_MASK_HW0 + (str[9] - '0'));
+}
+
+/* Return the mips_shadow_set if the "use_shadow_register_set" attribute is
+   set for a function.  */
+
+static enum mips_shadow_set
+mips_use_shadow_register_set (tree type)
+{
+  tree attr = lookup_attribute ("use_shadow_register_set",
+				TYPE_ATTRIBUTES (type));
+  tree args;
+
+  /* The validation code in mips_handle_use_shadow_register_set_attr guarantees
+     that if an argument is present then it means: Assume the shadow register
+     set has a valid stack pointer in it.  */
+  if (attr == NULL)
+    return SHADOW_SET_NO;
+
+  args = TREE_VALUE (attr);
+
+  if (args == NULL)
+    return SHADOW_SET_YES;
+
+  return SHADOW_SET_INTSTACK;
 }
 
 /* Check if the attribute to keep interrupts masked is set for a function.  */
@@ -1560,6 +1458,92 @@ mips_can_inline_p (tree caller, tree callee)
   if (mips_get_compress_mode (callee) != mips_get_compress_mode (caller))
     return false;
   return default_target_can_inline_p (caller, callee);
+}
+
+/* Handle an "interrupt" attribute with an optional argument.  */
+
+static tree
+mips_handle_interrupt_attr (tree *node ATTRIBUTE_UNUSED, tree name, tree args,
+			    int flags ATTRIBUTE_UNUSED, bool *no_add_attrs)
+{
+  /* Check for an argument.  */
+  if (is_attribute_p ("interrupt", name) && args != NULL)
+    {
+      tree cst;
+
+      cst = TREE_VALUE (args);
+      if (TREE_CODE (cst) != STRING_CST)
+	{
+	  warning (OPT_Wattributes,
+		   "%qE attribute requires a string argument",
+		   name);
+	  *no_add_attrs = true;
+	}
+      else if (strcmp (TREE_STRING_POINTER (cst), "eic") != 0
+	       && strncmp (TREE_STRING_POINTER (cst), "vector=", 7) != 0)
+	{
+	  warning (OPT_Wattributes,
+		   "argument to %qE attribute is neither eic, nor "
+		   "vector=<line>", name);
+	  *no_add_attrs = true;
+	}
+      else if (strncmp (TREE_STRING_POINTER (cst), "vector=", 7) == 0)
+	{
+	  const char *arg = TREE_STRING_POINTER (cst) + 7;
+
+	  /* Acceptable names are: sw0,sw1,hw0,hw1,hw2,hw3,hw4,hw5.  */
+	  if (strlen (arg) != 3
+	      || (arg[0] != 's' && arg[0] != 'h')
+	      || arg[1] != 'w'
+	      || (arg[0] == 's' && arg[2] != '0' && arg[2] != '1')
+	      || (arg[0] == 'h' && (arg[2] < '0' || arg[2] > '5')))
+	    {
+	      warning (OPT_Wattributes,
+		       "interrupt vector to %qE attribute is not "
+		       "vector=(sw0|sw1|hw0|hw1|hw2|hw3|hw4|hw5)",
+		       name);
+	      *no_add_attrs = true;
+	    }
+	}
+
+      return NULL_TREE;
+    }
+
+  return NULL_TREE;
+}
+
+/* Handle a "use_shadow_register_set" attribute with an optional argument.  */
+
+static tree
+mips_handle_use_shadow_register_set_attr (tree *node ATTRIBUTE_UNUSED,
+					  tree name, tree args,
+					  int flags ATTRIBUTE_UNUSED,
+					  bool *no_add_attrs)
+{
+  /* Check for an argument.  */
+  if (is_attribute_p ("use_shadow_register_set", name) && args != NULL)
+    {
+      tree cst;
+
+      cst = TREE_VALUE (args);
+      if (TREE_CODE (cst) != STRING_CST)
+	{
+	  warning (OPT_Wattributes,
+		   "%qE attribute requires a string argument",
+		   name);
+	  *no_add_attrs = true;
+	}
+      else if (strcmp (TREE_STRING_POINTER (cst), "intstack") != 0)
+	{
+	  warning (OPT_Wattributes,
+		   "argument to %qE attribute is not intstack", name);
+	  *no_add_attrs = true;
+	}
+
+      return NULL_TREE;
+    }
+
+  return NULL_TREE;
 }
 
 /* If X is a PLUS of a CONST_INT, return the two terms in *BASE_PTR
@@ -1855,6 +1839,140 @@ mips_symbol_binds_local_p (const_rtx x)
   return (SYMBOL_REF_DECL (x)
 	  ? targetm.binds_local_p (SYMBOL_REF_DECL (x))
 	  : SYMBOL_REF_LOCAL_P (x));
+}
+
+/* Return true if OP is a constant vector with the number of units in MODE,
+   and each unit has the same bit set.  */
+
+bool
+mips_const_vector_bitimm_set_p (rtx op, machine_mode mode)
+{
+  if (GET_CODE (op) == CONST_VECTOR && op != CONST0_RTX (mode))
+    {
+      unsigned HOST_WIDE_INT val = UINTVAL (CONST_VECTOR_ELT (op, 0));
+      int vlog2 = exact_log2 (val & GET_MODE_MASK (GET_MODE_INNER (mode)));
+
+      if (vlog2 != -1)
+	{
+	  gcc_assert (GET_MODE_CLASS (mode) == MODE_VECTOR_INT);
+	  gcc_assert (vlog2 >= 0 && vlog2 <= GET_MODE_UNIT_BITSIZE (mode) - 1);
+	  return mips_const_vector_same_val_p (op, mode);
+	}
+    }
+
+  return false;
+}
+
+/* Return true if OP is a constant vector with the number of units in MODE,
+   and each unit has the same bit clear.  */
+
+bool
+mips_const_vector_bitimm_clr_p (rtx op, machine_mode mode)
+{
+  if (GET_CODE (op) == CONST_VECTOR && op != CONSTM1_RTX (mode))
+    {
+      unsigned HOST_WIDE_INT val = ~UINTVAL (CONST_VECTOR_ELT (op, 0));
+      int vlog2 = exact_log2 (val & GET_MODE_MASK (GET_MODE_INNER (mode)));
+
+      if (vlog2 != -1)
+	{
+	  gcc_assert (GET_MODE_CLASS (mode) == MODE_VECTOR_INT);
+	  gcc_assert (vlog2 >= 0 && vlog2 <= GET_MODE_UNIT_BITSIZE (mode) - 1);
+	  return mips_const_vector_same_val_p (op, mode);
+	}
+    }
+
+  return false;
+}
+
+/* Return true if OP is a constant vector with the number of units in MODE,
+   and each unit has the same value.  */
+
+bool
+mips_const_vector_same_val_p (rtx op, machine_mode mode)
+{
+  int i, nunits = GET_MODE_NUNITS (mode);
+  rtx first;
+
+  if (GET_CODE (op) != CONST_VECTOR || GET_MODE (op) != mode)
+    return false;
+
+  first = CONST_VECTOR_ELT (op, 0);
+  for (i = 1; i < nunits; i++)
+    if (!rtx_equal_p (first, CONST_VECTOR_ELT (op, i)))
+      return false;
+
+  return true;
+}
+
+/* Return true if OP is a constant vector with the number of units in MODE,
+   and each unit has the same value as well as replicated bytes in the value.
+*/
+
+bool
+mips_const_vector_same_bytes_p (rtx op, machine_mode mode)
+{
+  int i, bytes;
+  HOST_WIDE_INT val, first_byte;
+  rtx first;
+
+  if (!mips_const_vector_same_val_p (op, mode))
+    return false;
+
+  first = CONST_VECTOR_ELT (op, 0);
+  bytes = GET_MODE_UNIT_SIZE (mode);
+  val = INTVAL (first);
+  first_byte = val & 0xff;
+  for (i = 1; i < bytes; i++)
+    {
+      val >>= 8;
+      if ((val & 0xff) != first_byte)
+	return false;
+    }
+
+  return true;
+}
+
+/* Return true if OP is a constant vector with the number of units in MODE,
+   and each unit has the same integer value in the range [LOW, HIGH].  */
+
+bool
+mips_const_vector_same_int_p (rtx op, machine_mode mode, HOST_WIDE_INT low,
+			      HOST_WIDE_INT high)
+{
+  HOST_WIDE_INT value;
+  rtx elem0;
+
+  if (!mips_const_vector_same_val_p (op, mode))
+    return false;
+
+  elem0 = CONST_VECTOR_ELT (op, 0);
+  if (!CONST_INT_P (elem0))
+    return false;
+
+  value = INTVAL (elem0);
+  return (value >= low && value <= high);
+}
+
+/* Return true if OP is a constant vector with repeated 4-element sets
+   in mode MODE.  */
+
+bool
+mips_const_vector_shuffle_set_p (rtx op, machine_mode mode)
+{
+  int nunits = GET_MODE_NUNITS (mode);
+  int nsets = nunits / 4;
+  int set = 0;
+  int i, j;
+
+  /* Check if we have the same 4-element sets.  */
+  for (j = 0; j < nsets; j++, set = 4 * j)
+    for (i = 0; i < 4; i++)
+      if ((INTVAL (XVECEXP (op, 0, i))
+	   != (INTVAL (XVECEXP (op, 0, set + i)) - set))
+	  || !IN_RANGE (INTVAL (XVECEXP (op, 0, set + i)), 0, set + 3))
+	return false;
+  return true;
 }
 
 /* Return true if rtx constants of mode MODE should be put into a small
@@ -2228,6 +2346,11 @@ mips_symbol_insns_1 (enum mips_symbol_type type, machine_mode mode)
 static int
 mips_symbol_insns (enum mips_symbol_type type, machine_mode mode)
 {
+  /* MSA LD.* and ST.* cannot support loading symbols via an immediate
+     operand.  */
+  if (MSA_SUPPORTED_MODE_P (mode))
+    return 0;
+
   return mips_symbol_insns_1 (type, mode) * (TARGET_MIPS16 ? 2 : 1);
 }
 
@@ -2347,6 +2470,12 @@ mips_valid_offset_p (rtx x, machine_mode mode)
       && !SMALL_OPERAND (INTVAL (x) + GET_MODE_SIZE (mode) - UNITS_PER_WORD))
     return false;
 
+  /* MSA LD.* and ST.* supports 10-bit signed offsets.  */
+  if (MSA_SUPPORTED_MODE_P (mode)
+      && !mips_signed_immediate_p (INTVAL (x), 10,
+				   mips_ldst_scaled_shift (mode)))
+    return false;
+
   return true;
 }
 
@@ -2371,6 +2500,10 @@ mips_valid_lo_sum_p (enum mips_symbol_type symbol_type, machine_mode mode)
      for 128-bit types.  */
   if (GET_MODE_SIZE (mode) > UNITS_PER_WORD
       && GET_MODE_BITSIZE (mode) > GET_MODE_ALIGNMENT (mode))
+    return false;
+
+  /* MSA LD.* and ST.* cannot support loading symbols via %lo($base).  */
+  if (MSA_SUPPORTED_MODE_P (mode))
     return false;
 
   return true;
@@ -2448,7 +2581,7 @@ mips_legitimate_address_p (machine_mode mode, rtx x, bool strict_p)
   return mips_classify_address (&addr, x, mode, strict_p);
 }
 
-/* Return true if X is a legitimate $sp-based address for mode MDOE.  */
+/* Return true if X is a legitimate $sp-based address for mode MODE.  */
 
 bool
 mips_stack_address_p (rtx x, machine_mode mode)
@@ -2502,6 +2635,8 @@ mips_lx_address_p (rtx addr, machine_mode mode)
     return true;
   if (ISA_HAS_LDX && mode == DImode)
     return true;
+  if (MSA_SUPPORTED_MODE_P (mode))
+    return true;
   return false;
 }
 
@@ -2539,6 +2674,7 @@ mips_address_insns (rtx x, machine_mode mode, bool might_split_p)
 {
   struct mips_address_info addr;
   int factor;
+  bool msa_p = (!might_split_p && MSA_SUPPORTED_MODE_P (mode));
 
   /* BLKmode is used for single unaligned loads and stores and should
      not count as a multiword mode.  (GET_MODE_SIZE (BLKmode) is pretty
@@ -2553,6 +2689,15 @@ mips_address_insns (rtx x, machine_mode mode, bool might_split_p)
     switch (addr.type)
       {
       case ADDRESS_REG:
+	if (msa_p)
+	  {
+	    /* MSA LD.* and ST.* supports 10-bit signed offsets.  */
+	    if (mips_signed_immediate_p (INTVAL (addr.offset), 10,
+					 mips_ldst_scaled_shift (mode)))
+	      return 1;
+	    else
+	      return 0;
+	  }
 	if (TARGET_MIPS16
 	    && !mips16_unextended_reference_p (mode, addr.reg,
 					       UINTVAL (addr.offset)))
@@ -2560,13 +2705,13 @@ mips_address_insns (rtx x, machine_mode mode, bool might_split_p)
 	return factor;
 
       case ADDRESS_LO_SUM:
-	return TARGET_MIPS16 ? factor * 2 : factor;
+	return msa_p ? 0 : TARGET_MIPS16 ? factor * 2 : factor;
 
       case ADDRESS_CONST_INT:
-	return factor;
+	return msa_p ? 0 : factor;
 
       case ADDRESS_SYMBOLIC:
-	return factor * mips_symbol_insns (addr.symbol_type, mode);
+	return msa_p ? 0 : factor * mips_symbol_insns (addr.symbol_type, mode);
       }
   return 0;
 }
@@ -2588,6 +2733,19 @@ mips_signed_immediate_p (unsigned HOST_WIDE_INT x, int bits, int shift = 0)
 {
   x += 1 << (bits + shift - 1);
   return mips_unsigned_immediate_p (x, bits, shift);
+}
+
+/* Return the scale shift that applied to MSA LD/ST address offset.  */
+
+int
+mips_ldst_scaled_shift (machine_mode mode)
+{
+  int shift = exact_log2 (GET_MODE_UNIT_SIZE (mode));
+
+  if (shift < 0 || shift > 8)
+    gcc_unreachable ();
+
+  return shift;
 }
 
 /* Return true if X is legitimate for accessing values of mode MODE,
@@ -2685,8 +2843,12 @@ mips_const_insns (rtx x)
 
       return mips_build_integer (codes, INTVAL (x));
 
-    case CONST_DOUBLE:
     case CONST_VECTOR:
+      if (ISA_HAS_MSA
+	  && mips_const_vector_same_int_p (x, GET_MODE (x), -512, 511))
+	return 1;
+      /* Fall through.  */
+    case CONST_DOUBLE:
       /* Allow zeros for normal mode, where we can use $0.  */
       return !TARGET_MIPS16 && x == CONST0_RTX (GET_MODE (x)) ? 1 : 0;
 
@@ -2746,6 +2908,26 @@ mips_split_const_insns (rtx x)
   return low + high;
 }
 
+/* Return one word of 128-bit value OP, taking into account the fixed
+   endianness of certain registers.  BYTE selects from the byte address.  */
+
+rtx
+mips_subword_at_byte (rtx op, unsigned int byte)
+{
+  machine_mode mode;
+
+  mode = GET_MODE (op);
+  if (mode == VOIDmode)
+    mode = TImode;
+
+  gcc_assert (!FP_REG_RTX_P (op));
+
+  if (MEM_P (op))
+    return mips_rewrite_small_data (adjust_address (op, word_mode, byte));
+
+  return simplify_gen_subreg (word_mode, op, mode, byte);
+}
+
 /* Return the number of instructions needed to implement INSN,
    given that it loads from or stores to MEM.  Assume that
    BASE_INSN_LENGTH is the length of one instruction.  */
@@ -2776,14 +2958,14 @@ mips_load_store_insns (rtx mem, rtx_insn *insn)
    assuming that BASE_INSN_LENGTH is the length of one instruction.  */
 
 int
-mips_idiv_insns (void)
+mips_idiv_insns (machine_mode mode)
 {
   int count;
 
   count = 1;
   if (TARGET_CHECK_ZERO_DIV)
     {
-      if (GENERATE_DIVIDE_TRAPS)
+      if (GENERATE_DIVIDE_TRAPS && !MSA_SUPPORTED_MODE_P (mode))
         count++;
       else
         count += 2;
@@ -2793,6 +2975,7 @@ mips_idiv_insns (void)
     count++;
   return count;
 }
+
 
 /* Emit a move from SRC to DEST.  Assume that the move expanders can
    handle all moves if !can_create_pseudo_p ().  The distinction is
@@ -2825,8 +3008,7 @@ mips_emit_move_or_split (rtx dest, rtx src, enum mips_split_type split_type)
 static void
 mips_emit_unary (enum rtx_code code, rtx target, rtx op0)
 {
-  emit_insn (gen_rtx_SET (VOIDmode, target,
-			  gen_rtx_fmt_e (code, GET_MODE (op0), op0)));
+  emit_insn (gen_rtx_SET (target, gen_rtx_fmt_e (code, GET_MODE (op0), op0)));
 }
 
 /* Compute (CODE OP0) and store the result in a new register of mode MODE.
@@ -2847,8 +3029,8 @@ mips_force_unary (machine_mode mode, enum rtx_code code, rtx op0)
 void
 mips_emit_binary (enum rtx_code code, rtx target, rtx op0, rtx op1)
 {
-  emit_insn (gen_rtx_SET (VOIDmode, target,
-			  gen_rtx_fmt_ee (code, GET_MODE (target), op0, op1)));
+  emit_insn (gen_rtx_SET (target, gen_rtx_fmt_ee (code, GET_MODE (target),
+						  op0, op1)));
 }
 
 /* Compute (CODE OP0 OP1) and store the result in a new register
@@ -3214,10 +3396,11 @@ static GTY(()) rtx mips_tls_symbol;
    (either global dynamic or local dynamic).  V0 is an RTX for the
    return value location.  */
 
-static rtx
+static rtx_insn *
 mips_call_tls_get_addr (rtx sym, enum mips_symbol_type type, rtx v0)
 {
-  rtx insn, loc, a0;
+  rtx loc, a0;
+  rtx_insn *insn;
 
   a0 = gen_rtx_REG (Pmode, GP_ARG_FIRST);
 
@@ -3228,8 +3411,8 @@ mips_call_tls_get_addr (rtx sym, enum mips_symbol_type type, rtx v0)
 
   start_sequence ();
 
-  emit_insn (gen_rtx_SET (Pmode, a0,
-			  gen_rtx_LO_SUM (Pmode, pic_offset_table_rtx, loc)));
+  emit_insn (gen_rtx_SET (a0, gen_rtx_LO_SUM (Pmode, pic_offset_table_rtx,
+					      loc)));
   insn = mips_expand_call (MIPS_CALL_NORMAL, v0, mips_tls_symbol,
 			   const0_rtx, NULL_RTX, false);
   RTL_CONST_CALL_P (insn) = 1;
@@ -3273,12 +3456,12 @@ mips_get_tp (void)
 static rtx
 mips_legitimize_tls_address (rtx loc)
 {
-  rtx dest, insn, v0, tp, tmp1, tmp2, eqv, offset;
+  rtx dest, v0, tp, tmp1, tmp2, eqv, offset;
   enum tls_model model;
 
   model = SYMBOL_REF_TLS_MODEL (loc);
   /* Only TARGET_ABICALLS code can have more than one module; other
-     code must be be static and should not use a GOT.  All TLS models
+     code must be static and should not use a GOT.  All TLS models
      reduce to local exec in this situation.  */
   if (!TARGET_ABICALLS)
     model = TLS_MODEL_LOCAL_EXEC;
@@ -3286,33 +3469,37 @@ mips_legitimize_tls_address (rtx loc)
   switch (model)
     {
     case TLS_MODEL_GLOBAL_DYNAMIC:
-      v0 = gen_rtx_REG (Pmode, GP_RETURN);
-      insn = mips_call_tls_get_addr (loc, SYMBOL_TLSGD, v0);
-      dest = gen_reg_rtx (Pmode);
-      emit_libcall_block (insn, dest, v0, loc);
-      break;
+      {
+	v0 = gen_rtx_REG (Pmode, GP_RETURN);
+	rtx_insn *insn = mips_call_tls_get_addr (loc, SYMBOL_TLSGD, v0);
+	dest = gen_reg_rtx (Pmode);
+	emit_libcall_block (insn, dest, v0, loc);
+	break;
+      }
 
     case TLS_MODEL_LOCAL_DYNAMIC:
-      v0 = gen_rtx_REG (Pmode, GP_RETURN);
-      insn = mips_call_tls_get_addr (loc, SYMBOL_TLSLDM, v0);
-      tmp1 = gen_reg_rtx (Pmode);
+      {
+	v0 = gen_rtx_REG (Pmode, GP_RETURN);
+	rtx_insn *insn = mips_call_tls_get_addr (loc, SYMBOL_TLSLDM, v0);
+	tmp1 = gen_reg_rtx (Pmode);
 
-      /* Attach a unique REG_EQUIV, to allow the RTL optimizers to
-	 share the LDM result with other LD model accesses.  */
-      eqv = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, const0_rtx),
-			    UNSPEC_TLS_LDM);
-      emit_libcall_block (insn, tmp1, v0, eqv);
+	/* Attach a unique REG_EQUIV, to allow the RTL optimizers to
+	   share the LDM result with other LD model accesses.  */
+	eqv = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, const0_rtx),
+			      UNSPEC_TLS_LDM);
+	emit_libcall_block (insn, tmp1, v0, eqv);
 
-      offset = mips_unspec_address (loc, SYMBOL_DTPREL);
-      if (mips_split_p[SYMBOL_DTPREL])
-	{
-	  tmp2 = mips_unspec_offset_high (NULL, tmp1, loc, SYMBOL_DTPREL);
-	  dest = gen_rtx_LO_SUM (Pmode, tmp2, offset);
-	}
-      else
-	dest = expand_binop (Pmode, add_optab, tmp1, offset,
-			     0, 0, OPTAB_DIRECT);
-      break;
+	offset = mips_unspec_address (loc, SYMBOL_DTPREL);
+	if (mips_split_p[SYMBOL_DTPREL])
+	  {
+	    tmp2 = mips_unspec_offset_high (NULL, tmp1, loc, SYMBOL_DTPREL);
+	    dest = gen_rtx_LO_SUM (Pmode, tmp2, offset);
+	  }
+	else
+	  dest = expand_binop (Pmode, add_optab, tmp1, offset,
+			       0, 0, OPTAB_DIRECT);
+	break;
+      }
 
     case TLS_MODEL_INITIAL_EXEC:
       tp = mips_get_tp ();
@@ -3432,7 +3619,7 @@ mips_move_integer (rtx temp, rtx dest, unsigned HOST_WIDE_INT value)
     {
       if (!can_create_pseudo_p ())
 	{
-	  emit_insn (gen_rtx_SET (VOIDmode, temp, x));
+	  emit_insn (gen_rtx_SET (temp, x));
 	  x = temp;
 	}
       else
@@ -3440,7 +3627,7 @@ mips_move_integer (rtx temp, rtx dest, unsigned HOST_WIDE_INT value)
       x = gen_rtx_fmt_ee (codes[i].code, mode, x, GEN_INT (codes[i].value));
     }
 
-  emit_insn (gen_rtx_SET (VOIDmode, dest, x));
+  emit_insn (gen_rtx_SET (dest, x));
 }
 
 /* Subroutine of mips_legitimize_move.  Move constant SRC into register
@@ -3462,7 +3649,7 @@ mips_legitimize_const_move (machine_mode mode, rtx dest, rtx src)
   /* Split moves of symbolic constants into high/low pairs.  */
   if (mips_split_symbol (dest, src, MAX_MACHINE_MODE, &src))
     {
-      emit_insn (gen_rtx_SET (VOIDmode, dest, src));
+      emit_insn (gen_rtx_SET (dest, src));
       return;
     }
 
@@ -3501,7 +3688,14 @@ mips_legitimize_const_move (machine_mode mode, rtx dest, rtx src)
 bool
 mips_legitimize_move (machine_mode mode, rtx dest, rtx src)
 {
-  if (!register_operand (dest, mode) && !reg_or_0_operand (src, mode))
+  /* Both src and dest are non-registers;  one special case is supported where
+     the source is (const_int 0) and the store can source the zero register.
+     MIPS16 and MSA are never able to source the zero register directly in
+     memory operations.  */
+  if (!register_operand (dest, mode)
+      && !register_operand (src, mode)
+      && (TARGET_MIPS16 || !const_0_operand (src, mode)
+	  || MSA_SUPPORTED_MODE_P (mode)))
     {
       mips_emit_move (dest, force_reg (mode, src));
       return true;
@@ -3639,9 +3833,11 @@ mips16_constant_cost (int code, HOST_WIDE_INT x)
       /* Like LE, but reject the always-true case.  */
       if (x == -1)
 	return -1;
+      /* FALLTHRU */
     case LE:
       /* We add 1 to the immediate and use SLT.  */
       x += 1;
+      /* FALLTHRU */
     case XOR:
       /* We can use CMPI for an xor with an unsigned 16-bit X.  */
     case LT:
@@ -3742,8 +3938,8 @@ mips_binary_cost (rtx x, int single_cost, int double_cost, bool speed)
   else
     cost = single_cost;
   return (cost
-	  + set_src_cost (XEXP (x, 0), speed)
-	  + rtx_cost (XEXP (x, 1), GET_CODE (x), 1, speed));
+	  + set_src_cost (XEXP (x, 0), GET_MODE (x), speed)
+	  + rtx_cost (XEXP (x, 1), GET_MODE (x), GET_CODE (x), 1, speed));
 }
 
 /* Return the cost of floating-point multiplications of mode MODE.  */
@@ -3844,10 +4040,10 @@ mips_set_reg_reg_cost (machine_mode mode)
 /* Implement TARGET_RTX_COSTS.  */
 
 static bool
-mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
-		int *total, bool speed)
+mips_rtx_costs (rtx x, machine_mode mode, int outer_code,
+		int opno ATTRIBUTE_UNUSED, int *total, bool speed)
 {
-  machine_mode mode = GET_MODE (x);
+  int code = GET_CODE (x);
   bool float_mode_p = FLOAT_MODE_P (mode);
   int cost;
   rtx addr;
@@ -3946,7 +4142,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	     for a word or doubleword operation, so we cannot rely on
 	     the result of mips_build_integer.  */
 	  else if (!TARGET_MIPS16
-		   && (outer_code == SET || mode == VOIDmode))
+		   && (outer_code == SET || GET_MODE (x) == VOIDmode))
 	    cost = 1;
 	  *total = COSTS_N_INSNS (cost);
 	  return true;
@@ -3992,7 +4188,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	  && UINTVAL (XEXP (x, 1)) == 0xffffffff)
 	{
 	  *total = (mips_zero_extend_cost (mode, XEXP (x, 0))
-		    + set_src_cost (XEXP (x, 0), speed));
+		    + set_src_cost (XEXP (x, 0), mode, speed));
 	  return true;
 	}
       if (ISA_HAS_CINS && CONST_INT_P (XEXP (x, 1)))
@@ -4002,7 +4198,8 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	      && CONST_INT_P (XEXP (op, 1))
 	      && mask_low_and_shift_p (mode, XEXP (x, 1), XEXP (op, 1), 32))
 	    {
-	      *total = COSTS_N_INSNS (1) + set_src_cost (XEXP (op, 0), speed);
+	      *total = COSTS_N_INSNS (1);
+	      *total += set_src_cost (XEXP (op, 0), mode, speed);
 	      return true;
 	    }
 	}
@@ -4014,8 +4211,8 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	{
 	  cost = GET_MODE_SIZE (mode) > UNITS_PER_WORD ? 2 : 1;
           *total = (COSTS_N_INSNS (cost)
-		    + set_src_cost (XEXP (XEXP (x, 0), 0), speed)
-		    + set_src_cost (XEXP (XEXP (x, 1), 0), speed));
+		    + set_src_cost (XEXP (XEXP (x, 0), 0), mode, speed)
+		    + set_src_cost (XEXP (XEXP (x, 1), 0), mode, speed));
 	  return true;
 	}
 	    
@@ -4051,7 +4248,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
     case LO_SUM:
       /* Low-part immediates need an extended MIPS16 instruction.  */
       *total = (COSTS_N_INSNS (TARGET_MIPS16 ? 2 : 1)
-		+ set_src_cost (XEXP (x, 0), speed));
+		+ set_src_cost (XEXP (x, 0), mode, speed));
       return true;
 
     case LT:
@@ -4066,6 +4263,10 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
     case NE:
     case UNORDERED:
     case LTGT:
+    case UNGE:
+    case UNGT:
+    case UNLE:
+    case UNLT:
       /* Branch comparisons have VOIDmode, so use the first operand's
 	 mode instead.  */
       mode = GET_MODE (XEXP (x, 0));
@@ -4079,30 +4280,27 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       return true;
 
     case MINUS:
-      if (float_mode_p
-	  && (ISA_HAS_NMADD4_NMSUB4 || ISA_HAS_NMADD3_NMSUB3)
-	  && TARGET_FUSED_MADD
-	  && !HONOR_NANS (mode)
-	  && !HONOR_SIGNED_ZEROS (mode))
+      if (float_mode_p && ISA_HAS_UNFUSED_MADD4 && !HONOR_SIGNED_ZEROS (mode))
 	{
-	  /* See if we can use NMADD or NMSUB.  See mips.md for the
-	     associated patterns.  */
+	  /* See if we can use NMADD or NMSUB via the *nmadd4<mode>_fastmath
+	     or *nmsub4<mode>_fastmath patterns.  These patterns check for
+	     HONOR_SIGNED_ZEROS so we check here too.  */
 	  rtx op0 = XEXP (x, 0);
 	  rtx op1 = XEXP (x, 1);
 	  if (GET_CODE (op0) == MULT && GET_CODE (XEXP (op0, 0)) == NEG)
 	    {
 	      *total = (mips_fp_mult_cost (mode)
-			+ set_src_cost (XEXP (XEXP (op0, 0), 0), speed)
-			+ set_src_cost (XEXP (op0, 1), speed)
-			+ set_src_cost (op1, speed));
+			+ set_src_cost (XEXP (XEXP (op0, 0), 0), mode, speed)
+			+ set_src_cost (XEXP (op0, 1), mode, speed)
+			+ set_src_cost (op1, mode, speed));
 	      return true;
 	    }
 	  if (GET_CODE (op1) == MULT)
 	    {
 	      *total = (mips_fp_mult_cost (mode)
-			+ set_src_cost (op0, speed)
-			+ set_src_cost (XEXP (op1, 0), speed)
-			+ set_src_cost (XEXP (op1, 1), speed));
+			+ set_src_cost (op0, mode, speed)
+			+ set_src_cost (XEXP (op1, 0), mode, speed)
+			+ set_src_cost (XEXP (op1, 1), mode, speed));
 	      return true;
 	    }
 	}
@@ -4113,9 +4311,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	{
 	  /* If this is part of a MADD or MSUB, treat the PLUS as
 	     being free.  */
-	  if ((ISA_HAS_FP_MADD4_MSUB4 || ISA_HAS_FP_MADD3_MSUB3)
-	      && TARGET_FUSED_MADD
-	      && GET_CODE (XEXP (x, 0)) == MULT)
+	  if (ISA_HAS_UNFUSED_MADD4 && GET_CODE (XEXP (x, 0)) == MULT)
 	    *total = 0;
 	  else
 	    *total = mips_cost->fp_add;
@@ -4132,8 +4328,8 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	  if (const_immlsa_operand (op2, mode))
 	    {
 	      *total = (COSTS_N_INSNS (1)
-			+ set_src_cost (XEXP (XEXP (x, 0), 0), speed)
-			+ set_src_cost (XEXP (x, 1), speed));
+			+ set_src_cost (XEXP (XEXP (x, 0), 0), mode, speed)
+			+ set_src_cost (XEXP (x, 1), mode, speed));
 	      return true;
 	    }
 	}
@@ -4147,22 +4343,18 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       return true;
 
     case NEG:
-      if (float_mode_p
-	  && (ISA_HAS_NMADD4_NMSUB4 || ISA_HAS_NMADD3_NMSUB3)
-	  && TARGET_FUSED_MADD
-	  && !HONOR_NANS (mode)
-	  && HONOR_SIGNED_ZEROS (mode))
+      if (float_mode_p && ISA_HAS_UNFUSED_MADD4)
 	{
-	  /* See if we can use NMADD or NMSUB.  See mips.md for the
-	     associated patterns.  */
+	  /* See if we can use NMADD or NMSUB via the *nmadd4<mode> or
+	     *nmsub4<mode> patterns.  */
 	  rtx op = XEXP (x, 0);
 	  if ((GET_CODE (op) == PLUS || GET_CODE (op) == MINUS)
 	      && GET_CODE (XEXP (op, 0)) == MULT)
 	    {
 	      *total = (mips_fp_mult_cost (mode)
-			+ set_src_cost (XEXP (XEXP (op, 0), 0), speed)
-			+ set_src_cost (XEXP (XEXP (op, 0), 1), speed)
-			+ set_src_cost (XEXP (op, 1), speed));
+			+ set_src_cost (XEXP (XEXP (op, 0), 0), mode, speed)
+			+ set_src_cost (XEXP (XEXP (op, 0), 1), mode, speed)
+			+ set_src_cost (XEXP (op, 1), mode, speed));
 	      return true;
 	    }
 	}
@@ -4174,8 +4366,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       return false;
 
     case FMA:
-      if (ISA_HAS_FP_MADDF_MSUBF)
-	*total = mips_fp_mult_cost (mode);
+      *total = mips_fp_mult_cost (mode);
       return false;
 
     case MULT:
@@ -4205,10 +4396,10 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	  if (outer_code == SQRT || GET_CODE (XEXP (x, 1)) == SQRT)
 	    /* An rsqrt<mode>a or rsqrt<mode>b pattern.  Count the
 	       division as being free.  */
-	    *total = set_src_cost (XEXP (x, 1), speed);
+	    *total = set_src_cost (XEXP (x, 1), mode, speed);
 	  else
 	    *total = (mips_fp_div_cost (mode)
-		      + set_src_cost (XEXP (x, 1), speed));
+		      + set_src_cost (XEXP (x, 1), mode, speed));
 	  return true;
 	}
       /* Fall through.  */
@@ -4236,10 +4427,11 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	      && CONST_INT_P (XEXP (x, 1))
 	      && exact_log2 (INTVAL (XEXP (x, 1))) >= 0)
 	    {
-	      *total = COSTS_N_INSNS (2) + set_src_cost (XEXP (x, 0), speed);
+	      *total = COSTS_N_INSNS (2);
+	      *total += set_src_cost (XEXP (x, 0), mode, speed);
 	      return true;
 	    }
-	  *total = COSTS_N_INSNS (mips_idiv_insns ());
+	  *total = COSTS_N_INSNS (mips_idiv_insns (mode));
 	}
       else if (mode == DImode)
         *total = mips_cost->int_div_di;
@@ -4259,7 +4451,7 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	  && GET_MODE (XEXP (x, 0)) == QImode
 	  && GET_CODE (XEXP (XEXP (x, 0), 0)) == PLUS)
 	{
-	  *total = set_src_cost (XEXP (XEXP (x, 0), 0), speed);
+	  *total = set_src_cost (XEXP (XEXP (x, 0), 0), VOIDmode, speed);
 	  return true;
 	}
       *total = mips_zero_extend_cost (mode, XEXP (x, 0));
@@ -4302,9 +4494,10 @@ mips_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	      if (ISA_HAS_R6DMUL
 		  && GET_CODE (op) == ZERO_EXTEND
 		  && GET_MODE (op) == DImode)
-		*total += rtx_cost (op, MULT, i, speed);
+		*total += rtx_cost (op, DImode, MULT, i, speed);
 	      else
-		*total += rtx_cost (XEXP (op, 0), GET_CODE (op), 0, speed);
+		*total += rtx_cost (XEXP (op, 0), VOIDmode, GET_CODE (op),
+				    0, speed);
 	    }
 
 	  return true;
@@ -4342,6 +4535,14 @@ mips_address_cost (rtx addr, machine_mode mode,
 {
   return mips_address_insns (addr, mode, false);
 }
+
+/* Implement TARGET_NO_SPECULATION_IN_DELAY_SLOTS_P.  */
+
+static bool
+mips_no_speculation_in_delay_slots_p ()
+{
+  return TARGET_CB_MAYBE;
+}
 
 /* Information about a single instruction in a multi-instruction
    asm sequence.  */
@@ -4373,12 +4574,13 @@ mips_multi_start (void)
   mips_multi_num_insns = 0;
 }
 
-/* Add a new, uninitialized member to the current multi-insn sequence.  */
+/* Add a new, zero initialized member to the current multi-insn sequence.  */
 
 static struct mips_multi_member *
 mips_multi_add (void)
 {
   mips_multi_member empty;
+  memset (&empty, 0, sizeof (empty));
   return mips_multi_members.safe_push (empty);
 }
 
@@ -4536,6 +4738,10 @@ mips_split_move_p (rtx dest, rtx src, enum mips_split_type split_type)
 	return false;
     }
 
+  /* Check if MSA moves need splitting.  */
+  if (MSA_SUPPORTED_MODE_P (GET_MODE (dest)))
+    return mips_split_128bit_move_p (dest, src);
+
   /* Otherwise split all multiword moves.  */
   return size > UNITS_PER_WORD;
 }
@@ -4549,7 +4755,9 @@ mips_split_move (rtx dest, rtx src, enum mips_split_type split_type)
   rtx low_dest;
 
   gcc_checking_assert (mips_split_move_p (dest, src, split_type));
-  if (FP_REG_RTX_P (dest) || FP_REG_RTX_P (src))
+  if (MSA_SUPPORTED_MODE_P (GET_MODE (dest)))
+    mips_split_128bit_move (dest, src);
+  else if (FP_REG_RTX_P (dest) || FP_REG_RTX_P (src))
     {
       if (!TARGET_64BIT && GET_MODE (dest) == DImode)
 	emit_insn (gen_move_doubleword_fprdi (dest, src));
@@ -4622,6 +4830,199 @@ mips_insn_split_type (rtx insn)
   return SPLIT_IF_NECESSARY;
 }
 
+/* Return true if a 128-bit move from SRC to DEST should be split.  */
+
+bool
+mips_split_128bit_move_p (rtx dest, rtx src)
+{
+  /* MSA-to-MSA moves can be done in a single instruction.  */
+  if (FP_REG_RTX_P (src) && FP_REG_RTX_P (dest))
+    return false;
+
+  /* Check for MSA loads and stores.  */
+  if (FP_REG_RTX_P (dest) && MEM_P (src))
+    return false;
+  if (FP_REG_RTX_P (src) && MEM_P (dest))
+    return false;
+
+  /* Check for MSA set to an immediate const vector with valid replicated
+     element.  */
+  if (FP_REG_RTX_P (dest)
+      && mips_const_vector_same_int_p (src, GET_MODE (src), -512, 511))
+    return false;
+
+  /* Check for MSA load zero immediate.  */
+  if (FP_REG_RTX_P (dest) && src == CONST0_RTX (GET_MODE (src)))
+    return false;
+
+  return true;
+}
+
+/* Split a 128-bit move from SRC to DEST.  */
+
+void
+mips_split_128bit_move (rtx dest, rtx src)
+{
+  int byte, index;
+  rtx low_dest, low_src, d, s;
+
+  if (FP_REG_RTX_P (dest))
+    {
+      gcc_assert (!MEM_P (src));
+
+      rtx new_dest = dest;
+      if (!TARGET_64BIT)
+	{
+	  if (GET_MODE (dest) != V4SImode)
+	    new_dest = simplify_gen_subreg (V4SImode, dest, GET_MODE (dest), 0);
+	}
+      else
+	{
+	  if (GET_MODE (dest) != V2DImode)
+	    new_dest = simplify_gen_subreg (V2DImode, dest, GET_MODE (dest), 0);
+	}
+
+      for (byte = 0, index = 0; byte < GET_MODE_SIZE (TImode);
+	   byte += UNITS_PER_WORD, index++)
+	{
+	  s = mips_subword_at_byte (src, byte);
+	  if (!TARGET_64BIT)
+	    emit_insn (gen_msa_insert_w (new_dest, s, new_dest,
+					 GEN_INT (1 << index)));
+	  else
+	    emit_insn (gen_msa_insert_d (new_dest, s, new_dest,
+					 GEN_INT (1 << index)));
+	}
+    }
+  else if (FP_REG_RTX_P (src))
+    {
+      gcc_assert (!MEM_P (dest));
+
+      rtx new_src = src;
+      if (!TARGET_64BIT)
+	{
+	  if (GET_MODE (src) != V4SImode)
+	    new_src = simplify_gen_subreg (V4SImode, src, GET_MODE (src), 0);
+	}
+      else
+	{
+	  if (GET_MODE (src) != V2DImode)
+	    new_src = simplify_gen_subreg (V2DImode, src, GET_MODE (src), 0);
+	}
+
+      for (byte = 0, index = 0; byte < GET_MODE_SIZE (TImode);
+	   byte += UNITS_PER_WORD, index++)
+	{
+	  d = mips_subword_at_byte (dest, byte);
+	  if (!TARGET_64BIT)
+	    emit_insn (gen_msa_copy_s_w (d, new_src, GEN_INT (index)));
+	  else
+	    emit_insn (gen_msa_copy_s_d (d, new_src, GEN_INT (index)));
+	}
+    }
+  else
+    {
+      low_dest = mips_subword_at_byte (dest, 0);
+      low_src = mips_subword_at_byte (src, 0);
+      gcc_assert (REG_P (low_dest) && REG_P (low_src));
+      /* Make sure the source register is not written before reading.  */
+      if (REGNO (low_dest) <= REGNO (low_src))
+	{
+	  for (byte = 0; byte < GET_MODE_SIZE (TImode);
+	       byte += UNITS_PER_WORD)
+	    {
+	      d = mips_subword_at_byte (dest, byte);
+	      s = mips_subword_at_byte (src, byte);
+	      mips_emit_move (d, s);
+	    }
+	}
+      else
+	{
+	  for (byte = GET_MODE_SIZE (TImode) - UNITS_PER_WORD; byte >= 0;
+	       byte -= UNITS_PER_WORD)
+	    {
+	      d = mips_subword_at_byte (dest, byte);
+	      s = mips_subword_at_byte (src, byte);
+	      mips_emit_move (d, s);
+	    }
+	}
+    }
+}
+
+/* Split a COPY_S.D with operands DEST, SRC and INDEX.  GEN is a function
+   used to generate subregs.  */
+
+void
+mips_split_msa_copy_d (rtx dest, rtx src, rtx index,
+		       rtx (*gen_fn)(rtx, rtx, rtx))
+{
+  gcc_assert ((GET_MODE (src) == V2DImode && GET_MODE (dest) == DImode)
+	      || (GET_MODE (src) == V2DFmode && GET_MODE (dest) == DFmode));
+
+  /* Note that low is always from the lower index, and high is always
+     from the higher index.  */
+  rtx low = mips_subword (dest, false);
+  rtx high = mips_subword (dest, true);
+  rtx new_src = simplify_gen_subreg (V4SImode, src, GET_MODE (src), 0);
+
+  emit_insn (gen_fn (low, new_src, GEN_INT (INTVAL (index) * 2)));
+  emit_insn (gen_fn (high, new_src, GEN_INT (INTVAL (index) * 2 + 1)));
+}
+
+/* Split a INSERT.D with operand DEST, SRC1.INDEX and SRC2.  */
+
+void
+mips_split_msa_insert_d (rtx dest, rtx src1, rtx index, rtx src2)
+{
+  int i;
+  gcc_assert (GET_MODE (dest) == GET_MODE (src1));
+  gcc_assert ((GET_MODE (dest) == V2DImode
+	       && (GET_MODE (src2) == DImode || src2 == const0_rtx))
+	      || (GET_MODE (dest) == V2DFmode && GET_MODE (src2) == DFmode));
+
+  /* Note that low is always from the lower index, and high is always
+     from the higher index.  */
+  rtx low = mips_subword (src2, false);
+  rtx high = mips_subword (src2, true);
+  rtx new_dest = simplify_gen_subreg (V4SImode, dest, GET_MODE (dest), 0);
+  rtx new_src1 = simplify_gen_subreg (V4SImode, src1, GET_MODE (src1), 0);
+  i = exact_log2 (INTVAL (index));
+  gcc_assert (i != -1);
+
+  emit_insn (gen_msa_insert_w (new_dest, low, new_src1,
+			       GEN_INT (1 << (i * 2))));
+  emit_insn (gen_msa_insert_w (new_dest, high, new_dest,
+			       GEN_INT (1 << (i * 2 + 1))));
+}
+
+/* Split FILL.D.  */
+
+void
+mips_split_msa_fill_d (rtx dest, rtx src)
+{
+  gcc_assert ((GET_MODE (dest) == V2DImode
+	       && (GET_MODE (src) == DImode || src == const0_rtx))
+	      || (GET_MODE (dest) == V2DFmode && GET_MODE (src) == DFmode));
+
+  /* Note that low is always from the lower index, and high is always
+     from the higher index.  */
+  rtx low, high;
+  if (src == const0_rtx)
+    {
+      low = src;
+      high = src;
+    }
+  else
+    {
+      low = mips_subword (src, false);
+      high = mips_subword (src, true);
+    }
+  rtx new_dest = simplify_gen_subreg (V4SImode, dest, GET_MODE (dest), 0);
+  emit_insn (gen_msa_fill_w (new_dest, low));
+  emit_insn (gen_msa_insert_w (new_dest, high, new_dest, GEN_INT (1 << 1)));
+  emit_insn (gen_msa_insert_w (new_dest, high, new_dest, GEN_INT (1 << 3)));
+}
+
 /* Return true if a move from SRC to DEST in INSN should be split.  */
 
 bool
@@ -4645,18 +5046,24 @@ mips_split_move_insn (rtx dest, rtx src, rtx insn)
 const char *
 mips_output_move (rtx dest, rtx src)
 {
-  enum rtx_code dest_code, src_code;
-  machine_mode mode;
+  enum rtx_code dest_code = GET_CODE (dest);
+  enum rtx_code src_code = GET_CODE (src);
+  machine_mode mode = GET_MODE (dest);
+  bool dbl_p = (GET_MODE_SIZE (mode) == 8);
+  bool msa_p = MSA_SUPPORTED_MODE_P (mode);
   enum mips_symbol_type symbol_type;
-  bool dbl_p;
-
-  dest_code = GET_CODE (dest);
-  src_code = GET_CODE (src);
-  mode = GET_MODE (dest);
-  dbl_p = (GET_MODE_SIZE (mode) == 8);
 
   if (mips_split_move_p (dest, src, SPLIT_IF_NECESSARY))
     return "#";
+
+  if (msa_p
+      && dest_code == REG && FP_REG_P (REGNO (dest))
+      && src_code == CONST_VECTOR
+      && CONST_INT_P (CONST_VECTOR_ELT (src, 0)))
+    {
+      gcc_assert (mips_const_vector_same_int_p (src, mode, -512, 511));
+      return "ldi.%v0\t%w0,%E1";
+    }
 
   if ((src_code == REG && GP_REG_P (REGNO (src)))
       || (!TARGET_MIPS16 && src == CONST0_RTX (mode)))
@@ -4688,7 +5095,15 @@ mips_output_move (rtx dest, rtx src)
 	    }
 
 	  if (FP_REG_P (REGNO (dest)))
-	    return dbl_p ? "dmtc1\t%z1,%0" : "mtc1\t%z1,%0";
+	    {
+	      if (msa_p)
+		{
+		  gcc_assert (src == CONST0_RTX (GET_MODE (src)));
+		  return "ldi.%v0\t%w0,0";
+		}
+
+	      return dbl_p ? "dmtc1\t%z1,%0" : "mtc1\t%z1,%0";
+	    }
 
 	  if (ALL_COP_REG_P (REGNO (dest)))
 	    {
@@ -4705,6 +5120,7 @@ mips_output_move (rtx dest, rtx src)
 	  case 2: return "sh\t%z1,%0";
 	  case 4: return "sw\t%z1,%0";
 	  case 8: return "sd\t%z1,%0";
+	  default: gcc_unreachable ();
 	  }
     }
   if (dest_code == REG && GP_REG_P (REGNO (dest)))
@@ -4733,7 +5149,10 @@ mips_output_move (rtx dest, rtx src)
 	    }
 
 	  if (FP_REG_P (REGNO (src)))
-	    return dbl_p ? "dmfc1\t%0,%1" : "mfc1\t%0,%1";
+	    {
+	      gcc_assert (!msa_p);
+	      return dbl_p ? "dmfc1\t%0,%1" : "mfc1\t%0,%1";
+	    }
 
 	  if (ALL_COP_REG_P (REGNO (src)))
 	    {
@@ -4751,6 +5170,7 @@ mips_output_move (rtx dest, rtx src)
 	  case 2: return "lhu\t%0,%1";
 	  case 4: return "lw\t%0,%1";
 	  case 8: return "ld\t%0,%1";
+	  default: gcc_unreachable ();
 	  }
 
       if (src_code == CONST_INT)
@@ -4797,17 +5217,29 @@ mips_output_move (rtx dest, rtx src)
 	{
 	  if (GET_MODE (dest) == V2SFmode)
 	    return "mov.ps\t%0,%1";
+	  else if (msa_p)
+	    return "move.v\t%w0,%w1";
 	  else
 	    return dbl_p ? "mov.d\t%0,%1" : "mov.s\t%0,%1";
 	}
 
       if (dest_code == MEM)
-	return dbl_p ? "sdc1\t%1,%0" : "swc1\t%1,%0";
+	{
+	  if (msa_p)
+	    return "st.%v1\t%w1,%0";
+
+	  return dbl_p ? "sdc1\t%1,%0" : "swc1\t%1,%0";
+	}
     }
   if (dest_code == REG && FP_REG_P (REGNO (dest)))
     {
       if (src_code == MEM)
-	return dbl_p ? "ldc1\t%0,%1" : "lwc1\t%0,%1";
+	{
+	  if (msa_p)
+	    return "ld.%v0\t%w0,%1";
+
+	  return dbl_p ? "ldc1\t%0,%1" : "lwc1\t%0,%1";
+	}
     }
   if (dest_code == REG && ALL_COP_REG_P (REGNO (dest)) && src_code == MEM)
     {
@@ -5049,7 +5481,8 @@ mips_allocate_fcc (machine_mode mode)
    conditions are:
 
       - EQ or NE between two registers.
-      - any comparison between a register and zero.  */
+      - any comparison between a register and zero.
+      - if compact branches are available then any condition is valid.  */
 
 static void
 mips_emit_compare (enum rtx_code *code, rtx *op0, rtx *op1, bool need_eq_ne_p)
@@ -5070,6 +5503,44 @@ mips_emit_compare (enum rtx_code *code, rtx *op0, rtx *op1, bool need_eq_ne_p)
 	    }
 	  else
 	    *op1 = force_reg (GET_MODE (cmp_op0), cmp_op1);
+	}
+      else if (!need_eq_ne_p && TARGET_CB_MAYBE)
+	{
+	  bool swap = false;
+	  switch (*code)
+	    {
+	    case LE:
+	      swap = true;
+	      *code = GE;
+	      break;
+	    case GT:
+	      swap = true;
+	      *code = LT;
+	      break;
+	    case LEU:
+	      swap = true;
+	      *code = GEU;
+	      break;
+	    case GTU:
+	      swap = true;
+	      *code = LTU;
+	      break;
+	    case GE:
+	    case LT:
+	    case GEU:
+	    case LTU:
+	      /* Do nothing.  */
+	      break;
+	    default:
+	      gcc_unreachable ();
+	    }
+	  *op1 = force_reg (GET_MODE (cmp_op0), cmp_op1);
+	  if (swap)
+	    {
+	      rtx tmp = *op1;
+	      *op1 = *op0;
+	      *op0 = tmp;
+	    }
 	}
       else
 	{
@@ -5220,20 +5691,19 @@ mips_expand_conditional_move (rtx *operands)
       rtx temp = gen_reg_rtx (mode);
       rtx temp2 = gen_reg_rtx (mode);
 
-      emit_insn (gen_rtx_SET (VOIDmode, temp,
+      emit_insn (gen_rtx_SET (temp,
 			      gen_rtx_IF_THEN_ELSE (mode, cond,
 						    operands[2], const0_rtx)));
 
       /* Flip the test for the second operand.  */
       cond = gen_rtx_fmt_ee ((code == EQ) ? NE : EQ, GET_MODE (op0), op0, op1);
 
-      emit_insn (gen_rtx_SET (VOIDmode, temp2,
+      emit_insn (gen_rtx_SET (temp2,
 			      gen_rtx_IF_THEN_ELSE (mode, cond,
 						    operands[3], const0_rtx)));
 
       /* Merge the two results, at least one is guaranteed to be zero.  */
-      emit_insn (gen_rtx_SET (VOIDmode, operands[0],
-			      gen_rtx_IOR (mode, temp, temp2)));
+      emit_insn (gen_rtx_SET (operands[0], gen_rtx_IOR (mode, temp, temp2)));
     }
   else
     {
@@ -5243,7 +5713,7 @@ mips_expand_conditional_move (rtx *operands)
 	  operands[3] = force_reg (GET_MODE (operands[0]), operands[3]);
 	}
 
-      emit_insn (gen_rtx_SET (VOIDmode, operands[0],
+      emit_insn (gen_rtx_SET (operands[0],
 			      gen_rtx_IF_THEN_ELSE (GET_MODE (operands[0]), cond,
 						    operands[2], operands[3])));
     }
@@ -6003,9 +6473,13 @@ mips_function_value_regno_p (const unsigned int regno)
 static bool
 mips_return_in_memory (const_tree type, const_tree fndecl ATTRIBUTE_UNUSED)
 {
-  return (TARGET_OLDABI
-	  ? TYPE_MODE (type) == BLKmode
-	  : !IN_RANGE (int_size_in_bytes (type), 0, 2 * UNITS_PER_WORD));
+  if (TARGET_OLDABI)
+    /* Ensure that any floating point vector types are returned via memory
+       even if they are supported through a vector mode with some ASEs.  */
+    return (VECTOR_FLOAT_TYPE_P (type)
+	    || TYPE_MODE (type) == BLKmode);
+
+  return (!IN_RANGE (int_size_in_bytes (type), 0, 2 * UNITS_PER_WORD));
 }
 
 /* Implement TARGET_SETUP_INCOMING_VARARGS.  */
@@ -6056,7 +6530,7 @@ mips_setup_incoming_varargs (cumulative_args_t cum, machine_mode mode,
 	  /* Set OFF to the offset from virtual_incoming_args_rtx of
 	     the first float register.  The FP save area lies below
 	     the integer one, and is aligned to UNITS_PER_FPVALUE bytes.  */
-	  off = (-gp_saved * UNITS_PER_WORD) & -UNITS_PER_FPVALUE;
+	  off = ROUND_DOWN (-gp_saved * UNITS_PER_WORD, UNITS_PER_FPVALUE);
 	  off -= fp_saved * UNITS_PER_FPREG;
 
 	  mode = TARGET_SINGLE_FLOAT ? SFmode : DFmode;
@@ -6288,7 +6762,7 @@ mips_std_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
   if (boundary < TYPE_ALIGN (type))
     {
       type = build_variant_type_copy (type);
-      TYPE_ALIGN (type) = boundary;
+      SET_TYPE_ALIGN (type, boundary);
     }
 
   /* Compute the rounded size of the type.  */
@@ -6420,7 +6894,7 @@ mips_gimplify_va_arg_expr (tree valist, tree type, gimple_seq *pre_p,
 			unshare_expr (valist), f_gtop, NULL_TREE);
 	  off = build3 (COMPONENT_REF, TREE_TYPE (f_goff),
 			unshare_expr (valist), f_goff, NULL_TREE);
-	  rsize = (size + UNITS_PER_WORD - 1) & -UNITS_PER_WORD;
+	  rsize = ROUND_UP (size, UNITS_PER_WORD);
 	  if (rsize > UNITS_PER_WORD)
 	    {
 	      /* [1] Emit code for: off &= -rsize.	*/
@@ -6603,7 +7077,7 @@ mips_load_call_address (enum mips_call_type type, rtx dest, rtx addr)
       && mips_ok_for_lazy_binding_p (addr))
     {
       addr = mips_got_load (dest, addr, SYMBOL_GOTOFF_CALL);
-      emit_insn (gen_rtx_SET (VOIDmode, dest, addr));
+      emit_insn (gen_rtx_SET (dest, addr));
       return true;
     }
   else
@@ -6613,30 +7087,10 @@ mips_load_call_address (enum mips_call_type type, rtx dest, rtx addr)
     }
 }
 
-struct local_alias_traits : default_hashmap_traits
-{
-  static hashval_t hash (rtx);
-  static bool equal_keys (rtx, rtx);
-};
-
 /* Each locally-defined hard-float MIPS16 function has a local symbol
    associated with it.  This hash table maps the function symbol (FUNC)
    to the local symbol (LOCAL). */
-static GTY (()) hash_map<rtx, rtx, local_alias_traits> *mips16_local_aliases;
-
-/* Hash table callbacks for mips16_local_aliases.  */
-
-hashval_t
-local_alias_traits::hash (rtx func)
-{
-  return htab_hash_string (XSTR (func, 0));
-}
-
-bool
-local_alias_traits::equal_keys (rtx func1, rtx func2)
-{
-  return rtx_equal_p (func1, func2);
-}
+static GTY (()) hash_map<nofree_string_hash, rtx> *mips16_local_aliases;
 
 /* FUNC is the symbol for a locally-defined hard-float MIPS16 function.
    Return a local alias for it, creating a new one if necessary.  */
@@ -6646,24 +7100,23 @@ mips16_local_alias (rtx func)
 {
   /* Create the hash table if this is the first call.  */
   if (mips16_local_aliases == NULL)
-    mips16_local_aliases
-      = hash_map<rtx, rtx, local_alias_traits>::create_ggc (37);
+    mips16_local_aliases = hash_map<nofree_string_hash, rtx>::create_ggc (37);
 
   /* Look up the function symbol, creating a new entry if need be.  */
   bool existed;
-  rtx *slot = &mips16_local_aliases->get_or_insert (func, &existed);
+  const char *func_name = XSTR (func, 0);
+  rtx *slot = &mips16_local_aliases->get_or_insert (func_name, &existed);
   gcc_assert (slot != NULL);
 
   if (!existed)
     {
-      const char *func_name, *local_name;
       rtx local;
 
       /* Create a new SYMBOL_REF for the local symbol.  The choice of
 	 __fn_local_* is based on the __fn_stub_* names that we've
 	 traditionally used for the non-MIPS16 stub.  */
       func_name = targetm.strip_name_encoding (XSTR (func, 0));
-      local_name = ACONCAT (("__fn_local_", func_name, NULL));
+      const char *local_name = ACONCAT (("__fn_local_", func_name, NULL));
       local = gen_rtx_SYMBOL_REF (Pmode, ggc_strdup (local_name));
       SYMBOL_REF_FLAGS (local) = SYMBOL_REF_FLAGS (func) | SYMBOL_FLAG_LOCAL;
 
@@ -6998,7 +7451,7 @@ mips16_build_call_stub (rtx retval, rtx *fn_ptr, rtx args_size, int fp_code)
   if (GET_CODE (fn) != SYMBOL_REF
       || !call_insn_operand (fn, VOIDmode))
     {
-      char buf[30];
+      char buf[32];
       rtx stub_fn, addr;
       rtx_insn *insn;
       bool lazy_p;
@@ -7150,7 +7603,7 @@ mips16_build_call_stub (rtx retval, rtx *fn_ptr, rtx args_size, int fp_code)
       if (fp_ret_p)
 	{
 	  /* Now call the non-MIPS16 function.  */
-	  output_asm_insn (MIPS_CALL ("jal", &fn, 0, -1), &fn);
+	  output_asm_insn (mips_output_jump (&fn, 0, -1, true), &fn);
 	  fprintf (asm_out_file, "\t.cfi_register 31,18\n");
 
 	  /* Move the result from floating-point registers to
@@ -7194,7 +7647,7 @@ mips16_build_call_stub (rtx retval, rtx *fn_ptr, rtx args_size, int fp_code)
 	    case DCmode:
 	      mips_output_64bit_xfer ('f', GP_RETURN + (8 / UNITS_PER_WORD),
 				      FP_REG_FIRST + 2);
-	      /* Fall though.  */
+	      /* FALLTHRU */
  	    case DFmode:
 	    case V2SFmode:
 	      gcc_assert (TARGET_PAIRED_SINGLE_FLOAT
@@ -7520,12 +7973,22 @@ mips_block_move_straight (rtx dest, rtx src, HOST_WIDE_INT length)
      half-word alignment, it is usually better to move in half words.
      For instance, lh/lh/sh/sh is usually better than lwl/lwr/swl/swr
      and lw/lw/sw/sw is usually better than ldl/ldr/sdl/sdr.
-     Otherwise move word-sized chunks.  */
-  if (MEM_ALIGN (src) == BITS_PER_WORD / 2
-      && MEM_ALIGN (dest) == BITS_PER_WORD / 2)
-    bits = BITS_PER_WORD / 2;
+     Otherwise move word-sized chunks.
+
+     For ISA_HAS_LWL_LWR we rely on the lwl/lwr & swl/swr load. Otherwise
+     picking the minimum of alignment or BITS_PER_WORD gets us the
+     desired size for bits.  */
+
+  if (!ISA_HAS_LWL_LWR)
+    bits = MIN (BITS_PER_WORD, MIN (MEM_ALIGN (src), MEM_ALIGN (dest)));
   else
-    bits = BITS_PER_WORD;
+    {
+      if (MEM_ALIGN (src) == BITS_PER_WORD / 2
+	  && MEM_ALIGN (dest) == BITS_PER_WORD / 2)
+	bits = BITS_PER_WORD / 2;
+      else
+	bits = BITS_PER_WORD;
+    }
 
   mode = mode_for_size (bits, MODE_INT, 0);
   delta = bits / BITS_PER_UNIT;
@@ -7636,6 +8099,9 @@ mips_block_move_loop (rtx dest, rtx src, HOST_WIDE_INT length,
   /* Mop up any left-over bytes.  */
   if (leftover)
     mips_block_move_straight (dest, src, leftover);
+  else
+    /* Temporary fix for PR79150.  */
+    emit_insn (gen_nop ());
 }
 
 /* Expand a movmemsi instruction, which copies LENGTH bytes from
@@ -7644,8 +8110,9 @@ mips_block_move_loop (rtx dest, rtx src, HOST_WIDE_INT length,
 bool
 mips_expand_block_move (rtx dest, rtx src, rtx length)
 {
-  /* Disable entirely for R6 initially.  */
-  if (!ISA_HAS_LWL_LWR)
+  if (!ISA_HAS_LWL_LWR
+      && (MEM_ALIGN (src) < MIPS_MIN_MOVE_MEM_ALIGN
+	  || MEM_ALIGN (dest) < MIPS_MIN_MOVE_MEM_ALIGN))
     return false;
 
   if (CONST_INT_P (length))
@@ -7773,8 +8240,7 @@ mips_expand_atomic_qihi (union mips_gen_fn_ptrs generator,
 
   /* Compute the equivalent exclusive mask.  */
   inverted_mask = gen_reg_rtx (SImode);
-  emit_insn (gen_rtx_SET (VOIDmode, inverted_mask,
-			  gen_rtx_NOT (SImode, mask)));
+  emit_insn (gen_rtx_SET (inverted_mask, gen_rtx_NOT (SImode, mask)));
 
   /* Shift the old value into place.  */
   if (oldval != const0_rtx)
@@ -8001,9 +8467,18 @@ mask_low_and_shift_p (machine_mode mode, rtx mask, rtx shift, int maxlen)
 bool
 and_operands_ok (machine_mode mode, rtx op1, rtx op2)
 {
-  return (memory_operand (op1, mode)
-	  ? and_load_operand (op2, mode)
-	  : and_reg_operand (op2, mode));
+
+  if (memory_operand (op1, mode))
+    {
+      if (TARGET_MIPS16) {
+	struct mips_address_info addr;
+	if (!mips_classify_address (&addr, op1, mode, false))
+	  return false;
+      }
+      return and_load_operand (op2, mode);
+    }
+  else
+    return and_reg_operand (op2, mode);
 }
 
 /* The canonical form of a mask-low-and-shift-left operation is
@@ -8258,7 +8733,7 @@ mips_pop_asm_switch (struct mips_asm_switch *asm_switch)
    '!'  Print "s" to use the short version if the delay slot contains a
 	16-bit instruction.
 
-   See also mips_init_print_operand_pucnt.  */
+   See also mips_init_print_operand_punct.  */
 
 static void
 mips_print_operand_punctuation (FILE *file, int ch)
@@ -8342,7 +8817,8 @@ mips_print_operand_punctuation (FILE *file, int ch)
 
     case ':':
       /* When final_sequence is 0, the delay slot will be a nop.  We can
-	 use the compact version for microMIPS.  */
+	 use the compact version where available.  The %: formatter will
+	 only be present if a compact form of the branch is available.  */
       if (final_sequence == 0)
 	putc ('c', file);
       break;
@@ -8350,8 +8826,9 @@ mips_print_operand_punctuation (FILE *file, int ch)
     case '!':
       /* If the delay slot instruction is short, then use the
 	 compact version.  */
-      if (final_sequence == 0
-	  || get_attr_length (final_sequence->insn (1)) == 2)
+      if (TARGET_MICROMIPS && !TARGET_INTERLINK_COMPRESSED && mips_isa_rev <= 5
+	  && (final_sequence == 0
+	      || get_attr_length (final_sequence->insn (1)) == 2))
 	putc ('s', file);
       break;
 
@@ -8439,9 +8916,12 @@ mips_print_operand_punct_valid_p (unsigned char code)
 
 /* Implement TARGET_PRINT_OPERAND.  The MIPS-specific operand codes are:
 
+   'E'	Print CONST_INT OP element 0 of a replicated CONST_VECTOR in decimal.
    'X'	Print CONST_INT OP in hexadecimal format.
    'x'	Print the low 16 bits of CONST_INT OP in hexadecimal format.
    'd'	Print CONST_INT OP in decimal.
+   'B'	Print CONST_INT OP element 0 of a replicated CONST_VECTOR
+	  as an unsigned byte [0..255].
    'm'	Print one less than CONST_INT OP in decimal.
    'y'	Print exact log2 of CONST_INT OP in decimal.
    'h'	Print the high-part relocation associated with OP, after stripping
@@ -8451,6 +8931,7 @@ mips_print_operand_punct_valid_p (unsigned char code)
    'N'	Print the inverse of the integer branch condition for comparison OP.
    'F'	Print the FPU branch condition for comparison OP.
    'W'	Print the inverse of the FPU branch condition for comparison OP.
+   'w'	Print a MSA register.
    'T'	Print 'f' for (eq:CC ...), 't' for (ne:CC ...),
 	      'z' for (eq:?I ...), 'n' for (ne:?I ...).
    't'	Like 'T', but with the EQ/NE cases reversed
@@ -8461,7 +8942,11 @@ mips_print_operand_punct_valid_p (unsigned char code)
    'L'	Print the low-order register in a double-word register operand.
    'M'	Print high-order register in a double-word register operand.
    'z'	Print $0 if OP is zero, otherwise print OP normally.
-   'b'	Print the address of a memory operand, without offset.  */
+   'b'	Print the address of a memory operand, without offset.
+   'v'	Print the insn size suffix b, h, w or d for vector modes V16QI, V8HI,
+	  V4SI, V2SI, and w, d for vector modes V4SF, V2DF respectively.
+   'V'	Print exact log2 of CONST_INT OP element 0 of a replicated
+	  CONST_VECTOR in decimal.  */
 
 static void
 mips_print_operand (FILE *file, rtx op, int letter)
@@ -8479,6 +8964,18 @@ mips_print_operand (FILE *file, rtx op, int letter)
 
   switch (letter)
     {
+    case 'E':
+      if (GET_CODE (op) == CONST_VECTOR)
+	{
+	  gcc_assert (mips_const_vector_same_val_p (op, GET_MODE (op)));
+	  op = CONST_VECTOR_ELT (op, 0);
+	  gcc_assert (CONST_INT_P (op));
+	  fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (op));
+	}
+      else
+	output_operand_lossage ("invalid use of '%%%c'", letter);
+      break;
+
     case 'X':
       if (CONST_INT_P (op))
 	fprintf (file, HOST_WIDE_INT_PRINT_HEX, INTVAL (op));
@@ -8500,6 +8997,19 @@ mips_print_operand (FILE *file, rtx op, int letter)
 	output_operand_lossage ("invalid use of '%%%c'", letter);
       break;
 
+    case 'B':
+      if (GET_CODE (op) == CONST_VECTOR)
+	{
+	  gcc_assert (mips_const_vector_same_val_p (op, GET_MODE (op)));
+	  op = CONST_VECTOR_ELT (op, 0);
+	  gcc_assert (CONST_INT_P (op));
+	  unsigned HOST_WIDE_INT val8 = UINTVAL (op) & GET_MODE_MASK (QImode);
+	  fprintf (file, HOST_WIDE_INT_PRINT_UNSIGNED, val8);
+	}
+      else
+	output_operand_lossage ("invalid use of '%%%c'", letter);
+      break;
+
     case 'm':
       if (CONST_INT_P (op))
 	fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (op) - 1);
@@ -8513,6 +9023,21 @@ mips_print_operand (FILE *file, rtx op, int letter)
 	  int val = exact_log2 (INTVAL (op));
 	  if (val != -1)
 	    fprintf (file, "%d", val);
+	  else
+	    output_operand_lossage ("invalid use of '%%%c'", letter);
+	}
+      else
+	output_operand_lossage ("invalid use of '%%%c'", letter);
+      break;
+
+    case 'V':
+      if (GET_CODE (op) == CONST_VECTOR)
+	{
+	  machine_mode mode = GET_MODE_INNER (GET_MODE (op));
+	  unsigned HOST_WIDE_INT val = UINTVAL (CONST_VECTOR_ELT (op, 0));
+	  int vlog2 = exact_log2 (val & GET_MODE_MASK (mode));
+	  if (vlog2 != -1)
+	    fprintf (file, "%d", vlog2);
 	  else
 	    output_operand_lossage ("invalid use of '%%%c'", letter);
 	}
@@ -8580,6 +9105,35 @@ mips_print_operand (FILE *file, rtx op, int letter)
 	output_operand_lossage ("invalid use of '%%%c'", letter);
       break;
 
+    case 'w':
+      if (code == REG && MSA_REG_P (REGNO (op)))
+	fprintf (file, "$w%s", &reg_names[REGNO (op)][2]);
+      else
+	output_operand_lossage ("invalid use of '%%%c'", letter);
+      break;
+
+    case 'v':
+      switch (GET_MODE (op))
+	{
+	case V16QImode:
+	  fprintf (file, "b");
+	  break;
+	case V8HImode:
+	  fprintf (file, "h");
+	  break;
+	case V4SImode:
+	case V4SFmode:
+	  fprintf (file, "w");
+	  break;
+	case V2DImode:
+	case V2DFmode:
+	  fprintf (file, "d");
+	  break;
+	default:
+	  output_operand_lossage ("invalid use of '%%%c'", letter);
+	}
+      break;
+
     default:
       switch (code)
 	{
@@ -8602,7 +9156,8 @@ mips_print_operand (FILE *file, rtx op, int letter)
 
 	case MEM:
 	  if (letter == 'D')
-	    output_address (plus_constant (Pmode, XEXP (op, 0), 4));
+	    output_address (GET_MODE (op), plus_constant (Pmode,
+							  XEXP (op, 0), 4));
 	  else if (letter == 'b')
 	    {
 	      gcc_assert (REG_P (XEXP (op, 0)));
@@ -8611,7 +9166,7 @@ mips_print_operand (FILE *file, rtx op, int letter)
 	  else if (letter && letter != 'z')
 	    output_operand_lossage ("invalid use of '%%%c'", letter);
 	  else
-	    output_address (XEXP (op, 0));
+	    output_address (GET_MODE (op), XEXP (op, 0));
 	  break;
 
 	default:
@@ -8631,7 +9186,7 @@ mips_print_operand (FILE *file, rtx op, int letter)
 /* Implement TARGET_PRINT_OPERAND_ADDRESS.  */
 
 static void
-mips_print_operand_address (FILE *file, rtx x)
+mips_print_operand_address (FILE *file, machine_mode /*mode*/, rtx x)
 {
   struct mips_address_info addr;
 
@@ -9202,6 +9757,37 @@ mips_finish_declare_object (FILE *stream, tree decl, int top_level, int at_end)
     }
 }
 #endif
+
+/* Mark text contents as code or data, mainly for the purpose of correct
+   disassembly.  Emit a local symbol and set its type appropriately for
+   that purpose.  Also emit `.insn' if marking contents as code so that
+   the ISA mode is recorded and any padding that follows is disassembled
+   as correct instructions.  */
+
+void
+mips_set_text_contents_type (FILE *file ATTRIBUTE_UNUSED,
+			     const char *prefix ATTRIBUTE_UNUSED,
+			     unsigned long num ATTRIBUTE_UNUSED,
+			     bool function_p ATTRIBUTE_UNUSED)
+{
+#ifdef ASM_OUTPUT_TYPE_DIRECTIVE
+  char buf[(sizeof (num) * 10) / 4 + 2];
+  const char *fnname;
+  char *sname;
+  rtx symbol;
+
+  sprintf (buf, "%lu", num);
+  symbol = XEXP (DECL_RTL (current_function_decl), 0);
+  fnname = targetm.strip_name_encoding (XSTR (symbol, 0));
+  sname = ACONCAT ((prefix, fnname, "_", buf, NULL));
+
+  ASM_OUTPUT_TYPE_DIRECTIVE (file, sname, function_p ? "function" : "object");
+  assemble_name (file, sname);
+  fputs (":\n", file);
+  if (function_p)
+    fputs ("\t.insn\n", file);
+#endif
+}
 
 /* Return the FOO in the name of the ".mdebug.FOO" section associated
    with the current ABI.  */
@@ -9313,6 +9899,10 @@ mips_file_start (void)
       attr = 1;
 
     fprintf (asm_out_file, "\t.gnu_attribute 4, %d\n", attr);
+
+    /* 128-bit MSA.  */
+    if (ISA_HAS_MSA)
+      fprintf (asm_out_file, "\t.gnu_attribute 8, 1\n");
   }
 #endif
 #endif
@@ -9364,7 +9954,7 @@ mips_frame_set (rtx mem, rtx reg)
 {
   rtx set;
 
-  set = gen_rtx_SET (VOIDmode, mem, reg);
+  set = gen_rtx_SET (mem, reg);
   RTX_FRAME_RELATED_P (set) = 1;
 
   return set;
@@ -9572,10 +10162,10 @@ mips16e_save_restore_reg (bool restore_p, bool reg_parm_p,
   if (restore_p)
     {
       mips_add_cfa_restore (reg);
-      return gen_rtx_SET (VOIDmode, reg, mem);
+      return gen_rtx_SET (reg, mem);
     }
   if (reg_parm_p)
-    return gen_rtx_SET (VOIDmode, mem, reg);
+    return gen_rtx_SET (mem, reg);
   return mips_frame_set (mem, reg);
 }
 
@@ -9625,7 +10215,7 @@ mips16e_build_save_restore (bool restore_p, unsigned int *mask_ptr,
   n = 0;
 
   /* Add the stack pointer adjustment.  */
-  set = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+  set = gen_rtx_SET (stack_pointer_rtx,
 		     plus_constant (Pmode, stack_pointer_rtx,
 				    restore_p ? size : -size));
   RTX_FRAME_RELATED_P (set) = 1;
@@ -9854,17 +10444,18 @@ mips16_cfun_returns_in_fpr_p (void)
 static bool
 mips_find_gp_ref (bool *cache, bool (*pred) (rtx_insn *))
 {
-  rtx_insn *insn;
+  rtx_insn *insn, *subinsn;
 
   if (!*cache)
     {
       push_topmost_sequence ();
       for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
-	if (USEFUL_INSN_P (insn) && pred (insn))
-	  {
-	    *cache = true;
-	    break;
-	  }
+	FOR_EACH_SUBINSN (subinsn, insn)
+	  if (USEFUL_INSN_P (subinsn) && pred (subinsn))
+	    {
+	      *cache = true;
+	      break;
+	    }
       pop_topmost_sequence ();
     }
   return *cache;
@@ -10123,7 +10714,8 @@ mips_interrupt_extra_call_saved_reg_p (unsigned int regno)
   if (TARGET_DSP && DSP_ACC_REG_P (regno))
     return true;
 
-  if (GP_REG_P (regno) && !cfun->machine->use_shadow_register_set_p)
+  if (GP_REG_P (regno)
+      && cfun->machine->use_shadow_register_set == SHADOW_SET_NO)
     {
       /* $0 is hard-wired.  */
       if (regno == GP_REG_FIRST)
@@ -10325,20 +10917,24 @@ mips_compute_frame_info (void)
   HOST_WIDE_INT offset, size;
   unsigned int regno, i;
 
+  /* Skip re-computing the frame info after reload completed.  */
+  if (reload_completed)
+    return;
+
   /* Set this function's interrupt properties.  */
   if (mips_interrupt_type_p (TREE_TYPE (current_function_decl)))
     {
       if (mips_isa_rev < 2)
 	error ("the %<interrupt%> attribute requires a MIPS32r2 processor or greater");
-      else if (TARGET_HARD_FLOAT)
-	error ("the %<interrupt%> attribute requires %<-msoft-float%>");
       else if (TARGET_MIPS16)
 	error ("interrupt handlers cannot be MIPS16 functions");
       else
 	{
 	  cfun->machine->interrupt_handler_p = true;
-	  cfun->machine->use_shadow_register_set_p =
-	    mips_use_shadow_register_set_p (TREE_TYPE (current_function_decl));
+	  cfun->machine->int_mask =
+	    mips_interrupt_mask (TREE_TYPE (current_function_decl));
+	  cfun->machine->use_shadow_register_set =
+	    mips_use_shadow_register_set (TREE_TYPE (current_function_decl));
 	  cfun->machine->keep_interrupts_masked_p =
 	    mips_keep_interrupts_masked_p (TREE_TYPE (current_function_decl));
 	  cfun->machine->use_debug_exception_return_p =
@@ -10351,13 +10947,16 @@ mips_compute_frame_info (void)
   memset (frame, 0, sizeof (*frame));
   size = get_frame_size ();
 
-  cfun->machine->global_pointer = mips_global_pointer ();
-
   /* The first two blocks contain the outgoing argument area and the $gp save
-     slot.  This area isn't needed in leaf functions, but if the
-     target-independent frame size is nonzero, we have already committed to
-     allocating these in STARTING_FRAME_OFFSET for !FRAME_GROWS_DOWNWARD.  */
-  if ((size == 0 || FRAME_GROWS_DOWNWARD) && crtl->is_leaf)
+     slot.  This area isn't needed in leaf functions.  We can also skip it
+     if we know that none of the called functions will use this space.
+
+     But if the target-independent frame size is nonzero, we have already
+     committed to allocating these in STARTING_FRAME_OFFSET for
+     !FRAME_GROWS_DOWNWARD.  */
+
+  if ((size == 0 || FRAME_GROWS_DOWNWARD)
+      && (crtl->is_leaf || (cfun->machine->optimize_call_stack && !flag_pic)))
     {
       /* The MIPS 3.0 linker does not like functions that dynamically
 	 allocate the stack and have 0 for STACK_DYNAMIC_OFFSET, since it
@@ -10374,6 +10973,26 @@ mips_compute_frame_info (void)
       frame->args_size = crtl->outgoing_args_size;
       frame->cprestore_size = MIPS_GP_SAVE_AREA_SIZE;
     }
+
+  /* MIPS16 code offsets the frame pointer by the size of the outgoing
+     arguments.  This tends to increase the chances of using unextended
+     instructions for local variables and incoming arguments.  */
+  if (TARGET_MIPS16)
+    frame->hard_frame_pointer_offset = frame->args_size;
+
+  /* PR 69129 / 69012: Beware of a possible race condition.  mips_global_pointer
+     might call mips_cfun_has_inflexible_gp_ref_p which in turn can call
+     mips_find_gp_ref which will iterate over the current insn sequence.
+     If any of these insns use the cprestore_save_slot_operand or
+     cprestore_load_slot_operand predicates in order to be recognised then
+     they will call mips_cprestore_address_p which calls
+     mips_get_cprestore_base_and_offset which expects the frame information
+     to be filled in...  In fact mips_get_cprestore_base_and_offset only
+     needs the args_size and hard_frame_pointer_offset fields to be filled
+     in, which is why the global_pointer field is initialised here and not
+     earlier.  */
+  cfun->machine->global_pointer = mips_global_pointer ();
+
   offset = frame->args_size + frame->cprestore_size;
 
   /* Move above the local variables.  */
@@ -10422,7 +11041,7 @@ mips_compute_frame_info (void)
       if (mips_save_reg_p (regno))
 	{
 	  frame->num_fp += MAX_FPRS_PER_FMT;
-	  frame->fmask |= ~(~0 << MAX_FPRS_PER_FMT) << (regno - FP_REG_FIRST);
+	  frame->fmask |= ~(~0U << MAX_FPRS_PER_FMT) << (regno - FP_REG_FIRST);
 	}
 
   /* Move above the FPR save area.  */
@@ -10453,9 +11072,9 @@ mips_compute_frame_info (void)
       /* All interrupt context functions need space to preserve STATUS.  */
       frame->num_cop0_regs++;
 
-      /* If we don't keep interrupts masked, we need to save EPC.  */
-      if (!cfun->machine->keep_interrupts_masked_p)
-	frame->num_cop0_regs++;
+      /* We need to save EPC regardless of whether interrupts remain masked
+	 as exceptions will corrupt EPC.  */
+      frame->num_cop0_regs++;
     }
 
   /* Move above the accumulator save area.  */
@@ -10471,6 +11090,35 @@ mips_compute_frame_info (void)
     {
       offset += frame->num_cop0_regs * UNITS_PER_WORD;
       frame->cop0_sp_offset = offset - UNITS_PER_WORD;
+    }
+
+  /* Determine if we can save the callee-saved registers in the frame
+     header.  Restrict this to functions where there is no other reason
+     to allocate stack space so that we can eliminate the instructions
+     that modify the stack pointer.  */
+
+  if (TARGET_OLDABI
+      && optimize > 0
+      && flag_frame_header_optimization
+      && !MAIN_NAME_P (DECL_NAME (current_function_decl))
+      && cfun->machine->varargs_size == 0
+      && crtl->args.pretend_args_size == 0
+      && frame->var_size == 0
+      && frame->num_acc == 0
+      && frame->num_cop0_regs == 0
+      && frame->num_fp == 0
+      && frame->num_gp > 0
+      && frame->num_gp <= MAX_ARGS_IN_REGISTERS
+      && !GENERATE_MIPS16E_SAVE_RESTORE
+      && !cfun->machine->interrupt_handler_p
+      && cfun->machine->does_not_use_frame_header
+      && cfun->machine->optimize_call_stack
+      && !cfun->machine->callers_may_not_allocate_frame
+      && !mips_cfun_has_cprestore_slot_p ())
+    {
+      offset = 0;
+      frame->gp_sp_offset = REG_PARM_STACK_SPACE(cfun) - UNITS_PER_WORD;
+      cfun->machine->use_frame_header_for_callee_saved_regs = true;
     }
 
   /* Move above the callee-allocated varargs save area.  */
@@ -10490,12 +11138,6 @@ mips_compute_frame_info (void)
     frame->acc_save_offset = frame->acc_sp_offset - offset;
   if (frame->num_cop0_regs > 0)
     frame->cop0_save_offset = frame->cop0_sp_offset - offset;
-
-  /* MIPS16 code offsets the frame pointer by the size of the outgoing
-     arguments.  This tends to increase the chances of using unextended
-     instructions for local variables and incoming arguments.  */
-  if (TARGET_MIPS16)
-    frame->hard_frame_pointer_offset = frame->args_size;
 }
 
 /* Return the style of GP load sequence that is being used for the
@@ -10773,7 +11415,7 @@ mips_save_restore_reg (machine_mode mode, int regno,
   fn (gen_rtx_REG (mode, regno), mem);
 }
 
-/* Call FN for each accumlator that is saved by the current function.
+/* Call FN for each accumulator that is saved by the current function.
    SP_OFFSET is the offset of the current stack pointer from the start
    of the frame.  */
 
@@ -10890,7 +11532,7 @@ umips_build_save_restore (mips_save_restore_fn fn,
 	set = mips_frame_set (mem, reg);
       else
 	{
-	  set = gen_rtx_SET (VOIDmode, reg, mem);
+	  set = gen_rtx_SET (reg, mem);
 	  mips_add_cfa_restore (reg);
 	}
       XVECEXP (pattern, 0, j) = set;
@@ -10907,7 +11549,7 @@ umips_build_save_restore (mips_save_restore_fn fn,
 	set = mips_frame_set (mem, reg);
       else
 	{
-	  set = gen_rtx_SET (VOIDmode, reg, mem);
+	  set = gen_rtx_SET (reg, mem);
 	  mips_add_cfa_restore (reg);
 	}
       XVECEXP (pattern, 0, j) = set;
@@ -11034,7 +11676,7 @@ mips_emit_save_slot_move (rtx dest, rtx src, rtx temp)
 	{
 	  mips_emit_move (temp, src);
 	  if (TARGET_64BIT)
-	    emit_insn (gen_mthisi_di (gen_rtx_REG (TImode, MD_REG_FIRST),
+	    emit_insn (gen_mthidi_ti (gen_rtx_REG (TImode, MD_REG_FIRST),
 				      temp, gen_rtx_REG (DImode, LO_REGNUM)));
 	  else
 	    emit_insn (gen_mthisi_di (gen_rtx_REG (DImode, MD_REG_FIRST),
@@ -11312,35 +11954,34 @@ mips_emit_probe_stack_range (HOST_WIDE_INT first, HOST_WIDE_INT size)
 
       /* Step 1: round SIZE to the previous multiple of the interval.  */
 
-      rounded_size = size & -PROBE_INTERVAL;
+      rounded_size = ROUND_DOWN (size, PROBE_INTERVAL);
 
 
       /* Step 2: compute initial and final value of the loop counter.  */
 
       /* TEST_ADDR = SP + FIRST.  */
-      emit_insn (gen_rtx_SET (VOIDmode, r3,
-			      plus_constant (Pmode, stack_pointer_rtx,
-					     -first)));
+      emit_insn (gen_rtx_SET (r3, plus_constant (Pmode, stack_pointer_rtx,
+						 -first)));
 
       /* LAST_ADDR = SP + FIRST + ROUNDED_SIZE.  */
       if (rounded_size > 32768)
 	{
           emit_move_insn (r12, GEN_INT (rounded_size));
-	  emit_insn (gen_rtx_SET (VOIDmode, r12,
-			          gen_rtx_MINUS (Pmode, r3, r12)));
+	  emit_insn (gen_rtx_SET (r12, gen_rtx_MINUS (Pmode, r3, r12)));
 	}
       else
-	emit_insn (gen_rtx_SET (VOIDmode, r12,
-			        plus_constant (Pmode, r3, -rounded_size)));
+	emit_insn (gen_rtx_SET (r12, plus_constant (Pmode, r3,
+						    -rounded_size)));
 
 
       /* Step 3: the loop
 
-	while (TEST_ADDR != LAST_ADDR)
+	do
 	  {
 	    TEST_ADDR = TEST_ADDR + PROBE_INTERVAL
 	    probe at TEST_ADDR
 	  }
+	while (TEST_ADDR != LAST_ADDR)
 
 	probes at FIRST + N * PROBE_INTERVAL for values of N from 1
 	until it is equal to ROUNDED_SIZE.  */
@@ -11366,37 +12007,30 @@ const char *
 mips_output_probe_stack_range (rtx reg1, rtx reg2)
 {
   static int labelno = 0;
-  char loop_lab[32], end_lab[32], tmp[64];
+  char loop_lab[32], tmp[64];
   rtx xops[2];
 
-  ASM_GENERATE_INTERNAL_LABEL (loop_lab, "LPSRL", labelno);
-  ASM_GENERATE_INTERNAL_LABEL (end_lab, "LPSRE", labelno++);
+  ASM_GENERATE_INTERNAL_LABEL (loop_lab, "LPSRL", labelno++);
 
+  /* Loop.  */
   ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, loop_lab);
 
-  /* Jump to END_LAB if TEST_ADDR == LAST_ADDR.  */
-  xops[0] = reg1;
-  xops[1] = reg2;
-  strcpy (tmp, "%(%<beq\t%0,%1,");
-  output_asm_insn (strcat (tmp, &end_lab[1]), xops);
- 
   /* TEST_ADDR = TEST_ADDR + PROBE_INTERVAL.  */
+  xops[0] = reg1;
   xops[1] = GEN_INT (-PROBE_INTERVAL);
   if (TARGET_64BIT && TARGET_LONG64)
     output_asm_insn ("daddiu\t%0,%0,%1", xops);
   else
     output_asm_insn ("addiu\t%0,%0,%1", xops);
 
-  /* Probe at TEST_ADDR and branch.  */
-  fprintf (asm_out_file, "\tb\t");
-  assemble_name_raw (asm_out_file, loop_lab);
-  fputc ('\n', asm_out_file);
+  /* Probe at TEST_ADDR, test if TEST_ADDR == LAST_ADDR and branch.  */
+  xops[1] = reg2;
+  strcpy (tmp, "%(%<bne\t%0,%1,");
+  output_asm_insn (strcat (tmp, &loop_lab[1]), xops); 
   if (TARGET_64BIT)
     output_asm_insn ("sd\t$0,0(%0)%)", xops);
   else
     output_asm_insn ("sw\t$0,0(%0)%)", xops);
-
-  ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, end_lab);
 
   return "";
 }
@@ -11498,21 +12132,21 @@ mips_expand_prologue (void)
 
 	      /* If this interrupt is using a shadow register set, we need to
 		 get the stack pointer from the previous register set.  */
-	      if (cfun->machine->use_shadow_register_set_p)
-		emit_insn (gen_mips_rdpgpr (stack_pointer_rtx,
-					    stack_pointer_rtx));
+	      if (cfun->machine->use_shadow_register_set == SHADOW_SET_YES)
+		emit_insn (PMODE_INSN (gen_mips_rdpgpr, (stack_pointer_rtx,
+							 stack_pointer_rtx)));
 
 	      if (!cfun->machine->keep_interrupts_masked_p)
 		{
-		  /* Move from COP0 Cause to K0.  */
-		  emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K0_REG_NUM),
-					    gen_rtx_REG (SImode,
-							 COP0_CAUSE_REG_NUM)));
-		  /* Move from COP0 EPC to K1.  */
-		  emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K1_REG_NUM),
-					    gen_rtx_REG (SImode,
-							 COP0_EPC_REG_NUM)));
+		  if (cfun->machine->int_mask == INT_MASK_EIC)
+		    /* Move from COP0 Cause to K0.  */
+		    emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K0_REG_NUM),
+			gen_rtx_REG (SImode, COP0_CAUSE_REG_NUM)));
 		}
+	      /* Move from COP0 EPC to K1.  */
+	      emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K1_REG_NUM),
+					gen_rtx_REG (SImode,
+						     COP0_EPC_REG_NUM)));
 
 	      /* Allocate the first part of the frame.  */
 	      rtx insn = gen_add3_insn (stack_pointer_rtx, stack_pointer_rtx,
@@ -11523,15 +12157,13 @@ mips_expand_prologue (void)
 
 	      /* Start at the uppermost location for saving.  */
 	      offset = frame->cop0_sp_offset - size;
-	      if (!cfun->machine->keep_interrupts_masked_p)
-		{
-		  /* Push EPC into its stack slot.  */
-		  mem = gen_frame_mem (word_mode,
-				       plus_constant (Pmode, stack_pointer_rtx,
-						      offset));
-		  mips_emit_move (mem, gen_rtx_REG (word_mode, K1_REG_NUM));
-		  offset -= UNITS_PER_WORD;
-		}
+
+	      /* Push EPC into its stack slot.  */
+	      mem = gen_frame_mem (word_mode,
+				   plus_constant (Pmode, stack_pointer_rtx,
+						  offset));
+	      mips_emit_move (mem, gen_rtx_REG (word_mode, K1_REG_NUM));
+	      offset -= UNITS_PER_WORD;
 
 	      /* Move from COP0 Status to K1.  */
 	      emit_insn (gen_cop0_move (gen_rtx_REG (SImode, K1_REG_NUM),
@@ -11539,7 +12171,8 @@ mips_expand_prologue (void)
 						     COP0_STATUS_REG_NUM)));
 
 	      /* Right justify the RIPL in k0.  */
-	      if (!cfun->machine->keep_interrupts_masked_p)
+	      if (!cfun->machine->keep_interrupts_masked_p
+		  && cfun->machine->int_mask == INT_MASK_EIC)
 		emit_insn (gen_lshrsi3 (gen_rtx_REG (SImode, K0_REG_NUM),
 					gen_rtx_REG (SImode, K0_REG_NUM),
 					GEN_INT (CAUSE_IPL)));
@@ -11552,11 +12185,21 @@ mips_expand_prologue (void)
 	      offset -= UNITS_PER_WORD;
 
 	      /* Insert the RIPL into our copy of SR (k1) as the new IPL.  */
-	      if (!cfun->machine->keep_interrupts_masked_p)
+	      if (!cfun->machine->keep_interrupts_masked_p
+		  && cfun->machine->int_mask == INT_MASK_EIC)
 		emit_insn (gen_insvsi (gen_rtx_REG (SImode, K1_REG_NUM),
 				       GEN_INT (6),
 				       GEN_INT (SR_IPL),
 				       gen_rtx_REG (SImode, K0_REG_NUM)));
+
+	      /* Clear all interrupt mask bits up to and including the
+		 handler's interrupt line.  */
+	      if (!cfun->machine->keep_interrupts_masked_p
+		  && cfun->machine->int_mask != INT_MASK_EIC)
+		emit_insn (gen_insvsi (gen_rtx_REG (SImode, K1_REG_NUM),
+				       GEN_INT (cfun->machine->int_mask + 1),
+				       GEN_INT (SR_IM0),
+				       gen_rtx_REG (SImode, GP_REG_FIRST)));
 
 	      if (!cfun->machine->keep_interrupts_masked_p)
 		/* Enable interrupts by clearing the KSU ERL and EXL bits.
@@ -11573,15 +12216,26 @@ mips_expand_prologue (void)
 				       GEN_INT (5),
 				       GEN_INT (SR_IE),
 				       gen_rtx_REG (SImode, GP_REG_FIRST)));
+
+	      if (TARGET_HARD_FLOAT)
+		/* Disable COP1 for hard-float.  This will lead to an exception
+		   if floating-point code is executed in an ISR.  */
+		emit_insn (gen_insvsi (gen_rtx_REG (SImode, K1_REG_NUM),
+				       GEN_INT (1),
+				       GEN_INT (SR_COP1),
+				       gen_rtx_REG (SImode, GP_REG_FIRST)));
 	    }
 	  else
 	    {
-	      rtx insn = gen_add3_insn (stack_pointer_rtx,
-					stack_pointer_rtx,
-					GEN_INT (-step1));
-	      RTX_FRAME_RELATED_P (emit_insn (insn)) = 1;
-	      mips_frame_barrier ();
-	      size -= step1;
+	      if (step1 != 0)
+		{
+		  rtx insn = gen_add3_insn (stack_pointer_rtx,
+					    stack_pointer_rtx,
+					    GEN_INT (-step1));
+		  RTX_FRAME_RELATED_P (emit_insn (insn)) = 1;
+		  mips_frame_barrier ();
+		  size -= step1;
+		}
 	    }
 	  mips_for_each_saved_acc (size, mips_save_reg);
 	  mips_for_each_saved_gpr_and_fpr (size, mips_save_reg);
@@ -11618,7 +12272,7 @@ mips_expand_prologue (void)
 
 	  /* Describe the combined effect of the previous instructions.  */
 	  mips_set_frame_expr
-	    (gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+	    (gen_rtx_SET (stack_pointer_rtx,
 			  plus_constant (Pmode, stack_pointer_rtx, -size)));
 	}
       mips_frame_barrier ();
@@ -11649,7 +12303,7 @@ mips_expand_prologue (void)
 				    hard_frame_pointer_rtx,
 				    MIPS_PROLOGUE_TEMP (Pmode)));
 	  mips_set_frame_expr
-	    (gen_rtx_SET (VOIDmode, hard_frame_pointer_rtx,
+	    (gen_rtx_SET (hard_frame_pointer_rtx,
 			  plus_constant (Pmode, stack_pointer_rtx, offset)));
 	}
     }
@@ -11706,9 +12360,9 @@ mips_epilogue_emit_cfa_restores (void)
   rtx_insn *insn;
 
   insn = get_last_insn ();
-  gcc_assert (insn && !REG_NOTES (insn));
   if (mips_epilogue.cfa_restores)
     {
+      gcc_assert (insn && !REG_NOTES (insn));
       RTX_FRAME_RELATED_P (insn) = 1;
       REG_NOTES (insn) = mips_epilogue.cfa_restores;
       mips_epilogue.cfa_restores = 0;
@@ -11918,29 +12572,27 @@ mips_expand_epilogue (bool sibcall_p)
 	  rtx mem;
 
 	  offset = frame->cop0_sp_offset - (frame->total_size - step2);
-	  if (!cfun->machine->keep_interrupts_masked_p)
-	    {
-	      /* Restore the original EPC.  */
-	      mem = gen_frame_mem (word_mode,
-				   plus_constant (Pmode, stack_pointer_rtx,
-						  offset));
-	      mips_emit_move (gen_rtx_REG (word_mode, K0_REG_NUM), mem);
-	      offset -= UNITS_PER_WORD;
 
-	      /* Move to COP0 EPC.  */
-	      emit_insn (gen_cop0_move (gen_rtx_REG (SImode, COP0_EPC_REG_NUM),
-					gen_rtx_REG (SImode, K0_REG_NUM)));
-	    }
+	  /* Restore the original EPC.  */
+	  mem = gen_frame_mem (word_mode,
+			       plus_constant (Pmode, stack_pointer_rtx,
+					      offset));
+	  mips_emit_move (gen_rtx_REG (word_mode, K1_REG_NUM), mem);
+	  offset -= UNITS_PER_WORD;
+
+	  /* Move to COP0 EPC.  */
+	  emit_insn (gen_cop0_move (gen_rtx_REG (SImode, COP0_EPC_REG_NUM),
+				    gen_rtx_REG (SImode, K1_REG_NUM)));
 
 	  /* Restore the original Status.  */
 	  mem = gen_frame_mem (word_mode,
 			       plus_constant (Pmode, stack_pointer_rtx,
 					      offset));
-	  mips_emit_move (gen_rtx_REG (word_mode, K0_REG_NUM), mem);
+	  mips_emit_move (gen_rtx_REG (word_mode, K1_REG_NUM), mem);
 	  offset -= UNITS_PER_WORD;
 
 	  /* If we don't use shadow register set, we need to update SP.  */
-	  if (!cfun->machine->use_shadow_register_set_p)
+	  if (cfun->machine->use_shadow_register_set == SHADOW_SET_NO)
 	    mips_deallocate_stack (stack_pointer_rtx, GEN_INT (step2), 0);
 	  else
 	    /* The choice of position is somewhat arbitrary in this case.  */
@@ -11948,7 +12600,7 @@ mips_expand_epilogue (bool sibcall_p)
 
 	  /* Move to COP0 Status.  */
 	  emit_insn (gen_cop0_move (gen_rtx_REG (SImode, COP0_STATUS_REG_NUM),
-				    gen_rtx_REG (SImode, K0_REG_NUM)));
+				    gen_rtx_REG (SImode, K1_REG_NUM)));
 	}
       else if (TARGET_MICROMIPS
 	       && !crtl->calls_eh_return
@@ -11961,7 +12613,9 @@ mips_expand_epilogue (bool sibcall_p)
 	mips_deallocate_stack (stack_pointer_rtx, GEN_INT (step2), 0);
     }
 
-  if (!use_jraddiusp_p)
+  if (cfun->machine->use_frame_header_for_callee_saved_regs)
+    mips_epilogue_emit_cfa_restores ();
+  else if (!use_jraddiusp_p)
     gcc_assert (!mips_epilogue.cfa_restores);
 
   /* Add in the __builtin_eh_return stack adjustment.  We need to
@@ -12063,7 +12717,8 @@ mips_can_use_return_insn (void)
   if (mips16_cfun_returns_in_fpr_p ())
     return false;
 
-  return cfun->machine->frame.total_size == 0;
+  return (cfun->machine->frame.total_size == 0
+	  && !cfun->machine->use_frame_header_for_callee_saved_regs);
 }
 
 /* Return true if register REGNO can store a value of mode MODE.
@@ -12091,8 +12746,12 @@ mips_hard_regno_mode_ok_p (unsigned int regno, machine_mode mode)
   size = GET_MODE_SIZE (mode);
   mclass = GET_MODE_CLASS (mode);
 
-  if (GP_REG_P (regno) && mode != CCFmode)
+  if (GP_REG_P (regno) && mode != CCFmode && !MSA_SUPPORTED_MODE_P (mode))
     return ((regno - GP_REG_FIRST) & 1) == 0 || size <= UNITS_PER_WORD;
+
+  /* For MSA, allow TImode and 128-bit vector modes in all FPR.  */
+  if (FP_REG_P (regno) && MSA_SUPPORTED_MODE_P (mode))
+    return true;
 
   if (FP_REG_P (regno)
       && (((regno - FP_REG_FIRST) % MAX_FPRS_PER_FMT) == 0
@@ -12171,6 +12830,33 @@ mips_hard_regno_mode_ok_p (unsigned int regno, machine_mode mode)
   return false;
 }
 
+/* Return nonzero if register OLD_REG can be renamed to register NEW_REG.  */
+
+bool
+mips_hard_regno_rename_ok (unsigned int old_reg ATTRIBUTE_UNUSED,
+			   unsigned int new_reg)
+{
+  /* Interrupt functions can only use registers that have already been
+     saved by the prologue, even if they would normally be call-clobbered.  */
+  if (cfun->machine->interrupt_handler_p && !df_regs_ever_live_p (new_reg))
+    return false;
+
+  return true;
+}
+
+/* Return nonzero if register REGNO can be used as a scratch register
+   in peephole2.  */
+
+bool
+mips_hard_regno_scratch_ok (unsigned int regno)
+{
+  /* See mips_hard_regno_rename_ok.  */
+  if (cfun->machine->interrupt_handler_p && !df_regs_ever_live_p (regno))
+    return false;
+
+  return true;
+}
+
 /* Implement HARD_REGNO_NREGS.  */
 
 unsigned int
@@ -12182,7 +12868,12 @@ mips_hard_regno_nregs (int regno, machine_mode mode)
     return (GET_MODE_SIZE (mode) + 3) / 4;
 
   if (FP_REG_P (regno))
-    return (GET_MODE_SIZE (mode) + UNITS_PER_FPREG - 1) / UNITS_PER_FPREG;
+    {
+      if (MSA_SUPPORTED_MODE_P (mode))
+	return 1;
+
+      return (GET_MODE_SIZE (mode) + UNITS_PER_FPREG - 1) / UNITS_PER_FPREG;
+    }
 
   /* All other registers are word-sized.  */
   return (GET_MODE_SIZE (mode) + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
@@ -12203,12 +12894,19 @@ mips_class_max_nregs (enum reg_class rclass, machine_mode mode)
     {
       if (HARD_REGNO_MODE_OK (ST_REG_FIRST, mode))
 	size = MIN (size, 4);
+
       AND_COMPL_HARD_REG_SET (left, reg_class_contents[(int) ST_REGS]);
     }
   if (hard_reg_set_intersect_p (left, reg_class_contents[(int) FP_REGS]))
     {
       if (HARD_REGNO_MODE_OK (FP_REG_FIRST, mode))
-	size = MIN (size, UNITS_PER_FPREG);
+	{
+	  if (MSA_SUPPORTED_MODE_P (mode))
+	    size = MIN (size, UNITS_PER_MSA_REG);
+	  else
+	    size = MIN (size, UNITS_PER_FPREG);
+	}
+
       AND_COMPL_HARD_REG_SET (left, reg_class_contents[(int) FP_REGS]);
     }
   if (!hard_reg_set_empty_p (left))
@@ -12227,6 +12925,10 @@ mips_cannot_change_mode_class (machine_mode from,
      and between those vectors and DImode.  */
   if (GET_MODE_SIZE (from) == 8 && GET_MODE_SIZE (to) == 8
       && INTEGRAL_MODE_P (from) && INTEGRAL_MODE_P (to))
+    return false;
+
+  /* Allow conversions between different MSA vector modes.  */
+  if (MSA_SUPPORTED_MODE_P (from) && MSA_SUPPORTED_MODE_P (to))
     return false;
 
   /* Otherwise, there are several problems with changing the modes of
@@ -12264,7 +12966,8 @@ mips_small_register_classes_for_mode_p (machine_mode mode
   return TARGET_MIPS16;
 }
 
-/* Return true if moves in mode MODE can use the FPU's mov.fmt instruction.  */
+/* Return true if moves in mode MODE can use the FPU's mov.fmt instruction,
+   or use the MSA's move.v instruction.  */
 
 static bool
 mips_mode_ok_for_mov_fmt_p (machine_mode mode)
@@ -12282,7 +12985,7 @@ mips_mode_ok_for_mov_fmt_p (machine_mode mode)
       return TARGET_HARD_FLOAT && TARGET_PAIRED_SINGLE_FLOAT;
 
     default:
-      return false;
+      return MSA_SUPPORTED_MODE_P (mode);
     }
 }
 
@@ -12529,6 +13232,10 @@ mips_secondary_reload_class (enum reg_class rclass,
 	   pairs of lwc1s and swc1s if ldc1 and sdc1 are not supported.  */
 	return NO_REGS;
 
+      if (MEM_P (x) && MSA_SUPPORTED_MODE_P (mode))
+	/* In this case we can use MSA LD.* and ST.*.  */
+	return NO_REGS;
+
       if (GP_REG_P (regno) || x == CONST0_RTX (mode))
 	/* In this case we can use mtc1, mfc1, dmtc1 or dmfc1.  */
 	return NO_REGS;
@@ -12598,7 +13305,7 @@ mips_vector_mode_supported_p (machine_mode mode)
       return TARGET_LOONGSON_VECTORS;
 
     default:
-      return false;
+      return MSA_SUPPORTED_MODE_P (mode);
     }
 }
 
@@ -12617,12 +13324,44 @@ mips_scalar_mode_supported_p (machine_mode mode)
 /* Implement TARGET_VECTORIZE_PREFERRED_SIMD_MODE.  */
 
 static machine_mode
-mips_preferred_simd_mode (machine_mode mode ATTRIBUTE_UNUSED)
+mips_preferred_simd_mode (machine_mode mode)
 {
   if (TARGET_PAIRED_SINGLE_FLOAT
       && mode == SFmode)
     return V2SFmode;
+
+  if (!ISA_HAS_MSA)
+    return word_mode;
+
+  switch (mode)
+    {
+    case QImode:
+      return V16QImode;
+    case HImode:
+      return V8HImode;
+    case SImode:
+      return V4SImode;
+    case DImode:
+      return V2DImode;
+
+    case SFmode:
+      return V4SFmode;
+
+    case DFmode:
+      return V2DFmode;
+
+    default:
+      break;
+    }
   return word_mode;
+}
+
+/* Implement TARGET_VECTORIZE_AUTOVECTORIZE_VECTOR_SIZES.  */
+
+static unsigned int
+mips_autovectorize_vector_sizes (void)
+{
+  return ISA_HAS_MSA ? 16 : 0;
 }
 
 /* Implement TARGET_INIT_LIBFUNCS.  */
@@ -12821,6 +13560,7 @@ mips_adjust_insn_length (rtx_insn *insn, int length)
 	break;
 
       case HAZARD_DELAY:
+      case HAZARD_FORBIDDEN_SLOT:
 	length += NOP_INSN_LENGTH;
 	break;
 
@@ -12830,6 +13570,76 @@ mips_adjust_insn_length (rtx_insn *insn, int length)
       }
 
   return length;
+}
+
+/* Return the asm template for a call.  OPERANDS are the operands, TARGET_OPNO
+   is the operand number of the target.  SIZE_OPNO is the operand number of
+   the argument size operand that can optionally hold the call attributes.  If
+   SIZE_OPNO is not -1 and the call is indirect, use the function symbol from
+   the call attributes to attach a R_MIPS_JALR relocation to the call.  LINK_P
+   indicates whether the jump is a call and needs to set the link register.
+
+   When generating GOT code without explicit relocation operators, all calls
+   should use assembly macros.  Otherwise, all indirect calls should use "jr"
+   or "jalr"; we will arrange to restore $gp afterwards if necessary.  Finally,
+   we can only generate direct calls for -mabicalls by temporarily switching
+   to non-PIC mode.
+
+   For microMIPS jal(r), we try to generate jal(r)s when a 16-bit
+   instruction is in the delay slot of jal(r).
+
+   Where compact branches are available, we try to use them if the delay slot
+   has a NOP (or equivalently delay slots were not enabled for the instruction
+   anyway).  */
+
+const char *
+mips_output_jump (rtx *operands, int target_opno, int size_opno, bool link_p)
+{
+  static char buffer[300];
+  char *s = buffer;
+  bool reg_p = REG_P (operands[target_opno]);
+
+  const char *and_link = link_p ? "al" : "";
+  const char *reg = reg_p ? "r" : "";
+  const char *compact = "";
+  const char *nop = "%/";
+  const char *short_delay = link_p ? "%!" : "";
+  const char *insn_name = TARGET_CB_NEVER || reg_p ? "j" : "b";
+
+  /* Compact branches can only be described when the ISA has support for them
+     as both the compact formatter '%:' and the delay slot NOP formatter '%/'
+     work as a mutually exclusive pair.  I.e. a NOP is never required if a
+     compact form is available.  */
+  if (!final_sequence
+      && (TARGET_CB_MAYBE
+	  || (ISA_HAS_JRC && !link_p && reg_p)))
+    {
+      compact = "c";
+      nop = "";
+    }
+
+  if (TARGET_USE_GOT && !TARGET_EXPLICIT_RELOCS)
+    sprintf (s, "%%*%s%s\t%%%d%%/", insn_name, and_link, target_opno);
+  else
+    {
+      if (!reg_p && TARGET_ABICALLS_PIC2)
+	s += sprintf (s, ".option\tpic0\n\t");
+
+      if (reg_p && mips_get_pic_call_symbol (operands, size_opno))
+	s += sprintf (s, "%%*.reloc\t1f,%s,%%%d\n1:\t",
+		      TARGET_MICROMIPS ? "R_MICROMIPS_JALR" : "R_MIPS_JALR",
+		      size_opno);
+      else
+	s += sprintf (s, "%%*");
+
+      s += sprintf (s, "%s%s%s%s%s\t%%%d%s",
+		    insn_name, and_link, reg, compact, short_delay,
+		    target_opno, nop);
+
+      if (!reg_p && TARGET_ABICALLS_PIC2)
+	s += sprintf (s, "\n\t.option\tpic2");
+    }
+  return buffer;
 }
 
 /* Return the assembly code for INSN, which has the operands given by
@@ -12885,12 +13695,25 @@ mips_output_conditional_branch (rtx_insn *insn, rtx *operands,
     }
 
   /* Output the unconditional branch to TAKEN.  */
-  if (TARGET_ABSOLUTE_JUMPS)
+  if (TARGET_ABSOLUTE_JUMPS && TARGET_CB_MAYBE)
+    {
+      /* Add a hazard nop.  */
+      if (!final_sequence)
+	{
+	  output_asm_insn ("nop\t\t# hazard nop", 0);
+	  fprintf (asm_out_file, "\n");
+	}
+      output_asm_insn (MIPS_ABSOLUTE_JUMP ("bc\t%0"), &taken);
+    }
+  else if (TARGET_ABSOLUTE_JUMPS)
     output_asm_insn (MIPS_ABSOLUTE_JUMP ("j\t%0%/"), &taken);
   else
     {
       mips_output_load_label (taken);
-      output_asm_insn ("jr\t%@%]%/", 0);
+      if (TARGET_CB_MAYBE)
+	output_asm_insn ("jrc\t%@%]", 0);
+      else
+	output_asm_insn ("jr\t%@%]%/", 0);
     }
 
   /* Now deal with its delay slot; see above.  */
@@ -12904,7 +13727,7 @@ mips_output_conditional_branch (rtx_insn *insn, rtx *operands,
 			   asm_out_file, optimize, 1, NULL);
 	  final_sequence->insn (1)->set_deleted ();
 	}
-      else
+      else if (TARGET_CB_NEVER)
 	output_asm_insn ("nop", 0);
       fprintf (asm_out_file, "\n");
     }
@@ -12916,42 +13739,155 @@ mips_output_conditional_branch (rtx_insn *insn, rtx *operands,
 }
 
 /* Return the assembly code for INSN, which branches to OPERANDS[0]
+   if some equality condition is true.  The condition is given by
+   OPERANDS[1] if !INVERTED_P, otherwise it is the inverse of
+   OPERANDS[1].  OPERANDS[2] is the comparison's first operand;
+   OPERANDS[3] is the second operand and may be zero or a register.  */
+
+const char *
+mips_output_equal_conditional_branch (rtx_insn* insn, rtx *operands,
+				      bool inverted_p)
+{
+  const char *branch[2];
+  /* For a simple BNEZ or BEQZ microMIPSr3 branch.  */
+  if (TARGET_MICROMIPS
+      && mips_isa_rev <= 5
+      && operands[3] == const0_rtx
+      && get_attr_length (insn) <= 8)
+    {
+      if (mips_cb == MIPS_CB_OPTIMAL)
+	{
+	  branch[!inverted_p] = "%*b%C1z%:\t%2,%0";
+	  branch[inverted_p] = "%*b%N1z%:\t%2,%0";
+	}
+      else
+	{
+	  branch[!inverted_p] = "%*b%C1z\t%2,%0%/";
+	  branch[inverted_p] = "%*b%N1z\t%2,%0%/";
+	}
+    }
+  else if (TARGET_CB_MAYBE)
+    {
+      if (operands[3] == const0_rtx)
+	{
+	  branch[!inverted_p] = MIPS_BRANCH_C ("b%C1z", "%2,%0");
+	  branch[inverted_p] = MIPS_BRANCH_C ("b%N1z", "%2,%0");
+	}
+      else if (REGNO (operands[2]) != REGNO (operands[3]))
+	{
+	  branch[!inverted_p] = MIPS_BRANCH_C ("b%C1", "%2,%3,%0");
+	  branch[inverted_p] = MIPS_BRANCH_C ("b%N1", "%2,%3,%0");
+	}
+      else
+	{
+	  /* This case is degenerate.  It should not happen, but does.  */
+	  if (GET_CODE (operands[1]) == NE)
+	    inverted_p = !inverted_p;
+
+	  branch[!inverted_p] = MIPS_BRANCH_C ("b", "%0");
+	  branch[inverted_p] = "%*\t\t# branch never";
+	}
+    }
+  else
+    {
+      branch[!inverted_p] = MIPS_BRANCH ("b%C1", "%2,%z3,%0");
+      branch[inverted_p] = MIPS_BRANCH ("b%N1", "%2,%z3,%0");
+    }
+
+  return mips_output_conditional_branch (insn, operands, branch[1], branch[0]);
+}
+
+/* Return the assembly code for INSN, which branches to OPERANDS[0]
    if some ordering condition is true.  The condition is given by
    OPERANDS[1] if !INVERTED_P, otherwise it is the inverse of
    OPERANDS[1].  OPERANDS[2] is the comparison's first operand;
-   its second is always zero.  */
+   OPERANDS[3] is the second operand and may be zero or a register.  */
 
 const char *
-mips_output_order_conditional_branch (rtx_insn *insn, rtx *operands, bool inverted_p)
+mips_output_order_conditional_branch (rtx_insn *insn, rtx *operands,
+				      bool inverted_p)
 {
   const char *branch[2];
 
   /* Make BRANCH[1] branch to OPERANDS[0] when the condition is true.
      Make BRANCH[0] branch on the inverse condition.  */
-  switch (GET_CODE (operands[1]))
+  if (operands[3] != const0_rtx)
     {
-      /* These cases are equivalent to comparisons against zero.  */
-    case LEU:
-      inverted_p = !inverted_p;
-      /* Fall through.  */
-    case GTU:
-      branch[!inverted_p] = MIPS_BRANCH ("bne", "%2,%.,%0");
-      branch[inverted_p] = MIPS_BRANCH ("beq", "%2,%.,%0");
-      break;
+      /* Handle degenerate cases that should not, but do, occur.  */
+      if (REGNO (operands[2]) == REGNO (operands[3]))
+	{
+	  switch (GET_CODE (operands[1]))
+	    {
+	    case LT:
+	    case LTU:
+	      inverted_p = !inverted_p;
+	      /* Fall through.  */
+	    case GE:
+	    case GEU:
+	      branch[!inverted_p] = MIPS_BRANCH_C ("b", "%0");
+	      branch[inverted_p] = "%*\t\t# branch never";
+	      break;
+	   default:
+	      gcc_unreachable ();
+	    }
+	}
+      else
+	{
+	  branch[!inverted_p] = MIPS_BRANCH_C ("b%C1", "%2,%3,%0");
+	  branch[inverted_p] = MIPS_BRANCH_C ("b%N1", "%2,%3,%0");
+	}
+    }
+  else
+    {
+      switch (GET_CODE (operands[1]))
+	{
+	  /* These cases are equivalent to comparisons against zero.  */
+	case LEU:
+	  inverted_p = !inverted_p;
+	  /* Fall through.  */
+	case GTU:
+	  if (TARGET_CB_MAYBE)
+	    {
+	      branch[!inverted_p] = MIPS_BRANCH_C ("bnez", "%2,%0");
+	      branch[inverted_p] = MIPS_BRANCH_C ("beqz", "%2,%0");
+	    }
+	  else
+	    {
+	      branch[!inverted_p] = MIPS_BRANCH ("bne", "%2,%.,%0");
+	      branch[inverted_p] = MIPS_BRANCH ("beq", "%2,%.,%0");
+	    }
+	  break;
 
-      /* These cases are always true or always false.  */
-    case LTU:
-      inverted_p = !inverted_p;
-      /* Fall through.  */
-    case GEU:
-      branch[!inverted_p] = MIPS_BRANCH ("beq", "%.,%.,%0");
-      branch[inverted_p] = MIPS_BRANCH ("bne", "%.,%.,%0");
-      break;
+	  /* These cases are always true or always false.  */
+	case LTU:
+	  inverted_p = !inverted_p;
+	  /* Fall through.  */
+	case GEU:
+	  if (TARGET_CB_MAYBE)
+	    {
+	      branch[!inverted_p] = MIPS_BRANCH_C ("b", "%0");
+	      branch[inverted_p] = "%*\t\t# branch never";
+	    }
+	  else
+	    {
+	      branch[!inverted_p] = MIPS_BRANCH ("beq", "%.,%.,%0");
+	      branch[inverted_p] = MIPS_BRANCH ("bne", "%.,%.,%0");
+	    }
+	  break;
 
-    default:
-      branch[!inverted_p] = MIPS_BRANCH ("b%C1z", "%2,%0");
-      branch[inverted_p] = MIPS_BRANCH ("b%N1z", "%2,%0");
-      break;
+	default:
+	  if (TARGET_CB_MAYBE)
+	    {
+	      branch[!inverted_p] = MIPS_BRANCH_C ("b%C1z", "%2,%0");
+	      branch[inverted_p] = MIPS_BRANCH_C ("b%N1z", "%2,%0");
+	    }
+	  else
+	    {
+	      branch[!inverted_p] = MIPS_BRANCH ("b%C1z", "%2,%0");
+	      branch[inverted_p] = MIPS_BRANCH ("b%N1z", "%2,%0");
+	    }
+	  break;
+	}
     }
   return mips_output_conditional_branch (insn, operands, branch[1], branch[0]);
 }
@@ -13154,11 +14090,18 @@ mips_process_sync_loop (rtx_insn *insn, rtx *operands)
 			       at, oldval, inclusive_mask, NULL);
 	  tmp1 = at;
 	}
-      mips_multi_add_insn ("bne\t%0,%z1,2f", tmp1, required_oldval, NULL);
+      if (TARGET_CB_NEVER)
+	mips_multi_add_insn ("bne\t%0,%z1,2f", tmp1, required_oldval, NULL);
 
       /* CMP = 0 [delay slot].  */
       if (cmp)
         mips_multi_add_insn ("li\t%0,0", cmp, NULL);
+
+      if (TARGET_CB_MAYBE && required_oldval == const0_rtx)
+	mips_multi_add_insn ("bnezc\t%0,2f", tmp1, NULL);
+      else if (TARGET_CB_MAYBE)
+	mips_multi_add_insn ("bnec\t%0,%1,2f", tmp1, required_oldval, NULL);
+
     }
 
   /* $TMP1 = OLDVAL & EXCLUSIVE_MASK.  */
@@ -13218,10 +14161,13 @@ mips_process_sync_loop (rtx_insn *insn, rtx *operands)
   /* When using branch likely (-mfix-r10000), the delay slot instruction
      will be annulled on false.  The normal delay slot instructions
      calculate the overall result of the atomic operation and must not
-     be annulled.  To ensure this behaviour unconditionally use a NOP
+     be annulled.  To ensure this behavior unconditionally use a NOP
      in the delay slot for the branch likely case.  */
 
-  mips_multi_add_insn ("beq%?\t%0,%.,1b%~", at, NULL);
+  if (TARGET_CB_MAYBE)
+    mips_multi_add_insn ("beqzc\t%0,1b", at, NULL);
+  else
+    mips_multi_add_insn ("beq%?\t%0,%.,1b%~", at, NULL);
 
   /* if (INSN1 != MOVE && INSN1 != LI) NEWVAL = $TMP3 [delay slot].  */
   if (insn1 != SYNC_INSN1_MOVE && insn1 != SYNC_INSN1_LI && tmp3 != newval)
@@ -13408,10 +14354,37 @@ mips_output_division (const char *division, rtx *operands)
 	}
       else
 	{
-	  output_asm_insn ("%(bne\t%2,%.,1f", operands);
-	  output_asm_insn (s, operands);
-	  s = "break\t7%)\n1:";
+	  if (flag_delayed_branch)
+	    {
+	      output_asm_insn ("%(bne\t%2,%.,1f", operands);
+	      output_asm_insn (s, operands);
+	      s = "break\t7%)\n1:";
+	    }
+	  else
+	    {
+	      output_asm_insn (s, operands);
+	      s = "bne\t%2,%.,1f\n\tnop\n\tbreak\t7\n1:";
+	    }
 	}
+    }
+  return s;
+}
+
+/* Return the assembly code for MSA DIV_{S,U}.DF or MOD_{S,U}.DF instructions,
+   which has the operands given by OPERANDS.  Add in a divide-by-zero check
+   if needed.  */
+
+const char *
+mips_msa_output_division (const char *division, rtx *operands)
+{
+  const char *s;
+
+  s = division;
+  if (TARGET_CHECK_ZERO_DIV)
+    {
+      output_asm_insn ("%(bnz.%v0\t%w2,1f", operands);
+      output_asm_insn (s, operands);
+      s = "break\t7%)\n1:";
     }
   return s;
 }
@@ -13479,7 +14452,7 @@ mips_store_data_bypass_p (rtx_insn *out_insn, rtx_insn *in_insn)
   if (GET_CODE (PATTERN (in_insn)) == UNSPEC_VOLATILE)
     return false;
 
-  return !store_data_bypass_p (out_insn, in_insn);
+  return store_data_bypass_p (out_insn, in_insn);
 }
 
 
@@ -13522,13 +14495,9 @@ static struct
    is treated like input-dependence.  */
 
 static int
-mips_adjust_cost (rtx_insn *insn ATTRIBUTE_UNUSED, rtx link,
-		  rtx_insn *dep ATTRIBUTE_UNUSED, int cost)
+mips_adjust_cost (rtx_insn *, int dep_type, rtx_insn *, int cost, unsigned int)
 {
-  if (REG_NOTE_KIND (link) == REG_DEP_OUTPUT
-      && TUNE_20KC)
-    return cost;
-  if (REG_NOTE_KIND (link) != 0)
+  if (dep_type != 0 && (dep_type != REG_DEP_OUTPUT || !TUNE_20KC))
     return 0;
   return cost;
 }
@@ -13564,6 +14533,7 @@ mips_issue_rate (void)
     case PROCESSOR_OCTEON:
     case PROCESSOR_OCTEON2:
     case PROCESSOR_OCTEON3:
+    case PROCESSOR_I6400:
       return 2;
 
     case PROCESSOR_SB1:
@@ -13713,7 +14683,7 @@ mips_multipass_dfa_lookahead (void)
   if (TUNE_OCTEON)
     return 2;
 
-  if (TUNE_P5600)
+  if (TUNE_P5600 || TUNE_I6400)
     return 4;
 
   return 0;
@@ -14167,6 +15137,7 @@ AVAIL_NON_MIPS16 (dsp_64, TARGET_64BIT && TARGET_DSP)
 AVAIL_NON_MIPS16 (dspr2_32, !TARGET_64BIT && TARGET_DSPR2)
 AVAIL_NON_MIPS16 (loongson, TARGET_LOONGSON_VECTORS)
 AVAIL_NON_MIPS16 (cache, TARGET_CACHE_BUILTIN)
+AVAIL_NON_MIPS16 (msa, TARGET_MSA)
 
 /* Construct a mips_builtin_description from the given arguments.
 
@@ -14283,6 +15254,38 @@ AVAIL_NON_MIPS16 (cache, TARGET_CACHE_BUILTIN)
 #define LOONGSON_BUILTIN_SUFFIX(INSN, SUFFIX, FUNCTION_TYPE)		\
   LOONGSON_BUILTIN_ALIAS (INSN, INSN ## _ ## SUFFIX, FUNCTION_TYPE)
 
+/* Define an MSA MIPS_BUILTIN_DIRECT function __builtin_msa_<INSN>
+   for instruction CODE_FOR_msa_<INSN>.  FUNCTION_TYPE is a builtin_description
+   field.  */
+#define MSA_BUILTIN(INSN, FUNCTION_TYPE)				\
+    { CODE_FOR_msa_ ## INSN, MIPS_FP_COND_f,				\
+    "__builtin_msa_" #INSN,  MIPS_BUILTIN_DIRECT,			\
+    FUNCTION_TYPE, mips_builtin_avail_msa }
+
+/* Define a remapped MSA MIPS_BUILTIN_DIRECT function __builtin_msa_<INSN>
+   for instruction CODE_FOR_msa_<INSN2>.  FUNCTION_TYPE is
+   a builtin_description field.  */
+#define MSA_BUILTIN_REMAP(INSN, INSN2, FUNCTION_TYPE)	\
+    { CODE_FOR_msa_ ## INSN2, MIPS_FP_COND_f,				\
+    "__builtin_msa_" #INSN,  MIPS_BUILTIN_DIRECT,			\
+    FUNCTION_TYPE, mips_builtin_avail_msa }
+
+/* Define an MSA MIPS_BUILTIN_MSA_TEST_BRANCH function __builtin_msa_<INSN>
+   for instruction CODE_FOR_msa_<INSN>.  FUNCTION_TYPE is a builtin_description
+   field.  */
+#define MSA_BUILTIN_TEST_BRANCH(INSN, FUNCTION_TYPE)			\
+    { CODE_FOR_msa_ ## INSN, MIPS_FP_COND_f,				\
+    "__builtin_msa_" #INSN, MIPS_BUILTIN_MSA_TEST_BRANCH,		\
+    FUNCTION_TYPE, mips_builtin_avail_msa }
+
+/* Define an MSA MIPS_BUILTIN_DIRECT_NO_TARGET function __builtin_msa_<INSN>
+   for instruction CODE_FOR_msa_<INSN>.  FUNCTION_TYPE is a builtin_description
+   field.  */
+#define MSA_NO_TARGET_BUILTIN(INSN, FUNCTION_TYPE)			\
+    { CODE_FOR_msa_ ## INSN, MIPS_FP_COND_f,				\
+    "__builtin_msa_" #INSN,  MIPS_BUILTIN_DIRECT_NO_TARGET,		\
+    FUNCTION_TYPE, mips_builtin_avail_msa }
+
 #define CODE_FOR_mips_sqrt_ps CODE_FOR_sqrtv2sf2
 #define CODE_FOR_mips_addq_ph CODE_FOR_addv2hi3
 #define CODE_FOR_mips_addu_qb CODE_FOR_addv4qi3
@@ -14322,6 +15325,203 @@ AVAIL_NON_MIPS16 (cache, TARGET_CACHE_BUILTIN)
 #define CODE_FOR_loongson_psubsb CODE_FOR_sssubv8qi3
 #define CODE_FOR_loongson_psubush CODE_FOR_ussubv4hi3
 #define CODE_FOR_loongson_psubusb CODE_FOR_ussubv8qi3
+
+#define CODE_FOR_msa_adds_s_b CODE_FOR_ssaddv16qi3
+#define CODE_FOR_msa_adds_s_h CODE_FOR_ssaddv8hi3
+#define CODE_FOR_msa_adds_s_w CODE_FOR_ssaddv4si3
+#define CODE_FOR_msa_adds_s_d CODE_FOR_ssaddv2di3
+#define CODE_FOR_msa_adds_u_b CODE_FOR_usaddv16qi3
+#define CODE_FOR_msa_adds_u_h CODE_FOR_usaddv8hi3
+#define CODE_FOR_msa_adds_u_w CODE_FOR_usaddv4si3
+#define CODE_FOR_msa_adds_u_d CODE_FOR_usaddv2di3
+#define CODE_FOR_msa_addv_b CODE_FOR_addv16qi3
+#define CODE_FOR_msa_addv_h CODE_FOR_addv8hi3
+#define CODE_FOR_msa_addv_w CODE_FOR_addv4si3
+#define CODE_FOR_msa_addv_d CODE_FOR_addv2di3
+#define CODE_FOR_msa_addvi_b CODE_FOR_addv16qi3
+#define CODE_FOR_msa_addvi_h CODE_FOR_addv8hi3
+#define CODE_FOR_msa_addvi_w CODE_FOR_addv4si3
+#define CODE_FOR_msa_addvi_d CODE_FOR_addv2di3
+#define CODE_FOR_msa_and_v CODE_FOR_andv16qi3
+#define CODE_FOR_msa_andi_b CODE_FOR_andv16qi3
+#define CODE_FOR_msa_bmnz_v CODE_FOR_msa_bmnz_b
+#define CODE_FOR_msa_bmnzi_b CODE_FOR_msa_bmnz_b
+#define CODE_FOR_msa_bmz_v CODE_FOR_msa_bmz_b
+#define CODE_FOR_msa_bmzi_b CODE_FOR_msa_bmz_b
+#define CODE_FOR_msa_bnz_v CODE_FOR_msa_bnz_v_b
+#define CODE_FOR_msa_bz_v CODE_FOR_msa_bz_v_b
+#define CODE_FOR_msa_bsel_v CODE_FOR_msa_bsel_b
+#define CODE_FOR_msa_bseli_b CODE_FOR_msa_bsel_b
+#define CODE_FOR_msa_ceqi_b CODE_FOR_msa_ceq_b
+#define CODE_FOR_msa_ceqi_h CODE_FOR_msa_ceq_h
+#define CODE_FOR_msa_ceqi_w CODE_FOR_msa_ceq_w
+#define CODE_FOR_msa_ceqi_d CODE_FOR_msa_ceq_d
+#define CODE_FOR_msa_clti_s_b CODE_FOR_msa_clt_s_b
+#define CODE_FOR_msa_clti_s_h CODE_FOR_msa_clt_s_h
+#define CODE_FOR_msa_clti_s_w CODE_FOR_msa_clt_s_w
+#define CODE_FOR_msa_clti_s_d CODE_FOR_msa_clt_s_d
+#define CODE_FOR_msa_clti_u_b CODE_FOR_msa_clt_u_b
+#define CODE_FOR_msa_clti_u_h CODE_FOR_msa_clt_u_h
+#define CODE_FOR_msa_clti_u_w CODE_FOR_msa_clt_u_w
+#define CODE_FOR_msa_clti_u_d CODE_FOR_msa_clt_u_d
+#define CODE_FOR_msa_clei_s_b CODE_FOR_msa_cle_s_b
+#define CODE_FOR_msa_clei_s_h CODE_FOR_msa_cle_s_h
+#define CODE_FOR_msa_clei_s_w CODE_FOR_msa_cle_s_w
+#define CODE_FOR_msa_clei_s_d CODE_FOR_msa_cle_s_d
+#define CODE_FOR_msa_clei_u_b CODE_FOR_msa_cle_u_b
+#define CODE_FOR_msa_clei_u_h CODE_FOR_msa_cle_u_h
+#define CODE_FOR_msa_clei_u_w CODE_FOR_msa_cle_u_w
+#define CODE_FOR_msa_clei_u_d CODE_FOR_msa_cle_u_d
+#define CODE_FOR_msa_div_s_b CODE_FOR_divv16qi3
+#define CODE_FOR_msa_div_s_h CODE_FOR_divv8hi3
+#define CODE_FOR_msa_div_s_w CODE_FOR_divv4si3
+#define CODE_FOR_msa_div_s_d CODE_FOR_divv2di3
+#define CODE_FOR_msa_div_u_b CODE_FOR_udivv16qi3
+#define CODE_FOR_msa_div_u_h CODE_FOR_udivv8hi3
+#define CODE_FOR_msa_div_u_w CODE_FOR_udivv4si3
+#define CODE_FOR_msa_div_u_d CODE_FOR_udivv2di3
+#define CODE_FOR_msa_fadd_w CODE_FOR_addv4sf3
+#define CODE_FOR_msa_fadd_d CODE_FOR_addv2df3
+#define CODE_FOR_msa_fexdo_w CODE_FOR_vec_pack_trunc_v2df
+#define CODE_FOR_msa_ftrunc_s_w CODE_FOR_fix_truncv4sfv4si2
+#define CODE_FOR_msa_ftrunc_s_d CODE_FOR_fix_truncv2dfv2di2
+#define CODE_FOR_msa_ftrunc_u_w CODE_FOR_fixuns_truncv4sfv4si2
+#define CODE_FOR_msa_ftrunc_u_d CODE_FOR_fixuns_truncv2dfv2di2
+#define CODE_FOR_msa_ffint_s_w CODE_FOR_floatv4siv4sf2
+#define CODE_FOR_msa_ffint_s_d CODE_FOR_floatv2div2df2
+#define CODE_FOR_msa_ffint_u_w CODE_FOR_floatunsv4siv4sf2
+#define CODE_FOR_msa_ffint_u_d CODE_FOR_floatunsv2div2df2
+#define CODE_FOR_msa_fsub_w CODE_FOR_subv4sf3
+#define CODE_FOR_msa_fsub_d CODE_FOR_subv2df3
+#define CODE_FOR_msa_fmadd_w CODE_FOR_fmav4sf4
+#define CODE_FOR_msa_fmadd_d CODE_FOR_fmav2df4
+#define CODE_FOR_msa_fmsub_w CODE_FOR_fnmav4sf4
+#define CODE_FOR_msa_fmsub_d CODE_FOR_fnmav2df4
+#define CODE_FOR_msa_fmul_w CODE_FOR_mulv4sf3
+#define CODE_FOR_msa_fmul_d CODE_FOR_mulv2df3
+#define CODE_FOR_msa_fdiv_w CODE_FOR_divv4sf3
+#define CODE_FOR_msa_fdiv_d CODE_FOR_divv2df3
+#define CODE_FOR_msa_fmax_w CODE_FOR_smaxv4sf3
+#define CODE_FOR_msa_fmax_d CODE_FOR_smaxv2df3
+#define CODE_FOR_msa_fmin_w CODE_FOR_sminv4sf3
+#define CODE_FOR_msa_fmin_d CODE_FOR_sminv2df3
+#define CODE_FOR_msa_fsqrt_w CODE_FOR_sqrtv4sf2
+#define CODE_FOR_msa_fsqrt_d CODE_FOR_sqrtv2df2
+#define CODE_FOR_msa_max_s_b CODE_FOR_smaxv16qi3
+#define CODE_FOR_msa_max_s_h CODE_FOR_smaxv8hi3
+#define CODE_FOR_msa_max_s_w CODE_FOR_smaxv4si3
+#define CODE_FOR_msa_max_s_d CODE_FOR_smaxv2di3
+#define CODE_FOR_msa_maxi_s_b CODE_FOR_smaxv16qi3
+#define CODE_FOR_msa_maxi_s_h CODE_FOR_smaxv8hi3
+#define CODE_FOR_msa_maxi_s_w CODE_FOR_smaxv4si3
+#define CODE_FOR_msa_maxi_s_d CODE_FOR_smaxv2di3
+#define CODE_FOR_msa_max_u_b CODE_FOR_umaxv16qi3
+#define CODE_FOR_msa_max_u_h CODE_FOR_umaxv8hi3
+#define CODE_FOR_msa_max_u_w CODE_FOR_umaxv4si3
+#define CODE_FOR_msa_max_u_d CODE_FOR_umaxv2di3
+#define CODE_FOR_msa_maxi_u_b CODE_FOR_umaxv16qi3
+#define CODE_FOR_msa_maxi_u_h CODE_FOR_umaxv8hi3
+#define CODE_FOR_msa_maxi_u_w CODE_FOR_umaxv4si3
+#define CODE_FOR_msa_maxi_u_d CODE_FOR_umaxv2di3
+#define CODE_FOR_msa_min_s_b CODE_FOR_sminv16qi3
+#define CODE_FOR_msa_min_s_h CODE_FOR_sminv8hi3
+#define CODE_FOR_msa_min_s_w CODE_FOR_sminv4si3
+#define CODE_FOR_msa_min_s_d CODE_FOR_sminv2di3
+#define CODE_FOR_msa_mini_s_b CODE_FOR_sminv16qi3
+#define CODE_FOR_msa_mini_s_h CODE_FOR_sminv8hi3
+#define CODE_FOR_msa_mini_s_w CODE_FOR_sminv4si3
+#define CODE_FOR_msa_mini_s_d CODE_FOR_sminv2di3
+#define CODE_FOR_msa_min_u_b CODE_FOR_uminv16qi3
+#define CODE_FOR_msa_min_u_h CODE_FOR_uminv8hi3
+#define CODE_FOR_msa_min_u_w CODE_FOR_uminv4si3
+#define CODE_FOR_msa_min_u_d CODE_FOR_uminv2di3
+#define CODE_FOR_msa_mini_u_b CODE_FOR_uminv16qi3
+#define CODE_FOR_msa_mini_u_h CODE_FOR_uminv8hi3
+#define CODE_FOR_msa_mini_u_w CODE_FOR_uminv4si3
+#define CODE_FOR_msa_mini_u_d CODE_FOR_uminv2di3
+#define CODE_FOR_msa_mod_s_b CODE_FOR_modv16qi3
+#define CODE_FOR_msa_mod_s_h CODE_FOR_modv8hi3
+#define CODE_FOR_msa_mod_s_w CODE_FOR_modv4si3
+#define CODE_FOR_msa_mod_s_d CODE_FOR_modv2di3
+#define CODE_FOR_msa_mod_u_b CODE_FOR_umodv16qi3
+#define CODE_FOR_msa_mod_u_h CODE_FOR_umodv8hi3
+#define CODE_FOR_msa_mod_u_w CODE_FOR_umodv4si3
+#define CODE_FOR_msa_mod_u_d CODE_FOR_umodv2di3
+#define CODE_FOR_msa_mod_s_b CODE_FOR_modv16qi3
+#define CODE_FOR_msa_mod_s_h CODE_FOR_modv8hi3
+#define CODE_FOR_msa_mod_s_w CODE_FOR_modv4si3
+#define CODE_FOR_msa_mod_s_d CODE_FOR_modv2di3
+#define CODE_FOR_msa_mod_u_b CODE_FOR_umodv16qi3
+#define CODE_FOR_msa_mod_u_h CODE_FOR_umodv8hi3
+#define CODE_FOR_msa_mod_u_w CODE_FOR_umodv4si3
+#define CODE_FOR_msa_mod_u_d CODE_FOR_umodv2di3
+#define CODE_FOR_msa_mulv_b CODE_FOR_mulv16qi3
+#define CODE_FOR_msa_mulv_h CODE_FOR_mulv8hi3
+#define CODE_FOR_msa_mulv_w CODE_FOR_mulv4si3
+#define CODE_FOR_msa_mulv_d CODE_FOR_mulv2di3
+#define CODE_FOR_msa_nlzc_b CODE_FOR_clzv16qi2
+#define CODE_FOR_msa_nlzc_h CODE_FOR_clzv8hi2
+#define CODE_FOR_msa_nlzc_w CODE_FOR_clzv4si2
+#define CODE_FOR_msa_nlzc_d CODE_FOR_clzv2di2
+#define CODE_FOR_msa_nor_v CODE_FOR_msa_nor_b
+#define CODE_FOR_msa_or_v CODE_FOR_iorv16qi3
+#define CODE_FOR_msa_ori_b CODE_FOR_iorv16qi3
+#define CODE_FOR_msa_nori_b CODE_FOR_msa_nor_b
+#define CODE_FOR_msa_pcnt_b CODE_FOR_popcountv16qi2
+#define CODE_FOR_msa_pcnt_h CODE_FOR_popcountv8hi2
+#define CODE_FOR_msa_pcnt_w CODE_FOR_popcountv4si2
+#define CODE_FOR_msa_pcnt_d CODE_FOR_popcountv2di2
+#define CODE_FOR_msa_xor_v CODE_FOR_xorv16qi3
+#define CODE_FOR_msa_xori_b CODE_FOR_xorv16qi3
+#define CODE_FOR_msa_sll_b CODE_FOR_vashlv16qi3
+#define CODE_FOR_msa_sll_h CODE_FOR_vashlv8hi3
+#define CODE_FOR_msa_sll_w CODE_FOR_vashlv4si3
+#define CODE_FOR_msa_sll_d CODE_FOR_vashlv2di3
+#define CODE_FOR_msa_slli_b CODE_FOR_vashlv16qi3
+#define CODE_FOR_msa_slli_h CODE_FOR_vashlv8hi3
+#define CODE_FOR_msa_slli_w CODE_FOR_vashlv4si3
+#define CODE_FOR_msa_slli_d CODE_FOR_vashlv2di3
+#define CODE_FOR_msa_sra_b CODE_FOR_vashrv16qi3
+#define CODE_FOR_msa_sra_h CODE_FOR_vashrv8hi3
+#define CODE_FOR_msa_sra_w CODE_FOR_vashrv4si3
+#define CODE_FOR_msa_sra_d CODE_FOR_vashrv2di3
+#define CODE_FOR_msa_srai_b CODE_FOR_vashrv16qi3
+#define CODE_FOR_msa_srai_h CODE_FOR_vashrv8hi3
+#define CODE_FOR_msa_srai_w CODE_FOR_vashrv4si3
+#define CODE_FOR_msa_srai_d CODE_FOR_vashrv2di3
+#define CODE_FOR_msa_srl_b CODE_FOR_vlshrv16qi3
+#define CODE_FOR_msa_srl_h CODE_FOR_vlshrv8hi3
+#define CODE_FOR_msa_srl_w CODE_FOR_vlshrv4si3
+#define CODE_FOR_msa_srl_d CODE_FOR_vlshrv2di3
+#define CODE_FOR_msa_srli_b CODE_FOR_vlshrv16qi3
+#define CODE_FOR_msa_srli_h CODE_FOR_vlshrv8hi3
+#define CODE_FOR_msa_srli_w CODE_FOR_vlshrv4si3
+#define CODE_FOR_msa_srli_d CODE_FOR_vlshrv2di3
+#define CODE_FOR_msa_subv_b CODE_FOR_subv16qi3
+#define CODE_FOR_msa_subv_h CODE_FOR_subv8hi3
+#define CODE_FOR_msa_subv_w CODE_FOR_subv4si3
+#define CODE_FOR_msa_subv_d CODE_FOR_subv2di3
+#define CODE_FOR_msa_subvi_b CODE_FOR_subv16qi3
+#define CODE_FOR_msa_subvi_h CODE_FOR_subv8hi3
+#define CODE_FOR_msa_subvi_w CODE_FOR_subv4si3
+#define CODE_FOR_msa_subvi_d CODE_FOR_subv2di3
+
+#define CODE_FOR_msa_move_v CODE_FOR_movv16qi
+
+#define CODE_FOR_msa_vshf_b CODE_FOR_vec_permv16qi
+#define CODE_FOR_msa_vshf_h CODE_FOR_vec_permv8hi
+#define CODE_FOR_msa_vshf_w CODE_FOR_vec_permv4si
+#define CODE_FOR_msa_vshf_d CODE_FOR_vec_permv2di
+
+#define CODE_FOR_msa_ilvod_d CODE_FOR_msa_ilvl_d
+#define CODE_FOR_msa_ilvev_d CODE_FOR_msa_ilvr_d
+#define CODE_FOR_msa_pckod_d CODE_FOR_msa_ilvl_d
+#define CODE_FOR_msa_pckev_d CODE_FOR_msa_ilvr_d
+
+#define CODE_FOR_msa_ldi_b CODE_FOR_msa_ldiv16qi
+#define CODE_FOR_msa_ldi_h CODE_FOR_msa_ldiv8hi
+#define CODE_FOR_msa_ldi_w CODE_FOR_msa_ldiv4si
+#define CODE_FOR_msa_ldi_d CODE_FOR_msa_ldiv2di
 
 static const struct mips_builtin_description mips_builtins[] = {
 #define MIPS_GET_FCSR 0
@@ -14611,12 +15811,547 @@ static const struct mips_builtin_description mips_builtins[] = {
   LOONGSON_BUILTIN_SUFFIX (punpcklwd, s, MIPS_V2SI_FTYPE_V2SI_V2SI),
 
   /* Sundry other built-in functions.  */
-  DIRECT_NO_TARGET_BUILTIN (cache, MIPS_VOID_FTYPE_SI_CVPOINTER, cache)
+  DIRECT_NO_TARGET_BUILTIN (cache, MIPS_VOID_FTYPE_SI_CVPOINTER, cache),
+
+  /* Built-in functions for MSA.  */
+  MSA_BUILTIN (sll_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (sll_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (sll_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (sll_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (slli_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (slli_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (slli_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (slli_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (sra_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (sra_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (sra_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (sra_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (srai_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (srai_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (srai_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (srai_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (srar_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (srar_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (srar_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (srar_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (srari_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (srari_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (srari_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (srari_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (srl_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (srl_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (srl_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (srl_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (srli_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (srli_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (srli_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (srli_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (srlr_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (srlr_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (srlr_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (srlr_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (srlri_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (srlri_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (srlri_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (srlri_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (bclr_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (bclr_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (bclr_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (bclr_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (bclri_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (bclri_h, MIPS_UV8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (bclri_w, MIPS_UV4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (bclri_d, MIPS_UV2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (bset_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (bset_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (bset_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (bset_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (bseti_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (bseti_h, MIPS_UV8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (bseti_w, MIPS_UV4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (bseti_d, MIPS_UV2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (bneg_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (bneg_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (bneg_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (bneg_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (bnegi_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (bnegi_h, MIPS_UV8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (bnegi_w, MIPS_UV4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (bnegi_d, MIPS_UV2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (binsl_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UV16QI),
+  MSA_BUILTIN (binsl_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI_UV8HI),
+  MSA_BUILTIN (binsl_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI_UV4SI),
+  MSA_BUILTIN (binsl_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI_UV2DI),
+  MSA_BUILTIN (binsli_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UQI),
+  MSA_BUILTIN (binsli_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI_UQI),
+  MSA_BUILTIN (binsli_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI_UQI),
+  MSA_BUILTIN (binsli_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI_UQI),
+  MSA_BUILTIN (binsr_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UV16QI),
+  MSA_BUILTIN (binsr_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI_UV8HI),
+  MSA_BUILTIN (binsr_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI_UV4SI),
+  MSA_BUILTIN (binsr_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI_UV2DI),
+  MSA_BUILTIN (binsri_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UQI),
+  MSA_BUILTIN (binsri_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI_UQI),
+  MSA_BUILTIN (binsri_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI_UQI),
+  MSA_BUILTIN (binsri_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI_UQI),
+  MSA_BUILTIN (addv_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (addv_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (addv_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (addv_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (addvi_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (addvi_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (addvi_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (addvi_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (subv_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (subv_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (subv_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (subv_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (subvi_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (subvi_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (subvi_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (subvi_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (max_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (max_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (max_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (max_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (maxi_s_b, MIPS_V16QI_FTYPE_V16QI_QI),
+  MSA_BUILTIN (maxi_s_h, MIPS_V8HI_FTYPE_V8HI_QI),
+  MSA_BUILTIN (maxi_s_w, MIPS_V4SI_FTYPE_V4SI_QI),
+  MSA_BUILTIN (maxi_s_d, MIPS_V2DI_FTYPE_V2DI_QI),
+  MSA_BUILTIN (max_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (max_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (max_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (max_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (maxi_u_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (maxi_u_h, MIPS_UV8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (maxi_u_w, MIPS_UV4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (maxi_u_d, MIPS_UV2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (min_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (min_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (min_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (min_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (mini_s_b, MIPS_V16QI_FTYPE_V16QI_QI),
+  MSA_BUILTIN (mini_s_h, MIPS_V8HI_FTYPE_V8HI_QI),
+  MSA_BUILTIN (mini_s_w, MIPS_V4SI_FTYPE_V4SI_QI),
+  MSA_BUILTIN (mini_s_d, MIPS_V2DI_FTYPE_V2DI_QI),
+  MSA_BUILTIN (min_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (min_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (min_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (min_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (mini_u_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (mini_u_h, MIPS_UV8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (mini_u_w, MIPS_UV4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (mini_u_d, MIPS_UV2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (max_a_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (max_a_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (max_a_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (max_a_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (min_a_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (min_a_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (min_a_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (min_a_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (ceq_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (ceq_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (ceq_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (ceq_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (ceqi_b, MIPS_V16QI_FTYPE_V16QI_QI),
+  MSA_BUILTIN (ceqi_h, MIPS_V8HI_FTYPE_V8HI_QI),
+  MSA_BUILTIN (ceqi_w, MIPS_V4SI_FTYPE_V4SI_QI),
+  MSA_BUILTIN (ceqi_d, MIPS_V2DI_FTYPE_V2DI_QI),
+  MSA_BUILTIN (clt_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (clt_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (clt_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (clt_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (clti_s_b, MIPS_V16QI_FTYPE_V16QI_QI),
+  MSA_BUILTIN (clti_s_h, MIPS_V8HI_FTYPE_V8HI_QI),
+  MSA_BUILTIN (clti_s_w, MIPS_V4SI_FTYPE_V4SI_QI),
+  MSA_BUILTIN (clti_s_d, MIPS_V2DI_FTYPE_V2DI_QI),
+  MSA_BUILTIN (clt_u_b, MIPS_V16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (clt_u_h, MIPS_V8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (clt_u_w, MIPS_V4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (clt_u_d, MIPS_V2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (clti_u_b, MIPS_V16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (clti_u_h, MIPS_V8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (clti_u_w, MIPS_V4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (clti_u_d, MIPS_V2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (cle_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (cle_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (cle_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (cle_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (clei_s_b, MIPS_V16QI_FTYPE_V16QI_QI),
+  MSA_BUILTIN (clei_s_h, MIPS_V8HI_FTYPE_V8HI_QI),
+  MSA_BUILTIN (clei_s_w, MIPS_V4SI_FTYPE_V4SI_QI),
+  MSA_BUILTIN (clei_s_d, MIPS_V2DI_FTYPE_V2DI_QI),
+  MSA_BUILTIN (cle_u_b, MIPS_V16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (cle_u_h, MIPS_V8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (cle_u_w, MIPS_V4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (cle_u_d, MIPS_V2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (clei_u_b, MIPS_V16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (clei_u_h, MIPS_V8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (clei_u_w, MIPS_V4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (clei_u_d, MIPS_V2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (ld_b, MIPS_V16QI_FTYPE_CVPOINTER_SI),
+  MSA_BUILTIN (ld_h, MIPS_V8HI_FTYPE_CVPOINTER_SI),
+  MSA_BUILTIN (ld_w, MIPS_V4SI_FTYPE_CVPOINTER_SI),
+  MSA_BUILTIN (ld_d, MIPS_V2DI_FTYPE_CVPOINTER_SI),
+  MSA_NO_TARGET_BUILTIN (st_b, MIPS_VOID_FTYPE_V16QI_CVPOINTER_SI),
+  MSA_NO_TARGET_BUILTIN (st_h, MIPS_VOID_FTYPE_V8HI_CVPOINTER_SI),
+  MSA_NO_TARGET_BUILTIN (st_w, MIPS_VOID_FTYPE_V4SI_CVPOINTER_SI),
+  MSA_NO_TARGET_BUILTIN (st_d, MIPS_VOID_FTYPE_V2DI_CVPOINTER_SI),
+  MSA_BUILTIN (sat_s_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (sat_s_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (sat_s_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (sat_s_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (sat_u_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (sat_u_h, MIPS_UV8HI_FTYPE_UV8HI_UQI),
+  MSA_BUILTIN (sat_u_w, MIPS_UV4SI_FTYPE_UV4SI_UQI),
+  MSA_BUILTIN (sat_u_d, MIPS_UV2DI_FTYPE_UV2DI_UQI),
+  MSA_BUILTIN (add_a_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (add_a_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (add_a_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (add_a_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (adds_a_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (adds_a_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (adds_a_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (adds_a_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (adds_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (adds_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (adds_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (adds_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (adds_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (adds_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (adds_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (adds_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (ave_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (ave_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (ave_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (ave_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (ave_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (ave_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (ave_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (ave_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (aver_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (aver_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (aver_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (aver_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (aver_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (aver_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (aver_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (aver_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (subs_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (subs_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (subs_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (subs_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (subs_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (subs_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (subs_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (subs_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (subsuu_s_b, MIPS_V16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (subsuu_s_h, MIPS_V8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (subsuu_s_w, MIPS_V4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (subsuu_s_d, MIPS_V2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (subsus_u_b, MIPS_UV16QI_FTYPE_UV16QI_V16QI),
+  MSA_BUILTIN (subsus_u_h, MIPS_UV8HI_FTYPE_UV8HI_V8HI),
+  MSA_BUILTIN (subsus_u_w, MIPS_UV4SI_FTYPE_UV4SI_V4SI),
+  MSA_BUILTIN (subsus_u_d, MIPS_UV2DI_FTYPE_UV2DI_V2DI),
+  MSA_BUILTIN (asub_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (asub_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (asub_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (asub_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (asub_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (asub_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (asub_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (asub_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (mulv_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (mulv_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (mulv_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (mulv_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (maddv_b, MIPS_V16QI_FTYPE_V16QI_V16QI_V16QI),
+  MSA_BUILTIN (maddv_h, MIPS_V8HI_FTYPE_V8HI_V8HI_V8HI),
+  MSA_BUILTIN (maddv_w, MIPS_V4SI_FTYPE_V4SI_V4SI_V4SI),
+  MSA_BUILTIN (maddv_d, MIPS_V2DI_FTYPE_V2DI_V2DI_V2DI),
+  MSA_BUILTIN (msubv_b, MIPS_V16QI_FTYPE_V16QI_V16QI_V16QI),
+  MSA_BUILTIN (msubv_h, MIPS_V8HI_FTYPE_V8HI_V8HI_V8HI),
+  MSA_BUILTIN (msubv_w, MIPS_V4SI_FTYPE_V4SI_V4SI_V4SI),
+  MSA_BUILTIN (msubv_d, MIPS_V2DI_FTYPE_V2DI_V2DI_V2DI),
+  MSA_BUILTIN (div_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (div_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (div_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (div_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (div_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (div_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (div_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (div_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (hadd_s_h, MIPS_V8HI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (hadd_s_w, MIPS_V4SI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (hadd_s_d, MIPS_V2DI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (hadd_u_h, MIPS_UV8HI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (hadd_u_w, MIPS_UV4SI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (hadd_u_d, MIPS_UV2DI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (hsub_s_h, MIPS_V8HI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (hsub_s_w, MIPS_V4SI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (hsub_s_d, MIPS_V2DI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (hsub_u_h, MIPS_V8HI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (hsub_u_w, MIPS_V4SI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (hsub_u_d, MIPS_V2DI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (mod_s_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (mod_s_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (mod_s_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (mod_s_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (mod_u_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (mod_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (mod_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (mod_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV2DI),
+  MSA_BUILTIN (dotp_s_h, MIPS_V8HI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (dotp_s_w, MIPS_V4SI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (dotp_s_d, MIPS_V2DI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (dotp_u_h, MIPS_UV8HI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (dotp_u_w, MIPS_UV4SI_FTYPE_UV8HI_UV8HI),
+  MSA_BUILTIN (dotp_u_d, MIPS_UV2DI_FTYPE_UV4SI_UV4SI),
+  MSA_BUILTIN (dpadd_s_h, MIPS_V8HI_FTYPE_V8HI_V16QI_V16QI),
+  MSA_BUILTIN (dpadd_s_w, MIPS_V4SI_FTYPE_V4SI_V8HI_V8HI),
+  MSA_BUILTIN (dpadd_s_d, MIPS_V2DI_FTYPE_V2DI_V4SI_V4SI),
+  MSA_BUILTIN (dpadd_u_h, MIPS_UV8HI_FTYPE_UV8HI_UV16QI_UV16QI),
+  MSA_BUILTIN (dpadd_u_w, MIPS_UV4SI_FTYPE_UV4SI_UV8HI_UV8HI),
+  MSA_BUILTIN (dpadd_u_d, MIPS_UV2DI_FTYPE_UV2DI_UV4SI_UV4SI),
+  MSA_BUILTIN (dpsub_s_h, MIPS_V8HI_FTYPE_V8HI_V16QI_V16QI),
+  MSA_BUILTIN (dpsub_s_w, MIPS_V4SI_FTYPE_V4SI_V8HI_V8HI),
+  MSA_BUILTIN (dpsub_s_d, MIPS_V2DI_FTYPE_V2DI_V4SI_V4SI),
+  MSA_BUILTIN (dpsub_u_h, MIPS_V8HI_FTYPE_V8HI_UV16QI_UV16QI),
+  MSA_BUILTIN (dpsub_u_w, MIPS_V4SI_FTYPE_V4SI_UV8HI_UV8HI),
+  MSA_BUILTIN (dpsub_u_d, MIPS_V2DI_FTYPE_V2DI_UV4SI_UV4SI),
+  MSA_BUILTIN (sld_b, MIPS_V16QI_FTYPE_V16QI_V16QI_SI),
+  MSA_BUILTIN (sld_h, MIPS_V8HI_FTYPE_V8HI_V8HI_SI),
+  MSA_BUILTIN (sld_w, MIPS_V4SI_FTYPE_V4SI_V4SI_SI),
+  MSA_BUILTIN (sld_d, MIPS_V2DI_FTYPE_V2DI_V2DI_SI),
+  MSA_BUILTIN (sldi_b, MIPS_V16QI_FTYPE_V16QI_V16QI_UQI),
+  MSA_BUILTIN (sldi_h, MIPS_V8HI_FTYPE_V8HI_V8HI_UQI),
+  MSA_BUILTIN (sldi_w, MIPS_V4SI_FTYPE_V4SI_V4SI_UQI),
+  MSA_BUILTIN (sldi_d, MIPS_V2DI_FTYPE_V2DI_V2DI_UQI),
+  MSA_BUILTIN (splat_b, MIPS_V16QI_FTYPE_V16QI_SI),
+  MSA_BUILTIN (splat_h, MIPS_V8HI_FTYPE_V8HI_SI),
+  MSA_BUILTIN (splat_w, MIPS_V4SI_FTYPE_V4SI_SI),
+  MSA_BUILTIN (splat_d, MIPS_V2DI_FTYPE_V2DI_SI),
+  MSA_BUILTIN (splati_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (splati_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (splati_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (splati_d, MIPS_V2DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (pckev_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (pckev_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (pckev_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (pckev_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (pckod_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (pckod_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (pckod_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (pckod_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (ilvl_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (ilvl_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (ilvl_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (ilvl_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (ilvr_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (ilvr_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (ilvr_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (ilvr_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (ilvev_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (ilvev_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (ilvev_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (ilvev_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (ilvod_b, MIPS_V16QI_FTYPE_V16QI_V16QI),
+  MSA_BUILTIN (ilvod_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (ilvod_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (ilvod_d, MIPS_V2DI_FTYPE_V2DI_V2DI),
+  MSA_BUILTIN (vshf_b, MIPS_V16QI_FTYPE_V16QI_V16QI_V16QI),
+  MSA_BUILTIN (vshf_h, MIPS_V8HI_FTYPE_V8HI_V8HI_V8HI),
+  MSA_BUILTIN (vshf_w, MIPS_V4SI_FTYPE_V4SI_V4SI_V4SI),
+  MSA_BUILTIN (vshf_d, MIPS_V2DI_FTYPE_V2DI_V2DI_V2DI),
+  MSA_BUILTIN (and_v, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (andi_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (or_v, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (ori_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (nor_v, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (nori_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (xor_v, MIPS_UV16QI_FTYPE_UV16QI_UV16QI),
+  MSA_BUILTIN (xori_b, MIPS_UV16QI_FTYPE_UV16QI_UQI),
+  MSA_BUILTIN (bmnz_v, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UV16QI),
+  MSA_BUILTIN (bmnzi_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UQI),
+  MSA_BUILTIN (bmz_v, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UV16QI),
+  MSA_BUILTIN (bmzi_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UQI),
+  MSA_BUILTIN (bsel_v, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UV16QI),
+  MSA_BUILTIN (bseli_b, MIPS_UV16QI_FTYPE_UV16QI_UV16QI_UQI),
+  MSA_BUILTIN (shf_b, MIPS_V16QI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (shf_h, MIPS_V8HI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (shf_w, MIPS_V4SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN_TEST_BRANCH (bnz_v, MIPS_SI_FTYPE_UV16QI),
+  MSA_BUILTIN_TEST_BRANCH (bz_v, MIPS_SI_FTYPE_UV16QI),
+  MSA_BUILTIN (fill_b, MIPS_V16QI_FTYPE_SI),
+  MSA_BUILTIN (fill_h, MIPS_V8HI_FTYPE_SI),
+  MSA_BUILTIN (fill_w, MIPS_V4SI_FTYPE_SI),
+  MSA_BUILTIN (fill_d, MIPS_V2DI_FTYPE_DI),
+  MSA_BUILTIN (pcnt_b, MIPS_V16QI_FTYPE_V16QI),
+  MSA_BUILTIN (pcnt_h, MIPS_V8HI_FTYPE_V8HI),
+  MSA_BUILTIN (pcnt_w, MIPS_V4SI_FTYPE_V4SI),
+  MSA_BUILTIN (pcnt_d, MIPS_V2DI_FTYPE_V2DI),
+  MSA_BUILTIN (nloc_b, MIPS_V16QI_FTYPE_V16QI),
+  MSA_BUILTIN (nloc_h, MIPS_V8HI_FTYPE_V8HI),
+  MSA_BUILTIN (nloc_w, MIPS_V4SI_FTYPE_V4SI),
+  MSA_BUILTIN (nloc_d, MIPS_V2DI_FTYPE_V2DI),
+  MSA_BUILTIN (nlzc_b, MIPS_V16QI_FTYPE_V16QI),
+  MSA_BUILTIN (nlzc_h, MIPS_V8HI_FTYPE_V8HI),
+  MSA_BUILTIN (nlzc_w, MIPS_V4SI_FTYPE_V4SI),
+  MSA_BUILTIN (nlzc_d, MIPS_V2DI_FTYPE_V2DI),
+  MSA_BUILTIN (copy_s_b, MIPS_SI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (copy_s_h, MIPS_SI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN (copy_s_w, MIPS_SI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN (copy_s_d, MIPS_DI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (copy_u_b, MIPS_USI_FTYPE_V16QI_UQI),
+  MSA_BUILTIN (copy_u_h, MIPS_USI_FTYPE_V8HI_UQI),
+  MSA_BUILTIN_REMAP (copy_u_w, copy_s_w, MIPS_USI_FTYPE_V4SI_UQI),
+  MSA_BUILTIN_REMAP (copy_u_d, copy_s_d, MIPS_UDI_FTYPE_V2DI_UQI),
+  MSA_BUILTIN (insert_b, MIPS_V16QI_FTYPE_V16QI_UQI_SI),
+  MSA_BUILTIN (insert_h, MIPS_V8HI_FTYPE_V8HI_UQI_SI),
+  MSA_BUILTIN (insert_w, MIPS_V4SI_FTYPE_V4SI_UQI_SI),
+  MSA_BUILTIN (insert_d, MIPS_V2DI_FTYPE_V2DI_UQI_DI),
+  MSA_BUILTIN (insve_b, MIPS_V16QI_FTYPE_V16QI_UQI_V16QI),
+  MSA_BUILTIN (insve_h, MIPS_V8HI_FTYPE_V8HI_UQI_V8HI),
+  MSA_BUILTIN (insve_w, MIPS_V4SI_FTYPE_V4SI_UQI_V4SI),
+  MSA_BUILTIN (insve_d, MIPS_V2DI_FTYPE_V2DI_UQI_V2DI),
+  MSA_BUILTIN_TEST_BRANCH (bnz_b, MIPS_SI_FTYPE_UV16QI),
+  MSA_BUILTIN_TEST_BRANCH (bnz_h, MIPS_SI_FTYPE_UV8HI),
+  MSA_BUILTIN_TEST_BRANCH (bnz_w, MIPS_SI_FTYPE_UV4SI),
+  MSA_BUILTIN_TEST_BRANCH (bnz_d, MIPS_SI_FTYPE_UV2DI),
+  MSA_BUILTIN_TEST_BRANCH (bz_b, MIPS_SI_FTYPE_UV16QI),
+  MSA_BUILTIN_TEST_BRANCH (bz_h, MIPS_SI_FTYPE_UV8HI),
+  MSA_BUILTIN_TEST_BRANCH (bz_w, MIPS_SI_FTYPE_UV4SI),
+  MSA_BUILTIN_TEST_BRANCH (bz_d, MIPS_SI_FTYPE_UV2DI),
+  MSA_BUILTIN (ldi_b, MIPS_V16QI_FTYPE_HI),
+  MSA_BUILTIN (ldi_h, MIPS_V8HI_FTYPE_HI),
+  MSA_BUILTIN (ldi_w, MIPS_V4SI_FTYPE_HI),
+  MSA_BUILTIN (ldi_d, MIPS_V2DI_FTYPE_HI),
+  MSA_BUILTIN (fcaf_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcaf_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcor_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcor_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcun_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcun_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcune_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcune_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcueq_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcueq_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fceq_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fceq_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcne_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcne_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fclt_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fclt_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcult_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcult_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcle_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcle_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fcule_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fcule_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsaf_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsaf_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsor_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsor_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsun_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsun_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsune_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsune_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsueq_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsueq_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fseq_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fseq_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsne_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsne_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fslt_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fslt_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsult_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsult_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsle_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsle_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsule_w, MIPS_V4SI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsule_d, MIPS_V2DI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fadd_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fadd_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fsub_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fsub_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fmul_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fmul_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fdiv_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fdiv_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fmadd_w, MIPS_V4SF_FTYPE_V4SF_V4SF_V4SF),
+  MSA_BUILTIN (fmadd_d, MIPS_V2DF_FTYPE_V2DF_V2DF_V2DF),
+  MSA_BUILTIN (fmsub_w, MIPS_V4SF_FTYPE_V4SF_V4SF_V4SF),
+  MSA_BUILTIN (fmsub_d, MIPS_V2DF_FTYPE_V2DF_V2DF_V2DF),
+  MSA_BUILTIN (fexp2_w, MIPS_V4SF_FTYPE_V4SF_V4SI),
+  MSA_BUILTIN (fexp2_d, MIPS_V2DF_FTYPE_V2DF_V2DI),
+  MSA_BUILTIN (fexdo_h, MIPS_V8HI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fexdo_w, MIPS_V4SF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (ftq_h, MIPS_V8HI_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (ftq_w, MIPS_V4SI_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fmin_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fmin_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fmin_a_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fmin_a_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fmax_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fmax_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (fmax_a_w, MIPS_V4SF_FTYPE_V4SF_V4SF),
+  MSA_BUILTIN (fmax_a_d, MIPS_V2DF_FTYPE_V2DF_V2DF),
+  MSA_BUILTIN (mul_q_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (mul_q_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (mulr_q_h, MIPS_V8HI_FTYPE_V8HI_V8HI),
+  MSA_BUILTIN (mulr_q_w, MIPS_V4SI_FTYPE_V4SI_V4SI),
+  MSA_BUILTIN (madd_q_h, MIPS_V8HI_FTYPE_V8HI_V8HI_V8HI),
+  MSA_BUILTIN (madd_q_w, MIPS_V4SI_FTYPE_V4SI_V4SI_V4SI),
+  MSA_BUILTIN (maddr_q_h, MIPS_V8HI_FTYPE_V8HI_V8HI_V8HI),
+  MSA_BUILTIN (maddr_q_w, MIPS_V4SI_FTYPE_V4SI_V4SI_V4SI),
+  MSA_BUILTIN (msub_q_h, MIPS_V8HI_FTYPE_V8HI_V8HI_V8HI),
+  MSA_BUILTIN (msub_q_w, MIPS_V4SI_FTYPE_V4SI_V4SI_V4SI),
+  MSA_BUILTIN (msubr_q_h, MIPS_V8HI_FTYPE_V8HI_V8HI_V8HI),
+  MSA_BUILTIN (msubr_q_w, MIPS_V4SI_FTYPE_V4SI_V4SI_V4SI),
+  MSA_BUILTIN (fclass_w, MIPS_V4SI_FTYPE_V4SF),
+  MSA_BUILTIN (fclass_d, MIPS_V2DI_FTYPE_V2DF),
+  MSA_BUILTIN (fsqrt_w, MIPS_V4SF_FTYPE_V4SF),
+  MSA_BUILTIN (fsqrt_d, MIPS_V2DF_FTYPE_V2DF),
+  MSA_BUILTIN (frcp_w, MIPS_V4SF_FTYPE_V4SF),
+  MSA_BUILTIN (frcp_d, MIPS_V2DF_FTYPE_V2DF),
+  MSA_BUILTIN (frint_w, MIPS_V4SF_FTYPE_V4SF),
+  MSA_BUILTIN (frint_d, MIPS_V2DF_FTYPE_V2DF),
+  MSA_BUILTIN (frsqrt_w, MIPS_V4SF_FTYPE_V4SF),
+  MSA_BUILTIN (frsqrt_d, MIPS_V2DF_FTYPE_V2DF),
+  MSA_BUILTIN (flog2_w, MIPS_V4SF_FTYPE_V4SF),
+  MSA_BUILTIN (flog2_d, MIPS_V2DF_FTYPE_V2DF),
+  MSA_BUILTIN (fexupl_w, MIPS_V4SF_FTYPE_V8HI),
+  MSA_BUILTIN (fexupl_d, MIPS_V2DF_FTYPE_V4SF),
+  MSA_BUILTIN (fexupr_w, MIPS_V4SF_FTYPE_V8HI),
+  MSA_BUILTIN (fexupr_d, MIPS_V2DF_FTYPE_V4SF),
+  MSA_BUILTIN (ffql_w, MIPS_V4SF_FTYPE_V8HI),
+  MSA_BUILTIN (ffql_d, MIPS_V2DF_FTYPE_V4SI),
+  MSA_BUILTIN (ffqr_w, MIPS_V4SF_FTYPE_V8HI),
+  MSA_BUILTIN (ffqr_d, MIPS_V2DF_FTYPE_V4SI),
+  MSA_BUILTIN (ftint_s_w, MIPS_V4SI_FTYPE_V4SF),
+  MSA_BUILTIN (ftint_s_d, MIPS_V2DI_FTYPE_V2DF),
+  MSA_BUILTIN (ftint_u_w, MIPS_UV4SI_FTYPE_V4SF),
+  MSA_BUILTIN (ftint_u_d, MIPS_UV2DI_FTYPE_V2DF),
+  MSA_BUILTIN (ftrunc_s_w, MIPS_V4SI_FTYPE_V4SF),
+  MSA_BUILTIN (ftrunc_s_d, MIPS_V2DI_FTYPE_V2DF),
+  MSA_BUILTIN (ftrunc_u_w, MIPS_UV4SI_FTYPE_V4SF),
+  MSA_BUILTIN (ftrunc_u_d, MIPS_UV2DI_FTYPE_V2DF),
+  MSA_BUILTIN (ffint_s_w, MIPS_V4SF_FTYPE_V4SI),
+  MSA_BUILTIN (ffint_s_d, MIPS_V2DF_FTYPE_V2DI),
+  MSA_BUILTIN (ffint_u_w, MIPS_V4SF_FTYPE_UV4SI),
+  MSA_BUILTIN (ffint_u_d, MIPS_V2DF_FTYPE_UV2DI),
+  MSA_NO_TARGET_BUILTIN (ctcmsa, MIPS_VOID_FTYPE_UQI_SI),
+  MSA_BUILTIN (cfcmsa, MIPS_SI_FTYPE_UQI),
+  MSA_BUILTIN (move_v, MIPS_V16QI_FTYPE_V16QI),
 };
 
 /* Index I is the function declaration for mips_builtins[I], or null if the
    function isn't defined on this target.  */
 static GTY(()) tree mips_builtin_decls[ARRAY_SIZE (mips_builtins)];
+/* Get the index I of the function declaration for mips_builtin_decls[I]
+   using the instruction code or return null if not defined for the target.  */
+static GTY(()) int mips_get_builtin_decl_index[NUM_INSN_CODES];
 
 /* MODE is a vector mode whose elements have type TYPE.  Return the type
    of the vector itself.  */
@@ -14658,7 +16393,9 @@ mips_build_cvpointer_type (void)
 #define MIPS_ATYPE_CVPOINTER mips_build_cvpointer_type ()
 
 /* Standard mode-based argument types.  */
+#define MIPS_ATYPE_QI intQI_type_node
 #define MIPS_ATYPE_UQI unsigned_intQI_type_node
+#define MIPS_ATYPE_HI intHI_type_node
 #define MIPS_ATYPE_SI intSI_type_node
 #define MIPS_ATYPE_USI unsigned_intSI_type_node
 #define MIPS_ATYPE_DI intDI_type_node
@@ -14673,6 +16410,24 @@ mips_build_cvpointer_type (void)
 #define MIPS_ATYPE_V4QI mips_builtin_vector_type (intQI_type_node, V4QImode)
 #define MIPS_ATYPE_V4HI mips_builtin_vector_type (intHI_type_node, V4HImode)
 #define MIPS_ATYPE_V8QI mips_builtin_vector_type (intQI_type_node, V8QImode)
+
+#define MIPS_ATYPE_V2DI						\
+  mips_builtin_vector_type (long_long_integer_type_node, V2DImode)
+#define MIPS_ATYPE_V4SI mips_builtin_vector_type (intSI_type_node, V4SImode)
+#define MIPS_ATYPE_V8HI mips_builtin_vector_type (intHI_type_node, V8HImode)
+#define MIPS_ATYPE_V16QI mips_builtin_vector_type (intQI_type_node, V16QImode)
+#define MIPS_ATYPE_V2DF mips_builtin_vector_type (double_type_node, V2DFmode)
+#define MIPS_ATYPE_V4SF mips_builtin_vector_type (float_type_node, V4SFmode)
+
+#define MIPS_ATYPE_UV2DI					\
+  mips_builtin_vector_type (long_long_unsigned_type_node, V2DImode)
+#define MIPS_ATYPE_UV4SI					\
+  mips_builtin_vector_type (unsigned_intSI_type_node, V4SImode)
+#define MIPS_ATYPE_UV8HI					\
+  mips_builtin_vector_type (unsigned_intHI_type_node, V8HImode)
+#define MIPS_ATYPE_UV16QI					\
+  mips_builtin_vector_type (unsigned_intQI_type_node, V16QImode)
+
 #define MIPS_ATYPE_UV2SI					\
   mips_builtin_vector_type (unsigned_intSI_type_node, V2SImode)
 #define MIPS_ATYPE_UV4HI					\
@@ -14734,10 +16489,13 @@ mips_init_builtins (void)
     {
       d = &mips_builtins[i];
       if (d->avail ())
-	mips_builtin_decls[i]
-	  = add_builtin_function (d->name,
-				  mips_build_function_type (d->function_type),
-				  i, BUILT_IN_MD, NULL, NULL);
+	{
+	  mips_builtin_decls[i]
+	    = add_builtin_function (d->name,
+				    mips_build_function_type (d->function_type),
+				    i, BUILT_IN_MD, NULL, NULL);
+	  mips_get_builtin_decl_index[d->icode] = i;
+	}
     }
 }
 
@@ -14749,6 +16507,48 @@ mips_builtin_decl (unsigned int code, bool initialize_p ATTRIBUTE_UNUSED)
   if (code >= ARRAY_SIZE (mips_builtins))
     return error_mark_node;
   return mips_builtin_decls[code];
+}
+
+/* Implement TARGET_VECTORIZE_BUILTIN_VECTORIZED_FUNCTION.  */
+
+static tree
+mips_builtin_vectorized_function (unsigned int fn, tree type_out, tree type_in)
+{
+  machine_mode in_mode, out_mode;
+  int in_n, out_n;
+
+  if (TREE_CODE (type_out) != VECTOR_TYPE
+      || TREE_CODE (type_in) != VECTOR_TYPE
+      || !ISA_HAS_MSA)
+    return NULL_TREE;
+
+  out_mode = TYPE_MODE (TREE_TYPE (type_out));
+  out_n = TYPE_VECTOR_SUBPARTS (type_out);
+  in_mode = TYPE_MODE (TREE_TYPE (type_in));
+  in_n = TYPE_VECTOR_SUBPARTS (type_in);
+
+  /* INSN is the name of the associated instruction pattern, without
+     the leading CODE_FOR_.  */
+#define MIPS_GET_BUILTIN(INSN) \
+  mips_builtin_decls[mips_get_builtin_decl_index[CODE_FOR_##INSN]]
+
+  switch (fn)
+    {
+    case BUILT_IN_SQRT:
+      if (out_mode == DFmode && out_n == 2
+	  && in_mode == DFmode && in_n == 2)
+	return MIPS_GET_BUILTIN (msa_fsqrt_d);
+      break;
+    case BUILT_IN_SQRTF:
+      if (out_mode == SFmode && out_n == 4
+	  && in_mode == SFmode && in_n == 4)
+	return MIPS_GET_BUILTIN (msa_fsqrt_w);
+      break;
+    default:
+      break;
+    }
+
+  return NULL_TREE;
 }
 
 /* Take argument ARGNO from EXP's argument list and convert it into
@@ -14777,7 +16577,269 @@ static rtx
 mips_expand_builtin_insn (enum insn_code icode, unsigned int nops,
 			  struct expand_operand *ops, bool has_target_p)
 {
-  if (!maybe_expand_insn (icode, nops, ops))
+  machine_mode imode;
+  int rangelo = 0, rangehi = 0, error_opno = 0;
+  rtx sireg;
+
+  switch (icode)
+    {
+    /* The third operand of these instructions is in SImode, so we need to
+       bring the corresponding builtin argument from QImode into SImode.  */
+    case CODE_FOR_loongson_pshufh:
+    case CODE_FOR_loongson_psllh:
+    case CODE_FOR_loongson_psllw:
+    case CODE_FOR_loongson_psrah:
+    case CODE_FOR_loongson_psraw:
+    case CODE_FOR_loongson_psrlh:
+    case CODE_FOR_loongson_psrlw:
+      gcc_assert (has_target_p && nops == 3 && ops[2].mode == QImode);
+      sireg = gen_reg_rtx (SImode);
+      emit_insn (gen_zero_extendqisi2 (sireg,
+				       force_reg (QImode, ops[2].value)));
+      ops[2].value = sireg;
+      ops[2].mode = SImode;
+      break;
+
+    case CODE_FOR_msa_addvi_b:
+    case CODE_FOR_msa_addvi_h:
+    case CODE_FOR_msa_addvi_w:
+    case CODE_FOR_msa_addvi_d:
+    case CODE_FOR_msa_clti_u_b:
+    case CODE_FOR_msa_clti_u_h:
+    case CODE_FOR_msa_clti_u_w:
+    case CODE_FOR_msa_clti_u_d:
+    case CODE_FOR_msa_clei_u_b:
+    case CODE_FOR_msa_clei_u_h:
+    case CODE_FOR_msa_clei_u_w:
+    case CODE_FOR_msa_clei_u_d:
+    case CODE_FOR_msa_maxi_u_b:
+    case CODE_FOR_msa_maxi_u_h:
+    case CODE_FOR_msa_maxi_u_w:
+    case CODE_FOR_msa_maxi_u_d:
+    case CODE_FOR_msa_mini_u_b:
+    case CODE_FOR_msa_mini_u_h:
+    case CODE_FOR_msa_mini_u_w:
+    case CODE_FOR_msa_mini_u_d:
+    case CODE_FOR_msa_subvi_b:
+    case CODE_FOR_msa_subvi_h:
+    case CODE_FOR_msa_subvi_w:
+    case CODE_FOR_msa_subvi_d:
+      gcc_assert (has_target_p && nops == 3);
+      /* We only generate a vector of constants iff the second argument
+	 is an immediate.  We also validate the range of the immediate.  */
+      if (CONST_INT_P (ops[2].value))
+	{
+	  rangelo = 0;
+	  rangehi = 31;
+	  if (IN_RANGE (INTVAL (ops[2].value), rangelo, rangehi))
+	    {
+	      ops[2].mode = ops[0].mode;
+	      ops[2].value = mips_gen_const_int_vector (ops[2].mode,
+							INTVAL (ops[2].value));
+	    }
+	  else
+	    error_opno = 2;
+	}
+      break;
+
+    case CODE_FOR_msa_ceqi_b:
+    case CODE_FOR_msa_ceqi_h:
+    case CODE_FOR_msa_ceqi_w:
+    case CODE_FOR_msa_ceqi_d:
+    case CODE_FOR_msa_clti_s_b:
+    case CODE_FOR_msa_clti_s_h:
+    case CODE_FOR_msa_clti_s_w:
+    case CODE_FOR_msa_clti_s_d:
+    case CODE_FOR_msa_clei_s_b:
+    case CODE_FOR_msa_clei_s_h:
+    case CODE_FOR_msa_clei_s_w:
+    case CODE_FOR_msa_clei_s_d:
+    case CODE_FOR_msa_maxi_s_b:
+    case CODE_FOR_msa_maxi_s_h:
+    case CODE_FOR_msa_maxi_s_w:
+    case CODE_FOR_msa_maxi_s_d:
+    case CODE_FOR_msa_mini_s_b:
+    case CODE_FOR_msa_mini_s_h:
+    case CODE_FOR_msa_mini_s_w:
+    case CODE_FOR_msa_mini_s_d:
+      gcc_assert (has_target_p && nops == 3);
+      /* We only generate a vector of constants iff the second argument
+	 is an immediate.  We also validate the range of the immediate.  */
+      if (CONST_INT_P (ops[2].value))
+	{
+	  rangelo = -16;
+	  rangehi = 15;
+	  if (IN_RANGE (INTVAL (ops[2].value), rangelo, rangehi))
+	    {
+	      ops[2].mode = ops[0].mode;
+	      ops[2].value = mips_gen_const_int_vector (ops[2].mode,
+							INTVAL (ops[2].value));
+	    }
+	  else
+	    error_opno = 2;
+	}
+      break;
+
+    case CODE_FOR_msa_andi_b:
+    case CODE_FOR_msa_ori_b:
+    case CODE_FOR_msa_nori_b:
+    case CODE_FOR_msa_xori_b:
+      gcc_assert (has_target_p && nops == 3);
+      if (!CONST_INT_P (ops[2].value))
+	break;
+      ops[2].mode = ops[0].mode;
+      ops[2].value = mips_gen_const_int_vector (ops[2].mode,
+						INTVAL (ops[2].value));
+      break;
+
+    case CODE_FOR_msa_bmzi_b:
+    case CODE_FOR_msa_bmnzi_b:
+    case CODE_FOR_msa_bseli_b:
+      gcc_assert (has_target_p && nops == 4);
+      if (!CONST_INT_P (ops[3].value))
+	break;
+      ops[3].mode = ops[0].mode;
+      ops[3].value = mips_gen_const_int_vector (ops[3].mode,
+						INTVAL (ops[3].value));
+      break;
+
+    case CODE_FOR_msa_fill_b:
+    case CODE_FOR_msa_fill_h:
+    case CODE_FOR_msa_fill_w:
+    case CODE_FOR_msa_fill_d:
+      /* Map the built-ins to vector fill operations.  We need fix up the mode
+	 for the element being inserted.  */
+      gcc_assert (has_target_p && nops == 2);
+      imode = GET_MODE_INNER (ops[0].mode);
+      ops[1].value = lowpart_subreg (imode, ops[1].value, ops[1].mode);
+      ops[1].mode = imode;
+      break;
+
+    case CODE_FOR_msa_ilvl_b:
+    case CODE_FOR_msa_ilvl_h:
+    case CODE_FOR_msa_ilvl_w:
+    case CODE_FOR_msa_ilvl_d:
+    case CODE_FOR_msa_ilvr_b:
+    case CODE_FOR_msa_ilvr_h:
+    case CODE_FOR_msa_ilvr_w:
+    case CODE_FOR_msa_ilvr_d:
+    case CODE_FOR_msa_ilvev_b:
+    case CODE_FOR_msa_ilvev_h:
+    case CODE_FOR_msa_ilvev_w:
+    case CODE_FOR_msa_ilvod_b:
+    case CODE_FOR_msa_ilvod_h:
+    case CODE_FOR_msa_ilvod_w:
+    case CODE_FOR_msa_pckev_b:
+    case CODE_FOR_msa_pckev_h:
+    case CODE_FOR_msa_pckev_w:
+    case CODE_FOR_msa_pckod_b:
+    case CODE_FOR_msa_pckod_h:
+    case CODE_FOR_msa_pckod_w:
+      /* Swap the operands 1 and 2 for interleave operations.  Built-ins follow
+	 convention of ISA, which have op1 as higher component and op2 as lower
+	 component.  However, the VEC_PERM op in tree and vec_concat in RTL
+	 expects first operand to be lower component, because of which this
+	 swap is needed for builtins.  */
+      gcc_assert (has_target_p && nops == 3);
+      std::swap (ops[1], ops[2]);
+      break;
+
+    case CODE_FOR_msa_slli_b:
+    case CODE_FOR_msa_slli_h:
+    case CODE_FOR_msa_slli_w:
+    case CODE_FOR_msa_slli_d:
+    case CODE_FOR_msa_srai_b:
+    case CODE_FOR_msa_srai_h:
+    case CODE_FOR_msa_srai_w:
+    case CODE_FOR_msa_srai_d:
+    case CODE_FOR_msa_srli_b:
+    case CODE_FOR_msa_srli_h:
+    case CODE_FOR_msa_srli_w:
+    case CODE_FOR_msa_srli_d:
+      gcc_assert (has_target_p && nops == 3);
+      if (CONST_INT_P (ops[2].value))
+	{
+	  rangelo = 0;
+	  rangehi = GET_MODE_UNIT_BITSIZE (ops[0].mode) - 1;
+	  if (IN_RANGE (INTVAL (ops[2].value), rangelo, rangehi))
+	    {
+	      ops[2].mode = ops[0].mode;
+	      ops[2].value = mips_gen_const_int_vector (ops[2].mode,
+							INTVAL (ops[2].value));
+	    }
+	  else
+	    error_opno = 2;
+	}
+      break;
+
+    case CODE_FOR_msa_insert_b:
+    case CODE_FOR_msa_insert_h:
+    case CODE_FOR_msa_insert_w:
+    case CODE_FOR_msa_insert_d:
+      /* Map the built-ins to insert operations.  We need to swap operands,
+	 fix up the mode for the element being inserted, and generate
+	 a bit mask for vec_merge.  */
+      gcc_assert (has_target_p && nops == 4);
+      std::swap (ops[1], ops[2]);
+      std::swap (ops[1], ops[3]);
+      imode = GET_MODE_INNER (ops[0].mode);
+      ops[1].value = lowpart_subreg (imode, ops[1].value, ops[1].mode);
+      ops[1].mode = imode;
+      rangelo = 0;
+      rangehi = GET_MODE_NUNITS (ops[0].mode) - 1;
+      if (CONST_INT_P (ops[3].value)
+	  && IN_RANGE (INTVAL (ops[3].value), rangelo, rangehi))
+	ops[3].value = GEN_INT (1 << INTVAL (ops[3].value));
+      else
+	error_opno = 2;
+      break;
+
+    case CODE_FOR_msa_insve_b:
+    case CODE_FOR_msa_insve_h:
+    case CODE_FOR_msa_insve_w:
+    case CODE_FOR_msa_insve_d:
+      /* Map the built-ins to element insert operations.  We need to swap
+	 operands and generate a bit mask.  */
+      gcc_assert (has_target_p && nops == 4);
+      std::swap (ops[1], ops[2]);
+      std::swap (ops[1], ops[3]);
+      rangelo = 0;
+      rangehi = GET_MODE_NUNITS (ops[0].mode) - 1;
+      if (CONST_INT_P (ops[3].value)
+	  && IN_RANGE (INTVAL (ops[3].value), rangelo, rangehi))
+	ops[3].value = GEN_INT (1 << INTVAL (ops[3].value));
+      else
+	error_opno = 2;
+      break;
+
+    case CODE_FOR_msa_shf_b:
+    case CODE_FOR_msa_shf_h:
+    case CODE_FOR_msa_shf_w:
+    case CODE_FOR_msa_shf_w_f:
+      gcc_assert (has_target_p && nops == 3);
+      ops[2].value = mips_gen_const_int_vector_shuffle (ops[0].mode,
+							INTVAL (ops[2].value));
+      break;
+
+    case CODE_FOR_msa_vshf_b:
+    case CODE_FOR_msa_vshf_h:
+    case CODE_FOR_msa_vshf_w:
+    case CODE_FOR_msa_vshf_d:
+      gcc_assert (has_target_p && nops == 4);
+      std::swap (ops[1], ops[3]);
+      break;
+
+    default:
+      break;
+  }
+
+  if (error_opno != 0)
+    {
+      error ("argument %d to the built-in must be a constant"
+	     " in range %d to %d", error_opno, rangelo, rangehi);
+      return has_target_p ? gen_reg_rtx (ops[0].mode) : const0_rtx;
+    }
+  else if (!maybe_expand_insn (icode, nops, ops))
     {
       error ("invalid argument to built-in function");
       return has_target_p ? gen_reg_rtx (ops[0].mode) : const0_rtx;
@@ -14867,6 +16929,50 @@ mips_expand_builtin_movtf (enum mips_builtin_type type,
   create_fixed_operand (&ops[3], cmp_result);
   return mips_expand_builtin_insn (CODE_FOR_mips_cond_move_tf_ps,
 				   4, ops, true);
+}
+
+/* Expand an MSA built-in for a compare and branch instruction specified by
+   ICODE, set a general-purpose register to 1 if the branch was taken,
+   0 otherwise.  */
+
+static rtx
+mips_expand_builtin_msa_test_branch (enum insn_code icode, tree exp)
+{
+  struct expand_operand ops[3];
+  rtx_insn *cbranch;
+  rtx_code_label *true_label, *done_label;
+  rtx cmp_result;
+
+  true_label = gen_label_rtx ();
+  done_label = gen_label_rtx ();
+
+  create_input_operand (&ops[0], true_label, TYPE_MODE (TREE_TYPE (exp)));
+  mips_prepare_builtin_arg (&ops[1], exp, 0);
+  create_fixed_operand (&ops[2], const0_rtx);
+
+  /* Make sure that the operand 1 is a REG.  */
+  if (GET_CODE (ops[1].value) != REG)
+    ops[1].value = force_reg (ops[1].mode, ops[1].value);
+
+  if ((cbranch = maybe_gen_insn (icode, 3, ops)) == NULL_RTX)
+    error ("failed to expand built-in function");
+
+  cmp_result = gen_reg_rtx (SImode);
+
+  /* First assume that CMP_RESULT is false.  */
+  mips_emit_move (cmp_result, const0_rtx);
+
+  /* Branch to TRUE_LABEL if CBRANCH is taken and DONE_LABEL otherwise.  */
+  emit_jump_insn (cbranch);
+  emit_jump_insn (gen_jump (done_label));
+  emit_barrier ();
+
+  /* Set CMP_RESULT to true if the branch was taken.  */
+  emit_label (true_label);
+  mips_emit_move (cmp_result, const1_rtx);
+
+  emit_label (done_label);
+  return cmp_result;
 }
 
 /* Move VALUE_IF_TRUE into TARGET if CONDITION is true; move VALUE_IF_FALSE
@@ -15005,6 +17111,9 @@ mips_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
       return mips_expand_builtin_compare (d->builtin_type, d->icode,
 					  d->cond, target, exp);
 
+    case MIPS_BUILTIN_MSA_TEST_BRANCH:
+      return mips_expand_builtin_msa_test_branch (d->icode, exp);
+
     case MIPS_BUILTIN_BPOSGE32:
       return mips_expand_builtin_bposge (d->builtin_type, target);
     }
@@ -15115,15 +17224,22 @@ mips16_emit_constants_1 (machine_mode mode, rtx value, rtx_insn *insn)
   gcc_unreachable ();
 }
 
-/* Dump out the constants in CONSTANTS after INSN.  */
+/* Dump out the constants in CONSTANTS after INSN.  Record the initial
+   label number in the `consttable' and `consttable_end' insns emitted
+   at the beginning and the end of the constant pool respectively, so
+   that individual pools can be uniquely marked as data for the purpose
+   of disassembly.  */
 
 static void
 mips16_emit_constants (struct mips16_constant *constants, rtx_insn *insn)
 {
+  int label_num = constants ? CODE_LABEL_NUMBER (constants->label) : 0;
   struct mips16_constant *c, *next;
   int align;
 
   align = 0;
+  if (constants)
+    insn = emit_insn_after (gen_consttable (GEN_INT (label_num)), insn);
   for (c = constants; c != NULL; c = next)
     {
       /* If necessary, increase the alignment of PC.  */
@@ -15140,6 +17256,8 @@ mips16_emit_constants (struct mips16_constant *constants, rtx_insn *insn)
       next = c->next;
       free (c);
     }
+  if (constants)
+    insn = emit_insn_after (gen_consttable_end (GEN_INT (label_num)), insn);
 
   emit_barrier_after (insn);
 }
@@ -15455,10 +17573,10 @@ r10k_safe_mem_expr_p (tree expr, unsigned HOST_WIDE_INT offset)
   HOST_WIDE_INT bitoffset, bitsize;
   tree inner, var_offset;
   machine_mode mode;
-  int unsigned_p, volatile_p;
+  int unsigned_p, reverse_p, volatile_p;
 
   inner = get_inner_reference (expr, &bitsize, &bitoffset, &var_offset, &mode,
-			       &unsigned_p, &volatile_p, false);
+			       &unsigned_p, &reverse_p, &volatile_p);
   if (!DECL_P (inner) || !DECL_SIZE_UNIT (inner) || var_offset)
     return false;
 
@@ -16379,25 +18497,24 @@ mips_hash_base (rtx base)
 
 /* Hashtable helpers.  */
 
-struct mips_lo_sum_offset_hasher : typed_free_remove <mips_lo_sum_offset>
+struct mips_lo_sum_offset_hasher : free_ptr_hash <mips_lo_sum_offset>
 {
-  typedef mips_lo_sum_offset value_type;
-  typedef rtx_def compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *, const compare_type *);
+  typedef rtx_def *compare_type;
+  static inline hashval_t hash (const mips_lo_sum_offset *);
+  static inline bool equal (const mips_lo_sum_offset *, const rtx_def *);
 };
 
 /* Hash-table callbacks for mips_lo_sum_offsets.  */
 
 inline hashval_t
-mips_lo_sum_offset_hasher::hash (const value_type *entry)
+mips_lo_sum_offset_hasher::hash (const mips_lo_sum_offset *entry)
 {
   return mips_hash_base (entry->base);
 }
 
 inline bool
-mips_lo_sum_offset_hasher::equal (const value_type *entry,
-				  const compare_type *value)
+mips_lo_sum_offset_hasher::equal (const mips_lo_sum_offset *entry,
+				  const rtx_def *value)
 {
   return rtx_equal_p (entry->base, value);
 }
@@ -16503,7 +18620,7 @@ mips_orphaned_high_part_p (mips_offset_table *htab, rtx_insn *insn)
 
 static void
 mips_avoid_hazard (rtx_insn *after, rtx_insn *insn, int *hilo_delay,
-		   rtx *delayed_reg, rtx lo_reg)
+		   rtx *delayed_reg, rtx lo_reg, bool *fs_delay)
 {
   rtx pattern, set;
   int nops, ninsns;
@@ -16529,6 +18646,15 @@ mips_avoid_hazard (rtx_insn *after, rtx_insn *insn, int *hilo_delay,
     nops = 2 - *hilo_delay;
   else if (*delayed_reg != 0 && reg_referenced_p (*delayed_reg, pattern))
     nops = 1;
+  /* If processing a forbidden slot hazard then a NOP is required if the
+     branch instruction was not in a sequence (as the sequence would
+     imply it is not actually a compact branch anyway) and the current
+     insn is not an inline asm, and can't go in a delay slot.  */
+  else if (*fs_delay && get_attr_can_delay (insn) == CAN_DELAY_NO
+	   && GET_CODE (PATTERN (after)) != SEQUENCE
+	   && GET_CODE (pattern) != ASM_INPUT
+	   && asm_noperands (pattern) < 0)
+    nops = 1;
   else
     nops = 0;
 
@@ -16541,10 +18667,16 @@ mips_avoid_hazard (rtx_insn *after, rtx_insn *insn, int *hilo_delay,
   /* Set up the state for the next instruction.  */
   *hilo_delay += ninsns;
   *delayed_reg = 0;
+  *fs_delay = false;
   if (INSN_CODE (insn) >= 0)
     switch (get_attr_hazard (insn))
       {
       case HAZARD_NONE:
+	break;
+
+      case HAZARD_FORBIDDEN_SLOT:
+	if (TARGET_CB_MAYBE)
+	  *fs_delay = true;
 	break;
 
       case HAZARD_HILO:
@@ -16559,6 +18691,34 @@ mips_avoid_hazard (rtx_insn *after, rtx_insn *insn, int *hilo_delay,
       }
 }
 
+/* A SEQUENCE is breakable iff the branch inside it has a compact form
+   and the target has compact branches.  */
+
+static bool
+mips_breakable_sequence_p (rtx_insn *insn)
+{
+  return (insn && GET_CODE (PATTERN (insn)) == SEQUENCE
+	  && TARGET_CB_MAYBE
+	  && get_attr_compact_form (SEQ_BEGIN (insn)) != COMPACT_FORM_NEVER);
+}
+
+/* Remove a SEQUENCE and replace it with the delay slot instruction
+   followed by the branch and return the instruction in the delay slot.
+   Return the first of the two new instructions.
+   Subroutine of mips_reorg_process_insns.  */
+
+static rtx_insn *
+mips_break_sequence (rtx_insn *insn)
+{
+  rtx_insn *before = PREV_INSN (insn);
+  rtx_insn *branch = SEQ_BEGIN (insn);
+  rtx_insn *ds = SEQ_END (insn);
+  remove_insn (insn);
+  add_insn_after (ds, before, NULL);
+  add_insn_after (branch, ds, NULL);
+  return ds;
+}
+
 /* Go through the instruction stream and insert nops where necessary.
    Also delete any high-part relocations whose partnering low parts
    are now all dead.  See if the whole function can then be put into
@@ -16570,6 +18730,7 @@ mips_reorg_process_insns (void)
   rtx_insn *insn, *last_insn, *subinsn, *next_insn;
   rtx lo_reg, delayed_reg;
   int hilo_delay;
+  bool fs_delay;
 
   /* Force all instructions to be split into their final form.  */
   split_all_insns_noflow ();
@@ -16638,6 +18799,7 @@ mips_reorg_process_insns (void)
   hilo_delay = 2;
   delayed_reg = 0;
   lo_reg = gen_rtx_REG (SImode, LO_REGNUM);
+  fs_delay = false;
 
   /* Make a second pass over the instructions.  Delete orphaned
      high-part relocations or turn them into NOPs.  Avoid hazards
@@ -16649,6 +18811,68 @@ mips_reorg_process_insns (void)
 	{
 	  if (GET_CODE (PATTERN (insn)) == SEQUENCE)
 	    {
+	      rtx_insn *next_active = next_active_insn (insn);
+	      /* Undo delay slots to avoid bubbles if the next instruction can
+		 be placed in a forbidden slot or the cost of adding an
+		 explicit NOP in a forbidden slot is OK and if the SEQUENCE is
+		 safely breakable.  */
+	      if (TARGET_CB_MAYBE
+		  && mips_breakable_sequence_p (insn)
+		  && INSN_P (SEQ_BEGIN (insn))
+		  && INSN_P (SEQ_END (insn))
+		  && ((next_active
+		       && INSN_P (next_active)
+		       && GET_CODE (PATTERN (next_active)) != SEQUENCE
+		       && get_attr_can_delay (next_active) == CAN_DELAY_YES)
+		      || !optimize_size))
+		{
+		  /* To hide a potential pipeline bubble, if we scan backwards
+		     from the current SEQUENCE and find that there is a load
+		     of a value that is used in the CTI and there are no
+		     dependencies between the CTI and instruction in the delay
+		     slot, break the sequence so the load delay is hidden.  */
+		  HARD_REG_SET uses;
+		  CLEAR_HARD_REG_SET (uses);
+		  note_uses (&PATTERN (SEQ_BEGIN (insn)), record_hard_reg_uses,
+			     &uses);
+		  HARD_REG_SET delay_sets;
+		  CLEAR_HARD_REG_SET (delay_sets);
+		  note_stores (PATTERN (SEQ_END (insn)), record_hard_reg_sets,
+			       &delay_sets);
+
+		  rtx_insn *prev = prev_active_insn (insn);
+		  if (prev
+		      && GET_CODE (PATTERN (prev)) == SET
+		      && MEM_P (SET_SRC (PATTERN (prev))))
+		    {
+		      HARD_REG_SET sets;
+		      CLEAR_HARD_REG_SET (sets);
+		      note_stores (PATTERN (prev), record_hard_reg_sets,
+				   &sets);
+
+		      /* Re-order if safe.  */
+		      if (!hard_reg_set_intersect_p (delay_sets, uses)
+			  && hard_reg_set_intersect_p (uses, sets))
+			{
+			  next_insn = mips_break_sequence (insn);
+			  /* Need to process the hazards of the newly
+			     introduced instructions.  */
+			  continue;
+			}
+		    }
+
+		  /* If we find an orphaned high-part relocation in a delay
+		     slot then we can convert to a compact branch and get
+		     the orphaned high part deleted.  */
+		  if (mips_orphaned_high_part_p (&htab, SEQ_END (insn)))
+		    {
+		      next_insn = mips_break_sequence (insn);
+		      /* Need to process the hazards of the newly
+			 introduced instructions.  */
+		      continue;
+		    }
+		}
+
 	      /* If we find an orphaned high-part relocation in a delay
 		 slot, it's easier to turn that instruction into a NOP than
 		 to delete it.  The delay slot will be a NOP either way.  */
@@ -16661,7 +18885,7 @@ mips_reorg_process_insns (void)
 			INSN_CODE (subinsn) = CODE_FOR_nop;
 		      }
 		    mips_avoid_hazard (last_insn, subinsn, &hilo_delay,
-				       &delayed_reg, lo_reg);
+				       &delayed_reg, lo_reg, &fs_delay);
 		  }
 	      last_insn = insn;
 	    }
@@ -16682,7 +18906,34 @@ mips_reorg_process_insns (void)
 	      else
 		{
 		  mips_avoid_hazard (last_insn, insn, &hilo_delay,
-				     &delayed_reg, lo_reg);
+				     &delayed_reg, lo_reg, &fs_delay);
+		  /* When a compact branch introduces a forbidden slot hazard
+		     and the next useful instruction is a SEQUENCE of a jump
+		     and a non-nop instruction in the delay slot, remove the
+		     sequence and replace it with the delay slot instruction
+		     then the jump to clear the forbidden slot hazard.  */
+
+		  if (fs_delay)
+		    {
+		      /* Search onwards from the current position looking for
+			 a SEQUENCE.  We are looking for pipeline hazards here
+			 and do not need to worry about labels or barriers as
+			 the optimization only undoes delay slot filling which
+			 only affects the order of the branch and its delay
+			 slot.  */
+		      rtx_insn *next = next_active_insn (insn);
+		      if (next
+			  && USEFUL_INSN_P (next)
+			  && GET_CODE (PATTERN (next)) == SEQUENCE
+			  && mips_breakable_sequence_p (next))
+			{
+			  last_insn = insn;
+			  next_insn = mips_break_sequence (next);
+			  /* Need to process the hazards of the newly
+			     introduced instructions.  */
+			  continue;
+			}
+		    }
 		  last_insn = insn;
 		}
 	    }
@@ -16777,10 +19028,9 @@ mips16_load_branch_target (rtx dest, rtx src)
 	mips_emit_move (dest, pic_offset_table_rtx);
       page = mips_unspec_address (src, SYMBOL_GOTOFF_PAGE);
       low = mips_unspec_address (src, SYMBOL_GOT_PAGE_OFST);
-      emit_insn (gen_rtx_SET (VOIDmode, dest,
+      emit_insn (gen_rtx_SET (dest,
 			      PMODE_INSN (gen_unspec_got, (dest, page))));
-      emit_insn (gen_rtx_SET (VOIDmode, dest,
-			      gen_rtx_LO_SUM (Pmode, dest, low)));
+      emit_insn (gen_rtx_SET (dest, gen_rtx_LO_SUM (Pmode, dest, low)));
     }
   else
     {
@@ -16805,13 +19055,14 @@ mips16_split_long_branches (void)
   do
     {
       rtx_insn *insn;
+      rtx_jump_insn *jump_insn;
 
       shorten_branches (get_insns ());
       something_changed = false;
       for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
-	if (JUMP_P (insn)
-	    && get_attr_length (insn) > 4
-	    && (any_condjump_p (insn) || any_uncondjump_p (insn)))
+	if ((jump_insn = dyn_cast <rtx_jump_insn *> (insn))
+	    && get_attr_length (jump_insn) > 4
+	    && (any_condjump_p (jump_insn) || any_uncondjump_p (jump_insn)))
 	  {
 	    rtx old_label, temp, saved_temp;
 	    rtx_code_label *new_label;
@@ -16826,7 +19077,7 @@ mips16_split_long_branches (void)
 	    emit_move_insn (saved_temp, temp);
 
 	    /* Load the branch target into TEMP.  */
-	    old_label = JUMP_LABEL (insn);
+	    old_label = JUMP_LABEL (jump_insn);
 	    target = gen_rtx_LABEL_REF (Pmode, old_label);
 	    mips16_load_branch_target (temp, target);
 
@@ -16841,7 +19092,7 @@ mips16_split_long_branches (void)
 	       a PC-relative constant pool.  */
 	    mips16_lay_out_constants (false);
 
-	    if (simplejump_p (insn))
+	    if (simplejump_p (jump_insn))
 	      /* We're going to replace INSN with a longer form.  */
 	      new_label = NULL;
 	    else
@@ -16855,15 +19106,55 @@ mips16_split_long_branches (void)
 	    jump_sequence = get_insns ();
 	    end_sequence ();
 
-	    emit_insn_after (jump_sequence, insn);
+	    emit_insn_after (jump_sequence, jump_insn);
 	    if (new_label)
-	      invert_jump (insn, new_label, false);
+	      invert_jump (jump_insn, new_label, false);
 	    else
-	      delete_insn (insn);
+	      delete_insn (jump_insn);
 	    something_changed = true;
 	  }
     }
   while (something_changed);
+}
+
+/* Insert a `.insn' assembly pseudo-op after any labels followed by
+   a MIPS16 constant pool or no insn at all.  This is needed so that
+   targets that have been optimized away are still marked as code
+   and therefore branches that remained and point to them are known
+   to retain the ISA mode and as such can be successfully assembled.  */
+
+static void
+mips_insert_insn_pseudos (void)
+{
+  bool insn_pseudo_needed = TRUE;
+  rtx_insn *insn;
+
+  for (insn = get_last_insn (); insn != NULL_RTX; insn = PREV_INSN (insn))
+    switch (GET_CODE (insn))
+      {
+      case INSN:
+	if (GET_CODE (PATTERN (insn)) == UNSPEC_VOLATILE
+	    && XINT (PATTERN (insn), 1) == UNSPEC_CONSTTABLE)
+	  {
+	    insn_pseudo_needed = TRUE;
+	    break;
+	  }
+	/* Fall through.  */
+      case JUMP_INSN:
+      case CALL_INSN:
+      case JUMP_TABLE_DATA:
+	insn_pseudo_needed = FALSE;
+	break;
+      case CODE_LABEL:
+	if (insn_pseudo_needed)
+	  {
+	    emit_insn_after (gen_insn_pseudo (), insn);
+	    insn_pseudo_needed = FALSE;
+	  }
+	break;
+      default:
+	break;
+      }
 }
 
 /* Implement TARGET_MACHINE_DEPENDENT_REORG.  */
@@ -16901,6 +19192,7 @@ mips_machine_reorg2 (void)
        optimizations, but this should be an extremely rare case anyhow.  */
     mips_reorg_process_insns ();
   mips16_split_long_branches ();
+  mips_insert_insn_pseudos ();
   return 0;
 }
 
@@ -17146,6 +19438,9 @@ mips_set_compression_mode (unsigned int compression_mode)
 
       if (TARGET_HARD_FLOAT_ABI && !TARGET_OLDABI)
 	sorry ("hard-float MIPS16 code for ABIs other than o32 and o64");
+
+      if (TARGET_MSA)
+	sorry ("MSA MIPS16 code");
     }
   else
     {
@@ -17181,6 +19476,13 @@ mips_set_compression_mode (unsigned int compression_mode)
 	mips16_globals = save_target_globals_default_opts ();
       else
 	restore_target_globals (mips16_globals);
+    }
+  else if (compression_mode & MASK_MICROMIPS)
+    {
+      if (!micromips_globals)
+	micromips_globals = save_target_globals_default_opts ();
+      else
+	restore_target_globals (micromips_globals);
     }
   else
     restore_target_globals (&default_target_globals);
@@ -17315,6 +19617,11 @@ mips_option_override (void)
   if (TARGET_MICROMIPS && TARGET_MIPS16)
     error ("unsupported combination: %s", "-mips16 -mmicromips");
 
+  /* Prohibit Paired-Single and MSA combination.  This is software restriction
+     rather than architectural.  */
+  if (ISA_HAS_MSA && TARGET_PAIRED_SINGLE_FLOAT)
+    error ("unsupported combination: %s", "-mmsa -mpaired-single");
+
   /* Save the base compression state and process flags as though we
      were generating uncompressed code.  */
   mips_base_compression_flags = TARGET_COMPRESSION;
@@ -17418,6 +19725,8 @@ mips_option_override (void)
 	target_flags |= MASK_FLOAT64;
       else if (TARGET_64BIT && TARGET_DOUBLE_FLOAT)
 	target_flags |= MASK_FLOAT64;
+      else if (mips_abi == ABI_32 && ISA_HAS_MSA && !TARGET_FLOATXX)
+	target_flags |= MASK_FLOAT64;
       else
 	target_flags &= ~MASK_FLOAT64;
     }
@@ -17493,8 +19802,15 @@ mips_option_override (void)
   if ((target_flags_explicit & MASK_BRANCHLIKELY) == 0)
     {
       if (ISA_HAS_BRANCHLIKELY
-	  && (optimize_size
-	      || (mips_tune_info->tune_flags & PTF_AVOID_BRANCHLIKELY) == 0))
+	  && ((optimize_size
+	       && (mips_tune_info->tune_flags
+		   & PTF_AVOID_BRANCHLIKELY_SIZE) == 0)
+	      || (!optimize_size
+		  && optimize > 0
+		  && (mips_tune_info->tune_flags
+		      & PTF_AVOID_BRANCHLIKELY_SPEED) == 0)
+	      || (mips_tune_info->tune_flags
+		  & PTF_AVOID_BRANCHLIKELY_ALWAYS) == 0))
 	target_flags |= MASK_BRANCHLIKELY;
       else
 	target_flags &= ~MASK_BRANCHLIKELY;
@@ -17538,6 +19854,27 @@ mips_option_override (void)
       /* Allow compilation to continue further even though invalid output
          will be produced.  */
       target_flags |= MASK_ODD_SPREG;
+    }
+
+  if (!ISA_HAS_COMPACT_BRANCHES && mips_cb == MIPS_CB_ALWAYS)
+    {
+      error ("unsupported combination: %qs%s %s",
+	      mips_arch_info->name, TARGET_MICROMIPS ? " -mmicromips" : "",
+	      "-mcompact-branches=always");
+    }
+  else if (!ISA_HAS_DELAY_SLOTS && mips_cb == MIPS_CB_NEVER)
+    {
+      error ("unsupported combination: %qs%s %s",
+	      mips_arch_info->name, TARGET_MICROMIPS ? " -mmicromips" : "",
+	      "-mcompact-branches=never");
+    }
+
+  /* Require explicit relocs for MIPS R6 onwards.  This enables simplification
+     of the compact branch and jump support through the backend.  */
+  if (!TARGET_EXPLICIT_RELOCS && mips_isa_rev >= 6)
+    {
+      error ("unsupported combination: %qs %s",
+	     mips_arch_info->name, "-mno-explicit-relocs");
     }
 
   /* The effect of -mabicalls isn't defined for the EABI.  */
@@ -17654,6 +19991,11 @@ mips_option_override (void)
       target_flags &= ~MASK_PAIRED_SINGLE_FLOAT;
       TARGET_MIPS3D = 0;
     }
+
+  /* Make sure that when ISA_HAS_MSA is true, TARGET_FLOAT64 and
+     TARGET_HARD_FLOAT_ABI and  both true.  */
+  if (ISA_HAS_MSA && !(TARGET_FLOAT64 && TARGET_HARD_FLOAT_ABI))
+    error ("%<-mmsa%> must be used with %<-mfp64%> and %<-mhard-float%>");
 
   /* Make sure that -mpaired-single is only used on ISAs that support it.
      We must disable it otherwise since it relies on other ISA properties
@@ -17825,6 +20167,8 @@ mips_option_override (void)
 
   if (TARGET_HARD_FLOAT_ABI && TARGET_MIPS5900)
     REAL_MODE_FORMAT (SFmode) = &spu_single_format;
+
+  mips_register_frame_header_opt ();
 }
 
 /* Swap the register information for registers I and I + 1, which
@@ -18024,16 +20368,32 @@ mips_need_noat_wrapper_p (rtx_insn *insn, rtx *opvec, int noperands)
   return false;
 }
 
-/* Implement FINAL_PRESCAN_INSN.  */
+/* Implement FINAL_PRESCAN_INSN.  Mark MIPS16 inline constant pools
+   as data for the purpose of disassembly.  For simplicity embed the
+   pool's initial label number in the local symbol produced so that
+   multiple pools within a single function end up marked with unique
+   symbols.  The label number is carried by the `consttable' insn
+   emitted at the beginning of each pool.  */
 
 void
 mips_final_prescan_insn (rtx_insn *insn, rtx *opvec, int noperands)
 {
+  if (INSN_P (insn)
+      && GET_CODE (PATTERN (insn)) == UNSPEC_VOLATILE
+      && XINT (PATTERN (insn), 1) == UNSPEC_CONSTTABLE)
+    mips_set_text_contents_type (asm_out_file, "__pool_",
+				 XINT (XVECEXP (PATTERN (insn), 0, 0), 0),
+				 FALSE);
+
   if (mips_need_noat_wrapper_p (insn, opvec, noperands))
     mips_push_asm_switch (&mips_noat);
 }
 
-/* Implement TARGET_ASM_FINAL_POSTSCAN_INSN.  */
+/* Implement TARGET_ASM_FINAL_POSTSCAN_INSN.  Reset text marking to
+   code after a MIPS16 inline constant pool.  Like with the beginning
+   of a pool table use the pool's initial label number to keep symbols
+   unique.  The label number is carried by the `consttable_end' insn
+   emitted at the end of each pool.  */
 
 static void
 mips_final_postscan_insn (FILE *file ATTRIBUTE_UNUSED, rtx_insn *insn,
@@ -18041,6 +20401,13 @@ mips_final_postscan_insn (FILE *file ATTRIBUTE_UNUSED, rtx_insn *insn,
 {
   if (mips_need_noat_wrapper_p (insn, opvec, noperands))
     mips_pop_asm_switch (&mips_noat);
+
+  if (INSN_P (insn)
+      && GET_CODE (PATTERN (insn)) == UNSPEC_VOLATILE
+      && XINT (PATTERN (insn), 1) == UNSPEC_CONSTTABLE_END)
+    mips_set_text_contents_type (asm_out_file, "__pend_",
+				 XINT (XVECEXP (PATTERN (insn), 0, 0), 0),
+				 TRUE);
 }
 
 /* Return the function that is used to expand the <u>mulsidi3 pattern.
@@ -18236,6 +20603,66 @@ umips_load_store_pair_p_1 (bool load_p, bool swap_p,
     return false;
 
   if (!UMIPS_12BIT_OFFSET_P (offset1))
+    return false;
+
+  return true;
+}
+
+bool
+mips_load_store_bonding_p (rtx *operands, machine_mode mode, bool load_p)
+{
+  rtx reg1, reg2, mem1, mem2, base1, base2;
+  enum reg_class rc1, rc2;
+  HOST_WIDE_INT offset1, offset2;
+
+  if (load_p)
+    {
+      reg1 = operands[0];
+      reg2 = operands[2];
+      mem1 = operands[1];
+      mem2 = operands[3];
+    }
+  else
+    {
+      reg1 = operands[1];
+      reg2 = operands[3];
+      mem1 = operands[0];
+      mem2 = operands[2];
+    }
+
+  if (mips_address_insns (XEXP (mem1, 0), mode, false) == 0
+      || mips_address_insns (XEXP (mem2, 0), mode, false) == 0)
+    return false;
+
+  mips_split_plus (XEXP (mem1, 0), &base1, &offset1);
+  mips_split_plus (XEXP (mem2, 0), &base2, &offset2);
+
+  /* Base regs do not match.  */
+  if (!REG_P (base1) || !rtx_equal_p (base1, base2))
+    return false;
+
+  /* Either of the loads is clobbering base register.  It is legitimate to bond
+     loads if second load clobbers base register.  However, hardware does not
+     support such bonding.  */
+  if (load_p
+      && (REGNO (reg1) == REGNO (base1)
+	  || (REGNO (reg2) == REGNO (base1))))
+    return false;
+
+  /* Loading in same registers.  */
+  if (load_p
+      && REGNO (reg1) == REGNO (reg2))
+    return false;
+
+  /* The loads/stores are not of same type.  */
+  rc1 = REGNO_REG_CLASS (REGNO (reg1));
+  rc2 = REGNO_REG_CLASS (REGNO (reg2));
+  if (rc1 != rc2
+      && !reg_class_subset_p (rc1, rc2)
+      && !reg_class_subset_p (rc2, rc1))
+    return false;
+
+  if (abs (offset1 - offset2) != GET_MODE_SIZE (mode))
     return false;
 
   return true;
@@ -18499,6 +20926,18 @@ mips_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
 
 #undef OP
 
+  /* If we are using compact branches we don't have delay slots so
+     place the instruction that was in the delay slot before the JRC
+     instruction.  */
+
+  if (TARGET_CB_ALWAYS)
+    {
+      rtx temp;
+      temp = trampoline[i-2];
+      trampoline[i-2] = trampoline[i-1];
+      trampoline[i-1] = temp;
+    }
+
   /* Copy the trampoline code.  Leave any padding uninitialized.  */
   for (j = 0; j < i; j++)
     {
@@ -18573,7 +21012,7 @@ void mips_function_profiler (FILE *file)
 }
 
 /* Implement TARGET_SHIFT_TRUNCATION_MASK.  We want to keep the default
-   behaviour of TARGET_SHIFT_TRUNCATION_MASK for non-vector modes even
+   behavior of TARGET_SHIFT_TRUNCATION_MASK for non-vector modes even
    when TARGET_LOONGSON_VECTORS is true.  */
 
 static unsigned HOST_WIDE_INT
@@ -18590,33 +21029,35 @@ mips_shift_truncation_mask (machine_mode mode)
 static void
 mips_prepare_pch_save (void)
 {
-  /* We are called in a context where the current MIPS16 vs. non-MIPS16
-     setting should be irrelevant.  The question then is: which setting
-     makes most sense at load time?
+  /* We are called in a context where the current compression vs.
+     non-compression setting should be irrelevant.  The question then is:
+     which setting makes most sense at load time?
 
-     The PCH is loaded before the first token is read.  We should never
-     have switched into MIPS16 mode by that point, and thus should not
-     have populated mips16_globals.  Nor can we load the entire contents
-     of mips16_globals from the PCH file, because mips16_globals contains
-     a combination of GGC and non-GGC data.
+     The PCH is loaded before the first token is read.  We should never have
+     switched into a compression mode by that point, and thus should not have
+     populated mips16_globals or micromips_globals.  Nor can we load the
+     entire contents of mips16_globals or micromips_globals from the PCH file,
+     because they contain a combination of GGC and non-GGC data.
 
      There is therefore no point in trying save the GGC part of
-     mips16_globals to the PCH file, or to preserve MIPS16ness across
-     the PCH save and load.  The loading compiler would not have access
-     to the non-GGC parts of mips16_globals (either from the PCH file,
-     or from a copy that the loading compiler generated itself) and would
-     have to call target_reinit anyway.
+     mips16_globals/micromips_globals to the PCH file, or to preserve a
+     compression setting across the PCH save and load.  The loading compiler
+     would not have access to the non-GGC parts of mips16_globals or
+     micromips_globals (either from the PCH file, or from a copy that the
+     loading compiler generated itself) and would have to call target_reinit
+     anyway.
 
-     It therefore seems best to switch back to non-MIPS16 mode at
-     save time, and to ensure that mips16_globals remains null after
-     a PCH load.  */
+     It therefore seems best to switch back to non-MIPS16 mode and
+     non-microMIPS mode to save time, and to ensure that mips16_globals and
+     micromips_globals remain null after a PCH load.  */
   mips_set_compression_mode (0);
   mips16_globals = 0;
+  micromips_globals = 0;
 }
 
 /* Generate or test for an insn that supports a constant permutation.  */
 
-#define MAX_VECT_LEN 8
+#define MAX_VECT_LEN 16
 
 struct expand_vec_perm_d
 {
@@ -18644,7 +21085,7 @@ mips_expand_vselect (rtx target, rtx op0,
 
   x = gen_rtx_PARALLEL (VOIDmode, gen_rtvec_v (nelt, rperm));
   x = gen_rtx_VEC_SELECT (GET_MODE (target), op0, x);
-  x = gen_rtx_SET (VOIDmode, target, x);
+  x = gen_rtx_SET (target, x);
 
   insn = emit_insn (x);
   if (recog_memoized (insn) < 0)
@@ -18765,14 +21206,14 @@ mips_expand_vpc_loongson_pshufh (struct expand_vec_perm_d *d)
       merge = force_reg (V4HImode, merge);
 
       x = gen_rtx_AND (V4HImode, merge, t1);
-      emit_insn (gen_rtx_SET (VOIDmode, t1, x));
+      emit_insn (gen_rtx_SET (t1, x));
 
       x = gen_rtx_NOT (V4HImode, merge);
       x = gen_rtx_AND (V4HImode, x, t0);
-      emit_insn (gen_rtx_SET (VOIDmode, t0, x));
+      emit_insn (gen_rtx_SET (t0, x));
 
       x = gen_rtx_IOR (V4HImode, t0, t1);
-      emit_insn (gen_rtx_SET (VOIDmode, d->target, x));
+      emit_insn (gen_rtx_SET (d->target, x));
     }
 
   return true;
@@ -18820,6 +21261,41 @@ mips_expand_vpc_loongson_bcast (struct expand_vec_perm_d *d)
   return true;
 }
 
+/* Construct (set target (vec_select op0 (parallel selector))) and
+   return true if that's a valid instruction in the active ISA.  */
+
+static bool
+mips_expand_msa_shuffle (struct expand_vec_perm_d *d)
+{
+  rtx x, elts[MAX_VECT_LEN];
+  rtvec v;
+  rtx_insn *insn;
+  unsigned i;
+
+  if (!ISA_HAS_MSA)
+    return false;
+
+  for (i = 0; i < d->nelt; i++)
+    elts[i] = GEN_INT (d->perm[i]);
+
+  v = gen_rtvec_v (d->nelt, elts);
+  x = gen_rtx_PARALLEL (VOIDmode, v);
+
+  if (!mips_const_vector_shuffle_set_p (x, d->vmode))
+    return false;
+
+  x = gen_rtx_VEC_SELECT (d->vmode, d->op0, x);
+  x = gen_rtx_SET (d->target, x);
+
+  insn = emit_insn (x);
+  if (recog_memoized (insn) < 0)
+    {
+      remove_insn (insn);
+      return false;
+    }
+  return true;
+}
+
 static bool
 mips_expand_vec_perm_const_1 (struct expand_vec_perm_d *d)
 {
@@ -18854,6 +21330,8 @@ mips_expand_vec_perm_const_1 (struct expand_vec_perm_d *d)
     return true;
   if (mips_expand_vpc_loongson_bcast (d))
     return true;
+  if (mips_expand_msa_shuffle (d))
+    return true;
   return false;
 }
 
@@ -18878,6 +21356,9 @@ mips_expand_vec_perm_const (rtx operands[4])
   d.nelt = nelt = GET_MODE_NUNITS (d.vmode);
   d.testing_p = false;
 
+  /* This is overly conservative, but ensures we don't get an
+     uninitialized warning on ORIG_PERM.  */
+  memset (orig_perm, 0, MAX_VECT_LEN);
   for (i = which = 0; i < nelt; ++i)
     {
       rtx e = XVECEXP (sel, 0, i);
@@ -18932,6 +21413,17 @@ mips_expand_vec_perm_const (rtx operands[4])
   return ok;
 }
 
+/* Implement TARGET_SCHED_REASSOCIATION_WIDTH.  */
+
+static int
+mips_sched_reassociation_width (unsigned int opc ATTRIBUTE_UNUSED,
+				machine_mode mode)
+{
+  if (MSA_SUPPORTED_MODE_P (mode))
+    return 2;
+  return 1;
+}
+
 /* Implement TARGET_VECTORIZE_VEC_PERM_CONST_OK.  */
 
 static bool
@@ -18982,8 +21474,61 @@ mips_expand_vec_unpack (rtx operands[2], bool unsigned_p, bool high_p)
 {
   machine_mode imode = GET_MODE (operands[1]);
   rtx (*unpack) (rtx, rtx, rtx);
-  rtx (*cmpgt) (rtx, rtx, rtx);
+  rtx (*cmpFunc) (rtx, rtx, rtx);
   rtx tmp, dest, zero;
+
+  if (ISA_HAS_MSA)
+    {
+      switch (imode)
+	{
+	case V4SImode:
+	  if (BYTES_BIG_ENDIAN != high_p)
+	    unpack = gen_msa_ilvl_w;
+	  else
+	    unpack = gen_msa_ilvr_w;
+
+	  cmpFunc = gen_msa_clt_s_w;
+	  break;
+
+	case V8HImode:
+	  if (BYTES_BIG_ENDIAN != high_p)
+	    unpack = gen_msa_ilvl_h;
+	  else
+	    unpack = gen_msa_ilvr_h;
+
+	  cmpFunc = gen_msa_clt_s_h;
+	  break;
+
+	case V16QImode:
+	  if (BYTES_BIG_ENDIAN != high_p)
+	    unpack = gen_msa_ilvl_b;
+	  else
+	    unpack = gen_msa_ilvr_b;
+
+	  cmpFunc = gen_msa_clt_s_b;
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	  break;
+	}
+
+      if (!unsigned_p)
+	{
+	  /* Extract sign extention for each element comparing each element
+	     with immediate zero.  */
+	  tmp = gen_reg_rtx (imode);
+	  emit_insn (cmpFunc (tmp, operands[1], CONST0_RTX (imode)));
+	}
+      else
+	tmp = force_reg (imode, CONST0_RTX (imode));
+
+      dest = gen_reg_rtx (imode);
+
+      emit_insn (unpack (dest, operands[1], tmp));
+      emit_move_insn (operands[0], gen_lowpart (GET_MODE (operands[0]), dest));
+      return;
+    }
 
   switch (imode)
     {
@@ -18992,14 +21537,14 @@ mips_expand_vec_unpack (rtx operands[2], bool unsigned_p, bool high_p)
 	unpack = gen_loongson_punpckhbh;
       else
 	unpack = gen_loongson_punpcklbh;
-      cmpgt = gen_loongson_pcmpgtb;
+      cmpFunc = gen_loongson_pcmpgtb;
       break;
     case V4HImode:
       if (high_p)
 	unpack = gen_loongson_punpckhhw;
       else
 	unpack = gen_loongson_punpcklhw;
-      cmpgt = gen_loongson_pcmpgth;
+      cmpFunc = gen_loongson_pcmpgth;
       break;
     default:
       gcc_unreachable ();
@@ -19011,13 +21556,35 @@ mips_expand_vec_unpack (rtx operands[2], bool unsigned_p, bool high_p)
   else
     {
       tmp = gen_reg_rtx (imode);
-      emit_insn (cmpgt (tmp, zero, operands[1]));
+      emit_insn (cmpFunc (tmp, zero, operands[1]));
     }
 
   dest = gen_reg_rtx (imode);
   emit_insn (unpack (dest, operands[1], tmp));
 
   emit_move_insn (operands[0], gen_lowpart (GET_MODE (operands[0]), dest));
+}
+
+/* Construct and return PARALLEL RTX with CONST_INTs for HIGH (high_p == TRUE)
+   or LOW (high_p == FALSE) half of a vector for mode MODE.  */
+
+rtx
+mips_msa_vec_parallel_const_half (machine_mode mode, bool high_p)
+{
+  int nunits = GET_MODE_NUNITS (mode);
+  rtvec v = rtvec_alloc (nunits / 2);
+  int base;
+  int i;
+
+  if (BYTES_BIG_ENDIAN)
+    base = high_p ? 0 : nunits / 2;
+  else
+    base = high_p ? nunits / 2 : 0;
+
+  for (i = 0; i < nunits / 2; i++)
+    RTVEC_ELT (v, i) = GEN_INT (base + i);
+
+  return gen_rtx_PARALLEL (VOIDmode, v);
 }
 
 /* A subroutine of mips_expand_vec_init, match constant vector elements.  */
@@ -19067,6 +21634,42 @@ mips_expand_vi_broadcast (machine_mode vmode, rtx target, rtx elt)
   gcc_assert (ok);
 }
 
+/* Return a const_int vector of VAL with mode MODE.  */
+
+rtx
+mips_gen_const_int_vector (machine_mode mode, HOST_WIDE_INT val)
+{
+  int nunits = GET_MODE_NUNITS (mode);
+  rtvec v = rtvec_alloc (nunits);
+  int i;
+
+  for (i = 0; i < nunits; i++)
+    RTVEC_ELT (v, i) = gen_int_mode (val, GET_MODE_INNER (mode));
+
+  return gen_rtx_CONST_VECTOR (mode, v);
+}
+
+/* Return a vector of repeated 4-element sets generated from
+   immediate VAL in mode MODE.  */
+
+static rtx
+mips_gen_const_int_vector_shuffle (machine_mode mode, int val)
+{
+  int nunits = GET_MODE_NUNITS (mode);
+  int nsets = nunits / 4;
+  rtx elts[MAX_VECT_LEN];
+  int set = 0;
+  int i, j;
+
+  /* Generate a const_int vector replicating the same 4-element set
+     from an immediate.  */
+  for (j = 0; j < nsets; j++, set = 4 * j)
+    for (i = 0; i < 4; i++)
+      elts[set + i] = GEN_INT (set + ((val >> (2 * i)) & 0x3));
+
+  return gen_rtx_PARALLEL (VOIDmode, gen_rtvec_v (nunits, elts));
+}
+
 /* A subroutine of mips_expand_vec_init, replacing all of the non-constant
    elements of VALS with zeros, copy the constant vector to TARGET.  */
 
@@ -19079,8 +21682,9 @@ mips_expand_vi_constant (machine_mode vmode, unsigned nelt,
 
   for (i = 0; i < nelt; ++i)
     {
-      if (!mips_constant_elt_p (RTVEC_ELT (vec, i)))
-	RTVEC_ELT (vec, i) = const0_rtx;
+      rtx elem = RTVEC_ELT (vec, i);
+      if (!mips_constant_elt_p (elem))
+	RTVEC_ELT (vec, i) = CONST0_RTX (GET_MODE (elem));
     }
 
   emit_move_insn (target, gen_rtx_CONST_VECTOR (vmode, vec));
@@ -19141,6 +21745,107 @@ mips_expand_vector_init (rtx target, rtx vals)
 	all_same = false;
     }
 
+  if (ISA_HAS_MSA)
+    {
+      if (all_same)
+	{
+	  rtx same = XVECEXP (vals, 0, 0);
+	  rtx temp, temp2;
+
+	  if (CONST_INT_P (same) && nvar == 0
+	      && mips_signed_immediate_p (INTVAL (same), 10, 0))
+	    {
+	      switch (vmode)
+		{
+		case V16QImode:
+		case V8HImode:
+		case V4SImode:
+		case V2DImode:
+		  temp = gen_rtx_CONST_VECTOR (vmode, XVEC (vals, 0));
+		  emit_move_insn (target, temp);
+		  return;
+
+		default:
+		  gcc_unreachable ();
+		}
+	    }
+	  temp = gen_reg_rtx (imode);
+	  if (imode == GET_MODE (same))
+	    temp2 = same;
+	  else if (GET_MODE_SIZE (imode) >= UNITS_PER_WORD)
+	    temp2 = simplify_gen_subreg (imode, same, GET_MODE (same), 0);
+	  else
+	    temp2 = lowpart_subreg (imode, same, GET_MODE (same));
+	  emit_move_insn (temp, temp2);
+
+	  switch (vmode)
+	    {
+	    case V16QImode:
+	    case V8HImode:
+	    case V4SImode:
+	    case V2DImode:
+	      mips_emit_move (target, gen_rtx_VEC_DUPLICATE (vmode, temp));
+	      break;
+
+	    case V4SFmode:
+	      emit_insn (gen_msa_splati_w_f_scalar (target, temp));
+	      break;
+
+	    case V2DFmode:
+	      emit_insn (gen_msa_splati_d_f_scalar (target, temp));
+	      break;
+
+	    default:
+	      gcc_unreachable ();
+	    }
+	}
+      else
+	{
+	  rtvec vec = shallow_copy_rtvec (XVEC (vals, 0));
+
+	  for (i = 0; i < nelt; ++i)
+	    RTVEC_ELT (vec, i) = CONST0_RTX (imode);
+
+	  emit_move_insn (target, gen_rtx_CONST_VECTOR (vmode, vec));
+
+	  for (i = 0; i < nelt; ++i)
+	    {
+	      rtx temp = gen_reg_rtx (imode);
+	      emit_move_insn (temp, XVECEXP (vals, 0, i));
+	      switch (vmode)
+		{
+		case V16QImode:
+		  emit_insn (gen_vec_setv16qi (target, temp, GEN_INT (i)));
+		  break;
+
+		case V8HImode:
+		  emit_insn (gen_vec_setv8hi (target, temp, GEN_INT (i)));
+		  break;
+
+		case V4SImode:
+		  emit_insn (gen_vec_setv4si (target, temp, GEN_INT (i)));
+		  break;
+
+		case V2DImode:
+		  emit_insn (gen_vec_setv2di (target, temp, GEN_INT (i)));
+		  break;
+
+		case V4SFmode:
+		  emit_insn (gen_vec_setv4sf (target, temp, GEN_INT (i)));
+		  break;
+
+		case V2DFmode:
+		  emit_insn (gen_vec_setv2df (target, temp, GEN_INT (i)));
+		  break;
+
+		default:
+		  gcc_unreachable ();
+		}
+	    }
+	}
+      return;
+    }
+
   /* Load constants from the pool, or whatever's handy.  */
   if (nvar == 0)
     {
@@ -19154,7 +21859,7 @@ mips_expand_vector_init (rtx target, rtx vals)
       rtx op0 = force_reg (imode, XVECEXP (vals, 0, 0));
       rtx op1 = force_reg (imode, XVECEXP (vals, 0, 1));
       x = gen_rtx_VEC_CONCAT (vmode, op0, op1);
-      emit_insn (gen_rtx_SET (VOIDmode, target, x));
+      emit_insn (gen_rtx_SET (target, x));
       return;
     }
 
@@ -19266,14 +21971,14 @@ mips_expand_vec_minmax (rtx target, rtx op0, rtx op1,
   emit_insn (cmp (tc, op0, op1));
 
   x = gen_rtx_AND (vmode, tc, (min_p ? op1 : op0));
-  emit_insn (gen_rtx_SET (VOIDmode, t0, x));
+  emit_insn (gen_rtx_SET (t0, x));
 
   x = gen_rtx_NOT (vmode, tc);
   x = gen_rtx_AND (vmode, x, (min_p ? op0 : op1));
-  emit_insn (gen_rtx_SET (VOIDmode, t1, x));
+  emit_insn (gen_rtx_SET (t1, x));
 
   x = gen_rtx_IOR (vmode, t0, t1);
-  emit_insn (gen_rtx_SET (VOIDmode, target, x));
+  emit_insn (gen_rtx_SET (target, x));
 }
 
 /* Implement HARD_REGNO_CALLER_SAVE_MODE.  */
@@ -19289,6 +21994,169 @@ mips_hard_regno_caller_save_mode (unsigned int regno,
     return choose_hard_reg_mode (regno, nregs, false);
   else
     return mode;
+}
+
+/* Generate RTL for comparing CMP_OP0 and CMP_OP1 using condition COND and
+   store the result -1 or 0 in DEST.  */
+
+static void
+mips_expand_msa_cmp (rtx dest, enum rtx_code cond, rtx op0, rtx op1)
+{
+  machine_mode cmp_mode = GET_MODE (op0);
+  int unspec = -1;
+  bool negate = false;
+
+  switch (cmp_mode)
+    {
+    case V16QImode:
+    case V8HImode:
+    case V4SImode:
+    case V2DImode:
+      switch (cond)
+	{
+	case NE:
+	  cond = reverse_condition (cond);
+	  negate = true;
+	  break;
+	case EQ:
+	case LT:
+	case LE:
+	case LTU:
+	case LEU:
+	  break;
+	case GE:
+	case GT:
+	case GEU:
+	case GTU:
+	  std::swap (op0, op1);
+	  cond = swap_condition (cond);
+	  break;
+	default:
+	  gcc_unreachable ();
+	}
+      mips_emit_binary (cond, dest, op0, op1);
+      if (negate)
+	emit_move_insn (dest, gen_rtx_NOT (GET_MODE (dest), dest));
+      break;
+
+    case V4SFmode:
+    case V2DFmode:
+      switch (cond)
+	{
+	case UNORDERED:
+	case ORDERED:
+	case EQ:
+	case NE:
+	case UNEQ:
+	case UNLE:
+	case UNLT:
+	  break;
+	case LTGT: cond = NE; break;
+	case UNGE: cond = UNLE; std::swap (op0, op1); break;
+	case UNGT: cond = UNLT; std::swap (op0, op1); break;
+	case LE: unspec = UNSPEC_MSA_FSLE; break;
+	case LT: unspec = UNSPEC_MSA_FSLT; break;
+	case GE: unspec = UNSPEC_MSA_FSLE; std::swap (op0, op1); break;
+	case GT: unspec = UNSPEC_MSA_FSLT; std::swap (op0, op1); break;
+	default:
+	  gcc_unreachable ();
+	}
+      if (unspec < 0)
+	mips_emit_binary (cond, dest, op0, op1);
+      else
+	{
+	  rtx x = gen_rtx_UNSPEC (GET_MODE (dest),
+				  gen_rtvec (2, op0, op1), unspec);
+	  emit_insn (gen_rtx_SET (dest, x));
+	}
+      break;
+
+    default:
+      gcc_unreachable ();
+      break;
+    }
+}
+
+/* Expand VEC_COND_EXPR, where:
+   MODE is mode of the result
+   VIMODE equivalent integer mode
+   OPERANDS operands of VEC_COND_EXPR.  */
+
+void
+mips_expand_vec_cond_expr (machine_mode mode, machine_mode vimode,
+			   rtx *operands)
+{
+  rtx cond = operands[3];
+  rtx cmp_op0 = operands[4];
+  rtx cmp_op1 = operands[5];
+  rtx cmp_res = gen_reg_rtx (vimode);
+
+  mips_expand_msa_cmp (cmp_res, GET_CODE (cond), cmp_op0, cmp_op1);
+
+  /* We handle the following cases:
+     1) r = a CMP b ? -1 : 0
+     2) r = a CMP b ? -1 : v
+     3) r = a CMP b ?  v : 0
+     4) r = a CMP b ? v1 : v2  */
+
+  /* Case (1) above.  We only move the results.  */
+  if (operands[1] == CONSTM1_RTX (vimode)
+      && operands[2] == CONST0_RTX (vimode))
+    emit_move_insn (operands[0], cmp_res);
+  else
+    {
+      rtx src1 = gen_reg_rtx (vimode);
+      rtx src2 = gen_reg_rtx (vimode);
+      rtx mask = gen_reg_rtx (vimode);
+      rtx bsel;
+
+      /* Move the vector result to use it as a mask.  */
+      emit_move_insn (mask, cmp_res);
+
+      if (register_operand (operands[1], mode))
+	{
+	  rtx xop1 = operands[1];
+	  if (mode != vimode)
+	    {
+	      xop1 = gen_reg_rtx (vimode);
+	      emit_move_insn (xop1, gen_rtx_SUBREG (vimode, operands[1], 0));
+	    }
+	  emit_move_insn (src1, xop1);
+	}
+      else
+	{
+	  gcc_assert (operands[1] == CONSTM1_RTX (vimode));
+	  /* Case (2) if the below doesn't move the mask to src2.  */
+	  emit_move_insn (src1, mask);
+	}
+
+      if (register_operand (operands[2], mode))
+	{
+	  rtx xop2 = operands[2];
+	  if (mode != vimode)
+	    {
+	      xop2 = gen_reg_rtx (vimode);
+	      emit_move_insn (xop2, gen_rtx_SUBREG (vimode, operands[2], 0));
+	    }
+	  emit_move_insn (src2, xop2);
+	}
+      else
+	{
+	  gcc_assert (operands[2] == CONST0_RTX (mode));
+	  /* Case (3) if the above didn't move the mask to src1.  */
+	  emit_move_insn (src2, mask);
+	}
+
+      /* We deal with case (4) if the mask wasn't moved to either src1 or src2.
+	 In any case, we eventually do vector mask-based copy.  */
+      bsel = gen_rtx_IOR (vimode,
+			  gen_rtx_AND (vimode,
+				       gen_rtx_NOT (vimode, mask), src2),
+			  gen_rtx_AND (vimode, mask, src1));
+      /* The result is placed back to a register with the mask.  */
+      emit_insn (gen_rtx_SET (mask, bsel));
+      emit_move_insn (operands[0], gen_rtx_SUBREG (mode, mask, 0));
+    }
 }
 
 /* Implement TARGET_CASE_VALUES_THRESHOLD.  */
@@ -19310,9 +22178,9 @@ mips_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update)
 {
   if (!TARGET_HARD_FLOAT_ABI)
     return;
-  tree exceptions_var = create_tmp_var (MIPS_ATYPE_USI);
-  tree fcsr_orig_var = create_tmp_var (MIPS_ATYPE_USI);
-  tree fcsr_mod_var = create_tmp_var (MIPS_ATYPE_USI);
+  tree exceptions_var = create_tmp_var_raw (MIPS_ATYPE_USI);
+  tree fcsr_orig_var = create_tmp_var_raw (MIPS_ATYPE_USI);
+  tree fcsr_mod_var = create_tmp_var_raw (MIPS_ATYPE_USI);
   tree get_fcsr = mips_builtin_decls[MIPS_GET_FCSR];
   tree set_fcsr = mips_builtin_decls[MIPS_SET_FCSR];
   tree get_fcsr_hold_call = build_call_expr (get_fcsr, 0);
@@ -19363,6 +22231,60 @@ static bool
 mips_lra_p (void)
 {
   return mips_lra_flag;
+}
+
+/* Implement TARGET_IRA_CHANGE_PSEUDO_ALLOCNO_CLASS.  */
+
+static reg_class_t
+mips_ira_change_pseudo_allocno_class (int regno, reg_class_t allocno_class,
+				      reg_class_t best_class ATTRIBUTE_UNUSED)
+{
+  /* LRA will allocate an FPR for an integer mode pseudo instead of spilling
+     to memory if an FPR is present in the allocno class.  It is rare that
+     we actually need to place an integer mode value in an FPR so where
+     possible limit the allocation to GR_REGS.  This will slightly pessimize
+     code that involves integer to/from float conversions as these will have
+     to reload into FPRs in LRA.  Such reloads are sometimes eliminated and
+     sometimes only partially eliminated.  We choose to take this penalty
+     in order to eliminate usage of FPRs in code that does not use floating
+     point data.
+
+     This change has a similar effect to increasing the cost of FPR->GPR
+     register moves for integer modes so that they are higher than the cost
+     of memory but changing the allocno class is more reliable.
+
+     This is also similar to forbidding integer mode values in FPRs entirely
+     but this would lead to an inconsistency in the integer to/from float
+     instructions that say integer mode values must be placed in FPRs.  */
+  if (INTEGRAL_MODE_P (PSEUDO_REGNO_MODE (regno)) && allocno_class == ALL_REGS)
+    return GR_REGS;
+  return allocno_class;
+}
+
+/* Implement TARGET_PROMOTE_FUNCTION_MODE */
+
+/* This function is equivalent to default_promote_function_mode_always_promote
+   except that it returns a promoted mode even if type is NULL_TREE.  This is
+   needed by libcalls which have no type (only a mode) such as fixed conversion
+   routines that take a signed or unsigned char/short argument and convert it
+   to a fixed type.  */
+
+static machine_mode
+mips_promote_function_mode (const_tree type ATTRIBUTE_UNUSED,
+                            machine_mode mode,
+                            int *punsignedp ATTRIBUTE_UNUSED,
+                            const_tree fntype ATTRIBUTE_UNUSED,
+                            int for_return ATTRIBUTE_UNUSED)
+{
+  int unsignedp;
+
+  if (type != NULL_TREE)
+    return promote_mode (type, mode, punsignedp);
+
+  unsignedp = *punsignedp;
+  PROMOTE_MODE (mode, unsignedp, type);
+  *punsignedp = unsignedp;
+  return mode;
 }
 
 /* Initialize the GCC target structure.  */
@@ -19436,6 +22358,9 @@ mips_lra_p (void)
 #undef TARGET_ADDRESS_COST
 #define TARGET_ADDRESS_COST mips_address_cost
 
+#undef TARGET_NO_SPECULATION_IN_DELAY_SLOTS_P
+#define TARGET_NO_SPECULATION_IN_DELAY_SLOTS_P mips_no_speculation_in_delay_slots_p
+
 #undef TARGET_IN_SMALL_DATA_P
 #define TARGET_IN_SMALL_DATA_P mips_in_small_data_p
 
@@ -19465,10 +22390,7 @@ mips_lra_p (void)
 #define TARGET_GIMPLIFY_VA_ARG_EXPR mips_gimplify_va_arg_expr
 
 #undef  TARGET_PROMOTE_FUNCTION_MODE
-#define TARGET_PROMOTE_FUNCTION_MODE default_promote_function_mode_always_promote
-#undef TARGET_PROMOTE_PROTOTYPES
-#define TARGET_PROMOTE_PROTOTYPES hook_bool_const_tree_true
-
+#define TARGET_PROMOTE_FUNCTION_MODE mips_promote_function_mode
 #undef TARGET_FUNCTION_VALUE
 #define TARGET_FUNCTION_VALUE mips_function_value
 #undef TARGET_LIBCALL_VALUE
@@ -19518,6 +22440,9 @@ mips_lra_p (void)
 #undef TARGET_MODE_REP_EXTENDED
 #define TARGET_MODE_REP_EXTENDED mips_mode_rep_extended
 
+#undef TARGET_VECTORIZE_BUILTIN_VECTORIZED_FUNCTION
+#define TARGET_VECTORIZE_BUILTIN_VECTORIZED_FUNCTION \
+  mips_builtin_vectorized_function
 #undef TARGET_VECTOR_MODE_SUPPORTED_P
 #define TARGET_VECTOR_MODE_SUPPORTED_P mips_vector_mode_supported_p
 
@@ -19526,6 +22451,9 @@ mips_lra_p (void)
 
 #undef TARGET_VECTORIZE_PREFERRED_SIMD_MODE
 #define TARGET_VECTORIZE_PREFERRED_SIMD_MODE mips_preferred_simd_mode
+#undef TARGET_VECTORIZE_AUTOVECTORIZE_VECTOR_SIZES
+#define TARGET_VECTORIZE_AUTOVECTORIZE_VECTOR_SIZES \
+  mips_autovectorize_vector_sizes
 
 #undef TARGET_INIT_BUILTINS
 #define TARGET_INIT_BUILTINS mips_init_builtins
@@ -19603,6 +22531,9 @@ mips_lra_p (void)
 #undef TARGET_VECTORIZE_VEC_PERM_CONST_OK
 #define TARGET_VECTORIZE_VEC_PERM_CONST_OK mips_vectorize_vec_perm_const_ok
 
+#undef TARGET_SCHED_REASSOCIATION_WIDTH
+#define TARGET_SCHED_REASSOCIATION_WIDTH mips_sched_reassociation_width
+
 #undef TARGET_CASE_VALUES_THRESHOLD
 #define TARGET_CASE_VALUES_THRESHOLD mips_case_values_threshold
 
@@ -19620,6 +22551,15 @@ mips_lra_p (void)
 #define TARGET_SPILL_CLASS mips_spill_class
 #undef TARGET_LRA_P
 #define TARGET_LRA_P mips_lra_p
+#undef TARGET_IRA_CHANGE_PSEUDO_ALLOCNO_CLASS
+#define TARGET_IRA_CHANGE_PSEUDO_ALLOCNO_CLASS mips_ira_change_pseudo_allocno_class
+
+#undef TARGET_HARD_REGNO_SCRATCH_OK
+#define TARGET_HARD_REGNO_SCRATCH_OK mips_hard_regno_scratch_ok
+
+/* The architecture reserves bit 0 for MIPS16 so use bit 1 for descriptors.  */
+#undef TARGET_CUSTOM_FUNCTION_DESCRIPTORS
+#define TARGET_CUSTOM_FUNCTION_DESCRIPTORS 2
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

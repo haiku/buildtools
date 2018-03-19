@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -35,7 +35,9 @@ with Interfaces.C;
 
 with System.OS_Primitives;
 
-package body Ada.Calendar is
+package body Ada.Calendar with
+  SPARK_Mode => Off
+is
 
    --------------------------
    -- Implementation Notes --
@@ -63,7 +65,7 @@ package body Ada.Calendar is
    --        procedure Split (9 or 10 parameters) -+
    --     end Ada.Calendar.Formatting
 
-   --  The behaviour of the interfacing routines is controlled via various
+   --  The behavior of the interfacing routines is controlled via various
    --  flags. All new Ada 2005 types from children of Ada.Calendar are
    --  emulated by a similar type. For instance, type Day_Number is replaced
    --  by Integer in various routines. One ramification of this model is that

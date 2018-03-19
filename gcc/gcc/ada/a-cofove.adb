@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2010-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 2010-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -33,7 +33,6 @@ with System; use type System.Address;
 package body Ada.Containers.Formal_Vectors with
   SPARK_Mode => Off
 is
-   pragma Annotate (CodePeer, Skip_Analysis);
 
    Growth_Factor : constant := 2;
    --  When growing a container, multiply current capacity by this. Doubling
@@ -96,7 +95,7 @@ is
 
    procedure Append (Container : in out Vector; New_Item : Vector) is
    begin
-      for X in First_Index (New_Item) .. Last_Index (New_Item)  loop
+      for X in First_Index (New_Item) .. Last_Index (New_Item) loop
          Append (Container, Element (New_Item, X));
       end loop;
    end Append;
@@ -120,7 +119,7 @@ is
          raise Constraint_Error with "vector is already at its maximum length";
       end if;
 
-      --  TODO: should check whether length > max capacity (cnt_t'last)  ???
+      --  TODO: should check whether length > max capacity (cnt_t'last) ???
 
       Container.Last := Container.Last + 1;
       Elems (Container) (Length (Container)) := New_Item;
@@ -355,7 +354,7 @@ is
    -- Generic_Sorting --
    ---------------------
 
-   package body Generic_Sorting is
+   package body Generic_Sorting with SPARK_Mode => Off is
 
       ---------------
       -- Is_Sorted --

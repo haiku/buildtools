@@ -1,5 +1,5 @@
 /* Process machine description and calculate constant conditions.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -31,7 +31,6 @@
 #include "tm.h"
 #include "rtl.h"
 #include "errors.h"
-#include "hashtab.h"
 #include "read-md.h"
 #include "gensupport.h"
 
@@ -52,6 +51,7 @@ write_header (void)
    machine description file.  */\n\
 \n\
 #include \"bconfig.h\"\n\
+#define INCLUDE_STRING\n\
 #include \"system.h\"\n\
 \n\
 /* It is necessary, but not entirely safe, to include the headers below\n\
@@ -60,7 +60,8 @@ write_header (void)
 #if GCC_VERSION >= 3001\n\
 \n\
 /* Do not allow checking to confuse the issue.  */\n\
-#undef ENABLE_CHECKING\n\
+#undef CHECKING_P\n\
+#define CHECKING_P 0\n\
 #undef ENABLE_TREE_CHECKING\n\
 #undef ENABLE_RTL_CHECKING\n\
 #undef ENABLE_RTL_FLAG_CHECKING\n\
@@ -70,13 +71,12 @@ write_header (void)
 #include \"coretypes.h\"\n\
 #include \"tm.h\"\n\
 #include \"insn-constants.h\"\n\
-#include \"ggc.h\"\n\
 #include \"rtl.h\"\n\
+#include \"memmodel.h\"\n\
 #include \"tm_p.h\"\n\
-#include \"hashtab.h\"\n\
-#include \"hash-set.h\"\n\
 #include \"hard-reg-set.h\"\n\
 #include \"function.h\"\n\
+#include \"emit-rtl.h\"\n\
 \n\
 /* Fake - insn-config.h doesn't exist yet.  */\n\
 #define MAX_RECOG_OPERANDS 10\n\
@@ -90,6 +90,8 @@ write_header (void)
 #include \"hard-reg-set.h\"\n\
 #include \"predict.h\"\n\
 #include \"basic-block.h\"\n\
+#include \"bitmap.h\"\n\
+#include \"df.h\"\n\
 #include \"resource.h\"\n\
 #include \"diagnostic-core.h\"\n\
 #include \"reload.h\"\n\
@@ -122,7 +124,7 @@ write_one_condition (void **slot, void * ARG_UNUSED (dummy))
   const struct c_test *test = * (const struct c_test **) slot;
   const char *p;
 
-  print_md_ptr_loc (test->expr);
+  rtx_reader_ptr->print_md_ptr_loc (test->expr);
   fputs ("  { \"", stdout);
   for (p = test->expr; *p; p++)
     {
@@ -137,9 +139,9 @@ write_one_condition (void **slot, void * ARG_UNUSED (dummy))
     }
 
   fputs ("\",\n    __builtin_constant_p ", stdout);
-  print_c_condition (test->expr);
+  rtx_reader_ptr->print_c_condition (test->expr);
   fputs ("\n    ? (int) ", stdout);
-  print_c_condition (test->expr);
+  rtx_reader_ptr->print_c_condition (test->expr);
   fputs ("\n    : -1 },\n", stdout);
   return 1;
 }
@@ -211,44 +213,30 @@ write_writer (void)
 }
 
 int
-main (int argc, char **argv)
+main (int argc, const char **argv)
 {
-  rtx desc;
-  int pattern_lineno; /* not used */
-  int code;
-
   progname = "genconditions";
 
   if (!init_rtx_reader_args (argc, argv))
     return (FATAL_EXIT_CODE);
 
   /* Read the machine description.  */
-  while (1)
+  md_rtx_info info;
+  while (read_md_rtx (&info))
     {
-      desc = read_md_rtx (&pattern_lineno, &code);
-      if (desc == NULL)
-	break;
-
-      /* N.B. define_insn_and_split, define_cond_exec are handled
-	 entirely within read_md_rtx; we never see them.  */
-      switch (GET_CODE (desc))
+      rtx def = info.def;
+      add_c_test (get_c_test (def), -1);
+      switch (GET_CODE (def))
 	{
-	default:
-	  break;
-
 	case DEFINE_INSN:
 	case DEFINE_EXPAND:
-	  add_c_test (XSTR (desc, 2), -1);
 	  /* except.h needs to know whether there is an eh_return
 	     pattern in the machine description.  */
-	  if (!strcmp (XSTR (desc, 0), "eh_return"))
+	  if (!strcmp (XSTR (def, 0), "eh_return"))
 	    saw_eh_return = 1;
 	  break;
 
-	case DEFINE_SPLIT:
-	case DEFINE_PEEPHOLE:
-	case DEFINE_PEEPHOLE2:
-	  add_c_test (XSTR (desc, 1), -1);
+	default:
 	  break;
 	}
     }

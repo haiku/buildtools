@@ -1,7 +1,11 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -fdump-tree-dom1-details" } */
-/* { dg-final { scan-tree-dump-times "FSM" 19 "dom1" } } */
-/* { dg-final { cleanup-tree-dump "dom1" } } */
+/* { dg-options "-O2 -fdump-tree-thread1-stats -fdump-tree-thread2-stats -fdump-tree-dom2-stats -fdump-tree-thread3-stats -fdump-tree-dom3-stats -fdump-tree-vrp2-stats -fno-guess-branch-probability" } */
+/* { dg-final { scan-tree-dump "Jumps threaded: 16"  "thread1" } } */
+/* { dg-final { scan-tree-dump "Jumps threaded: 9" "thread2" } } */
+/* { dg-final { scan-tree-dump "Jumps threaded: 3" "thread3" } } */
+/* { dg-final { scan-tree-dump-not "Jumps threaded"  "dom2" } } */
+/* { dg-final { scan-tree-dump-not "Jumps threaded"  "dom3" } } */
+/* { dg-final { scan-tree-dump-not "Jumps threaded"  "vrp2" } } */
 
 enum STATE {
   S0=0,

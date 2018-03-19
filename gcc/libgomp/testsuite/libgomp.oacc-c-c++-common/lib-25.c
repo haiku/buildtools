@@ -1,5 +1,8 @@
-/* { dg-do run } */
+/* Exercise acc_create and acc_delete on nvidia targets.  */
 
+/* { dg-do run { target openacc_nvidia_accel_selected } } */
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <openacc.h>
 
@@ -16,6 +19,7 @@ main (int argc, char **argv)
   if (!d)
     abort ();
 
+  fprintf (stderr, "CheCKpOInT\n");
   d = acc_create (h, N);
   if (!d)
     abort ();
@@ -27,4 +31,6 @@ main (int argc, char **argv)
   return 0;
 }
 
-/* { dg-shouldfail "libgomp: \[\h+,256\] already mapped to \[\h+,256\]" } */
+/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
+/* { dg-output "\\\[\[0-9a-fA-FxX\]+,\\\+256\\\] already mapped to \\\[\[0-9a-fA-FxX\]+,\\\+256\\\]" } */
+/* { dg-shouldfail "" } */

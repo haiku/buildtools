@@ -1,5 +1,5 @@
 # Makefile for gotools
-#   Copyright 2015 Free Software Foundation, Inc.
+#   Copyright (C) 2015-2016 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ LIBGODEP = $(libgodir)/libgo.la
 
 if NATIVE
 # Use the compiler we just built.
-GOCOMPILER = $(GOC_FOR_TARGET)
+GOCOMPILER = $(GOC_FOR_TARGET) $(XGCC_FLAGS_FOR_TARGET)
 else
 GOCOMPILER = $(GOC)
 endif
@@ -44,10 +44,13 @@ GOLINK = $(GOCOMPILER) $(GOCFLAGS) $(AM_GOCFLAGS) $(LDFLAGS) $(AM_LDFLAGS) -o $@
 cmdsrcdir = $(srcdir)/../libgo/go/cmd
 
 go_cmd_go_files = \
+	$(cmdsrcdir)/go/alldocs.go \
+	$(cmdsrcdir)/go/bug.go \
 	$(cmdsrcdir)/go/build.go \
 	$(cmdsrcdir)/go/clean.go \
 	$(cmdsrcdir)/go/context.go \
 	$(cmdsrcdir)/go/discovery.go \
+	$(cmdsrcdir)/go/doc.go \
 	$(cmdsrcdir)/go/env.go \
 	$(cmdsrcdir)/go/fix.go \
 	$(cmdsrcdir)/go/fmt.go \
@@ -58,6 +61,7 @@ go_cmd_go_files = \
 	$(cmdsrcdir)/go/http.go \
 	$(cmdsrcdir)/go/list.go \
 	$(cmdsrcdir)/go/main.go \
+	$(cmdsrcdir)/go/note.go \
 	$(cmdsrcdir)/go/pkg.go \
 	$(cmdsrcdir)/go/run.go \
 	$(cmdsrcdir)/go/signal.go \
@@ -73,6 +77,7 @@ go_cmd_go_files = \
 go_cmd_gofmt_files = \
 	$(cmdsrcdir)/gofmt/doc.go \
 	$(cmdsrcdir)/gofmt/gofmt.go \
+	$(cmdsrcdir)/gofmt/internal.go \
 	$(cmdsrcdir)/gofmt/rewrite.go \
 	$(cmdsrcdir)/gofmt/simplify.go
 
@@ -95,6 +100,7 @@ s-zdefaultcc: Makefile
 	echo 'const defaultGCCGO = "$(bindir)/$(GCCGO_INSTALL_NAME)"' >> zdefaultcc.go.tmp
 	echo 'const defaultCC = "$(bindir)/$(GCC_INSTALL_NAME)"' >> zdefaultcc.go.tmp
 	echo 'const defaultCXX = "$(bindir)/$(GXX_INSTALL_NAME)"' >> zdefaultcc.go.tmp
+	echo 'const defaultPkgConfig = "pkg-config"' >> zdefaultcc.go.tmp
 	$(SHELL) $(srcdir)/../move-if-change zdefaultcc.go.tmp zdefaultcc.go
 	$(STAMP) $@ 
 

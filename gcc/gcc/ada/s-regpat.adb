@@ -7,7 +7,7 @@
 --                                 B o d y                                  --
 --                                                                          --
 --               Copyright (C) 1986 by University of Toronto.               --
---                      Copyright (C) 1999-2014, AdaCore                    --
+--                      Copyright (C) 1999-2016, AdaCore                    --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -413,7 +413,7 @@ package body System.Regpat is
          Capturing     : Boolean;
          Flags         : out Expression_Flags;
          IP            : out Pointer);
-      --  Parse regular expression, i.e. main body or parenthesized thing
+      --  Parse regular expression, i.e. main body or parenthesized thing.
       --  Caller must absorb opening parenthesis. Capturing should be set to
       --  True when we have an open parenthesis from which we want the user
       --  to extra text.
@@ -422,7 +422,7 @@ package body System.Regpat is
         (Flags         : out Expression_Flags;
          First         : Boolean;
          IP            : out Pointer);
-      --  Implements the concatenation operator and handles '|'
+      --  Implements the concatenation operator and handles '|'.
       --  First should be true if this is the first item of the alternative.
 
       procedure Parse_Piece
@@ -2614,15 +2614,34 @@ package body System.Regpat is
                   exit State_Machine when Input_Pos /= BOL_Pos;
 
                when EOL =>
-                  exit State_Machine when Input_Pos <= Data'Last
-                    and then ((Self.Flags and Multiple_Lines) = 0
-                               or else Data (Input_Pos) /= ASCII.LF);
+
+                  --  A combination of MEOL and SEOL
+
+                  if (Self.Flags and Multiple_Lines) = 0 then
+
+                     --  Single line mode
+
+                     exit State_Machine when Input_Pos <= Data'Last;
+
+                  elsif Input_Pos <= Last_In_Data then
+                     exit State_Machine when Data (Input_Pos) /= ASCII.LF;
+                  else
+                     exit State_Machine when Last_In_Data /= Data'Last;
+                  end if;
 
                when MEOL =>
-                  exit State_Machine when Input_Pos <= Data'Last
-                    and then Data (Input_Pos) /= ASCII.LF;
+                  if Input_Pos <= Last_In_Data then
+                     exit State_Machine when Data (Input_Pos) /= ASCII.LF;
+                  else
+                     exit State_Machine when Last_In_Data /= Data'Last;
+                  end if;
 
                when SEOL =>
+
+                  --  If there is a character before Data'Last (even if
+                  --  Last_In_Data stops before then), we can't have the
+                  --  end of the line.
+
                   exit State_Machine when Input_Pos <= Data'Last;
 
                when BOUND | NBOUND =>

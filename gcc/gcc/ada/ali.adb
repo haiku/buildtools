@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -116,9 +116,9 @@ package body ALI is
       Partition_Elaboration_Policy_Specified := ' ';
       Queuing_Policy_Specified               := ' ';
       SSO_Default_Specified                  := False;
-      Static_Elaboration_Model_Used          := False;
       Task_Dispatching_Policy_Specified      := ' ';
       Unreserve_All_Interrupts_Specified     := False;
+      Frontend_Exceptions_Specified          := False;
       Zero_Cost_Exceptions_Specified         := False;
    end Initialize_ALI;
 
@@ -385,7 +385,7 @@ package body ALI is
          Write_Str ("make sure you are using consistent versions " &
 
          --  Split the following line so that it can easily be transformed for
-         --  e.g. JVM/.NET back-ends where the compiler has a different name.
+         --  other back-ends where the compiler might have a different name.
 
                     "of gcc/gnatbind");
 
@@ -717,7 +717,7 @@ package body ALI is
             begin
                loop
                   case Nextc is
-                     when '['   =>
+                     when '[' =>
                         Nested_Brackets := Nested_Brackets + 1;
                      when ']' =>
                         Nested_Brackets := Nested_Brackets - 1;
@@ -900,6 +900,7 @@ package body ALI is
         Unit_Exception_Table         => False,
         Ver                          => (others => ' '),
         Ver_Len                      => 0,
+        Frontend_Exceptions          => False,
         Zero_Cost_Exceptions         => False);
 
       --  Now we acquire the input lines from the ALI file. Note that the
@@ -1090,6 +1091,18 @@ package body ALI is
                Partition_Elaboration_Policy_Specified := Getc;
                ALIs.Table (Id).Partition_Elaboration_Policy :=
                  Partition_Elaboration_Policy_Specified;
+
+            --  Processing for FX
+
+            elsif C = 'F' then
+               C := Getc;
+
+               if C = 'X' then
+                  ALIs.Table (Id).Frontend_Exceptions := True;
+                  Frontend_Exceptions_Specified := True;
+               else
+                  Fatal_Error_Ignore;
+               end if;
 
             --  Processing for GP
 
@@ -1450,19 +1463,19 @@ package body ALI is
                   C := Getc;
 
                   case C is
-                  when 'v' =>
-                     ALIs.Table (Id).Restrictions.Violated (R) := True;
-                     Cumulative_Restrictions.Violated (R) := True;
+                     when 'v' =>
+                        ALIs.Table (Id).Restrictions.Violated (R) := True;
+                        Cumulative_Restrictions.Violated (R) := True;
 
-                  when 'r' =>
-                     ALIs.Table (Id).Restrictions.Set (R) := True;
-                     Cumulative_Restrictions.Set (R) := True;
+                     when 'r' =>
+                        ALIs.Table (Id).Restrictions.Set (R) := True;
+                        Cumulative_Restrictions.Set (R) := True;
 
-                  when 'n' =>
-                     null;
+                     when 'n' =>
+                        null;
 
-                  when others =>
-                     raise Bad_R_Line;
+                     when others =>
+                        raise Bad_R_Line;
                   end case;
                end loop;
 
@@ -1982,14 +1995,6 @@ package body ALI is
 
          Skip_Eol;
 
-         --  Check if static elaboration model used
-
-         if not Units.Table (Units.Last).Dynamic_Elab
-           and then not Units.Table (Units.Last).Internal
-         then
-            Static_Elaboration_Model_Used := True;
-         end if;
-
          C := Getc;
 
          --  Scan out With lines for this unit
@@ -2042,8 +2047,7 @@ package body ALI is
                         --  Store AD indication unless ignore required
 
                         if not Ignore_ED then
-                           Withs.Table (Withs.Last).Elab_All_Desirable :=
-                             True;
+                           Withs.Table (Withs.Last).Elab_All_Desirable := True;
                         end if;
 
                      elsif Nextc = 'E' then

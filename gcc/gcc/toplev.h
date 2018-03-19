@@ -1,5 +1,5 @@
 /* toplev.h - Various declarations for functions found in toplev.c
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -24,11 +24,13 @@ along with GCC; see the file COPYING3.  If not see
 extern struct cl_decoded_option *save_decoded_options;
 extern unsigned int save_decoded_options_count;
 
+class timer;
+
 /* Invoking the compiler.  */
 class toplev
 {
 public:
-  toplev (bool use_TV_TOTAL,
+  toplev (timer *external_timer,
 	  bool init_signals);
   ~toplev ();
 
@@ -39,6 +41,8 @@ public:
 private:
 
   void start_timevars ();
+
+  void run_self_tests ();
 
   bool m_use_TV_TOTAL;
   bool m_init_signals;
@@ -59,10 +63,8 @@ extern void announce_function (tree);
 extern void wrapup_global_declaration_1 (tree);
 extern bool wrapup_global_declaration_2 (tree);
 extern bool wrapup_global_declarations (tree *, int);
-extern void check_global_declaration_1 (tree);
-extern void check_global_declarations (tree *, int);
-extern void emit_debug_global_declarations (tree *, int);
-extern void write_global_declarations (void);
+
+extern void global_decl_processing (void);
 
 extern void dump_memory_report (bool);
 extern void dump_profile_report (void);
@@ -71,11 +73,6 @@ extern void target_reinit (void);
 
 /* A unique local time stamp, might be zero if none is available.  */
 extern unsigned local_tick;
-
-/* True if the user has tagged the function with the 'section'
-   attribute.  */
-
-extern bool user_defined_section_attribute;
 
 /* See toplev.c.  */
 extern int flag_rerun_cse_after_global_opts;

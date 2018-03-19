@@ -1,5 +1,5 @@
 /* go-backend.c -- Go frontend interface to gcc backend.
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright (C) 2010-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,27 +20,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "simple-object.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "target.h"
 #include "tree.h"
-#include "stor-layout.h"
+#include "memmodel.h"
 #include "tm_p.h"
+#include "diagnostic.h"
+#include "simple-object.h"
+#include "stor-layout.h"
 #include "intl.h"
 #include "output.h"	/* for assemble_string */
-#include "target.h"
 #include "common/common-target.h"
-#include "diagnostic.h"
 
-#include "go-c.h"
 
 /* The segment name we pass to simple_object_start_read to find Go
    export data.  */
@@ -81,23 +71,10 @@ go_field_alignment (tree t)
 #endif
 
 #ifdef ADJUST_FIELD_ALIGN
-  {
-    tree field ATTRIBUTE_UNUSED;
-    field = build_decl (UNKNOWN_LOCATION, FIELD_DECL, NULL, t);
-    v = ADJUST_FIELD_ALIGN (field, v);
-  }
+  v = ADJUST_FIELD_ALIGN (NULL_TREE, t, v);
 #endif
 
   return v / BITS_PER_UNIT;
-}
-
-/* Return the size and alignment of a trampoline.  */
-
-void
-go_trampoline_info (unsigned int *size, unsigned int *alignment)
-{
-  *size = TRAMPOLINE_SIZE;
-  *alignment = TRAMPOLINE_ALIGNMENT;
 }
 
 /* This is called by the Go frontend proper if the unsafe package was

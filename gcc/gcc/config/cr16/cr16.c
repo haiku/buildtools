@@ -1,5 +1,5 @@
 /* Output routines for CR16 processor.
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by KPIT Cummins Infosystems Limited.
   
    This file is part of GCC.
@@ -21,59 +21,25 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "stor-layout.h"
-#include "calls.h"
+#include "df.h"
+#include "memmodel.h"
 #include "tm_p.h"
 #include "regs.h"
-#include "hard-reg-set.h"
-#include "insn-config.h"
+#include "emit-rtl.h"
+#include "diagnostic-core.h"
+#include "stor-layout.h"
+#include "calls.h"
 #include "conditions.h"
 #include "output.h"
-#include "insn-codes.h"
-#include "insn-attr.h"
-#include "flags.h"
-#include "except.h"
-#include "function.h"
-#include "recog.h"
-#include "hashtab.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
 #include "expr.h"
-#include "optabs.h"
-#include "diagnostic-core.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "basic-block.h"
-#include "target.h"
-#include "target-def.h"
-#include "df.h"
 #include "builtins.h"
+
+/* This file should be included last.  */
+#include "target-def.h"
 
 /* Definitions.  */
 
@@ -157,7 +123,7 @@ static enum data_model_type data_model = DM_DEFAULT;
 
 /* TARGETM Function Prototypes and forward declarations  */
 static void cr16_print_operand (FILE *, rtx, int);
-static void cr16_print_operand_address (FILE *, rtx);
+static void cr16_print_operand_address (FILE *, machine_mode, rtx);
 
 /* Stack layout and calling conventions.  */
 #undef  TARGET_STRUCT_VALUE_RTX
@@ -206,6 +172,9 @@ static void cr16_print_operand_address (FILE *, rtx);
 #define TARGET_LEGITIMATE_CONSTANT_P    cr16_legitimate_constant_p
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P     cr16_legitimate_address_p
+
+#undef TARGET_LRA_P
+#define TARGET_LRA_P hook_bool_void_false
 
 /* Returning function value.  */
 #undef TARGET_FUNCTION_VALUE
@@ -598,7 +567,7 @@ cr16_function_arg (cumulative_args_t cum_v, machine_mode mode,
   /* function_arg () is called with this type just after all the args have 
      had their registers assigned. The rtx that function_arg returns from 
      this type is supposed to pass to 'gen_call' but currently it is not 
-     implemented (see macro GEN_CALL).  */
+     implemented.  */
   if (type == void_type_node)
     return NULL_RTX;
 
@@ -1152,10 +1121,8 @@ legitimate_pic_operand_p (rtx x)
     {
     case SYMBOL_REF:
       return 0;
-      break;
     case LABEL_REF:
       return 0;
-      break;
     case CONST:
       /* REVISIT: Use something like symbol_referenced_p.  */
       if (GET_CODE (XEXP (x, 0)) == PLUS
@@ -1166,7 +1133,6 @@ legitimate_pic_operand_p (rtx x)
       break;
     case MEM:
       return legitimate_pic_operand_p (XEXP (x, 0));
-      break;
     default:
       break;
     }
@@ -1401,10 +1367,8 @@ cr16_const_double_ok (rtx op)
 {
   if (GET_MODE (op) == SFmode)
     {
-      REAL_VALUE_TYPE r;
       long l;
-      REAL_VALUE_FROM_CONST_DOUBLE (r, op);
-      REAL_VALUE_TO_TARGET_SINGLE (r, l);
+      REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (op), l);
       return UNSIGNED_INT_FITS_N_BITS (l, 4) ? 1 : 0;
     }
 
@@ -1512,6 +1476,7 @@ cr16_print_operand (FILE * file, rtx x, int code)
     case 'g':
       /* 'g' is used for implicit mem: dereference.  */
       ptr_dereference = 1;
+      /* FALLTHRU */
     case 'f':
     case 0:
       /* default.  */
@@ -1531,16 +1496,14 @@ cr16_print_operand (FILE * file, rtx x, int code)
 	  return;
 
 	case MEM:
-	  output_address (XEXP (x, 0));
+	  output_address (GET_MODE (x), XEXP (x, 0));
 	  return;
 
 	case CONST_DOUBLE:
 	  {
-	    REAL_VALUE_TYPE r;
 	    long l;
 
-	    REAL_VALUE_FROM_CONST_DOUBLE (r, x);
-	    REAL_VALUE_TO_TARGET_SINGLE (r, l);
+	    REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (x), l);
 
 	    fprintf (file, "$0x%lx", l);
 	    return;
@@ -1563,9 +1526,10 @@ cr16_print_operand (FILE * file, rtx x, int code)
 	    {
 	      putc ('$', file);
 	    }
-	  cr16_print_operand_address (file, x);
+	  cr16_print_operand_address (file, VOIDmode, x);
 	  return;
 	}
+      gcc_unreachable ();
     default:
       output_operand_lossage ("invalid %%xn code");
     }
@@ -1576,7 +1540,7 @@ cr16_print_operand (FILE * file, rtx x, int code)
 /* Implements the macro PRINT_OPERAND_ADDRESS defined in cr16.h.  */
 
 static void
-cr16_print_operand_address (FILE * file, rtx addr)
+cr16_print_operand_address (FILE * file, machine_mode /*mode*/, rtx addr)
 {
   enum cr16_addrtype addrtype;
   struct cr16_address address;
@@ -1881,8 +1845,7 @@ cr16_create_dwarf_for_multi_push (rtx insn)
 		}
 	      reg = gen_rtx_REG (mode, j);
 	      offset += 2 * inc;
-	      tmp = gen_rtx_SET (VOIDmode,
-				 gen_frame_mem (mode,
+	      tmp = gen_rtx_SET (gen_frame_mem (mode,
 						plus_constant
 						(Pmode, stack_pointer_rtx,
 						 total_push_bytes - offset)),
@@ -1912,7 +1875,7 @@ cr16_create_dwarf_for_multi_push (rtx insn)
       from = i--;
     }
 
-  tmp = gen_rtx_SET (SImode, stack_pointer_rtx,
+  tmp = gen_rtx_SET (stack_pointer_rtx,
 		     gen_rtx_PLUS (SImode, stack_pointer_rtx,
 				   GEN_INT (-offset)));
   RTX_FRAME_RELATED_P (tmp) = 1;

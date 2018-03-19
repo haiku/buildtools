@@ -1,5 +1,5 @@
 /* Rematerialize pseudos values.
-   Copyright (C) 2014-2015 Free Software Foundation, Inc.
+   Copyright (C) 2014-2017 Free Software Foundation, Inc.
    Contributed by Vladimir Makarov <vmakarov@redhat.com>.
 
 This file is part of GCC.
@@ -55,49 +55,15 @@ along with GCC; see the file COPYING3.	If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hard-reg-set.h"
+#include "backend.h"
 #include "rtl.h"
-#include "rtl-error.h"
-#include "tm_p.h"
-#include "target.h"
-#include "insn-config.h"
-#include "recog.h"
-#include "output.h"
-#include "regs.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "vec.h"
-#include "machmode.h"
-#include "input.h"
-#include "function.h"
-#include "symtab.h"
-#include "flags.h"
-#include "statistics.h"
-#include "double-int.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "alias.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "except.h"
 #include "df.h"
+#include "insn-config.h"
+#include "regs.h"
+#include "memmodel.h"
 #include "ira.h"
-#include "sparseset.h"
-#include "params.h"
+#include "recog.h"
+#include "lra.h"
 #include "lra-int.h"
 
 /* Number of candidates for rematerialization.  */
@@ -128,10 +94,10 @@ struct cand
 {
   /* Index of the candidates in all_cands. */
   int index;
-  /* The candidate insn.  */
-  rtx_insn *insn;
   /* Insn pseudo regno for rematerialization.  */
   int regno;
+  /* The candidate insn.  */
+  rtx_insn *insn;
   /* Non-negative if a reload pseudo is in the insn instead of the
      pseudo for rematerialization.  */
   int reload_regno;
@@ -198,92 +164,6 @@ static inline remat_bb_data_t
 get_remat_bb_data_by_index (int index)
 {
   return &remat_bb_data[index];
-}
-
-
-
-/* Recursive hash function for RTL X.  */
-static hashval_t
-rtx_hash (rtx x)
-{
-  int i, j;
-  enum rtx_code code;
-  const char *fmt;
-  hashval_t val = 0;
-
-  if (x == 0)
-    return val;
-
-  code = GET_CODE (x);
-  val += (int) code + 4095;
-
-  /* Some RTL can be compared nonrecursively.  */
-  switch (code)
-    {
-    case REG:
-      return val + REGNO (x);
-
-    case LABEL_REF:
-      return iterative_hash_object (XEXP (x, 0), val);
-
-    case SYMBOL_REF:
-      return iterative_hash_object (XSTR (x, 0), val);
-
-    case SCRATCH:
-    case CONST_DOUBLE:
-    case CONST_INT:
-    case CONST_VECTOR:
-      return val;
-
-    default:
-      break;
-    }
-
-  /* Hash the elements.  */
-  fmt = GET_RTX_FORMAT (code);
-  for (i = GET_RTX_LENGTH (code) - 1; i >= 0; i--)
-    {
-      switch (fmt[i])
-	{
-	case 'w':
-	  val += XWINT (x, i);
-	  break;
-
-	case 'n':
-	case 'i':
-	  val += XINT (x, i);
-	  break;
-
-	case 'V':
-	case 'E':
-	  val += XVECLEN (x, i);
-
-	  for (j = 0; j < XVECLEN (x, i); j++)
-	    val += rtx_hash (XVECEXP (x, i, j));
-	  break;
-
-	case 'e':
-	  val += rtx_hash (XEXP (x, i));
-	  break;
-
-	case 'S':
-	case 's':
-	  val += htab_hash_string (XSTR (x, i));
-	  break;
-
-	case 'u':
-	case '0':
-	case 't':
-	  break;
-
-	  /* It is believed that rtx's at this level will never
-	     contain anything but integers and other rtx's, except for
-	     within LABEL_REFs and SYMBOL_REFs.  */
-	default:
-	  abort ();
-	}
-    }
-  return val;
 }
 
 
@@ -448,6 +328,10 @@ operand_to_remat (rtx_insn *insn)
       if (reg->regno >= FIRST_PSEUDO_REGISTER
 	  && bitmap_bit_p (&subreg_regs, reg->regno))
 	return -1;
+
+      /* Don't allow hard registers to be rematerialized.  */
+      if (reg->regno < FIRST_PSEUDO_REGISTER)
+	return -1;
     }
   if (found_reg == NULL)
     return -1;
@@ -486,6 +370,22 @@ operand_to_remat (rtx_insn *insn)
 		    < (reg->regno
 		       + hard_regno_nregs[reg->regno][reg->biggest_mode])))
 	      return -1;
+      }
+  /* Check hard coded insn registers.  */
+  for (struct lra_insn_reg *reg = static_id->hard_regs;
+       reg != NULL;
+       reg = reg->next)
+    if (reg->type == OP_INOUT)
+      return -1;
+    else if (reg->type == OP_IN)
+      {
+	/* Check that there is no output hard reg as the input
+	   one.  */
+	  for (struct lra_insn_reg *reg2 = static_id->hard_regs;
+	       reg2 != NULL;
+	       reg2 = reg2->next)
+	    if (reg2->type == OP_OUT && reg->regno == reg2->regno)
+		return -1;
       }
   /* Find the rematerialization operand.  */
   int nop = static_id->n_operands;
@@ -614,10 +514,8 @@ create_remat_bb_data (void)
 			   last_basic_block_for_fn (cfun));
   FOR_ALL_BB_FN (bb, cfun)
     {
-#ifdef ENABLE_CHECKING
-      if (bb->index < 0 || bb->index >= last_basic_block_for_fn (cfun))
-	abort ();
-#endif
+      gcc_checking_assert (bb->index >= 0
+			   && bb->index < last_basic_block_for_fn (cfun));
       bb_info = get_remat_bb_data (bb);
       bb_info->bb = bb;
       bitmap_initialize (&bb_info->changed_regs, &reg_obstack);
@@ -755,21 +653,46 @@ calculate_local_reg_remat_bb_data (void)
 
 
 
-/* Return true if REGNO is an input operand of INSN.  */
+/* Return true if REG overlaps an input operand of INSN.  */
 static bool
-input_regno_present_p (rtx_insn *insn, int regno)
+reg_overlap_for_remat_p (lra_insn_reg *reg, rtx_insn *insn)
 {
   int iter;
   lra_insn_recog_data_t id = lra_get_insn_recog_data (insn);
   struct lra_static_insn_data *static_id = id->insn_static_data;
-  struct lra_insn_reg *reg;
-  
+  unsigned regno = reg->regno;
+  int nregs;
+
+  if (regno >= FIRST_PSEUDO_REGISTER && reg_renumber[regno] >= 0)
+    regno = reg_renumber[regno];
+  if (regno >= FIRST_PSEUDO_REGISTER)
+    nregs = 1;
+  else
+    nregs = hard_regno_nregs[regno][reg->biggest_mode];
+
+  struct lra_insn_reg *reg2;
+
   for (iter = 0; iter < 2; iter++)
-    for (reg = (iter == 0 ? id->regs : static_id->hard_regs);
-	 reg != NULL;
-	 reg = reg->next)
-      if (reg->type == OP_IN && reg->regno == regno)
-	return true;
+    for (reg2 = (iter == 0 ? id->regs : static_id->hard_regs);
+	 reg2 != NULL;
+	 reg2 = reg2->next)
+      {
+	if (reg2->type != OP_IN)
+	  continue;
+	unsigned regno2 = reg2->regno;
+	int nregs2;
+
+	if (regno2 >= FIRST_PSEUDO_REGISTER && reg_renumber[regno2] >= 0)
+	  regno2 = reg_renumber[regno2];
+	if (regno2 >= FIRST_PSEUDO_REGISTER)
+	  nregs2 = 1;
+	else
+	  nregs2 = hard_regno_nregs[regno2][reg->biggest_mode];
+
+	if ((regno2 + nregs2 - 1 >= regno && regno2 < regno + nregs)
+	    || (regno + nregs - 1 >= regno2 && regno < regno2 + nregs2))
+	  return true;
+      }
   return false;
 }
 
@@ -870,7 +793,7 @@ calculate_gen_cands (void)
 			  && dst_regno == cand->regno)
 			continue;
 		      if (cand->regno == reg->regno
-			  || input_regno_present_p (insn2, reg->regno))
+			  || reg_overlap_for_remat_p (reg, insn2))
 			{
 			  bitmap_clear_bit (gen_cands, cand->index);
 			  bitmap_set_bit (&temp_bitmap, uid);
@@ -1101,6 +1024,7 @@ get_hard_regs (struct lra_insn_reg *reg, int &nregs)
 static void
 update_scratch_ops (rtx_insn *remat_insn)
 {
+  int hard_regno;
   lra_insn_recog_data_t id = lra_get_insn_recog_data (remat_insn);
   struct lra_static_insn_data *static_id = id->insn_static_data;
   for (int i = 0; i < static_id->n_operands; i++)
@@ -1111,9 +1035,17 @@ update_scratch_ops (rtx_insn *remat_insn)
       int regno = REGNO (*loc);
       if (! lra_former_scratch_p (regno))
 	continue;
+      hard_regno = reg_renumber[regno];
       *loc = lra_create_new_reg (GET_MODE (*loc), *loc,
 				 lra_get_allocno_class (regno),
 				 "scratch pseudo copy");
+      if (hard_regno >= 0)
+	{
+	  reg_renumber[REGNO (*loc)] = hard_regno;
+	  if (lra_dump_file)
+	    fprintf (lra_dump_file, "	 Assigning the same %d to r%d\n",
+		     REGNO (*loc), hard_regno);
+	}
       lra_register_new_scratch_op (remat_insn, i);
     }
   
@@ -1124,6 +1056,7 @@ update_scratch_ops (rtx_insn *remat_insn)
 static bool
 do_remat (void)
 {
+  unsigned regno;
   rtx_insn *insn;
   basic_block bb;
   bitmap_head avail_cands;
@@ -1131,12 +1064,21 @@ do_remat (void)
   bool changed_p = false;
   /* Living hard regs and hard registers of living pseudos.  */
   HARD_REG_SET live_hard_regs;
+  bitmap_iterator bi;
 
   bitmap_initialize (&avail_cands, &reg_obstack);
   bitmap_initialize (&active_cands, &reg_obstack);
   FOR_EACH_BB_FN (bb, cfun)
     {
-      REG_SET_TO_HARD_REG_SET (live_hard_regs, df_get_live_out (bb));
+      CLEAR_HARD_REG_SET (live_hard_regs);
+      EXECUTE_IF_SET_IN_BITMAP (df_get_live_in (bb), 0, regno, bi)
+	{
+	  int hard_regno = regno < FIRST_PSEUDO_REGISTER
+			   ? regno
+			   : reg_renumber[regno];
+	  if (hard_regno >= 0)
+	    SET_HARD_REG_BIT (live_hard_regs, hard_regno);
+	}
       bitmap_and (&avail_cands, &get_remat_bb_data (bb)->avin_cands,
 		  &get_remat_bb_data (bb)->livein_cands);
       /* Activating insns are always in the same block as their corresponding
@@ -1180,6 +1122,7 @@ do_remat (void)
 		  break;
 	    }
 	  int i, hard_regno, nregs;
+	  int dst_hard_regno, dst_nregs;
 	  rtx_insn *remat_insn = NULL;
 	  HOST_WIDE_INT cand_sp_offset = 0;
 	  if (cand != NULL)
@@ -1194,6 +1137,12 @@ do_remat (void)
 	      gcc_assert (REG_P (saved_op));
 	      int ignore_regno = REGNO (saved_op); 
 
+	      dst_hard_regno = dst_regno < FIRST_PSEUDO_REGISTER
+		? dst_regno : reg_renumber[dst_regno];
+	      gcc_assert (dst_hard_regno >= 0);
+	      machine_mode mode = GET_MODE (SET_DEST (set));
+	      dst_nregs = hard_regno_nregs[dst_hard_regno][mode];
+
 	      for (reg = cand_id->regs; reg != NULL; reg = reg->next)
 		if (reg->type != OP_IN && reg->regno != ignore_regno)
 		  {
@@ -1204,6 +1153,10 @@ do_remat (void)
 			break;
 		    if (i < nregs)
 		      break;
+		    /* Ensure the clobber also doesn't overlap dst_regno.  */
+		    if (hard_regno + nregs > dst_hard_regno
+			&& hard_regno < dst_hard_regno + dst_nregs)
+		      break;
 		  }
 
 	      if (reg == NULL)
@@ -1211,9 +1164,14 @@ do_remat (void)
 		  for (reg = static_cand_id->hard_regs;
 		       reg != NULL;
 		       reg = reg->next)
-		    if (reg->type != OP_IN
-			&& TEST_HARD_REG_BIT (live_hard_regs, reg->regno))
-		      break;
+		    if (reg->type != OP_IN)
+		      {
+			if (TEST_HARD_REG_BIT (live_hard_regs, reg->regno))
+			  break;
+			if (reg->regno >= dst_hard_regno
+			    && reg->regno < dst_hard_regno + dst_nregs)
+			  break;
+		      }
 		}
 
 	      if (reg == NULL)
@@ -1256,7 +1214,7 @@ do_remat (void)
 			&& dst_regno == cand->regno)
 		      continue;
 		    if (cand->regno == reg->regno
-			|| input_regno_present_p (cand->insn, reg->regno))
+			|| reg_overlap_for_remat_p (reg, cand->insn))
 		      bitmap_set_bit (&temp_bitmap, cand->index);
 		  }
 

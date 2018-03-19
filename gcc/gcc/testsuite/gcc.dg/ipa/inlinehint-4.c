@@ -1,4 +1,4 @@
-/* { dg-options "-O3 -fdump-ipa-inline-details -fno-early-inlining --param large-unit-insns=1"  } */
+/* { dg-options "-O3 -fdump-ipa-inline-details -fno-early-inlining --param large-unit-insns=1 -fno-partial-inlining"  } */
 /* { dg-add-options bind_pic_locally } */
 int *hashval;
 int *hash;
@@ -37,4 +37,3 @@ test (int i)
 /* { dg-final { scan-ipa-dump "Wrapper penalty"  "inline"  } } */
 /* { dg-final { scan-ipa-dump-not "Inlining lookup_slow to lookup"  "inline"  } } */
 /* { dg-final { scan-ipa-dump "Inlining lookup to test"  "inline"  } } */
-/* { dg-final { cleanup-ipa-dump "inline" } } */

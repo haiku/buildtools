@@ -29,6 +29,7 @@ different compilers on different platforms.
 However, since Ada is designed to be used in a
 wide variety of applications, it also contains a number of system
 dependent features to be used in interfacing to the external world.
+
 .. index:: Implementation-dependent features
 
 .. index:: Portability
@@ -113,7 +114,7 @@ This reference manual contains the following chapters:
 .. index:: Ada 2005 Language Reference Manual
 
 This reference manual assumes a basic familiarity with the Ada 95 language, as
-described in the 
+described in the
 :title:`International Standard ANSI/ISO/IEC-8652:1995`.
 It does not require knowledge of the new features introduced by Ada 2005 or
 Ada 2012.
@@ -147,10 +148,10 @@ in this guide:
   ::
 
     and then shown this way.
-    
+
 * Commands that are entered by the user are shown as preceded by a prompt string
   comprising the ``$`` character followed by a space.
-  
+
 Related Information
 ===================
 

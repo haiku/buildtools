@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -30,7 +30,7 @@
 ------------------------------------------------------------------------------
 
 --  The implementation here is portable to any IEEE implementation. It does
---  not handle non-binary radix, and also assumes that model numbers and
+--  not handle nonbinary radix, and also assumes that model numbers and
 --  machine numbers are basically identical, which is not true of all possible
 --  floating-point implementations. On a non-IEEE machine, this body must be
 --  specialized appropriately, or better still, its generic instantiations
@@ -84,7 +84,7 @@ package body System.Fat_Gen is
    --  the sign of the exponent. The absolute value of Frac is in the range
    --  0.0 <= Frac < 1.0. If Frac = 0.0 or -0.0, then Expo is always zero.
 
-   function Gradual_Scaling  (Adjustment : UI) return T;
+   function Gradual_Scaling (Adjustment : UI) return T;
    --  Like Scaling with a first argument of 1.0, but returns the smallest
    --  denormal rather than zero when the adjustment is smaller than
    --  Machine_Emin. Used for Succ and Pred.
@@ -368,7 +368,7 @@ package body System.Fat_Gen is
       Result := Truncation (abs X);
       Tail   := abs X - Result;
 
-      if Tail >= 0.5  then
+      if Tail >= 0.5 then
          Result := Result + 1.0;
       end if;
 
@@ -553,7 +553,7 @@ package body System.Fat_Gen is
       Result := Truncation (abs X);
       Tail   := abs X - Result;
 
-      if Tail >= 0.5  then
+      if Tail >= 0.5 then
          Result := Result + 1.0;
       end if;
 
@@ -744,7 +744,7 @@ package body System.Fat_Gen is
       else
          Result := Machine (Radix_To_M_Minus_1 + Result) - Radix_To_M_Minus_1;
 
-         if Result > abs X  then
+         if Result > abs X then
             Result := Result - 1.0;
          end if;
 
@@ -775,7 +775,7 @@ package body System.Fat_Gen is
       Result := Truncation (Abs_X);
       Tail   := Abs_X - Result;
 
-      if Tail > 0.5  then
+      if Tail > 0.5 then
          Result := Result + 1.0;
 
       elsif Tail = 0.5 then

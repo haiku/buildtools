@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -41,7 +41,6 @@ with Nmake;    use Nmake;
 with Opt;      use Opt;
 with Restrict; use Restrict;
 with Rident;   use Rident;
-with Rtsfind;  use Rtsfind;
 with Sem;      use Sem;
 with Sem_Aux;  use Sem_Aux;
 with Sem_Case; use Sem_Case;
@@ -64,6 +63,11 @@ with Tbuild;   use Tbuild;
 with Uintp;    use Uintp;
 
 package body Sem_Ch5 is
+
+   Current_LHS : Node_Id := Empty;
+   --  Holds the left-hand side of the assignment statement being analyzed.
+   --  Used to determine the type of a target_name appearing on the RHS, for
+   --  AI12-0125 and the use of '@' as an abbreviation for the LHS.
 
    Unblocked_Exit_Count : Nat := 0;
    --  This variable is used when processing if statements, case statements,
@@ -88,6 +92,10 @@ package body Sem_Ch5 is
    ------------------------
    -- Analyze_Assignment --
    ------------------------
+
+   --  WARNING: This routine manages Ghost regions. Return statements must be
+   --  replaced by gotos which jump to the end of the routine and restore the
+   --  Ghost mode.
 
    procedure Analyze_Assignment (N : Node_Id) is
       Lhs  : constant Node_Id := Name (N);
@@ -269,9 +277,17 @@ package body Sem_Ch5 is
          end if;
       end Set_Assignment_Type;
 
+      --  Local variables
+
+      Mode : Ghost_Mode_Type;
+
    --  Start of processing for Analyze_Assignment
 
    begin
+      --  Save LHS for use in target names (AI12-125)
+
+      Current_LHS := Lhs;
+
       Mark_Coextensions (N, Rhs);
 
       --  Analyze the target of the assignment first in case the expression
@@ -280,12 +296,11 @@ package body Sem_Ch5 is
 
       Analyze (Lhs);
 
-      --  The left hand side of an assignment may reference an entity subject
-      --  to pragma Ghost with policy Ignore. Set the mode now to ensure that
-      --  any nodes generated during analysis and expansion are properly
-      --  flagged as ignored Ghost.
+      --  An assignment statement is Ghost when the left hand side denotes a
+      --  Ghost entity. Set the mode now to ensure that any nodes generated
+      --  during analysis and expansion are properly marked as Ghost.
 
-      Set_Ghost_Mode (N);
+      Mark_And_Set_Ghost_Assignment (N, Mode);
       Analyze (Rhs);
 
       --  Ensure that we never do an assignment on a variable marked as
@@ -312,7 +327,27 @@ package body Sem_Ch5 is
             Get_First_Interp (Lhs, I, It);
 
             while Present (It.Typ) loop
-               if Has_Compatible_Type (Rhs, It.Typ) then
+
+               --  An indexed component with generalized indexing is always
+               --  overloaded with the corresponding dereference. Discard the
+               --  interpretation that yields a reference type, which is not
+               --  assignable.
+
+               if Nkind (Lhs) = N_Indexed_Component
+                 and then Present (Generalized_Indexing (Lhs))
+                 and then Has_Implicit_Dereference (It.Typ)
+               then
+                  null;
+
+               --  This may be a call to a parameterless function through an
+               --  implicit dereference, so discard interpretation as well.
+
+               elsif Is_Entity_Name (Lhs)
+                 and then Has_Implicit_Dereference (It.Typ)
+               then
+                  null;
+
+               elsif Has_Compatible_Type (Rhs, It.Typ) then
                   if T1 /= Any_Type then
 
                      --  An explicit dereference is overloaded if the prefix
@@ -342,8 +377,8 @@ package body Sem_Ch5 is
 
                                     if PIt = No_Interp then
                                        Error_Msg_N
-                                         ("ambiguous left-hand side"
-                                            & " in assignment", Lhs);
+                                         ("ambiguous left-hand side in "
+                                          & "assignment", Lhs);
                                        exit;
                                     else
                                        Resolve (Prefix (Lhs), PIt.Typ);
@@ -378,7 +413,7 @@ package body Sem_Ch5 is
             Error_Msg_N
               ("no valid types for left-hand side for assignment", Lhs);
             Kill_Lhs;
-            return;
+            goto Leave;
          end if;
       end if;
 
@@ -389,7 +424,13 @@ package body Sem_Ch5 is
 
       --  Cases where Lhs is not a variable
 
-      if not Is_Variable (Lhs) then
+      --  Cases where Lhs is not a variable. In an instance or an inlined body
+      --  no need for further check because assignment was legal in template.
+
+      if In_Inlined_Body then
+         null;
+
+      elsif not Is_Variable (Lhs) then
 
          --  Ada 2005 (AI-327): Check assignment to the attribute Priority of a
          --  protected object.
@@ -418,11 +459,7 @@ package body Sem_Ch5 is
                   --  objects have been previously expanded into calls to the
                   --  Get_Ceiling run-time subprogram.
 
-                 or else
-                  (Nkind (Ent) = N_Function_Call
-                    and then (Entity (Name (Ent)) = RTE (RE_Get_Ceiling)
-                               or else
-                              Entity (Name (Ent)) = RTE (RO_PE_Get_Ceiling)))
+                 or else Is_Expanded_Priority_Attribute (Ent)
                then
                   --  The enclosing subprogram cannot be a protected function
 
@@ -447,19 +484,20 @@ package body Sem_Ch5 is
                   --  effect (AARM D.5.2 (5/2)).
 
                   if Locking_Policy /= 'C' then
-                     Error_Msg_N ("assignment to the attribute PRIORITY has " &
-                                  "no effect??", Lhs);
-                     Error_Msg_N ("\since no Locking_Policy has been " &
-                                  "specified??", Lhs);
+                     Error_Msg_N
+                       ("assignment to the attribute PRIORITY has no effect??",
+                        Lhs);
+                     Error_Msg_N
+                       ("\since no Locking_Policy has been specified??", Lhs);
                   end if;
 
-                  return;
+                  goto Leave;
                end if;
             end if;
          end;
 
          Diagnose_Non_Variable_Lhs (Lhs);
-         return;
+         goto Leave;
 
       --  Error of assigning to limited type. We do however allow this in
       --  certain cases where the front end generates the assignments.
@@ -467,7 +505,6 @@ package body Sem_Ch5 is
       elsif Is_Limited_Type (T1)
         and then not Assignment_OK (Lhs)
         and then not Assignment_OK (Original_Node (Lhs))
-        and then not Is_Value_Type (T1)
       then
          --  CPP constructors can only be called in declarations
 
@@ -478,7 +515,15 @@ package body Sem_Ch5 is
               ("left hand of assignment must not be limited type", Lhs);
             Explain_Limited_Type (T1, Lhs);
          end if;
-         return;
+
+         goto Leave;
+
+      --  A class-wide type may be a limited view. This illegal case is not
+      --  caught by previous checks.
+
+      elsif Ekind (T1) = E_Class_Wide_Type and then From_Limited_With (T1) then
+         Error_Msg_NE ("invalid use of limited view of&", Lhs, T1);
+         goto Leave;
 
       --  Enforce RM 3.9.3 (8): the target of an assignment operation cannot be
       --  abstract. This is only checked when the assignment Comes_From_Source,
@@ -516,13 +561,23 @@ package body Sem_Ch5 is
       then
          Error_Msg_N ("invalid use of incomplete type", Lhs);
          Kill_Lhs;
-         return;
+         goto Leave;
       end if;
 
       --  Now we can complete the resolution of the right hand side
 
       Set_Assignment_Type (Lhs, T1);
+
       Resolve (Rhs, T1);
+
+      --  If the right-hand side contains target names, expansion has been
+      --  disabled to prevent expansion that might move target names out of
+      --  the context of the assignment statement. Restore the expander mode
+      --  now so that assignment statement can be properly expanded.
+
+      if Nkind (N) = N_Assignment_Statement and then Has_Target_Names (N) then
+         Expander_Mode_Restore;
+      end if;
 
       --  This is the point at which we check for an unset reference
 
@@ -533,7 +588,7 @@ package body Sem_Ch5 is
 
       if Rhs = Error then
          Kill_Lhs;
-         return;
+         goto Leave;
       end if;
 
       T2 := Etype (Rhs);
@@ -541,16 +596,15 @@ package body Sem_Ch5 is
       if not Covers (T1, T2) then
          Wrong_Type (Rhs, Etype (Lhs));
          Kill_Lhs;
-         return;
+         goto Leave;
       end if;
 
       --  Ada 2005 (AI-326): In case of explicit dereference of incomplete
       --  types, use the non-limited view if available
 
       if Nkind (Rhs) = N_Explicit_Dereference
-        and then Ekind (T2) = E_Incomplete_Type
         and then Is_Tagged_Type (T2)
-        and then Present (Non_Limited_View (T2))
+        and then Has_Non_Limited_View (T2)
       then
          T2 := Non_Limited_View (T2);
       end if;
@@ -569,7 +623,7 @@ package body Sem_Ch5 is
 
       if T1 = Any_Type or else T2 = Any_Type then
          Kill_Lhs;
-         return;
+         goto Leave;
       end if;
 
       --  If the rhs is class-wide or dynamically tagged, then require the lhs
@@ -661,7 +715,7 @@ package body Sem_Ch5 is
             --  to reset Is_True_Constant, and desirable for xref purposes.
 
             Note_Possible_Modification (Lhs, Sure => True);
-            return;
+            goto Leave;
 
          --  If we know the right hand side is non-null, then we convert to the
          --  target type, since we don't need a run time check in that case.
@@ -764,7 +818,7 @@ package body Sem_Ch5 is
          Set_Referenced_Modified (Lhs, Out_Param => False);
       end if;
 
-      --  RM 7.3.2 (12/3)  An assignment to a view conversion (from a type
+      --  RM 7.3.2 (12/3): An assignment to a view conversion (from a type
       --  to one of its ancestors) requires an invariant check. Apply check
       --  only if expression comes from source, otherwise it will be applied
       --  when value is assigned to source entity.
@@ -797,10 +851,24 @@ package body Sem_Ch5 is
                --  warnings when an assignment is rewritten as another
                --  assignment, and gets tied up with itself.
 
+               --  There may have been a previous reference to a component of
+               --  the variable, which in general removes the Last_Assignment
+               --  field of the variable to indicate a relevant use of the
+               --  previous assignment. However, if the assignment is to a
+               --  subcomponent the reference may not have registered, because
+               --  it is not possible to determine whether the context is an
+               --  assignment. In those cases we generate a Deferred_Reference,
+               --  to be used at the end of compilation to generate the right
+               --  kind of reference, and we suppress a potential warning for
+               --  a useless assignment, which might be premature. This may
+               --  lose a warning in rare cases, but seems preferable to a
+               --  misleading warning.
+
                if Warn_On_Modified_Unread
                  and then Is_Assignable (Ent)
                  and then Comes_From_Source (N)
                  and then In_Extended_Main_Source_Unit (Ent)
+                 and then not Has_Deferred_Reference (Ent)
                then
                   Warn_On_Useless_Assignment (Ent, N);
                end if;
@@ -867,6 +935,10 @@ package body Sem_Ch5 is
       end;
 
       Analyze_Dimension (N);
+
+   <<Leave>>
+      Current_LHS := Empty;
+      Restore_Ghost_Mode (Mode);
    end Analyze_Assignment;
 
    -----------------------------
@@ -1028,7 +1100,6 @@ package body Sem_Ch5 is
          end if;
 
          Check_References (Ent);
-         Warn_On_Useless_Assignments (Ent);
          End_Scope;
 
          if Unblocked_Exit_Count = 0 then
@@ -1558,7 +1629,7 @@ package body Sem_Ch5 is
          end if;
       end Analyze_Cond_Then;
 
-   --  Start of Analyze_If_Statement
+   --  Start of processing for Analyze_If_Statement
 
    begin
       --  Initialize exit count for else statements. If there is no else part,
@@ -1713,19 +1784,15 @@ package body Sem_Ch5 is
    ------------------------------------
 
    procedure Analyze_Iterator_Specification (N : Node_Id) is
-      Loc       : constant Source_Ptr := Sloc (N);
-      Def_Id    : constant Node_Id    := Defining_Identifier (N);
-      Subt      : constant Node_Id    := Subtype_Indication (N);
-      Iter_Name : constant Node_Id    := Name (N);
-
-      Ent : Entity_Id;
-      Typ : Entity_Id;
-      Bas : Entity_Id;
-
       procedure Check_Reverse_Iteration (Typ : Entity_Id);
       --  For an iteration over a container, if the loop carries the Reverse
       --  indicator, verify that the container type has an Iterate aspect that
       --  implements the reversible iterator interface.
+
+      function Get_Cursor_Type (Typ : Entity_Id) return Entity_Id;
+      --  For containers with Iterator and related aspects, the cursor is
+      --  obtained by locating an entity with the proper name in the scope
+      --  of the type.
 
       -----------------------------
       -- Check_Reverse_Iteration --
@@ -1742,21 +1809,83 @@ package body Sem_Ch5 is
          end if;
       end Check_Reverse_Iteration;
 
-   --   Start of processing for  Analyze_iterator_Specification
+      ---------------------
+      -- Get_Cursor_Type --
+      ---------------------
+
+      function Get_Cursor_Type (Typ : Entity_Id) return Entity_Id is
+         Ent : Entity_Id;
+
+      begin
+         --  If iterator type is derived, the cursor is declared in the scope
+         --  of the parent type.
+
+         if Is_Derived_Type (Typ) then
+            Ent := First_Entity (Scope (Etype (Typ)));
+         else
+            Ent := First_Entity (Scope (Typ));
+         end if;
+
+         while Present (Ent) loop
+            exit when Chars (Ent) = Name_Cursor;
+            Next_Entity (Ent);
+         end loop;
+
+         if No (Ent) then
+            return Any_Type;
+         end if;
+
+         --  The cursor is the target of generated assignments in the
+         --  loop, and cannot have a limited type.
+
+         if Is_Limited_Type (Etype (Ent)) then
+            Error_Msg_N ("cursor type cannot be limited", N);
+         end if;
+
+         return Etype (Ent);
+      end Get_Cursor_Type;
+
+      --  Local variables
+
+      Def_Id    : constant Node_Id    := Defining_Identifier (N);
+      Iter_Name : constant Node_Id    := Name (N);
+      Loc       : constant Source_Ptr := Sloc (N);
+      Subt      : constant Node_Id    := Subtype_Indication (N);
+
+      Bas : Entity_Id;
+      Typ : Entity_Id;
+
+   --   Start of processing for Analyze_Iterator_Specification
 
    begin
       Enter_Name (Def_Id);
 
+      --  AI12-0151 specifies that when the subtype indication is present, it
+      --  must statically match the type of the array or container element.
+      --  To simplify this check, we introduce a subtype declaration with the
+      --  given subtype indication when it carries a constraint, and rewrite
+      --  the original as a reference to the created subtype entity.
+
       if Present (Subt) then
-         Analyze (Subt);
-
-         --  Save type of subtype indication for subsequent check
-
          if Nkind (Subt) = N_Subtype_Indication then
-            Bas := Entity (Subtype_Mark (Subt));
+            declare
+               S    : constant Entity_Id := Make_Temporary (Sloc (Subt), 'S');
+               Decl : constant Node_Id :=
+                        Make_Subtype_Declaration (Loc,
+                          Defining_Identifier => S,
+                          Subtype_Indication  => New_Copy_Tree (Subt));
+            begin
+               Insert_Before (Parent (Parent (N)), Decl);
+               Analyze (Decl);
+               Rewrite (Subt, New_Occurrence_Of (S, Sloc (Subt)));
+            end;
          else
-            Bas := Entity (Subt);
+            Analyze (Subt);
          end if;
+
+         --  Save entity of subtype indication for subsequent check
+
+         Bas := Entity (Subt);
       end if;
 
       Preanalyze_Range (Iter_Name);
@@ -1772,7 +1901,7 @@ package body Sem_Ch5 is
       if Of_Present (N) then
          Set_Related_Expression (Def_Id, Iter_Name);
 
-         --  For a container, the iterator is specified through the aspect.
+         --  For a container, the iterator is specified through the aspect
 
          if not Is_Array_Type (Etype (Iter_Name)) then
             declare
@@ -1827,13 +1956,12 @@ package body Sem_Ch5 is
         and then (Nkind (Parent (N)) /= N_Quantified_Expression
                    or else Operating_Mode = Check_Semantics)
 
-        --  Do not perform this expansion in SPARK mode, since the formal
-        --  verification directly deals with the source form of the iterator.
-        --  Ditto for ASIS, where the temporary may hide the transformation
-        --  of a selected component into a prefixed function call.
+        --  Do not perform this expansion for ASIS and when expansion is
+        --  disabled, where the temporary may hide the transformation of a
+        --  selected component into a prefixed function call, and references
+        --  need to see the original expression.
 
-        and then not GNATprove_Mode
-        and then not ASIS_Mode
+        and then Expander_Active
       then
          declare
             Id    : constant Entity_Id := Make_Temporary (Loc, 'R', Iter_Name);
@@ -1962,8 +2090,33 @@ package body Sem_Ch5 is
          if Of_Present (N) then
             Set_Etype (Def_Id, Component_Type (Typ));
 
+            --  The loop variable is aliased if the array components are
+            --  aliased.
+
+            Set_Is_Aliased (Def_Id, Has_Aliased_Components (Typ));
+
+            --  AI12-0047 stipulates that the domain (array or container)
+            --  cannot be a component that depends on a discriminant if the
+            --  enclosing object is mutable, to prevent a modification of the
+            --  dowmain of iteration in the course of an iteration.
+
+            --  If the object is an expression it has been captured in a
+            --  temporary, so examine original node.
+
+            if Nkind (Original_Node (Iter_Name)) = N_Selected_Component
+              and then Is_Dependent_Component_Of_Mutable_Object
+                         (Original_Node (Iter_Name))
+            then
+               Error_Msg_N
+                 ("iterable name cannot be a discriminant-dependent "
+                  & "component of a mutable object", N);
+            end if;
+
             if Present (Subt)
-              and then Base_Type (Bas) /= Base_Type (Component_Type (Typ))
+              and then
+                (Base_Type (Bas) /= Base_Type (Component_Type (Typ))
+                  or else
+                    not Subtypes_Statically_Match (Bas, Component_Type (Typ)))
             then
                Error_Msg_N
                  ("subtype indication does not match component type", Subt);
@@ -1980,7 +2133,7 @@ package body Sem_Ch5 is
             if Ada_Version >= Ada_2012 then
                Error_Msg_NE
                  ("\if& is meant to designate an element of the array, use OF",
-                    N, Def_Id);
+                  N, Def_Id);
             end if;
 
             --  Prevent cascaded errors
@@ -2021,8 +2174,15 @@ package body Sem_Ch5 is
 
             else
                declare
-                  Element : constant Entity_Id :=
-                    Find_Value_Of_Aspect (Typ, Aspect_Iterator_Element);
+                  Element        : constant Entity_Id :=
+                                     Find_Value_Of_Aspect
+                                       (Typ, Aspect_Iterator_Element);
+                  Iterator       : constant Entity_Id :=
+                                     Find_Value_Of_Aspect
+                                       (Typ, Aspect_Default_Iterator);
+                  Orig_Iter_Name : constant Node_Id :=
+                                     Original_Node (Iter_Name);
+                  Cursor_Type    : Entity_Id;
 
                begin
                   if No (Element) then
@@ -2031,12 +2191,16 @@ package body Sem_Ch5 is
 
                   else
                      Set_Etype (Def_Id, Entity (Element));
+                     Cursor_Type := Get_Cursor_Type (Typ);
+                     pragma Assert (Present (Cursor_Type));
 
                      --  If subtype indication was given, verify that it covers
                      --  the element type of the container.
 
                      if Present (Subt)
-                       and then not Covers (Bas, Etype (Def_Id))
+                       and then (not Covers (Bas, Etype (Def_Id))
+                                  or else not Subtypes_Statically_Match
+                                                (Bas, Etype (Def_Id)))
                      then
                         Error_Msg_N
                           ("subtype indication does not match element type",
@@ -2049,11 +2213,54 @@ package body Sem_Ch5 is
                      if Has_Aspect (Typ, Aspect_Variable_Indexing) then
                         Set_Ekind (Def_Id, E_Variable);
                      end if;
+
+                     --  If the container is a constant, iterating over it
+                     --  requires a Constant_Indexing operation.
+
+                     if not Is_Variable (Iter_Name)
+                       and then not Has_Aspect (Typ, Aspect_Constant_Indexing)
+                     then
+                        Error_Msg_N
+                          ("iteration over constant container require "
+                           & "constant_indexing aspect", N);
+
+                     --  The Iterate function may have an in_out parameter,
+                     --  and a constant container is thus illegal.
+
+                     elsif Present (Iterator)
+                       and then Ekind (Entity (Iterator)) = E_Function
+                       and then Ekind (First_Formal (Entity (Iterator))) /=
+                                  E_In_Parameter
+                       and then not Is_Variable (Iter_Name)
+                     then
+                        Error_Msg_N ("variable container expected", N);
+                     end if;
+
+                     --  Detect a case where the iterator denotes a component
+                     --  of a mutable object which depends on a discriminant.
+                     --  Note that the iterator may denote a function call in
+                     --  qualified form, in which case this check should not
+                     --  be performed.
+
+                     if Nkind (Orig_Iter_Name) = N_Selected_Component
+                       and then
+                         Present (Entity (Selector_Name (Orig_Iter_Name)))
+                       and then Ekind_In
+                                  (Entity (Selector_Name (Orig_Iter_Name)),
+                                   E_Component,
+                                   E_Discriminant)
+                       and then Is_Dependent_Component_Of_Mutable_Object
+                                  (Orig_Iter_Name)
+                     then
+                        Error_Msg_N
+                          ("container cannot be a discriminant-dependent "
+                           & "component of a mutable object", N);
+                     end if;
                   end if;
                end;
             end if;
 
-         --  OF not present
+         --  IN iterator, domain is a range, or a call to Iterate function
 
          else
             --  For an iteration of the form IN, the name must denote an
@@ -2090,6 +2297,42 @@ package body Sem_Ch5 is
                end if;
             end if;
 
+            --  If the name is a call (typically prefixed) to some Iterate
+            --  function, it has been rewritten as an object declaration.
+            --  If that object is a selected component, verify that it is not
+            --  a component of an unconstrained mutable object.
+
+            if Nkind (Iter_Name) = N_Identifier
+              or else (not Expander_Active and Comes_From_Source (Iter_Name))
+            then
+               declare
+                  Orig_Node : constant Node_Id   := Original_Node (Iter_Name);
+                  Iter_Kind : constant Node_Kind := Nkind (Orig_Node);
+                  Obj       : Node_Id;
+
+               begin
+                  if Iter_Kind = N_Selected_Component then
+                     Obj  := Prefix (Orig_Node);
+
+                  elsif Iter_Kind = N_Function_Call then
+                     Obj  := First_Actual (Orig_Node);
+
+                  --  If neither, the name comes from source
+
+                  else
+                     Obj := Iter_Name;
+                  end if;
+
+                  if Nkind (Obj) = N_Selected_Component
+                    and then Is_Dependent_Component_Of_Mutable_Object (Obj)
+                  then
+                     Error_Msg_N
+                       ("container cannot be a discriminant-dependent "
+                        & "component of a mutable object", N);
+                  end if;
+               end;
+            end if;
+
             --  The result type of Iterate function is the classwide type of
             --  the interface parent. We need the specific Cursor type defined
             --  in the container package. We obtain it by name for a predefined
@@ -2100,34 +2343,13 @@ package body Sem_Ch5 is
                  Get_Cursor_Type
                    (Parent (Find_Value_Of_Aspect (Typ, Aspect_Iterable)),
                     Typ));
-               Ent := Etype (Def_Id);
 
             else
-               Ent := First_Entity (Scope (Typ));
-               while Present (Ent) loop
-                  if Chars (Ent) = Name_Cursor then
-                     Set_Etype (Def_Id, Etype (Ent));
-                     exit;
-                  end if;
-
-                  Next_Entity (Ent);
-               end loop;
+               Set_Etype (Def_Id, Get_Cursor_Type (Typ));
+               Check_Reverse_Iteration (Etype (Iter_Name));
             end if;
+
          end if;
-      end if;
-
-      --  A loop parameter cannot be effectively volatile. This check is
-      --  peformed only when SPARK_Mode is on as it is not a standard Ada
-      --  legality check (SPARK RM 7.1.3(6)).
-
-      --  Not clear whether this applies to element iterators, where the
-      --  cursor is not an explicit entity ???
-
-      if SPARK_Mode = On
-        and then not Of_Present (N)
-        and then Is_Effectively_Volatile (Ent)
-      then
-         Error_Msg_N ("loop parameter cannot be volatile", Ent);
       end if;
    end Analyze_Iterator_Specification;
 
@@ -2556,8 +2778,9 @@ package body Sem_Ch5 is
 
          --  a)  a function call,
          --  b)  an identifier that is not a type,
-         --  c)  an attribute reference 'Old (within a postcondition)
-         --  d)  an unchecked conversion
+         --  c)  an attribute reference 'Old (within a postcondition),
+         --  d)  an unchecked conversion or a qualified expression with
+         --      the proper iterator type.
 
          --  then it is an iteration over a container. It was classified as
          --  a loop specification by the parser, and must be rewritten now
@@ -2567,13 +2790,19 @@ package body Sem_Ch5 is
          --  conversion is always an object.
 
          if Nkind (DS_Copy) = N_Function_Call
+
            or else (Is_Entity_Name (DS_Copy)
                      and then not Is_Type (Entity (DS_Copy)))
+
            or else (Nkind (DS_Copy) = N_Attribute_Reference
                      and then Nam_In (Attribute_Name (DS_Copy),
-                                      Name_Old, Name_Loop_Entry))
-           or else Nkind (DS_Copy) = N_Unchecked_Type_Conversion
+                                      Name_Loop_Entry, Name_Old))
+
            or else Has_Aspect (Etype (DS_Copy), Aspect_Iterable)
+
+           or else Nkind (DS_Copy) = N_Unchecked_Type_Conversion
+           or else (Nkind (DS_Copy) = N_Qualified_Expression
+                     and then Is_Iterator (Etype (DS_Copy)))
          then
             --  This is an iterator specification. Rewrite it as such and
             --  analyze it to capture function calls that may require
@@ -2874,9 +3103,9 @@ package body Sem_Ch5 is
          end;
       end if;
 
-      --  A loop parameter cannot be effectively volatile. This check is
-      --  peformed only when SPARK_Mode is on as it is not a standard Ada
-      --  legality check (SPARK RM 7.1.3(6)).
+      --  A loop parameter cannot be effectively volatile (SPARK RM 7.1.3(4)).
+      --  This check is relevant only when SPARK_Mode is on as it is not a
+      --  standard Ada legality check.
 
       if SPARK_Mode = On and then Is_Effectively_Volatile (Id) then
          Error_Msg_N ("loop parameter cannot be volatile", Id);
@@ -2947,11 +3176,13 @@ package body Sem_Ch5 is
                Set_Parent (DS_Copy, Parent (DS));
                Preanalyze_Range (DS_Copy);
 
-               --  Check for a call to Iterate ()
+               --  Check for a call to Iterate () or an expression with
+               --  an iterator type.
 
                return
-                 Nkind (DS_Copy) = N_Function_Call
-                   and then Needs_Finalization (Etype (DS_Copy));
+                 (Nkind (DS_Copy) = N_Function_Call
+                   and then Needs_Finalization (Etype (DS_Copy)))
+                 or else Is_Iterator (Etype (DS_Copy));
             end;
          end if;
       end Is_Container_Iterator;
@@ -3022,7 +3253,7 @@ package body Sem_Ch5 is
          --  Verify that the loop name is hot hidden by an unrelated
          --  declaration in an inner scope.
 
-         elsif Ekind (Ent) /= E_Label and then Ekind (Ent) /= E_Loop  then
+         elsif Ekind (Ent) /= E_Label and then Ekind (Ent) /= E_Loop then
             Error_Msg_Sloc := Sloc (Ent);
             Error_Msg_N ("implicit label declaration for & is hidden#", Id);
 
@@ -3052,12 +3283,31 @@ package body Sem_Ch5 is
             end if;
          end if;
 
-      --  Case of no identifier present
+      --  Case of no identifier present. Create one and attach it to the
+      --  loop statement for use as a scope and as a reference for later
+      --  expansions. Indicate that the label does not come from source,
+      --  and attach it to the loop statement so it is part of the tree,
+      --  even without a full declaration.
 
       else
          Ent := New_Internal_Entity (E_Loop, Current_Scope, Loc, 'L');
          Set_Etype  (Ent, Standard_Void_Type);
+         Set_Identifier (N, New_Occurrence_Of (Ent, Loc));
          Set_Parent (Ent, N);
+         Set_Has_Created_Identifier (N);
+      end if;
+
+      --  If the iterator specification has a syntactic error, transform
+      --  construct into an infinite loop to prevent a crash and perform
+      --  some analysis.
+
+      if Present (Iter)
+        and then Present (Iterator_Specification (Iter))
+        and then Error_Posted (Iterator_Specification (Iter))
+      then
+         Set_Iteration_Scheme (N, Empty);
+         Analyze (N);
+         return;
       end if;
 
       --  Iteration over a container in Ada 2012 involves the creation of a
@@ -3173,16 +3423,36 @@ package body Sem_Ch5 is
       --  types the actual subtype of the components will only be determined
       --  when the cursor declaration is analyzed.
 
-      --  If the expander is not active, or in SPARK mode, then we want to
-      --  analyze the loop body now even in the Ada 2012 iterator case, since
-      --  the rewriting will not be done. Insert the loop variable in the
-      --  current scope, if not done when analysing the iteration scheme.
-      --  Set its kind properly to detect improper uses in the loop body.
+      --  If the expander is not active then we want to analyze the loop body
+      --  now even in the Ada 2012 iterator case, since the rewriting will not
+      --  be done. Insert the loop variable in the current scope, if not done
+      --  when analysing the iteration scheme.  Set its kind properly to detect
+      --  improper uses in the loop body.
+
+      --  In GNATprove mode, we do one of the above depending on the kind of
+      --  loop. If it is an iterator over an array, then we do not analyze the
+      --  loop now. We will analyze it after it has been rewritten by the
+      --  special SPARK expansion which is activated in GNATprove mode. We need
+      --  to do this so that other expansions that should occur in GNATprove
+      --  mode take into account the specificities of the rewritten loop, in
+      --  particular the introduction of a renaming (which needs to be
+      --  expanded).
+
+      --  In other cases in GNATprove mode then we want to analyze the loop
+      --  body now, since no rewriting will occur. Within a generic the
+      --  GNATprove mode is irrelevant, we must analyze the generic for
+      --  non-local name capture.
 
       if Present (Iter)
         and then Present (Iterator_Specification (Iter))
       then
-         if not Expander_Active then
+         if GNATprove_Mode
+           and then Is_Iterator_Over_Array (Iterator_Specification (Iter))
+           and then not Inside_A_Generic
+         then
+            null;
+
+         elsif not Expander_Active then
             declare
                I_Spec : constant Node_Id   := Iterator_Specification (Iter);
                Id     : constant Entity_Id := Defining_Identifier (I_Spec);
@@ -3262,6 +3532,31 @@ package body Sem_Ch5 is
    begin
       null;
    end Analyze_Null_Statement;
+
+   -------------------------
+   -- Analyze_Target_Name --
+   -------------------------
+
+   procedure Analyze_Target_Name (N : Node_Id) is
+   begin
+      if No (Current_LHS) then
+         Error_Msg_N ("target name can only appear within an assignment", N);
+         Set_Etype (N, Any_Type);
+
+      else
+         Set_Has_Target_Names (Parent (Current_LHS));
+         Set_Etype (N, Etype (Current_LHS));
+
+         --  Disable expansion for the rest of the analysis of the current
+         --  right-hand side. The enclosing assignment statement will be
+         --  rewritten during expansion, together with occurrences of the
+         --  target name.
+
+         if Expander_Active then
+            Expander_Mode_Save_And_Set (False);
+         end if;
+      end if;
+   end Analyze_Target_Name;
 
    ------------------------
    -- Analyze_Statements --

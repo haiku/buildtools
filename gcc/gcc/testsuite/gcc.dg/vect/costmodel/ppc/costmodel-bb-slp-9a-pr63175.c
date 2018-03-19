@@ -1,5 +1,5 @@
-/* { dg-require-effective-target vect_int } */
 /* { dg-do compile } */
+/* { dg-require-effective-target vect_int } */
 
 #define N 16 
 
@@ -26,5 +26,5 @@ main1 (void)
    or word stores (stw, stwu, stwx, stwux, or their indexed forms).  */
 
 /* { dg-final { scan-assembler "\t(lvx|lxv|lvsr|stxv)" } } */
-/* { dg-final { scan-assembler-not "\tlwz?u?x? " } } */
+/* { dg-final { scan-assembler-not "\tlwz?u?x? " { xfail { powerpc-ibm-aix* } } } } */
 /* { dg-final { scan-assembler-not "\tstwu?x? " } } */

@@ -1,5 +1,8 @@
-/* { dg-do run } */
+/* Test if duplicate data mappings with acc_copy_in.  */
 
+/* { dg-do run { target openacc_nvidia_accel_selected } } */
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <openacc.h>
 
@@ -19,6 +22,7 @@ main (int argc, char **argv)
 
   (void) acc_copyin (h, N);
 
+  fprintf (stderr, "CheCKpOInT\n");
   (void) acc_copyin (h, N);
 
   free (h);
@@ -26,4 +30,6 @@ main (int argc, char **argv)
   return 0;
 }
 
-/* { dg-shouldfail "libgomp: \[\h+,\+256\] already mapped to \[\h+,\+256\]" } */
+/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
+/* { dg-output "\\\[\[0-9a-fA-FxX\]+,\\\+256\\\] already mapped to \\\[\[0-9a-fA-FxX\]+,\\\+256\\\]" } */
+/* { dg-shouldfail "" } */

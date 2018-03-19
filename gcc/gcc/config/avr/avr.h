@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler,
    for ATMEL AVR at90s8515, ATmega103/103L, ATmega603/603L microcontrollers.
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2017 Free Software Foundation, Inc.
    Contributed by Denis Chertykov (chertykov@gmail.com)
 
 This file is part of GCC.
@@ -73,6 +73,8 @@ enum
 #define AVR_HAVE_RAMPZ (avr_arch->have_elpm             \
                         || avr_arch->have_rampd)
 #define AVR_HAVE_EIJMP_EICALL (avr_arch->have_eijmp_eicall)
+
+#define AVR_TINY_PM_OFFSET (0x4000)
 
 /* Handling of 8-bit SP versus 16-bit SP is as follows:
 
@@ -290,7 +292,7 @@ enum reg_class {
 
 #define STACK_PUSH_CODE POST_DEC
 
-#define STACK_GROWS_DOWNWARD
+#define STACK_GROWS_DOWNWARD 1
 
 #define STARTING_FRAME_OFFSET avr_starting_frame_offset()
 
@@ -358,11 +360,16 @@ typedef struct avr_args
       }                                                                 \
   } while (0)
 
-#define BRANCH_COST(speed_p, predictable_p) avr_branch_cost
+/* We increase branch costs after reload in order to keep basic-block
+   reordering from introducing out-of-line jumps and to prefer fall-through
+   edges instead.  The default branch costs are 0, mainly because otherwise
+   do_store_flag might come up with bloated code.  */
+#define BRANCH_COST(speed_p, predictable_p)     \
+  (avr_branch_cost + (reload_completed ? 4 : 0))
 
 #define SLOW_BYTE_ACCESS 0
 
-#define NO_FUNCTION_CSE
+#define NO_FUNCTION_CSE 1
 
 #define REGISTER_TARGET_PRAGMAS()                                       \
   do {                                                                  \
@@ -391,7 +398,7 @@ typedef struct avr_args
 
 #define SUPPORTS_INIT_PRIORITY 0
 
-#define JUMP_TABLES_IN_TEXT_SECTION 0
+#define JUMP_TABLES_IN_TEXT_SECTION 1
 
 #define ASM_COMMENT_START " ; "
 
@@ -453,7 +460,22 @@ typedef struct avr_args
 
 #undef WORD_REGISTER_OPERATIONS
 
-#define MOVE_MAX 4
+/* Can move only a single byte from memory to reg in a
+   single instruction. */
+
+#define MOVE_MAX 1
+
+/* Allow upto two bytes moves to occur using by_pieces
+   infrastructure */
+
+#define MOVE_MAX_PIECES 2
+
+/* Set MOVE_RATIO to 3 to allow memory moves upto 4 bytes to happen
+   by pieces when optimizing for speed, like it did when MOVE_MAX_PIECES
+   was 4. When optimizing for size, allow memory moves upto 2 bytes. 
+   Also see avr_use_by_pieces_infrastructure_p. */
+
+#define MOVE_RATIO(speed) ((speed) ? 3 : 2)
 
 #define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC) 1
 

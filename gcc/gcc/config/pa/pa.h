@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for the HP Spectrum.
-   Copyright (C) 1992-2015 Free Software Foundation, Inc.
+   Copyright (C) 1992-2017 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com) of Cygnus Support
    and Tim Moore (moore@defmacro.cs.utah.edu) of the Center for
    Software Science at the University of Utah.
@@ -92,12 +92,6 @@ extern unsigned long total_code_bytes;
    allows a difference of two symbols in the same subspace, and it doesn't
    detect the sequence as a pc-relative call.  */
 #define TARGET_LONG_PIC_SDIFF_CALL (!TARGET_GAS && TARGET_HPUX)
-
-/* Define to a C expression evaluating to true to use long PIC
-   pc-relative calls.  Long PIC pc-relative calls are only used with
-   GAS.  Currently, they are usable for calls which bind local to a
-   module but not for external calls.  */
-#define TARGET_LONG_PIC_PCREL_CALL 0
 
 /* Define to a C expression evaluating to true to use SOM secondary
    definition symbols for weak support.  Linker support for secondary
@@ -298,8 +292,22 @@ typedef struct GTY(()) machine_function
 /* A bit-field declared as `int' forces `int' alignment for the struct.  */
 #define PCC_BITFIELD_TYPE_MATTERS 1
 
-/* No data type wants to be aligned rounder than this.  */
+/* No data type wants to be aligned rounder than this.  The long double
+   type has 16-byte alignment on the 64-bit target even though it was never
+   implemented in hardware.  The software implementation only needs 8-byte
+   alignment.  This matches the biggest alignment of the HP compilers.  */
 #define BIGGEST_ALIGNMENT (2 * BITS_PER_WORD)
+
+/* Alignment, in bits, a C conformant malloc implementation has to provide.
+   The HP-UX malloc implementation provides a default alignment of 8 bytes.
+   It should be 16 bytes on the 64-bit target since long double has 16-byte
+   alignment.  It can be increased with mallopt but it's non critical since
+   long double was never implemented in hardware.  The glibc implementation
+   currently provides 8-byte alignment.  It should be 16 bytes since various
+   POSIX types such as pthread_mutex_t require 16-byte alignment.  Again,
+   this is non critical since 16-byte alignment is no longer needed for
+   atomic operations.  */
+#define MALLOC_ABI_ALIGNMENT (TARGET_SOM ? 64 : 128)
 
 /* Get around hp-ux assembler bug, and make strcpy of constants fast.  */
 #define CONSTANT_ALIGNMENT(EXP, ALIGN)		\
@@ -490,7 +498,7 @@ extern rtx hppa_pic_save_rtx (void);
 /* #define STACK_GROWS_DOWNWARD */
 
 /* Believe it or not.  */
-#define ARGS_GROW_DOWNWARD
+#define ARGS_GROW_DOWNWARD 1
 
 /* Define this to nonzero if the nominal address of the stack frame
    is at the high-address end of the local variables;
@@ -572,7 +580,7 @@ extern rtx hppa_pic_save_rtx (void);
    The INCOMING field tracks whether this is an "incoming" or
    "outgoing" argument.
    
-   The INDIRECT field indicates whether this is is an indirect
+   The INDIRECT field indicates whether this is an indirect
    call or not.
    
    The NARGS_PROTOTYPE field indicates that an argument does not
@@ -814,7 +822,8 @@ extern int may_call_alloca;
    this range are forced to the constant pool prior to reload.  */
 
 #define MAX_LEGIT_64BIT_CONST_INT ((HOST_WIDE_INT) 32 << 31)
-#define MIN_LEGIT_64BIT_CONST_INT ((HOST_WIDE_INT) -32 << 31)
+#define MIN_LEGIT_64BIT_CONST_INT \
+  ((HOST_WIDE_INT)((unsigned HOST_WIDE_INT) -32 << 31))
 #define LEGITIMATE_64BIT_CONST_INT_P(X) \
   ((X) >= MIN_LEGIT_64BIT_CONST_INT && (X) < MAX_LEGIT_64BIT_CONST_INT)
 
@@ -1011,7 +1020,7 @@ do {									     \
 
 /* Define if operations between registers always perform the operation
    on the full register even if a narrower mode is specified.  */
-#define WORD_REGISTER_OPERATIONS
+#define WORD_REGISTER_OPERATIONS 1
 
 /* Define if loading in MODE, an integral mode narrower than BITS_PER_WORD
    will either zero-extend or sign-extend.  The value of this macro should
@@ -1048,7 +1057,7 @@ do {									     \
    shouldn't be put through pseudo regs where they can be cse'd.
    Desirable on machines where ordinary constants are expensive
    but a CALL with constant address is cheap.  */
-#define NO_FUNCTION_CSE
+#define NO_FUNCTION_CSE 1
 
 /* Define this to be nonzero if shift instructions ignore all but the low-order
    few bits.  */
@@ -1210,7 +1219,7 @@ do {									     \
     fprintf (FILE, "\t.align %d\n", (1<<(LOG)))
 
 #define ASM_OUTPUT_SKIP(FILE,SIZE)  \
-  fprintf (FILE, "\t.blockz "HOST_WIDE_INT_PRINT_UNSIGNED"\n",		\
+  fprintf (FILE, "\t.blockz " HOST_WIDE_INT_PRINT_UNSIGNED"\n",		\
 	   (unsigned HOST_WIDE_INT)(SIZE))
 
 /* This says how to output an assembler line to define an uninitialized

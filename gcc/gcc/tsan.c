@@ -1,5 +1,5 @@
 /* GCC instrumentation plugin for ThreadSanitizer.
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
    Contributed by Dmitry Vyukov <dvyukov@google.com>
 
 This file is part of GCC.
@@ -22,68 +22,27 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "fold-const.h"
-#include "hashtab.h"
-#include "tm.h"
-#include "hard-reg-set.h"
-#include "function.h"
+#include "backend.h"
 #include "rtl.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "intl.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
+#include "tree.h"
+#include "memmodel.h"
 #include "gimple.h"
+#include "tree-pass.h"
+#include "ssa.h"
+#include "cgraph.h"
+#include "fold-const.h"
 #include "gimplify.h"
 #include "gimple-iterator.h"
 #include "gimplify-me.h"
-#include "gimple-ssa.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "tree-cfg.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
-#include "tree-pass.h"
 #include "tree-iterator.h"
-#include "langhooks.h"
-#include "output.h"
-#include "target.h"
-#include "diagnostic.h"
 #include "tree-ssa-propagate.h"
 #include "tree-ssa-loop-ivopts.h"
+#include "tree-eh.h"
 #include "tsan.h"
 #include "asan.h"
 #include "builtins.h"
+#include "target.h"
 
 /* Number of instrumented memory accesses in the current function.  */
 
@@ -117,7 +76,7 @@ get_memory_access_decl (bool is_write, unsigned size)
 /* Check as to whether EXPR refers to a store to vptr.  */
 
 static tree
-is_vptr_store (gimple stmt, tree expr, bool is_write)
+is_vptr_store (gimple *stmt, tree expr, bool is_write)
 {
   if (is_write == true
       && gimple_assign_single_p (stmt)
@@ -140,7 +99,7 @@ instrument_expr (gimple_stmt_iterator gsi, tree expr, bool is_write)
   tree base, rhs, expr_ptr, builtin_decl;
   basic_block bb;
   HOST_WIDE_INT size;
-  gimple stmt, g;
+  gimple *stmt, *g;
   gimple_seq seq;
   location_t loc;
   unsigned int align;
@@ -152,9 +111,9 @@ instrument_expr (gimple_stmt_iterator gsi, tree expr, bool is_write)
   HOST_WIDE_INT bitsize, bitpos;
   tree offset;
   machine_mode mode;
-  int volatilep = 0, unsignedp = 0;
-  base = get_inner_reference (expr, &bitsize, &bitpos, &offset,
-			      &mode, &unsignedp, &volatilep, false);
+  int unsignedp, reversep, volatilep = 0;
+  base = get_inner_reference (expr, &bitsize, &bitpos, &offset, &mode,
+			      &unsignedp, &reversep, &volatilep);
 
   /* No need to instrument accesses to decls that don't escape,
      they can't escape to other threads then.  */
@@ -170,9 +129,7 @@ instrument_expr (gimple_stmt_iterator gsi, tree expr, bool is_write)
 	return false;
     }
 
-  if (TREE_READONLY (base)
-      || (TREE_CODE (base) == VAR_DECL
-	  && DECL_HARD_REGISTER (base)))
+  if (TREE_READONLY (base) || (VAR_P (base) && DECL_HARD_REGISTER (base)))
     return false;
 
   stmt = gsi_stmt (gsi);
@@ -218,7 +175,7 @@ instrument_expr (gimple_stmt_iterator gsi, tree expr, bool is_write)
       if ((align - 1) & bitpos)
 	{
 	  align = (align - 1) & bitpos;
-	  align = align & -align;
+	  align = least_bit_hwi (align);
 	}
       expr = build_fold_addr_expr (unshare_expr (base));
       expr = build2 (MEM_REF, char_type_node, expr,
@@ -284,7 +241,8 @@ instrument_expr (gimple_stmt_iterator gsi, tree expr, bool is_write)
 enum tsan_atomic_action
 {
   check_last, add_seq_cst, add_acquire, weak_cas, strong_cas,
-  bool_cas, val_cas, lock_release, fetch_op, fetch_op_seq_cst
+  bool_cas, val_cas, lock_release, fetch_op, fetch_op_seq_cst,
+  bool_clear, bool_test_and_set
 };
 
 /* Table how to map sync/atomic builtins to their corresponding
@@ -318,6 +276,10 @@ static const struct tsan_map_atomic
   TRANSFORM (fcode, tsan_fcode, fetch_op, code)
 #define FETCH_OPS(fcode, tsan_fcode, code) \
   TRANSFORM (fcode, tsan_fcode, fetch_op_seq_cst, code)
+#define BOOL_CLEAR(fcode, tsan_fcode) \
+  TRANSFORM (fcode, tsan_fcode, bool_clear, ERROR_MARK)
+#define BOOL_TEST_AND_SET(fcode, tsan_fcode) \
+  TRANSFORM (fcode, tsan_fcode, bool_test_and_set, ERROR_MARK)
 
   CHECK_LAST (ATOMIC_LOAD_1, TSAN_ATOMIC8_LOAD),
   CHECK_LAST (ATOMIC_LOAD_2, TSAN_ATOMIC16_LOAD),
@@ -507,7 +469,11 @@ static const struct tsan_map_atomic
   LOCK_RELEASE (SYNC_LOCK_RELEASE_2, TSAN_ATOMIC16_STORE),
   LOCK_RELEASE (SYNC_LOCK_RELEASE_4, TSAN_ATOMIC32_STORE),
   LOCK_RELEASE (SYNC_LOCK_RELEASE_8, TSAN_ATOMIC64_STORE),
-  LOCK_RELEASE (SYNC_LOCK_RELEASE_16, TSAN_ATOMIC128_STORE)
+  LOCK_RELEASE (SYNC_LOCK_RELEASE_16, TSAN_ATOMIC128_STORE),
+
+  BOOL_CLEAR (ATOMIC_CLEAR, TSAN_ATOMIC8_STORE),
+
+  BOOL_TEST_AND_SET (ATOMIC_TEST_AND_SET, TSAN_ATOMIC8_EXCHANGE)
 };
 
 /* Instrument an atomic builtin.  */
@@ -515,7 +481,7 @@ static const struct tsan_map_atomic
 static void
 instrument_builtin_call (gimple_stmt_iterator *gsi)
 {
-  gimple stmt = gsi_stmt (*gsi), g;
+  gimple *stmt = gsi_stmt (*gsi), *g;
   tree callee = gimple_call_fndecl (stmt), last_arg, args[6], t, lhs;
   enum built_in_function fcode = DECL_FUNCTION_CODE (callee);
   unsigned int i, num = gimple_call_num_args (stmt), j;
@@ -534,11 +500,12 @@ instrument_builtin_call (gimple_stmt_iterator *gsi)
 	  case check_last:
 	  case fetch_op:
 	    last_arg = gimple_call_arg (stmt, num - 1);
-	    if (!tree_fits_uhwi_p (last_arg)
-		|| memmodel_base (tree_to_uhwi (last_arg)) >= MEMMODEL_LAST)
+	    if (tree_fits_uhwi_p (last_arg)
+		&& memmodel_base (tree_to_uhwi (last_arg)) >= MEMMODEL_LAST)
 	      return;
 	    gimple_call_set_fndecl (stmt, decl);
 	    update_stmt (stmt);
+	    maybe_clean_eh_stmt (stmt);
 	    if (tsan_atomic_table[i].action == fetch_op)
 	      {
 		args[1] = gimple_call_arg (stmt, 1);
@@ -559,6 +526,7 @@ instrument_builtin_call (gimple_stmt_iterator *gsi)
 				       ? MEMMODEL_SEQ_CST
 				       : MEMMODEL_ACQUIRE);
 	    update_gimple_call (gsi, decl, num + 1, args[0], args[1], args[2]);
+	    maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));
 	    stmt = gsi_stmt (*gsi);
 	    if (tsan_atomic_table[i].action == fetch_op_seq_cst)
 	      {
@@ -599,14 +567,15 @@ instrument_builtin_call (gimple_stmt_iterator *gsi)
 	    gcc_assert (num == 6);
 	    for (j = 0; j < 6; j++)
 	      args[j] = gimple_call_arg (stmt, j);
-	    if (!tree_fits_uhwi_p (args[4])
-		|| memmodel_base (tree_to_uhwi (args[4])) >= MEMMODEL_LAST)
+	    if (tree_fits_uhwi_p (args[4])
+		&& memmodel_base (tree_to_uhwi (args[4])) >= MEMMODEL_LAST)
 	      return;
-	    if (!tree_fits_uhwi_p (args[5])
-		|| memmodel_base (tree_to_uhwi (args[5])) >= MEMMODEL_LAST)
+	    if (tree_fits_uhwi_p (args[5])
+		&& memmodel_base (tree_to_uhwi (args[5])) >= MEMMODEL_LAST)
 	      return;
 	    update_gimple_call (gsi, decl, 5, args[0], args[1], args[2],
 				args[4], args[5]);
+	    maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));
 	    return;
 	  case bool_cas:
 	  case val_cas:
@@ -634,6 +603,7 @@ instrument_builtin_call (gimple_stmt_iterator *gsi)
 					       MEMMODEL_SEQ_CST),
 				build_int_cst (NULL_TREE,
 					       MEMMODEL_SEQ_CST));
+	    maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));
 	    if (tsan_atomic_table[i].action == val_cas && lhs)
 	      {
 		tree cond;
@@ -658,6 +628,60 @@ instrument_builtin_call (gimple_stmt_iterator *gsi)
 				build_int_cst (t, 0),
 				build_int_cst (NULL_TREE,
 					       MEMMODEL_RELEASE));
+	    maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));
+	    return;
+	  case bool_clear:
+	  case bool_test_and_set:
+	    if (BOOL_TYPE_SIZE != 8)
+	      {
+		decl = NULL_TREE;
+		for (j = 1; j < 5; j++)
+		  if (BOOL_TYPE_SIZE == (8 << j))
+		    {
+		      enum built_in_function tsan_fcode
+			= (enum built_in_function)
+			  (tsan_atomic_table[i].tsan_fcode + j);
+		      decl = builtin_decl_implicit (tsan_fcode);
+		      break;
+		    }
+		if (decl == NULL_TREE)
+		  return;
+	      }
+	    last_arg = gimple_call_arg (stmt, num - 1);
+	    if (tree_fits_uhwi_p (last_arg)
+		&& memmodel_base (tree_to_uhwi (last_arg)) >= MEMMODEL_LAST)
+	      return;
+	    t = TYPE_ARG_TYPES (TREE_TYPE (decl));
+	    t = TREE_VALUE (TREE_CHAIN (t));
+	    if (tsan_atomic_table[i].action == bool_clear)
+	      {
+		update_gimple_call (gsi, decl, 3, gimple_call_arg (stmt, 0),
+				    build_int_cst (t, 0), last_arg);
+		maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));
+		return;
+	      }
+	    t = build_int_cst (t, targetm.atomic_test_and_set_trueval);
+	    update_gimple_call (gsi, decl, 3, gimple_call_arg (stmt, 0),
+				t, last_arg);
+	    maybe_clean_or_replace_eh_stmt (stmt, gsi_stmt (*gsi));
+	    stmt = gsi_stmt (*gsi);
+	    lhs = gimple_call_lhs (stmt);
+	    if (lhs == NULL_TREE)
+	      return;
+	    if (targetm.atomic_test_and_set_trueval != 1
+		|| !useless_type_conversion_p (TREE_TYPE (lhs),
+					       TREE_TYPE (t)))
+	      {
+		tree new_lhs = make_ssa_name (TREE_TYPE (t));
+		gimple_call_set_lhs (stmt, new_lhs);
+		if (targetm.atomic_test_and_set_trueval != 1)
+		  g = gimple_build_assign (lhs, NE_EXPR, new_lhs,
+					   build_int_cst (TREE_TYPE (t), 0));
+		else
+		  g = gimple_build_assign (lhs, NOP_EXPR, new_lhs);
+		gsi_insert_after (gsi, g, GSI_NEW_STMT);
+		update_stmt (stmt);
+	      }
 	    return;
 	  default:
 	    continue;
@@ -671,7 +695,7 @@ instrument_builtin_call (gimple_stmt_iterator *gsi)
 static bool
 instrument_gimple (gimple_stmt_iterator *gsi)
 {
-  gimple stmt;
+  gimple *stmt;
   tree rhs, lhs;
   bool instrumented = false;
 
@@ -708,10 +732,10 @@ instrument_gimple (gimple_stmt_iterator *gsi)
 /* Replace TSAN_FUNC_EXIT internal call with function exit tsan builtin.  */
 
 static void
-replace_func_exit (gimple stmt)
+replace_func_exit (gimple *stmt)
 {
   tree builtin_decl = builtin_decl_implicit (BUILT_IN_TSAN_FUNC_EXIT);
-  gimple g = gimple_build_call (builtin_decl, 0);
+  gimple *g = gimple_build_call (builtin_decl, 0);
   gimple_set_location (g, cfun->function_end_locus);
   gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
   gsi_replace (&gsi, g, true);
@@ -725,7 +749,7 @@ instrument_func_exit (void)
   location_t loc;
   basic_block exit_bb;
   gimple_stmt_iterator gsi;
-  gimple stmt, g;
+  gimple *stmt, *g;
   tree builtin_decl;
   edge e;
   edge_iterator ei;
@@ -750,33 +774,35 @@ instrument_func_exit (void)
    Return true if func entry/exit should be instrumented.  */
 
 static bool
-instrument_memory_accesses (void)
+instrument_memory_accesses (bool *cfg_changed)
 {
   basic_block bb;
   gimple_stmt_iterator gsi;
   bool fentry_exit_instrument = false;
   bool func_exit_seen = false;
-  auto_vec<gimple> tsan_func_exits;
+  auto_vec<gimple *> tsan_func_exits;
 
   FOR_EACH_BB_FN (bb, cfun)
-    for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
-      {
-	gimple stmt = gsi_stmt (gsi);
-	if (is_gimple_call (stmt)
-	    && gimple_call_internal_p (stmt)
-	    && gimple_call_internal_fn (stmt) == IFN_TSAN_FUNC_EXIT)
-	  {
-	    if (fentry_exit_instrument)
-	      replace_func_exit (stmt);
-	    else
-	      tsan_func_exits.safe_push (stmt);
-	    func_exit_seen = true;
-	  }
-	else
-	  fentry_exit_instrument |= instrument_gimple (&gsi);
-      }
+    {
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	{
+	  gimple *stmt = gsi_stmt (gsi);
+	  if (gimple_call_internal_p (stmt, IFN_TSAN_FUNC_EXIT))
+	    {
+	      if (fentry_exit_instrument)
+		replace_func_exit (stmt);
+	      else
+		tsan_func_exits.safe_push (stmt);
+	      func_exit_seen = true;
+	    }
+	  else
+	    fentry_exit_instrument |= instrument_gimple (&gsi);
+	}
+      if (gimple_purge_dead_eh_edges (bb))
+	*cfg_changed = true;
+    }
   unsigned int i;
-  gimple stmt;
+  gimple *stmt;
   FOR_EACH_VEC_ELT (tsan_func_exits, i, stmt)
     if (fentry_exit_instrument)
       replace_func_exit (stmt);
@@ -796,7 +822,7 @@ static void
 instrument_func_entry (void)
 {
   tree ret_addr, builtin_decl;
-  gimple g;
+  gimple *g;
   gimple_seq seq = NULL;
 
   builtin_decl = builtin_decl_implicit (BUILT_IN_RETURN_ADDRESS);
@@ -821,9 +847,10 @@ static unsigned
 tsan_pass (void)
 {
   initialize_sanitizer_builtins ();
-  if (instrument_memory_accesses ())
+  bool cfg_changed = false;
+  if (instrument_memory_accesses (&cfg_changed))
     instrument_func_entry ();
-  return 0;
+  return cfg_changed ? TODO_cleanup_cfg : 0;
 }
 
 /* Inserts __tsan_init () into the list of CTORs.  */

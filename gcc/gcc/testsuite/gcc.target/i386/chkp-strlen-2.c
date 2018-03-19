@@ -2,7 +2,6 @@
 /* { dg-require-effective-target stpcpy } */
 /* { dg-options "-fcheck-pointer-bounds -mmpx -O2 -fdump-tree-strlen" } */
 /* { dg-final { scan-tree-dump-not "strlen" "strlen" } } */
-/* { dg-final { cleanup-tree-dump "strlen" } } */
 
 #define USE_GNU
 #include "../../gcc.dg/strlenopt.h"

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2014, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2016, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -58,7 +58,6 @@ package body System.Tasking.Initialization is
 
    package STPO renames System.Task_Primitives.Operations;
    package SSL  renames System.Soft_Links;
-   package AE   renames Ada.Exceptions;
 
    use Parameters;
    use Task_Primitives.Operations;
@@ -93,10 +92,6 @@ package body System.Tasking.Initialization is
 
    function Get_Current_Excep return SSL.EOA;
    --  Task-safe version of SSL.Get_Current_Excep
-
-   procedure Update_Exception
-     (X : AE.Exception_Occurrence := SSL.Current_Target_Exception);
-   --  Handle exception setting and check for pending actions
 
    function Task_Name return String;
    --  Returns current task's name
@@ -371,7 +366,6 @@ package body System.Tasking.Initialization is
       SSL.Unlock_Task        := Task_Unlock'Access;
       SSL.Check_Abort_Status := Check_Abort_Status'Access;
       SSL.Task_Name          := Task_Name'Access;
-      SSL.Update_Exception   := Update_Exception'Access;
       SSL.Get_Current_Excep  := Get_Current_Excep'Access;
 
       --  Initialize the tasking soft links (if not done yet) that are common
@@ -440,12 +434,15 @@ package body System.Tasking.Initialization is
    begin
       if not T.Aborting and then T /= Self_ID then
          case T.Common.State is
-            when Unactivated | Terminated =>
+            when Terminated
+               | Unactivated
+            =>
                pragma Assert (False);
                null;
 
-            when Activating | Runnable =>
-
+            when Activating
+               | Runnable
+            =>
                --  This is needed to cancel an asynchronous protected entry
                --  call during a requeue with abort.
 
@@ -455,15 +452,18 @@ package body System.Tasking.Initialization is
             when Interrupt_Server_Blocked_On_Event_Flag =>
                null;
 
-            when Delay_Sleep                              |
-                 Async_Select_Sleep                       |
-                 Interrupt_Server_Idle_Sleep              |
-                 Interrupt_Server_Blocked_Interrupt_Sleep |
-                 Timer_Server_Sleep                       |
-                 AST_Server_Sleep                         =>
+            when AST_Server_Sleep
+               | Async_Select_Sleep
+               | Delay_Sleep
+               | Interrupt_Server_Blocked_Interrupt_Sleep
+               | Interrupt_Server_Idle_Sleep
+               | Timer_Server_Sleep
+            =>
                Wakeup (T, T.Common.State);
 
-            when Acceptor_Sleep | Acceptor_Delay_Sleep =>
+            when Acceptor_Delay_Sleep
+               | Acceptor_Sleep
+            =>
                T.Open_Accepts := null;
                Wakeup (T, T.Common.State);
 
@@ -472,10 +472,11 @@ package body System.Tasking.Initialization is
                  (T.ATC_Nesting_Level).Cancellation_Attempted := True;
                Wakeup (T, T.Common.State);
 
-            when Activator_Sleep         |
-                 Master_Completion_Sleep |
-                 Master_Phase_2_Sleep    |
-                 Asynchronous_Hold       =>
+            when Activator_Sleep
+               | Asynchronous_Hold
+               | Master_Completion_Sleep
+               | Master_Phase_2_Sleep
+            =>
                null;
          end case;
       end if;
@@ -708,50 +709,6 @@ package body System.Tasking.Initialization is
          end if;
       end if;
    end Abort_Undefer;
-
-   ----------------------
-   -- Update_Exception --
-   ----------------------
-
-   --  Call only when holding no locks
-
-   procedure Update_Exception
-     (X : AE.Exception_Occurrence := SSL.Current_Target_Exception)
-   is
-      Self_Id : constant Task_Id := Self;
-      use Ada.Exceptions;
-
-   begin
-      Save_Occurrence (Self_Id.Common.Compiler_Data.Current_Excep, X);
-
-      if Self_Id.Deferral_Level = 0 then
-         if Self_Id.Pending_Action then
-            Self_Id.Pending_Action := False;
-            Self_Id.Deferral_Level := Self_Id.Deferral_Level + 1;
-
-            if Single_Lock then
-               Lock_RTS;
-            end if;
-
-            Write_Lock (Self_Id);
-            Self_Id.Pending_Action := False;
-            Unlock (Self_Id);
-
-            if Single_Lock then
-               Unlock_RTS;
-            end if;
-
-            Self_Id.Deferral_Level := Self_Id.Deferral_Level - 1;
-
-            if Self_Id.Pending_ATC_Level < Self_Id.ATC_Nesting_Level then
-               if not Self_Id.Aborting then
-                  Self_Id.Aborting := True;
-                  raise Standard'Abort_Signal;
-               end if;
-            end if;
-         end if;
-      end if;
-   end Update_Exception;
 
    --------------------------
    -- Wakeup_Entry_Caller --

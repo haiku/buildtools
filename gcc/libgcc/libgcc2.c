@@ -1,6 +1,6 @@
 /* More subroutines needed by GCC output code on some machines.  */
 /* Compile this one with gcc.  */
-/* Copyright (C) 1989-2015 Free Software Foundation, Inc.
+/* Copyright (C) 1989-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -160,7 +160,7 @@ __mulvSI3 (Wtype a, Wtype b)
 }
 #ifdef COMPAT_SIMODE_TRAPPING_ARITHMETIC
 #undef WORD_SIZE
-#define WORD_SIZE (sizeof (SItype) * BITS_PER_UNIT)
+#define WORD_SIZE (sizeof (SItype) * __CHAR_BIT__)
 SItype
 __mulvsi3 (SItype a, SItype b)
 {
@@ -375,7 +375,8 @@ __mulvDI3 (DWtype u, DWtype v)
 		}
 	      else
 		{
-		  if (uu.s.high == (Wtype) -1 && vv.s.high == (Wtype) - 1)
+		  if ((uu.s.high & vv.s.high) == (Wtype) -1
+		      && (uu.s.low | vv.s.low) != 0)
 		    {
 		      DWunion ww = {.ll = (UDWtype) (UWtype) uu.s.low
 				    * (UDWtype) (UWtype) vv.s.low};
@@ -680,7 +681,8 @@ __udiv_w_sdiv (UWtype *rp __attribute__ ((__unused__)),
 #endif
 
 #if (defined (L_udivdi3) || defined (L_divdi3) || \
-     defined (L_umoddi3) || defined (L_moddi3))
+     defined (L_umoddi3) || defined (L_moddi3) || \
+     defined (L_divmoddi4))
 #define L_udivmoddi4
 #endif
 
@@ -820,16 +822,16 @@ const UQItype __popcount_tab[256] =
 #endif
 
 #if defined(L_popcountsi2) || defined(L_popcountdi2)
-#define POPCOUNTCST2(x) (((UWtype) x << BITS_PER_UNIT) | x)
-#define POPCOUNTCST4(x) (((UWtype) x << (2 * BITS_PER_UNIT)) | x)
-#define POPCOUNTCST8(x) (((UWtype) x << (4 * BITS_PER_UNIT)) | x)
-#if W_TYPE_SIZE == BITS_PER_UNIT
+#define POPCOUNTCST2(x) (((UWtype) x << __CHAR_BIT__) | x)
+#define POPCOUNTCST4(x) (((UWtype) x << (2 * __CHAR_BIT__)) | x)
+#define POPCOUNTCST8(x) (((UWtype) x << (4 * __CHAR_BIT__)) | x)
+#if W_TYPE_SIZE == __CHAR_BIT__
 #define POPCOUNTCST(x) x
-#elif W_TYPE_SIZE == 2 * BITS_PER_UNIT
+#elif W_TYPE_SIZE == 2 * __CHAR_BIT__
 #define POPCOUNTCST(x) POPCOUNTCST2 (x)
-#elif W_TYPE_SIZE == 4 * BITS_PER_UNIT
+#elif W_TYPE_SIZE == 4 * __CHAR_BIT__
 #define POPCOUNTCST(x) POPCOUNTCST4 (POPCOUNTCST2 (x))
-#elif W_TYPE_SIZE == 8 * BITS_PER_UNIT
+#elif W_TYPE_SIZE == 8 * __CHAR_BIT__
 #define POPCOUNTCST(x) POPCOUNTCST8 (POPCOUNTCST4 (POPCOUNTCST2 (x)))
 #endif
 #endif
@@ -842,11 +844,11 @@ __popcountSI2 (UWtype x)
   /* Force table lookup on targets like AVR and RL78 which only
      pretend they have LIBGCC2_UNITS_PER_WORD 4, but actually
      have 1, and other small word targets.  */
-#if __SIZEOF_INT__ > 2 && defined (POPCOUNTCST) && BITS_PER_UNIT == 8
+#if __SIZEOF_INT__ > 2 && defined (POPCOUNTCST) && __CHAR_BIT__ == 8
   x = x - ((x >> 1) & POPCOUNTCST (0x55));
   x = (x & POPCOUNTCST (0x33)) + ((x >> 2) & POPCOUNTCST (0x33));
   x = (x + (x >> 4)) & POPCOUNTCST (0x0F);
-  return (x * POPCOUNTCST (0x01)) >> (W_TYPE_SIZE - BITS_PER_UNIT);
+  return (x * POPCOUNTCST (0x01)) >> (W_TYPE_SIZE - __CHAR_BIT__);
 #else
   int i, ret = 0;
 
@@ -866,7 +868,7 @@ __popcountDI2 (UDWtype x)
   /* Force table lookup on targets like AVR and RL78 which only
      pretend they have LIBGCC2_UNITS_PER_WORD 4, but actually
      have 1, and other small word targets.  */
-#if __SIZEOF_INT__ > 2 && defined (POPCOUNTCST) && BITS_PER_UNIT == 8
+#if __SIZEOF_INT__ > 2 && defined (POPCOUNTCST) && __CHAR_BIT__ == 8
   const DWunion uu = {.ll = x};
   UWtype x1 = uu.s.low, x2 = uu.s.high;
   x1 = x1 - ((x1 >> 1) & POPCOUNTCST (0x55));
@@ -876,7 +878,7 @@ __popcountDI2 (UDWtype x)
   x1 = (x1 + (x1 >> 4)) & POPCOUNTCST (0x0F);
   x2 = (x2 + (x2 >> 4)) & POPCOUNTCST (0x0F);
   x1 += x2;
-  return (x1 * POPCOUNTCST (0x01)) >> (W_TYPE_SIZE - BITS_PER_UNIT);
+  return (x1 * POPCOUNTCST (0x01)) >> (W_TYPE_SIZE - __CHAR_BIT__);
 #else
   int i, ret = 0;
 
@@ -937,7 +939,8 @@ __parityDI2 (UDWtype x)
 #ifdef TARGET_HAS_NO_HW_DIVIDE
 
 #if (defined (L_udivdi3) || defined (L_divdi3) || \
-     defined (L_umoddi3) || defined (L_moddi3))
+     defined (L_umoddi3) || defined (L_moddi3) || \
+     defined (L_divmoddi4))
 static inline __attribute__ ((__always_inline__))
 #endif
 UDWtype
@@ -1004,7 +1007,8 @@ __udivmoddi4 (UDWtype n, UDWtype d, UDWtype *rp)
 #else
 
 #if (defined (L_udivdi3) || defined (L_divdi3) || \
-     defined (L_umoddi3) || defined (L_moddi3))
+     defined (L_umoddi3) || defined (L_moddi3) || \
+     defined (L_divmoddi4))
 static inline __attribute__ ((__always_inline__))
 #endif
 UDWtype
@@ -1265,6 +1269,34 @@ __moddi3 (DWtype u, DWtype v)
   if (c)
     w = -w;
 
+  return w;
+}
+#endif
+
+#ifdef L_divmoddi4
+DWtype
+__divmoddi4 (DWtype u, DWtype v, DWtype *rp)
+{
+  Wtype c1 = 0, c2 = 0;
+  DWunion uu = {.ll = u};
+  DWunion vv = {.ll = v};
+  DWtype w;
+  DWtype r;
+
+  if (uu.s.high < 0)
+    c1 = ~c1, c2 = ~c2,
+    uu.ll = -uu.ll;
+  if (vv.s.high < 0)
+    c1 = ~c1,
+    vv.ll = -vv.ll;
+
+  w = __udivmoddi4 (uu.ll, vv.ll, (UDWtype*)&r);
+  if (c1)
+    w = -w;
+  if (c2)
+    r = -r;
+
+  *rp = r;
   return w;
 }
 #endif
@@ -1643,6 +1675,11 @@ FUNC (DWtype u)
     hi = -(UWtype) hi;
 
   UWtype count, shift;
+#if !defined (COUNT_LEADING_ZEROS_0) || COUNT_LEADING_ZEROS_0 != W_TYPE_SIZE
+  if (hi == 0)
+    count = W_TYPE_SIZE;
+  else
+#endif
   count_leading_zeros (count, hi);
 
   /* No leading bits means u == minimum.  */
@@ -1852,7 +1889,8 @@ NAME (TYPE x, int m)
 
 #endif
 
-#if ((defined(L_mulsc3) || defined(L_divsc3)) && LIBGCC2_HAS_SF_MODE) \
+#if((defined(L_mulhc3) || defined(L_divhc3)) && LIBGCC2_HAS_HF_MODE) \
+    || ((defined(L_mulsc3) || defined(L_divsc3)) && LIBGCC2_HAS_SF_MODE) \
     || ((defined(L_muldc3) || defined(L_divdc3)) && LIBGCC2_HAS_DF_MODE) \
     || ((defined(L_mulxc3) || defined(L_divxc3)) && LIBGCC2_HAS_XF_MODE) \
     || ((defined(L_multc3) || defined(L_divtc3)) && LIBGCC2_HAS_TF_MODE)
@@ -1861,30 +1899,36 @@ NAME (TYPE x, int m)
 #undef double
 #undef long
 
-#if defined(L_mulsc3) || defined(L_divsc3)
+#if defined(L_mulhc3) || defined(L_divhc3)
+# define MTYPE	HFtype
+# define CTYPE	HCtype
+# define MODE	hc
+# define CEXT	__LIBGCC_HF_FUNC_EXT__
+# define NOTRUNC (!__LIBGCC_HF_EXCESS_PRECISION__)
+#elif defined(L_mulsc3) || defined(L_divsc3)
 # define MTYPE	SFtype
 # define CTYPE	SCtype
 # define MODE	sc
 # define CEXT	__LIBGCC_SF_FUNC_EXT__
-# define NOTRUNC __LIBGCC_SF_EXCESS_PRECISION__
+# define NOTRUNC (!__LIBGCC_SF_EXCESS_PRECISION__)
 #elif defined(L_muldc3) || defined(L_divdc3)
 # define MTYPE	DFtype
 # define CTYPE	DCtype
 # define MODE	dc
 # define CEXT	__LIBGCC_DF_FUNC_EXT__
-# define NOTRUNC __LIBGCC_DF_EXCESS_PRECISION__
+# define NOTRUNC (!__LIBGCC_DF_EXCESS_PRECISION__)
 #elif defined(L_mulxc3) || defined(L_divxc3)
 # define MTYPE	XFtype
 # define CTYPE	XCtype
 # define MODE	xc
 # define CEXT	__LIBGCC_XF_FUNC_EXT__
-# define NOTRUNC __LIBGCC_XF_EXCESS_PRECISION__
+# define NOTRUNC (!__LIBGCC_XF_EXCESS_PRECISION__)
 #elif defined(L_multc3) || defined(L_divtc3)
 # define MTYPE	TFtype
 # define CTYPE	TCtype
 # define MODE	tc
 # define CEXT	__LIBGCC_TF_FUNC_EXT__
-# define NOTRUNC __LIBGCC_TF_EXCESS_PRECISION__
+# define NOTRUNC (!__LIBGCC_TF_EXCESS_PRECISION__)
 #else
 # error
 #endif
@@ -1922,7 +1966,7 @@ extern void *compile_type_assert[sizeof(INFINITY) == sizeof(MTYPE) ? 1 : -1];
 # define TRUNC(x)	__asm__ ("" : "=m"(x) : "m"(x))
 #endif
 
-#if defined(L_mulsc3) || defined(L_muldc3) \
+#if defined(L_mulhc3) || defined(L_mulsc3) || defined(L_muldc3) \
     || defined(L_mulxc3) || defined(L_multc3)
 
 CTYPE
@@ -1992,7 +2036,7 @@ CONCAT3(__mul,MODE,3) (MTYPE a, MTYPE b, MTYPE c, MTYPE d)
 }
 #endif /* complex multiply */
 
-#if defined(L_divsc3) || defined(L_divdc3) \
+#if defined(L_divhc3) || defined(L_divsc3) || defined(L_divdc3) \
     || defined(L_divxc3) || defined(L_divtc3)
 
 CTYPE
@@ -2309,8 +2353,7 @@ SYMBOL__MAIN (void)
    must be in the bss/common section.
 
    Long term no port should use those extensions.  But many still do.  */
-#if !defined(__LIBGCC_INIT_SECTION_ASM_OP__) \
-    && !defined(CTOR_LISTS_DEFINED_EXTERNALLY)
+#if !defined(__LIBGCC_INIT_SECTION_ASM_OP__)
 #if defined (TARGET_ASM_CONSTRUCTOR) || defined (USE_COLLECT2)
 func_ptr __CTOR_LIST__[2] = {0, 0};
 func_ptr __DTOR_LIST__[2] = {0, 0};
@@ -2318,6 +2361,6 @@ func_ptr __DTOR_LIST__[2] = {0, 0};
 func_ptr __CTOR_LIST__[2];
 func_ptr __DTOR_LIST__[2];
 #endif
-#endif /* no __LIBGCC_INIT_SECTION_ASM_OP__ and not CTOR_LISTS_DEFINED_EXTERNALLY */
+#endif /* no __LIBGCC_INIT_SECTION_ASM_OP__ */
 #endif /* L_ctors */
 #endif /* LIBGCC2_UNITS_PER_WORD <= MIN_UNITS_PER_WORD */

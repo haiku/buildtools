@@ -10,4 +10,4 @@ void vec_mpy(int y[], const short x[], short scaler)
    y[i] += ((scaler * x[i]) >> 31);
 }
 
-/* { dg-final { scan-assembler-times "smulbb" 1 { xfail *-*-* } } } */
+/* { dg-final { scan-assembler-times "smulbb" 1 } } */

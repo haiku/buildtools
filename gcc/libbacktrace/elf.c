@@ -1,5 +1,5 @@
 /* elf.c -- Get debug data from an ELF file for backtraces.
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -7,13 +7,13 @@ modification, are permitted provided that the following conditions are
 met:
 
     (1) Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer. 
+    notice, this list of conditions and the following disclaimer.
 
     (2) Redistributions in binary form must reproduce the above copyright
     notice, this list of conditions and the following disclaimer in
     the documentation and/or other materials provided with the
-    distribution.  
-    
+    distribution.
+
     (3) The name of the author may not be used to
     endorse or promote products derived from this software without
     specific prior written permission.
@@ -103,6 +103,7 @@ dl_iterate_phdr (int (*callback) (struct dl_phdr_info *,
 #undef SHT_SYMTAB
 #undef SHT_STRTAB
 #undef SHT_DYNSYM
+#undef SHF_COMPRESSED
 #undef STT_OBJECT
 #undef STT_FUNC
 
@@ -194,6 +195,8 @@ typedef struct {
 #define SHT_SYMTAB 2
 #define SHT_STRTAB 3
 #define SHT_DYNSYM 11
+
+#define SHF_COMPRESSED 0x800
 
 #if BACKTRACE_ELF_SIZE == 32
 
@@ -700,7 +703,8 @@ elf_add (struct backtrace_state *state, int descriptor, uintptr_t base_address,
 
       for (j = 0; j < (int) DEBUG_MAX; ++j)
 	{
-	  if (strcmp (name, debug_section_names[j]) == 0)
+	  if (strcmp (name, debug_section_names[j]) == 0
+              && (shdr->sh_flags & SHF_COMPRESSED) == 0)
 	    {
 	      sections[j].offset = shdr->sh_offset;
 	      sections[j].size = shdr->sh_size;
@@ -791,7 +795,6 @@ elf_add (struct backtrace_state *state, int descriptor, uintptr_t base_address,
     {
       if (!backtrace_close (descriptor, error_callback, data))
 	goto fail;
-      *fileline_fn = elf_nodebug;
       return 1;
     }
 
@@ -928,7 +931,7 @@ backtrace_initialize (struct backtrace_state *state, int descriptor,
   int ret;
   int found_sym;
   int found_dwarf;
-  fileline elf_fileline_fn;
+  fileline elf_fileline_fn = elf_nodebug;
   struct phdr_data pd;
 
   ret = elf_add (state, descriptor, 0, error_callback, data, &elf_fileline_fn,
@@ -958,7 +961,8 @@ backtrace_initialize (struct backtrace_state *state, int descriptor,
       if (found_sym)
 	backtrace_atomic_store_pointer (&state->syminfo_fn, elf_syminfo);
       else
-	__sync_bool_compare_and_swap (&state->syminfo_fn, NULL, elf_nosyms);
+	(void) __sync_bool_compare_and_swap (&state->syminfo_fn, NULL,
+					     elf_nosyms);
     }
 
   if (!state->threaded)

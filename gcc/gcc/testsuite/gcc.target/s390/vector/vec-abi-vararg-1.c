@@ -2,7 +2,7 @@
    ABI.  */
 
 /* { dg-do run { target { s390*-*-* } } } */
-/* { dg-require-effective-target vector } */
+/* { dg-require-effective-target s390_vx } */
 /* { dg-options "-O3 -mzarch -march=z13 --save-temps" } */
 
 /* Make sure arguments are fetched from the argument overflow area.  */
@@ -16,7 +16,6 @@
 /* { dg-final { scan-assembler "vl\t%v\[0-9\]*,232\\(%r15\\)" { target ilp32 } } } */
 /* { dg-final { scan-assembler "ld\t%v\[0-9\]*,248\\(%r15\\)" { target ilp32 } } } */
 
-/* { dg-final { cleanup-saved-temps } } */
 
 #include <stdarg.h>
 

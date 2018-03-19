@@ -1,5 +1,5 @@
 /* Subroutines for the gcc driver.
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -35,6 +35,9 @@ static struct vendor_cpu arm_cpu_table[] = {
     {"0xb02", "armv6k", "mpcore"},
     {"0xb36", "armv6j", "arm1136j-s"},
     {"0xb56", "armv6t2", "arm1156t2-s"},
+    /* armv6kz is the correct spelling for ARMv6KZ but may not be supported in
+       the version of binutils used.  The incorrect spelling is supported in
+       legacy and current binutils so that is used instead.  */
     {"0xb76", "armv6zk", "arm1176jz-s"},
     {"0xc05", "armv7-a", "cortex-a5"},
     {"0xc07", "armv7ve", "cortex-a7"},
@@ -43,6 +46,12 @@ static struct vendor_cpu arm_cpu_table[] = {
     {"0xc0d", "armv7ve", "cortex-a12"},
     {"0xc0e", "armv7ve", "cortex-a17"},
     {"0xc0f", "armv7ve", "cortex-a15"},
+    {"0xd01", "armv8-a+crc", "cortex-a32"},
+    {"0xd04", "armv8-a+crc", "cortex-a35"},
+    {"0xd03", "armv8-a+crc", "cortex-a53"},
+    {"0xd07", "armv8-a+crc", "cortex-a57"},
+    {"0xd08", "armv8-a+crc", "cortex-a72"},
+    {"0xd09", "armv8-a+crc", "cortex-a73"},
     {"0xc14", "armv7-r", "cortex-r4"},
     {"0xc15", "armv7-r", "cortex-r5"},
     {"0xc20", "armv6-m", "cortex-m0"},

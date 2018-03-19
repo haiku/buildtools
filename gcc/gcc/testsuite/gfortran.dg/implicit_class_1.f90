@@ -1,8 +1,16 @@
 ! { dg-do run }
+! { dg-skip-if "" { powerpc-ibm-aix* } { "*" } { "" } }
 !
 ! PR 56500: [OOP] "IMPLICIT CLASS(...)" wrongly rejected
 !
 ! Contributed by Reinhold Bader <Reinhold.Bader@lrz.de>
+
+! Add dump-fortran-original to check, if the patch preventing a gfortran
+! segfault is working correctly.  No cleanup needed, because the dump
+! goes to stdout.
+! { dg-options "-fdump-fortran-original" }
+! { dg-allow-blank-lines-in-output 1 }
+! { dg-prune-output "Namespace:.*-{42}" }
 
 program upimp
   implicit class(foo) (a-b)

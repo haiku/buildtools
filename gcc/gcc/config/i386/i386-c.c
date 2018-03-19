@@ -1,5 +1,5 @@
 /* Subroutines used for macro/preprocessor support on the ia-32.
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,37 +20,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "tm_p.h"
-#include "flags.h"
-#include "c-family/c-common.h"
-#include "ggc.h"
 #include "target.h"
-#include "target-def.h"
-#include "cpplib.h"
+#include "c-family/c-common.h"
+#include "memmodel.h"
+#include "tm_p.h"
 #include "c-family/c-pragma.h"
 
 static bool ix86_pragma_target_parse (tree, tree);
 static void ix86_target_macros_internal
-  (HOST_WIDE_INT, enum processor_type, enum processor_type, enum fpmath_unit,
+  (HOST_WIDE_INT, HOST_WIDE_INT, enum processor_type, enum processor_type, enum fpmath_unit,
    void (*def_or_undef) (cpp_reader *, const char *));
 
-
 /* Internal function to either define or undef the appropriate system
    macros.  */
 static void
 ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
+			     HOST_WIDE_INT isa_flag2,
 			     enum processor_type arch,
 			     enum processor_type tune,
 			     enum fpmath_unit fpmath,
@@ -73,6 +58,8 @@ ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
       def_or_undef (parse_in, "__i486");
       def_or_undef (parse_in, "__i486__");
       break;
+    case PROCESSOR_LAKEMONT:
+      /* Intel MCU is based on Intel Pentium CPU.  */
     case PROCESSOR_PENTIUM:
       def_or_undef (parse_in, "__i586");
       def_or_undef (parse_in, "__i586__");
@@ -131,6 +118,10 @@ ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
       def_or_undef (parse_in, "__bdver4");
       def_or_undef (parse_in, "__bdver4__");
       break;
+    case PROCESSOR_ZNVER1:
+      def_or_undef (parse_in, "__znver1");
+      def_or_undef (parse_in, "__znver1__");
+      break;
     case PROCESSOR_BTVER1:
       def_or_undef (parse_in, "__btver1");
       def_or_undef (parse_in, "__btver1__");
@@ -184,6 +175,10 @@ ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
     case PROCESSOR_KNL:
       def_or_undef (parse_in, "__knl");
       def_or_undef (parse_in, "__knl__");
+      break;
+    case PROCESSOR_SKYLAKE_AVX512:
+      def_or_undef (parse_in, "__skylake_avx512");
+      def_or_undef (parse_in, "__skylake_avx512__");
       break;
     /* use PROCESSOR_max to not set/unset the arch macro.  */
     case PROCESSOR_max:
@@ -256,6 +251,9 @@ ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
     case PROCESSOR_BDVER4:
       def_or_undef (parse_in, "__tune_bdver4__");
       break;
+    case PROCESSOR_ZNVER1:
+      def_or_undef (parse_in, "__tune_znver1__");
+      break;
     case PROCESSOR_BTVER1:
       def_or_undef (parse_in, "__tune_btver1__");
       break;
@@ -293,6 +291,12 @@ ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
       break;
     case PROCESSOR_KNL:
       def_or_undef (parse_in, "__tune_knl__");
+      break;
+    case PROCESSOR_SKYLAKE_AVX512:
+      def_or_undef (parse_in, "__tune_skylake_avx512__");
+      break;
+    case PROCESSOR_LAKEMONT:
+      def_or_undef (parse_in, "__tune_lakemont__");
       break;
     case PROCESSOR_INTEL:
     case PROCESSOR_GENERIC:
@@ -372,6 +376,14 @@ ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
     def_or_undef (parse_in, "__AVX512VBMI__");
   if (isa_flag & OPTION_MASK_ISA_AVX512IFMA)
     def_or_undef (parse_in, "__AVX512IFMA__");
+  if (isa_flag2 & OPTION_MASK_ISA_AVX5124VNNIW)
+    def_or_undef (parse_in, "__AVX5124VNNIW__");
+  if (isa_flag2 & OPTION_MASK_ISA_SGX)
+    def_or_undef (parse_in, "__SGX__");
+  if (isa_flag2 & OPTION_MASK_ISA_AVX5124FMAPS)
+    def_or_undef (parse_in, "__AVX5124FMAPS__");
+  if (isa_flag2 & OPTION_MASK_ISA_AVX512VPOPCNTDQ)
+    def_or_undef (parse_in, "__AVX512VPOPCNTDQ__");
   if (isa_flag & OPTION_MASK_ISA_FMA)
     def_or_undef (parse_in, "__FMA__");
   if (isa_flag & OPTION_MASK_ISA_RTM)
@@ -422,18 +434,27 @@ ix86_target_macros_internal (HOST_WIDE_INT isa_flag,
     def_or_undef (parse_in, "__SSE2_MATH__");
   if (isa_flag & OPTION_MASK_ISA_CLFLUSHOPT)
     def_or_undef (parse_in, "__CLFLUSHOPT__");
+  if (isa_flag & OPTION_MASK_ISA_CLZERO)
+    def_or_undef (parse_in, "__CLZERO__");
   if (isa_flag & OPTION_MASK_ISA_XSAVEC)
     def_or_undef (parse_in, "__XSAVEC__");
   if (isa_flag & OPTION_MASK_ISA_XSAVES)
     def_or_undef (parse_in, "__XSAVES__");
   if (isa_flag & OPTION_MASK_ISA_MPX)
     def_or_undef (parse_in, "__MPX__");
-  if (isa_flag & OPTION_MASK_ISA_PCOMMIT)
-    def_or_undef (parse_in, "__PCOMMIT__");
   if (isa_flag & OPTION_MASK_ISA_CLWB)
     def_or_undef (parse_in, "__CLWB__");
   if (isa_flag & OPTION_MASK_ISA_MWAITX)
     def_or_undef (parse_in, "__MWAITX__");
+  if (isa_flag & OPTION_MASK_ISA_PKU)
+    def_or_undef (parse_in, "__PKU__");
+  if (isa_flag2 & OPTION_MASK_ISA_RDPID)
+    def_or_undef (parse_in, "__RDPID__");
+  if (TARGET_IAMCU)
+    {
+      def_or_undef (parse_in, "__iamcu");
+      def_or_undef (parse_in, "__iamcu__");
+    }
 }
 
 
@@ -451,6 +472,9 @@ ix86_pragma_target_parse (tree args, tree pop_target)
   HOST_WIDE_INT prev_isa;
   HOST_WIDE_INT cur_isa;
   HOST_WIDE_INT diff_isa;
+  HOST_WIDE_INT prev_isa2;
+  HOST_WIDE_INT cur_isa2;
+  HOST_WIDE_INT diff_isa2;
   enum processor_type prev_arch;
   enum processor_type prev_tune;
   enum processor_type cur_arch;
@@ -483,6 +507,9 @@ ix86_pragma_target_parse (tree args, tree pop_target)
   prev_isa  = prev_opt->x_ix86_isa_flags;
   cur_isa   = cur_opt->x_ix86_isa_flags;
   diff_isa  = (prev_isa ^ cur_isa);
+  prev_isa2  = prev_opt->x_ix86_isa_flags2;
+  cur_isa2   = cur_opt->x_ix86_isa_flags2;
+  diff_isa2  = (prev_isa2 ^ cur_isa2);
   prev_arch = (enum processor_type) prev_opt->arch;
   prev_tune = (enum processor_type) prev_opt->tune;
   cur_arch  = (enum processor_type) cur_opt->arch;
@@ -498,6 +525,7 @@ ix86_pragma_target_parse (tree args, tree pop_target)
 
   /* Undef all of the macros for that are no longer current.  */
   ix86_target_macros_internal (prev_isa & diff_isa,
+			       prev_isa2 & diff_isa2,
 			       prev_arch,
 			       prev_tune,
 			       (enum fpmath_unit) prev_opt->x_ix86_fpmath,
@@ -512,6 +540,7 @@ ix86_pragma_target_parse (tree args, tree pop_target)
 
   /* Define all of the macros for new options that were just turned on.  */
   ix86_target_macros_internal (cur_isa & diff_isa,
+			       cur_isa2 & diff_isa2,
 			       cur_arch,
 			       cur_tune,
 			       (enum fpmath_unit) cur_opt->x_ix86_fpmath,
@@ -569,11 +598,17 @@ ix86_target_macros (void)
   cpp_define_formatted (parse_in, "__ATOMIC_HLE_ACQUIRE=%d", IX86_HLE_ACQUIRE);
   cpp_define_formatted (parse_in, "__ATOMIC_HLE_RELEASE=%d", IX86_HLE_RELEASE);
 
+  cpp_define (parse_in, "__GCC_ASM_FLAG_OUTPUTS__");
+
   ix86_target_macros_internal (ix86_isa_flags,
+			       ix86_isa_flags2,
 			       ix86_arch,
 			       ix86_tune,
 			       ix86_fpmath,
 			       cpp_define);
+
+  cpp_define (parse_in, "__SEG_FS");
+  cpp_define (parse_in, "__SEG_GS");
 }
 
 
@@ -587,6 +622,9 @@ ix86_register_pragmas (void)
 {
   /* Update pragma hook to allow parsing #pragma GCC target.  */
   targetm.target_option.pragma_parse = ix86_pragma_target_parse;
+
+  c_register_addr_space ("__seg_fs", ADDR_SPACE_SEG_FS);
+  c_register_addr_space ("__seg_gs", ADDR_SPACE_SEG_GS);
 
 #ifdef REGISTER_SUBTARGET_PRAGMAS
   REGISTER_SUBTARGET_PRAGMAS ();

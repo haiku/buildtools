@@ -1,4 +1,0 @@
-# There are system headers elsewhere, but these are the ones that
-# we are most likely to want to apply any fixes to.
-NATIVE_SYSTEM_HEADER_DIR = /boot/system/develop/headers
-LIMITS_H_TEST = [ -f $(SYSTEM_HEADER_DIR)/posix/limits.h ]

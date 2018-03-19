@@ -1,6 +1,17 @@
-/* { dg-do run  { target { i?86-*-* x86_64-*-* } } } */
+/* { dg-do run } */
+/* { dg-require-effective-target cilkplus_runtime } */
 /* { dg-options "-fcilkplus" } */
-/* { dg-additional-options "-lcilkrts" { target { i?86-*-* x86_64-*-* } } } */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern int __cilkrts_set_param (const char *, const char *);
+
+#ifdef __cplusplus
+}
+#endif
+
 
 void f0(volatile int *steal_flag)
 { 
@@ -32,6 +43,10 @@ void f3()
 
 int main()
 {
+  /* Ensure more than one worker.  */
+  if (__cilkrts_set_param("nworkers", "2") != 0)
+    __builtin_abort();
+
   f3();
   return 0;
 }

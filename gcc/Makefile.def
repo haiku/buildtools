@@ -50,6 +50,7 @@ host_modules= { module= gcc; bootstrap=true;
 host_modules= { module= gmp; lib_path=.libs; bootstrap=true;
 		// Work around in-tree gmp configure bug with missing flex.
 		extra_configure_flags='--disable-shared LEX="touch lex.yy.c"';
+		extra_make_flags='AM_CFLAGS="-DNO_ASM"';
 		no_install= true;
 		// none-*-* disables asm optimizations, bootstrap-testing
 		// the compiler more thoroughly.
@@ -57,11 +58,12 @@ host_modules= { module= gmp; lib_path=.libs; bootstrap=true;
 		// gmp's configure will complain if given anything
 		// different from host for target.
 	        target="none-${host_vendor}-${host_os}"; };
-host_modules= { module= mpfr; lib_path=.libs; bootstrap=true;
+host_modules= { module= mpfr; lib_path=src/.libs; bootstrap=true;
 		extra_configure_flags='--disable-shared @extra_mpfr_configure_flags@';
+		extra_make_flags='AM_CFLAGS="-DNO_ASM"';
 		no_install= true; };
-host_modules= { module= mpc; lib_path=.libs; bootstrap=true;
-		extra_configure_flags='--disable-shared @extra_mpc_gmp_configure_flags@ @extra_mpc_mpfr_configure_flags@';
+host_modules= { module= mpc; lib_path=src/.libs; bootstrap=true;
+		extra_configure_flags='--disable-shared @extra_mpc_gmp_configure_flags@ @extra_mpc_mpfr_configure_flags@ --disable-maintainer-mode';
 		no_install= true; };
 host_modules= { module= isl; lib_path=.libs; bootstrap=true;
 		extra_configure_flags='--disable-shared @extra_isl_gmp_configure_flags@';
@@ -93,9 +95,12 @@ host_modules= { module= libiberty-linker-plugin; bootstrap=true;
 		extra_make_flags='@extra_linker_plugin_flags@'; };
 // We abuse missing to avoid installing anything for libiconv.
 host_modules= { module= libiconv;
+		bootstrap=true;
 		extra_configure_flags='--disable-shared';
 		no_install= true;
-		missing= install-info;
+		missing= pdf;
+		missing= html;
+		missing= info;
 		missing= install-pdf;
 		missing= install-html;
 		missing= install-info; };
@@ -104,7 +109,9 @@ host_modules= { module= readline; };
 host_modules= { module= sid; };
 host_modules= { module= sim; };
 host_modules= { module= texinfo; no_install= true; };
-host_modules= { module= zlib; no_install=true; no_check=true; bootstrap=true; };
+host_modules= { module= zlib; no_install=true; no_check=true;
+		bootstrap=true;
+	        extra_configure_flags='@extra_host_zlib_configure_flags@';};
 host_modules= { module= gdb; };
 host_modules= { module= expect; };
 host_modules= { module= guile; };
@@ -150,6 +157,7 @@ target_modules = { module= libquadmath; };
 target_modules = { module= libgfortran; };
 target_modules = { module= libobjc; };
 target_modules = { module= libgo; };
+target_modules = { module= libhsail-rt; };
 target_modules = { module= libtermcap; no_check=true;
                    missing=mostlyclean;
                    missing=clean;
@@ -158,10 +166,7 @@ target_modules = { module= libtermcap; no_check=true;
 target_modules = { module= winsup; };
 target_modules = { module= libgloss; no_check=true; };
 target_modules = { module= libffi; no_install=true; };
-target_modules = { module= libjava; raw_cxx=true;
-                   extra_configure_flags="$(EXTRA_CONFIGARGS_LIBJAVA)"; };
 target_modules = { module= zlib; };
-target_modules = { module= boehm-gc; };
 target_modules = { module= rda; };
 target_modules = { module= libada; };
 target_modules = { module= libgomp; bootstrap= true; lib_path=.libs; };
@@ -275,7 +280,6 @@ flags_to_pass = { flag= CPPFLAGS_FOR_TARGET ; };
 flags_to_pass = { flag= CXXFLAGS_FOR_TARGET ; };
 flags_to_pass = { flag= DLLTOOL_FOR_TARGET ; };
 flags_to_pass = { flag= FLAGS_FOR_TARGET ; };
-flags_to_pass = { flag= GCJ_FOR_TARGET ; };
 flags_to_pass = { flag= GFORTRAN_FOR_TARGET ; };
 flags_to_pass = { flag= GOC_FOR_TARGET ; };
 flags_to_pass = { flag= GOCFLAGS_FOR_TARGET ; };
@@ -322,6 +326,7 @@ dependencies = { module=configure-gcc; on=all-gas; };
 dependencies = { module=configure-gcc; on=all-ld; };
 dependencies = { module=configure-gcc; on=all-gold; };
 dependencies = { module=configure-gcc; on=all-libelf; };
+dependencies = { module=configure-gcc; on=all-libiconv; };
 dependencies = { module=all-gcc; on=all-libiberty; hard=true; };
 dependencies = { module=all-gcc; on=all-intl; };
 dependencies = { module=all-gcc; on=all-mpfr; };
@@ -340,6 +345,7 @@ dependencies = { module=all-gcc; on=all-libdecnumber; hard=true; };
 dependencies = { module=all-gcc; on=all-libiberty; };
 dependencies = { module=all-gcc; on=all-fixincludes; };
 dependencies = { module=all-gcc; on=all-lto-plugin; };
+dependencies = { module=all-gcc; on=all-libiconv; };
 dependencies = { module=info-gcc; on=all-build-libiberty; };
 dependencies = { module=dvi-gcc; on=all-build-libiberty; };
 dependencies = { module=pdf-gcc; on=all-build-libiberty; };
@@ -351,8 +357,10 @@ dependencies = { module=install-strip-gcc ; on=install-strip-lto-plugin; };
 
 dependencies = { module=configure-libcpp; on=configure-libiberty; hard=true; };
 dependencies = { module=configure-libcpp; on=configure-intl; };
+dependencies = { module=configure-libcpp; on=all-libiconv; };
 dependencies = { module=all-libcpp; on=all-libiberty; hard=true; };
 dependencies = { module=all-libcpp; on=all-intl; };
+dependencies = { module=all-libcpp; on=all-libiconv; };
 
 dependencies = { module=all-fixincludes; on=all-libiberty; };
 
@@ -371,9 +379,11 @@ dependencies = { module=all-gotools; on=all-target-libgo; };
 
 dependencies = { module=all-utils; on=all-libiberty; };
 
+dependencies = { module=configure-intl; on=all-libiconv; };
 dependencies = { module=configure-mpfr; on=all-gmp; };
 dependencies = { module=configure-mpc; on=all-mpfr; };
 dependencies = { module=configure-isl; on=all-gmp; };
+dependencies = { module=all-intl; on=all-libiconv; };
 
 // Host modules specific to gdb.
 dependencies = { module=configure-gdb; on=all-intl; };
@@ -402,6 +412,7 @@ dependencies = { module=configure-bfd; on=configure-libiberty; hard=true; };
 dependencies = { module=configure-bfd; on=configure-intl; };
 dependencies = { module=all-bfd; on=all-libiberty; };
 dependencies = { module=all-bfd; on=all-intl; };
+dependencies = { module=all-bfd; on=all-zlib; };
 dependencies = { module=configure-opcodes; on=configure-libiberty; hard=true; };
 dependencies = { module=all-opcodes; on=all-libiberty; };
 
@@ -520,7 +531,6 @@ dependencies = { module=all-m4; on=all-build-texinfo; };
 // Target modules.  These can also have dependencies on the language
 // environment (e.g. on libstdc++).  By default target modules depend
 // on libgcc and newlib/libgloss.
-lang_env_dependencies = { module=libjava; cxx=true; };
 lang_env_dependencies = { module=libitm; cxx=true; };
 lang_env_dependencies = { module=libffi; cxx=true; };
 lang_env_dependencies = { module=libcilkrts; cxx=true; };
@@ -533,7 +543,6 @@ lang_env_dependencies = { module=libgcc; no_gcc=true; no_c=true; };
 // a dependency on libgcc for native targets to configure.
 lang_env_dependencies = { module=libiberty; no_c=true; };
 
-dependencies = { module=configure-target-boehm-gc; on=all-target-libstdc++-v3; };
 dependencies = { module=configure-target-fastjar; on=configure-target-zlib; };
 dependencies = { module=all-target-fastjar; on=all-target-zlib; };
 dependencies = { module=configure-target-libgo; on=configure-target-libffi; };
@@ -541,15 +550,6 @@ dependencies = { module=configure-target-libgo; on=all-target-libstdc++-v3; };
 dependencies = { module=all-target-libgo; on=all-target-libbacktrace; };
 dependencies = { module=all-target-libgo; on=all-target-libffi; };
 dependencies = { module=all-target-libgo; on=all-target-libatomic; };
-dependencies = { module=configure-target-libjava; on=configure-target-zlib; };
-dependencies = { module=configure-target-libjava; on=configure-target-boehm-gc; };
-dependencies = { module=configure-target-libjava; on=configure-target-libffi; };
-dependencies = { module=all-target-libjava; on=all-fastjar; };
-dependencies = { module=all-target-libjava; on=all-target-zlib; };
-dependencies = { module=all-target-libjava; on=all-target-boehm-gc; };
-dependencies = { module=all-target-libjava; on=all-target-libffi; };
-dependencies = { module=configure-target-libobjc; on=configure-target-boehm-gc; };
-dependencies = { module=all-target-libobjc; on=all-target-boehm-gc; };
 dependencies = { module=configure-target-libstdc++-v3; on=configure-target-libgomp; };
 dependencies = { module=configure-target-liboffloadmic; on=configure-target-libgomp; };
 dependencies = { module=configure-target-libsanitizer; on=all-target-libstdc++-v3; };
@@ -571,7 +571,6 @@ dependencies = { module=install-target-libcilkrts; on=install-target-libstdc++-v
 dependencies = { module=install-target-libcilkrts; on=install-target-libgcc; };
 dependencies = { module=install-target-liboffloadmic; on=install-target-libstdc++-v3; };
 dependencies = { module=install-target-liboffloadmic; on=install-target-libgcc; };
-dependencies = { module=install-target-libjava; on=install-target-libgcc; };
 dependencies = { module=install-target-libitm; on=install-target-libgcc; };
 dependencies = { module=install-target-libobjc; on=install-target-libgcc; };
 dependencies = { module=install-target-libstdc++-v3; on=install-target-libgcc; };
@@ -586,6 +585,7 @@ dependencies = { module=all-target-winsup; on=all-target-libtermcap; };
 dependencies = { module=configure-target-newlib; on=all-binutils; };
 dependencies = { module=configure-target-newlib; on=all-ld; };
 dependencies = { module=configure-target-libgfortran; on=all-target-libquadmath; };
+dependencies = { module=configure-target-libgfortran; on=all-target-libbacktrace; };
 
 languages = { language=c;	gcc-check-target=check-gcc; };
 languages = { language=c++;	gcc-check-target=check-c++;
@@ -595,8 +595,6 @@ languages = { language=c++;	gcc-check-target=check-c++;
 languages = { language=fortran;	gcc-check-target=check-fortran;
 				lib-check-target=check-target-libquadmath;
 				lib-check-target=check-target-libgfortran; };
-languages = { language=java;	gcc-check-target=check-java;
-				lib-check-target=check-target-libjava; };
 languages = { language=ada;	gcc-check-target=check-ada;
 				lib-check-target=check-target-libada; };
 languages = { language=objc;	gcc-check-target=check-objc;
@@ -604,6 +602,8 @@ languages = { language=objc;	gcc-check-target=check-objc;
 languages = { language=obj-c++;	gcc-check-target=check-obj-c++; };
 languages = { language=go;	gcc-check-target=check-go;
 				lib-check-target=check-target-libgo; };
+languages = { language=brig;	gcc-check-target=check-brig;
+				lib-check-target=check-target-libhsail-rt; };
 
 // Toplevel bootstrap
 bootstrap_stage = { id=1 ; };
@@ -624,3 +624,10 @@ bootstrap_stage = {
 bootstrap_stage = {
 	id=feedback ; prev=profile ;
 	bootstrap_target=profiledbootstrap ; };
+bootstrap_stage = {
+	id=autoprofile ; prev=1 ;
+        autoprofile="$$s/gcc/config/i386/$(AUTO_PROFILE)" ; };
+bootstrap_stage = {
+	id=autofeedback ; prev=autoprofile ;
+	bootstrap_target=autoprofiledbootstrap ;
+	profile_data="PERF_DATA=perf.data" ; };

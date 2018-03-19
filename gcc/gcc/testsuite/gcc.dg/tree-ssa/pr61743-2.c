@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O3 -funroll-loops -fno-tree-vectorize -fdump-tree-cunroll-details" } */
+/* { dg-options "-O3 -funroll-loops -fno-tree-vectorize -fdump-tree-cunroll-details -fno-peel-loops" } */
 
 #define N 8
 #define M 14
@@ -50,4 +50,3 @@ int foo1 (e_u8 a[4][N], int b1, int b2, e_u8 b[M+1][4][N])
 
 /* { dg-final { scan-tree-dump-times "loop with 4 iterations completely unrolled" 2 "cunroll" } } */
 /* { dg-final { scan-tree-dump-times "loop with 8 iterations completely unrolled" 2 "cunroll" } } */
-/* { dg-final { cleanup-tree-dump "cunroll" } } */

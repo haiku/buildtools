@@ -1,5 +1,5 @@
 /* Language independent return value optimizations
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,41 +20,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-pretty-print.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
 #include "gimple.h"
+#include "tree-pass.h"
+#include "ssa.h"
+#include "tree-pretty-print.h"
 #include "gimple-iterator.h"
 #include "gimple-walk.h"
-#include "gimple-ssa.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
-#include "tree-pass.h"
-#include "langhooks.h"
-#include "flags.h"	/* For "optimize" in gate_pass_return_slot.
-			   FIXME: That should be up to the pass manager,
-			   but pass_nrv is not in pass_all_optimizations.  */
+#include "internal-fn.h"
 
 /* This file implements return value optimizations for functions which
    return aggregate types.
@@ -192,7 +166,7 @@ pass_nrv::execute (function *fun)
     {
       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gimple stmt = gsi_stmt (gsi);
+	  gimple *stmt = gsi_stmt (gsi);
 	  tree ret_val;
 
 	  if (greturn *return_stmt = dyn_cast <greturn *> (stmt))
@@ -229,7 +203,7 @@ pass_nrv::execute (function *fun)
 
 	      /* The returned value must be a local automatic variable of the
 		 same type and alignment as the function's result.  */
-	      if (TREE_CODE (found) != VAR_DECL
+	      if (!VAR_P (found)
 		  || TREE_THIS_VOLATILE (found)
 		  || !auto_var_in_fn_p (found, current_function_decl)
 		  || TREE_ADDRESSABLE (found)
@@ -285,7 +259,7 @@ pass_nrv::execute (function *fun)
     {
       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )
 	{
-	  gimple stmt = gsi_stmt (gsi);
+	  gimple *stmt = gsi_stmt (gsi);
 	  /* If this is a copy from VAR to RESULT, remove it.  */
 	  if (gimple_assign_copy_p (stmt)
 	      && gimple_assign_lhs (stmt) == result
@@ -404,6 +378,12 @@ pass_return_slot::execute (function *fun)
 	  if (stmt
 	      && gimple_call_lhs (stmt)
 	      && !gimple_call_return_slot_opt_p (stmt)
+	      /* Ignore internal functions without direct optabs,
+		 those are expanded specially and aggregate_value_p
+		 on their result might result in undesirable warnings
+		 with some backends.  */
+	      && (!gimple_call_internal_p (stmt)
+		  || direct_internal_fn_p (gimple_call_internal_fn (stmt)))
 	      && aggregate_value_p (TREE_TYPE (gimple_call_lhs (stmt)),
 				    gimple_call_fndecl (stmt)))
 	    {

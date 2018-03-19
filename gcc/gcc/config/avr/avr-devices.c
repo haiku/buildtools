@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Contributed by Anatoly Sokolov (aesok@post.ru)
 
    This file is part of GCC.
@@ -21,8 +21,8 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "diagnostic.h"
 #include "tm.h"
+#include "diagnostic.h"
 #endif /* IN_GEN_AVR_MMCU_TEXI */
 
 #include "avr-arch.h"
@@ -111,8 +111,8 @@ avr_texinfo[] =
 const avr_mcu_t
 avr_mcu_types[] =
 {
-#define AVR_MCU(NAME, ARCH, DEV_ATTRIBUTE, MACRO, DATA_SEC, TEXT_SEC, N_FLASH)\
-  { NAME, ARCH, DEV_ATTRIBUTE, MACRO, DATA_SEC, TEXT_SEC, N_FLASH },
+#define AVR_MCU(NAME, ARCH, DEV_ATTRIBUTE, MACRO, DATA_SEC, TEXT_SEC, FLASH_SIZE)\
+  { NAME, ARCH, DEV_ATTRIBUTE, MACRO, DATA_SEC, TEXT_SEC, FLASH_SIZE },
 #include "avr-mcus.def"
 #undef AVR_MCU
     /* End of list.  */

@@ -1,6 +1,6 @@
 // Debugging multiset implementation -*- C++ -*-
 
-// Copyright (C) 2003-2015 Free Software Foundation, Inc.
+// Copyright (C) 2003-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -271,9 +271,14 @@ namespace __debug
 	void
 	insert(_InputIterator __first, _InputIterator __last)
 	{
-	  __glibcxx_check_valid_range(__first, __last);
-	  _Base::insert(__gnu_debug::__base(__first),
-			__gnu_debug::__base(__last));
+	  typename __gnu_debug::_Distance_traits<_InputIterator>::__type __dist;
+	  __glibcxx_check_valid_range2(__first, __last, __dist);
+
+	  if (__dist.second >= __gnu_debug::__dp_sign)
+	    _Base::insert(__gnu_debug::__unsafe(__first),
+			  __gnu_debug::__unsafe(__last));
+	  else
+	    _Base::insert(__first, __last);
 	}
 
 #if __cplusplus >= 201103L
@@ -281,6 +286,40 @@ namespace __debug
       insert(initializer_list<value_type> __l)
       { _Base::insert(__l); }
 #endif
+
+#if __cplusplus > 201402L
+      using node_type = typename _Base::node_type;
+
+      node_type
+      extract(const_iterator __position)
+      {
+	__glibcxx_check_erase(__position);
+	this->_M_invalidate_if(_Equal(__position.base()));
+	return _Base::extract(__position.base());
+      }
+
+      node_type
+      extract(const key_type& __key)
+      {
+	const auto __position = find(__key);
+	if (__position != end())
+	  return extract(__position);
+	return {};
+      }
+
+      iterator
+      insert(node_type&& __nh)
+      { return iterator(_Base::insert(std::move(__nh)), this); }
+
+      iterator
+      insert(const_iterator __hint, node_type&& __nh)
+      {
+	__glibcxx_check_insert(__hint);
+	return iterator(_Base::insert(__hint.base(), std::move(__nh)), this);
+      }
+
+      using _Base::merge;
+#endif // C++17
 
 #if __cplusplus >= 201103L
       iterator
@@ -356,9 +395,7 @@ namespace __debug
 
       void
       swap(multiset& __x)
-#if __cplusplus >= 201103L
-	noexcept( noexcept(declval<_Base>().swap(__x)) )
-#endif
+      _GLIBCXX_NOEXCEPT_IF( noexcept(declval<_Base&>().swap(__x)) )
       {
 	_Safe::_M_swap(__x);
 	_Base::swap(__x);
@@ -386,6 +423,22 @@ namespace __debug
       find(const key_type& __x) const
       { return const_iterator(_Base::find(__x), this); }
 
+#if __cplusplus > 201103L
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	iterator
+	find(const _Kt& __x)
+	{ return { _Base::find(__x), this }; }
+
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	const_iterator
+	find(const _Kt& __x) const
+	{ return { _Base::find(__x), this }; }
+#endif
+
       using _Base::count;
 
       iterator
@@ -398,6 +451,22 @@ namespace __debug
       lower_bound(const key_type& __x) const
       { return const_iterator(_Base::lower_bound(__x), this); }
 
+#if __cplusplus > 201103L
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	iterator
+	lower_bound(const _Kt& __x)
+	{ return { _Base::lower_bound(__x), this }; }
+
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	const_iterator
+	lower_bound(const _Kt& __x) const
+	{ return { _Base::lower_bound(__x), this }; }
+#endif
+
       iterator
       upper_bound(const key_type& __x)
       { return iterator(_Base::upper_bound(__x), this); }
@@ -407,6 +476,22 @@ namespace __debug
       const_iterator
       upper_bound(const key_type& __x) const
       { return const_iterator(_Base::upper_bound(__x), this); }
+
+#if __cplusplus > 201103L
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	iterator
+	upper_bound(const _Kt& __x)
+	{ return { _Base::upper_bound(__x), this }; }
+
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	const_iterator
+	upper_bound(const _Kt& __x) const
+	{ return { _Base::upper_bound(__x), this }; }
+#endif
 
       std::pair<iterator,iterator>
       equal_range(const key_type& __x)
@@ -427,6 +512,28 @@ namespace __debug
 	return std::make_pair(const_iterator(__res.first, this),
 			      const_iterator(__res.second, this));
       }
+
+#if __cplusplus > 201103L
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	std::pair<iterator, iterator>
+	equal_range(const _Kt& __x)
+	{
+	  auto __res = _Base::equal_range(__x);
+	  return { { __res.first, this }, { __res.second, this } };
+	}
+
+      template<typename _Kt,
+	       typename _Req =
+		 typename __has_is_transparent<_Compare, _Kt>::type>
+	std::pair<const_iterator, const_iterator>
+	equal_range(const _Kt& __x) const
+	{
+	  auto __res = _Base::equal_range(__x);
+	  return { { __res.first, this }, { __res.second, this } };
+	}
+#endif
 
       _Base&
       _M_base() _GLIBCXX_NOEXCEPT { return *this; }
@@ -475,6 +582,7 @@ namespace __debug
     void
     swap(multiset<_Key, _Compare, _Allocator>& __x,
 	 multiset<_Key, _Compare, _Allocator>& __y)
+    _GLIBCXX_NOEXCEPT_IF(noexcept(__x.swap(__y)))
     { return __x.swap(__y); }
 
 } // namespace __debug

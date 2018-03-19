@@ -21,6 +21,8 @@ main (void)
   unsigned short expect[N];
   int i;
 
+  check_vect ();
+
   for (i = 0; i < N; ++i)
     {
       arr[i] = i;
@@ -41,4 +43,3 @@ main (void)
 }
 
 /* { dg-final { scan-tree-dump-times "vectorized 1 loops" 1 "vect" } } */
-/* { dg-final { cleanup-tree-dump "vect" } } */

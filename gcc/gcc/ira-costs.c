@@ -1,5 +1,5 @@
 /* IRA hard register and memory cost calculation for allocnos or pseudos.
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright (C) 2006-2017 Free Software Foundation, Inc.
    Contributed by Vladimir Makarov <vmakarov@redhat.com>.
 
 This file is part of GCC.
@@ -21,48 +21,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-table.h"
-#include "hard-reg-set.h"
-#include "rtl.h"
-#include "symtab.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "vec.h"
-#include "machmode.h"
-#include "input.h"
-#include "function.h"
-#include "flags.h"
-#include "statistics.h"
-#include "double-int.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "alias.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "tm_p.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "regs.h"
-#include "addresses.h"
-#include "recog.h"
-#include "reload.h"
-#include "diagnostic-core.h"
+#include "backend.h"
 #include "target.h"
-#include "params.h"
+#include "rtl.h"
+#include "tree.h"
+#include "predict.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "insn-config.h"
+#include "regs.h"
+#include "ira.h"
 #include "ira-int.h"
+#include "addresses.h"
+#include "reload.h"
 
 /* The flags is set up every time when we calculate pseudo register
    classes through function ira_set_pseudo_classes.  */
@@ -103,7 +74,7 @@ static struct costs *costs;
 static struct costs *total_allocno_costs;
 
 /* It is the current size of struct costs.  */
-static int struct_costs_size;
+static size_t struct_costs_size;
 
 /* Return pointer to structure containing costs of allocno or pseudo
    with given NUM in array ARR.  */
@@ -159,25 +130,23 @@ static cost_classes_t *regno_cost_classes;
 
 /* Helper for cost_classes hashing.  */
 
-struct cost_classes_hasher
+struct cost_classes_hasher : pointer_hash <cost_classes>
 {
-  typedef cost_classes value_type;
-  typedef cost_classes compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *, const compare_type *);
-  static inline void remove (value_type *);
+  static inline hashval_t hash (const cost_classes *);
+  static inline bool equal (const cost_classes *, const cost_classes *);
+  static inline void remove (cost_classes *);
 };
 
 /* Returns hash value for cost classes info HV.  */
 inline hashval_t
-cost_classes_hasher::hash (const value_type *hv)
+cost_classes_hasher::hash (const cost_classes *hv)
 {
   return iterative_hash (&hv->classes, sizeof (enum reg_class) * hv->num, 0);
 }
 
 /* Compares cost classes info HV1 and HV2.  */
 inline bool
-cost_classes_hasher::equal (const value_type *hv1, const compare_type *hv2)
+cost_classes_hasher::equal (const cost_classes *hv1, const cost_classes *hv2)
 {
   return (hv1->num == hv2->num
 	  && memcmp (hv1->classes, hv2->classes,
@@ -186,7 +155,7 @@ cost_classes_hasher::equal (const value_type *hv1, const compare_type *hv2)
 
 /* Delete cost classes info V from the hash table.  */
 inline void
-cost_classes_hasher::remove (value_type *v)
+cost_classes_hasher::remove (cost_classes *v)
 {
   ira_free (v);
 }
@@ -474,6 +443,9 @@ copy_cost (rtx x, machine_mode mode, reg_class_t rclass, bool to_p,
      copy it.  */
   sri.prev_sri = prev_sri;
   sri.extra_cost = 0;
+  /* PR 68770: Secondary reload might examine the t_icode field.  */
+  sri.t_icode = CODE_FOR_nothing;
+
   secondary_class = targetm.secondary_reload (to_p, x, rclass, mode, &sri);
 
   if (secondary_class != NO_REGS)
@@ -812,6 +784,12 @@ record_reg_classes (int n_alts, int n_ops, rtx *ops,
 			win = 1;
 		      break;
 
+		    case CT_SPECIAL_MEMORY:
+		      insn_allows_mem[i] = allows_mem[i] = 1;
+		      if (MEM_P (op) && constraint_satisfied_p (op, cn))
+			win = 1;
+		      break;
+
 		    case CT_ADDRESS:
 		      /* Every address can be reloaded to fit.  */
 		      allows_addr = 1;
@@ -841,6 +819,9 @@ record_reg_classes (int n_alts, int n_ops, rtx *ops,
 	    }
 
 	  constraints[i] = p;
+
+	  if (alt_fail)
+	    break;
 
 	  /* How we account for this operand now depends on whether it
 	     is a pseudo register or not.  If it is, we first check if
@@ -1021,10 +1002,21 @@ record_reg_classes (int n_alts, int n_ops, rtx *ops,
 	    alt_cost += ira_memory_move_cost[mode][classes[i]][1];
 	  else
 	    alt_fail = 1;
+
+	  if (alt_fail)
+	    break;
 	}
 
       if (alt_fail)
-	continue;
+	{
+	  /* The loop above might have exited early once the failure
+	     was seen.  Skip over the constraints for the remaining
+	     operands.  */
+	  i += 1;
+	  for (; i < n_ops; ++i)
+	    constraints[i] = skip_alternative (constraints[i]);
+	  continue;
+	}
 
       op_cost_add = alt_cost * frequency;
       /* Finally, update the costs with the information we've
@@ -1380,8 +1372,6 @@ record_operand_costs (rtx_insn *insn, enum reg_class *pref)
       rtx dest = SET_DEST (set);
       rtx src = SET_SRC (set);
 
-      dest = SET_DEST (set);
-      src = SET_SRC (set);
       if (GET_CODE (dest) == SUBREG
 	  && (GET_MODE_SIZE (GET_MODE (dest))
 	      == GET_MODE_SIZE (GET_MODE (SUBREG_REG (dest)))))
@@ -1448,8 +1438,25 @@ scan_one_insn (rtx_insn *insn)
     return insn;
 
   pat_code = GET_CODE (PATTERN (insn));
-  if (pat_code == USE || pat_code == CLOBBER || pat_code == ASM_INPUT)
+  if (pat_code == ASM_INPUT)
     return insn;
+
+  /* If INSN is a USE/CLOBBER of a pseudo in a mode M then go ahead
+     and initialize the register move costs of mode M.
+
+     The pseudo may be related to another pseudo via a copy (implicit or
+     explicit) and if there are no mode M uses/sets of the original
+     pseudo, then we may leave the register move costs uninitialized for
+     mode M. */
+  if (pat_code == USE || pat_code == CLOBBER)
+    {
+      rtx x = XEXP (PATTERN (insn), 0);
+      if (GET_CODE (x) == REG
+	  && REGNO (x) >= FIRST_PSEUDO_REGISTER
+	  && have_regs_of_mode[GET_MODE (x)])
+        ira_init_register_move_cost_if_necessary (GET_MODE (x));
+      return insn;
+    }
 
   counted_mem = false;
   set = single_set (insn);
@@ -1478,7 +1485,10 @@ scan_one_insn (rtx_insn *insn)
 	      && targetm.legitimate_constant_p (GET_MODE (SET_DEST (set)),
 						XEXP (note, 0))
 	      && REG_N_SETS (REGNO (SET_DEST (set))) == 1))
-      && general_operand (SET_SRC (set), GET_MODE (SET_SRC (set))))
+      && general_operand (SET_SRC (set), GET_MODE (SET_SRC (set)))
+      /* LRA does not use equiv with a symbol for PIC code.  */
+      && (! ira_use_lra_p || ! pic_offset_table_rtx
+	  || ! contains_symbol_ref_p (XEXP (note, 0))))
     {
       enum reg_class cl = GENERAL_REGS;
       rtx reg = SET_DEST (set);
@@ -1638,7 +1648,7 @@ find_costs_and_classes (FILE *dump_file)
   int i, k, start, max_cost_classes_num;
   int pass;
   basic_block bb;
-  enum reg_class *regno_best_class;
+  enum reg_class *regno_best_class, new_class;
 
   init_recog ();
   regno_best_class
@@ -1855,7 +1865,8 @@ find_costs_and_classes (FILE *dump_file)
 		alt_class = reg_class_subunion[alt_class][rclass];
 	    }
 	  alt_class = ira_allocno_class_translate[alt_class];
-	  if (best_cost > i_mem_cost)
+	  if (best_cost > i_mem_cost
+	      && ! non_spilled_static_chain_regno_p (i))
 	    regno_aclass[i] = NO_REGS;
 	  else if (!optimize && !targetm.class_likely_spilled_p (best))
 	    /* Registers in the alternative class are likely to need
@@ -1869,20 +1880,40 @@ find_costs_and_classes (FILE *dump_file)
 	       short in -O0 code and so register pressure tends to be low.
 
 	       Avoid that by ignoring the alternative class if the best
-	       class has plenty of registers.  */
-	    regno_aclass[i] = best;
+	       class has plenty of registers.
+
+	       The union class arrays give important classes and only
+	       part of it are allocno classes.  So translate them into
+	       allocno classes.  */
+	    regno_aclass[i] = ira_allocno_class_translate[best];
 	  else
 	    {
 	      /* Make the common class the biggest class of best and
-		 alt_class.  */
-	      regno_aclass[i]
-		= ira_reg_class_superunion[best][alt_class];
+		 alt_class.  Translate the common class into an
+		 allocno class too.  */
+	      regno_aclass[i] = (ira_allocno_class_translate
+				 [ira_reg_class_superunion[best][alt_class]]);
 	      ira_assert (regno_aclass[i] != NO_REGS
 			  && ira_reg_allocno_class_p[regno_aclass[i]]);
 	    }
+	  if ((new_class
+	       = (reg_class) (targetm.ira_change_pseudo_allocno_class
+			      (i, regno_aclass[i], best))) != regno_aclass[i])
+	    {
+	      regno_aclass[i] = new_class;
+	      if (hard_reg_set_subset_p (reg_class_contents[new_class],
+					 reg_class_contents[best]))
+		best = new_class;
+	      if (hard_reg_set_subset_p (reg_class_contents[new_class],
+					 reg_class_contents[alt_class]))
+		alt_class = new_class;
+	    }
 	  if (pass == flag_expensive_optimizations)
 	    {
-	      if (best_cost > i_mem_cost)
+	      if (best_cost > i_mem_cost
+		  /* Do not assign NO_REGS to static chain pointer
+		     pseudo when non-local goto is used.  */
+		  && ! non_spilled_static_chain_regno_p (i))
 		best = alt_class = NO_REGS;
 	      else if (best == alt_class)
 		alt_class = NO_REGS;
@@ -1897,7 +1928,9 @@ find_costs_and_classes (FILE *dump_file)
 	  regno_best_class[i] = best;
 	  if (! allocno_p)
 	    {
-	      pref[i] = best_cost > i_mem_cost ? NO_REGS : best;
+	      pref[i] = (best_cost > i_mem_cost
+			 && ! non_spilled_static_chain_regno_p (i)
+			 ? NO_REGS : best);
 	      continue;
 	    }
 	  for (a = ira_regno_allocno_map[i];

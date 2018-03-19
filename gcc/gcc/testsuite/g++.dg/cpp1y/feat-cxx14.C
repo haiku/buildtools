@@ -1,5 +1,4 @@
-// { dg-do compile { target c++14 } }
-// { dg-options "-I${srcdir}/g++.dg/cpp1y -I${srcdir}/g++.dg/cpp1y/testinc" }
+// { dg-options "-std=c++14 -I${srcdir}/g++.dg/cpp1y -I${srcdir}/g++.dg/cpp1y/testinc" }
 
 //  C++98 features:
 
@@ -49,8 +48,8 @@
 
 #ifndef __cpp_range_based_for
 #  error "__cpp_range_based_for"
-#elif __cpp_range_based_for != 200907
-#  error "__cpp_range_based_for != 200907"
+#elif __cpp_range_based_for < 200907
+#  error "__cpp_range_based_for < 200907"
 #endif
 
 #ifndef __cpp_static_assert
@@ -71,10 +70,10 @@
 #  error "__cpp_attributes != 200809"
 #endif
 
-#ifndef __cpp_rvalue_reference
-#  error "__cpp_rvalue_reference"
-#elif __cpp_rvalue_reference != 200610
-#  error "__cpp_rvalue_reference != 200610"
+#ifndef __cpp_rvalue_references
+#  error "__cpp_rvalue_references"
+#elif __cpp_rvalue_references != 200610
+#  error "__cpp_rvalue_references != 200610"
 #endif
 
 #ifndef __cpp_variadic_templates
@@ -103,8 +102,8 @@
 
 #ifndef __cpp_inheriting_constructors
 #  error "__cpp_inheriting_constructors"
-#elif  __cpp_inheriting_constructors!= 200802
-#  error "__cpp_inheriting_constructors != 200802"
+#elif  __cpp_inheriting_constructors!= 201511
+#  error "__cpp_inheriting_constructors != 201511"
 #endif
 
 #ifndef __cpp_ref_qualifiers
@@ -117,6 +116,12 @@
 #  error "__cpp_alias_templates"
 #elif __cpp_alias_templates != 200704
 #  error "__cpp_alias_templates != 200704"
+#endif
+
+#ifndef __cpp_threadsafe_static_init
+#  error "__cpp_threadsafe_static_init"
+#elif __cpp_threadsafe_static_init != 200806
+#  error "__cpp_threadsafe_static_init != 200806"
 #endif
 
 //  C++14 features:
