@@ -213,8 +213,5 @@ Boston, MA 02111-1307, USA.  */
 /* Do not use JCR_SECTION_NAME default definition for Haiku */
 #define TARGET_NO_JCR_SECTION_NAME 1
 
-/* Do not desire to have _Jv_RegisterClasses in crtbegin.o for Haiku */
-#define TARGET_USE_JCR_SECTION 0
-
 /* Do not use TM clone registry in Haiku for now */
 #define USE_TM_CLONE_REGISTRY 0

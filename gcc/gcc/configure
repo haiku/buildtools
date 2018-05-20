@@ -25217,6 +25217,7 @@ $as_echo "#define HAVE_AS_SPARC5_VIS4 1" >>confdefs.h
 
 fi
 
+
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking assembler for SPARC6 instructions" >&5
 $as_echo_n "checking assembler for SPARC6 instructions... " >&6; }
 if test "${gcc_cv_as_sparc_sparc6+set}" = set; then :
@@ -25252,6 +25253,7 @@ if test $gcc_cv_as_sparc_sparc6 = yes; then
 $as_echo "#define HAVE_AS_SPARC6 1" >>confdefs.h
 
 fi
+
 
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking assembler for LEON instructions" >&5
 $as_echo_n "checking assembler for LEON instructions... " >&6; }

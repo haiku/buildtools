@@ -11308,7 +11308,7 @@ else
   lt_cv_dlopen_libs=
 
   case $host_os in
-  beos*)
+  beos* | haiku*)
     lt_cv_dlopen="load_add_on"
     lt_cv_dlopen_libs=
     lt_cv_dlopen_self=yes
@@ -53326,6 +53326,89 @@ _ACEOF
 
 fi
 done
+
+    ;;
+
+  *-haiku*)
+    for ac_header in nan.h ieeefp.h endian.h sys/isa_defs.h \
+      machine/endian.h machine/param.h sys/machine.h sys/types.h \
+      fp.h float.h endian.h inttypes.h locale.h float.h stdint.h
+do :
+  as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
+ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
+eval as_val=\$$as_ac_Header
+   if test "x$as_val" = x""yes; then :
+  cat >>confdefs.h <<_ACEOF
+#define `$as_echo "HAVE_$ac_header" | $as_tr_cpp` 1
+_ACEOF
+
+fi
+
+done
+
+    SECTION_FLAGS='-ffunction-sections -fdata-sections'
+
+
+    $as_echo "#define HAVE_INT64_T 1" >>confdefs.h
+
+
+    $as_echo "#define HAVE_ACOSF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_ASINF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_ATANF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_ATAN2F 1" >>confdefs.h
+
+    $as_echo "#define HAVE_CEILF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_COSF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_COSHF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_EXPF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_FABSF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_FINITE 1" >>confdefs.h
+
+    $as_echo "#define HAVE_FINITEF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_FLOORF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_FMODF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_FREXPF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_HYPOT 1" >>confdefs.h
+
+    $as_echo "#define HAVE_HYPOTF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_ISINF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_ISINFF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_ISNAN 1" >>confdefs.h
+
+    $as_echo "#define HAVE_ISNANF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_LOGF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_LOG10F 1" >>confdefs.h
+
+    $as_echo "#define HAVE_MODFF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_SINF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_SINHF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_SQRTF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_TANF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_TANHF 1" >>confdefs.h
+
+    $as_echo "#define HAVE_TLS 1" >>confdefs.h
 
     ;;
 

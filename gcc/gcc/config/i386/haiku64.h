@@ -112,9 +112,9 @@ Boston, MA 02111-1307, USA.  */
 #define ASM_SPEC "%{v:-V} %{Qy:} %{!Qn:-Qy} %{n} %{T} %{Ym,*} %{Yd,*} \
  %{Wa,*:%*} %{" SPEC_32 ":--32} %{" SPEC_64 ":--64}"
 
-#undef  ASM_OUTPUT_ALIGNED_COMMON
-#define ASM_OUTPUT_ALIGNED_COMMON(FILE, NAME, SIZE, ALIGN)		\
-  x86_elf_aligned_common (FILE, NAME, SIZE, ALIGN);
+#undef  ASM_OUTPUT_ALIGNED_DECL_COMMON
+#define ASM_OUTPUT_ALIGNED_DECL_COMMON(FILE, DECL, NAME, SIZE, ALIGN)		\
+  x86_elf_aligned_decl_common (FILE, DECL, NAME, SIZE, ALIGN);
 
 
 /* i386 System V Release 4 uses DWARF debugging info.

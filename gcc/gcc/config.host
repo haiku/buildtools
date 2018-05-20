@@ -134,10 +134,10 @@ case ${host} in
     esac
     ;;
   mips*-*-linux* \
-    mips*-*-haiku*)
+  |  mips*-*-haiku*)
     case ${target} in
       mips*-*-linux* \
-        mips*-*-haiku*)
+      |  mips*-*-haiku*)
 	host_extra_gcc_objs="driver-native.o"
 	host_xmake_file="${host_xmake_file} mips/x-native"
       ;;

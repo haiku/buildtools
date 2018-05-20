@@ -231,6 +231,10 @@ case ${host} in
       ;;
   esac
   ;;
+*-*-haiku*)
+  tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver t-slibgcc-nolc-override t-haiku"
+  extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
+  ;;
 *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu)
   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver t-linux"
   extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
@@ -391,6 +395,13 @@ arm-wrs-vxworks)
 arm*-*-freebsd*)                # ARM FreeBSD EABI
 	tmake_file="${tmake_file} arm/t-arm t-fixedpoint-gnu-prefix arm/t-elf"
 	tmake_file="${tmake_file} arm/t-bpabi arm/t-freebsd"
+	tm_file="${tm_file} arm/bpabi-lib.h"
+	unwind_header=config/arm/unwind-arm.h
+	tmake_file="${tmake_file} t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
+	;;
+arm*-*-haiku*)
+	tmake_file="${tmake_file} arm/t-arm t-fixedpoint-gnu-prefix arm/t-elf"
+	tmake_file="${tmake_file} arm/t-bpabi"
 	tm_file="${tm_file} arm/bpabi-lib.h"
 	unwind_header=config/arm/unwind-arm.h
 	tmake_file="${tmake_file} t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
@@ -605,6 +616,12 @@ x86_64-*-freebsd*)
 	tmake_file="${tmake_file} i386/t-freebsd i386/t-crtstuff"
 	md_unwind_header=i386/freebsd-unwind.h
 	;;
+i[34567]86-*-haiku*)
+	tmake_file="${tmake_file} i386/t-crtstuff i386/t-eh-dw2"
+	;;
+x86_64-*-haiku*)
+	tmake_file="${tmake_file} i386/t-crtstuff i386/t-eh-dw2"
+	;;
 i[34567]86-*-netbsdelf*)
 	tmake_file="${tmake_file} i386/t-crtstuff"
 	;;
@@ -813,6 +830,8 @@ m32r-*-linux*)
 m32rle-*-linux*)
 	tmake_file="$tmake_file m32r/t-linux t-fdpbit"
 	;;
+m68k-*-haiku*)
+	;;
 m68k-*-elf* | fido-*-elf)
 	tmake_file="$tmake_file m68k/t-floatlib"
 	;;
@@ -882,6 +901,8 @@ mips*-sde-elf*)
 	    ;;
 	esac
 	extra_parts="$extra_parts crti.o crtn.o"
+	;;
+mipsel-*-haiku*)
 	;;
 mipsisa32-*-elf* | mipsisa32el-*-elf* | \
 mipsisa32r2-*-elf* | mipsisa32r2el-*-elf* | \
@@ -1008,6 +1029,8 @@ powerpc*-*-freebsd*)
 	  md_unwind_header=rs6000/freebsd-unwind.h
 	  ;;
 	esac
+	;;
+powerpc-*-haiku*)
 	;;
 powerpc-*-netbsd*)
 	tmake_file="$tmake_file rs6000/t-netbsd rs6000/t-crtstuff"
