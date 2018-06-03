@@ -747,6 +747,7 @@ LDEXP_LIB
 EXTRA_GCC_LIBS
 GNAT_LIBEXC
 COLLECT2_LIBS
+build_math_library
 CXXDEPMODE
 DEPDIR
 am__leading_dot
@@ -783,6 +784,7 @@ with_float
 with_cpu
 enable_multiarch
 enable_multilib
+HYBRID_SECONDARY
 coverage_flags
 valgrind_command
 valgrind_path_defines
@@ -899,6 +901,7 @@ enable_checking
 enable_coverage
 enable_gather_detailed_mem_stats
 enable_valgrind_annotations
+with_hybrid_secondary
 with_stabs
 enable_multilib
 enable_multiarch
@@ -1714,6 +1717,8 @@ Optional Packages:
   --with-demangler-in-ld  try to use demangler in GNU ld
   --with-gnu-as           arrange to work with GNU as
   --with-as               arrange to use the specified as (full pathname)
+  --with-hybrid_secondary specify the packaging architecture for building a
+                          secondary compiler for a Haiku hybrid system
   --with-stabs            arrange to use stabs instead of host debug format
   --with-dwarf2           force the default debug format to be DWARF 2
   --with-specs=SPECS      add SPECS to driver command-line processing
@@ -7373,6 +7378,18 @@ fi
 # Miscenalleous configure options
 # -------------------------------
 
+# handle --with-hybrid-secondary
+
+# Check whether --with-hybrid_secondary was given.
+if test "${with_hybrid_secondary+set}" = set; then :
+  withval=$with_hybrid_secondary; HYBRID_SECONDARY=$withval
+else
+  HYBRID_SECONDARY=
+
+fi
+
+
+
 # With stabs
 
 # Check whether --with-stabs was given.
@@ -9378,6 +9395,16 @@ fi
 # --------
 # UNSORTED
 # --------
+
+
+# Configure -lm usage for host tools that need it
+build_math_library="-lm"
+case $build in
+  *-*-haiku*)
+    # no separate math library needed
+    build_math_library=
+    ;;
+esac
 
 
 # These libraries may be used by collect2.
@@ -11680,7 +11707,7 @@ case ${enable_threads} in
     # default
     target_thread_file='single'
     ;;
-  aix | dce | lynx | mipssde | posix | rtems | \
+  aix | dce | haiku | lynx | mipssde | posix | rtems | \
   single | tpf | vxworks | win32)
     target_thread_file=${enable_threads}
     ;;
@@ -15524,8 +15551,6 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
 
     haiku*)
       # PIC is the default for Haiku.
-      # The "-static" flag exists, but is broken.
-      lt_prog_compiler_static=
       ;;
 
     hpux*)
@@ -17637,8 +17662,9 @@ haiku*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
   shlibpath_overrides_runpath=yes
-  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
-  hardcode_into_libs=yes
+  sys_lib_search_path_spec='/boot/system/non-packaged/develop/lib /boot/system/develop/lib'
+  sys_lib_dlsearch_path_spec='/boot/home/config/non-packaged/lib /boot/home/config/lib /boot/system/non-packaged/lib /boot/system/lib'
+  hardcode_into_libs=no
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -18155,7 +18181,7 @@ else
   lt_cv_dlopen_libs=
 
   case $host_os in
-  beos*)
+  beos* | haiku* )
     lt_cv_dlopen="load_add_on"
     lt_cv_dlopen_libs=
     lt_cv_dlopen_self=yes
@@ -18433,7 +18459,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 18436 "configure"
+#line 18462 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -18539,7 +18565,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 18542 "configure"
+#line 18568 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -20353,7 +20379,6 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
         ;;
       esac
       ;;
-
     beos* | irix5* | irix6* | nonstopux* | osf3* | osf4* | osf5*)
       # PIC is the default for these OSes.
       ;;
@@ -20375,8 +20400,6 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
       ;;
     haiku*)
       # PIC is the default for Haiku.
-      # The "-static" flag exists, but is broken.
-      lt_prog_compiler_static_CXX=
       ;;
     interix[3-9]*)
       # Interix 3.x gcc -fpic/-fPIC options generate broken code.
@@ -21297,8 +21320,9 @@ haiku*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
   shlibpath_overrides_runpath=yes
-  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
-  hardcode_into_libs=yes
+  sys_lib_search_path_spec='/boot/system/non-packaged/develop/lib /boot/system/develop/lib'
+  sys_lib_dlsearch_path_spec='/boot/home/config/non-packaged/lib /boot/home/config/lib /boot/system/non-packaged/lib /boot/system/lib'
+  hardcode_into_libs=no
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -25217,7 +25241,6 @@ $as_echo "#define HAVE_AS_SPARC5_VIS4 1" >>confdefs.h
 
 fi
 
-
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking assembler for SPARC6 instructions" >&5
 $as_echo_n "checking assembler for SPARC6 instructions... " >&6; }
 if test "${gcc_cv_as_sparc_sparc6+set}" = set; then :
@@ -25253,7 +25276,6 @@ if test $gcc_cv_as_sparc_sparc6 = yes; then
 $as_echo "#define HAVE_AS_SPARC6 1" >>confdefs.h
 
 fi
-
 
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking assembler for LEON instructions" >&5
 $as_echo_n "checking assembler for LEON instructions... " >&6; }
