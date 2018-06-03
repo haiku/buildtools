@@ -105,6 +105,8 @@ build_objdir := $(toplevel_builddir)/$(build_subdir)
 build_libobjdir := $(toplevel_builddir)/$(build_libsubdir)
 target_objdir := $(toplevel_builddir)/$(target_subdir)
 
+HYBRID_SECONDARY = @HYBRID_SECONDARY@
+
 # --------
 # Defined vpaths
 # --------
@@ -263,7 +265,7 @@ NO_PIE_CFLAGS = @NO_PIE_CFLAGS@
 NO_PIE_FLAG = @NO_PIE_FLAG@
 
 # We don't want to compile the compilers with -fPIE, it make PCH fail.
-COMPILER += $(NO_PIE_CFLAGS)
+#COMPILER += $(NO_PIE_CFLAGS)
 
 # Link with -no-pie since we compile the compiler with -fno-PIE.
 LINKER += $(NO_PIE_FLAG)
@@ -774,9 +776,9 @@ NO_PIE_CFLAGS_FOR_BUILD = @NO_PIE_CFLAGS_FOR_BUILD@
 NO_PIE_FLAG_FOR_BUILD = @NO_PIE_FLAG_FOR_BUILD@
 BUILD_CFLAGS= @BUILD_CFLAGS@ -DGENERATOR_FILE
 BUILD_CXXFLAGS = @BUILD_CXXFLAGS@ -DGENERATOR_FILE
-BUILD_NO_PIE_CFLAGS = @BUILD_NO_PIE_CFLAGS@
-BUILD_CFLAGS += $(BUILD_NO_PIE_CFLAGS)
-BUILD_CXXFLAGS += $(BUILD_NO_PIE_CFLAGS)
+#BUILD_NO_PIE_CFLAGS = @BUILD_NO_PIE_CFLAGS@
+#BUILD_CFLAGS += $(BUILD_NO_PIE_CFLAGS)
+#BUILD_CXXFLAGS += $(BUILD_NO_PIE_CFLAGS)
 
 # Native compiler that we use.  This may be C++ some day.
 COMPILER_FOR_BUILD = $(CXX_FOR_BUILD)
@@ -2126,6 +2128,10 @@ DRIVER_DEFINES = \
   $(if $(SHLIB),$(if $(filter yes,@enable_shared@),-DENABLE_SHARED_LIBGCC)) \
   -DCONFIGURE_SPECS="\"@CONFIGURE_SPECS@\""
 
+ifneq ($(HYBRID_SECONDARY),)
+DRIVER_DEFINES += -DHYBRID_SECONDARY="\"$(HYBRID_SECONDARY)\""
+endif
+
 CFLAGS-gcc.o += $(DRIVER_DEFINES) -DBASEVER=$(BASEVER_s)
 gcc.o: $(BASEVER)
 
@@ -2736,7 +2742,7 @@ $(genprogerr:%=build/gen%$(build_exeext)): $(BUILD_ERRORS)
 genprog = $(genprogerr) check checksum condmd match
 
 # These programs need libs over and above what they get from the above list.
-build/genautomata$(build_exeext) : BUILD_LIBS += -lm
+build/genautomata$(build_exeext) : BUILD_LIBS += @build_math_library@
 
 build/genrecog$(build_exeext) : build/hash-table.o build/inchash.o
 build/gencfn-macros$(build_exeext) : build/hash-table.o build/ggc-none.o
@@ -2800,6 +2806,10 @@ PREPROCESSOR_DEFINES = \
   -DPREFIX=\"$(prefix)/\" \
   -DSTANDARD_EXEC_PREFIX=\"$(libdir)/gcc/\" \
   @TARGET_SYSTEM_ROOT_DEFINE@
+
+ifneq ($(HYBRID_SECONDARY),)
+PREPROCESSOR_DEFINES += -DHYBRID_SECONDARY="\"$(HYBRID_SECONDARY)\""
+endif
 
 CFLAGS-cppbuiltin.o += $(PREPROCESSOR_DEFINES) -DBASEVER=$(BASEVER_s)
 cppbuiltin.o: $(BASEVER)
