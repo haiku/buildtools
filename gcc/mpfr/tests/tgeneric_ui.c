@@ -1,7 +1,7 @@
 /* Generic test file for functions with one mpfr_t argument and an integer.
 
-Copyright 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2005-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -64,8 +64,17 @@ test_generic_ui (mpfr_prec_t p0, mpfr_prec_t p1, unsigned int N)
               mpfr_set_si (x, n == 0 ? 1 : -1, MPFR_RNDN);
               mpfr_set_exp (x, mpfr_get_emin ());
             }
-          u = INT_RAND_FUNCTION ();
-          rnd = RND_RAND ();
+          if (n < 2 || n > 3 || prec < p1)
+            u = INT_RAND_FUNCTION ();
+          else
+            {
+              /* Special cases tested in precision p1 if n = 2 or 3. */
+              if ((INTEGER_TYPE) -1 < 0)  /* signed, type long assumed */
+                u = n == 2 ? LONG_MIN : LONG_MAX;
+              else  /* unsigned */
+                u = n == 2 ? 0 : -1;
+            }
+          rnd = RND_RAND_NO_RNDF ();
           mpfr_set_prec (y, yprec);
           compare = TEST_FUNCTION (y, x, u, rnd);
           if (mpfr_can_round (y, yprec, rnd, rnd, prec))
@@ -83,14 +92,11 @@ test_generic_ui (mpfr_prec_t p0, mpfr_prec_t p1, unsigned int N)
                   printf ("Function: %s\n", TEST_FUNCTION_NAME);
 #endif
                   printf ("got      ");
-                  mpfr_out_str (stdout, 2, prec, z, MPFR_RNDN);
-                  puts ("");
+                  mpfr_dump (z);
                   printf ("expected ");
-                  mpfr_out_str (stdout, 2, prec, t, MPFR_RNDN);
-                  puts ("");
-                  printf ("approx  ");
-                  mpfr_print_binary (y);
-                  puts ("");
+                  mpfr_dump (t);
+                  printf ("approx   ");
+                  mpfr_dump (y);
                   exit (1);
                 }
               compare2 = mpfr_cmp (t, y);
@@ -100,16 +106,14 @@ test_generic_ui (mpfr_prec_t p0, mpfr_prec_t p1, unsigned int N)
                 compare = compare + compare2;
               else
                 compare = inexact; /* cannot determine sign(t-f(x)) */
-              if (((inexact == 0) && (compare != 0)) ||
-                  ((inexact > 0) && (compare <= 0)) ||
-                  ((inexact < 0) && (compare >= 0)))
+              if (! SAME_SIGN (inexact, compare) && rnd != MPFR_RNDF)
                 {
                   printf ("Wrong inexact flag for rnd=%s: expected %d, got %d"
                           "\n", mpfr_print_rnd_mode (rnd), compare, inexact);
-                  printf ("x="); mpfr_print_binary (x); puts ("");
-                  printf ("u=%lu", (unsigned long) u);
-                  printf ("y="); mpfr_print_binary (y); puts ("");
-                  printf ("t="); mpfr_print_binary (t); puts ("");
+                  printf ("x = "); mpfr_dump (x);
+                  printf ("u = %lu\n", (unsigned long) u);
+                  printf ("y = "); mpfr_dump (y);
+                  printf ("t = "); mpfr_dump (t);
                   exit (1);
                 }
             }

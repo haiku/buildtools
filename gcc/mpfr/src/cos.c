@@ -1,7 +1,7 @@
 /* mpfr_cos -- cosine of a floating-point number
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2001-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -49,7 +49,7 @@ mpfr_cos2_aux (mpfr_ptr f, mpfr_srcptr r)
 
   /* compute minimal i such that i*(i+1) does not fit in an unsigned long,
      assuming that there are no padding bits. */
-  maxi = 1UL << (CHAR_BIT * sizeof(unsigned long) / 2);
+  maxi = 1UL << (sizeof(unsigned long) * CHAR_BIT / 2);
   if (maxi * (maxi / 2) == 0) /* test checked at compile time */
     {
       /* can occur only when there are padding bits. */
@@ -169,12 +169,12 @@ mpfr_cos (mpfr_ptr y, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
 
   if (precy >= MPFR_SINCOS_THRESHOLD)
     {
-      MPFR_SAVE_EXPO_FREE (expo);
-      return mpfr_cos_fast (y, x, rnd_mode);
+      inexact = mpfr_cos_fast (y, x, rnd_mode);
+      goto end;
     }
 
   K0 = __gmpfr_isqrt (precy / 3);
-  m = precy + 2 * MPFR_INT_CEIL_LOG2 (precy) + 2 * K0;
+  m = precy + 2 * MPFR_INT_CEIL_LOG2 (precy) + 2 * K0 + 4;
 
   if (expx >= 3)
     {
@@ -245,7 +245,7 @@ mpfr_cos (mpfr_ptr y, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
       l = 2 * l + 1;
       if (reduce)
         l += (K == 0) ? 4 : 1;
-      k = MPFR_INT_CEIL_LOG2 (l) + 2*K;
+      k = MPFR_INT_CEIL_LOG2 (l) + 2 * K;
       /* now the error is bounded by 2^(k-m) = 2^(EXP(s)-err) */
 
       exps = MPFR_GET_EXP (s);
@@ -293,6 +293,7 @@ mpfr_cos (mpfr_ptr y, mpfr_srcptr x, mpfr_rnd_t rnd_mode)
       mpfr_clear (c);
     }
 
+ end:
   MPFR_SAVE_EXPO_FREE (expo);
   return mpfr_check_range (y, inexact, rnd_mode);
 }

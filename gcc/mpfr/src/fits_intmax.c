@@ -1,7 +1,7 @@
 /* mpfr_fits_intmax_p -- test whether an mpfr fits an intmax_t.
 
-Copyright 2004, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2004, 2006-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -21,7 +21,7 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #ifdef HAVE_CONFIG_H
-# include "config.h"            /* for a build within gmp */
+# include "config.h"
 #endif
 
 #include "mpfr-intmax.h"
@@ -29,10 +29,11 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 
 #ifdef _MPFR_H_HAVE_INTMAX_T
 
-/* We can't use fits_s.h <= mpfr_cmp_ui */
+/* We can't use fits_s.h as it uses mpfr_cmp_si */
 int
 mpfr_fits_intmax_p (mpfr_srcptr f, mpfr_rnd_t rnd)
 {
+  mpfr_flags_t saved_flags;
   mpfr_exp_t e;
   int prec;
   mpfr_t x, y;
@@ -85,8 +86,11 @@ mpfr_fits_intmax_p (mpfr_srcptr f, mpfr_rnd_t rnd)
   MPFR_ASSERTD (e == prec);
 
   /* hard case: first round to prec bits, then check */
+  saved_flags = __gmpfr_flags;
   mpfr_init2 (x, prec);
-  mpfr_set (x, f, rnd);
+  /* for RNDF, it is necessary and sufficient to check it fits when rounding
+     away from zero */
+  mpfr_set (x, f, (rnd == MPFR_RNDF) ? MPFR_RNDA : rnd);
 
   if (neg)
     {
@@ -97,10 +101,16 @@ mpfr_fits_intmax_p (mpfr_srcptr f, mpfr_rnd_t rnd)
     }
   else
     {
-      res = MPFR_GET_EXP (x) == e;
+      /* Warning! Due to the rounding, x can be an infinity. Here we use
+         the fact that singular numbers have a special exponent field,
+         thus well-defined and different from e, in which case this means
+         that the number does not fit. That's why we use MPFR_EXP, not
+         MPFR_GET_EXP. */
+      res = MPFR_EXP (x) == e;
     }
 
   mpfr_clear (x);
+  __gmpfr_flags = saved_flags;
   return res;
 }
 

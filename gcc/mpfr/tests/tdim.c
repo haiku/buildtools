@@ -1,7 +1,7 @@
 /* Test file for mpfr_dim.
 
-Copyright 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2004-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -19,9 +19,6 @@ You should have received a copy of the GNU Lesser General Public License
 along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
 http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
-
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "mpfr-test.h"
 
@@ -67,7 +64,7 @@ main (void)
   mpfr_set_inf (x, -1);
   mpfr_set_ui (y, 0, MPFR_RNDN);
   mpfr_dim (z, x, y, MPFR_RNDN);
-  if (mpfr_cmp_ui (z, 0) || mpfr_sgn (z) < 0)
+  if (MPFR_NOTZERO (z) || MPFR_IS_NEG (z))
     {
       printf ("Error in mpfr_dim (-Inf, 0)\n");
       exit (1);
@@ -77,7 +74,7 @@ main (void)
   mpfr_set_inf (x, 1);
   mpfr_set_inf (y, 1);
   mpfr_dim (z, x, y, MPFR_RNDN);
-  if (mpfr_cmp_ui (z, 0) || mpfr_sgn (z) < 0)
+  if (MPFR_NOTZERO (z) || MPFR_IS_NEG (z))
     {
       printf ("Error in mpfr_dim (+Inf, +Inf)\n");
       exit (1);
@@ -107,7 +104,7 @@ main (void)
   mpfr_clear (y);
   mpfr_clear (z);
 
-  test_generic (2, 220, 42);
+  test_generic (MPFR_PREC_MIN, 220, 42);
 
   tests_end_mpfr ();
   return 0;

@@ -1,7 +1,7 @@
 /* mpfr_jn_asympt, mpfr_yn_asympt -- shared code for mpfr_jn and mpfr_yn
 
-Copyright 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2007-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -36,6 +36,8 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
    (z can be negative only for jn).
    Return 0 if the expansion does not converge enough (the value 0 as inexact
    flag should not happen for normal input).
+   Note: for MPFR_RNDF, it returns 0 if the expansion failed, and a non-zero
+   value otherwise (with no other meaning).
 */
 static int
 FUNCTION (mpfr_ptr res, long n, mpfr_srcptr z, mpfr_rnd_t r)
@@ -253,9 +255,9 @@ FUNCTION (mpfr_ptr res, long n, mpfr_srcptr z, mpfr_rnd_t r)
         break;
       if (diverge != 0)
         {
-          mpfr_set (c, z, r); /* will force inex=0 below, which means the
-                               asymptotic expansion failed */
-          break;
+          MPFR_ZIV_FREE (loop);
+          mpfr_clear (c);
+          return 0; /* means that the asymptotic expansion failed */
         }
       MPFR_ZIV_NEXT (loop, w);
     }
@@ -265,5 +267,7 @@ FUNCTION (mpfr_ptr res, long n, mpfr_srcptr z, mpfr_rnd_t r)
     : mpfr_neg (res, c, r);
   mpfr_clear (c);
 
-  return inex;
+  /* for RNDF, mpfr_set or mpfr_neg may return 0, but if we return 0, it
+     would mean the asymptotic expansion failed, thus we return 1 instead */
+  return (r != MPFR_RNDF) ? inex : 1;
 }

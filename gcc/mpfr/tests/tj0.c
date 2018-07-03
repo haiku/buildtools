@@ -1,7 +1,7 @@
 /* tj0 -- test file for the Bessel function of first kind (order 0)
 
-Copyright 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2007-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -19,9 +19,6 @@ You should have received a copy of the GNU Lesser General Public License
 along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
 http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
-
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "mpfr-test.h"
 
@@ -99,6 +96,18 @@ main (int argc, char *argv[])
   mpfr_j0 (y, x, MPFR_RNDN);
   MPFR_ASSERTN (! mpfr_nan_p (y) && mpfr_cmp_ui_2exp (y, 41, -11) == 0);
 
+  /* Bug reported by Fredrik Johansson on 19 Jan 2016 */
+  mpfr_set_prec (x, 53);
+  mpfr_set_str (x, "0x4.3328p+0", 0, MPFR_RNDN);
+  mpfr_set_prec (y, 2);
+  mpfr_j0 (y, x, MPFR_RNDD);
+  /* y should be -0.5 */
+  MPFR_ASSERTN (! mpfr_nan_p (y) && mpfr_cmp_si_2exp (y, -1, -1) == 0);
+  mpfr_set_prec (y, 3);
+  mpfr_j0 (y, x, MPFR_RNDD);
+  /* y should be -0.4375 */
+  MPFR_ASSERTN (! mpfr_nan_p (y) && mpfr_cmp_si_2exp (y, -7, -4) == 0);
+
   /* Case for which s = 0 in mpfr_jn */
   mpfr_set_prec (x, 44);
   mpfr_set_prec (y, 44);
@@ -125,7 +134,7 @@ main (int argc, char *argv[])
   mpfr_clear (x);
   mpfr_clear (y);
 
-  test_generic (2, 100, 10);
+  test_generic (MPFR_PREC_MIN, 100, 10);
 
   data_check ("data/j0", mpfr_j0, "mpfr_j0");
 

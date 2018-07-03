@@ -1,7 +1,7 @@
 /* Test file for mpfr_out_str.
 
-Copyright 1999, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 1999, 2001-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -21,7 +21,6 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <float.h>
-#include <stdlib.h>
 
 #include "mpfr-test.h"
 
@@ -114,7 +113,7 @@ main (int argc, char *argv[])
       fout = fopen ("/dev/null", "w");
       /* If we failed to open this device, try with a dummy file */
       if (fout == NULL)
-        fout = fopen ("mpfrtest.txt", "w");
+        fout = fopen ("tout_str_out.txt", "w");
     }
   else
     {

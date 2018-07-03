@@ -1,8 +1,8 @@
 /* mpfr_set_si_2exp -- set a MPFR number from a machine signed integer with
    a shift
 
-Copyright 2004, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2004, 2006-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -36,7 +36,7 @@ mpfr_set_si_2exp (mpfr_ptr x, long i, mpfr_exp_t e, mpfr_rnd_t rnd_mode)
   else
     {
       mp_size_t xn;
-      unsigned int cnt, nbits;
+      int cnt, nbits;
       mp_limb_t ai, *xp;
       int inex = 0;
 

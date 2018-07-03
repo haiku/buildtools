@@ -1,7 +1,7 @@
 /* Test mpfr_get_ld_2exp.
 
-Copyright 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2006-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -20,8 +20,6 @@ along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
 http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <float.h>
 
 #include "mpfr-test.h"
@@ -79,8 +77,7 @@ check_round (void)
 static void
 check_inf_nan (void)
 {
-  /* only if nans and infs are available */
-#if _GMP_IEEE_FLOATS
+#if !defined(MPFR_ERRDIVZERO)
   mpfr_t  x;
   double  d;
   long    exp;
@@ -89,17 +86,17 @@ check_inf_nan (void)
 
   mpfr_set_inf (x, 1);
   d = (double) mpfr_get_ld_2exp (&exp, x, MPFR_RNDZ);
-  ASSERT_ALWAYS (d > 0);
-  ASSERT_ALWAYS (DOUBLE_ISINF (d));
+  MPFR_ASSERTN (d > 0);
+  MPFR_ASSERTN (DOUBLE_ISINF (d));
 
   mpfr_set_inf (x, -1);
   d = (double) mpfr_get_ld_2exp (&exp, x, MPFR_RNDZ);
-  ASSERT_ALWAYS (d < 0);
-  ASSERT_ALWAYS (DOUBLE_ISINF (d));
+  MPFR_ASSERTN (d < 0);
+  MPFR_ASSERTN (DOUBLE_ISINF (d));
 
   mpfr_set_nan (x);
   d = (double) mpfr_get_ld_2exp (&exp, x, MPFR_RNDZ);
-  ASSERT_ALWAYS (DOUBLE_ISNAN (d));
+  MPFR_ASSERTN (DOUBLE_ISNAN (d));
 
   mpfr_clear (x);
 #endif

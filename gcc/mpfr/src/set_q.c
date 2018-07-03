@@ -1,7 +1,7 @@
 /* mpfr_set_q -- set a floating-point number from a multiple-precision rational
 
-Copyright 2000, 2001, 2002, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2000-2002, 2004-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -23,6 +23,7 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 #define MPFR_NEED_LONGLONG_H
 #include "mpfr-impl.h"
 
+#ifndef MPFR_USE_MINI_GMP
 /*
  * Set f to z, choosing the smallest precision for f
  * so that z = f*(2^BPML)*zs*2^(RetVal)
@@ -38,7 +39,7 @@ set_z (mpfr_ptr f, mpz_srcptr z, mp_size_t *zs)
   MPFR_ASSERTD (mpz_sgn (z) != 0);
 
   /* Remove useless ending 0 */
-  for (p = PTR (z), s = *zs = ABS (SIZ (z)) ; *p == 0; p++, s--)
+  for (p = PTR (z), s = *zs = ABSIZ (z) ; *p == 0; p++, s--)
     MPFR_ASSERTD (s >= 0);
 
   /* Get working precision */
@@ -104,11 +105,13 @@ mpfr_set_q (mpfr_ptr f, mpq_srcptr q, mpfr_rnd_t rnd)
   sn -= sd;
   if (MPFR_UNLIKELY (sn > MPFR_EMAX_MAX / GMP_NUMB_BITS))
     {
+      MPFR_SAVE_EXPO_FREE (expo);
       inexact = mpfr_overflow (f, rnd, MPFR_SIGN (f));
       goto end;
     }
   if (MPFR_UNLIKELY (sn < MPFR_EMIN_MIN / GMP_NUMB_BITS -1))
     {
+      MPFR_SAVE_EXPO_FREE (expo);
       if (rnd == MPFR_RNDN)
         rnd = MPFR_RNDZ;
       inexact = mpfr_underflow (f, rnd, MPFR_SIGN (f));
@@ -127,7 +130,6 @@ mpfr_set_q (mpfr_ptr f, mpq_srcptr q, mpfr_rnd_t rnd)
  end:
   mpfr_clear (d);
   mpfr_clear (n);
-  return inexact;
+  MPFR_RET (inexact);
 }
-
-
+#endif

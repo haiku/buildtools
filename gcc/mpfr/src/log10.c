@@ -1,7 +1,7 @@
 /* mpfr_log10 -- logarithm in base 10.
 
-Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2001-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -68,7 +68,7 @@ mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mpfr_rnd_t rnd_mode)
           MPFR_ASSERTD (MPFR_IS_ZERO (a));
           MPFR_SET_INF (r);
           MPFR_SET_NEG (r);
-          mpfr_set_divby0 ();
+          MPFR_SET_DIVBY0 ();
           MPFR_RET (0); /* log10(0) is an exact -infinity */
         }
     }
@@ -104,7 +104,7 @@ mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mpfr_rnd_t rnd_mode)
     /* the optimal number of bits : see algorithms.tex */
     Nt = Ny + 4 + MPFR_INT_CEIL_LOG2 (Ny);
 
-    /* initialise of intermediary variables */
+    /* initialize of intermediary variables */
     mpfr_init2 (t, Nt);
     mpfr_init2 (tt, Nt);
 
@@ -132,7 +132,7 @@ mpfr_log10 (mpfr_ptr r, mpfr_srcptr a, mpfr_rnd_t rnd_mode)
             && mpfr_cmp (a, tt) == 0)
           break;
 
-        /* actualisation of the precision */
+        /* actualization of the precision */
         MPFR_ZIV_NEXT (loop, Nt);
         mpfr_set_prec (t, Nt);
         mpfr_set_prec (tt, Nt);

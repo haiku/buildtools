@@ -1,7 +1,7 @@
 /* Test file for mpfr_const_catalan.
 
-Copyright 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2005-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -20,8 +20,6 @@ along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
 http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include "mpfr-test.h"
 
 /* Wrapper for tgeneric */
@@ -52,7 +50,7 @@ main (int argc, char *argv[])
     }
   mpfr_clear (x);
 
-  test_generic (2, 200, 1);
+  test_generic (MPFR_PREC_MIN, 200, 1);
 
   tests_end_mpfr ();
   return 0;

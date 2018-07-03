@@ -1,7 +1,7 @@
 /* mpfr_mpn_exp -- auxiliary function for mpfr_get_str and mpfr_set_str
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 1999-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -91,7 +91,9 @@ mpfr_mpn_exp (mp_limb_t *a, mpfr_exp_t *exp_r, int b, mpfr_exp_t e, size_t n)
       n1 = (n * GMP_NUMB_BITS - bits) / GMP_NUMB_BITS;
 
       /* square of A : {c+2n1, 2(n-n1)} = {a+n1, n-n1}^2 */
-      mpn_sqr_n (c + 2 * n1, a + n1, n - n1);
+      /* TODO: we should use a short square here, but this needs to redo
+         the error analysis */
+      mpn_sqr (c + 2 * n1, a + n1, n - n1);
 
       /* set {c+n, 2n1-n} to 0 : {c, n} = {a, n}^2*K^n */
 

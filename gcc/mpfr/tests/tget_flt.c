@@ -1,7 +1,7 @@
 /* Test file for mpfr_get_flt and mpfr_set_flt
 
-Copyright 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 2009-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -20,17 +20,25 @@ along with the GNU MPFR Library; see the file COPYING.LESSER.  If not, see
 http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA. */
 
-#include <stdlib.h>
 #include <float.h>     /* for FLT_MIN */
+
 #include "mpfr-test.h"
 
 int
 main (void)
 {
   mpfr_t x, y;
-  float f, g, infp;
+  float f, g;
   int i;
+#if !defined(MPFR_ERRDIVZERO)
+  float infp;
+#endif
 
+  tests_start_mpfr ();
+
+#if !defined(MPFR_ERRDIVZERO)
+  /* The definition of DBL_POS_INF involves a division by 0. This makes
+     "clang -O2 -fsanitize=undefined -fno-sanitize-recover" fail. */
   infp = (float) DBL_POS_INF;
   if (infp * 0.5 != infp)
     {
@@ -38,8 +46,7 @@ main (void)
       fprintf (stderr, "(this is probably a compiler bug, please report)\n");
       exit (1);
     }
-
-  tests_start_mpfr ();
+#endif
 
   mpfr_init2 (x, 24);
   mpfr_init2 (y, 24);
@@ -47,9 +54,10 @@ main (void)
 #if !defined(MPFR_ERRDIVZERO)
   mpfr_set_nan (x);
   f = mpfr_get_flt (x, MPFR_RNDN);
-  if (f == f)
+  if (! DOUBLE_ISNAN (f))
     {
       printf ("Error for mpfr_get_flt(NaN)\n");
+      printf ("got f=%f\n", f);
       exit (1);
     }
   mpfr_set_flt (x, f, MPFR_RNDN);
@@ -85,21 +93,23 @@ main (void)
   mpfr_set_ui (x, 0, MPFR_RNDN);
   f = mpfr_get_flt (x, MPFR_RNDN);
   mpfr_set_flt (x, f, MPFR_RNDN);
-  if (mpfr_zero_p (x) == 0 || MPFR_SIGN (x) < 0)
+  if (mpfr_zero_p (x) == 0 || MPFR_IS_NEG (x))
     {
       printf ("Error for mpfr_set_flt(mpfr_get_flt(+0))\n");
       exit (1);
     }
 
+#ifdef HAVE_SIGNEDZ
   mpfr_set_ui (x, 0, MPFR_RNDN);
   mpfr_neg (x, x, MPFR_RNDN);
   f = mpfr_get_flt (x, MPFR_RNDN);
   mpfr_set_flt (x, f, MPFR_RNDN);
-  if (mpfr_zero_p (x) == 0 || MPFR_SIGN (x) > 0)
+  if (mpfr_zero_p (x) == 0 || MPFR_IS_POS (x))
     {
       printf ("Error for mpfr_set_flt(mpfr_get_flt(-0))\n");
       exit (1);
     }
+#endif  /* HAVE_SIGNEDZ */
 
   mpfr_set_ui (x, 17, MPFR_RNDN);
   f = mpfr_get_flt (x, MPFR_RNDN);
@@ -176,6 +186,7 @@ main (void)
       mpfr_mul_2exp (x, x, 1, MPFR_RNDN);
     }
 
+#ifdef HAVE_DENORMS_FLT
   mpfr_set_si_2exp (x, 1, -150, MPFR_RNDN);
   g = 0.0;
   f = mpfr_get_flt (x, MPFR_RNDN);
@@ -291,6 +302,7 @@ main (void)
       printf ("expected %.8e, got %.8e\n", g, f);
       exit (1);
     }
+#endif /* HAVE_DENORMS_FLT */
 
   mpfr_set_si_2exp (x, 1, 128, MPFR_RNDN);
   g = FLT_MAX;
@@ -353,6 +365,7 @@ main (void)
       printf ("expected %.8e, got %.8e\n", g, f);
       exit (1);
     }
+#if !defined(MPFR_ERRDIVZERO)
   f = mpfr_get_flt (x, MPFR_RNDN); /* first round to 2^128 (even rule),
                                       thus we should get +Inf */
   g = infp;
@@ -376,6 +389,7 @@ main (void)
       printf ("expected %.8e, got %.8e\n", g, f);
       exit (1);
     }
+#endif
 
   mpfr_clear (x);
   mpfr_clear (y);

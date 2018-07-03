@@ -1,7 +1,7 @@
 /* mpfr_clear -- free the memory space allocated for a floating-point number
 
-Copyright 1999, 2000, 2001, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013 Free Software Foundation, Inc.
-Contributed by the AriC and Caramel projects, INRIA.
+Copyright 1999-2001, 2004-2018 Free Software Foundation, Inc.
+Contributed by the AriC and Caramba projects, INRIA.
 
 This file is part of the GNU MPFR Library.
 
@@ -22,10 +22,10 @@ http://www.gnu.org/licenses/ or write to the Free Software Foundation, Inc.,
 
 #include "mpfr-impl.h"
 
-void
+MPFR_HOT_FUNCTION_ATTR void
 mpfr_clear (mpfr_ptr m)
 {
-  (*__gmp_free_func) (MPFR_GET_REAL_PTR (m),
+  mpfr_free_func (MPFR_GET_REAL_PTR (m),
                       MPFR_MALLOC_SIZE (MPFR_GET_ALLOC_SIZE (m)));
   MPFR_MANT (m) = (mp_limb_t *) 0;
 }
