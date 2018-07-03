@@ -1,11 +1,16 @@
 #include <isl_map_private.h>
 #include <isl_point_private.h>
 #include <isl/set.h>
+#include <isl/union_set.h>
 #include <isl_sample.h>
 #include <isl_scan.h>
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include <isl_space_private.h>
 #include <isl_val_private.h>
+#include <isl_vec_private.h>
+#include <isl_output_private.h>
+
+#include <set_to_map.c>
 
 isl_ctx *isl_point_get_ctx(__isl_keep isl_point *pnt)
 {
@@ -97,17 +102,18 @@ __isl_give isl_point *isl_point_copy(__isl_keep isl_point *pnt)
 	return pnt;
 }
 
-void isl_point_free(__isl_take isl_point *pnt)
+__isl_null isl_point *isl_point_free(__isl_take isl_point *pnt)
 {
 	if (!pnt)
-		return;
+		return NULL;
 
 	if (--pnt->ref > 0)
-		return;
+		return NULL;
 
 	isl_space_free(pnt->dim);
 	isl_vec_free(pnt->vec);
 	free(pnt);
+	return NULL;
 }
 
 __isl_give isl_point *isl_point_void(__isl_take isl_space *dim)
@@ -118,29 +124,12 @@ __isl_give isl_point *isl_point_void(__isl_take isl_space *dim)
 	return isl_point_alloc(dim, isl_vec_alloc(dim->ctx, 0));
 }
 
-int isl_point_is_void(__isl_keep isl_point *pnt)
+isl_bool isl_point_is_void(__isl_keep isl_point *pnt)
 {
 	if (!pnt)
-		return -1;
+		return isl_bool_error;
 
 	return pnt->vec->size == 0;
-}
-
-int isl_point_get_coordinate(__isl_keep isl_point *pnt,
-	enum isl_dim_type type, int pos, isl_int *v)
-{
-	if (!pnt || isl_point_is_void(pnt))
-		return -1;
-
-	if (pos < 0 || pos >= isl_space_dim(pnt->dim, type))
-		isl_die(isl_point_get_ctx(pnt), isl_error_invalid,
-			"position out of bounds", return -1);
-
-	if (type == isl_dim_set)
-		pos += isl_space_dim(pnt->dim, isl_dim_param);
-	isl_int_set(*v, pnt->vec->el[1 + pos]);
-
-	return 0;
 }
 
 /* Return the value of coordinate "pos" of type "type" of "pnt".
@@ -168,30 +157,6 @@ __isl_give isl_val *isl_point_get_coordinate_val(__isl_keep isl_point *pnt,
 	v = isl_val_rat_from_isl_int(ctx, pnt->vec->el[1 + pos],
 						pnt->vec->el[0]);
 	return isl_val_normalize(v);
-}
-
-__isl_give isl_point *isl_point_set_coordinate(__isl_take isl_point *pnt,
-	enum isl_dim_type type, int pos, isl_int v)
-{
-	if (!pnt || isl_point_is_void(pnt))
-		return pnt;
-
-	pnt = isl_point_cow(pnt);
-	if (!pnt)
-		return NULL;
-	pnt->vec = isl_vec_cow(pnt->vec);
-	if (!pnt->vec)
-		goto error;
-
-	if (type == isl_dim_set)
-		pos += isl_space_dim(pnt->dim, isl_dim_param);
-
-	isl_int_set(pnt->vec->el[1 + pos], v);
-
-	return pnt;
-error:
-	isl_point_free(pnt);
-	return NULL;
 }
 
 /* Replace coordinate "pos" of type "type" of "pnt" by "v".
@@ -296,12 +261,13 @@ error:
 
 struct isl_foreach_point {
 	struct isl_scan_callback callback;
-	int (*fn)(__isl_take isl_point *pnt, void *user);
+	isl_stat (*fn)(__isl_take isl_point *pnt, void *user);
 	void *user;
 	isl_space *dim;
 };
 
-static int foreach_point(struct isl_scan_callback *cb, __isl_take isl_vec *sample)
+static isl_stat foreach_point(struct isl_scan_callback *cb,
+	__isl_take isl_vec *sample)
 {
 	struct isl_foreach_point *fp = (struct isl_foreach_point *)cb;
 	isl_point *pnt;
@@ -311,18 +277,18 @@ static int foreach_point(struct isl_scan_callback *cb, __isl_take isl_vec *sampl
 	return fp->fn(pnt, fp->user);
 }
 
-int isl_set_foreach_point(__isl_keep isl_set *set,
-	int (*fn)(__isl_take isl_point *pnt, void *user), void *user)
+isl_stat isl_set_foreach_point(__isl_keep isl_set *set,
+	isl_stat (*fn)(__isl_take isl_point *pnt, void *user), void *user)
 {
 	struct isl_foreach_point fp = { { &foreach_point }, fn, user };
 	int i;
 
 	if (!set)
-		return -1;
+		return isl_stat_error;
 
 	fp.dim = isl_set_get_space(set);
 	if (!fp.dim)
-		return -1;
+		return isl_stat_error;
 
 	set = isl_set_copy(set);
 	set = isl_set_cow(set);
@@ -339,11 +305,11 @@ int isl_set_foreach_point(__isl_keep isl_set *set,
 	isl_set_free(set);
 	isl_space_free(fp.dim);
 
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_set_free(set);
 	isl_space_free(fp.dim);
-	return -1;
+	return isl_stat_error;
 }
 
 /* Return 1 if "bmap" contains the point "point".
@@ -351,24 +317,25 @@ error:
  * The point is first extended with the divs and then passed
  * to basic_map_contains.
  */
-int isl_basic_map_contains_point(__isl_keep isl_basic_map *bmap,
+isl_bool isl_basic_map_contains_point(__isl_keep isl_basic_map *bmap,
 	__isl_keep isl_point *point)
 {
 	int i;
 	struct isl_vec *vec;
 	unsigned dim;
-	int contains;
+	isl_bool contains;
 
 	if (!bmap || !point)
-		return -1;
-	isl_assert(bmap->ctx, isl_space_is_equal(bmap->dim, point->dim), return -1);
+		return isl_bool_error;
+	isl_assert(bmap->ctx, isl_space_is_equal(bmap->dim, point->dim),
+		return isl_bool_error);
 	if (bmap->n_div == 0)
 		return isl_basic_map_contains(bmap, point->vec);
 
 	dim = isl_basic_map_total_dim(bmap) - bmap->n_div;
 	vec = isl_vec_alloc(bmap->ctx, 1 + dim + bmap->n_div);
 	if (!vec)
-		return -1;
+		return isl_bool_error;
 
 	isl_seq_cpy(vec->el, point->vec->el, point->vec->size);
 	for (i = 0; i < bmap->n_div; ++i) {
@@ -384,18 +351,19 @@ int isl_basic_map_contains_point(__isl_keep isl_basic_map *bmap,
 	return contains;
 }
 
-int isl_map_contains_point(__isl_keep isl_map *map, __isl_keep isl_point *point)
+isl_bool isl_map_contains_point(__isl_keep isl_map *map,
+	__isl_keep isl_point *point)
 {
 	int i;
-	int found = 0;
+	isl_bool found = isl_bool_false;
 
 	if (!map || !point)
-		return -1;
+		return isl_bool_error;
 
 	map = isl_map_copy(map);
 	map = isl_map_compute_divs(map);
 	if (!map)
-		return -1;
+		return isl_bool_error;
 
 	for (i = 0; i < map->n; ++i) {
 		found = isl_basic_map_contains_point(map->p[i], point);
@@ -409,12 +377,13 @@ int isl_map_contains_point(__isl_keep isl_map *map, __isl_keep isl_point *point)
 	return found;
 error:
 	isl_map_free(map);
-	return -1;
+	return isl_bool_error;
 }
 
-int isl_set_contains_point(__isl_keep isl_set *set, __isl_keep isl_point *point)
+isl_bool isl_set_contains_point(__isl_keep isl_set *set,
+	__isl_keep isl_point *point)
 {
-	return isl_map_contains_point((isl_map *)set, point);
+	return isl_map_contains_point(set_to_map(set), point);
 }
 
 __isl_give isl_basic_set *isl_basic_set_from_point(__isl_take isl_point *pnt)
@@ -440,10 +409,28 @@ __isl_give isl_set *isl_set_from_point(__isl_take isl_point *pnt)
 	return isl_set_from_basic_set(bset);
 }
 
+/* Construct a union set, containing the single element "pnt".
+ * If "pnt" is void, then return an empty union set.
+ */
+__isl_give isl_union_set *isl_union_set_from_point(__isl_take isl_point *pnt)
+{
+	if (!pnt)
+		return NULL;
+	if (isl_point_is_void(pnt)) {
+		isl_space *space;
+
+		space = isl_point_get_space(pnt);
+		isl_point_free(pnt);
+		return isl_union_set_empty(space);
+	}
+
+	return isl_union_set_from_set(isl_set_from_point(pnt));
+}
+
 __isl_give isl_basic_set *isl_basic_set_box_from_points(
 	__isl_take isl_point *pnt1, __isl_take isl_point *pnt2)
 {
-	isl_basic_set *bset;
+	isl_basic_set *bset = NULL;
 	unsigned total;
 	int i;
 	int k;
@@ -521,6 +508,7 @@ error:
 	isl_point_free(pnt1);
 	isl_point_free(pnt2);
 	isl_int_clear(t);
+	isl_basic_set_free(bset);
 	return NULL;
 }
 
@@ -532,12 +520,28 @@ __isl_give isl_set *isl_set_box_from_points(__isl_take isl_point *pnt1,
 	return isl_set_from_basic_set(bset);
 }
 
+/* Print the coordinate at position "pos" of the point "pnt".
+ */
+static __isl_give isl_printer *print_coordinate(__isl_take isl_printer *p,
+	struct isl_print_space_data *data, unsigned pos)
+{
+	isl_point *pnt = data->user;
+
+	p = isl_printer_print_isl_int(p, pnt->vec->el[1 + pos]);
+	if (!isl_int_is_one(pnt->vec->el[0])) {
+		p = isl_printer_print_str(p, "/");
+		p = isl_printer_print_isl_int(p, pnt->vec->el[0]);
+	}
+
+	return p;
+}
+
 __isl_give isl_printer *isl_printer_print_point(
 	__isl_take isl_printer *p, __isl_keep isl_point *pnt)
 {
+	struct isl_print_space_data data = { 0 };
 	int i;
 	unsigned nparam;
-	unsigned dim;
 
 	if (!pnt)
 		return p;
@@ -547,7 +551,6 @@ __isl_give isl_printer *isl_printer_print_point(
 	}
 
 	nparam = isl_space_dim(pnt->dim, isl_dim_param);
-	dim = isl_space_dim(pnt->dim, isl_dim_set);
 	if (nparam > 0) {
 		p = isl_printer_print_str(p, "[");
 		for (i = 0; i < nparam; ++i) {
@@ -568,16 +571,10 @@ __isl_give isl_printer *isl_printer_print_point(
 		p = isl_printer_print_str(p, "]");
 		p = isl_printer_print_str(p, " -> ");
 	}
-	p = isl_printer_print_str(p, "[");
-	for (i = 0; i < dim; ++i) {
-		if (i)
-			p = isl_printer_print_str(p, ", ");
-		p = isl_printer_print_isl_int(p, pnt->vec->el[1 + nparam + i]);
-		if (!isl_int_is_one(pnt->vec->el[0])) {
-			p = isl_printer_print_str(p, "/");
-			p = isl_printer_print_isl_int(p, pnt->vec->el[0]);
-		}
-	}
-	p = isl_printer_print_str(p, "]");
+	data.print_dim = &print_coordinate;
+	data.user = pnt;
+	p = isl_printer_print_str(p, "{ ");
+	p = isl_print_space(pnt->dim, p, 0, &data);
+	p = isl_printer_print_str(p, " }");
 	return p;
 }

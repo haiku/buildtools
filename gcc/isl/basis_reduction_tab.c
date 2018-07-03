@@ -9,8 +9,10 @@
 
 #include <assert.h>
 #include <isl_map_private.h>
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include "isl_tab.h"
+#include <isl_int.h>
+#include <isl_config.h>
 
 struct tab_lp {
 	struct isl_ctx  *ctx;
@@ -30,17 +32,7 @@ struct tab_lp {
 	int		 is_fixed;
 };
 
-static struct tab_lp *init_lp(struct isl_tab *tab);
-static void set_lp_obj(struct tab_lp *lp, isl_int *row, int dim);
-static int solve_lp(struct tab_lp *lp);
-static void get_obj_val(struct tab_lp* lp, mpq_t *F);
-static void delete_lp(struct tab_lp *lp);
-static int add_lp_row(struct tab_lp *lp, isl_int *row, int dim);
-static void get_alpha(struct tab_lp* lp, int row, mpq_t *alpha);
-static int del_lp_row(struct tab_lp *lp) WARN_UNUSED;
-static int cut_lp_to_hyperplane(struct tab_lp *lp, isl_int *row);
-
-#define GBR_LP			    	    struct tab_lp
+#ifdef USE_GMP_FOR_MP
 #define GBR_type		    	    mpq_t
 #define GBR_init(v)		    	    mpq_init(v)
 #define GBR_clear(v)		    	    mpq_clear(v)
@@ -49,8 +41,63 @@ static int cut_lp_to_hyperplane(struct tab_lp *lp, isl_int *row);
 #define GBR_mul(a,b,c)			    mpq_mul(a,b,c)
 #define GBR_lt(a,b)			    (mpq_cmp(a,b) < 0)
 #define GBR_is_zero(a)			    (mpq_sgn(a) == 0)
-#define GBR_floor(a,b)			    mpz_fdiv_q(a,mpq_numref(b),mpq_denref(b))
-#define GBR_ceil(a,b)			    mpz_cdiv_q(a,mpq_numref(b),mpq_denref(b))
+#define GBR_numref(a)			    mpq_numref(a)
+#define GBR_denref(a)			    mpq_denref(a)
+#define GBR_floor(a,b)			    mpz_fdiv_q(a,GBR_numref(b),GBR_denref(b))
+#define GBR_ceil(a,b)			    mpz_cdiv_q(a,GBR_numref(b),GBR_denref(b))
+#define GBR_set_num_neg(a, b)		    mpz_neg(GBR_numref(*a), b);
+#define GBR_set_den(a, b)		    mpz_set(GBR_denref(*a), b);
+#endif /* USE_GMP_FOR_MP */
+
+#ifdef USE_IMATH_FOR_MP
+#include <imrat.h>
+
+#define GBR_type		    	    mp_rat
+#define GBR_init(v)		    	    v = mp_rat_alloc()
+#define GBR_clear(v)		    	    mp_rat_free(v)
+#define GBR_set(a,b)			    mp_rat_copy(b,a)
+#define GBR_set_ui(a,b)			    mp_rat_set_uvalue(a,b,1)
+#define GBR_mul(a,b,c)			    mp_rat_mul(b,c,a)
+#define GBR_lt(a,b)			    (mp_rat_compare(a,b) < 0)
+#define GBR_is_zero(a)			    (mp_rat_compare_zero(a) == 0)
+#ifdef USE_SMALL_INT_OPT
+#define GBR_numref(a)	isl_sioimath_encode_big(mp_rat_numer_ref(a))
+#define GBR_denref(a)	isl_sioimath_encode_big(mp_rat_denom_ref(a))
+#define GBR_floor(a, b)	isl_sioimath_fdiv_q((a), GBR_numref(b), GBR_denref(b))
+#define GBR_ceil(a, b)	isl_sioimath_cdiv_q((a), GBR_numref(b), GBR_denref(b))
+#define GBR_set_num_neg(a, b)                              \
+	do {                                               \
+		isl_sioimath_scratchspace_t scratch;       \
+		impz_neg(mp_rat_numer_ref(*a),             \
+		    isl_sioimath_bigarg_src(*b, &scratch));\
+	} while (0)
+#define GBR_set_den(a, b)                                  \
+	do {                                               \
+		isl_sioimath_scratchspace_t scratch;       \
+		impz_set(mp_rat_denom_ref(*a),             \
+		    isl_sioimath_bigarg_src(*b, &scratch));\
+	} while (0)
+#else /* USE_SMALL_INT_OPT */
+#define GBR_numref(a)		mp_rat_numer_ref(a)
+#define GBR_denref(a)		mp_rat_denom_ref(a)
+#define GBR_floor(a,b)		impz_fdiv_q(a,GBR_numref(b),GBR_denref(b))
+#define GBR_ceil(a,b)		impz_cdiv_q(a,GBR_numref(b),GBR_denref(b))
+#define GBR_set_num_neg(a, b)	impz_neg(GBR_numref(*a), b)
+#define GBR_set_den(a, b)	impz_set(GBR_denref(*a), b)
+#endif /* USE_SMALL_INT_OPT */
+#endif /* USE_IMATH_FOR_MP */
+
+static struct tab_lp *init_lp(struct isl_tab *tab);
+static void set_lp_obj(struct tab_lp *lp, isl_int *row, int dim);
+static int solve_lp(struct tab_lp *lp);
+static void get_obj_val(struct tab_lp* lp, GBR_type *F);
+static void delete_lp(struct tab_lp *lp);
+static int add_lp_row(struct tab_lp *lp, isl_int *row, int dim);
+static void get_alpha(struct tab_lp* lp, int row, GBR_type *alpha);
+static int del_lp_row(struct tab_lp *lp) WARN_UNUSED;
+static int cut_lp_to_hyperplane(struct tab_lp *lp, isl_int *row);
+
+#define GBR_LP			    	    struct tab_lp
 #define GBR_lp_init(P)		    	    init_lp(P)
 #define GBR_lp_set_obj(lp, obj, dim)	    set_lp_obj(lp, obj, dim)
 #define GBR_lp_solve(lp)		    solve_lp(lp)
@@ -157,8 +204,11 @@ static int solve_lp(struct tab_lp *lp)
 		isl_vec_free(sample);
 	}
 	isl_int_divexact_ui(lp->opt_denom, lp->opt_denom, 2);
-	if (res != isl_lp_ok)
+	if (res < 0)
 		return -1;
+	if (res != isl_lp_ok)
+		isl_die(lp->ctx, isl_error_internal,
+			"unexpected missing (bounded) solution", return -1);
 	return 0;
 }
 
@@ -193,10 +243,10 @@ static int cut_lp_to_hyperplane(struct tab_lp *lp, isl_int *row)
 	return lp->tab->empty;
 }
 
-static void get_obj_val(struct tab_lp* lp, mpq_t *F)
+static void get_obj_val(struct tab_lp* lp, GBR_type *F)
 {
-	isl_int_neg(mpq_numref(*F), lp->opt);
-	isl_int_set(mpq_denref(*F), lp->opt_denom);
+	GBR_set_num_neg(F, lp->opt);
+	GBR_set_den(F, lp->opt_denom);
 }
 
 static void delete_lp(struct tab_lp *lp)
@@ -229,11 +279,11 @@ static int add_lp_row(struct tab_lp *lp, isl_int *row, int dim)
 	return lp->neq++;
 }
 
-static void get_alpha(struct tab_lp* lp, int row, mpq_t *alpha)
+static void get_alpha(struct tab_lp* lp, int row, GBR_type *alpha)
 {
 	row += lp->con_offset;
-	isl_int_neg(mpq_numref(*alpha), lp->tab->dual->el[1 + row]);
-	isl_int_set(mpq_denref(*alpha), lp->tab->dual->el[0]);
+	GBR_set_num_neg(alpha, lp->tab->dual->el[1 + row]);
+	GBR_set_den(alpha, lp->tab->dual->el[0]);
 }
 
 static int del_lp_row(struct tab_lp *lp)

@@ -71,6 +71,11 @@ error:
 	return NULL;
 }
 
+uint32_t isl_id_get_hash(__isl_keep isl_id *id)
+{
+	return id ? id->hash : 0;
+}
+
 struct isl_name_and_user {
 	const char *name;
 	void *user;
@@ -83,8 +88,10 @@ static int isl_id_has_name_and_user(const void *entry, const void *val)
 
 	if (id->user != nu->user)
 		return 0;
-	if (!id->name && !nu->name)
+	if (id->name == nu->name)
 		return 1;
+	if (!id->name || !nu->name)
+		return 0;
 
 	return !strcmp(id->name, nu->name);
 }
@@ -94,6 +101,9 @@ __isl_give isl_id *isl_id_alloc(isl_ctx *ctx, const char *name, void *user)
 	struct isl_hash_table_entry *entry;
 	uint32_t id_hash;
 	struct isl_name_and_user nu = { name, user };
+
+	if (!ctx)
+		return NULL;
 
 	id_hash = isl_hash_init();
 	if (name)
@@ -127,6 +137,33 @@ __isl_give isl_id *isl_id_copy(isl_id *id)
 	return id;
 }
 
+/* Compare two isl_ids.
+ *
+ * The order is fairly arbitrary.  We do keep the comparison of
+ * the user pointers as a last resort since these pointer values
+ * may not be stable across different systems or even different runs.
+ */
+int isl_id_cmp(__isl_keep isl_id *id1, __isl_keep isl_id *id2)
+{
+	if (id1 == id2)
+		return 0;
+	if (!id1)
+		return -1;
+	if (!id2)
+		return 1;
+	if (!id1->name != !id2->name)
+		return !id1->name - !id2->name;
+	if (id1->name) {
+		int cmp = strcmp(id1->name, id2->name);
+		if (cmp != 0)
+			return cmp;
+	}
+	if (id1->user < id2->user)
+		return -1;
+	else
+		return 1;
+}
+
 static int isl_id_eq(const void *entry, const void *name)
 {
 	return entry == name;
@@ -143,7 +180,7 @@ uint32_t isl_hash_id(uint32_t hash, __isl_keep isl_id *id)
 /* Replace the free_user callback by "free_user".
  */
 __isl_give isl_id *isl_id_set_free_user(__isl_take isl_id *id,
-	__isl_give void (*free_user)(void *user))
+	void (*free_user)(void *user))
 {
 	if (!id)
 		return NULL;
@@ -156,7 +193,7 @@ __isl_give isl_id *isl_id_set_free_user(__isl_take isl_id *id,
 /* If the id has a negative refcount, then it is a static isl_id
  * and should not be freed.
  */
-void *isl_id_free(__isl_take isl_id *id)
+__isl_null isl_id *isl_id_free(__isl_take isl_id *id)
 {
 	struct isl_hash_table_entry *entry;
 

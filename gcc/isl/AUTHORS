@@ -16,20 +16,36 @@ isl was written by
 	    91893 Orsay
 	    France
 2011-2012   consultant for Leiden Institute of Advanced Computer Science
-2012	    Ecole Normale Superieure
-	    45 rue d’Ulm, 75230 Paris
+2012-2014   Ecole Normale Superieure
+	    45 rue d'Ulm, 75230 Paris
 	    France
+2014-2015   INRIA Rocquencourt
+	    Domaine de Voluceau - Rocquencourt, B.P. 105
+	    78153 Le Chesnay
+	    France
+2015-2016   Polly Labs
 
 Contributions by
 
 Mythri Alle
 Riyadh Baghdadi
 Serge Belyshev
+Albert Cohen
+Ray Donnelly
+Johannes Doerfert
+Armin Groesslinger
 Tobias Grosser
+Alexandre Isoard
 Andreas Kloeckner
+Michael Kruse
+Alexander Matz
 Sebastian Pop
 Louis-Noel Pouchet
+Benoit Pradelle
 Uday Kumar Reddy
+Andreas Simbuerger
+Malhar Thakkar
 Sven van Haastregt
+Oleksandr Zinenko
 
 The merge sort implementation was written by Jeffrey Stedfast.

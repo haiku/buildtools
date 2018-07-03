@@ -10,13 +10,17 @@
 #include <isl_ctx_private.h>
 #include <isl_map_private.h>
 #include <isl/ilp.h>
+#include <isl/union_set.h>
 #include "isl_sample.h"
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include "isl_equalities.h"
 #include <isl_aff_private.h>
 #include <isl_local_space_private.h>
 #include <isl_mat_private.h>
 #include <isl_val_private.h>
+#include <isl_vec_private.h>
+#include <isl_lp_private.h>
+#include <isl_ilp_private.h>
 
 /* Given a basic set "bset", construct a basic set U such that for
  * each element x in U, the whole unit box positioned at x is inside
@@ -27,7 +31,8 @@
  * term.  This ensures that if x satisfies the resulting constraints,
  * then x plus any sum of unit vectors satisfies the original constraints.
  */
-static struct isl_basic_set *unit_box_base_points(struct isl_basic_set *bset)
+static __isl_give isl_basic_set *unit_box_base_points(
+	__isl_take isl_basic_set *bset)
 {
 	int i, j, k;
 	struct isl_basic_set *unit_box = NULL;
@@ -37,9 +42,9 @@ static struct isl_basic_set *unit_box_base_points(struct isl_basic_set *bset)
 		goto error;
 
 	if (bset->n_eq != 0) {
-		unit_box = isl_basic_set_empty_like(bset);
+		isl_space *space = isl_basic_set_get_space(bset);
 		isl_basic_set_free(bset);
-		return unit_box;
+		return isl_basic_set_empty(space);
 	}
 
 	total = isl_basic_set_total_dim(bset);
@@ -75,7 +80,8 @@ error:
  * and round it up to the nearest integer.
  * If not, we simply pick any integer point in "bset".
  */
-static struct isl_vec *initial_solution(struct isl_basic_set *bset, isl_int *f)
+static __isl_give isl_vec *initial_solution(__isl_keep isl_basic_set *bset,
+	isl_int *f)
 {
 	enum isl_lp_result res;
 	struct isl_basic_set *unit_box;
@@ -97,7 +103,7 @@ static struct isl_vec *initial_solution(struct isl_basic_set *bset, isl_int *f)
 
 /* Restrict "bset" to those points with values for f in the interval [l, u].
  */
-static struct isl_basic_set *add_bounds(struct isl_basic_set *bset,
+static __isl_give isl_basic_set *add_bounds(__isl_take isl_basic_set *bset,
 	isl_int *f, isl_int l, isl_int u)
 {
 	int k;
@@ -140,8 +146,8 @@ error:
  * If no point can be found, we update l to the upper bound of the interval
  * we checked (u or l+floor(u-l-1/2)) plus 1.
  */
-static struct isl_vec *solve_ilp_search(struct isl_basic_set *bset,
-	isl_int *f, isl_int *opt, struct isl_vec *sol, isl_int l, isl_int u)
+static __isl_give isl_vec *solve_ilp_search(__isl_keep isl_basic_set *bset,
+	isl_int *f, isl_int *opt, __isl_take isl_vec *sol, isl_int l, isl_int u)
 {
 	isl_int tmp;
 	int divide = 1;
@@ -199,9 +205,8 @@ static struct isl_vec *solve_ilp_search(struct isl_basic_set *bset,
  *
  * We then call solve_ilp_search to perform a binary search on the interval.
  */
-static enum isl_lp_result solve_ilp(struct isl_basic_set *bset,
-				      isl_int *f, isl_int *opt,
-				      struct isl_vec **sol_p)
+static enum isl_lp_result solve_ilp(__isl_keep isl_basic_set *bset,
+	isl_int *f, isl_int *opt, __isl_give isl_vec **sol_p)
 {
 	enum isl_lp_result res;
 	isl_int l, u;
@@ -255,9 +260,8 @@ static enum isl_lp_result solve_ilp(struct isl_basic_set *bset,
 	return res;
 }
 
-static enum isl_lp_result solve_ilp_with_eq(struct isl_basic_set *bset, int max,
-				      isl_int *f, isl_int *opt,
-				      struct isl_vec **sol_p)
+static enum isl_lp_result solve_ilp_with_eq(__isl_keep isl_basic_set *bset,
+	int max, isl_int *f, isl_int *opt, __isl_give isl_vec **sol_p)
 {
 	unsigned dim;
 	enum isl_lp_result res;
@@ -298,9 +302,8 @@ error:
  * If there is any equality among the points in "bset", then we first
  * project it out.  Otherwise, we continue with solve_ilp above.
  */
-enum isl_lp_result isl_basic_set_solve_ilp(struct isl_basic_set *bset, int max,
-				      isl_int *f, isl_int *opt,
-				      struct isl_vec **sol_p)
+enum isl_lp_result isl_basic_set_solve_ilp(__isl_keep isl_basic_set *bset,
+	int max, isl_int *f, isl_int *opt, __isl_give isl_vec **sol_p)
 {
 	unsigned dim;
 	enum isl_lp_result res;
@@ -310,7 +313,8 @@ enum isl_lp_result isl_basic_set_solve_ilp(struct isl_basic_set *bset, int max,
 	if (sol_p)
 		*sol_p = NULL;
 
-	isl_assert(bset->ctx, isl_basic_set_n_param(bset) == 0, goto error);
+	isl_assert(bset->ctx, isl_basic_set_n_param(bset) == 0,
+		return isl_lp_error);
 
 	if (isl_basic_set_plain_is_empty(bset))
 		return isl_lp_empty;
@@ -331,9 +335,6 @@ enum isl_lp_result isl_basic_set_solve_ilp(struct isl_basic_set *bset, int max,
 	}
 
 	return res;
-error:
-	isl_basic_set_free(bset);
-	return isl_lp_error;
 }
 
 static enum isl_lp_result basic_set_opt(__isl_keep isl_basic_set *bset, int max,
@@ -462,8 +463,9 @@ static enum isl_lp_result isl_set_opt_aligned(__isl_keep isl_set *set, int max,
 			isl_int_clear(opt_i);
 			return res;
 		}
-		if (res == isl_lp_ok)
-			empty = 0;
+		if (res == isl_lp_empty)
+			continue;
+		empty = 0;
 		if (max ? isl_int_gt(opt_i, *opt) : isl_int_lt(opt_i, *opt))
 			isl_int_set(*opt, opt_i);
 	}
@@ -479,12 +481,15 @@ enum isl_lp_result isl_set_opt(__isl_keep isl_set *set, int max,
 	__isl_keep isl_aff *obj, isl_int *opt)
 {
 	enum isl_lp_result res;
+	isl_bool aligned;
 
 	if (!set || !obj)
 		return isl_lp_error;
 
-	if (isl_space_match(set->dim, isl_dim_param,
-			    obj->ls->dim, isl_dim_param))
+	aligned = isl_set_space_has_equal_params(set, obj->ls->dim);
+	if (aligned < 0)
+		return isl_lp_error;
+	if (aligned)
 		return isl_set_opt_aligned(set, max, obj, opt);
 
 	set = isl_set_copy(set);
@@ -498,24 +503,6 @@ enum isl_lp_result isl_set_opt(__isl_keep isl_set *set, int max,
 	isl_aff_free(obj);
 
 	return res;
-}
-
-enum isl_lp_result isl_basic_set_max(__isl_keep isl_basic_set *bset,
-	__isl_keep isl_aff *obj, isl_int *opt)
-{
-	return isl_basic_set_opt(bset, 1, obj, opt);
-}
-
-enum isl_lp_result isl_set_max(__isl_keep isl_set *set,
-	__isl_keep isl_aff *obj, isl_int *opt)
-{
-	return isl_set_opt(set, 1, obj, opt);
-}
-
-enum isl_lp_result isl_set_min(__isl_keep isl_set *set,
-	__isl_keep isl_aff *obj, isl_int *opt)
-{
-	return isl_set_opt(set, 0, obj, opt);
 }
 
 /* Convert the result of a function that returns an isl_lp_result
@@ -591,7 +578,7 @@ __isl_give isl_val *isl_basic_set_max_val(__isl_keep isl_basic_set *bset,
  * expression "obj" over the points in "set".
  *
  * Return infinity or negative infinity if the optimal value is unbounded and
- * NaN if "bset" is empty.
+ * NaN if "set" is empty.
  *
  * Call isl_set_opt and translate the results.
  */
@@ -617,7 +604,7 @@ __isl_give isl_val *isl_set_opt_val(__isl_keep isl_set *set, int max,
  * expression "obj" over the points in "set".
  *
  * Return infinity or negative infinity if the optimal value is unbounded and
- * NaN if "bset" is empty.
+ * NaN if "set" is empty.
  */
 __isl_give isl_val *isl_set_min_val(__isl_keep isl_set *set,
 	__isl_keep isl_aff *obj)
@@ -629,10 +616,233 @@ __isl_give isl_val *isl_set_min_val(__isl_keep isl_set *set,
  * expression "obj" over the points in "set".
  *
  * Return infinity or negative infinity if the optimal value is unbounded and
- * NaN if "bset" is empty.
+ * NaN if "set" is empty.
  */
 __isl_give isl_val *isl_set_max_val(__isl_keep isl_set *set,
 	__isl_keep isl_aff *obj)
 {
 	return isl_set_opt_val(set, 1, obj);
+}
+
+/* Return the optimum (min or max depending on "max") of "v1" and "v2",
+ * where either may be NaN, signifying an uninitialized value.
+ * That is, if either is NaN, then return the other one.
+ */
+static __isl_give isl_val *val_opt(__isl_take isl_val *v1,
+	__isl_take isl_val *v2, int max)
+{
+	if (!v1 || !v2)
+		goto error;
+	if (isl_val_is_nan(v1)) {
+		isl_val_free(v1);
+		return v2;
+	}
+	if (isl_val_is_nan(v2)) {
+		isl_val_free(v2);
+		return v1;
+	}
+	if (max)
+		return isl_val_max(v1, v2);
+	else
+		return isl_val_min(v1, v2);
+error:
+	isl_val_free(v1);
+	isl_val_free(v2);
+	return NULL;
+}
+
+/* Internal data structure for isl_set_opt_pw_aff.
+ *
+ * "max" is set if the maximum should be computed.
+ * "set" is the set over which the optimum should be computed.
+ * "res" contains the current optimum and is initialized to NaN.
+ */
+struct isl_set_opt_data {
+	int max;
+	isl_set *set;
+
+	isl_val *res;
+};
+
+/* Update the optimum in data->res with respect to the affine function
+ * "aff" defined over "set".
+ */
+static isl_stat piece_opt(__isl_take isl_set *set, __isl_take isl_aff *aff,
+	void *user)
+{
+	struct isl_set_opt_data *data = user;
+	isl_val *opt;
+
+	set = isl_set_intersect(set, isl_set_copy(data->set));
+	opt = isl_set_opt_val(set, data->max, aff);
+	isl_set_free(set);
+	isl_aff_free(aff);
+
+	data->res = val_opt(data->res, opt, data->max);
+	if (!data->res)
+		return isl_stat_error;
+
+	return isl_stat_ok;
+}
+
+/* Return the minimum (maximum if "max" is set) of the integer piecewise affine
+ * expression "obj" over the points in "set".
+ *
+ * Return infinity or negative infinity if the optimal value is unbounded and
+ * NaN if the intersection of "set" with the domain of "obj" is empty.
+ *
+ * Initialize the result to NaN and then update it for each of the pieces
+ * in "obj".
+ */
+static __isl_give isl_val *isl_set_opt_pw_aff(__isl_keep isl_set *set, int max,
+	__isl_keep isl_pw_aff *obj)
+{
+	struct isl_set_opt_data data = { max, set };
+
+	data.res = isl_val_nan(isl_set_get_ctx(set));
+	if (isl_pw_aff_foreach_piece(obj, &piece_opt, &data) < 0)
+		return isl_val_free(data.res);
+
+	return data.res;
+}
+
+/* Internal data structure for isl_union_set_opt_union_pw_aff.
+ *
+ * "max" is set if the maximum should be computed.
+ * "obj" is the objective function that needs to be optimized.
+ * "res" contains the current optimum and is initialized to NaN.
+ */
+struct isl_union_set_opt_data {
+	int max;
+	isl_union_pw_aff *obj;
+
+	isl_val *res;
+};
+
+/* Update the optimum in data->res with the optimum over "set".
+ * Do so by first extracting the matching objective function
+ * from data->obj.
+ */
+static isl_stat set_opt(__isl_take isl_set *set, void *user)
+{
+	struct isl_union_set_opt_data *data = user;
+	isl_space *space;
+	isl_pw_aff *pa;
+	isl_val *opt;
+
+	space = isl_set_get_space(set);
+	space = isl_space_from_domain(space);
+	space = isl_space_add_dims(space, isl_dim_out, 1);
+	pa = isl_union_pw_aff_extract_pw_aff(data->obj, space);
+	opt = isl_set_opt_pw_aff(set, data->max, pa);
+	isl_pw_aff_free(pa);
+	isl_set_free(set);
+
+	data->res = val_opt(data->res, opt, data->max);
+	if (!data->res)
+		return isl_stat_error;
+
+	return isl_stat_ok;
+}
+
+/* Return the minimum (maximum if "max" is set) of the integer piecewise affine
+ * expression "obj" over the points in "uset".
+ *
+ * Return infinity or negative infinity if the optimal value is unbounded and
+ * NaN if the intersection of "uset" with the domain of "obj" is empty.
+ *
+ * Initialize the result to NaN and then update it for each of the sets
+ * in "uset".
+ */
+static __isl_give isl_val *isl_union_set_opt_union_pw_aff(
+	__isl_keep isl_union_set *uset, int max,
+	__isl_keep isl_union_pw_aff *obj)
+{
+	struct isl_union_set_opt_data data = { max, obj };
+
+	data.res = isl_val_nan(isl_union_set_get_ctx(uset));
+	if (isl_union_set_foreach_set(uset, &set_opt, &data) < 0)
+		return isl_val_free(data.res);
+
+	return data.res;
+}
+
+/* Return a list of minima (maxima if "max" is set) over the points in "uset"
+ * for each of the expressions in "obj".
+ *
+ * An element in the list is infinity or negative infinity if the optimal
+ * value of the corresponding expression is unbounded and
+ * NaN if the intersection of "uset" with the domain of the expression
+ * is empty.
+ *
+ * Iterate over all the expressions in "obj" and collect the results.
+ */
+static __isl_give isl_multi_val *isl_union_set_opt_multi_union_pw_aff(
+	__isl_keep isl_union_set *uset, int max,
+	__isl_keep isl_multi_union_pw_aff *obj)
+{
+	int i, n;
+	isl_multi_val *mv;
+
+	if (!uset || !obj)
+		return NULL;
+
+	n = isl_multi_union_pw_aff_dim(obj, isl_dim_set);
+	mv = isl_multi_val_zero(isl_multi_union_pw_aff_get_space(obj));
+
+	for (i = 0; i < n; ++i) {
+		isl_val *v;
+		isl_union_pw_aff *upa;
+
+		upa = isl_multi_union_pw_aff_get_union_pw_aff(obj, i);
+		v = isl_union_set_opt_union_pw_aff(uset, max, upa);
+		isl_union_pw_aff_free(upa);
+		mv = isl_multi_val_set_val(mv, i, v);
+	}
+
+	return mv;
+}
+
+/* Return a list of minima over the points in "uset"
+ * for each of the expressions in "obj".
+ *
+ * An element in the list is infinity or negative infinity if the optimal
+ * value of the corresponding expression is unbounded and
+ * NaN if the intersection of "uset" with the domain of the expression
+ * is empty.
+ */
+__isl_give isl_multi_val *isl_union_set_min_multi_union_pw_aff(
+	__isl_keep isl_union_set *uset, __isl_keep isl_multi_union_pw_aff *obj)
+{
+	return isl_union_set_opt_multi_union_pw_aff(uset, 0, obj);
+}
+
+/* Return the maximal value attained by the given set dimension,
+ * independently of the parameter values and of any other dimensions.
+ *
+ * Return infinity if the optimal value is unbounded and
+ * NaN if "bset" is empty.
+ */
+__isl_give isl_val *isl_basic_set_dim_max_val(__isl_take isl_basic_set *bset,
+	int pos)
+{
+	isl_local_space *ls;
+	isl_aff *obj;
+	isl_val *v;
+
+	if (!bset)
+		return NULL;
+	if (pos < 0 || pos >= isl_basic_set_dim(bset, isl_dim_set))
+		isl_die(isl_basic_set_get_ctx(bset), isl_error_invalid,
+			"position out of bounds", goto error);
+	ls = isl_local_space_from_space(isl_basic_set_get_space(bset));
+	obj = isl_aff_var_on_domain(ls, isl_dim_set, pos);
+	v = isl_basic_set_max_val(bset, obj);
+	isl_aff_free(obj);
+	isl_basic_set_free(bset);
+
+	return v;
+error:
+	isl_basic_set_free(bset);
+	return NULL;
 }

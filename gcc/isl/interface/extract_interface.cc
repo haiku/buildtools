@@ -35,6 +35,11 @@
 
 #include <assert.h>
 #include <iostream>
+#ifdef HAVE_ADT_OWNINGPTR_H
+#include <llvm/ADT/OwningPtr.h>
+#else
+#include <memory>
+#endif
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Host.h>
@@ -59,16 +64,26 @@
 #include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Frontend/Utils.h>
 #include <clang/Lex/HeaderSearch.h>
+#ifdef HAVE_LEX_PREPROCESSOROPTIONS_H
+#include <clang/Lex/PreprocessorOptions.h>
+#else
+#include <clang/Frontend/PreprocessorOptions.h>
+#endif
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Parse/ParseAST.h>
 #include <clang/Sema/Sema.h>
 
 #include "extract_interface.h"
+#include "generator.h"
 #include "python.h"
 
 using namespace std;
 using namespace clang;
 using namespace clang::driver;
+
+#ifdef HAVE_ADT_OWNINGPTR_H
+#define unique_ptr	llvm::OwningPtr
+#endif
 
 static llvm::cl::opt<string> InputFilename(llvm::cl::Positional,
 			llvm::cl::Required, llvm::cl::desc("<input file>"));
@@ -76,7 +91,13 @@ static llvm::cl::list<string> Includes("I",
 			llvm::cl::desc("Header search path"),
 			llvm::cl::value_desc("path"), llvm::cl::Prefix);
 
-static const char *ResourceDir = CLANG_PREFIX"/lib/clang/"CLANG_VERSION_STRING;
+static llvm::cl::opt<string> Language(llvm::cl::Required,
+	llvm::cl::ValueRequired, "language",
+	llvm::cl::desc("Bindings to generate"),
+	llvm::cl::value_desc("name"));
+
+static const char *ResourceDir =
+	CLANG_PREFIX "/lib/clang/" CLANG_VERSION_STRING;
 
 /* Does decl have an attribute of the following form?
  *
@@ -107,12 +128,14 @@ static bool is_exported(Decl *decl)
 }
 
 /* Collect all types and functions that are annotated "isl_export"
- * in "types" and "function".
+ * in "exported_types" and "exported_function".  Collect all function
+ * declarations in "functions".
  *
  * We currently only consider single declarations.
  */
 struct MyASTConsumer : public ASTConsumer {
-	set<RecordDecl *> types;
+	set<RecordDecl *> exported_types;
+	set<FunctionDecl *> exported_functions;
 	set<FunctionDecl *> functions;
 
 	virtual HandleTopLevelDeclReturn HandleTopLevelDecl(DeclGroupRef D) {
@@ -121,14 +144,16 @@ struct MyASTConsumer : public ASTConsumer {
 		if (!D.isSingleDecl())
 			return HandleTopLevelDeclContinue;
 		decl = D.getSingleDecl();
+		if (isa<FunctionDecl>(decl))
+			functions.insert(cast<FunctionDecl>(decl));
 		if (!is_exported(decl))
 			return HandleTopLevelDeclContinue;
 		switch (decl->getKind()) {
 		case Decl::Record:
-			types.insert(cast<RecordDecl>(decl));
+			exported_types.insert(cast<RecordDecl>(decl));
 			break;
 		case Decl::Function:
-			functions.insert(cast<FunctionDecl>(decl));
+			exported_functions.insert(cast<FunctionDecl>(decl));
 			break;
 		default:
 			break;
@@ -151,13 +176,29 @@ static Driver *construct_driver(const char *binary, DiagnosticsEngine &Diags)
 	return new Driver(binary, llvm::sys::getDefaultTargetTriple(),
 			    "", false, Diags);
 }
-#else
+#elif defined(DRIVER_CTOR_TAKES_DEFAULTIMAGENAME)
 static Driver *construct_driver(const char *binary, DiagnosticsEngine &Diags)
 {
 	return new Driver(binary, llvm::sys::getDefaultTargetTriple(),
 			    "", Diags);
 }
+#else
+static Driver *construct_driver(const char *binary, DiagnosticsEngine &Diags)
+{
+	return new Driver(binary, llvm::sys::getDefaultTargetTriple(), Diags);
+}
 #endif
+
+namespace clang { namespace driver { class Job; } }
+
+/* Clang changed its API from 3.5 to 3.6 and once more in 3.7.
+ * We fix this with a simple overloaded function here.
+ */
+struct ClangAPI {
+	static Job *command(Job *J) { return J; }
+	static Job *command(Job &J) { return &J; }
+	static Command *command(Command &C) { return &C; }
+};
 
 /* Create a CompilerInvocation object that stores the command line
  * arguments constructed by the driver.
@@ -168,15 +209,15 @@ static CompilerInvocation *construct_invocation(const char *filename,
 	DiagnosticsEngine &Diags)
 {
 	const char *binary = CLANG_PREFIX"/bin/clang";
-	const llvm::OwningPtr<Driver> driver(construct_driver(binary, Diags));
+	const unique_ptr<Driver> driver(construct_driver(binary, Diags));
 	std::vector<const char *> Argv;
 	Argv.push_back(binary);
 	Argv.push_back(filename);
-	const llvm::OwningPtr<Compilation> compilation(
+	const unique_ptr<Compilation> compilation(
 		driver->BuildCompilation(llvm::ArrayRef<const char *>(Argv)));
 	JobList &Jobs = compilation->getJobs();
 
-	Command *cmd = cast<Command>(*Jobs.begin());
+	Command *cmd = cast<Command>(ClangAPI::command(*Jobs.begin()));
 	if (strcmp(cmd->getCreator().getName(), "clang"))
 		return NULL;
 
@@ -216,7 +257,17 @@ static TextDiagnosticPrinter *construct_printer(void)
 
 #endif
 
-#ifdef CREATETARGETINFO_TAKES_POINTER
+#ifdef CREATETARGETINFO_TAKES_SHARED_PTR
+
+static TargetInfo *create_target_info(CompilerInstance *Clang,
+	DiagnosticsEngine &Diags)
+{
+	shared_ptr<TargetOptions> TO = Clang->getInvocation().TargetOpts;
+	TO->Triple = llvm::sys::getDefaultTargetTriple();
+	return TargetInfo::CreateTargetInfo(Diags, TO);
+}
+
+#elif defined(CREATETARGETINFO_TAKES_POINTER)
 
 static TargetInfo *create_target_info(CompilerInstance *Clang,
 	DiagnosticsEngine &Diags)
@@ -254,6 +305,22 @@ static void create_diagnostics(CompilerInstance *Clang)
 
 #endif
 
+#ifdef CREATEPREPROCESSOR_TAKES_TUKIND
+
+static void create_preprocessor(CompilerInstance *Clang)
+{
+	Clang->createPreprocessor(TU_Complete);
+}
+
+#else
+
+static void create_preprocessor(CompilerInstance *Clang)
+{
+	Clang->createPreprocessor();
+}
+
+#endif
+
 #ifdef ADDPATH_TAKES_4_ARGUMENTS
 
 void add_path(HeaderSearchOptions &HSO, string Path)
@@ -270,6 +337,62 @@ void add_path(HeaderSearchOptions &HSO, string Path)
 
 #endif
 
+#ifdef HAVE_SETMAINFILEID
+
+static void create_main_file_id(SourceManager &SM, const FileEntry *file)
+{
+	SM.setMainFileID(SM.createFileID(file, SourceLocation(),
+					SrcMgr::C_User));
+}
+
+#else
+
+static void create_main_file_id(SourceManager &SM, const FileEntry *file)
+{
+	SM.createMainFileID(file);
+}
+
+#endif
+
+#ifdef SETLANGDEFAULTS_TAKES_5_ARGUMENTS
+
+static void set_lang_defaults(CompilerInstance *Clang)
+{
+	PreprocessorOptions &PO = Clang->getPreprocessorOpts();
+	TargetOptions &TO = Clang->getTargetOpts();
+	llvm::Triple T(TO.Triple);
+	CompilerInvocation::setLangDefaults(Clang->getLangOpts(), IK_C, T, PO,
+					    LangStandard::lang_unspecified);
+}
+
+#else
+
+static void set_lang_defaults(CompilerInstance *Clang)
+{
+	CompilerInvocation::setLangDefaults(Clang->getLangOpts(), IK_C,
+					    LangStandard::lang_unspecified);
+}
+
+#endif
+
+#ifdef SETINVOCATION_TAKES_SHARED_PTR
+
+static void set_invocation(CompilerInstance *Clang,
+	CompilerInvocation *invocation)
+{
+	Clang->setInvocation(std::make_shared<CompilerInvocation>(*invocation));
+}
+
+#else
+
+static void set_invocation(CompilerInstance *Clang,
+	CompilerInvocation *invocation)
+{
+	Clang->setInvocation(invocation);
+}
+
+#endif
+
 int main(int argc, char *argv[])
 {
 	llvm::cl::ParseCommandLineOptions(argc, argv);
@@ -281,36 +404,38 @@ int main(int argc, char *argv[])
 	CompilerInvocation *invocation =
 		construct_invocation(InputFilename.c_str(), Diags);
 	if (invocation)
-		Clang->setInvocation(invocation);
+		set_invocation(Clang, invocation);
 	Clang->createFileManager();
 	Clang->createSourceManager(Clang->getFileManager());
 	TargetInfo *target = create_target_info(Clang, Diags);
 	Clang->setTarget(target);
-	CompilerInvocation::setLangDefaults(Clang->getLangOpts(), IK_C,
-					    LangStandard::lang_unspecified);
+	set_lang_defaults(Clang);
 	HeaderSearchOptions &HSO = Clang->getHeaderSearchOpts();
 	LangOptions &LO = Clang->getLangOpts();
 	PreprocessorOptions &PO = Clang->getPreprocessorOpts();
 	HSO.ResourceDir = ResourceDir;
 
-	for (int i = 0; i < Includes.size(); ++i)
+	for (llvm::cl::list<string>::size_type i = 0; i < Includes.size(); ++i)
 		add_path(HSO, Includes[i]);
 
 	PO.addMacroDef("__isl_give=__attribute__((annotate(\"isl_give\")))");
 	PO.addMacroDef("__isl_keep=__attribute__((annotate(\"isl_keep\")))");
 	PO.addMacroDef("__isl_take=__attribute__((annotate(\"isl_take\")))");
 	PO.addMacroDef("__isl_export=__attribute__((annotate(\"isl_export\")))");
+	PO.addMacroDef("__isl_overload="
+	    "__attribute__((annotate(\"isl_overload\"))) "
+	    "__attribute__((annotate(\"isl_export\")))");
 	PO.addMacroDef("__isl_constructor=__attribute__((annotate(\"isl_constructor\"))) __attribute__((annotate(\"isl_export\")))");
 	PO.addMacroDef("__isl_subclass(super)=__attribute__((annotate(\"isl_subclass(\" #super \")\"))) __attribute__((annotate(\"isl_export\")))");
 
-	Clang->createPreprocessor();
+	create_preprocessor(Clang);
 	Preprocessor &PP = Clang->getPreprocessor();
 
-	PP.getBuiltinInfo().InitializeBuiltins(PP.getIdentifierTable(), LO);
+	PP.getBuiltinInfo().initializeBuiltins(PP.getIdentifierTable(), LO);
 
 	const FileEntry *file = Clang->getFileManager().getFile(InputFilename);
 	assert(file);
-	Clang->getSourceManager().createMainFileID(file);
+	create_main_file_id(Clang->getSourceManager(), file);
 
 	Clang->createASTContext();
 	MyASTConsumer consumer;
@@ -320,7 +445,16 @@ int main(int argc, char *argv[])
 	ParseAST(*sema);
 	Diags.getClient()->EndSourceFile();
 
-	generate_python(consumer.types, consumer.functions);
+	generator *gen = NULL;
+	if (Language.compare("python") == 0)
+		gen = new python_generator(consumer.exported_types,
+			consumer.exported_functions, consumer.functions);
+	else
+		cerr << "Language '" << Language << "' not recognized." << endl
+		     << "Not generating bindings." << endl;
+
+	if (gen)
+		gen->generate();
 
 	delete sema;
 	delete Clang;

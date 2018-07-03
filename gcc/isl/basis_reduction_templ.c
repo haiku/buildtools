@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <isl_ctx_private.h>
 #include <isl_map_private.h>
+#include <isl_vec_private.h>
 #include <isl_options_private.h>
 #include "isl_basis_reduction.h"
 
@@ -50,7 +51,6 @@ struct isl_tab *isl_tab_compute_reduced_basis(struct isl_tab *tab)
 	unsigned dim;
 	struct isl_ctx *ctx;
 	struct isl_mat *B;
-	int unbounded;
 	int i;
 	GBR_LP *lp = NULL;
 	GBR_type F_old, alpha, F_new;
@@ -132,8 +132,8 @@ struct isl_tab *isl_tab_compute_reduced_basis(struct isl_tab *tab)
 
 	GBR_lp_set_obj(lp, B->row[1+i]+1, dim);
 	ctx->stats->gbr_solved_lps++;
-	unbounded = GBR_lp_solve(lp);
-	isl_assert(ctx, !unbounded, goto error);
+	if (GBR_lp_solve(lp) < 0)
+		goto error;
 	GBR_lp_get_obj_val(lp, &F[i]);
 
 	if (GBR_lt(F[i], one)) {
@@ -150,8 +150,8 @@ struct isl_tab *isl_tab_compute_reduced_basis(struct isl_tab *tab)
 		if (i+1 == tab->n_zero) {
 			GBR_lp_set_obj(lp, B->row[1+i+1]+1, dim);
 			ctx->stats->gbr_solved_lps++;
-			unbounded = GBR_lp_solve(lp);
-			isl_assert(ctx, !unbounded, goto error);
+			if (GBR_lp_solve(lp) < 0)
+				goto error;
 			GBR_lp_get_obj_val(lp, &F_new);
 			fixed = GBR_lp_is_fixed(lp);
 			GBR_set_ui(alpha, 0);
@@ -165,8 +165,8 @@ struct isl_tab *isl_tab_compute_reduced_basis(struct isl_tab *tab)
 			row = GBR_lp_add_row(lp, B->row[1+i]+1, dim);
 			GBR_lp_set_obj(lp, B->row[1+i+1]+1, dim);
 			ctx->stats->gbr_solved_lps++;
-			unbounded = GBR_lp_solve(lp);
-			isl_assert(ctx, !unbounded, goto error);
+			if (GBR_lp_solve(lp) < 0)
+				goto error;
 			GBR_lp_get_obj_val(lp, &F_new);
 			fixed = GBR_lp_is_fixed(lp);
 
@@ -195,8 +195,8 @@ struct isl_tab *isl_tab_compute_reduced_basis(struct isl_tab *tab)
 						tmp, B->row[1+i]+1, dim);
 				GBR_lp_set_obj(lp, b_tmp->el, dim);
 				ctx->stats->gbr_solved_lps++;
-				unbounded = GBR_lp_solve(lp);
-				isl_assert(ctx, !unbounded, goto error);
+				if (GBR_lp_solve(lp) < 0)
+					goto error;
 				GBR_lp_get_obj_val(lp, &mu_F[j]);
 				mu_fixed[j] = GBR_lp_is_fixed(lp);
 				if (i > 0)
@@ -314,7 +314,7 @@ error:
  * basis with the equalities first.  Otherwise, we start off with
  * the identity matrix.
  */
-struct isl_mat *isl_basic_set_reduced_basis(struct isl_basic_set *bset)
+__isl_give isl_mat *isl_basic_set_reduced_basis(__isl_keep isl_basic_set *bset)
 {
 	struct isl_mat *basis;
 	struct isl_tab *tab;

@@ -4,18 +4,6 @@
 #include <isl/options.h>
 
 struct isl_options {
-	#define			ISL_LP_TAB	0
-	#define			ISL_LP_PIP	1
-	unsigned		lp_solver;
-
-	#define			ISL_ILP_GBR	0
-	#define			ISL_ILP_PIP	1
-	unsigned		ilp_solver;
-
-	#define			ISL_PIP_TAB	0
-	#define			ISL_PIP_PIP	1
-	unsigned		pip;
-
 	#define			ISL_CONTEXT_GBR		0
 	#define			ISL_CONTEXT_LEXMIN	1
 	unsigned		context;
@@ -50,26 +38,36 @@ struct isl_options {
 	int			schedule_max_coefficient;
 	int			schedule_max_constant_term;
 	int			schedule_parametric;
-	int			schedule_outer_zero_distance;
+	int			schedule_outer_coincidence;
 	int			schedule_maximize_band_depth;
+	int			schedule_maximize_coincidence;
 	int			schedule_split_scaled;
+	int			schedule_treat_coalescing;
 	int			schedule_separate_components;
+	int			schedule_whole_component;
 	unsigned		schedule_algorithm;
-	int			schedule_fuse;
+	int			schedule_carry_self_first;
+	int			schedule_serialize_sccs;
 
 	int			tile_scale_tile_loops;
 	int			tile_shift_point_loops;
 
 	char			*ast_iterator_type;
+	int			ast_always_print_block;
+	int			ast_print_macro_once;
 
 	int			ast_build_atomic_upper_bound;
 	int			ast_build_prefer_pdiv;
+	int			ast_build_detect_min_max;
 	int			ast_build_exploit_nested_bounds;
 	int			ast_build_group_coscheduled;
 	int			ast_build_separation_bounds;
 	int			ast_build_scale_strides;
 	int			ast_build_allow_else;
 	int			ast_build_allow_or;
+
+	int			print_stats;
+	unsigned long		max_operations;
 };
 
 #endif

@@ -14,14 +14,15 @@
 #include <isl/ctx.h>
 #include <isl_tarjan.h>
 
-void isl_tarjan_graph_free(struct isl_tarjan_graph *g)
+struct isl_tarjan_graph *isl_tarjan_graph_free(struct isl_tarjan_graph *g)
 {
 	if (!g)
-		return;
+		return NULL;
 	free(g->node);
 	free(g->stack);
 	free(g->order);
 	free(g);
+	return NULL;
 }
 
 static struct isl_tarjan_graph *isl_tarjan_graph_alloc(isl_ctx *ctx, int len)
@@ -58,8 +59,8 @@ error:
 /* Perform Tarjan's algorithm for computing the strongly connected components
  * in the graph with g->len nodes and with edges defined by "follows".
  */
-static int isl_tarjan_components(struct isl_tarjan_graph *g, int i,
-	int (*follows)(int i, int j, void *user), void *user)
+static isl_stat isl_tarjan_components(struct isl_tarjan_graph *g, int i,
+	isl_bool (*follows)(int i, int j, void *user), void *user)
 {
 	int j;
 
@@ -70,7 +71,7 @@ static int isl_tarjan_components(struct isl_tarjan_graph *g, int i,
 	g->stack[g->sp++] = i;
 
 	for (j = g->len - 1; j >= 0; --j) {
-		int f;
+		isl_bool f;
 
 		if (j == i)
 			continue;
@@ -81,7 +82,7 @@ static int isl_tarjan_components(struct isl_tarjan_graph *g, int i,
 
 		f = follows(i, j, user);
 		if (f < 0)
-			return -1;
+			return isl_stat_error;
 		if (!f)
 			continue;
 
@@ -94,7 +95,7 @@ static int isl_tarjan_components(struct isl_tarjan_graph *g, int i,
 	}
 
 	if (g->node[i].index != g->node[i].min_index)
-		return 0;
+		return isl_stat_ok;
 
 	do {
 		j = g->stack[--g->sp];
@@ -103,7 +104,7 @@ static int isl_tarjan_components(struct isl_tarjan_graph *g, int i,
 	} while (j != i);
 	g->order[g->op++] = -1;
 
-	return 0;
+	return isl_stat_ok;
 }
 
 /* Decompose the graph with "len" nodes and edges defined by "follows"
@@ -116,7 +117,7 @@ static int isl_tarjan_components(struct isl_tarjan_graph *g, int i,
  * in the result.
  */
 struct isl_tarjan_graph *isl_tarjan_graph_init(isl_ctx *ctx, int len,
-	int (*follows)(int i, int j, void *user), void *user)
+	isl_bool (*follows)(int i, int j, void *user), void *user)
 {
 	int i;
 	struct isl_tarjan_graph *g = NULL;
@@ -128,11 +129,31 @@ struct isl_tarjan_graph *isl_tarjan_graph_init(isl_ctx *ctx, int len,
 		if (g->node[i].index >= 0)
 			continue;
 		if (isl_tarjan_components(g, i, follows, user) < 0)
-			goto error;
+			return isl_tarjan_graph_free(g);
 	}
 
 	return g;
-error:
-	isl_tarjan_graph_free(g);
-	return NULL;
+}
+
+/* Decompose the graph with "len" nodes and edges defined by "follows"
+ * into the strongly connected component (SCC) that contains "node"
+ * as well as all SCCs that are followed by this SCC.
+ * follows(i, j, user) should return 1 if "i" follows "j" and 0 otherwise.
+ * It should return -1 on error.
+ *
+ * The SCC containing "node" will appear as the last component
+ * in g->order.
+ */
+struct isl_tarjan_graph *isl_tarjan_graph_component(isl_ctx *ctx, int len,
+	int node, isl_bool (*follows)(int i, int j, void *user), void *user)
+{
+	struct isl_tarjan_graph *g;
+
+	g = isl_tarjan_graph_alloc(ctx, len);
+	if (!g)
+		return NULL;
+	if (isl_tarjan_components(g, node, follows, user) < 0)
+		return isl_tarjan_graph_free(g);
+
+	return g;
 }

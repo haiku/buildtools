@@ -17,30 +17,6 @@
 #include <isl/schedule.h>
 #include <isl/version.h>
 
-struct isl_arg_choice isl_lp_solver_choice[] = {
-	{"tab",		ISL_LP_TAB},
-#ifdef ISL_PIPLIB
-	{"pip",		ISL_LP_PIP},
-#endif
-	{0}
-};
-
-struct isl_arg_choice isl_ilp_solver_choice[] = {
-	{"gbr",		ISL_ILP_GBR},
-#ifdef ISL_PIPLIB
-	{"pip",		ISL_ILP_PIP},
-#endif
-	{0}
-};
-
-struct isl_arg_choice isl_pip_solver_choice[] = {
-	{"tab",		ISL_PIP_TAB},
-#ifdef ISL_PIPLIB
-	{"pip",		ISL_PIP_PIP},
-#endif
-	{0}
-};
-
 struct isl_arg_choice isl_pip_context_choice[] = {
 	{"gbr",		ISL_CONTEXT_GBR},
 	{"lexmin",	ISL_CONTEXT_LEXMIN},
@@ -96,11 +72,29 @@ static struct isl_arg_choice convex[] = {
 	{0}
 };
 
+#define		ISL_SCHEDULE_FUSE_MAX			0
+#define		ISL_SCHEDULE_FUSE_MIN			1
+
 static struct isl_arg_choice fuse[] = {
 	{"max",		ISL_SCHEDULE_FUSE_MAX},
 	{"min",		ISL_SCHEDULE_FUSE_MIN},
 	{0}
 };
+
+/* Callback for setting the "schedule-fuse" option.
+ * This (now hidden) option tries to mimic an option that was
+ * replaced by the schedule-serialize-sccs option.
+ * Setting the old option to ISL_SCHEDULE_FUSE_MIN is now
+ * expressed by turning on the schedule-serialize-sccs option.
+ */
+static int set_fuse(void *opt, unsigned val)
+{
+	struct isl_options *options = opt;
+
+	options->schedule_serialize_sccs = (val == ISL_SCHEDULE_FUSE_MIN);
+
+	return 0;
+}
 
 static struct isl_arg_choice separation_bounds[] = {
 	{"explicit",	ISL_AST_BUILD_SEPARATION_BOUNDS_EXPLICIT},
@@ -114,12 +108,6 @@ static void print_version(void)
 }
 
 ISL_ARGS_START(struct isl_options, isl_options_args)
-ISL_ARG_CHOICE(struct isl_options, lp_solver, 0, "lp-solver", \
-	isl_lp_solver_choice,	ISL_LP_TAB, "lp solver to use")
-ISL_ARG_CHOICE(struct isl_options, ilp_solver, 0, "ilp-solver", \
-	isl_ilp_solver_choice,	ISL_ILP_GBR, "ilp solver to use")
-ISL_ARG_CHOICE(struct isl_options, pip, 0, "pip", \
-	isl_pip_solver_choice,	ISL_PIP_TAB, "pip solver to use")
 ISL_ARG_CHOICE(struct isl_options, context, 0, "context", \
 	isl_pip_context_choice,	ISL_CONTEXT_GBR,
 	"how to handle the pip context tableau")
@@ -156,24 +144,39 @@ ISL_ARG_INT(struct isl_options, schedule_max_constant_term, 0,
 	"<limit>. A value of -1 allows arbitrary coefficients.")
 ISL_ARG_BOOL(struct isl_options, schedule_parametric, 0,
 	"schedule-parametric", 1, "construct possibly parametric schedules")
-ISL_ARG_BOOL(struct isl_options, schedule_outer_zero_distance, 0,
-	"schedule-outer-zero-distance", 0,
-	"try to construct schedules with outer zero distances over "
-	"proximity dependences")
+ISL_ARG_BOOL(struct isl_options, schedule_outer_coincidence, 0,
+	"schedule-outer-coincidence", 0,
+	"try to construct schedules where the outer member of each band "
+	"satisfies the coincidence constraints")
 ISL_ARG_BOOL(struct isl_options, schedule_maximize_band_depth, 0,
 	"schedule-maximize-band-depth", 0,
 	"maximize the number of scheduling dimensions in a band")
+ISL_ARG_BOOL(struct isl_options, schedule_maximize_coincidence, 0,
+	"schedule-maximize-coincidence", 0,
+	"maximize the number of coincident dimensions in a band")
 ISL_ARG_BOOL(struct isl_options, schedule_split_scaled, 0,
 	"schedule-split-scaled", 1,
 	"split non-tilable bands with scaled schedules")
+ISL_ARG_BOOL(struct isl_options, schedule_treat_coalescing, 0,
+	"schedule-treat-coalescing", 1,
+	"try and prevent or adjust schedules that perform loop coalescing")
 ISL_ARG_BOOL(struct isl_options, schedule_separate_components, 0,
 	"schedule-separate-components", 1,
 	"separate components in dependence graph")
+ISL_ARG_BOOL(struct isl_options, schedule_whole_component, 0,
+	"schedule-whole-component", 1,
+	"try and compute schedule for entire component first")
 ISL_ARG_CHOICE(struct isl_options, schedule_algorithm, 0,
 	"schedule-algorithm", isl_schedule_algorithm_choice,
 	ISL_SCHEDULE_ALGORITHM_ISL, "scheduling algorithm to use")
-ISL_ARG_CHOICE(struct isl_options, schedule_fuse, 0, "schedule-fuse", fuse,
-	ISL_SCHEDULE_FUSE_MAX, "level of fusion during scheduling")
+ISL_ARG_BOOL(struct isl_options, schedule_carry_self_first, 0,
+	"schedule-carry-self-first", 1, "try and carry self-dependences first")
+ISL_ARG_BOOL(struct isl_options, schedule_serialize_sccs, 0,
+	"schedule-serialize-sccs", 0,
+	"serialize strongly connected components in dependence graph")
+ISL_ARG_PHANTOM_USER_CHOICE_F(0, "schedule-fuse", fuse, &set_fuse,
+	ISL_SCHEDULE_FUSE_MAX, "level of fusion during scheduling",
+	ISL_ARG_HIDDEN)
 ISL_ARG_BOOL(struct isl_options, tile_scale_tile_loops, 0,
 	"tile-scale-tile-loops", 1, "scale tile loops")
 ISL_ARG_BOOL(struct isl_options, tile_shift_point_loops, 0,
@@ -181,10 +184,17 @@ ISL_ARG_BOOL(struct isl_options, tile_shift_point_loops, 0,
 ISL_ARG_STR(struct isl_options, ast_iterator_type, 0,
 	"ast-iterator-type", "type", "int",
 	"type used for iterators during printing of AST")
+ISL_ARG_BOOL(struct isl_options, ast_always_print_block, 0,
+	"ast-always-print-block", 0, "print for and if bodies as a block "
+	"regardless of the number of statements in the body")
+ISL_ARG_BOOL(struct isl_options, ast_print_macro_once, 0,
+	"ast-print-macro-once", 0, "only print macro definitions once")
 ISL_ARG_BOOL(struct isl_options, ast_build_atomic_upper_bound, 0,
 	"ast-build-atomic-upper-bound", 1, "generate atomic upper bounds")
 ISL_ARG_BOOL(struct isl_options, ast_build_prefer_pdiv, 0,
 	"ast-build-prefer-pdiv", 1, "prefer pdiv operation over fdiv")
+ISL_ARG_BOOL(struct isl_options, ast_build_detect_min_max, 0,
+	"ast-build-detect-min-max", 0, "detect min/max expressions")
 ISL_ARG_BOOL(struct isl_options, ast_build_exploit_nested_bounds, 0,
 	"ast-build-exploit-nested-bounds", 1,
 	"simplify conditions based on bounds of nested for loops")
@@ -202,6 +212,10 @@ ISL_ARG_BOOL(struct isl_options, ast_build_allow_else, 0,
 	"ast-build-allow-else", 1, "generate if statements with else branches")
 ISL_ARG_BOOL(struct isl_options, ast_build_allow_or, 0,
 	"ast-build-allow-or", 1, "generate if conditions with disjunctions")
+ISL_ARG_BOOL(struct isl_options, print_stats, 0, "print-stats", 0,
+	"print statistics for every isl_ctx")
+ISL_ARG_ULONG(struct isl_options, max_operations, 0,
+	"max-operations", 0, "default number of maximal operations per isl_ctx")
 ISL_ARG_VERSION(print_version)
 ISL_ARGS_END
 
@@ -218,6 +232,11 @@ ISL_CTX_GET_CHOICE_DEF(isl_options, struct isl_options, isl_options_args,
 	on_error)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	pip_symmetry)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	pip_symmetry)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	coalesce_bounded_wrapping)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	coalesce_bounded_wrapping)
@@ -243,9 +262,19 @@ ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_maximize_band_depth)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_maximize_coincidence)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_maximize_coincidence)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_split_scaled)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_split_scaled)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_treat_coalescing)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_treat_coalescing)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_separate_components)
@@ -253,19 +282,29 @@ ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_separate_components)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
-	schedule_outer_zero_distance)
+	schedule_whole_component)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
-	schedule_outer_zero_distance)
+	schedule_whole_component)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_outer_coincidence)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_outer_coincidence)
 
 ISL_CTX_SET_CHOICE_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_algorithm)
 ISL_CTX_GET_CHOICE_DEF(isl_options, struct isl_options, isl_options_args,
 	schedule_algorithm)
 
-ISL_CTX_SET_CHOICE_DEF(isl_options, struct isl_options, isl_options_args,
-	schedule_fuse)
-ISL_CTX_GET_CHOICE_DEF(isl_options, struct isl_options, isl_options_args,
-	schedule_fuse)
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_carry_self_first)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_carry_self_first)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_serialize_sccs)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	schedule_serialize_sccs)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	tile_scale_tile_loops)
@@ -286,6 +325,11 @@ ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_build_prefer_pdiv)
 ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_build_prefer_pdiv)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	ast_build_detect_min_max)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	ast_build_detect_min_max)
 
 ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_build_exploit_nested_bounds)
@@ -301,6 +345,16 @@ ISL_CTX_SET_STR_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_iterator_type)
 ISL_CTX_GET_STR_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_iterator_type)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	ast_always_print_block)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	ast_always_print_block)
+
+ISL_CTX_SET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	ast_print_macro_once)
+ISL_CTX_GET_BOOL_DEF(isl_options, struct isl_options, isl_options_args,
+	ast_print_macro_once)
 
 ISL_CTX_SET_CHOICE_DEF(isl_options, struct isl_options, isl_options_args,
 	ast_build_separation_bounds)

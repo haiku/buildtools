@@ -16,12 +16,13 @@
 #include <isl_ctx_private.h>
 #include <isl_map_private.h>
 #include <isl/set.h>
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include <isl_morph.h>
 #include <isl_factorization.h>
 #include <isl_vertices_private.h>
 #include <isl_polynomial_private.h>
 #include <isl_options_private.h>
+#include <isl_vec_private.h>
 #include <isl_bernstein.h>
 
 struct bernstein_data {
@@ -241,7 +242,8 @@ error:
  * and the constant "1 = \sum_i \alpha_i" for the homogeneous dimension.
  * Next, we extract the coefficients of the Bernstein base polynomials.
  */
-static int bernstein_coefficients_cell(__isl_take isl_cell *cell, void *user)
+static isl_stat bernstein_coefficients_cell(__isl_take isl_cell *cell,
+	void *user)
 {
 	int i, j;
 	struct bernstein_data *data = (struct bernstein_data *)user;
@@ -318,10 +320,10 @@ static int bernstein_coefficients_cell(__isl_take isl_cell *cell, void *user)
 	for (i = 0; i < 1 + nvar; ++i)
 		isl_qpolynomial_free(subs[i]);
 	free(subs);
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_cell_free(cell);
-	return -1;
+	return isl_stat_error;
 }
 
 /* Base case of applying bernstein expansion.
@@ -372,8 +374,9 @@ static __isl_give isl_pw_qpolynomial_fold *bernstein_coefficients_base(
 	data->pwf_tight = isl_pw_qpolynomial_fold_zero(dim, data->type);
 	data->poly = isl_qpolynomial_homogenize(isl_qpolynomial_copy(poly));
 	vertices = isl_basic_set_compute_vertices(bset);
-	isl_vertices_foreach_disjoint_cell(vertices,
-		&bernstein_coefficients_cell, data);
+	if (isl_vertices_foreach_disjoint_cell(vertices,
+					&bernstein_coefficients_cell, data) < 0)
+		data->pwf = isl_pw_qpolynomial_fold_free(data->pwf);
 	isl_vertices_free(vertices);
 	isl_qpolynomial_free(data->poly);
 
@@ -516,8 +519,9 @@ error:
  * bernstein expansion recursively on each dimension.
  * Otherwise, we apply bernstein expansion on the entire polytope.
  */
-int isl_qpolynomial_bound_on_domain_bernstein(__isl_take isl_basic_set *bset,
-	__isl_take isl_qpolynomial *poly, struct isl_bound *bound)
+isl_stat isl_qpolynomial_bound_on_domain_bernstein(
+	__isl_take isl_basic_set *bset, __isl_take isl_qpolynomial *poly,
+	struct isl_bound *bound)
 {
 	struct bernstein_data data;
 	isl_pw_qpolynomial_fold *pwf;
@@ -546,9 +550,9 @@ int isl_qpolynomial_bound_on_domain_bernstein(__isl_take isl_basic_set *bset,
 	else
 		bound->pwf = isl_pw_qpolynomial_fold_fold(bound->pwf, pwf);
 
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_basic_set_free(bset);
 	isl_qpolynomial_free(poly);
-	return -1;
+	return isl_stat_error;
 }

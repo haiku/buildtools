@@ -1,81 +1,51 @@
 /*
  * Copyright 2008-2009 Katholieke Universiteit Leuven
+ * Copyright 2014      INRIA Rocquencourt
  *
  * Use of this software is governed by the MIT license
  *
  * Written by Sven Verdoolaege, K.U.Leuven, Departement
  * Computerwetenschappen, Celestijnenlaan 200A, B-3001 Leuven, Belgium
+ * and Inria Paris - Rocquencourt, Domaine de Voluceau - Rocquencourt,
+ * B.P. 105 - 78153 Le Chesnay, France
  */
 
 #include <isl_ctx_private.h>
 #include <isl_map_private.h>
-#include <isl/lp.h>
+#include <isl_lp_private.h>
 #include <isl/map.h>
 #include <isl_mat_private.h>
+#include <isl_vec_private.h>
 #include <isl/set.h>
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include <isl_options_private.h>
 #include "isl_equalities.h"
 #include "isl_tab.h"
+#include <isl_sort.h>
 
-static struct isl_basic_set *uset_convex_hull_wrap_bounded(struct isl_set *set);
+#include <bset_to_bmap.c>
+#include <bset_from_bmap.c>
+#include <set_to_map.c>
 
-/* Return 1 if constraint c is redundant with respect to the constraints
- * in bmap.  If c is a lower [upper] bound in some variable and bmap
- * does not have a lower [upper] bound in that variable, then c cannot
- * be redundant and we do not need solve any lp.
- */
-int isl_basic_map_constraint_is_redundant(struct isl_basic_map **bmap,
-	isl_int *c, isl_int *opt_n, isl_int *opt_d)
-{
-	enum isl_lp_result res;
-	unsigned total;
-	int i, j;
-
-	if (!bmap)
-		return -1;
-
-	total = isl_basic_map_total_dim(*bmap);
-	for (i = 0; i < total; ++i) {
-		int sign;
-		if (isl_int_is_zero(c[1+i]))
-			continue;
-		sign = isl_int_sgn(c[1+i]);
-		for (j = 0; j < (*bmap)->n_ineq; ++j)
-			if (sign == isl_int_sgn((*bmap)->ineq[j][1+i]))
-				break;
-		if (j == (*bmap)->n_ineq)
-			break;
-	}
-	if (i < total)
-		return 0;
-
-	res = isl_basic_map_solve_lp(*bmap, 0, c, (*bmap)->ctx->one,
-					opt_n, opt_d, NULL);
-	if (res == isl_lp_unbounded)
-		return 0;
-	if (res == isl_lp_error)
-		return -1;
-	if (res == isl_lp_empty) {
-		*bmap = isl_basic_map_set_to_empty(*bmap);
-		return 0;
-	}
-	return !isl_int_is_neg(*opt_n);
-}
-
-int isl_basic_set_constraint_is_redundant(struct isl_basic_set **bset,
-	isl_int *c, isl_int *opt_n, isl_int *opt_d)
-{
-	return isl_basic_map_constraint_is_redundant(
-			(struct isl_basic_map **)bset, c, opt_n, opt_d);
-}
+static __isl_give isl_basic_set *uset_convex_hull_wrap_bounded(
+	__isl_take isl_set *set);
 
 /* Remove redundant
  * constraints.  If the minimal value along the normal of a constraint
  * is the same if the constraint is removed, then the constraint is redundant.
  *
+ * Since some constraints may be mutually redundant, sort the constraints
+ * first such that constraints that involve existentially quantified
+ * variables are considered for removal before those that do not.
+ * The sorting is also needed for the use in map_simple_hull.
+ *
+ * Note that isl_tab_detect_implicit_equalities may also end up
+ * marking some constraints as redundant.  Make sure the constraints
+ * are preserved and undo those marking such that isl_tab_detect_redundant
+ * can consider the constraints in the sorted order.
+ *
  * Alternatively, we could have intersected the basic map with the
- * corresponding equality and the checked if the dimension was that
+ * corresponding equality and then checked if the dimension was that
  * of a facet.
  */
 __isl_give isl_basic_map *isl_basic_map_remove_redundancies(
@@ -94,13 +64,22 @@ __isl_give isl_basic_map *isl_basic_map_remove_redundancies(
 	if (bmap->n_ineq <= 1)
 		return bmap;
 
+	bmap = isl_basic_map_sort_constraints(bmap);
 	tab = isl_tab_from_basic_map(bmap, 0);
+	if (!tab)
+		goto error;
+	tab->preserve = 1;
 	if (isl_tab_detect_implicit_equalities(tab) < 0)
 		goto error;
+	if (isl_tab_restore_redundant(tab) < 0)
+		goto error;
+	tab->preserve = 0;
 	if (isl_tab_detect_redundant(tab) < 0)
 		goto error;
 	bmap = isl_basic_map_update_from_tab(bmap, tab);
 	isl_tab_free(tab);
+	if (!bmap)
+		return NULL;
 	ISL_F_SET(bmap, ISL_BASIC_MAP_NO_IMPLICIT);
 	ISL_F_SET(bmap, ISL_BASIC_MAP_NO_REDUNDANT);
 	return bmap;
@@ -113,8 +92,8 @@ error:
 __isl_give isl_basic_set *isl_basic_set_remove_redundancies(
 	__isl_take isl_basic_set *bset)
 {
-	return (struct isl_basic_set *)
-		isl_basic_map_remove_redundancies((struct isl_basic_map *)bset);
+	return bset_from_bmap(
+		isl_basic_map_remove_redundancies(bset_to_bmap(bset)));
 }
 
 /* Remove redundant constraints in each of the basic maps.
@@ -134,7 +113,7 @@ __isl_give isl_set *isl_set_remove_redundancies(__isl_take isl_set *set)
  * constraint c and if so, set the constant term such that the
  * resulting constraint is a bounding constraint for the set.
  */
-static int uset_is_bound(struct isl_set *set, isl_int *c, unsigned len)
+static int uset_is_bound(__isl_keep isl_set *set, isl_int *c, unsigned len)
 {
 	int first;
 	int j;
@@ -178,53 +157,6 @@ error:
 	return -1;
 }
 
-__isl_give isl_basic_map *isl_basic_map_set_rational(
-	__isl_take isl_basic_set *bmap)
-{
-	if (!bmap)
-		return NULL;
-
-	if (ISL_F_ISSET(bmap, ISL_BASIC_MAP_RATIONAL))
-		return bmap;
-
-	bmap = isl_basic_map_cow(bmap);
-	if (!bmap)
-		return NULL;
-
-	ISL_F_SET(bmap, ISL_BASIC_MAP_RATIONAL);
-
-	return isl_basic_map_finalize(bmap);
-}
-
-__isl_give isl_basic_set *isl_basic_set_set_rational(
-	__isl_take isl_basic_set *bset)
-{
-	return isl_basic_map_set_rational(bset);
-}
-
-__isl_give isl_map *isl_map_set_rational(__isl_take isl_map *map)
-{
-	int i;
-
-	map = isl_map_cow(map);
-	if (!map)
-		return NULL;
-	for (i = 0; i < map->n; ++i) {
-		map->p[i] = isl_basic_map_set_rational(map->p[i]);
-		if (!map->p[i])
-			goto error;
-	}
-	return map;
-error:
-	isl_map_free(map);
-	return NULL;
-}
-
-__isl_give isl_set *isl_set_set_rational(__isl_take isl_set *set)
-{
-	return isl_map_set_rational(set);
-}
-
 static struct isl_basic_set *isl_basic_set_add_equality(
 	struct isl_basic_set *bset, isl_int *c)
 {
@@ -252,7 +184,8 @@ error:
 	return NULL;
 }
 
-static struct isl_set *isl_set_add_basic_set_equality(struct isl_set *set, isl_int *c)
+static __isl_give isl_set *isl_set_add_basic_set_equality(
+	__isl_take isl_set *set, isl_int *c)
 {
 	int i;
 
@@ -287,7 +220,7 @@ error:
  *
  *			\sum_i x_{i,1} = 1
  */
-static struct isl_basic_set *wrap_constraints(struct isl_set *set)
+static __isl_give isl_basic_set *wrap_constraints(__isl_keep isl_set *set)
 {
 	struct isl_basic_set *lp;
 	unsigned n_eq;
@@ -567,7 +500,8 @@ error:
  * After computing the facets of the facet in the z' space,
  * we convert them back to the x space through Q.
  */
-static struct isl_basic_set *compute_facet(struct isl_set *set, isl_int *c)
+static __isl_give isl_basic_set *compute_facet(__isl_keep isl_set *set,
+	isl_int *c)
 {
 	struct isl_mat *m, *U, *Q;
 	struct isl_basic_set *facet = NULL;
@@ -590,8 +524,9 @@ static struct isl_basic_set *compute_facet(struct isl_set *set, isl_int *c)
 	set = isl_set_preimage(set, U);
 	facet = uset_convex_hull_wrap_bounded(set);
 	facet = isl_basic_set_preimage(facet, Q);
-	if (facet)
-		isl_assert(ctx, facet->n_eq == 0, goto error);
+	if (facet && facet->n_eq != 0)
+		isl_die(ctx, isl_error_internal, "unexpected equality",
+			return isl_basic_set_free(facet));
 	return facet;
 error:
 	isl_basic_set_free(facet);
@@ -620,8 +555,8 @@ error:
  * using the technique in section "3.1 Ridge Generation" of
  * "Extended Convex Hull" by Fukuda et al.
  */
-static struct isl_basic_set *extend(struct isl_basic_set *hull,
-	struct isl_set *set)
+static __isl_give isl_basic_set *extend(__isl_take isl_basic_set *hull,
+	__isl_keep isl_set *set)
 {
 	int i, j, f;
 	int k;
@@ -683,7 +618,7 @@ error:
  * We simply collect the lower and upper bounds of each basic set
  * and the biggest of those.
  */
-static struct isl_basic_set *convex_hull_1d(struct isl_set *set)
+static __isl_give isl_basic_set *convex_hull_1d(__isl_take isl_set *set)
 {
 	struct isl_mat *c = NULL;
 	isl_int *lower = NULL;
@@ -803,7 +738,7 @@ error:
 	return NULL;
 }
 
-static struct isl_basic_set *convex_hull_0d(struct isl_set *set)
+static __isl_give isl_basic_set *convex_hull_0d(__isl_take isl_set *set)
 {
 	struct isl_basic_set *convex_hull;
 
@@ -827,8 +762,8 @@ static struct isl_basic_set *convex_hull_0d(struct isl_set *set)
  * to the two original basic sets, retaining only those corresponding
  * to the convex hull.
  */
-static struct isl_basic_set *convex_hull_pair_elim(struct isl_basic_set *bset1,
-	struct isl_basic_set *bset2)
+static __isl_give isl_basic_set *convex_hull_pair_elim(
+	__isl_take isl_basic_set *bset1, __isl_take isl_basic_set *bset2)
 {
 	int i, j, k;
 	struct isl_basic_set *bset[2];
@@ -893,15 +828,15 @@ error:
 
 /* Is the set bounded for each value of the parameters?
  */
-int isl_basic_set_is_bounded(__isl_keep isl_basic_set *bset)
+isl_bool isl_basic_set_is_bounded(__isl_keep isl_basic_set *bset)
 {
 	struct isl_tab *tab;
-	int bounded;
+	isl_bool bounded;
 
 	if (!bset)
-		return -1;
+		return isl_bool_error;
 	if (isl_basic_set_plain_is_empty(bset))
-		return 1;
+		return isl_bool_true;
 
 	tab = isl_tab_from_recession_cone(bset, 1);
 	bounded = isl_tab_cone_is_bounded(tab);
@@ -912,17 +847,17 @@ int isl_basic_set_is_bounded(__isl_keep isl_basic_set *bset)
 /* Is the image bounded for each value of the parameters and
  * the domain variables?
  */
-int isl_basic_map_image_is_bounded(__isl_keep isl_basic_map *bmap)
+isl_bool isl_basic_map_image_is_bounded(__isl_keep isl_basic_map *bmap)
 {
 	unsigned nparam = isl_basic_map_dim(bmap, isl_dim_param);
 	unsigned n_in = isl_basic_map_dim(bmap, isl_dim_in);
-	int bounded;
+	isl_bool bounded;
 
 	bmap = isl_basic_map_copy(bmap);
 	bmap = isl_basic_map_cow(bmap);
 	bmap = isl_basic_map_move_dims(bmap, isl_dim_param, nparam,
 					isl_dim_in, 0, n_in);
-	bounded = isl_basic_set_is_bounded((isl_basic_set *)bmap);
+	bounded = isl_basic_set_is_bounded(bset_from_bmap(bmap));
 	isl_basic_map_free(bmap);
 
 	return bounded;
@@ -930,19 +865,19 @@ int isl_basic_map_image_is_bounded(__isl_keep isl_basic_map *bmap)
 
 /* Is the set bounded for each value of the parameters?
  */
-int isl_set_is_bounded(__isl_keep isl_set *set)
+isl_bool isl_set_is_bounded(__isl_keep isl_set *set)
 {
 	int i;
 
 	if (!set)
-		return -1;
+		return isl_bool_error;
 
 	for (i = 0; i < set->n; ++i) {
-		int bounded = isl_basic_set_is_bounded(set->p[i]);
+		isl_bool bounded = isl_basic_set_is_bounded(set->p[i]);
 		if (!bounded || bounded < 0)
 			return bounded;
 	}
-	return 1;
+	return isl_bool_true;
 }
 
 /* Compute the lineality space of the convex hull of bset1 and bset2.
@@ -951,8 +886,8 @@ int isl_set_is_bounded(__isl_keep isl_set *set)
  * with the negative of the recession cone of bset2 and then compute
  * the linear hull of the resulting cone.
  */
-static struct isl_basic_set *induced_lineality_space(
-	struct isl_basic_set *bset1, struct isl_basic_set *bset2)
+static __isl_give isl_basic_set *induced_lineality_space(
+	__isl_take isl_basic_set *bset1, __isl_take isl_basic_set *bset2)
 {
 	int i, k;
 	struct isl_basic_set *lin = NULL;
@@ -1007,7 +942,7 @@ error:
 	return NULL;
 }
 
-static struct isl_basic_set *uset_convex_hull(struct isl_set *set);
+static __isl_give isl_basic_set *uset_convex_hull(__isl_take isl_set *set);
 
 /* Given a set and a linear space "lin" of dimension n > 0,
  * project the linear space from the set, compute the convex hull
@@ -1029,8 +964,8 @@ static struct isl_basic_set *uset_convex_hull(struct isl_set *set);
  * we transform the hull back to the original space as A' Q_1 x >= b',
  * with Q_1 all but the last n rows of Q.
  */
-static struct isl_basic_set *modulo_lineality(struct isl_set *set,
-	struct isl_basic_set *lin)
+static __isl_give isl_basic_set *modulo_lineality(__isl_take isl_set *set,
+	__isl_take isl_basic_set *lin)
 {
 	unsigned total = isl_basic_set_total_dim(lin);
 	unsigned lin_dim;
@@ -1073,8 +1008,8 @@ error:
  * The next \alpha{ij} correspond to the equalities and come in pairs.
  * The final \alpha{ij} correspond to the inequalities.
  */
-static struct isl_basic_set *valid_direction_lp(
-	struct isl_basic_set *bset1, struct isl_basic_set *bset2)
+static __isl_give isl_basic_set *valid_direction_lp(
+	__isl_take isl_basic_set *bset1, __isl_take isl_basic_set *bset2)
 {
 	isl_space *dim;
 	struct isl_basic_set *lp;
@@ -1154,8 +1089,8 @@ error:
  * Note that we simply pick any valid direction and make no attempt
  * to pick a "good" or even the "best" valid direction.
  */
-static struct isl_vec *valid_direction(
-	struct isl_basic_set *bset1, struct isl_basic_set *bset2)
+static __isl_give isl_vec *valid_direction(
+	__isl_take isl_basic_set *bset1, __isl_take isl_basic_set *bset2)
 {
 	struct isl_basic_set *lp;
 	struct isl_tab *tab;
@@ -1217,8 +1152,8 @@ error:
  * In particular, add the "positivity constraint" and then perform
  * the mapping.
  */
-static struct isl_basic_set *homogeneous_map(struct isl_basic_set *bset,
-	struct isl_mat *T)
+static __isl_give isl_basic_set *homogeneous_map(__isl_take isl_basic_set *bset,
+	__isl_take isl_mat *T)
 {
 	int k;
 
@@ -1297,8 +1232,8 @@ error:
  *
  * The polyhedron b + A x >= 0 is then the convex hull of the input polyhedra.
  */
-static struct isl_basic_set *convex_hull_pair_pointed(
-	struct isl_basic_set *bset1, struct isl_basic_set *bset2)
+static __isl_give isl_basic_set *convex_hull_pair_pointed(
+	__isl_take isl_basic_set *bset1, __isl_take isl_basic_set *bset2)
 {
 	struct isl_ctx *ctx = NULL;
 	struct isl_vec *dir = NULL;
@@ -1309,12 +1244,12 @@ static struct isl_basic_set *convex_hull_pair_pointed(
 
 	if (!bset1 || !bset2)
 		goto error;
-	ctx = bset1->ctx;
+	ctx = isl_basic_set_get_ctx(bset1);
 	dir = valid_direction(isl_basic_set_copy(bset1),
 				isl_basic_set_copy(bset2));
 	if (!dir)
 		goto error;
-	T = isl_mat_alloc(bset1->ctx, dir->size, dir->size);
+	T = isl_mat_alloc(ctx, dir->size, dir->size);
 	if (!T)
 		goto error;
 	isl_seq_cpy(T->row[0], dir->block.data, dir->size);
@@ -1339,9 +1274,9 @@ error:
 	return NULL;
 }
 
-static struct isl_basic_set *uset_convex_hull_wrap(struct isl_set *set);
-static struct isl_basic_set *modulo_affine_hull(
-	struct isl_set *set, struct isl_basic_set *affine_hull);
+static __isl_give isl_basic_set *uset_convex_hull_wrap(__isl_take isl_set *set);
+static __isl_give isl_basic_set *modulo_affine_hull(
+	__isl_take isl_set *set, __isl_take isl_basic_set *affine_hull);
 
 /* Compute the convex hull of a pair of basic sets without any parameters or
  * integer divisions.
@@ -1356,8 +1291,8 @@ static struct isl_basic_set *modulo_affine_hull(
  * If the convex hull of the two basic sets would have a non-trivial
  * lineality space, we first project out this lineality space.
  */
-static struct isl_basic_set *convex_hull_pair(struct isl_basic_set *bset1,
-	struct isl_basic_set *bset2)
+static __isl_give isl_basic_set *convex_hull_pair(
+	__isl_take isl_basic_set *bset1, __isl_take isl_basic_set *bset2)
 {
 	isl_basic_set *lin, *aff;
 	int bounded1, bounded2;
@@ -1380,7 +1315,7 @@ static struct isl_basic_set *convex_hull_pair(struct isl_basic_set *bset1,
 		goto error;
 
 	if (bounded1 && bounded2)
-		uset_convex_hull_wrap(isl_basic_set_union(bset1, bset2));
+		return uset_convex_hull_wrap(isl_basic_set_union(bset1, bset2));
 
 	if (bounded1 || bounded2)
 		return convex_hull_pair_pointed(bset1, bset2);
@@ -1389,7 +1324,7 @@ static struct isl_basic_set *convex_hull_pair(struct isl_basic_set *bset1,
 				      isl_basic_set_copy(bset2));
 	if (!lin)
 		goto error;
-	if (isl_basic_set_is_universe(lin)) {
+	if (isl_basic_set_plain_is_universe(lin)) {
 		isl_basic_set_free(bset1);
 		isl_basic_set_free(bset2);
 		return lin;
@@ -1411,22 +1346,29 @@ error:
 }
 
 /* Compute the lineality space of a basic set.
- * We currently do not allow the basic set to have any divs.
  * We basically just drop the constants and turn every inequality
  * into an equality.
+ * Any explicit representations of local variables are removed
+ * because they may no longer be valid representations
+ * in the lineality space.
  */
-struct isl_basic_set *isl_basic_set_lineality_space(struct isl_basic_set *bset)
+__isl_give isl_basic_set *isl_basic_set_lineality_space(
+	__isl_take isl_basic_set *bset)
 {
 	int i, k;
 	struct isl_basic_set *lin = NULL;
-	unsigned dim;
+	unsigned n_div, dim;
 
 	if (!bset)
 		goto error;
-	isl_assert(bset->ctx, bset->n_div == 0, goto error);
+	n_div = isl_basic_set_dim(bset, isl_dim_div);
 	dim = isl_basic_set_total_dim(bset);
 
-	lin = isl_basic_set_alloc_space(isl_basic_set_get_space(bset), 0, dim, 0);
+	lin = isl_basic_set_alloc_space(isl_basic_set_get_space(bset),
+					n_div, dim, 0);
+	for (i = 0; i < n_div; ++i)
+		if (isl_basic_set_alloc_div(lin) < 0)
+			goto error;
 	if (!lin)
 		goto error;
 	for (i = 0; i < bset->n_eq; ++i) {
@@ -1458,9 +1400,10 @@ error:
 }
 
 /* Compute the (linear) hull of the lineality spaces of the basic sets in the
- * "underlying" set "set".
+ * set "set".
  */
-static struct isl_basic_set *uset_combined_lineality_space(struct isl_set *set)
+__isl_give isl_basic_set *isl_set_combined_lineality_space(
+	__isl_take isl_set *set)
 {
 	int i;
 	struct isl_set *lin = NULL;
@@ -1468,9 +1411,9 @@ static struct isl_basic_set *uset_combined_lineality_space(struct isl_set *set)
 	if (!set)
 		return NULL;
 	if (set->n == 0) {
-		isl_space *dim = isl_set_get_space(set);
+		isl_space *space = isl_set_get_space(set);
 		isl_set_free(set);
-		return isl_basic_set_empty(dim);
+		return isl_basic_set_empty(space);
 	}
 
 	lin = isl_set_alloc_space(isl_set_get_space(set), set->n, 0);
@@ -1489,44 +1432,53 @@ static struct isl_basic_set *uset_combined_lineality_space(struct isl_set *set)
  * lineality space.  If any of the intermediate results has
  * a non-trivial lineality space, it is projected out.
  */
-static struct isl_basic_set *uset_convex_hull_unbounded(struct isl_set *set)
+static __isl_give isl_basic_set *uset_convex_hull_unbounded(
+	__isl_take isl_set *set)
 {
-	struct isl_basic_set *convex_hull = NULL;
+	isl_basic_set_list *list;
 
-	convex_hull = isl_set_copy_basic_set(set);
-	set = isl_set_drop_basic_set(set, convex_hull);
-	if (!set)
-		goto error;
-	while (set->n > 0) {
+	list = isl_set_get_basic_set_list(set);
+	isl_set_free(set);
+
+	while (list) {
+		int n;
 		struct isl_basic_set *t;
-		t = isl_set_copy_basic_set(set);
+		isl_basic_set *bset1, *bset2;
+
+		n = isl_basic_set_list_n_basic_set(list);
+		if (n < 2)
+			isl_die(isl_basic_set_list_get_ctx(list),
+				isl_error_internal,
+				"expecting at least two elements", goto error);
+		bset1 = isl_basic_set_list_get_basic_set(list, n - 1);
+		bset2 = isl_basic_set_list_get_basic_set(list, n - 2);
+		bset1 = convex_hull_pair(bset1, bset2);
+		if (n == 2) {
+			isl_basic_set_list_free(list);
+			return bset1;
+		}
+		bset1 = isl_basic_set_underlying_set(bset1);
+		list = isl_basic_set_list_drop(list, n - 2, 2);
+		list = isl_basic_set_list_add(list, bset1);
+
+		t = isl_basic_set_list_get_basic_set(list, n - 2);
+		t = isl_basic_set_lineality_space(t);
 		if (!t)
 			goto error;
-		set = isl_set_drop_basic_set(set, t);
-		if (!set)
-			goto error;
-		convex_hull = convex_hull_pair(convex_hull, t);
-		if (set->n == 0)
-			break;
-		t = isl_basic_set_lineality_space(isl_basic_set_copy(convex_hull));
-		if (!t)
-			goto error;
-		if (isl_basic_set_is_universe(t)) {
-			isl_basic_set_free(convex_hull);
-			convex_hull = t;
-			break;
+		if (isl_basic_set_plain_is_universe(t)) {
+			isl_basic_set_list_free(list);
+			return t;
 		}
 		if (t->n_eq < isl_basic_set_total_dim(t)) {
-			set = isl_set_add_basic_set(set, convex_hull);
+			set = isl_basic_set_list_union(list);
 			return modulo_lineality(set, t);
 		}
 		isl_basic_set_free(t);
 	}
-	isl_set_free(set);
-	return convex_hull;
+
+	return NULL;
 error:
-	isl_set_free(set);
-	isl_basic_set_free(convex_hull);
+	isl_basic_set_list_free(list);
 	return NULL;
 }
 
@@ -1534,8 +1486,8 @@ error:
  * facet.
  * This function assumes that the given set is bounded.
  */
-static struct isl_basic_set *initial_hull(struct isl_basic_set *hull,
-	struct isl_set *set)
+static __isl_give isl_basic_set *initial_hull(__isl_take isl_basic_set *hull,
+	__isl_keep isl_set *set)
 {
 	struct isl_mat *bounds = NULL;
 	unsigned dim;
@@ -1636,8 +1588,8 @@ static int has_constraint(struct isl_ctx *ctx, struct isl_hash_table *table,
  * all other basic sets and is therefore the convex hull of set.
  * In this case we set *is_hull to 1.
  */
-static struct isl_basic_set *common_constraints(struct isl_basic_set *hull,
-	struct isl_set *set, int *is_hull)
+static __isl_give isl_basic_set *common_constraints(
+	__isl_take isl_basic_set *hull, __isl_keep isl_set *set, int *is_hull)
 {
 	int i, j, s, n;
 	int min_constraints;
@@ -1757,7 +1709,8 @@ error:
  * obvious facet constraints, if any.  If the result happens to
  * be the convex hull of "set" then *is_hull is set to 1.
  */
-static struct isl_basic_set *proto_hull(struct isl_set *set, int *is_hull)
+static __isl_give isl_basic_set *proto_hull(__isl_keep isl_set *set,
+	int *is_hull)
 {
 	struct isl_basic_set *hull;
 	unsigned n_ineq;
@@ -1775,7 +1728,7 @@ static struct isl_basic_set *proto_hull(struct isl_set *set, int *is_hull)
 	return common_constraints(hull, set, is_hull);
 }
 
-static struct isl_basic_set *uset_convex_hull_wrap(struct isl_set *set)
+static __isl_give isl_basic_set *uset_convex_hull_wrap(__isl_take isl_set *set)
 {
 	struct isl_basic_set *hull;
 	int is_hull;
@@ -1797,8 +1750,9 @@ static struct isl_basic_set *uset_convex_hull_wrap(struct isl_set *set)
  * the Fourier-Motzkin elimination based convex hull.
  * We also handle a few special cases before checking the boundedness.
  */
-static struct isl_basic_set *uset_convex_hull(struct isl_set *set)
+static __isl_give isl_basic_set *uset_convex_hull(__isl_take isl_set *set)
 {
+	isl_bool bounded;
 	struct isl_basic_set *convex_hull = NULL;
 	struct isl_basic_set *lin;
 
@@ -1809,8 +1763,6 @@ static struct isl_basic_set *uset_convex_hull(struct isl_set *set)
 	set = isl_set_set_rational(set);
 
 	if (!set)
-		goto error;
-	if (!set)
 		return NULL;
 	if (set->n == 1) {
 		convex_hull = isl_basic_set_copy(set->p[0]);
@@ -1820,14 +1772,16 @@ static struct isl_basic_set *uset_convex_hull(struct isl_set *set)
 	if (isl_set_n_dim(set) == 1)
 		return convex_hull_1d(set);
 
-	if (isl_set_is_bounded(set) &&
-	    set->ctx->opt->convex == ISL_CONVEX_HULL_WRAP)
+	bounded = isl_set_is_bounded(set);
+	if (bounded < 0)
+		goto error;
+	if (bounded && set->ctx->opt->convex == ISL_CONVEX_HULL_WRAP)
 		return uset_convex_hull_wrap(set);
 
-	lin = uset_combined_lineality_space(isl_set_copy(set));
+	lin = isl_set_combined_lineality_space(isl_set_copy(set));
 	if (!lin)
 		goto error;
-	if (isl_basic_set_is_universe(lin)) {
+	if (isl_basic_set_plain_is_universe(lin)) {
 		isl_set_free(set);
 		return lin;
 	}
@@ -1846,7 +1800,8 @@ error:
  * without parameters or divs and where the convex hull of set is
  * known to be full-dimensional.
  */
-static struct isl_basic_set *uset_convex_hull_wrap_bounded(struct isl_set *set)
+static __isl_give isl_basic_set *uset_convex_hull_wrap_bounded(
+	__isl_take isl_set *set)
 {
 	struct isl_basic_set *convex_hull = NULL;
 
@@ -1884,8 +1839,8 @@ error:
  * convex hull of the transformed set and then add the equalities back
  * (after performing the inverse transformation.
  */
-static struct isl_basic_set *modulo_affine_hull(
-	struct isl_set *set, struct isl_basic_set *affine_hull)
+static __isl_give isl_basic_set *modulo_affine_hull(
+	__isl_take isl_set *set, __isl_take isl_basic_set *affine_hull)
 {
 	struct isl_mat *T;
 	struct isl_mat *T2;
@@ -1903,9 +1858,23 @@ static struct isl_basic_set *modulo_affine_hull(
 	convex_hull = isl_basic_set_intersect(convex_hull, affine_hull);
 	return convex_hull;
 error:
+	isl_mat_free(T);
+	isl_mat_free(T2);
 	isl_basic_set_free(affine_hull);
 	isl_set_free(set);
 	return NULL;
+}
+
+/* Return an empty basic map living in the same space as "map".
+ */
+static __isl_give isl_basic_map *replace_map_by_empty_basic_map(
+	__isl_take isl_map *map)
+{
+	isl_space *space;
+
+	space = isl_map_get_space(map);
+	isl_map_free(map);
+	return isl_basic_map_empty(space);
 }
 
 /* Compute the convex hull of a map.
@@ -1913,29 +1882,22 @@ error:
  * The implementation was inspired by "Extended Convex Hull" by Fukuda et al.,
  * specifically, the wrapping of facets to obtain new facets.
  */
-struct isl_basic_map *isl_map_convex_hull(struct isl_map *map)
+__isl_give isl_basic_map *isl_map_convex_hull(__isl_take isl_map *map)
 {
 	struct isl_basic_set *bset;
 	struct isl_basic_map *model = NULL;
 	struct isl_basic_set *affine_hull = NULL;
 	struct isl_basic_map *convex_hull = NULL;
 	struct isl_set *set = NULL;
-	struct isl_ctx *ctx;
-
-	if (!map)
-		goto error;
-
-	ctx = map->ctx;
-	if (map->n == 0) {
-		convex_hull = isl_basic_map_empty_like_map(map);
-		isl_map_free(map);
-		return convex_hull;
-	}
 
 	map = isl_map_detect_equalities(map);
-	map = isl_map_align_divs(map);
+	map = isl_map_align_divs_internal(map);
 	if (!map)
 		goto error;
+
+	if (map->n == 0)
+		return replace_map_by_empty_basic_map(map);
+
 	model = isl_basic_map_copy(map->p[0]);
 	set = isl_map_underlying_set(map);
 	if (!set)
@@ -1967,8 +1929,7 @@ error:
 
 struct isl_basic_set *isl_set_convex_hull(struct isl_set *set)
 {
-	return (struct isl_basic_set *)
-		isl_map_convex_hull((struct isl_map *)set);
+	return bset_from_bmap(isl_map_convex_hull(set_to_map(set)));
 }
 
 __isl_give isl_basic_map *isl_map_polyhedral_hull(__isl_take isl_map *map)
@@ -1981,7 +1942,7 @@ __isl_give isl_basic_map *isl_map_polyhedral_hull(__isl_take isl_map *map)
 
 __isl_give isl_basic_set *isl_set_polyhedral_hull(__isl_take isl_set *set)
 {
-	return (isl_basic_set *)isl_map_polyhedral_hull((isl_map *)set);
+	return bset_from_bmap(isl_map_polyhedral_hull(set_to_map(set)));
 }
 
 struct sh_data_entry {
@@ -2055,7 +2016,7 @@ static int hash_ineq(struct isl_ctx *ctx, struct isl_hash_table *table,
  * The value in the hash table is a pointer to the (in)equality of "bset".
  */
 static int hash_basic_set(struct isl_hash_table *table,
-				struct isl_basic_set *bset)
+	__isl_keep isl_basic_set *bset)
 {
 	int i, j;
 	unsigned dim = isl_basic_set_total_dim(bset);
@@ -2074,7 +2035,7 @@ static int hash_basic_set(struct isl_hash_table *table,
 	return 0;
 }
 
-static struct sh_data *sh_data_alloc(struct isl_set *set, unsigned n_ineq)
+static struct sh_data *sh_data_alloc(__isl_keep isl_set *set, unsigned n_ineq)
 {
 	struct sh_data *data;
 	int i;
@@ -2113,7 +2074,7 @@ error:
  *	  0 if "ineq" may attain arbitrarily small values on basic set "j"
  *	 -1 if some error occurred
  */
-static int is_bound(struct sh_data *data, struct isl_set *set, int j,
+static int is_bound(struct sh_data *data, __isl_keep isl_set *set, int j,
 	isl_int *ineq, int shift)
 {
 	enum isl_lp_result res;
@@ -2142,6 +2103,47 @@ static int is_bound(struct sh_data *data, struct isl_set *set, int j,
 	       res == isl_lp_unbounded ? 0 : -1;
 }
 
+/* Set the constant term of "ineq" to the maximum of those of the constraints
+ * in the basic sets of "set" following "i" that are parallel to "ineq".
+ * That is, if any of the basic sets of "set" following "i" have a more
+ * relaxed copy of "ineq", then replace "ineq" by the most relaxed copy.
+ * "c_hash" is the hash value of the linear part of "ineq".
+ * "v" has been set up for use by has_ineq.
+ *
+ * Note that the two inequality constraints corresponding to an equality are
+ * represented by the same inequality constraint in data->p[j].table
+ * (but with different hash values).  This means the constraint (or at
+ * least its constant term) may need to be temporarily negated to get
+ * the actually hashed constraint.
+ */
+static void set_max_constant_term(struct sh_data *data, __isl_keep isl_set *set,
+	int i, isl_int *ineq, uint32_t c_hash, struct ineq_cmp_data *v)
+{
+	int j;
+	isl_ctx *ctx;
+	struct isl_hash_table_entry *entry;
+
+	ctx = isl_set_get_ctx(set);
+	for (j = i + 1; j < set->n; ++j) {
+		int neg;
+		isl_int *ineq_j;
+
+		entry = isl_hash_table_find(ctx, data->p[j].table,
+						c_hash, &has_ineq, v, 0);
+		if (!entry)
+			continue;
+
+		ineq_j = entry->data;
+		neg = isl_seq_is_neg(ineq_j + 1, ineq + 1, v->len);
+		if (neg)
+			isl_int_neg(ineq_j[0], ineq_j[0]);
+		if (isl_int_gt(ineq_j[0], ineq[0]))
+			isl_int_set(ineq[0], ineq_j[0]);
+		if (neg)
+			isl_int_neg(ineq_j[0], ineq_j[0]);
+	}
+}
+
 /* Check if inequality "ineq" from basic set "i" is or can be relaxed to
  * become a bound on the whole set.  If so, add the (relaxed) inequality
  * to "hull".  Relaxation is only allowed if "shift" is set.
@@ -2152,15 +2154,19 @@ static int is_bound(struct sh_data *data, struct isl_set *set, int j,
  * of the inequality.  If so, then we have already considered this
  * inequality and we are done.
  * Otherwise, for each basic set other than "i", we check if the inequality
- * is a bound on the basic set.
+ * is a bound on the basic set, but first replace the constant term
+ * by the maximal value of any translate of the inequality in any
+ * of the following basic sets.
  * For previous basic sets, we know that they do not contain a translate
  * of the inequality, so we directly call is_bound.
  * For following basic sets, we first check if a translate of the
- * inequality appears in its description and if so directly update
- * the inequality accordingly.
+ * inequality appears in its description.  If so, the constant term
+ * of the inequality has already been updated with respect to this
+ * translate and the inequality is therefore known to be a bound
+ * of this basic set.
  */
-static struct isl_basic_set *add_bound(struct isl_basic_set *hull,
-	struct sh_data *data, struct isl_set *set, int i, isl_int *ineq,
+static __isl_give isl_basic_set *add_bound(__isl_take isl_basic_set *hull,
+	struct sh_data *data, __isl_keep isl_set *set, int i, isl_int *ineq,
 	int shift)
 {
 	uint32_t c_hash;
@@ -2190,10 +2196,11 @@ static struct isl_basic_set *add_bound(struct isl_basic_set *hull,
 		return hull;
 
 	k = isl_basic_set_alloc_inequality(hull);
-	isl_seq_cpy(hull->ineq[k], ineq, 1 + v.len);
 	if (k < 0)
 		goto error;
+	isl_seq_cpy(hull->ineq[k], ineq, 1 + v.len);
 
+	set_max_constant_term(data, set, i, hull->ineq[k], c_hash, &v);
 	for (j = 0; j < i; ++j) {
 		int bound;
 		bound = is_bound(data, set, j, hull->ineq[k], shift);
@@ -2208,22 +2215,11 @@ static struct isl_basic_set *add_bound(struct isl_basic_set *hull,
 	}
 
 	for (j = i + 1; j < set->n; ++j) {
-		int bound, neg;
-		isl_int *ineq_j;
+		int bound;
 		entry = isl_hash_table_find(hull->ctx, data->p[j].table,
 						c_hash, has_ineq, &v, 0);
-		if (entry) {
-			ineq_j = entry->data;
-			neg = isl_seq_is_neg(ineq_j + 1,
-					     hull->ineq[k] + 1, v.len);
-			if (neg)
-				isl_int_neg(ineq_j[0], ineq_j[0]);
-			if (isl_int_gt(ineq_j[0], hull->ineq[k][0]))
-				isl_int_set(hull->ineq[k][0], ineq_j[0]);
-			if (neg)
-				isl_int_neg(ineq_j[0], ineq_j[0]);
+		if (entry)
 			continue;
-		}
 		bound = is_bound(data, set, j, hull->ineq[k], shift);
 		if (bound < 0)
 			goto error;
@@ -2251,8 +2247,8 @@ error:
  * become a bound on the whole set.  If so, add the (relaxed) inequality
  * to "hull".  Relaxation is only allowed if "shift" is set.
  */
-static struct isl_basic_set *add_bounds(struct isl_basic_set *bset,
-	struct sh_data *data, struct isl_set *set, int i, int shift)
+static __isl_give isl_basic_set *add_bounds(__isl_take isl_basic_set *bset,
+	struct sh_data *data, __isl_keep isl_set *set, int i, int shift)
 {
 	int j, k;
 	unsigned dim = isl_basic_set_total_dim(bset);
@@ -2315,7 +2311,56 @@ error:
 
 /* Compute a superset of the convex hull of map that is described
  * by only (translates of) the constraints in the constituents of map.
+ * Handle trivial cases where map is NULL or contains at most one disjunct.
+ */
+static __isl_give isl_basic_map *map_simple_hull_trivial(
+	__isl_take isl_map *map)
+{
+	isl_basic_map *hull;
+
+	if (!map)
+		return NULL;
+	if (map->n == 0)
+		return replace_map_by_empty_basic_map(map);
+
+	hull = isl_basic_map_copy(map->p[0]);
+	isl_map_free(map);
+	return hull;
+}
+
+/* Return a copy of the simple hull cached inside "map".
+ * "shift" determines whether to return the cached unshifted or shifted
+ * simple hull.
+ */
+static __isl_give isl_basic_map *cached_simple_hull(__isl_take isl_map *map,
+	int shift)
+{
+	isl_basic_map *hull;
+
+	hull = isl_basic_map_copy(map->cached_simple_hull[shift]);
+	isl_map_free(map);
+
+	return hull;
+}
+
+/* Compute a superset of the convex hull of map that is described
+ * by only (translates of) the constraints in the constituents of map.
  * Translation is only allowed if "shift" is set.
+ *
+ * The constraints are sorted while removing redundant constraints
+ * in order to indicate a preference of which constraints should
+ * be preserved.  In particular, pairs of constraints that are
+ * sorted together are preferred to either both be preserved
+ * or both be removed.  The sorting is performed inside
+ * isl_basic_map_remove_redundancies.
+ *
+ * The result of the computation is stored in map->cached_simple_hull[shift]
+ * such that it can be reused in subsequent calls.  The cache is cleared
+ * whenever the map is modified (in isl_map_cow).
+ * Note that the results need to be stored in the input map for there
+ * to be any chance that they may get reused.  In particular, they
+ * are stored in a copy of the input map that is saved before
+ * the integer division alignment.
  */
 static __isl_give isl_basic_map *map_simple_hull(__isl_take isl_map *map,
 	int shift)
@@ -2325,23 +2370,20 @@ static __isl_give isl_basic_map *map_simple_hull(__isl_take isl_map *map,
 	struct isl_basic_map *hull;
 	struct isl_basic_map *affine_hull;
 	struct isl_basic_set *bset = NULL;
+	isl_map *input;
 
-	if (!map)
-		return NULL;
-	if (map->n == 0) {
-		hull = isl_basic_map_empty_like_map(map);
-		isl_map_free(map);
-		return hull;
-	}
-	if (map->n == 1) {
-		hull = isl_basic_map_copy(map->p[0]);
-		isl_map_free(map);
-		return hull;
-	}
+	if (!map || map->n <= 1)
+		return map_simple_hull_trivial(map);
+
+	if (map->cached_simple_hull[shift])
+		return cached_simple_hull(map, shift);
 
 	map = isl_map_detect_equalities(map);
+	if (!map || map->n <= 1)
+		return map_simple_hull_trivial(map);
 	affine_hull = isl_map_affine_hull(isl_map_copy(map));
-	map = isl_map_align_divs(map);
+	input = isl_map_copy(map);
+	map = isl_map_align_divs_internal(map);
 	model = map ? isl_basic_map_copy(map->p[0]) : NULL;
 
 	set = isl_map_underlying_set(map);
@@ -2353,10 +2395,15 @@ static __isl_give isl_basic_map *map_simple_hull(__isl_take isl_map *map,
 	hull = isl_basic_map_intersect(hull, affine_hull);
 	hull = isl_basic_map_remove_redundancies(hull);
 
-	if (!hull)
-		return NULL;
-	ISL_F_SET(hull, ISL_BASIC_MAP_NO_IMPLICIT);
-	ISL_F_SET(hull, ISL_BASIC_MAP_ALL_EQUALITIES);
+	if (hull) {
+		ISL_F_SET(hull, ISL_BASIC_MAP_NO_IMPLICIT);
+		ISL_F_SET(hull, ISL_BASIC_MAP_ALL_EQUALITIES);
+	}
+
+	hull = isl_basic_map_finalize(hull);
+	if (input)
+		input->cached_simple_hull[shift] = isl_basic_map_copy(hull);
+	isl_map_free(input);
 
 	return hull;
 }
@@ -2371,8 +2418,7 @@ __isl_give isl_basic_map *isl_map_simple_hull(__isl_take isl_map *map)
 
 struct isl_basic_set *isl_set_simple_hull(struct isl_set *set)
 {
-	return (struct isl_basic_set *)
-		isl_map_simple_hull((struct isl_map *)set);
+	return bset_from_bmap(isl_map_simple_hull(set_to_map(set)));
 }
 
 /* Compute a superset of the convex hull of map that is described
@@ -2390,6 +2436,551 @@ __isl_give isl_basic_set *isl_set_unshifted_simple_hull(
 	return isl_map_unshifted_simple_hull(set);
 }
 
+/* Drop all inequalities from "bmap1" that do not also appear in "bmap2".
+ * A constraint that appears with different constant terms
+ * in "bmap1" and "bmap2" is also kept, with the least restrictive
+ * (i.e., greatest) constant term.
+ * "bmap1" and "bmap2" are assumed to have the same (known)
+ * integer divisions.
+ * The constraints of both "bmap1" and "bmap2" are assumed
+ * to have been sorted using isl_basic_map_sort_constraints.
+ *
+ * Run through the inequality constraints of "bmap1" and "bmap2"
+ * in sorted order.
+ * Each constraint of "bmap1" without a matching constraint in "bmap2"
+ * is removed.
+ * If a match is found, the constraint is kept.  If needed, the constant
+ * term of the constraint is adjusted.
+ */
+static __isl_give isl_basic_map *select_shared_inequalities(
+	__isl_take isl_basic_map *bmap1, __isl_keep isl_basic_map *bmap2)
+{
+	int i1, i2;
+
+	bmap1 = isl_basic_map_cow(bmap1);
+	if (!bmap1 || !bmap2)
+		return isl_basic_map_free(bmap1);
+
+	i1 = bmap1->n_ineq - 1;
+	i2 = bmap2->n_ineq - 1;
+	while (bmap1 && i1 >= 0 && i2 >= 0) {
+		int cmp;
+
+		cmp = isl_basic_map_constraint_cmp(bmap1, bmap1->ineq[i1],
+							bmap2->ineq[i2]);
+		if (cmp < 0) {
+			--i2;
+			continue;
+		}
+		if (cmp > 0) {
+			if (isl_basic_map_drop_inequality(bmap1, i1) < 0)
+				bmap1 = isl_basic_map_free(bmap1);
+			--i1;
+			continue;
+		}
+		if (isl_int_lt(bmap1->ineq[i1][0], bmap2->ineq[i2][0]))
+			isl_int_set(bmap1->ineq[i1][0], bmap2->ineq[i2][0]);
+		--i1;
+		--i2;
+	}
+	for (; i1 >= 0; --i1)
+		if (isl_basic_map_drop_inequality(bmap1, i1) < 0)
+			bmap1 = isl_basic_map_free(bmap1);
+
+	return bmap1;
+}
+
+/* Drop all equalities from "bmap1" that do not also appear in "bmap2".
+ * "bmap1" and "bmap2" are assumed to have the same (known)
+ * integer divisions.
+ *
+ * Run through the equality constraints of "bmap1" and "bmap2".
+ * Each constraint of "bmap1" without a matching constraint in "bmap2"
+ * is removed.
+ */
+static __isl_give isl_basic_map *select_shared_equalities(
+	__isl_take isl_basic_map *bmap1, __isl_keep isl_basic_map *bmap2)
+{
+	int i1, i2;
+	unsigned total;
+
+	bmap1 = isl_basic_map_cow(bmap1);
+	if (!bmap1 || !bmap2)
+		return isl_basic_map_free(bmap1);
+
+	total = isl_basic_map_total_dim(bmap1);
+
+	i1 = bmap1->n_eq - 1;
+	i2 = bmap2->n_eq - 1;
+	while (bmap1 && i1 >= 0 && i2 >= 0) {
+		int last1, last2;
+
+		last1 = isl_seq_last_non_zero(bmap1->eq[i1] + 1, total);
+		last2 = isl_seq_last_non_zero(bmap2->eq[i2] + 1, total);
+		if (last1 > last2) {
+			--i2;
+			continue;
+		}
+		if (last1 < last2) {
+			if (isl_basic_map_drop_equality(bmap1, i1) < 0)
+				bmap1 = isl_basic_map_free(bmap1);
+			--i1;
+			continue;
+		}
+		if (!isl_seq_eq(bmap1->eq[i1], bmap2->eq[i2], 1 + total)) {
+			if (isl_basic_map_drop_equality(bmap1, i1) < 0)
+				bmap1 = isl_basic_map_free(bmap1);
+		}
+		--i1;
+		--i2;
+	}
+	for (; i1 >= 0; --i1)
+		if (isl_basic_map_drop_equality(bmap1, i1) < 0)
+			bmap1 = isl_basic_map_free(bmap1);
+
+	return bmap1;
+}
+
+/* Compute a superset of "bmap1" and "bmap2" that is described
+ * by only the constraints that appear in both "bmap1" and "bmap2".
+ *
+ * First drop constraints that involve unknown integer divisions
+ * since it is not trivial to check whether two such integer divisions
+ * in different basic maps are the same.
+ * Then align the remaining (known) divs and sort the constraints.
+ * Finally drop all inequalities and equalities from "bmap1" that
+ * do not also appear in "bmap2".
+ */
+__isl_give isl_basic_map *isl_basic_map_plain_unshifted_simple_hull(
+	__isl_take isl_basic_map *bmap1, __isl_take isl_basic_map *bmap2)
+{
+	bmap1 = isl_basic_map_drop_constraint_involving_unknown_divs(bmap1);
+	bmap2 = isl_basic_map_drop_constraint_involving_unknown_divs(bmap2);
+	bmap2 = isl_basic_map_align_divs(bmap2, bmap1);
+	bmap1 = isl_basic_map_align_divs(bmap1, bmap2);
+	bmap1 = isl_basic_map_gauss(bmap1, NULL);
+	bmap2 = isl_basic_map_gauss(bmap2, NULL);
+	bmap1 = isl_basic_map_sort_constraints(bmap1);
+	bmap2 = isl_basic_map_sort_constraints(bmap2);
+
+	bmap1 = select_shared_inequalities(bmap1, bmap2);
+	bmap1 = select_shared_equalities(bmap1, bmap2);
+
+	isl_basic_map_free(bmap2);
+	bmap1 = isl_basic_map_finalize(bmap1);
+	return bmap1;
+}
+
+/* Compute a superset of the convex hull of "map" that is described
+ * by only the constraints in the constituents of "map".
+ * In particular, the result is composed of constraints that appear
+ * in each of the basic maps of "map"
+ *
+ * Constraints that involve unknown integer divisions are dropped
+ * since it is not trivial to check whether two such integer divisions
+ * in different basic maps are the same.
+ *
+ * The hull is initialized from the first basic map and then
+ * updated with respect to the other basic maps in turn.
+ */
+__isl_give isl_basic_map *isl_map_plain_unshifted_simple_hull(
+	__isl_take isl_map *map)
+{
+	int i;
+	isl_basic_map *hull;
+
+	if (!map)
+		return NULL;
+	if (map->n <= 1)
+		return map_simple_hull_trivial(map);
+	map = isl_map_drop_constraint_involving_unknown_divs(map);
+	hull = isl_basic_map_copy(map->p[0]);
+	for (i = 1; i < map->n; ++i) {
+		isl_basic_map *bmap_i;
+
+		bmap_i = isl_basic_map_copy(map->p[i]);
+		hull = isl_basic_map_plain_unshifted_simple_hull(hull, bmap_i);
+	}
+
+	isl_map_free(map);
+	return hull;
+}
+
+/* Compute a superset of the convex hull of "set" that is described
+ * by only the constraints in the constituents of "set".
+ * In particular, the result is composed of constraints that appear
+ * in each of the basic sets of "set"
+ */
+__isl_give isl_basic_set *isl_set_plain_unshifted_simple_hull(
+	__isl_take isl_set *set)
+{
+	return isl_map_plain_unshifted_simple_hull(set);
+}
+
+/* Check if "ineq" is a bound on "set" and, if so, add it to "hull".
+ *
+ * For each basic set in "set", we first check if the basic set
+ * contains a translate of "ineq".  If this translate is more relaxed,
+ * then we assume that "ineq" is not a bound on this basic set.
+ * Otherwise, we know that it is a bound.
+ * If the basic set does not contain a translate of "ineq", then
+ * we call is_bound to perform the test.
+ */
+static __isl_give isl_basic_set *add_bound_from_constraint(
+	__isl_take isl_basic_set *hull, struct sh_data *data,
+	__isl_keep isl_set *set, isl_int *ineq)
+{
+	int i, k;
+	isl_ctx *ctx;
+	uint32_t c_hash;
+	struct ineq_cmp_data v;
+
+	if (!hull || !set)
+		return isl_basic_set_free(hull);
+
+	v.len = isl_basic_set_total_dim(hull);
+	v.p = ineq;
+	c_hash = isl_seq_get_hash(ineq + 1, v.len);
+
+	ctx = isl_basic_set_get_ctx(hull);
+	for (i = 0; i < set->n; ++i) {
+		int bound;
+		struct isl_hash_table_entry *entry;
+
+		entry = isl_hash_table_find(ctx, data->p[i].table,
+						c_hash, &has_ineq, &v, 0);
+		if (entry) {
+			isl_int *ineq_i = entry->data;
+			int neg, more_relaxed;
+
+			neg = isl_seq_is_neg(ineq_i + 1, ineq + 1, v.len);
+			if (neg)
+				isl_int_neg(ineq_i[0], ineq_i[0]);
+			more_relaxed = isl_int_gt(ineq_i[0], ineq[0]);
+			if (neg)
+				isl_int_neg(ineq_i[0], ineq_i[0]);
+			if (more_relaxed)
+				break;
+			else
+				continue;
+		}
+		bound = is_bound(data, set, i, ineq, 0);
+		if (bound < 0)
+			return isl_basic_set_free(hull);
+		if (!bound)
+			break;
+	}
+	if (i < set->n)
+		return hull;
+
+	k = isl_basic_set_alloc_inequality(hull);
+	if (k < 0)
+		return isl_basic_set_free(hull);
+	isl_seq_cpy(hull->ineq[k], ineq, 1 + v.len);
+
+	return hull;
+}
+
+/* Compute a superset of the convex hull of "set" that is described
+ * by only some of the "n_ineq" constraints in the list "ineq", where "set"
+ * has no parameters or integer divisions.
+ *
+ * The inequalities in "ineq" are assumed to have been sorted such
+ * that constraints with the same linear part appear together and
+ * that among constraints with the same linear part, those with
+ * smaller constant term appear first.
+ *
+ * We reuse the same data structure that is used by uset_simple_hull,
+ * but we do not need the hull table since we will not consider the
+ * same constraint more than once.  We therefore allocate it with zero size.
+ *
+ * We run through the constraints and try to add them one by one,
+ * skipping identical constraints.  If we have added a constraint and
+ * the next constraint is a more relaxed translate, then we skip this
+ * next constraint as well.
+ */
+static __isl_give isl_basic_set *uset_unshifted_simple_hull_from_constraints(
+	__isl_take isl_set *set, int n_ineq, isl_int **ineq)
+{
+	int i;
+	int last_added = 0;
+	struct sh_data *data = NULL;
+	isl_basic_set *hull = NULL;
+	unsigned dim;
+
+	hull = isl_basic_set_alloc_space(isl_set_get_space(set), 0, 0, n_ineq);
+	if (!hull)
+		goto error;
+
+	data = sh_data_alloc(set, 0);
+	if (!data)
+		goto error;
+
+	dim = isl_set_dim(set, isl_dim_set);
+	for (i = 0; i < n_ineq; ++i) {
+		int hull_n_ineq = hull->n_ineq;
+		int parallel;
+
+		parallel = i > 0 && isl_seq_eq(ineq[i - 1] + 1, ineq[i] + 1,
+						dim);
+		if (parallel &&
+		    (last_added || isl_int_eq(ineq[i - 1][0], ineq[i][0])))
+			continue;
+		hull = add_bound_from_constraint(hull, data, set, ineq[i]);
+		if (!hull)
+			goto error;
+		last_added = hull->n_ineq > hull_n_ineq;
+	}
+
+	sh_data_free(data);
+	isl_set_free(set);
+	return hull;
+error:
+	sh_data_free(data);
+	isl_set_free(set);
+	isl_basic_set_free(hull);
+	return NULL;
+}
+
+/* Collect pointers to all the inequalities in the elements of "list"
+ * in "ineq".  For equalities, store both a pointer to the equality and
+ * a pointer to its opposite, which is first copied to "mat".
+ * "ineq" and "mat" are assumed to have been preallocated to the right size
+ * (the number of inequalities + 2 times the number of equalites and
+ * the number of equalities, respectively).
+ */
+static __isl_give isl_mat *collect_inequalities(__isl_take isl_mat *mat,
+	__isl_keep isl_basic_set_list *list, isl_int **ineq)
+{
+	int i, j, n, n_eq, n_ineq;
+
+	if (!mat)
+		return NULL;
+
+	n_eq = 0;
+	n_ineq = 0;
+	n = isl_basic_set_list_n_basic_set(list);
+	for (i = 0; i < n; ++i) {
+		isl_basic_set *bset;
+		bset = isl_basic_set_list_get_basic_set(list, i);
+		if (!bset)
+			return isl_mat_free(mat);
+		for (j = 0; j < bset->n_eq; ++j) {
+			ineq[n_ineq++] = mat->row[n_eq];
+			ineq[n_ineq++] = bset->eq[j];
+			isl_seq_neg(mat->row[n_eq++], bset->eq[j], mat->n_col);
+		}
+		for (j = 0; j < bset->n_ineq; ++j)
+			ineq[n_ineq++] = bset->ineq[j];
+		isl_basic_set_free(bset);
+	}
+
+	return mat;
+}
+
+/* Comparison routine for use as an isl_sort callback.
+ *
+ * Constraints with the same linear part are sorted together and
+ * among constraints with the same linear part, those with smaller
+ * constant term are sorted first.
+ */
+static int cmp_ineq(const void *a, const void *b, void *arg)
+{
+	unsigned dim = *(unsigned *) arg;
+	isl_int * const *ineq1 = a;
+	isl_int * const *ineq2 = b;
+	int cmp;
+
+	cmp = isl_seq_cmp((*ineq1) + 1, (*ineq2) + 1, dim);
+	if (cmp != 0)
+		return cmp;
+	return isl_int_cmp((*ineq1)[0], (*ineq2)[0]);
+}
+
+/* Compute a superset of the convex hull of "set" that is described
+ * by only constraints in the elements of "list", where "set" has
+ * no parameters or integer divisions.
+ *
+ * We collect all the constraints in those elements and then
+ * sort the constraints such that constraints with the same linear part
+ * are sorted together and that those with smaller constant term are
+ * sorted first.
+ */
+static __isl_give isl_basic_set *uset_unshifted_simple_hull_from_basic_set_list(
+	__isl_take isl_set *set, __isl_take isl_basic_set_list *list)
+{
+	int i, n, n_eq, n_ineq;
+	unsigned dim;
+	isl_ctx *ctx;
+	isl_mat *mat = NULL;
+	isl_int **ineq = NULL;
+	isl_basic_set *hull;
+
+	if (!set)
+		goto error;
+	ctx = isl_set_get_ctx(set);
+
+	n_eq = 0;
+	n_ineq = 0;
+	n = isl_basic_set_list_n_basic_set(list);
+	for (i = 0; i < n; ++i) {
+		isl_basic_set *bset;
+		bset = isl_basic_set_list_get_basic_set(list, i);
+		if (!bset)
+			goto error;
+		n_eq += bset->n_eq;
+		n_ineq += 2 * bset->n_eq + bset->n_ineq;
+		isl_basic_set_free(bset);
+	}
+
+	ineq = isl_alloc_array(ctx, isl_int *, n_ineq);
+	if (n_ineq > 0 && !ineq)
+		goto error;
+
+	dim = isl_set_dim(set, isl_dim_set);
+	mat = isl_mat_alloc(ctx, n_eq, 1 + dim);
+	mat = collect_inequalities(mat, list, ineq);
+	if (!mat)
+		goto error;
+
+	if (isl_sort(ineq, n_ineq, sizeof(ineq[0]), &cmp_ineq, &dim) < 0)
+		goto error;
+
+	hull = uset_unshifted_simple_hull_from_constraints(set, n_ineq, ineq);
+
+	isl_mat_free(mat);
+	free(ineq);
+	isl_basic_set_list_free(list);
+	return hull;
+error:
+	isl_mat_free(mat);
+	free(ineq);
+	isl_set_free(set);
+	isl_basic_set_list_free(list);
+	return NULL;
+}
+
+/* Compute a superset of the convex hull of "map" that is described
+ * by only constraints in the elements of "list".
+ *
+ * If the list is empty, then we can only describe the universe set.
+ * If the input map is empty, then all constraints are valid, so
+ * we return the intersection of the elements in "list".
+ *
+ * Otherwise, we align all divs and temporarily treat them
+ * as regular variables, computing the unshifted simple hull in
+ * uset_unshifted_simple_hull_from_basic_set_list.
+ */
+static __isl_give isl_basic_map *map_unshifted_simple_hull_from_basic_map_list(
+	__isl_take isl_map *map, __isl_take isl_basic_map_list *list)
+{
+	isl_basic_map *model;
+	isl_basic_map *hull;
+	isl_set *set;
+	isl_basic_set_list *bset_list;
+
+	if (!map || !list)
+		goto error;
+
+	if (isl_basic_map_list_n_basic_map(list) == 0) {
+		isl_space *space;
+
+		space = isl_map_get_space(map);
+		isl_map_free(map);
+		isl_basic_map_list_free(list);
+		return isl_basic_map_universe(space);
+	}
+	if (isl_map_plain_is_empty(map)) {
+		isl_map_free(map);
+		return isl_basic_map_list_intersect(list);
+	}
+
+	map = isl_map_align_divs_to_basic_map_list(map, list);
+	if (!map)
+		goto error;
+	list = isl_basic_map_list_align_divs_to_basic_map(list, map->p[0]);
+
+	model = isl_basic_map_list_get_basic_map(list, 0);
+
+	set = isl_map_underlying_set(map);
+	bset_list = isl_basic_map_list_underlying_set(list);
+
+	hull = uset_unshifted_simple_hull_from_basic_set_list(set, bset_list);
+	hull = isl_basic_map_overlying_set(hull, model);
+
+	return hull;
+error:
+	isl_map_free(map);
+	isl_basic_map_list_free(list);
+	return NULL;
+}
+
+/* Return a sequence of the basic maps that make up the maps in "list".
+ */
+static __isl_give isl_basic_map_list *collect_basic_maps(
+	__isl_take isl_map_list *list)
+{
+	int i, n;
+	isl_ctx *ctx;
+	isl_basic_map_list *bmap_list;
+
+	if (!list)
+		return NULL;
+	n = isl_map_list_n_map(list);
+	ctx = isl_map_list_get_ctx(list);
+	bmap_list = isl_basic_map_list_alloc(ctx, 0);
+
+	for (i = 0; i < n; ++i) {
+		isl_map *map;
+		isl_basic_map_list *list_i;
+
+		map = isl_map_list_get_map(list, i);
+		map = isl_map_compute_divs(map);
+		list_i = isl_map_get_basic_map_list(map);
+		isl_map_free(map);
+		bmap_list = isl_basic_map_list_concat(bmap_list, list_i);
+	}
+
+	isl_map_list_free(list);
+	return bmap_list;
+}
+
+/* Compute a superset of the convex hull of "map" that is described
+ * by only constraints in the elements of "list".
+ *
+ * If "map" is the universe, then the convex hull (and therefore
+ * any superset of the convexhull) is the universe as well.
+ *
+ * Otherwise, we collect all the basic maps in the map list and
+ * continue with map_unshifted_simple_hull_from_basic_map_list.
+ */
+__isl_give isl_basic_map *isl_map_unshifted_simple_hull_from_map_list(
+	__isl_take isl_map *map, __isl_take isl_map_list *list)
+{
+	isl_basic_map_list *bmap_list;
+	int is_universe;
+
+	is_universe = isl_map_plain_is_universe(map);
+	if (is_universe < 0)
+		map = isl_map_free(map);
+	if (is_universe < 0 || is_universe) {
+		isl_map_list_free(list);
+		return isl_map_unshifted_simple_hull(map);
+	}
+
+	bmap_list = collect_basic_maps(list);
+	return map_unshifted_simple_hull_from_basic_map_list(map, bmap_list);
+}
+
+/* Compute a superset of the convex hull of "set" that is described
+ * by only constraints in the elements of "list".
+ */
+__isl_give isl_basic_set *isl_set_unshifted_simple_hull_from_set_list(
+	__isl_take isl_set *set, __isl_take isl_set_list *list)
+{
+	return isl_map_unshifted_simple_hull_from_map_list(set, list);
+}
+
 /* Given a set "set", return parametric bounds on the dimension "dim".
  */
 static struct isl_basic_set *set_bounds(struct isl_set *set, int dim)
@@ -2405,7 +2996,7 @@ static struct isl_basic_set *set_bounds(struct isl_set *set, int dim)
  * resulting hull is bounded by a symbolic constant.  If not, the
  * hull is intersected with the corresponding bounds on the whole set.
  */
-struct isl_basic_set *isl_set_bounded_simple_hull(struct isl_set *set)
+__isl_give isl_basic_set *isl_set_bounded_simple_hull(__isl_take isl_set *set)
 {
 	int i, j;
 	struct isl_basic_set *hull;
@@ -2467,5 +3058,6 @@ struct isl_basic_set *isl_set_bounded_simple_hull(struct isl_set *set)
 	return hull;
 error:
 	isl_set_free(set);
+	isl_basic_set_free(hull);
 	return NULL;
 }

@@ -1,20 +1,28 @@
 /*
  * Copyright 2008-2009 Katholieke Universiteit Leuven
  * Copyright 2013      Ecole Normale Superieure
+ * Copyright 2014      INRIA Rocquencourt
+ * Copyright 2016      Sven Verdoolaege
  *
  * Use of this software is governed by the MIT license
  *
  * Written by Sven Verdoolaege, K.U.Leuven, Departement
  * Computerwetenschappen, Celestijnenlaan 200A, B-3001 Leuven, Belgium
  * and Ecole Normale Superieure, 45 rue d'Ulm, 75230 Paris, France
+ * and Inria Paris - Rocquencourt, Domaine de Voluceau - Rocquencourt,
+ * B.P. 105 - 78153 Le Chesnay, France
  */
 
 #include <isl_ctx_private.h>
 #include <isl_mat_private.h>
+#include <isl_vec_private.h>
 #include "isl_map_private.h"
 #include "isl_tab.h"
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include <isl_config.h>
+
+#include <bset_to_bmap.c>
+#include <bset_from_bmap.c>
 
 /*
  * The implementation of tableaus in this file was inspired by Section 8
@@ -151,7 +159,7 @@ int isl_tab_extend_vars(struct isl_tab *tab, unsigned n_new)
 		if (!var)
 			return -1;
 		tab->var = var;
-		tab->max_var += n_new;
+		tab->max_var = tab->n_var + n_new;
 	}
 
 	if (tab->mat->n_col < off + tab->n_col + n_new) {
@@ -169,15 +177,6 @@ int isl_tab_extend_vars(struct isl_tab *tab, unsigned n_new)
 	}
 
 	return 0;
-}
-
-struct isl_tab *isl_tab_extend(struct isl_tab *tab, unsigned n_new)
-{
-	if (isl_tab_extend_cons(tab, n_new) >= 0)
-		return tab;
-
-	isl_tab_free(tab);
-	return NULL;
 }
 
 static void free_undo_record(struct isl_tab_undo *undo)
@@ -621,21 +620,21 @@ static int min_is_manifestly_unbounded(struct isl_tab *tab,
 	return 1;
 }
 
-static int row_cmp(struct isl_tab *tab, int r1, int r2, int c, isl_int t)
+static int row_cmp(struct isl_tab *tab, int r1, int r2, int c, isl_int *t)
 {
 	unsigned off = 2 + tab->M;
 
 	if (tab->M) {
 		int s;
-		isl_int_mul(t, tab->mat->row[r1][2], tab->mat->row[r2][off+c]);
-		isl_int_submul(t, tab->mat->row[r2][2], tab->mat->row[r1][off+c]);
-		s = isl_int_sgn(t);
+		isl_int_mul(*t, tab->mat->row[r1][2], tab->mat->row[r2][off+c]);
+		isl_int_submul(*t, tab->mat->row[r2][2], tab->mat->row[r1][off+c]);
+		s = isl_int_sgn(*t);
 		if (s)
 			return s;
 	}
-	isl_int_mul(t, tab->mat->row[r1][1], tab->mat->row[r2][off + c]);
-	isl_int_submul(t, tab->mat->row[r2][1], tab->mat->row[r1][off + c]);
-	return isl_int_sgn(t);
+	isl_int_mul(*t, tab->mat->row[r1][1], tab->mat->row[r2][off + c]);
+	isl_int_submul(*t, tab->mat->row[r2][1], tab->mat->row[r1][off + c]);
+	return isl_int_sgn(*t);
 }
 
 /* Given the index of a column "c", return the index of a row
@@ -678,7 +677,7 @@ static int pivot_row(struct isl_tab *tab,
 			r = j;
 			continue;
 		}
-		tsgn = sgn * row_cmp(tab, r, j, c, t);
+		tsgn = sgn * row_cmp(tab, r, j, c, &t);
 		if (tsgn < 0 || (tsgn == 0 &&
 					    tab->row_var[j] < tab->row_var[r]))
 			r = j;
@@ -787,30 +786,42 @@ static void swap_rows(struct isl_tab *tab, int row1, int row2)
 	tab->row_sign[row2] = s;
 }
 
-static int push_union(struct isl_tab *tab,
+static isl_stat push_union(struct isl_tab *tab,
 	enum isl_tab_undo_type type, union isl_tab_undo_val u) WARN_UNUSED;
-static int push_union(struct isl_tab *tab,
+
+/* Push record "u" onto the undo stack of "tab", provided "tab"
+ * keeps track of undo information.
+ *
+ * If the record cannot be pushed, then mark the undo stack as invalid
+ * such that a later rollback attempt will not try to undo earlier
+ * records without having been able to undo the current record.
+ */
+static isl_stat push_union(struct isl_tab *tab,
 	enum isl_tab_undo_type type, union isl_tab_undo_val u)
 {
 	struct isl_tab_undo *undo;
 
 	if (!tab)
-		return -1;
+		return isl_stat_error;
 	if (!tab->need_undo)
-		return 0;
+		return isl_stat_ok;
 
 	undo = isl_alloc_type(tab->mat->ctx, struct isl_tab_undo);
 	if (!undo)
-		return -1;
+		goto error;
 	undo->type = type;
 	undo->u = u;
 	undo->next = tab->top;
 	tab->top = undo;
 
-	return 0;
+	return isl_stat_ok;
+error:
+	free_undo(tab);
+	tab->top = NULL;
+	return isl_stat_error;
 }
 
-int isl_tab_push_var(struct isl_tab *tab,
+isl_stat isl_tab_push_var(struct isl_tab *tab,
 	enum isl_tab_undo_type type, struct isl_tab_var *var)
 {
 	union isl_tab_undo_val u;
@@ -821,7 +832,7 @@ int isl_tab_push_var(struct isl_tab *tab,
 	return push_union(tab, type, u);
 }
 
-int isl_tab_push(struct isl_tab *tab, enum isl_tab_undo_type type)
+isl_stat isl_tab_push(struct isl_tab *tab, enum isl_tab_undo_type type)
 {
 	union isl_tab_undo_val u = { 0 };
 	return push_union(tab, type, u);
@@ -830,20 +841,21 @@ int isl_tab_push(struct isl_tab *tab, enum isl_tab_undo_type type)
 /* Push a record on the undo stack describing the current basic
  * variables, so that the this state can be restored during rollback.
  */
-int isl_tab_push_basis(struct isl_tab *tab)
+isl_stat isl_tab_push_basis(struct isl_tab *tab)
 {
 	int i;
 	union isl_tab_undo_val u;
 
 	u.col_var = isl_alloc_array(tab->mat->ctx, int, tab->n_col);
 	if (tab->n_col && !u.col_var)
-		return -1;
+		return isl_stat_error;
 	for (i = 0; i < tab->n_col; ++i)
 		u.col_var[i] = tab->col_var[i];
 	return push_union(tab, isl_tab_undo_saved_basis, u);
 }
 
-int isl_tab_push_callback(struct isl_tab *tab, struct isl_tab_callback *callback)
+isl_stat isl_tab_push_callback(struct isl_tab *tab,
+	struct isl_tab_callback *callback)
 {
 	union isl_tab_undo_val u;
 	u.callback = callback;
@@ -869,8 +881,7 @@ error:
 	return NULL;
 }
 
-struct isl_tab *isl_tab_add_sample(struct isl_tab *tab,
-	__isl_take isl_vec *sample)
+int isl_tab_add_sample(struct isl_tab *tab, __isl_take isl_vec *sample)
 {
 	if (!tab || !sample)
 		goto error;
@@ -893,11 +904,10 @@ struct isl_tab *isl_tab_add_sample(struct isl_tab *tab,
 	tab->sample_index[tab->n_sample] = tab->n_sample;
 	tab->n_sample++;
 
-	return tab;
+	return 0;
 error:
 	isl_vec_free(sample);
-	isl_tab_free(tab);
-	return NULL;
+	return -1;
 }
 
 struct isl_tab *isl_tab_drop_sample(struct isl_tab *tab, int s)
@@ -920,12 +930,12 @@ struct isl_tab *isl_tab_drop_sample(struct isl_tab *tab, int s)
 /* Record the current number of samples so that we can remove newer
  * samples during a rollback.
  */
-int isl_tab_save_samples(struct isl_tab *tab)
+isl_stat isl_tab_save_samples(struct isl_tab *tab)
 {
 	union isl_tab_undo_val u;
 
 	if (!tab)
-		return -1;
+		return isl_stat_error;
 
 	u.n = tab->n_sample;
 	return push_union(tab, isl_tab_undo_saved_samples, u);
@@ -967,15 +977,31 @@ int isl_tab_mark_redundant(struct isl_tab *tab, int row)
 	}
 }
 
-int isl_tab_mark_empty(struct isl_tab *tab)
+/* Mark "tab" as a rational tableau.
+ * If it wasn't marked as a rational tableau already and if we may
+ * need to undo changes, then arrange for the marking to be undone
+ * during the undo.
+ */
+int isl_tab_mark_rational(struct isl_tab *tab)
 {
 	if (!tab)
 		return -1;
+	if (!tab->rational && tab->need_undo)
+		if (isl_tab_push(tab, isl_tab_undo_rational) < 0)
+			return -1;
+	tab->rational = 1;
+	return 0;
+}
+
+isl_stat isl_tab_mark_empty(struct isl_tab *tab)
+{
+	if (!tab)
+		return isl_stat_error;
 	if (!tab->empty && tab->need_undo)
 		if (isl_tab_push(tab, isl_tab_undo_empty) < 0)
-			return -1;
+			return isl_stat_error;
 	tab->empty = 1;
-	return 0;
+	return isl_stat_ok;
 }
 
 int isl_tab_freeze_constraint(struct isl_tab *tab, int con)
@@ -1101,14 +1127,14 @@ int isl_tab_pivot(struct isl_tab *tab, int row, int col)
 	int i, j;
 	int sgn;
 	int t;
+	isl_ctx *ctx;
 	struct isl_mat *mat = tab->mat;
 	struct isl_tab_var *var;
 	unsigned off = 2 + tab->M;
 
-	if (tab->mat->ctx->abort) {
-		isl_ctx_set_error(tab->mat->ctx, isl_error_abort);
+	ctx = isl_tab_get_ctx(tab);
+	if (isl_ctx_next_operation(ctx) < 0)
 		return -1;
-	}
 
 	isl_int_swap(mat->row[row][0], mat->row[row][off + col]);
 	sgn = isl_int_sgn(mat->row[row][0]);
@@ -1419,7 +1445,8 @@ static int row_at_most_neg_one(struct isl_tab *tab, int row)
 /* Return 1 if "var" can attain values <= -1.
  * Return 0 otherwise.
  *
- * The sample value of "var" is assumed to be non-negative when the
+ * If the variable "var" is supposed to be non-negative (is_nonneg is set),
+ * then the sample value of "var" is assumed to be non-negative when the
  * the function is called.  If 1 is returned then the constraint
  * is not redundant and the sample value is made non-negative again before
  * the function returns.
@@ -1457,7 +1484,7 @@ int isl_tab_min_at_most_neg_one(struct isl_tab *tab, struct isl_tab_var *var)
 	do {
 		find_pivot(tab, var, var, -1, &row, &col);
 		if (row == var->index) {
-			if (restore_row(tab, var) < -1)
+			if (var->is_nonneg && restore_row(tab, var) < -1)
 				return -1;
 			return 1;
 		}
@@ -1593,40 +1620,59 @@ static int tab_is_manifestly_empty(struct isl_tab *tab)
  * Each of the non-negative variables with a negative coefficient can
  * then also be written as the negative sum of non-negative variables
  * and must therefore also be zero.
+ *
+ * If "temp_var" is set, then "var" is a temporary variable that
+ * will be removed after this function returns and for which
+ * no information is recorded on the undo stack.
+ * Do not add any undo records involving this variable in this case
+ * since the variable will have been removed before any future undo
+ * operations.  Also avoid marking the variable as redundant,
+ * since that either adds an undo record or needlessly removes the row
+ * (the caller will take care of removing the row).
  */
-static int close_row(struct isl_tab *tab, struct isl_tab_var *var) WARN_UNUSED;
-static int close_row(struct isl_tab *tab, struct isl_tab_var *var)
+static isl_stat close_row(struct isl_tab *tab, struct isl_tab_var *var,
+	int temp_var) WARN_UNUSED;
+static isl_stat close_row(struct isl_tab *tab, struct isl_tab_var *var,
+	int temp_var)
 {
 	int j;
 	struct isl_mat *mat = tab->mat;
 	unsigned off = 2 + tab->M;
 
-	isl_assert(tab->mat->ctx, var->is_nonneg, return -1);
+	if (!var->is_nonneg)
+		isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+			"expecting non-negative variable",
+			return isl_stat_error);
 	var->is_zero = 1;
-	if (tab->need_undo)
+	if (!temp_var && tab->need_undo)
 		if (isl_tab_push_var(tab, isl_tab_undo_zero, var) < 0)
-			return -1;
+			return isl_stat_error;
 	for (j = tab->n_dead; j < tab->n_col; ++j) {
 		int recheck;
 		if (isl_int_is_zero(mat->row[var->index][off + j]))
 			continue;
-		isl_assert(tab->mat->ctx,
-		    isl_int_is_neg(mat->row[var->index][off + j]), return -1);
+		if (isl_int_is_pos(mat->row[var->index][off + j]))
+			isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+				"row cannot have positive coefficients",
+				return isl_stat_error);
 		recheck = isl_tab_kill_col(tab, j);
 		if (recheck < 0)
-			return -1;
+			return isl_stat_error;
 		if (recheck)
 			--j;
 	}
-	if (isl_tab_mark_redundant(tab, var->index) < 0)
-		return -1;
+	if (!temp_var && isl_tab_mark_redundant(tab, var->index) < 0)
+		return isl_stat_error;
 	if (tab_is_manifestly_empty(tab) && isl_tab_mark_empty(tab) < 0)
-		return -1;
-	return 0;
+		return isl_stat_error;
+	return isl_stat_ok;
 }
 
 /* Add a constraint to the tableau and allocate a row for it.
  * Return the index into the constraint array "con".
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
  */
 int isl_tab_allocate_con(struct isl_tab *tab)
 {
@@ -1653,19 +1699,75 @@ int isl_tab_allocate_con(struct isl_tab *tab)
 	return r;
 }
 
-/* Add a variable to the tableau and allocate a column for it.
- * Return the index into the variable array "var".
+/* Move the entries in tab->var up one position, starting at "first",
+ * creating room for an extra entry at position "first".
+ * Since some of the entries of tab->row_var and tab->col_var contain
+ * indices into this array, they have to be updated accordingly.
  */
-int isl_tab_allocate_var(struct isl_tab *tab)
+static int var_insert_entry(struct isl_tab *tab, int first)
 {
-	int r;
+	int i;
+
+	if (tab->n_var >= tab->max_var)
+		isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+			"not enough room for new variable", return -1);
+	if (first > tab->n_var)
+		isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+			"invalid initial position", return -1);
+
+	for (i = tab->n_var - 1; i >= first; --i) {
+		tab->var[i + 1] = tab->var[i];
+		if (tab->var[i + 1].is_row)
+			tab->row_var[tab->var[i + 1].index]++;
+		else
+			tab->col_var[tab->var[i + 1].index]++;
+	}
+
+	tab->n_var++;
+
+	return 0;
+}
+
+/* Drop the entry at position "first" in tab->var, moving all
+ * subsequent entries down.
+ * Since some of the entries of tab->row_var and tab->col_var contain
+ * indices into this array, they have to be updated accordingly.
+ */
+static int var_drop_entry(struct isl_tab *tab, int first)
+{
+	int i;
+
+	if (first >= tab->n_var)
+		isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+			"invalid initial position", return -1);
+
+	tab->n_var--;
+
+	for (i = first; i < tab->n_var; ++i) {
+		tab->var[i] = tab->var[i + 1];
+		if (tab->var[i + 1].is_row)
+			tab->row_var[tab->var[i].index]--;
+		else
+			tab->col_var[tab->var[i].index]--;
+	}
+
+	return 0;
+}
+
+/* Add a variable to the tableau at position "r" and allocate a column for it.
+ * Return the index into the variable array "var", i.e., "r",
+ * or -1 on error.
+ */
+int isl_tab_insert_var(struct isl_tab *tab, int r)
+{
 	int i;
 	unsigned off = 2 + tab->M;
 
 	isl_assert(tab->mat->ctx, tab->n_col < tab->mat->n_col, return -1);
-	isl_assert(tab->mat->ctx, tab->n_var < tab->max_var, return -1);
 
-	r = tab->n_var;
+	if (var_insert_entry(tab, r) < 0)
+		return -1;
+
 	tab->var[r].index = tab->n_col;
 	tab->var[r].is_row = 0;
 	tab->var[r].is_nonneg = 0;
@@ -1678,7 +1780,6 @@ int isl_tab_allocate_var(struct isl_tab *tab)
 	for (i = 0; i < tab->n_row; ++i)
 		isl_int_set_si(tab->mat->row[i][off + tab->n_col], 0);
 
-	tab->n_var++;
 	tab->n_col++;
 	if (isl_tab_push_var(tab, isl_tab_undo_allocate, &tab->var[r]) < 0)
 		return -1;
@@ -1686,9 +1787,23 @@ int isl_tab_allocate_var(struct isl_tab *tab)
 	return r;
 }
 
+/* Add a variable to the tableau and allocate a column for it.
+ * Return the index into the variable array "var".
+ */
+int isl_tab_allocate_var(struct isl_tab *tab)
+{
+	if (!tab)
+		return -1;
+
+	return isl_tab_insert_var(tab, tab->n_var);
+}
+
 /* Add a row to the tableau.  The row is given as an affine combination
  * of the original variables and needs to be expressed in terms of the
  * column variables.
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
  *
  * We add each term in turn.
  * If r = n/d_r is the current sum and we need to add k x, then
@@ -1753,51 +1868,67 @@ int isl_tab_add_row(struct isl_tab *tab, isl_int *line)
 	return r;
 }
 
-static int drop_row(struct isl_tab *tab, int row)
+static isl_stat drop_row(struct isl_tab *tab, int row)
 {
-	isl_assert(tab->mat->ctx, ~tab->row_var[row] == tab->n_con - 1, return -1);
+	isl_assert(tab->mat->ctx, ~tab->row_var[row] == tab->n_con - 1,
+		return isl_stat_error);
 	if (row != tab->n_row - 1)
 		swap_rows(tab, row, tab->n_row - 1);
 	tab->n_row--;
 	tab->n_con--;
-	return 0;
+	return isl_stat_ok;
 }
 
-static int drop_col(struct isl_tab *tab, int col)
+/* Drop the variable in column "col" along with the column.
+ * The column is removed first because it may need to be moved
+ * into the last position and this process requires
+ * the contents of the col_var array in a state
+ * before the removal of the variable.
+ */
+static isl_stat drop_col(struct isl_tab *tab, int col)
 {
-	isl_assert(tab->mat->ctx, tab->col_var[col] == tab->n_var - 1, return -1);
+	int var;
+
+	var = tab->col_var[col];
 	if (col != tab->n_col - 1)
 		swap_cols(tab, col, tab->n_col - 1);
 	tab->n_col--;
-	tab->n_var--;
-	return 0;
+	if (var_drop_entry(tab, var) < 0)
+		return isl_stat_error;
+	return isl_stat_ok;
 }
 
 /* Add inequality "ineq" and check if it conflicts with the
  * previously added constraints or if it is obviously redundant.
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
  */
-int isl_tab_add_ineq(struct isl_tab *tab, isl_int *ineq)
+isl_stat isl_tab_add_ineq(struct isl_tab *tab, isl_int *ineq)
 {
 	int r;
 	int sgn;
 	isl_int cst;
 
 	if (!tab)
-		return -1;
+		return isl_stat_error;
 	if (tab->bmap) {
 		struct isl_basic_map *bmap = tab->bmap;
 
-		isl_assert(tab->mat->ctx, tab->n_eq == bmap->n_eq, return -1);
+		isl_assert(tab->mat->ctx, tab->n_eq == bmap->n_eq,
+			return isl_stat_error);
 		isl_assert(tab->mat->ctx,
-			    tab->n_con == bmap->n_eq + bmap->n_ineq, return -1);
+			    tab->n_con == bmap->n_eq + bmap->n_ineq,
+			    return isl_stat_error);
 		tab->bmap = isl_basic_map_add_ineq(tab->bmap, ineq);
 		if (isl_tab_push(tab, isl_tab_undo_bmap_ineq) < 0)
-			return -1;
+			return isl_stat_error;
 		if (!tab->bmap)
-			return -1;
+			return isl_stat_error;
 	}
 	if (tab->cone) {
 		isl_int_init(cst);
+		isl_int_set_si(cst, 0);
 		isl_int_swap(ineq[0], cst);
 	}
 	r = isl_tab_add_row(tab, ineq);
@@ -1806,25 +1937,25 @@ int isl_tab_add_ineq(struct isl_tab *tab, isl_int *ineq)
 		isl_int_clear(cst);
 	}
 	if (r < 0)
-		return -1;
+		return isl_stat_error;
 	tab->con[r].is_nonneg = 1;
 	if (isl_tab_push_var(tab, isl_tab_undo_nonneg, &tab->con[r]) < 0)
-		return -1;
+		return isl_stat_error;
 	if (isl_tab_row_is_redundant(tab, tab->con[r].index)) {
 		if (isl_tab_mark_redundant(tab, tab->con[r].index) < 0)
-			return -1;
-		return 0;
+			return isl_stat_error;
+		return isl_stat_ok;
 	}
 
 	sgn = restore_row(tab, &tab->con[r]);
 	if (sgn < -1)
-		return -1;
+		return isl_stat_error;
 	if (sgn < 0)
 		return isl_tab_mark_empty(tab);
 	if (tab->con[r].is_row && isl_tab_row_is_redundant(tab, tab->con[r].index))
 		if (isl_tab_mark_redundant(tab, tab->con[r].index) < 0)
-			return -1;
-	return 0;
+			return isl_stat_error;
+	return isl_stat_ok;
 }
 
 /* Pivot a non-negative variable down until it reaches the value zero
@@ -1864,6 +1995,9 @@ static int to_col(struct isl_tab *tab, struct isl_tab_var *var)
  * The equalities can therefore never conflict.
  * Adding the equalities is currently only really useful for a later call
  * to isl_tab_ineq_type.
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
  */
 static struct isl_tab *add_eq(struct isl_tab *tab, isl_int *eq)
 {
@@ -1893,19 +2027,30 @@ error:
 	return NULL;
 }
 
+/* Does the sample value of row "row" of "tab" involve the big parameter,
+ * if any?
+ */
+static int row_is_big(struct isl_tab *tab, int row)
+{
+	return tab->M && !isl_int_is_zero(tab->mat->row[row][2]);
+}
+
 static int row_is_manifestly_zero(struct isl_tab *tab, int row)
 {
 	unsigned off = 2 + tab->M;
 
 	if (!isl_int_is_zero(tab->mat->row[row][1]))
 		return 0;
-	if (tab->M && !isl_int_is_zero(tab->mat->row[row][2]))
+	if (row_is_big(tab, row))
 		return 0;
 	return isl_seq_first_non_zero(tab->mat->row[row] + off + tab->n_dead,
 					tab->n_col - tab->n_dead) == -1;
 }
 
 /* Add an equality that is known to be valid for the given tableau.
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
  */
 int isl_tab_add_valid_eq(struct isl_tab *tab, isl_int *eq)
 {
@@ -1942,6 +2087,12 @@ int isl_tab_add_valid_eq(struct isl_tab *tab, isl_int *eq)
 	return 0;
 }
 
+/* Add a zero row to "tab" and return the corresponding index
+ * in the constraint array.
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
+ */
 static int add_zero_row(struct isl_tab *tab)
 {
 	int r;
@@ -1960,6 +2111,10 @@ static int add_zero_row(struct isl_tab *tab)
 
 /* Add equality "eq" and check if it conflicts with the
  * previously added constraints or if it is obviously redundant.
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
+ * If tab->bmap is set, then two rows are needed instead of one.
  */
 int isl_tab_add_eq(struct isl_tab *tab, isl_int *eq)
 {
@@ -1979,6 +2134,7 @@ int isl_tab_add_eq(struct isl_tab *tab, isl_int *eq)
 
 	if (tab->cone) {
 		isl_int_init(cst);
+		isl_int_set_si(cst, 0);
 		isl_int_swap(eq[0], cst);
 	}
 	r = isl_tab_add_row(tab, eq);
@@ -1992,12 +2148,9 @@ int isl_tab_add_eq(struct isl_tab *tab, isl_int *eq)
 	var = &tab->con[r];
 	row = var->index;
 	if (row_is_manifestly_zero(tab, row)) {
-		if (snap) {
-			if (isl_tab_rollback(tab, snap) < 0)
-				return -1;
-		} else
-			drop_row(tab, row);
-		return 0;
+		if (snap)
+			return isl_tab_rollback(tab, snap);
+		return drop_row(tab, row);
 	}
 
 	if (tab->bmap) {
@@ -2087,9 +2240,12 @@ static struct isl_vec *ineq_for_div(struct isl_basic_map *bmap, unsigned div)
  *
  * If add_ineq is not NULL, then this function is used
  * instead of isl_tab_add_ineq to effectively add the inequalities.
+ *
+ * This function assumes that at least two more rows and at least
+ * two more elements in the constraint array are available in the tableau.
  */
-static int add_div_constraints(struct isl_tab *tab, unsigned div,
-	int (*add_ineq)(void *user, isl_int *), void *user)
+static isl_stat add_div_constraints(struct isl_tab *tab, unsigned div,
+	isl_stat (*add_ineq)(void *user, isl_int *), void *user)
 {
 	unsigned total;
 	unsigned div_pos;
@@ -2159,8 +2315,10 @@ static int div_is_nonneg(struct isl_tab *tab, __isl_keep isl_vec *div)
 	return 1;
 }
 
-/* Add an extra div, prescribed by "div" to the tableau and
+/* Insert an extra div, prescribed by "div", to the tableau and
  * the associated bmap (which is assumed to be non-NULL).
+ * The extra integer division is inserted at (tableau) position "pos".
+ * Return "pos" or -1 if an error occurred.
  *
  * If add_ineq is not NULL, then this function is used instead
  * of isl_tab_add_ineq to add the div constraints.
@@ -2168,17 +2326,26 @@ static int div_is_nonneg(struct isl_tab *tab, __isl_keep isl_vec *div)
  * wants to perform some extra processing when an inequality
  * is added to the tableau.
  */
-int isl_tab_add_div(struct isl_tab *tab, __isl_keep isl_vec *div,
-	int (*add_ineq)(void *user, isl_int *), void *user)
+int isl_tab_insert_div(struct isl_tab *tab, int pos, __isl_keep isl_vec *div,
+	isl_stat (*add_ineq)(void *user, isl_int *), void *user)
 {
 	int r;
-	int k;
 	int nonneg;
+	int n_div, o_div;
 
 	if (!tab || !div)
 		return -1;
 
+	if (div->size != 1 + 1 + tab->n_var)
+		isl_die(isl_tab_get_ctx(tab), isl_error_invalid,
+			"unexpected size", return -1);
+
 	isl_assert(tab->mat->ctx, tab->bmap, return -1);
+	n_div = isl_basic_map_dim(tab->bmap, isl_dim_div);
+	o_div = tab->n_var - n_div;
+	if (pos < o_div || pos > tab->n_var)
+		isl_die(isl_tab_get_ctx(tab), isl_error_invalid,
+			"invalid position", return -1);
 
 	nonneg = div_is_nonneg(tab, div);
 
@@ -2186,26 +2353,33 @@ int isl_tab_add_div(struct isl_tab *tab, __isl_keep isl_vec *div,
 		return -1;
 	if (isl_tab_extend_vars(tab, 1) < 0)
 		return -1;
-	r = isl_tab_allocate_var(tab);
+	r = isl_tab_insert_var(tab, pos);
 	if (r < 0)
 		return -1;
 
 	if (nonneg)
 		tab->var[r].is_nonneg = 1;
 
-	tab->bmap = isl_basic_map_extend_space(tab->bmap,
-		isl_basic_map_get_space(tab->bmap), 1, 0, 2);
-	k = isl_basic_map_alloc_div(tab->bmap);
-	if (k < 0)
+	tab->bmap = isl_basic_map_insert_div(tab->bmap, pos - o_div, div);
+	if (!tab->bmap)
 		return -1;
-	isl_seq_cpy(tab->bmap->div[k], div->el, div->size);
-	if (isl_tab_push(tab, isl_tab_undo_bmap_div) < 0)
+	if (isl_tab_push_var(tab, isl_tab_undo_bmap_div, &tab->var[r]) < 0)
 		return -1;
 
-	if (add_div_constraints(tab, k, add_ineq, user) < 0)
+	if (add_div_constraints(tab, pos - o_div, add_ineq, user) < 0)
 		return -1;
 
 	return r;
+}
+
+/* Add an extra div, prescribed by "div", to the tableau and
+ * the associated bmap (which is assumed to be non-NULL).
+ */
+int isl_tab_add_div(struct isl_tab *tab, __isl_keep isl_vec *div)
+{
+	if (!tab)
+		return -1;
+	return isl_tab_insert_div(tab, tab->n_var, div, NULL, NULL);
 }
 
 /* If "track" is set, then we want to keep track of all constraints in tab
@@ -2281,6 +2455,7 @@ struct isl_tab *isl_tab_from_recession_cone(__isl_keep isl_basic_set *bset,
 	tab->cone = 1;
 
 	isl_int_init(cst);
+	isl_int_set_si(cst, 0);
 	for (i = 0; i < bset->n_eq; ++i) {
 		isl_int_swap(bset->eq[i][offset], cst);
 		if (offset > 0) {
@@ -2315,16 +2490,16 @@ error:
 /* Assuming "tab" is the tableau of a cone, check if the cone is
  * bounded, i.e., if it is empty or only contains the origin.
  */
-int isl_tab_cone_is_bounded(struct isl_tab *tab)
+isl_bool isl_tab_cone_is_bounded(struct isl_tab *tab)
 {
 	int i;
 
 	if (!tab)
-		return -1;
+		return isl_bool_error;
 	if (tab->empty)
-		return 1;
+		return isl_bool_true;
 	if (tab->n_dead == tab->n_col)
-		return 1;
+		return isl_bool_true;
 
 	for (;;) {
 		for (i = tab->n_redundant; i < tab->n_row; ++i) {
@@ -2335,17 +2510,17 @@ int isl_tab_cone_is_bounded(struct isl_tab *tab)
 				continue;
 			sgn = sign_of_max(tab, var);
 			if (sgn < -1)
-				return -1;
+				return isl_bool_error;
 			if (sgn != 0)
-				return 0;
-			if (close_row(tab, var) < 0)
-				return -1;
+				return isl_bool_false;
+			if (close_row(tab, var, 0) < 0)
+				return isl_bool_error;
 			break;
 		}
 		if (tab->n_dead == tab->n_col)
-			return 1;
+			return isl_bool_true;
 		if (i == tab->n_row)
-			return 0;
+			return isl_bool_false;
 	}
 }
 
@@ -2426,6 +2601,22 @@ struct isl_vec *isl_tab_get_sample_value(struct isl_tab *tab)
 	return vec;
 }
 
+/* Store the sample value of "var" of "tab" rounded up (if sgn > 0)
+ * or down (if sgn < 0) to the nearest integer in *v.
+ */
+static void get_rounded_sample_value(struct isl_tab *tab,
+	struct isl_tab_var *var, int sgn, isl_int *v)
+{
+	if (!var->is_row)
+		isl_int_set_si(*v, 0);
+	else if (sgn > 0)
+		isl_int_cdiv_q(*v, tab->mat->row[var->index][1],
+				   tab->mat->row[var->index][0]);
+	else
+		isl_int_fdiv_q(*v, tab->mat->row[var->index][1],
+				   tab->mat->row[var->index][0]);
+}
+
 /* Update "bmap" based on the results of the tableau "tab".
  * In particular, implicit equalities are made explicit, redundant constraints
  * are removed and if the sample value happens to be integer, it is stored
@@ -2456,9 +2647,9 @@ struct isl_basic_map *isl_basic_map_update_from_tab(struct isl_basic_map *bmap,
 				isl_basic_map_drop_inequality(bmap, i);
 		}
 	if (bmap->n_eq != n_eq)
-		isl_basic_map_gauss(bmap, NULL);
+		bmap = isl_basic_map_gauss(bmap, NULL);
 	if (!tab->rational &&
-	    !bmap->sample && isl_tab_sample_is_integer(tab))
+	    bmap && !bmap->sample && isl_tab_sample_is_integer(tab))
 		bmap->sample = extract_integer_sample(tab);
 	return bmap;
 }
@@ -2466,20 +2657,39 @@ struct isl_basic_map *isl_basic_map_update_from_tab(struct isl_basic_map *bmap,
 struct isl_basic_set *isl_basic_set_update_from_tab(struct isl_basic_set *bset,
 	struct isl_tab *tab)
 {
-	return (struct isl_basic_set *)isl_basic_map_update_from_tab(
-		(struct isl_basic_map *)bset, tab);
+	return bset_from_bmap(isl_basic_map_update_from_tab(bset_to_bmap(bset),
+								tab));
 }
 
-/* Given a non-negative variable "var", add a new non-negative variable
- * that is the opposite of "var", ensuring that var can only attain the
- * value zero.
+/* Drop the last constraint added to "tab" in position "r".
+ * The constraint is expected to have remained in a row.
+ */
+static isl_stat drop_last_con_in_row(struct isl_tab *tab, int r)
+{
+	if (!tab->con[r].is_row)
+		isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+			"row unexpectedly moved to column",
+			return isl_stat_error);
+	if (r + 1 != tab->n_con)
+		isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+			"additional constraints added", return isl_stat_error);
+	if (drop_row(tab, tab->con[r].index) < 0)
+		return isl_stat_error;
+
+	return isl_stat_ok;
+}
+
+/* Given a non-negative variable "var", temporarily add a new non-negative
+ * variable that is the opposite of "var", ensuring that "var" can only attain
+ * the value zero.  The new variable is removed again before this function
+ * returns.  However, the effect of forcing "var" to be zero remains.
  * If var = n/d is a row variable, then the new variable = -n/d.
  * If var is a column variables, then the new variable = -var.
  * If the new variable cannot attain non-negative values, then
  * the resulting tableau is empty.
  * Otherwise, we know the value will be zero and we close the row.
  */
-static int cut_to_hyperplane(struct isl_tab *tab, struct isl_tab_var *var)
+static isl_stat cut_to_hyperplane(struct isl_tab *tab, struct isl_tab_var *var)
 {
 	unsigned r;
 	isl_int *row;
@@ -2487,12 +2697,14 @@ static int cut_to_hyperplane(struct isl_tab *tab, struct isl_tab_var *var)
 	unsigned off = 2 + tab->M;
 
 	if (var->is_zero)
-		return 0;
-	isl_assert(tab->mat->ctx, !var->is_redundant, return -1);
-	isl_assert(tab->mat->ctx, var->is_nonneg, return -1);
+		return isl_stat_ok;
+	if (var->is_redundant || !var->is_nonneg)
+		isl_die(isl_tab_get_ctx(tab), isl_error_invalid,
+			"expecting non-redundant non-negative variable",
+			return isl_stat_error);
 
 	if (isl_tab_extend_cons(tab, 1) < 0)
-		return -1;
+		return isl_stat_error;
 
 	r = tab->n_con;
 	tab->con[r].index = tab->n_row;
@@ -2517,25 +2729,25 @@ static int cut_to_hyperplane(struct isl_tab *tab, struct isl_tab_var *var)
 
 	tab->n_row++;
 	tab->n_con++;
-	if (isl_tab_push_var(tab, isl_tab_undo_allocate, &tab->con[r]) < 0)
-		return -1;
 
 	sgn = sign_of_max(tab, &tab->con[r]);
 	if (sgn < -1)
-		return -1;
+		return isl_stat_error;
 	if (sgn < 0) {
+		if (drop_last_con_in_row(tab, r) < 0)
+			return isl_stat_error;
 		if (isl_tab_mark_empty(tab) < 0)
-			return -1;
-		return 0;
+			return isl_stat_error;
+		return isl_stat_ok;
 	}
 	tab->con[r].is_nonneg = 1;
-	if (isl_tab_push_var(tab, isl_tab_undo_nonneg, &tab->con[r]) < 0)
-		return -1;
 	/* sgn == 0 */
-	if (close_row(tab, &tab->con[r]) < 0)
-		return -1;
+	if (close_row(tab, &tab->con[r], 1) < 0)
+		return isl_stat_error;
+	if (drop_last_con_in_row(tab, r) < 0)
+		return isl_stat_error;
 
-	return 0;
+	return isl_stat_ok;
 }
 
 /* Given a tableau "tab" and an inequality constraint "con" of the tableau,
@@ -2555,37 +2767,37 @@ static int cut_to_hyperplane(struct isl_tab *tab, struct isl_tab_var *var)
  * even after the relaxation, so we need to restore it.
  * We therefore prefer to pivot a column up to a row, if possible.
  */
-struct isl_tab *isl_tab_relax(struct isl_tab *tab, int con)
+int isl_tab_relax(struct isl_tab *tab, int con)
 {
 	struct isl_tab_var *var;
-	unsigned off = 2 + tab->M;
 
 	if (!tab)
-		return NULL;
+		return -1;
 
 	var = &tab->con[con];
 
 	if (var->is_row && (var->index < 0 || var->index < tab->n_redundant))
 		isl_die(tab->mat->ctx, isl_error_invalid,
-			"cannot relax redundant constraint", goto error);
+			"cannot relax redundant constraint", return -1);
 	if (!var->is_row && (var->index < 0 || var->index < tab->n_dead))
 		isl_die(tab->mat->ctx, isl_error_invalid,
-			"cannot relax dead constraint", goto error);
+			"cannot relax dead constraint", return -1);
 
 	if (!var->is_row && !max_is_manifestly_unbounded(tab, var))
 		if (to_row(tab, var, 1) < 0)
-			goto error;
+			return -1;
 	if (!var->is_row && !min_is_manifestly_unbounded(tab, var))
 		if (to_row(tab, var, -1) < 0)
-			goto error;
+			return -1;
 
 	if (var->is_row) {
 		isl_int_add(tab->mat->row[var->index][1],
 		    tab->mat->row[var->index][1], tab->mat->row[var->index][0]);
 		if (restore_row(tab, var) < 0)
-			goto error;
+			return -1;
 	} else {
 		int i;
+		unsigned off = 2 + tab->M;
 
 		for (i = 0; i < tab->n_row; ++i) {
 			if (isl_int_is_zero(tab->mat->row[i][off + var->index]))
@@ -2597,12 +2809,67 @@ struct isl_tab *isl_tab_relax(struct isl_tab *tab, int con)
 	}
 
 	if (isl_tab_push_var(tab, isl_tab_undo_relax, var) < 0)
-		goto error;
+		return -1;
 
-	return tab;
-error:
-	isl_tab_free(tab);
-	return NULL;
+	return 0;
+}
+
+/* Replace the variable v at position "pos" in the tableau "tab"
+ * by v' = v + shift.
+ *
+ * If the variable is in a column, then we first check if we can
+ * simply plug in v = v' - shift.  The effect on a row with
+ * coefficient f/d for variable v is that the constant term c/d
+ * is replaced by (c - f * shift)/d.  If shift is positive and
+ * f is negative for each row that needs to remain non-negative,
+ * then this is clearly safe.  In other words, if the minimum of v
+ * is manifestly unbounded, then we can keep v in a column position.
+ * Otherwise, we can pivot it down to a row.
+ * Similarly, if shift is negative, we need to check if the maximum
+ * of is manifestly unbounded.
+ *
+ * If the variable is in a row (from the start or after pivoting),
+ * then the constant term c/d is replaced by (c + d * shift)/d.
+ */
+int isl_tab_shift_var(struct isl_tab *tab, int pos, isl_int shift)
+{
+	struct isl_tab_var *var;
+
+	if (!tab)
+		return -1;
+	if (isl_int_is_zero(shift))
+		return 0;
+
+	var = &tab->var[pos];
+	if (!var->is_row) {
+		if (isl_int_is_neg(shift)) {
+			if (!max_is_manifestly_unbounded(tab, var))
+				if (to_row(tab, var, 1) < 0)
+					return -1;
+		} else {
+			if (!min_is_manifestly_unbounded(tab, var))
+				if (to_row(tab, var, -1) < 0)
+					return -1;
+		}
+	}
+
+	if (var->is_row) {
+		isl_int_addmul(tab->mat->row[var->index][1],
+				shift, tab->mat->row[var->index][0]);
+	} else {
+		int i;
+		unsigned off = 2 + tab->M;
+
+		for (i = 0; i < tab->n_row; ++i) {
+			if (isl_int_is_zero(tab->mat->row[i][off + var->index]))
+				continue;
+			isl_int_submul(tab->mat->row[i][1],
+				    shift, tab->mat->row[i][off + var->index]);
+		}
+
+	}
+
+	return 0;
 }
 
 /* Remove the sign constraint from constraint "con".
@@ -2643,6 +2910,37 @@ static int may_be_equality(struct isl_tab *tab, int row)
 					    tab->mat->row[row][0]);
 }
 
+/* Return an isl_tab_var that has been marked or NULL if no such
+ * variable can be found.
+ * The marked field has only been set for variables that
+ * appear in non-redundant rows or non-dead columns.
+ *
+ * Pick the last constraint variable that is marked and
+ * that appears in either a non-redundant row or a non-dead columns.
+ * Since the returned variable is tested for being a redundant constraint or
+ * an implicit equality, there is no need to return any tab variable that
+ * corresponds to a variable.
+ */
+static struct isl_tab_var *select_marked(struct isl_tab *tab)
+{
+	int i;
+	struct isl_tab_var *var;
+
+	for (i = tab->n_con - 1; i >= 0; --i) {
+		var = &tab->con[i];
+		if (var->index < 0)
+			continue;
+		if (var->is_row && var->index < tab->n_redundant)
+			continue;
+		if (!var->is_row && var->index < tab->n_dead)
+			continue;
+		if (var->marked)
+			return var;
+	}
+
+	return NULL;
+}
+
 /* Check for (near) equalities among the constraints.
  * A constraint is an equality if it is non-negative and if
  * its maximal value is either
@@ -2658,6 +2956,7 @@ static int may_be_equality(struct isl_tab *tab, int row)
  * Otherwise, if the maximal value is strictly less than one (and the
  * tableau is integer), then we restrict the value to being zero
  * by adding an opposite non-negative variable.
+ * The order in which the variables are considered is not important.
  */
 int isl_tab_detect_implicit_equalities(struct isl_tab *tab)
 {
@@ -2688,27 +2987,16 @@ int isl_tab_detect_implicit_equalities(struct isl_tab *tab)
 	while (n_marked) {
 		struct isl_tab_var *var;
 		int sgn;
-		for (i = tab->n_redundant; i < tab->n_row; ++i) {
-			var = isl_tab_var_from_row(tab, i);
-			if (var->marked)
-				break;
-		}
-		if (i == tab->n_row) {
-			for (i = tab->n_dead; i < tab->n_col; ++i) {
-				var = var_from_col(tab, i);
-				if (var->marked)
-					break;
-			}
-			if (i == tab->n_col)
-				break;
-		}
+		var = select_marked(tab);
+		if (!var)
+			break;
 		var->marked = 0;
 		n_marked--;
 		sgn = sign_of_max(tab, var);
 		if (sgn < 0)
 			return -1;
 		if (sgn == 0) {
-			if (close_row(tab, var) < 0)
+			if (close_row(tab, var, 0) < 0)
 				return -1;
 		} else if (!tab->rational && !at_least_one(tab, var)) {
 			if (cut_to_hyperplane(tab, var) < 0)
@@ -2888,20 +3176,9 @@ int isl_tab_detect_redundant(struct isl_tab *tab)
 	while (n_marked) {
 		struct isl_tab_var *var;
 		int red;
-		for (i = tab->n_redundant; i < tab->n_row; ++i) {
-			var = isl_tab_var_from_row(tab, i);
-			if (var->marked)
-				break;
-		}
-		if (i == tab->n_row) {
-			for (i = tab->n_dead; i < tab->n_col; ++i) {
-				var = var_from_col(tab, i);
-				if (var->marked)
-					break;
-			}
-			if (i == tab->n_col)
-				break;
-		}
+		var = select_marked(tab);
+		if (!var)
+			break;
 		var->marked = 0;
 		n_marked--;
 		red = con_is_redundant(tab, var);
@@ -2942,7 +3219,7 @@ int isl_tab_is_equality(struct isl_tab *tab, int con)
 
 	off = 2 + tab->M;
 	return isl_int_is_zero(tab->mat->row[row][1]) &&
-		(!tab->M || isl_int_is_zero(tab->mat->row[row][2])) &&
+		!row_is_big(tab, row) &&
 		isl_seq_first_non_zero(tab->mat->row[row] + off + tab->n_dead,
 					tab->n_col - tab->n_dead) == -1;
 }
@@ -2953,6 +3230,9 @@ int isl_tab_is_equality(struct isl_tab *tab, int con)
  * If opt_denom is NULL, then *opt is rounded up to the nearest integer.
  * The return value reflects the nature of the result (empty, unbounded,
  * minimal value returned in *opt).
+ *
+ * This function assumes that at least one more row and at least
+ * one more element in the constraint array are available in the tableau.
  */
 enum isl_lp_result isl_tab_min(struct isl_tab *tab,
 	isl_int *f, isl_int denom, isl_int *opt, isl_int *opt_denom,
@@ -3016,18 +3296,28 @@ enum isl_lp_result isl_tab_min(struct isl_tab *tab,
 			isl_int_set(*opt, tab->mat->row[var->index][1]);
 			isl_int_set(*opt_denom, tab->mat->row[var->index][0]);
 		} else
-			isl_int_cdiv_q(*opt, tab->mat->row[var->index][1],
-					     tab->mat->row[var->index][0]);
+			get_rounded_sample_value(tab, var, 1, opt);
 	}
 	if (isl_tab_rollback(tab, snap) < 0)
 		return isl_lp_error;
 	return res;
 }
 
+/* Is the constraint at position "con" marked as being redundant?
+ * If it is marked as representing an equality, then it is not
+ * considered to be redundant.
+ * Note that isl_tab_mark_redundant marks both the isl_tab_var as
+ * redundant and moves the corresponding row into the first
+ * tab->n_redundant positions (or removes the row, assigning it index -1),
+ * so the final test is actually redundant itself.
+ */
 int isl_tab_is_redundant(struct isl_tab *tab, int con)
 {
 	if (!tab)
 		return -1;
+	if (con < 0 || con >= tab->n_con)
+		isl_die(isl_tab_get_ctx(tab), isl_error_invalid,
+			"position out of bounds", return -1);
 	if (tab->con[con].is_zero)
 		return 0;
 	if (tab->con[con].is_redundant)
@@ -3035,7 +3325,242 @@ int isl_tab_is_redundant(struct isl_tab *tab, int con)
 	return tab->con[con].is_row && tab->con[con].index < tab->n_redundant;
 }
 
-/* Take a snapshot of the tableau that can be restored by s call to
+/* Is variable "var" of "tab" fixed to a constant value by its row
+ * in the tableau?
+ * If so and if "value" is not NULL, then store this constant value
+ * in "value".
+ *
+ * That is, is it a row variable that only has non-zero coefficients
+ * for dead columns?
+ */
+static isl_bool is_constant(struct isl_tab *tab, struct isl_tab_var *var,
+	isl_int *value)
+{
+	unsigned off = 2 + tab->M;
+	isl_mat *mat = tab->mat;
+	int n;
+	int row;
+	int pos;
+
+	if (!var->is_row)
+		return isl_bool_false;
+	row = var->index;
+	if (row_is_big(tab, row))
+		return isl_bool_false;
+	n = tab->n_col - tab->n_dead;
+	pos = isl_seq_first_non_zero(mat->row[row] + off + tab->n_dead, n);
+	if (pos != -1)
+		return isl_bool_false;
+	if (value)
+		isl_int_divexact(*value, mat->row[row][1], mat->row[row][0]);
+	return isl_bool_true;
+}
+
+/* Has the variable "var' of "tab" reached a value that is greater than
+ * or equal (if sgn > 0) or smaller than or equal (if sgn < 0) to "target"?
+ * "tmp" has been initialized by the caller and can be used
+ * to perform local computations.
+ *
+ * If the sample value involves the big parameter, then any value
+ * is reached.
+ * Otherwise check if n/d >= t, i.e., n >= d * t (if sgn > 0)
+ * or n/d <= t, i.e., n <= d * t (if sgn < 0).
+ */
+static int reached(struct isl_tab *tab, struct isl_tab_var *var, int sgn,
+	isl_int target, isl_int *tmp)
+{
+	if (row_is_big(tab, var->index))
+		return 1;
+	isl_int_mul(*tmp, tab->mat->row[var->index][0], target);
+	if (sgn > 0)
+		return isl_int_ge(tab->mat->row[var->index][1], *tmp);
+	else
+		return isl_int_le(tab->mat->row[var->index][1], *tmp);
+}
+
+/* Can variable "var" of "tab" attain the value "target" by
+ * pivoting up (if sgn > 0) or down (if sgn < 0)?
+ * If not, then pivot up [down] to the greatest [smallest]
+ * rational value.
+ * "tmp" has been initialized by the caller and can be used
+ * to perform local computations.
+ *
+ * If the variable is manifestly unbounded in the desired direction,
+ * then it can attain any value.
+ * Otherwise, it can be moved to a row.
+ * Continue pivoting until the target is reached.
+ * If no more pivoting can be performed, the maximal [minimal]
+ * rational value has been reached and the target cannot be reached.
+ * If the variable would be pivoted into a manifestly unbounded column,
+ * then the target can be reached.
+ */
+static isl_bool var_reaches(struct isl_tab *tab, struct isl_tab_var *var,
+	int sgn, isl_int target, isl_int *tmp)
+{
+	int row, col;
+
+	if (sgn < 0 && min_is_manifestly_unbounded(tab, var))
+		return isl_bool_true;
+	if (sgn > 0 && max_is_manifestly_unbounded(tab, var))
+		return isl_bool_true;
+	if (to_row(tab, var, sgn) < 0)
+		return isl_bool_error;
+	while (!reached(tab, var, sgn, target, tmp)) {
+		find_pivot(tab, var, var, sgn, &row, &col);
+		if (row == -1)
+			return isl_bool_false;
+		if (row == var->index)
+			return isl_bool_true;
+		if (isl_tab_pivot(tab, row, col) < 0)
+			return isl_bool_error;
+	}
+
+	return isl_bool_true;
+}
+
+/* Check if variable "var" of "tab" can only attain a single (integer)
+ * value, and, if so, add an equality constraint to fix the variable
+ * to this single value and store the result in "target".
+ * "target" and "tmp" have been initialized by the caller.
+ *
+ * Given the current sample value, round it down and check
+ * whether it is possible to attain a strictly smaller integer value.
+ * If so, the variable is not restricted to a single integer value.
+ * Otherwise, the search stops at the smallest rational value.
+ * Round up this value and check whether it is possible to attain
+ * a strictly greater integer value.
+ * If so, the variable is not restricted to a single integer value.
+ * Otherwise, the search stops at the greatest rational value.
+ * If rounding down this value yields a value that is different
+ * from rounding up the smallest rational value, then the variable
+ * cannot attain any integer value.  Mark the tableau empty.
+ * Otherwise, add an equality constraint that fixes the variable
+ * to the single integer value found.
+ */
+static isl_bool detect_constant_with_tmp(struct isl_tab *tab,
+	struct isl_tab_var *var, isl_int *target, isl_int *tmp)
+{
+	isl_bool reached;
+	isl_vec *eq;
+	int pos;
+	isl_stat r;
+
+	get_rounded_sample_value(tab, var, -1, target);
+	isl_int_sub_ui(*target, *target, 1);
+	reached = var_reaches(tab, var, -1, *target, tmp);
+	if (reached < 0 || reached)
+		return isl_bool_not(reached);
+	get_rounded_sample_value(tab, var, 1, target);
+	isl_int_add_ui(*target, *target, 1);
+	reached = var_reaches(tab, var, 1, *target, tmp);
+	if (reached < 0 || reached)
+		return isl_bool_not(reached);
+	get_rounded_sample_value(tab, var, -1, tmp);
+	isl_int_sub_ui(*target, *target, 1);
+	if (isl_int_ne(*target, *tmp)) {
+		if (isl_tab_mark_empty(tab) < 0)
+			return isl_bool_error;
+		return isl_bool_false;
+	}
+
+	if (isl_tab_extend_cons(tab, 1) < 0)
+		return isl_bool_error;
+	eq = isl_vec_alloc(isl_tab_get_ctx(tab), 1 + tab->n_var);
+	if (!eq)
+		return isl_bool_error;
+	pos = var - tab->var;
+	isl_seq_clr(eq->el + 1, tab->n_var);
+	isl_int_set_si(eq->el[1 + pos], -1);
+	isl_int_set(eq->el[0], *target);
+	r = isl_tab_add_eq(tab, eq->el);
+	isl_vec_free(eq);
+
+	return r < 0 ? isl_bool_error : isl_bool_true;
+}
+
+/* Check if variable "var" of "tab" can only attain a single (integer)
+ * value, and, if so, add an equality constraint to fix the variable
+ * to this single value and store the result in "value" (if "value"
+ * is not NULL).
+ *
+ * If the current sample value involves the big parameter,
+ * then the variable cannot have a fixed integer value.
+ * If the variable is already fixed to a single value by its row, then
+ * there is no need to add another equality constraint.
+ *
+ * Otherwise, allocate some temporary variables and continue
+ * with detect_constant_with_tmp.
+ */
+static isl_bool get_constant(struct isl_tab *tab, struct isl_tab_var *var,
+	isl_int *value)
+{
+	isl_int target, tmp;
+	isl_bool is_cst;
+
+	if (var->is_row && row_is_big(tab, var->index))
+		return isl_bool_false;
+	is_cst = is_constant(tab, var, value);
+	if (is_cst < 0 || is_cst)
+		return is_cst;
+
+	if (!value)
+		isl_int_init(target);
+	isl_int_init(tmp);
+
+	is_cst = detect_constant_with_tmp(tab, var,
+					    value ? value : &target, &tmp);
+
+	isl_int_clear(tmp);
+	if (!value)
+		isl_int_clear(target);
+
+	return is_cst;
+}
+
+/* Check if variable "var" of "tab" can only attain a single (integer)
+ * value, and, if so, add an equality constraint to fix the variable
+ * to this single value and store the result in "value" (if "value"
+ * is not NULL).
+ *
+ * For rational tableaus, nothing needs to be done.
+ */
+isl_bool isl_tab_is_constant(struct isl_tab *tab, int var, isl_int *value)
+{
+	if (!tab)
+		return isl_bool_error;
+	if (var < 0 || var >= tab->n_var)
+		isl_die(isl_tab_get_ctx(tab), isl_error_invalid,
+			"position out of bounds", return isl_bool_error);
+	if (tab->rational)
+		return isl_bool_false;
+
+	return get_constant(tab, &tab->var[var], value);
+}
+
+/* Check if any of the variables of "tab" can only attain a single (integer)
+ * value, and, if so, add equality constraints to fix those variables
+ * to these single values.
+ *
+ * For rational tableaus, nothing needs to be done.
+ */
+isl_stat isl_tab_detect_constants(struct isl_tab *tab)
+{
+	int i;
+
+	if (!tab)
+		return isl_stat_error;
+	if (tab->rational)
+		return isl_stat_ok;
+
+	for (i = 0; i < tab->n_var; ++i) {
+		if (get_constant(tab, &tab->var[i], NULL) < 0)
+			return isl_stat_error;
+	}
+
+	return isl_stat_ok;
+}
+
+/* Take a snapshot of the tableau that can be restored by a call to
  * isl_tab_rollback.
  */
 struct isl_tab_undo *isl_tab_snap(struct isl_tab *tab)
@@ -3046,23 +3571,50 @@ struct isl_tab_undo *isl_tab_snap(struct isl_tab *tab)
 	return tab->top;
 }
 
+/* Does "tab" need to keep track of undo information?
+ * That is, was a snapshot taken that may need to be restored?
+ */
+isl_bool isl_tab_need_undo(struct isl_tab *tab)
+{
+	if (!tab)
+		return isl_bool_error;
+
+	return tab->need_undo;
+}
+
+/* Remove all tracking of undo information from "tab", invalidating
+ * any snapshots that may have been taken of the tableau.
+ * Since all snapshots have been invalidated, there is also
+ * no need to start keeping track of undo information again.
+ */
+void isl_tab_clear_undo(struct isl_tab *tab)
+{
+	if (!tab)
+		return;
+
+	free_undo(tab);
+	tab->need_undo = 0;
+}
+
 /* Undo the operation performed by isl_tab_relax.
  */
-static int unrelax(struct isl_tab *tab, struct isl_tab_var *var) WARN_UNUSED;
-static int unrelax(struct isl_tab *tab, struct isl_tab_var *var)
+static isl_stat unrelax(struct isl_tab *tab, struct isl_tab_var *var)
+	WARN_UNUSED;
+static isl_stat unrelax(struct isl_tab *tab, struct isl_tab_var *var)
 {
 	unsigned off = 2 + tab->M;
 
 	if (!var->is_row && !max_is_manifestly_unbounded(tab, var))
 		if (to_row(tab, var, 1) < 0)
-			return -1;
+			return isl_stat_error;
 
 	if (var->is_row) {
 		isl_int_sub(tab->mat->row[var->index][1],
 		    tab->mat->row[var->index][1], tab->mat->row[var->index][0]);
 		if (var->is_nonneg) {
 			int sgn = restore_row(tab, var);
-			isl_assert(tab->mat->ctx, sgn >= 0, return -1);
+			isl_assert(tab->mat->ctx, sgn >= 0,
+				return isl_stat_error);
 		}
 	} else {
 		int i;
@@ -3076,7 +3628,7 @@ static int unrelax(struct isl_tab *tab, struct isl_tab_var *var)
 
 	}
 
-	return 0;
+	return isl_stat_ok;
 }
 
 /* Undo the operation performed by isl_tab_unrestrict.
@@ -3084,18 +3636,42 @@ static int unrelax(struct isl_tab *tab, struct isl_tab_var *var)
  * In particular, mark the variable as being non-negative and make
  * sure the sample value respects this constraint.
  */
-static int ununrestrict(struct isl_tab *tab, struct isl_tab_var *var)
+static isl_stat ununrestrict(struct isl_tab *tab, struct isl_tab_var *var)
 {
 	var->is_nonneg = 1;
 
 	if (var->is_row && restore_row(tab, var) < -1)
-		return -1;
+		return isl_stat_error;
 
-	return 0;
+	return isl_stat_ok;
 }
 
-static int perform_undo_var(struct isl_tab *tab, struct isl_tab_undo *undo) WARN_UNUSED;
-static int perform_undo_var(struct isl_tab *tab, struct isl_tab_undo *undo)
+/* Unmark the last redundant row in "tab" as being redundant.
+ * This undoes part of the modifications performed by isl_tab_mark_redundant.
+ * In particular, remove the redundant mark and make
+ * sure the sample value respects the constraint again.
+ * A variable that is marked non-negative by isl_tab_mark_redundant
+ * is covered by a separate undo record.
+ */
+static isl_stat restore_last_redundant(struct isl_tab *tab)
+{
+	struct isl_tab_var *var;
+
+	if (tab->n_redundant < 1)
+		isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+			"no redundant rows", return isl_stat_error);
+
+	var = isl_tab_var_from_row(tab, tab->n_redundant - 1);
+	var->is_redundant = 0;
+	tab->n_redundant--;
+	restore_row(tab, var);
+
+	return isl_stat_ok;
+}
+
+static isl_stat perform_undo_var(struct isl_tab *tab, struct isl_tab_undo *undo)
+	WARN_UNUSED;
+static isl_stat perform_undo_var(struct isl_tab *tab, struct isl_tab_undo *undo)
 {
 	struct isl_tab_var *var = var_from_index(tab, undo->u.var_index);
 	switch (undo->type) {
@@ -3103,10 +3679,10 @@ static int perform_undo_var(struct isl_tab *tab, struct isl_tab_undo *undo)
 		var->is_nonneg = 0;
 		break;
 	case isl_tab_undo_redundant:
-		var->is_redundant = 0;
-		tab->n_redundant--;
-		restore_row(tab, isl_tab_var_from_row(tab, tab->n_redundant));
-		break;
+		if (!var->is_row || var->index != tab->n_redundant - 1)
+			isl_die(isl_tab_get_ctx(tab), isl_error_internal,
+				"not undoing last redundant row", return -1);
+		return restore_last_redundant(tab);
 	case isl_tab_undo_freeze:
 		var->frozen = 0;
 		break;
@@ -3117,23 +3693,22 @@ static int perform_undo_var(struct isl_tab *tab, struct isl_tab_undo *undo)
 		break;
 	case isl_tab_undo_allocate:
 		if (undo->u.var_index >= 0) {
-			isl_assert(tab->mat->ctx, !var->is_row, return -1);
-			drop_col(tab, var->index);
-			break;
+			isl_assert(tab->mat->ctx, !var->is_row,
+				return isl_stat_error);
+			return drop_col(tab, var->index);
 		}
 		if (!var->is_row) {
 			if (!max_is_manifestly_unbounded(tab, var)) {
 				if (to_row(tab, var, 1) < 0)
-					return -1;
+					return isl_stat_error;
 			} else if (!min_is_manifestly_unbounded(tab, var)) {
 				if (to_row(tab, var, -1) < 0)
-					return -1;
+					return isl_stat_error;
 			} else
 				if (to_row(tab, var, 0) < 0)
-					return -1;
+					return isl_stat_error;
 		}
-		drop_row(tab, var->index);
-		break;
+		return drop_row(tab, var->index);
 	case isl_tab_undo_relax:
 		return unrelax(tab, var);
 	case isl_tab_undo_unrestrict:
@@ -3141,10 +3716,59 @@ static int perform_undo_var(struct isl_tab *tab, struct isl_tab_undo *undo)
 	default:
 		isl_die(tab->mat->ctx, isl_error_internal,
 			"perform_undo_var called on invalid undo record",
-			return -1);
+			return isl_stat_error);
 	}
 
-	return 0;
+	return isl_stat_ok;
+}
+
+/* Restore all rows that have been marked redundant by isl_tab_mark_redundant
+ * and that have been preserved in the tableau.
+ * Note that isl_tab_mark_redundant may also have marked some variables
+ * as being non-negative before marking them redundant.  These need
+ * to be removed as well as otherwise some constraints could end up
+ * getting marked redundant with respect to the variable.
+ */
+isl_stat isl_tab_restore_redundant(struct isl_tab *tab)
+{
+	if (!tab)
+		return isl_stat_error;
+
+	if (tab->need_undo)
+		isl_die(isl_tab_get_ctx(tab), isl_error_invalid,
+			"manually restoring redundant constraints "
+			"interferes with undo history",
+			return isl_stat_error);
+
+	while (tab->n_redundant > 0) {
+		if (tab->row_var[tab->n_redundant - 1] >= 0) {
+			struct isl_tab_var *var;
+
+			var = isl_tab_var_from_row(tab, tab->n_redundant - 1);
+			var->is_nonneg = 0;
+		}
+		restore_last_redundant(tab);
+	}
+	return isl_stat_ok;
+}
+
+/* Undo the addition of an integer division to the basic map representation
+ * of "tab" in position "pos".
+ */
+static isl_stat drop_bmap_div(struct isl_tab *tab, int pos)
+{
+	int off;
+
+	off = tab->n_var - isl_basic_map_dim(tab->bmap, isl_dim_div);
+	if (isl_basic_map_drop_div(tab->bmap, pos - off) < 0)
+		return isl_stat_error;
+	if (tab->samples) {
+		tab->samples = isl_mat_drop_cols(tab->samples, 1 + pos, 1);
+		if (!tab->samples)
+			return isl_stat_error;
+	}
+
+	return isl_stat_ok;
 }
 
 /* Restore the tableau to the state where the basic variables
@@ -3225,10 +3849,14 @@ static void drop_samples_since(struct isl_tab *tab, int n)
 	}
 }
 
-static int perform_undo(struct isl_tab *tab, struct isl_tab_undo *undo) WARN_UNUSED;
-static int perform_undo(struct isl_tab *tab, struct isl_tab_undo *undo)
+static isl_stat perform_undo(struct isl_tab *tab, struct isl_tab_undo *undo)
+	WARN_UNUSED;
+static isl_stat perform_undo(struct isl_tab *tab, struct isl_tab_undo *undo)
 {
 	switch (undo->type) {
+	case isl_tab_undo_rational:
+		tab->rational = 0;
+		break;
 	case isl_tab_undo_empty:
 		tab->empty = 0;
 		break;
@@ -3245,14 +3873,10 @@ static int perform_undo(struct isl_tab *tab, struct isl_tab_undo *undo)
 	case isl_tab_undo_bmap_ineq:
 		return isl_basic_map_free_inequality(tab->bmap, 1);
 	case isl_tab_undo_bmap_div:
-		if (isl_basic_map_free_div(tab->bmap, 1) < 0)
-			return -1;
-		if (tab->samples)
-			tab->samples->n_col--;
-		break;
+		return drop_bmap_div(tab, undo->u.var_index);
 	case isl_tab_undo_saved_basis:
 		if (restore_basis(tab, undo->u.col_var) < 0)
-			return -1;
+			return isl_stat_error;
 		break;
 	case isl_tab_undo_drop_sample:
 		tab->n_outside--;
@@ -3263,9 +3887,9 @@ static int perform_undo(struct isl_tab *tab, struct isl_tab_undo *undo)
 	case isl_tab_undo_callback:
 		return undo->u.callback->run(undo->u.callback);
 	default:
-		isl_assert(tab->mat->ctx, 0, return -1);
+		isl_assert(tab->mat->ctx, 0, return isl_stat_error);
 	}
-	return 0;
+	return isl_stat_ok;
 }
 
 /* Return the tableau to the state it was in when the snapshot "snap"
@@ -3397,7 +4021,7 @@ error:
 	return isl_ineq_error;
 }
 
-int isl_tab_track_bmap(struct isl_tab *tab, __isl_take isl_basic_map *bmap)
+isl_stat isl_tab_track_bmap(struct isl_tab *tab, __isl_take isl_basic_map *bmap)
 {
 	bmap = isl_basic_map_cow(bmap);
 	if (!tab || !bmap)
@@ -3408,7 +4032,7 @@ int isl_tab_track_bmap(struct isl_tab *tab, __isl_take isl_basic_map *bmap)
 		if (!bmap)
 			goto error;
 		tab->bmap = bmap;
-		return 0;
+		return isl_stat_ok;
 	}
 
 	isl_assert(tab->mat->ctx, tab->n_eq == bmap->n_eq, goto error);
@@ -3417,15 +4041,15 @@ int isl_tab_track_bmap(struct isl_tab *tab, __isl_take isl_basic_map *bmap)
 
 	tab->bmap = bmap;
 
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_basic_map_free(bmap);
-	return -1;
+	return isl_stat_error;
 }
 
-int isl_tab_track_bset(struct isl_tab *tab, __isl_take isl_basic_set *bset)
+isl_stat isl_tab_track_bset(struct isl_tab *tab, __isl_take isl_basic_set *bset)
 {
-	return isl_tab_track_bmap(tab, (isl_basic_map *)bset);
+	return isl_tab_track_bmap(tab, bset_to_bmap(bset));
 }
 
 __isl_keep isl_basic_set *isl_tab_peek_bset(struct isl_tab *tab)
@@ -3433,7 +4057,7 @@ __isl_keep isl_basic_set *isl_tab_peek_bset(struct isl_tab *tab)
 	if (!tab)
 		return NULL;
 
-	return (isl_basic_set *)tab->bmap;
+	return bset_from_bmap(tab->bmap);
 }
 
 static void isl_tab_print_internal(__isl_keep struct isl_tab *tab,

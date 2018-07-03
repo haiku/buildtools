@@ -8,8 +8,7 @@
  */
 
 #include <stdlib.h>
-#include <strings.h>
-#include <isl/hash.h>
+#include <isl_hash_private.h>
 #include <isl/ctx.h>
 #include "isl_config.h"
 
@@ -149,6 +148,13 @@ void isl_hash_table_free(struct isl_ctx *ctx, struct isl_hash_table *table)
 	free(table);
 }
 
+/* A dummy entry that can be used to make a distinction between
+ * a missing entry and an error condition.
+ * It is used by isl_union_*_find_part_entry.
+ */
+static struct isl_hash_table_entry none = { 0, NULL };
+struct isl_hash_table_entry *isl_hash_table_entry_none = &none;
+
 struct isl_hash_table_entry *isl_hash_table_find(struct isl_ctx *ctx,
 				struct isl_hash_table *table,
 				uint32_t key_hash,
@@ -180,20 +186,22 @@ struct isl_hash_table_entry *isl_hash_table_find(struct isl_ctx *ctx,
 	return &table->entries[h];
 }
 
-int isl_hash_table_foreach(struct isl_ctx *ctx,
-				struct isl_hash_table *table,
-				int (*fn)(void **entry, void *user), void *user)
+isl_stat isl_hash_table_foreach(isl_ctx *ctx, struct isl_hash_table *table,
+	isl_stat (*fn)(void **entry, void *user), void *user)
 {
 	size_t size;
 	uint32_t h;
+
+	if (!table->entries)
+		return isl_stat_error;
 
 	size = 1 << table->bits;
 	for (h = 0; h < size; ++ h)
 		if (table->entries[h].data &&
 		    fn(&table->entries[h].data, user) < 0)
-			return -1;
+			return isl_stat_error;
 	
-	return 0;
+	return isl_stat_ok;
 }
 
 void isl_hash_table_remove(struct isl_ctx *ctx,

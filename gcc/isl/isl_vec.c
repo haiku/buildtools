@@ -1,23 +1,35 @@
 /*
  * Copyright 2008-2009 Katholieke Universiteit Leuven
+ * Copyright 2013      Ecole Normale Superieure
  *
  * Use of this software is governed by the MIT license
  *
  * Written by Sven Verdoolaege, K.U.Leuven, Departement
  * Computerwetenschappen, Celestijnenlaan 200A, B-3001 Leuven, Belgium
+ * and Ecole Normale Superieure, 45 rue d’Ulm, 75230 Paris, France
  */
 
 #include <isl_ctx_private.h>
-#include <isl/seq.h>
-#include <isl/vec.h>
+#include <isl_seq.h>
 #include <isl_val_private.h>
+#include <isl_vec_private.h>
 
 isl_ctx *isl_vec_get_ctx(__isl_keep isl_vec *vec)
 {
 	return vec ? vec->ctx : NULL;
 }
 
-struct isl_vec *isl_vec_alloc(struct isl_ctx *ctx, unsigned size)
+/* Return a hash value that digests "vec".
+ */
+uint32_t isl_vec_get_hash(__isl_keep isl_vec *vec)
+{
+	if (!vec)
+		return 0;
+
+	return isl_seq_get_hash(vec->el, vec->size);
+}
+
+__isl_give isl_vec *isl_vec_alloc(struct isl_ctx *ctx, unsigned size)
 {
 	struct isl_vec *vec;
 
@@ -38,6 +50,7 @@ struct isl_vec *isl_vec_alloc(struct isl_ctx *ctx, unsigned size)
 	return vec;
 error:
 	isl_blk_free(ctx, vec->block);
+	free(vec);
 	return NULL;
 }
 
@@ -63,6 +76,66 @@ __isl_give isl_vec *isl_vec_extend(__isl_take isl_vec *vec, unsigned size)
 error:
 	isl_vec_free(vec);
 	return NULL;
+}
+
+/* Apply the expansion specified by "exp" to the "n" elements starting at "pos".
+ * "expanded" it the number of elements that need to replace those "n"
+ * elements.  The entries in "exp" have increasing values between
+ * 0 and "expanded".
+ */
+__isl_give isl_vec *isl_vec_expand(__isl_take isl_vec *vec, int pos, int n,
+	int *exp, int expanded)
+{
+	int i, j;
+	int old_size, extra;
+
+	if (!vec)
+		return NULL;
+	if (expanded < n)
+		isl_die(isl_vec_get_ctx(vec), isl_error_invalid,
+			"not an expansion", return isl_vec_free(vec));
+	if (expanded == n)
+		return vec;
+	if (pos < 0 || n < 0 || pos + n > vec->size)
+		isl_die(isl_vec_get_ctx(vec), isl_error_invalid,
+			"position out of bounds", return isl_vec_free(vec));
+
+	old_size = vec->size;
+	extra = expanded - n;
+	vec = isl_vec_extend(vec, old_size + extra);
+	vec = isl_vec_cow(vec);
+	if (!vec)
+		return NULL;
+
+	for (i = old_size - 1; i >= pos + n; --i)
+		isl_int_set(vec->el[i + extra], vec->el[i]);
+
+	j = n - 1;
+	for (i = expanded - 1; i >= 0; --i) {
+		if (j >= 0 && exp[j] == i) {
+			if (i != j)
+				isl_int_swap(vec->el[pos + i],
+					     vec->el[pos + j]);
+			j--;
+		} else {
+			isl_int_set_si(vec->el[pos + i], 0);
+		}
+	}
+
+	return vec;
+}
+
+/* Create a vector of size "size" with zero-valued elements.
+ */
+__isl_give isl_vec *isl_vec_zero(isl_ctx *ctx, unsigned size)
+{
+	isl_vec *vec;
+
+	vec = isl_vec_alloc(ctx, size);
+	if (!vec)
+		return NULL;
+	isl_seq_clr(vec->el, size);
+	return vec;
 }
 
 __isl_give isl_vec *isl_vec_zero_extend(__isl_take isl_vec *vec, unsigned size)
@@ -157,7 +230,7 @@ struct isl_vec *isl_vec_cow(struct isl_vec *vec)
 	return vec2;
 }
 
-void *isl_vec_free(__isl_take isl_vec *vec)
+__isl_null isl_vec *isl_vec_free(__isl_take isl_vec *vec)
 {
 	if (!vec)
 		return NULL;
@@ -175,18 +248,6 @@ void *isl_vec_free(__isl_take isl_vec *vec)
 int isl_vec_size(__isl_keep isl_vec *vec)
 {
 	return vec ? vec->size : -1;
-}
-
-int isl_vec_get_element(__isl_keep isl_vec *vec, int pos, isl_int *v)
-{
-	if (!vec)
-		return -1;
-
-	if (pos < 0 || pos >= vec->size)
-		isl_die(vec->ctx, isl_error_invalid, "position out of range",
-			return -1);
-	isl_int_set(*v, vec->el[pos]);
-	return 0;
 }
 
 /* Extract the element at position "pos" of "vec".
@@ -267,13 +328,22 @@ int isl_vec_cmp_element(__isl_keep isl_vec *vec1, __isl_keep isl_vec *vec2,
 	return isl_int_cmp(vec1->el[pos], vec2->el[pos]);
 }
 
-int isl_vec_is_equal(__isl_keep isl_vec *vec1, __isl_keep isl_vec *vec2)
+/* Does "vec" contain only zero elements?
+ */
+isl_bool isl_vec_is_zero(__isl_keep isl_vec *vec)
+{
+	if (!vec)
+		return isl_bool_error;
+	return isl_seq_first_non_zero(vec->el, vec->size) < 0;
+}
+
+isl_bool isl_vec_is_equal(__isl_keep isl_vec *vec1, __isl_keep isl_vec *vec2)
 {
 	if (!vec1 || !vec2)
-		return -1;
+		return isl_bool_error;
 
 	if (vec1->size != vec2->size)
-		return 0;
+		return isl_bool_false;
 
 	return isl_seq_eq(vec1->el, vec2->el, vec1->size);
 }
@@ -369,7 +439,7 @@ void isl_vec_lcm(struct isl_vec *vec, isl_int *lcm)
 /* Given a rational vector, with the denominator in the first element
  * of the vector, round up all coordinates.
  */
-struct isl_vec *isl_vec_ceil(struct isl_vec *vec)
+__isl_give isl_vec *isl_vec_ceil(__isl_take isl_vec *vec)
 {
 	vec = isl_vec_cow(vec);
 	if (!vec)
@@ -525,4 +595,52 @@ __isl_give isl_vec *isl_vec_insert_zero_els(__isl_take isl_vec *vec,
 	isl_seq_clr(vec->el + pos, n);
 
 	return vec;
+}
+
+/* Move the "n" elements starting as "src_pos" of "vec"
+ * to "dst_pos".  The elements originally at "dst_pos" are moved
+ * up or down depending on whether "dst_pos" is smaller or greater
+ * than "src_pos".
+ */
+__isl_give isl_vec *isl_vec_move_els(__isl_take isl_vec *vec,
+	unsigned dst_pos, unsigned src_pos, unsigned n)
+{
+	isl_vec *res;
+
+	if (!vec)
+		return NULL;
+
+	if (src_pos + n > vec->size)
+		isl_die(vec->ctx, isl_error_invalid,
+			"source range out of bounds", return isl_vec_free(vec));
+	if (dst_pos + n > vec->size)
+		isl_die(vec->ctx, isl_error_invalid,
+			"destination range out of bounds",
+			return isl_vec_free(vec));
+
+	if (n == 0 || dst_pos == src_pos)
+		return vec;
+
+	res = isl_vec_alloc(vec->ctx, vec->size);
+	if (!res)
+		return isl_vec_free(vec);
+
+	if (dst_pos < src_pos) {
+		isl_seq_cpy(res->el, vec->el, dst_pos);
+		isl_seq_cpy(res->el + dst_pos, vec->el + src_pos, n);
+		isl_seq_cpy(res->el + dst_pos + n,
+			    vec->el + dst_pos, src_pos - dst_pos);
+		isl_seq_cpy(res->el + src_pos + n,
+			    vec->el + src_pos + n, res->size - src_pos - n);
+	} else {
+		isl_seq_cpy(res->el, vec->el, src_pos);
+		isl_seq_cpy(res->el + src_pos,
+			    vec->el + src_pos + n, dst_pos - src_pos);
+		isl_seq_cpy(res->el + dst_pos, vec->el + src_pos, n);
+		isl_seq_cpy(res->el + dst_pos + n,
+			    vec->el + dst_pos + n, res->size - dst_pos - n);
+	}
+
+	isl_vec_free(vec);
+	return res;
 }

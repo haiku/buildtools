@@ -15,7 +15,7 @@ typedef struct isl_ast_graft isl_ast_graft;
  * "guard" contains conditions that should still be enforced by
  * some ancestor of the current tree.  In particular, the already
  * generated tree assumes that these conditions hold, but may not
- * enforced them itself.
+ * have enforced them itself.
  * The guard should not contain any unknown divs as it will be used
  * to generate an if condition.
  *
@@ -44,9 +44,10 @@ isl_ctx *isl_ast_graft_get_ctx(__isl_keep isl_ast_graft *graft);
 
 __isl_give isl_ast_graft *isl_ast_graft_alloc(
 	__isl_take isl_ast_node *node, __isl_keep isl_ast_build *build);
-__isl_give isl_ast_graft *isl_ast_graft_alloc_level(
-	__isl_take isl_ast_graft_list *children,
-	__isl_keep isl_ast_build *build, __isl_keep isl_ast_build *sub_build);
+__isl_give isl_ast_graft *isl_ast_graft_alloc_from_children(
+	__isl_take isl_ast_graft_list *list, __isl_take isl_set *guard,
+	__isl_take isl_basic_set *enforced, __isl_keep isl_ast_build *build,
+	__isl_keep isl_ast_build *sub_build);
 __isl_give isl_ast_graft_list *isl_ast_graft_list_fuse(
 	__isl_take isl_ast_graft_list *children,
 	__isl_keep isl_ast_build *build);
@@ -75,13 +76,25 @@ __isl_give isl_ast_graft *isl_ast_graft_add_guard(
 __isl_give isl_ast_graft *isl_ast_graft_enforce(
 	__isl_take isl_ast_graft *graft, __isl_take isl_basic_set *enforced);
 
+__isl_give isl_ast_graft *isl_ast_graft_insert_mark(
+	__isl_take isl_ast_graft *graft, __isl_take isl_id *mark);
+
 __isl_give isl_ast_graft_list *isl_ast_graft_list_unembed(
 	__isl_take isl_ast_graft_list *list, int product);
 __isl_give isl_ast_graft_list *isl_ast_graft_list_preimage_multi_aff(
 	__isl_take isl_ast_graft_list *list, __isl_take isl_multi_aff *ma);
+__isl_give isl_ast_graft_list *isl_ast_graft_list_insert_pending_guard_nodes(
+	__isl_take isl_ast_graft_list *list, __isl_keep isl_ast_build *build);
 
 __isl_give isl_ast_node *isl_ast_node_from_graft_list(
 	__isl_take isl_ast_graft_list *list, __isl_keep isl_ast_build *build);
+
+__isl_give isl_basic_set *isl_ast_graft_list_extract_shared_enforced(
+	__isl_keep isl_ast_graft_list *list, __isl_keep isl_ast_build *build);
+__isl_give isl_set *isl_ast_graft_list_extract_hoistable_guard(
+	__isl_keep isl_ast_graft_list *list, __isl_keep isl_ast_build *build);
+__isl_give isl_ast_graft_list *isl_ast_graft_list_gist_guards(
+	__isl_take isl_ast_graft_list *list, __isl_take isl_set *context);
 
 __isl_give isl_printer *isl_printer_print_ast_graft(__isl_take isl_printer *p,
 	__isl_keep isl_ast_graft *graft);

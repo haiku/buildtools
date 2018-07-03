@@ -1,10 +1,10 @@
-AC_INIT([isl], [0.12.2], [isl-development@googlegroups.com])
+AC_INIT([isl], [0.19], [isl-development@googlegroups.com])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([foreign])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 AC_SUBST(versioninfo)
-versioninfo=12:2:2
+versioninfo=19:0:0
 
 if test "x$prefix" != "xNONE"; then
 	prefix_wd=`cd $prefix && pwd`
@@ -25,7 +25,11 @@ AX_CC_MAXOPT
 AX_GCC_WARN_UNUSED_RESULT
 AX_C___ATTRIBUTE__
 
+AC_PROG_GREP
 AC_PROG_LIBTOOL
+AC_PROG_SED
+AM_PATH_PYTHON([2.5], [], [:])
+AM_CONDITIONAL([HAVE_PYTHON], [test "$PYTHON" != :])
 
 AC_CHECK_PROG(PERL, perl, perl, [])
 AC_CHECK_PROG(PDFLATEX, pdflatex, pdflatex, [])
@@ -35,219 +39,70 @@ AM_CONDITIONAL(GENERATE_DOC, test -n "$PERL" -a -n "$PDFLATEX" -a -n "$POD2HTML"
 
 AX_CREATE_STDINT_H(include/isl/stdint.h)
 
-AX_SUBMODULE(gmp,system|build,system)
-
-AC_SUBST(GMP_CPPFLAGS)
-AC_SUBST(GMP_LDFLAGS)
-AC_SUBST(GMP_LIBS)
-case "$with_gmp" in
-system)
-	if test "x$with_gmp_prefix" != "x"; then
-		isl_configure_args="$isl_configure_args --with-gmp=$with_gmp_prefix"
-		GMP_CPPFLAGS="-I$with_gmp_prefix/include"
-		GMP_LDFLAGS="-L$with_gmp_prefix/lib"
-	fi
-	GMP_LIBS=-lgmp
-	SAVE_CPPFLAGS="$CPPFLAGS"
-	SAVE_LDFLAGS="$LDFLAGS"
-	SAVE_LIBS="$LIBS"
-	CPPFLAGS="$GMP_CPPFLAGS $CPPFLAGS"
-	LDFLAGS="$GMP_LDFLAGS $LDFLAGS"
-	LIBS="$GMP_LIBS $LIBS"
-	AC_CHECK_HEADER([gmp.h], [], [AC_ERROR([gmp.h header not found])])
-	AC_CHECK_LIB([gmp], [main], [], [AC_ERROR([gmp library not found])])
-	AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <gmp.h>]], [[
-		mpz_t n, d;
-		if (mpz_divisible_p(n, d))
-			mpz_divexact_ui(n, n, 4);
-	]])], [], [AC_ERROR([gmp library too old])])
-	CPPFLAGS="$SAVE_CPPFLAGS"
-	LDFLAGS="$SAVE_LDFLAGS"
-	LIBS="$SAVE_LIBS"
+AC_ARG_WITH([int],
+	    [AS_HELP_STRING([--with-int=gmp|imath|imath-32],
+			    [Which package to use to represent
+				multi-precision integers [default=gmp]])],
+	    [], [with_int=gmp])
+case "$with_int" in
+gmp|imath|imath-32)
 	;;
-build)
-	GMP_CPPFLAGS="-I$gmp_srcdir -I$with_gmp_builddir"
-	GMP_LIBS="$with_gmp_builddir/libgmp.la"
+*)
+	AC_MSG_ERROR(
+	    [bad value ${withval} for --with-int (use gmp, imath or imath-32)])
+esac
+
+AC_SUBST(MP_CPPFLAGS)
+AC_SUBST(MP_LDFLAGS)
+AC_SUBST(MP_LIBS)
+case "$with_int" in
+gmp)
+	AX_DETECT_GMP
+	;;
+imath|imath-32)
+	AX_DETECT_IMATH
 	;;
 esac
-SAVE_CPPFLAGS="$CPPFLAGS"
-SAVE_LDFLAGS="$LDFLAGS"
-SAVE_LIBS="$LIBS"
-CPPFLAGS="$GMP_CPPFLAGS $CPPFLAGS"
-LDFLAGS="$GMP_LDFLAGS $LDFLAGS"
-LIBS="$GMP_LIBS $LIBS"
-need_get_memory_functions=false
-AC_CHECK_DECLS(mp_get_memory_functions,[],[
-	need_get_memory_functions=true
-],[#include <gmp.h>])
-AC_RUN_IFELSE([AC_LANG_PROGRAM([[#include <gmp.h>]], [[
-	mpz_t x,y,g,a,b;
-	mpz_init(x);
-	mpz_init(y);
-	mpz_init(g);
-	mpz_init(a);
-	mpz_init(b);
-	mpz_set_si(x, -1);
-	mpz_set_si(y, 9);
-	mpz_gcdext(g, a, b, x, y);
-	if (mpz_get_si(a) == -1 && mpz_get_si(b) == 0)
-		return 0;
-	else
-		return 1;
-]])], [need_normalized_gcdext=false], [need_normalized_gcdext=true],
-[need_normalized_gcdext=true])
-CPPFLAGS="$SAVE_CPPFLAGS"
-LDFLAGS="$SAVE_LDFLAGS"
-LIBS="$SAVE_LIBS"
-AM_CONDITIONAL(NEED_GET_MEMORY_FUNCTIONS, test x$need_get_memory_functions = xtrue)
-if test $need_normalized_gcdext = true; then
-AC_DEFINE([GMP_NORMALIZE_GCDEXT], [],
-	[result of mpz_gcdext needs to be normalized])
+if test "x$with_int" = "ximath-32" -a "x$GCC" = "xyes"; then
+	MP_CPPFLAGS="-std=gnu99 $MP_CPPFLAGS"
 fi
+
+AM_CONDITIONAL(IMATH_FOR_MP, test x$with_int = ximath -o x$with_int = ximath-32)
+AM_CONDITIONAL(GMP_FOR_MP, test x$with_int = xgmp)
+
+AM_CONDITIONAL(SMALL_INT_OPT, test "x$with_int" == "ximath-32")
+AS_IF([test "x$with_int" == "ximath-32"], [
+	AC_DEFINE([USE_SMALL_INT_OPT], [], [Use small integer optimization])
+])
+
 AC_CHECK_DECLS(ffs,[],[],[#include <strings.h>])
 AC_CHECK_DECLS(__builtin_ffs,[],[],[])
-
-AX_SUBMODULE(piplib,no|system|build,no)
-
-have_piplib=false
-AC_SUBST(PIPLIB_CPPFLAGS)
-AC_SUBST(PIPLIB_LDFLAGS)
-AC_SUBST(PIPLIB_LIBS)
-case "$with_piplib" in
-	build)
-		PIPLIB_CPPFLAGS="-I$piplib_srcdir/include"
-		PIPLIB_LIBS="$with_piplib_builddir/libpiplibMP.la"
-	;;
-	system)
-		PIPLIB_LIBS="-lpiplibMP"
-		if test "x$with_piplib_prefix" != "x"; then
-			PIPLIB_CPPFLAGS="-I$with_piplib_prefix/include"
-			PIPLIB_LDFLAGS="-L$with_piplib_prefix/lib"
-		fi
-		SAVE_CPPFLAGS="$CPPFLAGS"
-		SAVE_LDFLAGS="$LDFLAGS"
-		CPPFLAGS="$PIPLIB_CPPFLAGS $CPPFLAGS"
-		LDFLAGS="$PIPLIB_LDFLAGS $LDFLAGS"
-		AC_CHECK_LIB(piplibMP, pip_solve,[
-			AC_CHECK_MEMBER(PipOptions.Urs_parms, [], [
-				AC_MSG_ERROR([Piplib too old; please install version 1.3.6 or newer])
-			],[#include <piplib/piplibMP.h>])
-		],[
-			AC_MSG_ERROR([Piplib not found])
-		])
-		CPPFLAGS="$SAVE_CPPFLAGS"
-		LDFLAGS="$SAVE_LDFLAGS"
-	;;
-	no)
-	;;
-	*)
-		AC_MSG_ERROR(unsupported)
-	;;
-esac
-if test "$with_piplib" != "no"; then
-	AC_DEFINE(ISL_PIPLIB,,piplib is available)
-	have_piplib=true
+AC_CHECK_DECLS([_BitScanForward],[],[],[#include <intrin.h>])
+if test "x$ac_cv_have_decl_ffs" = xno -a \
+		"x$ac_cv_have_decl___builtin_ffs" = xno -a \
+		"x$ac_cv_have_decl__BitScanForward" = xno; then
+	AC_MSG_ERROR([No ffs implementation found])
 fi
-AM_CONDITIONAL(HAVE_PIPLIB, test x$have_piplib = xtrue)
+AC_CHECK_DECLS([strcasecmp,strncasecmp],[],[],[#include <strings.h>])
+AC_CHECK_DECLS([_stricmp,_strnicmp],[],[],[#include <string.h>])
+if test "x$ac_cv_have_decl_strcasecmp" = xno -a \
+		"x$ac_cv_have_decl__stricmp" = xno; then
+	AC_MSG_ERROR([No strcasecmp implementation found])
+fi
+if test "x$ac_cv_have_decl_strncasecmp" = xno -a \
+		"x$ac_cv_have_decl__strnicmp" = xno; then
+	AC_MSG_ERROR([No strncasecmp implementation found])
+fi
+AC_CHECK_DECLS([snprintf,_snprintf],[],[],[#include <stdio.h>])
+if test "x$ac_cv_have_decl_snprintf" = xno -a \
+		"x$ac_cv_have_decl__snprintf" = xno; then
+	AC_MSG_ERROR([No snprintf implementation found])
+fi
 
-AC_SUBST(CLANG_CXXFLAGS)
-AC_SUBST(CLANG_LDFLAGS)
-AC_SUBST(CLANG_LIBS)
 AX_SUBMODULE(clang,system|no,no)
 case "$with_clang" in
 system)
-	AC_PROG_GREP
-	llvm_config="llvm-config"
-	AC_CHECK_PROG([llvm_config_found], ["$llvm_config"], [yes])
-	if test "x$with_clang_prefix" != "x"; then
-		llvm_config="$with_clang_prefix/bin/llvm-config"
-		if test -x "$llvm_config"; then
-			llvm_config_found=yes
-		fi
-	fi
-	if test "$llvm_config_found" != yes; then
-		AC_MSG_ERROR([llvm-config not found])
-	fi
-	CLANG_CXXFLAGS=`$llvm_config --cxxflags`
-	CLANG_LDFLAGS=`$llvm_config --ldflags`
-	targets=`$llvm_config --targets-built`
-	components="$targets asmparser bitreader support mc"
-	$llvm_config --components | $GREP option > /dev/null 2> /dev/null
-	if test $? -eq 0; then
-		components="$components option"
-	fi
-	CLANG_LIBS=`$llvm_config --libs $components`
-	CLANG_PREFIX=`$llvm_config --prefix`
-	AC_DEFINE_UNQUOTED(CLANG_PREFIX, ["$CLANG_PREFIX"],
-				[Clang installation prefix])
-
-	SAVE_CPPFLAGS="$CPPFLAGS"
-	CPPFLAGS="$CLANG_CXXFLAGS $CPPFLAGS"
-	AC_LANG_PUSH(C++)
-	AC_CHECK_HEADER([clang/Basic/SourceLocation.h], [],
-		[AC_ERROR([clang header file not found])])
-	AC_EGREP_HEADER([getDefaultTargetTriple], [llvm/Support/Host.h], [],
-		[AC_DEFINE([getDefaultTargetTriple], [getHostTriple],
-		[Define to getHostTriple for older versions of clang])])
-	AC_EGREP_HEADER([getExpansionLineNumber],
-		[clang/Basic/SourceLocation.h], [],
-		[AC_DEFINE([getExpansionLineNumber],
-			[getInstantiationLineNumber],
-	    [Define to getInstantiationLineNumber for older versions of clang])])
-	AC_EGREP_HEADER([DiagnosticsEngine],
-		[clang/Basic/Diagnostic.h], [],
-		[AC_DEFINE([DiagnosticsEngine],
-			[Diagnostic],
-	    [Define to Diagnostic for older versions of clang])])
-	AC_EGREP_HEADER([ArrayRef], [clang/Driver/Driver.h],
-		[AC_DEFINE([USE_ARRAYREF], [],
-			[Define if Driver::BuildCompilation takes ArrayRef])])
-	AC_EGREP_HEADER([CXXIsProduction], [clang/Driver/Driver.h],
-		[AC_DEFINE([HAVE_CXXISPRODUCTION], [],
-		[Define if Driver constructor takes CXXIsProduction argument])])
-	AC_EGREP_HEADER([ IsProduction], [clang/Driver/Driver.h],
-		[AC_DEFINE([HAVE_ISPRODUCTION], [],
-		[Define if Driver constructor takes IsProduction argument])])
-	AC_EGREP_HEADER([void HandleTopLevelDecl\(], [clang/AST/ASTConsumer.h],
-		[AC_DEFINE([HandleTopLevelDeclReturn], [void],
-			   [Return type of HandleTopLevelDeclReturn])
-		 AC_DEFINE([HandleTopLevelDeclContinue], [],
-			   [Return type of HandleTopLevelDeclReturn])],
-		[AC_DEFINE([HandleTopLevelDeclReturn], [bool],
-			   [Return type of HandleTopLevelDeclReturn])
-		 AC_DEFINE([HandleTopLevelDeclContinue], [true],
-			   [Return type of HandleTopLevelDeclReturn])])
-	AC_CHECK_HEADER([clang/Basic/DiagnosticOptions.h],
-		[AC_DEFINE([HAVE_BASIC_DIAGNOSTICOPTIONS_H], [],
-			   [Define if clang/Basic/DiagnosticOptions.h exists])])
-	AC_TRY_COMPILE([#include <clang/Basic/TargetInfo.h>], [
-		using namespace clang;
-		TargetOptions *TO;
-		DiagnosticsEngine *Diags;
-		TargetInfo::CreateTargetInfo(*Diags, TO);
-	], [AC_DEFINE([CREATETARGETINFO_TAKES_POINTER], [],
-		      [Define if TargetInfo::CreateTargetInfo takes pointer])])
-	AC_TRY_COMPILE([#include <clang/Frontend/CompilerInstance.h>], [
-		using namespace clang;
-		DiagnosticConsumer *client;
-		CompilerInstance *Clang;
-		Clang->createDiagnostics(client);
-	], [], [AC_DEFINE([CREATEDIAGNOSTICS_TAKES_ARG], [],
-	[Define if CompilerInstance::createDiagnostics takes argc and argv])])
-	AC_TRY_COMPILE([#include <clang/Lex/HeaderSearchOptions.h>], [
-		using namespace clang;
-		HeaderSearchOptions HSO;
-		HSO.AddPath("", frontend::Angled, false, false);
-	], [AC_DEFINE([ADDPATH_TAKES_4_ARGUMENTS], [],
-		[Define if HeaderSearchOptions::AddPath takes 4 arguments])])
-	AC_LANG_POP
-	CPPFLAGS="$SAVE_CPPFLAGS"
-
-	SAVE_LDFLAGS="$LDFLAGS"
-	LDFLAGS="$CLANG_LDFLAGS $LDFLAGS"
-	AC_SUBST(LIB_CLANG_EDIT)
-	AC_CHECK_LIB([clangEdit], [main], [LIB_CLANG_EDIT=-lclangEdit], [])
-	LDFLAGS="$SAVE_LDFLAGS"
+	AX_DETECT_CLANG
 	;;
 esac
 AM_CONDITIONAL(HAVE_CLANG, test $with_clang = system)
@@ -256,17 +111,16 @@ AX_SET_WARNING_FLAGS
 
 AC_SUBST(WARNING_FLAGS)
 
-PACKAGE_CFLAGS="$GMP_CPPFLAGS"
-PACKAGE_LDFLAGS="$GMP_LDFLAGS"
-PACKAGE_LIBS="-lisl -lgmp"
+PACKAGE_CFLAGS="$MP_CPPFLAGS"
+PACKAGE_LDFLAGS="$MP_LDFLAGS"
+PACKAGE_LIBS="-lisl $MP_LIBS"
 AX_CREATE_PKGCONFIG_INFO
 
 AX_DETECT_GIT_HEAD
-echo '#define GIT_HEAD_ID "'$GIT_HEAD_ID'"' > gitversion.h
 
 AH_BOTTOM([#include <isl_config_post.h>])
 AC_CONFIG_HEADERS(isl_config.h)
-AC_CONFIG_HEADERS(include/isl/config.h)
+AC_CONFIG_FILES(isl_srcdir.c)
 AC_CONFIG_FILES(Makefile)
 AC_CONFIG_FILES(doc/Makefile)
 if test $with_clang = system; then
@@ -275,6 +129,8 @@ fi
 AC_CONFIG_FILES([bound_test.sh], [chmod +x bound_test.sh])
 AC_CONFIG_FILES([codegen_test.sh], [chmod +x codegen_test.sh])
 AC_CONFIG_FILES([pip_test.sh], [chmod +x pip_test.sh])
+AC_CONFIG_FILES([flow_test.sh], [chmod +x flow_test.sh])
+AC_CONFIG_FILES([schedule_test.sh], [chmod +x schedule_test.sh])
 AC_CONFIG_COMMANDS_POST([
 	dnl pass on arguments to subdir configures, but don't
 	dnl add them to config.status

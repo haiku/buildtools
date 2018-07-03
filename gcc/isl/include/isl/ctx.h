@@ -13,11 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <isl/int.h>
-#include <isl/blk.h>
 #include <isl/arg.h>
-#include <isl/hash.h>
-#include <isl/config.h>
 
 #ifndef __isl_give
 #define __isl_give
@@ -28,20 +24,20 @@
 #ifndef __isl_keep
 #define __isl_keep
 #endif
+#ifndef __isl_null
+#define __isl_null
+#endif
 #ifndef __isl_export
 #define __isl_export
+#endif
+#ifndef __isl_overload
+#define __isl_overload
 #endif
 #ifndef __isl_constructor
 #define __isl_constructor
 #endif
 #ifndef __isl_subclass
 #define __isl_subclass(super)
-#endif
-
-#ifdef GCC_WARN_UNUSED_RESULT
-#define	WARN_UNUSED	GCC_WARN_UNUSED_RESULT
-#else
-#define WARN_UNUSED
 #endif
 
 #if defined(__cplusplus)
@@ -78,15 +74,33 @@ struct isl_stats {
 enum isl_error {
 	isl_error_none = 0,
 	isl_error_abort,
+	isl_error_alloc,
 	isl_error_unknown,
 	isl_error_internal,
 	isl_error_invalid,
+	isl_error_quota,
 	isl_error_unsupported
 };
+typedef enum {
+	isl_stat_error = -1,
+	isl_stat_ok = 0
+} isl_stat;
+typedef enum {
+	isl_bool_error = -1,
+	isl_bool_false = 0,
+	isl_bool_true = 1
+} isl_bool;
+isl_bool isl_bool_not(isl_bool b);
 struct isl_ctx;
 typedef struct isl_ctx isl_ctx;
 
 /* Some helper macros */
+
+#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 1)
+#define ISL_DEPRECATED	__attribute__((__deprecated__))
+#else
+#define ISL_DEPRECATED
+#endif
 
 #define ISL_FL_INIT(l, f)   (l) = (f)               /* Specific flags location. */
 #define ISL_FL_SET(l, f)    ((l) |= (f))
@@ -98,24 +112,21 @@ typedef struct isl_ctx isl_ctx;
 #define ISL_F_CLR(p, f)     ISL_FL_CLR((p)->flags, f)
 #define ISL_F_ISSET(p, f)   ISL_FL_ISSET((p)->flags, f)
 
-/* isl_check_ctx() checks at compile time if 'ctx' is of type 'isl_ctx *' and
- * returns the value of 'expr'. It is used to ensure, that always an isl_ctx is
- * passed to the following macros, even if they currently do not use it.
- */
-#define isl_check_ctx(ctx, expr)	((ctx != (isl_ctx *) 0) ? expr : NULL)
+void *isl_malloc_or_die(isl_ctx *ctx, size_t size);
+void *isl_calloc_or_die(isl_ctx *ctx, size_t nmemb, size_t size);
+void *isl_realloc_or_die(isl_ctx *ctx, void *ptr, size_t size);
 
-#define isl_alloc(ctx,type,size)	((type *)isl_check_ctx(ctx,\
-							malloc(size)))
-#define isl_calloc(ctx,type,size)	((type *)isl_check_ctx(ctx,\
-							calloc(1, size)))
-#define isl_realloc(ctx,ptr,type,size)	((type *)isl_check_ctx(ctx,\
-							realloc(ptr,size)))
+#define isl_alloc(ctx,type,size)	((type *)isl_malloc_or_die(ctx, size))
+#define isl_calloc(ctx,type,size)	((type *)isl_calloc_or_die(ctx,\
+								    1, size))
+#define isl_realloc(ctx,ptr,type,size)	((type *)isl_realloc_or_die(ctx,\
+								    ptr, size))
 #define isl_alloc_type(ctx,type)	isl_alloc(ctx,type,sizeof(type))
 #define isl_calloc_type(ctx,type)	isl_calloc(ctx,type,sizeof(type))
 #define isl_realloc_type(ctx,ptr,type)	isl_realloc(ctx,ptr,type,sizeof(type))
 #define isl_alloc_array(ctx,type,n)	isl_alloc(ctx,type,(n)*sizeof(type))
-#define isl_calloc_array(ctx,type,n)	((type *)isl_check_ctx(ctx,\
-						calloc(n, sizeof(type))))
+#define isl_calloc_array(ctx,type,n)	((type *)isl_calloc_or_die(ctx,\
+							    n, sizeof(type)))
 #define isl_realloc_array(ctx,ptr,type,n) \
 				    isl_realloc(ctx,ptr,type,(n)*sizeof(type))
 
@@ -156,6 +167,10 @@ void isl_ctx_abort(isl_ctx *ctx);
 void isl_ctx_resume(isl_ctx *ctx);
 int isl_ctx_aborted(isl_ctx *ctx);
 
+void isl_ctx_set_max_operations(isl_ctx *ctx, unsigned long max_operations);
+unsigned long isl_ctx_get_max_operations(isl_ctx *ctx);
+void isl_ctx_reset_operations(isl_ctx *ctx);
+
 #define ISL_ARG_CTX_DECL(prefix,st,args)				\
 st *isl_ctx_peek_ ## prefix(isl_ctx *ctx);
 
@@ -178,16 +193,16 @@ int prefix ## _get_ ## field(isl_ctx *ctx)				\
 }
 
 #define ISL_CTX_SET_INT_DEF(prefix,st,args,field)			\
-int prefix ## _set_ ## field(isl_ctx *ctx, int val)			\
+isl_stat prefix ## _set_ ## field(isl_ctx *ctx, int val)		\
 {									\
 	st *options;							\
 	options = isl_ctx_peek_ ## prefix(ctx);				\
 	if (!options)							\
 		isl_die(ctx, isl_error_invalid,				\
 			"isl_ctx does not reference " #prefix,		\
-			return -1);					\
+			return isl_stat_error);				\
 	options->field = val;						\
-	return 0;							\
+	return isl_stat_ok;						\
 }
 
 #define ISL_CTX_GET_STR_DEF(prefix,st,args,field)			\
@@ -203,21 +218,21 @@ const char *prefix ## _get_ ## field(isl_ctx *ctx)			\
 }
 
 #define ISL_CTX_SET_STR_DEF(prefix,st,args,field)			\
-int prefix ## _set_ ## field(isl_ctx *ctx, const char *val)		\
+isl_stat prefix ## _set_ ## field(isl_ctx *ctx, const char *val)	\
 {									\
 	st *options;							\
 	options = isl_ctx_peek_ ## prefix(ctx);				\
 	if (!options)							\
 		isl_die(ctx, isl_error_invalid,				\
 			"isl_ctx does not reference " #prefix,		\
-			return -1);					\
+			return isl_stat_error);				\
 	if (!val)							\
-		return -1;						\
+		return isl_stat_error;					\
 	free(options->field);						\
 	options->field = strdup(val);					\
 	if (!options->field)						\
-		return -1;						\
-	return 0;							\
+		return isl_stat_error;					\
+	return isl_stat_ok;						\
 }
 
 #define ISL_CTX_GET_BOOL_DEF(prefix,st,args,field)			\
@@ -233,6 +248,9 @@ int prefix ## _set_ ## field(isl_ctx *ctx, const char *val)		\
 	ISL_CTX_SET_INT_DEF(prefix,st,args,field)
 
 enum isl_error isl_ctx_last_error(isl_ctx *ctx);
+const char *isl_ctx_last_error_msg(isl_ctx *ctx);
+const char *isl_ctx_last_error_file(isl_ctx *ctx);
+int isl_ctx_last_error_line(isl_ctx *ctx);
 void isl_ctx_reset_error(isl_ctx *ctx);
 void isl_ctx_set_error(isl_ctx *ctx, enum isl_error error);
 

@@ -1,168 +1,27 @@
 /*
  * Copyright 2010      INRIA Saclay
+ * Copyright 2014      Ecole Normale Superieure
+ * Copyright 2014      INRIA Rocquencourt
  *
  * Use of this software is governed by the MIT license
  *
  * Written by Sven Verdoolaege, INRIA Saclay - Ile-de-France,
  * Parc Club Orsay Universite, ZAC des vignes, 4 rue Jacques Monod,
  * 91893 Orsay, France 
+ * and Ecole Normale Superieure, 45 rue d'Ulm, 75230 Paris, France
+ * and Inria Paris - Rocquencourt, Domaine de Voluceau - Rocquencourt,
+ * B.P. 105 - 78153 Le Chesnay, France
  */
 
+#include <isl/val.h>
+#include <isl/aff.h>
 #include <isl/set.h>
 #include <isl/map.h>
+#include <isl/union_set.h>
+#include <isl/union_map.h>
 #include <isl/polynomial.h>
+#include <isl/schedule.h>
 #include <isl/obj.h>
-
-struct isl_int_obj {
-	int ref;
-	isl_ctx *ctx;
-	isl_int v;
-};
-
-__isl_give isl_int_obj *isl_int_obj_alloc(isl_ctx *ctx, isl_int v)
-{
-	isl_int_obj *i;
-
-	i = isl_alloc_type(ctx, isl_int_obj);
-	if (!i)
-		return NULL;
-	
-	i->ctx = ctx;
-	isl_ctx_ref(ctx);
-	i->ref = 1;
-	isl_int_init(i->v);
-	isl_int_set(i->v, v);
-
-	return i;
-}
-
-__isl_give isl_int_obj *isl_int_obj_copy(__isl_keep isl_int_obj *i)
-{
-	if (!i)
-		return NULL;
-
-	i->ref++;
-	return i;
-}
-
-__isl_give isl_int_obj *isl_int_obj_dup(__isl_keep isl_int_obj *i)
-{
-	if (!i)
-		return NULL;
-
-	return isl_int_obj_alloc(i->ctx, i->v);
-}
-
-__isl_give isl_int_obj *isl_int_obj_cow(__isl_take isl_int_obj *i)
-{
-	if (!i)
-		return NULL;
-
-	if (i->ref == 1)
-		return i;
-	i->ref--;
-	return isl_int_obj_dup(i);
-}
-
-void isl_int_obj_free(__isl_take isl_int_obj *i)
-{
-	if (!i)
-		return;
-
-	if (--i->ref > 0)
-		return;
-
-	isl_ctx_deref(i->ctx);
-	isl_int_clear(i->v);
-	free(i);
-}
-
-__isl_give isl_int_obj *isl_int_obj_add(__isl_take isl_int_obj *i1,
-	__isl_take isl_int_obj *i2)
-{
-	i1 = isl_int_obj_cow(i1);
-	if (!i1 || !i2)
-		goto error;
-	
-	isl_int_add(i1->v, i1->v, i2->v);
-
-	isl_int_obj_free(i2);
-	return i1;
-error:
-	isl_int_obj_free(i1);
-	isl_int_obj_free(i2);
-	return NULL;
-}
-
-__isl_give isl_int_obj *isl_int_obj_sub(__isl_take isl_int_obj *i1,
-	__isl_take isl_int_obj *i2)
-{
-	i1 = isl_int_obj_cow(i1);
-	if (!i1 || !i2)
-		goto error;
-	
-	isl_int_sub(i1->v, i1->v, i2->v);
-
-	isl_int_obj_free(i2);
-	return i1;
-error:
-	isl_int_obj_free(i1);
-	isl_int_obj_free(i2);
-	return NULL;
-}
-
-__isl_give isl_int_obj *isl_int_obj_mul(__isl_take isl_int_obj *i1,
-	__isl_take isl_int_obj *i2)
-{
-	i1 = isl_int_obj_cow(i1);
-	if (!i1 || !i2)
-		goto error;
-	
-	isl_int_mul(i1->v, i1->v, i2->v);
-
-	isl_int_obj_free(i2);
-	return i1;
-error:
-	isl_int_obj_free(i1);
-	isl_int_obj_free(i2);
-	return NULL;
-}
-
-void isl_int_obj_get_int(__isl_keep isl_int_obj *i, isl_int *v)
-{
-	if (!i)
-		return;
-	isl_int_set(*v, i->v);
-}
-
-static void *isl_obj_int_copy(void *v)
-{
-	return isl_int_obj_copy((isl_int_obj *)v);
-}
-
-static void isl_obj_int_free(void *v)
-{
-	isl_int_obj_free((isl_int_obj *)v);
-}
-
-static __isl_give isl_printer *isl_obj_int_print(__isl_take isl_printer *p,
-	void *v)
-{
-	isl_int_obj *i = v;
-	return isl_printer_print_isl_int(p, i->v);
-}
-
-static void *isl_obj_int_add(void *v1, void *v2)
-{
-	return isl_int_obj_add((isl_int_obj *)v1, (isl_int_obj *)v2);
-}
-
-struct isl_obj_vtable isl_obj_int_vtable = {
-	isl_obj_int_copy,
-	isl_obj_int_add,
-	isl_obj_int_print,
-	isl_obj_int_free
-};
 
 static void *isl_obj_val_copy(void *v)
 {
@@ -302,6 +161,35 @@ struct isl_obj_vtable isl_obj_union_set_vtable = {
 	isl_obj_union_set_add,
 	isl_obj_union_set_print,
 	isl_obj_union_set_free
+};
+
+static void *isl_obj_pw_multi_aff_copy(void *v)
+{
+	return isl_pw_multi_aff_copy((isl_pw_multi_aff *) v);
+}
+
+static void isl_obj_pw_multi_aff_free(void *v)
+{
+	isl_pw_multi_aff_free((isl_pw_multi_aff *) v);
+}
+
+static __isl_give isl_printer *isl_obj_pw_multi_aff_print(
+	__isl_take isl_printer *p, void *v)
+{
+	return isl_printer_print_pw_multi_aff(p, (isl_pw_multi_aff *) v);
+}
+
+static void *isl_obj_pw_multi_aff_add(void *v1, void *v2)
+{
+	return isl_pw_multi_aff_add((isl_pw_multi_aff *) v1,
+				    (isl_pw_multi_aff *) v2);
+}
+
+struct isl_obj_vtable isl_obj_pw_multi_aff_vtable = {
+	isl_obj_pw_multi_aff_copy,
+	isl_obj_pw_multi_aff_add,
+	isl_obj_pw_multi_aff_print,
+	isl_obj_pw_multi_aff_free
 };
 
 static void *isl_obj_none_copy(void *v)
@@ -451,4 +339,27 @@ struct isl_obj_vtable isl_obj_union_pw_qpolynomial_fold_vtable = {
 	isl_obj_union_pw_qpf_add,
 	isl_obj_union_pw_qpf_print,
 	isl_obj_union_pw_qpf_free
+};
+
+static void *isl_obj_schedule_copy(void *v)
+{
+	return isl_schedule_copy((isl_schedule *) v);
+}
+
+static void isl_obj_schedule_free(void *v)
+{
+	isl_schedule_free((isl_schedule *) v);
+}
+
+static __isl_give isl_printer *isl_obj_schedule_print(
+	__isl_take isl_printer *p, void *v)
+{
+	return isl_printer_print_schedule(p, (isl_schedule *) v);
+}
+
+struct isl_obj_vtable isl_obj_schedule_vtable = {
+	isl_obj_schedule_copy,
+	NULL,
+	isl_obj_schedule_print,
+	isl_obj_schedule_free
 };

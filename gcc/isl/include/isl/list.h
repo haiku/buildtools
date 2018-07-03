@@ -11,7 +11,7 @@
 #define ISL_LIST_H
 
 #include <isl/ctx.h>
-#include <isl/printer.h>
+#include <isl/printer_type.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -28,7 +28,8 @@ __isl_give isl_##EL##_list *isl_##EL##_list_from_##EL(			\
 __isl_give isl_##EL##_list *isl_##EL##_list_alloc(isl_ctx *ctx, int n);	\
 __isl_give isl_##EL##_list *isl_##EL##_list_copy(			\
 	__isl_keep isl_##EL##_list *list);				\
-void *isl_##EL##_list_free(__isl_take isl_##EL##_list *list);		\
+__isl_null isl_##EL##_list *isl_##EL##_list_free(			\
+	__isl_take isl_##EL##_list *list);				\
 __isl_give isl_##EL##_list *isl_##EL##_list_add(			\
 	__isl_take isl_##EL##_list *list,				\
 	__isl_take struct isl_##EL *el);				\
@@ -46,19 +47,24 @@ __isl_give struct isl_##EL *isl_##EL##_list_get_##EL(			\
 __isl_give struct isl_##EL##_list *isl_##EL##_list_set_##EL(		\
 	__isl_take struct isl_##EL##_list *list, int index,		\
 	__isl_take struct isl_##EL *el);				\
-int isl_##EL##_list_foreach(__isl_keep isl_##EL##_list *list,		\
-	int (*fn)(__isl_take struct isl_##EL *el, void *user),		\
+isl_stat isl_##EL##_list_foreach(__isl_keep isl_##EL##_list *list,	\
+	isl_stat (*fn)(__isl_take struct isl_##EL *el, void *user),	\
+	void *user);							\
+__isl_give isl_##EL##_list *isl_##EL##_list_map(			\
+	__isl_take isl_##EL##_list *list,				\
+	__isl_give isl_##EL * (*fn)(__isl_take isl_##EL *el,		\
+		void *user),						\
 	void *user);							\
 __isl_give isl_##EL##_list *isl_##EL##_list_sort(			\
 	__isl_take isl_##EL##_list *list,				\
 	int (*cmp)(__isl_keep struct isl_##EL *a,			\
 		__isl_keep struct isl_##EL *b,				\
 		void *user), void *user);				\
-int isl_##EL##_list_foreach_scc(__isl_keep isl_##EL##_list *list,	\
-	int (*follows)(__isl_keep struct isl_##EL *a,			\
+isl_stat isl_##EL##_list_foreach_scc(__isl_keep isl_##EL##_list *list,	\
+	isl_bool (*follows)(__isl_keep struct isl_##EL *a,		\
 			__isl_keep struct isl_##EL *b, void *user),	\
 	void *follows_user,						\
-	int (*fn)(__isl_take isl_##EL##_list *scc, void *user),		\
+	isl_stat (*fn)(__isl_take isl_##EL##_list *scc, void *user),	\
 	void *fn_user);							\
 __isl_give isl_printer *isl_printer_print_##EL##_list(			\
 	__isl_take isl_printer *p, __isl_keep isl_##EL##_list *list);	\

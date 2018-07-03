@@ -35,14 +35,19 @@ struct isl_morph {
 };
 typedef struct isl_morph isl_morph;
 
+isl_ctx *isl_morph_get_ctx(__isl_keep isl_morph *morph);
+
 __isl_give isl_morph *isl_morph_alloc(
 	__isl_take isl_basic_set *dom, __isl_take isl_basic_set *ran,
 	__isl_take isl_mat *map, __isl_take isl_mat *inv);
 __isl_give isl_morph *isl_morph_copy(__isl_keep isl_morph *morph);
 __isl_give isl_morph *isl_morph_identity(__isl_keep isl_basic_set *bset);
-void isl_morph_free(__isl_take isl_morph *morph);
+__isl_null isl_morph *isl_morph_free(__isl_take isl_morph *morph);
 
+__isl_give isl_space *isl_morph_get_dom_space(__isl_keep isl_morph *morph);
 __isl_give isl_space *isl_morph_get_ran_space(__isl_keep isl_morph *morph);
+__isl_give isl_multi_aff *isl_morph_get_var_multi_aff(
+	__isl_keep isl_morph *morph);
 unsigned isl_morph_dom_dim(__isl_keep isl_morph *morph, enum isl_dim_type type);
 unsigned isl_morph_ran_dim(__isl_keep isl_morph *morph, enum isl_dim_type type);
 
@@ -62,6 +67,9 @@ void isl_morph_dump(__isl_take isl_morph *morph);
 
 __isl_give isl_morph *isl_basic_set_variable_compression(
 	__isl_keep isl_basic_set *bset, enum isl_dim_type type);
+__isl_give isl_morph *isl_basic_set_variable_compression_with_id(
+	__isl_keep isl_basic_set *bset, enum isl_dim_type type,
+	__isl_keep isl_id *id);
 __isl_give isl_morph *isl_basic_set_parameter_compression(
 	__isl_keep isl_basic_set *bset);
 __isl_give isl_morph *isl_basic_set_full_compression(

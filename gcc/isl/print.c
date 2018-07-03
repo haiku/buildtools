@@ -7,7 +7,6 @@
 #include <isl/union_set.h>
 #include <isl/union_map.h>
 #include <isl/polynomial.h>
-#include <isl/band.h>
 #include <isl/constraint.h>
 #include <isl/aff.h>
 #include <isl/ast.h>
@@ -19,6 +18,9 @@
 #include <print_templ.c>
 #undef BASE
 #define BASE val
+#include <print_templ.c>
+#undef BASE
+#define BASE multi_val
 #include <print_templ.c>
 #undef BASE
 #define BASE space
@@ -63,9 +65,6 @@
 #define BASE union_pw_qpolynomial_fold
 #include <print_templ.c>
 #undef BASE
-#define BASE band
-#include <print_templ.c>
-#undef BASE
 #define BASE constraint
 #include <print_templ.c>
 #undef BASE
@@ -87,11 +86,17 @@
 #define BASE multi_pw_aff
 #include <print_templ.c>
 #undef BASE
+#define BASE union_pw_aff
+#include <print_templ.c>
+#undef BASE
+#define BASE multi_union_pw_aff
+#include <print_templ.c>
+#undef BASE
 #define BASE point
 #include <print_templ.c>
 #undef BASE
 #define BASE ast_expr
-#include <print_templ.c>
+#include <print_templ_yaml.c>
 #undef BASE
 #define BASE ast_node
-#include <print_templ.c>
+#include <print_templ_yaml.c>

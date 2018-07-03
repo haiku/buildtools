@@ -33,6 +33,8 @@ extern struct isl_obj_vtable isl_obj_map_vtable;
 #define isl_obj_map		(&isl_obj_map_vtable)
 extern struct isl_obj_vtable isl_obj_union_map_vtable;
 #define isl_obj_union_map	(&isl_obj_union_map_vtable)
+extern struct isl_obj_vtable isl_obj_pw_multi_aff_vtable;
+#define isl_obj_pw_multi_aff	(&isl_obj_pw_multi_aff_vtable)
 extern struct isl_obj_vtable isl_obj_pw_qpolynomial_vtable;
 #define isl_obj_pw_qpolynomial	(&isl_obj_pw_qpolynomial_vtable)
 extern struct isl_obj_vtable isl_obj_union_pw_qpolynomial_vtable;
@@ -41,23 +43,12 @@ extern struct isl_obj_vtable isl_obj_pw_qpolynomial_fold_vtable;
 #define isl_obj_pw_qpolynomial_fold	(&isl_obj_pw_qpolynomial_fold_vtable)
 extern struct isl_obj_vtable isl_obj_union_pw_qpolynomial_fold_vtable;
 #define isl_obj_union_pw_qpolynomial_fold	(&isl_obj_union_pw_qpolynomial_fold_vtable)
+extern struct isl_obj_vtable isl_obj_schedule_vtable;
+#define isl_obj_schedule	(&isl_obj_schedule_vtable)
 struct isl_obj {
 	isl_obj_type	type;
 	void		*v;
 };
-
-struct isl_int_obj;
-typedef struct isl_int_obj isl_int_obj;
-
-__isl_give isl_int_obj *isl_int_obj_alloc(isl_ctx *ctx, isl_int v);
-void isl_int_obj_free(__isl_take isl_int_obj *i);
-__isl_give isl_int_obj *isl_int_obj_add(__isl_take isl_int_obj *i1,
-	__isl_take isl_int_obj *i2);
-__isl_give isl_int_obj *isl_int_obj_sub(__isl_take isl_int_obj *i1,
-	__isl_take isl_int_obj *i2);
-__isl_give isl_int_obj *isl_int_obj_mul(__isl_take isl_int_obj *i1,
-	__isl_take isl_int_obj *i2);
-void isl_int_obj_get_int(__isl_keep isl_int_obj *i, isl_int *v);
 
 #if defined(__cplusplus)
 }

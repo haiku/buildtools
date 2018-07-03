@@ -11,11 +11,12 @@
 #include <isl_ctx_private.h>
 #include <isl_map_private.h>
 #include <isl/map.h>
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include <isl_space_private.h>
-#include <isl/lp.h>
+#include <isl_lp_private.h>
 #include <isl/union_map.h>
 #include <isl_mat_private.h>
+#include <isl_vec_private.h>
 #include <isl_options_private.h>
 #include <isl_tarjan.h>
 
@@ -69,13 +70,15 @@ static __isl_give isl_map *set_path_length(__isl_take isl_map *map,
 	bmap = isl_basic_map_alloc_space(dim, 0, 1, 1);
 	if (exactly) {
 		k = isl_basic_map_alloc_equality(bmap);
+		if (k < 0)
+			goto error;
 		c = bmap->eq[k];
 	} else {
 		k = isl_basic_map_alloc_inequality(bmap);
+		if (k < 0)
+			goto error;
 		c = bmap->ineq[k];
 	}
-	if (k < 0)
-		goto error;
 	isl_seq_clr(c, 1 + isl_basic_map_total_dim(bmap));
 	isl_int_set_si(c[0], -length);
 	isl_int_set_si(c[1 + nparam + d - 1], -1);
@@ -281,15 +284,15 @@ error:
 /* Check whether the parametric constant term of constraint c is never
  * positive in "bset".
  */
-static int parametric_constant_never_positive(__isl_keep isl_basic_set *bset,
-	isl_int *c, int *div_purity)
+static isl_bool parametric_constant_never_positive(
+	__isl_keep isl_basic_set *bset, isl_int *c, int *div_purity)
 {
 	unsigned d;
 	unsigned n_div;
 	unsigned nparam;
 	int i;
 	int k;
-	int empty;
+	isl_bool empty;
 
 	n_div = isl_basic_set_dim(bset, isl_dim_div);
 	d = isl_basic_set_dim(bset, isl_dim_set);
@@ -316,7 +319,7 @@ static int parametric_constant_never_positive(__isl_keep isl_basic_set *bset,
 	return empty;
 error:
 	isl_basic_set_free(bset);
-	return -1;
+	return isl_bool_error;
 }
 
 /* Return PURE_PARAM if only the coefficients of the parameters are non-zero.
@@ -332,7 +335,7 @@ static int purity(__isl_keep isl_basic_set *bset, isl_int *c, int *div_purity,
 	unsigned d;
 	unsigned n_div;
 	unsigned nparam;
-	int empty;
+	isl_bool empty;
 	int i;
 	int p = 0, v = 0;
 
@@ -432,6 +435,7 @@ static int empty_path_is_identity(__isl_keep isl_basic_map *path, unsigned pos)
 		goto error;
 	isl_seq_clr(test->eq[k], 1 + isl_basic_map_total_dim(test));
 	isl_int_set_si(test->eq[k][pos], 1);
+	test = isl_basic_map_gauss(test, NULL);
 	id = isl_basic_map_identity(isl_basic_map_get_space(path));
 	is_id = isl_basic_map_is_equal(test, id);
 	isl_basic_map_free(test);
@@ -473,13 +477,15 @@ static __isl_give isl_basic_map *add_delta_constraints(
 			continue;
 		if (eq && p != MIXED) {
 			k = isl_basic_map_alloc_equality(path);
+			if (k < 0)
+				goto error;
 			path_c = path->eq[k];
 		} else {
 			k = isl_basic_map_alloc_inequality(path);
+			if (k < 0)
+				goto error;
 			path_c = path->ineq[k];
 		}
-		if (k < 0)
-			goto error;
 		isl_seq_clr(path_c, 1 + isl_basic_map_total_dim(path));
 		if (p == PURE_VAR) {
 			isl_seq_cpy(path_c + off,
@@ -753,6 +759,9 @@ static __isl_give isl_map *construct_extended_path(__isl_take isl_space *dim,
 	unsigned d;
 	int i, j, n;
 
+	if (!map)
+		goto error;
+
 	d = isl_map_dim(map, isl_dim_in);
 
 	path = isl_map_identity(isl_space_copy(dim));
@@ -768,7 +777,7 @@ static __isl_give isl_map *construct_extended_path(__isl_take isl_space *dim,
 		delta = isl_basic_map_deltas(isl_basic_map_copy(map->p[i]));
 
 		for (j = 0; j < d; ++j) {
-			int fixed;
+			isl_bool fixed;
 
 			fixed = isl_basic_set_plain_dim_is_fixed(delta, j,
 							    &steps->row[n][j]);
@@ -813,19 +822,24 @@ error:
 	return NULL;
 }
 
-static int isl_set_overlaps(__isl_keep isl_set *set1, __isl_keep isl_set *set2)
+static isl_bool isl_set_overlaps(__isl_keep isl_set *set1,
+	__isl_keep isl_set *set2)
 {
 	isl_set *i;
-	int no_overlap;
+	isl_bool no_overlap;
 
-	if (!isl_space_tuple_match(set1->dim, isl_dim_set, set2->dim, isl_dim_set))
-		return 0;
+	if (!set1 || !set2)
+		return isl_bool_error;
+
+	if (!isl_space_tuple_is_equal(set1->dim, isl_dim_set,
+					set2->dim, isl_dim_set))
+		return isl_bool_false;
 
 	i = isl_set_intersect(isl_set_copy(set1), isl_set_copy(set2));
 	no_overlap = isl_set_is_empty(i);
 	isl_set_free(i);
 
-	return no_overlap < 0 ? -1 : !no_overlap;
+	return isl_bool_not(no_overlap);
 }
 
 /* Given a union of basic maps R = \cup_i R_i \subseteq D \times D
@@ -854,16 +868,20 @@ static __isl_give isl_map *construct_component(__isl_take isl_space *dim,
 	struct isl_set *range = NULL;
 	struct isl_map *app = NULL;
 	struct isl_map *path = NULL;
+	isl_bool overlaps;
 
 	domain = isl_map_domain(isl_map_copy(map));
 	domain = isl_set_coalesce(domain);
 	range = isl_map_range(isl_map_copy(map));
 	range = isl_set_coalesce(range);
-	if (!isl_set_overlaps(domain, range)) {
+	overlaps = isl_set_overlaps(domain, range);
+	if (overlaps < 0 || !overlaps) {
 		isl_set_free(domain);
 		isl_set_free(range);
 		isl_space_free(dim);
 
+		if (overlaps < 0)
+			map = NULL;
 		map = isl_map_copy(map);
 		map = isl_map_add_dims(map, isl_dim_in, 1);
 		map = isl_map_add_dims(map, isl_dim_out, 1);
@@ -1023,7 +1041,7 @@ static int composability(__isl_keep isl_set *C, int i,
 
 	ok = LEFT | RIGHT;
 	for (j = 0; j < map->n && ok; ++j) {
-		int overlaps, subset;
+		isl_bool overlaps, subset;
 		if (j == i)
 			continue;
 
@@ -1423,7 +1441,7 @@ static int merge(isl_set **set, int *group, __isl_take isl_set *dom, int pos)
 	set[pos] = isl_set_copy(dom);
 
 	for (i = pos - 1; i >= 0; --i) {
-		int o;
+		isl_bool o;
 
 		if (group[i] != i)
 			continue;
@@ -1592,7 +1610,7 @@ static __isl_give isl_map *floyd_warshall_with_groups(__isl_take isl_space *dim,
 
 	floyd_warshall_iterate(grid, n, exact);
 
-	app = isl_map_empty(isl_map_get_space(map));
+	app = isl_map_empty(isl_map_get_space(grid[0][0]));
 
 	for (i = 0; i < n; ++i) {
 		for (j = 0; j < n; ++j)
@@ -1750,16 +1768,16 @@ struct isl_tc_follows_data {
  * *check_closed is set if the subset relation holds while
  * R_1 \circ R_2 is not empty.
  */
-static int basic_map_follows(int i, int j, void *user)
+static isl_bool basic_map_follows(int i, int j, void *user)
 {
 	struct isl_tc_follows_data *data = user;
 	struct isl_map *map12 = NULL;
 	struct isl_map *map21 = NULL;
-	int subset;
+	isl_bool subset;
 
-	if (!isl_space_tuple_match(data->list[i]->dim, isl_dim_in,
+	if (!isl_space_tuple_is_equal(data->list[i]->dim, isl_dim_in,
 				    data->list[j]->dim, isl_dim_out))
-		return 0;
+		return isl_bool_false;
 
 	map21 = isl_map_from_basic_map(
 			isl_basic_map_apply_range(
@@ -1770,15 +1788,15 @@ static int basic_map_follows(int i, int j, void *user)
 		goto error;
 	if (subset) {
 		isl_map_free(map21);
-		return 0;
+		return isl_bool_false;
 	}
 
-	if (!isl_space_tuple_match(data->list[i]->dim, isl_dim_in,
+	if (!isl_space_tuple_is_equal(data->list[i]->dim, isl_dim_in,
 				    data->list[i]->dim, isl_dim_out) ||
-	    !isl_space_tuple_match(data->list[j]->dim, isl_dim_in,
+	    !isl_space_tuple_is_equal(data->list[j]->dim, isl_dim_in,
 				    data->list[j]->dim, isl_dim_out)) {
 		isl_map_free(map21);
-		return 1;
+		return isl_bool_true;
 	}
 
 	map12 = isl_map_from_basic_map(
@@ -1794,10 +1812,10 @@ static int basic_map_follows(int i, int j, void *user)
 	if (subset)
 		data->check_closed = 1;
 
-	return subset < 0 ? -1 : !subset;
+	return subset < 0 ? isl_bool_error : !subset;
 error:
 	isl_map_free(map21);
-	return -1;
+	return isl_bool_error;
 }
 
 /* Given a union of basic maps R = \cup_i R_i \subseteq D \times D
@@ -1946,14 +1964,12 @@ static __isl_give isl_map *construct_power(__isl_keep isl_map *map,
 {
 	struct isl_map *app = NULL;
 	isl_space *dim = NULL;
-	unsigned d;
 
 	if (!map)
 		return NULL;
 
 	dim = isl_map_get_space(map);
 
-	d = isl_space_dim(dim, isl_dim_in);
 	dim = isl_space_add_dims(dim, isl_dim_in, 1);
 	dim = isl_space_add_dims(dim, isl_dim_out, 1);
 
@@ -2100,53 +2116,6 @@ __isl_give isl_map *isl_map_reaching_path_lengths(__isl_take isl_map *map,
 	return map;
 }
 
-/* Check whether equality i of bset is a pure stride constraint
- * on a single dimensions, i.e., of the form
- *
- *	v = k e
- *
- * with k a constant and e an existentially quantified variable.
- */
-static int is_eq_stride(__isl_keep isl_basic_set *bset, int i)
-{
-	unsigned nparam;
-	unsigned d;
-	unsigned n_div;
-	int pos1;
-	int pos2;
-
-	if (!bset)
-		return -1;
-
-	if (!isl_int_is_zero(bset->eq[i][0]))
-		return 0;
-
-	nparam = isl_basic_set_dim(bset, isl_dim_param);
-	d = isl_basic_set_dim(bset, isl_dim_set);
-	n_div = isl_basic_set_dim(bset, isl_dim_div);
-
-	if (isl_seq_first_non_zero(bset->eq[i] + 1, nparam) != -1)
-		return 0;
-	pos1 = isl_seq_first_non_zero(bset->eq[i] + 1 + nparam, d);
-	if (pos1 == -1)
-		return 0;
-	if (isl_seq_first_non_zero(bset->eq[i] + 1 + nparam + pos1 + 1, 
-					d - pos1 - 1) != -1)
-		return 0;
-
-	pos2 = isl_seq_first_non_zero(bset->eq[i] + 1 + nparam + d, n_div);
-	if (pos2 == -1)
-		return 0;
-	if (isl_seq_first_non_zero(bset->eq[i] + 1 + nparam + d  + pos2 + 1,
-				   n_div - pos2 - 1) != -1)
-		return 0;
-	if (!isl_int_is_one(bset->eq[i][1 + nparam + pos1]) &&
-	    !isl_int_is_negone(bset->eq[i][1 + nparam + pos1]))
-		return 0;
-
-	return 1;
-}
-
 /* Given a map, compute the smallest superset of this map that is of the form
  *
  *	{ i -> j : L <= j - i <= U and exists a_p: j_p - i_p = M_p a_p }
@@ -2212,7 +2181,7 @@ static __isl_give isl_map *box_closure_on_domain(__isl_take isl_map *map,
 		isl_int_set_si(bmap->div[k][0], 0);
 	}
 	for (i = 0; i < aff->n_eq; ++i) {
-		if (!is_eq_stride(aff, i))
+		if (!isl_basic_set_eq_is_stride(aff, i))
 			continue;
 		k = isl_basic_map_alloc_equality(bmap);
 		if (k < 0)
@@ -2596,7 +2565,7 @@ error:
 	return NULL;
 }
 
-static int inc_count(__isl_take isl_map *map, void *user)
+static isl_stat inc_count(__isl_take isl_map *map, void *user)
 {
 	int *n = user;
 
@@ -2604,10 +2573,10 @@ static int inc_count(__isl_take isl_map *map, void *user)
 
 	isl_map_free(map);
 
-	return 0;
+	return isl_stat_ok;
 }
 
-static int collect_basic_map(__isl_take isl_map *map, void *user)
+static isl_stat collect_basic_map(__isl_take isl_map *map, void *user)
 {
 	int i;
 	isl_basic_map ***next = user;
@@ -2620,10 +2589,10 @@ static int collect_basic_map(__isl_take isl_map *map, void *user)
 	}
 
 	isl_map_free(map);
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_map_free(map);
-	return -1;
+	return isl_stat_error;
 }
 
 /* Perform Floyd-Warshall on the given list of basic relations.
@@ -2891,14 +2860,14 @@ struct isl_union_power {
 	int *exact;
 };
 
-static int power(__isl_take isl_map *map, void *user)
+static isl_stat power(__isl_take isl_map *map, void *user)
 {
 	struct isl_union_power *up = user;
 
 	map = isl_map_power(map, up->exact);
 	up->pow = isl_union_map_from_map(map);
 
-	return -1;
+	return isl_stat_error;
 }
 
 /* Construct a map [x] -> [x+1], with parameters prescribed by "dim".

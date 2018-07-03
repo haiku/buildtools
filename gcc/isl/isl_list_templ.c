@@ -2,6 +2,7 @@
  * Copyright 2008-2009 Katholieke Universiteit Leuven
  * Copyright 2011      INRIA Saclay
  * Copyright 2012-2013 Ecole Normale Superieure
+ * Copyright 2017      Sven Verdoolaege
  *
  * Use of this software is governed by the MIT license
  *
@@ -14,6 +15,7 @@
 
 #include <isl_sort.h>
 #include <isl_tarjan.h>
+#include <isl/printer.h>
 
 #define xCAT(A,B) A ## B
 #define CAT(A,B) xCAT(A,B)
@@ -130,6 +132,18 @@ static __isl_give LIST(EL) *FN(LIST(EL),grow)(__isl_take LIST(EL) *list, int n)
 	return res;
 }
 
+/* Check that "index" is a valid position in "list".
+ */
+static isl_stat FN(LIST(EL),check_index)(__isl_keep LIST(EL) *list, int index)
+{
+	if (!list)
+		return isl_stat_error;
+	if (index < 0 || index >= list->n)
+		isl_die(FN(LIST(EL),get_ctx)(list), isl_error_invalid,
+			"index out of bounds", return isl_stat_error);
+	return isl_stat_ok;
+}
+
 __isl_give LIST(EL) *FN(LIST(EL),add)(__isl_take LIST(EL) *list,
 	__isl_take struct EL *el)
 {
@@ -192,8 +206,8 @@ __isl_give LIST(EL) *FN(LIST(EL),insert)(__isl_take LIST(EL) *list,
 			"index out of bounds", goto error);
 
 	if (list->ref == 1 && list->size > list->n) {
-		for (i = list->n - 1; i >= pos; --i)
-			list->p[i + 1] = list->p[i];
+		for (i = list->n; i > pos; --i)
+			list->p[i] = list->p[i - 1];
 		list->n++;
 		list->p[pos] = el;
 		return list;
@@ -214,7 +228,7 @@ error:
 	return NULL;
 }
 
-void *FN(LIST(EL),free)(__isl_take LIST(EL) *list)
+__isl_null LIST(EL) *FN(LIST(EL),free)(__isl_take LIST(EL) *list)
 {
 	int i;
 
@@ -239,11 +253,8 @@ int FN(FN(LIST(EL),n),BASE)(__isl_keep LIST(EL) *list)
 
 __isl_give EL *FN(FN(LIST(EL),get),BASE)(__isl_keep LIST(EL) *list, int index)
 {
-	if (!list)
+	if (FN(LIST(EL),check_index)(list, index) < 0)
 		return NULL;
-	if (index < 0 || index >= list->n)
-		isl_die(list->ctx, isl_error_invalid,
-			"index out of bounds", return NULL);
 	return FN(EL,copy)(list->p[index]);
 }
 
@@ -254,9 +265,8 @@ __isl_give LIST(EL) *FN(FN(LIST(EL),set),BASE)(__isl_take LIST(EL) *list,
 {
 	if (!list || !el)
 		goto error;
-	if (index < 0 || index >= list->n)
-		isl_die(list->ctx, isl_error_invalid,
-			"index out of bounds", goto error);
+	if (FN(LIST(EL),check_index)(list, index) < 0)
+		goto error;
 	if (list->p[index] == el) {
 		FN(EL,free)(el);
 		return list;
@@ -273,23 +283,80 @@ error:
 	return NULL;
 }
 
-int FN(LIST(EL),foreach)(__isl_keep LIST(EL) *list,
-	int (*fn)(__isl_take EL *el, void *user), void *user)
+/* Return the element at position "index" of "list".
+ * This may be either a copy or the element itself
+ * if there is only one reference to "list".
+ * This allows the element to be modified inplace
+ * if both the list and the element have only a single reference.
+ * The caller is not allowed to modify "list" between
+ * this call to isl_list_*_take_* and a subsequent call
+ * to isl_list_*_restore_*.
+ * The only exception is that isl_list_*_free can be called instead.
+ */
+static __isl_give EL *FN(FN(LIST(EL),take),BASE)(__isl_keep LIST(EL) *list,
+	int index)
+{
+	EL *el;
+
+	if (FN(LIST(EL),check_index)(list, index) < 0)
+		return NULL;
+	if (list->ref != 1)
+		return FN(FN(LIST(EL),get),BASE)(list, index);
+	el = list->p[index];
+	list->p[index] = NULL;
+	return el;
+}
+
+/* Set the element at position "index" of "list" to "el",
+ * where the position may be empty due to a previous call
+ * to isl_list_*_take_*.
+ */
+static __isl_give LIST(EL) *FN(FN(LIST(EL),restore),BASE)(
+	__isl_take LIST(EL) *list, int index, __isl_take EL *el)
+{
+	return FN(FN(LIST(EL),set),BASE)(list, index, el);
+}
+
+isl_stat FN(LIST(EL),foreach)(__isl_keep LIST(EL) *list,
+	isl_stat (*fn)(__isl_take EL *el, void *user), void *user)
 {
 	int i;
 
 	if (!list)
-		return -1;
+		return isl_stat_error;
 
 	for (i = 0; i < list->n; ++i) {
-		EL *el = FN(EL,copy(list->p[i]));
+		EL *el = FN(EL,copy)(list->p[i]);
 		if (!el)
-			return -1;
+			return isl_stat_error;
 		if (fn(el, user) < 0)
-			return -1;
+			return isl_stat_error;
 	}
 
-	return 0;
+	return isl_stat_ok;
+}
+
+/* Replace each element in "list" by the result of calling "fn"
+ * on the element.
+ */
+__isl_give LIST(EL) *FN(LIST(EL),map)(__isl_keep LIST(EL) *list,
+	__isl_give EL *(*fn)(__isl_take EL *el, void *user), void *user)
+{
+	int i, n;
+
+	if (!list)
+		return NULL;
+
+	n = list->n;
+	for (i = 0; i < n; ++i) {
+		EL *el = FN(FN(LIST(EL),take),BASE)(list, i);
+		if (!el)
+			return FN(LIST(EL),free)(list);
+		el = fn(el, user);
+		list = FN(FN(LIST(EL),restore),BASE)(list, i, el);
+	}
+
+	return list;
 }
 
 /* Internal data structure for isl_*_list_sort.
@@ -344,7 +411,7 @@ __isl_give LIST(EL) *FN(LIST(EL),sort)(__isl_take LIST(EL) *list,
  */
 S(LIST(EL),foreach_scc_data) {
 	LIST(EL) *list;
-	int (*follows)(__isl_keep EL *a, __isl_keep EL *b, void *user);
+	isl_bool (*follows)(__isl_keep EL *a, __isl_keep EL *b, void *user);
 	void *follows_user;
 };
 
@@ -352,7 +419,7 @@ S(LIST(EL),foreach_scc_data) {
  *
  * Use the user provided callback to find out.
  */
-static int FN(LIST(EL),follows)(int i, int j, void *user)
+static isl_bool FN(LIST(EL),follows)(int i, int j, void *user)
 {
 	S(LIST(EL),foreach_scc_data) *data = user;
 
@@ -363,8 +430,8 @@ static int FN(LIST(EL),follows)(int i, int j, void *user)
 /* Call "fn" on the sublist of "list" that consists of the elements
  * with indices specified by the "n" elements of "pos".
  */
-static int FN(LIST(EL),call_on_scc)(__isl_keep LIST(EL) *list, int *pos, int n,
-	int (*fn)(__isl_take LIST(EL) *scc, void *user), void *user)
+static isl_stat FN(LIST(EL),call_on_scc)(__isl_keep LIST(EL) *list, int *pos,
+	int n, isl_stat (*fn)(__isl_take LIST(EL) *scc, void *user), void *user)
 {
 	int i;
 	isl_ctx *ctx;
@@ -394,10 +461,10 @@ static int FN(LIST(EL),call_on_scc)(__isl_keep LIST(EL) *list, int *pos, int n,
  * We simply call isl_tarjan_graph_init, extract the SCCs from the result and
  * call fn on each of them.
  */
-int FN(LIST(EL),foreach_scc)(__isl_keep LIST(EL) *list,
-	int (*follows)(__isl_keep EL *a, __isl_keep EL *b, void *user),
+isl_stat FN(LIST(EL),foreach_scc)(__isl_keep LIST(EL) *list,
+	isl_bool (*follows)(__isl_keep EL *a, __isl_keep EL *b, void *user),
 	void *follows_user,
-	int (*fn)(__isl_take LIST(EL) *scc, void *user), void *fn_user)
+	isl_stat (*fn)(__isl_take LIST(EL) *scc, void *user), void *fn_user)
 {
 	S(LIST(EL),foreach_scc_data) data = { list, follows, follows_user };
 	int i, n;
@@ -405,9 +472,9 @@ int FN(LIST(EL),foreach_scc)(__isl_keep LIST(EL) *list,
 	struct isl_tarjan_graph *g;
 
 	if (!list)
-		return -1;
+		return isl_stat_error;
 	if (list->n == 0)
-		return 0;
+		return isl_stat_ok;
 	if (list->n == 1)
 		return fn(FN(LIST(EL),copy)(list), fn_user);
 
@@ -415,7 +482,7 @@ int FN(LIST(EL),foreach_scc)(__isl_keep LIST(EL) *list,
 	n = list->n;
 	g = isl_tarjan_graph_init(ctx, n, &FN(LIST(EL),follows), &data);
 	if (!g)
-		return -1;
+		return isl_stat_error;
 
 	i = 0;
 	do {
@@ -440,7 +507,7 @@ int FN(LIST(EL),foreach_scc)(__isl_keep LIST(EL) *list,
 
 	isl_tarjan_graph_free(g);
 
-	return n > 0 ? -1 : 0;
+	return n > 0 ? isl_stat_error : isl_stat_ok;
 }
 
 __isl_give LIST(EL) *FN(FN(LIST(EL),from),BASE)(__isl_take EL *el)
@@ -461,6 +528,26 @@ error:
 	return NULL;
 }
 
+/* Append the elements of "list2" to "list1", where "list1" is known
+ * to have only a single reference and enough room to hold
+ * the extra elements.
+ */
+static __isl_give LIST(EL) *FN(LIST(EL),concat_inplace)(
+	__isl_take LIST(EL) *list1, __isl_take LIST(EL) *list2)
+{
+	int i;
+
+	for (i = 0; i < list2->n; ++i)
+		list1 = FN(LIST(EL),add)(list1, FN(EL,copy)(list2->p[i]));
+	FN(LIST(EL),free)(list2);
+	return list1;
+}
+
+/* Concatenate "list1" and "list2".
+ * If "list1" has only one reference and has enough room
+ * for the elements of "list2", the add the elements to "list1" itself.
+ * Otherwise, create a new list to store the result.
+ */
 __isl_give LIST(EL) *FN(LIST(EL),concat)(__isl_take LIST(EL) *list1,
 	__isl_take LIST(EL) *list2)
 {
@@ -470,6 +557,9 @@ __isl_give LIST(EL) *FN(LIST(EL),concat)(__isl_take LIST(EL) *list1,
 
 	if (!list1 || !list2)
 		goto error;
+
+	if (list1->ref == 1 && list1->n + list2->n <= list1->size)
+		return FN(LIST(EL),concat_inplace)(list1, list2);
 
 	ctx = FN(LIST(EL),get_ctx)(list1);
 	res = FN(LIST(EL),alloc)(ctx, list1->n + list2->n);

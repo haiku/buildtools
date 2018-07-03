@@ -13,10 +13,14 @@
 #include <isl_map_private.h>
 #include <isl_constraint_private.h>
 #include <isl_space_private.h>
-#include <isl/seq.h>
+#include <isl_seq.h>
 #include <isl_aff_private.h>
 #include <isl_local_space_private.h>
 #include <isl_val_private.h>
+#include <isl_vec_private.h>
+
+#include <bset_to_bmap.c>
+#include <bset_from_bmap.c>
 
 #undef BASE
 #define BASE constraint
@@ -130,15 +134,17 @@ error:
 struct isl_constraint *isl_basic_set_constraint(struct isl_basic_set *bset,
 	isl_int **line)
 {
-	return isl_basic_map_constraint((struct isl_basic_map *)bset, line);
+	return isl_basic_map_constraint(bset_to_bmap(bset), line);
 }
 
-__isl_give isl_constraint *isl_equality_alloc(__isl_take isl_local_space *ls)
+__isl_give isl_constraint *isl_constraint_alloc_equality(
+	__isl_take isl_local_space *ls)
 {
 	return isl_constraint_alloc(1, ls);
 }
 
-__isl_give isl_constraint *isl_inequality_alloc(__isl_take isl_local_space *ls)
+__isl_give isl_constraint *isl_constraint_alloc_inequality(
+	__isl_take isl_local_space *ls)
 {
 	return isl_constraint_alloc(0, ls);
 }
@@ -172,7 +178,7 @@ struct isl_constraint *isl_constraint_copy(struct isl_constraint *constraint)
 	return constraint;
 }
 
-void *isl_constraint_free(struct isl_constraint *c)
+__isl_null isl_constraint *isl_constraint_free(__isl_take isl_constraint *c)
 {
 	if (!c)
 		return NULL;
@@ -187,55 +193,120 @@ void *isl_constraint_free(struct isl_constraint *c)
 	return NULL;
 }
 
+/* Return the number of constraints in "bmap", i.e., the
+ * number of times isl_basic_map_foreach_constraint will
+ * call the callback.
+ */
+int isl_basic_map_n_constraint(__isl_keep isl_basic_map *bmap)
+{
+	if (!bmap)
+		return -1;
+
+	return bmap->n_eq + bmap->n_ineq;
+}
+
 /* Return the number of constraints in "bset", i.e., the
  * number of times isl_basic_set_foreach_constraint will
  * call the callback.
  */
 int isl_basic_set_n_constraint(__isl_keep isl_basic_set *bset)
 {
-	if (!bset)
-		return -1;
-
-	return bset->n_eq + bset->n_ineq;
+	return isl_basic_map_n_constraint(bset);
 }
 
-int isl_basic_map_foreach_constraint(__isl_keep isl_basic_map *bmap,
-	int (*fn)(__isl_take isl_constraint *c, void *user), void *user)
+isl_stat isl_basic_map_foreach_constraint(__isl_keep isl_basic_map *bmap,
+	isl_stat (*fn)(__isl_take isl_constraint *c, void *user), void *user)
 {
 	int i;
 	struct isl_constraint *c;
 
 	if (!bmap)
-		return -1;
+		return isl_stat_error;
 
 	isl_assert(bmap->ctx, ISL_F_ISSET(bmap, ISL_BASIC_MAP_FINAL),
-			return -1);
+			return isl_stat_error);
 
 	for (i = 0; i < bmap->n_eq; ++i) {
 		c = isl_basic_map_constraint(isl_basic_map_copy(bmap),
 						&bmap->eq[i]);
 		if (!c)
-			return -1;
+			return isl_stat_error;
 		if (fn(c, user) < 0)
-			return -1;
+			return isl_stat_error;
 	}
 
 	for (i = 0; i < bmap->n_ineq; ++i) {
 		c = isl_basic_map_constraint(isl_basic_map_copy(bmap),
 						&bmap->ineq[i]);
 		if (!c)
-			return -1;
+			return isl_stat_error;
 		if (fn(c, user) < 0)
-			return -1;
+			return isl_stat_error;
 	}
 
-	return 0;
+	return isl_stat_ok;
 }
 
-int isl_basic_set_foreach_constraint(__isl_keep isl_basic_set *bset,
-	int (*fn)(__isl_take isl_constraint *c, void *user), void *user)
+isl_stat isl_basic_set_foreach_constraint(__isl_keep isl_basic_set *bset,
+	isl_stat (*fn)(__isl_take isl_constraint *c, void *user), void *user)
 {
-	return isl_basic_map_foreach_constraint((isl_basic_map *)bset, fn, user);
+	return isl_basic_map_foreach_constraint(bset_to_bmap(bset), fn, user);
+}
+
+/* Add the constraint to the list that "user" points to, if it is not
+ * a div constraint.
+ */
+static isl_stat collect_constraint(__isl_take isl_constraint *constraint,
+	void *user)
+{
+	isl_constraint_list **list = user;
+
+	if (isl_constraint_is_div_constraint(constraint))
+		isl_constraint_free(constraint);
+	else
+		*list = isl_constraint_list_add(*list, constraint);
+
+	return isl_stat_ok;
+}
+
+/* Return a list of constraints that, when combined, are equivalent
+ * to "bmap".  The input is required to have only known divs.
+ *
+ * There is no need to include the div constraints as they are
+ * implied by the div expressions.
+ */
+__isl_give isl_constraint_list *isl_basic_map_get_constraint_list(
+	__isl_keep isl_basic_map *bmap)
+{
+	int n;
+	int known;
+	isl_ctx *ctx;
+	isl_constraint_list *list;
+
+	known = isl_basic_map_divs_known(bmap);
+	if (known < 0)
+		return NULL;
+	ctx = isl_basic_map_get_ctx(bmap);
+	if (!known)
+		isl_die(ctx, isl_error_invalid,
+			"input involves unknown divs", return NULL);
+
+	n = isl_basic_map_n_constraint(bmap);
+	list = isl_constraint_list_alloc(ctx, n);
+	if (isl_basic_map_foreach_constraint(bmap,
+					    &collect_constraint, &list) < 0)
+		list = isl_constraint_list_free(list);
+
+	return list;
+}
+
+/* Return a list of constraints that, when combined, are equivalent
+ * to "bset".  The input is required to have only known divs.
+ */
+__isl_give isl_constraint_list *isl_basic_set_get_constraint_list(
+	__isl_keep isl_basic_set *bset)
+{
+	return isl_basic_map_get_constraint_list(bset);
 }
 
 int isl_constraint_is_equal(struct isl_constraint *constraint1,
@@ -281,9 +352,8 @@ error:
 struct isl_basic_set *isl_basic_set_add_constraint(
 	struct isl_basic_set *bset, struct isl_constraint *constraint)
 {
-	return (struct isl_basic_set *)
-		isl_basic_map_add_constraint((struct isl_basic_map *)bset,
-						constraint);
+	return bset_from_bmap(isl_basic_map_add_constraint(bset_to_bmap(bset),
+							    constraint));
 }
 
 __isl_give isl_map *isl_map_add_constraint(__isl_take isl_map *map,
@@ -323,23 +393,23 @@ int isl_constraint_dim(struct isl_constraint *constraint,
 	return n(constraint, type);
 }
 
-int isl_constraint_involves_dims(__isl_keep isl_constraint *constraint,
+isl_bool isl_constraint_involves_dims(__isl_keep isl_constraint *constraint,
 	enum isl_dim_type type, unsigned first, unsigned n)
 {
 	int i;
 	isl_ctx *ctx;
 	int *active = NULL;
-	int involves = 0;
+	isl_bool involves = isl_bool_false;
 
 	if (!constraint)
-		return -1;
+		return isl_bool_error;
 	if (n == 0)
-		return 0;
+		return isl_bool_false;
 
 	ctx = isl_constraint_get_ctx(constraint);
 	if (first + n > isl_constraint_dim(constraint, type))
 		isl_die(ctx, isl_error_invalid,
-			"range out of bounds", return -1);
+			"range out of bounds", return isl_bool_error);
 
 	active = isl_local_space_get_active(constraint->ls,
 					    constraint->v->el + 1);
@@ -349,7 +419,7 @@ int isl_constraint_involves_dims(__isl_keep isl_constraint *constraint,
 	first += isl_local_space_offset(constraint->ls, type) - 1;
 	for (i = 0; i < n; ++i)
 		if (active[first + i]) {
-			involves = 1;
+			involves = isl_bool_true;
 			break;
 		}
 
@@ -358,21 +428,21 @@ int isl_constraint_involves_dims(__isl_keep isl_constraint *constraint,
 	return involves;
 error:
 	free(active);
-	return -1;
+	return isl_bool_error;
 }
 
 /* Does the given constraint represent a lower bound on the given
  * dimension?
  */
-int isl_constraint_is_lower_bound(__isl_keep isl_constraint *constraint,
+isl_bool isl_constraint_is_lower_bound(__isl_keep isl_constraint *constraint,
 	enum isl_dim_type type, unsigned pos)
 {
 	if (!constraint)
-		return -1;
+		return isl_bool_error;
 
 	if (pos >= isl_local_space_dim(constraint->ls, type))
 		isl_die(isl_constraint_get_ctx(constraint), isl_error_invalid,
-			"position out of bounds", return -1);
+			"position out of bounds", return isl_bool_error);
 
 	pos += isl_local_space_offset(constraint->ls, type);
 	return isl_int_is_pos(constraint->v->el[pos]);
@@ -381,15 +451,15 @@ int isl_constraint_is_lower_bound(__isl_keep isl_constraint *constraint,
 /* Does the given constraint represent an upper bound on the given
  * dimension?
  */
-int isl_constraint_is_upper_bound(__isl_keep isl_constraint *constraint,
+isl_bool isl_constraint_is_upper_bound(__isl_keep isl_constraint *constraint,
 	enum isl_dim_type type, unsigned pos)
 {
 	if (!constraint)
-		return -1;
+		return isl_bool_error;
 
 	if (pos >= isl_local_space_dim(constraint->ls, type))
 		isl_die(isl_constraint_get_ctx(constraint), isl_error_invalid,
-			"position out of bounds", return -1);
+			"position out of bounds", return isl_bool_error);
 
 	pos += isl_local_space_offset(constraint->ls, type);
 	return isl_int_is_neg(constraint->v->el[pos]);
@@ -402,7 +472,8 @@ const char *isl_constraint_get_dim_name(__isl_keep isl_constraint *constraint,
 	    isl_local_space_get_dim_name(constraint->ls, type, pos) : NULL;
 }
 
-void isl_constraint_get_constant(struct isl_constraint *constraint, isl_int *v)
+void isl_constraint_get_constant(__isl_keep isl_constraint *constraint,
+	isl_int *v)
 {
 	if (!constraint)
 		return;
@@ -548,7 +619,7 @@ __isl_give isl_constraint *isl_constraint_set_coefficient(
  */
 __isl_give isl_constraint *isl_constraint_set_coefficient_val(
 	__isl_take isl_constraint *constraint,
-	enum isl_dim_type type, int pos, isl_val *v)
+	enum isl_dim_type type, int pos, __isl_take isl_val *v)
 {
 	constraint = isl_constraint_cow(constraint);
 	if (!constraint || !v)
@@ -598,60 +669,6 @@ __isl_give isl_constraint *isl_constraint_set_coefficient_si(
 	return constraint;
 }
 
-/* Drop any constraint from "bset" that is identical to "constraint".
- * In particular, this means that the local spaces of "bset" and
- * "constraint" need to be the same.
- *
- * Since the given constraint may actually be a pointer into the bset,
- * we have to be careful not to reorder the constraints as the user
- * may be holding on to other constraints from the same bset.
- * This should be cleaned up when the internal representation of
- * isl_constraint is changed to use isl_aff.
- */
-__isl_give isl_basic_set *isl_basic_set_drop_constraint(
-	__isl_take isl_basic_set *bset, __isl_take isl_constraint *constraint)
-{
-	int i;
-	unsigned n;
-	isl_int **row;
-	unsigned total;
-	isl_local_space *ls1;
-	int equal;
-
-	if (!bset || !constraint)
-		goto error;
-
-	ls1 = isl_basic_set_get_local_space(bset);
-	equal = isl_local_space_is_equal(ls1, constraint->ls);
-	isl_local_space_free(ls1);
-	if (equal < 0)
-		goto error;
-	if (!equal) {
-		isl_constraint_free(constraint);
-		return bset;
-	}
-
-	if (isl_constraint_is_equality(constraint)) {
-		n = bset->n_eq;
-		row = bset->eq;
-	} else {
-		n = bset->n_ineq;
-		row = bset->ineq;
-	}
-
-	total = isl_constraint_dim(constraint, isl_dim_all);
-	for (i = 0; i < n; ++i)
-		if (isl_seq_eq(row[i], constraint->v->el, 1 + total))
-			isl_seq_clr(row[i], 1 + total);
-			
-	isl_constraint_free(constraint);
-	return bset;
-error:
-	isl_constraint_free(constraint);
-	isl_basic_set_free(bset);
-	return NULL;
-}
-
 struct isl_constraint *isl_constraint_negate(struct isl_constraint *constraint)
 {
 	isl_ctx *ctx;
@@ -672,10 +689,10 @@ struct isl_constraint *isl_constraint_negate(struct isl_constraint *constraint)
 	return constraint;
 }
 
-int isl_constraint_is_equality(struct isl_constraint *constraint)
+isl_bool isl_constraint_is_equality(struct isl_constraint *constraint)
 {
 	if (!constraint)
-		return -1;
+		return isl_bool_error;
 	return constraint->eq;
 }
 
@@ -690,9 +707,11 @@ int isl_constraint_is_div_constraint(__isl_keep isl_constraint *constraint)
 		return 0;
 	n_div = isl_constraint_dim(constraint, isl_dim_div);
 	for (i = 0; i < n_div; ++i) {
-		if (isl_local_space_is_div_constraint(constraint->ls,
-							constraint->v->el, i))
-			return 1;
+		isl_bool is_div;
+		is_div = isl_local_space_is_div_constraint(constraint->ls,
+							constraint->v->el, i);
+		if (is_div < 0 || is_div)
+			return is_div;
 	}
 
 	return 0;
@@ -742,20 +761,27 @@ error:
 	return NULL;
 }
 
-struct isl_basic_set *isl_basic_set_from_constraint(
-	struct isl_constraint *constraint)
+__isl_give isl_basic_set *isl_basic_set_from_constraint(
+	__isl_take isl_constraint *constraint)
 {
 	if (!constraint)
 		return NULL;
 
 	if (isl_constraint_dim(constraint, isl_dim_in) != 0)
 		isl_die(isl_constraint_get_ctx(constraint), isl_error_invalid,
-			"not a set constraint",
-			return isl_constraint_free(constraint));
-	return (isl_basic_set *)isl_basic_map_from_constraint(constraint);
+			"not a set constraint", goto error);
+	return bset_from_bmap(isl_basic_map_from_constraint(constraint));
+error:
+	isl_constraint_free(constraint);
+	return NULL;
 }
 
-int isl_basic_map_has_defining_equality(
+/* Is the variable of "type" at position "pos" of "bmap" defined
+ * in terms of earlier dimensions through an equality?
+ *
+ * If so, and if c is not NULL, then return a copy of this equality in *c.
+ */
+isl_bool isl_basic_map_has_defining_equality(
 	__isl_keep isl_basic_map *bmap, enum isl_dim_type type, int pos,
 	__isl_give isl_constraint **c)
 {
@@ -764,30 +790,39 @@ int isl_basic_map_has_defining_equality(
 	unsigned total;
 
 	if (!bmap)
-		return -1;
+		return isl_bool_error;
 	offset = basic_map_offset(bmap, type);
 	total = isl_basic_map_total_dim(bmap);
-	isl_assert(bmap->ctx, pos < isl_basic_map_dim(bmap, type), return -1);
-	for (i = 0; i < bmap->n_eq; ++i)
-		if (!isl_int_is_zero(bmap->eq[i][offset + pos]) &&
+	if (pos >= isl_basic_map_dim(bmap, type))
+		isl_die(isl_basic_map_get_ctx(bmap), isl_error_invalid,
+			"invalid position", return isl_bool_error);
+	for (i = 0; i < bmap->n_eq; ++i) {
+		if (isl_int_is_zero(bmap->eq[i][offset + pos]) ||
 		    isl_seq_first_non_zero(bmap->eq[i]+offset+pos+1,
-					   1+total-offset-pos-1) == -1) {
+					   1+total-offset-pos-1) != -1)
+			continue;
+		if (c)
 			*c = isl_basic_map_constraint(isl_basic_map_copy(bmap),
 								&bmap->eq[i]);
-			return 1;
-		}
-	return 0;
+		return isl_bool_true;
+	}
+	return isl_bool_false;
 }
 
-int isl_basic_set_has_defining_equality(
+/* Is the variable of "type" at position "pos" of "bset" defined
+ * in terms of earlier dimensions through an equality?
+ *
+ * If so, and if c is not NULL, then return a copy of this equality in *c.
+ */
+isl_bool isl_basic_set_has_defining_equality(
 	__isl_keep isl_basic_set *bset, enum isl_dim_type type, int pos,
 	__isl_give isl_constraint **c)
 {
-	return isl_basic_map_has_defining_equality((isl_basic_map *)bset,
+	return isl_basic_map_has_defining_equality(bset_to_bmap(bset),
 						    type, pos, c);
 }
 
-int isl_basic_set_has_defining_inequalities(
+isl_bool isl_basic_set_has_defining_inequalities(
 	struct isl_basic_set *bset, enum isl_dim_type type, int pos,
 	struct isl_constraint **lower,
 	struct isl_constraint **upper)
@@ -799,10 +834,12 @@ int isl_basic_set_has_defining_inequalities(
 	isl_int **lower_line, **upper_line;
 
 	if (!bset)
-		return -1;
+		return isl_bool_error;
 	offset = basic_set_offset(bset, type);
 	total = isl_basic_set_total_dim(bset);
-	isl_assert(bset->ctx, pos < isl_basic_set_dim(bset, type), return -1);
+	if (pos >= isl_basic_set_dim(bset, type))
+		isl_die(isl_basic_set_get_ctx(bset), isl_error_invalid,
+			"invalid position", return isl_bool_error);
 	isl_int_init(m);
 	for (i = 0; i < bset->n_ineq; ++i) {
 		if (isl_int_is_zero(bset->ineq[i][offset + pos]))
@@ -834,13 +871,13 @@ int isl_basic_set_has_defining_inequalities(
 			*upper = isl_basic_set_constraint(
 					isl_basic_set_copy(bset), upper_line);
 			isl_int_clear(m);
-			return 1;
+			return isl_bool_true;
 		}
 	}
 	*lower = NULL;
 	*upper = NULL;
 	isl_int_clear(m);
-	return 0;
+	return isl_bool_false;
 }
 
 /* Given two constraints "a" and "b" on the variable at position "abs_pos"
@@ -945,10 +982,10 @@ static __isl_give isl_basic_set *set_largest_lower_bound(
 	return context;
 }
 
-static int foreach_upper_bound(__isl_keep isl_basic_set *bset,
+static isl_stat foreach_upper_bound(__isl_keep isl_basic_set *bset,
 	enum isl_dim_type type, unsigned abs_pos,
 	__isl_take isl_basic_set *context, int n_upper,
-	int (*fn)(__isl_take isl_constraint *lower,
+	isl_stat (*fn)(__isl_take isl_constraint *lower,
 		  __isl_take isl_constraint *upper,
 		  __isl_take isl_basic_set *bset, void *user), void *user)
 {
@@ -977,20 +1014,20 @@ static int foreach_upper_bound(__isl_keep isl_basic_set *bset,
 	isl_basic_set_free(context);
 
 	if (i < bset->n_ineq)
-		return -1;
+		return isl_stat_error;
 
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_constraint_free(upper);
 	isl_basic_set_free(context_i);
 	isl_basic_set_free(context);
-	return -1;
+	return isl_stat_error;
 }
 
-static int foreach_lower_bound(__isl_keep isl_basic_set *bset,
+static isl_stat foreach_lower_bound(__isl_keep isl_basic_set *bset,
 	enum isl_dim_type type, unsigned abs_pos,
 	__isl_take isl_basic_set *context, int n_lower,
-	int (*fn)(__isl_take isl_constraint *lower,
+	isl_stat (*fn)(__isl_take isl_constraint *lower,
 		  __isl_take isl_constraint *upper,
 		  __isl_take isl_basic_set *bset, void *user), void *user)
 {
@@ -1019,20 +1056,20 @@ static int foreach_lower_bound(__isl_keep isl_basic_set *bset,
 	isl_basic_set_free(context);
 
 	if (i < bset->n_ineq)
-		return -1;
+		return isl_stat_error;
 
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_constraint_free(lower);
 	isl_basic_set_free(context_i);
 	isl_basic_set_free(context);
-	return -1;
+	return isl_stat_error;
 }
 
-static int foreach_bound_pair(__isl_keep isl_basic_set *bset,
+static isl_stat foreach_bound_pair(__isl_keep isl_basic_set *bset,
 	enum isl_dim_type type, unsigned abs_pos,
 	__isl_take isl_basic_set *context, int n_lower, int n_upper,
-	int (*fn)(__isl_take isl_constraint *lower,
+	isl_stat (*fn)(__isl_take isl_constraint *lower,
 		  __isl_take isl_constraint *upper,
 		  __isl_take isl_basic_set *bset, void *user), void *user)
 {
@@ -1087,16 +1124,16 @@ static int foreach_bound_pair(__isl_keep isl_basic_set *bset,
 	isl_basic_set_free(context);
 
 	if (i < bset->n_ineq)
-		return -1;
+		return isl_stat_error;
 
-	return 0;
+	return isl_stat_ok;
 error:
 	isl_constraint_free(lower);
 	isl_constraint_free(upper);
 	isl_basic_set_free(context_i);
 	isl_basic_set_free(context_j);
 	isl_basic_set_free(context);
-	return -1;
+	return isl_stat_error;
 }
 
 /* For each pair of lower and upper bounds on the variable "pos"
@@ -1115,9 +1152,9 @@ error:
  * If not, we count the number of lower and upper bounds and
  * act accordingly.
  */
-int isl_basic_set_foreach_bound_pair(__isl_keep isl_basic_set *bset,
+isl_stat isl_basic_set_foreach_bound_pair(__isl_keep isl_basic_set *bset,
 	enum isl_dim_type type, unsigned pos,
-	int (*fn)(__isl_take isl_constraint *lower,
+	isl_stat (*fn)(__isl_take isl_constraint *lower,
 		  __isl_take isl_constraint *upper,
 		  __isl_take isl_basic_set *bset, void *user), void *user)
 {
@@ -1129,10 +1166,11 @@ int isl_basic_set_foreach_bound_pair(__isl_keep isl_basic_set *bset,
 	int n_lower, n_upper;
 
 	if (!bset)
-		return -1;
-	isl_assert(bset->ctx, pos < isl_basic_set_dim(bset, type), return -1);
+		return isl_stat_error;
+	isl_assert(bset->ctx, pos < isl_basic_set_dim(bset, type),
+		return isl_stat_error);
 	isl_assert(bset->ctx, type == isl_dim_param || type == isl_dim_set,
-		return -1);
+		return isl_stat_error);
 
 	abs_pos = pos;
 	if (type == isl_dim_set)
@@ -1285,4 +1323,72 @@ __isl_give isl_constraint *isl_equality_from_aff(__isl_take isl_aff *aff)
 __isl_give isl_constraint *isl_inequality_from_aff(__isl_take isl_aff *aff)
 {
 	return isl_constraint_alloc_aff(0, aff);
+}
+
+/* Compare two isl_constraints.
+ *
+ * Return -1 if "c1" is "smaller" than "c2", 1 if "c1" is "greater"
+ * than "c2" and 0 if they are equal.
+ *
+ * The order is fairly arbitrary.  We do consider constraints that only involve
+ * earlier dimensions as "smaller".
+ */
+int isl_constraint_plain_cmp(__isl_keep isl_constraint *c1,
+	__isl_keep isl_constraint *c2)
+{
+	int cmp;
+	int last1, last2;
+
+	if (c1 == c2)
+		return 0;
+	if (!c1)
+		return -1;
+	if (!c2)
+		return 1;
+	cmp = isl_local_space_cmp(c1->ls, c2->ls);
+	if (cmp != 0)
+		return cmp;
+
+	last1 = isl_seq_last_non_zero(c1->v->el + 1, c1->v->size - 1);
+	last2 = isl_seq_last_non_zero(c2->v->el + 1, c1->v->size - 1);
+	if (last1 != last2)
+		return last1 - last2;
+
+	return isl_seq_cmp(c1->v->el, c2->v->el, c1->v->size);
+}
+
+/* Compare two constraints based on their final (non-zero) coefficients.
+ * In particular, the constraint that involves later variables or
+ * that has a larger coefficient for a shared latest variable
+ * is considered "greater" than the other constraint.
+ *
+ * Return -1 if "c1" is "smaller" than "c2", 1 if "c1" is "greater"
+ * than "c2" and 0 if they are equal.
+ *
+ * If the constraints live in different local spaces, then we cannot
+ * really compare the constraints so we compare the local spaces instead.
+ */
+int isl_constraint_cmp_last_non_zero(__isl_keep isl_constraint *c1,
+	__isl_keep isl_constraint *c2)
+{
+	int cmp;
+	int last1, last2;
+
+	if (c1 == c2)
+		return 0;
+	if (!c1)
+		return -1;
+	if (!c2)
+		return 1;
+	cmp = isl_local_space_cmp(c1->ls, c2->ls);
+	if (cmp != 0)
+		return cmp;
+
+	last1 = isl_seq_last_non_zero(c1->v->el + 1, c1->v->size - 1);
+	last2 = isl_seq_last_non_zero(c2->v->el + 1, c1->v->size - 1);
+	if (last1 != last2)
+		return last1 - last2;
+	if (last1 == -1)
+		return 0;
+	return isl_int_abs_cmp(c1->v->el[1 + last1], c2->v->el[1 + last2]);
 }

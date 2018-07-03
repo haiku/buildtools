@@ -14,13 +14,98 @@
 #define __isl_calloc(type,size)		((type *)calloc(1, size))
 #define __isl_calloc_type(type)		__isl_calloc(type,sizeof(type))
 
+/* Return the negation of "b", where the negation of isl_bool_error
+ * is isl_bool_error again.
+ */
+isl_bool isl_bool_not(isl_bool b)
+{
+	return b < 0 ? isl_bool_error : !b;
+}
+
+/* Check that the result of an allocation ("p") is not NULL and
+ * complain if it is.
+ * The only exception is when allocation size ("size") is equal to zero.
+ */
+static void *check_non_null(isl_ctx *ctx, void *p, size_t size)
+{
+	if (p || size == 0)
+		return p;
+	isl_die(ctx, isl_error_alloc, "allocation failure", return NULL);
+}
+
+/* Prepare for performing the next "operation" in the context.
+ * Return 0 if we are allowed to perform this operation and
+ * return -1 if we should abort the computation.
+ *
+ * In particular, we should stop if the user has explicitly aborted
+ * the computation or if the maximal number of operations has been exceeded.
+ */
+int isl_ctx_next_operation(isl_ctx *ctx)
+{
+	if (!ctx)
+		return -1;
+	if (ctx->abort) {
+		isl_ctx_set_error(ctx, isl_error_abort);
+		return -1;
+	}
+	if (ctx->max_operations && ctx->operations >= ctx->max_operations)
+		isl_die(ctx, isl_error_quota,
+			"maximal number of operations exceeded", return -1);
+	ctx->operations++;
+	return 0;
+}
+
+/* Call malloc and complain if it fails.
+ * If ctx is NULL, then return NULL.
+ */
+void *isl_malloc_or_die(isl_ctx *ctx, size_t size)
+{
+	if (isl_ctx_next_operation(ctx) < 0)
+		return NULL;
+	return ctx ? check_non_null(ctx, malloc(size), size) : NULL;
+}
+
+/* Call calloc and complain if it fails.
+ * If ctx is NULL, then return NULL.
+ */
+void *isl_calloc_or_die(isl_ctx *ctx, size_t nmemb, size_t size)
+{
+	if (isl_ctx_next_operation(ctx) < 0)
+		return NULL;
+	return ctx ? check_non_null(ctx, calloc(nmemb, size), nmemb) : NULL;
+}
+
+/* Call realloc and complain if it fails.
+ * If ctx is NULL, then return NULL.
+ */
+void *isl_realloc_or_die(isl_ctx *ctx, void *ptr, size_t size)
+{
+	if (isl_ctx_next_operation(ctx) < 0)
+		return NULL;
+	return ctx ? check_non_null(ctx, realloc(ptr, size), size) : NULL;
+}
+
+/* Keep track of all information about the current error ("error", "msg",
+ * "file", "line") in "ctx".
+ */
+void isl_ctx_set_full_error(isl_ctx *ctx, enum isl_error error, const char *msg,
+	const char *file, int line)
+{
+	if (!ctx)
+		return;
+	ctx->error = error;
+	ctx->error_msg = msg;
+	ctx->error_file = file;
+	ctx->error_line = line;
+}
+
 void isl_handle_error(isl_ctx *ctx, enum isl_error error, const char *msg,
 	const char *file, int line)
 {
 	if (!ctx)
 		return;
 
-	isl_ctx_set_error(ctx, error);
+	isl_ctx_set_full_error(ctx, error, msg, file, line);
 
 	switch (ctx->opt->on_error) {
 	case ISL_ON_ERROR_WARN:
@@ -131,7 +216,10 @@ isl_ctx *isl_ctx_alloc_with_options(struct isl_args *args, void *user_opt)
 	ctx->n_cached = 0;
 	ctx->n_miss = 0;
 
-	ctx->error = isl_error_none;
+	isl_ctx_reset_error(ctx);
+
+	ctx->operations = 0;
+	isl_ctx_set_max_operations(ctx, ctx->opt->max_operations);
 
 	return ctx;
 error:
@@ -162,6 +250,13 @@ void isl_ctx_deref(struct isl_ctx *ctx)
 	ctx->ref--;
 }
 
+/* Print statistics on usage.
+ */
+static void print_stats(isl_ctx *ctx)
+{
+	fprintf(stderr, "operations: %lu\n", ctx->operations);
+}
+
 void isl_ctx_free(struct isl_ctx *ctx)
 {
 	if (!ctx)
@@ -170,6 +265,9 @@ void isl_ctx_free(struct isl_ctx *ctx)
 		isl_die(ctx, isl_error_invalid,
 			"isl_ctx freed, but some objects still reference it",
 			return);
+
+	if (ctx->opt->print_stats)
+		print_stats(ctx);
 
 	isl_hash_table_clear(&ctx->id_table);
 	isl_blk_clear_cache(ctx);
@@ -194,18 +292,43 @@ struct isl_options *isl_ctx_options(isl_ctx *ctx)
 
 enum isl_error isl_ctx_last_error(isl_ctx *ctx)
 {
-	return ctx->error;
+	return ctx ? ctx->error : isl_error_invalid;
+}
+
+/* Return the error message of the last error in "ctx".
+ */
+const char *isl_ctx_last_error_msg(isl_ctx *ctx)
+{
+	return ctx ? ctx->error_msg : NULL;
+}
+
+/* Return the file name where the last error in "ctx" occurred.
+ */
+const char *isl_ctx_last_error_file(isl_ctx *ctx)
+{
+	return ctx ? ctx->error_file : NULL;
+}
+
+/* Return the line number where the last error in "ctx" occurred.
+ */
+int isl_ctx_last_error_line(isl_ctx *ctx)
+{
+	return ctx ? ctx->error_line : -1;
 }
 
 void isl_ctx_reset_error(isl_ctx *ctx)
 {
+	if (!ctx)
+		return;
 	ctx->error = isl_error_none;
+	ctx->error_msg = NULL;
+	ctx->error_file = NULL;
+	ctx->error_line = -1;
 }
 
 void isl_ctx_set_error(isl_ctx *ctx, enum isl_error error)
 {
-	if (ctx)
-		ctx->error = error;
+	isl_ctx_set_full_error(ctx, error, NULL, NULL, -1);
 }
 
 void isl_ctx_abort(isl_ctx *ctx)
@@ -230,4 +353,29 @@ int isl_ctx_parse_options(isl_ctx *ctx, int argc, char **argv, unsigned flags)
 	if (!ctx)
 		return -1;
 	return isl_args_parse(ctx->user_args, argc, argv, ctx->user_opt, flags);
+}
+
+/* Set the maximal number of iterations of "ctx" to "max_operations".
+ */
+void isl_ctx_set_max_operations(isl_ctx *ctx, unsigned long max_operations)
+{
+	if (!ctx)
+		return;
+	ctx->max_operations = max_operations;
+}
+
+/* Return the maximal number of iterations of "ctx".
+ */
+unsigned long isl_ctx_get_max_operations(isl_ctx *ctx)
+{
+	return ctx ? ctx->max_operations : 0;
+}
+
+/* Reset the number of operations performed by "ctx".
+ */
+void isl_ctx_reset_operations(isl_ctx *ctx)
+{
+	if (!ctx)
+		return;
+	ctx->operations = 0;
 }
