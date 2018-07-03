@@ -6,22 +6,33 @@
    SAFE TO REACH IT THROUGH DOCUMENTED INTERFACES.  IN FACT, IT IS ALMOST
    GUARANTEED THAT IT WILL CHANGE OR DISAPPEAR IN A FUTURE GNU MP RELEASE.
 
-Copyright 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
+Copyright 2006-2010, 2013 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 
 #include "gmp.h"
@@ -52,7 +63,7 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define MAYBE_sqr_toom2							\
   (SQR_TOOM4_THRESHOLD < 4 * SQR_TOOM3_THRESHOLD)
 #define MAYBE_sqr_toom4							\
-  (SQR_FFT_THRESHOLD >= 4 * SQR_TOOM4_THRESHOLD)
+  (SQR_TOOM6_THRESHOLD >= 4 * SQR_TOOM4_THRESHOLD)
 #endif
 
 #define TOOM4_SQR_REC(p, a, n, ws)					\
@@ -149,5 +160,5 @@ mpn_toom4_sqr (mp_ptr pp,
   TOOM4_SQR_REC (v0, a0, n, tp);
   TOOM4_SQR_REC (vinf, a3, s, tp);	/* vinf, 2s limbs */
 
-  mpn_toom_interpolate_7pts (pp, n, 0, vm2, vm1, v2, vh, 2*s, tp);
+  mpn_toom_interpolate_7pts (pp, n, (enum toom7_flags) 0, vm2, vm1, v2, vh, 2*s, tp);
 }

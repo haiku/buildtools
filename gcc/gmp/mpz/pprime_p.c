@@ -6,29 +6,39 @@
    positive is (1/4)**reps, where reps is the number of internal passes of the
    probabilistic algorithm.  Knuth indicates that 25 passes are reasonable.
 
-Copyright 1991, 1993, 1994, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2005 Free
-Software Foundation, Inc.  Miller-Rabin code contributed by John Amanatides.
+Copyright 1991, 1993, 1994, 1996-2002, 2005 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
 #include "longlong.h"
 
-static int isprime __GMP_PROTO ((unsigned long int));
+static int isprime (unsigned long int);
 
 
 /* MPN_MOD_OR_MODEXACT_1_ODD can be used instead of mpn_mod_1 for the trial
@@ -65,7 +75,7 @@ mpz_probab_prime_p (mpz_srcptr n, int reps)
   /* Check if n has small factors.  */
 #if defined (PP_INVERTED)
   r = MPN_MOD_OR_PREINV_MOD_1 (PTR(n), (mp_size_t) SIZ(n), (mp_limb_t) PP,
-                               (mp_limb_t) PP_INVERTED);
+			       (mp_limb_t) PP_INVERTED);
 #else
   r = mpn_mod_1 (PTR(n), (mp_size_t) SIZ(n), (mp_limb_t) PP);
 #endif

@@ -1,21 +1,32 @@
 /* mpz_lucnum2_ui -- calculate Lucas numbers.
 
-Copyright 2001, 2003, 2005 Free Software Foundation, Inc.
+Copyright 2001, 2003, 2005, 2012 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include "gmp.h"
@@ -53,10 +64,8 @@ mpz_lucnum2_ui (mpz_ptr ln, mpz_ptr lnsub1, unsigned long n)
   size = MPN_FIB2_SIZE (n);
   f1p = TMP_ALLOC_LIMBS (size);
 
-  MPZ_REALLOC (ln,     size+1);
-  MPZ_REALLOC (lnsub1, size+1);
-  lp  = PTR(ln);
-  l1p = PTR(lnsub1);
+  lp  = MPZ_REALLOC (ln,     size+1);
+  l1p = MPZ_REALLOC (lnsub1, size+1);
 
   size = mpn_fib2_ui (l1p, f1p, n);
 

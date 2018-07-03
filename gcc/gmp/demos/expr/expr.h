@@ -1,21 +1,32 @@
 /* Header for expression evaluation.
 
-Copyright 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
+Copyright 2000-2002, 2004 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 
 #ifndef __EXPR_H__
@@ -98,32 +109,34 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define MPEXPR_TYPE_OPERATOR       0x2000
 
 
-typedef void (*mpexpr_fun_t) __GMP_PROTO ((void));
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef void (*mpexpr_fun_t) (void);
 
 struct mpexpr_operator_t {
-  __gmp_const char  *name;
-  mpexpr_fun_t      fun;
-  int               type;
-  int               precedence;
+  const char   *name;
+  mpexpr_fun_t fun;
+  int          type;
+  int          precedence;
 };
 
 
-int mpf_expr_a __GMP_PROTO ((__gmp_const struct mpexpr_operator_t *table,
-			mpf_ptr res, int base, unsigned long prec,
-			__gmp_const char *e, size_t elen,
-			mpf_srcptr var[26]));
-int mpf_expr __GMP_PROTO ((mpf_ptr res, int base, __gmp_const char *e, ...));
+int mpf_expr_a (const struct mpexpr_operator_t *, mpf_ptr, int,
+		unsigned long, const char *, size_t, mpf_srcptr [26]);
+int mpf_expr (mpf_ptr, int, const char *, ...);
 
-int mpq_expr_a __GMP_PROTO ((__gmp_const struct mpexpr_operator_t *table,
-			mpq_ptr res, int base,
-			__gmp_const char *e, size_t elen,
-			mpq_srcptr var[26]));
-int mpq_expr __GMP_PROTO ((mpq_ptr res, int base, __gmp_const char *e, ...));
+int mpq_expr_a (const struct mpexpr_operator_t *, mpq_ptr,
+		int, const char *, size_t, mpq_srcptr [26]);
+int mpq_expr (mpq_ptr, int, const char *, ...);
 
-int mpz_expr_a __GMP_PROTO ((__gmp_const struct mpexpr_operator_t *table,
-			mpz_ptr res, int base,
-			__gmp_const char *e, size_t elen,
-			mpz_srcptr var[26]));
-int mpz_expr __GMP_PROTO ((mpz_ptr res, int base, __gmp_const char *e, ...));
+int mpz_expr_a (const struct mpexpr_operator_t *, mpz_ptr, int,
+		const char *, size_t, mpz_srcptr [26]);
+int mpz_expr (mpz_ptr, int, const char *, ...);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

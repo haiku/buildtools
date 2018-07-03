@@ -1,30 +1,42 @@
 dnl  PowerPC-64 mpn_mul_1 -- Multiply a limb vector with a limb and store
 dnl  the result in a second limb vector.
 
-dnl  Copyright 1999, 2000, 2001, 2003, 2004, 2005, 2006 Free Software
-dnl  Foundation, Inc.
+dnl  Copyright 1999-2001, 2003-2006, 2010 Free Software Foundation, Inc.
 
 dnl  This file is part of the GNU MP Library.
-
+dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 3 of the License, or (at
-dnl  your option) any later version.
-
+dnl  it under the terms of either:
+dnl
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
+dnl
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-dnl  License for more details.
-
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
-C		cycles/limb
-C POWER3/PPC630:     6-18
-C POWER4/PPC970:     7.25
-C POWER5:            7.75
+C               cycles/limb
+C POWER3/PPC630     6-18
+C POWER4/PPC970     7.25?  not updated for last file revision
+C POWER5            7.25
+C POWER6           14
+C POWER7            2.9
 
 C TODO
 C  * Try to reduce the number of needed live registers (at least r5 and r10
@@ -118,26 +130,18 @@ L(b10):	ld	r27, 8(up)
 
 L(top):	mulld	r0, r26, r6
 	mulhdu	r5, r26, r6
-	ld	r26, 0(up)
-	nop
-
 	mulld	r7, r27, r6
 	mulhdu	r8, r27, r6
+	ld	r26, 0(up)
 	ld	r27, 8(up)
-	nop
-
 	adde	r0, r0, r12
 	adde	r7, r7, r5
-
 	mulld	r9, r26, r6
 	mulhdu	r10, r26, r6
-	ld	r26, 16(up)
-	nop
-
 	mulld	r11, r27, r6
 	mulhdu	r12, r27, r6
+	ld	r26, 16(up)
 	ld	r27, 24(up)
-
 	std	r0, 0(rp)
 	adde	r9, r9, r8
 	std	r7, 8(rp)
@@ -151,13 +155,10 @@ L(top):	mulld	r0, r26, r6
 
 L(end):	mulld	r0, r26, r6
 	mulhdu	r5, r26, r6
-
 	mulld	r7, r27, r6
 	mulhdu	r8, r27, r6
-
 	adde	r0, r0, r12
 	adde	r7, r7, r5
-
 	std	r0, 0(rp)
 	std	r7, 8(rp)
 L(ret):	addze	r3, r8

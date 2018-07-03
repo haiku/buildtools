@@ -1,22 +1,21 @@
 /* Test mpz_add, mpz_add_ui, mpz_cmp, mpz_cmp, mpz_mul, mpz_sqrtrem.
 
-Copyright 1991, 1993, 1994, 1996, 2000, 2001, 2002 Free Software Foundation,
-Inc.
+Copyright 1991, 1993, 1994, 1996, 2000-2002 Free Software Foundation, Inc.
 
-This file is part of the GNU MP Library.
+This file is part of the GNU MP Library test suite.
 
-The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+The GNU MP Library test suite is free software; you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 3 of the License,
+or (at your option) any later version.
 
-The GNU MP Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+The GNU MP Library test suite is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+Public License for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received a copy of the GNU General Public License along with
+the GNU MP Library test suite.  If not, see https://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,8 +24,8 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #include "gmp-impl.h"
 #include "tests.h"
 
-void dump_abort __GMP_PROTO ((mpz_t, mpz_t, mpz_t));
-void debug_mp __GMP_PROTO ((mpz_t, int));
+void dump_abort (mpz_t, mpz_t, mpz_t);
+void debug_mp (mpz_t, int);
 
 int
 main (int argc, char **argv)
@@ -65,9 +64,16 @@ main (int argc, char **argv)
 
       /* printf ("%ld\n", SIZ (x2)); */
 
+      mpz_sqrt (temp, x2);
+      MPZ_CHECK_FORMAT (temp);
+
       mpz_sqrtrem (x, rem, x2);
       MPZ_CHECK_FORMAT (x);
       MPZ_CHECK_FORMAT (rem);
+
+      /* Are results different?  */
+      if (mpz_cmp (temp, x) != 0)
+	dump_abort (x2, x, rem);
 
       mpz_mul (temp, x, x);
 

@@ -1,22 +1,33 @@
 /* UltraSPARC 64 mpn_mod_1 -- mpn by limb remainder.
 
-Copyright 1991, 1993, 1994, 1999, 2000, 2001, 2003 Free Software Foundation,
+Copyright 1991, 1993, 1994, 1999-2001, 2003, 2010 Free Software Foundation,
 Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -46,8 +57,8 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
    sizes, but at size==2 it was only about the same speed and at size==3 was
    slower.  */
 
-mp_limb_t
-mpn_mod_1 (mp_srcptr src_limbptr, mp_size_t size_limbs, mp_limb_t d_limb)
+static mp_limb_t
+mpn_mod_1_anynorm (mp_srcptr src_limbptr, mp_size_t size_limbs, mp_limb_t d_limb)
 {
   int        norm, norm_rshift;
   mp_limb_t  src_high_limb;
@@ -173,5 +184,56 @@ mpn_mod_1 (mp_srcptr src_limbptr, mp_size_t size_limbs, mp_limb_t d_limb)
 
       ASSERT ((r & ((CNST_LIMB(1) << norm) - 1)) == 0);
       return r >> norm;
+    }
+}
+
+mp_limb_t
+mpn_mod_1 (mp_srcptr ap, mp_size_t n, mp_limb_t b)
+{
+  ASSERT (n >= 0);
+  ASSERT (b != 0);
+
+  /* Should this be handled at all?  Rely on callers?  Note un==0 is currently
+     required by mpz/fdiv_r_ui.c and possibly other places.  */
+  if (n == 0)
+    return 0;
+
+  if (UNLIKELY ((b & GMP_NUMB_HIGHBIT) != 0))
+    {
+      if (BELOW_THRESHOLD (n, MOD_1N_TO_MOD_1_1_THRESHOLD))
+	{
+	  return mpn_mod_1_anynorm (ap, n, b);
+	}
+      else
+	{
+	  mp_limb_t pre[4];
+	  mpn_mod_1_1p_cps (pre, b);
+	  return mpn_mod_1_1p (ap, n, b, pre);
+	}
+    }
+  else
+    {
+      if (BELOW_THRESHOLD (n, MOD_1U_TO_MOD_1_1_THRESHOLD))
+	{
+	  return mpn_mod_1_anynorm (ap, n, b);
+	}
+      else if (BELOW_THRESHOLD (n, MOD_1_1_TO_MOD_1_2_THRESHOLD))
+	{
+	  mp_limb_t pre[4];
+	  mpn_mod_1_1p_cps (pre, b);
+	  return mpn_mod_1_1p (ap, n, b << pre[1], pre);
+	}
+      else if (BELOW_THRESHOLD (n, MOD_1_2_TO_MOD_1_4_THRESHOLD) || UNLIKELY (b > GMP_NUMB_MASK / 4))
+	{
+	  mp_limb_t pre[5];
+	  mpn_mod_1s_2p_cps (pre, b);
+	  return mpn_mod_1s_2p (ap, n, b << pre[1], pre);
+	}
+      else
+	{
+	  mp_limb_t pre[7];
+	  mpn_mod_1s_4p_cps (pre, b);
+	  return mpn_mod_1s_4p (ap, n, b << pre[1], pre);
+	}
     }
 }

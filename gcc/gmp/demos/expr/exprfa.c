@@ -1,21 +1,32 @@
 /* mpf expression evaluation
 
-Copyright 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
+Copyright 2000-2002, 2004 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 
 /* Future: Bitwise "&", "|" and "&" could be done, if desired.  Not sure
@@ -35,7 +46,7 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 
 static size_t
-e_mpf_number (mpf_ptr res, __gmp_const char *e, size_t elen, int base)
+e_mpf_number (mpf_ptr res, const char *e, size_t elen, int base)
 {
   char    *edup;
   size_t  i, ret, extra=0;
@@ -151,9 +162,9 @@ e_mpf_set_or_swap (mpf_ptr w, mpf_ptr x)
 
 
 int
-mpf_expr_a (__gmp_const struct mpexpr_operator_t *table,
+mpf_expr_a (const struct mpexpr_operator_t *table,
             mpf_ptr res, int base, unsigned long prec,
-            __gmp_const char *e, size_t elen,
+            const char *e, size_t elen,
             mpf_srcptr var[26])
 {
   struct mpexpr_parse_t  p;

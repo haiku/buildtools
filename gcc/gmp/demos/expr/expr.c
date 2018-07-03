@@ -1,21 +1,32 @@
 /* mpexpr_evaluate -- shared code for simple expression evaluation
 
-Copyright 2000, 2001, 2002, 2004 Free Software Foundation, Inc.
+Copyright 2000-2002, 2004 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -136,7 +147,7 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 static int
 lookahead (struct mpexpr_parse_t *p, int prefix)
 {
-  __gmp_const struct mpexpr_operator_t  *op, *op_found;
+  const struct mpexpr_operator_t  *op, *op_found;
   size_t  oplen, oplen_found, wlen;
   int     i;
 
@@ -278,7 +289,7 @@ lookahead (struct mpexpr_parse_t *p, int prefix)
    a reference through CP.  */
 #define CONTROL_PUSH(opptr,args)                        \
   do {                                                  \
-    __gmp_const struct mpexpr_operator_t *op = opptr;   \
+    const struct mpexpr_operator_t *op = opptr;		\
     struct mpexpr_control_t *cp;                        \
     CONTROL_SPACE ();                                   \
     p->control_top++;                                   \
@@ -371,7 +382,7 @@ mpexpr_evaluate (struct mpexpr_parse_t *p)
   /* "done" is a special sentinel at the bottom of the control stack,
      precedence -1 is lower than any normal operator.  */
   {
-    static __gmp_const struct mpexpr_operator_t  operator_done
+    static const struct mpexpr_operator_t  operator_done
       = { "DONE", NULL, MPEXPR_TYPE_DONE, -1 };
 
     p->control_alloc = 20;

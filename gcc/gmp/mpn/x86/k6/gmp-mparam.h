@@ -1,36 +1,47 @@
 /* AMD K6 gmp-mparam.h -- Compiler/machine parameter header file.
 
-Copyright 1991, 1993, 1994, 2000, 2001, 2002, 2003, 2004, 2009, 2010
-Free Software Foundation, Inc.
+Copyright 1991, 1993, 1994, 2000-2004, 2009, 2010 Free Software Foundation,
+Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #define GMP_LIMB_BITS 32
-#define BYTES_PER_MP_LIMB 4
+#define GMP_LIMB_BYTES 4
 
 
 /* 450MHz K6-2 */
 
 #define MOD_1_NORM_THRESHOLD                12
 #define MOD_1_UNNORM_THRESHOLD           MP_SIZE_T_MAX  /* never */
-#define MOD_1N_TO_MOD_1_1_THRESHOLD         28
-#define MOD_1U_TO_MOD_1_1_THRESHOLD         18
-#define MOD_1_1_TO_MOD_1_2_THRESHOLD         0
-#define MOD_1_2_TO_MOD_1_4_THRESHOLD     MP_SIZE_T_MAX
-#define PREINV_MOD_1_TO_MOD_1_THRESHOLD     82
+#define MOD_1N_TO_MOD_1_1_THRESHOLD         41
+#define MOD_1U_TO_MOD_1_1_THRESHOLD         32
+#define MOD_1_1_TO_MOD_1_2_THRESHOLD         3
+#define MOD_1_2_TO_MOD_1_4_THRESHOLD         0
+#define PREINV_MOD_1_TO_MOD_1_THRESHOLD    128
 #define USE_PREINV_DIVREM_1                  0
 #define DIVEXACT_1_THRESHOLD                 0  /* always (native) */
 #define BMOD_1_TO_MOD_1_THRESHOLD        MP_SIZE_T_MAX  /* never */

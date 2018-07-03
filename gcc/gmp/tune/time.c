@@ -1,21 +1,32 @@
-/* Time routines for speed measurments.
+/* Time routines for speed measurements.
 
-Copyright 1999, 2000, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
+Copyright 1999-2004, 2010-2012 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 
 /* Usage:
@@ -255,7 +266,7 @@ static const int  use_stck = 1;  /* always use when available */
 typedef uint64_t  stck_t; /* gcc for s390 is quite new, always has uint64_t */
 #define STCK(timestamp)                 \
   do {                                  \
-    asm ("stck %0" : "=m" (timestamp)); \
+    asm ("stck %0" : "=Q" (timestamp)); \
   } while (0)
 #else
 static const int  have_stck = 0;
@@ -456,9 +467,22 @@ cycles_works_p (void)
   if (result != -1)
     goto done;
 
+  /* FIXME: On linux, the cycle counter is not saved and restored over
+   * context switches, making it almost useless for precise cputime
+   * measurements. When available, it's better to use clock_gettime,
+   * which seems to have reasonable accuracy (tested on x86_32,
+   * linux-2.6.26, glibc-2.7). However, there are also some linux
+   * systems where clock_gettime is broken in one way or the other,
+   * like CLOCK_PROCESS_CPUTIME_ID not implemented (easy case) or
+   * kind-of implemented but broken (needs code to detect that), and
+   * on those systems a wall-clock cycle counter is the least bad
+   * fallback.
+   *
+   * So we need some code to disable the cycle counter on some but not
+   * all linux systems. */
 #ifdef SIGILL
   {
-    RETSIGTYPE (*old_handler) __GMP_PROTO ((int));
+    RETSIGTYPE (*old_handler) (int);
     unsigned  cycles[2];
 
     old_handler = signal (SIGILL, cycles_works_handler);
@@ -671,8 +695,8 @@ getrusage_backwards_p (void)
 	  if (speed_option_verbose)
 	    printf ("getrusage went backwards (attempt %d: %ld.%06ld -> %ld.%06ld)\n",
 		    i,
-		    prev.ru_utime.tv_sec, prev.ru_utime.tv_usec,
-		    next.ru_utime.tv_sec, next.ru_utime.tv_usec);
+		    (long) prev.ru_utime.tv_sec, (long) prev.ru_utime.tv_usec,
+		    (long) next.ru_utime.tv_sec, (long) next.ru_utime.tv_usec);
 	  result = 1;
 	  break;
 	}
@@ -708,6 +732,8 @@ const int  have_cgt_id = 1;
 const int  have_cgt_id = 0;
 # define CGT_ID       (ASSERT_FAIL (CGT_ID not determined), -1)
 #endif
+
+#define CGT_DELAY_COUNT 1000
 
 int
 cgt_works_p (void)
@@ -748,8 +774,46 @@ cgt_works_p (void)
     }
 
   cgt_unittime = unit.tv_sec + unit.tv_nsec * 1e-9;
-  printf ("clock_gettime is %s accurate\n",
-	  unittime_string (cgt_unittime));
+  if (speed_option_verbose)
+    printf ("clock_gettime is %s accurate\n", unittime_string (cgt_unittime));
+
+  if (cgt_unittime < 10e-9)
+    {
+      /* Do we believe this? */
+      struct timespec start, end;
+      static volatile int counter;
+      double duration;
+      if (clock_gettime (CGT_ID, &start))
+	{
+	  if (speed_option_verbose)
+	    printf ("clock_gettime id=%d error: %s\n", CGT_ID, strerror (errno));
+	  result = 0;
+	  return result;
+	}
+      /* Loop of at least 1000 memory accesses, ought to take at
+	 least 100 ns*/
+      for (counter = 0; counter < CGT_DELAY_COUNT; counter++)
+	;
+      if (clock_gettime (CGT_ID, &end))
+	{
+	  if (speed_option_verbose)
+	    printf ("clock_gettime id=%d error: %s\n", CGT_ID, strerror (errno));
+	  result = 0;
+	  return result;
+	}
+      duration = (end.tv_sec + end.tv_nsec * 1e-9
+		  - start.tv_sec - start.tv_nsec * 1e-9);
+      if (speed_option_verbose)
+	printf ("delay loop of %d rounds took %s (according to clock_gettime)\n",
+		CGT_DELAY_COUNT, unittime_string (duration));
+      if (duration < 100e-9)
+	{
+	  if (speed_option_verbose)
+	    printf ("clock_gettime id=%d not believable\n", CGT_ID);
+	  result = 0;
+	  return result;
+	}
+    }
   result = 1;
   return result;
 }
@@ -779,7 +843,7 @@ int
 mftb_works_p (void)
 {
   unsigned   a[2];
-  RETSIGTYPE (*old_handler) __GMP_PROTO ((int));
+  RETSIGTYPE (*old_handler) (int);
   double     cycletime;
 
   /* suppress a warning about a[] unused */
@@ -941,7 +1005,7 @@ speed_time_init (void)
 
   speed_cycletime_init ();
 
-  if (have_cycles && cycles_works_p ())
+  if (!speed_option_cycles_broken && have_cycles && cycles_works_p ())
     {
       use_cycles = 1;
       DEFAULT (speed_cycletime, 1.0);
@@ -1072,7 +1136,7 @@ speed_time_init (void)
       use_cgt = 1;
       speed_unittime = cgt_unittime;
       DEFAULT (speed_precision, (cgt_unittime <= 0.1e-6 ? 10000 : 1000));
-      strcpy (speed_time_string, "microsecond accurate getrusage()");
+      strcpy (speed_time_string, "microsecond accurate clock_gettime()");
     }
   else if (have_times && clk_tck() > 1000000)
     {

@@ -1,36 +1,47 @@
 dnl  mpn_mul_1 for Pentium 4 and P6 models with SSE2 (i.e., 9,D,E,F).
 
-dnl  Copyright 2005, 2007 Free Software Foundation, Inc.
-dnl
+dnl  Copyright 2005, 2007, 2011 Free Software Foundation, Inc.
+
 dnl  This file is part of the GNU MP Library.
 dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 3 of the License, or (at
-dnl  your option) any later version.
+dnl  it under the terms of either:
+dnl
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
+dnl
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
 dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-dnl  License for more details.
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 
 include(`../config.m4')
 
+C                           cycles/limb
+C P6 model 0-8,10-12		-
+C P6 model 9   (Banias)		4.17
+C P6 model 13  (Dothan)		4.17
+C P4 model 0-1 (Willamette)	4
+C P4 model 2   (Northwood)	4
+C P4 model 3-4 (Prescott)	4.55
+
 C TODO:
 C  * Tweak eax/edx offsets in loop as to save some lea's
 C  * Perhaps software pipeline small-case code
-
-C                           cycles/limb
-C P6 model 0-8,10-12)           -
-C P6 model 9   (Banias)		?
-C P6 model 13  (Dothan)         4.17
-C P4 model 0-1 (Willamette):	4
-C P4 model 2   (Northwood):     4
-C P4 model 3-4 (Prescott):      4.55
 
 C INPUT PARAMETERS
 C rp		sp + 4
@@ -40,22 +51,13 @@ C v0		sp + 16
 
 	TEXT
 	ALIGN(16)
-PROLOGUE(mpn_mul_1c)
-	mov	4(%esp), %edx
-	mov	8(%esp), %eax
-	mov	12(%esp), %ecx
-	movd	16(%esp), %mm7
-	movd	20(%esp), %mm6
-	jmp	L(ent)
-EPILOGUE()
-	ALIGN(16)
 PROLOGUE(mpn_mul_1)
-	mov	4(%esp), %edx
+	pxor	%mm6, %mm6
+L(ent):	mov	4(%esp), %edx
 	mov	8(%esp), %eax
 	mov	12(%esp), %ecx
 	movd	16(%esp), %mm7
-	pxor	%mm6, %mm6
-L(ent):	cmp	$4, %ecx
+	cmp	$4, %ecx
 	jnc	L(big)
 
 L(lp0):	movd	(%eax), %mm0
@@ -155,4 +157,8 @@ L(end):	pmuludq	%mm7, %mm2
 	movd	%mm6, %eax
 	emms
 	ret
+EPILOGUE()
+PROLOGUE(mpn_mul_1c)
+	movd	20(%esp), %mm6
+	jmp	L(ent)
 EPILOGUE()

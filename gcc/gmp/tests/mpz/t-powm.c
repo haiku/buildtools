@@ -1,22 +1,22 @@
 /* Test mpz_powm, mpz_mul, mpz_mod, mpz_mod_ui, mpz_div_ui.
 
-Copyright 1991, 1993, 1994, 1996, 1999, 2000, 2001, 2009, 2012 Free Software
+Copyright 1991, 1993, 1994, 1996, 1999-2001, 2009, 2012 Free Software
 Foundation, Inc.
 
-This file is part of the GNU MP Library.
+This file is part of the GNU MP Library test suite.
 
-The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+The GNU MP Library test suite is free software; you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 3 of the License,
+or (at your option) any later version.
 
-The GNU MP Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+The GNU MP Library test suite is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+Public License for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received a copy of the GNU General Public License along with
+the GNU MP Library test suite.  If not, see https://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,14 +26,14 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #include "gmp-impl.h"
 #include "tests.h"
 
-void debug_mp __GMP_PROTO ((mpz_t, int));
+void debug_mp (mpz_t, int);
 
 #define SIZEM 13
 
 /* Check that all sizes up to just above MUL_TOOM22_THRESHOLD have been tested
    a few times.  FIXME: If SIZEM is set too low, this will never happen.  */
 int
-allsizes_seen (int *allsizes)
+allsizes_seen (unsigned int *allsizes)
 {
   mp_size_t i;
 

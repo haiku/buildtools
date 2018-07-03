@@ -1,28 +1,39 @@
 /* mpn_sbpi1_bdiv_q -- schoolbook Hensel division with precomputed inverse,
    returning quotient only.
 
-   Contributed to the GNU project by Niels Möller.
+   Contributed to the GNU project by Niels MÃ¶ller.
 
    THE FUNCTIONS IN THIS FILE ARE INTERNAL FUNCTIONS WITH MUTABLE INTERFACES.
    IT IS ONLY SAFE TO REACH THEM THROUGH DOCUMENTED INTERFACES.  IN FACT, IT IS
    ALMOST GUARANTEED THAT THEY'LL CHANGE OR DISAPPEAR IN A FUTURE GMP RELEASE.
 
-Copyright 2005, 2006, 2009 Free Software Foundation, Inc.
+Copyright 2005, 2006, 2009, 2011, 2012 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -58,25 +69,27 @@ mpn_sbpi1_bdiv_q (mp_ptr qp,
   ASSERT (dn > 0);
   ASSERT (nn >= dn);
   ASSERT ((dp[0] & 1) != 0);
+  /* FIXME: Add ASSERTs for allowable overlapping; i.e., that qp = np is OK,
+     but some over N/Q overlaps will not work.  */
 
   for (i = nn - dn; i > 0; i--)
     {
       q = dinv * np[0];
-      qp[0] = ~q;
-      qp++;
       cy = mpn_addmul_1 (np, dp, dn, q);
       mpn_add_1 (np + dn, np + dn, i, cy);
       ASSERT (np[0] == 0);
+      qp[0] = ~q;
+      qp++;
       np++;
     }
 
   for (i = dn; i > 1; i--)
     {
       q = dinv * np[0];
-      qp[0] = ~q;
-      qp++;
       mpn_addmul_1 (np, dp, i, q);
       ASSERT (np[0] == 0);
+      qp[0] = ~q;
+      qp++;
       np++;
     }
 

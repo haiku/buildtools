@@ -1,21 +1,32 @@
 /* mpz expression evaluation, simple part
 
-Copyright 2000, 2001, 2002 Free Software Foundation, Inc.
+Copyright 2000-2002 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -86,7 +97,7 @@ e_mpz_clrbit (mpz_ptr w, mpz_srcptr x, unsigned long n)
   mpz_clrbit (w, n);
 }
 
-static __gmp_const struct mpexpr_operator_t  _mpz_expr_standard_table[] = {
+static const struct mpexpr_operator_t  _mpz_expr_standard_table[] = {
 
   { "**",  (mpexpr_fun_t) mpz_pow_ui,
     MPEXPR_TYPE_BINARY_UI | MPEXPR_TYPE_RIGHTASSOC,                  220 },
@@ -172,32 +183,17 @@ static __gmp_const struct mpexpr_operator_t  _mpz_expr_standard_table[] = {
 
 /* The table is available globally only through a pointer, so the table size
    can change without breaking binary compatibility. */
-__gmp_const struct mpexpr_operator_t * __gmp_const mpz_expr_standard_table
+const struct mpexpr_operator_t * const mpz_expr_standard_table
 = _mpz_expr_standard_table;
 
 
 int
-#if HAVE_STDARG
-mpz_expr (mpz_ptr res, int base, __gmp_const char *e, ...)
-#else
-mpz_expr (va_alist)
-     va_dcl
-#endif
+mpz_expr (mpz_ptr res, int base, const char *e, ...)
 {
   mpz_srcptr  var[MPEXPR_VARIABLES];
   va_list     ap;
   int         ret;
-#if HAVE_STDARG
   va_start (ap, e);
-#else
-  mpz_ptr           res;
-  int               base;
-  __gmp_const char  *e;
-  va_start (ap);
-  res  = va_arg (ap, mpz_ptr);
-  base = va_arg (ap, int);
-  e    = va_arg (ap, __gmp_const char *);
-#endif
 
   TRACE (printf ("mpz_expr(): base %d, %s\n", base, e));
   ret = mpexpr_va_to_var ((void **) var, ap);

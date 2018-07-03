@@ -1,41 +1,54 @@
 dnl  AMD64 mpn_rsh1add_n -- rp[] = (up[] + vp[]) >> 1
+dnl  AMD64 mpn_rsh1sub_n -- rp[] = (up[] - vp[]) >> 1
 
-dnl  Copyright 2003, 2005, 2009 Free Software Foundation, Inc.
+dnl  Copyright 2003, 2005, 2009, 2011, 2012 Free Software Foundation, Inc.
 
 dnl  This file is part of the GNU MP Library.
-
+dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 3 of the License, or (at
-dnl  your option) any later version.
-
+dnl  it under the terms of either:
+dnl
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
+dnl
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-dnl  License for more details.
-
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
-
 C	     cycles/limb
-C K8,K9:	 2.14	(mpn_add_n + mpn_rshift need 4.125)
-C K10:		 2.14	(mpn_add_n + mpn_rshift need 4.125)
-C P4:		12.75
-C P6-15:	 3.75
+C AMD K8,K9	 2.14	(mpn_add_n + mpn_rshift need 4.125)
+C AMD K10	 2.14	(mpn_add_n + mpn_rshift need 4.125)
+C Intel P4	12.75
+C Intel core2	 3.75
+C Intel NMH	 4.4
+C Intel SBR	 ?
+C Intel atom	 ?
+C VIA nano	 3.25
 
 C TODO
 C  * Rewrite to use indexed addressing, like addlsh1.asm and sublsh1.asm.
-C  * Try to approach the cache bandwidth 1.5 c/l.  It should be possible.
 
 C INPUT PARAMETERS
-define(`rp',`%rdi')
-define(`up',`%rsi')
-define(`vp',`%rdx')
-define(`n',`%rcx')
-define(`n32',`%ecx')
+define(`rp', `%rdi')
+define(`up', `%rsi')
+define(`vp', `%rdx')
+define(`n',`  %rcx')
 
 ifdef(`OPERATION_rsh1add_n', `
 	define(ADDSUB,	      add)
@@ -50,14 +63,18 @@ ifdef(`OPERATION_rsh1sub_n', `
 
 MULFUNC_PROLOGUE(mpn_rsh1add_n mpn_rsh1add_nc mpn_rsh1sub_n mpn_rsh1sub_nc)
 
+ABI_SUPPORT(DOS64)
+ABI_SUPPORT(STD64)
+
 ASM_START()
 	TEXT
-
 	ALIGN(16)
 PROLOGUE(func_nc)
+	FUNC_ENTRY(4)
+IFDOS(`	mov	56(%rsp), %r8	')
 	push	%rbx
 
-	xor	%eax, %eax
+	xor	R32(%rax), R32(%rax)
 	neg	%r8			C set C flag from parameter
 	mov	(up), %rbx
 	ADCSBB	(vp), %rbx
@@ -66,16 +83,17 @@ EPILOGUE()
 
 	ALIGN(16)
 PROLOGUE(func_n)
+	FUNC_ENTRY(4)
 	push	%rbx
 
-	xor	%eax, %eax
+	xor	R32(%rax), R32(%rax)
 	mov	(up), %rbx
 	ADDSUB	(vp), %rbx
 L(ent):
 	rcr	%rbx			C rotate, save acy
-	adc	%eax, %eax		C return value
+	adc	R32(%rax), R32(%rax)	C return value
 
-	mov	n32, R32(%r11)
+	mov	R32(n), R32(%r11)
 	and	$3, R32(%r11)
 
 	cmp	$1, R32(%r11)
@@ -166,5 +184,6 @@ L(top):	add	%rbx, %rbx		C rotate carry limb, restore acy
 
 L(end):	mov	%rbx, (rp)
 	pop	%rbx
+	FUNC_EXIT()
 	ret
 EPILOGUE()

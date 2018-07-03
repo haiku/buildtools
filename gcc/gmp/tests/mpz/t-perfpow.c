@@ -2,22 +2,22 @@
 
    Contributed to the GNU project by Torbjorn Granlund and Martin Boij.
 
-Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
+Copyright 2008-2010, 2014 Free Software Foundation, Inc.
 
-This file is part of the GNU MP Library.
+This file is part of the GNU MP Library test suite.
 
-The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+The GNU MP Library test suite is free software; you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 3 of the License,
+or (at your option) any later version.
 
-The GNU MP Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+The GNU MP Library test suite is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+Public License for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received a copy of the GNU General Public License along with
+the GNU MP Library test suite.  If not, see https://www.gnu.org/licenses/.  */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,9 +28,9 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 struct
 {
-  char *num_as_str;
+  const char *num_as_str;
   char want;
-} tests[] =
+} static tests[] =
   {
     { "0", 1},
     { "1", 1},
@@ -163,7 +163,7 @@ check_random (int reps)
 	  else
 	    {
 	      mpz_urandomb (np, rands, 32);
-	      destroy = mpz_get_ui (np) % (nrprimes - 2) + 1;
+	      destroy = mpz_get_ui (np) % (nrprimes - 2);
 	    }
 
 	  g = exp[destroy];
@@ -208,9 +208,14 @@ check_random (int reps)
 	}
       else
 	{
-	  if (res == 1)
+	  if (res == 1 && destroy != 0)
 	    {
 	      gmp_printf("n = %Zu\nn was destroyed, but perfpow_p still believes n is a perfect power\n", n);
+	      abort ();
+	    }
+	  else if (res == 0 && destroy == 0)
+	    {
+	      gmp_printf("n = %Zu\nn is a perfect power, perfpow_p disagrees\n", n);
 	      abort ();
 	    }
 	}
@@ -233,7 +238,7 @@ main (int argc, char **argv)
 
   check_tests ();
 
-  n_tests = 1000;
+  n_tests = 500;
   if (argc == 2)
     n_tests = atoi (argv[1]);
   check_random (n_tests);

@@ -1,30 +1,44 @@
 dnl  AMD64 mpn_lshsub_n.  R = 2^k(U - V).
 
-dnl  Copyright 2006 Free Software Foundation, Inc.
+dnl  Copyright 2006, 2011, 2012 Free Software Foundation, Inc.
 
 dnl  This file is part of the GNU MP Library.
-
+dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 3 of the License, or (at
-dnl  your option) any later version.
-
+dnl  it under the terms of either:
+dnl
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
+dnl
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-dnl  License for more details.
-
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
 
 C	     cycles/limb
-C K8,K9:	 3.15	(mpn_sub_n + mpn_lshift costs about 4 c/l)
-C K10:		 3.15	(mpn_sub_n + mpn_lshift costs about 4 c/l)
-C P4:		16.5
-C P6-15:	 4.35
+C AMD K8,K9	 3.15	(mpn_sub_n + mpn_lshift costs about 4 c/l)
+C AMD K10	 3.15	(mpn_sub_n + mpn_lshift costs about 4 c/l)
+C Intel P4	16.5
+C Intel core2	 4.35
+C Intel corei	 ?
+C Intel atom	 ?
+C VIA nano	 ?
 
 C This was written quickly and not optimized at all, but it runs very well on
 C K8.  But perhaps one could get under 3 c/l.  Ideas:
@@ -41,10 +55,15 @@ define(`vp',	`%rdx')
 define(`n',	`%rcx')
 define(`cnt',	`%r8')
 
+ABI_SUPPORT(DOS64)
+ABI_SUPPORT(STD64)
+
 ASM_START()
 	TEXT
 	ALIGN(16)
 PROLOGUE(mpn_lshsub_n)
+	FUNC_ENTRY(4)
+IFDOS(`	mov	56(%rsp), %r8d	')
 
 	push	%r12
 	push	%r13
@@ -53,32 +72,32 @@ PROLOGUE(mpn_lshsub_n)
 	push	%rbx
 
 	mov	n, %rax
-	xor	%ebx, %ebx		C clear carry save register
-	mov	%r8d, %ecx		C shift count
-	xor	%r15d, %r15d		C limb carry
+	xor	R32(%rbx), R32(%rbx)	C clear carry save register
+	mov	R32(%r8), R32(%rcx)	C shift count
+	xor	R32(%r15), R32(%r15)	C limb carry
 
-	mov	%eax, %r11d
-	and	$3, %r11d
+	mov	R32(%rax), R32(%r11)
+	and	$3, R32(%r11)
 	je	L(4)
-	sub	$1, %r11d
+	sub	$1, R32(%r11)
 
 L(oopette):
-	add	%ebx, %ebx		C restore carry flag
+	add	R32(%rbx), R32(%rbx)	C restore carry flag
 	mov	0(up), %r8
 	lea	8(up), up
 	sbb	0(vp), %r8
 	mov	%r8, %r12
-	sbb	%ebx, %ebx		C save carry flag
-	shl	%cl, %r8
+	sbb	R32(%rbx), R32(%rbx)	C save carry flag
+	shl	R8(%rcx), %r8
 	or	%r15, %r8
 	mov	%r12, %r15
 	lea	8(vp), vp
-	neg	%cl
-	shr	%cl, %r15
-	neg	%cl
+	neg	R8(%rcx)
+	shr	R8(%rcx), %r15
+	neg	R8(%rcx)
 	mov	%r8, 0(rp)
 	lea	8(rp), rp
-	sub	$1, %r11d
+	sub	$1, R32(%r11)
 	jnc	L(oopette)
 
 L(4):
@@ -87,7 +106,7 @@ L(4):
 
 	ALIGN(16)
 L(oop):
-	add	%ebx, %ebx		C restore carry flag
+	add	R32(%rbx), R32(%rbx)	C restore carry flag
 
 	mov	0(up), %r8
 	mov	8(up), %r9
@@ -104,29 +123,29 @@ L(oop):
 	mov	%r10, %r14
 	sbb	24(vp), %r11
 
-	sbb	%ebx, %ebx		C save carry flag
+	sbb	R32(%rbx), R32(%rbx)	C save carry flag
 
-	shl	%cl, %r8
-	shl	%cl, %r9
-	shl	%cl, %r10
+	shl	R8(%rcx), %r8
+	shl	R8(%rcx), %r9
+	shl	R8(%rcx), %r10
 	or	%r15, %r8
 	mov	%r11, %r15
-	shl	%cl, %r11
+	shl	R8(%rcx), %r11
 
 	lea	32(vp), vp
 
-	neg	%cl
+	neg	R8(%rcx)
 
-	shr	%cl, %r12
-	shr	%cl, %r13
-	shr	%cl, %r14
-	shr	%cl, %r15		C used next loop
+	shr	R8(%rcx), %r12
+	shr	R8(%rcx), %r13
+	shr	R8(%rcx), %r14
+	shr	R8(%rcx), %r15		C used next loop
 
 	or	%r12, %r9
 	or	%r13, %r10
 	or	%r14, %r11
 
-	neg	%cl
+	neg	R8(%rcx)
 
 	mov	%r8, 0(rp)
 	mov	%r9, 8(rp)
@@ -138,8 +157,8 @@ L(oop):
 	sub	$4, %rax
 	jnc	L(oop)
 L(end):
-	neg	%ebx
-	shl	%cl, %rbx
+	neg	R32(%rbx)
+	shl	R8(%rcx), %rbx
 	adc	%r15, %rbx
 	mov	%rbx, %rax
 	pop	%rbx
@@ -148,5 +167,6 @@ L(end):
 	pop	%r13
 	pop	%r12
 
+	FUNC_EXIT()
 	ret
 EPILOGUE()

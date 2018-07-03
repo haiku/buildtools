@@ -1,21 +1,21 @@
 /* Manipulable localeconv and nl_langinfo.
 
-Copyright 2001, 2002 Free Software Foundation, Inc.
+Copyright 2001, 2002, 2014 Free Software Foundation, Inc.
 
-This file is part of the GNU MP Library.
+This file is part of the GNU MP Library test suite.
 
-The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+The GNU MP Library test suite is free software; you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 3 of the License,
+or (at your option) any later version.
 
-The GNU MP Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+The GNU MP Library test suite is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+Public License for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received a copy of the GNU General Public License along with
+the GNU MP Library test suite.  If not, see https://www.gnu.org/licenses/.  */
 
 #include "config.h"
 
@@ -41,9 +41,12 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 
 extern char point_string[];
 
-#if HAVE_LOCALECONV
+#if HAVE_LOCALECONV && ! defined __MINGW32__
 struct lconv *
 localeconv (void)
+#if defined __cplusplus && defined __GLIBC__
+  throw()
+#endif
 {
   static struct lconv  l;
   l.decimal_point = point_string;
@@ -54,6 +57,9 @@ localeconv (void)
 #if HAVE_NL_LANGINFO
 char *
 nl_langinfo (nl_item n)
+#if defined __cplusplus && defined __GLIBC__
+  throw()
+#endif
 {
   return point_string;
 }

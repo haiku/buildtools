@@ -9,17 +9,28 @@ Copyright 2003 Free Software Foundation, Inc.
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 
 #define LOW32(x)   ((x) & 0xFFFFFFFF)
@@ -128,6 +139,24 @@ Error, error, unknown limb endianness;
   do { } while (0)
 #endif
 
+
+/* Multiply u anv v, where v < 2^32.  */
+#define umul_ppmm_s(w1, w0, u, v)					\
+  do {									\
+    UWtype __x0, __x2;							\
+    UWtype __ul, __vl, __uh;						\
+    UWtype __u = (u), __v = (v);					\
+									\
+    __ul = __ll_lowpart (__u);						\
+    __uh = __ll_highpart (__u);						\
+    __vl = __ll_lowpart (__v);						\
+									\
+    __x0 = (UWtype) __ul * __vl;					\
+    __x2 = (UWtype) __uh * __vl;					\
+									\
+    (w1) = (__x2 + (__x0 >> W_TYPE_SIZE/2)) >> W_TYPE_SIZE/2;		\
+    (w0) = (__x2 << W_TYPE_SIZE/2) + __x0;				\
+  } while (0)
 
 /* Count the leading zeros on a limb, but assuming it fits in 32 bits.
    The count returned will be in the range 32 to 63.

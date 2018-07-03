@@ -1,27 +1,21 @@
 /* Test mpn_get_d.
 
-Copyright 2002, 2003, 2004 Free Software Foundation, Inc.
+Copyright 2002-2004 Free Software Foundation, Inc.
 
-This file is part of the GNU MP Library.
+This file is part of the GNU MP Library test suite.
 
-The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+The GNU MP Library test suite is free software; you can redistribute it
+and/or modify it under the terms of the GNU General Public License as
+published by the Free Software Foundation; either version 3 of the License,
+or (at your option) any later version.
 
-The GNU MP Library is distributed in the hope that it will be useful, but
-WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+The GNU MP Library test suite is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General
+Public License for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
-
-/* Note that we don't use <limits.h> for LONG_MIN, but instead our own
-   definition in gmp-impl.h.  In gcc 2.95.4 (debian 3.0) under
-   -mcpu=ultrasparc, limits.h sees __sparc_v9__ defined and assumes that
-   means long is 64-bit long, but it's only 32-bits, causing fatal compile
-   errors.  */
+You should have received a copy of the GNU General Public License along with
+the GNU MP Library test suite.  If not, see https://www.gnu.org/licenses/.  */
 
 #include "config.h"
 
@@ -71,7 +65,7 @@ check_onebit (void)
   };
 
   /* FIXME: It'd be better to base this on the float format. */
-#ifdef __vax
+#if defined (__vax) || defined (__vax__)
   int     limit = 127;  /* vax fp numbers have limited range */
 #else
   int     limit = 511;
@@ -96,7 +90,7 @@ check_onebit (void)
           exp = exp_table[exp_i];
 
           want_bit = bit + exp;
-          if (want_bit > limit || want_bit < -limit)
+          if (want_bit >= limit || want_bit <= -limit)
             continue;
 
           want = 1.0;
@@ -495,7 +489,9 @@ main (void)
   check_ieee_denorm ();
   check_ieee_overflow ();
   check_0x81c25113 ();
+#if ! (defined (__vax) || defined (__vax__))
   check_rand ();
+#endif
 
   tests_end ();
   exit (0);

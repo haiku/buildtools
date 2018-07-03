@@ -4,22 +4,33 @@
    THEY'RE ALMOST CERTAIN TO BE SUBJECT TO INCOMPATIBLE CHANGES OR DISAPPEAR
    COMPLETELY IN FUTURE GNU MP RELEASES.
 
-Copyright 2003, 2004, 2011 Free Software Foundation, Inc.
+Copyright 2003, 2004, 2011-2013, 2015 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include <stdio.h>    /* for printf */
 #include <stdlib.h>   /* for getenv */
@@ -31,13 +42,10 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 /* Change this to "#define TRACE(x) x" for some traces. */
 #define TRACE(x)
 
-/* Change this to 1 to take the cpuid from GMP_CPU_TYPE env var. */
-#define WANT_FAKE_CPUID  0
-
 
 /* fat_entry.asm */
-long __gmpn_cpuid __GMP_PROTO ((char dst[12], int id));
-int  __gmpn_cpuid_available __GMP_PROTO ((void));
+long __gmpn_cpuid (char [12], int);
+int  __gmpn_cpuid_available (void);
 
 
 #if WANT_FAKE_CPUID
@@ -54,7 +62,7 @@ int  __gmpn_cpuid_available __GMP_PROTO ((void));
 
 static struct {
   const char  *name;
-  const char  vendor[13];
+  const char  *vendor;
   unsigned    fms;
 } fake_cpuid_table[] = {
   { "i386",       "" },
@@ -64,17 +72,43 @@ static struct {
   { "pentiumpro", "GenuineIntel", MAKE_FMS (6, 0) },
   { "pentium2",   "GenuineIntel", MAKE_FMS (6, 2) },
   { "pentium3",   "GenuineIntel", MAKE_FMS (6, 7) },
-  { "pentium4",   "GenuineIntel", MAKE_FMS (7, 0) },
+  { "pentium4",   "GenuineIntel", MAKE_FMS (15, 2) },
+  { "prescott",   "GenuineIntel", MAKE_FMS (15, 3) },
+  { "nocona",     "GenuineIntel", MAKE_FMS (15, 4) },
+  { "core2",      "GenuineIntel", MAKE_FMS (6, 0xf) },
+  { "nehalem",    "GenuineIntel", MAKE_FMS (6, 0x1a) },
+  { "nhm",        "GenuineIntel", MAKE_FMS (6, 0x1a) },
+  { "atom",       "GenuineIntel", MAKE_FMS (6, 0x1c) },
+  { "westmere",   "GenuineIntel", MAKE_FMS (6, 0x25) },
+  { "wsm",        "GenuineIntel", MAKE_FMS (6, 0x25) },
+  { "sandybridge","GenuineIntel", MAKE_FMS (6, 0x2a) },
+  { "sbr",        "GenuineIntel", MAKE_FMS (6, 0x2a) },
+  { "silvermont", "GenuineIntel", MAKE_FMS (6, 0x37) },
+  { "slm",        "GenuineIntel", MAKE_FMS (6, 0x37) },
+  { "haswell",    "GenuineIntel", MAKE_FMS (6, 0x3c) },
+  { "hwl",        "GenuineIntel", MAKE_FMS (6, 0x3c) },
+  { "broadwell",  "GenuineIntel", MAKE_FMS (6, 0x3d) },
+  { "bwl",        "GenuineIntel", MAKE_FMS (6, 0x3d) },
+  { "skylake",    "GenuineIntel", MAKE_FMS (6, 0x5e) },
+  { "sky",        "GenuineIntel", MAKE_FMS (6, 0x5e) },
 
   { "k5",         "AuthenticAMD", MAKE_FMS (5, 0) },
   { "k6",         "AuthenticAMD", MAKE_FMS (5, 3) },
   { "k62",        "AuthenticAMD", MAKE_FMS (5, 8) },
   { "k63",        "AuthenticAMD", MAKE_FMS (5, 9) },
   { "athlon",     "AuthenticAMD", MAKE_FMS (6, 0) },
-  { "x86_64",     "AuthenticAMD", MAKE_FMS (15, 0) },
+  { "k8",         "AuthenticAMD", MAKE_FMS (15, 0) },
+  { "k10",        "AuthenticAMD", MAKE_FMS (16, 0) },
+  { "bobcat",     "AuthenticAMD", MAKE_FMS (20, 1) },
+  { "bulldozer",  "AuthenticAMD", MAKE_FMS (21, 1) },
+  { "piledriver", "AuthenticAMD", MAKE_FMS (21, 2) },
+  { "steamroller","AuthenticAMD", MAKE_FMS (21, 0x30) },
+  { "excavator",  "AuthenticAMD", MAKE_FMS (21, 0x60) },
+  { "jaguar",     "AuthenticAMD", MAKE_FMS (22, 1) },
 
   { "viac3",      "CentaurHauls", MAKE_FMS (6, 0) },
   { "viac32",     "CentaurHauls", MAKE_FMS (6, 9) },
+  { "nano",       "CentaurHauls", MAKE_FMS (6, 15) },
 };
 
 static int
@@ -128,28 +162,46 @@ typedef DECL_preinv_mod_1    ((*preinv_mod_1_t));
 
 struct cpuvec_t __gmpn_cpuvec = {
   __MPN(add_n_init),
+  0,
+  0,
   __MPN(addmul_1_init),
+  0,
+  __MPN(bdiv_dbm1c_init),
+  __MPN(cnd_add_n_init),
+  __MPN(cnd_sub_n_init),
+  __MPN(com_init),
   __MPN(copyd_init),
   __MPN(copyi_init),
   __MPN(divexact_1_init),
-  __MPN(divexact_by3c_init),
   __MPN(divrem_1_init),
   __MPN(gcd_1_init),
   __MPN(lshift_init),
+  __MPN(lshiftc_init),
   __MPN(mod_1_init),
+  __MPN(mod_1_1p_init),
+  __MPN(mod_1_1p_cps_init),
+  __MPN(mod_1s_2p_init),
+  __MPN(mod_1s_2p_cps_init),
+  __MPN(mod_1s_4p_init),
+  __MPN(mod_1s_4p_cps_init),
   __MPN(mod_34lsub1_init),
   __MPN(modexact_1c_odd_init),
   __MPN(mul_1_init),
   __MPN(mul_basecase_init),
+  __MPN(mullo_basecase_init),
   __MPN(preinv_divrem_1_init),
   __MPN(preinv_mod_1_init),
+  __MPN(redc_1_init),
+  __MPN(redc_2_init),
   __MPN(rshift_init),
   __MPN(sqr_basecase_init),
   __MPN(sub_n_init),
+  0,
   __MPN(submul_1_init),
   0
 };
 
+int __gmpn_cpuvec_initialized = 0;
 
 /* The following setups start with generic x86, then overwrite with
    specifics for a chip, and higher versions of that chip.
@@ -219,21 +271,107 @@ __gmpn_cpuvec_init (void)
             case 6:
               TRACE (printf ("  p6\n"));
               CPUVEC_SETUP_p6;
-              if (model >= 2)
-                {
-                  TRACE (printf ("  pentium2\n"));
+	      switch (model)
+		{
+		case 0x00:
+		case 0x01:
+		  TRACE (printf ("  pentiumpro\n"));
+		  break;
+
+		case 0x02:
+		case 0x03:
+		case 0x04:
+		case 0x05:
+		case 0x06:
+		  TRACE (printf ("  pentium2\n"));
                   CPUVEC_SETUP_p6_mmx;
-                }
-              if (model >= 7)
-                {
-                  TRACE (printf ("  pentium3\n"));
+		  break;
+
+		case 0x07:
+		case 0x08:
+		case 0x0a:
+		case 0x0b:
+		case 0x0c:
+		  TRACE (printf ("  pentium3\n"));
+                  CPUVEC_SETUP_p6_mmx;
                   CPUVEC_SETUP_p6_p3mmx;
-                }
-              if (model >= 0xD || model == 9)
-                {
-                  TRACE (printf ("  p6 with sse2\n"));
+		  break;
+
+		case 0x09:		/* Banias */
+		case 0x0d:		/* Dothan */
+		case 0x0e:		/* Yonah */
+		  TRACE (printf ("  Banias/Dothan/Yonah\n"));
+                  CPUVEC_SETUP_p6_mmx;
+                  CPUVEC_SETUP_p6_p3mmx;
                   CPUVEC_SETUP_p6_sse2;
-                }
+		  break;
+
+		case 0x0f:		/* Conroe Merom Kentsfield Allendale */
+		case 0x10:
+		case 0x11:
+		case 0x12:
+		case 0x13:
+		case 0x14:
+		case 0x15:
+		case 0x16:
+		case 0x17:		/* PNR Wolfdale Yorkfield */
+		case 0x18:
+		case 0x19:
+		case 0x1d:		/* PNR Dunnington */
+		  TRACE (printf ("  Conroe\n"));
+                  CPUVEC_SETUP_p6_mmx;
+                  CPUVEC_SETUP_p6_p3mmx;
+                  CPUVEC_SETUP_p6_sse2;
+		  CPUVEC_SETUP_core2;
+		  break;
+
+		case 0x1c:		/* Atom Silverthorne */
+		case 0x26:		/* Atom Lincroft */
+		case 0x27:		/* Atom Saltwell */
+		case 0x36:		/* Atom Cedarview/Saltwell */
+		  TRACE (printf ("  atom\n"));
+		  CPUVEC_SETUP_atom;
+		  CPUVEC_SETUP_atom_mmx;
+		  CPUVEC_SETUP_atom_sse2;
+		  break;
+
+		case 0x1a:		/* NHM Gainestown */
+		case 0x1b:
+		case 0x1e:		/* NHM Lynnfield/Jasper */
+		case 0x1f:
+		case 0x20:
+		case 0x21:
+		case 0x22:
+		case 0x23:
+		case 0x24:
+		case 0x25:		/* WSM Clarkdale/Arrandale */
+		case 0x28:
+		case 0x29:
+		case 0x2b:
+		case 0x2c:		/* WSM Gulftown */
+		case 0x2e:		/* NHM Beckton */
+		case 0x2f:		/* WSM Eagleton */
+		  TRACE (printf ("  nehalem/westmere\n"));
+                  CPUVEC_SETUP_p6_mmx;
+                  CPUVEC_SETUP_p6_p3mmx;
+                  CPUVEC_SETUP_p6_sse2;
+		  CPUVEC_SETUP_core2;
+		  CPUVEC_SETUP_coreinhm;
+		  break;
+
+		case 0x2a:		/* SBR */
+		case 0x2d:		/* SBR-EP */
+		case 0x3a:		/* IBR */
+		case 0x3c:		/* Haswell */
+		  TRACE (printf ("  sandybridge\n"));
+                  CPUVEC_SETUP_p6_mmx;
+                  CPUVEC_SETUP_p6_p3mmx;
+                  CPUVEC_SETUP_p6_sse2;
+		  CPUVEC_SETUP_core2;
+		  CPUVEC_SETUP_coreinhm;
+		  CPUVEC_SETUP_coreisbr;
+		  break;
+		}
               break;
 
             case 15:
@@ -271,13 +409,40 @@ __gmpn_cpuvec_init (void)
               break;
             case 6:
               TRACE (printf ("  athlon\n"));
-            athlon:
               CPUVEC_SETUP_k7;
               CPUVEC_SETUP_k7_mmx;
               break;
-            case 15:
-              TRACE (printf ("  x86_64\n"));
-              goto athlon;
+
+            case 0x0f:		/* k8 */
+            case 0x11:		/* "fam 11h", mix of k8 and k10 */
+            case 0x13:		/* unknown, conservatively assume k8  */
+            case 0x16:		/* unknown, conservatively assume k8  */
+            case 0x17:		/* unknown, conservatively assume k8  */
+              TRACE (printf ("  k8\n"));
+              CPUVEC_SETUP_k7;
+              CPUVEC_SETUP_k7_mmx;
+              CPUVEC_SETUP_k8;
+	      break;
+
+            case 0x10:		/* k10 */
+            case 0x12:		/* k10 (llano) */
+              TRACE (printf ("  k10\n"));
+              CPUVEC_SETUP_k7;
+              CPUVEC_SETUP_k7_mmx;
+	      break;
+
+            case 0x14:		/* bobcat */
+              TRACE (printf ("  bobcat\n"));
+              CPUVEC_SETUP_k7;
+              CPUVEC_SETUP_k7_mmx;
+              CPUVEC_SETUP_bobcat;
+	      break;
+
+            case 0x15:		/* bulldozer */
+              TRACE (printf ("  bulldozer\n"));
+              CPUVEC_SETUP_k7;
+              CPUVEC_SETUP_k7_mmx;
+	      break;
             }
         }
       else if (strcmp (vendor_string, "CentaurHauls") == 0)
@@ -290,6 +455,11 @@ __gmpn_cpuvec_init (void)
                 {
                   TRACE (printf ("  viac32\n"));
                 }
+	      if (model >= 15)
+		{
+                  TRACE (printf ("  nano\n"));
+		  CPUVEC_SETUP_nano;
+		}
               break;
             }
         }
@@ -313,5 +483,5 @@ __gmpn_cpuvec_init (void)
 
   /* Set this once the threshold fields are ready.
      Use volatile to prevent it getting moved.  */
-  ((volatile struct cpuvec_t *) &__gmpn_cpuvec)->initialized = 1;
+  *((volatile int *) &__gmpn_cpuvec_initialized) = 1;
 }

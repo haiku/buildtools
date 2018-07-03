@@ -3,30 +3,40 @@ dnl  PPC-64 mpn_divrem_2 -- Divide an mpn number by a normalized 2-limb number.
 dnl  Copyright 2007, 2008 Free Software Foundation, Inc.
 
 dnl  This file is part of the GNU MP Library.
-
+dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 3 of the License, or (at
-dnl  your option) any later version.
-
+dnl  it under the terms of either:
+dnl
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
+dnl
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
 dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-dnl  License for more details.
-
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
-C			cycles/limb
-C			norm	frac
+C                       cycles/limb
+C                       norm    frac
 C POWER3/PPC630
-C POWER4/PPC970		39*	39*
-C POWER5		39*	39*
-
-C STATUS
-C  * Performace fluctuates like crazy
+C POWER4/PPC970         ?       ?
+C POWER5                37      ?
+C POWER6                62      ?
+C POWER6                30.5    ?
 
 C INPUT PARAMETERS
 C qp  = r3
@@ -43,7 +53,7 @@ ASM_START()
 
 EXTERN_FUNC(mpn_invert_limb)
 
-PROLOGUE(mpn_divrem_2)
+PROLOGUE(mpn_divrem_2,toc)
 	mflr	r0
 	std	r23, -72(r1)
 	std	r24, -64(r1)
@@ -97,7 +107,6 @@ L(8):
 	blt	cr0, L(18)
 	mr	r3, r30
 	CALL(	mpn_invert_limb)
-	nop
 	mulld	r10, r3, r30
 	mulhdu	r0, r3, r28
 	addc	r8, r10, r28
@@ -121,12 +130,12 @@ L(loop):
 	mulld	r6, r29, r3
 	addc	r6, r6, r31
 	adde	r8, r8, r29
+	cmpd	cr7, r27, r25
 	mulld	r0, r30, r8
-	subf	r31, r0, r31
 	mulhdu	r11, r28, r8
 	mulld	r10, r28, r8
+	subf	r31, r0, r31
 	li	r7, 0
-	cmpd	cr7, r27, r25
 	blt	cr7, L(60)
 	ld	r7, 0(r26)
 	addi	r26, r26, -8

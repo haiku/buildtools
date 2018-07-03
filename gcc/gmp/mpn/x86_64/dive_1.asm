@@ -1,32 +1,44 @@
 dnl  AMD64 mpn_divexact_1 -- mpn by limb exact division.
 
-dnl  Copyright 2001, 2002, 2004, 2005, 2006 Free Software Foundation, Inc.
+dnl  Copyright 2001, 2002, 2004-2006, 2011, 2012 Free Software Foundation, Inc.
 
 dnl  This file is part of the GNU MP Library.
-
+dnl
 dnl  The GNU MP Library is free software; you can redistribute it and/or modify
-dnl  it under the terms of the GNU Lesser General Public License as published
-dnl  by the Free Software Foundation; either version 3 of the License, or (at
-dnl  your option) any later version.
-
-dnl The GNU MP Library is distributed in the hope that it will be useful, but
+dnl  it under the terms of either:
+dnl
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
+dnl
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
+dnl  The GNU MP Library is distributed in the hope that it will be useful, but
 dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-dnl  License for more details.
-
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
 
 C	     cycles/limb
-C K8,K9:	10
-C K10:		10
-C P4:		33
-C P6 core2:	13.25
-C P6 corei7:	14
-C P6 atom:	42
+C AMD K8,K9	10
+C AMD K10	10
+C Intel P4	33
+C Intel core2	13.25
+C Intel corei	14
+C Intel atom	42
+C VIA nano	43
 
 C A quick adoption of the 32-bit K7 code.
 
@@ -37,10 +49,14 @@ C up		rsi
 C n		rdx
 C divisor	rcx
 
+ABI_SUPPORT(DOS64)
+ABI_SUPPORT(STD64)
+
 ASM_START()
 	TEXT
 	ALIGN(16)
 PROLOGUE(mpn_divexact_1)
+	FUNC_ENTRY(4)
 	push	%rbx
 
 	mov	%rcx, %rax
@@ -54,11 +70,7 @@ L(odd):	mov	%rax, %rbx
 	shr	R32(%rax)
 	and	$127, R32(%rax)		C d/2, 7 bits
 
-ifdef(`PIC',`
-	mov	binvert_limb_table@GOTPCREL(%rip), %rdx
-',`
-	movabs	$binvert_limb_table, %rdx
-')
+	LEA(	binvert_limb_table, %rdx)
 
 	movzbl	(%rdx,%rax), R32(%rax)	C inv 8 bits
 
@@ -133,12 +145,14 @@ L(ent):	imul	%r10, %rax		C			6
 	imul	%r10, %rax
 	mov	%rax, (%rdi)
 	pop	%rbx
+	FUNC_EXIT()
 	ret
 
 L(one):	shr	R8(%rcx), %rax
 	imul	%r10, %rax
 	mov	%rax, (%rdi)
 	pop	%rbx
+	FUNC_EXIT()
 	ret
 
 EPILOGUE()

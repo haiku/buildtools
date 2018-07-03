@@ -1,38 +1,49 @@
 dnl  Intel P6 mpn_addmul_1/mpn_submul_1 -- add or subtract mpn multiple.
 
-dnl  Copyright 1999, 2000, 2001, 2002, 2005 Free Software Foundation, Inc.
-dnl
+dnl  Copyright 1999-2002, 2005 Free Software Foundation, Inc.
+
 dnl  This file is part of the GNU MP Library.
 dnl
-dnl  The GNU MP Library is free software; you can redistribute it and/or
-dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 3 of the
-dnl  License, or (at your option) any later version.
+dnl  The GNU MP Library is free software; you can redistribute it and/or modify
+dnl  it under the terms of either:
 dnl
-dnl  The GNU MP Library is distributed in the hope that it will be useful,
-dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
-dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-dnl  Lesser General Public License for more details.
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
+dnl  The GNU MP Library is distributed in the hope that it will be useful, but
+dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
 
-C                           cycles/limb
-C P5:
-C P6 model 0-8,10-12)            6.44
-C P6 model 9  (Banias)
-C P6 model 13 (Dothan)           6.11
+C			    cycles/limb
+C P5
+C P6 model 0-8,10-12		 6.44
+C P6 model 9  (Banias)		 6.15
+C P6 model 13 (Dothan)		 6.11
 C P4 model 0  (Willamette)
 C P4 model 1  (?)
 C P4 model 2  (Northwood)
 C P4 model 3  (Prescott)
 C P4 model 4  (Nocona)
-C K6:
-C K7:
-C K8:
+C AMD K6
+C AMD K7
+C AMD K8
 
 
 dnl  P6 UNROLL_COUNT cycles/limb

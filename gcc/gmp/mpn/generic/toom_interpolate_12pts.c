@@ -1,4 +1,4 @@
-/* Interpolaton for the algorithm Toom-Cook 6.5-way.
+/* Interpolation for the algorithm Toom-Cook 6.5-way.
 
    Contributed to the GNU project by Marco Bodrato.
 
@@ -6,22 +6,33 @@
    SAFE TO REACH IT THROUGH DOCUMENTED INTERFACES.  IN FACT, IT IS ALMOST
    GUARANTEED THAT IT WILL CHANGE OR DISAPPEAR IN A FUTURE GNU MP RELEASE.
 
-Copyright 2009, 2010 Free Software Foundation, Inc.
+Copyright 2009, 2010, 2012 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 
 #include "gmp.h"
@@ -240,7 +251,7 @@ mpn_toom_interpolate_12pts (mp_ptr pp, mp_ptr r1, mp_ptr r3, mp_ptr r5,
   mpn_sub_n (r4, r4, r5, n3p1); /* can be negative */
   DO_mpn_sublsh_n (r4, r5, n3p1, 8, wsi); /* can be negative */
 #endif
-  /* A division by 2835x4 followsi. Warning: the operand can be negative! */
+  /* A division by 2835x4 follows. Warning: the operand can be negative! */
   mpn_divexact_by2835x4(r4, r4, n3p1);
   if ((r4[n3] & (GMP_NUMB_MAX << (GMP_NUMB_BITS-3))) != 0)
     r4[n3] |= (GMP_NUMB_MAX << (GMP_NUMB_BITS-2));

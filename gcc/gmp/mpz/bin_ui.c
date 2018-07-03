@@ -1,21 +1,32 @@
 /* mpz_bin_ui - compute n over k.
 
-Copyright 1998, 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+Copyright 1998-2002, 2012, 2013 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -46,23 +57,23 @@ mpz_bin_ui (mpz_ptr r, mpz_srcptr n, unsigned long int k)
   mp_limb_t  kacc;
   mp_size_t  negate;
 
-  if (mpz_sgn (n) < 0)
+  if (SIZ (n) < 0)
     {
       /* bin(n,k) = (-1)^k * bin(-n+k-1,k), and set ni = -n+k-1 - k = -n-1 */
       mpz_init (ni);
-      mpz_neg (ni, n);
-      mpz_sub_ui (ni, ni, 1L);
+      mpz_add_ui (ni, n, 1L);
+      mpz_neg (ni, ni);
       negate = (k & 1);   /* (-1)^k */
     }
   else
     {
       /* bin(n,k) == 0 if k>n
-         (no test for this under the n<0 case, since -n+k-1 >= k there) */
+	 (no test for this under the n<0 case, since -n+k-1 >= k there) */
       if (mpz_cmp_ui (n, k) < 0)
-        {
-          mpz_set_ui (r, 0L);
-          return;
-        }
+	{
+	  SIZ (r) = 0;
+	  return;
+	}
 
       /* set ni = n-k */
       mpz_init (ni);
@@ -72,7 +83,7 @@ mpz_bin_ui (mpz_ptr r, mpz_srcptr n, unsigned long int k)
 
   /* Now wanting bin(ni+k,k), with ni positive, and "negate" is the sign (0
      for positive, 1 for negative). */
-  mpz_set_ui (r, 1L);
+  SIZ (r) = 1; PTR (r)[0] = 1;
 
   /* Rewrite bin(n,k) as bin(n,n-k) if that is smaller.  In this case it's
      whether ni+k-k < k meaning ni<k, and if so change to denominator ni+k-k
@@ -108,19 +119,18 @@ mpz_bin_ui (mpz_ptr r, mpz_srcptr n, unsigned long int k)
       mpz_add_ui (ni, ni, 1L);
       mpz_mul (nacc, nacc, ni);
       umul_ppmm (k1, k0, kacc, i << GMP_NAIL_BITS);
-      k0 >>= GMP_NAIL_BITS;
       if (k1 != 0)
 	{
 	  /* Accumulator overflow.  Perform bignum step.  */
 	  mpz_mul (r, r, nacc);
-	  mpz_set_ui (nacc, 1L);
-          DIVIDE ();
+	  SIZ (nacc) = 1; PTR (nacc)[0] = 1;
+	  DIVIDE ();
 	  kacc = i;
 	}
       else
 	{
 	  /* Save new products in accumulators to keep accumulating.  */
-	  kacc = k0;
+	  kacc = k0 >> GMP_NAIL_BITS;
 	}
     }
 

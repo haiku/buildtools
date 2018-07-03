@@ -4,23 +4,33 @@
    SAFE TO REACH THEM THROUGH DOCUMENTED INTERFACES.  IN FACT, IT IS ALMOST
    GUARANTEED THAT THEY'LL CHANGE OR DISAPPEAR IN A FUTURE GNU MP RELEASE.
 
-Copyright 1996, 1998, 2000, 2001, 2002, 2003, 2004, 2008 Free Software
-Foundation, Inc.
+Copyright 1996, 1998, 2000-2004, 2008, 2012 Free Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -199,7 +209,7 @@ div2 (mp_ptr rp,
 
 /* Reduces a,b until |a-b| (almost) fits in one limb + 1 bit. Constructs
    matrix M. Returns 1 if we make progress, i.e. can perform at least
-   one subtraction. Otherwise returns zero.. */
+   one subtraction. Otherwise returns zero. */
 
 /* FIXME: Possible optimizations:
 
@@ -338,8 +348,6 @@ mpn_hgcd2 (mp_limb_t ah, mp_limb_t al, mp_limb_t bh, mp_limb_t bl,
   for (;;)
     {
       ASSERT (ah >= bh);
-      if (ah == bh)
-	break;
 
       ah -= bh;
       if (ah < (CNST_LIMB (1) << (GMP_LIMB_BITS / 2 + 1)))
@@ -369,8 +377,6 @@ mpn_hgcd2 (mp_limb_t ah, mp_limb_t al, mp_limb_t bh, mp_limb_t bl,
 	}
     subtract_a1:
       ASSERT (bh >= ah);
-      if (ah == bh)
-	break;
 
       bh -= ah;
       if (bh < (CNST_LIMB (1) << (GMP_LIMB_BITS / 2 + 1)))
@@ -437,33 +443,5 @@ mpn_hgcd_mul_matrix1_vector (const struct hgcd_matrix1 *M,
   bp[n] = bh;
 
   n += (ah | bh) > 0;
-  return n;
-}
-
-/* Sets (r;b) = M^{-1}(a;b), with M^{-1} = (u11, -u01; -u10, u00) from
-   the left. Uses three buffers, to avoid a copy. */
-mp_size_t
-mpn_hgcd_mul_matrix1_inverse_vector (const struct hgcd_matrix1 *M,
-				     mp_ptr rp, mp_srcptr ap, mp_ptr bp, mp_size_t n)
-{
-  mp_limb_t h0, h1;
-
-  /* Compute (r;b) <-- (u11 a - u01 b; -u10 a + u00 b) as
-
-     r  = u11 * a
-     r -= u01 * b
-     b *= u00
-     b -= u10 * a
-  */
-
-  h0 =    mpn_mul_1 (rp, ap, n, M->u[1][1]);
-  h1 = mpn_submul_1 (rp, bp, n, M->u[0][1]);
-  ASSERT (h0 == h1);
-
-  h0 =    mpn_mul_1 (bp, bp, n, M->u[0][0]);
-  h1 = mpn_submul_1 (bp, ap, n, M->u[1][0]);
-  ASSERT (h0 == h1);
-
-  n -= (rp[n-1] | bp[n-1]) == 0;
   return n;
 }

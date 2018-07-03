@@ -1,31 +1,44 @@
 dnl  AMD64 mpn_lshiftc -- mpn left shift with complement.
 
-dnl  Copyright 2003, 2005, 2006, 2009 Free Software Foundation, Inc.
-dnl
+dnl  Copyright 2003, 2005, 2006, 2009, 2011, 2012 Free Software Foundation, Inc.
+
 dnl  This file is part of the GNU MP Library.
 dnl
-dnl  The GNU MP Library is free software; you can redistribute it and/or
-dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 3 of the
-dnl  License, or (at your option) any later version.
+dnl  The GNU MP Library is free software; you can redistribute it and/or modify
+dnl  it under the terms of either:
 dnl
-dnl  The GNU MP Library is distributed in the hope that it will be useful,
-dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
-dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-dnl  Lesser General Public License for more details.
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
+dnl  The GNU MP Library is distributed in the hope that it will be useful, but
+dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
 
 C	     cycles/limb
-C K8,K9:	 2.75
-C K10:		 2.75
-C P4:		 ?
-C P6-15 (Core2): ?
-C P6-28 (Atom):	 ?
+C AMD K8,K9	 2.75
+C AMD K10	 2.75
+C Intel P4	 ?
+C Intel core2	 ?
+C Intel corei	 ?
+C Intel atom	 ?
+C VIA nano	 3.75
 
 
 C INPUT PARAMETERS
@@ -34,10 +47,14 @@ define(`up',	`%rsi')
 define(`n',	`%rdx')
 define(`cnt',	`%rcx')
 
+ABI_SUPPORT(DOS64)
+ABI_SUPPORT(STD64)
+
 ASM_START()
 	TEXT
 	ALIGN(32)
 PROLOGUE(mpn_lshiftc)
+	FUNC_ENTRY(4)
 	neg	R32(%rcx)		C put rsh count in cl
 	mov	-8(up,n,8), %rax
 	shr	R8(%rcx), %rax		C function return value
@@ -144,21 +161,22 @@ L(top):
 	jae	L(top)			C				      2
 L(end):
 	neg	R32(%rcx)		C put rsh count in cl
-	mov	16(up,n,8), %r8
+	mov	8(up), %r8
 	shr	R8(%rcx), %r8
 	or	%r8, %r10
-	mov	8(up,n,8), %r9
+	mov	(up), %r9
 	shr	R8(%rcx), %r9
 	or	%r9, %r11
 	not	%r10
 	not	%r11
-	mov	%r10, 24(rp,n,8)
-	mov	%r11, 16(rp,n,8)
+	mov	%r10, 16(rp)
+	mov	%r11, 8(rp)
 
 	neg	R32(%rcx)		C put lsh count in cl
 L(ast):	mov	(up), %r10
 	shl	R8(%rcx), %r10
 	not	%r10
 	mov	%r10, (rp)
+	FUNC_EXIT()
 	ret
 EPILOGUE()

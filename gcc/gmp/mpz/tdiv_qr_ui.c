@@ -2,23 +2,34 @@
    Set QUOT to DIVIDEND / SHORT_DIVISOR
    and REM to DIVIDEND mod SHORT_DIVISOR.
 
-Copyright 1991, 1993, 1994, 1996, 1998, 2001, 2002, 2004 Free Software
+Copyright 1991, 1993, 1994, 1996, 1998, 2001, 2002, 2004, 2012 Free Software
 Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -30,7 +41,7 @@ mpz_tdiv_qr_ui (mpz_ptr quot, mpz_ptr rem, mpz_srcptr dividend, unsigned long in
   mp_ptr np, qp;
   mp_limb_t rl;
 
-  if (divisor == 0)
+  if (UNLIKELY (divisor == 0))
     DIVIDE_BY_ZERO;
 
   ns = SIZ(dividend);
@@ -42,8 +53,7 @@ mpz_tdiv_qr_ui (mpz_ptr quot, mpz_ptr rem, mpz_srcptr dividend, unsigned long in
     }
 
   nn = ABS(ns);
-  MPZ_REALLOC (quot, nn);
-  qp = PTR(quot);
+  qp = MPZ_REALLOC (quot, nn);
   np = PTR(dividend);
 
 #if BITS_PER_ULONG > GMP_NUMB_BITS  /* avoid warnings about shift amount */
@@ -62,8 +72,7 @@ mpz_tdiv_qr_ui (mpz_ptr quot, mpz_ptr rem, mpz_srcptr dividend, unsigned long in
 	  return rl;
 	}
 
-      MPZ_REALLOC (rem, 2);
-      rp = PTR(rem);
+      rp = MPZ_REALLOC (rem, 2);
 
       dp[0] = divisor & GMP_NUMB_MASK;
       dp[1] = divisor >> GMP_NUMB_BITS;

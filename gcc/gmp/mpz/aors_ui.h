@@ -1,23 +1,34 @@
 /* mpz_add_ui, mpz_sub_ui -- Add or subtract an mpz_t and an unsigned
    one-word integer.
 
-Copyright 1991, 1993, 1994, 1996, 1999, 2000, 2001, 2002, 2004 Free Software
+Copyright 1991, 1993, 1994, 1996, 1999-2002, 2004, 2012, 2013 Free Software
 Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 #include "gmp.h"
 #include "gmp-impl.h"
@@ -66,24 +77,21 @@ FUNCTION (mpz_ptr w, mpz_srcptr u, unsigned long int vval)
     }
 #endif
 
-  usize = u->_mp_size;
+  usize = SIZ (u);
+  if (usize == 0)
+    {
+      PTR (w)[0] = vval;
+      SIZ (w) = VARIATION_NEG (vval != 0);
+      return;
+    }
+
   abs_usize = ABS (usize);
 
   /* If not space for W (and possible carry), increase space.  */
-  wsize = abs_usize + 1;
-  if (w->_mp_alloc < wsize)
-    _mpz_realloc (w, wsize);
+  wp = MPZ_REALLOC (w, abs_usize + 1);
 
   /* These must be after realloc (U may be the same as W).  */
-  up = u->_mp_d;
-  wp = w->_mp_d;
-
-  if (abs_usize == 0)
-    {
-      wp[0] = vval;
-      w->_mp_size = VARIATION_NEG (vval != 0);
-      return;
-    }
+  up = PTR (u);
 
   if (usize VARIATION_CMP 0)
     {
@@ -109,5 +117,5 @@ FUNCTION (mpz_ptr w, mpz_srcptr u, unsigned long int vval)
 	}
     }
 
-  w->_mp_size = wsize;
+  SIZ (w) = wsize;
 }

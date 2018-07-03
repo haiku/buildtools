@@ -1,32 +1,42 @@
 dnl  x86 mpn_add_n/mpn_sub_n -- mpn addition and subtraction.
 
-dnl  Copyright 1992, 1994, 1995, 1996, 1999, 2000, 2001, 2002 Free Software
-dnl  Foundation, Inc.
-dnl
+dnl  Copyright 1992, 1994-1996, 1999-2002 Free Software Foundation, Inc.
+
 dnl  This file is part of the GNU MP Library.
 dnl
-dnl  The GNU MP Library is free software; you can redistribute it and/or
-dnl  modify it under the terms of the GNU Lesser General Public License as
-dnl  published by the Free Software Foundation; either version 3 of the
-dnl  License, or (at your option) any later version.
+dnl  The GNU MP Library is free software; you can redistribute it and/or modify
+dnl  it under the terms of either:
 dnl
-dnl  The GNU MP Library is distributed in the hope that it will be useful,
-dnl  but WITHOUT ANY WARRANTY; without even the implied warranty of
-dnl  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-dnl  Lesser General Public License for more details.
+dnl    * the GNU Lesser General Public License as published by the Free
+dnl      Software Foundation; either version 3 of the License, or (at your
+dnl      option) any later version.
 dnl
-dnl  You should have received a copy of the GNU Lesser General Public License
-dnl  along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.
+dnl  or
+dnl
+dnl    * the GNU General Public License as published by the Free Software
+dnl      Foundation; either version 2 of the License, or (at your option) any
+dnl      later version.
+dnl
+dnl  or both in parallel, as here.
+dnl
+dnl  The GNU MP Library is distributed in the hope that it will be useful, but
+dnl  WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+dnl  or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+dnl  for more details.
+dnl
+dnl  You should have received copies of the GNU General Public License and the
+dnl  GNU Lesser General Public License along with the GNU MP Library.  If not,
+dnl  see https://www.gnu.org/licenses/.
 
 include(`../config.m4')
 
 
 C     cycles/limb
-C P5:   3.375
-C P6:   3.125
-C K6:   3.5
-C K7:   2.25
-C P4:   8.75
+C P5	3.375
+C P6	3.125
+C K6	3.5
+C K7	2.25
+C P4	8.75
 
 
 ifdef(`OPERATION_add_n',`
@@ -99,7 +109,7 @@ L(0a):	leal	(%eax,%eax,8),%eax
 	C possible to simplify.
 	pushl	%ebp		FRAME_pushl()
 	movl	PARAM_CARRY,%ebp
-	shrl	$1,%ebp			C shift bit 0 into carry
+	shrl	%ebp			C shift bit 0 into carry
 	popl	%ebp		FRAME_popl()
 
 	jmp	*%eax			C jump into loop
@@ -148,7 +158,7 @@ L(0b):	leal	(%eax,%eax,8),%eax
 L(oopgo):
 	pushl	%ebp		FRAME_pushl()
 	movl	PARAM_CARRY,%ebp
-	shrl	$1,%ebp			C shift bit 0 into carry
+	shrl	%ebp			C shift bit 0 into carry
 	popl	%ebp		FRAME_popl()
 
 	ALIGN(16)

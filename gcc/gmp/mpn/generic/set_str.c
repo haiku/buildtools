@@ -9,23 +9,34 @@
    FACT, IT IS ALMOST GUARANTEED THAT THEY WILL CHANGE OR DISAPPEAR IN A FUTURE
    GNU MP RELEASE.
 
-Copyright 1991, 1992, 1993, 1994, 1996, 2000, 2001, 2002, 2004, 2006, 2007,
-2008 Free Software Foundation, Inc.
+Copyright 1991-1994, 1996, 2000-2002, 2004, 2006-2008, 2012, 2013 Free
+Software Foundation, Inc.
 
 This file is part of the GNU MP Library.
 
 The GNU MP Library is free software; you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation; either version 3 of the License, or (at your
-option) any later version.
+it under the terms of either:
+
+  * the GNU Lesser General Public License as published by the Free
+    Software Foundation; either version 3 of the License, or (at your
+    option) any later version.
+
+or
+
+  * the GNU General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option) any
+    later version.
+
+or both in parallel, as here.
 
 The GNU MP Library is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
-License for more details.
+or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
 
-You should have received a copy of the GNU Lesser General Public License
-along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
+You should have received copies of the GNU General Public License and the
+GNU Lesser General Public License along with the GNU MP Library.  If not,
+see https://www.gnu.org/licenses/.  */
 
 
 /* TODO:
@@ -131,8 +142,7 @@ mpn_set_str_compute_powtab (powers_t *powtab, mp_ptr powtab_mem, mp_size_t un, i
   long i, pi;
   mp_size_t n;
   mp_ptr p, t;
-  unsigned normalization_steps;
-  mp_limb_t big_base, big_base_inverted;
+  mp_limb_t big_base;
   int chars_per_limb;
   size_t digits_in_base;
   mp_size_t shift;
@@ -141,8 +151,6 @@ mpn_set_str_compute_powtab (powers_t *powtab, mp_ptr powtab_mem, mp_size_t un, i
 
   chars_per_limb = mp_bases[base].chars_per_limb;
   big_base = mp_bases[base].big_base;
-  big_base_inverted = mp_bases[base].big_base_inverted;
-  count_leading_zeros (normalization_steps, big_base);
 
   p = powtab_mem_ptr;
   powtab_mem_ptr += 1;
@@ -239,7 +247,9 @@ mpn_dc_set_str (mp_ptr rp, const unsigned char *str, size_t str_len,
 
   if (hn == 0)
     {
-      MPN_ZERO (rp, powtab->n + sn);
+      /* Zero +1 limb here, to avoid reading an allocated but uninitialised
+	 limb in mpn_incr_u below.  */
+      MPN_ZERO (rp, powtab->n + sn + 1);
     }
   else
     {
