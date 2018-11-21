@@ -199,7 +199,6 @@ if $(NT) {
 		EXIT On NT, set MSVCDIR, MSVCNT, or MSVC to the root
 			of the Borland or Microsoft directories. ;
 	}
-
 } else if $(MINGW) {
 	CC		?= gcc ;
 	C++		?= g++ ;
@@ -270,13 +269,6 @@ if $(NT) {
 } else if $(UNIX) {
 	switch $(OS)
 	{
-	case AIX :
-	LINKLIBS	?= -lbsd ;
-
-	case AMIGA :
-	CC		?= gcc ;
-	YACC		?= bison -y ;
-
 	case CYGWIN :
 	CC		?= gcc ;
 	CCFLAGS 	+= -D__cygwin__ ;
@@ -286,42 +278,9 @@ if $(NT) {
 	SUFEXE		?= .exe ;
 	YACC		?= bison -y ;
 
-	case HPUX :
-	RANLIB		?= "" ;
-
-	case INTERIX :
-	CC		?= gcc ;
-	JAMSHELL	?= sh -c ;
-	RANLIB		?= "" ;
-
-	case IRIX :
-	RANLIB		?= "" ;
-
-	case MPEIX :
-	CC		?= gcc ;
-	C++		?= gcc ;
-	CCFLAGS		+= -D_POSIX_SOURCE ;
-	HDRS		+= /usr/include ;
-	RANLIB		?= "" ;
-	NOARSCAN	?= true ;
-	NOARUPDATE	?= true ;
-
-	case MVS :
-	RANLIB		?= "" ;
-
-	case NEXT :
-	AR		?= libtool -o ;
-	RANLIB		?= "" ;
-
 	case MACOSX :
 	C++		?= c++ ;
 	MANDIR		?= /usr/local/share/man ;
-
-	case NCR :
-	RANLIB		?= "" ;
-
-	case PTX :
-	RANLIB		?= "" ;
 
 	case QNX :
 	AR		?= wlib ;
@@ -333,17 +292,6 @@ if $(NT) {
 	LINKFLAGS	?= -Q ;	# quiet
 	NOARSCAN	?= true ;
 	RANLIB		?= "" ;
-
-	case SINIX :
-	RANLIB		?= "" ;
-
-	case SOLARIS :
-	RANLIB		?= "" ;
-	AR		?= "/usr/ccs/bin/ar ru" ;
-
-	case UNICOS :
-	NOARSCAN 	?= true ;
-	OPTIM 		?= -O0 ;
 
 	# UNIX defaults
 
