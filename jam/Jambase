@@ -167,7 +167,6 @@ if $(NT) {
 					$(MSVC)\\lib\\oldnames.lib
 					;
 		LINKLIBS	?= ;
-		NOARSCAN	?= true ;
 		OPTIM		?=  ;
 		STDHDRS		?= $(MSVC)\\include ;
 		UNDEFFLAG	?= "/u _" ;
@@ -221,7 +220,6 @@ if $(NT) {
 	LINK		?= mwld ;
 	LINKFLAGS	?= "" ;
 	MANDIR		?= /boot/home/config/man ;
-	NOARSCAN	?= true ;
 	RANLIB		?= ranlib ;
 	STDHDRS		?= /boot/develop/headers/posix ;
 	YACC		?= bison -y ;
@@ -240,7 +238,6 @@ if $(NT) {
 	LIBDIR		?= /boot/home/config/lib ;
 	LINK		?= gcc ;
 	MANDIR		?= /boot/home/config/man ;
-	NOARSCAN	?= true ;
 	RANLIB		?= ranlib ;
 	STDHDRS		?= /boot/develop/headers/posix ;
 	YACC		?= bison -y ;
@@ -259,7 +256,6 @@ if $(NT) {
 	LIBDIR		?= /boot/common/lib ;
 	LINK		?= gcc ;
 	MANDIR		?= /boot/common/man ;
-	NOARSCAN	?= true ;
 	RANLIB		?= ranlib ;
 	STDHDRS		?= /boot/develop/headers/posix ;
 	YACC		?= bison -y ;
@@ -290,7 +286,6 @@ if $(NT) {
 	C++FLAGS	?= -Q ;	# quiet
 	LINK		?= $(CC) ;
 	LINKFLAGS	?= -Q ;	# quiet
-	NOARSCAN	?= true ;
 	RANLIB		?= "" ;
 
 	# UNIX defaults
@@ -315,7 +310,7 @@ if $(NT) {
 # General defaults; a lot like UNIX
 #
 
-AR		?= ar ru ;
+AR		?= ar rD ;
 AS		?= as ;
 ASFLAGS		?= ;
 AWK		?= awk ;
@@ -335,21 +330,22 @@ HDRS		?= ;
 INSTALLGRIST	?= installed ;
 JAMFILE		?= Jamfile ;
 JAMRULES	?= Jamrules ;
-LEX		?= ;
+LEX			?= ;
 LIBDIR		?= /usr/local/lib ;
 LINK		?= $(CC) ;
 LINKFLAGS	?= ;
 LINKLIBS	?= ;
-LN		?= ln ;
+LN			?= ln ;
+NOARSCAN	?= true ;
 MANDIR		?= /usr/local/man ;
 MKDIR		?= mkdir ;
-MV		?= mv -f ;
+MV			?= mv -f ;
 OPTIM		?= ;
-RCP		?= rcp ;
-RM		?= rm -f ;
+RCP			?= rcp ;
+RM			?= rm -f ;
 RMDIR		?= $(RM) ;
-RSH		?= rsh ;
-SED		?= sed ;
+RSH			?= rsh ;
+SED			?= sed ;
 SHELLHEADER	?= "#!/bin/sh" ;
 SHELLMODE	?= 755 ;
 SLASH		?= / ;
