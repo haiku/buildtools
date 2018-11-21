@@ -118,7 +118,7 @@
 # Special variables set by jam:
 #	$(<) - targets of a rule (to the left of the :)
 #	$(>) - sources of a rule (to the right of the :)
-#	$(xxx) - true on xxx (UNIX, NT, MAC)
+#	$(xxx) - true on xxx (UNIX, NT)
 #	$(OS) - name of OS - varies wildly
 #	$(JAMVERSION) - version number (2.5)
 #
@@ -200,62 +200,11 @@ if $(NT) {
 	}
 
 } else if $(MINGW) {
-	Echo		"MingW32" ;
-
 	CC		?= gcc ;
 	C++		?= g++ ;
 	CCFLAGS 	+= -DMINGW ;
 	RANLIB		?= "ranlib" ;
 	SUFEXE		?= .exe ;
-} else if $(MAC) {
-	local OPT ;
-
-	CW	?= "{CW}" ;
-
-	MACHDRS ?=
-		"$(UMACHDRS):Universal:Interfaces:CIncludes"
-		"$(CW):MSL:MSL_C:MSL_Common:Include"
-		"$(CW):MSL:MSL_C:MSL_MacOS:Include" ;
-
-	MACLIBS ?=
-		"$(CW):MacOS Support:Universal:Libraries:StubLibraries:Interfacelib"
-		"$(CW):MacOS Support:Universal:Libraries:StubLibraries:Mathlib" ;
-
-	MPWLIBS ?=
-		"$(CW):MacOS Support:Libraries:Runtime:Libs:MSL_MPWCRuntime_PPC.lib"
-		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_C_PPC_MPW.Lib" ;
-
-	MPWNLLIBS ?=
-		"$(CW):MacOS Support:Libraries:Runtime:Libs:MSL_MPWCRuntime_PPC.lib"
-		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_C_PPC_MPW(NL).Lib" ;
-
-	SIOUXHDRS ?= ;
-
-	SIOUXLIBS ?=
-		"$(CW):MacOS Support:Libraries:Runtime:Libs:MSL_Runtime_PPC.lib"
-		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_SIOUX_PPC.Lib"
-		"$(CW):MSL:MSL_C:MSL_MacOS:Lib:PPC:MSL_C_PPC.Lib" ;
-
-	C++		?= mwcppc ;
-	C++FLAGS	?= -w off ;
-	CC		?= mwcppc ;
-	CCFLAGS		?= -w off ;
-	CP		?= duplicate -y ;
-	DOT		?= ":" ;
-	DOTDOT		?= "::" ;
-	HDRS 		?= $(MACHDRS) $(MPWHDRS) ;
-	LINK		?= mwlinkppc ;
-	LINKFLAGS	?= -mpwtool -warn ;
-	LINKLIBS 	?= $(MACLIBS) $(MPWLIBS) ;
-	MKDIR		?= newfolder ;
-	MV		?= rename -y ;
-	NOARSCAN	?= true ;
-	OPTIM		?= ;
-	RM		?= delete -y ;
-	SLASH		?= ":" ;
-	STDHDRS		?= ;
-	SUFLIB		?= .lib ;
-	SUFOBJ		?= .o ;
 } else if $(OS) = BEOS && $(OSPLAT) = PPC {
 	AR		?= mwld -xml -o ;
 	BINDIR		?= /boot/home/config/bin ;
@@ -1550,10 +1499,6 @@ rule FDirName
 if $(NT) {
 	rule FDefines { return /D$(<) ; }
 	rule FIncludes { return /I$(<) ; }
-} else if $(MAC) {
-	rule FQuote { return \"$(<)\" ; }
-	rule FDefines { return "-define '$(<)'" ; }
-	rule FIncludes { return \"$(<:J=,)\" ; }
 }
 
 #
@@ -1758,43 +1703,6 @@ if $(NT) && $(MSVCNT) {
 	actions Link bind NEEDLIBS
 	{
 	$(LINK) $(LINKFLAGS) /out:$(<) $(UNDEFS) $(>) $(NEEDLIBS) $(LINKLIBS)
-	}
-}
-
-#
-# Mac specifc actions
-#
-
-else if $(MAC)
-{
-	actions together Archive
-	{
-	$(LINK) -library -o $(<) $(>)
-	}
-
-	actions Cc
-	{
-	set -e MWCincludes $(CCHDRS)
-	$(CC) -o $(<) $(CCFLAGS) $(CCDEFS) $(>)
-	}
-
-	actions C++
-	{
-	set -e MWCincludes $(CCHDRS)
-	$(CC) -o $(<) $(C++FLAGS) $(CCDEFS) $(>)
-	}
-
-	actions Link bind NEEDLIBS
-	{
-	$(LINK) -o $(<) $(LINKFLAGS) $(>) $(NEEDLIBS) "$(LINKLIBS)"
-	}
-}
-
-if $(WIN98)
-{
-	actions existing Clean
-	{
-	del $(>)
 	}
 }
 
