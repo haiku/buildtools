@@ -13,6 +13,7 @@
 # JAMBASE - jam 2.5 ruleset providing make(1)-like functionality
 #
 # This file has been almost completely refactored from Jam's original version.
+# Old platforms have been removed, new ones added, defaults changed, etc.
 #
 
 # Special targets defined in this file:
@@ -1030,16 +1031,11 @@ rule SubDir
 	if ! $($(_top)-SET) {
 		$(_top)-SET = true ;
 
-		## LOCAL CHANGE
-		#
 		# Needed below to reset $(_top), so that to the SubDir invoked by the
 		# top jamfile we will include, it will appear, as if the code has
 		# never been executed.
 		#
 		local _originalTop = $($(_top)) ;
-		#
-		## LOCAL CHANGE
-
 
 		# First time we've seen this TOP.
 		# We'll initialize a number of internal variables:
@@ -1131,11 +1127,8 @@ rule SubDir
 		SUBDIR_DOWN = ;
 		SUBDIR_ROOT = $($(_top)-ROOT) ;
 
-		## LOCAL CHANGE
-		#
 		# If we are the first Jamfile, we include the top Jamfile of this
 		# tree and  stop processing.
-		#
 		if ! $(INVOCATION_SUBDIR_SET) {
 			INVOCATION_SUBDIR_SET = true ;
 			INVOCATION_SUBDIR_TOP = $($(_top)) ;
@@ -1153,8 +1146,6 @@ rule SubDir
 				jumptoeof ;
 			}
 		}
-		#
-		## LOCAL CHANGE
 
 		# Include $(TOPRULES) or $(TOP)/Jamrules.
 		# Include $(TOPRULES) if set.
@@ -1332,31 +1323,6 @@ rule FGristSourceFiles
 	# files have global visibility.
 	#
 	# Here we comment out the old version and replace it with the new.
-#	# Produce source file name name with grist in it,
-#	# if SOURCE_GRIST is set.
-#
-#	# Leave header files alone, because they have a global
-#	# visibility.
-#
-#	if ! $(SOURCE_GRIST)
-#	{
-#		return $(<) ;
-#	}
-#	else
-#	{
-#		local _i _o ;
-#
-#		for _i in $(<)
-#		{
-#		switch $(_i)
-#		{
-#		case *.h :	_o += $(_i) ;
-#		case * : 	_o += $(_i:G=$(SOURCE_GRIST)) ;
-#		}
-#		}
-#
-#		return $(_o) ;
-#	}
 	return [ FGristFiles $(<) ] ;
 	#
 	## LOCAL CHANGE: end
