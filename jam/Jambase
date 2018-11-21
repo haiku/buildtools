@@ -325,7 +325,6 @@ C++FLAGS	?= ;
 CC		?= cc ;
 CCFLAGS		?= ;
 CP		?= cp -f ;
-CRELIB		?= ;
 DOT		?= . ;
 DOTDOT		?= .. ;
 EXEMODE		?= 711 ;
@@ -643,8 +642,6 @@ rule LibraryFromObjects
 	}
 
 	LocalClean clean : $(_l) ;
-
-	if $(CRELIB) { CreLib $(_l) : $(_s[1]) ; }
 
 	Archive $(_l) : $(_s) ;
 
