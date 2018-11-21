@@ -336,10 +336,6 @@ if $(NT) {
 	SUFEXE		?= .exe ;
 	YACC		?= bison -y ;
 
-	case DGUX :
-	RANLIB		?= "" ;
-	RELOCATE 	?= true ;
-
 	case HPUX :
 	RANLIB		?= "" ;
 
@@ -388,10 +384,6 @@ if $(NT) {
 	NOARSCAN	?= true ;
 	RANLIB		?= "" ;
 
-	case SCO :
-	RANLIB		?= "" ;
-	RELOCATE 	?= true ;
-
 	case SINIX :
 	RANLIB		?= "" ;
 
@@ -402,11 +394,6 @@ if $(NT) {
 	case UNICOS :
 	NOARSCAN 	?= true ;
 	OPTIM 		?= -O0 ;
-
-	case UNIXWARE :
-	RANLIB		?= "" ;
-	RELOCATE 	?= true ;
-	}
 
 	# UNIX defaults
 
@@ -520,12 +507,6 @@ rule Cc
 {
 	Depends $(<) : $(>) ;
 
-	# If the compiler's -o flag doesn't work, relocate the .o
-
-	if $(RELOCATE) {
-		CcMv $(<) : $(>) ;
-	}
-
 	# Just to clarify here: this sets the per-target CCFLAGS to
 	# be the current value of (global) CCFLAGS and SUBDIRCCFLAGS.
 	# CCHDRS and CCDEFS must be reformatted each time for some
@@ -540,10 +521,6 @@ rule Cc
 rule C++
 {
 	Depends $(<) : $(>) ;
-
-	if $(RELOCATE) {
-		CcMv $(<) : $(>) ;
-	}
 
 	C++FLAGS on $(<) += $(C++FLAGS) $(SUBDIRC++FLAGS) $(OPTIM) ;
 
@@ -1706,27 +1683,6 @@ actions YaccMv
 {
 	$(MV) $(YACCFILES).c $(<[1])
 	$(MV) $(YACCFILES).h $(<[2])
-}
-
-#
-# RELOCATE - for compilers with broken -o flags
-#
-
-if $(RELOCATE) {
-	actions C++
-	{
-	$(C++) -c $(C++FLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-
-	actions Cc
-	{
-	$(CC) -c $(CCFLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-
-	actions ignore CcMv
-	{
-	[ $(<) != $(>:BS=$(SUFOBJ)) ] && $(MV) $(>:BS=$(SUFOBJ)) $(<)
-	}
 }
 
 #
