@@ -1447,7 +1447,7 @@ actions Chgrp
 
 actions Chmod1
 {
-	$(CHMOD) $(MODE) $(<)
+	$(CHMOD) "$(MODE)" "$(1)"
 }
 
 actions Chown
@@ -1457,12 +1457,12 @@ actions Chown
 
 actions piecemeal together existing Clean
 {
-	$(RM) $(>)
+	$(RM) "$(>)"
 }
 
 actions File
 {
-	$(CP) $(>) $(<)
+	$(CP) "$(>)" "$(<)"
 }
 
 actions GenFile1
