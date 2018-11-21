@@ -118,7 +118,7 @@
 # Special variables set by jam:
 #	$(<) - targets of a rule (to the left of the :)
 #	$(>) - sources of a rule (to the right of the :)
-#	$(xxx) - true on xxx (UNIX, VMS, NT, OS2, MAC)
+#	$(xxx) - true on xxx (UNIX, NT, MAC)
 #	$(OS) - name of OS - varies wildly
 #	$(JAMVERSION) - version number (2.5)
 #
@@ -153,18 +153,7 @@ if $(NT) {
 	SUFOBJ		?= .obj ;
 	SUFEXE		?= .exe ;
 
-	if $(BCCROOT) {
-		AR		?= tlib /C /P64 ;
-		CC		?= bcc32 ;
-		CCFLAGS		?= -v -w- -q -DWIN -tWR -tWM -tWC ;
-		C++		?= $(CC) ;
-		C++FLAGS	?= $(CCFLAGS) -P ;
-		LINK		?= $(CC) ;
-		LINKFLAGS	?= $(CCFLAGS) ;
-		STDLIBPATH	?= $(BCCROOT)\\lib ;
-		STDHDRS		?= $(BCCROOT)\\include ;
-		NOARSCAN	?= true ;
-	} else if $(MSVC) {
+	if $(MSVC) {
 		AR		?= lib /nologo ;
 		CC		?= cl /nologo ;
 		CCFLAGS		?= /D \"WIN\" ;
@@ -206,7 +195,7 @@ if $(NT) {
 		STDHDRS		?= $(MSVCNT)\\include ;
 		UNDEFFLAG	?= "/u _" ;
 	} else {
-		EXIT On NT, set BCCROOT, MSVCDIR, MSVCNT, or MSVC to the root
+		EXIT On NT, set MSVCDIR, MSVCNT, or MSVC to the root
 			of the Borland or Microsoft directories. ;
 	}
 
@@ -218,69 +207,6 @@ if $(NT) {
 	CCFLAGS 	+= -DMINGW ;
 	RANLIB		?= "ranlib" ;
 	SUFEXE		?= .exe ;
-} else if $(OS2) {
-	WATCOM		?= $(watcom) ;
-
-	if ! $(WATCOM) {
-		Exit On OS2, set WATCOM to the root of the Watcom directory. ;
-	}
-
-	AR		?= wlib ;
-	BINDIR		?= \\os2\\apps ;
-	CC		?= wcc386 ;
-	CCFLAGS		?= /zq /DOS2 /I$(WATCOM)\\h ; # zq=quiet
-	C++		?= wpp386 ;
-	C++FLAGS	?= $(CCFLAGS) ;
-	CP		?= copy ;
-	DOT		?= . ;
-	DOTDOT		?= .. ;
-	LINK		?= wcl386 ;
-	LINKFLAGS	?= /zq ; # zq=quiet
-	LINKLIBS	?= ;
-	MV		?= move ;
-	NOARSCAN	?= true ;
-	OPTIM		?= ;
-	RM		?= del /f ;
-	SLASH		?= \\ ;
-	STDHDRS		?= $(WATCOM)\\h ;
-	SUFEXE		?= .exe ;
-	SUFLIB		?= .lib ;
-	SUFOBJ		?= .obj ;
-	UNDEFFLAG	?= "/u _" ;
-
-} else if $(VMS) {
-	C++		?= cxx ;
-	C++FLAGS	?= ;
-	CC		?= cc ;
-	CCFLAGS		?= ;
-	CHMOD		?= set file/prot= ;
-	CP		?= copy/replace ;
-	CRELIB		?= true ;
-	DOT		?= [] ;
-	DOTDOT		?= [-] ;
-	EXEMODE		?= (w:e) ;
-	FILEMODE	?= (w:r) ;
-	HDRS		?= ;
-	LINK		?= link ;
-	LINKFLAGS	?= "" ;
-	LINKLIBS	?= ;
-	MKDIR		?= create/dir ;
-	MV		?= rename ;
-	OPTIM		?= "" ;
-	RM		?= delete ;
-	RUNVMS		?= mcr ;
-	SHELLMODE	?= (w:er) ;
-	SLASH		?= . ;
-	STDHDRS		?= decc$library_include ;
-	SUFEXE		?= .exe ;
-	SUFLIB		?= .olb ;
-	SUFOBJ		?= .obj ;
-
-	switch $(OS)
-	{
-	case OPENVMS : CCFLAGS ?= /stand=vaxc ;
-	case VMS	 : LINKLIBS ?= sys$library:vaxcrtl.olb/lib ;
-	}
 } else if $(MAC) {
 	local OPT ;
 
@@ -603,7 +529,7 @@ rule Cc
 	# Just to clarify here: this sets the per-target CCFLAGS to
 	# be the current value of (global) CCFLAGS and SUBDIRCCFLAGS.
 	# CCHDRS and CCDEFS must be reformatted each time for some
-	# compiles (VMS, NT) that malign multiple -D or -I flags.
+	# compiles (NT) that malign multiple -D or -I flags.
 
 	CCFLAGS on $(<) += $(CCFLAGS) $(SUBDIRCCFLAGS) $(OPTIM) ;
 
@@ -1644,51 +1570,13 @@ rule FDirName
 	return $(_s) ;
 }
 
-if $(OS2) {
-	rule FQuote { return \"$(<)\" ; }
-	rule FIncludes { return /I$(<) ; }
-} else if $(NT) {
+if $(NT) {
 	rule FDefines { return /D$(<) ; }
 	rule FIncludes { return /I$(<) ; }
 } else if $(MAC) {
 	rule FQuote { return \"$(<)\" ; }
 	rule FDefines { return "-define '$(<)'" ; }
 	rule FIncludes { return \"$(<:J=,)\" ; }
-} else if $(VMS) {
-	rule FQuote { return \"\"\"$(<)\"\"\" ; }
-	rule FDefines { return "/define=( $(<:J=,) )" ; }
-	rule FIncludes { return "/inc=( $(<:J=,) )" ; }
-
-	rule FDirName
-	{
-		local _s _i ;
-
-		# Turn individual elements in $(<) into a usable path.
-
-		if ! $(<) {
-			_s = $(DOT) ;
-		} else {
-			# This handles the following cases:
-			# 	a -> [.a]
-			# 	a b c -> [.a.b.c]
-			# 	x: -> x:
-			# 	x: a -> x:[a]
-			# 	x:[a] b -> x:[a.b]
-
-			switch $(<[1])
-			{
-			case *:* : _s = $(<[1]) ;
-			case \\[*\\] : _s = $(<[1]) ;
-			case * : _s = [.$(<[1])] ;
-			}
-
-			for _i in [.$(<[2-])] {
-			_s = $(_i:R=$(_s)) ;
-			}
-		}
-
-		return $(_s) ;
-	}
 }
 
 #
@@ -1914,110 +1802,6 @@ if $(NT) && $(MSVCNT) {
 	actions Link bind NEEDLIBS
 	{
 	$(LINK) $(LINKFLAGS) /out:$(<) $(UNDEFS) $(>) $(NEEDLIBS) $(LINKLIBS)
-	}
-} else if $(NT) && $(BCCROOT) {
-	actions updated together piecemeal Archive
-	{
-	$(AR) $(<) -+$(>)
-	}
-
-	actions Link bind NEEDLIBS
-	{
-	$(LINK) -e$(<) $(LINKFLAGS) $(UNDEFS) -L$(LINKLIBS) $(NEEDLIBS) $(>)
-	}
-
-	actions C++
-	{
-	$(C++) -c -o$(<) $(C++FLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-
-	actions Cc
-	{
-	$(CC) -c -o$(<) $(CCFLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-}
-
-#
-# OS2 specific actions
-#
-
-else if $(OS2) && $(WATCOM)
-{
-	actions together piecemeal Archive
-	{
-	$(AR) $(<) +-$(>)
-	}
-
-	actions Cc
-	{
-	$(CC) /Fo=$(<) $(CCFLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-
-	actions C++
-	{
-	$(C++) /Fo=$(<) $(C++FLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-
-	actions Link bind NEEDLIBS
-	{
-	$(LINK) $(LINKFLAGS) /Fe=$(<) $(UNDEFS) $(>) $(NEEDLIBS) $(LINKLIBS)
-	}
-
-	actions Shell
-	{
-	$(CP) $(>) $(<)
-	}
-}
-
-#
-# VMS specific actions
-#
-
-else if $(VMS)
-{
-	actions updated together piecemeal Archive
-	{
-	lib/replace $(<) $(>[1]) ,$(>[2-])
-	}
-
-	actions Cc
-	{
-	$(CC)/obj=$(<) $(CCFLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-
-	actions C++
-	{
-	$(C++)/obj=$(<) $(C++FLAGS) $(CCDEFS) $(CCHDRS) $(>)
-	}
-
-	actions piecemeal together existing Clean
-	{
-	$(RM) $(>[1]);* ,$(>[2-]);*
-	}
-
-	actions together quietly CreLib
-	{
-	if f$search("$(<)") .eqs. "" then lib/create $(<)
-	}
-
-	actions GenFile1
-	{
-	mcr $(>[1]) $(<) $(>[2-])
-	}
-
-	actions Link bind NEEDLIBS
-	{
-	$(LINK)/exe=$(<) $(LINKFLAGS) $(>:J=,) ,$(NEEDLIBS)/lib ,$(LINKLIBS)
-	}
-
-	actions quietly updated piecemeal together RmTemps
-	{
-	$(RM) $(>[1]);* ,$(>[2-]);*
-	}
-
-	actions Shell
-	{
-	$(CP) $(>) $(<)
 	}
 }
 
