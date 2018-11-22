@@ -135,7 +135,7 @@
 
 # for perforce use -- jambase version
 
-JAMBASEDATE = 2002.05.09 ;
+JAMBASEDATE = 2018.11.21 ;
 
 # Initialize variables
 #
@@ -287,6 +287,7 @@ if $(NT) {
 	LINK		?= $(CC) ;
 	LINKFLAGS	?= -Q ;	# quiet
 	RANLIB		?= "" ;
+	}
 
 	# UNIX defaults
 
