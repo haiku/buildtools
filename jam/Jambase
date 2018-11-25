@@ -311,7 +311,7 @@ if $(NT) {
 # General defaults; a lot like UNIX
 #
 
-AR		?= ar rD ;
+AR		?= ar ru ;
 AS		?= as ;
 ASFLAGS		?= ;
 AWK		?= awk ;
