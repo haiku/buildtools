@@ -2939,6 +2939,11 @@ sparc64-*-rtems*)
 	extra_options="${extra_options}"
 	tmake_file="${tmake_file} sparc/t-sparc sparc/t-rtems-64"
 	;;
+sparc64-*-haiku*)
+	tm_file="${tm_file} dbxelf.h elfos.h sparc/sysv4.h sparc/sp64-elf.h sparc/haiku.h haiku.h"
+	extra_options="${extra_options}"
+	tmake_file="${tmake_file} t-haiku sparc/t-sparc sparc/t-haiku"
+	;;
 sparc64-*-linux*)
 	tm_file="sparc/biarch64.h ${tm_file} dbxelf.h elfos.h sparc/sysv4.h gnu-user.h linux.h glibc-stdint.h sparc/default64.h sparc/linux64.h sparc/tso.h"
 	extra_options="${extra_options} sparc/long-double-switch.opt"

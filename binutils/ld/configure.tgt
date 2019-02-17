@@ -769,6 +769,7 @@ sh64-*-elf*)		targ_emul=shelf
 sparc64-*-aout*)	targ_emul=sparcaout ;;
 sparc64-*-elf*)		targ_emul=elf64_sparc ;;
 sparc64-*-rtems*)	targ_emul=elf64_sparc ;;
+sparc64-*-haiku*)	targ_emul=elf64_sparc ;;
 sparc-sun-sunos4*) 	targ_emul=sun4 ;;
 sparclite*-*-elf)	targ_emul=elf32_sparc ;;
 sparclite*-*-coff)	targ_emul=coff_sparc ;;
