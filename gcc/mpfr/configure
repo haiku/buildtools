@@ -13399,16 +13399,17 @@ fi
 
 
 # Check whether --enable-lto was given.
+enable_lto=no
 if test "${enable_lto+set}" = set; then :
-  enableval=$enable_lto;  case $enableval in
-      yes)  if test "$enable_shared" != "no"; then
-              as_fn_error $? "--enable-lto can only work in static mode (--disable-shared)" "$LINENO" 5
-            fi
-            enable_lto=yes
-            ;;
-      no)   ;;
-      *)    as_fn_error $? "bad value for --enable-lto: yes or no" "$LINENO" 5 ;;
-     esac
+#  enableval=$enable_lto;  case $enableval in
+#      yes)  if test "$enable_shared" != "no"; then
+#              as_fn_error $? "--enable-lto can only work in static mode (--disable-shared)" "$LINENO" 5
+#            fi
+#            enable_lto=yes
+#            ;;
+#      no)   ;;
+#      *)    as_fn_error $? "bad value for --enable-lto: yes or no" "$LINENO" 5 ;;
+#     esac
 fi
 
 
