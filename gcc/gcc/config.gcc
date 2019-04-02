@@ -2071,6 +2071,8 @@ microblaze*-*-elf)
 riscv*-*-haiku*)
 	tm_file="elfos.h haiku.h ${tm_file} riscv/haiku.h"
 	tmake_file="${tmake_file} t-haiku riscv/t-riscv riscv/t-haiku"
+	gnu_ld=yes
+	gas=yes
 	;;
 riscv*-*-linux*)
 	tm_file="elfos.h gnu-user.h linux.h glibc-stdint.h ${tm_file} riscv/linux.h"
