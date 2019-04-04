@@ -43,10 +43,13 @@ along with GCC; see the file COPYING3.  If not see
   "%{mabi=lp64f:-sp}" \
   "%{mabi=lp64d:}" \
 
-/* Because RISC-V only has word-sized atomics, it requries libatomic where
-   others do not.  So link libatomic by default, as needed.  */
 #undef LIB_SPEC
-#define LIB_SPEC " -lroot -latomic "
+// Linux adds -latomic because RISC-V only has word-sized atomics
+// Not sure if we really need it though.
+#define LIB_SPEC " -lroot "
+
+// riscv.h defines /lib and friends which breaks the sysroot
+#undef STARTFILE_PREFIX_SPEC
 
 #define ICACHE_FLUSH_FUNC "__riscv_flush_icache"
 
