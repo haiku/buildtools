@@ -1,4 +1,4 @@
-// { dg-options -std=c++1z }
+// { dg-options -std=c++17 }
 
 namespace std {
   template<typename T> struct tuple_size;
@@ -20,7 +20,7 @@ void f3() { auto [ x ] = a3; }	// { dg-error "get" }
 
 struct A3a { int i,j; int get(); } a3a;
 template<> struct std::tuple_size<A3a> { enum { value = 1 }; };
-void f3a() { auto [ x ] = a3a; }	// { dg-error "get<0>" }
+void f3a() { auto [ x ] = a3a; }	// { dg-error "get" }
 
 struct A3b { int i,j; } a3b;
 int get(A3b&&);

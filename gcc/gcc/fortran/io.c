@@ -1,5 +1,5 @@
 /* Deal with I/O statements & related stuff.
-   Copyright (C) 2000-2017 Free Software Foundation, Inc.
+   Copyright (C) 2000-2018 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -25,6 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gfortran.h"
 #include "match.h"
 #include "parse.h"
+#include "constructor.h"
 
 gfc_st_label
 format_asterisk = {0, NULL, NULL, -1, ST_LABEL_FORMAT, ST_LABEL_FORMAT, NULL,
@@ -111,6 +112,9 @@ static gfc_dt *current_dt;
 
 #define RESOLVE_TAG(x, y) if (!resolve_tag (x, y)) return false;
 
+/* Are we currently processing an asynchronous I/O statement? */
+
+bool async_io_dt;
 
 /**************** Fortran 95 FORMAT parser  *****************/
 
@@ -982,6 +986,9 @@ data_desc:
 	case FMT_COMMA:
 	  goto format_item;
 
+	case FMT_COLON:
+	  goto format_item_1;
+
 	case FMT_LPAREN:
 
   dtio_vlist:
@@ -1515,8 +1522,8 @@ match_dec_etag (const io_tag *tag, gfc_expr **e)
     return m;
   else if (m != MATCH_NO)
     {
-      gfc_error ("%s is a DEC extension at %C, re-compile with "
-	  "-fdec to enable", tag->name);
+      gfc_error ("%s at %C is a DEC extension, enable with "
+		 "%<-fdec%>", tag->name);
       return MATCH_ERROR;
     }
   return m;
@@ -1532,8 +1539,8 @@ match_dec_vtag (const io_tag *tag, gfc_expr **e)
     return m;
   else if (m != MATCH_NO)
     {
-      gfc_error ("%s is a DEC extension at %C, re-compile with "
-	  "-fdec to enable", tag->name);
+      gfc_error ("%s at %C is a DEC extension, enable with "
+		 "%<-fdec%>", tag->name);
       return MATCH_ERROR;
     }
   return m;
@@ -1553,8 +1560,8 @@ match_dec_ftag (const io_tag *tag, gfc_open *o)
 
   if (!flag_dec)
     {
-      gfc_error ("%s is a DEC extension at %C, re-compile with "
-		 "-fdec to enable", tag->name);
+      gfc_error ("%s at %C is a DEC extension, enable with "
+		 "%<-fdec%>", tag->name);
       return MATCH_ERROR;
     }
 
@@ -1600,7 +1607,7 @@ match_dec_ftag (const io_tag *tag, gfc_open *o)
 /* Resolution of the FORMAT tag, to be called from resolve_tag.  */
 
 static bool
-resolve_tag_format (const gfc_expr *e)
+resolve_tag_format (gfc_expr *e)
 {
   if (e->expr_type == EXPR_CONSTANT
       && (e->ts.type != BT_CHARACTER
@@ -1609,6 +1616,47 @@ resolve_tag_format (const gfc_expr *e)
       gfc_error ("Constant expression in FORMAT tag at %L must be "
 		 "of type default CHARACTER", &e->where);
       return false;
+    }
+
+  /* Concatenate a constant character array into a single character
+     expression.  */
+
+  if ((e->expr_type == EXPR_ARRAY || e->rank > 0)
+      && e->ts.type == BT_CHARACTER
+      && gfc_is_constant_expr (e))
+    {
+      if (e->expr_type == EXPR_VARIABLE
+	  && e->symtree->n.sym->attr.flavor == FL_PARAMETER)
+	gfc_simplify_expr (e, 1);
+
+      if (e->expr_type == EXPR_ARRAY)
+	{
+	  gfc_constructor *c;
+	  gfc_charlen_t n, len;
+	  gfc_expr *r;
+	  gfc_char_t *dest, *src;
+
+	  n = 0;
+	  c = gfc_constructor_first (e->value.constructor);
+	  len = c->expr->value.character.length;
+	  
+	  for ( ; c; c = gfc_constructor_next (c))
+	    n += len;
+
+	  r = gfc_get_character_expr (e->ts.kind, &e->where, NULL, n);
+	  dest = r->value.character.string;
+
+	  for (c = gfc_constructor_first (e->value.constructor);
+	     c; c = gfc_constructor_next (c))
+	    {
+	      src = c->expr->value.character.string;
+	      for (gfc_charlen_t i = 0 ; i < len; i++)
+		*dest++ = *src++;
+	    }
+
+	  gfc_replace_expr (e, r);
+	  return true;
+	}
     }
 
   /* If e's rank is zero and e is not an element of an array, it should be
@@ -1944,7 +1992,15 @@ static int
 compare_to_allowed_values (const char *specifier, const char *allowed[],
 			   const char *allowed_f2003[], 
 			   const char *allowed_gnu[], gfc_char_t *value,
-			   const char *statement, bool warn)
+			   const char *statement, bool warn,
+			   int *num = NULL);
+
+
+static int
+compare_to_allowed_values (const char *specifier, const char *allowed[],
+			   const char *allowed_f2003[], 
+			   const char *allowed_gnu[], gfc_char_t *value,
+			   const char *statement, bool warn, int *num)
 {
   int i;
   unsigned int len;
@@ -1961,7 +2017,11 @@ compare_to_allowed_values (const char *specifier, const char *allowed[],
   for (i = 0; allowed[i]; i++)
     if (len == strlen (allowed[i])
 	&& gfc_wide_strncasecmp (value, allowed[i], strlen (allowed[i])) == 0)
+      {
+	if (num)
+	  *num = i;
       return 1;
+      }
 
   for (i = 0; allowed_f2003 && allowed_f2003[i]; i++)
     if (len == strlen (allowed_f2003[i])
@@ -2090,33 +2150,6 @@ gfc_match_open (void)
 
   warn = (open->err || open->iostat) ? true : false;
 
-  /* Checks on NEWUNIT specifier.  */
-  if (open->newunit)
-    {
-      if (open->unit)
-	{
-	  gfc_error ("UNIT specifier not allowed with NEWUNIT at %C");
-	  goto cleanup;
-	}
-
-      if (!open->file && open->status)
-        {
-	  if (open->status->expr_type == EXPR_CONSTANT
-	     && gfc_wide_strncasecmp (open->status->value.character.string,
-				       "scratch", 7) != 0)
-	   {
-	     gfc_error ("NEWUNIT specifier must have FILE= "
-			"or STATUS='scratch' at %C");
-	     goto cleanup;
-	   }
-	}
-    }
-  else if (!open->unit)
-    {
-      gfc_error ("OPEN statement at %C must have UNIT or NEWUNIT specified");
-      goto cleanup;
-    }
-
   /* Checks on the ACCESS specifier.  */
   if (open->access && open->access->expr_type == EXPR_CONSTANT)
     {
@@ -2171,6 +2204,21 @@ gfc_match_open (void)
 
       if (!is_char_type ("ASYNCHRONOUS", open->asynchronous))
 	goto cleanup;
+
+      if (open->asynchronous->ts.kind != 1)
+	{
+	  gfc_error ("ASYNCHRONOUS= specifier at %L must be of default "
+		     "CHARACTER kind", &open->asynchronous->where);
+	  return MATCH_ERROR;
+	}
+
+      if (open->asynchronous->expr_type == EXPR_ARRAY
+	  || open->asynchronous->expr_type == EXPR_STRUCTURE)
+	{
+	  gfc_error ("ASYNCHRONOUS= specifier at %L must be scalar",
+		     &open->asynchronous->where);
+	  return MATCH_ERROR;
+	}
 
       if (open->asynchronous->expr_type == EXPR_CONSTANT)
 	{
@@ -2439,6 +2487,33 @@ gfc_match_open (void)
 			 "cannot have the value SCRATCH if a FILE specifier "
 			 "is present");
 	}
+    }
+
+  /* Checks on NEWUNIT specifier.  */
+  if (open->newunit)
+    {
+      if (open->unit)
+	{
+	  gfc_error ("UNIT specifier not allowed with NEWUNIT at %C");
+	  goto cleanup;
+	}
+
+      if (!open->file && open->status)
+        {
+	  if (open->status->expr_type == EXPR_CONSTANT
+	     && gfc_wide_strncasecmp (open->status->value.character.string,
+				       "scratch", 7) != 0)
+	   {
+	     gfc_error ("NEWUNIT specifier must have FILE= "
+			"or STATUS='scratch' at %C");
+	     goto cleanup;
+	   }
+	}
+    }
+  else if (!open->unit)
+    {
+      gfc_error ("OPEN statement at %C must have UNIT or NEWUNIT specified");
+      goto cleanup;
     }
 
   /* Things that are not allowed for unformatted I/O.  */
@@ -2774,21 +2849,20 @@ cleanup:
 
 
 bool
-gfc_resolve_filepos (gfc_filepos *fp)
+gfc_resolve_filepos (gfc_filepos *fp, locus *where)
 {
   RESOLVE_TAG (&tag_unit, fp->unit);
   RESOLVE_TAG (&tag_iostat, fp->iostat);
   RESOLVE_TAG (&tag_iomsg, fp->iomsg);
-  if (!gfc_reference_st_label (fp->err, ST_LABEL_TARGET))
-    return false;
 
-  if (!fp->unit && (fp->iostat || fp->iomsg))
+  if (!fp->unit && (fp->iostat || fp->iomsg || fp->err))
     {
-      locus where;
-      where = fp->iostat ? fp->iostat->where : fp->iomsg->where;
-      gfc_error ("UNIT number missing in statement at %L", &where);
+      gfc_error ("UNIT number missing in statement at %L", where);
       return false;
     }
+
+  if (!gfc_reference_st_label (fp->err, ST_LABEL_TARGET))
+    return false;
 
   if (fp->unit->expr_type == EXPR_CONSTANT
       && fp->unit->ts.type == BT_INTEGER
@@ -3299,7 +3373,7 @@ gfc_resolve_dt (gfc_dt *dt, locus *loc)
 	      gfc_error ("NAMELIST object %qs in namelist %qs at %L is "
 			 "polymorphic and requires a defined input/output "
 			 "procedure", n->sym->name, dt->namelist->name, loc);
-	      return 1;
+	      return false;
 	    }
     
 	  if ((n->sym->ts.type == BT_DERIVED)
@@ -3310,7 +3384,7 @@ gfc_resolve_dt (gfc_dt *dt, locus *loc)
 				   "namelist %qs at %L with ALLOCATABLE "
 				   "or POINTER components", n->sym->name,
 				   dt->namelist->name, loc))
-		return 1;
+		return false;
     
 	      if (!t)
 		{
@@ -3318,7 +3392,7 @@ gfc_resolve_dt (gfc_dt *dt, locus *loc)
 			     "ALLOCATABLE or POINTER components and thus requires "
 			     "a defined input/output procedure", n->sym->name,
 			     dt->namelist->name, loc);
-		  return 1;
+		  return false;
 		}
 	    }
 	}
@@ -3611,16 +3685,20 @@ terminate_io (gfc_code *io_code)
 
 /* Check the constraints for a data transfer statement.  The majority of the
    constraints appearing in 9.4 of the standard appear here.  Some are handled
-   in resolve_tag and others in gfc_resolve_dt.  */
+   in resolve_tag and others in gfc_resolve_dt.  Also set the async_io_dt flag
+   and, if necessary, the asynchronous flag on the SIZE argument.  */
 
 static match
 check_io_constraints (io_kind k, gfc_dt *dt, gfc_code *io_code,
 		      locus *spec_end)
 {
-#define io_constraint(condition,msg,arg)\
+#define io_constraint(condition, msg, arg)\
 if (condition) \
   {\
-    gfc_error(msg,arg);\
+    if ((arg)->lb != NULL)\
+      gfc_error ((msg), (arg));\
+    else\
+      gfc_error ((msg), &gfc_current_locus);\
     m = MATCH_ERROR;\
   }
 
@@ -3680,11 +3758,14 @@ if (condition) \
   if (expr && expr->ts.type != BT_CHARACTER)
     {
 
-      io_constraint (gfc_pure (NULL) && (k == M_READ || k == M_WRITE),
-		     "IO UNIT in %s statement at %C must be "
+      if (gfc_pure (NULL) && (k == M_READ || k == M_WRITE))
+	{
+	  gfc_error ("IO UNIT in %s statement at %C must be "
 		     "an internal file in a PURE procedure",
 		     io_kind_name (k));
-
+	  return MATCH_ERROR;
+	}
+	  
       if (k == M_READ || k == M_WRITE)
 	gfc_unset_implicit_pure (NULL);
     }
@@ -3719,6 +3800,7 @@ if (condition) \
 
   if (dt->asynchronous) 
     {
+      int num;
       static const char * asynchronous[] = { "YES", "NO", NULL };
 
       if (!gfc_reduce_init_expr (dt->asynchronous))
@@ -3731,12 +3813,34 @@ if (condition) \
       if (!is_char_type ("ASYNCHRONOUS", dt->asynchronous))
 	return MATCH_ERROR;
 
+      if (dt->asynchronous->ts.kind != 1)
+	{
+	  gfc_error ("ASYNCHRONOUS= specifier at %L must be of default "
+		     "CHARACTER kind", &dt->asynchronous->where);
+	  return MATCH_ERROR;
+	}
+
+      if (dt->asynchronous->expr_type == EXPR_ARRAY
+	  || dt->asynchronous->expr_type == EXPR_STRUCTURE)
+	{
+	  gfc_error ("ASYNCHRONOUS= specifier at %L must be scalar",
+		     &dt->asynchronous->where);
+	  return MATCH_ERROR;
+	}
+
       if (!compare_to_allowed_values
 		("ASYNCHRONOUS", asynchronous, NULL, NULL,
 		 dt->asynchronous->value.character.string,
-		 io_kind_name (k), warn))
+		 io_kind_name (k), warn, &num))
 	return MATCH_ERROR;
+
+      /* Best to put this here because the yes/no info is still around.  */
+      async_io_dt = num == 0;
+      if (async_io_dt && dt->size)
+	dt->size->symtree->n.sym->attr.asynchronous = 1;
     }
+  else
+    async_io_dt = false;
 
   if (dt->id)
     {
@@ -4222,9 +4326,10 @@ get_io_list:
 	goto syntax;
     }
 
-  /* See if we want to use defaults for missing exponents in real transfers.  */
+  /* See if we want to use defaults for missing exponents in real transfers
+     and other DEC runtime extensions.  */
   if (flag_dec)
-    dt->default_exp = 1;
+    dt->dec_ext = 1;
 
   /* A full IO statement has been matched.  Check the constraints.  spec_end is
      supplied for cases where no locus is supplied.  */
@@ -4641,8 +4746,8 @@ match_wait_element (gfc_wait *wait)
 
   m = match_etag (&tag_unit, &wait->unit);
   RETM m = match_ltag (&tag_err, &wait->err);
-  RETM m = match_ltag (&tag_end, &wait->eor);
-  RETM m = match_ltag (&tag_eor, &wait->end);
+  RETM m = match_ltag (&tag_end, &wait->end);
+  RETM m = match_ltag (&tag_eor, &wait->eor);
   RETM m = match_etag (&tag_iomsg, &wait->iomsg);
   if (m == MATCH_YES && !check_char_variable (wait->iomsg))
     return MATCH_ERROR;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2017 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2018 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    Namelist input contributed by Paul Thomas
    F2003 I/O support contributed by Jerry DeLisle
@@ -1380,7 +1380,7 @@ parse_real (st_parameter_dt *dtp, void *buffer, int length)
   if (!isdigit (c))
     {
       /* Extension: allow default exponent of 0 when omitted.  */
-      if (dtp->common.flags & IOPARM_DT_DEFAULT_EXP)
+      if (dtp->common.flags & IOPARM_DT_DEC_EXT)
 	{
 	  push_char (dtp, '0');
 	  goto done;
@@ -1831,7 +1831,7 @@ read_real (st_parameter_dt *dtp, void *dest, int length)
   if (!isdigit (c))
     {
       /* Extension: allow default exponent of 0 when omitted.  */
-      if (dtp->common.flags & IOPARM_DT_DEFAULT_EXP)
+      if (dtp->common.flags & IOPARM_DT_DEC_EXT)
 	{
 	  push_char (dtp, '0');
 	  goto done;
@@ -2100,7 +2100,8 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
 			    int kind, size_t size)
 {
   gfc_char4_t *q, *r;
-  int c, i, m;
+  size_t m;
+  int c;
   int err = 0;
 
   /* Set the next_char and push_char worker functions.  */
@@ -2197,7 +2198,7 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
 	  gfc_charlen_type child_iomsg_len;
 	  int noiostat;
 	  int *child_iostat = NULL;
-	  gfc_array_i4 vlist;
+	  gfc_full_array_i4 vlist;
 
 	  GFC_DESCRIPTOR_DATA(&vlist) = NULL;
 	  GFC_DIMENSION_SET(vlist.dim[0],1, 0, 0);
@@ -2255,20 +2256,20 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
     case BT_CHARACTER:
       if (dtp->u.p.saved_string)
 	{
-	  m = ((int) size < dtp->u.p.saved_used)
-	      ? (int) size : dtp->u.p.saved_used;
+	  m = (size < (size_t) dtp->u.p.saved_used)
+	    ? size : (size_t) dtp->u.p.saved_used;
 
 	  q = (gfc_char4_t *) p;
 	  r = (gfc_char4_t *) dtp->u.p.saved_string;
 	  if (dtp->u.p.current_unit->flags.encoding == ENCODING_UTF8)
-	    for (i = 0; i < m; i++)
+	    for (size_t i = 0; i < m; i++)
 	      *q++ = *r++;
 	  else
 	    {
 	      if (kind == 1)
 		memcpy (p, dtp->u.p.saved_string, m);
 	      else
-		for (i = 0; i < m; i++)
+		for (size_t i = 0; i < m; i++)
 		  *q++ = *r++;
 	    }
 	}
@@ -2276,14 +2277,14 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
 	/* Just delimiters encountered, nothing to copy but SPACE.  */
         m = 0;
 
-      if (m < (int) size)
+      if (m < size)
 	{
 	  if (kind == 1)
 	    memset (((char *) p) + m, ' ', size - m);
 	  else
 	    {
 	      q = (gfc_char4_t *) p;
-	      for (i = m; i < (int) size; i++)
+	      for (size_t i = m; i < size; i++)
 		q[i] = (unsigned char) ' ';
 	    }
 	}
@@ -2995,12 +2996,12 @@ nml_read_obj (st_parameter_dt *dtp, namelist_info *nl, index_type offset,
 		gfc_charlen_type child_iomsg_len;
 		int noiostat;
 		int *child_iostat = NULL;
-		gfc_array_i4 vlist;
+		gfc_full_array_i4 vlist;
 		formatted_dtio dtio_ptr = (formatted_dtio)nl->dtio_sub;
 
 		GFC_DESCRIPTOR_DATA(&vlist) = NULL;
 		GFC_DIMENSION_SET(vlist.dim[0],1, 0, 0);
-
+		
 		list_obj.vptr = nl->vtable;
 		list_obj.len = 0;
 
@@ -3613,11 +3614,7 @@ find_nml_name:
   while (!dtp->u.p.input_complete)
     {
       if (!nml_get_obj_data (dtp, &prev_nl, nml_err_msg, sizeof nml_err_msg))
-	{
-	  if (dtp->u.p.current_unit->unit_number != options.stdin_unit)
-	    goto nml_err_ret;
-	  generate_error (&dtp->common, LIBERROR_READ_VALUE, nml_err_msg);
-        }
+	goto nml_err_ret;
 
       /* Reset the previous namelist pointer if we know we are not going
 	 to be doing multiple reads within a single namelist object.  */

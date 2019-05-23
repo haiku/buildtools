@@ -1,11 +1,10 @@
 /* PR tree-optimization/80631 */
-/* { dg-do run } */
 
 #include "tree-vect.h"
 
 int v[8] = { 77, 1, 79, 3, 4, 3, 6, 7 };
 
-__attribute__((noinline, noclone)) void
+__attribute__((noipa)) void
 f1 (void)
 {
   int k, r = -1;
@@ -16,7 +15,7 @@ f1 (void)
     abort ();
 }
 
-__attribute__((noinline, noclone)) void
+__attribute__((noipa)) void
 f2 (void)
 {
   int k, r = 4;
@@ -27,7 +26,7 @@ f2 (void)
     abort ();
 }
 
-__attribute__((noinline, noclone)) void
+__attribute__((noipa)) void
 f3 (void)
 {
   int k, r = -17;
@@ -38,7 +37,7 @@ f3 (void)
     abort ();
 }
 
-__attribute__((noinline, noclone)) void
+__attribute__((noipa)) void
 f4 (void)
 {
   int k, r = 7;
@@ -49,7 +48,7 @@ f4 (void)
     abort ();
 }
 
-__attribute__((noinline, noclone)) void
+__attribute__((noipa)) void
 f5 (void)
 {
   int k, r = -1;
@@ -72,5 +71,6 @@ main ()
   return 0;
 }
 
-/* { dg-final { scan-tree-dump-times "LOOP VECTORIZED" 5 "vect" { xfail { ! vect_max_reduc } } } } */
-/* { dg-final { scan-tree-dump-times "condition expression based on integer induction." 10 "vect" { xfail { ! vect_max_reduc } } } } */
+/* { dg-final { scan-tree-dump-times "LOOP VECTORIZED" 5 "vect" { target vect_condition } } } */
+/* { dg-final { scan-tree-dump-times "optimizing condition reduction with FOLD_EXTRACT_LAST" 10 "vect" { target vect_fold_extract_last } } } */
+/* { dg-final { scan-tree-dump-times "condition expression based on integer induction." 10 "vect" { target { { ! vect_fold_extract_last } && vect_condition } } } } */

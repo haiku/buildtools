@@ -1,5 +1,5 @@
 /* Compiler arithmetic
-   Copyright (C) 2000-2017 Free Software Foundation, Inc.
+   Copyright (C) 2000-2018 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -113,6 +113,11 @@ gfc_arith_error (arith code)
       p =
 	_("Integer outside symmetric range implied by Standard Fortran at %L");
       break;
+    case ARITH_WRONGCONCAT:
+      p =
+	_("Illegal type in character concatenation at %L");
+      break;
+
     default:
       gfc_internal_error ("gfc_arith_error(): Bad error code");
     }
@@ -555,10 +560,10 @@ check_result (arith rc, gfc_expr *x, gfc_expr *r, gfc_expr **rp)
       val = ARITH_OK;
     }
 
-  if (val != ARITH_OK)
-    gfc_free_expr (r);
-  else
+  if (val == ARITH_OK || val == ARITH_OVERFLOW)
     *rp = r;
+  else
+    gfc_free_expr (r);
 
   return val;
 }
@@ -980,9 +985,14 @@ static arith
 gfc_arith_concat (gfc_expr *op1, gfc_expr *op2, gfc_expr **resultp)
 {
   gfc_expr *result;
-  int len;
+  size_t len;
 
-  gcc_assert (op1->ts.kind == op2->ts.kind);
+  /* By cleverly playing around with constructors, is is possible
+     to get mismaching types here.  */
+  if (op1->ts.type != BT_CHARACTER || op2->ts.type != BT_CHARACTER
+      || op1->ts.kind != op2->ts.kind)
+    return ARITH_WRONGCONCAT;
+
   result = gfc_get_constant_expr (BT_CHARACTER, op1->ts.kind,
 				  &op1->where);
 
@@ -1089,7 +1099,7 @@ compare_complex (gfc_expr *op1, gfc_expr *op2)
 int
 gfc_compare_string (gfc_expr *a, gfc_expr *b)
 {
-  int len, alen, blen, i;
+  size_t len, alen, blen, i;
   gfc_char_t ac, bc;
 
   alen = a->value.character.length;
@@ -1116,7 +1126,7 @@ gfc_compare_string (gfc_expr *a, gfc_expr *b)
 int
 gfc_compare_with_Cstring (gfc_expr *a, const char *b, bool case_sensitive)
 {
-  int len, alen, blen, i;
+  size_t len, alen, blen, i;
   gfc_char_t ac, bc;
 
   alen = a->value.character.length;
@@ -1603,8 +1613,12 @@ eval_intrinsic (gfc_intrinsic_op op,
   if (rc != ARITH_OK)
     {
       gfc_error (gfc_arith_error (rc), &op1->where);
+      if (rc == ARITH_OVERFLOW)
+	goto done;
       return NULL;
     }
+
+done:
 
   gfc_free_expr (op1);
   gfc_free_expr (op2);
@@ -2001,13 +2015,14 @@ wprecision_real_real (mpfr_t r, int from_kind, int to_kind)
 static bool
 wprecision_int_real (mpz_t n, mpfr_t r)
 {
+  bool ret;
   mpz_t i;
   mpz_init (i);
   mpfr_get_z (i, r, GFC_RND_MODE);
   mpz_sub (i, i, n);
-  return mpz_cmp_si (i, 0) != 0;
+  ret = mpz_cmp_si (i, 0) != 0;
   mpz_clear (i);
-
+  return ret;
 }
 
 /* Convert integers to integers.  */
@@ -2046,7 +2061,7 @@ gfc_int2int (gfc_expr *src, int kind)
       gfc_convert_mpz_to_signed (result->value.integer,
 				 gfc_integer_kinds[k].bit_size);
 
-      if (warn_conversion && kind < src->ts.kind)
+      if (warn_conversion && !src->do_not_warn && kind < src->ts.kind)
 	gfc_warning_now (OPT_Wconversion, "Conversion from %qs to %qs at %L",
 			 gfc_typename (&src->ts), gfc_typename (&result->ts),
 			 &src->where);
@@ -2513,6 +2528,18 @@ gfc_int2log (gfc_expr *src, int kind)
   return result;
 }
 
+/* Convert character to character. We only use wide strings internally,
+   so we only set the kind.  */
+
+gfc_expr *
+gfc_character2character (gfc_expr *src, int kind)
+{
+  gfc_expr *result;
+  result = gfc_copy_expr (src);
+  result->ts.kind = kind;
+
+  return result;
+}
 
 /* Helper function to set the representation in a Hollerith conversion.  
    This assumes that the ts.type and ts.kind of the result have already
@@ -2603,6 +2630,7 @@ gfc_hollerith2character (gfc_expr *src, int kind)
   result = gfc_copy_expr (src);
   result->ts.type = BT_CHARACTER;
   result->ts.kind = kind;
+  result->ts.u.pad = 0;
 
   result->value.character.length = result->representation.length;
   result->value.character.string

@@ -1,5 +1,5 @@
 /* Implementation of the MATMUL intrinsic
-   Copyright (C) 2002-2017 Free Software Foundation, Inc.
+   Copyright (C) 2002-2018 Free Software Foundation, Inc.
    Contributed by Paul Brook <paul@nowt.org>
 
 This file is part of the GNU Fortran runtime library (libgfortran).
@@ -222,9 +222,9 @@ matmul_i4_avx (gfc_array_i4 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -286,11 +286,11 @@ matmul_i4_avx (gfc_array_i4 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_INTEGER_4 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_INTEGER_4 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_INTEGER_4 *t1;
 
       a = abase;
       b = bbase;
@@ -315,6 +315,19 @@ matmul_i4_avx (gfc_array_i4 * const restrict retarray,
       /* Early exit if possible */
       if (m == 0 || n == 0 || k == 0)
 	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_INTEGER_4));
 
       /* Start turning the crank. */
       i1 = n;
@@ -525,6 +538,7 @@ matmul_i4_avx (gfc_array_i4 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -765,9 +779,9 @@ matmul_i4_avx2 (gfc_array_i4 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -829,11 +843,11 @@ matmul_i4_avx2 (gfc_array_i4 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_INTEGER_4 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_INTEGER_4 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_INTEGER_4 *t1;
 
       a = abase;
       b = bbase;
@@ -858,6 +872,19 @@ matmul_i4_avx2 (gfc_array_i4 * const restrict retarray,
       /* Early exit if possible */
       if (m == 0 || n == 0 || k == 0)
 	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_INTEGER_4));
 
       /* Start turning the crank. */
       i1 = n;
@@ -1068,6 +1095,7 @@ matmul_i4_avx2 (gfc_array_i4 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -1308,9 +1336,9 @@ matmul_i4_avx512f (gfc_array_i4 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -1372,11 +1400,11 @@ matmul_i4_avx512f (gfc_array_i4 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_INTEGER_4 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_INTEGER_4 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_INTEGER_4 *t1;
 
       a = abase;
       b = bbase;
@@ -1401,6 +1429,19 @@ matmul_i4_avx512f (gfc_array_i4 * const restrict retarray,
       /* Early exit if possible */
       if (m == 0 || n == 0 || k == 0)
 	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_INTEGER_4));
 
       /* Start turning the crank. */
       i1 = n;
@@ -1611,6 +1652,7 @@ matmul_i4_avx512f (gfc_array_i4 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -1706,6 +1748,24 @@ matmul_i4_avx512f (gfc_array_i4 * const restrict retarray,
 #undef max
 
 #endif  /* HAVE_AVX512F */
+
+/* AMD-specifix funtions with AVX128 and FMA3/FMA4.  */
+
+#if defined(HAVE_AVX) && defined(HAVE_FMA3) && defined(HAVE_AVX128)
+void
+matmul_i4_avx128_fma3 (gfc_array_i4 * const restrict retarray, 
+	gfc_array_i4 * const restrict a, gfc_array_i4 * const restrict b, int try_blas,
+	int blas_limit, blas_call gemm) __attribute__((__target__("avx,fma")));
+internal_proto(matmul_i4_avx128_fma3);
+#endif
+
+#if defined(HAVE_AVX) && defined(HAVE_FMA4) && defined(HAVE_AVX128)
+void
+matmul_i4_avx128_fma4 (gfc_array_i4 * const restrict retarray, 
+	gfc_array_i4 * const restrict a, gfc_array_i4 * const restrict b, int try_blas,
+	int blas_limit, blas_call gemm) __attribute__((__target__("avx,fma4")));
+internal_proto(matmul_i4_avx128_fma4);
+#endif
 
 /* Function to fall back to if there is no special processor-specific version.  */
 static void
@@ -1847,9 +1907,9 @@ matmul_i4_vanilla (gfc_array_i4 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -1911,11 +1971,11 @@ matmul_i4_vanilla (gfc_array_i4 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_INTEGER_4 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_INTEGER_4 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_INTEGER_4 *t1;
 
       a = abase;
       b = bbase;
@@ -1940,6 +2000,19 @@ matmul_i4_vanilla (gfc_array_i4 * const restrict retarray,
       /* Early exit if possible */
       if (m == 0 || n == 0 || k == 0)
 	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_INTEGER_4));
 
       /* Start turning the crank. */
       i1 = n;
@@ -2150,6 +2223,7 @@ matmul_i4_vanilla (gfc_array_i4 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -2296,6 +2370,26 @@ void matmul_i4 (gfc_array_i4 * const restrict retarray,
 	    }
 #endif  /* HAVE_AVX */
         }
+    else if (__cpu_model.__cpu_vendor == VENDOR_AMD)
+      {
+#if defined(HAVE_AVX) && defined(HAVE_FMA3) && defined(HAVE_AVX128)
+        if ((__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX))
+	    && (__cpu_model.__cpu_features[0] & (1 << FEATURE_FMA)))
+	  {
+            matmul_fn = matmul_i4_avx128_fma3;
+	    goto store;
+	  }
+#endif
+#if defined(HAVE_AVX) && defined(HAVE_FMA4) && defined(HAVE_AVX128)
+        if ((__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX))
+	     && (__cpu_model.__cpu_features[0] & (1 << FEATURE_FMA4)))
+	  {
+            matmul_fn = matmul_i4_avx128_fma4;
+	    goto store;
+	  }
+#endif
+
+      }
    store:
       __atomic_store_n (&matmul_p, matmul_fn, __ATOMIC_RELAXED);
    }
@@ -2444,9 +2538,9 @@ matmul_i4 (gfc_array_i4 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -2508,11 +2602,11 @@ matmul_i4 (gfc_array_i4 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_INTEGER_4 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_INTEGER_4 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_INTEGER_4 *t1;
 
       a = abase;
       b = bbase;
@@ -2537,6 +2631,19 @@ matmul_i4 (gfc_array_i4 * const restrict retarray,
       /* Early exit if possible */
       if (m == 0 || n == 0 || k == 0)
 	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_INTEGER_4));
 
       /* Start turning the crank. */
       i1 = n;
@@ -2747,6 +2854,7 @@ matmul_i4 (gfc_array_i4 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)

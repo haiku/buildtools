@@ -11,11 +11,11 @@ struct S
 void
 foo (S<int> *b)
 {
-  auto & [c] = *b;	// { dg-warning "decomposition declaration only available with" "" { target c++14_down } }
+  auto & [c] = *b;	// { dg-warning "structured bindings only available with" "" { target c++14_down } }
 }
 
 void
 bar (S<char> *d)
 {
-  auto [e] = *d;	// { dg-warning "decomposition declaration only available with" "" { target c++14_down } }
+  auto [e] = *d;	// { dg-warning "structured bindings only available with" "" { target c++14_down } }
 }

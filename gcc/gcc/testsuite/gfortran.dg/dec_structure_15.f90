@@ -1,4 +1,4 @@
-! { dg-do "compile" }
+! { dg-do compile }
 ! { dg-options "" }
 !
 ! PR fortran/77584
@@ -24,4 +24,3 @@ contains
     a2 = 0.0
   end function
 end module
-! { dg-final { cleanup-modules "dec_structure_15" } }

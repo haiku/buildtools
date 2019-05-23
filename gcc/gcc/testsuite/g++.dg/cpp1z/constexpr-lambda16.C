@@ -8,6 +8,7 @@ int main()
       if (i)
         {
 	  int j;
+	  static int k;
 	  return i + j;
         }
       return i;

@@ -1,4 +1,4 @@
-// Copyright (C) 2017 Free Software Foundation, Inc.
+// Copyright (C) 2017-2018 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -16,7 +16,7 @@
 // <http://www.gnu.org/licenses/>.
 
 // { dg-options "-std=gnu++17" }
-// { dg-do compile { target c++1z } }
+// { dg-do compile { target c++17 } }
 
 #include <functional>
 
@@ -32,7 +32,7 @@ std::reference_wrapper<decltype(&f)> r2(p);
 static_assert(std::is_same_v<decltype(r2)::result_type, int>);
 static_assert(std::is_same_v<decltype(r2)::argument_type, short>);
 
-struct X { long f() const noexcept { return 0L; } };
+struct X { long f() const & noexcept { return 0L; } };
 auto m = &X::f;
 std::reference_wrapper<decltype(m)> r3(m);
 static_assert(std::is_same_v<decltype(r3)::result_type, long>);
