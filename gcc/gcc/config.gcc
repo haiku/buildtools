@@ -2044,7 +2044,7 @@ m68k-*-haiku*)
     default_m68k_cpu=68020
     default_cf_cpu=5206
     tmake_file="${tmake_file} m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
-    tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h"
+    tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h haiku-stdint.h"
     tm_defines="${tm_defines} MOTOROLA=1"
     ;;
 mcore-*-elf)
@@ -2099,7 +2099,7 @@ microblaze*-*-elf)
 	tmake_file="${tmake_file} microblaze/t-microblaze"
         ;;
 riscv*-*-haiku*)
-	tm_file="elfos.h haiku.h ${tm_file} riscv/haiku.h"
+	tm_file="elfos.h haiku.h ${tm_file} riscv/haiku.h haiku-stdint.h"
 	tmake_file="${tmake_file} t-haiku riscv/t-riscv riscv/t-haiku"
 	gnu_ld=yes
 	gas=yes
@@ -2175,7 +2175,7 @@ mips*-mti-linux*)
 	;;
 mipsel-*-haiku*)
     target_cpu_default="MASK_ABICALLS"
-    tm_file="elfos.h ${tm_file} haiku.h mips/haiku.h"
+    tm_file="elfos.h ${tm_file} haiku.h mips/haiku.h haiku-stdint.h"
     tmake_file="${tmake_file} mips/t-elf t-haiku"
     ;;
 mips*-*-linux*)				# Linux MIPS, either endian.
@@ -2520,7 +2520,7 @@ powerpc-*-eabi*)
 	;;
 powerpc-*-haiku*)
 	tmake_file="${tmake_file} rs6000/t-fprules rs6000/t-ppcos rs6000/t-ppccomm t-haiku"
-	tm_file="${tm_file} dbxelf.h elfos.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku.h"
+	tm_file="${tm_file} dbxelf.h elfos.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku.h haiku-stdint.h"
 	extra_options="${extra_options} rs6000/sysv4.opt"
 	;;
 powerpc-*-rtems*spe*)
@@ -3010,7 +3010,7 @@ sparc64-*-rtems*)
 	tmake_file="${tmake_file} sparc/t-sparc sparc/t-rtems-64"
 	;;
 sparc64-*-haiku*)
-	tm_file="${tm_file} dbxelf.h elfos.h sparc/sysv4.h sparc/sp64-elf.h haiku.h sparc/haiku.h"
+	tm_file="${tm_file} dbxelf.h elfos.h sparc/sysv4.h sparc/sp64-elf.h haiku.h sparc/haiku.h haiku-stdint.h"
 	extra_options="${extra_options}"
 	tmake_file="${tmake_file} t-haiku sparc/t-sparc sparc/t-haiku"
 	;;
