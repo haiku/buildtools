@@ -45,7 +45,6 @@
 #define SUBTARGET_CPU_DEFAULT TARGET_CPU_arm6
 
 /* Now we define the strings used to build the spec file.  */
-/* interestingly, bpabi defines __GXX_TYPEINFO_EQUALITY_INLINE=0 too as we do. */
 
 #undef TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS()		\
@@ -58,12 +57,6 @@
       builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
       builtin_define ("__STDC_ISO_10646__=201103L"); \
       builtin_assert ("system=haiku");					\
-      /* Haiku apparently doesn't support merging of symbols across shared \
-		 object boundaries. Hence we need to explicitly specify that \
-         type_infos are not merged, so that they get compared by name \
-         instead of by pointer. */ \
-      builtin_define ("__GXX_MERGED_TYPEINFO_NAMES=0"); \
-      /*builtin_define ("__GXX_TYPEINFO_EQUALITY_INLINE=0"); done in bpabi: */\
       TARGET_BPABI_CPP_BUILTINS();					\
     }									\
   while (0)
