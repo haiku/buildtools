@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2004-2017 Free Software Foundation, Inc.
+#   Copyright (C) 2004-2019 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -17,6 +17,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
 # MA 02110-1301, USA.
+
+case ${target} in
+  *-*-*gnu*)
+    gnu_target=TRUE
+    ;;
+  *)
+    gnu_target=FALSE
+    ;;
+esac
 
 fragment <<EOF
 
@@ -44,7 +53,7 @@ mips_after_parse (void)
      MIPS ABI requires a mapping between the GOT and the symbol table.  */
   if (link_info.emit_gnu_hash)
     {
-      einfo ("%X%P: .gnu.hash is incompatible with the MIPS ABI\n");
+      einfo (_("%X%P: .gnu.hash is incompatible with the MIPS ABI\n"));
       link_info.emit_hash = TRUE;
       link_info.emit_gnu_hash = FALSE;
     }
@@ -157,7 +166,7 @@ mips_add_stub_section (const char *stub_sec_name, asection *input_section,
 				 bfd_get_arch (link_info.output_bfd),
 				 bfd_get_mach (link_info.output_bfd)))
 	{
-	  einfo ("%F%P: can not create BFD %E\n");
+	  einfo (_("%F%P: can not create BFD: %E\n"));
 	  return NULL;
 	}
       stub_bfd->flags |= BFD_LINKER_CREATED;
@@ -190,7 +199,7 @@ mips_add_stub_section (const char *stub_sec_name, asection *input_section,
     return stub_sec;
 
  err_ret:
-  einfo ("%X%P: can not make stub section: %E\n");
+  einfo (_("%X%P: can not make stub section: %E\n"));
   return NULL;
 }
 
@@ -203,7 +212,8 @@ mips_create_output_section_statements (void)
 
   htab = elf_hash_table (&link_info);
   if (is_elf_hash_table (htab) && is_mips_elf (link_info.output_bfd))
-    _bfd_mips_elf_linker_flags (&link_info, insn32, ignore_branch_isa);
+    _bfd_mips_elf_linker_flags (&link_info, insn32, ignore_branch_isa,
+				${gnu_target});
 
   if (is_mips_elf (link_info.output_bfd))
     _bfd_mips_elf_init_stubs (&link_info, mips_add_stub_section);
@@ -214,13 +224,16 @@ mips_create_output_section_statements (void)
 static void
 mips_before_allocation (void)
 {
-  flagword flags;
+  if (is_mips_elf (link_info.output_bfd))
+    {
+      flagword flags;
 
-  flags = elf_elfheader (link_info.output_bfd)->e_flags;
-  if (!bfd_link_pic (&link_info)
-      && !link_info.nocopyreloc
-      && (flags & (EF_MIPS_PIC | EF_MIPS_CPIC)) == EF_MIPS_CPIC)
-    _bfd_mips_elf_use_plts_and_copy_relocs (&link_info);
+      flags = elf_elfheader (link_info.output_bfd)->e_flags;
+      if (!bfd_link_pic (&link_info)
+	  && !link_info.nocopyreloc
+	  && (flags & (EF_MIPS_PIC | EF_MIPS_CPIC)) == EF_MIPS_CPIC)
+	_bfd_mips_elf_use_plts_and_copy_relocs (&link_info);
+    }
 
   gld${EMULATION_NAME}_before_allocation ();
 }

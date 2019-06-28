@@ -1,5 +1,5 @@
 /* tc-arm.c -- Assemble for the ARM
-   Copyright (C) 1994-2017 Free Software Foundation, Inc.
+   Copyright (C) 1994-2019 Free Software Foundation, Inc.
    Contributed by Richard Earnshaw (rwe@pegasus.esprit.ec.org)
 	Modified by David Taylor (dtaylor@armltd.co.uk)
 	Cirrus coprocessor mods by Aldy Hernandez (aldyh@redhat.com)
@@ -75,6 +75,9 @@ static struct
   unsigned	  sp_restored:1;
 } unwind;
 
+/* Whether --fdpic was given.  */
+static int arm_fdpic;
+
 #endif /* OBJ_ELF */
 
 /* Results from operand parsing worker functions.  */
@@ -123,7 +126,12 @@ enum arm_float_abi
 
 #define streq(a, b)	      (strcmp (a, b) == 0)
 
+/* Current set of feature bits available (CPU+FPU).  Different from
+   selected_cpu + selected_fpu in case of autodetection since the CPU
+   feature bits are then all set.  */
 static arm_feature_set cpu_variant;
+/* Feature bits used in each execution state.  Used to set build attribute
+   (in particular Tag_*_ISA_use) in CPU autodetection mode.  */
 static arm_feature_set arm_arch_used;
 static arm_feature_set thumb_arch_used;
 
@@ -143,15 +151,24 @@ bfd_boolean codecomposer_syntax = FALSE;
 /* Variables that we set while parsing command-line options.  Once all
    options have been read we re-process these values to set the real
    assembly flags.  */
+
+/* CPU and FPU feature bits set for legacy CPU and FPU options (eg. -marm1
+   instead of -mcpu=arm1).  */
 static const arm_feature_set *legacy_cpu = NULL;
 static const arm_feature_set *legacy_fpu = NULL;
 
+/* CPU, extension and FPU feature bits selected by -mcpu.  */
 static const arm_feature_set *mcpu_cpu_opt = NULL;
+static arm_feature_set *mcpu_ext_opt = NULL;
 static const arm_feature_set *mcpu_fpu_opt = NULL;
+
+/* CPU, extension and FPU feature bits selected by -march.  */
 static const arm_feature_set *march_cpu_opt = NULL;
+static arm_feature_set *march_ext_opt = NULL;
 static const arm_feature_set *march_fpu_opt = NULL;
+
+/* Feature bits selected by -mfpu.  */
 static const arm_feature_set *mfpu_opt = NULL;
-static const arm_feature_set *object_arch = NULL;
 
 /* Constants for known architecture features.  */
 static const arm_feature_set fpu_default = FPU_DEFAULT;
@@ -171,7 +188,7 @@ static const arm_feature_set cpu_default = CPU_DEFAULT;
 #endif
 
 static const arm_feature_set arm_ext_v1 = ARM_FEATURE_CORE_LOW (ARM_EXT_V1);
-static const arm_feature_set arm_ext_v2 = ARM_FEATURE_CORE_LOW (ARM_EXT_V1);
+static const arm_feature_set arm_ext_v2 = ARM_FEATURE_CORE_LOW (ARM_EXT_V2);
 static const arm_feature_set arm_ext_v2s = ARM_FEATURE_CORE_LOW (ARM_EXT_V2S);
 static const arm_feature_set arm_ext_v3 = ARM_FEATURE_CORE_LOW (ARM_EXT_V3);
 static const arm_feature_set arm_ext_v3m = ARM_FEATURE_CORE_LOW (ARM_EXT_V3M);
@@ -187,7 +204,9 @@ static const arm_feature_set arm_ext_v5j = ARM_FEATURE_CORE_LOW (ARM_EXT_V5J);
 static const arm_feature_set arm_ext_v6 = ARM_FEATURE_CORE_LOW (ARM_EXT_V6);
 static const arm_feature_set arm_ext_v6k = ARM_FEATURE_CORE_LOW (ARM_EXT_V6K);
 static const arm_feature_set arm_ext_v6t2 = ARM_FEATURE_CORE_LOW (ARM_EXT_V6T2);
-static const arm_feature_set arm_ext_v6m = ARM_FEATURE_CORE_LOW (ARM_EXT_V6M);
+/* Only for compatability of hint instructions.  */
+static const arm_feature_set arm_ext_v6k_v6t2 =
+  ARM_FEATURE_CORE_LOW (ARM_EXT_V6K | ARM_EXT_V6T2);
 static const arm_feature_set arm_ext_v6_notm =
   ARM_FEATURE_CORE_LOW (ARM_EXT_V6_NOTM);
 static const arm_feature_set arm_ext_v6_dsp =
@@ -201,11 +220,11 @@ static const arm_feature_set arm_ext_v7 = ARM_FEATURE_CORE_LOW (ARM_EXT_V7);
 static const arm_feature_set arm_ext_v7a = ARM_FEATURE_CORE_LOW (ARM_EXT_V7A);
 static const arm_feature_set arm_ext_v7r = ARM_FEATURE_CORE_LOW (ARM_EXT_V7R);
 #ifdef OBJ_ELF
-static const arm_feature_set arm_ext_v7m = ARM_FEATURE_CORE_LOW (ARM_EXT_V7M);
+static const arm_feature_set ATTRIBUTE_UNUSED arm_ext_v7m = ARM_FEATURE_CORE_LOW (ARM_EXT_V7M);
 #endif
 static const arm_feature_set arm_ext_v8 = ARM_FEATURE_CORE_LOW (ARM_EXT_V8);
 static const arm_feature_set arm_ext_m =
-  ARM_FEATURE_CORE (ARM_EXT_V6M | ARM_EXT_OS | ARM_EXT_V7M,
+  ARM_FEATURE_CORE (ARM_EXT_V6M | ARM_EXT_V7M,
 		    ARM_EXT2_V8M | ARM_EXT2_V8M_MAIN);
 static const arm_feature_set arm_ext_mp = ARM_FEATURE_CORE_LOW (ARM_EXT_MP);
 static const arm_feature_set arm_ext_sec = ARM_FEATURE_CORE_LOW (ARM_EXT_SEC);
@@ -234,16 +253,24 @@ static const arm_feature_set arm_ext_ras =
 /* FP16 instructions.  */
 static const arm_feature_set arm_ext_fp16 =
   ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST);
+static const arm_feature_set arm_ext_fp16_fml =
+  ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_FML);
+static const arm_feature_set arm_ext_v8_2 =
+  ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_2A);
 static const arm_feature_set arm_ext_v8_3 =
   ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8_3A);
+static const arm_feature_set arm_ext_sb =
+  ARM_FEATURE_CORE_HIGH (ARM_EXT2_SB);
+static const arm_feature_set arm_ext_predres =
+  ARM_FEATURE_CORE_HIGH (ARM_EXT2_PREDRES);
 
 static const arm_feature_set arm_arch_any = ARM_ANY;
+#ifdef OBJ_ELF
+static const arm_feature_set fpu_any = FPU_ANY;
+#endif
 static const arm_feature_set arm_arch_full ATTRIBUTE_UNUSED = ARM_FEATURE (-1, -1, -1);
 static const arm_feature_set arm_arch_t2 = ARM_ARCH_THUMB2;
 static const arm_feature_set arm_arch_none = ARM_ARCH_NONE;
-#ifdef OBJ_ELF
-static const arm_feature_set arm_arch_v6m_only = ARM_ARCH_V6M_ONLY;
-#endif
 
 static const arm_feature_set arm_cext_iwmmxt2 =
   ARM_FEATURE_COPROC (ARM_CEXT_IWMMXT2);
@@ -293,10 +320,24 @@ static const arm_feature_set crc_ext_armv8 =
   ARM_FEATURE_COPROC (CRC_EXT_ARMV8);
 static const arm_feature_set fpu_neon_ext_v8_1 =
   ARM_FEATURE_COPROC (FPU_NEON_EXT_RDMA);
+static const arm_feature_set fpu_neon_ext_dotprod =
+  ARM_FEATURE_COPROC (FPU_NEON_EXT_DOTPROD);
 
 static int mfloat_abi_opt = -1;
-/* Record user cpu selection for object attributes.  */
+/* Architecture feature bits selected by the last -mcpu/-march or .cpu/.arch
+   directive.  */
+static arm_feature_set selected_arch = ARM_ARCH_NONE;
+/* Extension feature bits selected by the last -mcpu/-march or .arch_extension
+   directive.  */
+static arm_feature_set selected_ext = ARM_ARCH_NONE;
+/* Feature bits selected by the last -mcpu/-march or by the combination of the
+   last .cpu/.arch directive .arch_extension directives since that
+   directive.  */
 static arm_feature_set selected_cpu = ARM_ARCH_NONE;
+/* FPU feature bits selected by the last -mfpu or .fpu directive.  */
+static arm_feature_set selected_fpu = FPU_NONE;
+/* Feature bits selected by the last .object_arch directive.  */
+static arm_feature_set selected_object_arch = ARM_ARCH_NONE;
 /* Must be long enough to hold any of the names in arm_cpus.  */
 static char selected_cpu_name[20];
 
@@ -537,7 +578,7 @@ struct asm_barrier_opt
 
 struct reloc_entry
 {
-  const char *                    name;
+  const char *              name;
   bfd_reloc_code_real_type  reloc;
 };
 
@@ -564,7 +605,8 @@ struct neon_typed_alias
 };
 
 /* ARM register categories.  This includes coprocessor numbers and various
-   architecture extensions' registers.	*/
+   architecture extensions' registers.  Each entry should have an error message
+   in reg_expected_msgs below.  */
 enum arm_reg_type
 {
   REG_TYPE_RN,
@@ -576,6 +618,7 @@ enum arm_reg_type
   REG_TYPE_NQ,
   REG_TYPE_VFSD,
   REG_TYPE_NDQ,
+  REG_TYPE_NSD,
   REG_TYPE_NSDQ,
   REG_TYPE_VFC,
   REG_TYPE_MVF,
@@ -607,27 +650,30 @@ struct reg_entry
 /* Diagnostics used when we don't get a register of the expected type.	*/
 const char * const reg_expected_msgs[] =
 {
-  N_("ARM register expected"),
-  N_("bad or missing co-processor number"),
-  N_("co-processor register expected"),
-  N_("FPA register expected"),
-  N_("VFP single precision register expected"),
-  N_("VFP/Neon double precision register expected"),
-  N_("Neon quad precision register expected"),
-  N_("VFP single or double precision register expected"),
-  N_("Neon double or quad precision register expected"),
-  N_("VFP single, double or Neon quad precision register expected"),
-  N_("VFP system register expected"),
-  N_("Maverick MVF register expected"),
-  N_("Maverick MVD register expected"),
-  N_("Maverick MVFX register expected"),
-  N_("Maverick MVDX register expected"),
-  N_("Maverick MVAX register expected"),
-  N_("Maverick DSPSC register expected"),
-  N_("iWMMXt data register expected"),
-  N_("iWMMXt control register expected"),
-  N_("iWMMXt scalar register expected"),
-  N_("XScale accumulator register expected"),
+  [REG_TYPE_RN]	    = N_("ARM register expected"),
+  [REG_TYPE_CP]	    = N_("bad or missing co-processor number"),
+  [REG_TYPE_CN]	    = N_("co-processor register expected"),
+  [REG_TYPE_FN]	    = N_("FPA register expected"),
+  [REG_TYPE_VFS]    = N_("VFP single precision register expected"),
+  [REG_TYPE_VFD]    = N_("VFP/Neon double precision register expected"),
+  [REG_TYPE_NQ]	    = N_("Neon quad precision register expected"),
+  [REG_TYPE_VFSD]   = N_("VFP single or double precision register expected"),
+  [REG_TYPE_NDQ]    = N_("Neon double or quad precision register expected"),
+  [REG_TYPE_NSD]    = N_("Neon single or double precision register expected"),
+  [REG_TYPE_NSDQ]   = N_("VFP single, double or Neon quad precision register"
+			 " expected"),
+  [REG_TYPE_VFC]    = N_("VFP system register expected"),
+  [REG_TYPE_MVF]    = N_("Maverick MVF register expected"),
+  [REG_TYPE_MVD]    = N_("Maverick MVD register expected"),
+  [REG_TYPE_MVFX]   = N_("Maverick MVFX register expected"),
+  [REG_TYPE_MVDX]   = N_("Maverick MVDX register expected"),
+  [REG_TYPE_MVAX]   = N_("Maverick MVAX register expected"),
+  [REG_TYPE_DSPSC]  = N_("Maverick DSPSC register expected"),
+  [REG_TYPE_MMXWR]  = N_("iWMMXt data register expected"),
+  [REG_TYPE_MMXWC]  = N_("iWMMXt control register expected"),
+  [REG_TYPE_MMXWCG] = N_("iWMMXt scalar register expected"),
+  [REG_TYPE_XSCALE] = N_("XScale accumulator register expected"),
+  [REG_TYPE_RNB]    = N_("")
 };
 
 /* Some well known registers that we refer to directly elsewhere.  */
@@ -974,11 +1020,11 @@ skip_past_char (char ** str, char c)
 
 /* Return TRUE if anything in the expression is a bignum.  */
 
-static int
+static bfd_boolean
 walk_no_bignums (symbolS * sp)
 {
   if (symbol_get_value_expression (sp)->X_op == O_big)
-    return 1;
+    return TRUE;
 
   if (symbol_get_value_expression (sp)->X_add_symbol)
     {
@@ -987,10 +1033,10 @@ walk_no_bignums (symbolS * sp)
 		  && walk_no_bignums (symbol_get_value_expression (sp)->X_op_symbol)));
     }
 
-  return 0;
+  return FALSE;
 }
 
-static int in_my_get_expression = 0;
+static bfd_boolean in_my_get_expression = FALSE;
 
 /* Third argument to my_get_expression.	 */
 #define GE_NO_PREFIX 0
@@ -1004,7 +1050,6 @@ static int
 my_get_expression (expressionS * ep, char ** str, int prefix_mode)
 {
   char * save_in;
-  segT	 seg;
 
   /* In unified syntax, all prefixes are optional.  */
   if (unified_syntax)
@@ -1027,16 +1072,17 @@ my_get_expression (expressionS * ep, char ** str, int prefix_mode)
       if (is_immediate_prefix (**str))
 	(*str)++;
       break;
-    default: abort ();
+    default:
+      abort ();
     }
 
   memset (ep, 0, sizeof (expressionS));
 
   save_in = input_line_pointer;
   input_line_pointer = *str;
-  in_my_get_expression = 1;
-  seg = expression (ep);
-  in_my_get_expression = 0;
+  in_my_get_expression = TRUE;
+  expression (ep);
+  in_my_get_expression = FALSE;
 
   if (ep->X_op == O_illegal || ep->X_op == O_absent)
     {
@@ -1048,22 +1094,6 @@ my_get_expression (expressionS * ep, char ** str, int prefix_mode)
 		      ? _("missing expression") :_("bad expression"));
       return 1;
     }
-
-#ifdef OBJ_AOUT
-  if (seg != absolute_section
-      && seg != text_section
-      && seg != data_section
-      && seg != bss_section
-      && seg != undefined_section)
-    {
-      inst.error = _("bad segment");
-      *str = input_line_pointer;
-      input_line_pointer = save_in;
-      return 1;
-    }
-#else
-  (void) seg;
-#endif
 
   /* Get rid of any bignums now, so that we don't generate an error for which
      we can't establish a line number later on.	 Big numbers are never valid
@@ -1083,7 +1113,7 @@ my_get_expression (expressionS * ep, char ** str, int prefix_mode)
 
   *str = input_line_pointer;
   input_line_pointer = save_in;
-  return 0;
+  return SUCCESS;
 }
 
 /* Turn a string in input_line_pointer into a floating point constant
@@ -1178,6 +1208,7 @@ md_atof (int type, char * litP, int * sizeP)
 
 /* We handle all bad expressions here, so that we can report the faulty
    instruction in the error message.  */
+
 void
 md_operand (expressionS * exp)
 {
@@ -1187,10 +1218,11 @@ md_operand (expressionS * exp)
 
 /* Immediate values.  */
 
+#ifdef OBJ_ELF
 /* Generic immediate-value read function for use in directives.
    Accepts anything that 'expression' can fold to a constant.
    *val receives the number.  */
-#ifdef OBJ_ELF
+
 static int
 immediate_for_directive (int *val)
 {
@@ -1500,6 +1532,8 @@ parse_typed_reg_or_scalar (char **ccp, enum arm_reg_type type,
       || (type == REG_TYPE_NSDQ
 	  && (reg->type == REG_TYPE_VFS || reg->type == REG_TYPE_VFD
 	      || reg->type == REG_TYPE_NQ))
+      || (type == REG_TYPE_NSD
+	  && (reg->type == REG_TYPE_VFS || reg->type == REG_TYPE_VFD))
       || (type == REG_TYPE_MMXWC
 	  && (reg->type == REG_TYPE_MMXWCG)))
     type = (enum arm_reg_type) reg->type;
@@ -1523,7 +1557,9 @@ parse_typed_reg_or_scalar (char **ccp, enum arm_reg_type type,
 
   if (skip_past_char (&str, '[') == SUCCESS)
     {
-      if (type != REG_TYPE_VFD)
+      if (type != REG_TYPE_VFD
+	  && !(type == REG_TYPE_VFS
+	       && ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_v8_2)))
 	{
 	  first_error (_("only D registers may be indexed"));
 	  return FAIL;
@@ -1619,8 +1655,12 @@ parse_scalar (char **ccp, int elsize, struct neon_type_el *type)
   int reg;
   char *str = *ccp;
   struct neon_typed_alias atype;
+  enum arm_reg_type reg_type = REG_TYPE_VFD;
 
-  reg = parse_typed_reg_or_scalar (&str, REG_TYPE_VFD, NULL, &atype);
+  if (elsize == 4)
+    reg_type = REG_TYPE_VFS;
+
+  reg = parse_typed_reg_or_scalar (&str, reg_type, NULL, &atype);
 
   if (reg == FAIL || (atype.defined & NTA_HASINDEX) == 0)
     return FAIL;
@@ -2710,7 +2750,7 @@ mapping_state (enum mstate state)
 
 	Some Thumb instructions are alignment-sensitive modulo 4 bytes,
 	but themselves require 2-byte alignment; this applies to some
-	PC- relative forms.  However, these cases will invovle implicit
+	PC- relative forms.  However, these cases will involve implicit
 	literal pool generation or an explicit .align >=2, both of
 	which will cause the section to me marked with sufficient
 	alignment.  Thus, we don't handle those cases here.  */
@@ -3380,7 +3420,7 @@ tc_start_label_without_colon (void)
 }
 
 /* Can't use symbol_new here, so have to create a symbol and then at
-   a later date assign it a value. Thats what these functions do.  */
+   a later date assign it a value. That's what these functions do.  */
 
 static void
 symbol_locate (symbolS *    symbolP,
@@ -3549,7 +3589,9 @@ s_arm_elf_cons (int nbytes)
 		}
 
 	      if (size > nbytes)
-		as_bad (_("%s relocations do not fit in %d bytes"),
+		as_bad (ngettext ("%s relocations do not fit in %d byte",
+				  "%s relocations do not fit in %d bytes",
+				  nbytes),
 			howto->name, nbytes);
 	      else
 		{
@@ -4733,7 +4775,7 @@ const pseudo_typeS md_pseudo_table[] =
   {"4byte", cons, 4},
   {"8byte", cons, 8},
   /* These are used for dwarf2.  */
-  { "file", (void (*) (int)) dwarf2_directive_file, 0 },
+  { "file", dwarf2_directive_file, 0 },
   { "loc",  dwarf2_directive_loc,  0 },
   { "loc_mark_labels", dwarf2_directive_loc_mark_labels, 0 },
 #endif
@@ -4766,6 +4808,7 @@ parse_immediate (char **str, int *val, int min, int max,
 		 bfd_boolean prefix_opt)
 {
   expressionS exp;
+
   my_get_expression (&exp, str, prefix_opt ? GE_OPT_PREFIX : GE_IMM_PREFIX);
   if (exp.X_op != O_constant)
     {
@@ -4969,9 +5012,13 @@ parse_ifimm_zero (char **in)
   int error_code;
 
   if (!is_immediate_prefix (**in))
-    return FALSE;
-
-  ++*in;
+    {
+      /* In unified syntax, all prefixes are optional.  */
+      if (!unified_syntax)
+	return FALSE;
+    }
+  else
+    ++*in;
 
   /* Accept #0x0 as a synonym for #0.  */
   if (strncmp (*in, "0x", 2) == 0)
@@ -5609,6 +5656,7 @@ parse_address_main (char **str, int i, int group_relocations,
 	  else
 	    {
 	      char *q = p;
+
 	      if (my_get_expression (&inst.reloc.exp, &p, GE_IMM_PREFIX))
 		return PARSE_OPERAND_FAIL;
 	      /* If the offset is 0, find out if it's a +0 or -0.  */
@@ -5699,6 +5747,7 @@ parse_address_main (char **str, int i, int group_relocations,
 	  else
 	    {
 	      char *q = p;
+
 	      if (inst.operands[i].negative)
 		{
 		  inst.operands[i].negative = 0;
@@ -6128,17 +6177,16 @@ record_feature_use (const arm_feature_set *feature)
     ARM_MERGE_FEATURE_SETS (arm_arch_used, arm_arch_used, *feature);
 }
 
-/* If the given feature available in the selected CPU, mark it as used.
-   Returns TRUE iff feature is available.  */
+/* If the given feature is currently allowed, mark it as used and return TRUE.
+   Return FALSE otherwise.  */
 static bfd_boolean
 mark_feature_used (const arm_feature_set *feature)
 {
-  /* Ensure the option is valid on the current architecture.  */
+  /* Ensure the option is currently allowed.  */
   if (!ARM_CPU_HAS_FEATURE (cpu_variant, *feature))
     return FALSE;
 
-  /* Add the appropriate architecture feature for the barrier option used.
-     */
+  /* Add the appropriate architecture feature for the barrier option used.  */
   record_feature_use (feature);
 
   return TRUE;
@@ -6471,6 +6519,7 @@ enum operand_parse_code
   OP_RND,       /* Neon double precision register (0..31) */
   OP_RNQ,	/* Neon quad precision register */
   OP_RVSD,	/* VFP single or double precision register */
+  OP_RNSD,      /* Neon single or double precision register */
   OP_RNDQ,      /* Neon double or quad precision register */
   OP_RNSDQ,	/* Neon single, double or quad precision register */
   OP_RNSC,      /* Neon scalar D[X] */
@@ -6497,6 +6546,7 @@ enum operand_parse_code
   OP_RVSD_I0,	/* VFP S or D reg, or immediate zero.  */
   OP_RSVD_FI0, /* VFP S or D reg, or floating point immediate zero.  */
   OP_RR_RNSC,   /* ARM reg or Neon scalar.  */
+  OP_RNSD_RNSC, /* Neon S or D reg, or Neon scalar.  */
   OP_RNSDQ_RNSC, /* Vector S, D or Q reg, or Neon scalar.  */
   OP_RNDQ_RNSC, /* Neon D or Q reg, or Neon scalar.  */
   OP_RND_RNSC,  /* Neon D reg, or Neon scalar.  */
@@ -6548,7 +6598,7 @@ enum operand_parse_code
   OP_APSR_RR,   /* ARM register or "APSR_nzcv".  */
 
   OP_RRnpc_I0,	/* ARM register or literal 0 */
-  OP_RR_EXr,	/* ARM register or expression with opt. reloc suff. */
+  OP_RR_EXr,	/* ARM register or expression with opt. reloc stuff. */
   OP_RR_EXi,	/* ARM register or expression with imm prefix */
   OP_RF_IF,	/* FPA register or immediate */
   OP_RIWR_RIWC, /* iWMMXt R or C reg */
@@ -6758,6 +6808,7 @@ parse_operands (char *str, const unsigned int *pattern, bfd_boolean thumb)
 	case OP_RXA:   po_reg_or_fail (REG_TYPE_XSCALE);  break;
 	case OP_oRNQ:
 	case OP_RNQ:   po_reg_or_fail (REG_TYPE_NQ);      break;
+	case OP_RNSD:  po_reg_or_fail (REG_TYPE_NSD);     break;
 	case OP_oRNDQ:
 	case OP_RNDQ:  po_reg_or_fail (REG_TYPE_NDQ);     break;
 	case OP_RVSD:  po_reg_or_fail (REG_TYPE_VFSD);    break;
@@ -6812,6 +6863,18 @@ parse_operands (char *str, const unsigned int *pattern, bfd_boolean thumb)
 	    break;
 	    try_nsdq:
 	    po_reg_or_fail (REG_TYPE_NSDQ);
+	  }
+	  break;
+
+	case OP_RNSD_RNSC:
+	  {
+	    po_scalar_or_goto (8, try_s_scalar);
+	    break;
+	    try_s_scalar:
+	    po_scalar_or_goto (4, try_nsd);
+	    break;
+	    try_nsd:
+	    po_reg_or_fail (REG_TYPE_NSD);
 	  }
 	  break;
 
@@ -8362,6 +8425,13 @@ do_adr (void)
   inst.reloc.type = BFD_RELOC_ARM_IMMEDIATE;
   inst.reloc.pc_rel = 1;
   inst.reloc.exp.X_add_number -= 8;
+
+  if (support_interwork
+      && inst.reloc.exp.X_op == O_symbol
+      && inst.reloc.exp.X_add_symbol != NULL
+      && S_IS_DEFINED (inst.reloc.exp.X_add_symbol)
+      && THUMB_IS_FUNC (inst.reloc.exp.X_add_symbol))
+    inst.reloc.exp.X_add_number |= 1;
 }
 
 /* This is a pseudo-op of the form "adrl rd, label" to be converted
@@ -8380,6 +8450,13 @@ do_adrl (void)
   inst.reloc.pc_rel	       = 1;
   inst.size		       = INSN_SIZE * 2;
   inst.reloc.exp.X_add_number -= 8;
+
+  if (support_interwork
+      && inst.reloc.exp.X_op == O_symbol
+      && inst.reloc.exp.X_add_symbol != NULL
+      && S_IS_DEFINED (inst.reloc.exp.X_add_symbol)
+      && THUMB_IS_FUNC (inst.reloc.exp.X_add_symbol))
+    inst.reloc.exp.X_add_number |= 1;
 }
 
 static void
@@ -8551,7 +8628,8 @@ do_bx (void)
   /* Output R_ARM_V4BX relocations if is an EABI object that looks like
      it is for ARMv4t or earlier.  */
   want_reloc = !ARM_CPU_HAS_FEATURE (selected_cpu, arm_ext_v5);
-  if (object_arch && !ARM_CPU_HAS_FEATURE (*object_arch, arm_ext_v5))
+  if (!ARM_FEATURE_ZERO (selected_object_arch)
+      && !ARM_CPU_HAS_FEATURE (selected_object_arch, arm_ext_v5))
       want_reloc = TRUE;
 
 #ifdef OBJ_ELF
@@ -8849,6 +8927,11 @@ encode_ldmstm(int from_push_pop_mnem)
     {
       int is_push = (inst.instruction & A_PUSH_POP_OP_MASK) == A1_OPCODE_PUSH;
 
+      if (is_push && one_reg == 13 /* SP */)
+	/* PR 22483: The A2 encoding cannot be used when
+	   pushing the stack pointer as this is UNPREDICTABLE.  */
+	return;
+
       inst.instruction &= A_COND_MASK;
       inst.instruction |= is_push ? A2_OPCODE_PUSH : A2_OPCODE_POP;
       inst.instruction |= one_reg << 12;
@@ -8960,7 +9043,7 @@ check_ldr_r15_aligned (void)
 	      && (inst.operands[0].reg == REG_PC
 	      && inst.operands[1].reg == REG_PC
 	      && (inst.reloc.exp.X_add_number & 0x3)),
-	      _("ldr to register 15 must be 4-byte alligned"));
+	      _("ldr to register 15 must be 4-byte aligned"));
 }
 
 static void
@@ -9069,9 +9152,9 @@ do_mov16 (void)
 
   top = (inst.instruction & 0x00400000) != 0;
   constraint (top && inst.reloc.type == BFD_RELOC_ARM_MOVW,
-	      _(":lower16: not allowed this instruction"));
+	      _(":lower16: not allowed in this instruction"));
   constraint (!top && inst.reloc.type == BFD_RELOC_ARM_MOVT,
-	      _(":upper16: not allowed instruction"));
+	      _(":upper16: not allowed in this instruction"));
   inst.instruction |= inst.operands[0].reg << 12;
   if (inst.reloc.type == BFD_RELOC_UNUSED)
     {
@@ -9179,7 +9262,7 @@ do_mrs (void)
   if (inst.operands[1].isreg)
     {
       br = inst.operands[1].reg;
-      if (((br & 0x200) == 0) && ((br & 0xf0000) != 0xf000))
+      if (((br & 0x200) == 0) && ((br & 0xf0000) != 0xf0000))
 	as_bad (_("bad register for mrs"));
     }
   else
@@ -10507,7 +10590,7 @@ do_t_add_sub_w (void)
 }
 
 /* Parse an add or subtract instruction.  We get here with inst.instruction
-   equalling any of THUMB_OPCODE_add, adds, sub, or subs.  */
+   equaling any of THUMB_OPCODE_add, adds, sub, or subs.  */
 
 static void
 do_t_add_sub (void)
@@ -10757,9 +10840,14 @@ do_t_adr (void)
       inst.reloc.type = BFD_RELOC_ARM_THUMB_ADD;
       inst.reloc.exp.X_add_number -= 4; /* PC relative adjust.  */
       inst.reloc.pc_rel = 1;
-
       inst.instruction |= Rd << 4;
     }
+
+  if (inst.reloc.exp.X_op == O_symbol
+      && inst.reloc.exp.X_add_symbol != NULL
+      && S_IS_DEFINED (inst.reloc.exp.X_add_symbol)
+      && THUMB_IS_FUNC (inst.reloc.exp.X_add_symbol))
+    inst.reloc.exp.X_add_number += 1;
 }
 
 /* Arithmetic instructions for which there is just one 16-bit
@@ -11203,6 +11291,12 @@ do_t_clz (void)
   inst.instruction |= Rd << 8;
   inst.instruction |= Rm << 16;
   inst.instruction |= Rm;
+}
+
+static void
+do_t_csdb (void)
+{
+  set_it_insn_type (OUTSIDE_IT_INSN);
 }
 
 static void
@@ -12139,12 +12233,12 @@ do_t_mov16 (void)
   top = (inst.instruction & 0x00800000) != 0;
   if (inst.reloc.type == BFD_RELOC_ARM_MOVW)
     {
-      constraint (top, _(":lower16: not allowed this instruction"));
+      constraint (top, _(":lower16: not allowed in this instruction"));
       inst.reloc.type = BFD_RELOC_ARM_THUMB_MOVW;
     }
   else if (inst.reloc.type == BFD_RELOC_ARM_MOVT)
     {
-      constraint (!top, _(":upper16: not allowed this instruction"));
+      constraint (!top, _(":upper16: not allowed in this instruction"));
       inst.reloc.type = BFD_RELOC_ARM_THUMB_MOVT;
     }
 
@@ -13106,17 +13200,6 @@ do_t_sxth (void)
 static void
 do_t_swi (void)
 {
-  /* We have to do the following check manually as ARM_EXT_OS only applies
-     to ARM_EXT_V6M.  */
-  if (ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_v6m))
-    {
-      if (!ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_os)
-	  /* This only applies to the v6m however, not later architectures.  */
-	  && ! ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_v7))
-	as_bad (_("SVC is not permitted on this architecture"));
-      ARM_MERGE_FEATURE_SETS (thumb_arch_used, thumb_arch_used, arm_ext_os);
-    }
-
   inst.reloc.type = BFD_RELOC_ARM_SWI;
 }
 
@@ -13402,7 +13485,9 @@ NEON_ENC_TAB
   X (2, (H, I), HALF),			\
   X (3, (H, H, H), HALF),		\
   X (3, (H, F, I), MIXED),		\
-  X (3, (F, H, I), MIXED)
+  X (3, (F, H, I), MIXED),		\
+  X (3, (D, H, H), MIXED),		\
+  X (3, (D, H, S), MIXED)
 
 #define S2(A,B)		NS_##A##B
 #define S3(A,B,C)	NS_##A##B##C
@@ -15022,7 +15107,14 @@ do_neon_ceq (void)
    scalars, which are encoded in 5 bits, M : Rm.
    For 16-bit scalars, the register is encoded in Rm[2:0] and the index in
    M:Rm[3], and for 32-bit scalars, the register is encoded in Rm[3:0] and the
-   index in M.  */
+   index in M.
+
+   Dot Product instructions are similar to multiply instructions except elsize
+   should always be 32.
+
+   This function translates SCALAR, which is GAS's internal encoding of indexed
+   scalar register, to raw encoding.  There is also register and index range
+   check based on ELSIZE.  */
 
 static unsigned
 neon_scalar_for_mul (unsigned scalar, unsigned elsize)
@@ -15825,6 +15917,8 @@ do_neon_cvt_1 (enum neon_cvt_mode mode)
     /* Half-precision conversions for Advanced SIMD -- neon.  */
     case NS_QD:
     case NS_DQ:
+      if (vfp_or_neon_is_neon (NEON_CHECK_CC | NEON_CHECK_ARCH) == FAIL)
+	return;
 
       if ((rs == NS_DQ)
 	  && (inst.vectype.el[0].size != 16 || inst.vectype.el[1].size != 32))
@@ -16103,6 +16197,133 @@ static void
 do_neon_mac_maybe_scalar_long (void)
 {
   neon_mac_reg_scalar_long (N_S16 | N_S32 | N_U16 | N_U32, N_SU_32);
+}
+
+/* Like neon_scalar_for_mul, this function generate Rm encoding from GAS's
+   internal SCALAR.  QUAD_P is 1 if it's for Q format, otherwise it's 0.  */
+
+static unsigned
+neon_scalar_for_fmac_fp16_long (unsigned scalar, unsigned quad_p)
+{
+  unsigned regno = NEON_SCALAR_REG (scalar);
+  unsigned elno = NEON_SCALAR_INDEX (scalar);
+
+  if (quad_p)
+    {
+      if (regno > 7 || elno > 3)
+	goto bad_scalar;
+
+      return ((regno & 0x7)
+	      | ((elno & 0x1) << 3)
+	      | (((elno >> 1) & 0x1) << 5));
+    }
+  else
+    {
+      if (regno > 15 || elno > 1)
+	goto bad_scalar;
+
+      return (((regno & 0x1) << 5)
+	      | ((regno >> 1) & 0x7)
+	      | ((elno & 0x1) << 3));
+    }
+
+bad_scalar:
+  first_error (_("scalar out of range for multiply instruction"));
+  return 0;
+}
+
+static void
+do_neon_fmac_maybe_scalar_long (int subtype)
+{
+  enum neon_shape rs;
+  int high8;
+  /* NOTE: vfmal/vfmsl use slightly different NEON three-same encoding.  'size"
+     field (bits[21:20]) has different meaning.  For scalar index variant, it's
+     used to differentiate add and subtract, otherwise it's with fixed value
+     0x2.  */
+  int size = -1;
+
+  if (inst.cond != COND_ALWAYS)
+    as_warn (_("vfmal/vfmsl with FP16 type cannot be conditional, the "
+	       "behaviour is UNPREDICTABLE"));
+
+  constraint (!ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_fp16_fml),
+	      _(BAD_FP16));
+
+  constraint (!ARM_CPU_HAS_FEATURE (cpu_variant, fpu_neon_ext_armv8),
+	      _(BAD_FPU));
+
+  /* vfmal/vfmsl are in three-same D/Q register format or the third operand can
+     be a scalar index register.  */
+  if (inst.operands[2].isscalar)
+    {
+      high8 = 0xfe000000;
+      if (subtype)
+	size = 16;
+      rs = neon_select_shape (NS_DHS, NS_QDS, NS_NULL);
+    }
+  else
+    {
+      high8 = 0xfc000000;
+      size = 32;
+      if (subtype)
+	inst.instruction |= (0x1 << 23);
+      rs = neon_select_shape (NS_DHH, NS_QDD, NS_NULL);
+    }
+
+  neon_check_type (3, rs, N_EQK, N_EQK, N_KEY | N_F16);
+
+  /* "opcode" from template has included "ubit", so simply pass 0 here.  Also,
+     the "S" bit in size field has been reused to differentiate vfmal and vfmsl,
+     so we simply pass -1 as size.  */
+  unsigned quad_p = (rs == NS_QDD || rs == NS_QDS);
+  neon_three_same (quad_p, 0, size);
+
+  /* Undo neon_dp_fixup.  Redo the high eight bits.  */
+  inst.instruction &= 0x00ffffff;
+  inst.instruction |= high8;
+
+#define LOW1(R) ((R) & 0x1)
+#define HI4(R) (((R) >> 1) & 0xf)
+  /* Unlike usually NEON three-same, encoding for Vn and Vm will depend on
+     whether the instruction is in Q form and whether Vm is a scalar indexed
+     operand.  */
+  if (inst.operands[2].isscalar)
+    {
+      unsigned rm
+	= neon_scalar_for_fmac_fp16_long (inst.operands[2].reg, quad_p);
+      inst.instruction &= 0xffffffd0;
+      inst.instruction |= rm;
+
+      if (!quad_p)
+	{
+	  /* Redo Rn as well.  */
+	  inst.instruction &= 0xfff0ff7f;
+	  inst.instruction |= HI4 (inst.operands[1].reg) << 16;
+	  inst.instruction |= LOW1 (inst.operands[1].reg) << 7;
+	}
+    }
+  else if (!quad_p)
+    {
+      /* Redo Rn and Rm.  */
+      inst.instruction &= 0xfff0ff50;
+      inst.instruction |= HI4 (inst.operands[1].reg) << 16;
+      inst.instruction |= LOW1 (inst.operands[1].reg) << 7;
+      inst.instruction |= HI4 (inst.operands[2].reg);
+      inst.instruction |= LOW1 (inst.operands[2].reg) << 5;
+    }
+}
+
+static void
+do_neon_vfmal (void)
+{
+  return do_neon_fmac_maybe_scalar_long (0);
+}
+
+static void
+do_neon_vfmsl (void)
+{
+  return do_neon_fmac_maybe_scalar_long (1);
 }
 
 static void
@@ -16480,7 +16701,26 @@ do_neon_mov (void)
     case NS_HI:
     case NS_FI:  /* case 10 (fconsts).  */
       ldconst = "fconsts";
-      encode_fconstd:
+    encode_fconstd:
+      if (!inst.operands[1].immisfloat)
+	{
+	  unsigned new_imm;
+	  /* Immediate has to fit in 8 bits so float is enough.  */
+	  float imm = (float) inst.operands[1].imm;
+	  memcpy (&new_imm, &imm, sizeof (float));
+	  /* But the assembly may have been written to provide an integer
+	     bit pattern that equates to a float, so check that the
+	     conversion has worked.  */
+	  if (is_quarter_float (new_imm))
+	    {
+	      if (is_quarter_float (inst.operands[1].imm))
+		as_warn (_("immediate constant is valid both as a bit-pattern and a floating point value (using the fp value)"));
+
+	      inst.operands[1].imm = new_imm;
+	      inst.operands[1].immisfloat = 1;
+	    }
+	}
+
       if (is_quarter_float (inst.operands[1].imm))
 	{
 	  inst.operands[1].imm = neon_qfloat_bits (inst.operands[1].imm);
@@ -16571,6 +16811,20 @@ do_neon_movhf (void)
 
   constraint (!ARM_CPU_HAS_FEATURE (cpu_variant, fpu_vfp_ext_armv8),
 	      _(BAD_FPU));
+
+  if (inst.cond != COND_ALWAYS)
+    {
+      if (thumb_mode)
+	{
+	  as_warn (_("ARMv8.2 scalar fp16 instruction cannot be conditional,"
+		     " the behaviour is UNPREDICTABLE"));
+	}
+      else
+	{
+	  inst.error = BAD_COND;
+	  return;
+	}
+    }
 
   do_vfp_sp_monadic ();
 
@@ -17364,6 +17618,79 @@ do_vcadd (void)
   inst.instruction |= (size == 32) << 20;
 }
 
+/* Dot Product instructions encoding support.  */
+
+static void
+do_neon_dotproduct (int unsigned_p)
+{
+  enum neon_shape rs;
+  unsigned scalar_oprd2 = 0;
+  int high8;
+
+  if (inst.cond != COND_ALWAYS)
+    as_warn (_("Dot Product instructions cannot be conditional,  the behaviour "
+	       "is UNPREDICTABLE"));
+
+  constraint (!ARM_CPU_HAS_FEATURE (cpu_variant, fpu_neon_ext_armv8),
+	      _(BAD_FPU));
+
+  /* Dot Product instructions are in three-same D/Q register format or the third
+     operand can be a scalar index register.  */
+  if (inst.operands[2].isscalar)
+    {
+      scalar_oprd2 = neon_scalar_for_mul (inst.operands[2].reg, 32);
+      high8 = 0xfe000000;
+      rs = neon_select_shape (NS_DDS, NS_QQS, NS_NULL);
+    }
+  else
+    {
+      high8 = 0xfc000000;
+      rs = neon_select_shape (NS_DDD, NS_QQQ, NS_NULL);
+    }
+
+  if (unsigned_p)
+    neon_check_type (3, rs, N_EQK, N_EQK, N_KEY | N_U8);
+  else
+    neon_check_type (3, rs, N_EQK, N_EQK, N_KEY | N_S8);
+
+  /* The "U" bit in traditional Three Same encoding is fixed to 0 for Dot
+     Product instruction, so we pass 0 as the "ubit" parameter.  And the
+     "Size" field are fixed to 0x2, so we pass 32 as the "size" parameter.  */
+  neon_three_same (neon_quad (rs), 0, 32);
+
+  /* Undo neon_dp_fixup.  Dot Product instructions are using a slightly
+     different NEON three-same encoding.  */
+  inst.instruction &= 0x00ffffff;
+  inst.instruction |= high8;
+  /* Encode 'U' bit which indicates signedness.  */
+  inst.instruction |= (unsigned_p ? 1 : 0) << 4;
+  /* Re-encode operand2 if it's indexed scalar operand.  What has been encoded
+     from inst.operand[2].reg in neon_three_same is GAS's internal encoding, not
+     the instruction encoding.  */
+  if (inst.operands[2].isscalar)
+    {
+      inst.instruction &= 0xffffffd0;
+      inst.instruction |= LOW4 (scalar_oprd2);
+      inst.instruction |= HI1 (scalar_oprd2) << 5;
+    }
+}
+
+/* Dot Product instructions for signed integer.  */
+
+static void
+do_neon_dotproduct_s (void)
+{
+  return do_neon_dotproduct (0);
+}
+
+/* Dot Product instructions for unsigned integer.  */
+
+static void
+do_neon_dotproduct_u (void)
+{
+  return do_neon_dotproduct (1);
+}
+
 /* Crypto v1 instructions.  */
 static void
 do_crypto_2op_1 (unsigned elttype, int op)
@@ -17505,8 +17832,6 @@ do_crc32_1 (unsigned int poly, unsigned int sz)
 
   if (Rd == REG_PC || Rn == REG_PC || Rm == REG_PC)
     as_warn (UNPRED_REG ("r15"));
-  if (thumb_mode && (Rd == REG_SP || Rn == REG_SP || Rm == REG_SP))
-    as_warn (UNPRED_REG ("r13"));
 }
 
 static void
@@ -17908,7 +18233,7 @@ opcode_lookup (char **str)
 	case OT_cinfix3_deprecated:
 	case OT_odd_infix_unc:
 	  if (!unified_syntax)
-	    return 0;
+	    return NULL;
 	  /* Fall through.  */
 
 	case OT_csuffix:
@@ -18032,7 +18357,7 @@ now_it_add_mask (int cond)
      set_it_insn_type_last ()           ditto
      in_it_block ()                     ditto
      it_fsm_post_encode ()              from md_assemble ()
-     force_automatic_it_block_close ()  from label habdling functions
+     force_automatic_it_block_close ()  from label handling functions
 
    Rationale:
      1) md_assemble () calls it_fsm_pre_encode () before calling tencode (),
@@ -18288,12 +18613,13 @@ it_fsm_post_encode (void)
   if (now_it.insn_cond
       && !now_it.warn_deprecated
       && warn_on_deprecated
-      && ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_v8))
+      && ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_v8)
+      && !ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_m))
     {
       if (inst.instruction >= 0x10000)
 	{
 	  as_tsktsk (_("IT blocks containing 32-bit Thumb instructions are "
-		     "deprecated in ARMv8"));
+		     "performance deprecated in ARMv8-A and ARMv8-R"));
 	  now_it.warn_deprecated = TRUE;
 	}
       else
@@ -18304,9 +18630,10 @@ it_fsm_post_encode (void)
 	    {
 	      if ((inst.instruction & p->mask) == p->pattern)
 		{
-		  as_tsktsk (_("IT blocks containing 16-bit Thumb instructions "
-			     "of the following class are deprecated in ARMv8: "
-			     "%s"), p->description);
+		  as_tsktsk (_("IT blocks containing 16-bit Thumb "
+			       "instructions of the following class are "
+			       "performance deprecated in ARMv8-A and "
+			       "ARMv8-R: %s"), p->description);
 		  now_it.warn_deprecated = TRUE;
 		  break;
 		}
@@ -18318,7 +18645,8 @@ it_fsm_post_encode (void)
       if (now_it.block_length > 1)
 	{
 	  as_tsktsk (_("IT blocks containing more than one conditional "
-		     "instruction are deprecated in ARMv8"));
+		     "instruction are performance deprecated in ARMv8-A and "
+		     "ARMv8-R"));
 	  now_it.warn_deprecated = TRUE;
 	}
     }
@@ -18457,7 +18785,10 @@ md_assemble (char *str)
 	  || (thumb_mode == 1
 	      && !ARM_CPU_HAS_FEATURE (variant, *opcode->tvariant)))
 	{
-	  as_bad (_("selected processor does not support `%s' in Thumb mode"), str);
+	  if (opcode->tencode == do_t_swi)
+	    as_bad (_("SVC is not permitted on this architecture"));
+	  else
+	    as_bad (_("selected processor does not support `%s' in Thumb mode"), str);
 	  return;
 	}
       if (inst.cond != COND_ALWAYS && !unified_syntax
@@ -19002,7 +19333,16 @@ static struct reloc_entry reloc_names[] =
   { "tlscall", BFD_RELOC_ARM_TLS_CALL},
 	{ "TLSCALL", BFD_RELOC_ARM_TLS_CALL},
   { "tlsdescseq", BFD_RELOC_ARM_TLS_DESCSEQ},
-	{ "TLSDESCSEQ", BFD_RELOC_ARM_TLS_DESCSEQ}
+	{ "TLSDESCSEQ", BFD_RELOC_ARM_TLS_DESCSEQ},
+  { "gotfuncdesc", BFD_RELOC_ARM_GOTFUNCDESC },
+	{ "GOTFUNCDESC", BFD_RELOC_ARM_GOTFUNCDESC },
+  { "gotofffuncdesc", BFD_RELOC_ARM_GOTOFFFUNCDESC },
+	{ "GOTOFFFUNCDESC", BFD_RELOC_ARM_GOTOFFFUNCDESC },
+  { "funcdesc", BFD_RELOC_ARM_FUNCDESC },
+	{ "FUNCDESC", BFD_RELOC_ARM_FUNCDESC },
+   { "tlsgd_fdpic", BFD_RELOC_ARM_TLS_GD32_FDPIC },      { "TLSGD_FDPIC", BFD_RELOC_ARM_TLS_GD32_FDPIC },
+   { "tlsldm_fdpic", BFD_RELOC_ARM_TLS_LDM32_FDPIC },    { "TLSLDM_FDPIC", BFD_RELOC_ARM_TLS_LDM32_FDPIC },
+   { "gottpoff_fdpic", BFD_RELOC_ARM_TLS_IE32_FDPIC },   { "GOTTPOFF_FDIC", BFD_RELOC_ARM_TLS_IE32_FDPIC },
 };
 #endif
 
@@ -19135,6 +19475,15 @@ static struct asm_barrier_opt barrier_opt_names[] =
 
 #define C3(mnem, op, nops, ops, ae)	\
   { #mnem, OPS##nops ops, OT_cinfix3, 0x##op, 0x0, ARM_VARIANT, 0, do_##ae, NULL }
+
+/* Thumb-only variants of TCE and TUE.  */
+#define ToC(mnem, top, nops, ops, te) \
+  { mnem, OPS##nops ops, OT_csuffix, 0x0, 0x##top, 0, THUMB_VARIANT, NULL, \
+    do_##te }
+
+#define ToU(mnem, top, nops, ops, te) \
+  { mnem, OPS##nops ops, OT_unconditional, 0x0, 0x##top, 0, THUMB_VARIANT, \
+    NULL, do_##te }
 
 /* Legacy mnemonics that always have conditional infix after the third
    character.  */
@@ -19282,8 +19631,6 @@ static const struct asm_opcode insns[] =
  tC3("ldmia",	8900000, _ldmia,    2, (RRw, REGLST), ldmstm, t_ldmstm),
  tC3("ldmfd",	8900000, _ldmia,    2, (RRw, REGLST), ldmstm, t_ldmstm),
 
- TCE("swi",	f000000, df00,     1, (EXPi),        swi, t_swi),
- TCE("svc",	f000000, df00,     1, (EXPi),        swi, t_swi),
  tCE("b",	a000000, _b,	   1, (EXPr),	     branch, t_branch),
  TCE("bl",	b000000, f000f800, 1, (EXPr),	     bl, t_branch23),
 
@@ -19310,6 +19657,12 @@ static const struct asm_opcode insns[] =
  /* These may simplify to neg.  */
  TCE("rsb",	0600000, ebc00000, 3, (RR, oRR, SH), arit, t_rsb),
  TC3("rsbs",	0700000, ebd00000, 3, (RR, oRR, SH), arit, t_rsb),
+
+#undef THUMB_VARIANT
+#define THUMB_VARIANT  & arm_ext_os
+
+ TCE("swi",	f000000, df00,     1, (EXPi),        swi, t_swi),
+ TCE("svc",	f000000, df00,     1, (EXPi),        swi, t_swi),
 
 #undef  THUMB_VARIANT
 #define THUMB_VARIANT  & arm_ext_v6
@@ -19644,9 +19997,9 @@ static const struct asm_opcode insns[] =
  TCE("usat16",	6e00f30, f3a00000, 3, (RRnpc, I15, RRnpc),	   usat16, t_usat16),
 
 #undef  ARM_VARIANT
-#define ARM_VARIANT   & arm_ext_v6k
+#define ARM_VARIANT   & arm_ext_v6k_v6t2
 #undef  THUMB_VARIANT
-#define THUMB_VARIANT & arm_ext_v6k
+#define THUMB_VARIANT & arm_ext_v6k_v6t2
 
  tCE("yield",	320f001, _yield,    0, (), noargs, t_hint),
  tCE("wfe",	320f002, _wfe,      0, (), noargs, t_hint),
@@ -19712,6 +20065,17 @@ static const struct asm_opcode insns[] =
  TC3("ldrsbt",	03000d0, f9100e00, 2, (RRnpc_npcsp, ADDR), ldsttv4, t_ldstt),
  TC3("strht",	02000b0, f8200e00, 2, (RRnpc_npcsp, ADDR), ldsttv4, t_ldstt),
 
+#undef  ARM_VARIANT
+#define ARM_VARIANT    & arm_ext_v3
+#undef  THUMB_VARIANT
+#define THUMB_VARIANT  & arm_ext_v6t2
+
+ TUE("csdb",	320f014, f3af8014, 0, (), noargs, t_csdb),
+ TUF("ssbb",	57ff040, f3bf8f40, 0, (), noargs, t_csdb),
+ TUF("pssbb",	57ff044, f3bf8f44, 0, (), noargs, t_csdb),
+
+#undef  ARM_VARIANT
+#define ARM_VARIANT    & arm_ext_v6t2
 #undef  THUMB_VARIANT
 #define THUMB_VARIANT  & arm_ext_v6t2_v8m
  TCE("movw",	3000000, f2400000, 2, (RRnpc, HALF),		    mov16, t_mov16),
@@ -19905,6 +20269,13 @@ static const struct asm_opcode insns[] =
  NCE (vjcvt, eb90bc0, 2, (RVS, RVD), vjcvt),
  NUF (vcmla, 0, 4, (RNDQ, RNDQ, RNDQ_RNSC, EXPi), vcmla),
  NUF (vcadd, 0, 4, (RNDQ, RNDQ, RNDQ, EXPi), vcadd),
+
+#undef  ARM_VARIANT
+#define ARM_VARIANT   & fpu_neon_ext_dotprod
+#undef  THUMB_VARIANT
+#define THUMB_VARIANT & fpu_neon_ext_dotprod
+ NUF (vsdot, d00, 3, (RNDQ, RNDQ, RNDQ_RNSC), neon_dotproduct_s),
+ NUF (vudot, d00, 3, (RNDQ, RNDQ, RNDQ_RNSC), neon_dotproduct_u),
 
 #undef  ARM_VARIANT
 #define ARM_VARIANT  & fpu_fpa_ext_v1  /* Core FPA instruction set (V1).  */
@@ -20531,6 +20902,10 @@ static const struct asm_opcode insns[] =
  NCE (vmovx,     eb00a40,       2, (RVS, RVS), neon_movhf),
  NCE (vins,      eb00ac0,       2, (RVS, RVS), neon_movhf),
 
+ /* New backported fma/fms instructions optional in v8.2.  */
+ NCE (vfmal, 810, 3, (RNDQ, RNSD, RNSD_RNSC), neon_vfmal),
+ NCE (vfmsl, 810, 3, (RNDQ, RNSD, RNSD_RNSC), neon_vfmsl),
+
 #undef  THUMB_VARIANT
 #define THUMB_VARIANT  & fpu_neon_ext_v1
 #undef  ARM_VARIANT
@@ -21150,25 +21525,40 @@ static const struct asm_opcode insns[] =
  cCE("cfmadda32", e200600, 4, (RMAX, RMAX, RMFX, RMFX), mav_quad),
  cCE("cfmsuba32", e300600, 4, (RMAX, RMAX, RMFX, RMFX), mav_quad),
 
+ /* ARMv8.5-A instructions.  */
+#undef  ARM_VARIANT
+#define ARM_VARIANT   & arm_ext_sb
+#undef  THUMB_VARIANT
+#define THUMB_VARIANT & arm_ext_sb
+ TUF("sb", 57ff070, f3bf8f70, 0, (), noargs, noargs),
+
+#undef  ARM_VARIANT
+#define ARM_VARIANT   & arm_ext_predres
+#undef  THUMB_VARIANT
+#define THUMB_VARIANT & arm_ext_predres
+ CE("cfprctx", e070f93, 1, (RRnpc), rd),
+ CE("dvprctx", e070fb3, 1, (RRnpc), rd),
+ CE("cpprctx", e070ff3, 1, (RRnpc), rd),
+
  /* ARMv8-M instructions.  */
 #undef  ARM_VARIANT
 #define ARM_VARIANT NULL
 #undef  THUMB_VARIANT
 #define THUMB_VARIANT & arm_ext_v8m
- TUE("sg", 0, e97fe97f, 0, (), 0, noargs),
- TUE("blxns", 0, 4784, 1, (RRnpc), 0, t_blx),
- TUE("bxns", 0, 4704, 1, (RRnpc), 0, t_bx),
- TUE("tt", 0, e840f000, 2, (RRnpc, RRnpc), 0, tt),
- TUE("ttt", 0, e840f040, 2, (RRnpc, RRnpc), 0, tt),
- TUE("tta", 0, e840f080, 2, (RRnpc, RRnpc), 0, tt),
- TUE("ttat", 0, e840f0c0, 2, (RRnpc, RRnpc), 0, tt),
+ ToU("sg",    e97fe97f,	0, (),		   noargs),
+ ToC("blxns", 4784,	1, (RRnpc),	   t_blx),
+ ToC("bxns",  4704,	1, (RRnpc),	   t_bx),
+ ToC("tt",    e840f000,	2, (RRnpc, RRnpc), tt),
+ ToC("ttt",   e840f040,	2, (RRnpc, RRnpc), tt),
+ ToC("tta",   e840f080,	2, (RRnpc, RRnpc), tt),
+ ToC("ttat",  e840f0c0,	2, (RRnpc, RRnpc), tt),
 
  /* FP for ARMv8-M Mainline.  Enabled for ARMv8-M Mainline because the
     instructions behave as nop if no VFP is present.  */
 #undef  THUMB_VARIANT
 #define THUMB_VARIANT & arm_ext_v8m_main
- TUEc("vlldm",	0,	 ec300a00, 1, (RRnpc),	rn),
- TUEc("vlstm",	0,	 ec200a00, 1, (RRnpc),	rn),
+ ToC("vlldm", ec300a00, 1, (RRnpc), rn),
+ ToC("vlstm", ec200a00, 1, (RRnpc), rn),
 };
 #undef ARM_VARIANT
 #undef THUMB_VARIANT
@@ -21712,21 +22102,6 @@ valueT
 md_section_align (segT	 segment ATTRIBUTE_UNUSED,
 		  valueT size)
 {
-#if (defined (OBJ_AOUT) || defined (OBJ_MAYBE_AOUT))
-  if (OUTPUT_FLAVOR == bfd_target_aout_flavour)
-    {
-      /* For a.out, force the section size to be aligned.  If we don't do
-	 this, BFD will align it for us, but it will not write out the
-	 final bytes of the section.  This may be a bug in BFD, but it is
-	 easier to fix it here since that is how the other a.out targets
-	 work.  */
-      int align;
-
-      align = bfd_get_section_alignment (stdoutput, segment);
-      size = ((size + (1 << align) - 1) & (-((valueT) 1 << align)));
-    }
-#endif
-
   return size;
 }
 
@@ -21884,7 +22259,7 @@ arm_frag_align_code (int n, int max)
    Note - despite the name this initialisation is not done when the frag
    is created, but only when its type is assigned.  A frag can be created
    and used a long time before its type is set, so beware of assuming that
-   this initialisationis performed first.  */
+   this initialisation is performed first.  */
 
 #ifndef OBJ_ELF
 void
@@ -21898,12 +22273,17 @@ arm_init_frag (fragS * fragP, int max_chars ATTRIBUTE_UNUSED)
 void
 arm_init_frag (fragS * fragP, int max_chars)
 {
-  int frag_thumb_mode;
+  bfd_boolean frag_thumb_mode;
 
   /* If the current ARM vs THUMB mode has not already
      been recorded into this frag then do so now.  */
   if ((fragP->tc_frag_data.thumb_mode & MODE_RECORDED) == 0)
     fragP->tc_frag_data.thumb_mode = thumb_mode | MODE_RECORDED;
+
+  /* PR 21809: Do not set a mapping state for debug sections
+     - it just confuses other tools.  */
+  if (bfd_get_section_flags (NULL, now_seg) & SEC_DEBUGGING)
+    return;
 
   frag_thumb_mode = fragP->tc_frag_data.thumb_mode ^ MODE_RECORDED;
 
@@ -22055,6 +22435,7 @@ add_unwind_adjustsp (offsetT offset)
 }
 
 /* Finish the list of unwind opcodes for this function.	 */
+
 static void
 finish_unwind_opcodes (void)
 {
@@ -22135,7 +22516,8 @@ start_unwind_section (const segT text_seg, int idx)
       linkonce = 1;
     }
 
-  obj_elf_change_section (sec_name, type, flags, 0, group_name, linkonce, 0);
+  obj_elf_change_section (sec_name, type, 0, flags, 0, group_name,
+			  linkonce, 0);
 
   /* Set the section link for index tables.  */
   if (idx)
@@ -22340,7 +22722,7 @@ tc_arm_regname_to_dw2regnum (char *regname)
   if (reg != FAIL)
     return reg + 256;
 
-  return -1;
+  return FAIL;
 }
 
 #ifdef TE_PE
@@ -22770,6 +23152,7 @@ thumb32_negate_data_op (offsetT *instruction, unsigned int value)
 }
 
 /* Read a 32-bit thumb instruction from buf.  */
+
 static unsigned long
 get_thumb32_insn (char * buf)
 {
@@ -22779,7 +23162,6 @@ get_thumb32_insn (char * buf)
 
   return insn;
 }
-
 
 /* We usually want to set the low bit on the address of thumb function
    symbols.  In particular .word foo - . should have the low bit set.
@@ -23279,12 +23661,14 @@ md_apply_fix (fixS *	fixP,
 	      /* MOV accepts both Thumb2 modified immediate (T2 encoding) and
 		 UINT16 (T3 encoding), MOVW only accepts UINT16.  When
 		 disassembling, MOV is preferred when there is no encoding
-		 overlap.
-		 NOTE: MOV is using ORR opcode under Thumb 2 mode.  */
+		 overlap.  */
 	      if (((newval >> T2_DATA_OP_SHIFT) & 0xf) == T2_OPCODE_ORR
+		  /* NOTE: MOV uses the ORR opcode in Thumb 2 mode
+		     but with the Rn field [19:16] set to 1111.  */
+		  && (((newval >> 16) & 0xf) == 0xf)
 		  && ARM_CPU_HAS_FEATURE (cpu_variant, arm_ext_v6t2_v8m)
 		  && !((newval >> T2_SBIT_SHIFT) & 0x1)
-		  && value >= 0 && value <=0xffff)
+		  && value >= 0 && value <= 0xffff)
 		{
 		  /* Toggle bit[25] to change encoding from T2 to T3.  */
 		  newval ^= 1 << 25;
@@ -23434,7 +23818,7 @@ md_apply_fix (fixS *	fixP,
       /* We are going to store value (shifted right by two) in the
 	 instruction, in a 24 bit, signed field.  Bits 26 through 32 either
 	 all clear or all set and bit 0 must be clear.  For B/BL bit 1 must
-	 also be be clear.  */
+	 also be clear.  */
       if (value & temp)
 	as_bad_where (fixP->fx_file, fixP->fx_line,
 		      _("misaligned branch destination"));
@@ -23648,6 +24032,21 @@ md_apply_fix (fixS *	fixP,
       S_SET_THREAD_LOCAL (fixP->fx_addsy);
       break;
 
+      /* Same handling as above, but with the arm_fdpic guard.  */
+    case BFD_RELOC_ARM_TLS_GD32_FDPIC:
+    case BFD_RELOC_ARM_TLS_IE32_FDPIC:
+    case BFD_RELOC_ARM_TLS_LDM32_FDPIC:
+      if (arm_fdpic)
+	{
+	  S_SET_THREAD_LOCAL (fixP->fx_addsy);
+	}
+      else
+	{
+	  as_bad_where (fixP->fx_file, fixP->fx_line,
+			_("Relocation supported only in FDPIC mode"));
+	}
+      break;
+
     case BFD_RELOC_ARM_GOT32:
     case BFD_RELOC_ARM_GOTOFF:
       break;
@@ -23663,6 +24062,22 @@ md_apply_fix (fixS *	fixP,
 	 during reloc processing later.  */
       if (fixP->fx_done || !seg->use_rela_p)
 	md_number_to_chars (buf, fixP->fx_offset, 4);
+      break;
+
+      /* Relocations for FDPIC.  */
+    case BFD_RELOC_ARM_GOTFUNCDESC:
+    case BFD_RELOC_ARM_GOTOFFFUNCDESC:
+    case BFD_RELOC_ARM_FUNCDESC:
+      if (arm_fdpic)
+	{
+	  if (fixP->fx_done || !seg->use_rela_p)
+	    md_number_to_chars (buf, 0, 4);
+	}
+      else
+	{
+	  as_bad_where (fixP->fx_file, fixP->fx_line,
+			_("Relocation supported only in FDPIC mode"));
+      }
       break;
 #endif
 
@@ -24092,7 +24507,7 @@ md_apply_fix (fixS *	fixP,
        {
 	 bfd_vma insn;
 	 bfd_vma encoded_addend;
-	 bfd_vma addend_abs = abs (value);
+	 bfd_vma addend_abs = llabs (value);
 
 	 /* Check that the absolute value of the addend can be
 	    expressed as an 8-bit constant plus a rotation.  */
@@ -24133,7 +24548,7 @@ md_apply_fix (fixS *	fixP,
       if (!seg->use_rela_p)
 	{
 	  bfd_vma insn;
-	  bfd_vma addend_abs = abs (value);
+	  bfd_vma addend_abs = llabs (value);
 
 	  /* Check that the absolute value of the addend can be
 	     encoded in 12 bits.  */
@@ -24172,7 +24587,7 @@ md_apply_fix (fixS *	fixP,
       if (!seg->use_rela_p)
 	{
 	  bfd_vma insn;
-	  bfd_vma addend_abs = abs (value);
+	  bfd_vma addend_abs = llabs (value);
 
 	  /* Check that the absolute value of the addend can be
 	     encoded in 8 bits.  */
@@ -24212,7 +24627,7 @@ md_apply_fix (fixS *	fixP,
       if (!seg->use_rela_p)
 	{
 	  bfd_vma insn;
-	  bfd_vma addend_abs = abs (value);
+	  bfd_vma addend_abs = llabs (value);
 
 	  /* Check that the absolute value of the addend is a multiple of
 	     four and, when divided by four, fits in 8 bits.  */
@@ -24425,14 +24840,20 @@ tc_gen_reloc (asection *section, fixS *fixp)
     case BFD_RELOC_ARM_THUMB_ALU_ABS_G1_NC:
     case BFD_RELOC_ARM_THUMB_ALU_ABS_G2_NC:
     case BFD_RELOC_ARM_THUMB_ALU_ABS_G3_NC:
+    case BFD_RELOC_ARM_GOTFUNCDESC:
+    case BFD_RELOC_ARM_GOTOFFFUNCDESC:
+    case BFD_RELOC_ARM_FUNCDESC:
       code = fixp->fx_r_type;
       break;
 
     case BFD_RELOC_ARM_TLS_GOTDESC:
     case BFD_RELOC_ARM_TLS_GD32:
+    case BFD_RELOC_ARM_TLS_GD32_FDPIC:
     case BFD_RELOC_ARM_TLS_LE32:
     case BFD_RELOC_ARM_TLS_IE32:
+    case BFD_RELOC_ARM_TLS_IE32_FDPIC:
     case BFD_RELOC_ARM_TLS_LDM32:
+    case BFD_RELOC_ARM_TLS_LDM32_FDPIC:
       /* BFD will include the symbol's address in the addend.
 	 But we don't want that, so subtract it out again here.  */
       if (!S_IS_COMMON (fixp->fx_addsy))
@@ -24698,9 +25119,12 @@ arm_fix_adjustable (fixS * fixP)
       || fixP->fx_r_type == BFD_RELOC_ARM_GOT32
       || fixP->fx_r_type == BFD_RELOC_ARM_GOTOFF
       || fixP->fx_r_type == BFD_RELOC_ARM_TLS_GD32
+      || fixP->fx_r_type == BFD_RELOC_ARM_TLS_GD32_FDPIC
       || fixP->fx_r_type == BFD_RELOC_ARM_TLS_LE32
       || fixP->fx_r_type == BFD_RELOC_ARM_TLS_IE32
+      || fixP->fx_r_type == BFD_RELOC_ARM_TLS_IE32_FDPIC
       || fixP->fx_r_type == BFD_RELOC_ARM_TLS_LDM32
+      || fixP->fx_r_type == BFD_RELOC_ARM_TLS_LDM32_FDPIC
       || fixP->fx_r_type == BFD_RELOC_ARM_TLS_LDO32
       || fixP->fx_r_type == BFD_RELOC_ARM_TLS_GOTDESC
       || fixP->fx_r_type == BFD_RELOC_ARM_TLS_CALL
@@ -24754,10 +25178,20 @@ elf32_arm_target_format (void)
 	  ? "elf32-bigarm-nacl"
 	  : "elf32-littlearm-nacl");
 #else
-  if (target_big_endian)
-    return "elf32-bigarm";
+  if (arm_fdpic)
+    {
+      if (target_big_endian)
+	return "elf32-bigarm-fdpic";
+      else
+	return "elf32-littlearm-fdpic";
+    }
   else
-    return "elf32-littlearm";
+    {
+      if (target_big_endian)
+	return "elf32-bigarm";
+      else
+	return "elf32-littlearm";
+    }
 #endif
 }
 
@@ -25019,59 +25453,69 @@ md_begin (void)
       if (mcpu_cpu_opt || march_cpu_opt)
 	as_bad (_("use of old and new-style options to set CPU type"));
 
-      mcpu_cpu_opt = legacy_cpu;
+      selected_arch = *legacy_cpu;
     }
-  else if (!mcpu_cpu_opt)
-    mcpu_cpu_opt = march_cpu_opt;
+  else if (mcpu_cpu_opt)
+    {
+      selected_arch = *mcpu_cpu_opt;
+      selected_ext = *mcpu_ext_opt;
+    }
+  else if (march_cpu_opt)
+    {
+      selected_arch = *march_cpu_opt;
+      selected_ext = *march_ext_opt;
+    }
+  ARM_MERGE_FEATURE_SETS (selected_cpu, selected_arch, selected_ext);
 
   if (legacy_fpu)
     {
       if (mfpu_opt)
 	as_bad (_("use of old and new-style options to set FPU type"));
 
-      mfpu_opt = legacy_fpu;
+      selected_fpu = *legacy_fpu;
     }
-  else if (!mfpu_opt)
+  else if (mfpu_opt)
+    selected_fpu = *mfpu_opt;
+  else
     {
 #if !(defined (EABI_DEFAULT) || defined (TE_LINUX) \
 	|| defined (TE_NetBSD) || defined (TE_VXWORKS))
       /* Some environments specify a default FPU.  If they don't, infer it
 	 from the processor.  */
       if (mcpu_fpu_opt)
-	mfpu_opt = mcpu_fpu_opt;
-      else
-	mfpu_opt = march_fpu_opt;
+	selected_fpu = *mcpu_fpu_opt;
+      else if (march_fpu_opt)
+	selected_fpu = *march_fpu_opt;
 #else
-      mfpu_opt = &fpu_default;
+      selected_fpu = fpu_default;
 #endif
     }
 
-  if (!mfpu_opt)
+  if (ARM_FEATURE_ZERO (selected_fpu))
     {
-      if (mcpu_cpu_opt != NULL)
-	mfpu_opt = &fpu_default;
-      else if (mcpu_fpu_opt != NULL && ARM_CPU_HAS_FEATURE (*mcpu_fpu_opt, arm_ext_v5))
-	mfpu_opt = &fpu_arch_vfp_v2;
+      if (!no_cpu_selected ())
+	selected_fpu = fpu_default;
       else
-	mfpu_opt = &fpu_arch_fpa;
+	selected_fpu = fpu_arch_fpa;
     }
 
 #ifdef CPU_DEFAULT
-  if (!mcpu_cpu_opt)
+  if (ARM_FEATURE_ZERO (selected_arch))
     {
-      mcpu_cpu_opt = &cpu_default;
-      selected_cpu = cpu_default;
+      selected_arch = cpu_default;
+      selected_cpu = selected_arch;
     }
-  else if (no_cpu_selected ())
-    selected_cpu = cpu_default;
+  ARM_MERGE_FEATURE_SETS (cpu_variant, selected_cpu, selected_fpu);
 #else
-  if (mcpu_cpu_opt)
-    selected_cpu = *mcpu_cpu_opt;
+  /*  Autodection of feature mode: allow all features in cpu_variant but leave
+      selected_cpu unset.  It will be set in aeabi_set_public_attributes ()
+      after all instruction have been processed and we can decide what CPU
+      should be selected.  */
+  if (ARM_FEATURE_ZERO (selected_arch))
+    ARM_MERGE_FEATURE_SETS (cpu_variant, arm_arch_any, selected_fpu);
   else
-    mcpu_cpu_opt = &arm_arch_any;
+    ARM_MERGE_FEATURE_SETS (cpu_variant, selected_cpu, selected_fpu);
 #endif
-
-  ARM_MERGE_FEATURE_SETS (cpu_variant, *mcpu_cpu_opt, *mfpu_opt);
 
   autoselect_thumb_from_cpu_variant ();
 
@@ -25267,6 +25711,7 @@ const char * md_shortopts = "m:k";
 #endif
 #endif
 #define OPTION_FIX_V4BX (OPTION_MD_BASE + 2)
+#define OPTION_FDPIC (OPTION_MD_BASE + 3)
 
 struct option md_longopts[] =
 {
@@ -25277,19 +25722,21 @@ struct option md_longopts[] =
   {"EL", no_argument, NULL, OPTION_EL},
 #endif
   {"fix-v4bx", no_argument, NULL, OPTION_FIX_V4BX},
+#ifdef OBJ_ELF
+  {"fdpic", no_argument, NULL, OPTION_FDPIC},
+#endif
   {NULL, no_argument, NULL, 0}
 };
-
 
 size_t md_longopts_size = sizeof (md_longopts);
 
 struct arm_option_table
 {
-  const char *option;		/* Option name to match.  */
-  const char *help;		/* Help information.  */
-  int  *var;		/* Variable to change.	*/
-  int	value;		/* What to change it to.  */
-  const char *deprecated;	/* If non-null, print this message.  */
+  const char *  option;		/* Option name to match.  */
+  const char *  help;		/* Help information.  */
+  int *         var;		/* Variable to change.	*/
+  int	        value;		/* What to change it to.  */
+  const char *  deprecated;	/* If non-null, print this message.  */
 };
 
 struct arm_option_table arm_opts[] =
@@ -25322,10 +25769,10 @@ struct arm_option_table arm_opts[] =
 
 struct arm_legacy_option_table
 {
-  const char *option;				/* Option name to match.  */
-  const arm_feature_set	**var;		/* Variable to change.	*/
-  const arm_feature_set	value;		/* What to change it to.  */
-  const char *deprecated;			/* If non-null, print this message.  */
+  const char *              option;		/* Option name to match.  */
+  const arm_feature_set	**  var;		/* Variable to change.	*/
+  const arm_feature_set	    value;		/* What to change it to.  */
+  const char *              deprecated;		/* If non-null, print this message.  */
 };
 
 const struct arm_legacy_option_table arm_legacy_opts[] =
@@ -25432,10 +25879,10 @@ const struct arm_legacy_option_table arm_legacy_opts[] =
   {"marmv5e",	 &legacy_cpu, ARM_ARCH_V5TE, N_("use -march=armv5te")},
 
   /* Floating point variants -- don't add any more to this list either.	 */
-  {"mfpe-old", &legacy_fpu, FPU_ARCH_FPE, N_("use -mfpu=fpe")},
-  {"mfpa10",   &legacy_fpu, FPU_ARCH_FPA, N_("use -mfpu=fpa10")},
-  {"mfpa11",   &legacy_fpu, FPU_ARCH_FPA, N_("use -mfpu=fpa11")},
-  {"mno-fpu",  &legacy_fpu, ARM_ARCH_NONE,
+  {"mfpe-old",   &legacy_fpu, FPU_ARCH_FPE, N_("use -mfpu=fpe")},
+  {"mfpa10",     &legacy_fpu, FPU_ARCH_FPA, N_("use -mfpu=fpa10")},
+  {"mfpa11",     &legacy_fpu, FPU_ARCH_FPA, N_("use -mfpu=fpa11")},
+  {"mno-fpu",    &legacy_fpu, ARM_ARCH_NONE,
    N_("use either -mfpu=softfpa or -mfpu=softvfp")},
 
   {NULL, NULL, ARM_ARCH_NONE, NULL}
@@ -25443,285 +25890,505 @@ const struct arm_legacy_option_table arm_legacy_opts[] =
 
 struct arm_cpu_option_table
 {
-  const char *name;
-  size_t name_len;
-  const arm_feature_set	value;
+  const char *           name;
+  size_t                 name_len;
+  const arm_feature_set	 value;
+  const arm_feature_set	 ext;
   /* For some CPUs we assume an FPU unless the user explicitly sets
      -mfpu=...	*/
-  const arm_feature_set	default_fpu;
+  const arm_feature_set	 default_fpu;
   /* The canonical name of the CPU, or NULL to use NAME converted to upper
      case.  */
-  const char *canonical_name;
+  const char *           canonical_name;
 };
 
 /* This list should, at a minimum, contain all the cpu names
    recognized by GCC.  */
-#define ARM_CPU_OPT(N, V, DF, CN) { N, sizeof (N) - 1, V, DF, CN }
+#define ARM_CPU_OPT(N, CN, V, E, DF) { N, sizeof (N) - 1, V, E, DF, CN }
+
 static const struct arm_cpu_option_table arm_cpus[] =
 {
-  ARM_CPU_OPT ("all",		ARM_ANY,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm1",		ARM_ARCH_V1,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm2",		ARM_ARCH_V2,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm250",	ARM_ARCH_V2S,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm3",		ARM_ARCH_V2S,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm6",		ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm60",		ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm600",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm610",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm620",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7",		ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7m",		ARM_ARCH_V3M,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7d",		ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7dm",	ARM_ARCH_V3M,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7di",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7dmi",	ARM_ARCH_V3M,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm70",		ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm700",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm700i",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm710",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm710t",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm720",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm720t",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm740t",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm710c",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7100",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7500",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7500fe",	ARM_ARCH_V3,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7t",		ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7tdmi",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm7tdmi-s",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm8",		ARM_ARCH_V4,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm810",	ARM_ARCH_V4,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("strongarm",	ARM_ARCH_V4,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("strongarm1",	ARM_ARCH_V4,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("strongarm110",	ARM_ARCH_V4,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("strongarm1100",	ARM_ARCH_V4,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("strongarm1110",	ARM_ARCH_V4,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm9",		ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm920",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    "ARM920T"),
-  ARM_CPU_OPT ("arm920t",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm922t",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm940t",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,    NULL),
-  ARM_CPU_OPT ("arm9tdmi",	ARM_ARCH_V4T,	 FPU_ARCH_FPA,	  NULL),
-  ARM_CPU_OPT ("fa526",		ARM_ARCH_V4,	 FPU_ARCH_FPA,	  NULL),
-  ARM_CPU_OPT ("fa626",		ARM_ARCH_V4,	 FPU_ARCH_FPA,	  NULL),
+  ARM_CPU_OPT ("all",		  NULL,		       ARM_ANY,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm1",		  NULL,		       ARM_ARCH_V1,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm2",		  NULL,		       ARM_ARCH_V2,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm250",	  NULL,		       ARM_ARCH_V2S,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm3",		  NULL,		       ARM_ARCH_V2S,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm6",		  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm60",		  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm600",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm610",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm620",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7",		  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7m",		  NULL,		       ARM_ARCH_V3M,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7d",		  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7dm",	  NULL,		       ARM_ARCH_V3M,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7di",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7dmi",	  NULL,		       ARM_ARCH_V3M,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm70",		  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm700",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm700i",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm710",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm710t",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm720",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm720t",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm740t",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm710c",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7100",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7500",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7500fe",	  NULL,		       ARM_ARCH_V3,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7t",		  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7tdmi",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm7tdmi-s",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm8",		  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm810",	  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("strongarm",	  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("strongarm1",	  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("strongarm110",	  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("strongarm1100",	  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("strongarm1110",	  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm9",		  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm920",	  "ARM920T",	       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm920t",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm922t",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm940t",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("arm9tdmi",	  NULL,		       ARM_ARCH_V4T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("fa526",		  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+  ARM_CPU_OPT ("fa626",		  NULL,		       ARM_ARCH_V4,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_FPA),
+
   /* For V5 or later processors we default to using VFP; but the user
      should really set the FPU type explicitly.	 */
-  ARM_CPU_OPT ("arm9e-r0",	ARM_ARCH_V5TExP, FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm9e",		ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm926ej",	ARM_ARCH_V5TEJ,	 FPU_ARCH_VFP_V2, "ARM926EJ-S"),
-  ARM_CPU_OPT ("arm926ejs",	ARM_ARCH_V5TEJ,	 FPU_ARCH_VFP_V2, "ARM926EJ-S"),
-  ARM_CPU_OPT ("arm926ej-s",	ARM_ARCH_V5TEJ,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm946e-r0",	ARM_ARCH_V5TExP, FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm946e",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, "ARM946E-S"),
-  ARM_CPU_OPT ("arm946e-s",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm966e-r0",	ARM_ARCH_V5TExP, FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm966e",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, "ARM966E-S"),
-  ARM_CPU_OPT ("arm966e-s",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm968e-s",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm10t",	ARM_ARCH_V5T,	 FPU_ARCH_VFP_V1, NULL),
-  ARM_CPU_OPT ("arm10tdmi",	ARM_ARCH_V5T,	 FPU_ARCH_VFP_V1, NULL),
-  ARM_CPU_OPT ("arm10e",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm1020",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, "ARM1020E"),
-  ARM_CPU_OPT ("arm1020t",	ARM_ARCH_V5T,	 FPU_ARCH_VFP_V1, NULL),
-  ARM_CPU_OPT ("arm1020e",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm1022e",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm1026ejs",	ARM_ARCH_V5TEJ,	 FPU_ARCH_VFP_V2,
-								 "ARM1026EJ-S"),
-  ARM_CPU_OPT ("arm1026ej-s",	ARM_ARCH_V5TEJ,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("fa606te",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("fa616te",	ARM_ARCH_V5TE,   FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("fa626te",	ARM_ARCH_V5TE,   FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("fmp626",	ARM_ARCH_V5TE,   FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("fa726te",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm1136js",	ARM_ARCH_V6,	 FPU_NONE,	  "ARM1136J-S"),
-  ARM_CPU_OPT ("arm1136j-s",	ARM_ARCH_V6,	 FPU_NONE,	  NULL),
-  ARM_CPU_OPT ("arm1136jfs",	ARM_ARCH_V6,	 FPU_ARCH_VFP_V2,
-								 "ARM1136JF-S"),
-  ARM_CPU_OPT ("arm1136jf-s",	ARM_ARCH_V6,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("mpcore",	ARM_ARCH_V6K,	 FPU_ARCH_VFP_V2, "MPCore"),
-  ARM_CPU_OPT ("mpcorenovfp",	ARM_ARCH_V6K,	 FPU_NONE,	  "MPCore"),
-  ARM_CPU_OPT ("arm1156t2-s",	ARM_ARCH_V6T2,	 FPU_NONE,	  NULL),
-  ARM_CPU_OPT ("arm1156t2f-s",	ARM_ARCH_V6T2,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("arm1176jz-s",	ARM_ARCH_V6KZ,	 FPU_NONE,	  NULL),
-  ARM_CPU_OPT ("arm1176jzf-s",	ARM_ARCH_V6KZ,	 FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("cortex-a5",	ARM_ARCH_V7A_MP_SEC,
-						 FPU_NONE,	  "Cortex-A5"),
-  ARM_CPU_OPT ("cortex-a7",	ARM_ARCH_V7VE,   FPU_ARCH_NEON_VFP_V4,
-								  "Cortex-A7"),
-  ARM_CPU_OPT ("cortex-a8",	ARM_ARCH_V7A_SEC,
-						 ARM_FEATURE_COPROC (FPU_VFP_V3
-							| FPU_NEON_EXT_V1),
-								  "Cortex-A8"),
-  ARM_CPU_OPT ("cortex-a9",	ARM_ARCH_V7A_MP_SEC,
-						 ARM_FEATURE_COPROC (FPU_VFP_V3
-							| FPU_NEON_EXT_V1),
-								  "Cortex-A9"),
-  ARM_CPU_OPT ("cortex-a12",	ARM_ARCH_V7VE,   FPU_ARCH_NEON_VFP_V4,
-								  "Cortex-A12"),
-  ARM_CPU_OPT ("cortex-a15",	ARM_ARCH_V7VE,   FPU_ARCH_NEON_VFP_V4,
-								  "Cortex-A15"),
-  ARM_CPU_OPT ("cortex-a17",	ARM_ARCH_V7VE,   FPU_ARCH_NEON_VFP_V4,
-								  "Cortex-A17"),
-  ARM_CPU_OPT ("cortex-a32",    ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Cortex-A32"),
-  ARM_CPU_OPT ("cortex-a35",    ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Cortex-A35"),
-  ARM_CPU_OPT ("cortex-a53",    ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Cortex-A53"),
-  ARM_CPU_OPT ("cortex-a57",    ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Cortex-A57"),
-  ARM_CPU_OPT ("cortex-a72",    ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Cortex-A72"),
-  ARM_CPU_OPT ("cortex-a73",    ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Cortex-A73"),
-  ARM_CPU_OPT ("cortex-r4",	ARM_ARCH_V7R,	 FPU_NONE,	  "Cortex-R4"),
-  ARM_CPU_OPT ("cortex-r4f",	ARM_ARCH_V7R,	 FPU_ARCH_VFP_V3D16,
-								  "Cortex-R4F"),
-  ARM_CPU_OPT ("cortex-r5",	ARM_ARCH_V7R_IDIV,
-						 FPU_NONE,	  "Cortex-R5"),
-  ARM_CPU_OPT ("cortex-r7",	ARM_ARCH_V7R_IDIV,
-						 FPU_ARCH_VFP_V3D16,
-								  "Cortex-R7"),
-  ARM_CPU_OPT ("cortex-r8",	ARM_ARCH_V7R_IDIV,
-						 FPU_ARCH_VFP_V3D16,
-								  "Cortex-R8"),
-  ARM_CPU_OPT ("cortex-m33",	ARM_ARCH_V8M_MAIN_DSP,
-						 FPU_NONE,	  "Cortex-M33"),
-  ARM_CPU_OPT ("cortex-m23",	ARM_ARCH_V8M_BASE,
-						 FPU_NONE,	  "Cortex-M23"),
-  ARM_CPU_OPT ("cortex-m7",	ARM_ARCH_V7EM,	 FPU_NONE,	  "Cortex-M7"),
-  ARM_CPU_OPT ("cortex-m4",	ARM_ARCH_V7EM,	 FPU_NONE,	  "Cortex-M4"),
-  ARM_CPU_OPT ("cortex-m3",	ARM_ARCH_V7M,	 FPU_NONE,	  "Cortex-M3"),
-  ARM_CPU_OPT ("cortex-m1",	ARM_ARCH_V6SM,	 FPU_NONE,	  "Cortex-M1"),
-  ARM_CPU_OPT ("cortex-m0",	ARM_ARCH_V6SM,	 FPU_NONE,	  "Cortex-M0"),
-  ARM_CPU_OPT ("cortex-m0plus",	ARM_ARCH_V6SM,	 FPU_NONE,	  "Cortex-M0+"),
-  ARM_CPU_OPT ("exynos-m1",	ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Samsung " \
-								  "Exynos M1"),
-  ARM_CPU_OPT ("falkor",	ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Qualcomm "
-								  "Falkor"),
-  ARM_CPU_OPT ("qdf24xx",	ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-								  "Qualcomm "
-								  "QDF24XX"),
+  ARM_CPU_OPT ("arm9e-r0",	  NULL,		       ARM_ARCH_V5TExP,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm9e",		  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm926ej",	  "ARM926EJ-S",	       ARM_ARCH_V5TEJ,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm926ejs",	  "ARM926EJ-S",	       ARM_ARCH_V5TEJ,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm926ej-s",	  NULL,		       ARM_ARCH_V5TEJ,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm946e-r0",	  NULL,		       ARM_ARCH_V5TExP,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm946e",	  "ARM946E-S",	       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm946e-s",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm966e-r0",	  NULL,		       ARM_ARCH_V5TExP,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm966e",	  "ARM966E-S",	       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm966e-s",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm968e-s",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm10t",	  NULL,		       ARM_ARCH_V5T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V1),
+  ARM_CPU_OPT ("arm10tdmi",	  NULL,		       ARM_ARCH_V5T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V1),
+  ARM_CPU_OPT ("arm10e",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1020",	  "ARM1020E",	       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1020t",	  NULL,		       ARM_ARCH_V5T,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V1),
+  ARM_CPU_OPT ("arm1020e",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1022e",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1026ejs",	  "ARM1026EJ-S",       ARM_ARCH_V5TEJ,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1026ej-s",	  NULL,		       ARM_ARCH_V5TEJ,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("fa606te",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("fa616te",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("fa626te",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("fmp626",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("fa726te",	  NULL,		       ARM_ARCH_V5TE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1136js",	  "ARM1136J-S",	       ARM_ARCH_V6,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("arm1136j-s",	  NULL,		       ARM_ARCH_V6,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("arm1136jfs",	  "ARM1136JF-S",       ARM_ARCH_V6,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1136jf-s",	  NULL,		       ARM_ARCH_V6,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("mpcore",	  "MPCore",	       ARM_ARCH_V6K,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("mpcorenovfp",	  "MPCore",	       ARM_ARCH_V6K,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("arm1156t2-s",	  NULL,		       ARM_ARCH_V6T2,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("arm1156t2f-s",	  NULL,		       ARM_ARCH_V6T2,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("arm1176jz-s",	  NULL,		       ARM_ARCH_V6KZ,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("arm1176jzf-s",	  NULL,		       ARM_ARCH_V6KZ,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("cortex-a5",	  "Cortex-A5",	       ARM_ARCH_V7A,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_MP | ARM_EXT_SEC),
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-a7",	  "Cortex-A7",	       ARM_ARCH_V7VE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_NEON_VFP_V4),
+  ARM_CPU_OPT ("cortex-a8",	  "Cortex-A8",	       ARM_ARCH_V7A,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_SEC),
+	       ARM_FEATURE_COPROC (FPU_VFP_V3 | FPU_NEON_EXT_V1)),
+  ARM_CPU_OPT ("cortex-a9",	  "Cortex-A9",	       ARM_ARCH_V7A,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_MP | ARM_EXT_SEC),
+	       ARM_FEATURE_COPROC (FPU_VFP_V3 | FPU_NEON_EXT_V1)),
+  ARM_CPU_OPT ("cortex-a12",	  "Cortex-A12",	       ARM_ARCH_V7VE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_NEON_VFP_V4),
+  ARM_CPU_OPT ("cortex-a15",	  "Cortex-A15",	       ARM_ARCH_V7VE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_NEON_VFP_V4),
+  ARM_CPU_OPT ("cortex-a17",	  "Cortex-A17",	       ARM_ARCH_V7VE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_NEON_VFP_V4),
+  ARM_CPU_OPT ("cortex-a32",	  "Cortex-A32",	       ARM_ARCH_V8A,
+	       ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("cortex-a35",	  "Cortex-A35",	       ARM_ARCH_V8A,
+	       ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("cortex-a53",	  "Cortex-A53",	       ARM_ARCH_V8A,
+	       ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("cortex-a55",    "Cortex-A55",	       ARM_ARCH_V8_2A,
+	       ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8_DOTPROD),
+  ARM_CPU_OPT ("cortex-a57",	  "Cortex-A57",	       ARM_ARCH_V8A,
+	       ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("cortex-a72",	  "Cortex-A72",	       ARM_ARCH_V8A,
+	      ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	      FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("cortex-a73",	  "Cortex-A73",	       ARM_ARCH_V8A,
+	      ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	      FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("cortex-a75",    "Cortex-A75",	       ARM_ARCH_V8_2A,
+	       ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8_DOTPROD),
+  ARM_CPU_OPT ("cortex-a76",    "Cortex-A76",	       ARM_ARCH_V8_2A,
+	       ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8_DOTPROD),
+  ARM_CPU_OPT ("ares",    "Ares",	       ARM_ARCH_V8_2A,
+	       ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8_DOTPROD),
+  ARM_CPU_OPT ("cortex-r4",	  "Cortex-R4",	       ARM_ARCH_V7R,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-r4f",	  "Cortex-R4F",	       ARM_ARCH_V7R,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V3D16),
+  ARM_CPU_OPT ("cortex-r5",	  "Cortex-R5",	       ARM_ARCH_V7R,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_ADIV),
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-r7",	  "Cortex-R7",	       ARM_ARCH_V7R,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_ADIV),
+	       FPU_ARCH_VFP_V3D16),
+  ARM_CPU_OPT ("cortex-r8",	  "Cortex-R8",	       ARM_ARCH_V7R,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_ADIV),
+	       FPU_ARCH_VFP_V3D16),
+  ARM_CPU_OPT ("cortex-r52",	  "Cortex-R52",	       ARM_ARCH_V8R,
+	      ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	      FPU_ARCH_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("cortex-m33",	  "Cortex-M33",	       ARM_ARCH_V8M_MAIN,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_V5ExP | ARM_EXT_V6_DSP),
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-m23",	  "Cortex-M23",	       ARM_ARCH_V8M_BASE,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-m7",	  "Cortex-M7",	       ARM_ARCH_V7EM,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-m4",	  "Cortex-M4",	       ARM_ARCH_V7EM,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-m3",	  "Cortex-M3",	       ARM_ARCH_V7M,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-m1",	  "Cortex-M1",	       ARM_ARCH_V6SM,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-m0",	  "Cortex-M0",	       ARM_ARCH_V6SM,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("cortex-m0plus",	  "Cortex-M0+",	       ARM_ARCH_V6SM,
+	       ARM_ARCH_NONE,
+	       FPU_NONE),
+  ARM_CPU_OPT ("exynos-m1",	  "Samsung Exynos M1", ARM_ARCH_V8A,
+	       ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
 
   /* ??? XSCALE is really an architecture.  */
-  ARM_CPU_OPT ("xscale",	ARM_ARCH_XSCALE, FPU_ARCH_VFP_V2, NULL),
-  /* ??? iwmmxt is not a processor.  */
-  ARM_CPU_OPT ("iwmmxt",	ARM_ARCH_IWMMXT, FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("iwmmxt2",	ARM_ARCH_IWMMXT2,FPU_ARCH_VFP_V2, NULL),
-  ARM_CPU_OPT ("i80200",	ARM_ARCH_XSCALE, FPU_ARCH_VFP_V2, NULL),
-  /* Maverick */
-  ARM_CPU_OPT ("ep9312",	ARM_FEATURE_LOW (ARM_AEXT_V4T, ARM_CEXT_MAVERICK),
-						 FPU_ARCH_MAVERICK, "ARM920T"),
-  /* Marvell processors.  */
-  ARM_CPU_OPT ("marvell-pj4",   ARM_FEATURE_CORE (ARM_AEXT_V7A | ARM_EXT_MP
-						  | ARM_EXT_SEC,
-						  ARM_EXT2_V6T2_V8M),
-						FPU_ARCH_VFP_V3D16, NULL),
-  ARM_CPU_OPT ("marvell-whitney", ARM_FEATURE_CORE (ARM_AEXT_V7A | ARM_EXT_MP
-						    | ARM_EXT_SEC,
-						    ARM_EXT2_V6T2_V8M),
-					       FPU_ARCH_NEON_VFP_V4, NULL),
-  /* APM X-Gene family.  */
-  ARM_CPU_OPT ("xgene1",        ARM_ARCH_V8A,    FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-	                                                          "APM X-Gene 1"),
-  ARM_CPU_OPT ("xgene2",        ARM_ARCH_V8A_CRC, FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
-	                                                          "APM X-Gene 2"),
+  ARM_CPU_OPT ("xscale",	  NULL,		       ARM_ARCH_XSCALE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
 
-  { NULL, 0, ARM_ARCH_NONE, ARM_ARCH_NONE, NULL }
+  /* ??? iwmmxt is not a processor.  */
+  ARM_CPU_OPT ("iwmmxt",	  NULL,		       ARM_ARCH_IWMMXT,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("iwmmxt2",	  NULL,		       ARM_ARCH_IWMMXT2,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+  ARM_CPU_OPT ("i80200",	  NULL,		       ARM_ARCH_XSCALE,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_VFP_V2),
+
+  /* Maverick.  */
+  ARM_CPU_OPT ("ep9312",	  "ARM920T",
+	       ARM_FEATURE_LOW (ARM_AEXT_V4T, ARM_CEXT_MAVERICK),
+	       ARM_ARCH_NONE, FPU_ARCH_MAVERICK),
+
+  /* Marvell processors.  */
+  ARM_CPU_OPT ("marvell-pj4",	  NULL,		       ARM_ARCH_V7A,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_MP | ARM_EXT_SEC),
+	       FPU_ARCH_VFP_V3D16),
+  ARM_CPU_OPT ("marvell-whitney", NULL,		       ARM_ARCH_V7A,
+	       ARM_FEATURE_CORE_LOW (ARM_EXT_MP | ARM_EXT_SEC),
+	       FPU_ARCH_NEON_VFP_V4),
+
+  /* APM X-Gene family.  */
+  ARM_CPU_OPT ("xgene1",	  "APM X-Gene 1",      ARM_ARCH_V8A,
+	       ARM_ARCH_NONE,
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+  ARM_CPU_OPT ("xgene2",	  "APM X-Gene 2",      ARM_ARCH_V8A,
+	       ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
+	       FPU_ARCH_CRYPTO_NEON_VFP_ARMV8),
+
+  { NULL, 0, ARM_ARCH_NONE, ARM_ARCH_NONE, ARM_ARCH_NONE, NULL }
 };
 #undef ARM_CPU_OPT
 
 struct arm_arch_option_table
 {
-  const char *name;
-  size_t name_len;
-  const arm_feature_set	value;
-  const arm_feature_set	default_fpu;
+  const char *           name;
+  size_t                 name_len;
+  const arm_feature_set	 value;
+  const arm_feature_set	 default_fpu;
 };
 
 /* This list should, at a minimum, contain all the architecture names
    recognized by GCC.  */
 #define ARM_ARCH_OPT(N, V, DF) { N, sizeof (N) - 1, V, DF }
+
 static const struct arm_arch_option_table arm_archs[] =
 {
-  ARM_ARCH_OPT ("all",		ARM_ANY,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv1",	ARM_ARCH_V1,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv2",	ARM_ARCH_V2,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv2a",	ARM_ARCH_V2S,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv2s",	ARM_ARCH_V2S,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv3",	ARM_ARCH_V3,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv3m",	ARM_ARCH_V3M,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv4",	ARM_ARCH_V4,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv4xm",	ARM_ARCH_V4xM,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv4t",	ARM_ARCH_V4T,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv4txm",	ARM_ARCH_V4TxM,	 FPU_ARCH_FPA),
-  ARM_ARCH_OPT ("armv5",	ARM_ARCH_V5,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv5t",	ARM_ARCH_V5T,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv5txm",	ARM_ARCH_V5TxM,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv5te",	ARM_ARCH_V5TE,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv5texp",	ARM_ARCH_V5TExP, FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv5tej",	ARM_ARCH_V5TEJ,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6",	ARM_ARCH_V6,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6j",	ARM_ARCH_V6,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6k",	ARM_ARCH_V6K,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6z",	ARM_ARCH_V6Z,	 FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("all",		  ARM_ANY,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv1",	  ARM_ARCH_V1,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv2",	  ARM_ARCH_V2,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv2a",	  ARM_ARCH_V2S,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv2s",	  ARM_ARCH_V2S,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv3",	  ARM_ARCH_V3,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv3m",	  ARM_ARCH_V3M,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv4",	  ARM_ARCH_V4,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv4xm",	  ARM_ARCH_V4xM,	FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv4t",	  ARM_ARCH_V4T,		FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv4txm",	  ARM_ARCH_V4TxM,	FPU_ARCH_FPA),
+  ARM_ARCH_OPT ("armv5",	  ARM_ARCH_V5,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv5t",	  ARM_ARCH_V5T,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv5txm",	  ARM_ARCH_V5TxM,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv5te",	  ARM_ARCH_V5TE,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv5texp",	  ARM_ARCH_V5TExP,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv5tej",	  ARM_ARCH_V5TEJ,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6",	  ARM_ARCH_V6,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6j",	  ARM_ARCH_V6,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6k",	  ARM_ARCH_V6K,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6z",	  ARM_ARCH_V6Z,		FPU_ARCH_VFP),
   /* The official spelling of this variant is ARMv6KZ, the name "armv6zk" is
      kept to preserve existing behaviour.  */
-  ARM_ARCH_OPT ("armv6kz",	ARM_ARCH_V6KZ,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6zk",	ARM_ARCH_V6KZ,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6t2",	ARM_ARCH_V6T2,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6kt2",	ARM_ARCH_V6KT2,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6zt2",	ARM_ARCH_V6ZT2,	 FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6kz",	  ARM_ARCH_V6KZ,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6zk",	  ARM_ARCH_V6KZ,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6t2",	  ARM_ARCH_V6T2,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6kt2",	  ARM_ARCH_V6KT2,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6zt2",	  ARM_ARCH_V6ZT2,	FPU_ARCH_VFP),
   /* The official spelling of this variant is ARMv6KZ, the name "armv6zkt2" is
      kept to preserve existing behaviour.  */
-  ARM_ARCH_OPT ("armv6kzt2",	ARM_ARCH_V6KZT2, FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6zkt2",	ARM_ARCH_V6KZT2, FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6-m",	ARM_ARCH_V6M,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv6s-m",	ARM_ARCH_V6SM,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7",	ARM_ARCH_V7,	 FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6kzt2",	  ARM_ARCH_V6KZT2,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6zkt2",	  ARM_ARCH_V6KZT2,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6-m",	  ARM_ARCH_V6M,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv6s-m",	  ARM_ARCH_V6SM,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7",	  ARM_ARCH_V7,		FPU_ARCH_VFP),
   /* The official spelling of the ARMv7 profile variants is the dashed form.
      Accept the non-dashed form for compatibility with old toolchains.  */
-  ARM_ARCH_OPT ("armv7a",	ARM_ARCH_V7A,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7ve",	ARM_ARCH_V7VE,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7r",	ARM_ARCH_V7R,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7m",	ARM_ARCH_V7M,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7-a",	ARM_ARCH_V7A,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7-r",	ARM_ARCH_V7R,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7-m",	ARM_ARCH_V7M,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv7e-m",	ARM_ARCH_V7EM,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv8-m.base",	ARM_ARCH_V8M_BASE, FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv8-m.main",	ARM_ARCH_V8M_MAIN, FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv8-a",	ARM_ARCH_V8A,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv8.1-a",	ARM_ARCH_V8_1A,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv8.2-a",	ARM_ARCH_V8_2A,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("armv8.3-a",	ARM_ARCH_V8_3A,	 FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("xscale",	ARM_ARCH_XSCALE, FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("iwmmxt",	ARM_ARCH_IWMMXT, FPU_ARCH_VFP),
-  ARM_ARCH_OPT ("iwmmxt2",	ARM_ARCH_IWMMXT2,FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7a",	  ARM_ARCH_V7A,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7ve",	  ARM_ARCH_V7VE,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7r",	  ARM_ARCH_V7R,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7m",	  ARM_ARCH_V7M,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7-a",	  ARM_ARCH_V7A,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7-r",	  ARM_ARCH_V7R,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7-m",	  ARM_ARCH_V7M,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv7e-m",	  ARM_ARCH_V7EM,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8-m.base",	  ARM_ARCH_V8M_BASE,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8-m.main",	  ARM_ARCH_V8M_MAIN,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8-a",	  ARM_ARCH_V8A,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8.1-a",	  ARM_ARCH_V8_1A,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8.2-a",	  ARM_ARCH_V8_2A,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8.3-a",	  ARM_ARCH_V8_3A,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8-r",	  ARM_ARCH_V8R,		FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8.4-a",	  ARM_ARCH_V8_4A,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("armv8.5-a",	  ARM_ARCH_V8_5A,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("xscale",	  ARM_ARCH_XSCALE,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("iwmmxt",	  ARM_ARCH_IWMMXT,	FPU_ARCH_VFP),
+  ARM_ARCH_OPT ("iwmmxt2",	  ARM_ARCH_IWMMXT2,	FPU_ARCH_VFP),
   { NULL, 0, ARM_ARCH_NONE, ARM_ARCH_NONE }
 };
 #undef ARM_ARCH_OPT
 
 /* ISA extensions in the co-processor and main instruction set space.  */
+
 struct arm_option_extension_value_table
 {
-  const char *name;
-  size_t name_len;
-  const arm_feature_set merge_value;
-  const arm_feature_set clear_value;
+  const char *           name;
+  size_t                 name_len;
+  const arm_feature_set  merge_value;
+  const arm_feature_set  clear_value;
   /* List of architectures for which an extension is available.  ARM_ARCH_NONE
      indicates that an extension is available for all architectures while
      ARM_ANY marks an empty entry.  */
-  const arm_feature_set allowed_archs[2];
+  const arm_feature_set  allowed_archs[2];
 };
 
-/* The following table must be in alphabetical order with a NULL last entry.
-   */
+/* The following table must be in alphabetical order with a NULL last entry.  */
+
 #define ARM_EXT_OPT(N, M, C, AA) { N, sizeof (N) - 1, M, C, { AA, ARM_ANY } }
 #define ARM_EXT_OPT2(N, M, C, AA1, AA2) { N, sizeof (N) - 1, M, C, {AA1, AA2} }
+
 static const struct arm_option_extension_value_table arm_extensions[] =
 {
   ARM_EXT_OPT ("crc",  ARCH_CRC_ARMV8, ARM_FEATURE_COPROC (CRC_EXT_ARMV8),
@@ -25729,6 +26396,9 @@ static const struct arm_option_extension_value_table arm_extensions[] =
   ARM_EXT_OPT ("crypto", FPU_ARCH_CRYPTO_NEON_VFP_ARMV8,
 			 ARM_FEATURE_COPROC (FPU_CRYPTO_ARMV8),
 				   ARM_FEATURE_CORE_LOW (ARM_EXT_V8)),
+  ARM_EXT_OPT ("dotprod", FPU_ARCH_DOTPROD_NEON_VFP_ARMV8,
+			  ARM_FEATURE_COPROC (FPU_NEON_EXT_DOTPROD),
+			  ARM_ARCH_V8_2A),
   ARM_EXT_OPT ("dsp",	ARM_FEATURE_CORE_LOW (ARM_EXT_V5ExP | ARM_EXT_V6_DSP),
 			ARM_FEATURE_CORE_LOW (ARM_EXT_V5ExP | ARM_EXT_V6_DSP),
 			ARM_FEATURE_CORE (ARM_EXT_V7M, ARM_EXT2_V8M)),
@@ -25737,10 +26407,22 @@ static const struct arm_option_extension_value_table arm_extensions[] =
   ARM_EXT_OPT ("fp16",  ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST),
 			ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST),
 			ARM_ARCH_V8_2A),
+  ARM_EXT_OPT ("fp16fml",  ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST
+						  | ARM_EXT2_FP16_FML),
+			   ARM_FEATURE_CORE_HIGH (ARM_EXT2_FP16_INST
+						  | ARM_EXT2_FP16_FML),
+			   ARM_ARCH_V8_2A),
   ARM_EXT_OPT2 ("idiv",	ARM_FEATURE_CORE_LOW (ARM_EXT_ADIV | ARM_EXT_DIV),
 			ARM_FEATURE_CORE_LOW (ARM_EXT_ADIV | ARM_EXT_DIV),
 			ARM_FEATURE_CORE_LOW (ARM_EXT_V7A),
 			ARM_FEATURE_CORE_LOW (ARM_EXT_V7R)),
+  /* Duplicate entry for the purpose of allowing ARMv7 to match in presence of
+     Thumb divide instruction.  Due to this having the same name as the
+     previous entry, this will be ignored when doing command-line parsing and
+     only considered by build attribute selection code.  */
+  ARM_EXT_OPT ("idiv",	ARM_FEATURE_CORE_LOW (ARM_EXT_DIV),
+			ARM_FEATURE_CORE_LOW (ARM_EXT_DIV),
+			ARM_FEATURE_CORE_LOW (ARM_EXT_V7)),
   ARM_EXT_OPT ("iwmmxt",ARM_FEATURE_COPROC (ARM_CEXT_IWMMXT),
 			ARM_FEATURE_COPROC (ARM_CEXT_IWMMXT), ARM_ARCH_NONE),
   ARM_EXT_OPT ("iwmmxt2", ARM_FEATURE_COPROC (ARM_CEXT_IWMMXT2),
@@ -25756,13 +26438,19 @@ static const struct arm_option_extension_value_table arm_extensions[] =
 				   ARM_FEATURE_CORE_LOW (ARM_EXT_V6M)),
   ARM_EXT_OPT ("pan",	ARM_FEATURE_CORE_HIGH (ARM_EXT2_PAN),
 			ARM_FEATURE (ARM_EXT_V8, ARM_EXT2_PAN, 0),
-			ARM_FEATURE_CORE_LOW (ARM_EXT_V8)),
+			ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8A)),
+  ARM_EXT_OPT ("predres", ARM_FEATURE_CORE_HIGH (ARM_EXT2_PREDRES),
+			ARM_FEATURE_CORE_HIGH (ARM_EXT2_PREDRES),
+			ARM_ARCH_V8A),
   ARM_EXT_OPT ("ras",	ARM_FEATURE_CORE_HIGH (ARM_EXT2_RAS),
 			ARM_FEATURE (ARM_EXT_V8, ARM_EXT2_RAS, 0),
-			ARM_FEATURE_CORE_LOW (ARM_EXT_V8)),
+			ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8A)),
   ARM_EXT_OPT ("rdma",  FPU_ARCH_NEON_VFP_ARMV8_1,
 			ARM_FEATURE_COPROC (FPU_NEON_ARMV8 | FPU_NEON_EXT_RDMA),
-			ARM_FEATURE_CORE_LOW (ARM_EXT_V8)),
+			ARM_FEATURE_CORE_HIGH (ARM_EXT2_V8A)),
+  ARM_EXT_OPT ("sb",	ARM_FEATURE_CORE_HIGH (ARM_EXT2_SB),
+			ARM_FEATURE_CORE_HIGH (ARM_EXT2_SB),
+			ARM_ARCH_V8A),
   ARM_EXT_OPT2 ("sec",	ARM_FEATURE_CORE_LOW (ARM_EXT_SEC),
 			ARM_FEATURE_CORE_LOW (ARM_EXT_SEC),
 			ARM_FEATURE_CORE_LOW (ARM_EXT_V6K),
@@ -25783,8 +26471,8 @@ static const struct arm_option_extension_value_table arm_extensions[] =
 /* ISA floating-point and Advanced SIMD extensions.  */
 struct arm_option_fpu_value_table
 {
-  const char *name;
-  const arm_feature_set value;
+  const char *           name;
+  const arm_feature_set  value;
 };
 
 /* This list should, at a minimum, contain all the fpu names
@@ -25803,7 +26491,7 @@ static const struct arm_option_fpu_value_table arm_fpus[] =
   {"softvfp+vfp",	FPU_ARCH_VFP_V2},
   {"vfp",		FPU_ARCH_VFP_V2},
   {"vfp9",		FPU_ARCH_VFP_V2},
-  {"vfp3",              FPU_ARCH_VFP_V3}, /* For backwards compatbility.  */
+  {"vfp3",		FPU_ARCH_VFP_V3}, /* Undocumented, use vfpv3.  */
   {"vfp10",		FPU_ARCH_VFP_V2},
   {"vfp10-r0",		FPU_ARCH_VFP_V1},
   {"vfpxd",		FPU_ARCH_VFP_V1xD},
@@ -25816,10 +26504,11 @@ static const struct arm_option_fpu_value_table arm_fpus[] =
   {"vfpv3xd-fp16",	FPU_ARCH_VFP_V3xD_FP16},
   {"arm1020t",		FPU_ARCH_VFP_V1},
   {"arm1020e",		FPU_ARCH_VFP_V2},
-  {"arm1136jfs",	FPU_ARCH_VFP_V2},
+  {"arm1136jfs",	FPU_ARCH_VFP_V2}, /* Undocumented, use arm1136jf-s.  */
   {"arm1136jf-s",	FPU_ARCH_VFP_V2},
   {"maverick",		FPU_ARCH_MAVERICK},
-  {"neon",              FPU_ARCH_VFP_V3_PLUS_NEON_V1},
+  {"neon",		FPU_ARCH_VFP_V3_PLUS_NEON_V1},
+  {"neon-vfpv3",	FPU_ARCH_VFP_V3_PLUS_NEON_V1},
   {"neon-fp16",		FPU_ARCH_NEON_FP16},
   {"vfpv4",		FPU_ARCH_VFP_V4},
   {"vfpv4-d16",		FPU_ARCH_VFP_V4D16},
@@ -25864,17 +26553,16 @@ static const struct arm_option_value_table arm_eabis[] =
 
 struct arm_long_option_table
 {
-  const char * option;		/* Substring to match.	*/
+  const char * option;			/* Substring to match.	*/
   const char * help;			/* Help information.  */
   int (* func) (const char * subopt);	/* Function to decode sub-option.  */
   const char * deprecated;		/* If non-null, print this message.  */
 };
 
 static bfd_boolean
-arm_parse_extension (const char *str, const arm_feature_set **opt_p)
+arm_parse_extension (const char *str, const arm_feature_set *opt_set,
+		     arm_feature_set *ext_set)
 {
-  arm_feature_set *ext_set = XNEW (arm_feature_set);
-
   /* We insist on extensions being specified in alphabetical order, and with
      extensions being added before being removed.  We achieve this by having
      the global ARM_EXTENSIONS table in alphabetical order, and using the
@@ -25884,10 +26572,6 @@ arm_parse_extension (const char *str, const arm_feature_set **opt_p)
   const struct arm_option_extension_value_table * opt = NULL;
   const arm_feature_set arm_any = ARM_ANY;
   int adding_value = -1;
-
-  /* Copy the feature set, so that we can modify it.  */
-  *ext_set = **opt_p;
-  *opt_p = ext_set;
 
   while (str != NULL && *str != 0)
     {
@@ -25955,7 +26639,7 @@ arm_parse_extension (const char *str, const arm_feature_set **opt_p)
 		/* Empty entry.  */
 		if (ARM_FEATURE_EQUAL (opt->allowed_archs[i], arm_any))
 		  continue;
-		if (ARM_FSET_CPU_SUBSET (opt->allowed_archs[i], *ext_set))
+		if (ARM_FSET_CPU_SUBSET (opt->allowed_archs[i], *opt_set))
 		  break;
 	      }
 	    if (i == nb_allowed_archs)
@@ -25970,6 +26654,10 @@ arm_parse_extension (const char *str, const arm_feature_set **opt_p)
 	    else
 	      ARM_CLEAR_FEATURE (*ext_set, *ext_set, opt->clear_value);
 
+	    /* Allowing Thumb division instructions for ARMv7 in autodetection
+	       rely on this break so that duplicate extensions (extensions
+	       with the same name as a previous extension in the list) are not
+	       considered for command-line parsing.  */
 	    break;
 	  }
 
@@ -26025,6 +26713,9 @@ arm_parse_cpu (const char *str)
     if (opt->name_len == len && strncmp (opt->name, str, len) == 0)
       {
 	mcpu_cpu_opt = &opt->value;
+	if (mcpu_ext_opt == NULL)
+	  mcpu_ext_opt = XNEW (arm_feature_set);
+	*mcpu_ext_opt = opt->ext;
 	mcpu_fpu_opt = &opt->default_fpu;
 	if (opt->canonical_name)
 	  {
@@ -26044,7 +26735,7 @@ arm_parse_cpu (const char *str)
 	  }
 
 	if (ext != NULL)
-	  return arm_parse_extension (ext, &mcpu_cpu_opt);
+	  return arm_parse_extension (ext, mcpu_cpu_opt, mcpu_ext_opt);
 
 	return TRUE;
       }
@@ -26075,11 +26766,14 @@ arm_parse_arch (const char *str)
     if (opt->name_len == len && strncmp (opt->name, str, len) == 0)
       {
 	march_cpu_opt = &opt->value;
+	if (march_ext_opt == NULL)
+	  march_ext_opt = XNEW (arm_feature_set);
+	*march_ext_opt = arm_arch_none;
 	march_fpu_opt = &opt->default_fpu;
 	strcpy (selected_cpu_name, opt->name);
 
 	if (ext != NULL)
-	  return arm_parse_extension (ext, &march_cpu_opt);
+	  return arm_parse_extension (ext, march_cpu_opt, march_ext_opt);
 
 	return TRUE;
       }
@@ -26215,6 +26909,12 @@ md_parse_option (int c, const char * arg)
       fix_v4bx = TRUE;
       break;
 
+#ifdef OBJ_ELF
+    case OPTION_FDPIC:
+      arm_fdpic = TRUE;
+      break;
+#endif /* OBJ_ELF */
+
     case 'a':
       /* Listing option.  Just ignore these, we don't support additional
 	 ones.	*/
@@ -26309,43 +27009,83 @@ md_show_usage (FILE * fp)
 
   fprintf (fp, _("\
   --fix-v4bx              Allow BX in ARMv4 code\n"));
-}
-
 
 #ifdef OBJ_ELF
+  fprintf (fp, _("\
+  --fdpic                 generate an FDPIC object file\n"));
+#endif /* OBJ_ELF */
+}
+
+#ifdef OBJ_ELF
+
 typedef struct
 {
   int val;
   arm_feature_set flags;
 } cpu_arch_ver_table;
 
-/* Mapping from CPU features to EABI CPU arch values.  As a general rule, table
-   must be sorted least features first but some reordering is needed, eg. for
-   Thumb-2 instructions to be detected as coming from ARMv6T2.  */
+/* Mapping from CPU features to EABI CPU arch values.  Table must be sorted
+   chronologically for architectures, with an exception for ARMv6-M and
+   ARMv6S-M due to legacy reasons.  No new architecture should have a
+   special case.  This allows for build attribute selection results to be
+   stable when new architectures are added.  */
 static const cpu_arch_ver_table cpu_arch_ver[] =
 {
-    {1, ARM_ARCH_V4},
-    {2, ARM_ARCH_V4T},
-    {3, ARM_ARCH_V5},
-    {3, ARM_ARCH_V5T},
-    {4, ARM_ARCH_V5TE},
-    {5, ARM_ARCH_V5TEJ},
-    {6, ARM_ARCH_V6},
-    {9, ARM_ARCH_V6K},
-    {7, ARM_ARCH_V6Z},
-    {11, ARM_ARCH_V6M},
-    {12, ARM_ARCH_V6SM},
-    {8, ARM_ARCH_V6T2},
-    {10, ARM_ARCH_V7VE},
-    {10, ARM_ARCH_V7R},
-    {10, ARM_ARCH_V7M},
-    {14, ARM_ARCH_V8A},
-    {16, ARM_ARCH_V8M_BASE},
-    {17, ARM_ARCH_V8M_MAIN},
-    {0, ARM_ARCH_NONE}
+    {TAG_CPU_ARCH_PRE_V4,   ARM_ARCH_V1},
+    {TAG_CPU_ARCH_PRE_V4,   ARM_ARCH_V2},
+    {TAG_CPU_ARCH_PRE_V4,   ARM_ARCH_V2S},
+    {TAG_CPU_ARCH_PRE_V4,   ARM_ARCH_V3},
+    {TAG_CPU_ARCH_PRE_V4,   ARM_ARCH_V3M},
+    {TAG_CPU_ARCH_V4,	    ARM_ARCH_V4xM},
+    {TAG_CPU_ARCH_V4,	    ARM_ARCH_V4},
+    {TAG_CPU_ARCH_V4T,	    ARM_ARCH_V4TxM},
+    {TAG_CPU_ARCH_V4T,	    ARM_ARCH_V4T},
+    {TAG_CPU_ARCH_V5T,	    ARM_ARCH_V5xM},
+    {TAG_CPU_ARCH_V5T,	    ARM_ARCH_V5},
+    {TAG_CPU_ARCH_V5T,	    ARM_ARCH_V5TxM},
+    {TAG_CPU_ARCH_V5T,	    ARM_ARCH_V5T},
+    {TAG_CPU_ARCH_V5TE,	    ARM_ARCH_V5TExP},
+    {TAG_CPU_ARCH_V5TE,	    ARM_ARCH_V5TE},
+    {TAG_CPU_ARCH_V5TEJ,    ARM_ARCH_V5TEJ},
+    {TAG_CPU_ARCH_V6,	    ARM_ARCH_V6},
+    {TAG_CPU_ARCH_V6KZ,	    ARM_ARCH_V6Z},
+    {TAG_CPU_ARCH_V6KZ,	    ARM_ARCH_V6KZ},
+    {TAG_CPU_ARCH_V6K,	    ARM_ARCH_V6K},
+    {TAG_CPU_ARCH_V6T2,	    ARM_ARCH_V6T2},
+    {TAG_CPU_ARCH_V6T2,	    ARM_ARCH_V6KT2},
+    {TAG_CPU_ARCH_V6T2,	    ARM_ARCH_V6ZT2},
+    {TAG_CPU_ARCH_V6T2,	    ARM_ARCH_V6KZT2},
+
+    /* When assembling a file with only ARMv6-M or ARMv6S-M instruction, GNU as
+       always selected build attributes to match those of ARMv6-M
+       (resp. ARMv6S-M).  However, due to these architectures being a strict
+       subset of ARMv7-M in terms of instructions available, ARMv7-M attributes
+       would be selected when fully respecting chronology of architectures.
+       It is thus necessary to make a special case of ARMv6-M and ARMv6S-M and
+       move them before ARMv7 architectures.  */
+    {TAG_CPU_ARCH_V6_M,	    ARM_ARCH_V6M},
+    {TAG_CPU_ARCH_V6S_M,    ARM_ARCH_V6SM},
+
+    {TAG_CPU_ARCH_V7,	    ARM_ARCH_V7},
+    {TAG_CPU_ARCH_V7,	    ARM_ARCH_V7A},
+    {TAG_CPU_ARCH_V7,	    ARM_ARCH_V7R},
+    {TAG_CPU_ARCH_V7,	    ARM_ARCH_V7M},
+    {TAG_CPU_ARCH_V7,	    ARM_ARCH_V7VE},
+    {TAG_CPU_ARCH_V7E_M,    ARM_ARCH_V7EM},
+    {TAG_CPU_ARCH_V8,	    ARM_ARCH_V8A},
+    {TAG_CPU_ARCH_V8,	    ARM_ARCH_V8_1A},
+    {TAG_CPU_ARCH_V8,	    ARM_ARCH_V8_2A},
+    {TAG_CPU_ARCH_V8,	    ARM_ARCH_V8_3A},
+    {TAG_CPU_ARCH_V8M_BASE, ARM_ARCH_V8M_BASE},
+    {TAG_CPU_ARCH_V8M_MAIN, ARM_ARCH_V8M_MAIN},
+    {TAG_CPU_ARCH_V8R,	    ARM_ARCH_V8R},
+    {TAG_CPU_ARCH_V8,	    ARM_ARCH_V8_4A},
+    {TAG_CPU_ARCH_V8,	    ARM_ARCH_V8_5A},
+    {-1,		    ARM_ARCH_NONE}
 };
 
 /* Set an attribute if it has not already been set by the user.  */
+
 static void
 aeabi_set_attribute_int (int tag, int value)
 {
@@ -26364,92 +27104,218 @@ aeabi_set_attribute_string (int tag, const char *value)
     bfd_elf_add_proc_attr_string (stdoutput, tag, value);
 }
 
-/* Set the public EABI object attributes.  */
-void
-aeabi_set_public_attributes (void)
+/* Return whether features in the *NEEDED feature set are available via
+   extensions for the architecture whose feature set is *ARCH_FSET.  */
+
+static bfd_boolean
+have_ext_for_needed_feat_p (const arm_feature_set *arch_fset,
+			    const arm_feature_set *needed)
 {
-  int arch;
-  char profile;
-  int virt_sec = 0;
-  int fp16_optional = 0;
-  arm_feature_set arm_arch = ARM_ARCH_NONE;
-  arm_feature_set flags;
-  arm_feature_set tmp;
-  arm_feature_set arm_arch_v8m_base = ARM_ARCH_V8M_BASE;
-  const cpu_arch_ver_table *p;
+  int i, nb_allowed_archs;
+  arm_feature_set ext_fset;
+  const struct arm_option_extension_value_table *opt;
 
-  /* Choose the architecture based on the capabilities of the requested cpu
-     (if any) and/or the instructions actually used.  */
-  ARM_MERGE_FEATURE_SETS (flags, arm_arch_used, thumb_arch_used);
-  ARM_MERGE_FEATURE_SETS (flags, flags, *mfpu_opt);
-  ARM_MERGE_FEATURE_SETS (flags, flags, selected_cpu);
-
-  if (ARM_CPU_HAS_FEATURE (arm_arch_used, arm_arch_any))
-    ARM_MERGE_FEATURE_SETS (flags, flags, arm_ext_v1);
-
-  if (ARM_CPU_HAS_FEATURE (thumb_arch_used, arm_arch_any))
-    ARM_MERGE_FEATURE_SETS (flags, flags, arm_ext_v4t);
-
-  selected_cpu = flags;
-
-  /* Allow the user to override the reported architecture.  */
-  if (object_arch)
+  ext_fset = arm_arch_none;
+  for (opt = arm_extensions; opt->name != NULL; opt++)
     {
-      ARM_CLEAR_FEATURE (flags, flags, arm_arch_any);
-      ARM_MERGE_FEATURE_SETS (flags, flags, *object_arch);
-    }
+      /* Extension does not provide any feature we need.  */
+      if (!ARM_CPU_HAS_FEATURE (*needed, opt->merge_value))
+	continue;
 
-  /* We need to make sure that the attributes do not identify us as v6S-M
-     when the only v6S-M feature in use is the Operating System Extensions.  */
-  if (ARM_CPU_HAS_FEATURE (flags, arm_ext_os))
-      if (!ARM_CPU_HAS_FEATURE (flags, arm_arch_v6m_only))
-	ARM_CLEAR_FEATURE (flags, flags, arm_ext_os);
-
-  tmp = flags;
-  arch = 0;
-  for (p = cpu_arch_ver; p->val; p++)
-    {
-      if (ARM_CPU_HAS_FEATURE (tmp, p->flags))
+      nb_allowed_archs =
+	sizeof (opt->allowed_archs) / sizeof (opt->allowed_archs[0]);
+      for (i = 0; i < nb_allowed_archs; i++)
 	{
-	  arch = p->val;
-	  arm_arch = p->flags;
-	  ARM_CLEAR_FEATURE (tmp, tmp, p->flags);
+	  /* Empty entry.  */
+	  if (ARM_FEATURE_EQUAL (opt->allowed_archs[i], arm_arch_any))
+	    break;
+
+	  /* Extension is available, add it.  */
+	  if (ARM_FSET_CPU_SUBSET (opt->allowed_archs[i], *arch_fset))
+	    ARM_MERGE_FEATURE_SETS (ext_fset, ext_fset, opt->merge_value);
 	}
     }
 
-  /* The table lookup above finds the last architecture to contribute
-     a new feature.  Unfortunately, Tag13 is a subset of the union of
-     v6T2 and v7-M, so it is never seen as contributing a new feature.
-     We can not search for the last entry which is entirely used,
-     because if no CPU is specified we build up only those flags
-     actually used.  Perhaps we should separate out the specified
-     and implicit cases.  Avoid taking this path for -march=all by
-     checking for contradictory v7-A / v7-M features.  */
-  if (arch == TAG_CPU_ARCH_V7
-      && !ARM_CPU_HAS_FEATURE (flags, arm_ext_v7a)
-      && ARM_CPU_HAS_FEATURE (flags, arm_ext_v7m)
-      && ARM_CPU_HAS_FEATURE (flags, arm_ext_v6_dsp))
+  /* Can we enable all features in *needed?  */
+  return ARM_FSET_CPU_SUBSET (*needed, ext_fset);
+}
+
+/* Select value for Tag_CPU_arch and Tag_CPU_arch_profile build attributes for
+   a given architecture feature set *ARCH_EXT_FSET including extension feature
+   set *EXT_FSET.  Selection logic used depend on EXACT_MATCH:
+   - if true, check for an exact match of the architecture modulo extensions;
+   - otherwise, select build attribute value of the first superset
+     architecture released so that results remains stable when new architectures
+     are added.
+   For -march/-mcpu=all the build attribute value of the most featureful
+   architecture is returned.  Tag_CPU_arch_profile result is returned in
+   PROFILE.  */
+
+static int
+get_aeabi_cpu_arch_from_fset (const arm_feature_set *arch_ext_fset,
+			      const arm_feature_set *ext_fset,
+			      char *profile, int exact_match)
+{
+  arm_feature_set arch_fset;
+  const cpu_arch_ver_table *p_ver, *p_ver_ret = NULL;
+
+  /* Select most featureful architecture with all its extensions if building
+     for -march=all as the feature sets used to set build attributes.  */
+  if (ARM_FEATURE_EQUAL (*arch_ext_fset, arm_arch_any))
     {
-      arch = TAG_CPU_ARCH_V7E_M;
-      arm_arch = (arm_feature_set) ARM_ARCH_V7EM;
+      /* Force revisiting of decision for each new architecture.  */
+      gas_assert (MAX_TAG_CPU_ARCH <= TAG_CPU_ARCH_V8M_MAIN);
+      *profile = 'A';
+      return TAG_CPU_ARCH_V8;
     }
 
-  ARM_CLEAR_FEATURE (tmp, flags, arm_arch_v8m_base);
-  if (arch == TAG_CPU_ARCH_V8M_BASE && ARM_CPU_HAS_FEATURE (tmp, arm_arch_any))
+  ARM_CLEAR_FEATURE (arch_fset, *arch_ext_fset, *ext_fset);
+
+  for (p_ver = cpu_arch_ver; p_ver->val != -1; p_ver++)
     {
-      arch = TAG_CPU_ARCH_V8M_MAIN;
-      arm_arch = (arm_feature_set) ARM_ARCH_V8M_MAIN;
+      arm_feature_set known_arch_fset;
+
+      ARM_CLEAR_FEATURE (known_arch_fset, p_ver->flags, fpu_any);
+      if (exact_match)
+	{
+	  /* Base architecture match user-specified architecture and
+	     extensions, eg. ARMv6S-M matching -march=armv6-m+os.  */
+	  if (ARM_FEATURE_EQUAL (*arch_ext_fset, known_arch_fset))
+	    {
+	      p_ver_ret = p_ver;
+	      goto found;
+	    }
+	  /* Base architecture match user-specified architecture only
+	     (eg. ARMv6-M in the same case as above).  Record it in case we
+	     find a match with above condition.  */
+	  else if (p_ver_ret == NULL
+		   && ARM_FEATURE_EQUAL (arch_fset, known_arch_fset))
+	    p_ver_ret = p_ver;
+	}
+      else
+	{
+
+	  /* Architecture has all features wanted.  */
+	  if (ARM_FSET_CPU_SUBSET (arch_fset, known_arch_fset))
+	    {
+	      arm_feature_set added_fset;
+
+	      /* Compute features added by this architecture over the one
+		 recorded in p_ver_ret.  */
+	      if (p_ver_ret != NULL)
+		ARM_CLEAR_FEATURE (added_fset, known_arch_fset,
+				   p_ver_ret->flags);
+	      /* First architecture that match incl. with extensions, or the
+		 only difference in features over the recorded match is
+		 features that were optional and are now mandatory.  */
+	      if (p_ver_ret == NULL
+		  || ARM_FSET_CPU_SUBSET (added_fset, arch_fset))
+		{
+		  p_ver_ret = p_ver;
+		  goto found;
+		}
+	    }
+	  else if (p_ver_ret == NULL)
+	    {
+	      arm_feature_set needed_ext_fset;
+
+	      ARM_CLEAR_FEATURE (needed_ext_fset, arch_fset, known_arch_fset);
+
+	      /* Architecture has all features needed when using some
+		 extensions.  Record it and continue searching in case there
+		 exist an architecture providing all needed features without
+		 the need for extensions (eg. ARMv6S-M Vs ARMv6-M with
+		 OS extension).  */
+	      if (have_ext_for_needed_feat_p (&known_arch_fset,
+					      &needed_ext_fset))
+		p_ver_ret = p_ver;
+	    }
+	}
     }
 
-  /* In cpu_arch_ver ARMv8-A is before ARMv8-M for atomics to be detected as
-     coming from ARMv8-A.  However, since ARMv8-A has more instructions than
-     ARMv8-M, -march=all must be detected as ARMv8-A.  */
-  if (arch == TAG_CPU_ARCH_V8M_MAIN
-      && ARM_FEATURE_CORE_EQUAL (selected_cpu, arm_arch_any))
+  if (p_ver_ret == NULL)
+    return -1;
+
+found:
+  /* Tag_CPU_arch_profile.  */
+  if (ARM_CPU_HAS_FEATURE (p_ver_ret->flags, arm_ext_v7a)
+      || ARM_CPU_HAS_FEATURE (p_ver_ret->flags, arm_ext_v8)
+      || (ARM_CPU_HAS_FEATURE (p_ver_ret->flags, arm_ext_atomics)
+	  && !ARM_CPU_HAS_FEATURE (p_ver_ret->flags, arm_ext_v8m_m_only)))
+    *profile = 'A';
+  else if (ARM_CPU_HAS_FEATURE (p_ver_ret->flags, arm_ext_v7r))
+    *profile = 'R';
+  else if (ARM_CPU_HAS_FEATURE (p_ver_ret->flags, arm_ext_m))
+    *profile = 'M';
+  else
+    *profile = '\0';
+  return p_ver_ret->val;
+}
+
+/* Set the public EABI object attributes.  */
+
+static void
+aeabi_set_public_attributes (void)
+{
+  char profile = '\0';
+  int arch = -1;
+  int virt_sec = 0;
+  int fp16_optional = 0;
+  int skip_exact_match = 0;
+  arm_feature_set flags, flags_arch, flags_ext;
+
+  /* Autodetection mode, choose the architecture based the instructions
+     actually used.  */
+  if (no_cpu_selected ())
     {
-      arch = TAG_CPU_ARCH_V8;
-      arm_arch = (arm_feature_set) ARM_ARCH_V8A;
+      ARM_MERGE_FEATURE_SETS (flags, arm_arch_used, thumb_arch_used);
+
+      if (ARM_CPU_HAS_FEATURE (arm_arch_used, arm_arch_any))
+	ARM_MERGE_FEATURE_SETS (flags, flags, arm_ext_v1);
+
+      if (ARM_CPU_HAS_FEATURE (thumb_arch_used, arm_arch_any))
+	ARM_MERGE_FEATURE_SETS (flags, flags, arm_ext_v4t);
+
+      /* Code run during relaxation relies on selected_cpu being set.  */
+      ARM_CLEAR_FEATURE (flags_arch, flags, fpu_any);
+      flags_ext = arm_arch_none;
+      ARM_CLEAR_FEATURE (selected_arch, flags_arch, flags_ext);
+      selected_ext = flags_ext;
+      selected_cpu = flags;
     }
+  /* Otherwise, choose the architecture based on the capabilities of the
+     requested cpu.  */
+  else
+    {
+      ARM_MERGE_FEATURE_SETS (flags_arch, selected_arch, selected_ext);
+      ARM_CLEAR_FEATURE (flags_arch, flags_arch, fpu_any);
+      flags_ext = selected_ext;
+      flags = selected_cpu;
+    }
+  ARM_MERGE_FEATURE_SETS (flags, flags, selected_fpu);
+
+  /* Allow the user to override the reported architecture.  */
+  if (!ARM_FEATURE_ZERO (selected_object_arch))
+    {
+      ARM_CLEAR_FEATURE (flags_arch, selected_object_arch, fpu_any);
+      flags_ext = arm_arch_none;
+    }
+  else
+    skip_exact_match = ARM_FEATURE_EQUAL (selected_cpu, arm_arch_any);
+
+  /* When this function is run again after relaxation has happened there is no
+     way to determine whether an architecture or CPU was specified by the user:
+     - selected_cpu is set above for relaxation to work;
+     - march_cpu_opt is not set if only -mcpu or .cpu is used;
+     - mcpu_cpu_opt is set to arm_arch_any for autodetection.
+     Therefore, if not in -march=all case we first try an exact match and fall
+     back to autodetection.  */
+  if (!skip_exact_match)
+    arch = get_aeabi_cpu_arch_from_fset (&flags_arch, &flags_ext, &profile, 1);
+  if (arch == -1)
+    arch = get_aeabi_cpu_arch_from_fset (&flags_arch, &flags_ext, &profile, 0);
+  if (arch == -1)
+    as_bad (_("no architecture contains all the instructions used\n"));
 
   /* Tag_CPU_name.  */
   if (selected_cpu_name[0])
@@ -26472,40 +27338,22 @@ aeabi_set_public_attributes (void)
   aeabi_set_attribute_int (Tag_CPU_arch, arch);
 
   /* Tag_CPU_arch_profile.  */
-  if (ARM_CPU_HAS_FEATURE (flags, arm_ext_v7a)
-      || ARM_CPU_HAS_FEATURE (flags, arm_ext_v8)
-      || (ARM_CPU_HAS_FEATURE (flags, arm_ext_atomics)
-	  && !ARM_CPU_HAS_FEATURE (flags, arm_ext_v8m_m_only)))
-    profile = 'A';
-  else if (ARM_CPU_HAS_FEATURE (flags, arm_ext_v7r))
-    profile = 'R';
-  else if (ARM_CPU_HAS_FEATURE (flags, arm_ext_m))
-    profile = 'M';
-  else
-    profile = '\0';
-
   if (profile != '\0')
     aeabi_set_attribute_int (Tag_CPU_arch_profile, profile);
 
   /* Tag_DSP_extension.  */
-  if (ARM_CPU_HAS_FEATURE (flags, arm_ext_dsp))
-    {
-      arm_feature_set ext;
+  if (ARM_CPU_HAS_FEATURE (selected_ext, arm_ext_dsp))
+    aeabi_set_attribute_int (Tag_DSP_extension, 1);
 
-      /* DSP instructions not in architecture.  */
-      ARM_CLEAR_FEATURE (ext, flags, arm_arch);
-      if (ARM_CPU_HAS_FEATURE (ext, arm_ext_dsp))
-	aeabi_set_attribute_int (Tag_DSP_extension, 1);
-    }
-
+  ARM_CLEAR_FEATURE (flags_arch, flags, fpu_any);
   /* Tag_ARM_ISA_use.  */
   if (ARM_CPU_HAS_FEATURE (flags, arm_ext_v1)
-      || arch == 0)
+      || ARM_FEATURE_ZERO (flags_arch))
     aeabi_set_attribute_int (Tag_ARM_ISA_use, 1);
 
   /* Tag_THUMB_ISA_use.  */
   if (ARM_CPU_HAS_FEATURE (flags, arm_ext_v4t)
-      || arch == 0)
+      || ARM_FEATURE_ZERO (flags_arch))
     {
       int thumb_isa_use;
 
@@ -26587,9 +27435,7 @@ aeabi_set_public_attributes (void)
      by the base architecture.
 
      For new architectures we will have to check these tests.  */
-  gas_assert (arch <= TAG_CPU_ARCH_V8
-	      || (arch >= TAG_CPU_ARCH_V8M_BASE
-		  && arch <= TAG_CPU_ARCH_V8M_MAIN));
+  gas_assert (arch <= TAG_CPU_ARCH_V8M_MAIN);
   if (ARM_CPU_HAS_FEATURE (flags, arm_ext_v8)
       || ARM_CPU_HAS_FEATURE (flags, arm_ext_v8m))
     aeabi_set_attribute_int (Tag_DIV_use, 0);
@@ -26612,7 +27458,21 @@ aeabi_set_public_attributes (void)
     aeabi_set_attribute_int (Tag_Virtualization_use, virt_sec);
 }
 
+/* Post relaxation hook.  Recompute ARM attributes now that relaxation is
+   finished and free extension feature bits which will not be used anymore.  */
+
+void
+arm_md_post_relax (void)
+{
+  aeabi_set_public_attributes ();
+  XDELETE (mcpu_ext_opt);
+  mcpu_ext_opt = NULL;
+  XDELETE (march_ext_opt);
+  march_ext_opt = NULL;
+}
+
 /* Add the default contents for the .ARM.attributes section.  */
+
 void
 arm_md_end (void)
 {
@@ -26622,7 +27482,6 @@ arm_md_end (void)
   aeabi_set_public_attributes ();
 }
 #endif /* OBJ_ELF */
-
 
 /* Parse a .cpu directive.  */
 
@@ -26643,8 +27502,9 @@ s_arm_cpu (int ignored ATTRIBUTE_UNUSED)
   for (opt = arm_cpus + 1; opt->name != NULL; opt++)
     if (streq (opt->name, name))
       {
-	mcpu_cpu_opt = &opt->value;
-	selected_cpu = opt->value;
+	selected_arch = opt->value;
+	selected_ext = opt->ext;
+	ARM_MERGE_FEATURE_SETS (selected_cpu, selected_arch, selected_ext);
 	if (opt->canonical_name)
 	  strcpy (selected_cpu_name, opt->canonical_name);
 	else
@@ -26655,7 +27515,8 @@ s_arm_cpu (int ignored ATTRIBUTE_UNUSED)
 
 	    selected_cpu_name[i] = 0;
 	  }
-	ARM_MERGE_FEATURE_SETS (cpu_variant, *mcpu_cpu_opt, *mfpu_opt);
+	ARM_MERGE_FEATURE_SETS (cpu_variant, selected_cpu, selected_fpu);
+
 	*input_line_pointer = saved_char;
 	demand_empty_rest_of_line ();
 	return;
@@ -26664,7 +27525,6 @@ s_arm_cpu (int ignored ATTRIBUTE_UNUSED)
   *input_line_pointer = saved_char;
   ignore_rest_of_line ();
 }
-
 
 /* Parse a .arch directive.  */
 
@@ -26685,10 +27545,11 @@ s_arm_arch (int ignored ATTRIBUTE_UNUSED)
   for (opt = arm_archs + 1; opt->name != NULL; opt++)
     if (streq (opt->name, name))
       {
-	mcpu_cpu_opt = &opt->value;
-	selected_cpu = opt->value;
+	selected_arch = opt->value;
+	selected_ext = arm_arch_none;
+	selected_cpu = selected_arch;
 	strcpy (selected_cpu_name, opt->name);
-	ARM_MERGE_FEATURE_SETS (cpu_variant, *mcpu_cpu_opt, *mfpu_opt);
+	ARM_MERGE_FEATURE_SETS (cpu_variant, selected_cpu, selected_fpu);
 	*input_line_pointer = saved_char;
 	demand_empty_rest_of_line ();
 	return;
@@ -26698,7 +27559,6 @@ s_arm_arch (int ignored ATTRIBUTE_UNUSED)
   *input_line_pointer = saved_char;
   ignore_rest_of_line ();
 }
-
 
 /* Parse a .object_arch directive.  */
 
@@ -26719,7 +27579,7 @@ s_arm_object_arch (int ignored ATTRIBUTE_UNUSED)
   for (opt = arm_archs + 1; opt->name != NULL; opt++)
     if (streq (opt->name, name))
       {
-	object_arch = &opt->value;
+	selected_object_arch = opt->value;
 	*input_line_pointer = saved_char;
 	demand_empty_rest_of_line ();
 	return;
@@ -26736,7 +27596,6 @@ static void
 s_arm_arch_extension (int ignored ATTRIBUTE_UNUSED)
 {
   const struct arm_option_extension_value_table *opt;
-  const arm_feature_set arm_any = ARM_ANY;
   char saved_char;
   char *name;
   int adding_value = 1;
@@ -26762,9 +27621,9 @@ s_arm_arch_extension (int ignored ATTRIBUTE_UNUSED)
 	for (i = 0; i < nb_allowed_archs; i++)
 	  {
 	    /* Empty entry.  */
-	    if (ARM_FEATURE_EQUAL (opt->allowed_archs[i], arm_any))
+	    if (ARM_CPU_IS_ANY (opt->allowed_archs[i]))
 	      continue;
-	    if (ARM_FSET_CPU_SUBSET (opt->allowed_archs[i], *mcpu_cpu_opt))
+	    if (ARM_FSET_CPU_SUBSET (opt->allowed_archs[i], selected_arch))
 	      break;
 	  }
 
@@ -26776,15 +27635,19 @@ s_arm_arch_extension (int ignored ATTRIBUTE_UNUSED)
 	  }
 
 	if (adding_value)
-	  ARM_MERGE_FEATURE_SETS (selected_cpu, selected_cpu,
+	  ARM_MERGE_FEATURE_SETS (selected_ext, selected_ext,
 				  opt->merge_value);
 	else
-	  ARM_CLEAR_FEATURE (selected_cpu, selected_cpu, opt->clear_value);
+	  ARM_CLEAR_FEATURE (selected_ext, selected_ext, opt->clear_value);
 
-	mcpu_cpu_opt = &selected_cpu;
-	ARM_MERGE_FEATURE_SETS (cpu_variant, *mcpu_cpu_opt, *mfpu_opt);
+	ARM_MERGE_FEATURE_SETS (selected_cpu, selected_arch, selected_ext);
+	ARM_MERGE_FEATURE_SETS (cpu_variant, selected_cpu, selected_fpu);
 	*input_line_pointer = saved_char;
 	demand_empty_rest_of_line ();
+	/* Allowing Thumb division instructions for ARMv7 in autodetection rely
+	   on this return so that duplicate extensions (extensions with the
+	   same name as a previous extension in the list) are not considered
+	   for command-line parsing.  */
 	return;
       }
 
@@ -26813,8 +27676,13 @@ s_arm_fpu (int ignored ATTRIBUTE_UNUSED)
   for (opt = arm_fpus; opt->name != NULL; opt++)
     if (streq (opt->name, name))
       {
-	mfpu_opt = &opt->value;
-	ARM_MERGE_FEATURE_SETS (cpu_variant, *mcpu_cpu_opt, *mfpu_opt);
+	selected_fpu = opt->value;
+#ifndef CPU_DEFAULT
+	if (no_cpu_selected ())
+	  ARM_MERGE_FEATURE_SETS (cpu_variant, arm_arch_any, selected_fpu);
+	else
+#endif
+	  ARM_MERGE_FEATURE_SETS (cpu_variant, selected_cpu, selected_fpu);
 	*input_line_pointer = saved_char;
 	demand_empty_rest_of_line ();
 	return;
@@ -26909,10 +27777,10 @@ arm_convert_symbolic_attribute (const char *name)
   return -1;
 }
 
-
 /* Apply sym value for relocations only in the case that they are for
    local symbols in the same segment as the fixup and you have the
    respective architectural feature for blx and simple switches.  */
+
 int
 arm_apply_sym_value (struct fix * fixP, segT this_seg)
 {

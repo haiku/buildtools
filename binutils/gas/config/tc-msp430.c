@@ -1,6 +1,6 @@
 /* tc-msp430.c -- Assembler code for the Texas Instruments MSP430
 
-  Copyright (C) 2002-2017 Free Software Foundation, Inc.
+  Copyright (C) 2002-2019 Free Software Foundation, Inc.
   Contributed by Dmitry Diky <diwil@mail.ru>
 
   This file is part of GAS, the GNU Assembler.
@@ -294,7 +294,7 @@ target_is_430xv2 (void)
       ? BFD_RELOC_MSP430_16_BYTE : BFD_RELOC_MSP430_16))
 
 /* Generate a 16-bit pc-relative relocation.
-   For the 430X we generate a relocation without linkwer range checking.
+   For the 430X we generate a relocation without linker range checking.
    For the 430 we generate a relocation without assembler range checking
    if we are handling an immediate value or a byte-width instruction.  */
 #undef  CHECK_RELOC_MSP430_PCREL
@@ -415,6 +415,13 @@ parse_exp (char * s, expressionS * op)
   expression (op);
   if (op->X_op == O_absent)
     as_bad (_("missing operand"));
+  /* Our caller is likely to check that the entire expression was parsed.
+     If we have found a hex constant with an 'h' suffix, ilp will be left
+     pointing at the 'h', so skip it here.  */
+  if (input_line_pointer != NULL
+      && op->X_op == O_constant
+      && (*input_line_pointer == 'h' || *input_line_pointer == 'H'))
+    ++ input_line_pointer;
   return input_line_pointer;
 }
 
@@ -612,7 +619,7 @@ msp430_profiler (int dummy ATTRIBUTE_UNUSED)
   subseg = now_subseg;
 
   /* Now go to .profiler section.  */
-  obj_elf_change_section (".profiler", SHT_PROGBITS, 0, 0, 0, 0, 0);
+  obj_elf_change_section (".profiler", SHT_PROGBITS, 0, 0, 0, 0, 0, 0);
 
   /* Save flags.  */
   emit_expr (& exp, 2);
@@ -625,7 +632,7 @@ msp430_profiler (int dummy ATTRIBUTE_UNUSED)
       /* Now get profiling info.  */
       halt = extract_operand (input_line_pointer, str, 1024);
       /* Process like ".word xxx" directive.  */
-      parse_exp (str, & exp);
+      (void) parse_exp (str, & exp);
       emit_expr (& exp, 2);
       input_line_pointer = halt;
     }
@@ -676,6 +683,8 @@ static bfd_boolean warn_interrupt_nops = TRUE;
 #define OPTION_MCPU 'c'
 #define OPTION_MOVE_DATA 'd'
 static bfd_boolean move_data = FALSE;
+#define OPTION_DATA_REGION 'r'
+static bfd_boolean upper_data_region_in_use = FALSE;
 
 enum
 {
@@ -706,8 +715,8 @@ msp430_set_arch (int option)
 
 /* This is a copy of the same data structure found in gcc/config/msp430/msp430.c
    Keep these two structures in sync.
-   The data in this structure has been extracted from the devices.csv file
-   released by TI, updated as of March 2016.  */
+   The data in this structure has been extracted from version 1.194 of the
+   devices.csv file released by TI in September 2016.  */
 
 struct msp430_mcu_data
 {
@@ -1133,6 +1142,8 @@ msp430_mcu_data [] =
   { "msp430fg6626",2,8 },
   { "msp430fr2032",2,0 },
   { "msp430fr2033",2,0 },
+  { "msp430fr2110",2,0 },
+  { "msp430fr2111",2,0 },
   { "msp430fr2310",2,0 },
   { "msp430fr2311",2,0 },
   { "msp430fr2433",2,8 },
@@ -1173,8 +1184,6 @@ msp430_mcu_data [] =
   { "msp430fr5858",2,8 },
   { "msp430fr5859",2,8 },
   { "msp430fr5867",2,8 },
-  { "msp430fr5862",2,8 },
-  { "msp430fr5864",2,8 },
   { "msp430fr58671",2,8 },
   { "msp430fr5868",2,8 },
   { "msp430fr5869",2,8 },
@@ -1185,8 +1194,6 @@ msp430_mcu_data [] =
   { "msp430fr5888",2,8 },
   { "msp430fr5889",2,8 },
   { "msp430fr58891",2,8 },
-  { "msp430fr5892",2,8 },
-  { "msp430fr5894",2,8 },
   { "msp430fr5922",2,8 },
   { "msp430fr59221",2,8 },
   { "msp430fr5947",2,8 },
@@ -1212,6 +1219,7 @@ msp430_mcu_data [] =
   { "msp430fr59891",2,8 },
   { "msp430fr5992",2,8 },
   { "msp430fr5994",2,8 },
+  { "msp430fr59941",2,8 },
   { "msp430fr5xx_6xxgeneric",2,8 },
   { "msp430fr6820",2,8 },
   { "msp430fr6822",2,8 },
@@ -1449,6 +1457,12 @@ md_parse_option (int c, const char * arg)
     case OPTION_MOVE_DATA:
       move_data = TRUE;
       return 1;
+
+    case OPTION_DATA_REGION:
+      if (strcmp (arg, "upper") == 0
+	  || strcmp (arg, "either") == 0)
+	upper_data_region_in_use = TRUE;
+      return 1;
     }
 
   return 0;
@@ -1479,14 +1493,19 @@ msp430_make_init_symbols (const char * name)
 
   /* Note - data assigned to the .either.data section may end up being
      placed in the .upper.data section if the .lower.data section is
-     full.  Hence the need to define the crt0 symbol.  */
+     full.  Hence the need to define the crt0 symbol.
+     The linker may create upper or either data sections, even when none exist
+     at the moment, so use the value of the data-region flag to determine if
+     the symbol is needed.  */
   if (strncmp (name, ".either.data", 12) == 0
-      || strncmp (name, ".upper.data", 11) == 0)
+      || strncmp (name, ".upper.data", 11) == 0
+      || upper_data_region_in_use)
     (void) symbol_find_or_make ("__crt0_move_highdata");
 
   /* See note about .either.data above.  */
   if (strncmp (name, ".upper.bss", 10) == 0
-      || strncmp (name, ".either.bss", 11) == 0)
+      || strncmp (name, ".either.bss", 11) == 0
+      || upper_data_region_in_use)
     (void) symbol_find_or_make ("__crt0_init_highbss");
 }
 
@@ -1571,6 +1590,7 @@ struct option md_longopts[] =
   {"mY", no_argument, NULL, OPTION_NO_WARN_INTR_NOPS},
   {"my", no_argument, NULL, OPTION_WARN_INTR_NOPS},
   {"md", no_argument, NULL, OPTION_MOVE_DATA},
+  {"mdata-region", required_argument, NULL, OPTION_DATA_REGION},
   {NULL, no_argument, NULL, 0}
 };
 
@@ -1602,6 +1622,9 @@ md_show_usage (FILE * stream)
 	   _("  -my - warn about missing NOPs after changing interrupts (default)\n"));
   fprintf (stream,
 	   _("  -md - Force copying of data from ROM to RAM at startup\n"));
+  fprintf (stream,
+	   _("  -mdata-region={none|lower|upper|either} - select region data will be\n"
+	     "    placed in.\n"));
 }
 
 symbolS *
@@ -1649,6 +1672,12 @@ md_begin (void)
   linkrelax = 1;
 }
 
+static inline bfd_boolean
+is_regname_end (char c)
+{
+  return (c == 0 || ! ISALNUM (c));
+}
+  
 /* Returns the register number equivalent to the string T.
    Returns -1 if there is no such register.
    Skips a leading 'r' or 'R' character if there is one.
@@ -1657,32 +1686,36 @@ md_begin (void)
 static signed int
 check_reg (char * t)
 {
-  signed int val;
+  char * endt;
+  signed long int val;
 
-  if (t == NULL)
+  if (t == NULL || t[0] == 0)
     return -1;
 
   if (*t == 'r' || *t == 'R')
     ++t;
 
-  if (strncasecmp (t, "pc", 2) == 0)
+  if (strncasecmp (t, "pc", 2) == 0 && is_regname_end (t[2]))
     return 0;
 
-  if (strncasecmp (t, "sp", 2) == 0)
+  if (strncasecmp (t, "sp", 2) == 0 && is_regname_end (t[2]))
     return 1;
 
-  if (strncasecmp (t, "sr", 2) == 0)
+  if (strncasecmp (t, "sr", 2) == 0 && is_regname_end (t[2]))
     return 2;
 
-  if (*t == '0')
+  if (*t == '0' && is_regname_end (t[1]))
     return 0;
 
-  val = atoi (t);
+  val = strtol (t, & endt, 0);
 
   if (val < 1 || val > 15)
     return -1;
 
-  return val;
+  if (is_regname_end (*endt))
+    return val;
+
+  return -1;
 }
 
 static int
@@ -1693,6 +1726,7 @@ msp430_srcoperand (struct msp430_operand_s * op,
 		   bfd_boolean allow_20bit_values,
 		   bfd_boolean constants_allowed)
 {
+  char * end;
   char *__tl = l;
 
   /* Check if an immediate #VALUE.  The hash sign should be only at the beginning!  */
@@ -1749,7 +1783,12 @@ msp430_srcoperand (struct msp430_operand_s * op,
       op->mode = OP_EXP;
       op->vshift = vshift;
 
-      parse_exp (__tl, &(op->exp));
+      end = parse_exp (__tl, &(op->exp));
+      if (end != NULL && *end != 0 && *end != ')' )
+	{
+	  as_bad (_("extra characters '%s' at end of immediate expression '%s'"), end, l);
+	  return 1;
+	}
       if (op->exp.X_op == O_constant)
 	{
 	  int x = op->exp.X_add_number;
@@ -1879,7 +1918,7 @@ msp430_srcoperand (struct msp430_operand_s * op,
 	  else
 	    {
 	      as_bad (_
-		      ("unknown expression in operand %s. use #llo() #lhi() #hlo() #hhi() "),
+		      ("unknown expression in operand %s.  Use #llo(), #lhi(), #hlo() or #hhi()"),
 		      l);
 	      return 1;
 	    }
@@ -1946,7 +1985,12 @@ msp430_srcoperand (struct msp430_operand_s * op,
       op->am = 1;		/* mode As == 01 bin.  */
       op->ol = 1;		/* Immediate value followed by instruction.  */
       __tl = h + 1;
-      parse_exp (__tl, &(op->exp));
+      end = parse_exp (__tl, &(op->exp));
+      if (end != NULL && *end != 0)
+	{
+	  as_bad (_("extra characters '%s' at the end of absolute operand '%s'"), end, l);
+	  return 1;
+	}
       op->mode = OP_EXP;
       op->vshift = 0;
       if (op->exp.X_op == O_constant)
@@ -2057,7 +2101,12 @@ msp430_srcoperand (struct msp430_operand_s * op,
       *h = 0;
       op->mode = OP_EXP;
       op->vshift = 0;
-      parse_exp (__tl, &(op->exp));
+      end = parse_exp (__tl, &(op->exp));
+      if (end != NULL && *end != 0)
+	{
+	  as_bad (_("extra characters '%s' at end of operand '%s'"), end, l);
+	  return 1;
+	}
       if (op->exp.X_op == O_constant)
 	{
 	  int x = op->exp.X_add_number;
@@ -2119,23 +2168,20 @@ msp430_srcoperand (struct msp430_operand_s * op,
     }
 
   /* Symbolic mode 'mov a, b' == 'mov x(pc), y(pc)'.  */
-  do
+  op->mode = OP_EXP;
+  op->reg = 0;		/* PC relative... be careful.  */
+  /* An expression starting with a minus sign is a constant, not an address.  */
+  op->am = (*l == '-' ? 3 : 1);
+  op->ol = 1;
+  op->vshift = 0;
+  __tl = l;
+  end = parse_exp (__tl, &(op->exp));
+  if (end != NULL && * end != 0)
     {
-      op->mode = OP_EXP;
-      op->reg = 0;		/* PC relative... be careful.  */
-      /* An expression starting with a minus sign is a constant, not an address.  */
-      op->am = (*l == '-' ? 3 : 1);
-      op->ol = 1;
-      op->vshift = 0;
-      __tl = l;
-      parse_exp (__tl, &(op->exp));
-      return 0;
+      as_bad (_("extra characters '%s' at end of operand '%s'"), end, l);
+      return 1;
     }
-  while (0);
-
-  /* Unreachable.  */
-  as_bad (_("unknown addressing mode for operand %s"), l);
-  return 1;
+  return 0;
 }
 
 
@@ -2162,7 +2208,7 @@ msp430_dstoperand (struct msp430_operand_s * op,
       op->am = 1;
       op->ol = 1;
       op->vshift = 0;
-      parse_exp (__tl, &(op->exp));
+      (void) parse_exp (__tl, &(op->exp));
 
       if (op->exp.X_op != O_constant || op->exp.X_add_number != 0)
 	{
@@ -2449,6 +2495,79 @@ static signed int check_for_nop = 0;
 
 #define is_opcode(NAME) (strcmp (opcode->name, NAME) == 0)
 
+/* is_{e,d}int only check the explicit enabling/disabling of interrupts.
+   For MOV insns, more sophisticated processing is needed to determine if they
+   result in enabling/disabling interrupts.  */
+#define is_dint(OPCODE, BIN) ((strcmp (OPCODE, "dint") == 0) \
+				   || ((strcmp (OPCODE, "bic") == 0) \
+				       && BIN == 0xc232) \
+				   || ((strcmp (OPCODE, "clr") == 0) \
+				       && BIN == 0x4302))
+
+#define is_eint(OPCODE, BIN) ((strcmp (OPCODE, "eint") == 0) \
+				   || ((strcmp (OPCODE, "bis") == 0) \
+				       && BIN == 0xd232))
+
+const char * const INSERT_NOP_BEFORE_EINT = "NOP inserted here, before an interrupt enable instruction";
+const char * const INSERT_NOP_AFTER_DINT = "NOP inserted here, after an interrupt disable instruction";
+const char * const INSERT_NOP_AFTER_EINT = "NOP inserted here, after an interrupt enable instruction";
+const char * const INSERT_NOP_BEFORE_UNKNOWN = "NOP inserted here, before this interrupt state change";
+const char * const INSERT_NOP_AFTER_UNKNOWN ="NOP inserted here, after the instruction that changed interrupt state";
+const char * const INSERT_NOP_AT_EOF = "NOP inserted after the interrupt state change at the end of the file";
+
+const char * const WARN_NOP_BEFORE_EINT = "a NOP might be needed here, before an interrupt enable instruction";
+const char * const WARN_NOP_AFTER_DINT = "a NOP might be needed here, after an interrupt disable instruction";
+const char * const WARN_NOP_AFTER_EINT = "a NOP might be needed here, after an interrupt enable instruction";
+const char * const WARN_NOP_BEFORE_UNKNOWN = "a NOP might be needed here, before this interrupt state change";
+const char * const WARN_NOP_AFTER_UNKNOWN = "a NOP might also be needed here, after the instruction that changed interrupt state";
+const char * const WARN_NOP_AT_EOF = "a NOP might be needed after the interrupt state change at the end of the file";
+
+static void
+gen_nop (void)
+{
+  char *frag;
+  frag = frag_more (2);
+  bfd_putl16 ((bfd_vma) 0x4303 /* NOP */, frag);
+  dwarf2_emit_insn (2);
+}
+
+/* Insert/inform about adding a NOP if this insn enables interrupts.  */
+static void
+warn_eint_nop (bfd_boolean prev_insn_is_nop, bfd_boolean prev_insn_is_dint)
+{
+  if (prev_insn_is_nop
+      /* Prevent double warning for DINT immediately before EINT.  */
+      || prev_insn_is_dint
+      /* 430 ISA does not require a NOP before EINT.  */
+      || (! target_is_430x ()))
+    return;
+  if (gen_interrupt_nops)
+    {
+      gen_nop ();
+      if (warn_interrupt_nops)
+	as_warn (_(INSERT_NOP_BEFORE_EINT));
+    }
+  else if (warn_interrupt_nops)
+    as_warn (_(WARN_NOP_BEFORE_EINT));
+}
+
+/* Use when unsure what effect the insn will have on the interrupt status,
+   to insert/warn about adding a NOP before the current insn.  */
+static void
+warn_unsure_interrupt (void)
+{
+  /* Since this could enable or disable interrupts, need to add/warn about
+     adding a NOP before and after this insn.  */
+  if (gen_interrupt_nops)
+    {
+      gen_nop ();
+      if (warn_interrupt_nops)
+	as_warn (_(INSERT_NOP_BEFORE_UNKNOWN));
+    }
+  else if (warn_interrupt_nops)
+    as_warn (_(WARN_NOP_BEFORE_UNKNOWN));
+}
+
 /* Parse instruction operands.
    Return binary opcode.  */
 
@@ -2459,6 +2578,7 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
   int insn_length = 0;
   char l1[MAX_OP_LEN], l2[MAX_OP_LEN];
   char *frag;
+  char *end;
   int where;
   struct msp430_operand_s op1, op2;
   int res = 0;
@@ -2472,6 +2592,12 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
   const char * error_message;
   static signed int repeat_count = 0;
   static bfd_boolean prev_insn_is_nop = FALSE;
+  static bfd_boolean prev_insn_is_dint = FALSE;
+  static bfd_boolean prev_insn_is_eint = FALSE;
+  /* We might decide before the end of the function that the current insn is
+     equivalent to DINT/EINT.  */
+  bfd_boolean this_insn_is_dint = FALSE;
+  bfd_boolean this_insn_is_eint = FALSE;
   bfd_boolean fix_emitted;
 
   /* Opcode is the one from opcodes table
@@ -2539,7 +2665,7 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
      instruction that does not support it.  Look for an alternative extended
      instruction that has the same name without the period.  Eg: "add.a"
      becomes "adda".  Although this not an officially supported way of
-     specifing instruction aliases other MSP430 assemblers allow it.  So we
+     specifying instruction aliases other MSP430 assemblers allow it.  So we
      support it for compatibility purposes.  */
   if (addr_op && opcode->fmt >= 0)
     {
@@ -2564,7 +2690,9 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
       && opcode->insn_opnumb
       && (!*line || *line == '\n'))
     {
-      as_bad (_("instruction %s requires %d operand(s)"),
+      as_bad (ngettext ("instruction %s requires %d operand",
+			"instruction %s requires %d operands",
+			opcode->insn_opnumb),
 	      opcode->name, opcode->insn_opnumb);
       return 0;
     }
@@ -2605,37 +2733,77 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
       repeat_count = 0;
     }
 
+  /* The previous instruction set this flag if it wants to check if this insn
+     is a NOP.  */
   if (check_for_nop)
     {
       if (! is_opcode ("nop"))
 	{
-	  bfd_boolean doit = FALSE;
-
 	  do
 	    {
 	      switch (check_for_nop & - check_for_nop)
 		{
 		case NOP_CHECK_INTERRUPT:
-		  if (warn_interrupt_nops)
+		  /* NOP_CHECK_INTERRUPT rules:
+		     1.  430 and 430x ISA require a NOP after DINT.
+		     2.  Only the 430x ISA requires NOP before EINT (this has
+			been dealt with in the previous call to this function).
+		     3.  Only the 430x ISA requires NOP after every EINT.
+			CPU42 errata.  */
+		  if (gen_interrupt_nops || warn_interrupt_nops)
 		    {
-		      if (gen_interrupt_nops)
-			as_warn (_("NOP inserted between two instructions that change interrupt state"));
+		      if (prev_insn_is_dint)
+			{
+			  if (gen_interrupt_nops)
+			    {
+			      gen_nop ();
+			      if (warn_interrupt_nops)
+				as_warn (_(INSERT_NOP_AFTER_DINT));
+			    }
+			  else
+			    as_warn (_(WARN_NOP_AFTER_DINT));
+			}
+		      else if (prev_insn_is_eint)
+			{
+			  if (gen_interrupt_nops)
+			    {
+			      gen_nop ();
+			      if (warn_interrupt_nops)
+				as_warn (_(INSERT_NOP_AFTER_EINT));
+			    }
+			  else
+			    as_warn (_(WARN_NOP_AFTER_EINT));
+			}
+		      /* If we get here it's because the last instruction was
+			 determined to either disable or enable interrupts, but
+			 we're not sure which.
+			 We have no information yet about what effect the
+			 current instruction has on interrupts, that has to be
+			 sorted out later.
+			 The last insn may have required a NOP after it, so we
+			 deal with that now.  */
 		      else
-			as_warn (_("a NOP might be needed here because of successive changes in interrupt state"));
+			{
+			  if (gen_interrupt_nops)
+			    {
+			      gen_nop ();
+			      if (warn_interrupt_nops)
+				as_warn (_(INSERT_NOP_AFTER_UNKNOWN));
+			    }
+			  else
+			    /* warn_unsure_interrupt was called on the previous
+			       insn.  */
+			    as_warn (_(WARN_NOP_AFTER_UNKNOWN));
+			}
 		    }
-
-		  if (gen_interrupt_nops)
-		    /* Emit a NOP between interrupt enable/disable.
-		       See 1.3.4.1 of the MSP430x5xx User Guide.  */
-		    doit = TRUE;
 		  break;
 
 		case NOP_CHECK_CPU12:
 		  if (silicon_errata_warn & SILICON_ERRATA_CPU12)
-		    as_warn (_("CPU12: CMP/BIT with PC destinstion ignores next instruction"));
+		    as_warn (_("CPU12: CMP/BIT with PC destination ignores next instruction"));
 
 		  if (silicon_errata_fix & SILICON_ERRATA_CPU12)
-		    doit = TRUE;
+		    gen_nop ();
 		  break;
 
 		case NOP_CHECK_CPU19:
@@ -2643,7 +2811,7 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 		    as_warn (_("CPU19: Instruction setting CPUOFF must be followed by a NOP"));
 
 		  if (silicon_errata_fix & SILICON_ERRATA_CPU19)
-		    doit = TRUE;
+		    gen_nop ();
 		  break;
 		  
 		default:
@@ -2653,15 +2821,7 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	      check_for_nop &= ~ (check_for_nop & - check_for_nop);
 	    }
 	  while (check_for_nop);
-	  
-	  if (doit)
-	    {
-	      frag = frag_more (2);
-	      bfd_putl16 ((bfd_vma) 0x4303 /* NOP */, frag);
-	      dwarf2_emit_insn (2);
-	    }
 	}
-
       check_for_nop = 0;
     }
 
@@ -2672,24 +2832,7 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	{
 	case 0:
 	  if (is_opcode ("eint"))
-	    {
-	      if (! prev_insn_is_nop)
-		{
-		  if (gen_interrupt_nops)
-		    {
-		      frag = frag_more (2);
-		      bfd_putl16 ((bfd_vma) 0x4303 /* NOP */, frag);
-		      dwarf2_emit_insn (2);
-
-		      if (warn_interrupt_nops)
-			as_warn (_("inserting a NOP before EINT"));
-		    }
-		  else if (warn_interrupt_nops)
-		    as_warn (_("a NOP might be needed before the EINT"));
-		}
-	    }
-	  else if (is_opcode ("dint"))
-	    check_for_nop |= NOP_CHECK_INTERRUPT;
+	    warn_eint_nop (prev_insn_is_nop, prev_insn_is_dint);
 
 	  /* Set/clear bits instructions.  */
 	  if (extended_op)
@@ -2725,9 +2868,9 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 		   || is_opcode ("bicx") || is_opcode ("bisx") || is_opcode ("movx")))
 	    {
 	      if (silicon_errata_fix & SILICON_ERRATA_CPU11)
-		as_bad (_("CPU11: PC is destinstion of SR altering instruction"));
+		as_bad (_("CPU11: PC is destination of SR altering instruction"));
 	      else if (silicon_errata_warn & SILICON_ERRATA_CPU11)
-		as_warn (_("CPU11: PC is destinstion of SR altering instruction"));
+		as_warn (_("CPU11: PC is destination of SR altering instruction"));
 	    }
 	  
 	  /* If the status register is the destination...  */
@@ -2742,14 +2885,11 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 		  ))
 	    {
 	      if (silicon_errata_fix & SILICON_ERRATA_CPU13)
-		as_bad (_("CPU13: SR is destinstion of SR altering instruction"));
+		as_bad (_("CPU13: SR is destination of SR altering instruction"));
 	      else if (silicon_errata_warn & SILICON_ERRATA_CPU13)
-		as_warn (_("CPU13: SR is destinstion of SR altering instruction"));
+		as_warn (_("CPU13: SR is destination of SR altering instruction"));
 	    }
 	  
-	  if (is_opcode ("clr") && bin == 0x4302 /* CLR R2*/)
-	    check_for_nop |= NOP_CHECK_INTERRUPT;
-
 	  /* Compute the entire instruction length, in bytes.  */
 	  op_length = (extended_op ? 2 : 0) + 2 + (op1.ol * 2);
 	  insn_length += op_length;
@@ -2847,12 +2987,14 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	      /* ... and the opcode alters the SR.  */
 	      && (is_opcode ("rla") || is_opcode ("rlc")
 		  || is_opcode ("rlax") || is_opcode ("rlcx")
+		  || is_opcode ("sxt") || is_opcode ("sxtx")
+		  || is_opcode ("swpb")
 		  ))
 	    {
 	      if (silicon_errata_fix & SILICON_ERRATA_CPU13)
-		as_bad (_("CPU13: SR is destinstion of SR altering instruction"));
+		as_bad (_("CPU13: SR is destination of SR altering instruction"));
 	      else if (silicon_errata_warn & SILICON_ERRATA_CPU13)
-		as_warn (_("CPU13: SR is destinstion of SR altering instruction"));
+		as_warn (_("CPU13: SR is destination of SR altering instruction"));
 	    }
 	  
 	  if (extended_op)
@@ -3090,10 +3232,15 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 		as_bad (_("expected #n as first argument of %s"), opcode->name);
 		break;
 	      }
-	    parse_exp (l1 + 1, &(op1.exp));
+	    end = parse_exp (l1 + 1, &(op1.exp));
+	    if (end != NULL && *end != 0)
+	      {
+		as_bad (_("extra characters '%s' at end of constant expression '%s'"), end, l1);
+		break;
+	      }
 	    if (op1.exp.X_op != O_constant)
 	      {
-		as_bad (_("expected constant expression for first argument of %s"),
+		as_bad (_("expected constant expression as first argument of %s"),
 			opcode->name);
 		break;
 	      }
@@ -3161,10 +3308,15 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 		as_bad (_("expected #n as first argument of %s"), opcode->name);
 		break;
 	      }
-	    parse_exp (l1 + 1, &(op1.exp));
+	    end = parse_exp (l1 + 1, &(op1.exp));
+	    if (end != NULL && *end != 0)
+	      {
+		as_bad (_("extra characters '%s' at end of operand '%s'"), end, l1);
+		break;
+	      }
 	    if (op1.exp.X_op != O_constant)
 	      {
-		as_bad (_("expected constant expression for first argument of %s"),
+		as_bad (_("expected constant expression as first argument of %s"),
 			opcode->name);
 		break;
 	      }
@@ -3224,7 +3376,12 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 
 	    if (*l1 == '#')
 	      {
-		parse_exp (l1 + 1, &(op1.exp));
+		end = parse_exp (l1 + 1, &(op1.exp));
+		if (end != NULL && *end != 0)
+		  {
+		    as_bad (_("extra characters '%s' at end of operand '%s'"), end, l1);
+		    break;
+		  }
 
 		if (op1.exp.X_op == O_constant)
 		  {
@@ -3336,7 +3493,12 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	  /* The RPT instruction only accepted immediates and registers.  */
 	  if (*l1 == '#')
 	    {
-	      parse_exp (l1 + 1, &(op1.exp));
+	      end = parse_exp (l1 + 1, &(op1.exp));
+	      if (end != NULL && *end != 0)
+		{
+		  as_bad (_("extra characters '%s' at end of operand '%s'"), end, l1);
+		  break;
+		}
 	      if (op1.exp.X_op != O_constant)
 		{
 		  as_bad (_("expected constant value as argument to RPT"));
@@ -3373,10 +3535,16 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	  break;
 
 	default:
-	  as_bad (_("Illegal emulated instruction "));
+	  as_bad (_("Illegal emulated instruction"));
 	  break;
 	}
       break;
+
+      /* FIXME: Emit warning when dest reg SR(R2) is addressed with .B or .A.
+	 From f5 ref man 6.3.3:
+	   The 16-bit Status Register (SR, also called R2), used as a source or
+	   destination register, can only be used in register mode addressed
+	   with word instructions.  */
 
     case 1:			/* Format 1, double operand.  */
       line = extract_operand (line, l1, sizeof (l1));
@@ -3411,9 +3579,9 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	       || is_opcode ("bicx") || is_opcode ("bisx") || is_opcode ("movx")))
 	{
 	  if (silicon_errata_fix & SILICON_ERRATA_CPU11)
-	    as_bad (_("CPU11: PC is destinstion of SR altering instruction"));
+	    as_bad (_("CPU11: PC is destination of SR altering instruction"));
 	  else if (silicon_errata_warn & SILICON_ERRATA_CPU11)
-	    as_warn (_("CPU11: PC is destinstion of SR altering instruction"));
+	    as_warn (_("CPU11: PC is destination of SR altering instruction"));
 	}
 	  
       /* If the status register is the destination...  */
@@ -3428,24 +3596,13 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	      ))
 	{
 	  if (silicon_errata_fix & SILICON_ERRATA_CPU13)
-	    as_bad (_("CPU13: SR is destinstion of SR altering instruction"));
+	    as_bad (_("CPU13: SR is destination of SR altering instruction"));
 	  else if (silicon_errata_warn & SILICON_ERRATA_CPU13)
-	    as_warn (_("CPU13: SR is destinstion of SR altering instruction"));
-	}
-	  
-      if (   (is_opcode ("bic") && bin == 0xc232)
-	  || (is_opcode ("bis") && bin == 0xd232)
-	  || (is_opcode ("mov") && op2.mode == OP_REG && op2.reg == 2))
-	{
-	  /* Avoid false checks when a constant value is being put into the SR.  */
-	  if (op1.mode == OP_EXP
-	      && op1.exp.X_op == O_constant
-	      && (op1.exp.X_add_number & 0x8) != 0x8)
-	    ;
-	  else
-	    check_for_nop |= NOP_CHECK_INTERRUPT;
+	    as_warn (_("CPU13: SR is destination of SR altering instruction"));
 	}
 
+      /* Chain these checks for SR manipulations so we can warn if they are not
+	 caught.  */
       if (((is_opcode ("bis") && bin == 0xd032)
 	   || (is_opcode ("mov") && bin == 0x4032)
 	   || (is_opcode ("xor") && bin == 0xe032))
@@ -3453,6 +3610,60 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	  && op1.exp.X_op == O_constant
 	  && (op1.exp.X_add_number & 0x10) == 0x10)
 	check_for_nop |= NOP_CHECK_CPU19;
+      else if ((is_opcode ("mov") && op2.mode == OP_REG && op2.reg == 2))
+	{
+	  /* Any MOV with the SR as the destination either enables or disables
+	     interrupts.  */
+	  if (op1.mode == OP_EXP
+	      && op1.exp.X_op == O_constant)
+	    {
+	      if ((op1.exp.X_add_number & 0x8) == 0x8)
+		{
+		  /* The GIE bit is being set.  */
+		  warn_eint_nop (prev_insn_is_nop, prev_insn_is_dint);
+		  this_insn_is_eint = TRUE;
+		}
+	      else
+		/* The GIE bit is being cleared.  */
+		this_insn_is_dint = TRUE;
+	    }
+	  /* If an immediate value which is covered by the constant generator
+	     is the src, then op1 will have been changed to either R2 or R3 by
+	     this point.
+	     The only constants covered by CG1 and CG2, which have bit 3 set
+	     and therefore would enable interrupts when writing to the SR, are
+	     R2 with addresing mode 0b11 and R3 with 0b11.
+	     The addressing mode is in bits 5:4 of the binary opcode.  */
+	  else if (op1.mode == OP_REG
+		   && (op1.reg == 2 || op1.reg == 3)
+		   && (bin & 0x30) == 0x30)
+	    {
+	      warn_eint_nop (prev_insn_is_nop, prev_insn_is_dint);
+	      this_insn_is_eint = TRUE;
+	    }
+	  /* Any other use of the constant generator with destination R2, will
+	     disable interrupts.  */
+	  else if (op1.mode == OP_REG
+		   && (op1.reg == 2 || op1.reg == 3))
+	    this_insn_is_dint = TRUE;
+	  else
+	    {
+	      /* FIXME: Couldn't work out whether the insn is enabling or
+		 disabling interrupts, so for safety need to treat it as both
+		 a DINT and EINT.  */
+	      warn_unsure_interrupt ();
+	      check_for_nop |= NOP_CHECK_INTERRUPT;
+	    }
+	}
+      else if (is_eint (opcode->name, bin))
+	warn_eint_nop (prev_insn_is_nop, prev_insn_is_dint);
+      else if ((bin & 0x32) == 0x32)
+	{
+	  /* Double-operand insn with the As==0b11 and Rdst==0x2 will result in
+	   * an interrupt state change if a write happens.  */
+	  /* FIXME: How strict to be here? */
+	  ;
+	}
 
       /* Compute the entire length of the instruction in bytes.  */
       op_length = (extended_op ? 2 : 0)	/* The extension word.  */
@@ -3606,9 +3817,9 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	  && (is_opcode ("rra") || is_opcode ("rrc") || is_opcode ("sxt")))
 	{
 	  if (silicon_errata_fix & SILICON_ERRATA_CPU13)
-	    as_bad (_("CPU13: SR is destinstion of SR altering instruction"));
+	    as_bad (_("CPU13: SR is destination of SR altering instruction"));
 	  else if (silicon_errata_warn & SILICON_ERRATA_CPU13)
-	    as_warn (_("CPU13: SR is destinstion of SR altering instruction"));
+	    as_warn (_("CPU13: SR is destination of SR altering instruction"));
 	}
 	  
       insn_length = (extended_op ? 2 : 0) + 2 + (op1.ol * 2);
@@ -3704,7 +3915,12 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	  if (*m == '$')
 	    m++;
 
-	  parse_exp (m, &exp);
+	  end = parse_exp (m, &exp);
+	  if (end != NULL && *end != 0)
+	    {
+	      as_bad (_("extra characters '%s' at end of operand '%s'"), end, l1);
+	      break;
+	    }
 
 	  /* In order to handle something like:
 
@@ -3744,7 +3960,7 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 
 	      if (x > 512 || x < -511)
 		{
-		  as_bad (_("Wrong displacement  %d"), x << 1);
+		  as_bad (_("Wrong displacement %d"), x << 1);
 		  break;
 		}
 
@@ -3798,7 +4014,12 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	  if (*m == '#' || *m == '$')
 	    m++;
 
-	  parse_exp (m, & exp);
+	  end = parse_exp (m, & exp);
+	  if (end != NULL && *end != 0)
+	    {
+	      as_bad (_("extra characters '%s' at end of operand '%s'"), end, l1);
+	      break;
+	    }
 	  if (exp.X_op == O_symbol)
 	    {
 	      /* Relaxation required.  */
@@ -3844,7 +4065,12 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
 	  if (*m == '#' || *m == '$')
 	    m++;
 
-	  parse_exp (m, & exp);
+	  end = parse_exp (m, & exp);
+	  if (end != NULL && *end != 0)
+	    {
+	      as_bad (_("extra characters '%s' at end of operand '%s'"), end, l1);
+	      break;
+	    }
 	  if (exp.X_op == O_symbol)
 	    {
 	      /* Relaxation required.  */
@@ -3875,11 +4101,34 @@ msp430_operands (struct msp430_opcode_s * opcode, char * line)
       as_bad (_("Illegal instruction or not implemented opcode."));
     }
 
-  if (is_opcode ("nop"))
-    prev_insn_is_nop = TRUE;
-  else
-    prev_insn_is_nop = FALSE;
-	    
+    if (is_opcode ("nop"))
+      {
+	prev_insn_is_nop = TRUE;
+	prev_insn_is_dint = FALSE;
+	prev_insn_is_eint = FALSE;
+      }
+    else if (this_insn_is_dint || is_dint (opcode->name, bin))
+      {
+	prev_insn_is_dint = TRUE;
+	prev_insn_is_eint = FALSE;
+	prev_insn_is_nop = FALSE;
+	check_for_nop |= NOP_CHECK_INTERRUPT;
+      }
+    /* NOP is not needed after EINT for 430 ISA.  */
+    else if (target_is_430x () && (this_insn_is_eint || is_eint (opcode->name, bin)))
+      {
+	prev_insn_is_eint = TRUE;
+	prev_insn_is_nop = FALSE;
+	prev_insn_is_dint = FALSE;
+	check_for_nop |= NOP_CHECK_INTERRUPT;
+      }
+    else
+      {
+	prev_insn_is_nop = FALSE;
+	prev_insn_is_dint = FALSE;
+	prev_insn_is_eint = FALSE;
+      }
+
   input_line_pointer = line;
   return 0;
 }
@@ -3903,7 +4152,7 @@ md_assemble (char * str)
 
   if (!cmd[0])
     {
-      as_bad (_("can't find opcode "));
+      as_bad (_("can't find opcode"));
       return;
     }
 
@@ -3951,7 +4200,7 @@ md_pcrel_from_section (fixS * fixp, segT sec)
   return fixp->fx_frag->fr_address + fixp->fx_where;
 }
 
-/* Replaces standard TC_FORCE_RELOCATION_LOCAL.
+/* Addition to the standard TC_FORCE_RELOCATION_LOCAL.
    Now it handles the situation when relocations
    have to be passed to linker.  */
 int
@@ -3965,8 +4214,7 @@ msp430_force_relocation_local (fixS *fixp)
         && !msp430_enable_relax)
     return 1;
 
-  return (!fixp->fx_pcrel
-	  || generic_force_reloc (fixp));
+  return 0;
 }
 
 
@@ -4226,7 +4474,7 @@ tc_gen_reloc (asection * seg ATTRIBUTE_UNUSED, fixS * fixp)
 	 because there can be multiple incarnations of the same label, with
 	 exactly the same name, in any given section and the linker will have
 	 no way to identify the correct one.  Instead we just have to hope
-	 that no relaxtion will occur between the local label and the other
+	 that no relaxation will occur between the local label and the other
 	 symbol in the expression.
 
 	 Similarly we have to compute differences between symbols in the .eh_frame
@@ -4346,7 +4594,7 @@ md_estimate_size_before_relax (fragS * fragP ATTRIBUTE_UNUSED,
     }
   else if (fragP->fr_symbol)
     {
-      /* Its got a segment, but its not ours.   Even if fr_symbol is in
+      /* It's got a segment, but it's not ours.   Even if fr_symbol is in
 	 an absolute segment, we don't know a displacement until we link
 	 object files. So it will always be long. This also applies to
 	 labels in a subsegment of current. Liker may relax it to short
@@ -4507,7 +4755,7 @@ md_convert_frag (bfd * abfd ATTRIBUTE_UNUSED,
       break;
 
     default:
-      as_fatal (_("internal inconsistency problem in %s:  %lx"),
+      as_fatal (_("internal inconsistency problem in %s: %lx"),
 		__FUNCTION__, (long) fragP->fr_subtype);
       break;
     }
@@ -4616,7 +4864,16 @@ void
 msp430_md_end (void)
 {
   if (check_for_nop)
-    as_warn ("assembly finished without a possibly needed NOP instruction");
+    {
+      if (gen_interrupt_nops)
+	{
+	  gen_nop ();
+	  if (warn_interrupt_nops)
+	    as_warn (INSERT_NOP_AT_EOF);
+	}
+      else if (warn_interrupt_nops)
+	as_warn (_(WARN_NOP_AT_EOF));
+    }
 
   bfd_elf_add_proc_attr_int (stdoutput, OFBA_MSPABI_Tag_ISA,
 			     target_is_430x () ? 2 : 1);

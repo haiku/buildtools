@@ -1,5 +1,5 @@
 /* ELF support for BFD.
-   Copyright (C) 1991-2017 Free Software Foundation, Inc.
+   Copyright (C) 1991-2019 Free Software Foundation, Inc.
 
    Written by Fred Fish @ Cygnus Support, from information published
    in "UNIX System V Release 4, Programmers Guide: ANSI C and
@@ -78,6 +78,7 @@
 
 #define ELFOSABI_C6000_ELFABI 64 /* Bare-metal TMS320C6000 */
 #define ELFOSABI_C6000_LINUX 65 /* Linux TMS320C6000 */
+#define ELFOSABI_ARM_FDPIC   65 /* ARM FDPIC */
 #define ELFOSABI_ARM	     97	/* ARM */
 #define ELFOSABI_STANDALONE 255	/* Standalone (embedded) application */
 
@@ -112,13 +113,15 @@
 #define EM_860		  7	/* Intel 80860 */
 #define EM_MIPS		  8	/* MIPS R3000 (officially, big-endian only) */
 #define EM_S370		  9	/* IBM System/370 */
-#define EM_MIPS_RS3_LE	 10	/* MIPS R3000 little-endian (Oct 4 1999 Draft) Deprecated */
+#define EM_MIPS_RS3_LE	 10	/* MIPS R3000 little-endian (Oct 4 1999 Draft).  Deprecated.  */
+#define EM_OLD_SPARCV9	 11	/* Old version of Sparc v9, from before the ABI.  Deprecated.  */
 #define EM_res011	 11	/* Reserved */
 #define EM_res012	 12	/* Reserved */
 #define EM_res013	 13	/* Reserved */
 #define EM_res014	 14	/* Reserved */
 #define EM_PARISC	 15	/* HPPA */
 #define EM_res016	 16	/* Reserved */
+#define EM_PPC_OLD	 17	/* Old version of PowerPC.  Deprecated.  */
 #define EM_VPP550	 17	/* Fujitsu VPP500 */
 #define EM_SPARC32PLUS	 18	/* Sun's "v8plus" */
 #define EM_960		 19	/* Intel 80960 */
@@ -198,10 +201,12 @@
 #define EM_OR1K		 92	/* OpenRISC 1000 32-bit embedded processor */
 #define EM_ARC_COMPACT	 93	/* ARC International ARCompact processor */
 #define EM_XTENSA	 94	/* Tensilica Xtensa Architecture */
+#define EM_SCORE_OLD	 95	/* Old Sunplus S+core7 backend magic number. Written in the absence of an ABI.  */
 #define EM_VIDEOCORE	 95	/* Alphamosaic VideoCore processor */
 #define EM_TMM_GPP	 96	/* Thompson Multimedia General Purpose Processor */
 #define EM_NS32K	 97	/* National Semiconductor 32000 series */
 #define EM_TPC		 98	/* Tenor Network TPC processor */
+#define EM_PJ_OLD	 99	/* Old value for picoJava.  Deprecated.  */
 #define EM_SNP1K	 99	/* Trebia SNP 1000 processor */
 #define EM_ST200	100	/* STMicroelectronics ST200 microcontroller */
 #define EM_IP2K		101	/* Ubicom IP2022 micro controller */
@@ -218,6 +223,7 @@
 #define EM_DXP		112	/* Icera Semiconductor Inc. Deep Execution Processor */
 #define EM_ALTERA_NIOS2	113	/* Altera Nios II soft-core processor */
 #define EM_CRX		114	/* National Semiconductor CRX */
+#define EM_CR16_OLD	115	/* Old, value for National Semiconductor CompactRISC.  Deprecated.  */
 #define EM_XGATE	115	/* Motorola XGATE embedded processor */
 #define EM_C166		116	/* Infineon C16x/XC16x processor */
 #define EM_M16C		117	/* Renesas M16C series microprocessors */
@@ -248,7 +254,7 @@
 #define EM_TI_C2000	141	/* Texas Instruments TMS320C2000 DSP family */
 #define EM_TI_C5500	142	/* Texas Instruments TMS320C55x DSP family */
 #define EM_res143	143	/* Reserved */
-#define EM_res144	144	/* Reserved */
+#define EM_TI_PRU	144	/* Texas Instruments Programmable Realtime Unit */
 #define EM_res145	145	/* Reserved */
 #define EM_res146	146	/* Reserved */
 #define EM_res147	147	/* Reserved */
@@ -331,6 +337,10 @@
 #define EM_MOXIE        223     /* Moxie processor family */
 #define EM_AMDGPU 	224 	/* AMD GPU architecture */
 #define EM_RISCV 	243 	/* RISC-V */
+#define EM_LANAI	244	/* Lanai 32-bit processor.  */
+#define EM_BPF		247	/* Linux BPF – in-kernel virtual machine.  */
+#define EM_NFP		250	/* Netronome Flow Processor.  */
+#define EM_CSKY		252	/* C-SKY processor family.  */
 
 /* If it is necessary to assign new unofficial EM_* values, please pick large
    random numbers (0x8523, 0xa7f2, etc.) to minimize the chances of collision
@@ -344,19 +354,6 @@
    unofficial e_machine number should eventually ask registry@sco.com for
    an officially blessed number to be added to the list above.	*/
 
-/* Old version of Sparc v9, from before the ABI;
-   This should be removed shortly.  */
-#define EM_OLD_SPARCV9		11
-
-/* Old version of PowerPC, this should be removed shortly. */
-#define EM_PPC_OLD		17
-
-/* picoJava */
-#define EM_PJ_OLD		99
-
-/* Old, unofficial value for National Semiconductor CompactRISC - CR16 */
-#define EM_CR16_OLD		115
-
 /* AVR magic number.  Written in the absense of an ABI.  */
 #define EM_AVR_OLD		0x1057
 
@@ -368,6 +365,12 @@
 
 /* FR30 magic number - no EABI available.  */
 #define EM_CYGNUS_FR30		0x3330
+
+/* Unofficial value for Web Assembly binaries, as used by LLVM.  */
+#define EM_WEBASSEMBLY		0x4157
+
+/* Freescale S12Z.   The Freescale toolchain generates elf files with this value.  */
+#define EM_S12Z               0x4DEF
 
 /* DLX magic number.  Written in the absense of an ABI.  */
 #define EM_DLX			0x5aa5
@@ -426,15 +429,16 @@
 /* Old, unofficial value for Moxie.  */
 #define EM_MOXIE_OLD            0xFEED
 
-/* Old Sunplus S+core7 backend magic number. Written in the absence of an ABI.  */
-#define EM_SCORE_OLD            95
-
 #define EM_MICROBLAZE_OLD	0xbaab	/* Old MicroBlaze */
 
-#define EM_ADAPTEVA_EPIPHANY   0x1223  /* Adapteva's Epiphany architecture.  */
+#define EM_ADAPTEVA_EPIPHANY	0x1223  /* Adapteva's Epiphany architecture.  */
 
 /* Old constant that might be in use by some software. */
 #define EM_OPENRISC		EM_OR1K
+
+/* C-SKY historically used 39, the same value as MCORE, from which the
+   architecture was derived.  */
+#define EM_CSKY_OLD		EM_MCORE
 
 /* See the above comment before you add a new EM_* value here.  */
 
@@ -465,6 +469,12 @@
 #define PT_SUNW_EH_FRAME PT_GNU_EH_FRAME      /* Solaris uses the same value */
 #define PT_GNU_STACK	(PT_LOOS + 0x474e551) /* Stack flags */
 #define PT_GNU_RELRO	(PT_LOOS + 0x474e552) /* Read-only after relocation */
+#define PT_GNU_PROPERTY	(PT_LOOS + 0x474e553) /* GNU property */
+
+/* Mbind segments */
+#define PT_GNU_MBIND_NUM 4096
+#define PT_GNU_MBIND_LO (PT_LOOS + 0x474e555)
+#define PT_GNU_MBIND_HI (PT_GNU_MBIND_LO + PT_GNU_MBIND_NUM - 1)
 
 /* Program segment permissions, in program header p_flags field.  */
 
@@ -494,7 +504,7 @@
 #define SHT_FINI_ARRAY	  15		/* Array of ptrs to finish functions */
 #define SHT_PREINIT_ARRAY 16		/* Array of ptrs to pre-init funcs */
 #define SHT_GROUP	  17		/* Section contains a section group */
-#define SHT_SYMTAB_SHNDX  18		/* Indicies for SHN_XINDEX entries */
+#define SHT_SYMTAB_SHNDX  18		/* Indices for SHN_XINDEX entries */
 
 #define SHT_LOOS	0x60000000	/* First of OS specific semantics */
 #define SHT_HIOS	0x6fffffff	/* Last of OS specific semantics */
@@ -537,6 +547,7 @@
 
 /* #define SHF_MASKOS	0x0F000000    *//* OS-specific semantics */
 #define SHF_MASKOS	0x0FF00000	/* New value, Oct 4, 1999 Draft */
+#define SHF_GNU_BUILD_NOTE    (1 << 20)	/* Section contains GNU BUILD ATTRIBUTE notes.  */
 #define SHF_MASKPROC	0xF0000000	/* Processor-specific semantics */
 
 /* This used to be implemented as a processor specific section flag.
@@ -547,6 +558,8 @@
 					   builds when those objects
 					   are not to be further
 					   relocated.  */
+
+#define SHF_GNU_MBIND	0x01000000	/* Mbind section.  */
 
 /* Compression types.  */
 #define ELFCOMPRESS_ZLIB   1		/* Compressed with zlib.  */
@@ -567,6 +580,32 @@
 #define NT_PPC_VMX	0x100		/* PowerPC Altivec/VMX registers */
 					/*   note name must be "LINUX".  */
 #define NT_PPC_VSX	0x102		/* PowerPC VSX registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TAR	0x103		/* PowerPC Target Address Register */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_PPR	0x104		/* PowerPC Program Priority Register */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_DSCR	0x105		/* PowerPC Data Stream Control Register */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_EBB	0x106		/* PowerPC Event Based Branch Registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_PMU	0x107		/* PowerPC Performance Monitor Registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_CGPR	0x108		/* PowerPC TM checkpointed GPR Registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_CFPR	0x109		/* PowerPC TM checkpointed FPR Registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_CVMX	0x10a		/* PowerPC TM checkpointed VMX Registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_CVSX	0x10b		/* PowerPC TM checkpointed VSX Registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_SPR	0x10c		/* PowerPC TM Special Purpose Registers */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_CTAR	0x10d		/* PowerPC TM checkpointed TAR */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_CPPR	0x10e		/* PowerPC TM checkpointed PPR */
+					/*   note name must be "LINUX".  */
+#define NT_PPC_TM_CDSCR	0x10f		/* PowerPC TM checkpointed Data SCR */
 					/*   note name must be "LINUX".  */
 #define NT_386_TLS	0x200		/* x86 TLS information */
 					/*   note name must be "LINUX".  */
@@ -596,6 +635,10 @@
 					/*   note name must be "LINUX".  */
 #define NT_S390_VXRS_HIGH	0x30a	/* S390 vector registers 16-31 */
 					/*   note name must be "LINUX".  */
+#define NT_S390_GS_CB	0x30b		/* s390 guarded storage registers */
+					/*   note name must be "LINUX".  */
+#define NT_S390_GS_BC	0x30c		/* s390 guarded storage broadcast control block */
+					/*   note name must be "LINUX".  */
 #define NT_ARM_VFP	0x400		/* ARM VFP registers */
 /* The following definitions should really use NT_AARCH_..., but defined
    this way for compatibility with Linux.  */
@@ -604,6 +647,8 @@
 #define NT_ARM_HW_BREAK	0x402		/* AArch hardware breakpoint registers */
 					/*   note name must be "LINUX".  */
 #define NT_ARM_HW_WATCH	0x403		/* AArch hardware watchpoint registers */
+					/*   note name must be "LINUX".  */
+#define NT_ARM_SVE	0x405		/* AArch SVE registers.  */
 					/*   note name must be "LINUX".  */
 #define NT_SIGINFO	0x53494749	/* Fields of siginfo_t.  */
 #define NT_FILE		0x46494c45	/* Description of mapped files.  */
@@ -633,6 +678,7 @@
 #define	NT_FREEBSD_PROCSTAT_OSREL	14	/* Procstat osreldate data. */
 #define	NT_FREEBSD_PROCSTAT_PSSTRINGS	15	/* Procstat ps_strings data. */
 #define	NT_FREEBSD_PROCSTAT_AUXV	16	/* Procstat auxv data. */
+#define	NT_FREEBSD_PTLWPINFO	17	/* Thread ptrace miscellaneous info. */
 
 /* Note segments for core files on NetBSD systems.  Note name
    must start with "NetBSD-CORE".  */
@@ -668,6 +714,130 @@
 #define NT_GNU_HWCAP		2	/* Used by ld.so and kernel vDSO.  */
 #define NT_GNU_BUILD_ID		3	/* Generated by ld --build-id.  */
 #define NT_GNU_GOLD_VERSION	4	/* Generated by gold.  */
+#define NT_GNU_PROPERTY_TYPE_0  5	/* Generated by gcc.  */
+
+#define NT_GNU_BUILD_ATTRIBUTE_OPEN	0x100
+#define NT_GNU_BUILD_ATTRIBUTE_FUNC	0x101
+
+#define GNU_BUILD_ATTRIBUTE_TYPE_NUMERIC	'*'
+#define GNU_BUILD_ATTRIBUTE_TYPE_STRING		'$'
+#define GNU_BUILD_ATTRIBUTE_TYPE_BOOL_TRUE	'+'
+#define GNU_BUILD_ATTRIBUTE_TYPE_BOOL_FALSE	'!'
+
+#define GNU_BUILD_ATTRIBUTE_VERSION	1
+#define GNU_BUILD_ATTRIBUTE_STACK_PROT	2
+#define GNU_BUILD_ATTRIBUTE_RELRO	3
+#define GNU_BUILD_ATTRIBUTE_STACK_SIZE	4
+#define GNU_BUILD_ATTRIBUTE_TOOL	5
+#define GNU_BUILD_ATTRIBUTE_ABI		6
+#define GNU_BUILD_ATTRIBUTE_PIC		7
+#define GNU_BUILD_ATTRIBUTE_SHORT_ENUM	8
+
+#define NOTE_GNU_PROPERTY_SECTION_NAME	".note.gnu.property"
+#define GNU_BUILD_ATTRS_SECTION_NAME	".gnu.build.attributes"
+
+/* Values used in GNU .note.gnu.property notes (NT_GNU_PROPERTY_TYPE_0).  */
+#define GNU_PROPERTY_STACK_SIZE			1
+#define GNU_PROPERTY_NO_COPY_ON_PROTECTED	2
+
+/* Processor-specific semantics, lo */
+#define GNU_PROPERTY_LOPROC  0xc0000000
+/* Processor-specific semantics, hi */
+#define GNU_PROPERTY_HIPROC  0xdfffffff
+/* Application-specific semantics, lo */
+#define GNU_PROPERTY_LOUSER  0xe0000000
+/* Application-specific semantics, hi */
+#define GNU_PROPERTY_HIUSER  0xffffffff
+
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_USED	0xc0000000
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_NEEDED	0xc0000001
+
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_486	(1U << 0)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_586	(1U << 1)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_686	(1U << 2)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_SSE	(1U << 3)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_SSE2	(1U << 4)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_SSE3	(1U << 5)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_SSSE3	(1U << 6)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_SSE4_1	(1U << 7)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_SSE4_2	(1U << 8)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX	(1U << 9)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX2	(1U << 10)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX512F	(1U << 11)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX512CD	(1U << 12)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX512ER	(1U << 13)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX512PF	(1U << 14)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX512VL	(1U << 15)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX512DQ	(1U << 16)
+#define GNU_PROPERTY_X86_COMPAT_ISA_1_AVX512BW	(1U << 17)
+
+/* A 4-byte unsigned integer property: A bit is set if it is set in all
+   relocatable inputs.  */
+#define GNU_PROPERTY_X86_UINT32_AND_LO		0xc0000002
+#define GNU_PROPERTY_X86_UINT32_AND_HI		0xc0007fff
+
+/* A 4-byte unsigned integer property: A bit is set if it is set in any
+   relocatable inputs.  */
+#define GNU_PROPERTY_X86_UINT32_OR_LO		0xc0008000
+#define GNU_PROPERTY_X86_UINT32_OR_HI		0xc000ffff
+
+/* A 4-byte unsigned integer property: A bit is set if it is set in any
+   relocatable inputs and the property is present in all relocatable
+   inputs.  */
+#define GNU_PROPERTY_X86_UINT32_OR_AND_LO	0xc0010000
+#define GNU_PROPERTY_X86_UINT32_OR_AND_HI	0xc0017fff
+
+#define GNU_PROPERTY_X86_FEATURE_1_AND \
+  (GNU_PROPERTY_X86_UINT32_AND_LO + 0)
+
+#define GNU_PROPERTY_X86_ISA_1_NEEDED \
+  (GNU_PROPERTY_X86_UINT32_OR_LO + 0)
+#define GNU_PROPERTY_X86_FEATURE_2_NEEDED \
+  (GNU_PROPERTY_X86_UINT32_OR_LO + 1)
+
+#define GNU_PROPERTY_X86_ISA_1_USED \
+  (GNU_PROPERTY_X86_UINT32_OR_AND_LO + 0)
+#define GNU_PROPERTY_X86_FEATURE_2_USED \
+  (GNU_PROPERTY_X86_UINT32_OR_AND_LO + 1)
+
+#define GNU_PROPERTY_X86_FEATURE_1_IBT		(1U << 0)
+#define GNU_PROPERTY_X86_FEATURE_1_SHSTK	(1U << 1)
+
+#define GNU_PROPERTY_X86_ISA_1_CMOV		(1U << 0)
+#define GNU_PROPERTY_X86_ISA_1_SSE		(1U << 1)
+#define GNU_PROPERTY_X86_ISA_1_SSE2		(1U << 2)
+#define GNU_PROPERTY_X86_ISA_1_SSE3		(1U << 3)
+#define GNU_PROPERTY_X86_ISA_1_SSSE3		(1U << 4)
+#define GNU_PROPERTY_X86_ISA_1_SSE4_1		(1U << 5)
+#define GNU_PROPERTY_X86_ISA_1_SSE4_2		(1U << 6)
+#define GNU_PROPERTY_X86_ISA_1_AVX		(1U << 7)
+#define GNU_PROPERTY_X86_ISA_1_AVX2		(1U << 8)
+#define GNU_PROPERTY_X86_ISA_1_FMA		(1U << 9)
+#define GNU_PROPERTY_X86_ISA_1_AVX512F		(1U << 10)
+#define GNU_PROPERTY_X86_ISA_1_AVX512CD		(1U << 11)
+#define GNU_PROPERTY_X86_ISA_1_AVX512ER		(1U << 12)
+#define GNU_PROPERTY_X86_ISA_1_AVX512PF		(1U << 13)
+#define GNU_PROPERTY_X86_ISA_1_AVX512VL		(1U << 14)
+#define GNU_PROPERTY_X86_ISA_1_AVX512DQ		(1U << 15)
+#define GNU_PROPERTY_X86_ISA_1_AVX512BW		(1U << 16)
+#define GNU_PROPERTY_X86_ISA_1_AVX512_4FMAPS	(1U << 17)
+#define GNU_PROPERTY_X86_ISA_1_AVX512_4VNNIW	(1U << 18)
+#define GNU_PROPERTY_X86_ISA_1_AVX512_BITALG	(1U << 19)
+#define GNU_PROPERTY_X86_ISA_1_AVX512_IFMA	(1U << 20)
+#define GNU_PROPERTY_X86_ISA_1_AVX512_VBMI	(1U << 21)
+#define GNU_PROPERTY_X86_ISA_1_AVX512_VBMI2	(1U << 22)
+#define GNU_PROPERTY_X86_ISA_1_AVX512_VNNI	(1U << 23)
+
+#define GNU_PROPERTY_X86_FEATURE_2_X86		(1U << 0)
+#define GNU_PROPERTY_X86_FEATURE_2_X87		(1U << 1)
+#define GNU_PROPERTY_X86_FEATURE_2_MMX		(1U << 2)
+#define GNU_PROPERTY_X86_FEATURE_2_XMM		(1U << 3)
+#define GNU_PROPERTY_X86_FEATURE_2_YMM		(1U << 4)
+#define GNU_PROPERTY_X86_FEATURE_2_ZMM		(1U << 5)
+#define GNU_PROPERTY_X86_FEATURE_2_FXSR		(1U << 6)
+#define GNU_PROPERTY_X86_FEATURE_2_XSAVE	(1U << 7)
+#define GNU_PROPERTY_X86_FEATURE_2_XSAVEOPT	(1U << 8)
+#define GNU_PROPERTY_X86_FEATURE_2_XSAVEC	(1U << 9)
 
 /* Values used in GNU .note.ABI-tag notes (NT_GNU_ABI_TAG).  */
 #define GNU_ABI_TAG_LINUX	0
@@ -911,6 +1081,9 @@
 #define	DF_1_SINGLETON	0x02000000
 #define	DF_1_STUB	0x04000000
 #define	DF_1_PIE	0x08000000
+#define	DF_1_KMOD	0x10000000
+#define	DF_1_WEAKFILTER	0x20000000
+#define	DF_1_NOCOMMON	0x40000000
 
 /* Flag values for the DT_FLAGS entry.	*/
 #define DF_ORIGIN	(1 << 0)
@@ -1049,6 +1222,9 @@
 #define AT_FREEBSD_PAGESIZESLEN 21      /* Number of pagesizes. */
 #define AT_FREEBSD_TIMEKEEP     22      /* Pointer to timehands. */
 #define AT_FREEBSD_STACKPROT    23      /* Initial stack protection. */
+#define AT_FREEBSD_EHDRFLAGS    24      /* e_flags field from ELF header. */
+#define AT_FREEBSD_HWCAP        25      /* CPU feature flags. */
+#define AT_FREEBSD_HWCAP2       26      /* CPU feature flags 2. */
 
 #define AT_SUN_UID      2000    /* Effective user ID.  */
 #define AT_SUN_RUID     2001    /* Real user ID.  */
@@ -1059,9 +1235,9 @@
 #define AT_SUN_LDNAME   2006    /* String giving name of dynamic linker.  */
 #define AT_SUN_LPAGESZ  2007    /* Large pagesize.   */
 #define AT_SUN_PLATFORM 2008    /* Platform name string.  */
-#undef AT_SUN_HWCAP
-#define AT_SUN_HWCAP    2009	/* Machine dependent hints about
+#define AT_SUN_CAP_HW1	2009	/* Machine dependent hints about
 				   processor capabilities.  */
+#define AT_SUN_HWCAP	AT_SUN_CAP_HW1 /* For backward compat only.  */
 #define AT_SUN_IFLUSH   2010    /* Should flush icache? */
 #define AT_SUN_CPU      2011    /* CPU name string.  */
 #define AT_SUN_EMUL_ENTRY 2012	/* COFF entry point address.  */
@@ -1070,6 +1246,12 @@
 #define AT_SUN_MMU      2015    /* String for name of MMU module.   */
 #define AT_SUN_LDDATA   2016    /* Dynamic linker's data segment address.  */
 #define AT_SUN_AUXFLAGS	2017	/* AF_SUN_ flags passed from the kernel.  */
-
+#define	AT_SUN_EMULATOR	2018	/* Name of emulation binary for runtime
+				   linker.  */
+#define	AT_SUN_BRANDNAME 2019	/* Name of brand library.  */
+#define	AT_SUN_BRAND_AUX1 2020	/* Aux vectors for brand modules.  */
+#define	AT_SUN_BRAND_AUX2 2021
+#define	AT_SUN_BRAND_AUX3 2022
+#define	AT_SUN_CAP_HW2	2023	/* Extension of AT_SUN_CAP_HW1.  */
 
 #endif /* _ELF_COMMON_H */

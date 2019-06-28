@@ -1,5 +1,5 @@
 /* SPARC ELF specific backend routines.
-   Copyright (C) 2005-2017 Free Software Foundation, Inc.
+   Copyright (C) 2005-2019 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -45,6 +45,9 @@ struct _bfd_sparc_elf_app_reg
 struct _bfd_sparc_elf_link_hash_table
 {
   struct elf_link_hash_table elf;
+
+  /* Short-cut to get to dynamic linker sections.  */
+  asection *interp;
 
   union
   {
@@ -94,10 +97,10 @@ extern reloc_howto_type *_bfd_sparc_elf_reloc_type_lookup
   (bfd *, bfd_reloc_code_real_type);
 extern reloc_howto_type *_bfd_sparc_elf_reloc_name_lookup
   (bfd *, const char *);
-extern void _bfd_sparc_elf_info_to_howto
+extern bfd_boolean _bfd_sparc_elf_info_to_howto
   (bfd *, arelent *, Elf_Internal_Rela *);
 extern reloc_howto_type *_bfd_sparc_elf_info_to_howto_ptr
-  (unsigned int);
+  (bfd*, unsigned int);
 extern bfd_boolean _bfd_sparc_elf_mkobject
   (bfd *);
 extern struct bfd_link_hash_table *_bfd_sparc_elf_link_hash_table_create
@@ -115,9 +118,6 @@ extern asection *_bfd_sparc_elf_gc_mark_hook
   (asection *, struct bfd_link_info *,
    Elf_Internal_Rela *, struct elf_link_hash_entry *,
    Elf_Internal_Sym *);
-extern bfd_boolean _bfd_sparc_elf_gc_sweep_hook
-  (bfd *, struct bfd_link_info *,
-   asection *, const Elf_Internal_Rela *);
 extern bfd_boolean _bfd_sparc_elf_adjust_dynamic_symbol
   (struct bfd_link_info *, struct elf_link_hash_entry *);
 extern bfd_boolean _bfd_sparc_elf_omit_section_dynsym
@@ -136,6 +136,8 @@ extern bfd_boolean _bfd_sparc_elf_finish_dynamic_symbol
    Elf_Internal_Sym *sym);
 extern bfd_boolean _bfd_sparc_elf_finish_dynamic_sections
   (bfd *, struct bfd_link_info *);
+extern bfd_boolean _bfd_sparc_elf_fixup_symbol
+  (struct bfd_link_info *, struct elf_link_hash_entry *);
 extern bfd_boolean _bfd_sparc_elf_object_p
   (bfd *);
 extern bfd_vma _bfd_sparc_elf_plt_sym_val

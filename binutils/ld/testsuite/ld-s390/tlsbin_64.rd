@@ -22,6 +22,7 @@ Section Headers:
  +\[[ 0-9]+\] .tbss +NOBITS .* 0+40 00 WAT +0 +0 +1
  +\[[ 0-9]+\] .dynamic +DYNAMIC .*
  +\[[ 0-9]+\] .got +PROGBITS .*
+#...
  +\[[ 0-9]+\] .symtab .*
  +\[[ 0-9]+\] .strtab .*
  +\[[ 0-9]+\] .shstrtab .*
@@ -34,7 +35,7 @@ There are [0-9]+ program headers, starting at offset [0-9]+
 
 Program Headers:
  +Type +Offset +VirtAddr +PhysAddr +FileSiz +MemSiz +Flg Align
- +PHDR +0x0+40 0x0+1000040 0x0+1000040 0x0+150 0x0+150 R E 0x8
+ +PHDR +0x0+40 0x0+1000040 0x0+1000040 0x0+150 0x0+150 R +0x8
  +INTERP +0x0+190 0x0+1000190 0x0+1000190 0x0+f 0x0+f R +0x1
 .*Requesting program interpreter.*
  +LOAD .* R E 0x1000
@@ -58,7 +59,7 @@ Relocation section '.rela.dyn' at offset 0x[0-9a-f]+ contains 4 entries:
 [0-9a-f ]+R_390_TLS_TPOFF +0+ sG6 \+ 0
 [0-9a-f ]+R_390_TLS_TPOFF +0+ sG1 \+ 0
 
-Relocation section '.rela.plt' at offset 0x[0-9a-f]+ contains 1 entries:
+Relocation section '.rela.plt' at offset 0x[0-9a-f]+ contains 1 entry:
  +Offset +Info +Type +Symbol's Value +Symbol's Name \+ Addend
 [0-9a-f ]+R_390_JMP_SLOT[0-9a-f ]+__tls_get_offset \+ 0
 
@@ -68,11 +69,8 @@ Symbol table '\.dynsym' contains [0-9]+ entries:
 .* TLS +GLOBAL +DEFAULT +UND sG3
 .* TLS +GLOBAL +DEFAULT +UND sG2
 .* FUNC +GLOBAL +DEFAULT +UND __tls_get_offset
-.* NOTYPE +GLOBAL +DEFAULT +12 __bss_start
 .* TLS +GLOBAL +DEFAULT +UND sG6
 .* TLS +GLOBAL +DEFAULT +UND sG1
-.* NOTYPE +GLOBAL +DEFAULT +12 _edata
-.* NOTYPE +GLOBAL +DEFAULT +12 _end
 
 Symbol table '\.symtab' contains [0-9]+ entries:
  +Num: +Value +Size +Type +Bind +Vis +Ndx +Name
@@ -89,6 +87,7 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* SECTION +LOCAL +DEFAULT +10 
 .* SECTION +LOCAL +DEFAULT +11 
 .* SECTION +LOCAL +DEFAULT +12 
+#...
 .* FILE +LOCAL +DEFAULT +ABS .*
 .* TLS +LOCAL +DEFAULT +9 sl1
 .* TLS +LOCAL +DEFAULT +9 sl2
@@ -109,7 +108,7 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* TLS +LOCAL +DEFAULT +10 bl8
 .* FILE +LOCAL +DEFAULT +ABS .*
 .* OBJECT +LOCAL +DEFAULT +11 _DYNAMIC
-.* OBJECT +LOCAL +DEFAULT +12 _GLOBAL_OFFSET_TABLE_
+.* OBJECT +LOCAL +DEFAULT +1. _GLOBAL_OFFSET_TABLE_
 .* TLS +GLOBAL +DEFAULT +UND sG3
 .* TLS +GLOBAL +DEFAULT +9 sg8
 .* TLS +GLOBAL +DEFAULT +10 bg8
@@ -129,7 +128,7 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* TLS +GLOBAL +HIDDEN +9 sh4
 .* TLS +GLOBAL +DEFAULT +10 bg7
 .* TLS +GLOBAL +HIDDEN +9 sh5
-.* NOTYPE +GLOBAL +DEFAULT +12 __bss_start
+.* NOTYPE +GLOBAL +DEFAULT +1. __bss_start
 .* TLS +GLOBAL +DEFAULT +UND sG6
 .* FUNC +GLOBAL +DEFAULT +8 fn2
 .* TLS +GLOBAL +DEFAULT +9 sg2
@@ -137,8 +136,8 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* TLS +GLOBAL +HIDDEN +9 sh1
 .* TLS +GLOBAL +DEFAULT +9 sg6
 .* TLS +GLOBAL +DEFAULT +9 sg7
-.* NOTYPE +GLOBAL +DEFAULT +12 _edata
-.* NOTYPE +GLOBAL +DEFAULT +12 _end
+.* NOTYPE +GLOBAL +DEFAULT +1. _edata
+.* NOTYPE +GLOBAL +DEFAULT +1. _end
 .* TLS +GLOBAL +HIDDEN +9 sh2
 .* TLS +GLOBAL +HIDDEN +9 sh6
 .* TLS +GLOBAL +DEFAULT +10 bg2

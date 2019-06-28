@@ -1,5 +1,5 @@
 /* ldlang.h - linker command language support
-   Copyright (C) 1991-2017 Free Software Foundation, Inc.
+   Copyright (C) 1991-2019 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -88,6 +88,7 @@ enum statement_enum
 
 typedef struct lang_statement_header_struct
 {
+  /* Next pointer for statement_list statement list.  */
   union lang_statement_union *next;
   enum statement_enum type;
 } lang_statement_header_type;
@@ -143,6 +144,8 @@ typedef struct lang_output_section_statement_struct
   fill_type *fill;
   union etree_union *addr_tree;
   union etree_union *load_base;
+  union etree_union *section_alignment;
+  union etree_union *subsection_alignment;
 
   /* If non-null, an expression to evaluate after setting the section's
      size.  The expression is evaluated inside REGION (above) with '.'
@@ -153,8 +156,6 @@ typedef struct lang_output_section_statement_struct
   lang_output_section_phdr_list *phdrs;
 
   unsigned int block_value;
-  int subsection_alignment;	/* Alignment of components.  */
-  int section_alignment;	/* Alignment of start of section.  */
   int constraint;
   flagword flags;
   enum section_type sectype;
@@ -306,11 +307,10 @@ typedef struct lang_input_statement_struct
 
   struct flag_info *section_flag_list;
 
-  /* Point to the next file - whatever it is, wanders up and down
-     archives */
+  /* Next pointer for file_chain statement list.  */
   union lang_statement_union *next;
 
-  /* Point to the next file, but skips archive contents.  */
+  /* Next pointer for input_file_chain statement list.  */
   union lang_statement_union *next_real_file;
 
   const char *target;
@@ -582,9 +582,9 @@ extern asection *section_for_dot
 
 #define LANG_FOR_EACH_INPUT_STATEMENT(statement)			\
   lang_input_statement_type *statement;					\
-  for (statement = (lang_input_statement_type *) file_chain.head;	\
-       statement != (lang_input_statement_type *) NULL;			\
-       statement = (lang_input_statement_type *) statement->next)	\
+  for (statement = &file_chain.head->input_statement;			\
+       statement != NULL;						\
+       statement = &statement->next->input_statement)
 
 #define lang_output_section_find(NAME) \
   lang_output_section_statement_lookup (NAME, 0, FALSE)

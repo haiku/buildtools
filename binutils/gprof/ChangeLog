@@ -1,22 +1,32 @@
-2017-07-25  Tristan Gingold  <gingold@adacore.com>
+2019-02-02  Nick Clifton  <nickc@redhat.com>
+
+	2.32 Release
+	* configure: Regenerate.
+
+2019-01-21  Nick Clifton  <nickc@redhat.com>
+
+	* po/tr.po: Updated Turkish translation.
+
+2019-01-19  Nick Clifton  <nickc@redhat.com>
+
+	* configure: Regenerate.
+	* po/gprof.pot: Regenerate.
+
+2018-06-24  Nick Clifton  <nickc@redhat.com>
+
+	2.32 branch created.
+
+2019-01-09  Andrew Paprocki  <andrew@ishiboo.com>
 
 	* configure: Regenerate.
 
-2017-03-02  Tristan Gingold  <gingold@adacore.com>
-
-	* configure: Regenerate.
-
-2017-03-02  Tristan Gingold  <gingold@adacore.com>
-
-	* configure: Regenerate.
-
-2017-01-02  Alan Modra  <amodra@gmail.com>
+2019-01-01  Alan Modra  <amodra@gmail.com>
 
 	Update year range in copyright notice of all files.
 
-For older changes see ChangeLog-2016
+For older changes see ChangeLog-2018
 
-Copyright (C) 2017 Free Software Foundation, Inc.
+Copyright (C) 2019 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

@@ -1,5 +1,5 @@
 /* tc-z8k.c -- Assemble code for the Zilog Z800n
-   Copyright (C) 1992-2017 Free Software Foundation, Inc.
+   Copyright (C) 1992-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -1124,7 +1124,7 @@ build_bytes (opcode_entry_type *this_try, struct z8k_op *operand ATTRIBUTE_UNUSE
 	case CLASS_REG_WORD:
 	case CLASS_REG_LONG:
 	case CLASS_REG_QUAD:
-	  /* Insert bit mattern of right reg.  */
+	  /* Insert bit pattern of right reg.  */
 	  *output_ptr++ = reg[c & 0xf];
 	  break;
 	case CLASS_DISP:

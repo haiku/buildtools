@@ -1,5 +1,5 @@
 /* tc-alpha.c - Processor-specific code for the DEC Alpha AXP CPU.
-   Copyright (C) 1989-2017 Free Software Foundation, Inc.
+   Copyright (C) 1989-2019 Free Software Foundation, Inc.
    Contributed by Carnegie Mellon University, 1993.
    Written by Alessandro Forin, based on earlier gas-1.38 target CPU files.
    Modified by Ken Raeburn for gas-2.x and ECOFF support.
@@ -49,7 +49,6 @@
 
 #include "as.h"
 #include "subsegs.h"
-#include "struc-symbol.h"
 #include "ecoff.h"
 
 #include "opcode/alpha.h"
@@ -706,7 +705,7 @@ alpha_adjust_relocs (bfd *abfd ATTRIBUTE_UNUSED,
      present.  Not implemented.
 
      Also suppress the optimization if the !literals/!lituses are spread
-     in different segments.  This can happen with "intersting" uses of
+     in different segments.  This can happen with "interesting" uses of
      inline assembly; examples are present in the Linux kernel semaphores.  */
 
   for (fixp = seginfo->fix_root; fixp; fixp = next)
@@ -3369,7 +3368,7 @@ assemble_tokens (const char *opname,
 #ifdef OBJ_EVAX
 
 /* Add sym+addend to link pool.
-   Return offset from curent procedure value (pv) to entry in link pool.
+   Return offset from current procedure value (pv) to entry in link pool.
 
    Add new fixup only if offset isn't 16bit.  */
 
@@ -3400,7 +3399,9 @@ add_to_link_pool (symbolS *sym, offsetT addend)
 	    && fixp->fx_offset == (valueT)addend
 	    && fixp->tc_fix_data.info
 	    && fixp->tc_fix_data.info->sym
-	    && fixp->tc_fix_data.info->sym->sy_value.X_op_symbol == basesym)
+	    && symbol_symbolS (fixp->tc_fix_data.info->sym)
+	    && (symbol_get_value_expression (fixp->tc_fix_data.info->sym)
+		->X_op_symbol == basesym))
 	  return fixp->tc_fix_data.info->sym;
       }
 
@@ -3628,7 +3629,7 @@ s_alpha_comm (int ignore ATTRIBUTE_UNUSED)
     }
 
 #ifndef OBJ_EVAX
-  know (symbolP->sy_frag == &zero_address_frag);
+  know (symbol_get_frag (symbolP) == &zero_address_frag);
 #endif
   demand_empty_rest_of_line ();
 }
@@ -4882,7 +4883,7 @@ s_alpha_gprel32 (int ignore ATTRIBUTE_UNUSED)
 }
 
 /* Handle floating point allocation pseudo-ops.  This is like the
-   generic vresion, but it makes sure the current label, if any, is
+   generic version, but it makes sure the current label, if any, is
    correctly aligned.  */
 
 static void
@@ -5769,6 +5770,12 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg)
       md_number_to_chars (fixpos, value, 2);
       break;
 
+    case BFD_RELOC_8:
+      if (fixP->fx_pcrel)
+	fixP->fx_r_type = BFD_RELOC_8_PCREL;
+      size = 1;
+      goto do_reloc_xx;
+
     case BFD_RELOC_16:
       if (fixP->fx_pcrel)
 	fixP->fx_r_type = BFD_RELOC_16_PCREL;
@@ -5871,7 +5878,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg)
 	  return;
 	}
 
-      if ((abs (value) >> 2) & ~0xfffff)
+      if (value + (1u << 22) >= (1u << 23))
 	goto done;
       else
 	{
@@ -5890,7 +5897,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg)
 	  return;
 	}
 
-      if ((abs (value)) & ~0x7fff)
+      if (value + (1u << 15) >= (1u << 16))
 	goto done;
       else
 	{
@@ -5910,7 +5917,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg)
 	  return;
 	}
 
-      if ((abs (value) >> 2) & ~0xfffff)
+      if (value + (1u << 22) >= (1u << 23))
 	{
 	  /* Out of range.  */
 	  if (fixP->fx_r_type == BFD_RELOC_ALPHA_BOH)

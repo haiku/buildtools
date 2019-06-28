@@ -1,5 +1,5 @@
 /* od-macho.c -- dump information about an Mach-O object file.
-   Copyright (C) 2011-2017 Free Software Foundation, Inc.
+   Copyright (C) 2011-2019 Free Software Foundation, Inc.
    Written by Tristan Gingold, Adacore.
 
    This file is part of GNU Binutils.
@@ -106,7 +106,6 @@ static const bfd_mach_o_xlat_name bfd_mach_o_cpu_name[] =
   { "arm", BFD_MACH_O_CPU_TYPE_ARM },
   { "mc88000", BFD_MACH_O_CPU_TYPE_MC88000 },
   { "sparc", BFD_MACH_O_CPU_TYPE_SPARC },
-  { "i860", BFD_MACH_O_CPU_TYPE_I860 },
   { "alpha", BFD_MACH_O_CPU_TYPE_ALPHA },
   { "powerpc", BFD_MACH_O_CPU_TYPE_POWERPC },
   { "powerpc_64", BFD_MACH_O_CPU_TYPE_POWERPC_64 },
@@ -210,6 +209,10 @@ static const bfd_mach_o_xlat_name bfd_mach_o_load_command_name[] =
   { "encryption_info_64", BFD_MACH_O_LC_ENCRYPTION_INFO_64},
   { "linker_options", BFD_MACH_O_LC_LINKER_OPTIONS},
   { "linker_optimization_hint", BFD_MACH_O_LC_LINKER_OPTIMIZATION_HINT},
+  { "version_min_tvos", BFD_MACH_O_LC_VERSION_MIN_TVOS},
+  { "version_min_watchos", BFD_MACH_O_LC_VERSION_MIN_WATCHOS},
+  { "note", BFD_MACH_O_LC_NOTE},
+  { "build_version", BFD_MACH_O_LC_BUILD_VERSION},
   { NULL, 0}
 };
 
@@ -230,7 +233,25 @@ static const bfd_mach_o_xlat_name bfd_mach_o_thread_x86_name[] =
   { "state_none", BFD_MACH_O_x86_THREAD_STATE_NONE},
   { NULL, 0 }
 };
-
+
+static const bfd_mach_o_xlat_name bfd_mach_o_platform_name[] =
+{
+  { "macos", BFD_MACH_O_PLATFORM_MACOS},
+  { "ios", BFD_MACH_O_PLATFORM_IOS},
+  { "tvos", BFD_MACH_O_PLATFORM_TVOS},
+  { "watchos", BFD_MACH_O_PLATFORM_WATCHOS},
+  { "bridgeos", BFD_MACH_O_PLATFORM_BRIDGEOS},
+  { NULL, 0 }
+};
+
+static const bfd_mach_o_xlat_name bfd_mach_o_tool_name[] =
+{
+  { "clang", BFD_MACH_O_TOOL_CLANG},
+  { "swift", BFD_MACH_O_TOOL_SWIFT},
+  { "ld", BFD_MACH_O_TOOL_LD},
+  { NULL, 0 }
+};
+
 static void
 bfd_mach_o_print_flags (const bfd_mach_o_xlat_name *table,
                         unsigned long val)
@@ -1074,7 +1095,10 @@ dump_code_signature_superblob (bfd *abfd ATTRIBUTE_UNUSED,
       return;
     }
   count = bfd_getb32 (buf + 8);
-  printf (_("  %u index entries:\n"), count);
+  printf (ngettext ("  %u index entry:\n",
+		    "  %u index entries:\n",
+		    count),
+	  count);
   if (len < 12 + 8 * count)
     {
       printf (_("  [bad block length]\n"));
@@ -1437,6 +1461,68 @@ dump_twolevel_hints (bfd *abfd, bfd_mach_o_twolevel_hints_command *cmd)
 }
 
 static void
+printf_version (uint32_t version)
+{
+  uint32_t maj, min, upd;
+
+  maj = (version >> 16) & 0xffff;
+  min = (version >> 8) & 0xff;
+  upd = version & 0xff;
+
+  printf ("%u.%u.%u", maj, min, upd);
+}
+
+static void
+dump_build_version (bfd *abfd, bfd_mach_o_load_command *cmd)
+{
+  const char *platform_name;
+  size_t tools_len, tools_offset;
+  bfd_mach_o_build_version_tool *tools, *tool;
+  bfd_mach_o_build_version_command *ver = &cmd->command.build_version;
+  uint32_t i;
+
+  platform_name = bfd_mach_o_get_name_or_null
+    (bfd_mach_o_platform_name, ver->platform);
+  if (platform_name == NULL)
+    printf ("   platform: 0x%08x\n", ver->platform);
+  else
+    printf ("   platform: %s\n", platform_name);
+  printf ("   os:       ");
+  printf_version (ver->minos);
+  printf ("\n   sdk:      ");
+  printf_version (ver->sdk);
+  printf ("\n   ntools:   %u\n", ver->ntools);
+
+  tools_len = sizeof (bfd_mach_o_build_version_tool) * ver->ntools;
+  tools_offset = cmd->offset + cmd->len - tools_len;
+
+  tools = xmalloc (tools_len);
+  if (bfd_seek (abfd, tools_offset, SEEK_SET) != 0
+      || bfd_bread (tools, tools_len, abfd) != tools_len)
+    {
+      non_fatal (_("cannot read build tools"));
+      free (tools);
+      return;
+    }
+
+  for (i = 0, tool = tools; i < ver->ntools; i++, tool++)
+    {
+      const char * tool_name;
+
+      tool_name = bfd_mach_o_get_name_or_null
+	(bfd_mach_o_tool_name, tool->tool);
+      if (tool_name == NULL)
+	printf ("   tool:     0x%08x\n", tool->tool);
+      else
+	printf ("   tool:     %s\n", tool_name);
+      printf ("   version:  ");
+      printf_version (tool->version);
+      printf ("\n");
+    }
+  free (tools);
+}
+
+static void
 dump_load_command (bfd *abfd, bfd_mach_o_load_command *cmd,
                    unsigned int idx, bfd_boolean verbose)
 {
@@ -1580,10 +1666,16 @@ dump_load_command (bfd *abfd, bfd_mach_o_load_command *cmd,
       break;
     case BFD_MACH_O_LC_VERSION_MIN_MACOSX:
     case BFD_MACH_O_LC_VERSION_MIN_IPHONEOS:
+    case BFD_MACH_O_LC_VERSION_MIN_WATCHOS:
+    case BFD_MACH_O_LC_VERSION_MIN_TVOS:
       {
         bfd_mach_o_version_min_command *ver = &cmd->command.version_min;
 
-        printf ("    %u.%u.%u\n", ver->rel, ver->maj, ver->min);
+        printf ("   os: ");
+        printf_version (ver->version);
+        printf ("\n   sdk: ");
+        printf_version (ver->sdk);
+        printf ("\n");
       }
       break;
     case BFD_MACH_O_LC_SOURCE_VERSION:
@@ -1641,6 +1733,21 @@ dump_load_command (bfd *abfd, bfd_mach_o_load_command *cmd,
 	printf ("\n");
         break;
       }
+    case BFD_MACH_O_LC_NOTE:
+      {
+        bfd_mach_o_note_command *note = &cmd->command.note;
+        printf ("   data owner: %.16s\n", note->data_owner);
+        printf ("   offset:     ");
+	printf_uint64 (note->offset);
+        printf ("\n"
+                "   size:       ");
+	printf_uint64 (note->size);
+	printf ("\n");
+        break;
+      }
+    case BFD_MACH_O_LC_BUILD_VERSION:
+      dump_build_version (abfd, cmd);
+      break;
     default:
       break;
     }
@@ -1686,7 +1793,7 @@ dump_unwind_encoding_x86 (unsigned int encoding, unsigned int sz,
 	unsigned int regs;
 	char pfx = sz == 8 ? 'R' : 'E';
 
-	regs = encoding & MACH_O_UNWIND_X86_64_RBP_FRAME_REGSITERS;
+	regs = encoding & MACH_O_UNWIND_X86_64_RBP_FRAME_REGISTERS;
 	printf (" %cSP frame", pfx);
 	if (regs != 0)
 	  {
@@ -2203,9 +2310,9 @@ mach_o_dump (bfd *abfd)
 /* Vector for Mach-O.  */
 
 const struct objdump_private_desc objdump_private_desc_mach_o =
-  {
-    mach_o_help,
-    mach_o_filter,
-    mach_o_dump,
-    options
-  };
+{
+ mach_o_help,
+ mach_o_filter,
+ mach_o_dump,
+ options
+};

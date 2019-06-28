@@ -1,5 +1,5 @@
 /* resbin.c -- manipulate the Windows binary resource format.
-   Copyright (C) 1997-2017 Free Software Foundation, Inc.
+   Copyright (C) 1997-2019 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Rewritten by Kai Tietz, Onevision.
 
@@ -574,8 +574,6 @@ bin_to_res_dialog (windres_bfd *wrbfd, const bfd_byte *data, rc_uint_type length
 	dc->data = NULL;
       else
 	{
-	  off = (off + 3) &~ 3;
-
 	  if (length < off + datalen)
 	    toosmall (_("dialog control data"));
 
@@ -1582,7 +1580,6 @@ res_to_bin_dialog (windres_bfd *wrbfd, rc_uint_type off, const rc_dialog *dialog
 	{
 	  rc_uint_type saved_off = off;
 	  rc_uint_type old_off;
-	  off += (4 - ((off - off_delta) & 3)) & 3;
 
 	  old_off = off;
 	  off = res_to_bin_rcdata (wrbfd, off, dc->data);
@@ -1590,10 +1587,10 @@ res_to_bin_dialog (windres_bfd *wrbfd, rc_uint_type off, const rc_dialog *dialog
 	    old_off = off = saved_off;
 	  if (wrbfd)
 	    windres_put_16 (wrbfd, dc_rclen, off - old_off);
-	    }
+	}
       if (wrbfd)
 	set_windres_bfd_content (wrbfd, dc_rclen, marker, 2);
-	}
+    }
 
   if (wrbfd)
     {

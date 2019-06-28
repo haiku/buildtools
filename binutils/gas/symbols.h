@@ -1,5 +1,5 @@
 /* symbols.h -
-   Copyright (C) 1987-2017 Free Software Foundation, Inc.
+   Copyright (C) 1987-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -146,7 +146,7 @@ struct broken_word
     struct broken_word *use_jump;
   };
 extern struct broken_word *broken_words;
-#endif /* ndef WORKING_DOT_WORD */
+#endif /* ifdef WORKING_DOT_WORD */
 
 /*
  * Current means for getting from symbols to segments and vice verse.
@@ -167,6 +167,8 @@ void symbol_remove (symbolS * symbolP, symbolS ** rootP,
 		    symbolS ** lastP);
 
 extern symbolS *symbol_previous (symbolS *);
+
+extern int symbol_on_chain (symbolS *s, symbolS *rootPP, symbolS *lastPP);
 
 void verify_symbol_chain (symbolS * rootP, symbolS * lastP);
 
@@ -200,6 +202,7 @@ extern int symbol_equated_p (symbolS *);
 extern int symbol_equated_reloc_p (symbolS *);
 extern int symbol_constant_p (symbolS *);
 extern int symbol_shadow_p (symbolS *);
+extern symbolS *symbol_symbolS (symbolS *);
 extern asymbol *symbol_get_bfdsym (symbolS *);
 extern void symbol_set_bfdsym (symbolS *, asymbol *);
 extern int symbol_same_p (symbolS *, symbolS *);

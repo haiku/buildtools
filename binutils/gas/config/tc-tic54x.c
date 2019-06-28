@@ -1,5 +1,5 @@
 /* tc-tic54x.c -- Assembly code for the Texas Instruments TMS320C54X
-   Copyright (C) 1999-2017 Free Software Foundation, Inc.
+   Copyright (C) 1999-2019 Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@cygnus.com)
 
    This file is part of GAS, the GNU Assembler.
@@ -50,7 +50,6 @@
 #include "sb.h"
 #include "macro.h"
 #include "subsegs.h"
-#include "struc-symbol.h"
 #include "opcode/tic54x.h"
 #include "obj-coff.h"
 #include <math.h>
@@ -161,7 +160,7 @@ size_t md_longopts_size = sizeof (md_longopts);
 static int assembly_begun = 0;
 /* Addressing mode is not entirely implemented; the latest rev of the Other
    assembler doesn't seem to make any distinction whatsoever; all relocations
-   are stored as extended relocatiosn.  Older versions used REL16 vs RELEXT16,
+   are stored as extended relocations.  Older versions used REL16 vs RELEXT16,
    but now it seems all relocations are RELEXT16.  We use all RELEXT16.
 
    The cpu version is kind of a waste of time as well.  There is one
@@ -230,14 +229,14 @@ static char *subsym_substitute (char *, int);
 void
 md_show_usage (FILE *stream)
 {
-  fprintf (stream, _("C54x-specific command line  options:\n"));
+  fprintf (stream, _("C54x-specific command line options:\n"));
   fprintf (stream, _("-mfar-mode | -mf          Use extended addressing\n"));
   fprintf (stream, _("-mcpu=<CPU version>       Specify the CPU version\n"));
   fprintf (stream, _("-merrors-to-file <filename>\n"));
   fprintf (stream, _("-me <filename>            Redirect errors to a file\n"));
 }
 
-/* Output a single character (upper octect is zero).  */
+/* Output a single character (upper octet is zero).  */
 
 static void
 tic54x_emit_char (char c)
@@ -506,7 +505,7 @@ tic54x_bss (int x ATTRIBUTE_UNUSED)
   symbolP = symbol_find_or_make (name);
 
   if (S_GET_SEGMENT (symbolP) == bss_section)
-    symbolP->sy_frag->fr_symbol = (symbolS *) NULL;
+    symbol_get_frag (symbolP)->fr_symbol = (symbolS *) NULL;
 
   symbol_set_frag (symbolP, frag_now);
   p = frag_var (rs_org, 1, 1, (relax_substateT) 0, symbolP,
@@ -1838,7 +1837,7 @@ tic54x_clink (int ignored ATTRIBUTE_UNUSED)
     {
       if (!tic54x_initialized_section (seg))
 	{
-	  as_bad (_("Current section is unitialized, "
+	  as_bad (_("Current section is uninitialized, "
 		    "section name required for .clink"));
 	  ignore_rest_of_line ();
 	  return;
@@ -2031,7 +2030,7 @@ tic54x_loop (int count)
   if (!is_end_of_line[(int) *input_line_pointer])
     count = get_absolute_expression ();
 
-  do_repeat (count, "LOOP", "ENDLOOP");
+  do_repeat ((size_t) count, "LOOP", "ENDLOOP");
 }
 
 /* Normally, endloop gets eaten by the preceding loop.  */
@@ -4661,7 +4660,7 @@ subsym_substitute (char *line, int forced)
 			  len = get_absolute_expression ();
 			  if (beg + len > strlen (value))
 			    {
-			      as_bad (_("Invalid length (use 0 to %d"),
+			      as_bad (_("Invalid length (use 0 to %d)"),
 				      (int) strlen (value) - beg);
 			      break;
 			    }
@@ -4843,8 +4842,11 @@ md_assemble (char *line)
 	    {
 	      if (words > delay_slots)
 		{
-		  as_bad (_("Instruction does not fit in available delay "
-			    "slots (%d-word insn, %d slots left)"),
+		  as_bad (ngettext ("Instruction does not fit in available "
+				    "delay slots (%d-word insn, %d slot left)",
+				    "Instruction does not fit in available "
+				    "delay slots (%d-word insn, %d slots left)",
+				    delay_slots),
 			  words, delay_slots);
 		  delay_slots = 0;
 		  return;
@@ -4915,9 +4917,13 @@ md_assemble (char *line)
 	{
 	  if (words > delay_slots)
 	    {
-	      as_warn (_("Instruction does not fit in available delay "
-			 "slots (%d-word insn, %d slots left). "
-			 "Resulting behavior is undefined."),
+	      as_warn (ngettext ("Instruction does not fit in available "
+				 "delay slots (%d-word insn, %d slot left). "
+				 "Resulting behavior is undefined.",
+				 "Instruction does not fit in available "
+				 "delay slots (%d-word insn, %d slots left). "
+				 "Resulting behavior is undefined.",
+				 delay_slots),
 		       words, delay_slots);
 	      delay_slots = 0;
 	      return;

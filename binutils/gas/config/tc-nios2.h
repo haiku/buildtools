@@ -1,5 +1,5 @@
 /* Definitions for Altera Nios II assembler.
-   Copyright (C) 2012-2017 Free Software Foundation, Inc.
+   Copyright (C) 2012-2019 Free Software Foundation, Inc.
    Contributed by Nigel Gray (ngray@altera.com).
    Contributed by Mentor Graphics, Inc.
 
@@ -45,7 +45,7 @@ extern const char *nios2_target_format (void);
    separator characters are commas, brackets and space.
    The instruction name is always separated from other tokens by a space
    The maximum number of tokens in an instruction is 5 (the instruction name,
-   3 arguments, and a 4th string representing the expected instructin opcode
+   3 arguments, and a 4th string representing the expected instruct in opcode
    after assembly. The latter is only used when the assemble is running in
    self test mode, otherwise its presence will generate an error.  */
 #define NIOS2_MAX_INSN_TOKENS	6

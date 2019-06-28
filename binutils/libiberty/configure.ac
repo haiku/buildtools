@@ -1,6 +1,5 @@
 dnl Process this file with autoconf to produce a configure script
 
-AC_PREREQ(2.64)
 AC_INIT
 AC_CONFIG_SRCDIR([xmalloc.c])
 
@@ -391,7 +390,7 @@ funcs="$funcs setproctitle"
 vars="sys_errlist sys_nerr sys_siglist"
 
 checkfuncs="__fsetlocking canonicalize_file_name dup3 getrlimit getrusage \
- getsysinfo gettimeofday on_exit psignal pstat_getdynamic pstat_getstatic \
+ getsysinfo gettimeofday on_exit pipe2 psignal pstat_getdynamic pstat_getstatic \
  realpath setrlimit sbrk spawnve spawnvpe strerror strsignal sysconf sysctl \
  sysmp table times wait3 wait4"
 
@@ -407,7 +406,7 @@ if test "x" = "y"; then
     index insque \
     memchr memcmp memcpy memmem memmove memset mkstemps \
     on_exit \
-    psignal pstat_getdynamic pstat_getstatic putenv \
+    pipe2 psignal pstat_getdynamic pstat_getstatic putenv \
     random realpath rename rindex \
     sbrk setenv setproctitle setrlimit sigsetmask snprintf spawnve spawnvpe \
      stpcpy stpncpy strcasecmp strchr strdup \
@@ -416,7 +415,7 @@ if test "x" = "y"; then
     table times tmpnam \
     vasprintf vfprintf vprintf vsprintf \
     wait3 wait4 waitpid)
-  AC_CHECK_DECLS([basename(char *), ffs, asprintf, vasprintf, snprintf, vsnprintf, strtol, strtoul, strtoll, strtoull])
+  AC_CHECK_DECLS([basename(char *), ffs, asprintf, vasprintf, snprintf, vsnprintf, strtol, strtoul, strtoll, strtoull, strnlen])
   AC_DEFINE(HAVE_SYS_ERRLIST, 1, [Define if you have the sys_errlist variable.])
   AC_DEFINE(HAVE_SYS_NERR,    1, [Define if you have the sys_nerr variable.])
   AC_DEFINE(HAVE_SYS_SIGLIST, 1, [Define if you have the sys_siglist variable.])
@@ -689,6 +688,7 @@ if test -z "${setobjs}"; then
   AC_CHECK_DECLS([calloc, getenv, getopt, malloc, realloc, sbrk])
   AC_CHECK_DECLS([strtol, strtoul, strtoll, strtoull])
   AC_CHECK_DECLS([strverscmp])
+  AC_CHECK_DECLS([strnlen])
   libiberty_NEED_DECLARATION(canonicalize_file_name)
 fi
 

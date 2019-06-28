@@ -1,8 +1,7 @@
 #ld: --gc-sections -shared -version-script pr12975.t
 #readelf: -s --wide
-#target: *-*-linux* *-*-gnu*
-#notarget: d30v-*-* dlx-*-* i960-*-* pj*-*-*
-#notarget: hppa64-*-* i370-*-* i860-*-* ia64-*-* mep-*-* mn10200-*-*
+#target: *-*-linux* *-*-gnu* arm*-*-uclinuxfdpiceabi
+#xfail: d30v-*-* dlx-*-* hppa64-*-* mep-*-* mn10200-*-* pj*-*-* xgate-*-*
 # generic linker targets don't support --gc-sections, nor do a bunch of others
 
 #failif

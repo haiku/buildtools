@@ -1,5 +1,5 @@
 /* SOM object file format.
-   Copyright (C) 1993-2017 Free Software Foundation, Inc.
+   Copyright (C) 1993-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -243,7 +243,7 @@ obj_som_init_stab_section (segT seg)
   p = frag_more (12);
   memset (p, 0, 12);
   file = as_where ((unsigned int *) NULL);
-  stroff = get_stab_string_offset (file, "$GDB_STRINGS$");
+  stroff = get_stab_string_offset (file, "$GDB_STRINGS$", FALSE);
   know (stroff == 1);
   md_number_to_chars (p, stroff, 4);
   seg_info (seg)->stabu.p = p;

@@ -1,12 +1,11 @@
 #source: merge.s
 #ld: -T merge.ld
 #objdump: -s
-#xfail: "bfin-*-*" "cr16-*-*" "cris*-*-*" "crx-*-*" "d10v-*-*" "d30v-*-*"
-#xfail: "dlx-*-*" "fr30-*-*" "frv-*-*" "hppa*64*-*-*" "h8300-*-*" "score-*-*"
-#xfail: "i370-*-*" "i860-*-*" "i960-*-*" "ip2k-*-*" "iq2000-*-*" "lm32-*-*"
-#xfail: "mcore-*-*" "mn102*-*-*" "ms1-*-*" "mep-*-*" "m68hc11-*-*" "nios2-*-*"
-#xfail: "or32-*-*" "pj-*-*" "sparc*-*-*" "tic6x-*-*" "vax-*-*" "xstormy16-*-*"
-#xfail: "xtensa*-*-*" "metag-*-*" "ft32-*-*"
+#xfail: bfin-*-* cr16-*-* cris*-*-* crx-*-* csky-*-* d10v-*-* d30v-*-* dlx-*-*
+#xfail: fr30-*-* frv-*-* ft32-*-* h8300-*-* hppa*64*-*-* ip2k-*-* iq2000-*-*
+#xfail: lm32-*-* m68hc11-*-* mcore-*-* mep-*-* metag-*-* mn102*-*-* ms1-*-*
+#xfail: nds32*-*-* nios2-*-* or32-*-* pj-*-* pru-*-* s12z-*-* score-*-* tic6x-*-*
+#xfail: vax-*-* xgate-*-* xstormy16-*-* xtensa*-*-*
 
 .*:     file format .*elf.*
 

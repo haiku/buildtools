@@ -1,5 +1,5 @@
 /* ld.h -- general linker header file
-   Copyright (C) 1991-2017 Free Software Foundation, Inc.
+   Copyright (C) 1991-2019 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -55,8 +55,14 @@
 # define gettext(Msgid) (Msgid)
 # define dgettext(Domainname, Msgid) (Msgid)
 # define dcgettext(Domainname, Msgid, Category) (Msgid)
-# define textdomain(Domainname) while (0) /* nothing */
-# define bindtextdomain(Domainname, Dirname) while (0) /* nothing */
+# define ngettext(Msgid1, Msgid2, n) \
+  (n == 1 ? Msgid1 : Msgid2)
+# define dngettext(Domainname, Msgid1, Msgid2, n) \
+  (n == 1 ? Msgid1 : Msgid2)
+# define dcngettext(Domainname, Msgid1, Msgid2, n, Category) \
+  (n == 1 ? Msgid1 : Msgid2)
+# define textdomain(Domainname) do {} while (0)
+# define bindtextdomain(Domainname, Dirname) do {} while (0)
 # define _(String) (String)
 # define N_(String) (String)
 #endif
@@ -132,9 +138,6 @@ typedef struct
   /* 1 => assign space to common symbols even if `relocatable_output'.  */
   bfd_boolean force_common_definition;
 
-  /* 1 => do not assign addresses to common symbols.  */
-  bfd_boolean inhibit_common_definition;
-
   /* If TRUE, build MIPS embedded PIC relocation tables in the output
      file.  */
   bfd_boolean embedded_relocs;
@@ -171,6 +174,11 @@ typedef struct
 
   /* If set, display the target memory usage (per memory region).  */
   bfd_boolean print_memory_usage;
+
+  /* Should we force section groups to be resolved?  Controlled with
+     --force-group-allocation on the command line or FORCE_GROUP_ALLOCATION
+     in the linker script.  */
+  bfd_boolean force_group_allocation;
 
   /* Big or little endian as set on command line.  */
   enum endian_enum endian;
