@@ -170,6 +170,7 @@ ALL_EMULATION_SOURCES = \
 	earmelf.c \
 	earmelf_fbsd.c \
 	earmelf_fuchsia.c \
+	earmelf_haiku.c \
 	earmelf_linux.c \
 	earmelf_linux_eabi.c \
 	earmelf_linux_fdpiceabi.c \
@@ -263,6 +264,7 @@ ALL_EMULATION_SOURCES = \
 	eelf32ppc.c \
 	eelf32ppc_fbsd.c \
 	eelf32ppclinux.c \
+	eelf32ppchaiku.c \
 	eelf32ppcnto.c \
 	eelf32ppcsim.c \
 	eelf32ppcvxworks.c \
@@ -286,10 +288,12 @@ ALL_EMULATION_SOURCES = \
 	eelf_i386_be.c \
 	eelf_i386_chaos.c \
 	eelf_i386_fbsd.c \
+	eelf_i386_haiku.c \
 	eelf_i386_ldso.c \
 	eelf_i386_nacl.c \
 	eelf_i386_sol2.c \
 	eelf_i386_vxworks.c \
+	eelf_mipsel_haiku.c \
 	eelf_iamcu.c \
 	eelf_s390.c \
 	eh8300elf.c \
@@ -455,6 +459,7 @@ ALL_64_EMULATION_SOURCES = \
 	eelf_k1om_fbsd.c \
 	eelf_x86_64.c \
 	eelf_x86_64_cloudabi.c \
+	eelf_x86_64_haiku.c \
 	eelf_x86_64_fbsd.c \
 	eelf_x86_64_nacl.c \
 	eelf_x86_64_sol2.c \
@@ -701,6 +706,10 @@ earmelf_fbsd.c: $(srcdir)/emulparams/armelf_fbsd.sh \
 
 earmelf_fuchsia.c: $(srcdir)/emulparams/armelf_fuchsia.sh \
   $(ELF_DEPS) $(srcdir)/emultempl/armelf.em \
+  $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
+earmelf_haiku.c: $(srcdir)/emulparams/armelf_haiku.sh \
+  $(srcdir)/emultempl/elf32.em $(srcdir)/emultempl/armelf.em \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 earmelf_linux.c: $(srcdir)/emulparams/armelf_linux.sh \
@@ -1213,6 +1222,12 @@ eelf32ppc_fbsd.c: $(srcdir)/emulparams/elf32ppc_fbsd.sh \
   $(srcdir)/emultempl/ppc32elf.em ldemul-list.h \
   $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
+eelf32ppchaiku.c: $(srcdir)/emulparams/elf32ppchaiku.sh \
+  $(srcdir)/emulparams/elf32ppc.sh $(srcdir)/emulparams/elf32ppccommon.sh \
+  $(srcdir)/emultempl/ppc32elf.em $(ELF_DEPS) \
+  ldemul-list.h \
+  $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
 eelf32ppclinux.c: $(srcdir)/emulparams/elf32ppclinux.sh \
   $(srcdir)/emulparams/elf32ppc.sh $(srcdir)/emulparams/elf32ppccommon.sh \
   $(srcdir)/emulparams/dynamic_undefined_weak.sh \
@@ -1299,6 +1314,9 @@ eelf_i386_fbsd.c: $(srcdir)/emulparams/elf_i386_fbsd.sh \
   $(srcdir)/emulparams/elf_i386.sh \
   $(ELF_X86_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
+eelf_i386_haiku.c: $(srcdir)/emulparams/elf_i386_haiku.sh \
+  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
 eelf_i386_ldso.c: $(srcdir)/emulparams/elf_i386_ldso.sh \
   $(ELF_X86_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
@@ -1311,6 +1329,9 @@ eelf_i386_sol2.c: $(srcdir)/emulparams/elf_i386_sol2.sh \
   $(srcdir)/emulparams/solaris2.sh \
   $(srcdir)/emultempl/solaris2.em \
   $(ELF_X86_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
+eelf_mipsel_haiku.c: $(srcdir)/emulparams/elf_mipsel_haiku.sh \
+  $(srcdir)/emultempl/elf32.em $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 eelf_i386_vxworks.c: $(srcdir)/emulparams/elf_i386_vxworks.sh \
   $(srcdir)/emulparams/vxworks.sh $(srcdir)/emultempl/vxworks.em \
@@ -1696,6 +1717,10 @@ ez8002.c: $(srcdir)/emulparams/z8002.sh \
 
 eelf32_x86_64.c: $(srcdir)/emulparams/elf32_x86_64.sh \
   $(ELF_X86_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
+eelf_x86_64_haiku.c: $(srcdir)/emulparams/elf_x86_64_haiku.sh \
+  $(srcdir)/emulparams/elf_x86_64.sh \
+  $(ELF_DEPS) $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 eelf32_x86_64_nacl.c: $(srcdir)/emulparams/elf32_x86_64_nacl.sh \
   $(srcdir)/emulparams/elf32_x86_64.sh \
