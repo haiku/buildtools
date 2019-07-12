@@ -360,7 +360,7 @@ case ${generic_target} in
   ppc-*-beos*)				fmt=coff ;;
   ppc-*-*n*bsd* | ppc-*-elf*)		fmt=elf ;;
   ppc-*-eabi* | ppc-*-sysv4*)		fmt=elf ;;
-  ppc-*-haiku-*)			fmt=elf em=haiku ;;
+  ppc-*-haiku*)				fmt=elf em=haiku ;;
   ppc-*-linux-*)			fmt=elf em=linux ;;
   ppc-*-solaris*)			fmt=elf em=solaris ;;
   ppc-*-macos*)				fmt=coff em=macos ;;
