@@ -112,7 +112,9 @@ new_string_list(int block_size)
 		if (block_size <= 0)
 			block_size = 5;
 		list->block_size = block_size;
-		if (!resize_string_list(list, 0)) {
+		if (resize_string_list(list, 0))
+			*list->strings = 0;
+		else {
 			free(list);
 			list = 0;
 		}
