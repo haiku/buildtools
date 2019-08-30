@@ -354,6 +354,11 @@ aarch64*-*-fuchsia*)
 	tmake_file="${tmake_file} ${cpu_type}/t-aarch64"
 	tmake_file="${tmake_file} ${cpu_type}/t-softfp t-softfp"
 	;;
+aarch64*-*-haiku*)
+	tmake_file="${tmake_file} ${cpu_type}/t-aarch64"
+	tmake_file="${tmake_file} ${cpu_type}/t-softfp t-softfp"
+	md_unwind_header=aarch64/haiku-unwind.h
+	;;
 aarch64*-*-linux*)
 	extra_parts="$extra_parts crtfastmath.o"
 	md_unwind_header=aarch64/linux-unwind.h
