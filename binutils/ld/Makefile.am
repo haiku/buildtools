@@ -398,6 +398,7 @@ ALL_64_EMULATION_SOURCES = \
 	eaarch64cloudabib.c \
 	eaarch64fbsd.c \
 	eaarch64fbsdb.c \
+	eaarch64haiku.c \
 	eaarch64linux.c \
 	eaarch64linuxb.c \
 	eaarch64linux32.c \
@@ -1558,6 +1559,10 @@ eaarch64fbsd.c: $(srcdir)/emulparams/aarch64fbsd.sh \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
 eaarch64fbsdb.c: $(srcdir)/emulparams/aarch64fbsdb.sh $(srcdir)/emulparams/aarch64fbsd.sh \
+  $(ELF_DEPS) $(srcdir)/emultempl/aarch64elf.em \
+  $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
+
+eaarch64haiku.c: $(srcdir)/emulparams/aarch64haiku.sh \
   $(ELF_DEPS) $(srcdir)/emultempl/aarch64elf.em \
   $(srcdir)/scripttempl/elf.sc ${GEN_DEPENDS}
 
