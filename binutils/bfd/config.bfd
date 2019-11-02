@@ -828,7 +828,6 @@ case "${targ}" in
 
   m68*-*-haiku*)
     targ_defvec=m68k_elf32_vec
-    targ_selvecs="m68k_coff_vec ieee_vec"
     ;;
 
   m68hc11-*-* | m6811-*-*)
