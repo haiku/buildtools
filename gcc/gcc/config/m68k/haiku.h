@@ -243,7 +243,7 @@ do {									\
 #undef FINALIZE_TRAMPOLINE
 #define FINALIZE_TRAMPOLINE(TRAMP)					\
   emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__clear_cache"),	\
-		     LCT_NORMAL, VOIDmode, 2, TRAMP, Pmode,			\
+		     LCT_NORMAL, VOIDmode, TRAMP, Pmode,			\
 		     plus_constant (Pmode, TRAMP, TRAMPOLINE_SIZE), \
 		     Pmode);
 
