@@ -344,6 +344,10 @@ case "${targ}" in
     targ_defvec=arm_elf32_le_vec
     targ_selvecs="arm_elf32_be_vec"
     ;;
+  arm*-*-haiku*)
+    targ_defvec=arm_elf32_le_vec
+    targ_selvecs="arm_elf32_fdpic_le_vec arm_elf32_be_vec arm_elf32_fdpic_be_vec arm_pe_le_vec arm_pe_be_vec arm_pei_le_vec arm_pei_be_vec"
+    ;;
   arm-*-nacl*)
     targ_defvec=arm_elf32_nacl_le_vec
     targ_selvecs="arm_elf32_nacl_be_vec i386_elf32_nacl_vec"
@@ -394,8 +398,7 @@ case "${targ}" in
     ;;
   arm-*-elf | arm*-*-freebsd* | arm*-*-linux-* | arm*-*-conix* | \
   arm*-*-uclinux* | arm-*-kfreebsd*-gnu | \
-  arm*-*-eabi* | arm-*-rtems* | arm*-*-uclinuxfdpiceabi | \
-  arm*-*-haiku*)
+  arm*-*-eabi* | arm-*-rtems* | arm*-*-uclinuxfdpiceabi)
     targ_defvec=arm_elf32_le_vec
     targ_selvecs="arm_elf32_fdpic_le_vec arm_elf32_be_vec arm_elf32_fdpic_be_vec"
     ;;
