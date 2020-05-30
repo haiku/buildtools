@@ -50,7 +50,7 @@
 # include <process.h>
 # endif
 
-# ifdef __linux__
+# if defined(__linux__) || defined(__HAIKU__)
 # define USE_POSIX_SPAWN
 # endif
 
