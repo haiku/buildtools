@@ -1,6 +1,7 @@
 AC_DEFUN([AX_DETECT_CLANG], [
 AC_SUBST(CLANG_CXXFLAGS)
 AC_SUBST(CLANG_LDFLAGS)
+AC_SUBST(CLANG_RFLAG)
 AC_SUBST(CLANG_LIBS)
 AC_PROG_GREP
 AC_PROG_SED
@@ -18,6 +19,9 @@ fi
 CLANG_CXXFLAGS=`$llvm_config --cxxflags | \
 	$SED -e 's/-Wcovered-switch-default//;s/-gsplit-dwarf//'`
 CLANG_LDFLAGS=`$llvm_config --ldflags`
+# Construct a -R argument for libtool.
+# This is needed in case some of the clang libraries are shared libraries.
+CLANG_RFLAG=`echo "$CLANG_LDFLAGS" | $SED -e 's/-L/-R/g'`
 targets=`$llvm_config --targets-built`
 components="$targets asmparser bitreader support mc"
 $llvm_config --components | $GREP option > /dev/null 2> /dev/null
@@ -43,12 +47,25 @@ AC_EGREP_HEADER([getDefaultTargetTriple], [llvm/Support/Host.h], [],
 AC_EGREP_HEADER([getExpansionLineNumber], [clang/Basic/SourceLocation.h], [],
 	[AC_DEFINE([getExpansionLineNumber], [getInstantiationLineNumber],
 	[Define to getInstantiationLineNumber for older versions of clang])])
+AC_EGREP_HEADER([getImmediateExpansionRange], [clang/Basic/SourceManager.h],
+	[],
+	[AC_DEFINE([getImmediateExpansionRange],
+	[getImmediateInstantiationRange],
+	[Define to getImmediateInstantiationRange for older versions of clang])]
+)
 AC_EGREP_HEADER([DiagnosticsEngine], [clang/Basic/Diagnostic.h], [],
 	[AC_DEFINE([DiagnosticsEngine], [Diagnostic],
 	[Define to Diagnostic for older versions of clang])])
 AC_EGREP_HEADER([ArrayRef], [clang/Driver/Driver.h],
 	[AC_DEFINE([USE_ARRAYREF], [],
-		[Define if Driver::BuildCompilation takes ArrayRef])])
+		[Define if Driver::BuildCompilation takes ArrayRef])
+	AC_EGREP_HEADER([ArrayRef.*CommandLineArgs],
+		[clang/Frontend/CompilerInvocation.h],
+		[AC_DEFINE([CREATE_FROM_ARGS_TAKES_ARRAYREF], [],
+			[Define if CompilerInvocation::CreateFromArgs takes
+			 ArrayRef])
+		])
+	])
 AC_EGREP_HEADER([CXXIsProduction], [clang/Driver/Driver.h],
 	[AC_DEFINE([HAVE_CXXISPRODUCTION], [],
 		[Define if Driver constructor takes CXXIsProduction argument])])
@@ -131,8 +148,11 @@ AC_EGREP_HEADER([initializeBuiltins],
 	[AC_DEFINE([initializeBuiltins], [InitializeBuiltins],
 		[Define to InitializeBuiltins for older versions of clang])])
 AC_EGREP_HEADER([IK_C], [clang/Frontend/FrontendOptions.h], [],
-	 [AC_DEFINE([IK_C], [InputKind::C],
-	    [Define to InputKind::C for newer versions of clang])])
+	[AC_CHECK_HEADER([clang/Basic/LangStandard.h],
+		[IK_C=Language::C], [IK_C=InputKind::C])
+	 AC_DEFINE_UNQUOTED([IK_C], [$IK_C],
+	 [Define to Language::C or InputKind::C for newer versions of clang])
+	])
 AC_TRY_COMPILE([
 	#include <clang/Basic/TargetOptions.h>
 	#include <clang/Lex/PreprocessorOptions.h>
@@ -157,6 +177,9 @@ AC_TRY_COMPILE([
 	Clang->setInvocation(std::make_shared<CompilerInvocation>(*invocation));
 ], [AC_DEFINE([SETINVOCATION_TAKES_SHARED_PTR], [],
 	[Defined if CompilerInstance::setInvocation takes a shared_ptr])])
+AC_CHECK_HEADER([llvm/Option/Arg.h],
+	[AC_DEFINE([HAVE_LLVM_OPTION_ARG_H], [],
+		   [Define if llvm/Option/Arg.h exists])])
 AC_LANG_POP
 CPPFLAGS="$SAVE_CPPFLAGS"
 
