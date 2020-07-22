@@ -51,7 +51,8 @@ LAST_UPDATED
 REVISION
 
 # ignore in-tree prerequisites
-/mpfr*
-/mpc*
-/gmp*
-/isl*
+##Haiku: We care about changes in our in tree deps
+##/mpfr*
+##/mpc*
+##/gmp*
+##/isl*
