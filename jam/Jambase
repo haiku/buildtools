@@ -135,7 +135,7 @@
 
 # for perforce use -- jambase version
 
-JAMBASEDATE = 2018.11.21 ;
+JAMBASEDATE = 2020.09.16 ;
 
 # Initialize variables
 #
@@ -155,7 +155,8 @@ if $(NT) {
 	SUFEXE		?= .exe ;
 
 	if $(MSVC) {
-		AR		?= lib /nologo ;
+		AR		?= lib ;
+		ARFLAGS		?= /nologo ;
 		CC		?= cl /nologo ;
 		CCFLAGS		?= /D \"WIN\" ;
 		C++		?= $(CC) ;
@@ -180,6 +181,7 @@ if $(NT) {
 		local I ; if $(OSPLAT) = IA64 { I = ia64\\ ; } else { I = "" ; }
 
 		AR		?= lib ;
+		ARFLAGS		?= ;
 		AS		?= masm386 ;
 		CC		?= cl /nologo ;
 		CCFLAGS		?= "" ;
@@ -205,7 +207,8 @@ if $(NT) {
 	RANLIB		?= "ranlib" ;
 	SUFEXE		?= .exe ;
 } else if $(OS) = BEOS && $(OSPLAT) = PPC {
-	AR		?= mwld -xml -o ;
+	AR		?= mwld ;
+	ARFLAGS		?= -xml -o ;
 	BINDIR		?= /boot/home/config/bin ;
 	CC		?= mwcc ;
 	CCFLAGS		?= -nosyspath ;
@@ -280,6 +283,7 @@ if $(NT) {
 
 	case QNX :
 	AR		?= wlib ;
+	ARFLAGS		?= ;
 	CC		?= cc ;
 	CCFLAGS		?= -Q ;	# quiet
 	C++		?= $(CC) ;
@@ -311,7 +315,8 @@ if $(NT) {
 # General defaults; a lot like UNIX
 #
 
-AR		?= ar ru ;
+AR		?= ar ;
+ARFLAGS		?= ru ;
 AS		?= as ;
 ASFLAGS		?= ;
 AWK		?= awk ;
@@ -1419,7 +1424,7 @@ if $(NT) {
 
 actions updated together piecemeal Archive
 {
-	$(AR) $(<) $(>)
+	$(AR) $(ARFLAGS) $(<) $(>)
 }
 
 actions As
