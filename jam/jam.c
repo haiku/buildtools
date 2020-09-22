@@ -141,6 +141,7 @@ struct globs globs = {
 # else
 	{ 0, 1 }, 		/* display actions  */
 # endif
+	0,			/* output compilation db here */
 	0			/* output commands, not run them */
 } ;
 
@@ -182,7 +183,7 @@ main( int argc, char **argv, char **arg_environ )
 
 	argc--, argv++;
 
-	if( ( n = getoptions( argc, argv, "d:j:f:gs:t:ano:qv", optv ) ) < 0 )
+	if( ( n = getoptions( argc, argv, "d:j:f:gs:t:ano:cqv", optv ) ) < 0 )
 	{
 	    printf( "\nusage: jam [ options ] targets...\n\n" );
 
@@ -197,6 +198,7 @@ main( int argc, char **argv, char **arg_environ )
             printf( "-jx     Run up to x shell commands concurrently.\n" );
             printf( "-n      Don't actually execute the updating actions.\n" );
             printf( "-ox     Write the updating actions to file x.\n" );
+            printf( "-c      Output JSON compilation database to compile_commands.json.\n" );
             printf( "-q      Quit quickly as soon as a target fails.\n" );
 	    printf( "-sx=y   Set variable x=y, overriding environment.\n" );
             printf( "-tx     Rebuild x, even if it is up-to-date.\n" );
@@ -277,6 +279,17 @@ main( int argc, char **argv, char **arg_environ )
 	    case '0': break;
 	    default: printf( "Invalid debug flag '%c'.\n", s[-1] );
 	    }
+	}
+
+	/* If we're asked to produce a compilation database, open the file. */
+	if ( ( s = getoptval( optv, 'c', 0 ) ) )
+	{
+	    if ( !( globs.comp_db = fopen( "compile_commands.json", "w" ) ) )
+	    {
+		printf( "Failed to write to 'compile_commands.json'\n");
+		exit( EXITBAD );
+	    }
+	    fprintf(globs.comp_db, "[\n");
 	}
 
 	/* Set JAMDATE first */
@@ -438,6 +451,13 @@ main( int argc, char **argv, char **arg_environ )
 
 	if( globs.cmdout )
 	    fclose( globs.cmdout );
+
+	/* close compilation database output file */
+	if ( globs.comp_db )
+	{
+		fprintf(globs.comp_db, "]\n");
+		fclose( globs.comp_db );
+	}
 
 	return status ? EXITBAD : EXITOK;
 }

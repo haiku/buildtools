@@ -500,6 +500,7 @@ struct globs {
 	int	quitquick;
 	int	newestfirst;		/* build newest sources first */
 	char	debug[DEBUG_MAX];
+	FILE	*comp_db;			/* output compilation db here */
 	FILE	*cmdout;		/* print cmds, not run them */
 } ;
 

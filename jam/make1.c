@@ -62,6 +62,8 @@
 # include "command.h"
 # include "execcmd.h"
 
+#include <unistd.h>
+
 static void make1a( TARGET *t, TARGET *parent );
 static void make1b( TARGET *t );
 static void make1c( TARGET *t );
@@ -72,6 +74,12 @@ static LIST *make1list( LIST *l, TARGETS *targets, int flags,
 	int *missingTargets );
 static SETTINGS *make1settings( LIST *vars );
 static void make1bind( TARGET *t, int warn );
+
+void out_compile_database(
+     char const * const action,
+     char const * const source,
+     char const * const command
+ );
 
 /* Ugly static - it's too hard to carry it through the callbacks. */
 
@@ -294,6 +302,17 @@ make1c( TARGET *t )
 
 	    if( globs.cmdout )
 		fprintf( globs.cmdout, "%s", cmd->buf );
+
+	    if ( globs.comp_db != NULL )
+	    {
+		const char* rule_name = cmd->rule->name;
+		const char* target_name = lol_get( (LOL *)&cmd->args, 0 )->string;
+		const char* source_name = NULL;
+		LIST* sources = lol_get( (LOL *)&cmd->args, 1);
+		if (sources != NULL)
+		    source_name = lol_get((LOL *)&cmd->args, 1 )->string;
+		out_compile_database( rule_name, source_name, cmd->buf );
+	    }
 
 	    if( globs.noexec )
 	    {
@@ -670,4 +689,74 @@ make1bind(
 	t->boundname = search( t->name, &t->time );
 	t->binding = t->time ? T_BIND_EXISTS : T_BIND_MISSING;
 	popsettings( t->settings );
+}
+
+
+static void out_json(char const* str, FILE* f)
+{
+     char const* escape_src = "\"\\\b\n\r\t";
+     char const* escape_subst[] = {
+         "\\\"", "\\\\", "\\b", "\\n", "\\r", "\\t"
+     };
+     char buffer[1024];
+     int i = 0;
+
+     /* trim leading whitespace */
+     while (*str != 0 && strchr(" \t\n\r\t", *str) != NULL)
+        ++str;
+
+     for (; *str != 0; ++str)
+     {
+         char const* ch;
+         char const* subst;
+         if (i >= sizeof(buffer) - 10)
+         {
+             buffer[i] = 0;
+             fputs(buffer, f);
+             i = 0;
+         }
+
+         /* skip non-printable characters */
+         if ((unsigned)*str < ' ') continue;
+
+         ch = strchr(escape_src, *str);
+         if (ch == NULL)
+         {
+             buffer[i++] = *str;
+             continue;
+         }
+         subst = escape_subst[ch - escape_src];
+         strcpy(&buffer[i], subst);
+         i += strlen(subst);
+     }
+
+     buffer[i] = 0;
+     fputs(buffer, f);
+}
+
+
+void out_compile_database
+(
+     char const * const action,
+     char const * const source,
+     char const * const command
+)
+{
+     /* file format defined here:
+      * http://clang.llvm.org/docs/JSONCompilationDatabase.html
+      * we're not interested in link, mkdir, rm or any non-compile action
+      */
+     if (source
+        && (strstr(action, "Cc") != NULL || strstr(action, "C++") != NULL))
+     {
+         char buffer[PATH_MAX];
+         fputs("{ \"directory\": \"", globs.comp_db);
+         out_json(getcwd(buffer, sizeof(buffer)), globs.comp_db);
+         fputs("\", \"command\": \"", globs.comp_db);
+         out_json(command, globs.comp_db);
+         fputs("\", \"file\": \"", globs.comp_db);
+         out_json(source, globs.comp_db);
+         fputs("\" },\n", globs.comp_db);
+     }
+
 }
