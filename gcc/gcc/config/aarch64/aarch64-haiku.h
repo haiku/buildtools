@@ -22,32 +22,22 @@
 #ifndef GCC_AARCH64_HAIKU_H
 #define GCC_AARCH64_HAIKU_H
 
-#define HAIKU_DYNAMIC_LINKER		"/system/runtime_loader"
-
-#define CPP_SPEC "%{pthread:-D_REENTRANT}"
+#define TARGET_OS_CPP_BUILTINS()					\
+  do									\
+    {									\
+      builtin_define ("__HAIKU__");					\
+      builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
+      builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
+      builtin_define ("__STDC_ISO_10646__=201103L"); 			\
+      builtin_assert ("system=haiku");					\
+    }									\
+  while (0)
 
 #if TARGET_BIG_ENDIAN_DEFAULT
 #define TARGET_LINKER_EMULATION  "aarch64haikub"
 #else
 #define TARGET_LINKER_EMULATION  "aarch64haiku"
 #endif
-
-#undef  SUBTARGET_EXTRA_LINK_SPEC
-#define SUBTARGET_EXTRA_LINK_SPEC " -m" TARGET_LINKER_EMULATION
-
-#undef  HAIKU_TARGET_LINK_SPEC
-#define HAIKU_TARGET_LINK_SPEC "                                 \
-    %{p:%nconsider using `-pg' instead of `-p' with gprof (1) } \
-    %{v:-V}                                                     \
-    %{assert*} %{R*} %{rpath*} %{defsym*}                       \
-    %{shared:-Bshareable %{h*} %{soname*}}                      \
-    %{symbolic:-Bsymbolic}                                      \
-    %{static:-Bstatic}                                          \
-    %{!static:                                                  \
-      %{rdynamic:-export-dynamic}                               \
-      %{!shared:-dynamic-linker " HAIKU_DYNAMIC_LINKER " }}     \
-    -X" SUBTARGET_EXTRA_LINK_SPEC "                             \
-    %{mbig-endian:-EB} %{mlittle-endian:-EL}"
 
 #if TARGET_FIX_ERR_A53_835769_DEFAULT
 #define CA53_ERR_835769_SPEC \
@@ -65,20 +55,6 @@
   " %{mfix-cortex-a53-843419:--fix-cortex-a53-843419}"
 #endif
 
-#define LINK_SPEC HAIKU_TARGET_LINK_SPEC \
-                  CA53_ERR_835769_SPEC \
-                  CA53_ERR_843419_SPEC
-
-#define TARGET_OS_CPP_BUILTINS()		\
-  do									\
-    {									\
-	builtin_define ("__HAIKU__");					\
-	builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
-	builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
-    builtin_define ("__STDC_ISO_10646__=201103L"); \
-	builtin_assert ("system=haiku");					\
-    }									\
-  while (0)
 
 #define TARGET_ASM_FILE_END file_end_indicate_exec_stack
 
@@ -90,5 +66,10 @@
 
 /* Define this to be nonzero if static stack checking is supported.  */
 #define STACK_CHECK_STATIC_BUILTIN 1
+
+
+#undef	LINK_SPEC
+#define LINK_SPEC "%{!o*:-o %b} -m " TARGET_LINKER_EMULATION " %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}\
+	%{mbig-endian:-EB} %{mlittle-endian:-EL} " CA53_ERR_835769_SPEC " " CA53_ERR_843419_SPEC " -X"
 
 #endif  /* GCC_AARCH64_HAIKU_H */
