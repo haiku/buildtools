@@ -44,11 +44,17 @@ Boston, MA 02111-1307, USA.  */
 
 /* Haiku uses lots of multichars, so don't warn about them unless the
    user explicitly asks for the warnings with -Wmultichar.  Note that
-   CC1_SPEC is used for both cc1 and cc1plus.  */
-#undef CC1_SPEC
-#define CC1_SPEC \
+   CC1_SPEC is used for both cc1 and cc1plus.
+   
+   HAIKU_CC1_SPEC is common options for all architectures. The frame pointer is also enabled
+   for all architectures, except for 32-bit i386, because that one has a very limited number of
+   registers, and the performance impact is too high. */
+#define HAIKU_CC1_SPEC \
   "%{fpic|fPIC|fpie|fPIE|fno-pic|fno-PIC|fno-pie|fno-PIE:;:-fPIC} \
    %{!Wmultichar: -Wno-multichar} %(cc1_cpu) %{profile:-p}"
+#undef CC1_SPEC
+#define CC1_SPEC \
+  HAIKU_CC1_SPEC " %{!fomit-frame-pointer: -fno-omit-frame-pointer}"
 
 #undef CC1PLUS_SPEC
 #define CC1PLUS_SPEC "%{!Wctor-dtor-privacy:-Wno-ctor-dtor-privacy}"

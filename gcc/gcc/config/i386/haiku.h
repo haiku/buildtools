@@ -75,3 +75,8 @@ Boston, MA 02111-1307, USA.  */
     if ((MAX_SKIP)==0) fprintf ((FILE), "\t.p2align %d\n", (LOG)); \
     else fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP))
 #endif
+
+/* On 32-bit i386, because there are so few registers, keep the frame pointer disabled by default.
+ * Other architectures have it always enabled for Haiku */
+#undef CC1_SPEC
+#define CC1_SPEC HAIKU_CC1_SPEC
