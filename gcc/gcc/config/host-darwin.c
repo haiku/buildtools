@@ -22,6 +22,8 @@
 #include "coretypes.h"
 #include "diagnostic-core.h"
 #include "config/host-darwin.h"
+#include "hosthooks.h"
+#include "hosthooks-def.h"
 
 /* Yes, this is really supposed to work.  */
 static char pch_address_space[1024*1024*1024] __attribute__((aligned (4096)));
@@ -75,3 +77,5 @@ darwin_gt_pch_use_address (void *addr, size_t sz, int fd, size_t off)
 
   return ret;
 }
+
+const struct host_hooks host_hooks = HOST_HOOKS_INITIALIZER;
