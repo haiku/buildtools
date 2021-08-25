@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-# Copyright (C) 2012-2019 Free Software Foundation, Inc.
+# Copyright (C) 2012-2021 Free Software Foundation, Inc.
 # Contributed by Andes Technology Corporation.
 #
 # This file is part of the GNU Binutils.
@@ -68,7 +68,7 @@ nds32_elf_after_parse (void)
   if (!RELAXATION_ENABLED)
     relax_fp_as_gp = 0;
 
-  gld${EMULATION_NAME}_after_parse ();
+  ldelf_after_parse ();
 }
 
 static void
@@ -123,7 +123,7 @@ nds32_elf_after_allocation (void)
 {
   /* Call default after allocation callback.
      1. This is where relaxation is done.
-     2. It calls gld${EMULATION_NAME}_map_segments to build ELF segment table.
+     2. It calls ldelf_map_segments to build ELF segment table.
      3. Any relaxation requires relax being done must be called after it.  */
   gld${EMULATION_NAME}_after_allocation ();
 }

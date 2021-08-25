@@ -3,7 +3,7 @@ dnl
 dnl And be careful when changing it!  If you must add tests with square
 dnl brackets, be sure changequote invocations surround it.
 dnl
-dnl   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+dnl   Copyright (C) 2012-2021 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -111,6 +111,17 @@ AC_ARG_ENABLE(generate_build_notes,
   no)   ac_default_generate_build_notes=0 ;;
 esac])dnl
 
+# Decide if the MIPS assembler should default to enable MIPS fix Loongson3
+# LLSC errata.
+ac_default_mips_fix_loongson3_llsc=unset
+# Provide a configuration option to override the default.
+AC_ARG_ENABLE(mips-fix-loongson3-llsc,
+             AS_HELP_STRING([--enable-mips-fix-loongson3-llsc],
+             [enable MIPS fix Loongson3 LLSC errata]),
+[case "${enableval}" in
+  yes)  ac_default_mips_fix_loongson3_llsc=1 ;;
+  no)   ac_default_mips_fix_loongson3_llsc=0 ;;
+esac])dnl
 
 # Decide if the x86 ELF assembler should default to generating GNU x86
 # used ISA and feature properties.
@@ -229,6 +240,13 @@ for this_target in $target $canon_targets ; do
       | i386-*-go32* \
       | i386-go32-rtems*)
 	AC_DEFINE(STRICTCOFF, 1, [Using strict COFF?])
+	;;
+
+      i386-*-linux-* | x86_64-*-linux-*)
+	if test ${this_target} = $target \
+	   && test ${ac_default_generate_x86_used_note} = unset; then
+	  ac_default_generate_x86_used_note=1
+	fi
 	;;
 
       i386-*-solaris2 \
@@ -419,6 +437,12 @@ changequote([,])dnl
 	done
 	;;
 
+      bpf)
+      	if test $this_target = $target ; then
+	  AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "${arch}", [Default architecture.])
+	fi
+        using_cgen=yes
+        ;;
       epiphany | fr30 | ip2k | iq2000 | lm32 | m32r | or1k)
 	using_cgen=yes
 	;;
@@ -552,11 +576,42 @@ changequote([,])dnl
 	AC_MSG_RESULT($enable_zol_ext)
 	;;
 
-      aarch64 | i386 | riscv | s390 | sparc)
+      aarch64 | i386 | s390 | sparc)
 	if test $this_target = $target ; then
 	  AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "${arch}", [Default architecture.])
 	fi
 	;;
+
+      riscv)
+        # --target=riscv[32|64]-*-*.  */
+        if test $this_target = $target ; then
+          AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "${arch}", [Default architecture.])
+        fi
+
+        # --with-arch=<value>.  The syntax of <value> is same as Gas option -march.
+        AC_MSG_CHECKING(for default configuration of --with-arch)
+        if test "x${with_arch}" != x; then
+        AC_DEFINE_UNQUOTED(DEFAULT_RISCV_ARCH_WITH_EXT, "$with_arch",
+                           [Define default value for RISC-V -march.])
+        fi
+        AC_MSG_RESULT($with_arch)
+
+        # --with-isa-spec=[2.2|20190608|20191213].
+        AC_MSG_CHECKING(for default configuration of --with-isa-spec)
+        if test "x${with_isa_spec}" != x; then
+          AC_DEFINE_UNQUOTED(DEFAULT_RISCV_ISA_SPEC, "$with_isa_spec",
+                             [Define default value for RISC-V -misa-spec.])
+        fi
+        AC_MSG_RESULT($with_isa_spec)
+
+        # --with-priv-spec=[1.9|1.9.1|1.10|1.11].
+        AC_MSG_CHECKING(for default configuration of --with-priv-spec)
+        if test "x${with_priv_spec}" != x; then
+          AC_DEFINE_UNQUOTED(DEFAULT_RISCV_PRIV_SPEC, "$with_priv_spec",
+                             [Define default value for RISC-V -mpriv-spec])
+        fi
+        AC_MSG_RESULT($with_priv_spec)
+        ;;
 
       rl78)
 	f=rl78-parse.o
@@ -686,6 +741,13 @@ fi
 AC_DEFINE_UNQUOTED(DEFAULT_RISCV_ATTR,
   $ac_default_generate_riscv_attr,
   [Define to 1 if you want to generate RISC-V arch attribute by default.])
+
+if test ${ac_default_mips_fix_loongson3_llsc} = unset; then
+  ac_default_mips_fix_loongson3_llsc=0
+fi
+AC_DEFINE_UNQUOTED(DEFAULT_MIPS_FIX_LOONGSON3_LLSC,
+  $ac_default_mips_fix_loongson3_llsc,
+  [Define to 1 if you want to fix Loongson3 LLSC Errata by default.])
 
 if test x$ac_default_compressed_debug_sections = xyes ; then
   AC_DEFINE(DEFAULT_FLAG_COMPRESS_DEBUG, 1, [Define if you want compressed debug sections by default.])

@@ -1,5 +1,5 @@
 /* sysdep.h -- handle host dependencies for the BFD library
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright (C) 1995-2021 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -187,7 +187,7 @@ size_t strnlen (const char *, size_t);
 
    This is because the code in this directory is used to build a
    library which will be linked with code in other directories to form
-   programs.  We want to maintain a seperate translation file for this
+   programs.  We want to maintain a separate translation file for this
    directory however, rather than being forced to merge it with that
    of any program linked to libbfd.  This is a library, so it cannot
    depend on the catalog currently loaded.
@@ -221,6 +221,14 @@ size_t strnlen (const char *, size_t);
 # define bindtextdomain(Domainname, Dirname) do {} while (0)
 # define _(String) (String)
 # define N_(String) (String)
+#endif
+
+#ifndef HAVE_GETUID
+#define getuid() 0
+#endif
+
+#ifndef HAVE_GETGID
+#define getgid() 0
 #endif
 
 #endif /* ! defined (BFD_SYSDEP_H) */

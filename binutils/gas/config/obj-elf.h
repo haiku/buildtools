@@ -1,5 +1,5 @@
 /* ELF object file format.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -55,18 +55,41 @@ extern int mips_flag_mdebug;
 #endif
 #endif
 
+enum elf_visibility
+{
+  visibility_unchanged = 0,
+  visibility_local,
+  visibility_hidden,
+  visibility_remove
+};
+
+struct elf_versioned_name_list
+{
+  char *name;
+  struct elf_versioned_name_list *next;
+};
+
 /* Additional information we keep for each symbol.  */
 struct elf_obj_sy
 {
   /* Whether the symbol has been marked as local.  */
-  int local;
+  unsigned int local : 1;
+
+  /* Whether the symbol has been marked for rename with @@@.  */
+  unsigned int rename : 1;
+
+  /* Whether the symbol has a bad version name.  */
+  unsigned int bad_version : 1;
+
+  /* Whether visibility of the symbol should be changed.  */
+  ENUM_BITFIELD (elf_visibility) visibility : 2;
 
   /* Use this to keep track of .size expressions that involve
      differences that we can't compute yet.  */
   expressionS *size;
 
-  /* The name specified by the .symver directive.  */
-  char *versioned_name;
+  /* The list of names specified by the .symver directive.  */
+  struct elf_versioned_name_list *versioned_name;
 
 #ifdef ECOFF_DEBUGGING
   /* If we are generating ECOFF debugging information, we need some
@@ -75,6 +98,18 @@ struct elf_obj_sy
   struct localsym *ecoff_symbol;
   valueT ecoff_extern_size;
 #endif
+};
+
+/* Match section group name, the sh_info field and the section_id
+   field.  */
+struct elf_section_match
+{
+  const char *   group_name;
+  const char *   linked_to_symbol_name;
+  unsigned int   section_id;
+  unsigned int   sh_info;		/* ELF section information.  */
+  bfd_vma        sh_flags;		/* ELF section flags.  */
+  flagword       flags;
 };
 
 #define OBJ_SYMFIELD_TYPE struct elf_obj_sy
@@ -162,7 +197,7 @@ extern void obj_elf_common (int);
 extern void obj_elf_data (int);
 extern void obj_elf_text (int);
 extern void obj_elf_change_section
-  (const char *, unsigned int, unsigned int, bfd_vma, int, const char *,
+  (const char *, unsigned int, bfd_vma, int, struct elf_section_match *,
    int, int);
 extern void obj_elf_vtable_inherit (int);
 extern void obj_elf_vtable_entry (int);
@@ -186,6 +221,11 @@ void elf_obj_read_begin_hook (void);
 void elf_obj_symbol_new_hook (symbolS *);
 #ifndef obj_symbol_new_hook
 #define obj_symbol_new_hook	elf_obj_symbol_new_hook
+#endif
+
+void elf_obj_symbol_clone_hook (symbolS *, symbolS *);
+#ifndef obj_symbol_clone_hook
+#define obj_symbol_clone_hook	elf_obj_symbol_clone_hook
 #endif
 
 void elf_copy_symbol_attributes (symbolS *, symbolS *);

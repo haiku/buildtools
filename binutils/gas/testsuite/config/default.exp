@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2019 Free Software Foundation, Inc.
+# Copyright (C) 2012-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,12 +16,10 @@
 
 load_lib gas-defs.exp
 
-global AS
 if ![info exists AS] then {
     set AS [findfile $base_dir/../as-new "../as-new" [transform as]]
 }
 
-global ASFLAGS
 if ![info exists ASFLAGS] then {
     set ASFLAGS ""
 }

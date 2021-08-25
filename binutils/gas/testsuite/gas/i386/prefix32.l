@@ -5,9 +5,11 @@
 .*:9: Error: invalid .* `vaddss' after `repne'
 .*:14: Error: same type of prefix .*
 .*:15: Error: same type of prefix .*
-.*:19: Error: same type of prefix .*
+.*:18: Error: data size .* `addps'
+.*:19: Error: data size .* `addpd'
 .*:20: Error: data size .* `vaddps'
 .*:21: Error: data size .* `vaddpd'
+.*:25: Error: same type of prefix .*
 GAS LISTING .*
 #...
 [ 	]*1[ 	]+\.text
@@ -27,10 +29,15 @@ GAS LISTING .*
 [ 	]*15[ 	]+rep bnd ret
 [ 	]*16[ 	]*
 [ 	]*17[ 	]+\.Ldata16:
-[ 	]*18[ 	]+#bogus	data16 addps	%xmm0, %xmm0
-[ 	]*19[ 	]+\?\?\?\? 660F58C0[ 	]+data16 addpd	%xmm0, %xmm0
-\*\*\*\*  Error: .*
+[ 	]*18[ 	]+data16 addps	%xmm0, %xmm0
+[ 	]*19[ 	]+data16 addpd	%xmm0, %xmm0
 [ 	]*20[ 	]+data16 vaddps	%xmm0, %xmm0, %xmm0
 [ 	]*21[ 	]+data16 vaddpd	%xmm0, %xmm0, %xmm0
 [ 	]*22[ 	]*
-[ 	]*23[ 	]*[\?]+ 0+[ \t]+\.p2align	4,0
+[ 	]*23[ 	]+\.Lsegment:
+[ 	]*24[ 	]+\?\?\?\? 368B4500[ 	]+ss mov		%ss:\(%ebp\), %eax
+[ 	]*25[ 	]+ss mov		%ds:\(%ebp\), %eax
+[ 	]*26[ 	]+\?\?\?\? 3E8B4500[ 	]+ds mov		%ss:\(%ebp\), %eax
+[ 	]*27[ 	]+\?\?\?\? 3E8B4500[ 	]+ds mov		%ds:\(%ebp\), %eax
+[ 	]*28[ 	]*
+#pass

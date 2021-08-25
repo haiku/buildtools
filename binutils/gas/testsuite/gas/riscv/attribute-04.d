@@ -1,4 +1,4 @@
-#as: -march-attr
+#as: -march-attr -misa-spec=2.2
 #readelf: -A
 #source: attribute-04.s
 Attribute Section: riscv

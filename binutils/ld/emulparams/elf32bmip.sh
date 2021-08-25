@@ -19,6 +19,7 @@ fi
 INITIAL_READONLY_SECTIONS="${INITIAL_READONLY_SECTIONS}
   .MIPS.abiflags ${RELOCATING-0} : { *(.MIPS.abiflags) }
   .reginfo       ${RELOCATING-0} : { *(.reginfo) }
+  .MIPS.xhash    ${RELOCATING-0} : { *(.MIPS.xhash) }
 "
 OTHER_TEXT_SECTIONS='*(.mips16.fn.*) *(.mips16.call.*)'
 # Unlike most targets, the MIPS backend puts all dynamic relocations
@@ -72,7 +73,7 @@ OTHER_SECTIONS="
 "
 ARCH=mips
 MACHINE=
-TEMPLATE_NAME=elf32
+TEMPLATE_NAME=elf
 EXTRA_EM_FILE=mipself
 GENERATE_SHLIB_SCRIPT=yes
 GENERATE_PIE_SCRIPT=yes

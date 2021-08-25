@@ -119,11 +119,11 @@ SECTIONS
 
     /* CRT is prepared for constructor/destructor table to have
        a "valid" NULL address.  */
-    ${CONSTRUCTING+ __init_array_begin = . ; }
+    ${CONSTRUCTING+ __init_array_start = . ; }
     ${CONSTRUCTING+ KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*)))}
     ${CONSTRUCTING+ KEEP (*(.init_array))}
     ${CONSTRUCTING+ __init_array_end = . ; }
-    ${CONSTRUCTING+ __fini_array_begin = . ; }
+    ${CONSTRUCTING+ __fini_array_start = . ; }
     ${CONSTRUCTING+ KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*)))}
     ${CONSTRUCTING+ KEEP (*(.fini_array))}
     ${CONSTRUCTING+ __fini_array_end = . ; }
@@ -167,7 +167,7 @@ SECTIONS
   .noinit ${RELOCATING-0} :
   {
     ${RELOCATING+ PROVIDE (_noinit_start = .) ; }
-    *(.noinit)
+    *(.noinit${RELOCATING+ .noinit.* .gnu.linkonce.n.*})
     ${RELOCATING+ PROVIDE (_noinit_end = .) ; }
     ${RELOCATING+ PROVIDE (_heap_start = .) ; }
     ${RELOCATING+ . += __HEAP_SIZE ; }

@@ -86,6 +86,16 @@ On error, @var{fd} is closed.
 A copy of the @var{filename} argument is stored in the newly created
 BFD.  It can be accessed via the bfd_get_filename() macro.
 
+@findex bfd_fdopenw
+@subsubsection @code{bfd_fdopenw}
+@strong{Synopsis}
+@example
+bfd *bfd_fdopenw (const char *filename, const char *target, int fd);
+@end example
+@strong{Description}@*
+@code{bfd_fdopenw} is exactly like @code{bfd_fdopenr} with the exception that
+the resulting BFD is suitable for output.
+
 @findex bfd_openstreamr
 @subsubsection @code{bfd_openstreamr}
 @strong{Synopsis}
@@ -265,16 +275,6 @@ void *bfd_alloc (bfd *abfd, bfd_size_type wanted);
 Allocate a block of @var{wanted} bytes of memory attached to
 @code{abfd} and return a pointer to it.
 
-@findex bfd_alloc2
-@subsubsection @code{bfd_alloc2}
-@strong{Synopsis}
-@example
-void *bfd_alloc2 (bfd *abfd, bfd_size_type nmemb, bfd_size_type size);
-@end example
-@strong{Description}@*
-Allocate a block of @var{nmemb} elements of @var{size} bytes each
-of memory attached to @code{abfd} and return a pointer to it.
-
 @findex bfd_zalloc
 @subsubsection @code{bfd_zalloc}
 @strong{Synopsis}
@@ -284,16 +284,6 @@ void *bfd_zalloc (bfd *abfd, bfd_size_type wanted);
 @strong{Description}@*
 Allocate a block of @var{wanted} bytes of zeroed memory
 attached to @code{abfd} and return a pointer to it.
-
-@findex bfd_zalloc2
-@subsubsection @code{bfd_zalloc2}
-@strong{Synopsis}
-@example
-void *bfd_zalloc2 (bfd *abfd, bfd_size_type nmemb, bfd_size_type size);
-@end example
-@strong{Description}@*
-Allocate a block of @var{nmemb} elements of @var{size} bytes each
-of zeroed memory attached to @code{abfd} and return a pointer to it.
 
 @findex bfd_calc_gnu_debuglink_crc32
 @subsubsection @code{bfd_calc_gnu_debuglink_crc32}
@@ -573,4 +563,15 @@ the current directory.
 @code{NULL} on any errors or failure to locate the debug file,
 otherwise a pointer to a heap-allocated string containing the
 filename.  The caller is responsible for freeing this string.
+
+@findex bfd_set_filename
+@subsubsection @code{bfd_set_filename}
+@strong{Synopsis}
+@example
+const char *bfd_set_filename (bfd *abfd, const char *filename);
+@end example
+@strong{Description}@*
+Set the filename of @var{abfd}, copying the FILENAME parameter to
+bfd_alloc'd memory owned by @var{abfd}.  Returns a pointer the
+newly allocated name, or NULL if the allocation failed.
 

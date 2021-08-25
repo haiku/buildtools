@@ -1,5 +1,5 @@
 /* tc-nds32.h -- Header file for tc-nds32.c.
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2021 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of GAS.
@@ -191,7 +191,7 @@ struct nds32_frag_type
 extern void nds32_frag_init (fragS *);
 
 #define TC_FRAG_TYPE				struct nds32_frag_type
-#define TC_FRAG_INIT(fragP)			nds32_frag_init (fragP)
+#define TC_FRAG_INIT(fragP, max_bytes)		nds32_frag_init (fragP)
 
 /* CFI directive.  */
 extern void nds32_elf_frame_initial_instructions (void);

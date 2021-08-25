@@ -1,5 +1,5 @@
 /* BFD back end for traditional Unix core files (U-area and raw sections)
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988-2021 Free Software Foundation, Inc.
    Written by John Gilmore of Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -71,13 +71,13 @@ struct trad_core_struct
 
 /* Handle 4.2-style (and perhaps also sysV-style) core dump file.  */
 
-static const bfd_target *
+static bfd_cleanup
 trad_unix_core_file_p (bfd *abfd)
 {
   int val;
   struct user u;
   struct trad_core_struct *rawptr;
-  bfd_size_type amt;
+  size_t amt;
   flagword flags;
 
 #ifdef TRAD_CORE_USER_OFFSET
@@ -220,7 +220,7 @@ trad_unix_core_file_p (bfd *abfd)
   core_datasec (abfd)->alignment_power = 2;
   core_regsec (abfd)->alignment_power = 2;
 
-  return abfd->xvec;
+  return _bfd_no_cleanup;
 
  fail:
   bfd_release (abfd, abfd->tdata.any);
@@ -279,6 +279,7 @@ const bfd_target core_trad_vec =
     ' ',			/* ar_pad_char */
     16,				/* ar_max_namelen */
     0,				/* match priority.  */
+    TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
     NO_GET64, NO_GETS64, NO_PUT64,	/* 64 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 32 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 16 bit data */

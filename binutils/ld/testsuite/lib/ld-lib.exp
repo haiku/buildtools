@@ -1,5 +1,5 @@
 # Support routines for LD testsuite.
-#   Copyright (C) 1994-2019 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2021 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -37,7 +37,9 @@ proc at_least_gcc_version { major minor } {
     if { $CC == "" } {
 	return 0
     }
-    set state [remote_exec host $CC --version]
+    # Filter out -Wl, options.
+    regsub -all -- "-Wl,\[^ ^\t\]+" $CC "" cc_cmd
+    set state [remote_exec host $cc_cmd --version]
     if { [lindex $state 0] != 0 } {
 	return 0;
     }
@@ -289,7 +291,6 @@ proc default_ld_compile { cc source object } {
 	return 1
     } else {
 	verbose -log "$exec_output"
-	perror "$source: compilation failed"
 	return 0
     }
 }
@@ -304,13 +305,15 @@ proc default_ld_assemble { as in_flags source object } {
 
     if ![info exists ASFLAGS] { set ASFLAGS "" }
 
-    set flags "[big_or_little_endian] -I$srcdir/$subdir"
+    set flags [big_or_little_endian]
+    if [info exists subdir] {
+	append flags " -I$srcdir/$subdir"
+    }
     set exec_output [run_host_cmd "$as" "$flags $in_flags $ASFLAGS -o $object $source"]
     set exec_output [prune_warnings $exec_output]
     if [string match "" $exec_output] then {
 	return 1
     } else {
-	perror "$source: assembly failed"
 	return 0
     }
 }
@@ -361,7 +364,6 @@ proc default_ld_nm { nm nmflags object } {
 	return 1
     } else {
 	verbose -log "$exec_output"
-	perror "$object: nm failed"
 	return 0
     }
 }
@@ -379,7 +381,7 @@ proc ld_link_defsyms {} {
 
     # Windows targets need __main, some prefixed with underscore.
     if {[istarget *-*-cygwin* ] || [istarget *-*-mingw*]} {
-        append flags " --defsym __main=0 --defsym ___main=0"
+        append flags " --defsym __main=main --defsym ___main=main"
     }
 
     # PowerPC EABI code calls __eabi.
@@ -414,7 +416,7 @@ proc ld_link_defsyms {} {
 proc ar_simple_create { ar aropts target objects } {
     remote_file host delete $target
 
-    set exec_output [run_host_cmd "$ar" "-rc $aropts $target $objects"]
+    set exec_output [run_host_cmd "$ar" "$aropts rc $target $objects"]
     set exec_output [prune_warnings $exec_output]
 
     if [string match "" $exec_output] then {
@@ -451,6 +453,7 @@ proc ar_simple_create { ar aropts target objects } {
 #
 proc run_ld_link_tests { ldtests args } {
     global ld
+    global LDFLAGS
     global as
     global nm
     global ar
@@ -463,12 +466,10 @@ proc run_ld_link_tests { ldtests args } {
     global CFLAGS
     global runtests
     global exec_output
-    global ld_elf_shared_opt
 
-    if { [is_elf_format] && [check_shared_lib_support] } {
-	set ld_extra_opt "$ld_elf_shared_opt"
-    } else {
-	set ld_extra_opt ""
+    set ld_extra_opt $LDFLAGS
+    if [check_relro_support] {
+	append ld_extra_opt " -z norelro"
     }
 
     foreach testitem $ldtests {
@@ -479,7 +480,10 @@ proc run_ld_link_tests { ldtests args } {
 	}
 
 	foreach target $args {
-	    setup_xfail $target
+	    if [match_target $target] {
+		setup_xfail "*-*-*"
+		break
+	    }
 	}
 
 	set ld_options [lindex $testitem 1]
@@ -495,6 +499,11 @@ proc run_ld_link_tests { ldtests args } {
 	set maybe_failed 0
 	set ld_output ""
 
+	# Add -fno-lto.  LTO should be tested explicitly by $cflags.
+	if {[check_lto_available]} {
+	    set cflags "-fno-lto $cflags"
+	}
+
 #	verbose -log "Testname is $testname"
 #	verbose -log "ld_options is $ld_options"
 #	verbose -log "ld_after is $ld_after"
@@ -506,25 +515,42 @@ proc run_ld_link_tests { ldtests args } {
 	# Assemble each file in the test.
 	foreach src_file $src_files {
 	    set fileroot "[file rootname [file tail $src_file]]"
-	    set objfile "tmpdir/$fileroot.o"
-	    lappend objfiles $objfile
 
-	    if { [file extension $src_file] == ".c" } {
-		set as_file "tmpdir/$fileroot.s"
-		if ![ld_compile "$CC -S $CFLAGS $cflags" $srcdir/$subdir/$src_file $as_file] {
+	    if { [file extension $src_file] == ".bz2" } {
+		set objfile tmpdir/[file rootname $src_file]
+		set unbzip2 "system \"bzip2 -dc $srcdir/$subdir/$src_file > $objfile\""
+		send_log "$unbzip2\n"
+		catch "$unbzip2" exec_output
+		if ![string match "" $exec_output] then {
+		    send_log "$exec_output\n"
 		    set is_unresolved 1
 		    break
 		}
 	    } else {
-		set as_file "$srcdir/$subdir/$src_file"
+		set objfile "tmpdir/$fileroot.o"
+		if { [file extension $src_file] == ".c" } {
+		    set as_file "tmpdir/$fileroot.s"
+		    if ![ld_compile "$CC -S $CFLAGS $cflags" $srcdir/$subdir/$src_file $as_file] {
+			set is_unresolved 1
+			break
+		    }
+		} else {
+		    set as_file "$srcdir/$subdir/$src_file"
+		}
+		if ![ld_assemble $as "$as_options $as_file" $objfile] {
+		    set failed 1
+		    break
+		}
 	    }
-	    if ![ld_assemble $as "$as_options $as_file" $objfile] {
-		set is_unresolved 1
-		break
-	    }
+	    lappend objfiles $objfile
 	}
 
 	# Catch assembler errors.
+	if { $failed } {
+	    fail $testname
+	    continue
+	}
+	# Catch compiler errors.
 	if { $is_unresolved } {
 	    unresolved $testname
 	    continue
@@ -672,9 +698,6 @@ proc run_ld_link_exec_tests { ldtests args } {
     }
 
     foreach testitem $ldtests {
-	foreach target $args {
-	    setup_xfail $target
-	}
 	set testname [lindex $testitem 0]
 	set ld_options [lindex $testitem 1]
 	set as_options [lindex $testitem 2]
@@ -687,6 +710,23 @@ proc run_ld_link_exec_tests { ldtests args } {
 	set ld_after [lindex $testitem 9]
 	set objfiles {}
 	set failed 0
+
+	if { ![check_compiler_available] } {
+	    unsupported $testname
+	    continue
+	}
+
+	# Add -fno-lto.  LTO should be tested explicitly by $cflags.
+	if {[check_lto_available]} {
+	    set cflags "-fno-lto $cflags"
+	}
+
+	foreach target $args {
+	    if [match_target $target] {
+		setup_xfail "*-*-*"
+		break
+	    }
+	}
 
 #	verbose -log "Testname is $testname"
 #	verbose -log "ld_options is $ld_options"
@@ -761,14 +801,9 @@ proc run_ld_link_exec_tests { ldtests args } {
 		verbose "$exec_output" 1
 		set failed 1
 	    } else {
-		send_log "diff $binfile.out $srcdir/$subdir/$expfile\n"
-		verbose "diff $binfile.out $srcdir/$subdir/$expfile"
-		catch "exec diff $binfile.out $srcdir/$subdir/$expfile" exec_output
-		set exec_output [prune_warnings $exec_output]
-
-		if ![string match "" $exec_output] then {
-		    send_log "$exec_output\n"
-		    verbose "$exec_output" 1
+		send_log [file_contents $binfile.out]
+		verbose [file_contents $binfile.out] 2
+		if [regexp_diff "$binfile.out" "$srcdir/$subdir/$expfile"] {
 		    set failed 1
 		}
 	    }
@@ -839,6 +874,16 @@ proc run_cc_link_tests { ldtests } {
 	set failed 0
 	set check_ld(terminal) 0
 	set check_ld(source) ""
+
+	if { ![check_compiler_available] } {
+	    unsupported $testname
+	    continue
+	}
+
+	# Add -fno-lto.  LTO should be tested explicitly by $cflags.
+	if {[check_lto_available]} {
+	    set cflags "-fno-lto $cflags"
+	}
 
 	#verbose -log "testname  is $testname"
 	#verbose -log "ldflags   is $ldflags"
@@ -911,6 +956,7 @@ proc run_cc_link_tests { ldtests } {
 
 	if { $binfile eq "tmpdir/" } {
 	    # compile only
+	    set binfile $objfile
 	} elseif { [regexp ".*\\.a$" $binfile] } {
 	    if { ![ar_simple_create $ar $ldflags $binfile "$objfiles"] } {
 		set failed 1
@@ -1035,6 +1081,7 @@ proc check_gc_sections_available { } {
 	# Some targets don't support gc-sections despite whatever's
 	# advertised by ld's options.
 	if {   [istarget alpha-*-*]
+            || [istarget bpf-*-*]
 	    || [istarget d30v-*-*]
 	    || [istarget dlx-*-*]
 	    || [istarget hppa*64-*-*]
@@ -1043,7 +1090,9 @@ proc check_gc_sections_available { } {
 	    || [istarget mn10200-*-*]
 	    || [istarget pj*-*-*]
 	    || [istarget pru*-*-*]
-	    || [istarget xgate-*-*] } {
+	    || [istarget s12z-*-*]
+	    || [istarget xgate-*-*]
+	    || [istarget z80-*-*] } {
 	    set gc_sections_available_saved 0
 	    return 0
 	}
@@ -1069,8 +1118,8 @@ proc check_gc_sections_available { } {
     return $gc_sections_available_saved
 }
 
-# Return true if target uses genelf.em (assuming it is ELF).
-proc is_generic_elf { } {
+# Return true if target uses genelf.em.
+proc uses_genelf { } {
     if { [istarget "d30v-*-*"]
 	 || [istarget "dlx-*-*"]
 	 || [istarget "fr30-*-*"]
@@ -1078,14 +1127,14 @@ proc is_generic_elf { } {
 	 || [istarget "ft32-*-*"]
 	 || [istarget "iq2000-*-*"]
 	 || [istarget "mn10200-*-*"]
-	 || [istarget "moxie-*-*"]
 	 || [istarget "msp430-*-*"]
 	 || [istarget "mt-*-*"]
 	 || [istarget "pj*-*-*"]
+	 || [istarget "s12z-*-*"]
 	 || [istarget "xgate-*-*"] } {
-	return 1;
+	return 1
     }
-    return 0;
+    return 0
 }
 
 proc is_underscore_target { } {
@@ -1114,7 +1163,8 @@ proc check_plugin_api_available { } {
     if {![info exists plugin_api_available_saved]} {
 	# Check if the ld used by gcc supports --plugin.
 	set ld_output [remote_exec host $ld "--help"]
-	if { [ string first "-plugin PLUGIN" $ld_output ] >= 0 } {
+	if { [regexp -- "-plugin PLUGIN \[^\n\r\]*" $ld_output line]
+	     && ![regexp "ignored" $line] } {
 	    set plugin_api_available_saved 1
 	} else {
 	    set plugin_api_available_saved 0
@@ -1139,6 +1189,49 @@ proc check_sysroot_available { } {
     return $ld_sysroot_available_saved
 }
 
+# Return true if we can build a program with the compiler.
+# On some targets, CC might be defined, but libraries and startup
+# code might be missing or require special options that the ld test
+# harness doesn't know about.
+
+proc check_compiler_available { } {
+    global compiler_available_saved
+    global CC
+
+    if {![info exists compiler_available_saved]} {
+        if { [which $CC] == 0 } {
+	    set compiler_available_saved 0
+	    return 0
+	}
+
+	set flags ""
+	if [board_info [target_info name] exists cflags] {
+	    append flags " [board_info [target_info name] cflags]"
+	}
+	if [board_info [target_info name] exists ldflags] {
+	    append flags " [board_info [target_info name] ldflags]"
+	}
+
+	set basename "tmpdir/compiler[pid]"
+	set src ${basename}.c
+	set output ${basename}.out
+	set f [open $src "w"]
+	puts $f "int main (void)"
+	puts $f "{"
+	puts $f "  return 0; "
+	puts $f "}"
+	close $f
+	if [is_remote host] {
+	    set src [remote_download host $src]
+	}
+	set compiler_available_saved [run_host_cmd_yesno "$CC" "$flags $src -o $output"]
+	remote_file host delete $src
+	remote_file host delete $output
+	file delete $src
+    }
+    return $compiler_available_saved
+}
+
 # Returns 1 if plugin is enabled in gcc.  Returns 0 otherwise.
 proc check_gcc_plugin_enabled { } {
     global CC
@@ -1149,7 +1242,9 @@ proc check_gcc_plugin_enabled { } {
     if { $CC == ""} {
 	return 0
     }
-    set state [remote_exec host $CC -v]
+    # Filter out -Wl, options.
+    regsub -all -- "-Wl,\[^ ^\t\]+" $CC "" cc_cmd
+    set state [remote_exec host $cc_cmd -v]
     if { [lindex $state 0] != 0 } {
 	return 0;
     }
@@ -1309,11 +1404,7 @@ proc check_as_cfi { } {
     close $as_fh
     remote_download host $as_file
     verbose -log "Checking CFI support:"
-    rename "perror" "check_as_cfi_perror"
-    proc perror { args } { }
     set success [ld_assemble $as $as_file "/dev/null"]
-    rename "perror" ""
-    rename "check_as_cfi_perror" "perror"
     #remote_file host delete $as_file
     set check_as_cfi_result $success
     return $success
@@ -1326,7 +1417,7 @@ proc check_ifunc_available { } {
     global CC
 
     if {![info exists ifunc_available_saved]} {
-        if { [which $CC] == 0 } {
+        if { ![check_compiler_available] } {
 	    set ifunc_available_saved 0
 	    return 0
 	}
@@ -1375,7 +1466,7 @@ proc check_ifunc_attribute_available { } {
     global CC
 
     if {![info exists ifunc_attribute_available_saved]} {
-        if { [which $CC] == 0 } {
+        if { ![check_compiler_available] } {
 	    set ifunc_attribute_available_saved 0
 	    return 0
 	}
@@ -1422,7 +1513,7 @@ proc check_libdl_available { } {
     global CC
 
     if {![info exists libdl_available_saved]} {
-        if { [which $CC] == 0 } {
+        if { ![check_compiler_available] } {
 	    set libdl_available_saved 0
 	    return 0
 	}
@@ -1458,7 +1549,7 @@ proc check_gnu2_tls_available { } {
     global GNU2_CFLAGS
 
     if {![info exists gnu2_tls_available_saved]} {
-        if { [which $CC] == 0 || "$GNU2_CFLAGS" == "" } {
+        if { ![check_compiler_available] || "$GNU2_CFLAGS" == "" } {
 	    set gnu2_tls_available_saved 0
 	    return 0
 	}
@@ -1512,4 +1603,60 @@ proc check_gnu2_tls_available { } {
 	file delete $src1 $src2
     }
     return $gnu2_tls_available_saved
+}
+
+# Compile a C source file, with the specified additional_flags.
+proc compile_one_cc { src output additional_flags } {
+    global CC
+    global CFLAGS
+
+    set flags ""
+    if [board_info [target_info name] exists cflags] {
+	append flags " [board_info [target_info name] cflags]"
+    }
+    if [board_info [target_info name] exists ldflags] {
+	append flags " [board_info [target_info name] ldflags]"
+    }
+
+    if [is_remote host] {
+	set src [remote_download host $src]
+    }
+    return [run_host_cmd_yesno "$CC" "$flags $CFLAGS $additional_flags $src -o $output"]
+}
+
+# Returns true if the target compiler supports -gt
+proc check_ctf_available { } {
+    global ctf_available_saved
+
+    if {![info exists ctf_available_saved]} {
+	if { ![check_compiler_available] } {
+	    set ctf_available_saved 0
+	} else {
+	    set basename "tmpdir/ctf_available[pid]"
+	    set src ${basename}.c
+	    set output ${basename}.o
+	    set f [open $src "w"]
+	    puts $f "int main() { return 0; }"
+	    close $f
+	    set ctf_available_saved [compile_one_cc $src $output "-gt -c"]
+	    remote_file host delete $src
+	    remote_file host delete $output
+	    file delete $src
+	}
+    }
+    return $ctf_available_saved
+}
+
+proc skip_ctf_tests { } {
+    global enable_libctf
+
+    if {$enable_libctf eq "no"} {
+	return 1
+    }
+
+    if [check_ctf_available] {
+	return 0
+    }
+
+    return 1
 }

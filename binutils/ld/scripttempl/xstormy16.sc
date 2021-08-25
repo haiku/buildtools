@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+# Copyright (C) 2014-2021 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -98,7 +98,7 @@ DTOR=" .dtors       ${CONSTRUCTING-0} :
   } > ROM"
 
 cat <<EOF
-/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -181,7 +181,7 @@ SECTIONS
     *(.text)
     ${RELOCATING+*(.text.*)}
     *(.stub)
-    /* .gnu.warning sections are handled specially by elf32.em.  */
+    /* .gnu.warning sections are handled specially by elf.em.  */
     *(.gnu.warning)
     ${RELOCATING+*(.gnu.linkonce.t.*)}
     ${RELOCATING+${OTHER_TEXT_SECTIONS}}
@@ -189,13 +189,13 @@ SECTIONS
   .init        ${RELOCATING-0} :
   {
     ${RELOCATING+${INIT_START}}
-    KEEP (*(.init))
+    KEEP (*(SORT_NONE(.init)))
     ${RELOCATING+${INIT_END}}
   }${RELOCATING+ > ROM =${NOP-0}}
   .fini    ${RELOCATING-0} :
   {
     ${RELOCATING+${FINI_START}}
-    KEEP (*(.fini))
+    KEEP (*(SORT_NONE(.fini)))
     ${RELOCATING+${FINI_END}}
   }${RELOCATING+ > ROM =${NOP-0}}
   ${RELOCATING+PROVIDE (__etext = .);}

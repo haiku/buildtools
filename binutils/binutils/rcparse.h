@@ -1,8 +1,9 @@
-/* A Bison parser, made by GNU Bison 3.0.5.  */
+/* A Bison parser, made by GNU Bison 3.5.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -29,6 +30,9 @@
 
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
+
+/* Undocumented macros, especially those whose name start with YY_,
+   are private implementation details.  Do not rely on them.  */
 
 #ifndef YY_YY_RCPARSE_H_INCLUDED
 # define YY_YY_RCPARSE_H_INCLUDED
@@ -108,39 +112,40 @@ extern int yydebug;
     GRAYED = 318,
     HELP = 319,
     INACTIVE = 320,
-    MENUBARBREAK = 321,
-    MENUBREAK = 322,
-    MESSAGETABLE = 323,
-    RCDATA = 324,
-    STRINGTABLE = 325,
-    VERSIONINFO = 326,
-    FILEVERSION = 327,
-    PRODUCTVERSION = 328,
-    FILEFLAGSMASK = 329,
-    FILEFLAGS = 330,
-    FILEOS = 331,
-    FILETYPE = 332,
-    FILESUBTYPE = 333,
-    BLOCKSTRINGFILEINFO = 334,
-    BLOCKVARFILEINFO = 335,
-    VALUE = 336,
-    BLOCK = 337,
-    MOVEABLE = 338,
-    FIXED = 339,
-    PURE = 340,
-    IMPURE = 341,
-    PRELOAD = 342,
-    LOADONCALL = 343,
-    DISCARDABLE = 344,
-    NOT = 345,
-    QUOTEDUNISTRING = 346,
-    QUOTEDSTRING = 347,
-    STRING = 348,
-    NUMBER = 349,
-    SIZEDUNISTRING = 350,
-    SIZEDSTRING = 351,
-    IGNORED_TOKEN = 352,
-    NEG = 353
+    OWNERDRAW = 321,
+    MENUBARBREAK = 322,
+    MENUBREAK = 323,
+    MESSAGETABLE = 324,
+    RCDATA = 325,
+    STRINGTABLE = 326,
+    VERSIONINFO = 327,
+    FILEVERSION = 328,
+    PRODUCTVERSION = 329,
+    FILEFLAGSMASK = 330,
+    FILEFLAGS = 331,
+    FILEOS = 332,
+    FILETYPE = 333,
+    FILESUBTYPE = 334,
+    BLOCKSTRINGFILEINFO = 335,
+    BLOCKVARFILEINFO = 336,
+    VALUE = 337,
+    BLOCK = 338,
+    MOVEABLE = 339,
+    FIXED = 340,
+    PURE = 341,
+    IMPURE = 342,
+    PRELOAD = 343,
+    LOADONCALL = 344,
+    DISCARDABLE = 345,
+    NOT = 346,
+    QUOTEDUNISTRING = 347,
+    QUOTEDSTRING = 348,
+    STRING = 349,
+    NUMBER = 350,
+    SIZEDUNISTRING = 351,
+    SIZEDSTRING = 352,
+    IGNORED_TOKEN = 353,
+    NEG = 354
   };
 #endif
 /* Tokens.  */
@@ -207,46 +212,46 @@ extern int yydebug;
 #define GRAYED 318
 #define HELP 319
 #define INACTIVE 320
-#define MENUBARBREAK 321
-#define MENUBREAK 322
-#define MESSAGETABLE 323
-#define RCDATA 324
-#define STRINGTABLE 325
-#define VERSIONINFO 326
-#define FILEVERSION 327
-#define PRODUCTVERSION 328
-#define FILEFLAGSMASK 329
-#define FILEFLAGS 330
-#define FILEOS 331
-#define FILETYPE 332
-#define FILESUBTYPE 333
-#define BLOCKSTRINGFILEINFO 334
-#define BLOCKVARFILEINFO 335
-#define VALUE 336
-#define BLOCK 337
-#define MOVEABLE 338
-#define FIXED 339
-#define PURE 340
-#define IMPURE 341
-#define PRELOAD 342
-#define LOADONCALL 343
-#define DISCARDABLE 344
-#define NOT 345
-#define QUOTEDUNISTRING 346
-#define QUOTEDSTRING 347
-#define STRING 348
-#define NUMBER 349
-#define SIZEDUNISTRING 350
-#define SIZEDSTRING 351
-#define IGNORED_TOKEN 352
-#define NEG 353
+#define OWNERDRAW 321
+#define MENUBARBREAK 322
+#define MENUBREAK 323
+#define MESSAGETABLE 324
+#define RCDATA 325
+#define STRINGTABLE 326
+#define VERSIONINFO 327
+#define FILEVERSION 328
+#define PRODUCTVERSION 329
+#define FILEFLAGSMASK 330
+#define FILEFLAGS 331
+#define FILEOS 332
+#define FILETYPE 333
+#define FILESUBTYPE 334
+#define BLOCKSTRINGFILEINFO 335
+#define BLOCKVARFILEINFO 336
+#define VALUE 337
+#define BLOCK 338
+#define MOVEABLE 339
+#define FIXED 340
+#define PURE 341
+#define IMPURE 342
+#define PRELOAD 343
+#define LOADONCALL 344
+#define DISCARDABLE 345
+#define NOT 346
+#define QUOTEDUNISTRING 347
+#define QUOTEDSTRING 348
+#define STRING 349
+#define NUMBER 350
+#define SIZEDUNISTRING 351
+#define SIZEDSTRING 352
+#define IGNORED_TOKEN 353
+#define NEG 354
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-
 union YYSTYPE
 {
-#line 68 "rcparse.y" /* yacc.c:1910  */
+#line 68 "rcparse.y"
 
   rc_accelerator acc;
   rc_accelerator *pacc;
@@ -292,9 +297,9 @@ union YYSTYPE
     const unichar *s;
   } suni;
 
-#line 296 "rcparse.h" /* yacc.c:1910  */
-};
+#line 301 "rcparse.h"
 
+};
 typedef union YYSTYPE YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define YYSTYPE_IS_DECLARED 1

@@ -1,5 +1,5 @@
 /* tc-s390.c -- Assemble for the S390
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
    Contributed by Martin Schwidefsky (schwidefsky@de.ibm.com).
 
    This file is part of GAS, the GNU Assembler.
@@ -197,10 +197,10 @@ register_name (expressionS *expressionP)
 /* Local variables.  */
 
 /* Opformat hash table.  */
-static struct hash_control *s390_opformat_hash;
+static htab_t s390_opformat_hash;
 
 /* Opcode hash table.  */
-static struct hash_control *s390_opcode_hash = NULL;
+static htab_t s390_opcode_hash = NULL;
 
 /* Flags to set in the elf header */
 static flagword s390_flags = 0;
@@ -291,7 +291,7 @@ s390_parse_cpu (const char *         arg,
       S390_INSTR_FLAG_HTM | S390_INSTR_FLAG_VX },
     { STRING_COMMA_LEN ("z14"), STRING_COMMA_LEN ("arch12"),
       S390_INSTR_FLAG_HTM | S390_INSTR_FLAG_VX },
-    { STRING_COMMA_LEN (""), STRING_COMMA_LEN ("arch13"),
+    { STRING_COMMA_LEN ("z15"), STRING_COMMA_LEN ("arch13"),
       S390_INSTR_FLAG_HTM | S390_INSTR_FLAG_VX }
   };
   static struct
@@ -494,13 +494,12 @@ s390_setup_opcodes (void)
   const struct s390_opcode *op;
   const struct s390_opcode *op_end;
   bfd_boolean dup_insn = FALSE;
-  const char *retval;
 
   if (s390_opcode_hash != NULL)
-    hash_die (s390_opcode_hash);
+    htab_delete (s390_opcode_hash);
 
   /* Insert the opcodes into a hash table.  */
-  s390_opcode_hash = hash_new ();
+  s390_opcode_hash = str_htab_create ();
 
   op_end = s390_opcodes + s390_num_opcodes;
   for (op = s390_opcodes; op < op_end; op++)
@@ -531,15 +530,11 @@ s390_setup_opcodes (void)
 	  f = (op->flags & S390_INSTR_FLAG_FACILITY_MASK);
 	  use_opcode = ((f & current_flags) == f);
 	}
-      if (use_opcode)
+      if (use_opcode
+	  && str_hash_insert (s390_opcode_hash, op->name, op, 0) != NULL)
 	{
-	  retval = hash_insert (s390_opcode_hash, op->name, (void *) op);
-	  if (retval != (const char *) NULL)
-	    {
-	      as_bad (_("Internal assembler error for instruction %s"),
-		      op->name);
-	      dup_insn = TRUE;
-	    }
+	  as_bad (_("duplicate %s"), op->name);
+	  dup_insn = TRUE;
 	}
 
       while (op < op_end - 1 && strcmp (op->name, op[1].name) == 0)
@@ -559,7 +554,6 @@ md_begin (void)
 {
   const struct s390_opcode *op;
   const struct s390_opcode *op_end;
-  const char *retval;
 
   /* Give a warning if the combination -m64-bit and -Aesa is used.  */
   if (s390_arch_size == 64 && current_cpu < S390_OPCODE_Z900)
@@ -572,16 +566,12 @@ md_begin (void)
     bfd_set_private_flags (stdoutput, s390_flags);
 
   /* Insert the opcode formats into a hash table.  */
-  s390_opformat_hash = hash_new ();
+  s390_opformat_hash = str_htab_create ();
 
   op_end = s390_opformats + s390_num_opformats;
   for (op = s390_opformats; op < op_end; op++)
-    {
-      retval = hash_insert (s390_opformat_hash, op->name, (void *) op);
-      if (retval != (const char *) NULL)
-	as_bad (_("Internal assembler error for instruction format %s"),
-		op->name);
-    }
+    if (str_hash_insert (s390_opformat_hash, op->name, op, 0) != NULL)
+      as_fatal (_("duplicate %s"), op->name);
 
   s390_setup_opcodes ();
 
@@ -896,7 +886,7 @@ s390_elf_suffix (char **str_p, expressionS *exp_p)
 	return ptr->suffix;
       }
 
-  return BFD_RELOC_UNUSED;
+  return ELF_SUFFIX_NONE;
 }
 
 /* Structure used to hold a literal pool entry.  */
@@ -1693,7 +1683,7 @@ md_assemble (char *str)
     *s++ = '\0';
 
   /* Look up the opcode in the hash table.  */
-  opcode = (struct s390_opcode *) hash_find (s390_opcode_hash, str);
+  opcode = (struct s390_opcode *) str_hash_find (s390_opcode_hash, str);
   if (opcode == (const struct s390_opcode *) NULL)
     {
       as_bad (_("Unrecognized opcode: `%s'"), str);
@@ -1761,7 +1751,7 @@ s390_insn (int ignore ATTRIBUTE_UNUSED)
 
   /* Look up the opcode in the hash table.  */
   opformat = (struct s390_opcode *)
-    hash_find (s390_opformat_hash, input_line_pointer);
+    str_hash_find (s390_opformat_hash, input_line_pointer);
   if (opformat == (const struct s390_opcode *) NULL)
     {
       as_bad (_("Unrecognized opcode format: `%s'"), input_line_pointer);
@@ -1910,7 +1900,7 @@ s390_literals (int ignore ATTRIBUTE_UNUSED)
 
 #define MAX_HISTORY 100
 
-/* The .machine pseudo op allows to switch to a different CPU level in
+/* The .machine pseudo op allows one to switch to a different CPU level in
    the asm listing.  The current CPU setting can be stored on a stack
    with .machine push and restored with .machine pop.  */
 
@@ -2001,7 +1991,7 @@ s390_machine (int ignore ATTRIBUTE_UNUSED)
   demand_empty_rest_of_line ();
 }
 
-/* The .machinemode pseudo op allows to switch to a different
+/* The .machinemode pseudo op allows one to switch to a different
    architecture mode in the asm listing.  The current architecture
    mode setting can be stored on a stack with .machinemode push and
    restored with .machinemode pop.  */
@@ -2084,7 +2074,7 @@ md_atof (int type, char *litp, int *sizep)
 valueT
 md_section_align (asection *seg, valueT addr)
 {
-  int align = bfd_get_section_alignment (stdoutput, seg);
+  int align = bfd_section_alignment (seg);
 
   return ((addr + (1 << align) - 1) & -(1 << align));
 }
@@ -2120,7 +2110,7 @@ md_undefined_symbol (char *name)
 	  if (symbol_find (name))
 	    as_bad (_("GOT already in symbol table"));
 	  GOT_symbol = symbol_new (name, undefined_section,
-				   (valueT) 0, &zero_address_frag);
+				   &zero_address_frag, 0);
 	}
       return GOT_symbol;
     }

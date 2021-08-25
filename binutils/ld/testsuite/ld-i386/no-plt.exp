@@ -1,5 +1,5 @@
 # Expect script for i386 no-PLT tests.
-#   Copyright (C) 2016-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2016-2021 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -35,12 +35,9 @@ if ![istarget "i?86-*-*"] {
 }
 
 # Check to see if the C compiler works
-if { [which $CC] == 0 } {
+if { ![check_compiler_available] } {
     return
 }
-
-# Add $NOPIE_CFLAGS and $NOPIE_LDFLAGS if non-PIE is required.
-global NOPIE_CFLAGS NOPIE_LDFLAGS
 
 run_cc_link_tests [list \
     [list \

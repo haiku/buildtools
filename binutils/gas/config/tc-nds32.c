@@ -1,5 +1,5 @@
 /* tc-nds32.c -- Assemble for the nds32
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2021 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of GAS, the GNU Assembler.
@@ -82,8 +82,8 @@ static int vec_size = 0;
    ".flag verbatim" at beginning of the content.  We have
    'nds32_flag' to parse it and set this field to be non-zero.  */
 static int verbatim = 0;
-static struct hash_control *nds32_gprs_hash;
-static struct hash_control *nds32_hint_hash;
+static htab_t nds32_gprs_hash;
+static htab_t nds32_hint_hash;
 #define TLS_REG "$r27"
 #define GOT_NAME "_GLOBAL_OFFSET_TABLE_"
 
@@ -109,7 +109,7 @@ enum ict_option {
 static enum ict_option ict_flag = ICT_NONE;
 
 
-static struct hash_control *nds32_relax_info_hash;
+static htab_t nds32_relax_info_hash;
 
 /* Branch patterns.  */
 static relax_info_t relax_table[] =
@@ -2569,12 +2569,12 @@ struct nds32_pseudo_opcode
 };
 #define PV_DONT_CARE 0
 
-static struct hash_control *nds32_pseudo_opcode_hash = NULL;
+static htab_t nds32_pseudo_opcode_hash = NULL;
 
 static int
 builtin_isreg (const char *s, const char *x ATTRIBUTE_UNUSED)
 {
-  if (s [0] == '$' && hash_find (nds32_gprs_hash, (s + 1)))
+  if (s [0] == '$' && str_hash_find (nds32_gprs_hash, (s + 1)))
     return 1;
   return 0;
 }
@@ -2586,7 +2586,7 @@ builtin_regnum (const char *s, const char *x ATTRIBUTE_UNUSED)
   if (*s != '$')
     return -1;
   s++;
-  k = hash_find (nds32_gprs_hash, s);
+  k = str_hash_find (nds32_gprs_hash, s);
 
   if (k == NULL)
     return -1;
@@ -3432,21 +3432,12 @@ static struct nds32_pseudo_opcode nds32_pseudo_opcode_table[] =
 static void
 nds32_init_nds32_pseudo_opcodes (void)
 {
-  struct nds32_pseudo_opcode *opcode = nds32_pseudo_opcode_table;
+  struct nds32_pseudo_opcode *opcode;
 
-  nds32_pseudo_opcode_hash = hash_new ();
-  for ( ; opcode->opcode; opcode++)
-    {
-      void *op;
-
-      op = hash_find (nds32_pseudo_opcode_hash, opcode->opcode);
-      if (op != NULL)
-	{
-	  as_warn (_("Duplicated pseudo-opcode %s."), opcode->opcode);
-	  continue;
-	}
-      hash_insert (nds32_pseudo_opcode_hash, opcode->opcode, opcode);
-    }
+  nds32_pseudo_opcode_hash = str_htab_create ();
+  for (opcode = nds32_pseudo_opcode_table; opcode->opcode; opcode++)
+    if (str_hash_insert (nds32_pseudo_opcode_hash, opcode->opcode, opcode, 0))
+      as_fatal (_("duplicate %s"), opcode->opcode);
 }
 
 static struct nds32_pseudo_opcode *
@@ -3466,7 +3457,7 @@ nds32_lookup_pseudo_opcode (const char *str)
     }
   op[i] = '\0';
 
-  result = hash_find (nds32_pseudo_opcode_hash, op);
+  result = str_hash_find (nds32_pseudo_opcode_hash, op);
   free (op);
   return result;
 }
@@ -3501,7 +3492,7 @@ nds32_pseudo_opcode_wrapper (char *line, struct nds32_pseudo_opcode *opcode)
 	}
       ++s;
     } while (s[0] != '\0');
-end:
+ end:
   /* Put the origin line for debugging.  */
   argv[argc] = line;
   opcode->proc (argc, argv, opcode->pseudo_val);
@@ -3841,7 +3832,7 @@ do_nds32_seg (int i, subsegT sub)
       seg->s = subseg_new (seg->name, sub);
       if (OUTPUT_FLAVOR == bfd_target_elf_flavour)
 	{
-	  bfd_set_section_flags (stdoutput, seg->s, seg->flags);
+	  bfd_set_section_flags (seg->s, seg->flags);
 	  if ((seg->flags & SEC_LOAD) == 0)
 	    seg_info (seg->s)->bss = 1;
 	}
@@ -4002,7 +3993,7 @@ make_mapping_symbol (enum mstate state, valueT value, fragS * frag, unsigned int
       abort ();
     }
 
-  symbol_p = symbol_new (symbol_name, now_seg, value, frag);
+  symbol_p = symbol_new (symbol_name, now_seg, frag, value);
   /* local scope attribute  */
   symbol_get_bfdsym (symbol_p)->flags |= BSF_NO_FLAGS | BSF_LOCAL;
 }
@@ -4287,16 +4278,16 @@ nds32_relax_hint (int mode ATTRIBUTE_UNUSED)
     relax_hint_begin = 0;
   name = nds_itoa (relax_hint_id_current);
 
-reordered_id:
+ reordered_id:
 
   /* Find relax hint entry for next instruction, and all member will be
      initialized at that time.  */
-  relocs = hash_find (nds32_hint_hash, name);
+  relocs = str_hash_find (nds32_hint_hash, name);
   if (relocs == NULL)
     {
       relocs = XNEW (struct nds32_relocs_pattern);
       memset (relocs, 0, sizeof (struct nds32_relocs_pattern));
-      hash_insert (nds32_hint_hash, name, relocs);
+      str_hash_insert (nds32_hint_hash, name, relocs, 0);
     }
   else
     {
@@ -4623,17 +4614,17 @@ md_begin (void)
   nds32_asm_init (&asm_desc, flags);
 
   /* Initial general purpose registers hash table.  */
-  nds32_gprs_hash = hash_new ();
+  nds32_gprs_hash = str_htab_create ();
   for (k = keyword_gpr; k->name; k++)
-    hash_insert (nds32_gprs_hash, k->name, k);
+    str_hash_insert (nds32_gprs_hash, k->name, k, 0);
 
   /* Initial branch hash table.  */
-  nds32_relax_info_hash = hash_new ();
+  nds32_relax_info_hash = str_htab_create ();
   for (relax_info = relax_table; relax_info->opcode; relax_info++)
-    hash_insert (nds32_relax_info_hash, relax_info->opcode, relax_info);
+    str_hash_insert (nds32_relax_info_hash, relax_info->opcode, relax_info, 0);
 
   /* Initial relax hint hash table.  */
-  nds32_hint_hash = hash_new ();
+  nds32_hint_hash = str_htab_create ();
   enable_16bit = nds32_16bit_ext;
 }
 
@@ -5278,8 +5269,8 @@ nds32_elf_sethi_range (struct nds32_relocs_pattern *pattern)
    not, optimize option, 16 bit instruction is enable.  */
 
 #define SET_ADDEND(size, convertible, optimize, insn16_on) \
-  (((size) & 0xff) | ((convertible) ? 1 << 31 : 0) \
-   | ((optimize) ? 1<< 30 : 0) | (insn16_on ? 1 << 29 : 0))
+  (((size) & 0xff) | ((convertible) ? 1u << 31 : 0) \
+   | ((optimize) ? 1 << 30 : 0) | (insn16_on ? 1 << 29 : 0))
 #define MAC_COMBO (E_NDS32_HAS_FPU_MAC_INST|E_NDS32_HAS_MAC_DX_INST)
 
 static void
@@ -5813,7 +5804,7 @@ nds32_find_reloc_table (struct nds32_relocs_pattern *relocs_pattern,
   if (opc)
     {
       /* Branch relax pattern.  */
-      relax_info = hash_find (nds32_relax_info_hash, opc);
+      relax_info = str_hash_find (nds32_relax_info_hash, opc);
       if (!relax_info)
 	return FALSE;
       fixup_info = relax_info->relax_fixup[range];
@@ -5940,7 +5931,7 @@ nds32_match_hint_insn (struct nds32_opcode *opcode, uint32_t seq)
 /* Append relax relocation for link time relaxing.  */
 
 static void
-nds32_elf_append_relax_relocs (const char *key, void *value)
+nds32_elf_append_relax_relocs (const char *key, const void *value)
 {
   struct nds32_relocs_pattern *relocs_pattern =
     (struct nds32_relocs_pattern *) value;
@@ -6062,6 +6053,7 @@ nds32_elf_append_relax_relocs (const char *key, void *value)
       fixup_size = fixup_now->size;
 
       /* Insert all fixup.  */
+      pcrel = 0;
       while (fixup_size != 0 && fixup_now->offset == offset)
 	{
 	  /* Set the real instruction size in element.  */
@@ -6088,8 +6080,9 @@ nds32_elf_append_relax_relocs (const char *key, void *value)
 		    {
 		      ptr_offset =
 			pattern_temp->where - pattern_temp->frag->fr_literal;
-		      exp.X_add_symbol = symbol_temp_new (now_seg, ptr_offset,
-							  pattern_temp->frag);
+		      exp.X_add_symbol = symbol_temp_new (now_seg,
+							  pattern_temp->frag,
+							  ptr_offset);
 		      exp.X_add_number = 0;
 		      fixP =
 			fix_new_exp (fragP, where - fragP->fr_literal,
@@ -6186,8 +6179,9 @@ nds32_elf_append_relax_relocs (const char *key, void *value)
 		    {
 		      ptr_offset = next_pattern->where
 			- next_pattern->frag->fr_literal;
-		      exp.X_add_symbol = symbol_temp_new (now_seg, ptr_offset,
-							  next_pattern->frag);
+		      exp.X_add_symbol = symbol_temp_new (now_seg,
+							  next_pattern->frag,
+							  ptr_offset);
 		      exp.X_add_number = 0;
 		      fixP = fix_new_exp (fragP, where - fragP->fr_literal,
 					  fixup_size, &exp, 0,
@@ -6218,8 +6212,8 @@ nds32_elf_append_relax_relocs (const char *key, void *value)
 			      ptr_offset = next_insn->where
 				- next_insn->frag->fr_literal;
 			      exp.X_add_symbol = symbol_temp_new (now_seg,
-								  ptr_offset,
-								  next_insn->frag);
+								  next_insn->frag,
+								  ptr_offset);
 			      exp.X_add_number = 0;
 			      fixP = fix_new_exp (fragP,
 						  where - fragP->fr_literal,
@@ -6267,10 +6261,19 @@ nds32_elf_append_relax_relocs (const char *key, void *value)
       pattern_now = pattern_now->next;
     }
 
-restore:
+ restore:
   now_seg = seg_bak;
   frchain_now = frchain_bak;
 }
+
+static int
+nds32_elf_append_relax_relocs_traverse (void **slot, void *arg ATTRIBUTE_UNUSED)
+{
+  string_tuple_t *tuple = *((string_tuple_t **) slot);
+  nds32_elf_append_relax_relocs (tuple->key, tuple->value);
+  return 1;
+}
+
 
 static void
 nds32_str_tolower (const char *src, char *dest)
@@ -6609,7 +6612,7 @@ md_operand (expressionS *expressionP)
 valueT
 md_section_align (segT segment, valueT size)
 {
-  int align = bfd_get_section_alignment (stdoutput, segment);
+  int align = bfd_section_alignment (segment);
 
   return ((size + (1 << align) - 1) & ((valueT) -1 << align));
 }
@@ -6757,7 +6760,7 @@ nds32_relax_branch_instructions (segT segment, fragS *fragP,
 	return 0;
     }
 
-  relax_info = hash_find (nds32_relax_info_hash, opcode->opcode);
+  relax_info = str_hash_find (nds32_relax_info_hash, opcode->opcode);
 
   if (relax_info == NULL)
     return adjust;
@@ -7046,7 +7049,7 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT sec, fragS *fragP)
 
   if (fragP->tc_frag_data.flag & NDS32_FRAG_RELAXABLE_BRANCH)
     {
-      relax_info = hash_find (nds32_relax_info_hash, opcode->opcode);
+      relax_info = str_hash_find (nds32_relax_info_hash, opcode->opcode);
 
       if (relax_info == NULL)
 	return;
@@ -7106,7 +7109,7 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT sec, fragS *fragP)
   else if (fragP->tc_frag_data.flag & NDS32_FRAG_BRANCH)
     {
       /* Branch instruction adjust and append relocations.  */
-      relax_info = hash_find (nds32_relax_info_hash, opcode->opcode);
+      relax_info = str_hash_find (nds32_relax_info_hash, opcode->opcode);
 
       if (relax_info == NULL)
 	return;
@@ -7182,14 +7185,14 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT sec, fragS *fragP)
 	  if ((fixup_info[i].ramp & NDS32_CREATE_LABEL) != 0)
 	    {
 	      /* This is a reverse branch.  */
-	      exp.X_add_symbol = symbol_temp_new (sec, 0, fragP->fr_next);
+	      exp.X_add_symbol = symbol_temp_new (sec, fragP->fr_next, 0);
 	      exp.X_add_number = 0;
 	    }
 	  else if ((fixup_info[i].ramp & NDS32_PTR) != 0)
 	    {
 	      /* This relocation has to point to another instruction.  */
 	      branch_size = fr_where + code_size - 4;
-	      exp.X_add_symbol = symbol_temp_new (sec, branch_size, fragP);
+	      exp.X_add_symbol = symbol_temp_new (sec, fragP, branch_size);
 	      exp.X_add_number = 0;
 	    }
 	  else if ((fixup_info[i].ramp & NDS32_ABS) != 0)
@@ -7315,9 +7318,6 @@ md_number_to_chars (char *buf, valueT val, int n)
   else
     number_to_chars_littleendian (buf, val, n);
 }
-
-/* Equal to MAX_PRECISION in atof-ieee.c.  */
-#define MAX_LITTLENUMS 6
 
 /* This function is called to convert an ASCII string into a floating point
    value in format used by the CPU.  */
@@ -7484,7 +7484,7 @@ nds32_insert_relax_entry (bfd *abfd ATTRIBUTE_UNUSED, asection *sec,
 static void
 nds32_elf_analysis_relax_hint (void)
 {
-  hash_traverse (nds32_hint_hash, nds32_elf_append_relax_relocs);
+  htab_traverse (nds32_hint_hash, nds32_elf_append_relax_relocs_traverse, NULL);
 }
 
 static void
@@ -7568,13 +7568,13 @@ compar_relent (const void *lhs, const void *rhs)
    relocation.  */
 
 void
-nds32_set_section_relocs (asection *sec, arelent ** relocs ATTRIBUTE_UNUSED,
-			  unsigned int n ATTRIBUTE_UNUSED)
+nds32_set_section_relocs (asection *sec ATTRIBUTE_UNUSED,
+			  arelent **relocs, unsigned int n)
 {
-  bfd *abfd ATTRIBUTE_UNUSED = sec->owner;
-  if (bfd_get_section_flags (abfd, sec) & (flagword) SEC_RELOC)
-    nds32_insertion_sort (sec->orelocation, sec->reloc_count,
-			  sizeof (arelent**), compar_relent);
+  if (n <= 1)
+    return;
+
+  nds32_insertion_sort (relocs, n, sizeof (*relocs), compar_relent);
 }
 
 long
@@ -7969,7 +7969,7 @@ nds32_parse_name (char const *name, expressionS *exprP,
 int
 tc_nds32_regname_to_dw2regnum (char *regname)
 {
-  struct nds32_keyword *sym = hash_find (nds32_gprs_hash, regname);
+  struct nds32_keyword *sym = str_hash_find (nds32_gprs_hash, regname);
 
   if (!sym)
     return -1;

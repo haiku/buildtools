@@ -1,5 +1,5 @@
 # Test handling of weak undefined symbols
-#   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2001-2021 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -35,7 +35,6 @@ if { ![is_elf_format] && ![is_pecoff_format] } then {
     if {! [istarget i?86-*-*]} {
 	setup_xfail *-*-pe*
     }
-    setup_xfail pj-*-*
     fail $testname
 } elseif {![is_remote host] && [which $objdump] == 0} then {
     unresolved $testname
@@ -106,7 +105,8 @@ set asflags ""
 switch -glob $target_triplet {
     aarch64* -
     arm* -
-    powerpc* { set asflags "--defsym BL=1" }
+    powerpc64* { set asflags "--defsym BL=1" }
+    powerpc* { set asflags "--defsym BLPLT=1" }
     hppa* { set asflags "--defsym HPPA=1" }
     i\[3-7\]86* -
     x86_64* { set asflags "--defsym CALLPLT=1" }

@@ -240,8 +240,12 @@ AC_SUBST(PICFLAG)
 NOASANFLAG=
 case " ${CFLAGS} " in
   *\ -fsanitize=address\ *) NOASANFLAG=-fno-sanitize=address ;;
+  *\ -fsanitize=hwaddress\ *) NOASANFLAG=-fno-sanitize=hwaddress ;;
 esac
 AC_SUBST(NOASANFLAG)
+
+GCC_CET_HOST_FLAGS(CET_HOST_FLAGS)
+AC_SUBST(CET_HOST_FLAGS)
 
 echo "# Warning: this fragment is automatically generated" > temp-frag
 

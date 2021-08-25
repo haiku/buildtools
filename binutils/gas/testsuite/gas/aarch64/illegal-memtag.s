@@ -24,6 +24,12 @@ func:
 	stzgm x2, [x3, #16]
 	stzgm x4, [x5, #16]!
 
+	# LDGM/STGM
+	ldgm x2, [x3, #16]
+	ldgm x4, [x5, #16]!
+	stgm x2, [x3, #16]
+	stgm x4, [x5, #16]!
+
 	# Illegal SP/XZR registers
 	irg xzr, x2, x3
 	irg x1, xzr, x3
@@ -45,10 +51,10 @@ func:
 	st2g x2, [xzr, #0]!
 	stzg x2, [xzr], #0
 	stz2g x2, [xzr, #0]
-	stg sp, [x2, #0]
-	st2g sp, [x2, #0]!
-	stzg sp, [x2], #0
-	stz2g sp, [x2, #0]
+	stg xzr, [x2, #0]
+	st2g xzr, [x2, #0]!
+	stzg xzr, [x2], #0
+	stz2g xzr, [x2, #0]
 	stgp sp, x2, [x3]
 	stgp x1, sp, [x3]
 	stgp x0, x0, [xzr]
@@ -59,3 +65,7 @@ func:
 	# Xt == Xn with writeback should not complain
 	st2g x2, [x2, #0]!
 	stzg x2, [x2], #0
+	ldgm x0, [xzr]
+	ldgm sp, [x3]
+	stgm x0, [xzr]
+	stgm sp, [x3]

@@ -1,5 +1,5 @@
 /* BFD back-end for s-record objects.
-   Copyright (C) 1990-2019 Free Software Foundation, Inc.
+   Copyright (C) 1990-2021 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support <sac@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -493,8 +493,7 @@ srec_scan (bfd *abfd)
 
 	    if (bytes * 2 > bufsize)
 	      {
-		if (buf != NULL)
-		  free (buf);
+		free (buf);
 		buf = (bfd_byte *) bfd_malloc ((bfd_size_type) bytes * 2);
 		if (buf == NULL)
 		  goto error_return;
@@ -550,7 +549,7 @@ srec_scan (bfd *abfd)
 		  {
 		    char secbuf[20];
 		    char *secname;
-		    bfd_size_type amt;
+		    size_t amt;
 		    flagword flags;
 
 		    sprintf (secbuf, ".sec%d", bfd_count_sections (abfd) + 1);
@@ -618,9 +617,7 @@ srec_scan (bfd *abfd)
 		    goto error_return;
 		  }
 
-		if (buf != NULL)
-		  free (buf);
-
+		free (buf);
 		return TRUE;
 	      }
 	  }
@@ -631,22 +628,18 @@ srec_scan (bfd *abfd)
   if (error)
     goto error_return;
 
-  if (buf != NULL)
-    free (buf);
-
+  free (buf);
   return TRUE;
 
  error_return:
-  if (symbuf != NULL)
-    free (symbuf);
-  if (buf != NULL)
-    free (buf);
+  free (symbuf);
+  free (buf);
   return FALSE;
 }
 
 /* Check whether an existing file is an S-record file.  */
 
-static const bfd_target *
+static bfd_cleanup
 srec_object_p (bfd *abfd)
 {
   void * tdata_save;
@@ -676,12 +669,12 @@ srec_object_p (bfd *abfd)
   if (abfd->symcount > 0)
     abfd->flags |= HAS_SYMS;
 
-  return abfd->xvec;
+  return _bfd_no_cleanup;
 }
 
 /* Check whether an existing file is an S-record file with symbols.  */
 
-static const bfd_target *
+static bfd_cleanup
 symbolsrec_object_p (bfd *abfd)
 {
   void * tdata_save;
@@ -711,7 +704,7 @@ symbolsrec_object_p (bfd *abfd)
   if (abfd->symcount > 0)
     abfd->flags |= HAS_SYMS;
 
-  return abfd->xvec;
+  return _bfd_no_cleanup;
 }
 
 /* Read in the contents of a section in an S-record file.  */
@@ -751,8 +744,7 @@ srec_read_section (bfd *abfd, asection *section, bfd_byte *contents)
 
       if (bytes * 2 > bufsize)
 	{
-	  if (buf != NULL)
-	    free (buf);
+	  free (buf);
 	  buf = (bfd_byte *) bfd_malloc ((bfd_size_type) bytes * 2);
 	  if (buf == NULL)
 	    goto error_return;
@@ -768,8 +760,7 @@ srec_read_section (bfd *abfd, asection *section, bfd_byte *contents)
 	{
 	default:
 	  BFD_ASSERT (sofar == section->size);
-	  if (buf != NULL)
-	    free (buf);
+	  free (buf);
 	  return TRUE;
 
 	case '3':
@@ -793,8 +784,7 @@ srec_read_section (bfd *abfd, asection *section, bfd_byte *contents)
 	    {
 	      /* We've come to the end of this section.  */
 	      BFD_ASSERT (sofar == section->size);
-	      if (buf != NULL)
-		free (buf);
+	      free (buf);
 	      return TRUE;
 	    }
 
@@ -817,14 +807,11 @@ srec_read_section (bfd *abfd, asection *section, bfd_byte *contents)
 
   BFD_ASSERT (sofar == section->size);
 
-  if (buf != NULL)
-    free (buf);
-
+  free (buf);
   return TRUE;
 
  error_return:
-  if (buf != NULL)
-    free (buf);
+  free (buf);
   return FALSE;
 }
 
@@ -885,7 +872,7 @@ srec_set_section_contents (bfd *abfd,
 			   file_ptr offset,
 			   bfd_size_type bytes_to_do)
 {
-  int opb = bfd_octets_per_byte (abfd);
+  int opb = bfd_octets_per_byte (abfd, NULL);
   tdata_type *tdata = abfd->tdata.srec_data;
   srec_data_list_type *entry;
 
@@ -1015,15 +1002,15 @@ srec_write_record (bfd *abfd,
 static bfd_boolean
 srec_write_header (bfd *abfd)
 {
-  unsigned int len = strlen (abfd->filename);
+  unsigned int len = strlen (bfd_get_filename (abfd));
 
   /* I'll put an arbitrary 40 char limit on header size.  */
   if (len > 40)
     len = 40;
 
   return srec_write_record (abfd, 0, (bfd_vma) 0,
-			    (bfd_byte *) abfd->filename,
-			    (bfd_byte *) abfd->filename + len);
+			    (bfd_byte *) bfd_get_filename (abfd),
+			    (bfd_byte *) bfd_get_filename (abfd) + len);
 }
 
 static bfd_boolean
@@ -1053,7 +1040,8 @@ srec_write_section (bfd *abfd,
       if (octets_this_chunk > _bfd_srec_len)
 	octets_this_chunk = _bfd_srec_len;
 
-      address = list->where + octets_written / bfd_octets_per_byte (abfd);
+      address = list->where + (octets_written
+			       / bfd_octets_per_byte (abfd, NULL));
 
       if (! srec_write_record (abfd,
 			       tdata->type,
@@ -1088,17 +1076,20 @@ srec_write_symbols (bfd *abfd)
       bfd_size_type len;
       asymbol **table = bfd_get_outsymbols (abfd);
 
-      len = strlen (abfd->filename);
+      len = strlen (bfd_get_filename (abfd));
       if (bfd_bwrite ("$$ ", (bfd_size_type) 3, abfd) != 3
-	  || bfd_bwrite (abfd->filename, len, abfd) != len
+	  || bfd_bwrite (bfd_get_filename (abfd), len, abfd) != len
 	  || bfd_bwrite ("\r\n", (bfd_size_type) 2, abfd) != 2)
 	return FALSE;
 
       for (i = 0; i < count; i++)
 	{
 	  asymbol *s = table[i];
+
 	  if (! bfd_is_local_label (abfd, s)
-	      && (s->flags & BSF_DEBUGGING) == 0)
+	      && (s->flags & BSF_DEBUGGING) == 0
+	      && s->section != NULL
+	      && s->section->output_section != NULL)
 	    {
 	      /* Just dump out non debug symbols.  */
 	      char buf[43], *p;
@@ -1275,6 +1266,7 @@ srec_print_symbol (bfd *abfd,
 #define srec_bfd_lookup_section_flags		  bfd_generic_lookup_section_flags
 #define srec_bfd_merge_sections			  bfd_generic_merge_sections
 #define srec_bfd_is_group_section		  bfd_generic_is_group_section
+#define srec_bfd_group_name			  bfd_generic_group_name
 #define srec_bfd_discard_group			  bfd_generic_discard_group
 #define srec_section_already_linked		  _bfd_generic_section_already_linked
 #define srec_bfd_define_common_symbol		  bfd_generic_define_common_symbol
@@ -1303,6 +1295,7 @@ const bfd_target srec_vec =
   ' ',				/* AR_pad_char.  */
   16,				/* AR_max_namelen.  */
   0,				/* match priority.  */
+  TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Data.  */
@@ -1359,6 +1352,7 @@ const bfd_target symbolsrec_vec =
   ' ',				/* AR_pad_char.  */
   16,				/* AR_max_namelen.  */
   0,				/* match priority.  */
+  TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
   bfd_getb32, bfd_getb_signed_32, bfd_putb32,
   bfd_getb16, bfd_getb_signed_16, bfd_putb16,	/* Data.  */

@@ -1,4 +1,4 @@
-#   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+#   Copyright (C) 1993-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -34,8 +34,6 @@ if ![info exists LD] then {
 if ![info exists LDFLAGS] then {
     set LDFLAGS ""
 }
-set ld_elf_shared_opt "-z norelro"
-
 if ![info exists NM] then {
     set NM [findfile $base_dir/nm-new $base_dir/nm-new [transform nm]]
 }

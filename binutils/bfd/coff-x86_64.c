@@ -1,5 +1,5 @@
 /* BFD back-end for AMD 64 COFF files.
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006-2021 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -51,6 +51,9 @@
 /* The page size is a guess based on ELF.  */
 
 #define COFF_PAGE_SIZE 0x1000
+
+/* All users of this file have bfd_octets_per_byte (abfd, sec) == 1.  */
+#define OCTETS_PER_BYTE(ABFD, SEC) 1
 
 /* For some reason when using AMD COFF the value stored in the .text
    section for a reference to a common symbol is the value itself plus
@@ -141,11 +144,11 @@ coff_amd64_reloc (bfd *abfd,
   if (diff != 0)
     {
       reloc_howto_type *howto = reloc_entry->howto;
-      unsigned char *addr = (unsigned char *) data + reloc_entry->address;
+      bfd_size_type octets = (reloc_entry->address
+			      * OCTETS_PER_BYTE (abfd, input_section));
+      unsigned char *addr = (unsigned char *) data + octets;
 
-      if (! bfd_reloc_offset_in_range (howto, abfd, input_section,
-				       reloc_entry->address
-				       * bfd_octets_per_byte (abfd)))
+      if (!bfd_reloc_offset_in_range (howto, abfd, input_section, octets))
 	return bfd_reloc_outofrange;
 
       switch (howto->size)
@@ -219,7 +222,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "R_X86_64_64",		/* name */
+	 "IMAGE_REL_AMD64_ADDR64", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffffffffffffll,	/* src_mask */
 	 0xffffffffffffffffll,	/* dst_mask */
@@ -232,7 +235,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "R_X86_64_32",		/* name */
+	 "IMAGE_REL_AMD64_ADDR32", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -246,7 +249,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "rva32",		/* name */
+	 "IMAGE_REL_AMD64_ADDR32NB", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -260,7 +263,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "R_X86_64_PC32",	/* name */
+	 "IMAGE_REL_AMD64_REL32", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -274,7 +277,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "DISP32+1",		/* name */
+	 "IMAGE_REL_AMD64_REL32_1", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -287,7 +290,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "DISP32+2",		/* name */
+	 "IMAGE_REL_AMD64_REL32_2", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -300,7 +303,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "DISP32+3",		/* name */
+	 "IMAGE_REL_AMD64_REL32_3", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -313,7 +316,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "DISP32+4",		/* name */
+	 "IMAGE_REL_AMD64_REL32_4", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -326,7 +329,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "DISP32+5",		/* name */
+	 "IMAGE_REL_AMD64_REL32_5", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -342,7 +345,7 @@ static reloc_howto_type howto_table[] =
 	 0,			/* bitpos */
 	 complain_overflow_bitfield, /* complain_on_overflow */
 	 coff_amd64_reloc,	/* special_function */
-	 "secrel32",		/* name */
+	 "IMAGE_REL_AMD64_SECREL", /* name */
 	 TRUE,			/* partial_inplace */
 	 0xffffffff,		/* src_mask */
 	 0xffffffff,		/* dst_mask */
@@ -779,6 +782,7 @@ const bfd_target
   '/',				/* Ar_pad_char.  */
   15,				/* Ar_max_namelen.  */
   0,				/* match priority.  */
+  TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
 
   bfd_getl64, bfd_getl_signed_64, bfd_putl64,
      bfd_getl32, bfd_getl_signed_32, bfd_putl32,
@@ -792,19 +796,19 @@ const bfd_target
     _bfd_dummy_target,
     amd64coff_object_p,
     bfd_generic_archive_p,
-    amd64coff_object_p 
+    amd64coff_object_p
   },
   {				/* bfd_set_format.  */
     _bfd_bool_bfd_false_error,
     coff_mkobject,
     _bfd_generic_mkarchive,
-    _bfd_bool_bfd_false_error 
+    _bfd_bool_bfd_false_error
   },
   {				/* bfd_write_contents.  */
     _bfd_bool_bfd_false_error,
     coff_write_object_contents,
     _bfd_write_archive_contents,
-    _bfd_bool_bfd_false_error 
+    _bfd_bool_bfd_false_error
   },
 
   BFD_JUMP_TABLE_GENERIC (coff),
@@ -821,3 +825,77 @@ const bfd_target
 
   COFF_SWAP_TABLE
 };
+
+/* Entry for big object files.  */
+
+#ifdef COFF_WITH_PE_BIGOBJ
+const bfd_target
+  TARGET_SYM_BIG =
+{
+  TARGET_NAME_BIG,
+  bfd_target_coff_flavour,
+  BFD_ENDIAN_LITTLE,		/* Data byte order is little.  */
+  BFD_ENDIAN_LITTLE,		/* Header byte order is little.  */
+
+  (HAS_RELOC | EXEC_P		/* Object flags.  */
+   | HAS_LINENO | HAS_DEBUG
+   | HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED | BFD_COMPRESS | BFD_DECOMPRESS),
+
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC /* Section flags.  */
+#if defined(COFF_WITH_PE)
+   | SEC_LINK_ONCE | SEC_LINK_DUPLICATES | SEC_READONLY | SEC_DEBUGGING
+#endif
+   | SEC_CODE | SEC_DATA | SEC_EXCLUDE ),
+
+#ifdef TARGET_UNDERSCORE
+  TARGET_UNDERSCORE,		/* Leading underscore.  */
+#else
+  0,				/* Leading underscore.  */
+#endif
+  '/',				/* Ar_pad_char.  */
+  15,				/* Ar_max_namelen.  */
+  0,				/* match priority.  */
+  TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
+
+  bfd_getl64, bfd_getl_signed_64, bfd_putl64,
+     bfd_getl32, bfd_getl_signed_32, bfd_putl32,
+     bfd_getl16, bfd_getl_signed_16, bfd_putl16, /* Data.  */
+  bfd_getl64, bfd_getl_signed_64, bfd_putl64,
+     bfd_getl32, bfd_getl_signed_32, bfd_putl32,
+     bfd_getl16, bfd_getl_signed_16, bfd_putl16, /* Hdrs.  */
+
+  /* Note that we allow an object file to be treated as a core file as well.  */
+  {				/* bfd_check_format.  */
+    _bfd_dummy_target,
+    amd64coff_object_p,
+    bfd_generic_archive_p,
+    amd64coff_object_p
+  },
+  {				/* bfd_set_format.  */
+    _bfd_bool_bfd_false_error,
+    coff_mkobject,
+    _bfd_generic_mkarchive,
+    _bfd_bool_bfd_false_error
+  },
+  {				/* bfd_write_contents.  */
+    _bfd_bool_bfd_false_error,
+    coff_write_object_contents,
+    _bfd_write_archive_contents,
+    _bfd_bool_bfd_false_error
+  },
+
+  BFD_JUMP_TABLE_GENERIC (coff),
+  BFD_JUMP_TABLE_COPY (coff),
+  BFD_JUMP_TABLE_CORE (_bfd_nocore),
+  BFD_JUMP_TABLE_ARCHIVE (_bfd_archive_coff),
+  BFD_JUMP_TABLE_SYMBOLS (coff),
+  BFD_JUMP_TABLE_RELOCS (coff),
+  BFD_JUMP_TABLE_WRITE (coff),
+  BFD_JUMP_TABLE_LINK (coff),
+  BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
+
+  NULL,
+
+  &bigobj_swap_table
+};
+#endif

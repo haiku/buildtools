@@ -1,5 +1,5 @@
 /* listing.c - maintain assembly listings
-   Copyright (C) 1991-2019 Free Software Foundation, Inc.
+   Copyright (C) 1991-2021 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -508,17 +508,12 @@ buffer_line (file_info_type *file, char *line, unsigned int size)
 	fseek (last_open_file, file->pos, SEEK_SET);
     }
 
-  /* Leave room for null.  */
-  size -= 1;
-
   c = fgetc (last_open_file);
 
   while (c != EOF && c != '\n' && c != '\r')
     {
-      if (count < size)
+      if (++count < size)
 	*p++ = c;
-      count++;
-
       c = fgetc (last_open_file);
     }
 
@@ -536,7 +531,7 @@ buffer_line (file_info_type *file, char *line, unsigned int size)
   if (c == EOF)
     {
       file->at_end = 1;
-      if (count + 2 < size)
+      if (count + 3 < size)
 	{
 	  *p++ = '.';
 	  *p++ = '.';
@@ -783,7 +778,7 @@ calc_hex (list_info_type *list)
     {
       /* Print as many bytes from the fixed part as is sensible.  */
       octet_in_frag = 0;
-      while ((offsetT) octet_in_frag < frag_ptr->fr_fix
+      while (octet_in_frag < frag_ptr->fr_fix
 	     && data_buffer_size < MAX_BYTES - 3)
 	{
 	  if (address == ~(unsigned int) 0)
@@ -801,8 +796,8 @@ calc_hex (list_info_type *list)
 	  unsigned int var_rep_idx = octet_in_frag;
 
 	  /* Print as many bytes from the variable part as is sensible.  */
-	  while (((offsetT) octet_in_frag
-		  < (frag_ptr->fr_fix + frag_ptr->fr_var * frag_ptr->fr_offset))
+	  while ((octet_in_frag
+		  < frag_ptr->fr_fix + frag_ptr->fr_var * frag_ptr->fr_offset)
 		 && data_buffer_size < MAX_BYTES - 3)
 	    {
 	      if (address == ~(unsigned int) 0)
@@ -816,7 +811,7 @@ calc_hex (list_info_type *list)
 	      var_rep_idx++;
 	      octet_in_frag++;
 
-	      if ((offsetT) var_rep_idx >= frag_ptr->fr_fix + frag_ptr->fr_var)
+	      if (var_rep_idx >= frag_ptr->fr_fix + frag_ptr->fr_var)
 		var_rep_idx = var_rep_max;
 	    }
 	}

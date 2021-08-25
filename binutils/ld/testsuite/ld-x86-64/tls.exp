@@ -1,5 +1,5 @@
 # Expect script for x86-64 TLS tests.
-#   Copyright (C) 2016-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2016-2021 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -32,7 +32,7 @@ if ![istarget "x86_64-*-linux*"] {
 }
 
 # Check to see if the C compiler works
-if { [which $CC] == 0 } {
+if { ![check_compiler_available] } {
     return
 }
 
@@ -177,8 +177,8 @@ run_ld_link_exec_tests [list \
     ] \
 ]
 
-# -mtls-dialect=gnu2 isn't supported on x32.
-if [istarget "x86_64-*-linux*-gnux32"] {
+# Skip if -mtls-dialect=gnu2 doesn't work.
+if { ![run_host_cmd_yesno $CC "-c -O2 -fPIC $GNU2_CFLAGS $srcdir/$subdir/tlsdesc1b.c -o tmpdir/tlsdesc1b.o"] } {
     return
 }
 

@@ -1,32 +1,46 @@
-2019-02-02  Nick Clifton  <nickc@redhat.com>
+2021-02-06  Nick Clifton  <nickc@redhat.com>
 
-	2.32 Release
+	This is the 2.36.1 release.
 	* configure: Regenerate.
 
-2019-01-21  Nick Clifton  <nickc@redhat.com>
+2021-01-24  Nick Clifton  <nickc@redhat.com>
 
-	* po/tr.po: Updated Turkish translation.
+	* configure: Regenerate.
 
-2019-01-19  Nick Clifton  <nickc@redhat.com>
+2021-01-24  Nick Clifton  <nickc@redhat.com>
+
+	This is the 2.36 release.
+	* configure: Regenerate.
+
+2021-01-09  Nick Clifton  <nickc@redhat.com>
 
 	* configure: Regenerate.
 	* po/gprof.pot: Regenerate.
 
-2018-06-24  Nick Clifton  <nickc@redhat.com>
+2021-01-09  Nick Clifton  <nickc@redhat.com>
 
-	2.32 branch created.
+	* 2.36 release branch crated.
 
-2019-01-09  Andrew Paprocki  <andrew@ishiboo.com>
+2021-01-09  Alan Modra  <amodra@gmail.com>
 
 	* configure: Regenerate.
 
-2019-01-01  Alan Modra  <amodra@gmail.com>
+2021-01-07  Samuel Thibault  <samuel.thibault@gnu.org>
+
+	* configure: Regenerate.
+
+2021-01-01  Nicolas Boulenguez  <nicolas@debian.org>
+
+	* README: Correct grammar.
+	* gprof.texi: Likewise.
+
+2021-01-01  Alan Modra  <amodra@gmail.com>
 
 	Update year range in copyright notice of all files.
 
-For older changes see ChangeLog-2018
+For older changes see ChangeLog-2020
 
-Copyright (C) 2019 Free Software Foundation, Inc.
+Copyright (C) 2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

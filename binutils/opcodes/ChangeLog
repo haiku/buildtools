@@ -1,109 +1,124 @@
-2019-02-02  Nick Clifton  <nickc@redhat.com>
+2021-02-06  Nick Clifton  <nickc@redhat.com>
 
-	2.32 Release
+	This is the 2.36.1 release.
 	* configure: Regenerate.
 	* po/opcodes.pot: Regenerate.
 
-2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+2021-02-05  Nelson Chu  <nelson.chu@sifive.com>
 
-	Backport from mainline
-	2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+	* riscv-opc.c (MASK_RVB_IMM): Removed.
+	(riscv_opcodes): Removed zb* instructions.
+	(riscv_ext_version_table): Removed versions for zb*.
 
-	* s390-mkopc.c (main): Accept arch13 as cpu string.
-	* s390-opc.c: Add new instruction formats and instruction opcode
-	masks.
-	* s390-opc.txt: Add new arch13 instructions.
+2021-01-26  Alan Modra  <amodra@gmail.com>
 
-2019-01-25  Sudakshina Das  <sudi.das@arm.com>
+	* i386-gen.c (parse_template): Ensure entire template_instance
+	is initialised.
 
-	* aarch64-tbl.h (QL_LDST_AT): Update macro.
-	(aarch64_opcode): Change encoding for stg, stzg
-	st2g and st2zg.
-	* aarch64-asm-2.c: Regenerated.
-	* aarch64-dis-2.c: Regenerated.
-	* aarch64-opc-2.c: Regenerated.
+2021-01-24  Nick Clifton  <nickc@redhat.com>
 
-2019-01-25  Sudakshina Das  <sudi.das@arm.com>
+	* configure: Regenerate.
+	* po/opercodes.pot: Regenerate.
 
-	* aarch64-asm-2.c: Regenerated.
+2021-01-24  Nick Clifton  <nickc@redhat.com>
+
+	This is the 2.36 release.
+	* configure: Regenerate.
+	* po/opercodes.pot: Regenerate.
+
+2021-01-12  Nick Clifton  <nickc@redhat.com>
+
+	* po/sr.po: Updated Serbian translation.
+
+2021-01-11  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
+
+	* aarch64-asm-2.c: Regenerate.
 	* aarch64-dis-2.c: Likewise.
 	* aarch64-opc-2.c: Likewise.
-	* aarch64-tbl.h (aarch64_opcode): Add new stzgm.
+	* aarch64-opc.c (aarch64_print_operand):
+	Delete handling of AARCH64_OPND_CSRE_CSR.
+	* aarch64-tbl.h (aarch64_feature_csre): Delete.
+	(CSRE): Likewise.
+	(_CSRE_INSN): Likewise.
+	(aarch64_opcode_table): Delete csr.
 
-2019-01-25  Sudakshina Das  <sudi.das@arm.com>
-	    Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
-
-	* aarch64-asm.c (aarch64_ins_addr_simple_2): Remove.
-	* aarch64-asm.h (ins_addr_simple_2): Likeiwse.
-	* aarch64-dis.c (aarch64_ext_addr_simple_2): Likewise.
-	* aarch64-dis.h (ext_addr_simple_2): Likewise.
-	* aarch64-opc.c (operand_general_constraint_met_p): Remove
-	case for ldstgv_indexed.
-	(aarch64_print_operand): Remove case for AARCH64_OPND_ADDR_SIMPLE_2.
-	* aarch64-tbl.h (struct aarch64_opcode): Remove ldgv and stgv.
-	(AARCH64_OPERANDS): Remove ADDR_SIMPLE_2.
-	* aarch64-asm-2.c: Regenerated.
-	* aarch64-dis-2.c: Regenerated.
-	* aarch64-opc-2.c: Regenerated.
-
-2019-01-23  Nick Clifton  <nickc@redhat.com>
-
-	* po/pt_BR.po: Updated Brazilian Portuguese translation.
-
-2019-01-22  Chenghua Xu  <paul.hua.gm@gmail.com>
-
-	* mips-dis.c (mips_arch_choices): Fix typo in
-	gs464, gs464e and gs264e descriptors.
-
-2019-01-21  Nick Clifton  <nickc@redhat.com>
+2021-01-11  Nick Clifton  <nickc@redhat.com>
 
 	* po/de.po: Updated German translation.
+	* po/fr.po: Updated French translation.
+	* po/pt_BR.po: Updated Brazilian Portuguese translation.
+	* po/sv.po: Updated Swedish translation.
 	* po/uk.po: Updated Ukranian translation.
 
-2019-01-19  Nick Clifton  <nickc@redhat.com>
+2021-01-09  Nick Clifton  <nickc@redhat.com>
 
 	* configure: Regenerate.
 	* po/opcodes.pot: Regenerate.
 
-2018-06-24  Nick Clifton  <nickc@redhat.com>
+2021-01-09  Nick Clifton  <nickc@redhat.com>
 
-	2.32 branch created.
+	* 2.36 release branch crated.
 
-2019-01-09  John Darrington <john@darrington.wattle.id.au>
+2021-01-08  Peter Bergner  <bergner@linux.ibm.com>
 
-	* s12z-dis.c (print_insn_s12z):  Do not dereference an operand
-	if it is null.
-	-dis.c (opr_emit_disassembly): Do not omit an index if it is
-	zero.
+	* ppc-opc.c (insert_dw, (extract_dw): New functions.
+	(DW, (XRC_MASK): Define.
+	(powerpc_opcodes) <hashchk, hashchkp, hashst, haststp>: New mnemonics.
 
-2019-01-09  Andrew Paprocki  <andrew@ishiboo.com>
+2021-01-09  Alan Modra  <amodra@gmail.com>
+
+	* configure: Regenerate.
+
+2021-01-08  Nick Clifton  <nickc@redhat.com>
+
+	* po/sv.po: Updated Swedish translation.
+
+2021-01-08  Nick Clifton  <nickc@redhat.com>
+
+	PR 27129
+	* aarch64-dis.c (determine_disassembling_preference): Move call to
+	aarch64_match_operands_constraint outside of the assertion.
+	* aarch64-asm.c (aarch64_ins_limm_1): Remove call to assert.
+	Replace with a return of FALSE.
+
+	PR 27139
+	* aarch64-opc.c (aarch64_sys_regs): Treat id_aa64mmfr2_el1 as a
+	core system register.
+
+2021-01-07  Samuel Thibault  <samuel.thibault@gnu.org>
 
 	* configure: Regenerate.
 
-2019-01-07  Alan Modra  <amodra@gmail.com>
+2021-01-07  Nick Clifton  <nickc@redhat.com>
 
-	* configure: Regenerate.
-	* po/POTFILES.in: Regenerate.
+	* po/fr.po: Updated French translation.
 
-2019-01-03  John Darrington <john@darrington.wattle.id.au>
+2021-01-07  Fredrik Noring  <noring@nocrew.org>
 
-	* s12z-opc.c: New file.
-	* s12z-opc.h: New file.
-	* s12z-dis.c: Removed all code not directly related to display
-	of instructions.  Used the interface provided by the new files
-	instead.
-	* Makefile.am (TARGET_LIBOPCODES_CFILES) Add s12z-opc.c.
-	* Makefile.in: Regenerate.
-	* configure.ac (bfd_s12z_arch): Correct the dependencies.
-	* configure: Regenerate.
+	* m68k-opc.c (chkl): Change minimum architecture requirement to
+	m68020.
 
-2019-01-01  Alan Modra  <amodra@gmail.com>
+2021-01-07  Philipp Tomsich  <prt@gnu.org>
+
+	* riscv-opc.c (riscv_opcodes): Add pause hint instruction.
+
+2021-01-07  Claire Xenia Wolf  <claire@symbioticeda.com>
+	    Jim Wilson  <jimw@sifive.com>
+	    Andrew Waterman  <andrew@sifive.com>
+	    Maxim Blinov  <maxim.blinov@embecosm.com>
+	    Kito Cheng  <kito.cheng@sifive.com>
+	    Nelson Chu  <nelson.chu@sifive.com>
+
+	* riscv-opc.c (riscv_opcodes): Add ZBA/ZBB/ZBC instructions.
+	(MASK_RVB_IMM): Used for rev8 and orc.b encoding.
+
+2021-01-01  Alan Modra  <amodra@gmail.com>
 
 	Update year range in copyright notice of all files.
 
-For older changes see ChangeLog-2018
+For older changes see ChangeLog-2020
 
-Copyright (C) 2019 Free Software Foundation, Inc.
+Copyright (C) 2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

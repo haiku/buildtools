@@ -1,4 +1,4 @@
-#   Copyright (C) 1994-2019 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -37,57 +37,71 @@ if ![is_remote host] {
 }
 
 # Test that objcopy does not modify a file when copying it.
+# "object" or "executable" values for type are supported.
 
-proc objcopy_test {testname srcfile} {
+proc objcopy_test {testname srcfile type asflags ldflags} {
     global OBJCOPY
     global OBJCOPYFLAGS
     global srcdir
     global subdir
     global tempfile
     global copyfile
+    set t_tempfile $tempfile
+    set t_copyfile ${copyfile}.o
 
-    if {![binutils_assemble $srcdir/$subdir/${srcfile} $tempfile]} then {
-	unresolved "objcopy ($testname)"
-	remote_file host delete $tempfile
+    if { $type != "object" && $type != "executable" } {
+	error "objcopy_test accepts only \"object\" or \"executable\" values for type"
+    }
+
+    if {![binutils_assemble_flags $srcdir/$subdir/${srcfile} $t_tempfile "$asflags"]} then {
+	unresolved "objcopy $type ($testname)"
+	remote_file host delete $t_tempfile
 	return
     }
 
-    set got [binutils_run $OBJCOPY "$OBJCOPYFLAGS $tempfile ${copyfile}.o"]
+    set xflags ""
+    if { $type == "executable" } {
+	global LD
+	# Check that LD exists
+	if {[which $LD] == 0} then {
+	    untested "objcopy $type ($testname)"
+	    return
+	}
+
+	# Use tempfile and copyfile without the .o extension for executable files
+	set t_tempfile [string range $tempfile 0 end-2]
+	set t_copyfile $copyfile
+	set got [binutils_run $LD "$tempfile -o $t_tempfile $ldflags"]
+	if { ![string equal "" $got] } then {
+	    unresolved "objcopy $type ($testname)"
+	    return
+	}
+	set xflags "--preserve-dates"
+    }
+
+    set got [binutils_run $OBJCOPY "$OBJCOPYFLAGS $xflags $t_tempfile $t_copyfile"]
 
     if ![string equal "" $got] then {
-	fail "objcopy ($testname)"
+	send_log "$got\n"
+	fail "objcopy $type ($testname)"
     } else {
-	send_log "cmp $tempfile ${copyfile}.o\n"
-	verbose "cmp $tempfile ${copyfile}.o"
+	send_log "cmp $t_tempfile $t_copyfile\n"
+	verbose "cmp $t_tempfile $t_copyfile"
 	if [is_remote host] {
-	    set src1 tmpdir/bintest.o
-	    set src2 tmpdir/copy.o
-	    remote_upload host $tempfile $src1
-	    remote_upload host ${copyfile}.o $src2
+	    set src1 tmpdir/bintest
+	    set src2 tmpdir/copy
+	    remote_upload host $t_tempfile $src1
+	    remote_upload host $t_copyfile $src2
 	} else {
-	    set src1 ${tempfile}
-	    set src2 ${copyfile}.o
+	    set src1 $t_tempfile
+	    set src2 $t_copyfile
 	}
 	set status [remote_exec build cmp "${src1} ${src2}"]
 	set exec_output [lindex $status 1]
 	set exec_output [prune_warnings $exec_output]
 
-	# On some systems the result of objcopy will not be identical.
-	# Usually this is just because gas isn't using bfd to write the
-	# files in the first place, and may order things a little
-	# differently. Those systems should use setup_xfail here.
-
-	setup_xfail "hppa*-*-*"
-	setup_xfail "m8*-*"
-	setup_xfail "sh-*-coff*"
-	setup_xfail "tic54x-*-*"
-	setup_xfail "tic80-*-*"
-
-	clear_xfail "hppa*64*-*-hpux*" "hppa*-*-linux*" "hppa*-*-lites*"
-	clear_xfail "hppa*-*-*n*bsd*" "hppa*-*-rtems*" "*-*-*elf*"
-
 	if [string equal "" $exec_output] then {
-	    pass "objcopy ($testname)"
+	    pass "objcopy $type ($testname)"
 	} else {
 	    send_log "$exec_output\n"
 	    verbose "$exec_output" 1
@@ -95,12 +109,61 @@ proc objcopy_test {testname srcfile} {
 	    # On OSF/1, this succeeds with gas and fails with /bin/as.
 	    setup_xfail "alpha*-*-osf*"
 
-	    fail "objcopy ($testname)"
+	    fail "objcopy $type ($testname)"
 	}
     }
 }
 
-objcopy_test "simple copy" bintest.s
+setup_xfail "hppa*-*-*"
+setup_xfail "sh-*-coff*"
+setup_xfail "tic54x-*-*"
+clear_xfail "hppa*64*-*-hpux*" "hppa*-*-linux*" "hppa*-*-lites*"
+clear_xfail "hppa*-*-*n*bsd*" "hppa*-*-rtems*" "hppa*-*-*elf*"
+objcopy_test "simple copy" bintest.s object "" ""
+
+# Test verilog data width
+proc objcopy_test_verilog {testname} {
+    global OBJCOPY
+    global OBJCOPYFLAGS
+    global srcdir
+    global subdir
+    global copyfile
+    set binfile tmpdir/verilogtest.o
+    set verilog tmpdir/verilog
+
+    set got [binutils_assemble $srcdir/$subdir/verilogtest.s $binfile]
+    if {![binutils_assemble $srcdir/$subdir/verilogtest.s $binfile]} then {
+	unresolved "objcopy ($testname)"
+	return
+    }
+
+    set got [binutils_run $OBJCOPY "-O verilog $binfile $verilog"]
+    if ![string equal "" $got] then {
+	fail "objcopy ($testname)"
+    }
+
+    set got [binutils_run $OBJCOPY "-O verilog --verilog-data-width 0 $binfile $verilog-0.hex"]
+    if ![regexp "verilog data width must be at least 1 byte" $got] then {
+	fail "objcopy ($testname 0) {$got}"
+    } else {
+	pass "objcopy ($testname 0)"
+    }
+
+    foreach width {1 2 4 8} {
+	set got [binutils_run $OBJCOPY "-O verilog --verilog-data-width $width $binfile $verilog-$width.hex"]
+	if ![string equal "" $got] then {
+	    fail "objcopy ($testname $width)"
+	}
+        send_log "regexp_diff $verilog-$width.hex $srcdir/$subdir/verilog-$width.hex\n"
+	if {! [regexp_diff "$verilog-$width.hex" "$srcdir/$subdir/verilog-$width.hex"]} {
+	    pass "objcopy ($testname $width)"
+	} else {
+	    fail "objcopy ($testname $width)"
+	}
+    }
+}
+
+objcopy_test_verilog "verilog data width"
 
 if { [file exists $tempfile] } {
     # Test reversing bytes in a section.
@@ -108,7 +171,11 @@ if { [file exists $tempfile] } {
     set reversed ${tempfile}-reversed
     set sect_names [get_standard_section_names]
     if { $sect_names != "" } {
-	set got [binutils_run $OBJCOPY "$OBJCOPYFLAGS -j [lindex $sect_names 1] --reverse-bytes=4 $tempfile $reversed"]
+	if { [istarget hppa*-*-hpux*] } {
+	    set got [binutils_run $OBJCOPY "$OBJCOPYFLAGS -j \$PRIVATE\$ -j [lindex $sect_names 1] --reverse-bytes=4 $tempfile $reversed"]
+	} else {
+	    set got [binutils_run $OBJCOPY "$OBJCOPYFLAGS -j [lindex $sect_names 1] --reverse-bytes=4 $tempfile $reversed"]
+	}
     } else {
 	set got [binutils_run $OBJCOPY "$OBJCOPYFLAGS -j .data --reverse-bytes=4 $tempfile $reversed"]
     }
@@ -129,10 +196,6 @@ if { [file exists $tempfile] } {
 	set found_rev [regexp -lineanchor $want $revdata -> revdata]
 
 	if {$found_orig == 0 || $found_rev == 0} then {
-	    # som doesn't have a .data section
-	    setup_xfail "hppa*-*-hpux*"
-	    clear_xfail "hppa*64*-*-hpux*"
-
 	    fail "objcopy --reverse-bytes"
 	} else {
 	    scan $origdata "%2x%2x%2x%2x" b1 b2 b3 b4
@@ -1037,7 +1100,7 @@ proc objcopy_test_elf_common_symbols {} {
 # ia64 specific tests
 if { ([istarget "ia64-*-elf*"]
        || [istarget "ia64-*-linux*"]) } {
-    objcopy_test "ia64 link order" link-order.s
+    objcopy_test "ia64 link order" link-order.s object "" ""
 }
 
 # ELF specific tests
@@ -1045,7 +1108,14 @@ set elf64 ""
 if [is_elf_format] {
     objcopy_test_symbol_manipulation
     objcopy_test_elf_common_symbols
-    objcopy_test "ELF unknown section type" unknown.s
+
+    setup_xfail "hppa*-*-*"
+    setup_xfail "sh-*-coff*"
+    setup_xfail "tic54x-*-*"
+    clear_xfail "hppa*64*-*-hpux*" "hppa*-*-linux*" "hppa*-*-lites*"
+    clear_xfail "hppa*-*-*n*bsd*" "hppa*-*-rtems*" "hppa*-*-*elf*"
+    objcopy_test "ELF unknown section type" unknown.s object "" ""
+
     objcopy_test_readelf "ELF group 1" group.s
     objcopy_test_readelf "ELF group 2" group-2.s
     objcopy_test_readelf "ELF group 3" group-3.s
@@ -1058,16 +1128,18 @@ if [is_elf_format] {
     run_dump_test "group-7c"
     run_dump_test "copy-1"
     run_dump_test "note-1"
-    # Use bintest.o from the note-1 test to determine ELF32 or ELF64
-    if [is_elf64 tmpdir/bintest.o] {
+    # Use copytest.o from the note-1 test to determine ELF32 or ELF64
+    if [is_elf64 tmpdir/copytest.o] {
 	set elf64 "--defsym ELF64=1"
 	run_dump_test "note-2-64"
 	run_dump_test "note-3-64"
 	run_dump_test "note-4-64"
+	run_dump_test "note-6-64"
     } else {
 	run_dump_test "note-2-32"
 	run_dump_test "note-3-32"
 	run_dump_test "note-4-32"
+	run_dump_test "note-6-32"
     }
     run_dump_test "note-5"
 }
@@ -1176,6 +1248,9 @@ if [is_elf_format] {
     run_dump_test "only-section-01"
     run_dump_test "remove-section-01"
 
+    run_dump_test "keep-section-1"
+    run_dump_test "keep-section-2"
+
     # Test the remove relocation functionality
     set test_list [lsort [glob -nocomplain $srcdir/$subdir/remove-relocs-*.d]]
     foreach t $test_list {
@@ -1266,3 +1341,26 @@ proc objcopy_remove_relocations_from_executable { } {
 objcopy_remove_relocations_from_executable
 
 run_dump_test "pr23633"
+
+run_dump_test "set-section-alignment"
+
+setup_xfail "hppa*-*-*"
+setup_xfail "sh-*-coff*"
+setup_xfail "spu-*-*"
+clear_xfail "hppa*64*-*-hpux*" "hppa*-*-linux*" "hppa*-*-lites*"
+clear_xfail "hppa*-*-*n*bsd*" "hppa*-*-rtems*" "hppa*-*-*elf*"
+if { [istarget pdp11-*-*] } {
+    set src "pr25662-pdp11.s"
+} else {
+    set src "pr25662.s"
+}
+
+set ldflags "-T$srcdir/$subdir/pr25662.ld"
+if { [istarget *-*-cygwin] || [istarget *-*-mingw*] } {
+   append ldflags " --disable-reloc-section"
+}
+
+#xcoff doesn't support arbitrary sections
+if { ![is_xcoff_format] } {
+    objcopy_test "pr25662" $src executable "" $ldflags
+}

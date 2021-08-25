@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2013-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2013-2021 Free Software Foundation, Inc.
 #
 # This file is part of GNU Binutils.
 #
@@ -18,13 +18,14 @@
 # Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
 # MA 02110-1301, USA.
 
-# This file is sourced from elf32.em, and defines extra C-SKY ELF
+# This file is sourced from elf.em, and defines extra C-SKY ELF
 # specific routines.
 #
 fragment <<EOF
 
 #include "ldctor.h"
 #include "elf/csky.h"
+#include "elf32-csky.h"
 
 /* To use branch stub or not.  */
 extern bfd_boolean use_branch_stub;
@@ -116,25 +117,32 @@ EOF
 case ${target} in
     csky-*-linux-*)
 fragment <<EOF
-/* This is a convenient point to tell BFD about target specific flags.
-   After the output has been created, but before inputs are read.  */
+
 static void
-csky_elf_create_output_section_statements (void)
+csky_elf_before_parse (void)
 {
   use_branch_stub = FALSE;
+  gld${EMULATION_NAME}_before_parse ();
 }
 EOF
     ;;
-    *)
+esac
+
 fragment <<EOF
+
 /* This is a convenient point to tell BFD about target specific flags.
    After the output has been created, but before inputs are read.  */
 static void
 csky_elf_create_output_section_statements (void)
 {
+  if (!(bfd_get_flavour (link_info.output_bfd) == bfd_target_elf_flavour
+	&& elf_object_id (link_info.output_bfd) == CSKY_ELF_DATA))
+    use_branch_stub = FALSE;
+
   /* If don't use branch stub, just do not emit stub_file.  */
-  if (use_branch_stub == FALSE)
+  if (!use_branch_stub)
     return;
+
   stub_file = lang_add_input_file ("linker stubs",
 				   lang_input_file_is_fake_enum, NULL);
   stub_file->the_bfd = bfd_create ("linker stubs", link_info.output_bfd);
@@ -150,11 +158,7 @@ csky_elf_create_output_section_statements (void)
   stub_file->the_bfd->flags |= BFD_LINKER_CREATED;
   ldlang_add_file (stub_file);
 }
-EOF
-    ;;
-esac
 
-fragment <<EOF
 /* Call-back for elf32_csky_size_stubs.  */
 
 /* Create a new stub section, and arrange for it to be linked
@@ -177,10 +181,10 @@ elf32_csky_add_stub_section (const char *stub_sec_name,
   if (stub_sec == NULL)
     goto err_ret;
 
-  bfd_set_section_alignment (stub_file->the_bfd, stub_sec, 3);
+  bfd_set_section_alignment (stub_sec, 3);
 
   output_section = input_section->output_section;
-  secname = bfd_get_section_name (output_section->owner, output_section);
+  secname = bfd_section_name (output_section);
   os = lang_output_section_find (secname);
 
   info.input_section = input_section;
@@ -193,7 +197,7 @@ elf32_csky_add_stub_section (const char *stub_sec_name,
   if (hook_in_stub (&info, &os->children.head))
     return stub_sec;
 
-err_ret:
+ err_ret:
   einfo (_("%X%P: can not make stub section: %E\n"));
   return NULL;
 }
@@ -205,7 +209,7 @@ gldcsky_layout_sections_again (void)
   /* If we have changed sizes of the stub sections, then we need
      to recalculate all the section offsets.  This may mean we need to
      add even more stubs.  */
-  gld${EMULATION_NAME}_map_segments (TRUE);
+  ldelf_map_segments (TRUE);
   need_laying_out = -1;
 }
 
@@ -266,7 +270,7 @@ gld${EMULATION_NAME}_after_allocation (void)
     }
 
   if (need_laying_out != -1)
-    gld${EMULATION_NAME}_map_segments (need_laying_out);
+    ldelf_map_segments (need_laying_out);
 }
 
 static void
@@ -280,35 +284,10 @@ gld${EMULATION_NAME}_finish (void)
   finish_default ();
 }
 
-/* Avoid processing the fake stub_file in vercheck, stat_needed and
-   check_needed routines.  */
-
-static void (*real_func) (lang_input_statement_type *);
-
-static void csky_for_each_input_file_wrapper (lang_input_statement_type *l)
-{
-  if (l != stub_file)
-    (*real_func) (l);
-}
-
-static void
-csky_lang_for_each_input_file (void (*func) (lang_input_statement_type *))
-{
-  real_func = func;
-  lang_for_each_input_file (&csky_for_each_input_file_wrapper);
-}
-
-#define lang_for_each_input_file csky_lang_for_each_input_file
-
 EOF
 
 # This code gets inserted into the generic elf32.sc linker script
 # and allows us to define our own command line switches.
-case ${target} in
-    csky-*-linux-*)
-    ;;
-
-    *)
 PARSE_AND_LIST_PROLOGUE='
 #define OPTION_BRANCH_STUB		301
 #define OPTION_NO_BRANCH_STUB		302
@@ -321,12 +300,14 @@ PARSE_AND_LIST_LONGOPTS='
   {"stub-group-size",	required_argument, NULL, OPTION_STUBGROUP_SIZE},
 '
 PARSE_AND_LIST_OPTIONS='
-  fprintf (file, _("  --[no-]branch-stub\n"));
-  fprintf (file, _("\t\t\tDisable/enable use of stubs to expand branch "
-		   "instructions that cannot reach the target.\n"));
-  fprintf (file, _("  --stub-group-size=N\n"));
-  fprintf (file, _("\t\t\tMaximum size of a group of input sections "
-		   "handled by one stub section."));
+  fprintf (file, _("  --[no-]branch-stub          "
+		   "Disable/enable use of stubs to expand branch\n"
+		   "                              "
+		   "  instructions that cannot reach the target.\n"));
+  fprintf (file, _("  --stub-group-size=N         "
+		   "Maximum size of a group of input sections\n"
+		   "                              "
+		   "  handled by one stub section.\n"));
 '
 
 PARSE_AND_LIST_ARGS_CASES='
@@ -347,9 +328,10 @@ PARSE_AND_LIST_ARGS_CASES='
     }
     break;
 '
-    ;;
-esac
 
+case ${target} in
+    csky-*-linux-*) LDEMUL_BEFORE_PARSE=csky_elf_before_parse ;;
+esac
 LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=csky_elf_create_output_section_statements
 LDEMUL_FINISH=gld${EMULATION_NAME}_finish

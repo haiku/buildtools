@@ -17,8 +17,8 @@ Section Headers:
   \[12\] \.bss              NOBITS          100000c4 0020c4 000004 00  WA  0   0  4
   \[13\] \.c6xabi\.attributes C6000_ATTRIBUTES 00000000 0020c4 000019 00      0   0  1
   \[14\] \.symtab           SYMTAB          00000000 0020e0 000170 10     15  20  4
-  \[15\] \.strtab           STRTAB          00000000 002250 000057 00      0   0  1
-  \[16\] \.shstrtab         STRTAB          00000000 0022a7 00007b 00      0   0  1
+  \[15\] \.strtab           STRTAB .*
+  \[16\] \.shstrtab         STRTAB .*
 Key to Flags:
 #...
 
@@ -49,9 +49,6 @@ Dynamic section at offset 0x110c contains 18 entries:
  0x0000000a \(STRSZ\)                      30 \(bytes\)
  0x0000000b \(SYMENT\)                     16 \(bytes\)
  0x00000015 \(DEBUG\)                      0x0
- 0x70000000 \(C6000_DSBT_BASE\)            0x100000a0
- 0x70000001 \(C6000_DSBT_SIZE\)            0x3
- 0x70000003 \(C6000_DSBT_INDEX\)           0x0
  0x00000003 \(PLTGOT\)                     0x100000ac
  0x00000002 \(PLTRELSZ\)                   12 \(bytes\)
  0x00000014 \(PLTREL\)                     RELA
@@ -59,6 +56,9 @@ Dynamic section at offset 0x110c contains 18 entries:
  0x00000007 \(RELA\)                       0x80e8
  0x00000008 \(RELASZ\)                     48 \(bytes\)
  0x00000009 \(RELAENT\)                    12 \(bytes\)
+ 0x70000000 \(C6000_DSBT_BASE\)            0x100000a0
+ 0x70000001 \(C6000_DSBT_SIZE\)            0x3
+ 0x70000003 \(C6000_DSBT_INDEX\)           0x0
  0x00000000 \(NULL\)                       0x0
 
 Relocation section '\.rela\.got' at offset 0x10e8 contains 2 entries:
@@ -102,7 +102,7 @@ Symbol table '\.symtab' contains 23 entries:
     11: 100000c0     0 SECTION LOCAL  DEFAULT   11 
     12: 100000c4     0 SECTION LOCAL  DEFAULT   12 
     13: 00000000     0 SECTION LOCAL  DEFAULT   13 
-    14: 00000000     0 FILE    LOCAL  DEFAULT  ABS tmpdir/shlib-app-1r\.o
+    14: 00000000     0 FILE    LOCAL  DEFAULT  ABS .*shlib-app-1r\.o
     15: 10000060     0 NOTYPE  LOCAL  DEFAULT    9 fish
     16: 00000000     0 FILE    LOCAL  DEFAULT  ABS 
     17: 0000810c     0 OBJECT  LOCAL  DEFAULT    6 _DYNAMIC

@@ -3,7 +3,7 @@
 # These variables may be overridden by the emulation file.  The
 # defaults are appropriate for an Alpha running OSF/1.
 #
-# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+# Copyright (C) 2014-2021 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -17,7 +17,7 @@ else
   test -z "$DATA_ADDR" && DATA_ADDR=0x140000000
 fi
 cat <<EOF
-/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -34,12 +34,12 @@ SECTIONS
   .text : {
     ${RELOCATING+ _ftext = .;}
     ${RELOCATING+ __istart = .;}
-    ${RELOCATING+ *(.init)}
+    ${RELOCATING+ KEEP (*(SORT_NONE(.init)))}
     ${RELOCATING+ LONG (0x6bfa8001)}
     ${RELOCATING+ eprol = .;}
     *(.text)
     ${RELOCATING+ __fstart = .;}
-    ${RELOCATING+ *(.fini)}
+    ${RELOCATING+ KEEP (*(SORT_NONE(.fini)))}
     ${RELOCATING+ LONG (0x6bfa8001)}
     ${RELOCATING+ _etext = .;}
   }

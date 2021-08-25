@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+# Copyright (C) 2014-2021 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -8,6 +8,8 @@
 #	NOP - four byte opcode for no-op (defaults to none)
 #	NO_SMALL_DATA - no .sbss/.sbss2/.sdata/.sdata2 sections if not
 #		empty.
+#	HAVE_NOINIT - Include a .noinit output section in the script.
+#	HAVE_PERSISTENT - Include a .persistent output section in the script.
 #	SMALL_DATA_CTOR - .ctors contains small data.
 #	SMALL_DATA_DTOR - .dtors contains small data.
 #	DATA_ADDR - if end-of-text-plus-one-page isn't right for data start
@@ -62,6 +64,9 @@
 #	OTHER_SYMBOLS - symbols to place right at the end of the script.
 #	ETEXT_NAME - name of a symbol for the end of the text section,
 #		normally etext.
+#	ETEXT_LAST_IN_RODATA_SEGMENT - emit ETEXT_NAME after all sections in
+#		the read-only data segment (which may or may not be equal to
+#		the code segment), instead of after just the code parts.
 #	SEPARATE_CODE - if set, .text and similar sections containing
 #		actual machine instructions must be in wholly disjoint
 #		pages from any other data, including headers
@@ -100,6 +105,8 @@
 #  .lrodata	.gnu.linkonce.lr.foo
 #  .ldata	.gnu.linkonce.l.foo
 #  .lbss	.gnu.linkonce.lb.foo
+#  .noinit	.gnu.linkonce.n.foo
+#  .persistent	.gnu.linkonce.p.foo
 #
 #  Each of these can also have corresponding .rel.* and .rela.* sections.
 
@@ -109,6 +116,7 @@ else
   FILL=
 fi
 
+test -n "$CREATE_SHLIB$CREATE_PIE" && CREATE_PIC=" "
 test -z "$RODATA_NAME" && RODATA_NAME=rodata
 test -z "$SDATA_NAME" && SDATA_NAME=sdata
 test -z "$SBSS_NAME" && SBSS_NAME=sbss
@@ -160,15 +168,15 @@ REL_IFUNC=".rel.ifunc    ${RELOCATING-0} : { *(.rel.ifunc) }"
 RELA_IFUNC=".rela.ifunc   ${RELOCATING-0} : { *(.rela.ifunc) }"
 REL_IPLT=".rel.iplt     ${RELOCATING-0} :
     {
-      ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_start = .);}}
+      ${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_start = .);}}
       *(.rel.iplt)
-      ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_end = .);}}
+      ${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_end = .);}}
     }"
 RELA_IPLT=".rela.iplt    ${RELOCATING-0} :
     {
-      ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_start = .);}}
+      ${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_start = .);}}
       *(.rela.iplt)
-      ${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_end = .);}}
+      ${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_end = .);}}
     }"
 DYNAMIC=".dynamic      ${RELOCATING-0} : { *(.dynamic) }"
 RODATA=".${RODATA_NAME}       ${RELOCATING-0} : { *(.${RODATA_NAME}${RELOCATING+ .${RODATA_NAME}.* .gnu.linkonce.r.*}) }"
@@ -318,6 +326,28 @@ STACK=".stack        ${RELOCATING-0}${RELOCATING+${STACK_ADDR}} :
     *(.stack)
     ${RELOCATING+${STACK_SENTINEL}}
   }"
+test "${HAVE_NOINIT}" = "yes" && NOINIT="
+  /* This section contains data that is not initialized during load,
+     or during the application's initialization sequence.  */
+  .noinit (NOLOAD) :
+  {
+    ${RELOCATING+. = ALIGN(${ALIGNMENT});}
+    ${RELOCATING+PROVIDE (__noinit_start = .);}
+    *(.noinit${RELOCATING+ .noinit.* .gnu.linkonce.n.*})
+    ${RELOCATING+. = ALIGN(${ALIGNMENT});}
+    ${RELOCATING+PROVIDE (__noinit_end = .);}
+  }"
+test "${HAVE_PERSISTENT}" = "yes" && PERSISTENT="
+  /* This section contains data that is initialized during load,
+     but not during the application's initialization sequence.  */
+  .persistent :
+  {
+    ${RELOCATING+. = ALIGN(${ALIGNMENT});}
+    ${RELOCATING+PROVIDE (__persistent_start = .);}
+    *(.persistent${RELOCATING+ .persistent.* .gnu.linkonce.p.*})
+    ${RELOCATING+. = ALIGN(${ALIGNMENT});}
+    ${RELOCATING+PROVIDE (__persistent_end = .);}
+  }"
 
 TEXT_START_ADDR="SEGMENT_START(\"text-segment\", ${TEXT_START_ADDR})"
 SHLIB_TEXT_START_ADDR="SEGMENT_START(\"text-segment\", ${SHLIB_TEXT_START_ADDR:-0})"
@@ -347,7 +377,7 @@ else
 fi
 
 cat <<EOF
-/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -463,16 +493,16 @@ cat >> ldscripts/dyntmp.$$ <<EOF
   .rel.plt      ${RELOCATING-0} :
     {
       *(.rel.plt)
-      ${IREL_IN_PLT+${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_start = .);}}}
+      ${IREL_IN_PLT+${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_start = .);}}}
       ${IREL_IN_PLT+${RELOCATING+*(.rel.iplt)}}
-      ${IREL_IN_PLT+${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_end = .);}}}
+      ${IREL_IN_PLT+${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rel_iplt_end = .);}}}
     }
   .rela.plt     ${RELOCATING-0} :
     {
       *(.rela.plt)
-      ${IREL_IN_PLT+${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_start = .);}}}
+      ${IREL_IN_PLT+${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_start = .);}}}
       ${IREL_IN_PLT+${RELOCATING+*(.rela.iplt)}}
-      ${IREL_IN_PLT+${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_end = .);}}}
+      ${IREL_IN_PLT+${RELOCATING+${CREATE_PIC-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_end = .);}}}
     }
   ${OTHER_PLT_RELOC_SECTIONS}
 EOF
@@ -513,8 +543,9 @@ cat <<EOF
     ${RELOCATING+*(.text.exit .text.exit.*)}
     ${RELOCATING+*(.text.startup .text.startup.*)}
     ${RELOCATING+*(.text.hot .text.hot.*)}
+    ${RELOCATING+*(SORT(.text.sorted.*))}
     *(.text .stub${RELOCATING+ .text.* .gnu.linkonce.t.*})
-    /* .gnu.warning sections are handled specially by elf32.em.  */
+    /* .gnu.warning sections are handled specially by elf.em.  */
     *(.gnu.warning)
     ${RELOCATING+${OTHER_TEXT_SECTIONS}}
   } ${FILL}
@@ -524,9 +555,9 @@ cat <<EOF
     KEEP (*(SORT_NONE(.fini)))
     ${RELOCATING+${FINI_END}}
   } ${FILL}
-  ${RELOCATING+PROVIDE (__${ETEXT_NAME} = .);}
-  ${RELOCATING+PROVIDE (_${ETEXT_NAME} = .);}
-  ${RELOCATING+PROVIDE (${ETEXT_NAME} = .);}
+  ${RELOCATING+${ETEXT_LAST_IN_RODATA_SEGMENT-PROVIDE (__${ETEXT_NAME} = .);}}
+  ${RELOCATING+${ETEXT_LAST_IN_RODATA_SEGMENT-PROVIDE (_${ETEXT_NAME} = .);}}
+  ${RELOCATING+${ETEXT_LAST_IN_RODATA_SEGMENT-PROVIDE (${ETEXT_NAME} = .);}}
   ${RELOCATING+${TEXT_SEGMENT_ALIGN}}
 EOF
 
@@ -571,6 +602,10 @@ cat <<EOF
   /* These sections are generated by the Sun/Oracle C++ compiler.  */
   .exception_ranges ${RELOCATING-0} : ONLY_IF_RO { *(.exception_ranges${RELOCATING+*}) }
   ${TEXT_PLT+${PLT_NEXT_DATA+${PLT} ${OTHER_PLT_SECTIONS}}}
+
+  ${RELOCATING+${ETEXT_LAST_IN_RODATA_SEGMENT+PROVIDE (__${ETEXT_NAME} = .);}}
+  ${RELOCATING+${ETEXT_LAST_IN_RODATA_SEGMENT+PROVIDE (_${ETEXT_NAME} = .);}}
+  ${RELOCATING+${ETEXT_LAST_IN_RODATA_SEGMENT+PROVIDE (${ETEXT_NAME} = .);}}
 
   ${RELOCATING+/* Adjust the address for the data segment.  We want to adjust up to
      the same address within the page on the next page up.  */}
@@ -636,6 +671,7 @@ cat <<EOF
   ${DATA_SDATA-${SDATA}}
   ${DATA_SDATA-${OTHER_SDATA_SECTIONS}}
   ${RELOCATING+${DATA_END_SYMBOLS-${CREATE_SHLIB+PROVIDE (}${USER_LABEL_PREFIX}_edata = .${CREATE_SHLIB+)}; PROVIDE (${USER_LABEL_PREFIX}edata = .);}}
+  ${PERSISTENT}
   ${RELOCATING+. = .;}
   ${RELOCATING+${CREATE_SHLIB+PROVIDE (}${USER_LABEL_PREFIX}__bss_start = .${CREATE_SHLIB+)};}
   ${RELOCATING+${OTHER_BSS_SYMBOLS}}
@@ -656,6 +692,7 @@ cat <<EOF
   ${OTHER_BSS_SECTIONS}
   ${LARGE_BSS_AFTER_BSS+${LARGE_BSS}}
   ${RELOCATING+${OTHER_BSS_END_SYMBOLS}}
+  ${NOINIT}
   ${RELOCATING+. = ALIGN(${ALIGNMENT});}
 EOF
 

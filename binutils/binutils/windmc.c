@@ -1,5 +1,5 @@
 /* windmc.c -- a program to compile Windows message files.
-   Copyright (C) 2007-2019 Free Software Foundation, Inc.
+   Copyright (C) 2007-2021 Free Software Foundation, Inc.
    Written by Kai Tietz, Onevision.
 
    This file is part of GNU Binutils.
@@ -377,7 +377,7 @@ write_header_define (FILE *fp, const unichar *sym_name, rc_uint_type vid, const 
       if (nl != NULL)
 	{
 	  if (mcset_out_values_are_decimal)
-	    fprintf (fp, "//\n// MessageId: 0x%lu\n//\n", (unsigned long) vid);
+	    fprintf (fp, "//\n// MessageId: %lu\n//\n", (unsigned long) vid);
 	  else
 	    fprintf (fp, "//\n// MessageId: 0x%lx\n//\n", (unsigned long) vid);
 	}
@@ -392,7 +392,7 @@ write_header_define (FILE *fp, const unichar *sym_name, rc_uint_type vid, const 
       (tdef ? "(" : ""), (tdef ? tdef : ""), (tdef ? ")" : ""),
     (unsigned long) vid);
   else
-    fprintf (fp, "#define %s %s%s%s 0x%lu\n\n", sym,
+    fprintf (fp, "#define %s %s%s%s %lu\n\n", sym,
       (tdef ? "(" : ""), (tdef ? tdef : ""), (tdef ? ")" : ""),
     (unsigned long) vid);
 }
@@ -698,7 +698,7 @@ windmc_write_bin (const char *filename, mc_node_lang **nl, int elems)
       dta_off += mi[i].res_len;
     }
   sec_length = (dta_off + 3) & ~3;
-  if (! bfd_set_section_size (mc_bfd.abfd, mc_bfd.sec, sec_length))
+  if (!bfd_set_section_size (mc_bfd.sec, sec_length))
     bfd_fatal ("bfd_set_section_size");
   /* Make sure we write the complete block.  */
   set_windmc_bfd_content ("\0", sec_length - 1, 1);
@@ -821,7 +821,7 @@ write_dbg (FILE *fp)
   while (h != NULL)
     {
       if (h->symbol)
-	write_dbg_define (fp, h->symbol, mcset_msg_id_typedef);
+	write_dbg_define (fp, h->symbol, h->id_typecast);
       h = h->next;
     }
   fprintf (fp, "  { (");
@@ -872,7 +872,7 @@ write_header (FILE *fp)
 		fprintf (fp, "#define %s 0x%lx\n", convert_unicode_to_ACP (key->sval),
 			 (unsigned long) key->nval);
 	      else
-		fprintf (fp, "#define %s 0x%lu\n", convert_unicode_to_ACP (key->sval),
+		fprintf (fp, "#define %s %lu\n", convert_unicode_to_ACP (key->sval),
 			 (unsigned long) key->nval);
 	    }
 	}
@@ -892,7 +892,7 @@ write_header (FILE *fp)
 		fprintf (fp, "#define %s 0x%lx\n", convert_unicode_to_ACP (key->sval),
 			 (unsigned long) key->nval);
 	      else
-		fprintf (fp, "#define %s 0x%lu\n", convert_unicode_to_ACP (key->sval),
+		fprintf (fp, "#define %s %lu\n", convert_unicode_to_ACP (key->sval),
 			 (unsigned long) key->nval);
 	    }
 	}
@@ -908,7 +908,7 @@ write_header (FILE *fp)
 	    fprintf (fp, "%s", s);
 	}
       if (h->symbol)
-	write_header_define (fp, h->symbol, h->vid, mcset_msg_id_typedef, h->sub);
+	write_header_define (fp, h->symbol, h->vid, h->id_typecast, h->sub);
       h = h->next;
     }
 }
@@ -924,7 +924,7 @@ mc_unify_path (const char *path)
   hsz = xmalloc (strlen (path) + 2);
   strcpy (hsz, path);
   end = hsz + strlen (hsz);
-  if (hsz[-1] != '/' && hsz[-1] != '\\')
+  if (end[-1] != '/' && end[-1] != '\\')
     strcpy (end, "/");
   while ((end = strchr (hsz, '\\')) != NULL)
     *end = '/';
@@ -1161,12 +1161,9 @@ main (int argc, char **argv)
     }
   write_bin ();
 
-  if (mc_nodes_lang)
-    free (mc_nodes_lang);
-  if (mc_severity_codes)
-    free (mc_severity_codes);
-  if (mc_facility_codes)
-    free (mc_facility_codes);
+  free (mc_nodes_lang);
+  free (mc_severity_codes);
+  free (mc_facility_codes);
 
   xexit (0);
   return 0;

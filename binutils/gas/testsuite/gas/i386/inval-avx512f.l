@@ -211,6 +211,13 @@
 .*:304: Error: .*masking.*vscatterpf1dps.*
 .*:305: Error: .*masking.*vscatterpf1qpd.*
 .*:306: Error: .*masking.*vscatterpf1qps.*
+.*:308: Error: .*unsupported broadcast for `vdpbf16ps'
+.*:309: Error: .*unsupported broadcast for `vcvtne2ps2bf16'
+.*:311: Error: .*unsupported broadcast for `vcvtneps2bf16'
+.*:312: Error: .*unsupported broadcast for `vcvtneps2bf16'
+.*:313: Error: .*unsupported broadcast for `vcvtneps2bf16'
+.*:316: Error: .*unsupported broadcast for `vcvtneps2bf16'
+.*:319: Error: .*unsupported broadcast for `vcvtneps2bf16'
 GAS LISTING .*
 
 
@@ -546,3 +553,22 @@ GAS LISTING .*
 [ 	]*304[ 	]+vscatterpf1dps \(%eax,%zmm1\)\{%k1\}\{z\}
 [ 	]*305[ 	]+vscatterpf1qpd \(%eax,%zmm1\)\{%k1\}\{z\}
 [ 	]*306[ 	]+vscatterpf1qps \(%eax,%zmm1\)\{%k1\}\{z\}
+[ 	]*307[ 	]*
+[ 	]*308[ 	]+vdpbf16ps 8\(%eax\)\{1to8\}, %zmm2, %zmm2
+[ 	]*309[ 	]+vcvtne2ps2bf16 8\(%eax\)\{1to8\}, %zmm2, %zmm2
+[ 	]*310[ 	]*
+[ 	]*311[ 	]+vcvtneps2bf16 \(%eax\)\{1to2\}, %ymm1
+[ 	]*312[ 	]+vcvtneps2bf16 \(%eax\)\{1to4\}, %ymm1
+[ 	]*313[ 	]+vcvtneps2bf16 \(%eax\)\{1to8\}, %ymm1
+[ 	]*314 \?\?\?\? 62F27E58[ 	]+vcvtneps2bf16 \(%eax\)\{1to16\}, %ymm1
+[ 	]*314[ 	]+7208
+[ 	]*315[ 	]*
+[ 	]*316[ 	]+vcvtneps2bf16 \(%eax\)\{1to2\}, %xmm1
+[ 	]*317 \?\?\?\? 62F27E18[ 	]+vcvtneps2bf16 \(%eax\)\{1to4\}, %xmm1
+[ 	]*317[ 	]+7208
+[ 	]*318 \?\?\?\? 62F27E38[ 	]+vcvtneps2bf16 \(%eax\)\{1to8\}, %xmm1
+[ 	]*318[ 	]+7208
+[ 	]*319[ 	]+vcvtneps2bf16 \(%eax\)\{1to16\}, %xmm1
+[ 	]*320[ 	]+\?\?\?\? 8DB42600 		\.p2align 4
+[ 	]*320[ 	]+0000008D 
+[ 	]*320[ 	]+7600

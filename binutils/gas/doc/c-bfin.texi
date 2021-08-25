@@ -1,4 +1,4 @@
-@c Copyright (C) 2005-2019 Free Software Foundation, Inc.
+@c Copyright (C) 2005-2021 Free Software Foundation, Inc.
 @c This is part of the GAS manual.
 @c For copying conditions, see the file as.texinfo.
 @c man end
@@ -236,7 +236,7 @@ floating point libraries.
 
 @item Blackfin Opcodes
 For detailed information on the Blackfin machine instruction set, see
-the Blackfin(r) Processor Instruction Set Reference.
+the Blackfin Processor Instruction Set Reference.
 
 @end table
 

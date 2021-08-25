@@ -1,4 +1,4 @@
-# Copyright (C) 1993-2019 Free Software Foundation, Inc.
+# Copyright (C) 1993-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -267,7 +267,7 @@ proc gas_init { args } {
     global target_os
     global stdoptlist
 
-    case "$target_cpu" in {
+    switch -glob "$target_cpu" {
 	"m68???"		{ set target_cpu_family m68k }
 	"i[3-7]86"		{ set target_cpu_family i386 }
 	default			{ set target_cpu_family $target_cpu }
