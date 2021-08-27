@@ -56,6 +56,7 @@
 
 # ifdef unix
 # include <unistd.h>
+# include <sys/wait.h>
 
 # ifdef USE_POSIX_SPAWN
 extern char **environ;
