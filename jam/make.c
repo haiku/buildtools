@@ -57,6 +57,7 @@
 # include "variable.h"
 # include "rules.h"
 
+# include "hcache.h"
 # include "search.h"
 # include "newstr.h"
 # include "make.h"
