@@ -206,10 +206,14 @@ var_expand(
 		/* Look for a : modifier in the variable name */
 		/* Must copy into varname so we can modify it */
 
-		if (strlen(vars->string) > MAXSYM) {
-		    printf("MAXSYM is too low! Need at least %d\n", l);
-		    exit(-1);
+		size_t varname_len = strlen(vars->string);
+		if( varname_len > MAXSYM )
+		{
+		    printf( "MAXSYM is too low! Need at least %zu\n",
+		        varname_len );
+		    exit( -1 );
 		}
+
 		strcpy( varname, vars->string );
 
 		if( colon = strchr( varname, MAGIC_COLON ) )
@@ -278,10 +282,12 @@ var_expand(
 		    LIST *rem;
 		    char *out1;
 
-		    if (out - out_buf > MAXSYM) {
-			printf("MAXSYM is too low!\n");
-			exit(-1);
+		    if( out - out_buf > MAXSYM )
+		    {
+		        printf( "MAXSYM is too low!\n" );
+		        exit( -1 );
 		    }
+
 		    /* Handle end subscript (length actually) */
 
 		    if( sub2 >= 0 && --sub2 < 0 )
