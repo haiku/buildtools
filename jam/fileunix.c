@@ -58,7 +58,7 @@
 # define STRUCT_DIRENT struct dirent 
 # endif
 
-# ifdef __CYGWIN__
+# if defined(__CYGWIN__) || defined(unix)
 # include <unistd.h>
 # endif
 
