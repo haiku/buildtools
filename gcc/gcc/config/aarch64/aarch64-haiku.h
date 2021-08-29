@@ -56,8 +56,6 @@
 #endif
 
 
-#define TARGET_ASM_FILE_END file_end_indicate_exec_stack
-
 /* Uninitialized common symbols in non-PIE executables, even with
    strong definitions in dependent shared libraries, will resolve
    to COPY relocated symbol in the executable.  See PR65780.  */
