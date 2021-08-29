@@ -994,6 +994,7 @@ aarch64*-*-freebsd*)
 	tmake_file="${tmake_file} aarch64/t-aarch64 aarch64/t-aarch64-freebsd"
 	;;
 aarch64*-*-haiku*)
+	gcc_cv_initfini_array=yes
 	tm_file="${tm_file} dbxelf.h elfos.h haiku.h haiku-stdint.h"
 	tm_file="${tm_file} aarch64/aarch64-elf.h aarch64/aarch64-haiku.h"
 	tmake_file="${tmake_file} t-haiku aarch64/t-aarch64 aarch64/t-aarch64-haiku"
@@ -2104,6 +2105,7 @@ microblaze*-*-elf)
 	tmake_file="${tmake_file} microblaze/t-microblaze"
         ;;
 riscv*-*-haiku*)
+	gcc_cv_initfini_array=yes
 	tm_file="elfos.h haiku.h ${tm_file} riscv/haiku.h haiku-stdint.h"
 	tmake_file="${tmake_file} t-haiku riscv/t-riscv riscv/t-haiku"
 	gnu_ld=yes
