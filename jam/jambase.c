@@ -152,7 +152,7 @@ const char *jambase[] = {
 "YACCFILES	?= y.tab ;\n",
 "YACCFLAGS	?= -d ;\n",
 "}\n",
-"AR		?= ar ru ;\n",
+"AR		?= ar r ;\n",
 "AS		?= as ;\n",
 "ASFLAGS		?= ;\n",
 "AWK		?= awk ;\n",

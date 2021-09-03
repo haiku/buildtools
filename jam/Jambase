@@ -316,7 +316,7 @@ if $(NT) {
 #
 
 AR		?= ar ;
-ARFLAGS		?= ru ;
+ARFLAGS		?= r ;
 AS		?= as ;
 ASFLAGS		?= ;
 AWK		?= awk ;
