@@ -272,7 +272,7 @@ if $(NT) {
 	CC		?= gcc ;
 	CCFLAGS 	+= -D__cygwin__ ;
 	LEX		?= flex ;
-	JAMSHELL	?= sh -c ;
+	JAMSHELL	?= sh -e -c ;
 	RANLIB		?= "" ;
 	SUFEXE		?= .exe ;
 	YACC		?= bison -y ;
