@@ -135,7 +135,7 @@
 
 # for perforce use -- jambase version
 
-JAMBASEDATE = 2020.09.16 ;
+JAMBASEDATE = 2021.10.20 ;
 
 # Initialize variables
 #
@@ -248,7 +248,7 @@ if $(NT) {
 	YACCFILES	?= y.tab ;
 	YACCFLAGS	?= -d ;
 } else if $(OS) = HAIKU {
-	BINDIR		?= /boot/common/bin ;
+	BINDIR		?= /boot/system/non-packaged/bin ;
 	CC		?= gcc ;
 	C++		?= $(CC) ;
 	CHMOD		?= chmod ;
@@ -256,11 +256,11 @@ if $(NT) {
 	CHOWN		?= chown ;
 	FORTRAN		?= "" ;
 	LEX		?= flex ;
-	LIBDIR		?= /boot/common/lib ;
+	LIBDIR		?= /boot/system/non-packaged/lib ;
 	LINK		?= gcc ;
-	MANDIR		?= /boot/common/man ;
+	MANDIR		?= /boot/system/non-packaged/documentation/man ;
 	RANLIB		?= ranlib ;
-	STDHDRS		?= /boot/develop/headers/posix ;
+	STDHDRS		?= /boot/system/develop/headers/posix ;
 	YACC		?= bison -y ;
 	YACCGEN		?= .c ;
 	YACCFILES	?= y.tab ;
