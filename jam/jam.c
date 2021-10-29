@@ -455,7 +455,7 @@ int main( int argc, char **argv, char **arg_environ )
 	/* close compilation database output file */
 	if ( globs.comp_db )
 	{
-		fprintf(globs.comp_db, "]\n");
+		fprintf(globs.comp_db, "\n]\n");
 		fclose( globs.comp_db );
 	}
 

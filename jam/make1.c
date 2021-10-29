@@ -735,6 +735,9 @@ static void out_json(char const* str, FILE* f)
 }
 
 
+static int written_compile_database_objects = 0;
+
+
 void out_compile_database
 (
      char const * const action,
@@ -750,13 +753,17 @@ void out_compile_database
         && (strstr(action, "Cc") != NULL || strstr(action, "C++") != NULL))
      {
          char buffer[PATH_MAX];
+         if( written_compile_database_objects++ > 0 )
+         {
+             fputs(",\n", globs.comp_db);
+         }
          fputs("{ \"directory\": \"", globs.comp_db);
          out_json(getcwd(buffer, sizeof(buffer)), globs.comp_db);
          fputs("\", \"command\": \"", globs.comp_db);
          out_json(command, globs.comp_db);
          fputs("\", \"file\": \"", globs.comp_db);
          out_json(source, globs.comp_db);
-         fputs("\" },\n", globs.comp_db);
+         fputs("\" }", globs.comp_db);
      }
 
 }
