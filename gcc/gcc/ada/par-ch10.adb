@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -397,10 +397,10 @@ package body Ch10 is
                or else Token in Token_Class_Deckn
             then
                Push_Scope_Stack;
-               Scope.Table (Scope.Last).Etyp := E_Name;
-               Scope.Table (Scope.Last).Sloc := SIS_Sloc;
-               Scope.Table (Scope.Last).Ecol := SIS_Ecol;
-               Scope.Table (Scope.Last).Lreq := False;
+               Scopes (Scope.Last).Etyp := E_Name;
+               Scopes (Scope.Last).Sloc := SIS_Sloc;
+               Scopes (Scope.Last).Ecol := SIS_Ecol;
+               Scopes (Scope.Last).Lreq := False;
                SIS_Entry_Active := False;
 
                --  If we had a missing semicolon in the declaration, then
@@ -511,7 +511,7 @@ package body Ch10 is
 
       --  Another error from which it is hard to recover
 
-      if Nkind_In (Unit_Node, N_Subprogram_Body_Stub, N_Package_Body_Stub) then
+      if Nkind (Unit_Node) in N_Subprogram_Body_Stub | N_Package_Body_Stub then
          Cunit_Error_Flag := True;
          return Error;
       end if;
@@ -527,10 +527,10 @@ package body Ch10 is
             Unit_Node := Specification (Unit_Node);
          end if;
 
-         if Nkind_In (Unit_Node, N_Package_Declaration,
-                                 N_Subprogram_Declaration,
-                                 N_Subprogram_Body,
-                                 N_Subprogram_Renaming_Declaration)
+         if Nkind (Unit_Node) in N_Package_Declaration
+                               | N_Subprogram_Declaration
+                               | N_Subprogram_Body
+                               | N_Subprogram_Renaming_Declaration
          then
             Unit_Node := Specification (Unit_Node);
 
@@ -541,27 +541,26 @@ package body Ch10 is
             end if;
          end if;
 
-         if Nkind_In (Unit_Node, N_Task_Body,
-                                 N_Protected_Body,
-                                 N_Task_Type_Declaration,
-                                 N_Protected_Type_Declaration,
-                                 N_Single_Task_Declaration,
-                                 N_Single_Protected_Declaration)
+         if Nkind (Unit_Node) in N_Task_Body
+                               | N_Protected_Body
+                               | N_Task_Type_Declaration
+                               | N_Protected_Type_Declaration
+                               | N_Single_Task_Declaration
+                               | N_Single_Protected_Declaration
          then
             Name_Node := Defining_Identifier (Unit_Node);
 
-         elsif Nkind_In (Unit_Node, N_Function_Instantiation,
-                                    N_Function_Specification,
-                                    N_Generic_Function_Renaming_Declaration,
-                                    N_Generic_Package_Renaming_Declaration,
-                                    N_Generic_Procedure_Renaming_Declaration)
-          or else
-               Nkind_In (Unit_Node, N_Package_Body,
-                                    N_Package_Instantiation,
-                                    N_Package_Renaming_Declaration,
-                                    N_Package_Specification,
-                                    N_Procedure_Instantiation,
-                                    N_Procedure_Specification)
+         elsif Nkind (Unit_Node) in N_Function_Instantiation
+                                  | N_Function_Specification
+                                  | N_Generic_Function_Renaming_Declaration
+                                  | N_Generic_Package_Renaming_Declaration
+                                  | N_Generic_Procedure_Renaming_Declaration
+          or else Nkind (Unit_Node) in N_Package_Body
+                                  | N_Package_Instantiation
+                                  | N_Package_Renaming_Declaration
+                                  | N_Package_Specification
+                                  | N_Procedure_Instantiation
+                                  | N_Procedure_Specification
          then
             Name_Node := Defining_Unit_Name (Unit_Node);
 
@@ -862,11 +861,7 @@ package body Ch10 is
                  ("unexpected LIMITED ignored");
             end if;
 
-            if Ada_Version < Ada_2005 then
-               Error_Msg_SP ("LIMITED WITH is an Ada 2005 extension");
-               Error_Msg_SP
-                 ("\unit must be compiled with -gnat05 switch");
-            end if;
+            Error_Msg_Ada_2005_Extension ("`LIMITED WITH`");
 
          elsif Token = Tok_Private then
             Has_Limited := False;
@@ -880,12 +875,9 @@ package body Ch10 is
 
                Restore_Scan_State (Scan_State); -- to PRIVATE
                return Item_List;
-
-            elsif Ada_Version < Ada_2005 then
-               Error_Msg_SP ("`PRIVATE WITH` is an Ada 2005 extension");
-               Error_Msg_SP
-                 ("\unit must be compiled with -gnat05 switch");
             end if;
+
+            Error_Msg_Ada_2005_Extension ("`PRIVATE WITH`");
 
          else
             Has_Limited := False;

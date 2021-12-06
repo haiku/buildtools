@@ -6,7 +6,7 @@
 --                                                                          --
 --                                B o d y                                   --
 --                                                                          --
---         Copyright (C) 1998-2018, Free Software Foundation, Inc.          --
+--         Copyright (C) 1998-2020, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -52,23 +52,16 @@ pragma Style_Checks (All_Checks);
 --  performed at compile time, and is relatively cheap (see PO_Do_Or_Queue,
 --  Service_Entry).
 
-pragma Polling (Off);
---  Turn off polling, we do not want polling to take place during tasking
---  operations. It can cause infinite loops and other problems.
-
 pragma Suppress (All_Checks);
 --  Why is this required ???
 
 with Ada.Exceptions;
 
 with System.Task_Primitives.Operations;
-with System.Parameters;
 
 package body System.Tasking.Protected_Objects.Single_Entry is
 
    package STPO renames System.Task_Primitives.Operations;
-
-   use Parameters;
 
    -----------------------
    -- Local Subprograms --
@@ -143,18 +136,9 @@ package body System.Tasking.Protected_Objects.Single_Entry is
 
    begin
       Entry_Call.Exception_To_Raise := Program_Error'Identity;
-
-      if Single_Lock then
-         STPO.Lock_RTS;
-      end if;
-
       STPO.Write_Lock (Caller);
       Wakeup_Entry_Caller (Entry_Call);
       STPO.Unlock (Caller);
-
-      if Single_Lock then
-         STPO.Unlock_RTS;
-      end if;
    end Send_Program_Error;
 
    -------------------------
@@ -286,17 +270,9 @@ package body System.Tasking.Protected_Objects.Single_Entry is
            (Object.Compiler_Info, Entry_Call.Uninterpreted_Data, 1);
          Object.Call_In_Progress := null;
 
-         if Single_Lock then
-            STPO.Lock_RTS;
-         end if;
-
          STPO.Write_Lock (Entry_Call.Self);
          Wakeup_Entry_Caller (Entry_Call);
          STPO.Unlock (Entry_Call.Self);
-
-         if Single_Lock then
-            STPO.Unlock_RTS;
-         end if;
 
       else
          pragma Assert (Entry_Call.Mode = Simple_Call);
@@ -319,9 +295,9 @@ package body System.Tasking.Protected_Objects.Single_Entry is
          Send_Program_Error (Entry_Call);
    end PO_Do_Or_Queue;
 
-   ----------------------------
-   -- Protected_Single_Count --
-   ----------------------------
+   ---------------------------
+   -- Protected_Count_Entry --
+   ---------------------------
 
    function Protected_Count_Entry (Object : Protection_Entry) return Natural is
    begin
@@ -341,7 +317,8 @@ package body System.Tasking.Protected_Objects.Single_Entry is
       Uninterpreted_Data : System.Address)
    is
       Self_Id    : constant Task_Id := STPO.Self;
-      Entry_Call : Entry_Call_Record renames Self_Id.Entry_Calls (1);
+      Entry_Call : Entry_Call_Record renames
+        Self_Id.Entry_Calls (Self_Id.Entry_Calls'First);
    begin
       --  If pragma Detect_Blocking is active then Program_Error must be
       --  raised if this potentially blocking operation is called from a
@@ -369,17 +346,9 @@ package body System.Tasking.Protected_Objects.Single_Entry is
       pragma Assert (Entry_Call.State /= Cancelled);
 
       if Entry_Call.State /= Done then
-         if Single_Lock then
-            STPO.Lock_RTS;
-         end if;
-
          STPO.Write_Lock (Self_Id);
          Wait_For_Completion (Entry_Call'Access);
          STPO.Unlock (Self_Id);
-
-         if Single_Lock then
-            STPO.Unlock_RTS;
-         end if;
       end if;
 
       Check_Exception (Self_Id, Entry_Call'Access);
@@ -426,17 +395,9 @@ package body System.Tasking.Protected_Objects.Single_Entry is
          Caller := Entry_Call.Self;
          Unlock_Entry (Object);
 
-         if Single_Lock then
-            STPO.Lock_RTS;
-         end if;
-
          STPO.Write_Lock (Caller);
          Wakeup_Entry_Caller (Entry_Call);
          STPO.Unlock (Caller);
-
-         if Single_Lock then
-            STPO.Unlock_RTS;
-         end if;
 
       else
          --  Just unlock the entry

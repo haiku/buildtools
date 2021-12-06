@@ -1,5 +1,5 @@
 /* Utility functions used by tools like collect2 and lto-wrapper.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -34,6 +34,7 @@ static char *response_file;
 bool debug;
 bool verbose;
 bool save_temps;
+const char *dumppfx;
 
 
 /* Notify user of a non-error.  */
@@ -65,7 +66,7 @@ collect_wait (const char *prog, struct pex_obj *pex)
   int status;
 
   if (!pex_get_status (pex, 1, &status))
-    fatal_error (input_location, "can't get program status: %m");
+    fatal_error (input_location, "cannot get program status: %m");
   pex_free (pex);
 
   if (response_file && !save_temps)
@@ -103,7 +104,8 @@ do_wait (const char *prog, struct pex_obj *pex)
 
 struct pex_obj *
 collect_execute (const char *prog, char **argv, const char *outname,
-		 const char *errname, int flags, bool use_atfile)
+		 const char *errname, int flags, bool use_atfile,
+		 const char *atsuffix)
 {
   struct pex_obj *pex;
   const char *errmsg;
@@ -125,7 +127,10 @@ collect_execute (const char *prog, char **argv, const char *outname,
       /* Note: we assume argv contains at least one element; this is
          checked above.  */
 
-      response_file = make_temp_file ("");
+      if (!save_temps || !atsuffix || !dumppfx)
+	response_file = make_temp_file ("");
+      else
+	response_file = concat (dumppfx, atsuffix, NULL);
 
       f = fopen (response_file, "w");
 
@@ -176,11 +181,11 @@ collect_execute (const char *prog, char **argv, const char *outname,
      since we might not end up needing something that we could not find.  */
 
   if (argv[0] == 0)
-    fatal_error (input_location, "cannot find '%s'", prog);
+    fatal_error (input_location, "cannot find %qs", prog);
 
   pex = pex_init (0, "collect2", NULL);
   if (pex == NULL)
-    fatal_error (input_location, "pex_init failed: %m");
+    fatal_error (input_location, "%<pex_init%> failed: %m");
 
   errmsg = pex_run (pex, flags, argv[0], argv, outname,
 		    errname, &err);
@@ -201,12 +206,13 @@ collect_execute (const char *prog, char **argv, const char *outname,
 }
 
 void
-fork_execute (const char *prog, char **argv, bool use_atfile)
+fork_execute (const char *prog, char **argv, bool use_atfile,
+	      const char *atsuffix)
 {
   struct pex_obj *pex;
 
   pex = collect_execute (prog, argv, NULL, NULL,
-			 PEX_LAST | PEX_SEARCH, use_atfile);
+			 PEX_LAST | PEX_SEARCH, use_atfile, atsuffix);
   do_wait (prog, pex);
 }
 

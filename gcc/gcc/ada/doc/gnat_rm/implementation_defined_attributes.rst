@@ -93,8 +93,8 @@ Attribute Bit
 ``obj'Bit``, where ``obj`` is any object, yields the bit
 offset within the storage unit (byte) that contains the first bit of
 storage allocated for the object.  The value of this attribute is of the
-type *universal_integer*, and is always a non-negative number not
-exceeding the value of ``System.Storage_Unit``.
+type *universal_integer* and is always a nonnegative number smaller
+than ``System.Storage_Unit``.
 
 For an object that is a variable or a constant allocated in a register,
 the value is zero.  (The use of this attribute does not force the
@@ -241,14 +241,16 @@ the first element of the array.
 
 .. code-block:: ada
 
-  type Unconstr_Array is array (Positive range <>) of Boolean;
+  type Unconstr_Array is array (Short_Short_Integer range <>) of Positive;
   Put_Line ("Descriptor size = " & Unconstr_Array'Descriptor_Size'Img);
 
 
-The attribute takes into account any additional padding due to type alignment.
-In the example above, the descriptor contains two values of type
-``Positive`` representing the low and high bound.  Since ``Positive`` has
-a size of 31 bits and an alignment of 4, the descriptor size is ``2 * Positive'Size + 2`` or 64 bits.
+The attribute takes into account any padding due to the alignment of the
+component type. In the example above, the descriptor contains two values
+of type ``Short_Short_Integer`` representing the low and high bound. But,
+since ``Positive`` has an alignment of 4, the size of the descriptor is
+``2 * Short_Short_Integer'Size`` rounded up to the next multiple of 32,
+which yields a size of 32 bits, i.e. including 16 bits of padding.
 
 Attribute Elaborated
 ====================
@@ -336,6 +338,9 @@ Attribute Enum_Rep
 
 .. index:: Enum_Rep
 
+Note that this attribute is now standard in Ada 202x and is available
+as an implementation defined attribute for earlier Ada versions.
+
 For every enumeration subtype ``S``, ``S'Enum_Rep`` denotes a
 function with the following spec:
 
@@ -353,7 +358,7 @@ enumeration literal or object.
 The function returns the representation value for the given enumeration
 value.  This will be equal to value of the ``Pos`` attribute in the
 absence of an enumeration representation clause.  This is a static
-attribute (i.e.,:the result is static if the argument is static).
+attribute (i.e., the result is static if the argument is static).
 
 ``S'Enum_Rep`` can also be used with integer types and objects,
 in which case it simply returns the integer value.  The reason for this
@@ -370,6 +375,9 @@ Attribute Enum_Val
 .. index:: Representation of enums
 
 .. index:: Enum_Val
+
+Note that this attribute is now standard in Ada 202x and is available
+as an implementation defined attribute for earlier Ada versions.
 
 For every enumeration subtype ``S``, ``S'Enum_Val`` denotes a
 function with the following spec:
@@ -475,21 +483,34 @@ otherwise.  The intended use of this attribute is in conjunction with generic
 definitions.  If the attribute is applied to a generic private type, it
 indicates whether or not the corresponding actual type has discriminants.
 
+Attribute Has_Tagged_Values
+===========================
+.. index:: Tagged values, testing for
+
+.. index:: Has_Tagged_Values
+
+The prefix of the ``Has_Tagged_Values`` attribute is a type. The result is a
+Boolean value which is True if the type is a composite type (array or record)
+that is either a tagged type or has a subcomponent that is tagged, and is False
+otherwise. The intended use of this attribute is in conjunction with generic
+definitions. If the attribute is applied to a generic private type, it
+indicates whether or not the corresponding actual type has access values.
+
 Attribute Img
 =============
 .. index:: Img
 
-The ``Img`` attribute differs from ``Image`` in that it is applied
-directly to an object, and yields the same result as
-``Image`` for the subtype of the object.  This is convenient for
-debugging:
+The ``Img`` attribute differs from ``Image`` in that, while both can be
+applied directly to an object, ``Img`` cannot be applied to types.
+
+Example usage of the attribute:
 
 .. code-block:: ada
 
   Put_Line ("X = " & X'Img);
 
 
-has the same meaning as the more verbose:
+which has the same meaning as the more verbose:
 
 .. code-block:: ada
 
@@ -502,6 +523,13 @@ Note that technically, in analogy to ``Image``,
 that returns the appropriate string when called. This means that
 ``X'Img`` can be renamed as a function-returning-string, or used
 in an instantiation as a function parameter.
+
+Attribute Initialized
+=====================
+.. index:: Initialized
+
+For the syntax and semantics of this attribute, see the SPARK 2014 Reference
+Manual, section 6.10.
 
 Attribute Integer_Value
 =======================
@@ -642,6 +670,14 @@ target.  This is a static value that can be used to specify the alignment
 for an object, guaranteeing that it is properly aligned in all
 cases.
 
+Attribute Max_Integer_Size
+==========================
+.. index:: Max_Integer_Size
+
+``Standard'Max_Integer_Size`` (``Standard`` is the only permissible
+prefix) provides the size of the largest supported integer type for
+the target. The result is a static constant.
+
 Attribute Mechanism_Code
 ========================
 .. index:: Return values, passing mechanism
@@ -781,8 +817,6 @@ and is static.  For non-scalar types, the result is nonstatic.
 
 Attribute Pool_Address
 ======================
-.. index:: Parameters, when passed by reference
-
 .. index:: Pool_Address
 
 ``X'Pool_Address`` for any object ``X`` returns the address
@@ -967,8 +1001,8 @@ of the use of this feature:
      --  the former is used.
 
 
-Other properties are as for standard representation attribute ``Bit_Order``,
-as defined by Ada RM 13.5.3(4). The default is ``System.Default_Bit_Order``.
+Other properties are as for the standard representation attribute ``Bit_Order``
+defined by Ada RM 13.5.3(4). The default is ``System.Default_Bit_Order``.
 
 For a record type ``T``, if ``T'Scalar_Storage_Order`` is
 specified explicitly, it shall be equal to ``T'Bit_Order``. Note:
@@ -978,8 +1012,8 @@ specified explicitly and set to the same value.
 
 Derived types inherit an explicitly set scalar storage order from their parent
 types. This may be overridden for the derived type by giving an explicit scalar
-storage order for the derived type. For a record extension, the derived type
-must have the same scalar storage order as the parent type.
+storage order for it. However, for a record extension, the derived type must
+have the same scalar storage order as the parent type.
 
 A component of a record type that is itself a record or an array and that does
 not start and end on a byte boundary must have have the same scalar storage
@@ -1018,14 +1052,17 @@ inheritance in the case of a derived type), then the default is normally
 the native ordering of the target, but this default can be overridden using
 pragma ``Default_Scalar_Storage_Order``.
 
-Note that if a component of ``T`` is itself of a record or array type,
-the specfied ``Scalar_Storage_Order`` does *not* apply to that nested type:
-an explicit attribute definition clause must be provided for the component
-type as well if desired.
+If a component of ``T`` is itself of a record or array type, the specfied
+``Scalar_Storage_Order`` does *not* apply to that nested type: an explicit
+attribute definition clause must be provided for the component type as well
+if desired.
 
 Note that the scalar storage order only affects the in-memory data
 representation. It has no effect on the representation used by stream
 attributes.
+
+Note that debuggers may be unable to display the correct value of scalar
+components of a type for which the opposite storage order is specified.
 
 .. _Attribute_Simple_Storage_Pool:
 
@@ -1102,6 +1139,26 @@ GNAT also allows this attribute to be applied to floating-point types
 for compatibility with Ada 83.  See
 the Ada 83 reference manual for an exact description of the semantics of
 this attribute when applied to floating-point types.
+
+Attribute Small_Denominator
+===========================
+.. index:: Small
+
+.. index:: Small_Denominator
+
+``typ'Small_Denominator`` for any fixed-point subtype `typ` yields the
+denominator in the representation of ``typ'Small`` as a rational number
+with coprime factors (i.e. as an irreducible fraction).
+
+Attribute Small_Numerator
+=========================
+.. index:: Small
+
+.. index:: Small_Numerator
+
+``typ'Small_Numerator`` for any fixed-point subtype `typ` yields the
+numerator in the representation of ``typ'Small`` as a rational number
+with coprime factors (i.e. as an irreducible fraction).
 
 Attribute Storage_Unit
 ======================
@@ -1534,32 +1591,31 @@ Attribute Valid_Scalars
 =======================
 .. index:: Valid_Scalars
 
-The ``'Valid_Scalars`` attribute is intended to make it easier to
-check the validity of scalar subcomponents of composite objects. It
-is defined for any prefix ``X`` that denotes an object.
-The value of this attribute is of the predefined type Boolean.
-``X'Valid_Scalars`` yields True if and only if evaluation of
-``P'Valid`` yields True for every scalar part P of X or if X has
-no scalar parts. It is not specified in what order the scalar parts
-are checked, nor whether any more are checked after any one of them
-is determined to be invalid. If the prefix ``X`` is of a class-wide
-type ``T'Class`` (where ``T`` is the associated specific type),
-or if the prefix ``X`` is of a specific tagged type ``T``, then
-only the scalar parts of components of ``T`` are traversed; in other
-words, components of extensions of ``T`` are not traversed even if
-``T'Class (X)'Tag /= T'Tag`` . The compiler will issue a warning if it can
-be determined at compile time that the prefix of the attribute has no
-scalar parts (e.g., if the prefix is of an access type, an interface type,
-an undiscriminated task type, or an undiscriminated protected type).
+The ``'Valid_Scalars`` attribute is intended to make it easier to check the
+validity of scalar subcomponents of composite objects. The attribute is defined
+for any prefix ``P`` which denotes an object. Prefix ``P`` can be any type
+except for tagged private or ``Unchecked_Union`` types. The value of the
+attribute is of type ``Boolean``.
 
-For scalar types, ``Valid_Scalars`` is equivalent to ``Valid``. The use
-of this attribute is not permitted for ``Unchecked_Union`` types for which
-in general it is not possible to determine the values of the discriminants.
+``P'Valid_Scalars`` yields ``True`` if and only if the evaluation of
+``C'Valid`` yields ``True`` for every scalar subcomponent ``C`` of ``P``, or if
+``P`` has no scalar subcomponents. Attribute ``'Valid_Scalars`` is equivalent
+to attribute ``'Valid`` for scalar types.
 
-Note: ``Valid_Scalars`` can generate a lot of code, especially in the case
-of a large variant record. If the attribute is called in many places in the
-same program applied to objects of the same type, it can reduce program size
-to write a function with a single use of the attribute, and then call that
+It is not specified in what order the subcomponents are checked, nor whether
+any more are checked after any one of them is determined to be invalid. If the
+prefix ``P`` is of a class-wide type ``T'Class`` (where ``T`` is the associated
+specific type), or if the prefix ``P`` is of a specific tagged type ``T``, then
+only the subcomponents of ``T`` are checked; in other words, components of
+extensions of ``T`` are not checked even if ``T'Class (P)'Tag /= T'Tag``.
+
+The compiler will issue a warning if it can be determined at compile time that
+the prefix of the attribute has no scalar subcomponents.
+
+Note: ``Valid_Scalars`` can generate a lot of code, especially in the case of
+a large variant record. If the attribute is called in many places in the same
+program applied to objects of the same type, it can reduce program size to
+write a function with a single use of the attribute, and then call that
 function from multiple places.
 
 Attribute VADS_Size
@@ -1606,4 +1662,3 @@ Attribute Word_Size
 ``Standard'Word_Size`` (``Standard`` is the only permissible
 prefix) provides the value ``System.Word_Size``. The result is
 a static constant.
-

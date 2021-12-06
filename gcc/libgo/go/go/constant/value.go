@@ -66,6 +66,11 @@ type Value interface {
 // The spec requires at least 256 bits; typical implementations use 512 bits.
 const prec = 512
 
+// TODO(gri) Consider storing "error" information in an unknownVal so clients
+//           can provide better error messages. For instance, if a number is
+//           too large (incl. infinity), that could be recorded in unknownVal.
+//           See also #20583 and #42695 for use cases.
+
 type (
 	unknownVal struct{}
 	boolVal    bool
@@ -170,7 +175,7 @@ func (x int64Val) String() string { return strconv.FormatInt(int64(x), 10) }
 func (x intVal) String() string   { return x.val.String() }
 func (x ratVal) String() string   { return rtof(x).String() }
 
-// String returns returns a decimal approximation of the Float value.
+// String returns a decimal approximation of the Float value.
 func (x floatVal) String() string {
 	f := x.val
 
@@ -297,10 +302,16 @@ func makeFloat(x *big.Float) Value {
 	if x.Sign() == 0 {
 		return floatVal0
 	}
+	if x.IsInf() {
+		return unknownVal{}
+	}
 	return floatVal{x}
 }
 
 func makeComplex(re, im Value) Value {
+	if re.Kind() == Unknown || im.Kind() == Unknown {
+		return unknownVal{}
+	}
 	return complexVal{re, im}
 }
 
@@ -315,8 +326,9 @@ func makeFloatFromLiteral(lit string) Value {
 				// but it'll take forever to parse as a Rat.
 				lit = "0"
 			}
-			r, _ := newRat().SetString(lit)
-			return ratVal{r}
+			if r, ok := newRat().SetString(lit); ok {
+				return ratVal{r}
+			}
 		}
 		// otherwise use floats
 		return makeFloat(f)
@@ -358,16 +370,13 @@ func MakeUint64(x uint64) Value {
 }
 
 // MakeFloat64 returns the Float value for x.
+// If x is -0.0, the result is 0.0.
 // If x is not finite, the result is an Unknown.
 func MakeFloat64(x float64) Value {
 	if math.IsInf(x, 0) || math.IsNaN(x) {
 		return unknownVal{}
 	}
-	// convert -0 to 0
-	if x == 0 {
-		return int64Val(0)
-	}
-	return ratVal{newRat().SetFloat64(x)}
+	return ratVal{newRat().SetFloat64(x + 0)} // convert -0 to 0
 }
 
 // MakeFromLiteral returns the corresponding integer, floating-point,
@@ -527,6 +536,68 @@ func Float64Val(x Value) (float64, bool) {
 		return 0, false
 	default:
 		panic(fmt.Sprintf("%v not a Float", x))
+	}
+}
+
+// Val returns the underlying value for a given constant. Since it returns an
+// interface, it is up to the caller to type assert the result to the expected
+// type. The possible dynamic return types are:
+//
+//    x Kind             type of result
+//    -----------------------------------------
+//    Bool               bool
+//    String             string
+//    Int                int64 or *big.Int
+//    Float              *big.Float or *big.Rat
+//    everything else    nil
+//
+func Val(x Value) interface{} {
+	switch x := x.(type) {
+	case boolVal:
+		return bool(x)
+	case *stringVal:
+		return x.string()
+	case int64Val:
+		return int64(x)
+	case intVal:
+		return x.val
+	case ratVal:
+		return x.val
+	case floatVal:
+		return x.val
+	default:
+		return nil
+	}
+}
+
+// Make returns the Value for x.
+//
+//    type of x        result Kind
+//    ----------------------------
+//    bool             Bool
+//    string           String
+//    int64            Int
+//    *big.Int         Int
+//    *big.Float       Float
+//    *big.Rat         Float
+//    anything else    Unknown
+//
+func Make(x interface{}) Value {
+	switch x := x.(type) {
+	case bool:
+		return boolVal(x)
+	case string:
+		return &stringVal{s: x}
+	case int64:
+		return int64Val(x)
+	case *big.Int:
+		return makeInt(x)
+	case *big.Rat:
+		return makeRat(x)
+	case *big.Float:
+		return makeFloat(x)
+	default:
+		return unknownVal{}
 	}
 }
 

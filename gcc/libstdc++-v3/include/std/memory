@@ -1,6 +1,6 @@
 // <memory> -*- C++ -*-
 
-// Copyright (C) 2001-2018 Free Software Foundation, Inc.
+// Copyright (C) 2001-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -38,6 +38,7 @@
 
 /** @file include/memory
  *  This is a Standard C++ Library header.
+ *  @ingroup memory
  */
 
 #ifndef _GLIBCXX_MEMORY
@@ -67,87 +68,84 @@
 #include <bits/stl_raw_storage_iter.h>
 
 #if __cplusplus >= 201103L
-#  include <exception>        	  // std::exception
-#  include <typeinfo>         	  // std::type_info in get_deleter
-#  include <iosfwd>           	  // std::basic_ostream
-#  include <ext/atomicity.h>
-#  include <ext/concurrence.h>
-#  include <bits/functexcept.h>
-#  include <bits/stl_function.h>  // std::less
-#  include <bits/uses_allocator.h>
 #  include <type_traits>
+#  include <bits/align.h>
+#  include <bits/uses_allocator.h>
+#  include <bits/alloc_traits.h>
 #  include <debug/debug.h>
 #  include <bits/unique_ptr.h>
 #  include <bits/shared_ptr.h>
 #  include <bits/shared_ptr_atomic.h>
-#  if _GLIBCXX_USE_DEPRECATED
-#    include <backward/auto_ptr.h>
-#  endif
-#else
+#endif
+
+#if __cplusplus < 201103L || _GLIBCXX_USE_DEPRECATED
 #  include <backward/auto_ptr.h>
 #endif
 
+#if __cplusplus > 201703L
+#  include <bits/ranges_uninitialized.h>
+#  include <bits/uses_allocator_args.h>
+#endif
+
 #if __cplusplus >= 201103L
-#  include <cstdint>
-#  ifdef _GLIBCXX_USE_C99_STDINT_TR1
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-/**
- *  @brief Fit aligned storage in buffer.
+/** @defgroup ptr_safety Pointer Safety and Garbage Collection
+ *  @ingroup memory
  *
- *  [ptr.align]
+ * Utilities to assist with garbage collection in an implementation
+ * that supports <em>strict pointer safety</em>.
+ * This implementation only supports <em>relaxed pointer safety</em>
+ * and so these functions have no effect.
  *
- *  This function tries to fit @a __size bytes of storage with alignment
- *  @a __align into the buffer @a __ptr of size @a __space bytes.  If such
- *  a buffer fits then @a __ptr is changed to point to the first byte of the
- *  aligned storage and @a __space is reduced by the bytes used for alignment.
+ * C++11 20.6.4 [util.dynamic.safety], Pointer safety
  *
- *  @param __align   A fundamental or extended alignment value.
- *  @param __size    Size of the aligned storage required.
- *  @param __ptr     Pointer to a buffer of @a __space bytes.
- *  @param __space   Size of the buffer pointed to by @a __ptr.
- *  @return the updated pointer if the aligned storage fits, otherwise nullptr.
+ * @{
  */
-inline void*
-align(size_t __align, size_t __size, void*& __ptr, size_t& __space) noexcept
-{
-  const auto __intptr = reinterpret_cast<uintptr_t>(__ptr);
-  const auto __aligned = (__intptr - 1u + __align) & -__align;
-  const auto __diff = __aligned - __intptr;
-  if ((__size + __diff) > __space)
-    return nullptr;
-  else
-    {
-      __space -= __diff;
-      return __ptr = reinterpret_cast<void*>(__aligned);
-    }
-}
 
-// 20.7.4 [util.dynamic.safety], pointer safety
-
+/// Constants representing the different types of pointer safety.
 enum class pointer_safety { relaxed, preferred, strict };
 
+/// Inform a garbage collector that an object is still in use.
 inline void
 declare_reachable(void*) { }
 
+/// Unregister an object previously registered with declare_reachable.
 template <typename _Tp>
   inline _Tp*
   undeclare_reachable(_Tp* __p) { return __p; }
 
+/// Inform a garbage collector that a region of memory need not be traced.
 inline void
 declare_no_pointers(char*, size_t) { }
 
+/// Unregister a range previously registered with declare_no_pointers.
 inline void
 undeclare_no_pointers(char*, size_t) { }
 
+/// The type of pointer safety supported by the implementation.
 inline pointer_safety
 get_pointer_safety() noexcept { return pointer_safety::relaxed; }
+/// @}
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace
-#endif // _GLIBCXX_USE_C99_STDINT_TR1
 #endif // C++11
+
+#if __cplusplus >= 201703L
+// Parallel STL algorithms
+# if _PSTL_EXECUTION_POLICIES_DEFINED
+// If <execution> has already been included, pull in implementations
+#  include <pstl/glue_memory_impl.h>
+# else
+// Otherwise just pull in forward declarations
+#  include <pstl/glue_memory_defs.h>
+# endif
+
+// Feature test macro for parallel algorithms
+# define __cpp_lib_parallel_algorithm 201603L
+#endif // C++17
 
 #endif /* _GLIBCXX_MEMORY */

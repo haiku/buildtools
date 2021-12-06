@@ -1,5 +1,5 @@
 /* Callgraph based analysis of static variables.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
 
 This file is part of GCC.
@@ -61,6 +61,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "symbol-summary.h"
 #include "ipa-prop.h"
 #include "ipa-fnsummary.h"
+#include "symtab-thunks.h"
 
 /* Lattice values for const and pure functions.  Everything starts out
    being const, then may drop to pure and then neither depending on
@@ -85,8 +86,20 @@ static const char *malloc_state_names[] = {"malloc_top", "malloc", "malloc_botto
 
 /* Holder for the const_state.  There is one of these per function
    decl.  */
-struct funct_state_d
+class funct_state_d
 {
+public:
+  funct_state_d (): pure_const_state (IPA_NEITHER),
+    state_previously_known (IPA_NEITHER), looping_previously_known (true),
+    looping (true), can_throw (true), can_free (true),
+    malloc_state (STATE_MALLOC_BOTTOM) {}
+
+  funct_state_d (const funct_state_d &s): pure_const_state (s.pure_const_state),
+    state_previously_known (s.state_previously_known),
+    looping_previously_known (s.looping_previously_known),
+    looping (s.looping), can_throw (s.can_throw), can_free (s.can_free),
+    malloc_state (s.malloc_state) {}
+
   /* See above.  */
   enum pure_const_state_e pure_const_state;
   /* What user set here; we can be always sure about this.  */
@@ -110,20 +123,26 @@ struct funct_state_d
   enum malloc_state_e malloc_state;
 };
 
-/* State used when we know nothing about function.  */
-static struct funct_state_d varying_state
-   = { IPA_NEITHER, IPA_NEITHER, true, true, true, true, STATE_MALLOC_BOTTOM };
-
-
-typedef struct funct_state_d * funct_state;
+typedef class funct_state_d * funct_state;
 
 /* The storage of the funct_state is abstracted because there is the
    possibility that it may be desirable to move this to the cgraph
    local info.  */
 
-/* Array, indexed by cgraph node uid, of function states.  */
+class funct_state_summary_t:
+  public fast_function_summary <funct_state_d *, va_heap>
+{
+public:
+  funct_state_summary_t (symbol_table *symtab):
+    fast_function_summary <funct_state_d *, va_heap> (symtab) {}
 
-static vec<funct_state> funct_state_vec;
+  virtual void insert (cgraph_node *, funct_state_d *state);
+  virtual void duplicate (cgraph_node *src_node, cgraph_node *dst_node,
+			  funct_state_d *src_data,
+			  funct_state_d *dst_data);
+};
+
+static funct_state_summary_t *funct_state_summaries = NULL;
 
 static bool gate_pure_const (void);
 
@@ -155,12 +174,6 @@ public:
 
 private:
   bool init_p;
-
-  /* Holders of ipa cgraph hooks: */
-  struct cgraph_node_hook_list *function_insertion_hook_holder;
-  struct cgraph_2node_hook_list *node_duplication_hook_holder;
-  struct cgraph_node_hook_list *node_removal_hook_holder;
-
 }; // class pass_ipa_pure_const
 
 } // anon namespace
@@ -187,7 +200,7 @@ suggest_attribute (int option, tree decl, bool known_finite,
 		   hash_set<tree> *warned_about,
 		   const char * attrib_name)
 {
-  if (!option_enabled (option, &global_options))
+  if (!option_enabled (option, lang_hooks.option_lang_mask (), &global_options))
     return warned_about;
   if (TREE_THIS_VOLATILE (decl)
       || (known_finite && function_always_visible_to_compiler_p (decl)))
@@ -249,7 +262,7 @@ warn_function_malloc (tree decl)
   static hash_set<tree> *warned_about;
   warned_about
     = suggest_attribute (OPT_Wsuggest_attribute_malloc, decl,
-			 false, warned_about, "malloc");
+			 true, warned_about, "malloc");
 }
 
 /* Emit suggestion about __attribute__((noreturn)) for DECL.  */
@@ -258,10 +271,6 @@ static void
 warn_function_noreturn (tree decl)
 {
   tree original_decl = decl;
-
-  cgraph_node *node = cgraph_node::get (decl);
-  if (node->instrumentation_clone)
-    decl = node->instrumented_version->decl;
 
   static hash_set<tree> *warned_about;
   if (!lang_hooks.missing_noreturn_ok_p (decl)
@@ -276,56 +285,10 @@ warn_function_cold (tree decl)
 {
   tree original_decl = decl;
 
-  cgraph_node *node = cgraph_node::get (decl);
-  if (node->instrumentation_clone)
-    decl = node->instrumented_version->decl;
-
   static hash_set<tree> *warned_about;
   warned_about 
     = suggest_attribute (OPT_Wsuggest_attribute_cold, original_decl,
 			 true, warned_about, "cold");
-}
-
-/* Return true if we have a function state for NODE.  */
-
-static inline bool
-has_function_state (struct cgraph_node *node)
-{
-  if (!funct_state_vec.exists ()
-      || funct_state_vec.length () <= (unsigned int)node->uid)
-    return false;
-  return funct_state_vec[node->uid] != NULL;
-}
-
-/* Return the function state from NODE.  */
-
-static inline funct_state
-get_function_state (struct cgraph_node *node)
-{
-  if (!funct_state_vec.exists ()
-      || funct_state_vec.length () <= (unsigned int)node->uid
-      || !funct_state_vec[node->uid])
-    /* We might want to put correct previously_known state into varying.  */
-    return &varying_state;
- return funct_state_vec[node->uid];
-}
-
-/* Set the function state S for NODE.  */
-
-static inline void
-set_function_state (struct cgraph_node *node, funct_state s)
-{
-  if (!funct_state_vec.exists ()
-      || funct_state_vec.length () <= (unsigned int)node->uid)
-     funct_state_vec.safe_grow_cleared (node->uid + 1);
-
-  /* If funct_state_vec already contains a funct_state, we have to release
-     it before it's going to be ovewritten.  */
-  if (funct_state_vec[node->uid] != NULL
-      && funct_state_vec[node->uid] != &varying_state)
-    free (funct_state_vec[node->uid]);
-
-  funct_state_vec[node->uid] = s;
 }
 
 /* Check to see if the use (or definition when CHECKING_WRITE is true)
@@ -378,7 +341,7 @@ check_decl (funct_state local,
   if (DECL_EXTERNAL (t) || TREE_PUBLIC (t))
     {
       /* Readonly reads are safe.  */
-      if (TREE_READONLY (t) && !TYPE_NEEDS_CONSTRUCTING (TREE_TYPE (t)))
+      if (TREE_READONLY (t))
 	return; /* Read of a constant, do not change the function state.  */
       else
 	{
@@ -419,13 +382,11 @@ check_op (funct_state local, tree t, bool checking_write)
 	fprintf (dump_file, "    Volatile indirect ref is not const/pure\n");
       return;
     }
-  else if (t
-  	   && (INDIRECT_REF_P (t) || TREE_CODE (t) == MEM_REF)
-	   && TREE_CODE (TREE_OPERAND (t, 0)) == SSA_NAME
-	   && !ptr_deref_may_alias_global_p (TREE_OPERAND (t, 0)))
+  else if (refs_local_or_readonly_memory_p (t))
     {
       if (dump_file)
-	fprintf (dump_file, "    Indirect ref to local memory is OK\n");
+	fprintf (dump_file, "    Indirect ref to local or readonly "
+		 "memory is OK\n");
       return;
     }
   else if (checking_write)
@@ -538,7 +499,7 @@ worse_state (enum pure_const_state_e *state, bool *looping,
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "Dropping state to PURE because call to %s may not "
-		 "bind to current def.\n", to->name ());
+		 "bind to current def.\n", to->dump_name ());
       state2 = IPA_PURE;
     }
   *state = MAX (*state, state2);
@@ -549,35 +510,34 @@ worse_state (enum pure_const_state_e *state, bool *looping,
    but function using them is.  */
 static bool
 special_builtin_state (enum pure_const_state_e *state, bool *looping,
-			tree callee)
+		       tree callee)
 {
   if (DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
     switch (DECL_FUNCTION_CODE (callee))
       {
-	case BUILT_IN_RETURN:
-	case BUILT_IN_UNREACHABLE:
-	CASE_BUILT_IN_ALLOCA:
-	case BUILT_IN_STACK_SAVE:
-	case BUILT_IN_STACK_RESTORE:
-	case BUILT_IN_EH_POINTER:
-	case BUILT_IN_EH_FILTER:
-	case BUILT_IN_UNWIND_RESUME:
-	case BUILT_IN_CXA_END_CLEANUP:
-	case BUILT_IN_EH_COPY_VALUES:
-	case BUILT_IN_FRAME_ADDRESS:
-	case BUILT_IN_APPLY:
-	case BUILT_IN_APPLY_ARGS:
-	case BUILT_IN_ASAN_BEFORE_DYNAMIC_INIT:
-	case BUILT_IN_ASAN_AFTER_DYNAMIC_INIT:
-	  *looping = false;
-	  *state = IPA_CONST;
-	  return true;
-	case BUILT_IN_PREFETCH:
-	  *looping = true;
-	  *state = IPA_CONST;
-	  return true;
-	default:
-	  break;
+      case BUILT_IN_RETURN:
+      case BUILT_IN_UNREACHABLE:
+      CASE_BUILT_IN_ALLOCA:
+      case BUILT_IN_STACK_SAVE:
+      case BUILT_IN_STACK_RESTORE:
+      case BUILT_IN_EH_POINTER:
+      case BUILT_IN_EH_FILTER:
+      case BUILT_IN_UNWIND_RESUME:
+      case BUILT_IN_CXA_END_CLEANUP:
+      case BUILT_IN_EH_COPY_VALUES:
+      case BUILT_IN_FRAME_ADDRESS:
+      case BUILT_IN_APPLY_ARGS:
+      case BUILT_IN_ASAN_BEFORE_DYNAMIC_INIT:
+      case BUILT_IN_ASAN_AFTER_DYNAMIC_INIT:
+	*looping = false;
+	*state = IPA_CONST;
+	return true;
+      case BUILT_IN_PREFETCH:
+	*looping = true;
+	*state = IPA_CONST;
+	return true;
+      default:
+	break;
       }
   return false;
 }
@@ -594,9 +554,9 @@ check_call (funct_state local, gcall *call, bool ipa)
 {
   int flags = gimple_call_flags (call);
   tree callee_t = gimple_call_fndecl (call);
-  bool possibly_throws = stmt_could_throw_p (call);
+  bool possibly_throws = stmt_could_throw_p (cfun, call);
   bool possibly_throws_externally = (possibly_throws
-  				     && stmt_can_throw_external (call));
+  				     && stmt_can_throw_external (cfun, call));
 
   if (possibly_throws)
     {
@@ -662,9 +622,10 @@ check_call (funct_state local, gcall *call, bool ipa)
 	  case BUILT_IN_LONGJMP:
 	  case BUILT_IN_NONLOCAL_GOTO:
 	    if (dump_file)
-	      fprintf (dump_file, "    longjmp and nonlocal goto is not const/pure\n");
+	      fprintf (dump_file,
+		       "    longjmp and nonlocal goto is not const/pure\n");
 	    local->pure_const_state = IPA_NEITHER;
-            local->looping = true;
+	    local->looping = true;
 	    break;
 	  default:
 	    break;
@@ -782,6 +743,8 @@ check_stmt (gimple_stmt_iterator *gsip, funct_state local, bool ipa)
   /* Do consider clobber as side effects before IPA, so we rather inline
      C++ destructors and keep clobber semantics than eliminate them.
 
+     Similar logic is in ipa-modref.
+
      TODO: We may get smarter during early optimizations on these and let
      functions containing only clobbers to be optimized more.  This is a common
      case of C++ destructors.  */
@@ -809,7 +772,7 @@ check_stmt (gimple_stmt_iterator *gsip, funct_state local, bool ipa)
 			    ipa ? check_ipa_store :  check_store);
 
   if (gimple_code (stmt) != GIMPLE_CALL
-      && stmt_could_throw_p (stmt))
+      && stmt_could_throw_p (cfun, stmt))
     {
       if (cfun->can_throw_non_call_exceptions)
 	{
@@ -817,7 +780,7 @@ check_stmt (gimple_stmt_iterator *gsip, funct_state local, bool ipa)
 	    fprintf (dump_file, "    can throw; looping\n");
 	  local->looping = true;
 	}
-      if (stmt_can_throw_external (stmt))
+      if (stmt_can_throw_external (cfun, stmt))
 	{
 	  if (dump_file)
 	    fprintf (dump_file, "    can throw externally\n");
@@ -879,20 +842,20 @@ check_retval_uses (tree retval, gimple *stmt)
       {
 	tree op2 = gimple_cond_rhs (cond);
 	if (!integer_zerop (op2))
-	  RETURN_FROM_IMM_USE_STMT (use_iter, false);
+	  return false;
       }
     else if (gassign *ga = dyn_cast<gassign *> (use_stmt))
       {
 	enum tree_code code = gimple_assign_rhs_code (ga);
 	if (TREE_CODE_CLASS (code) != tcc_comparison)
-	  RETURN_FROM_IMM_USE_STMT (use_iter, false);
+	  return false;
 	if (!integer_zerop (gimple_assign_rhs2 (ga)))
-	  RETURN_FROM_IMM_USE_STMT (use_iter, false);
+	  return false;
       }
     else if (is_gimple_debug (use_stmt))
       ;
     else if (use_stmt != stmt)
-      RETURN_FROM_IMM_USE_STMT (use_iter, false);
+      return false;
 
   return true;
 }
@@ -908,6 +871,99 @@ check_retval_uses (tree retval, gimple *stmt)
       and return_stmt (and likewise a phi arg has immediate use only within comparison
       or the phi stmt).  */
 
+#define DUMP_AND_RETURN(reason)  \
+{  \
+  if (dump_file && (dump_flags & TDF_DETAILS))  \
+    fprintf (dump_file, "\n%s is not a malloc candidate, reason: %s\n", \
+	     (node->dump_name ()), (reason));  \
+  return false;  \
+}
+
+static bool
+malloc_candidate_p_1 (function *fun, tree retval, gimple *ret_stmt, bool ipa,
+		      bitmap visited)
+{
+  cgraph_node *node = cgraph_node::get_create (fun->decl);
+  if (!bitmap_set_bit (visited, SSA_NAME_VERSION (retval)))
+    return true;
+
+  if (!check_retval_uses (retval, ret_stmt))
+    DUMP_AND_RETURN("Return value has uses outside return stmt"
+		    " and comparisons against 0.")
+
+  gimple *def = SSA_NAME_DEF_STMT (retval);
+
+  if (gcall *call_stmt = dyn_cast<gcall *> (def))
+    {
+      tree callee_decl = gimple_call_fndecl (call_stmt);
+      if (!callee_decl)
+	return false;
+
+      if (!ipa && !DECL_IS_MALLOC (callee_decl))
+	DUMP_AND_RETURN("callee_decl does not have malloc attribute for"
+			" non-ipa mode.")
+
+      cgraph_edge *cs = node->get_edge (call_stmt);
+      if (cs)
+	{
+	  ipa_call_summary *es = ipa_call_summaries->get_create (cs);
+	  es->is_return_callee_uncaptured = true;
+	}
+    }
+
+    else if (gphi *phi = dyn_cast<gphi *> (def))
+      {
+	bool all_args_zero = true;
+	for (unsigned i = 0; i < gimple_phi_num_args (phi); ++i)
+	  {
+	    tree arg = gimple_phi_arg_def (phi, i);
+	    if (integer_zerop (arg))
+	      continue;
+
+	    all_args_zero = false;
+	    if (TREE_CODE (arg) != SSA_NAME)
+	      DUMP_AND_RETURN ("phi arg is not SSA_NAME.");
+	    if (!check_retval_uses (arg, phi))
+	      DUMP_AND_RETURN ("phi arg has uses outside phi"
+				 " and comparisons against 0.")
+
+	    gimple *arg_def = SSA_NAME_DEF_STMT (arg);
+	    if (is_a<gphi *> (arg_def))
+	      {
+		if (!malloc_candidate_p_1 (fun, arg, phi, ipa, visited))
+		    DUMP_AND_RETURN ("nested phi fail")
+		continue;
+	      }
+
+	    gcall *call_stmt = dyn_cast<gcall *> (arg_def);
+	    if (!call_stmt)
+	      DUMP_AND_RETURN ("phi arg is a not a call_stmt.")
+
+	    tree callee_decl = gimple_call_fndecl (call_stmt);
+	    if (!callee_decl)
+	      return false;
+	    if (!ipa && !DECL_IS_MALLOC (callee_decl))
+	      DUMP_AND_RETURN("callee_decl does not have malloc attribute"
+			      " for non-ipa mode.")
+
+	    cgraph_edge *cs = node->get_edge (call_stmt);
+	    if (cs)
+	      {
+		ipa_call_summary *es = ipa_call_summaries->get_create (cs);
+		es->is_return_callee_uncaptured = true;
+	      }
+	  }
+
+	if (all_args_zero)
+	  DUMP_AND_RETURN ("Return value is a phi with all args equal to 0.")
+      }
+
+    else
+      DUMP_AND_RETURN("def_stmt of return value is not a call or phi-stmt.")
+
+  return true;
+}
+
 static bool
 malloc_candidate_p (function *fun, bool ipa)
 {
@@ -916,16 +972,11 @@ malloc_candidate_p (function *fun, bool ipa)
   edge_iterator ei;
   cgraph_node *node = cgraph_node::get_create (fun->decl);
 
-#define DUMP_AND_RETURN(reason)  \
-{  \
-  if (dump_file && (dump_flags & TDF_DETAILS))  \
-    fprintf (dump_file, "%s", (reason));  \
-  return false;  \
-}
-
-  if (EDGE_COUNT (exit_block->preds) == 0)
+  if (EDGE_COUNT (exit_block->preds) == 0
+      || !flag_delete_null_pointer_checks)
     return false;
 
+  auto_bitmap visited;
   FOR_EACH_EDGE (e, ei, exit_block->preds)
     {
       gimple_stmt_iterator gsi = gsi_last_bb (e->src);
@@ -942,72 +993,17 @@ malloc_candidate_p (function *fun, bool ipa)
 	  || TREE_CODE (TREE_TYPE (retval)) != POINTER_TYPE)
 	DUMP_AND_RETURN("Return value is not SSA_NAME or not a pointer type.")
 
-      if (!check_retval_uses (retval, ret_stmt))
-	DUMP_AND_RETURN("Return value has uses outside return stmt"
-			" and comparisons against 0.")
-
-      gimple *def = SSA_NAME_DEF_STMT (retval);
-      if (gcall *call_stmt = dyn_cast<gcall *> (def))
-	{
-	  tree callee_decl = gimple_call_fndecl (call_stmt);
-	  if (!callee_decl)
-	    return false;
-
-	  if (!ipa && !DECL_IS_MALLOC (callee_decl))
-	    DUMP_AND_RETURN("callee_decl does not have malloc attribute for"
-			    " non-ipa mode.")
-
-	  cgraph_edge *cs = node->get_edge (call_stmt);
-	  if (cs)
-	    {
-	      ipa_call_summary *es = ipa_call_summaries->get (cs);
-	      gcc_assert (es);
-	      es->is_return_callee_uncaptured = true;
-	    }
-	}
-
-      else if (gphi *phi = dyn_cast<gphi *> (def))
-	for (unsigned i = 0; i < gimple_phi_num_args (phi); ++i)
-	  {
-	    tree arg = gimple_phi_arg_def (phi, i);
-	    if (TREE_CODE (arg) != SSA_NAME)
-	      DUMP_AND_RETURN("phi arg is not SSA_NAME.")
-	    if (!(arg == null_pointer_node || check_retval_uses (arg, phi)))
-	      DUMP_AND_RETURN("phi arg has uses outside phi"
-			      " and comparisons against 0.")
-
-	    gimple *arg_def = SSA_NAME_DEF_STMT (arg);
-	    gcall *call_stmt = dyn_cast<gcall *> (arg_def);
-	    if (!call_stmt)
-	      return false;
-	    tree callee_decl = gimple_call_fndecl (call_stmt);
-	    if (!callee_decl)
-	      return false;
-	    if (!ipa && !DECL_IS_MALLOC (callee_decl))
-	      DUMP_AND_RETURN("callee_decl does not have malloc attribute for"
-			      " non-ipa mode.")
-
-	    cgraph_edge *cs = node->get_edge (call_stmt);
-	    if (cs)
-	      {
-		ipa_call_summary *es = ipa_call_summaries->get (cs);
-		gcc_assert (es);
-		es->is_return_callee_uncaptured = true;
-	      }
-	  }
-
-      else
-	DUMP_AND_RETURN("def_stmt of return value is not a call or phi-stmt.")
+      if (!malloc_candidate_p_1 (fun, retval, ret_stmt, ipa, visited))
+	return false;
     }
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "\nFound %s to be candidate for malloc attribute\n",
 	     IDENTIFIER_POINTER (DECL_NAME (fun->decl)));
   return true;
-
-#undef DUMP_AND_RETURN
 }
 
+#undef DUMP_AND_RETURN
 
 /* This is the main routine for finding the reference patterns for
    global variables within a function FN.  */
@@ -1019,7 +1015,7 @@ analyze_function (struct cgraph_node *fn, bool ipa)
   funct_state l;
   basic_block this_block;
 
-  l = XCNEW (struct funct_state_d);
+  l = XCNEW (class funct_state_d);
   l->pure_const_state = IPA_CONST;
   l->state_previously_known = IPA_NEITHER;
   l->looping_previously_known = true;
@@ -1030,11 +1026,11 @@ analyze_function (struct cgraph_node *fn, bool ipa)
 		    flags_from_decl_or_type (fn->decl),
 		    fn->cannot_return_p ());
 
-  if (fn->thunk.thunk_p || fn->alias)
+  if (fn->thunk || fn->alias)
     {
       /* Thunk gets propagated through, so nothing interesting happens.  */
       gcc_assert (ipa);
-      if (fn->thunk.thunk_p && fn->thunk.virtual_offset_p)
+      if (fn->thunk && thunk_info::get (fn)->virtual_offset_p)
 	l->pure_const_state = IPA_NEITHER;
       return l;
     }
@@ -1042,7 +1038,7 @@ analyze_function (struct cgraph_node *fn, bool ipa)
   if (dump_file)
     {
       fprintf (dump_file, "\n\n local analysis of %s\n ",
-	       fn->name ());
+	       fn->dump_name ());
     }
 
   push_cfun (DECL_STRUCT_FUNCTION (decl));
@@ -1091,13 +1087,13 @@ end:
 	    }
 	  else
 	    {
-	      struct loop *loop;
+	      class loop *loop;
 	      scev_initialize ();
 	      FOR_EACH_LOOP (loop, 0)
 		if (!finite_loop_p (loop))
 		  {
 		    if (dump_file)
-		      fprintf (dump_file, "    can not prove finiteness of "
+		      fprintf (dump_file, "    cannot prove finiteness of "
 			       "loop %i\n", loop->num);
 		    l->looping =true;
 		    break;
@@ -1144,40 +1140,35 @@ end:
   return l;
 }
 
-/* Called when new function is inserted to callgraph late.  */
-static void
-add_new_function (struct cgraph_node *node, void *data ATTRIBUTE_UNUSED)
+void
+funct_state_summary_t::insert (cgraph_node *node, funct_state_d *state)
 {
   /* There are some shared nodes, in particular the initializers on
      static declarations.  We do not need to scan them more than once
      since all we would be interested in are the addressof
      operations.  */
   if (opt_for_fn (node->decl, flag_ipa_pure_const))
-    set_function_state (node, analyze_function (node, true));
-}
-
-/* Called when new clone is inserted to callgraph late.  */
-
-static void
-duplicate_node_data (struct cgraph_node *src, struct cgraph_node *dst,
-	 	     void *data ATTRIBUTE_UNUSED)
-{
-  if (has_function_state (src))
     {
-      funct_state l = XNEW (struct funct_state_d);
-      gcc_assert (!has_function_state (dst));
-      memcpy (l, get_function_state (src), sizeof (*l));
-      set_function_state (dst, l);
+      funct_state_d *a = analyze_function (node, true);
+      new (state) funct_state_d (*a);
+      free (a);
     }
+  else
+    /* Do not keep stale summaries.  */
+    funct_state_summaries->remove (node);
 }
 
 /* Called when new clone is inserted to callgraph late.  */
 
-static void
-remove_node_data (struct cgraph_node *node, void *data ATTRIBUTE_UNUSED)
+void
+funct_state_summary_t::duplicate (cgraph_node *, cgraph_node *dst,
+				  funct_state_d *src_data,
+				  funct_state_d *dst_data)
 {
-  if (has_function_state (node))
-    set_function_state (node, NULL);
+  new (dst_data) funct_state_d (*src_data);
+  if (dst_data->malloc_state == STATE_MALLOC
+      && VOID_TYPE_P (TREE_TYPE (TREE_TYPE (dst->decl))))
+    dst_data->malloc_state = STATE_MALLOC_BOTTOM;
 }
 
 
@@ -1190,12 +1181,7 @@ register_hooks (void)
 
   init_p = true;
 
-  node_removal_hook_holder =
-      symtab->add_cgraph_removal_hook (&remove_node_data, NULL);
-  node_duplication_hook_holder =
-      symtab->add_cgraph_duplication_hook (&duplicate_node_data, NULL);
-  function_insertion_hook_holder =
-      symtab->add_cgraph_insertion_hook (&add_new_function, NULL);
+  funct_state_summaries = new funct_state_summary_t (symtab);
 }
 
 
@@ -1212,13 +1198,17 @@ pure_const_generate_summary (void)
 
   /* Process all of the functions.
 
-     We process AVAIL_INTERPOSABLE functions.  We can not use the results
+     We process AVAIL_INTERPOSABLE functions.  We cannot use the results
      by default, but the info can be used at LTO with -fwhole-program or
      when function got cloned and the clone is AVAILABLE.  */
 
   FOR_EACH_DEFINED_FUNCTION (node)
     if (opt_for_fn (node->decl, flag_ipa_pure_const))
-      set_function_state (node, analyze_function (node, true));
+      {
+	funct_state_d *a = analyze_function (node, true);
+	new (funct_state_summaries->get_create (node)) funct_state_d (*a);
+	free (a);
+      }
 }
 
 
@@ -1240,7 +1230,7 @@ pure_const_write_summary (void)
        lsei_next_function_in_partition (&lsei))
     {
       node = lsei_cgraph_node (lsei);
-      if (node->definition && has_function_state (node))
+      if (node->definition && funct_state_summaries->exists (node))
 	count++;
     }
 
@@ -1251,14 +1241,12 @@ pure_const_write_summary (void)
        lsei_next_function_in_partition (&lsei))
     {
       node = lsei_cgraph_node (lsei);
-      if (node->definition && has_function_state (node))
+      funct_state_d *fs = funct_state_summaries->get (node);
+      if (node->definition && fs != NULL)
 	{
 	  struct bitpack_d bp;
-	  funct_state fs;
 	  int node_ref;
 	  lto_symtab_encoder_t encoder;
-
-	  fs = get_function_state (node);
 
 	  encoder = ob->decl_state->symtab_node_encoder;
 	  node_ref = lto_symtab_encoder_encode (encoder, node);
@@ -1298,7 +1286,7 @@ pure_const_read_summary (void)
     {
       const char *data;
       size_t len;
-      struct lto_input_block *ib
+      class lto_input_block *ib
 	= lto_create_simple_input_block (file_data,
 					 LTO_section_ipa_pure_const,
 					 &data, &len);
@@ -1315,13 +1303,12 @@ pure_const_read_summary (void)
 	      funct_state fs;
 	      lto_symtab_encoder_t encoder;
 
-	      fs = XCNEW (struct funct_state_d);
 	      index = streamer_read_uhwi (ib);
 	      encoder = file_data->symtab_node_encoder;
 	      node = dyn_cast<cgraph_node *> (lto_symtab_encoder_deref (encoder,
 									index));
-	      set_function_state (node, fs);
 
+	      fs = funct_state_summaries->get_create (node);
 	      /* Note that the flags must be read in the opposite
 		 order in which they were written (the bitflags were
 		 pushed into FLAGS).  */
@@ -1381,12 +1368,14 @@ ignore_edge_for_nothrow (struct cgraph_edge *e)
     return true;
 
   enum availability avail;
-  cgraph_node *n = e->callee->function_or_virtual_thunk_symbol (&avail,
-							        e->caller);
-  if (avail <= AVAIL_INTERPOSABLE || TREE_NOTHROW (n->decl))
+  cgraph_node *ultimate_target
+    = e->callee->function_or_virtual_thunk_symbol (&avail, e->caller);
+  if (avail <= AVAIL_INTERPOSABLE || TREE_NOTHROW (ultimate_target->decl))
     return true;
-  return opt_for_fn (e->callee->decl, flag_non_call_exceptions)
-	 && !e->callee->binds_to_current_def_p (e->caller);
+  return ((opt_for_fn (e->callee->decl, flag_non_call_exceptions)
+	   && !e->callee->binds_to_current_def_p (e->caller))
+	  || !opt_for_fn (e->caller->decl, flag_ipa_pure_const)
+	  || !opt_for_fn (ultimate_target->decl, flag_ipa_pure_const));
 }
 
 /* Return true if NODE is self recursive function.
@@ -1416,16 +1405,21 @@ cdtor_p (cgraph_node *n, void *)
   return false;
 }
 
-/* We only propagate across edges with non-interposable callee.  */
+/* Skip edges from and to nodes without ipa_pure_const enabled.
+   Ignore not available symbols.  */
 
 static bool
 ignore_edge_for_pure_const (struct cgraph_edge *e)
 {
   enum availability avail;
-  e->callee->function_or_virtual_thunk_symbol (&avail, e->caller);
-  return (avail <= AVAIL_INTERPOSABLE);
-}
+  cgraph_node *ultimate_target
+    = e->callee->function_or_virtual_thunk_symbol (&avail, e->caller);
 
+  return (avail <= AVAIL_INTERPOSABLE
+	  || !opt_for_fn (e->caller->decl, flag_ipa_pure_const)
+	  || !opt_for_fn (ultimate_target->decl,
+			  flag_ipa_pure_const));
+}
 
 /* Produce transitive closure over the callgraph and compute pure/const
    attributes.  */
@@ -1477,7 +1471,7 @@ propagate_pure_const (void)
 	  int i;
 	  struct ipa_ref *ref = NULL;
 
-	  funct_state w_l = get_function_state (w);
+	  funct_state w_l = funct_state_summaries->get_create (w);
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    fprintf (dump_file, "  Visiting %s state:%s looping %i\n",
 		     w->dump_name (),
@@ -1519,7 +1513,8 @@ propagate_pure_const (void)
 		}
 	      if (avail > AVAIL_INTERPOSABLE)
 		{
-		  funct_state y_l = get_function_state (y);
+		  funct_state y_l = funct_state_summaries->get_create (y);
+
 		  if (dump_file && (dump_flags & TDF_DETAILS))
 		    {
 		      fprintf (dump_file,
@@ -1544,7 +1539,7 @@ propagate_pure_const (void)
 		    }
 		}
 	      else if (special_builtin_state (&edge_state, &edge_looping,
-					       y->decl))
+					      y->decl))
 		;
 	      else
 		state_from_flags (&edge_state, &edge_looping,
@@ -1607,7 +1602,6 @@ propagate_pure_const (void)
 		    fprintf (dump_file, "    global var write\n");
 		  break;
 		case IPA_REF_ADDR:
-		case IPA_REF_CHKP:
 		  break;
 		default:
 		  gcc_unreachable ();
@@ -1634,7 +1628,7 @@ propagate_pure_const (void)
       while (w && !can_free)
 	{
 	  struct cgraph_edge *e;
-	  funct_state w_l = get_function_state (w);
+	  funct_state w_l = funct_state_summaries->get (w);
 
 	  if (w_l->can_free
 	      || w->get_availability () == AVAIL_INTERPOSABLE
@@ -1649,7 +1643,7 @@ propagate_pure_const (void)
 								  e->caller);
 
 	      if (avail > AVAIL_INTERPOSABLE)
-		can_free = get_function_state (y)->can_free;
+		can_free = funct_state_summaries->get (y)->can_free;
 	      else
 		can_free = true;
 	    }
@@ -1662,7 +1656,7 @@ propagate_pure_const (void)
       w = node;
       while (w)
 	{
-	  funct_state w_l = get_function_state (w);
+	  funct_state w_l = funct_state_summaries->get (w);
 	  enum pure_const_state_e this_state = pure_const_state;
 	  bool this_looping = looping;
 
@@ -1670,7 +1664,7 @@ propagate_pure_const (void)
 	  w->nonfreeing_fn = !can_free;
 	  if (!can_free && dump_file)
 	    fprintf (dump_file, "Function found not to call free: %s\n",
-		     w->name ());
+		     w->dump_name ());
 
 	  if (w_l->state_previously_known != IPA_NEITHER
 	      && this_state > w_l->state_previously_known)
@@ -1691,7 +1685,7 @@ propagate_pure_const (void)
 	  /* Inline clones share declaration with their offline copies;
 	     do not modify their declarations since the offline copy may
 	     be different.  */
-	  if (!w->global.inlined_to)
+	  if (!w->inlined_to)
 	    switch (this_state)
 	      {
 	      case IPA_CONST:
@@ -1701,7 +1695,7 @@ propagate_pure_const (void)
 		    if (dump_file)
 		      fprintf (dump_file, "Function found to be %sconst: %s\n",
 			       this_looping ? "looping " : "",
-			       w->name ());
+			       w->dump_name ());
 		  }
 		/* Turning constructor or destructor to non-looping const/pure
 		   enables us to possibly remove the function completely.  */
@@ -1716,7 +1710,7 @@ propagate_pure_const (void)
 		      fprintf (dump_file,
 			       "Declaration updated to be %sconst: %s\n",
 			       this_looping ? "looping " : "",
-			       w->name ());
+			       w->dump_name ());
 		    remove_p |= has_cdtor;
 		  }
 		break;
@@ -1728,7 +1722,7 @@ propagate_pure_const (void)
 		    if (dump_file)
 		      fprintf (dump_file, "Function found to be %spure: %s\n",
 			       this_looping ? "looping " : "",
-			       w->name ());
+			       w->dump_name ());
 		  }
 		if (this_looping)
 		  has_cdtor = false;
@@ -1741,7 +1735,7 @@ propagate_pure_const (void)
 		      fprintf (dump_file,
 			       "Declaration updated to be %spure: %s\n",
 			       this_looping ? "looping " : "",
-			       w->name ());
+			       w->dump_name ());
 		    remove_p |= has_cdtor;
 		  }
 		break;
@@ -1801,7 +1795,7 @@ propagate_nothrow (void)
 
 	  if (!TREE_NOTHROW (w->decl))
 	    {
-	      funct_state w_l = get_function_state (w);
+	      funct_state w_l = funct_state_summaries->get_create (w);
 
 	      if (w_l->can_throw
 		  || w->get_availability () == AVAIL_INTERPOSABLE)
@@ -1818,15 +1812,15 @@ propagate_nothrow (void)
 				   function_or_virtual_thunk_symbol (&avail,
 								     e->caller);
 
-		  /* We can use info about the callee only if we know it can
-		     not be interposed.
+		  /* We can use info about the callee only if we know it
+		     cannot be interposed.
 		     When callee is compiled with non-call exceptions we also
 		     must check that the declaration is bound to current
 		     body as other semantically equivalent body may still
 		     throw.  */
 		  if (avail <= AVAIL_INTERPOSABLE
 		      || (!TREE_NOTHROW (y->decl)
-			  && (get_function_state (y)->can_throw
+			  && (funct_state_summaries->get_create (y)->can_throw
 			      || (opt_for_fn (y->decl, flag_non_call_exceptions)
 				  && !e->callee->binds_to_current_def_p (w)))))
 		    can_throw = true;
@@ -1846,18 +1840,18 @@ propagate_nothrow (void)
       w = node;
       while (w)
 	{
-	  funct_state w_l = get_function_state (w);
+	  funct_state w_l = funct_state_summaries->get_create (w);
 	  if (!can_throw && !TREE_NOTHROW (w->decl))
 	    {
 	      /* Inline clones share declaration with their offline copies;
 		 do not modify their declarations since the offline copy may
 		 be different.  */
-	      if (!w->global.inlined_to)
+	      if (!w->inlined_to)
 		{
 		  w->set_nothrow_flag (true);
 		  if (dump_file)
 		    fprintf (dump_file, "Function found to be nothrow: %s\n",
-			     w->name ());
+			     w->dump_name ());
 		}
 	    }
 	  else if (can_throw && !TREE_NOTHROW (w->decl))
@@ -1884,9 +1878,10 @@ dump_malloc_lattice (FILE *dump_file, const char *s)
   cgraph_node *node;
   FOR_EACH_FUNCTION (node)
     {
-      funct_state fs = get_function_state (node);
-      malloc_state_e state = fs->malloc_state;
-      fprintf (dump_file, "%s: %s\n", node->name (), malloc_state_names[state]);
+      funct_state fs = funct_state_summaries->get (node);
+      if (fs)
+	fprintf (dump_file, "%s: %s\n", node->dump_name (),
+		 malloc_state_names[fs->malloc_state]);
     }
 }
 
@@ -1899,12 +1894,10 @@ propagate_malloc (void)
   FOR_EACH_FUNCTION (node)
     {
       if (DECL_IS_MALLOC (node->decl))
-	if (!has_function_state (node))
+	if (!funct_state_summaries->exists (node))
 	  {
-	    funct_state l = XCNEW (struct funct_state_d);
-	    *l = varying_state;
-	    l->malloc_state = STATE_MALLOC;
-	    set_function_state (node, l);
+	    funct_state fs = funct_state_summaries->get_create (node);
+	    fs->malloc_state = STATE_MALLOC;
 	  }
     }
 
@@ -1923,10 +1916,10 @@ propagate_malloc (void)
 	  cgraph_node *node = order[i];
 	  if (node->alias
 	      || !node->definition
-	      || !has_function_state (node))
+	      || !funct_state_summaries->exists (node))
 	    continue;
 
-	  funct_state l = get_function_state (node);
+	  funct_state l = funct_state_summaries->get (node);
 
 	  /* FIXME: add support for indirect-calls.  */
 	  if (node->indirect_calls)
@@ -1944,10 +1937,10 @@ propagate_malloc (void)
 	  if (l->malloc_state == STATE_MALLOC_BOTTOM)
 	    continue;
 
-	  vec<cgraph_node *> callees = vNULL;
+	  auto_vec<cgraph_node *, 16> callees;
 	  for (cgraph_edge *cs = node->callees; cs; cs = cs->next_callee)
 	    {
-	      ipa_call_summary *es = ipa_call_summaries->get (cs);
+	      ipa_call_summary *es = ipa_call_summaries->get_create (cs);
 	      if (es && es->is_return_callee_uncaptured)
 		callees.safe_push (cs->callee);
 	    }
@@ -1956,12 +1949,13 @@ propagate_malloc (void)
 	  for (unsigned j = 0; j < callees.length (); j++)
 	    {
 	      cgraph_node *callee = callees[j];
-	      if (!has_function_state (callee))
+	      if (!funct_state_summaries->exists (node))
 		{
 		  new_state = STATE_MALLOC_BOTTOM;
 		  break;
 		}
-	      malloc_state_e callee_state = get_function_state (callee)->malloc_state;
+	      malloc_state_e callee_state
+		= funct_state_summaries->get_create (callee)->malloc_state;
 	      if (new_state < callee_state)
 		new_state = callee_state;
 	    }
@@ -1974,16 +1968,17 @@ propagate_malloc (void)
     }
 
   FOR_EACH_DEFINED_FUNCTION (node)
-    if (has_function_state (node))
+    if (funct_state_summaries->exists (node))
       {
-	funct_state l = get_function_state (node);
+	funct_state l = funct_state_summaries->get (node);
 	if (!node->alias
 	    && l->malloc_state == STATE_MALLOC
-	    && !node->global.inlined_to)
+	    && !node->inlined_to
+	    && !VOID_TYPE_P (TREE_TYPE (TREE_TYPE (node->decl))))
 	  {
 	    if (dump_file && (dump_flags & TDF_DETAILS))
 	      fprintf (dump_file, "Function %s found to be malloc\n",
-		       node->name ());
+		       node->dump_name ());
 
 	    bool malloc_decl_p = DECL_IS_MALLOC (node->decl);
 	    node->set_malloc_flag (true);
@@ -2004,12 +1999,7 @@ unsigned int
 pass_ipa_pure_const::
 execute (function *)
 {
-  struct cgraph_node *node;
   bool remove_p;
-
-  symtab->remove_cgraph_insertion_hook (function_insertion_hook_holder);
-  symtab->remove_cgraph_duplication_hook (node_duplication_hook_holder);
-  symtab->remove_cgraph_removal_hook (node_removal_hook_holder);
 
   /* Nothrow makes more function to not lead to return and improve
      later analysis.  */
@@ -2017,11 +2007,7 @@ execute (function *)
   propagate_malloc ();
   remove_p = propagate_pure_const ();
 
-  /* Cleanup. */
-  FOR_EACH_FUNCTION (node)
-    if (has_function_state (node))
-      free (get_function_state (node));
-  funct_state_vec.release ();
+  delete funct_state_summaries;
   return remove_p ? TODO_remove_functions : 0;
 }
 
@@ -2042,12 +2028,7 @@ pass_ipa_pure_const::pass_ipa_pure_const(gcc::context *ctxt)
 		     0, /* function_transform_todo_flags_start */
 		     NULL, /* function_transform */
 		     NULL), /* variable_transform */
-  init_p(false),
-  function_insertion_hook_holder(NULL),
-  node_duplication_hook_holder(NULL),
-  node_removal_hook_holder(NULL)
-{
-}
+  init_p (false) {}
 
 ipa_opt_pass_d *
 make_pass_ipa_pure_const (gcc::context *ctxt)
@@ -2226,7 +2207,7 @@ pass_local_pure_const::execute (function *fun)
       changed = true;
       if (dump_file)
 	fprintf (dump_file, "Function found to be malloc: %s\n",
-		 node->name ());
+		 node->dump_name ());
     }
 
   free (l);
@@ -2332,7 +2313,7 @@ pass_nothrow::execute (function *)
 
   node = cgraph_node::get (current_function_decl);
 
-  /* We run during lowering, we can not really use availability yet.  */
+  /* We run during lowering, we cannot really use availability yet.  */
   if (cgraph_node::get (current_function_decl)->get_availability ()
       <= AVAIL_INTERPOSABLE)
     {
@@ -2347,7 +2328,7 @@ pass_nothrow::execute (function *)
       for (gimple_stmt_iterator gsi = gsi_start_bb (this_block);
 	   !gsi_end_p (gsi);
 	   gsi_next (&gsi))
-        if (stmt_can_throw_external (gsi_stmt (gsi)))
+        if (stmt_can_throw_external (cfun, gsi_stmt (gsi)))
 	  {
 	    if (is_gimple_call (gsi_stmt (gsi)))
 	      {

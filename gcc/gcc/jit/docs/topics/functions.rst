@@ -1,4 +1,4 @@
-.. Copyright (C) 2014-2018 Free Software Foundation, Inc.
+.. Copyright (C) 2014-2021 Free Software Foundation, Inc.
    Originally contributed by David Malcolm <dmalcolm@redhat.com>
 
    This is free software: you can redistribute it and/or modify it
@@ -34,6 +34,8 @@ Params
 
    In preparation for creating a function, create a new parameter of the
    given type and name.
+
+   The parameter ``type`` must be non-`void`.
 
    The parameter ``name`` must be non-NULL.  The call takes a copy of the
    underlying string, so it is valid to pass in a pointer to an on-stack
@@ -123,6 +125,21 @@ Functions
                gcc_jit_context_get_builtin_function (gcc_jit_context *ctxt,\
                                                      const char *name)
 
+   Get the :type:`gcc_jit_function` for the built-in function with the
+   given name.  For example:
+
+   .. code-block:: c
+
+      gcc_jit_function *fn
+        = gcc_jit_context_get_builtin_function (ctxt, "__builtin_memcpy");
+
+   .. note:: Due to technical limitations with how libgccjit interacts with
+      the insides of GCC, not all built-in functions are supported.  More
+      precisely, not all types are supported for parameters of built-in
+      functions from libgccjit.  Attempts to get a built-in function that
+      uses such a parameter will lead to an error being emitted within
+      the context.
+
 .. function::  gcc_jit_object *\
                gcc_jit_function_as_object (gcc_jit_function *func)
 
@@ -147,6 +164,8 @@ Functions
 
    Create a new local variable within the function, of the given type and
    name.
+
+   The parameter ``type`` must be non-`void`.
 
    The parameter ``name`` must be non-NULL.  The call takes a copy of the
    underlying string, so it is valid to pass in a pointer to an on-stack
@@ -439,3 +458,6 @@ Statements
        :start-after: /* Quote from here in docs/topics/functions.rst.  */
        :end-before: /* Quote up to here in docs/topics/functions.rst.  */
        :language: c
+
+See also :type:`gcc_jit_extended_asm` for entrypoints for adding inline
+assembler statements to a function.

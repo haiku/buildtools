@@ -1,5 +1,5 @@
 /* Intrinsic function resolution.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
    Contributed by Andy Vaught & Katherine Holcomb
 
 This file is part of GCC.
@@ -35,6 +35,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "intrinsic.h"
 #include "constructor.h"
 #include "arith.h"
+#include "trans.h"
 
 /* Given printf-like arguments, return a stable version of the result string.
 
@@ -46,7 +47,8 @@ along with GCC; see the file COPYING3.  If not see
 const char *
 gfc_get_string (const char *format, ...)
 {
-  char temp_name[128];
+  /* Provide sufficient space for "_F.caf_token__symbol.symbol_MOD_symbol".  */
+  char temp_name[15 + 2*GFC_MAX_SYMBOL_LEN + 5 + GFC_MAX_SYMBOL_LEN + 1];
   const char *str;
   va_list ap;
   tree ident;
@@ -60,9 +62,12 @@ gfc_get_string (const char *format, ...)
     }
   else
     {
+      int ret;
       va_start (ap, format);
-      vsnprintf (temp_name, sizeof (temp_name), format, ap);
+      ret = vsnprintf (temp_name, sizeof (temp_name), format, ap);
       va_end (ap);
+      if (ret < 1 || ret >= (int) sizeof (temp_name)) /* Reject truncation.  */
+	gfc_internal_error ("identifier overflow: %d", ret);
       temp_name[sizeof (temp_name) - 1] = 0;
       str = temp_name;
     }
@@ -685,86 +690,6 @@ gfc_resolve_cosh (gfc_expr *f, gfc_expr *x)
 }
 
 
-/* Our replacement of elements of a trig call with an EXPR_OP (e.g.
-   multiplying the result or operands by a factor to convert to/from degrees)
-   will cause the resolve_* function to be invoked again when resolving the
-   freshly created EXPR_OP.  See gfc_resolve_trigd, gfc_resolve_atrigd,
-   gfc_resolve_cotan.  We must observe this and avoid recursively creating
-   layers of nested EXPR_OP expressions.  */
-
-static bool
-is_trig_resolved (gfc_expr *f)
-{
-  /* We know we've already resolved the function if we see the lib call
-     starting with '__'.  */
-  return (f->value.function.name != NULL
-	  && strncmp ("__", f->value.function.name, 2) == 0);
-}
-
-/* Return a shallow copy of the function expression f.  The original expression
-   has its pointers cleared so that it may be freed without affecting the
-   shallow copy.  This is similar to gfc_copy_expr, but doesn't perform a deep
-   copy of the argument list, allowing it to be reused somewhere else,
-   setting the expression up nicely for gfc_replace_expr.  */
-
-static gfc_expr *
-copy_replace_function_shallow (gfc_expr *f)
-{
-  gfc_expr *fcopy;
-  gfc_actual_arglist *args;
-
-  /* The only thing deep-copied in gfc_copy_expr is args.  */
-  args = f->value.function.actual;
-  f->value.function.actual = NULL;
-  fcopy = gfc_copy_expr (f);
-  fcopy->value.function.actual = args;
-
-  /* Clear the old function so the shallow copy is not affected if the old
-     expression is freed.  */
-  f->value.function.name = NULL;
-  f->value.function.isym = NULL;
-  f->value.function.actual = NULL;
-  f->value.function.esym = NULL;
-  f->shape = NULL;
-  f->ref = NULL;
-
-  return fcopy;
-}
-
-
-/* Resolve cotan = cos / sin.  */
-
-void
-gfc_resolve_cotan (gfc_expr *f, gfc_expr *x)
-{
-  gfc_expr *result, *fcopy, *sin;
-  gfc_actual_arglist *sin_args;
-
-  if (is_trig_resolved (f))
-    return;
-
-  /* Compute cotan (x) = cos (x) / sin (x).  */
-  f->value.function.isym = gfc_intrinsic_function_by_id (GFC_ISYM_COS);
-  gfc_resolve_cos (f, x);
-
-  sin_args = gfc_get_actual_arglist ();
-  sin_args->expr = gfc_copy_expr (x);
-
-  sin = gfc_get_expr ();
-  sin->ts = f->ts;
-  sin->where = f->where;
-  sin->expr_type = EXPR_FUNCTION;
-  sin->value.function.isym = gfc_intrinsic_function_by_id (GFC_ISYM_SIN);
-  sin->value.function.actual = sin_args;
-  gfc_resolve_sin (sin, sin_args->expr);
-
-  /* Replace f with cos/sin - we do this in place in f for the caller.  */
-  fcopy = copy_replace_function_shallow (f);
-  result = gfc_divide (fcopy, sin);
-  gfc_replace_expr (f, result);
-}
-
-
 void
 gfc_resolve_count (gfc_expr *f, gfc_expr *mask, gfc_expr *dim, gfc_expr *kind)
 {
@@ -1351,16 +1276,27 @@ gfc_resolve_ior (gfc_expr *f, gfc_expr *i, gfc_expr *j)
 
 
 void
-gfc_resolve_index_func (gfc_expr *f, gfc_expr *str,
-			gfc_expr *sub_str ATTRIBUTE_UNUSED, gfc_expr *back,
-			gfc_expr *kind)
+gfc_resolve_index_func (gfc_expr *f, gfc_actual_arglist *a)
 {
   gfc_typespec ts;
   gfc_clear_ts (&ts);
+  gfc_expr *str, *back, *kind;
+  gfc_actual_arglist *a_sub_str, *a_back, *a_kind;
+
+  if (f->do_not_resolve_again)
+    return;
+
+  a_sub_str = a->next;
+  a_back = a_sub_str->next;
+  a_kind = a_back->next;
+
+  str = a->expr;
+  back = a_back->expr;
+  kind = a_kind->expr;
 
   f->ts.type = BT_INTEGER;
   if (kind)
-    f->ts.kind = mpz_get_si (kind->value.integer);
+    f->ts.kind = mpz_get_si ((kind)->value.integer);
   else
     f->ts.kind = gfc_default_integer_kind;
 
@@ -1375,6 +1311,8 @@ gfc_resolve_index_func (gfc_expr *f, gfc_expr *str,
 
   f->value.function.name
     = gfc_get_string ("__index_%d_i%d", str->ts.kind, f->ts.kind);
+
+  f->do_not_resolve_again = 1;
 }
 
 
@@ -1448,6 +1386,15 @@ gfc_resolve_isatty (gfc_expr *f, gfc_expr *u)
     }
 
   f->value.function.name = gfc_get_string (PREFIX ("isatty_l%d"), f->ts.kind);
+}
+
+
+void
+gfc_resolve_is_contiguous (gfc_expr *f, gfc_expr *array ATTRIBUTE_UNUSED)
+{
+  f->ts.type = BT_LOGICAL;
+  f->ts.kind = gfc_default_logical_kind;
+  f->value.function.name = gfc_get_string ("__is_contiguous");
 }
 
 
@@ -1782,6 +1729,115 @@ gfc_resolve_maxloc (gfc_expr *f, gfc_expr *array, gfc_expr *dim,
     }
 }
 
+
+void
+gfc_resolve_findloc (gfc_expr *f, gfc_expr *array, gfc_expr *value,
+		     gfc_expr *dim, gfc_expr *mask, gfc_expr *kind,
+		     gfc_expr *back)
+{
+  const char *name;
+  int i, j, idim;
+  int fkind;
+  int d_num;
+
+  /* See at the end of the function for why this is necessary.  */
+
+  if (f->do_not_resolve_again)
+    return;
+
+  f->ts.type = BT_INTEGER;
+
+  /* We have a single library version, which uses index_type.  */
+
+  if (kind)
+    fkind = mpz_get_si (kind->value.integer);
+  else
+    fkind = gfc_default_integer_kind;
+
+  f->ts.kind = gfc_index_integer_kind;
+
+  /* Convert value.  If array is not LOGICAL and value is, we already
+     issued an error earlier.  */
+
+  if ((array->ts.type != value->ts.type && value->ts.type != BT_LOGICAL)
+      || array->ts.kind != value->ts.kind)
+    gfc_convert_type_warn (value, &array->ts, 2, 0);
+
+  if (dim == NULL)
+    {
+      f->rank = 1;
+      f->shape = gfc_get_shape (1);
+      mpz_init_set_si (f->shape[0], array->rank);
+    }
+  else
+    {
+      f->rank = array->rank - 1;
+      gfc_resolve_dim_arg (dim);
+      if (array->shape && dim->expr_type == EXPR_CONSTANT)
+	{
+	  idim = (int) mpz_get_si (dim->value.integer);
+	  f->shape = gfc_get_shape (f->rank);
+	  for (i = 0, j = 0; i < f->rank; i++, j++)
+	    {
+	      if (i == (idim - 1))
+		j++;
+	      mpz_init_set (f->shape[i], array->shape[j]);
+	    }
+	}
+    }
+
+  if (mask)
+    {
+      if (mask->rank == 0)
+	name = "sfindloc";
+      else
+	name = "mfindloc";
+
+      resolve_mask_arg (mask);
+    }
+  else
+    name = "findloc";
+
+  if (dim)
+    {
+      if (f->rank > 0)
+	d_num = 1;
+      else
+	d_num = 2;
+    }
+  else
+    d_num = 0;
+
+  if (back->ts.kind != gfc_logical_4_kind)
+    {
+      gfc_typespec ts;
+      gfc_clear_ts (&ts);
+      ts.type = BT_LOGICAL;
+      ts.kind = gfc_logical_4_kind;
+      gfc_convert_type_warn (back, &ts, 2, 0);
+    }
+
+  f->value.function.name
+    = gfc_get_string (PREFIX ("%s%d_%c%d"), name, d_num,
+		      gfc_type_letter (array->ts.type, true), array->ts.kind);
+
+  /* We only have a single library function, so we need to convert
+     here.  If the function is resolved from within a convert
+     function generated on a previous round of resolution, endless
+     recursion could occur.  Guard against that here.  */
+
+  if (f->ts.kind != fkind)
+    {
+      f->do_not_resolve_again = 1;
+      gfc_typespec ts;
+      gfc_clear_ts (&ts);
+
+      ts.type = BT_INTEGER;
+      ts.kind = fkind;
+      gfc_convert_type_warn (f, &ts, 2, 0);
+    }
+
+}
 
 void
 gfc_resolve_maxval (gfc_expr *f, gfc_expr *array, gfc_expr *dim,
@@ -2377,6 +2433,10 @@ gfc_resolve_fe_runtime_error (gfc_code *c)
     a->name = "%VAL";
 
   c->resolved_sym = gfc_get_intrinsic_sub_symbol (name);
+  /* We set the backend_decl here because runtime_error is a
+     variadic function and we would use the wrong calling
+     convention otherwise.  */
+  c->resolved_sym->backend_decl = gfor_fndecl_runtime_error;
 }
 
 void
@@ -2769,158 +2829,6 @@ gfc_resolve_tanh (gfc_expr *f, gfc_expr *x)
 }
 
 
-/* Build an expression for converting degrees to radians.  */
-
-static gfc_expr *
-get_radians (gfc_expr *deg)
-{
-  gfc_expr *result, *factor;
-  gfc_actual_arglist *mod_args;
-
-  gcc_assert (deg->ts.type == BT_REAL);
-
-  /* Set deg = deg % 360 to avoid offsets from large angles.  */
-  factor = gfc_get_constant_expr (deg->ts.type, deg->ts.kind, &deg->where);
-  mpfr_set_d (factor->value.real, 360.0, GFC_RND_MODE);
-
-  mod_args = gfc_get_actual_arglist ();
-  mod_args->expr = deg;
-  mod_args->next = gfc_get_actual_arglist ();
-  mod_args->next->expr = factor;
-
-  result = gfc_get_expr ();
-  result->ts = deg->ts;
-  result->where = deg->where;
-  result->expr_type = EXPR_FUNCTION;
-  result->value.function.isym = gfc_intrinsic_function_by_id (GFC_ISYM_MOD);
-  result->value.function.actual = mod_args;
-
-  /* Set factor = pi / 180.  */
-  factor = gfc_get_constant_expr (deg->ts.type, deg->ts.kind, &deg->where);
-  mpfr_const_pi (factor->value.real, GFC_RND_MODE);
-  mpfr_div_ui (factor->value.real, factor->value.real, 180, GFC_RND_MODE);
-
-  /* Result is rad = (deg % 360) * (pi / 180).  */
-  result = gfc_multiply (result, factor);
-  return result;
-}
-
-
-/* Build an expression for converting radians to degrees.  */
-
-static gfc_expr *
-get_degrees (gfc_expr *rad)
-{
-  gfc_expr *result, *factor;
-  gfc_actual_arglist *mod_args;
-  mpfr_t tmp;
-
-  gcc_assert (rad->ts.type == BT_REAL);
-
-  /* Set rad = rad % 2pi to avoid offsets from large angles.  */
-  factor = gfc_get_constant_expr (rad->ts.type, rad->ts.kind, &rad->where);
-  mpfr_const_pi (factor->value.real, GFC_RND_MODE);
-  mpfr_mul_ui (factor->value.real, factor->value.real, 2, GFC_RND_MODE);
-
-  mod_args = gfc_get_actual_arglist ();
-  mod_args->expr = rad;
-  mod_args->next = gfc_get_actual_arglist ();
-  mod_args->next->expr = factor;
-
-  result = gfc_get_expr ();
-  result->ts = rad->ts;
-  result->where = rad->where;
-  result->expr_type = EXPR_FUNCTION;
-  result->value.function.isym = gfc_intrinsic_function_by_id (GFC_ISYM_MOD);
-  result->value.function.actual = mod_args;
-
-  /* Set factor = 180 / pi.  */
-  factor = gfc_get_constant_expr (rad->ts.type, rad->ts.kind, &rad->where);
-  mpfr_set_ui (factor->value.real, 180, GFC_RND_MODE);
-  mpfr_init (tmp);
-  mpfr_const_pi (tmp, GFC_RND_MODE);
-  mpfr_div (factor->value.real, factor->value.real, tmp, GFC_RND_MODE);
-  mpfr_clear (tmp);
-
-  /* Result is deg = (rad % 2pi) * (180 / pi).  */
-  result = gfc_multiply (result, factor);
-  return result;
-}
-
-
-/* Resolve a call to a trig function.  */
-
-static void
-resolve_trig_call (gfc_expr *f, gfc_expr *x)
-{
-  switch (f->value.function.isym->id)
-    {
-    case GFC_ISYM_ACOS:
-      return gfc_resolve_acos (f, x);
-    case GFC_ISYM_ASIN:
-      return gfc_resolve_asin (f, x);
-    case GFC_ISYM_ATAN:
-      return gfc_resolve_atan (f, x);
-    case GFC_ISYM_ATAN2:
-      /* NB. arg3 is unused for atan2 */
-      return gfc_resolve_atan2 (f, x, NULL);
-    case GFC_ISYM_COS:
-      return gfc_resolve_cos (f, x);
-    case GFC_ISYM_COTAN:
-      return gfc_resolve_cotan (f, x);
-    case GFC_ISYM_SIN:
-      return gfc_resolve_sin (f, x);
-    case GFC_ISYM_TAN:
-      return gfc_resolve_tan (f, x);
-    default:
-      gcc_unreachable ();
-    }
-}
-
-/* Resolve degree trig function as trigd (x) = trig (radians (x)).  */
-
-void
-gfc_resolve_trigd (gfc_expr *f, gfc_expr *x)
-{
-  if (is_trig_resolved (f))
-    return;
-
-  x = get_radians (x);
-  f->value.function.actual->expr = x;
-
-  resolve_trig_call (f, x);
-}
-
-
-/* Resolve degree inverse trig function as atrigd (x) = degrees (atrig (x)).  */
-
-void
-gfc_resolve_atrigd (gfc_expr *f, gfc_expr *x)
-{
-  gfc_expr *result, *fcopy;
-
-  if (is_trig_resolved (f))
-    return;
-
-  resolve_trig_call (f, x);
-
-  fcopy = copy_replace_function_shallow (f);
-  result = get_degrees (fcopy);
-  gfc_replace_expr (f, result);
-}
-
-
-/* Resolve atan2d(x) = degrees(atan2(x)).  */
-
-void
-gfc_resolve_atan2d (gfc_expr *f, gfc_expr *x, gfc_expr *y ATTRIBUTE_UNUSED)
-{
-  /* Note that we lose the second arg here - that's okay because it is
-     unused in gfc_resolve_atan2 anyway.  */
-  gfc_resolve_atrigd (f, x);
-}
-
-
 /* Resolve failed_images (team, kind).  */
 
 void
@@ -3155,6 +3063,30 @@ gfc_resolve_trim (gfc_expr *f, gfc_expr *string)
 }
 
 
+/* Resolve the degree trignometric functions.  This amounts to setting
+   the function return type-spec from its argument and building a
+   library function names of the form _gfortran_sind_r4.  */
+
+void
+gfc_resolve_trigd (gfc_expr *f, gfc_expr *x)
+{
+  f->ts = x->ts;
+  f->value.function.name
+    = gfc_get_string (PREFIX ("%s_%c%d"), f->value.function.isym->name,
+		      gfc_type_letter (x->ts.type), x->ts.kind);
+}
+
+
+void
+gfc_resolve_trigd2 (gfc_expr *f, gfc_expr *y, gfc_expr *x)
+{
+  f->ts = y->ts;
+  f->value.function.name
+    = gfc_get_string (PREFIX ("%s_%d"), f->value.function.isym->name,
+		      x->ts.kind);
+}
+
+
 void
 gfc_resolve_ubound (gfc_expr *f, gfc_expr *array, gfc_expr *dim, gfc_expr *kind)
 {
@@ -3375,21 +3307,7 @@ gfc_resolve_mvbits (gfc_code *c)
 {
   static const sym_intent INTENTS[] = {INTENT_IN, INTENT_IN, INTENT_IN,
 				       INTENT_INOUT, INTENT_IN};
-
   const char *name;
-  gfc_typespec ts;
-  gfc_clear_ts (&ts);
-
-  /* FROMPOS, LEN and TOPOS are restricted to small values.  As such,
-     they will be converted so that they fit into a C int.  */
-  ts.type = BT_INTEGER;
-  ts.kind = gfc_c_int_kind;
-  if (c->ext.actual->next->expr->ts.kind != gfc_c_int_kind)
-    gfc_convert_type (c->ext.actual->next->expr, &ts, 2);
-  if (c->ext.actual->next->next->expr->ts.kind != gfc_c_int_kind)
-    gfc_convert_type (c->ext.actual->next->next->expr, &ts, 2);
-  if (c->ext.actual->next->next->next->next->expr->ts.kind != gfc_c_int_kind)
-    gfc_convert_type (c->ext.actual->next->next->next->next->expr, &ts, 2);
 
   /* TO and FROM are guaranteed to have the same kind parameter.  */
   name = gfc_get_string (PREFIX ("mvbits_i%d"),
@@ -3401,6 +3319,17 @@ gfc_resolve_mvbits (gfc_code *c)
   /* Create a dummy formal arglist so the INTENTs are known later for purpose
      of creating temporaries.  */
   c->resolved_sym->formal = create_formal_for_intents (c->ext.actual, INTENTS);
+}
+
+
+/* Set up the call to RANDOM_INIT.  */ 
+
+void
+gfc_resolve_random_init (gfc_code *c)
+{
+  const char *name;
+  name = gfc_get_string (PREFIX ("random_init"));
+  c->resolved_sym = gfc_get_intrinsic_sub_symbol (name);
 }
 
 

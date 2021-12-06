@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2013-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2013-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -36,6 +36,7 @@ private with Ada.Finalization;
 private with Ada.Streams;
 
 private with System.Atomic_Counters;
+private with Ada.Strings.Text_Output;
 
 generic
    type Element_Type (<>) is private;
@@ -96,6 +97,8 @@ package Ada.Containers.Indefinite_Holders is
 
    procedure Move (Target : in out Holder; Source : in out Holder);
 
+   procedure Swap (Left, Right : in out Holder);
+
 private
 
    use Ada.Finalization;
@@ -128,7 +131,11 @@ private
    type Holder is new Ada.Finalization.Controlled with record
       Reference : Shared_Holder_Access;
       Busy      : Natural := 0;
-   end record;
+   end record with Put_Image => Put_Image;
+
+   procedure Put_Image
+     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Holder);
+
    for Holder'Read use Read;
    for Holder'Write use Write;
 

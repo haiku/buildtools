@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -46,6 +46,16 @@ package Exp_Ch3 is
    procedure Expand_Record_Extension (T : Entity_Id; Def : Node_Id);
    --  Add a field _parent in the extension part of the record
 
+   procedure Build_Access_Subprogram_Wrapper_Body
+     (Decl     : Node_Id;
+      New_Decl : Node_Id);
+   --  Build the wrapper body, which holds the indirect call through an access-
+   --  to-subprogram, and whose expansion incorporates the contracts of the
+   --  access type declaration. Called from Build_Access_Subprogram_Wrapper.
+   --  Building the wrapper is done during analysis to perform proper semantic
+   --  checks on the relevant aspects. The wrapper body could be simplified to
+   --  a null body when expansion is disabled ???
+
    procedure Build_Discr_Checking_Funcs (N : Node_Id);
    --  Builds function which checks whether the component name is consistent
    --  with the current discriminants. N is the full type declaration node,
@@ -84,12 +94,51 @@ package Exp_Ch3 is
    --  Constructor_Ref is a call to a constructor subprogram. It is currently
    --  used only to support C++ constructors.
 
+   function Build_Variant_Record_Equality
+     (Typ         : Entity_Id;
+      Body_Id     : Entity_Id;
+      Param_Specs : List_Id) return Node_Id;
+   --  Build the body of the equality function Body_Id for the untagged variant
+   --  record Typ with the given parameters specification list.
+
+   procedure Ensure_Activation_Chain_And_Master (Obj_Decl : Node_Id);
+   --  If tasks are being declared (or might be declared) by the given object
+   --  declaration then ensure to have an activation chain defined for the
+   --  tasks (has no effect if we already have one), and also that a Master
+   --  variable is established (and that the appropriate enclosing construct
+   --  is established as a task master).
+
    function Freeze_Type (N : Node_Id) return Boolean;
    --  This function executes the freezing actions associated with the given
    --  freeze type node N and returns True if the node is to be deleted. We
    --  delete the node if it is present just for front end purpose and we don't
    --  want Gigi to see the node. This function can't delete the node itself
    --  since it would confuse any remaining processing of the freeze node.
+
+   function Get_Simple_Init_Val
+     (Typ  : Entity_Id;
+      N    : Node_Id;
+      Size : Uint := No_Uint) return Node_Id;
+   --  Build an expression that represents the required initial value of type
+   --  Typ for which predicate Needs_Simple_Initialization is True. N is a node
+   --  whose source location is used in the construction of the expression.
+   --  Size is used as follows:
+   --
+   --    * If the size of the object to be initialized it is known, it should
+   --      be passed to the routine.
+   --
+   --    * If the size is unknown or is zero, then the Esize of Typ is used as
+   --      an estimate of the size.
+   --
+   --  The object size is needed to prepare a known invalid value for use by
+   --  Normalize_Scalars. A call to this routine where Typ denotes a scalar
+   --  type is valid only when Normalize_Scalars or Initialize_Scalars is
+   --  active, or if N is the node for a 'Invalid_Value attribute node.
+
+   function Init_Proc_Level_Formal (Proc : Entity_Id) return Entity_Id;
+   --  Fetch the extra formal from an initalization procedure "proc"
+   --  corresponding to the level of the object being initialized. When none
+   --  is present Empty is returned.
 
    procedure Init_Secondary_Tags
      (Typ            : Entity_Id;
@@ -113,34 +162,5 @@ package Exp_Ch3 is
    --  is inserted after the declaration, but if the object has an address
    --  clause the assignment is handled as part of the freezing of the object,
    --  see Check_Address_Clause.
-
-   function Needs_Simple_Initialization
-     (T           : Entity_Id;
-      Consider_IS : Boolean := True) return Boolean;
-   --  Certain types need initialization even though there is no specific
-   --  initialization routine:
-   --    Access types (which need initializing to null)
-   --    All scalar types if Normalize_Scalars mode set
-   --    Descendants of standard string types if Normalize_Scalars mode set
-   --    Scalar types having a Default_Value attribute
-   --  Regarding Initialize_Scalars mode, this is ignored if Consider_IS is
-   --  set to False, but if Consider_IS is set to True, then the cases above
-   --  mentioning Normalize_Scalars also apply for Initialize_Scalars mode.
-
-   function Get_Simple_Init_Val
-     (T    : Entity_Id;
-      N    : Node_Id;
-      Size : Uint := No_Uint) return Node_Id;
-   --  For a type which Needs_Simple_Initialization (see above), prepares the
-   --  tree for an expression representing the required initial value. N is a
-   --  node whose source location used in constructing this tree which is
-   --  returned as the result of the call. The Size parameter indicates the
-   --  target size of the object if it is known (indicated by a value that is
-   --  not No_Uint and is greater than zero). If Size is not given (Size set to
-   --  No_Uint, or non-positive), then the Esize of T is used as an estimate of
-   --  the Size. The object size is needed to prepare a known invalid value for
-   --  use by Normalize_Scalars. A call to this routine where T is a scalar
-   --  type is only valid if we are in Normalize_Scalars or Initialize_Scalars
-   --  mode, or if N is the node for a 'Invalid_Value attribute node.
 
 end Exp_Ch3;

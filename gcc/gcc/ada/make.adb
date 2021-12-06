@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -85,6 +85,7 @@ package body Make is
 
    procedure Sigint_Intercepted;
    pragma Convention (C, Sigint_Intercepted);
+   pragma No_Return (Sigint_Intercepted);
    --  Called when the program is interrupted by Ctrl-C to delete the
    --  temporary mapping files and configuration pragmas files.
 
@@ -205,7 +206,7 @@ package body Make is
 
    procedure Add_Library_Search_Dir (Path : String);
    --  Call Add_Lib_Search_Dir with an absolute directory path. If Path is
-   --  relative path,, it is relative to the current working directory.
+   --  relative path, it is relative to the current working directory.
 
    procedure Add_Source_Search_Dir (Path : String);
    --  Call Add_Src_Search_Dir with an absolute directory path. If Path is a
@@ -254,6 +255,7 @@ package body Make is
                                No_Shared_Libgcc_Switch'Access;
 
    procedure Make_Failed (S : String);
+   pragma No_Return (Make_Failed);
    --  Delete all temp files created by Gnatmake and call Osint.Fail, with the
    --  parameter S (see osint.ads).
 
@@ -462,7 +464,7 @@ package body Make is
    Ada_Flag_1        : constant String_Access := new String'("-x");
    Ada_Flag_2        : constant String_Access := new String'("ada");
    AdaSCIL_Flag      : constant String_Access := new String'("adascil");
-   GNAT_Flag         : constant String_Access := new String'("-gnatpg");
+   GNAT_Flag         : constant String_Access := new String'("-gnatg");
    Do_Not_Check_Flag : constant String_Access := new String'("-x");
 
    Object_Suffix : constant String := Get_Target_Object_Suffix.all;
@@ -500,7 +502,7 @@ package body Make is
    --  linker). For the sake of convenience, some program specific switches
    --  can be passed directly on the gnatmake command line. This procedure
    --  records these switches so that gnatmake can pass them to the right
-   --  program.  S is the switch to be added at the end of the command line
+   --  program. S is the switch to be added at the end of the command line
    --  for Program if Append_Switch is True. If Append_Switch is False S is
    --  added at the beginning of the command line.
 
@@ -545,6 +547,7 @@ package body Make is
    --  Display_Executed_Programs is set. The lower bound of Args must be 1.
 
    procedure Report_Compilation_Failed;
+   pragma No_Return (Report_Compilation_Failed);
    --  Delete all temporary files and fail graciously
 
    -----------------
@@ -580,7 +583,7 @@ package body Make is
    Gnatmake_Mapping_File : String_Access := null;
    --  The path name of a mapping file specified by switch -C=
 
-   procedure Init_Mapping_File (File_Index : in out Natural);
+   procedure Init_Mapping_File (File_Index : out Natural);
    --  Create a new mapping file or reuse one already created.
 
    package Temp_File_Paths is new Table.Table
@@ -1421,9 +1424,9 @@ package body Make is
    --------------------------
 
    procedure Check_Linker_Options
-     (E_Stamp   : Time_Stamp_Type;
-      O_File    : out File_Name_Type;
-      O_Stamp   : out Time_Stamp_Type)
+     (E_Stamp : Time_Stamp_Type;
+      O_File  : out File_Name_Type;
+      O_Stamp : out Time_Stamp_Type)
    is
       procedure Check_File (File : File_Name_Type);
       --  Update O_File and O_Stamp if the given file is younger than E_Stamp
@@ -1674,7 +1677,7 @@ package body Make is
          L            : File_Name_Type;
          Source_Index : Int;
          Args         : Argument_List) return Process_Id;
-      --  Compiles S using Args. If S is a GNAT predefined source "-gnatpg" is
+      --  Compiles S using Args. If S is a GNAT predefined source "-gnatg" is
       --  added to Args. Non blocking call. L corresponds to the expected
       --  library file name. Process_Id of the process spawned to execute the
       --  compilation.
@@ -1865,9 +1868,9 @@ package body Make is
 
             if Add_It then
                if not Queue.Insert
-                        ((File    => Sfile,
-                          Unit    => No_Unit_Name,
-                          Index   => 0))
+                        ((File  => Sfile,
+                          Unit  => No_Unit_Name,
+                          Index => 0))
                then
                   if Is_In_Obsoleted (Sfile) then
                      Executable_Obsolete := True;
@@ -2024,7 +2027,7 @@ package body Make is
             end loop;
          end;
 
-         --  Set -gnatpg for predefined files (for this purpose the renamings
+         --  Set -gnatg for predefined files (for this purpose the renamings
          --  such as Text_IO do not count as predefined). Note that we strip
          --  the directory name from the source file name because the call to
          --  Fname.Is_Predefined_File_Name cannot deal with directory prefixes.
@@ -2347,10 +2350,10 @@ package body Make is
          Full_Lib_File : File_Name_Type := No_File;
          Lib_File_Attr : aliased File_Attributes;
          Read_Only     : Boolean := False;
-         ALI           : ALI_Id;
+         ALI           : ALI_Id := No_ALI_Id;
          --  The ALI file and its attributes (size, stamp, ...)
 
-         Obj_File  : File_Name_Type;
+         Obj_File  : File_Name_Type := No_File;
          Obj_Stamp : Time_Stamp_Type;
          --  The object file
 
@@ -3614,7 +3617,7 @@ package body Make is
    -- Init_Mapping_File --
    -----------------------
 
-   procedure Init_Mapping_File (File_Index : in out Natural) is
+   procedure Init_Mapping_File (File_Index : out Natural) is
       FD     : File_Descriptor;
       Status : Boolean;
       --  For call to Close
@@ -3786,7 +3789,7 @@ package body Make is
 
                if Gprbuild = null then
                   Fail_Program
-                    ("project files are no longer supported by gnamake;" &
+                    ("project files are no longer supported by gnatmake;" &
                      " use gprbuild instead");
                end if;
 
@@ -4378,9 +4381,7 @@ package body Make is
                Look_In_Primary_Dir := False;
 
             elsif Program_Args = Compiler then
-               if Argv (3 .. Argv'Last) /= "-" then
-                  Add_Source_Search_Dir (Argv (3 .. Argv'Last));
-               end if;
+               Add_Source_Search_Dir (Argv (3 .. Argv'Last));
 
             elsif Program_Args = Binder then
                Add_Library_Search_Dir (Argv (3 .. Argv'Last));
@@ -4515,7 +4516,9 @@ package body Make is
                end;
             end if;
 
-         elsif Argv'Length >= 8 and then Argv (1 .. 8) = "--param=" then
+         elsif (Argv'Length >= 8 and then Argv (1 .. 8) = "--param=")
+           or else (Argv'Length >= 10 and then Argv (1 .. 10) = "--sysroot=")
+         then
             Add_Switch (Argv, Compiler);
             Add_Switch (Argv, Linker);
 
@@ -4690,22 +4693,13 @@ package body Make is
 
          --  -m
 
-         elsif Argv (2) = 'm' and then Argv'Last = 2 then
+         elsif Argv (2) = 'm' then
+            pragma Assert (Argv'Last = 2);
             Minimal_Recompilation := True;
 
-         --  -u
+         --  -u and -U (they are differentiated elsewhere)
 
-         elsif Argv (2) = 'u' and then Argv'Last = 2 then
-            Unique_Compile := True;
-            Compile_Only   := True;
-            Do_Bind_Step   := False;
-            Do_Link_Step   := False;
-
-         --  -U
-
-         elsif Argv (2) = 'U'
-           and then Argv'Last = 2
-         then
+         elsif Argv (2) in 'u' | 'U' and then Argv'Last = 2 then
             Unique_Compile := True;
             Compile_Only   := True;
             Do_Bind_Step   := False;

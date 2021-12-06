@@ -1,5 +1,5 @@
 /* Compilation switch flag type definitions for GCC.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -19,6 +19,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #ifndef GCC_FLAG_TYPES_H
 #define GCC_FLAG_TYPES_H
+
+#if !defined(IN_LIBGCC2) && !defined(IN_TARGET_LIBS) && !defined(IN_RTS)
 
 enum debug_info_type
 {
@@ -123,6 +125,14 @@ enum stack_reuse_level
   SR_ALL
 };
 
+/* The live patching level.  */
+enum live_patching_level
+{
+  LIVE_PATCHING_NONE = 0,
+  LIVE_PATCHING_INLINE_ONLY_STATIC,
+  LIVE_PATCHING_INLINE_CLONE
+};
+
 /* The algorithm used for basic block reordering.  */
 enum reorder_blocks_algorithm
 {
@@ -192,6 +202,22 @@ enum stack_check_type
   FULL_BUILTIN_STACK_CHECK
 };
 
+/* Type of callgraph information.  */
+enum callgraph_info_type
+{
+  /* No information.  */
+  NO_CALLGRAPH_INFO = 0,
+
+  /* Naked callgraph.  */
+  CALLGRAPH_INFO_NAKED = 1,
+
+  /* Callgraph decorated with stack usage information.  */
+  CALLGRAPH_INFO_STACK_USAGE = 2,
+
+  /* Callgraph decoration with dynamic allocation information.  */
+  CALLGRAPH_INFO_DYNAMIC_ALLOC = 4
+};
+
 /* Floating-point contraction mode.  */
 enum fp_contract_mode {
   FP_CONTRACT_OFF = 0,
@@ -206,12 +232,14 @@ enum scalar_storage_order_kind {
   SSO_LITTLE_ENDIAN
 };
 
-/* Vectorizer cost-model.  */
+/* Vectorizer cost-model.  Except for DEFAULT, the values are ordered from
+   the most conservative to the least conservative.  */
 enum vect_cost_model {
+  VECT_COST_MODEL_VERY_CHEAP = -3,
+  VECT_COST_MODEL_CHEAP = -2,
+  VECT_COST_MODEL_DYNAMIC = -1,
   VECT_COST_MODEL_UNLIMITED = 0,
-  VECT_COST_MODEL_CHEAP = 1,
-  VECT_COST_MODEL_DYNAMIC = 2,
-  VECT_COST_MODEL_DEFAULT = 3
+  VECT_COST_MODEL_DEFAULT = 1
 };
 
 /* Different instrumentation modes.  */
@@ -248,6 +276,9 @@ enum sanitize_code {
   SANITIZE_BUILTIN = 1UL << 25,
   SANITIZE_POINTER_COMPARE = 1UL << 26,
   SANITIZE_POINTER_SUBTRACT = 1UL << 27,
+  SANITIZE_HWADDRESS = 1UL << 28,
+  SANITIZE_USER_HWADDRESS = 1UL << 29,
+  SANITIZE_KERNEL_HWADDRESS = 1UL << 30,
   SANITIZE_SHIFT = SANITIZE_SHIFT_BASE | SANITIZE_SHIFT_EXPONENT,
   SANITIZE_UNDEFINED = SANITIZE_SHIFT | SANITIZE_DIVIDE | SANITIZE_UNREACHABLE
 		       | SANITIZE_VLA | SANITIZE_NULL | SANITIZE_RETURN
@@ -259,6 +290,33 @@ enum sanitize_code {
 		       | SANITIZE_POINTER_OVERFLOW | SANITIZE_BUILTIN,
   SANITIZE_UNDEFINED_NONDEFAULT = SANITIZE_FLOAT_DIVIDE | SANITIZE_FLOAT_CAST
 				  | SANITIZE_BOUNDS_STRICT
+};
+
+/* Different settings for zeroing subset of registers.  */
+namespace zero_regs_flags {
+  const unsigned int UNSET = 0;
+  const unsigned int SKIP = 1UL << 0;
+  const unsigned int ONLY_USED = 1UL << 1;
+  const unsigned int ONLY_GPR = 1UL << 2;
+  const unsigned int ONLY_ARG = 1UL << 3;
+  const unsigned int ENABLED = 1UL << 4;
+  const unsigned int USED_GPR_ARG = ENABLED | ONLY_USED | ONLY_GPR | ONLY_ARG;
+  const unsigned int USED_GPR = ENABLED | ONLY_USED | ONLY_GPR;
+  const unsigned int USED_ARG = ENABLED | ONLY_USED | ONLY_ARG;
+  const unsigned int USED = ENABLED | ONLY_USED;
+  const unsigned int ALL_GPR_ARG = ENABLED | ONLY_GPR | ONLY_ARG;
+  const unsigned int ALL_GPR = ENABLED | ONLY_GPR;
+  const unsigned int ALL_ARG = ENABLED | ONLY_ARG;
+  const unsigned int ALL = ENABLED;
+}
+
+/* Settings of flag_incremental_link.  */
+enum incremental_link {
+  INCREMENTAL_LINK_NONE,
+  /* Do incremental linking and produce binary.  */
+  INCREMENTAL_LINK_NOLTO,
+  /* Do incremental linking and produce IL.  */
+  INCREMENTAL_LINK_LTO
 };
 
 /* Different trace modes.  */
@@ -289,6 +347,7 @@ enum lto_partition_model {
 enum lto_linker_output {
   LTO_LINKER_OUTPUT_UNKNOWN,
   LTO_LINKER_OUTPUT_REL,
+  LTO_LINKER_OUTPUT_NOLTOREL,
   LTO_LINKER_OUTPUT_DYN,
   LTO_LINKER_OUTPUT_PIE,
   LTO_LINKER_OUTPUT_EXEC
@@ -334,6 +393,40 @@ enum cf_protection_level
   CF_BRANCH = 1 << 0,
   CF_RETURN = 1 << 1,
   CF_FULL = CF_BRANCH | CF_RETURN,
-  CF_SET = 1 << 2
+  CF_SET = 1 << 2,
+  CF_CHECK = 1 << 3
 };
+
+/* Parloops schedule type.  */
+enum parloops_schedule_type
+{
+  PARLOOPS_SCHEDULE_STATIC = 0,
+  PARLOOPS_SCHEDULE_DYNAMIC,
+  PARLOOPS_SCHEDULE_GUIDED,
+  PARLOOPS_SCHEDULE_AUTO,
+  PARLOOPS_SCHEDULE_RUNTIME
+};
+
+/* EVRP mode.  */
+enum evrp_mode
+{
+  EVRP_MODE_EVRP_FIRST = 0,
+  EVRP_MODE_EVRP_ONLY = 1,
+  EVRP_MODE_RVRP_ONLY = 2,
+  EVRP_MODE_RVRP_FIRST = 3,
+  EVRP_MODE_TRACE = 4,
+  EVRP_MODE_DEBUG = 8 | EVRP_MODE_TRACE,
+  EVRP_MODE_RVRP_TRACE = EVRP_MODE_RVRP_ONLY | EVRP_MODE_TRACE,
+  EVRP_MODE_RVRP_DEBUG = EVRP_MODE_RVRP_ONLY | EVRP_MODE_DEBUG
+};
+
+/* Modes of OpenACC 'kernels' constructs handling.  */
+enum openacc_kernels
+{
+  OPENACC_KERNELS_DECOMPOSE,
+  OPENACC_KERNELS_PARLOOPS
+};
+
+#endif
+
 #endif /* ! GCC_FLAG_TYPES_H */

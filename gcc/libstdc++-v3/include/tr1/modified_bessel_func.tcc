@@ -1,6 +1,6 @@
 // Special functions -*- C++ -*-
 
-// Copyright (C) 2006-2018 Free Software Foundation, Inc.
+// Copyright (C) 2006-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -46,7 +46,7 @@
 #ifndef _GLIBCXX_TR1_MODIFIED_BESSEL_FUNC_TCC
 #define _GLIBCXX_TR1_MODIFIED_BESSEL_FUNC_TCC 1
 
-#include "special_function_util.h"
+#include <tr1/special_function_util.h>
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -377,7 +377,6 @@ namespace tr1
       const _Tp __absx = std::abs(__x);
       const _Tp __rootx = std::sqrt(__absx);
       const _Tp __z = _Tp(2) * __absx * __rootx / _Tp(3);
-      const _Tp _S_NaN = std::numeric_limits<_Tp>::quiet_NaN();
       const _Tp _S_inf = std::numeric_limits<_Tp>::infinity();
 
       if (__isnan(__x))

@@ -1,4 +1,5 @@
 ! { dg-do run }
+! { dg-options "-std=legacy" }
 
 program collapse2
   integer :: i, j, k, a(1:3, 4:6, 5:7)
@@ -12,6 +13,9 @@ program collapse2
         do 164 k = 5, 7
           a(i, j, k) = i + j + k
 164      end do
+  !$acc end parallel
+
+  !$acc parallel
   !$acc loop collapse(2) reduction(.or.:l)
 firstdo: do i = 1, 3
       do j = 4, 6

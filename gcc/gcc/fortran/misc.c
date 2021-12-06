@@ -1,5 +1,5 @@
 /* Miscellaneous stuff that doesn't fit anywhere else.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -100,6 +100,9 @@ gfc_basic_typename (bt type)
     case BT_VOID:
       p = "VOID";
       break;
+    case BT_BOZ:
+      p = "BOZ";
+      break;
     case BT_UNKNOWN:
       p = "UNKNOWN";
       break;
@@ -119,12 +122,16 @@ gfc_basic_typename (bt type)
    the argument list of a single statement.  */
 
 const char *
-gfc_typename (gfc_typespec *ts)
+gfc_typename (gfc_typespec *ts, bool for_hash)
 {
-  static char buffer1[GFC_MAX_SYMBOL_LEN + 7];  /* 7 for "TYPE()" + '\0'.  */
-  static char buffer2[GFC_MAX_SYMBOL_LEN + 7];
+  /* Need to add sufficient padding for "TYPE()" + '\0', "UNION()" + '\0',
+     or "CLASS()" + '\0'.  */
+  static char buffer1[GFC_MAX_SYMBOL_LEN + 8];
+  static char buffer2[GFC_MAX_SYMBOL_LEN + 8];
   static int flag = 0;
   char *buffer;
+  gfc_typespec *ts1;
+  gfc_charlen_t length = 0;
 
   buffer = flag ? buffer1 : buffer2;
   flag = !flag;
@@ -144,7 +151,19 @@ gfc_typename (gfc_typespec *ts)
       sprintf (buffer, "LOGICAL(%d)", ts->kind);
       break;
     case BT_CHARACTER:
-      sprintf (buffer, "CHARACTER(%d)", ts->kind);
+      if (for_hash)
+	{
+	  sprintf (buffer, "CHARACTER(%d)", ts->kind);
+	  break;
+	}
+
+      if (ts->u.cl && ts->u.cl->length)
+	length = gfc_mpz_get_hwi (ts->u.cl->length->value.integer);
+      if (ts->kind == gfc_default_character_kind)
+	sprintf (buffer, "CHARACTER(" HOST_WIDE_INT_PRINT_DEC ")", length);
+      else
+	sprintf (buffer, "CHARACTER(" HOST_WIDE_INT_PRINT_DEC ",%d)", length,
+		 ts->kind);
       break;
     case BT_HOLLERITH:
       sprintf (buffer, "HOLLERITH");
@@ -153,12 +172,21 @@ gfc_typename (gfc_typespec *ts)
       sprintf (buffer, "UNION(%s)", ts->u.derived->name);
       break;
     case BT_DERIVED:
+      if (ts->u.derived == NULL)
+	{
+	  sprintf (buffer, "invalid type");
+	  break;
+	}
       sprintf (buffer, "TYPE(%s)", ts->u.derived->name);
       break;
     case BT_CLASS:
-      if (ts->u.derived->components)
-	ts = &ts->u.derived->components->ts;
-      if (ts->u.derived->attr.unlimited_polymorphic)
+      if (ts->u.derived == NULL)
+	{
+	  sprintf (buffer, "invalid class");
+	  break;
+	}
+      ts1 = ts->u.derived->components ? &ts->u.derived->components->ts : NULL;
+      if (ts1 && ts1->u.derived && ts1->u.derived->attr.unlimited_polymorphic)
 	sprintf (buffer, "CLASS(*)");
       else
 	sprintf (buffer, "CLASS(%s)", ts->u.derived->name);
@@ -169,6 +197,9 @@ gfc_typename (gfc_typespec *ts)
     case BT_PROCEDURE:
       strcpy (buffer, "PROCEDURE");
       break;
+    case BT_BOZ:
+      strcpy (buffer, "BOZ");
+      break;
     case BT_UNKNOWN:
       strcpy (buffer, "UNKNOWN");
       break;
@@ -177,6 +208,90 @@ gfc_typename (gfc_typespec *ts)
     }
 
   return buffer;
+}
+
+
+const char *
+gfc_typename (gfc_expr *ex)
+{
+  /* 34 character buffer: 14 for "CHARACTER(n,4)", n can be upto 20 characters,
+     add 19 for the extra width and 1 for '\0' */
+  static char buffer1[34];
+  static char buffer2[34];
+  static bool flag = false;
+  char *buffer;
+  gfc_charlen_t length;
+  buffer = flag ? buffer1 : buffer2;
+  flag = !flag;
+
+  if (ex->ts.type == BT_CHARACTER)
+    {
+      if (ex->expr_type == EXPR_CONSTANT)
+	length = ex->value.character.length;
+      else if (ex->ts.deferred)
+	{
+	  if (ex->ts.kind == gfc_default_character_kind)
+	    return "CHARACTER(:)";
+	  sprintf (buffer, "CHARACTER(:,%d)", ex->ts.kind);
+	  return buffer;
+	}
+      else if (ex->ts.u.cl && ex->ts.u.cl->length == NULL)
+	{
+	  if (ex->ts.kind == gfc_default_character_kind)
+	    return "CHARACTER(*)";
+	  sprintf (buffer, "CHARACTER(*,%d)", ex->ts.kind);
+	  return buffer;
+	}
+      else if (ex->ts.u.cl == NULL
+	       || ex->ts.u.cl->length->expr_type != EXPR_CONSTANT)
+	{
+	  if (ex->ts.kind == gfc_default_character_kind)
+	    return "CHARACTER";
+	  sprintf (buffer, "CHARACTER(KIND=%d)", ex->ts.kind);
+	  return buffer;
+	}
+      else
+	length = gfc_mpz_get_hwi (ex->ts.u.cl->length->value.integer);
+      if (ex->ts.kind == gfc_default_character_kind)
+	sprintf (buffer, "CHARACTER(" HOST_WIDE_INT_PRINT_DEC ")", length);
+      else
+	sprintf (buffer, "CHARACTER(" HOST_WIDE_INT_PRINT_DEC ",%d)", length,
+		 ex->ts.kind);
+      return buffer;
+    }
+  return gfc_typename(&ex->ts);
+}
+
+/* The type of a dummy variable can also be CHARACTER(*).  */
+
+const char *
+gfc_dummy_typename (gfc_typespec *ts)
+{
+  static char buffer1[15];  /* 15 for "CHARACTER(*,4)" + '\0'.  */
+  static char buffer2[15];
+  static bool flag = false;
+  char *buffer;
+
+  buffer = flag ? buffer1 : buffer2;
+  flag = !flag;
+
+  if (ts->type == BT_CHARACTER)
+    {
+      bool has_length = false;
+      if (ts->u.cl)
+	has_length = ts->u.cl->length != NULL;
+      if (!has_length)
+	{
+	  if (ts->kind == gfc_default_character_kind)
+	    sprintf(buffer, "CHARACTER(*)");
+	  else if (ts->kind < 10)
+	    sprintf(buffer, "CHARACTER(*,%d)", ts->kind);
+	  else
+	    sprintf(buffer, "CHARACTER(*,?)");
+	  return buffer;
+	}
+    }
+  return gfc_typename(ts);
 }
 
 
@@ -286,7 +401,7 @@ get_c_kind(const char *c_kind_name, CInteropKind_t kinds_table[])
 
 
 /* For a given name TYPO, determine the best candidate from CANDIDATES
-   perusing Levenshtein distance.  Frees CANDIDATES before returning.  */
+   using get_edit_distance.  Frees CANDIDATES before returning.  */
 
 const char *
 gfc_closest_fuzzy_match (const char *typo, char **candidates)
@@ -299,7 +414,7 @@ gfc_closest_fuzzy_match (const char *typo, char **candidates)
 
   while (cand && *cand)
     {
-      edit_distance_t dist = levenshtein_distance (typo, tl, *cand,
+      edit_distance_t dist = get_edit_distance (typo, tl, *cand,
 	  strlen (*cand));
       if (dist < best_distance)
 	{
@@ -312,7 +427,7 @@ gfc_closest_fuzzy_match (const char *typo, char **candidates)
      likely to be meaningless.  */
   if (best)
     {
-      unsigned int cutoff = MAX (tl, strlen (best)) / 2;
+      unsigned int cutoff = MAX (tl, strlen (best));
 
       if (best_distance > cutoff)
 	{

@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2018 Free Software Foundation, Inc.
+// Copyright (C) 2004-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -45,12 +45,14 @@ try_allocation()
 extern "C" void
 try_throw_exception()
 {
+#if __cpp_exceptions
   try
     {
       std::__throw_bad_exception();
     }
   catch (const std::exception& e)
     { }
+#endif
 }
 
 extern "C" void
@@ -75,8 +77,9 @@ try_function_random_fail()
   std::__throw_bad_exception();
 }
 
-#if __cplusplus < 201103L
-// "must be compiled with C++98"
+#if __cplusplus >= 201103L
+# error "must be compiled with C++98"
+#else
   void
   erase_external(std::set<int>& s)
   { s.erase(s.begin()); }

@@ -7,15 +7,26 @@ package runtime_test
 import (
 	"flag"
 	"fmt"
+	"internal/race"
+	"internal/testenv"
+	"os"
+	"os/exec"
 	"reflect"
+	"runtime"
 	. "runtime"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
 )
 
+var testMemStatsCount int
+
 func TestMemStats(t *testing.T) {
 	t.Skip("skipping test with gccgo")
+
+	testMemStatsCount++
 
 	// Make sure there's at least one forced GC.
 	GC()
@@ -32,6 +43,13 @@ func TestMemStats(t *testing.T) {
 	}
 	le := func(thresh float64) func(interface{}) error {
 		return func(x interface{}) error {
+			// These sanity tests aren't necessarily valid
+			// with high -test.count values, so only run
+			// them once.
+			if testMemStatsCount > 1 {
+				return nil
+			}
+
 			if reflect.ValueOf(x).Convert(reflect.TypeOf(thresh)).Float() < thresh {
 				return nil
 			}
@@ -50,7 +68,7 @@ func TestMemStats(t *testing.T) {
 	// PauseTotalNs can be 0 if timer resolution is poor.
 	fields := map[string][]func(interface{}) error{
 		"Alloc": {nz, le(1e10)}, "TotalAlloc": {nz, le(1e11)}, "Sys": {nz, le(1e10)},
-		"Lookups": {nz, le(1e10)}, "Mallocs": {nz, le(1e10)}, "Frees": {nz, le(1e10)},
+		"Lookups": {eq(uint64(0))}, "Mallocs": {nz, le(1e10)}, "Frees": {nz, le(1e10)},
 		"HeapAlloc": {nz, le(1e10)}, "HeapSys": {nz, le(1e10)}, "HeapIdle": {le(1e10)},
 		"HeapInuse": {nz, le(1e10)}, "HeapReleased": {le(1e10)}, "HeapObjects": {nz, le(1e10)},
 		"StackInuse": {nz, le(1e10)}, "StackSys": {nz, le(1e10)},
@@ -151,6 +169,148 @@ func TestTinyAlloc(t *testing.T) {
 
 	if len(chunks) == N {
 		t.Fatal("no bytes allocated within the same 8-byte chunk")
+	}
+}
+
+var (
+	tinyByteSink   *byte
+	tinyUint32Sink *uint32
+	tinyObj12Sink  *obj12
+)
+
+type obj12 struct {
+	a uint64
+	b uint32
+}
+
+func TestTinyAllocIssue37262(t *testing.T) {
+	// Try to cause an alignment access fault
+	// by atomically accessing the first 64-bit
+	// value of a tiny-allocated object.
+	// See issue 37262 for details.
+
+	// GC twice, once to reach a stable heap state
+	// and again to make sure we finish the sweep phase.
+	runtime.GC()
+	runtime.GC()
+
+	// Make 1-byte allocations until we get a fresh tiny slot.
+	aligned := false
+	for i := 0; i < 16; i++ {
+		tinyByteSink = new(byte)
+		if uintptr(unsafe.Pointer(tinyByteSink))&0xf == 0xf {
+			aligned = true
+			break
+		}
+	}
+	if !aligned {
+		t.Fatal("unable to get a fresh tiny slot")
+	}
+
+	// Create a 4-byte object so that the current
+	// tiny slot is partially filled.
+	tinyUint32Sink = new(uint32)
+
+	// Create a 12-byte object, which fits into the
+	// tiny slot. If it actually gets place there,
+	// then the field "a" will be improperly aligned
+	// for atomic access on 32-bit architectures.
+	// This won't be true if issue 36606 gets resolved.
+	tinyObj12Sink = new(obj12)
+
+	// Try to atomically access "x.a".
+	atomic.StoreUint64(&tinyObj12Sink.a, 10)
+
+	// Clear the sinks.
+	tinyByteSink = nil
+	tinyUint32Sink = nil
+	tinyObj12Sink = nil
+}
+
+func TestPageCacheLeak(t *testing.T) {
+	defer GOMAXPROCS(GOMAXPROCS(1))
+	leaked := PageCachePagesLeaked()
+	if leaked != 0 {
+		t.Fatalf("found %d leaked pages in page caches", leaked)
+	}
+}
+
+func TestPhysicalMemoryUtilization(t *testing.T) {
+	got := runTestProg(t, "testprog", "GCPhys")
+	want := "OK\n"
+	if got != want {
+		t.Fatalf("expected %q, but got %q", want, got)
+	}
+}
+
+func TestScavengedBitsCleared(t *testing.T) {
+	var mismatches [128]BitsMismatch
+	if n, ok := CheckScavengedBitsCleared(mismatches[:]); !ok {
+		t.Errorf("uncleared scavenged bits")
+		for _, m := range mismatches[:n] {
+			t.Logf("\t@ address 0x%x", m.Base)
+			t.Logf("\t|  got: %064b", m.Got)
+			t.Logf("\t| want: %064b", m.Want)
+		}
+		t.FailNow()
+	}
+}
+
+type acLink struct {
+	x [1 << 20]byte
+}
+
+var arenaCollisionSink []*acLink
+
+func TestArenaCollision(t *testing.T) {
+	testenv.MustHaveExec(t)
+
+	// Test that mheap.sysAlloc handles collisions with other
+	// memory mappings.
+	if os.Getenv("TEST_ARENA_COLLISION") != "1" {
+		cmd := testenv.CleanCmdEnv(exec.Command(os.Args[0], "-test.run=TestArenaCollision", "-test.v"))
+		cmd.Env = append(cmd.Env, "TEST_ARENA_COLLISION=1")
+		out, err := cmd.CombinedOutput()
+		if race.Enabled {
+			// This test runs the runtime out of hint
+			// addresses, so it will start mapping the
+			// heap wherever it can. The race detector
+			// doesn't support this, so look for the
+			// expected failure.
+			if want := "too many address space collisions"; !strings.Contains(string(out), want) {
+				t.Fatalf("want %q, got:\n%s", want, string(out))
+			}
+		} else if !strings.Contains(string(out), "PASS\n") || err != nil {
+			t.Fatalf("%s\n(exit status %v)", string(out), err)
+		}
+		return
+	}
+	disallowed := [][2]uintptr{}
+	// Drop all but the next 3 hints. 64-bit has a lot of hints,
+	// so it would take a lot of memory to go through all of them.
+	KeepNArenaHints(3)
+	// Consume these 3 hints and force the runtime to find some
+	// fallback hints.
+	for i := 0; i < 5; i++ {
+		// Reserve memory at the next hint so it can't be used
+		// for the heap.
+		start, end := MapNextArenaHint()
+		disallowed = append(disallowed, [2]uintptr{start, end})
+		// Allocate until the runtime tries to use the hint we
+		// just mapped over.
+		hint := GetNextArenaHint()
+		for GetNextArenaHint() == hint {
+			ac := new(acLink)
+			arenaCollisionSink = append(arenaCollisionSink, ac)
+			// The allocation must not have fallen into
+			// one of the reserved regions.
+			p := uintptr(unsafe.Pointer(ac))
+			for _, d := range disallowed {
+				if d[0] <= p && p < d[1] {
+					t.Fatalf("allocation %#x in reserved region [%#x, %#x)", p, d[0], d[1])
+				}
+			}
+		}
 	}
 }
 

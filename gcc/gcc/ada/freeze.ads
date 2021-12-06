@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -152,15 +152,15 @@ package Freeze is
    --    occur.
    --
    --    Size is known at compile time, but the actual value of the size is not
-   --    known to the front end or is definitely greater than 64. In this case,
-   --    Size_Known_At_Compile_Time is set, but the RM_Size field is left set
-   --    to zero (to be set by Gigi).
+   --    known to the front end or is greater than System_Max_Integer_Size. In
+   --    this case, Size_Known_At_Compile_Time is set, but the RM_Size field is
+   --    left set to zero (to be set by Gigi).
    --
    --    Size is known at compile time, and the actual value of the size is
-   --    known to the front end and is not greater than 64. In this case, the
-   --    flag Size_Known_At_Compile_Time is set, and in addition RM_Size is set
-   --    to the required size, allowing for possible front end packing of an
-   --    array using this type as a component type.
+   --    known to the front end and not greater than System_Max_Integer_Size.
+   --    In this case, Size_Known_At_Compile_Time is set, and in addition the
+   --    RM_Size field is set to the required size, allowing for possible front
+   --    end packing of an array using this type as a component type.
    --
    --  Note: the flag Size_Known_At_Compile_Time is used to determine if the
    --  secondary stack must be used to return a value of the type, and also
@@ -174,8 +174,8 @@ package Freeze is
    --  do not allow a size clause if the size would not otherwise be known at
    --  compile time in any case.
 
-   function Is_Atomic_VFA_Aggregate (N : Node_Id) return Boolean;
-   --  If an atomic/VFA object is initialized with an aggregate or is assigned
+   function Is_Full_Access_Aggregate (N : Node_Id) return Boolean;
+   --  If a full access object is initialized with an aggregate or is assigned
    --  an aggregate, we have to prevent a piecemeal access or assignment to the
    --  object, even if the aggregate is to be expanded. We create a temporary
    --  for the aggregate, and assign the temporary instead, so that the back
@@ -229,6 +229,17 @@ package Freeze is
    --  not really expressions, but they can appear within expressions and
    --  so need to be similarly treated. Freeze_Expression takes care of
    --  determining the proper insertion point for generated freeze actions.
+
+   procedure Freeze_Expr_Types
+     (Def_Id : Entity_Id;
+      Typ    : Entity_Id;
+      Expr   : Node_Id;
+      N      : Node_Id);
+   --  N is the body constructed for an expression function that is a
+   --  completion, and Def_Id is the function being completed.
+   --  This procedure freezes before N all the types referenced in Expr,
+   --  which is either the expression of the expression function, or
+   --  the expression in a pre/post aspect that applies to Def_Id;
 
    procedure Freeze_Fixed_Point_Type (Typ : Entity_Id);
    --  Freeze fixed point type. For fixed-point types, we have to defer

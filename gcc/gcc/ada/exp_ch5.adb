@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -29,7 +29,6 @@ with Checks;   use Checks;
 with Debug;    use Debug;
 with Einfo;    use Einfo;
 with Elists;   use Elists;
-with Errout;   use Errout;
 with Exp_Aggr; use Exp_Aggr;
 with Exp_Ch6;  use Exp_Ch6;
 with Exp_Ch7;  use Exp_Ch7;
@@ -114,6 +113,28 @@ package body Exp_Ch5 is
    --  Auxiliary declarations are inserted before node N using the standard
    --  Insert_Actions mechanism.
 
+   function Expand_Assign_Array_Bitfield
+     (N      : Node_Id;
+      Larray : Entity_Id;
+      Rarray : Entity_Id;
+      L_Type : Entity_Id;
+      R_Type : Entity_Id;
+      Rev    : Boolean) return Node_Id;
+   --  Alternative to Expand_Assign_Array_Loop for packed bitfields. Generates
+   --  a call to the System.Bitfields.Copy_Bitfield, which is more efficient
+   --  than copying component-by-component.
+
+   function Expand_Assign_Array_Loop_Or_Bitfield
+     (N      : Node_Id;
+      Larray : Entity_Id;
+      Rarray : Entity_Id;
+      L_Type : Entity_Id;
+      R_Type : Entity_Id;
+      Ndim   : Pos;
+      Rev    : Boolean) return Node_Id;
+   --  Calls either Expand_Assign_Array_Loop or Expand_Assign_Array_Bitfield as
+   --  appropriate.
+
    procedure Expand_Assign_Record (N : Node_Id);
    --  N is an assignment of an untagged record value. This routine handles
    --  the case where the assignment must be made component by component,
@@ -164,7 +185,7 @@ package body Exp_Ch5 is
    --  is the original Assignment node.
 
    --------------------------------------
-   -- Build_Formal_Container_iteration --
+   -- Build_Formal_Container_Iteration --
    --------------------------------------
 
    procedure Build_Formal_Container_Iteration
@@ -237,6 +258,15 @@ package body Exp_Ch5 is
                     New_Occurrence_Of (Cursor, Loc)))),
           Statements => Stats,
           End_Label  => Empty);
+
+      --  If the contruct has a specified loop name, preserve it in the new
+      --  loop, for possible use in exit statements.
+
+      if Present (Identifier (N))
+        and then Comes_From_Source (Identifier (N))
+      then
+         Set_Identifier (New_Loop, Identifier (N));
+      end if;
    end Build_Formal_Container_Iteration;
 
    ------------------------------
@@ -248,8 +278,9 @@ package body Exp_Ch5 is
    begin
       return
         Nkind (Rhs) = N_Type_Conversion
-          and then
-            not Same_Representation (Etype (Rhs), Etype (Expression (Rhs)));
+          and then not Has_Compatible_Representation
+                         (Target_Type  => Etype (Rhs),
+                          Operand_Type => Etype (Expression (Rhs)));
    end Change_Of_Representation;
 
    ------------------------------
@@ -304,6 +335,10 @@ package body Exp_Ch5 is
       R_Slice : constant Boolean := Nkind (Act_Rhs) = N_Slice;
 
       Crep : constant Boolean := Change_Of_Representation (N);
+
+      pragma Assert
+        (Crep
+          or else Is_Bit_Packed_Array (L_Type) = Is_Bit_Packed_Array (R_Type));
 
       Larray  : Node_Id;
       Rarray  : Node_Id;
@@ -407,7 +442,7 @@ package body Exp_Ch5 is
       --  respect to the right-hand side as given, not a possible underlying
       --  renamed object, since this would generate incorrect extra checks.
 
-      Apply_Length_Check (Rhs, L_Type);
+      Apply_Length_Check_On_Assignment (Rhs, L_Type, Lhs);
 
       --  We start by assuming that the move can be done in either direction,
       --  i.e. that the two sides are completely disjoint.
@@ -488,11 +523,11 @@ package body Exp_Ch5 is
       elsif Has_Controlled_Component (L_Type) then
          Loop_Required := True;
 
-      --  If object is atomic/VFA, we cannot tolerate a loop
+      --  If object is full access, we cannot tolerate a loop
 
-      elsif Is_Atomic_Or_VFA_Object (Act_Lhs)
+      elsif Is_Full_Access_Object (Act_Lhs)
               or else
-            Is_Atomic_Or_VFA_Object (Act_Rhs)
+            Is_Full_Access_Object (Act_Rhs)
       then
          return;
 
@@ -501,8 +536,8 @@ package body Exp_Ch5 is
 
       elsif Has_Atomic_Components (L_Type)
         or else Has_Atomic_Components (R_Type)
-        or else Is_Atomic_Or_VFA (Component_Type (L_Type))
-        or else Is_Atomic_Or_VFA (Component_Type (R_Type))
+        or else Is_Full_Access (Component_Type (L_Type))
+        or else Is_Full_Access (Component_Type (R_Type))
       then
          Loop_Required := True;
 
@@ -930,7 +965,7 @@ package body Exp_Ch5 is
 
             else
                Rewrite (N,
-                 Expand_Assign_Array_Loop
+                 Expand_Assign_Array_Loop_Or_Bitfield
                    (N, Larray, Rarray, L_Type, R_Type, Ndim,
                     Rev => not Forwards_OK (N)));
             end if;
@@ -1030,8 +1065,8 @@ package body Exp_Ch5 is
                end if;
 
                --  Reset the Analyzed flag, because the bounds of the index
-               --  type itself may be universal, and must must be reanalyzed
-               --  to acquire the proper type for the back end.
+               --  type itself may be universal, and must be reanalyzed to
+               --  acquire the proper type for the back end.
 
                Set_Analyzed (Cleft_Lo, False);
                Set_Analyzed (Cright_Lo, False);
@@ -1083,12 +1118,12 @@ package body Exp_Ch5 is
                    Condition => Condition,
 
                    Then_Statements => New_List (
-                     Expand_Assign_Array_Loop
+                     Expand_Assign_Array_Loop_Or_Bitfield
                       (N, Larray, Rarray, L_Type, R_Type, Ndim,
                        Rev => False)),
 
                    Else_Statements => New_List (
-                     Expand_Assign_Array_Loop
+                     Expand_Assign_Array_Loop_Or_Bitfield
                       (N, Larray, Rarray, L_Type, R_Type, Ndim,
                        Rev => True))));
             end if;
@@ -1311,6 +1346,155 @@ package body Exp_Ch5 is
       return Assign;
    end Expand_Assign_Array_Loop;
 
+   ----------------------------------
+   -- Expand_Assign_Array_Bitfield --
+   ----------------------------------
+
+   function Expand_Assign_Array_Bitfield
+     (N      : Node_Id;
+      Larray : Entity_Id;
+      Rarray : Entity_Id;
+      L_Type : Entity_Id;
+      R_Type : Entity_Id;
+      Rev    : Boolean) return Node_Id
+   is
+      pragma Assert (not Rev);
+      --  Reverse copying is not yet supported by Copy_Bitfield.
+
+      pragma Assert (not Change_Of_Representation (N));
+      --  This won't work, for example, to copy a packed array to an unpacked
+      --  array.
+
+      Loc  : constant Source_Ptr := Sloc (N);
+
+      L_Index_Typ : constant Node_Id := Etype (First_Index (L_Type));
+      R_Index_Typ : constant Node_Id := Etype (First_Index (R_Type));
+      Left_Lo  : constant Node_Id := Type_Low_Bound  (L_Index_Typ);
+      Right_Lo : constant Node_Id := Type_Low_Bound  (R_Index_Typ);
+
+      L_Addr : constant Node_Id :=
+        Make_Attribute_Reference (Loc,
+          Prefix =>
+            Make_Indexed_Component (Loc,
+              Prefix =>
+                Duplicate_Subexpr (Larray, True),
+              Expressions => New_List (New_Copy_Tree (Left_Lo))),
+          Attribute_Name => Name_Address);
+
+      L_Bit : constant Node_Id :=
+        Make_Attribute_Reference (Loc,
+          Prefix =>
+            Make_Indexed_Component (Loc,
+              Prefix =>
+                Duplicate_Subexpr (Larray, True),
+              Expressions => New_List (New_Copy_Tree (Left_Lo))),
+          Attribute_Name => Name_Bit);
+
+      R_Addr : constant Node_Id :=
+        Make_Attribute_Reference (Loc,
+          Prefix =>
+            Make_Indexed_Component (Loc,
+              Prefix =>
+                Duplicate_Subexpr (Rarray, True),
+              Expressions => New_List (New_Copy_Tree (Right_Lo))),
+          Attribute_Name => Name_Address);
+
+      R_Bit : constant Node_Id :=
+        Make_Attribute_Reference (Loc,
+          Prefix =>
+            Make_Indexed_Component (Loc,
+              Prefix =>
+                Duplicate_Subexpr (Rarray, True),
+              Expressions => New_List (New_Copy_Tree (Right_Lo))),
+          Attribute_Name => Name_Bit);
+
+      --  Compute the Size of the bitfield
+
+      --  Note that the length check has already been done, so we can use the
+      --  size of either L or R; they are equal. We can't use 'Size here,
+      --  because sometimes bit fields get copied into a temp, and the 'Size
+      --  ends up being the size of the temp (e.g. an 8-bit temp containing
+      --  a 4-bit bit field).
+
+      Size : constant Node_Id :=
+        Make_Op_Multiply (Loc,
+          Make_Attribute_Reference (Loc,
+            Prefix =>
+              Duplicate_Subexpr (Name (N), True),
+            Attribute_Name => Name_Length),
+          Make_Attribute_Reference (Loc,
+            Prefix =>
+              Duplicate_Subexpr (Name (N), True),
+            Attribute_Name => Name_Component_Size));
+
+   begin
+      return Make_Procedure_Call_Statement (Loc,
+        Name => New_Occurrence_Of (RTE (RE_Copy_Bitfield), Loc),
+        Parameter_Associations => New_List (
+          R_Addr, R_Bit, L_Addr, L_Bit, Size));
+   end Expand_Assign_Array_Bitfield;
+
+   ------------------------------------------
+   -- Expand_Assign_Array_Loop_Or_Bitfield --
+   ------------------------------------------
+
+   function Expand_Assign_Array_Loop_Or_Bitfield
+     (N      : Node_Id;
+      Larray : Entity_Id;
+      Rarray : Entity_Id;
+      L_Type : Entity_Id;
+      R_Type : Entity_Id;
+      Ndim   : Pos;
+      Rev    : Boolean) return Node_Id
+   is
+      Slices : constant Boolean :=
+        Nkind (Name (N)) = N_Slice or else Nkind (Expression (N)) = N_Slice;
+      L_Prefix_Comp : constant Boolean :=
+        --  True if the left-hand side is a slice of a component or slice
+        Nkind (Name (N)) = N_Slice
+          and then Nkind (Prefix (Name (N))) in
+                     N_Selected_Component | N_Indexed_Component | N_Slice;
+      R_Prefix_Comp : constant Boolean :=
+        --  Likewise for the right-hand side
+        Nkind (Expression (N)) = N_Slice
+          and then Nkind (Prefix (Expression (N))) in
+                     N_Selected_Component | N_Indexed_Component | N_Slice;
+
+   begin
+      --  Determine whether Copy_Bitfield is appropriate (will work, and will
+      --  be more efficient than component-by-component copy). Copy_Bitfield
+      --  doesn't work for reversed storage orders. It is efficient for slices
+      --  of bit-packed arrays. Copy_Bitfield can read and write bits that are
+      --  not part of the objects being copied, so we don't want to use it if
+      --  there are volatile or independent components. If the Prefix of the
+      --  slice is a component or slice, then it might be a part of an object
+      --  with some other volatile or independent components, so we disable the
+      --  optimization in that case as well. We could complicate this code by
+      --  actually looking for such volatile and independent components.
+
+      if Is_Bit_Packed_Array (L_Type)
+        and then Is_Bit_Packed_Array (R_Type)
+        and then not Reverse_Storage_Order (L_Type)
+        and then not Reverse_Storage_Order (R_Type)
+        and then Ndim = 1
+        and then not Rev
+        and then Slices
+        and then not Has_Volatile_Component (L_Type)
+        and then not Has_Volatile_Component (R_Type)
+        and then not Has_Independent_Components (L_Type)
+        and then not Has_Independent_Components (R_Type)
+        and then not L_Prefix_Comp
+        and then not R_Prefix_Comp
+        and then RTE_Available (RE_Copy_Bitfield)
+      then
+         return Expand_Assign_Array_Bitfield
+           (N, Larray, Rarray, L_Type, R_Type, Rev);
+      else
+         return Expand_Assign_Array_Loop
+           (N, Larray, Rarray, L_Type, R_Type, Ndim, Rev);
+      end if;
+   end Expand_Assign_Array_Loop_Or_Bitfield;
+
    --------------------------
    -- Expand_Assign_Record --
    --------------------------
@@ -1335,7 +1519,7 @@ package body Exp_Ch5 is
       --  be assigned.
 
       elsif Possible_Bit_Aligned_Component (Lhs)
-              or
+              or else
             Possible_Bit_Aligned_Component (Rhs)
       then
          null;
@@ -1408,6 +1592,18 @@ package body Exp_Ch5 is
             while Present (C) loop
                if Chars (C) = Chars (Comp) then
                   return C;
+
+               --  The component may be a renamed discriminant, in
+               --  which case check against the name of the original
+               --  discriminant of the parent type.
+
+               elsif Is_Derived_Type (Scope (Comp))
+                 and then Ekind (Comp) = E_Discriminant
+                 and then Present (Corresponding_Discriminant (Comp))
+                 and then
+                   Chars (C) = Chars (Corresponding_Discriminant (Comp))
+               then
+                  return C;
                end if;
 
                Next_Entity (C);
@@ -1427,14 +1623,27 @@ package body Exp_Ch5 is
             CI : constant List_Id := Component_Items (CL);
             VP : constant Node_Id := Variant_Part (CL);
 
-            Alts   : List_Id;
-            DC     : Node_Id;
-            DCH    : List_Id;
-            Expr   : Node_Id;
-            Result : List_Id;
-            V      : Node_Id;
+            Constrained_Typ : Entity_Id;
+            Alts            : List_Id;
+            DC              : Node_Id;
+            DCH             : List_Id;
+            Expr            : Node_Id;
+            Result          : List_Id;
+            V               : Node_Id;
 
          begin
+            --  Try to find a constrained type to extract discriminant values
+            --  from, so that the case statement built below gets an
+            --  opportunity to be folded by Expand_N_Case_Statement.
+
+            if U_U or else Is_Constrained (Etype (Rhs)) then
+               Constrained_Typ := Etype (Rhs);
+            elsif Is_Constrained (Etype (Expression (N))) then
+               Constrained_Typ := Etype (Expression (N));
+            else
+               Constrained_Typ := Empty;
+            end if;
+
             Result := Make_Field_Assigns (CI);
 
             if Present (VP) then
@@ -1456,17 +1665,12 @@ package body Exp_Ch5 is
                   Next_Non_Pragma (V);
                end loop;
 
-               --  If we have an Unchecked_Union, use the value of the inferred
-               --  discriminant of the variant part expression as the switch
-               --  for the case statement. The case statement may later be
-               --  folded.
-
-               if U_U then
+               if Present (Constrained_Typ) then
                   Expr :=
                     New_Copy (Get_Discriminant_Value (
                       Entity (Name (VP)),
-                      Etype (Rhs),
-                      Discriminant_Constraint (Etype (Rhs))));
+                      Constrained_Typ,
+                      Discriminant_Constraint (Constrained_Typ)));
                else
                   Expr :=
                     Make_Selected_Component (Loc,
@@ -1522,11 +1726,22 @@ package body Exp_Ch5 is
                    Selector_Name => New_Occurrence_Of (Disc, Loc));
             end if;
 
+            --  Generate the assignment statement. When the left-hand side
+            --  is an object with an address clause present, force generated
+            --  temporaries to be renamings so as to correctly assign to any
+            --  overlaid objects.
+
             A :=
               Make_Assignment_Statement (Loc,
-                Name =>
+                Name       =>
                   Make_Selected_Component (Loc,
-                    Prefix        => Duplicate_Subexpr (Lhs),
+                    Prefix        =>
+                      Duplicate_Subexpr
+                        (Exp          => Lhs,
+                         Name_Req     => False,
+                         Renaming_Req =>
+                           Is_Entity_Name (Lhs)
+                             and then Present (Address_Clause (Entity (Lhs)))),
                     Selector_Name =>
                       New_Occurrence_Of (Find_Component (L_Typ, C), Loc)),
                 Expression => Expr);
@@ -1579,9 +1794,10 @@ package body Exp_Ch5 is
       --  Start of processing for Expand_Assign_Record
 
       begin
-         --  Note that we use the base types for this processing. This results
-         --  in some extra work in the constrained case, but the change of
-         --  representation case is so unusual that it is not worth the effort.
+         --  Note that we need to use the base types for this processing in
+         --  order to retrieve the Type_Definition. In the constrained case,
+         --  we filter out the non relevant fields in
+         --  Make_Component_List_Assign.
 
          --  First copy the discriminants. This is done unconditionally. It
          --  is required in the unconstrained left side case, and also in the
@@ -1617,7 +1833,7 @@ package body Exp_Ch5 is
                      CF := F;
                   end if;
 
-                  if Is_Unchecked_Union (Base_Type (R_Typ)) then
+                  if Is_Unchecked_Union (R_Typ) then
 
                      --  Within an initialization procedure this is the
                      --  assignment to an unchecked union component, in which
@@ -1689,8 +1905,8 @@ package body Exp_Ch5 is
          --  We know the underlying type is a record, but its current view
          --  may be private. We must retrieve the usable record declaration.
 
-         if Nkind_In (Decl, N_Private_Type_Declaration,
-                            N_Private_Extension_Declaration)
+         if Nkind (Decl) in N_Private_Type_Declaration
+                          | N_Private_Extension_Declaration
            and then Present (Full_View (R_Typ))
          then
             RDef := Type_Definition (Declaration_Node (Full_View (R_Typ)));
@@ -1709,8 +1925,8 @@ package body Exp_Ch5 is
                Insert_Actions (N,
                  Make_Component_List_Assign (Component_List (RDef), True));
             else
-               Insert_Actions
-                 (N, Make_Component_List_Assign (Component_List (RDef)));
+               Insert_Actions (N,
+                 Make_Component_List_Assign (Component_List (RDef)));
             end if;
 
             Rewrite (N, Make_Null_Statement (Loc));
@@ -2001,15 +2217,21 @@ package body Exp_Ch5 is
 
       if not Suppress_Assignment_Checks (N) then
 
-         --  First deal with generation of range check if required
+         --  First deal with generation of range check if required,
+         --  and then predicate checks if the type carries a predicate.
+         --  If the Rhs is an expression these tests may have been applied
+         --  already. This is the case if the RHS is a type conversion.
+         --  Other such redundant checks could be removed ???
 
-         if Do_Range_Check (Rhs) then
-            Generate_Range_Check (Rhs, Typ, CE_Range_Check_Failed);
+         if Nkind (Rhs) /= N_Type_Conversion
+           or else Entity (Subtype_Mark (Rhs)) /= Typ
+         then
+            if Do_Range_Check (Rhs) then
+               Generate_Range_Check (Rhs, Typ, CE_Range_Check_Failed);
+            end if;
+
+            Apply_Predicate_Check (Rhs, Typ);
          end if;
-
-         --  Then generate predicate check if required
-
-         Apply_Predicate_Check (Rhs, Typ);
       end if;
 
       --  Check for a special case where a high level transformation is
@@ -2044,7 +2266,7 @@ package body Exp_Ch5 is
       --  Since P is going to be evaluated more than once, any subscripts
       --  in P must have their evaluation forced.
 
-      if Nkind_In (Lhs, N_Indexed_Component, N_Selected_Component)
+      if Nkind (Lhs) in N_Indexed_Component | N_Selected_Component
         and then Is_Ref_To_Bit_Packed_Array (Prefix (Lhs))
       then
          declare
@@ -2080,8 +2302,7 @@ package body Exp_Ch5 is
             loop
                Set_Analyzed (Exp, False);
 
-               if Nkind_In (Exp, N_Indexed_Component,
-                                 N_Selected_Component)
+               if Nkind (Exp) in N_Indexed_Component | N_Selected_Component
                then
                   Exp := Prefix (Exp);
                else
@@ -2205,14 +2426,23 @@ package body Exp_Ch5 is
       --  checking. Convert Lhs as well, otherwise the actual subtype might
       --  not be constructible. If the discriminants have defaults the type
       --  is unconstrained and there is nothing to check.
+      --  Ditto if a private type with unknown discriminants has a full view
+      --  that is an unconstrained array, in which case a length check is
+      --  needed.
 
-      elsif Has_Unknown_Discriminants (Base_Type (Etype (Lhs)))
-        and then Has_Discriminants (Typ)
-        and then not Has_Defaulted_Discriminants (Typ)
-      then
-         Rewrite (Rhs, OK_Convert_To (Base_Type (Typ), Rhs));
-         Rewrite (Lhs, OK_Convert_To (Base_Type (Typ), Lhs));
-         Apply_Discriminant_Check (Rhs, Typ, Lhs);
+      elsif Has_Unknown_Discriminants (Base_Type (Etype (Lhs))) then
+         if Has_Discriminants (Typ)
+           and then not Has_Defaulted_Discriminants (Typ)
+         then
+            Rewrite (Rhs, OK_Convert_To (Base_Type (Typ), Rhs));
+            Rewrite (Lhs, OK_Convert_To (Base_Type (Typ), Lhs));
+            Apply_Discriminant_Check (Rhs, Typ, Lhs);
+
+         elsif Is_Array_Type (Typ) and then Is_Constrained (Typ)  then
+            Rewrite (Rhs, OK_Convert_To (Base_Type (Typ), Rhs));
+            Rewrite (Lhs, OK_Convert_To (Base_Type (Typ), Lhs));
+            Apply_Length_Check (Rhs, Typ);
+         end if;
 
       --  In the access type case, we need the same discriminant check, and
       --  also range checks if we have an access to constrained array.
@@ -2235,38 +2465,7 @@ package body Exp_Ch5 is
             if Is_Constrained (Etype (Lhs)) then
                Apply_Length_Check (Rhs, Etype (Lhs));
             end if;
-
-            if Nkind (Rhs) = N_Allocator then
-               declare
-                  Target_Typ : constant Entity_Id := Etype (Expression (Rhs));
-                  C_Es       : Check_Result;
-
-               begin
-                  C_Es :=
-                    Get_Range_Checks
-                      (Lhs,
-                       Target_Typ,
-                       Etype (Designated_Type (Etype (Lhs))));
-
-                  Insert_Range_Checks
-                    (C_Es,
-                     N,
-                     Target_Typ,
-                     Sloc (Lhs),
-                     Lhs);
-               end;
-            end if;
          end if;
-
-      --  Apply range check for access type case
-
-      elsif Is_Access_Type (Etype (Lhs))
-        and then Nkind (Rhs) = N_Allocator
-        and then Nkind (Expression (Rhs)) = N_Qualified_Expression
-      then
-         Analyze_And_Resolve (Expression (Rhs));
-         Apply_Range_Check
-           (Expression (Rhs), Designated_Type (Etype (Lhs)));
       end if;
 
       --  Ada 2005 (AI-231): Generate the run-time check
@@ -2328,7 +2527,7 @@ package body Exp_Ch5 is
                                Condition =>
                                  Make_Op_Gt (Loc,
                                    Left_Opnd  =>
-                                     Dynamic_Accessibility_Level (Rhs),
+                                     Accessibility_Level (Rhs, Dynamic_Level),
                                    Right_Opnd =>
                                      Make_Integer_Literal (Loc,
                                        Intval =>
@@ -2344,7 +2543,8 @@ package body Exp_Ch5 is
                                          (Effective_Extra_Accessibility
                                             (Entity (Lhs)), Loc),
                                      Expression =>
-                                        Dynamic_Accessibility_Level (Rhs));
+                                       Accessibility_Level
+                                         (Rhs, Dynamic_Level));
 
          begin
             if not Accessibility_Checks_Suppressed (Entity (Lhs)) then
@@ -2452,18 +2652,13 @@ package body Exp_Ch5 is
                          and then
                            not Restriction_Active (No_Dispatching_Calls))
             then
+               --  We should normally not encounter any limited type here,
+               --  except in the corner case where an assignment was not
+               --  intended like the pathological case of a raise expression
+               --  within a return statement.
+
                if Is_Limited_Type (Typ) then
-
-                  --  This can happen in an instance when the formal is an
-                  --  extension of a limited interface, and the actual is
-                  --  limited. This is an error according to AI05-0087, but
-                  --  is not caught at the point of instantiation in earlier
-                  --  versions.
-
-                  --  This is wrong, error messages cannot be issued during
-                  --  expansion, since they would be missed in -gnatc mode ???
-
-                  Error_Msg_N ("assignment not available on limited type", N);
+                  pragma Assert (not Comes_From_Source (N));
                   return;
                end if;
 
@@ -2676,8 +2871,8 @@ package body Exp_Ch5 is
             Actual_Rhs : Node_Id := Rhs;
 
          begin
-            while Nkind_In (Actual_Rhs, N_Type_Conversion,
-                                        N_Qualified_Expression)
+            while Nkind (Actual_Rhs) in
+                    N_Type_Conversion | N_Qualified_Expression
             loop
                Actual_Rhs := Expression (Actual_Rhs);
             end loop;
@@ -2751,7 +2946,7 @@ package body Exp_Ch5 is
                --  Skip this if left-hand side is an array or record component
                --  and elementary component validity checks are suppressed.
 
-               if Nkind_In (Lhs, N_Selected_Component, N_Indexed_Component)
+               if Nkind (Lhs) in N_Selected_Component | N_Indexed_Component
                  and then not Validity_Check_Components
                then
                   null;
@@ -2823,13 +3018,14 @@ package body Exp_Ch5 is
    -----------------------------
 
    procedure Expand_N_Case_Statement (N : Node_Id) is
-      Loc    : constant Source_Ptr := Sloc (N);
-      Expr   : constant Node_Id    := Expression (N);
-      Alt    : Node_Id;
-      Len    : Nat;
-      Cond   : Node_Id;
-      Choice : Node_Id;
-      Chlist : List_Id;
+      Loc            : constant Source_Ptr := Sloc (N);
+      Expr           : constant Node_Id    := Expression (N);
+      From_Cond_Expr : constant Boolean    := From_Conditional_Expression (N);
+      Alt            : Node_Id;
+      Len            : Nat;
+      Cond           : Node_Id;
+      Choice         : Node_Id;
+      Chlist         : List_Id;
 
    begin
       --  Check for the situation where we know at compile time which branch
@@ -2929,7 +3125,35 @@ package body Exp_Ch5 is
          if Validity_Check_Default
            and then not Predicates_Ignored (Etype (Expr))
          then
-            Ensure_Valid (Expr);
+            --  Recognize the simple case where Expr is an object reference
+            --  and the case statement is directly preceded by an
+            --  "if Obj'Valid then": in this case, do not emit another validity
+            --  check.
+
+            declare
+               Check_Validity : Boolean := True;
+               Attr           : Node_Id;
+            begin
+               if Nkind (Expr) = N_Identifier
+                 and then Nkind (Parent (N)) = N_If_Statement
+                 and then Nkind (Original_Node (Condition (Parent (N))))
+                           = N_Attribute_Reference
+                 and then No (Prev (N))
+               then
+                  Attr := Original_Node (Condition (Parent (N)));
+
+                  if Attribute_Name (Attr) = Name_Valid
+                    and then Nkind (Prefix (Attr)) = N_Identifier
+                    and then Entity (Prefix (Attr)) = Entity (Expr)
+                  then
+                     Check_Validity := False;
+                  end if;
+               end if;
+
+               if Check_Validity then
+                  Ensure_Valid (Expr);
+               end if;
+            end;
          end if;
 
          --  If there is only a single alternative, just replace it with the
@@ -3040,7 +3264,15 @@ package body Exp_Ch5 is
                    Condition => Cond,
                    Then_Statements => Then_Stms,
                    Else_Statements => Else_Stms));
+
+               --  The rewritten if statement needs to inherit whether the
+               --  case statement was expanded from a conditional expression,
+               --  for proper handling of nested controlled objects.
+
+               Set_From_Conditional_Expression (N, From_Cond_Expr);
+
                Analyze (N);
+
                return;
             end if;
          end if;
@@ -3250,6 +3482,12 @@ package body Exp_Ch5 is
       Set_Ekind (Cursor, E_Variable);
       Insert_Action (N, Init);
 
+      --  The loop parameter is declared by an object declaration, but within
+      --  the loop we must prevent user assignments to it; the following flag
+      --  accomplishes that.
+
+      Set_Is_Loop_Parameter (Element);
+
       --  Declaration for Element
 
       Elmt_Decl :=
@@ -3271,7 +3509,7 @@ package body Exp_Ch5 is
                 Declarations => New_List (Elmt_Decl),
                 Handled_Statement_Sequence =>
                   Make_Handled_Sequence_Of_Statements (Loc,
-                    Statements =>  Stats))));
+                    Statements => Stats))));
 
       else
          Elmt_Ref :=
@@ -3297,7 +3535,7 @@ package body Exp_Ch5 is
              Declarations               => New_List (Elmt_Decl),
              Handled_Statement_Sequence =>
                Make_Handled_Sequence_Of_Statements (Loc,
-                 Statements =>  New_List (New_Loop)));
+                 Statements => New_List (New_Loop)));
       end if;
 
       --  The element is only modified in expanded code, so it appears as
@@ -3307,28 +3545,8 @@ package body Exp_Ch5 is
       Set_Warnings_Off (Element);
 
       Rewrite (N, New_Loop);
-
-      --  The loop parameter is declared by an object declaration, but within
-      --  the loop we must prevent user assignments to it, so we analyze the
-      --  declaration and reset the entity kind, before analyzing the rest of
-      --  the loop.
-
-      Analyze (Elmt_Decl);
-      Set_Ekind (Defining_Identifier (Elmt_Decl), E_Loop_Parameter);
-
       Analyze (N);
    end Expand_Formal_Container_Element_Loop;
-
-   -----------------------------
-   -- Expand_N_Goto_Statement --
-   -----------------------------
-
-   --  Add poll before goto if polling active
-
-   procedure Expand_N_Goto_Statement (N : Node_Id) is
-   begin
-      Generate_Poll_Call (N);
-   end Expand_N_Goto_Statement;
 
    ---------------------------
    -- Expand_N_If_Statement --
@@ -3529,7 +3747,7 @@ package body Exp_Ch5 is
                --  specific to pure if statements, however (see
                --  Sem_Ch5.Analyze_If_Statement).
 
-               Set_Comes_From_Source (New_If, Comes_From_Source (N));
+               Preserve_Comes_From_Source (New_If, N);
                return;
 
             --  No special processing for that elsif part, move to next
@@ -3549,9 +3767,9 @@ package body Exp_Ch5 is
       --  Another optimization, special cases that can be simplified
 
       --     if expression then
-      --        return true;
+      --        return [standard.]true;
       --     else
-      --        return false;
+      --        return [standard.]false;
       --     end if;
 
       --  can be changed to:
@@ -3561,9 +3779,9 @@ package body Exp_Ch5 is
       --  and
 
       --     if expression then
-      --        return false;
+      --        return [standard.]false;
       --     else
-      --        return true;
+      --        return [standard.]true;
       --     end if;
 
       --  can be changed to:
@@ -3596,9 +3814,9 @@ package body Exp_Ch5 is
                      Else_Expr : constant Node_Id := Expression (Else_Stm);
 
                   begin
-                     if Nkind (Then_Expr) = N_Identifier
+                     if Nkind (Then_Expr) in N_Expanded_Name | N_Identifier
                           and then
-                        Nkind (Else_Expr) = N_Identifier
+                        Nkind (Else_Expr) in N_Expanded_Name | N_Identifier
                      then
                         if Entity (Then_Expr) = Standard_True
                           and then Entity (Else_Expr) = Standard_False
@@ -3674,15 +3892,20 @@ package body Exp_Ch5 is
       Array_Dim  : constant Pos        := Number_Dimensions (Array_Typ);
       Id         : constant Entity_Id  := Defining_Identifier (I_Spec);
       Loc        : constant Source_Ptr := Sloc (Isc);
-      Stats      : constant List_Id    := Statements (N);
+      Stats      : List_Id    := Statements (N);
       Core_Loop  : Node_Id;
       Dim1       : Int;
       Ind_Comp   : Node_Id;
       Iterator   : Entity_Id;
 
-   --  Start of processing for Expand_Iterator_Loop_Over_Array
-
    begin
+      if Present (Iterator_Filter (I_Spec)) then
+         pragma Assert (Ada_Version >= Ada_2020);
+         Stats := New_List (Make_If_Statement (Loc,
+            Condition => Iterator_Filter (I_Spec),
+            Then_Statements => Stats));
+      end if;
+
       --  for Element of Array loop
 
       --  It requires an internally generated cursor to iterate over the array
@@ -3698,8 +3921,13 @@ package body Exp_Ch5 is
 
       Ind_Comp :=
         Make_Indexed_Component (Loc,
-          Prefix      => Relocate_Node (Array_Node),
+          Prefix      => New_Copy_Tree (Array_Node),
           Expressions => New_List (New_Occurrence_Of (Iterator, Loc)));
+
+      --  Propagate the original node to the copy since the analysis of the
+      --  following object renaming declaration relies on the original node.
+
+      Set_Original_Node (Prefix (Ind_Comp), Original_Node (Array_Node));
 
       Prepend_To (Stats,
         Make_Object_Renaming_Declaration (Loc,
@@ -3742,7 +3970,7 @@ package body Exp_Ch5 is
                   Defining_Identifier         => Iterator,
                   Discrete_Subtype_Definition =>
                     Make_Attribute_Reference (Loc,
-                      Prefix         => Relocate_Node (Array_Node),
+                      Prefix         => New_Copy_Tree (Array_Node),
                       Attribute_Name => Name_Range,
                       Expressions    => New_List (
                         Make_Integer_Literal (Loc, Dim1))),
@@ -3779,7 +4007,7 @@ package body Exp_Ch5 is
                         Defining_Identifier         => Iterator,
                         Discrete_Subtype_Definition =>
                           Make_Attribute_Reference (Loc,
-                            Prefix         => Relocate_Node (Array_Node),
+                            Prefix         => New_Copy_Tree (Array_Node),
                             Attribute_Name => Name_Range,
                             Expressions    => New_List (
                               Make_Integer_Literal (Loc, Dim1))),
@@ -3890,7 +4118,7 @@ package body Exp_Ch5 is
    --      --  Default_Iterator aspect of Vector. This increments Lock,
    --      --  disallowing tampering with cursors. Unfortunately, it does not
    --      --  increment Busy. The result of Iterate is Limited_Controlled;
-   --      --  finalization will decrement Lock.  This is a build-in-place
+   --      --  finalization will decrement Lock. This is a build-in-place
    --      --  dispatching call to Iterate.
 
    --      Cur : Cursor := First (Iter); -- or Last
@@ -3948,7 +4176,9 @@ package body Exp_Ch5 is
       Elem_Typ : constant Entity_Id   := Etype (Id);
       Id_Kind  : constant Entity_Kind := Ekind (Id);
       Loc      : constant Source_Ptr  := Sloc (N);
-      Stats    : constant List_Id     := Statements (N);
+
+      Stats    : List_Id     := Statements (N);
+      --  Maybe wrapped in a conditional if a filter is present
 
       Cursor    : Entity_Id;
       Decl      : Node_Id;
@@ -3970,6 +4200,13 @@ package body Exp_Ch5 is
       --  The package in which the container type is declared
 
    begin
+      if Present (Iterator_Filter (I_Spec)) then
+         pragma Assert (Ada_Version >= Ada_2020);
+         Stats := New_List (Make_If_Statement (Loc,
+            Condition => Iterator_Filter (I_Spec),
+            Then_Statements => Stats));
+      end if;
+
       --  Determine the advancement and initialization steps for the cursor.
       --  Analysis of the expanded loop will verify that the container has a
       --  reverse iterator.
@@ -4118,10 +4355,21 @@ package body Exp_Ch5 is
             Iter_Pack := Scope (Root_Type (Etype (Iter_Type)));
 
             --  Find declarations needed for "for ... of" optimization
+            --  These declarations come from GNAT sources or sources
+            --  derived from them. User code may include additional
+            --  overloadings with similar names, and we need to perforn
+            --  some reasonable resolution to find the needed primitives.
+            --  It is unclear whether this mechanism is fragile if a user
+            --  makes arbitrary changes to the private part of a package
+            --  that supports iterators.
 
             Ent := First_Entity (Pack);
             while Present (Ent) loop
-               if Chars (Ent) = Name_Get_Element_Access then
+               if Chars (Ent) = Name_Get_Element_Access
+                 and then Present (First_Formal (Ent))
+                 and then Chars (First_Formal (Ent)) = Name_Position
+                 and then No (Next_Formal (First_Formal (Ent)))
+               then
                   Fast_Element_Access_Op := Ent;
 
                elsif Chars (Ent) = Name_Step
@@ -4398,7 +4646,6 @@ package body Exp_Ch5 is
    --  4. Deal with while loops where Condition_Actions is set
    --  5. Deal with loops over predicated subtypes
    --  6. Deal with loops with iterators over arrays and containers
-   --  7. Insert polling call if required
 
    procedure Expand_N_Loop_Statement (N : Node_Id) is
       Loc    : constant Source_Ptr := Sloc (N);
@@ -4419,12 +4666,6 @@ package body Exp_Ch5 is
          Adjust_Condition (Condition (Scheme));
       end if;
 
-      --  Generate polling call
-
-      if Is_Non_Empty_List (Statements (N)) then
-         Generate_Poll_Call (First (Statements (N)));
-      end if;
-
       --  Nothing more to do for plain loop with no iteration scheme
 
       if No (Scheme) then
@@ -4443,11 +4684,30 @@ package body Exp_Ch5 is
             Loop_Id : constant Entity_Id := Defining_Identifier (LPS);
             Ltype   : constant Entity_Id := Etype (Loop_Id);
             Btype   : constant Entity_Id := Base_Type (Ltype);
+            Stats   : constant List_Id   := Statements (N);
             Expr    : Node_Id;
             Decls   : List_Id;
             New_Id  : Entity_Id;
 
          begin
+            --  If Discrete_Subtype_Definition has been rewritten as an
+            --  N_Raise_xxx_Error, rewrite the whole loop as a raise node to
+            --  avoid confusing the code generator down the line.
+
+            if Nkind (Discrete_Subtype_Definition (LPS)) in N_Raise_xxx_Error
+            then
+               Rewrite (N, Discrete_Subtype_Definition (LPS));
+               return;
+            end if;
+
+            if Present (Iterator_Filter (LPS)) then
+               pragma Assert (Ada_Version >= Ada_2020);
+               Set_Statements (N,
+                  New_List (Make_If_Statement (Loc,
+                    Condition => Iterator_Filter (LPS),
+                    Then_Statements => Stats)));
+            end if;
+
             --  Deal with loop over predicates
 
             if Is_Discrete_Type (Ltype)
@@ -4564,7 +4824,7 @@ package body Exp_Ch5 is
                        Declarations => Decls,
                        Handled_Statement_Sequence =>
                          Make_Handled_Sequence_Of_Statements (Loc,
-                           Statements => Statements (N)))),
+                           Statements => Stats))),
 
                    End_Label => End_Label (N)));
 
@@ -4666,7 +4926,7 @@ package body Exp_Ch5 is
          end if;
       end if;
 
-      --  When the iteration scheme mentiones attribute 'Loop_Entry, the loop
+      --  When the iteration scheme mentions attribute 'Loop_Entry, the loop
       --  is transformed into a conditional block where the original loop is
       --  the sole statement. Inspect the statements of the nested loop for
       --  controlled objects.
@@ -4690,13 +4950,14 @@ package body Exp_Ch5 is
    --  mode, the semantic analyzer may disallow one or both forms.
 
    procedure Expand_Predicated_Loop (N : Node_Id) is
-      Loc     : constant Source_Ptr := Sloc (N);
-      Isc     : constant Node_Id    := Iteration_Scheme (N);
-      LPS     : constant Node_Id    := Loop_Parameter_Specification (Isc);
-      Loop_Id : constant Entity_Id  := Defining_Identifier (LPS);
-      Ltype   : constant Entity_Id  := Etype (Loop_Id);
-      Stat    : constant List_Id    := Static_Discrete_Predicate (Ltype);
-      Stmts   : constant List_Id    := Statements (N);
+      Orig_Loop_Id :          Node_Id    := Empty;
+      Loc          : constant Source_Ptr := Sloc (N);
+      Isc          : constant Node_Id    := Iteration_Scheme (N);
+      LPS          : constant Node_Id    := Loop_Parameter_Specification (Isc);
+      Loop_Id      : constant Entity_Id  := Defining_Identifier (LPS);
+      Ltype        : constant Entity_Id  := Etype (Loop_Id);
+      Stat         : constant List_Id    := Static_Discrete_Predicate (Ltype);
+      Stmts        : constant List_Id    := Statements (N);
 
    begin
       --  Case of iteration over non-static predicate, should not be possible
@@ -4975,7 +5236,13 @@ package body Exp_Ch5 is
                 Alternatives => Alts);
             Append_To (Stmts, Cstm);
 
-            --  Rewrite the loop
+            --  Rewrite the loop preserving the loop identifier in case there
+            --  are exit statements referencing it.
+
+            if Present (Identifier (N)) then
+               Orig_Loop_Id := New_Occurrence_Of
+                                 (Entity (Identifier (N)), Loc);
+            end if;
 
             Set_Suppress_Assignment_Checks (D);
 
@@ -4987,6 +5254,7 @@ package body Exp_Ch5 is
                     Statements => New_List (
                       Make_Loop_Statement (Loc,
                         Statements => Stmts,
+                        Identifier => Orig_Loop_Id,
                         End_Label  => Empty)))));
 
             Analyze (N);

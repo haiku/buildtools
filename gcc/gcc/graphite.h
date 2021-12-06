@@ -1,5 +1,5 @@
 /* Graphite polyhedral representation.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2021 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@amd.com> and
    Tobias Grosser <grosser@fim.uni-passau.de>.
 
@@ -23,22 +23,6 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_GRAPHITE_POLY_H
 
 #include "sese.h"
-#include <isl/options.h>
-#include <isl/ctx.h>
-#include <isl/val.h>
-#include <isl/set.h>
-#include <isl/union_set.h>
-#include <isl/map.h>
-#include <isl/union_map.h>
-#include <isl/aff.h>
-#include <isl/constraint.h>
-#include <isl/flow.h>
-#include <isl/ilp.h>
-#include <isl/schedule.h>
-#include <isl/ast_build.h>
-#include <isl/schedule_node.h>
-#include <isl/id.h>
-#include <isl/space.h>
 
 typedef struct poly_dr *poly_dr_p;
 
@@ -460,6 +444,7 @@ carries_deps (__isl_keep isl_union_map *schedule,
 extern bool build_poly_scop (scop_p);
 extern bool graphite_regenerate_ast_isl (scop_p);
 extern void build_scops (vec<scop_p> *);
+extern tree cached_scalar_evolution_in_region (const sese_l &, loop_p, tree);
 extern void dot_all_sese (FILE *, vec<sese_l> &);
 extern void dot_sese (sese_l &);
 extern void dot_cfg ();

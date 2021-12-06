@@ -1,5 +1,5 @@
 /* Create and destroy argument vectors (argv's)
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
    Written by Fred Fish @ Cygnus Support
 
 This file is part of the libiberty library.
@@ -327,6 +327,14 @@ writeargv (char * const *argv, FILE *f)
           arg++;
         }
 
+      /* Write out a pair of quotes for an empty argument.  */
+      if (arg == *argv)
+	if (EOF == fputs ("\"\"", f))
+	  {
+	    status = 1;
+	    goto done;
+	  }
+
       if (EOF == fputc ('\n', f))
         {
           status = 1;
@@ -434,7 +442,10 @@ expandargv (int *argcp, char ***argvp)
 	     due to CR/LF->CR translation when reading text files.
 	     That does not in-and-of itself indicate failure.  */
 	  && ferror (f))
-	goto error;
+	{
+	  free (buffer);
+	  goto error;
+	}
       /* Add a NUL terminator.  */
       buffer[len] = '\0';
       /* If the file is empty or contains only whitespace, buildargv would
@@ -455,6 +466,8 @@ expandargv (int *argcp, char ***argvp)
       file_argc = 0;
       while (file_argv[file_argc])
 	++file_argc;
+      /* Free the original option's memory.  */
+      free ((*argvp)[i]);
       /* Now, insert FILE_ARGV into ARGV.  The "+1" below handles the
 	 NULL terminator at the end of ARGV.  */ 
       *argvp = ((char **) 

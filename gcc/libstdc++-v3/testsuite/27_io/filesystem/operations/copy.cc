@@ -1,8 +1,7 @@
-// { dg-options "-std=gnu++17 -lstdc++fs" }
 // { dg-do run { target c++17 } }
 // { dg-require-filesystem-ts "" }
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -57,7 +56,7 @@ test01()
   VERIFY( !exists(to) );
 
   ec.clear();
-  opts != fs::copy_options::recursive;
+  opts |= fs::copy_options::recursive;
   fs::copy("/", to, opts, ec);
   VERIFY( ec == std::make_error_code(std::errc::is_a_directory) );
   VERIFY( !exists(to) );
@@ -67,6 +66,11 @@ test01()
 void
 test02()
 {
+#if defined(__MINGW32__) || defined(__MINGW64__)
+  // No symlink support
+  return;
+#endif
+
   const std::error_code bad_ec = make_error_code(std::errc::invalid_argument);
   auto from = __gnu_test::nonexistent_path();
   auto to = __gnu_test::nonexistent_path();
@@ -116,7 +120,7 @@ test03()
   auto to = __gnu_test::nonexistent_path();
 
   // test empty file
-  std::ofstream{from.native()};
+  std::ofstream{from};
   VERIFY( fs::exists(from) );
   VERIFY( fs::file_size(from) == 0 );
   fs::copy(from, to);
@@ -125,7 +129,7 @@ test03()
 
   remove(to);
   VERIFY( !fs::exists(to) );
-  std::ofstream{from.native()} << "Hello, filesystem!";
+  std::ofstream{from} << "Hello, filesystem!";
   VERIFY( fs::file_size(from) != 0 );
   fs::copy(from, to);
   VERIFY( fs::exists(to) );

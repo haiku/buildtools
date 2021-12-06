@@ -1,5 +1,5 @@
 /* Process source files and output type information.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -1611,7 +1611,7 @@ static outf_p
 create_file (const char *name, const char *oname)
 {
   static const char *const hdr[] = {
-    "   Copyright (C) 2004-2018 Free Software Foundation, Inc.\n",
+    "   Copyright (C) 2004-2021 Free Software Foundation, Inc.\n",
     "\n",
     "This file is part of GCC.\n",
     "\n",
@@ -1717,14 +1717,18 @@ open_base_files (void)
       "explow.h", "calls.h", "memmodel.h", "emit-rtl.h", "varasm.h",
       "stmt.h", "expr.h", "alloc-pool.h", "cselib.h", "insn-addr.h",
       "optabs.h", "libfuncs.h", "debug.h", "internal-fn.h", "gimple-fold.h",
+      "value-range.h",
       "tree-eh.h", "gimple-iterator.h", "gimple-ssa.h", "tree-cfg.h",
       "tree-vrp.h", "tree-phinodes.h", "ssa-iterators.h", "stringpool.h",
       "tree-ssanames.h", "tree-ssa-loop.h", "tree-ssa-loop-ivopts.h",
       "tree-ssa-loop-manip.h", "tree-ssa-loop-niter.h", "tree-into-ssa.h",
-      "tree-dfa.h", "tree-ssa.h", "reload.h", "cpp-id-data.h", "tree-chrec.h",
+      "tree-dfa.h", "tree-ssa.h", "reload.h", "cpplib.h", "tree-chrec.h",
       "except.h", "output.h",  "cfgloop.h", "target.h", "lto-streamer.h",
       "target-globals.h", "ipa-ref.h", "cgraph.h", "symbol-summary.h",
-      "ipa-prop.h", "ipa-fnsummary.h", "dwarf2out.h", "omp-offload.h", NULL
+      "ipa-prop.h", "ipa-fnsummary.h", "dwarf2out.h", "omp-general.h",
+      "omp-offload.h", "ipa-modref-tree.h", "ipa-modref.h", "symtab-thunks.h",
+      "symtab-clones.h",
+      NULL
     };
     const char *const *ifp;
     outf_p gtype_desc_c;
@@ -2434,8 +2438,8 @@ static void write_local (outf_p output_header,
 static int contains_scalar_p (type_p t);
 static void put_mangled_filename (outf_p, const input_file *);
 static void finish_root_table (struct flist *flp, const char *pfx,
-			       const char *tname, const char *lastname,
-			       const char *name);
+			       const char *lastname,
+			       const char *tname, const char *name);
 static void write_root (outf_p, pair_p, type_p, const char *, int,
 			struct fileloc *, bool);
 static void write_array (outf_p f, pair_p v,
@@ -5196,6 +5200,7 @@ main (int argc, char **argv)
       POS_HERE (do_scalar_typedef ("widest_int", &pos));
       POS_HERE (do_scalar_typedef ("int64_t", &pos));
       POS_HERE (do_scalar_typedef ("poly_int64", &pos));
+      POS_HERE (do_scalar_typedef ("poly_uint64", &pos));
       POS_HERE (do_scalar_typedef ("uint64_t", &pos));
       POS_HERE (do_scalar_typedef ("uint8", &pos));
       POS_HERE (do_scalar_typedef ("uintptr_t", &pos));
@@ -5204,6 +5209,7 @@ main (int argc, char **argv)
       POS_HERE (do_scalar_typedef ("void", &pos));
       POS_HERE (do_scalar_typedef ("machine_mode", &pos));
       POS_HERE (do_scalar_typedef ("fixed_size_mode", &pos));
+      POS_HERE (do_scalar_typedef ("CONSTEXPR", &pos));
       POS_HERE (do_typedef ("PTR", 
 			    create_pointer (resolve_typedef ("void", &pos)),
 			    &pos));

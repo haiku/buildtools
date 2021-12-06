@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1998-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1998-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -514,7 +514,6 @@ package Lib.Xref is
 
       E_Package_Body                               => ' ',
       E_Protected_Body                             => ' ',
-      E_Protected_Object                           => ' ',
       E_Subprogram_Body                            => ' ',
       E_Task_Body                                  => ' ');
 
@@ -592,8 +591,8 @@ package Lib.Xref is
 
    --  What we do in such cases is to gather nodes, where we would have liked
    --  to call Generate_Reference but we couldn't because we didn't know enough
-   --  into this table, Then we deal with generating references later on when
-   --  we have sufficient information to do it right.
+   --  into a table, then we deal with generating references later on when we
+   --  have sufficient information to do it right.
 
    type Deferred_Reference_Entry is record
       E : Entity_Id;
@@ -601,13 +600,8 @@ package Lib.Xref is
    end record;
    --  One entry, E, N are as required for Generate_Reference call
 
-   package Deferred_References is new Table.Table (
-     Table_Component_Type => Deferred_Reference_Entry,
-     Table_Index_Type     => Int,
-     Table_Low_Bound      => 0,
-     Table_Initial        => 512,
-     Table_Increment      => 200,
-     Table_Name           => "Name_Deferred_References");
+   procedure Defer_Reference (Deferred_Reference : Deferred_Reference_Entry);
+   --  Add one entry to the deferred reference table
 
    procedure Process_Deferred_References;
    --  This procedure is called from Frontend to process these table entries.
@@ -632,6 +626,11 @@ package Lib.Xref is
       --  Return the closest enclosing subprogram or library-level package.
       --  This ensures that GNATprove can distinguish local variables from
       --  global variables.
+      --
+      --  ??? This routine should only be used for processing related to
+      --  cross-references, where it might return wrong result but must avoid
+      --  crashes on ill-formed source code. It is wrong to use it where exact
+      --  result is needed.
 
       procedure Generate_Dereference
         (N   : Node_Id;

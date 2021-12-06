@@ -1,14 +1,72 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
 
-2018-07-26  Release Manager
+2021-04-27  Release Manager
 
-	* GCC 8.2.0 released.
+	* GCC 11.1.0 released.
 
-2018-05-02  Release Manager
+2021-01-05  Samuel Thibault  <samuel.thibault@ens-lyon.org>
 
-	* GCC 8.1.0 released.
+	* configure: Re-generate.
+
+2020-12-05  Iain Sandoe  <iain@sandoe.co.uk>
+
+	PR target/97865
+	* configure: Regenerate.
+
+2020-11-29  John David Anglin  <danglin@gcc.gnu.org>
+
+	* configure: Regenerate.
+
+2020-05-29  H.J. Lu  <hjl.tools@gmail.com>
+
+	PR bootstrap/95413
+	* configure: Regenerated.
+
+2020-05-15  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR bootstrap/95147
+	* configure: Regenerated.
+
+2020-05-14  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* configure: Regenerated.
+
+2020-02-12  Sandra Loosemore  <sandra@codesourcery.com>
+
+	PR libstdc++/79193
+	PR libstdc++/88999
+
+	* configure: Regenerated.
+
+2020-01-24  Maciej W. Rozycki  <macro@wdc.com>
+
+	* configure.ac: Handle `--with-toolexeclibdir='.
+	* Makefile.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+
+2020-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2019-09-27  Maciej W. Rozycki  <macro@wdc.com>
+
+	* configure: Regenerate.
+
+2019-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2018-10-31  Joseph Myers  <joseph@codesourcery.com>
+
+	PR bootstrap/82856
+	* Makefile.am: Include multilib.am.
+	(AUTOMAKE_OPTIONS): Remove 1.9.5.
+	* configure.ac: Remove AC_PREREQ.  Quote argument to
+	AC_RUN_IFELSE.
+	* Makefile.in, aclocal.m4, configure: Regenerate.
 
 2018-04-24  H.J. Lu  <hongjiu.lu@intel.com>
 
@@ -263,7 +321,7 @@
 	* configure: Regenerate.
 
 2008-09-26  Peter O'Gorman  <pogma@thewrittenword.com>
-            Steve Ellcey  <sje@cup.hp.com>
+	    Steve Ellcey  <sje@cup.hp.com>
 
 	* configure: Regenerate for new libtool.
 	* Makefile.in: Ditto.

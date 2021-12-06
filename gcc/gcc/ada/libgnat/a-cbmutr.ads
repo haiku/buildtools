@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---           Copyright (C) 2014-2018, Free Software Foundation, Inc.        --
+--           Copyright (C) 2014-2020, Free Software Foundation, Inc.        --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -35,13 +35,16 @@ with Ada.Iterator_Interfaces;
 
 with Ada.Containers.Helpers;
 private with Ada.Streams;
+private with Ada.Strings.Text_Output;
 
 generic
    type Element_Type is private;
 
    with function "=" (Left, Right : Element_Type) return Boolean is <>;
 
-package Ada.Containers.Bounded_Multiway_Trees is
+package Ada.Containers.Bounded_Multiway_Trees with
+  SPARK_Mode => Off
+is
    pragma Annotate (CodePeer, Skip_Analysis);
    pragma Pure;
    pragma Remote_Types;
@@ -300,12 +303,15 @@ private
    type Element_Array is array (Count_Type range <>) of aliased Element_Type;
 
    type Tree (Capacity : Count_Type) is tagged record
-      Nodes    : Tree_Node_Array (0 .. Capacity) := (others => <>);
-      Elements : Element_Array (1 .. Capacity) := (others => <>);
+      Nodes    : Tree_Node_Array (0 .. Capacity);
+      Elements : Element_Array (1 .. Capacity);
       Free     : Count_Type'Base := No_Node;
       TC       : aliased Tamper_Counts;
       Count    : Count_Type := 0;
-   end record;
+   end record with Put_Image => Put_Image;
+
+   procedure Put_Image
+     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Tree);
 
    procedure Write
      (Stream    : not null access Root_Stream_Type'Class;
@@ -327,7 +333,7 @@ private
       Node      : Count_Type'Base := No_Node;
    end record;
 
-   procedure  Read
+   procedure Read
      (Stream   : not null access Root_Stream_Type'Class;
       Position : out Cursor);
    for Cursor'Read use Read;

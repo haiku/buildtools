@@ -42,12 +42,13 @@ int bar3 (int x)
 // { dg-final { if [string match s390*-*-* $target_triplet ] {return} } }
 // Likewise for CRIS targets.
 // { dg-final { if [string match cris-*-* $target_triplet ] {return} } }
-// { dg-final { if [string match crisv32-*-* $target_triplet ] {return} } }
 // Likewise for m68k targets.
 // { dg-final { if [string match fido-*-* $target_triplet ] {return} } }
 // { dg-final { if [string match m68k-*-* $target_triplet ] {return} } }
 // Likewise for moxie targets.
 // { dg-final { if [string match moxie-*-* $target_triplet ] {return} } }
+// Likewise for msp430 targets.
+// { dg-final { if [string match msp430-*-* $target_triplet ] {return} } }
 // Likewise for Visium targets.
 // { dg-final { if [string match visium-*-* $target_triplet ] {return} } }
 // { dg-final { scan-assembler "baz3.*baz3.*baz3.*baz3.*baz3.*baz3" } }

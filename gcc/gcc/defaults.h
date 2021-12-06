@@ -1,5 +1,5 @@
 /* Definitions of various defaults for tm.h macros.
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@monkeys.com)
 
 This file is part of GCC.
@@ -283,6 +283,17 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define SUPPORTS_DISCRIMINATOR 1
 #else
 #define SUPPORTS_DISCRIMINATOR 0
+#endif
+#endif
+
+/* This determines whether or not we support marking sections with
+   SHF_GNU_RETAIN flag.  Also require .init_array/.fini_array section
+   for constructors and destructors.  */
+#ifndef SUPPORTS_SHF_GNU_RETAIN
+#if HAVE_GAS_SHF_GNU_RETAIN && HAVE_INITFINI_ARRAY_SUPPORT
+#define SUPPORTS_SHF_GNU_RETAIN 1
+#else
+#define SUPPORTS_SHF_GNU_RETAIN 0
 #endif
 #endif
 
@@ -582,6 +593,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    these guesses; getting the wrong type of a given width will not
    affect C++ name mangling because in C++ these are distinct types
    not typedefs.  */
+
+#ifndef CHAR8_TYPE
+#define CHAR8_TYPE "unsigned char"
+#endif
 
 #ifdef UINT_LEAST16_TYPE
 #define CHAR16_TYPE UINT_LEAST16_TYPE
@@ -1314,10 +1329,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 
 /* If a memory-to-memory move would take MOVE_RATIO or more simple
-   move-instruction sequences, we will do a movmem or libcall instead.  */
+   move-instruction sequences, we will do a cpymem or libcall instead.  */
 
 #ifndef MOVE_RATIO
-#if defined (HAVE_movmemqi) || defined (HAVE_movmemhi) || defined (HAVE_movmemsi) || defined (HAVE_movmemdi) || defined (HAVE_movmemti)
+#if defined (HAVE_cpymemqi) || defined (HAVE_cpymemhi) || defined (HAVE_cpymemsi) || defined (HAVE_cpymemdi) || defined (HAVE_cpymemti)
 #define MOVE_RATIO(speed) 2
 #else
 /* If we are optimizing for space (-Os), cut down the default move ratio.  */
@@ -1338,7 +1353,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 
 /* If a memory set (to value other than zero) operation would take
-   SET_RATIO or more simple move-instruction sequences, we will do a movmem
+   SET_RATIO or more simple move-instruction sequences, we will do a setmem
    or libcall instead.  */
 #ifndef SET_RATIO
 #define SET_RATIO(speed) MOVE_RATIO (speed)
@@ -1453,6 +1468,20 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #ifndef DWARF_GNAT_ENCODINGS_DEFAULT
 #define DWARF_GNAT_ENCODINGS_DEFAULT DWARF_GNAT_ENCODINGS_GDB
+#endif
+
+#ifndef USED_FOR_TARGET
+/* Done this way to keep gengtype happy.  */
+#if BITS_PER_UNIT == 8
+#define TARGET_UNIT uint8_t
+#elif BITS_PER_UNIT == 16
+#define TARGET_UNIT uint16_t
+#elif BITS_PER_UNIT == 32
+#define TARGET_UNIT uint32_t
+#else
+#error Unknown BITS_PER_UNIT
+#endif
+typedef TARGET_UNIT target_unit;
 #endif
 
 #endif  /* ! GCC_DEFAULTS_H */

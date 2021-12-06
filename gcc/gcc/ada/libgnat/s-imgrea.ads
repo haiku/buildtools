@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -44,15 +44,18 @@ package System.Img_Real is
    --  image for fixed-point types (RM 3.5(34)), where Aft is the value of the
    --  Aft attribute for the fixed-point type. This function is used only for
    --  ordinary fixed point (see package System.Img_Dec for handling of decimal
-   --  fixed-point). The caller guarantees that S is long enough to hold the
+   --  fixed point). The caller guarantees that S is long enough to hold the
    --  result and has a lower bound of 1.
+   --
+   --  Remark: This procedure should NOT be called with V = -0.0 or V = +/-Inf,
+   --          The result is irrelevant.
 
    procedure Image_Floating_Point
      (V    : Long_Long_Float;
       S    : in out String;
       P    : out Natural;
       Digs : Natural);
-   --  Computes fixed_type'Image (V) and returns the result in S (1 .. P)
+   --  Computes float_type'Image (V) and returns the result in S (1 .. P)
    --  updating P on return. The result is computed according to the rules for
    --  image for floating-point types (RM 3.5(33)), where Digs is the value of
    --  the Digits attribute for the floating-point type. The caller guarantees
@@ -72,5 +75,10 @@ package System.Img_Real is
    --  to compile this unit with checks off). The Fore, Aft and Exp values
    --  can be set to any valid values for the case of use from Text_IO. Note
    --  that no space is stored at the start for non-negative values.
+
+   Max_Real_Image_Length : constant := 5200;
+   --   If Exp is set to zero and Aft is set to Text_IO.Field'Last (i.e., 255)
+   --   then Long_Long_Float'Last generates an image whose length is
+   --   slightly less than 5200.
 
 end System.Img_Real;

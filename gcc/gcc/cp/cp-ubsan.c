@@ -1,5 +1,5 @@
 /* UndefinedBehaviorSanitizer, undefined behavior detector.
-   Copyright (C) 2014-2018 Free Software Foundation, Inc.
+   Copyright (C) 2014-2021 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>
 
 This file is part of GCC.
@@ -118,20 +118,38 @@ cp_ubsan_maybe_instrument_member_call (tree stmt)
 {
   if (call_expr_nargs (stmt) == 0)
     return;
-  tree *opp = &CALL_EXPR_ARG (stmt, 0);
-  tree op = *opp;
-  if (op == error_mark_node
-      || !POINTER_TYPE_P (TREE_TYPE (op)))
-    return;
-  while (TREE_CODE (op) == COMPOUND_EXPR)
+  tree op, *opp;
+
+  tree fn = CALL_EXPR_FN (stmt);
+  if (fn && TREE_CODE (fn) == OBJ_TYPE_REF)
     {
-      opp = &TREE_OPERAND (op, 1);
+      /* Virtual function call: Sanitize the use of the object pointer in the
+	 OBJ_TYPE_REF, since the vtable reference will SEGV otherwise (95221).
+	 OBJ_TYPE_REF_EXPR is ptr->vptr[N] and OBJ_TYPE_REF_OBJECT is ptr.  But
+	 we can't be sure of finding OBJ_TYPE_REF_OBJECT in OBJ_TYPE_REF_EXPR
+	 if the latter has been optimized, so we use a COMPOUND_EXPR below.  */
+      opp = &OBJ_TYPE_REF_EXPR (fn);
+      op = OBJ_TYPE_REF_OBJECT (fn);
+    }
+  else
+    {
+      /* Non-virtual call: Sanitize the 'this' argument.  */
+      opp = &CALL_EXPR_ARG (stmt, 0);
+      if (*opp == error_mark_node
+	  || !INDIRECT_TYPE_P (TREE_TYPE (*opp)))
+	return;
+      while (TREE_CODE (*opp) == COMPOUND_EXPR)
+	opp = &TREE_OPERAND (*opp, 1);
       op = *opp;
     }
   op = cp_ubsan_maybe_instrument_vptr (EXPR_LOCATION (stmt), op,
 				       TREE_TYPE (TREE_TYPE (op)),
 				       true, UBSAN_MEMBER_CALL);
-  if (op)
+  if (!op)
+    /* No change.  */;
+  else if (fn && TREE_CODE (fn) == OBJ_TYPE_REF)
+    *opp = cp_build_compound_expr (op, *opp, tf_none);
+  else
     *opp = op;
 }
 
@@ -257,15 +275,15 @@ tree
 cp_ubsan_maybe_instrument_downcast (location_t loc, tree type,
 				    tree intype, tree op)
 {
-  if (!POINTER_TYPE_P (type)
-      || !POINTER_TYPE_P (intype)
-      || !POINTER_TYPE_P (TREE_TYPE (op))
+  if (!INDIRECT_TYPE_P (type)
+      || !INDIRECT_TYPE_P (intype)
+      || !INDIRECT_TYPE_P (TREE_TYPE (op))
       || !CLASS_TYPE_P (TREE_TYPE (TREE_TYPE (op)))
       || !is_properly_derived_from (TREE_TYPE (type), TREE_TYPE (intype)))
     return NULL_TREE;
 
   return cp_ubsan_maybe_instrument_vptr (loc, op, TREE_TYPE (type), true,
-					 TREE_CODE (type) == POINTER_TYPE
+					 TYPE_PTR_P (type)
 					 ? UBSAN_DOWNCAST_POINTER
 					 : UBSAN_DOWNCAST_REFERENCE);
 }

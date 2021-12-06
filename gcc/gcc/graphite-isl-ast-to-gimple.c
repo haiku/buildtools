@@ -1,5 +1,5 @@
 /* Translation of isl AST to Gimple.
-   Copyright (C) 2014-2018 Free Software Foundation, Inc.
+   Copyright (C) 2014-2021 Free Software Foundation, Inc.
    Contributed by Roman Gareev <gareevroman@gmail.com>.
 
 This file is part of GCC.
@@ -18,13 +18,12 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define USES_ISL
+#define INCLUDE_ISL
 
 #include "config.h"
 
 #ifdef HAVE_isl
 
-#define INCLUDE_MAP
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
@@ -32,7 +31,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "gimple.h"
 #include "ssa.h"
-#include "params.h"
 #include "fold-const.h"
 #include "gimple-fold.h"
 #include "gimple-iterator.h"
@@ -70,18 +68,14 @@ struct ast_build_info
 /* IVS_PARAMS maps isl's scattering and parameter identifiers
    to corresponding trees.  */
 
-typedef std::map<isl_id *, tree> ivs_params;
+typedef hash_map<isl_id *, tree> ivs_params;
 
 /* Free all memory allocated for isl's identifiers.  */
 
 static void ivs_params_clear (ivs_params &ip)
 {
-  std::map<isl_id *, tree>::iterator it;
-  for (it = ip.begin ();
-       it != ip.end (); it++)
-    {
-      isl_id_free (it->first);
-    }
+  for (auto it = ip.begin (); it != ip.end (); ++it)
+    isl_id_free ((*it).first);
 }
 
 /* Set the "separate" option for the schedule node.  */
@@ -203,7 +197,7 @@ class translate_isl_ast_to_gimple
   {
     codegen_error = true;
     gcc_assert (! flag_checking
-		|| PARAM_VALUE (PARAM_GRAPHITE_ALLOW_CODEGEN_ERRORS));
+		|| param_graphite_allow_codegen_errors);
   }
 
   bool is_constant (tree op) const
@@ -257,15 +251,16 @@ gcc_expression_from_isl_ast_expr_id (tree type,
 {
   gcc_assert (isl_ast_expr_get_type (expr_id) == isl_ast_expr_id);
   isl_id *tmp_isl_id = isl_ast_expr_get_id (expr_id);
-  std::map<isl_id *, tree>::iterator res;
-  res = ip.find (tmp_isl_id);
+  tree *tp = ip.get (tmp_isl_id);
   isl_id_free (tmp_isl_id);
-  gcc_assert (res != ip.end () &&
-	      "Could not map isl_id to tree expression");
+  gcc_assert (tp && "Could not map isl_id to tree expression");
   isl_ast_expr_free (expr_id);
-  tree t = res->second;
+  tree t = *tp;
   if (useless_type_conversion_p (type, TREE_TYPE (t)))
     return t;
+  if (POINTER_TYPE_P (TREE_TYPE (t))
+      && !POINTER_TYPE_P (type) && !ptrofftype_p (type))
+    t = fold_convert (sizetype, t);
   return fold_convert (type, t);
 }
 
@@ -411,7 +406,9 @@ ternary_op_to_tree (tree type, __isl_take isl_ast_expr *expr, ivs_params &ip)
   if (codegen_error_p ())
     return NULL_TREE;
 
-  return fold_build3 (COND_EXPR, type, a, b, c);
+  return fold_build3 (COND_EXPR, type, a,
+		      rewrite_to_non_trapping_overflow (b),
+		      rewrite_to_non_trapping_overflow (c));
 }
 
 /* Converts a unary isl_ast_expr_op expression E to a GCC expression tree of
@@ -592,11 +589,9 @@ graphite_create_new_loop (edge entry_edge, __isl_keep isl_ast_node *node_for,
 
   isl_ast_expr *for_iterator = isl_ast_node_for_get_iterator (node_for);
   isl_id *id = isl_ast_expr_get_id (for_iterator);
-  std::map<isl_id *, tree>::iterator res;
-  res = ip.find (id);
-  if (ip.count (id))
-    isl_id_free (res->first);
-  ip[id] = iv;
+  bool existed_p = ip.put (id, iv);
+  if (existed_p)
+    isl_id_free (id);
   isl_ast_expr_free (for_iterator);
   return loop;
 }
@@ -813,7 +808,7 @@ translate_isl_ast_node_user (__isl_keep isl_ast_node *node,
   const int nb_loops = number_of_loops (cfun);
   vec<tree> iv_map;
   iv_map.create (nb_loops);
-  iv_map.safe_grow_cleared (nb_loops);
+  iv_map.safe_grow_cleared (nb_loops, true);
 
   build_iv_mapping (iv_map, gbb, user_expr, ip, pbb->scop->scop_info->region);
   isl_ast_expr_free (user_expr);
@@ -1090,7 +1085,8 @@ tree translate_isl_ast_to_gimple::
 get_rename_from_scev (tree old_name, gimple_seq *stmts, loop_p loop,
 		      vec<tree> iv_map)
 {
-  tree scev = scalar_evolution_in_region (region->region, loop, old_name);
+  tree scev = cached_scalar_evolution_in_region (region->region,
+						 loop, old_name);
 
   /* At this point we should know the exact scev for each
      scalar SSA_NAME used in the scop: all the other scalar
@@ -1342,7 +1338,8 @@ add_parameters_to_ivs_params (scop_p scop, ivs_params &ip)
     {
       isl_id *tmp_id = isl_set_get_dim_id (scop->param_context,
 					   isl_dim_param, i);
-      ip[tmp_id] = param;
+      bool existed_p = ip.put (tmp_id, param);
+      gcc_assert (!existed_p);
     }
 }
 
@@ -1380,7 +1377,7 @@ scop_to_isl_ast (scop_p scop)
 {
   int old_err = isl_options_get_on_error (scop->isl_context);
   int old_max_operations = isl_ctx_get_max_operations (scop->isl_context);
-  int max_operations = PARAM_VALUE (PARAM_MAX_ISL_OPERATIONS);
+  int max_operations = param_max_isl_operations;
   if (max_operations)
     isl_ctx_set_max_operations (scop->isl_context, max_operations);
   isl_options_set_on_error (scop->isl_context, ISL_ON_ERROR_CONTINUE);
@@ -1409,17 +1406,20 @@ scop_to_isl_ast (scop_p scop)
   isl_ctx_set_max_operations (scop->isl_context, old_max_operations);
   if (isl_ctx_last_error (scop->isl_context) != isl_error_none)
     {
-      location_t loc = find_loop_location
-	(scop->scop_info->region.entry->dest->loop_father);
-      if (isl_ctx_last_error (scop->isl_context) == isl_error_quota)
-	dump_printf_loc (MSG_MISSED_OPTIMIZATION, loc,
-			 "loop nest not optimized, AST generation timed out "
-			 "after %d operations [--param max-isl-operations]\n",
-			 max_operations);
-      else
-	dump_printf_loc (MSG_MISSED_OPTIMIZATION, loc,
-			 "loop nest not optimized, ISL AST generation "
-			 "signalled an error\n");
+      if (dump_enabled_p ())
+	{
+	  dump_user_location_t loc = find_loop_location
+	    (scop->scop_info->region.entry->dest->loop_father);
+	  if (isl_ctx_last_error (scop->isl_context) == isl_error_quota)
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, loc,
+			     "loop nest not optimized, AST generation timed out "
+			     "after %d operations [--param max-isl-operations]\n",
+			     max_operations);
+	  else
+	    dump_printf_loc (MSG_MISSED_OPTIMIZATION, loc,
+			     "loop nest not optimized, ISL AST generation "
+			     "signalled an error\n");
+	}
       isl_ast_node_free (ast_isl);
       return NULL;
     }
@@ -1518,10 +1518,13 @@ graphite_regenerate_ast_isl (scop_p scop)
 
   if (t.codegen_error_p ())
     {
-      location_t loc = find_loop_location
-	(scop->scop_info->region.entry->dest->loop_father);
-      dump_printf_loc (MSG_MISSED_OPTIMIZATION, loc,
-		       "loop nest not optimized, code generation error\n");
+      if (dump_enabled_p ())
+	{
+	  dump_user_location_t loc = find_loop_location
+	    (scop->scop_info->region.entry->dest->loop_father);
+	  dump_printf_loc (MSG_MISSED_OPTIMIZATION, loc,
+			   "loop nest not optimized, code generation error\n");
+	}
 
       /* Remove the unreachable region.  */
       remove_edge_and_dominated_blocks (if_region->true_region->region.entry);

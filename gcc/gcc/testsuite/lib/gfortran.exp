@@ -1,4 +1,4 @@
-# Copyright (C) 2003-2018 Free Software Foundation, Inc.
+# Copyright (C) 2003-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -220,13 +220,6 @@ proc gfortran_init { args } {
 	lappend ALWAYS_GFORTRANFLAGS "additional_flags=$TOOL_OPTIONS"
     }
 
-    # On the SPU, most of the fortran test cases exceed local store size.
-    # Use automatic overlay support to make them fit.
-    if { [check_effective_target_spu_auto_overlay] } {
-	lappend ALWAYS_GFORTRANFLAGS "ldflags=-Wl,--auto-overlay"
-	lappend ALWAYS_GFORTRANFLAGS "ldflags=-Wl,--reserved-space=131072"
-    }
-
     verbose -log "ALWAYS_GFORTRANFLAGS set to $ALWAYS_GFORTRANFLAGS"
 
     verbose "gfortran is initialized" 3
@@ -241,12 +234,20 @@ proc gfortran_target_compile { source dest type options } {
     global gluefile wrap_flags
     global ALWAYS_GFORTRANFLAGS
     global GFORTRAN_UNDER_TEST
+    global TEST_ALWAYS_FLAGS
     global flags_to_postpone
     global board_info
 
     if { [target_info needs_status_wrapper] != "" && [info exists gluefile] } {
 	lappend options "libs=${gluefile}"
 	lappend options "ldflags=${wrap_flags}"
+    }
+
+    # TEST_ALWAYS_FLAGS are flags that should be passed to every
+    # compilation.  They are passed first to allow individual
+    # tests to override them.
+    if [info exists TEST_ALWAYS_FLAGS] {
+	set options [concat "{additional_flags=$TEST_ALWAYS_FLAGS}" $options]
     }
 
     # bind_pic_locally adds -fpie/-fPIE flags to flags_to_postpone and it is

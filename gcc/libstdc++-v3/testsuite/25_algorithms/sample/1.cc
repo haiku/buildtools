@@ -1,4 +1,4 @@
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,8 +15,8 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++17" }
 // { dg-do run { target c++17 } }
+// { dg-require-cstdint "" }
 
 #include <algorithm>
 #include <random>
@@ -93,6 +93,7 @@ test04()
 
   // forward iterator for population and output iterator for result
   auto res = sample(pop.begin(), pop.end(), samp.begin(), sample_size, rng);
+  VERIFY( res.ptr == (out + sample_size) );
 
   // verify no duplicates
   std::sort(std::begin(out), std::end(out));

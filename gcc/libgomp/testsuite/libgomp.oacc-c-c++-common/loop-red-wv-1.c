@@ -1,7 +1,6 @@
-/* { dg-do run } */
-/* { dg-additional-options "-O2" } */
-
 #include <stdio.h>
+#include <openacc.h>
+#include <gomp-constants.h>
 
 #define N (32*32*32+17)
 int main ()
@@ -9,26 +8,30 @@ int main ()
   int ix;
   int ondev = 0;
   int t = 0, h = 0;
+  int workersize, vectorsize;
   
-#pragma acc parallel num_workers(32) vector_length(32) copy(ondev)
+#pragma acc parallel num_workers(32) vector_length(32) copy(ondev) \
+	    copyout(workersize, vectorsize)
   {
 #pragma acc loop worker vector reduction (+:t)
     for (unsigned ix = 0; ix < N; ix++)
       {
 	int val = ix;
 	
-	if (__builtin_acc_on_device (5))
+	if (acc_on_device (acc_device_not_host))
 	  {
-	    int g = 0, w = 0, v = 0;
+	    int g, w, v;
 
-	    __asm__ volatile ("mov.u32 %0,%%ctaid.x;" : "=r" (g));
-	    __asm__ volatile ("mov.u32 %0,%%tid.y;" : "=r" (w));
-	    __asm__ volatile ("mov.u32 %0,%%tid.x;" : "=r" (v));
+	    g = __builtin_goacc_parlevel_id (GOMP_DIM_GANG);
+	    w = __builtin_goacc_parlevel_id (GOMP_DIM_WORKER);
+	    v = __builtin_goacc_parlevel_id (GOMP_DIM_VECTOR);
 	    val = (g << 16) | (w << 8) | v;
 	    ondev = 1;
 	  }
 	t += val;
       }
+    workersize = __builtin_goacc_parlevel_size (GOMP_DIM_WORKER);
+    vectorsize = __builtin_goacc_parlevel_size (GOMP_DIM_VECTOR);
   }
 
   for (ix = 0; ix < N; ix++)
@@ -37,8 +40,8 @@ int main ()
       if(ondev)
 	{
 	  int g = 0;
-	  int w = (ix / 32) % 32;
-	  int v = ix % 32;
+	  int w = (ix / vectorsize) % workersize;
+	  int v = ix % vectorsize;
 
 	  val = (g << 16) | (w << 8) | v;
 	}

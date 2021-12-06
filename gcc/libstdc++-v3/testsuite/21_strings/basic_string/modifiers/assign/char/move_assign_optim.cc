@@ -1,4 +1,4 @@
-// Copyright (C) 2018 Free Software Foundation, Inc.
+// Copyright (C) 2018-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,7 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-O1" }
+// { dg-options "-O1 -g0" }
 // { dg-do compile { target c++11 } }
 // { dg-final { scan-assembler-not "__throw_length_error" } }
 // { dg-final { scan-assembler-not "__throw_bad_alloc" } }
@@ -30,6 +30,8 @@ test01(std::string& target, std::string&& source)
   // The move assignment operator should be simple enough that the compiler
   // can see that it never results in a length_error or bad_alloc exception
   // (which would be turned into std::terminate by the noexcept on the
-  // assignment operator).
+  // assignment operator). This is only true when inlining though.
+#ifndef __NO_INLINE__
   target = std::move(source);
+#endif
 }

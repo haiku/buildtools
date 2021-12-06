@@ -1,5 +1,5 @@
 /* jit-builtins.c -- Handling of builtin functions during JIT-compilation.
-   Copyright (C) 2014-2018 Free Software Foundation, Inc.
+   Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -162,7 +162,7 @@ builtins_manager::get_builtin_function (const char *name)
 recording::function *
 builtins_manager::get_builtin_function_by_id (enum built_in_function builtin_id)
 {
-  gcc_assert (builtin_id >= 0);
+  gcc_assert (builtin_id > BUILT_IN_NONE);
   gcc_assert (builtin_id < END_BUILTINS);
 
   /* Lazily build the functions, caching them so that repeated calls for
@@ -243,6 +243,85 @@ builtins_manager::make_builtin_function (enum built_in_function builtin_id)
     (void)get_builtin_function_by_id (BUILT_IN_SINCOSL);
 
   return result;
+}
+
+/* Build an array of type names for use by get_string_for_type_id.  */
+
+static const char * const type_names[] = {
+#define DEF_PRIMITIVE_TYPE(ENUM, VALUE) #ENUM,
+#define DEF_FUNCTION_TYPE_0(ENUM, RETURN) #ENUM,
+#define DEF_FUNCTION_TYPE_1(ENUM, RETURN, ARG1) #ENUM,
+#define DEF_FUNCTION_TYPE_2(ENUM, RETURN, ARG1, ARG2) #ENUM,
+#define DEF_FUNCTION_TYPE_3(ENUM, RETURN, ARG1, ARG2, ARG3) #ENUM,
+#define DEF_FUNCTION_TYPE_4(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4) #ENUM,
+#define DEF_FUNCTION_TYPE_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) #ENUM,
+#define DEF_FUNCTION_TYPE_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			    ARG6)					\
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_7(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			    ARG6, ARG7)					\
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_8(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			    ARG6, ARG7, ARG8)				\
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_9(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			    ARG6, ARG7, ARG8, ARG9)			\
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_10(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			     ARG6, ARG7, ARG8, ARG9, ARG10)		 \
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_11(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			     ARG6, ARG7, ARG8, ARG9, ARG10, ARG11)	 \
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_0(ENUM, RETURN) #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_1(ENUM, RETURN, ARG1) #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_2(ENUM, RETURN, ARG1, ARG2) #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_3(ENUM, RETURN, ARG1, ARG2, ARG3) #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_4(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4) #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) \
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+				ARG6)					\
+					  #ENUM,
+#define DEF_FUNCTION_TYPE_VAR_7(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+				ARG6, ARG7)				\
+					  #ENUM,
+#define DEF_POINTER_TYPE(ENUM, TYPE) #ENUM,
+
+#include "builtin-types.def"
+
+#undef DEF_PRIMITIVE_TYPE
+#undef DEF_FUNCTION_TYPE_0
+#undef DEF_FUNCTION_TYPE_1
+#undef DEF_FUNCTION_TYPE_2
+#undef DEF_FUNCTION_TYPE_3
+#undef DEF_FUNCTION_TYPE_4
+#undef DEF_FUNCTION_TYPE_5
+#undef DEF_FUNCTION_TYPE_6
+#undef DEF_FUNCTION_TYPE_7
+#undef DEF_FUNCTION_TYPE_8
+#undef DEF_FUNCTION_TYPE_9
+#undef DEF_FUNCTION_TYPE_10
+#undef DEF_FUNCTION_TYPE_11
+#undef DEF_FUNCTION_TYPE_VAR_0
+#undef DEF_FUNCTION_TYPE_VAR_1
+#undef DEF_FUNCTION_TYPE_VAR_2
+#undef DEF_FUNCTION_TYPE_VAR_3
+#undef DEF_FUNCTION_TYPE_VAR_4
+#undef DEF_FUNCTION_TYPE_VAR_5
+#undef DEF_FUNCTION_TYPE_VAR_6
+#undef DEF_FUNCTION_TYPE_VAR_7
+#undef DEF_POINTER_TYPE
+};
+
+/* Get a string for TYPE_ID suitable for use in logs and error messages
+   (e.g. "BT_PID").  */
+
+static const char *
+get_string_for_type_id (enum jit_builtin_type type_id)
+{
+  gcc_assert (type_id < sizeof (type_names)/sizeof(type_names[0]));
+  return type_names[type_id];
 }
 
 /* Get the recording::type for a given type of builtin function,
@@ -383,7 +462,8 @@ builtins_manager::make_primitive_type (enum jit_builtin_type type_id)
     default:
       // only some of these types are implemented so far:
       m_ctxt->add_error (NULL,
-			 "unimplemented primitive type for builtin: %d", type_id);
+			 "unimplemented primitive type for builtin (type: %s)",
+			 get_string_for_type_id (type_id));
       return NULL;
 
     case BT_VOID: return m_ctxt->get_type (GCC_JIT_TYPE_VOID);
@@ -395,10 +475,11 @@ builtins_manager::make_primitive_type (enum jit_builtin_type type_id)
     case BT_LONGLONG: return m_ctxt->get_type (GCC_JIT_TYPE_LONG_LONG);
     case BT_ULONGLONG:
       return m_ctxt->get_type (GCC_JIT_TYPE_UNSIGNED_LONG_LONG);
-    // case BT_INT128:
-    // case BT_UINT128:
     // case BT_INTMAX:
     // case BT_UINTMAX:
+    case BT_INT8: return m_ctxt->get_int_type (1, true);
+    case BT_INT16: return m_ctxt->get_int_type (2, true);
+    case BT_UINT8: return m_ctxt->get_int_type (1, false);
     case BT_UINT16: return m_ctxt->get_int_type (2, false);
     case BT_UINT32: return m_ctxt->get_int_type (4, false);
     case BT_UINT64: return m_ctxt->get_int_type (8, false);
@@ -407,6 +488,13 @@ builtins_manager::make_primitive_type (enum jit_builtin_type type_id)
     case BT_FLOAT: return m_ctxt->get_type (GCC_JIT_TYPE_FLOAT);
     case BT_DOUBLE: return m_ctxt->get_type (GCC_JIT_TYPE_DOUBLE);
     case BT_LONGDOUBLE: return m_ctxt->get_type (GCC_JIT_TYPE_LONG_DOUBLE);
+    // case BT_FLOAT16:
+    // case BT_FLOAT32:
+    // case BT_FLOAT64:
+    // case BT_FLOAT128:
+    // case BT_FLOAT32X:
+    // case BT_FLOAT64X:
+    // case BT_FLOAT128X:
     case BT_COMPLEX_FLOAT:
       return m_ctxt->get_type (GCC_JIT_TYPE_COMPLEX_FLOAT);
     case BT_COMPLEX_DOUBLE:
@@ -415,18 +503,35 @@ builtins_manager::make_primitive_type (enum jit_builtin_type type_id)
       return m_ctxt->get_type (GCC_JIT_TYPE_COMPLEX_LONG_DOUBLE);
     case BT_PTR: return m_ctxt->get_type (GCC_JIT_TYPE_VOID_PTR);
     case BT_FILEPTR: return m_ctxt->get_type (GCC_JIT_TYPE_FILE_PTR);
-    // case BT_CONST:
-    // case BT_VOLATILE_PTR:
-    // case BT_CONST_VOLATILE_PTR:
+    // case BT_CONST_TM_PTR:
+    // case BT_FENV_T_PTR:
+    // case BT_CONST_FENV_T_PTR:
+    // case BT_FEXCEPT_T_PTR:
+    // case BT_CONST_FEXCEPT_T_PTR:
+    case BT_CONST_PTR:
+      return m_ctxt->get_type (GCC_JIT_TYPE_VOID)->get_const ()->get_pointer ();
+    case BT_VOLATILE_PTR:
+      return (m_ctxt->get_type (GCC_JIT_TYPE_VOID)->get_volatile ()
+	      ->get_pointer ());
+    case BT_CONST_VOLATILE_PTR:
+      return (m_ctxt->get_type (GCC_JIT_TYPE_VOID)->get_const ()
+	      ->get_volatile ()->get_pointer ());
     // case BT_PTRMODE:
-    // case BT_INT_PTR:
-    // case BT_FLOAT_PTR:
+    case BT_INT_PTR:
+      return m_ctxt->get_type (GCC_JIT_TYPE_INT)->get_pointer ();
+    case BT_FLOAT_PTR:
+      return m_ctxt->get_type (GCC_JIT_TYPE_FLOAT)->get_pointer ();
     case BT_DOUBLE_PTR:
       return m_ctxt->get_type (GCC_JIT_TYPE_DOUBLE)->get_pointer ();
-    // case BT_CONST_DOUBLE_PTR:
+    case BT_CONST_DOUBLE_PTR:
+      return (m_ctxt->get_type (GCC_JIT_TYPE_DOUBLE)->get_const ()
+	      ->get_pointer ());
     // case BT_LONGDOUBLE_PTR:
     // case BT_PID:
-    // case BT_SIZE:
+    case BT_SIZE:
+      return m_ctxt->get_type (GCC_JIT_TYPE_SIZE_T);
+    case BT_CONST_SIZE:
+      return m_ctxt->get_type (GCC_JIT_TYPE_SIZE_T)->get_const ();
     // case BT_SSIZE:
     // case BT_WINT:
     // case BT_STRING:
@@ -434,9 +539,6 @@ builtins_manager::make_primitive_type (enum jit_builtin_type type_id)
     // case BT_DFLOAT32:
     // case BT_DFLOAT64:
     // case BT_DFLOAT128:
-    // case BT_DFLOAT32_PTR:
-    // case BT_DFLOAT64_PTR:
-    // case BT_DFLOAT128_PTR:
     // case BT_VALIST_REF:
     // case BT_VALIST_ARG:
     // case BT_I1:
@@ -444,6 +546,7 @@ builtins_manager::make_primitive_type (enum jit_builtin_type type_id)
     // case BT_I4:
     // case BT_I8:
     // case BT_I16:
+    // case BT_PTR_CONST_STRING:
     }
 }
 
@@ -495,6 +598,18 @@ builtins_manager::make_ptr_type (enum jit_builtin_type,
 {
   recording::type *base_type = get_type (other_type_id);
   return base_type->get_pointer ();
+}
+
+/* Ensure that builtins that could be needed during optimization
+   get created ahead of time.  */
+
+void
+builtins_manager::ensure_optimization_builtins_exist ()
+{
+  /* build_common_builtin_nodes does most of this, but not all.
+     We can't loop through all of the builtin_data array, we don't
+     support all types yet.  */
+  (void)get_builtin_function_by_id (BUILT_IN_TRAP);
 }
 
 /* Playback support.  */

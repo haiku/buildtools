@@ -1,6 +1,6 @@
 /* Medium-level subroutines: convert bit-field store and extract
    and shifts, multiplies and divides to rtl instructions.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+/* Work around tree-optimization/91825.  */
+#pragma GCC diagnostic warning "-Wmaybe-uninitialized"
 
 #include "config.h"
 #include "system.h"
@@ -29,8 +31,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "predict.h"
 #include "memmodel.h"
 #include "tm_p.h"
-#include "expmed.h"
 #include "optabs.h"
+#include "expmed.h"
 #include "regs.h"
 #include "emit-rtl.h"
 #include "diagnostic-core.h"
@@ -153,6 +155,8 @@ init_expmed_one_conv (struct init_expmed_rtl *all, scalar_int_mode to_mode,
   PUT_MODE (all->reg, from_mode);
   set_convert_cost (to_mode, from_mode, speed,
 		    set_src_cost (which, to_mode, speed));
+  /* Restore all->reg's mode.  */
+  PUT_MODE (all->reg, to_mode);
 }
 
 static void
@@ -227,6 +231,7 @@ init_expmed_one_mode (struct init_expmed_rtl *all,
       if (GET_MODE_CLASS (int_mode_to) == MODE_INT
 	  && GET_MODE_WIDER_MODE (int_mode_to).exists (&wider_mode))
 	{
+	  PUT_MODE (all->reg, mode);
 	  PUT_MODE (all->zext, wider_mode);
 	  PUT_MODE (all->wide_mult, wider_mode);
 	  PUT_MODE (all->wide_lshr, wider_mode);
@@ -407,7 +412,8 @@ flip_storage_order (machine_mode mode, rtx x)
 	  && __builtin_expect (reverse_float_storage_order_supported < 0, 0))
 	check_reverse_float_storage_order_support ();
 
-      if (!int_mode_for_size (GET_MODE_PRECISION (mode), 0).exists (&int_mode))
+      if (!int_mode_for_size (GET_MODE_PRECISION (mode), 0).exists (&int_mode)
+	  || !targetm.scalar_mode_supported_p (int_mode))
 	{
 	  sorry ("reverse storage order for %smode", GET_MODE_NAME (mode));
 	  return x;
@@ -599,7 +605,7 @@ store_bit_field_using_insv (const extraction_insn *insv, rtx op0,
 			    unsigned HOST_WIDE_INT bitnum,
 			    rtx value, scalar_int_mode value_mode)
 {
-  struct expand_operand ops[4];
+  class expand_operand ops[4];
   rtx value1;
   rtx xop0 = op0;
   rtx_insn *last = get_last_insn ();
@@ -623,9 +629,16 @@ store_bit_field_using_insv (const extraction_insn *insv, rtx op0,
       /* If xop0 is a register, we need it in OP_MODE
 	 to make it acceptable to the format of insv.  */
       if (GET_CODE (xop0) == SUBREG)
-	/* We can't just change the mode, because this might clobber op0,
-	   and we will need the original value of op0 if insv fails.  */
-	xop0 = gen_rtx_SUBREG (op_mode, SUBREG_REG (xop0), SUBREG_BYTE (xop0));
+	{
+	  /* If such a SUBREG can't be created, give up.  */
+	  if (!validate_subreg (op_mode, GET_MODE (SUBREG_REG (xop0)),
+				SUBREG_REG (xop0), SUBREG_BYTE (xop0)))
+	    return false;
+	  /* We can't just change the mode, because this might clobber op0,
+	     and we will need the original value of op0 if insv fails.  */
+	  xop0 = gen_rtx_SUBREG (op_mode, SUBREG_REG (xop0),
+				 SUBREG_BYTE (xop0));
+	}
       if (REG_P (xop0) && GET_MODE (xop0) != op_mode)
 	xop0 = gen_lowpart_SUBREG (op_mode, xop0);
     }
@@ -759,7 +772,7 @@ store_bit_field_1 (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
       && known_eq (bitsize, GET_MODE_BITSIZE (innermode))
       && multiple_p (bitnum, GET_MODE_BITSIZE (innermode), &pos))
     {
-      struct expand_operand ops[3];
+      class expand_operand ops[3];
       enum insn_code icode = optab_handler (vec_set_optab, outermode);
 
       create_fixed_operand (&ops[0], op0);
@@ -838,6 +851,27 @@ store_bit_field_1 (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
       if (MEM_P (op0))
 	op0 = adjust_bitfield_address_size (op0, op0_mode.else_blk (),
 					    0, MEM_SIZE (op0));
+      else if (!op0_mode.exists ())
+	{
+	  if (ibitnum == 0
+	      && known_eq (ibitsize, GET_MODE_BITSIZE (GET_MODE (op0)))
+	      && MEM_P (value)
+	      && !reverse)
+	    {
+	      value = adjust_address (value, GET_MODE (op0), 0);
+	      emit_move_insn (op0, value);
+	      return true;
+	    }
+	  if (!fallback_p)
+	    return false;
+	  rtx temp = assign_stack_temp (GET_MODE (op0),
+					GET_MODE_SIZE (GET_MODE (op0)));
+	  emit_move_insn (temp, op0);
+	  store_bit_field_1 (temp, bitsize, bitnum, 0, 0, fieldmode, value,
+			     reverse, fallback_p);
+	  emit_move_insn (op0, temp);
+	  return true;
+	}
       else
 	op0 = gen_lowpart (op0_mode.require (), op0);
     }
@@ -870,7 +904,7 @@ store_integral_bit_field (rtx op0, opt_scalar_int_mode op0_mode,
       && known_eq (bitsize, GET_MODE_BITSIZE (fieldmode))
       && optab_handler (movstrict_optab, fieldmode) != CODE_FOR_nothing)
     {
-      struct expand_operand ops[2];
+      class expand_operand ops[2];
       enum insn_code icode = optab_handler (movstrict_optab, fieldmode);
       rtx arg0 = op0;
       unsigned HOST_WIDE_INT subreg_off;
@@ -910,8 +944,7 @@ store_integral_bit_field (rtx op0, opt_scalar_int_mode op0_mode,
 	 However, only do that if the value is not BLKmode.  */
 
       const bool backwards = WORDS_BIG_ENDIAN && fieldmode != BLKmode;
-      unsigned int nwords = (bitsize + (BITS_PER_WORD - 1)) / BITS_PER_WORD;
-      unsigned int i;
+      const int nwords = (bitsize + (BITS_PER_WORD - 1)) / BITS_PER_WORD;
       rtx_insn *last;
 
       /* This is the mode we must force value to, so that there will be enough
@@ -927,35 +960,31 @@ store_integral_bit_field (rtx op0, opt_scalar_int_mode op0_mode,
 	value_mode = smallest_int_mode_for_size (nwords * BITS_PER_WORD);
 
       last = get_last_insn ();
-      for (i = 0; i < nwords; i++)
+      for (int i = 0; i < nwords; i++)
 	{
-	  /* If I is 0, use the low-order word in both field and target;
-	     if I is 1, use the next to lowest word; and so on.  */
-	  unsigned int wordnum = (backwards
-				  ? GET_MODE_SIZE (value_mode) / UNITS_PER_WORD
-				  - i - 1
-				  : i);
-	  unsigned int bit_offset = (backwards ^ reverse
-				     ? MAX ((int) bitsize - ((int) i + 1)
-					    * BITS_PER_WORD,
-					    0)
-				     : (int) i * BITS_PER_WORD);
-	  rtx value_word = operand_subword_force (value, wordnum, value_mode);
-	  unsigned HOST_WIDE_INT new_bitsize =
-	    MIN (BITS_PER_WORD, bitsize - i * BITS_PER_WORD);
-
-	  /* If the remaining chunk doesn't have full wordsize we have
-	     to make sure that for big-endian machines the higher order
-	     bits are used.  */
-	  if (new_bitsize < BITS_PER_WORD && BYTES_BIG_ENDIAN && !backwards)
-	    {
-	      int shift = BITS_PER_WORD - new_bitsize;
-	      rtx shift_rtx = gen_int_shift_amount (word_mode, shift);
-	      value_word = simplify_expand_binop (word_mode, lshr_optab,
-						  value_word, shift_rtx,
-						  NULL_RTX, true,
-						  OPTAB_LIB_WIDEN);
-	    }
+	  /* Number of bits to be stored in this iteration, i.e. BITS_PER_WORD
+	     except maybe for the last iteration.  */
+	  const unsigned HOST_WIDE_INT new_bitsize
+	    = MIN (BITS_PER_WORD, bitsize - i * BITS_PER_WORD);
+	  /* Bit offset from the starting bit number in the target.  */
+	  const unsigned int bit_offset
+	    = backwards ^ reverse
+	      ? MAX ((int) bitsize - (i + 1) * BITS_PER_WORD, 0)
+	      : i * BITS_PER_WORD;
+	  /* Starting word number in the value.  */
+	  const unsigned int wordnum
+	    = backwards
+	      ? GET_MODE_SIZE (value_mode) / UNITS_PER_WORD - (i + 1)
+	      : i;
+	  /* The chunk of the value in word_mode.  We use bit-field extraction
+	      in BLKmode to handle unaligned memory references and to shift the
+	      last chunk right on big-endian machines if need be.  */
+	  rtx value_word
+	    = fieldmode == BLKmode
+	      ? extract_bit_field (value, new_bitsize, wordnum * BITS_PER_WORD,
+				   1, NULL_RTX, word_mode, word_mode, false,
+				   NULL)
+	      : operand_subword_force (value, wordnum, value_mode);
 
 	  if (!store_bit_field_1 (op0, new_bitsize,
 				  bitnum + bit_offset,
@@ -1499,7 +1528,7 @@ extract_bit_field_using_extv (const extraction_insn *extv, rtx op0,
 			      int unsignedp, rtx target,
 			      machine_mode mode, machine_mode tmode)
 {
-  struct expand_operand ops[4];
+  class expand_operand ops[4];
   rtx spec_target = target;
   rtx spec_target_subreg = 0;
   scalar_int_mode ext_mode = extv->field_mode;
@@ -1641,12 +1670,10 @@ extract_bit_field_1 (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
 	  poly_uint64 nunits;
 	  if (!multiple_p (GET_MODE_BITSIZE (GET_MODE (op0)),
 			   GET_MODE_UNIT_BITSIZE (tmode), &nunits)
-	      || !mode_for_vector (inner_mode, nunits).exists (&new_mode)
-	      || !VECTOR_MODE_P (new_mode)
+	      || !related_vector_mode (tmode, inner_mode,
+				       nunits).exists (&new_mode)
 	      || maybe_ne (GET_MODE_SIZE (new_mode),
-			   GET_MODE_SIZE (GET_MODE (op0)))
-	      || GET_MODE_INNER (new_mode) != GET_MODE_INNER (tmode)
-	      || !targetm.vector_mode_supported_p (new_mode))
+			   GET_MODE_SIZE (GET_MODE (op0))))
 	    new_mode = VOIDmode;
 	}
       poly_uint64 pos;
@@ -1655,7 +1682,7 @@ extract_bit_field_1 (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
 	      != CODE_FOR_nothing)
 	  && multiple_p (bitnum, GET_MODE_BITSIZE (tmode), &pos))
 	{
-	  struct expand_operand ops[3];
+	  class expand_operand ops[3];
 	  machine_mode outermode = new_mode;
 	  machine_mode innermode = tmode;
 	  enum insn_code icode
@@ -1722,7 +1749,7 @@ extract_bit_field_1 (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
 	  && known_eq (bitsize, GET_MODE_BITSIZE (innermode))
 	  && multiple_p (bitnum, GET_MODE_BITSIZE (innermode), &pos))
 	{
-	  struct expand_operand ops[3];
+	  class expand_operand ops[3];
 
 	  create_output_operand (&ops[0], target, innermode);
 	  ops[0].target = 1;
@@ -2046,7 +2073,10 @@ extract_integral_bit_field (rtx op0, opt_scalar_int_mode op0_mode,
    If a TARGET is specified and we can store in it at no extra cost,
    we do so, and return TARGET.
    Otherwise, we return a REG of mode TMODE or MODE, with TMODE preferred
-   if they are equally easy.  */
+   if they are equally easy.
+
+   If the result can be stored at TARGET, and ALT_RTL is non-NULL,
+   then *ALT_RTL is set to TARGET (before legitimziation).  */
 
 rtx
 extract_bit_field (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
@@ -2392,6 +2422,10 @@ extract_low_bits (machine_mode mode, machine_mode src_mode, rtx src)
     return NULL_RTX;
 
   src = gen_lowpart (src_int_mode, src);
+  if (!validate_subreg (int_mode, src_int_mode, src,
+			subreg_lowpart_offset (int_mode, src_int_mode)))
+    return NULL_RTX;
+
   src = convert_modes (int_mode, src_int_mode, src, true);
   src = gen_lowpart (mode, src);
   return src;
@@ -3352,13 +3386,20 @@ expand_mult_const (machine_mode mode, rtx op0, HOST_WIDE_INT val,
 	      tem = gen_lowpart (nmode, op0);
 	    }
 
-	  insn = get_last_insn ();
-	  wide_int wval_so_far
-	    = wi::uhwi (val_so_far,
-			GET_MODE_PRECISION (as_a <scalar_mode> (nmode)));
-	  rtx c = immed_wide_int_const (wval_so_far, nmode);
-	  set_dst_reg_note (insn, REG_EQUAL, gen_rtx_MULT (nmode, tem, c),
-			    accum_inner);
+	  /* Don't add a REG_EQUAL note if tem is a paradoxical SUBREG.
+	     In that case, only the low bits of accum would be guaranteed to
+	     be equal to the content of the REG_EQUAL note, the upper bits
+	     can be anything.  */
+	  if (!paradoxical_subreg_p (tem))
+	    {
+	      insn = get_last_insn ();
+	      wide_int wval_so_far
+		= wi::uhwi (val_so_far,
+			    GET_MODE_PRECISION (as_a <scalar_mode> (nmode)));
+	      rtx c = immed_wide_int_const (wval_so_far, nmode);
+	      set_dst_reg_note (insn, REG_EQUAL, gen_rtx_MULT (nmode, tem, c),
+				accum_inner);
+	    }
 	}
     }
 
@@ -3680,7 +3721,7 @@ choose_multiplier (unsigned HOST_WIDE_INT d, int n, int precision,
     {
       unsigned HOST_WIDE_INT mask = (HOST_WIDE_INT_1U << n) - 1;
       *multiplier_ptr = mhigh.to_uhwi () & mask;
-      return mhigh.to_uhwi () >= mask;
+      return mhigh.to_uhwi () > mask;
     }
   else
     {
@@ -3872,7 +3913,7 @@ expmed_mult_highpart_optab (scalar_int_mode mode, rtx op0, rtx op1,
 
 /* Emit code to multiply OP0 and OP1 (where OP1 is an integer constant),
    putting the high half of the result in TARGET if that is convenient,
-   and return where the result is.  If the operation can not be performed,
+   and return where the result is.  If the operation cannot be performed,
    0 is returned.
 
    MODE is the mode of operation and result.
@@ -4056,9 +4097,12 @@ expand_sdiv_pow2 (scalar_int_mode mode, rtx op0, HOST_WIDE_INT d)
     {
       temp = gen_reg_rtx (mode);
       temp = emit_store_flag (temp, LT, op0, const0_rtx, mode, 0, 1);
-      temp = expand_binop (mode, add_optab, temp, op0, NULL_RTX,
-			   0, OPTAB_LIB_WIDEN);
-      return expand_shift (RSHIFT_EXPR, mode, temp, logd, NULL_RTX, 0);
+      if (temp != NULL_RTX)
+	{
+	  temp = expand_binop (mode, add_optab, temp, op0, NULL_RTX,
+			       0, OPTAB_LIB_WIDEN);
+	  return expand_shift (RSHIFT_EXPR, mode, temp, logd, NULL_RTX, 0);
+	}
     }
 
   if (HAVE_conditional_move
@@ -4092,17 +4136,21 @@ expand_sdiv_pow2 (scalar_int_mode mode, rtx op0, HOST_WIDE_INT d)
 
       temp = gen_reg_rtx (mode);
       temp = emit_store_flag (temp, LT, op0, const0_rtx, mode, 0, -1);
-      if (GET_MODE_BITSIZE (mode) >= BITS_PER_WORD
-	  || shift_cost (optimize_insn_for_speed_p (), mode, ushift)
-	     > COSTS_N_INSNS (1))
-	temp = expand_binop (mode, and_optab, temp, gen_int_mode (d - 1, mode),
-			     NULL_RTX, 0, OPTAB_LIB_WIDEN);
-      else
-	temp = expand_shift (RSHIFT_EXPR, mode, temp,
-			     ushift, NULL_RTX, 1);
-      temp = expand_binop (mode, add_optab, temp, op0, NULL_RTX,
-			   0, OPTAB_LIB_WIDEN);
-      return expand_shift (RSHIFT_EXPR, mode, temp, logd, NULL_RTX, 0);
+      if (temp != NULL_RTX)
+	{
+	  if (GET_MODE_BITSIZE (mode) >= BITS_PER_WORD
+	      || shift_cost (optimize_insn_for_speed_p (), mode, ushift)
+	      > COSTS_N_INSNS (1))
+	    temp = expand_binop (mode, and_optab, temp,
+				 gen_int_mode (d - 1, mode),
+				 NULL_RTX, 0, OPTAB_LIB_WIDEN);
+	  else
+	    temp = expand_shift (RSHIFT_EXPR, mode, temp,
+				 ushift, NULL_RTX, 1);
+	  temp = expand_binop (mode, add_optab, temp, op0, NULL_RTX,
+			       0, OPTAB_LIB_WIDEN);
+	  return expand_shift (RSHIFT_EXPR, mode, temp, logd, NULL_RTX, 0);
+	}
     }
 
   label = gen_label_rtx ();
@@ -4153,7 +4201,8 @@ expand_sdiv_pow2 (scalar_int_mode mode, rtx op0, HOST_WIDE_INT d)
 
 rtx
 expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
-	       rtx op0, rtx op1, rtx target, int unsignedp)
+	       rtx op0, rtx op1, rtx target, int unsignedp,
+	       enum optab_methods methods)
 {
   machine_mode compute_mode;
   rtx tquotient;
@@ -4259,16 +4308,21 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
   optab2 = (op1_is_pow2 ? optab1
 	    : (unsignedp ? udivmod_optab : sdivmod_optab));
 
-  FOR_EACH_MODE_FROM (compute_mode, mode)
-    if (optab_handler (optab1, compute_mode) != CODE_FOR_nothing
-	|| optab_handler (optab2, compute_mode) != CODE_FOR_nothing)
-      break;
-
-  if (compute_mode == VOIDmode)
-    FOR_EACH_MODE_FROM (compute_mode, mode)
-      if (optab_libfunc (optab1, compute_mode)
-	  || optab_libfunc (optab2, compute_mode))
+  if (methods == OPTAB_WIDEN || methods == OPTAB_LIB_WIDEN)
+    {
+      FOR_EACH_MODE_FROM (compute_mode, mode)
+      if (optab_handler (optab1, compute_mode) != CODE_FOR_nothing
+	  || optab_handler (optab2, compute_mode) != CODE_FOR_nothing)
 	break;
+
+      if (compute_mode == VOIDmode && methods == OPTAB_LIB_WIDEN)
+	FOR_EACH_MODE_FROM (compute_mode, mode)
+	  if (optab_libfunc (optab1, compute_mode)
+	      || optab_libfunc (optab2, compute_mode))
+	    break;
+    }
+  else
+    compute_mode = mode;
 
   /* If we still couldn't find a mode, use MODE, but expand_binop will
      probably die.  */
@@ -4372,8 +4426,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 			remainder
 			  = expand_binop (int_mode, and_optab, op0,
 					  gen_int_mode (mask, int_mode),
-					  remainder, 1,
-					  OPTAB_LIB_WIDEN);
+					  remainder, 1, methods);
 			if (remainder)
 			  return gen_lowpart (mode, remainder);
 		      }
@@ -4681,7 +4734,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 			remainder = expand_binop
 			  (int_mode, and_optab, op0,
 			   gen_int_mode (mask, int_mode),
-			   remainder, 0, OPTAB_LIB_WIDEN);
+			   remainder, 0, methods);
 			if (remainder)
 			  return gen_lowpart (mode, remainder);
 		      }
@@ -4806,7 +4859,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	  do_cmp_and_jump (op1, const0_rtx, LT, compute_mode, label2);
 	  do_cmp_and_jump (adjusted_op0, const0_rtx, LT, compute_mode, label1);
 	  tem = expand_binop (compute_mode, sdiv_optab, adjusted_op0, op1,
-			      quotient, 0, OPTAB_LIB_WIDEN);
+			      quotient, 0, methods);
 	  if (tem != quotient)
 	    emit_move_insn (quotient, tem);
 	  emit_jump_insn (targetm.gen_jump (label5));
@@ -4818,7 +4871,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	  emit_label (label2);
 	  do_cmp_and_jump (adjusted_op0, const0_rtx, GT, compute_mode, label3);
 	  tem = expand_binop (compute_mode, sdiv_optab, adjusted_op0, op1,
-			      quotient, 0, OPTAB_LIB_WIDEN);
+			      quotient, 0, methods);
 	  if (tem != quotient)
 	    emit_move_insn (quotient, tem);
 	  emit_jump_insn (targetm.gen_jump (label5));
@@ -4827,7 +4880,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	  expand_dec (adjusted_op0, const1_rtx);
 	  emit_label (label4);
 	  tem = expand_binop (compute_mode, sdiv_optab, adjusted_op0, op1,
-			      quotient, 0, OPTAB_LIB_WIDEN);
+			      quotient, 0, methods);
 	  if (tem != quotient)
 	    emit_move_insn (quotient, tem);
 	  expand_dec (quotient, const1_rtx);
@@ -4852,7 +4905,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 				   floor_log2 (d), tquotient, 1);
 		t2 = expand_binop (int_mode, and_optab, op0,
 				   gen_int_mode (d - 1, int_mode),
-				   NULL_RTX, 1, OPTAB_LIB_WIDEN);
+				   NULL_RTX, 1, methods);
 		t3 = gen_reg_rtx (int_mode);
 		t3 = emit_store_flag (t3, NE, t2, const0_rtx, int_mode, 1, 1);
 		if (t3 == 0)
@@ -4923,7 +4976,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	      emit_label (label1);
 	      expand_dec (adjusted_op0, const1_rtx);
 	      tem = expand_binop (compute_mode, udiv_optab, adjusted_op0, op1,
-				  quotient, 1, OPTAB_LIB_WIDEN);
+				  quotient, 1, methods);
 	      if (tem != quotient)
 		emit_move_insn (quotient, tem);
 	      expand_inc (quotient, const1_rtx);
@@ -4947,7 +5000,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 				   floor_log2 (d), tquotient, 0);
 		t2 = expand_binop (compute_mode, and_optab, op0,
 				   gen_int_mode (d - 1, compute_mode),
-				   NULL_RTX, 1, OPTAB_LIB_WIDEN);
+				   NULL_RTX, 1, methods);
 		t3 = gen_reg_rtx (compute_mode);
 		t3 = emit_store_flag (t3, NE, t2, const0_rtx,
 				      compute_mode, 1, 1);
@@ -5023,7 +5076,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	      do_cmp_and_jump (adjusted_op0, const0_rtx, GT,
 			       compute_mode, label1);
 	      tem = expand_binop (compute_mode, sdiv_optab, adjusted_op0, op1,
-				  quotient, 0, OPTAB_LIB_WIDEN);
+				  quotient, 0, methods);
 	      if (tem != quotient)
 		emit_move_insn (quotient, tem);
 	      emit_jump_insn (targetm.gen_jump (label5));
@@ -5036,7 +5089,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	      do_cmp_and_jump (adjusted_op0, const0_rtx, LT,
 			       compute_mode, label3);
 	      tem = expand_binop (compute_mode, sdiv_optab, adjusted_op0, op1,
-				  quotient, 0, OPTAB_LIB_WIDEN);
+				  quotient, 0, methods);
 	      if (tem != quotient)
 		emit_move_insn (quotient, tem);
 	      emit_jump_insn (targetm.gen_jump (label5));
@@ -5045,7 +5098,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	      expand_inc (adjusted_op0, const1_rtx);
 	      emit_label (label4);
 	      tem = expand_binop (compute_mode, sdiv_optab, adjusted_op0, op1,
-				  quotient, 0, OPTAB_LIB_WIDEN);
+				  quotient, 0, methods);
 	      if (tem != quotient)
 		emit_move_insn (quotient, tem);
 	      expand_inc (quotient, const1_rtx);
@@ -5093,10 +5146,10 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	      {
 		rtx tem;
 		quotient = expand_binop (int_mode, udiv_optab, op0, op1,
-					 quotient, 1, OPTAB_LIB_WIDEN);
+					 quotient, 1, methods);
 		tem = expand_mult (int_mode, quotient, op1, NULL_RTX, 1);
 		remainder = expand_binop (int_mode, sub_optab, op0, tem,
-					  remainder, 1, OPTAB_LIB_WIDEN);
+					  remainder, 1, methods);
 	      }
 	    tem = plus_constant (int_mode, op1, -1);
 	    tem = expand_shift (RSHIFT_EXPR, int_mode, tem, 1, NULL_RTX, 1);
@@ -5118,10 +5171,10 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	      {
 		rtx tem;
 		quotient = expand_binop (int_mode, sdiv_optab, op0, op1,
-					 quotient, 0, OPTAB_LIB_WIDEN);
+					 quotient, 0, methods);
 		tem = expand_mult (int_mode, quotient, op1, NULL_RTX, 0);
 		remainder = expand_binop (int_mode, sub_optab, op0, tem,
-					  remainder, 0, OPTAB_LIB_WIDEN);
+					  remainder, 0, methods);
 	      }
 	    abs_rem = expand_abs (int_mode, remainder, NULL_RTX, 1, 0);
 	    abs_op1 = expand_abs (int_mode, op1, NULL_RTX, 1, 0);
@@ -5218,7 +5271,7 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 		quotient = sign_expand_binop (compute_mode,
 					      udiv_optab, sdiv_optab,
 					      op0, op1, target,
-					      unsignedp, OPTAB_LIB_WIDEN);
+					      unsignedp, methods);
 	    }
 	}
     }
@@ -5233,10 +5286,11 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 	  /* No divide instruction either.  Use library for remainder.  */
 	  remainder = sign_expand_binop (compute_mode, umod_optab, smod_optab,
 					 op0, op1, target,
-					 unsignedp, OPTAB_LIB_WIDEN);
+					 unsignedp, methods);
 	  /* No remainder function.  Try a quotient-and-remainder
 	     function, keeping the remainder.  */
-	  if (!remainder)
+	  if (!remainder
+	      && (methods == OPTAB_LIB || methods == OPTAB_LIB_WIDEN))
 	    {
 	      remainder = gen_reg_rtx (compute_mode);
 	      if (!expand_twoval_binop_libfunc
@@ -5254,9 +5308,13 @@ expand_divmod (int rem_flag, enum tree_code code, machine_mode mode,
 				   NULL_RTX, unsignedp);
 	  remainder = expand_binop (compute_mode, sub_optab, op0,
 				    remainder, target, unsignedp,
-				    OPTAB_LIB_WIDEN);
+				    methods);
 	}
     }
+
+  if (methods != OPTAB_LIB_WIDEN
+      && (rem_flag ? remainder : quotient) == NULL_RTX)
+    return NULL_RTX;
 
   return gen_lowpart (mode, rem_flag ? remainder : quotient);
 }
@@ -5417,7 +5475,7 @@ emit_cstore (rtx target, enum insn_code icode, enum rtx_code code,
 	     int unsignedp, rtx x, rtx y, int normalizep,
 	     machine_mode target_mode)
 {
-  struct expand_operand ops[4];
+  class expand_operand ops[4];
   rtx op0, comparison, subtarget;
   rtx_insn *last;
   scalar_int_mode result_mode = targetm.cstore_mode (icode);
@@ -5460,11 +5518,14 @@ emit_cstore (rtx target, enum insn_code icode, enum rtx_code code,
      If STORE_FLAG_VALUE does not have the sign bit set when
      interpreted in MODE, we can do this conversion as unsigned, which
      is usually more efficient.  */
-  if (GET_MODE_SIZE (int_target_mode) > GET_MODE_SIZE (result_mode))
+  if (GET_MODE_PRECISION (int_target_mode) > GET_MODE_PRECISION (result_mode))
     {
-      convert_move (target, subtarget,
-		    val_signbit_known_clear_p (result_mode,
-					       STORE_FLAG_VALUE));
+      gcc_assert (GET_MODE_PRECISION (result_mode) != 1
+		  || STORE_FLAG_VALUE == 1 || STORE_FLAG_VALUE == -1);
+
+      bool unsignedp = (STORE_FLAG_VALUE >= 0);
+      convert_move (target, subtarget, unsignedp);
+
       op0 = target;
       result_mode = int_target_mode;
     }
@@ -5542,6 +5603,9 @@ emit_store_flag_1 (rtx target, enum rtx_code code, rtx op0, rtx op1,
 
   if (mode == VOIDmode)
     mode = GET_MODE (op0);
+
+  if (CONST_SCALAR_INT_P (op1))
+    canonicalize_comparison (mode, &code, &op1);
 
   /* For some comparisons with 1 and -1, we can convert this to
      comparisons with zero.  This will often produce more opportunities for
@@ -6163,6 +6227,106 @@ emit_store_flag_force (rtx target, enum rtx_code code, rtx op0, rtx op1,
 
   return target;
 }
+
+/* Helper function for canonicalize_cmp_for_target.  Swap between inclusive
+   and exclusive ranges in order to create an equivalent comparison.  See
+   canonicalize_cmp_for_target for the possible cases.  */
+
+static enum rtx_code
+equivalent_cmp_code (enum rtx_code code)
+{
+  switch (code)
+    {
+    case GT:
+      return GE;
+    case GE:
+      return GT;
+    case LT:
+      return LE;
+    case LE:
+      return LT;
+    case GTU:
+      return GEU;
+    case GEU:
+      return GTU;
+    case LTU:
+      return LEU;
+    case LEU:
+      return LTU;
+
+    default:
+      return code;
+    }
+}
+
+/* Choose the more appropiate immediate in scalar integer comparisons.  The
+   purpose of this is to end up with an immediate which can be loaded into a
+   register in fewer moves, if possible.
+
+   For each integer comparison there exists an equivalent choice:
+     i)   a >  b or a >= b + 1
+     ii)  a <= b or a <  b + 1
+     iii) a >= b or a >  b - 1
+     iv)  a <  b or a <= b - 1
+
+   MODE is the mode of the first operand.
+   CODE points to the comparison code.
+   IMM points to the rtx containing the immediate.  *IMM must satisfy
+   CONST_SCALAR_INT_P on entry and continues to satisfy CONST_SCALAR_INT_P
+   on exit.  */
+
+void
+canonicalize_comparison (machine_mode mode, enum rtx_code *code, rtx *imm)
+{
+  if (!SCALAR_INT_MODE_P (mode))
+    return;
+
+  int to_add = 0;
+  enum signop sgn = unsigned_condition_p (*code) ? UNSIGNED : SIGNED;
+
+  /* Extract the immediate value from the rtx.  */
+  wide_int imm_val = rtx_mode_t (*imm, mode);
+
+  if (*code == GT || *code == GTU || *code == LE || *code == LEU)
+    to_add = 1;
+  else if (*code == GE || *code == GEU || *code == LT || *code == LTU)
+    to_add = -1;
+  else
+    return;
+
+  /* Check for overflow/underflow in the case of signed values and
+     wrapping around in the case of unsigned values.  If any occur
+     cancel the optimization.  */
+  wi::overflow_type overflow = wi::OVF_NONE;
+  wide_int imm_modif;
+
+  if (to_add == 1)
+    imm_modif = wi::add (imm_val, 1, sgn, &overflow);
+  else
+    imm_modif = wi::sub (imm_val, 1, sgn, &overflow);
+
+  if (overflow)
+    return;
+
+  /* The following creates a pseudo; if we cannot do that, bail out.  */
+  if (!can_create_pseudo_p ())
+    return;
+
+  rtx reg = gen_rtx_REG (mode, LAST_VIRTUAL_REGISTER + 1);
+  rtx new_imm = immed_wide_int_const (imm_modif, mode);
+
+  rtx_insn *old_rtx = gen_move_insn (reg, *imm);
+  rtx_insn *new_rtx = gen_move_insn (reg, new_imm);
+
+  /* Update the immediate and the code.  */
+  if (insn_cost (old_rtx, true) > insn_cost (new_rtx, true))
+    {
+      *code = equivalent_cmp_code (*code);
+      *imm = new_imm;
+    }
+}
+
+
 
 /* Perform possibly multi-word comparison and conditional jump to LABEL
    if ARG1 OP ARG2 true where ARG1 and ARG2 are of mode MODE.  This is

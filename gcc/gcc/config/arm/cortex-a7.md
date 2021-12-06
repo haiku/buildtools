@@ -1,5 +1,5 @@
 ;; ARM Cortex-A7 pipeline description
-;; Copyright (C) 2012-2018 Free Software Foundation, Inc.
+;; Copyright (C) 2012-2021 Free Software Foundation, Inc.
 ;;
 ;; Contributed by ARM Ltd.
 ;; Based on cortex-a5.md which was originally contributed by CodeSourcery.
@@ -143,13 +143,13 @@
 
 (define_insn_reservation "cortex_a7_alu_shift" 2
   (and (eq_attr "tune" "cortexa7")
-       (eq_attr "type" "alu_shift_imm,alus_shift_imm,\
+       (eq_attr "type" "alu_shift_imm_lsl_1to4,alu_shift_imm_other,alus_shift_imm,\
                         logic_shift_imm,logics_shift_imm,\
                         alu_shift_reg,alus_shift_reg,\
                         logic_shift_reg,logics_shift_reg,\
                         mov_shift,mov_shift_reg,\
                         mvn_shift,mvn_shift_reg,\
-                        mrs,multiple,no_insn"))
+                        mrs,multiple"))
   "cortex_a7_ex1")
 
 ;; Forwarding path for unshifted operands.
@@ -171,7 +171,7 @@
 (define_insn_reservation "cortex_a7_mul" 2
   (and (eq_attr "tune" "cortexa7")
        (ior (eq_attr "mul32" "yes")
-            (eq_attr "mul64" "yes")))
+	    (eq_attr "widen_mul64" "yes")))
   "cortex_a7_both")
 
 ;; Forward the result of a multiply operation to the accumulator 

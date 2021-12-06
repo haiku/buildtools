@@ -6,23 +6,17 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
 -- ware  Foundation;  either version 3,  or (at your option) any later ver- --
 -- sion.  GNAT is distributed in the hope that it will be useful, but WITH- --
 -- OUT ANY WARRANTY;  without even the  implied warranty of MERCHANTABILITY --
--- or FITNESS FOR A PARTICULAR PURPOSE.                                     --
---                                                                          --
--- As a special exception under Section 7 of GPL version 3, you are granted --
--- additional permissions described in the GCC Runtime Library Exception,   --
--- version 3.1, as published by the Free Software Foundation.               --
---                                                                          --
--- You should have received a copy of the GNU General Public License and    --
--- a copy of the GCC Runtime Library Exception along with this program;     --
--- see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see    --
--- <http://www.gnu.org/licenses/>.                                          --
+-- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
+-- for  more details.  You should have  received  a copy of the GNU General --
+-- Public License  distributed with GNAT; see file COPYING3.  If not, go to --
+-- http://www.gnu.org/licenses for a complete copy of the license.          --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -70,7 +64,7 @@ package Atree is
 
    --  Currently entities are composed of 7 sequentially allocated 32-byte
    --  nodes, considered as a single record. The following definition gives
-   --  the number of extension nodes.
+   --  the number of extension nodes. ????We plan to change this.
 
    Num_Extension_Nodes : Node_Id := 6;
    --  This value is increased by one if debug flag -gnatd.N is set. This is
@@ -80,6 +74,10 @@ package Atree is
    --  Measurements conducted for the 5->6 bump showed an increase from 1.81 to
    --  2.01 for the nodes/entities ratio and a 2% increase in compilation time
    --  on average for the GCC-based compiler at -O0 on a 32-bit x86 host.
+
+   procedure Print_Statistics;
+   pragma Export (Ada, Print_Statistics);
+   --  Print various statistics on the tables maintained by the package
 
    ----------------------------------------
    -- Definitions of Fields in Tree Node --
@@ -231,12 +229,9 @@ package Atree is
    function Flags_Address return System.Address;
    --  Return address of Flags table (used in Back_End for Gigi call)
 
-   function Num_Nodes return Nat;
-   --  Total number of nodes allocated, where an entity counts as a single
-   --  node. This count is incremented every time a node or entity is
-   --  allocated, and decremented every time a node or entity is deleted.
-   --  This value is used by Xref and by Treepr to allocate hash tables of
-   --  suitable size for hashing Node_Id values.
+   function Approx_Num_Nodes_And_Entities return Nat;
+   --  This is an approximation to the number of nodes and entities allocated,
+   --  used to determine sizes of hash tables.
 
    -----------------------
    -- Use of Empty Node --
@@ -308,6 +303,8 @@ package Atree is
    --  and hence to prevent generation of an object file even if the
    --  switch -gnatQ is set. Initialized to zero at the start of compilation.
    --  Initialized for -gnatVa use, see comment above.
+
+   --  WARNING: There is a matching C declaration of this variable in fe.h
 
    Total_Errors_Detected : Nat := 0;
    --  Number of errors detected so far. Includes count of serious errors and
@@ -402,10 +399,8 @@ package Atree is
    --  place, and then for subsequent modifications as required.
 
    procedure Initialize;
-   --  Called at the start of compilation to initialize the allocation of
-   --  the node and list tables and make the standard entries for Empty,
-   --  Error and Error_List. Note that Initialize must not be called if
-   --  Tree_Read is used.
+   --  Called at the start of compilation to initialize the allocation of the
+   --  node and list tables and make the entries for Empty and Error.
 
    procedure Lock;
    --  Called before the back end is invoked to lock the nodes table
@@ -422,15 +417,6 @@ package Atree is
    procedure Unlock_Nodes;
    --  Called to unlock entity modifications when assertions are enabled; if
    --  assertions are not enabled calling this subprogram has no effect.
-
-   procedure Tree_Read;
-   --  Initializes internal tables from current tree file using the relevant
-   --  Table.Tree_Read routines. Note that Initialize should not be called if
-   --  Tree_Read is used. Tree_Read includes all necessary initialization.
-
-   procedure Tree_Write;
-   --  Writes out internal tables to current tree file using the relevant
-   --  Table.Tree_Write routines.
 
    function New_Node
      (New_Node_Kind : Node_Kind;
@@ -559,7 +545,7 @@ package Atree is
    --  semantic chains: Homonym and Next_Entity: the corresponding links must
    --  be adjusted by the caller, according to context.
 
-   function Extend_Node (Node : Node_Id) return Entity_Id;
+   function Extend_Node (Source : Node_Id) return Entity_Id;
    --  This function returns a copy of its input node with an extension added.
    --  The fields of the extension are set to Empty. Due to the way extensions
    --  are handled (as four consecutive array elements), it may be necessary
@@ -569,6 +555,13 @@ package Atree is
    --  caller's responsibility to ensure that any pointers to the original node
    --  are appropriately updated. This function is used only by Sinfo.CN to
    --  change nodes into their corresponding entities.
+
+   type Ignored_Ghost_Record_Proc is access procedure (N : Node_Or_Entity_Id);
+
+   procedure Set_Ignored_Ghost_Recording_Proc
+     (Proc : Ignored_Ghost_Record_Proc);
+   --  Register a procedure that is invoked when an ignored Ghost node or
+   --  entity is created.
 
    type Report_Proc is access procedure (Target : Node_Id; Source : Node_Id);
 
@@ -671,313 +664,6 @@ package Atree is
    function Sloc                         (N : Node_Id) return Source_Ptr;
    pragma Inline (Sloc);
 
-   ---------------------
-   -- Node_Kind Tests --
-   ---------------------
-
-   --  These are like the functions in Sinfo, but the first argument is a
-   --  Node_Id, and the tested field is Nkind (N).
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind;
-      V7 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind;
-      V7 : Node_Kind;
-      V8 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind;
-      V7 : Node_Kind;
-      V8 : Node_Kind;
-      V9 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N   : Node_Id;
-      V1  : Node_Kind;
-      V2  : Node_Kind;
-      V3  : Node_Kind;
-      V4  : Node_Kind;
-      V5  : Node_Kind;
-      V6  : Node_Kind;
-      V7  : Node_Kind;
-      V8  : Node_Kind;
-      V9  : Node_Kind;
-      V10 : Node_Kind) return Boolean;
-
-   function Nkind_In
-     (N   : Node_Id;
-      V1  : Node_Kind;
-      V2  : Node_Kind;
-      V3  : Node_Kind;
-      V4  : Node_Kind;
-      V5  : Node_Kind;
-      V6  : Node_Kind;
-      V7  : Node_Kind;
-      V8  : Node_Kind;
-      V9  : Node_Kind;
-      V10 : Node_Kind;
-      V11 : Node_Kind) return Boolean;
-
-   pragma Inline (Nkind_In);
-   --  Inline all above functions
-
-   -----------------------
-   -- Entity_Kind_Tests --
-   -----------------------
-
-   --  Utility functions to test whether an Entity_Kind value, either given
-   --  directly as the first argument, or the Ekind field of an Entity given
-   --  as the first argument, matches any of the given list of Entity_Kind
-   --  values. Return True if any match, False if no match.
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind;
-      V9 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E   : Entity_Id;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (E   : Entity_Id;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind;
-      V11 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind;
-      V9 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T   : Entity_Kind;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind) return Boolean;
-
-   function Ekind_In
-     (T   : Entity_Kind;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind;
-      V11 : Entity_Kind) return Boolean;
-
-   pragma Inline (Ekind_In);
-   --  Inline all above functions
-
    -----------------------------
    -- Entity Access Functions --
    -----------------------------
@@ -1025,10 +711,7 @@ package Atree is
    procedure Set_Original_Node         (N : Node_Id; Val : Node_Id);
    pragma Inline (Set_Original_Node);
    --  Note that this routine is used only in very peculiar cases. In normal
-   --  cases, the Original_Node link is set by calls to Rewrite. We currently
-   --  use it in ASIS mode to manually set the link from pragma expressions to
-   --  their aspect original source expressions, so that the original source
-   --  expressions accessed by ASIS are also semantically analyzed.
+   --  cases, the Original_Node link is set by calls to Rewrite.
 
    procedure Set_Parent                (N : Node_Id; Val : Node_Id);
    pragma Inline (Set_Parent);
@@ -1150,10 +833,9 @@ package Atree is
    function Original_Node (Node : Node_Id) return Node_Id;
    pragma Inline (Original_Node);
    --  If Node has not been rewritten, then returns its input argument
-   --  unchanged, else returns the Node for the original subtree. Note that
-   --  this is used extensively by ASIS on the trees constructed in ASIS mode
-   --  to reconstruct the original semantic tree. See section in sinfo.ads
-   --  for requirements on original nodes returned by this function.
+   --  unchanged, else returns the Node for the original subtree. See section
+   --  in sinfo.ads for requirements on original nodes returned by this
+   --  function.
    --
    --  Note: Parents are not preserved in original tree nodes that are
    --  retrieved in this way (i.e. their children may have children whose
@@ -1522,6 +1204,9 @@ package Atree is
 
       function Elist29 (N : Node_Id) return Elist_Id;
       pragma Inline (Elist29);
+
+      function Elist30 (N : Node_Id) return Elist_Id;
+      pragma Inline (Elist30);
 
       function Elist36 (N : Node_Id) return Elist_Id;
       pragma Inline (Elist36);
@@ -2889,6 +2574,9 @@ package Atree is
       procedure Set_Elist29 (N : Node_Id; Val : Elist_Id);
       pragma Inline (Set_Elist29);
 
+      procedure Set_Elist30 (N : Node_Id; Val : Elist_Id);
+      pragma Inline (Set_Elist30);
+
       procedure Set_Elist36 (N : Node_Id; Val : Elist_Id);
       pragma Inline (Set_Elist36);
 
@@ -4149,7 +3837,8 @@ package Atree is
             --    Field6-11     Holds Field36-Field41
 
          end case;
-      end record;
+      end record; -- Node_Record
+      pragma Suppress_Initialization (Node_Record); -- see package Nodes below
 
       pragma Pack (Node_Record);
       for Node_Record'Size use 8 * 32;
@@ -4161,7 +3850,7 @@ package Atree is
       --  Default value used to initialize default nodes. Note that some of the
       --  fields get overwritten, and in particular, Nkind always gets reset.
 
-      Default_Node : Node_Record := (
+      Default_Node : constant Node_Record := (
          Is_Extension      => False,
          Pflag1            => False,
          Pflag2            => False,
@@ -4170,7 +3859,6 @@ package Atree is
          Rewrite_Ins       => False,
          Analyzed          => False,
          Comes_From_Source => False,
-         --  modified by Set_Comes_From_Source_Default
          Error_Posted      => False,
          Flag4             => False,
 
@@ -4192,7 +3880,7 @@ package Atree is
 
          Nkind             => N_Unused_At_Start,
 
-         Sloc              => No_Location,
+         Sloc              => 0,
          Link              => Empty_List_Or_Node,
          Field1            => Empty_List_Or_Node,
          Field2            => Empty_List_Or_Node,
@@ -4244,17 +3932,18 @@ package Atree is
          Field11           => Empty_List_Or_Node,
          Field12           => Empty_List_Or_Node);
 
-      --  The following defines the extendable array used for the nodes table
-      --  Nodes with extensions use six consecutive entries in the array
+      --  The following defines the extendable array used for the nodes table.
+      --  Nodes with extensions use multiple consecutive entries in the array
+      --  (see Num_Extension_Nodes).
 
-      package Nodes is new Table.Table (
-        Table_Component_Type => Node_Record,
-        Table_Index_Type     => Node_Id'Base,
-        Table_Low_Bound      => First_Node_Id,
-        Table_Initial        => Alloc.Nodes_Initial,
-        Table_Increment      => Alloc.Nodes_Increment,
-        Release_Threshold    => Alloc.Nodes_Release_Threshold,
-        Table_Name           => "Nodes");
+      package Nodes is new Table.Table
+        (Table_Component_Type => Node_Record,
+         Table_Index_Type     => Node_Id'Base,
+         Table_Low_Bound      => First_Node_Id,
+         Table_Initial        => Alloc.Nodes_Initial,
+         Table_Increment      => Alloc.Nodes_Increment,
+         Release_Threshold    => Alloc.Nodes_Release_Threshold,
+         Table_Name           => "Nodes");
 
       --  The following is a parallel table to Nodes, which provides 8 more
       --  bits of space that logically belong to the corresponding node. This

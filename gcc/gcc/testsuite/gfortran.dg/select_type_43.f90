@@ -1,6 +1,6 @@
 ! { dg-do run }
 !
-! Tests the fix for PRxxxxx - runtime segfault as indicated.
+! Tests the fix for PR87277 - runtime segfault as indicated.
 !
 ! Contributed by Andrew Baldwin on clf.
 !

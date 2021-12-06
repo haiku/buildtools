@@ -1,6 +1,6 @@
 /* Gimple walk support.
 
-   Copyright (C) 2007-2018 Free Software Foundation, Inc.
+   Copyright (C) 2007-2021 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com>
 
 This file is part of GCC.
@@ -336,6 +336,16 @@ walk_gimple_op (gimple *stmt, walk_tree_fn callback_op,
       }
       break;
 
+    case GIMPLE_OMP_SCAN:
+      {
+	gomp_scan *scan_stmt = as_a <gomp_scan *> (stmt);
+	ret = walk_tree (gimple_omp_scan_clauses_ptr (scan_stmt),
+			 callback_op, wi, pset);
+	if (ret)
+	  return ret;
+      }
+      break;
+
     case GIMPLE_OMP_FOR:
       ret = walk_tree (gimple_omp_for_clauses_ptr (stmt), callback_op, wi,
 		       pset);
@@ -507,6 +517,30 @@ walk_gimple_op (gimple *stmt, walk_tree_fn callback_op,
     case GIMPLE_PREDICT:
       break;
 
+    case GIMPLE_PHI:
+      /* PHIs are not GSS_WITH_OPS so we need to handle them explicitely.  */
+      {
+	gphi *phi = as_a <gphi *> (stmt);
+	if (wi)
+	  {
+	    wi->val_only = true;
+	    wi->is_lhs = true;
+	  }
+	ret = walk_tree (gimple_phi_result_ptr (phi), callback_op, wi, pset);
+	if (wi)
+	  wi->is_lhs = false;
+	if (ret)
+	  return ret;
+	for (unsigned i = 0; i < gimple_phi_num_args (phi); ++i)
+	  {
+	    ret = walk_tree (gimple_phi_arg_def_ptr (phi, i),
+			     callback_op, wi, pset);
+	    if (ret)
+	      return ret;
+	  }
+	break;
+      }
+
     default:
       {
 	enum gimple_statement_structure_enum gss;
@@ -650,6 +684,7 @@ walk_gimple_stmt (gimple_stmt_iterator *gsi, walk_stmt_fn callback_stmt,
     case GIMPLE_OMP_MASTER:
     case GIMPLE_OMP_TASKGROUP:
     case GIMPLE_OMP_ORDERED:
+    case GIMPLE_OMP_SCAN:
     case GIMPLE_OMP_SECTION:
     case GIMPLE_OMP_PARALLEL:
     case GIMPLE_OMP_TASK:
@@ -657,7 +692,6 @@ walk_gimple_stmt (gimple_stmt_iterator *gsi, walk_stmt_fn callback_stmt,
     case GIMPLE_OMP_SINGLE:
     case GIMPLE_OMP_TARGET:
     case GIMPLE_OMP_TEAMS:
-    case GIMPLE_OMP_GRID_BODY:
       ret = walk_gimple_seq_mod (gimple_omp_body_ptr (stmt), callback_stmt,
 			     callback_op, wi);
       if (ret)

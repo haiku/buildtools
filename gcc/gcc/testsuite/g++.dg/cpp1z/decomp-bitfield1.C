@@ -1,5 +1,5 @@
 // Test of bit-fields.
-// { dg-options -std=c++17 }
+// { dg-do compile { target c++17 } }
 
 struct A { long i: 2; } a;
 
@@ -15,5 +15,5 @@ void f()
 
   long &r = x;			// { dg-error "bit" }
   &x;				// { dg-error "bit" }
-  sizeof(x);			// { dg-error "bit" }
+  sizeof(x);			// { dg-error "10:invalid application of .sizeof. to a bit-field" }
 }

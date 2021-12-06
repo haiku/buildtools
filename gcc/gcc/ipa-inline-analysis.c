@@ -1,5 +1,5 @@
 /* Analysis used by inlining decision heuristics.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
    Contributed by Jan Hubicka
 
 This file is part of GCC.
@@ -34,7 +34,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "print-tree.h"
 #include "tree-inline.h"
 #include "gimple-pretty-print.h"
-#include "params.h"
 #include "cfganal.h"
 #include "gimple-iterator.h"
 #include "tree-cfg.h"
@@ -51,9 +50,49 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimplify.h"
 
 /* Cached node/edge growths.  */
-vec<edge_growth_cache_entry> edge_growth_cache;
-static struct cgraph_edge_hook_list *edge_removal_hook_holder;
+fast_call_summary<edge_growth_cache_entry *, va_heap> *edge_growth_cache = NULL;
 
+/* The context cache remembers estimated time/size and hints for given
+   ipa_call_context of a call.  */
+class node_context_cache_entry
+{
+public:
+  ipa_cached_call_context ctx;
+  sreal time, nonspec_time;
+  int size;
+  ipa_hints hints;
+
+  node_context_cache_entry ()
+  : ctx ()
+  {
+  }
+  ~node_context_cache_entry ()
+  {
+    ctx.release ();
+  }
+};
+
+/* At the moment we implement primitive single entry LRU cache.  */
+class node_context_summary
+{
+public:
+  node_context_cache_entry entry;
+
+  node_context_summary ()
+  : entry ()
+  {
+  }
+  ~node_context_summary ()
+  {
+  }
+};
+
+/* Summary holding the context cache.  */
+static fast_function_summary <node_context_summary *, va_heap>
+	*node_context_cache = NULL;
+/* Statistics about the context cache effectivity.  */
+static long node_context_cache_hit, node_context_cache_miss,
+	    node_context_cache_clear;
 
 /* Give initial reasons why inlining would fail on EDGE.  This gets either
    nullified or usually overwritten by more precise reasons later.  */
@@ -70,7 +109,7 @@ initialize_inline_failed (struct cgraph_edge *e)
     e->inline_failed = CIF_INDIRECT_UNKNOWN_CALL;
   else if (!callee->definition)
     e->inline_failed = CIF_BODY_NOT_AVAILABLE;
-  else if (callee->local.redefined_extern_inline)
+  else if (callee->redefined_extern_inline)
     e->inline_failed = CIF_REDEFINED_EXTERN_INLINE;
   else
     e->inline_failed = CIF_FUNCTION_NOT_CONSIDERED;
@@ -79,61 +118,55 @@ initialize_inline_failed (struct cgraph_edge *e)
 			    == CIF_FINAL_ERROR);
 }
 
-
-/* Keep edge cache consistent across edge removal.  */
-
-static void
-inline_edge_removal_hook (struct cgraph_edge *edge,
-			  void *data ATTRIBUTE_UNUSED)
-{
-  reset_edge_growth_cache (edge);
-}
-
-
-/* Initialize growth caches.  */
+/* Allocate edge growth caches.  */
 
 void
-initialize_growth_caches (void)
+initialize_growth_caches ()
 {
-  if (!edge_removal_hook_holder)
-    edge_removal_hook_holder =
-      symtab->add_edge_removal_hook (&inline_edge_removal_hook, NULL);
-  if (symtab->edges_max_uid)
-    edge_growth_cache.safe_grow_cleared (symtab->edges_max_uid);
+  edge_growth_cache
+    = new fast_call_summary<edge_growth_cache_entry *, va_heap> (symtab);
+  node_context_cache
+    = new fast_function_summary<node_context_summary *, va_heap> (symtab);
+  edge_growth_cache->disable_duplication_hook ();
+  node_context_cache->disable_insertion_hook ();
+  node_context_cache->disable_duplication_hook ();
 }
-
 
 /* Free growth caches.  */
 
 void
 free_growth_caches (void)
 {
-  if (edge_removal_hook_holder)
-    {
-      symtab->remove_edge_removal_hook (edge_removal_hook_holder);
-      edge_removal_hook_holder = NULL;
-    }
-  edge_growth_cache.release ();
+  delete edge_growth_cache;
+  delete node_context_cache;
+  edge_growth_cache = NULL;
+  node_context_cache = NULL;
+  if (dump_file)
+    fprintf (dump_file, "node context cache: %li hits, %li misses,"
+		   	" %li initializations\n",
+	     node_context_cache_hit, node_context_cache_miss,
+	     node_context_cache_clear);
+  node_context_cache_hit = 0;
+  node_context_cache_miss = 0;
+  node_context_cache_clear = 0;
 }
 
-/* Return hints derrived from EDGE.   */
+/* Return hints derived from EDGE.   */
 
 int
 simple_edge_hints (struct cgraph_edge *edge)
 {
   int hints = 0;
-  struct cgraph_node *to = (edge->caller->global.inlined_to
-			    ? edge->caller->global.inlined_to : edge->caller);
+  struct cgraph_node *to = (edge->caller->inlined_to
+			    ? edge->caller->inlined_to : edge->caller);
   struct cgraph_node *callee = edge->callee->ultimate_alias_target ();
-  if (ipa_fn_summaries->get (to)->scc_no
-      && ipa_fn_summaries->get (to)->scc_no
-	 == ipa_fn_summaries->get (callee)->scc_no
-      && !edge->recursive_p ())
+  int to_scc_no = ipa_fn_summaries->get (to)->scc_no;
+  int callee_scc_no = ipa_fn_summaries->get (callee)->scc_no;
+
+  if (to_scc_no && to_scc_no  == callee_scc_no && !edge->recursive_p ())
     hints |= INLINE_HINT_same_scc;
 
-  if (callee->lto_file_data && edge->caller->lto_file_data
-      && edge->caller->lto_file_data != callee->lto_file_data
-      && !callee->merged_comdat && !callee->icf_merged)
+  if (cross_module_call_p (edge))
     hints |= INLINE_HINT_cross_module;
 
   return hints;
@@ -147,28 +180,74 @@ simple_edge_hints (struct cgraph_edge *edge)
    size, since we always need both metrics eventually.  */
 
 sreal
-do_estimate_edge_time (struct cgraph_edge *edge)
+do_estimate_edge_time (struct cgraph_edge *edge, sreal *ret_nonspec_time)
 {
   sreal time, nonspec_time;
   int size;
   ipa_hints hints;
   struct cgraph_node *callee;
   clause_t clause, nonspec_clause;
-  vec<tree> known_vals;
-  vec<ipa_polymorphic_call_context> known_contexts;
-  vec<ipa_agg_jump_function_p> known_aggs;
-  struct ipa_call_summary *es = ipa_call_summaries->get (edge);
-  int min_size;
+  ipa_auto_call_arg_values avals;
+  class ipa_call_summary *es = ipa_call_summaries->get (edge);
+  int min_size = -1;
 
   callee = edge->callee->ultimate_alias_target ();
 
   gcc_checking_assert (edge->inline_failed);
-  evaluate_properties_for_edge (edge, true,
-				&clause, &nonspec_clause, &known_vals,
-				&known_contexts, &known_aggs);
-  estimate_node_size_and_time (callee, clause, nonspec_clause, known_vals,
-			       known_contexts, known_aggs, &size, &min_size,
-			       &time, &nonspec_time, &hints, es->param);
+  evaluate_properties_for_edge (edge, true, &clause, &nonspec_clause,
+				&avals, true);
+  ipa_call_context ctx (callee, clause, nonspec_clause, es->param, &avals);
+  if (node_context_cache != NULL)
+    {
+      node_context_summary *e = node_context_cache->get_create (callee);
+      if (e->entry.ctx.equal_to (ctx))
+	{
+	  node_context_cache_hit++;
+	  size = e->entry.size;
+	  time = e->entry.time;
+	  nonspec_time = e->entry.nonspec_time;
+	  hints = e->entry.hints;
+	  if (flag_checking
+	      && !opt_for_fn (callee->decl, flag_profile_partial_training)
+	      && !callee->count.ipa_p ())
+	    {
+	      ipa_call_estimates chk_estimates;
+	      ctx.estimate_size_and_time (&chk_estimates);
+	      gcc_assert (chk_estimates.size == size
+			  && chk_estimates.time == time
+		  	  && chk_estimates.nonspecialized_time == nonspec_time
+			  && chk_estimates.hints == hints);
+	    }
+	}
+      else
+	{
+	  if (e->entry.ctx.exists_p ())
+	    node_context_cache_miss++;
+	  else
+	    node_context_cache_clear++;
+	  e->entry.ctx.release ();
+	  ipa_call_estimates estimates;
+	  ctx.estimate_size_and_time (&estimates);
+	  size = estimates.size;
+	  e->entry.size = size;
+	  time = estimates.time;
+	  e->entry.time = time;
+	  nonspec_time = estimates.nonspecialized_time;
+	  e->entry.nonspec_time = nonspec_time;
+	  hints = estimates.hints;
+	  e->entry.hints = hints;
+	  e->entry.ctx.duplicate_from (ctx);
+	}
+    }
+  else
+    {
+      ipa_call_estimates estimates;
+      ctx.estimate_size_and_time (&estimates);
+      size = estimates.size;
+      time = estimates.time;
+      nonspec_time = estimates.nonspecialized_time;
+      hints = estimates.hints;
+    }
 
   /* When we have profile feedback, we can quite safely identify hot
      edges and for those we disable size limits.  Don't do that when
@@ -176,33 +255,52 @@ do_estimate_edge_time (struct cgraph_edge *edge)
      may hurt optimization of the caller's hot path.  */
   if (edge->count.ipa ().initialized_p () && edge->maybe_hot_p ()
       && (edge->count.ipa ().apply_scale (2, 1)
-          > (edge->caller->global.inlined_to
-	     ? edge->caller->global.inlined_to->count.ipa ()
+	  > (edge->caller->inlined_to
+	     ? edge->caller->inlined_to->count.ipa ()
 	     : edge->caller->count.ipa ())))
     hints |= INLINE_HINT_known_hot;
 
-  known_vals.release ();
-  known_contexts.release ();
-  known_aggs.release ();
   gcc_checking_assert (size >= 0);
   gcc_checking_assert (time >= 0);
 
   /* When caching, update the cache entry.  */
-  if (edge_growth_cache.exists ())
+  if (edge_growth_cache != NULL)
     {
-      ipa_fn_summaries->get (edge->callee)->min_size = min_size;
-      if ((int) edge_growth_cache.length () <= edge->uid)
-	edge_growth_cache.safe_grow_cleared (symtab->edges_max_uid);
-      edge_growth_cache[edge->uid].time = time;
-      edge_growth_cache[edge->uid].nonspec_time = nonspec_time;
+      if (min_size >= 0)
+        ipa_fn_summaries->get (edge->callee->function_symbol ())->min_size
+	   = min_size;
+      edge_growth_cache_entry *entry
+	= edge_growth_cache->get_create (edge);
+      entry->time = time;
+      entry->nonspec_time = nonspec_time;
 
-      edge_growth_cache[edge->uid].size = size + (size >= 0);
+      entry->size = size + (size >= 0);
       hints |= simple_edge_hints (edge);
-      edge_growth_cache[edge->uid].hints = hints + 1;
+      entry->hints = hints + 1;
     }
+  if (ret_nonspec_time)
+    *ret_nonspec_time = nonspec_time;
   return time;
 }
 
+/* Reset cache for NODE.
+   This must be done each time NODE body is modified.  */
+void
+reset_node_cache (struct cgraph_node *node)
+{
+  if (node_context_cache)
+    node_context_cache->remove (node);
+}
+
+/* Remove EDGE from caches once it was inlined.  */
+void
+ipa_remove_from_growth_caches (struct cgraph_edge *edge)
+{
+  if (node_context_cache)
+    node_context_cache->remove (edge->callee);
+  if (edge_growth_cache)
+    edge_growth_cache->remove (edge);
+}
 
 /* Return estimated callee growth after inlining EDGE.
    Only to be called via estimate_edge_size.  */
@@ -213,16 +311,13 @@ do_estimate_edge_size (struct cgraph_edge *edge)
   int size;
   struct cgraph_node *callee;
   clause_t clause, nonspec_clause;
-  vec<tree> known_vals;
-  vec<ipa_polymorphic_call_context> known_contexts;
-  vec<ipa_agg_jump_function_p> known_aggs;
 
   /* When we do caching, use do_estimate_edge_time to populate the entry.  */
 
-  if (edge_growth_cache.exists ())
+  if (edge_growth_cache != NULL)
     {
       do_estimate_edge_time (edge);
-      size = edge_growth_cache[edge->uid].size;
+      size = edge_growth_cache->get (edge)->size;
       gcc_checking_assert (size);
       return size - (size > 0);
     }
@@ -231,17 +326,13 @@ do_estimate_edge_size (struct cgraph_edge *edge)
 
   /* Early inliner runs without caching, go ahead and do the dirty work.  */
   gcc_checking_assert (edge->inline_failed);
-  evaluate_properties_for_edge (edge, true,
-				&clause, &nonspec_clause,
-				&known_vals, &known_contexts,
-				&known_aggs);
-  estimate_node_size_and_time (callee, clause, nonspec_clause, known_vals,
-			       known_contexts, known_aggs, &size, NULL, NULL,
-			       NULL, NULL, vNULL);
-  known_vals.release ();
-  known_contexts.release ();
-  known_aggs.release ();
-  return size;
+  ipa_auto_call_arg_values avals;
+  evaluate_properties_for_edge (edge, true, &clause, &nonspec_clause,
+				&avals, true);
+  ipa_call_context ctx (callee, clause, nonspec_clause, vNULL, &avals);
+  ipa_call_estimates estimates;
+  ctx.estimate_size_and_time (&estimates, false, false);
+  return estimates.size;
 }
 
 
@@ -251,19 +342,15 @@ do_estimate_edge_size (struct cgraph_edge *edge)
 ipa_hints
 do_estimate_edge_hints (struct cgraph_edge *edge)
 {
-  ipa_hints hints;
   struct cgraph_node *callee;
   clause_t clause, nonspec_clause;
-  vec<tree> known_vals;
-  vec<ipa_polymorphic_call_context> known_contexts;
-  vec<ipa_agg_jump_function_p> known_aggs;
 
   /* When we do caching, use do_estimate_edge_time to populate the entry.  */
 
-  if (edge_growth_cache.exists ())
+  if (edge_growth_cache != NULL)
     {
       do_estimate_edge_time (edge);
-      hints = edge_growth_cache[edge->uid].hints;
+      ipa_hints hints = edge_growth_cache->get (edge)->hints;
       gcc_checking_assert (hints);
       return hints - 1;
     }
@@ -272,17 +359,13 @@ do_estimate_edge_hints (struct cgraph_edge *edge)
 
   /* Early inliner runs without caching, go ahead and do the dirty work.  */
   gcc_checking_assert (edge->inline_failed);
-  evaluate_properties_for_edge (edge, true,
-				&clause, &nonspec_clause,
-				&known_vals, &known_contexts,
-				&known_aggs);
-  estimate_node_size_and_time (callee, clause, nonspec_clause, known_vals,
-			       known_contexts, known_aggs, NULL, NULL,
-			       NULL, NULL, &hints, vNULL);
-  known_vals.release ();
-  known_contexts.release ();
-  known_aggs.release ();
-  hints |= simple_edge_hints (edge);
+  ipa_auto_call_arg_values avals;
+  evaluate_properties_for_edge (edge, true, &clause, &nonspec_clause,
+				&avals, true);
+  ipa_call_context ctx (callee, clause, nonspec_clause, vNULL, &avals);
+  ipa_call_estimates estimates;
+  ctx.estimate_size_and_time (&estimates, false, true);
+  ipa_hints hints = estimates.hints | simple_edge_hints (edge);
   return hints;
 }
 
@@ -293,14 +376,15 @@ int
 estimate_size_after_inlining (struct cgraph_node *node,
 			      struct cgraph_edge *edge)
 {
-  struct ipa_call_summary *es = ipa_call_summaries->get (edge);
+  class ipa_call_summary *es = ipa_call_summaries->get (edge);
+  ipa_size_summary *s = ipa_size_summaries->get (node);
   if (!es->predicate || *es->predicate != false)
     {
-      int size = ipa_fn_summaries->get (node)->size + estimate_edge_growth (edge);
+      int size = s->size + estimate_edge_growth (edge);
       gcc_assert (size >= 0);
       return size;
     }
-  return ipa_fn_summaries->get (node)->size;
+  return s->size;
 }
 
 
@@ -310,6 +394,7 @@ struct growth_data
   bool self_recursive;
   bool uninlinable;
   int growth;
+  int cap;
 };
 
 
@@ -329,29 +414,58 @@ do_estimate_growth_1 (struct cgraph_node *node, void *data)
 	  || !opt_for_fn (e->caller->decl, optimize))
 	{
 	  d->uninlinable = true;
+	  if (d->cap < INT_MAX)
+	    return true;
           continue;
 	}
 
       if (e->recursive_p ())
 	{
 	  d->self_recursive = true;
+	  if (d->cap < INT_MAX)
+	    return true;
 	  continue;
 	}
       d->growth += estimate_edge_growth (e);
+      if (d->growth > d->cap)
+	return true;
     }
   return false;
 }
 
+/* Return estimated savings for eliminating offline copy of NODE by inlining
+   it everywhere.  */
 
-/* Estimate the growth caused by inlining NODE into all callees.  */
+static int
+offline_size (struct cgraph_node *node, ipa_size_summary *info)
+{
+  if (!DECL_EXTERNAL (node->decl))
+    {
+      if (node->will_be_removed_from_program_if_no_direct_calls_p ())
+	return info->size;
+      /* COMDAT functions are very often not shared across multiple units
+         since they come from various template instantiations.
+         Take this into account.  */
+      else if (DECL_COMDAT (node->decl)
+	       && node->can_remove_if_no_direct_calls_p ())
+	{
+	  int prob = opt_for_fn (node->decl, param_comdat_sharing_probability);
+	  return (info->size * (100 - prob) + 50) / 100;
+	}
+    }
+  return 0;
+}
+
+/* Estimate the growth caused by inlining NODE into all callers.  */
 
 int
 estimate_growth (struct cgraph_node *node)
 {
-  struct growth_data d = { node, false, false, 0 };
-  struct ipa_fn_summary *info = ipa_fn_summaries->get (node);
+  struct growth_data d = { node, false, false, 0, INT_MAX };
+  ipa_size_summary *info = ipa_size_summaries->get (node);
 
-  node->call_for_symbol_and_aliases (do_estimate_growth_1, &d, true);
+  if (node->call_for_symbol_and_aliases (do_estimate_growth_1, &d, true))
+    return 1;
 
   /* For self recursive functions the growth estimation really should be
      infinity.  We don't want to return very large values because the growth
@@ -359,21 +473,8 @@ estimate_growth (struct cgraph_node *node)
      return zero or negative growths. */
   if (d.self_recursive)
     d.growth = d.growth < info->size ? info->size : d.growth;
-  else if (DECL_EXTERNAL (node->decl) || d.uninlinable)
-    ;
-  else
-    {
-      if (node->will_be_removed_from_program_if_no_direct_calls_p ())
-	d.growth -= info->size;
-      /* COMDAT functions are very often not shared across multiple units
-         since they come from various template instantiations.
-         Take this into account.  */
-      else if (DECL_COMDAT (node->decl)
-	       && node->can_remove_if_no_direct_calls_p ())
-	d.growth -= (info->size
-		     * (100 - PARAM_VALUE (PARAM_COMDAT_SHARING_PROBABILITY))
-		     + 50) / 100;
-    }
+  else if (!d.uninlinable)
+    d.growth -= offline_size (node, info);
 
   return d.growth;
 }
@@ -381,7 +482,8 @@ estimate_growth (struct cgraph_node *node)
 /* Verify if there are fewer than MAX_CALLERS.  */
 
 static bool
-check_callers (cgraph_node *node, int *max_callers)
+check_callers (cgraph_node *node, int *growth, int *n, int offline,
+	       int min_size, struct cgraph_edge *known_edge)
 {
   ipa_ref *ref;
 
@@ -390,70 +492,96 @@ check_callers (cgraph_node *node, int *max_callers)
 
   for (cgraph_edge *e = node->callers; e; e = e->next_caller)
     {
-      (*max_callers)--;
-      if (!*max_callers
-	  || cgraph_inline_failed_type (e->inline_failed) == CIF_FINAL_ERROR)
+      edge_growth_cache_entry *entry;
+
+      if (e == known_edge)
+	continue;
+      if (cgraph_inline_failed_type (e->inline_failed) == CIF_FINAL_ERROR)
+	return true;
+      if (edge_growth_cache != NULL
+	  && (entry = edge_growth_cache->get (e)) != NULL
+	  && entry->size != 0)
+	*growth += entry->size - (entry->size > 0);
+      else
+	{
+	  class ipa_call_summary *es = ipa_call_summaries->get (e);
+	  if (!es)
+	    return true;
+	  *growth += min_size - es->call_stmt_size;
+	  if (--(*n) < 0)
+	    return false;
+	}
+      if (*growth > offline)
 	return true;
     }
 
-  FOR_EACH_ALIAS (node, ref)
-    if (check_callers (dyn_cast <cgraph_node *> (ref->referring), max_callers))
-      return true;
+  if (*n > 0)
+    FOR_EACH_ALIAS (node, ref)
+      if (check_callers (dyn_cast <cgraph_node *> (ref->referring), growth, n,
+			 offline, min_size, known_edge))
+	return true;
 
   return false;
 }
 
 
-/* Make cheap estimation if growth of NODE is likely positive knowing
-   EDGE_GROWTH of one particular edge. 
-   We assume that most of other edges will have similar growth
-   and skip computation if there are too many callers.  */
+/* Decide if growth of NODE is positive.  This is cheaper than calculating
+   actual growth.  If edge growth of KNOWN_EDGE is known
+   it is passed by EDGE_GROWTH.  */
 
 bool
-growth_likely_positive (struct cgraph_node *node,
-		        int edge_growth)
+growth_positive_p (struct cgraph_node *node,
+		   struct cgraph_edge * known_edge, int edge_growth)
 {
-  int max_callers;
   struct cgraph_edge *e;
-  gcc_checking_assert (edge_growth > 0);
+
+  ipa_size_summary *s = ipa_size_summaries->get (node);
 
   /* First quickly check if NODE is removable at all.  */
-  if (DECL_EXTERNAL (node->decl))
-    return true;
-  if (!node->can_remove_if_no_direct_calls_and_refs_p ()
-      || node->address_taken)
+  int offline = offline_size (node, s);
+  if (offline <= 0 && known_edge && edge_growth > 0)
     return true;
 
-  max_callers = ipa_fn_summaries->get (node)->size * 4 / edge_growth + 2;
+  int min_size = ipa_fn_summaries->get (node)->min_size;
+  int n = 10;
 
+  int min_growth = known_edge ? edge_growth : 0;
   for (e = node->callers; e; e = e->next_caller)
     {
-      max_callers--;
-      if (!max_callers
-	  || cgraph_inline_failed_type (e->inline_failed) == CIF_FINAL_ERROR)
+      edge_growth_cache_entry *entry;
+
+      if (cgraph_inline_failed_type (e->inline_failed) == CIF_FINAL_ERROR)
+	return true;
+      if (e == known_edge)
+	continue;
+      if (edge_growth_cache != NULL
+	  && (entry = edge_growth_cache->get (e)) != NULL
+	  && entry->size != 0)
+	min_growth += entry->size - (entry->size > 0);
+      else
+	{
+	  class ipa_call_summary *es = ipa_call_summaries->get (e);
+	  if (!es)
+	    return true;
+	  min_growth += min_size - es->call_stmt_size;
+	  if (--n <= 0)
+	    break;
+	}
+      if (min_growth > offline)
 	return true;
     }
 
   ipa_ref *ref;
-  FOR_EACH_ALIAS (node, ref)
-    if (check_callers (dyn_cast <cgraph_node *> (ref->referring), &max_callers))
-      return true;
-
-  /* Unlike for functions called once, we play unsafe with
-     COMDATs.  We can allow that since we know functions
-     in consideration are small (and thus risk is small) and
-     moreover grow estimates already accounts that COMDAT
-     functions may or may not disappear when eliminated from
-     current unit. With good probability making aggressive
-     choice in all units is going to make overall program
-     smaller.  */
-  if (DECL_COMDAT (node->decl))
-    {
-      if (!node->can_remove_if_no_direct_calls_p ())
+  if (n > 0)
+    FOR_EACH_ALIAS (node, ref)
+      if (check_callers (dyn_cast <cgraph_node *> (ref->referring),
+			 &min_growth, &n, offline, min_size, known_edge))
 	return true;
-    }
-  else if (!node->will_be_removed_from_program_if_no_direct_calls_p ())
-    return true;
 
-  return estimate_growth (node) > 0;
+  struct growth_data d = { node, false, false, 0, offline };
+  if (node->call_for_symbol_and_aliases (do_estimate_growth_1, &d, true))
+    return true;
+  if (d.self_recursive || d.uninlinable)
+    return true;
+  return (d.growth > offline);
 }

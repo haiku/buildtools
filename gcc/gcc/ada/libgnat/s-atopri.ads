@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---              Copyright (C) 2012-2018, Free Software Foundation, Inc.     --
+--              Copyright (C) 2012-2020, Free Software Foundation, Inc.     --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -33,8 +33,10 @@
 --  functions and operations used by the compiler to generate the lock-free
 --  implementation of protected objects.
 
+with Interfaces.C;
+
 package System.Atomic_Primitives is
-   pragma Preelaborate;
+   pragma Pure;
 
    type uint is mod 2 ** Long_Integer'Size;
 
@@ -59,6 +61,9 @@ package System.Atomic_Primitives is
    Last    : constant := 6;
 
    subtype Mem_Model is Integer range Relaxed .. Last;
+
+   type bool is new Boolean;
+   pragma Convention (C, bool);
 
    ------------------------------------
    -- GCC built-in atomic primitives --
@@ -92,18 +97,6 @@ package System.Atomic_Primitives is
                   Sync_Compare_And_Swap_8,
                   "__sync_val_compare_and_swap_1");
 
-   --  ??? Should use __atomic_compare_exchange_1 (doesn't work yet):
-   --  function Sync_Compare_And_Swap_8
-   --    (Ptr           : Address;
-   --     Expected      : Address;
-   --     Desired       : uint8;
-   --     Weak          : Boolean   := False;
-   --     Success_Model : Mem_Model := Seq_Cst;
-   --     Failure_Model : Mem_Model := Seq_Cst) return Boolean;
-   --  pragma Import (Intrinsic,
-   --                 Sync_Compare_And_Swap_8,
-   --                 "__atomic_compare_exchange_1");
-
    function Sync_Compare_And_Swap_16
      (Ptr      : Address;
       Expected : uint16;
@@ -127,6 +120,36 @@ package System.Atomic_Primitives is
    pragma Import (Intrinsic,
                   Sync_Compare_And_Swap_64,
                   "__sync_val_compare_and_swap_8");
+
+   --  ??? We might want to switch to the __atomic series of builtins for
+   --  compare-and-swap operations at some point.
+
+   --  function Atomic_Compare_Exchange_8
+   --    (Ptr           : Address;
+   --     Expected      : Address;
+   --     Desired       : uint8;
+   --     Weak          : Boolean   := False;
+   --     Success_Model : Mem_Model := Seq_Cst;
+   --     Failure_Model : Mem_Model := Seq_Cst) return Boolean;
+   --  pragma Import (Intrinsic,
+   --                 Atomic_Compare_Exchange_8,
+   --                 "__atomic_compare_exchange_1");
+
+   function Atomic_Test_And_Set
+     (Ptr   : System.Address;
+      Model : Mem_Model := Seq_Cst) return bool;
+   pragma Import (Intrinsic, Atomic_Test_And_Set, "__atomic_test_and_set");
+
+   procedure Atomic_Clear
+     (Ptr   : System.Address;
+      Model : Mem_Model := Seq_Cst);
+   pragma Import (Intrinsic, Atomic_Clear, "__atomic_clear");
+
+   function Atomic_Always_Lock_Free
+     (Size : Interfaces.C.size_t;
+      Ptr  : System.Address := System.Null_Address) return bool;
+   pragma Import
+     (Intrinsic, Atomic_Always_Lock_Free, "__atomic_always_lock_free");
 
    --------------------------
    -- Lock-free operations --

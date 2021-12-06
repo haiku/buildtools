@@ -1,5 +1,5 @@
 /* Common hooks for IBM RS/6000.
-   Copyright (C) 1991-2018 Free Software Foundation, Inc.
+   Copyright (C) 1991-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -26,13 +26,25 @@
 #include "common/common-target-def.h"
 #include "opts.h"
 #include "flags.h"
-#include "params.h"
 
 /* Implement TARGET_OPTION_OPTIMIZATION_TABLE.  */
 static const struct default_options rs6000_option_optimization_table[] =
   {
+    /* Split multi-word types early.  */
+    { OPT_LEVELS_ALL, OPT_fsplit_wide_types_early, NULL, 1 },
     /* Enable -fsched-pressure for first pass instruction scheduling.  */
     { OPT_LEVELS_1_PLUS, OPT_fsched_pressure, NULL, 1 },
+    /* Enable -munroll-only-small-loops with -funroll-loops to unroll small
+       loops at -O2 and above by default.  */
+    { OPT_LEVELS_2_PLUS_SPEED_ONLY, OPT_funroll_loops, NULL, 1 },
+    { OPT_LEVELS_2_PLUS_SPEED_ONLY, OPT_munroll_only_small_loops, NULL, 1 },
+
+    /* -frename-registers leads to non-optimal codegen and performance
+       on rs6000, turn it off by default.  */
+    { OPT_LEVELS_ALL, OPT_frename_registers, NULL, 0 },
+
+    /* Double growth factor to counter reduced min jump length.  */
+    { OPT_LEVELS_ALL, OPT__param_max_grow_copy_bb_insns_, NULL, 16 },
     { OPT_LEVELS_NONE, 0, NULL, 0 }
   };
 
@@ -60,15 +72,6 @@ rs6000_option_init_struct (struct gcc_options *opts)
 #endif
 }
 
-/* Implement TARGET_OPTION_DEFAULT_PARAMS.  */
-
-static void
-rs6000_option_default_params (void)
-{
-  /* Double growth factor to counter reduced min jump length.  */
-  set_default_param_value (PARAM_MAX_GROW_COPY_BB_INSNS, 16);
-}
-
 /* If not otherwise specified by a target, make 'long double' equivalent to
    'double'.  */
 
@@ -83,7 +86,6 @@ rs6000_handle_option (struct gcc_options *opts, struct gcc_options *opts_set,
 		      const struct cl_decoded_option *decoded,
 		      location_t loc)
 {
-  enum fpu_type_t fpu_type = FPU_NONE;
   char *p, *q;
   size_t code = decoded->opt_index;
   const char *arg = decoded->arg;
@@ -179,7 +181,7 @@ rs6000_handle_option (struct gcc_options *opts, struct gcc_options *opts_set,
 	  else if (! strcmp (q, "builtin"))
 	    mask = MASK_DEBUG_BUILTIN;
 	  else
-	    error_at (loc, "unknown -mdebug-%s switch", q);
+	    error_at (loc, "unknown %<-mdebug-%s%> switch", q);
 
 	  if (invert)
 	    opts->x_rs6000_debug &= ~mask;
@@ -218,67 +220,10 @@ rs6000_handle_option (struct gcc_options *opts, struct gcc_options *opts_set,
     case OPT_mlong_double_:
       if (value != 64 && value != 128)
 	{
-	  error_at (loc, "unknown switch -mlong-double-%s", arg);
+	  error_at (loc, "unknown switch %<-mlong-double-%s%>", arg);
 	  opts->x_rs6000_long_double_type_size
 	    = RS6000_DEFAULT_LONG_DOUBLE_SIZE;
 	  return false;
-	}
-      break;
-
-    case OPT_msingle_float:
-      if (!TARGET_SINGLE_FPU) 
-	warning_at (loc, 0,
-		    "-msingle-float option equivalent to -mhard-float");
-      /* -msingle-float implies -mno-double-float and TARGET_HARD_FLOAT. */
-      opts->x_rs6000_double_float = 0;
-      opts->x_rs6000_isa_flags &= ~OPTION_MASK_SOFT_FLOAT;
-      opts_set->x_rs6000_isa_flags |= OPTION_MASK_SOFT_FLOAT;
-      break;
-
-    case OPT_mdouble_float:
-      /* -mdouble-float implies -msingle-float and TARGET_HARD_FLOAT. */
-      opts->x_rs6000_single_float = 1;
-      opts->x_rs6000_isa_flags &= ~OPTION_MASK_SOFT_FLOAT;
-      opts_set->x_rs6000_isa_flags |= OPTION_MASK_SOFT_FLOAT;
-      break;
-
-    case OPT_msimple_fpu:
-      if (!TARGET_SINGLE_FPU) 
-	warning_at (loc, 0, "-msimple-fpu option ignored");
-      break;
-
-    case OPT_mhard_float:
-      /* -mhard_float implies -msingle-float and -mdouble-float. */
-      opts->x_rs6000_single_float = opts->x_rs6000_double_float = 1;
-      break;
-
-    case OPT_msoft_float:
-      /* -msoft_float implies -mnosingle-float and -mnodouble-float. */
-      opts->x_rs6000_single_float = opts->x_rs6000_double_float = 0;
-      break;
-
-    case OPT_mfpu_:
-      fpu_type = (enum fpu_type_t) value;
-      if (fpu_type != FPU_NONE)
-	{
-	  /* If -mfpu is not none, then turn off SOFT_FLOAT, turn on
-	     HARD_FLOAT. */
-	  opts->x_rs6000_isa_flags &= ~OPTION_MASK_SOFT_FLOAT;
-	  opts_set->x_rs6000_isa_flags |= OPTION_MASK_SOFT_FLOAT;
-	  opts->x_rs6000_xilinx_fpu = 1;
-	  if (fpu_type == FPU_SF_LITE || fpu_type == FPU_SF_FULL) 
-	    opts->x_rs6000_single_float = 1;
-	  if (fpu_type == FPU_DF_LITE || fpu_type == FPU_DF_FULL) 
-	    opts->x_rs6000_single_float = opts->x_rs6000_double_float = 1;
-	  if (fpu_type == FPU_SF_LITE || fpu_type == FPU_DF_LITE) 
-	    opts->x_rs6000_simple_fpu = 1;
-	}
-      else
-	{
-	  /* -mfpu=none is equivalent to -msoft-float.  */
-	  opts->x_rs6000_isa_flags |= OPTION_MASK_SOFT_FLOAT;
-	  opts_set->x_rs6000_isa_flags |= OPTION_MASK_SOFT_FLOAT;
-	  opts->x_rs6000_single_float = opts->x_rs6000_double_float = 0;
 	}
       break;
 
@@ -319,9 +264,6 @@ rs6000_supports_split_stack (bool report,
 
 #undef TARGET_OPTION_INIT_STRUCT
 #define TARGET_OPTION_INIT_STRUCT rs6000_option_init_struct
-
-#undef TARGET_OPTION_DEFAULT_PARAMS
-#define TARGET_OPTION_DEFAULT_PARAMS rs6000_option_default_params
 
 #undef TARGET_OPTION_OPTIMIZATION_TABLE
 #define TARGET_OPTION_OPTIMIZATION_TABLE rs6000_option_optimization_table

@@ -10,7 +10,6 @@ import (
 	"internal/race"
 	"internal/trace"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"runtime"
@@ -30,6 +29,9 @@ var (
 func TestEventBatch(t *testing.T) {
 	if race.Enabled {
 		t.Skip("skipping in race mode")
+	}
+	if IsEnabled() {
+		t.Skip("skipping because -test.trace is set")
 	}
 	if testing.Short() {
 		t.Skip("skipping in short mode")
@@ -81,6 +83,9 @@ func TestEventBatch(t *testing.T) {
 }
 
 func TestTraceStartStop(t *testing.T) {
+	if IsEnabled() {
+		t.Skip("skipping because -test.trace is set")
+	}
 	buf := new(bytes.Buffer)
 	if err := Start(buf); err != nil {
 		t.Fatalf("failed to start tracing: %v", err)
@@ -98,6 +103,9 @@ func TestTraceStartStop(t *testing.T) {
 }
 
 func TestTraceDoubleStart(t *testing.T) {
+	if IsEnabled() {
+		t.Skip("skipping because -test.trace is set")
+	}
 	Stop()
 	buf := new(bytes.Buffer)
 	if err := Start(buf); err != nil {
@@ -111,6 +119,9 @@ func TestTraceDoubleStart(t *testing.T) {
 }
 
 func TestTrace(t *testing.T) {
+	if IsEnabled() {
+		t.Skip("skipping because -test.trace is set")
+	}
 	buf := new(bytes.Buffer)
 	if err := Start(buf); err != nil {
 		t.Fatalf("failed to start tracing: %v", err)
@@ -168,6 +179,16 @@ func testBrokenTimestamps(t *testing.T, data []byte) {
 }
 
 func TestTraceStress(t *testing.T) {
+	if runtime.GOOS == "js" {
+		t.Skip("no os.Pipe on js")
+	}
+	if IsEnabled() {
+		t.Skip("skipping because -test.trace is set")
+	}
+	if testing.Short() {
+		t.Skip("skipping in -short mode")
+	}
+
 	var wg sync.WaitGroup
 	done := make(chan bool)
 
@@ -219,7 +240,7 @@ func TestTraceStress(t *testing.T) {
 	runtime.GC()
 	// Trigger GC from malloc.
 	n := int(1e3)
-	if runtime.GOOS == "openbsd" && runtime.GOARCH == "arm" {
+	if isMemoryConstrained() {
 		// Reduce allocation to avoid running out of
 		// memory on the builder - see issue/12032.
 		n = 512
@@ -304,9 +325,30 @@ func TestTraceStress(t *testing.T) {
 	testBrokenTimestamps(t, trace)
 }
 
+// isMemoryConstrained reports whether the current machine is likely
+// to be memory constrained.
+// This was originally for the openbsd/arm builder (Issue 12032).
+// TODO: move this to testenv? Make this look at memory? Look at GO_BUILDER_NAME?
+func isMemoryConstrained() bool {
+	if runtime.GOOS == "plan9" {
+		return true
+	}
+	switch runtime.GOARCH {
+	case "arm", "mips", "mipsle":
+		return true
+	}
+	return false
+}
+
 // Do a bunch of various stuff (timers, GC, network, etc) in a separate goroutine.
 // And concurrently with all that start/stop trace 3 times.
 func TestTraceStressStartStop(t *testing.T) {
+	if runtime.GOOS == "js" {
+		t.Skip("no os.Pipe on js")
+	}
+	if IsEnabled() {
+		t.Skip("skipping because -test.trace is set")
+	}
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(8))
 	outerDone := make(chan bool)
 
@@ -357,9 +399,9 @@ func TestTraceStressStartStop(t *testing.T) {
 		runtime.GC()
 		// Trigger GC from malloc.
 		n := int(1e3)
-		if runtime.GOOS == "openbsd" && runtime.GOARCH == "arm" {
+		if isMemoryConstrained() {
 			// Reduce allocation to avoid running out of
-			// memory on the builder - see issue/12032.
+			// memory on the builder.
 			n = 512
 		}
 		for i := 0; i < n; i++ {
@@ -454,6 +496,9 @@ func TestTraceStressStartStop(t *testing.T) {
 }
 
 func TestTraceFutileWakeup(t *testing.T) {
+	if IsEnabled() {
+		t.Skip("skipping because -test.trace is set")
+	}
 	buf := new(bytes.Buffer)
 	if err := Start(buf); err != nil {
 		t.Fatalf("failed to start tracing: %v", err)
@@ -540,7 +585,7 @@ func saveTrace(t *testing.T, buf *bytes.Buffer, name string) {
 	if !*saveTraces {
 		return
 	}
-	if err := ioutil.WriteFile(name+".trace", buf.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(name+".trace", buf.Bytes(), 0600); err != nil {
 		t.Errorf("failed to write trace file: %s", err)
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"path"
@@ -189,7 +188,7 @@ func TestReader(t *testing.T) {
 			Gid:      5000,
 			Size:     5,
 			ModTime:  time.Unix(1244593104, 0),
-			Typeflag: '\x00',
+			Typeflag: '0',
 		}, {
 			Name:     "small2.txt",
 			Mode:     0444,
@@ -197,7 +196,7 @@ func TestReader(t *testing.T) {
 			Gid:      5000,
 			Size:     11,
 			ModTime:  time.Unix(1244593104, 0),
-			Typeflag: '\x00',
+			Typeflag: '0',
 		}},
 	}, {
 		file: "testdata/pax.tar",
@@ -378,9 +377,9 @@ func TestReader(t *testing.T) {
 				"security.selinux": "unconfined_u:object_r:default_t:s0\x00",
 			},
 			PAXRecords: map[string]string{
-				"mtime": "1386065770.449252304",
-				"atime": "1389782991.41987522",
-				"ctime": "1386065770.449252304",
+				"mtime":                         "1386065770.449252304",
+				"atime":                         "1389782991.41987522",
+				"ctime":                         "1386065770.449252304",
 				"SCHILY.xattr.security.selinux": "unconfined_u:object_r:default_t:s0\x00",
 			},
 			Format: FormatPAX,
@@ -534,9 +533,10 @@ func TestReader(t *testing.T) {
 		// a buggy pre-Go1.8 tar.Writer.
 		file: "testdata/invalid-go17.tar",
 		headers: []*Header{{
-			Name:    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/foo",
-			Uid:     010000000,
-			ModTime: time.Unix(0, 0),
+			Name:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/foo",
+			Uid:      010000000,
+			ModTime:  time.Unix(0, 0),
+			Typeflag: '0',
 		}},
 	}, {
 		// USTAR archive with a regular entry with non-zero device numbers.
@@ -772,7 +772,7 @@ func TestReadTruncation(t *testing.T) {
 		"testdata/pax-path-hdr.tar",
 		"testdata/sparse-formats.tar",
 	} {
-		buf, err := ioutil.ReadFile(p)
+		buf, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -864,7 +864,7 @@ func TestReadTruncation(t *testing.T) {
 				}
 				cnt++
 				if s2 == "manual" {
-					if _, err = tr.writeTo(ioutil.Discard); err != nil {
+					if _, err = tr.writeTo(io.Discard); err != nil {
 						break
 					}
 				}

@@ -1,5 +1,5 @@
 /* CPP Library - charsets
-   Copyright (C) 1998-2018 Free Software Foundation, Inc.
+   Copyright (C) 1998-2021 Free Software Foundation, Inc.
 
    Broken out of c-lex.c Apr 2003, adding valid C99 UCN ranges.
 
@@ -638,6 +638,9 @@ init_iconv_desc (cpp_reader *pfile, const char *to, const char *from)
   char *pair;
   size_t i;
 
+  ret.to = to;
+  ret.from = from;
+
   if (!strcasecmp (to, from))
     {
       ret.func = convert_no_conversion;
@@ -901,6 +904,9 @@ struct ucnrange {
 };
 #include "ucnid.h"
 
+/* ISO 10646 defines the UCS codespace as the range 0-0x10FFFF inclusive.  */
+#define UCS_LIMIT 0x10FFFF
+
 /* Returns 1 if C is valid in an identifier, 2 if C is valid except at
    the start of an identifier, and 0 if C is not valid in an
    identifier.  We assume C has already gone through the checks of
@@ -915,7 +921,7 @@ ucn_valid_in_identifier (cpp_reader *pfile, cppchar_t c,
   int mn, mx, md;
   unsigned short valid_flags, invalid_start_flags;
 
-  if (c > 0x10FFFF)
+  if (c > UCS_LIMIT)
     return 0;
 
   mn = 0;
@@ -1015,6 +1021,10 @@ ucn_valid_in_identifier (cpp_reader *pfile, cppchar_t c,
    C99 6.4.3: A universal character name shall not specify a character
    whose short identifier is less than 00A0 other than 0024 ($), 0040 (@),
    or 0060 (`), nor one in the range D800 through DFFF inclusive.
+
+   If the hexadecimal value is larger than the upper bound of the UCS
+   codespace specified in ISO/IEC 10646, a pedantic warning is issued
+   in all versions of C and in the C++20 or later versions of C++.
 
    *PSTR must be preceded by "\u" or "\U"; it is assumed that the
    buffer end is delimited by a non-hex digit.  Returns false if the
@@ -1135,6 +1145,12 @@ _cpp_valid_ucn (cpp_reader *pfile, const uchar **pstr,
    "universal character %.*s is not valid at the start of an identifier",
 		   (int) (str - base), base);
     }
+  else if (result > UCS_LIMIT
+	   && (!CPP_OPTION (pfile, cplusplus)
+	       || CPP_OPTION (pfile, lang) > CLK_CXX17))
+    cpp_error (pfile, CPP_DL_PEDWARN,
+	       "%.*s is outside the UCS codespace",
+	       (int) (str - base), base);
 
   *cp = result;
   return true;
@@ -1196,6 +1212,84 @@ convert_ucn (cpp_reader *pfile, const uchar *from, const uchar *limit,
     }
 
   return from;
+}
+
+/*  Performs a similar task as _cpp_valid_ucn, but parses UTF-8-encoded
+    extended characters rather than UCNs.  If the return value is TRUE, then a
+    character was successfully decoded and stored in *CP; *PSTR has been
+    updated to point one past the valid UTF-8 sequence.  Diagnostics may have
+    been emitted if the character parsed is not allowed in the current context.
+    If the return value is FALSE, then *PSTR has not been modified and *CP may
+    equal 0, to indicate that *PSTR does not form a valid UTF-8 sequence, or it
+    may, when processing an identifier in C mode, equal a codepoint that was
+    validly encoded but is not allowed to appear in an identifier.  In either
+    case, no diagnostic is emitted, and the return value of FALSE should cause
+    a new token to be formed.
+
+    Unlike _cpp_valid_ucn, this will never be called when lexing a string; only
+    a potential identifier, or a CPP_OTHER token.  NST is unused in the latter
+    case.
+
+    As in _cpp_valid_ucn, IDENTIFIER_POS is 0 when not in an identifier, 1 for
+    the start of an identifier, or 2 otherwise.  */
+
+extern bool
+_cpp_valid_utf8 (cpp_reader *pfile,
+		 const uchar **pstr,
+		 const uchar *limit,
+		 int identifier_pos,
+		 struct normalize_state *nst,
+		 cppchar_t *cp)
+{
+  const uchar *base = *pstr;
+  size_t inbytesleft = limit - base;
+  if (one_utf8_to_cppchar (pstr, &inbytesleft, cp))
+    {
+      /* No diagnostic here as this byte will rather become a
+	 new token.  */
+      *cp = 0;
+      return false;
+    }
+
+  if (identifier_pos)
+    {
+      switch (ucn_valid_in_identifier (pfile, *cp, nst))
+	{
+
+	case 0:
+	  /* In C++, this is an error for invalid character in an identifier
+	     because logically, the UTF-8 was converted to a UCN during
+	     translation phase 1 (even though we don't physically do it that
+	     way).  In C, this byte rather becomes grammatically a separate
+	     token.  */
+
+	  if (CPP_OPTION (pfile, cplusplus))
+	    cpp_error (pfile, CPP_DL_ERROR,
+		       "extended character %.*s is not valid in an identifier",
+		       (int) (*pstr - base), base);
+	  else
+	    {
+	      *pstr = base;
+	      return false;
+	    }
+
+	  break;
+
+	case 2:
+	  if (identifier_pos == 1)
+	    {
+	      /* This is treated the same way in C++ or C99 -- lexed as an
+		 identifier which is then invalid because an identifier is
+		 not allowed to start with this character.  */
+	      cpp_error (pfile, CPP_DL_ERROR,
+	  "extended character %.*s is not valid at the start of an identifier",
+			 (int) (*pstr - base), base);
+	    }
+	  break;
+	}
+    }
+
+  return true;
 }
 
 /* Subroutine of convert_hex and convert_oct.  N is the representation
@@ -1693,13 +1787,14 @@ cpp_interpret_string (cpp_reader *pfile, const cpp_string *from, size_t count,
   return cpp_interpret_string_1 (pfile, from, count, to, type, NULL, NULL);
 }
 
-/* A "do nothing" error-handling callback for use by
+/* A "do nothing" diagnostic-handling callback for use by
    cpp_interpret_string_ranges, so that it can temporarily suppress
-   error-handling.  */
+   diagnostic-handling.  */
 
 static bool
-noop_error_cb (cpp_reader *, int, int, rich_location *,
-	       const char *, va_list *)
+noop_diagnostic_cb (cpp_reader *, enum cpp_diagnostic_level,
+		    enum cpp_warning_reason, rich_location *,
+		    const char *, va_list *)
 {
   /* no-op.  */
   return true;
@@ -1737,25 +1832,26 @@ cpp_interpret_string_ranges (cpp_reader *pfile, const cpp_string *from,
     return "execution character set != source character set";
 
   /* For on-demand strings we have already lexed the strings, so there
-     should be no errors.  However, if we have bogus source location
+     should be no diagnostics.  However, if we have bogus source location
      data (or stringified macro arguments), the attempt to lex the
-     strings could fail with an error.  Temporarily install an
-     error-handler to catch the error, so that it can lead to this call
+     strings could fail with an diagnostic.  Temporarily install an
+     diagnostic-handler to catch the diagnostic, so that it can lead to this call
      failing, rather than being emitted as a user-visible diagnostic.
-     If an error does occur, we should see it via the return value of
+     If an diagnostic does occur, we should see it via the return value of
      cpp_interpret_string_1.  */
-  bool (*saved_error_handler) (cpp_reader *, int, int, rich_location *,
-			       const char *, va_list *)
+  bool (*saved_diagnostic_handler) (cpp_reader *, enum cpp_diagnostic_level,
+				    enum cpp_warning_reason, rich_location *,
+				    const char *, va_list *)
     ATTRIBUTE_FPTR_PRINTF(5,0);
 
-  saved_error_handler = pfile->cb.error;
-  pfile->cb.error = noop_error_cb;
+  saved_diagnostic_handler = pfile->cb.diagnostic;
+  pfile->cb.diagnostic = noop_diagnostic_cb;
 
   bool result = cpp_interpret_string_1 (pfile, from, count, NULL, type,
 					loc_readers, out);
 
-  /* Restore the saved error-handler.  */
-  pfile->cb.error = saved_error_handler;
+  /* Restore the saved diagnostic-handler.  */
+  pfile->cb.diagnostic = saved_diagnostic_handler;
 
   if (!result)
     return "cpp_interpret_string_1 failed";
@@ -1788,10 +1884,11 @@ cpp_interpret_string_notranslate (cpp_reader *pfile, const cpp_string *from,
 /* Subroutine of cpp_interpret_charconst which performs the conversion
    to a number, for narrow strings.  STR is the string structure returned
    by cpp_interpret_string.  PCHARS_SEEN and UNSIGNEDP are as for
-   cpp_interpret_charconst.  */
+   cpp_interpret_charconst.  TYPE is the token type.  */
 static cppchar_t
 narrow_str_to_charconst (cpp_reader *pfile, cpp_string str,
-			 unsigned int *pchars_seen, int *unsignedp)
+			 unsigned int *pchars_seen, int *unsignedp,
+			 enum cpp_ttype type)
 {
   size_t width = CPP_OPTION (pfile, char_precision);
   size_t max_chars = CPP_OPTION (pfile, int_precision) / width;
@@ -1820,10 +1917,12 @@ narrow_str_to_charconst (cpp_reader *pfile, cpp_string str,
 	result = c;
     }
 
+  if (type == CPP_UTF8CHAR)
+    max_chars = 1;
   if (i > max_chars)
     {
       i = max_chars;
-      cpp_error (pfile, CPP_DL_WARNING,
+      cpp_error (pfile, type == CPP_UTF8CHAR ? CPP_DL_ERROR : CPP_DL_WARNING,
 		 "character constant too long for its type");
     }
   else if (i > 1 && CPP_OPTION (pfile, warn_multichar))
@@ -1832,6 +1931,8 @@ narrow_str_to_charconst (cpp_reader *pfile, cpp_string str,
   /* Multichar constants are of type int and therefore signed.  */
   if (i > 1)
     unsigned_p = 0;
+  else if (type == CPP_UTF8CHAR && !CPP_OPTION (pfile, cplusplus))
+    unsigned_p = 1;
   else
     unsigned_p = CPP_OPTION (pfile, unsigned_char);
 
@@ -1872,6 +1973,17 @@ wide_str_to_charconst (cpp_reader *pfile, cpp_string str,
   size_t off, i;
   cppchar_t result = 0, c;
 
+  if (str.len <= nbwc)
+    {
+      /* Error recovery, if no errors have been diagnosed previously,
+	 there should be at least two wide characters.  Empty literals
+	 are diagnosed earlier and we can get just the zero terminator
+	 only if there were errors diagnosed during conversion.  */
+      *pchars_seen = 0;
+      *unsignedp = 0;
+      return 0;
+    }
+
   /* This is finicky because the string is in the target's byte order,
      which may not be our byte order.  Only the last character, ignoring
      the NUL terminator, is relevant.  */
@@ -1887,7 +1999,9 @@ wide_str_to_charconst (cpp_reader *pfile, cpp_string str,
      character exactly fills a wchar_t, so a multi-character wide
      character constant is guaranteed to overflow.  */
   if (str.len > nbwc * 2)
-    cpp_error (pfile, CPP_DL_WARNING,
+    cpp_error (pfile, (CPP_OPTION (pfile, cplusplus)
+		       && (type == CPP_CHAR16 || type == CPP_CHAR32))
+		      ? CPP_DL_ERROR : CPP_DL_WARNING,
 	       "character constant too long for its type");
 
   /* Truncate the constant to its natural width, and simultaneously
@@ -1945,7 +2059,8 @@ cpp_interpret_charconst (cpp_reader *pfile, const cpp_token *token,
     result = wide_str_to_charconst (pfile, str, pchars_seen, unsignedp,
 				    token->type);
   else
-    result = narrow_str_to_charconst (pfile, str, pchars_seen, unsignedp);
+    result = narrow_str_to_charconst (pfile, str, pchars_seen, unsignedp,
+				      token->type);
 
   if (str.text != token->val.str.text)
     free ((void *)str.text);
@@ -1954,8 +2069,9 @@ cpp_interpret_charconst (cpp_reader *pfile, const cpp_token *token,
 }
 
 /* Convert an identifier denoted by ID and LEN, which might contain
-   UCN escapes, to the source character set, either UTF-8 or
-   UTF-EBCDIC.  Assumes that the identifier is actually a valid identifier.  */
+   UCN escapes or UTF-8 multibyte chars, to the source character set,
+   either UTF-8 or UTF-EBCDIC.  Assumes that the identifier is actually
+   a valid identifier.  */
 cpp_hashnode *
 _cpp_interpret_identifier (cpp_reader *pfile, const uchar *id, size_t len)
 {
@@ -2133,9 +2249,8 @@ _cpp_default_encoding (void)
 /* Constructor for cpp_string_location_reader.  */
 
 cpp_string_location_reader::
-cpp_string_location_reader (source_location src_loc,
+cpp_string_location_reader (location_t src_loc,
 			    line_maps *line_table)
-: m_line_table (line_table)
 {
   src_loc = get_range_from_loc (line_table, src_loc).m_start;
 
@@ -2162,4 +2277,145 @@ cpp_string_location_reader::get_next ()
   if (m_loc <= LINE_MAP_MAX_LOCATION_WITH_COLS)
     m_loc += m_offset_per_column;
   return result;
+}
+
+cpp_display_width_computation::
+cpp_display_width_computation (const char *data, int data_length, int tabstop) :
+  m_begin (data),
+  m_next (m_begin),
+  m_bytes_left (data_length),
+  m_tabstop (tabstop),
+  m_display_cols (0)
+{
+  gcc_assert (m_tabstop > 0);
+}
+
+
+/* The main implementation function for class cpp_display_width_computation.
+   m_next points on entry to the start of the UTF-8 encoding of the next
+   character, and is updated to point just after the last byte of the encoding.
+   m_bytes_left contains on entry the remaining size of the buffer into which
+   m_next points, and this is also updated accordingly.  If m_next does not
+   point to a valid UTF-8-encoded sequence, then it will be treated as a single
+   byte with display width 1.  m_cur_display_col is the current display column,
+   relative to which tab stops should be expanded.  Returns the display width of
+   the codepoint just processed.  */
+
+int
+cpp_display_width_computation::process_next_codepoint ()
+{
+  cppchar_t c;
+  int next_width;
+
+  if (*m_next == '\t')
+    {
+      ++m_next;
+      --m_bytes_left;
+      next_width = m_tabstop - (m_display_cols % m_tabstop);
+    }
+  else if (one_utf8_to_cppchar ((const uchar **) &m_next, &m_bytes_left, &c)
+	   != 0)
+    {
+      /* Input is not convertible to UTF-8.  This could be fine, e.g. in a
+	 string literal, so don't complain.  Just treat it as if it has a width
+	 of one.  */
+      ++m_next;
+      --m_bytes_left;
+      next_width = 1;
+    }
+  else
+    {
+      /*  one_utf8_to_cppchar() has updated m_next and m_bytes_left for us.  */
+      next_width = cpp_wcwidth (c);
+    }
+
+  m_display_cols += next_width;
+  return next_width;
+}
+
+/*  Utility to advance the byte stream by the minimum amount needed to consume
+    N display columns.  Returns the number of display columns that were
+    actually skipped.  This could be less than N, if there was not enough data,
+    or more than N, if the last character to be skipped had a sufficiently large
+    display width.  */
+int
+cpp_display_width_computation::advance_display_cols (int n)
+{
+  const int start = m_display_cols;
+  const int target = start + n;
+  while (m_display_cols < target && !done ())
+    process_next_codepoint ();
+  return m_display_cols - start;
+}
+
+/*  For the string of length DATA_LENGTH bytes that begins at DATA, compute
+    how many display columns are occupied by the first COLUMN bytes.  COLUMN
+    may exceed DATA_LENGTH, in which case the phantom bytes at the end are
+    treated as if they have display width 1.  Tabs are expanded to the next tab
+    stop, relative to the start of DATA.  */
+
+int
+cpp_byte_column_to_display_column (const char *data, int data_length,
+				   int column, int tabstop)
+{
+  const int offset = MAX (0, column - data_length);
+  cpp_display_width_computation dw (data, column - offset, tabstop);
+  while (!dw.done ())
+    dw.process_next_codepoint ();
+  return dw.display_cols_processed () + offset;
+}
+
+/*  For the string of length DATA_LENGTH bytes that begins at DATA, compute
+    the least number of bytes that will result in at least DISPLAY_COL display
+    columns.  The return value may exceed DATA_LENGTH if the entire string does
+    not occupy enough display columns.  */
+
+int
+cpp_display_column_to_byte_column (const char *data, int data_length,
+				   int display_col, int tabstop)
+{
+  cpp_display_width_computation dw (data, data_length, tabstop);
+  const int avail_display = dw.advance_display_cols (display_col);
+  return dw.bytes_processed () + MAX (0, display_col - avail_display);
+}
+
+/* Our own version of wcwidth().  We don't use the actual wcwidth() in glibc,
+   because that will inspect the user's locale, and in particular in an ASCII
+   locale, it will not return anything useful for extended characters.  But GCC
+   in other respects (see e.g. _cpp_default_encoding()) behaves as if
+   everything is UTF-8.  We also make some tweaks that are useful for the way
+   GCC needs to use this data, e.g. tabs and other control characters should be
+   treated as having width 1.  The lookup tables are generated from
+   contrib/unicode/gen_wcwidth.py and were made by simply calling glibc
+   wcwidth() on all codepoints, then applying the small tweaks.  These tables
+   are not highly optimized, but for the present purpose of outputting
+   diagnostics, they are sufficient.  */
+
+#include "generated_cpp_wcwidth.h"
+int cpp_wcwidth (cppchar_t c)
+{
+  if (__builtin_expect (c <= wcwidth_range_ends[0], true))
+    return wcwidth_widths[0];
+
+  /* Binary search the tables.  */
+  int begin = 1;
+  static const int end
+      = sizeof wcwidth_range_ends / sizeof (*wcwidth_range_ends);
+  int len = end - begin;
+  do
+    {
+      int half = len/2;
+      int middle = begin + half;
+      if (c > wcwidth_range_ends[middle])
+	{
+	  begin = middle + 1;
+	  len -= half + 1;
+	}
+      else
+	len = half;
+    } while (len);
+
+  if (__builtin_expect (begin != end, true))
+    return wcwidth_widths[begin];
+  return 1;
 }

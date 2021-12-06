@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -40,8 +40,11 @@ with Ada.Containers.Helpers; use Ada.Containers.Helpers;
 with Ada.Containers.Prime_Numbers;
 
 with System; use type System.Address;
+with System.Put_Images;
 
-package body Ada.Containers.Indefinite_Hashed_Sets is
+package body Ada.Containers.Indefinite_Hashed_Sets with
+  SPARK_Mode => Off
+is
 
    pragma Warnings (Off, "variable ""Busy*"" is not referenced");
    pragma Warnings (Off, "variable ""Lock*"" is not referenced");
@@ -239,7 +242,7 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
            (Element => Position.Node.Element.all'Access,
             Control => (Controlled with TC))
          do
-            Lock (TC.all);
+            Busy (TC.all);
          end return;
       end;
    end Constant_Reference;
@@ -320,6 +323,8 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
       Position  : in out Cursor)
    is
    begin
+      TC_Check (Container.HT.TC);
+
       if Checks and then Position.Node = null then
          raise Constraint_Error with "Position cursor equals No_Element";
       end if;
@@ -332,8 +337,6 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
       then
          raise Program_Error with "Position cursor designates wrong set";
       end if;
-
-      TC_Check (Container.HT.TC);
 
       pragma Assert (Vet (Position), "Position cursor is bad");
 
@@ -502,6 +505,17 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
 
       return Position.Node.Element.all;
    end Element;
+
+   -----------
+   -- Empty --
+   -----------
+
+   function Empty (Capacity : Count_Type := 1000) return Set is
+   begin
+      return Result : Set do
+         Reserve_Capacity (Result, Capacity);
+      end return;
+   end Empty;
 
    ---------------------
    -- Equivalent_Sets --
@@ -1229,7 +1243,7 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
         Container.HT.TC'Unrestricted_Access;
    begin
       return R : constant Reference_Control_Type := (Controlled with TC) do
-         Lock (TC.all);
+         Busy (TC.all);
       end return;
    end Pseudo_Reference;
 
@@ -1261,6 +1275,31 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
          Process (Position.Node.Element.all);
       end;
    end Query_Element;
+
+   ---------------
+   -- Put_Image --
+   ---------------
+
+   procedure Put_Image
+     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Set)
+   is
+      First_Time : Boolean := True;
+      use System.Put_Images;
+   begin
+      Array_Before (S);
+
+      for X of V loop
+         if First_Time then
+            First_Time := False;
+         else
+            Simple_Array_Between (S);
+         end if;
+
+         Element_Type'Put_Image (S, X);
+      end loop;
+
+      Array_After (S);
+   end Put_Image;
 
    ----------
    -- Read --
@@ -1321,12 +1360,12 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
       pragma Warnings (Off, X);
 
    begin
+      TE_Check (Container.HT.TC);
+
       if Checks and then Node = null then
          raise Constraint_Error with
            "attempt to replace element not in set";
       end if;
-
-      TE_Check (Container.HT.TC);
 
       X := Node.Element;
 
@@ -2044,7 +2083,7 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
               (Element => Node.Element.all'Access,
                Control => (Controlled with TC))
             do
-               Lock (TC.all);
+               Busy (TC.all);
             end return;
          end;
       end Constant_Reference;
@@ -2227,12 +2266,12 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
                           Control =>
                             (Controlled with
                               HT.TC'Unrestricted_Access,
-                              Container => Container'Access,
+                              Container => Container'Unchecked_Access,
                               Index     => HT_Ops.Index (HT, Position.Node),
                               Old_Pos   => Position,
                               Old_Hash  => Hash (Key (Position))))
             do
-               Lock (HT.TC);
+               Busy (HT.TC);
             end return;
          end;
       end Reference_Preserving_Key;
@@ -2261,12 +2300,12 @@ package body Ada.Containers.Indefinite_Hashed_Sets is
                           Control =>
                             (Controlled with
                               HT.TC'Unrestricted_Access,
-                              Container => Container'Access,
+                              Container => Container'Unchecked_Access,
                               Index     => HT_Ops.Index (HT, P.Node),
                               Old_Pos   => P,
                               Old_Hash  => Hash (Key)))
             do
-               Lock (HT.TC);
+               Busy (HT.TC);
             end return;
          end;
       end Reference_Preserving_Key;

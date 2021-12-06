@@ -1,5 +1,5 @@
 /* Graphite polyhedral representation.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2021 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@amd.com> and
    Tobias Grosser <grosser@fim.uni-passau.de>.
 
@@ -19,7 +19,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define USES_ISL
+#define INCLUDE_ISL
 
 #include "config.h"
 
@@ -402,7 +402,7 @@ static void
 print_pbb_body (FILE *file, poly_bb_p pbb)
 {
   fprintf (file, "Body (\n");
-  dump_bb (file, pbb_bb (pbb), 0, 0);
+  dump_bb (file, pbb_bb (pbb), 0, TDF_NONE);
   fprintf (file, ")\n");
 }
 

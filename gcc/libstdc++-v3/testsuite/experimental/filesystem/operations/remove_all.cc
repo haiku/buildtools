@@ -1,4 +1,4 @@
-// Copyright (C) 2016-2018 Free Software Foundation, Inc.
+// Copyright (C) 2016-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -42,6 +42,9 @@ test01()
   VERIFY( !ec );
   VERIFY( n == 0 );
 
+#if defined(__MINGW32__) || defined(__MINGW64__)
+  // No symlink support
+#else
   auto link = __gnu_test::nonexistent_path();
   create_symlink(p, link);  // dangling symlink
   ec = bad_ec;
@@ -58,6 +61,7 @@ test01()
   VERIFY( n == 1 );
   VERIFY( !exists(symlink_status(link)) );  // The symlink is removed, but
   VERIFY( exists(p) );                      // its target is not.
+#endif
 
   const auto dir = __gnu_test::nonexistent_path();
   create_directories(dir/"a/b/c");
@@ -104,9 +108,44 @@ test02()
   VERIFY( !exists(dir) );
 }
 
+void
+test04()
+{
+#if defined(__MINGW32__) || defined(__MINGW64__)
+  // no permissions
+#else
+  // PR libstdc++/93201
+  std::error_code ec;
+  std::uintmax_t n;
+
+  auto dir = __gnu_test::nonexistent_path();
+  fs::create_directory(dir);
+  __gnu_test::scoped_file f(dir/"file");
+  // remove write permission on the directory:
+  fs::permissions(dir, fs::perms::owner_read|fs::perms::owner_exec);
+  n = fs::remove_all(dir, ec);
+  VERIFY( n == std::uintmax_t(-1) );
+  VERIFY( ec == std::errc::permission_denied ); // not ENOTEMPTY
+
+  try {
+    fs::remove_all(dir);
+    VERIFY( false );
+  } catch (const fs::filesystem_error& e) {
+    VERIFY( e.code() == std::errc::permission_denied );
+    // First path is the argument to remove_all
+    VERIFY( e.path1() == dir );
+  }
+
+  fs::permissions(dir, fs::perms::owner_write|fs::perms::add_perms);
+  fs::remove_all(dir, ec);
+  f.path.clear();
+#endif
+}
+
 int
 main()
 {
   test01();
   test02();
+  test04();
 }

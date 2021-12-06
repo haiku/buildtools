@@ -1,5 +1,5 @@
 /* Output variables, constants and external declarations, for GNU compiler.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -43,10 +43,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "fold-const.h"
 #include "stor-layout.h"
 #include "varasm.h"
+#include "version.h"
 #include "flags.h"
 #include "stmt.h"
 #include "expr.h"
 #include "expmed.h"
+#include "optabs.h"
 #include "output.h"
 #include "langhooks.h"
 #include "debug.h"
@@ -56,6 +58,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "asan.h"
 #include "rtl-iter.h"
 #include "file-prefix-map.h" /* remap_debug_filename()  */
+#include "alloc-pool.h"
+#include "toplev.h"
+#include "opts.h"
 
 #ifdef XCOFF_DEBUGGING_INFO
 #include "xcoffout.h"		/* Needed for external data declarations.  */
@@ -68,8 +73,8 @@ extern GTY(()) const char *weak_global_object_name;
 const char *first_global_object_name;
 const char *weak_global_object_name;
 
-struct addr_const;
-struct constant_descriptor_rtx;
+class addr_const;
+class constant_descriptor_rtx;
 struct rtx_constant_pool;
 
 #define n_deferred_constants (crtl->varasm.deferred_constants)
@@ -105,13 +110,13 @@ static int contains_pointers_p (tree);
 #ifdef ASM_OUTPUT_EXTERNAL
 static bool incorporeal_function_p (tree);
 #endif
-static void decode_addr_const (tree, struct addr_const *);
+static void decode_addr_const (tree, class addr_const *);
 static hashval_t const_hash_1 (const tree);
 static int compare_constant (const tree, const tree);
 static void output_constant_def_contents (rtx);
-static void output_addressed_constants (tree);
+static void output_addressed_constants (tree, int);
 static unsigned HOST_WIDE_INT output_constant (tree, unsigned HOST_WIDE_INT,
-					       unsigned int, bool);
+					       unsigned int, bool, bool);
 static void globalize_decl (tree);
 static bool decl_readonly_section_1 (enum section_category);
 #ifdef BSS_SECTION_ASM_OP
@@ -275,16 +280,27 @@ get_noswitch_section (unsigned int flags, noswitch_section_callback callback)
 }
 
 /* Return the named section structure associated with NAME.  Create
-   a new section with the given fields if no such structure exists.  */
+   a new section with the given fields if no such structure exists.
+   When NOT_EXISTING, then fail if the section already exists.  Return
+   the existing section if the SECTION_RETAIN bit doesn't match.  Set
+   the SECTION_WRITE | SECTION_RELRO bits on the the existing section
+   if one of the section flags is SECTION_WRITE | SECTION_RELRO and the
+   other has none of these flags in named sections and either the section
+   hasn't been declared yet or has been declared as writable.  */
 
 section *
-get_section (const char *name, unsigned int flags, tree decl)
+get_section (const char *name, unsigned int flags, tree decl,
+	     bool not_existing)
 {
   section *sect, **slot;
 
   slot = section_htab->find_slot_with_hash (name, htab_hash_string (name),
 					    INSERT);
   flags |= SECTION_NAMED;
+  if (decl != nullptr
+      && DECL_P (decl)
+      && lookup_attribute ("retain", DECL_ATTRIBUTES (decl)))
+    flags |= SECTION_RETAIN;
   if (*slot == NULL)
     {
       sect = ggc_alloc<section> ();
@@ -295,6 +311,9 @@ get_section (const char *name, unsigned int flags, tree decl)
     }
   else
     {
+      if (not_existing)
+	internal_error ("Section already exists: %qs", name);
+
       sect = *slot;
       /* It is fine if one of the sections has SECTION_NOTYPE as long as
          the other has none of the contrary flags (see the logic at the end
@@ -328,6 +347,11 @@ get_section (const char *name, unsigned int flags, tree decl)
 	      sect->common.flags |= (SECTION_WRITE | SECTION_RELRO);
 	      return sect;
 	    }
+	  /* If the SECTION_RETAIN bit doesn't match, return and switch
+	     to a new section later.  */
+	  if ((sect->common.flags & SECTION_RETAIN)
+	      != (flags & SECTION_RETAIN))
+	    return sect;
 	  /* Sanity check user variables for flag changes.  */
 	  if (sect->named.decl != NULL
 	      && DECL_P (sect->named.decl)
@@ -363,7 +387,11 @@ use_object_blocks_p (void)
 
 /* Return the object_block structure for section SECT.  Create a new
    structure if we haven't created one already.  Return null if SECT
-   itself is null.  */
+   itself is null.  Return also null for mergeable sections since
+   section anchors can't be used in mergeable sections anyway,
+   because the linker might move objects around, and using the
+   object blocks infrastructure in that case is both a waste and a
+   maintenance burden.  */
 
 static struct object_block *
 get_block_for_section (section *sect)
@@ -371,6 +399,9 @@ get_block_for_section (section *sect)
   struct object_block *block;
 
   if (sect == NULL)
+    return NULL;
+
+  if (sect->common.flags & SECTION_MERGE)
     return NULL;
 
   object_block **slot
@@ -455,6 +486,7 @@ resolve_unique_section (tree decl, int reloc ATTRIBUTE_UNUSED,
   if (DECL_SECTION_NAME (decl) == NULL
       && targetm_common.have_named_sections
       && (flag_function_or_data_sections
+	  || lookup_attribute ("retain", DECL_ATTRIBUTES (decl))
 	  || DECL_COMDAT_GROUP (decl)))
     {
       targetm.asm_out.unique_section (decl, reloc);
@@ -581,9 +613,13 @@ default_function_section (tree decl, enum node_frequency freq,
      where we can split away unnecessary parts of static constructors.  */
   if (startup && freq != NODE_FREQUENCY_UNLIKELY_EXECUTED)
   {
-    /* If we do have a profile or(and) LTO phase is executed, we do not need
-       these ELF section.  */
-    if (!in_lto_p || !flag_profile_values)
+    /* During LTO the tp_first_run profiling will naturally place all
+       initialization code first.  Using separate section is counter-productive
+       because startup only code may call functions which are no longer
+       startup only.  */
+    if (!in_lto_p
+        || !cgraph_node::get (decl)->tp_first_run
+	|| !opt_for_fn (decl, flag_profile_reorder_functions))
       return get_named_text_section (decl, ".text.startup", NULL);
     else
       return NULL;
@@ -599,10 +635,7 @@ default_function_section (tree decl, enum node_frequency freq,
       case NODE_FREQUENCY_UNLIKELY_EXECUTED:
 	return get_named_text_section (decl, ".text.unlikely", NULL);
       case NODE_FREQUENCY_HOT:
-        /* If we do have a profile or(and) LTO phase is executed, we do not need
-           these ELF section.  */
-        if (!in_lto_p || !flag_profile_values)
-          return get_named_text_section (decl, ".text.hot", NULL);
+        return get_named_text_section (decl, ".text.hot", NULL);
 	/* FALLTHRU */
       default:
 	return NULL;
@@ -717,12 +750,26 @@ switch_to_other_text_partition (void)
   switch_to_section (current_function_section ());
 }
 
-/* Return the read-only data section associated with function DECL.  */
+/* Return the read-only or relocated read-only data section
+   associated with function DECL.  */
 
 section *
-default_function_rodata_section (tree decl)
+default_function_rodata_section (tree decl, bool relocatable)
 {
-  if (decl != NULL_TREE && DECL_SECTION_NAME (decl))
+  const char* sname;
+  unsigned int flags;
+
+  flags = 0;
+
+  if (relocatable)
+    {
+      sname = ".data.rel.ro.local";
+      flags = (SECTION_WRITE | SECTION_RELRO);
+    }
+  else
+    sname = ".rodata";
+
+  if (decl && DECL_SECTION_NAME (decl))
     {
       const char *name = DECL_SECTION_NAME (decl);
 
@@ -735,38 +782,56 @@ default_function_rodata_section (tree decl)
 	  dot = strchr (name + 1, '.');
 	  if (!dot)
 	    dot = name;
-	  len = strlen (dot) + 8;
+	  len = strlen (dot) + strlen (sname) + 1;
 	  rname = (char *) alloca (len);
 
-	  strcpy (rname, ".rodata");
+	  strcpy (rname, sname);
 	  strcat (rname, dot);
-	  return get_section (rname, SECTION_LINKONCE, decl);
+	  return get_section (rname, (SECTION_LINKONCE | flags), decl);
 	}
-      /* For .gnu.linkonce.t.foo we want to use .gnu.linkonce.r.foo.  */
+      /* For .gnu.linkonce.t.foo we want to use .gnu.linkonce.r.foo or
+	 .gnu.linkonce.d.rel.ro.local.foo if the jump table is relocatable.  */
       else if (DECL_COMDAT_GROUP (decl)
 	       && strncmp (name, ".gnu.linkonce.t.", 16) == 0)
 	{
-	  size_t len = strlen (name) + 1;
-	  char *rname = (char *) alloca (len);
+	  size_t len;
+	  char *rname;
 
-	  memcpy (rname, name, len);
-	  rname[14] = 'r';
-	  return get_section (rname, SECTION_LINKONCE, decl);
+	  if (relocatable)
+	    {
+	      len = strlen (name) + strlen (".rel.ro.local") + 1;
+	      rname = (char *) alloca (len);
+
+	      strcpy (rname, ".gnu.linkonce.d.rel.ro.local");
+	      strcat (rname, name + 15);
+	    }
+	  else
+	    {
+	      len = strlen (name) + 1;
+	      rname = (char *) alloca (len);
+
+	      memcpy (rname, name, len);
+	      rname[14] = 'r';
+	    }
+	  return get_section (rname, (SECTION_LINKONCE | flags), decl);
 	}
       /* For .text.foo we want to use .rodata.foo.  */
       else if (flag_function_sections && flag_data_sections
 	       && strncmp (name, ".text.", 6) == 0)
 	{
 	  size_t len = strlen (name) + 1;
-	  char *rname = (char *) alloca (len + 2);
+	  char *rname = (char *) alloca (len + strlen (sname) - 5);
 
-	  memcpy (rname, ".rodata", 7);
-	  memcpy (rname + 7, name + 5, len - 5);
-	  return get_section (rname, 0, decl);
+	  memcpy (rname, sname, strlen (sname));
+	  memcpy (rname + strlen (sname), name + 5, len - 5);
+	  return get_section (rname, flags, decl);
 	}
     }
 
-  return readonly_data_section;
+  if (relocatable)
+    return get_section (sname, flags, decl);
+  else
+    return readonly_data_section;
 }
 
 /* Return the read-only data section associated with function DECL
@@ -774,7 +839,7 @@ default_function_rodata_section (tree decl)
    readonly data section.  */
 
 section *
-default_no_function_rodata_section (tree decl ATTRIBUTE_UNUSED)
+default_no_function_rodata_section (tree, bool)
 {
   return readonly_data_section;
 }
@@ -784,7 +849,8 @@ default_no_function_rodata_section (tree decl ATTRIBUTE_UNUSED)
 static const char *
 function_mergeable_rodata_prefix (void)
 {
-  section *s = targetm.asm_out.function_rodata_section (current_function_decl);
+  section *s = targetm.asm_out.function_rodata_section (current_function_decl,
+							false);
   if (SECTION_STYLE (s) == SECTION_NAMED)
     return s->named.name;
   else
@@ -805,7 +871,7 @@ mergeable_string_section (tree decl ATTRIBUTE_UNUSED,
       && TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE
       && align <= 256
       && (len = int_size_in_bytes (TREE_TYPE (decl))) > 0
-      && TREE_STRING_LENGTH (decl) >= len)
+      && TREE_STRING_LENGTH (decl) == len)
     {
       scalar_int_mode mode;
       unsigned int modesize;
@@ -823,6 +889,9 @@ mergeable_string_section (tree decl ATTRIBUTE_UNUSED,
 	  if (align < modesize)
 	    align = modesize;
 
+	  if (!HAVE_LD_ALIGNED_SHF_MERGE && align > 8)
+	    return readonly_data_section;
+
 	  str = TREE_STRING_POINTER (decl);
 	  unit = GET_MODE_SIZE (mode);
 
@@ -835,7 +904,7 @@ mergeable_string_section (tree decl ATTRIBUTE_UNUSED,
 	      if (j == unit)
 		break;
 	    }
-	  if (i == len - unit)
+	  if (i == len - unit || (unit == 1 && i == len))
 	    {
 	      sprintf (name, "%s.str%d.%d", prefix,
 		       modesize / 8, (int) (align / 8));
@@ -861,7 +930,8 @@ mergeable_constant_section (machine_mode mode ATTRIBUTE_UNUSED,
       && known_le (GET_MODE_BITSIZE (mode), align)
       && align >= 8
       && align <= 256
-      && (align & (align - 1)) == 0)
+      && (align & (align - 1)) == 0
+      && (HAVE_LD_ALIGNED_SHF_MERGE ? 1 : align == 8))
     {
       const char *prefix = function_mergeable_rodata_prefix ();
       char *name = (char *) alloca (strlen (prefix) + 30);
@@ -1005,7 +1075,11 @@ bss_initializer_p (const_tree decl, bool named)
 	      || (DECL_INITIAL (decl) == error_mark_node
 	          && !in_lto_p)
 	      || (flag_zero_initialized_in_bss
-	          && initializer_zerop (DECL_INITIAL (decl)))));
+		  && initializer_zerop (DECL_INITIAL (decl))
+		  /* A decl with the "persistent" attribute applied and
+		     explicitly initialized to 0 should not be treated as a BSS
+		     variable.  */
+		  && !DECL_PERSISTENT_P (decl))));
 }
 
 /* Compute the alignment of variable specified by DECL.
@@ -1151,7 +1225,8 @@ get_variable_section (tree decl, bool prefer_noswitch_p)
   if (vnode)
     vnode->get_constructor ();
 
-  if (DECL_COMMON (decl))
+  if (DECL_COMMON (decl)
+      && !lookup_attribute ("retain", DECL_ATTRIBUTES (decl)))
     {
       /* If the decl has been given an explicit section name, or it resides
 	 in a non-generic address space, then it isn't common, and shouldn't
@@ -1189,6 +1264,7 @@ get_variable_section (tree decl, bool prefer_noswitch_p)
 
   if (ADDR_SPACE_GENERIC_P (as)
       && !DECL_THREAD_LOCAL_P (decl)
+      && !DECL_NOINIT_P (decl)
       && !(prefer_noswitch_p && targetm.have_switchable_bss_sections)
       && bss_initializer_p (decl))
     {
@@ -1304,6 +1380,23 @@ ultimate_transparent_alias_target (tree *alias)
   return target;
 }
 
+/* Return true if REGNUM is mentioned in ELIMINABLE_REGS as a from
+   register number.  */
+
+static bool
+eliminable_regno_p (int regnum)
+{
+  static const struct
+  {
+    const int from;
+    const int to;
+  } eliminables[] = ELIMINABLE_REGS;
+  for (size_t i = 0; i < ARRAY_SIZE (eliminables); i++)
+    if (regnum == eliminables[i].from)
+      return true;
+  return false;
+}
+
 /* Create the DECL_RTL for a VAR_DECL or FUNCTION_DECL.  DECL should
    have static storage duration.  In other words, it should not be an
    automatic variable, including PARM_DECLs.
@@ -1377,10 +1470,6 @@ make_decl_rtl (tree decl)
     }
 
   id = DECL_ASSEMBLER_NAME (decl);
-  if (TREE_CODE (decl) == FUNCTION_DECL
-      && cgraph_node::get (decl)
-      && cgraph_node::get (decl)->instrumentation_clone)
-    ultimate_transparent_alias_target (&id);
   name = IDENTIFIER_POINTER (id);
 
   if (name[0] != '*' && TREE_CODE (decl) != FUNCTION_DECL
@@ -1410,6 +1499,15 @@ make_decl_rtl (tree decl)
       else if (!targetm.hard_regno_mode_ok (reg_number, mode))
 	error ("register specified for %q+D isn%'t suitable for data type",
                decl);
+      else if (reg_number != HARD_FRAME_POINTER_REGNUM
+	       && (reg_number == FRAME_POINTER_REGNUM
+#ifdef RETURN_ADDRESS_POINTER_REGNUM
+		   || reg_number == RETURN_ADDRESS_POINTER_REGNUM
+#endif
+		   || reg_number == ARG_POINTER_REGNUM)
+	       && eliminable_regno_p (reg_number))
+	error ("register specified for %q+D is an internal GCC "
+	       "implementation detail", decl);
       /* Now handle properly declared static register variables.  */
       else
 	{
@@ -1790,7 +1888,7 @@ assemble_start_function (tree decl, const char *fnname)
 
   /* Switch to the correct text section for the start of the function.  */
 
-  switch_to_section (function_section (decl));
+  switch_to_section (function_section (decl), decl);
   if (crtl->has_bb_partition && !hot_label_written)
     ASM_OUTPUT_LABEL (asm_out_file, crtl->subsections.hot_section_label);
 
@@ -1805,21 +1903,25 @@ assemble_start_function (tree decl, const char *fnname)
      Note that we still need to align to DECL_ALIGN, as above,
      because ASM_OUTPUT_MAX_SKIP_ALIGN might not do any alignment at all.  */
   if (! DECL_USER_ALIGN (decl)
-      && align_functions_log > align
+      && align_functions.levels[0].log > align
       && optimize_function_for_speed_p (cfun))
     {
 #ifdef ASM_OUTPUT_MAX_SKIP_ALIGN
-      int align_log = align_functions_log;
+      int align_log = align_functions.levels[0].log;
 #endif
-      int max_skip = align_functions - 1;
+      int max_skip = align_functions.levels[0].maxskip;
       if (flag_limit_function_alignment && crtl->max_insn_address > 0
 	  && max_skip >= crtl->max_insn_address)
 	max_skip = crtl->max_insn_address - 1;
 
 #ifdef ASM_OUTPUT_MAX_SKIP_ALIGN
       ASM_OUTPUT_MAX_SKIP_ALIGN (asm_out_file, align_log, max_skip);
+      if (max_skip == align_functions.levels[0].maxskip)
+	ASM_OUTPUT_MAX_SKIP_ALIGN (asm_out_file,
+				   align_functions.levels[1].log,
+				   align_functions.levels[1].maxskip);
 #else
-      ASM_OUTPUT_ALIGN (asm_out_file, align_functions_log);
+      ASM_OUTPUT_ALIGN (asm_out_file, align_functions.levels[0].log);
 #endif
     }
 
@@ -1832,10 +1934,7 @@ assemble_start_function (tree decl, const char *fnname)
 
   /* Make function name accessible from other files, if appropriate.  */
 
-  if (TREE_PUBLIC (decl)
-      || (cgraph_node::get (decl)->instrumentation_clone
-	  && cgraph_node::get (decl)->instrumented_version
-	  && TREE_PUBLIC (cgraph_node::get (decl)->instrumented_version->decl)))
+  if (TREE_PUBLIC (decl))
     {
       notice_global_symbol (decl);
 
@@ -1847,40 +1946,8 @@ assemble_start_function (tree decl, const char *fnname)
   if (DECL_PRESERVE_P (decl))
     targetm.asm_out.mark_decl_preserved (fnname);
 
-  unsigned HOST_WIDE_INT patch_area_size = function_entry_patch_area_size;
-  unsigned HOST_WIDE_INT patch_area_entry = function_entry_patch_area_start;
-
-  tree patchable_function_entry_attr
-    = lookup_attribute ("patchable_function_entry", DECL_ATTRIBUTES (decl));
-  if (patchable_function_entry_attr)
-    {
-      tree pp_val = TREE_VALUE (patchable_function_entry_attr);
-      tree patchable_function_entry_value1 = TREE_VALUE (pp_val);
-
-      if (tree_fits_uhwi_p (patchable_function_entry_value1))
-	patch_area_size = tree_to_uhwi (patchable_function_entry_value1);
-      else
-	gcc_unreachable ();
-
-      patch_area_entry = 0;
-      if (list_length (pp_val) > 1)
-	{
-	  tree patchable_function_entry_value2 =
-	    TREE_VALUE (TREE_CHAIN (pp_val));
-
-	  if (tree_fits_uhwi_p (patchable_function_entry_value2))
-	    patch_area_entry = tree_to_uhwi (patchable_function_entry_value2);
-	  else
-	    gcc_unreachable ();
-	}
-    }
-
-  if (patch_area_entry > patch_area_size)
-    {
-      if (patch_area_size > 0)
-	warning (OPT_Wattributes, "Patchable function entry > size");
-      patch_area_entry = 0;
-    }
+  unsigned short patch_area_size = crtl->patch_area_size;
+  unsigned short patch_area_entry = crtl->patch_area_entry;
 
   /* Emit the patching area before the entry label, if any.  */
   if (patch_area_entry > 0)
@@ -1898,7 +1965,8 @@ assemble_start_function (tree decl, const char *fnname)
   /* And the area after the label.  Record it if we haven't done so yet.  */
   if (patch_area_size > patch_area_entry)
     targetm.asm_out.print_patchable_function_entry (asm_out_file,
-					     patch_area_size-patch_area_entry,
+						    patch_area_size
+						    - patch_area_entry,
 						    patch_area_entry == 0);
 
   if (lookup_attribute ("no_split_stack", DECL_ATTRIBUTES (decl)))
@@ -1973,7 +2041,7 @@ assemble_zeros (unsigned HOST_WIDE_INT size)
 /* Assemble an alignment pseudo op for an ALIGN-bit boundary.  */
 
 void
-assemble_align (int align)
+assemble_align (unsigned int align)
 {
   if (align > BITS_PER_UNIT)
     {
@@ -2120,7 +2188,7 @@ assemble_noswitch_variable (tree decl, const char *name, section *sect,
 
 static void
 assemble_variable_contents (tree decl, const char *name,
-			    bool dont_output_data)
+			    bool dont_output_data, bool merge_strings)
 {
   /* Do any machine/system dependent processing of the object.  */
 #ifdef ASM_DECLARE_OBJECT_NAME
@@ -2143,7 +2211,7 @@ assemble_variable_contents (tree decl, const char *name,
 	output_constant (DECL_INITIAL (decl),
 			 tree_to_uhwi (DECL_SIZE_UNIT (decl)),
 			 get_variable_align (decl),
-			 false);
+			 false, merge_strings);
       else
 	/* Leave space for it.  */
 	assemble_zeros (tree_to_uhwi (DECL_SIZE_UNIT (decl)));
@@ -2293,7 +2361,7 @@ assemble_variable (tree decl, int top_level ATTRIBUTE_UNUSED,
 
   /* Output any data that we will need to use the address of.  */
   if (DECL_INITIAL (decl) && DECL_INITIAL (decl) != error_mark_node)
-    output_addressed_constants (DECL_INITIAL (decl));
+    output_addressed_constants (DECL_INITIAL (decl), 0);
 
   /* dbxout.c needs to know this.  */
   if (sect && (sect->common.flags & SECTION_CODE) != 0)
@@ -2316,10 +2384,12 @@ assemble_variable (tree decl, int top_level ATTRIBUTE_UNUSED,
 	  && (strcmp (sect->named.name, ".vtable_map_vars") == 0))
 	handle_vtv_comdat_section (sect, decl);
       else
-	switch_to_section (sect);
+	switch_to_section (sect, decl);
       if (align > BITS_PER_UNIT)
 	ASM_OUTPUT_ALIGN (asm_out_file, floor_log2 (align / BITS_PER_UNIT));
-      assemble_variable_contents (decl, name, dont_output_data);
+      assemble_variable_contents (decl, name, dont_output_data,
+				  (sect->common.flags & SECTION_MERGE)
+				  && (sect->common.flags & SECTION_STRINGS));
       if (asan_protected)
 	{
 	  unsigned HOST_WIDE_INT int size
@@ -2404,7 +2474,7 @@ static hash_set<tree> *pending_assemble_externals_set;
 static bool
 incorporeal_function_p (tree decl)
 {
-  if (TREE_CODE (decl) == FUNCTION_DECL && DECL_BUILT_IN (decl))
+  if (TREE_CODE (decl) == FUNCTION_DECL && fndecl_built_in_p (decl))
     {
       const char *name;
 
@@ -2582,20 +2652,16 @@ assemble_name_raw (FILE *file, const char *name)
     ASM_OUTPUT_LABELREF (file, name);
 }
 
-/* Like assemble_name_raw, but should be used when NAME might refer to
-   an entity that is also represented as a tree (like a function or
-   variable).  If NAME does refer to such an entity, that entity will
-   be marked as referenced.  */
-
-void
-assemble_name (FILE *file, const char *name)
+/* Return NAME that should actually be emitted, looking through
+   transparent aliases.  If NAME refers to an entity that is also
+   represented as a tree (like a function or variable), mark the entity
+   as referenced.  */
+const char *
+assemble_name_resolve (const char *name)
 {
-  const char *real_name;
-  tree id;
+  const char *real_name = targetm.strip_name_encoding (name);
+  tree id = maybe_get_identifier (real_name);
 
-  real_name = targetm.strip_name_encoding (name);
-
-  id = maybe_get_identifier (real_name);
   if (id)
     {
       tree id_orig = id;
@@ -2607,7 +2673,18 @@ assemble_name (FILE *file, const char *name)
       gcc_assert (! TREE_CHAIN (id));
     }
 
-  assemble_name_raw (file, name);
+  return name;
+}
+
+/* Like assemble_name_raw, but should be used when NAME might refer to
+   an entity that is also represented as a tree (like a function or
+   variable).  If NAME does refer to such an entity, that entity will
+   be marked as referenced.  */
+
+void
+assemble_name (FILE *file, const char *name)
+{
+  assemble_name_raw (file, assemble_name_resolve (name));
 }
 
 /* Allocate SIZE bytes writable static space with a gensym name
@@ -2730,10 +2807,24 @@ integer_asm_op (int size, int aligned_p)
       return targetm.asm_out.byte_op;
     case 2:
       return ops->hi;
+    case 3:
+      return ops->psi;
     case 4:
       return ops->si;
+    case 5:
+    case 6:
+    case 7:
+      return ops->pdi;
     case 8:
       return ops->di;
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+      return ops->pti;
     case 16:
       return ops->ti;
     default:
@@ -2853,25 +2944,27 @@ assemble_real (REAL_VALUE_TYPE d, scalar_float_mode mode, unsigned int align,
   real_to_target (data, &d, mode);
 
   /* Put out the first word with the specified alignment.  */
+  unsigned int chunk_nunits = MIN (nunits, units_per);
   if (reverse)
     elt = flip_storage_order (SImode, gen_int_mode (data[nelts - 1], SImode));
   else
-    elt = GEN_INT (data[0]);
-  assemble_integer (elt, MIN (nunits, units_per), align, 1);
-  nunits -= units_per;
+    elt = GEN_INT (sext_hwi (data[0], chunk_nunits * BITS_PER_UNIT));
+  assemble_integer (elt, chunk_nunits, align, 1);
+  nunits -= chunk_nunits;
 
   /* Subsequent words need only 32-bit alignment.  */
   align = min_align (align, 32);
 
   for (int i = 1; i < nelts; i++)
     {
+      chunk_nunits = MIN (nunits, units_per);
       if (reverse)
 	elt = flip_storage_order (SImode,
 				  gen_int_mode (data[nelts - 1 - i], SImode));
       else
-	elt = GEN_INT (data[i]);
-      assemble_integer (elt, MIN (nunits, units_per), align, 1);
-      nunits -= units_per;
+	elt = GEN_INT (sext_hwi (data[i], chunk_nunits * BITS_PER_UNIT));
+      assemble_integer (elt, chunk_nunits, align, 1);
+      nunits -= chunk_nunits;
     }
 }
 
@@ -2880,13 +2973,14 @@ assemble_real (REAL_VALUE_TYPE d, scalar_float_mode mode, unsigned int align,
    Store them both in the structure *VALUE.
    EXP must be reducible.  */
 
-struct addr_const {
+class addr_const {
+public:
   rtx base;
   poly_int64 offset;
 };
 
 static void
-decode_addr_const (tree exp, struct addr_const *value)
+decode_addr_const (tree exp, class addr_const *value)
 {
   tree target = TREE_OPERAND (exp, 0);
   poly_int64 offset = 0;
@@ -2944,7 +3038,9 @@ decode_addr_const (tree exp, struct addr_const *value)
     case COMPLEX_CST:
     case CONSTRUCTOR:
     case INTEGER_CST:
-      x = output_constant_def (target, 1);
+      x = lookup_constant_def (target);
+      /* Should have been added by output_addressed_constants.  */
+      gcc_assert (x);
       break;
 
     case INDIRECT_REF:
@@ -3048,9 +3144,13 @@ const_hash_1 (const tree exp)
       }
 
     case ADDR_EXPR:
+      if (CONSTANT_CLASS_P (TREE_OPERAND (exp, 0)))
+       return const_hash_1 (TREE_OPERAND (exp, 0));
+
+      /* Fallthru.  */
     case FDESC_EXPR:
       {
-	struct addr_const value;
+	class addr_const value;
 
 	decode_addr_const (exp, &value);
 	switch (GET_CODE (value.base))
@@ -3154,7 +3254,9 @@ compare_constant (const tree t1, const tree t2)
       return FIXED_VALUES_IDENTICAL (TREE_FIXED_CST (t1), TREE_FIXED_CST (t2));
 
     case STRING_CST:
-      if (TYPE_MODE (TREE_TYPE (t1)) != TYPE_MODE (TREE_TYPE (t2)))
+      if (TYPE_MODE (TREE_TYPE (t1)) != TYPE_MODE (TREE_TYPE (t2))
+	  || int_size_in_bytes (TREE_TYPE (t1))
+	     != int_size_in_bytes (TREE_TYPE (t2)))
 	return 0;
 
       return (TREE_STRING_LENGTH (t1) == TREE_STRING_LENGTH (t2)
@@ -3244,7 +3346,7 @@ compare_constant (const tree t1, const tree t2)
     case ADDR_EXPR:
     case FDESC_EXPR:
       {
-	struct addr_const value1, value2;
+	class addr_const value1, value2;
 	enum rtx_code code;
 	int ret;
 
@@ -3311,8 +3413,9 @@ get_constant_size (tree exp)
   HOST_WIDE_INT size;
 
   size = int_size_in_bytes (TREE_TYPE (exp));
-  if (TREE_CODE (exp) == STRING_CST)
-    size = MAX (TREE_STRING_LENGTH (exp), size);
+  gcc_checking_assert (size >= 0);
+  gcc_checking_assert (TREE_CODE (exp) != STRING_CST
+		       || size >= TREE_STRING_LENGTH (exp));
   return size;
 }
 
@@ -3357,7 +3460,15 @@ build_constant_desc (tree exp)
   if (TREE_CODE (exp) == STRING_CST)
     SET_DECL_ALIGN (decl, targetm.constant_alignment (exp, DECL_ALIGN (decl)));
   else
-    align_variable (decl, 0);
+    {
+      align_variable (decl, 0);
+      if (DECL_ALIGN (decl) < GET_MODE_ALIGNMENT (DECL_MODE (decl))
+	  && ((optab_handler (movmisalign_optab, DECL_MODE (decl))
+	       != CODE_FOR_nothing)
+	      || targetm.slow_unaligned_access (DECL_MODE (decl),
+						DECL_ALIGN (decl))))
+	SET_DECL_ALIGN (decl, GET_MODE_ALIGNMENT (DECL_MODE (decl)));
+    }
 
   /* Now construct the SYMBOL_REF and the MEM.  */
   if (use_object_blocks_p ())
@@ -3377,7 +3488,6 @@ build_constant_desc (tree exp)
   TREE_CONSTANT_POOL_ADDRESS_P (symbol) = 1;
 
   rtl = gen_const_mem (TYPE_MODE (TREE_TYPE (exp)), symbol);
-  set_mem_attributes (rtl, exp, 1);
   set_mem_alias_set (rtl, 0);
 
   /* Putting EXP into the literal pool might have imposed a different
@@ -3400,6 +3510,43 @@ build_constant_desc (tree exp)
   return desc;
 }
 
+/* Subroutine of output_constant_def and tree_output_constant_def:
+   Add a constant to the hash table that tracks which constants
+   already have labels.  */
+
+static constant_descriptor_tree *
+add_constant_to_table (tree exp, int defer)
+{
+  /* The hash table methods may call output_constant_def for addressed
+     constants, so handle them first.  */
+  output_addressed_constants (exp, defer);
+
+  /* Sanity check to catch recursive insertion.  */
+  static bool inserting;
+  gcc_assert (!inserting);
+  inserting = true;
+
+  /* Look up EXP in the table of constant descriptors.  If we didn't
+     find it, create a new one.  */
+  struct constant_descriptor_tree key;
+  key.value = exp;
+  key.hash = const_hash_1 (exp);
+  constant_descriptor_tree **loc
+    = const_desc_htab->find_slot_with_hash (&key, key.hash, INSERT);
+
+  inserting = false;
+
+  struct constant_descriptor_tree *desc = *loc;
+  if (!desc)
+    {
+      desc = build_constant_desc (exp);
+      desc->hash = key.hash;
+      *loc = desc;
+    }
+
+  return desc;
+}
+
 /* Return an rtx representing a reference to constant data in memory
    for the constant expression EXP.
 
@@ -3416,24 +3563,7 @@ build_constant_desc (tree exp)
 rtx
 output_constant_def (tree exp, int defer)
 {
-  struct constant_descriptor_tree *desc;
-  struct constant_descriptor_tree key;
-
-  /* Look up EXP in the table of constant descriptors.  If we didn't find
-     it, create a new one.  */
-  key.value = exp;
-  key.hash = const_hash_1 (exp);
-  constant_descriptor_tree **loc
-    = const_desc_htab->find_slot_with_hash (&key, key.hash, INSERT);
-
-  desc = *loc;
-  if (desc == 0)
-    {
-      desc = build_constant_desc (exp);
-      desc->hash = key.hash;
-      *loc = desc;
-    }
-
+  struct constant_descriptor_tree *desc = add_constant_to_table (exp, defer);
   maybe_output_constant_def_contents (desc, defer);
   return desc->rtl;
 }
@@ -3476,7 +3606,8 @@ maybe_output_constant_def_contents (struct constant_descriptor_tree *desc,
    constant's alignment in bits.  */
 
 static void
-assemble_constant_contents (tree exp, const char *label, unsigned int align)
+assemble_constant_contents (tree exp, const char *label, unsigned int align,
+			    bool merge_strings)
 {
   HOST_WIDE_INT size;
 
@@ -3486,7 +3617,7 @@ assemble_constant_contents (tree exp, const char *label, unsigned int align)
   targetm.asm_out.declare_constant_name (asm_out_file, label, exp, size);
 
   /* Output the value of EXP.  */
-  output_constant (exp, size, align, false);
+  output_constant (exp, size, align, false, merge_strings);
 
   targetm.asm_out.decl_end ();
 }
@@ -3502,7 +3633,7 @@ output_constant_def_contents (rtx symbol)
 
   /* Make sure any other constants whose addresses appear in EXP
      are assigned label numbers.  */
-  output_addressed_constants (exp);
+  output_addressed_constants (exp, 0);
 
   /* We are no longer deferring this constant.  */
   TREE_ASM_WRITTEN (decl) = TREE_ASM_WRITTEN (exp) = 1;
@@ -3527,10 +3658,13 @@ output_constant_def_contents (rtx symbol)
 		   || (VAR_P (decl) && DECL_IN_CONSTANT_POOL (decl))
 		   ? DECL_ALIGN (decl)
 		   : symtab_node::get (decl)->definition_alignment ());
-      switch_to_section (get_constant_section (exp, align));
+      section *sect = get_constant_section (exp, align);
+      switch_to_section (sect);
       if (align > BITS_PER_UNIT)
 	ASM_OUTPUT_ALIGN (asm_out_file, floor_log2 (align / BITS_PER_UNIT));
-      assemble_constant_contents (exp, XSTR (symbol, 0), align);
+      assemble_constant_contents (exp, XSTR (symbol, 0), align,
+				  (sect->common.flags & SECTION_MERGE)
+				  && (sect->common.flags & SECTION_STRINGS));
       if (asan_protected)
 	{
 	  HOST_WIDE_INT size = get_constant_size (exp);
@@ -3563,31 +3697,15 @@ lookup_constant_def (tree exp)
 tree
 tree_output_constant_def (tree exp)
 {
-  struct constant_descriptor_tree *desc, key;
-  tree decl;
-
-  /* Look up EXP in the table of constant descriptors.  If we didn't find
-     it, create a new one.  */
-  key.value = exp;
-  key.hash = const_hash_1 (exp);
-  constant_descriptor_tree **loc
-    = const_desc_htab->find_slot_with_hash (&key, key.hash, INSERT);
-
-  desc = *loc;
-  if (desc == 0)
-    {
-      desc = build_constant_desc (exp);
-      desc->hash = key.hash;
-      *loc = desc;
-    }
-
-  decl = SYMBOL_REF_DECL (XEXP (desc->rtl, 0));
+  struct constant_descriptor_tree *desc = add_constant_to_table (exp, 1);
+  tree decl = SYMBOL_REF_DECL (XEXP (desc->rtl, 0));
   varpool_node::finalize_decl (decl);
   return decl;
 }
 
-struct GTY((chain_next ("%h.next"), for_user)) constant_descriptor_rtx {
-  struct constant_descriptor_rtx *next;
+class GTY((chain_next ("%h.next"), for_user)) constant_descriptor_rtx {
+public:
+  class constant_descriptor_rtx *next;
   rtx mem;
   rtx sym;
   rtx constant;
@@ -3614,8 +3732,8 @@ struct const_rtx_desc_hasher : ggc_ptr_hash<constant_descriptor_rtx>
 
 struct GTY(()) rtx_constant_pool {
   /* Pointers to first and last constant in pool, as ordered by offset.  */
-  struct constant_descriptor_rtx *first;
-  struct constant_descriptor_rtx *last;
+  class constant_descriptor_rtx *first;
+  class constant_descriptor_rtx *last;
 
   /* Hash facility for making memory-constants from constant rtl-expressions.
      It is used on RISC machines where immediate integer arguments and
@@ -3775,7 +3893,7 @@ simplify_subtraction (rtx x)
 rtx
 force_const_mem (machine_mode in_mode, rtx x)
 {
-  struct constant_descriptor_rtx *desc, tmp;
+  class constant_descriptor_rtx *desc, tmp;
   struct rtx_constant_pool *pool;
   char label[256];
   rtx def, symbol;
@@ -3883,7 +4001,7 @@ get_pool_constant (const_rtx addr)
 rtx
 get_pool_constant_mark (rtx addr, bool *pmarked)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
 
   desc = SYMBOL_REF_CONSTANT (addr);
   *pmarked = (desc->mark != 0);
@@ -3931,7 +4049,6 @@ output_constant_pool_2 (fixed_size_mode mode, rtx x, unsigned int align)
     case MODE_UFRACT:
     case MODE_ACCUM:
     case MODE_UACCUM:
-    case MODE_POINTER_BOUNDS:
       assemble_integer (x, GET_MODE_SIZE (mode), align, 1);
       break;
 
@@ -3992,7 +4109,7 @@ output_constant_pool_2 (fixed_size_mode mode, rtx x, unsigned int align)
    giving it ALIGN bits of alignment.  */
 
 static void
-output_constant_pool_1 (struct constant_descriptor_rtx *desc,
+output_constant_pool_1 (class constant_descriptor_rtx *desc,
 			unsigned int align)
 {
   rtx x, tmp;
@@ -4069,7 +4186,7 @@ output_constant_pool_1 (struct constant_descriptor_rtx *desc,
 static void
 recompute_pool_offsets (struct rtx_constant_pool *pool)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
   pool->offset = 0;
 
   for (desc = pool->first; desc ; desc = desc->next)
@@ -4098,7 +4215,7 @@ mark_constants_in_pattern (rtx insn)
 	{
 	  if (CONSTANT_POOL_ADDRESS_P (x))
 	    {
-	      struct constant_descriptor_rtx *desc = SYMBOL_REF_CONSTANT (x);
+	      class constant_descriptor_rtx *desc = SYMBOL_REF_CONSTANT (x);
 	      if (desc->mark == 0)
 		{
 		  desc->mark = 1;
@@ -4167,10 +4284,30 @@ mark_constant_pool (void)
 static void
 output_constant_pool_contents (struct rtx_constant_pool *pool)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
 
   for (desc = pool->first; desc ; desc = desc->next)
-    if (desc->mark)
+    if (desc->mark < 0)
+      {
+#ifdef ASM_OUTPUT_DEF
+	const char *name = XSTR (desc->sym, 0);
+	char label[256];
+	char buffer[256 + 32];
+	const char *p;
+
+	ASM_GENERATE_INTERNAL_LABEL (label, "LC", ~desc->mark);
+	p = label;
+	if (desc->offset)
+	  {
+	    sprintf (buffer, "%s+%ld", p, (long) (desc->offset));
+	    p = buffer;
+	  }
+	ASM_OUTPUT_DEF (asm_out_file, name, p);
+#else
+	gcc_unreachable ();
+#endif
+      }
+    else if (desc->mark)
       {
 	/* If the constant is part of an object_block, make sure that
 	   the constant has been positioned within its block, but do not
@@ -4186,6 +4323,160 @@ output_constant_pool_contents (struct rtx_constant_pool *pool)
 	    output_constant_pool_1 (desc, desc->align);
 	  }
       }
+}
+
+struct constant_descriptor_rtx_data {
+  constant_descriptor_rtx *desc;
+  target_unit *bytes;
+  unsigned short size;
+  unsigned short offset;
+  unsigned int hash;
+};
+
+/* qsort callback to sort constant_descriptor_rtx_data * vector by
+   decreasing size.  */
+
+static int
+constant_descriptor_rtx_data_cmp (const void *p1, const void *p2)
+{
+  constant_descriptor_rtx_data *const data1
+    = *(constant_descriptor_rtx_data * const *) p1;
+  constant_descriptor_rtx_data *const data2
+    = *(constant_descriptor_rtx_data * const *) p2;
+  if (data1->size > data2->size)
+    return -1;
+  if (data1->size < data2->size)
+    return 1;
+  if (data1->hash < data2->hash)
+    return -1;
+  gcc_assert (data1->hash > data2->hash);
+  return 1;
+}
+
+struct const_rtx_data_hasher : nofree_ptr_hash<constant_descriptor_rtx_data>
+{
+  static hashval_t hash (constant_descriptor_rtx_data *);
+  static bool equal (constant_descriptor_rtx_data *,
+		     constant_descriptor_rtx_data *);
+};
+
+/* Hash and compare functions for const_rtx_data_htab.  */
+
+hashval_t
+const_rtx_data_hasher::hash (constant_descriptor_rtx_data *data)
+{
+  return data->hash;
+}
+
+bool
+const_rtx_data_hasher::equal (constant_descriptor_rtx_data *x,
+			      constant_descriptor_rtx_data *y)
+{
+  if (x->hash != y->hash || x->size != y->size)
+    return 0;
+  unsigned int align1 = x->desc->align;
+  unsigned int align2 = y->desc->align;
+  unsigned int offset1 = (x->offset * BITS_PER_UNIT) & (align1 - 1);
+  unsigned int offset2 = (y->offset * BITS_PER_UNIT) & (align2 - 1);
+  if (offset1)
+    align1 = least_bit_hwi (offset1);
+  if (offset2)
+    align2 = least_bit_hwi (offset2);
+  if (align2 > align1)
+    return 0;
+  if (memcmp (x->bytes, y->bytes, x->size * sizeof (target_unit)) != 0)
+    return 0;
+  return 1;
+}
+
+/* Attempt to optimize constant pool POOL.  If it contains both CONST_VECTOR
+   constants and scalar constants with the values of CONST_VECTOR elements,
+   try to alias the scalar constants with the CONST_VECTOR elements.  */
+
+static void
+optimize_constant_pool (struct rtx_constant_pool *pool)
+{
+  auto_vec<target_unit, 128> buffer;
+  auto_vec<constant_descriptor_rtx_data *, 128> vec;
+  object_allocator<constant_descriptor_rtx_data>
+    data_pool ("constant_descriptor_rtx_data_pool");
+  int idx = 0;
+  size_t size = 0;
+  for (constant_descriptor_rtx *desc = pool->first; desc; desc = desc->next)
+    if (desc->mark > 0
+	&& ! (SYMBOL_REF_HAS_BLOCK_INFO_P (desc->sym)
+	      && SYMBOL_REF_BLOCK (desc->sym)))
+      {
+	buffer.truncate (0);
+	buffer.reserve (GET_MODE_SIZE (desc->mode));
+	if (native_encode_rtx (desc->mode, desc->constant, buffer, 0,
+			       GET_MODE_SIZE (desc->mode)))
+	  {
+	    constant_descriptor_rtx_data *data = data_pool.allocate ();
+	    data->desc = desc;
+	    data->bytes = NULL;
+	    data->size = GET_MODE_SIZE (desc->mode);
+	    data->offset = 0;
+	    data->hash = idx++;
+	    size += data->size;
+	    vec.safe_push (data);
+	  }
+      }
+  if (idx)
+    {
+      vec.qsort (constant_descriptor_rtx_data_cmp);
+      unsigned min_size = vec.last ()->size;
+      target_unit *bytes = XNEWVEC (target_unit, size);
+      unsigned int i;
+      constant_descriptor_rtx_data *data;
+      hash_table<const_rtx_data_hasher> * htab
+	= new hash_table<const_rtx_data_hasher> (31);
+      size = 0;
+      FOR_EACH_VEC_ELT (vec, i, data)
+	{
+	  buffer.truncate (0);
+	  native_encode_rtx (data->desc->mode, data->desc->constant,
+			     buffer, 0, data->size);
+	  memcpy (bytes + size, buffer.address (), data->size);
+	  data->bytes = bytes + size;
+	  data->hash = iterative_hash (data->bytes,
+				       data->size * sizeof (target_unit), 0);
+	  size += data->size;
+	  constant_descriptor_rtx_data **slot
+	    = htab->find_slot_with_hash (data, data->hash, INSERT);
+	  if (*slot)
+	    {
+	      data->desc->mark = ~(*slot)->desc->labelno;
+	      data->desc->offset = (*slot)->offset;
+	    }
+	  else
+	    {
+	      unsigned int sz = 1 << floor_log2 (data->size);
+
+	      *slot = data;
+	      for (sz >>= 1; sz >= min_size; sz >>= 1)
+		for (unsigned off = 0; off + sz <= data->size; off += sz)
+		  {
+		    constant_descriptor_rtx_data tmp;
+		    tmp.desc = data->desc;
+		    tmp.bytes = data->bytes + off;
+		    tmp.size = sz;
+		    tmp.offset = off;
+		    tmp.hash = iterative_hash (tmp.bytes,
+					       sz * sizeof (target_unit), 0);
+		    slot = htab->find_slot_with_hash (&tmp, tmp.hash, INSERT);
+		    if (*slot == NULL)
+		      {
+			*slot = data_pool.allocate ();
+			**slot = tmp;
+		      }
+		  }
+	    }
+	}
+      delete htab;
+      XDELETE (bytes);
+    }
+  data_pool.release ();
 }
 
 /* Mark all constants that are used in the current function, then write
@@ -4223,6 +4514,10 @@ output_constant_pool (const char *fnname ATTRIBUTE_UNUSED,
 void
 output_shared_constant_pool (void)
 {
+  if (optimize
+      && TARGET_SUPPORTS_ALIASES)
+    optimize_constant_pool (shared_constant_pool);
+
   output_constant_pool_contents (shared_constant_pool);
 }
 
@@ -4299,7 +4594,7 @@ compute_reloc_for_constant (tree exp)
    Indicate whether an ADDR_EXPR has been encountered.  */
 
 static void
-output_addressed_constants (tree exp)
+output_addressed_constants (tree exp, int defer)
 {
   tree tem;
 
@@ -4319,21 +4614,21 @@ output_addressed_constants (tree exp)
 	tem = DECL_INITIAL (tem);
 
       if (CONSTANT_CLASS_P (tem) || TREE_CODE (tem) == CONSTRUCTOR)
-	output_constant_def (tem, 0);
+	output_constant_def (tem, defer);
 
       if (TREE_CODE (tem) == MEM_REF)
-	output_addressed_constants (TREE_OPERAND (tem, 0));
+	output_addressed_constants (TREE_OPERAND (tem, 0), defer);
       break;
 
     case PLUS_EXPR:
     case POINTER_PLUS_EXPR:
     case MINUS_EXPR:
-      output_addressed_constants (TREE_OPERAND (exp, 1));
+      output_addressed_constants (TREE_OPERAND (exp, 1), defer);
       gcc_fallthrough ();
 
     CASE_CONVERT:
     case VIEW_CONVERT_EXPR:
-      output_addressed_constants (TREE_OPERAND (exp, 0));
+      output_addressed_constants (TREE_OPERAND (exp, 0), defer);
       break;
 
     case CONSTRUCTOR:
@@ -4341,7 +4636,7 @@ output_addressed_constants (tree exp)
 	unsigned HOST_WIDE_INT idx;
 	FOR_EACH_CONSTRUCTOR_VALUE (CONSTRUCTOR_ELTS (exp), idx, tem)
 	  if (tem != 0)
-	    output_addressed_constants (tem);
+	    output_addressed_constants (tem, defer);
       }
       break;
 
@@ -4782,6 +5077,30 @@ initializer_constant_valid_for_bitfield_p (tree value)
   return false;
 }
 
+/* Check if a STRING_CST fits into the field.
+   Tolerate only the case when the NUL termination
+   does not fit into the field.   */
+
+static bool
+check_string_literal (tree string, unsigned HOST_WIDE_INT size)
+{
+  tree type = TREE_TYPE (string);
+  tree eltype = TREE_TYPE (type);
+  unsigned HOST_WIDE_INT elts = tree_to_uhwi (TYPE_SIZE_UNIT (eltype));
+  unsigned HOST_WIDE_INT mem_size = tree_to_uhwi (TYPE_SIZE_UNIT (type));
+  int len = TREE_STRING_LENGTH (string);
+
+  if (elts != 1 && elts != 2 && elts != 4)
+    return false;
+  if (len < 0 || len % elts != 0)
+    return false;
+  if (size < (unsigned)len)
+    return false;
+  if (mem_size != size)
+    return false;
+  return true;
+}
+
 /* output_constructor outer state of relevance in recursive calls, typically
    for nested aggregate bitfields.  */
 
@@ -4820,7 +5139,7 @@ output_constructor (tree, unsigned HOST_WIDE_INT, unsigned int, bool,
 
 static unsigned HOST_WIDE_INT
 output_constant (tree exp, unsigned HOST_WIDE_INT size, unsigned int align,
-		 bool reverse)
+		 bool reverse, bool merge_strings)
 {
   enum tree_code code;
   unsigned HOST_WIDE_INT thissize;
@@ -4917,7 +5236,6 @@ output_constant (tree exp, unsigned HOST_WIDE_INT size, unsigned int align,
     case REFERENCE_TYPE:
     case OFFSET_TYPE:
     case FIXED_POINT_TYPE:
-    case POINTER_BOUNDS_TYPE:
     case NULLPTR_TYPE:
       cst = expand_expr (exp, NULL_RTX, VOIDmode, EXPAND_INITIALIZER);
       if (reverse)
@@ -4936,10 +5254,11 @@ output_constant (tree exp, unsigned HOST_WIDE_INT size, unsigned int align,
       break;
 
     case COMPLEX_TYPE:
-      output_constant (TREE_REALPART (exp), thissize / 2, align, reverse);
+      output_constant (TREE_REALPART (exp), thissize / 2, align,
+		       reverse, false);
       output_constant (TREE_IMAGPART (exp), thissize / 2,
 		       min_align (align, BITS_PER_UNIT * (thissize / 2)),
-		       reverse);
+		       reverse, false);
       break;
 
     case ARRAY_TYPE:
@@ -4949,8 +5268,12 @@ output_constant (tree exp, unsigned HOST_WIDE_INT size, unsigned int align,
 	case CONSTRUCTOR:
 	  return output_constructor (exp, size, align, reverse, NULL);
 	case STRING_CST:
-	  thissize
-	    = MIN ((unsigned HOST_WIDE_INT)TREE_STRING_LENGTH (exp), size);
+	  thissize = (unsigned HOST_WIDE_INT)TREE_STRING_LENGTH (exp);
+	  if (merge_strings
+	      && (thissize == 0
+		  || TREE_STRING_POINTER (exp) [thissize - 1] != '\0'))
+	    thissize++;
+	  gcc_checking_assert (check_string_literal (exp, size));
 	  assemble_string (TREE_STRING_POINTER (exp), thissize);
 	  break;
 	case VECTOR_CST:
@@ -4959,14 +5282,14 @@ output_constant (tree exp, unsigned HOST_WIDE_INT size, unsigned int align,
 	    unsigned int nalign = MIN (align, GET_MODE_ALIGNMENT (inner));
 	    int elt_size = GET_MODE_SIZE (inner);
 	    output_constant (VECTOR_CST_ELT (exp, 0), elt_size, align,
-			     reverse);
+			     reverse, false);
 	    thissize = elt_size;
 	    /* Static constants must have a fixed size.  */
 	    unsigned int nunits = VECTOR_CST_NELTS (exp).to_constant ();
 	    for (unsigned int i = 1; i < nunits; i++)
 	      {
 		output_constant (VECTOR_CST_ELT (exp, i), elt_size, nalign,
-				 reverse);
+				 reverse, false);
 		thissize += elt_size;
 	      }
 	    break;
@@ -5069,6 +5392,26 @@ struct oc_local_state {
 static void
 output_constructor_array_range (oc_local_state *local)
 {
+  /* Perform the index calculation in modulo arithmetic but
+     sign-extend the result because Ada has negative DECL_FIELD_OFFSETs
+     but we are using an unsigned sizetype.  */
+  unsigned prec = TYPE_PRECISION (sizetype);
+  offset_int idx = wi::sext (wi::to_offset (TREE_OPERAND (local->index, 0))
+			     - wi::to_offset (local->min_index), prec);
+  tree valtype = TREE_TYPE (local->val);
+  HOST_WIDE_INT fieldpos
+    = (idx * wi::to_offset (TYPE_SIZE_UNIT (valtype))).to_short_addr ();
+
+  /* Advance to offset of this element.  */
+  if (fieldpos > local->total_bytes)
+    {
+      assemble_zeros (fieldpos - local->total_bytes);
+      local->total_bytes = fieldpos;
+    }
+  else
+    /* Must not go backwards.  */
+    gcc_assert (fieldpos == local->total_bytes);
+
   unsigned HOST_WIDE_INT fieldsize
     = int_size_in_bytes (TREE_TYPE (local->type));
 
@@ -5087,8 +5430,8 @@ output_constructor_array_range (oc_local_state *local)
       if (local->val == NULL_TREE)
 	assemble_zeros (fieldsize);
       else
-	fieldsize
-	  = output_constant (local->val, fieldsize, align2, local->reverse);
+	fieldsize = output_constant (local->val, fieldsize, align2,
+				     local->reverse, false);
 
       /* Count its size.  */
       local->total_bytes += fieldsize;
@@ -5170,6 +5513,8 @@ output_constructor_regular_field (oc_local_state *local)
 	     on the chain is a TYPE_DECL of the enclosing struct.  */
 	  const_tree next = DECL_CHAIN (local->field);
 	  gcc_assert (!fieldsize || !next || TREE_CODE (next) != FIELD_DECL);
+	  tree size = TYPE_SIZE_UNIT (TREE_TYPE (local->val));
+	  gcc_checking_assert (compare_tree_int (size, fieldsize) == 0);
 	}
       else
 	fieldsize = tree_to_uhwi (DECL_SIZE_UNIT (local->field));
@@ -5181,8 +5526,8 @@ output_constructor_regular_field (oc_local_state *local)
   if (local->val == NULL_TREE)
     assemble_zeros (fieldsize);
   else
-    fieldsize
-      = output_constant (local->val, fieldsize, align2, local->reverse);
+    fieldsize = output_constant (local->val, fieldsize, align2,
+				 local->reverse, false);
 
   /* Count its size.  */
   local->total_bytes += fieldsize;
@@ -5292,7 +5637,7 @@ output_constructor_bitfield (oc_local_state *local, unsigned int bit_offset)
     {
       int this_time;
       int shift;
-      HOST_WIDE_INT value;
+      unsigned HOST_WIDE_INT value;
       HOST_WIDE_INT next_byte = next_offset / BITS_PER_UNIT;
       HOST_WIDE_INT next_bit = next_offset % BITS_PER_UNIT;
 
@@ -5324,15 +5669,13 @@ output_constructor_bitfield (oc_local_state *local, unsigned int bit_offset)
 	      this_time = end - shift + 1;
 	    }
 
-	  /* Now get the bits from the appropriate constant word.  */
-	  value = TREE_INT_CST_ELT (local->val, shift / HOST_BITS_PER_WIDE_INT);
-	  shift = shift & (HOST_BITS_PER_WIDE_INT - 1);
+	  /* Now get the bits we want to insert.  */
+	  value = wi::extract_uhwi (wi::to_widest (local->val),
+				    shift, this_time);
 
 	  /* Get the result.  This works only when:
 	     1 <= this_time <= HOST_BITS_PER_WIDE_INT.  */
-	  local->byte |= (((value >> shift)
-			   & (((HOST_WIDE_INT) 2 << (this_time - 1)) - 1))
-			  << (BITS_PER_UNIT - this_time - next_bit));
+	  local->byte |= value << (BITS_PER_UNIT - this_time - next_bit);
 	}
       else
 	{
@@ -5349,15 +5692,13 @@ output_constructor_bitfield (oc_local_state *local, unsigned int bit_offset)
 	    this_time
 	      = HOST_BITS_PER_WIDE_INT - (shift & (HOST_BITS_PER_WIDE_INT - 1));
 
-	  /* Now get the bits from the appropriate constant word.  */
-	  value = TREE_INT_CST_ELT (local->val, shift / HOST_BITS_PER_WIDE_INT);
-	  shift = shift & (HOST_BITS_PER_WIDE_INT - 1);
+	  /* Now get the bits we want to insert.  */
+	  value = wi::extract_uhwi (wi::to_widest (local->val),
+				    shift, this_time);
 
 	  /* Get the result.  This works only when:
 	     1 <= this_time <= HOST_BITS_PER_WIDE_INT.  */
-	  local->byte |= (((value >> shift)
-			   & (((HOST_WIDE_INT) 2 << (this_time - 1)) - 1))
-			  << next_bit);
+	  local->byte |= value << next_bit;
 	}
 
       next_offset += this_time;
@@ -5585,7 +5926,12 @@ merge_weak (tree newdecl, tree olddecl)
 void
 declare_weak (tree decl)
 {
-  gcc_assert (TREE_CODE (decl) != FUNCTION_DECL || !TREE_ASM_WRITTEN (decl));
+  /* With -fsyntax-only, TREE_ASM_WRITTEN might be set on certain function
+     decls earlier than normally, but as with -fsyntax-only nothing is really
+     emitted, there is no harm in marking it weak later.  */
+  gcc_assert (TREE_CODE (decl) != FUNCTION_DECL
+	      || !TREE_ASM_WRITTEN (decl)
+	      || flag_syntax_only);
   if (! TREE_PUBLIC (decl))
     {
       error ("weak declaration of %q+D must be public", decl);
@@ -5657,7 +6003,8 @@ weak_finish (void)
       tree alias_decl = TREE_PURPOSE (t);
       tree target = ultimate_transparent_alias_target (&TREE_VALUE (t));
 
-      if (! TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (alias_decl)))
+      if (! TREE_SYMBOL_REFERENCED (DECL_ASSEMBLER_NAME (alias_decl))
+         || TREE_SYMBOL_REFERENCED (target))
 	/* Remove alias_decl from the weak list, but leave entries for
 	   the target alone.  */
 	target = NULL_TREE;
@@ -5825,11 +6172,6 @@ do_assemble_alias (tree decl, tree target)
 #ifdef ASM_OUTPUT_DEF
   tree orig_decl = decl;
 
-  if (TREE_CODE (decl) == FUNCTION_DECL
-      && cgraph_node::get (decl)->instrumentation_clone
-      && cgraph_node::get (decl)->instrumented_version)
-    orig_decl = cgraph_node::get (decl)->instrumented_version->decl;
-
   /* Make name accessible from other files, if appropriate.  */
 
   if (TREE_PUBLIC (decl) || TREE_PUBLIC (orig_decl))
@@ -5848,7 +6190,7 @@ do_assemble_alias (tree decl, tree target)
       else
 #endif
 	error_at (DECL_SOURCE_LOCATION (decl),
-		  "ifunc is not supported on this target");
+		  "%qs is not supported on this target", "ifunc");
     }
 
 # ifdef ASM_OUTPUT_DEF_FROM_DECLS
@@ -5891,6 +6233,23 @@ do_assemble_alias (tree decl, tree target)
 #endif
 }
 
+/* Output .symver directive.  */
+
+void
+do_assemble_symver (tree decl, tree target)
+{
+  tree id = DECL_ASSEMBLER_NAME (decl);
+  ultimate_transparent_alias_target (&id);
+  ultimate_transparent_alias_target (&target);
+#ifdef ASM_OUTPUT_SYMVER_DIRECTIVE
+  ASM_OUTPUT_SYMVER_DIRECTIVE (asm_out_file,
+			       IDENTIFIER_POINTER (target),
+			       IDENTIFIER_POINTER (id));
+#else
+  error ("symver is only supported on ELF platforms");
+#endif
+}
+
 /* Emit an assembler directive to make the symbol for DECL an alias to
    the symbol for TARGET.  */
 
@@ -5906,9 +6265,9 @@ assemble_alias (tree decl, tree target)
       ultimate_transparent_alias_target (&target);
 
       if (alias == target)
-	error ("weakref %q+D ultimately targets itself", decl);
+	error ("%qs symbol %q+D ultimately targets itself", "weakref", decl);
       if (TREE_PUBLIC (decl))
-	error ("weakref %q+D must have static linkage", decl);
+	error ("%qs symbol %q+D must have static linkage", "weakref", decl);
     }
   else
     {
@@ -5925,7 +6284,7 @@ assemble_alias (tree decl, tree target)
 	  if (TREE_CODE (decl) == FUNCTION_DECL
 	      && lookup_attribute ("ifunc", DECL_ATTRIBUTES (decl)))
 	    error_at (DECL_SOURCE_LOCATION (decl),
-		      "ifunc is not supported in this configuration");
+		      "%qs is not supported in this configuration", "ifunc");
 	  else
 	    error_at (DECL_SOURCE_LOCATION (decl),
 		      "only weak aliases are supported in this configuration");
@@ -6154,13 +6513,6 @@ int
 maybe_assemble_visibility (tree decl)
 {
   enum symbol_visibility vis = DECL_VISIBILITY (decl);
-
-  if (TREE_CODE (decl) == FUNCTION_DECL
-      && cgraph_node::get (decl)
-      && cgraph_node::get (decl)->instrumentation_clone
-      && cgraph_node::get (decl)->instrumented_version)
-    vis = DECL_VISIBILITY (cgraph_node::get (decl)->instrumented_version->decl);
-
   if (vis != VISIBILITY_DEFAULT)
     {
       targetm.asm_out.assemble_visibility (decl, vis);
@@ -6379,6 +6731,12 @@ default_section_type_flags (tree decl, const char *name, int reloc)
       || strncmp (name, ".gnu.linkonce.tb.", 17) == 0)
     flags |= SECTION_TLS | SECTION_BSS;
 
+  if (strcmp (name, ".noinit") == 0)
+    flags |= SECTION_WRITE | SECTION_BSS | SECTION_NOTYPE;
+
+  if (strcmp (name, ".persistent") == 0)
+    flags |= SECTION_WRITE | SECTION_NOTYPE;
+
   /* Various sections have special ELF types that the assembler will
      assign by default based on the name.  They are neither SHT_PROGBITS
      nor SHT_NOBITS, so when changing sections we don't want to print a
@@ -6437,9 +6795,10 @@ default_elf_asm_named_section (const char *name, unsigned int flags,
 
   /* If we have already declared this section, we can use an
      abbreviated form to switch back to it -- unless this section is
-     part of a COMDAT groups, in which case GAS requires the full
-     declaration every time.  */
+     part of a COMDAT groups or with SHF_GNU_RETAIN or with SHF_LINK_ORDER,
+     in which case GAS requires the full declaration every time.  */
   if (!(HAVE_COMDAT_GROUP && (flags & SECTION_LINKONCE))
+      && !(flags & (SECTION_RETAIN | SECTION_LINK_ORDER))
       && (flags & SECTION_DECLARED))
     {
       fprintf (asm_out_file, "\t.section\t%s\n", name);
@@ -6454,7 +6813,7 @@ default_elf_asm_named_section (const char *name, unsigned int flags,
     {
       if (!(flags & SECTION_DEBUG))
 	*f++ = 'a';
-#if defined (HAVE_GAS_SECTION_EXCLUDE) && HAVE_GAS_SECTION_EXCLUDE == 1
+#if HAVE_GAS_SECTION_EXCLUDE
       if (flags & SECTION_EXCLUDE)
 	*f++ = 'e';
 #endif
@@ -6472,6 +6831,10 @@ default_elf_asm_named_section (const char *name, unsigned int flags,
 	*f++ = TLS_SECTION_ASM_FLAG;
       if (HAVE_COMDAT_GROUP && (flags & SECTION_LINKONCE))
 	*f++ = 'G';
+      if (flags & SECTION_RETAIN)
+	*f++ = 'R';
+      if (flags & SECTION_LINK_ORDER)
+	*f++ = 'o';
 #ifdef MACH_DEP_SECTION_ASM_FLAG
       if (flags & SECTION_MACH_DEP)
 	*f++ = MACH_DEP_SECTION_ASM_FLAG;
@@ -6504,6 +6867,14 @@ default_elf_asm_named_section (const char *name, unsigned int flags,
 
       if (flags & SECTION_ENTSIZE)
 	fprintf (asm_out_file, ",%d", flags & SECTION_ENTSIZE);
+      if (flags & SECTION_LINK_ORDER)
+	{
+	  tree id = DECL_ASSEMBLER_NAME (decl);
+	  ultimate_transparent_alias_target (&id);
+	  const char *name = IDENTIFIER_POINTER (id);
+	  name = targetm.strip_name_encoding (name);
+	  fprintf (asm_out_file, ",%s", name);
+	}
       if (HAVE_COMDAT_GROUP && (flags & SECTION_LINKONCE))
 	{
 	  if (TREE_CODE (decl) == IDENTIFIER_NODE)
@@ -6704,6 +7075,7 @@ default_elf_select_section (tree decl, int reloc,
 			    unsigned HOST_WIDE_INT align)
 {
   const char *sname;
+
   switch (categorize_decl_for_section (decl, reloc))
     {
     case SECCAT_TEXT:
@@ -6721,6 +7093,11 @@ default_elf_select_section (tree decl, int reloc,
       sname = ".sdata2";
       break;
     case SECCAT_DATA:
+      if (DECL_P (decl) && DECL_PERSISTENT_P (decl))
+	{
+	  sname = ".persistent";
+	  break;
+	}
       return data_section;
     case SECCAT_DATA_REL:
       sname = ".data.rel";
@@ -6741,6 +7118,11 @@ default_elf_select_section (tree decl, int reloc,
       sname = ".tdata";
       break;
     case SECCAT_BSS:
+      if (DECL_P (decl) && DECL_NOINIT_P (decl))
+	{
+	  sname = ".noinit";
+	  break;
+	}
       if (bss_section)
 	return bss_section;
       sname = ".bss";
@@ -6786,6 +7168,11 @@ default_unique_section (tree decl, int reloc)
       break;
     case SECCAT_DATA:
       prefix = one_only ? ".d" : ".data";
+      if (DECL_P (decl) && DECL_PERSISTENT_P (decl))
+	{
+	  prefix = one_only ? ".p" : ".persistent";
+	  break;
+	}
       break;
     case SECCAT_DATA_REL:
       prefix = one_only ? ".d.rel" : ".data.rel";
@@ -6803,6 +7190,11 @@ default_unique_section (tree decl, int reloc)
       prefix = one_only ? ".s" : ".sdata";
       break;
     case SECCAT_BSS:
+      if (DECL_P (decl) && DECL_NOINIT_P (decl))
+	{
+	  prefix = one_only ? ".n" : ".noinit";
+	  break;
+	}
       prefix = one_only ? ".b" : ".bss";
       break;
     case SECCAT_SBSS:
@@ -6967,14 +7359,13 @@ default_asm_output_anchor (rtx symbol)
 bool
 default_use_anchors_for_symbol_p (const_rtx symbol)
 {
-  section *sect;
   tree decl;
+  section *sect = SYMBOL_REF_BLOCK (symbol)->sect;
 
-  /* Don't use anchors for mergeable sections.  The linker might move
-     the objects around.  */
-  sect = SYMBOL_REF_BLOCK (symbol)->sect;
-  if (sect->common.flags & SECTION_MERGE)
-    return false;
+  /* This function should only be called with non-zero SYMBOL_REF_BLOCK,
+     furthermore get_block_for_section should not create object blocks
+     for mergeable sections.  */
+  gcc_checking_assert (sect && !(sect->common.flags & SECTION_MERGE));
 
   /* Don't use anchors for small data sections.  The small data register
      acts as an anchor for such sections.  */
@@ -7365,10 +7756,45 @@ output_section_asm_op (const void *directive)
    the current section is NEW_SECTION.  */
 
 void
-switch_to_section (section *new_section)
+switch_to_section (section *new_section, tree decl)
 {
   if (in_section == new_section)
-    return;
+    {
+      bool retain_p;
+      if ((new_section->common.flags & SECTION_NAMED)
+	  && decl != nullptr
+	  && DECL_P (decl)
+	  && ((retain_p = !!lookup_attribute ("retain",
+					      DECL_ATTRIBUTES (decl)))
+	      != !!(new_section->common.flags & SECTION_RETAIN)))
+	{
+	  /* If the SECTION_RETAIN bit doesn't match, switch to a new
+	     section.  */
+	  tree used_decl, no_used_decl;
+
+	  if (retain_p)
+	    {
+	      new_section->common.flags |= SECTION_RETAIN;
+	      used_decl = decl;
+	      no_used_decl = new_section->named.decl;
+	    }
+	  else
+	    {
+	      new_section->common.flags &= ~(SECTION_RETAIN
+					     | SECTION_DECLARED);
+	      used_decl = new_section->named.decl;
+	      no_used_decl = decl;
+	    }
+	  warning (OPT_Wattributes,
+		   "%+qD without %<retain%> attribute and %qD with "
+		   "%<retain%> attribute are placed in a section with "
+		   "the same name", no_used_decl, used_decl);
+	  inform (DECL_SOURCE_LOCATION (used_decl),
+		  "%qD was declared here", used_decl);
+	}
+      else
+	return;
+    }
 
   if (new_section->common.flags & SECTION_FORGET)
     in_section = NULL;
@@ -7402,7 +7828,7 @@ void
 place_block_symbol (rtx symbol)
 {
   unsigned HOST_WIDE_INT size, mask, offset;
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
   unsigned int alignment;
   struct object_block *block;
   tree decl;
@@ -7564,7 +7990,7 @@ get_section_anchor (struct object_block *block, HOST_WIDE_INT offset,
 static void
 output_object_block (struct object_block *block)
 {
-  struct constant_descriptor_rtx *desc;
+  class constant_descriptor_rtx *desc;
   unsigned int i;
   HOST_WIDE_INT offset;
   tree decl;
@@ -7583,6 +8009,7 @@ output_object_block (struct object_block *block)
   else
     switch_to_section (block->sect);
 
+  gcc_checking_assert (!(block->sect->common.flags & SECTION_MERGE));
   assemble_align (block->alignment);
 
   /* Define the values of all anchors relative to the current section
@@ -7609,8 +8036,8 @@ output_object_block (struct object_block *block)
 	{
 	  HOST_WIDE_INT size;
 	  decl = SYMBOL_REF_DECL (symbol);
-	  assemble_constant_contents
-	       (DECL_INITIAL (decl), XSTR (symbol, 0), DECL_ALIGN (decl));
+	  assemble_constant_contents (DECL_INITIAL (decl), XSTR (symbol, 0),
+				      DECL_ALIGN (decl), false);
 
 	  size = get_constant_size (DECL_INITIAL (decl));
 	  offset += size;
@@ -7627,7 +8054,7 @@ output_object_block (struct object_block *block)
 	{
 	  HOST_WIDE_INT size;
 	  decl = SYMBOL_REF_DECL (symbol);
-	  assemble_variable_contents (decl, XSTR (symbol, 0), false);
+	  assemble_variable_contents (decl, XSTR (symbol, 0), false, false);
 	  size = tree_to_uhwi (DECL_SIZE_UNIT (decl));
 	  offset += size;
 	  if ((flag_sanitize & SANITIZE_ADDRESS)
@@ -7705,45 +8132,14 @@ output_object_blocks (void)
    we want to emit NUL strings terminators into the object file we have to use
    ASM_OUTPUT_SKIP.  */
 
-int
-elf_record_gcc_switches (print_switch_type type, const char * name)
+void
+elf_record_gcc_switches (const char *options)
 {
-  switch (type)
-    {
-    case SWITCH_TYPE_PASSED:
-      ASM_OUTPUT_ASCII (asm_out_file, name, strlen (name));
-      ASM_OUTPUT_SKIP (asm_out_file, HOST_WIDE_INT_1U);
-      break;
-
-    case SWITCH_TYPE_DESCRIPTIVE:
-      if (name == NULL)
-	{
-	  /* Distinguish between invocations where name is NULL.  */
-	  static bool started = false;
-
-	  if (!started)
-	    {
-	      section * sec;
-
-	      sec = get_section (targetm.asm_out.record_gcc_switches_section,
-				 SECTION_DEBUG
-				 | SECTION_MERGE
-				 | SECTION_STRINGS
-				 | (SECTION_ENTSIZE & 1),
-				 NULL);
-	      switch_to_section (sec);
-	      started = true;
-	    }
-	}
-
-    default:
-      break;
-    }
-
-  /* The return value is currently ignored by the caller, but must be 0.
-     For -fverbose-asm the return value would be the number of characters
-     emitted into the assembler file.  */
-  return 0;
+  section *sec = get_section (targetm.asm_out.record_gcc_switches_section,
+			      SECTION_DEBUG | SECTION_MERGE
+			      | SECTION_STRINGS | (SECTION_ENTSIZE & 1), NULL);
+  switch_to_section (sec);
+  ASM_OUTPUT_ASCII (asm_out_file, options, strlen (options) + 1);
 }
 
 /* Emit text to declare externally defined symbols. It is needed to

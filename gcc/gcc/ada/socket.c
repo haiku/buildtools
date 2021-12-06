@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *          Copyright (C) 2003-2018, Free Software Foundation, Inc.         *
+ *          Copyright (C) 2003-2020, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -31,8 +31,12 @@
 
 /*  This file provides a portable binding to the sockets API                */
 
+#define ATTRIBUTE_UNUSED __attribute__((unused))
+
 /* Ensure access to errno is thread safe.  */
+#ifndef _REENTRANT
 #define _REENTRANT
+#endif
 #define _THREAD_SAFE
 
 #include "gsocket.h"
@@ -88,14 +92,31 @@ extern int __gnat_hostent_h_addrtype (struct hostent *);
 extern int __gnat_hostent_h_length (struct hostent *);
 extern char * __gnat_hostent_h_addr (struct hostent *, int);
 
+extern int __gnat_getaddrinfo(
+  const char *node,
+  const char *service,
+  const struct addrinfo *hints,
+  struct addrinfo **res);
+int __gnat_getnameinfo(
+  const struct sockaddr *sa, socklen_t salen,
+  char *host, size_t hostlen,
+  char *serv, size_t servlen, int flags);
+extern void __gnat_freeaddrinfo(struct addrinfo *res);
+extern const char * __gnat_gai_strerror(int errcode);
+
 #ifndef HAVE_INET_PTON
 extern int  __gnat_inet_pton (int, const char *, void *);
 #endif
-
+
+#ifndef HAVE_INET_NTOP
+extern const char *
+__gnat_inet_ntop(int, const void *, char *, socklen_t);
+#endif
+
 /* Disable the sending of SIGPIPE for writes on a broken stream */
 
 void
-__gnat_disable_sigpipe (int fd)
+__gnat_disable_sigpipe (int fd ATTRIBUTE_UNUSED)
 {
 #ifdef SO_NOSIGPIPE
   int val = 1;
@@ -110,7 +131,7 @@ __gnat_disable_all_sigpipes (void)
   (void) signal (SIGPIPE, SIG_IGN);
 #endif
 }
-
+
 #if defined (_WIN32) || defined (__vxworks)
 /*
  * Signalling FDs operations are implemented in Ada for these platforms
@@ -126,7 +147,7 @@ int
 __gnat_create_signalling_fds (int *fds) {
   return pipe (fds);
 }
-
+
 /*
  * Read one byte of data from rsig, the read end of a pair of signalling fds
  * created by __gnat_create_signalling_fds.
@@ -136,7 +157,7 @@ __gnat_read_signalling_fd (int rsig) {
   char c;
   return read (rsig, &c, 1);
 }
-
+
 /*
  * Write one byte of data to wsig, the write end of a pair of signalling fds
  * created by __gnat_create_signalling_fds.
@@ -146,7 +167,7 @@ __gnat_write_signalling_fd (int wsig) {
   char c = 0;
   return write (wsig, &c, 1);
 }
-
+
 /*
  * Close one end of a pair of signalling fds
  */
@@ -155,7 +176,7 @@ __gnat_close_signalling_fd (int sig) {
   (void) close (sig);
 }
 #endif
-
+
 /*
  * Handling of gethostbyname, gethostbyaddr, getservbyname and getservbyport
  * =========================================================================
@@ -312,8 +333,8 @@ __gnat_getservbyport (int port, const char *proto,
 }
 #else
 int
-__gnat_gethostbyname (const char *name,
-  struct hostent *ret, char *buf, size_t buflen,
+__gnat_gethostbyname (const char *name, struct hostent *ret,
+  char *buf ATTRIBUTE_UNUSED, size_t buflen ATTRIBUTE_UNUSED,
   int *h_errnop)
 {
   struct hostent *rh;
@@ -328,8 +349,8 @@ __gnat_gethostbyname (const char *name,
 }
 
 int
-__gnat_gethostbyaddr (const char *addr, int len, int type,
-  struct hostent *ret, char *buf, size_t buflen,
+__gnat_gethostbyaddr (const char *addr, int len, int type, struct hostent *ret,
+  char *buf ATTRIBUTE_UNUSED, size_t buflen ATTRIBUTE_UNUSED,
   int *h_errnop)
 {
   struct hostent *rh;
@@ -344,8 +365,8 @@ __gnat_gethostbyaddr (const char *addr, int len, int type,
 }
 
 int
-__gnat_getservbyname (const char *name, const char *proto,
-  struct servent *ret, char *buf, size_t buflen)
+__gnat_getservbyname (const char *name, const char *proto, struct servent *ret,
+  char *buf ATTRIBUTE_UNUSED, size_t buflen ATTRIBUTE_UNUSED)
 {
   struct servent *rh;
   rh = getservbyname (name, proto);
@@ -356,8 +377,8 @@ __gnat_getservbyname (const char *name, const char *proto,
 }
 
 int
-__gnat_getservbyport (int port, const char *proto,
-  struct servent *ret, char *buf, size_t buflen)
+__gnat_getservbyport (int port, const char *proto, struct servent *ret,
+  char *buf ATTRIBUTE_UNUSED, size_t buflen ATTRIBUTE_UNUSED)
 {
   struct servent *rh;
   rh = getservbyport (port, proto);
@@ -367,7 +388,7 @@ __gnat_getservbyport (int port, const char *proto,
   return 0;
 }
 #endif
-
+
 /* Find the largest socket in the socket set SET. This is needed for
    `select'.  LAST is the maximum value for the largest socket. This hint is
    used to avoid scanning very large socket sets.  On return, LAST is the
@@ -376,19 +397,18 @@ __gnat_getservbyport (int port, const char *proto,
 void
 __gnat_last_socket_in_set (fd_set *set, int *last)
 {
-  int s;
   int l;
   l = -1;
 
 #ifdef _WIN32
   /* More efficient method for NT. */
-  for (s = 0; s < set->fd_count; s++)
+  for (unsigned int s = 0; s < set->fd_count; s++)
     if ((int) set->fd_array[s] > l)
       l = set->fd_array[s];
 
 #else
 
-  for (s = *last; s != -1; s--)
+  for (int s = *last; s != -1; s--)
     if (FD_ISSET (s, set))
       {
 	l = s;
@@ -496,7 +516,7 @@ __gnat_get_h_errno (void) {
 int
 __gnat_socket_ioctl (int fd, IOCTL_Req_T req, int *arg) {
 #if defined (_WIN32)
-  return ioctlsocket (fd, req, arg);
+  return ioctlsocket (fd, req, (unsigned long *)arg);
 #elif defined (__APPLE__)
   /*
    * On Darwin, req is an unsigned long, and we want to convert without sign
@@ -532,7 +552,8 @@ __gnat_inet_pton (int af, const char *src, void *dst) {
   int rc;
 
   ss.ss_family = af;
-  rc = WSAStringToAddressA (src, af, NULL, (struct sockaddr *)&ss, &sslen);
+  rc = WSAStringToAddressA ((char *)src, af, NULL, (struct sockaddr *)&ss,
+                            &sslen);
   if (rc == 0) {
     switch (af) {
       case AF_INET:
@@ -566,6 +587,41 @@ __gnat_inet_pton (int af, const char *src, void *dst) {
     *(in_addr_t *)dst = addr;
   }
   return rc;
+#endif
+}
+#endif
+
+#ifndef HAVE_INET_NTOP
+
+const char *
+__gnat_inet_ntop(int af, const void *src, char *dst, socklen_t size)
+{
+#ifdef _WIN32
+  struct sockaddr_storage ss;
+  int sslen = sizeof ss;
+  memset(&ss, 0, sslen);
+  ss.ss_family = af;
+
+  switch (af) {
+    case AF_INET6:
+      ((struct sockaddr_in6 *)&ss)->sin6_addr = *(struct in6_addr *)src;
+      break;
+    case AF_INET:
+      ((struct sockaddr_in *)&ss)->sin_addr = *(struct in_addr *)src;
+      break;
+    default:
+      errno = EAFNOSUPPORT;
+      return NULL;
+  }
+
+  DWORD sz = size;
+
+  if (WSAAddressToStringA((struct sockaddr*)&ss, sslen, 0, dst, &sz) != 0) {
+     return NULL;
+  }
+  return dst;
+#else
+  return NULL;
 #endif
 }
 #endif
@@ -646,6 +702,124 @@ char *
 __gnat_servent_s_proto (struct servent * s)
 {
   return s->s_proto;
+}
+
+#if defined(AF_INET6) && !defined(__rtems__)
+
+int __gnat_getaddrinfo(
+  const char *node,
+  const char *service,
+  const struct addrinfo *hints,
+  struct addrinfo **res)
+{
+  return getaddrinfo(node, service, hints, res);
+}
+
+int __gnat_getnameinfo(
+  const struct sockaddr *sa, socklen_t salen,
+  char *host, size_t hostlen,
+  char *serv, size_t servlen, int flags)
+{
+  return getnameinfo(sa, salen, host, hostlen, serv, servlen, flags);
+}
+
+void __gnat_freeaddrinfo(struct addrinfo *res) {
+   freeaddrinfo(res);
+}
+
+const char * __gnat_gai_strerror(int errcode) {
+#if defined(_WIN32) ||  defined(__vxworks)
+  // gai_strerror thread usafe on Windows and is not available on some vxWorks
+  // versions
+
+  switch (errcode) {
+    case EAI_AGAIN:
+      return "Temporary failure in name resolution.";
+    case EAI_BADFLAGS:
+      return "Invalid value for ai_flags.";
+    case EAI_FAIL:
+      return "Nonrecoverable failure in name resolution.";
+    case EAI_FAMILY:
+      return "The ai_family member is not supported.";
+    case EAI_MEMORY:
+      return "Memory allocation failure.";
+#ifdef EAI_NODATA
+    // Could be not defined under the vxWorks
+    case EAI_NODATA:
+      return "No address associated with nodename.";
+#endif
+#if EAI_NODATA != EAI_NONAME
+    /* with mingw64 runtime EAI_NODATA and EAI_NONAME have the same value.
+       This applies to both win32 and win64 */
+    case EAI_NONAME:
+      return "Neither nodename nor servname provided, or not known.";
+#endif
+    case EAI_SERVICE:
+      return "The servname parameter is not supported for ai_socktype.";
+    case EAI_SOCKTYPE:
+      return "The ai_socktype member is not supported.";
+#ifdef EAI_SYSTEM
+    // Could be not defined, at least on Windows
+    case EAI_SYSTEM:
+      return "System error returned in errno";
+#endif
+    default:
+      return "Unknown error.";
+    }
+#else
+   return gai_strerror(errcode);
+#endif
+}
+
+#else
+
+int __gnat_getaddrinfo(
+  const char *node,
+  const char *service,
+  const struct addrinfo *hints,
+  struct addrinfo **res)
+{
+  return -1;
+}
+
+int __gnat_getnameinfo(
+  const struct sockaddr *sa, socklen_t salen,
+  char *host, size_t hostlen,
+  char *serv, size_t servlen, int flags)
+{
+  return -1;
+}
+
+void __gnat_freeaddrinfo(struct addrinfo *res) {
+}
+
+const char * __gnat_gai_strerror(int errcode) {
+   return "getaddinfo functions family is not supported";
+}
+
+#endif
+
+int __gnat_minus_500ms() {
+#if defined (_WIN32)
+  // Windows Server 2019 and Windows 8.0 do not need 500 millisecond socket
+  // timeout correction.
+  if (IsWindowsServer()) {
+    OSVERSIONINFO osvi;
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    // Documentation proposes to use IsWindowsVersionOrGreater(10, 0, 17763)
+    // but it does not compare by the build number (last parameter).
+    GetVersionEx(&osvi);
+    return osvi.dwMajorVersion < 10
+        || (osvi.dwMajorVersion == 10
+            && osvi.dwMinorVersion == 0
+            && osvi.dwBuildNumber < 17763);
+  } else {
+    return !IsWindows8OrGreater();
+  }
+#else
+  return 0;
+#endif
 }
 
 #endif /* defined(HAVE_SOCKETS) */

@@ -1,6 +1,6 @@
 /* Operating system specific defines to be used when targeting GCC for
    hosting on Windows32, using a Unix style C library and tools.
-   Copyright (C) 1995-2018 Free Software Foundation, Inc.
+   Copyright (C) 1995-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -287,7 +287,7 @@ do {						\
 
 #undef ASM_OUTPUT_ALIGN
 #define ASM_OUTPUT_ALIGN(FILE,LOG)	\
-    if ((LOG)!=0) fprintf ((FILE), "\t.align %d\n", 1<<(LOG))
+    if ((LOG) != 0) fprintf ((FILE), "\t.align %d\n", 1 << (LOG))
 
 /* Windows uses explicit import from shared libraries.  */
 #define MULTIPLE_SYMBOL_SPACES 1
@@ -375,9 +375,6 @@ do {						\
 #endif
 #endif
 
-/* Don't assume anything about the header files.  */
-#define NO_IMPLICIT_EXTERN_C
-
 #undef PROFILE_HOOK
 #define PROFILE_HOOK(LABEL)						\
   if (MAIN_NAME_P (DECL_NAME (current_function_decl)))			\
@@ -387,14 +384,6 @@ do {						\
 		     gen_rtx_SYMBOL_REF (Pmode, "_monstartup")),	\
 	const0_rtx));							\
     }
-
-/* Java Native Interface (JNI) methods on Win32 are invoked using the
-   stdcall calling convention.  */
-#undef MODIFY_JNI_METHOD_CALL
-#define MODIFY_JNI_METHOD_CALL(MDECL)					      \
-  build_type_attribute_variant ((MDECL),				      \
-			       build_tree_list (get_identifier ("stdcall"),   \
-						NULL))
 
 /* For Win32 ABI compatibility */
 #undef DEFAULT_PCC_STRUCT_RETURN
@@ -422,11 +411,6 @@ do {						\
 #undef	BIGGEST_FIELD_ALIGNMENT
 #define BIGGEST_FIELD_ALIGNMENT 64
 #endif
-
-/* A bit-field declared as `int' forces `int' alignment for the struct.  */
-#undef PCC_BITFIELD_TYPE_MATTERS
-#define PCC_BITFIELD_TYPE_MATTERS 1
-#define GROUP_BITFIELDS_BY_ALIGN TYPE_NATIVE(rec)
 
 /* Enable alias attribute support.  */
 #ifndef SET_ASM_OP
@@ -488,3 +472,7 @@ do {						\
 
 /* Static stack checking is supported by means of probes.  */
 #define STACK_CHECK_STATIC_BUILTIN 1
+
+#ifndef HAVE_GAS_ALIGNED_COMM
+# define HAVE_GAS_ALIGNED_COMM 0
+#endif

@@ -1,5 +1,5 @@
 /* go-lang.c -- Go frontend gcc interface.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -89,6 +89,7 @@ static const char *go_pkgpath = NULL;
 static const char *go_prefix = NULL;
 static const char *go_relative_import_path = NULL;
 static const char *go_c_header = NULL;
+static const char *go_embedcfg = NULL;
 
 /* Language hooks.  */
 
@@ -112,12 +113,15 @@ go_langhook_init (void)
   args.prefix = go_prefix;
   args.relative_import_path = go_relative_import_path;
   args.c_header = go_c_header;
+  args.embedcfg = go_embedcfg;
   args.check_divide_by_zero = go_check_divide_zero;
   args.check_divide_overflow = go_check_divide_overflow;
   args.compiling_runtime = go_compiling_runtime;
   args.debug_escape_level = go_debug_escape_level;
   args.debug_escape_hash = go_debug_escape_hash;
   args.nil_check_size_threshold = TARGET_AIX ? -1 : 4096;
+  args.debug_optimization = go_debug_optimization;
+  args.need_eqtype = TARGET_AIX ? true : false;
   args.linemap = go_get_linemap();
   args.backend = go_get_backend();
   go_create_gogo (&args);
@@ -128,6 +132,16 @@ go_langhook_init (void)
      for floating point constants with abstract type.  This may
      eventually be controllable by a command line option.  */
   mpfr_set_default_prec (256);
+
+  /* If necessary, override GCC's choice of minimum and maximum
+     exponents.  This should only affect GCC middle-end
+     compilation-time, not correctness.  */
+  mpfr_exp_t exp = mpfr_get_emax ();
+  if (exp < (1 << 16) - 1)
+    mpfr_set_emax ((1 << 16) - 1);
+  exp = mpfr_get_emin ();
+  if (exp > - ((1 << 16) - 1))
+    mpfr_set_emin (- ((1 << 16) - 1));
 
   /* Go uses exceptions.  */
   using_eh_for_cleanups ();
@@ -194,7 +208,7 @@ static bool
 go_langhook_handle_option (
     size_t scode,
     const char *arg,
-    int value,
+    HOST_WIDE_INT value,
     int kind ATTRIBUTE_UNUSED,
     location_t loc ATTRIBUTE_UNUSED,
     const struct cl_option_handlers *handlers ATTRIBUTE_UNUSED)
@@ -270,6 +284,10 @@ go_langhook_handle_option (
       go_c_header = arg;
       break;
 
+    case OPT_fgo_embedcfg_:
+      go_embedcfg = arg;
+      break;
+
     default:
       /* Just return 1 to indicate that the option is valid.  */
       break;
@@ -292,12 +310,23 @@ go_langhook_post_options (const char **pfilename ATTRIBUTE_UNUSED)
     go_add_search_path (dir);
   go_search_dirs.release ();
 
-  if (flag_excess_precision_cmdline == EXCESS_PRECISION_DEFAULT)
-    flag_excess_precision_cmdline = EXCESS_PRECISION_STANDARD;
+  if (flag_excess_precision == EXCESS_PRECISION_DEFAULT)
+    flag_excess_precision = EXCESS_PRECISION_STANDARD;
 
   /* Tail call optimizations can confuse uses of runtime.Callers.  */
-  if (!global_options_set.x_flag_optimize_sibling_calls)
-    global_options.x_flag_optimize_sibling_calls = 0;
+  SET_OPTION_IF_UNSET (&global_options, &global_options_set,
+		       flag_optimize_sibling_calls, 0);
+
+  /* Partial inlining can confuses uses of runtime.Callers.
+     See https://gcc.gnu.org/PR91663.  */
+  SET_OPTION_IF_UNSET (&global_options, &global_options_set,
+		       flag_partial_inlining, 0);
+
+  /* Go programs expect runtime.Callers to give the right answers,
+     which means that we can't combine functions even if they look the
+     same.  */
+  SET_OPTION_IF_UNSET (&global_options, &global_options_set,
+		       flag_ipa_icf_functions, 0);
 
   /* If the debug info level is still 1, as set in init_options, make
      sure that some debugging type is selected.  */
@@ -306,18 +335,18 @@ go_langhook_post_options (const char **pfilename ATTRIBUTE_UNUSED)
     global_options.x_write_symbols = PREFERRED_DEBUGGING_TYPE;
 
   /* We turn on stack splitting if we can.  */
-  if (!global_options_set.x_flag_split_stack
-      && targetm_common.supports_split_stack (false, &global_options))
-    global_options.x_flag_split_stack = 1;
+  if (targetm_common.supports_split_stack (false, &global_options))
+    SET_OPTION_IF_UNSET (&global_options, &global_options_set,
+			 flag_split_stack, 1);
 
   /* If stack splitting is turned on, and the user did not explicitly
      request function partitioning, turn off partitioning, as it
      confuses the linker when trying to handle partitioned split-stack
      code that calls a non-split-stack function.  */
   if (global_options.x_flag_split_stack
-      && global_options.x_flag_reorder_blocks_and_partition
-      && !global_options_set.x_flag_reorder_blocks_and_partition)
-    global_options.x_flag_reorder_blocks_and_partition = 0;
+      && global_options.x_flag_reorder_blocks_and_partition)
+    SET_OPTION_IF_UNSET (&global_options, &global_options_set,
+			 flag_reorder_blocks_and_partition, 0);
 
   /* Returning false means that the backend should be used.  */
   return false;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2005-2018 Free Software Foundation, Inc.
+/* Copyright (C) 2005-2021 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -68,13 +68,14 @@ struct gomp_task_icv gomp_global_icv = {
   .run_sched_chunk_size = 1,
   .default_device_var = 0,
   .dyn_var = false,
-  .nest_var = false,
+  .max_active_levels_var = 1,
   .bind_var = omp_proc_bind_false,
   .target_data = NULL
 };
 
-unsigned long gomp_max_active_levels_var = INT_MAX;
 bool gomp_cancel_var = false;
+enum gomp_target_offload_t gomp_target_offload_var
+  = GOMP_TARGET_OFFLOAD_DEFAULT;
 int gomp_max_task_priority_var = 0;
 #ifndef HAVE_SYNC_BUILTINS
 gomp_mutex_t gomp_managed_threads_lock;
@@ -86,10 +87,15 @@ char *gomp_bind_var_list;
 unsigned long gomp_bind_var_list_len;
 void **gomp_places_list;
 unsigned long gomp_places_list_len;
+uintptr_t gomp_def_allocator = omp_default_mem_alloc;
 int gomp_debug_var;
 unsigned int gomp_num_teams_var;
+bool gomp_display_affinity_var;
+char *gomp_affinity_format_var = "level %L thread %i affinity %A";
+size_t gomp_affinity_format_len;
 char *goacc_device_type;
 int goacc_device_num;
+int goacc_default_dims[GOMP_DIM_MAX];
 
 #ifndef LIBGOMP_OFFLOADED_ONLY
 
@@ -100,6 +106,7 @@ parse_schedule (void)
 {
   char *env, *end;
   unsigned long value;
+  int monotonic = 0;
 
   env = getenv ("OMP_SCHEDULE");
   if (env == NULL)
@@ -107,6 +114,26 @@ parse_schedule (void)
 
   while (isspace ((unsigned char) *env))
     ++env;
+  if (strncasecmp (env, "monotonic", 9) == 0)
+    {
+      monotonic = 1;
+      env += 9;
+    }
+  else if (strncasecmp (env, "nonmonotonic", 12) == 0)
+    {
+      monotonic = -1;
+      env += 12;
+    }
+  if (monotonic)
+    {
+      while (isspace ((unsigned char) *env))
+	++env;
+      if (*env != ':')
+	goto unknown;
+      ++env;
+      while (isspace ((unsigned char) *env))
+	++env;
+    }
   if (strncasecmp (env, "static", 6) == 0)
     {
       gomp_global_icv.run_sched_var = GFS_STATIC;
@@ -130,12 +157,16 @@ parse_schedule (void)
   else
     goto unknown;
 
+  if (monotonic == 1
+      || (monotonic == 0 && gomp_global_icv.run_sched_var == GFS_STATIC))
+    gomp_global_icv.run_sched_var |= GFS_MONOTONIC;
+
   while (isspace ((unsigned char) *env))
     ++env;
   if (*env == '\0')
     {
       gomp_global_icv.run_sched_chunk_size
-	= gomp_global_icv.run_sched_var != GFS_STATIC;
+	= (gomp_global_icv.run_sched_var & ~GFS_MONOTONIC) != GFS_STATIC;
       return;
     }
   if (*env++ != ',')
@@ -158,7 +189,8 @@ parse_schedule (void)
   if ((int)value != value)
     goto invalid;
 
-  if (value == 0 && gomp_global_icv.run_sched_var != GFS_STATIC)
+  if (value == 0
+      && (gomp_global_icv.run_sched_var & ~GFS_MONOTONIC) != GFS_STATIC)
     value = 1;
   gomp_global_icv.run_sched_chunk_size = value;
   return;
@@ -341,6 +373,44 @@ parse_unsigned_long_list (const char *name, unsigned long *p1stvalue,
   free (values);
   gomp_error ("Invalid value for environment variable %s", name);
   return false;
+}
+
+static void
+parse_target_offload (const char *name, enum gomp_target_offload_t *offload)
+{
+  const char *env;
+  int new_offload = -1;
+
+  env = getenv (name);
+  if (env == NULL)
+    return;
+
+  while (isspace ((unsigned char) *env))
+    ++env;
+  if (strncasecmp (env, "default", 7) == 0)
+    {
+      env += 7;
+      new_offload = GOMP_TARGET_OFFLOAD_DEFAULT;
+    }
+  else if (strncasecmp (env, "mandatory", 9) == 0)
+    {
+      env += 9;
+      new_offload = GOMP_TARGET_OFFLOAD_MANDATORY;
+    }
+  else if (strncasecmp (env, "disabled", 8) == 0)
+    {
+      env += 8;
+      new_offload = GOMP_TARGET_OFFLOAD_DISABLED;
+    }
+  while (isspace ((unsigned char) *env))
+    ++env;
+  if (new_offload != -1 && *env == '\0')
+    {
+      *offload = new_offload;
+      return;
+    }
+
+  gomp_error ("Invalid value for environment variable OMP_TARGET_OFFLOAD");
 }
 
 /* Parse environment variable set to a boolean or list of omp_proc_bind_t
@@ -888,16 +958,17 @@ parse_spincount (const char *name, unsigned long long *pvalue)
 }
 
 /* Parse a boolean value for environment variable NAME and store the
-   result in VALUE.  */
+   result in VALUE.  Return true if one was present and it was
+   successfully parsed.  */
 
-static void
+static bool
 parse_boolean (const char *name, bool *value)
 {
   const char *env;
 
   env = getenv (name);
   if (env == NULL)
-    return;
+    return false;
 
   while (isspace ((unsigned char) *env))
     ++env;
@@ -916,11 +987,14 @@ parse_boolean (const char *name, bool *value)
   while (isspace ((unsigned char) *env))
     ++env;
   if (*env != '\0')
-    gomp_error ("Invalid value for environment variable %s", name);
+    {
+      gomp_error ("Invalid value for environment variable %s", name);
+      return false;
+    }
+  return true;
 }
 
-/* Parse the OMP_WAIT_POLICY environment variable and store the
-   result in gomp_active_wait_policy.  */
+/* Parse the OMP_WAIT_POLICY environment variable and return the value.  */
 
 static int
 parse_wait_policy (void)
@@ -1054,6 +1128,47 @@ parse_affinity (bool ignore)
   return false;
 }
 
+/* Parse the OMP_ALLOCATOR environment variable and return the value.  */
+
+static uintptr_t
+parse_allocator (void)
+{
+  const char *env;
+  uintptr_t ret = omp_default_mem_alloc;
+
+  env = getenv ("OMP_ALLOCATOR");
+  if (env == NULL)
+    return ret;
+
+  while (isspace ((unsigned char) *env))
+    ++env;
+  if (0)
+    ;
+#define C(v) \
+  else if (strncasecmp (env, #v, sizeof (#v) - 1) == 0)	\
+    {							\
+      ret = v;						\
+      env += sizeof (#v) - 1;				\
+    }
+  C (omp_default_mem_alloc)
+  C (omp_large_cap_mem_alloc)
+  C (omp_const_mem_alloc)
+  C (omp_high_bw_mem_alloc)
+  C (omp_low_lat_mem_alloc)
+  C (omp_cgroup_mem_alloc)
+  C (omp_pteam_mem_alloc)
+  C (omp_thread_mem_alloc)
+#undef C
+  else
+    env = "X";
+  while (isspace ((unsigned char) *env))
+    ++env;
+  if (*env == '\0')
+    return ret;
+  gomp_error ("Invalid value for environment variable OMP_ALLOCATOR");
+  return omp_default_mem_alloc;
+}
+
 static void
 parse_acc_device_type (void)
 {
@@ -1063,6 +1178,36 @@ parse_acc_device_type (void)
     goacc_device_type = strdup (env);
   else
     goacc_device_type = NULL;
+}
+
+static void
+parse_gomp_openacc_dim (void)
+{
+  /* The syntax is the same as for the -fopenacc-dim compilation option.  */
+  const char *var_name = "GOMP_OPENACC_DIM";
+  const char *env_var = getenv (var_name);
+  if (!env_var)
+    return;
+
+  const char *pos = env_var;
+  int i;
+  for (i = 0; *pos && i != GOMP_DIM_MAX; i++)
+    {
+      if (i && *pos++ != ':')
+	break;
+
+      if (*pos == ':')
+	continue;
+
+      const char *eptr;
+      errno = 0;
+      long val = strtol (pos, (char **)&eptr, 10);
+      if (errno || val < 0 || (unsigned)val != val)
+	break;
+
+      goacc_default_dims[i] = (int)val;
+      pos = eptr;
+    }
 }
 
 static void
@@ -1111,7 +1256,7 @@ handle_omp_display_env (unsigned long stacksize, int wait_policy)
   fprintf (stderr, "  OMP_DYNAMIC = '%s'\n",
 	   gomp_global_icv.dyn_var ? "TRUE" : "FALSE");
   fprintf (stderr, "  OMP_NESTED = '%s'\n",
-	   gomp_global_icv.nest_var ? "TRUE" : "FALSE");
+	   gomp_global_icv.max_active_levels_var > 1 ? "TRUE" : "FALSE");
 
   fprintf (stderr, "  OMP_NUM_THREADS = '%lu", gomp_global_icv.nthreads_var);
   for (i = 1; i < gomp_nthreads_var_list_len; i++)
@@ -1119,19 +1264,34 @@ handle_omp_display_env (unsigned long stacksize, int wait_policy)
   fputs ("'\n", stderr);
 
   fprintf (stderr, "  OMP_SCHEDULE = '");
-  switch (gomp_global_icv.run_sched_var)
+  if ((gomp_global_icv.run_sched_var & GFS_MONOTONIC))
+    {
+      if (gomp_global_icv.run_sched_var != (GFS_MONOTONIC | GFS_STATIC))
+	fputs ("MONOTONIC:", stderr);
+    }
+  else if (gomp_global_icv.run_sched_var == GFS_STATIC)
+    fputs ("NONMONOTONIC:", stderr);
+  switch (gomp_global_icv.run_sched_var & ~GFS_MONOTONIC)
     {
     case GFS_RUNTIME:
       fputs ("RUNTIME", stderr);
+      if (gomp_global_icv.run_sched_chunk_size != 1)
+	fprintf (stderr, ",%d", gomp_global_icv.run_sched_chunk_size);
       break;
     case GFS_STATIC:
       fputs ("STATIC", stderr);
+      if (gomp_global_icv.run_sched_chunk_size != 0)
+	fprintf (stderr, ",%d", gomp_global_icv.run_sched_chunk_size);
       break;
     case GFS_DYNAMIC:
       fputs ("DYNAMIC", stderr);
+      if (gomp_global_icv.run_sched_chunk_size != 1)
+	fprintf (stderr, ",%d", gomp_global_icv.run_sched_chunk_size);
       break;
     case GFS_GUIDED:
       fputs ("GUIDED", stderr);
+      if (gomp_global_icv.run_sched_chunk_size != 1)
+	fprintf (stderr, ",%d", gomp_global_icv.run_sched_chunk_size);
       break;
     case GFS_AUTO:
       fputs ("AUTO", stderr);
@@ -1188,8 +1348,8 @@ handle_omp_display_env (unsigned long stacksize, int wait_policy)
 	   wait_policy > 0 ? "ACTIVE" : "PASSIVE");
   fprintf (stderr, "  OMP_THREAD_LIMIT = '%u'\n",
 	   gomp_global_icv.thread_limit_var);
-  fprintf (stderr, "  OMP_MAX_ACTIVE_LEVELS = '%lu'\n",
-	   gomp_max_active_levels_var);
+  fprintf (stderr, "  OMP_MAX_ACTIVE_LEVELS = '%u'\n",
+	   gomp_global_icv.max_active_levels_var);
 
   fprintf (stderr, "  OMP_CANCELLATION = '%s'\n",
 	   gomp_cancel_var ? "TRUE" : "FALSE");
@@ -1197,6 +1357,41 @@ handle_omp_display_env (unsigned long stacksize, int wait_policy)
 	   gomp_global_icv.default_device_var);
   fprintf (stderr, "  OMP_MAX_TASK_PRIORITY = '%d'\n",
 	   gomp_max_task_priority_var);
+  fprintf (stderr, "  OMP_DISPLAY_AFFINITY = '%s'\n",
+	   gomp_display_affinity_var ? "TRUE" : "FALSE");
+  fprintf (stderr, "  OMP_AFFINITY_FORMAT = '%s'\n",
+	   gomp_affinity_format_var);
+  fprintf (stderr, "  OMP_ALLOCATOR = '");
+  switch (gomp_def_allocator)
+    {
+#define C(v) case v: fputs (#v, stderr); break;
+    C (omp_default_mem_alloc)
+    C (omp_large_cap_mem_alloc)
+    C (omp_const_mem_alloc)
+    C (omp_high_bw_mem_alloc)
+    C (omp_low_lat_mem_alloc)
+    C (omp_cgroup_mem_alloc)
+    C (omp_pteam_mem_alloc)
+    C (omp_thread_mem_alloc)
+#undef C
+    default: break;
+    }
+  fputs ("'\n", stderr);
+
+  fputs ("  OMP_TARGET_OFFLOAD = '", stderr);
+  switch (gomp_target_offload_var)
+    {
+    case GOMP_TARGET_OFFLOAD_DEFAULT:
+      fputs ("DEFAULT", stderr);
+      break;
+    case GOMP_TARGET_OFFLOAD_MANDATORY:
+      fputs ("MANDATORY", stderr);
+      break;
+    case GOMP_TARGET_OFFLOAD_DISABLED:
+      fputs ("DISABLED", stderr);
+      break;
+    }
+  fputs ("'\n", stderr);
 
   if (verbose)
     {
@@ -1219,6 +1414,7 @@ static void __attribute__((constructor))
 initialize_env (void)
 {
   unsigned long thread_limit_var, stacksize = GOMP_DEFAULT_STACKSIZE;
+  unsigned long max_active_levels_var;
   int wait_policy;
 
   /* Do a compile time check that mkomp_h.pl did good job.  */
@@ -1226,12 +1422,12 @@ initialize_env (void)
 
   parse_schedule ();
   parse_boolean ("OMP_DYNAMIC", &gomp_global_icv.dyn_var);
-  parse_boolean ("OMP_NESTED", &gomp_global_icv.nest_var);
   parse_boolean ("OMP_CANCELLATION", &gomp_cancel_var);
+  parse_boolean ("OMP_DISPLAY_AFFINITY", &gomp_display_affinity_var);
   parse_int ("OMP_DEFAULT_DEVICE", &gomp_global_icv.default_device_var, true);
+  parse_target_offload ("OMP_TARGET_OFFLOAD", &gomp_target_offload_var);
   parse_int ("OMP_MAX_TASK_PRIORITY", &gomp_max_task_priority_var, true);
-  parse_unsigned_long ("OMP_MAX_ACTIVE_LEVELS", &gomp_max_active_levels_var,
-		       true);
+  gomp_def_allocator = parse_allocator ();
   if (parse_unsigned_long ("OMP_THREAD_LIMIT", &thread_limit_var, false))
     {
       gomp_global_icv.thread_limit_var
@@ -1255,9 +1451,25 @@ initialize_env (void)
 		      &gomp_bind_var_list_len)
       && gomp_global_icv.bind_var == omp_proc_bind_false)
     ignore = true;
+  if (parse_unsigned_long ("OMP_MAX_ACTIVE_LEVELS",
+			   &max_active_levels_var, true))
+    gomp_global_icv.max_active_levels_var
+      = (max_active_levels_var > gomp_supported_active_levels)
+	? gomp_supported_active_levels : max_active_levels_var;
+  else
+    {
+      bool nested = true;
+
+      /* OMP_NESTED is deprecated in OpenMP 5.0.  */
+      if (parse_boolean ("OMP_NESTED", &nested))
+	gomp_global_icv.max_active_levels_var
+	  = nested ? gomp_supported_active_levels : 1;
+      else if (gomp_nthreads_var_list_len > 1 || gomp_bind_var_list_len > 1)
+	gomp_global_icv.max_active_levels_var = gomp_supported_active_levels;
+    }
   /* Make sure OMP_PLACES and GOMP_CPU_AFFINITY env vars are always
      parsed if present in the environment.  If OMP_PROC_BIND was set
-     explictly to false, don't populate places list though.  If places
+     explicitly to false, don't populate places list though.  If places
      list was successfully set from OMP_PLACES, only parse but don't process
      GOMP_CPU_AFFINITY.  If OMP_PROC_BIND was not set in the environment,
      default to OMP_PROC_BIND=true if OMP_PLACES or GOMP_CPU_AFFINITY
@@ -1277,6 +1489,13 @@ initialize_env (void)
     }
   if (gomp_global_icv.bind_var != omp_proc_bind_false)
     gomp_init_affinity ();
+
+  {
+    const char *env = getenv ("OMP_AFFINITY_FORMAT");
+    if (env != NULL)
+      gomp_set_affinity_format (env, strlen (env));
+  }
+
   wait_policy = parse_wait_policy ();
   if (!parse_spincount ("GOMP_SPINCOUNT", &gomp_spin_count_var))
     {
@@ -1302,7 +1521,6 @@ initialize_env (void)
 
   /* Not strictly environment related, but ordering constructors is tricky.  */
   pthread_attr_init (&gomp_thread_attr);
-  pthread_attr_setdetachstate (&gomp_thread_attr, PTHREAD_CREATE_DETACHED);
 
   if (parse_stacksize ("OMP_STACKSIZE", &stacksize)
       || parse_stacksize ("GOMP_STACKSIZE", &stacksize)
@@ -1336,7 +1554,10 @@ initialize_env (void)
     goacc_device_num = 0;
 
   parse_acc_device_type ();
+  parse_gomp_openacc_dim ();
 
   goacc_runtime_initialize ();
+
+  goacc_profiling_initialize ();
 }
 #endif /* LIBGOMP_OFFLOADED_ONLY */

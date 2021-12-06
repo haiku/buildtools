@@ -1,5 +1,5 @@
 /* Register note definitions.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -232,6 +232,21 @@ REG_NOTE (STACK_CHECK)
    The decl might not be available in the call due to splitting of the call
    insn.  This note is a SYMBOL_REF.  */
 REG_NOTE (CALL_DECL)
+
+/* Indicates that the call is an untyped_call.  These calls are special
+   in that they set all of the target ABI's return value registers to a
+   defined value without explicitly saying so.  For example, a typical
+   untyped_call sequence has the form:
+
+       (call (mem (symbol_ref "foo")))
+       (set (reg pseudo1) (reg result1))
+       ...
+       (set (reg pseudon) (reg resultn))
+
+   The ABI specifies that result1..resultn are clobbered by the call,
+   but the RTL does not indicate that result1..resultn are the results
+   of the call.  */
+REG_NOTE (UNTYPED_CALL)
 
 /* Indicate that a call should not be verified for control-flow consistency.
    The target address of the call is assumed as a valid address and no check

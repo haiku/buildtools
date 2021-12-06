@@ -1,5 +1,5 @@
 // Methods for type_info for -*- C++ -*- Run Time Type Identification.
-// Copyright (C) 1994-2018 Free Software Foundation, Inc.
+// Copyright (C) 1994-2021 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -29,15 +29,6 @@
 std::type_info::
 ~type_info ()
 { }
-
-#ifdef __HAIKU__
-#ifndef __GXX_MERGED_TYPEINFO_NAMES
-#define __GXX_MERGED_TYPEINFO_NAMES 0
-#endif
-#ifndef __GXX_TYPEINFO_EQUALITY_INLINE
-#define __GXX_TYPEINFO_EQUALITY_INLINE 0
-#endif
-#endif
 
 #if !__GXX_TYPEINFO_EQUALITY_INLINE
 

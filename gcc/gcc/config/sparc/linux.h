@@ -1,5 +1,5 @@
 /* Definitions for SPARC running Linux-based GNU systems with ELF.
-   Copyright (C) 1996-2018 Free Software Foundation, Inc.
+   Copyright (C) 1996-2021 Free Software Foundation, Inc.
    Contributed by Eddie C. Dost (ecd@skynet.be)
 
 This file is part of GCC.
@@ -27,16 +27,10 @@ along with GCC; see the file COPYING3.  If not see
     }						\
   while (0)
 
-/* Provide a ENDFILE_SPEC appropriate for GNU/Linux.  Here we tack on
-   the GNU/Linux magical crtend.o file (see crtstuff.c) which
-   provides part of the support for getting C++ file-scope static
-   object constructed before entering `main', followed by a normal
-   GNU/Linux "finalizer" file, `crtn.o'.  */
-
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC \
-  "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s\
-   %{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s}"
+  GNU_USER_TARGET_ENDFILE_SPEC \
+  "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s}"
 
 /* -mcpu=native handling only makes sense with compiler running on
    a SPARC chip.  */
@@ -54,10 +48,11 @@ extern const char *host_detect_local_cpu (int argc, const char **argv);
 
 #define DRIVER_SELF_SPECS MCPU_MTUNE_NATIVE_SPECS
 
-/* This is for -profile to use -lc_p instead of -lc.  */
-#undef	CC1_SPEC
-#define	CC1_SPEC "%{profile:-p} \
-"
+#undef  ASAN_CC1_SPEC
+#define ASAN_CC1_SPEC "%{%:sanitize(address):-funwind-tables}"
+
+#undef  CC1_SPEC
+#define CC1_SPEC GNU_USER_TARGET_CC1_SPEC ASAN_CC1_SPEC
 
 #undef SIZE_TYPE
 #define SIZE_TYPE "unsigned int"

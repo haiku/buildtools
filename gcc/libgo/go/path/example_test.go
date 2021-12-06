@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package path
+// +build gccgo_examples
 
-/* Commented out until gccgo has example support.
+package path
 
 import (
 	"fmt"
@@ -81,26 +81,43 @@ func ExampleJoin() {
 	fmt.Println(path.Join("a", "b", "c"))
 	fmt.Println(path.Join("a", "b/c"))
 	fmt.Println(path.Join("a/b", "c"))
+
+	fmt.Println(path.Join("a/b", "../../../xyz"))
+
 	fmt.Println(path.Join("", ""))
 	fmt.Println(path.Join("a", ""))
 	fmt.Println(path.Join("", "a"))
+
 	// Output:
 	// a/b/c
 	// a/b/c
 	// a/b/c
+	// ../xyz
 	//
 	// a
 	// a
+}
+
+func ExampleMatch() {
+	fmt.Println(path.Match("abc", "abc"))
+	fmt.Println(path.Match("a*", "abc"))
+	fmt.Println(path.Match("a*/b", "a/c/b"))
+	// Output:
+	// true <nil>
+	// true <nil>
+	// false <nil>
 }
 
 func ExampleSplit() {
-	fmt.Println(path.Split("static/myfile.css"))
-	fmt.Println(path.Split("myfile.css"))
-	fmt.Println(path.Split(""))
+	split := func(s string) {
+		dir, file := path.Split(s)
+		fmt.Printf("path.Split(%q) = dir: %q, file: %q\n", s, dir, file)
+	}
+	split("static/myfile.css")
+	split("myfile.css")
+	split("")
 	// Output:
-	// static/ myfile.css
-	//  myfile.css
-	//
+	// path.Split("static/myfile.css") = dir: "static/", file: "myfile.css"
+	// path.Split("myfile.css") = dir: "", file: "myfile.css"
+	// path.Split("") = dir: "", file: ""
 }
-
-*/

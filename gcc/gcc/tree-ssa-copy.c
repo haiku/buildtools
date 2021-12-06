@@ -1,5 +1,5 @@
 /* Copy propagation and SSA_NAME replacement support routines.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -492,13 +492,13 @@ init_copy_prop (void)
 class copy_folder : public substitute_and_fold_engine
 {
  public:
-  tree get_value (tree) FINAL OVERRIDE;
+  tree value_of_expr (tree name, gimple *) FINAL OVERRIDE;
 };
 
 /* Callback for substitute_and_fold to get at the final copy-of values.  */
 
 tree
-copy_folder::get_value (tree name)
+copy_folder::value_of_expr (tree name, gimple *)
 {
   tree val;
   if (SSA_NAME_VERSION (name) >= n_copy_of)
@@ -545,13 +545,12 @@ fini_copy_prop (void)
 	      duplicate_ssa_name_ptr_info (copy_of[i].value,
 					   SSA_NAME_PTR_INFO (var));
 	      /* Points-to information is cfg insensitive,
-		 but alignment info might be cfg sensitive, if it
-		 e.g. is derived from VRP derived non-zero bits.
-		 So, do not copy alignment info if the two SSA_NAMEs
-		 aren't defined in the same basic block.  */
+		 but [E]VRP might record context sensitive alignment
+		 info, non-nullness, etc.  So reset context sensitive
+		 info if the two SSA_NAMEs aren't defined in the same
+		 basic block.  */
 	      if (var_bb != copy_of_bb)
-		mark_ptr_info_alignment_unknown
-				(SSA_NAME_PTR_INFO (copy_of[i].value));
+		reset_flow_sensitive_info (copy_of[i].value);
 	    }
 	  else if (!POINTER_TYPE_P (TREE_TYPE (var))
 		   && SSA_NAME_RANGE_INFO (var)

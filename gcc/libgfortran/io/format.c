@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2018 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2021 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -38,7 +38,7 @@ static const fnode colon_node = { FMT_COLON, 0, NULL, NULL, {{ 0, 0, 0 }}, 0,
 
 /* Error messages. */
 
-static const char posint_required[] = "Positive width required in format",
+static const char posint_required[] = "Positive integer required in format",
   period_required[] = "Period required in format",
   nonneg_required[] = "Nonnegative width required in format",
   unexpected_element[] = "Unexpected element '%c' in format\n",
@@ -617,6 +617,7 @@ parse_format_list (st_parameter_dt *dtp, bool *seen_dd)
   int repeat;
   format_data *fmt = dtp->u.p.fmt;
   bool seen_data_desc = false;
+  int standard;
 
   head = tail = NULL;
 
@@ -925,16 +926,26 @@ parse_format_list (st_parameter_dt *dtp, bool *seen_dd)
       tail->repeat = repeat;
 
       u = format_lex (fmt);
-      if (t == FMT_G && u == FMT_ZERO)
+      
+      /* Processing for zero width formats.  */
+      if (u == FMT_ZERO)
 	{
-	  *seen_dd = true;
-	  if (notification_std (GFC_STD_F2008) == NOTIFICATION_ERROR
+          if (t == FMT_F)
+	    standard = GFC_STD_F95;
+	  else if (t == FMT_G)
+	    standard = GFC_STD_F2008;
+	  else
+	    standard = GFC_STD_F2018;
+
+	  if (notification_std (standard) == NOTIFICATION_ERROR
 	      || dtp->u.p.mode == READING)
 	    {
 	      fmt->error = zero_width;
 	      goto finished;
 	    }
 	  tail->u.real.w = 0;
+
+	  /* Look for the dot seperator.  */
 	  u = format_lex (fmt);
 	  if (u != FMT_PERIOD)
 	    {
@@ -942,81 +953,121 @@ parse_format_list (st_parameter_dt *dtp, bool *seen_dd)
 	      break;
 	    }
 
+	  /* Look for the precision.  */
 	  u = format_lex (fmt);
-	  if (u != FMT_POSINT)
-	    {
-	      fmt->error = posint_required;
-	      goto finished;
-	    }
-	  tail->u.real.d = fmt->value;
-	  break;
-	}
-      if (t == FMT_F && dtp->u.p.mode == WRITING)
-	{
-	  *seen_dd = true;
-	  if (u != FMT_POSINT && u != FMT_ZERO)
+	  if (u != FMT_ZERO && u != FMT_POSINT)
 	    {
 	      fmt->error = nonneg_required;
 	      goto finished;
 	    }
-	}
-      else if (u != FMT_POSINT)
-	{
-	  fmt->error = posint_required;
-	  goto finished;
+	  tail->u.real.d = fmt->value;
+	  
+	  /* Look for optional exponent, not allowed for FMT_D */
+	  if (t == FMT_D)
+	    break;
+	  u = format_lex (fmt);
+	  if (u != FMT_E)
+	    fmt->saved_token = u;
+	  else
+	    {
+	      u = format_lex (fmt);
+	      if (u != FMT_POSINT)
+		{
+		  if (u == FMT_ZERO)
+		    {
+		      notify_std (&dtp->common, GFC_STD_F2018,
+				  "Positive exponent width required");
+		    }
+		  else
+		    {
+		      fmt->error = "Positive exponent width required in "
+				   "format string at %L";
+		      goto finished;
+		    }
+		}
+	      tail->u.real.e = fmt->value;
+	    }
+	  break;
 	}
 
-      tail->u.real.w = fmt->value;
-      t2 = t;
-      t = format_lex (fmt);
-      if (t != FMT_PERIOD)
+      /* Processing for positive width formats.  */
+      if (u == FMT_POSINT)
 	{
-	  /* We treat a missing decimal descriptor as 0.  Note: This is only
-	     allowed if -std=legacy, otherwise an error occurs.  */
-	  if (compile_options.warn_std != 0)
+	  tail->u.real.w = fmt->value;
+
+	  /* Look for the dot separator. Because of legacy behaviors
+	     we do some look ahead for missing things.  */
+	  t2 = t;
+	  t = format_lex (fmt);
+	  if (t != FMT_PERIOD)
 	    {
-	      fmt->error = period_required;
+	      /* We treat a missing decimal descriptor as 0.  Note: This is only
+		 allowed if -std=legacy, otherwise an error occurs.  */
+	      if (compile_options.warn_std != 0)
+		{
+		  fmt->error = period_required;
+		  goto finished;
+		}
+	      fmt->saved_token = t;
+	      tail->u.real.d = 0;
+	      tail->u.real.e = -1;
+	      break;
+	    }
+
+	  /* If we made it here, we should have the dot so look for the
+	     precision.  */
+	  t = format_lex (fmt);
+	  if (t != FMT_ZERO && t != FMT_POSINT)
+	    {
+	      fmt->error = nonneg_required;
 	      goto finished;
 	    }
-	  fmt->saved_token = t;
+	  tail->u.real.d = fmt->value;
+	  tail->u.real.e = -1;
+
+	  /* Done with D and F formats.  */
+	  if (t2 == FMT_D || t2 == FMT_F)
+	    {
+	      *seen_dd = true;
+	      break;
+	    }
+
+	  /* Look for optional exponent */
+	  u = format_lex (fmt);
+	  if (u != FMT_E)
+	    fmt->saved_token = u;
+	  else
+	    {
+	      u = format_lex (fmt);
+	      if (u != FMT_POSINT)
+		{
+		  if (u == FMT_ZERO)
+		    {
+		      notify_std (&dtp->common, GFC_STD_F2018,
+				  "Positive exponent width required");
+		    }
+		  else
+		    {
+		      fmt->error = "Positive exponent width required in "
+				   "format string at %L";
+		      goto finished;
+		    }
+		}
+	      tail->u.real.e = fmt->value;
+	    }
+	  break;
+	}
+
+      /* Old DEC codes may not have width or precision specified.  */
+      if (dtp->u.p.mode == WRITING && (dtp->common.flags & IOPARM_DT_DEC_EXT))
+	{
+	  tail->u.real.w = DEFAULT_WIDTH;
 	  tail->u.real.d = 0;
 	  tail->u.real.e = -1;
-	  break;
+	  fmt->saved_token = u;
 	}
-
-      t = format_lex (fmt);
-      if (t != FMT_ZERO && t != FMT_POSINT)
-	{
-	  fmt->error = nonneg_required;
-	  goto finished;
-	}
-
-      tail->u.real.d = fmt->value;
-      tail->u.real.e = -1;
-
-      if (t2 == FMT_D || t2 == FMT_F)
-	{
-	  *seen_dd = true;
-	  break;
-	}
-
-      /* Look for optional exponent */
-      t = format_lex (fmt);
-      if (t != FMT_E)
-	fmt->saved_token = t;
-      else
-	{
-	  t = format_lex (fmt);
-	  if (t != FMT_POSINT)
-	    {
-	      fmt->error = "Positive exponent width required in format";
-	      goto finished;
-	    }
-
-	  tail->u.real.e = fmt->value;
-	}
-
       break;
+
     case FMT_DT:
       *seen_dd = true;
       get_fnode (fmt, &head, &tail, t);
@@ -1058,7 +1109,7 @@ parse_format_list (st_parameter_dt *dtp, bool *seen_dd)
 	    {
 	      /* We have parsed the complete vlist so initialize the
 	         array descriptor and save it in the format node.  */
-	      gfc_array_i4 *vp = tail->u.udf.vlist;
+	      gfc_full_array_i4 *vp = tail->u.udf.vlist;
 	      GFC_DESCRIPTOR_DATA(vp) = xmalloc (i * sizeof(GFC_INTEGER_4));
 	      GFC_DIMENSION_SET(vp->dim[0],1, i, 1);
 	      memcpy (GFC_DESCRIPTOR_DATA(vp), temp, i * sizeof(GFC_INTEGER_4));
@@ -1100,6 +1151,13 @@ parse_format_list (st_parameter_dt *dtp, bool *seen_dd)
 	{
 	  if (t != FMT_POSINT)
 	    {
+	      if (dtp->common.flags & IOPARM_DT_DEC_EXT)
+		{
+		  tail->u.integer.w = DEFAULT_WIDTH;
+		  tail->u.integer.m = -1;
+		  fmt->saved_token = t;
+		  break;
+		}
 	      fmt->error = posint_required;
 	      goto finished;
 	    }
@@ -1108,6 +1166,13 @@ parse_format_list (st_parameter_dt *dtp, bool *seen_dd)
 	{
 	  if (t != FMT_ZERO && t != FMT_POSINT)
 	    {
+	      if (dtp->common.flags & IOPARM_DT_DEC_EXT)
+		{
+		  tail->u.integer.w = DEFAULT_WIDTH;
+		  tail->u.integer.m = -1;
+		  fmt->saved_token = t;
+		  break;
+		}
 	      fmt->error = nonneg_required;
 	      goto finished;
 	    }

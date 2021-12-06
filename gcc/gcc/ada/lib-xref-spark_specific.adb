@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2011-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2011-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -168,9 +168,9 @@ package body SPARK_Specific is
       end loop;
    end Iterate_SPARK_Xrefs;
 
-   -------------------------------------
-   -- Enclosing_Subprogram_Or_Package --
-   -------------------------------------
+   ---------------------------------------------
+   -- Enclosing_Subprogram_Or_Library_Package --
+   ---------------------------------------------
 
    function Enclosing_Subprogram_Or_Library_Package
      (N : Node_Id) return Entity_Id
@@ -181,11 +181,11 @@ package body SPARK_Specific is
       --  If N is the defining identifier for a subprogram, then return the
       --  enclosing subprogram or package, not this subprogram.
 
-      if Nkind_In (N, N_Defining_Identifier, N_Defining_Operator_Symbol)
-        and then (Ekind (N) in Entry_Kind
-                   or else Ekind (N) = E_Subprogram_Body
-                   or else Ekind (N) in Generic_Subprogram_Kind
-                   or else Ekind (N) in Subprogram_Kind)
+      if Nkind (N) in N_Defining_Identifier | N_Defining_Operator_Symbol
+        and then Ekind (N) in Entry_Kind
+                            | E_Subprogram_Body
+                            | Generic_Subprogram_Kind
+                            | Subprogram_Kind
       then
          Context := Parent (Unit_Declaration_Node (N));
 
@@ -228,7 +228,18 @@ package body SPARK_Specific is
                end loop;
 
                if Nkind (Context) = N_Pragma then
-                  Context := Parent (Context);
+
+                  --  When used for cross-references then aspects might not be
+                  --  yet linked to pragmas; when used for AST navigation in
+                  --  GNATprove this routine is expected to follow those links.
+
+                  if From_Aspect_Specification (Context) then
+                     Context := Corresponding_Aspect (Context);
+                     pragma Assert (Nkind (Context) = N_Aspect_Specification);
+                     Context := Entity (Context);
+                  else
+                     Context := Parent (Context);
+                  end if;
                end if;
 
             when N_Entry_Body
@@ -280,13 +291,15 @@ package body SPARK_Specific is
 
       procedure Create_Heap is
       begin
-         Name_Len := Name_Of_Heap_Variable'Length;
-         Name_Buffer (1 .. Name_Len) := Name_Of_Heap_Variable;
-
-         Heap := Make_Defining_Identifier (Standard_Location, Name_Enter);
+         Heap :=
+           Make_Defining_Identifier
+             (Standard_Location,
+              Name_Enter (Name_Of_Heap_Variable));
 
          Set_Ekind       (Heap, E_Variable);
          Set_Is_Internal (Heap, True);
+         Set_Etype       (Heap, Standard_Void_Type);
+         Set_Scope       (Heap, Standard_Standard);
          Set_Has_Fully_Qualified_Name (Heap);
       end Create_Heap;
 

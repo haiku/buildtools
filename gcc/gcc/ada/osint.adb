@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -88,6 +88,10 @@ package body Osint is
    function OS_Time_To_GNAT_Time (T : OS_Time) return Time_Stamp_Type;
    --  Convert OS format time to GNAT format time stamp. If T is Invalid_Time,
    --  then returns Empty_Time_Stamp.
+   --  Round to even seconds on Windows before conversion.
+   --  Windows ALI files had timestamps rounded to even seconds historically.
+   --  The rounding was originally done in GM_Split. Now that GM_Split no
+   --  longer does it, we are rounding it here only for ALI files.
 
    function Executable_Prefix return String_Ptr;
    --  Returns the name of the root directory where the executable is stored.
@@ -95,6 +99,10 @@ package body Osint is
    --  root/lib/gcc-lib/..., or under root/libexec/gcc/... For example, if
    --  executable is stored in directory "/foo/bar/bin", this routine returns
    --  "/foo/bar/". Return "" if location is not recognized as described above.
+
+   function File_Names_Equal (File1, File2 : String) return Boolean;
+   --  Compare File1 and File2 taking into account the case insensitivity
+   --  of the OS.
 
    function Update_Path (Path : String_Ptr) return String_Ptr;
    --  Update the specified path to replace the prefix with the location where
@@ -250,8 +258,7 @@ package body Osint is
       Attr : aliased File_Attributes;
    end record;
 
-   No_File_Info_Cache : constant File_Info_Cache :=
-                          (No_File, Unknown_Attributes);
+   No_File_Info_Cache : constant File_Info_Cache := (No_File, (others => 0));
 
    package File_Name_Hash_Table is new GNAT.HTable.Simple_HTable (
      Header_Num => File_Hash_Num,
@@ -788,6 +795,17 @@ package body Osint is
       end if;
    end Dir_In_Src_Search_Path;
 
+   -----------------------------------------
+   -- Dump_Command_Line_Source_File_Names --
+   -----------------------------------------
+
+   procedure Dump_Command_Line_Source_File_Names is
+   begin
+      for J in 1 .. Number_Of_Files loop
+         Write_Str (File_Names (J).all & " ");
+      end loop;
+   end Dump_Command_Line_Source_File_Names;
+
    ----------------------------
    -- Dump_Source_File_Names --
    ----------------------------
@@ -831,39 +849,29 @@ package body Osint is
                   Add_Suffix := False;
                   exit;
 
-               elsif Name_Buffer (J) = '/' or else
-                     Name_Buffer (J) = Directory_Separator
-               then
+               elsif Is_Directory_Separator (Name_Buffer (J)) then
                   exit;
                end if;
             end loop;
          end if;
 
          if Add_Suffix then
-            declare
-               Buffer : String := Name_Buffer (1 .. Name_Len);
+            --  If Executable doesn't end with the executable suffix, add it
 
-            begin
-               --  Get the file name in canonical case to accept as is. Names
-               --  end with ".EXE" on Windows.
-
-               Canonical_Case_File_Name (Buffer);
-
-               --  If Executable doesn't end with the executable suffix, add it
-
-               if Buffer'Length <= Exec_Suffix'Length
-                 or else
-                   Buffer (Buffer'Last - Exec_Suffix'Length + 1 .. Buffer'Last)
-                     /= Exec_Suffix.all
-               then
-                  Name_Buffer
-                    (Name_Len + 1 .. Name_Len + Exec_Suffix'Length) :=
-                      Exec_Suffix.all;
-                  Name_Len := Name_Len + Exec_Suffix'Length;
-                  Free (Exec_Suffix);
-                  return Name_Find;
-               end if;
-            end;
+            if Name_Len <= Exec_Suffix'Length
+              or else not
+                File_Names_Equal
+                  (Name_Buffer
+                    (Name_Len - Exec_Suffix'Length + 1 .. Name_Len),
+                   Exec_Suffix.all)
+            then
+               Name_Buffer
+                 (Name_Len + 1 .. Name_Len + Exec_Suffix'Length) :=
+                   Exec_Suffix.all;
+               Name_Len := Name_Len + Exec_Suffix'Length;
+               Free (Exec_Suffix);
+               return Name_Find;
+            end if;
          end if;
       end if;
 
@@ -877,7 +885,6 @@ package body Osint is
    is
       Exec_Suffix    : String_Access;
       Add_Suffix     : Boolean;
-      Canonical_Name : String := Name;
 
    begin
       if Executable_Extension_On_Target = No_Name then
@@ -897,27 +904,26 @@ package body Osint is
 
          begin
             Free (Exec_Suffix);
-            Canonical_Case_File_Name (Canonical_Name);
-
             Add_Suffix := True;
+
             if Only_If_No_Suffix then
-               for J in reverse Canonical_Name'Range loop
-                  if Canonical_Name (J) = '.' then
+               for J in reverse Name'Range loop
+                  if Name (J) = '.' then
                      Add_Suffix := False;
                      exit;
 
-                  elsif Canonical_Name (J) = '/' or else
-                        Canonical_Name (J) = Directory_Separator
-                  then
+                  elsif Is_Directory_Separator (Name (J)) then
                      exit;
                   end if;
                end loop;
             end if;
 
             if Add_Suffix and then
-              (Canonical_Name'Length <= Suffix'Length
-               or else Canonical_Name (Canonical_Name'Last - Suffix'Length + 1
-                                       .. Canonical_Name'Last) /= Suffix)
+              (Name'Length <= Suffix'Length
+               or else not
+                 File_Names_Equal
+                   (Name (Name'Last - Suffix'Length + 1 .. Name'Last),
+                    Suffix))
             then
                declare
                   Result : String (1 .. Name'Length + Suffix'Length);
@@ -1047,13 +1053,26 @@ package body Osint is
       Exit_Program (E_Fatal);
    end Fail;
 
+   ----------------------
+   -- File_Names_Equal --
+   ----------------------
+
+   function File_Names_Equal (File1, File2 : String) return Boolean is
+   begin
+      if File_Names_Case_Sensitive then
+         return File1 = File2;
+      else
+         return To_Lower (File1) = To_Lower (File2);
+      end if;
+   end File_Names_Equal;
+
    ---------------
    -- File_Hash --
    ---------------
 
    function File_Hash (F : File_Name_Type) return File_Hash_Num is
    begin
-      return File_Hash_Num (Int (F) rem File_Hash_Num'Range_Length);
+      return File_Hash_Num (Int (F) mod File_Hash_Num'Range_Length);
    end File_Hash;
 
    -----------------
@@ -1416,6 +1435,15 @@ package body Osint is
       return Name_Find;
    end Get_Directory;
 
+   ------------------------------
+   -- Get_First_Main_File_Name --
+   ------------------------------
+
+   function Get_First_Main_File_Name return String is
+   begin
+      return File_Names (1).all;
+   end Get_First_Main_File_Name;
+
    --------------------------
    -- Get_Next_Dir_In_Path --
    --------------------------
@@ -1502,7 +1530,7 @@ package body Osint is
       --  Add a directory separator at the end of the directory if necessary
       --  so that we can directly append a file to the directory
 
-      if Search_Dir (Search_Dir'Last) /= Directory_Separator then
+      if not Is_Directory_Separator (Search_Dir (Search_Dir'Last)) then
          Local_Search_Dir :=
            new String'(Search_Dir & String'(1 => Directory_Separator));
       else
@@ -1554,7 +1582,7 @@ package body Osint is
                raise Program_Error;
             end if;
 
-            if Buffer (Path_Len) /= Directory_Separator then
+            if not Is_Directory_Separator (Buffer (Path_Len)) then
                Path_Len := Path_Len + 1;
                Buffer (Path_Len) := Directory_Separator;
             end if;
@@ -1965,9 +1993,7 @@ package body Osint is
       Fptr := File_Name'First;
 
       for J in reverse File_Name'Range loop
-         if File_Name (J) = Directory_Separator
-           or else File_Name (J) = '/'
-         then
+         if Is_Directory_Separator (File_Name (J)) then
             if J = File_Name'Last then
                Fail ("File name missing");
             end if;
@@ -2166,6 +2192,19 @@ package body Osint is
    function OS_Time_To_GNAT_Time (T : OS_Time) return Time_Stamp_Type is
       GNAT_Time : Time_Stamp_Type;
 
+      type Underlying_OS_Time is
+        range -(2 ** (Standard'Address_Size - Integer'(1))) ..
+              +(2 ** (Standard'Address_Size - Integer'(1)) - 1);
+      --  Underlying_OS_Time is a redeclaration of OS_Time to allow integer
+      --  manipulation. Remove this in favor of To_Ada/To_C once newer
+      --  GNAT releases are available with these functions.
+
+      function To_Int is
+        new Unchecked_Conversion (OS_Time, Underlying_OS_Time);
+      function From_Int is
+        new Unchecked_Conversion (Underlying_OS_Time, OS_Time);
+
+      TI : Underlying_OS_Time := To_Int (T);
       Y  : Year_Type;
       Mo : Month_Type;
       D  : Day_Type;
@@ -2178,7 +2217,17 @@ package body Osint is
          return Empty_Time_Stamp;
       end if;
 
-      GM_Split (T, Y, Mo, D, H, Mn, S);
+      if On_Windows and then TI mod 2 > 0 then
+         --  Windows ALI files had timestamps rounded to even seconds
+         --  historically. The rounding was originally done in GM_Split.
+         --  Now that GM_Split no longer does it, we are rounding it here
+         --  only for ALI files.
+
+         TI := TI + 1;
+      end if;
+
+      GM_Split (From_Int (TI), Y, Mo, D, H, Mn, S);
+
       Make_Time_Stamp
         (Year    => Nat (Y),
          Month   => Nat (Mo),
@@ -2222,8 +2271,7 @@ package body Osint is
       --  Ditto for suffix, e.g. in "gcc-4.1", the suffix is "-4.1"
 
       for J in reverse 1 .. Name_Len loop
-         if Name_Buffer (J) = '/'
-           or else Name_Buffer (J) = Directory_Separator
+         if Is_Directory_Separator (Name_Buffer (J))
            or else Name_Buffer (J) = ':'
          then
             Start_Of_Prefix := J + 1;

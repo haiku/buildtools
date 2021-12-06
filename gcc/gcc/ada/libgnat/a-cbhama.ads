@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -36,6 +36,7 @@ with Ada.Iterator_Interfaces;
 private with Ada.Containers.Hash_Tables;
 private with Ada.Streams;
 private with Ada.Finalization;
+private with Ada.Strings.Text_Output;
 
 generic
    type Key_Type is private;
@@ -45,7 +46,9 @@ generic
    with function Equivalent_Keys (Left, Right : Key_Type) return Boolean;
    with function "=" (Left, Right : Element_Type) return Boolean is <>;
 
-package Ada.Containers.Bounded_Hashed_Maps is
+package Ada.Containers.Bounded_Hashed_Maps with
+  SPARK_Mode => Off
+is
    pragma Annotate (CodePeer, Skip_Analysis);
    pragma Pure;
    pragma Remote_Types;
@@ -54,7 +57,9 @@ package Ada.Containers.Bounded_Hashed_Maps is
       Constant_Indexing => Constant_Reference,
       Variable_Indexing => Reference,
       Default_Iterator  => Iterate,
-      Iterator_Element  => Element_Type;
+      Iterator_Element  => Element_Type,
+      Aggregate         => (Empty     => Empty,
+                            Add_Named => Insert);
 
    pragma Preelaborable_Initialization (Map);
 
@@ -64,6 +69,8 @@ package Ada.Containers.Bounded_Hashed_Maps is
    Empty_Map : constant Map;
    --  Map objects declared without an initialization expression are
    --  initialized to the value Empty_Map.
+
+   function Empty (Capacity : Count_Type) return Map;
 
    No_Element : constant Cursor;
    --  Cursor objects declared without an initialization expression are
@@ -107,7 +114,8 @@ package Ada.Containers.Bounded_Hashed_Maps is
    --  Equivalent to Length (Container) = 0
 
    procedure Clear (Container : in out Map);
-   --  Removes all of the items from the map
+   --  Removes all of the items from the map. This will deallocate all memory
+   --  associated with this map.
 
    function Key (Position : Cursor) return Key_Type;
    --  Returns the key of the node designated by the cursor
@@ -337,7 +345,11 @@ private
      new Hash_Tables.Generic_Bounded_Hash_Table_Types (Node_Type);
 
    type Map (Capacity : Count_Type; Modulus : Hash_Type) is
-      new HT_Types.Hash_Table_Type (Capacity, Modulus) with null record;
+      new HT_Types.Hash_Table_Type (Capacity, Modulus)
+      with null record with Put_Image => Put_Image;
+
+   procedure Put_Image
+     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Map);
 
    use HT_Types, HT_Types.Implementation;
    use Ada.Streams;

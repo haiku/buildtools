@@ -1,6 +1,6 @@
 /* Functions for writing LTO sections.
 
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2021 Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
 
 This file is part of GCC.
@@ -30,6 +30,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "data-streamer.h"
 #include "langhooks.h"
 #include "lto-compress.h"
+#include "print-tree.h"
 
 static vec<lto_out_decl_state_ptr> decl_state_stack;
 
@@ -66,6 +67,15 @@ lto_begin_section (const char *name, bool compress)
 {
   lang_hooks.lto.begin_section (name);
 
+  if (streamer_dump_file)
+    {
+      if (flag_dump_unnumbered || flag_dump_noaddr)
+	  fprintf (streamer_dump_file, "Creating %ssection\n",
+		   compress ? "compressed " : "");
+	else
+	  fprintf (streamer_dump_file, "Creating %ssection %s\n",
+		   compress ? "compressed " : "", name);
+    }
   gcc_assert (compression_stream == NULL);
   if (compress)
     compression_stream = lto_start_compression (lto_append_data, NULL);
@@ -137,105 +147,6 @@ lto_write_stream (struct lto_output_stream *obs)
     }
 }
 
-
-/* Lookup NAME in ENCODER.  If NAME is not found, create a new entry in
-   ENCODER for NAME with the next available index of ENCODER,  then
-   print the index to OBS.  True is returned if NAME was added to
-   ENCODER.  The resulting index is stored in THIS_INDEX.
-
-   If OBS is NULL, the only action is to add NAME to the encoder. */
-
-bool
-lto_output_decl_index (struct lto_output_stream *obs,
-		       struct lto_tree_ref_encoder *encoder,
-		       tree name, unsigned int *this_index)
-{
-  bool new_entry_p = FALSE;
-  bool existed_p;
-
-  unsigned int &index
-    = encoder->tree_hash_table->get_or_insert (name, &existed_p);
-  if (!existed_p)
-    {
-      index = encoder->trees.length ();
-      encoder->trees.safe_push (name);
-      new_entry_p = TRUE;
-    }
-
-  if (obs)
-    streamer_write_uhwi_stream (obs, index);
-  *this_index = index;
-  return new_entry_p;
-}
-
-/* Output a field DECL to OBS.  */
-
-void
-lto_output_field_decl_index (struct lto_out_decl_state *decl_state,
-			     struct lto_output_stream * obs, tree decl)
-{
-  unsigned int index;
-  lto_output_decl_index (obs, &decl_state->streams[LTO_DECL_STREAM_FIELD_DECL],
-			 decl, &index);
-}
-
-/* Output a function DECL to OBS.  */
-
-void
-lto_output_fn_decl_index (struct lto_out_decl_state *decl_state,
-			  struct lto_output_stream * obs, tree decl)
-{
-  unsigned int index;
-  lto_output_decl_index (obs, &decl_state->streams[LTO_DECL_STREAM_FN_DECL],
-			 decl, &index);
-}
-
-/* Output a namespace DECL to OBS.  */
-
-void
-lto_output_namespace_decl_index (struct lto_out_decl_state *decl_state,
-				 struct lto_output_stream * obs, tree decl)
-{
-  unsigned int index;
-  lto_output_decl_index (obs,
-			 &decl_state->streams[LTO_DECL_STREAM_NAMESPACE_DECL],
-			 decl, &index);
-}
-
-/* Output a static or extern var DECL to OBS.  */
-
-void
-lto_output_var_decl_index (struct lto_out_decl_state *decl_state,
-			   struct lto_output_stream * obs, tree decl)
-{
-  unsigned int index;
-  lto_output_decl_index (obs, &decl_state->streams[LTO_DECL_STREAM_VAR_DECL],
-			 decl, &index);
-}
-
-/* Output a type DECL to OBS.  */
-
-void
-lto_output_type_decl_index (struct lto_out_decl_state *decl_state,
-			    struct lto_output_stream * obs, tree decl)
-{
-  unsigned int index;
-  lto_output_decl_index (obs, &decl_state->streams[LTO_DECL_STREAM_TYPE_DECL],
-			 decl, &index);
-}
-
-/* Output a type REF to OBS.  */
-
-void
-lto_output_type_ref_index (struct lto_out_decl_state *decl_state,
-			   struct lto_output_stream *obs, tree ref)
-{
-  unsigned int index;
-  lto_output_decl_index (obs, &decl_state->streams[LTO_DECL_STREAM_TYPE],
-			 ref, &index);
-}
-
-
 /* Create the output block and return it.  */
 
 struct lto_simple_output_block *
@@ -262,15 +173,13 @@ lto_destroy_simple_output_block (struct lto_simple_output_block *ob)
   char *section_name;
   struct lto_simple_header header;
 
-  section_name = lto_get_section_name (ob->section_type, NULL, NULL);
+  section_name = lto_get_section_name (ob->section_type, NULL, 0, NULL);
   lto_begin_section (section_name, !flag_wpa);
   free (section_name);
 
   /* Write the header which says how to decode the pieces of the
      t.  */
   memset (&header, 0, sizeof (struct lto_simple_header));
-  header.major_version = LTO_major_version;
-  header.minor_version = LTO_minor_version;
   header.main_size = ob->main_stream->total_size;
   lto_write_data (&header, sizeof header);
 

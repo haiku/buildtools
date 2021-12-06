@@ -1,5 +1,5 @@
 /* Common VxWorks AE target definitions for GNU compiler.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
    Contributed by CodeSourcery, LLC.
 
 This file is part of GCC.
@@ -50,6 +50,12 @@ along with GCC; see the file COPYING3.  If not see
 #define VXWORKS_LIBGCC_SPEC	\
   "-lgcc"
 
+/* The VxWorks AE ports features are restricted on purpose.  No RTPs,
+   for example.  */
+
+#undef TARGET_VXWORKS_HAVE_CTORS_DTORS
+#define TARGET_VXWORKS_HAVE_CTORS_DTORS 0
+
 #undef VXWORKS_STARTFILE_SPEC
 #define VXWORKS_STARTFILE_SPEC ""
 
@@ -57,6 +63,10 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Both kernels and RTPs have the facilities required by this macro.  */
 #define TARGET_POSIX_IO
+
+/* The AE/653 system headers all predate the introduction of _VX_ prefixes
+   ahead of CPU families of macros.  */
+#define VX_CPU_PREFIX ""
 
 /* A VxWorks 653 implementation of TARGET_OS_CPP_BUILTINS.  */
 #define VXWORKS_OS_CPP_BUILTINS()                                       \

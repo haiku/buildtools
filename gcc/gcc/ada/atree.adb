@@ -6,23 +6,17 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
 -- ware  Foundation;  either version 3,  or (at your option) any later ver- --
 -- sion.  GNAT is distributed in the hope that it will be useful, but WITH- --
 -- OUT ANY WARRANTY;  without even the  implied warranty of MERCHANTABILITY --
--- or FITNESS FOR A PARTICULAR PURPOSE.                                     --
---                                                                          --
--- As a special exception under Section 7 of GPL version 3, you are granted --
--- additional permissions described in the GCC Runtime Library Exception,   --
--- version 3.1, as published by the Free Software Foundation.               --
---                                                                          --
--- You should have received a copy of the GNU General Public License and    --
--- a copy of the GCC Runtime Library Exception along with this program;     --
--- see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see    --
--- <http://www.gnu.org/licenses/>.                                          --
+-- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
+-- for  more details.  You should have  received  a copy of the GNU General --
+-- Public License  distributed with GNAT; see file COPYING3.  If not, go to --
+-- http://www.gnu.org/licenses for a complete copy of the license.          --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -42,11 +36,14 @@ with Nlists;  use Nlists;
 with Opt;     use Opt;
 with Output;  use Output;
 with Sinput;  use Sinput;
-with Tree_IO; use Tree_IO;
 
 with GNAT.Heap_Sort_G;
 
 package body Atree is
+
+   Ignored_Ghost_Recording_Proc : Ignored_Ghost_Record_Proc := null;
+   --  This soft link captures the procedure invoked during the creation of an
+   --  ignored Ghost node or entity.
 
    Locked : Boolean := False;
    --  Compiling with assertions enabled, node contents modifications are
@@ -54,7 +51,8 @@ package body Atree is
    --  assertions this lock has no effect.
 
    Reporting_Proc : Report_Proc := null;
-   --  Record argument to last call to Set_Reporting_Proc
+   --  Set_Reporting_Proc sets this. Set_Reporting_Proc must be called only
+   --  once.
 
    Rewriting_Proc : Rewrite_Proc := null;
    --  This soft link captures the procedure invoked during a node rewrite
@@ -110,16 +108,11 @@ package body Atree is
    procedure Node_Debug_Output (Op : String; N : Node_Id);
    --  Called by nnd; writes Op followed by information about N
 
-   procedure Print_Statistics;
-   pragma Export (Ada, Print_Statistics);
-   --  Print various statistics on the tables maintained by the package
-
    -----------------------------
    -- Local Objects and Types --
    -----------------------------
 
-   Node_Count : Nat;
-   --  Count allocated nodes for Num_Nodes function
+   Comes_From_Source_Default : Boolean := False;
 
    use Unchecked_Access;
    --  We are allowed to see these from within our own body
@@ -501,7 +494,7 @@ package body Atree is
 
    --  Note: eventually, this should be a field in the Node directly, but
    --  for now we do not want to disturb the efficiency of a power of 2
-   --  for the node size
+   --  for the node size. ????We are planning to get rid of power-of-2.
 
    package Orig_Nodes is new Table.Table (
       Table_Component_Type => Node_Id,
@@ -538,15 +531,19 @@ package body Atree is
      Table_Increment      => 200,
      Table_Name           => "Paren_Counts");
 
+   procedure Set_Paren_Count_Of_Copy (Target, Source : Node_Id);
+   pragma Inline (Set_Paren_Count_Of_Copy);
+   --  Called when copying a node. Makes sure the Paren_Count of the copy is
+   --  correct.
+
    -----------------------
    -- Local Subprograms --
    -----------------------
 
-   function Allocate_Initialize_Node
-     (Src            : Node_Id;
-      With_Extension : Boolean) return Node_Id;
-   --  Allocate a new node or node extension. If Src is not empty, the
-   --  information for the newly-allocated node is copied from it.
+   function Allocate_New_Node return Node_Id;
+   pragma Inline (Allocate_New_Node);
+   --  Allocate a new node or first part of a node extension. Initialize the
+   --  Nodes.Table entry, Flags, Orig_Nodes, and List tables.
 
    procedure Fix_Parents (Ref_Node, Fix_Node : Node_Id);
    --  Fix up parent pointers for the syntactic children of Fix_Node after a
@@ -556,79 +553,28 @@ package body Atree is
    --  Mark arbitrary node or entity N as Ghost when it is created within a
    --  Ghost region.
 
-   ------------------------------
-   -- Allocate_Initialize_Node --
-   ------------------------------
+   procedure Report (Target, Source : Node_Id);
+   pragma Inline (Report);
+   --  Invoke the reporting procedure if available
 
-   function Allocate_Initialize_Node
-     (Src            : Node_Id;
-      With_Extension : Boolean) return Node_Id
-   is
+   -----------------------
+   -- Allocate_New_Node --
+   -----------------------
+
+   function Allocate_New_Node return Node_Id is
       New_Id : Node_Id;
-
    begin
-      if Present (Src)
-        and then not Has_Extension (Src)
-        and then With_Extension
-        and then Src = Nodes.Last
-      then
-         New_Id := Src;
-
-      --  We are allocating a new node, or extending a node other than
-      --  Nodes.Last.
-
-      else
-         if Present (Src) then
-            Nodes.Append (Nodes.Table (Src));
-            Flags.Append (Flags.Table (Src));
-         else
-            Nodes.Append (Default_Node);
-            Flags.Append (Default_Flags);
-         end if;
-
-         New_Id := Nodes.Last;
-         Orig_Nodes.Append (New_Id);
-         Node_Count := Node_Count + 1;
-      end if;
-
-      --  Clear Check_Actuals to False
-
-      Set_Check_Actuals (New_Id, False);
-
-      --  Specifically copy Paren_Count to deal with creating new table entry
-      --  if the parentheses count is at the maximum possible value already.
-
-      if Present (Src) and then Nkind (Src) in N_Subexpr then
-         Set_Paren_Count (New_Id, Paren_Count (Src));
-      end if;
-
-      --  Set extension nodes if required
-
-      if With_Extension then
-         if Present (Src) and then Has_Extension (Src) then
-            for J in 1 .. Num_Extension_Nodes loop
-               Nodes.Append (Nodes.Table (Src + J));
-               Flags.Append (Flags.Table (Src + J));
-            end loop;
-         else
-            for J in 1 .. Num_Extension_Nodes loop
-               Nodes.Append (Default_Node_Extension);
-               Flags.Append (Default_Flags);
-            end loop;
-         end if;
-      end if;
-
-      Orig_Nodes.Set_Last (Nodes.Last);
+      Nodes.Append (Default_Node);
+      New_Id := Nodes.Last;
+      Flags.Append (Default_Flags);
+      Orig_Nodes.Append (New_Id);
+      Nodes.Table (Nodes.Last).Comes_From_Source :=
+        Comes_From_Source_Default;
       Allocate_List_Tables (Nodes.Last);
-
-      --  Invoke the reporting procedure (if available)
-
-      if Reporting_Proc /= null then
-         Reporting_Proc.all (Target => New_Id, Source => Src);
-      end if;
+      Report (Target => New_Id, Source => Empty);
 
       return New_Id;
-   end Allocate_Initialize_Node;
+   end Allocate_New_Node;
 
    --------------
    -- Analyzed --
@@ -683,12 +629,21 @@ package body Atree is
    -----------------
 
    procedure Change_Node (N : Node_Id; New_Node_Kind : Node_Kind) is
-      Save_Sloc    : constant Source_Ptr := Sloc (N);
+
+      --  Flags table attributes
+
+      Save_CA     : constant Boolean := Flags.Table (N).Check_Actuals;
+      Save_Is_IGN : constant Boolean := Flags.Table (N).Is_Ignored_Ghost_Node;
+
+      --  Nodes table attributes
+
+      Save_CFS     : constant Boolean    := Nodes.Table (N).Comes_From_Source;
       Save_In_List : constant Boolean    := Nodes.Table (N).In_List;
       Save_Link    : constant Union_Id   := Nodes.Table (N).Link;
-      Save_CFS     : constant Boolean    := Nodes.Table (N).Comes_From_Source;
       Save_Posted  : constant Boolean    := Nodes.Table (N).Error_Posted;
-      Par_Count    : Nat                 := 0;
+      Save_Sloc    : constant Source_Ptr := Sloc (N);
+
+      Par_Count : Nat := 0;
 
    begin
       if Nkind (N) in N_Subexpr then
@@ -703,7 +658,9 @@ package body Atree is
       Nodes.Table (N).Nkind             := New_Node_Kind;
       Nodes.Table (N).Error_Posted      := Save_Posted;
 
-      Flags.Table (N) := Default_Flags;
+      Flags.Table (N)                       := Default_Flags;
+      Flags.Table (N).Check_Actuals         := Save_CA;
+      Flags.Table (N).Is_Ignored_Ghost_Node := Save_Is_IGN;
 
       if New_Node_Kind in N_Subexpr then
          Set_Paren_Count (N, Par_Count);
@@ -748,12 +705,7 @@ package body Atree is
 
       Flags.Table (Destination) := Flags.Table (Source);
 
-      --  Specifically set Paren_Count to make sure auxiliary table entry
-      --  gets correctly made if the parentheses count is at the max value.
-
-      if Nkind (Destination) in N_Subexpr then
-         Set_Paren_Count (Destination, Paren_Count (Source));
-      end if;
+      Set_Paren_Count_Of_Copy (Target => Destination, Source => Source);
 
       --  Deal with copying extension nodes if present. No need to copy flags
       --  table entries, since they are always zero for extending components.
@@ -946,9 +898,9 @@ package body Atree is
 
             --  The following code is a bit kludgy. It would be cleaner to
             --  Add an entry Change_Expanded_Name_To_Selected_Component to
-            --  Sinfo.CN, but that's an earthquake, because it has the wrong
-            --  license, and Atree is used outside the compiler, e.g. in the
-            --  binder and in ASIS, so we don't want to add that dependency.
+            --  Sinfo.CN, but that's delicate because Atree is used in the
+            --  binder, so we don't want to add that dependency.
+            --  ??? Revisit now that ASIS is no longer using this unit.
 
             --  Consequently we have no choice but to hold our noses and do
             --  the change manually. At least we are Atree, so this odd use
@@ -979,336 +931,6 @@ package body Atree is
       pragma Assert (Nkind (E) in N_Entity);
       return N_To_E (Nodes.Table (E + 1).Nkind);
    end Ekind;
-
-   --------------
-   -- Ekind_In --
-   --------------
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2;
-   end Ekind_In;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3;
-   end Ekind_In;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3 or else
-             T = V4;
-   end Ekind_In;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3 or else
-             T = V4 or else
-             T = V5;
-   end Ekind_In;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3 or else
-             T = V4 or else
-             T = V5 or else
-             T = V6;
-   end Ekind_In;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3 or else
-             T = V4 or else
-             T = V5 or else
-             T = V6 or else
-             T = V7;
-   end Ekind_In;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3 or else
-             T = V4 or else
-             T = V5 or else
-             T = V6 or else
-             T = V7 or else
-             T = V8;
-   end Ekind_In;
-
-   function Ekind_In
-     (T  : Entity_Kind;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind;
-      V9 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3 or else
-             T = V4 or else
-             T = V5 or else
-             T = V6 or else
-             T = V7 or else
-             T = V8 or else
-             T = V9;
-   end Ekind_In;
-
-   function Ekind_In
-     (T   : Entity_Kind;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1 or else
-             T = V2 or else
-             T = V3 or else
-             T = V4 or else
-             T = V5 or else
-             T = V6 or else
-             T = V7 or else
-             T = V8 or else
-             T = V9 or else
-             T = V10;
-   end Ekind_In;
-
-   function Ekind_In
-     (T   : Entity_Kind;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind;
-      V11 : Entity_Kind) return Boolean
-   is
-   begin
-      return T = V1  or else
-             T = V2  or else
-             T = V3  or else
-             T = V4  or else
-             T = V5  or else
-             T = V6  or else
-             T = V7  or else
-             T = V8  or else
-             T = V9  or else
-             T = V10 or else
-             T = V11;
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2);
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3);
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3, V4);
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3, V4, V5);
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3, V4, V5, V6);
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3, V4, V5, V6, V7);
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3, V4, V5, V6, V7, V8);
-   end Ekind_In;
-
-   function Ekind_In
-     (E  : Entity_Id;
-      V1 : Entity_Kind;
-      V2 : Entity_Kind;
-      V3 : Entity_Kind;
-      V4 : Entity_Kind;
-      V5 : Entity_Kind;
-      V6 : Entity_Kind;
-      V7 : Entity_Kind;
-      V8 : Entity_Kind;
-      V9 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3, V4, V5, V6, V7, V8, V9);
-   end Ekind_In;
-
-   function Ekind_In
-     (E   : Entity_Id;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind) return Boolean
-   is
-   begin
-      return Ekind_In (Ekind (E), V1, V2, V3, V4, V5, V6, V7, V8, V9, V10);
-   end Ekind_In;
-
-   function Ekind_In
-     (E   : Entity_Id;
-      V1  : Entity_Kind;
-      V2  : Entity_Kind;
-      V3  : Entity_Kind;
-      V4  : Entity_Kind;
-      V5  : Entity_Kind;
-      V6  : Entity_Kind;
-      V7  : Entity_Kind;
-      V8  : Entity_Kind;
-      V9  : Entity_Kind;
-      V10 : Entity_Kind;
-      V11 : Entity_Kind) return Boolean
-   is
-   begin
-      return
-        Ekind_In (Ekind (E), V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11);
-   end Ekind_In;
 
    ------------------
    -- Error_Posted --
@@ -1372,12 +994,14 @@ package body Atree is
    -- Extend_Node --
    -----------------
 
-   function Extend_Node (Node : Node_Id) return Entity_Id is
-      Result : Entity_Id;
+   function Extend_Node (Source : Node_Id) return Entity_Id is
+      pragma Assert (Present (Source));
+      pragma Assert (not Has_Extension (Source));
+      New_Id : Entity_Id;
 
       procedure Debug_Extend_Node;
       pragma Inline (Debug_Extend_Node);
-      --  Debug routine for debug flag N
+      --  Debug routine for -gnatdn
 
       -----------------------
       -- Debug_Extend_Node --
@@ -1387,13 +1011,13 @@ package body Atree is
       begin
          if Debug_Flag_N then
             Write_Str ("Extend node ");
-            Write_Int (Int (Node));
+            Write_Int (Int (Source));
 
-            if Result = Node then
+            if New_Id = Source then
                Write_Str (" in place");
             else
                Write_Str (" copied to ");
-               Write_Int (Int (Result));
+               Write_Int (Int (New_Id));
             end if;
 
             --  Write_Eol;
@@ -1403,12 +1027,34 @@ package body Atree is
    --  Start of processing for Extend_Node
 
    begin
-      pragma Assert (not (Has_Extension (Node)));
+      --  Optimize the case where Source happens to be the last node; in that
+      --  case, we don't need to move it.
 
-      Result := Allocate_Initialize_Node (Node, With_Extension => True);
+      if Source = Nodes.Last then
+         New_Id := Source;
+      else
+         Nodes.Append (Nodes.Table (Source));
+         Flags.Append (Flags.Table (Source));
+         New_Id := Nodes.Last;
+         Orig_Nodes.Append (New_Id);
+      end if;
+
+      Set_Check_Actuals (New_Id, False);
+
+      --  Set extension nodes
+
+      for J in 1 .. Num_Extension_Nodes loop
+         Nodes.Append (Default_Node_Extension);
+         Flags.Append (Default_Flags);
+      end loop;
+
+      Orig_Nodes.Set_Last (Nodes.Last);
+      Allocate_List_Tables (Nodes.Last);
+      Report (Target => New_Id, Source => Source);
+
       pragma Debug (Debug_Extend_Node);
 
-      return Result;
+      return New_Id;
    end Extend_Node;
 
    -----------------
@@ -1416,6 +1062,8 @@ package body Atree is
    -----------------
 
    procedure Fix_Parents (Ref_Node, Fix_Node : Node_Id) is
+      pragma Assert (Nkind (Ref_Node) = Nkind (Fix_Node));
+
       procedure Fix_Parent (Field : Union_Id);
       --  Fix up one parent pointer. Field is checked to see if it points to
       --  a node, list, or element list that has a parent that points to
@@ -1473,7 +1121,7 @@ package body Atree is
 
    function Get_Comes_From_Source_Default return Boolean is
    begin
-      return Default_Node.Comes_From_Source;
+      return Comes_From_Source_Default;
    end Get_Comes_From_Source_Default;
 
    -----------------
@@ -1504,7 +1152,6 @@ package body Atree is
       pragma Warnings (Off, Dummy);
 
    begin
-      Node_Count := 0;
       Atree_Private_Part.Nodes.Init;
       Atree_Private_Part.Flags.Init;
       Orig_Nodes.Init;
@@ -1568,9 +1215,8 @@ package body Atree is
       --  We used to Release the tables, as in the comments below, but that is
       --  a waste of time. We're only wasting virtual memory here, and the
       --  release calls copy large amounts of data.
+      --  ???Get rid of Release?
 
-      --  Nodes.Release;
-      Nodes.Locked := True;
       --  Flags.Release;
       Flags.Locked := True;
       --  Orig_Nodes.Release;
@@ -1606,6 +1252,13 @@ package body Atree is
          end if;
 
          Set_Is_Ignored_Ghost_Node (N);
+
+         --  Record the ignored Ghost node or entity in order to eliminate it
+         --  from the tree later.
+
+         if Ignored_Ghost_Recording_Proc /= null then
+            Ignored_Ghost_Recording_Proc.all (N);
+         end if;
       end if;
    end Mark_New_Ghost_Node;
 
@@ -1623,38 +1276,60 @@ package body Atree is
    --------------
 
    function New_Copy (Source : Node_Id) return Node_Id is
-      New_Id : Node_Id := Source;
-
+      New_Id : Node_Id;
    begin
-      if Source > Empty_Or_Error then
-         New_Id := Allocate_Initialize_Node (Source, Has_Extension (Source));
-
-         Nodes.Table (New_Id).Link := Empty_List_Or_Node;
-         Nodes.Table (New_Id).In_List := False;
-
-         --  If the original is marked as a rewrite insertion, then unmark the
-         --  copy, since we inserted the original, not the copy.
-
-         Nodes.Table (New_Id).Rewrite_Ins := False;
-         pragma Debug (New_Node_Debugging_Output (New_Id));
-
-         --  Clear Is_Overloaded since we cannot have semantic interpretations
-         --  of this new node.
-
-         if Nkind (Source) in N_Subexpr then
-            Set_Is_Overloaded (New_Id, False);
-         end if;
-
-         --  Always clear Has_Aspects, the caller must take care of copying
-         --  aspects if this is required for the particular situation.
-
-         Set_Has_Aspects (New_Id, False);
-
-         --  Mark the copy as Ghost depending on the current Ghost region
-
-         Mark_New_Ghost_Node (New_Id);
+      if Source <= Empty_Or_Error then
+         return Source;
       end if;
 
+      Nodes.Append (Nodes.Table (Source));
+      Flags.Append (Flags.Table (Source));
+      New_Id := Nodes.Last;
+      Orig_Nodes.Append (New_Id);
+      Set_Check_Actuals (New_Id, False);
+      Set_Paren_Count_Of_Copy (Target => New_Id, Source => Source);
+
+      --  Set extension nodes if required
+
+      if Has_Extension (Source) then
+         for J in 1 .. Num_Extension_Nodes loop
+            Nodes.Append (Nodes.Table (Source + J));
+            Flags.Append (Flags.Table (Source + J));
+         end loop;
+         Orig_Nodes.Set_Last (Nodes.Last);
+      else
+         pragma Assert (Orig_Nodes.Table (Orig_Nodes.Last) = Nodes.Last);
+      end if;
+
+      Allocate_List_Tables (Nodes.Last);
+      Report (Target => New_Id, Source => Source);
+
+      Nodes.Table (New_Id).In_List := False;
+      Nodes.Table (New_Id).Link    := Empty_List_Or_Node;
+
+      --  If the original is marked as a rewrite insertion, then unmark the
+      --  copy, since we inserted the original, not the copy.
+
+      Nodes.Table (New_Id).Rewrite_Ins := False;
+      pragma Debug (New_Node_Debugging_Output (New_Id));
+
+      --  Clear Is_Overloaded since we cannot have semantic interpretations
+      --  of this new node.
+
+      if Nkind (Source) in N_Subexpr then
+         Set_Is_Overloaded (New_Id, False);
+      end if;
+
+      --  Always clear Has_Aspects, the caller must take care of copying
+      --  aspects if this is required for the particular situation.
+
+      Set_Has_Aspects (New_Id, False);
+
+      --  Mark the copy as Ghost depending on the current Ghost region
+
+      Mark_New_Ghost_Node (New_Id);
+
+      pragma Assert (New_Id /= Source);
       return New_Id;
    end New_Copy;
 
@@ -1666,30 +1341,35 @@ package body Atree is
      (New_Node_Kind : Node_Kind;
       New_Sloc      : Source_Ptr) return Entity_Id
    is
-      Ent : Entity_Id;
-
-   begin
       pragma Assert (New_Node_Kind in N_Entity);
+      New_Id : constant Entity_Id := Allocate_New_Node;
+   begin
+      --  Set extension nodes
 
-      Ent := Allocate_Initialize_Node (Empty, With_Extension => True);
+      for J in 1 .. Num_Extension_Nodes loop
+         Nodes.Append (Default_Node_Extension);
+         Flags.Append (Default_Flags);
+      end loop;
+
+      Orig_Nodes.Set_Last (Nodes.Last);
 
       --  If this is a node with a real location and we are generating
       --  source nodes, then reset Current_Error_Node. This is useful
       --  if we bomb during parsing to get a error location for the bomb.
 
-      if Default_Node.Comes_From_Source and then New_Sloc > No_Location then
-         Current_Error_Node := Ent;
+      if  New_Sloc > No_Location and then Comes_From_Source_Default then
+         Current_Error_Node := New_Id;
       end if;
 
-      Nodes.Table (Ent).Nkind := New_Node_Kind;
-      Nodes.Table (Ent).Sloc  := New_Sloc;
-      pragma Debug (New_Node_Debugging_Output (Ent));
+      Nodes.Table (New_Id).Nkind := New_Node_Kind;
+      Nodes.Table (New_Id).Sloc  := New_Sloc;
+      pragma Debug (New_Node_Debugging_Output (New_Id));
 
       --  Mark the new entity as Ghost depending on the current Ghost region
 
-      Mark_New_Ghost_Node (Ent);
+      Mark_New_Ghost_Node (New_Id);
 
-      return Ent;
+      return New_Id;
    end New_Entity;
 
    --------------
@@ -1700,29 +1380,27 @@ package body Atree is
      (New_Node_Kind : Node_Kind;
       New_Sloc      : Source_Ptr) return Node_Id
    is
-      Nod : Node_Id;
-
-   begin
       pragma Assert (New_Node_Kind not in N_Entity);
-
-      Nod := Allocate_Initialize_Node (Empty, With_Extension => False);
-      Nodes.Table (Nod).Nkind := New_Node_Kind;
-      Nodes.Table (Nod).Sloc  := New_Sloc;
-      pragma Debug (New_Node_Debugging_Output (Nod));
+      New_Id : constant Node_Id := Allocate_New_Node;
+      pragma Assert (Orig_Nodes.Table (Orig_Nodes.Last) = Nodes.Last);
+   begin
+      Nodes.Table (New_Id).Nkind := New_Node_Kind;
+      Nodes.Table (New_Id).Sloc  := New_Sloc;
+      pragma Debug (New_Node_Debugging_Output (New_Id));
 
       --  If this is a node with a real location and we are generating source
       --  nodes, then reset Current_Error_Node. This is useful if we bomb
       --  during parsing to get an error location for the bomb.
 
-      if Default_Node.Comes_From_Source and then New_Sloc > No_Location then
-         Current_Error_Node := Nod;
+      if Comes_From_Source_Default and then New_Sloc > No_Location then
+         Current_Error_Node := New_Id;
       end if;
 
       --  Mark the new node as Ghost depending on the current Ghost region
 
-      Mark_New_Ghost_Node (Nod);
+      Mark_New_Ghost_Node (New_Id);
 
-      return Nod;
+      return New_Id;
    end New_Node;
 
    -------------------------
@@ -1761,146 +1439,6 @@ package body Atree is
    begin
       return Nodes.Table (N).Nkind;
    end Nkind;
-
-   --------------
-   -- Nkind_In --
-   --------------
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2);
-   end Nkind_In;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3);
-   end Nkind_In;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4);
-   end Nkind_In;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4, V5);
-   end Nkind_In;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4, V5, V6);
-   end Nkind_In;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind;
-      V7 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4, V5, V6, V7);
-   end Nkind_In;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind;
-      V7 : Node_Kind;
-      V8 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4, V5, V6, V7, V8);
-   end Nkind_In;
-
-   function Nkind_In
-     (N  : Node_Id;
-      V1 : Node_Kind;
-      V2 : Node_Kind;
-      V3 : Node_Kind;
-      V4 : Node_Kind;
-      V5 : Node_Kind;
-      V6 : Node_Kind;
-      V7 : Node_Kind;
-      V8 : Node_Kind;
-      V9 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4, V5, V6, V7, V8, V9);
-   end Nkind_In;
-
-   function Nkind_In
-     (N   : Node_Id;
-      V1  : Node_Kind;
-      V2  : Node_Kind;
-      V3  : Node_Kind;
-      V4  : Node_Kind;
-      V5  : Node_Kind;
-      V6  : Node_Kind;
-      V7  : Node_Kind;
-      V8  : Node_Kind;
-      V9  : Node_Kind;
-      V10 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4, V5, V6, V7, V8, V9, V10);
-   end Nkind_In;
-
-   function Nkind_In
-     (N   : Node_Id;
-      V1  : Node_Kind;
-      V2  : Node_Kind;
-      V3  : Node_Kind;
-      V4  : Node_Kind;
-      V5  : Node_Kind;
-      V6  : Node_Kind;
-      V7  : Node_Kind;
-      V8  : Node_Kind;
-      V9  : Node_Kind;
-      V10 : Node_Kind;
-      V11 : Node_Kind) return Boolean
-   is
-   begin
-      return Nkind_In (Nkind (N), V1, V2, V3, V4, V5, V6, V7, V8, V9, V10,
-                                  V11);
-   end Nkind_In;
 
    --------
    -- No --
@@ -1943,14 +1481,18 @@ package body Atree is
       return Nodes.Table (First_Node_Id)'Address;
    end Nodes_Address;
 
-   ---------------
-   -- Num_Nodes --
-   ---------------
+   -----------------------------------
+   -- Approx_Num_Nodes_And_Entities --
+   -----------------------------------
 
-   function Num_Nodes return Nat is
+   function Approx_Num_Nodes_And_Entities return Nat is
    begin
-      return Node_Count;
-   end Num_Nodes;
+      --  This is an overestimate, because entities take up more space, but
+      --  that really doesn't matter; it's not worth subtracting out the
+      --  "extra".
+
+      return Nat (Nodes.Last - First_Node_Id);
+   end Approx_Num_Nodes_And_Entities;
 
    -------------------
    -- Original_Node --
@@ -2025,8 +1567,7 @@ package body Atree is
 
    procedure Preserve_Comes_From_Source (NewN, OldN : Node_Id) is
    begin
-      Nodes.Table (NewN).Comes_From_Source :=
-        Nodes.Table (OldN).Comes_From_Source;
+      Set_Comes_From_Source (NewN, Comes_From_Source (OldN));
    end Preserve_Comes_From_Source;
 
    ----------------------
@@ -2164,7 +1705,7 @@ package body Atree is
       --  If the node being relocated was a rewriting of some original node,
       --  then the relocated node has the same original node.
 
-      if Orig_Nodes.Table (Source) /= Source then
+      if Is_Rewrite_Substitution (Source) then
          Orig_Nodes.Table (New_Node) := Orig_Nodes.Table (Source);
       end if;
 
@@ -2213,21 +1754,40 @@ package body Atree is
       end if;
    end Replace;
 
+   ------------
+   -- Report --
+   ------------
+
+   procedure Report (Target, Source : Node_Id) is
+   begin
+      if Reporting_Proc /= null then
+         Reporting_Proc.all (Target, Source);
+      end if;
+   end Report;
+
    -------------
    -- Rewrite --
    -------------
 
    procedure Rewrite (Old_Node, New_Node : Node_Id) is
-      Old_Error_P : constant Boolean  := Nodes.Table (Old_Node).Error_Posted;
-      --  This field is always preserved in the new node
 
-      Old_Has_Aspects : constant Boolean := Nodes.Table (Old_Node).Has_Aspects;
-      --  This field is always preserved in the new node
+      --  Flags table attributes
 
-      Old_Paren_Count     : Nat;
+      Old_CA     : constant Boolean := Flags.Table (Old_Node).Check_Actuals;
+      Old_Is_IGN : constant Boolean :=
+                     Flags.Table (Old_Node).Is_Ignored_Ghost_Node;
+
+      --  Nodes table attributes
+
+      Old_Error_Posted : constant Boolean :=
+                           Nodes.Table (Old_Node).Error_Posted;
+      Old_Has_Aspects  : constant Boolean :=
+                           Nodes.Table (Old_Node).Has_Aspects;
+
       Old_Must_Not_Freeze : Boolean;
-      --  These fields are preserved in the new node only if the new node
-      --  and the old node are both subexpression nodes.
+      Old_Paren_Count     : Nat;
+      --  These fields are preserved in the new node only if the new node and
+      --  the old node are both subexpression nodes.
 
       --  Note: it is a violation of abstraction levels for Must_Not_Freeze
       --  to be referenced like this. ???
@@ -2244,11 +1804,11 @@ package body Atree is
       pragma Debug (New_Node_Debugging_Output (New_Node));
 
       if Nkind (Old_Node) in N_Subexpr then
-         Old_Paren_Count     := Paren_Count (Old_Node);
          Old_Must_Not_Freeze := Must_Not_Freeze (Old_Node);
+         Old_Paren_Count     := Paren_Count (Old_Node);
       else
-         Old_Paren_Count     := 0;
          Old_Must_Not_Freeze := False;
+         Old_Paren_Count     := 0;
       end if;
 
       --  Allocate a new node, to be used to preserve the original contents
@@ -2274,8 +1834,11 @@ package body Atree is
       --  Copy substitute node into place, preserving old fields as required
 
       Copy_Node (Source => New_Node, Destination => Old_Node);
-      Nodes.Table (Old_Node).Error_Posted := Old_Error_P;
+      Nodes.Table (Old_Node).Error_Posted := Old_Error_Posted;
       Nodes.Table (Old_Node).Has_Aspects  := Old_Has_Aspects;
+
+      Flags.Table (Old_Node).Check_Actuals         := Old_CA;
+      Flags.Table (Old_Node).Is_Ignored_Ghost_Node := Old_Is_IGN;
 
       if Nkind (New_Node) in N_Subexpr then
          Set_Paren_Count     (Old_Node, Old_Paren_Count);
@@ -2334,7 +1897,7 @@ package body Atree is
 
    procedure Set_Comes_From_Source_Default (Default : Boolean) is
    begin
-      Default_Node.Comes_From_Source := Default;
+      Comes_From_Source_Default := Default;
    end Set_Comes_From_Source_Default;
 
    ---------------
@@ -2368,6 +1931,18 @@ package body Atree is
       pragma Assert (N <= Nodes.Last);
       Nodes.Table (N).Has_Aspects := Val;
    end Set_Has_Aspects;
+
+   --------------------------------------
+   -- Set_Ignored_Ghost_Recording_Proc --
+   --------------------------------------
+
+   procedure Set_Ignored_Ghost_Recording_Proc
+     (Proc : Ignored_Ghost_Record_Proc)
+   is
+   begin
+      pragma Assert (Ignored_Ghost_Recording_Proc = null);
+      Ignored_Ghost_Recording_Proc := Proc;
+   end Set_Ignored_Ghost_Recording_Proc;
 
    -------------------------------
    -- Set_Is_Ignored_Ghost_Node --
@@ -2410,6 +1985,8 @@ package body Atree is
          Nodes.Table (N).Pflag1 := True;
          Nodes.Table (N).Pflag2 := True;
 
+         --  Search for existing table entry
+
          for J in Paren_Counts.First .. Paren_Counts.Last loop
             if N = Paren_Counts.Table (J).Nod then
                Paren_Counts.Table (J).Count := Val;
@@ -2417,9 +1994,29 @@ package body Atree is
             end if;
          end loop;
 
+         --  No existing table entry; make a new one
+
          Paren_Counts.Append ((Nod => N, Count => Val));
       end if;
    end Set_Paren_Count;
+
+   -----------------------------
+   -- Set_Paren_Count_Of_Copy --
+   -----------------------------
+
+   procedure Set_Paren_Count_Of_Copy (Target, Source : Node_Id) is
+   begin
+      --  We already copied the two Pflags. We need to update the Paren_Counts
+      --  table only if greater than 2.
+
+      if Nkind (Source) in N_Subexpr
+        and then Paren_Count (Source) > 2
+      then
+         Set_Paren_Count (Target, Paren_Count (Source));
+      end if;
+
+      pragma Assert (Paren_Count (Target) = Paren_Count (Source));
+   end Set_Paren_Count_Of_Copy;
 
    ----------------
    -- Set_Parent --
@@ -2616,32 +2213,6 @@ package body Atree is
    begin
       Discard := Traverse (Node);
    end Traverse_Proc;
-
-   ---------------
-   -- Tree_Read --
-   ---------------
-
-   procedure Tree_Read is
-   begin
-      Tree_Read_Int (Node_Count);
-      Nodes.Tree_Read;
-      Flags.Tree_Read;
-      Orig_Nodes.Tree_Read;
-      Paren_Counts.Tree_Read;
-   end Tree_Read;
-
-   ----------------
-   -- Tree_Write --
-   ----------------
-
-   procedure Tree_Write is
-   begin
-      Tree_Write_Int (Node_Count);
-      Nodes.Tree_Write;
-      Flags.Tree_Write;
-      Orig_Nodes.Tree_Write;
-      Paren_Counts.Tree_Write;
-   end Tree_Write;
 
    ------------------------------
    -- Unchecked Access Package --
@@ -3407,6 +2978,17 @@ package body Atree is
             return Elist_Id (Value);
          end if;
       end Elist29;
+
+      function Elist30 (N : Node_Id) return Elist_Id is
+         pragma Assert (Nkind (N) in N_Entity);
+         Value : constant Union_Id := Nodes.Table (N + 5).Field6;
+      begin
+         if Value = 0 then
+            return No_Elist;
+         else
+            return Elist_Id (Value);
+         end if;
+      end Elist30;
 
       function Elist36 (N : Node_Id) return Elist_Id is
          pragma Assert (Nkind (N) in N_Entity);
@@ -6318,6 +5900,13 @@ package body Atree is
          Nodes.Table (N + 4).Field11 := Union_Id (Val);
       end Set_Elist29;
 
+      procedure Set_Elist30 (N : Node_Id; Val : Elist_Id) is
+      begin
+         pragma Assert (not Locked);
+         pragma Assert (Nkind (N) in N_Entity);
+         Nodes.Table (N + 5).Field6 := Union_Id (Val);
+      end Set_Elist30;
+
       procedure Set_Elist36 (N : Node_Id; Val : Elist_Id) is
       begin
          pragma Assert (not Locked);
@@ -9191,7 +8780,6 @@ package body Atree is
 
    procedure Unlock is
    begin
-      Nodes.Locked := False;
       Flags.Locked := False;
       Orig_Nodes.Locked := False;
    end Unlock;

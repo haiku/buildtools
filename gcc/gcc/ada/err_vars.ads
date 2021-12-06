@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -112,6 +112,8 @@ package Err_Vars is
    Error_Msg_Uint_1 : Uint;
    Error_Msg_Uint_2 : Uint;
    --  Uint values for ^ insertion characters in message
+
+   --  WARNING: There is a matching C declaration of these variables in fe.h
 
    Error_Msg_Sloc : Source_Ptr;
    --  Source location for # insertion character in message

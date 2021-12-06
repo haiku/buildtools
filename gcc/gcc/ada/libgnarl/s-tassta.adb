@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2018, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2020, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -28,10 +28,6 @@
 -- Extensive contributions were provided by Ada Core Technologies, Inc.     --
 --                                                                          --
 ------------------------------------------------------------------------------
-
-pragma Polling (Off);
---  Turn off polling, we do not want ATC polling to take place during tasking
---  operations. It causes infinite loops and other problems.
 
 pragma Partition_Elaboration_Policy (Concurrent);
 --  This package only implements the concurrent elaboration policy. This pragma
@@ -74,7 +70,6 @@ package body System.Tasking.Stages is
 
    use Ada.Exceptions;
 
-   use Parameters;
    use Secondary_Stack;
    use Task_Primitives;
    use Task_Primitives.Operations;
@@ -341,9 +336,7 @@ package body System.Tasking.Stages is
          C := C.Common.Activation_Link;
       end loop;
 
-      if not Single_Lock then
-         Unlock_RTS;
-      end if;
+      Unlock_RTS;
 
       --  Close the entries of any tasks that failed thread creation, and count
       --  those that have not finished activation.
@@ -382,10 +375,6 @@ package body System.Tasking.Stages is
       Self_ID.Common.State := Runnable;
       Unlock (Self_ID);
 
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
-
       --  Remove the tasks from the chain
 
       Chain_Access.T_ID := null;
@@ -406,17 +395,7 @@ package body System.Tasking.Stages is
 
    begin
       Initialization.Defer_Abort_Nestable (Self_ID);
-
-      if Single_Lock then
-         Lock_RTS;
-      end if;
-
       Vulnerable_Complete_Activation (Self_ID);
-
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
-
       Initialization.Undefer_Abort_Nestable (Self_ID);
 
       --  ??? Why do we need to allow for nested deferral here?
@@ -588,7 +567,7 @@ package body System.Tasking.Stages is
       --  give up on creating this task, and simply return.
 
       if not Self_ID.Callable then
-         pragma Assert (Self_ID.Pending_ATC_Level = 0);
+         pragma Assert (Self_ID.Pending_ATC_Level = Level_Completed_Task);
          pragma Assert (Self_ID.Pending_Action);
          pragma Assert
            (Chain.T_ID = null or else Chain.T_ID.Common.State = Unactivated);
@@ -655,7 +634,7 @@ package body System.Tasking.Stages is
          T.Common.Task_Image_Len := Len;
       end if;
 
-      --  Note: we used to have code here to initialize T.Commmon.Domain, but
+      --  Note: we used to have code here to initialize T.Common.Domain, but
       --  that is not needed, since this is initialized in System.Tasking.
 
       Unlock (Self_ID);
@@ -846,12 +825,8 @@ package body System.Tasking.Stages is
       --  Force termination of "independent" library-level server tasks
 
       Lock_RTS;
-
       Abort_Dependents (Self_ID);
-
-      if not Single_Lock then
-         Unlock_RTS;
-      end if;
+      Unlock_RTS;
 
       --  We need to explicitly wait for the task to be terminated here
       --  because on true concurrent system, we may end this procedure before
@@ -890,10 +865,6 @@ package body System.Tasking.Stages is
          Self_ID.Common.State, Ignore_1, Ignore_2);
 
       Unlock (Self_ID);
-
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
 
       --  Complete the environment task
 
@@ -1125,11 +1096,10 @@ package body System.Tasking.Stages is
             --  stack analysis.
 
             Big_Overflow_Guard : constant := 64 * 1024 + 8 * 1024;
-            Small_Stack_Limit  : constant := 64 * 1024;
-            --  ??? These three values are experimental, and seem to work on
-            --  most platforms. They still need to be analyzed further. They
-            --  also need documentation, what are they and why does the logic
-            --  differ depending on whether the stack is large or small???
+            --  These two values are experimental, and seem to work on most
+            --  platforms. They still need to be analyzed further. They also
+            --  need documentation, what are they and why does the logic differ
+            --  depending on whether the stack is large or small???
 
             Pattern_Size : Natural :=
                              Natural (Self_ID.Common.
@@ -1152,7 +1122,7 @@ package body System.Tasking.Stages is
                --  Adjustments for inner frames
 
                Pattern_Size := Pattern_Size -
-                 (if Pattern_Size < Small_Stack_Limit
+                 (if Pattern_Size < Big_Overflow_Guard
                     then Small_Overflow_Guard
                     else Big_Overflow_Guard);
             else
@@ -1211,6 +1181,12 @@ package body System.Tasking.Stages is
          --  place the exception handlers in a different block. In this way,
          --  we do not call Set_Jmpbuf_Address (which needs Self) before we
          --  set Self in Enter_Task
+
+         --  Call the initialization hook if any
+
+         if Global_Initialization_Handler /= null then
+            Global_Initialization_Handler.all;
+         end if;
 
          --  Call the task body procedure
 
@@ -1294,10 +1270,6 @@ package body System.Tasking.Stages is
       --  the environment task. The task termination code for the environment
       --  task is executed by SSL.Task_Termination_Handler.
 
-      if Single_Lock then
-         Lock_RTS;
-      end if;
-
       Write_Lock (Self_ID);
 
       if Self_ID.Common.Specific_Handler /= null then
@@ -1319,10 +1291,6 @@ package body System.Tasking.Stages is
       end if;
 
       Unlock (Self_ID);
-
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
 
       --  Execute the task termination handler if we found it
 
@@ -1393,26 +1361,16 @@ package body System.Tasking.Stages is
 
       Initialization.Task_Lock (Self_ID);
 
-      if Single_Lock then
-         Lock_RTS;
-      end if;
-
       Master_Of_Task := Self_ID.Master_Of_Task;
 
       --  Check if the current task is an independent task If so, decrement
       --  the Independent_Task_Count value.
 
       if Master_Of_Task = Independent_Task_Level then
-         if Single_Lock then
-            Utilities.Independent_Task_Count :=
-              Utilities.Independent_Task_Count - 1;
-
-         else
-            Write_Lock (Environment_Task);
-            Utilities.Independent_Task_Count :=
-              Utilities.Independent_Task_Count - 1;
-            Unlock (Environment_Task);
-         end if;
+         Write_Lock (Environment_Task);
+         Utilities.Independent_Task_Count :=
+           Utilities.Independent_Task_Count - 1;
+         Unlock (Environment_Task);
       end if;
 
       --  Unprotect the guard page if needed
@@ -1421,10 +1379,6 @@ package body System.Tasking.Stages is
 
       Utilities.Make_Passive (Self_ID, Task_Completed => True);
       Deallocate := Self_ID.Free_On_Termination;
-
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
 
       pragma Assert (Check_Exit (Self_ID));
 
@@ -1454,20 +1408,11 @@ package body System.Tasking.Stages is
 
    begin
       Initialization.Defer_Abort_Nestable (Self_ID);
-
-      if Single_Lock then
-         Lock_RTS;
-      end if;
-
       Write_Lock (T);
       Result := T.Common.State = Terminated;
       Unlock (T);
-
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
-
       Initialization.Undefer_Abort_Nestable (Self_ID);
+
       return Result;
    end Terminated;
 
@@ -1553,7 +1498,9 @@ package body System.Tasking.Stages is
       --  for the task completion is an abort, we do not raise an exception.
       --  See RM 9.2(5).
 
-      if not Self_ID.Callable and then Self_ID.Pending_ATC_Level /= 0 then
+      if not Self_ID.Callable
+        and then Self_ID.Pending_ATC_Level /= Level_Completed_Task
+      then
          Activator.Common.Activation_Failed := True;
       end if;
 
@@ -1598,10 +1545,7 @@ package body System.Tasking.Stages is
 
       function Check_Unactivated_Tasks return Boolean is
       begin
-         if not Single_Lock then
-            Lock_RTS;
-         end if;
-
+         Lock_RTS;
          Write_Lock (Self_ID);
 
          C := All_Tasks_List;
@@ -1624,10 +1568,7 @@ package body System.Tasking.Stages is
          end loop;
 
          Unlock (Self_ID);
-
-         if not Single_Lock then
-            Unlock_RTS;
-         end if;
+         Unlock_RTS;
 
          return True;
       end Check_Unactivated_Tasks;
@@ -1696,10 +1637,7 @@ package body System.Tasking.Stages is
 
       Self_ID.Common.State := Master_Completion_Sleep;
       Unlock (Self_ID);
-
-      if not Single_Lock then
-         Unlock_RTS;
-      end if;
+      Unlock_RTS;
 
       --  Wait until dependent tasks are all terminated or ready to terminate.
       --  While waiting, the task may be awakened if the task's priority needs
@@ -1716,15 +1654,11 @@ package body System.Tasking.Stages is
          if Self_ID.Pending_ATC_Level < Self_ID.ATC_Nesting_Level
            and then not Self_ID.Dependents_Aborted
          then
-            if Single_Lock then
-               Abort_Dependents (Self_ID);
-            else
-               Unlock (Self_ID);
-               Lock_RTS;
-               Abort_Dependents (Self_ID);
-               Unlock_RTS;
-               Write_Lock (Self_ID);
-            end if;
+            Unlock (Self_ID);
+            Lock_RTS;
+            Abort_Dependents (Self_ID);
+            Unlock_RTS;
+            Write_Lock (Self_ID);
          else
             pragma Debug
               (Debug.Trace (Self_ID, "master_completion_sleep", 'C'));
@@ -1751,10 +1685,7 @@ package body System.Tasking.Stages is
 
          --  Force any remaining dependents to terminate by aborting them
 
-         if not Single_Lock then
-            Lock_RTS;
-         end if;
-
+         Lock_RTS;
          Abort_Dependents (Self_ID);
 
          --  Above, when we "abort" the dependents we are simply using this
@@ -1799,10 +1730,7 @@ package body System.Tasking.Stages is
 
          Self_ID.Common.State := Master_Phase_2_Sleep;
          Unlock (Self_ID);
-
-         if not Single_Lock then
-            Unlock_RTS;
-         end if;
+         Unlock_RTS;
 
          --  Wait for all counted tasks to finish terminating themselves
 
@@ -1826,10 +1754,7 @@ package body System.Tasking.Stages is
       --  locks. Instead, we put those ATCBs to be freed onto a temporary list,
       --  called To_Be_Freed.
 
-      if not Single_Lock then
-         Lock_RTS;
-      end if;
-
+      Lock_RTS;
       C := All_Tasks_List;
       P := null;
       while C /= null loop
@@ -1980,13 +1905,9 @@ package body System.Tasking.Stages is
            Self_ID.Master_Of_Task .. Self_ID.Master_Of_Task + 3);
       pragma Assert (Self_ID.Common.Wait_Count = 0);
       pragma Assert (Self_ID.Open_Accepts = null);
-      pragma Assert (Self_ID.ATC_Nesting_Level = 1);
+      pragma Assert (Self_ID.ATC_Nesting_Level = Level_No_ATC_Occurring);
 
       pragma Debug (Debug.Trace (Self_ID, "V_Complete_Task", 'C'));
-
-      if Single_Lock then
-         Lock_RTS;
-      end if;
 
       Write_Lock (Self_ID);
       Self_ID.Callable := False;
@@ -2001,10 +1922,6 @@ package body System.Tasking.Stages is
 
       if Self_ID.Common.Activator /= null then
          Vulnerable_Complete_Activation (Self_ID);
-      end if;
-
-      if Single_Lock then
-         Unlock_RTS;
       end if;
 
       --  If Self_ID.Master_Within = Self_ID.Master_Of_Task + 2 we may have
@@ -2033,17 +1950,9 @@ package body System.Tasking.Stages is
    begin
       pragma Debug (Debug.Trace (Self, "Vulnerable_Free_Task", 'C', T));
 
-      if Single_Lock then
-         Lock_RTS;
-      end if;
-
       Write_Lock (T);
       Initialization.Finalize_Attributes (T);
       Unlock (T);
-
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
 
       System.Task_Primitives.Operations.Finalize_TCB (T);
    end Vulnerable_Free_Task;

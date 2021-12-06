@@ -1,7 +1,6 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ(2.64)
 AC_INIT(cpplib, [ ], gcc-bugs@gcc.gnu.org, cpplib)
 AC_CONFIG_SRCDIR(ucnid.h)
 AC_CONFIG_MACRO_DIR(../config)
@@ -13,6 +12,7 @@ AC_PROG_INSTALL
 AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
+AC_CHECK_TOOL(AR, ar)
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_SYS_LARGEFILE
@@ -42,7 +42,7 @@ ACX_PROG_CC_WARNINGS_ARE_ERRORS([manual])
 # Dependency checking.
 ZW_CREATE_DEPDIR
 AC_LANG_PUSH([C++])
-AC_COMPILE_IFELSE([[int i;]], [],
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([int i;])], [],
 		  [AC_MSG_ERROR([C++ compiler missing or inoperational])])
 AC_LANG_POP([C++])
 ZW_PROG_COMPILER_DEPENDENCIES([CXX])
@@ -206,6 +206,17 @@ AC_ARG_ENABLE(host-shared,
 		[build host code as shared libraries])],
 [PICFLAG=-fPIC], [PICFLAG=])
 AC_SUBST(PICFLAG)
+
+# Enable Intel CET on Intel CET enabled host if jit is enabled.
+GCC_CET_HOST_FLAGS(CET_HOST_FLAGS)
+case x$enable_languages in
+*jit*)
+  ;;
+*)
+  CET_HOST_FLAGS=
+  ;;
+esac
+AC_SUBST(CET_HOST_FLAGS)
 
 AC_ARG_ENABLE(valgrind-annotations,
 [AS_HELP_STRING([--enable-valgrind-annotations],

@@ -1,5 +1,5 @@
-/* Dead store elimination
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+/* Dead and redundant store elimination
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -33,19 +33,31 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-dfa.h"
 #include "domwalk.h"
 #include "tree-cfgcleanup.h"
-#include "params.h"
 #include "alias.h"
+#include "tree-ssa-loop.h"
+#include "tree-ssa-dse.h"
+#include "builtins.h"
+#include "gimple-fold.h"
+#include "gimplify.h"
 
 /* This file implements dead store elimination.
 
    A dead store is a store into a memory location which will later be
    overwritten by another store without any intervening loads.  In this
-   case the earlier store can be deleted.
+   case the earlier store can be deleted or trimmed if the store
+   was partially dead.
+
+   A redundant store is a store into a memory location which stores
+   the exact same value as a prior store to the same memory location.
+   While this can often be handled by dead store elimination, removing
+   the redundant store is often better than removing or trimming the
+   dead store.
 
    In our SSA + virtual operand world we use immediate uses of virtual
-   operands to detect dead stores.  If a store's virtual definition
+   operands to detect these cases.  If a store's virtual definition
    is used precisely once by a later store to the same location which
-   post dominates the first store, then the first store is dead.
+   post dominates the first store, then the first store is dead.  If
+   the data stored is the same, then the second store is redundant.
 
    The single use of the store's virtual definition ensures that
    there are no intervening aliased loads and the requirement that
@@ -57,7 +69,9 @@ along with GCC; see the file COPYING3.  If not see
    the point immediately before the later store.  Again, the single
    use of the virtual definition and the post-dominance relationship
    ensure that such movement would be safe.  Clearly if there are
-   back to back stores, then the second is redundant.
+   back to back stores, then the second is makes the first dead.  If
+   the second store stores the same value, then the second store is
+   redundant.
 
    Reviewing section 10.7.2 in Morgan's "Building an Optimizing Compiler"
    may also help in understanding this code since it discusses the
@@ -65,23 +79,16 @@ along with GCC; see the file COPYING3.  If not see
    fact, they are the same transformation applied to different views of
    the CFG.  */
 
+static void delete_dead_or_redundant_call (gimple_stmt_iterator *, const char *);
 
 /* Bitmap of blocks that have had EH statements cleaned.  We should
    remove their dead edges eventually.  */
 static bitmap need_eh_cleanup;
 
-/* Return value from dse_classify_store */
-enum dse_store_status
-{
-  DSE_STORE_LIVE,
-  DSE_STORE_MAYBE_PARTIAL_DEAD,
-  DSE_STORE_DEAD
-};
-
 /* STMT is a statement that may write into memory.  Analyze it and
    initialize WRITE to describe how STMT affects memory.
 
-   Return TRUE if the the statement was analyzed, FALSE otherwise.
+   Return TRUE if the statement was analyzed, FALSE otherwise.
 
    It is always safe to return FALSE.  But typically better optimziation
    can be achieved by analyzing more statements.  */
@@ -94,19 +101,42 @@ initialize_ao_ref_for_dse (gimple *stmt, ao_ref *write)
     {
       switch (DECL_FUNCTION_CODE (gimple_call_fndecl (stmt)))
 	{
-	  case BUILT_IN_MEMCPY:
-	  case BUILT_IN_MEMMOVE:
-	  case BUILT_IN_MEMSET:
-	    {
-	      tree size = NULL_TREE;
-	      if (gimple_call_num_args (stmt) == 3)
-		size = gimple_call_arg (stmt, 2);
-	      tree ptr = gimple_call_arg (stmt, 0);
-	      ao_ref_init_from_ptr_and_size (write, ptr, size);
-	      return true;
-	    }
-	  default:
-	    break;
+	case BUILT_IN_MEMCPY:
+	case BUILT_IN_MEMMOVE:
+	case BUILT_IN_MEMSET:
+	case BUILT_IN_MEMCPY_CHK:
+	case BUILT_IN_MEMMOVE_CHK:
+	case BUILT_IN_MEMSET_CHK:
+	case BUILT_IN_STRNCPY:
+	case BUILT_IN_STRNCPY_CHK:
+	  {
+	    tree size = gimple_call_arg (stmt, 2);
+	    tree ptr = gimple_call_arg (stmt, 0);
+	    ao_ref_init_from_ptr_and_size (write, ptr, size);
+	    return true;
+	  }
+
+	/* A calloc call can never be dead, but it can make
+	   subsequent stores redundant if they store 0 into
+	   the same memory locations.  */
+	case BUILT_IN_CALLOC:
+	  {
+	    tree nelem = gimple_call_arg (stmt, 0);
+	    tree selem = gimple_call_arg (stmt, 1);
+	    tree lhs;
+	    if (TREE_CODE (nelem) == INTEGER_CST
+		&& TREE_CODE (selem) == INTEGER_CST
+		&& (lhs = gimple_call_lhs (stmt)) != NULL_TREE)
+	      {
+		tree size = fold_build2 (MULT_EXPR, TREE_TYPE (nelem),
+					 nelem, selem);
+		ao_ref_init_from_ptr_and_size (write, lhs, size);
+		return true;
+	      }
+	  }
+
+	default:
+	  break;
 	}
     }
   else if (is_gimple_assign (stmt))
@@ -117,7 +147,7 @@ initialize_ao_ref_for_dse (gimple *stmt, ao_ref *write)
   return false;
 }
 
-/* Given REF from the the alias oracle, return TRUE if it is a valid
+/* Given REF from the alias oracle, return TRUE if it is a valid
    memory reference for dead store elimination, false otherwise.
 
    In particular, the reference must have a known base, known maximum
@@ -210,7 +240,7 @@ setup_live_bytes_from_ref (ao_ref *ref, sbitmap live_bytes)
   if (valid_ao_ref_for_dse (ref)
       && ref->size.is_constant (&const_size)
       && (const_size / BITS_PER_UNIT
-	  <= PARAM_VALUE (PARAM_DSE_MAX_OBJECT_SIZE)))
+	  <= param_dse_max_object_size))
     {
       bitmap_clear (live_bytes);
       bitmap_set_range (live_bytes, 0, const_size / BITS_PER_UNIT);
@@ -239,11 +269,26 @@ compute_trims (ao_ref *ref, sbitmap live, int *trim_head, int *trim_tail,
 
   /* Now identify how much, if any of the tail we can chop off.  */
   HOST_WIDE_INT const_size;
+  int last_live = bitmap_last_set_bit (live);
   if (ref->size.is_constant (&const_size))
     {
       int last_orig = (const_size / BITS_PER_UNIT) - 1;
-      int last_live = bitmap_last_set_bit (live);
-      *trim_tail = (last_orig - last_live) & ~0x1;
+      /* We can leave inconvenient amounts on the tail as
+	 residual handling in mem* and str* functions is usually
+	 reasonably efficient.  */
+      *trim_tail = last_orig - last_live;
+
+      /* But don't trim away out of bounds accesses, as this defeats
+	 proper warnings.
+
+	 We could have a type with no TYPE_SIZE_UNIT or we could have a VLA
+	 where TYPE_SIZE_UNIT is not a constant.  */
+      if (*trim_tail
+	  && TYPE_SIZE_UNIT (TREE_TYPE (ref->base))
+	  && TREE_CODE (TYPE_SIZE_UNIT (TREE_TYPE (ref->base))) == INTEGER_CST
+	  && compare_tree_int (TYPE_SIZE_UNIT (TREE_TYPE (ref->base)),
+			       last_orig) <= 0)
+	*trim_tail = 0;
     }
   else
     *trim_tail = 0;
@@ -251,7 +296,12 @@ compute_trims (ao_ref *ref, sbitmap live, int *trim_head, int *trim_tail,
   /* Identify how much, if any of the head we can chop off.  */
   int first_orig = 0;
   int first_live = bitmap_first_set_bit (live);
-  *trim_head = (first_live - first_orig) & ~0x1;
+  *trim_head = first_live - first_orig;
+
+  /* If more than a word remains, then make sure to keep the
+     starting point at least word aligned.  */
+  if (last_live - first_live > UNITS_PER_WORD)
+    *trim_head &= ~(UNITS_PER_WORD - 1);
 
   if ((*trim_head || *trim_tail)
       && dump_file && (dump_flags & TDF_DETAILS))
@@ -373,29 +423,38 @@ decrement_count (gimple *stmt, int decrement)
   gcc_assert (TREE_CODE (*countp) == INTEGER_CST);
   *countp = wide_int_to_tree (TREE_TYPE (*countp), (TREE_INT_CST_LOW (*countp)
 						    - decrement));
-
 }
 
 static void
 increment_start_addr (gimple *stmt, tree *where, int increment)
 {
+  if (tree lhs = gimple_call_lhs (stmt))
+    if (where == gimple_call_arg_ptr (stmt, 0))
+      {
+	gassign *newop = gimple_build_assign (lhs, unshare_expr (*where));
+	gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
+	gsi_insert_after (&gsi, newop, GSI_SAME_STMT);
+	gimple_call_set_lhs (stmt, NULL_TREE);
+	update_stmt (stmt);
+      }
+
   if (TREE_CODE (*where) == SSA_NAME)
     {
       tree tem = make_ssa_name (TREE_TYPE (*where));
       gassign *newop
-        = gimple_build_assign (tem, POINTER_PLUS_EXPR, *where,
+	= gimple_build_assign (tem, POINTER_PLUS_EXPR, *where,
 			       build_int_cst (sizetype, increment));
       gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
       gsi_insert_before (&gsi, newop, GSI_SAME_STMT);
       *where = tem;
-      update_stmt (gsi_stmt (gsi));
+      update_stmt (stmt);
       return;
     }
 
   *where = build_fold_addr_expr (fold_build2 (MEM_REF, char_type_node,
-                                             *where,
-                                             build_int_cst (ptr_type_node,
-                                                            increment)));
+					      *where,
+					      build_int_cst (ptr_type_node,
+							     increment)));
 }
 
 /* STMT is builtin call that writes bytes in bitmap ORIG, some bytes are dead
@@ -409,51 +468,115 @@ increment_start_addr (gimple *stmt, tree *where, int increment)
 static void
 maybe_trim_memstar_call (ao_ref *ref, sbitmap live, gimple *stmt)
 {
+  int head_trim, tail_trim;
   switch (DECL_FUNCTION_CODE (gimple_call_fndecl (stmt)))
     {
+    case BUILT_IN_STRNCPY:
+    case BUILT_IN_STRNCPY_CHK:
+      compute_trims (ref, live, &head_trim, &tail_trim, stmt);
+      if (head_trim)
+	{
+	  /* Head trimming of strncpy is only possible if we can
+	     prove all bytes we would trim are non-zero (or we could
+	     turn the strncpy into memset if there must be zero
+	     among the head trimmed bytes).  If we don't know anything
+	     about those bytes, the presence or absence of '\0' bytes
+	     in there will affect whether it acts for the non-trimmed
+	     bytes as memset or memcpy/strncpy.  */
+	  c_strlen_data lendata = { };
+	  int orig_head_trim = head_trim;
+	  tree srcstr = gimple_call_arg (stmt, 1);
+	  if (!get_range_strlen (srcstr, &lendata, /*eltsize=*/1)
+	      || !tree_fits_uhwi_p (lendata.minlen))
+	    head_trim = 0;
+	  else if (tree_to_uhwi (lendata.minlen) < (unsigned) head_trim)
+	    {
+	      head_trim = tree_to_uhwi (lendata.minlen);
+	      if ((orig_head_trim & (UNITS_PER_WORD - 1)) == 0)
+		head_trim &= ~(UNITS_PER_WORD - 1);
+	    }
+	  if (orig_head_trim != head_trim
+	      && dump_file
+	      && (dump_flags & TDF_DETAILS))
+	    fprintf (dump_file,
+		     "  Adjusting strncpy trimming to (head = %d,"
+		     " tail = %d)\n", head_trim, tail_trim);
+	}
+      goto do_memcpy;
+
     case BUILT_IN_MEMCPY:
     case BUILT_IN_MEMMOVE:
-      {
-	int head_trim, tail_trim;
-	compute_trims (ref, live, &head_trim, &tail_trim, stmt);
+    case BUILT_IN_MEMCPY_CHK:
+    case BUILT_IN_MEMMOVE_CHK:
+      compute_trims (ref, live, &head_trim, &tail_trim, stmt);
 
-	/* Tail trimming is easy, we can just reduce the count.  */
-        if (tail_trim)
-	  decrement_count (stmt, tail_trim);
+    do_memcpy:
+      /* Tail trimming is easy, we can just reduce the count.  */
+      if (tail_trim)
+	decrement_count (stmt, tail_trim);
 
-	/* Head trimming requires adjusting all the arguments.  */
-        if (head_trim)
-          {
-	    tree *dst = gimple_call_arg_ptr (stmt, 0);
-	    increment_start_addr (stmt, dst, head_trim);
-	    tree *src = gimple_call_arg_ptr (stmt, 1);
-	    increment_start_addr (stmt, src, head_trim);
-	    decrement_count (stmt, head_trim);
-	  }
-        break;
-      }
+      /* Head trimming requires adjusting all the arguments.  */
+      if (head_trim)
+	{
+	  /* For __*_chk need to adjust also the last argument.  */
+	  if (gimple_call_num_args (stmt) == 4)
+	    {
+	      tree size = gimple_call_arg (stmt, 3);
+	      if (!tree_fits_uhwi_p (size))
+		break;
+	      if (!integer_all_onesp (size))
+		{
+		  unsigned HOST_WIDE_INT sz = tree_to_uhwi (size);
+		  if (sz < (unsigned) head_trim)
+		    break;
+		  tree arg = wide_int_to_tree (TREE_TYPE (size),
+					       sz - head_trim);
+		  gimple_call_set_arg (stmt, 3, arg);
+		}
+	    }
+	  tree *dst = gimple_call_arg_ptr (stmt, 0);
+	  increment_start_addr (stmt, dst, head_trim);
+	  tree *src = gimple_call_arg_ptr (stmt, 1);
+	  increment_start_addr (stmt, src, head_trim);
+	  decrement_count (stmt, head_trim);
+	}
+      break;
 
     case BUILT_IN_MEMSET:
-      {
-	int head_trim, tail_trim;
-	compute_trims (ref, live, &head_trim, &tail_trim, stmt);
+    case BUILT_IN_MEMSET_CHK:
+      compute_trims (ref, live, &head_trim, &tail_trim, stmt);
 
-	/* Tail trimming is easy, we can just reduce the count.  */
-        if (tail_trim)
-	  decrement_count (stmt, tail_trim);
+      /* Tail trimming is easy, we can just reduce the count.  */
+      if (tail_trim)
+	decrement_count (stmt, tail_trim);
 
-	/* Head trimming requires adjusting all the arguments.  */
-        if (head_trim)
-          {
-	    tree *dst = gimple_call_arg_ptr (stmt, 0);
-	    increment_start_addr (stmt, dst, head_trim);
-	    decrement_count (stmt, head_trim);
-	  }
-	break;
-      }
+      /* Head trimming requires adjusting all the arguments.  */
+      if (head_trim)
+	{
+	  /* For __*_chk need to adjust also the last argument.  */
+	  if (gimple_call_num_args (stmt) == 4)
+	    {
+	      tree size = gimple_call_arg (stmt, 3);
+	      if (!tree_fits_uhwi_p (size))
+		break;
+	      if (!integer_all_onesp (size))
+		{
+		  unsigned HOST_WIDE_INT sz = tree_to_uhwi (size);
+		  if (sz < (unsigned) head_trim)
+		    break;
+		  tree arg = wide_int_to_tree (TREE_TYPE (size),
+					       sz - head_trim);
+		  gimple_call_set_arg (stmt, 3, arg);
+		}
+	    }
+	  tree *dst = gimple_call_arg_ptr (stmt, 0);
+	  increment_start_addr (stmt, dst, head_trim);
+	  decrement_count (stmt, head_trim);
+	}
+      break;
 
-      default:
-	break;
+    default:
+      break;
     }
 }
 
@@ -515,19 +638,132 @@ live_bytes_read (ao_ref use_ref, ao_ref *ref, sbitmap live)
   return true;
 }
 
-/* A helper of dse_optimize_stmt.
-   Given a GIMPLE_ASSIGN in STMT that writes to REF, find a candidate
-   statement *USE_STMT that may prove STMT to be dead.
-   Return TRUE if the above conditions are met, otherwise FALSE.  */
+/* Callback for dse_classify_store calling for_each_index.  Verify that
+   indices are invariant in the loop with backedge PHI in basic-block DATA.  */
 
-static dse_store_status
-dse_classify_store (ao_ref *ref, gimple *stmt, gimple **use_stmt,
-		    bool byte_tracking_enabled, sbitmap live_bytes)
+static bool
+check_name (tree, tree *idx, void *data)
+{
+  basic_block phi_bb = (basic_block) data;
+  if (TREE_CODE (*idx) == SSA_NAME
+      && !SSA_NAME_IS_DEFAULT_DEF (*idx)
+      && dominated_by_p (CDI_DOMINATORS, gimple_bb (SSA_NAME_DEF_STMT (*idx)),
+			 phi_bb))
+    return false;
+  return true;
+}
+
+/* STMT stores the value 0 into one or more memory locations
+   (via memset, empty constructor, calloc call, etc).
+
+   See if there is a subsequent store of the value 0 to one
+   or more of the same memory location(s).  If so, the subsequent
+   store is redundant and can be removed.
+
+   The subsequent stores could be via memset, empty constructors,
+   simple MEM stores, etc.  */
+
+static void
+dse_optimize_redundant_stores (gimple *stmt)
+{
+  int cnt = 0;
+
+  /* TBAA state of STMT, if it is a call it is effectively alias-set zero.  */
+  alias_set_type earlier_set = 0;
+  alias_set_type earlier_base_set = 0;
+  if (is_gimple_assign (stmt))
+    {
+      ao_ref lhs_ref;
+      ao_ref_init (&lhs_ref, gimple_assign_lhs (stmt));
+      earlier_set = ao_ref_alias_set (&lhs_ref);
+      earlier_base_set = ao_ref_base_alias_set (&lhs_ref);
+    }
+
+  /* We could do something fairly complex and look through PHIs
+     like DSE_CLASSIFY_STORE, but it doesn't seem to be worth
+     the effort.
+
+     Look at all the immediate uses of the VDEF (which are obviously
+     dominated by STMT).   See if one or more stores 0 into the same
+     memory locations a STMT, if so remove the immediate use statements.  */
+  tree defvar = gimple_vdef (stmt);
+  imm_use_iterator ui;
+  gimple *use_stmt;
+  FOR_EACH_IMM_USE_STMT (use_stmt, ui, defvar)
+    {
+      /* Limit stmt walking.  */
+      if (++cnt > param_dse_max_alias_queries_per_store)
+	break;
+
+      /* If USE_STMT stores 0 into one or more of the same locations
+	 as STMT and STMT would kill USE_STMT, then we can just remove
+	 USE_STMT.  */
+      tree fndecl;
+      if ((is_gimple_assign (use_stmt)
+	   && gimple_vdef (use_stmt)
+	   && (gimple_assign_single_p (use_stmt)
+	       && initializer_zerop (gimple_assign_rhs1 (use_stmt))))
+	  || (gimple_call_builtin_p (use_stmt, BUILT_IN_NORMAL)
+	      && (fndecl = gimple_call_fndecl (use_stmt)) != NULL
+	      && (DECL_FUNCTION_CODE (fndecl) == BUILT_IN_MEMSET
+		  || DECL_FUNCTION_CODE (fndecl) == BUILT_IN_MEMSET_CHK)
+	      && integer_zerop (gimple_call_arg (use_stmt, 1))))
+	{
+	  ao_ref write;
+
+	  if (!initialize_ao_ref_for_dse (use_stmt, &write))
+	    break;
+
+	  if (valid_ao_ref_for_dse (&write)
+	      && stmt_kills_ref_p (stmt, &write))
+	    {
+	      gimple_stmt_iterator gsi = gsi_for_stmt (use_stmt);
+	      if (is_gimple_assign (use_stmt))
+		{
+		  ao_ref lhs_ref;
+		  ao_ref_init (&lhs_ref, gimple_assign_lhs (use_stmt));
+		  if ((earlier_set == ao_ref_alias_set (&lhs_ref)
+		       || alias_set_subset_of (ao_ref_alias_set (&lhs_ref),
+					       earlier_set))
+		      && (earlier_base_set == ao_ref_base_alias_set (&lhs_ref)
+			  || alias_set_subset_of
+			       (ao_ref_base_alias_set (&lhs_ref),
+						  earlier_base_set)))
+		    delete_dead_or_redundant_assignment (&gsi, "redundant",
+							 need_eh_cleanup);
+		}
+	      else if (is_gimple_call (use_stmt))
+		{
+		  if ((earlier_set == 0
+		       || alias_set_subset_of (0, earlier_set))
+		      && (earlier_base_set == 0
+			  || alias_set_subset_of (0, earlier_base_set)))
+		  delete_dead_or_redundant_call (&gsi, "redundant");
+		}
+	      else
+		gcc_unreachable ();
+	    }
+	}
+    }
+}
+
+/* A helper of dse_optimize_stmt.
+   Given a GIMPLE_ASSIGN in STMT that writes to REF, classify it
+   according to downstream uses and defs.  Sets *BY_CLOBBER_P to true
+   if only clobber statements influenced the classification result.
+   Returns the classification.  */
+
+dse_store_status
+dse_classify_store (ao_ref *ref, gimple *stmt,
+		    bool byte_tracking_enabled, sbitmap live_bytes,
+		    bool *by_clobber_p, tree stop_at_vuse)
 {
   gimple *temp;
-  unsigned cnt = 0;
+  int cnt = 0;
+  auto_bitmap visited;
 
-  *use_stmt = NULL;
+  if (by_clobber_p)
+    *by_clobber_p = true;
 
   /* Find the first dominated statement that clobbers (part of) the
      memory stmt stores to with no intermediate statement that may use
@@ -536,60 +772,60 @@ dse_classify_store (ao_ref *ref, gimple *stmt, gimple **use_stmt,
   temp = stmt;
   do
     {
-      gimple *use_stmt, *defvar_def;
+      gimple *use_stmt;
       imm_use_iterator ui;
       bool fail = false;
       tree defvar;
 
-      /* Limit stmt walking to be linear in the number of possibly
-         dead stores.  */
-      if (++cnt > 256)
-	return DSE_STORE_LIVE;
-
       if (gimple_code (temp) == GIMPLE_PHI)
-	defvar = PHI_RESULT (temp);
+	{
+	  /* If we visit this PHI by following a backedge then we have to
+	     make sure ref->ref only refers to SSA names that are invariant
+	     with respect to the loop represented by this PHI node.  */
+	  if (dominated_by_p (CDI_DOMINATORS, gimple_bb (stmt),
+			      gimple_bb (temp))
+	      && !for_each_index (ref->ref ? &ref->ref : &ref->base,
+				  check_name, gimple_bb (temp)))
+	    return DSE_STORE_LIVE;
+	  defvar = PHI_RESULT (temp);
+	  bitmap_set_bit (visited, SSA_NAME_VERSION (defvar));
+	}
       else
 	defvar = gimple_vdef (temp);
-      defvar_def = temp;
-      temp = NULL;
+
+      /* If we're instructed to stop walking at region boundary, do so.  */
+      if (defvar == stop_at_vuse)
+	return DSE_STORE_LIVE;
+
+      auto_vec<gimple *, 10> defs;
+      gimple *phi_def = NULL;
       FOR_EACH_IMM_USE_STMT (use_stmt, ui, defvar)
 	{
-	  cnt++;
-
-	  /* If we ever reach our DSE candidate stmt again fail.  We
-	     cannot handle dead stores in loops.  */
-	  if (use_stmt == stmt)
+	  /* Limit stmt walking.  */
+	  if (++cnt > param_dse_max_alias_queries_per_store)
 	    {
 	      fail = true;
-	      BREAK_FROM_IMM_USE_STMT (ui);
+	      break;
 	    }
+
+	  /* We have visited ourselves already so ignore STMT for the
+	     purpose of chaining.  */
+	  if (use_stmt == stmt)
+	    ;
 	  /* In simple cases we can look through PHI nodes, but we
 	     have to be careful with loops and with memory references
 	     containing operands that are also operands of PHI nodes.
 	     See gcc.c-torture/execute/20051110-*.c.  */
 	  else if (gimple_code (use_stmt) == GIMPLE_PHI)
 	    {
-	      if (temp
-		  /* Make sure we are not in a loop latch block.  */
-		  || gimple_bb (stmt) == gimple_bb (use_stmt)
-		  || dominated_by_p (CDI_DOMINATORS,
-				     gimple_bb (stmt), gimple_bb (use_stmt))
-		  /* We can look through PHIs to regions post-dominating
-		     the DSE candidate stmt.  */
-		  || !dominated_by_p (CDI_POST_DOMINATORS,
-				      gimple_bb (stmt), gimple_bb (use_stmt)))
+	      /* If we already visited this PHI ignore it for further
+		 processing.  */
+	      if (!bitmap_bit_p (visited,
+				 SSA_NAME_VERSION (PHI_RESULT (use_stmt))))
 		{
-		  fail = true;
-		  BREAK_FROM_IMM_USE_STMT (ui);
+		  defs.safe_push (use_stmt);
+		  phi_def = use_stmt;
 		}
-	      /* Do not consider the PHI as use if it dominates the
-	         stmt defining the virtual operand we are processing,
-		 we have processed it already in this case.  */
-	      if (gimple_bb (defvar_def) != gimple_bb (use_stmt)
-		  && !dominated_by_p (CDI_DOMINATORS,
-				      gimple_bb (defvar_def),
-				      gimple_bb (use_stmt)))
-		temp = use_stmt;
 	    }
 	  /* If the statement is a use the store is not dead.  */
 	  else if (ref_maybe_used_by_stmt_p (use_stmt, ref))
@@ -597,42 +833,31 @@ dse_classify_store (ao_ref *ref, gimple *stmt, gimple **use_stmt,
 	      /* Handle common cases where we can easily build an ao_ref
 		 structure for USE_STMT and in doing so we find that the
 		 references hit non-live bytes and thus can be ignored.  */
-	      if (byte_tracking_enabled && (!gimple_vdef (use_stmt) || !temp))
+	      if (byte_tracking_enabled
+		  && is_gimple_assign (use_stmt))
 		{
-		  if (is_gimple_assign (use_stmt))
+		  ao_ref use_ref;
+		  ao_ref_init (&use_ref, gimple_assign_rhs1 (use_stmt));
+		  if (valid_ao_ref_for_dse (&use_ref)
+		      && use_ref.base == ref->base
+		      && known_eq (use_ref.size, use_ref.max_size)
+		      && !live_bytes_read (use_ref, ref, live_bytes))
 		    {
-		      /* Other cases were noted as non-aliasing by
-			 the call to ref_maybe_used_by_stmt_p.  */
-		      ao_ref use_ref;
-		      ao_ref_init (&use_ref, gimple_assign_rhs1 (use_stmt));
-		      if (valid_ao_ref_for_dse (&use_ref)
-			  && use_ref.base == ref->base
-			  && known_eq (use_ref.size, use_ref.max_size)
-			  && !live_bytes_read (use_ref, ref, live_bytes))
-			{
-			  /* If this statement has a VDEF, then it is the
-			     first store we have seen, so walk through it.  */
-			  if (gimple_vdef (use_stmt))
-			    temp = use_stmt;
-			  continue;
-			}
+		      /* If this is a store, remember it as we possibly
+			 need to walk the defs uses.  */
+		      if (gimple_vdef (use_stmt))
+			defs.safe_push (use_stmt);
+		      continue;
 		    }
 		}
 
 	      fail = true;
-	      BREAK_FROM_IMM_USE_STMT (ui);
+	      break;
 	    }
-	  /* If this is a store, remember it or bail out if we have
-	     multiple ones (the will be in different CFG parts then).  */
+	  /* If this is a store, remember it as we possibly need to walk the
+	     defs uses.  */
 	  else if (gimple_vdef (use_stmt))
-	    {
-	      if (temp)
-		{
-		  fail = true;
-		  BREAK_FROM_IMM_USE_STMT (ui);
-		}
-	      temp = use_stmt;
-	    }
+	    defs.safe_push (use_stmt);
 	}
 
       if (fail)
@@ -647,25 +872,88 @@ dse_classify_store (ao_ref *ref, gimple *stmt, gimple **use_stmt,
       /* If we didn't find any definition this means the store is dead
          if it isn't a store to global reachable memory.  In this case
 	 just pretend the stmt makes itself dead.  Otherwise fail.  */
-      if (!temp)
+      if (defs.is_empty ())
 	{
 	  if (ref_may_alias_global_p (ref))
 	    return DSE_STORE_LIVE;
 
-	  temp = stmt;
-	  break;
+	  if (by_clobber_p)
+	    *by_clobber_p = false;
+	  return DSE_STORE_DEAD;
 	}
 
-      if (byte_tracking_enabled && temp)
-	clear_bytes_written_by (live_bytes, temp, ref);
-    }
-  /* Continue walking until we reach a full kill as a single statement
-     or there are no more live bytes.  */
-  while (!stmt_kills_ref_p (temp, ref)
-	 && !(byte_tracking_enabled && bitmap_empty_p (live_bytes)));
+      /* Process defs and remove those we need not process further.  */
+      for (unsigned i = 0; i < defs.length ();)
+	{
+	  gimple *def = defs[i];
+	  gimple *use_stmt;
+	  use_operand_p use_p;
+	  /* If the path to check starts with a kill we do not need to
+	     process it further.
+	     ???  With byte tracking we need only kill the bytes currently
+	     live.  */
+	  if (stmt_kills_ref_p (def, ref))
+	    {
+	      if (by_clobber_p && !gimple_clobber_p (def))
+		*by_clobber_p = false;
+	      defs.unordered_remove (i);
+	    }
+	  /* If the path ends here we do not need to process it further.
+	     This for example happens with calls to noreturn functions.  */
+	  else if (gimple_code (def) != GIMPLE_PHI
+		   && has_zero_uses (gimple_vdef (def)))
+	    {
+	      /* But if the store is to global memory it is definitely
+		 not dead.  */
+	      if (ref_may_alias_global_p (ref))
+		return DSE_STORE_LIVE;
+	      defs.unordered_remove (i);
+	    }
+	  /* In addition to kills we can remove defs whose only use
+	     is another def in defs.  That can only ever be PHIs of which
+	     we track a single for simplicity reasons (we fail for multiple
+	     PHIs anyways).  We can also ignore defs that feed only into
+	     already visited PHIs.  */
+	  else if (gimple_code (def) != GIMPLE_PHI
+		   && single_imm_use (gimple_vdef (def), &use_p, &use_stmt)
+		   && (use_stmt == phi_def
+		       || (gimple_code (use_stmt) == GIMPLE_PHI
+			   && bitmap_bit_p (visited,
+					    SSA_NAME_VERSION
+					      (PHI_RESULT (use_stmt))))))
+	    defs.unordered_remove (i);
+	  else
+	    ++i;
+	}
 
-  *use_stmt = temp;
-  return DSE_STORE_DEAD;
+      /* If all defs kill the ref we are done.  */
+      if (defs.is_empty ())
+	return DSE_STORE_DEAD;
+      /* If more than one def survives fail.  */
+      if (defs.length () > 1)
+	{
+	  /* STMT might be partially dead and we may be able to reduce
+	     how many memory locations it stores into.  */
+	  if (byte_tracking_enabled && !gimple_clobber_p (stmt))
+	    return DSE_STORE_MAYBE_PARTIAL_DEAD;
+	  return DSE_STORE_LIVE;
+	}
+      temp = defs[0];
+
+      /* Track partial kills.  */
+      if (byte_tracking_enabled)
+	{
+	  clear_bytes_written_by (live_bytes, temp, ref);
+	  if (bitmap_empty_p (live_bytes))
+	    {
+	      if (by_clobber_p && !gimple_clobber_p (temp))
+		*by_clobber_p = false;
+	      return DSE_STORE_DEAD;
+	    }
+	}
+    }
+  /* Continue walking until there are no more live bytes.  */
+  while (1);
 }
 
 
@@ -674,7 +962,7 @@ class dse_dom_walker : public dom_walker
 public:
   dse_dom_walker (cdi_direction direction)
     : dom_walker (direction),
-    m_live_bytes (PARAM_VALUE (PARAM_DSE_MAX_OBJECT_SIZE)),
+    m_live_bytes (param_dse_max_object_size),
     m_byte_tracking_enabled (false) {}
 
   virtual edge before_dom_children (basic_block);
@@ -687,12 +975,12 @@ private:
 
 /* Delete a dead call at GSI, which is mem* call of some kind.  */
 static void
-delete_dead_call (gimple_stmt_iterator *gsi)
+delete_dead_or_redundant_call (gimple_stmt_iterator *gsi, const char *type)
 {
   gimple *stmt = gsi_stmt (*gsi);
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
-      fprintf (dump_file, "  Deleted dead call: ");
+      fprintf (dump_file, "  Deleted %s call: ", type);
       print_gimple_stmt (dump_file, stmt, 0, dump_flags);
       fprintf (dump_file, "\n");
     }
@@ -720,13 +1008,14 @@ delete_dead_call (gimple_stmt_iterator *gsi)
 
 /* Delete a dead store at GSI, which is a gimple assignment. */
 
-static void
-delete_dead_assignment (gimple_stmt_iterator *gsi)
+void
+delete_dead_or_redundant_assignment (gimple_stmt_iterator *gsi, const char *type,
+				     bitmap need_eh_cleanup)
 {
   gimple *stmt = gsi_stmt (*gsi);
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
-      fprintf (dump_file, "  Deleted dead store: ");
+      fprintf (dump_file, "  Deleted %s store: ", type);
       print_gimple_stmt (dump_file, stmt, 0, dump_flags);
       fprintf (dump_file, "\n");
     }
@@ -736,7 +1025,7 @@ delete_dead_assignment (gimple_stmt_iterator *gsi)
 
   /* Remove the dead store.  */
   basic_block bb = gimple_bb (stmt);
-  if (gsi_remove (gsi, true))
+  if (gsi_remove (gsi, true) && need_eh_cleanup)
     bitmap_set_bit (need_eh_cleanup, bb->index);
 
   /* And release any SSA_NAMEs set in this statement back to the
@@ -779,64 +1068,89 @@ dse_dom_walker::dse_optimize_stmt (gimple_stmt_iterator *gsi)
      some builtin calls.  */
   if (gimple_call_builtin_p (stmt, BUILT_IN_NORMAL))
     {
-      switch (DECL_FUNCTION_CODE (gimple_call_fndecl (stmt)))
+      tree fndecl = gimple_call_fndecl (stmt);
+      switch (DECL_FUNCTION_CODE (fndecl))
 	{
-	  case BUILT_IN_MEMCPY:
-	  case BUILT_IN_MEMMOVE:
-	  case BUILT_IN_MEMSET:
-	    {
-	      /* Occasionally calls with an explicit length of zero
-		 show up in the IL.  It's pointless to do analysis
-		 on them, they're trivially dead.  */
-	      tree size = gimple_call_arg (stmt, 2);
-	      if (integer_zerop (size))
-		{
-		  delete_dead_call (gsi);
-		  return;
-		}
-
-	      gimple *use_stmt;
-	      enum dse_store_status store_status;
-	      m_byte_tracking_enabled
-		= setup_live_bytes_from_ref (&ref, m_live_bytes);
-	      store_status = dse_classify_store (&ref, stmt, &use_stmt,
-						 m_byte_tracking_enabled,
-						 m_live_bytes);
-	      if (store_status == DSE_STORE_LIVE)
+	case BUILT_IN_MEMCPY:
+	case BUILT_IN_MEMMOVE:
+	case BUILT_IN_STRNCPY:
+	case BUILT_IN_MEMSET:
+	case BUILT_IN_MEMCPY_CHK:
+	case BUILT_IN_MEMMOVE_CHK:
+	case BUILT_IN_STRNCPY_CHK:
+	case BUILT_IN_MEMSET_CHK:
+	  {
+	    /* Occasionally calls with an explicit length of zero
+	       show up in the IL.  It's pointless to do analysis
+	       on them, they're trivially dead.  */
+	    tree size = gimple_call_arg (stmt, 2);
+	    if (integer_zerop (size))
+	      {
+		delete_dead_or_redundant_call (gsi, "dead");
 		return;
+	      }
 
-	      if (store_status == DSE_STORE_MAYBE_PARTIAL_DEAD)
-		{
-		  maybe_trim_memstar_call (&ref, m_live_bytes, stmt);
-		  return;
-		}
+	    /* If this is a memset call that initializes an object
+	       to zero, it may be redundant with an earlier memset
+	       or empty CONSTRUCTOR of a larger object.  */
+	    if ((DECL_FUNCTION_CODE (fndecl) == BUILT_IN_MEMSET
+		 || DECL_FUNCTION_CODE (fndecl) == BUILT_IN_MEMSET_CHK)
+		&& integer_zerop (gimple_call_arg (stmt, 1)))
+	      dse_optimize_redundant_stores (stmt);
 
-	      if (store_status == DSE_STORE_DEAD)
-		delete_dead_call (gsi);
+	    enum dse_store_status store_status;
+	    m_byte_tracking_enabled
+	      = setup_live_bytes_from_ref (&ref, m_live_bytes);
+	    store_status = dse_classify_store (&ref, stmt,
+					       m_byte_tracking_enabled,
+					       m_live_bytes);
+	    if (store_status == DSE_STORE_LIVE)
 	      return;
-	    }
 
-	  default:
+	    if (store_status == DSE_STORE_MAYBE_PARTIAL_DEAD)
+	      {
+		maybe_trim_memstar_call (&ref, m_live_bytes, stmt);
+		return;
+	      }
+
+	    if (store_status == DSE_STORE_DEAD)
+	      delete_dead_or_redundant_call (gsi, "dead");
 	    return;
+	  }
+
+	case BUILT_IN_CALLOC:
+	  /* We already know the arguments are integer constants.  */
+	  dse_optimize_redundant_stores (stmt);
+	  return;
+
+	default:
+	  return;
 	}
     }
 
   if (is_gimple_assign (stmt))
     {
-      gimple *use_stmt;
+      bool by_clobber_p = false;
+
+      /* Check if this statement stores zero to a memory location,
+	 and if there is a subsequent store of zero to the same
+	 memory location.  If so, remove the subsequent store.  */
+      if (gimple_assign_single_p (stmt)
+	  && initializer_zerop (gimple_assign_rhs1 (stmt)))
+	dse_optimize_redundant_stores (stmt);
 
       /* Self-assignments are zombies.  */
       if (operand_equal_p (gimple_assign_rhs1 (stmt),
 			   gimple_assign_lhs (stmt), 0))
-	use_stmt = stmt;
+	;
       else
 	{
 	  m_byte_tracking_enabled
 	    = setup_live_bytes_from_ref (&ref, m_live_bytes);
 	  enum dse_store_status store_status;
-	  store_status = dse_classify_store (&ref, stmt, &use_stmt,
+	  store_status = dse_classify_store (&ref, stmt,
 					     m_byte_tracking_enabled,
-					     m_live_bytes);
+					     m_live_bytes, &by_clobber_p);
 	  if (store_status == DSE_STORE_LIVE)
 	    return;
 
@@ -852,10 +1166,10 @@ dse_dom_walker::dse_optimize_stmt (gimple_stmt_iterator *gsi)
       /* But only remove *this_2(D) ={v} {CLOBBER} if killed by
 	 another clobber stmt.  */
       if (gimple_clobber_p (stmt)
-	  && !gimple_clobber_p (use_stmt))
+	  && !by_clobber_p)
 	return;
 
-      delete_dead_assignment (gsi);
+      delete_dead_or_redundant_assignment (gsi, "dead", need_eh_cleanup);
     }
 }
 
@@ -909,7 +1223,7 @@ pass_dse::execute (function *fun)
 {
   need_eh_cleanup = BITMAP_ALLOC (NULL);
 
-  renumber_gimple_stmt_uids ();
+  renumber_gimple_stmt_uids (cfun);
 
   /* We might consider making this a property of each pass so that it
      can be [re]computed on an as-needed basis.  Particularly since

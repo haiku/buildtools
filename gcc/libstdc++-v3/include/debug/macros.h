@@ -1,6 +1,6 @@
 // Debugging support implementation -*- C++ -*-
 
-// Copyright (C) 2003-2018 Free Software Foundation, Inc.
+// Copyright (C) 2003-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -38,16 +38,23 @@
  * the user error and where the error is reported.
  *
  */
-#define _GLIBCXX_DEBUG_VERIFY_AT(_Condition,_ErrorMessage,_File,_Line)	\
-  do									\
-  {									\
-    if (! (_Condition))							\
-      __gnu_debug::_Error_formatter::_M_at(_File, _Line)		\
-	  ._ErrorMessage._M_error();					\
+#define _GLIBCXX_DEBUG_VERIFY_COND_AT(_Cond,_ErrMsg,_File,_Line,_Func)	\
+  if (__builtin_expect(!bool(_Cond), false))				\
+    __gnu_debug::_Error_formatter::_S_at(_File, _Line, _Func)		\
+      ._ErrMsg._M_error()
+
+#define _GLIBCXX_DEBUG_VERIFY_AT_F(_Cond,_ErrMsg,_File,_Line,_Func)	\
+  do {									\
+    __glibcxx_constexpr_assert(_Cond);					\
+    _GLIBCXX_DEBUG_VERIFY_COND_AT(_Cond,_ErrMsg,_File,_Line,_Func);	\
   } while (false)
 
-#define _GLIBCXX_DEBUG_VERIFY(_Condition,_ErrorMessage)			\
-  _GLIBCXX_DEBUG_VERIFY_AT(_Condition,_ErrorMessage,__FILE__,__LINE__)
+#define _GLIBCXX_DEBUG_VERIFY_AT(_Cond,_ErrMsg,_File,_Line)		\
+  _GLIBCXX_DEBUG_VERIFY_AT_F(_Cond,_ErrMsg,_File,_Line,__PRETTY_FUNCTION__)
+
+#define _GLIBCXX_DEBUG_VERIFY(_Cond,_ErrMsg)				\
+  _GLIBCXX_DEBUG_VERIFY_AT_F(_Cond, _ErrMsg, __FILE__, __LINE__,	\
+			     __PRETTY_FUNCTION__)
 
 // Verify that [_First, _Last) forms a valid iterator range.
 #define __glibcxx_check_valid_range(_First,_Last)			\
@@ -56,11 +63,22 @@ _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__valid_range(_First, _Last),	\
 		      ._M_iterator(_First, #_First)			\
 		      ._M_iterator(_Last, #_Last))
 
+#define __glibcxx_check_valid_range_at(_First,_Last,_File,_Line,_Func)	\
+_GLIBCXX_DEBUG_VERIFY_AT_F(__gnu_debug::__valid_range(_First, _Last),	\
+			   _M_message(__gnu_debug::__msg_valid_range)	\
+			   ._M_iterator(_First, #_First)		\
+			   ._M_iterator(_Last, #_Last),			\
+			   _File,_Line,_Func)
+
 #define __glibcxx_check_valid_range2(_First,_Last,_Dist)		\
 _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__valid_range(_First, _Last, _Dist),	\
 		      _M_message(__gnu_debug::__msg_valid_range)	\
 		      ._M_iterator(_First, #_First)			\
 		      ._M_iterator(_Last, #_Last))
+
+#define __glibcxx_check_valid_constructor_range(_First,_Last)		\
+  __gnu_debug::__check_valid_range(_First, _Last,			\
+				   __FILE__, __LINE__, __PRETTY_FUNCTION__)
 
 // Verify that [_First, _Last) forms a non-empty iterator range.
 #define __glibcxx_check_non_empty_range(_First,_Last)			\
@@ -68,6 +86,55 @@ _GLIBCXX_DEBUG_VERIFY(_First != _Last,					\
 		      _M_message(__gnu_debug::__msg_non_empty_range)	\
 		      ._M_iterator(_First, #_First)			\
 		      ._M_iterator(_Last, #_Last))
+
+// Verify that [_First, _First + _Size) forms a valid range.
+#define __glibcxx_check_can_increment(_First,_Size)			\
+_GLIBCXX_DEBUG_VERIFY(__gnu_debug::__can_advance(_First, _Size),	\
+		      _M_message(__gnu_debug::__msg_iter_subscript_oob)	\
+		      ._M_iterator(_First, #_First)			\
+		      ._M_integer(_Size, #_Size))
+
+#define __glibcxx_check_can_increment_dist(_First,_Dist,_Way)		\
+  _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__can_advance(_First, _Dist, _Way), \
+		      _M_message(__gnu_debug::__msg_iter_subscript_oob)	\
+		      ._M_iterator(_First, #_First)			\
+		      ._M_integer(_Way * _Dist.first, #_Dist))
+
+#define __glibcxx_check_can_increment_range(_First1,_Last1,_First2)	\
+  do									\
+  {									\
+    typename __gnu_debug::_Distance_traits<__decltype(_First1)>::__type __dist;\
+    _GLIBCXX_DEBUG_VERIFY_AT_F(						\
+			__gnu_debug::__valid_range(_First1, _Last1, __dist),\
+			_M_message(__gnu_debug::__msg_valid_range)	\
+			._M_iterator(_First1, #_First1)			\
+			._M_iterator(_Last1, #_Last1),			\
+			__FILE__,__LINE__,__PRETTY_FUNCTION__);		\
+    _GLIBCXX_DEBUG_VERIFY_AT_F(						\
+			__gnu_debug::__can_advance(_First2, __dist, 1), \
+			_M_message(__gnu_debug::__msg_iter_subscript_oob)\
+			._M_iterator(_First2, #_First2)			\
+			._M_integer(__dist.first),			\
+			__FILE__,__LINE__,__PRETTY_FUNCTION__);		\
+  } while(false)
+
+#define __glibcxx_check_can_decrement_range(_First1,_Last1,_First2)	\
+  do									\
+  {									\
+    typename __gnu_debug::_Distance_traits<__decltype(_First1)>::__type __dist;\
+    _GLIBCXX_DEBUG_VERIFY_AT_F(						\
+			__gnu_debug::__valid_range(_First1, _Last1, __dist),\
+			_M_message(__gnu_debug::__msg_valid_range)	\
+			._M_iterator(_First1, #_First1)			\
+			._M_iterator(_Last1, #_Last1),			\
+			__FILE__,__LINE__,__PRETTY_FUNCTION__);		\
+    _GLIBCXX_DEBUG_VERIFY_AT_F(						\
+			__gnu_debug::__can_advance(_First2, __dist, -1), \
+			_M_message(__gnu_debug::__msg_iter_subscript_oob)\
+			._M_iterator(_First2, #_First2)			\
+			._M_integer(-__dist.first),			\
+			__FILE__,__LINE__,__PRETTY_FUNCTION__);		\
+  } while(false)
 
 /** Verify that we can insert into *this with the iterator _Position.
  *  Insertion into a container at a specific position requires that
@@ -130,7 +197,7 @@ _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__foreign_iterator(_Position,_First,_Last),\
  *  _Safe_sequence and the _Position iterator is a _Safe_iterator.
 */
 #define __glibcxx_check_insert_range_after(_Position,_First,_Last,_Dist)\
-  __glibcxx_check_valid_range2(_First,_Last,_Dist);			\
+__glibcxx_check_valid_range2(_First,_Last,_Dist);			\
 __glibcxx_check_insert_after(_Position);				\
 _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__foreign_iterator(_Position,_First,_Last),\
 		      _M_message(__gnu_debug::__msg_insert_range_from_self)\
@@ -183,6 +250,11 @@ _GLIBCXX_DEBUG_VERIFY(_First._M_attached_to(this),			\
  *  valid iterator range within this sequence.
 */
 #define __glibcxx_check_erase_range_after(_First,_Last)			\
+_GLIBCXX_DEBUG_VERIFY(!_First._M_singular() && !_Last._M_singular(),	\
+		      _M_message(__gnu_debug::__msg_erase_different)	\
+		      ._M_sequence(*this, "this")			\
+		      ._M_iterator(_First, #_First)			\
+		      ._M_iterator(_Last, #_Last));			\
 _GLIBCXX_DEBUG_VERIFY(_First._M_can_compare(_Last),			\
 		      _M_message(__gnu_debug::__msg_erase_different)	\
 		      ._M_sequence(*this, "this")			\
@@ -230,9 +302,43 @@ _GLIBCXX_DEBUG_VERIFY(! this->empty(),					\
 		      _M_message(__gnu_debug::__msg_empty)	        \
                       ._M_sequence(*this, "this"))
 
+// Verify that a predicate is irreflexive
+#define __glibcxx_check_irreflexive(_First,_Last)			\
+  _GLIBCXX_DEBUG_VERIFY(_First == _Last || !(*_First < *_First),	\
+			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
+			._M_iterator_value_type(_First, "< operator type"))
+
+#if __cplusplus >= 201103L
+# define __glibcxx_check_irreflexive2(_First,_Last)			\
+  _GLIBCXX_DEBUG_VERIFY(_First == _Last					\
+			|| __gnu_debug::__is_irreflexive(_First),	\
+			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
+			._M_iterator_value_type(_First, "< operator type"))
+#else
+# define __glibcxx_check_irreflexive2(_First,_Last)
+#endif
+
+#define __glibcxx_check_irreflexive_pred(_First,_Last,_Pred)		\
+  _GLIBCXX_DEBUG_VERIFY(_First == _Last || !_Pred(*_First, *_First),	\
+			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
+			._M_instance(_Pred, "functor")			\
+			._M_iterator_value_type(_First, "ordered type"))
+
+#if __cplusplus >= 201103L
+# define __glibcxx_check_irreflexive_pred2(_First,_Last,_Pred)		\
+  _GLIBCXX_DEBUG_VERIFY(_First == _Last					\
+			||__gnu_debug::__is_irreflexive_pred(_First, _Pred), \
+			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
+			._M_instance(_Pred, "functor")			\
+			._M_iterator_value_type(_First, "ordered type"))
+#else
+# define __glibcxx_check_irreflexive_pred2(_First,_Last,_Pred)
+#endif
+
 // Verify that the iterator range [_First, _Last) is sorted
 #define __glibcxx_check_sorted(_First,_Last)				\
 __glibcxx_check_valid_range(_First,_Last);				\
+__glibcxx_check_irreflexive(_First,_Last);				\
  _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__check_sorted(			\
 			__gnu_debug::__base(_First),			\
 			__gnu_debug::__base(_Last)),			\
@@ -244,6 +350,7 @@ __glibcxx_check_valid_range(_First,_Last);				\
     predicate _Pred. */
 #define __glibcxx_check_sorted_pred(_First,_Last,_Pred)			\
 __glibcxx_check_valid_range(_First,_Last);				\
+__glibcxx_check_irreflexive_pred(_First,_Last,_Pred);			\
 _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__check_sorted(			\
 			__gnu_debug::__base(_First),			\
 			__gnu_debug::__base(_Last), _Pred),		\
@@ -341,12 +448,6 @@ _GLIBCXX_DEBUG_VERIFY(__gnu_debug::__check_partitioned_upper(		\
 		      ._M_iterator(_Last, #_Last)			\
 		      ._M_string(#_Pred))
 
-// Verify that the container is not self move assigned
-#define __glibcxx_check_self_move_assign(_Other)			\
-_GLIBCXX_DEBUG_VERIFY(this != &_Other,					\
-		      _M_message(__gnu_debug::__msg_self_move_assign)	\
-                      ._M_sequence(*this, "this"))
-
 // Verify that load factor is positive
 #define __glibcxx_check_max_load_factor(_F)				\
 _GLIBCXX_DEBUG_VERIFY(_F > 0.0f,					\
@@ -361,38 +462,5 @@ _GLIBCXX_DEBUG_VERIFY(_This.get_allocator() == _Other.get_allocator(),	\
 #define __glibcxx_check_string(_String) _GLIBCXX_DEBUG_PEDASSERT(_String != 0)
 #define __glibcxx_check_string_len(_String,_Len) \
   _GLIBCXX_DEBUG_PEDASSERT(_String != 0 || _Len == 0)
-
-// Verify that a predicate is irreflexive
-#define __glibcxx_check_irreflexive(_First,_Last)			\
-  _GLIBCXX_DEBUG_VERIFY(_First == _Last || !(*_First < *_First),	\
-			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
-			._M_iterator_value_type(_First, "< operator type"))
-
-#if __cplusplus >= 201103L
-# define __glibcxx_check_irreflexive2(_First,_Last)			\
-  _GLIBCXX_DEBUG_VERIFY(_First == _Last					\
-			|| __gnu_debug::__is_irreflexive(_First),	\
-			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
-			._M_iterator_value_type(_First, "< operator type"))
-#else
-# define __glibcxx_check_irreflexive2(_First,_Last)
-#endif
-
-#define __glibcxx_check_irreflexive_pred(_First,_Last,_Pred)		\
-  _GLIBCXX_DEBUG_VERIFY(_First == _Last	|| !_Pred(*_First, *_First),		\
-			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
-			._M_instance(_Pred, "functor")			\
-			._M_iterator_value_type(_First, "ordered type"))
-
-#if __cplusplus >= 201103L
-# define __glibcxx_check_irreflexive_pred2(_First,_Last,_Pred)		\
-  _GLIBCXX_DEBUG_VERIFY(_First == _Last					\
-			||__gnu_debug::__is_irreflexive_pred(_First, _Pred), \
-			_M_message(__gnu_debug::__msg_irreflexive_ordering) \
-			._M_instance(_Pred, "functor")			\
-			._M_iterator_value_type(_First, "ordered type"))
-#else
-# define __glibcxx_check_irreflexive_pred2(_First,_Last,_Pred)
-#endif
 
 #endif

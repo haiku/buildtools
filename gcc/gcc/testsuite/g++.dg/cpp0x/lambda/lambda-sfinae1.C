@@ -8,8 +8,8 @@ struct AddRvalueReferenceImpl { typedef T type; };
 
 template <typename T>
 struct AddRvalueReferenceImpl<T, typename BoolSink<false &&
-      [] {			// { dg-error "lambda" }
-         extern T &&tref;
+      [] {			// { dg-error "lambda" "" { target c++17_down } }
+	extern void tref(T&&);
       }>::type> {
    typedef T &&type;
 };
@@ -19,7 +19,7 @@ struct AddRvalueReference : AddRvalueReferenceImpl<T, void> { };
 
 namespace ImplHelpers {
    template <typename T>
-   typename AddRvalueReference<T>::type create(void) { }
+   typename AddRvalueReference<T>::type create(void);
 }
 
 template <typename T, typename U, typename ...Args>
@@ -27,9 +27,8 @@ struct IsConstructibleImpl { enum { value = 0 }; };
 
 template <typename T, typename ...Args>
 struct IsConstructibleImpl<T, typename BoolSink<false &&
-      [] {			// { dg-error "lambda" }
-         T t( ::ImplHelpers::create<Args>() ...);
-      }>::type, Args ...> {
+      [] { T t( ::ImplHelpers::create<Args>() ...); } // { dg-error "" }
+  >::type, Args ...> {
    enum { value = 1 };
 };
 

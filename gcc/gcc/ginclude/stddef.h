@@ -1,4 +1,4 @@
-/* Copyright (C) 1989-2018 Free Software Foundation, Inc.
+/* Copyright (C) 1989-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -46,21 +46,15 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 /* This avoids lossage on SunOS but only if stdtypes.h comes first.
    There's no way to win with the other order!  Sun lossage.  */
 
-/* On 4.3bsd-net2, make sure ansi.h is included, so we have
-   one less case to deal with in the following.  */
-#if defined (__BSD_NET2__) || defined (____386BSD____) || (defined (__FreeBSD__) && (__FreeBSD__ < 5)) || defined(__NetBSD__)
+#if defined(__NetBSD__)
 #include <machine/ansi.h>
 #endif
-/* On FreeBSD 5, machine/ansi.h does not exist anymore... */
-#if defined (__FreeBSD__) && (__FreeBSD__ >= 5)
+
+#if defined (__FreeBSD__)
 #include <sys/_types.h>
 #endif
 
-/* In 4.3bsd-net2, machine/ansi.h defines these symbols, which are
-   defined if the corresponding type is *not* defined.
-   FreeBSD-2.1 defines _MACHINE_ANSI_H_ instead of _ANSI_H_.
-   NetBSD defines _I386_ANSI_H_ and _X86_64_ANSI_H_ instead of _ANSI_H_ */
-#if defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_) || defined(_X86_64_ANSI_H_)  || defined(_I386_ANSI_H_)
+#if defined(__NetBSD__)
 #if !defined(_SIZE_T_) && !defined(_BSD_SIZE_T_)
 #define _SIZE_T
 #endif
@@ -87,7 +81,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef _WCHAR_T_
 #undef _BSD_WCHAR_T_
 #endif
-#endif /* defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_) || defined(_X86_64_ANSI_H_) || defined(_I386_ANSI_H_) */
+#endif /* defined(__NetBSD__) */
 
 /* Sequent's header files use _PTRDIFF_T_ in some conflicting way.
    Just ignore it.  */
@@ -167,7 +161,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 /* Define this type if we are doing the whole job,
    or if we want this type in particular.  */
 #if defined (_STDDEF_H) || defined (__need_size_t)
-#ifndef __size_t__	/* BeOS, Haiku */
+#ifndef __size_t__	/* BeOS */
 #ifndef __SIZE_T__	/* Cray Unicos/Mk */
 #ifndef _SIZE_T	/* in case <sys/types.h> has defined it. */
 #ifndef _SYS_SIZE_T_H
@@ -184,7 +178,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 #ifndef _GCC_SIZE_T
 #ifndef _SIZET_
 #ifndef __size_t
-#define __size_t__	/* BeOS, Haiku */
+#define __size_t__	/* BeOS */
 #define __SIZE_T__	/* Cray Unicos/Mk */
 #define _SIZE_T
 #define _SYS_SIZE_T_H
@@ -200,12 +194,11 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 #define ___int_size_t_h
 #define _GCC_SIZE_T
 #define _SIZET_
-#if (defined (__FreeBSD__) && (__FreeBSD__ >= 5)) \
+#if defined (__FreeBSD__) \
   || defined(__DragonFly__) \
-  || defined(__FreeBSD_kernel__)
-/* __size_t is a typedef on FreeBSD 5, must not trash it. */
-#elif defined (__VMS__)
-/* __size_t is also a typedef on VMS.  */
+  || defined(__FreeBSD_kernel__) \
+  || defined(__VMS__)
+/* __size_t is a typedef, must not trash it.  */
 #else
 #define __size_t
 #endif
@@ -214,7 +207,7 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 #endif
 #if !(defined (__GNUG__) && defined (size_t))
 typedef __SIZE_TYPE__ size_t;
-#if defined(__BEOS__)
+#ifdef __BEOS__
 typedef long ssize_t;
 #endif /* __BEOS__ */
 #endif /* !(defined (__GNUG__) && defined (size_t)) */
@@ -247,7 +240,7 @@ typedef long ssize_t;
 /* Define this type if we are doing the whole job,
    or if we want this type in particular.  */
 #if defined (_STDDEF_H) || defined (__need_wchar_t)
-#ifndef __wchar_t__	/* BeOS, Haiku */
+#ifndef __wchar_t__	/* BeOS */
 #ifndef __WCHAR_T__	/* Cray Unicos/Mk */
 #ifndef _WCHAR_T
 #ifndef _T_WCHAR_
@@ -264,7 +257,7 @@ typedef long ssize_t;
 #ifndef ___int_wchar_t_h
 #ifndef __INT_WCHAR_T_H
 #ifndef _GCC_WCHAR_T
-#define __wchar_t__	/* BeOS, Haiku */
+#define __wchar_t__	/* BeOS */
 #define __WCHAR_T__	/* Cray Unicos/Mk */
 #define _WCHAR_T
 #define _T_WCHAR_
@@ -359,11 +352,7 @@ typedef __WINT_TYPE__ wint_t;
 #undef __need_wint_t
 #endif
 
-/*  In 4.3bsd-net2, leave these undefined to indicate that size_t, etc.
-    are already defined.  */
-/*  BSD/OS 3.1 and FreeBSD [23].x require the MACHINE_ANSI_H check here.  */
-/*  NetBSD 5 requires the I386_ANSI_H and X86_64_ANSI_H checks here.  */
-#if defined(_ANSI_H_) || defined(_MACHINE_ANSI_H_) || defined(_X86_64_ANSI_H_) || defined(_I386_ANSI_H_)
+#if defined(__NetBSD__)
 /*  The references to _GCC_PTRDIFF_T_, _GCC_SIZE_T_, and _GCC_WCHAR_T_
     are probably typos and should be removed before 2.8 is released.  */
 #ifdef _GCC_PTRDIFF_T_
@@ -391,7 +380,7 @@ typedef __WINT_TYPE__ wint_t;
 #undef _WCHAR_T_
 #undef _BSD_WCHAR_T_
 #endif
-#endif /* _ANSI_H_ || _MACHINE_ANSI_H_ || _X86_64_ANSI_H_ || _I386_ANSI_H_ */
+#endif /* __NetBSD__ */
 
 #endif /* __sys_stdtypes_h */
 

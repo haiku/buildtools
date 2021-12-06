@@ -1,5 +1,5 @@
 /* Basic IPA optimizations and utilities.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -71,9 +71,9 @@ update_inlined_to_pointer (struct cgraph_node *node, struct cgraph_node *inlined
 {
   struct cgraph_edge *e;
   for (e = node->callees; e; e = e->next_callee)
-    if (e->callee->global.inlined_to)
+    if (e->callee->inlined_to)
       {
-        e->callee->global.inlined_to = inlined_to;
+	e->callee->inlined_to = inlined_to;
 	update_inlined_to_pointer (e->callee, inlined_to);
       }
 }
@@ -101,12 +101,32 @@ enqueue_node (symtab_node *node, symtab_node **first,
   *first = node;
 }
 
+/* Return true if NODE may get inlined later.
+   This is used to keep DECL_EXTERNAL function bodies around long enough
+   so inliner can proces them.  */
+
+static bool
+possible_inline_candidate_p (symtab_node *node)
+{
+  if (symtab->state >= IPA_SSA_AFTER_INLINING)
+    return false;
+  cgraph_node *cnode = dyn_cast <cgraph_node *> (node);
+  if (!cnode)
+    return false;
+  if (DECL_UNINLINABLE (cnode->decl))
+    return false;
+  if (opt_for_fn (cnode->decl, optimize))
+    return true;
+  if (symtab->state >= IPA_SSA)
+    return false;
+  return lookup_attribute ("always_inline", DECL_ATTRIBUTES (node->decl));
+}
+
 /* Process references.  */
 
 static void
 process_references (symtab_node *snode,
 		    symtab_node **first,
-		    bool before_inlining_p,
 		    hash_set<symtab_node *> *reachable)
 {
   int i;
@@ -118,27 +138,22 @@ process_references (symtab_node *snode,
 
       if (node->definition && !node->in_other_partition
 	  && ((!DECL_EXTERNAL (node->decl) || node->alias)
-	      || (((before_inlining_p
-		    && (TREE_CODE (node->decl) != FUNCTION_DECL
-			|| (TREE_CODE (node->decl) == FUNCTION_DECL
-			    && opt_for_fn (body->decl, optimize))
-		        || (symtab->state < IPA_SSA
-		            && lookup_attribute
-				 ("always_inline",
-			          DECL_ATTRIBUTES (body->decl))))))
+	      || (possible_inline_candidate_p (node)
 		  /* We use variable constructors during late compilation for
 		     constant folding.  Keep references alive so partitioning
 		     knows about potential references.  */
 		  || (VAR_P (node->decl)
-		      && flag_wpa
-		      && ctor_for_folding (node->decl)
-		         != error_mark_node))))
+		      && (flag_wpa
+			  || flag_incremental_link
+			 	 == INCREMENTAL_LINK_LTO)
+		      && dyn_cast <varpool_node *> (node)
+		      	   ->ctor_useable_for_folding_p ()))))
 	{
 	  /* Be sure that we will not optimize out alias target
 	     body.  */
 	  if (DECL_EXTERNAL (node->decl)
 	      && node->alias
-	      && before_inlining_p)
+	      && symtab->state < IPA_SSA_AFTER_INLINING)
 	    reachable->add (body);
 	  reachable->add (node);
 	}
@@ -158,8 +173,7 @@ static void
 walk_polymorphic_call_targets (hash_set<void *> *reachable_call_targets,
 			       struct cgraph_edge *edge,
 			       symtab_node **first,
-			       hash_set<symtab_node *> *reachable,
-			       bool before_inlining_p)
+			       hash_set<symtab_node *> *reachable)
 {
   unsigned int i;
   void *cache_token;
@@ -188,15 +202,14 @@ walk_polymorphic_call_targets (hash_set<void *> *reachable_call_targets,
 	  /* Prior inlining, keep alive bodies of possible targets for
 	     devirtualization.  */
 	  if (n->definition
-	      && (before_inlining_p
-		  && opt_for_fn (body->decl, optimize)
+	      && (possible_inline_candidate_p (body)
 		  && opt_for_fn (body->decl, flag_devirtualize)))
 	     {
 		/* Be sure that we will not optimize out alias target
 		   body.  */
 		if (DECL_EXTERNAL (n->decl)
 		    && n->alias
-		    && before_inlining_p)
+		    && symtab->state < IPA_SSA_AFTER_INLINING)
 		  reachable->add (body);
 	       reachable->add (n);
 	     }
@@ -223,28 +236,18 @@ walk_polymorphic_call_targets (hash_set<void *> *reachable_call_targets,
 		       (builtin_decl_implicit (BUILT_IN_UNREACHABLE));
 
 	  if (dump_enabled_p ())
-            {
-	      location_t locus;
-	      if (edge->call_stmt)
-		locus = gimple_location (edge->call_stmt);
-	      else
-		locus = UNKNOWN_LOCATION;
-	      dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, locus,
+	    {
+	      dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, edge->call_stmt,
 			       "devirtualizing call in %s to %s\n",
 			       edge->caller->dump_name (),
 			       target->dump_name ());
 	    }
-	  edge = edge->make_direct (target);
+	  edge = cgraph_edge::make_direct (edge, target);
 	  if (ipa_fn_summaries)
-	    ipa_update_overall_fn_summary (node);
+	    ipa_update_overall_fn_summary (node->inlined_to
+					   ? node->inlined_to : node);
 	  else if (edge->call_stmt)
-	    {
-	      edge->redirect_call_stmt_to_callee ();
-
-	      /* Call to __builtin_unreachable shouldn't be instrumented.  */
-	      if (!targets.length ())
-		gimple_call_set_with_bounds (edge->call_stmt, false);
-	    }
+	    cgraph_edge::redirect_call_stmt_to_callee (edge);
 	}
     }
 }
@@ -282,7 +285,7 @@ walk_polymorphic_call_targets (hash_set<void *> *reachable_call_targets,
    - C++ virtual tables keyed to other unit are represented as DECL_EXTERNAL
      variables with DECL_INITIAL set.  We finalize these and keep reachable
      ones around for constant folding purposes.  After inlining we however
-     stop walking their references to let everything static referneced by them
+     stop walking their references to let everything static referenced by them
      to be removed when it is otherwise unreachable.
 
    We maintain queue of both reachable symbols (i.e. defined symbols that needs
@@ -312,8 +315,6 @@ symbol_table::remove_unreachable_nodes (FILE *file)
   hash_set<symtab_node *> reachable;
   hash_set<tree> body_needed_for_clonning;
   hash_set<void *> reachable_call_targets;
-  bool before_inlining_p = symtab->state < (!optimize && !in_lto_p ? IPA_SSA
-					    : IPA_SSA_AFTER_INLINING);
 
   timevar_push (TV_IPA_UNREACHABLE);
   build_type_inheritance_graph ();
@@ -335,11 +336,11 @@ symbol_table::remove_unreachable_nodes (FILE *file)
       node->used_as_abstract_origin = false;
       node->indirect_call_target = false;
       if (node->definition
-	  && !node->global.inlined_to
+	  && !node->inlined_to
 	  && !node->in_other_partition
 	  && !node->can_remove_if_no_direct_calls_and_refs_p ())
 	{
-	  gcc_assert (!node->global.inlined_to);
+	  gcc_assert (!node->inlined_to);
 	  reachable.add (node);
 	  enqueue_node (node, &first, &reachable);
 	}
@@ -390,22 +391,25 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 		      n->used_as_abstract_origin = true;
 		}
 	    }
-	  /* If any symbol in a comdat group is reachable, force
-	     all externally visible symbols in the same comdat
+	  /* If any non-external and non-local symbol in a comdat group is
+ 	     reachable, force all externally visible symbols in the same comdat
 	     group to be reachable as well.  Comdat-local symbols
 	     can be discarded if all uses were inlined.  */
-	  if (node->same_comdat_group)
+	  if (node->same_comdat_group
+	      && node->externally_visible
+	      && !DECL_EXTERNAL (node->decl))
 	    {
 	      symtab_node *next;
 	      for (next = node->same_comdat_group;
 		   next != node;
 		   next = next->same_comdat_group)
 		if (!next->comdat_local_p ()
+		    && !DECL_EXTERNAL (next->decl)
 		    && !reachable.add (next))
 		  enqueue_node (next, &first, &reachable);
 	    }
 	  /* Mark references as reachable.  */
-	  process_references (node, &first, before_inlining_p, &reachable);
+	  process_references (node, &first, &reachable);
 	}
 
       if (cgraph_node *cnode = dyn_cast <cgraph_node *> (node))
@@ -425,8 +429,7 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 		      next = e->next_callee;
 		      if (e->indirect_info->polymorphic)
 			walk_polymorphic_call_targets (&reachable_call_targets,
-						       e, &first, &reachable,
-						       before_inlining_p);
+						       e, &first, &reachable);
 		    }
 		}
 	      for (e = cnode->callees; e; e = e->next_callee)
@@ -437,42 +440,26 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 		      && (!e->inline_failed
 			  || !DECL_EXTERNAL (e->callee->decl)
 			  || e->callee->alias
-			  || (before_inlining_p
-			      && (opt_for_fn (body->decl, optimize)
-		                  || (symtab->state < IPA_SSA
-		                      && lookup_attribute
-				          ("always_inline",
-				           DECL_ATTRIBUTES (body->decl)))))))
+			  || possible_inline_candidate_p (e->callee)))
 		    {
 		      /* Be sure that we will not optimize out alias target
 			 body.  */
 		      if (DECL_EXTERNAL (e->callee->decl)
 			  && e->callee->alias
-			  && before_inlining_p)
+			  && symtab->state < IPA_SSA_AFTER_INLINING)
 			reachable.add (body);
 		      reachable.add (e->callee);
 		    }
+		  else if (e->callee->declare_variant_alt
+			   && !e->callee->in_other_partition)
+		    reachable.add (e->callee);
 		  enqueue_node (e->callee, &first, &reachable);
 		}
 
 	      /* When inline clone exists, mark body to be preserved so when removing
 		 offline copy of the function we don't kill it.  */
-	      if (cnode->global.inlined_to)
+	      if (cnode->inlined_to)
 	        body_needed_for_clonning.add (cnode->decl);
-
-	      /* For instrumentation clones we always need original
-		 function node for proper LTO privatization.  */
-	      if (cnode->instrumentation_clone
-		  && cnode->definition)
-		{
-		  gcc_assert (cnode->instrumented_version || in_lto_p);
-		  if (cnode->instrumented_version)
-		    {
-		      enqueue_node (cnode->instrumented_version, &first,
-				    &reachable);
-		      reachable.add (cnode->instrumented_version);
-		    }
-		}
 
 	      /* For non-inline clones, force their origins to the boundary and ensure
 		 that body is not removed.  */
@@ -488,7 +475,7 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 		}
 
 	    }
-	  else if (cnode->thunk.thunk_p)
+	  else if (cnode->thunk)
 	    enqueue_node (cnode->callees->callee, &first, &reachable);
 
 	  /* If any reachable function has simd clones, mark them as
@@ -538,14 +525,19 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 	  /* We keep definitions of thunks and aliases in the boundary so
 	     we can walk to the ultimate alias targets and function symbols
 	     reliably.  */
-	  if (node->alias || node->thunk.thunk_p)
+	  if (node->alias || node->thunk)
 	    ;
-	  else if (!body_needed_for_clonning.contains (node->decl)
-	      && !node->alias && !node->thunk.thunk_p)
-	    node->release_body ();
+	  else if (!body_needed_for_clonning.contains (node->decl))
+	    {
+	      /* Make the node a non-clone so that we do not attempt to
+		 materialize it later.  */
+	      if (node->clone_of)
+		node->remove_from_clone_tree ();
+	      node->release_body ();
+	    }
 	  else if (!node->clone_of)
 	    gcc_assert (in_lto_p || DECL_RESULT (node->decl));
-	  if (node->definition && !node->alias && !node->thunk.thunk_p)
+	  if (node->definition && !node->alias && !node->thunk)
 	    {
 	      if (file)
 		fprintf (file, " %s", node->dump_name ());
@@ -555,7 +547,7 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 	      node->cpp_implicit_alias = false;
 	      node->alias = false;
 	      node->transparent_alias = false;
-	      node->thunk.thunk_p = false;
+	      node->thunk = false;
 	      node->weakref = false;
 	      /* After early inlining we drop always_inline attributes on
 		 bodies of functions that are still referenced (have their
@@ -564,16 +556,10 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 		= remove_attribute ("always_inline",
 				    DECL_ATTRIBUTES (node->decl));
 	      if (!node->in_other_partition)
-		node->local.local = false;
+		node->local = false;
 	      node->remove_callees ();
 	      node->remove_all_references ();
 	      changed = true;
-	      if (node->thunk.thunk_p
-		  && node->thunk.add_pointer_bounds_args)
-		{
-		  node->thunk.thunk_p = false;
-		  node->thunk.add_pointer_bounds_args = false;
-		}
 	    }
 	}
       else
@@ -586,11 +572,11 @@ symbol_table::remove_unreachable_nodes (FILE *file)
      to turn it into normal cone.  */
   FOR_EACH_FUNCTION (node)
     {
-      if (node->global.inlined_to
+      if (node->inlined_to
 	  && !node->callers)
 	{
 	  gcc_assert (node->clones);
-	  node->global.inlined_to = NULL;
+	  node->inlined_to = NULL;
 	  update_inlined_to_pointer (node, node);
 	}
       node->aux = NULL;
@@ -622,7 +608,7 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 	    fprintf (file, " %s", vnode->dump_name ());
           vnext = next_variable (vnode);
 	  /* Signal removal to the debug machinery.  */
-	  if (! flag_wpa)
+	  if (! flag_wpa || flag_incremental_link == INCREMENTAL_LINK_LTO)
 	    {
 	      vnode->definition = false;
 	      (*debug_hooks->late_global_decl) (vnode->decl);
@@ -636,12 +622,12 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 	  if (vnode->definition)
 	    {
 	      if (file)
-		fprintf (file, " %s", vnode->name ());
+		fprintf (file, " %s", vnode->dump_name ());
 	      changed = true;
 	    }
 	  /* Keep body if it may be useful for constant folding.  */
-	  if ((init = ctor_for_folding (vnode->decl)) == error_mark_node
-	      && !POINTER_BOUNDS_P (vnode->decl))
+	  if ((flag_wpa || flag_incremental_link == INCREMENTAL_LINK_LTO)
+	      || ((init = ctor_for_folding (vnode->decl)) == error_mark_node))
 	    vnode->remove_initializer ();
 	  else
 	    DECL_INITIAL (vnode->decl) = init;
@@ -666,13 +652,10 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 	&& !node->used_from_other_partition)
       {
 	if (!node->call_for_symbol_and_aliases
-	    (has_addr_references_p, NULL, true)
-	    && (!node->instrumentation_clone
-		|| !node->instrumented_version
-		|| !node->instrumented_version->address_taken))
+	    (has_addr_references_p, NULL, true))
 	  {
 	    if (file)
-	      fprintf (file, " %s", node->name ());
+	      fprintf (file, " %s", node->dump_name ());
 	    node->address_taken = false;
 	    changed = true;
 	    if (node->local_p ()
@@ -680,11 +663,11 @@ symbol_table::remove_unreachable_nodes (FILE *file)
 		   of possible later devirtualization.  Do not mark them as
 		   local too early so we won't optimize them out before
 		   we are done with polymorphic call analysis.  */
-		&& (!before_inlining_p
+		&& (symtab->state >= IPA_SSA_AFTER_INLINING
 		    || !node->call_for_symbol_and_aliases
 		       (is_indirect_call_target_p, NULL, true)))
 	      {
-		node->local.local = true;
+		node->local = true;
 		if (file)
 		  fprintf (file, " (local)");
 	      }
@@ -737,8 +720,6 @@ process_references (varpool_node *vnode,
 	process_references (dyn_cast<varpool_node *> (ref->referring), written,
 			    address_taken, read, explicit_refs);
 	break;
-      case IPA_REF_CHKP:
-	gcc_unreachable ();
       }
 }
 
@@ -780,20 +761,23 @@ clear_addressable_bit (varpool_node *vnode, void *data ATTRIBUTE_UNUSED)
   return false;
 }
 
-/* Discover variables that have no longer address taken or that are read only
-   and update their flags.
+/* Discover variables that have no longer address taken, are read-only or
+   write-only and update their flags.
 
-   Return true when unreachable symbol removan should be done.
+   Return true when unreachable symbol removal should be done.
 
-   FIXME: This can not be done in between gimplify and omp_expand since
+   FIXME: This cannot be done in between gimplify and omp_expand since
    readonly flag plays role on what is shared and what is not.  Currently we do
    this transformation as part of whole program visibility and re-do at
    ipa-reference pass (to take into account clonning), but it would
    make sense to do it before early optimizations.  */
 
 bool
-ipa_discover_readonly_nonaddressable_vars (void)
+ipa_discover_variable_flags (void)
 {
+  if (!flag_ipa_reference_addressable)
+    return false;
+
   bool remove_p = false;
   varpool_node *vnode;
   if (dump_file)
@@ -816,7 +800,8 @@ ipa_discover_readonly_nonaddressable_vars (void)
 	if (!address_taken)
 	  {
 	    if (TREE_ADDRESSABLE (vnode->decl) && dump_file)
-	      fprintf (dump_file, " %s (non-addressable)", vnode->name ());
+	      fprintf (dump_file, " %s (non-addressable)",
+		       vnode->dump_name ());
 	    vnode->call_for_symbol_and_aliases (clear_addressable_bit, NULL,
 					        true);
 	  }
@@ -827,13 +812,13 @@ ipa_discover_readonly_nonaddressable_vars (void)
 	    && vnode->get_section () == NULL)
 	  {
 	    if (!TREE_READONLY (vnode->decl) && dump_file)
-	      fprintf (dump_file, " %s (read-only)", vnode->name ());
+	      fprintf (dump_file, " %s (read-only)", vnode->dump_name ());
 	    vnode->call_for_symbol_and_aliases (set_readonly_bit, NULL, true);
 	  }
 	if (!vnode->writeonly && !read && !address_taken && written)
 	  {
 	    if (dump_file)
-	      fprintf (dump_file, " %s (write-only)", vnode->name ());
+	      fprintf (dump_file, " %s (write-only)", vnode->dump_name ());
 	    vnode->call_for_symbol_and_aliases (set_writeonly_bit, &remove_p, 
 					        true);
 	  }
@@ -844,9 +829,8 @@ ipa_discover_readonly_nonaddressable_vars (void)
 }
 
 /* Generate and emit a static constructor or destructor.  WHICH must
-   be one of 'I' (for a constructor), 'D' (for a destructor), 'P'
-   (for chp static vars constructor) or 'B' (for chkp static bounds
-   constructor).  BODY is a STATEMENT_LIST containing GENERIC
+   be one of 'I' (for a constructor), 'D' (for a destructor).
+   BODY is a STATEMENT_LIST containing GENERIC
    statements.  PRIORITY is the initialization priority for this
    constructor or destructor.
 
@@ -865,13 +849,18 @@ cgraph_build_static_cdtor_1 (char which, tree body, int priority, bool final,
   /* The priority is encoded in the constructor or destructor name.
      collect2 will sort the names and arrange that they are called at
      program startup.  */
-  if (final)
-    sprintf (which_buf, "%c_%.5d_%d", which, priority, counter++);
+  if (!targetm.have_ctors_dtors && final)
+    {
+      sprintf (which_buf, "%c_%.5d_%d", which, priority, counter++);
+      name = get_file_function_name (which_buf);
+    }
   else
-  /* Proudce sane name but one not recognizable by collect2, just for the
-     case we fail to inline the function.  */
-    sprintf (which_buf, "sub_%c_%.5d_%d", which, priority, counter++);
-  name = get_file_function_name (which_buf);
+    {
+      /* Proudce sane name but one not recognizable by collect2, just for the
+	 case we fail to inline the function.  */
+      sprintf (which_buf, "_sub_%c_%.5d_%d", which, priority, counter++);
+      name = get_identifier (which_buf);
+    }
 
   decl = build_decl (input_location, FUNCTION_DECL, name,
 		     build_function_type_list (void_type_node, NULL_TREE));
@@ -913,20 +902,6 @@ cgraph_build_static_cdtor_1 (char which, tree body, int priority, bool final,
       DECL_STATIC_CONSTRUCTOR (decl) = 1;
       decl_init_priority_insert (decl, priority);
       break;
-    case 'P':
-      DECL_STATIC_CONSTRUCTOR (decl) = 1;
-      DECL_ATTRIBUTES (decl) = tree_cons (get_identifier ("chkp ctor"),
-					  NULL,
-					  NULL_TREE);
-      decl_init_priority_insert (decl, priority);
-      break;
-    case 'B':
-      DECL_STATIC_CONSTRUCTOR (decl) = 1;
-      DECL_ATTRIBUTES (decl) = tree_cons (get_identifier ("bnd_legacy"),
-					  NULL,
-					  NULL_TREE);
-      decl_init_priority_insert (decl, priority);
-      break;
     case 'D':
       DECL_STATIC_DESTRUCTOR (decl) = 1;
       decl_fini_priority_insert (decl, priority);
@@ -944,16 +919,22 @@ cgraph_build_static_cdtor_1 (char which, tree body, int priority, bool final,
 }
 
 /* Generate and emit a static constructor or destructor.  WHICH must
-   be one of 'I' (for a constructor), 'D' (for a destructor), 'P'
-   (for chkp static vars constructor) or 'B' (for chkp static bounds
-   constructor).  BODY is a STATEMENT_LIST containing GENERIC
+   be one of 'I' (for a constructor) or 'D' (for a destructor).
+   BODY is a STATEMENT_LIST containing GENERIC
    statements.  PRIORITY is the initialization priority for this
    constructor or destructor.  */
 
 void
 cgraph_build_static_cdtor (char which, tree body, int priority)
 {
-  cgraph_build_static_cdtor_1 (which, body, priority, false, NULL, NULL);
+  /* FIXME: We should be able to
+     gcc_assert (!in_lto_p);
+     because at LTO time the global options are not safe to use.
+     Unfortunately ASAN finish_file will produce constructors late and they
+     may lead to surprises.  */
+  cgraph_build_static_cdtor_1 (which, body, priority, false,
+			       optimization_default_node,
+			       target_option_default_node);
 }
 
 /* When target does not have ctors and dtors, we call all constructor
@@ -1251,8 +1232,8 @@ propagate_single_user (varpool_node *vnode, cgraph_node *function,
       struct cgraph_node *cnode = dyn_cast <cgraph_node *> (ref->referring);
       if (cnode)
 	{
-	  if (cnode->global.inlined_to)
-	    cnode = cnode->global.inlined_to;
+	  if (cnode->inlined_to)
+	    cnode = cnode->inlined_to;
 	  if (!function)
 	    function = cnode;
 	  else if (function != cnode)
@@ -1405,43 +1386,3 @@ make_pass_ipa_single_use (gcc::context *ctxt)
   return new pass_ipa_single_use (ctxt);
 }
 
-/* Materialize all clones.  */
-
-namespace {
-
-const pass_data pass_data_materialize_all_clones =
-{
-  SIMPLE_IPA_PASS, /* type */
-  "materialize-all-clones", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_IPA_OPT, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_materialize_all_clones : public simple_ipa_opt_pass
-{
-public:
-  pass_materialize_all_clones (gcc::context *ctxt)
-    : simple_ipa_opt_pass (pass_data_materialize_all_clones, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual unsigned int execute (function *)
-    {
-      symtab->materialize_all_clones ();
-      return 0;
-    }
-
-}; // class pass_materialize_all_clones
-
-} // anon namespace
-
-simple_ipa_opt_pass *
-make_pass_materialize_all_clones (gcc::context *ctxt)
-{
-  return new pass_materialize_all_clones (ctxt);
-}

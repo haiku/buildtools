@@ -1,6 +1,6 @@
 // Iostreams base classes -*- C++ -*-
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -114,6 +114,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __ios_failure(const char* s) : failure(s)
     { __construct_ios_failure(buf, runtime_error::what()); }
 
+    __ios_failure(const char* s, const error_code& e) : failure(s, e)
+    { __construct_ios_failure(buf, runtime_error::what()); }
+
     ~__ios_failure()
     { __destroy_ios_failure(buf); }
 
@@ -160,6 +163,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   void
   __throw_ios_failure(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(__ios_failure(_(__s))); }
+
+  void
+  __throw_ios_failure(const char* str __attribute__((unused)),
+		      int err __attribute__((unused)))
+  {
+    _GLIBCXX_THROW_OR_ABORT(__ios_failure(_(str),
+	  err ? error_code(err, generic_category()) : io_errc::stream));
+  }
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

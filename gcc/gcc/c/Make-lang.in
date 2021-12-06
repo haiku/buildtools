@@ -1,5 +1,5 @@
 # Top level -*- makefile -*- fragment for GNU C - C language.
-# Copyright (C) 1994-2018 Free Software Foundation, Inc.
+# Copyright (C) 1994-2021 Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -37,6 +37,7 @@
 #
 # Define the names for selecting c in LANGUAGES.
 c: cc1$(exeext)
+c.serial = cc1$(exeext)
 
 # Tell GNU make to ignore these if they exist.
 .PHONY: c gcc
@@ -82,8 +83,10 @@ cc1-checksum.c : build/genchecksum$(build_exeext) checksum-options \
 	fi
 
 cc1$(exeext): $(C_OBJS) cc1-checksum.o $(BACKEND) $(LIBDEPS)
+	@$(call LINK_PROGRESS,$(INDEX.c),start)
 	+$(LLINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) -o $@ $(C_OBJS) \
 	  cc1-checksum.o $(BACKEND) $(LIBS) $(BACKENDLIBS)
+	@$(call LINK_PROGRESS,$(INDEX.c),end)
 
 cc1.fda: ../stage1-gcc/cc1$(exeext) ../prev-gcc/$(PERF_DATA)
 	$(CREATE_GCOV) -binary ../stage1-gcc/cc1$(exeext) -gcov cc1.fda -profile ../prev-gcc/$(PERF_DATA) -gcov_version 1
@@ -110,6 +113,38 @@ c.tags: force
 c.man:
 c.srcman:
 
+# C selftests
+
+# If C is enabled, require the selftests to be run for it
+# at each stage of the build:
+selftest-c: s-selftest-c
+
+C_SELFTEST_FLAGS = -xc $(SELFTEST_FLAGS)
+C_SELFTEST_DEPS = cc1$(exeext) $(SELFTEST_DEPS)
+
+# Run the C selftests:
+s-selftest-c: $(C_SELFTEST_DEPS)
+	$(GCC_FOR_TARGET) $(C_SELFTEST_FLAGS)
+	$(STAMP) $@
+
+# Convenience methods for running C selftests under gdb:
+.PHONY: selftest-c-gdb
+selftest-c-gdb: $(C_SELFTEST_DEPS)
+	$(GCC_FOR_TARGET) $(C_SELFTEST_FLAGS) \
+	  -wrapper gdb,--args
+
+.PHONY: selftest-gdb
+selftest-gdb: selftest-c-gdb
+
+# Convenience methods for running C selftests under valgrind:
+.PHONY: selftest-c-valgrind
+selftest-c-valgrind: $(C_SELFTEST_DEPS)
+	$(GCC_FOR_TARGET) $(C_SELFTEST_FLAGS) \
+	  -wrapper valgrind,--leak-check=full
+
+.PHONY: selftest-valgrind
+selftest-valgrind: selftest-c-valgrind
+
 # List of targets that can use the generic check- rule and its // variant.
 lang_checks += check-gcc
 lang_checks_parallelized += check-gcc
@@ -130,7 +165,7 @@ c.install-plugin: installdirs
 # Install import library.
 ifeq ($(plugin_implib),yes)
 	$(mkinstalldirs) $(DESTDIR)$(plugin_resourcesdir)
-	$(INSTALL_DATA) cc1$(exeext).a $(DESTDIR)/$(plugin_resourcesdir)/cc1$(exeext).a
+	$(INSTALL_DATA) cc1$(exeext).a $(DESTDIR)$(plugin_resourcesdir)/cc1$(exeext).a
 endif
 
 c.uninstall:

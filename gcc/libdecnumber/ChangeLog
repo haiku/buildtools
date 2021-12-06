@@ -1,14 +1,70 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
 
-2018-07-26  Release Manager
+2021-04-27  Release Manager
 
-	* GCC 8.2.0 released.
+	* GCC 11.1.0 released.
 
-2018-05-02  Release Manager
+2020-07-30  H.J. Lu  <hjl.tools@gmail.com>
 
-	* GCC 8.1.0 released.
+	PR bootstrap/96202
+	* configure: Regenerated.
+
+2020-05-29  H.J. Lu  <hjl.tools@gmail.com>
+
+	PR bootstrap/95413
+	* configure: Regenerated.
+
+2020-05-23  David Edelsohn  <dje.gcc@gmail.com>
+
+	* Makefile.in (AR): Substitute @AR@.
+	* configure.ac (CHECK_PROG AR): New.
+	* configure: Regenerate.
+
+2020-05-14  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* configure: Regenerated.
+
+2020-05-12  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* Makefile.in (CET_HOST_FLAGS): New.
+	(COMPILER): Add $(CET_HOST_FLAGS).
+	* configure.ac: Add GCC_CET_HOST_FLAGS(CET_HOST_FLAGS) and
+	AC_SUBST(CET_HOST_FLAGS).  Clear CET_HOST_FLAGS if jit isn't
+	enabled.
+	* aclocal.m4: Regenerated.
+	* configure: Likewise.
+
+2020-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2019-12-09  Joseph Myers  <joseph@codesourcery.com>
+
+	PR middle-end/91226
+	* bid/bid2dpd_dpd2bid.c (_bid_to_dpd64): Handle non-canonical
+	significands.
+	(_bid_to_dpd128): Likewise.  Check for case where combination
+	field starts 1100, 1101 or 1110.
+
+2019-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2018-10-31  Joseph Myers  <joseph@codesourcery.com>
+
+	PR bootstrap/82856
+	Merge from binutils-gdb:
+	2018-06-19  Simon Marchi  <simon.marchi@ericsson.com>
+
+	* configure.ac: Remove AC_PREREQ.
+	* configure: Re-generate.
+	* aclocal.m4.
+
+2018-07-05  James Clarke  <jrtc27@jrtc27.com>
+
+	* configure: Regenerated.
 
 2018-02-19  Martin Liska  <mliska@suse.cz>
 
@@ -282,7 +338,7 @@
 
 2009-04-01  Ben Elliston  <bje@au.ibm.com>
 
-        * decContext.h: Include gstdint.h instead of <stdint.h>.
+	* decContext.h: Include gstdint.h instead of <stdint.h>.
 
 2009-03-30  Ben Elliston  <bje@au.ibm.com>
 
@@ -629,11 +685,11 @@
 
 2006-01-02  Paolo Bonzini  <bonzini@gnu.org>
 
-        PR target/25259
-        * configure.ac: Use GCC_HEADER_STDINT.
-        * decContext.h: Include gstdint.h.
-        * aclocal.m4: Regenerate.
-        * configure: Regenerate.
+	PR target/25259
+	* configure.ac: Use GCC_HEADER_STDINT.
+	* decContext.h: Include gstdint.h.
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
 
 2005-12-20  Roger Sayle  <roger@eyesopen.com>
 
@@ -689,14 +745,14 @@
 2005-11-29  Ben Elliston  <bje@au.ibm.com>
 
 	* decimal32.h, decimal64.h, decimal128.h: New.
-        * decimal32.c, decimal64.c, decimal128.c: Likewise.
+	* decimal32.c, decimal64.c, decimal128.c: Likewise.
 	* decContext.c, decContext.h: Likewise.
 	* decUtility.c, decUtility.h: Likewise.
 	* decNumber.c, decNumber.h, decNumberLocal.h: Likewise.
 	* decDPD.h: Likewise.
 	* decLibrary.c, decRound.c: Likewise.
 
-Copyright (C) 2005-2018 Free Software Foundation, Inc.
+Copyright (C) 2005-2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

@@ -1,4 +1,4 @@
-dnl   Copyright (C) 2014-2018 Free Software Foundation, Inc.
+dnl   Copyright (C) 2014-2021 Free Software Foundation, Inc.
 dnl
 dnl This file is part of GCC.
 dnl
@@ -16,7 +16,6 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with GCC; see the file COPYING3.  If not see
 dnl <http://www.gnu.org/licenses/>.
 
-AC_PREREQ(2.64)
 AC_INIT([libcc1], [version-unused])
 AC_CONFIG_SRCDIR([libcc1.cc])
 AC_CONFIG_HEADER(cc1plugin-config.h)
@@ -45,6 +44,9 @@ if test "$GXX" = yes; then
   visibility=-fvisibility=hidden
 fi
 AC_SUBST(visibility)
+
+GCC_CET_HOST_FLAGS(CET_HOST_FLAGS)
+AC_SUBST(CET_HOST_FLAGS)
 
 AC_CHECK_DECLS([basename])
 
@@ -101,6 +103,12 @@ AC_CACHE_CHECK([for socket libraries], libcc1_cv_lib_sockets,
    LIBS=$libcc1_old_libs
 ])
 LIBS="$LIBS $libcc1_cv_lib_sockets"
+
+case "$host" in
+  *-*-darwin*) darwin_dynamic_lookup=yes ;;
+  *) darwin_dynamic_lookup=no ;;
+esac
+AM_CONDITIONAL(DARWIN_DYNAMIC_LOOKUP, test $darwin_dynamic_lookup = yes)
 
 # If any of these functions are missing, simply don't bother building
 # this plugin.

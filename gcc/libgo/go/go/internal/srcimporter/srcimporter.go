@@ -13,8 +13,13 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	exec "internal/execabs"
+	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	_ "unsafe" // for go:linkname
 )
 
 // An Importer provides the context for importing packages from source code.
@@ -113,7 +118,6 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	var firstHardErr error
 	conf := types.Config{
 		IgnoreFuncBodies: true,
-		FakeImportC:      true,
 		// continue type-checking after the first error
 		Error: func(err error) {
 			if firstHardErr == nil && !err.(types.Error).Soft {
@@ -123,6 +127,21 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		Importer: p,
 		Sizes:    p.sizes,
 	}
+	if len(bp.CgoFiles) > 0 {
+		if p.ctxt.OpenFile != nil {
+			// cgo, gcc, pkg-config, etc. do not support
+			// build.Context's VFS.
+			conf.FakeImportC = true
+		} else {
+			setUsesCgo(&conf)
+			file, err := p.cgo(bp)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, file)
+		}
+	}
+
 	pkg, err = conf.Check(bp.ImportPath, p.fset, files, nil)
 	if err != nil {
 		// If there was a hard error it is possibly unsafe
@@ -144,7 +163,11 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 }
 
 func (p *Importer) parseFiles(dir string, filenames []string) ([]*ast.File, error) {
-	open := p.ctxt.OpenFile // possibly nil
+	// use build.Context's OpenFile if there is one
+	open := p.ctxt.OpenFile
+	if open == nil {
+		open = func(name string) (io.ReadCloser, error) { return os.Open(name) }
+	}
 
 	files := make([]*ast.File, len(filenames))
 	errors := make([]error, len(filenames))
@@ -154,22 +177,13 @@ func (p *Importer) parseFiles(dir string, filenames []string) ([]*ast.File, erro
 	for i, filename := range filenames {
 		go func(i int, filepath string) {
 			defer wg.Done()
-			if open != nil {
-				src, err := open(filepath)
-				if err != nil {
-					errors[i] = fmt.Errorf("opening package file %s failed (%v)", filepath, err)
-					return
-				}
-				files[i], errors[i] = parser.ParseFile(p.fset, filepath, src, 0)
-				src.Close() // ignore Close error - parsing may have succeeded which is all we need
-			} else {
-				// Special-case when ctxt doesn't provide a custom OpenFile and use the
-				// parser's file reading mechanism directly. This appears to be quite a
-				// bit faster than opening the file and providing an io.ReaderCloser in
-				// both cases.
-				// TODO(gri) investigate performance difference (issue #19281)
-				files[i], errors[i] = parser.ParseFile(p.fset, filepath, nil, 0)
+			src, err := open(filepath)
+			if err != nil {
+				errors[i] = err // open provides operation and filename in error
+				return
 			}
+			files[i], errors[i] = parser.ParseFile(p.fset, filepath, src, 0)
+			src.Close() // ignore Close error - parsing may have succeeded which is all we need
 		}(i, p.joinPath(dir, filename))
 	}
 	wg.Wait()
@@ -182,6 +196,47 @@ func (p *Importer) parseFiles(dir string, filenames []string) ([]*ast.File, erro
 	}
 
 	return files, nil
+}
+
+func (p *Importer) cgo(bp *build.Package) (*ast.File, error) {
+	tmpdir, err := os.MkdirTemp("", "srcimporter")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmpdir)
+
+	args := []string{"go", "tool", "cgo", "-objdir", tmpdir}
+	if bp.Goroot {
+		switch bp.ImportPath {
+		case "runtime/cgo":
+			args = append(args, "-import_runtime_cgo=false", "-import_syscall=false")
+		case "runtime/race":
+			args = append(args, "-import_syscall=false")
+		}
+	}
+	args = append(args, "--")
+	args = append(args, strings.Fields(os.Getenv("CGO_CPPFLAGS"))...)
+	args = append(args, bp.CgoCPPFLAGS...)
+	if len(bp.CgoPkgConfig) > 0 {
+		cmd := exec.Command("pkg-config", append([]string{"--cflags"}, bp.CgoPkgConfig...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, strings.Fields(string(out))...)
+	}
+	args = append(args, "-I", tmpdir)
+	args = append(args, strings.Fields(os.Getenv("CGO_CFLAGS"))...)
+	args = append(args, bp.CgoCFLAGS...)
+	args = append(args, bp.CgoFiles...)
+
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = bp.Dir
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+
+	return parser.ParseFile(p.fset, filepath.Join(tmpdir, "_cgo_gotypes.go"), nil, 0)
 }
 
 // context-controlled file system operations
@@ -205,3 +260,6 @@ func (p *Importer) joinPath(elem ...string) string {
 	}
 	return filepath.Join(elem...)
 }
+
+//go:linkname setUsesCgo go_1types.srcimporter__setUsesCgo
+func setUsesCgo(conf *types.Config)

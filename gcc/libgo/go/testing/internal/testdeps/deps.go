@@ -46,10 +46,6 @@ func (TestDeps) StopCPUProfile() {
 	pprof.StopCPUProfile()
 }
 
-func (TestDeps) WriteHeapProfile(w io.Writer) error {
-	return pprof.WriteHeapProfile(w)
-}
-
 func (TestDeps) WriteProfileTo(name string, w io.Writer, debug int) error {
 	return pprof.Lookup(name).WriteTo(w, debug)
 }
@@ -102,7 +98,6 @@ func (l *testLog) add(op, name string) {
 }
 
 var log testLog
-var didSetLogger bool
 
 func (TestDeps) StartTestLog(w io.Writer) {
 	log.mu.Lock()
@@ -125,4 +120,9 @@ func (TestDeps) StopTestLog() error {
 	err := log.w.Flush()
 	log.w = nil
 	return err
+}
+
+// SetPanicOnExit0 tells the os package whether to panic on os.Exit(0).
+func (TestDeps) SetPanicOnExit0(v bool) {
+	testlog.SetPanicOnExit0(v)
 }

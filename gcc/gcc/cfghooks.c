@@ -1,5 +1,5 @@
 /* Hooks for cfg representation specific functions.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <s.pop@laposte.net>
 
 This file is part of GCC.
@@ -31,6 +31,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfganal.h"
 #include "tree-ssa.h"
 #include "cfgloop.h"
+
+/* Disable warnings about missing quoting in GCC diagnostics.  */
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat-diag"
+#endif
 
 /* A pointer to one of the hooks containers.  */
 static struct cfg_hooks *cfg_hooks;
@@ -147,7 +153,7 @@ verify_flow_info (void)
 	  err = 1;
 	}
       /* FIXME: Graphite and SLJL and target code still tends to produce
-	 edges with no probablity.  */
+	 edges with no probability.  */
       if (profile_status_for_fn (cfun) >= PROFILE_GUESSED
           && !bb->count.initialized_p () && !flag_graphite && 0)
 	{
@@ -164,7 +170,7 @@ verify_flow_info (void)
 	      err = 1;
 	    }
 	  /* FIXME: Graphite and SLJL and target code still tends to produce
-	     edges with no probablity.  */
+	     edges with no probability.  */
 	  if (profile_status_for_fn (cfun) >= PROFILE_GUESSED
 	      && !e->probability.initialized_p () && !flag_graphite && 0)
 	    {
@@ -253,8 +259,6 @@ verify_flow_info (void)
 	err = 1;
       }
 
-  last_bb_seen = ENTRY_BLOCK_PTR_FOR_FN (cfun);
-
   /* Clean up.  */
   free (last_visited);
   free (edge_checksum);
@@ -288,7 +292,7 @@ dump_bb (FILE *outf, basic_block bb, int indent, dump_flags_t flags)
 DEBUG_FUNCTION void
 debug (basic_block_def &ref)
 {
-  dump_bb (stderr, &ref, 0, 0);
+  dump_bb (stderr, &ref, 0, TDF_NONE);
 }
 
 DEBUG_FUNCTION void
@@ -492,7 +496,7 @@ redirect_edge_and_branch_force (edge e, basic_block dest)
     {
       if (ret != NULL)
 	{
-	  struct loop *loop
+	  class loop *loop
 	    = find_common_loop (single_pred (ret)->loop_father,
 				single_succ (ret)->loop_father);
 	  add_bb_to_loop (ret, loop);
@@ -600,7 +604,7 @@ delete_basic_block (basic_block bb)
 
   if (current_loops != NULL)
     {
-      struct loop *loop = bb->loop_father;
+      class loop *loop = bb->loop_father;
 
       /* If we remove the header or the latch of a loop, mark the loop for
 	 removal.  */
@@ -636,7 +640,8 @@ split_edge (edge e)
   profile_count count = e->count ();
   edge f;
   bool irr = (e->flags & EDGE_IRREDUCIBLE_LOOP) != 0;
-  struct loop *loop;
+  bool back = (e->flags & EDGE_DFS_BACK) != 0;
+  class loop *loop;
   basic_block src = e->src, dest = e->dest;
 
   if (!cfg_hooks->split_edge)
@@ -654,6 +659,11 @@ split_edge (edge e)
       ret->flags |= BB_IRREDUCIBLE_LOOP;
       single_pred_edge (ret)->flags |= EDGE_IRREDUCIBLE_LOOP;
       single_succ_edge (ret)->flags |= EDGE_IRREDUCIBLE_LOOP;
+    }
+  if (back)
+    {
+      single_pred_edge (ret)->flags &= ~EDGE_DFS_BACK;
+      single_succ_edge (ret)->flags |= EDGE_DFS_BACK;
     }
 
   if (dom_info_available_p (CDI_DOMINATORS))
@@ -866,7 +876,7 @@ make_forwarder_block (basic_block bb, bool (*redirect_edge_p) (edge),
   edge e, fallthru;
   edge_iterator ei;
   basic_block dummy, jump;
-  struct loop *loop, *ploop, *cloop;
+  class loop *loop, *ploop, *cloop;
 
   if (!cfg_hooks->make_forwarder_block)
     internal_error ("%s does not support make_forwarder_block",
@@ -1031,7 +1041,7 @@ force_nonfallthru (edge e)
 	{
 	  basic_block pred = single_pred (ret);
 	  basic_block succ = single_succ (ret);
-	  struct loop *loop
+	  class loop *loop
 	    = find_common_loop (pred->loop_father, succ->loop_father);
 	  rescan_loop_exit (e, false, true);
 	  add_bb_to_loop (ret, loop);
@@ -1066,7 +1076,7 @@ can_duplicate_block_p (const_basic_block bb)
    AFTER.  */
 
 basic_block
-duplicate_block (basic_block bb, edge e, basic_block after)
+duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
 {
   edge s, n;
   basic_block new_bb;
@@ -1082,7 +1092,7 @@ duplicate_block (basic_block bb, edge e, basic_block after)
 
   gcc_checking_assert (can_duplicate_block_p (bb));
 
-  new_bb = cfg_hooks->duplicate_block (bb);
+  new_bb = cfg_hooks->duplicate_block (bb, id);
   if (after)
     move_block_after (new_bb, after);
 
@@ -1114,8 +1124,8 @@ duplicate_block (basic_block bb, edge e, basic_block after)
      of BB if the loop is not being copied.  */
   if (current_loops != NULL)
     {
-      struct loop *cloop = bb->loop_father;
-      struct loop *copy = get_loop_copy (cloop);
+      class loop *cloop = bb->loop_father;
+      class loop *copy = get_loop_copy (cloop);
       /* If we copied the loop header block but not the loop
 	 we have created a loop with multiple entries.  Ditch the loop,
 	 add the new block to the outer loop and arrange for a fixup.  */
@@ -1224,7 +1234,7 @@ lv_flush_pending_stmts (edge e)
    a need to call the tree_duplicate_loop_to_header_edge rather
    than duplicate_loop_to_header_edge when we are in tree mode.  */
 bool
-cfg_hook_duplicate_loop_to_header_edge (struct loop *loop, edge e,
+cfg_hook_duplicate_loop_to_header_edge (class loop *loop, edge e,
 					unsigned int ndupl,
 					sbitmap wont_exit, edge orig,
 					vec<edge> *to_remove,
@@ -1332,11 +1342,12 @@ end:
 void
 copy_bbs (basic_block *bbs, unsigned n, basic_block *new_bbs,
 	  edge *edges, unsigned num_edges, edge *new_edges,
-	  struct loop *base, basic_block after, bool update_dominance)
+	  class loop *base, basic_block after, bool update_dominance)
 {
   unsigned i, j;
   basic_block bb, new_bb, dom_bb;
   edge e;
+  copy_bb_data id;
 
   /* Mark the blocks to be copied.  This is used by edge creation hooks
      to decide whether to reallocate PHI nodes capacity to avoid reallocating
@@ -1349,7 +1360,7 @@ copy_bbs (basic_block *bbs, unsigned n, basic_block *new_bbs,
     {
       /* Duplicate.  */
       bb = bbs[i];
-      new_bb = new_bbs[i] = duplicate_block (bb, NULL, after);
+      new_bb = new_bbs[i] = duplicate_block (bb, NULL, after, &id);
       after = new_bb;
       if (bb->loop_father)
 	{
@@ -1380,8 +1391,6 @@ copy_bbs (basic_block *bbs, unsigned n, basic_block *new_bbs,
     }
 
   /* Redirect edges.  */
-  for (j = 0; j < num_edges; j++)
-    new_edges[j] = NULL;
   for (i = 0; i < n; i++)
     {
       edge_iterator ei;
@@ -1390,13 +1399,24 @@ copy_bbs (basic_block *bbs, unsigned n, basic_block *new_bbs,
 
       FOR_EACH_EDGE (e, ei, new_bb->succs)
 	{
-	  for (j = 0; j < num_edges; j++)
-	    if (edges[j] && edges[j]->src == bb && edges[j]->dest == e->dest)
-	      new_edges[j] = e;
-
 	  if (!(e->dest->flags & BB_DUPLICATED))
 	    continue;
 	  redirect_edge_and_branch_force (e, get_bb_copy (e->dest));
+	}
+    }
+  for (j = 0; j < num_edges; j++)
+    {
+      if (!edges[j])
+	new_edges[j] = NULL;
+      else
+	{
+	  basic_block src = edges[j]->src;
+	  basic_block dest = edges[j]->dest;
+	  if (src->flags & BB_DUPLICATED)
+	    src = get_bb_copy (src);
+	  if (dest->flags & BB_DUPLICATED)
+	    dest = get_bb_copy (dest);
+	  new_edges[j] = find_edge (src, dest);
 	}
     }
 
@@ -1425,11 +1445,10 @@ split_block_before_cond_jump (basic_block bb)
 
 /* Work-horse for passes.c:check_profile_consistency.
    Do book-keeping of the CFG for the profile consistency checker.
-   If AFTER_PASS is 0, do pre-pass accounting, or if AFTER_PASS is 1
-   then do post-pass accounting.  Store the counting in RECORD.  */
+   Store the counting in RECORD.  */
 
 void
-account_profile_record (struct profile_record *record, int after_pass)
+profile_record_check_consistency (profile_record *record)
 {
   basic_block bb;
   edge_iterator ei;
@@ -1445,26 +1464,53 @@ account_profile_record (struct profile_record *record, int after_pass)
 	    sum += e->probability;
 	  if (EDGE_COUNT (bb->succs)
 	      && sum.differs_from_p (profile_probability::always ()))
-	    record->num_mismatched_freq_out[after_pass]++;
+	    record->num_mismatched_freq_out++;
 	  profile_count lsum = profile_count::zero ();
 	  FOR_EACH_EDGE (e, ei, bb->succs)
 	    lsum += e->count ();
 	  if (EDGE_COUNT (bb->succs) && (lsum.differs_from_p (bb->count)))
-	    record->num_mismatched_count_out[after_pass]++;
+	    record->num_mismatched_count_out++;
 	}
       if (bb != ENTRY_BLOCK_PTR_FOR_FN (cfun)
 	  && profile_status_for_fn (cfun) != PROFILE_ABSENT)
 	{
+	  profile_probability sum = profile_probability::never ();
 	  profile_count lsum = profile_count::zero ();
 	  FOR_EACH_EDGE (e, ei, bb->preds)
-	    lsum += e->count ();
+	    {
+	      sum += e->probability;
+	      lsum += e->count ();
+	    }
+	  if (EDGE_COUNT (bb->preds)
+	      && sum.differs_from_p (profile_probability::always ()))
+	    record->num_mismatched_freq_in++;
 	  if (lsum.differs_from_p (bb->count))
-	    record->num_mismatched_count_in[after_pass]++;
+	    record->num_mismatched_count_in++;
 	}
       if (bb == ENTRY_BLOCK_PTR_FOR_FN (cfun)
 	  || bb == EXIT_BLOCK_PTR_FOR_FN (cfun))
 	continue;
       gcc_assert (cfg_hooks->account_profile_record);
-      cfg_hooks->account_profile_record (bb, after_pass, record);
+      cfg_hooks->account_profile_record (bb, record);
    }
 }
+
+/* Work-horse for passes.c:acount_profile.
+   Do book-keeping of the CFG for the profile accounting.
+   Store the counting in RECORD.  */
+
+void
+profile_record_account_profile (profile_record *record)
+{
+  basic_block bb;
+
+  FOR_ALL_BB_FN (bb, cfun)
+   {
+      gcc_assert (cfg_hooks->account_profile_record);
+      cfg_hooks->account_profile_record (bb, record);
+   }
+}
+
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic pop
+#endif

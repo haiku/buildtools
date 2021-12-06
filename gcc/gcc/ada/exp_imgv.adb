@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -27,6 +27,7 @@ with Atree;    use Atree;
 with Casing;   use Casing;
 with Checks;   use Checks;
 with Einfo;    use Einfo;
+with Exp_Put_Image;
 with Exp_Util; use Exp_Util;
 with Lib;      use Lib;
 with Namet;    use Namet;
@@ -48,17 +49,12 @@ with Urealp;   use Urealp;
 
 package body Exp_Imgv is
 
-   function Has_Decimal_Small (E : Entity_Id) return Boolean;
-   --  Applies to all entities. True for a Decimal_Fixed_Point_Type, or an
-   --  Ordinary_Fixed_Point_Type with a small that is a negative power of ten.
-   --  Shouldn't this be in einfo.adb or sem_aux.adb???
-
    procedure Rewrite_Object_Image
      (N         : Node_Id;
       Pref      : Entity_Id;
       Attr_Name : Name_Id;
       Str_Typ   : Entity_Id);
-   --  AI12-00124: Rewrite attribute 'Image when it is applied to an object
+   --  AI12-0124: Rewrite attribute 'Image when it is applied to an object
    --  reference as an attribute applied to a type. N denotes the node to be
    --  rewritten, Pref denotes the prefix of the 'Image attribute, and Name
    --  and Str_Typ specify which specific string type and 'Image attribute to
@@ -69,18 +65,23 @@ package body Exp_Imgv is
    ------------------------------------
 
    procedure Build_Enumeration_Image_Tables (E : Entity_Id; N : Node_Id) is
-      Loc  : constant Source_Ptr := Sloc (E);
-      Str  : String_Id;
+      Loc : constant Source_Ptr := Sloc (E);
+
+      Eind : Entity_Id;
+      Estr : Entity_Id;
       Ind  : List_Id;
+      Ityp : Node_Id;
+      Len  : Nat;
       Lit  : Entity_Id;
       Nlit : Nat;
-      Len  : Nat;
-      Estr : Entity_Id;
-      Eind : Entity_Id;
-      Ityp : Node_Id;
+      Str  : String_Id;
+
+      Saved_SSO : constant Character := Opt.Default_SSO;
+      --  Used to save the current scalar storage order during the generation
+      --  of the literal lookup table.
 
    begin
-      --  Nothing to do for other than a root enumeration type
+      --  Nothing to do for types other than a root enumeration type
 
       if E /= Root_Type (E) then
          return;
@@ -138,6 +139,15 @@ package body Exp_Imgv is
       Set_Lit_Strings (E, Estr);
       Set_Lit_Indexes (E, Eind);
 
+      --  Temporarily set the current scalar storage order to the default
+      --  during the generation of the literals table, since both the Image and
+      --  Value attributes rely on runtime routines for interpreting table
+      --  values.
+
+      Opt.Default_SSO := ' ';
+
+      --  Generate literal table
+
       Insert_Actions (N,
         New_List (
           Make_Object_Declaration (Loc,
@@ -168,6 +178,10 @@ package body Exp_Imgv is
               Make_Aggregate (Loc,
                 Expressions => Ind))),
         Suppress => All_Checks);
+
+      --  Reset the scalar storage order to the saved value
+
+      Opt.Default_SSO := Saved_SSO;
    end Build_Enumeration_Image_Tables;
 
    ----------------------------
@@ -200,21 +214,13 @@ package body Exp_Imgv is
    --      xx = Boolean
    --      tv = Boolean (Expr)
 
-   --    For signed integer types with size <= Integer'Size
-   --      xx = Integer
-   --      tv = Integer (Expr)
+   --    For signed integer types
+   --      xx = [Long_Long_[Long_]]Integer
+   --      tv = [Long_Long_[Long_]]Integer (Expr)
 
-   --    For other signed integer types
-   --      xx = Long_Long_Integer
-   --      tv = Long_Long_Integer (Expr)
-
-   --    For modular types with modulus <= System.Unsigned_Types.Unsigned
-   --      xx = Unsigned
-   --      tv = System.Unsigned_Types.Unsigned (Expr)
-
-   --    For other modular integer types
-   --      xx = Long_Long_Unsigned
-   --      tv = System.Unsigned_Types.Long_Long_Unsigned (Expr)
+   --    For modular types
+   --      xx = [Long_Long_[Long_]]Unsigned
+   --      tv = System.Unsigned_Types.[Long_Long_[Long_]]Unsigned (Expr)
 
    --    For types whose root type is Wide_Character
    --      xx = Wide_Character
@@ -230,22 +236,25 @@ package body Exp_Imgv is
    --      tv = Long_Long_Float (Expr)
    --      pm = typ'Digits (typ = subtype of expression)
 
-   --    For ordinary fixed-point types
+   --    For decimal fixed-point types
+   --      xx = Decimal{32,64,128}
+   --      tv = Integer_{32,64,128} (Expr)? [convert with no scaling]
+   --      pm = typ'Scale (typ = subtype of expression)
+
+   --    For the most common ordinary fixed-point types
+   --      xx = Fixed{32,64,128}
+   --      tv = Integer_{32,64,128} (Expr) [convert with no scaling]
+   --      pm = numerator of typ'Small (typ = subtype of expression)
+   --           denominator of typ'Small
+   --           (Integer_{32,64,128} x typ'Small)'Fore
+   --           typ'Aft
+
+   --    For other ordinary fixed-point types
    --      xx = Ordinary_Fixed_Point
    --      tv = Long_Long_Float (Expr)
    --      pm = typ'Aft (typ = subtype of expression)
 
-   --    For decimal fixed-point types with size = Integer'Size
-   --      xx = Decimal
-   --      tv = Integer (Expr)
-   --      pm = typ'Scale (typ = subtype of expression)
-
-   --    For decimal fixed-point types with size > Integer'Size
-   --      xx = Long_Long_Decimal
-   --      tv = Long_Long_Integer?(Expr) [convert with no scaling]
-   --      pm = typ'Scale (typ = subtype of expression)
-
-   --  For enumeration types other than those declared packages Standard
+   --  For enumeration types other than those declared in package Standard
    --  or System, Snn, Pnn, are expanded as above, but the call looks like:
 
    --    Image_Enumeration_NN (rt'Pos (X), Snn, Pnn, typS, typI'Address)
@@ -433,13 +442,13 @@ package body Exp_Imgv is
 
       --  Local variables
 
+      Enum_Case : Boolean;
       Imid      : RE_Id;
+      Proc_Ent  : Entity_Id;
       Ptyp      : Entity_Id;
       Rtyp      : Entity_Id;
       Tent      : Entity_Id := Empty;
       Ttyp      : Entity_Id;
-      Proc_Ent  : Entity_Id;
-      Enum_Case : Boolean;
 
       Arg_List : List_Id;
       --  List of arguments for run-time procedure call
@@ -450,26 +459,40 @@ package body Exp_Imgv is
       Snn : constant Entity_Id := Make_Temporary (Loc, 'S');
       Pnn : constant Entity_Id := Make_Temporary (Loc, 'P');
 
+   --  Start of processing for Expand_Image_Attribute
+
    begin
       if Is_Object_Image (Pref) then
          Rewrite_Object_Image (N, Pref, Name_Image, Standard_String);
          return;
+      end if;
+
+      Ptyp := Entity (Pref);
+
+      --  Ada 2020 allows 'Image on private types, so fetch the underlying
+      --  type to obtain the structure of the type. We use the base type,
+      --  not the root type, to handle properly derived types, but we use
+      --  the root type for enumeration types, because the literal map is
+      --  attached to the root. Should be inherited ???
+
+      if Is_Enumeration_Type (Ptyp) then
+         Rtyp := Underlying_Type (Root_Type (Ptyp));
+      else
+         Rtyp := Underlying_Type (Base_Type (Ptyp));
+      end if;
 
       --  Enable speed-optimized expansion of user-defined enumeration types
       --  if we are compiling with optimizations enabled and enumeration type
       --  literals are generated. Otherwise the call will be expanded into a
       --  call to the runtime library.
 
-      elsif Optimization_Level > 0
+      if Optimization_Level > 0
         and then not Global_Discard_Names
-        and then Is_User_Defined_Enumeration_Type (Root_Type (Entity (Pref)))
+        and then Is_User_Defined_Enumeration_Type (Rtyp)
       then
          Expand_User_Defined_Enumeration_Image;
          return;
       end if;
-
-      Ptyp := Entity (Pref);
-      Rtyp := Root_Type (Ptyp);
 
       --  Build declarations of Snn and Pnn to be inserted
 
@@ -503,7 +526,15 @@ package body Exp_Imgv is
 
       Enum_Case := False;
 
-      if Rtyp = Standard_Boolean then
+      --  If this is a case where Image should be transformed using Put_Image,
+      --  then do so. See Exp_Put_Image for details.
+
+      if Exp_Put_Image.Image_Should_Call_Put_Image (N) then
+         Rewrite (N, Exp_Put_Image.Build_Image_Call (N));
+         Analyze_And_Resolve (N, Standard_String, Suppress => All_Checks);
+         return;
+
+      elsif Rtyp = Standard_Boolean then
          Imid := RE_Image_Boolean;
          Tent := Rtyp;
 
@@ -529,35 +560,81 @@ package body Exp_Imgv is
          Tent := Rtyp;
 
       elsif Is_Signed_Integer_Type (Rtyp) then
-         if Esize (Rtyp) <= Esize (Standard_Integer) then
+         if Esize (Rtyp) <= Standard_Integer_Size then
             Imid := RE_Image_Integer;
             Tent := Standard_Integer;
-         else
+         elsif Esize (Rtyp) <= Standard_Long_Long_Integer_Size then
             Imid := RE_Image_Long_Long_Integer;
             Tent := Standard_Long_Long_Integer;
+         else
+            Imid := RE_Image_Long_Long_Long_Integer;
+            Tent := Standard_Long_Long_Long_Integer;
          end if;
 
       elsif Is_Modular_Integer_Type (Rtyp) then
          if Modulus (Rtyp) <= Modulus (RTE (RE_Unsigned)) then
             Imid := RE_Image_Unsigned;
             Tent := RTE (RE_Unsigned);
-         else
+         elsif Modulus (Rtyp) <= Modulus (RTE (RE_Long_Long_Unsigned)) then
             Imid := RE_Image_Long_Long_Unsigned;
             Tent := RTE (RE_Long_Long_Unsigned);
+         else
+            Imid := RE_Image_Long_Long_Long_Unsigned;
+            Tent := RTE (RE_Long_Long_Long_Unsigned);
          end if;
 
-      elsif Is_Fixed_Point_Type (Rtyp) and then Has_Decimal_Small (Rtyp) then
-         if UI_To_Int (Esize (Rtyp)) <= Standard_Integer_Size then
-            Imid := RE_Image_Decimal;
-            Tent := Standard_Integer;
+      elsif Is_Decimal_Fixed_Point_Type (Rtyp) then
+         if Esize (Rtyp) <= 32 then
+            Imid := RE_Image_Decimal32;
+            Tent := RTE (RE_Integer_32);
+         elsif Esize (Rtyp) <= 64 then
+            Imid := RE_Image_Decimal64;
+            Tent := RTE (RE_Integer_64);
          else
-            Imid := RE_Image_Long_Long_Decimal;
-            Tent := Standard_Long_Long_Integer;
+            Imid := RE_Image_Decimal128;
+            Tent := RTE (RE_Integer_128);
          end if;
 
       elsif Is_Ordinary_Fixed_Point_Type (Rtyp) then
-         Imid := RE_Image_Ordinary_Fixed_Point;
-         Tent := Standard_Long_Long_Float;
+         declare
+            Num : constant Uint := Norm_Num (Small_Value (Rtyp));
+            Den : constant Uint := Norm_Den (Small_Value (Rtyp));
+            Max : constant Uint := UI_Max (Num, Den);
+            Min : constant Uint := UI_Min (Num, Den);
+            Siz : constant Uint := Esize (Rtyp);
+
+         begin
+            --  Note that we do not use sharp bounds to speed things up
+
+            if Siz <= 32
+              and then Max <= Uint_2 ** 31
+              and then (Min = Uint_1
+                         or else (Num < Den and then Den <= Uint_2 ** 27)
+                         or else (Den < Num and then Num <= Uint_2 ** 25))
+            then
+               Imid := RE_Image_Fixed32;
+               Tent := RTE (RE_Integer_32);
+            elsif Siz <= 64
+              and then Max <= Uint_2 ** 63
+              and then (Min = Uint_1
+                         or else (Num < Den and then Den <= Uint_2 ** 59)
+                         or else (Den < Num and then Num <= Uint_2 ** 53))
+            then
+               Imid := RE_Image_Fixed64;
+               Tent := RTE (RE_Integer_64);
+            elsif System_Max_Integer_Size = 128
+              and then Max <= Uint_2 ** 127
+              and then (Min = Uint_1
+                         or else (Num < Den and then Den <= Uint_2 ** 123)
+                         or else (Den < Num and then Num <= Uint_2 ** 122))
+            then
+               Imid := RE_Image_Fixed128;
+               Tent := RTE (RE_Integer_128);
+            else
+               Imid := RE_Image_Ordinary_Fixed_Point;
+               Tent := Standard_Long_Long_Float;
+            end if;
+         end;
 
       elsif Is_Floating_Point_Type (Rtyp) then
          Imid := RE_Image_Floating_Point;
@@ -566,19 +643,24 @@ package body Exp_Imgv is
       --  Only other possibility is user-defined enumeration type
 
       else
+         pragma Assert (Is_Enumeration_Type (Rtyp));
+
          if Discard_Names (First_Subtype (Ptyp))
-           or else No (Lit_Strings (Root_Type (Ptyp)))
+           or else No (Lit_Strings (Rtyp))
          then
             --  When pragma Discard_Names applies to the first subtype, build
-            --  (Pref'Pos (Expr))'Img.
+            --  (Long_Long_Integer (Pref'Pos (Expr)))'Img. The conversion is
+            --  there to avoid applying 'Img directly in Universal_Integer,
+            --  which can be a very large type. See also the handling of 'Val.
 
             Rewrite (N,
               Make_Attribute_Reference (Loc,
                 Prefix =>
-                   Make_Attribute_Reference (Loc,
-                     Prefix         => Pref,
-                     Attribute_Name => Name_Pos,
-                     Expressions    => New_List (Expr)),
+                  Convert_To (Standard_Long_Long_Integer,
+                    Make_Attribute_Reference (Loc,
+                    Prefix         => Pref,
+                    Attribute_Name => Name_Pos,
+                    Expressions    => New_List (Expr))),
                 Attribute_Name =>
                   Name_Img));
             Analyze_And_Resolve (N, Standard_String);
@@ -613,14 +695,49 @@ package body Exp_Imgv is
       --  Build first argument for call
 
       if Enum_Case then
-         Arg_List := New_List (
-           Make_Attribute_Reference (Loc,
-             Attribute_Name => Name_Pos,
-             Prefix         => New_Occurrence_Of (Ptyp, Loc),
-             Expressions    => New_List (Expr)));
+         declare
+            T : Entity_Id;
+         begin
+            --  In Ada 2020 we need the underlying type here, because 'Image is
+            --  allowed on private types. We have already checked the version
+            --  when resolving the attribute.
+
+            if Is_Private_Type (Ptyp) then
+               T := Rtyp;
+            else
+               T := Ptyp;
+            end if;
+
+            Arg_List := New_List (
+              Make_Attribute_Reference (Loc,
+                Attribute_Name => Name_Pos,
+                Prefix         => New_Occurrence_Of (T, Loc),
+                Expressions    => New_List (Expr)));
+         end;
+
+      --  AI12-0020: Ada 2020 allows 'Image for all types, including private
+      --  types. If the full type is not a fixed-point type, then it is enough
+      --  to set the Conversion_OK flag. However, that would not work for
+      --  fixed-point types, because that flag changes the run-time semantics
+      --  of fixed-point type conversions; therefore, we must first convert to
+      --  Rtyp, and then to Tent.
 
       else
-         Arg_List := New_List (Convert_To (Tent, Expr));
+         declare
+            Conv : Node_Id;
+         begin
+            if Is_Private_Type (Etype (Expr)) then
+               if Is_Fixed_Point_Type (Rtyp) then
+                  Conv := Convert_To (Tent, OK_Convert_To (Rtyp, Expr));
+               else
+                  Conv := OK_Convert_To (Tent, Expr);
+               end if;
+            else
+               Conv := Convert_To (Tent, Expr);
+            end if;
+
+            Arg_List := New_List (Conv);
+         end;
       end if;
 
       --  Append Snn, Pnn arguments
@@ -659,29 +776,45 @@ package body Exp_Imgv is
              Prefix         => New_Occurrence_Of (Ptyp, Loc),
              Attribute_Name => Name_Digits));
 
-      --  For ordinary fixed-point types, append Aft parameter
-
-      elsif Is_Ordinary_Fixed_Point_Type (Rtyp) then
-         Append_To (Arg_List,
-           Make_Attribute_Reference (Loc,
-             Prefix         => New_Occurrence_Of (Ptyp, Loc),
-             Attribute_Name => Name_Aft));
-
-         if Has_Decimal_Small (Rtyp) then
-            Set_Conversion_OK (First (Arg_List));
-            Set_Etype (First (Arg_List), Tent);
-         end if;
-
       --  For decimal, append Scale and also set to do literal conversion
 
       elsif Is_Decimal_Fixed_Point_Type (Rtyp) then
-         Append_To (Arg_List,
-           Make_Attribute_Reference (Loc,
-             Prefix         => New_Occurrence_Of (Ptyp, Loc),
-             Attribute_Name => Name_Scale));
-
          Set_Conversion_OK (First (Arg_List));
-         Set_Etype (First (Arg_List), Tent);
+
+         Append_To (Arg_List, Make_Integer_Literal (Loc, Scale_Value (Ptyp)));
+
+      --  For ordinary fixed-point types, append Num, Den, Fore, Aft parameters
+      --  and also set to do literal conversion.
+
+      elsif Is_Ordinary_Fixed_Point_Type (Rtyp) then
+         if Imid /= RE_Image_Ordinary_Fixed_Point then
+            Set_Conversion_OK (First (Arg_List));
+
+            Append_To (Arg_List,
+              Make_Integer_Literal (Loc, -Norm_Num (Small_Value (Ptyp))));
+
+            Append_To (Arg_List,
+              Make_Integer_Literal (Loc, -Norm_Den (Small_Value (Ptyp))));
+
+            --  We want to compute the Fore value for the fixed point type
+            --  whose mantissa type is Tent and whose small is typ'Small.
+
+            declare
+               T : Ureal := Uint_2 ** (Esize (Tent) - 1) * Small_Value (Ptyp);
+               F : Nat   := 2;
+
+            begin
+               while T >= Ureal_10 loop
+                  F := F + 1;
+                  T := T / Ureal_10;
+               end loop;
+
+               Append_To (Arg_List,
+                  Make_Integer_Literal (Loc, UI_From_Int (F)));
+            end;
+         end if;
+
+         Append_To (Arg_List, Make_Integer_Literal (Loc, Aft_Value (Ptyp)));
 
       --  For Wide_Character, append Ada 2005 indication
 
@@ -726,7 +859,7 @@ package body Exp_Imgv is
 
    --    btyp (Value_xx (X))
 
-   --  where btyp is he base type of the prefix
+   --  where btyp is the base type of the prefix
 
    --    For types whose root type is Character
    --      xx = Character
@@ -740,35 +873,29 @@ package body Exp_Imgv is
    --    For types whose root type is Boolean
    --      xx = Boolean
 
-   --    For signed integer types with size <= Integer'Size
-   --      xx = Integer
+   --    For signed integer types
+   --      xx = [Long_Long_[Long_]]Integer
 
-   --    For other signed integer types
-   --      xx = Long_Long_Integer
+   --    For modular types
+   --      xx = [Long_Long_[Long_]]Unsigned
 
-   --    For modular types with modulus <= System.Unsigned_Types.Unsigned
-   --      xx = Unsigned
+   --    For floating-point types
+   --      xx = [Long_[Long_]]Float
 
-   --    For other modular integer types
-   --      xx = Long_Long_Unsigned
+   --  For decimal fixed-point types, typ'Value (X) expands into
 
-   --    For floating-point types and ordinary fixed-point types
-   --      xx = Real
+   --    btyp?(Value_Decimal{32,64,128} (X, typ'Scale));
+
+   --  For the most common ordinary fixed-point types
+
+   --    btyp?(Value_Fixed{32,64,128} (X, numerator of S, denominator of S));
+   --    where S = typ'Small
 
    --  For Wide_[Wide_]Character types, typ'Value (X) expands into:
 
    --    btyp (Value_xx (X, EM))
 
    --  where btyp is the base type of the prefix, and EM is the encoding method
-
-   --  For decimal types with size <= Integer'Size, typ'Value (X)
-   --  expands into
-
-   --    btyp?(Value_Decimal (X, typ'Scale));
-
-   --  For all other decimal types, typ'Value (X) expands into
-
-   --    btyp?(Value_Long_Long_Decimal (X, typ'Scale))
 
    --  For enumeration types other than those derived from types Boolean,
    --  Character, Wide_[Wide_]Character in Standard, typ'Value (X) expands to:
@@ -817,33 +944,34 @@ package body Exp_Imgv is
            Make_Integer_Literal (Loc,
              Intval => Int (Wide_Character_Encoding_Method)));
 
-      elsif     Rtyp = Base_Type (Standard_Short_Short_Integer)
-        or else Rtyp = Base_Type (Standard_Short_Integer)
-        or else Rtyp = Base_Type (Standard_Integer)
-      then
-         Vid := RE_Value_Integer;
-
       elsif Is_Signed_Integer_Type (Rtyp) then
-         Vid := RE_Value_Long_Long_Integer;
+         if Esize (Rtyp) <= Standard_Integer_Size then
+            Vid := RE_Value_Integer;
+         elsif Esize (Rtyp) <= Standard_Long_Long_Integer_Size then
+            Vid := RE_Value_Long_Long_Integer;
+         else
+            Vid := RE_Value_Long_Long_Long_Integer;
+         end if;
 
       elsif Is_Modular_Integer_Type (Rtyp) then
          if Modulus (Rtyp) <= Modulus (RTE (RE_Unsigned)) then
             Vid := RE_Value_Unsigned;
-         else
+         elsif Modulus (Rtyp) <= Modulus (RTE (RE_Long_Long_Unsigned)) then
             Vid := RE_Value_Long_Long_Unsigned;
+         else
+            Vid := RE_Value_Long_Long_Long_Unsigned;
          end if;
 
       elsif Is_Decimal_Fixed_Point_Type (Rtyp) then
-         if UI_To_Int (Esize (Rtyp)) <= Standard_Integer_Size then
-            Vid := RE_Value_Decimal;
+         if Esize (Rtyp) <= 32 and then abs (Scale_Value (Rtyp)) <= 9 then
+            Vid := RE_Value_Decimal32;
+         elsif Esize (Rtyp) <= 64 and then abs (Scale_Value (Rtyp)) <= 18 then
+            Vid := RE_Value_Decimal64;
          else
-            Vid := RE_Value_Long_Long_Decimal;
+            Vid := RE_Value_Decimal128;
          end if;
 
-         Append_To (Args,
-           Make_Attribute_Reference (Loc,
-             Prefix => New_Occurrence_Of (Typ, Loc),
-             Attribute_Name => Name_Scale));
+         Append_To (Args, Make_Integer_Literal (Loc, Scale_Value (Rtyp)));
 
          Rewrite (N,
            OK_Convert_To (Btyp,
@@ -855,8 +983,75 @@ package body Exp_Imgv is
          Analyze_And_Resolve (N, Btyp);
          return;
 
-      elsif Is_Real_Type (Rtyp) then
-         Vid := RE_Value_Real;
+      elsif Is_Ordinary_Fixed_Point_Type (Rtyp) then
+         declare
+            Num : constant Uint := Norm_Num (Small_Value (Rtyp));
+            Den : constant Uint := Norm_Den (Small_Value (Rtyp));
+            Max : constant Uint := UI_Max (Num, Den);
+            Min : constant Uint := UI_Min (Num, Den);
+            Siz : constant Uint := Esize (Rtyp);
+
+         begin
+            if Siz <= 32
+              and then Max <= Uint_2 ** 31
+              and then (Min = Uint_1 or else Max <= Uint_2 ** 27)
+            then
+               Vid := RE_Value_Fixed32;
+            elsif Siz <= 64
+              and then Max <= Uint_2 ** 63
+              and then (Min = Uint_1 or else Max <= Uint_2 ** 59)
+            then
+               Vid := RE_Value_Fixed64;
+            elsif System_Max_Integer_Size = 128
+              and then Max <= Uint_2 ** 127
+              and then (Min = Uint_1 or else Max <= Uint_2 ** 123)
+            then
+               Vid := RE_Value_Fixed128;
+            else
+               Vid := RE_Value_Long_Float;
+            end if;
+
+            if Vid /= RE_Value_Long_Float then
+               Append_To (Args,
+                 Make_Integer_Literal (Loc, -Norm_Num (Small_Value (Rtyp))));
+
+               Append_To (Args,
+                 Make_Integer_Literal (Loc, -Norm_Den (Small_Value (Rtyp))));
+
+               Rewrite (N,
+                 OK_Convert_To (Btyp,
+                   Make_Function_Call (Loc,
+                     Name => New_Occurrence_Of (RTE (Vid), Loc),
+                     Parameter_Associations => Args)));
+
+               Set_Etype (N, Btyp);
+               Analyze_And_Resolve (N, Btyp);
+               return;
+            end if;
+         end;
+
+      elsif Is_Floating_Point_Type (Rtyp) then
+         --  Short_Float and Float are the same type for GNAT
+
+         if Rtyp = Standard_Short_Float or else Rtyp = Standard_Float then
+            Vid := RE_Value_Float;
+
+         --  If Long_Float and Long_Long_Float are the same type, then use the
+         --  implementation of the former, which is faster and more accurate.
+
+         elsif Rtyp = Standard_Long_Float
+           or else (Rtyp = Standard_Long_Long_Float
+                     and then
+                    Standard_Long_Long_Float_Size = Standard_Long_Float_Size)
+         then
+            Vid := RE_Value_Long_Float;
+
+         elsif Rtyp = Standard_Long_Long_Float then
+            Vid := RE_Value_Long_Long_Float;
+
+         else
+            raise Program_Error;
+         end if;
 
       --  Only other possibility is user-defined enumeration type
 
@@ -1197,12 +1392,12 @@ package body Exp_Imgv is
    --      yy = Boolean
 
    --    For signed integer types
-   --      xx = Width_Long_Long_Integer
-   --      yy = Long_Long_Integer
+   --      xx = Width_[Long_Long_[Long_]]Integer
+   --      yy = [Long_Long_[Long_]]Integer
 
    --    For modular integer types
-   --      xx = Width_Long_Long_Unsigned
-   --      yy = Long_Long_Unsigned
+   --      xx = Width_[Long_Long_[Long_]]Unsigned
+   --      yy = [Long_Long_[Long_]]Unsigned
 
    --  For types derived from Wide_Character, typ'Width expands into
 
@@ -1240,7 +1435,11 @@ package body Exp_Imgv is
    --      Wide_Wide_Character (typ'First),
    --      Wide_Wide_Character (typ'Last));
 
-   --  For real types, typ'Width and typ'Wide_[Wide_]Width expand into
+   --  For fixed point types, typ'Width and typ'Wide_[Wide_]Width expand into
+
+   --    if Ptyp'First > Ptyp'Last then 0 else Ptyp'Fore + 1 + Ptyp'Aft end if
+
+   --  and for floating point types, they expand into
 
    --    if Ptyp'First > Ptyp'Last then 0 else btyp'Width end if
 
@@ -1337,18 +1536,66 @@ package body Exp_Imgv is
       --  Signed integer types
 
       elsif Is_Signed_Integer_Type (Rtyp) then
-         XX := RE_Width_Long_Long_Integer;
-         YY := Standard_Long_Long_Integer;
+         if Esize (Rtyp) <= Standard_Integer_Size then
+            XX := RE_Width_Integer;
+            YY := Standard_Integer;
+         elsif Esize (Rtyp) <= Standard_Long_Long_Integer_Size then
+            XX := RE_Width_Long_Long_Integer;
+            YY := Standard_Long_Long_Integer;
+         else
+            XX := RE_Width_Long_Long_Long_Integer;
+            YY := Standard_Long_Long_Long_Integer;
+         end if;
 
       --  Modular integer types
 
       elsif Is_Modular_Integer_Type (Rtyp) then
-         XX := RE_Width_Long_Long_Unsigned;
-         YY := RTE (RE_Long_Long_Unsigned);
+         if Modulus (Rtyp) <= Modulus (RTE (RE_Unsigned)) then
+            XX := RE_Width_Unsigned;
+            YY := RTE (RE_Unsigned);
+         elsif Modulus (Rtyp) <= Modulus (RTE (RE_Long_Long_Unsigned)) then
+            XX := RE_Width_Long_Long_Unsigned;
+            YY := RTE (RE_Long_Long_Unsigned);
+         else
+            XX := RE_Width_Long_Long_Long_Unsigned;
+            YY := RTE (RE_Long_Long_Long_Unsigned);
+         end if;
 
-      --  Real types
+      --  Fixed point types
 
-      elsif Is_Real_Type (Rtyp) then
+      elsif Is_Fixed_Point_Type (Rtyp) then
+         Rewrite (N,
+           Make_If_Expression (Loc,
+             Expressions => New_List (
+
+               Make_Op_Gt (Loc,
+                 Left_Opnd =>
+                   Make_Attribute_Reference (Loc,
+                     Prefix => New_Occurrence_Of (Ptyp, Loc),
+                     Attribute_Name => Name_First),
+
+                 Right_Opnd =>
+                   Make_Attribute_Reference (Loc,
+                     Prefix => New_Occurrence_Of (Ptyp, Loc),
+                     Attribute_Name => Name_Last)),
+
+               Make_Integer_Literal (Loc, 0),
+
+               Make_Op_Add (Loc,
+                 Make_Attribute_Reference (Loc,
+                   Prefix => New_Occurrence_Of (Ptyp, Loc),
+                   Attribute_Name => Name_Fore),
+
+                 Make_Op_Add (Loc,
+                   Make_Integer_Literal (Loc, 1),
+                   Make_Integer_Literal (Loc, Aft_Value (Ptyp)))))));
+
+         Analyze_And_Resolve (N, Typ);
+         return;
+
+      --  Floating point types
+
+      elsif Is_Floating_Point_Type (Rtyp) then
          Rewrite (N,
            Make_If_Expression (Loc,
              Expressions => New_List (
@@ -1574,18 +1821,6 @@ package body Exp_Imgv is
 
       Analyze_And_Resolve (N, Typ);
    end Expand_Width_Attribute;
-
-   -----------------------
-   -- Has_Decimal_Small --
-   -----------------------
-
-   function Has_Decimal_Small (E : Entity_Id) return Boolean is
-   begin
-      return Is_Decimal_Fixed_Point_Type (E)
-        or else
-          (Is_Ordinary_Fixed_Point_Type (E)
-             and then Ureal_10**Aft_Value (E) * Small_Value (E) = Ureal_1);
-   end Has_Decimal_Small;
 
    --------------------------
    -- Rewrite_Object_Image --

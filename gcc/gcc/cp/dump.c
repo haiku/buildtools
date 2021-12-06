@@ -1,5 +1,5 @@
 /* Tree-dumping functionality for intermediate representation.
-   Copyright (C) 1999-2018 Free Software Foundation, Inc.
+   Copyright (C) 1999-2021 Free Software Foundation, Inc.
    Written by Mark Mitchell <mark@codesourcery.com>
 
 This file is part of GCC.
@@ -280,42 +280,12 @@ cp_dump_tree (void* dump_info, tree t)
       dump_child ("else", ELSE_CLAUSE (t));
       break;
 
-    case BREAK_STMT:
-    case CONTINUE_STMT:
-      dump_stmt (di, t);
-      break;
-
-    case DO_STMT:
-      dump_stmt (di, t);
-      dump_child ("body", DO_BODY (t));
-      dump_child ("cond", DO_COND (t));
-      break;
-
-    case FOR_STMT:
-      dump_stmt (di, t);
-      dump_child ("init", FOR_INIT_STMT (t));
-      dump_child ("cond", FOR_COND (t));
-      dump_child ("expr", FOR_EXPR (t));
-      dump_child ("body", FOR_BODY (t));
-      break;
-
     case RANGE_FOR_STMT:
       dump_stmt (di, t);
+      dump_child ("init", RANGE_FOR_INIT_STMT (t));
       dump_child ("decl", RANGE_FOR_DECL (t));
       dump_child ("expr", RANGE_FOR_EXPR (t));
       dump_child ("body", RANGE_FOR_BODY (t));
-      break;
-
-    case SWITCH_STMT:
-      dump_stmt (di, t);
-      dump_child ("cond", SWITCH_STMT_COND (t));
-      dump_child ("body", SWITCH_STMT_BODY (t));
-      break;
-
-    case WHILE_STMT:
-      dump_stmt (di, t);
-      dump_child ("cond", WHILE_COND (t));
-      dump_child ("body", WHILE_BODY (t));
       break;
 
     case STMT_EXPR:
@@ -325,6 +295,12 @@ cp_dump_tree (void* dump_info, tree t)
     case EXPR_STMT:
       dump_stmt (di, t);
       dump_child ("expr", EXPR_STMT_EXPR (t));
+      break;
+
+    case OMP_DEPOBJ:
+      dump_stmt (di, t);
+      dump_child ("depobj", OMP_DEPOBJ_DEPOBJ (t));
+      dump_child ("clauses", OMP_DEPOBJ_CLAUSES (t));
       break;
 
     default:

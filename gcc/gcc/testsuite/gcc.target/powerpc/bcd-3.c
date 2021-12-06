@@ -1,9 +1,7 @@
 /* { dg-do compile { target { powerpc*-*-linux* && lp64 } } } */
 /* { dg-skip-if "" { powerpc*-*-darwin* } } */
-/* { dg-skip-if "" { powerpc*-*-*spe* } } */
 /* { dg-require-effective-target powerpc_p8vector_ok } */
-/* { dg-skip-if "do not override -mcpu" { powerpc*-*-* } { "-mcpu=*" } { "-mcpu=power8" } } */
-/* { dg-options "-mcpu=power8 -O2" } */
+/* { dg-options "-mdejagnu-cpu=power8 -O2" } */
 /* { dg-final { scan-assembler-times "bcdadd\[.\] " 4 } } */
 /* { dg-final { scan-assembler-times "bcdsub\[.\] " 4 } } */
 /* { dg-final { scan-assembler-not   "bl __builtin"   } } */
@@ -19,6 +17,8 @@
 typedef __int128_t __attribute__((__vector_size__(16)))	vector_128_t;
 typedef __int128_t					scalar_128_t;
 typedef	unsigned long long				scalar_64_t;
+
+#include <altivec.h>
 
 /* Test whether the peephole works to allow folding a bcdadd, with a
    bcdadd_<test> into a single instruction.  */

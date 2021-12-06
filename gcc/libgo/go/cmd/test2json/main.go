@@ -6,7 +6,7 @@
 //
 // Usage:
 //
-//	go tool test2json [-p pkg] [-t] [./pkg.test -test.v]
+//	go tool test2json [-p pkg] [-t] [./pkg.test -test.v [-test.paniconexit0]]
 //
 // Test2json runs the given test command and converts its output to JSON;
 // with no command specified, test2json expects test output on standard input.
@@ -17,6 +17,10 @@
 // The -p flag sets the package reported in each test event.
 //
 // The -t flag requests that time stamps be added to each test event.
+//
+// The test must be invoked with -test.v. Additionally passing
+// -test.paniconexit0 will cause test2json to exit with a non-zero
+// status if one of the tests being run calls os.Exit(0).
 //
 // Note that test2json is only intended for converting a single test
 // binary's output. To convert the output of a "go test" command,
@@ -45,15 +49,17 @@
 //	pause  - the test has been paused
 //	cont   - the test has continued running
 //	pass   - the test passed
-//	fail   - the test failed
+//	bench  - the benchmark printed log output but did not fail
+//	fail   - the test or benchmark failed
 //	output - the test printed output
+//	skip   - the test was skipped or the package contained no tests
 //
 // The Package field, if present, specifies the package being tested.
 // When the go command runs parallel tests in -json mode, events from
 // different tests are interlaced; the Package field allows readers to
 // separate them.
 //
-// The Test field, if present, specifies the test or example, or benchmark
+// The Test field, if present, specifies the test, example, or benchmark
 // function that caused the event. Events for the overall package test
 // do not set Test.
 //
@@ -67,14 +73,22 @@
 // the concatenation of the Output fields of all output events is the exact
 // output of the test execution.
 //
+// When a benchmark runs, it typically produces a single line of output
+// giving timing results. That line is reported in an event with Action == "output"
+// and no Test field. If a benchmark logs output or reports a failure
+// (for example, by using b.Log or b.Error), that extra output is reported
+// as a sequence of events with Test set to the benchmark name, terminated
+// by a final event with Action == "bench" or "fail".
+// Benchmarks have no events with Action == "run", "pause", or "cont".
+//
 package main
 
 import (
 	"flag"
 	"fmt"
+	exec "internal/execabs"
 	"io"
 	"os"
-	"os/exec"
 
 	"cmd/internal/test2json"
 )
@@ -108,12 +122,16 @@ func main() {
 		w := &countWriter{0, c}
 		cmd.Stdout = w
 		cmd.Stderr = w
-		if err := cmd.Run(); err != nil {
+		err := cmd.Run()
+		if err != nil {
 			if w.n > 0 {
 				// Assume command printed why it failed.
 			} else {
 				fmt.Fprintf(c, "test2json: %v\n", err)
 			}
+		}
+		c.Exited(err)
+		if err != nil {
 			c.Close()
 			os.Exit(1)
 		}

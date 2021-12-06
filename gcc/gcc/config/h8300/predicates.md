@@ -1,5 +1,5 @@
 ;; Predicate definitions for Renesas H8/300.
-;; Copyright (C) 2005-2018 Free Software Foundation, Inc.
+;; Copyright (C) 2005-2021 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -216,7 +216,7 @@
 
 ;; Return true if OP is a valid call operand.
 
-(define_predicate "call_insn_operand"
+(define_predicate "call_expander_operand"
   (match_code "mem")
 {
   if (GET_CODE (op) == MEM)
@@ -224,9 +224,19 @@
       rtx inside = XEXP (op, 0);
       if (register_operand (inside, Pmode))
 	return 1;
-      if (CONSTANT_ADDRESS_P (inside))
+      if (SYMBOL_REF_P (inside))
 	return 1;
     }
+  return 0;
+})
+
+(define_predicate "call_insn_operand"
+  (match_code "reg,symbol_ref")
+{
+  if (register_operand (op, Pmode))
+    return 1;
+  if (SYMBOL_REF_P (op))
+    return 1;
   return 0;
 })
 
@@ -234,21 +244,17 @@
 ;; operand for a small call (4 bytes instead of 6 bytes).
 
 (define_predicate "small_call_insn_operand"
-  (match_code "mem")
+  (match_code "reg,symbol_ref")
 {
-  if (GET_CODE (op) == MEM)
-    {
-      rtx inside = XEXP (op, 0);
+  /* Register indirect is a small call.  */
+  if (register_operand (op, Pmode))
+    return 1;
 
-      /* Register indirect is a small call.  */
-      if (register_operand (inside, Pmode))
-	return 1;
+  /* A call through the function vector is a small call too.  */
+  if (GET_CODE (op) == SYMBOL_REF
+      && (SYMBOL_REF_FLAGS (op) & SYMBOL_FLAG_FUNCVEC_FUNCTION))
+    return 1;
 
-      /* A call through the function vector is a small call too.  */
-      if (GET_CODE (inside) == SYMBOL_REF
-	  && (SYMBOL_REF_FLAGS (inside) & SYMBOL_FLAG_FUNCVEC_FUNCTION))
-	return 1;
-    }
   /* Otherwise it's a large call.  */
   return 0;
 })
@@ -290,30 +296,17 @@
          the negative case.  */
       if (value < 0)
 	value = -value;
-      if (TARGET_H8300H || TARGET_H8300S)
-	{
-	  /* A constant addition/subtraction takes 2 states in QImode,
-	     4 states in HImode, and 6 states in SImode.  Thus, the
-	     only case we can win is when SImode is used, in which
-	     case, two adds/subs are used, taking 4 states.  */
-	  if (mode == SImode
-	      && (value == 2 + 1
-		  || value == 4 + 1
-		  || value == 4 + 2
-		  || value == 4 + 4))
-	    return 1;
-	}
-      else
-	{
-	  /* We do not profit directly by splitting addition or
-	     subtraction of 3 and 4.  However, since these are
-	     implemented as a sequence of adds or subs, they do not
-	     clobber (cc0) unlike a sequence of add.b and add.x.  */
-	  if (mode == HImode
-	      && (value == 2 + 1
-		  || value == 2 + 2))
-	    return 1;
-	}
+
+      /* A constant addition/subtraction takes 2 states in QImode,
+	 4 states in HImode, and 6 states in SImode.  Thus, the
+	 only case we can win is when SImode is used, in which
+	 case, two adds/subs are used, taking 4 states.  */
+      if (mode == SImode
+	  && (value == 2 + 1
+	      || value == 4 + 1
+	      || value == 4 + 2
+	      || value == 4 + 4))
+	return 1;
     }
 
   return 0;
@@ -501,4 +494,19 @@
   enum rtx_code code = GET_CODE (op);
 
   return (code == IOR || code == XOR);
+})
+
+;; Used to detect valid targets for conditional branches
+;; Used to detect (pc) or (label_ref) in some jumping patterns
+(define_predicate "pc_or_label_operand"
+  (match_code "pc,label_ref"))
+
+(define_predicate "simple_memory_operand"
+  (match_code "mem")
+{
+  if (GET_MODE (op) == mode
+      && (GET_CODE (XEXP (op, 0)) != PRE_DEC
+	  && GET_CODE (XEXP (op, 0)) != POST_INC))
+    return 1;
+  return 0;
 })

@@ -14,7 +14,9 @@
   properly nested DW_TAG_inlined_subroutine DIEs for third, second and first.
 */
 
-/* { dg-options "-O -g3 -gdwarf -dA -fgnu89-inline" } */
+/* Explicitly use dwarf-2 because dwarf-5 might use DW_FORM_implicit_const
+   which is hard to scan for. */
+/* { dg-options "-O -g3 -gdwarf-2 -dA -fgnu89-inline" } */
 /* { dg-do compile } */
 
 /* There are 6 inlined subroutines:
@@ -23,12 +25,10 @@
      of third, second and first.  */
 /* { dg-final { scan-assembler-times "\\(DIE \\(\[^\n\]*\\) DW_TAG_inlined_subroutine" 6 } } */
 
-/* Likewise we should have 6 DW_TAG_lexical_block DIEs:
-   - One for each subroutine inlined into main, so that's 3.
-   - One for each subroutine inlined in the out of line instances
-     of third, second and first, that's 3.
-*/
-/* { dg-final { scan-assembler-times "\\(DIE \\(\[^\n\]*\\) DW_TAG_lexical_block" 6 } } */
+/* We should have no DW_TAG_lexical_block DIEs, all inline instances
+   should have the first subblock elided to match the abstract instance
+   layout.  */
+/* { dg-final { scan-assembler-times "\\(DIE \\(\[^\n\]*\\) DW_TAG_lexical_block" 0 } } */
 
 
 /* There are 3 DW_AT_inline attributes: one per abstract inline instance.

@@ -3,7 +3,7 @@
 
 struct X
 {
-  friend void g(X, int) = 0; // { dg-error "initializer specified for friend function" }
+  friend void g(X, int) = 0; // { dg-error "15:initializer specified for friend function" }
   friend void g(X, int) = default; // { dg-error "cannot be defaulted" }
   // { dg-prune-output "note" }
   friend void f(X, int) = delete;
@@ -17,7 +17,7 @@ void g(Y, double);
 struct Y
 {
   // { dg-prune-output "note" }
-  friend void g(Y, int) = delete;
+  friend void g(Y, int) = delete; // { dg-error "not first declaration" }
   friend void g(Y, double) {}
 };
 

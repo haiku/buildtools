@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -174,13 +174,6 @@ package Exp_Ch7 is
    --  adjusted. Typ is the expected type of Obj_Ref. When Skip_Self is set,
    --  only the components (if any) are adjusted. Return Empty if Adjust or
    --  Deep_Adjust is not available, possibly due to previous errors.
-
-   function Make_Detach_Call (Obj_Ref : Node_Id) return Node_Id;
-   --  Create a call to unhook an object from an arbitrary list. Obj_Ref is the
-   --  object. Generate the following:
-   --
-   --    Ada.Finalization.Heap_Management.Detach
-   --      (System.Finalization_Root.Root_Controlled_Ptr (Obj_Ref));
 
    function Make_Final_Call
      (Obj_Ref   : Node_Id;

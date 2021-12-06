@@ -1,5 +1,5 @@
 ;; GCC machine description for AVX512F instructions
-;; Copyright (C) 2013-2018 Free Software Foundation, Inc.
+;; Copyright (C) 2013-2021 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -57,12 +57,12 @@
 (define_subst_attr "mask_avx512vl_condition" "mask" "1" "TARGET_AVX512VL")
 (define_subst_attr "mask_avx512bw_condition" "mask" "1" "TARGET_AVX512BW")
 (define_subst_attr "mask_avx512dq_condition" "mask" "1" "TARGET_AVX512DQ")
-(define_subst_attr "store_mask_constraint" "mask" "vm" "v")
-(define_subst_attr "store_mask_predicate" "mask" "nonimmediate_operand" "register_operand")
 (define_subst_attr "mask_prefix" "mask" "vex" "evex")
 (define_subst_attr "mask_prefix2" "mask" "maybe_vex" "evex")
 (define_subst_attr "mask_prefix3" "mask" "orig,vex" "evex,evex")
+(define_subst_attr "bcst_mask_prefix3" "mask" "orig,maybe_evex" "evex,evex")
 (define_subst_attr "mask_prefix4" "mask" "orig,orig,vex" "evex,evex,evex")
+(define_subst_attr "bcst_mask_prefix4" "mask" "orig,orig,maybe_evex" "evex,evex,evex")
 (define_subst_attr "mask_expand_op3" "mask" "3" "5")
 
 (define_subst "mask"
@@ -72,8 +72,20 @@
   [(set (match_dup 0)
         (vec_merge:SUBST_V
 	  (match_dup 1)
-	  (match_operand:SUBST_V 2 "vector_move_operand" "0C")
+	  (match_operand:SUBST_V 2 "nonimm_or_0_operand" "0C")
 	  (match_operand:<avx512fmaskmode> 3 "register_operand" "Yk")))])
+
+(define_subst_attr "merge_mask_name" "merge_mask" "" "_merge_mask")
+(define_subst_attr "merge_mask_operand3" "merge_mask" "" "%{%3%}")
+(define_subst "merge_mask"
+  [(set (match_operand:SUBST_V 0)
+        (match_operand:SUBST_V 1))]
+  "TARGET_AVX512F"
+  [(set (match_dup 0)
+        (vec_merge:SUBST_V
+	  (match_dup 1)
+	  (match_dup 0)
+	  (match_operand:<avx512fmaskmode> 2 "register_operand" "Yk")))])
 
 (define_subst_attr "mask_scalar_merge_name" "mask_scalar_merge" "" "_mask")
 (define_subst_attr "mask_scalar_merge_operand3" "mask_scalar_merge" "" "%{%3%}")
@@ -120,9 +132,11 @@
 (define_subst_attr "round_mask_op4" "round" "" "<round_mask_operand4>")
 (define_subst_attr "round_sd_mask_op4" "round" "" "<round_sd_mask_operand4>")
 (define_subst_attr "round_constraint" "round" "vm" "v")
+(define_subst_attr "bcst_round_constraint" "round" "vmBr" "v")
 (define_subst_attr "round_constraint2" "round" "m" "v")
 (define_subst_attr "round_constraint3" "round" "rm" "r")
 (define_subst_attr "round_nimm_predicate" "round" "vector_operand" "register_operand")
+(define_subst_attr "bcst_round_nimm_predicate" "round" "bcst_vector_operand" "register_operand")
 (define_subst_attr "round_nimm_scalar_predicate" "round" "nonimmediate_operand" "register_operand")
 (define_subst_attr "round_prefix" "round" "vex" "evex")
 (define_subst_attr "round_mode512bit_condition" "round" "1" "(<MODE>mode == V16SFmode
@@ -243,7 +257,7 @@
     (match_dup 1)
     (match_dup 2)
     (match_dup 3)
-    (match_operand:SUBST_V 4 "vector_move_operand")
+    (match_operand:SUBST_V 4 "nonimm_or_0_operand")
     (match_operand:<avx512fmaskmode> 5 "register_operand")])
 
 (define_subst_attr "mask_scalar_name" "mask_scalar" "" "_mask")
@@ -261,7 +275,7 @@
 	(vec_merge:SUBST_V
 	  (vec_merge:SUBST_V
 	    (match_dup 1)
-	    (match_operand:SUBST_V 3 "vector_move_operand" "0C")
+	    (match_operand:SUBST_V 3 "nonimm_or_0_operand" "0C")
 	    (match_operand:<avx512fmaskmode> 4 "register_operand" "Yk"))
 	  (match_dup 2)
 	  (const_int 1)))])
@@ -271,7 +285,7 @@
 (define_subst_attr "round_scalar_mask_op3" "round_scalar" "" "<round_scalar_mask_operand3>")
 (define_subst_attr "round_scalar_constraint" "round_scalar" "vm" "v")
 (define_subst_attr "round_scalar_prefix" "round_scalar" "vex" "evex")
-(define_subst_attr "round_scalar_nimm_predicate" "round_scalar" "vector_operand" "register_operand")
+(define_subst_attr "round_scalar_nimm_predicate" "round_scalar" "nonimmediate_operand" "register_operand")
 
 (define_subst "round_scalar"
   [(set (match_operand:SUBST_V 0)
@@ -296,7 +310,7 @@
 (define_subst_attr "round_saeonly_scalar_mask_op4" "round_saeonly_scalar" "" "<round_saeonly_scalar_mask_operand4>")
 (define_subst_attr "round_saeonly_scalar_constraint" "round_saeonly_scalar" "vm" "v")
 (define_subst_attr "round_saeonly_scalar_prefix" "round_saeonly_scalar" "vex" "evex")
-(define_subst_attr "round_saeonly_scalar_nimm_predicate" "round_saeonly_scalar" "vector_operand" "register_operand")
+(define_subst_attr "round_saeonly_scalar_nimm_predicate" "round_saeonly_scalar" "nonimmediate_operand" "register_operand")
 
 (define_subst "round_saeonly_scalar"
   [(set (match_operand:SUBST_V 0)
@@ -313,3 +327,16 @@
 		(const_int 1))
 	     (match_operand:SI 3 "const48_operand")]
 		UNSPEC_EMBEDDED_ROUNDING))])
+
+(define_subst_attr "maskz_half_name" "maskz_half" "" "_maskz_1")
+(define_subst_attr "maskz_half_operand4" "maskz_half" "" "%{%5%}%N4")
+
+(define_subst "maskz_half"
+  [(set (match_operand:SUBST_V 0)
+        (match_operand:SUBST_V 1))]
+  ""
+  [(set (match_dup 0)
+        (vec_merge:SUBST_V
+	  (match_dup 1)
+	  (match_operand:SUBST_V 2 "const0_operand" "C")
+	  (match_operand:<avx512fmaskhalfmode> 3 "register_operand" "Yk")))])

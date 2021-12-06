@@ -1,14 +1,252 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
 
-2018-07-26  Release Manager
+2021-04-27  Release Manager
 
-	* GCC 8.2.0 released.
+	* GCC 11.1.0 released.
 
-2018-05-02  Release Manager
+2021-01-28  Ian Lance Taylor  <iant@golang.org>
 
-	* GCC 8.1.0 released.
+	* gospec.c (lang_specific_driver): Add -g if no debugging options
+	were passed.
+
+2021-01-15  Ian Lance Taylor  <iant@golang.org>
+
+	* Make-lang.in (GO_OBJS): Add go/embed.o.
+
+2021-01-05  Jakub Jelinek  <jakub@redhat.com>
+
+	* lang.opt (fgo-embedcfg=): Add full stop at the end of description.
+
+2021-01-05  Ian Lance Taylor  <iant@golang.org>
+
+	* lang.opt (fgo-embedcfg): New option.
+	* go-c.h (struct go_create_gogo_args): Add embedcfg field.
+	* go-lang.c (go_embedcfg): New static variable.
+	(go_langhook_init): Set go_create_gogo_args embedcfg field.
+	(go_langhook_handle_option): Handle OPT_fgo_embedcfg_.
+	* gccgo.texi (Invoking gccgo): Document -fgo-embedcfg.
+
+2021-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	* gccgo.texi: Bump @copyrights-go year.
+
+2020-12-22  Ian Lance Taylor  <iant@golang.org>
+
+	PR go/98402
+	* go-lang.c (go_langhook_init): Force MPFR exponent range to be
+	large enough to support Go constants.
+
+2020-11-20  Jakub Jelinek  <jakub@redhat.com>
+
+	PR other/97911
+	* Make-lang.in (go.serial): Change from goal to a variable.
+	(.PHONY): Drop go.serial and go.prev.
+	(go1$(exeext)): Depend on $(go.serial) rather than go.serial.
+
+2020-11-18  Jakub Jelinek  <jakub@redhat.com>
+
+	* Make-lang.in (go.serial): New goal.
+	(.PHONY): Add go.serial go.prev.
+	(go1$(exeext)): Depend on go.prev.  Call LINK_PROGRESS.
+
+2020-11-11  Alan Modra  <amodra@gmail.com>
+
+	* go-gcc.cc (Gcc_backend::global_variable_set_init): Cast NULL to
+	avoid ambiguous overloaded call.
+
+2020-11-06  Nathan Sidwell  <nathan@acm.org>
+
+	* go-gcc.cc (Gcc_backend::call_expression): Rename
+	DECL_IS_BUILTIN->DECL_IS_UNDECLARED_BUILTIN.
+
+2020-11-04  Ian Lance Taylor  <iant@golang.org>
+
+	* go-lang.c (go_langhook_post_options): Disable
+	-fipa-icf-functions if it was not explicitly enabled.
+
+2020-09-14  Jakub Jelinek  <jakub@redhat.com>
+
+	* go-gcc.cc (Gcc_backend::function): Adjust
+	cl_optimization_save, cl_optimization_restore and
+	build_optimization_node callers.
+
+2020-08-10  Clément Chigot  <chigot.c@gmail.com>
+
+	* go-c.h (struct go_create_gogo_args): Add need_eqtype field.
+	* go-lang.c (go_langhook_init): Set need_eqtype.
+
+2020-04-15  Ian Lance Taylor  <iant@golang.org>
+
+	PR go/94607
+	* go-gcc.cc (class Gcc_backend): Define builtin_const,
+	builtin_noreturn, builtin_novops.
+	(Gcc_backend::define_builtin): Change const_p and noreturn_p
+	parameters to a single flags parameter.  Change all callers.
+	(Gcc_backend::Gcc_backend): Pass novops for prefetch.
+
+2020-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+	* gccgo.texi: Bump @copyrights-go year.
+
+2019-11-12  Martin Liska  <mliska@suse.cz>
+
+	* go-lang.c (go_langhook_post_options):
+	Use SET_OPTION_IF_UNSET.
+
+2019-09-04  Ian Lance Taylor  <iant@golang.org>
+
+	PR tree-optimization/91663
+	* go-lang.c (go_langhook_post_options): Clear
+	flag_partial_inlining.
+
+2019-08-23  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/91283
+	* go-lang.c (go_langhook_post_options): Set flag_excess_precision
+	instead of flag_excess_precision_cmdline.
+
+2019-07-02  Cherry Zhang  <cherryyz@google.com>
+
+	* go-gcc.cc (Gcc_backend::Gcc_backend): Define __builtin_memset.
+
+2019-06-21  Cherry Zhang  <cherryyz@google.com>
+
+	* go-gcc.cc (Gcc_backend::Gcc_backend): Define math/bits
+	builtins.
+
+2019-05-30  Jim Wilson  <jimw@sifive.com>
+
+	* go-gcc.cc (Gcc_backend::Gcc_backend): Add BUILT_IN_ATOMIC_FETCH_AND_1
+	and BUILT_IN_ATOMIC_FETCH_OR_1.
+
+2019-05-16  Cherry Zhang  <cherryyz@google.com>
+
+	* go-gcc.cc (Gcc_backend::Gcc_backend): Define atomic builtins.
+
+2019-05-08  Cherry Zhang  <cherryyz@google.com>
+
+	* go-gcc.cc (Gcc_backend::Gcc_backend): Define memmove builtin.
+
+2019-05-07  Cherry Zhang  <cherryyz@google.com>
+
+	* lang.opt (-fgo-debug-optimization): New option.
+	* go-c.h (struct go_create_gogo_args): Add debug_optimization
+	field.
+	* go-lang.c (go_langhook_init): Set debug_optimization field.
+	* gccgo.texi (Invoking gccgo): Document -fgo-debug-optimization.
+
+2019-03-06  Ian Lance Taylor  <iant@golang.org>
+
+	PR go/89227
+	* go-gcc.cc (Gcc_backend::function): Set TREE_PUBLIC for an
+	only-inline function.
+
+2019-02-15  Cherry Zhang  <cherryyz@google.com>
+
+	* go-gcc.cc (Gcc_backend::Gcc_backend): Define __builtin_dwarf_cfa
+	instead of __builtin_frame_address.
+
+2019-02-14  Ian Lance Taylor  <iant@golang.org>
+
+	* go-backend.c (go_imported_unsafe): Update
+	optimization_default_node.
+
+2019-02-13  Ian Lance Taylor  <iant@golang.org>
+
+	* go-gcc.cc: #include "opts.h".
+	(Gcc_backend::function): Compile thunks with -Os.
+
+2019-02-05  Nikhil Benesch  <nikhil.benesch@gmail.com>
+
+	PR go/89019
+	* go-gcc.cc (Gcc_backend::placeholder_struct_type): Mark
+	placeholder structs as requiring structural equality.
+	(Gcc_backend::set_placeholder_pointer_type): Propagate the
+	canonical type from the desired pointer type to the placeholder
+	pointer type.
+
+2019-01-09  Ian Lance Taylor  <iant@golang.org>
+
+	PR go/86343
+	* go-gcc.cc (Gcc_backend::set_placeholder_struct_type): Go back to
+	build_distinct_type_copy, but copy the fields so that they have
+	the right DECL_CONTEXT.
+
+2019-01-09  Sandra Loosemore  <sandra@codesourcery.com>
+
+	PR other/16615
+
+	* go-backend.c: Mechanically replace "can not" with "cannot".
+	* go-gcc.cc: Likewise.
+
+2019-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+	* gccgo.texi: Bump @copyrights-go year.
+
+2018-11-27  Ian Lance Taylor  <iant@golang.org>
+
+	* go-gcc.cc (Gcc_backend::function): Handle function_only_inline
+	flag.
+
+2018-11-13  David Malcolm  <dmalcolm@redhat.com>
+
+	* go-gcc-diagnostics.cc: Replace "source_location" with "location_t".
+	* go-gcc.cc: Likewise.
+	* go-linemap.cc: Likewise.
+	* go-location.h: Likewise.
+	* gofrontend/README: Likewise.
+
+2018-10-31  Ian Lance Taylor  <iant@golang.org>
+
+	* go-gcc.cc (Gcc_backend::write_global_definitions): Don't call
+	gimplify_function_tree.  Instead call allocate_struct_function if
+	necessary.
+
+2018-10-29  Ian Lance Taylor  <iant@golang.org>
+
+	* go-gcc.cc (Gcc_backend::function): Change to use a single flags
+	parameter.
+
+2018-10-29  Ian Lance Taylor  <iant@golang.org>
+
+	* go-linemap.cc (Gcc_linemap::location_file): New method.
+
+2018-10-17  David Malcolm  <dmalcolm@redhat.com>
+
+	* Make-lang.in (selftest-go): New.
+
+2018-09-20  Allan Sandfeld Jensen  <allan.jensen@qt.io>
+
+	* gospec.c (lang_specific_driver): Handle -r like -nostdlib.
+
+2018-08-27  Martin Liska  <mliska@suse.cz>
+
+	* go-gcc.cc (Gcc_backend::call_expression): Use new function
+	fndecl_built_in_p and remove check for FUNCTION_DECL if
+	possible.
+
+2018-07-20  Martin Sebor  <msebor@redhat.com>
+
+	PR middle-end/82063
+	* go-lang.c (go_langhook_handle_option): Change function argument
+	to HOST_WIDE_INT.
+
+2018-06-28  Ian Lance Taylor  <iant@golang.org>
+
+	PR go/86343
+	* go-gcc.cc (Gcc_backend::set_placeholder_struct_type): Call
+	build_variant_type_copy rather than build_distinct_type_copy.
+
+2018-06-08  Cherry Zhang  <cherryyz@google.com>
+
+	* go-gcc.cc (class Gcc_backend): Remove
+	stack_allocation_expression method.
 
 2018-02-03  Ian Lance Taylor  <iant@golang.org>
 
@@ -463,7 +701,7 @@
 2015-07-12  Aldy Hernandez  <aldyh@redhat.com>
 
 	* gofrontend/backend.h: Fix double word typos.
-        * gofrontend/expressions.cc: Same.
+	* gofrontend/expressions.cc: Same.
 	* gospec.c: Same.
 
 2015-07-07  Andrew MacLeod  <amacleod@redhat.com>
@@ -825,7 +1063,7 @@
 2013-11-22  Andrew MacLeod  <amacleod@redhat.com>
 
 	* go-gcc.cc: Add required include files from gimple.h.
-	* go-lang.c: Likewise
+	* go-lang.c: Likewise.
 
 2013-11-18  Richard Sandiford  <rdsandiford@googlemail.com>
 
@@ -1540,7 +1778,7 @@
 
 	Go frontend added to gcc repository.
 
-Copyright (C) 2010-2018 Free Software Foundation, Inc.
+Copyright (C) 2010-2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

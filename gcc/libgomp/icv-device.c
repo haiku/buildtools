@@ -1,4 +1,4 @@
-/* Copyright (C) 2005-2018 Free Software Foundation, Inc.
+/* Copyright (C) 2005-2021 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -43,23 +43,15 @@ omp_get_default_device (void)
 }
 
 int
-omp_get_num_devices (void)
+omp_get_initial_device (void)
 {
   return gomp_get_num_devices ();
 }
 
 int
-omp_get_num_teams (void)
+omp_get_num_devices (void)
 {
-  /* Hardcoded to 1 on host, MIC, HSAIL?  Maybe variable on PTX.  */
-  return 1;
-}
-
-int
-omp_get_team_num (void)
-{
-  /* Hardcoded to 0 on host, MIC, HSAIL?  Maybe variable on PTX.  */
-  return 0;
+  return gomp_get_num_devices ();
 }
 
 int
@@ -71,7 +63,6 @@ omp_is_initial_device (void)
 
 ialias (omp_set_default_device)
 ialias (omp_get_default_device)
+ialias (omp_get_initial_device)
 ialias (omp_get_num_devices)
-ialias (omp_get_num_teams)
-ialias (omp_get_team_num)
 ialias (omp_is_initial_device)

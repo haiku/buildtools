@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -207,13 +207,13 @@ package body Styleg is
 
       function OK_Boolean_Operand (N : Node_Id) return Boolean is
       begin
-         if Nkind_In (N, N_Identifier, N_Expanded_Name) then
+         if Nkind (N) in N_Identifier | N_Expanded_Name then
             return True;
 
          elsif Nkind (N) = N_Op_Not then
             return OK_Boolean_Operand (Original_Node (Right_Opnd (N)));
 
-         elsif Nkind_In (N, N_Op_And, N_Op_Or) then
+         elsif Nkind (N) in N_Op_And | N_Op_Or then
             return OK_Boolean_Operand (Original_Node (Left_Opnd (N)))
                      and then
                    OK_Boolean_Operand (Original_Node (Right_Opnd (N)));
@@ -233,7 +233,7 @@ package body Styleg is
             Orig : constant Node_Id := Original_Node (Node);
 
          begin
-            if Nkind_In (Orig, N_Op_And, N_Op_Or) then
+            if Nkind (Orig) in N_Op_And | N_Op_Or then
                declare
                   L : constant Node_Id := Original_Node (Left_Opnd  (Orig));
                   R : constant Node_Id := Original_Node (Right_Opnd (Orig));
@@ -609,6 +609,31 @@ package body Styleg is
          end if;
       end if;
    end Check_Comment;
+
+   --------------------------------------
+   -- Check_Defining_Identifier_Casing --
+   --------------------------------------
+
+   procedure Check_Defining_Identifier_Casing is
+   begin
+      if Style_Check_Mixed_Case_Decls then
+         case Determine_Token_Casing is
+            when All_Lower_Case
+               | All_Upper_Case
+            =>
+               Error_Msg_SC -- CODEFIX
+                 ("(style) bad capitalization, mixed case required");
+
+            --  The Unknown case is something like A_B_C, which is both all
+            --  caps and mixed case.
+
+            when Mixed_Case
+               | Unknown
+            =>
+               null; -- OK
+         end case;
+      end if;
+   end Check_Defining_Identifier_Casing;
 
    -------------------
    -- Check_Dot_Dot --

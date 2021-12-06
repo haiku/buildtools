@@ -41,26 +41,28 @@ func main() {
 		return
 	}
 
+	// Keep in sync with src/cmd/go/internal/work/buildid.go:updateBuildID
+
 	f, err := os.Open(file)
 	if err != nil {
 		log.Fatal(err)
 	}
 	matches, hash, err := buildid.FindAndHash(f, id, 0)
+	f.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-	f.Close()
 
-	tail := id
-	if i := strings.LastIndex(id, "."); i >= 0 {
-		tail = tail[i+1:]
+	newID := id[:strings.LastIndex(id, "/")] + "/" + buildid.HashToString(hash)
+	if len(newID) != len(id) {
+		log.Fatalf("%s: build ID length mismatch %q vs %q", file, id, newID)
 	}
-	if len(tail) != len(hash)*2 {
-		log.Fatalf("%s: cannot find %d-byte hash in id %s", file, len(hash), id)
-	}
-	newID := id[:len(id)-len(tail)] + fmt.Sprintf("%x", hash)
 
-	f, err = os.OpenFile(file, os.O_WRONLY, 0)
+	if len(matches) == 0 {
+		return
+	}
+
+	f, err = os.OpenFile(file, os.O_RDWR, 0)
 	if err != nil {
 		log.Fatal(err)
 	}

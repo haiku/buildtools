@@ -1,8 +1,6 @@
-// { dg-options "-std=gnu++17 -lstdc++fs" }
 // { dg-do run { target c++17 } }
-// { dg-require-filesystem-ts "" }
 
-// Copyright (C) 2018 Free Software Foundation, Inc.
+// Copyright (C) 2018-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -70,8 +68,8 @@ test02()
 void
 test03()
 {
-  for (const path& p : __gnu_test::test_paths)
-    for (const path& q : __gnu_test::test_paths)
+  for (const path p : __gnu_test::test_paths)
+    for (const path q : __gnu_test::test_paths)
       test(p, q);
 }
 

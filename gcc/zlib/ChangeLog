@@ -1,14 +1,28 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
 
-2018-07-26  Release Manager
+2021-04-27  Release Manager
 
-	* GCC 8.2.0 released.
+	* GCC 11.1.0 released.
 
-2018-05-02  Release Manager
+2021-01-05  Samuel Thibault  <samuel.thibault@ens-lyon.org>
 
-	* GCC 8.1.0 released.
+	* configure: Re-generate.
+
+2020-12-05  Iain Sandoe  <iain@sandoe.co.uk>
+
+	PR target/97865
+	* configure: Regenerate.
+
+2020-11-29  John David Anglin  <danglin@gcc.gnu.org>
+
+	* configure: Regenerate.
+
+2020-05-29  H.J. Lu  <hjl.tools@gmail.com>
+
+	PR bootstrap/95413
+	* configure: Regenerated.
 
 
                 ChangeLog file for zlib

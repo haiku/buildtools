@@ -5,7 +5,7 @@
    use forward- and back-slash in path names interchangeably, and
    some of them have case-insensitive file names.
 
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
 
 This file is part of BFD, the Binary File Descriptor library.
 
@@ -32,25 +32,22 @@ Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA. 
 extern "C" {
 #endif
 
-#if defined(__MSDOS__) || defined(_WIN32) || defined(__OS2__) || defined (__CYGWIN__)
+#if defined(__MSDOS__) || (defined(_WIN32) && ! defined(__CYGWIN__)) || \
+    defined(__OS2__)
 #  ifndef HAVE_DOS_BASED_FILE_SYSTEM
 #    define HAVE_DOS_BASED_FILE_SYSTEM 1
 #  endif
-/*
 #  ifndef HAVE_CASE_INSENSITIVE_FILE_SYSTEM
 #    define HAVE_CASE_INSENSITIVE_FILE_SYSTEM 1
 #  endif
-*/
 #  define HAS_DRIVE_SPEC(f) HAS_DOS_DRIVE_SPEC (f)
 #  define IS_DIR_SEPARATOR(c) IS_DOS_DIR_SEPARATOR (c)
 #  define IS_ABSOLUTE_PATH(f) IS_DOS_ABSOLUTE_PATH (f)
 #else /* not DOSish */
 #  if defined(__APPLE__)
-/*
 #    ifndef HAVE_CASE_INSENSITIVE_FILE_SYSTEM
 #      define HAVE_CASE_INSENSITIVE_FILE_SYSTEM 1
 #    endif
-*/
 #  endif /* __APPLE__ */
 #  define HAS_DRIVE_SPEC(f) (0)
 #  define IS_DIR_SEPARATOR(c) IS_UNIX_DIR_SEPARATOR (c)

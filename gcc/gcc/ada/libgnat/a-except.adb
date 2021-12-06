@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,10 +31,6 @@
 
 pragma Style_Checks (All_Checks);
 --  No subprogram ordering check, due to logical grouping
-
-pragma Polling (Off);
---  We must turn polling off for this unit, because otherwise we get
---  elaboration circularities with System.Exception_Tables.
 
 with System;                  use System;
 with System.Exceptions;       use System.Exceptions;
@@ -228,7 +224,7 @@ package body Ada.Exceptions is
       function Allocate_Occurrence return EOA;
       --  Allocate an exception occurrence (as well as the machine occurrence)
 
-      procedure Propagate_Exception (Excep : EOA);
+      procedure Propagate_Exception (Excep : Exception_Occurrence);
       pragma No_Return (Propagate_Exception);
       --  This procedure propagates the exception represented by Excep
 
@@ -668,21 +664,6 @@ package body Ada.Exceptions is
    Rmsg_36 : constant String := "stream operation not allowed"     & NUL;
    Rmsg_37 : constant String := "build-in-place mismatch"          & NUL;
 
-   -----------------------
-   -- Polling Interface --
-   -----------------------
-
-   type Unsigned is mod 2 ** 32;
-
-   Counter : Unsigned := 0;
-   pragma Warnings (Off, Counter);
-   --  This counter is provided for convenience. It can be used in Poll to
-   --  perform periodic but not systematic operations.
-
-   procedure Poll is separate;
-   --  The actual polling routine is separate, so that it can easily be
-   --  replaced with a target dependent version.
-
    --------------------------
    -- Code_Address_For_AAA --
    --------------------------
@@ -940,7 +921,7 @@ package body Ada.Exceptions is
    procedure Complete_And_Propagate_Occurrence (X : EOA) is
    begin
       Complete_Occurrence (X);
-      Exception_Propagation.Propagate_Exception (X);
+      Exception_Propagation.Propagate_Exception (X.all);
    end Complete_And_Propagate_Occurrence;
 
    ---------------------
@@ -976,11 +957,6 @@ package body Ada.Exceptions is
 
    begin
       Exception_Data.Set_Exception_Msg (X, E, Message);
-
-      if not ZCX_By_Default then
-         Abort_Defer.all;
-      end if;
-
       Complete_And_Propagate_Occurrence (X);
    end Raise_Exception_Always;
 
@@ -1060,11 +1036,6 @@ package body Ada.Exceptions is
 
    begin
       Exception_Data.Set_Exception_C_Msg (X, E, M);
-
-      if not ZCX_By_Default then
-         Abort_Defer.all;
-      end if;
-
       Complete_Occurrence (X);
       return X;
    end Create_Occurrence_From_Signal_Handler;
@@ -1091,7 +1062,7 @@ package body Ada.Exceptions is
    is
    begin
       Exception_Propagation.Propagate_Exception
-        (Create_Occurrence_From_Signal_Handler (E, M));
+        (Create_Occurrence_From_Signal_Handler (E, M).all);
    end Raise_From_Signal_Handler;
 
    -------------------------
@@ -1160,11 +1131,6 @@ package body Ada.Exceptions is
       X : constant EOA := Exception_Propagation.Allocate_Occurrence;
    begin
       Exception_Data.Set_Exception_C_Msg (X, E, F, L, C, M);
-
-      if not ZCX_By_Default then
-         Abort_Defer.all;
-      end if;
-
       Complete_And_Propagate_Occurrence (X);
    end Raise_With_Location_And_Msg;
 
@@ -1186,13 +1152,6 @@ package body Ada.Exceptions is
 
       Excep.Msg_Length                  := Ex.Msg_Length;
       Excep.Msg (1 .. Excep.Msg_Length) := Ex.Msg (1 .. Ex.Msg_Length);
-
-      --  The following is a common pattern, should be abstracted
-      --  into a procedure call ???
-
-      if not ZCX_By_Default then
-         Abort_Defer.all;
-      end if;
 
       Complete_And_Propagate_Occurrence (Excep);
    end Raise_With_Msg;
@@ -1526,10 +1485,6 @@ package body Ada.Exceptions is
       Saved_MO : constant System.Address := Excep.Machine_Occurrence;
 
    begin
-      if not ZCX_By_Default then
-         Abort_Defer.all;
-      end if;
-
       Save_Occurrence (Excep.all, Get_Current_Excep.all.all);
       Excep.Machine_Occurrence := Saved_MO;
       Complete_And_Propagate_Occurrence (Excep);
@@ -1575,10 +1530,6 @@ package body Ada.Exceptions is
 
    procedure Reraise_Occurrence_Always (X : Exception_Occurrence) is
    begin
-      if not ZCX_By_Default then
-         Abort_Defer.all;
-      end if;
-
       Reraise_Occurrence_No_Defer (X);
    end Reraise_Occurrence_Always;
 
@@ -1587,12 +1538,25 @@ package body Ada.Exceptions is
    ---------------------------------
 
    procedure Reraise_Occurrence_No_Defer (X : Exception_Occurrence) is
-      Excep    : constant EOA := Exception_Propagation.Allocate_Occurrence;
-      Saved_MO : constant System.Address := Excep.Machine_Occurrence;
    begin
-      Save_Occurrence (Excep.all, X);
-      Excep.Machine_Occurrence := Saved_MO;
-      Complete_And_Propagate_Occurrence (Excep);
+      --  If we have a Machine_Occurrence at hand already, e.g. when we are
+      --  reraising a foreign exception, just repropagate. Otherwise, e.g.
+      --  when reraising a GNAT exception or an occurrence read back from a
+      --  stream, set up a new occurrence with its own Machine block first.
+
+      if X.Machine_Occurrence /= System.Null_Address then
+         Exception_Propagation.Propagate_Exception (X);
+      else
+         declare
+            Excep : constant EOA
+              := Exception_Propagation.Allocate_Occurrence;
+            Saved_MO : constant System.Address := Excep.Machine_Occurrence;
+         begin
+            Save_Occurrence (Excep.all, X);
+            Excep.Machine_Occurrence := Saved_MO;
+            Complete_And_Propagate_Occurrence (Excep);
+         end;
+      end if;
    end Reraise_Occurrence_No_Defer;
 
    ---------------------
@@ -1611,6 +1575,7 @@ package body Ada.Exceptions is
       Target.Machine_Occurrence := System.Null_Address;
       Target.Msg_Length         := Source.Msg_Length;
       Target.Num_Tracebacks     := Source.Num_Tracebacks;
+      Target.Exception_Raised   := Source.Exception_Raised;
       Target.Pid                := Source.Pid;
 
       Target.Msg (1 .. Target.Msg_Length) :=
@@ -1646,10 +1611,10 @@ package body Ada.Exceptions is
    ---------------
 
    procedure To_Stderr (C : Character) is
-      procedure Put_Char_Stderr (C : Character);
+      procedure Put_Char_Stderr (C : Integer);
       pragma Import (C, Put_Char_Stderr, "put_char_stderr");
    begin
-      Put_Char_Stderr (C);
+      Put_Char_Stderr (Character'Pos (C));
    end To_Stderr;
 
    procedure To_Stderr (S : String) is

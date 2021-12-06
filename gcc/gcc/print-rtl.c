@@ -1,5 +1,5 @@
 /* Print RTL for GCC.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -36,11 +36,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "alias.h"
 #include "tree.h"
 #include "basic-block.h"
-#include "cfg.h"
 #include "print-tree.h"
 #include "flags.h"
 #include "predict.h"
 #include "function.h"
+#include "cfg.h"
 #include "basic-block.h"
 #include "diagnostic.h"
 #include "tree-pretty-print.h"
@@ -53,6 +53,13 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "print-rtl.h"
 #include "rtl-iter.h"
+
+/* Disable warnings about quoting issues in the pp_xxx calls below
+   that (intentionally) don't follow GCC diagnostic conventions.  */
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat-diag"
+#endif
 
 /* String printed at beginning of each RTL when it is dumped.
    This string is set to ASM_COMMENT_START when the RTL is dumped in
@@ -176,7 +183,8 @@ void
 print_mem_expr (FILE *outfile, const_tree expr)
 {
   fputc (' ', outfile);
-  print_generic_expr (outfile, CONST_CAST_TREE (expr), dump_flags);
+  print_generic_expr (outfile, CONST_CAST_TREE (expr),
+		      dump_flags | TDF_SLIM);
 }
 #endif
 
@@ -362,6 +370,10 @@ rtx_writer::print_rtx_operand_codes_E_and_V (const_rtx in_rtx, int idx)
       print_rtx_head, m_indent * 2, "");
       m_sawclose = 0;
     }
+  if (GET_CODE (in_rtx) == CONST_VECTOR
+      && !GET_MODE_NUNITS (GET_MODE (in_rtx)).is_constant ()
+      && CONST_VECTOR_DUPLICATE_P (in_rtx))
+    fprintf (m_outfile, " repeat");
   fputs (" [", m_outfile);
   if (XVEC (in_rtx, idx) != NULL)
     {
@@ -369,8 +381,47 @@ rtx_writer::print_rtx_operand_codes_E_and_V (const_rtx in_rtx, int idx)
       if (XVECLEN (in_rtx, idx))
 	m_sawclose = 1;
 
+      int barrier = XVECLEN (in_rtx, idx);
+      if (GET_CODE (in_rtx) == CONST_VECTOR
+	  && !GET_MODE_NUNITS (GET_MODE (in_rtx)).is_constant ())
+	barrier = CONST_VECTOR_NPATTERNS (in_rtx);
+
       for (int j = 0; j < XVECLEN (in_rtx, idx); j++)
-	print_rtx (XVECEXP (in_rtx, idx, j));
+	{
+	  int j1;
+
+	  if (j == barrier)
+	    {
+	      fprintf (m_outfile, "\n%s%*s",
+		       print_rtx_head, m_indent * 2, "");
+	      if (!CONST_VECTOR_STEPPED_P (in_rtx))
+		fprintf (m_outfile, "repeat [");
+	      else if (CONST_VECTOR_NPATTERNS (in_rtx) == 1)
+		fprintf (m_outfile, "stepped [");
+	      else
+		fprintf (m_outfile, "stepped (interleave %d) [",
+			 CONST_VECTOR_NPATTERNS (in_rtx));
+	      m_indent += 2;
+	    }
+
+	  print_rtx (XVECEXP (in_rtx, idx, j));
+	  int limit = MIN (barrier, XVECLEN (in_rtx, idx));
+	  for (j1 = j + 1; j1 < limit; j1++)
+	    if (XVECEXP (in_rtx, idx, j) != XVECEXP (in_rtx, idx, j1))
+	      break;
+
+	  if (j1 != j + 1)
+	    {
+	      fprintf (m_outfile, " repeated x%i", j1 - j);
+	      j = j1 - 1;
+	    }
+	}
+
+      if (barrier < XVECLEN (in_rtx, idx))
+	{
+	  m_indent -= 2;
+	  fprintf (m_outfile, "\n%s%*s]", print_rtx_head, m_indent * 2, "");
+	}
 
       m_indent -= 2;
     }
@@ -398,7 +449,8 @@ rtx_writer::print_rtx_operand_code_i (const_rtx in_rtx, int idx)
       if (INSN_HAS_LOCATION (in_insn))
 	{
 	  expanded_location xloc = insn_location (in_insn);
-	  fprintf (m_outfile, " \"%s\":%i", xloc.file, xloc.line);
+	  fprintf (m_outfile, " \"%s\":%i:%i", xloc.file, xloc.line,
+		   xloc.column);
 	}
 #endif
     }
@@ -1215,7 +1267,7 @@ print_rtx_insn_vec (FILE *file, const vec<rtx_insn *> &vec)
   unsigned int len = vec.length ();
   for (unsigned int i = 0; i < len; i++)
     {
-      print_rtl (file, vec[i]);
+      print_rtl_single (file, vec[i]);
       if (i < len - 1)
 	fputs (", ", file);
     }
@@ -1237,9 +1289,6 @@ print_rtx_insn_vec (FILE *file, const vec<rtx_insn *> &vec)
 
    It is also possible to obtain a string for a single pattern as a string
    pointer, via str_pattern_slim, but this usage is discouraged.  */
-
-/* For insns we print patterns, and for some patterns we print insns...  */
-static void print_insn_with_notes (pretty_printer *, const rtx_insn *);
 
 /* This recognizes rtx'en classified as expressions.  These are always
    represent some action on values or results of other expression, that
@@ -1664,7 +1713,9 @@ print_value (pretty_printer *pp, const_rtx x, int verbose)
       pp_string (pp, tmp);
       break;
     case CONST_STRING:
-      pp_printf (pp, "\"%s\"", XSTR (x, 0));
+      pp_string (pp, "\"");
+      pretty_print_string (pp, XSTR (x, 0), strlen (XSTR (x, 0)));
+      pp_string (pp, "\"");
       break;
     case SYMBOL_REF:
       pp_printf (pp, "`%s'", XSTR (x, 0));
@@ -1793,7 +1844,7 @@ print_pattern (pretty_printer *pp, const_rtx x, int verbose)
 	    gcc_assert (strlen (print_rtx_head) < sizeof (indented_print_rtx_head) - 4);
 	    snprintf (indented_print_rtx_head,
 		      sizeof (indented_print_rtx_head),
-		      "%s     ", print_rtx_head);
+		      "%s    ", print_rtx_head);
 	    print_rtx_head = indented_print_rtx_head;
 	    for (int i = 0; i < seq->len (); i++)
 	      print_insn_with_notes (pp, seq->insn (i));
@@ -1987,7 +2038,7 @@ print_insn (pretty_printer *pp, const rtx_insn *x, int verbose)
 /* Pretty-print a slim dump of X (an insn) to PP, including any register
    note attached to the instruction.  */
 
-static void
+void
 print_insn_with_notes (pretty_printer *pp, const rtx_insn *x)
 {
   pp_string (pp, print_rtx_head);
@@ -2115,7 +2166,7 @@ extern void debug_bb_slim (basic_block);
 DEBUG_FUNCTION void
 debug_bb_slim (basic_block bb)
 {
-  dump_bb (stderr, bb, 0, TDF_SLIM | TDF_BLOCKS);
+  debug_bb (bb, TDF_SLIM | TDF_BLOCKS);
 }
 
 extern void debug_bb_n_slim (int);
@@ -2126,4 +2177,8 @@ debug_bb_n_slim (int n)
   debug_bb_slim (bb);
 }
 
+#endif
+
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic pop
 #endif

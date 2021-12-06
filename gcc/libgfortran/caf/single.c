@@ -1,5 +1,5 @@
 /* Single-image implementation of GNU Fortran Coarray Library
-   Copyright (C) 2011-2018 Free Software Foundation, Inc.
+   Copyright (C) 2011-2021 Free Software Foundation, Inc.
    Contributed by Tobias Burnus <burnus@net-b.de>
 
 This file is part of the GNU Fortran Coarray Runtime Library (libcaf).
@@ -327,7 +327,7 @@ int _gfortran_caf_image_status (int image,
 }
 
 
-/* Single image library.  There can not be any failed images with only one
+/* Single image library.  There cannot be any failed images with only one
    image.  */
 
 void
@@ -1268,7 +1268,7 @@ get_for_ref (caf_reference_t *ref, size_t *i, size_t *dst_index,
 	  if (ref->next && ref->next->type == CAF_REF_COMPONENT)
 	    /* The currently ref'ed component was allocatabe (caf_token_offset
 	       > 0) and the next ref is a component, too, then the new sr has to
-	       be dereffed.  (static arrays can not be allocatable or they
+	       be dereffed.  (static arrays cannot be allocatable or they
 	       become an array with descriptor.  */
 	    sr = *(void **)(sr + ref->u.c.offset);
 	  else
@@ -1525,7 +1525,7 @@ get_for_ref (caf_reference_t *ref, size_t *i, size_t *dst_index,
 		       dst_kind, src_kind, dst_dim, src_dim + 1, 1,
 		       stat, src_type);
 	  return;
-	/* The OPEN_* are mapped to a RANGE and therefore can not occur.  */
+	/* The OPEN_* are mapped to a RANGE and therefore cannot occur.  */
 	case CAF_ARR_REF_OPEN_END:
 	case CAF_ARR_REF_OPEN_START:
 	default:
@@ -1558,7 +1558,7 @@ _gfortran_caf_get_by_ref (caf_token_t token,
   const char extentoutofrange[] = "libcaf_single::caf_get_by_ref(): "
 				  "extent out of range.\n";
   const char cannotallocdst[] = "libcaf_single::caf_get_by_ref(): "
-				"can not allocate memory.\n";
+				"cannot allocate memory.\n";
   const char nonallocextentmismatch[] = "libcaf_single::caf_get_by_ref(): "
       "extent of non-allocatable arrays mismatch (%lu != %lu).\n";
   const char doublearrayref[] = "libcaf_single::caf_get_by_ref(): "
@@ -1864,7 +1864,7 @@ _gfortran_caf_get_by_ref (caf_token_t token,
 		  break;
 		case CAF_ARR_REF_OPEN_END:
 		  /* This and OPEN_START are mapped to a RANGE and therefore
-		     can not occur here.  */
+		     cannot occur here.  */
 		case CAF_ARR_REF_OPEN_START:
 		default:
 		  caf_internal_error (unknownarrreftype, stat, NULL, 0);
@@ -2415,7 +2415,7 @@ send_by_ref (caf_reference_t *ref, size_t *i, size_t *src_index,
 		       dst_kind, src_kind, dst_dim + 1, src_dim, 1,
 		       size, stat, dst_type);
 	  return;
-	/* The OPEN_* are mapped to a RANGE and therefore can not occur.  */
+	/* The OPEN_* are mapped to a RANGE and therefore cannot occur.  */
 	case CAF_ARR_REF_OPEN_END:
 	case CAF_ARR_REF_OPEN_START:
 	default:
@@ -2447,7 +2447,7 @@ _gfortran_caf_send_by_ref (caf_token_t token,
   const char realloconinnerref[] = "libcaf_single::caf_send_by_ref(): "
       "reallocation of array followed by component ref not allowed.\n";
   const char cannotallocdst[] = "libcaf_single::caf_send_by_ref(): "
-				"can not allocate memory.\n";
+				"cannot allocate memory.\n";
   const char nonallocextentmismatch[] = "libcaf_single::caf_send_by_ref(): "
       "extent of non-allocatable array mismatch.\n";
   const char innercompref[] = "libcaf_single::caf_send_by_ref(): "
@@ -2728,7 +2728,7 @@ _gfortran_caf_send_by_ref (caf_token_t token,
 		  break;
 		case CAF_ARR_REF_OPEN_END:
 		  /* This and OPEN_START are mapped to a RANGE and therefore
-		     can not occur here.  */
+		     cannot occur here.  */
 		case CAF_ARR_REF_OPEN_START:
 		default:
 		  caf_internal_error (unknownarrreftype, stat, NULL, 0);
@@ -2810,14 +2810,16 @@ _gfortran_caf_sendget_by_ref (caf_token_t dst_token, int dst_image_index,
   GFC_DESCRIPTOR_RANK (&temp) = -1;
   GFC_DESCRIPTOR_TYPE (&temp) = dst_type;
 
-  _gfortran_caf_get_by_ref (src_token, src_image_index, &temp, src_refs,
+  _gfortran_caf_get_by_ref (src_token, src_image_index,
+			    (gfc_descriptor_t *) &temp, src_refs,
 			    dst_kind, src_kind, may_require_tmp, true,
 			    src_stat, src_type);
 
   if (src_stat && *src_stat != 0)
     return;
 
-  _gfortran_caf_send_by_ref (dst_token, dst_image_index, &temp, dst_refs,
+  _gfortran_caf_send_by_ref (dst_token, dst_image_index,
+			     (gfc_descriptor_t *) &temp, dst_refs,
 			     dst_kind, dst_kind, may_require_tmp, true,
 			     dst_stat, dst_type);
   if (GFC_DESCRIPTOR_DATA (&temp))
@@ -2959,7 +2961,8 @@ _gfortran_caf_event_query (caf_token_t token, size_t index,
 void
 _gfortran_caf_lock (caf_token_t token, size_t index,
 		    int image_index __attribute__ ((unused)),
-		    int *aquired_lock, int *stat, char *errmsg, size_t errmsg_len)
+		    int *acquired_lock, int *stat, char *errmsg,
+		    size_t errmsg_len)
 {
   const char *msg = "Already locked";
   bool *lock = &((bool *) MEMTOK (token))[index];
@@ -2967,16 +2970,16 @@ _gfortran_caf_lock (caf_token_t token, size_t index,
   if (!*lock)
     {
       *lock = true;
-      if (aquired_lock)
-	*aquired_lock = (int) true;
+      if (acquired_lock)
+	*acquired_lock = (int) true;
       if (stat)
 	*stat = 0;
       return;
     }
 
-  if (aquired_lock)
+  if (acquired_lock)
     {
-      *aquired_lock = (int) false;
+      *acquired_lock = (int) false;
       if (stat)
 	*stat = 0;
     return;
@@ -3131,4 +3134,14 @@ _gfortran_caf_is_present (caf_token_t token,
       riter = riter->next;
     }
   return memptr != NULL;
+}
+
+/* Reference the libraries implementation.  */
+extern void _gfortran_random_init (int32_t, int32_t, int32_t);
+
+void _gfortran_caf_random_init (bool repeatable, bool image_distinct)
+{
+  /* In a single image implementation always forward to the gfortran
+     routine.  */
+  _gfortran_random_init (repeatable, image_distinct, 1);
 }

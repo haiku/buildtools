@@ -7,7 +7,7 @@
 --                                  B o d y                                 --
 --                                                                          --
 --            Copyright (C) 1991-2017, Florida State University             --
---          Copyright (C) 1995-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1995-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -40,11 +40,8 @@
 --  This package encapsulates all direct interfaces to OS services
 --  that are needed by children of System.
 
-pragma Polling (Off);
---  Turn off polling, we do not want ATC polling to take place during
---  tasking operations. It causes infinite loops and other problems.
-
 with Interfaces.C; use Interfaces.C;
+
 package body System.OS_Interface is
 
    -----------------

@@ -1,6 +1,6 @@
 // Iostreams base classes -*- C++ -*-
 
-// Copyright (C) 1997-2018 Free Software Foundation, Inc.
+// Copyright (C) 1997-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -289,6 +289,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       virtual const char*
       what() const throw();
 
+#if __cplusplus >= 201103L
+      // Define the new members required by C++11,
+      // even though the error_code cannot be stored.
+
+      explicit
+      failure(const string& __s, const error_code&) noexcept
+      : failure(__s)
+      { }
+
+      explicit
+      failure(const char* __s, const error_code& = error_code{})
+      : failure(string(__s))
+      { }
+
+      // Stand-in for system_error::code() but returning by value.
+      error_code code() const noexcept { return error_code{}; }
+#endif
+
     private:
       string _M_msg;
     };
@@ -445,7 +463,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     /// Open for output.  Default for @c ofstream and fstream.
     static const openmode out =		_S_out;
 
-    /// Open for input.  Default for @c ofstream.
+    /// Truncate an existing stream when opening.  Default for @c ofstream.
     static const openmode trunc =	_S_trunc;
 
     // 27.4.2.1.5  Type ios_base::seekdir
@@ -471,12 +489,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #if __cplusplus <= 201402L
     // Annex D.6 (removed in C++17)
-    typedef int io_state;
-    typedef int open_mode;
-    typedef int seek_dir;
+    typedef int io_state
+      _GLIBCXX_DEPRECATED_SUGGEST("std::iostate");
+    typedef int open_mode
+      _GLIBCXX_DEPRECATED_SUGGEST("std::openmode");
+    typedef int seek_dir
+      _GLIBCXX_DEPRECATED_SUGGEST("std::seekdir");
 
-    typedef std::streampos streampos;
-    typedef std::streamoff streamoff;
+    typedef std::streampos streampos
+      _GLIBCXX_DEPRECATED_SUGGEST("std::streampos");
+    typedef std::streamoff streamoff
+      _GLIBCXX_DEPRECATED_SUGGEST("std::streamoff");
 #endif
 
     // Callbacks;
@@ -606,6 +629,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     public:
       Init();
       ~Init();
+
+#if __cplusplus >= 201103L
+      Init(const Init&) = default;
+      Init& operator=(const Init&) = default;
+#endif
 
     private:
       static _Atomic_word	_S_refcount;
@@ -810,7 +838,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     long&
     iword(int __ix)
     {
-      _Words& __word = (__ix < _M_word_size)
+      _Words& __word = ((unsigned)__ix < (unsigned)_M_word_size)
 			? _M_word[__ix] : _M_grow_words(__ix, true);
       return __word._M_iword;
     }
@@ -831,7 +859,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void*&
     pword(int __ix)
     {
-      _Words& __word = (__ix < _M_word_size)
+      _Words& __word = ((unsigned)__ix < (unsigned)_M_word_size)
 			? _M_word[__ix] : _M_grow_words(__ix, false);
       return __word._M_pword;
     }

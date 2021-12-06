@@ -1,5 +1,0 @@
-# Disable multilib for now, as we don't intend to support SPARC32.
-#MULTILIB_OPTIONS = m32/m64
-#MULTILIB_DIRNAMES = 32 64
-#MULTILIB_MATCHES =
-

@@ -1,19 +1,177 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
 
-2018-07-26  Release Manager
+2021-04-27  Release Manager
 
-	* GCC 8.2.0 released.
+	* GCC 11.1.0 released.
+
+2020-12-16  Martin Liska  <mliska@suse.cz>
+
+	* lang.opt: Remove usage of Report.
+
+2020-11-20  Jakub Jelinek  <jakub@redhat.com>
+
+	PR other/97911
+	* Make-lang.in (brig.serial): Change from goal to a variable.
+	(.PHONY): Drop brig.serial and brig.prev.
+	(brig1$(exeext)): Depend on $(brig.serial) rather than brig.serial.
+
+2020-11-18  Jakub Jelinek  <jakub@redhat.com>
+
+	* Make-lang.in (brig.serial): New goal.
+	(.PHONY): Add brig.serial brig.prev.
+	(brig1$(exeext)): Depend on brig.prev.  Call LINK_PROGRESS.
+
+2020-08-03  Martin Jambor  <mjambor@suse.cz>
+
+	* brigfrontend/brig-util.h (hsa_type_packed_p): Declared.
+	* brigfrontend/brig-util.cc (hsa_type_packed_p): Moved here from
+	removed gcc/hsa-common.c.
+	* brigfrontend/hsa-brig-format.h: New file.
+
+2020-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2019-10-04  Joseph Myers  <joseph@codesourcery.com>
+
+	* brig-lang.c (flag_isoc2x): New variable.
+
+2019-08-23  Jakub Jelinek  <jakub@redhat.com>
+
+	PR middle-end/91283
+	* brig-lang.c (brig_langhook_post_options): Set flag_excess_precision
+	instead of flag_excess_precision_cmdline.
+
+2019-06-25  Jozef Lawrynowicz  <jozef.l@mittosystems.com>
+
+	* brig-lang.c (brig_build_c_type_nodes): Accept "__intN__"
+	format of "__intN" types for SIZE_TYPE.
+
+2019-05-16  Martin Sebor  <msebor@redhat.com>
+
+	* brigfrontend/brig-control-handler.cc
+	(brig_directive_control_handler::operator): Remove trailing newline
+	from a diagnostic.
+	* brigfrontend/brig-module-handler.cc
+	(brig_directive_module_handler::operator): Remove a duplicated space
+	from a diagnostic.
+
+2019-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2018-10-17  David Malcolm  <dmalcolm@redhat.com>
+
+	* Make-lang.in (selftest-brig): New.
+
+2018-07-20  Martin Sebor  <msebor@redhat.com>
+
+	PR middle-end/82063
+	* brig-lang.c (brig_langhook_handle_option): Change function
+	argument to HOST_WIDE_INT.
 
 2018-07-04  Martin Jambor  <mjambor@suse.cz>
 
 	PR hsa/86371
 	* Make-lang.in (BRIGINCLUDES): Remove erroneous include path in $HOME.
 
-2018-05-02  Release Manager
+2018-06-28  Martin Liska  <mliska@suse.cz>
 
-	* GCC 8.1.0 released.
+	* brigspec.c: Add missing header file inclusion.
+
+2018-06-08  David Malcolm  <dmalcolm@redhat.com>
+
+	* brigfrontend/brig-to-generic.cc
+	(brig_to_generic::write_globals): Use TDF_NONE rather than 0.
+	(dump_function): Likewise.
+
+2018-05-18  Richard Sandiford  <richard.sandiford@linaro.org>
+
+	* brigfrontend/brig-function.cc
+	(brig_function::get_builtin_for_hsa_opcode): Use BUILT_IN_FMA
+	for BRIG_OPCODE_FMA.
+	(brig_function::get_tree_code_for_hsa_opcode): Treat BUILT_IN_FMA
+	as a call.
+
+2018-05-04  Pekka Jääskeläinen  <pekka.jaaskelainen@parmance.com>
+
+	* brigfrontend/brig-basic-inst-handler.cc: Fix handling of NOPs.
+
+2018-05-04  Pekka Jääskeläinen  <pekka.jaaskelainen@parmance.com>
+
+	Add flag -fassume-phsa that is on by default. If -fno-assume-phsa
+	is given, these optimizations are disabled.  With this flag, gccbrig
+	can generate GENERIC that assumes we are targeting a phsa-runtime
+	based implementation, which allows us to expose the work-item context
+	accesses to retrieve WI IDs etc.  which helps optimizers.
+	First optimization that takes advantage of this is to get rid of
+	the setworkitemid calls whenever we have non-inlined calls that
+	use IDs internally.  Other optimizations added in this commit:
+	- expand absoluteid to similar level of simplicity as workitemid.
+	At the moment absoluteid is the best indexing ID to end up with
+	WG vectorization.
+	- propagate ID variables closer to their uses. This is mainly
+	to avoid known useless casts, which confuse at least scalar
+	evolution analysis.
+	- use signed long long for storing IDs. Unsigned integers have
+	defined wraparound semantics, which confuse at least scalar
+	evolution analysis, leading to unvectorizable WI loops.
+	- also refactor some BRIG function generation helpers to brig_function.
+	- no point in having the wi-loop as a for-loop. It's really
+	a do...while and SCEV can analyze it just fine still.
+	- add consts to ptrs etc. in BRIG builtin defs.
+	Improves optimization opportunities.
+	- add qualifiers to generated function parameters.
+	Const and restrict on the hidden local/private pointers,
+	the arg buffer and the context pointer help some optimizations.
+	* brigfrontend/brig-basic-inst-handler.cc: See above.
+	* brigfrontend/brig-branch-inst-handler.cc: See above.
+	* brigfrontend/brig-cmp-inst-handler.cc: See above.
+	* brigfrontend/brig-code-entry-handler.cc: See above.
+	* brigfrontend/brig-code-entry-handler.h: See above.
+	* brigfrontend/brig-control-handler.cc: See above.
+	* brigfrontend/brig-cvt-inst-handler.cc: See above.
+	* brigfrontend/brig-function-handler.cc: See above.
+	* brigfrontend/brig-function.cc: See above.
+	* brigfrontend/brig-function.h: See above.
+	* brigfrontend/brig-label-handler.cc: See above.
+	* brigfrontend/brig-lane-inst-handler.cc: See above.
+	* brigfrontend/brig-mem-inst-handler.cc: See above.
+	* brigfrontend/phsa.h: See above.
+	* lang.opt: See above.
+
+2018-05-04  Pekka Jääskeläinen  <pekka.jaaskelainen@parmance.com>
+
+	* brigfrontend/brig-function-handler.cc: Skip multiple forward
+	declarations of the same function.
+
+2018-05-04  Pekka Jääskeläinen  <pekka.jaaskelainen@parmance.com>
+
+	* brig-lang.c: Do not allow optimizations based on known C
+	builtins.
+
+2018-05-04  Pekka Jääskeläinen  <pekka.jaaskelainen@parmance.com>
+
+	* brig-lang.c: Allow controlling strict aliasing from
+	cmd line.
+
+2018-05-04  Pekka Jääskeläinen  <pekka.jaaskelainen@parmance.com>
+
+	* brigfrontend/brig-code-entry-handler.cc: The modulo in
+	ID computation should not be needed.
+
+2018-05-04  Pekka Jääskeläinen  <pekka.jaaskelainen@parmance.com>
+
+	* brig-lang.c: Add support for whole program
+	optimizations by marking the kernels externally visible.
+	* brigfrontend/brig-branch-inst-handler.cc: See above.
+	* brigfrontend/brig-function-handler.cc: See above.
+	* brigfrontend/brig-function.cc: See above.
+	* brigfrontend/brig-to-generic.cc: See above.
+	* brigfrontend/brig-to-generic.h: See above.
+	* brigfrontend/brig-variable-handler.h: See above.
 
 2018-01-03  Richard Sandiford  <richard.sandiford@linaro.org>
 	    Alan Hayward  <alan.hayward@arm.com>
@@ -110,7 +268,7 @@
 	can be used to patch away BRIG entries at the binary level.
 	Also add extra error detection for zeroed regions: make sure
 	the byteCount field is never zero.
-	* brig/brigfrontend/phsa.h: Added a new error prefix for
+	* brigfrontend/phsa.h: Added a new error prefix for
 	errors which are due to corrupted BRIG modules.
 
 2017-10-09  Henry Linjamäki  <henry.linjamaki@parmance.com>

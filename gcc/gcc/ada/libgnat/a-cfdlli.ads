@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -34,6 +34,7 @@ with Ada.Containers.Functional_Maps;
 
 generic
    type Element_Type is private;
+   with function "=" (Left, Right : Element_Type) return Boolean is <>;
 
 package Ada.Containers.Formal_Doubly_Linked_Lists with
   SPARK_Mode
@@ -788,9 +789,10 @@ is
                 Count => Count);
 
    procedure Delete (Container : in out List; Position : in out Cursor) with
-     Global => null,
-     Pre    => Has_Element (Container, Position),
-     Post   =>
+     Global  => null,
+     Depends => (Container =>+ Position, Position => null),
+     Pre     => Has_Element (Container, Position),
+     Post    =>
        Length (Container) = Length (Container)'Old - 1
 
          --  Position is set to No_Element
@@ -1615,7 +1617,7 @@ private
       Length : Count_Type := 0;
       First  : Count_Type := 0;
       Last   : Count_Type := 0;
-      Nodes  : Node_Array (1 .. Capacity) := (others => <>);
+      Nodes  : Node_Array (1 .. Capacity);
    end record;
 
    Empty_List : constant List := (0, others => <>);

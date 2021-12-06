@@ -1,7 +1,6 @@
-/* { dg-do run { target { powerpc*-*-* && p9vector_hw } } } */
-/* { dg-skip-if "do not override -mcpu" { powerpc*-*-* } { "-mcpu=*" } { "-mcpu=power9" } } */
-/* { dg-require-effective-target powerpc_p9vector_ok } */
-/* { dg-options "-mcpu=power9 -O2" } */
+/* { dg-do run } */
+/* { dg-require-effective-target p9vector_hw } */
+/* { dg-options "-mdejagnu-cpu=power9 -O2" } */
 
 #include <altivec.h>
 #define TRUE 1
@@ -82,6 +81,7 @@ vext (vector unsigned char *vc)
 int main()
 {
    vector signed int vsi_arg;
+   vector unsigned int vui_arg;
    vector unsigned char vec_uc_arg, vec_uc_result, vec_uc_expected;
    vector unsigned long long vec_ull_result, vec_ull_expected;
    unsigned long long ull_result, ull_expected;
@@ -93,10 +93,17 @@ int main()
 
    vsi_arg = (vector signed int){0xA, 0xB, 0xC, 0xD};
 
+#ifdef __BIG_ENDIAN__
+   vec_uc_expected = (vector unsigned char){0, 0, 0, 0xB,
+					    5, 6, 7, 8,
+					    9, 10, 11, 12,
+					    13, 14, 15, 16};
+#else
    vec_uc_expected = (vector unsigned char){0xC, 0, 0, 0,
 					    5, 6, 7, 8,
 					    9, 10, 11, 12,
 					    13, 14, 15, 16};
+#endif
    /* Test vec_insert4b() */
    /* Insert into char 0 location */
    vec_uc_result = vec_insert4b (vsi_arg, vec_uc_arg, 0);
@@ -112,11 +119,20 @@ int main()
       }
 
    /* insert into char 4 location */
+#ifdef __BIG_ENDIAN__
    vec_uc_expected = (vector unsigned char){1, 2, 3, 4,
-					    0xC, 0, 0, 0,
+					    0, 0, 0, 3,
 					    9, 10, 11, 12,
 					    13, 14, 15, 16};
-   vec_uc_result = vec_insert4b (vsi_arg, vec_uc_arg, 4);
+#else
+   vec_uc_expected = (vector unsigned char){1, 2, 3, 4,
+					    2, 0, 0, 0,
+					    9, 10, 11, 12,
+					    13, 14, 15, 16};
+#endif
+   vui_arg = (vector unsigned int){0x4, 0x3, 0x2, 0x1};
+
+   vec_uc_result = vec_insert4b (vui_arg, vec_uc_arg, 4);
 
    if (result_wrong_uc(vec_uc_expected, vec_uc_result))
      {
@@ -130,12 +146,20 @@ int main()
 
    /* Test vec_extract4b() */
    /* Extract 4b, from char 0 location */
+#ifdef __BIG_ENDIAN__
+   vec_uc_arg = (vector unsigned char){0, 0, 0, 10,
+				       0, 0, 0, 20,
+				       0, 0, 0, 30,
+				       0, 0, 0, 40};
+   vec_ull_expected = (vector unsigned long long){10, 0};
+#else
    vec_uc_arg = (vector unsigned char){10, 0, 0, 0,
 				       20, 0, 0, 0,
 				       30, 0, 0, 0,
 				       40, 0, 0, 0};
-
    vec_ull_expected = (vector unsigned long long){0, 10};
+#endif
+
    vec_ull_result = vec_extract4b(vec_uc_arg, 0);
 
    if (result_wrong_ull(vec_ull_expected, vec_ull_result))
@@ -149,12 +173,20 @@ int main()
       }
 
    /* Extract 4b, from char 12 location */
+#ifdef __BIG_ENDIAN__
+   vec_uc_arg = (vector unsigned char){0, 0, 0, 10,
+				       0, 0, 0, 20,
+				       0, 0, 0, 30,
+				       0, 0, 0, 40};
+   vec_ull_expected = (vector unsigned long long){40, 0};
+#else
    vec_uc_arg = (vector unsigned char){10, 0, 0, 0,
 				       20, 0, 0, 0,
 				       30, 0, 0, 0,
 				       40, 0, 0, 0};
-
    vec_ull_expected = (vector unsigned long long){0, 40};
+#endif
+
    vec_ull_result = vec_extract4b(vec_uc_arg, 12);
 
    if (result_wrong_ull(vec_ull_expected, vec_ull_result))

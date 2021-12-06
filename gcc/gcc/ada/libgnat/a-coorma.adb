@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,8 +38,11 @@ with Ada.Containers.Red_Black_Trees.Generic_Keys;
 pragma Elaborate_All (Ada.Containers.Red_Black_Trees.Generic_Keys);
 
 with System; use type System.Address;
+with System.Put_Images;
 
-package body Ada.Containers.Ordered_Maps is
+package body Ada.Containers.Ordered_Maps with
+  SPARK_Mode => Off
+is
 
    pragma Warnings (Off, "variable ""Busy*"" is not referenced");
    pragma Warnings (Off, "variable ""Lock*"" is not referenced");
@@ -336,7 +339,7 @@ package body Ada.Containers.Ordered_Maps is
            (Element => Position.Node.Element'Access,
             Control => (Controlled with TC))
          do
-            Lock (TC.all);
+            Busy (TC.all);
          end return;
       end;
    end Constant_Reference;
@@ -361,7 +364,7 @@ package body Ada.Containers.Ordered_Maps is
            (Element => Node.Element'Access,
             Control => (Controlled with TC))
          do
-            Lock (TC.all);
+            Busy (TC.all);
          end return;
       end;
    end Constant_Reference;
@@ -479,6 +482,14 @@ package body Ada.Containers.Ordered_Maps is
       if Checks and then Position.Node = null then
          raise Constraint_Error with
            "Position cursor of function Element equals No_Element";
+      end if;
+
+      if Checks
+        and then (Left (Position.Node) = Position.Node
+                   or else
+                  Right (Position.Node) = Position.Node)
+      then
+         raise Program_Error with "dangling cursor";
       end if;
 
       pragma Assert (Vet (Position.Container.Tree, Position.Node),
@@ -1172,7 +1183,7 @@ package body Ada.Containers.Ordered_Maps is
         Container.Tree.TC'Unrestricted_Access;
    begin
       return R : constant Reference_Control_Type := (Controlled with TC) do
-         Lock (TC.all);
+         Busy (TC.all);
       end return;
    end Pseudo_Reference;
 
@@ -1203,6 +1214,36 @@ package body Ada.Containers.Ordered_Maps is
          Process (K, E);
       end;
    end Query_Element;
+
+   ---------------
+   -- Put_Image --
+   ---------------
+
+   procedure Put_Image
+     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Map)
+   is
+      First_Time : Boolean := True;
+      use System.Put_Images;
+
+      procedure Put_Key_Value (Position : Cursor);
+      procedure Put_Key_Value (Position : Cursor) is
+      begin
+         if First_Time then
+            First_Time := False;
+         else
+            Simple_Array_Between (S);
+         end if;
+
+         Key_Type'Put_Image (S, Key (Position));
+         Put_Arrow (S);
+         Element_Type'Put_Image (S, Element (Position));
+      end Put_Key_Value;
+
+   begin
+      Array_Before (S);
+      Iterate (V, Put_Key_Value'Access);
+      Array_After (S);
+   end Put_Image;
 
    ----------
    -- Read --
@@ -1299,7 +1340,7 @@ package body Ada.Containers.Ordered_Maps is
            (Element => Position.Node.Element'Access,
             Control => (Controlled with TC))
          do
-            Lock (TC.all);
+            Busy (TC.all);
          end return;
       end;
    end Reference;
@@ -1324,7 +1365,7 @@ package body Ada.Containers.Ordered_Maps is
            (Element => Node.Element'Access,
             Control => (Controlled with TC))
          do
-            Lock (TC.all);
+            Busy (TC.all);
          end return;
       end;
    end Reference;
@@ -1341,11 +1382,11 @@ package body Ada.Containers.Ordered_Maps is
       Node : constant Node_Access := Key_Ops.Find (Container.Tree, Key);
 
    begin
+      TE_Check (Container.Tree.TC);
+
       if Checks and then Node = null then
          raise Constraint_Error with "key not in map";
       end if;
-
-      TE_Check (Container.Tree.TC);
 
       Node.Key := Key;
       Node.Element := New_Item;
@@ -1361,6 +1402,8 @@ package body Ada.Containers.Ordered_Maps is
       New_Item  : Element_Type)
    is
    begin
+      TE_Check (Container.Tree.TC);
+
       if Checks and then Position.Node = null then
          raise Constraint_Error with
            "Position cursor of Replace_Element equals No_Element";
@@ -1371,8 +1414,6 @@ package body Ada.Containers.Ordered_Maps is
          raise Program_Error with
            "Position cursor of Replace_Element designates wrong map";
       end if;
-
-      TE_Check (Container.Tree.TC);
 
       pragma Assert (Vet (Container.Tree, Position.Node),
                      "Position cursor of Replace_Element is bad");

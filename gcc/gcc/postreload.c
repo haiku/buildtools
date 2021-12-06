@@ -1,5 +1,5 @@
 /* Perform simple optimizations to clean up the result of reload.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -40,6 +40,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "cselib.h"
 #include "tree-pass.h"
 #include "dbgcnt.h"
+#include "function-abi.h"
+#include "rtl-iter.h"
 
 static int reload_cse_noop_set_p (rtx);
 static bool reload_cse_simplify (rtx_insn *, rtx);
@@ -94,6 +96,16 @@ reload_cse_simplify (rtx_insn *insn, rtx testreg)
      to cse function calls.  */
   if (NO_FUNCTION_CSE && CALL_P (insn))
     return false;
+
+  /* Remember if this insn has been sp += const_int.  */
+  rtx sp_set = set_for_reg_notes (insn);
+  rtx sp_addend = NULL_RTX;
+  if (sp_set
+      && SET_DEST (sp_set) == stack_pointer_rtx
+      && GET_CODE (SET_SRC (sp_set)) == PLUS
+      && XEXP (SET_SRC (sp_set), 0) == stack_pointer_rtx
+      && CONST_INT_P (XEXP (SET_SRC (sp_set), 1)))
+    sp_addend = XEXP (SET_SRC (sp_set), 1);
 
   if (GET_CODE (body) == SET)
     {
@@ -155,8 +167,7 @@ reload_cse_simplify (rtx_insn *insn, rtx testreg)
 		  value = SET_DEST (part);
 		}
 	    }
-	  else if (GET_CODE (part) != CLOBBER
-		   && GET_CODE (part) != USE)
+	  else if (GET_CODE (part) != CLOBBER && GET_CODE (part) != USE)
 	    break;
 	}
 
@@ -178,6 +189,15 @@ reload_cse_simplify (rtx_insn *insn, rtx testreg)
       else
 	reload_cse_simplify_operands (insn, testreg);
     }
+
+  /* If sp += const_int insn is changed into sp = reg;, add REG_EQUAL
+     note so that the stack_adjustments pass can undo it if beneficial.  */
+  if (sp_addend
+      && SET_DEST (sp_set) == stack_pointer_rtx
+      && REG_P (SET_SRC (sp_set)))
+    set_dst_reg_note (insn, REG_EQUAL,
+		      gen_rtx_PLUS (Pmode, stack_pointer_rtx,
+				    sp_addend), stack_pointer_rtx);
 
 done:
   return (EDGE_COUNT (insn_bb->succs) != insn_bb_succs);
@@ -572,6 +592,13 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 	}
     }
 
+  /* The loop below sets alternative_order[0] but -Wmaybe-uninitialized
+     can't know that.  Clear it here to avoid the warning.  */
+  alternative_order[0] = 0;
+  gcc_assert (!recog_data.n_alternatives
+	      || (which_alternative >= 0
+		  && which_alternative < recog_data.n_alternatives));
+
   /* Record all alternatives which are better or equal to the currently
      matching one in the alternative_order array.  */
   for (i = j = 0; i < recog_data.n_alternatives; i++)
@@ -667,7 +694,8 @@ struct reg_use
    STORE_RUID is always meaningful if we only want to use a value in a
    register in a different place: it denotes the next insn in the insn
    stream (i.e. the last encountered) that sets or clobbers the register.
-   REAL_STORE_RUID is similar, but clobbers are ignored when updating it.  */
+   REAL_STORE_RUID is similar, but clobbers are ignored when updating it.
+   EXPR is the expression used when storing the register.  */
 static struct
   {
     struct reg_use reg_use[RELOAD_COMBINE_MAX_USES];
@@ -677,6 +705,7 @@ static struct
     int real_store_ruid;
     int use_ruid;
     bool all_offsets_match;
+    rtx expr;
   } reg_state[FIRST_PSEUDO_REGISTER];
 
 /* Reverse linear uid.  This is increased in reload_combine while scanning
@@ -1076,6 +1105,10 @@ reload_combine_recognize_pattern (rtx_insn *insn)
       struct reg_use *use = reg_state[regno].reg_use + i;
       if (GET_MODE (*use->usep) != mode)
 	return false;
+      /* Don't try to adjust (use (REGX)).  */
+      if (GET_CODE (PATTERN (use->insn)) == USE
+	  && &XEXP (PATTERN (use->insn), 0) == use->usep)
+	return false;
     }
 
   /* Look for (set (REGX) (CONST_INT))
@@ -1130,7 +1163,8 @@ reload_combine_recognize_pattern (rtx_insn *insn)
 	      if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], i)
 		  && reg_state[i].use_index == RELOAD_COMBINE_MAX_USES
 		  && reg_state[i].store_ruid <= reg_state[regno].use_ruid
-		  && (call_used_regs[i] || df_regs_ever_live_p (i))
+		  && (crtl->abi->clobbers_full_reg_p (i)
+		      || df_regs_ever_live_p (i))
 		  && (!frame_pointer_needed || i != HARD_FRAME_POINTER_REGNUM)
 		  && !fixed_regs[i] && !global_regs[i]
 		  && hard_regno_nregs (i, GET_MODE (reg)) == 1
@@ -1196,11 +1230,10 @@ reload_combine_recognize_pattern (rtx_insn *insn)
 	      /* Delete the reg-reg addition.  */
 	      delete_insn (insn);
 
-	      if (reg_state[regno].offset != const0_rtx
-		  /* Previous REG_EQUIV / REG_EQUAL notes for PREV
-		     are now invalid.  */
-		  && remove_reg_equal_equiv_notes (prev))
-		df_notes_rescan (prev);
+	      if (reg_state[regno].offset != const0_rtx)
+		/* Previous REG_EQUIV / REG_EQUAL notes for PREV
+		   are now invalid.  */
+		remove_reg_equal_equiv_notes (prev);
 
 	      reg_state[regno].use_index = RELOAD_COMBINE_MAX_USES;
 	      return true;
@@ -1262,8 +1295,8 @@ reload_combine (void)
 
 	  REG_SET_TO_HARD_REG_SET (live, live_in);
 	  compute_use_by_pseudos (&live, live_in);
-	  COPY_HARD_REG_SET (LABEL_LIVE (insn), live);
-	  IOR_HARD_REG_SET (ever_live_at_start, live);
+	  LABEL_LIVE (insn) = live;
+	  ever_live_at_start |= live;
 	}
     }
 
@@ -1320,14 +1353,12 @@ reload_combine (void)
 	  || reload_combine_recognize_pattern (insn))
 	continue;
 
-      note_stores (PATTERN (insn), reload_combine_note_store, NULL);
+      note_stores (insn, reload_combine_note_store, NULL);
 
       if (CALL_P (insn))
 	{
 	  rtx link;
-	  HARD_REG_SET used_regs;
-
-	  get_call_reg_set_usage (insn, &used_regs, call_used_reg_set);
+	  HARD_REG_SET used_regs = insn_callee_abi (insn).full_reg_clobbers ();
 
 	  for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
 	    if (TEST_HARD_REG_BIT (used_regs, r))
@@ -1341,18 +1372,12 @@ reload_combine (void)
 	    {
 	      rtx setuse = XEXP (link, 0);
 	      rtx usage_rtx = XEXP (setuse, 0);
-	      if ((GET_CODE (setuse) == USE || GET_CODE (setuse) == CLOBBER)
-		  && REG_P (usage_rtx))
+
+	      if (GET_CODE (setuse) == USE && REG_P (usage_rtx))
 	        {
 		  unsigned int end_regno = END_REGNO (usage_rtx);
 		  for (unsigned int i = REGNO (usage_rtx); i < end_regno; ++i)
-		    if (GET_CODE (XEXP (link, 0)) == CLOBBER)
-		      {
-		        reg_state[i].use_index = RELOAD_COMBINE_MAX_USES;
-		        reg_state[i].store_ruid = reload_combine_ruid;
-		      }
-		    else
-		      reg_state[i].use_index = -1;
+		    reg_state[i].use_index = -1;
 	         }
 	     }
 	}
@@ -1700,7 +1725,8 @@ move2add_valid_value_p (int regno, scalar_int_mode mode)
     {
       scalar_int_mode old_mode;
       if (!is_a <scalar_int_mode> (reg_mode[regno], &old_mode)
-	  || !MODES_OK_FOR_MOVE2ADD (mode, old_mode))
+	  || !MODES_OK_FOR_MOVE2ADD (mode, old_mode)
+	  || !REG_CAN_CHANGE_MODE_P (regno, old_mode, mode))
 	return false;
       /* The value loaded into regno in reg_mode[regno] is also valid in
 	 mode after truncation only if (REG:mode regno) is the lowpart of
@@ -2091,7 +2117,22 @@ reload_cse_move2add (rtx_insn *first)
 		}
 	    }
 	}
-      note_stores (PATTERN (insn), move2add_note_store, insn);
+
+      /* There are no REG_INC notes for SP autoinc.  */
+      subrtx_var_iterator::array_type array;
+      FOR_EACH_SUBRTX_VAR (iter, array, PATTERN (insn), NONCONST)
+	{
+	  rtx mem = *iter;
+	  if (mem
+	      && MEM_P (mem)
+	      && GET_RTX_CLASS (GET_CODE (XEXP (mem, 0))) == RTX_AUTOINC)
+	    {
+	      if (XEXP (XEXP (mem, 0), 0) == stack_pointer_rtx)
+		reg_mode[STACK_POINTER_REGNUM] = VOIDmode;
+	    }
+	}
+
+      note_stores (insn, move2add_note_store, insn);
 
       /* If INSN is a conditional branch, we try to extract an
 	 implicit set out of it.  */
@@ -2121,29 +2162,13 @@ reload_cse_move2add (rtx_insn *first)
 	 unknown values.  */
       if (CALL_P (insn))
 	{
-	  rtx link;
-
+	  function_abi callee_abi = insn_callee_abi (insn);
 	  for (i = FIRST_PSEUDO_REGISTER - 1; i >= 0; i--)
-	    {
-	      if (call_used_regs[i])
-		/* Reset the information about this register.  */
-		reg_mode[i] = VOIDmode;
-	    }
-
-	  for (link = CALL_INSN_FUNCTION_USAGE (insn); link;
-	       link = XEXP (link, 1))
-	    {
-	      rtx setuse = XEXP (link, 0);
-	      rtx usage_rtx = XEXP (setuse, 0);
-	      if (GET_CODE (setuse) == CLOBBER
-		  && REG_P (usage_rtx))
-	        {
-		  unsigned int end_regno = END_REGNO (usage_rtx);
-		  for (unsigned int r = REGNO (usage_rtx); r < end_regno; ++r)
-		    /* Reset the information about this register.  */
-		    reg_mode[r] = VOIDmode;
-		}
-	    }
+	    if (reg_mode[i] != VOIDmode
+		&& reg_mode[i] != BLKmode
+		&& callee_abi.clobbers_reg_p (reg_mode[i], i))
+	      /* Reset the information about this register.  */
+	      reg_mode[i] = VOIDmode;
 	}
     }
   return changed;
@@ -2160,17 +2185,6 @@ move2add_note_store (rtx dst, const_rtx set, void *data)
   rtx_insn *insn = (rtx_insn *) data;
   unsigned int regno = 0;
   scalar_int_mode mode;
-
-  /* Some targets do argument pushes without adding REG_INC notes.  */
-
-  if (MEM_P (dst))
-    {
-      dst = XEXP (dst, 0);
-      if (GET_CODE (dst) == PRE_INC || GET_CODE (dst) == POST_INC
-	  || GET_CODE (dst) == PRE_DEC || GET_CODE (dst) == POST_DEC)
-	reg_mode[REGNO (XEXP (dst, 0))] = VOIDmode;
-      return;
-    }
 
   if (GET_CODE (dst) == SUBREG)
     regno = subreg_regno (dst);

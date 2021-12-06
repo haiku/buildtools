@@ -33,6 +33,17 @@ runtime_atoi(const byte *p, intgo len)
 	return n;
 }
 
+// A random number from the GNU/Linux auxv array.
+static uint32 randomNumber;
+
+// Set the random number from Go code.
+
+void
+setRandomNumber(uint32 r)
+{
+	randomNumber = r;
+}
+
 #if defined(__i386__) || defined(__x86_64__) || defined (__s390__) || defined (__s390x__)
 
 // When cputicks is just asm instructions, skip the split stack
@@ -85,8 +96,8 @@ runtime_cputicks(void)
 #else
   // Currently cputicks() is used in blocking profiler and to seed runtime·fastrand().
   // runtime·nanotime() is a poor approximation of CPU ticks that is enough for the profiler.
-  // TODO: need more entropy to better seed fastrand.
-  return runtime_nanotime();
+  // randomNumber provides better seeding of fastrand.
+  return runtime_nanotime1() + randomNumber;
 #endif
 }
 
@@ -123,16 +134,22 @@ int32 go_read(int32, void *, int32)
 int32
 go_read(int32 fd, void *p, int32 n)
 {
-  return runtime_read(fd, p, n);
+  ssize_t r = runtime_read(fd, p, n);
+  if (r < 0)
+    r = - errno;
+  return (int32)r;
 }
 
-int32 go_write(uintptr, void *, int32)
-  __asm__ (GOSYM_PREFIX "runtime.write");
+int32 go_write1(uintptr, void *, int32)
+  __asm__ (GOSYM_PREFIX "runtime.write1");
 
 int32
-go_write(uintptr fd, void *p, int32 n)
+go_write1(uintptr fd, void *p, int32 n)
 {
-  return runtime_write(fd, p, n);
+  ssize_t r = runtime_write(fd, p, n);
+  if (r < 0)
+    r = - errno;
+  return (int32)r;
 }
 
 int32 go_closefd(int32)
@@ -175,6 +192,38 @@ getEnd()
   return end;
 }
 
+// Return an address that is before the read-only data section.
+// Unfortunately there is no standard symbol for this so we use a text
+// address.
+
+uintptr getText(void)
+  __asm__ (GOSYM_PREFIX "runtime.getText");
+
+uintptr
+getText(void)
+{
+  return (uintptr)(const void *)(getText);
+}
+
+// Return the end of the text segment, assumed to come after the
+// read-only data section.
+
+uintptr getEtext(void)
+  __asm__ (GOSYM_PREFIX "runtime.getEtext");
+
+uintptr
+getEtext(void)
+{
+  const void *p;
+
+  p = __data_start;
+  if (p == nil)
+    p = __etext;
+  if (p == nil)
+    p = _etext;
+  return (uintptr)(p);
+}
+
 // CPU-specific initialization.
 // Fetch CPUID info on x86.
 
@@ -193,7 +242,6 @@ runtime_cpuinit()
 		}
 	}
 	if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
-		setCpuidECX(ecx);
 #if defined(__i386__)
 		if ((edx & bit_SSE2) != 0) {
 			hasSSE2 = true;

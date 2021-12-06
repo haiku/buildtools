@@ -1,5 +1,5 @@
 /* Implementation of the C API; all wrappers into the internal C++ API
-   Copyright (C) 2013-2018 Free Software Foundation, Inc.
+   Copyright (C) 2013-2021 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -23,6 +23,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "timevar.h"
 #include "typed-splay-tree.h"
+#include "cppbuiltin.h"
+#include <pthread.h>
 
 #include "libgccjit.h"
 #include "jit-recording.h"
@@ -62,6 +64,10 @@ struct gcc_jit_field : public gcc::jit::recording::field
 {
 };
 
+struct gcc_jit_bitfield : public gcc::jit::recording::bitfield
+{
+};
+
 struct gcc_jit_function : public gcc::jit::recording::function
 {
 };
@@ -89,6 +95,11 @@ struct gcc_jit_case : public gcc::jit::recording::case_
 struct gcc_jit_timer : public timer
 {
 };
+
+struct gcc_jit_extended_asm : public gcc::jit::recording::extended_asm
+{
+};
+
 
 /**********************************************************************
  Error-handling.
@@ -294,13 +305,13 @@ struct gcc_jit_timer : public timer
 
 static void
 jit_error (gcc::jit::recording::context *ctxt,
-	   gcc_jit_location *loc,
+	   gcc::jit::recording::location *loc,
 	   const char *fmt, ...)
   GNU_PRINTF(3, 4);
 
 static void
 jit_error (gcc::jit::recording::context *ctxt,
-	   gcc_jit_location *loc,
+	   gcc::jit::recording::location *loc,
 	   const char *fmt, ...)
 {
   va_list ap;
@@ -521,6 +532,8 @@ gcc_jit_context_new_array_type (gcc_jit_context *ctxt,
   /* LOC can be NULL.  */
   RETURN_NULL_IF_FAIL (element_type, ctxt, loc, "NULL type");
   RETURN_NULL_IF_FAIL (num_elements >= 0, ctxt, NULL, "negative size");
+  RETURN_NULL_IF_FAIL (!element_type->is_void (), ctxt, loc,
+		       "void type for elements");
 
   return (gcc_jit_type *)ctxt->new_array_type (loc,
 					       element_type,
@@ -550,8 +563,49 @@ gcc_jit_context_new_field (gcc_jit_context *ctxt,
     "unknown size for field \"%s\" (type: %s)",
     name,
     type->get_debug_string ());
+  RETURN_NULL_IF_FAIL_PRINTF1 (
+    !type->is_void (),
+    ctxt, loc,
+    "void type for field \"%s\"",
+    name);
 
   return (gcc_jit_field *)ctxt->new_field (loc, type, name);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::context::new_bitfield method, in
+   jit-recording.c.  */
+
+gcc_jit_field *
+gcc_jit_context_new_bitfield (gcc_jit_context *ctxt,
+			      gcc_jit_location *loc,
+			      gcc_jit_type *type,
+			      int width,
+			      const char *name)
+{
+  RETURN_NULL_IF_FAIL (ctxt, NULL, NULL, "NULL context");
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  /* LOC can be NULL.  */
+  RETURN_NULL_IF_FAIL (name, ctxt, loc, "NULL name");
+  RETURN_NULL_IF_FAIL (type, ctxt, loc, "NULL type");
+  RETURN_NULL_IF_FAIL_PRINTF2 (type->is_int () || type->is_bool (),
+			       ctxt, loc,
+			       "bit-field %s has non integral type %s",
+			       name, type->get_debug_string ());
+  RETURN_NULL_IF_FAIL_PRINTF2 (
+    width > 0, ctxt, loc,
+    "invalid width %d for bitfield \"%s\" (must be > 0)",
+    width, name);
+  RETURN_NULL_IF_FAIL_PRINTF2 (
+    type->has_known_size (),
+    ctxt, loc,
+    "unknown size for field \"%s\" (type: %s)",
+    name,
+    type->get_debug_string ());
+
+  return (gcc_jit_field *)ctxt->new_bitfield (loc, type, width, name);
 }
 
 /* Public entrypoint.  See description in libgccjit.h.
@@ -744,10 +798,15 @@ gcc_jit_context_new_function_ptr_type (gcc_jit_context *ctxt,
     ctxt, loc,
     "NULL param_types creating function pointer type");
   for (int i = 0; i < num_params; i++)
-    RETURN_NULL_IF_FAIL_PRINTF1 (
-      param_types[i],
-      ctxt, loc,
-      "NULL parameter type %i creating function pointer type", i);
+    {
+      RETURN_NULL_IF_FAIL_PRINTF1 (param_types[i],
+				   ctxt, loc,
+				   "NULL parameter type %i"
+				   " creating function pointer type", i);
+      RETURN_NULL_IF_FAIL_PRINTF1 (!param_types[i]->is_void (),
+				   ctxt, loc,
+				   "void type for param %i", i);
+    }
 
   return (gcc_jit_type*)
     ctxt->new_function_ptr_type (loc, return_type,
@@ -774,6 +833,9 @@ gcc_jit_context_new_param (gcc_jit_context *ctxt,
   /* LOC can be NULL.  */
   RETURN_NULL_IF_FAIL (type, ctxt, loc, "NULL type");
   RETURN_NULL_IF_FAIL (name, ctxt, loc, "NULL name");
+  RETURN_NULL_IF_FAIL_PRINTF1 (!type->is_void (),
+			       ctxt, loc,
+			       "void type for param \"%s\"", name);
 
   return (gcc_jit_param *)ctxt->new_param (loc, type, name);
 }
@@ -1051,8 +1113,52 @@ gcc_jit_context_new_global (gcc_jit_context *ctxt,
     "unknown size for global \"%s\" (type: %s)",
     name,
     type->get_debug_string ());
+  RETURN_NULL_IF_FAIL_PRINTF1 (
+    !type->is_void (),
+    ctxt, loc,
+    "void type for global \"%s\"",
+    name);
 
   return (gcc_jit_lvalue *)ctxt->new_global (loc, kind, type, name);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::global::set_initializer method, in
+   jit-recording.c.  */
+
+extern gcc_jit_lvalue *
+gcc_jit_global_set_initializer (gcc_jit_lvalue *global,
+				const void *blob,
+				size_t num_bytes)
+{
+  RETURN_NULL_IF_FAIL (global, NULL, NULL, "NULL global");
+  RETURN_NULL_IF_FAIL (blob, NULL, NULL, "NULL blob");
+  RETURN_NULL_IF_FAIL_PRINTF1 (global->is_global (), NULL, NULL,
+			       "lvalue \"%s\" not a global",
+			       global->get_debug_string ());
+
+  gcc::jit::recording::type *lval_type = global->get_type ();
+  RETURN_NULL_IF_FAIL_PRINTF1 (lval_type->is_array (), NULL, NULL,
+			       "global \"%s\" is not an array",
+			       global->get_debug_string ());
+  RETURN_NULL_IF_FAIL_PRINTF1 (lval_type->dereference ()->is_int (), NULL, NULL,
+			       "global \"%s\" is not an array of integral type",
+			       global->get_debug_string ());
+  size_t lvalue_size =
+    lval_type->dereference ()->get_size ()
+    * static_cast <gcc::jit::recording::array_type *> (lval_type)->num_elements ();
+  RETURN_NULL_IF_FAIL_PRINTF3 (
+    lvalue_size == num_bytes, NULL, NULL,
+    "mismatching sizes:"
+    " global \"%s\" has size %zu whereas initializer has size %zu",
+    global->get_debug_string (), lvalue_size, num_bytes);
+
+  reinterpret_cast <gcc::jit::recording::global *> (global)
+    ->set_initializer (blob, num_bytes);
+
+  return global;
 }
 
 /* Public entrypoint.  See description in libgccjit.h.
@@ -1126,7 +1232,7 @@ gcc_jit_rvalue_get_type (gcc_jit_rvalue *rvalue)
 /* Public entrypoint.  See description in libgccjit.h.
 
    After error-checking, the real work is done by the
-   gcc::jit::recording::context::new_rvalue_from_int method in
+   gcc::jit::recording::context::new_rvalue_from_const <int> method in
    jit-recording.c.  */
 
 gcc_jit_rvalue *
@@ -1142,7 +1248,11 @@ gcc_jit_context_new_rvalue_from_int (gcc_jit_context *ctxt,
 	  ->new_rvalue_from_const <int> (numeric_type, value));
 }
 
-/* FIXME. */
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::context::new_rvalue_from_const <long> method
+   in jit-recording.c.  */
 
 gcc_jit_rvalue *
 gcc_jit_context_new_rvalue_from_long (gcc_jit_context *ctxt,
@@ -1194,7 +1304,7 @@ gcc_jit_context_one (gcc_jit_context *ctxt,
 /* Public entrypoint.  See description in libgccjit.h.
 
    After error-checking, the real work is done by the
-   gcc::jit::recording::context::new_rvalue_from_double method in
+   gcc::jit::recording::context::new_rvalue_from_const <double> method in
    jit-recording.c.  */
 
 gcc_jit_rvalue *
@@ -1213,8 +1323,8 @@ gcc_jit_context_new_rvalue_from_double (gcc_jit_context *ctxt,
 /* Public entrypoint.  See description in libgccjit.h.
 
    After error-checking, the real work is done by the
-   gcc::jit::recording::context::new_rvalue_from_ptr method in
-   jit-recording.c.  */
+   gcc::jit::recording::context::new_rvalue_from_const <void *> method
+   in jit-recording.c.  */
 
 gcc_jit_rvalue *
 gcc_jit_context_new_rvalue_from_ptr (gcc_jit_context *ctxt,
@@ -1296,6 +1406,13 @@ gcc_jit_context_new_unary_op (gcc_jit_context *ctxt,
     "unrecognized value for enum gcc_jit_unary_op: %i",
     op);
   RETURN_NULL_IF_FAIL (result_type, ctxt, loc, "NULL result_type");
+  RETURN_NULL_IF_FAIL_PRINTF3 (
+    result_type->is_numeric (), ctxt, loc,
+    "gcc_jit_unary_op %s with operand %s "
+    "has non-numeric result_type: %s",
+    gcc::jit::unary_op_reproducer_strings[op],
+    rvalue->get_debug_string (),
+    result_type->get_debug_string ());
   RETURN_NULL_IF_FAIL (rvalue, ctxt, loc, "NULL rvalue");
 
   return (gcc_jit_rvalue *)ctxt->new_unary_op (loc, op, result_type, rvalue);
@@ -1345,6 +1462,13 @@ gcc_jit_context_new_binary_op (gcc_jit_context *ctxt,
     a->get_type ()->get_debug_string (),
     b->get_debug_string (),
     b->get_type ()->get_debug_string ());
+  RETURN_NULL_IF_FAIL_PRINTF4 (
+    result_type->is_numeric (), ctxt, loc,
+    "gcc_jit_binary_op %s with operands a: %s b: %s "
+    "has non-numeric result_type: %s",
+    gcc::jit::binary_op_reproducer_strings[op],
+    a->get_debug_string (), b->get_debug_string (),
+    result_type->get_debug_string ());
 
   return (gcc_jit_rvalue *)ctxt->new_binary_op (loc, op, result_type, a, b);
 }
@@ -1855,6 +1979,11 @@ gcc_jit_function_new_local (gcc_jit_function *func,
     "unknown size for local \"%s\" (type: %s)",
     name,
     type->get_debug_string ());
+  RETURN_NULL_IF_FAIL_PRINTF1 (
+    !type->is_void (),
+    ctxt, loc,
+    "void type for local \"%s\"",
+    name);
 
   return (gcc_jit_lvalue *)func->new_local (loc, type, name);
 }
@@ -2644,6 +2773,25 @@ gcc_jit_context_add_command_line_option (gcc_jit_context *ctxt,
 
 /* Public entrypoint.  See description in libgccjit.h.
 
+   The real work is done by the
+   gcc::jit::recording::context::add_driver_option method in
+   jit-recording.c.  */
+
+void
+gcc_jit_context_add_driver_option (gcc_jit_context *ctxt,
+				   const char *optname)
+{
+  RETURN_IF_FAIL (ctxt, NULL, NULL, "NULL context");
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  RETURN_IF_FAIL (optname, ctxt, NULL, "NULL optname");
+  if (ctxt->get_logger ())
+    ctxt->get_logger ()->log ("optname: %s", optname);
+
+  ctxt->add_driver_option (optname);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
    After error-checking, the real work is done by the
    gcc::jit::recording::context::enable_dump method in
    jit-recording.c.  */
@@ -2993,6 +3141,7 @@ gcc_jit_type_get_aligned (gcc_jit_type *type,
     (pow2_or_zerop (alignment_in_bytes), ctxt, NULL,
      "alignment not a power of two: %zi",
      alignment_in_bytes);
+  RETURN_NULL_IF_FAIL (!type->is_void (), ctxt, NULL, "void type");
 
   return (gcc_jit_type *)type->get_aligned (alignment_in_bytes);
 }
@@ -3101,4 +3250,227 @@ gcc_jit_context_new_rvalue_from_vector (gcc_jit_context *ctxt,
     (loc,
      as_vec_type,
      (gcc::jit::recording::rvalue **)elements);
+}
+
+/* A mutex around the cached state in parse_basever.
+   Ideally this would be within parse_basever, but the mutex is only needed
+   by libgccjit.  */
+
+static pthread_mutex_t version_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+struct version_info
+{
+  /* Default constructor.  Populate via parse_basever,
+     guarded by version_mutex.  */
+  version_info ()
+  {
+    pthread_mutex_lock (&version_mutex);
+    parse_basever (&major, &minor, &patchlevel);
+    pthread_mutex_unlock (&version_mutex);
+  }
+
+  int major;
+  int minor;
+  int patchlevel;
+};
+
+
+extern int
+gcc_jit_version_major (void)
+{
+  version_info vi;
+  return vi.major;
+}
+
+extern int
+gcc_jit_version_minor (void)
+{
+  version_info vi;
+  return vi.minor;
+}
+
+extern int
+gcc_jit_version_patchlevel (void)
+{
+  version_info vi;
+  return vi.patchlevel;
+}
+
+/**********************************************************************
+ Asm support.
+ **********************************************************************/
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::block::add_extended_asm, in
+   jit-recording.c.  */
+
+gcc_jit_extended_asm *
+gcc_jit_block_add_extended_asm (gcc_jit_block *block,
+				gcc_jit_location *loc,
+				const char *asm_template)
+{
+  RETURN_NULL_IF_NOT_VALID_BLOCK (block, loc);
+  gcc::jit::recording::context *ctxt = block->get_context ();
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  /* LOC can be NULL.  */
+  RETURN_NULL_IF_FAIL (asm_template, ctxt, loc, "NULL asm_template");
+
+  return (gcc_jit_extended_asm *)block->add_extended_asm (loc, asm_template);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::block::end_with_extended_asm_goto, in
+   jit-recording.c.  */
+
+gcc_jit_extended_asm *
+gcc_jit_block_end_with_extended_asm_goto (gcc_jit_block *block,
+					  gcc_jit_location *loc,
+					  const char *asm_template,
+					  int num_goto_blocks,
+					  gcc_jit_block **goto_blocks,
+					  gcc_jit_block *fallthrough_block)
+{
+  RETURN_NULL_IF_NOT_VALID_BLOCK (block, loc);
+  gcc::jit::recording::context *ctxt = block->get_context ();
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  /* LOC can be NULL.  */
+  RETURN_NULL_IF_FAIL (asm_template, ctxt, loc, "NULL asm_template");
+  RETURN_NULL_IF_FAIL (num_goto_blocks >= 0, ctxt, loc, "num_goto_blocks < 0");
+  for (int i = 0; i < num_goto_blocks; i++)
+    RETURN_NULL_IF_FAIL_PRINTF1 (goto_blocks[i],
+				 ctxt, loc,
+				 "NULL goto_blocks[%i]", i);
+  /* fallthrough_block can be NULL.  */
+  return (gcc_jit_extended_asm *)block->end_with_extended_asm_goto
+    (loc, asm_template,
+     num_goto_blocks, (gcc::jit::recording::block **)goto_blocks,
+     fallthrough_block);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, this calls the trivial
+   gcc::jit::recording::memento::as_object method (an extended_asm is a
+   memento), in jit-recording.h.  */
+
+gcc_jit_object *
+gcc_jit_extended_asm_as_object (gcc_jit_extended_asm *ext_asm)
+{
+  RETURN_NULL_IF_FAIL (ext_asm, NULL, NULL, "NULL ext_asm");
+
+  return static_cast <gcc_jit_object *> (ext_asm->as_object ());
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::extended_asm::set_volatile_flag, in
+   jit-recording.c.  */
+
+void
+gcc_jit_extended_asm_set_volatile_flag (gcc_jit_extended_asm *ext_asm,
+					int flag)
+{
+  RETURN_IF_FAIL (ext_asm, NULL, NULL, "NULL ext_asm");
+  ext_asm->set_volatile_flag (flag);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::extended_asm::set_inline_flag, in
+   jit-recording.c.  */
+
+void
+gcc_jit_extended_asm_set_inline_flag (gcc_jit_extended_asm *ext_asm,
+				      int flag)
+{
+  RETURN_IF_FAIL (ext_asm, NULL, NULL, "NULL ext_asm");
+  ext_asm->set_inline_flag (flag);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::extended_asm::add_output_operand, in
+   jit-recording.c.  */
+
+void
+gcc_jit_extended_asm_add_output_operand (gcc_jit_extended_asm *ext_asm,
+					 const char *asm_symbolic_name,
+					 const char *constraint,
+					 gcc_jit_lvalue *dest)
+{
+  RETURN_IF_FAIL (ext_asm, NULL, NULL, "NULL ext_asm");
+  gcc::jit::recording::context *ctxt = ext_asm->get_context ();
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  gcc::jit::recording::location *loc = ext_asm->get_loc ();
+  /* asm_symbolic_name can be NULL.  */
+  RETURN_IF_FAIL (constraint, ctxt, loc, "NULL constraint");
+  RETURN_IF_FAIL (dest, ctxt, loc, "NULL dest");
+  RETURN_IF_FAIL (!ext_asm->is_goto (), ctxt, loc,
+		  "cannot add output operand to asm goto");
+  ext_asm->add_output_operand (asm_symbolic_name, constraint, dest);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::extended_asm::add_input_operand, in
+   jit-recording.c.  */
+
+extern void
+gcc_jit_extended_asm_add_input_operand (gcc_jit_extended_asm *ext_asm,
+					const char *asm_symbolic_name,
+					const char *constraint,
+					gcc_jit_rvalue *src)
+{
+  RETURN_IF_FAIL (ext_asm, NULL, NULL, "NULL ext_asm");
+  gcc::jit::recording::context *ctxt = ext_asm->get_context ();
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  gcc::jit::recording::location *loc = ext_asm->get_loc ();
+  /* asm_symbolic_name can be NULL.  */
+  RETURN_IF_FAIL (constraint, ctxt, loc, "NULL constraint");
+  RETURN_IF_FAIL (src, ctxt, loc, "NULL src");
+  ext_asm->add_input_operand (asm_symbolic_name, constraint, src);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::extended_asm::add_clobber, in
+   jit-recording.c.  */
+
+void
+gcc_jit_extended_asm_add_clobber (gcc_jit_extended_asm *ext_asm,
+				  const char *victim)
+{
+  RETURN_IF_FAIL (ext_asm, NULL, NULL, "NULL ext_asm");
+  gcc::jit::recording::context *ctxt = ext_asm->get_context ();
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  gcc::jit::recording::location *loc = ext_asm->get_loc ();
+  RETURN_IF_FAIL (victim, ctxt, loc, "NULL victim");
+  ext_asm->add_clobber (victim);
+}
+
+/* Public entrypoint.  See description in libgccjit.h.
+
+   After error-checking, the real work is done by the
+   gcc::jit::recording::context::add_top_level_asm, in
+   jit-recording.c.  */
+
+void
+gcc_jit_context_add_top_level_asm (gcc_jit_context *ctxt,
+				   gcc_jit_location *loc,
+				   const char *asm_stmts)
+{
+  RETURN_IF_FAIL (ctxt, NULL, NULL, "NULL ctxt");
+  JIT_LOG_FUNC (ctxt->get_logger ());
+  /* LOC can be NULL.  */
+  RETURN_IF_FAIL (asm_stmts, ctxt, NULL, "NULL asm_stmts");
+  ctxt->add_top_level_asm (loc, asm_stmts);
 }

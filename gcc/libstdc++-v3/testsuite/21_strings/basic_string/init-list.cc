@@ -1,4 +1,4 @@
-// Copyright (C) 2008-2018 Free Software Foundation, Inc.
+// Copyright (C) 2008-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -17,12 +17,16 @@
 //
 
 // { dg-do run { target c++11 } }
-// { dg-require-effective-target cxx11-abi }
 
-#include <string>
 #include <testsuite_hooks.h>
 
+#ifdef _GLIBCXX_DEBUG
+#include <debug/string>
+using namespace __gnu_debug;
+#else
+#include <string>
 using namespace std;
+#endif
 
 void test01(void)
 {

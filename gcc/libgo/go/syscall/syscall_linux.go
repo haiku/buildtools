@@ -4,20 +4,31 @@
 
 package syscall
 
-import "unsafe"
-
-func direntIno(buf []byte) (uint64, bool) {
-	return readInt(buf, unsafe.Offsetof(Dirent{}.Ino), unsafe.Sizeof(Dirent{}.Ino))
+// AllThreadsSyscall performs a syscall on each OS thread of the Go
+// runtime. It first invokes the syscall on one thread. Should that
+// invocation fail, it returns immediately with the error status.
+// Otherwise, it invokes the syscall on all of the remaining threads
+// in parallel. It will terminate the program if it observes any
+// invoked syscall's return value differs from that of the first
+// invocation.
+//
+// AllThreadsSyscall is intended for emulating simultaneous
+// process-wide state changes that require consistently modifying
+// per-thread state of the Go runtime.
+//
+// AllThreadsSyscall is unaware of any threads that are launched
+// explicitly by cgo linked code, so the function always returns
+// ENOTSUP in binaries that use cgo.
+//go:uintptrescapes
+func AllThreadsSyscall(trap, a1, a2, a3 uintptr) (r1, r2 uintptr, err Errno) {
+	return minus1, minus1, ENOTSUP
 }
 
-func direntReclen(buf []byte) (uint64, bool) {
-	return readInt(buf, unsafe.Offsetof(Dirent{}.Reclen), unsafe.Sizeof(Dirent{}.Reclen))
+// AllThreadsSyscall6 is like AllThreadsSyscall, but extended to six
+// arguments.
+//go:uintptrescapes
+func AllThreadsSyscall6(trap, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2 uintptr, err Errno) {
+	return minus1, minus1, ENOTSUP
 }
 
-func direntNamlen(buf []byte) (uint64, bool) {
-	reclen, ok := direntReclen(buf)
-	if !ok {
-		return 0, false
-	}
-	return reclen - uint64(unsafe.Offsetof(Dirent{}.Name)), true
-}
+const minus1 = ^uintptr(0)

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1998-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1998-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -761,6 +761,9 @@ package body Xr_Tabls is
       With_Dir : Boolean := False;
       Strip    : Natural    := 0) return String
    is
+      pragma Annotate (CodePeer, Skip_Analysis);
+      --  ??? To disable false positives currently generated
+
       Tmp : GNAT.OS_Lib.String_Access;
 
       function Internal_Strip (Full_Name : String) return String;
@@ -1012,12 +1015,12 @@ package body Xr_Tabls is
       Decl         : Declaration_Reference := Entities_HTable.Get_First;
       Arr          : Reference_Array_Access;
       Index        : Natural;
-      End_Index    : Natural;
+      End_Index    : Natural := 0;
       Current_File : File_Reference;
       Current_Line : Cst_String_Access;
       Buffer       : GNAT.OS_Lib.String_Access;
       Ref          : Reference;
-      Line         : Natural;
+      Line         : Natural := Natural'Last;
 
    begin
       --  Create a temporary array, where all references will be

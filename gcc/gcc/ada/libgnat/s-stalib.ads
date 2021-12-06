@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -46,10 +46,6 @@
 
 pragma Compiler_Unit_Warning;
 
-pragma Polling (Off);
---  We must turn polling off for this unit, because otherwise we get
---  elaboration circularities with Ada.Exceptions if polling is on.
-
 with Ada.Unchecked_Conversion;
 
 package System.Standard_Library is
@@ -81,6 +77,7 @@ package System.Standard_Library is
    -------------------------------------
 
    type Raise_Action is access procedure;
+   pragma Favor_Top_Level (Raise_Action);
    --  A pointer to a procedure used in the Raise_Hook field
 
    type Exception_Data;

@@ -6,23 +6,17 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
 -- ware  Foundation;  either version 3,  or (at your option) any later ver- --
 -- sion.  GNAT is distributed in the hope that it will be useful, but WITH- --
 -- OUT ANY WARRANTY;  without even the  implied warranty of MERCHANTABILITY --
--- or FITNESS FOR A PARTICULAR PURPOSE.                                     --
---                                                                          --
--- As a special exception under Section 7 of GPL version 3, you are granted --
--- additional permissions described in the GCC Runtime Library Exception,   --
--- version 3.1, as published by the Free Software Foundation.               --
---                                                                          --
--- You should have received a copy of the GNU General Public License and    --
--- a copy of the GCC Runtime Library Exception along with this program;     --
--- see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see    --
--- <http://www.gnu.org/licenses/>.                                          --
+-- or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License --
+-- for  more details.  You should have  received  a copy of the GNU General --
+-- Public License  distributed with GNAT; see file COPYING3.  If not, go to --
+-- http://www.gnu.org/licenses for a complete copy of the license.          --
 --                                                                          --
 -- GNAT was originally developed  by the GNAT team at  New York University. --
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
@@ -67,8 +61,8 @@ package Alloc is
    In_Out_Warnings_Initial          : constant := 100;        -- Sem_Warn
    In_Out_Warnings_Increment        : constant := 100;
 
-   Ignored_Ghost_Units_Initial      : constant := 20;         -- Sem_Util
-   Ignored_Ghost_Units_Increment    : constant := 50;
+   Ignored_Ghost_Nodes_Initial      : constant := 100;        -- Ghost
+   Ignored_Ghost_Nodes_Increment    : constant := 100;
 
    Inlined_Initial                  : constant := 100;        -- Inline
    Inlined_Increment                : constant := 100;
@@ -115,6 +109,9 @@ package Alloc is
 
    Rep_Table_Initial                : constant := 1000;       -- Repinfo
    Rep_Table_Increment              : constant := 200;
+
+   Rep_JSON_Table_Initial           : constant := 10;          -- Repinfo
+   Rep_JSON_Table_Increment         : constant := 200;
 
    Scope_Stack_Initial              : constant := 10;         -- Sem
    Scope_Stack_Increment            : constant := 200;

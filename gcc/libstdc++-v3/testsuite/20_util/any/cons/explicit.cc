@@ -1,7 +1,6 @@
-// { dg-options "-std=gnu++17" }
-// { dg-do compile }
+// { dg-do compile { target c++17 } }
 
-// Copyright (C) 2016-2018 Free Software Foundation, Inc.
+// Copyright (C) 2016-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +23,7 @@
 
 int main()
 {
-  std::any a = {std::in_place_type<int>, 42}; // { dg-error "converting" }
+  std::any a = {std::in_place_type<int>, 42}; // { dg-error "convert" }
   std::any a2 = {std::in_place_type<std::vector<int>>,
-		 {42, 666}}; // { dg-error "converting" }
+		 {42, 666}}; // { dg-error "convert" }
 }

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -78,18 +78,24 @@ package body Ch3 is
    --  it very unlikely that this will ever arise in practice.
 
    procedure P_Declarative_Items
-     (Decls   : List_Id;
-      Done    : out Boolean;
-      In_Spec : Boolean);
+     (Decls              : List_Id;
+      Done               : out Boolean;
+      Declare_Expression : Boolean;
+      In_Spec            : Boolean);
    --  Scans out a single declarative item, or, in the case of a declaration
    --  with a list of identifiers, a list of declarations, one for each of the
    --  identifiers in the list. The declaration or declarations scanned are
    --  appended to the given list. Done indicates whether or not there may be
    --  additional declarative items to scan. If Done is True, then a decision
    --  has been made that there are no more items to scan. If Done is False,
-   --  then there may be additional declarations to scan. In_Spec is true if
-   --  we are scanning a package declaration, and is used to generate an
-   --  appropriate message if a statement is encountered in such a context.
+   --  then there may be additional declarations to scan.
+   --
+   --  Declare_Expression is true if we are parsing a declare_expression, in
+   --  which case we want to suppress certain style checking.
+   --
+   --  In_Spec is true if we are scanning a package declaration, and is used to
+   --  generate an appropriate message if a statement is encountered in such a
+   --  context.
 
    procedure P_Identifier_Declarations
      (Decls   : List_Id;
@@ -117,11 +123,12 @@ package body Ch3 is
 
    procedure Check_Restricted_Expression (N : Node_Id) is
    begin
-      if Nkind_In (N, N_Op_And, N_Op_Or, N_Op_Xor, N_And_Then, N_Or_Else) then
+      if Nkind (N) in N_Op_And | N_Op_Or | N_Op_Xor | N_And_Then | N_Or_Else
+      then
          Check_Restricted_Expression (Left_Opnd (N));
          Check_Restricted_Expression (Right_Opnd (N));
 
-      elsif Nkind_In (N, N_In, N_Not_In)
+      elsif Nkind (N) in N_In | N_Not_In
         and then Paren_Count (N) = 0
       then
          Error_Msg_N ("|this expression must be parenthesized!", N);
@@ -228,8 +235,12 @@ package body Ch3 is
          raise Error_Resync;
       end if;
 
+      if Style_Check then
+         Style.Check_Defining_Identifier_Casing;
+      end if;
+
       Ident_Node := Token_Node;
-      Scan; -- past the reserved identifier
+      Scan; -- past the identifier
 
       --  If we already have a defining identifier, clean it out and make
       --  a new clean identifier. This situation arises in some error cases
@@ -679,12 +690,7 @@ package body Ch3 is
                   --  Ada 2005 (AI-419): LIMITED NEW
 
                elsif Token = Tok_New then
-                  if Ada_Version < Ada_2005 then
-                     Error_Msg_SP
-                       ("LIMITED in derived type is an Ada 2005 extension");
-                     Error_Msg_SP
-                       ("\unit must be compiled with -gnat05 switch");
-                  end if;
+                  Error_Msg_Ada_2005_Extension ("LIMITED in derived type");
 
                   Typedef_Node := P_Derived_Type_Def_Or_Private_Ext_Decl;
                   Set_Limited_Present (Typedef_Node);
@@ -908,7 +914,7 @@ package body Ch3 is
 
          if Unknown_Dis then
             Error_Msg
-              ("Full type declaration cannot have unknown discriminants",
+              ("full type declaration cannot have unknown discriminants",
                 Discr_Sloc);
          end if;
       end if;
@@ -1045,7 +1051,7 @@ package body Ch3 is
          --  otherwise things are really messed up, so resynchronize.
 
          if Token = Tok_Record then
-            Error_Msg_SC ("anonymous record definitions are not permitted");
+            Error_Msg_SC ("anonymous record definition not permitted");
             Discard_Junk_Node (P_Record_Definition);
             return Error;
 
@@ -1476,6 +1482,29 @@ package body Ch3 is
          Done := False;
          return;
 
+      --  AI12-0275: Object renaming declaration without subtype_mark or
+      --  access_definition
+
+      elsif Token = Tok_Renames then
+         Error_Msg_Ada_2020_Feature
+           ("object renaming without subtype", Token_Ptr);
+
+         Scan; -- past renames
+
+         Decl_Node :=
+           New_Node (N_Object_Renaming_Declaration, Ident_Sloc);
+         Set_Name (Decl_Node, P_Name);
+         Set_Defining_Identifier (Decl_Node, Idents (1));
+
+         P_Aspect_Specifications (Decl_Node, Semicolon => False);
+
+         T_Semicolon;
+
+         Append (Decl_Node, Decls);
+         Done := False;
+
+         return;
+
       --  Otherwise we have an error situation
 
       else
@@ -1634,13 +1663,8 @@ package body Ch3 is
                   Set_Null_Exclusion_Present (Decl_Node, Not_Null_Present);
 
                   if Token = Tok_Access then
-                     if Ada_Version < Ada_2005 then
-                        Error_Msg_SP
-                          ("generalized use of anonymous access types " &
-                           "is an Ada 2005 extension");
-                        Error_Msg_SP
-                          ("\unit must be compiled with -gnat05 switch");
-                     end if;
+                     Error_Msg_Ada_2005_Extension
+                       ("generalized use of anonymous access types");
 
                      Set_Object_Definition
                        (Decl_Node, P_Access_Definition (Not_Null_Present));
@@ -1697,13 +1721,8 @@ package body Ch3 is
                --  Access definition (AI-406) or subtype indication
 
                if Token = Tok_Access then
-                  if Ada_Version < Ada_2005 then
-                     Error_Msg_SP
-                       ("generalized use of anonymous access types " &
-                        "is an Ada 2005 extension");
-                     Error_Msg_SP
-                       ("\unit must be compiled with -gnat05 switch");
-                  end if;
+                  Error_Msg_Ada_2005_Extension
+                    ("generalized use of anonymous access types");
 
                   Set_Object_Definition
                     (Decl_Node, P_Access_Definition (Not_Null_Present));
@@ -1742,12 +1761,8 @@ package body Ch3 is
             Not_Null_Present := P_Null_Exclusion;  --  Ada 2005 (AI-231/423)
 
             if Token = Tok_Access then
-               if Ada_Version < Ada_2005 then
-                  Error_Msg_SP
-                    ("generalized use of anonymous access types " &
-                     "is an Ada 2005 extension");
-                  Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-               end if;
+               Error_Msg_Ada_2005_Extension
+                 ("generalized use of anonymous access types");
 
                Acc_Node := P_Access_Definition (Not_Null_Present);
 
@@ -1813,12 +1828,8 @@ package body Ch3 is
          --  Ada 2005 (AI-230): Access Definition case
 
          elsif Token = Tok_Access then
-            if Ada_Version < Ada_2005 then
-               Error_Msg_SP
-                 ("generalized use of anonymous access types " &
-                  "is an Ada 2005 extension");
-               Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-            end if;
+            Error_Msg_Ada_2005_Extension
+              ("generalized use of anonymous access types");
 
             Acc_Node := P_Access_Definition (Null_Exclusion_Present => False);
 
@@ -2026,11 +2037,7 @@ package body Ch3 is
       if Token = Tok_And then
          Scan; -- past AND
 
-         if Ada_Version < Ada_2005 then
-            Error_Msg_SP
-              ("abstract interface is an Ada 2005 extension");
-            Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-         end if;
+         Error_Msg_Ada_2005_Extension ("abstract interface");
 
          Set_Interface_List (Typedef_Node, New_List);
 
@@ -2420,7 +2427,7 @@ package body Ch3 is
 
    begin
       if Ada_Version = Ada_83 then
-         Error_Msg_SC ("(Ada 83): modular types not allowed");
+         Error_Msg_SC ("(Ada 83) modular types not allowed");
       end if;
 
       Typedef_Node := New_Node (N_Modular_Type_Definition, Token_Ptr);
@@ -2758,12 +2765,8 @@ package body Ch3 is
       --  Ada 2005 (AI-230): Access Definition case
 
       if Token = Tok_Access then
-         if Ada_Version < Ada_2005 then
-            Error_Msg_SP
-              ("generalized use of anonymous access types " &
-               "is an Ada 2005 extension");
-            Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-         end if;
+         Error_Msg_Ada_2005_Extension
+           ("generalized use of anonymous access types");
 
          --  AI95-406 makes "aliased" legal (and useless) in this context so
          --  followintg code which used to be needed is commented out.
@@ -2773,7 +2776,7 @@ package body Ch3 is
          --  end if;
 
          Set_Subtype_Indication     (CompDef_Node, Empty);
-         Set_Aliased_Present        (CompDef_Node, False);
+         Set_Aliased_Present        (CompDef_Node, Aliased_Present);
          Set_Access_Definition      (CompDef_Node,
            P_Access_Definition (Not_Null_Present));
       else
@@ -2965,9 +2968,9 @@ package body Ch3 is
 
    --  DISCRIMINANT_SPECIFICATION ::=
    --    DEFINING_IDENTIFIER_LIST : [NULL_EXCLUSION] SUBTYPE_MARK
-   --      [:= DEFAULT_EXPRESSION]
+   --      [:= DEFAULT_EXPRESSION] [ASPECT_SPECIFICATION]
    --  | DEFINING_IDENTIFIER_LIST : ACCESS_DEFINITION
-   --      [:= DEFAULT_EXPRESSION]
+   --      [:= DEFAULT_EXPRESSION] [ASPECT_SPECIFICATION]
 
    --  If no known discriminant part is present, then No_List is returned
 
@@ -3060,6 +3063,10 @@ package body Ch3 is
 
                Set_Expression
                  (Specification_Node, Init_Expr_Opt (True));
+
+               if Token = Tok_With then
+                  P_Aspect_Specifications (Specification_Node, False);
+               end if;
 
                if Ident > 1 then
                   Set_Prev_Ids (Specification_Node, True);
@@ -3334,11 +3341,11 @@ package body Ch3 is
 
       else
          Push_Scope_Stack;
-         Scope.Table (Scope.Last).Etyp := E_Record;
-         Scope.Table (Scope.Last).Ecol := Start_Column;
-         Scope.Table (Scope.Last).Sloc := Token_Ptr;
-         Scope.Table (Scope.Last).Labl := Error;
-         Scope.Table (Scope.Last).Junk := (Token /= Tok_Record);
+         Scopes (Scope.Last).Etyp := E_Record;
+         Scopes (Scope.Last).Ecol := Start_Column;
+         Scopes (Scope.Last).Sloc := Token_Ptr;
+         Scopes (Scope.Last).Labl := Error;
+         Scopes (Scope.Last).Junk := (Token /= Tok_Record);
 
          T_Record;
 
@@ -3415,7 +3422,7 @@ package body Ch3 is
             --  additional clue that confirms the incorrect spelling.
 
             if Token /= Tok_Identifier then
-               if Start_Column > Scope.Table (Scope.Last).Ecol
+               if Start_Column > Scopes (Scope.Last).Ecol
                  and then Is_Reserved_Identifier
                then
                   Save_Scan_State (Scan_State); -- at reserved id
@@ -3547,7 +3554,7 @@ package body Ch3 is
             Set_Defining_Identifier (Decl_Node, Idents (Ident));
 
             if Token = Tok_Constant then
-               Error_Msg_SC ("constant components are not permitted");
+               Error_Msg_SC ("constant component not permitted");
                Scan;
             end if;
 
@@ -3567,12 +3574,8 @@ package body Ch3 is
             --  Ada 2005 (AI-230): Access Definition case
 
             if Token = Tok_Access then
-               if Ada_Version < Ada_2005 then
-                  Error_Msg_SP
-                    ("generalized use of anonymous access types " &
-                     "is an Ada 2005 extension");
-                  Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-               end if;
+               Error_Msg_Ada_2005_Extension
+                 ("generalized use of anonymous access types");
 
                --  AI95-406 makes "aliased" legal (and useless) here, so the
                --  following code which used to be required is commented out.
@@ -3592,7 +3595,7 @@ package body Ch3 is
                Set_Null_Exclusion_Present (CompDef_Node, Not_Null_Present);
 
                if Token = Tok_Array then
-                  Error_Msg_SC ("anonymous arrays not allowed as components");
+                  Error_Msg_SC ("anonymous array not allowed as component");
                   raise Error_Resync;
                end if;
 
@@ -3657,9 +3660,9 @@ package body Ch3 is
    begin
       Variant_Part_Node := New_Node (N_Variant_Part, Token_Ptr);
       Push_Scope_Stack;
-      Scope.Table (Scope.Last).Etyp := E_Case;
-      Scope.Table (Scope.Last).Sloc := Token_Ptr;
-      Scope.Table (Scope.Last).Ecol := Start_Column;
+      Scopes (Scope.Last).Etyp := E_Case;
+      Scopes (Scope.Last).Sloc := Token_Ptr;
+      Scopes (Scope.Last).Ecol := Start_Column;
 
       Scan; -- past CASE
       Case_Node := P_Expression;
@@ -3912,10 +3915,7 @@ package body Ch3 is
       Typedef_Node : Node_Id;
 
    begin
-      if Ada_Version < Ada_2005 then
-         Error_Msg_SP ("abstract interface is an Ada 2005 extension");
-         Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-      end if;
+      Error_Msg_Ada_2005_Extension ("abstract interface");
 
       if Abstract_Present then
          Error_Msg_SP
@@ -4102,11 +4102,7 @@ package body Ch3 is
          --  Ada 2005 (AI-318-02)
 
          if Token = Tok_Access then
-            if Ada_Version < Ada_2005 then
-               Error_Msg_SC
-                 ("anonymous access result type is an Ada 2005 extension");
-               Error_Msg_SC ("\unit must be compiled with -gnat05 switch");
-            end if;
+            Error_Msg_Ada_2005_Extension ("anonymous access result type");
 
             Result_Node := P_Access_Definition (Result_Not_Null);
 
@@ -4204,10 +4200,7 @@ package body Ch3 is
         or else Token = Tok_Procedure
         or else Token = Tok_Function
       then
-         if Ada_Version < Ada_2005 then
-            Error_Msg_SP ("access-to-subprogram is an Ada 2005 extension");
-            Error_Msg_SP ("\unit should be compiled with -gnat05 switch");
-         end if;
+         Error_Msg_Ada_2005_Extension ("access-to-subprogram");
 
          Subp_Node := P_Access_Type_Definition (Header_Already_Parsed => True);
          Set_Null_Exclusion_Present (Subp_Node, Null_Exclusion_Present);
@@ -4222,17 +4215,14 @@ package body Ch3 is
          if Token = Tok_All then
             if Ada_Version < Ada_2005 then
                Error_Msg_SP
-                 ("ALL is not permitted for anonymous access types");
+                 ("ALL not permitted for anonymous access type");
             end if;
 
             Scan; -- past ALL
             Set_All_Present (Def_Node);
 
          elsif Token = Tok_Constant then
-            if Ada_Version < Ada_2005 then
-               Error_Msg_SP ("access-to-constant is an Ada 2005 extension");
-               Error_Msg_SP ("\unit should be compiled with -gnat05 switch");
-            end if;
+            Error_Msg_Ada_2005_Extension ("access-to-constant");
 
             Scan; -- past CONSTANT
             Set_Constant_Present (Def_Node);
@@ -4280,7 +4270,8 @@ package body Ch3 is
       --  Loop to scan out the declarations
 
       loop
-         P_Declarative_Items (Decls, Done, In_Spec => False);
+         P_Declarative_Items
+           (Decls, Done, Declare_Expression => False, In_Spec => False);
          exit when Done;
       end loop;
 
@@ -4307,16 +4298,20 @@ package body Ch3 is
    --  then the scan is set past the next semicolon and Error is returned.
 
    procedure P_Declarative_Items
-     (Decls   : List_Id;
-      Done    : out Boolean;
-      In_Spec : Boolean)
+     (Decls              : List_Id;
+      Done               : out Boolean;
+      Declare_Expression : Boolean;
+      In_Spec            : Boolean)
    is
       Scan_State : Saved_Scan_State;
 
    begin
       Done := False;
 
-      if Style_Check then
+      --  In -gnatg mode, we don't want a "bad indentation" error inside a
+      --  declare_expression.
+
+      if Style_Check and not Declare_Expression then
          Style.Check_Indentation;
       end if;
 
@@ -4510,11 +4505,11 @@ package body Ch3 is
                   --  scan it out
 
                   Push_Scope_Stack;
-                  Scope.Table (Scope.Last).Sloc := SIS_Sloc;
-                  Scope.Table (Scope.Last).Etyp := E_Name;
-                  Scope.Table (Scope.Last).Ecol := SIS_Ecol;
-                  Scope.Table (Scope.Last).Labl := SIS_Labl;
-                  Scope.Table (Scope.Last).Lreq := False;
+                  Scopes (Scope.Last).Sloc := SIS_Sloc;
+                  Scopes (Scope.Last).Etyp := E_Name;
+                  Scopes (Scope.Last).Ecol := SIS_Ecol;
+                  Scopes (Scope.Last).Labl := SIS_Labl;
+                  Scopes (Scope.Last).Lreq := False;
                   SIS_Entry_Active := False;
                   Scan; -- past BEGIN
                   Set_Handled_Statement_Sequence (Body_Node,
@@ -4672,7 +4667,9 @@ package body Ch3 is
    --  the scan pointer is repositioned past the next semicolon, and the scan
    --  for declarative items continues.
 
-   function P_Basic_Declarative_Items return List_Id is
+   function P_Basic_Declarative_Items
+     (Declare_Expression : Boolean) return List_Id
+   is
       Decl  : Node_Id;
       Decls : List_Id;
       Kind  : Node_Kind;
@@ -4695,7 +4692,8 @@ package body Ch3 is
       Decls := New_List;
 
       loop
-         P_Declarative_Items (Decls, Done, In_Spec => True);
+         P_Declarative_Items
+           (Decls, Done, Declare_Expression, In_Spec => True);
          exit when Done;
       end loop;
 
@@ -4720,12 +4718,20 @@ package body Ch3 is
             Kind = N_Task_Body       or else
             Kind = N_Protected_Body
          then
-            Error_Msg ("proper body not allowed in package spec", Sloc (Decl));
+            if Declare_Expression then
+               Error_Msg
+                 ("proper body not allowed in declare_expression",
+                  Sloc (Decl));
+            else
+               Error_Msg
+                 ("proper body not allowed in package spec",
+                  Sloc (Decl));
+            end if;
 
             --  Complete declaration of mangled subprogram body, for better
             --  recovery if analysis is attempted.
 
-            if Nkind_In (Decl, N_Subprogram_Body, N_Package_Body, N_Task_Body)
+            if Nkind (Decl) in N_Subprogram_Body | N_Package_Body | N_Task_Body
               and then No (Handled_Statement_Sequence (Decl))
             then
                Set_Handled_Statement_Sequence (Decl,
@@ -4741,7 +4747,7 @@ package body Ch3 is
          elsif Kind = N_Assignment_Statement then
             Error_Msg
               ("assignment statement not allowed in package spec",
-                 Sloc (Decl));
+               Sloc (Decl));
          end if;
 
          Next (Decl);
@@ -4787,7 +4793,8 @@ package body Ch3 is
       Dummy_Done : Boolean;
       pragma Warnings (Off, Dummy_Done);
    begin
-      P_Declarative_Items (S, Dummy_Done, False);
+      P_Declarative_Items
+        (S, Dummy_Done, Declare_Expression => False, In_Spec => False);
    end Skip_Declaration;
 
    -----------------------------------------

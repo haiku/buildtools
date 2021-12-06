@@ -6,6 +6,7 @@
 // license that can be found in the LICENSE file.
 
 // +build !aix
+// +build !hurd
 // +build !linux
 // +build !solaris !386
 // +build !solaris !sparc
@@ -14,5 +15,5 @@ package os
 
 import "syscall"
 
-//extern readdir_r
-func libc_readdir_r(*syscall.DIR, *syscall.Dirent, **syscall.Dirent) syscall.Errno
+//extern-sysinfo readdir
+func libc_readdir(*syscall.DIR) *syscall.Dirent

@@ -1,8 +1,6 @@
-// { dg-options "-std=gnu++17 -lstdc++fs" }
 // { dg-do run { target c++17 } }
-// { dg-require-filesystem-ts "" }
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -36,20 +34,15 @@ test01()
   VERIFY( p2.root_path() == path("/") );
 }
 
-#undef VERIFY
-#define VERIFY(X) do { if (!(X)) { __builtin_puts("FAIL: " #X); } } while(false)
-#define DUMP(X, Y, Z) do { if (!(Y == Z)) { __builtin_printf("%s %s %s\n", X.c_str(), Y.c_str(), Z.c_str()); } } while(false)
-
 void
 test02()
 {
-  for (const path& p : __gnu_test::test_paths)
+  for (const path p : __gnu_test::test_paths)
   {
     path rootp = p.root_path();
     path rootn = p.root_name();
     path rootd = p.root_directory();
     VERIFY( rootp == (rootn / rootd) );
-    DUMP(p,  rootp , (rootn / rootd) );
   }
 }
 

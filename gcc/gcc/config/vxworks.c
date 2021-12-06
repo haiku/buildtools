@@ -1,5 +1,5 @@
 /* Common VxWorks target definitions for GNU compiler.
-   Copyright (C) 2007-2018 Free Software Foundation, Inc.
+   Copyright (C) 2007-2021 Free Software Foundation, Inc.
    Contributed by CodeSourcery, Inc.
 
 This file is part of GCC.
@@ -27,7 +27,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "output.h"
 #include "fold-const.h"
+#include "rtl.h"
+#include "memmodel.h"
+#include "optabs.h"
 
+#if !HAVE_INITFINI_ARRAY_SUPPORT
 /* Like default_named_section_asm_out_constructor, except that even
    constructors with DEFAULT_INIT_PRIORITY must go in a numbered
    section on VxWorks.  The VxWorks runtime uses a clever trick to get
@@ -56,6 +60,7 @@ vxworks_asm_out_destructor (rtx symbol, int priority)
 				    /*constructor_p=*/false);
   assemble_addr_to_section (symbol, sec);
 }
+#endif
 
 /* Return the list of FIELD_DECLs that make up an emulated TLS
    variable's control object.  TYPE is the structure these are fields
@@ -143,11 +148,19 @@ vxworks_override_options (void)
       targetm.emutls.debug_form_tls_address = true;
     }
 
-  /* We can use .ctors/.dtors sections only in RTP mode.  */
-  targetm.have_ctors_dtors = TARGET_VXWORKS_RTP;
+  /* Arrange to use .ctors/.dtors sections if the target VxWorks configuration
+     and mode supports it, or the init/fini_array sections if we were
+     configured with --enable-initfini-array explicitly.  In the latter case,
+     the toolchain user is expected to provide whatever linker level glue is
+     required to get things to operate properly.  */
 
-  /* PIC is only supported for RTPs.  */
-  if (flag_pic && !TARGET_VXWORKS_RTP)
+  targetm.have_ctors_dtors = 
+    TARGET_VXWORKS_HAVE_CTORS_DTORS || HAVE_INITFINI_ARRAY_SUPPORT;
+
+  /* PIC is only supported for RTPs.  flags_pic might be < 0 here, in
+     contexts where the corresponding switches are not processed,
+     e.g. from --help.  We are not generating code in such cases.  */
+  if (flag_pic > 0 && !TARGET_VXWORKS_RTP)
     error ("PIC is only supported for RTPs");
 
   /* VxWorks comes with non-gdb debuggers which only support strict
@@ -159,4 +172,25 @@ vxworks_override_options (void)
 
   if (!global_options_set.x_dwarf_version)
     dwarf_version = VXWORKS_DWARF_VERSION_DEFAULT;
+
+}
+
+/* We don't want to use library symbol __clear_cache on SR0640.  Avoid
+   it and issue a direct call to cacheTextUpdate.  It takes a size_t
+   length rather than the END address, so we have to compute it.  */
+
+void
+vxworks_emit_call_builtin___clear_cache (rtx begin, rtx end)
+{
+  /* STATUS cacheTextUpdate (void *, size_t); */
+  rtx callee = gen_rtx_SYMBOL_REF (Pmode, "cacheTextUpdate");
+
+  enum machine_mode size_mode = TYPE_MODE (sizetype);
+
+  rtx len = simplify_gen_binary (MINUS, size_mode, end, begin);
+
+  emit_library_call (callee,
+		     LCT_NORMAL, VOIDmode,
+		     begin, ptr_mode,
+		     len, size_mode);
 }

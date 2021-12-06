@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---           Copyright (C) 2009-2018, Free Software Foundation, Inc.        --
+--           Copyright (C) 2009-2020, Free Software Foundation, Inc.        --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -37,10 +37,6 @@
 --  .debug_line section of the object file is referenced. In cases where object
 --  size is a consideration it's possible to strip all other .debug sections,
 --  which will decrease the size of the object significantly.
-
-pragma Polling (Off);
---  We must turn polling off for this unit, because otherwise we can get
---  elaboration circularities when polling is turned on
 
 with Ada.Exceptions.Traceback;
 
@@ -75,9 +71,10 @@ package System.Dwarf_Lines is
    pragma Inline (Is_Inside);
    --  Return true iff a run-time address Addr is within the module
 
-   function Low (C : Dwarf_Context) return Address;
-   pragma Inline (Low);
-   --  Return the lowest address of C, from the module object file
+   function Low_Address (C : Dwarf_Context)
+      return System.Address;
+   pragma Inline (Low_Address);
+   --  Return the lowest address of C, accounting for the module load address
 
    procedure Dump (C : in out Dwarf_Context);
    --  Dump each row found in the object's .debug_lines section to standard out
@@ -92,7 +89,7 @@ package System.Dwarf_Lines is
      (Cin          :        Dwarf_Context;
       Traceback    :        AET.Tracebacks_Array;
       Suppress_Hex :        Boolean;
-      Symbol_Found : in out Boolean;
+      Symbol_Found :    out Boolean;
       Res          : in out System.Bounded_Strings.Bounded_String);
    --  Generate a string for a traceback suitable for displaying to the user.
    --  If one or more symbols are found, Symbol_Found is set to True. This
@@ -163,12 +160,14 @@ private
    type Search_Array_Access is access Search_Array;
 
    type Dwarf_Context (In_Exception : Boolean := False) is record
-      Load_Slide : System.Storage_Elements.Integer_Address := 0;
-      Low, High  : Address;
+      Low, High  : System.Storage_Elements.Storage_Offset;
       --  Bounds of the module, per the module object file
 
       Obj : SOR.Object_File_Access;
       --  The object file containing dwarf sections
+
+      Load_Address : System.Address := System.Null_Address;
+      --  The address at which the object file was loaded at run time
 
       Has_Debug : Boolean;
       --  True if all debug sections are available

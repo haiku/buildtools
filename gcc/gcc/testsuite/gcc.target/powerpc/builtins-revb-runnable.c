@@ -1,6 +1,7 @@
-/* { dg-do run { target { powerpc*-*-* && { lp64 && p8vector_hw } } } } */
-/* { dg-skip-if "do not override -mcpu" { powerpc*-*-* } { "-mcpu=*" } { "-mcpu=power8" } } */
-/* { dg-options "-mcpu=power8  -O3" } */
+/* { dg-do run } */
+/* { dg-require-effective-target p8vector_hw } */
+/* { dg-require-effective-target int128 } */
+/* { dg-options "-mdejagnu-cpu=power8  -O3" } */
 
 #include <altivec.h>
 

@@ -2,10 +2,9 @@
 // { dg-options "-pthread"  }
 // { dg-require-effective-target c++11 }
 // { dg-require-effective-target pthread }
-// { dg-require-cstdint "" }
 // { dg-require-gthreads "" }
 // { dg-require-debug-mode "" }
-// Copyright (C) 2010-2018 Free Software Foundation, Inc.
+// Copyright (C) 2010-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -27,6 +26,7 @@
 // mode as it requires acquiring 2 locks at the same time.
 
 #include <vector>
+#include <memory>
 #include <thread>
 #include <functional>
 #include <testsuite_hooks.h>

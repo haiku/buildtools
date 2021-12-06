@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2013-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2013-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -55,6 +55,7 @@ package body Set_Targ is
    S_Float_Words_BE             : constant Str := "Float_Words_BE";
    S_Int_Size                   : constant Str := "Int_Size";
    S_Long_Double_Size           : constant Str := "Long_Double_Size";
+   S_Long_Long_Long_Size        : constant Str := "Long_Long_Long_Size";
    S_Long_Long_Size             : constant Str := "Long_Long_Size";
    S_Long_Size                  : constant Str := "Long_Size";
    S_Maximum_Alignment          : constant Str := "Maximum_Alignment";
@@ -84,6 +85,7 @@ package body Set_Targ is
           S_Float_Words_BE             'Unrestricted_Access,
           S_Int_Size                   'Unrestricted_Access,
           S_Long_Double_Size           'Unrestricted_Access,
+          S_Long_Long_Long_Size        'Unrestricted_Access,
           S_Long_Long_Size             'Unrestricted_Access,
           S_Long_Size                  'Unrestricted_Access,
           S_Maximum_Alignment          'Unrestricted_Access,
@@ -111,6 +113,7 @@ package body Set_Targ is
           Float_Words_BE             'Address,
           Int_Size                   'Address,
           Long_Double_Size           'Address,
+          Long_Long_Long_Size        'Address,
           Long_Long_Size             'Address,
           Long_Size                  'Address,
           Maximum_Alignment          'Address,
@@ -745,8 +748,15 @@ package body Set_Targ is
 
       for J in DTR'Range loop
          if not DTR (J) then
-            Fail ("missing entry for " & DTN (J).all & " in file "
-                  & File_Name);
+            --  Make an exception for Long_Long_Long_Size???
+
+            if DTN (J) = S_Long_Long_Long_Size'Unrestricted_Access then
+               Long_Long_Long_Size := Long_Long_Size;
+
+            else
+               Fail ("missing entry for " & DTN (J).all & " in file "
+                     & File_Name);
+            end if;
          end if;
       end loop;
 
@@ -820,7 +830,7 @@ package body Set_Targ is
 
 begin
    --  First step: see if the -gnateT switch is present. As we have noted,
-   --  this has to be done very early, so can not depend on the normal circuit
+   --  this has to be done very early, so cannot depend on the normal circuit
    --  for reading switches and setting switches in Opt. The following code
    --  will set Opt.Target_Dependent_Info_Read_Name if the switch -gnateT=name
    --  is present in the options string.
@@ -917,6 +927,9 @@ begin
            Get_Back_End_Config_File;
       begin
          if Back_End_Config_File /= null then
+            pragma Gnat_Annotate
+              (CodePeer, Intentional, "test always false",
+               "some variant body will return non null");
             Read_Target_Dependent_Values (Back_End_Config_File.all);
 
          --  Otherwise we get all values from the back end directly
@@ -931,6 +944,7 @@ begin
             Double_Scalar_Alignment    := Get_Double_Scalar_Alignment;
             Float_Words_BE             := Get_Float_Words_BE;
             Int_Size                   := Get_Int_Size;
+            Long_Long_Long_Size        := Get_Long_Long_Long_Size;
             Long_Long_Size             := Get_Long_Long_Size;
             Long_Size                  := Get_Long_Size;
             Maximum_Alignment          := Get_Maximum_Alignment;

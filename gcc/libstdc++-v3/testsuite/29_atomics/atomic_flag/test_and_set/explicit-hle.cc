@@ -1,12 +1,12 @@
 // { dg-do compile { target i?86-*-* x86_64-*-* } }
 // { dg-options "-O2 -g0 -fno-exceptions -fno-asynchronous-unwind-tables" }
-// { dg-additional-options "-march=i486" { target ia32 } }
+// { dg-additional-options "-march=i486 -fcf-protection=none" { target ia32 } }
 // { dg-require-effective-target c++11 }
 // { dg-skip-if "scans fail with LTO" { lto } { "-flto" } }
 // { dg-final { scan-assembler-times "xacquire\|\.byte\[^\n\r]*0xf2" 14 } }
 // { dg-final { scan-assembler-times "xrelease\|\.byte\[^\n\r]*0xf3" 14 } }
 
-// Copyright (C) 2008-2018 Free Software Foundation, Inc.
+// Copyright (C) 2008-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -25,8 +25,8 @@
 
 #include <atomic>
 
-#define ACQ memory_order_acquire | __memory_order_hle_acquire
-#define REL memory_order_release | __memory_order_hle_release
+const auto ACQ = std::memory_order_acquire | std::__memory_order_hle_acquire;
+const auto REL = std::memory_order_release | std::__memory_order_hle_release;
 
 int main()
 {

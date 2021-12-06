@@ -1,5 +1,5 @@
 /* Internals of libgccjit: classes for playing back recorded API calls.
-   Copyright (C) 2013-2018 Free Software Foundation, Inc.
+   Copyright (C) 2013-2021 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -36,8 +36,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "context.h"
 #include "fold-const.h"
+#include "opt-suggestions.h"
 #include "gcc.h"
 #include "diagnostic.h"
+#include "stmt.h"
 
 #include <pthread.h>
 
@@ -46,6 +48,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "jit-builtins.h"
 #include "jit-tempdir.h"
 
+#ifdef _WIN32
+#include "jit-w32.h"
+#endif
+
+/* Compare with gcc/c-family/c-common.h: DECL_C_BIT_FIELD,
+   SET_DECL_C_BIT_FIELD.
+   These are redefined here to avoid depending from the C frontend.  */
+#define DECL_JIT_BIT_FIELD(NODE) \
+  (DECL_LANG_FLAG_4 (FIELD_DECL_CHECK (NODE)) == 1)
+#define SET_DECL_JIT_BIT_FIELD(NODE) \
+  (DECL_LANG_FLAG_4 (FIELD_DECL_CHECK (NODE)) = 1)
 
 /* gcc::jit::playback::context::build_cast uses the convert.h API,
    which in turn requires the frontend to provide a "convert"
@@ -74,13 +87,24 @@ namespace jit {
  Playback.
  **********************************************************************/
 
+/* Build a STRING_CST tree for STR, or return NULL if it is NULL.
+   The TREE_TYPE is not initialized.  */
+
+static tree
+build_string (const char *str)
+{
+  if (str)
+    return ::build_string (strlen (str), str);
+  else
+    return NULL_TREE;
+}
+
 /* The constructor for gcc::jit::playback::context.  */
 
 playback::context::context (recording::context *ctxt)
   : log_user (ctxt->get_logger ()),
     m_recording_ctxt (ctxt),
     m_tempdir (NULL),
-    m_char_array_type_node (NULL),
     m_const_char_ptr (NULL)
 {
   JIT_LOG_SCOPE (get_logger ());
@@ -262,6 +286,46 @@ new_field (location *loc,
   return new field (decl);
 }
 
+/* Construct a playback::bitfield instance (wrapping a tree).  */
+
+playback::field *
+playback::context::
+new_bitfield (location *loc,
+	      type *type,
+	      int width,
+	      const char *name)
+{
+  gcc_assert (type);
+  gcc_assert (name);
+  gcc_assert (width);
+
+  /* compare with c/c-decl.c:grokfield,  grokdeclarator and
+     check_bitfield_type_and_width.  */
+
+  tree tree_type = type->as_tree ();
+  gcc_assert (INTEGRAL_TYPE_P (tree_type));
+  tree tree_width = build_int_cst (integer_type_node, width);
+  if (compare_tree_int (tree_width, TYPE_PRECISION (tree_type)) > 0)
+    {
+      add_error (
+	loc,
+	"width of bit-field %s (width: %i) is wider than its type (width: %i)",
+	name, width, TYPE_PRECISION (tree_type));
+      return NULL;
+    }
+
+  tree decl = build_decl (UNKNOWN_LOCATION, FIELD_DECL,
+			  get_identifier (name), type->as_tree ());
+  DECL_NONADDRESSABLE_P (decl) = true;
+  DECL_INITIAL (decl) = tree_width;
+  SET_DECL_JIT_BIT_FIELD (decl);
+
+  if (loc)
+    set_tree_location (decl, loc);
+
+  return new field (decl);
+}
+
 /* Construct a playback::compound_type instance (wrapping a tree).  */
 
 playback::compound_type *
@@ -294,8 +358,15 @@ playback::compound_type::set_fields (const auto_vec<playback::field *> *fields)
   for (unsigned i = 0; i < fields->length (); i++)
     {
       field *f = (*fields)[i];
-      DECL_CONTEXT (f->as_tree ()) = t;
-      fieldlist = chainon (f->as_tree (), fieldlist);
+      tree x = f->as_tree ();
+      DECL_CONTEXT (x) = t;
+      if (DECL_JIT_BIT_FIELD (x))
+	{
+	  unsigned HOST_WIDE_INT width = tree_to_uhwi (DECL_INITIAL (x));
+	  DECL_SIZE (x) = bitsize_int (width);
+	  DECL_BIT_FIELD (x) = 1;
+	}
+      fieldlist = chainon (x, fieldlist);
     }
   fieldlist = nreverse (fieldlist);
   TYPE_FIELDS (t) = fieldlist;
@@ -398,12 +469,11 @@ new_function (location *loc,
 
   if (builtin_id)
     {
-      DECL_FUNCTION_CODE (fndecl) = builtin_id;
       gcc_assert (loc == NULL);
       DECL_SOURCE_LOCATION (fndecl) = BUILTINS_LOCATION;
 
-      DECL_BUILT_IN_CLASS (fndecl) =
-	builtins_manager::get_class (builtin_id);
+      built_in_class fclass = builtins_manager::get_class (builtin_id);
+      set_decl_built_in_function (fndecl, fclass, builtin_id);
       set_builtin_decl (builtin_id, fndecl,
 			builtins_manager::implicit_p (builtin_id));
 
@@ -453,14 +523,14 @@ new_function (location *loc,
   return func;
 }
 
-/* Construct a playback::lvalue instance (wrapping a tree).  */
+/* In use by new_global and new_global_initialized.  */
 
-playback::lvalue *
+tree
 playback::context::
-new_global (location *loc,
-	    enum gcc_jit_global_kind kind,
-	    type *type,
-	    const char *name)
+global_new_decl (location *loc,
+		 enum gcc_jit_global_kind kind,
+		 type *type,
+		 const char *name)
 {
   gcc_assert (type);
   gcc_assert (name);
@@ -490,6 +560,15 @@ new_global (location *loc,
   if (loc)
     set_tree_location (inner, loc);
 
+  return inner;
+}
+
+/* In use by new_global and new_global_initialized.  */
+
+playback::lvalue *
+playback::context::
+global_finalize_lvalue (tree inner)
+{
   varpool_node::get_create (inner);
 
   varpool_node::finalize_decl (inner);
@@ -497,6 +576,92 @@ new_global (location *loc,
   m_globals.safe_push (inner);
 
   return new lvalue (this, inner);
+}
+
+/* Construct a playback::lvalue instance (wrapping a tree).  */
+
+playback::lvalue *
+playback::context::
+new_global (location *loc,
+	    enum gcc_jit_global_kind kind,
+	    type *type,
+	    const char *name)
+{
+  tree inner = global_new_decl (loc, kind, type, name);
+
+  return global_finalize_lvalue (inner);
+}
+
+/* Fill 'constructor_elements' with the memory content of
+   'initializer'.  Each element of the initializer is of the size of
+   type T.  In use by new_global_initialized.*/
+
+template<typename T>
+static void
+load_blob_in_ctor (vec<constructor_elt, va_gc> *&constructor_elements,
+		   size_t num_elem,
+		   const void *initializer)
+{
+  /* Loosely based on 'output_init_element' c-typeck.c:9691.  */
+  const T *p = (const T *)initializer;
+  tree node = make_unsigned_type (BITS_PER_UNIT * sizeof (T));
+  for (size_t i = 0; i < num_elem; i++)
+    {
+      constructor_elt celt =
+	{ build_int_cst (long_unsigned_type_node, i),
+	  build_int_cst (node, p[i]) };
+      vec_safe_push (constructor_elements, celt);
+    }
+}
+
+/* Construct an initialized playback::lvalue instance (wrapping a
+   tree).  */
+
+playback::lvalue *
+playback::context::
+new_global_initialized (location *loc,
+			enum gcc_jit_global_kind kind,
+			type *type,
+                        size_t element_size,
+			size_t initializer_num_elem,
+			const void *initializer,
+			const char *name)
+{
+  tree inner = global_new_decl (loc, kind, type, name);
+
+  vec<constructor_elt, va_gc> *constructor_elements = NULL;
+
+  switch (element_size)
+    {
+    case 1:
+      load_blob_in_ctor<uint8_t> (constructor_elements, initializer_num_elem,
+				  initializer);
+      break;
+    case 2:
+      load_blob_in_ctor<uint16_t> (constructor_elements, initializer_num_elem,
+				   initializer);
+      break;
+    case 4:
+      load_blob_in_ctor<uint32_t> (constructor_elements, initializer_num_elem,
+				   initializer);
+      break;
+    case 8:
+      load_blob_in_ctor<uint64_t> (constructor_elements, initializer_num_elem,
+				   initializer);
+      break;
+    default:
+      /* This function is serving on sizes returned by 'get_size',
+	 these are all covered by the previous cases.  */
+      gcc_unreachable ();
+    }
+  /* Compare with 'pop_init_level' c-typeck.c:8780.  */
+  tree ctor = build_constructor (type->as_tree (), constructor_elements);
+  constructor_elements = NULL;
+
+  /* Compare with 'store_init_value' c-typeck.c:7555.  */
+  DECL_INITIAL (inner) = ctor;
+
+  return global_finalize_lvalue (inner);
 }
 
 /* Implementation of the various
@@ -616,9 +781,14 @@ playback::rvalue *
 playback::context::
 new_string_literal (const char *value)
 {
-  tree t_str = build_string (strlen (value), value);
-  gcc_assert (m_char_array_type_node);
-  TREE_TYPE (t_str) = m_char_array_type_node;
+  /* Compare with c-family/c-common.c: fix_string_type.  */
+  size_t len = strlen (value);
+  tree i_type = build_index_type (size_int (len));
+  tree a_type = build_array_type (char_type_node, i_type);
+  /* build_string len parameter must include NUL terminator when
+     building C strings.  */
+  tree t_str = ::build_string (len + 1, value);
+  TREE_TYPE (t_str) = a_type;
 
   /* Convert to (const char*), loosely based on
      c/c-typeck.c: array_to_pointer_conversion,
@@ -662,6 +832,18 @@ as_truth_value (tree expr, location *loc)
     set_tree_location (expr, loc);
 
   return expr;
+}
+
+/* Add a "top-level" basic asm statement (i.e. one outside of any functions)
+   containing ASM_STMTS.
+
+   Compare with c_parser_asm_definition.  */
+
+void
+playback::context::add_top_level_asm (const char *asm_stmts)
+{
+  tree asm_str = build_string (asm_stmts);
+  symtab->finalize_toplevel_asm (asm_str);
 }
 
 /* Construct a playback::rvalue instance (wrapping a tree) for a
@@ -1196,20 +1378,31 @@ dereference (location *loc)
   return new lvalue (get_context (), datum);
 }
 
-/* Mark EXP saying that we need to be able to take the
+/* Mark the lvalue saying that we need to be able to take the
    address of it; it should not be allocated in a register.
-   Compare with e.g. c/c-typeck.c: c_mark_addressable.  */
+   Compare with e.g. c/c-typeck.c: c_mark_addressable really_atomic_lvalue.
+   Returns false if a failure occurred (an error will already have been
+   added to the active context for this case).  */
 
-static void
-jit_mark_addressable (tree exp)
+bool
+playback::lvalue::
+mark_addressable (location *loc)
 {
-  tree x = exp;
+  tree x = as_tree ();;
 
   while (1)
     switch (TREE_CODE (x))
       {
       case COMPONENT_REF:
-	/* (we don't yet support bitfields)  */
+	if (DECL_JIT_BIT_FIELD (TREE_OPERAND (x, 1)))
+	  {
+	    gcc_assert (gcc::jit::active_playback_ctxt);
+	    gcc::jit::
+	      active_playback_ctxt->add_error (loc,
+					       "cannot take address of "
+					       "bit-field");
+	    return false;
+	  }
 	/* fallthrough */
       case ADDR_EXPR:
       case ARRAY_REF:
@@ -1221,7 +1414,7 @@ jit_mark_addressable (tree exp)
       case COMPOUND_LITERAL_EXPR:
       case CONSTRUCTOR:
 	TREE_ADDRESSABLE (x) = 1;
-	return;
+	return true;
 
       case VAR_DECL:
       case CONST_DECL:
@@ -1233,7 +1426,7 @@ jit_mark_addressable (tree exp)
 	TREE_ADDRESSABLE (x) = 1;
 	/* fallthrough */
       default:
-	return;
+	return true;
       }
 }
 
@@ -1250,8 +1443,10 @@ get_address (location *loc)
   tree ptr = build1 (ADDR_EXPR, t_ptrtype, t_lvalue);
   if (loc)
     get_context ()->set_tree_location (ptr, loc);
-  jit_mark_addressable (t_lvalue);
-  return new rvalue (get_context (), ptr);
+  if (mark_addressable (loc))
+    return new rvalue (get_context (), ptr);
+  else
+    return NULL;
 }
 
 /* The wrapper subclasses are GC-managed, but can own non-GC memory.
@@ -1727,6 +1922,104 @@ add_switch (location *loc,
   add_stmt (switch_stmt);
 }
 
+/* Convert OPERANDS to a tree-based chain suitable for creating an
+   extended asm stmt.
+   Compare with c_parser_asm_operands.  */
+
+static tree
+build_operand_chain (const auto_vec <playback::asm_operand> *operands)
+{
+  tree result = NULL_TREE;
+  unsigned i;
+  playback::asm_operand *asm_op;
+  FOR_EACH_VEC_ELT (*operands, i, asm_op)
+    {
+      tree name = build_string (asm_op->m_asm_symbolic_name);
+      tree str = build_string (asm_op->m_constraint);
+      tree value = asm_op->m_expr;
+      result = chainon (result,
+			build_tree_list (build_tree_list (name, str),
+					 value));
+    }
+  return result;
+}
+
+/* Convert CLOBBERS to a tree-based list suitable for creating an
+   extended asm stmt.
+   Compare with c_parser_asm_clobbers.  */
+
+static tree
+build_clobbers (const auto_vec <const char *> *clobbers)
+{
+  tree list = NULL_TREE;
+  unsigned i;
+  const char *clobber;
+  FOR_EACH_VEC_ELT (*clobbers, i, clobber)
+    {
+      tree str = build_string (clobber);
+      list = tree_cons (NULL_TREE, str, list);
+    }
+  return list;
+}
+
+/* Convert BLOCKS to a tree-based list suitable for creating an
+   extended asm stmt.
+   Compare with c_parser_asm_goto_operands.  */
+
+static tree
+build_goto_operands (const auto_vec <playback::block *> *blocks)
+{
+  tree list = NULL_TREE;
+  unsigned i;
+  playback::block *b;
+  FOR_EACH_VEC_ELT (*blocks, i, b)
+    {
+      tree label = b->as_label_decl ();
+      tree name = build_string (IDENTIFIER_POINTER (DECL_NAME (label)));
+      TREE_USED (label) = 1;
+      list = tree_cons (name, label, list);
+    }
+  return nreverse (list);
+}
+
+/* Add an extended asm statement to this block.
+
+   Compare with c_parser_asm_statement (in c/c-parser.c)
+   and build_asm_expr (in c/c-typeck.c).  */
+
+void
+playback::block::add_extended_asm (location *loc,
+				   const char *asm_template,
+				   bool is_volatile,
+				   bool is_inline,
+				   const auto_vec <asm_operand> *outputs,
+				   const auto_vec <asm_operand> *inputs,
+				   const auto_vec <const char *> *clobbers,
+				   const auto_vec <block *> *goto_blocks)
+{
+  tree t_string = build_string (asm_template);
+  tree t_outputs = build_operand_chain (outputs);
+  tree t_inputs = build_operand_chain (inputs);
+  tree t_clobbers = build_clobbers (clobbers);
+  tree t_labels = build_goto_operands (goto_blocks);
+  t_string
+    = resolve_asm_operand_names (t_string, t_outputs, t_inputs, t_labels);
+  tree asm_stmt
+    = build5 (ASM_EXPR, void_type_node,
+	      t_string, t_outputs, t_inputs, t_clobbers, t_labels);
+
+  /* asm statements without outputs, including simple ones, are treated
+     as volatile.  */
+  ASM_VOLATILE_P (asm_stmt) = (outputs->length () == 0);
+  ASM_INPUT_P (asm_stmt) = 0; /* extended asm stmts are not "simple".  */
+  ASM_INLINE_P (asm_stmt) = is_inline;
+  if (is_volatile)
+    ASM_VOLATILE_P (asm_stmt) = 1;
+  if (loc)
+    set_tree_location (asm_stmt, loc);
+  add_stmt (asm_stmt);
+}
+
 /* Constructor for gcc::jit::playback::block.  */
 
 playback::block::
@@ -1747,26 +2040,6 @@ block (function *func,
 			    identifier, void_type_node);
   DECL_CONTEXT (m_label_decl) = func->as_fndecl ();
   m_label_expr = NULL;
-}
-
-/* A subclass of auto_vec <char *> that frees all of its elements on
-   deletion.  */
-
-class auto_argvec : public auto_vec <char *>
-{
- public:
-  ~auto_argvec ();
-};
-
-/* auto_argvec's dtor, freeing all contained strings, automatically
-   chaining up to ~auto_vec <char *>, which frees the internal buffer.  */
-
-auto_argvec::~auto_argvec ()
-{
-  int i;
-  char *str;
-  FOR_EACH_VEC_ELT (*this, i, str)
-    free (str);
 }
 
 /* Compile a playback::context:
@@ -1822,7 +2095,7 @@ compile ()
   /* Acquire the JIT mutex and set "this" as the active playback ctxt.  */
   acquire_mutex ();
 
-  auto_argvec fake_args;
+  auto_string_vec fake_args;
   make_fake_args (&fake_args, ctxt_progname, &requested_dumps);
   if (errors_occurred ())
     {
@@ -2108,8 +2381,10 @@ playback::compile_to_file::copy_file (const char *src_path,
 
   gcc_assert (total_sz_in == total_sz_out);
   if (get_logger ())
-    get_logger ()->log ("total bytes copied: %ld", total_sz_out);
+    get_logger ()->log ("total bytes copied: %zu", total_sz_out);
 
+  /* fchmod does not exist in Windows. */
+#ifndef _WIN32
   /* Set the permissions of the copy to those of the original file,
      in particular the "executable" bits.  */
   if (fchmod (fileno (f_out), stat_buf.st_mode) == -1)
@@ -2117,6 +2392,7 @@ playback::compile_to_file::copy_file (const char *src_path,
 	       "error setting mode of %s: %s",
 	       dst_path,
 	       xstrerror (errno));
+#endif
 
   fclose (f_out);
 }
@@ -2226,10 +2502,8 @@ make_fake_args (vec <char *> *argvec,
   /* Aggressively garbage-collect, to shake out bugs: */
   if (get_bool_option (GCC_JIT_BOOL_OPTION_SELFCHECK_GC))
     {
-      ADD_ARG ("--param");
-      ADD_ARG ("ggc-min-expand=0");
-      ADD_ARG ("--param");
-      ADD_ARG ("ggc-min-heapsize=0");
+      ADD_ARG ("--param=ggc-min-expand=0");
+      ADD_ARG ("--param=ggc-min-heapsize=0");
     }
 
   if (get_bool_option (GCC_JIT_BOOL_OPTION_DUMP_EVERYTHING))
@@ -2440,7 +2714,7 @@ invoke_driver (const char *ctxt_progname,
   /* Currently this lumps together both assembling and linking into
      TV_ASSEMBLE.  */
   auto_timevar assemble_timevar (get_timer (), tv_id);
-  auto_argvec argvec;
+  auto_string_vec argvec;
 #define ADD_ARG(arg) argvec.safe_push (xstrdup (arg))
 
   ADD_ARG (gcc_driver_name);
@@ -2477,6 +2751,10 @@ invoke_driver (const char *ctxt_progname,
 
   if (0)
     ADD_ARG ("-v");
+
+  /* Add any user-provided driver extra options.  */
+
+  m_recording_ctxt->append_driver_options (&argvec);
 
 #undef ADD_ARG
 
@@ -2591,10 +2869,19 @@ dlopen_built_dso ()
 {
   JIT_LOG_SCOPE (get_logger ());
   auto_timevar load_timevar (get_timer (), TV_LOAD);
-  void *handle = NULL;
-  const char *error = NULL;
+  result::handle handle = NULL;
   result *result_obj = NULL;
 
+#ifdef _WIN32
+  /* Clear any existing error.  */
+  SetLastError(0);
+
+  handle = LoadLibrary(m_tempdir->get_path_so_file ());
+  if (GetLastError() != 0)  {
+    print_last_error();
+  }
+#else
+  const char *error = NULL;
   /* Clear any existing error.  */
   dlerror ();
 
@@ -2603,6 +2890,8 @@ dlopen_built_dso ()
   if ((error = dlerror()) != NULL)  {
     add_error (NULL, "%s", error);
   }
+#endif
+
   if (handle)
     {
       /* We've successfully dlopened the result; create a
@@ -2652,10 +2941,6 @@ playback::context::
 replay ()
 {
   JIT_LOG_SCOPE (get_logger ());
-  /* Adapted from c-common.c:c_common_nodes_and_builtins.  */
-  tree array_domain_type = build_index_type (size_int (200));
-  m_char_array_type_node
-    = build_array_type (char_type_node, array_domain_type);
 
   m_const_char_ptr
     = build_pointer_type (build_qualified_type (char_type_node,
@@ -2663,6 +2948,11 @@ replay ()
 
   /* Replay the recorded events:  */
   timevar_push (TV_JIT_REPLAY);
+
+  /* Ensure that builtins that could be needed during optimization
+     get created ahead of time.  */
+  builtins_manager *bm = m_recording_ctxt->get_builtins_manager ();
+  bm->ensure_optimization_builtins_exist ();
 
   m_recording_ctxt->replay_into (this);
 
@@ -2672,13 +2962,11 @@ replay ()
      refs.  Hence we must stop using them before the GC can run.  */
   m_recording_ctxt->disassociate_from_playback ();
 
-  /* The builtins_manager, if any, is associated with the recording::context
+  /* The builtins_manager is associated with the recording::context
      and might be reused for future compiles on other playback::contexts,
      but its m_attributes array is not GTY-labeled and hence will become
      nonsense if the GC runs.  Purge this state.  */
-  builtins_manager *bm = get_builtins_manager ();
-  if (bm)
-    bm->finish_playback ();
+  bm->finish_playback ();
 
   timevar_pop (TV_JIT_REPLAY);
 
@@ -2846,7 +3134,7 @@ handle_locations ()
   FOR_EACH_VEC_ELT (m_cached_locations, i, cached_location)
     {
       tree t = cached_location->first;
-      source_location srcloc = cached_location->second->m_srcloc;
+      location_t srcloc = cached_location->second->m_srcloc;
 
       /* This covers expressions: */
       if (CAN_HAVE_LOCATION_P (t))
@@ -2946,7 +3234,7 @@ new_location (recording::location *rloc,
 /* Deferred setting of the location for a given tree, by adding the
    (tree, playback::location) pair to a list of deferred associations.
    We will actually set the location on the tree later on once
-   the source_location for the playback::location exists.  */
+   the location_t for the playback::location exists.  */
 
 void
 playback::context::

@@ -6,7 +6,7 @@
  *                                                                          *
  *                              C Header File                               *
  *                                                                          *
- *          Copyright (C) 1992-2018, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2020, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -23,9 +23,9 @@
  *                                                                          *
  ****************************************************************************/
 
-/* This is the C header corresponding to the Ada package specification for
-   Atree. It also contains the implementations of inlined functions from the
-   package body for Atree.  It was generated manually from atree.ads and
+/* This is the C header that corresponds to the Ada package specification for
+   Atree.  It also contains the implementation of inlined functions from the
+   package body for Atree.  It was created manually from atree.ads and
    atree.adb and must be kept synchronized with changes in these files.
 
    Note that only routines for reading the tree are included, since the tree
@@ -530,6 +530,7 @@ extern Node_Id Current_Error_Node;
 #define Elist25(N)    Field25 (N)
 #define Elist26(N)    Field26 (N)
 #define Elist29(N)    Field29 (N)
+#define Elist30(N)    Field30 (N)
 #define Elist36(N)    Field36 (N)
 
 #define Name1(N)      Field1  (N)

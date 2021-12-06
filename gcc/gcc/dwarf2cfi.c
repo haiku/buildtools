@@ -1,5 +1,5 @@
 /* Dwarf2 Call Frame Information helper routines.
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -68,6 +68,12 @@ struct GTY(()) dw_cfi_row
 
   /* The expressions for any register column that is saved.  */
   cfi_vec reg_save;
+
+  /* True if the register window is saved.  */
+  bool window_save;
+
+  /* True if the return address is in a mangled state.  */
+  bool ra_mangled;
 };
 
 /* The caller's ORIG_REG is saved in SAVED_IN_REG.  */
@@ -147,6 +153,9 @@ struct dw_trace_info
 
   /* True if we've seen different values incoming to beg_true_args_size.  */
   bool args_size_undefined;
+
+  /* True if we've seen an insn with a REG_ARGS_SIZE note before EH_HEAD.  */
+  bool args_size_defined_for_eh;
 };
 
 
@@ -515,7 +524,7 @@ static void
 update_row_reg_save (dw_cfi_row *row, unsigned column, dw_cfi_ref cfi)
 {
   if (vec_safe_length (row->reg_save) <= column)
-    vec_safe_grow_cleared (row->reg_save, column + 1);
+    vec_safe_grow_cleared (row->reg_save, column + 1, true);
   (*row->reg_save)[column] = cfi;
 }
 
@@ -763,6 +772,12 @@ cfi_row_equal_p (dw_cfi_row *a, dw_cfi_row *b)
         return false;
     }
 
+  if (a->window_save != b->window_save)
+    return false;
+
+  if (a->ra_mangled != b->ra_mangled)
+    return false;
+
   return true;
 }
 
@@ -941,6 +956,9 @@ notice_args_size (rtx_insn *insn)
   note = find_reg_note (insn, REG_ARGS_SIZE, NULL);
   if (note == NULL)
     return;
+
+  if (!cur_trace->eh_head)
+    cur_trace->args_size_defined_for_eh = true;
 
   args_size = get_args_size (note);
   delta = args_size - cur_trace->end_true_args_size;
@@ -1358,8 +1376,9 @@ dwarf2out_frame_debug_cfa_restore (rtx reg)
 }
 
 /* A subroutine of dwarf2out_frame_debug, process a REG_CFA_WINDOW_SAVE.
-   ??? Perhaps we should note in the CIE where windows are saved (instead of
-   assuming 0(cfa)) and what registers are in the window.  */
+
+   ??? Perhaps we should note in the CIE where windows are saved (instead
+   of assuming 0(cfa)) and what registers are in the window.  */
 
 static void
 dwarf2out_frame_debug_cfa_window_save (void)
@@ -1368,6 +1387,22 @@ dwarf2out_frame_debug_cfa_window_save (void)
 
   cfi->dw_cfi_opc = DW_CFA_GNU_window_save;
   add_cfi (cfi);
+  cur_row->window_save = true;
+}
+
+/* A subroutine of dwarf2out_frame_debug, process a REG_CFA_TOGGLE_RA_MANGLE.
+   Note: DW_CFA_GNU_window_save dwarf opcode is reused for toggling RA mangle
+   state, this is a target specific operation on AArch64 and can only be used
+   on other targets if they don't use the window save operation otherwise.  */
+
+static void
+dwarf2out_frame_debug_cfa_toggle_ra_mangle (void)
+{
+  dw_cfi_ref cfi = new_cfi ();
+
+  cfi->dw_cfi_opc = DW_CFA_GNU_window_save;
+  add_cfi (cfi);
+  cur_row->ra_mangled = !cur_row->ra_mangled;
 }
 
 /* Record call frame debugging information for an expression EXPR,
@@ -1660,9 +1695,19 @@ dwarf2out_frame_debug_expr (rtx expr)
 	      if (fde
 		  && fde->stack_realign
 		  && REGNO (src) == STACK_POINTER_REGNUM)
-		gcc_assert (REGNO (dest) == HARD_FRAME_POINTER_REGNUM
-			    && fde->drap_reg != INVALID_REGNUM
-			    && cur_cfa->reg != dwf_regno (src));
+		{
+		  gcc_assert (REGNO (dest) == HARD_FRAME_POINTER_REGNUM
+			      && fde->drap_reg != INVALID_REGNUM
+			      && cur_cfa->reg != dwf_regno (src)
+			      && fde->rule18);
+		  fde->rule18 = 0;
+		  /* The save of hard frame pointer has been deferred
+		     until this point when Rule 18 applied.  Emit it now.  */
+		  queue_reg_save (dest, NULL_RTX, 0);
+		  /* And as the instruction modifies the hard frame pointer,
+		     flush the queue as well.  */
+		  dwarf2out_flush_queued_reg_saves ();
+		}
 	      else
 		queue_reg_save (src, dest, 0);
 	    }
@@ -1762,7 +1807,7 @@ dwarf2out_frame_debug_expr (rtx expr)
 
 	  /* Rule 6 */
 	case CONST_INT:
-	case POLY_INT_CST:
+	case CONST_POLY_INT:
 	  cur_trace->cfa_temp.reg = dwf_regno (dest);
 	  cur_trace->cfa_temp.offset = rtx_to_poly_int64 (src);
 	  break;
@@ -1872,6 +1917,7 @@ dwarf2out_frame_debug_expr (rtx expr)
 	    {
 	      gcc_assert (cur_cfa->reg != dw_frame_pointer_regnum);
 	      cur_trace->cfa_store.offset = 0;
+	      fde->rule18 = 1;
 	    }
 
 	  if (cur_cfa->reg == dw_stack_pointer_regnum)
@@ -2006,7 +2052,17 @@ dwarf2out_frame_debug_expr (rtx expr)
 	span = NULL;
 
       if (!span)
-	queue_reg_save (src, NULL_RTX, offset);
+	{
+	  if (fde->rule18)
+	    /* Just verify the hard frame pointer save when doing dynamic
+	       realignment uses expected offset.  The actual queue_reg_save
+	       needs to be deferred until the instruction that sets
+	       hard frame pointer to stack pointer, see PR99334 for
+	       details.  */
+	    gcc_assert (known_eq (offset, 0));
+	  else
+	    queue_reg_save (src, NULL_RTX, offset);
+	}
       else
 	{
 	  /* We have a PARALLEL describing where the contents of SRC live.
@@ -2127,8 +2183,11 @@ dwarf2out_frame_debug (rtx_insn *insn)
 	break;
 
       case REG_CFA_TOGGLE_RA_MANGLE:
+	dwarf2out_frame_debug_cfa_toggle_ra_mangle ();
+	handled_one = true;
+	break;
+
       case REG_CFA_WINDOW_SAVE:
-	/* We overload both of these operations onto the same DWARF opcode.  */
 	dwarf2out_frame_debug_cfa_window_save ();
 	handled_one = true;
 	break;
@@ -2192,6 +2251,25 @@ change_cfi_row (dw_cfi_row *old_row, dw_cfi_row *new_row)
 	add_cfi_restore (i);
       else if (!cfi_equal_p (r_old, r_new))
         add_cfi (r_new);
+    }
+
+  if (!old_row->window_save && new_row->window_save)
+    {
+      dw_cfi_ref cfi = new_cfi ();
+
+      gcc_assert (!old_row->ra_mangled && !new_row->ra_mangled);
+      cfi->dw_cfi_opc = DW_CFA_GNU_window_save;
+      add_cfi (cfi);
+    }
+
+  if (old_row->ra_mangled != new_row->ra_mangled)
+    {
+      dw_cfi_ref cfi = new_cfi ();
+
+      gcc_assert (!old_row->window_save && !new_row->window_save);
+      /* DW_CFA_GNU_window_save is reused for toggling RA mangle state.  */
+      cfi->dw_cfi_opc = DW_CFA_GNU_window_save;
+      add_cfi (cfi);
     }
 }
 
@@ -2415,6 +2493,13 @@ create_trace_edges (rtx_insn *insn)
 	  for (i = 0; i < n; ++i)
 	    {
 	      rtx_insn *lab = as_a <rtx_insn *> (XEXP (RTVEC_ELT (vec, i), 0));
+	      maybe_record_trace_start (lab, insn);
+	    }
+
+	  /* Handle casesi dispatch insns.  */
+	  if ((tmp = tablejump_casesi_pattern (insn)) != NULL_RTX)
+	    {
+	      rtx_insn * lab = label_ref_label (XEXP (SET_SRC (tmp), 2));
 	      maybe_record_trace_start (lab, insn);
 	    }
 	}
@@ -2668,6 +2753,7 @@ scan_trace (dw_trace_info *trace, bool entry)
       create_trace_edges (control);
     }
 
+  gcc_assert (!cfun->fde || !cfun->fde->rule18);
   add_cfi_insn = NULL;
   cur_row = NULL;
   cur_trace = NULL;
@@ -2719,7 +2805,7 @@ before_next_cfi_note (rtx_insn *start)
 static void
 connect_traces (void)
 {
-  unsigned i, n = trace_info.length ();
+  unsigned i, n;
   dw_trace_info *prev_ti, *ti;
 
   /* ??? Ideally, we should have both queued and processed every trace.
@@ -2730,20 +2816,15 @@ connect_traces (void)
      these are not "real" instructions, and should not be considered.
      This could be generically useful for tablejump data as well.  */
   /* Remove all unprocessed traces from the list.  */
-  for (i = n - 1; i > 0; --i)
-    {
-      ti = &trace_info[i];
-      if (ti->beg_row == NULL)
-	{
-	  trace_info.ordered_remove (i);
-	  n -= 1;
-	}
-      else
-	gcc_assert (ti->end_row != NULL);
-    }
+  unsigned ix, ix2;
+  VEC_ORDERED_REMOVE_IF_FROM_TO (trace_info, ix, ix2, ti, 1,
+				 trace_info.length (), ti->beg_row == NULL);
+  FOR_EACH_VEC_ELT (trace_info, ix, ti)
+    gcc_assert (ti->end_row != NULL);
 
   /* Work from the end back to the beginning.  This lets us easily insert
      remember/restore_state notes in the correct order wrt other notes.  */
+  n = trace_info.length ();
   prev_ti = &trace_info[n - 1];
   for (i = n - 1; i > 0; --i)
     {
@@ -2789,6 +2870,12 @@ connect_traces (void)
 	      cfi->dw_cfi_opc = DW_CFA_restore_state;
 	      add_cfi (cfi);
 
+	      /* If the target unwinder does not save the CFA as part of the
+		 register state, we need to restore it separately.  */
+	      if (targetm.asm_out.should_restore_cfa_state ()
+		  && (cfi = def_cfa_0 (&old_row->cfa, &ti->beg_row->cfa)))
+		add_cfi (cfi);
+
 	      old_row = prev_ti->beg_row;
 	    }
 	  /* Otherwise, we'll simply change state from the previous end.  */
@@ -2825,11 +2912,17 @@ connect_traces (void)
 
 	  if (ti->switch_sections)
 	    prev_args_size = 0;
+
 	  if (ti->eh_head == NULL)
 	    continue;
-	  gcc_assert (!ti->args_size_undefined);
 
-	  if (maybe_ne (ti->beg_delay_args_size, prev_args_size))
+	  /* We require either the incoming args_size values to match or the
+	     presence of an insn setting it before the first EH insn.  */
+	  gcc_assert (!ti->args_size_undefined || ti->args_size_defined_for_eh);
+
+	  /* In the latter case, we force the creation of a CFI note.  */
+	  if (ti->args_size_undefined
+	      || maybe_ne (ti->beg_delay_args_size, prev_args_size))
 	    {
 	      /* ??? Search back to previous CFI note.  */
 	      add_cfi_insn = PREV_INSN (ti->eh_head);

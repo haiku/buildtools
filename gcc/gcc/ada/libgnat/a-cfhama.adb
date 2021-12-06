@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2010-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2010-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -429,7 +429,7 @@ is
       procedure Lift_Abstraction_Level (Container : Map) is null;
 
       -----------------------
-      -- Mapping_preserved --
+      -- Mapping_Preserved --
       -----------------------
 
       function Mapping_Preserved
@@ -509,8 +509,11 @@ is
 
    procedure Free (HT : in out Map; X : Count_Type) is
    begin
-      HT.Nodes (X).Has_Element := False;
-      HT_Ops.Free (HT, X);
+      if X /= 0 then
+         pragma Assert (X <= HT.Capacity);
+         HT.Nodes (X).Has_Element := False;
+         HT_Ops.Free (HT, X);
+      end if;
    end Free;
 
    ----------------------

@@ -10,16 +10,16 @@ import (
 	"unsafe"
 )
 
+// For exec_unix.go.
+const SYS_EXECVE = 0
+
 //sys	Openat(dirfd int, path string, flags int, mode uint32) (fd int, err error)
 //open64at(dirfd _C_int, path *byte, flags _C_int, mode Mode_t) _C_int
-
-//sys	ptrace(request int, id int, addr uintptr, data int, buff uintptr) (val int)
-//ptrace(request _C_int, id int, addr uintptr, data _C_int, buff *byte) _C_int
 
 //sys	ptrace64(request int, id int64, addr int64, data int, buff uintptr) (err error)
 //ptrace64(request _C_int, id int64, addr int64, data _C_int, buff *byte) _C_int
 
-func raw_ptrace(request int, pid int, addr *byte, data *byte) Errno {
+func raw_ptrace(request int, pid int, addr uintptr, data uintptr) Errno {
 	if request == _PTRACE_TRACEME {
 		// Convert to AIX ptrace call.
 		err := ptrace64(_PT_TRACE_ME, 0, 0, 0, 0)
@@ -111,28 +111,6 @@ func Reboot(how int) (err error) {
 //sys	Fchownat(dirfd int, path string, uid int, gid int, flags int) (err error)
 //fchownat(dirfd _C_int, path *byte, owner Uid_t, group Gid_t, flags _C_int) _C_int
 
-// On AIX, there is no flock() system call, we emulate it.
-func Flock(fd int, op int) (err error) {
-	lk := &Flock_t{}
-	if (op & LOCK_UN) != 0 {
-		lk.Type = F_UNLCK
-	} else if (op & LOCK_EX) != 0 {
-		lk.Type = F_WRLCK
-	} else if (op & LOCK_SH) != 0 {
-		lk.Type = F_RDLCK
-	} else {
-		return nil
-	}
-	if (op & LOCK_NB) != 0 {
-		err = FcntlFlock(uintptr(fd), F_SETLK, lk)
-		if err != nil && (err == EAGAIN || err == EACCES) {
-			return EWOULDBLOCK
-		}
-		return err
-	}
-	return FcntlFlock(uintptr(fd), F_SETLKW, lk)
-}
-
 //sys	Fstatfs(fd int, buf *Statfs_t) (err error)
 //fstatfs64(fd _C_int, buf *Statfs_t) _C_int
 
@@ -161,3 +139,6 @@ func ReadDirent(fd int, buf []byte) (n int, err error) {
 func Unlinkat(dirfd int, path string) (err error) {
 	return unlinkat(dirfd, path, 0)
 }
+
+//sys	Getkerninfo(op int32, where uintptr, size uintptr, arg int64) (i int32, err error)
+//getkerninfo(op _C_int, where *byte, size *byte, arg _C_long) _C_int

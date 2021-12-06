@@ -7,7 +7,7 @@
 --                                  S p e c                                 --
 --                                                                          --
 --             Copyright (C) 1991-2017, Florida State University            --
---          Copyright (C) 1995-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1995-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -44,9 +44,6 @@ with Ada.Unchecked_Conversion;
 
 package System.OS_Interface is
    pragma Preelaborate;
-
-   pragma Linker_Options ("-lposix4");
-   pragma Linker_Options ("-lthread");
 
    subtype int            is Interfaces.C.int;
    subtype short          is Interfaces.C.short;
@@ -258,6 +255,11 @@ package System.OS_Interface is
 
    function To_Timespec (D : Duration) return timespec;
    pragma Inline (To_Timespec);
+
+   function sysconf (name : int) return long;
+   pragma Import (C, sysconf);
+
+   SC_NPROCESSORS_ONLN : constant := 15;
 
    -------------
    -- Process --

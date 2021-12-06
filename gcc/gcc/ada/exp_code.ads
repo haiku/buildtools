@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1996-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1996-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -37,6 +37,8 @@ package Exp_Code is
    --  code statements, for use by Gigi processing for code statements.
    --  Note that the implementations of these routines must not attempt
    --  to expand tables that are frozen on entry to Gigi.
+
+   --  WARNING: There is a matching C declaration of these subprograms in fe.h
 
    function Is_Asm_Volatile (N : Node_Id) return Boolean;
    --  Given an N_Code_Statement node N, return True if Volatile=True is

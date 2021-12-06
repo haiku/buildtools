@@ -1,6 +1,6 @@
 // Safe container implementation  -*- C++ -*-
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -80,7 +80,14 @@ namespace __gnu_debug
       _Safe_container&
       operator=(_Safe_container&& __x) noexcept
       {
-	__glibcxx_check_self_move_assign(__x);
+	if (std::__addressof(__x) == this)
+	  {
+	    // Standard containers have a valid but unspecified value after
+	    // self-move, so we invalidate all debug iterators even if the
+	    // underlying container happens to preserve its contents.
+	    this->_M_invalidate_all();
+	    return *this;
+	  }
 
 	if (_IsCxx11AllocatorAware)
 	  {

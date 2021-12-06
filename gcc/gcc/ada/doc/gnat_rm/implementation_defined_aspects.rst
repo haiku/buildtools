@@ -370,6 +370,12 @@ Aspect Max_Queue_Length
 
 This aspect is equivalent to :ref:`pragma Max_Queue_Length<Pragma-Max_Queue_Length>`.
 
+Aspect No_Caching
+=================
+.. index:: No_Caching
+
+This boolean aspect is equivalent to :ref:`pragma No_Caching<Pragma-No_Caching>`.
+
 Aspect No_Elaboration_Code_All
 ==============================
 .. index:: No_Elaboration_Code_All
@@ -457,6 +463,13 @@ Aspect Refined_State
 .. index:: Refined_State
 
 This aspect is equivalent to :ref:`pragma Refined_State<Pragma-Refined_State>`.
+
+Aspect Relaxed_Initialization
+=============================
+.. index:: Refined_Initialization
+
+For the syntax and semantics of this aspect, see the SPARK 2014 Reference
+Manual, section 6.10.
 
 Aspect Remote_Access_Type
 =========================
@@ -551,9 +564,11 @@ Aspect Unreferenced
 ===================
 .. index:: Unreferenced
 
-This boolean aspect is equivalent to :ref:`pragma Unreferenced<Pragma-Unreferenced>`. Note that
-in the case of formal parameters, it is not permitted to have aspects for
-a formal parameter, so in this case the pragma form must be used.
+This boolean aspect is equivalent to :ref:`pragma Unreferenced<Pragma-Unreferenced>`.
+
+When using the ``-gnat2020`` switch, this aspect is also supported on formal
+parameters, which is in particular the only form possible for expression
+functions.
 
 Aspect Unreferenced_Objects
 ===========================

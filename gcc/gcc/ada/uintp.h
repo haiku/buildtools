@@ -6,7 +6,7 @@
  *                                                                          *
  *                              C Header File                               *
  *                                                                          *
- *            Copyright (C) 1992-2018, Free Software Foundation, Inc.       *
+ *            Copyright (C) 1992-2020, Free Software Foundation, Inc.       *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -23,8 +23,9 @@
  *                                                                          *
  ****************************************************************************/
 
-/* This file corresponds to the Ada package specification Uintp.  It was
-   created manually from the files uintp.ads and uintp.adb.  */
+/* This is the C header that corresponds to the Ada package specification for
+   Uintp.  It was created manually from uintp.ads and must be kept synchronized
+   with changes in this file.  */
 
 #ifdef __cplusplus
 extern "C" {

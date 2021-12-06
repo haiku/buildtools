@@ -1,5 +1,5 @@
 ;; Machine description of the Synopsys DesignWare ARC cpu for GNU C compiler
-;; Copyright (C) 2007-2018 Free Software Foundation, Inc.
+;; Copyright (C) 2007-2021 Free Software Foundation, Inc.
 
 ;; This file is part of GCC.
 
@@ -1400,40 +1400,21 @@
 (define_insn_and_split "*mov<mode>_insn"
   [(set (match_operand:VWH 0 "move_dest_operand" "=r,r,r,m")
 	(match_operand:VWH 1 "general_operand"    "i,r,m,r"))]
-  "TARGET_PLUS_QMACW
-   && (register_operand (operands[0], <MODE>mode)
+  "(register_operand (operands[0], <MODE>mode)
        || register_operand (operands[1], <MODE>mode))"
-  "*
-{
-  switch (which_alternative)
-    {
-     default:
-       return \"#\";
-
-     case 1:
-       return \"vadd2 %0, %1, 0\";
-
-     case 2:
-       if (TARGET_LL64)
-         return \"ldd%U1%V1 %0,%1\";
-       return \"#\";
-
-     case 3:
-       if (TARGET_LL64)
-	   return \"std%U0%V0 %1,%0\";
-	 return \"#\";
-    }
-}"
-  "reload_completed"
+  "@
+   #
+   vadd2\\t%0,%1,0
+   ldd%U1%V1\\t%0,%1
+   std%U0%V0\\t%1,%0"
+  "&& reload_completed && arc_split_move_p (operands)"
   [(const_int 0)]
   {
    arc_split_move (operands);
    DONE;
   }
   [(set_attr "type" "move,move,load,store")
-   (set_attr "predicable" "yes,no,no,no")
-   (set_attr "iscompact"  "false,false,false,false")
-   ])
+   (set_attr "length" "16,8,16,16")])
 
 (define_expand "movmisalign<mode>"
  [(set (match_operand:VWH 0 "general_operand" "")
@@ -1612,6 +1593,44 @@
  DONE;
 })
 
+(define_expand "sdot_prodv4hi"
+  [(match_operand:V2SI 0 "register_operand" "")
+   (match_operand:V4HI 1 "register_operand" "")
+   (match_operand:V4HI 2 "register_operand" "")
+   (match_operand:V2SI 3 "register_operand" "")]
+  "TARGET_PLUS_MACD"
+{
+ rtx acc_reg  = gen_rtx_REG  (V2SImode, ACC_REG_FIRST);
+ rtx op1_low  = gen_lowpart  (V2HImode, operands[1]);
+ rtx op1_high = gen_highpart (V2HImode, operands[1]);
+ rtx op2_low  = gen_lowpart  (V2HImode, operands[2]);
+ rtx op2_high = gen_highpart (V2HImode, operands[2]);
+
+ emit_move_insn (acc_reg, operands[3]);
+ emit_insn (gen_arc_vec_smac_v2hiv2si_zero (op1_low, op2_low));
+ emit_insn (gen_arc_vec_smac_v2hiv2si (operands[0], op1_high, op2_high));
+ DONE;
+})
+
+(define_expand "udot_prodv4hi"
+  [(match_operand:V2SI 0 "register_operand" "")
+   (match_operand:V4HI 1 "register_operand" "")
+   (match_operand:V4HI 2 "register_operand" "")
+   (match_operand:V2SI 3 "register_operand" "")]
+  "TARGET_PLUS_MACD"
+{
+ rtx acc_reg  = gen_rtx_REG  (V2SImode, ACC_REG_FIRST);
+ rtx op1_low  = gen_lowpart  (V2HImode, operands[1]);
+ rtx op1_high = gen_highpart (V2HImode, operands[1]);
+ rtx op2_low  = gen_lowpart  (V2HImode, operands[2]);
+ rtx op2_high = gen_highpart (V2HImode, operands[2]);
+
+ emit_move_insn (acc_reg, operands[3]);
+ emit_insn (gen_arc_vec_umac_v2hiv2si_zero (op1_low, op2_low));
+ emit_insn (gen_arc_vec_umac_v2hiv2si (operands[0], op1_high, op2_high));
+ DONE;
+})
+
 (define_insn "arc_vec_<V_US>mult_lo_v4hi"
  [(set (match_operand:V2SI 0 "even_register_operand"                     "=r,r")
        (mult:V2SI (SE:V2SI (vec_select:V2HI
@@ -1704,30 +1723,37 @@
   }
 )
 
-(define_insn "arc_vec_<V_US>mac_hi_v4hi"
- [(set (match_operand:V2SI 0 "even_register_operand"                     "=r,r")
+(define_insn "arc_vec_<V_US>mac_v2hiv2si"
+ [(set (match_operand:V2SI 0 "even_register_operand"                "=r,Ral,r")
        (plus:V2SI
-	(reg:V2SI ARCV2_ACC)
-	(mult:V2SI (SE:V2SI (vec_select:V2HI
-			     (match_operand:V4HI 1 "even_register_operand" "0,r")
-			     (parallel [(const_int 2) (const_int 3)])))
-		   (SE:V2SI (vec_select:V2HI
-			     (match_operand:V4HI 2 "even_register_operand" "r,r")
-			     (parallel [(const_int 2) (const_int 3)]))))))
+	(mult:V2SI (SE:V2SI (match_operand:V2HI 1 "register_operand" "0,  r,r"))
+		   (SE:V2SI (match_operand:V2HI 2 "register_operand" "r,  r,r")))
+	(reg:V2SI ARCV2_ACC)))
   (set (reg:V2SI ARCV2_ACC)
        (plus:V2SI
-	(reg:V2SI ARCV2_ACC)
-	(mult:V2SI (SE:V2SI (vec_select:V2HI (match_dup 1)
-					     (parallel [(const_int 2) (const_int 3)])))
-		   (SE:V2SI (vec_select:V2HI (match_dup 2)
-					     (parallel [(const_int 2) (const_int 3)]))))))
+	(mult:V2SI (SE:V2SI (match_dup 1))
+		   (SE:V2SI (match_dup 2)))
+	(reg:V2SI ARCV2_ACC)))
   ]
   "TARGET_PLUS_MACD"
-  "vmac2h<V_US_suffix>%? %0, %R1, %R2"
+  "@
+   vmac2h<V_US_suffix>%?\\t%0,%1,%2
+   vmac2h<V_US_suffix>%?\\t0,%1,%2
+   vmac2h<V_US_suffix>%?\\t%0,%1,%2"
   [(set_attr "length" "4")
    (set_attr "type" "multi")
-   (set_attr "predicable" "yes,no")
-   (set_attr "cond" "canuse,nocond")])
+   (set_attr "predicable" "yes,no,no")])
+
+(define_insn "arc_vec_<V_US>mac_v2hiv2si_zero"
+ [(set (reg:V2SI ARCV2_ACC)
+       (plus:V2SI
+	(mult:V2SI (SE:V2SI (match_operand:V2HI 0 "register_operand" "r"))
+		   (SE:V2SI (match_operand:V2HI 1 "register_operand" "r")))
+	(reg:V2SI ARCV2_ACC)))]
+  "TARGET_PLUS_MACD"
+  "vmac2h<V_US_suffix>%?\\t0,%0,%1"
+  [(set_attr "length" "4")
+   (set_attr "type" "multi")])
 
 ;; Builtins
 (define_insn "dmach"

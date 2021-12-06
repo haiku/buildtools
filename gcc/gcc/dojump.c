@@ -1,5 +1,5 @@
 /* Convert tree expression to rtl instructions, for GNU compiler.
-   Copyright (C) 1988-2018 Free Software Foundation, Inc.
+   Copyright (C) 1988-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -38,6 +38,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 
 static bool prefer_and_bit_test (scalar_int_mode, int);
+static void do_jump (tree, rtx_code_label *, rtx_code_label *,
+		     profile_probability);
 static void do_jump_by_parts_greater (scalar_int_mode, tree, tree, int,
 				      rtx_code_label *, rtx_code_label *,
 				      profile_probability);
@@ -118,38 +120,6 @@ restore_pending_stack_adjust (saved_pending_stack_adjust *save)
     }
 }
 
-/* Expand conditional expressions.  */
-
-/* Generate code to evaluate EXP and jump to LABEL if the value is zero.  */
-
-void
-jumpifnot (tree exp, rtx_code_label *label, profile_probability prob)
-{
-  do_jump (exp, label, NULL, prob.invert ());
-}
-
-void
-jumpifnot_1 (enum tree_code code, tree op0, tree op1, rtx_code_label *label,
-	     profile_probability prob)
-{
-  do_jump_1 (code, op0, op1, label, NULL, prob.invert ());
-}
-
-/* Generate code to evaluate EXP and jump to LABEL if the value is nonzero.  */
-
-void
-jumpif (tree exp, rtx_code_label *label, profile_probability prob)
-{
-  do_jump (exp, NULL, label, prob);
-}
-
-void
-jumpif_1 (enum tree_code code, tree op0, tree op1,
-	  rtx_code_label *label, profile_probability prob)
-{
-  do_jump_1 (code, op0, op1, NULL, label, prob);
-}
-
 /* Used internally by prefer_and_bit_test.  */
 
 static GTY(()) rtx and_reg;
@@ -197,7 +167,7 @@ prefer_and_bit_test (scalar_int_mode mode, int bitnum)
    OP0 CODE OP1 .  IF_FALSE_LABEL and IF_TRUE_LABEL like in do_jump.
    PROB is probability of jump to if_true_label.  */
 
-void
+static void
 do_jump_1 (enum tree_code code, tree op0, tree op1,
 	   rtx_code_label *if_false_label, rtx_code_label *if_true_label,
 	   profile_probability prob)
@@ -417,7 +387,7 @@ do_jump_1 (enum tree_code code, tree op0, tree op1,
 
    PROB is probability of jump to if_true_label.  */
 
-void
+static void
 do_jump (tree exp, rtx_code_label *if_false_label,
 	 rtx_code_label *if_true_label, profile_probability prob)
 {
@@ -467,6 +437,7 @@ do_jump (tree exp, rtx_code_label *if_false_label,
       /* FALLTHRU */
     case NON_LVALUE_EXPR:
     case ABS_EXPR:
+    case ABSU_EXPR:
     case NEGATE_EXPR:
     case LROTATE_EXPR:
     case RROTATE_EXPR:
@@ -697,8 +668,6 @@ do_jump_by_parts_greater_rtx (scalar_int_mode mode, int unsignedp, rtx op0,
       code = LE;
       if_true_label = if_false_label;
       if_false_label = drop_through_label;
-      drop_through_if_true = false;
-      drop_through_if_false = true;
       prob = prob.invert ();
     }
 
@@ -928,7 +897,7 @@ split_comparison (enum rtx_code code, machine_mode mode,
       return false;
     case LTGT:
       /* Do not turn a trapping comparison into a non-trapping one.  */
-      if (HONOR_SNANS (mode))
+      if (HONOR_NANS (mode))
 	{
           *code1 = LT;
           *code2 = GT;
@@ -945,6 +914,43 @@ split_comparison (enum rtx_code code, machine_mode mode,
     }
 }
 
+/* Generate code to evaluate EXP and jump to LABEL if the value is nonzero.
+   PROB is probability of jump to LABEL.  */
+
+void
+jumpif (tree exp, rtx_code_label *label, profile_probability prob)
+{
+  do_jump (exp, NULL, label, prob);
+}
+
+/* Similar to jumpif but dealing with exploded comparisons of the type
+   OP0 CODE OP1 .  LABEL and PROB are like in jumpif.  */
+
+void
+jumpif_1 (enum tree_code code, tree op0, tree op1, rtx_code_label *label,
+	  profile_probability prob)
+{
+  do_jump_1 (code, op0, op1, NULL, label, prob);
+}
+
+/* Generate code to evaluate EXP and jump to LABEL if the value is zero.
+   PROB is probability of jump to LABEL.  */
+
+void
+jumpifnot (tree exp, rtx_code_label *label, profile_probability prob)
+{
+  do_jump (exp, label, NULL, prob.invert ());
+}
+
+/* Similar to jumpifnot but dealing with exploded comparisons of the type
+   OP0 CODE OP1 .  LABEL and PROB are like in jumpifnot.  */
+
+void
+jumpifnot_1 (enum tree_code code, tree op0, tree op1, rtx_code_label *label,
+	     profile_probability prob)
+{
+  do_jump_1 (code, op0, op1, label, NULL, prob.invert ());
+}
 
 /* Like do_compare_and_jump but expects the values to compare as two rtx's.
    The decision as to signed or unsigned comparison must be made by the caller.
@@ -1108,13 +1114,19 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
 	           /* ... or if there is no libcall for it.  */
 	           || code_to_optab (code) == unknown_optab))
         {
-	  enum rtx_code first_code;
+	  enum rtx_code first_code, orig_code = code;
 	  bool and_them = split_comparison (code, mode, &first_code, &code);
 
 	  /* If there are no NaNs, the first comparison should always fall
 	     through.  */
 	  if (!HONOR_NANS (mode))
 	    gcc_assert (first_code == (and_them ? ORDERED : UNORDERED));
+
+	  else if ((orig_code == EQ || orig_code == NE)
+		   && rtx_equal_p (op0, op1))
+	    /* Self-comparisons x == x or x != x can be optimized into
+	       just x ord x or x nord x.  */
+	    code = orig_code == EQ ? ORDERED : UNORDERED;
 
 	  else
 	    {
@@ -1126,18 +1138,37 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
 		cprob = cprob.apply_scale (99, 100);
 	      else
 		cprob = profile_probability::even ();
-	      /* We want to split:
+	      /* For and_them we want to split:
 		 if (x) goto t; // prob;
+		 goto f;
 		 into
-		 if (a) goto t; // first_prob;
-		 if (b) goto t; // prob;
+		 if (a) ; else goto f; // first_prob for ;
+				       // 1 - first_prob for goto f;
+		 if (b) goto t; // adjusted prob;
+		 goto f;
 		 such that the overall probability of jumping to t
-		 remains the same and first_prob is prob * cprob.  */
+		 remains the same.  The and_them case should be
+		 probability-wise equivalent to the !and_them case with
+		 f and t swapped and also the conditions inverted, i.e.
+		 if (!a) goto f;
+		 if (!b) goto f;
+		 goto t;
+		 where the overall probability of jumping to f is
+		 1 - prob (thus the first prob.invert () below).
+		 cprob.invert () is because the a condition is inverted,
+		 so if it was originally ORDERED, !a is UNORDERED and
+		 thus should be relative 1% rather than 99%.
+		 The invert () on assignment to first_prob is because
+		 first_prob represents the probability of fallthru,
+		 rather than goto f.  And the last prob.invert () is
+		 because the adjusted prob represents the probability of
+		 jumping to t rather than to f.  */
 	      if (and_them)
 		{
 		  rtx_code_label *dest_label;
 		  prob = prob.invert ();
-		  profile_probability first_prob = prob.split (cprob).invert ();
+		  profile_probability first_prob
+		    = prob.split (cprob.invert ()).invert ();
 		  prob = prob.invert ();
 		  /* If we only jump if true, just bypass the second jump.  */
 		  if (! if_false_label)
@@ -1151,11 +1182,37 @@ do_compare_rtx_and_jump (rtx op0, rtx op1, enum rtx_code code, int unsignedp,
                   do_compare_rtx_and_jump (op0, op1, first_code, unsignedp, mode,
 					   size, dest_label, NULL, first_prob);
 		}
+	      /* For !and_them we want to split:
+		 if (x) goto t; // prob;
+		 goto f;
+		 into
+		 if (a) goto t; // first_prob;
+		 if (b) goto t; // adjusted prob;
+		 goto f;
+		 such that the overall probability of jumping to t
+		 remains the same and first_prob is prob * cprob.  */
               else
 		{
 		  profile_probability first_prob = prob.split (cprob);
 		  do_compare_rtx_and_jump (op0, op1, first_code, unsignedp, mode,
 					   size, NULL, if_true_label, first_prob);
+		  if (orig_code == NE && can_compare_p (UNEQ, mode, ccp_jump))
+		    {
+		      /* x != y can be split into x unord y || x ltgt y
+			 or x unord y || !(x uneq y).  The latter has the
+			 advantage that both comparisons are non-signalling and
+			 so there is a higher chance that the RTL optimizations
+			 merge the two comparisons into just one.  */
+		      code = UNEQ;
+		      prob = prob.invert ();
+		      if (! if_false_label)
+			{
+			  if (! dummy_label)
+			    dummy_label = gen_label_rtx ();
+			  if_false_label = dummy_label;
+			}
+		      std::swap (if_false_label, if_true_label);
+		    }
 		}
 	    }
 	}

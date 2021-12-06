@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler,
    for IBM RS/6000 POWER running AIX.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -23,14 +23,16 @@
 #undef  TARGET_AIX
 #define TARGET_AIX 1
 
+/* System headers are not C++-aware.  */
+#define SYSTEM_IMPLICIT_EXTERN_C 1
+
 /* Linux64.h wants to redefine TARGET_AIX based on -m64, but it can't be used
    in the #if conditional in options-default.h, so provide another macro.  */
 #undef  TARGET_AIX_OS
 #define TARGET_AIX_OS 1
 
 /* AIX always has a TOC.  */
-#define TARGET_NO_TOC 0
-#define TARGET_TOC 1
+#define TARGET_HAS_TOC 1
 #define FIXED_R2 1
 
 /* AIX allows r13 to be used in 32-bit mode.  */
@@ -221,9 +223,8 @@
 /* This now supports a natural alignment mode.  */
 /* AIX word-aligns FP doubles but doubleword-aligns 64-bit ints.  */
 #define ADJUST_FIELD_ALIGN(FIELD, TYPE, COMPUTED) \
-  ((TARGET_ALIGN_NATURAL == 0						\
-    && TYPE_MODE (strip_array_types (TYPE)) == DFmode)			\
-   ? MIN ((COMPUTED), 32)						\
+  (TARGET_ALIGN_NATURAL == 0						\
+   ? rs6000_special_adjust_field_align (TYPE, COMPUTED)			\
    : (COMPUTED))
 
 /* AIX increases natural record alignment to doubleword if the first
@@ -278,3 +279,10 @@
 /* Use standard DWARF numbering for DWARF debugging information.  */
 #define RS6000_USE_DWARF_NUMBERING
 
+#define TARGET_PRECOMPUTE_TLS_P rs6000_aix_precompute_tls_p
+
+/* Replace -m64 with -maix64 and -m32 with -maix32.  */
+#undef SUBTARGET_DRIVER_SELF_SPECS
+#define SUBTARGET_DRIVER_SELF_SPECS	\
+"%{m64:-maix64} %<m64",			\
+"%{m32:-maix32} %<m32"

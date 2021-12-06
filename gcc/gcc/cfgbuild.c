@@ -1,5 +1,5 @@
 /* Control flow graph building code for GNU compiler.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -545,6 +545,7 @@ find_bb_boundaries (basic_block bb)
 	     if the barrier were preceded by a control_flow_insn_p insn.  */
 	  if (!flow_transfer_insn)
 	    flow_transfer_insn = prev_nonnote_nondebug_insn_bb (insn);
+	  debug_insn = NULL;
 	}
 
       if (control_flow_insn_p (insn))
@@ -657,7 +658,7 @@ find_many_sub_basic_blocks (sbitmap blocks)
   basic_block bb, min, max;
   bool found = false;
   auto_vec<unsigned int> n_succs;
-  n_succs.safe_grow_cleared (last_basic_block_for_fn (cfun));
+  n_succs.safe_grow_cleared (last_basic_block_for_fn (cfun), true);
 
   FOR_EACH_BB_FN (bb, cfun)
     SET_STATE (bb,

@@ -1,5 +1,5 @@
 /* Language hooks common to C++ and ObjC++ front ends.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
    Contributed by Ziemowit Laski  <zlaski@apple.com>
 
 This file is part of GCC.
@@ -34,6 +34,11 @@ extern tree cp_unit_size_without_reusable_padding (tree);
 extern tree cp_get_global_decls ();
 extern tree cp_pushdecl (tree);
 extern void cp_register_dumps (gcc::dump_manager *);
+extern bool cp_handle_option (size_t, const char *, HOST_WIDE_INT, int,
+			      location_t, const struct cl_option_handlers *);
+extern tree cxx_make_type_hook			(tree_code);
+extern tree cxx_simulate_enum_decl (location_t, const char *,
+				    vec<string_int_pair>);
 
 /* Lang hooks that are shared between C++ and ObjC++ are defined here.  Hooks
    specific to C++ or ObjC++ go in cp/cp-lang.c and objcp/objcp-lang.c,
@@ -60,7 +65,7 @@ extern void cp_register_dumps (gcc::dump_manager *);
 #undef LANG_HOOKS_REGISTER_DUMPS
 #define LANG_HOOKS_REGISTER_DUMPS cp_register_dumps
 #undef LANG_HOOKS_HANDLE_OPTION
-#define LANG_HOOKS_HANDLE_OPTION c_common_handle_option
+#define LANG_HOOKS_HANDLE_OPTION cp_handle_option
 #undef LANG_HOOKS_HANDLE_FILENAME
 #define LANG_HOOKS_HANDLE_FILENAME c_common_handle_filename
 #undef LANG_HOOKS_POST_OPTIONS
@@ -99,6 +104,9 @@ extern void cp_register_dumps (gcc::dump_manager *);
 #define LANG_HOOKS_BUILTIN_FUNCTION cxx_builtin_function
 #undef  LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE
 #define LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE cxx_builtin_function_ext_scope
+#undef  LANG_HOOKS_SIMULATE_BUILTIN_FUNCTION_DECL
+#define LANG_HOOKS_SIMULATE_BUILTIN_FUNCTION_DECL \
+  cxx_simulate_builtin_function_decl
 #undef	LANG_HOOKS_TYPE_HASH_EQ
 #define LANG_HOOKS_TYPE_HASH_EQ	cxx_type_hash_eq
 #undef	LANG_HOOKS_COPY_LANG_QUALIFIERS
@@ -109,6 +117,8 @@ extern void cp_register_dumps (gcc::dump_manager *);
 #define LANG_HOOKS_BLOCK_MAY_FALLTHRU cxx_block_may_fallthru
 #undef LANG_HOOKS_EMITS_BEGIN_STMT
 #define LANG_HOOKS_EMITS_BEGIN_STMT true
+#undef LANG_HOOKS_FINALIZE_EARLY_DEBUG
+#define LANG_HOOKS_FINALIZE_EARLY_DEBUG c_common_finalize_early_debug
 
 /* Attribute hooks.  */
 #undef LANG_HOOKS_COMMON_ATTRIBUTE_TABLE
@@ -126,7 +136,9 @@ extern void cp_register_dumps (gcc::dump_manager *);
 #define LANG_HOOKS_TREE_DUMP_TYPE_QUALS_FN cp_type_quals
 
 #undef LANG_HOOKS_MAKE_TYPE
-#define LANG_HOOKS_MAKE_TYPE cxx_make_type
+#define LANG_HOOKS_MAKE_TYPE cxx_make_type_hook
+#undef LANG_HOOKS_SIMULATE_ENUM_DECL
+#define LANG_HOOKS_SIMULATE_ENUM_DECL cxx_simulate_enum_decl
 #undef LANG_HOOKS_TYPE_FOR_MODE
 #define LANG_HOOKS_TYPE_FOR_MODE c_common_type_for_mode
 #undef LANG_HOOKS_TYPE_FOR_SIZE
@@ -154,6 +166,8 @@ extern void cp_register_dumps (gcc::dump_manager *);
 
 #undef LANG_HOOKS_OMP_PREDETERMINED_SHARING
 #define LANG_HOOKS_OMP_PREDETERMINED_SHARING cxx_omp_predetermined_sharing
+#undef LANG_HOOKS_OMP_PREDETERMINED_MAPPING
+#define LANG_HOOKS_OMP_PREDETERMINED_MAPPING cxx_omp_predetermined_mapping
 #undef LANG_HOOKS_OMP_CLAUSE_DEFAULT_CTOR
 #define LANG_HOOKS_OMP_CLAUSE_DEFAULT_CTOR cxx_omp_clause_default_ctor
 #undef LANG_HOOKS_OMP_CLAUSE_COPY_CTOR

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2011-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2011-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -85,10 +85,6 @@ package System.Finalization_Masters is
    procedure Delete_Finalize_Address_Unprotected (Obj : System.Address);
    --  Destroy the relation pair object - Finalize_Address from the internal
    --  hash table.
-
-   procedure Detach (N : not null FM_Node_Ptr);
-   --  Compiler interface, do not call from within the run-time. Remove a node
-   --  from an arbitrary finalization master.
 
    procedure Detach_Unprotected (N : not null FM_Node_Ptr);
    --  Remove a node from an arbitrary finalization master

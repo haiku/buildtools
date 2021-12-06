@@ -1,13 +1,24 @@
-// Copyright 2017 The Go Authors. All rights reserved.
+// Copyright 2018 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build aix
+
 package runtime
 
-import "unsafe"
+import (
+	"unsafe"
+)
+
+//extern sysconf
+func sysconf(int32) _C_long
 
 type mOS struct {
 	waitsema uintptr // semaphore for parking on locks
+}
+
+func getProcID() uint64 {
+	return uint64(gettid())
 }
 
 //extern malloc
@@ -35,7 +46,7 @@ func clock_gettime(clock_id int64, timeout *timespec) int32
 
 //go:nosplit
 func semacreate(mp *m) {
-	if mp.mos.waitsema != 0 {
+	if mp.waitsema != 0 {
 		return
 	}
 
@@ -48,37 +59,44 @@ func semacreate(mp *m) {
 	if sem_init(sem, 0, 0) != 0 {
 		throw("sem_init")
 	}
-	mp.mos.waitsema = uintptr(unsafe.Pointer(sem))
+	mp.waitsema = uintptr(unsafe.Pointer(sem))
 }
 
 //go:nosplit
 func semasleep(ns int64) int32 {
 	_m_ := getg().m
 	if ns >= 0 {
-		const CLOCK_REALTIME int64 = 9
 		var ts timespec
 
-		if clock_gettime(CLOCK_REALTIME, &ts) != 0 {
+		if clock_gettime(_CLOCK_REALTIME, &ts) != 0 {
 			throw("clock_gettime")
 		}
-		ts.tv_sec += timespec_sec_t(ns / 1000000000)
-		ts.tv_nsec += timespec_nsec_t(ns % 1000000000)
-		if ts.tv_nsec >= 1000000000 {
-			ts.tv_sec += timespec_sec_t(1)
-			ts.tv_nsec -= timespec_nsec_t(1000000000)
-		}
 
-		if sem_timedwait((*semt)(unsafe.Pointer(_m_.mos.waitsema)), &ts) != 0 {
+		sec := int64(ts.tv_sec) + ns/1e9
+		nsec := int64(ts.tv_nsec) + ns%1e9
+		if nsec >= 1e9 {
+			sec++
+			nsec -= 1e9
+		}
+		if sec != int64(timespec_sec_t(sec)) {
+			// Handle overflows (timespec_sec_t is 32-bit in 32-bit applications)
+			sec = 1<<31 - 1
+		}
+		ts.tv_sec = timespec_sec_t(sec)
+		ts.tv_nsec = timespec_nsec_t(nsec)
+
+		if sem_timedwait((*semt)(unsafe.Pointer(_m_.waitsema)), &ts) != 0 {
 			err := errno()
 			if err == _ETIMEDOUT || err == _EAGAIN || err == _EINTR {
 				return -1
 			}
+			println("sem_timedwait err ", err, " ts.tv_sec ", ts.tv_sec, " ts.tv_nsec ", ts.tv_nsec, " ns ", ns, " id ", _m_.id)
 			throw("sem_timedwait")
 		}
 		return 0
 	}
 	for {
-		r1 := sem_wait((*semt)(unsafe.Pointer(_m_.mos.waitsema)))
+		r1 := sem_wait((*semt)(unsafe.Pointer(_m_.waitsema)))
 		if r1 == 0 {
 			break
 		}
@@ -92,7 +110,17 @@ func semasleep(ns int64) int32 {
 
 //go:nosplit
 func semawakeup(mp *m) {
-	if sem_post((*semt)(unsafe.Pointer(mp.mos.waitsema))) != 0 {
+	if sem_post((*semt)(unsafe.Pointer(mp.waitsema))) != 0 {
 		throw("sem_post")
 	}
 }
+
+func osinit() {
+	ncpu = int32(sysconf(__SC_NPROCESSORS_ONLN))
+	physPageSize = uintptr(sysconf(__SC_PAGE_SIZE))
+}
+
+const (
+	_CLOCK_REALTIME  = 9
+	_CLOCK_MONOTONIC = 10
+)

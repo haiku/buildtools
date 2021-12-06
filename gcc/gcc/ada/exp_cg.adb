@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2010-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2010-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -26,7 +26,6 @@
 with Atree;    use Atree;
 with Einfo;    use Einfo;
 with Elists;   use Elists;
-with Exp_Disp; use Exp_Disp;
 with Exp_Dbug; use Exp_Dbug;
 with Exp_Tss;  use Exp_Tss;
 with Lib;      use Lib;
@@ -82,7 +81,7 @@ package body Exp_CG is
    --  Determines if E is a predefined primitive operation.
    --  Note: This routine should replace the routine with the same name that is
    --  currently available in exp_disp because it extends its functionality to
-   --  handle fully qualified names ???
+   --  handle fully qualified names. It's actually in Sem_Util. ???
 
    function Slot_Number (Prim : Entity_Id) return Uint;
    --  Returns the slot number associated with Prim. For predefined primitives
@@ -122,7 +121,14 @@ package body Exp_CG is
       for J in Call_Graph_Nodes.First .. Call_Graph_Nodes.Last loop
          N := Call_Graph_Nodes.Table (J);
 
-         if Nkind (N) in N_Subprogram_Call then
+         --  No action needed for subprogram calls removed by the expander
+         --  (for example, calls to ignored ghost entities).
+
+         if Nkind (N) = N_Null_Statement then
+            pragma Assert (Nkind (Original_Node (N)) in N_Subprogram_Call);
+            null;
+
+         elsif Nkind (N) in N_Subprogram_Call then
             Write_Call_Info (N);
 
          else pragma Assert (Nkind (N) = N_Defining_Identifier);
@@ -140,7 +146,7 @@ package body Exp_CG is
          end if;
       end loop;
 
-      Set_Special_Output (null);
+      Cancel_Special_Output;
    end Generate_CG_Output;
 
    ----------------
@@ -255,13 +261,14 @@ package body Exp_CG is
            or else TSS_Name = TSS_Stream_Write
            or else TSS_Name = TSS_Stream_Input
            or else TSS_Name = TSS_Stream_Output
+           or else TSS_Name = TSS_Put_Image
            or else TSS_Name = TSS_Deep_Adjust
            or else TSS_Name = TSS_Deep_Finalize
          then
             return True;
 
          elsif not Has_Fully_Qualified_Name (E) then
-            if Nam_In (Chars (E), Name_uSize, Name_uAlignment, Name_uAssign)
+            if Chars (E) in Name_uSize | Name_uAlignment | Name_uAssign
               or else
                 (Chars (E) = Name_Op_Eq
                   and then Etype (First_Formal (E)) = Etype (Last_Formal (E)))

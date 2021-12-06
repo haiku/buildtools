@@ -6,10 +6,29 @@
    source of the excessive array bound is in a different function than
    the call.
    { dg-do compile }
-   { dg-options "-O2 -Warray-bounds -Wno-stringop-overflow" } */
+   { dg-options "-O2 -Warray-bounds -Wno-stringop-overflow -fno-tree-vrp" } */
 
-#include <stddef.h>
-#include <string.h>
+#if __has_include (<stddef.h>)
+#  include <stddef.h>
+#else
+/* For cross-compilers.  */
+typedef __PTRDIFF_TYPE__   ptrdiff_t;
+typedef __SIZE_TYPE__      size_t;
+#endif
+
+#if __has_include (<string.h>)
+#  include <string.h>
+#  undef memcpy
+#  undef strcat
+#  undef strcpy
+#  undef strncpy
+#else
+extern void* memcpy (void*, const void*, size_t);
+extern char* strcat (char*, const char*);
+extern char* strcpy (char*, const char*);
+extern char* strncpy (char*, const char*, size_t);
+#endif
+
 
 #define MAX  (__SIZE_MAX__ / 2)
 
@@ -153,12 +172,24 @@ void call_strncpy_src_xsize (char *d, size_t n)
 /* Exercise strncpy out-of-bounds offsets with an array of unknown size.  */
 
 static void
-wrap_strncpy_src_diff_max (char *d, const char *s, ptrdiff_t i, size_t n)
+wrap_strncpy_src_diff_max_m1 (char *d, const char *s, ptrdiff_t i, size_t n)
 {
   /* Unlike in the similar call to memcpy(), there is no pointer
      overflow here because the size N is not added to the source
-     offset.  */
+     offset MAX - 1 (only 1 is for the access to its first element,
+     which is tested below).  */
   strncpy (d, s + i, n);
+}
+
+void call_strncpy_src_diff_max_m1 (char *d, const char *s, size_t n)
+{
+  wrap_strncpy_src_diff_max_m1 (d, s, MAX - 1, 3);
+}
+
+static void
+wrap_strncpy_src_diff_max (char *d, const char *s, ptrdiff_t i, size_t n)
+{
+  strncpy (d, s + i, n);  /* { dg-warning "pointer overflow between offset \[0-9\]+ and size \\\[1, 0]" } */
 }
 
 void call_strncpy_src_diff_max (char *d, const char *s, size_t n)

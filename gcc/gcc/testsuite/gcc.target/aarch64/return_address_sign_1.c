@@ -1,6 +1,6 @@
 /* Testing return address signing where no combined instructions used.  */
 /* { dg-do compile } */
-/* { dg-options "-O2 -msign-return-address=all" } */
+/* { dg-options "-O2 -mbranch-protection=pac-ret+leaf" } */
 /* { dg-require-effective-target lp64 } */
 
 int foo (int);
@@ -41,12 +41,12 @@ func3 (int a, int b, int c)
 void __attribute__ ((target ("arch=armv8.3-a")))
 func4 (long offset, void *handler, int *ptr, int imm1, int imm2)
 {
-  /* paciasp */
+  /* no paciasp */
   *ptr = imm1 + foo (imm1) + imm2;
   __builtin_eh_return (offset, handler);
-  /* autiasp */
+  /* no autiasp */
   return;
 }
 
-/* { dg-final { scan-assembler-times "autiasp" 4 } } */
-/* { dg-final { scan-assembler-times "paciasp" 4 } } */
+/* { dg-final { scan-assembler-times "autiasp" 3 } } */
+/* { dg-final { scan-assembler-times "paciasp" 3 } } */

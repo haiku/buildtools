@@ -1,5 +1,5 @@
 /* Operations with very long integers.
-   Copyright (C) 2012-2018 Free Software Foundation, Inc.
+   Copyright (C) 2012-2021 Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
 
 This file is part of GCC.
@@ -229,6 +229,20 @@ wi::to_mpz (const wide_int_ref &x, mpz_t result, signop sgn)
 	t[i] = v[i];
       t[len - 1] = (unsigned HOST_WIDE_INT) v[len - 1] << excess >> excess;
       mpz_import (result, len, -1, sizeof (HOST_WIDE_INT), 0, 0, t);
+    }
+  else if (excess < 0 && wi::neg_p (x))
+    {
+      int extra
+	= (-excess + HOST_BITS_PER_WIDE_INT - 1) / HOST_BITS_PER_WIDE_INT;
+      HOST_WIDE_INT *t = XALLOCAVEC (HOST_WIDE_INT, len + extra);
+      for (int i = 0; i < len; i++)
+	t[i] = v[i];
+      for (int i = 0; i < extra; i++)
+	t[len + i] = -1;
+      excess = (-excess) % HOST_BITS_PER_WIDE_INT;
+      if (excess)
+	t[len + extra - 1] = (HOST_WIDE_INT_1U << excess) - 1;
+      mpz_import (result, len + extra, -1, sizeof (HOST_WIDE_INT), 0, 0, t);
     }
   else
     mpz_import (result, len, -1, sizeof (HOST_WIDE_INT), 0, 0, v);
@@ -702,8 +716,11 @@ wi::set_bit_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *xval,
       /* If the bit we just set is at the msb of the block, make sure
 	 that any higher bits are zeros.  */
       if (bit + 1 < precision && subbit == HOST_BITS_PER_WIDE_INT - 1)
-	val[len++] = 0;
-      return len;
+	{
+	  val[len++] = 0;
+	  return len;
+	}
+      return canonize (val, len, precision);
     }
   else
     {
@@ -1128,7 +1145,7 @@ unsigned int
 wi::add_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
 	       unsigned int op0len, const HOST_WIDE_INT *op1,
 	       unsigned int op1len, unsigned int prec,
-	       signop sgn, bool *overflow)
+	       signop sgn, wi::overflow_type *overflow)
 {
   unsigned HOST_WIDE_INT o0 = 0;
   unsigned HOST_WIDE_INT o1 = 0;
@@ -1158,7 +1175,8 @@ wi::add_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
       val[len] = mask0 + mask1 + carry;
       len++;
       if (overflow)
-	*overflow = (sgn == UNSIGNED && carry);
+	*overflow
+	  = (sgn == UNSIGNED && carry) ? wi::OVF_OVERFLOW : wi::OVF_NONE;
     }
   else if (overflow)
     {
@@ -1166,7 +1184,17 @@ wi::add_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
       if (sgn == SIGNED)
 	{
 	  unsigned HOST_WIDE_INT x = (val[len - 1] ^ o0) & (val[len - 1] ^ o1);
-	  *overflow = (HOST_WIDE_INT) (x << shift) < 0;
+	  if ((HOST_WIDE_INT) (x << shift) < 0)
+	    {
+	      if (o0 > (unsigned HOST_WIDE_INT) val[len - 1])
+		*overflow = wi::OVF_UNDERFLOW;
+	      else if (o0 < (unsigned HOST_WIDE_INT) val[len - 1])
+		*overflow = wi::OVF_OVERFLOW;
+	      else
+		*overflow = wi::OVF_NONE;
+	    }
+	  else
+	    *overflow = wi::OVF_NONE;
 	}
       else
 	{
@@ -1174,9 +1202,9 @@ wi::add_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
 	  x <<= shift;
 	  o0 <<= shift;
 	  if (old_carry)
-	    *overflow = (x <= o0);
+	    *overflow = (x <= o0) ? wi::OVF_OVERFLOW : wi::OVF_NONE;
 	  else
-	    *overflow = (x < o0);
+	    *overflow = (x < o0) ? wi::OVF_OVERFLOW : wi::OVF_NONE;
 	}
     }
 
@@ -1264,12 +1292,14 @@ wi_pack (HOST_WIDE_INT *result,
    made to see if it overflows.  Unfortunately there is no better way
    to check for overflow than to do this.  If OVERFLOW is nonnull,
    record in *OVERFLOW whether the result overflowed.  SGN controls
-   the signedness and is used to check overflow or if HIGH is set.  */
+   the signedness and is used to check overflow or if HIGH is set.
+
+   NOTE: Overflow type for signed overflow is not yet implemented.  */
 unsigned int
 wi::mul_internal (HOST_WIDE_INT *val, const HOST_WIDE_INT *op1val,
 		  unsigned int op1len, const HOST_WIDE_INT *op2val,
 		  unsigned int op2len, unsigned int prec, signop sgn,
-		  bool *overflow, bool high)
+		  wi::overflow_type *overflow, bool high)
 {
   unsigned HOST_WIDE_INT o0, o1, k, t;
   unsigned int i;
@@ -1294,7 +1324,7 @@ wi::mul_internal (HOST_WIDE_INT *val, const HOST_WIDE_INT *op1val,
      just make sure that we never attempt to set it.  */
   bool needs_overflow = (overflow != 0);
   if (needs_overflow)
-    *overflow = false;
+    *overflow = wi::OVF_NONE;
 
   wide_int_ref op1 = wi::storage_ref (op1val, op1len, prec);
   wide_int_ref op2 = wi::storage_ref (op2val, op2len, prec);
@@ -1337,7 +1367,8 @@ wi::mul_internal (HOST_WIDE_INT *val, const HOST_WIDE_INT *op1val,
 	  unsigned HOST_WIDE_INT upper;
 	  umul_ppmm (upper, val[0], op1.ulow (), op2.ulow ());
 	  if (needs_overflow)
-	    *overflow = (upper != 0);
+	    /* Unsigned overflow can only be +OVERFLOW.  */
+	    *overflow = (upper != 0) ? wi::OVF_OVERFLOW : wi::OVF_NONE;
 	  if (high)
 	    val[0] = upper;
 	  return 1;
@@ -1394,12 +1425,14 @@ wi::mul_internal (HOST_WIDE_INT *val, const HOST_WIDE_INT *op1val,
 	  if (sgn == SIGNED)
 	    {
 	      if ((HOST_WIDE_INT) r != sext_hwi (r, prec))
-		*overflow = true;
+		/* FIXME: Signed overflow type is not implemented yet.  */
+		*overflow = OVF_UNKNOWN;
 	    }
 	  else
 	    {
 	      if ((r >> prec) != 0)
-		*overflow = true;
+		/* Unsigned overflow can only be +OVERFLOW.  */
+		*overflow = OVF_OVERFLOW;
 	    }
 	}
       val[0] = high ? r >> prec : r;
@@ -1474,7 +1507,8 @@ wi::mul_internal (HOST_WIDE_INT *val, const HOST_WIDE_INT *op1val,
 
       for (i = half_blocks_needed; i < half_blocks_needed * 2; i++)
 	if (((HOST_WIDE_INT)(r[i] & mask)) != top)
-	  *overflow = true;
+	  /* FIXME: Signed overflow type is not implemented yet.  */
+	  *overflow = (sgn == UNSIGNED) ? wi::OVF_OVERFLOW : wi::OVF_UNKNOWN;
     }
 
   int r_offset = high ? half_blocks_needed : 0;
@@ -1518,7 +1552,7 @@ unsigned int
 wi::sub_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
 	       unsigned int op0len, const HOST_WIDE_INT *op1,
 	       unsigned int op1len, unsigned int prec,
-	       signop sgn, bool *overflow)
+	       signop sgn, wi::overflow_type *overflow)
 {
   unsigned HOST_WIDE_INT o0 = 0;
   unsigned HOST_WIDE_INT o1 = 0;
@@ -1552,7 +1586,7 @@ wi::sub_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
       val[len] = mask0 - mask1 - borrow;
       len++;
       if (overflow)
-	*overflow = (sgn == UNSIGNED && borrow);
+	*overflow = (sgn == UNSIGNED && borrow) ? OVF_UNDERFLOW : OVF_NONE;
     }
   else if (overflow)
     {
@@ -1560,7 +1594,17 @@ wi::sub_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
       if (sgn == SIGNED)
 	{
 	  unsigned HOST_WIDE_INT x = (o0 ^ o1) & (val[len - 1] ^ o0);
-	  *overflow = (HOST_WIDE_INT) (x << shift) < 0;
+	  if ((HOST_WIDE_INT) (x << shift) < 0)
+	    {
+	      if (o0 > o1)
+		*overflow = OVF_UNDERFLOW;
+	      else if (o0 < o1)
+		*overflow = OVF_OVERFLOW;
+	      else
+		*overflow = OVF_NONE;
+	    }
+	  else
+	    *overflow = OVF_NONE;
 	}
       else
 	{
@@ -1568,9 +1612,9 @@ wi::sub_large (HOST_WIDE_INT *val, const HOST_WIDE_INT *op0,
 	  x <<= shift;
 	  o0 <<= shift;
 	  if (old_borrow)
-	    *overflow = (x >= o0);
+	    *overflow = (x >= o0) ? OVF_UNDERFLOW : OVF_NONE;
 	  else
-	    *overflow = (x > o0);
+	    *overflow = (x > o0) ? OVF_UNDERFLOW : OVF_NONE;
 	}
     }
 
@@ -1706,7 +1750,7 @@ wi::divmod_internal (HOST_WIDE_INT *quotient, unsigned int *remainder_len,
 		     unsigned int dividend_len, unsigned int dividend_prec,
 		     const HOST_WIDE_INT *divisor_val, unsigned int divisor_len,
 		     unsigned int divisor_prec, signop sgn,
-		     bool *oflow)
+		     wi::overflow_type *oflow)
 {
   unsigned int dividend_blocks_needed = 2 * BLOCKS_NEEDED (dividend_prec);
   unsigned int divisor_blocks_needed = 2 * BLOCKS_NEEDED (divisor_prec);
@@ -1750,8 +1794,8 @@ wi::divmod_internal (HOST_WIDE_INT *quotient, unsigned int *remainder_len,
 	  *remainder_len = 1;
 	  remainder[0] = 0;
 	}
-      if (oflow != 0)
-	*oflow = true;
+      if (oflow)
+	*oflow = OVF_OVERFLOW;
       if (quotient)
 	for (unsigned int i = 0; i < dividend_len; ++i)
 	  quotient[i] = dividend_val[i];
@@ -1759,7 +1803,7 @@ wi::divmod_internal (HOST_WIDE_INT *quotient, unsigned int *remainder_len,
     }
 
   if (oflow)
-    *oflow = false;
+    *oflow = OVF_NONE;
 
   /* Do it on the host if you can.  */
   if (sgn == SIGNED
@@ -2196,6 +2240,39 @@ wi::round_up_for_mask (const wide_int &val, const wide_int &mask)
   return (val | tmp) & -tmp;
 }
 
+/* Compute the modular multiplicative inverse of A modulo B
+   using extended Euclid's algorithm.  Assumes A and B are coprime,
+   and that A and B have the same precision.  */
+wide_int
+wi::mod_inv (const wide_int &a, const wide_int &b)
+{
+  /* Verify the assumption.  */
+  gcc_checking_assert (wi::eq_p (wi::gcd (a, b), 1));
+
+  unsigned int p = a.get_precision () + 1;
+  gcc_checking_assert (b.get_precision () + 1 == p);
+  wide_int c = wide_int::from (a, p, UNSIGNED);
+  wide_int d = wide_int::from (b, p, UNSIGNED);
+  wide_int x0 = wide_int::from (0, p, UNSIGNED);
+  wide_int x1 = wide_int::from (1, p, UNSIGNED);
+
+  if (wi::eq_p (b, 1))
+    return wide_int::from (1, p, UNSIGNED);
+
+  while (wi::gt_p (c, 1, UNSIGNED))
+    {
+      wide_int t = d;
+      wide_int q = wi::divmod_trunc (c, d, UNSIGNED, &d);
+      c = t;
+      wide_int s = x0;
+      x0 = wi::sub (x1, wi::mul (q, x0));
+      x1 = s;
+    }
+  if (wi::lt_p (x1, 0, SIGNED))
+    x1 += d;
+  return x1;
+}
+
 /*
  * Private utilities.
  */
@@ -2421,30 +2498,30 @@ test_overflow ()
       {
 	int prec = precs[i];
 	int offset = offsets[j];
-	bool overflow;
+	wi::overflow_type overflow;
 	wide_int sum, diff;
 
 	sum = wi::add (wi::max_value (prec, UNSIGNED) - offset, 1,
 		       UNSIGNED, &overflow);
 	ASSERT_EQ (sum, -offset);
-	ASSERT_EQ (overflow, offset == 0);
+	ASSERT_EQ (overflow != wi::OVF_NONE, offset == 0);
 
 	sum = wi::add (1, wi::max_value (prec, UNSIGNED) - offset,
 		       UNSIGNED, &overflow);
 	ASSERT_EQ (sum, -offset);
-	ASSERT_EQ (overflow, offset == 0);
+	ASSERT_EQ (overflow != wi::OVF_NONE, offset == 0);
 
 	diff = wi::sub (wi::max_value (prec, UNSIGNED) - offset,
 			wi::max_value (prec, UNSIGNED),
 			UNSIGNED, &overflow);
 	ASSERT_EQ (diff, -offset);
-	ASSERT_EQ (overflow, offset != 0);
+	ASSERT_EQ (overflow != wi::OVF_NONE, offset != 0);
 
 	diff = wi::sub (wi::max_value (prec, UNSIGNED) - offset,
 			wi::max_value (prec, UNSIGNED) - 1,
 			UNSIGNED, &overflow);
 	ASSERT_EQ (diff, 1 - offset);
-	ASSERT_EQ (overflow, offset > 1);
+	ASSERT_EQ (overflow != wi::OVF_NONE, offset > 1);
     }
 }
 

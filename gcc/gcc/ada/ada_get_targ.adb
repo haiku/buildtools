@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -55,9 +55,9 @@ package body Get_Targ is
       return 8;
    end Get_Char_Size;
 
-   -----------------
-   -- Get_Wchar_T --
-   -----------------
+   ----------------------
+   -- Get_Wchar_T_Size --
+   ----------------------
 
    function Get_Wchar_T_Size return Pos is
    begin
@@ -100,6 +100,15 @@ package body Get_Targ is
       return 64;
    end Get_Long_Long_Size;
 
+   -----------------------------
+   -- Get_Long_Long_Long_Size --
+   -----------------------------
+
+   function Get_Long_Long_Long_Size return Pos is
+   begin
+      return 64;
+   end Get_Long_Long_Long_Size;
+
    ----------------------
    -- Get_Pointer_Size --
    ----------------------
@@ -117,15 +126,6 @@ package body Get_Targ is
    begin
       return 4;
    end Get_Maximum_Alignment;
-
-   ------------------------------------
-   -- Get_System_Allocator_Alignment --
-   ------------------------------------
-
-   function Get_System_Allocator_Alignment return Nat is
-   begin
-      return 1;
-   end Get_System_Allocator_Alignment;
 
    ------------------------
    -- Get_Float_Words_BE --
@@ -181,6 +181,15 @@ package body Get_Targ is
       return 1;
    end Get_Strict_Alignment;
 
+   ------------------------------------
+   -- Get_System_Allocator_Alignment --
+   ------------------------------------
+
+   function Get_System_Allocator_Alignment return Nat is
+   begin
+      return 1;
+   end Get_System_Allocator_Alignment;
+
    --------------------------------
    -- Get_Double_Float_Alignment --
    --------------------------------
@@ -208,22 +217,6 @@ package body Get_Targ is
       return 64;  -- Can be different on some targets (e.g., AAMP)
    end Get_Max_Unaligned_Field;
 
-   ----------------------
-   -- Digits_From_Size --
-   ----------------------
-
-   function Digits_From_Size (Size : Pos) return Pos is
-   begin
-      case Size is
-         when  32    => return  6;
-         when  48    => return  9;
-         when  64    => return 15;
-         when  96    => return 18;
-         when 128    => return 18;
-         when others => raise Program_Error;
-      end case;
-   end Digits_From_Size;
-
    -----------------------------
    -- Register_Back_End_Types --
    -----------------------------
@@ -250,21 +243,6 @@ package body Get_Targ is
          Size      => 64,
          Alignment => 64);
    end Register_Back_End_Types;
-
-   ---------------------
-   -- Width_From_Size --
-   ---------------------
-
-   function Width_From_Size  (Size : Pos) return Pos is
-   begin
-      case Size is
-         when  8     => return  4;
-         when 16     => return  6;
-         when 32     => return 11;
-         when 64     => return 21;
-         when others => raise Program_Error;
-      end case;
-   end Width_From_Size;
 
    ------------------------------
    -- Get_Back_End_Config_File --

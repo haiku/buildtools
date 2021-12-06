@@ -1,5 +1,5 @@
 /* Swing Modulo Scheduling implementation.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
    Contributed by Ayal Zaks and Mustafa Hagog <zaks,mustafa@il.ibm.com>
 
 This file is part of GCC.
@@ -39,11 +39,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "sched-int.h"
 #include "cfgloop.h"
 #include "expr.h"
-#include "params.h"
 #include "ddg.h"
 #include "tree-pass.h"
 #include "dbgcnt.h"
 #include "loop-unroll.h"
+#include "hard-reg-set.h"
 
 #ifdef INSN_SCHEDULING
 
@@ -211,8 +211,6 @@ static int sms_order_nodes (ddg_ptr, int, int *, int *);
 static void set_node_sched_params (ddg_ptr);
 static partial_schedule_ptr sms_schedule_by_order (ddg_ptr, int, int, int *);
 static void permute_partial_schedule (partial_schedule_ptr, rtx_insn *);
-static void generate_prolog_epilog (partial_schedule_ptr, struct loop *,
-                                    rtx, rtx);
 static int calculate_stage_count (partial_schedule_ptr, int);
 static void calculate_must_precede_follow (ddg_node_ptr, int, int,
 					   int, int, sbitmap, sbitmap, sbitmap);
@@ -370,7 +368,7 @@ doloop_register_get (rtx_insn *head, rtx_insn *tail)
                              : prev_nondebug_insn (tail));
 
   for (insn = head; insn != first_insn_not_to_check; insn = NEXT_INSN (insn))
-    if (!DEBUG_INSN_P (insn) && reg_mentioned_p (reg, insn))
+    if (NONDEBUG_INSN_P (insn) && reg_mentioned_p (reg, insn))
       {
         if (dump_file)
         {
@@ -392,10 +390,13 @@ doloop_register_get (rtx_insn *head, rtx_insn *tail)
    this constant.  Otherwise return 0.  */
 static rtx_insn *
 const_iteration_count (rtx count_reg, basic_block pre_header,
-		       int64_t * count)
+		       int64_t *count, bool* adjust_inplace)
 {
   rtx_insn *insn;
   rtx_insn *head, *tail;
+
+  *adjust_inplace = false;
+  bool read_after = false;
 
   if (! pre_header)
     return NULL;
@@ -403,18 +404,25 @@ const_iteration_count (rtx count_reg, basic_block pre_header,
   get_ebb_head_tail (pre_header, pre_header, &head, &tail);
 
   for (insn = tail; insn != PREV_INSN (head); insn = PREV_INSN (insn))
-    if (NONDEBUG_INSN_P (insn) && single_set (insn) &&
-	rtx_equal_p (count_reg, SET_DEST (single_set (insn))))
+    if (single_set (insn) && rtx_equal_p (count_reg,
+					  SET_DEST (single_set (insn))))
       {
 	rtx pat = single_set (insn);
 
 	if (CONST_INT_P (SET_SRC (pat)))
 	  {
 	    *count = INTVAL (SET_SRC (pat));
+	    *adjust_inplace = !read_after;
 	    return insn;
 	  }
 
 	return NULL;
+      }
+    else if (NONDEBUG_INSN_P (insn) && reg_mentioned_p (count_reg, insn))
+      {
+	read_after = true;
+	if (reg_set_p (count_reg, insn))
+	   break;
       }
 
   return NULL;
@@ -429,7 +437,7 @@ res_MII (ddg_ptr g)
   if (targetm.sched.sms_res_mii)
     return targetm.sched.sms_res_mii (g);
 
-  return ((g->num_nodes - g->num_debug) / issue_rate);
+  return g->num_nodes / issue_rate;
 }
 
 
@@ -441,7 +449,7 @@ static void
 set_node_sched_params (ddg_ptr g)
 {
   node_sched_param_vec.truncate (0);
-  node_sched_param_vec.safe_grow_cleared (g->num_nodes);
+  node_sched_param_vec.safe_grow_cleared (g->num_nodes, true);
 }
 
 /* Make sure that node_sched_param_vec has an entry for every move in PS.  */
@@ -449,7 +457,7 @@ static void
 extend_node_sched_params (partial_schedule_ptr ps)
 {
   node_sched_param_vec.safe_grow_cleared (ps->g->num_nodes
-					  + ps->reg_moves.length ());
+					  + ps->reg_moves.length (), true);
 }
 
 /* Update the sched_params (time, row and stage) for node U using the II,
@@ -736,7 +744,7 @@ schedule_reg_moves (partial_schedule_ptr ps)
 
       /* Create NREG_MOVES register moves.  */
       first_move = ps->reg_moves.length ();
-      ps->reg_moves.safe_grow_cleared (first_move + nreg_moves);
+      ps->reg_moves.safe_grow_cleared (first_move + nreg_moves, true);
       extend_node_sched_params (ps);
 
       /* Record the moves associated with this node.  */
@@ -1086,10 +1094,11 @@ optimize_sc (partial_schedule_ptr ps, ddg_ptr g)
 
 static void
 duplicate_insns_of_cycles (partial_schedule_ptr ps, int from_stage,
-			   int to_stage, rtx count_reg)
+			   int to_stage, rtx count_reg, class loop *loop)
 {
   int row;
   ps_insn_ptr ps_ij;
+  copy_bb_data id;
 
   for (row = 0; row < ps->ii; row++)
     for (ps_ij = ps->rows[row]; ps_ij; ps_ij = ps_ij->next_in_row)
@@ -1114,7 +1123,8 @@ duplicate_insns_of_cycles (partial_schedule_ptr ps, int from_stage,
 	if (from_stage <= last_u && to_stage >= first_u)
 	  {
 	    if (u < ps->g->num_nodes)
-	      duplicate_insn_chain (ps_first_note (ps, u), u_insn);
+	      duplicate_insn_chain (ps_first_note (ps, u), u_insn,
+				    loop, &id);
 	    else
 	      emit_insn (copy_rtx (PATTERN (u_insn)));
 	  }
@@ -1124,8 +1134,8 @@ duplicate_insns_of_cycles (partial_schedule_ptr ps, int from_stage,
 
 /* Generate the instructions (including reg_moves) for prolog & epilog.  */
 static void
-generate_prolog_epilog (partial_schedule_ptr ps, struct loop *loop,
-                        rtx count_reg, rtx count_init)
+generate_prolog_epilog (partial_schedule_ptr ps, class loop *loop,
+			rtx count_reg, bool adjust_init)
 {
   int i;
   int last_stage = PS_STAGE_COUNT (ps) - 1;
@@ -1134,12 +1144,12 @@ generate_prolog_epilog (partial_schedule_ptr ps, struct loop *loop,
   /* Generate the prolog, inserting its insns on the loop-entry edge.  */
   start_sequence ();
 
-  if (!count_init)
+  if (adjust_init)
     {
       /* Generate instructions at the beginning of the prolog to
-         adjust the loop count by STAGE_COUNT.  If loop count is constant
-         (count_init), this constant is adjusted by STAGE_COUNT in
-         generate_prolog_epilog function.  */
+	 adjust the loop count by STAGE_COUNT.  If loop count is constant
+	 and it not used anywhere in prologue, this constant is adjusted by
+	 STAGE_COUNT outside of generate_prolog_epilog function.  */
       rtx sub_reg = NULL_RTX;
 
       sub_reg = expand_simple_binop (GET_MODE (count_reg), MINUS, count_reg,
@@ -1152,7 +1162,7 @@ generate_prolog_epilog (partial_schedule_ptr ps, struct loop *loop,
     }
 
   for (i = 0; i < last_stage; i++)
-    duplicate_insns_of_cycles (ps, 0, i, count_reg);
+    duplicate_insns_of_cycles (ps, 0, i, count_reg, loop);
 
   /* Put the prolog on the entry edge.  */
   e = loop_preheader_edge (loop);
@@ -1166,7 +1176,7 @@ generate_prolog_epilog (partial_schedule_ptr ps, struct loop *loop,
   start_sequence ();
 
   for (i = 0; i < last_stage; i++)
-    duplicate_insns_of_cycles (ps, i + 1, last_stage, count_reg);
+    duplicate_insns_of_cycles (ps, i + 1, last_stage, count_reg, loop);
 
   /* Put the epilogue on the exit edge.  */
   gcc_assert (single_exit (loop));
@@ -1181,7 +1191,7 @@ generate_prolog_epilog (partial_schedule_ptr ps, struct loop *loop,
 /* Mark LOOP as software pipelined so the later
    scheduling passes don't touch it.  */
 static void
-mark_loop_unsched (struct loop *loop)
+mark_loop_unsched (class loop *loop)
 {
   unsigned i;
   basic_block *bbs = get_loop_body (loop);
@@ -1195,7 +1205,7 @@ mark_loop_unsched (struct loop *loop)
 /* Return true if all the BBs of the loop are empty except the
    loop header.  */
 static bool
-loop_single_full_bb_p (struct loop *loop)
+loop_single_full_bb_p (class loop *loop)
 {
   unsigned i;
   basic_block *bbs = get_loop_body (loop);
@@ -1251,7 +1261,7 @@ dump_insn_location (rtx_insn *insn)
 /* Return true if the loop is in its canonical form and false if not.
    i.e. SIMPLE_SMS_LOOP_P and have one preheader block, and single exit.  */
 static bool
-loop_canon_p (struct loop *loop)
+loop_canon_p (class loop *loop)
 {
 
   if (loop->inner || !loop_outer (loop))
@@ -1294,7 +1304,7 @@ loop_canon_p (struct loop *loop)
    make it one by splitting the first entry edge and
    redirecting the others to the new BB.  */
 static void
-canon_loop (struct loop *loop)
+canon_loop (class loop *loop)
 {
   edge e;
   edge_iterator i;
@@ -1332,9 +1342,6 @@ setup_sched_infos (void)
    version may be entered.  Just a guess.  */
 #define PROB_SMS_ENOUGH_ITERATIONS 80
 
-/* Used to calculate the upper bound of ii.  */
-#define MAXII_FACTOR 2
-
 /* Main entry point, perform SMS scheduling on the loops of the function
    that consist of single basic blocks.  */
 static void
@@ -1346,10 +1353,11 @@ sms_schedule (void)
   int maxii, max_asap;
   partial_schedule_ptr ps;
   basic_block bb = NULL;
-  struct loop *loop;
+  class loop *loop;
   basic_block condition_bb = NULL;
   edge latch_edge;
   HOST_WIDE_INT trip_count, max_trip_count;
+  HARD_REG_SET prohibited_regs;
 
   loop_optimizer_init (LOOPS_HAVE_PREHEADERS
 		       | LOOPS_HAVE_RECORDED_EXITS);
@@ -1378,6 +1386,8 @@ sms_schedule (void)
   /* Allocate memory to hold the DDG array one entry for each loop.
      We use loop->num as index into this array.  */
   g_arr = XCNEWVEC (ddg_ptr, number_of_loops (cfun));
+
+  REG_SET_TO_HARD_REG_SET (prohibited_regs, &df->regular_block_artificial_uses);
 
   if (dump_file)
   {
@@ -1433,7 +1443,7 @@ sms_schedule (void)
       if ( latch_edge->count () > profile_count::zero ()
           && (latch_edge->count()
 	      < single_exit (loop)->count ().apply_scale
-				 (SMS_LOOP_AVERAGE_COUNT_THRESHOLD, 1)))
+				 (param_sms_loop_average_count_threshold, 1)))
 	{
 	  if (dump_file)
 	    {
@@ -1449,10 +1459,6 @@ sms_schedule (void)
                   fprintf (dump_file, "%" PRId64 "max %" PRId64,
                            (int64_t) trip_count, (int64_t) max_trip_count);
                   fprintf (dump_file, "\n");
-	      	  fprintf (dump_file, "SMS profile-sum-max ");
-	      	  fprintf (dump_file, "%" PRId64,
-	          	   (int64_t) profile_info->sum_max);
-	      	  fprintf (dump_file, "\n");
 	    	}
 	    }
           continue;
@@ -1467,23 +1473,31 @@ sms_schedule (void)
       }
 
       /* Don't handle BBs with calls or barriers
-	 or !single_set with the exception of instructions that include
-	 count_reg---these instructions are part of the control part
-	 that do-loop recognizes.
+	 or !single_set with the exception of do-loop control part insns.
          ??? Should handle insns defining subregs.  */
-     for (insn = head; insn != NEXT_INSN (tail); insn = NEXT_INSN (insn))
-      {
-         rtx set;
+      for (insn = head; insn != NEXT_INSN (tail); insn = NEXT_INSN (insn))
+	{
+	  if (INSN_P (insn))
+	    {
+	      HARD_REG_SET regs;
+	      CLEAR_HARD_REG_SET (regs);
+	      note_stores (insn, record_hard_reg_sets, &regs);
+	      if (hard_reg_set_intersect_p (regs, prohibited_regs))
+		break;
+	    }
 
-        if (CALL_P (insn)
-            || BARRIER_P (insn)
-            || (NONDEBUG_INSN_P (insn) && !JUMP_P (insn)
-                && !single_set (insn) && GET_CODE (PATTERN (insn)) != USE
-                && !reg_mentioned_p (count_reg, insn))
-            || (INSN_P (insn) && (set = single_set (insn))
-                && GET_CODE (SET_DEST (set)) == SUBREG))
-        break;
-      }
+	  if (CALL_P (insn)
+	      || BARRIER_P (insn)
+	      || (INSN_P (insn) && single_set (insn)
+		  && GET_CODE (SET_DEST (single_set (insn))) == SUBREG)
+	      /* Not a single set.  */
+	      || (NONDEBUG_INSN_P (insn) && !JUMP_P (insn)
+		  && !single_set (insn) && GET_CODE (PATTERN (insn)) != USE
+		  /* But non-single-set allowed in one special case.  */
+		  && (insn != prev_nondebug_insn (tail)
+		      || !reg_mentioned_p (count_reg, insn))))
+	    break;
+	}
 
       if (insn != NEXT_INSN (tail))
 	{
@@ -1493,11 +1507,13 @@ sms_schedule (void)
 		fprintf (dump_file, "SMS loop-with-call\n");
 	      else if (BARRIER_P (insn))
 		fprintf (dump_file, "SMS loop-with-barrier\n");
-              else if ((NONDEBUG_INSN_P (insn) && !JUMP_P (insn)
-                && !single_set (insn) && GET_CODE (PATTERN (insn)) != USE))
-                fprintf (dump_file, "SMS loop-with-not-single-set\n");
-              else
-               fprintf (dump_file, "SMS loop with subreg in lhs\n");
+	      else if (INSN_P (insn) && single_set (insn)
+		       && GET_CODE (SET_DEST (single_set (insn))) == SUBREG)
+		fprintf (dump_file, "SMS loop with subreg in lhs\n");
+	      else
+		fprintf (dump_file,
+			 "SMS loop-with-not-single-set-or-prohibited-reg\n");
+
 	      print_rtl_single (dump_file, insn);
 	    }
 
@@ -1534,7 +1550,8 @@ sms_schedule (void)
       rtx_insn *count_init;
       int mii, rec_mii, stage_count, min_cycle;
       int64_t loop_count = 0;
-      bool opt_sc_p;
+      bool opt_sc_p, adjust_inplace = false;
+      basic_block pre_header;
 
       if (! (g = g_arr[loop->num]))
         continue;
@@ -1567,10 +1584,6 @@ sms_schedule (void)
 	      fprintf (dump_file, "%" PRId64,
 	               (int64_t) bb->count.to_gcov_type ());
 	      fprintf (dump_file, "\n");
-	      fprintf (dump_file, "SMS profile-sum-max ");
-	      fprintf (dump_file, "%" PRId64,
-	               (int64_t) profile_info->sum_max);
-	      fprintf (dump_file, "\n");
 	    }
 	  fprintf (dump_file, "SMS doloop\n");
 	  fprintf (dump_file, "SMS built-ddg %d\n", g->num_nodes);
@@ -1579,18 +1592,12 @@ sms_schedule (void)
 	}
 
 
-      /* In case of th loop have doloop register it gets special
-	 handling.  */
-      count_init = NULL;
-      if ((count_reg = doloop_register_get (head, tail)))
-	{
-	  basic_block pre_header;
-
-	  pre_header = loop_preheader_edge (loop)->src;
-	  count_init = const_iteration_count (count_reg, pre_header,
-					      &loop_count);
-	}
+      count_reg = doloop_register_get (head, tail);
       gcc_assert (count_reg);
+
+      pre_header = loop_preheader_edge (loop)->src;
+      count_init = const_iteration_count (count_reg, pre_header, &loop_count,
+					  &adjust_inplace);
 
       if (dump_file && count_init)
         {
@@ -1605,7 +1612,8 @@ sms_schedule (void)
       mii = 1; /* Need to pass some estimate of mii.  */
       rec_mii = sms_order_nodes (g, mii, node_order, &max_asap);
       mii = MAX (res_MII (g), rec_mii);
-      maxii = MAX (max_asap, MAXII_FACTOR * mii);
+      mii = MAX (mii, 1);
+      maxii = MAX (max_asap, param_sms_max_ii_factor * mii);
 
       if (dump_file)
 	fprintf (dump_file, "SMS iis %d %d %d (rec_mii, mii, maxii)\n",
@@ -1644,10 +1652,10 @@ sms_schedule (void)
 	      gcc_assert (stage_count >= 1);
 	    }
 
-	  /* The default value of PARAM_SMS_MIN_SC is 2 as stage count of
+	  /* The default value of param_sms_min_sc is 2 as stage count of
 	     1 means that there is no interleaving between iterations thus
 	     we let the scheduling passes do the job in this case.  */
-	  if (stage_count < PARAM_VALUE (PARAM_SMS_MIN_SC)
+	  if (stage_count < param_sms_min_sc
 	      || (count_init && (loop_count <= stage_count))
 	      || (max_trip_count >= 0 && max_trip_count <= stage_count)
 	      || (trip_count >= 0 && trip_count <= stage_count))
@@ -1710,9 +1718,20 @@ sms_schedule (void)
 	      print_partial_schedule (ps, dump_file);
 	    }
  
-          /* case the BCT count is not known , Do loop-versioning */
-	  if (count_reg && ! count_init)
+	  if (count_init)
+	    {
+	       if (adjust_inplace)
+		{
+		  /* When possible, set new iteration count of loop kernel in
+		     place.  Otherwise, generate_prolog_epilog creates an insn
+		     to adjust.  */
+		  SET_SRC (single_set (count_init)) = GEN_INT (loop_count
+							    - stage_count + 1);
+		}
+	    }
+	  else
             {
+	      /* case the BCT count is not known , Do loop-versioning */
 	      rtx comp_rtx = gen_rtx_GT (VOIDmode, count_reg,
 					 gen_int_mode (stage_count,
 						       GET_MODE (count_reg)));
@@ -1722,12 +1741,7 @@ sms_schedule (void)
 	      loop_version (loop, comp_rtx, &condition_bb,
 	  		    prob, prob.invert (),
 			    prob, prob.invert (), true);
-	     }
-
-	  /* Set new iteration count of loop kernel.  */
-          if (count_reg && count_init)
-	    SET_SRC (single_set (count_init)) = GEN_INT (loop_count
-						     - stage_count + 1);
+	    }
 
 	  /* Now apply the scheduled kernel to the RTL of the loop.  */
 	  permute_partial_schedule (ps, g->closing_branch->first_note);
@@ -1744,7 +1758,7 @@ sms_schedule (void)
 	  if (dump_file)
 	    print_node_sched_params (dump_file, g->num_nodes, ps);
 	  /* Generate prolog and epilog.  */
-          generate_prolog_epilog (ps, loop, count_reg, count_init);
+	  generate_prolog_epilog (ps, loop, count_reg, !adjust_inplace);
 	  break;
 	}
 
@@ -1835,11 +1849,6 @@ sms_schedule (void)
    In rare cases, it may be better to allow windows of II+1 cycles.
    The window would then start and end on the same row, but with
    different "must precede" and "must follow" requirements.  */
-
-/* A limit on the number of cycles that resource conflicts can span.  ??? Should
-   be provided by DFA, and be dependent on the type of insn scheduled.  Currently
-   set to 0 to save compile time.  */
-#define DFA_HISTORY SMS_DFA_HISTORY
 
 /* A threshold for the number of repeated unsuccessful attempts to insert
    an empty row, before we flush the partial schedule and start over.  */
@@ -2144,7 +2153,12 @@ sms_schedule_by_order (ddg_ptr g, int mii, int maxii, int *nodes_order)
   auto_sbitmap must_follow (num_nodes);
   auto_sbitmap tobe_scheduled (num_nodes);
 
-  partial_schedule_ptr ps = create_partial_schedule (ii, g, DFA_HISTORY);
+  /* Value of param_sms_dfa_history is a limit on the number of cycles that
+     resource conflicts can span.  ??? Should be provided by DFA, and be
+     dependent on the type of insn scheduled.  Set to 0 by default to save
+     compile time.  */
+  partial_schedule_ptr ps = create_partial_schedule (ii, g,
+						     param_sms_dfa_history);
 
   bitmap_ones (tobe_scheduled);
   bitmap_clear (sched_nodes);
@@ -2163,11 +2177,7 @@ sms_schedule_by_order (ddg_ptr g, int mii, int maxii, int *nodes_order)
   	  ddg_node_ptr u_node = &ps->g->nodes[u];
 	  rtx_insn *insn = u_node->insn;
 
-	  if (!NONDEBUG_INSN_P (insn))
-	    {
-	      bitmap_clear_bit (tobe_scheduled, u);
-	      continue;
-	    }
+	  gcc_checking_assert (NONDEBUG_INSN_P (insn));
 
 	  if (bitmap_bit_p (sched_nodes, u))
 	    continue;
@@ -3004,9 +3014,7 @@ ps_insn_find_column (partial_schedule_ptr ps, ps_insn_ptr ps_i,
             last_must_precede = next_ps_i;
         }
       /* The closing branch must be the last in the row.  */
-      if (must_precede 
-	  && bitmap_bit_p (must_precede, next_ps_i->id)
-	  && JUMP_P (ps_rtl_insn (ps, next_ps_i->id)))
+      if (JUMP_P (ps_rtl_insn (ps, next_ps_i->id)))
 	return false;
              
        last_in_row = next_ps_i;
@@ -3171,9 +3179,6 @@ ps_has_conflicts (partial_schedule_ptr ps, int from, int to)
 	{
 	  rtx_insn *insn = ps_rtl_insn (ps, crr_insn->id);
 
-	  if (!NONDEBUG_INSN_P (insn))
-	    continue;
-
 	  /* Check if there is room for the current insn.  */
 	  if (!can_issue_more || state_dead_lock_p (curr_state))
 	    return true;
@@ -3210,7 +3215,7 @@ ps_add_node_check_conflicts (partial_schedule_ptr ps, int n,
    			     int c, sbitmap must_precede,
 			     sbitmap must_follow)
 {
-  int has_conflicts = 0;
+  int i, first, amount, has_conflicts = 0;
   ps_insn_ptr ps_i;
 
   /* First add the node to the PS, if this succeeds check for
@@ -3218,23 +3223,32 @@ ps_add_node_check_conflicts (partial_schedule_ptr ps, int n,
   if (! (ps_i = add_node_to_ps (ps, n, c, must_precede, must_follow)))
     return NULL; /* Failed to insert the node at the given cycle.  */
 
-  has_conflicts = ps_has_conflicts (ps, c, c)
-		  || (ps->history > 0
-		      && ps_has_conflicts (ps,
-					   c - ps->history,
-					   c + ps->history));
-
-  /* Try different issue slots to find one that the given node can be
-     scheduled in without conflicts.  */
-  while (has_conflicts)
+  while (1)
     {
+      has_conflicts = ps_has_conflicts (ps, c, c);
+      if (ps->history > 0 && !has_conflicts)
+	{
+	  /* Check all 2h+1 intervals, starting from c-2h..c up to c..2h,
+	     but not more than ii intervals.  */
+	  first = c - ps->history;
+	  amount = 2 * ps->history + 1;
+	  if (amount > ps->ii)
+	    amount = ps->ii;
+	  for (i = first; i < first + amount; i++)
+	    {
+	      has_conflicts = ps_has_conflicts (ps,
+						i - ps->history,
+						i + ps->history);
+	      if (has_conflicts)
+		break;
+	    }
+	}
+      if (!has_conflicts)
+	break;
+      /* Try different issue slots to find one that the given node can be
+	 scheduled in without conflicts.  */
       if (! ps_insn_advance_column (ps, ps_i, must_follow))
 	break;
-      has_conflicts = ps_has_conflicts (ps, c, c)
-		      || (ps->history > 0
-			  && ps_has_conflicts (ps,
-					       c - ps->history,
-					       c + ps->history));
     }
 
   if (has_conflicts)

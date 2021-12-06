@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd solaris
+// +build aix darwin dragonfly freebsd linux netbsd openbsd solaris
 
 package syscall_test
 
@@ -11,12 +11,12 @@ import (
 	"fmt"
 	"internal/testenv"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -46,11 +46,13 @@ func _() {
 	// fcntl file locking structure and constants
 	var (
 		_ = syscall.Flock_t{
-			Type:   int16(0),
-			Whence: int16(0),
-			Start:  int64(0),
-			Len:    int64(0),
-			Pid:    int32(0),
+			// Comment out the Type and Whence tests because
+			// on the Hurd they are int32, not int16.
+			// Type:   int16(0),
+			// Whence: int16(0),
+			Start: int64(0),
+			Len:   int64(0),
+			Pid:   int32(0),
 		}
 	)
 	const (
@@ -69,7 +71,7 @@ func _() {
 // Thus this test also verifies that the Flock_t structure can be
 // roundtripped with F_SETLK and F_GETLK.
 func TestFcntlFlock(t *testing.T) {
-	if runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64") {
+	if runtime.GOOS == "ios" {
 		t.Skip("skipping; no child processes allowed on iOS")
 	}
 	flock := syscall.Flock_t{
@@ -78,7 +80,7 @@ func TestFcntlFlock(t *testing.T) {
 	}
 	if os.Getenv("GO_WANT_HELPER_PROCESS") == "" {
 		// parent
-		tempDir, err := ioutil.TempDir("", "TestFcntlFlock")
+		tempDir, err := os.MkdirTemp("", "TestFcntlFlock")
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
@@ -136,7 +138,27 @@ func TestPassFD(t *testing.T) {
 		return
 	}
 
-	tempDir, err := ioutil.TempDir("", "TestPassFD")
+	if runtime.GOOS == "aix" {
+		// Unix network isn't properly working on AIX 7.2 with Technical Level < 2
+		out, err := exec.Command("oslevel", "-s").Output()
+		if err != nil {
+			t.Skipf("skipping on AIX because oslevel -s failed: %v", err)
+		}
+		if len(out) < len("7200-XX-ZZ-YYMM") { // AIX 7.2, Tech Level XX, Service Pack ZZ, date YYMM
+			t.Skip("skipping on AIX because oslevel -s hasn't the right length")
+		}
+		aixVer := string(out[:4])
+		tl, err := strconv.Atoi(string(out[5:7]))
+		if err != nil {
+			t.Skipf("skipping on AIX because oslevel -s output cannot be parsed: %v", err)
+		}
+		if aixVer < "7200" || (aixVer == "7200" && tl < 2) {
+			t.Skip("skipped on AIX versions previous to 7.2 TL 2")
+		}
+
+	}
+
+	tempDir, err := os.MkdirTemp("", "TestPassFD")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +226,7 @@ func TestPassFD(t *testing.T) {
 	f := os.NewFile(uintptr(gotFds[0]), "fd-from-child")
 	defer f.Close()
 
-	got, err := ioutil.ReadAll(f)
+	got, err := io.ReadAll(f)
 	want := "Hello from child process!\n"
 	if string(got) != want {
 		t.Errorf("child process ReadAll: %q, %v; want %q", got, err, want)
@@ -236,7 +258,7 @@ func passFDChild() {
 	// We make it in tempDir, which our parent will clean up.
 	flag.Parse()
 	tempDir := flag.Arg(0)
-	f, err := ioutil.TempFile(tempDir, "")
+	f, err := os.CreateTemp(tempDir, "")
 	if err != nil {
 		fmt.Printf("TempFile: %v", err)
 		return
@@ -315,6 +337,12 @@ func TestRlimit(t *testing.T) {
 	}
 	set := rlimit
 	set.Cur = set.Max - 1
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "ios") && set.Cur > 4096 {
+		// rlim_min for RLIMIT_NOFILE should be equal to
+		// or lower than kern.maxfilesperproc, which on
+		// some machines are 4096. See #40564.
+		set.Cur = 4096
+	}
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &set)
 	if err != nil {
 		t.Fatalf("Setrlimit: set failed: %#v %v", set, err)
@@ -326,15 +354,11 @@ func TestRlimit(t *testing.T) {
 	}
 	set = rlimit
 	set.Cur = set.Max - 1
+	if (runtime.GOOS == "darwin" || runtime.GOOS == "ios") && set.Cur > 4096 {
+		set.Cur = 4096
+	}
 	if set != get {
-		// Seems like Darwin requires some privilege to
-		// increase the soft limit of rlimit sandbox, though
-		// Setrlimit never reports an error.
-		switch runtime.GOOS {
-		case "darwin":
-		default:
-			t.Fatalf("Rlimit: change failed: wanted %#v got %#v", set, get)
-		}
+		t.Fatalf("Rlimit: change failed: wanted %#v got %#v", set, get)
 	}
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rlimit)
 	if err != nil {
@@ -351,5 +375,19 @@ func TestSeekFailure(t *testing.T) {
 	t.Logf("Seek: %v", str)
 	if str == "" {
 		t.Fatalf("Seek(-1, 0, 0) return error with empty message")
+	}
+}
+
+func TestSetsockoptString(t *testing.T) {
+	// should not panic on empty string, see issue #31277
+	err := syscall.SetsockoptString(-1, 0, 0, "")
+	if err == nil {
+		t.Fatalf("SetsockoptString: did not fail")
+	}
+}
+
+func TestENFILETemporary(t *testing.T) {
+	if !syscall.ENFILE.Temporary() {
+		t.Error("ENFILE is not treated as a temporary error")
 	}
 }

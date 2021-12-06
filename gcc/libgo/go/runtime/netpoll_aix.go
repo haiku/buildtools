@@ -1,16 +1,23 @@
-// Copyright 2017 The Go Authors. All rights reserved.
+// Copyright 2018 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 package runtime
 
-import "unsafe"
+import (
+	"runtime/internal/atomic"
+	"unsafe"
+)
 
 // This is based on the former libgo/runtime/netpoll_select.c implementation
-// except that it uses AIX pollset_poll instead of select and is written in Go.
+// except that it uses poll instead of select and is written in Go.
+// It's also based on Solaris implementation for the arming mechanisms
 
-type pollset_t int32
+//go:noescape
+//extern poll
+func libc_poll(pfds *pollfd, npfds uintptr, timeout uintptr) int32
 
+// pollfd represents the poll structure for AIX operating system.
 type pollfd struct {
 	fd      int32
 	events  int16
@@ -22,191 +29,191 @@ const _POLLOUT = 0x0002
 const _POLLHUP = 0x2000
 const _POLLERR = 0x4000
 
-type poll_ctl struct {
-	cmd    int16
-	events int16
-	fd     int32
-}
-
-const _PS_ADD = 0x0
-const _PS_DELETE = 0x2
-
-//extern pollset_create
-func pollset_create(maxfd int32) pollset_t
-
-//go:noescape
-//extern pollset_ctl
-func pollset_ctl(ps pollset_t, pollctl_array *poll_ctl, array_length int32) int32
-
-//go:noescape
-//extern pollset_poll
-func pollset_poll(ps pollset_t, polldata_array *pollfd, array_length int32, timeout int32) int32
-
-//go:noescape
-//extern pipe
-func libc_pipe(fd *int32) int32
-
-//extern __go_fcntl_uintptr
-func fcntlUintptr(fd, cmd, arg uintptr) (uintptr, uintptr)
-
-func fcntl(fd, cmd int32, arg uintptr) uintptr {
-	r, _ := fcntlUintptr(uintptr(fd), uintptr(cmd), arg)
-	return r
-}
-
 var (
-	ps          pollset_t = -1
-	mpfds       map[int32]*pollDesc
-	pmtx        mutex
-	rdwake      int32
-	wrwake      int32
-	needsUpdate bool
+	pfds           []pollfd
+	pds            []*pollDesc
+	mtxpoll        mutex
+	mtxset         mutex
+	rdwake         int32
+	wrwake         int32
+	pendingUpdates int32
+
+	netpollWakeSig uint32 // used to avoid duplicate calls of netpollBreak
 )
 
 func netpollinit() {
-	var p [2]int32
-
-	if ps = pollset_create(-1); ps < 0 {
-		throw("runtime: netpollinit failed to create pollset")
+	// Create the pipe we use to wakeup poll.
+	r, w, errno := nonblockingPipe()
+	if errno != 0 {
+		throw("netpollinit: failed to create pipe")
 	}
-	// It is not possible to add or remove descriptors from
-	// the pollset while pollset_poll is active.
-	// We use a pipe to wakeup pollset_poll when the pollset
-	// needs to be updated.
-	if err := libc_pipe(&p[0]); err < 0 {
-		throw("runtime: netpollinit failed to create pipe")
-	}
-	rdwake = p[0]
-	wrwake = p[1]
+	rdwake = r
+	wrwake = w
 
-	fl := fcntl(rdwake, _F_GETFL, 0)
-	fcntl(rdwake, _F_SETFL, fl|_O_NONBLOCK)
-	fcntl(rdwake, _F_SETFD, _FD_CLOEXEC)
+	// Pre-allocate array of pollfd structures for poll.
+	pfds = make([]pollfd, 1, 128)
 
-	fl = fcntl(wrwake, _F_GETFL, 0)
-	fcntl(wrwake, _F_SETFL, fl|_O_NONBLOCK)
-	fcntl(wrwake, _F_SETFD, _FD_CLOEXEC)
+	// Poll the read side of the pipe.
+	pfds[0].fd = rdwake
+	pfds[0].events = _POLLIN
 
-	// Add the read side of the pipe to the pollset.
-	var pctl poll_ctl
-	pctl.cmd = _PS_ADD
-	pctl.fd = rdwake
-	pctl.events = _POLLIN
-	if pollset_ctl(ps, &pctl, 1) != 0 {
-		throw("runtime: netpollinit failed to register pipe")
-	}
-
-	mpfds = make(map[int32]*pollDesc)
+	pds = make([]*pollDesc, 1, 128)
+	pds[0] = nil
 }
 
-func netpolldescriptor() uintptr {
-	// ps is not a real file descriptor.
-	return ^uintptr(0)
+func netpollIsPollDescriptor(fd uintptr) bool {
+	return fd == uintptr(rdwake) || fd == uintptr(wrwake)
+}
+
+// netpollwakeup writes on wrwake to wakeup poll before any changes.
+func netpollwakeup() {
+	if pendingUpdates == 0 {
+		pendingUpdates = 1
+		b := [1]byte{0}
+		write(uintptr(wrwake), unsafe.Pointer(&b[0]), 1)
+	}
 }
 
 func netpollopen(fd uintptr, pd *pollDesc) int32 {
-	// pollset_ctl will block if pollset_poll is active
-	// so wakeup pollset_poll first.
-	lock(&pmtx)
-	needsUpdate = true
-	unlock(&pmtx)
-	b := [1]byte{0}
-	write(uintptr(wrwake), unsafe.Pointer(&b[0]), 1)
+	lock(&mtxpoll)
+	netpollwakeup()
 
-	var pctl poll_ctl
-	pctl.cmd = _PS_ADD
-	pctl.fd = int32(fd)
-	pctl.events = _POLLIN | _POLLOUT
-	if pollset_ctl(ps, &pctl, 1) != 0 {
-		return int32(errno())
-	}
-	lock(&pmtx)
-	mpfds[int32(fd)] = pd
-	needsUpdate = false
-	unlock(&pmtx)
+	lock(&mtxset)
+	unlock(&mtxpoll)
 
+	pd.user = uint32(len(pfds))
+	pfds = append(pfds, pollfd{fd: int32(fd)})
+	pds = append(pds, pd)
+	unlock(&mtxset)
 	return 0
 }
 
 func netpollclose(fd uintptr) int32 {
-	// pollset_ctl will block if pollset_poll is active
-	// so wakeup pollset_poll first.
-	lock(&pmtx)
-	needsUpdate = true
-	unlock(&pmtx)
-	b := [1]byte{0}
-	write(uintptr(wrwake), unsafe.Pointer(&b[0]), 1)
+	lock(&mtxpoll)
+	netpollwakeup()
 
-	var pctl poll_ctl
-	pctl.cmd = _PS_DELETE
-	pctl.fd = int32(fd)
-	if pollset_ctl(ps, &pctl, 1) != 0 {
-		return int32(errno())
+	lock(&mtxset)
+	unlock(&mtxpoll)
+
+	for i := 0; i < len(pfds); i++ {
+		if pfds[i].fd == int32(fd) {
+			pfds[i] = pfds[len(pfds)-1]
+			pfds = pfds[:len(pfds)-1]
+
+			pds[i] = pds[len(pds)-1]
+			pds[i].user = uint32(i)
+			pds = pds[:len(pds)-1]
+			break
+		}
 	}
-	lock(&pmtx)
-	delete(mpfds, int32(fd))
-	needsUpdate = false
-	unlock(&pmtx)
-
+	unlock(&mtxset)
 	return 0
 }
 
 func netpollarm(pd *pollDesc, mode int) {
-	throw("runtime: unused")
+	lock(&mtxpoll)
+	netpollwakeup()
+
+	lock(&mtxset)
+	unlock(&mtxpoll)
+
+	switch mode {
+	case 'r':
+		pfds[pd.user].events |= _POLLIN
+	case 'w':
+		pfds[pd.user].events |= _POLLOUT
+	}
+	unlock(&mtxset)
 }
 
-func netpoll(block bool) *g {
-	if ps == -1 {
-		return nil
+// netpollBreak interrupts a poll.
+func netpollBreak() {
+	if atomic.Cas(&netpollWakeSig, 0, 1) {
+		b := [1]byte{0}
+		write(uintptr(wrwake), unsafe.Pointer(&b[0]), 1)
 	}
-	timeout := int32(-1)
-	if !block {
-		timeout = 0
+}
+
+// netpoll checks for ready network connections.
+// Returns list of goroutines that become runnable.
+// delay < 0: blocks indefinitely
+// delay == 0: does not block, just polls
+// delay > 0: block for up to that many nanoseconds
+//go:nowritebarrierrec
+func netpoll(delay int64) gList {
+	var timeout uintptr
+	if delay < 0 {
+		timeout = ^uintptr(0)
+	} else if delay == 0 {
+		// TODO: call poll with timeout == 0
+		return gList{}
+	} else if delay < 1e6 {
+		timeout = 1
+	} else if delay < 1e15 {
+		timeout = uintptr(delay / 1e6)
+	} else {
+		// An arbitrary cap on how long to wait for a timer.
+		// 1e9 ms == ~11.5 days.
+		timeout = 1e9
 	}
-	var pfds [128]pollfd
 retry:
-	lock(&pmtx)
-	if needsUpdate {
-		unlock(&pmtx)
-		osyield()
-		goto retry
-	}
-	unlock(&pmtx)
-	nfound := pollset_poll(ps, &pfds[0], int32(len(pfds)), timeout)
-	if nfound < 0 {
+	lock(&mtxpoll)
+	lock(&mtxset)
+	pendingUpdates = 0
+	unlock(&mtxpoll)
+
+	n := libc_poll(&pfds[0], uintptr(len(pfds)), timeout)
+	if n < 0 {
 		e := errno()
 		if e != _EINTR {
-			throw("runtime: pollset_poll failed")
+			println("errno=", e, " len(pfds)=", len(pfds))
+			throw("poll failed")
+		}
+		unlock(&mtxset)
+		// If a timed sleep was interrupted, just return to
+		// recalculate how long we should sleep now.
+		if timeout > 0 {
+			return gList{}
 		}
 		goto retry
 	}
-	var gp guintptr
-	for i := int32(0); i < nfound; i++ {
+	// Check if some descriptors need to be changed
+	if n != 0 && pfds[0].revents&(_POLLIN|_POLLHUP|_POLLERR) != 0 {
+		if delay != 0 {
+			// A netpollwakeup could be picked up by a
+			// non-blocking poll. Only clear the wakeup
+			// if blocking.
+			var b [1]byte
+			for read(rdwake, unsafe.Pointer(&b[0]), 1) == 1 {
+			}
+			atomic.Store(&netpollWakeSig, 0)
+		}
+		// Still look at the other fds even if the mode may have
+		// changed, as netpollBreak might have been called.
+		n--
+	}
+	var toRun gList
+	for i := 1; i < len(pfds) && n > 0; i++ {
 		pfd := &pfds[i]
 
 		var mode int32
 		if pfd.revents&(_POLLIN|_POLLHUP|_POLLERR) != 0 {
-			if pfd.fd == rdwake {
-				var b [1]byte
-				read(pfd.fd, unsafe.Pointer(&b[0]), 1)
-				continue
-			}
 			mode += 'r'
+			pfd.events &= ^_POLLIN
 		}
 		if pfd.revents&(_POLLOUT|_POLLHUP|_POLLERR) != 0 {
 			mode += 'w'
+			pfd.events &= ^_POLLOUT
 		}
 		if mode != 0 {
-			lock(&pmtx)
-			pd := mpfds[pfd.fd]
-			unlock(&pmtx)
-			if pd != nil {
-				netpollready(&gp, pd, mode)
+			pds[i].everr = false
+			if pfd.revents == _POLLERR {
+				pds[i].everr = true
 			}
+			netpollready(&toRun, pds[i], mode)
+			n--
 		}
 	}
-	if block && gp == 0 {
-		goto retry
-	}
-	return gp.ptr()
+	unlock(&mtxset)
+	return toRun
 }

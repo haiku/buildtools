@@ -1,3 +1,6 @@
+! { dg-do run }
+! { dg-options "-std=legacy" }
+
   integer :: err
   err = 0
 !$omp parallel num_threads (4) default (none) shared (err)
@@ -5,7 +8,7 @@
   call test
 !$omp end single
 !$omp end parallel
-  if (err.ne.0) STOP 1
+  if (err.ne.0) stop 1
 contains
   subroutine check (x, y, l)
     integer :: x, y

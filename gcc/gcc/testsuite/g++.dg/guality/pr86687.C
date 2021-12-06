@@ -13,7 +13,7 @@ public:
 class foo {
 public:
   foo (string dir_hint) {
-    p = dir_hint.p; // { dg-final { gdb-test 16 "dir_hint.p" 3 } }
+    p = dir_hint.p; // { dg-final { gdb-test . "dir_hint.p" 3 } }
   }
 
   int p;

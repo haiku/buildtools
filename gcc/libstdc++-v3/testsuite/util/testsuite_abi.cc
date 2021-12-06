@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2004-2018 Free Software Foundation, Inc.
+// Copyright (C) 2004-2021 Free Software Foundation, Inc.
 
 // This library is free software; you can redistribute it and/or
 // modify it under the terms of the GNU General Public License as
@@ -206,6 +206,12 @@ check_version(symbol& test, bool added)
       known_versions.push_back("GLIBCXX_3.4.23");
       known_versions.push_back("GLIBCXX_3.4.24");
       known_versions.push_back("GLIBCXX_3.4.25");
+      known_versions.push_back("GLIBCXX_3.4.26");
+      known_versions.push_back("GLIBCXX_3.4.27");
+      known_versions.push_back("GLIBCXX_3.4.28");
+      known_versions.push_back("GLIBCXX_3.4.29");
+      known_versions.push_back("GLIBCXX_LDBL_3.4.29");
+      known_versions.push_back("GLIBCXX_IEEE128_3.4.29");
       known_versions.push_back("CXXABI_1.3");
       known_versions.push_back("CXXABI_LDBL_1.3");
       known_versions.push_back("CXXABI_1.3.1");
@@ -219,6 +225,9 @@ check_version(symbol& test, bool added)
       known_versions.push_back("CXXABI_1.3.9");
       known_versions.push_back("CXXABI_1.3.10");
       known_versions.push_back("CXXABI_1.3.11");
+      known_versions.push_back("CXXABI_1.3.12");
+      known_versions.push_back("CXXABI_1.3.13");
+      known_versions.push_back("CXXABI_IEEE128_1.3.13");
       known_versions.push_back("CXXABI_TM_1");
       known_versions.push_back("CXXABI_FLOAT128");
     }
@@ -236,8 +245,13 @@ check_version(symbol& test, bool added)
 	test.version_status = symbol::incompatible;
 
       // Check that added symbols are added in the latest pre-release version.
-      bool latestp = (test.version_name == "GLIBCXX_3.4.25"
-		     || test.version_name == "CXXABI_1.3.11"
+      bool latestp = (test.version_name == "GLIBCXX_3.4.29"
+	  // XXX remove next 3 lines when baselines have been regenerated
+	  // to include {IEEE128,LDBL} symbols:
+		     || test.version_name == "GLIBCXX_LDBL_3.4.29"
+		     || test.version_name == "GLIBCXX_IEEE128_3.4.29"
+		     || test.version_name == "CXXABI_IEEE128_1.3.13"
+		     || test.version_name == "CXXABI_1.3.13"
 		     || test.version_name == "CXXABI_FLOAT128"
 		     || test.version_name == "CXXABI_TM_1");
       if (added && !latestp)
@@ -250,7 +264,17 @@ check_version(symbol& test, bool added)
 	  && test.demangled_name.find("std::__cxx11::") != 0)
 	{
 	  if (test.version_name.find("_LDBL_") == std::string::npos
-	      && test.version_name.find("_FLOAT128") == std::string::npos)
+	      && test.version_name.find("_FLOAT128") == std::string::npos
+	      && test.version_name.find("_IEEE128") == std::string::npos)
+	    test.version_status = symbol::incompatible;
+	}
+
+      // Check that IEEE128 long double compatibility symbols demangled as
+      // __ieee128 are put into some _LDBL_IEEE version name.
+      // XXX is this right? might not want *everything* for __ieee128 in here.
+      if (added && test.demangled_name.find("__ieee128") != std::string::npos)
+	{
+	  if (test.version_name.find("_IEEE128") == std::string::npos)
 	    test.version_status = symbol::incompatible;
 	}
 
@@ -353,14 +377,9 @@ get_symbol(const string& name, const symbols& s)
 void
 examine_symbol(const char* name, const char* file)
 {
-  try
-    {
-      symbols s = create_symbols(file);
-      const symbol& sym = get_symbol(name, s);
-      sym.print();
-    }
-  catch(...)
-    { __throw_exception_again; }
+    symbols s = create_symbols(file);
+    const symbol& sym = get_symbol(name, s);
+    sym.print();
 }
 
 int
@@ -387,6 +406,15 @@ compare_symbols(const char* baseline_file, const char* test_file,
 	ld_version_found = true;
       ++li;
     }
+
+  // Similarly for IEEE128 symbols.
+  bool ieee_version_found(false);
+  for (li = test.begin(); li != test.end(); ++li)
+    if (li->second.version_name.find("_IEEE128_") != std::string::npos)
+      {
+        ieee_version_found = true;
+        break;
+      }
 
   // Sort out names.
   // Assuming all baseline names and test names are both unique w/ no
@@ -421,9 +449,12 @@ compare_symbols(const char* baseline_file, const char* test_file,
 	{
 	  // Iff no test long double compatibility symbols at all and the symbol
 	  // missing is a baseline long double compatibility symbol, skip.
-	  string version_name(i->second.version_name);
+	  string version_name(i->second.version_name.size()
+			      ? i->second.version_name : i->first);
 	  bool base_ld(version_name.find("_LDBL_") != std::string::npos);
-	  if (!base_ld || base_ld && ld_version_found)
+	  bool base_ieee(version_name.find("_IEEE128_") != std::string::npos);
+	  if ((!base_ld || (base_ld && ld_version_found))
+	      && (!base_ieee || (base_ieee && ieee_version_found)))
 	    missing_names.push_back(name);
 	}
     }

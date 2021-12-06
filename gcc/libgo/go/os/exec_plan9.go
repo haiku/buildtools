@@ -5,7 +5,6 @@
 package os
 
 import (
-	"errors"
 	"runtime"
 	"syscall"
 	"time"
@@ -27,13 +26,14 @@ func startProcess(name string, argv []string, attr *ProcAttr) (p *Process, err e
 		Sys: attr.Sys,
 	}
 
+	sysattr.Files = make([]uintptr, 0, len(attr.Files))
 	for _, f := range attr.Files {
 		sysattr.Files = append(sysattr.Files, f.Fd())
 	}
 
 	pid, h, e := syscall.StartProcess(name, argv, sysattr)
 	if e != nil {
-		return nil, &PathError{"fork/exec", name, e}
+		return nil, &PathError{Op: "fork/exec", Path: name, Err: e}
 	}
 
 	return newProcess(pid, h), nil
@@ -51,7 +51,7 @@ func (p *Process) writeProcFile(file string, data string) error {
 
 func (p *Process) signal(sig Signal) error {
 	if p.done() {
-		return errors.New("os: process already finished")
+		return ErrProcessDone
 	}
 	if e := p.writeProcFile("note", sig.String()); e != nil {
 		return NewSyscallError("signal", e)
@@ -135,4 +135,14 @@ func (p *ProcessState) String() string {
 		return "<nil>"
 	}
 	return "exit status: " + p.status.Msg
+}
+
+// ExitCode returns the exit code of the exited process, or -1
+// if the process hasn't exited or was terminated by a signal.
+func (p *ProcessState) ExitCode() int {
+	// return -1 if the process hasn't started.
+	if p == nil {
+		return -1
+	}
+	return p.status.ExitStatus()
 }

@@ -1,5 +1,6 @@
 /* { dg-do run } */
 /* { dg-options "-ftree-tail-merge -Wno-div-by-zero -O2 -fno-dce -fno-isolate-erroneous-paths-dereference -fno-tree-dce -fno-tree-vrp" } */
+/* { dg-require-effective-target ptr_eq_long } */
 
 int b, c, d, e;
 
@@ -14,6 +15,6 @@ int
 main (void)
 {
   b = (unsigned char) __builtin_parity (d);
-  e ? foo (0) : (long) &c;
+  e ? foo (0) : (__INTPTR_TYPE__) &c;
   return 0;
 }

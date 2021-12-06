@@ -1,5 +1,5 @@
 /* GCC backend definitions for the Renesas RX processor.
-   Copyright (C) 2008-2018 Free Software Foundation, Inc.
+   Copyright (C) 2008-2021 Free Software Foundation, Inc.
    Contributed by Red Hat.
 
    This file is part of GCC.
@@ -408,7 +408,9 @@ typedef unsigned int CUMULATIVE_ARGS;
 #define GLOBAL_ASM_OP 		\
   (TARGET_AS100_SYNTAX ? "\t.GLB\t" : "\t.global\t")
 #define ASM_COMMENT_START	" ;"
+#undef ASM_APP_ON
 #define ASM_APP_ON		""
+#undef ASM_APP_OFF
 #define ASM_APP_OFF 		""
 #define LOCAL_LABEL_PREFIX	"L"
 #undef  USER_LABEL_PREFIX
@@ -417,9 +419,9 @@ typedef unsigned int CUMULATIVE_ARGS;
 /* Compute the alignment needed for label X in various situations.
    If the user has specified an alignment then honour that, otherwise
    use rx_align_for_label.  */
-#define JUMP_ALIGN(x)				(align_jumps > 1 ? align_jumps_log : rx_align_for_label (x, 0))
-#define LABEL_ALIGN(x)				(align_labels > 1 ? align_labels_log : rx_align_for_label (x, 3))
-#define LOOP_ALIGN(x)				(align_loops > 1 ? align_loops_log : rx_align_for_label (x, 2))
+#define JUMP_ALIGN(x)				(align_jumps.levels[0].log > 0 ? align_jumps : align_flags (rx_align_for_label (x, 0)))
+#define LABEL_ALIGN(x)				(align_labels.levels[0].log > 0 ? align_labels : align_flags (rx_align_for_label (x, 3)))
+#define LOOP_ALIGN(x)				(align_loops.levels[0].log > 0 ? align_loops : align_flags (rx_align_for_label (x, 2)))
 #define LABEL_ALIGN_AFTER_BARRIER(x)		rx_align_for_label (x, 0)
 
 #define ASM_OUTPUT_MAX_SKIP_ALIGN(STREAM, LOG, MAX_SKIP)	\
@@ -626,6 +628,9 @@ typedef unsigned int CUMULATIVE_ARGS;
 #undef  PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE (TARGET_AS100_SYNTAX \
 				  ? DBX_DEBUG : DWARF2_DEBUG)
+
+#define DBX_DEBUGGING_INFO 1
+#define DWARF2_DEBUGGING_INFO 1
 
 #define INCOMING_FRAME_SP_OFFSET		4
 #define ARG_POINTER_CFA_OFFSET(FNDECL)		4
