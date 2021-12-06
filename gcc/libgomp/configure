@@ -8248,8 +8248,6 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
 
     haiku*)
       # PIC is the default for Haiku.
-      # The "-static" flag exists, but is broken.
-      lt_prog_compiler_static=
       ;;
 
     hpux*)
@@ -10361,8 +10359,9 @@ haiku*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
   shlibpath_overrides_runpath=yes
-  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
-  hardcode_into_libs=yes
+  sys_lib_search_path_spec='/boot/system/non-packaged/develop/lib /boot/system/develop/lib'
+  sys_lib_dlsearch_path_spec='/boot/home/config/non-packaged/lib /boot/home/config/lib /boot/system/non-packaged/lib /boot/system/lib'
+  hardcode_into_libs=no
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -10879,7 +10878,7 @@ else
   lt_cv_dlopen_libs=
 
   case $host_os in
-  beos*)
+  beos* | haiku* )
     lt_cv_dlopen="load_add_on"
     lt_cv_dlopen_libs=
     lt_cv_dlopen_self=yes
@@ -11157,7 +11156,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11160 "configure"
+#line 11159 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11263,7 +11262,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11266 "configure"
+#line 11265 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -12123,8 +12122,6 @@ $as_echo_n "checking for $compiler option to produce PIC... " >&6; }
 
     haiku*)
       # PIC is the default for Haiku.
-      # The "-static" flag exists, but is broken.
-      lt_prog_compiler_static_FC=
       ;;
 
     hpux*)
@@ -14001,8 +13998,9 @@ haiku*)
   soname_spec='${libname}${release}${shared_ext}$major'
   shlibpath_var=LIBRARY_PATH
   shlibpath_overrides_runpath=yes
-  sys_lib_dlsearch_path_spec='/boot/home/config/lib /boot/common/lib /boot/beos/system/lib'
-  hardcode_into_libs=yes
+  sys_lib_search_path_spec='/boot/system/non-packaged/develop/lib /boot/system/develop/lib'
+  sys_lib_dlsearch_path_spec='/boot/home/config/non-packaged/lib /boot/home/config/lib /boot/system/non-packaged/lib /boot/system/lib'
+  hardcode_into_libs=no
   ;;
 
 hpux9* | hpux10* | hpux11*)
@@ -15086,7 +15084,6 @@ case "$host" in
   *)
     # Check to see if -pthread or -lpthread is needed.  Prefer the former.
     # In case the pthread.h system header is not found, this test will fail.
-    CFLAGS="$CFLAGS -pthread"
     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <pthread.h>
@@ -15100,9 +15097,9 @@ pthread_t t; pthread_create(&t,NULL,g,NULL);
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
-  XPCFLAGS=" -Wc,-pthread"
+
 else
-  CFLAGS="$save_CFLAGS" LIBS="-lpthread $LIBS"
+  CFLAGS="$CFLAGS -pthread"
       cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include <pthread.h>
@@ -15116,9 +15113,28 @@ pthread_t t; pthread_create(&t,NULL,g,NULL);
 }
 _ACEOF
 if ac_fn_c_try_link "$LINENO"; then :
+  XPCFLAGS=" -Wc,-pthread"
+else
+  CFLAGS="$save_CFLAGS" LIBS="-lpthread $LIBS"
+        cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <pthread.h>
+           void *g(void *d) { return NULL; }
+int
+main ()
+{
+pthread_t t; pthread_create(&t,NULL,g,NULL);
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
 
 else
   as_fn_error "Pthreads are required to build libgomp" "$LINENO" 5
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
 fi
 rm -f core conftest.err conftest.$ac_objext \
     conftest$ac_exeext conftest.$ac_ext

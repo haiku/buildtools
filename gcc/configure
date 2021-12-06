@@ -3161,7 +3161,7 @@ if test x$enable_libgomp = x ; then
 	;;
     *-*-solaris2* | *-*-hpux11*)
 	;;
-    *-*-darwin* | *-*-aix*)
+    *-*-darwin* | *-*-aix* | *-*-haiku*)
 	;;
     nvptx*-*-*)
 	;;
@@ -3380,6 +3380,9 @@ case "${target}" in
     ;;
   *-*-darwin*)
     noconfigdirs="$noconfigdirs target-libffi"
+    ;;
+  *-*-haiku*)
+    noconfigdirs="$noconfigdirs ${libgcj}"
     ;;
   *-*-netware*)
     noconfigdirs="$noconfigdirs target-libffi"

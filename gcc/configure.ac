@@ -513,7 +513,7 @@ if test x$enable_libgomp = x ; then
 	;;
     *-*-solaris2* | *-*-hpux11*)
 	;;
-    *-*-darwin* | *-*-aix*)
+    *-*-darwin* | *-*-aix* | *-*-haiku*)
 	;;
     nvptx*-*-*)
 	;;
@@ -712,6 +712,9 @@ case "${target}" in
   *-*-darwin*)
     noconfigdirs="$noconfigdirs target-libffi"
     ;;
+  *-*-haiku*)
+    noconfigdirs="$noconfigdirs ${libgcj}"
+    ;;
   *-*-netware*)
     noconfigdirs="$noconfigdirs target-libffi"
     ;;
@@ -878,7 +881,7 @@ case "${target}" in
   *-*-aix*)
     noconfigdirs="$noconfigdirs target-newlib target-libgloss"
     ;;
-  *-*-haiku*)
+  *-*-beos*)
     noconfigdirs="$noconfigdirs target-newlib target-libgloss"
     ;;
   *-*-chorusos)
@@ -888,6 +891,9 @@ case "${target}" in
     noconfigdirs="$noconfigdirs target-newlib target-libgloss"
     ;;
   *-*-freebsd*)
+    noconfigdirs="$noconfigdirs target-newlib target-libgloss"
+    ;;
+  *-*-haiku*)
     noconfigdirs="$noconfigdirs target-newlib target-libgloss"
     ;;
   *-*-linux* | *-*-gnu* | *-*-k*bsd*-gnu | *-*-kopensolaris*-gnu)

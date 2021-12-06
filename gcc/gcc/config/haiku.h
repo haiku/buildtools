@@ -53,6 +53,11 @@ Boston, MA 02111-1307, USA.  */
 #undef CC1PLUS_SPEC
 #define CC1PLUS_SPEC "%{!Wctor-dtor-privacy:-Wno-ctor-dtor-privacy}"
 
+#define SUBTARGET_OVERRIDE_OPTIONS			\
+  do {							\
+    haiku_override_options ();			\
+  } while (0)
+
 /* LIB_SPEC for Haiku */
 #undef LIB_SPEC
 #define LIB_SPEC "-lroot"
@@ -205,13 +210,9 @@ Boston, MA 02111-1307, USA.  */
 /* Haiku headers are C++-aware (and often use C++).  */
 #define NO_IMPLICIT_EXTERN_C
 
-/* Only allow -lssp for SSP, as -lssp_nonshared is problematic in Haiku */
-#ifndef TARGET_LIBC_PROVIDES_SSP
-#define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all:-lssp}"
-#endif
-
-/* Do not use JCR_SECTION_NAME default definition for Haiku */
-#define TARGET_NO_JCR_SECTION_NAME 1
+#define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all" \
+		       "|fstack-protector-strong|fstack-protector-explicit" \
+		       ":-lssp_nonshared}"
 
 /* Do not use TM clone registry in Haiku for now */
 #define USE_TM_CLONE_REGISTRY 0

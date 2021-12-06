@@ -231,13 +231,17 @@ case ${host} in
       ;;
   esac
   ;;
-*-*-haiku*)
-  tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver t-slibgcc-nolc-override t-haiku"
-  extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
-  ;;
 *-*-fuchsia*)
   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-fuchsia"
   extra_parts="crtbegin.o crtend.o"
+  ;;
+*-*-haiku*)
+  # This is the generic ELF configuration of Haiku.  Later
+  # machine-specific sections may refine and add to this
+  # configuration.
+  tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-haiku t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver"
+  tmake_file="$tmake_file t-slibgcc-libgcc t-slibgcc-nolc-override"
+  extra_parts="crtbegin.o crtbeginS.o crtend.o crtendS.o"
   ;;
 *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu)
   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver t-linux"
@@ -421,13 +425,6 @@ arm*-*-freebsd*)                # ARM FreeBSD EABI
 	unwind_header=config/arm/unwind-arm.h
 	tmake_file="${tmake_file} t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
 	;;
-arm*-*-haiku*)
-	tmake_file="${tmake_file} arm/t-arm t-fixedpoint-gnu-prefix arm/t-elf"
-	tmake_file="${tmake_file} arm/t-bpabi"
-	tm_file="${tm_file} arm/bpabi-lib.h"
-	unwind_header=config/arm/unwind-arm.h
-	tmake_file="${tmake_file} t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
-	;;
 arm*-*-fuchsia*)
 	tmake_file="${tmake_file} arm/t-arm arm/t-elf arm/t-bpabi"
 	tmake_file="${tmake_file} arm/tsoftfp t-softfp"
@@ -436,6 +433,12 @@ arm*-*-fuchsia*)
 	;;
 arm*-*-netbsdelf*)
 	tmake_file="$tmake_file arm/t-arm arm/t-netbsd t-slibgcc-gld-nover"
+	;;
+arm-*-haiku*)
+	tmake_file="${tmake_file} arm/t-arm arm/t-elf arm/t-bpabi"
+	tmake_file="${tmake_file} t-softfp-sfdf t-softfp-excl arm/t-softfp t-softfp"
+	tm_file="${tm_file} arm/bpabi-lib.h"
+	unwind_header=config/arm/unwind-arm.h
 	;;
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	tmake_file="${tmake_file} arm/t-arm t-fixedpoint-gnu-prefix t-crtfm"
