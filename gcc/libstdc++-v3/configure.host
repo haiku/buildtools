@@ -267,6 +267,9 @@ case "${host_os}" in
       os_include_dir="os/gnu-linux"
     fi
     ;;
+  haiku*)
+    os_include_dir="os/haiku"
+    ;;
   hpux*)
     os_include_dir="os/hpux"
     ;;
@@ -354,7 +357,7 @@ case "${host}" in
 	;;
     esac
     ;;
-  arm*-*-freebsd*)
+  arm*-*-freebsd* | arm*-*-haiku*)
      port_specific_symbol_files="\$(srcdir)/../config/os/gnu-linux/arm-eabi-extra.ver"
      ;;
   powerpc*-*-darwin*)

@@ -90,7 +90,7 @@ case "${host}" in
 
   *-freebsd*)
     SECTION_FLAGS='-ffunction-sections -fdata-sections'
-    AC_SUBST(SECTION_FLAGS) 
+    AC_SUBST(SECTION_FLAGS)
     GLIBCXX_CHECK_LINKER_FEATURES
     AC_DEFINE(HAVE_SETENV)
     AC_DEFINE(HAVE_FINITEF)
@@ -134,6 +134,46 @@ case "${host}" in
     AC_CHECK_FUNCS(timespec_get)
     AC_CHECK_FUNCS(sockatmark)
     AC_CHECK_FUNCS(uselocale)
+    ;;
+
+  *-haiku*)
+    AC_CHECK_HEADERS([nan.h ieeefp.h endian.h sys/isa_defs.h \
+      machine/endian.h machine/param.h sys/machine.h sys/types.h \
+      fp.h float.h endian.h inttypes.h locale.h float.h stdint.h])
+    SECTION_FLAGS='-ffunction-sections -fdata-sections'
+    AC_SUBST(SECTION_FLAGS)
+
+    AC_DEFINE(HAVE_INT64_T)
+
+    AC_DEFINE(HAVE_ACOSF)
+    AC_DEFINE(HAVE_ASINF)
+    AC_DEFINE(HAVE_ATANF)
+    AC_DEFINE(HAVE_ATAN2F)
+    AC_DEFINE(HAVE_CEILF)
+    AC_DEFINE(HAVE_COSF)
+    AC_DEFINE(HAVE_COSHF)
+    AC_DEFINE(HAVE_EXPF)
+    AC_DEFINE(HAVE_FABSF)
+    AC_DEFINE(HAVE_FINITE)
+    AC_DEFINE(HAVE_FINITEF)
+    AC_DEFINE(HAVE_FLOORF)
+    AC_DEFINE(HAVE_FMODF)
+    AC_DEFINE(HAVE_FREXPF)
+    AC_DEFINE(HAVE_HYPOT)
+    AC_DEFINE(HAVE_HYPOTF)
+    AC_DEFINE(HAVE_ISINF)
+    AC_DEFINE(HAVE_ISINFF)
+    AC_DEFINE(HAVE_ISNAN)
+    AC_DEFINE(HAVE_ISNANF)
+    AC_DEFINE(HAVE_LOGF)
+    AC_DEFINE(HAVE_LOG10F)
+    AC_DEFINE(HAVE_MODFF)
+    AC_DEFINE(HAVE_SINF)
+    AC_DEFINE(HAVE_SINHF)
+    AC_DEFINE(HAVE_SQRTF)
+    AC_DEFINE(HAVE_TANF)
+    AC_DEFINE(HAVE_TANHF)
+    AC_DEFINE(HAVE_TLS)
     ;;
 
   *-fuchsia*)
@@ -228,7 +268,7 @@ case "${host}" in
     ;;
   *-qnx6.1* | *-qnx6.2*)
     SECTION_FLAGS='-ffunction-sections -fdata-sections'
-    AC_SUBST(SECTION_FLAGS) 
+    AC_SUBST(SECTION_FLAGS)
     GLIBCXX_CHECK_LINKER_FEATURES
     AC_DEFINE(HAVE_COSF)
     AC_DEFINE(HAVE_COSL)

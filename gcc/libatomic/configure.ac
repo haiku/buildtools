@@ -217,21 +217,27 @@ LIBAT_WORDSIZE
 case " $config_path " in
  *" posix "*)
   XPCFLAGS=""
-  CFLAGS="$CFLAGS -pthread"
   AC_LINK_IFELSE(
     [AC_LANG_PROGRAM(
      [#include <pthread.h>
       void *g(void *d) { return NULL; }],
      [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
-    [XPCFLAGS=" -pthread"],
-    [CFLAGS="$save_CFLAGS $XCFLAGS" LIBS="-lpthread $LIBS"
+    [],
+    [CFLAGS="$CFLAGS -pthread"
      AC_LINK_IFELSE(
-      [AC_LANG_PROGRAM(
-       [#include <pthread.h>
-        void *g(void *d) { return NULL; }],
-       [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
-      [],
-      [AC_MSG_ERROR([Pthreads are required to build libatomic])])])
+       [AC_LANG_PROGRAM(
+        [#include <pthread.h>
+         void *g(void *d) { return NULL; }],
+        [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
+       [XPCFLAGS=" -pthread"],
+       [CFLAGS="$save_CFLAGS $XCFLAGS" LIBS="-lpthread $LIBS"
+        AC_LINK_IFELSE(
+          [AC_LANG_PROGRAM(
+           [#include <pthread.h>
+            void *g(void *d) { return NULL; }],
+           [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
+          [],
+          [AC_MSG_ERROR([Pthreads are required to build libatomic])])])])
   CFLAGS="$save_CFLAGS $XPCFLAGS"
   ;;
 esac

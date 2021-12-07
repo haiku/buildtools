@@ -194,21 +194,27 @@ case "$host" in
   *)
     # Check to see if -pthread or -lpthread is needed.  Prefer the former.
     # In case the pthread.h system header is not found, this test will fail.
-    CFLAGS="$CFLAGS -pthread"
     AC_LINK_IFELSE(
      [AC_LANG_PROGRAM(
       [#include <pthread.h>
        void *g(void *d) { return NULL; }],
       [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
-     [XPCFLAGS=" -Wc,-pthread"],
-     [CFLAGS="$save_CFLAGS" LIBS="-lpthread $LIBS"
+     [],
+     [CFLAGS="$CFLAGS -pthread"
       AC_LINK_IFELSE(
        [AC_LANG_PROGRAM(
         [#include <pthread.h>
          void *g(void *d) { return NULL; }],
         [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
-       [],
-       [AC_MSG_ERROR([Pthreads are required to build libgomp])])])
+       [XPCFLAGS=" -Wc,-pthread"],
+       [CFLAGS="$save_CFLAGS" LIBS="-lpthread $LIBS"
+        AC_LINK_IFELSE(
+         [AC_LANG_PROGRAM(
+          [#include <pthread.h>
+           void *g(void *d) { return NULL; }],
+          [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
+         [],
+         [AC_MSG_ERROR([Pthreads are required to build libgomp])])])])
 esac
 
 if test x$libgomp_use_pthreads != xno; then

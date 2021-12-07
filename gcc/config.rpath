@@ -161,6 +161,8 @@ if test "$with_gnu_ld" = yes; then
       ;;
     netbsd*)
       ;;
+    haiku*)
+      ;;
     solaris* | sysv5*)
       if $LD -v 2>&1 | egrep 'BFD 2\.8' > /dev/null; then
         ld_shlibs=no
