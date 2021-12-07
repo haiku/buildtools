@@ -2458,7 +2458,7 @@ m68k-*-haiku*)
 	default_m68k_cpu=68020
 	default_cf_cpu=5206
 	tmake_file="${tmake_file} m68k/t-m68kbare m68k/t-crtstuff t-haiku" #??
-	tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h"
+	tm_file="${tm_file} dbxelf.h elfos.h haiku.h m68k/haiku.h haiku-stdint.h"
 	tm_defines="${tm_defines} MOTOROLA=1"
 	;;
 mcore-*-elf)
@@ -2607,7 +2607,7 @@ mips*-mti-linux*)
 	;;
 mipsel-*-haiku*)
 	target_cpu_default="MASK_ABICALLS"
-	tm_file="elfos.h ${tm_file} haiku.h mips/haiku.h"
+	tm_file="elfos.h ${tm_file} haiku.h mips/haiku.h haiku-stdint.h"
 	tmake_file="${tmake_file} mips/t-elf t-haiku"
 	;;
 mips*-*-linux*)				# Linux MIPS, either endian.
