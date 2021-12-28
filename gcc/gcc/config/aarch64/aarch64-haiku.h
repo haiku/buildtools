@@ -67,7 +67,7 @@
 
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m " TARGET_LINKER_EMULATION " %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}\
+#define LINK_SPEC "-m " TARGET_LINKER_EMULATION " %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}\
 	%{mbig-endian:-EB} %{mlittle-endian:-EL} " CA53_ERR_835769_SPEC " " CA53_ERR_843419_SPEC " -X"
 
 #endif  /* GCC_AARCH64_HAIKU_H */

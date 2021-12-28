@@ -108,7 +108,7 @@ Boston, MA 02110-1301, USA.  */
 
 #undef	LINK_SPEC
 /*#define LINK_SPEC "%{!o*:-o %b} -m elf_m68k_haiku -shared -no-undefined %{nostart:-e 0}"*/
-#define LINK_SPEC "%{!o*:-o %b} -m m68kelf %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
+#define LINK_SPEC "-m m68kelf %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
 
 /* XXX: not sure for the rest there... */
 

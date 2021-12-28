@@ -53,4 +53,4 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "%{!o*:-o %b} -m elf32ppchaiku %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
+#define LINK_SPEC "-m elf32ppchaiku %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
