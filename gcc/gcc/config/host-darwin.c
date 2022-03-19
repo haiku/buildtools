@@ -80,4 +80,6 @@ darwin_gt_pch_use_address (void *addr, size_t sz, int fd, size_t off)
   return ret;
 }
 
+#if defined(__aarch64__)
 const struct host_hooks host_hooks = HOST_HOOKS_INITIALIZER;
+#endif
