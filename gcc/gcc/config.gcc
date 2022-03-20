@@ -839,6 +839,7 @@ case ${target} in
   default_use_cxa_atexit=yes
   tm_p_file="${tm_p_file} haiku-protos.h"
   extra_objs="${extra_objs} haiku.o"
+  extra_options="${extra_options} haiku.opt"
   ;;
 *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu | *-*-uclinuxfdpiceabi)
   extra_options="$extra_options gnu-user.opt"
