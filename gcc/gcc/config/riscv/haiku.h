@@ -41,7 +41,15 @@ along with GCC; see the file COPYING3.  If not see
   "%{mabi=ilp32d:}" \
   "%{mabi=lp64:-sf}" \
   "%{mabi=lp64f:-sp}" \
+  "%{mabi=lp64d:}"
+
+#define LD_EMUL_SUFFIX \
   "%{mabi=lp64d:}" \
+  "%{mabi=lp64f:_lp64f}" \
+  "%{mabi=lp64:_lp64}" \
+  "%{mabi=ilp32d:}" \
+  "%{mabi=ilp32f:_ilp32f}" \
+  "%{mabi=ilp32:_ilp32}"
 
 #undef LIB_SPEC
 // Linux adds -latomic because RISC-V only has word-sized atomics
@@ -54,4 +62,4 @@ along with GCC; see the file COPYING3.  If not see
 #define ICACHE_FLUSH_FUNC "__riscv_flush_icache"
 
 #undef	LINK_SPEC
-#define LINK_SPEC "-melf" XLEN_SPEC "lriscv %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}} -X"
+#define LINK_SPEC "-melf" XLEN_SPEC DEFAULT_ENDIAN_SPEC "riscv" LD_EMUL_SUFFIX " %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}} -X"
