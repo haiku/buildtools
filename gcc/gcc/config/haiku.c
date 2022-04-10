@@ -29,4 +29,11 @@ haiku_override_options (void)
     dwarf_strict = 1;
   if (!global_options_set.x_dwarf_version)
     dwarf_version = 4;
+
+  /* PIE does not work on Haiku, but PIC does the right thing for position
+   * independant executables. So if asked for PIE, do PIC instead.
+   */
+  if (flag_pie && !flag_pic)
+    flag_pic = flag_pie;
+  flag_pie = 0;
 }
