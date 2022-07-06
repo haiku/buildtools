@@ -67,6 +67,12 @@ Boston, MA 02111-1307, USA.  */
 #define USE_LD_AS_NEEDED 1
 #endif
 
+/* Pass --eh-frame-hdr to provide a PT_EH_FRAME section, allowing unwind 
+   libraries to get frame information. */
+#if defined(HAVE_LD_EH_FRAME_HDR)
+#define LINK_EH_SPEC "%{!static|static-pie:--eh-frame-hdr} "
+#endif
+
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC "crti.o%s crtbeginS.o%s %{!shared:%{!nostart:start_dyn.o%s}} init_term_dyn.o%s"
 
