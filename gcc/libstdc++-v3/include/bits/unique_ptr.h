@@ -1,6 +1,6 @@
 // unique_ptr implementation -*- C++ -*-
 
-// Copyright (C) 2008-2017 Free Software Foundation, Inc.
+// Copyright (C) 2008-2018 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -48,7 +48,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    */
 
 #if _GLIBCXX_USE_DEPRECATED
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   template<typename> class auto_ptr;
+#pragma GCC diagnostic pop
 #endif
 
   /// Primary template of default_delete, used by unique_ptr
@@ -187,7 +190,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		typename = _DeleterConstraint<_Up>>
 	constexpr unique_ptr() noexcept
 	: _M_t()
-        { }
+	{ }
 
       /** Takes ownership of a pointer.
        *
@@ -230,7 +233,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /// Creates a unique_ptr that owns nothing.
       template <typename _Up = _Dp,
 		typename = _DeleterConstraint<_Up>>
-	constexpr unique_ptr(nullptr_t) noexcept : unique_ptr() { }
+	constexpr unique_ptr(nullptr_t) noexcept : _M_t() { }
 
       // Move constructors.
 
@@ -254,10 +257,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{ }
 
 #if _GLIBCXX_USE_DEPRECATED
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
       /// Converting constructor from @c auto_ptr
       template<typename _Up, typename = _Require<
 	       is_convertible<_Up*, _Tp*>, is_same<_Dp, default_delete<_Tp>>>>
 	unique_ptr(auto_ptr<_Up>&& __u) noexcept;
+#pragma GCC diagnostic pop
 #endif
 
       /// Destructor, invokes the deleter if the stored pointer is not null.
@@ -452,7 +458,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		typename = _DeleterConstraint<_Up>>
 	constexpr unique_ptr() noexcept
 	: _M_t()
-        { }
+	{ }
 
       /** Takes ownership of a pointer.
        *
@@ -511,7 +517,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /// Creates a unique_ptr that owns nothing.
       template <typename _Up = _Dp,
 		typename = _DeleterConstraint<_Up>>
-	constexpr unique_ptr(nullptr_t) noexcept : unique_ptr() { }
+	constexpr unique_ptr(nullptr_t) noexcept : _M_t() { }
 
       template<typename _Up, typename _Ep,
 	       typename = _Require<__safe_conversion_up<_Up, _Ep>>>

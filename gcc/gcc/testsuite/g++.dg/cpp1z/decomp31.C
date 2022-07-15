@@ -1,5 +1,5 @@
 // PR c++/81888
-// { dg-do compile { target c++1z } }
+// { dg-do compile { target c++17 } }
 
 struct S {
   bool s = true;

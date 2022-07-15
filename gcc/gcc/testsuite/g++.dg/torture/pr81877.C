@@ -1,6 +1,6 @@
 /* { dg-do run } */
 
-void __attribute__((noinline,noclone)) g(int p, int *out)
+void __attribute__((noipa)) g(int p, int *out)
 {
   int x = 0, y;
 #pragma GCC ivdep

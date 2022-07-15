@@ -14,7 +14,7 @@ bar (u128 d, u64 e, u64 f, u64 g, u128 h)
   return 0;
 }
 
-static u64
+static u64 __attribute__ ((noipa))
 foo (void)
 {
   (void)(v - bar (0, 0, 0, 0, 0));

@@ -1,4 +1,6 @@
 ! { dg-do compile }
+! PR fortran/82796
+! Code contributed by ripero84 at gmail dot com 
 module eq
    implicit none
    integer :: n1, n2

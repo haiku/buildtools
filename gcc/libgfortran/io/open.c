@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2017 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2018 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    F2003 I/O support contributed by Jerry DeLisle
 
@@ -529,6 +529,14 @@ new_unit (st_parameter_open *opp, gfc_unit *u, unit_flags *flags)
   if (u2 != NULL)
     unlock_unit (u2);
 
+  /* If the unit specified is preconnected with a file specified to be open,
+     then clear the format buffer.  */
+  if ((opp->common.unit == options.stdin_unit ||
+       opp->common.unit == options.stdout_unit ||
+       opp->common.unit == options.stderr_unit)
+      && (opp->common.flags & IOPARM_OPEN_HAS_FILE) != 0)
+    fbuf_destroy (u);
+
   /* Open file.  */
 
   s = open_external (opp, flags);
@@ -586,7 +594,7 @@ new_unit (st_parameter_open *opp, gfc_unit *u, unit_flags *flags)
   else
     {
       u->flags.has_recl = 0;
-      u->recl = max_offset;
+      u->recl = default_recl;
       if (compile_options.max_subrecord_length)
 	{
 	  u->recl_subrecord = compile_options.max_subrecord_length;
@@ -622,7 +630,9 @@ new_unit (st_parameter_open *opp, gfc_unit *u, unit_flags *flags)
   if (flags->access == ACCESS_STREAM)
     {
       u->maxrec = max_offset;
-      u->recl = 1;
+      /* F2018 (N2137) 12.10.2.26: If the connection is for stream
+	 access recl is assigned the value -2.  */
+      u->recl = -2;
       u->bytes_left = 1;
       u->strm_pos = stell (u->s) + 1;
     }
@@ -805,8 +815,6 @@ st_open (st_parameter_open *opp)
 	conv = compile_options.convert;
     }
   
-  /* We use big_endian, which is 0 on little-endian machines
-     and 1 on big-endian machines.  */
   switch (conv)
     {
     case GFC_CONVERT_NATIVE:
@@ -814,11 +822,11 @@ st_open (st_parameter_open *opp)
       break;
       
     case GFC_CONVERT_BIG:
-      conv = big_endian ? GFC_CONVERT_NATIVE : GFC_CONVERT_SWAP;
+      conv = __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ? GFC_CONVERT_NATIVE : GFC_CONVERT_SWAP;
       break;
       
     case GFC_CONVERT_LITTLE:
-      conv = big_endian ? GFC_CONVERT_SWAP : GFC_CONVERT_NATIVE;
+      conv = __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__ ? GFC_CONVERT_SWAP : GFC_CONVERT_NATIVE;
       break;
       
     default:

@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // Filesystem utils for the C++ library testsuite.
 //
-// Copyright (C) 2014-2017 Free Software Foundation, Inc.
+// Copyright (C) 2014-2018 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,7 +22,14 @@
 #ifndef _TESTSUITE_FS_H
 #define _TESTSUITE_FS_H 1
 
+// Assume we want std::filesystem in C++17, unless USE_FILESYSTEM_TS defined:
+#if __cplusplus >= 201703L && ! defined USE_FILESYSTEM_TS
+#include <filesystem>
+namespace test_fs = std::filesystem;
+#else
 #include <experimental/filesystem>
+namespace test_fs = std::experimental::filesystem;
+#endif
 #include <fstream>
 #include <string>
 #include <cstdio>
@@ -33,13 +40,14 @@ namespace __gnu_test
 {
 #define PATH_CHK(p1, p2, fn) \
     if ( p1.fn() != p2.fn() ) \
-      throw std::experimental::filesystem::filesystem_error( #fn, p1, p2, \
+      throw test_fs::filesystem_error("comparing '" #fn "' failed", p1, p2, \
 	  std::make_error_code(std::errc::invalid_argument) )
 
   void
-  compare_paths(const std::experimental::filesystem::path& p1,
-		const std::experimental::filesystem::path& p2)
+  compare_paths(const test_fs::path& p1,
+		const test_fs::path& p2)
   {
+    PATH_CHK( p1, p2, native );
     PATH_CHK( p1, p2, string );
     PATH_CHK( p1, p2, empty );
     PATH_CHK( p1, p2, has_root_path );
@@ -55,7 +63,7 @@ namespace __gnu_test
     auto d1 = std::distance(p1.begin(), p1.end());
     auto d2 = std::distance(p2.begin(), p2.end());
     if( d1 != d2 )
-      throw std::experimental::filesystem::filesystem_error(
+      throw test_fs::filesystem_error(
 	  "distance(begin, end)", p1, p2,
 	  std::make_error_code(std::errc::invalid_argument) );
   }
@@ -67,28 +75,44 @@ namespace __gnu_test
 
   // This is NOT supposed to be a secure way to get a unique name!
   // We just need a path that doesn't exist for testing purposes.
-  std::experimental::filesystem::path
-  nonexistent_path()
+  test_fs::path
+  nonexistent_path(std::string file = __builtin_FILE())
   {
-    std::experimental::filesystem::path p;
+    // Include the caller's filename to help identify tests that fail to
+    // clean up the files they create.
+    // Remove .cc extension:
+    if (file.length() > 3 && file.compare(file.length() - 3, 3, ".cc") == 0)
+      file.resize(file.length() - 3);
+    // And directory:
+    auto pos = file.find_last_of("/\\");
+    if (pos != file.npos)
+      file.erase(0, pos+1);
+
+    test_fs::path p;
 #if defined(_GNU_SOURCE) || _XOPEN_SOURCE >= 500 || _POSIX_C_SOURCE >= 200112L
-    char tmp[] = "filesystem-ts-test.XXXXXX";
+    char tmp[] = "filesystem-test.XXXXXX";
     int fd = ::mkstemp(tmp);
     if (fd == -1)
-      throw std::experimental::filesystem::filesystem_error("mkstemp failed",
+      throw test_fs::filesystem_error("mkstemp failed",
 	  std::error_code(errno, std::generic_category()));
     ::unlink(tmp);
     ::close(fd);
-    p = tmp;
+    if (!file.empty())
+      file.insert(0, 1, '-');
+    file.insert(0, tmp);
+    p = file;
 #else
-    char buf[64];
+    if (file.length() > 64)
+      file.resize(64);
+    char buf[128];
     static int counter;
 #if _GLIBCXX_USE_C99_STDIO
-    std::snprintf(buf, 64,
+    std::snprintf(buf, 128,
 #else
     std::sprintf(buf,
 #endif
-      "filesystem-ts-test.%d.%lu", counter++, (unsigned long) ::getpid());
+      "filesystem-test.%d.%lu-%s", counter++, (unsigned long) ::getpid(),
+      file.c_str());
     p = buf;
 #endif
     return p;
@@ -97,7 +121,7 @@ namespace __gnu_test
   // RAII helper to remove a file on scope exit.
   struct scoped_file
   {
-    using path_type = std::experimental::filesystem::path;
+    using path_type = test_fs::path;
 
     enum adopt_file_t { adopt_file };
 

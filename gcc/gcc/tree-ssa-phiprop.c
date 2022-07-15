@@ -1,5 +1,5 @@
 /* Backward propagation of indirect loads through PHIs.
-   Copyright (C) 2007-2017 Free Software Foundation, Inc.
+   Copyright (C) 2007-2018 Free Software Foundation, Inc.
    Contributed by Richard Guenther <rguenther@suse.de>
 
 This file is part of GCC.
@@ -150,7 +150,7 @@ phiprop_insert_phi (basic_block bb, gphi *phi, gimple *use_stmt,
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "Inserting PHI for result of load ");
-      print_gimple_stmt (dump_file, use_stmt, 0, 0);
+      print_gimple_stmt (dump_file, use_stmt, 0);
     }
 
   /* Add PHI arguments for each edge inserting loads of the
@@ -177,10 +177,10 @@ phiprop_insert_phi (basic_block bb, gphi *phi, gimple *use_stmt,
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, "  for edge defining ");
-	      print_generic_expr (dump_file, PHI_ARG_DEF_FROM_EDGE (phi, e), 0);
+	      print_generic_expr (dump_file, PHI_ARG_DEF_FROM_EDGE (phi, e));
 	      fprintf (dump_file, " reusing PHI result ");
 	      print_generic_expr (dump_file,
-				  phivn[SSA_NAME_VERSION (old_arg)].value, 0);
+				  phivn[SSA_NAME_VERSION (old_arg)].value);
 	      fprintf (dump_file, "\n");
 	    }
 	  /* Reuse a formerly created dereference.  */
@@ -210,9 +210,9 @@ phiprop_insert_phi (basic_block bb, gphi *phi, gimple *use_stmt,
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, "  for edge defining ");
-	      print_generic_expr (dump_file, PHI_ARG_DEF_FROM_EDGE (phi, e), 0);
+	      print_generic_expr (dump_file, PHI_ARG_DEF_FROM_EDGE (phi, e));
 	      fprintf (dump_file, " inserting load ");
-	      print_gimple_stmt (dump_file, tmp, 0, 0);
+	      print_gimple_stmt (dump_file, tmp, 0);
 	    }
 	}
 
@@ -225,7 +225,7 @@ phiprop_insert_phi (basic_block bb, gphi *phi, gimple *use_stmt,
       update_stmt (new_phi);
 
       if (dump_file && (dump_flags & TDF_DETAILS))
-	print_gimple_stmt (dump_file, new_phi, 0, 0);
+	print_gimple_stmt (dump_file, new_phi, 0);
     }
 
   return res;
@@ -270,6 +270,7 @@ propagate_with_phi (basic_block bb, gphi *phi, struct phiprop_d *phivn,
   use_operand_p arg_p, use;
   ssa_op_iter i;
   bool phi_inserted;
+  bool changed;
   tree type = NULL_TREE;
 
   if (!POINTER_TYPE_P (TREE_TYPE (ptr))
@@ -317,6 +318,7 @@ propagate_with_phi (basic_block bb, gphi *phi, struct phiprop_d *phivn,
   /* Replace the first dereference of *ptr if there is one and if we
      can move the loads to the place of the ptr phi node.  */
   phi_inserted = false;
+  changed = false;
   FOR_EACH_IMM_USE_STMT (use_stmt, ui, ptr)
     {
       gimple *def_stmt;
@@ -403,7 +405,7 @@ propagate_with_phi (basic_block bb, gphi *phi, struct phiprop_d *phivn,
 	  unlink_stmt_vdef (use_stmt);
 	  gsi_remove (&gsi, true);
 
-	  phi_inserted = true;
+	  changed = true;
 	}
 
       /* Found a proper dereference.  Insert a phi node if this
@@ -424,6 +426,7 @@ propagate_with_phi (basic_block bb, gphi *phi, struct phiprop_d *phivn,
 	  gsi_remove (&gsi, true);
 
 	  phi_inserted = true;
+	  changed = true;
 	}
       else
 	{
@@ -431,13 +434,14 @@ propagate_with_phi (basic_block bb, gphi *phi, struct phiprop_d *phivn,
 	     load.  */
 	  gimple_assign_set_rhs1 (use_stmt, res);
 	  update_stmt (use_stmt);
+	  changed = true;
 	}
 
 next:;
       /* Continue searching for a proper dereference.  */
     }
 
-  return phi_inserted;
+  return changed;
 }
 
 /* Main entry for phiprop pass.  */
@@ -491,8 +495,14 @@ pass_phiprop::execute (function *fun)
   bbs = get_all_dominated_blocks (CDI_DOMINATORS,
 				  single_succ (ENTRY_BLOCK_PTR_FOR_FN (fun)));
   FOR_EACH_VEC_ELT (bbs, i, bb)
-    for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
-      did_something |= propagate_with_phi (bb, gsi.phi (), phivn, n);
+    {
+      /* Since we're going to move dereferences across predecessor
+         edges avoid blocks with abnormal predecessors.  */
+      if (bb_has_abnormal_pred (bb))
+	continue;
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	did_something |= propagate_with_phi (bb, gsi.phi (), phivn, n);
+    }
 
   if (did_something)
     gsi_commit_edge_inserts ();

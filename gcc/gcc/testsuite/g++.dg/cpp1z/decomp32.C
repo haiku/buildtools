@@ -18,15 +18,15 @@ namespace std {
 
 auto [a] = A{};	// { dg-error "1 name provided" }
 		// { dg-message "while 'A' decomposes into -1 elements" "" { target *-*-* } .-1 }
-		// { dg-warning "decomposition declaration only available with" "" { target c++14_down } .-2 }
+		// { dg-warning "structured bindings only available with" "" { target c++14_down } .-2 }
 #ifdef __SIZEOF_INT128__
 auto [b] = B{};	// { dg-error "1 name provided" "" { target int128 } }
 		// { dg-message "while 'B' decomposes into \[0-9xa-fXA-F]* elements" "" { target int128 } .-1 }
-		// { dg-warning "decomposition declaration only available with" "" { target { c++14_down && int128 } } .-2 }
+		// { dg-warning "structured bindings only available with" "" { target { c++14_down && int128 } } .-2 }
 auto [c, d] = B{};	// { dg-error "2 names provided" "" { target int128 } }
 			// { dg-message "while 'B' decomposes into \[0-9xa-fXA-F]* elements" "" { target int128 } .-1 }
-			// { dg-warning "decomposition declaration only available with" "" { target { c++14_down && int128 } } .-2 }
+			// { dg-warning "structured bindings only available with" "" { target { c++14_down && int128 } } .-2 }
 #endif
 auto [e, f, g] = A{};	// { dg-error "3 names provided" }
 			// { dg-message "while 'A' decomposes into -1 elements" "" { target *-*-* } .-1 }
-			// { dg-warning "decomposition declaration only available with" "" { target c++14_down } .-2 }
+			// { dg-warning "structured bindings only available with" "" { target c++14_down } .-2 }
