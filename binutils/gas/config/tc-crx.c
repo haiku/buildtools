@@ -1,5 +1,5 @@
 /* tc-crx.c -- Assembler code for the CRX CPU core.
-   Copyright (C) 2004-2017 Free Software Foundation, Inc.
+   Copyright (C) 2004-2019 Free Software Foundation, Inc.
 
    Contributed by Tomer Levi, NSC, Israel.
    Originally written for GAS 2.12 by Tomer Levi, NSC, Israel.
@@ -69,21 +69,21 @@ static struct hash_control *reg_hash;
 /* CRX coprocessor registers hash table.  */
 static struct hash_control *copreg_hash;
 /* Current instruction we're assembling.  */
-const inst *instruction;
+static const inst *instruction;
 
 /* Global variables.  */
 
 /* Array to hold an instruction encoding.  */
-long output_opcode[2];
+static long output_opcode[2];
 
 /* Nonzero means a relocatable symbol.  */
-int relocatable;
+static int relocatable;
 
 /* A copy of the original instruction (used in error messages).  */
-char ins_parse[MAX_INST_LEN];
+static char ins_parse[MAX_INST_LEN];
 
 /* The current processed argument number.  */
-int cur_arg_num;
+static int cur_arg_num;
 
 /* Generic assembler global variables which must be defined by all targets.  */
 
@@ -569,7 +569,7 @@ md_begin (void)
       {
 	hashret = hash_insert (reg_hash, regtab->name, (void *) regtab);
 	if (hashret)
-	  as_fatal (_("Internal Error:  Can't hash %s: %s"),
+	  as_fatal (_("Internal error: Can't hash %s: %s"),
 		    regtab->name,
 		    hashret);
       }
@@ -588,7 +588,7 @@ md_begin (void)
 	hashret = hash_insert (copreg_hash, copregtab->name,
 			       (void *) copregtab);
 	if (hashret)
-	  as_fatal (_("Internal Error:  Can't hash %s: %s"),
+	  as_fatal (_("Internal error: Can't hash %s: %s"),
 		    copregtab->name,
 		    hashret);
       }
@@ -715,8 +715,8 @@ exponent2scale (int val)
 static void
 set_operand (char *operand, ins * crx_ins)
 {
-  char *operandS; /* Pointer to start of sub-opearand.  */
-  char *operandE; /* Pointer to end of sub-opearand.  */
+  char *operandS; /* Pointer to start of sub-operand.  */
+  char *operandE; /* Pointer to end of sub-operand.  */
   expressionS scale;
   int scale_val;
   char *input_save, c;
@@ -756,7 +756,7 @@ set_operand (char *operand, ins * crx_ins)
 	operandE++;
       *operandE = '\0';
       if ((cur_arg->r = get_register (operandS)) == nullregister)
-	as_bad (_("Illegal register `%s' in Instruction `%s'"),
+	as_bad (_("Illegal register `%s' in instruction `%s'"),
 		operandS, ins_parse);
 
       if (cur_arg->type != arg_rbase)
@@ -776,7 +776,7 @@ set_operand (char *operand, ins * crx_ins)
 	operandE++;
       *operandE++ = '\0';
       if ((cur_arg->r = get_register (operandS)) == nullregister)
-	as_bad (_("Illegal register `%s' in Instruction `%s'"),
+	as_bad (_("Illegal register `%s' in instruction `%s'"),
 		operandS, ins_parse);
 
       /* Skip leading white space.  */
@@ -791,7 +791,7 @@ set_operand (char *operand, ins * crx_ins)
       *operandE++ = '\0';
 
       if ((cur_arg->i_r = get_register (operandS)) == nullregister)
-	as_bad (_("Illegal register `%s' in Instruction `%s'"),
+	as_bad (_("Illegal register `%s' in instruction `%s'"),
 		operandS, ins_parse);
 
       /* Skip leading white space.  */
@@ -1043,9 +1043,9 @@ parse_insn (ins *insn, char *operands)
   int i;
 
   /* Handle instructions with no operands.  */
-  for (i = 0; no_op_insn[i] != NULL; i++)
+  for (i = 0; crx_no_op_insn[i] != NULL; i++)
   {
-    if (streq (no_op_insn[i], instruction->mnemonic))
+    if (streq (crx_no_op_insn[i], instruction->mnemonic))
     {
       insn->nargs = 0;
       return;
@@ -1134,9 +1134,8 @@ getreg_image (reg r)
 
 /* Issue a error message when register is illegal.  */
 #define IMAGE_ERR \
-  as_bad (_("Illegal register (`%s') in Instruction: `%s'"), \
-	    reg_name, ins_parse);			     \
-  break;
+  as_bad (_("Illegal register (`%s') in instruction: `%s'"), \
+	  reg_name, ins_parse);
 
   switch (rreg->type)
   {
@@ -1145,18 +1144,21 @@ getreg_image (reg r)
 	return rreg->image;
       else
 	IMAGE_ERR;
+      break;
 
     case CRX_CFG_REGTYPE:
       if (is_procreg)
 	return rreg->image;
       else
 	IMAGE_ERR;
+      break;
 
     case CRX_R_REGTYPE:
       if (! is_procreg)
 	return rreg->image;
       else
 	IMAGE_ERR;
+      break;
 
     case CRX_C_REGTYPE:
     case CRX_CS_REGTYPE:
@@ -1165,6 +1167,7 @@ getreg_image (reg r)
 
     default:
       IMAGE_ERR;
+      break;
   }
 
   return 0;
@@ -1261,14 +1264,14 @@ print_operand (int nbits, int shift, argument *arg)
 
     case arg_copr:
       if (arg->cr < c0 || arg->cr > c15)
-	as_bad (_("Illegal Co-processor register in Instruction `%s' "),
+	as_bad (_("Illegal co-processor register in instruction `%s'"),
 		ins_parse);
       CRX_PRINT (0, getreg_image (arg->cr), shift);
       break;
 
     case arg_copsr:
       if (arg->cr < cs0 || arg->cr > cs15)
-	as_bad (_("Illegal Co-processor special register in Instruction `%s' "),
+	as_bad (_("Illegal co-processor special register in instruction `%s'"),
 		ins_parse);
       CRX_PRINT (0, getreg_image (arg->cr), shift);
       break;
@@ -1387,7 +1390,7 @@ check_range (long *num, int bits, int unsigned flags, int update)
 		      : instruction->flags & DISPUD4 ? 4
 		      : 0);
 
-      for (bin = 0; bin < cst4_maps; bin++)
+      for (bin = 0; bin < crx_cst4_maps; bin++)
 	{
 	  if (value == mul * bin)
 	    {
@@ -1404,9 +1407,9 @@ check_range (long *num, int bits, int unsigned flags, int update)
     {
       int is_cst4 = 0;
 
-      for (bin = 0; bin < cst4_maps; bin++)
+      for (bin = 0; bin < crx_cst4_maps; bin++)
 	{
-	  if (value == (uint32_t) cst4_map[bin])
+	  if (value == (uint32_t) crx_cst4_map[bin])
 	    {
 	      is_cst4 = 1;
 	      if (update)
@@ -1610,7 +1613,7 @@ next_insn:
   else
     /* Full match - print the encoding to output file.  */
     {
-      /* Make further checkings (such that couldn't be made earlier).
+      /* Make further checking (such that couldn't be made earlier).
 	 Warn the user if necessary.  */
       warn_if_needed (insn);
 
@@ -1648,7 +1651,7 @@ next_insn:
   return 1;
 }
 
-/* Bunch of error checkings.
+/* Bunch of error checking.
    The checks are made after a matching instruction was found.  */
 
 void
@@ -1733,7 +1736,7 @@ mask_reg (int r, unsigned short int *mask)
 {
   if ((reg)r > (reg)sp)
     {
-      as_bad (_("Invalid Register in Register List"));
+      as_bad (_("Invalid register in register list"));
       return;
     }
 
@@ -1752,7 +1755,7 @@ preprocess_reglist (char *param, int *allocated)
   int reg_counter = 0;		  /* Count number of parsed registers.  */
   unsigned short int mask = 0;	  /* Mask for 16 general purpose registers.  */
   char *new_param;		  /* New created operands string.  */
-  char *paramP = param;		  /* Pointer to original opearands string.  */
+  char *paramP = param;		  /* Pointer to original operands string.  */
   char maskstring[10];		  /* Array to print the mask as a string.  */
   int hi_found = 0, lo_found = 0; /* Boolean flags for hi/lo registers.  */
   reg r;
@@ -1897,7 +1900,7 @@ print_insn (ins *insn)
       words[j++] = output_opcode[i] & 0xFFFF;
     }
 
-  /* Handle relaxtion.  */
+  /* Handle relaxation.  */
   if ((instruction->flags & RELAXABLE) && relocatable)
     {
       int relax_subtype;

@@ -1,6 +1,6 @@
 // copy-relocs.h -- handle COPY relocations for gold   -*- C++ -*-
 
-// Copyright (C) 2006-2017 Free Software Foundation, Inc.
+// Copyright (C) 2006-2019 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -155,8 +155,9 @@ class Copy_relocs
   // The dynamic BSS data which goes into the .bss section.  This is
   // where writable variables which require COPY relocations are placed.
   Output_data_space* dynbss_;
-  // The dynamic read-only data, which goes into the .dynbss section.  This
-  // is where read-only variables which require COPY relocations are placed.
+  // The dynamic read-only data, which goes into the .data.rel.ro section.
+  // This is where read-only variables which require COPY relocations are
+  // placed.
   Output_data_space* dynrelro_;
 };
 

@@ -21,6 +21,7 @@ Section Headers:
  +\[[ 0-9]+\] .tbss +NOBITS .* 0+20 00 WAT +0 +0 +1
  +\[[ 0-9]+\] .dynamic +DYNAMIC .*
  +\[[ 0-9]+\] .got +PROGBITS .*
+#...
  +\[[ 0-9]+\] .symtab .*
  +\[[ 0-9]+\] .strtab .*
  +\[[ 0-9]+\] .shstrtab .*
@@ -62,7 +63,7 @@ Relocation section '.rela.dyn' at offset 0x[0-9a-f]+ contains 14 entries:
 [0-9a-f ]+R_390_TLS_DTPOFF +0+ sg1 \+ 0
 [0-9a-f ]+R_390_TLS_TPOFF +0+4 sg2 \+ 0
 
-Relocation section '.rela.plt' at offset 0x[0-9a-f]+ contains 1 entries:
+Relocation section '.rela.plt' at offset 0x[0-9a-f]+ contains 1 entry:
  +Offset +Info +Type +Symbol's Value +Symbol's Name \+ Addend
 [0-9a-f ]+R_390_JMP_SLOT +0+ __tls_get_offset \+ 0
 
@@ -78,12 +79,9 @@ Symbol table '\.dynsym' contains [0-9]+ entries:
 .* NOTYPE +GLOBAL +DEFAULT +UND __tls_get_offset
 .* TLS +GLOBAL +DEFAULT +8 sg1
 .* FUNC +GLOBAL +DEFAULT +7 fn1
-.* NOTYPE +GLOBAL +DEFAULT +11 __bss_start
 .* TLS +GLOBAL +DEFAULT +8 sg2
 .* TLS +GLOBAL +DEFAULT +8 sg6
 .* TLS +GLOBAL +DEFAULT +8 sg7
-.* NOTYPE +GLOBAL +DEFAULT +11 _edata
-.* NOTYPE +GLOBAL +DEFAULT +11 _end
 
 Symbol table '\.symtab' contains [0-9]+ entries:
  +Num: +Value +Size +Type +Bind +Vis +Ndx +Name
@@ -99,6 +97,7 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* SECTION +LOCAL +DEFAULT +9 
 .* SECTION +LOCAL +DEFAULT +10 
 .* SECTION +LOCAL +DEFAULT +11 
+#...
 .* FILE +LOCAL +DEFAULT +ABS .*
 .* TLS +LOCAL +DEFAULT +8 sl1
 .* TLS +LOCAL +DEFAULT +8 sl2
@@ -134,9 +133,6 @@ Symbol table '\.symtab' contains [0-9]+ entries:
 .* NOTYPE +GLOBAL +DEFAULT +UND __tls_get_offset
 .* TLS +GLOBAL +DEFAULT +8 sg1
 .* FUNC +GLOBAL +DEFAULT +7 fn1
-.* NOTYPE +GLOBAL +DEFAULT +11 __bss_start
 .* TLS +GLOBAL +DEFAULT +8 sg2
 .* TLS +GLOBAL +DEFAULT +8 sg6
 .* TLS +GLOBAL +DEFAULT +8 sg7
-.* NOTYPE +GLOBAL +DEFAULT +11 _edata
-.* NOTYPE +GLOBAL +DEFAULT +11 _end

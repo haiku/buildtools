@@ -15,14 +15,13 @@ case ${target} in
 	TEXT_START_ADDR=0x0
 	GOT="
 .got ${RELOCATING-0} : {
-  *(.dsbt)
-  *(.got.plt) *(.igot.plt) *(.got) *(.igot)
+  ${RELOCATING+*(.dsbt)
+  *(.got.plt) *(.igot.plt) }*(.got)${RELOCATING+ *(.igot)}
 }"
 	;;
 esac
 MAXPAGESIZE="CONSTANT (MAXPAGESIZE)"
 ARCH=tic6x
-EXECUTABLE_SYMBOLS="EXTERN (__c6xabi_DSBT_BASE);"
 OTHER_GOT_SYMBOLS="PROVIDE_HIDDEN (__c6xabi_DSBT_BASE = .);"
 # ".bss" is near (small) BSS, ".far" is far (normal) BSS, ".const" is
 # far read-only data, ".rodata" is near read-only data.  ".neardata"

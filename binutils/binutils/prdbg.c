@@ -1,5 +1,5 @@
 /* prdbg.c -- Print out generic debugging information.
-   Copyright (C) 1995-2017 Free Software Foundation, Inc.
+   Copyright (C) 1995-2019 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
    Tags style generation written by Salvador E. Tropea <set@computer.org>.
 
@@ -286,6 +286,8 @@ static const struct debug_write_fns tg_fns =
   pr_end_function,		/* Same, does nothing.  */
   tg_lineno
 };
+
+static int demangle_flags = DMGL_ANSI | DMGL_PARAMS;
 
 /* Print out the generic debugging information recorded in dhandle.  */
 
@@ -581,7 +583,7 @@ static bfd_boolean
 pr_int_type (void *p, unsigned int size, bfd_boolean unsignedp)
 {
   struct pr_handle *info = (struct pr_handle *) p;
-  char ab[10];
+  char ab[40];
 
   sprintf (ab, "%sint%d", unsignedp ? "u" : "", size * 8);
   return push_type (info, ab);
@@ -593,7 +595,7 @@ static bfd_boolean
 pr_float_type (void *p, unsigned int size)
 {
   struct pr_handle *info = (struct pr_handle *) p;
-  char ab[10];
+  char ab[40];
 
   if (size == 4)
     return push_type (info, "float");
@@ -623,7 +625,7 @@ static bfd_boolean
 pr_bool_type (void *p, unsigned int size)
 {
   struct pr_handle *info = (struct pr_handle *) p;
-  char ab[10];
+  char ab[40];
 
   sprintf (ab, "bool%d", size * 8);
 
@@ -2600,7 +2602,7 @@ tg_variable (void *p, const char *name, enum debug_var_kind kind,
 
   dname = NULL;
   if (info->demangler)
-    dname = info->demangler (info->abfd, name, DMGL_ANSI | DMGL_PARAMS);
+    dname = info->demangler (info->abfd, name, demangle_flags);
 
   from_class = NULL;
   if (dname != NULL)
@@ -2661,7 +2663,7 @@ tg_start_function (void *p, const char *name, bfd_boolean global)
 
   dname = NULL;
   if (info->demangler)
-    dname = info->demangler (info->abfd, name, DMGL_ANSI | DMGL_PARAMS);
+    dname = info->demangler (info->abfd, name, demangle_flags);
 
   if (! substitute_type (info, dname ? dname : name))
     return FALSE;

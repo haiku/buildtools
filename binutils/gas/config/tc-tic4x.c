@@ -1,5 +1,5 @@
 /* tc-tic4x.c -- Assemble for the Texas Instruments TMS320C[34]x.
-   Copyright (C) 1997-2017 Free Software Foundation, Inc.
+   Copyright (C) 1997-2019 Free Software Foundation, Inc.
 
    Contributed by Michael P. Hayes (m.hayes@elec.canterbury.ac.nz)
 
@@ -223,7 +223,7 @@ const char FLT_CHARS[] = "fFilsS";
 extern FLONUM_TYPE generic_floating_point_number;
 
 /* Precision in LittleNums.  */
-#define MAX_PRECISION (4)       /* Its a bit overkill for us, but the code
+#define MAX_PRECISION (4)       /* It's a bit overkill for us, but the code
                                    requires it... */
 #define S_PRECISION (1)		/* Short float constants 16-bit.  */
 #define F_PRECISION (2)		/* Float and double types 32-bit.  */
@@ -903,7 +903,7 @@ tic4x_stringer (int append_zero)
               as_bad (_("Non-constant symbols not allowed\n"));
               return;
             }
-          exp.X_add_number &= 255; /* Limit numeber to 8-bit */
+          exp.X_add_number &= 255; /* Limit number to 8-bit */
 	  emit_expr (&exp, 1);
           bytes++;
 	}
@@ -2353,7 +2353,7 @@ tic4x_insn_check (tic4x_insn_t *tinsn)
       if (tinsn->operands[1].mode == M_REGISTER
 	  && tinsn->operands[tinsn->num_operands-1].mode == M_REGISTER
 	  && tinsn->operands[1].expr.X_add_number == tinsn->operands[tinsn->num_operands-1].expr.X_add_number )
-        as_warn (_("Equal parallell destination registers, one result will be discarded"));
+        as_warn (_("Equal parallel destination registers, one result will be discarded"));
     }
 }
 

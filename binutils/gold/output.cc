@@ -1,6 +1,6 @@
 // output.cc -- manage the output file for gold
 
-// Copyright (C) 2006-2017 Free Software Foundation, Inc.
+// Copyright (C) 2006-2019 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -127,14 +127,26 @@ namespace gold
 static int
 gold_fallocate(int o, off_t offset, off_t len)
 {
+  if (len <= 0)
+    return 0;
+
 #ifdef HAVE_POSIX_FALLOCATE
   if (parameters->options().posix_fallocate())
-    return ::posix_fallocate(o, offset, len);
+    {
+      int err = ::posix_fallocate(o, offset, len);
+      if (err != EINVAL && err != ENOSYS && err != EOPNOTSUPP)
+	return err;
+    }
 #endif // defined(HAVE_POSIX_FALLOCATE)
+
 #ifdef HAVE_FALLOCATE
-  if (::fallocate(o, 0, offset, len) == 0)
-    return 0;
+  {
+    int err = ::fallocate(o, 0, offset, len);
+    if (err != EINVAL && err != ENOSYS && err != EOPNOTSUPP)
+      return err;
+  }
 #endif // defined(HAVE_FALLOCATE)
+
   if (::ftruncate(o, offset + len) < 0)
     return errno;
   return 0;
@@ -2383,7 +2395,8 @@ Output_section::Output_section(const char* name, elfcpp::Elf_Word type,
     lookup_maps_(new Output_section_lookup_maps),
     free_list_(),
     free_space_fill_(NULL),
-    patch_space_(0)
+    patch_space_(0),
+    reloc_section_(NULL)
 {
   // An unallocated section has no address.  Forcing this means that
   // we don't need special treatment for symbols defined in debug
@@ -2435,7 +2448,13 @@ Output_section::add_input_section(Layout* layout,
 				  unsigned int reloc_shndx,
 				  bool have_sections_script)
 {
+  section_size_type input_section_size = shdr.get_sh_size();
+  section_size_type uncompressed_size;
   elfcpp::Elf_Xword addralign = shdr.get_sh_addralign();
+  if (object->section_is_compressed(shndx, &uncompressed_size,
+				    &addralign))
+    input_section_size = uncompressed_size;
+
   if ((addralign & (addralign - 1)) != 0)
     {
       object->error(_("invalid alignment %lu for section \"%s\""),
@@ -2484,11 +2503,6 @@ Output_section::add_input_section(Layout* layout,
 	  return -1;
 	}
     }
-
-  section_size_type input_section_size = shdr.get_sh_size();
-  section_size_type uncompressed_size;
-  if (object->section_is_compressed(shndx, &uncompressed_size))
-    input_section_size = uncompressed_size;
 
   off_t offset_in_section;
 

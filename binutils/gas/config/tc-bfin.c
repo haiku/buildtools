@@ -1,5 +1,5 @@
 /* tc-bfin.c -- Assembler for the ADI Blackfin.
-   Copyright (C) 2005-2017 Free Software Foundation, Inc.
+   Copyright (C) 2005-2019 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -19,7 +19,6 @@
    02110-1301, USA.  */
 
 #include "as.h"
-#include "struc-symbol.h"
 #include "bfin-defs.h"
 #include "obstack.h"
 #include "safe-ctype.h"
@@ -968,13 +967,13 @@ INSTR_T Expr_Node_Gen_Reloc (Expr_Node *head, int parent_reloc);
 INSTR_T
 Expr_Node_Gen_Reloc (Expr_Node * head, int parent_reloc)
 {
-  /* Top level reloction expression generator VDSP style.
+  /* Top level relocation expression generator VDSP style.
    If the relocation is just by itself, generate one item
    else generate this convoluted expression.  */
 
   INSTR_T note = NULL_CODE;
   INSTR_T note1 = NULL_CODE;
-  int pcrel = 1;  /* Is the parent reloc pcrelative?
+  int pcrel = 1;  /* Is the parent reloc pc-relative?
 		  This calculation here and HOWTO should match.  */
 
   if (parent_reloc)
@@ -1930,7 +1929,7 @@ bfin_loop_beginend (Expr_Node *exp, int begin)
   /* LOOP_END follows the last instruction in the loop.
      Adjust label address.  */
   if (!begin)
-    ((struct local_symbol *) linelabel)->lsy_value -= last_insn_size;
+    *symbol_X_add_number (linelabel) -= last_insn_size;
 }
 
 bfd_boolean

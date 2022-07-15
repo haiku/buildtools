@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2017 Free Software Foundation, Inc.
+# Copyright (C) 2014-2019 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -54,9 +54,9 @@
 #	INPUT_FILES - INPUT command of files to always include
 #	WRITABLE_RODATA - if set, the .rodata section should be writable
 #	INIT_START, INIT_END -  statements just before and just after
-# 	combination of .init sections.
+#	combination of .init sections.
 #	FINI_START, FINI_END - statements just before and just after
-# 	combination of .fini sections.
+#	combination of .fini sections.
 #	STACK_ADDR - start of a .stack section.
 #	OTHER_SYMBOLS - symbols to place right at the end of the script.
 #	ETEXT_NAME - name of a symbol for the end of the text section,
@@ -141,16 +141,16 @@ if test -z "${INITIAL_READONLY_SECTIONS}${CREATE_SHLIB}"; then
 fi
 if test -z "$PLT"; then
   IPLT=".iplt         ${RELOCATING-0} : { *(.iplt) }"
-  PLT=".plt          ${RELOCATING-0} : { *(.plt)${IREL_IN_PLT+ *(.iplt)} }
+  PLT=".plt          ${RELOCATING-0} : { *(.plt)${RELOCATING+${IREL_IN_PLT+ *(.iplt)}} }
   ${IREL_IN_PLT-$IPLT}"
 fi
 test -n "${DATA_PLT-${BSS_PLT-text}}" && TEXT_PLT=
 if test -z "$GOT"; then
   if test -z "$SEPARATE_GOTPLT"; then
-    GOT=".got          ${RELOCATING-0} : { *(.got.plt) *(.igot.plt) *(.got) *(.igot) }"
+    GOT=".got          ${RELOCATING-0} : {${RELOCATING+ *(.got.plt) *(.igot.plt)} *(.got)${RELOCATING+ *(.igot)} }"
   else
-    GOT=".got          ${RELOCATING-0} : { *(.got) *(.igot) }"
-    GOTPLT=".got.plt      ${RELOCATING-0} : { *(.got.plt)  *(.igot.plt) }"
+    GOT=".got          ${RELOCATING-0} : { *(.got)${RELOCATING+ *(.igot)} }"
+    GOTPLT=".got.plt      ${RELOCATING-0} : { *(.got.plt)${RELOCATING+ *(.igot.plt)} }"
   fi
 fi
 REL_IFUNC=".rel.ifunc    ${RELOCATING-0} : { *(.rel.ifunc) }"
@@ -176,9 +176,9 @@ if test -z "${NO_SMALL_DATA}"; then
   {
     ${RELOCATING+${SBSS_START_SYMBOLS}}
     ${CREATE_SHLIB+*(.${SBSS_NAME}2 .${SBSS_NAME}2.* .gnu.linkonce.sb2.*)}
-    *(.dyn${SBSS_NAME})
+    ${RELOCATING+*(.dyn${SBSS_NAME})}
     *(.${SBSS_NAME}${RELOCATING+ .${SBSS_NAME}.* .gnu.linkonce.sb.*})
-    *(.scommon)
+    ${RELOCATING+*(.scommon)}
     ${RELOCATING+${SBSS_END_SYMBOLS}}
   }"
   SBSS2=".${SBSS_NAME}2        ${RELOCATING-0} : { *(.${SBSS_NAME}2${RELOCATING+ .${SBSS_NAME}2.* .gnu.linkonce.sb2.*}) }"
@@ -303,10 +303,11 @@ DTOR=".dtors        ${CONSTRUCTING-0} :
     KEEP (*(.dtors))
     ${CONSTRUCTING+${DTOR_END}}
   }"
-STACK="  .stack        ${RELOCATING-0}${RELOCATING+${STACK_ADDR}} :
+STACK=".stack        ${RELOCATING-0}${RELOCATING+${STACK_ADDR}} :
   {
     ${RELOCATING+${USER_LABEL_PREFIX}_stack = .;}
     *(.stack)
+    ${RELOCATING+${STACK_SENTINEL}}
   }"
 
 TEXT_START_ADDR="SEGMENT_START(\"text-segment\", ${TEXT_START_ADDR})"
@@ -326,7 +327,7 @@ else
 fi
 
 cat <<EOF
-/* Copyright (C) 2014-2017 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -357,7 +358,7 @@ emit_early_ro()
 {
   cat <<EOF
   ${INITIAL_READONLY_SECTIONS}
-  .note.gnu.build-id : { *(.note.gnu.build-id) }
+  .note.gnu.build-id ${RELOCATING-0}: { *(.note.gnu.build-id) }
 EOF
 }
 
@@ -426,13 +427,13 @@ cat >> ldscripts/dyntmp.$$ <<EOF
   .rel.dyn      ${RELOCATING-0} :
     {
 EOF
-sed -e '/^[ 	]*[{}][ 	]*$/d;/:[ 	]*$/d;/\.rela\./d;/__rela_iplt_/d;s/^.*: { *\(.*\)}$/      \1/' $COMBRELOC >> ldscripts/dyntmp.$$
+sed -e '/^[	 ]*[{}][	 ]*$/d;/:[	 ]*$/d;/\.rela\./d;/__rela_iplt_/d;s/^.*: { *\(.*\)}$/      \1/' $COMBRELOC >> ldscripts/dyntmp.$$
 cat >> ldscripts/dyntmp.$$ <<EOF
     }
   .rela.dyn     ${RELOCATING-0} :
     {
 EOF
-sed -e '/^[ 	]*[{}][ 	]*$/d;/:[ 	]*$/d;/\.rel\./d;/__rel_iplt_/d;s/^.*: { *\(.*\)}/      \1/' $COMBRELOC >> ldscripts/dyntmp.$$
+sed -e '/^[	 ]*[{}][	 ]*$/d;/:[	 ]*$/d;/\.rel\./d;/__rel_iplt_/d;s/^.*: { *\(.*\)}/      \1/' $COMBRELOC >> ldscripts/dyntmp.$$
 cat >> ldscripts/dyntmp.$$ <<EOF
     }
 EOF
@@ -462,10 +463,10 @@ emit_dyn()
     cat ldscripts/dyntmp.$$
   else
     if test -z "${NO_REL_RELOCS}"; then
-      sed -e '/^[ 	]*\.rela\.[^}]*$/,/}/d;/^[ 	]*\.rela\./d;/__rela_iplt_/d' ldscripts/dyntmp.$$
+      sed -e '/^[	 ]*\.rela\.[^}]*$/,/}/d;/^[	 ]*\.rela\./d;/__rela_iplt_/d' ldscripts/dyntmp.$$
     fi
     if test -z "${NO_RELA_RELOCS}"; then
-      sed -e '/^[ 	]*\.rel\.[^}]*$/,/}/d;/^[ 	]*\.rel\./d;/__rel_iplt_/d' ldscripts/dyntmp.$$
+      sed -e '/^[	 ]*\.rel\.[^}]*$/,/}/d;/^[	 ]*\.rel\./d;/__rel_iplt_/d' ldscripts/dyntmp.$$
     fi
   fi
   rm -f ldscripts/dyntmp.$$
@@ -538,14 +539,12 @@ cat <<EOF
   ${CREATE_SHLIB-${SDATA2}}
   ${CREATE_SHLIB-${SBSS2}}
   ${OTHER_READONLY_SECTIONS}
-  .eh_frame_hdr : { *(.eh_frame_hdr) ${RELOCATING+*(.eh_frame_entry .eh_frame_entry.*)} }
+  .eh_frame_hdr ${RELOCATING-0} : { *(.eh_frame_hdr) ${RELOCATING+*(.eh_frame_entry .eh_frame_entry.*)} }
   .eh_frame     ${RELOCATING-0} : ONLY_IF_RO { KEEP (*(.eh_frame)) ${RELOCATING+*(.eh_frame.*)} }
-  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RO { *(.gcc_except_table
-  .gcc_except_table.*) }
+  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RO { *(.gcc_except_table${RELOCATING+ .gcc_except_table.*}) }
   .gnu_extab ${RELOCATING-0} : ONLY_IF_RO { *(.gnu_extab*) }
   /* These sections are generated by the Sun/Oracle C++ compiler.  */
-  .exception_ranges ${RELOCATING-0} : ONLY_IF_RO { *(.exception_ranges
-  .exception_ranges*) }
+  .exception_ranges ${RELOCATING-0} : ONLY_IF_RO { *(.exception_ranges${RELOCATING+*}) }
   ${TEXT_PLT+${PLT_NEXT_DATA+${PLT}}}
 
   /* Adjust the address for the data segment.  We want to adjust up to
@@ -557,12 +556,12 @@ cat <<EOF
   /* Exception handling  */
   .eh_frame     ${RELOCATING-0} : ONLY_IF_RW { KEEP (*(.eh_frame)) ${RELOCATING+*(.eh_frame.*)} }
   .gnu_extab    ${RELOCATING-0} : ONLY_IF_RW { *(.gnu_extab) }
-  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) }
-  .exception_ranges ${RELOCATING-0} : ONLY_IF_RW { *(.exception_ranges .exception_ranges*) }
+  .gcc_except_table ${RELOCATING-0} : ONLY_IF_RW { *(.gcc_except_table${RELOCATING+ .gcc_except_table.*}) }
+  .exception_ranges ${RELOCATING-0} : ONLY_IF_RW { *(.exception_ranges${RELOCATING+*}) }
 
   /* Thread Local Storage sections  */
-  .tdata	${RELOCATING-0} : { PROVIDE_HIDDEN(.tdata = .); *(.tdata${RELOCATING+ .tdata.* .gnu.linkonce.td.*}) }
-  .tbss		${RELOCATING-0} : { PROVIDE_HIDDEN(.tbss = .); *(.tbss${RELOCATING+ .tbss.* .gnu.linkonce.tb.*})${RELOCATING+ *(.tcommon)} }
+  .tdata	${RELOCATING-0} : { ${RELOCATING+PROVIDE_HIDDEN(.tdata = .); }*(.tdata${RELOCATING+ .tdata.* .gnu.linkonce.td.*}) }
+  .tbss		${RELOCATING-0} : { ${RELOCATING+PROVIDE_HIDDEN(.tbss = .); }*(.tbss${RELOCATING+ .tbss.* .gnu.linkonce.tb.*})${RELOCATING+ *(.tcommon)} }
 
   .preinit_array   ${RELOCATING-0} :
   {
@@ -620,15 +619,15 @@ cat <<EOF
   ${BSS_PLT+${PLT}}
   .${BSS_NAME}          ${RELOCATING-0} :
   {
-   *(.dyn${BSS_NAME})
-   *(.${BSS_NAME}${RELOCATING+ .${BSS_NAME}.* .gnu.linkonce.b.*})
-   *(COMMON)
-   /* Align here to ensure that the .bss section occupies space up to
-      _end.  Align after .bss to ensure correct alignment even if the
-      .bss section disappears because there are no input sections.
-      FIXME: Why do we need it? When there is no .bss section, we don't
-      pad the .data section.  */
-   ${RELOCATING+. = ALIGN(. != 0 ? ${ALIGNMENT} : 1);}
+    ${RELOCATING+*(.dyn${BSS_NAME})}
+    *(.${BSS_NAME}${RELOCATING+ .${BSS_NAME}.* .gnu.linkonce.b.*})
+    ${RELOCATING+*(COMMON)
+    /* Align here to ensure that the .bss section occupies space up to
+       _end.  Align after .bss to ensure correct alignment even if the
+       .bss section disappears because there are no input sections.
+       FIXME: Why do we need it? When there is no .bss section, we do not
+       pad the .data section.  */
+    . = ALIGN(. != 0 ? ${ALIGNMENT} : 1);}
   }
   ${OTHER_BSS_SECTIONS}
   ${LARGE_BSS_AFTER_BSS+${LARGE_BSS}}
@@ -649,6 +648,9 @@ SHLIB_LARGE_DATA_ADDR=". = SEGMENT_START(\"ldata-segment\", ${SHLIB_LARGE_DATA_A
   ${RELOCATING+${OTHER_END_SYMBOLS}}
   ${RELOCATING+${END_SYMBOLS-${USER_LABEL_PREFIX}_end = .; PROVIDE (${USER_LABEL_PREFIX}end = .);}}
   ${RELOCATING+${DATA_SEGMENT_END}}
+  ${TINY_DATA_SECTION}
+  ${TINY_BSS_SECTION}
+  ${STACK_ADDR+${STACK}}
 EOF
 
 test -z "${NON_ALLOC_DYN}" || emit_dyn
@@ -669,11 +671,6 @@ EOF
 . $srcdir/scripttempl/DWARF.sc
 
 cat <<EOF
-
-  ${TINY_DATA_SECTION}
-  ${TINY_BSS_SECTION}
-
-  ${STACK_ADDR+${STACK}}
   ${ATTRS_SECTIONS}
   ${OTHER_SECTIONS}
   ${RELOCATING+${OTHER_SYMBOLS}}

@@ -1,5 +1,5 @@
 /* tc-riscv.h -- header file for tc-riscv.c.
-   Copyright (C) 2011-2017 Free Software Foundation, Inc.
+   Copyright (C) 2011-2019 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
@@ -38,7 +38,10 @@ struct expressionS;
 /* Symbols named FAKE_LABEL_NAME are emitted when generating DWARF, so make
    sure FAKE_LABEL_NAME is printable.  It still must be distinct from any
    real label name.  So, append a space, which other labels can't contain.  */
-#define FAKE_LABEL_NAME ".L0 "
+#define FAKE_LABEL_NAME RISCV_FAKE_LABEL_NAME
+/* Changing the special character in FAKE_LABEL_NAME requires changing
+   FAKE_LABEL_CHAR too.  */
+#define FAKE_LABEL_CHAR RISCV_FAKE_LABEL_CHAR
 
 #define md_relax_frag(segment, fragp, stretch) \
   riscv_relax_frag (segment, fragp, stretch)
@@ -59,7 +62,7 @@ extern bfd_boolean riscv_frag_align_code (int);
 extern void riscv_handle_align (fragS *);
 #define HANDLE_ALIGN riscv_handle_align
 
-#define MAX_MEM_FOR_RS_ALIGN_CODE 7
+#define MAX_MEM_FOR_RS_ALIGN_CODE (3 + 4)
 
 /* The ISA of the target may change based on command-line arguments.  */
 #define TARGET_FORMAT riscv_target_format()
@@ -87,7 +90,9 @@ extern void riscv_pre_output_hook (void);
 
 /* Postpone text-section label subtraction calculation until linking, since
    linker relaxations might change the deltas.  */
-#define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG) ((SEG)->flags & SEC_CODE)
+#define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG)	\
+  (GENERIC_FORCE_RELOCATION_SUB_SAME (FIX, SEG)	\
+   || ((SEG)->flags & SEC_CODE) != 0)
 #define TC_FORCE_RELOCATION_SUB_LOCAL(FIX, SEG) 1
 #define TC_VALIDATE_FIX_SUB(FIX, SEG) 1
 #define TC_FORCE_RELOCATION_LOCAL(FIX) 1
@@ -114,5 +119,11 @@ extern void riscv_elf_final_processing (void);
 
 /* Adjust debug_line after relaxation.  */
 #define DWARF2_USE_FIXED_ADVANCE_PC 1
+
+#define md_end riscv_md_end
+#define CONVERT_SYMBOLIC_ATTRIBUTE riscv_convert_symbolic_attribute
+
+extern void riscv_md_end (void);
+extern int riscv_convert_symbolic_attribute (const char *);
 
 #endif /* TC_RISCV */

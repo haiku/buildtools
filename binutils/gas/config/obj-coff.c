@@ -1,5 +1,5 @@
 /* coff object file format
-   Copyright (C) 1989-2017 Free Software Foundation, Inc.
+   Copyright (C) 1989-2019 Free Software Foundation, Inc.
 
    This file is part of GAS.
 
@@ -23,7 +23,6 @@
 #include "as.h"
 #include "safe-ctype.h"
 #include "subsegs.h"
-#include "struc-symbol.h"
 
 #ifdef TE_PE
 #include "coff/pe.h"
@@ -235,9 +234,6 @@ obj_coff_comm (int ignore ATTRIBUTE_UNUSED)
   s_comm_internal (ignore, obj_coff_common_parse);
 }
 #endif /* TE_PE */
-
-#define GET_FILENAME_STRING(X) \
-  ((char *) (&((X)->sy_symbol.ost_auxent->x_file.x_n.x_offset))[1])
 
 /* @@ Ick.  */
 static segT
@@ -929,7 +925,7 @@ obj_coff_size (int ignore ATTRIBUTE_UNUSED)
 {
   if (def_symbol_in_progress == NULL)
     {
-      as_warn (_(".size pseudo-op used outside of .def/.endef ignored."));
+      as_warn (_(".size pseudo-op used outside of .def/.endef: ignored."));
       demand_empty_rest_of_line ();
       return;
     }
@@ -944,7 +940,7 @@ obj_coff_scl (int ignore ATTRIBUTE_UNUSED)
 {
   if (def_symbol_in_progress == NULL)
     {
-      as_warn (_(".scl pseudo-op used outside of .def/.endef ignored."));
+      as_warn (_(".scl pseudo-op used outside of .def/.endef: ignored."));
       demand_empty_rest_of_line ();
       return;
     }
@@ -961,7 +957,7 @@ obj_coff_tag (int ignore ATTRIBUTE_UNUSED)
 
   if (def_symbol_in_progress == NULL)
     {
-      as_warn (_(".tag pseudo-op used outside of .def/.endef ignored."));
+      as_warn (_(".tag pseudo-op used outside of .def/.endef: ignored."));
       demand_empty_rest_of_line ();
       return;
     }
@@ -991,7 +987,7 @@ obj_coff_type (int ignore ATTRIBUTE_UNUSED)
 {
   if (def_symbol_in_progress == NULL)
     {
-      as_warn (_(".type pseudo-op used outside of .def/.endef ignored."));
+      as_warn (_(".type pseudo-op used outside of .def/.endef: ignored."));
       demand_empty_rest_of_line ();
       return;
     }
@@ -1010,7 +1006,7 @@ obj_coff_val (int ignore ATTRIBUTE_UNUSED)
 {
   if (def_symbol_in_progress == NULL)
     {
-      as_warn (_(".val pseudo-op used outside of .def/.endef ignored."));
+      as_warn (_(".val pseudo-op used outside of .def/.endef: ignored."));
       demand_empty_rest_of_line ();
       return;
     }
@@ -1806,7 +1802,7 @@ obj_coff_init_stab_section (segT seg)
   memset (p, 0, 12);
   file = as_where ((unsigned int *) NULL);
   stabstr_name = concat (seg->name, "str", (char *) NULL);
-  stroff = get_stab_string_offset (file, stabstr_name);
+  stroff = get_stab_string_offset (file, stabstr_name, TRUE);
   know (stroff == 1);
   md_number_to_chars (p, stroff, 4);
 }

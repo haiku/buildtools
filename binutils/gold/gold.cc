@@ -1,6 +1,6 @@
 // gold.cc -- main linker functions
 
-// Copyright (C) 2006-2017 Free Software Foundation, Inc.
+// Copyright (C) 2006-2019 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -175,7 +175,7 @@ queue_initial_tasks(const General_options& options,
 		    Workqueue* workqueue, Input_objects* input_objects,
 		    Symbol_table* symtab, Layout* layout, Mapfile* mapfile)
 {
-  if (cmdline.begin() == cmdline.end())
+  if (cmdline.number_of_input_files() == 0)
     {
       bool is_ok = false;
       if (options.printed_version())
@@ -631,10 +631,16 @@ queue_middle_tasks(const General_options& options,
 	  for (++p; p != input_objects->relobj_end(); ++p)
 	    {
 	      if ((*p)->uses_split_stack() != uses_split_stack)
-		gold_fatal(_("cannot mix split-stack '%s' and "
-			     "non-split-stack '%s' when using -r"),
-			   (*input_objects->relobj_begin())->name().c_str(),
-			   (*p)->name().c_str());
+		{
+		  const char *name1
+		    = (*input_objects->relobj_begin())->name().c_str();
+		  const char *name2 = (*p)->name().c_str();
+		  const char *name_split = uses_split_stack ? name1 : name2;
+		  const char *name_nosplit = uses_split_stack ? name2 : name1;
+		  gold_fatal(_("cannot mix split-stack '%s' and "
+			       "non-split-stack '%s' when using -r"),
+			     name_split, name_nosplit);
+		}
 	    }
 	}
     }

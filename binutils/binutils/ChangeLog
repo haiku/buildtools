@@ -1,50 +1,137 @@
-2017-07-25  Tristan Gingold  <gingold@adacore.com>
+2019-02-02  Nick Clifton  <nickc@redhat.com>
+
+	2.32 Release
+	* configure: Regenerate.
+
+2019-01-25  Nick Clifton  <nickc@redhat.com>
+
+	* po/bg.po: Updated Bulgarian translation.
+
+2019-01-23  Nick Clifton  <nickc@redhat.com>
+
+	* po/fr.po: Updated French translation.
+	* po/pt.po: Updated Portuguese translation.
+
+2019-01-21  Nick Clifton  <nickc@redhat.com>
+
+	* po/uk.po: Updated Ukranian translation.
+
+2019-01-19  Nick Clifton  <nickc@redhat.com>
+
+	* configure: Regenerate.
+	* binutils/po/binutils.pot.
+
+2018-06-24  Nick Clifton  <nickc@redhat.com>
+
+	2.32 branch created.
+
+2019-01-17  Nick Clifton  <nickc@redhat.com>
+
+	* objdump.c (disassemble_section): When disassembling from a
+	symbol only stop at the next symbol if the original symbol was not
+	a function symbol.  Otherwise continue disassembling until a new
+	function is reached.
+	* testsuite/binutils-all/objdump.exp: Add tests of extended
+	functionality.
+	* testsuite/binutils-all/disasm.s: New test source file.
+
+2019-01-16  Kito Cheng  <kito@andestech.com>
+	    Nelson Chu  <nelson@andestech.com>
+
+	* readelf.c (get_riscv_section_type_name): New function.
+	(get_section_type_name): Add handler for RISC-V.
+	(riscv_attr_tag_t): Declare.
+	(riscv_attr_tag): New.
+	(display_riscv_attribute): New function.
+	(process_attributes): Add handler for RISC-V.
+	* testsuite/binutils-all/strip-3.d: Remove .riscv.attribute
+	section.
+
+2019-01-10  Nick Clifton  <nickc@redhat.com>
+
+	PR 23963
+	* objdump.c (sanitize_string): New function.  Removes control
+	characters from symbol names.
+	(dump_section_header): Use new function.
+	(objdump_print_symname): Likewise.
+	(objdump_print_addr_with_sym): Likewise.
+	(show_line): Likewise.
+	(disassemble_bytes): Likewise.
+	(disassemble_section): Likewise.
+	(load_specific_debug_section): Likewise.
+	(read_section_stabs): Likewise.
+	(print_section_stabs): Likewise.
+	(dump_section): Likewise.
+	(dump_reloc_set): Likewise.
+	(dump_relocs_in_section): Likewise.
+	(dump_bfd): Likewise.
+	(display_any_bfd): Likewise.
+
+2019-01-09  Nick Clifton  <nickc@redhat.com>
+
+	PR 24049
+	* readelf.c (process_archive): Use arch.file_name in error
+	messages until the qualified name is available.
+
+2019-01-09  Andrew Paprocki  <andrew@ishiboo.com>
 
 	* configure: Regenerate.
 
-2017-05-18  Alan Modra  <amodra@gmail.com>
+2019-01-09  Alan Modra  <amodra@gmail.com>
 
-	Apply from master
-	2017-01-10  Nick Clifton  <nickc@redhat.com>
-	PR 21034
-	* stabs.c (parse_stab_members): Fix thinko checking for g++
-	version 1 stabs information.
+	* testsuite/binutils-all/cxxfilt.exp: Pass --no-strip-underscores
+	unconditionally to tests needing the option rather than via a
+	list of targets.
 
-2017-03-02  Tristan Gingold  <gingold@adacore.com>
+2019-01-08  Nick Clifton  <nickc@redhat.com>
 
-	* configure: Regenerate.
+	PR 24044
+	* cxxfilt.c (hp_symbol_characters): Delete.
+	(main): Remove depcreated demangling styles.
+	* stabs.c (parse_stab_argtypes): Remove support for old gnu v2
+	demangling opnames.
+	* testsuite/binutils-all/cxxfilt.exp: Use the
+	--no-strip-underscore option for targets that do prefix their
+	symbols with underscores.
+	Update tests to eliminate those that use gnu v2 encoding.
 
-2017-03-02  Tristan Gingold  <gingold@adacore.com>
+2019-01-08  Tamar Christina  <tamar.christina@arm.com>
 
-	* configure: Regenerate.
+	PR 24065
+	* testsuite/binutils-all/copy-6.d: New test.
+	* testsuite/binutils-all/objcopy.exp: Use it.
 
-2017-01-18  Bernhard Rosenkranzer  <bero@lindev.ch>
+2019-01-08  Alan Modra  <amodra@gmail.com>
 
-	PR 21059
-	* arlex.l: Support processing with flex 2.6.3.
-	* deflex.l: Likewise.
-	* syslex.l: Likewise.
+	* testsuite/lib/binutils-common.exp (run_dump_test): Don't prepend
+	$srcdir/$subdir to source file name if it starts with "./".
 
-2017-01-12  Nick Clifton  <nickc@redhat.com>
+2019-01-05  Yoshinori Sato <ysato@users.sourceforge.jp>
 
-	PR binutils/20876
-	* NEWS: Mention the new feature.
-	* testsuite/binutils-all/objdump.exp (test_build_id_debuglink):
-	New proc to test the location of separate debug info files using
-	the build-id method.
+	* readelf.c (get_machine_flags): Add RXv3 output.
 
-2017-01-09  Alan Modra  <amodra@gmail.com>
+2019-01-04  Nick Clifton  <nickc@redhat.com>
 
-	* readelf.c (process_section_headers): Correct .rel.dyn/.rela.dyn
-	comment.
+	PR 24005
+	* objdump.c (load_specific_debug_section): Check for integer
+	overflow before attempting to allocate contents.
 
-2017-01-02  Alan Modra  <amodra@gmail.com>
+2019-01-04  Nick Clifton  <nickc@redhat.com>
+
+	PR 24001
+	* objcopy.c (copy_object): Free dhandle after writing out the
+	debug information.
+	* objdump.c (dump_bfd): Free dhandle after printing out the debug
+	information.
+
+
+2019-01-01  Alan Modra  <amodra@gmail.com>
 
 	Update year range in copyright notice of all files.
 
-For older changes see ChangeLog-2016
+For older changes see ChangeLog-2018
 
-Copyright (C) 2017 Free Software Foundation, Inc.
+Copyright (C) 2019 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

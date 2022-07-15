@@ -1,100 +1,71 @@
-2017-04-03  Palmer Dabbelt  <palmer@dabbelt.com>
+2019-02-02  Nick Clifton  <nickc@redhat.com>
 
-	* elf/riscv.h (RISCV_GP_SYMBOL): New define.
+	2.32 Release.
 
-2017-03-27  Andrew Waterman  <andrew@sifive.com>
-
-	* opcode/riscv-opc.h (CSR_PMPCFG0): New define.
-	(CSR_PMPCFG1): Likewise.
-	(CSR_PMPCFG2): Likewise.
-	(CSR_PMPCFG3): Likewise.
-	(CSR_PMPADDR0): Likewise.
-	(CSR_PMPADDR1): Likewise.
-	(CSR_PMPADDR2): Likewise.
-	(CSR_PMPADDR3): Likewise.
-	(CSR_PMPADDR4): Likewise.
-	(CSR_PMPADDR5): Likewise.
-	(CSR_PMPADDR6): Likewise.
-	(CSR_PMPADDR7): Likewise.
-	(CSR_PMPADDR8): Likewise.
-	(CSR_PMPADDR9): Likewise.
-	(CSR_PMPADDR10): Likewise.
-	(CSR_PMPADDR11): Likewise.
-	(CSR_PMPADDR12): Likewise.
-	(CSR_PMPADDR13): Likewise.
-	(CSR_PMPADDR14): Likewise.
-	(CSR_PMPADDR15): Likewise.
-	(pmpcfg0): Declare register.
-	(pmpcfg1): Likewise.
-	(pmpcfg2): Likewise.
-	(pmpcfg3): Likewise.
-	(pmpaddr0): Likewise.
-	(pmpaddr1): Likewise.
-	(pmpaddr2): Likewise.
-	(pmpaddr3): Likewise.
-	(pmpaddr4): Likewise.
-	(pmpaddr5): Likewise.
-	(pmpaddr6): Likewise.
-	(pmpaddr7): Likewise.
-	(pmpaddr8): Likewise.
-	(pmpaddr9): Likewise.
-	(pmpaddr10): Likewise.
-	(pmpaddr11): Likewise.
-	(pmpaddr12): Likewise.
-	(pmpaddr13): Likewise.
-	(pmpaddr14): Likewise.
-	(pmpaddr15): Likewise.
-
-2017-03-21  Andreas Krebbel  <krebbel@linux.vnet.ibm.com>
+2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
 
 	Backport from mainline
-	2017-03-21  Andreas Krebbel  <krebbel@linux.vnet.ibm.com>
+	2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
 
-	* opcode/s390.h (S390_INSTR_FLAG_VX2): Remove.
-	(S390_INSTR_FLAG_FACILITY_MASK): Adjust value.
+	* opcode/s390.h (enum s390_opcode_cpu_val): Add
+	S390_OPCODE_ARCH13.
 
-2017-02-28  Alan Modra  <amodra@gmail.com>
+2019-01-25  Sudakshina Das  <sudi.das@arm.com>
+	    Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
 
-	* elf/ppc64.h (R_PPC64_16DX_HA): New.  Expand fake reloc comment.
-	* elf/ppc.h (R_PPC_16DX_HA): Likewise.
+	* opcode/aarch64.h (enum aarch64_opnd): Remove
+	AARCH64_OPND_ADDR_SIMPLE_2.
+	(enum aarch64_insn_class): Remove ldstgv_indexed.
 
-2017-02-22  Andrew Waterman  <andrew@sifive.com>
+2018-06-24  Nick Clifton  <nickc@redhat.com>
 
-	* opcode/riscv-opc.h (CSR_SCOUNTEREN): New define.
-	(CSR_MCOUNTEREN): Likewise.
-	(scounteren): Declare register.
-	(mcounteren): Likewise.
+	2.32 branch created.
 
-2017-02-14  Andrew Waterman  <andrew@sifive.com>
+2019-01-16  Kito Cheng  <kito@andestech.com>
 
-	* opcode/riscv-opc.h (MATCH_SFENCE_VMA): New define.
-	(MASK_SFENCE_VMA): Likewise.
-	(sfence_vma): Declare instruction.
+	* elf/riscv.h (SHT_RISCV_ATTRIBUTES): Define.
+	(Tag_RISCV_arch): Likewise.
+	(Tag_RISCV_priv_spec): Likewise.
+	(Tag_RISCV_priv_spec_minor): Likewise.
+	(Tag_RISCV_priv_spec_revision): Likewise.
+	(Tag_RISCV_unaligned_access): Likewise.
+	(Tag_RISCV_stack_align): Likewise.
 
-2017-02-27  Richard Sandiford  <richard.sandiford@arm.com>
+2019-01-14  Pavel I. Kryukov  <kryukov@frtk.ru>
 
-	* opcode/aarch64.h (AARCH64_OPND_SVE_ADDR_RI_S4x16)
-	(AARCH64_OPND_SVE_IMM_ROT1, AARCH64_OPND_SVE_IMM_ROT2)
-	(AARCH64_OPND_SVE_Zm3_INDEX, AARCH64_OPND_SVE_Zm3_22_INDEX)
-	(AARCH64_OPND_SVE_Zm4_INDEX): New aarch64_opnds.
+	* dis-asm.h: include <string.h>
 
-2017-02-27  Richard Sandiford  <richard.sandiford@arm.com>
+2019-01-10  Nick Clifton  <nickc@redhat.com>
 
-	* opcode/aarch64.h (AARCH64_FEATURE_COMPNUM): New macro.
-	(AARCH64_ARCH_V8_3): Include AARCH64_FEATURE_COMPNUM.
+	* Merge from GCC:
+	2018-12-22  Jason Merrill  <jason@redhat.com>
 
-2017-02-27  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+	* demangle.h: Remove support for ancient GNU (pre-3.0), Lucid,
+	ARM, HP, and EDG demangling styles.
 
-	* opcode/aarch64.h (AARCH64_FEATURE_RCPC): Define.
-	(AARCH64_ARCH_V8_3): Update.
+2019-01-09  Sandra Loosemore  <sandra@codesourcery.com>
 
-2017-01-02  Alan Modra  <amodra@gmail.com>
+	Merge from GCC:
+	PR other/16615
+
+	* libiberty.h: Mechanically replace "can not" with "cannot".
+	* plugin-api.h: Likewise.
+
+2018-12-25  Yoshinori Sato <ysato@users.sourceforge.jp>
+
+	* elf/rx.h (EF_RX_CPU_MASK): Update new bits.
+	(E_FLAG_RX_V3): New RXv3 type.
+	* opcode/rx.h (RX_Size): Add double size.
+	(RX_Operand_Type): Add double FPU registers.
+	(RX_Opcode_ID): Add new instuctions.
+
+2019-01-01  Alan Modra  <amodra@gmail.com>
 
 	Update year range in copyright notice of all files.
 
-For older changes see ChangeLog-2016
+For older changes see ChangeLog-2018
 
-Copyright (C) 2017 Free Software Foundation, Inc.
+Copyright (C) 2019 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

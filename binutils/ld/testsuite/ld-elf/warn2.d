@@ -2,11 +2,11 @@
 #source: symbol2ref.s
 #source: symbol2w.s
 #ld: -T group.ld
-#warning: ^[^\\n]*\.[obj]+: warning: function 'Foo' used$
+#warning: ^[^\n]*\.[obj]+: warning: function 'Foo' used$
 #readelf: -s
 #notarget: "sparc64-*-solaris2*" "sparcv9-*-solaris2*"
-#xfail: d30v-*-* dlx-*-* fr30-*-* frv-*-elf ft32-*-* i860-*-* i960-*-*
-#xfail: iq*-*-* mn10200-*-* moxie-*-* msp*-*-* mt-*-* pj*-*-*
+#xfail: d30v-*-* dlx-*-* fr30-*-* frv-*-elf ft32-*-*
+#xfail: iq*-*-* mn10200-*-* moxie-*-* msp*-*-* mt-*-* pj*-*-* xgate-*-*
 # if not using elf32.em, you don't get fancy section handling
 
 # Check that warnings are generated for the symbols in .gnu.warning

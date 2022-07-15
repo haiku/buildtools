@@ -1,11 +1,11 @@
-# Copyright (C) 2014-2017 Free Software Foundation, Inc.
-# 
+# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+#
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
 # notice and this notice are preserved.
 
 cat <<EOF
-/* Copyright (C) 2014-2017 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -14,13 +14,19 @@ cat <<EOF
 OUTPUT_FORMAT("${OUTPUT_FORMAT}","${OUTPUT_FORMAT}","${OUTPUT_FORMAT}")
 OUTPUT_ARCH(${ARCH})
 
+EOF
+
+test -n "${RELOCATING}" && cat <<EOF
 MEMORY
 {
   text   (rx)   : ORIGIN = $ROM_START,  LENGTH = $ROM_SIZE
-  data   (rwx)  : ORIGIN = $RAM_START, 	LENGTH = $RAM_SIZE
+  data   (rwx)  : ORIGIN = $RAM_START,	LENGTH = $RAM_SIZE
   vectors (rw)  : ORIGIN = 0xffe0,      LENGTH = 0x20
 }
 
+EOF
+
+cat <<EOF
 SECTIONS
 {
   /* Read-only sections, merged into text segment.  */
@@ -86,7 +92,7 @@ SECTIONS
   /* Internal text space.  */
   .text :
   {
-    ${RELOCATING+. = ALIGN(2);}
+    ${RELOCATING+. = ALIGN(2);
     *(SORT_NONE(.init))
     *(SORT_NONE(.init0))  /* Start here after reset.  */
     *(SORT_NONE(.init1))
@@ -97,7 +103,7 @@ SECTIONS
     *(SORT_NONE(.init6)) /* C++ constructors.  */
     *(SORT_NONE(.init7))
     *(SORT_NONE(.init8))
-    *(SORT_NONE(.init9))  /* Call main().  */
+    *(SORT_NONE(.init9))  /* Call main().  */}
 
     ${CONSTRUCTING+ __ctors_start = . ; }
     ${CONSTRUCTING+ *(.ctors) }
@@ -108,12 +114,12 @@ SECTIONS
 
     ${RELOCATING+. = ALIGN(2);}
     *(.text)
-    ${RELOCATING+. = ALIGN(2);}
+    ${RELOCATING+. = ALIGN(2);
     *(.text.*)
-    ${RELOCATING+. = ALIGN(2);}
+    . = ALIGN(2);
     *(.text:*)
 
-    ${RELOCATING+. = ALIGN(2);}
+    . = ALIGN(2);
     *(SORT_NONE(.fini9))
     *(SORT_NONE(.fini8))
     *(SORT_NONE(.fini7))
@@ -126,30 +132,30 @@ SECTIONS
     *(SORT_NONE(.fini0))  /* Infinite loop after program termination.  */
     *(SORT_NONE(.fini))
 
-    ${RELOCATING+ _etext = . ; }
+    _etext = . ;}
   } ${RELOCATING+ > text}
 
   .rodata :
   {
-    *(.rodata .rodata.* .gnu.linkonce.r.*)
-    *(.const)
-    *(.const:*)
+    *(.rodata${RELOCATING+ .rodata.* .gnu.linkonce.r.*})
+    ${RELOCATING+*(.const)}
+    ${RELOCATING+*(.const:*)}
   } ${RELOCATING+ > text}
 
   .data ${RELOCATING-0} :
-  {  
+  {
     ${RELOCATING+ PROVIDE (__data_start = .) ; }
     ${RELOCATING+. = ALIGN(2);}
     *(.data)
-    *(.data.*)
-    *(.gnu.linkonce.d*)
+    ${RELOCATING+*(.data.*)}
+    ${RELOCATING+*(.gnu.linkonce.d*)}
     ${RELOCATING+. = ALIGN(2);}
     ${RELOCATING+ _edata = . ; }
-  } ${RELOCATING+ > data ${RELOCATING+AT> text}}
-  
+  } ${RELOCATING+ > data AT> text}
+
   __romdatastart = LOADADDR(.data);
   __romdatacopysize = SIZEOF(.data);
-  
+
   .bss ${RELOCATING+ SIZEOF(.data) + ADDR(.data)} :
   {
     ${RELOCATING+. = ALIGN(2);}
@@ -181,7 +187,7 @@ SECTIONS
   .vectors ${RELOCATING-0}:
   {
     ${RELOCATING+ PROVIDE (__vectors_start = .) ; }
-    *(.vectors*)
+    *(.vectors${RELOCATING+*})
     ${RELOCATING+ _vectors_end = . ; }
   } ${RELOCATING+ > vectors}
 
@@ -193,23 +199,26 @@ SECTIONS
   }
 
   /* Stabs debugging sections.  */
-  .stab 0 : { *(.stab) } 
+  .stab 0 : { *(.stab) }
   .stabstr 0 : { *(.stabstr) }
   .stab.excl 0 : { *(.stab.excl) }
   .stab.exclstr 0 : { *(.stab.exclstr) }
   .stab.index 0 : { *(.stab.index) }
   .stab.indexstr 0 : { *(.stab.indexstr) }
   .comment 0 : { *(.comment) }
- 
+
 EOF
 
 . $srcdir/scripttempl/DWARF.sc
 
-cat <<EOF
+test -n "${RELOCATING}" && cat <<EOF
   PROVIDE (__stack = ${STACK}) ;
   PROVIDE (__data_start_rom = _etext) ;
   PROVIDE (__data_end_rom   = _etext + SIZEOF (.data)) ;
   PROVIDE (__noinit_start_rom = _etext + SIZEOF (.data)) ;
   PROVIDE (__noinit_end_rom = _etext + SIZEOF (.data) + SIZEOF (.noinit)) ;
+EOF
+
+cat <<EOF
 }
 EOF

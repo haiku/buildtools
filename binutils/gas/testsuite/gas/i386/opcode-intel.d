@@ -358,7 +358,7 @@ Disassembly of section .text:
  *[0-9a-f]+:	0f b5 90 90 90 90 90[ 	]+lgs[ 	]+edx,(FWORD PTR )?\[eax-0x6f6f6f70\]
  *[0-9a-f]+:	0f b6 90 90 90 90 90[ 	]+movzx[ 	]+edx,BYTE PTR \[eax-0x6f6f6f70\]
  *[0-9a-f]+:	0f b7 90 90 90 90 90[ 	]+movzx[ 	]+edx,WORD PTR \[eax-0x6f6f6f70\]
- *[0-9a-f]+:	0f b9[ 	]+ud1[ 	]*
+ *[0-9a-f]+:	0f 0b[ 	]+ud2[ 	]*
  *[0-9a-f]+:	0f bb 90 90 90 90 90[ 	]+btc[ 	]+(DWORD PTR )?\[eax-0x6f6f6f70\],edx
  *[0-9a-f]+:	0f bc 90 90 90 90 90[ 	]+bsf[ 	]+edx,(DWORD PTR )?\[eax-0x6f6f6f70\]
  *[0-9a-f]+:	0f bd 90 90 90 90 90[ 	]+bsr[ 	]+edx,(DWORD PTR )?\[eax-0x6f6f6f70\]
@@ -601,4 +601,7 @@ Disassembly of section .text:
  +[a-f0-9]+:	82 f3 01             	xor    bl,0x1
  +[a-f0-9]+:	82 fb 01             	cmp    bl,0x1
  +[a-f0-9]+:	62 f3 7d 08 15 e8 ab 	vpextrw eax,xmm5,0xab
+ +[a-f0-9]+:	f6 c9 01             	test   cl,(0x)?0*1
+ +[a-f0-9]+:	66 f7 c9 02 00       	test   cx,(0x)?0*2
+ +[a-f0-9]+:	f7 c9 04 00 00 00    	test   ecx,(0x)?0*4
 #pass

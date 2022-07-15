@@ -1,5 +1,5 @@
 /* size.c -- report size of various sections of an executable file.
-   Copyright (C) 1991-2017 Free Software Foundation, Inc.
+   Copyright (C) 1991-2019 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -137,7 +137,8 @@ main (int argc, char **argv)
 
   expandargv (&argc, &argv);
 
-  bfd_init ();
+  if (bfd_init () != BFD_INIT_MAGIC)
+    fatal (_("fatal error: libbfd ABI mismatch"));
   set_default_bfd_target ();
 
   while ((c = getopt_long (argc, argv, "ABHhVvdfotx", long_options,

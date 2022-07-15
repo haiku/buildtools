@@ -1,4 +1,4 @@
-@c Copyright (C) 1991-2017 Free Software Foundation, Inc.
+@c Copyright (C) 1991-2019 Free Software Foundation, Inc.
 @c This is part of the GAS manual.
 @c For copying conditions, see the file as.texinfo.
 @c man end
@@ -74,7 +74,8 @@ usage and use x86-64 as target platform).
 @item -n
 By default, x86 GAS replaces multiple nop instructions used for
 alignment within code sections with multi-byte nop instructions such
-as leal 0(%esi,1),%esi.  This switch disables the optimization.
+as leal 0(%esi,1),%esi.  This switch disables the optimization if a single
+byte nop (0x90) is explicitly specified as the fill byte for alignment.
 
 @cindex @samp{--divide} option, i386
 @item --divide
@@ -122,6 +123,7 @@ processor names are recognized:
 @code{bdver3},
 @code{bdver4},
 @code{znver1},
+@code{znver2},
 @code{btver1},
 @code{btver2},
 @code{generic32} and
@@ -139,6 +141,10 @@ accept various extension mnemonics.  For example,
 @code{no287},
 @code{no387},
 @code{no687},
+@code{cmov},
+@code{nocmov},
+@code{fxsr},
+@code{nofxsr},
 @code{mmx},
 @code{nommx},
 @code{sse},
@@ -167,10 +173,16 @@ accept various extension mnemonics.  For example,
 @code{sha},
 @code{rdpid},
 @code{ptwrite},
+@code{cet},
+@code{gfni},
+@code{vaes},
+@code{vpclmulqdq},
 @code{prefetchwt1},
 @code{clflushopt},
 @code{se1},
 @code{clwb},
+@code{movdiri},
+@code{movdir64b},
 @code{avx512f},
 @code{avx512cd},
 @code{avx512er},
@@ -183,6 +195,9 @@ accept various extension mnemonics.  For example,
 @code{avx512_4fmaps},
 @code{avx512_4vnniw},
 @code{avx512_vpopcntdq},
+@code{avx512_vbmi2},
+@code{avx512_vnni},
+@code{avx512_bitalg},
 @code{noavx512f},
 @code{noavx512cd},
 @code{noavx512er},
@@ -195,6 +210,9 @@ accept various extension mnemonics.  For example,
 @code{noavx512_4fmaps},
 @code{noavx512_4vnniw},
 @code{noavx512_vpopcntdq},
+@code{noavx512_vbmi2},
+@code{noavx512_vnni},
+@code{noavx512_bitalg},
 @code{vmx},
 @code{vmfunc},
 @code{smx},
@@ -218,6 +236,10 @@ accept various extension mnemonics.  For example,
 @code{clflush},
 @code{mwaitx},
 @code{clzero},
+@code{wbnoinvd},
+@code{pconfig},
+@code{waitpkg},
+@code{cldemote},
 @code{lwp},
 @code{fma4},
 @code{xop},
@@ -276,6 +298,16 @@ AVX instructions with 128bit vector length, which is the default.
 @option{-mavxscalar=@var{256}} will encode scalar AVX instructions
 with 256bit vector length.
 
+@cindex @samp{-mvexwig=} option, i386
+@cindex @samp{-mvexwig=} option, x86-64
+@item -mvexwig=@var{0}
+@itemx -mvexwig=@var{1}
+These options control how the assembler should encode VEX.W-ignored (WIG)
+VEX instructions.  @option{-mvexwig=@var{0}} will encode WIG VEX
+instructions with vex.w = 0, which is the default.
+@option{-mvexwig=@var{1}} will encode WIG EVEX instructions with
+vex.w = 1.
+
 @cindex @samp{-mevexlig=} option, i386
 @cindex @samp{-mevexlig=} option, x86-64
 @item -mevexlig=@var{128}
@@ -317,7 +349,7 @@ take precedent.
 @cindex @samp{-mnaked-reg} option, i386
 @cindex @samp{-mnaked-reg} option, x86-64
 @item -mnaked-reg
-This opetion specifies that registers don't require a @samp{%} prefix.
+This option specifies that registers don't require a @samp{%} prefix.
 The @code{.att_syntax} and @code{.intel_syntax} directives will take precedent.
 
 @cindex @samp{-madd-bnd-prefix} option, i386
@@ -378,6 +410,15 @@ R_X86_64_REX_GOTPCRELX, in 64-bit mode.
 relocations.  The default can be controlled by a configure option
 @option{--enable-x86-relax-relocations}.
 
+@cindex @samp{-mx86-used-note=} option, i386
+@cindex @samp{-mx86-used-note=} option, x86-64
+@item -mx86-used-note=@var{no}
+@itemx -mx86-used-note=@var{yes}
+These options control whether the assembler should generate
+GNU_PROPERTY_X86_ISA_1_USED and GNU_PROPERTY_X86_FEATURE_2_USED
+GNU property notes.  The default can be controlled by the
+@option{--enable-x86-used-note} configure option.
+
 @cindex @samp{-mevexrcig=} option, i386
 @cindex @samp{-mevexrcig=} option, x86-64
 @item -mevexrcig=@var{rne}
@@ -397,6 +438,28 @@ with 01, 10 and 11 RC bits, respectively.
 @itemx -mintel64
 This option specifies that the assembler should accept only AMD64 or
 Intel64 ISA in 64-bit mode.  The default is to accept both.
+
+@cindex @samp{-O0} option, i386
+@cindex @samp{-O0} option, x86-64
+@cindex @samp{-O} option, i386
+@cindex @samp{-O} option, x86-64
+@cindex @samp{-O1} option, i386
+@cindex @samp{-O1} option, x86-64
+@cindex @samp{-O2} option, i386
+@cindex @samp{-O2} option, x86-64
+@cindex @samp{-Os} option, i386
+@cindex @samp{-Os} option, x86-64
+@item -O0 | -O | -O1 | -O2 | -Os
+Optimize instruction encoding with smaller instruction size.  @samp{-O}
+and @samp{-O1} encode 64-bit register load instructions with 64-bit
+immediate as 32-bit register load instructions with 31-bit or 32-bits
+immediates and encode 64-bit register clearing instructions with 32-bit
+register clearing instructions.  @samp{-O2} includes @samp{-O1}
+optimization plus encodes 256-bit and 512-bit vector register clearing
+instructions with 128-bit vector register clearing instructions.
+@samp{-Os} includes @samp{-O2} optimization plus encodes 16-bit, 32-bit
+and 64-bit register tests with immediate as 8-bit register test with
+immediate.  @samp{-O0} turns off this optimization.
 
 @end table
 @c man end
@@ -420,8 +483,17 @@ specifies the desired alignment of the symbol in the bss section.
 
 This directive is only available for COFF based x86 targets.
 
+@cindex @code{largecomm} directive, ELF
+@item .largecomm @var{symbol} , @var{length}[, @var{alignment}]
+This directive behaves in the same way as the @code{comm} directive
+except that the data is placed into the @var{.lbss} section instead of
+the @var{.bss} section @ref{Comm}.
+
+The directive is intended to be used for data which requires a large
+amount of space, and it is only available for ELF based x86_64
+targets.
+
 @c FIXME: Document other x86 specific directives ?  Eg: .code16gcc,
-@c .largecomm
 
 @end table
 
@@ -547,7 +619,7 @@ line is treated as a comment, but in this case the line can also be a
 logical line number directive (@pxref{Comments}) or a preprocessor
 control command (@pxref{Preprocessing}).
 
-If the @option{--divide} command line option has not been specified
+If the @option{--divide} command-line option has not been specified
 then the @samp{/} character appearing anywhere on a line also
 introduces a line comment.
 
@@ -597,10 +669,38 @@ quadruple word).
 @cindex encoding options, i386
 @cindex encoding options, x86-64
 
-Different encoding options can be specified via optional mnemonic
-suffix.  @samp{.s} suffix swaps 2 register operands in encoding when
-moving from one register to another.  @samp{.d8} or @samp{.d32} suffix
-prefers 8bit or 32bit displacement in encoding.
+Different encoding options can be specified via pseudo prefixes:
+
+@itemize @bullet
+@item
+@samp{@{disp8@}} -- prefer 8-bit displacement.
+
+@item
+@samp{@{disp32@}} -- prefer 32-bit displacement.
+
+@item
+@samp{@{load@}} -- prefer load-form instruction.
+
+@item
+@samp{@{store@}} -- prefer store-form instruction.
+
+@item
+@samp{@{vex2@}} -- prefer 2-byte VEX prefix for VEX instruction.
+
+@item
+@samp{@{vex3@}} -- prefer 3-byte VEX prefix for VEX instruction.
+
+@item
+@samp{@{evex@}} --  encode with EVEX prefix.
+
+@item
+@samp{@{rex@}} -- prefer REX prefix for integer and legacy vector
+instructions (x86-64 only).  Note that this differs from the @samp{rex}
+prefix which generates REX prefix unconditionally.
+
+@item
+@samp{@{nooptimize@}} -- disable instruction size optimization.
+@end itemize
 
 @cindex conversion instructions, i386
 @cindex i386 conversion instructions
@@ -1179,12 +1279,13 @@ supported on the CPU specified.  The choices for @var{cpu_type} are:
 @item @samp{i486} @tab @samp{i586} @tab @samp{i686} @tab @samp{pentium}
 @item @samp{pentiumpro} @tab @samp{pentiumii} @tab @samp{pentiumiii} @tab @samp{pentium4}
 @item @samp{prescott} @tab @samp{nocona} @tab @samp{core} @tab @samp{core2}
-@item @samp{corei7} @tab @samp{l1om} @tab @samp{k1om} @samp{iamcu}
+@item @samp{corei7} @tab @samp{l1om} @tab @samp{k1om} @tab @samp{iamcu}
 @item @samp{k6} @tab @samp{k6_2} @tab @samp{athlon} @tab @samp{k8}
 @item @samp{amdfam10} @tab @samp{bdver1} @tab @samp{bdver2} @tab @samp{bdver3}
-@item @samp{bdver4} @tab @samp{znver1} @tab @samp{btver1} @tab @samp{btver2}
-@item @samp{generic32} @tab @samp{generic64}
-@item @samp{.mmx} @tab @samp{.sse} @tab @samp{.sse2} @tab @samp{.sse3}
+@item @samp{bdver4} @tab @samp{znver1} @tab @samp{znver2} @tab @samp{btver1}
+@item @samp{btver2} @tab @samp{generic32} @tab @samp{generic64}
+@item @samp{.cmov} @tab @samp{.fxsr} @tab @samp{.mmx}
+@item @samp{.sse} @tab @samp{.sse2} @tab @samp{.sse3}
 @item @samp{.ssse3} @tab @samp{.sse4.1} @tab @samp{.sse4.2} @tab @samp{.sse4}
 @item @samp{.avx} @tab @samp{.vmx} @tab @samp{.smx} @tab @samp{.ept}
 @item @samp{.clflush} @tab @samp{.movbe} @tab @samp{.xsave} @tab @samp{.xsaveopt}
@@ -1197,7 +1298,12 @@ supported on the CPU specified.  The choices for @var{cpu_type} are:
 @item @samp{.avx512f} @tab @samp{.avx512cd} @tab @samp{.avx512er} @tab @samp{.avx512pf}
 @item @samp{.avx512vl} @tab @samp{.avx512bw} @tab @samp{.avx512dq} @tab @samp{.avx512ifma}
 @item @samp{.avx512vbmi} @tab @samp{.avx512_4fmaps} @tab @samp{.avx512_4vnniw}
-@item @samp{.avx512_vpopcntdq} @tab @samp{.clwb} @tab @samp{.rdpid} @tab @samp{.ptwrite}
+@item @samp{.avx512_vpopcntdq} @tab @samp{.avx512_vbmi2} @tab @samp{.avx512_vnni}
+@item @samp{.avx512_bitalg}
+@item @samp{.clwb} @tab @samp{.rdpid} @tab @samp{.ptwrite} @tab @item @samp{.ibt}
+@item @samp{.wbnoinvd} @tab @samp{.pconfig} @tab @samp{.waitpkg} @tab @samp{.cldemote}
+@item @samp{.shstk} @tab @samp{.gfni} @tab @samp{.vaes} @tab @samp{.vpclmulqdq}
+@item @samp{.movdiri} @tab @samp{.movdir64b}
 @item @samp{.3dnow} @tab @samp{.3dnowa} @tab @samp{.sse4a} @tab @samp{.sse5}
 @item @samp{.syscall} @tab @samp{.rdtscp} @tab @samp{.svme} @tab @samp{.abm}
 @item @samp{.lwp} @tab @samp{.fma4} @tab @samp{.xop} @tab @samp{.cx16}
