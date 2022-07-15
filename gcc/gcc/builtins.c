@@ -3633,16 +3633,28 @@ expand_builtin_int_roundingfn_2 (tree exp, rtx target)
 	 BUILT_IN_IROUND and if __builtin_iround is called directly, emit
 	 a call to lround in the hope that the target provides at least some
 	 C99 functions.  This should result in the best user experience for
-	 not full C99 targets.  */
-      tree fallback_fndecl = mathfn_built_in_1
-	(TREE_TYPE (arg), as_combined_fn (fallback_fn), 0);
+	 not full C99 targets.
+	 As scalar float conversions with same mode are useless in GIMPLE,
+	 we can end up e.g. with _Float32 argument passed to float builtin,
+	 try to get the type from the builtin prototype first.  */
+      tree fallback_fndecl = NULL_TREE;
+      if (tree argtypes = TYPE_ARG_TYPES (TREE_TYPE (fndecl)))
+        fallback_fndecl
+          = mathfn_built_in_1 (TREE_VALUE (argtypes),
+			       as_combined_fn (fallback_fn), 0);
+      if (fallback_fndecl == NULL_TREE)
+	fallback_fndecl
+	  = mathfn_built_in_1 (TREE_TYPE (arg),
+			       as_combined_fn (fallback_fn), 0);
+      if (fallback_fndecl)
+	{
+	  exp = build_call_nofold_loc (EXPR_LOCATION (exp),
+				       fallback_fndecl, 1, arg);
 
-      exp = build_call_nofold_loc (EXPR_LOCATION (exp),
-				   fallback_fndecl, 1, arg);
-
-      target = expand_call (exp, NULL_RTX, target == const0_rtx);
-      target = maybe_emit_group_store (target, TREE_TYPE (exp));
-      return convert_to_mode (mode, target, 0);
+	  target = expand_call (exp, NULL_RTX, target == const0_rtx);
+	  target = maybe_emit_group_store (target, TREE_TYPE (exp));
+	  return convert_to_mode (mode, target, 0);
+	}
     }
 
   return expand_call (exp, target, target == const0_rtx);
@@ -5605,11 +5617,14 @@ compute_objsize_r (tree ptr, int ostype, access_ref *pref,
 
   if (code == INTEGER_CST)
     {
-      /* Pointer constants other than null are most likely the result
-	 of erroneous null pointer addition/subtraction.  Set size to
-	 zero.  For null pointers, set size to the maximum for now
-	 since those may be the result of jump threading.  */
-      if (integer_zerop (ptr))
+      /* Pointer constants other than null smaller than param_min_pagesize
+	 might be the result of erroneous null pointer addition/subtraction.
+	 Unless zero is a valid address set size to zero.  For null pointers,
+	 set size to the maximum for now since those may be the result of
+	 jump threading.  Similarly, for values >= param_min_pagesize in
+	 order to support (type *) 0x7cdeab00.  */
+      if (integer_zerop (ptr)
+	  || wi::to_widest (ptr) >= param_min_pagesize)
 	pref->set_max_size_range ();
       else
 	pref->sizrng[0] = pref->sizrng[1] = 0;
@@ -7878,12 +7893,10 @@ default_emit_call_builtin___clear_cache (rtx begin, rtx end)
 void
 maybe_emit_call_builtin___clear_cache (rtx begin, rtx end)
 {
-  if ((GET_MODE (begin) != ptr_mode && GET_MODE (begin) != Pmode)
-      || (GET_MODE (end) != ptr_mode && GET_MODE (end) != Pmode))
-    {
-      error ("both arguments to %<__builtin___clear_cache%> must be pointers");
-      return;
-    }
+  gcc_assert ((GET_MODE (begin) == ptr_mode || GET_MODE (begin) == Pmode
+	       || CONST_INT_P (begin))
+	      && (GET_MODE (end) == ptr_mode || GET_MODE (end) == Pmode
+		  || CONST_INT_P (end)));
 
   if (targetm.have_clear_cache ())
     {

@@ -1179,10 +1179,15 @@
 (define_predicate "mma_disassemble_output_operand"
   (match_code "reg,subreg,mem")
 {
+  if (MEM_P (op))
+    {
+      rtx  addr = XEXP (op, 0);
+      return indexed_or_indirect_address (addr, mode)
+	     || quad_address_p (addr, mode, false);
+    }
+
   if (SUBREG_P (op))
     op = SUBREG_REG (op);
-  if (!REG_P (op))
-    return true;
 
   return vsx_register_operand (op, mode);
 })
@@ -1947,3 +1952,17 @@
  (if_then_else (match_test "TARGET_VSX")
   (match_operand 0 "reg_or_cint_operand")
   (match_operand 0 "const_int_operand")))
+
+;; Return true if the operand is a valid Mach-O pic address.
+;;
+(define_predicate "macho_pic_address"
+  (match_code "const,unspec")
+{
+  if (GET_CODE (op) == CONST)
+    op = XEXP (op, 0);
+
+  if (GET_CODE (op) == UNSPEC && XINT (op, 1) == UNSPEC_MACHOPIC_OFFSET)
+    return CONSTANT_P (XVECEXP (op, 0, 0));
+  else
+    return false;
+})

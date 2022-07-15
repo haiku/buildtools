@@ -628,9 +628,9 @@ ix86_init_mmx_sse_builtins (void)
 			    VOID_FTYPE_VOID, IX86_BUILTIN_MFENCE);
 
   /* SSE3.  */
-  def_builtin (OPTION_MASK_ISA_SSE3, 0, "__builtin_ia32_monitor",
+  def_builtin (0, OPTION_MASK_ISA2_MWAIT, "__builtin_ia32_monitor",
 	       VOID_FTYPE_PCVOID_UNSIGNED_UNSIGNED, IX86_BUILTIN_MONITOR);
-  def_builtin (OPTION_MASK_ISA_SSE3, 0, "__builtin_ia32_mwait",
+  def_builtin (0, OPTION_MASK_ISA2_MWAIT, "__builtin_ia32_mwait",
 	       VOID_FTYPE_UNSIGNED_UNSIGNED, IX86_BUILTIN_MWAIT);
 
   /* AES */
@@ -2236,7 +2236,11 @@ fold_builtin_cpu (tree fndecl, tree *args)
       /* Return __cpu_model.__cpu_features[0] & field_val  */
       final = build2 (BIT_AND_EXPR, unsigned_type_node, array_elt,
 		      build_int_cstu (unsigned_type_node, field_val));
-      return build1 (CONVERT_EXPR, integer_type_node, final);
+      if (isa_names_table[i].feature == (INT_TYPE_SIZE - 1))
+	return build2 (NE_EXPR, integer_type_node, final,
+		       build_int_cst (unsigned_type_node, 0));
+      else
+	return build1 (CONVERT_EXPR, integer_type_node, final);
     }
   gcc_unreachable ();
 }

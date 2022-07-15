@@ -2022,6 +2022,10 @@ maybe_warn_rdwr_sizes (rdwr_map *rwm, tree fndecl, tree fntype, tree exp)
 	  if (access.second.minsize
 	      && access.second.minsize != HOST_WIDE_INT_M1U)
 	    access_size = build_int_cstu (sizetype, access.second.minsize);
+	  else if (VOID_TYPE_P (argtype) && access.second.mode == access_none)
+	    /* Treat access mode none on a void* argument as expecting
+	       as little as zero bytes.  */
+	    access_size = size_zero_node;
 	  else
 	    access_size = size_one_node;
 	}
@@ -2126,8 +2130,8 @@ maybe_warn_rdwr_sizes (rdwr_map *rwm, tree fndecl, tree fntype, tree exp)
 					   "array %s is null but "
 					   "the corresponding bound argument "
 					   "%i value is %s",
-					   exp, sizidx + 1, argtypestr.c_str (),
-					   ptridx + 1, sizstr);
+					   exp, ptridx + 1, argtypestr.c_str (),
+					   sizidx + 1, sizstr);
 		}
 	      else
 		arg_warned = warning_at (loc, OPT_Wnonnull,

@@ -466,6 +466,7 @@ new_function (location *loc,
   DECL_ARTIFICIAL (resdecl) = 1;
   DECL_IGNORED_P (resdecl) = 1;
   DECL_RESULT (fndecl) = resdecl;
+  DECL_CONTEXT (resdecl) = fndecl;
 
   if (builtin_id)
     {
@@ -1481,7 +1482,8 @@ function (context *ctxt,
 : m_ctxt(ctxt),
   m_inner_fndecl (fndecl),
   m_inner_bind_expr (NULL),
-  m_kind (kind)
+  m_kind (kind),
+  m_blocks ()
 {
   if (m_kind != GCC_JIT_FUNCTION_IMPORTED)
     {

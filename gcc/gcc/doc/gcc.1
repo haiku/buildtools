@@ -129,7 +129,7 @@
 .\" ========================================================================
 .\"
 .IX Title "GCC 1"
-.TH GCC 1 "2021-07-28" "gcc-11.2.0" "GNU"
+.TH GCC 1 "2022-04-21" "gcc-11.3.0" "GNU"
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
@@ -806,6 +806,7 @@ in the following sections.
 \&\-mverbose\-cost\-dump 
 \&\-mpure\-code 
 \&\-mcmse 
+\&\-mfix\-cmse\-cve\-2021\-35465 
 \&\-mfdpic\fR
 .Sp
 \&\fI\s-1AVR\s0 Options\fR
@@ -835,12 +836,12 @@ in the following sections.
 \&\fB\-msim  \-msdata=\fR\fIsdata-type\fR
 .Sp
 \&\fI\s-1CRIS\s0 Options\fR
-\&\fB\-mcpu=\fR\fIcpu\fR  \fB\-march=\fR\fIcpu\fR  \fB\-mtune=\fR\fIcpu\fR 
-\&\fB\-mmax\-stack\-frame=\fR\fIn\fR  \fB\-melinux\-stacksize=\fR\fIn\fR 
+\&\fB\-mcpu=\fR\fIcpu\fR  \fB\-march=\fR\fIcpu\fR
+\&\fB\-mtune=\fR\fIcpu\fR \fB\-mmax\-stack\-frame=\fR\fIn\fR 
 \&\fB\-metrax4  \-metrax100  \-mpdebug  \-mcc\-init  \-mno\-side\-effects 
 \&\-mstack\-align  \-mdata\-align  \-mconst\-align 
-\&\-m32\-bit  \-m16\-bit  \-m8\-bit  \-mno\-prologue\-epilogue  \-mno\-gotplt 
-\&\-melf  \-maout  \-melinux  \-mlinux  \-sim  \-sim2 
+\&\-m32\-bit  \-m16\-bit  \-m8\-bit  \-mno\-prologue\-epilogue 
+\&\-melf  \-maout  \-sim  \-sim2 
 \&\-mmul\-bug\-workaround  \-mno\-mul\-bug\-workaround\fR
 .Sp
 \&\fI\s-1CR16\s0 Options\fR
@@ -1375,7 +1376,7 @@ See \s-1RS/6000\s0 and PowerPC Options.
 \&\-mno\-wide\-multiply  \-mrtd  \-malign\-double 
 \&\-mpreferred\-stack\-boundary=\fR\fInum\fR 
 \&\fB\-mincoming\-stack\-boundary=\fR\fInum\fR 
-\&\fB\-mcld  \-mcx16  \-msahf  \-mmovbe  \-mcrc32 
+\&\fB\-mcld  \-mcx16  \-msahf  \-mmovbe  \-mcrc32 \-mmwait 
 \&\-mrecip  \-mrecip=\fR\fIopt\fR 
 \&\fB\-mvzeroupper  \-mprefer\-avx128  \-mprefer\-vector\-width=\fR\fIopt\fR 
 \&\fB\-mmmx  \-msse  \-msse2  \-msse3  \-mssse3  \-msse4.1  \-msse4.2  \-msse4  \-mavx 
@@ -1412,7 +1413,8 @@ See \s-1RS/6000\s0 and PowerPC Options.
 \&\fB\-mstack\-protector\-guard\-symbol=\fR\fIsymbol\fR 
 \&\fB\-mgeneral\-regs\-only  \-mcall\-ms2sysv\-xlogues 
 \&\-mindirect\-branch=\fR\fIchoice\fR  \fB\-mfunction\-return=\fR\fIchoice\fR 
-\&\fB\-mindirect\-branch\-register \-mneeded\fR
+\&\fB\-mindirect\-branch\-register \-mharden\-sls=\fR\fIchoice\fR 
+\&\fB\-mindirect\-branch\-cs\-prefix \-mneeded\fR
 .Sp
 \&\fIx86 Windows Options\fR
 \&\fB\-mconsole  \-mcygwin  \-mno\-cygwin  \-mdll 
@@ -1889,7 +1891,8 @@ named \fIdir/bar.*\fR, combining the given \fIdumppfx\fR with the
 default \fIdumpbase\fR derived from the primary output name.  Dump
 outputs also take the input name suffix: \fIdir/bar.c.*\fR.
 .Sp
-It defaults to the location of the output file; options
+It defaults to the location of the output file, unless the output
+file is a special file like \f(CW\*(C`/dev/null\*(C'\fR. Options
 \&\fB\-save\-temps=cwd\fR and \fB\-save\-temps=obj\fR override this
 default, just like an explicit \fB\-dumpdir\fR option.  In case
 multiple such options are given, the last one prevails:
@@ -5338,7 +5341,7 @@ name is still supported, but the newer name is more descriptive.)
 \&\-Wredundant\-move\fR (only for \*(C+)  
 \&\fB\-Wtype\-limits  
 \&\-Wuninitialized  
-\&\-Wshift\-negative\-value\fR (in \*(C+03 and in C99 and newer)  
+\&\-Wshift\-negative\-value\fR (in \*(C+11 to \*(C+17 and in C99 and newer)  
 \&\fB\-Wunused\-parameter\fR (only with\fB \fR\fB\-Wunused\fR\fB \fRor\fB \fR\fB\-Wall\fR) 
 \&\fB\-Wunused\-but\-set\-parameter\fR (only with\fB \fR\fB\-Wunused\fR\fB \fRor\fB \fR\fB\-Wall\fR)
 .Sp
@@ -6263,7 +6266,7 @@ of the type.  This warning is enabled by default.
 .IP "\fB\-Wshift\-negative\-value\fR" 4
 .IX Item "-Wshift-negative-value"
 Warn if left shifting a negative value.  This warning is enabled by
-\&\fB\-Wextra\fR in C99 and \*(C+11 modes (and newer).
+\&\fB\-Wextra\fR in C99 (and newer) and \*(C+11 to \*(C+17 modes.
 .IP "\fB\-Wno\-shift\-overflow\fR" 4
 .IX Item "-Wno-shift-overflow"
 .PD 0
@@ -13844,7 +13847,8 @@ The option cannot be combined with \fB\-fsanitize=thread\fR.
 .IX Item "-fsanitize=undefined"
 Enable UndefinedBehaviorSanitizer, a fast undefined behavior detector.
 Various computations are instrumented to detect undefined behavior
-at runtime.  Current suboptions are:
+at runtime.  See <\fBhttps://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html\fR> for more details.   The run-time behavior can be influenced using the
+\&\fB\s-1UBSAN_OPTIONS\s0\fR environment variable.  Current suboptions are:
 .RS 4
 .IP "\fB\-fsanitize=shift\fR" 4
 .IX Item "-fsanitize=shift"
@@ -14088,7 +14092,8 @@ You can also use the \f(CW\*(C`nocf_check\*(C'\fR attribute to identify
 which functions and calls should be skipped from instrumentation.
 .Sp
 Currently the x86 GNU/Linux target provides an implementation based
-on Intel Control-flow Enforcement Technology (\s-1CET\s0).
+on Intel Control-flow Enforcement Technology (\s-1CET\s0) which works for
+i686 processor or newer.
 .IP "\fB\-fstack\-protector\fR" 4
 .IX Item "-fstack-protector"
 Emit extra code to check for buffer overflows, such as stack smashing
@@ -17512,10 +17517,10 @@ performance of the code.  Permissible values for this option are:
 \&\fBcortex\-a65\fR, \fBcortex\-a65ae\fR, \fBcortex\-a34\fR,
 \&\fBcortex\-a78\fR, \fBcortex\-a78ae\fR, \fBcortex\-a78c\fR,
 \&\fBares\fR, \fBexynos\-m1\fR, \fBemag\fR, \fBfalkor\fR,
-\&\fBneoverse\-e1\fR, \fBneoverse\-n1\fR, \fBneoverse\-n2\fR,
-\&\fBneoverse\-v1\fR, \fBqdf24xx\fR, \fBsaphira\fR,
-\&\fBphecda\fR, \fBxgene1\fR, \fBvulcan\fR, \fBocteontx\fR,
-\&\fBocteontx81\fR,  \fBocteontx83\fR,
+\&\fBneoverse\-512tvb\fR, \fBneoverse\-e1\fR, \fBneoverse\-n1\fR,
+\&\fBneoverse\-n2\fR, \fBneoverse\-v1\fR, \fBqdf24xx\fR,
+\&\fBsaphira\fR, \fBphecda\fR, \fBxgene1\fR, \fBvulcan\fR,
+\&\fBocteontx\fR, \fBocteontx81\fR,  \fBocteontx83\fR,
 \&\fBocteontx2\fR, \fBocteontx2t98\fR, \fBocteontx2t96\fR
 \&\fBocteontx2t93\fR, \fBocteontx2f95\fR, \fBocteontx2f95n\fR,
 \&\fBocteontx2f95mm\fR,
@@ -17526,12 +17531,21 @@ performance of the code.  Permissible values for this option are:
 \&\fBcortex\-a57.cortex\-a53\fR, \fBcortex\-a72.cortex\-a53\fR,
 \&\fBcortex\-a73.cortex\-a35\fR, \fBcortex\-a73.cortex\-a53\fR,
 \&\fBcortex\-a75.cortex\-a55\fR, \fBcortex\-a76.cortex\-a55\fR,
-\&\fBcortex\-r82\fR, \fBcortex\-x1\fR, \fBnative\fR.
+\&\fBcortex\-r82\fR, \fBcortex\-x1\fR, \fBampere1\fR, \fBnative\fR.
 .Sp
 The values \fBcortex\-a57.cortex\-a53\fR, \fBcortex\-a72.cortex\-a53\fR,
 \&\fBcortex\-a73.cortex\-a35\fR, \fBcortex\-a73.cortex\-a53\fR,
 \&\fBcortex\-a75.cortex\-a55\fR, \fBcortex\-a76.cortex\-a55\fR specify that \s-1GCC\s0
 should tune for a big.LITTLE system.
+.Sp
+The value \fBneoverse\-512tvb\fR specifies that \s-1GCC\s0 should tune
+for Neoverse cores that (a) implement \s-1SVE\s0 and (b) have a total vector
+bandwidth of 512 bits per cycle.  In other words, the option tells \s-1GCC\s0 to
+tune for Neoverse cores that can execute 4 128\-bit Advanced \s-1SIMD\s0 arithmetic
+instructions a cycle and that can execute an equivalent number of \s-1SVE\s0
+arithmetic instructions per cycle (2 for 256\-bit \s-1SVE, 4\s0 for 128\-bit \s-1SVE\s0).
+This is more general than tuning for a specific core like Neoverse V1
+but is more specific than the default tuning described below.
 .Sp
 Additionally on native AArch64 GNU/Linux systems the value
 \&\fBnative\fR tunes performance to the host system.  This option has no effect
@@ -17560,6 +17574,16 @@ the target processor for which to tune for performance (as if
 by \fB\-mtune\fR).  Where this option is used in conjunction
 with \fB\-march\fR or \fB\-mtune\fR, those options take precedence
 over the appropriate part of this option.
+.Sp
+\&\fB\-mcpu=neoverse\-512tvb\fR is special in that it does not refer
+to a specific core, but instead refers to all Neoverse cores that
+(a) implement \s-1SVE\s0 and (b) have a total vector bandwidth of 512 bits
+a cycle.  Unless overridden by \fB\-march\fR,
+\&\fB\-mcpu=neoverse\-512tvb\fR generates code that can run on a
+Neoverse V1 core, since Neoverse V1 is the first Neoverse core with
+these properties.  Unless overridden by \fB\-mtune\fR,
+\&\fB\-mcpu=neoverse\-512tvb\fR tunes code in the same way as for
+\&\fB\-mtune=neoverse\-512tvb\fR.
 .IP "\fB\-moverride=\fR\fIstring\fR" 4
 .IX Item "-moverride=string"
 Override tuning decisions made by the back-end in response to a
@@ -17954,6 +17978,18 @@ Compile for \s-1GCN5\s0 Vega 20 devices (gfx906).
 .RE
 .RS 4
 .RE
+.IP "\fB\-msram\-ecc=on\fR" 4
+.IX Item "-msram-ecc=on"
+.PD 0
+.IP "\fB\-msram\-ecc=off\fR" 4
+.IX Item "-msram-ecc=off"
+.IP "\fB\-msram\-ecc=any\fR" 4
+.IX Item "-msram-ecc=any"
+.PD
+Compile binaries suitable for devices with the SRAM-ECC feature enabled,
+disabled, or either mode.  This feature can be enabled per-process on some
+devices.  The compiled code must match the device mode. The default is
+\&\fBany\fR, for devices that support it.
 .IP "\fB\-mstack\-size=\fR\fIbytes\fR" 4
 .IX Item "-mstack-size=bytes"
 Specify how many \fIbytes\fR of stack space will be requested for each \s-1GPU\s0
@@ -17961,6 +17997,13 @@ thread (wave-front).  Beware that there may be many threads and limited memory
 available.  The size of the stack allocation may also have an impact on
 run-time performance.  The default is 32KB when using OpenACC or OpenMP, and
 1MB otherwise.
+.IP "\fB\-mxnack\fR" 4
+.IX Item "-mxnack"
+Compile binaries suitable for devices with the \s-1XNACK\s0 feature enabled.  Some
+devices always require \s-1XNACK\s0 and some allow the user to configure \s-1XNACK.\s0  The
+compiled code must match the device mode.  The default is \fB\-mno\-xnack\fR.
+At present this option is a placeholder for support that is not yet
+implemented.
 .PP
 \fI\s-1ARC\s0 Options\fR
 .IX Subsection "ARC Options"
@@ -19710,6 +19753,13 @@ is only available when generating non-pic code for M\-profile targets.
 Generate secure code as per the \*(L"ARMv8\-M Security Extensions: Requirements on
 Development Tools Engineering Specification\*(R", which can be found on
 <\fBhttps://developer.arm.com/documentation/ecm0359818/latest/\fR>.
+.IP "\fB\-mfix\-cmse\-cve\-2021\-35465\fR" 4
+.IX Item "-mfix-cmse-cve-2021-35465"
+Mitigate against a potential security issue with the \f(CW\*(C`VLLDM\*(C'\fR instruction
+in some M\-profile devices when using \s-1CMSE\s0 (\s-1CVE\-2021\-365465\s0).  This option is
+enabled by default when the option \fB\-mcpu=\fR is used with
+\&\f(CW\*(C`cortex\-m33\*(C'\fR, \f(CW\*(C`cortex\-m35p\*(C'\fR or \f(CW\*(C`cortex\-m55\*(C'\fR.  The option
+\&\fB\-mno\-fix\-cmse\-cve\-2021\-35465\fR can be used to disable the mitigation.
 .IP "\fB\-mfdpic\fR" 4
 .IX Item "-mfdpic"
 .PD 0
@@ -20649,8 +20699,7 @@ These options are defined specifically for the \s-1CRIS\s0 ports.
 Generate code for the specified architecture.  The choices for
 \&\fIarchitecture-type\fR are \fBv3\fR, \fBv8\fR and \fBv10\fR for
 respectively \s-1ETRAX\s0\ 4, \s-1ETRAX\s0\ 100, and \s-1ETRAX\s0\ 100\ \s-1LX.\s0
-Default is \fBv0\fR except for cris-axis-linux-gnu, where the default is
-\&\fBv10\fR.
+Default is \fBv0\fR.
 .IP "\fB\-mtune=\fR\fIarchitecture-type\fR" 4
 .IX Item "-mtune=architecture-type"
 Tune to \fIarchitecture-type\fR everything applicable about the generated
@@ -20732,26 +20781,12 @@ instructions or return sequences are generated in the code.  Use this
 option only together with visual inspection of the compiled code: no
 warnings or errors are generated when call-saved registers must be saved,
 or storage for local variables needs to be allocated.
-.IP "\fB\-mno\-gotplt\fR" 4
-.IX Item "-mno-gotplt"
-.PD 0
-.IP "\fB\-mgotplt\fR" 4
-.IX Item "-mgotplt"
-.PD
-With \fB\-fpic\fR and \fB\-fPIC\fR, don't generate (do generate)
-instruction sequences that load addresses for functions from the \s-1PLT\s0 part
-of the \s-1GOT\s0 rather than (traditional on other architectures) calls to the
-\&\s-1PLT.\s0  The default is \fB\-mgotplt\fR.
 .IP "\fB\-melf\fR" 4
 .IX Item "-melf"
-Legacy no-op option only recognized with the cris-axis-elf and
-cris-axis-linux-gnu targets.
-.IP "\fB\-mlinux\fR" 4
-.IX Item "-mlinux"
-Legacy no-op option only recognized with the cris-axis-linux-gnu target.
+Legacy no-op option.
 .IP "\fB\-sim\fR" 4
 .IX Item "-sim"
-This option, recognized for the cris-axis-elf, arranges
+This option arranges
 to link with input-output functions from a simulator library.  Code,
 initialized data and zero-initialized data are allocated consecutively.
 .IP "\fB\-sim2\fR" 4
@@ -25983,7 +26018,7 @@ Supported values for \fIcpu_type\fR are \fB401\fR, \fB403\fR,
 \&\fBe6500\fR, \fBec603e\fR, \fBG3\fR, \fBG4\fR, \fBG5\fR,
 \&\fBtitan\fR, \fBpower3\fR, \fBpower4\fR, \fBpower5\fR, \fBpower5+\fR,
 \&\fBpower6\fR, \fBpower6x\fR, \fBpower7\fR, \fBpower8\fR,
-\&\fBpower9\fR, \fBfuture\fR, \fBpowerpc\fR, \fBpowerpc64\fR,
+\&\fBpower9\fR, \fBpower10\fR, \fBpowerpc\fR, \fBpowerpc64\fR,
 \&\fBpowerpc64le\fR, \fBrs64\fR, and \fBnative\fR.
 .Sp
 \&\fB\-mcpu=powerpc\fR, \fB\-mcpu=powerpc64\fR, and
@@ -26170,10 +26205,9 @@ Enable/disable the \fI_\|_float128\fR keyword for \s-1IEEE\s0 128\-bit floating 
 and use either software emulation for \s-1IEEE\s0 128\-bit floating point or
 hardware instructions.
 .Sp
-The \s-1VSX\s0 instruction set (\fB\-mvsx\fR, \fB\-mcpu=power7\fR,
-\&\fB\-mcpu=power8\fR), or \fB\-mcpu=power9\fR must be enabled to
-use the \s-1IEEE\s0 128\-bit floating point support.  The \s-1IEEE\s0 128\-bit
-floating point support only works on PowerPC Linux systems.
+The \s-1VSX\s0 instruction set (\fB\-mvsx\fR) must be enabled to use the \s-1IEEE\s0
+128\-bit floating point support.  The \s-1IEEE\s0 128\-bit floating point is only
+supported on Linux.
 .Sp
 The default for \fB\-mfloat128\fR is enabled on PowerPC Linux
 systems using the \s-1VSX\s0 instruction set, and disabled on other systems.
@@ -27010,10 +27044,9 @@ the offset with a symbol reference to a canary in the \s-1TLS\s0 block.
 .IP "\fB\-mno\-pcrel\fR" 4
 .IX Item "-mno-pcrel"
 .PD
-Generate (do not generate) pc-relative addressing when the option
-\&\fB\-mcpu=future\fR is used.  The \fB\-mpcrel\fR option requires
-that the medium code model (\fB\-mcmodel=medium\fR) and prefixed
-addressing (\fB\-mprefixed\fR) options are enabled.
+Generate (do not generate) pc-relative addressing.  The \fB\-mpcrel\fR
+option requires that the medium code model (\fB\-mcmodel=medium\fR)
+and prefixed addressing (\fB\-mprefixed\fR) options are enabled.
 .IP "\fB\-mprefixed\fR" 4
 .IX Item "-mprefixed"
 .PD 0
@@ -27021,15 +27054,17 @@ addressing (\fB\-mprefixed\fR) options are enabled.
 .IX Item "-mno-prefixed"
 .PD
 Generate (do not generate) addressing modes using prefixed load and
-store instructions when the option \fB\-mcpu=future\fR is used.
+store instructions.  The \fB\-mprefixed\fR option requires that
+the option \fB\-mcpu=power10\fR (or later) is enabled.
 .IP "\fB\-mmma\fR" 4
 .IX Item "-mmma"
 .PD 0
 .IP "\fB\-mno\-mma\fR" 4
 .IX Item "-mno-mma"
 .PD
-Generate (do not generate) the \s-1MMA\s0 instructions when the option
-\&\fB\-mcpu=future\fR is used.
+Generate (do not generate) the \s-1MMA\s0 instructions.  The \fB\-mma\fR
+option requires that the option \fB\-mcpu=power10\fR (or later)
+is enabled.
 .IP "\fB\-mrop\-protect\fR" 4
 .IX Item "-mrop-protect"
 .PD 0
@@ -27456,7 +27491,8 @@ system representing a certain processor type.  Possible values for
 \&\fIcpu-type\fR are \fBz900\fR/\fBarch5\fR, \fBz990\fR/\fBarch6\fR,
 \&\fBz9\-109\fR, \fBz9\-ec\fR/\fBarch7\fR, \fBz10\fR/\fBarch8\fR,
 \&\fBz196\fR/\fBarch9\fR, \fBzEC12\fR, \fBz13\fR/\fBarch11\fR,
-\&\fBz14\fR/\fBarch12\fR, \fBz15\fR/\fBarch13\fR, and \fBnative\fR.
+\&\fBz14\fR/\fBarch12\fR, \fBz15\fR/\fBarch13\fR,
+\&\fBz16\fR/\fBarch14\fR, and \fBnative\fR.
 .Sp
 The default is \fB\-march=z900\fR.
 .Sp
@@ -28137,10 +28173,11 @@ so \fB\-mno\-lra\fR needs to be passed to get old Reload.
 Set the instruction set, register set, and instruction scheduling parameters
 for machine type \fIcpu_type\fR.  Supported values for \fIcpu_type\fR are
 \&\fBv7\fR, \fBcypress\fR, \fBv8\fR, \fBsupersparc\fR, \fBhypersparc\fR,
-\&\fBleon\fR, \fBleon3\fR, \fBleon3v7\fR, \fBsparclite\fR, \fBf930\fR,
-\&\fBf934\fR, \fBsparclite86x\fR, \fBsparclet\fR, \fBtsc701\fR, \fBv9\fR,
-\&\fBultrasparc\fR, \fBultrasparc3\fR, \fBniagara\fR, \fBniagara2\fR,
-\&\fBniagara3\fR, \fBniagara4\fR, \fBniagara7\fR and \fBm8\fR.
+\&\fBleon\fR, \fBleon3\fR, \fBleon3v7\fR, \fBleon5\fR, \fBsparclite\fR,
+\&\fBf930\fR, \fBf934\fR, \fBsparclite86x\fR, \fBsparclet\fR, \fBtsc701\fR,
+\&\fBv9\fR, \fBultrasparc\fR, \fBultrasparc3\fR, \fBniagara\fR,
+\&\fBniagara2\fR, \fBniagara3\fR, \fBniagara4\fR, \fBniagara7\fR and
+\&\fBm8\fR.
 .Sp
 Native Solaris and GNU/Linux toolchains also support the value \fBnative\fR,
 which selects the best architecture option for the host processor.
@@ -28159,7 +28196,7 @@ implementations.
 cypress, leon3v7
 .IP "v8" 4
 .IX Item "v8"
-supersparc, hypersparc, leon, leon3
+supersparc, hypersparc, leon, leon3, leon5
 .IP "sparclite" 4
 .IX Item "sparclite"
 f930, f934, sparclite86x
@@ -28227,7 +28264,7 @@ The same values for \fB\-mcpu=\fR\fIcpu_type\fR can be used for
 \&\fB\-mtune=\fR\fIcpu_type\fR, but the only useful values are those
 that select a particular \s-1CPU\s0 implementation.  Those are
 \&\fBcypress\fR, \fBsupersparc\fR, \fBhypersparc\fR, \fBleon\fR,
-\&\fBleon3\fR, \fBleon3v7\fR, \fBf930\fR, \fBf934\fR,
+\&\fBleon3\fR, \fBleon3v7\fR, \fBleon5\fR, \fBf930\fR, \fBf934\fR,
 \&\fBsparclite86x\fR, \fBtsc701\fR, \fBultrasparc\fR,
 \&\fBultrasparc3\fR, \fBniagara\fR, \fBniagara2\fR, \fBniagara3\fR,
 \&\fBniagara4\fR, \fBniagara7\fR and \fBm8\fR.  With native Solaris
@@ -29098,12 +29135,14 @@ instruction set support.
 .IP "\fBsapphirerapids\fR" 4
 .IX Item "sapphirerapids"
 Intel sapphirerapids \s-1CPU\s0 with 64\-bit extensions, \s-1MOVBE, MMX, SSE, SSE2, SSE3,
-SSSE3, SSE4.1, SSE4.2, POPCNT, PKU, AVX, AVX2, AES, PCLMUL, FSGSBASE, RDRND,
-FMA, BMI, BMI2, F16C, RDSEED, ADCX, PREFETCHW, CLFLUSHOPT, XSAVEC, XSAVES,
-AVX512F, CLWB, AVX512VL, AVX512BW, AVX512DQ, AVX512CD, AVX512VNNI, AVX512BF16,
+SSSE3, SSE4.1, SSE4.2, POPCNT, CX16, SAHF, FXSR, AVX, XSAVE, PCLMUL, FSGSBASE,
+RDRND, F16C, AVX2, BMI, BMI2, LZCNT, FMA, MOVBE, HLE, RDSEED, ADCX, PREFETCHW,
+AES, CLFLUSHOPT, XSAVEC, XSAVES, SGX, AVX512F, AVX512VL, AVX512BW, AVX512DQ,
+AVX512CD, PKU, AVX512VBMI, AVX512IFMA, SHA, AVX512VNNI, GFNI, VAES, AVX512VBMI2
+VPCLMULQDQ, AVX512BITALG, RDPID, AVX512VPOPCNTDQ, PCONFIG, WBNOINVD, CLWB,
 MOVDIRI, MOVDIR64B, AVX512VP2INTERSECT, ENQCMD, CLDEMOTE, PTWRITE, WAITPKG,
-SERIALIZE, TSXLDTRK, UINTR, AMX\-BF16,\s0 AMX-TILE, \s-1AMX\-INT8\s0 and AVX-VNNI
-instruction set support.
+SERIALIZE, TSXLDTRK, UINTR, AMX\-BF16,\s0 AMX-TILE, \s-1AMX\-INT8,\s0 AVX-VNNI and
+\&\s-1AVX512BF16\s0 instruction set support.
 .IP "\fBalderlake\fR" 4
 .IX Item "alderlake"
 Intel Alderlake \s-1CPU\s0 with 64\-bit extensions, \s-1MOVBE, MMX, SSE, SSE2, SSE3, SSSE3,
@@ -29987,6 +30026,11 @@ from x86 Control-flow Enforcement Technology (\s-1CET\s0).
 This option enables built-in functions \f(CW\*(C`_\|_builtin_ia32_crc32qi\*(C'\fR,
 \&\f(CW\*(C`_\|_builtin_ia32_crc32hi\*(C'\fR, \f(CW\*(C`_\|_builtin_ia32_crc32si\*(C'\fR and
 \&\f(CW\*(C`_\|_builtin_ia32_crc32di\*(C'\fR to generate the \f(CW\*(C`crc32\*(C'\fR machine instruction.
+.IP "\fB\-mmwait\fR" 4
+.IX Item "-mmwait"
+This option enables built-in functions \f(CW\*(C`_\|_builtin_ia32_monitor\*(C'\fR,
+and \f(CW\*(C`_\|_builtin_ia32_mwait\*(C'\fR to generate the \f(CW\*(C`monitor\*(C'\fR and
+\&\f(CW\*(C`mwait\*(C'\fR machine instructions.
 .IP "\fB\-mrecip\fR" 4
 .IX Item "-mrecip"
 This option enables use of \f(CW\*(C`RCPSS\*(C'\fR and \f(CW\*(C`RSQRTSS\*(C'\fR instructions
@@ -30498,6 +30542,19 @@ not be reachable in the large code model.
 .IP "\fB\-mindirect\-branch\-register\fR" 4
 .IX Item "-mindirect-branch-register"
 Force indirect call and jump via register.
+.IP "\fB\-mharden\-sls=\fR\fIchoice\fR" 4
+.IX Item "-mharden-sls=choice"
+Generate code to mitigate against straight line speculation (\s-1SLS\s0) with
+\&\fIchoice\fR.  The default is \fBnone\fR which disables all \s-1SLS\s0
+hardening.  \fBreturn\fR enables \s-1SLS\s0 hardening for function returns.
+\&\fBindirect-jmp\fR enables \s-1SLS\s0 hardening for indirect jumps.
+\&\fBall\fR enables all \s-1SLS\s0 hardening.
+.IP "\fB\-mindirect\-branch\-cs\-prefix\fR" 4
+.IX Item "-mindirect-branch-cs-prefix"
+Add \s-1CS\s0 prefix to call and jmp to indirect thunk with branch target in
+r8\-r15 registers so that the call and jmp instruction length is 6 bytes
+to allow them to be replaced with \fBlfence; call *%r8\-r15\fR or
+\&\fBlfence; jmp *%r8\-r15\fR at run-time.
 .PP
 These \fB\-m\fR switches are supported in addition to the above
 on x86\-64 processors in 64\-bit environments.

@@ -24,6 +24,7 @@
 #include <string>
 #include <memory>
 #include <iostream>
+#include <future>
 #include "../util/testsuite_allocator.h" // NullablePointer
 
 typedef std::tuple<int, int> ExTuple;
@@ -151,10 +152,45 @@ main()
   std::unique_ptr<int, Deleter>& rempty_ptr = empty_ptr;
 // { dg-final { note-test rempty_ptr {std::unique_ptr<int> = {get() = {<No data fields>}}} } }
 
+  struct Deleter_pr103086
+  {
+    int deleter_member = -1;
+    void operator()(int*) const noexcept { }
+  };
+
+  std::unique_ptr<int, Deleter_pr103086> uniq_ptr;
+// { dg-final { note-test uniq_ptr {std::unique_ptr<int> = {get() = 0x0}} } }
+  std::unique_ptr<int, Deleter_pr103086>& runiq_ptr = uniq_ptr;
+// { dg-final { note-test runiq_ptr {std::unique_ptr<int> = {get() = 0x0}} } }
+
   ExTuple tpl(6,7);
 // { dg-final { note-test tpl {std::tuple containing = {[1] = 6, [2] = 7}} } }
   ExTuple &rtpl = tpl;
 // { dg-final { note-test rtpl {std::tuple containing = {[1] = 6, [2] = 7}} } }
+
+  std::error_code e0;
+  // { dg-final { note-test e0 {std::error_code = { }} } }
+  std::error_condition ec0;
+  // { dg-final { note-test ec0 {std::error_condition = { }} } }
+  std::error_code einval = std::make_error_code(std::errc::invalid_argument);
+  // { dg-final { note-test einval {std::error_code = {"generic": EINVAL}} } }
+  std::error_condition ecinval = std::make_error_condition(std::errc::invalid_argument);
+  // { dg-final { note-test ecinval {std::error_condition = {"generic": EINVAL}} } }
+
+  struct custom_cat : std::error_category {
+    const char* name() const noexcept { return "miaow"; }
+    std::string message(int) const { return ""; }
+  } cat;
+  std::error_code emiaow(42, cat);
+  // { dg-final { note-test emiaow {std::error_code = {custom_cat: 42}} } }
+  std::error_condition ecmiaow(42, cat);
+  // { dg-final { note-test ecmiaow {std::error_condition = {custom_cat: 42}} } }
+
+  std::error_code ecio = std::make_error_code(std::io_errc::stream);
+  // { dg-final { note-test ecio {std::error_code = {"io": stream}} } }
+  std::error_code ecfut0 = std::make_error_code(std::future_errc{});
+  // { dg-final { note-test ecfut0 {std::error_code = {"future": 0}} } }
+
   placeholder(""); // Mark SPOT
   use(efl);
   use(fl);

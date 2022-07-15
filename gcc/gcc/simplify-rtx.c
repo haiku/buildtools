@@ -2124,6 +2124,16 @@ simplify_context::simplify_associative_operation (rtx_code code,
 {
   rtx tem;
 
+  /* Normally expressions simplified by simplify-rtx.c are combined
+     at most from a few machine instructions and therefore the
+     expressions should be fairly small.  During var-tracking
+     we can see arbitrarily large expressions though and reassociating
+     those can be quadratic, so punt after encountering max_assoc_count
+     simplify_associative_operation calls during outermost simplify_*
+     call.  */
+  if (++assoc_count >= max_assoc_count)
+    return NULL_RTX;
+
   /* Linearize the operator to the left.  */
   if (GET_CODE (op1) == code)
     {
@@ -7220,6 +7230,7 @@ simplify_context::simplify_subreg (machine_mode outermode, rtx op,
          have instruction to move the whole thing.  */
       && (! MEM_VOLATILE_P (op)
 	  || ! have_insn_for (SET, innermode))
+      && !(STRICT_ALIGNMENT && MEM_ALIGN (op) < GET_MODE_ALIGNMENT (outermode))
       && known_le (outersize, innersize))
     return adjust_address_nv (op, outermode, byte);
 

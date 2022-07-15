@@ -24,6 +24,7 @@
 
 #include <random>
 #include <stdexcept>
+#include <cstdio>
 #include <testsuite_hooks.h>
 #include <testsuite_random.h>
 
@@ -42,7 +43,7 @@ test02()
 #ifdef _GLIBCXX_USE_DEV_RANDOM
   std::random_device x1("/dev/urandom");
   std::random_device x2("/dev/random");
-  VERIFY( x1() != x2() );
+  VERIFY( x1() != x2() || x1() != x2() );
 #endif
 }
 
@@ -57,8 +58,14 @@ test03()
   int count = 0;
   for (const std::string& token : tokens)
   {
+    std::printf("checking std::random_device(\"%s\"):\t", token.c_str());
     if (__gnu_test::random_device_available(token))
+    {
+      std::puts("yes");
       ++count;
+    }
+    else
+      std::puts("no");
   }
   VERIFY( count != 0 );
 }

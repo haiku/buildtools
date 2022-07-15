@@ -553,7 +553,7 @@ ix86_can_inline_p (tree caller, tree callee)
 
   /* Changes of those flags can be tolerated for always inlines. Lets hope
      user knows what he is doing.  */
-  const unsigned HOST_WIDE_INT always_inline_safe_mask
+  unsigned HOST_WIDE_INT always_inline_safe_mask
 	 = (MASK_USE_8BIT_IDIV | MASK_ACCUMULATE_OUTGOING_ARGS
 	    | MASK_NO_ALIGN_STRINGOPS | MASK_AVX256_SPLIT_UNALIGNED_LOAD
 	    | MASK_AVX256_SPLIT_UNALIGNED_STORE | MASK_CLD
@@ -577,6 +577,10 @@ ix86_can_inline_p (tree caller, tree callee)
     = (DECL_DISREGARD_INLINE_LIMITS (callee)
        && lookup_attribute ("always_inline",
 			    DECL_ATTRIBUTES (callee)));
+
+  /* If callee only uses GPRs, ignore MASK_80387.  */
+  if (TARGET_GENERAL_REGS_ONLY_P (callee_opts->x_ix86_target_flags))
+    always_inline_safe_mask |= MASK_80387;
 
   cgraph_node *callee_node = cgraph_node::get (callee);
   /* Callee's isa options should be a subset of the caller's, i.e. a SSE4
@@ -1868,8 +1872,12 @@ type_natural_mode (const_tree type, const CUMULATIVE_ARGS *cum,
 	{
 	  machine_mode innermode = TYPE_MODE (TREE_TYPE (type));
 
-	  /* There are no XFmode vector modes.  */
+	  /* There are no XFmode vector modes ...  */
 	  if (innermode == XFmode)
+	    return mode;
+
+	  /* ... and no decimal float vector modes.  */
+	  if (DECIMAL_FLOAT_MODE_P (innermode))
 	    return mode;
 
 	  if (TREE_CODE (TREE_TYPE (type)) == REAL_TYPE)
@@ -4959,7 +4967,8 @@ standard_80387_constant_p (rtx x)
   /* For XFmode constants, try to find a special 80387 instruction when
      optimizing for size or on those CPUs that benefit from them.  */
   if (mode == XFmode
-      && (optimize_function_for_size_p (cfun) || TARGET_EXT_80387_CONSTANTS))
+      && (optimize_function_for_size_p (cfun) || TARGET_EXT_80387_CONSTANTS)
+      && !flag_rounding_math)
     {
       int i;
 
@@ -5793,6 +5802,8 @@ output_indirect_thunk (unsigned int regno)
     }
 
   fputs ("\tret\n", asm_out_file);
+  if ((ix86_harden_sls & harden_sls_return))
+    fputs ("\tint3\n", asm_out_file);
 }
 
 /* Output a funtion with a call and return thunk for indirect branch.
@@ -5995,7 +6006,7 @@ ix86_code_end (void)
       xops[0] = gen_rtx_REG (Pmode, regno);
       xops[1] = gen_rtx_MEM (Pmode, stack_pointer_rtx);
       output_asm_insn ("mov%z0\t{%1, %0|%0, %1}", xops);
-      output_asm_insn ("%!ret", NULL);
+      fputs ("\tret\n", asm_out_file);
       final_end_function ();
       init_insn_lengths ();
       free_after_compilation (cfun);
@@ -7214,7 +7225,8 @@ find_drap_reg (void)
 	 register in such case.  */
       if (DECL_STATIC_CHAIN (decl)
 	  || cfun->machine->no_caller_saved_registers
-	  || crtl->tail_call_emit)
+	  || crtl->tail_call_emit
+	  || crtl->calls_eh_return)
 	return DI_REG;
 
       /* Reuse static chain register if it isn't used for parameter
@@ -10562,23 +10574,18 @@ legitimate_pic_address_disp_p (rtx disp)
 	      if (is_imported_p (op0))
 		return true;
 
-	      if (SYMBOL_REF_FAR_ADDR_P (op0)
-		  || !SYMBOL_REF_LOCAL_P (op0))
+	      if (SYMBOL_REF_FAR_ADDR_P (op0) || !SYMBOL_REF_LOCAL_P (op0))
 		break;
 
-	      /* Function-symbols need to be resolved only for
-	         large-model.
-	         For the small-model we don't need to resolve anything
-	         here.  */
+	      /* Non-external-weak function symbols need to be resolved only
+		 for the large model.  Non-external symbols don't need to be
+		 resolved for large and medium models.  For the small model,
+		 we don't need to resolve anything here.  */
 	      if ((ix86_cmodel != CM_LARGE_PIC
-	           && SYMBOL_REF_FUNCTION_P (op0))
+		   && SYMBOL_REF_FUNCTION_P (op0)
+		   && !(SYMBOL_REF_EXTERNAL_P (op0) && SYMBOL_REF_WEAK (op0)))
+		  || !SYMBOL_REF_EXTERNAL_P (op0)
 		  || ix86_cmodel == CM_SMALL_PIC)
-		return true;
-	      /* Non-external symbols don't need to be resolved for
-	         large, and medium-model.  */
-	      if ((ix86_cmodel == CM_LARGE_PIC
-		   || ix86_cmodel == CM_MEDIUM_PIC)
-		  && !SYMBOL_REF_EXTERNAL_P (op0))
 		return true;
 	    }
 	  else if (!SYMBOL_REF_FAR_ADDR_P (op0)
@@ -11466,6 +11473,36 @@ legitimize_tls_address (rtx x, enum tls_model model, bool for_mov)
     }
 
   return dest;
+}
+
+/* Return true if the TLS address requires insn using integer registers.
+   It's used to prevent KMOV/VMOV in TLS code sequences which require integer
+   MOV instructions, refer to PR103275.  */
+bool
+ix86_gpr_tls_address_pattern_p (rtx mem)
+{
+  gcc_assert (MEM_P (mem));
+
+  rtx addr = XEXP (mem, 0);
+  subrtx_var_iterator::array_type array;
+  FOR_EACH_SUBRTX_VAR (iter, array, addr, ALL)
+    {
+      rtx op = *iter;
+      if (GET_CODE (op) == UNSPEC)
+	switch (XINT (op, 1))
+	  {
+	  case UNSPEC_GOTNTPOFF:
+	    return true;
+	  case UNSPEC_TPOFF:
+	    if (!TARGET_64BIT)
+	      return true;
+	    break;
+	  default:
+	    break;
+	  }
+    }
+
+  return false;
 }
 
 /* Return true if OP refers to a TLS address.  */
@@ -13767,7 +13804,10 @@ ix86_print_operand_address_as (FILE *file, rtx addr,
 static void
 ix86_print_operand_address (FILE *file, machine_mode /*mode*/, rtx addr)
 {
-  ix86_print_operand_address_as (file, addr, ADDR_SPACE_GENERIC, false);
+  if (this_is_asm_operands && ! address_operand (addr, VOIDmode))
+    output_operand_lossage ("invalid constraints for operand");
+  else
+    ix86_print_operand_address_as (file, addr, ADDR_SPACE_GENERIC, false);
 }
 
 /* Implementation of TARGET_ASM_OUTPUT_ADDR_CONST_EXTRA.  */
@@ -15697,9 +15737,14 @@ ix86_output_jmp_thunk_or_indirect (const char *thunk_name, const int regno)
 {
   if (thunk_name != NULL)
     {
+      if (REX_INT_REGNO_P (regno)
+	  && ix86_indirect_branch_cs_prefix)
+	fprintf (asm_out_file, "\tcs\n");
       fprintf (asm_out_file, "\tjmp\t");
       assemble_name (asm_out_file, thunk_name);
       putc ('\n', asm_out_file);
+      if ((ix86_harden_sls & harden_sls_indirect_jmp))
+	fputs ("\tint3\n", asm_out_file);
     }
   else
     output_indirect_thunk (regno);
@@ -15748,6 +15793,9 @@ ix86_output_indirect_branch_via_reg (rtx call_op, bool sibcall_p)
     {
       if (thunk_name != NULL)
 	{
+	  if (REX_INT_REGNO_P (regno)
+	      && ix86_indirect_branch_cs_prefix)
+	    fprintf (asm_out_file, "\tcs\n");
 	  fprintf (asm_out_file, "\tcall\t");
 	  assemble_name (asm_out_file, thunk_name);
 	  putc ('\n', asm_out_file);
@@ -15922,10 +15970,10 @@ ix86_output_indirect_jmp (rtx call_op)
 	gcc_unreachable ();
 
       ix86_output_indirect_branch (call_op, "%0", true);
-      return "";
     }
   else
-    return "%!jmp\t%A0";
+    output_asm_insn ("%!jmp\t%A0", &call_op);
+  return (ix86_harden_sls & harden_sls_indirect_jmp) ? "int3" : "";
 }
 
 /* Output return instrumentation for current function if needed.  */
@@ -15993,10 +16041,8 @@ ix86_output_function_return (bool long_p)
       return "";
     }
 
-  if (!long_p)
-    return "%!ret";
-
-  return "rep%; ret";
+  output_asm_insn (long_p ? "rep%; ret" : "ret", nullptr);
+  return (ix86_harden_sls & harden_sls_return) ? "int3" : "";
 }
 
 /* Output indirect function return.  RET_OP is the function return
@@ -16031,11 +16077,14 @@ ix86_output_indirect_function_return (rtx ret_op)
 	}
       else
 	output_indirect_thunk (regno);
-
-      return "";
     }
   else
-    return "%!jmp\t%A0";
+    {
+      output_asm_insn ("%!jmp\t%A0", &ret_op);
+      if (ix86_harden_sls & harden_sls_indirect_jmp)
+	fputs ("\tint3\n", asm_out_file);
+    }
+  return "";
 }
 
 /* Output the assembly for a call instruction.  */
@@ -16091,7 +16140,12 @@ ix86_output_call_insn (rtx_insn *insn, rtx call_op)
       if (output_indirect_p && !direct_p)
 	ix86_output_indirect_branch (call_op, xasm, true);
       else
-	output_asm_insn (xasm, &call_op);
+	{
+	  output_asm_insn (xasm, &call_op);
+	  if (!direct_p
+	      && (ix86_harden_sls & harden_sls_indirect_jmp))
+	    return "int3";
+	}
       return "";
     }
 
@@ -16116,8 +16170,10 @@ ix86_output_call_insn (rtx_insn *insn, rtx call_op)
 	    break;
 
 	  /* If we get to the epilogue note, prevent a catch region from
-	     being adjacent to the standard epilogue sequence.  If non-
-	     call-exceptions, we'll have done this during epilogue emission. */
+	     being adjacent to the standard epilogue sequence.  Note that,
+	     if non-call exceptions are enabled, we already did it during
+	     epilogue expansion, or else, if the insn can throw internally,
+	     we already did it during the reorg pass.  */
 	  if (NOTE_P (i) && NOTE_KIND (i) == NOTE_INSN_EPILOGUE_BEG
 	      && !flag_non_call_exceptions
 	      && !can_throw_internal (insn))
@@ -18128,6 +18184,8 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 
     do_shift:
       gcc_assert (n_args >= 2);
+      if (!gimple_call_lhs (stmt))
+	break;
       arg0 = gimple_call_arg (stmt, 0);
       arg1 = gimple_call_arg (stmt, 1);
       if (n_args > 2)
@@ -18191,7 +18249,7 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 
     case IX86_BUILTIN_SHUFPD:
       arg2 = gimple_call_arg (stmt, 2);
-      if (TREE_CODE (arg2) == INTEGER_CST)
+      if (TREE_CODE (arg2) == INTEGER_CST && gimple_call_lhs (stmt))
 	{
 	  location_t loc = gimple_location (stmt);
 	  unsigned HOST_WIDE_INT imask = TREE_INT_CST_LOW (arg2);

@@ -703,6 +703,8 @@
 ;; - The address space and glc (volatile) fields are there to replace the
 ;;   fields normally found in a MEM.
 ;; - Multiple forms of address expression are supported, below.
+;;
+;; TODO: implement combined gather and zero_extend, but only for -msram-ecc=on
 
 (define_expand "gather_load<mode><vnsi>"
   [(match_operand:V_ALL 0 "register_operand")
@@ -825,8 +827,12 @@
 	/* Work around assembler bug in which a 64-bit register is expected,
 	but a 32-bit value would be correct.  */
 	int reg = REGNO (operands[2]) - FIRST_VGPR_REG;
-	sprintf (buf, "global_load%%o0\t%%0, v[%d:%d], %%1 offset:%%3%s\;"
-		      "s_waitcnt\tvmcnt(0)", reg, reg + 1, glc);
+	if (HAVE_GCN_ASM_GLOBAL_LOAD_FIXED)
+	  sprintf (buf, "global_load%%o0\t%%0, v%d, %%1 offset:%%3%s\;"
+			"s_waitcnt\tvmcnt(0)", reg, glc);
+	else
+	  sprintf (buf, "global_load%%o0\t%%0, v[%d:%d], %%1 offset:%%3%s\;"
+			"s_waitcnt\tvmcnt(0)", reg, reg + 1, glc);
       }
     else
       gcc_unreachable ();
@@ -956,8 +962,12 @@
 	/* Work around assembler bug in which a 64-bit register is expected,
 	but a 32-bit value would be correct.  */
 	int reg = REGNO (operands[1]) - FIRST_VGPR_REG;
-	sprintf (buf, "global_store%%s3\tv[%d:%d], %%3, %%0 offset:%%2%s",
-		 reg, reg + 1, glc);
+	if (HAVE_GCN_ASM_GLOBAL_LOAD_FIXED)
+	  sprintf (buf, "global_store%%s3\tv%d, %%3, %%0 offset:%%2%s",
+		   reg, glc);
+	else
+	  sprintf (buf, "global_store%%s3\tv[%d:%d], %%3, %%0 offset:%%2%s",
+		   reg, reg + 1, glc);
       }
     else
       gcc_unreachable ();

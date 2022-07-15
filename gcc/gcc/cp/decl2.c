@@ -1202,6 +1202,9 @@ is_late_template_attribute (tree attr, tree decl)
     {
       tree type = TYPE_P (decl) ? decl : TREE_TYPE (decl);
 
+      if (!type)
+	return true;
+
       /* We can't apply any attributes to a completely unknown type until
 	 instantiation time.  */
       enum tree_code code = TREE_CODE (type);
@@ -5137,6 +5140,7 @@ c_parse_final_cleanups (void)
 	  if (!DECL_EXTERNAL (decl)
 	      && decl_needed_p (decl)
 	      && !TREE_ASM_WRITTEN (decl)
+	      && !DECL_IMMEDIATE_FUNCTION_P (decl)
 	      && !node->definition)
 	    {
 	      /* We will output the function; no longer consider it in this
@@ -5605,6 +5609,7 @@ mark_used (tree decl, tsubst_flags_t complain)
     used_types_insert (DECL_CONTEXT (decl));
 
   if (TREE_CODE (decl) == FUNCTION_DECL
+      && !DECL_DELETED_FN (decl)
       && !maybe_instantiate_noexcept (decl, complain))
     return false;
 

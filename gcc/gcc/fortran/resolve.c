@@ -804,6 +804,15 @@ resolve_entries (gfc_namespace *ns)
 	     the same string length, i.e. both len=*, or both len=4.
 	     Having both len=<variable> is also possible, but difficult to
 	     check at compile time.  */
+	  else if (ts->type == BT_CHARACTER
+		   && (el->sym->result->attr.allocatable
+		       != ns->entries->sym->result->attr.allocatable))
+	    {
+	      gfc_error ("Function %s at %L has entry %s with mismatched "
+			 "characteristics", ns->entries->sym->name,
+			 &ns->entries->sym->declared_at, el->sym->name);
+	      goto cleanup;
+	    }
 	  else if (ts->type == BT_CHARACTER && ts->u.cl && fts->u.cl
 		   && (((ts->u.cl->length && !fts->u.cl->length)
 			||(!ts->u.cl->length && fts->u.cl->length))
@@ -908,6 +917,8 @@ resolve_entries (gfc_namespace *ns)
 	    }
 	}
     }
+
+cleanup:
   proc->attr.access = ACCESS_PRIVATE;
   proc->attr.entry_master = 1;
 
@@ -1441,6 +1452,43 @@ resolve_structure_cons (gfc_expr *expr, int init)
 			     " %s", comp->name, &cons->expr->where, err);
 	      return false;
 	    }
+	}
+
+      /* Validate shape, except for dynamic or PDT arrays.  */
+      if (cons->expr->expr_type == EXPR_ARRAY && rank == cons->expr->rank
+	  && comp->as && !comp->attr.allocatable && !comp->attr.pointer
+	  && !comp->attr.pdt_array)
+	{
+	  mpz_t len;
+	  mpz_init (len);
+	  for (int n = 0; n < rank; n++)
+	    {
+	      if (comp->as->upper[n]->expr_type != EXPR_CONSTANT
+		  || comp->as->lower[n]->expr_type != EXPR_CONSTANT)
+		{
+		  gfc_error ("Bad array spec of component %qs referenced in "
+			     "structure constructor at %L",
+			     comp->name, &cons->expr->where);
+		  t = false;
+		  break;
+		};
+	      if (cons->expr->shape == NULL)
+		continue;
+	      mpz_set_ui (len, 1);
+	      mpz_add (len, len, comp->as->upper[n]->value.integer);
+	      mpz_sub (len, len, comp->as->lower[n]->value.integer);
+	      if (mpz_cmp (cons->expr->shape[n], len) != 0)
+		{
+		  gfc_error ("The shape of component %qs in the structure "
+			     "constructor at %L differs from the shape of the "
+			     "declared component for dimension %d (%ld/%ld)",
+			     comp->name, &cons->expr->where, n+1,
+			     mpz_get_si (cons->expr->shape[n]),
+			     mpz_get_si (len));
+		  t = false;
+		}
+	    }
+	  mpz_clear (len);
 	}
 
       if (!comp->attr.pointer || comp->attr.proc_pointer
@@ -5674,6 +5722,8 @@ resolve_variable (gfc_expr *e)
      can't be translated that way.  */
   if (sym->assoc && e->rank == 0 && e->ref && sym->ts.type == BT_CLASS
       && sym->assoc->target && sym->assoc->target->ts.type == BT_CLASS
+      && sym->assoc->target->ts.u.derived
+      && CLASS_DATA (sym->assoc->target)
       && CLASS_DATA (sym->assoc->target)->as)
     {
       gfc_ref *ref = e->ref;
@@ -5738,7 +5788,8 @@ resolve_variable (gfc_expr *e)
   /* Like above, but for class types, where the checking whether an array
      ref is present is more complicated.  Furthermore make sure not to add
      the full array ref to _vptr or _len refs.  */
-  if (sym->assoc && sym->ts.type == BT_CLASS
+  if (sym->assoc && sym->ts.type == BT_CLASS && sym->ts.u.derived
+      && CLASS_DATA (sym)
       && CLASS_DATA (sym)->attr.dimension
       && (e->ts.type != BT_DERIVED || !e->ts.u.derived->attr.vtype))
     {
@@ -7821,8 +7872,9 @@ resolve_allocate_expr (gfc_expr *e, gfc_code *code, bool *array_alloc_wo_spec)
 	}
     }
 
-  /* Check for F08:C628.  */
-  if (allocatable == 0 && pointer == 0 && !unlimited)
+  /* Check for F08:C628 (F2018:C932).  Each allocate-object shall be a data
+     pointer or an allocatable variable.  */
+  if (allocatable == 0 && pointer == 0)
     {
       gfc_error ("Allocate-object at %L must be ALLOCATABLE or a POINTER",
 		 &e->where);
@@ -8156,16 +8208,21 @@ resolve_allocate_deallocate (gfc_code *code, const char *fcn)
   /* Check the stat variable.  */
   if (stat)
     {
-      gfc_check_vardef_context (stat, false, false, false,
-				_("STAT variable"));
+      if (!gfc_check_vardef_context (stat, false, false, false,
+				     _("STAT variable")))
+	  goto done_stat;
 
-      if ((stat->ts.type != BT_INTEGER
-	   && !(stat->ref && (stat->ref->type == REF_ARRAY
-			      || stat->ref->type == REF_COMPONENT)))
+      if (stat->ts.type != BT_INTEGER
 	  || stat->rank > 0)
 	gfc_error ("Stat-variable at %L must be a scalar INTEGER "
 		   "variable", &stat->where);
 
+      if (stat->expr_type == EXPR_CONSTANT || stat->symtree == NULL)
+	goto done_stat;
+
+      /* F2018:9.7.4: The stat-variable shall not be allocated or deallocated
+       * within the ALLOCATE or DEALLOCATE statement in which it appears ...
+       */
       for (p = code->ext.alloc.list; p; p = p->next)
 	if (p->expr->symtree->n.sym->name == stat->symtree->n.sym->name)
 	  {
@@ -8193,6 +8250,8 @@ resolve_allocate_deallocate (gfc_code *code, const char *fcn)
 	  }
     }
 
+done_stat:
+
   /* Check the errmsg variable.  */
   if (errmsg)
     {
@@ -8200,22 +8259,26 @@ resolve_allocate_deallocate (gfc_code *code, const char *fcn)
 	gfc_warning (0, "ERRMSG at %L is useless without a STAT tag",
 		     &errmsg->where);
 
-      gfc_check_vardef_context (errmsg, false, false, false,
-				_("ERRMSG variable"));
+      if (!gfc_check_vardef_context (errmsg, false, false, false,
+				     _("ERRMSG variable")))
+	  goto done_errmsg;
 
       /* F18:R928  alloc-opt             is ERRMSG = errmsg-variable
 	 F18:R930  errmsg-variable       is scalar-default-char-variable
 	 F18:R906  default-char-variable is variable
 	 F18:C906  default-char-variable shall be default character.  */
-      if ((errmsg->ts.type != BT_CHARACTER
-	   && !(errmsg->ref
-		&& (errmsg->ref->type == REF_ARRAY
-		    || errmsg->ref->type == REF_COMPONENT)))
+      if (errmsg->ts.type != BT_CHARACTER
 	  || errmsg->rank > 0
 	  || errmsg->ts.kind != gfc_default_character_kind)
 	gfc_error ("ERRMSG variable at %L shall be a scalar default CHARACTER "
 		   "variable", &errmsg->where);
 
+      if (errmsg->expr_type == EXPR_CONSTANT || errmsg->symtree == NULL)
+	goto done_errmsg;
+
+      /* F2018:9.7.5: The errmsg-variable shall not be allocated or deallocated
+       * within the ALLOCATE or DEALLOCATE statement in which it appears ...
+       */
       for (p = code->ext.alloc.list; p; p = p->next)
 	if (p->expr->symtree->n.sym->name == errmsg->symtree->n.sym->name)
 	  {
@@ -8242,6 +8305,8 @@ resolve_allocate_deallocate (gfc_code *code, const char *fcn)
 	      }
 	  }
     }
+
+done_errmsg:
 
   /* Check that an allocate-object appears only once in the statement.  */
 
@@ -9147,8 +9212,7 @@ resolve_assoc_var (gfc_symbol* sym, bool resolve_target)
       if (!sym->ts.u.cl)
 	sym->ts.u.cl = target->ts.u.cl;
 
-      if (sym->ts.deferred && target->expr_type == EXPR_VARIABLE
-	  && target->symtree->n.sym->attr.dummy
+      if (sym->ts.deferred
 	  && sym->ts.u.cl == target->ts.u.cl)
 	{
 	  sym->ts.u.cl = gfc_new_charlen (sym->ns, NULL);
@@ -9167,8 +9231,11 @@ resolve_assoc_var (gfc_symbol* sym, bool resolve_target)
 		|| sym->ts.u.cl->length->expr_type != EXPR_CONSTANT)
 		&& target->expr_type != EXPR_VARIABLE)
 	{
-	  sym->ts.u.cl = gfc_new_charlen (sym->ns, NULL);
-	  sym->ts.deferred = 1;
+	  if (!sym->ts.deferred)
+	    {
+	      sym->ts.u.cl = gfc_new_charlen (sym->ns, NULL);
+	      sym->ts.deferred = 1;
+	    }
 
 	  /* This is reset in trans-stmt.c after the assignment
 	     of the target expression to the associate name.  */
@@ -9356,6 +9423,7 @@ resolve_select_type (gfc_code *code, gfc_namespace *old_ns)
 
       /* Check F03:C815.  */
       if ((c->ts.type == BT_DERIVED || c->ts.type == BT_CLASS)
+	  && selector_type
 	  && !selector_type->attr.unlimited_polymorphic
 	  && !gfc_type_is_extensible (c->ts.u.derived))
 	{
@@ -9366,7 +9434,8 @@ resolve_select_type (gfc_code *code, gfc_namespace *old_ns)
 	}
 
       /* Check F03:C816.  */
-      if (c->ts.type != BT_UNKNOWN && !selector_type->attr.unlimited_polymorphic
+      if (c->ts.type != BT_UNKNOWN
+	  && selector_type && !selector_type->attr.unlimited_polymorphic
 	  && ((c->ts.type != BT_DERIVED && c->ts.type != BT_CLASS)
 	      || !gfc_type_is_extension_of (selector_type, c->ts.u.derived)))
 	{
@@ -10224,19 +10293,27 @@ resolve_sync (gfc_code *code)
 
   /* Check STAT.  */
   gfc_resolve_expr (code->expr2);
-  if (code->expr2
-      && (code->expr2->ts.type != BT_INTEGER || code->expr2->rank != 0
-	  || code->expr2->expr_type != EXPR_VARIABLE))
-    gfc_error ("STAT= argument at %L must be a scalar INTEGER variable",
-	       &code->expr2->where);
+  if (code->expr2)
+    {
+      if (code->expr2->ts.type != BT_INTEGER || code->expr2->rank != 0)
+	gfc_error ("STAT= argument at %L must be a scalar INTEGER variable",
+		   &code->expr2->where);
+      else
+	gfc_check_vardef_context (code->expr2, false, false, false,
+				  _("STAT variable"));
+    }
 
   /* Check ERRMSG.  */
   gfc_resolve_expr (code->expr3);
-  if (code->expr3
-      && (code->expr3->ts.type != BT_CHARACTER || code->expr3->rank != 0
-	  || code->expr3->expr_type != EXPR_VARIABLE))
-    gfc_error ("ERRMSG= argument at %L must be a scalar CHARACTER variable",
-	       &code->expr3->where);
+  if (code->expr3)
+    {
+      if (code->expr3->ts.type != BT_CHARACTER || code->expr3->rank != 0)
+	gfc_error ("ERRMSG= argument at %L must be a scalar CHARACTER variable",
+		   &code->expr3->where);
+      else
+	gfc_check_vardef_context (code->expr3, false, false, false,
+				  _("ERRMSG variable"));
+    }
 }
 
 
@@ -12276,7 +12353,7 @@ resolve_values (gfc_symbol *sym)
   if (sym->value == NULL)
     return;
 
-  if (sym->attr.ext_attr & (1 << EXT_ATTR_DEPRECATED))
+  if (sym->attr.ext_attr & (1 << EXT_ATTR_DEPRECATED) && sym->attr.referenced)
     gfc_warning (OPT_Wdeprecated_declarations,
 		 "Using parameter %qs declared at %L is deprecated",
 		 sym->name, &sym->declared_at);
@@ -13169,7 +13246,8 @@ resolve_fl_procedure (gfc_symbol *sym, int mp_flag)
 
   /* An elemental function is required to return a scalar 12.7.1  */
   if (sym->attr.elemental && sym->attr.function
-      && (sym->as || (sym->ts.type == BT_CLASS && CLASS_DATA (sym)->as)))
+      && (sym->as || (sym->ts.type == BT_CLASS && sym->attr.class_ok
+		      && CLASS_DATA (sym)->as)))
     {
       gfc_error ("ELEMENTAL function %qs at %L must have a scalar "
 		 "result", sym->name, &sym->declared_at);

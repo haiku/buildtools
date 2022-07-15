@@ -1639,7 +1639,7 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
   fi
 
   if test x"$ac_no_sleep" = x"yes"; then
-    AC_DEFINE(NO_SLEEP,1, [Defined if no way to sleep is available.])
+    AC_DEFINE(_GLIBCXX_NO_SLEEP,1, [Defined if no way to sleep is available.])
   fi
 
   AC_SUBST(GLIBCXX_LIBS)
@@ -2857,11 +2857,13 @@ AC_DEFUN([GLIBCXX_ENABLE_CSTDIO], [
       CSTDIO_H=config/io/c_io_stdio.h
       BASIC_FILE_H=config/io/basic_file_stdio.h
       BASIC_FILE_CC=config/io/basic_file_stdio.cc
-      AC_MSG_RESULT(stdio)
 
       if test "x$enable_cstdio" = "xstdio_pure" ; then
+	AC_MSG_RESULT([stdio (without POSIX read/write)])
 	AC_DEFINE(_GLIBCXX_USE_STDIO_PURE, 1,
 		  [Define to restrict std::__basic_file<> to stdio APIs.])
+      else
+	AC_MSG_RESULT([stdio (with POSIX read/write)])
       fi
       ;;
   esac

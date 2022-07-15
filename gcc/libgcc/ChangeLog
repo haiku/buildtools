@@ -1,3 +1,143 @@
+2022-04-21  Release Manager
+
+	* GCC 11.3.0 released.
+
+2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* config.host: Add weak emutls crt to the extra_parts.
+	(*-*-darwin*): Add logic to build a shared unwinder library for
+	Darwin8-10.  Add shim declaration header to powerpc*-darwin builds.
+	* config/i386/darwin-lib.h (DECLARE_LIBRARY_RENAMES): Remove
+	workaround.
+	* config/libgcc-libsystem.ver: Add exclude list for the system-
+	provided unwinder.
+	* config/t-slibgcc-darwin: Bump SO version, remove stubs code.
+	Build a legacy libgcc_s.1 and the supporting pieces (all FAT libs).
+	* config/t-darwin-ehs: Add dependencies to the shared unwinder
+	objects.  Add dependency on unwind.h.
+	* config/t-darwin: Reorganise the EH fragments to place them for
+	inclusion in a shared EH lib.  Add libgcc_tm.h to the dependencies
+	for darwin10-unwind-find-enc-func.
+	* config/i386/libgcc-darwin.10.4.ver: Removed.
+	* config/i386/libgcc-darwin.10.5.ver: Removed.
+	* config/rs6000/libgcc-darwin.10.4.ver: Removed.
+	* config/rs6000/libgcc-darwin.10.5.ver: Removed.
+	* config/i386/t-darwin: Build legacy libgcc_s.1.
+	* config/rs6000/t-darwin: Likewise.
+	* config/rs6000/t-darwin-ehs: Remove dependency on the powerpc end
+	file.  Add darwin-fallback.o.
+	* config/darwin-unwind.ver: New file.
+	* config/i386/libgcc-darwin.ver: New file.
+
+2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
+
+	Backported from master:
+	2021-11-19  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* config/t-darwin: Build weak-defined emutls objects.
+	* emutls.c (__emutls_get_address): Add optional attributes.
+	(__emutls_register_common): Likewise.
+	(EMUTLS_ATTR): New.
+
+2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
+
+	Backported from master:
+	2021-11-05  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* config/darwin10-unwind-find-enc-func.c: Include libgcc_tm.h.
+	* config/i386/darwin-lib.h: Declare Darwin10 crt function.
+
+2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
+
+	Backported from master:
+	2021-09-19  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* config.host: Use convenience library for Darwin10
+	unwinder shim.
+	* config/t-darwin: Build Darwin10 unwinder shim as a
+	convenience library.
+
+2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
+
+	Backported from master:
+	2021-09-22  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* config/i386/sfp-machine.h: Guard Mach-O-specific code
+	using __APPLE__.
+
+2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
+
+	Backported from master:
+	2021-09-03  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* config/i386/sfp-machine.h (alias_SFtype
+	alias_DFtype, alias_TFtype): New.
+	(ALIAS_SELECTOR): New.
+	(strong_alias): Use __typeof and a _Generic selector to
+	provide the type to the synthesized function.
+
+2022-03-30  Nelson Chu  <nelson.chu@sifive.com>
+
+	Backported from master:
+	2021-12-06  Nelson Chu  <nelson.chu@sifive.com>
+
+	* config/riscv/div.S: Add the hidden alias symbol for __udivdi3, and
+	then use HIDDEN_JUMPTARGET to target it since it is non-preemptible.
+	* config/riscv/riscv-asm.h: Added new macros HIDDEN_JUMPTARGET and
+	HIDDEN_DEF.
+
+2022-01-02  John David Anglin  <danglin@gcc.gnu.org>
+
+	* config/pa/linux-atomic.c (_ASM_EFAULT): Define.
+	(__kernel_cmpxchg): Nullify illegal iitlbp instruction if error
+	return is not equal _ASM_EFAULT.
+	(__kernel_cmpxchg2): Likewise.
+
+2021-11-27  John David Anglin  <danglin@gcc.gnu.org>
+
+	* config/pa/t-dimode (lib2difuncs): Fix typo.
+
+2021-11-05  John David Anglin  <danglin@gcc.gnu.org>
+
+	PR libgomp/96661
+	* config.host (hppa*64*-*-linux*): Revise tmake_file.
+	(hppa*64*-*-hpux11*): Likewise.
+	* config/pa/sfp-exceptions.c: New.
+	* config/pa/sfp-machine.h: New.
+	* config/pa/t-dimode: New.
+	* config/pa/t-softfp-sfdftf: New.
+
+2021-10-27  John David Anglin  <danglin@gcc.gnu.org>
+
+	* config.host (hppa*64*-*-linux*): Don't add pa/t-linux to
+	tmake_file.
+	* config/pa/linux-atomic.c: Define u8, u16 and u64 types.
+	Use them in FETCH_AND_OP_2, OP_AND_FETCH_2, COMPARE_AND_SWAP_2,
+	SYNC_LOCK_TEST_AND_SET_2 and SYNC_LOCK_RELEASE_1 macros.
+	* config/pa/t-linux64 (LIB1ASMSRC): New define.
+	(LIB1ASMFUNCS): Revise.
+	(HOST_LIBGCC2_CFLAGS): Add "-DLINUX=1".
+
+2021-08-31  Richard Sandiford  <richard.sandiford@arm.com>
+
+	Backported from master:
+	2021-08-31  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* config/aarch64/value-unwind.h: Add missing runtime exception
+	paragraph.
+	* config/frv/frv-abi.h: Likewise.
+	* config/i386/value-unwind.h: Likewise.
+	* config/pa/pa64-hpux-lib.h: Likewise.
+
+2021-08-24  Richard Earnshaw  <rearnsha@arm.com>
+
+	Backported from master:
+	2021-08-24  Richard Earnshaw  <rearnsha@arm.com>
+
+	PR target/102035
+	* config/arm/cmse_nonsecure_call.S (__gnu_cmse_nonsecure_call):
+	Add vlldm erratum work-around.
+
 2021-07-28  Release Manager
 
 	* GCC 11.2.0 released.

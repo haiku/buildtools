@@ -241,23 +241,6 @@ static GTY ((cache))
 static GTY ((cache))
      hash_table<tree_decl_map_cache_hasher> *value_expr_for_decl;
 
-struct tree_vec_map_cache_hasher : ggc_cache_ptr_hash<tree_vec_map>
-{
-  static hashval_t hash (tree_vec_map *m) { return DECL_UID (m->base.from); }
-
-  static bool
-  equal (tree_vec_map *a, tree_vec_map *b)
-  {
-    return a->base.from == b->base.from;
-  }
-
-  static int
-  keep_cache_entry (tree_vec_map *&m)
-  {
-    return ggc_marked_p (m->base.from);
-  }
-};
-
 static GTY ((cache))
      hash_table<tree_vec_map_cache_hasher> *debug_args_for_decl;
 
@@ -12299,7 +12282,6 @@ walk_tree_1 (tree *tp, walk_tree_fn func, void *data,
 	case OMP_CLAUSE_BIND:
 	case OMP_CLAUSE_AUTO:
 	case OMP_CLAUSE_SEQ:
-	case OMP_CLAUSE_TILE:
 	case OMP_CLAUSE__SIMT_:
 	case OMP_CLAUSE_IF_PRESENT:
 	case OMP_CLAUSE_FINALIZE:
@@ -12311,6 +12293,7 @@ walk_tree_1 (tree *tp, walk_tree_fn func, void *data,
 	  WALK_SUBTREE_TAIL (OMP_CLAUSE_CHAIN (*tp));
 
 	case OMP_CLAUSE_COLLAPSE:
+	case OMP_CLAUSE_TILE:
 	  {
 	    int i;
 	    for (i = 0; i < 3; i++)
@@ -13968,6 +13951,8 @@ component_ref_size (tree ref, special_array_member *sam /* = NULL */)
      to struct types with flexible array members.  */
   if (memsize)
     {
+      if (!tree_fits_poly_int64_p (memsize))
+	return NULL_TREE;
       poly_int64 memsz64 = memsize ? tree_to_poly_int64 (memsize) : 0;
       if (known_lt (baseoff, memsz64))
 	{

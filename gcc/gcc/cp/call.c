@@ -2799,7 +2799,7 @@ add_builtin_candidate (struct z_candidate **candidates, enum tree_code code,
 	  tree c1 = TREE_TYPE (type1);
 	  tree c2 = TYPE_PTRMEM_CLASS_TYPE (type2);
 
-	  if (MAYBE_CLASS_TYPE_P (c1) && DERIVED_FROM_P (c2, c1)
+	  if (CLASS_TYPE_P (c1) && DERIVED_FROM_P (c2, c1)
 	      && (TYPE_PTRMEMFUNC_P (type2)
 		  || is_complete (TYPE_PTRMEM_POINTED_TO_TYPE (type2))))
 	    break;
@@ -4764,7 +4764,6 @@ build_operator_new_call (tree fnname, vec<tree, va_gc> **args,
 
      we disregard block-scope declarations of "operator new".  */
   fns = lookup_name (fnname, LOOK_where::NAMESPACE);
-  fns = lookup_arg_dependent (fnname, fns, *args);
 
   if (align_arg)
     {
@@ -8643,6 +8642,7 @@ make_base_init_ok (tree exp)
        call target.  It would be possible to splice in the appropriate
        arguments, but probably not worth the complexity.  */
     return false;
+  mark_used (fn);
   AGGR_INIT_EXPR_FN (exp) = build_address (fn);
   return true;
 }
@@ -9456,7 +9456,10 @@ build_over_call (struct z_candidate *cand, int flags, tsubst_flags_t complain)
 	   && DECL_OVERLOADED_OPERATOR_IS (fn, NOP_EXPR)
 	   && trivial_fn_p (fn))
     {
-      tree to = cp_build_fold_indirect_ref (argarray[0]);
+      /* Don't use cp_build_fold_indirect_ref, op= returns an lvalue even if
+	 the object argument isn't one.  */
+      tree to = cp_build_indirect_ref (input_location, argarray[0],
+				       RO_ARROW, complain);
       tree type = TREE_TYPE (to);
       tree as_base = CLASSTYPE_AS_BASE (type);
       tree arg = argarray[1];
@@ -10793,7 +10796,7 @@ build_new_method_call_1 (tree instance, tree fns, vec<tree, va_gc> **args,
 		     we know we really need it.  */
 		  cand->first_arg = instance;
 		}
-	      else if (any_dependent_bases_p ())
+	      else if (current_class_ptr && any_dependent_bases_p ())
 		/* We can't tell until instantiation time whether we can use
 		   *this as the implicit object argument.  */;
 	      else
@@ -11600,7 +11603,7 @@ joust_maybe_elide_copy (z_candidate *&cand)
 /* True if the defining declarations of the two candidates have equivalent
    parameters.  */
 
-bool
+static bool
 cand_parms_match (z_candidate *c1, z_candidate *c2)
 {
   tree fn1 = c1->fn;
@@ -11622,8 +11625,19 @@ cand_parms_match (z_candidate *c1, z_candidate *c2)
       fn1 = DECL_TEMPLATE_RESULT (t1);
       fn2 = DECL_TEMPLATE_RESULT (t2);
     }
-  return compparms (TYPE_ARG_TYPES (TREE_TYPE (fn1)),
-		    TYPE_ARG_TYPES (TREE_TYPE (fn2)));
+  tree parms1 = TYPE_ARG_TYPES (TREE_TYPE (fn1));
+  tree parms2 = TYPE_ARG_TYPES (TREE_TYPE (fn2));
+  if (DECL_FUNCTION_MEMBER_P (fn1)
+      && DECL_FUNCTION_MEMBER_P (fn2)
+      && (DECL_NONSTATIC_MEMBER_FUNCTION_P (fn1)
+	  != DECL_NONSTATIC_MEMBER_FUNCTION_P (fn2)))
+    {
+      /* Ignore 'this' when comparing the parameters of a static member
+	 function with those of a non-static one.  */
+      parms1 = skip_artificial_parms_for (fn1, parms1);
+      parms2 = skip_artificial_parms_for (fn2, parms2);
+    }
+  return compparms (parms1, parms2);
 }
 
 /* Compare two candidates for overloading as described in
@@ -12520,6 +12534,8 @@ set_up_extended_ref_temp (tree decl, tree expr, vec<tree, va_gc> **cleanups,
      VAR.  */
   if (TREE_CODE (expr) != TARGET_EXPR)
     expr = get_target_expr (expr);
+  else if (TREE_ADDRESSABLE (expr))
+    TREE_ADDRESSABLE (var) = 1;
 
   if (TREE_CODE (decl) == FIELD_DECL
       && extra_warnings && !TREE_NO_WARNING (decl))

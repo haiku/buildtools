@@ -524,7 +524,20 @@ split_nonconstant_init_1 (tree dest, tree init, bool nested)
 		sub = build3 (COMPONENT_REF, inner_type, dest, field_index,
 			      NULL_TREE);
 
-	      if (!split_nonconstant_init_1 (sub, value, true))
+	      if (!split_nonconstant_init_1 (sub, value, true)
+		      /* For flexible array member with initializer we
+			 can't remove the initializer, because only the
+			 initializer determines how many elements the
+			 flexible array member has.  */
+		  || (!array_type_p
+		      && TREE_CODE (inner_type) == ARRAY_TYPE
+		      && TYPE_DOMAIN (inner_type) == NULL
+		      && TREE_CODE (TREE_TYPE (value)) == ARRAY_TYPE
+		      && COMPLETE_TYPE_P (TREE_TYPE (value))
+		      && !integer_zerop (TYPE_SIZE (TREE_TYPE (value)))
+		      && idx == CONSTRUCTOR_NELTS (init) - 1
+		      && TYPE_HAS_TRIVIAL_DESTRUCTOR
+				(strip_array_types (inner_type))))
 		complete_p = false;
 	      else
 		{
@@ -1321,10 +1334,15 @@ massage_init_elt (tree type, tree init, int nested, int flags,
     new_flags |= LOOKUP_AGGREGATE_PAREN_INIT;
   init = digest_init_r (type, init, nested ? 2 : 1, new_flags, complain);
   /* When we defer constant folding within a statement, we may want to
-     defer this folding as well.  */
-  tree t = fold_non_dependent_init (init, complain);
-  if (TREE_CONSTANT (t))
-    init = t;
+     defer this folding as well.  Don't call this on CONSTRUCTORs because
+     their elements have already been folded, and we must avoid folding
+     the result of get_nsdmi.  */
+  if (TREE_CODE (init) != CONSTRUCTOR)
+    {
+      tree t = fold_non_dependent_init (init, complain);
+      if (TREE_CONSTANT (t))
+	init = t;
+    }
   return init;
 }
 
@@ -1397,6 +1415,14 @@ process_init_constructor_array (tree type, tree init, int nested, int flags,
 	      strip_array_types (TREE_TYPE (ce->value)))));
 
       picflags |= picflag_from_initializer (ce->value);
+      /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer
+	 CONSTRUCTOR.  */
+      if (TREE_CODE (ce->value) == CONSTRUCTOR
+	  && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value))
+	{
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value) = 0;
+	}
     }
 
   /* No more initializers. If the array is unbounded, we are done. Otherwise,
@@ -1431,6 +1457,14 @@ process_init_constructor_array (tree type, tree init, int nested, int flags,
 	if (next)
 	  {
 	    picflags |= picflag_from_initializer (next);
+	    /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer
+	       CONSTRUCTOR.  */
+	    if (TREE_CODE (next) == CONSTRUCTOR
+		&& CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next))
+	      {
+		CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+		CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next) = 0;
+	      }
 	    if (len > i+1
 		&& (initializer_constant_valid_p (next, TREE_TYPE (next))
 		    == null_pointer_node))
@@ -1627,6 +1661,13 @@ process_init_constructor_record (tree type, tree init, int nested, int flags,
       if (fldtype != TREE_TYPE (field))
 	next = cp_convert_and_check (TREE_TYPE (field), next, complain);
       picflags |= picflag_from_initializer (next);
+      /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer CONSTRUCTOR.  */
+      if (TREE_CODE (next) == CONSTRUCTOR
+	  && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next))
+	{
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next) = 0;
+	}
       CONSTRUCTOR_APPEND_ELT (v, field, next);
     }
 
@@ -1767,6 +1808,14 @@ process_init_constructor_union (tree type, tree init, int nested, int flags,
     ce->value = massage_init_elt (TREE_TYPE (ce->index), ce->value, nested,
 				  flags, complain);
 
+  /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer CONSTRUCTOR.  */
+  if (ce->value
+      && TREE_CODE (ce->value) == CONSTRUCTOR
+      && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value))
+    {
+      CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+      CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value) = 0;
+    }
   return picflag_from_initializer (ce->value);
 }
 

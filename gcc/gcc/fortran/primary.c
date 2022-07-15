@@ -2151,6 +2151,7 @@ gfc_match_varspec (gfc_expr *primary, int equiv_flag, bool sub_flag,
 	  && !(gfc_matching_procptr_assignment
 	       && sym->attr.flavor == FL_PROCEDURE))
       || (sym->ts.type == BT_CLASS && sym->attr.class_ok
+	  && sym->ts.u.derived && CLASS_DATA (sym)
 	  && (CLASS_DATA (sym)->attr.dimension
 	      || CLASS_DATA (sym)->attr.codimension)))
     {
@@ -3354,6 +3355,7 @@ gfc_match_structure_constructor (gfc_symbol *sym, gfc_expr **result)
   match m;
   gfc_expr *e;
   gfc_symtree *symtree;
+  bool t = true;
 
   gfc_get_ha_sym_tree (sym->name, &symtree);
 
@@ -3384,10 +3386,18 @@ gfc_match_structure_constructor (gfc_symbol *sym, gfc_expr **result)
      in the structure constructor must be a constant.  Try to reduce the
      expression here.  */
   if (gfc_in_match_data ())
-    gfc_reduce_init_expr (e);
+    t = gfc_reduce_init_expr (e);
 
-  *result = e;
-  return MATCH_YES;
+  if (t)
+    {
+      *result = e;
+      return MATCH_YES;
+    }
+  else
+    {
+      gfc_free_expr (e);
+      return MATCH_ERROR;
+    }
 }
 
 

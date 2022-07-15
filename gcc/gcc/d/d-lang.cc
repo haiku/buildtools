@@ -108,7 +108,7 @@ deps_add_target (const char *target, bool quoted)
 
   if (!quoted)
     {
-      obstack_grow (&buffer, target, strlen (target));
+      obstack_grow0 (&buffer, target, strlen (target));
       d_option.deps_target.safe_push ((const char *) obstack_finish (&buffer));
       return;
     }
@@ -149,6 +149,7 @@ deps_add_target (const char *target, bool quoted)
       obstack_1grow (&buffer, *p);
     }
 
+  obstack_1grow (&buffer, '\0');
   d_option.deps_target.safe_push ((const char *) obstack_finish (&buffer));
 }
 
@@ -278,6 +279,8 @@ deps_write (Module *module, obstack *buffer)
       obstack_grow (buffer, str, strlen (str));
       obstack_grow (buffer, ":\n", 2);
     }
+
+  obstack_1grow (buffer, '\0');
 }
 
 /* Implements the lang_hooks.init_options routine for language D.
@@ -884,6 +887,7 @@ d_parse_file (void)
 	      obstack_grow (&buffer, str, strlen (str));
 	    }
 
+	  obstack_1grow (&buffer, '\0');
 	  message ("%s", (char *) obstack_finish (&buffer));
 	}
     }
@@ -1745,6 +1749,7 @@ d_enum_underlying_base_type (const_tree type)
 #undef LANG_HOOKS_GET_ALIAS_SET
 #undef LANG_HOOKS_TYPES_COMPATIBLE_P
 #undef LANG_HOOKS_BUILTIN_FUNCTION
+#undef LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE
 #undef LANG_HOOKS_REGISTER_BUILTIN_TYPE
 #undef LANG_HOOKS_FINISH_INCOMPLETE_DECL
 #undef LANG_HOOKS_GIMPLIFY_EXPR
@@ -1776,6 +1781,7 @@ d_enum_underlying_base_type (const_tree type)
 #define LANG_HOOKS_GET_ALIAS_SET	    d_get_alias_set
 #define LANG_HOOKS_TYPES_COMPATIBLE_P	    d_types_compatible_p
 #define LANG_HOOKS_BUILTIN_FUNCTION	    d_builtin_function
+#define LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE d_builtin_function_ext_scope
 #define LANG_HOOKS_REGISTER_BUILTIN_TYPE    d_register_builtin_type
 #define LANG_HOOKS_FINISH_INCOMPLETE_DECL   d_finish_incomplete_decl
 #define LANG_HOOKS_GIMPLIFY_EXPR	    d_gimplify_expr

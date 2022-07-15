@@ -3109,13 +3109,9 @@ finish_compound_literal (tree type, tree compound_literal,
     return error_mark_node;
   compound_literal = reshape_init (type, compound_literal, complain);
   if (SCALAR_TYPE_P (type)
-      && !BRACE_ENCLOSED_INITIALIZER_P (compound_literal))
-    {
-      tree t = instantiate_non_dependent_expr_sfinae (compound_literal,
-						      complain);
-      if (!check_narrowing (type, t, complain))
-	return error_mark_node;
-    }
+      && !BRACE_ENCLOSED_INITIALIZER_P (compound_literal)
+      && !check_narrowing (type, compound_literal, complain))
+    return error_mark_node;
   if (TREE_CODE (type) == ARRAY_TYPE
       && TYPE_DOMAIN (type) == NULL_TREE)
     {
@@ -4681,6 +4677,17 @@ expand_or_defer_fn (tree fn)
       emit_associated_thunks (fn);
 
       function_depth--;
+
+      if (DECL_IMMEDIATE_FUNCTION_P (fn))
+	{
+	  if (cgraph_node *node = cgraph_node::get (fn))
+	    {
+	      node->body_removed = true;
+	      node->analyzed = false;
+	      node->definition = false;
+	      node->force_output = false;
+	    }
+	}
     }
 }
 
@@ -10669,7 +10676,8 @@ is_this_parameter (tree t)
 {
   if (!DECL_P (t) || DECL_NAME (t) != this_identifier)
     return false;
-  gcc_assert (TREE_CODE (t) == PARM_DECL || is_capture_proxy (t)
+  gcc_assert (TREE_CODE (t) == PARM_DECL
+	      || (TREE_CODE (t) == VAR_DECL && DECL_HAS_VALUE_EXPR_P (t))
 	      || (cp_binding_oracle && TREE_CODE (t) == VAR_DECL));
   return true;
 }

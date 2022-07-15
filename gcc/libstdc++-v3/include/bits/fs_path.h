@@ -63,15 +63,13 @@ namespace filesystem
 {
 _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
-  /** @addtogroup filesystem
-   *  @{
-   */
-
   class path;
 
   /// @cond undocumented
 namespace __detail
 {
+  /// @addtogroup filesystem
+  /// @{
   template<typename _CharT>
     inline constexpr bool __is_encoded_char = false;
   template<>
@@ -238,10 +236,15 @@ namespace __detail
 	return basic_string<_EcharT>(__first, __last);
     }
 
+  /// @} group filesystem
 } // namespace __detail
   /// @endcond
 
-  /// A filesystem path.
+  /// @addtogroup filesystem
+  /// @{
+
+  /// A filesystem path
+  /// @ingroup filesystem
   class path
   {
   public:
@@ -289,7 +292,7 @@ namespace __detail
     template<typename _InputIterator,
 	     typename _Require = __detail::_Path2<_InputIterator>>
       path(_InputIterator __first, _InputIterator __last, format = auto_format)
-      : _M_pathname(_S_convert(__first, __last))
+      : _M_pathname(_S_convert(__detail::__string_from_range(__first, __last)))
       { _M_split_cmpts(); }
 
     template<typename _Source,
@@ -355,7 +358,7 @@ namespace __detail
       __detail::_Path2<_InputIterator>&
       append(_InputIterator __first, _InputIterator __last)
       {
-	_M_append(_S_convert(__first, __last));
+	_M_append(_S_convert(__detail::__string_from_range(__first, __last)));
 	return *this;
       }
 
@@ -387,7 +390,7 @@ namespace __detail
       __detail::_Path2<_InputIterator>&
       concat(_InputIterator __first, _InputIterator __last)
       {
-	_M_concat(_S_convert(__first, __last));
+	_M_concat(_S_convert(__detail::__string_from_range(__first, __last)));
 	return *this;
       }
 
@@ -599,11 +602,6 @@ namespace __detail
       static auto
       _S_convert(const _EcharT* __first, const _EcharT* __last);
 
-    template<typename _Iter>
-      static auto
-      _S_convert(_Iter __first, _Iter __last)
-      { return _S_convert(__detail::__string_from_range(__first, __last)); }
-
     static string_type
     _S_convert_loc(const char* __first, const char* __last,
 		   const std::locale& __loc);
@@ -693,7 +691,8 @@ namespace __detail
     struct _Parser;
   };
 
-  /// @relates std::filesystem::path @{
+  /// @{
+  /// @relates std::filesystem::path
 
   inline void swap(path& __lhs, path& __rhs) noexcept { __lhs.swap(__rhs); }
 
@@ -1347,16 +1346,20 @@ namespace __detail
 _GLIBCXX_END_NAMESPACE_CXX11
 } // namespace filesystem
 
+/// @cond undocumented
+
 inline ptrdiff_t
 distance(filesystem::path::iterator __first, filesystem::path::iterator __last)
 { return __path_iter_distance(__first, __last); }
 
-template<typename _InputIterator, typename _Distance>
+template<typename _Distance>
   void
   advance(filesystem::path::iterator& __i, _Distance __n)
   { __path_iter_advance(__i, static_cast<ptrdiff_t>(__n)); }
 
 extern template class __shared_ptr<const filesystem::filesystem_error::_Impl>;
+
+/// @endcond
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std

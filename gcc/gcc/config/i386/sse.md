@@ -104,8 +104,6 @@
   UNSPEC_COMPRESS
   UNSPEC_COMPRESS_STORE
   UNSPEC_EXPAND
-  UNSPEC_MASKED_EQ
-  UNSPEC_MASKED_GT
 
   ;; Mask operations
   UNSPEC_MASKOP
@@ -3273,7 +3271,7 @@
 ;; For signed comparison, handle EQ 0: NEQ 4,
 ;; for unsigned comparison extra handle LE:2, NLE:6, equivalent to EQ and NEQ.
 
-(define_split
+(define_insn_and_split "*<avx512>_ucmp<mode>3_1"
   [(set (match_operand:<avx512fmaskmode> 0 "register_operand")
 	(unspec:<avx512fmaskmode>
 	  [(us_minus:VI12_AVX512VL
@@ -3282,9 +3280,11 @@
 	   (match_operand:VI12_AVX512VL 3 "const0_operand")
 	   (match_operand:SI 4 "const_0_to_7_operand")]
 	  UNSPEC_PCMP_ITER))]
-  "TARGET_AVX512BW
+  "TARGET_AVX512BW && ix86_pre_reload_split ()
   && ix86_binary_operator_ok (US_MINUS, <MODE>mode, operands)
   && (INTVAL (operands[4]) & <pcmp_signed_mask>) == 0"
+  "#"
+  "&& 1"
   [(const_int 0)]
   {
     /* LE: 2, NLT: 5, NLE: 6, LT: 1  */
@@ -6995,7 +6995,7 @@
 (define_expand "vec_unpacks_float_hi_v8si"
   [(set (match_dup 2)
 	(vec_select:V4SI
-	  (match_operand:V8SI 1 "vector_operand")
+	  (match_operand:V8SI 1 "register_operand")
 	  (parallel [(const_int 4) (const_int 5)
 		     (const_int 6) (const_int 7)])))
    (set (match_operand:V4DF 0 "register_operand")
@@ -12895,24 +12895,6 @@
    (set_attr "prefix" "vex")
    (set_attr "mode" "OI")])
 
-(define_insn_and_split "*avx2_eq<mode>3"
- [(set (match_operand:VI_128_256  0 "register_operand")
-	(vec_merge:VI_128_256
-	  (match_operand:VI_128_256 1 "vector_all_ones_operand")
-	  (match_operand:VI_128_256 2 "const0_operand")
-	  (unspec:<avx512fmaskmode>
-	    [(match_operand:VI_128_256 3 "nonimmediate_operand")
-	     (match_operand:VI_128_256 4 "nonimmediate_operand")]
-	     UNSPEC_MASKED_EQ)))]
-  "TARGET_AVX512VL && ix86_pre_reload_split ()
-  && !(MEM_P (operands[3]) && MEM_P (operands[4]))"
-  "#"
-  "&& 1"
-  [(set (match_dup 0)
-	(eq:VI_128_256
-	   (match_dup 3)
-	   (match_dup 4)))])
-
 (define_insn_and_split "*avx2_pcmp<mode>3_1"
  [(set (match_operand:VI_128_256  0 "register_operand")
 	(vec_merge:VI_128_256
@@ -12982,8 +12964,9 @@
   [(set (match_operand:<avx512fmaskmode> 0 "register_operand")
 	(unspec:<avx512fmaskmode>
 	  [(match_operand:VI12_AVX512VL 1 "nonimmediate_operand")
-	   (match_operand:VI12_AVX512VL 2 "nonimmediate_operand")]
-	  UNSPEC_MASKED_EQ))]
+	   (match_operand:VI12_AVX512VL 2 "nonimmediate_operand")
+	   (const_int 0)]
+	  UNSPEC_PCMP))]
   "TARGET_AVX512BW"
   "ix86_fixup_binary_operands_no_copy (EQ, <MODE>mode, operands);")
 
@@ -12991,17 +12974,19 @@
   [(set (match_operand:<avx512fmaskmode> 0 "register_operand")
 	(unspec:<avx512fmaskmode>
 	  [(match_operand:VI48_AVX512VL 1 "nonimmediate_operand")
-	   (match_operand:VI48_AVX512VL 2 "nonimmediate_operand")]
-	  UNSPEC_MASKED_EQ))]
+	   (match_operand:VI48_AVX512VL 2 "nonimmediate_operand")
+	   (const_int 0)]
+	  UNSPEC_PCMP))]
   "TARGET_AVX512F"
   "ix86_fixup_binary_operands_no_copy (EQ, <MODE>mode, operands);")
 
-(define_insn "<avx512>_eq<mode>3<mask_scalar_merge_name>_1"
+(define_insn "*<avx512>_eq<mode>3<mask_scalar_merge_name>_1"
   [(set (match_operand:<avx512fmaskmode> 0 "register_operand" "=k,k")
 	(unspec:<avx512fmaskmode>
 	  [(match_operand:VI12_AVX512VL 1 "nonimm_or_0_operand" "%v,v")
-	   (match_operand:VI12_AVX512VL 2 "nonimm_or_0_operand" "vm,C")]
-	  UNSPEC_MASKED_EQ))]
+	   (match_operand:VI12_AVX512VL 2 "nonimm_or_0_operand" "vm,C")
+	   (const_int 0)]
+	  UNSPEC_PCMP))]
   "TARGET_AVX512BW && !(MEM_P (operands[1]) && MEM_P (operands[2]))"
   "@
    vpcmpeq<ssemodesuffix>\t{%2, %1, %0<mask_scalar_merge_operand3>|%0<mask_scalar_merge_operand3>, %1, %2}
@@ -13011,12 +12996,13 @@
    (set_attr "prefix" "evex")
    (set_attr "mode" "<sseinsnmode>")])
 
-(define_insn "<avx512>_eq<mode>3<mask_scalar_merge_name>_1"
+(define_insn "*<avx512>_eq<mode>3<mask_scalar_merge_name>_1"
   [(set (match_operand:<avx512fmaskmode> 0 "register_operand" "=k,k")
 	(unspec:<avx512fmaskmode>
 	  [(match_operand:VI48_AVX512VL 1 "nonimm_or_0_operand" "%v,v")
-	   (match_operand:VI48_AVX512VL 2 "nonimm_or_0_operand" "vm,C")]
-	  UNSPEC_MASKED_EQ))]
+	   (match_operand:VI48_AVX512VL 2 "nonimm_or_0_operand" "vm,C")
+	   (const_int 0)]
+	  UNSPEC_PCMP))]
   "TARGET_AVX512F && !(MEM_P (operands[1]) && MEM_P (operands[2]))"
   "@
    vpcmpeq<ssemodesuffix>\t{%2, %1, %0<mask_scalar_merge_operand3>|%0<mask_scalar_merge_operand3>, %1, %2}
@@ -13102,47 +13088,21 @@
    (set_attr "prefix" "vex")
    (set_attr "mode" "OI")])
 
-(define_insn_and_split "*avx2_gt<mode>3"
- [(set (match_operand:VI_128_256  0 "register_operand")
-	(vec_merge:VI_128_256
-	  (match_operand:VI_128_256 1 "vector_all_ones_operand")
-	  (match_operand:VI_128_256 2 "const0_operand")
-	  (unspec:<avx512fmaskmode>
-	    [(match_operand:VI_128_256 3 "register_operand")
-	     (match_operand:VI_128_256 4 "nonimmediate_operand")]
-	     UNSPEC_MASKED_GT)))]
-  "TARGET_AVX512VL
-  && ix86_pre_reload_split ()"
-  "#"
-  "&& 1"
-  [(set (match_dup 0)
-	(gt:VI_128_256
-	   (match_dup 3)
-	   (match_dup 4)))])
-
-(define_insn "<avx512>_gt<mode>3<mask_scalar_merge_name>"
-  [(set (match_operand:<avx512fmaskmode> 0 "register_operand" "=k")
+(define_expand "<avx512>_gt<mode>3<mask_scalar_merge_name>"
+  [(set (match_operand:<avx512fmaskmode> 0 "register_operand")
 	(unspec:<avx512fmaskmode>
-	  [(match_operand:VI48_AVX512VL 1 "register_operand" "v")
-	   (match_operand:VI48_AVX512VL 2 "nonimmediate_operand" "vm")] UNSPEC_MASKED_GT))]
-  "TARGET_AVX512F"
-  "vpcmpgt<ssemodesuffix>\t{%2, %1, %0<mask_scalar_merge_operand3>|%0<mask_scalar_merge_operand3>, %1, %2}"
-  [(set_attr "type" "ssecmp")
-   (set_attr "prefix_extra" "1")
-   (set_attr "prefix" "evex")
-   (set_attr "mode" "<sseinsnmode>")])
+	  [(match_operand:VI48_AVX512VL 1 "register_operand")
+	   (match_operand:VI48_AVX512VL 2 "nonimmediate_operand")
+	   (const_int 6)] UNSPEC_PCMP))]
+  "TARGET_AVX512F")
 
-(define_insn "<avx512>_gt<mode>3<mask_scalar_merge_name>"
-  [(set (match_operand:<avx512fmaskmode> 0 "register_operand" "=k")
+(define_expand "<avx512>_gt<mode>3<mask_scalar_merge_name>"
+  [(set (match_operand:<avx512fmaskmode> 0 "register_operand")
 	(unspec:<avx512fmaskmode>
-	  [(match_operand:VI12_AVX512VL 1 "register_operand" "v")
-	   (match_operand:VI12_AVX512VL 2 "nonimmediate_operand" "vm")] UNSPEC_MASKED_GT))]
-  "TARGET_AVX512BW"
-  "vpcmpgt<ssemodesuffix>\t{%2, %1, %0<mask_scalar_merge_operand3>|%0<mask_scalar_merge_operand3>, %1, %2}"
-  [(set_attr "type" "ssecmp")
-   (set_attr "prefix_extra" "1")
-   (set_attr "prefix" "evex")
-   (set_attr "mode" "<sseinsnmode>")])
+	  [(match_operand:VI12_AVX512VL 1 "register_operand")
+	   (match_operand:VI12_AVX512VL 2 "nonimmediate_operand")
+	   (const_int 6)] UNSPEC_PCMP))]
+  "TARGET_AVX512BW")
 
 (define_insn "sse2_gt<mode>3"
   [(set (match_operand:VI124_128 0 "register_operand" "=x,x")
@@ -16593,7 +16553,7 @@
   [(unspec_volatile [(match_operand:SI 0 "register_operand" "c")
 		     (match_operand:SI 1 "register_operand" "a")]
 		    UNSPECV_MWAIT)]
-  "TARGET_SSE3"
+  "TARGET_MWAIT"
 ;; 64bit version is "mwait %rax,%rcx". But only lower 32bits are used.
 ;; Since 32bit register operands are implicitly zero extended to 64bit,
 ;; we only need to set up 32bit registers.
@@ -16605,7 +16565,7 @@
 		     (match_operand:SI 1 "register_operand" "c")
 		     (match_operand:SI 2 "register_operand" "d")]
 		    UNSPECV_MONITOR)]
-  "TARGET_SSE3"
+  "TARGET_MWAIT"
 ;; 64bit version is "monitor %rax,%rcx,%rdx". But only lower 32bits in
 ;; RCX and RDX are used.  Since 32bit register operands are implicitly
 ;; zero extended to 64bit, we only need to set up 32bit registers.
@@ -16675,12 +16635,12 @@
    (set_attr "mode" "TI")])
 
 (define_insn_and_split "ssse3_ph<plusminus_mnemonic>wv4hi3"
-  [(set (match_operand:V4HI 0 "register_operand" "=y,x,Yv")
+  [(set (match_operand:V4HI 0 "register_operand" "=y,x,x")
 	(ssse3_plusminus:V4HI
 	  (vec_select:V4HI
 	    (vec_concat:V8HI
-	      (match_operand:V4HI 1 "register_operand" "0,0,Yv")
-	      (match_operand:V4HI 2 "register_mmxmem_operand" "ym,x,Yv"))
+	      (match_operand:V4HI 1 "register_operand" "0,0,x")
+	      (match_operand:V4HI 2 "register_mmxmem_operand" "ym,x,x"))
 	    (parallel
 	      [(const_int 0) (const_int 2) (const_int 4) (const_int 6)]))
 	  (vec_select:V4HI
@@ -16762,12 +16722,12 @@
    (set_attr "mode" "TI")])
 
 (define_insn_and_split "ssse3_ph<plusminus_mnemonic>dv2si3"
-  [(set (match_operand:V2SI 0 "register_operand" "=y,x,Yv")
+  [(set (match_operand:V2SI 0 "register_operand" "=y,x,x")
 	(plusminus:V2SI
 	  (vec_select:V2SI
 	    (vec_concat:V4SI
-	      (match_operand:V2SI 1 "register_operand" "0,0,Yv")
-	      (match_operand:V2SI 2 "register_mmxmem_operand" "ym,x,Yv"))
+	      (match_operand:V2SI 1 "register_operand" "0,0,x")
+	      (match_operand:V2SI 2 "register_mmxmem_operand" "ym,x,x"))
 	    (parallel [(const_int 0) (const_int 2)]))
 	  (vec_select:V2SI
 	    (vec_concat:V4SI (match_dup 1) (match_dup 2))
@@ -17173,13 +17133,13 @@
 })
 
 (define_insn_and_split "*ssse3_pshufbv8qi3"
-  [(set (match_operand:V8QI 0 "register_operand" "=y,x,Yv")
-	(unspec:V8QI [(match_operand:V8QI 1 "register_operand" "0,0,Yv")
-		      (match_operand:V8QI 2 "register_mmxmem_operand" "ym,x,Yv")
+  [(set (match_operand:V8QI 0 "register_operand" "=y,x,Yw")
+	(unspec:V8QI [(match_operand:V8QI 1 "register_operand" "0,0,Yw")
+		      (match_operand:V8QI 2 "register_mmxmem_operand" "ym,x,Yw")
 		      (match_operand:V4SI 4 "reg_or_const_vector_operand"
 					  "i,3,3")]
 		     UNSPEC_PSHUFB))
-   (clobber (match_scratch:V4SI 3 "=X,&x,&Yv"))]
+   (clobber (match_scratch:V4SI 3 "=X,&x,&Yw"))]
   "(TARGET_MMX || TARGET_MMX_WITH_SSE) && TARGET_SSSE3"
   "@
    pshufb\t{%2, %0|%0, %2}
@@ -17226,10 +17186,10 @@
    (set_attr "mode" "<sseinsnmode>")])
 
 (define_insn "ssse3_psign<mode>3"
-  [(set (match_operand:MMXMODEI 0 "register_operand" "=y,x,Yv")
+  [(set (match_operand:MMXMODEI 0 "register_operand" "=y,x,x")
 	(unspec:MMXMODEI
-	  [(match_operand:MMXMODEI 1 "register_operand" "0,0,Yv")
-	   (match_operand:MMXMODEI 2 "register_mmxmem_operand" "ym,x,Yv")]
+	  [(match_operand:MMXMODEI 1 "register_operand" "0,0,x")
+	   (match_operand:MMXMODEI 2 "register_mmxmem_operand" "ym,x,x")]
 	  UNSPEC_PSIGN))]
   "(TARGET_MMX || TARGET_MMX_WITH_SSE) && TARGET_SSSE3"
   "@
@@ -20299,8 +20259,9 @@
 	    negate = true;
 	}
       par = gen_rtx_PARALLEL (V16QImode, rtvec_alloc (16));
+      tmp = lowpart_subreg (QImode, operands[2], SImode);
       for (i = 0; i < 16; i++)
-        XVECEXP (par, 0, i) = operands[2];
+	XVECEXP (par, 0, i) = tmp;
 
       tmp = gen_reg_rtx (V16QImode);
       emit_insn (gen_vec_initv16qiqi (tmp, par));
@@ -22633,8 +22594,9 @@
   "TARGET_AVX512F"
 {
   operands[5]
-    = gen_rtx_UNSPEC (Pmode, gen_rtvec (3, operands[0], operands[2],
-					operands[4]), UNSPEC_VSIBADDR);
+    = gen_rtx_UNSPEC (Pmode, gen_rtvec (4, operands[0], operands[2],
+					operands[4], operands[1]),
+					UNSPEC_VSIBADDR);
 })
 
 (define_insn "*avx512f_scattersi<VI48F:mode>"
@@ -22642,10 +22604,11 @@
 	  [(unspec:P
 	     [(match_operand:P 0 "vsib_address_operand" "Tv")
 	      (match_operand:<VEC_GATHER_IDXSI> 2 "register_operand" "v")
-	      (match_operand:SI 4 "const1248_operand" "n")]
+	      (match_operand:SI 4 "const1248_operand" "n")
+	      (match_operand:<avx512fmaskmode> 6 "register_operand" "1")]
 	     UNSPEC_VSIBADDR)])
 	(unspec:VI48F
-	  [(match_operand:<avx512fmaskmode> 6 "register_operand" "1")
+	  [(match_dup 6)
 	   (match_operand:VI48F 3 "register_operand" "v")]
 	  UNSPEC_SCATTER))
    (clobber (match_scratch:<avx512fmaskmode> 1 "=&Yk"))]
@@ -22671,8 +22634,9 @@
   "TARGET_AVX512F"
 {
   operands[5]
-    = gen_rtx_UNSPEC (Pmode, gen_rtvec (3, operands[0], operands[2],
-					operands[4]), UNSPEC_VSIBADDR);
+    = gen_rtx_UNSPEC (Pmode, gen_rtvec (4, operands[0], operands[2],
+					operands[4], operands[1]),
+					UNSPEC_VSIBADDR);
 })
 
 (define_insn "*avx512f_scatterdi<VI48F:mode>"
@@ -22680,10 +22644,11 @@
 	  [(unspec:P
 	     [(match_operand:P 0 "vsib_address_operand" "Tv")
 	      (match_operand:<VEC_GATHER_IDXDI> 2 "register_operand" "v")
-	      (match_operand:SI 4 "const1248_operand" "n")]
+	      (match_operand:SI 4 "const1248_operand" "n")
+	      (match_operand:QI 6 "register_operand" "1")]
 	     UNSPEC_VSIBADDR)])
 	(unspec:VI48F
-	  [(match_operand:QI 6 "register_operand" "1")
+	  [(match_dup 6)
 	   (match_operand:<VEC_GATHER_SRCDI> 3 "register_operand" "v")]
 	  UNSPEC_SCATTER))
    (clobber (match_scratch:QI 1 "=&Yk"))]
@@ -24114,8 +24079,8 @@
 
 ;; KEYLOCKER
 (define_insn "loadiwkey"
-  [(unspec_volatile:V2DI [(match_operand:V2DI 0 "register_operand" "v")
-			  (match_operand:V2DI 1 "register_operand" "v")
+  [(unspec_volatile:V2DI [(match_operand:V2DI 0 "register_operand" "x")
+			  (match_operand:V2DI 1 "register_operand" "x")
 			  (match_operand:V2DI 2 "register_operand" "Yz")
 			  (match_operand:SI   3 "register_operand" "a")]
 			 UNSPECV_LOADIWKEY)
@@ -24248,7 +24213,7 @@
    (UNSPECV_AESENC256KLU8 "enc256kl")])
 
 (define_insn "aes<aesklvariant>u8"
-  [(set (match_operand:V2DI 0 "register_operand" "=v")
+  [(set (match_operand:V2DI 0 "register_operand" "=x")
 	(unspec_volatile:V2DI [(match_operand:V2DI 1 "register_operand" "0")
 			       (match_operand:BLK   2 "memory_operand" "m")]
 			      AESDECENCKL))
@@ -24317,5 +24282,5 @@
 	    [(match_operand:BLK 0 "memory_operand" "m")]
 	    AESDECENCWIDEKL))])]
   "TARGET_WIDEKL"
-  "aes<aeswideklvariant>\t{%0}"
+  "aes<aeswideklvariant>\t%0"
   [(set_attr "type" "other")])

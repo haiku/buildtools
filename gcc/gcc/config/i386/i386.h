@@ -181,6 +181,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define TARGET_CLWB_P(x)	TARGET_ISA_CLWB_P(x)
 #define TARGET_MWAITX	TARGET_ISA2_MWAITX
 #define TARGET_MWAITX_P(x)	TARGET_ISA2_MWAITX_P(x)
+#define TARGET_MWAIT	TARGET_ISA2_MWAIT
+#define TARGET_MWAIT_P(x)	TARGET_ISA2_MWAIT_P(x)
 #define TARGET_PKU	TARGET_ISA_PKU
 #define TARGET_PKU_P(x)	TARGET_ISA_PKU_P(x)
 #define TARGET_SHSTK	TARGET_ISA_SHSTK
@@ -256,8 +258,9 @@ struct stringop_algs
        this issue.  Since this header is used by code compiled with the C
        compiler we must guard the addition.  */
 #ifdef __cplusplus
-    stringop_strategy(int _max = -1, enum stringop_alg _alg = libcall,
-		      int _noalign = false)
+    constexpr
+    stringop_strategy (int _max = -1, enum stringop_alg _alg = libcall,
+		       int _noalign = false)
       : max (_max), alg (_alg), noalign (_noalign) {}
 #endif
     const int max;
@@ -2558,10 +2561,10 @@ constexpr wide_int_bitmask PTA_ICELAKE_SERVER = PTA_ICELAKE_CLIENT
   | PTA_PCONFIG | PTA_WBNOINVD | PTA_CLWB;
 constexpr wide_int_bitmask PTA_TIGERLAKE = PTA_ICELAKE_CLIENT | PTA_MOVDIRI
   | PTA_MOVDIR64B | PTA_CLWB | PTA_AVX512VP2INTERSECT | PTA_KL | PTA_WIDEKL;
-constexpr wide_int_bitmask PTA_SAPPHIRERAPIDS = PTA_COOPERLAKE | PTA_MOVDIRI
+constexpr wide_int_bitmask PTA_SAPPHIRERAPIDS = PTA_ICELAKE_SERVER | PTA_MOVDIRI
   | PTA_MOVDIR64B | PTA_AVX512VP2INTERSECT | PTA_ENQCMD | PTA_CLDEMOTE
   | PTA_PTWRITE | PTA_WAITPKG | PTA_SERIALIZE | PTA_TSXLDTRK | PTA_AMX_TILE
-  | PTA_AMX_INT8 | PTA_AMX_BF16 | PTA_UINTR | PTA_AVXVNNI;
+  | PTA_AMX_INT8 | PTA_AMX_BF16 | PTA_UINTR | PTA_AVXVNNI | PTA_AVX512BF16;
 constexpr wide_int_bitmask PTA_KNL = PTA_BROADWELL | PTA_AVX512PF
   | PTA_AVX512ER | PTA_AVX512F | PTA_AVX512CD | PTA_PREFETCHWT1;
 constexpr wide_int_bitmask PTA_BONNELL = PTA_CORE2 | PTA_MOVBE;
@@ -2649,6 +2652,7 @@ enum ix86_stack_slot
   SLOT_CW_FLOOR,
   SLOT_CW_CEIL,
   SLOT_STV_TEMP,
+  SLOT_FLOATxFDI_387,
   MAX_386_STACK_LOCALS
 };
 

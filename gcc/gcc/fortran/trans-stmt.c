@@ -356,6 +356,25 @@ gfc_conv_elemental_dependencies (gfc_se * se, gfc_se * loopse,
 }
 
 
+/* Given an executable statement referring to an intrinsic function call,
+   returns the intrinsic symbol.  */
+
+static gfc_intrinsic_sym *
+get_intrinsic_for_code (gfc_code *code)
+{
+  if (code->op == EXEC_CALL)
+    {
+      gfc_intrinsic_sym * const isym = code->resolved_isym;
+      if (isym)
+	return isym;
+      else
+	return gfc_get_intrinsic_for_expr (code->expr1);
+    }
+
+  return NULL;
+}
+
+
 /* Get the interface symbol for the procedure corresponding to the given call.
    We can't get the procedure symbol directly as we have to handle the case
    of (deferred) type-bound procedures.  */
@@ -402,6 +421,7 @@ gfc_trans_call (gfc_code * code, bool dependency_check,
   ss = gfc_ss_terminator;
   if (code->resolved_sym->attr.elemental)
     ss = gfc_walk_elemental_function_args (ss, code->ext.actual,
+					   get_intrinsic_for_code (code),
 					   get_proc_ifc_for_call (code),
 					   GFC_SS_REFERENCE);
 
@@ -1226,7 +1246,8 @@ gfc_trans_sync (gfc_code *code, gfc_exec_op type)
 
   if (code->expr2)
     {
-      gcc_assert (code->expr2->expr_type == EXPR_VARIABLE);
+      gcc_assert (code->expr2->expr_type == EXPR_VARIABLE
+		  || code->expr2->expr_type == EXPR_FUNCTION);
       gfc_init_se (&argse, NULL);
       gfc_conv_expr_val (&argse, code->expr2);
       stat = argse.expr;
@@ -1236,7 +1257,8 @@ gfc_trans_sync (gfc_code *code, gfc_exec_op type)
 
   if (code->expr3 && flag_coarray == GFC_FCOARRAY_LIB)
     {
-      gcc_assert (code->expr3->expr_type == EXPR_VARIABLE);
+      gcc_assert (code->expr3->expr_type == EXPR_VARIABLE
+		  || code->expr3->expr_type == EXPR_FUNCTION);
       gfc_init_se (&argse, NULL);
       argse.want_pointer = 1;
       gfc_conv_expr (&argse, code->expr3);
@@ -1917,7 +1939,7 @@ trans_associate_var (gfc_symbol *sym, gfc_wrapped_block *block)
       gfc_conv_expr_descriptor (&se, e);
 
       if (sym->ts.type == BT_CHARACTER
-	  && !se.direct_byref && sym->ts.deferred
+	  && sym->ts.deferred
 	  && !sym->attr.select_type_temporary
 	  && VAR_P (sym->ts.u.cl->backend_decl)
 	  && se.string_length != sym->ts.u.cl->backend_decl)

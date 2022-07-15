@@ -1109,7 +1109,8 @@ gfc_match_char (char c)
    %t  Matches end of statement.
    %o  Matches an intrinsic operator, returned as an INTRINSIC enum.
    %l  Matches a statement label
-   %v  Matches a variable expression (an lvalue)
+   %v  Matches a variable expression (an lvalue, except function references
+   having a data pointer result)
    %   Matches a required space (in free form) and optional spaces.  */
 
 match
@@ -3854,7 +3855,7 @@ sync_statement (gfc_statement st)
 
   for (;;)
     {
-      m = gfc_match (" stat = %v", &tmp);
+      m = gfc_match (" stat = %e", &tmp);
       if (m == MATCH_ERROR)
 	goto syntax;
       if (m == MATCH_YES)
@@ -3874,7 +3875,7 @@ sync_statement (gfc_statement st)
 	  break;
 	}
 
-      m = gfc_match (" errmsg = %v", &tmp);
+      m = gfc_match (" errmsg = %e", &tmp);
       if (m == MATCH_ERROR)
 	goto syntax;
       if (m == MATCH_YES)
@@ -4078,7 +4079,7 @@ gfc_match_goto (void)
 	}
       while (gfc_match_char (',') == MATCH_YES);
 
-      if (gfc_match (")%t") != MATCH_YES)
+      if (gfc_match (" )%t") != MATCH_YES)
 	goto syntax;
 
       if (head == NULL)
@@ -4405,7 +4406,7 @@ gfc_match_allocate (void)
 
 alloc_opt_list:
 
-      m = gfc_match (" stat = %v", &tmp);
+      m = gfc_match (" stat = %e", &tmp);
       if (m == MATCH_ERROR)
 	goto cleanup;
       if (m == MATCH_YES)
@@ -4434,7 +4435,7 @@ alloc_opt_list:
 	    goto alloc_opt_list;
 	}
 
-      m = gfc_match (" errmsg = %v", &tmp);
+      m = gfc_match (" errmsg = %e", &tmp);
       if (m == MATCH_ERROR)
 	goto cleanup;
       if (m == MATCH_YES)
@@ -4777,7 +4778,7 @@ gfc_match_deallocate (void)
 
 dealloc_opt_list:
 
-      m = gfc_match (" stat = %v", &tmp);
+      m = gfc_match (" stat = %e", &tmp);
       if (m == MATCH_ERROR)
 	goto cleanup;
       if (m == MATCH_YES)
@@ -4799,7 +4800,7 @@ dealloc_opt_list:
 	    goto dealloc_opt_list;
 	}
 
-      m = gfc_match (" errmsg = %v", &tmp);
+      m = gfc_match (" errmsg = %e", &tmp);
       if (m == MATCH_ERROR)
 	goto cleanup;
       if (m == MATCH_YES)
@@ -6091,8 +6092,30 @@ match_case_selector (gfc_case **cp)
 	  m = gfc_match_init_expr (&c->high);
 	  if (m == MATCH_ERROR)
 	    goto cleanup;
+	  if (m == MATCH_YES
+	      && c->high->ts.type != BT_LOGICAL
+	      && c->high->ts.type != BT_INTEGER
+	      && c->high->ts.type != BT_CHARACTER)
+	    {
+	      gfc_error ("Expression in CASE selector at %L cannot be %s",
+			 &c->high->where, gfc_typename (c->high));
+	      goto cleanup;
+	    }
 	  /* MATCH_NO is fine.  It's OK if nothing is there!  */
 	}
+    }
+
+  if (c->low && c->low->rank != 0)
+    {
+      gfc_error ("Expression in CASE selector at %L must be scalar",
+		 &c->low->where);
+      goto cleanup;
+    }
+  if (c->high && c->high->rank != 0)
+    {
+      gfc_error ("Expression in CASE selector at %L must be scalar",
+		 &c->high->where);
+      goto cleanup;
     }
 
   *cp = c;
@@ -6357,7 +6380,8 @@ select_type_set_tmp (gfc_typespec *ts)
       sym = tmp->n.sym;
       gfc_add_type (sym, ts, NULL);
 
-      if (selector->ts.type == BT_CLASS && selector->attr.class_ok)
+      if (selector->ts.type == BT_CLASS && selector->attr.class_ok
+	  && selector->ts.u.derived && CLASS_DATA (selector))
 	{
 	  sym->attr.pointer
 		= CLASS_DATA (selector)->attr.class_pointer;

@@ -1275,6 +1275,8 @@ move (tree expr)
 {
   tree type = TREE_TYPE (expr);
   gcc_assert (!TYPE_REF_P (type));
+  if (xvalue_p (expr))
+    return expr;
   type = cp_build_reference_type (type, /*rval*/true);
   return build_static_cast (input_location, type, expr,
 			    tf_warning_or_error);
@@ -1480,9 +1482,9 @@ apply_identity_attributes (tree result, tree attribs, bool *remove_attributes)
 	      p = &TREE_CHAIN (*p);
 	    }
 	}
-      else if (first_ident)
+      else if (first_ident && first_ident != error_mark_node)
 	{
-	  for (tree a2 = first_ident; a2; a2 = TREE_CHAIN (a2))
+	  for (tree a2 = first_ident; a2 != a; a2 = TREE_CHAIN (a2))
 	    {
 	      *p = tree_cons (TREE_PURPOSE (a2), TREE_VALUE (a2), NULL_TREE);
 	      p = &TREE_CHAIN (*p);
@@ -1743,7 +1745,7 @@ strip_typedefs (tree t, bool *remove_attributes, unsigned int flags)
 	    type = strip_typedefs (pat, remove_attributes, flags);
 	    if (type != pat)
 	      {
-		result = copy_node (t);
+		result = build_distinct_type_copy (t);
 		PACK_EXPANSION_PATTERN (result) = type;
 	      }
 	  }
@@ -2766,8 +2768,9 @@ fixup_deferred_exception_variants (tree type, tree raises)
 
   /* Though sucky, this walk will process the canonical variants
      first.  */
+  tree prev = NULL_TREE;
   for (tree variant = TYPE_MAIN_VARIANT (type);
-       variant; variant = TYPE_NEXT_VARIANT (variant))
+       variant; prev = variant, variant = TYPE_NEXT_VARIANT (variant))
     if (TYPE_RAISES_EXCEPTIONS (variant) == original)
       {
 	gcc_checking_assert (variant != TYPE_MAIN_VARIANT (type));
@@ -2777,21 +2780,34 @@ fixup_deferred_exception_variants (tree type, tree raises)
 	    cp_cv_quals var_quals = TYPE_QUALS (variant);
 	    cp_ref_qualifier rqual = type_memfn_rqual (variant);
 
+	    /* If VARIANT would become a dup (cp_check_qualified_type-wise)
+	       of an existing variant in the variant list of TYPE after its
+	       exception specification has been parsed, elide it.  Otherwise,
+	       build_cp_fntype_variant could use it, leading to "canonical
+	       types differ for identical types."  */
 	    tree v = TYPE_MAIN_VARIANT (type);
 	    for (; v; v = TYPE_NEXT_VARIANT (v))
-	      if (TYPE_CANONICAL (v) == v
-		  && cp_check_qualified_type (v, variant, var_quals,
-					      rqual, cr, false))
-		break;
+	      if (cp_check_qualified_type (v, variant, var_quals,
+					   rqual, cr, false))
+		{
+		  /* The main variant will not match V, so PREV will never
+		     be null.  */
+		  TYPE_NEXT_VARIANT (prev) = TYPE_NEXT_VARIANT (variant);
+		  break;
+		}
 	    TYPE_RAISES_EXCEPTIONS (variant) = raises;
 
 	    if (!v)
 	      v = build_cp_fntype_variant (TYPE_CANONICAL (variant),
 					   rqual, cr, false);
-	    TYPE_CANONICAL (variant) = v;
+	    TYPE_CANONICAL (variant) = TYPE_CANONICAL (v);
 	  }
 	else
 	  TYPE_RAISES_EXCEPTIONS (variant) = raises;
+
+	if (!TYPE_DEPENDENT_P (variant))
+	  /* We no longer know that it's not type-dependent.  */
+	  TYPE_DEPENDENT_P_VALID (variant) = false;
       }
 }
 
@@ -5382,7 +5398,9 @@ cp_walk_subtrees (tree *tp, int *walk_subtrees_p, walk_tree_fn func,
       // walk the parameter list. Doing so causes false
       // positives in the pack expansion checker since the
       // requires parameters are introduced as pack expansions.
-      WALK_SUBTREE (TREE_OPERAND (*tp, 1));
+      ++cp_unevaluated_operand;
+      result = cp_walk_tree (&REQUIRES_EXPR_REQS (*tp), func, data, pset);
+      --cp_unevaluated_operand;
       *walk_subtrees_p = 0;
       break;
 
@@ -5441,6 +5459,11 @@ cp_walk_subtrees (tree *tp, int *walk_subtrees_p, walk_tree_fn func,
 	       arguments.  */
 	    WALK_SUBTREE (TREE_OPERAND (*tp, 1));
 	}
+      break;
+
+    case STATIC_ASSERT:
+      WALK_SUBTREE (STATIC_ASSERT_CONDITION (*tp));
+      WALK_SUBTREE (STATIC_ASSERT_MESSAGE (*tp));
       break;
 
     default:
