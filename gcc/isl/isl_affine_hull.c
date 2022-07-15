@@ -59,8 +59,8 @@ error:
 	return NULL;
 }
 
-struct isl_basic_set *isl_basic_set_implicit_equalities(
-						struct isl_basic_set *bset)
+__isl_give isl_basic_set *isl_basic_set_implicit_equalities(
+	__isl_take isl_basic_set *bset)
 {
 	return bset_from_bmap(
 		isl_basic_map_implicit_equalities(bset_to_bmap(bset)));
@@ -93,7 +93,7 @@ static void set_common_multiple(
 
 /* Delete a given equality, moving all the following equalities one up.
  */
-static void delete_row(struct isl_basic_set *bset, unsigned row)
+static void delete_row(__isl_keep isl_basic_set *bset, unsigned row)
 {
 	isl_int *t;
 	int r;
@@ -263,7 +263,8 @@ error:
  * The caller of this function ensures that the tableau is bounded or
  * that tab->basis and tab->n_unbounded have been set appropriately.
  */
-static struct isl_vec *outside_point(struct isl_tab *tab, isl_int *eq, int up)
+static __isl_give isl_vec *outside_point(struct isl_tab *tab, isl_int *eq,
+	int up)
 {
 	struct isl_ctx *ctx;
 	struct isl_vec *sample = NULL;
@@ -726,8 +727,8 @@ error:
  * The affine hull in the original space is then obtained as
  * A = preimage(A'', Q_1).
  */
-static struct isl_basic_set *affine_hull_with_cone(struct isl_basic_set *bset,
-	struct isl_basic_set *cone)
+static __isl_give isl_basic_set *affine_hull_with_cone(
+	__isl_take isl_basic_set *bset, __isl_take isl_basic_set *cone)
 {
 	isl_size total;
 	unsigned cone_dim;
@@ -804,7 +805,8 @@ error:
  * In particular, if the recession cone is full-dimensional, then
  * the affine hull is simply the whole universe.
  */
-static struct isl_basic_set *uset_affine_hull(struct isl_basic_set *bset)
+static __isl_give isl_basic_set *uset_affine_hull(
+	__isl_take isl_basic_set *bset)
 {
 	struct isl_basic_set *cone;
 	isl_size total;
@@ -849,8 +851,8 @@ error:
  * In particular, dimensions that correspond to existential variables
  * in bmap and that are found to be fixed are not removed.
  */
-static struct isl_basic_set *equalities_in_underlying_set(
-						struct isl_basic_map *bmap)
+static __isl_give isl_basic_set *equalities_in_underlying_set(
+	__isl_take isl_basic_map *bmap)
 {
 	struct isl_mat *T1 = NULL;
 	struct isl_mat *T2 = NULL;
@@ -923,8 +925,7 @@ __isl_give isl_basic_map *isl_basic_map_detect_equalities(
 		isl_basic_set_free(hull);
 		return isl_basic_map_set_to_empty(bmap);
 	}
-	bmap = isl_basic_map_extend_space(bmap, isl_space_copy(bmap->dim), 0,
-					hull->n_eq, 0);
+	bmap = isl_basic_map_extend(bmap, 0, hull->n_eq, 0);
 	total = isl_basic_set_dim(hull, isl_dim_all);
 	if (total < 0)
 		goto error;
@@ -998,7 +999,8 @@ __isl_give isl_basic_map *isl_basic_map_affine_hull(
 	return bmap;
 }
 
-struct isl_basic_set *isl_basic_set_affine_hull(struct isl_basic_set *bset)
+__isl_give isl_basic_set *isl_basic_set_affine_hull(
+	__isl_take isl_basic_set *bset)
 {
 	return bset_from_bmap(isl_basic_map_affine_hull(bset_to_bmap(bset)));
 }
@@ -1030,8 +1032,7 @@ static __isl_give isl_basic_map *add_strides(__isl_take isl_basic_map *bmap,
 	if (isl_int_is_one(M->row[0][0]))
 		return bmap;
 
-	bmap = isl_basic_map_extend_space(bmap, isl_space_copy(bmap->dim),
-					M->n_row - 1, M->n_row - 1, 0);
+	bmap = isl_basic_map_extend(bmap, M->n_row - 1, M->n_row - 1, 0);
 
 	isl_int_init(gcd);
 	for (i = 1; i < M->n_row; ++i) {
@@ -1109,7 +1110,6 @@ static __isl_give isl_basic_map *isl_basic_map_make_strides_explicit(
 	for (n_known = 0; n_known < bmap->n_div; ++n_known)
 		if (isl_int_is_zero(bmap->div[n_known][0]))
 			break;
-	ctx = isl_basic_map_get_ctx(bmap);
 	v_div = isl_basic_map_var_offset(bmap, isl_dim_div);
 	if (v_div < 0)
 		return isl_basic_map_free(bmap);
@@ -1119,6 +1119,7 @@ static __isl_give isl_basic_map *isl_basic_map_make_strides_explicit(
 			break;
 	if (n == 0)
 		return bmap;
+	ctx = isl_basic_map_get_ctx(bmap);
 	B = isl_mat_sub_alloc6(ctx, bmap->eq, 0, n, 0, 1 + v_div + n_known);
 	n_col = bmap->n_div - n_known;
 	A = isl_mat_sub_alloc6(ctx, bmap->eq, 0, n, 1 + v_div + n_known, n_col);
@@ -1245,7 +1246,7 @@ error:
 	return NULL;
 }
 
-struct isl_basic_set *isl_set_affine_hull(struct isl_set *set)
+__isl_give isl_basic_set *isl_set_affine_hull(__isl_take isl_set *set)
 {
 	return bset_from_bmap(isl_map_affine_hull(set_to_map(set)));
 }

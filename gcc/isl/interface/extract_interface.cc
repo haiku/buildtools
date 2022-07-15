@@ -82,8 +82,9 @@
 #include "extract_interface.h"
 #include "generator.h"
 #include "python.h"
-#include "cpp.h"
+#include "plain_cpp.h"
 #include "cpp_conversion.h"
+#include "template_cpp.h"
 
 using namespace std;
 using namespace clang;
@@ -237,6 +238,26 @@ static void create_from_args(CompilerInvocation &invocation,
 
 #endif
 
+#ifdef CLANG_SYSROOT
+/* Set sysroot if required.
+ *
+ * If CLANG_SYSROOT is defined, then set it to this value.
+ */
+static void set_sysroot(ArgStringList &args)
+{
+	args.push_back("-isysroot");
+	args.push_back(CLANG_SYSROOT);
+}
+#else
+/* Set sysroot if required.
+ *
+ * If CLANG_SYSROOT is not defined, then it does not need to be set.
+ */
+static void set_sysroot(ArgStringList &args)
+{
+}
+#endif
+
 /* Create a CompilerInvocation object that stores the command line
  * arguments constructed by the driver.
  * The arguments are mainly useful for setting up the system include
@@ -258,10 +279,11 @@ static CompilerInvocation *construct_invocation(const char *filename,
 	if (strcmp(cmd->getCreator().getName(), "clang"))
 		return NULL;
 
-	const ArgStringList *args = &cmd->getArguments();
+	ArgStringList args = cmd->getArguments();
+	set_sysroot(args);
 
 	CompilerInvocation *invocation = new CompilerInvocation;
-	create_from_args(*invocation, args, Diags);
+	create_from_args(*invocation, &args, Diags);
 	return invocation;
 }
 
@@ -358,13 +380,21 @@ static void create_preprocessor(CompilerInstance *Clang)
 
 #ifdef ADDPATH_TAKES_4_ARGUMENTS
 
+/* Add "Path" to the header search options.
+ *
+ * Do not take into account sysroot, i.e., set ignoreSysRoot to true.
+ */
 void add_path(HeaderSearchOptions &HSO, string Path)
 {
-	HSO.AddPath(Path, frontend::Angled, false, false);
+	HSO.AddPath(Path, frontend::Angled, false, true);
 }
 
 #else
 
+/* Add "Path" to the header search options.
+ *
+ * Do not take into account sysroot, i.e., set IsSysRootRelative to false.
+ */
 void add_path(HeaderSearchOptions &HSO, string Path)
 {
 	HSO.AddPath(Path, frontend::Angled, true, false, false);
@@ -391,12 +421,15 @@ static void create_main_file_id(SourceManager &SM, const FileEntry *file)
 
 #ifdef SETLANGDEFAULTS_TAKES_5_ARGUMENTS
 
+#include "set_lang_defaults_arg4.h"
+
 static void set_lang_defaults(CompilerInstance *Clang)
 {
 	PreprocessorOptions &PO = Clang->getPreprocessorOpts();
 	TargetOptions &TO = Clang->getTargetOpts();
 	llvm::Triple T(TO.Triple);
-	CompilerInvocation::setLangDefaults(Clang->getLangOpts(), IK_C, T, PO,
+	CompilerInvocation::setLangDefaults(Clang->getLangOpts(), IK_C, T,
+					    setLangDefaultsArg4(PO),
 					    LangStandard::lang_unspecified);
 }
 
@@ -477,13 +510,16 @@ static void generate(MyASTConsumer &consumer, SourceManager &SM)
 		gen = new python_generator(SM, consumer.exported_types,
 			consumer.exported_functions, consumer.functions);
 	} else if (OutputLanguage.compare("cpp") == 0) {
-		gen = new cpp_generator(SM, consumer.exported_types,
+		gen = new plain_cpp_generator(SM, consumer.exported_types,
 			consumer.exported_functions, consumer.functions);
 	} else if (OutputLanguage.compare("cpp-checked") == 0) {
-		gen = new cpp_generator(SM, consumer.exported_types,
+		gen = new plain_cpp_generator(SM, consumer.exported_types,
 			consumer.exported_functions, consumer.functions, true);
 	} else if (OutputLanguage.compare("cpp-checked-conversion") == 0) {
 		gen = new cpp_conversion_generator(SM, consumer.exported_types,
+			consumer.exported_functions, consumer.functions);
+	} else if (OutputLanguage.compare("template-cpp") == 0) {
+		gen = new template_cpp_generator(SM, consumer.exported_types,
 			consumer.exported_functions, consumer.functions);
 	} else {
 		cerr << "Language '" << OutputLanguage

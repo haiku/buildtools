@@ -1428,6 +1428,17 @@ isl_bool isl_val_eq(__isl_keep isl_val *v1, __isl_keep isl_val *v2)
 			   isl_int_eq(v1->d, v2->d));
 }
 
+/* Is "v" equal to "i"?
+ */
+isl_bool isl_val_eq_si(__isl_keep isl_val *v, long i)
+{
+	if (!v)
+		return isl_bool_error;
+	if (!isl_val_is_int(v))
+		return isl_bool_false;
+	return isl_bool_ok(isl_int_cmp_si(v->n, i) == 0);
+}
+
 /* Is "v1" equal to "v2" in absolute value?
  */
 isl_bool isl_val_abs_eq(__isl_keep isl_val *v1, __isl_keep isl_val *v2)
@@ -1568,11 +1579,19 @@ __isl_give isl_val *isl_val_zero_on_domain(__isl_take isl_local_space *ls)
 #include <isl_multi_arith_templ.c>
 #include <isl_multi_dim_id_templ.c>
 #include <isl_multi_dims.c>
+#include <isl_multi_min_max_templ.c>
 #include <isl_multi_nan_templ.c>
 #include <isl_multi_product_templ.c>
 #include <isl_multi_splice_templ.c>
 #include <isl_multi_tuple_id_templ.c>
 #include <isl_multi_zero_templ.c>
+
+/* Does "mv" consist of only zeros?
+ */
+isl_bool isl_multi_val_is_zero(__isl_keep isl_multi_val *mv)
+{
+	return isl_multi_val_every(mv, &isl_val_is_zero);
+}
 
 /* Apply "fn" to each of the elements of "mv" with as second argument "v".
  */

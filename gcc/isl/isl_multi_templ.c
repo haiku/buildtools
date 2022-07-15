@@ -258,6 +258,27 @@ __isl_give MULTI(BASE) *FN(FN(MULTI(BASE),set),BASE)(
 	return FN(MULTI(BASE),set_at)(multi, pos, el);
 }
 
+/* Return the base expressions of "multi" as a list.
+ */
+__isl_give LIST(EL) *FN(MULTI(BASE),get_list)(
+	__isl_keep MULTI(BASE) *multi)
+{
+	isl_size n;
+	int i;
+	LIST(EL) *list;
+
+	n = FN(MULTI(BASE),size)(multi);
+	if (n < 0)
+		return NULL;
+	list = FN(LIST(EL),alloc)(FN(MULTI(BASE),get_ctx(multi)), n);
+	for (i = 0; i < n; ++i) {
+		EL *el = FN(MULTI(BASE),get_at)(multi, i);
+		list = FN(LIST(EL),add)(list, el);
+	}
+
+	return list;
+}
+
 /* Reset the space of "multi".  This function is called from isl_pw_templ.c
  * and doesn't know if the space of an element object is represented
  * directly or through its domain.  It therefore passes along both,
@@ -458,6 +479,15 @@ error:
 	return NULL;
 }
 
+/* This function performs the same operation as isl_multi_*_from_*_list,
+ * but is considered as a function on an isl_space when exported.
+ */
+__isl_give MULTI(BASE) *FN(isl_space_multi,BASE)(__isl_take isl_space *space,
+	__isl_take LIST(EL) *list)
+{
+	return FN(FN(MULTI(BASE),from),LIST(BASE))(space, list);
+}
+
 __isl_give MULTI(BASE) *FN(MULTI(BASE),drop_dims)(
 	__isl_take MULTI(BASE) *multi,
 	enum isl_dim_type type, unsigned first, unsigned n)
@@ -499,48 +529,20 @@ __isl_give MULTI(BASE) *FN(MULTI(BASE),drop_dims)(
 	return multi;
 }
 
-/* Align the parameters of "multi1" and "multi2" (if needed) and call "fn".
- */
-static __isl_give MULTI(BASE) *FN(MULTI(BASE),align_params_multi_multi_and)(
-	__isl_take MULTI(BASE) *multi1, __isl_take MULTI(BASE) *multi2,
-	__isl_give MULTI(BASE) *(*fn)(__isl_take MULTI(BASE) *multi1,
-		__isl_take MULTI(BASE) *multi2))
-{
-	isl_ctx *ctx;
-	isl_bool equal_params;
+#undef TYPE
+#define TYPE MULTI(BASE)
 
-	if (!multi1 || !multi2)
-		goto error;
-	equal_params = isl_space_has_equal_params(multi1->space, multi2->space);
-	if (equal_params < 0)
-		goto error;
-	if (equal_params)
-		return fn(multi1, multi2);
-	ctx = FN(MULTI(BASE),get_ctx)(multi1);
-	if (!isl_space_has_named_params(multi1->space) ||
-	    !isl_space_has_named_params(multi2->space))
-		isl_die(ctx, isl_error_invalid,
-			"unaligned unnamed parameters", goto error);
-	multi1 = FN(MULTI(BASE),align_params)(multi1,
-					    FN(MULTI(BASE),get_space)(multi2));
-	multi2 = FN(MULTI(BASE),align_params)(multi2,
-					    FN(MULTI(BASE),get_space)(multi1));
-	return fn(multi1, multi2);
-error:
-	FN(MULTI(BASE),free)(multi1);
-	FN(MULTI(BASE),free)(multi2);
-	return NULL;
-}
+#include "isl_check_named_params_templ.c"
+static
+#include "isl_align_params_bin_templ.c"
 
 /* Given two MULTI(BASE)s A -> B and C -> D,
  * construct a MULTI(BASE) (A * C) -> [B -> D].
  *
- * The parameters are assumed to have been aligned.
- *
  * If "multi1" and/or "multi2" has an explicit domain, then
  * intersect the domain of the result with these explicit domains.
  */
-static __isl_give MULTI(BASE) *FN(MULTI(BASE),range_product_aligned)(
+__isl_give MULTI(BASE) *FN(MULTI(BASE),range_product)(
 	__isl_take MULTI(BASE) *multi1, __isl_take MULTI(BASE) *multi2)
 {
 	int i;
@@ -549,6 +551,7 @@ static __isl_give MULTI(BASE) *FN(MULTI(BASE),range_product_aligned)(
 	isl_space *space;
 	MULTI(BASE) *res;
 
+	FN(MULTI(BASE),align_params_bin)(&multi1, &multi2);
 	n1 = FN(MULTI(BASE),size)(multi1);
 	n2 = FN(MULTI(BASE),size)(multi2);
 	if (n1 < 0 || n2 < 0)
@@ -580,16 +583,6 @@ error:
 	FN(MULTI(BASE),free)(multi1);
 	FN(MULTI(BASE),free)(multi2);
 	return NULL;
-}
-
-/* Given two MULTI(BASE)s A -> B and C -> D,
- * construct a MULTI(BASE) (A * C) -> [B -> D].
- */
-__isl_give MULTI(BASE) *FN(MULTI(BASE),range_product)(
-	__isl_take MULTI(BASE) *multi1, __isl_take MULTI(BASE) *multi2)
-{
-	return FN(MULTI(BASE),align_params_multi_multi_and)(multi1, multi2,
-					&FN(MULTI(BASE),range_product_aligned));
 }
 
 /* Is the range of "multi" a wrapped relation?
@@ -755,26 +748,13 @@ error:
 	return NULL;
 }
 
-/* Check that "multi1" and "multi2" live in the same space,
- * reporting an error if they do not.
- */
-static isl_stat FN(MULTI(BASE),check_equal_space)(
-	__isl_keep MULTI(BASE) *multi1, __isl_keep MULTI(BASE) *multi2)
-{
-	isl_bool equal;
+#undef TYPE
+#define TYPE	MULTI(BASE)
 
-	if (!multi1 || !multi2)
-		return isl_stat_error;
-
-	equal = isl_space_is_equal(multi1->space, multi2->space);
-	if (equal < 0)
-		return isl_stat_error;
-	if (!equal)
-		isl_die(FN(MULTI(BASE),get_ctx)(multi1), isl_error_invalid,
-			"spaces don't match", return isl_stat_error);
-
-	return isl_stat_ok;
-}
+static
+#include "isl_type_has_equal_space_bin_templ.c"
+static
+#include "isl_type_check_equal_space_templ.c"
 
 /* This function is currently only used from isl_aff.c
  */
@@ -795,6 +775,7 @@ static __isl_give MULTI(BASE) *FN(MULTI(BASE),bin_op)(
 {
 	int i;
 
+	FN(MULTI(BASE),align_params_bin)(&multi1, &multi2);
 	multi1 = FN(MULTI(BASE),cow)(multi1);
 	if (FN(MULTI(BASE),check_equal_space)(multi1, multi2) < 0)
 		goto error;
@@ -842,6 +823,32 @@ static isl_bool FN(MULTI(BASE),any)(__isl_keep MULTI(BASE) *multi,
 	}
 
 	return isl_bool_false;
+}
+
+/* Only used on some multi-expressions.
+ */
+static isl_bool FN(MULTI(BASE),every)(__isl_keep MULTI(BASE) *multi,
+	isl_bool (*test)(__isl_keep EL *)) __attribute__ ((unused));
+
+/* Does "test" succeed on every base expression of "multi"?
+ */
+static isl_bool FN(MULTI(BASE),every)(__isl_keep MULTI(BASE) *multi,
+	isl_bool (*test)(__isl_keep EL *))
+{
+	isl_size n;
+	int i;
+
+	n = FN(MULTI(BASE),size)(multi);
+	if (n < 0)
+		return isl_bool_error;
+
+	for (i = 0; i < n; ++i) {
+		isl_bool every = test(multi->u.p[i]);
+		if (every < 0 || !every)
+			return every;
+	}
+
+	return isl_bool_true;
 }
 
 /* Convert a multiple expression defined over a parameter domain

@@ -46,23 +46,35 @@
 const char *isl_class::get_prefix = "get_";
 const char *isl_class::set_callback_prefix = "set_";
 
-/* Should "method" be considered to be a static method?
- * That is, is the first argument something other than
- * an instance of the class?
+/* Is the first argument an instance of the class?
  */
-bool isl_class::is_static(FunctionDecl *method) const
+bool isl_class::first_arg_matches_class(FunctionDecl *method) const
 {
 	ParmVarDecl *param;
 	QualType type;
 
 	if (method->getNumParams() < 1)
-		return true;
+		return false;
 
 	param = method->getParamDecl(0);
 	type = param->getOriginalType();
 	if (!generator::is_isl_type(type))
-		return true;
-	return generator::extract_type(type) != name;
+		return false;
+	return generator::extract_type(type) == name;
+}
+
+/* Should "method" be considered to be a static method?
+ * That is, is the first argument something other than
+ * an instance of the class?
+ *
+ * If this method was copied from a superclass, then check
+ * whether the method is static with respect to this superclass.
+ */
+bool isl_class::is_static(FunctionDecl *method) const
+{
+	if (copied_from.count(method) != 0)
+		return copied_from.at(method).is_static(method);
+	return !first_arg_matches_class(method);
 }
 
 /* Should "method" be considered to be a static method?
@@ -157,7 +169,7 @@ void generator::extract_class_automatic_conversions(const isl_class &clazz)
 
 	for (fi = constructors.begin(); fi != constructors.end(); ++fi) {
 		FunctionDecl *fd = *fi;
-		string name = fd->getName();
+		string name = fd->getName().str();
 		if (automatic_conversion_functions.count(name) != 0)
 			extract_automatic_conversion(fd);
 	}
@@ -184,7 +196,7 @@ void generator::extract_automatic_conversions()
 void generator::add_subclass(RecordDecl *decl, const string &super_name,
 	const string &sub_name)
 {
-	string name = decl->getName();
+	string name = decl->getName().str();
 
 	classes[sub_name].name = name;
 	classes[sub_name].superclass_name = super_name;
@@ -200,7 +212,7 @@ void generator::add_subclass(RecordDecl *decl, const string &super_name,
  */
 void generator::add_class(RecordDecl *decl)
 {
-	return add_subclass(decl, "", decl->getName());
+	return add_subclass(decl, "", decl->getName().str());
 }
 
 /* Given a function "fn_type" that returns the subclass type
@@ -285,7 +297,7 @@ static bool handled_sets_enum(isl_class *c, FunctionDecl *fd)
 	if (!enum_type)
 		return false;
 	decl = enum_type->getDecl();
-	enum_name = decl->getName();
+	enum_name = decl->getName().str();
 	enum_name = enum_name.substr(4);
 	fd_name = c->method_name(fd);
 	pos = fd_name.find(enum_name);
@@ -329,6 +341,21 @@ static bool sets_persistent_callback(isl_class *c, FunctionDecl *fd)
 			 c->set_callback_prefix) == 0;
 }
 
+/* Does this function take any enum arguments?
+ */
+static bool takes_enums(FunctionDecl *fd)
+{
+	unsigned n;
+
+	n = fd->getNumParams();
+	for (unsigned i = 0; i < n; ++i) {
+		ParmVarDecl *param = fd->getParamDecl(i);
+		if (param->getType()->getAs<EnumType>())
+			return true;
+	}
+	return false;
+}
+
 /* Sorting function that places declaration of functions
  * with a shorter name first.
  */
@@ -338,9 +365,13 @@ static bool less_name(const FunctionDecl *a, const FunctionDecl *b)
 }
 
 /* Collect all functions that belong to a certain type, separating
- * constructors from methods that set persistent callback and
+ * constructors from methods that set an enum value,
+ * methods that set a persistent callback and
  * from regular methods, while keeping track of the _to_str,
- * _copy and _free functions, if any, separately.  If there are any overloaded
+ * _copy and _free functions, if any, separately.
+ * Methods that accept any enum arguments that are not specifically handled
+ * are not supported.
+ * If there are any overloaded
  * functions, then they are grouped based on their name after removing the
  * argument type suffix.
  * Check for functions that describe subclasses before considering
@@ -348,6 +379,8 @@ static bool less_name(const FunctionDecl *a, const FunctionDecl *b)
  * functions as belonging to the subclasses.
  * Sort the names of the functions based on their lengths
  * to ensure that nested subclasses are handled later.
+ *
+ * Also extract information about automatic conversion functions.
  */
 generator::generator(SourceManager &SM, set<RecordDecl *> &exported_types,
 	set<FunctionDecl *> exported_functions, set<FunctionDecl *> functions) :
@@ -360,7 +393,7 @@ generator::generator(SourceManager &SM, set<RecordDecl *> &exported_types,
 
 	for (in = functions.begin(); in != functions.end(); ++in) {
 		FunctionDecl *decl = *in;
-		functions_by_name[decl->getName()] = decl;
+		functions_by_name[decl->getName().str()] = decl;
 	}
 
 	for (it = exported_types.begin(); it != exported_types.end(); ++it)
@@ -392,9 +425,12 @@ generator::generator(SourceManager &SM, set<RecordDecl *> &exported_types,
 		} else if (handled_sets_enum(c, method)) {
 		} else if (sets_persistent_callback(c, method)) {
 			c->persistent_callbacks.insert(method);
+		} else if (takes_enums(method)) {
+			std::string name = method->getName().str();
+			die(name + " has unhandled enum argument");
 		} else {
-			string fullname = c->name_without_type_suffixes(method);
-			c->methods[fullname].insert(method);
+			string name = c->method_name(method);
+			c->methods[name].insert(method);
 		}
 	}
 
@@ -767,7 +803,8 @@ static std::string type_suffix(ParmVarDecl *param)
 /* If "suffix" is a suffix of "s", then return "s" with the suffix removed.
  * Otherwise, simply return "s".
  */
-static std::string drop_suffix(const std::string &s, const std::string &suffix)
+std::string generator::drop_suffix(const std::string &s,
+	const std::string &suffix)
 {
 	size_t len, suffix_len;
 
@@ -792,7 +829,7 @@ string isl_class::name_without_type_suffixes(FunctionDecl *method)
 	int num_params;
 	string name;
 
-	name = method->getName();
+	name = method->getName().str();
 	if (!generator::is_overload(method))
 		return name;
 
@@ -804,7 +841,7 @@ string isl_class::name_without_type_suffixes(FunctionDecl *method)
 		param = method->getParamDecl(i);
 		type = type_suffix(param);
 
-		name = drop_suffix(name, type);
+		name = generator::drop_suffix(name, type);
 	}
 
 	return name;

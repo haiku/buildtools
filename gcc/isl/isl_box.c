@@ -76,7 +76,8 @@ static __isl_give isl_fixed_box *isl_fixed_box_init(
 	isl_multi_val *size;
 
 	offset = isl_multi_aff_zero(isl_space_copy(space));
-	size = isl_multi_val_zero(isl_space_range(space));
+	space = isl_space_drop_all_params(isl_space_range(space));
+	size = isl_multi_val_zero(space);
 	return isl_fixed_box_alloc(offset, size);
 }
 
@@ -152,6 +153,27 @@ static __isl_give isl_fixed_box *isl_fixed_box_invalidate(
 
 	if (!box->offset || !box->size)
 		return isl_fixed_box_free(box);
+	return box;
+}
+
+/* Project the domain of the fixed box onto its parameter space.
+ * In particular, project out the domain of the offset.
+ */
+static __isl_give isl_fixed_box *isl_fixed_box_project_domain_on_params(
+	__isl_take isl_fixed_box *box)
+{
+	isl_bool valid;
+
+	valid = isl_fixed_box_is_valid(box);
+	if (valid < 0)
+		return isl_fixed_box_free(box);
+	if (!valid)
+		return box;
+
+	box->offset = isl_multi_aff_project_domain_on_params(box->offset);
+	if (!box->offset)
+		return isl_fixed_box_free(box);
+
 	return box;
 }
 
@@ -302,6 +324,13 @@ static isl_stat compute_size_in_direction(__isl_take isl_constraint *c,
  * Initialize the size with infinity and if no better size is found
  * then invalidate the box.  Otherwise, set the offset and size
  * in the given direction by those that correspond to the smallest size.
+ *
+ * Note that while evaluating the size corresponding to a lower bound,
+ * an affine expression is constructed from the lower bound.
+ * This lower bound may therefore not have any unknown local variables.
+ * Eliminate any unknown local variables up front.
+ * No such restriction needs to be imposed on the set over which
+ * the size is computed.
  */
 static __isl_give isl_fixed_box *set_dim_extent(__isl_take isl_fixed_box *box,
 	__isl_keep isl_map *map, int pos)
@@ -309,6 +338,7 @@ static __isl_give isl_fixed_box *set_dim_extent(__isl_take isl_fixed_box *box,
 	struct isl_size_info info;
 	isl_bool valid;
 	isl_ctx *ctx;
+	isl_basic_set *bset;
 
 	if (!box || !map)
 		return isl_fixed_box_free(box);
@@ -316,16 +346,18 @@ static __isl_give isl_fixed_box *set_dim_extent(__isl_take isl_fixed_box *box,
 	ctx = isl_map_get_ctx(map);
 	map = isl_map_copy(map);
 	map = isl_map_project_onto(map, isl_dim_out, pos, 1);
-	map = isl_map_compute_divs(map);
 	info.size = isl_val_infty(ctx);
 	info.offset = NULL;
 	info.pos = isl_map_dim(map, isl_dim_in);
 	info.bset = isl_basic_map_wrap(isl_map_simple_hull(map));
+	bset = isl_basic_set_copy(info.bset);
+	bset = isl_basic_set_remove_unknown_divs(bset);
 	if (info.pos < 0)
-		info.bset = isl_basic_set_free(info.bset);
-	if (isl_basic_set_foreach_constraint(info.bset,
+		bset = isl_basic_set_free(bset);
+	if (isl_basic_set_foreach_constraint(bset,
 					&compute_size_in_direction, &info) < 0)
 		box = isl_fixed_box_free(box);
+	isl_basic_set_free(bset);
 	valid = isl_val_is_int(info.size);
 	if (valid < 0)
 		box = isl_fixed_box_free(box);
@@ -373,6 +405,29 @@ __isl_give isl_fixed_box *isl_map_get_range_simple_fixed_box_hull(
 			break;
 	}
 	isl_map_free(map);
+
+	return box;
+}
+
+/* Try and construct a fixed-size rectangular box with an offset
+ * in terms of the parameters of "set" that contains "set".
+ * If no such box can be constructed, then return an invalidated box,
+ * i.e., one where isl_fixed_box_is_valid returns false.
+ *
+ * Compute the box using isl_map_get_range_simple_fixed_box_hull
+ * by constructing a map from the set and
+ * project out the domain again from the result.
+ */
+__isl_give isl_fixed_box *isl_set_get_simple_fixed_box_hull(
+	__isl_keep isl_set *set)
+{
+	isl_map *map;
+	isl_fixed_box *box;
+
+	map = isl_map_from_range(isl_set_copy(set));
+	box = isl_map_get_range_simple_fixed_box_hull(map);
+	isl_map_free(map);
+	box = isl_fixed_box_project_domain_on_params(box);
 
 	return box;
 }

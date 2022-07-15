@@ -1,3 +1,18 @@
+/*
+ * Copyright 2010      INRIA Saclay
+ * Copyright 2013      Ecole Normale Superieure
+ * Copyright 2015      Sven Verdoolaege
+ * Copyright 2019      Cerebras Systems
+ *
+ * Use of this software is governed by the MIT license
+ *
+ * Written by Sven Verdoolaege, INRIA Saclay - Ile-de-France,
+ * Parc Club Orsay Universite, ZAC des vignes, 4 rue Jacques Monod,
+ * 91893 Orsay, France
+ * and Ecole Normale Superieure, 45 rue d'Ulm, 75230 Paris, France
+ * and Cerebras Systems, 175 S San Antonio Rd, Los Altos, CA, USA
+ */
+
 #include <isl_map_private.h>
 #include <isl_point_private.h>
 #include <isl/set.h>
@@ -29,6 +44,18 @@ __isl_give isl_space *isl_point_get_space(__isl_keep isl_point *pnt)
 {
 	return isl_space_copy(isl_point_peek_space(pnt));
 }
+
+#undef TYPE1
+#define TYPE1		isl_basic_map
+#undef TYPE2
+#define TYPE2		isl_point
+#undef TYPE_PAIR
+#define TYPE_PAIR	isl_basic_map_point
+
+static
+#include "isl_type_has_equal_space_templ.c"
+static
+#include "isl_type_check_equal_space_templ.c"
 
 __isl_give isl_point *isl_point_alloc(__isl_take isl_space *space,
 	__isl_take isl_vec *vec)
@@ -311,6 +338,55 @@ __isl_give isl_val *isl_point_get_coordinate_val(__isl_keep isl_point *pnt,
 	return isl_val_normalize(v);
 }
 
+/* Set all entries of "mv" to NaN.
+ */
+static __isl_give isl_multi_val *set_nan(__isl_take isl_multi_val *mv)
+{
+	int i;
+	isl_size n;
+	isl_val *v;
+
+	n = isl_multi_val_size(mv);
+	if (n < 0)
+		return isl_multi_val_free(mv);
+	v = isl_val_nan(isl_multi_val_get_ctx(mv));
+	for (i = 0; i < n; ++i)
+		mv = isl_multi_val_set_at(mv, i, isl_val_copy(v));
+	isl_val_free(v);
+
+	return mv;
+}
+
+/* Return the values of the set dimensions of "pnt".
+ * Return a sequence of NaNs in case of a void point.
+ */
+__isl_give isl_multi_val *isl_point_get_multi_val(__isl_keep isl_point *pnt)
+{
+	int i;
+	isl_bool is_void;
+	isl_size n;
+	isl_multi_val *mv;
+
+	is_void = isl_point_is_void(pnt);
+	if (is_void < 0)
+		return NULL;
+
+	mv = isl_multi_val_alloc(isl_point_get_space(pnt));
+	if (is_void)
+		return set_nan(mv);
+	n = isl_multi_val_size(mv);
+	if (n < 0)
+		return isl_multi_val_free(mv);
+	for (i = 0; i < n; ++i) {
+		isl_val *v;
+
+		v = isl_point_get_coordinate_val(pnt, isl_dim_set, i);
+		mv = isl_multi_val_set_at(mv, i, v);
+	}
+
+	return mv;
+}
+
 /* Replace coordinate "pos" of type "type" of "pnt" by "v".
  */
 __isl_give isl_point *isl_point_set_coordinate_val(__isl_take isl_point *pnt,
@@ -484,10 +560,8 @@ isl_bool isl_basic_map_contains_point(__isl_keep isl_basic_map *bmap,
 	isl_vec *vec;
 	isl_bool contains;
 
-	if (!bmap || !point)
+	if (isl_basic_map_point_check_equal_space(bmap, point) < 0)
 		return isl_bool_error;
-	isl_assert(bmap->ctx, isl_space_is_equal(bmap->dim, point->dim),
-		return isl_bool_error);
 	if (bmap->n_div == 0)
 		return isl_basic_map_contains(bmap, point->vec);
 
@@ -560,6 +634,14 @@ __isl_give isl_set *isl_set_from_point(__isl_take isl_point *pnt)
 	return isl_set_from_basic_set(bset);
 }
 
+/* This function performs the same operation as isl_set_from_point,
+ * but is considered as a function on an isl_point when exported.
+ */
+__isl_give isl_set *isl_point_to_set(__isl_take isl_point *pnt)
+{
+	return isl_set_from_point(pnt);
+}
+
 /* Construct a union set, containing the single element "pnt".
  * If "pnt" is void, then return an empty union set.
  */
@@ -596,11 +678,11 @@ __isl_give isl_basic_set *isl_basic_set_box_from_points(
 			isl_space_is_equal(pnt1->dim, pnt2->dim), goto error);
 
 	if (isl_point_is_void(pnt1) && isl_point_is_void(pnt2)) {
-		isl_space *dim = isl_space_copy(pnt1->dim);
+		isl_space *space = isl_space_copy(pnt1->dim);
 		isl_point_free(pnt1);
 		isl_point_free(pnt2);
 		isl_int_clear(t);
-		return isl_basic_set_empty(dim);
+		return isl_basic_set_empty(space);
 	}
 	if (isl_point_is_void(pnt1)) {
 		isl_point_free(pnt1);

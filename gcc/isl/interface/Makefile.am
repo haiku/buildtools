@@ -1,3 +1,4 @@
+ACLOCAL_AMFLAGS = -I ../m4
 AUTOMAKE_OPTIONS = nostdinc
 
 noinst_PROGRAMS = extract_interface
@@ -16,11 +17,12 @@ extract_interface_SOURCES = \
 	cpp.cc \
 	cpp_conversion.h \
 	cpp_conversion.cc \
+	plain_cpp.h \
+	plain_cpp.cc \
+	set_lang_defaults_arg4.h \
+	template_cpp.h \
+	template_cpp.cc \
 	extract_interface.h \
 	extract_interface.cc
 extract_interface_LDFLAGS = $(CLANG_LDFLAGS) $(CLANG_RFLAG)
-extract_interface_LDADD = \
-	-lclangFrontend -lclangSerialization -lclangParse -lclangSema \
-	$(LIB_CLANG_EDIT) \
-	-lclangAnalysis -lclangAST -lclangLex -lclangBasic -lclangDriver \
-	$(CLANG_LIBS) $(CLANG_LDFLAGS)
+extract_interface_LDADD = $(CLANG_LIBS) $(CLANG_LDFLAGS)
