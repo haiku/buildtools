@@ -1090,7 +1090,7 @@ group_cluster::dump (FILE *f, bool details)
   for (unsigned i = 0; i < m_cases.length (); i++)
     {
       simple_cluster *sc = static_cast<simple_cluster *> (m_cases[i]);
-      comparison_count += sc->m_range_p ? 2 : 1;
+      comparison_count += sc->get_comparison_count ();
     }
 
   unsigned HOST_WIDE_INT range = get_range (get_low (), get_high ());
@@ -1185,10 +1185,23 @@ jump_table_cluster::find_jump_tables (vec<cluster *> &clusters)
 
   min.quick_push (min_cluster_item (0, 0, 0));
 
+  unsigned HOST_WIDE_INT max_ratio
+    = (optimize_insn_for_size_p ()
+       ? param_jump_table_max_growth_ratio_for_size
+       : param_jump_table_max_growth_ratio_for_speed);
+
   for (unsigned i = 1; i <= l; i++)
     {
       /* Set minimal # of clusters with i-th item to infinite.  */
       min.quick_push (min_cluster_item (INT_MAX, INT_MAX, INT_MAX));
+
+      /* Pre-calculate number of comparisons for the clusters.  */
+      HOST_WIDE_INT comparison_count = 0;
+      for (unsigned k = 0; k <= i - 1; k++)
+	{
+	  simple_cluster *sc = static_cast<simple_cluster *> (clusters[k]);
+	  comparison_count += sc->get_comparison_count ();
+	}
 
       for (unsigned j = 0; j < i; j++)
 	{
@@ -1200,10 +1213,15 @@ jump_table_cluster::find_jump_tables (vec<cluster *> &clusters)
 	  if ((min[j].m_count + 1 < min[i].m_count
 	       || (min[j].m_count + 1 == min[i].m_count
 		   && s < min[i].m_non_jt_cases))
-	      && can_be_handled (clusters, j, i - 1))
+	      && can_be_handled (clusters, j, i - 1, max_ratio,
+				 comparison_count))
 	    min[i] = min_cluster_item (min[j].m_count + 1, j, s);
+
+	  simple_cluster *sc = static_cast<simple_cluster *> (clusters[j]);
+	  comparison_count -= sc->get_comparison_count ();
 	}
 
+      gcc_checking_assert (comparison_count == 0);
       gcc_checking_assert (min[i].m_count != INT_MAX);
     }
 
@@ -1241,7 +1259,9 @@ jump_table_cluster::find_jump_tables (vec<cluster *> &clusters)
 
 bool
 jump_table_cluster::can_be_handled (const vec<cluster *> &clusters,
-				    unsigned start, unsigned end)
+				    unsigned start, unsigned end,
+				    unsigned HOST_WIDE_INT max_ratio,
+				    unsigned HOST_WIDE_INT comparison_count)
 {
   /* If the switch is relatively small such that the cost of one
      indirect jump on the target are higher than the cost of a
@@ -1260,10 +1280,6 @@ jump_table_cluster::can_be_handled (const vec<cluster *> &clusters,
   if (start == end)
     return true;
 
-  unsigned HOST_WIDE_INT max_ratio
-    = (optimize_insn_for_size_p ()
-       ? param_jump_table_max_growth_ratio_for_size
-       : param_jump_table_max_growth_ratio_for_speed);
   unsigned HOST_WIDE_INT range = get_range (clusters[start]->get_low (),
 					    clusters[end]->get_high ());
   /* Check overflow.  */
@@ -1276,18 +1292,6 @@ jump_table_cluster::can_be_handled (const vec<cluster *> &clusters,
   unsigned HOST_WIDE_INT lhs = 100 * range;
   if (lhs < range)
     return false;
-
-  /* First make quick guess as each cluster
-     can add at maximum 2 to the comparison_count.  */
-  if (lhs > 2 * max_ratio * (end - start + 1))
-    return false;
-
-  unsigned HOST_WIDE_INT comparison_count = 0;
-  for (unsigned i = start; i <= end; i++)
-    {
-      simple_cluster *sc = static_cast<simple_cluster *> (clusters[i]);
-      comparison_count += sc->m_range_p ? 2 : 1;
-    }
 
   return lhs <= max_ratio * comparison_count;
 }
@@ -1493,7 +1497,7 @@ case_bit_test::cmp (const void *p1, const void *p2)
 
 void
 bit_test_cluster::emit (tree index_expr, tree index_type,
-			tree, basic_block default_bb, location_t)
+			tree, basic_block default_bb, location_t loc)
 {
   case_bit_test test[m_max_case_bit_tests] = { {} };
   unsigned int i, j, k;
@@ -1614,9 +1618,9 @@ bit_test_cluster::emit (tree index_expr, tree index_type,
   gsi = gsi_last_bb (m_case_bb);
 
   /* idx = (unsigned)x - minval.  */
-  idx = fold_convert (unsigned_index_type, index_expr);
-  idx = fold_build2 (MINUS_EXPR, unsigned_index_type, idx,
-		     fold_convert (unsigned_index_type, minval));
+  idx = fold_convert_loc (loc, unsigned_index_type, index_expr);
+  idx = fold_build2_loc (loc, MINUS_EXPR, unsigned_index_type, idx,
+			 fold_convert_loc (loc, unsigned_index_type, minval));
   idx = force_gimple_operand_gsi (&gsi, idx,
 				  /*simple=*/true, NULL_TREE,
 				  /*before=*/true, GSI_SAME_STMT);
@@ -1630,15 +1634,15 @@ bit_test_cluster::emit (tree index_expr, tree index_type,
 				    fold_convert (unsigned_index_type, range),
 				    /*simple=*/true, NULL_TREE,
 				    /*before=*/true, GSI_SAME_STMT);
-      tmp = fold_build2 (GT_EXPR, boolean_type_node, idx, range);
+      tmp = fold_build2_loc (loc, GT_EXPR, boolean_type_node, idx, range);
       basic_block new_bb
 	= hoist_edge_and_branch_if_true (&gsi, tmp, default_bb,
-					 profile_probability::unlikely ());
+					 profile_probability::unlikely (), loc);
       gsi = gsi_last_bb (new_bb);
     }
 
-  tmp = fold_build2 (LSHIFT_EXPR, word_type_node, word_mode_one,
-		     fold_convert (word_type_node, idx));
+  tmp = fold_build2_loc (loc, LSHIFT_EXPR, word_type_node, word_mode_one,
+			 fold_convert_loc (loc, word_type_node, idx));
 
   /* csui = (1 << (word_mode) idx) */
   if (count > 1)
@@ -1664,13 +1668,15 @@ bit_test_cluster::emit (tree index_expr, tree index_type,
 							 bt_range);
       bt_range -= test[k].bits;
       tmp = wide_int_to_tree (word_type_node, test[k].mask);
-      tmp = fold_build2 (BIT_AND_EXPR, word_type_node, csui, tmp);
-      tmp = fold_build2 (NE_EXPR, boolean_type_node, tmp, word_mode_zero);
+      tmp = fold_build2_loc (loc, BIT_AND_EXPR, word_type_node, csui, tmp);
+      tmp = fold_build2_loc (loc, NE_EXPR, boolean_type_node,
+			     tmp, word_mode_zero);
       tmp = force_gimple_operand_gsi (&gsi, tmp,
 				      /*simple=*/true, NULL_TREE,
 				      /*before=*/true, GSI_SAME_STMT);
       basic_block new_bb
-	= hoist_edge_and_branch_if_true (&gsi, tmp, test[k].target_bb, prob);
+	= hoist_edge_and_branch_if_true (&gsi, tmp, test[k].target_bb,
+					 prob, loc);
       gsi = gsi_last_bb (new_bb);
     }
 
@@ -1700,7 +1706,8 @@ bit_test_cluster::emit (tree index_expr, tree index_type,
 basic_block
 bit_test_cluster::hoist_edge_and_branch_if_true (gimple_stmt_iterator *gsip,
 						 tree cond, basic_block case_bb,
-						 profile_probability prob)
+						 profile_probability prob,
+						 location_t loc)
 {
   tree tmp;
   gcond *cond_stmt;
@@ -1714,6 +1721,7 @@ bit_test_cluster::hoist_edge_and_branch_if_true (gimple_stmt_iterator *gsip,
   tmp = force_gimple_operand_gsi (gsip, cond, /*simple=*/true, NULL,
 				  /*before=*/true, GSI_SAME_STMT);
   cond_stmt = gimple_build_cond_from_tree (tmp, NULL_TREE, NULL_TREE);
+  gimple_set_location (cond_stmt, loc);
   gsi_insert_before (gsip, cond_stmt, GSI_SAME_STMT);
 
   e_false = split_block (split_bb, cond_stmt);

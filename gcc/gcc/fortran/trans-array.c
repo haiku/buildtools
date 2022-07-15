@@ -6525,7 +6525,14 @@ gfc_trans_g77_array (gfc_symbol * sym, gfc_wrapped_block * block)
   /* Set the pointer itself if we aren't using the parameter directly.  */
   if (TREE_CODE (parm) != PARM_DECL)
     {
-      tmp = convert (TREE_TYPE (parm), GFC_DECL_SAVED_DESCRIPTOR (parm));
+      tmp = GFC_DECL_SAVED_DESCRIPTOR (parm);
+      if (sym->ts.type == BT_CLASS)
+	{
+	  tmp = build_fold_indirect_ref_loc (input_location, tmp);
+	  tmp = gfc_class_data_get (tmp);
+	  tmp = gfc_conv_descriptor_data_get (tmp);
+	}
+      tmp = convert (TREE_TYPE (parm), tmp);
       gfc_add_modify (&init, parm, tmp);
     }
   stmt = gfc_finish_block (&init);
@@ -6627,7 +6634,8 @@ gfc_trans_dummy_array_bias (gfc_symbol * sym, tree tmpdesc,
       && VAR_P (sym->ts.u.cl->backend_decl))
     gfc_conv_string_length (sym->ts.u.cl, NULL, &init);
 
-  checkparm = (as->type == AS_EXPLICIT
+  /* TODO: Fix the exclusion of class arrays from extent checking.  */
+  checkparm = (as->type == AS_EXPLICIT && !is_classarray
 	       && (gfc_option.rtcheck & GFC_RTCHECK_BOUNDS));
 
   no_repack = !(GFC_DECL_PACKED_ARRAY (tmpdesc)
@@ -8818,6 +8826,10 @@ structure_alloc_comps (gfc_symbol * der_type, tree decl,
 		continue;
 	    }
 
+	  /* Do not broadcast a caf_token.  These are local to the image.  */
+	  if (attr->caf_token)
+	    continue;
+
 	  add_when_allocated = NULL_TREE;
 	  if (cmp_has_alloc_comps
 	      && !c->attr.pointer && !c->attr.proc_pointer)
@@ -8850,10 +8862,13 @@ structure_alloc_comps (gfc_symbol * der_type, tree decl,
 	  if (attr->dimension)
 	    {
 	      tmp = gfc_get_element_type (TREE_TYPE (comp));
-	      ubound = gfc_full_array_size (&tmpblock, comp,
-					    c->ts.type == BT_CLASS
-					    ? CLASS_DATA (c)->as->rank
-					    : c->as->rank);
+	      if (!GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (comp)))
+		ubound = GFC_TYPE_ARRAY_SIZE (TREE_TYPE (comp));
+	      else
+		ubound = gfc_full_array_size (&tmpblock, comp,
+					      c->ts.type == BT_CLASS
+						? CLASS_DATA (c)->as->rank
+						: c->as->rank);
 	    }
 	  else
 	    {
@@ -8861,26 +8876,39 @@ structure_alloc_comps (gfc_symbol * der_type, tree decl,
 	      ubound = build_int_cst (gfc_array_index_type, 1);
 	    }
 
-	  cdesc = gfc_get_array_type_bounds (tmp, 1, 0, &gfc_index_one_node,
-					     &ubound, 1,
-					     GFC_ARRAY_ALLOCATABLE, false);
+	  /* Treat strings like arrays.  Or the other way around, do not
+	   * generate an additional array layer for scalar components.  */
+	  if (attr->dimension || c->ts.type == BT_CHARACTER)
+	    {
+	      cdesc = gfc_get_array_type_bounds (tmp, 1, 0, &gfc_index_one_node,
+						 &ubound, 1,
+						 GFC_ARRAY_ALLOCATABLE, false);
 
-	  cdesc = gfc_create_var (cdesc, "cdesc");
-	  DECL_ARTIFICIAL (cdesc) = 1;
+	      cdesc = gfc_create_var (cdesc, "cdesc");
+	      DECL_ARTIFICIAL (cdesc) = 1;
 
-	  gfc_add_modify (&tmpblock, gfc_conv_descriptor_dtype (cdesc),
-	  		  gfc_get_dtype_rank_type (1, tmp));
-	  gfc_conv_descriptor_lbound_set (&tmpblock, cdesc,
-					  gfc_index_zero_node,
-					  gfc_index_one_node);
-	  gfc_conv_descriptor_stride_set (&tmpblock, cdesc,
-					  gfc_index_zero_node,
-					  gfc_index_one_node);
-	  gfc_conv_descriptor_ubound_set (&tmpblock, cdesc,
-					  gfc_index_zero_node, ubound);
+	      gfc_add_modify (&tmpblock, gfc_conv_descriptor_dtype (cdesc),
+			      gfc_get_dtype_rank_type (1, tmp));
+	      gfc_conv_descriptor_lbound_set (&tmpblock, cdesc,
+					      gfc_index_zero_node,
+					      gfc_index_one_node);
+	      gfc_conv_descriptor_stride_set (&tmpblock, cdesc,
+					      gfc_index_zero_node,
+					      gfc_index_one_node);
+	      gfc_conv_descriptor_ubound_set (&tmpblock, cdesc,
+					      gfc_index_zero_node, ubound);
+	    }
+	  else
+	    /* Prevent warning.  */
+	    cdesc = NULL_TREE;
 
 	  if (attr->dimension)
-	    comp = gfc_conv_descriptor_data_get (comp);
+	    {
+	      if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (comp)))
+		comp = gfc_conv_descriptor_data_get (comp);
+	      else
+		comp = gfc_build_addr_expr (NULL_TREE, comp);
+	    }
 	  else
 	    {
 	      gfc_se se;
@@ -8888,14 +8916,18 @@ structure_alloc_comps (gfc_symbol * der_type, tree decl,
 	      gfc_init_se (&se, NULL);
 
 	      comp = gfc_conv_scalar_to_descriptor (&se, comp,
-	      					    c->ts.type == BT_CLASS
-	      					    ? CLASS_DATA (c)->attr
-	      					    : c->attr);
-	      comp = gfc_build_addr_expr (NULL_TREE, comp);
+						    c->ts.type == BT_CLASS
+						      ? CLASS_DATA (c)->attr
+						      : c->attr);
+	      if (c->ts.type == BT_CHARACTER)
+		comp = gfc_build_addr_expr (NULL_TREE, comp);
 	      gfc_add_block_to_block (&tmpblock, &se.pre);
 	    }
 
-	  gfc_conv_descriptor_data_set (&tmpblock, cdesc, comp);
+	  if (attr->dimension || c->ts.type == BT_CHARACTER)
+	    gfc_conv_descriptor_data_set (&tmpblock, cdesc, comp);
+	  else
+	    cdesc = comp;
 
 	  tree fndecl;
 
@@ -11177,6 +11209,89 @@ gfc_get_proc_ifc_for_expr (gfc_expr *procedure_ref)
 }
 
 
+/* Given an expression referring to an intrinsic function call,
+   return the intrinsic symbol.  */
+
+gfc_intrinsic_sym *
+gfc_get_intrinsic_for_expr (gfc_expr *call)
+{
+  if (call == NULL)
+    return NULL;
+
+  /* Normal procedure case.  */
+  if (call->expr_type == EXPR_FUNCTION)
+    return call->value.function.isym;
+  else
+    return NULL;
+}
+
+
+/* Indicates whether an argument to an intrinsic function should be used in
+   scalarization.  It is usually the case, except for some intrinsics
+   requiring the value to be constant, and using the value at compile time only.
+   As the value is not used at runtime in those cases, we don’t produce code
+   for it, and it should not be visible to the scalarizer.
+   FUNCTION is the intrinsic function being called, ACTUAL_ARG is the actual
+   argument being examined in that call, and ARG_NUM the index number
+   of ACTUAL_ARG in the list of arguments.
+   The intrinsic procedure’s dummy argument associated with ACTUAL_ARG is
+   identified using the name in ACTUAL_ARG if it is present (that is: if it’s
+   a keyword argument), otherwise using ARG_NUM.  */
+
+static bool
+arg_evaluated_for_scalarization (gfc_intrinsic_sym *function,
+				 gfc_actual_arglist &actual_arg, int arg_num)
+{
+  if (function != NULL)
+    {
+      if (actual_arg.name == NULL)
+	{
+	  switch (function->id)
+	    {
+	      case GFC_ISYM_INDEX:
+	      case GFC_ISYM_SCAN:
+	      case GFC_ISYM_VERIFY:
+		if (arg_num == 3)
+		  return false;
+		break;
+
+	      case GFC_ISYM_LEN_TRIM:
+	      case GFC_ISYM_MASKL:
+	      case GFC_ISYM_MASKR:
+		if (arg_num == 1)
+		  return false;
+
+	      /* Fallthrough.  */
+
+	      default:
+		break;
+	    }
+	}
+      else
+	{
+	  switch (function->id)
+	    {
+	      case GFC_ISYM_INDEX:
+	      case GFC_ISYM_LEN_TRIM:
+	      case GFC_ISYM_MASKL:
+	      case GFC_ISYM_MASKR:
+	      case GFC_ISYM_SCAN:
+	      case GFC_ISYM_VERIFY:
+		if (strcmp ("kind", actual_arg.name) == 0)
+		  return false;
+
+	      /* Fallthrough.  */
+
+	      default:
+		break;
+	    }
+	}
+    }
+
+  return true;
+}
+
+
 /* Walk the arguments of an elemental function.
    PROC_EXPR is used to check whether an argument is permitted to be absent.  If
    it is NULL, we don't do the check and the argument is assumed to be present.
@@ -11184,6 +11299,7 @@ gfc_get_proc_ifc_for_expr (gfc_expr *procedure_ref)
 
 gfc_ss *
 gfc_walk_elemental_function_args (gfc_ss * ss, gfc_actual_arglist *arg,
+				  gfc_intrinsic_sym *intrinsic_sym,
 				  gfc_symbol *proc_ifc, gfc_ss_type type)
 {
   gfc_formal_arglist *dummy_arg;
@@ -11200,10 +11316,13 @@ gfc_walk_elemental_function_args (gfc_ss * ss, gfc_actual_arglist *arg,
   else
     dummy_arg = NULL;
 
+  int arg_num = 0;
   scalar = 1;
   for (; arg; arg = arg->next)
     {
-      if (!arg->expr || arg->expr->expr_type == EXPR_NULL)
+      if (!arg->expr
+	  || arg->expr->expr_type == EXPR_NULL
+	  || !arg_evaluated_for_scalarization (intrinsic_sym, *arg, arg_num))
 	goto loop_continue;
 
       newss = gfc_walk_subexpr (head, arg->expr);
@@ -11236,6 +11355,7 @@ gfc_walk_elemental_function_args (gfc_ss * ss, gfc_actual_arglist *arg,
         }
 
 loop_continue:
+      arg_num++;
       if (dummy_arg != NULL)
 	dummy_arg = dummy_arg->next;
     }
@@ -11296,6 +11416,7 @@ gfc_walk_function_expr (gfc_ss * ss, gfc_expr * expr)
 
       ss = gfc_walk_elemental_function_args (old_ss,
 					     expr->value.function.actual,
+					     gfc_get_intrinsic_for_expr (expr),
 					     gfc_get_proc_ifc_for_expr (expr),
 					     GFC_SS_REFERENCE);
       if (ss != old_ss

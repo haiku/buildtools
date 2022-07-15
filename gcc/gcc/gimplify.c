@@ -245,6 +245,7 @@ static enum gimplify_status gimplify_compound_expr (tree *, gimple_seq *, bool);
 static hash_map<tree, tree> *oacc_declare_returns;
 static enum gimplify_status gimplify_expr (tree *, gimple_seq *, gimple_seq *,
 					   bool (*) (tree), fallback_t, bool);
+static void prepare_gimple_addressable (tree *, gimple_seq *);
 
 /* Shorter alias name for the above function for use in gimplify.c
    only.  */
@@ -2979,6 +2980,8 @@ gimplify_compound_lval (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
      So we do this in three steps.  First we deal with the annotations
      for any variables in the components, then we gimplify the base,
      then we gimplify any indices, from left to right.  */
+
+  bool need_non_reg = false;
   for (i = expr_stack.length () - 1; i >= 0; i--)
     {
       tree t = expr_stack[i];
@@ -3034,6 +3037,7 @@ gimplify_compound_lval (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
 				    is_gimple_reg, fb_rvalue);
 	      ret = MIN (ret, tret);
 	    }
+	  need_non_reg = true;
 	}
       else if (TREE_CODE (t) == COMPONENT_REF)
 	{
@@ -3065,6 +3069,7 @@ gimplify_compound_lval (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
 				    is_gimple_reg, fb_rvalue);
 	      ret = MIN (ret, tret);
 	    }
+	  need_non_reg = true;
 	}
     }
 
@@ -3074,6 +3079,12 @@ gimplify_compound_lval (tree *expr_p, gimple_seq *pre_p, gimple_seq *post_p,
   tret = gimplify_expr (p, pre_p, post_p, is_gimple_min_lval,
 			fallback | fb_lvalue);
   ret = MIN (ret, tret);
+
+  /* Step 2a: if we have component references we do not support on
+     registers then make sure the base isn't a register.  Of course
+     we can only do so if an rvalue is OK.  */
+  if (need_non_reg && (fallback & fb_rvalue))
+    prepare_gimple_addressable (p, pre_p);
 
   /* And finally, the indices and operands of ARRAY_REF.  During this
      loop we also remove any useless conversions.  */
@@ -12736,21 +12747,15 @@ gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
 /* Helper for gimplify_omp_loop, called through walk_tree.  */
 
 static tree
-replace_reduction_placeholders (tree *tp, int *walk_subtrees, void *data)
+note_no_context_vars (tree *tp, int *, void *data)
 {
-  if (DECL_P (*tp))
+  if (VAR_P (*tp)
+      && DECL_CONTEXT (*tp) == NULL_TREE
+      && !is_global_var (*tp))
     {
-      tree *d = (tree *) data;
-      if (*tp == OMP_CLAUSE_REDUCTION_PLACEHOLDER (d[0]))
-	{
-	  *tp = OMP_CLAUSE_REDUCTION_PLACEHOLDER (d[1]);
-	  *walk_subtrees = 0;
-	}
-      else if (*tp == OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (d[0]))
-	{
-	  *tp = OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (d[1]);
-	  *walk_subtrees = 0;
-	}
+      vec<tree> *d = (vec<tree> *) data;
+      d->safe_push (*tp);
+      DECL_CONTEXT (*tp) = current_function_decl;
     }
   return NULL_TREE;
 }
@@ -12920,7 +12925,8 @@ gimplify_omp_loop (tree *expr_p, gimple_seq *pre_p)
     {
       if (pass == 2)
 	{
-	  tree bind = build3 (BIND_EXPR, void_type_node, NULL, NULL, NULL);
+	  tree bind = build3 (BIND_EXPR, void_type_node, NULL, NULL,
+			      make_node (BLOCK));
 	  append_to_statement_list (*expr_p, &BIND_EXPR_BODY (bind));
 	  *expr_p = make_node (OMP_PARALLEL);
 	  TREE_TYPE (*expr_p) = void_type_node;
@@ -12987,25 +12993,64 @@ gimplify_omp_loop (tree *expr_p, gimple_seq *pre_p)
 	    *pc = copy_node (c);
 	    OMP_CLAUSE_DECL (*pc) = unshare_expr (OMP_CLAUSE_DECL (c));
 	    TREE_TYPE (*pc) = unshare_expr (TREE_TYPE (c));
-	    OMP_CLAUSE_REDUCTION_INIT (*pc)
-	      = unshare_expr (OMP_CLAUSE_REDUCTION_INIT (c));
-	    OMP_CLAUSE_REDUCTION_MERGE (*pc)
-	      = unshare_expr (OMP_CLAUSE_REDUCTION_MERGE (c));
 	    if (OMP_CLAUSE_REDUCTION_PLACEHOLDER (*pc))
 	      {
+		auto_vec<tree> no_context_vars;
+		int walk_subtrees = 0;
+		note_no_context_vars (&OMP_CLAUSE_REDUCTION_PLACEHOLDER (c),
+				      &walk_subtrees, &no_context_vars);
+		if (tree p = OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (c))
+		  note_no_context_vars (&p, &walk_subtrees, &no_context_vars);
+		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_INIT (c),
+					      note_no_context_vars,
+					      &no_context_vars);
+		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_MERGE (c),
+					      note_no_context_vars,
+					      &no_context_vars);
+
 		OMP_CLAUSE_REDUCTION_PLACEHOLDER (*pc)
 		  = copy_node (OMP_CLAUSE_REDUCTION_PLACEHOLDER (c));
 		if (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc))
 		  OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc)
 		    = copy_node (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (c));
-		tree nc = *pc;
-		tree data[2] = { c, nc };
-		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_INIT (nc),
-					      replace_reduction_placeholders,
-					      data);
-		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_MERGE (nc),
-					      replace_reduction_placeholders,
-					      data);
+
+		hash_map<tree, tree> decl_map;
+		decl_map.put (OMP_CLAUSE_DECL (c), OMP_CLAUSE_DECL (c));
+		decl_map.put (OMP_CLAUSE_REDUCTION_PLACEHOLDER (c),
+			      OMP_CLAUSE_REDUCTION_PLACEHOLDER (*pc));
+		if (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc))
+		  decl_map.put (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (c),
+				OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc));
+
+		copy_body_data id;
+		memset (&id, 0, sizeof (id));
+		id.src_fn = current_function_decl;
+		id.dst_fn = current_function_decl;
+		id.src_cfun = cfun;
+		id.decl_map = &decl_map;
+		id.copy_decl = copy_decl_no_change;
+		id.transform_call_graph_edges = CB_CGE_DUPLICATE;
+		id.transform_new_cfg = true;
+		id.transform_return_to_modify = false;
+		id.transform_lang_insert_block = NULL;
+		id.eh_lp_nr = 0;
+		walk_tree (&OMP_CLAUSE_REDUCTION_INIT (*pc), copy_tree_body_r,
+			   &id, NULL);
+		walk_tree (&OMP_CLAUSE_REDUCTION_MERGE (*pc), copy_tree_body_r,
+			   &id, NULL);
+
+		for (tree d : no_context_vars)
+		  {
+		    DECL_CONTEXT (d) = NULL_TREE;
+		    DECL_CONTEXT (*decl_map.get (d)) = NULL_TREE;
+		  }
+	      }
+	    else
+	      {
+		OMP_CLAUSE_REDUCTION_INIT (*pc)
+		  = unshare_expr (OMP_CLAUSE_REDUCTION_INIT (c));
+		OMP_CLAUSE_REDUCTION_MERGE (*pc)
+		  = unshare_expr (OMP_CLAUSE_REDUCTION_MERGE (c));
 	      }
 	    pc = &OMP_CLAUSE_CHAIN (*pc);
 	    break;

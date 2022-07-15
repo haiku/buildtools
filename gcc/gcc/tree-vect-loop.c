@@ -3638,6 +3638,17 @@ vect_is_simple_reduction (loop_vec_info loop_info, stmt_vec_info phi_info,
       return def_stmt_info;
     }
 
+  /* When the inner loop of a double reduction ends up with more than
+     one loop-closed PHI we have failed to classify alternate such
+     PHIs as double reduction, leading to wrong code.  See PR103237.  */
+  if (inner_loop_of_double_reduc && lcphis.length () != 1)
+    {
+      if (dump_enabled_p ())
+	dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+			 "unhandle double reduction\n");
+      return NULL;
+    }
+
   /* If this isn't a nested cycle or if the nested cycle reduction value
      is used ouside of the inner loop we cannot handle uses of the reduction
      value.  */
@@ -5989,8 +6000,14 @@ vect_create_epilog_for_reduction (loop_vec_info loop_vinfo,
      the loop exit phi node.  */
   if (REDUC_GROUP_FIRST_ELEMENT (stmt_info))
     {
-      stmt_vec_info dest_stmt_info
-	= vect_orig_stmt (SLP_TREE_SCALAR_STMTS (slp_node)[group_size - 1]);
+      /* The last statement in the reduction chain produces the live-out
+	 value.  Note SLP optimization can shuffle scalar stmts to
+	 optimize permutations so we have to search for the last stmt.  */
+      stmt_vec_info dest_stmt_info;
+      FOR_EACH_VEC_ELT (SLP_TREE_SCALAR_STMTS (slp_node), k, dest_stmt_info)
+	if (!REDUC_GROUP_NEXT_ELEMENT (dest_stmt_info))
+	  break;
+      dest_stmt_info = vect_orig_stmt (dest_stmt_info);
       scalar_dest = gimple_assign_lhs (dest_stmt_info->stmt);
       group_size = 1;
     }
@@ -7781,6 +7798,24 @@ vectorizable_phi (vec_info *,
 			       "incompatible vector types for invariants\n");
 	    return false;
 	  }
+	else if (SLP_TREE_DEF_TYPE (child) == vect_internal_def
+		 && !useless_type_conversion_p (vectype,
+						SLP_TREE_VECTYPE (child)))
+	  {
+	    /* With bools we can have mask and non-mask precision vectors,
+	       while pattern recog is supposed to guarantee consistency here
+	       bugs in it can cause mismatches (PR103489 for example).
+	       Deal with them here instead of ICEing later.  */
+	    if (dump_enabled_p ())
+	      dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+			       "incompatible vector type setup from "
+			       "bool pattern detection\n");
+	    gcc_checking_assert
+	      (VECTOR_BOOLEAN_TYPE_P (SLP_TREE_VECTYPE (child))
+	       != VECTOR_BOOLEAN_TYPE_P (vectype));
+	    return false;
+	  }
+
       /* For single-argument PHIs assume coalescing which means zero cost
 	 for the scalar and the vector PHIs.  This avoids artificially
 	 favoring the vector path (but may pessimize it in some cases).  */
@@ -7981,6 +8016,15 @@ vectorizable_induction (loop_vec_info loop_vinfo,
       return false;
     }
 
+  step_expr = STMT_VINFO_LOOP_PHI_EVOLUTION_PART (stmt_info);
+  gcc_assert (step_expr != NULL_TREE);
+  tree step_vectype = get_same_sized_vectype (TREE_TYPE (step_expr), vectype);
+
+  /* Check for backend support of PLUS/MINUS_EXPR. */
+  if (!target_supports_op_p (step_vectype, PLUS_EXPR, optab_default)
+      || !target_supports_op_p (step_vectype, MINUS_EXPR, optab_default))
+    return false;
+
   if (!vec_stmt) /* transformation not required.  */
     {
       unsigned inside_cost = 0, prologue_cost = 0;
@@ -8039,10 +8083,6 @@ vectorizable_induction (loop_vec_info loop_vinfo,
 
   if (dump_enabled_p ())
     dump_printf_loc (MSG_NOTE, vect_location, "transform induction phi.\n");
-
-  step_expr = STMT_VINFO_LOOP_PHI_EVOLUTION_PART (stmt_info);
-  gcc_assert (step_expr != NULL_TREE);
-  tree step_vectype = get_same_sized_vectype (TREE_TYPE (step_expr), vectype);
 
   pe = loop_preheader_edge (iv_loop);
   /* Find the first insertion point in the BB.  */

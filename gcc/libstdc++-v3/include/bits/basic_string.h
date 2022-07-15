@@ -648,7 +648,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  @param  __n   The number of characters to copy from __t.
        *  @param  __a   Allocator to use.
        */
-      template<typename _Tp, typename = _If_sv<_Tp, void>>
+      template<typename _Tp,
+	       typename = enable_if_t<is_convertible_v<const _Tp&, __sv_type>>>
 	basic_string(const _Tp& __t, size_type __pos, size_type __n,
 		     const _Alloc& __a = _Alloc())
 	: basic_string(_S_to_string_view(__t).substr(__pos, __n), __a) { }
@@ -3743,7 +3744,8 @@ _GLIBCXX_END_NAMESPACE_CXX11
        *  @param  __n   The number of characters to copy from __t.
        *  @param  __a   Allocator to use.
        */
-      template<typename _Tp, typename = _If_sv<_Tp, void>>
+      template<typename _Tp,
+	       typename = enable_if_t<is_convertible_v<const _Tp&, __sv_type>>>
 	basic_string(const _Tp& __t, size_type __pos, size_type __n,
 		     const _Alloc& __a = _Alloc())
 	: basic_string(_S_to_string_view(__t).substr(__pos, __n), __a) { }
@@ -6024,8 +6026,7 @@ _GLIBCXX_END_NAMESPACE_CXX11
       { return __sv_type(this->data(), this->size()).ends_with(__x); }
 #endif // C++20
 
-#if __cplusplus >= 202011L \
-  || (__cplusplus == 202002L && !defined __STRICT_ANSI__)
+#if __cplusplus > 202011L
       bool
       contains(basic_string_view<_CharT, _Traits> __x) const noexcept
       { return __sv_type(this->data(), this->size()).contains(__x); }

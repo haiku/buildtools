@@ -414,7 +414,8 @@ i[34567]86-*-*)
 		       avx512vp2intersectintrin.h avx512vp2intersectvlintrin.h
 		       tsxldtrkintrin.h amxtileintrin.h amxint8intrin.h
 		       amxbf16intrin.h x86gprintrin.h uintrintrin.h
-		       hresetintrin.h keylockerintrin.h avxvnniintrin.h"
+		       hresetintrin.h keylockerintrin.h avxvnniintrin.h
+		       mwaitintrin.h"
 	;;
 x86_64-*-*)
 	cpu_type=i386
@@ -451,7 +452,8 @@ x86_64-*-*)
 		       avx512vp2intersectintrin.h avx512vp2intersectvlintrin.h
 		       tsxldtrkintrin.h amxtileintrin.h amxint8intrin.h
 		       amxbf16intrin.h x86gprintrin.h uintrintrin.h
-		       hresetintrin.h keylockerintrin.h avxvnniintrin.h"
+		       hresetintrin.h keylockerintrin.h avxvnniintrin.h
+		       mwaitintrin.h"
 	;;
 ia64-*-*)
 	extra_headers=ia64intrin.h
@@ -702,9 +704,9 @@ case ${target} in
       *-*-darwin[4-9]* | *-*-darwin1[0-9]*)
         macos_min=`expr $darwin_maj - 4`
         ;;
-      *-*-darwin20*)
-        # Darwin 20 corresponds to macOS 11.
-        macos_maj=11
+      *-*-darwin2*)
+        # Darwin 20 corresponds to macOS 11, Darwin 21 to macOS 12.
+        macos_maj=`expr $darwin_maj - 9`
         def_ld64=609.0
         ;;
       *-*-darwin)
@@ -4630,12 +4632,15 @@ case "${target}" in
 		case "${with_isa_spec}" in
 		""|default|2.2)
 			tm_defines="${tm_defines} TARGET_DEFAULT_ISA_SPEC=ISA_SPEC_CLASS_2P2"
+			with_isa_spec=2.2
 			;;
 		20191213 | 201912)
 			tm_defines="${tm_defines} TARGET_DEFAULT_ISA_SPEC=ISA_SPEC_CLASS_20191213"
+			with_isa_spec=20191213
 			;;
 		20190608 | 201906)
 			tm_defines="${tm_defines} TARGET_DEFAULT_ISA_SPEC=ISA_SPEC_CLASS_20190608"
+			with_isa_spec=20190608
 			;;
 		*)
 			echo "--with-isa-spec only accept 2.2, 20191213, 201912, 20190608 or 201906" 1>&2
@@ -4687,7 +4692,7 @@ case "${target}" in
 		esac
 		PYTHON=`which python || which python3 || which python2`
 		if test "x${PYTHON}" != x; then
-			with_arch=`${PYTHON} ${srcdir}/config/riscv/arch-canonicalize ${with_arch}`
+			with_arch=`${PYTHON} ${srcdir}/config/riscv/arch-canonicalize -misa-spec=${with_isa_spec} ${with_arch}`
 		fi
 		tm_defines="${tm_defines} TARGET_RISCV_DEFAULT_ARCH=${with_arch}"
 
@@ -4736,6 +4741,7 @@ case "${target}" in
 			case "${target}" in
 			riscv*-*-elf*)
 				if ${srcdir}/config/riscv/multilib-generator \
+					-misa-spec=${with_isa_spec} \
 					`echo ${with_multilib_generator} | sed 's/;/ /g'`\
 					> t-multilib-config;
 				then
@@ -5144,7 +5150,7 @@ case "${target}" in
 		for which in arch tune; do
 			eval "val=\$with_$which"
 			case ${val} in
-			"" | native | z900 | z990 | z9-109 | z9-ec | z10 | z196 | zEC12 | z13 | z14 | z15 | arch5 | arch6 | arch7 | arch8 | arch9 | arch10 | arch11 | arch12 | arch13 | arch14 )
+			"" | native | z900 | z990 | z9-109 | z9-ec | z10 | z196 | zEC12 | z13 | z14 | z15 | z16 | arch5 | arch6 | arch7 | arch8 | arch9 | arch10 | arch11 | arch12 | arch13 | arch14 )
 				# OK
 				;;
 			*)
@@ -5434,7 +5440,7 @@ case ${target} in
 esac
 
 t=
-all_defaults="abi cpu cpu_32 cpu_64 arch arch_32 arch_64 tune tune_32 tune_64 schedule float mode fpu nan fp_32 odd_spreg_32 divide llsc mips-plt synci tls lxc1-sxc1 madd4"
+all_defaults="abi cpu cpu_32 cpu_64 arch arch_32 arch_64 tune tune_32 tune_64 schedule float mode fpu nan fp_32 odd_spreg_32 divide llsc mips-plt synci tls lxc1-sxc1 madd4 isa_spec"
 for option in $all_defaults
 do
 	eval "val=\$with_"`echo $option | sed s/-/_/g`

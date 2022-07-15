@@ -1,3 +1,54 @@
+2022-04-21  Release Manager
+
+	* GCC 11.3.0 released.
+
+2022-03-29  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2022-03-09  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/104711
+	* c-fold.c (c_fully_fold_internal): Don't emit
+	-Wshift-negative-value warning if TYPE_OVERFLOW_WRAPS.
+	* c-typeck.c (build_binary_op): Likewise.
+
+2022-03-29  Marek Polacek  <polacek@redhat.com>
+
+	Backported from master:
+	2022-03-22  Marek Polacek  <polacek@redhat.com>
+
+	PR c/82283
+	PR c/84685
+	* c-typeck.c (struct initializer_stack): Add 'designated' member.
+	(start_init): Set it.
+	(finish_init): Restore constructor_designated.
+	(push_init_level): Set constructor_designated to the value of
+	constructor_designated in the upper constructor_stack.
+
+2022-01-24  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2022-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	PR objc/103639
+	* c-typeck.c (c_finish_bc_stmt): For break inside of switch inside of
+	ObjC foreach, emit normal BREAK_STMT rather than goto to label.
+
+2022-01-24  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2021-12-14  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c/103587
+	* c-parser.c (c_parser_balanced_token_sequence): For CPP_PRAGMA,
+	consume the pragma and silently skip to the pragma eol.
+
+2021-12-16  Martin Sebor  <msebor@redhat.com>
+
+	PR c/101289
+	PR c/97548
+	* c-decl.c (get_parm_array_spec): Strip nops.
+
 2021-07-28  Release Manager
 
 	* GCC 11.2.0 released.

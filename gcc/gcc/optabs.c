@@ -1113,6 +1113,10 @@ expand_doubleword_mod (machine_mode mode, rtx op0, rtx op1, bool unsignedp)
 
       remainder = convert_modes (mode, word_mode, remainder, unsignedp);
       /* Punt if we need any library calls.  */
+      if (last)
+	last = NEXT_INSN (last);
+      else
+	last = get_insns ();
       for (; last; last = NEXT_INSN (last))
 	if (CALL_P (last))
 	  return NULL_RTX;
@@ -1206,6 +1210,10 @@ expand_doubleword_divmod (machine_mode mode, rtx op0, rtx op1, rtx *rem,
     }
 
   /* Punt if we need any library calls.  */
+  if (last)
+    last = NEXT_INSN (last);
+  else
+    last = get_insns ();
   for (; last; last = NEXT_INSN (last))
     if (CALL_P (last))
       return NULL_RTX;
@@ -4286,12 +4294,14 @@ prepare_cmp_insn (rtx x, rtx y, enum rtx_code comparison, rtx size,
   /* If we are optimizing, force expensive constants into a register.  */
   if (CONSTANT_P (x) && optimize
       && (rtx_cost (x, mode, COMPARE, 0, optimize_insn_for_speed_p ())
-          > COSTS_N_INSNS (1)))
+          > COSTS_N_INSNS (1))
+      && can_create_pseudo_p ())
     x = force_reg (mode, x);
 
   if (CONSTANT_P (y) && optimize
       && (rtx_cost (y, mode, COMPARE, 1, optimize_insn_for_speed_p ())
-          > COSTS_N_INSNS (1)))
+          > COSTS_N_INSNS (1))
+      && can_create_pseudo_p ())
     y = force_reg (mode, y);
 
 #if HAVE_cc0
@@ -4367,6 +4377,8 @@ prepare_cmp_insn (rtx x, rtx y, enum rtx_code comparison, rtx size,
      compare and branch in different basic blocks.  */
   if (cfun->can_throw_non_call_exceptions)
     {
+      if (!can_create_pseudo_p () && (may_trap_p (x) || may_trap_p (y)))
+	goto fail;
       if (may_trap_p (x))
 	x = copy_to_reg (x);
       if (may_trap_p (y))

@@ -731,12 +731,11 @@ logical_array_check (gfc_expr *array, int n)
 static bool
 array_check (gfc_expr *e, int n)
 {
-  if (e->ts.type == BT_CLASS && gfc_expr_attr (e).class_ok
+  if (e->rank != 0 && e->ts.type == BT_CLASS && gfc_expr_attr (e).class_ok
 	&& CLASS_DATA (e)->attr.dimension
 	&& CLASS_DATA (e)->as->rank)
     {
       gfc_add_class_array_ref (e);
-      return true;
     }
 
   if (e->rank != 0 && e->ts.type != BT_PROCEDURE)
@@ -1012,33 +1011,13 @@ variable_check (gfc_expr *e, int n, bool allow_proc)
   if (e->expr_type == EXPR_VARIABLE
       && e->symtree->n.sym->attr.intent == INTENT_IN
       && (gfc_current_intrinsic_arg[n]->intent == INTENT_OUT
-	  || gfc_current_intrinsic_arg[n]->intent == INTENT_INOUT))
+	  || gfc_current_intrinsic_arg[n]->intent == INTENT_INOUT)
+      && !gfc_check_vardef_context (e, false, true, false, NULL))
     {
-      gfc_ref *ref;
-      bool pointer = e->symtree->n.sym->ts.type == BT_CLASS
-		     && CLASS_DATA (e->symtree->n.sym)
-		     ? CLASS_DATA (e->symtree->n.sym)->attr.class_pointer
-		     : e->symtree->n.sym->attr.pointer;
-
-      for (ref = e->ref; ref; ref = ref->next)
-	{
-	  if (pointer && ref->type == REF_COMPONENT)
-	    break;
-	  if (ref->type == REF_COMPONENT
-	      && ((ref->u.c.component->ts.type == BT_CLASS
-		   && CLASS_DATA (ref->u.c.component)->attr.class_pointer)
-		  || (ref->u.c.component->ts.type != BT_CLASS
-		      && ref->u.c.component->attr.pointer)))
-	    break;
-	}
-
-      if (!ref)
-	{
-	  gfc_error ("%qs argument of %qs intrinsic at %L cannot be "
-		     "INTENT(IN)", gfc_current_intrinsic_arg[n]->name,
-		     gfc_current_intrinsic, &e->where);
-	  return false;
-	}
+      gfc_error ("%qs argument of %qs intrinsic at %L cannot be INTENT(IN)",
+		 gfc_current_intrinsic_arg[n]->name,
+		 gfc_current_intrinsic, &e->where);
+      return false;
     }
 
   if (e->expr_type == EXPR_VARIABLE
@@ -4357,6 +4336,9 @@ gfc_check_norm2 (gfc_expr *array, gfc_expr *dim)
   if (!array_check (array, 0))
     return false;
 
+  if (!dim_check (dim, 1, false))
+    return false;
+
   if (!dim_rank_check (dim, array, false))
     return false;
 
@@ -4493,6 +4475,9 @@ gfc_check_parity (gfc_expr *mask, gfc_expr *dim)
     return false;
 
   if (!array_check (mask, 0))
+    return false;
+
+  if (!dim_check (dim, 1, false))
     return false;
 
   if (!dim_rank_check (dim, mask, false))
@@ -4696,6 +4681,7 @@ gfc_check_reshape (gfc_expr *source, gfc_expr *shape,
   mpz_t size;
   mpz_t nelems;
   int shape_size;
+  bool shape_is_const;
 
   if (!array_check (source, 0))
     return false;
@@ -4729,7 +4715,11 @@ gfc_check_reshape (gfc_expr *source, gfc_expr *shape,
 		 "than %d elements", &shape->where, GFC_MAX_DIMENSIONS);
       return false;
     }
-  else if (shape->expr_type == EXPR_ARRAY && gfc_is_constant_expr (shape))
+
+  gfc_simplify_expr (shape, 0);
+  shape_is_const = gfc_is_constant_expr (shape);
+
+  if (shape->expr_type == EXPR_ARRAY && shape_is_const)
     {
       gfc_expr *e;
       int i, extent;
@@ -4745,38 +4735,7 @@ gfc_check_reshape (gfc_expr *source, gfc_expr *shape,
 	      gfc_error ("%qs argument of %qs intrinsic at %L has "
 			 "negative element (%d)",
 			 gfc_current_intrinsic_arg[1]->name,
-			 gfc_current_intrinsic, &e->where, extent);
-	      return false;
-	    }
-	}
-    }
-  else if (shape->expr_type == EXPR_VARIABLE && shape->ref
-	   && shape->ref->u.ar.type == AR_FULL && shape->ref->u.ar.dimen == 1
-	   && shape->ref->u.ar.as
-	   && shape->ref->u.ar.as->lower[0]->expr_type == EXPR_CONSTANT
-	   && shape->ref->u.ar.as->lower[0]->ts.type == BT_INTEGER
-	   && shape->ref->u.ar.as->upper[0]->expr_type == EXPR_CONSTANT
-	   && shape->ref->u.ar.as->upper[0]->ts.type == BT_INTEGER
-	   && shape->symtree->n.sym->attr.flavor == FL_PARAMETER
-	   && shape->symtree->n.sym->value)
-    {
-      int i, extent;
-      gfc_expr *e, *v;
-
-      v = shape->symtree->n.sym->value;
-
-      for (i = 0; i < shape_size; i++)
-	{
-	  e = gfc_constructor_lookup_expr (v->value.constructor, i);
-	  if (e == NULL)
-	     break;
-
-	  gfc_extract_int (e, &extent);
-
-	  if (extent < 0)
-	    {
-	      gfc_error ("Element %d of actual argument of RESHAPE at %L "
-			 "cannot be negative", i + 1, &shape->where);
+			 gfc_current_intrinsic, &shape->where, extent);
 	      return false;
 	    }
 	}
@@ -4853,8 +4812,7 @@ gfc_check_reshape (gfc_expr *source, gfc_expr *shape,
 	}
     }
 
-  if (pad == NULL && shape->expr_type == EXPR_ARRAY
-      && gfc_is_constant_expr (shape)
+  if (pad == NULL && shape->expr_type == EXPR_ARRAY && shape_is_const
       && !(source->expr_type == EXPR_VARIABLE && source->symtree->n.sym->as
 	   && source->symtree->n.sym->as->type == AS_ASSUMED_SIZE))
     {
@@ -5083,8 +5041,18 @@ gfc_check_shape (gfc_expr *source, gfc_expr *kind)
   if (gfc_invalid_null_arg (source))
     return false;
 
+  if (!kind_check (kind, 1, BT_INTEGER))
+    return false;
+  if (kind && !gfc_notify_std (GFC_STD_F2003, "%qs intrinsic "
+			       "with KIND argument at %L",
+			       gfc_current_intrinsic, &kind->where))
+    return false;
+
   if (source->rank == 0 || source->expr_type != EXPR_VARIABLE)
     return true;
+
+  if (source->ref == NULL)
+    return false;
 
   ar = gfc_find_array_ref (source);
 
@@ -5094,13 +5062,6 @@ gfc_check_shape (gfc_expr *source, gfc_expr *kind)
 		 "an assumed size array", &source->where);
       return false;
     }
-
-  if (!kind_check (kind, 1, BT_INTEGER))
-    return false;
-  if (kind && !gfc_notify_std (GFC_STD_F2003, "%qs intrinsic "
-			       "with KIND argument at %L",
-			       gfc_current_intrinsic, &kind->where))
-    return false;
 
   return true;
 }
@@ -5176,6 +5137,9 @@ gfc_check_sizeof (gfc_expr *arg)
       return false;
     }
 
+  if (illegal_boz_arg (arg))
+    return false;
+
   /* TYPE(*) is acceptable if and only if it uses an array descriptor.  */
   if (arg->ts.type == BT_ASSUMED
       && (arg->symtree->n.sym->as == NULL
@@ -5216,6 +5180,18 @@ static bool
 is_c_interoperable (gfc_expr *expr, const char **msg, bool c_loc, bool c_f_ptr)
 {
   *msg = NULL;
+
+  if (expr->expr_type == EXPR_NULL)
+    {
+      *msg = "NULL() is not interoperable";
+      return false;
+    }
+
+  if (expr->ts.type == BT_BOZ)
+    {
+      *msg = "BOZ literal constant";
+      return false;
+    }
 
   if (expr->ts.type == BT_CLASS)
     {
@@ -6163,8 +6139,8 @@ gfc_calculate_transfer_sizes (gfc_expr *source, gfc_expr *mold, gfc_expr *size,
    * representation is not shorter than that of SOURCE.
    * If SIZE is present, the result is an array of rank one and size SIZE.
    */
-  if (result_elt_size == 0 && *source_size > 0 && !size
-      && mold->expr_type == EXPR_ARRAY)
+  if (result_elt_size == 0 && *source_size > 0
+      && (mold->expr_type == EXPR_ARRAY || mold->rank))
     {
       gfc_error ("%<MOLD%> argument of %<TRANSFER%> intrinsic at %L is an "
 		 "array and shall not have storage size 0 when %<SOURCE%> "

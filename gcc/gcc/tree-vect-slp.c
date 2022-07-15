@@ -827,7 +827,7 @@ vect_update_shared_vectype (stmt_vec_info stmt_info, tree vectype)
 /* Return true if call statements CALL1 and CALL2 are similar enough
    to be combined into the same SLP group.  */
 
-static bool
+bool
 compatible_calls_p (gcall *call1, gcall *call2)
 {
   unsigned int nargs = gimple_call_num_args (call1);
@@ -1819,6 +1819,10 @@ vect_build_slp_tree_2 (vec_info *vinfo, slp_tree node,
 	      }
 	  if (dump_enabled_p ())
 	    dump_printf (MSG_NOTE, "\n");
+	  /* After swapping some operands we lost track whether an
+	     operand has any pattern defs so be conservative here.  */
+	  if (oprnds_info[0]->any_pattern || oprnds_info[1]->any_pattern)
+	    oprnds_info[0]->any_pattern = oprnds_info[1]->any_pattern = true;
 	  /* And try again with scratch 'matches' ... */
 	  bool *tem = XALLOCAVEC (bool, group_size);
 	  if ((child = vect_build_slp_tree (vinfo, oprnd_info->def_stmts,
@@ -2410,6 +2414,7 @@ optimize_load_redistribution (scalar_stmts_to_slp_tree_map_t *bst_map,
 static bool
 vect_match_slp_patterns_2 (slp_tree *ref_node, vec_info *vinfo,
 			   slp_tree_to_load_perm_map_t *perm_cache,
+			   slp_compat_nodes_map_t *compat_cache,
 			   hash_set<slp_tree> *visited)
 {
   unsigned i;
@@ -2421,11 +2426,13 @@ vect_match_slp_patterns_2 (slp_tree *ref_node, vec_info *vinfo,
   slp_tree child;
   FOR_EACH_VEC_ELT (SLP_TREE_CHILDREN (node), i, child)
     found_p |= vect_match_slp_patterns_2 (&SLP_TREE_CHILDREN (node)[i],
-					  vinfo, perm_cache, visited);
+					  vinfo, perm_cache, compat_cache,
+					  visited);
 
   for (unsigned x = 0; x < num__slp_patterns; x++)
     {
-      vect_pattern *pattern = slp_patterns[x] (perm_cache, ref_node);
+      vect_pattern *pattern
+	= slp_patterns[x] (perm_cache, compat_cache, ref_node);
       if (pattern)
 	{
 	  pattern->build (vinfo);
@@ -2446,7 +2453,8 @@ vect_match_slp_patterns_2 (slp_tree *ref_node, vec_info *vinfo,
 static bool
 vect_match_slp_patterns (slp_instance instance, vec_info *vinfo,
 			 hash_set<slp_tree> *visited,
-			 slp_tree_to_load_perm_map_t *perm_cache)
+			 slp_tree_to_load_perm_map_t *perm_cache,
+			 slp_compat_nodes_map_t *compat_cache)
 {
   DUMP_VECT_SCOPE ("vect_match_slp_patterns");
   slp_tree *ref_node = &SLP_INSTANCE_TREE (instance);
@@ -2456,7 +2464,8 @@ vect_match_slp_patterns (slp_instance instance, vec_info *vinfo,
 		     "Analyzing SLP tree %p for patterns\n",
 		     SLP_INSTANCE_TREE (instance));
 
-  return vect_match_slp_patterns_2 (ref_node, vinfo, perm_cache, visited);
+  return vect_match_slp_patterns_2 (ref_node, vinfo, perm_cache, compat_cache,
+				    visited);
 }
 
 /* STMT_INFO is a store group of size GROUP_SIZE that we are considering
@@ -2827,8 +2836,13 @@ vect_analyze_slp_instance (vec_info *vinfo,
       vec<stmt_vec_info> reductions = as_a <loop_vec_info> (vinfo)->reductions;
       scalar_stmts.create (reductions.length ());
       for (i = 0; reductions.iterate (i, &next_info); i++)
-	if (STMT_VINFO_RELEVANT_P (next_info)
-	    || STMT_VINFO_LIVE_P (next_info))
+	if ((STMT_VINFO_RELEVANT_P (next_info)
+	     || STMT_VINFO_LIVE_P (next_info))
+	    /* ???  Make sure we didn't skip a conversion around a reduction
+	       path.  In that case we'd have to reverse engineer that conversion
+	       stmt following the chain using reduc_idx and from the PHI
+	       using reduc_def.  */
+	    && STMT_VINFO_DEF_TYPE (next_info) == vect_reduction_def)
 	  scalar_stmts.quick_push (next_info);
       /* If less than two were relevant/live there's nothing to SLP.  */
       if (scalar_stmts.length () < 2)
@@ -2924,12 +2938,14 @@ vect_analyze_slp (vec_info *vinfo, unsigned max_tree_size)
 
   hash_set<slp_tree> visited_patterns;
   slp_tree_to_load_perm_map_t perm_cache;
+  slp_compat_nodes_map_t compat_cache;
 
   /* See if any patterns can be found in the SLP tree.  */
   bool pattern_found = false;
   FOR_EACH_VEC_ELT (LOOP_VINFO_SLP_INSTANCES (vinfo), i, instance)
     pattern_found |= vect_match_slp_patterns (instance, vinfo,
-					      &visited_patterns, &perm_cache);
+					      &visited_patterns, &perm_cache,
+					      &compat_cache);
 
   /* If any were found optimize permutations of loads.  */
   if (pattern_found)
@@ -3160,6 +3176,13 @@ vect_optimize_slp (vec_info *vinfo)
       perms.safe_push (perm);
       n_perm[idx] = perms.length () - 1;
     }
+
+  /* In addition to the above we have to mark outgoing permutes facing
+     non-reduction graph entries that are not represented as to be
+     materialized.  */
+  for (slp_instance instance : vinfo->slp_instances)
+    if (SLP_INSTANCE_KIND (instance) == slp_inst_kind_ctor)
+      bitmap_set_bit (n_materialize, SLP_INSTANCE_TREE (instance)->vertex);
 
   /* Propagate permutes along the graph and compute materialization points.  */
   bool changed;
@@ -4169,7 +4192,13 @@ vect_slp_analyze_operations (vec_info *vinfo)
 	     SLP tree root.  */
 	  || (SLP_INSTANCE_ROOT_STMT (instance)
 	      && (SLP_TREE_DEF_TYPE (SLP_INSTANCE_TREE (instance))
-		  != vect_internal_def)))
+		  != vect_internal_def
+		  /* Make sure we vectorized with the expected type.  */
+		  || !useless_type_conversion_p
+			(TREE_TYPE (TREE_TYPE (gimple_assign_rhs1
+					      (instance->root_stmt->stmt))),
+			 TREE_TYPE (SLP_TREE_VECTYPE
+					    (SLP_INSTANCE_TREE (instance)))))))
         {
 	  slp_tree node = SLP_INSTANCE_TREE (instance);
 	  stmt_vec_info stmt_info = SLP_TREE_SCALAR_STMTS (node)[0];
@@ -5134,6 +5163,8 @@ vect_slp_bbs (vec<basic_block> bbs)
 					      &dataref_groups, current_group))
 	    ++current_group;
 	}
+      /* New BBs always start a new DR group.  */
+      ++current_group;
     }
 
   return vect_slp_region (bbs, datarefs, &dataref_groups, insns);

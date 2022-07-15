@@ -93,7 +93,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @{
    */
 
-#if __cplusplus > 201703L && __cpp_lib_concepts
+#if __cpp_lib_concepts
   namespace __detail
   {
     // Weaken iterator_category _Cat to _Limit if it is derived from that,
@@ -150,7 +150,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     public:
       typedef _Iterator					iterator_type;
       typedef typename __traits_type::pointer		pointer;
-#if __cplusplus <= 201703L
+#if ! __cpp_lib_concepts
       typedef typename __traits_type::difference_type	difference_type;
       typedef typename __traits_type::reference		reference;
 #else
@@ -1683,7 +1683,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     template<typename _It>
       concept __common_iter_use_postfix_proxy
 	= (!requires (_It& __i) { { *__i++ } -> __can_reference; })
-	  && constructible_from<iter_value_t<_It>, iter_reference_t<_It>>;
+	  && constructible_from<iter_value_t<_It>, iter_reference_t<_It>>
+	  && move_constructible<iter_value_t<_It>>;
   } // namespace __detail
 
   /// An iterator/sentinel adaptor for representing a non-common range.
@@ -1710,14 +1711,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       iter_value_t<_It> _M_keep;
 
+      constexpr
       __arrow_proxy(iter_reference_t<_It>&& __x)
       : _M_keep(std::move(__x)) { }
 
       friend class common_iterator;
 
     public:
-      const iter_value_t<_It>*
-      operator->() const
+      constexpr const iter_value_t<_It>*
+      operator->() const noexcept
       { return std::__addressof(_M_keep); }
     };
 
@@ -1725,14 +1727,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       iter_value_t<_It> _M_keep;
 
+      constexpr
       __postfix_proxy(iter_reference_t<_It>&& __x)
-      : _M_keep(std::move(__x)) { }
+      : _M_keep(std::forward<iter_reference_t<_It>>(__x)) { }
 
       friend class common_iterator;
 
     public:
-      const iter_value_t<_It>&
-      operator*() const
+      constexpr const iter_value_t<_It>&
+      operator*() const noexcept
       { return _M_keep; }
     };
 
@@ -1740,6 +1743,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     constexpr
     common_iterator()
     noexcept(is_nothrow_default_constructible_v<_It>)
+    requires default_initializable<_It>
     : _M_it(), _M_index(0)
     { }
 
@@ -2117,7 +2121,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // iterator_concept defined in __counted_iter_concept
       // iterator_category defined in __counted_iter_cat
 
-      constexpr counted_iterator() = default;
+      constexpr counted_iterator() requires default_initializable<_It> = default;
 
       constexpr
       counted_iterator(_It __i, iter_difference_t<_It> __n)
@@ -2336,6 +2340,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   /// @} group iterators
 
   template<typename _Iterator>
+    _GLIBCXX20_CONSTEXPR
     auto
     __niter_base(move_iterator<_Iterator> __it)
     -> decltype(make_move_iterator(__niter_base(__it.base())))
@@ -2349,6 +2354,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     };
 
   template<typename _Iterator>
+    _GLIBCXX20_CONSTEXPR
     auto
     __miter_base(move_iterator<_Iterator> __it)
     -> decltype(__miter_base(__it.base()))

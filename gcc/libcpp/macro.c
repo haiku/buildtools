@@ -1346,8 +1346,11 @@ funlike_invocation_p (cpp_reader *pfile, cpp_hashnode *node,
       token = cpp_get_token (pfile);
       if (token->type != CPP_PADDING)
 	break;
+      gcc_assert ((token->flags & PREV_WHITE) == 0);
       if (padding == NULL
-	  || (!(padding->flags & PREV_WHITE) && token->val.source == NULL))
+	  || padding->val.source == NULL
+	  || (!(padding->val.source->flags & PREV_WHITE)
+	      && token->val.source == NULL))
 	padding = token;
     }
 
@@ -2023,6 +2026,11 @@ replace_args (cpp_reader *pfile, cpp_hashnode *node, cpp_macro *macro,
 		  paste_flag = tokens_buff_last_token_ptr (buff);
 		}
 
+	      if (start && paste_flag == start && (*start)->flags & PASTE_LEFT)
+		/* If __VA_OPT__ expands to nothing (either because __VA_ARGS__
+		   is empty or because it is __VA_OPT__() ), drop PASTE_LEFT
+		   flag from previous token.  */
+		copy_paste_flag (pfile, start, &pfile->avoid_paste);
 	      if (src->flags & PASTE_LEFT)
 		{
 		  /* With a non-empty __VA_OPT__ on the LHS of ##, the last
@@ -3110,7 +3118,8 @@ cpp_get_token_with_location (cpp_reader *pfile, location_t *loc)
 
 /* Returns true if we're expanding an object-like macro that was
    defined in a system header.  Just checks the macro at the top of
-   the stack.  Used for diagnostic suppression.  */
+   the stack.  Used for diagnostic suppression.
+   Also return true for builtin macros.  */
 int
 cpp_sys_macro_p (cpp_reader *pfile)
 {
@@ -3121,7 +3130,11 @@ cpp_sys_macro_p (cpp_reader *pfile)
   else
     node = pfile->context->c.macro;
 
-  return node && node->value.macro && node->value.macro->syshdr;
+  if (!node)
+    return false;
+  if (cpp_builtin_macro_p (node))
+    return true;
+  return node->value.macro && node->value.macro->syshdr;
 }
 
 /* Read each token in, until end of the current file.  Directives are

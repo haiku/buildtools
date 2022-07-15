@@ -369,7 +369,7 @@ d_eval_constant_expression (const Loc &loc, tree cst)
       else if (code == STRING_CST)
 	{
 	  const void *string = TREE_STRING_POINTER (cst);
-	  size_t len = TREE_STRING_LENGTH (cst);
+	  size_t len = TREE_STRING_LENGTH (cst) - 1;
 	  return StringExp::create (loc, CONST_CAST (void *, string), len);
 	}
       else if (code == VECTOR_CST)
@@ -1205,5 +1205,20 @@ d_builtin_function (tree decl)
   return decl;
 }
 
+/* Same as d_builtin_function, but used to delay putting in back-end builtin
+   functions until the ISA that defines the builtin has been declared.
+   However in D, there is no global namespace.  All builtins get pushed into the
+   `gcc.builtins' module, which is constructed during the semantic analysis
+   pass, which has already finished by the time target attributes are evaluated.
+   So builtins are not pushed because they would be ultimately ignored.
+   The purpose of having this function then is to improve compile-time
+   reflection support to allow user-code to determine whether a given back end
+   function is enabled by the ISA.  */
+
+tree
+d_builtin_function_ext_scope (tree decl)
+{
+  return decl;
+}
 
 #include "gt-d-d-builtins.h"

@@ -888,39 +888,6 @@ add_sym_4 (const char *name, gfc_isym_id id, enum klass cl, int actual_ok, bt ty
 	   (void *) 0);
 }
 
-/* Add a symbol to the function list where the function takes 4
-   arguments and resolution may need to change the number or
-   arrangement of arguments. This is the case for INDEX, which needs
-   its KIND argument removed.  */
-
-static void
-add_sym_4ind (const char *name, gfc_isym_id id, enum klass cl, int actual_ok,
-	      bt type, int kind, int standard,
-	      bool (*check) (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *),
-	      gfc_expr *(*simplify) (gfc_expr *, gfc_expr *, gfc_expr *,
-				     gfc_expr *),
-	      void (*resolve) (gfc_expr *, gfc_actual_arglist *),
-	      const char *a1, bt type1, int kind1, int optional1,
-	      const char *a2, bt type2, int kind2, int optional2,
-	      const char *a3, bt type3, int kind3, int optional3,
-	      const char *a4, bt type4, int kind4, int optional4 )
-{
-  gfc_check_f cf;
-  gfc_simplify_f sf;
-  gfc_resolve_f rf;
-
-  cf.f4 = check;
-  sf.f4 = simplify;
-  rf.f1m = resolve;
-
-  add_sym (name, id, cl, actual_ok, type, kind, standard, cf, sf, rf,
-	   a1, type1, kind1, optional1, INTENT_IN,
-	   a2, type2, kind2, optional2, INTENT_IN,
-	   a3, type3, kind3, optional3, INTENT_IN,
-	   a4, type4, kind4, optional4, INTENT_IN,
-	   (void *) 0);
-}
-
 
 /* Add a symbol to the subroutine list where the subroutine takes
    4 arguments.  */
@@ -1175,6 +1142,7 @@ gfc_is_intrinsic (gfc_symbol* sym, int subroutine_flag, locus loc)
 
   /* Check for attributes which prevent the symbol from being INTRINSIC.  */
   if (sym->attr.external || sym->attr.contained
+      || sym->attr.recursive
       || sym->attr.if_source == IFSRC_IFBODY)
     return false;
 
@@ -2223,11 +2191,11 @@ add_functions (void)
 
   /* The resolution function for INDEX is called gfc_resolve_index_func
      because the name gfc_resolve_index is already used in resolve.c.  */
-  add_sym_4ind ("index", GFC_ISYM_INDEX, CLASS_ELEMENTAL, ACTUAL_YES,
-		BT_INTEGER, di, GFC_STD_F77,
-		gfc_check_index, gfc_simplify_index, gfc_resolve_index_func,
-		stg, BT_CHARACTER, dc, REQUIRED, ssg, BT_CHARACTER, dc, REQUIRED,
-		bck, BT_LOGICAL, dl, OPTIONAL, kind, BT_INTEGER, di, OPTIONAL);
+  add_sym_4 ("index", GFC_ISYM_INDEX, CLASS_ELEMENTAL, ACTUAL_YES,
+	     BT_INTEGER, di, GFC_STD_F77,
+	     gfc_check_index, gfc_simplify_index, gfc_resolve_index_func,
+	     stg, BT_CHARACTER, dc, REQUIRED, ssg, BT_CHARACTER, dc, REQUIRED,
+	     bck, BT_LOGICAL, dl, OPTIONAL, kind, BT_INTEGER, di, OPTIONAL);
 
   make_generic ("index", GFC_ISYM_INDEX, GFC_STD_F77);
 
@@ -4530,10 +4498,9 @@ resolve_intrinsic (gfc_intrinsic_sym *specific, gfc_expr *e)
 
   arg = e->value.function.actual;
 
-  /* Special case hacks for MIN, MAX and INDEX.  */
+  /* Special case hacks for MIN and MAX.  */
   if (specific->resolve.f1m == gfc_resolve_max
-      || specific->resolve.f1m == gfc_resolve_min
-      || specific->resolve.f1m == gfc_resolve_index_func)
+      || specific->resolve.f1m == gfc_resolve_min)
     {
       (*specific->resolve.f1m) (e, arg);
       return;
@@ -5237,12 +5204,13 @@ gfc_convert_type_warn (gfc_expr *expr, gfc_typespec *ts, int eflag, int wflag,
   /* In building an array constructor, gfortran can end up here when no
      conversion is required for an intrinsic type.  We need to let derived
      types drop through.  */
-  if (from_ts.type != BT_DERIVED
+  if (from_ts.type != BT_DERIVED && from_ts.type != BT_CLASS
       && (from_ts.type == ts->type && from_ts.kind == ts->kind))
     return true;
 
-  if (expr->ts.type == BT_DERIVED && ts->type == BT_DERIVED
-      && gfc_compare_types (&expr->ts, ts))
+  if ((expr->ts.type == BT_DERIVED || expr->ts.type == BT_CLASS)
+      && (ts->type == BT_DERIVED || ts->type == BT_CLASS)
+      && gfc_compare_types (ts, &expr->ts))
     return true;
 
   /* If array is true then conversion is in an array constructor where

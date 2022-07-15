@@ -3056,6 +3056,11 @@ find_a_file (const struct path_prefix *pprefix, const char *name, int mode,
     return xstrdup (DEFAULT_LINKER);
 #endif
 
+#ifdef DEFAULT_DSYMUTIL
+  if (! strcmp (name, "dsymutil") && access (DEFAULT_DSYMUTIL, mode) == 0)
+    return xstrdup (DEFAULT_DSYMUTIL);
+#endif
+
   /* Determine the filename to execute (special case for absolute paths).  */
 
   if (IS_ABSOLUTE_PATH (name))
@@ -4991,7 +4996,8 @@ process_command (unsigned int decoded_options_count,
 
   bool explicit_dumpdir = dumpdir;
 
-  if (!save_temps_overrides_dumpdir && explicit_dumpdir)
+  if ((!save_temps_overrides_dumpdir && explicit_dumpdir)
+      || (output_file && not_actual_file_p (output_file)))
     {
       /* Do nothing.  */
     }

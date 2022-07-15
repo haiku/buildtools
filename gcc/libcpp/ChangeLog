@@ -1,3 +1,64 @@
+2022-04-21  Release Manager
+
+	* GCC 11.3.0 released.
+
+2022-02-19  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2022-02-01  Jakub Jelinek  <jakub@redhat.com>
+
+	PR preprocessor/104147
+	* macro.c (funlike_invocation_p): For padding prefer a token
+	with val.source non-NULL especially if it has PREV_WHITE set
+	on val.source->flags.  Add gcc_assert that CPP_PADDING tokens
+	don't have PREV_WHITE set in flags.
+
+2022-02-19  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2022-02-01  Jakub Jelinek  <jakub@redhat.com>
+
+	* directives.c (destringize_and_run): Push &pfile->avoid_paste
+	instead of a copy of pfile->directive_result for the CPP_PADDING
+	case.
+
+2022-01-24  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2021-12-30  Jakub Jelinek  <jakub@redhat.com>
+
+	PR preprocessor/89971
+	* macro.c (replace_args): For ##__VA_OPT__, if __VA_OPT__ expands
+	to no tokens at all, drop PASTE_LEFT flag from the previous token.
+
+2021-12-04  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2021-12-04  Jakub Jelinek  <jakub@redhat.com>
+
+	PR preprocessor/102432
+	* lex.c (_cpp_lex_direct): If buffer->need_line while
+	pfile->state.in_deferred_pragma, return CPP_PRAGMA_EOL token instead
+	of assertion failure.
+
+2021-11-29  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2021-11-17  Jakub Jelinek  <jakub@redhat.com>
+
+	PR preprocessor/103130
+	* lex.c (cpp_directive_only_process): Treat even \*/ as end of block
+	comment.
+
+2021-08-12  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2021-08-12  Jakub Jelinek  <jakub@redhat.com>
+
+	PR preprocessor/101638
+	* macro.c (cpp_sys_macro_p): Return true instead of
+	crashing on builtin macros.
+
 2021-07-28  Release Manager
 
 	* GCC 11.2.0 released.

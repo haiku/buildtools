@@ -316,8 +316,14 @@ gnu_ld_flag="$with_gnu_ld",
 gnu_ld_flag=no)
 
 case $target in
-    *darwin*) ld64_flag=yes;; # Darwin can only use a ld64-compatible linker.
-    *) ld64_flag=no;;
+    *darwin*)
+	ld64_flag=yes # Darwin can only use a ld64-compatible linker.
+	dsymutil_flag=yes # Darwin uses dsymutil to link debug.
+	;;
+    *)
+	ld64_flag=no
+	dsymutil_flag=no
+	;;
 esac
 
 # With pre-defined ld
@@ -352,6 +358,31 @@ AC_ARG_WITH(demangler-in-ld,
 [AS_HELP_STRING([--with-demangler-in-ld], [try to use demangler in GNU ld])],
 demangler_in_ld="$with_demangler_in_ld",
 demangler_in_ld=yes)
+
+# Allow the user to specify a dsymutil executable (used on Darwin only, so far)
+AC_ARG_WITH(dsymutil,
+[AS_HELP_STRING([--with-dsymutil], [arrange to use the specified dsymutil (full pathname)])],
+DEFAULT_DSYMUTIL="$with_dsymutil")
+
+dsymutil_vers=
+if test x"${DEFAULT_DSYMUTIL+set}" = x"set"; then
+  if test ! -x "$DEFAULT_DSYMUTIL"; then
+    AC_MSG_ERROR([cannot execute: $DEFAULT_DSYMUTIL: check --with-dsymutil or env. var. DEFAULT_DSYMUTIL])
+  else
+    if dsymutil_vers=`$DEFAULT_DSYMUTIL -v /dev/null 2>&1`; then
+      dsymutil_flag=yes
+    fi
+  fi
+  AC_DEFINE_UNQUOTED(DEFAULT_DSYMUTIL,"$DEFAULT_DSYMUTIL",
+	[Define to enable the use of a default debug linker.])
+fi
+
+AC_MSG_CHECKING([whether a default dsymutil was specified])
+if test x"${DEFAULT_DSYMUTIL+set}" = x"set"; then
+  AC_MSG_RESULT([yes ($DEFAULT_DSYMUTIL)])
+else
+  AC_MSG_RESULT(no)
+fi
 
 # ----------------------
 # Find default assembler
@@ -2424,23 +2455,13 @@ BUILD_CXXFLAGS='$(ALL_CXXFLAGS)' AC_SUBST(BUILD_CXXFLAGS)
 BUILD_LDFLAGS='$(LDFLAGS)'	AC_SUBST(BUILD_LDFLAGS)
 STMP_FIXINC=stmp-fixinc		AC_SUBST(STMP_FIXINC)
 
-BUILD_NO_PIE_CFLAGS='$(NO_PIE_CFLAGS)' AC_SUBST(BUILD_NO_PIE_CFLAGS)
-BUILD_NO_PIE_FLAG='$(NO_PIE_FLAG)' AC_SUBST(BUILD_NO_PIE_FLAG)
-
 # And these apply if build != host, or we are generating coverage data
 if test x$build != x$host || test "x$coverage_flags" != x
 then
     BUILD_CFLAGS='$(INTERNAL_CFLAGS) $(T_CFLAGS) $(CFLAGS_FOR_BUILD)'
     BUILD_CXXFLAGS='$(INTERNAL_CFLAGS) $(T_CFLAGS) $(CXXFLAGS_FOR_BUILD)'
     BUILD_LDFLAGS='$(LDFLAGS_FOR_BUILD)'
-
-    NO_PIE_CFLAGS_FOR_BUILD=${NO_PIE_CFLAGS_FOR_BUILD-${NO_PIE_CFLAGS}}
-    NO_PIE_FLAG_FOR_BUILD=${NO_PIE_FLAG_FOR_BUILD-${NO_PIE_FLAG}}
-    BUILD_NO_PIE_CFLAGS='$(NO_PIE_CFLAGS_FOR_BUILD)'
-    BUILD_NO_PIE_FLAG='$(NO_PIE_FLAG_FOR_BUILD)'
 fi
-AC_SUBST(NO_PIE_CFLAGS_FOR_BUILD)
-AC_SUBST(NO_PIE_FLAG_FOR_BUILD)
 
 # Expand extra_headers to include complete path.
 # This substitutes for lots of t-* files.
@@ -2833,6 +2854,27 @@ if test x$gcc_cv_otool = x; then
 else
 	AC_MSG_RESULT($gcc_cv_otool)
 fi
+
+# Figure out the dsymutil we will use.
+AS_VAR_SET_IF(gcc_cv_dsymutil,, [
+if test -x "$DEFAULT_DSYMUTIL"; then
+    gcc_cv_dsymutil="$DEFAULT_DSYMUTIL"
+elif test -x dsymutil$build_exeext; then
+    gcc_cv_dsymutil=./dsymutil$build_exeext
+elif ( set dummy $DSYMUTIL_FOR_TARGET; test -x $[2] ); then
+    gcc_cv_dsymutil=$DSYMUTIL_FOR_TARGET
+elif ( set dummy $DSYMUTIL; test -x $[2] ); then
+    gcc_cv_dsymutil=$DSYMUTIL
+else
+    AC_PATH_PROG(gcc_cv_dsymutil, $DSYMUTIL_FOR_TARGET)
+fi])
+
+ORIGINAL_DSYMUTIL_FOR_TARGET=$gcc_cv_dsymutil
+AC_SUBST(ORIGINAL_DSYMUTIL_FOR_TARGET)
+case "$ORIGINAL_DSYMUTIL_FOR_TARGET" in
+  ./dsymutil | ./dsymutil$build_exeext) ;;
+  *) AC_CONFIG_FILES(dsymutil:exec-tool.in, [chmod +x dsymutil]) ;;
+esac 
 
 # Figure out what assembler alignment features are present.
 gcc_GAS_CHECK_FEATURE([.balign and .p2align], gcc_cv_as_balign_and_p2align,
@@ -4729,6 +4771,15 @@ foo:	nop
 	fi
 	;;
     esac
+    case $target_os in
+       darwin2[[0-9]]* | darwin19*)
+        gcc_GAS_CHECK_FEATURE([llvm assembler x86-pad-for-align option],
+          gcc_cv_as_mllvm_x86_pad_for_align,,
+          [-mllvm -x86-pad-for-align=false], [.text],,
+          [AC_DEFINE(HAVE_AS_MLLVM_X86_PAD_FOR_ALIGN, 1,
+	    [Define if your Mac OS X assembler supports -mllvm -x86-pad-for-align=false.])])
+       ;;
+    esac
 
     gcc_GAS_CHECK_FEATURE([-xbrace_comment], gcc_cv_as_ix86_xbrace_comment,,
       [-xbrace_comment=no], [.text],,
@@ -5285,7 +5336,7 @@ configured with --enable-newlib-nano-formatted-io.])
 		 [Define if the assembler understands -misa-spec=.])])
     gcc_GAS_CHECK_FEATURE([-march=rv32i_zifencei support],
       gcc_cv_as_riscv_march_zifencei,,
-      [-march=rv32i_zifencei],,,
+      [-march=rv32i_zifencei2p0],,,
       [AC_DEFINE(HAVE_AS_MARCH_ZIFENCEI, 1,
 		 [Define if the assembler understands -march=rv*_zifencei.])])
     ;;
@@ -5336,6 +5387,133 @@ case "$target" in
       echo "*** This configuration requires the GNU assembler" >&2
       exit 1
     fi
+    ;;
+esac
+
+# This tests if the assembler supports two registers for global_load functions
+# (like in LLVM versions <12) or one register (like in LLVM 12).
+case "$target" in
+  amdgcn-* | gcn-*)
+    AC_MSG_CHECKING(assembler fix for global_load functions)
+    gcc_cv_as_gcn_global_load_fixed=yes
+    if test x$gcc_cv_as != x; then
+      cat > conftest.s <<EOF
+	global_store_dwordx2    v[[1:2]], v[[4:5]], s[[14:15]]
+EOF
+      if $gcc_cv_as -triple=amdgcn--amdhsa -filetype=obj -mcpu=gfx900 -o conftest.o conftest.s > /dev/null 2>&1; then
+        gcc_cv_as_gcn_global_load_fixed=no
+      fi
+      rm -f conftest.s conftest.o conftest
+    fi
+    global_load_fixed=`if test x$gcc_cv_as_gcn_global_load_fixed = xyes; then echo 1; else echo 0; fi`
+    AC_DEFINE_UNQUOTED(HAVE_GCN_ASM_GLOBAL_LOAD_FIXED, $global_load_fixed,
+      [Define if your assembler has fixed global_load functions.])
+    AC_MSG_RESULT($gcc_cv_as_gcn_global_load_fixed)
+    ;;
+esac
+
+case "$target" in
+  amdgcn-* | gcn-*)
+    # Test the LLVM assembler syntax dialect; they have made a number of
+    # changes between LLVM 12 & 13 without any backward compatibility.
+    gcc_GAS_CHECK_FEATURE([assembler amdgcn_target v2/3 syntax],
+      gcc_cv_as_gcn_asm_v3_syntax,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx906 -mattr=+xnack],
+      [.amdgcn_target "amdgcn-unknown-amdhsa--gfx906+xnack"],,
+      [AC_DEFINE(HAVE_GCN_ASM_V3_SYNTAX, 1,
+       [Define if your assembler expects amdgcn_target gfx908+xnack syntax.])])
+    gcc_GAS_CHECK_FEATURE([assembler amdgcn_target v4 syntax],
+      gcc_cv_as_gcn_asm_v4_syntax,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx908 -mattr=+xnack],
+      [.amdgcn_target "amdgcn-unknown-amdhsa--gfx908:xnack+"],,
+      [AC_DEFINE(HAVE_GCN_ASM_V4_SYNTAX, 1,
+       [Define if your assembler expects amdgcn_target gfx908:xnack+ syntax.])])
+
+    # Some attribute names changed in the move to v4 ...
+    if test $gcc_cv_as_gcn_asm_v3_syntax = yes; then
+	sramopt="+sram-ecc"
+	sramattr="+sram-ecc"
+	xnackattr="+xnack"
+    elif test $gcc_cv_as_gcn_asm_v4_syntax = yes; then
+	sramopt="+sramecc"
+	sramattr=":sramecc+"
+	xnackattr=":xnack+"
+    else
+	AC_MSG_ERROR([Unrecognised assembler version])
+    fi
+
+    # Test whether the LLVM assembler accepts -mattr=+xnack without any
+    # diagnostic. LLVM 9 & 10 accept the option whether it makes sense or not,
+    # LLVM 12+ throws a warning for GPUs without support.
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+xnack for fiji],
+      gcc_cv_as_gcn_xnack_ecc_fiji,,
+      [-triple=amdgcn--amdhsa -mcpu=fiji -mattr=+xnack 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_xnack_ecc_fiji=yes],
+      [AC_DEFINE(HAVE_GCN_XNACK_FIJI, 1,
+       [Define if your assembler allows -mattr=+xnack for fiji.])])
+    rm -f conftest.err
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+xnack for gfx900],
+      gcc_cv_as_gcn_xnack_ecc_gfx900,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx900 -mattr=+xnack 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_xnack_ecc_gfx900=yes],
+      [AC_DEFINE(HAVE_GCN_XNACK_GFX900, 1,
+       [Define if your assembler allows -mattr=+xnack for gfx900.])])
+    rm -f conftest.err
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+xnack for gfx906],
+      gcc_cv_as_gcn_xnack_ecc_gfx906,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx906 -mattr=+xnack 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_xnack_ecc_gfx906=yes],
+      [AC_DEFINE(HAVE_GCN_XNACK_GFX906, 1,
+       [Define if your assembler allows -mattr=+xnack for gfx906.])])
+    rm -f conftest.err
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=+xnack for gfx908],
+      gcc_cv_as_gcn_xnack_ecc_gfx908,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx908 -mattr=+xnack 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_xnack_ecc_gfx908=yes],
+      [AC_DEFINE(HAVE_GCN_XNACK_GFX908, 1,
+       [Define if your assembler allows -mattr=+xnack for gfx908.])])
+    rm -f conftest.err
+
+    # Test whether the LLVM assembler accepts -mattr=+sramecc without any
+    # diagnostic. LLVM 9 & 10 accept the option whether it makes sense or not,
+    # (some?) LLVM 12 rejects it for all GPUs, and LLVM13 throws a warning
+    # for GPUs without support.
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=$sramopt for fiji],
+      gcc_cv_as_gcn_sram_ecc_fiji,,
+      [-triple=amdgcn--amdhsa -mcpu=fiji -mattr=$sramopt 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_sram_ecc_fiji=yes],
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_FIJI, 1,
+       [Define if your assembler allows -mattr=+sramecc for fiji.])])
+    rm -f conftest.err
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=$sramopt for gfx900],
+      gcc_cv_as_gcn_sram_ecc_gfx900,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx900 -mattr=$sramopt 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_sram_ecc_gfx900=yes],
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_GFX900, 1,
+       [Define if your assembler allows -mattr=+sramecc for gfx900.])])
+    rm -f conftest.err
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=$sramopt for gfx906],
+      gcc_cv_as_gcn_sram_ecc_gfx906,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx906 -mattr=$sramopt 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_sram_ecc_gfx906=yes],
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_GFX906, 1,
+       [Define if your assembler allows -mattr=+sramecc for gfx906.])])
+    rm -f conftest.err
+    gcc_GAS_CHECK_FEATURE([assembler accepts -mattr=$sramopt for gfx908],
+      gcc_cv_as_gcn_sram_ecc_gfx908,,
+      [-triple=amdgcn--amdhsa -mcpu=gfx908 -mattr=$sramopt 2>conftest.err], [],
+      [grep "." conftest.err >&AS_MESSAGE_LOG_FD \
+       || gcc_cv_as_gcn_sram_ecc_gfx908=yes],
+      [AC_DEFINE(HAVE_GCN_SRAM_ECC_GFX908, 1,
+       [Define if your assembler allows -mattr=+sramecc for gfx908.])])
+    rm -f conftest.err
     ;;
 esac
 
@@ -6200,6 +6378,46 @@ if test x"$ld64_flag" = x"yes"; then
   [Define to 1 if ld64 supports '-export_dynamic'.])
 fi
 
+if test x"$dsymutil_flag" = x"yes"; then
+
+    # If the user specified a dsymutil path, then we will already have the
+    # version string, otherwise, pick it up.
+    if test x"$gcc_cv_dsymutil" = x; then
+        AC_MSG_WARN([dsymutil is a required tool for this system, but not found])
+        dsymutil_vers="tool unspecified"
+    elif test x"$dsymutil_vers" = x; then
+	dsymutil_vers=`$gcc_cv_dsymutil -v /dev/null 2>&1`
+    fi
+
+    dsymutil_temp=`echo $dsymutil_vers | sed 1q`
+    AC_MSG_CHECKING(dsymutil version "$dsymutil_temp")
+    if echo $dsymutil_temp | grep dwarfutils- > /dev/null; then
+      dsymutil_kind=DWARFUTILS
+      dsymutil_vers=`echo $dsymutil_temp | sed 's/.*dwarfutils-\([[0-9\.]]*\).*/\1/'`
+    elif echo $dsymutil_temp | grep clang- > /dev/null; then
+      dsymutil_kind=CLANG
+      dsymutil_vers=`echo $dsymutil_temp | sed 's/.*clang-\([[0-9\.]]*\).*/\1/'`
+    elif echo $dsymutil_temp | grep 'LLVM version ' > /dev/null; then
+      dsymutil_kind=LLVM
+      dsymutil_vers=`echo $dsymutil_temp | sed 's/.*LLVM\ version\ \([[0-9\.]]*\).*/\1/'`
+    else
+      dsymutil_kind=UNKNOWN
+      dsymutil_vers="0.0"
+    fi
+    dsymutil_major=`expr "$dsymutil_vers" : '\([[0-9]]*\)'`
+    dsymutil_minor=`expr "$dsymutil_vers" : '[[0-9]]*\.\([[0-9]]*\)'`
+    dsymutil_tiny=`expr "$dsymutil_vers" : '[[0-9]]*\.[[0-9]]*\.\([[0-9]]*\)'`
+    if test x"${dsymutil_minor}" = x; then
+      dsymutil_minor=0
+    fi
+    if test x"${dsymutil_tiny}" = x; then
+      dsymutil_tiny=0
+    fi
+    AC_DEFINE_UNQUOTED(DSYMUTIL_VERSION, [$dsymutil_kind,${dsymutil_major},${dsymutil_minor},${dsymutil_tiny}],
+        [Define to the dsymutil version.])
+    AC_MSG_RESULT($dsymutil_vers : $dsymutil_kind ${dsymutil_major} ${dsymutil_minor} ${dsymutil_tiny} )
+fi
+
 case $target_os in
   win32 | pe | cygwin* | mingw32*)
     AC_MSG_CHECKING(broken PE linker dwarf5 support)
@@ -6222,6 +6440,23 @@ case $target_os in
 	        [Define if the PE linker has broken DWARF 5 support.])
     fi
     AC_MSG_RESULT($gcc_cv_ld_broken_pe_dwarf5)
+
+    AC_MSG_CHECKING(PE linker --disable-dynamicbase support)
+    gcc_cv_ld_disable_dynamicbase=no
+    if test $in_tree_ld = yes; then
+      if test "$gcc_cv_gld_major_version" -eq 2 -a "$gcc_cv_gld_minor_version" -ge 36 -o "$gcc_cv_gld_major_version" -gt 2; then \
+        gcc_cv_ld_disable_dynamicbase=yes
+      fi
+    else
+      if $gcc_cv_ld --help 2>&1 | grep -q 'disable\-]dynamicbase' > /dev/null; then
+        gcc_cv_ld_disable_dynamicbase=yes
+      fi
+    fi
+    if test x"$gcc_cv_ld_disable_dynamicbase" = xyes; then
+      AC_DEFINE(HAVE_LD_PE_DISABLE_DYNAMICBASE, 1,
+                [Define if the PE linker supports --disable-dynamicbase option.])
+    fi
+    AC_MSG_RESULT($gcc_cv_ld_disable_dynamicbase)
     ;;
 esac
 
@@ -6356,7 +6591,7 @@ EOF
 esac
 
 case "$target:$tm_file" in
-  powerpc64-*-freebsd* | powerpc64*-*-linux* | powerpc*-*-linux*rs6000/biarch64.h*)
+  powerpc64*-*-freebsd* | powerpc64*-*-linux* | powerpc*-*-linux*rs6000/biarch64.h*)
   case "$target" in
      *le-*-linux*)
      emul_name="-melf64lppc"

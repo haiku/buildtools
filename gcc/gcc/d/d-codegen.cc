@@ -1158,7 +1158,7 @@ build_struct_literal (tree type, vec <constructor_elt, va_gc> *init)
   if (COMPLEX_FLOAT_TYPE_P (type))
     {
       gcc_assert (vec_safe_length (init) == 2);
-      return build_complex (type, (*init)[0].value, (*init)[1].value);
+      return complex_expr (type, (*init)[0].value, (*init)[1].value);
     }
 
   vec <constructor_elt, va_gc> *ve = NULL;
@@ -1639,21 +1639,9 @@ build_array_index (tree ptr, tree index)
   /* Array element size.  */
   tree size_exp = size_in_bytes (target_type);
 
-  if (integer_zerop (size_exp))
+  if (integer_zerop (size_exp) || integer_onep (size_exp))
     {
-      /* Test for array of void.  */
-      if (TYPE_MODE (target_type) == TYPE_MODE (void_type_node))
-	index = fold_convert (type, index);
-      else
-	{
-	  /* Should catch this earlier.  */
-	  error ("invalid use of incomplete type %qD", TYPE_NAME (target_type));
-	  ptr_type = error_mark_node;
-	}
-    }
-  else if (integer_onep (size_exp))
-    {
-      /* Array of bytes -- No need to multiply.  */
+      /* Array of void or bytes -- No need to multiply.  */
       index = fold_convert (type, index);
     }
   else

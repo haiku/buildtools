@@ -180,6 +180,13 @@ public:
     return tree_int_cst_equal (get_low (), get_high ());
   }
 
+  /* Return number of comparisons needed for the case.  */
+  unsigned
+  get_comparison_count ()
+  {
+    return m_range_p ? 2 : 1;
+  }
+
   /* Low value of the case.  */
   tree m_low;
 
@@ -267,9 +274,12 @@ public:
   static vec<cluster *> find_jump_tables (vec<cluster *> &clusters);
 
   /* Return true when cluster starting at START and ending at END (inclusive)
-     can build a jump-table.  */
+     can build a jump-table.  COMPARISON_COUNT is number of comparison
+     operations needed if the clusters are expanded as decision tree.
+     MAX_RATIO tells about the maximum code growth (in percent).  */
   static bool can_be_handled (const vec<cluster *> &clusters, unsigned start,
-			      unsigned end);
+			      unsigned end, unsigned HOST_WIDE_INT max_ratio,
+			      unsigned HOST_WIDE_INT comparison_count);
 
   /* Return true if cluster starting at START and ending at END (inclusive)
      is profitable transformation.  */
@@ -419,7 +429,8 @@ public:
   static basic_block hoist_edge_and_branch_if_true (gimple_stmt_iterator *gsip,
 						    tree cond,
 						    basic_block case_bb,
-						    profile_probability prob);
+						    profile_probability prob,
+						    location_t);
 
   /* Return whether bit test expansion is allowed.  */
   static inline bool is_enabled (void)

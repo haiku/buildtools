@@ -1304,6 +1304,17 @@ const_binop (enum tree_code code, tree arg1, tree arg2)
       real_convert (&result, mode, &value);
 
       /* Don't constant fold this floating point operation if
+	 both operands are not NaN but the result is NaN, and
+	 flag_trapping_math.  Such operations should raise an
+	 invalid operation exception.  */
+      if (flag_trapping_math
+	  && MODE_HAS_NANS (mode)
+	  && REAL_VALUE_ISNAN (result)
+	  && !REAL_VALUE_ISNAN (d1)
+	  && !REAL_VALUE_ISNAN (d2))
+	return NULL_TREE;
+
+      /* Don't constant fold this floating point operation if
 	 the result has overflowed and flag_trapping_math.  */
       if (flag_trapping_math
 	  && MODE_HAS_INFINITIES (mode)
@@ -3326,8 +3337,11 @@ operand_compare::operand_equal_p (const_tree arg0, const_tree arg1,
 		    tree field0 = TREE_OPERAND (arg0, 1);
 		    tree field1 = TREE_OPERAND (arg1, 1);
 
-		    if (!operand_equal_p (DECL_FIELD_OFFSET (field0),
-					  DECL_FIELD_OFFSET (field1), flags)
+		    /* Non-FIELD_DECL operands can appear in C++ templates.  */
+		    if (TREE_CODE (field0) != FIELD_DECL
+			|| TREE_CODE (field1) != FIELD_DECL
+			|| !operand_equal_p (DECL_FIELD_OFFSET (field0),
+					     DECL_FIELD_OFFSET (field1), flags)
 			|| !operand_equal_p (DECL_FIELD_BIT_OFFSET (field0),
 					     DECL_FIELD_BIT_OFFSET (field1),
 					     flags))
@@ -3506,11 +3520,26 @@ operand_compare::operand_equal_p (const_tree arg0, const_tree arg1,
 
     case tcc_declaration:
       /* Consider __builtin_sqrt equal to sqrt.  */
-      return (TREE_CODE (arg0) == FUNCTION_DECL
-	      && fndecl_built_in_p (arg0) && fndecl_built_in_p (arg1)
-	      && DECL_BUILT_IN_CLASS (arg0) == DECL_BUILT_IN_CLASS (arg1)
-	      && (DECL_UNCHECKED_FUNCTION_CODE (arg0)
-		  == DECL_UNCHECKED_FUNCTION_CODE (arg1)));
+      if (TREE_CODE (arg0) == FUNCTION_DECL)
+	return (fndecl_built_in_p (arg0) && fndecl_built_in_p (arg1)
+		&& DECL_BUILT_IN_CLASS (arg0) == DECL_BUILT_IN_CLASS (arg1)
+		&& (DECL_UNCHECKED_FUNCTION_CODE (arg0)
+		    == DECL_UNCHECKED_FUNCTION_CODE (arg1)));
+
+      if (DECL_P (arg0)
+	  && (flags & OEP_DECL_NAME)
+	  && (flags & OEP_LEXICOGRAPHIC))
+	{
+	  /* Consider decls with the same name equal.  The caller needs
+	     to make sure they refer to the same entity (such as a function
+	     formal parameter).  */
+	  tree a0name = DECL_NAME (arg0);
+	  tree a1name = DECL_NAME (arg1);
+	  const char *a0ns = a0name ? IDENTIFIER_POINTER (a0name) : NULL;
+	  const char *a1ns = a1name ? IDENTIFIER_POINTER (a1name) : NULL;
+	  return a0ns && a1ns && strcmp (a0ns, a1ns) == 0;
+	}
+      return false;
 
     case tcc_exceptional:
       if (TREE_CODE (arg0) == CONSTRUCTOR)
@@ -3921,14 +3950,14 @@ bool
 operand_compare::verify_hash_value (const_tree arg0, const_tree arg1,
 				    unsigned int flags, bool *ret)
 {
-  /* When checking, verify at the outermost operand_equal_p call that
-     if operand_equal_p returns non-zero then ARG0 and ARG1 has the same
-     hash value.  */
+  /* When checking and unless comparing DECL names, verify that if
+     the outermost operand_equal_p call returns non-zero then ARG0
+     and ARG1 have the same hash value.  */
   if (flag_checking && !(flags & OEP_NO_HASH_CHECK))
     {
       if (operand_equal_p (arg0, arg1, flags | OEP_NO_HASH_CHECK))
 	{
-	  if (arg0 != arg1)
+	  if (arg0 != arg1 && !(flags & OEP_DECL_NAME))
 	    {
 	      inchash::hash hstate0 (0), hstate1 (0);
 	      hash_operand (arg0, hstate0, flags | OEP_HASH_CHECK);
@@ -5003,7 +5032,8 @@ make_range_step (location_t loc, enum tree_code code, tree arg0, tree arg1,
 	 being not equal to zero; "out" is leaving it alone.  */
       if (low == NULL_TREE || high == NULL_TREE
 	  || ! integer_zerop (low) || ! integer_zerop (high)
-	  || TREE_CODE (arg1) != INTEGER_CST)
+	  || TREE_CODE (arg1) != INTEGER_CST
+	  || TREE_CODE (arg0_type) == NULLPTR_TYPE)
 	return NULL_TREE;
 
       switch (code)
@@ -5163,7 +5193,7 @@ make_range_step (location_t loc, enum tree_code code, tree arg0, tree arg1,
 	n_high = fold_convert_loc (loc, arg0_type, n_high);
 
       /* If we're converting arg0 from an unsigned type, to exp,
-	 a signed type,  we will be doing the comparison as unsigned.
+	 a signed type, we will be doing the comparison as unsigned.
 	 The tests above have already verified that LOW and HIGH
 	 are both positive.
 
@@ -5222,6 +5252,32 @@ make_range_step (location_t loc, enum tree_code code, tree arg0, tree arg1,
 		return NULL_TREE;
 
 	      in_p = (in_p != n_in_p);
+	    }
+	}
+
+      /* Otherwise, if we are converting arg0 from signed type, to exp,
+	 an unsigned type, we will do the comparison as signed.  If
+	 high is non-NULL, we punt above if it doesn't fit in the signed
+	 type, so if we get through here, +[-, high] or +[low, high] are
+	 equivalent to +[-, n_high] or +[n_low, n_high].  Similarly,
+	 +[-, -] or -[-, -] are equivalent too.  But if low is specified and
+	 high is not, the +[low, -] range is equivalent to union of
+	 +[n_low, -] and +[-, -1] ranges, so +[low, -] is equivalent to
+	 -[0, n_low-1] and similarly -[low, -] to +[0, n_low-1], except for
+	 low being 0, which should be treated as [-, -].  */
+      else if (TYPE_UNSIGNED (exp_type)
+	       && !TYPE_UNSIGNED (arg0_type)
+	       && low
+	       && !high)
+	{
+	  if (integer_zerop (low))
+	    n_low = NULL_TREE;
+	  else
+	    {
+	      n_high = fold_build2_loc (loc, PLUS_EXPR, arg0_type,
+					n_low, build_int_cst (arg0_type, -1));
+	      n_low = build_zero_cst (arg0_type);
+	      in_p = !in_p;
 	    }
 	}
 
@@ -6429,15 +6485,19 @@ fold_truth_andor_1 (location_t loc, enum tree_code code, tree truth_type,
 			 size_int (xll_bitpos));
   rl_mask = const_binop (LSHIFT_EXPR, fold_convert_loc (loc, lntype, rl_mask),
 			 size_int (xrl_bitpos));
+  if (ll_mask == NULL_TREE || rl_mask == NULL_TREE)
+    return 0;
 
   if (l_const)
     {
       l_const = fold_convert_loc (loc, lntype, l_const);
       l_const = unextend (l_const, ll_bitsize, ll_unsignedp, ll_and_mask);
       l_const = const_binop (LSHIFT_EXPR, l_const, size_int (xll_bitpos));
+      if (l_const == NULL_TREE)
+	return 0;
       if (! integer_zerop (const_binop (BIT_AND_EXPR, l_const,
 					fold_build1_loc (loc, BIT_NOT_EXPR,
-						     lntype, ll_mask))))
+							 lntype, ll_mask))))
 	{
 	  warning (0, "comparison is always %d", wanted_code == NE_EXPR);
 
@@ -6449,9 +6509,11 @@ fold_truth_andor_1 (location_t loc, enum tree_code code, tree truth_type,
       r_const = fold_convert_loc (loc, lntype, r_const);
       r_const = unextend (r_const, rl_bitsize, rl_unsignedp, rl_and_mask);
       r_const = const_binop (LSHIFT_EXPR, r_const, size_int (xrl_bitpos));
+      if (r_const == NULL_TREE)
+	return 0;
       if (! integer_zerop (const_binop (BIT_AND_EXPR, r_const,
 					fold_build1_loc (loc, BIT_NOT_EXPR,
-						     lntype, rl_mask))))
+							 lntype, rl_mask))))
 	{
 	  warning (0, "comparison is always %d", wanted_code == NE_EXPR);
 
@@ -6496,6 +6558,8 @@ fold_truth_andor_1 (location_t loc, enum tree_code code, tree truth_type,
       rr_mask = const_binop (LSHIFT_EXPR, fold_convert_loc (loc,
 							    rntype, rr_mask),
 			     size_int (xrr_bitpos));
+      if (lr_mask == NULL_TREE || rr_mask == NULL_TREE)
+	return 0;
 
       /* Make a mask that corresponds to both fields being compared.
 	 Do this for both items being compared.  If the operands are the
@@ -6555,6 +6619,8 @@ fold_truth_andor_1 (location_t loc, enum tree_code code, tree truth_type,
 				 size_int (MIN (xll_bitpos, xrl_bitpos)));
 	  lr_mask = const_binop (RSHIFT_EXPR, lr_mask,
 				 size_int (MIN (xlr_bitpos, xrr_bitpos)));
+	  if (ll_mask == NULL_TREE || lr_mask == NULL_TREE)
+	    return 0;
 
 	  /* Convert to the smaller type before masking out unwanted bits.  */
 	  type = lntype;

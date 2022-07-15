@@ -933,13 +933,15 @@ get_normalized_constraints_from_decl (tree d, bool diag = false)
       tmpl = most_general_template (tmpl);
   }
 
+  d = tmpl ? tmpl : decl;
+
   /* If we're not diagnosing errors, use cached constraints, if any.  */
   if (!diag)
-    if (tree *p = hash_map_safe_get (normalized_map, tmpl))
+    if (tree *p = hash_map_safe_get (normalized_map, d))
       return *p;
 
   tree norm = NULL_TREE;
-  if (tree ci = get_constraints (decl))
+  if (tree ci = get_constraints (d))
     {
       push_nested_class_guard pncs (DECL_CONTEXT (d));
 
@@ -951,7 +953,7 @@ get_normalized_constraints_from_decl (tree d, bool diag = false)
     }
 
   if (!diag)
-    hash_map_safe_put<hm_ggc> (normalized_map, tmpl, norm);
+    hash_map_safe_put<hm_ggc> (normalized_map, d, norm);
 
   return norm;
 }
@@ -1286,20 +1288,15 @@ remove_constraints (tree t)
    for declaration matching.  */
 
 tree
-maybe_substitute_reqs_for (tree reqs, const_tree decl_)
+maybe_substitute_reqs_for (tree reqs, const_tree decl)
 {
   if (reqs == NULL_TREE)
     return NULL_TREE;
 
-  tree decl = CONST_CAST_TREE (decl_);
-  tree result = STRIP_TEMPLATE (decl);
-
-  if (DECL_UNIQUE_FRIEND_P (result))
+  decl = STRIP_TEMPLATE (decl);
+  if (DECL_UNIQUE_FRIEND_P (decl) && DECL_TEMPLATE_INFO (decl))
     {
-      tree tmpl = decl;
-      if (TREE_CODE (decl) != TEMPLATE_DECL)
-	tmpl = DECL_TI_TEMPLATE (result);
-
+      tree tmpl = DECL_TI_TEMPLATE (decl);
       tree gargs = generic_targs_for (tmpl);
       processing_template_decl_sentinel s;
       if (uses_template_parms (gargs))
@@ -2865,7 +2862,8 @@ satisfaction_value (tree t)
     return t;
 
   gcc_assert (TREE_CODE (t) == INTEGER_CST
-	      && same_type_p (TREE_TYPE (t), boolean_type_node));
+	      && same_type_ignoring_top_level_qualifiers_p (TREE_TYPE (t),
+							    boolean_type_node));
   if (integer_zerop (t))
     return boolean_false_node;
   else
@@ -3209,12 +3207,11 @@ satisfy_declaration_constraints (tree t, sat_info info)
 	 set of template arguments.  Augment this with the outer template
 	 arguments that were used to regenerate the lambda.  */
       gcc_assert (!args || TMPL_ARGS_DEPTH (args) == 1);
-      tree lambda = CLASSTYPE_LAMBDA_EXPR (DECL_CONTEXT (t));
-      tree outer_args = TI_ARGS (LAMBDA_EXPR_REGEN_INFO (lambda));
+      tree regen_args = lambda_regenerating_args (t);
       if (args)
-	args = add_to_template_args (outer_args, args);
+	args = add_to_template_args (regen_args, args);
       else
-	args = outer_args;
+	args = regen_args;
     }
 
   /* If any arguments depend on template parameters, we can't
@@ -3232,9 +3229,11 @@ satisfy_declaration_constraints (tree t, sat_info info)
     {
       if (!push_tinst_level (t))
 	return result;
+      push_to_top_level ();
       push_access_scope (t);
       result = satisfy_normalized_constraints (norm, args, info);
       pop_access_scope (t);
+      pop_from_top_level ();
       pop_tinst_level ();
     }
 
@@ -3290,9 +3289,11 @@ satisfy_declaration_constraints (tree t, tree args, sat_info info)
       if (!push_tinst_level (t, args))
 	return result;
       tree pattern = DECL_TEMPLATE_RESULT (t);
+      push_to_top_level ();
       push_access_scope (pattern);
       result = satisfy_normalized_constraints (norm, args, info);
       pop_access_scope (pattern);
+      pop_from_top_level ();
       pop_tinst_level ();
     }
 

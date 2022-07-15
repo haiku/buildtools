@@ -1156,6 +1156,9 @@ ix86_split_idivmod (machine_mode mode, rtx operands[],
   rtx scratch, tmp0, tmp1, tmp2;
   rtx (*gen_divmod4_1) (rtx, rtx, rtx, rtx);
 
+  operands[2] = force_reg (mode, operands[2]);
+  operands[3] = force_reg (mode, operands[3]);
+
   switch (mode)
     {
     case E_SImode:
@@ -12323,6 +12326,9 @@ rdseed_step:
       return target;
 
     case IX86_BUILTIN_READ_FLAGS:
+      if (ignore)
+	return const0_rtx;
+
       emit_insn (gen_push (gen_rtx_REG (word_mode, FLAGS_REG)));
 
       if (optimize
@@ -14473,9 +14479,9 @@ quarter:
 	      else
 		{
 		  word = expand_simple_binop (word_mode, ASHIFT, word, shift,
-					      word, 1, OPTAB_LIB_WIDEN);
+					      NULL_RTX, 1, OPTAB_LIB_WIDEN);
 		  word = expand_simple_binop (word_mode, IOR, word, elt,
-					      word, 1, OPTAB_LIB_WIDEN);
+					      NULL_RTX, 1, OPTAB_LIB_WIDEN);
 		}
 	    }
 
@@ -15833,6 +15839,11 @@ void ix86_emit_i387_log1p (rtx op0, rtx op1)
   rtx res = gen_reg_rtx (XFmode);
   rtx cst, cstln2, cst1;
   rtx_insn *insn;
+
+  /* The emit_jump call emits pending stack adjust, make sure it is emitted
+     before the conditional jump, otherwise the stack adjustment will be
+     only conditional.  */
+  do_pending_stack_adjust ();
 
   cst = const_double_from_real_value
     (REAL_VALUE_ATOF ("0.29289321881345247561810596348408353", XFmode), XFmode);

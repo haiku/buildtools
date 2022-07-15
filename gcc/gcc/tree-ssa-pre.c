@@ -1609,6 +1609,21 @@ phi_translate_1 (bitmap_set_t dest,
 		newoperands.release ();
 		return NULL;
 	      }
+	    /* When we translate a MEM_REF across a backedge and we have
+	       restrict info that's not from our functions parameters
+	       we have to remap it since we now may deal with a different
+	       instance where the dependence info is no longer valid.
+	       See PR102970.  Note instead of keeping a remapping table
+	       per backedge we simply throw away restrict info.  */
+	    if ((newop.opcode == MEM_REF
+		 || newop.opcode == TARGET_MEM_REF)
+		&& newop.clique > 1
+		&& (e->flags & EDGE_DFS_BACK))
+	      {
+		newop.clique = 0;
+		newop.base = 0;
+		changed = true;
+	      }
 	    if (!changed)
 	      continue;
 	    if (!newoperands.exists ())
@@ -2070,6 +2085,13 @@ prune_clobbered_mems (bitmap_set_t set, basic_block block)
 			  && value_dies_in_block_x (expr, block))))
 		to_remove = i;
 	    }
+	  /* If the REFERENCE may trap make sure the block does not contain
+	     a possible exit point.
+	     ???  This is overly conservative if we translate AVAIL_OUT
+	     as the available expression might be after the exit point.  */
+	  if (BB_MAY_NOTRETURN (block)
+	      && vn_reference_may_trap (ref))
+	    to_remove = i;
 	}
       else if (expr->kind == NARY)
 	{

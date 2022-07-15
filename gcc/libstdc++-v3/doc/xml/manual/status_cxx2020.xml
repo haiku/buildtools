@@ -10,8 +10,8 @@
 </info>
 
 <para>
-In this implementation the <literal>-std=gnu++2a</literal> or
-<literal>-std=c++2a</literal> flag must be used to enable language
+In this implementation the <literal>-std=gnu++20</literal> or
+<literal>-std=c++20</literal> flag must be used to enable language
 and library
 features. See <link linkend="manual.intro.using.flags">dialect</link>
 options. The pre-defined symbol
@@ -20,8 +20,8 @@ presence of the required flag.
 </para>
 
 <para>
-This section describes the C++20 and library TS support in mainline GCC,
-not in any particular release.
+This section describes the C++20 and library TS support in the GCC 11
+release series.
 </para>
 
 <para>
@@ -545,6 +545,16 @@ or any notes about the implementation.
       <entry />
     </row>
 
+    <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
+      <entry> Avoid template bloat for <code>safe_ranges</code> in combination with ‘subrange-y’ view adaptors.</entry>
+      <entry>
+        <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2020/p1739r4.html">
+        P1739R4 </link>
+      </entry>
+      <entry align="center"> </entry>
+      <entry />
+    </row>
 
 
     <row>

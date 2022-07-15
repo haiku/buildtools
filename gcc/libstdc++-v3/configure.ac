@@ -170,7 +170,7 @@ GLIBCXX_ENABLE_LONG_LONG([yes])
 GLIBCXX_ENABLE_WCHAR_T([yes])
 GLIBCXX_ENABLE_C99([yes])
 GLIBCXX_ENABLE_CONCEPT_CHECKS([no])
-GLIBCXX_ENABLE_DEBUG_FLAGS(["-gdwarf-4 -g3 -O0 -D_GLIBCXX_ASSERTIONS"])
+GLIBCXX_ENABLE_DEBUG_FLAGS(["-g3 -O0 -D_GLIBCXX_ASSERTIONS"])
 GLIBCXX_ENABLE_DEBUG([no])
 GLIBCXX_ENABLE_PARALLEL([yes])
 GLIBCXX_ENABLE_CXX_FLAGS
@@ -483,6 +483,11 @@ GLIBCXX_CHECK_FILESYSTEM_DEPS
 
 # For Networking TS.
 AC_CHECK_HEADERS([fcntl.h sys/ioctl.h sys/socket.h sys/uio.h poll.h netdb.h arpa/inet.h netinet/in.h netinet/tcp.h])
+AC_CHECK_DECL(F_GETFL,,,[#include <fcntl.h>])
+AC_CHECK_DECL(F_SETFL,,,[#include <fcntl.h>])
+if test "$ac_cv_have_decl_F_GETFL$ac_cv_have_decl_F_SETFL" = yesyes ; then
+  AC_CHECK_DECL(O_NONBLOCK,,,[#include <fcntl.h>])
+fi
 
 # For Transactional Memory TS
 GLIBCXX_CHECK_SIZE_T_MANGLING

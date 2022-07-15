@@ -2589,7 +2589,9 @@ gfc_conv_substring (gfc_se * se, gfc_ref * ref, int kind,
   if (!CONSTANT_CLASS_P (tmp) && !DECL_P (tmp))
     end.expr = gfc_evaluate_now (end.expr, &se->pre);
 
-  if (gfc_option.rtcheck & GFC_RTCHECK_BOUNDS)
+  if ((gfc_option.rtcheck & GFC_RTCHECK_BOUNDS)
+      && (ref->u.ss.start->symtree
+	  && !ref->u.ss.start->symtree->n.sym->attr.implied_index))
     {
       tree nonempty = fold_build2_loc (input_location, LE_EXPR,
 				       logical_type_node, start.expr,
@@ -2761,9 +2763,9 @@ conv_parent_component_references (gfc_se * se, gfc_ref * ref)
   dt = ref->u.c.sym;
   c = ref->u.c.component;
 
-  /* Return if the component is in the parent type.  */
+  /* Return if the component is in this type, i.e. not in the parent type.  */
   for (cmp = dt->components; cmp; cmp = cmp->next)
-    if (strcmp (c->name, cmp->name) == 0)
+    if (c == cmp)
       return;
 
   /* Build a gfc_ref to recursively call gfc_conv_component_ref.  */
@@ -2823,6 +2825,9 @@ tree
 gfc_maybe_dereference_var (gfc_symbol *sym, tree var, bool descriptor_only_p,
 			   bool is_classarray)
 {
+  if (!POINTER_TYPE_P (TREE_TYPE (var)))
+    return var;
+
   /* Characters are entirely different from other types, they are treated
      separately.  */
   if (sym->ts.type == BT_CHARACTER)
@@ -6421,6 +6426,15 @@ gfc_conv_procedure_call (gfc_se * se, gfc_symbol * sym,
 				fsym ? fsym->attr.intent : INTENT_INOUT,
 				fsym && fsym->attr.pointer);
 
+	      else if (e->ts.type == BT_CLASS && CLASS_DATA (e)->as
+		       && CLASS_DATA (e)->as->type == AS_ASSUMED_SIZE
+		       && nodesc_arg && fsym->ts.type == BT_DERIVED)
+		/* An assumed size class actual argument being passed to
+		   a 'no descriptor' formal argument just requires the
+		   data pointer to be passed. For class dummy arguments
+		   this is stored in the symbol backend decl..  */
+		parmse.expr = e->symtree->n.sym->backend_decl;
+
 	      else if (gfc_is_class_array_ref (e, NULL)
 		       && fsym && fsym->ts.type == BT_DERIVED)
 		/* The actual argument is a component reference to an
@@ -6494,6 +6508,17 @@ gfc_conv_procedure_call (gfc_se * se, gfc_symbol * sym,
 		    // deallocate the components first
 		    tmp = gfc_deallocate_alloc_comp (fsym->ts.u.derived,
 						     parmse.expr, e->rank);
+		    /* But check whether dummy argument is optional.  */
+		    if (tmp != NULL_TREE
+			&& fsym->attr.optional
+			&& e->expr_type == EXPR_VARIABLE
+			&& e->symtree->n.sym->attr.optional)
+		      {
+			tree present;
+			present = gfc_conv_expr_present (e->symtree->n.sym);
+			tmp = build3_v (COND_EXPR, present, tmp,
+					build_empty_stmt (input_location));
+		      }
 		    if (tmp != NULL_TREE)
 		      gfc_add_expr_to_block (&se->pre, tmp);
 		  }
