@@ -37,11 +37,55 @@ the effect of deferring aborts for the sequence of statements (but not
 for the declarations or handlers, if any, associated with this statement
 sequence).
 
+.. _Pragma-Abstract_State:
+
 Pragma Abstract_State
 =====================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.1.4.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Abstract_State (ABSTRACT_STATE_LIST);
+
+  ABSTRACT_STATE_LIST ::=
+       null
+    |  STATE_NAME_WITH_OPTIONS
+    | (STATE_NAME_WITH_OPTIONS {, STATE_NAME_WITH_OPTIONS} )
+
+  STATE_NAME_WITH_OPTIONS ::=
+       STATE_NAME
+    | (STATE_NAME with OPTION_LIST)
+
+  OPTION_LIST ::= OPTION {, OPTION}
+
+  OPTION ::=
+      SIMPLE_OPTION
+    | NAME_VALUE_OPTION
+
+  SIMPLE_OPTION ::= Ghost | Synchronous
+
+  NAME_VALUE_OPTION ::=
+      Part_Of => ABSTRACT_STATE
+    | External [=> EXTERNAL_PROPERTY_LIST]
+
+  EXTERNAL_PROPERTY_LIST ::=
+       EXTERNAL_PROPERTY
+    | (EXTERNAL_PROPERTY {, EXTERNAL_PROPERTY} )
+
+  EXTERNAL_PROPERTY ::=
+      Async_Readers    [=> boolean_EXPRESSION]
+    | Async_Writers    [=> boolean_EXPRESSION]
+    | Effective_Reads  [=> boolean_EXPRESSION]
+    | Effective_Writes [=> boolean_EXPRESSION]
+      others            => boolean_EXPRESSION
+
+  STATE_NAME ::= defining_identifier
+
+  ABSTRACT_STATE ::= name
+
+For the semantics of this pragma, see the entry for aspect `Abstract_State` in
+the SPARK 2014 Reference Manual, section 7.1.4.
 
 Pragma Ada_83
 =============
@@ -152,7 +196,7 @@ Ada 83, Ada 95, or Ada 2005 programs.
 The one argument form, which is not a configuration pragma,
 is used for managing the transition from Ada
 2005 to Ada 2012 in the run-time library. If an entity is marked
-as Ada_201 only, then referencing the entity in any pre-Ada_2012
+as Ada_2012 only, then referencing the entity in any pre-Ada_2012
 mode will generate a warning. In addition, in any pre-Ada_2012
 mode, a preference rule is established which does not choose
 such an entity unless it is unambiguously specified. This avoids
@@ -224,6 +268,8 @@ this pragma serves no purpose but is ignored
 rather than rejected to allow common sets of sources to be used
 in the two situations.
 
+.. _Pragma-Annotate:
+
 Pragma Annotate
 ===============
 
@@ -283,18 +329,7 @@ The string argument, if given, is the message that will be associated
 with the exception occurrence if the exception is raised.  If no second
 argument is given, the default message is `file`:`nnn`,
 where `file` is the name of the source file containing the assert,
-and `nnn` is the line number of the assert.  A pragma is not a
-statement, so if a statement sequence contains nothing but a pragma
-assert, then a null statement is required in addition, as in:
-
-.. code-block:: ada
-
-  ...
-  if J > 3 then
-     pragma Assert (K > 3, "Bad value for K");
-     null;
-  end if;
-
+and `nnn` is the line number of the assert.
 
 Note that, as with the `if` statement to which it is equivalent, the
 type of the expression is either `Standard.Boolean`, or any type derived
@@ -392,7 +427,7 @@ Syntax::
                         Refined_Post         |
                         Statement_Assertions
 
-  POLICY_IDENTIFIER ::= Check | Disable | Ignore
+  POLICY_IDENTIFIER ::= Check | Disable | Ignore | Suppressible
 
 
 This is a standard Ada 2012 pragma that is available as an
@@ -415,6 +450,8 @@ If the policy is `IGNORE`, then assertions are ignored, i.e.
 the corresponding pragma or aspect is deactivated.
 This pragma overrides the effect of the *-gnata* switch on the
 command line.
+If the policy is `SUPPRESSIBLE`, then assertions are enabled by default,
+however, if the *-gnatp* switch is specified all assertions are ignored.
 
 The implementation defined policy `DISABLE` is like
 `IGNORE` except that it completely disables semantic
@@ -518,17 +555,33 @@ values will generally give an exception, though formally the program
 is erroneous so there are no guarantees that this will always be the
 case, and it is recommended that these two options not be used together.
 
+.. _Pragma-Async_Readers:
+
 Pragma Async_Readers
 ====================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.1.2.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Asynch_Readers   [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect `Async_Readers` in
+the SPARK 2014 Reference Manual, section 7.1.2.
+
+.. _Pragma-Async_Writers:
 
 Pragma Async_Writers
 ====================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.1.2.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Asynch_Writers   [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect `Async_Writers` in
+the SPARK 2014 Reference Manual, section 7.1.2.
 
 Pragma Attribute_Definition
 ===========================
@@ -803,24 +856,6 @@ compatibility with the standard `Assertion_Policy` pragma. The check
 policy setting `DISABLE` causes the second argument of a corresponding
 `Check` pragma to be completely ignored and not analyzed.
 
-Pragma CIL_Constructor
-======================
-
-Syntax:
-
-
-::
-
-  pragma CIL_Constructor ([Entity =>] function_LOCAL_NAME);
-
-
-This pragma is used to assert that the specified Ada function should be
-mapped to the .NET constructor for some Ada tagged record type.
-
-See section 4.1 of the
-`GNAT User's Guide: Supplement for the .NET Platform.`
-for related information.
-
 Pragma Comment
 ==============
 
@@ -1075,20 +1110,37 @@ If the alignment for a record or array type is not specified (using
 pragma `Pack`, pragma `Component_Alignment`, or a record rep
 clause), the GNAT uses the default alignment as described previously.
 
+.. _Pragma-Constant_After_Elaboration:
+
+Pragma Constant_After_Elaboration
+=================================
+
+Syntax:
+
+.. code-block:: ada
+
+  pragma Constant_After_Elaboration [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect
+`Constant_After_Elaboration` in the SPARK 2014 Reference Manual, section 3.3.1.
+
+.. _Pragma-Contract_Cases:
+
 Pragma Contract_Cases
 =====================
 .. index:: Contract cases
 
-
 Syntax:
 
+.. code-block:: ada
 
-::
+  pragma Contract_Cases ((CONTRACT_CASE {, CONTRACT_CASE));
 
-  pragma Contract_Cases (
-     Condition => Consequence
-   {,Condition => Consequence});
+  CONTRACT_CASE ::= CASE_GUARD => CONSEQUENCE
 
+  CASE_GUARD ::= boolean_EXPRESSION | others
+
+  CONSEQUENCE ::= boolean_EXPRESSION
 
 The `Contract_Cases` pragma allows defining fine-grain specifications
 that can complement or replace the contract given by a precondition and a
@@ -1328,6 +1380,20 @@ This pragma is standard in Ada 2012, but is available in all earlier
 versions of Ada as an implementation-defined pragma.
 See Ada 2012 Reference Manual for details.
 
+.. _Pragma-Default_Initial_Condition:
+
+Pragma Default_Initial_Condition
+================================
+
+Syntax:
+
+.. code-block:: ada
+
+  pragma Default_Initial_Condition [ (null | boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect
+`Default_Initial_Condition` in the SPARK 2014 Reference Manual, section 7.3.3.
+
 Pragma Debug
 ============
 
@@ -1463,11 +1529,38 @@ This pragma is standard in Ada 2012, but is available in all earlier
 versions of Ada as an implementation-defined pragma.
 See Ada 2012 Reference Manual for details.
 
+.. _Pragma-Depends:
+
 Pragma Depends
 ==============
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 6.1.5.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Depends (DEPENDENCY_RELATION);
+
+  DEPENDENCY_RELATION ::=
+       null
+    | (DEPENDENCY_CLAUSE {, DEPENDENCY_CLAUSE})
+
+  DEPENDENCY_CLAUSE ::=
+      OUTPUT_LIST =>[+] INPUT_LIST
+    | NULL_DEPENDENCY_CLAUSE
+
+  NULL_DEPENDENCY_CLAUSE ::= null => INPUT_LIST
+
+  OUTPUT_LIST ::= OUTPUT | (OUTPUT {, OUTPUT})
+
+  INPUT_LIST ::= null | INPUT | (INPUT {, INPUT})
+
+  OUTPUT ::= NAME | FUNCTION_RESULT
+  INPUT  ::= NAME
+
+  where FUNCTION_RESULT is a function Result attribute_reference
+
+For the semantics of this pragma, see the entry for aspect `Depends` in the
+SPARK 2014 Reference Manual, section 6.1.5.
 
 Pragma Detect_Blocking
 ======================
@@ -1526,17 +1619,33 @@ This pragma is standard in Ada 2012, but is available in all earlier
 versions of Ada as an implementation-defined pragma.
 See Ada 2012 Reference Manual for details.
 
+.. _Pragma-Effective_Reads:
+
 Pragma Effective_Reads
 ======================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.1.2.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Effective_Reads  [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect `Effective_Reads` in
+the SPARK 2014 Reference Manual, section 7.1.2.
+
+.. _Pragma-Effective_Writes:
 
 Pragma Effective_Writes
 =======================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.1.2.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Effective_Writes [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect `Effective_Writes`
+in the SPARK 2014 Reference Manual, section 7.1.2.
 
 Pragma Elaboration_Checks
 =========================
@@ -1979,6 +2088,19 @@ of GNAT specific extensions are recognized as follows:
   generic types. The result indicates if the corresponding actual
   is constrained.
 
+.. _Pragma-Extensions_Visible:
+
+Pragma Extensions_Visible
+=========================
+
+Syntax:
+
+.. code-block:: ada
+
+  pragma Extensions_Visible [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect `Extensions_Visible`
+in the SPARK 2014 Reference Manual, section 6.1.7.
 
 Pragma External
 ===============
@@ -2113,6 +2235,8 @@ following operations are affected:
   must instantiate your own version of `Ada.Numerics.Generic_Complex_Types`
   under control of the pragma, rather than use the preinstantiated versions.
 
+.. _Pragma-Favor_Top_Level:
+
 Pragma Favor_Top_Level
 ======================
 
@@ -2176,11 +2300,44 @@ be `IEEE_Float` to specify the use of IEEE format, as follows:
 *
   No other value of digits is permitted.
 
+.. _Pragma-Ghost:
+
+Pragma Ghost
+============
+
+Syntax:
+
+.. code-block:: ada
+
+  pragma Ghost [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect `Ghost` in the SPARK
+2014 Reference Manual, section 6.9.
+
+.. _Pragma-Global:
+
 Pragma Global
 =============
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 6.1.4.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Global (GLOBAL_SPECIFICATION);
+
+  GLOBAL_SPECIFICATION ::=
+       null
+    | (GLOBAL_LIST)
+    | (MODED_GLOBAL_LIST {, MODED_GLOBAL_LIST})
+
+  MODED_GLOBAL_LIST ::= MODE_SELECTOR => GLOBAL_LIST
+
+  MODE_SELECTOR ::= In_Out | Input | Output | Proof_In
+  GLOBAL_LIST   ::= GLOBAL_ITEM | (GLOBAL_ITEM {, GLOBAL_ITEM})
+  GLOBAL_ITEM   ::= NAME
+
+For the semantics of this pragma, see the entry for aspect `Global` in the
+SPARK 2014 Reference Manual, section 6.1.4.
 
 Pragma Ident
 ============
@@ -2226,7 +2383,7 @@ Syntax:
   pragma Implementation_Defined (local_NAME);
 
 
-This pragma marks a previously declared entioty as implementation-defined.
+This pragma marks a previously declared entity as implementation-defined.
 For an overloaded entity, applies to the most recent homonym.
 
 
@@ -2576,11 +2733,19 @@ manipulate separate components in the composite object. This may place
 constraints on the representation of the object (for instance prohibiting
 tight packing).
 
+.. _Pragma-Initial_Condition:
+
 Pragma Initial_Condition
 ========================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.1.6.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Initial_Condition (boolean_EXPRESSION);
+
+For the semantics of this pragma, see the entry for aspect `Initial_Condition`
+in the SPARK 2014 Reference Manual, section 7.1.6.
 
 Pragma Initialize_Scalars
 =========================
@@ -2644,11 +2809,34 @@ of stack required, so it is probably a good idea to turn on stack
 checking (see description of stack checking in the GNAT
 User's Guide) when using this pragma.
 
+.. _Pragma-Initializes:
+
 Pragma Initializes
 ==================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.1.5.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Initializes (INITIALIZATION_LIST);
+
+  INITIALIZATION_LIST ::=
+       null
+    | (INITIALIZATION_ITEM {, INITIALIZATION_ITEM})
+
+  INITIALIZATION_ITEM ::= name [=> INPUT_LIST]
+
+  INPUT_LIST ::=
+       null
+    |  INPUT
+    | (INPUT {, INPUT})
+
+  INPUT ::= name
+
+For the semantics of this pragma, see the entry for aspect `Initializes` in the
+SPARK 2014 Reference Manual, section 7.1.5.
+
+.. _Pragma-Inline_Always:
 
 Pragma Inline_Always
 ====================
@@ -2825,6 +3013,8 @@ Overriding the default state of signals used by the Ada runtime may interfere
 with an application's runtime behavior in the cases of the synchronous signals,
 and in the case of the signal used to implement the `abort` statement.
 
+.. _Pragma-Invariant:
+
 Pragma Invariant
 ================
 
@@ -2863,42 +3053,6 @@ invariant pragma for the same entity.
 
 For further details on the use of this pragma, see the Ada 2012 documentation
 of the Type_Invariant aspect.
-
-Pragma Java_Constructor
-=======================
-
-Syntax:
-
-
-::
-
-  pragma Java_Constructor ([Entity =>] function_LOCAL_NAME);
-
-
-This pragma is used to assert that the specified Ada function should be
-mapped to the Java constructor for some Ada tagged record type.
-
-See section 7.3.2 of the
-`GNAT User's Guide: Supplement for the JVM Platform.`
-for related information.
-
-Pragma Java_Interface
-=====================
-
-Syntax:
-
-
-::
-
-  pragma Java_Interface ([Entity =>] abstract_tagged_type_LOCAL_NAME);
-
-
-This pragma is used to assert that the specified Ada abstract tagged type
-is to be mapped to a Java interface name.
-
-See sections 7.1 and 7.2 of the
-`GNAT User's Guide: Supplement for the JVM Platform.`
-for related information.
 
 Pragma Keep_Names
 =================
@@ -3128,6 +3282,8 @@ after the Ada run-time environment is shut down.
 See `pragma Linker_Constructor` for the set of restrictions that apply
 because of these specific contexts.
 
+.. _Pragma-Linker_Section:
+
 Pragma Linker_Section
 =====================
 
@@ -3203,6 +3359,7 @@ section). See also `pragma Persistent_BSS`.
     procedure Q with Linker_Section => "Qsection";
   end IO_Card;
 
+.. _Pragma-Lock_Free:
 
 Pragma Lock_Free
 ================
@@ -3406,6 +3563,19 @@ Syntax::
 This pragma is provided for compatibility with OpenVMS VAX Systems.  It has
 no effect in GNAT, other than being syntax checked.
 
+Pragma Max_Queue_Length
+=======================
+
+Syntax::
+
+   pragma Max_Entry_Queue (static_integer_EXPRESSION);
+
+
+This pragma is used to specify the maximum callers per entry queue for
+individual protected entries and entry families. It accepts a single
+positive integer as a parameter and must appear after the declaration
+of an entry.
+
 Pragma No_Body
 ==============
 
@@ -3428,6 +3598,8 @@ This is particularly useful during maintenance when a package is modified in
 such a way that a body needed before is no longer needed. The provision of a
 dummy body with a No_Body pragma ensures that there is no interference from
 earlier versions of the package body.
+
+.. _Pragma-No_Elaboration_Code_All:
 
 Pragma No_Elaboration_Code_All
 ==============================
@@ -3530,6 +3702,8 @@ in which it must be suppressed, see the section on Optimization and Strict Alias
 in the :title:`GNAT User's Guide`.
 
 This pragma currently has no effects on access to unconstrained array types.
+
+.. _Pragma-No_Tagged_Streams:
 
 Pragma No_Tagged_Streams
 ========================
@@ -4026,11 +4200,21 @@ This pragma is standard in Ada 2005, but is available in all earlier
 versions of Ada as an implementation-defined pragma.
 See Ada 2012 Reference Manual for details.
 
+.. _Pragma-Part_Of:
+
 Pragma Part_Of
 ==============
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.2.6.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Part_Of (ABSTRACT_STATE);
+
+  ABSTRACT_STATE ::= NAME
+
+For the semantics of this pragma, see the entry for aspect `Part_Of` in the
+SPARK 2014 Reference Manual, section 7.2.6.
 
 Pragma Passive
 ==============
@@ -4055,6 +4239,8 @@ optimized.  GNAT does not attempt to optimize any tasks in this manner
 
 For more information on the subject of passive tasks, see the section
 'Passive Task Optimization' in the GNAT Users Guide.
+
+.. _Pragma-Persistent_BSS:
 
 Pragma Persistent_BSS
 =====================
@@ -4359,6 +4545,43 @@ aspects, but is prepared to ignore the pragmas. The assertion
 policy that controls this pragma is `Post'Class`, not
 `Post_Class`.
 
+Pragma Rename_Pragma
+============================
+.. index:: Pragmas, synonyms
+
+Syntax:
+
+
+::
+
+  pragma Rename_Pragma (
+           [New_Name =>] IDENTIFIER,
+           [Renamed  =>] pragma_IDENTIFIER);
+
+This pragma provides a mechanism for supplying new names for existing
+pragmas. The `New_Name` identifier can subsequently be used as a synonym for
+the Renamed pragma. For example, suppose you have code that was originally
+developed on a compiler that supports Inline_Only as an implementation defined
+pragma. And suppose the semantics of pragma Inline_Only are identical to (or at
+least very similar to) the GNAT implementation defined pragma
+Inline_Always. You could globally replace Inline_Only with Inline_Always.
+
+However, to avoid that source modification, you could instead add a
+configuration pragma:
+
+.. code-block:: ada
+
+  pragma Rename_Pragma (
+           New_Name => Inline_Only,
+           Renamed  => Inline_Always);
+
+
+Then GNAT will treat "pragma Inline_Only ..." as if you had written
+"pragma Inline_Always ...".
+
+Pragma Inline_Only will not necessarily mean the same thing as the other Ada
+compiler; it's up to you to make sure the semantics are close enough.
+
 Pragma Pre
 ==========
 .. index:: Pre
@@ -4443,6 +4666,8 @@ use of the pragma identifier `Check`. Historically, pragma
 Ada 2012, and has been retained in its original form for
 compatibility purposes.
 
+.. _Pragma-Predicate:
+
 Pragma Predicate
 ================
 
@@ -4486,7 +4711,7 @@ the effect is identical to the following Ada 2012 code:
     Dynamic_Predicate => F(Q) or G(Q);
 
 
-Note that there is are no pragmas `Dynamic_Predicate`
+Note that there are no pragmas `Dynamic_Predicate`
 or `Static_Predicate`. That is
 because these pragmas would affect legality and semantics of
 the program and thus do not have a neutral effect if ignored.
@@ -4500,6 +4725,23 @@ fundamentally changed (for example a membership test
 `A in B` would not take into account a predicate
 defined for subtype B). When following this approach, the
 use of predicates should be avoided.
+
+Pragma Predicate_Failure
+========================
+
+Syntax:
+
+
+::
+
+  pragma Predicate_Failure
+    ([Entity  =>] type_LOCAL_NAME,
+     [Message =>] String_Expression);
+
+
+The `Predicate_Failure` pragma is intended to be an exact replacement for
+the language-defined
+`Predicate_Failure` aspect, and shares its restrictions and semantics.
 
 Pragma Preelaborable_Initialization
 ===================================
@@ -4613,14 +4855,14 @@ Syntax:
 
 .. code-block:: ada
 
-  pragma Profile (Ravenscar | Restricted | Rational);
+  pragma Profile (Ravenscar | Restricted | Rational | GNAT_Extended_Ravenscar);
 
 
 This pragma is standard in Ada 2005, but is available in all earlier
 versions of Ada as an implementation-defined pragma. This is a
 configuration pragma that establishes a set of configuration pragmas
 that depend on the argument. `Ravenscar` is standard in Ada 2005.
-The other two possibilities (`Restricted` or `Rational`)
+The other possibilities (`Restricted`, `Rational`, `GNAT_Extended_Ravenscar`)
 are implementation-defined. The set of configuration pragmas
 is defined in the following sections.
 
@@ -4732,6 +4974,23 @@ is defined in the following sections.
   ``Profile (Restricted)``,
   automatically causes the use of a simplified,
   more efficient version of the tasking run-time library.
+
+* Pragma Profile (GNAT_Extended_Ravenscar)
+
+  This profile corresponds to a GNAT specific extension of the
+  Ravenscar profile. The profile may change in the future although
+  only in a compatible way: some restrictions may be removed or
+  relaxed. It is defined as a variation of the Ravenscar profile.
+
+  The ``No_Implicit_Heap_Allocations`` restriction has been replaced
+  by ``No_Implicit_Task_Allocations`` and
+  ``No_Implicit_Protected_Object_Allocations``.
+
+  The ``Simple_Barriers`` restriction has been replaced by
+  ``Pure_Barriers``.
+
+  The ``Max_Protected_Entries``, ``Max_Entry_Queue_Length``, and
+  ``No_Relative_Delay`` restrictions have been removed.
 
 * Pragma Profile (Restricted)
 
@@ -4846,6 +5105,8 @@ Syntax:
 
 This pragma is identical in effect to pragma `Common_Object`.
 
+.. _Pragma-Pure_Function:
+
 Pragma Pure_Function
 ====================
 
@@ -4950,29 +5211,103 @@ compatibility purposes. It is equivalent to:
 
 which is the preferred method of setting the `Ravenscar` profile.
 
+.. _Pragma-Refined_Depends:
+
 Pragma Refined_Depends
 ======================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 6.1.5.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Refined_Depends (DEPENDENCY_RELATION);
+
+  DEPENDENCY_RELATION ::=
+       null
+    | (DEPENDENCY_CLAUSE {, DEPENDENCY_CLAUSE})
+
+  DEPENDENCY_CLAUSE ::=
+      OUTPUT_LIST =>[+] INPUT_LIST
+    | NULL_DEPENDENCY_CLAUSE
+
+  NULL_DEPENDENCY_CLAUSE ::= null => INPUT_LIST
+
+  OUTPUT_LIST ::= OUTPUT | (OUTPUT {, OUTPUT})
+
+  INPUT_LIST ::= null | INPUT | (INPUT {, INPUT})
+
+  OUTPUT ::= NAME | FUNCTION_RESULT
+  INPUT  ::= NAME
+
+  where FUNCTION_RESULT is a function Result attribute_reference
+
+For the semantics of this pragma, see the entry for aspect `Refined_Depends` in
+the SPARK 2014 Reference Manual, section 6.1.5.
+
+.. _Pragma-Refined_Global:
 
 Pragma Refined_Global
 =====================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 6.1.4.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Refined_Global (GLOBAL_SPECIFICATION);
+
+  GLOBAL_SPECIFICATION ::=
+       null
+    | (GLOBAL_LIST)
+    | (MODED_GLOBAL_LIST {, MODED_GLOBAL_LIST})
+
+  MODED_GLOBAL_LIST ::= MODE_SELECTOR => GLOBAL_LIST
+
+  MODE_SELECTOR ::= In_Out | Input | Output | Proof_In
+  GLOBAL_LIST   ::= GLOBAL_ITEM | (GLOBAL_ITEM {, GLOBAL_ITEM})
+  GLOBAL_ITEM   ::= NAME
+
+For the semantics of this pragma, see the entry for aspect `Refined_Global` in
+the SPARK 2014 Reference Manual, section 6.1.4.
+
+.. _Pragma-Refined_Post:
 
 Pragma Refined_Post
 ===================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.2.7.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Refined_Post (boolean_EXPRESSION);
+
+For the semantics of this pragma, see the entry for aspect `Refined_Post` in
+the SPARK 2014 Reference Manual, section 7.2.7.
+
+.. _Pragma-Refined_State:
 
 Pragma Refined_State
 ====================
 
-For the description of this pragma, see SPARK 2014 Reference Manual,
-section 7.2.2.
+Syntax:
+
+.. code-block:: ada
+
+  pragma Refined_State (REFINEMENT_LIST);
+
+  REFINEMENT_LIST ::=
+    (REFINEMENT_CLAUSE {, REFINEMENT_CLAUSE})
+
+  REFINEMENT_CLAUSE ::= state_NAME => CONSTITUENT_LIST
+
+  CONSTITUENT_LIST ::=
+       null
+    |  CONSTITUENT
+    | (CONSTITUENT {, CONSTITUENT})
+
+  CONSTITUENT ::= object_NAME | state_NAME
+
+For the semantics of this pragma, see the entry for aspect `Refined_State` in
+the SPARK 2014 Reference Manual, section 7.2.2.
 
 Pragma Relative_Deadline
 ========================
@@ -4988,6 +5323,8 @@ Syntax:
 This pragma is standard in Ada 2005, but is available in all earlier
 versions of Ada as an implementation-defined pragma.
 See Ada 2012 Reference Manual for details.
+
+.. _Pragma-Remote_Access_Type:
 
 Pragma Remote_Access_Type
 =========================
@@ -5188,6 +5525,41 @@ run with various special switches as follows:
   comprehensive messages identifying possible problems based on this
   information.
 
+.. _Pragma-Secondary_Stack_Size:
+
+Pragma Secondary_Stack_Size
+===========================
+
+Syntax:
+
+.. code-block:: ada
+
+  pragma Secondary_Stack_Size (integer_EXPRESSION);
+
+This pragma appears within the task definition of a single task declaration 
+or a task type declaration (like pragma `Storage_Size`) and applies to all 
+task objects of that type. The argument specifies the size of the secondary 
+stack to be used by these task objects, and must be of an integer type. The
+secondary stack is used to handle functions that return a variable-sized 
+result, for example a function returning an unconstrained String.
+
+Note this pragma only applies to targets using fixed secondary stacks, like
+VxWorks 653 and bare board targets, where a fixed block for the 
+secondary stack is allocated from the primary stack of the task. By default,
+these targets assign a percentage of the primary stack for the secondary stack,
+as defined by `System.Parameter.Sec_Stack_Percentage`. With this pragma, 
+an `integer_EXPRESSION` of bytes is assigned from the primary stack instead.
+
+For most targets, the pragma does not apply as the secondary stack grows on 
+demand: allocated as a chain of blocks in the heap. The default size of these 
+blocks can be modified via the `-D` binder option as described in 
+:title:`GNAT User's Guide`.
+
+Note that no check is made to see if the secondary stack can fit inside the 
+primary stack.
+
+Note the pragma cannot appear when the restriction `No_Secondary_Stack`
+is in effect.
 
 Pragma Share_Generic
 ====================
@@ -5206,6 +5578,8 @@ This pragma is provided for compatibility with Dec Ada 83. It has
 no effect in `GNAT` (which does not implement shared generics), other
 than to check that the given names are all names of generic units or
 generic instances.
+
+.. _Pragma-Shared:
 
 Pragma Shared
 =============
@@ -5245,6 +5619,8 @@ Syntax:
 
 This pragma is provided for compatibility with other Ada implementations. It
 is recognized but ignored by all current versions of GNAT.
+
+.. _Pragma-Simple_Storage_Pool_Type:
 
 Pragma Simple_Storage_Pool_Type
 ===============================
@@ -5430,7 +5806,7 @@ Pragma Source_File_Name_Project
 ===============================
 
 This pragma has the same syntax and semantics as pragma Source_File_Name.
-It is only allowed as a stand alone configuration pragma.
+It is only allowed as a stand-alone configuration pragma.
 It cannot appear after a :ref:`Pragma_Source_File_Name`, and
 most importantly, once pragma Source_File_Name_Project appears,
 no further Source_File_Name pragmas are allowed.
@@ -5465,6 +5841,8 @@ source file is the one referred to.
 The second argument must be a string literal, it cannot be a static
 string expression other than a string literal.  This is because its value
 is needed for error messages issued by all phases of the compiler.
+
+.. _Pragma-SPARK_Mode:
 
 Pragma SPARK_Mode
 =================
@@ -5770,6 +6148,13 @@ names that are implementation defined (as permitted by the RM):
   for a duplicated tag value when a tagged type is declared.
 
 *
+  `Container_Checks` Can be used to suppress all checks within Ada.Containers
+  and instances of its children, including Tampering_Check.
+
+*
+  `Tampering_Check` Can be used to suppress tampering check in the containers.
+
+*
   `Predicate_Check` can be used to control whether predicate checks are
   active. It is applicable only to predicates for which the policy is
   `Check`. Unlike `Assertion_Policy`, which determines if a given
@@ -5818,6 +6203,8 @@ with Rational Ada, where it appears as a program unit pragma.
 The use of the standard Ada pragma `Suppress (All_Checks)`
 as a normal configuration pragma is the preferred usage in GNAT.
 
+.. _Pragma-Suppress_Debug_Info:
+
 Pragma Suppress_Debug_Info
 ==========================
 
@@ -5855,6 +6242,8 @@ appear in a global configuration pragma file, or in a specific unit as
 usual. It is not required that this pragma be used consistently within
 a partition, so it is fine to have some units within a partition compiled
 with this pragma and others compiled in normal mode without it.
+
+.. _Pragma-Suppress_Initialization:
 
 Pragma Suppress_Initialization
 ==============================
@@ -5976,6 +6365,8 @@ created, depending on the target.  This pragma can appear anywhere a
 `Storage_Size` attribute definition clause is allowed for a task
 type.
 
+.. _Pragma-Test_Case:
+
 Pragma Test_Case
 ================
 .. index:: Test cases
@@ -6034,6 +6425,8 @@ precondition of the subprogram, and the output context should also satisfy its
 postcondition. Mode `Robustness` indicates that the precondition and
 postcondition of the subprogram should be ignored for this test case.
 
+.. _Pragma-Thread_Local_Storage:
+
 Pragma Thread_Local_Storage
 ===========================
 .. index:: Task specific storage
@@ -6053,8 +6446,8 @@ Syntax:
 This pragma specifies that the specified entity, which must be
 a variable declared in a library level package, is to be marked as
 "Thread Local Storage" (`TLS`). On systems supporting this (which
-include Solaris, GNU/Linux and VxWorks 6), this causes each thread
-(and hence each Ada task) to see a distinct copy of the variable.
+include Windows, Solaris, GNU/Linux and VxWorks 6), this causes each
+thread (and hence each Ada task) to see a distinct copy of the variable.
 
 The variable may not have default initialization, and if there is
 an explicit initialization, it must be either `null` for an
@@ -6128,6 +6521,8 @@ from the language defined `Invariant` pragma in that it
 does not permit a string parameter, and it is
 controlled by the assertion identifier `Type_Invariant`
 rather than `Invariant`.
+
+.. _Pragma-Type_Invariant_Class:
 
 Pragma Type_Invariant_Class
 ===========================
@@ -6253,6 +6648,8 @@ a clean manner.
 The abort only happens if code is being generated.  Thus you can use
 specs of unimplemented packages in syntax or semantic checking mode.
 
+.. _Pragma-Universal_Aliasing:
+
 Pragma Universal_Aliasing
 =========================
 
@@ -6271,6 +6668,8 @@ access types designating this type were subject to pragma No_Strict_Aliasing.
 For a detailed description of the strict aliasing optimization, and the
 situations in which it must be suppressed, see the section on
 `Optimization and Strict Aliasing` in the :title:`GNAT User's Guide`.
+
+.. _Pragma-Universal_Data:
 
 Pragma Universal_Data
 =====================
@@ -6295,6 +6694,8 @@ a library unit pragma, but can also be used as a configuration pragma
 (including use in the :file:`gnat.adc` file). The functionality
 of this pragma is also available by applying the -univ switch on the
 compilations of units where universal addressing of the data is desired.
+
+.. _Pragma-Unmodified:
 
 Pragma Unmodified
 =================
@@ -6327,6 +6728,8 @@ whose name contains one of the substrings
 are typically to be used in cases where such warnings are expected.
 Thus it is never necessary to use `pragma Unmodified` for such
 variables, though it is harmless to do so.
+
+.. _Pragma-Unreferenced:
 
 Pragma Unreferenced
 ===================
@@ -6385,6 +6788,8 @@ whose name contains one of the substrings
 are typically to be used in cases where such warnings are expected.
 Thus it is never necessary to use `pragma Unreferenced` for such
 variables, though it is harmless to do so.
+
+.. _Pragma-Unreferenced_Objects:
 
 Pragma Unreferenced_Objects
 ===========================
@@ -6479,8 +6884,8 @@ configuration pragma will ensure this test is not suppressed:
 This pragma is standard in Ada 2005. It is available in all earlier versions
 of Ada as an implementation-defined pragma.
 
-Note that in addition to the checks defined in the Ada RM, GNAT recogizes
-a number of implementation-defined check names. See description of pragma
+Note that in addition to the checks defined in the Ada RM, GNAT recogizes a
+number of implementation-defined check names. See the description of pragma
 `Suppress` for full details.
 
 Pragma Use_VADS_Size
@@ -6505,6 +6910,40 @@ processing of valid Ada 95 or Ada 2005 programs.  This is intended to aid in
 the handling of existing code which depends on the interpretation of Size
 as implemented in the VADS compiler.  See description of the VADS_Size
 attribute for further details.
+
+.. _Pragma-Unused:
+
+Pragma Unused
+=============
+.. index:: Warnings, unused
+
+Syntax:
+
+
+::
+
+  pragma Unused (LOCAL_NAME {, LOCAL_NAME});
+
+
+This pragma signals that the assignable entities (variables,
+`out` parameters, and `in out` parameters) whose names are listed
+deliberately do not get assigned or referenced in the current source unit
+after the occurrence of the pragma in the current source unit. This
+suppresses warnings about the entities that are unreferenced and/or not
+assigned, and, in addition, a warning will be generated if one of these
+entities gets assigned or subsequently referenced in the same unit as the
+pragma (in the corresponding body or one of its subunits).
+
+This is particularly useful for clearly signaling that a particular
+parameter is not modified or referenced, even though the spec suggests
+that it might be.
+
+For the variable case, warnings are never given for unreferenced
+variables whose name contains one of the substrings
+`DISCARD, DUMMY, IGNORE, JUNK, UNUSED` in any casing. Such names
+are typically to be used in cases where such warnings are expected.
+Thus it is never necessary to use `pragma Unmodified` for such
+variables, though it is harmless to do so.
 
 Pragma Validity_Checks
 ======================
@@ -6582,6 +7021,54 @@ is mentioned in this section is that a pragma of the same name was supplied
 in some Ada 83 compilers, including DEC Ada 83.  The Ada 95 / Ada 2005
 implementation of pragma Volatile is upwards compatible with the
 implementation in DEC Ada 83.
+
+.. _Pragma-Volatile_Full_Access:
+
+Pragma Volatile_Full_Access
+===========================
+
+Syntax:
+
+
+.. code-block:: ada
+
+  pragma Volatile_Full_Access (LOCAL_NAME);
+
+
+This is similar in effect to pragma Volatile, except that any reference to the
+object is guaranteed to be done only with instructions that read or write all
+the bits of the object. Furthermore, if the object is of a composite type,
+then any reference to a component of the object is guaranteed to read and/or
+write all the bits of the object.
+
+The intention is that this be suitable for use with memory-mapped I/O devices
+on some machines. Note that there are two important respects in which this is
+different from `pragma Atomic`. First a reference to a `Volatile_Full_Access`
+object is not a sequential action in the RM 9.10 sense and, therefore, does
+not create a synchronization point. Second, in the case of `pragma Atomic`,
+there is no guarantee that all the bits will be accessed if the reference
+is not to the whole object; the compiler is allowed (and generally will)
+access only part of the object in this case.
+
+It is not permissible to specify `Atomic` and `Volatile_Full_Access` for
+the same object.
+
+It is not permissible to specify `Volatile_Full_Access` for a composite
+(record or array) type or object that has at least one `Aliased` component.
+
+.. _Pragma-Volatile_Function:
+
+Pragma Volatile_Function
+========================
+
+Syntax:
+
+.. code-block:: ada
+
+  pragma Volatile_Function [ (boolean_EXPRESSION) ];
+
+For the semantics of this pragma, see the entry for aspect `Volatile_Function`
+in the SPARK 2014 Reference Manual, section 7.1.2.
 
 Pragma Warning_As_Error
 =======================

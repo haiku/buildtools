@@ -42,8 +42,8 @@
 #  error "__cpp_attributes" // { dg-error "error" }
 #endif
 
-#ifndef __cpp_rvalue_reference
-#  error "__cpp_rvalue_reference" // { dg-error "error" }
+#ifndef __cpp_rvalue_references
+#  error "__cpp_rvalue_references" // { dg-error "error" }
 #endif
 
 #ifndef __cpp_variadic_templates
@@ -113,6 +113,16 @@
 #  error "__cpp_sized_deallocation" // { dg-error "error" }
 #endif
 
+// C++17 features:
+
+#ifndef __cpp_namespace_attributes
+#  error "__cpp_namespace_attributes" // { dg-error "error" }
+#endif
+
+#ifndef __cpp_nested_namespace_definitions
+#  error "__cpp_nested_namespace_definitions" // { dg-error "error" }
+#endif
+
 //  C++11 attributes:
 
 #ifdef __has_cpp_attribute
@@ -134,7 +144,7 @@
 
 //  C++14 attributes:
 
-//  Attribute [[deprecated]] is allowed in C++11 as an extension (with pedwarn).
+//  Attribute [[deprecated]] is allowed in C++11 as an extension.
 //#ifdef __has_cpp_attribute
 //#  if __has_cpp_attribute(deprecated) == 201309
 //#    error "__has_cpp_attribute(deprecated)" // {  }

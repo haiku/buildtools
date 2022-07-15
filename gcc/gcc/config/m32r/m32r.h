@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, Renesas M32R cpu.
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright (C) 1996-2017 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -159,7 +159,7 @@
 
 /* Options to pass on to the assembler.  */
 #undef  ASM_SPEC
-#define ASM_SPEC "%(asm_cpu) %(relax) %{fpic|fpie:-K PIC} %{fPIC|fPIE:-K PIC}"
+#define ASM_SPEC "%(asm_cpu) %(relax) %{" FPIE_OR_FPIC_SPEC ":-K PIC}"
 
 #define LINK_SPEC "%{v} %(link_cpu) %(relax)"
 
@@ -524,7 +524,7 @@ extern enum reg_class m32r_regno_reg_class[FIRST_PSEUDO_REGISTER];
 
 /* Define this macro if pushing a word onto the stack moves the stack
    pointer to a smaller address.  */
-#define STACK_GROWS_DOWNWARD
+#define STACK_GROWS_DOWNWARD 1
 
 /* Offset from frame pointer to start allocating local variables at.
    If FRAME_GROWS_DOWNWARD, this is the offset to the END of the
@@ -581,15 +581,6 @@ extern enum reg_class m32r_regno_reg_class[FIRST_PSEUDO_REGISTER];
 
 /* Eliminating the frame and arg pointers.  */
 
-#if 0
-/* C statement to store the difference between the frame pointer
-   and the stack pointer values immediately after the function prologue.
-   If `ELIMINABLE_REGS' is defined, this macro will be not be used and
-   need not be defined.  */
-#define INITIAL_FRAME_POINTER_OFFSET(VAR) \
-((VAR) = m32r_compute_frame_size (get_frame_size ()))
-#endif
-
 /* If defined, this macro specifies a table of register pairs used to
    eliminate unneeded registers that point into the stack frame.  If
    it is not defined, the only elimination attempted by the compiler
@@ -604,10 +595,8 @@ extern enum reg_class m32r_regno_reg_class[FIRST_PSEUDO_REGISTER];
  { ARG_POINTER_REGNUM,	 STACK_POINTER_REGNUM },	\
  { ARG_POINTER_REGNUM,   FRAME_POINTER_REGNUM }}
 
-/* This macro is similar to `INITIAL_FRAME_POINTER_OFFSET'.  It
-   specifies the initial difference between the specified pair of
-   registers.  This macro must be defined if `ELIMINABLE_REGS' is
-   defined.  */
+/* This macro returns the initial difference between the specified pair
+   of registers.  */
 
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)				\
   do										\
@@ -767,7 +756,7 @@ L2:     .word STATIC
 
 /* Define this macro if it is as good or better to call a constant
    function address than to call an address kept in a register.  */
-#define NO_FUNCTION_CSE
+#define NO_FUNCTION_CSE 1
 
 /* Section selection.  */
 
@@ -1004,7 +993,7 @@ L2:     .word STATIC
 
 /* Define if operations between registers always perform the operation
    on the full register even if a narrower mode is specified.  */
-#define WORD_REGISTER_OPERATIONS
+#define WORD_REGISTER_OPERATIONS 1
 
 /* Define if loading in MODE, an integral mode narrower than BITS_PER_WORD
    will either zero-extend or sign-extend.  The value of this macro should

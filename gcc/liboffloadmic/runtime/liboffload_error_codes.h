@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2014 Intel Corporation.  All Rights Reserved.
+    Copyright (c) 2014-2016 Intel Corporation.  All Rights Reserved.
 
     Redistribution and use in source and binary forms, with or without
     modification, are permitted provided that the following conditions
@@ -43,6 +43,7 @@ typedef enum
     c_send_func_ptr,
     c_receive_func_ptr,
     c_malloc,
+    c_unknown_mic_device_type,
     c_offload_malloc,
     c_invalid_env_var_value,
     c_invalid_env_var_int_value,
@@ -63,11 +64,17 @@ typedef enum
     c_mic_init4,
     c_mic_init5,
     c_mic_init6,
+    c_mic_init7,
+    c_mic_init8,
+    c_mic_init9,
+    c_mic_init10,
+    c_mic_init11,
     c_no_static_var_data,
     c_no_ptr_data,
     c_get_engine_handle,
     c_get_engine_index,
     c_process_create,
+    c_process_set_cache_size,
     c_process_get_func_handles,
     c_process_wait_shutdown,
     c_process_proxy_flush,
@@ -91,6 +98,7 @@ typedef enum
     c_event_wait,
     c_zero_or_neg_ptr_len,
     c_zero_or_neg_transfer_size,
+    c_bad_ptr_mem_alloc,
     c_bad_ptr_mem_range,
     c_different_src_and_dstn_sizes,
     c_ranges_dont_match,
@@ -103,6 +111,9 @@ typedef enum
     c_unknown_binary_type,
     c_multiple_target_exes,
     c_no_target_exe,
+    c_incorrect_affinity,
+    c_cannot_set_affinity,
+    c_mixed_versions,
     c_report_host,
     c_report_target,
     c_report_title,
@@ -159,7 +170,30 @@ typedef enum
     c_report_myosharedalignedfree,
     c_report_myoacquire,
     c_report_myorelease,
-    c_coipipe_max_number
+    c_report_myosupportsfeature,
+    c_report_myosharedarenacreate,
+    c_report_myosharedalignedarenamalloc,
+    c_report_myosharedalignedarenafree,
+    c_report_myoarenaacquire,
+    c_report_myoarenarelease,
+    c_coipipe_max_number,
+    c_in_with_preallocated,
+    c_report_no_host_exe,
+    c_report_no_target_exe,
+    c_report_path_buff_overflow,
+    c_create_pipeline_for_stream,
+    c_offload_no_stream,
+    c_offload_device_doesnt_match_to_stream,
+    c_offload_streams_are_absent,
+    c_get_engine_info,
+    c_clear_cpu_mask,
+    c_set_cpu_mask,
+    c_report_state_stream,
+    c_report_stream,
+    c_unload_library,
+    c_target_myo_library,
+    c_myo_dl_sym,
+    c_bad_myo_free
 } error_types;
 
 enum OffloadHostPhase {
@@ -260,15 +294,21 @@ enum OffloadTargetPhase {
     c_offload_target_max_phase
 };
 
+#ifdef TARGET_WINNT
+    #define DLL_LOCAL
+#else
+    #define DLL_LOCAL  __attribute__((visibility("hidden")))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-void __liboffload_error_support(error_types input_tag, ...);
-void __liboffload_report_support(error_types input_tag, ...);
-char const *offload_get_message_str(int msgCode);
-char const * report_get_message_str(error_types input_tag);
-char const * report_get_host_stage_str(int i);
-char const * report_get_target_stage_str(int i);
+DLL_LOCAL void __liboffload_error_support(error_types input_tag, ...);
+DLL_LOCAL void __liboffload_report_support(error_types input_tag, ...);
+DLL_LOCAL char const *offload_get_message_str(int msgCode);
+DLL_LOCAL char const * report_get_message_str(error_types input_tag);
+DLL_LOCAL char const * report_get_host_stage_str(int i);
+DLL_LOCAL char const * report_get_target_stage_str(int i);
 #ifdef __cplusplus
 }
 #endif
@@ -281,7 +321,7 @@ char const * report_get_target_stage_str(int i);
     fprintf(stderr, "\t TEST for %s \n \t", nm); \
     __liboffload_error_support(msg, __VA_ARGS__);
 
-void write_message(FILE * file, int msgCode, va_list args_p);
+DLL_LOCAL void write_message(FILE * file, int msgCode, va_list args_p);
 
 #define LIBOFFLOAD_ERROR __liboffload_error_support
 

@@ -1,5 +1,5 @@
 /* Dump infrastructure for optimizations and intermediate representation.
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,21 +20,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "diagnostic-core.h"
-#include "dumpfile.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
 #include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "real.h"
 #include "tree.h"
 #include "gimple-pretty-print.h"
+#include "diagnostic-core.h"
+#include "dumpfile.h"
 #include "context.h"
 
 /* If non-NULL, return one past-the-end of the matching SUBPART of
@@ -60,29 +50,31 @@ int dump_flags;
    TREE_DUMP_INDEX enumeration in dumpfile.h.  */
 static struct dump_file_info dump_files[TDI_end] =
 {
-  {NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, 0, 0, 0, false},
+  {NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, 0, 0, 0, false, false},
   {".cgraph", "ipa-cgraph", NULL, NULL, NULL, NULL, NULL, TDF_IPA,
-   0, 0, 0, 0, 0, false},
+   0, 0, 0, 0, 0, false, false},
   {".type-inheritance", "ipa-type-inheritance", NULL, NULL, NULL, NULL, NULL, TDF_IPA,
-   0, 0, 0, 0, 0, false},
+   0, 0, 0, 0, 0, false, false},
+  {".ipa-clones", "ipa-clones", NULL, NULL, NULL, NULL, NULL, TDF_IPA,
+   0, 0, 0, 0, 0, false, false},
   {".tu", "translation-unit", NULL, NULL, NULL, NULL, NULL, TDF_TREE,
-   0, 0, 0, 0, 1, false},
+   0, 0, 0, 0, 1, false, false},
   {".class", "class-hierarchy", NULL, NULL, NULL, NULL, NULL, TDF_TREE,
-   0, 0, 0, 0, 2, false},
+   0, 0, 0, 0, 2, false, false},
   {".original", "tree-original", NULL, NULL, NULL, NULL, NULL, TDF_TREE,
-   0, 0, 0, 0, 3, false},
+   0, 0, 0, 0, 3, false, false},
   {".gimple", "tree-gimple", NULL, NULL, NULL, NULL, NULL, TDF_TREE,
-   0, 0, 0, 0, 4, false},
+   0, 0, 0, 0, 4, false, false},
   {".nested", "tree-nested", NULL, NULL, NULL, NULL, NULL, TDF_TREE,
-   0, 0, 0, 0, 5, false},
+   0, 0, 0, 0, 5, false, false},
 #define FIRST_AUTO_NUMBERED_DUMP 6
 
   {NULL, "tree-all", NULL, NULL, NULL, NULL, NULL, TDF_TREE,
-   0, 0, 0, 0, 0, false},
+   0, 0, 0, 0, 0, false, false},
   {NULL, "rtl-all", NULL, NULL, NULL, NULL, NULL, TDF_RTL,
-   0, 0, 0, 0, 0, false},
+   0, 0, 0, 0, 0, false, false},
   {NULL, "ipa-all", NULL, NULL, NULL, NULL, NULL, TDF_IPA,
-   0, 0, 0, 0, 0, false},
+   0, 0, 0, 0, 0, false, false},
 };
 
 /* Define a name->number mapping for a dump flag value.  */
@@ -118,13 +110,15 @@ static const struct dump_option_value_info dump_options[] =
   {"nouid", TDF_NOUID},
   {"enumerate_locals", TDF_ENUMERATE_LOCALS},
   {"scev", TDF_SCEV},
+  {"gimple", TDF_GIMPLE},
   {"optimized", MSG_OPTIMIZED_LOCATIONS},
   {"missed", MSG_MISSED_OPTIMIZATION},
   {"note", MSG_NOTE},
   {"optall", MSG_ALL},
   {"all", ~(TDF_RAW | TDF_SLIM | TDF_LINENO | TDF_TREE | TDF_RTL | TDF_IPA
 	    | TDF_STMTADDR | TDF_GRAPH | TDF_DIAGNOSTIC | TDF_VERBOSE
-	    | TDF_RHS_ONLY | TDF_NOUID | TDF_ENUMERATE_LOCALS | TDF_SCEV)},
+	    | TDF_RHS_ONLY | TDF_NOUID | TDF_ENUMERATE_LOCALS | TDF_SCEV
+	    | TDF_GIMPLE)},
   {NULL, 0}
 };
 
@@ -146,6 +140,7 @@ static const struct dump_option_value_info optgroup_options[] =
   {"ipa", OPTGROUP_IPA},
   {"loop", OPTGROUP_LOOP},
   {"inline", OPTGROUP_INLINE},
+  {"omp", OPTGROUP_OMP},
   {"vec", OPTGROUP_VEC},
   {"optall", OPTGROUP_ALL},
   {NULL, 0}
@@ -352,7 +347,7 @@ dump_loc (int dump_kind, FILE *dfile, source_location loc)
    EXTRA_DUMP_FLAGS on the dump streams if DUMP_KIND is enabled.  */
 
 void
-dump_gimple_stmt (int dump_kind, int extra_dump_flags, gimple gs, int spc)
+dump_gimple_stmt (int dump_kind, int extra_dump_flags, gimple *gs, int spc)
 {
   if (dump_file && (dump_kind & pflags))
     print_gimple_stmt (dump_file, gs, spc, dump_flags | extra_dump_flags);
@@ -365,7 +360,7 @@ dump_gimple_stmt (int dump_kind, int extra_dump_flags, gimple gs, int spc)
 
 void
 dump_gimple_stmt_loc (int dump_kind, source_location loc, int extra_dump_flags,
-                      gimple gs, int spc)
+		      gimple *gs, int spc)
 {
   if (dump_file && (dump_kind & pflags))
     {

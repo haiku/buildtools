@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Contributed by Anatoly Sokolov (aesok@post.ru)
 
    This file is part of GCC.
@@ -22,24 +22,12 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "tm_p.h"
-#include "cpplib.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "stor-layout.h"
 #include "target.h"
 #include "c-family/c-common.h"
+#include "stor-layout.h"
 #include "langhooks.h"
-
+#include "memmodel.h"
+#include "tm_p.h"
 
 /* IDs for all the AVR builtins.  */
 
@@ -261,14 +249,15 @@ avr_resolve_overloaded_builtin (unsigned int iloc, tree fndecl, void *vargs)
 void
 avr_register_target_pragmas (void)
 {
-  int i;
-
   gcc_assert (ADDR_SPACE_GENERIC == ADDR_SPACE_RAM);
 
   /* Register address spaces.  The order must be the same as in the respective
-     enum from avr.h (or designated initializers must be used in avr.c).  */
+     enum from avr.h (or designated initializers must be used in avr.c).
+     We always register all address spaces even if some of them make no
+     sense for some targets.  Diagnose for non-supported spaces will be
+     emit by TARGET_ADDR_SPACE_DIAGNOSE_USAGE.  */
 
-  for (i = 0; i < ADDR_SPACE_COUNT; i++)
+  for (int i = 0; i < ADDR_SPACE_COUNT; i++)
     {
       gcc_assert (i == avr_addrspace[i].id);
 
@@ -301,12 +290,10 @@ avr_toupper (char *up, const char *lo)
 void
 avr_cpu_cpp_builtins (struct cpp_reader *pfile)
 {
-  int i;
-
   builtin_define_std ("AVR");
 
   /* __AVR_DEVICE_NAME__ and  avr_mcu_types[].macro like __AVR_ATmega8__
-	 are defined by -D command option, see device-specs file.  */
+     are defined by -D command option, see device-specs file.  */
 
   if (avr_arch->macro)
     cpp_define_formatted (pfile, "__AVR_ARCH__=%s", avr_arch->macro);
@@ -347,7 +334,8 @@ avr_cpu_cpp_builtins (struct cpp_reader *pfile)
          it has been mapped to the data memory.  For AVR_TINY devices
          (ATtiny4/5/9/10/20 and 40) mapped program memory starts at 0x4000. */
 
-      cpp_define (pfile, "__AVR_TINY_PM_BASE_ADDRESS__=0x4000");
+      cpp_define_formatted (pfile, "__AVR_TINY_PM_BASE_ADDRESS__=0x%x",
+                            AVR_TINY_PM_OFFSET);
     }
 
   if (AVR_HAVE_EIJMP_EICALL)
@@ -399,15 +387,12 @@ avr_cpu_cpp_builtins (struct cpp_reader *pfile)
 
   if (lang_GNU_C ())
     {
-      for (i = 0; i < ADDR_SPACE_COUNT; i++)
+      for (int i = 0; i < ADDR_SPACE_COUNT; i++)
         if (!ADDR_SPACE_GENERIC_P (i)
             /* Only supply __FLASH<n> macro if the address space is reasonable
                for this target.  The address space qualifier itself is still
                supported, but using it will throw an error.  */
-            && avr_addrspace[i].segment < avr_n_flash
-	    /* Only support __MEMX macro if we have LPM.  */
-	    && (AVR_HAVE_LPM || avr_addrspace[i].pointer_size <= 2))
-
+            && avr_addr_space_supported_p ((addr_space_t) i))
           {
             const char *name = avr_addrspace[i].name;
             char *Name = (char*) alloca (1 + strlen (name));

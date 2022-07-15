@@ -15,7 +15,7 @@
     class(foo), dimension(:), allocatable :: some_local_object
     allocate(foobar(10)[*])
 
-    allocate(some_local_object(10), source=foobar)
+    allocate(some_local_object, source=foobar)
 
     if (.not. allocated(foobar)) call abort()
     if (lbound(foobar, 1) /= 1 .OR. ubound(foobar, 1) /= 10) call abort()

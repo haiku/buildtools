@@ -1,5 +1,5 @@
 /* Local Register Allocator (LRA) intercommunication header file.
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright (C) 2010-2017 Free Software Foundation, Inc.
    Contributed by Vladimir Makarov <vmakarov@redhat.com>.
 
 This file is part of GCC.
@@ -20,14 +20,6 @@ along with GCC; see the file COPYING3.	If not see
 
 #ifndef GCC_LRA_INT_H
 #define GCC_LRA_INT_H
-
-#include "lra.h"
-#include "bitmap.h"
-#include "recog.h"
-#include "insn-attr.h"
-#include "insn-codes.h"
-#include "insn-config.h"
-#include "regs.h"
 
 #define lra_assert(c) gcc_checking_assert (c)
 
@@ -99,19 +91,17 @@ struct lra_reg
   /* True if the pseudo should not be assigned to a stack register.  */
   bool no_stack_p;
 #endif
-#ifdef ENABLE_CHECKING
   /* True if the pseudo crosses a call.	 It is setup in lra-lives.c
      and used to check that the pseudo crossing a call did not get a
      call used hard register.  */
   bool call_p;
-#endif
   /* Number of references and execution frequencies of the register in
      *non-debug* insns.	 */
   int nrefs, freq;
   int last_reload;
-  /* Regno used to undo the inheritance.  It can be non-zero only
-     between couple of inheritance and undo inheritance passes.	 */
-  int restore_regno;
+  /* rtx used to undo the inheritance.  It can be non-null only
+     between subsequent inheritance and undo inheritance passes.  */
+  rtx restore_rtx;
   /* Value holding by register.	 If the pseudos have the same value
      they do not conflict.  */
   int val;
@@ -140,6 +130,8 @@ struct lra_operand_data
 {
   /* The machine description constraint string of the operand.	*/
   const char *constraint;
+  /* Alternatives for which early_clobber can be true.  */
+  alternative_mask early_clobber_alts;
   /* It is taken only from machine description (which is different
      from recog_data.operand_mode) and can be of VOIDmode.  */
   ENUM_BITFIELD(machine_mode) mode : 16;
@@ -160,6 +152,8 @@ struct lra_operand_data
 /* Info about register occurrence in an insn.  */
 struct lra_insn_reg
 {
+  /* Alternatives for which early_clobber can be true.  */
+  alternative_mask early_clobber_alts;
   /* The biggest mode through which the insn refers to the register
      occurrence (remember the register can be accessed through a
      subreg in the insn).  */
@@ -295,6 +289,7 @@ extern lra_insn_recog_data_t *lra_insn_recog_data;
 extern int lra_curr_reload_num;
 
 extern void lra_dump_bitmap_with_title (const char *, bitmap, int);
+extern hashval_t lra_rtx_hash (rtx x);
 extern void lra_push_insn (rtx_insn *);
 extern void lra_push_insn_by_uid (unsigned int);
 extern void lra_push_insn_and_update_insn_regno_info (rtx_insn *);

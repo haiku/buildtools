@@ -1,5 +1,5 @@
 /* Target Code for TI C6X
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright (C) 2010-2017 Free Software Foundation, Inc.
    Contributed by Andrew Jenner <andrew@codesourcery.com>
    Contributed by Bernd Schmidt <bernds@codesourcery.com>
 
@@ -22,77 +22,42 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
+#include "gimple-expr.h"
+#include "cfghooks.h"
+#include "df.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "stringpool.h"
+#include "optabs.h"
+#include "regs.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "cgraph.h"
+#include "diagnostic-core.h"
 #include "stor-layout.h"
 #include "varasm.h"
 #include "calls.h"
-#include "stringpool.h"
-#include "insn-flags.h"
 #include "output.h"
 #include "insn-attr.h"
-#include "insn-codes.h"
-#include "hashtab.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
 #include "explow.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
-#include "regs.h"
-#include "optabs.h"
-#include "recog.h"
-#include "ggc.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "predict.h"
-#include "basic-block.h"
 #include "sched-int.h"
-#include "timevar.h"
-#include "tm_p.h"
-#include "tm-preds.h"
 #include "tm-constrs.h"
-#include "df.h"
-#include "diagnostic-core.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "langhooks.h"
-#include "target.h"
-#include "target-def.h"
 #include "sel-sched.h"
 #include "debug.h"
-#include "opts.h"
 #include "hw-doloop.h"
 #include "regrename.h"
 #include "dumpfile.h"
-#include "gimple-expr.h"
 #include "builtins.h"
+
+/* This file should be included last.  */
+#include "target-def.h"
 
 /* Table of supported architecture variants.  */
 typedef struct
@@ -1293,8 +1258,7 @@ c6x_expand_call (rtx retval, rtx address, bool sibcall)
       if (retval == NULL_RTX)
 	call_insn = emit_call_insn (call_insn);
       else
-	call_insn = emit_call_insn (gen_rtx_SET (GET_MODE (retval), retval,
-						 call_insn));
+	call_insn = emit_call_insn (gen_rtx_SET (retval, call_insn));
     }
   if (flag_pic)
     use_reg (&CALL_INSN_FUNCTION_USAGE (call_insn), pic_offset_table_rtx);
@@ -1493,20 +1457,20 @@ c6x_expand_compare (rtx comparison, machine_mode mode)
 
       cmp1 = gen_reg_rtx (SImode);
       cmp2 = gen_reg_rtx (SImode);
-      emit_insn (gen_rtx_SET (VOIDmode, cmp1,
-			      gen_rtx_fmt_ee (code, SImode, high[0], high[1])));
+      emit_insn (gen_rtx_SET (cmp1, gen_rtx_fmt_ee (code, SImode,
+						    high[0], high[1])));
       if (code == EQ)
 	{
 	  if (c6x_force_op_for_comparison_p (code, lo[1]))
 	    lo[1] = force_reg (SImode, lo[1]);
-	  emit_insn (gen_rtx_SET (VOIDmode, cmp2,
-				  gen_rtx_fmt_ee (code, SImode, lo[0], lo[1])));
+	  emit_insn (gen_rtx_SET (cmp2, gen_rtx_fmt_ee (code, SImode,
+							lo[0], lo[1])));
 	  emit_insn (gen_andsi3 (cmp1, cmp1, cmp2));
 	}
       else
 	{
-	  emit_insn (gen_rtx_SET (VOIDmode, cmp2,
-				  gen_rtx_EQ (SImode, high[0], high[1])));
+	  emit_insn (gen_rtx_SET (cmp2, gen_rtx_EQ (SImode, high[0],
+						    high[1])));
 	  if (code == GT)
 	    code = GTU;
 	  else if (code == LT)
@@ -1564,8 +1528,7 @@ c6x_expand_compare (rtx comparison, machine_mode mode)
 	}
 
       cmp = gen_reg_rtx (SImode);
-      emit_insn (gen_rtx_SET (VOIDmode, cmp,
-			      gen_rtx_fmt_ee (code1, SImode, op0, op1)));
+      emit_insn (gen_rtx_SET (cmp, gen_rtx_fmt_ee (code1, SImode, op0, op1)));
       fn = op_mode == DFmode ? gen_cmpdf_ior : gen_cmpsf_ior;
       emit_insn (fn (cmp, gen_rtx_fmt_ee (code2, SImode, op0, op1),
 		     op0, op1, cmp));
@@ -1641,8 +1604,8 @@ c6x_expand_compare (rtx comparison, machine_mode mode)
 	  cmp = gen_reg_rtx (SImode);
 	  if (c6x_force_op_for_comparison_p (code, op1))
 	    op1 = force_reg (SImode, op1);
-	  emit_insn (gen_rtx_SET (VOIDmode, cmp,
-				  gen_rtx_fmt_ee (code, SImode, op0, op1)));
+	  emit_insn (gen_rtx_SET (cmp, gen_rtx_fmt_ee (code, SImode,
+						       op0, op1)));
 	}
     }
 
@@ -1892,7 +1855,7 @@ print_address_offset (FILE *file, rtx off, machine_mode mem_mode)
 	}
     }
   fputs ("(", file);
-  output_address (off);
+  output_address (mem_mode, off);
   fputs (")", file);
 }
 
@@ -1915,7 +1878,7 @@ c6x_print_address_operand (FILE *file, rtx x, machine_mode mem_mode)
     case PRE_MODIFY:
     case POST_MODIFY:
       if (GET_CODE (x) == POST_MODIFY)
-	output_address (XEXP (x, 0));
+	output_address (mem_mode, XEXP (x, 0));
       off = XEXP (XEXP (x, 1), 1);
       if (XEXP (x, 0) == stack_pointer_rtx)
 	{
@@ -1932,7 +1895,7 @@ c6x_print_address_operand (FILE *file, rtx x, machine_mode mem_mode)
       else
 	fprintf (file, "++");
       if (GET_CODE (x) == PRE_MODIFY)
-	output_address (XEXP (x, 0));
+	output_address (mem_mode, XEXP (x, 0));
       print_address_offset (file, off, mem_mode);
       break;
 
@@ -1945,28 +1908,28 @@ c6x_print_address_operand (FILE *file, rtx x, machine_mode mem_mode)
 	}
       else
 	fprintf (file, "+");
-      output_address (XEXP (x, 0));
+      output_address (mem_mode, XEXP (x, 0));
       print_address_offset (file, off, mem_mode);
       break;
 
     case PRE_DEC:
       gcc_assert (XEXP (x, 0) != stack_pointer_rtx);
       fprintf (file, "--");
-      output_address (XEXP (x, 0));
+      output_address (mem_mode, XEXP (x, 0));
       fprintf (file, "[1]");
       break;
     case PRE_INC:
       fprintf (file, "++");
-      output_address (XEXP (x, 0));
+      output_address (mem_mode, XEXP (x, 0));
       fprintf (file, "[1]");
       break;
     case POST_INC:
       gcc_assert (XEXP (x, 0) != stack_pointer_rtx);
-      output_address (XEXP (x, 0));
+      output_address (mem_mode, XEXP (x, 0));
       fprintf (file, "++[1]");
       break;
     case POST_DEC:
-      output_address (XEXP (x, 0));
+      output_address (mem_mode, XEXP (x, 0));
       fprintf (file, "--[1]");
       break;
 
@@ -2025,17 +1988,13 @@ c6x_get_unit_specifier (rtx_insn *insn)
     case UNITS_DLS:
     case UNITS_D_ADDR:
       return 'd';
-      break;
     case UNITS_L:
     case UNITS_LS:
       return 'l';
-      break;
     case UNITS_S:
       return 's';
-      break;
     case UNITS_M:
       return 'm';
-      break;
     default:
       gcc_unreachable ();
     }
@@ -2080,9 +2039,9 @@ c6x_print_unit_specifier_field (FILE *file, rtx_insn *insn)
 
 /* Output assembly language output for the address ADDR to FILE.  */
 static void
-c6x_print_operand_address (FILE *file, rtx addr)
+c6x_print_operand_address (FILE *file, machine_mode mode, rtx addr)
 {
-  c6x_print_address_operand (file, addr, VOIDmode);
+  c6x_print_address_operand (file, addr, mode);
 }
 
 /* Print an operand, X, to FILE, with an optional modifier in CODE.
@@ -2775,7 +2734,7 @@ emit_add_sp_const (HOST_WIDE_INT offset, bool frame_related_p)
     {
       if (REG_P (to_add))
 	add_reg_note (insn, REG_FRAME_RELATED_EXPR,
-		      gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+		      gen_rtx_SET (stack_pointer_rtx,
 				   gen_rtx_PLUS (Pmode, stack_pointer_rtx,
 						 orig_to_add)));
 
@@ -3466,6 +3425,7 @@ try_rename_operands (rtx_insn *head, rtx_insn *tail, unit_req_table reqs,
   int best_reg, old_reg;
   vec<du_head_p> involved_chains = vNULL;
   unit_req_table new_reqs;
+  bool ok;
 
   for (i = 0, tmp_mask = op_mask; tmp_mask; i++)
     {
@@ -3532,7 +3492,8 @@ try_rename_operands (rtx_insn *head, rtx_insn *tail, unit_req_table reqs,
   best_reg =
     find_rename_reg (this_head, super_class, &unavailable, old_reg, true);
 
-  regrename_do_replace (this_head, best_reg);
+  ok = regrename_do_replace (this_head, best_reg);
+  gcc_assert (ok);
 
   count_unit_reqs (new_reqs, head, PREV_INSN (tail));
   merge_unit_reqs (new_reqs);
@@ -3545,7 +3506,10 @@ try_rename_operands (rtx_insn *head, rtx_insn *tail, unit_req_table reqs,
 	       unit_req_imbalance (reqs), unit_req_imbalance (new_reqs));
     }
   if (unit_req_imbalance (new_reqs) > unit_req_imbalance (reqs))
-    regrename_do_replace (this_head, old_reg);
+    {
+      ok = regrename_do_replace (this_head, old_reg);
+      gcc_assert (ok);
+    }
   else
     memcpy (reqs, new_reqs, sizeof (unit_req_table));
 
@@ -3835,6 +3799,7 @@ predicate_insn (rtx_insn *insn, rtx cond, bool doit)
     {
       if (doit)
 	{
+	  cond = copy_rtx (cond);
 	  rtx newpat = gen_rtx_COND_EXEC (VOIDmode, cond, PATTERN (insn));
 	  PATTERN (insn) = newpat;
 	  INSN_CODE (insn) = -1;
@@ -4504,7 +4469,8 @@ c6x_variable_issue (FILE *dump ATTRIBUTE_UNUSED,
    anti- and output dependencies.  */
 
 static int
-c6x_adjust_cost (rtx_insn *insn, rtx link, rtx_insn *dep_insn, int cost)
+c6x_adjust_cost (rtx_insn *insn, int dep_type, rtx_insn *dep_insn, int cost,
+		 unsigned int)
 {
   enum attr_type insn_type = TYPE_UNKNOWN, dep_insn_type = TYPE_UNKNOWN;
   int dep_insn_code_number, insn_code_number;
@@ -4519,7 +4485,7 @@ c6x_adjust_cost (rtx_insn *insn, rtx link, rtx_insn *dep_insn, int cost)
   if (insn_code_number >= 0)
     insn_type = get_attr_type (insn);
 
-  kind = REG_NOTE_KIND (link);
+  kind = (reg_note) dep_type;
   if (kind == 0)
     {
       /* If we have a dependency on a load, and it's not for the result of
@@ -4764,7 +4730,7 @@ c6x_gen_bundles (void)
 /* Emit a NOP instruction for CYCLES cycles after insn AFTER.  Return it.  */
 
 static rtx_insn *
-emit_nop_after (int cycles, rtx after)
+emit_nop_after (int cycles, rtx_insn *after)
 {
   rtx_insn *insn;
 
@@ -4839,10 +4805,10 @@ convert_to_callp (rtx_insn *insn)
 /* Scan forwards from INSN until we find the next insn that has mode TImode
    (indicating it starts a new cycle), and occurs in cycle CLOCK.
    Return it if we find such an insn, NULL_RTX otherwise.  */
-static rtx
-find_next_cycle_insn (rtx insn, int clock)
+static rtx_insn *
+find_next_cycle_insn (rtx_insn *insn, int clock)
 {
-  rtx t = insn;
+  rtx_insn *t = insn;
   if (GET_MODE (t) == TImode)
     t = next_real_insn (t);
   while (t && GET_MODE (t) != TImode)
@@ -4850,7 +4816,7 @@ find_next_cycle_insn (rtx insn, int clock)
 
   if (t && insn_get_clock (t) == clock)
     return t;
-  return NULL_RTX;
+  return NULL;
 }
 
 /* If COND_INSN has a COND_EXEC condition, wrap the same condition
@@ -4868,10 +4834,10 @@ duplicate_cond (rtx pat, rtx cond_insn)
 
 /* Walk forward from INSN to find the last insn that issues in the same clock
    cycle.  */
-static rtx
-find_last_same_clock (rtx insn)
+static rtx_insn *
+find_last_same_clock (rtx_insn *insn)
 {
-  rtx retval = insn;
+  rtx_insn *retval = insn;
   rtx_insn *t = next_real_insn (insn);
 
   while (t && GET_MODE (t) != TImode)
@@ -4891,7 +4857,7 @@ find_last_same_clock (rtx insn)
    the SEQUENCEs that represent execute packets.  */
 
 static void
-reorg_split_calls (rtx *call_labels)
+reorg_split_calls (rtx_insn **call_labels)
 {
   unsigned int reservation_mask = 0;
   rtx_insn *insn = get_insns ();
@@ -4913,7 +4879,7 @@ reorg_split_calls (rtx *call_labels)
 
       if (returning_call_p (insn))
 	{
-	  rtx label = gen_label_rtx ();
+	  rtx_code_label *label = gen_label_rtx ();
 	  rtx labelref = gen_rtx_LABEL_REF (Pmode, label);
 	  rtx reg = gen_rtx_REG (SImode, RETURN_ADDR_REGNO);
 
@@ -4967,12 +4933,11 @@ reorg_split_calls (rtx *call_labels)
 		 no insn setting/using B3 is scheduled in the delay slots of
 		 a call.  */
 	      int this_clock = insn_get_clock (insn);
-	      rtx last_same_clock;
-	      rtx after1;
+	      rtx_insn *after1;
 
 	      call_labels[INSN_UID (insn)] = label;
 
-	      last_same_clock = find_last_same_clock (insn);
+	      rtx_insn *last_same_clock = find_last_same_clock (insn);
 
 	      if (can_use_callp (insn))
 		{
@@ -5030,7 +4995,8 @@ reorg_split_calls (rtx *call_labels)
 	      else
 		{
 		  rtx x1, x2;
-		  rtx after2 = find_next_cycle_insn (after1, this_clock + 2);
+		  rtx_insn *after2 = find_next_cycle_insn (after1,
+							   this_clock + 2);
 		  if (after2 == NULL_RTX)
 		    after2 = after1;
 		  x2 = gen_movsi_lo_sum (reg, reg, labelref);
@@ -5065,7 +5031,7 @@ reorg_split_calls (rtx *call_labels)
    scheduling was run earlier.  */
 
 static void
-reorg_emit_nops (rtx *call_labels)
+reorg_emit_nops (rtx_insn **call_labels)
 {
   bool first;
   rtx last_call;
@@ -5398,7 +5364,7 @@ undo_split_delayed_nonbranch (rtx_insn *insn)
 		   && type == TYPE_LOAD_SHADOW)
 		  || (XINT (prev_pat, 1) == UNSPEC_REAL_MULT
 		      && type == TYPE_MULT_SHADOW)));
-  insn_pat = gen_rtx_SET (VOIDmode, SET_DEST (insn_pat),
+  insn_pat = gen_rtx_SET (SET_DEST (insn_pat),
 			  XVECEXP (prev_pat, 0, 1));
   insn_pat = duplicate_cond (insn_pat, prev);
   PATTERN (insn) = insn_pat;
@@ -5823,8 +5789,9 @@ hwloop_optimize (hwloop_info loop)
   start_sequence ();
 
   insn = emit_insn (gen_mvilc (loop->iter_reg));
+  if (loop->iter_reg_used_outside)
+    insn = emit_move_insn (loop->iter_reg, const0_rtx);
   insn = emit_insn (gen_sploop (GEN_INT (sp_ii)));
-
   seq = get_insns ();
 
   if (!single_succ_p (entry_bb) || vec_safe_length (loop->incoming) > 1)
@@ -5957,7 +5924,6 @@ static void
 c6x_reorg (void)
 {
   basic_block bb;
-  rtx *call_labels;
   bool do_selsched = (c6x_flag_schedule_insns2 && flag_selective_scheduling2
 		      && !maybe_skip_selective_scheduling ());
 
@@ -6003,7 +5969,7 @@ c6x_reorg (void)
     }
   sched_no_dce = false;
 
-  call_labels = XCNEWVEC (rtx, get_max_uid () + 1);
+  rtx_insn **call_labels = XCNEWVEC (rtx_insn *, get_max_uid () + 1);
 
   reorg_split_calls (call_labels);
 
@@ -6063,11 +6029,12 @@ shift_p (rtx x, enum rtx_code code, int amount)
    scanned.  In either case, *TOTAL contains the cost result.  */
 
 static bool
-c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
+c6x_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno, int *total,
 	       bool speed)
 {
   int cost2 = COSTS_N_INSNS (1);
   rtx op0, op1;
+  int code = GET_CODE (x);
 
   switch (code)
     {
@@ -6096,12 +6063,12 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
 
     case TRUNCATE:
       /* Recognize a mult_highpart operation.  */
-      if ((GET_MODE (x) == HImode || GET_MODE (x) == SImode)
+      if ((mode == HImode || mode == SImode)
 	  && GET_CODE (XEXP (x, 0)) == LSHIFTRT
-	  && GET_MODE (XEXP (x, 0)) == GET_MODE_2XWIDER_MODE (GET_MODE (x))
+	  && GET_MODE (XEXP (x, 0)) == GET_MODE_2XWIDER_MODE (mode)
 	  && GET_CODE (XEXP (XEXP (x, 0), 0)) == MULT
 	  && GET_CODE (XEXP (XEXP (x, 0), 1)) == CONST_INT
-	  && INTVAL (XEXP (XEXP (x, 0), 1)) == GET_MODE_BITSIZE (GET_MODE (x)))
+	  && INTVAL (XEXP (XEXP (x, 0), 1)) == GET_MODE_BITSIZE (mode))
 	{
 	  rtx mul = XEXP (XEXP (x, 0), 0);
 	  rtx op0 = XEXP (mul, 0);
@@ -6111,15 +6078,16 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
 
 	  if ((code0 == code1
 	       && (code0 == SIGN_EXTEND || code0 == ZERO_EXTEND))
-	      || (GET_MODE (x) == HImode
+	      || (mode == HImode
 		  && code0 == ZERO_EXTEND && code1 == SIGN_EXTEND))
 	    {
-	      if (GET_MODE (x) == HImode)
+	      if (mode == HImode)
 		*total = COSTS_N_INSNS (2);
 	      else
 		*total = COSTS_N_INSNS (12);
-	      *total += rtx_cost (XEXP (op0, 0), code0, 0, speed);
-	      *total += rtx_cost (XEXP (op1, 0), code1, 0, speed);
+	      mode = GET_MODE (XEXP (op0, 0));
+	      *total += rtx_cost (XEXP (op0, 0), mode, code0, 0, speed);
+	      *total += rtx_cost (XEXP (op1, 0), mode, code1, 0, speed);
 	      return true;
 	    }
 	}
@@ -6128,7 +6096,7 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
     case ASHIFT:
     case ASHIFTRT:
     case LSHIFTRT:
-      if (GET_MODE (x) == DImode)
+      if (mode == DImode)
 	*total = COSTS_N_INSNS (CONSTANT_P (XEXP (x, 1)) ? 4 : 15);
       else
 	*total = COSTS_N_INSNS (1);
@@ -6139,16 +6107,16 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
       *total = COSTS_N_INSNS (1);
       op0 = code == PLUS ? XEXP (x, 0) : XEXP (x, 1);
       op1 = code == PLUS ? XEXP (x, 1) : XEXP (x, 0);
-      if (GET_MODE_SIZE (GET_MODE (x)) <= UNITS_PER_WORD
-	  && INTEGRAL_MODE_P (GET_MODE (x))
+      if (GET_MODE_SIZE (mode) <= UNITS_PER_WORD
+	  && INTEGRAL_MODE_P (mode)
 	  && GET_CODE (op0) == MULT
 	  && GET_CODE (XEXP (op0, 1)) == CONST_INT
 	  && (INTVAL (XEXP (op0, 1)) == 2
 	      || INTVAL (XEXP (op0, 1)) == 4
 	      || (code == PLUS && INTVAL (XEXP (op0, 1)) == 8)))
 	{
-	  *total += rtx_cost (XEXP (op0, 0), ASHIFT, 0, speed);
-	  *total += rtx_cost (op1, (enum rtx_code) code, 1, speed);
+	  *total += rtx_cost (XEXP (op0, 0), mode, ASHIFT, 0, speed);
+	  *total += rtx_cost (op1, mode, (enum rtx_code) code, 1, speed);
 	  return true;
 	}
       return false;
@@ -6156,21 +6124,21 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
     case MULT:
       op0 = XEXP (x, 0);
       op1 = XEXP (x, 1);
-      if (GET_MODE (x) == DFmode)
+      if (mode == DFmode)
 	{
 	  if (TARGET_FP)
 	    *total = COSTS_N_INSNS (speed ? 10 : 1);
 	  else
 	    *total = COSTS_N_INSNS (speed ? 200 : 4);
 	}
-      else if (GET_MODE (x) == SFmode)
+      else if (mode == SFmode)
 	{
 	  if (TARGET_FP)
 	    *total = COSTS_N_INSNS (speed ? 4 : 1);
 	  else
 	    *total = COSTS_N_INSNS (speed ? 100 : 4);
 	}
-      else if (GET_MODE (x) == DImode)
+      else if (mode == DImode)
 	{
 	  if (TARGET_MPY32
 	      && GET_CODE (op0) == GET_CODE (op1)
@@ -6185,7 +6153,7 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
 	    /* Maybe improve this laster.  */
 	    *total = COSTS_N_INSNS (20);
 	}
-      else if (GET_MODE (x) == SImode)
+      else if (mode == SImode)
 	{
 	  if (((GET_CODE (op0) == ZERO_EXTEND
 		|| GET_CODE (op0) == SIGN_EXTEND
@@ -6213,15 +6181,15 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
 	  else
 	    *total = COSTS_N_INSNS (6);
 	}
-      else if (GET_MODE (x) == HImode)
+      else if (mode == HImode)
 	*total = COSTS_N_INSNS (speed ? 2 : 1);
 
       if (GET_CODE (op0) != REG
 	  && (GET_CODE (op0) != SUBREG || GET_CODE (SUBREG_REG (op0)) != REG))
-	*total += rtx_cost (op0, MULT, 0, speed);
+	*total += rtx_cost (op0, mode, MULT, 0, speed);
       if (op1 && GET_CODE (op1) != REG
 	  && (GET_CODE (op1) != SUBREG || GET_CODE (SUBREG_REG (op1)) != REG))
-	*total += rtx_cost (op1, MULT, 1, speed);
+	*total += rtx_cost (op1, mode, MULT, 1, speed);
       return true;
 
     case UDIV:
@@ -6239,7 +6207,7 @@ c6x_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
 	  && XEXP (op0, 1) == const0_rtx
 	  && rtx_equal_p (XEXP (x, 1), XEXP (op0, 0)))
 	{
-	  *total = rtx_cost (XEXP (x, 1), (enum rtx_code) outer_code,
+	  *total = rtx_cost (XEXP (x, 1), VOIDmode, (enum rtx_code) outer_code,
 			     opno, speed);
 	  return false;
 	}
@@ -6777,6 +6745,9 @@ c6x_debug_unwind_info (void)
 #define TARGET_LEGITIMATE_CONSTANT_P c6x_legitimate_constant_p
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P c6x_legitimate_address_p
+
+#undef TARGET_LRA_P
+#define TARGET_LRA_P hook_bool_void_false
 
 #undef TARGET_IN_SMALL_DATA_P
 #define TARGET_IN_SMALL_DATA_P c6x_in_small_data_p

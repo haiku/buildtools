@@ -67,4 +67,3 @@ fn8 (int a, int b, int m)
 }
 
 /* { dg-final { scan-tree-dump-not " \\| " "cddce1" } } */
-/* { dg-final { cleanup-tree-dump "original" } } */

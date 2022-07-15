@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -137,7 +137,7 @@ package body Sem_Type is
    --  entities. We do not introduce explicit versions of primitive operators
    --  for each type definition. As a result, there is only one entity
    --  corresponding to predefined addition on all numeric types, etc. The
-   --  back-end resolves predefined operators according to their type. The
+   --  back end resolves predefined operators according to their type. The
    --  visibility of primitive operations then reduces to the visibility of the
    --  resulting type: (a + b) is a legal interpretation of some primitive
    --  operator + if the type of the result (which must also be the type of a
@@ -307,7 +307,6 @@ package body Sem_Type is
             else
                Get_Next_Interp (I, It);
             end if;
-
          end loop;
 
          All_Interp.Table (All_Interp.Last) := (Name, Typ, Abstr_Op);
@@ -638,8 +637,9 @@ package body Sem_Type is
 
          H := Current_Entity (Ent);
          while Present (H) loop
-            exit when (not Is_Overloadable (H))
-              and then Is_Immediately_Visible (H);
+            exit when
+              not Is_Overloadable (H)
+                and then Is_Immediately_Visible (H);
 
             if Is_Immediately_Visible (H) and then H /= Ent then
 
@@ -1223,19 +1223,12 @@ package body Sem_Type is
 
       elsif From_Limited_With (T1) then
 
-         --  If the expected type is the non-limited view of a type, the
+         --  If the expected type is the nonlimited view of a type, the
          --  expression may have the limited view. If that one in turn is
          --  incomplete, get full view if available.
 
-         if Is_Incomplete_Type (T1) then
-            return Covers (Get_Full_View (Non_Limited_View (T1)), T2);
-
-         elsif Ekind (T1) = E_Class_Wide_Type then
-            return
-              Covers (Class_Wide_Type (Non_Limited_View (Etype (T1))), T2);
-         else
-            return False;
-         end if;
+         return Has_Non_Limited_View (T1)
+           and then Covers (Get_Full_View (Non_Limited_View (T1)), T2);
 
       elsif From_Limited_With (T2) then
 
@@ -1243,17 +1236,8 @@ package body Sem_Type is
          --  either type might have a limited view. Checks performed elsewhere
          --  verify that the context type is the nonlimited view.
 
-         if Is_Incomplete_Type (T2) then
-            return Covers (T1, Get_Full_View (Non_Limited_View (T2)));
-
-         elsif Ekind (T2) = E_Class_Wide_Type then
-            return
-              Present (Non_Limited_View (Etype (T2)))
-                and then
-                  Covers (T1, Class_Wide_Type (Non_Limited_View (Etype (T2))));
-         else
-            return False;
-         end if;
+         return Has_Non_Limited_View (T2)
+           and then Covers (T1, Get_Full_View (Non_Limited_View (T2)));
 
       --  Ada 2005 (AI-412): Coverage for regular incomplete subtypes
 
@@ -1332,13 +1316,13 @@ package body Sem_Type is
       --  the generic. Within the instance the actual is represented by a
       --  constructed subprogram renaming.
 
-      function Matches (Actual, Formal : Node_Id) return Boolean;
-      --  Look for exact type match in an instance, to remove spurious
-      --  ambiguities when two formal types have the same actual.
+      function Matches (Op : Node_Id; Func_Id : Entity_Id) return Boolean;
+      --  Determine whether function Func_Id is an exact match for binary or
+      --  unary operator Op.
 
       function Operand_Type return Entity_Id;
-      --  Determine type of operand for an equality operation, to apply
-      --  Ada 2005 rules to equality on anonymous access types.
+      --  Determine type of operand for an equality operation, to apply Ada
+      --  2005 rules to equality on anonymous access types.
 
       function Standard_Operator return Boolean;
       --  Check whether subprogram is predefined operator declared in Standard.
@@ -1428,14 +1412,82 @@ package body Sem_Type is
       -- Matches --
       -------------
 
-      function Matches (Actual, Formal : Node_Id) return Boolean is
-         T1 : constant Entity_Id := Etype (Actual);
-         T2 : constant Entity_Id := Etype (Formal);
+      function Matches (Op : Node_Id; Func_Id : Entity_Id) return Boolean is
+         function Matching_Types
+           (Opnd_Typ   : Entity_Id;
+            Formal_Typ : Entity_Id) return Boolean;
+         --  Determine whether operand type Opnd_Typ and formal parameter type
+         --  Formal_Typ are either the same or compatible.
+
+         --------------------
+         -- Matching_Types --
+         --------------------
+
+         function Matching_Types
+           (Opnd_Typ   : Entity_Id;
+            Formal_Typ : Entity_Id) return Boolean
+         is
+         begin
+            --  A direct match
+
+            if Opnd_Typ = Formal_Typ then
+               return True;
+
+            --  Any integer type matches universal integer
+
+            elsif Opnd_Typ = Universal_Integer
+              and then Is_Integer_Type (Formal_Typ)
+            then
+               return True;
+
+            --  Any floating point type matches universal real
+
+            elsif Opnd_Typ = Universal_Real
+              and then Is_Floating_Point_Type (Formal_Typ)
+            then
+               return True;
+
+            --  The type of the formal parameter maps a generic actual type to
+            --  a generic formal type. If the operand type is the type being
+            --  mapped in an instance, then this is a match.
+
+            elsif Is_Generic_Actual_Type (Formal_Typ)
+              and then Etype (Formal_Typ) = Opnd_Typ
+            then
+               return True;
+
+            --  ??? There are possibly other cases to consider
+
+            else
+               return False;
+            end if;
+         end Matching_Types;
+
+         --  Local variables
+
+         F1      : constant Entity_Id := First_Formal (Func_Id);
+         F1_Typ  : constant Entity_Id := Etype (F1);
+         F2      : constant Entity_Id := Next_Formal (F1);
+         F2_Typ  : constant Entity_Id := Etype (F2);
+         Lop_Typ : constant Entity_Id := Etype (Left_Opnd  (Op));
+         Rop_Typ : constant Entity_Id := Etype (Right_Opnd (Op));
+
+      --  Start of processing for Matches
+
       begin
-         return T1 = T2
-           or else
-             (Is_Numeric_Type (T2)
-               and then (T1 = Universal_Real or else T1 = Universal_Integer));
+         if Lop_Typ = F1_Typ then
+            return Matching_Types (Rop_Typ, F2_Typ);
+
+         elsif Rop_Typ = F2_Typ then
+            return Matching_Types (Lop_Typ, F1_Typ);
+
+         --  Otherwise this is not a good match because each operand-formal
+         --  pair is compatible only on base-type basis, which is not specific
+         --  enough.
+
+         else
+            return False;
+         end if;
       end Matches;
 
       ------------------
@@ -1554,9 +1606,9 @@ package body Sem_Type is
                   Act1 := Left_Opnd (N);
                   Act2 := Right_Opnd (N);
 
-                  --  Use type of second formal, so as to include
-                  --  exponentiation, where the exponent may be
-                  --  ambiguous and the result non-universal.
+                  --  Use the type of the second formal, so as to include
+                  --  exponentiation, where the exponent may be ambiguous and
+                  --  the result non-universal.
 
                   Next_Formal (F1);
 
@@ -1566,8 +1618,10 @@ package body Sem_Type is
 
                if Nkind (Act1) in N_Op
                  and then Is_Overloaded (Act1)
-                 and then Nkind_In (Left_Opnd (Act1), N_Integer_Literal,
-                                                      N_Real_Literal)
+                 and then
+                   (Nkind (Act1) in N_Unary_Op
+                     or else Nkind_In (Left_Opnd (Act1), N_Integer_Literal,
+                                                         N_Real_Literal))
                  and then Nkind_In (Right_Opnd (Act1), N_Integer_Literal,
                                                        N_Real_Literal)
                  and then Has_Compatible_Type (Act1, Standard_Boolean)
@@ -1713,6 +1767,7 @@ package body Sem_Type is
 
       It1  := It;
       Nam1 := It.Nam;
+
       while I /= I2 loop
          Get_Next_Interp (I, It);
       end loop;
@@ -1744,18 +1799,6 @@ package body Sem_Type is
          end if;
       end if;
 
-      --  Check for overloaded CIL convention stuff because the CIL libraries
-      --  do sick things like Console.Write_Line where it matches two different
-      --  overloads, so just pick the first ???
-
-      if Convention (Nam1) = Convention_CIL
-        and then Convention (Nam2) = Convention_CIL
-        and then Ekind (Nam1) = Ekind (Nam2)
-        and then Ekind_In (Nam1, E_Procedure, E_Function)
-      then
-         return It2;
-      end if;
-
       --  If the context is universal, the predefined operator is preferred.
       --  This includes bounds in numeric type declarations, and expressions
       --  in type conversions. If no interpretation yields a universal type,
@@ -1779,17 +1822,16 @@ package body Sem_Type is
             begin
                Get_First_Interp (N, I, It);
                while Present (It.Typ) loop
-                  if (Covers (Typ, It.Typ) or else Typ = Any_Type)
-                    and then
-                     (It.Typ = Universal_Integer
+                  if (It.Typ = Universal_Integer
                        or else It.Typ = Universal_Real)
+                    and then (Typ = Any_Type or else Covers (Typ, It.Typ))
                   then
                      return It;
 
-                  elsif Covers (Typ, It.Typ)
+                  elsif Is_Numeric_Type (It.Typ)
                     and then Scope (It.Typ) = Standard_Standard
                     and then Scope (It.Nam) = Standard_Standard
-                    and then Is_Numeric_Type (It.Typ)
+                    and then Covers (Typ, It.Typ)
                   then
                      Candidate := It;
                   end if;
@@ -1996,16 +2038,13 @@ package body Sem_Type is
                end;
 
             elsif Nkind (N) in N_Binary_Op then
-               if Matches (Left_Opnd (N), First_Formal (Nam1))
-                 and then
-                   Matches (Right_Opnd (N), Next_Formal (First_Formal (Nam1)))
-               then
+               if Matches (N, Nam1) then
                   return It1;
                else
                   return It2;
                end if;
 
-            elsif Nkind (N) in  N_Unary_Op then
+            elsif Nkind (N) in N_Unary_Op then
                if Etype (Right_Opnd (N)) = Etype (First_Formal (Nam1)) then
                   return It1;
                else
@@ -2539,7 +2578,6 @@ package body Sem_Type is
 
          loop
             if Present (Interfaces (E))
-              and then Present (Interfaces (E))
               and then not Is_Empty_Elmt_List (Interfaces (E))
             then
                Elmt := First_Elmt (Interfaces (E));
@@ -2647,10 +2685,18 @@ package body Sem_Type is
       end if;
 
       if Ekind (Target_Typ) = E_Incomplete_Type then
-         pragma Assert (Present (Non_Limited_View (Target_Typ)));
-         Target_Typ := Non_Limited_View (Target_Typ);
 
-         --  Protect the frontend against previously detected errors
+         --  We must have either a full view or a nonlimited view of the type
+         --  to locate the list of ancestors.
+
+         if Present (Full_View (Target_Typ)) then
+            Target_Typ := Full_View (Target_Typ);
+         else
+            pragma Assert (Present (Non_Limited_View (Target_Typ)));
+            Target_Typ := Non_Limited_View (Target_Typ);
+         end if;
+
+         --  Protect the front end against previously detected errors
 
          if Ekind (Target_Typ) = E_Incomplete_Type then
             return False;
@@ -2739,6 +2785,17 @@ package body Sem_Type is
          then
             Error_Msg_NE ("(Ada 2005) does not implement interface }",
                           L, Etype (Class_Wide_Type (Etype (R))));
+
+         --  Specialize message if one operand is a limited view, a priori
+         --  unrelated to all other types.
+
+         elsif From_Limited_With (Etype (R)) then
+            Error_Msg_NE ("limited view of& not compatible with context",
+                           R, Etype (R));
+
+         elsif From_Limited_With (Etype (L)) then
+            Error_Msg_NE ("limited view of& not compatible with context",
+                           L, Etype (L));
          else
             Error_Msg_N ("incompatible types", Parent (L));
          end if;
@@ -2985,7 +3042,7 @@ package body Sem_Type is
    -- New_Interps --
    -----------------
 
-   procedure New_Interps (N : Node_Id)  is
+   procedure New_Interps (N : Node_Id) is
       Map_Ptr : Int;
 
    begin
@@ -3035,20 +3092,21 @@ package body Sem_Type is
    ---------------------------
 
    function Operator_Matches_Spec (Op, New_S : Entity_Id) return Boolean is
-      Op_Name : constant Name_Id   := Chars (Op);
-      T       : constant Entity_Id := Etype (New_S);
-      New_F   : Entity_Id;
-      Old_F   : Entity_Id;
-      Num     : Int;
-      T1      : Entity_Id;
-      T2      : Entity_Id;
+      New_First_F : constant Entity_Id := First_Formal (New_S);
+      Op_Name     : constant Name_Id   := Chars (Op);
+      T           : constant Entity_Id := Etype (New_S);
+      New_F       : Entity_Id;
+      Num         : Nat;
+      Old_F       : Entity_Id;
+      T1          : Entity_Id;
+      T2          : Entity_Id;
 
    begin
-      --  To verify that a predefined operator matches a given signature,
-      --  do a case analysis of the operator classes. Function can have one
-      --  or two formals and must have the proper result type.
+      --  To verify that a predefined operator matches a given signature, do a
+      --  case analysis of the operator classes. Function can have one or two
+      --  formals and must have the proper result type.
 
-      New_F := First_Formal (New_S);
+      New_F := New_First_F;
       Old_F := First_Formal (Op);
       Num := 0;
       while Present (New_F) and then Present (Old_F) loop
@@ -3065,7 +3123,7 @@ package body Sem_Type is
       --  Unary operators
 
       elsif Num = 1 then
-         T1 := Etype (First_Formal (New_S));
+         T1 := Etype (New_First_F);
 
          if Nam_In (Op_Name, Name_Op_Subtract, Name_Op_Add, Name_Op_Abs) then
             return Base_Type (T1) = Base_Type (T)
@@ -3082,8 +3140,8 @@ package body Sem_Type is
       --  Binary operators
 
       else
-         T1 := Etype (First_Formal (New_S));
-         T2 := Etype (Next_Formal (First_Formal (New_S)));
+         T1 := Etype (New_First_F);
+         T2 := Etype (Next_Formal (New_First_F));
 
          if Nam_In (Op_Name, Name_Op_And, Name_Op_Or, Name_Op_Xor) then
             return Base_Type (T1) = Base_Type (T2)

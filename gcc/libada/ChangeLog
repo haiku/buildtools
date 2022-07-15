@@ -1,18 +1,51 @@
-2016-06-03  Release Manager
+2018-01-25  Release Manager
 
-	* GCC 5.4.0 released.
+	* GCC 7.3.0 released.
 
-2015-12-04  Release Manager
+2017-08-14  Release Manager
 
-	* GCC 5.3.0 released.
+	* GCC 7.2.0 released.
 
-2015-07-16  Release Manager
+2017-06-01  Eric Botcazou  <ebotcazou@adacore.com>
 
-	* GCC 5.2.0 released.
+	PR ada/80921
+	* configure.ac (default_gnatlib_target): Remove bogus condition.
+	(have_getipinfo): Tweak.
+	* configure: Regenerate.
 
-2015-04-22  Release Manager
+2017-05-02  Release Manager
 
-	* GCC 5.1.0 released.
+	* GCC 7.1.0 released.
+
+2017-01-17  Jakub Jelinek  <jakub@redhat.com>
+
+	PR other/79046
+	* configure.ac: Add GCC_BASE_VER.
+	* Makefile.in (version): Use @get_gcc_base_ver@ instead of cat to get
+	version from BASE-VER file.
+	* configure: Regenerate.
+
+2017-01-04  Alan Modra  <amodra@gmail.com>
+
+	* Makefile.in (configure_deps): Update and order as per
+	configure.ac sinclude.
+	* configure: Regenerate.
+
+2017-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2016-11-15  Matthias Klose  <doko@ubuntu.com>
+
+	* configure: Regenerate.
+
+2016-04-30  Oleg Endo  <olegendo@gcc.gnu.org>
+
+	* configure: Remove SH5 support.
+
+2016-01-04  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
 
 2015-04-10  Jakub Jelinek  <jakub@redhat.com>
 	    Iain Sandoe  <iain@codesourcery.com>
@@ -367,8 +400,8 @@
 	* configure: Generate.
 
 	* New directory, new ChangeLog.
-
-Copyright (C) 2003-2015 Free Software Foundation, Inc.
+
+Copyright (C) 2003-2017 Free Software Foundation, Inc.
 
 This ChangeLog is free software; the Free Software Foundation gives
 unlimited permission to copy, distribute, and modify it.

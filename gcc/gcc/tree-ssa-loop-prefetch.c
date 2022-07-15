@@ -1,5 +1,5 @@
 /* Array prefetching.
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,72 +20,34 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "target.h"
+#include "rtl.h"
 #include "tree.h"
+#include "gimple.h"
+#include "predict.h"
+#include "tree-pass.h"
+#include "gimple-ssa.h"
+#include "optabs-query.h"
+#include "tree-pretty-print.h"
 #include "fold-const.h"
 #include "stor-layout.h"
-#include "tm_p.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-pretty-print.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimplify.h"
 #include "gimple-iterator.h"
 #include "gimplify-me.h"
-#include "gimple-ssa.h"
 #include "tree-ssa-loop-ivopts.h"
 #include "tree-ssa-loop-manip.h"
 #include "tree-ssa-loop-niter.h"
 #include "tree-ssa-loop.h"
+#include "ssa.h"
 #include "tree-into-ssa.h"
 #include "cfgloop.h"
-#include "tree-pass.h"
-#include "insn-config.h"
-#include "tree-chrec.h"
 #include "tree-scalar-evolution.h"
-#include "diagnostic-core.h"
 #include "params.h"
 #include "langhooks.h"
 #include "tree-inline.h"
 #include "tree-data-ref.h"
-
-
-/* FIXME: Needed for optabs, but this should all be moved to a TBD interface
-   between the GIMPLE and RTL worlds.  */
-#include "hashtab.h"
-#include "rtl.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "insn-codes.h"
-#include "optabs.h"
-#include "recog.h"
+#include "diagnostic-core.h"
 
 /* This pass inserts prefetch instructions to optimize cache usage during
    accesses to arrays in loops.  It processes loops sequentially and:
@@ -228,10 +190,6 @@ along with GCC; see the file COPYING3.  If not see
 #define ACCEPTABLE_MISS_RATE 50
 #endif
 
-#ifndef HAVE_prefetch
-#define HAVE_prefetch 0
-#endif
-
 #define L1_CACHE_SIZE_BYTES ((unsigned) (L1_CACHE_SIZE * 1024))
 #define L2_CACHE_SIZE_BYTES ((unsigned) (L2_CACHE_SIZE * 1024))
 
@@ -273,7 +231,7 @@ struct mem_ref_group
 
 /* Assigned to PREFETCH_BEFORE when all iterations are to be prefetched.  */
 
-#define PREFETCH_ALL		(~(unsigned HOST_WIDE_INT) 0)
+#define PREFETCH_ALL		HOST_WIDE_INT_M1U
 
 /* Do not generate a prefetch if the unroll factor is significantly less
    than what is required by the prefetch.  This is to avoid redundant
@@ -298,7 +256,7 @@ struct mem_ref_group
 
 struct mem_ref
 {
-  gimple stmt;			/* Statement in that the reference appears.  */
+  gimple *stmt;			/* Statement in that the reference appears.  */
   tree mem;			/* The reference.  */
   HOST_WIDE_INT delta;		/* Constant offset of the reference.  */
   struct mem_ref_group *group;	/* The group of references it belongs to.  */
@@ -368,8 +326,8 @@ find_or_create_group (struct mem_ref_group **groups, tree base, tree step)
 
       /* If step is an integer constant, keep the list of groups sorted
          by decreasing step.  */
-        if (cst_and_fits_in_hwi ((*groups)->step) && cst_and_fits_in_hwi (step)
-            && int_cst_value ((*groups)->step) < int_cst_value (step))
+      if (cst_and_fits_in_hwi ((*groups)->step) && cst_and_fits_in_hwi (step)
+	  && int_cst_value ((*groups)->step) < int_cst_value (step))
 	break;
     }
 
@@ -387,7 +345,7 @@ find_or_create_group (struct mem_ref_group **groups, tree base, tree step)
    WRITE_P.  The reference occurs in statement STMT.  */
 
 static void
-record_ref (struct mem_ref_group *group, gimple stmt, tree mem,
+record_ref (struct mem_ref_group *group, gimple *stmt, tree mem,
 	    HOST_WIDE_INT delta, bool write_p)
 {
   struct mem_ref **aref;
@@ -453,7 +411,7 @@ release_mem_refs (struct mem_ref_group *groups)
 struct ar_data
 {
   struct loop *loop;			/* Loop of the reference.  */
-  gimple stmt;				/* Statement of the reference.  */
+  gimple *stmt;				/* Statement of the reference.  */
   tree *step;				/* Step of the memory reference.  */
   HOST_WIDE_INT *delta;			/* Offset of the memory reference.  */
 };
@@ -519,7 +477,7 @@ idx_analyze_ref (tree base, tree *index, void *data)
 static bool
 analyze_ref (struct loop *loop, tree *ref_p, tree *base,
 	     tree *step, HOST_WIDE_INT *delta,
-	     gimple stmt)
+	     gimple *stmt)
 {
   struct ar_data ar_data;
   tree off;
@@ -567,7 +525,7 @@ analyze_ref (struct loop *loop, tree *ref_p, tree *base,
 
 static bool
 gather_memory_references_ref (struct loop *loop, struct mem_ref_group **refs,
-			      tree ref, bool write_p, gimple stmt)
+			      tree ref, bool write_p, gimple *stmt)
 {
   tree base, step;
   HOST_WIDE_INT delta;
@@ -643,7 +601,7 @@ gather_memory_references (struct loop *loop, bool *no_other_refs, unsigned *ref_
   basic_block bb;
   unsigned i;
   gimple_stmt_iterator bsi;
-  gimple stmt;
+  gimple *stmt;
   tree lhs, rhs;
   struct mem_ref_group *refs = NULL;
 
@@ -670,6 +628,9 @@ gather_memory_references (struct loop *loop, bool *no_other_refs, unsigned *ref_
 		*no_other_refs = false;
 	      continue;
 	    }
+
+	  if (! gimple_vuse (stmt))
+	    continue;
 
 	  lhs = gimple_assign_lhs (stmt);
 	  rhs = gimple_assign_rhs1 (stmt);
@@ -740,9 +701,9 @@ ddown (HOST_WIDE_INT x, unsigned HOST_WIDE_INT by)
   gcc_assert (by > 0);
 
   if (x >= 0)
-    return x / by;
+    return x / (HOST_WIDE_INT) by;
   else
-    return (x + by - 1) / by;
+    return (x + (HOST_WIDE_INT) by - 1) / (HOST_WIDE_INT) by;
 }
 
 /* Given a CACHE_LINE_SIZE and two inductive memory references
@@ -1197,6 +1158,18 @@ issue_prefetch_ref (struct mem_ref *ref, unsigned unroll_factor, unsigned ahead)
           addr = force_gimple_operand_gsi (&bsi, unshare_expr (addr), true,
 					   NULL, true, GSI_SAME_STMT);
       }
+
+      if (addr_base != addr
+	  && TREE_CODE (addr_base) == SSA_NAME
+	  && TREE_CODE (addr) == SSA_NAME)
+	{
+	  duplicate_ssa_name_ptr_info (addr, SSA_NAME_PTR_INFO (addr_base));
+	  /* As this isn't a plain copy we have to reset alignment
+	     information.  */
+	  if (SSA_NAME_PTR_INFO (addr))
+	    mark_ptr_info_alignment_unknown (SSA_NAME_PTR_INFO (addr));
+	}
+
       /* Create the prefetch instruction.  */
       prefetch = gimple_build_call (builtin_decl_explicit (BUILT_IN_PREFETCH),
 				    3, addr, write_p, local);
@@ -1586,7 +1559,7 @@ determine_loop_nest_reuse (struct loop *loop, struct mem_ref_group *refs,
   vec<ddr_p> dependences = vNULL;
   struct mem_ref_group *gr;
   struct mem_ref *ref, *refb;
-  vec<loop_p> vloops = vNULL;
+  auto_vec<loop_p> vloops;
   unsigned *loop_data_size;
   unsigned i, j, n;
   unsigned volume, dist, adist;
@@ -1885,7 +1858,7 @@ loop_prefetch_arrays (struct loop *loop)
   ahead = (PREFETCH_LATENCY + time - 1) / time;
   est_niter = estimated_stmt_executions_int (loop);
   if (est_niter == -1)
-    est_niter = max_stmt_executions_int (loop);
+    est_niter = likely_max_stmt_executions_int (loop);
 
   /* Prefetching is not likely to be profitable if the trip count to ahead
      ratio is too small.  */
@@ -1966,11 +1939,11 @@ tree_ssa_prefetch_arrays (void)
   bool unrolled = false;
   int todo_flags = 0;
 
-  if (!HAVE_prefetch
+  if (!targetm.have_prefetch ()
       /* It is possible to ask compiler for say -mtune=i486 -march=pentium4.
 	 -mtune=i486 causes us having PREFETCH_BLOCK 0, since this is part
 	 of processor costs and i486 does not have prefetch, but
-	 -march=pentium4 causes HAVE_prefetch to be true.  Ugh.  */
+	 -march=pentium4 causes targetm.have_prefetch to be true.  Ugh.  */
       || PREFETCH_BLOCK == 0)
     return 0;
 
@@ -2004,10 +1977,6 @@ tree_ssa_prefetch_arrays (void)
       DECL_IS_NOVOPS (decl) = true;
       set_builtin_decl (BUILT_IN_PREFETCH, decl, false);
     }
-
-  /* We assume that size of cache line is a power of two, so verify this
-     here.  */
-  gcc_assert ((PREFETCH_BLOCK & (PREFETCH_BLOCK - 1)) == 0);
 
   FOR_EACH_LOOP (loop, LI_FROM_INNERMOST)
     {
@@ -2065,6 +2034,20 @@ pass_loop_prefetch::execute (function *fun)
 {
   if (number_of_loops (fun) <= 1)
     return 0;
+
+  if ((PREFETCH_BLOCK & (PREFETCH_BLOCK - 1)) != 0)
+    {
+      static bool warned = false;
+
+      if (!warned)
+	{
+	  warning (OPT_Wdisabled_optimization,
+		   "%<l1-cache-size%> parameter is not a power of two %d",
+		   PREFETCH_BLOCK);
+	  warned = true;
+	}
+      return 0;
+    }
 
   return tree_ssa_prefetch_arrays ();
 }

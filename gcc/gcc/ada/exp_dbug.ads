@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1996-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1996-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -414,7 +414,7 @@ package Exp_Dbug is
    procedure Get_External_Name
      (Entity     : Entity_Id;
       Has_Suffix : Boolean := False;
-      Suffix     : String := "");
+      Suffix     : String  := "");
    --  Set Name_Buffer and Name_Len to the external name of the entity. The
    --  external name is the Interface_Name, if specified, unless the entity
    --  has an address clause or Has_Suffix is true.
@@ -434,6 +434,21 @@ package Exp_Dbug is
    --  Note that a call to this procedure has no effect if we are not
    --  generating code, since the necessary information for computing the
    --  proper external name is not available in this case.
+
+   -------------------------------------
+   -- Encoding for translation into C --
+   -------------------------------------
+
+   --  In Modify_Tree_For_C mode we must add encodings to dismabiguate cases
+   --  where Ada block structure cannot be directly translated. These cases
+   --  are as follows:
+
+   --    a)  A loop variable may hide a homonym in an enclosing block
+   --    b)  A block-local variable may hide a homonym in an enclosing block
+
+   --  In C these constructs are not scopes and we must distinguish the names
+   --  explicitly. In the first case we create a qualified name with the suffix
+   --  'L', in the second case with a suffix 'B'.
 
    --------------------------------------------
    -- Subprograms for Handling Qualification --
@@ -1061,6 +1076,9 @@ package Exp_Dbug is
    --    ttt is the name of the original declared array
    --    nnn is the component size in bits (1-31)
 
+   --  Note that if the packed array is not bit-packed, the name will simply
+   --  be tttP.
+
    --  When the debugger sees that an object is of a type that is encoded in
    --  this manner, it can use the original type to determine the bounds and
    --  the component type, and the component size to determine the packing
@@ -1182,8 +1200,7 @@ package Exp_Dbug is
 
    function Make_Packed_Array_Impl_Type_Name
      (Typ   : Entity_Id;
-      Csize : Uint)
-      return  Name_Id;
+      Csize : Uint) return Name_Id;
    --  This function is used in Exp_Pakd to create the name that is encoded as
    --  described above. The entity Typ provides the name ttt, and the value
    --  Csize is the component size that provides the nnn value.

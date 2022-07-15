@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2014, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2016, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -39,14 +39,12 @@ pragma Polling (Off);
 --  operations. It causes infinite loops and other problems.
 
 with Interfaces.C;
-with Interfaces.C.Extensions;
 
 with System.Task_Info;
 with System.Tasking.Debug;
 with System.Interrupt_Management;
 with System.OS_Constants;
 with System.OS_Primitives;
-with System.Stack_Checking.Operations;
 with System.Multiprocessors;
 
 with System.Soft_Links;
@@ -59,12 +57,10 @@ package body System.Task_Primitives.Operations is
 
    package OSC renames System.OS_Constants;
    package SSL renames System.Soft_Links;
-   package SC renames System.Stack_Checking.Operations;
 
    use System.Tasking.Debug;
    use System.Tasking;
    use Interfaces.C;
-   use Interfaces.C.Extensions;
    use System.OS_Interface;
    use System.Parameters;
    use System.OS_Primitives;
@@ -629,30 +625,14 @@ package body System.Task_Primitives.Operations is
    ---------------------
 
    function Monotonic_Clock return Duration is
-      use Interfaces;
-
-      procedure timeval_to_duration
-        (T    : not null access timeval;
-         sec  : not null access C.Extensions.long_long;
-         usec : not null access C.long);
-      pragma Import (C, timeval_to_duration, "__gnat_timeval_to_duration");
-
-      Micro  : constant := 10**6;
-      sec    : aliased C.Extensions.long_long;
-      usec   : aliased C.long;
-      TV     : aliased timeval;
+      TS     : aliased timespec;
       Result : int;
-
-      function gettimeofday
-        (Tv : access timeval;
-         Tz : System.Address := System.Null_Address) return int;
-      pragma Import (C, gettimeofday, "gettimeofday");
-
    begin
-      Result := gettimeofday (TV'Access, System.Null_Address);
+      Result := clock_gettime
+        (clock_id => OSC.CLOCK_RT_Ada, tp => TS'Unchecked_Access);
       pragma Assert (Result = 0);
-      timeval_to_duration (TV'Access, sec'Access, usec'Access);
-      return Duration (sec) + Duration (usec) / Micro;
+
+      return To_Duration (TS);
    end Monotonic_Clock;
 
    -------------------
@@ -775,14 +755,55 @@ package body System.Task_Primitives.Operations is
       Self_ID.Common.LL.Thread := pthread_self;
       Self_ID.Common.LL.LWP := lwp_self;
 
-      if Self_ID.Common.Task_Image_Len > 0 then
+      --  Set thread name to ease debugging. If the name of the task is
+      --  "foreign thread" (as set by Register_Foreign_Thread) retrieve
+      --  the name of the thread and update the name of the task instead.
+
+      if Self_ID.Common.Task_Image_Len = 14
+        and then Self_ID.Common.Task_Image (1 .. 14) = "foreign thread"
+      then
+         declare
+            Thread_Name : String (1 .. 16);
+            --  PR_GET_NAME returns a string of up to 16 bytes
+
+            Len    : Natural := 0;
+            --  Length of the task name contained in Task_Name
+
+            Result : int;
+            --  Result from the prctl call
+         begin
+            Result := prctl (PR_GET_NAME, unsigned_long (Thread_Name'Address));
+            pragma Assert (Result = 0);
+
+            --  Find the length of the given name
+
+            for J in Thread_Name'Range loop
+               if Thread_Name (J) /= ASCII.NUL then
+                  Len := Len + 1;
+               else
+                  exit;
+               end if;
+            end loop;
+
+            --  Cover the odd situtation if someone decides to change
+            --  Parameters.Max_Task_Image_Length to less than 16 characters
+
+            if Len > Parameters.Max_Task_Image_Length then
+               Len := Parameters.Max_Task_Image_Length;
+            end if;
+
+            --  Copy the name of the thread to the task's ATCB
+
+            Self_ID.Common.Task_Image (1 .. Len) := Thread_Name (1 .. Len);
+            Self_ID.Common.Task_Image_Len := Len;
+         end;
+
+      elsif Self_ID.Common.Task_Image_Len > 0 then
          declare
             Task_Name : String (1 .. Parameters.Max_Task_Image_Length + 1);
             Result    : int;
 
          begin
-            --  Set thread name to ease debugging
-
             Task_Name (1 .. Self_ID.Common.Task_Image_Len) :=
               Self_ID.Common.Task_Image (1 .. Self_ID.Common.Task_Image_Len);
             Task_Name (Self_ID.Common.Task_Image_Len + 1) := ASCII.NUL;
@@ -1065,8 +1086,6 @@ package body System.Task_Primitives.Operations is
       if T.Known_Tasks_Index /= -1 then
          Known_Tasks (T.Known_Tasks_Index) := null;
       end if;
-
-      SC.Invalidate_Stack_Cache (T.Common.Compiler_Data.Pri_Stack_Info'Access);
 
       ATCB_Allocation.Free_ATCB (T);
    end Finalize_TCB;

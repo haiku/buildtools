@@ -1,5 +1,5 @@
 /* Header file for gimple iterators.
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -65,31 +65,32 @@ extern void gsi_insert_seq_after_without_update (gimple_stmt_iterator *,
 extern void gsi_insert_seq_after (gimple_stmt_iterator *, gimple_seq,
 				  enum gsi_iterator_update);
 extern gimple_seq gsi_split_seq_after (gimple_stmt_iterator);
-extern void gsi_set_stmt (gimple_stmt_iterator *, gimple);
+extern void gsi_set_stmt (gimple_stmt_iterator *, gimple *);
 extern void gsi_split_seq_before (gimple_stmt_iterator *, gimple_seq *);
-extern bool gsi_replace (gimple_stmt_iterator *, gimple, bool);
+extern bool gsi_replace (gimple_stmt_iterator *, gimple *, bool);
 extern void gsi_replace_with_seq (gimple_stmt_iterator *, gimple_seq, bool);
-extern void gsi_insert_before_without_update (gimple_stmt_iterator *, gimple,
+extern void gsi_insert_before_without_update (gimple_stmt_iterator *, gimple *,
 					      enum gsi_iterator_update);
-extern void gsi_insert_before (gimple_stmt_iterator *, gimple,
+extern void gsi_insert_before (gimple_stmt_iterator *, gimple *,
 			       enum gsi_iterator_update);
-extern void gsi_insert_after_without_update (gimple_stmt_iterator *, gimple,
+extern void gsi_insert_after_without_update (gimple_stmt_iterator *, gimple *,
 					     enum gsi_iterator_update);
-extern void gsi_insert_after (gimple_stmt_iterator *, gimple,
+extern void gsi_insert_after (gimple_stmt_iterator *, gimple *,
 			      enum gsi_iterator_update);
 extern bool gsi_remove (gimple_stmt_iterator *, bool);
-extern gimple_stmt_iterator gsi_for_stmt (gimple);
+extern gimple_stmt_iterator gsi_for_stmt (gimple *);
 extern gphi_iterator gsi_for_phi (gphi *);
 extern void gsi_move_after (gimple_stmt_iterator *, gimple_stmt_iterator *);
 extern void gsi_move_before (gimple_stmt_iterator *, gimple_stmt_iterator *);
 extern void gsi_move_to_bb_end (gimple_stmt_iterator *, basic_block);
-extern void gsi_insert_on_edge (edge, gimple);
+extern void gsi_insert_on_edge (edge, gimple *);
 extern void gsi_insert_seq_on_edge (edge, gimple_seq);
-extern basic_block gsi_insert_on_edge_immediate (edge, gimple);
+extern basic_block gsi_insert_on_edge_immediate (edge, gimple *);
 extern basic_block gsi_insert_seq_on_edge_immediate (edge, gimple_seq);
 extern void gsi_commit_edge_inserts (void);
 extern void gsi_commit_one_edge_insert (edge, basic_block *);
 extern gphi_iterator gsi_start_phis (basic_block);
+extern void update_modified_stmts (gimple_seq);
 
 /* Return a new iterator pointing to GIMPLE_SEQ's first statement.  */
 
@@ -196,7 +197,7 @@ gsi_next (gimple_stmt_iterator *i)
 static inline void
 gsi_prev (gimple_stmt_iterator *i)
 {
-  gimple prev = i->ptr->prev;
+  gimple *prev = i->ptr->prev;
   if (prev->next)
     i->ptr = prev;
   else
@@ -205,7 +206,7 @@ gsi_prev (gimple_stmt_iterator *i)
 
 /* Return the current stmt.  */
 
-static inline gimple
+static inline gimple *
 gsi_stmt (gimple_stmt_iterator i)
 {
   return i.ptr;
@@ -304,6 +305,20 @@ gsi_last_nondebug_bb (basic_block bb)
   return i;
 }
 
+/* Return true if I is followed only by debug statements in its
+   sequence.  */
+
+static inline bool
+gsi_one_nondebug_before_end_p (gimple_stmt_iterator i)
+{
+  if (gsi_one_before_end_p (i))
+    return true;
+  if (gsi_end_p (i))
+    return false;
+  gsi_next_nondebug (&i);
+  return gsi_end_p (i);
+}
+
 /* Iterates I statement iterator to the next non-virtual statement.  */
 
 static inline void
@@ -342,6 +357,35 @@ static inline gimple_seq
 gsi_seq (gimple_stmt_iterator i)
 {
   return *i.seq;
+}
+
+/* Determine whether SEQ is a nondebug singleton.  */
+
+static inline bool
+gimple_seq_nondebug_singleton_p (gimple_seq seq)
+{
+  gimple_stmt_iterator gsi;
+
+  /* Find a nondebug gimple.  */
+  gsi.ptr = gimple_seq_first (seq);
+  gsi.seq = &seq;
+  gsi.bb = NULL;
+  while (!gsi_end_p (gsi)
+	 && is_gimple_debug (gsi_stmt (gsi)))
+    gsi_next (&gsi);
+
+  /* No nondebug gimple found, not a singleton.  */
+  if (gsi_end_p (gsi))
+    return false;
+
+  /* Find a next nondebug gimple.  */
+  gsi_next (&gsi);
+  while (!gsi_end_p (gsi)
+	 && is_gimple_debug (gsi_stmt (gsi)))
+    gsi_next (&gsi);
+
+  /* Only a singleton if there's no next nondebug gimple.  */
+  return gsi_end_p (gsi);
 }
 
 #endif /* GCC_GIMPLE_ITERATOR_H */

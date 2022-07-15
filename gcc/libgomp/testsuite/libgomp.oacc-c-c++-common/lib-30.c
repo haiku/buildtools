@@ -1,5 +1,8 @@
-/* { dg-do run } */
+/* Exercise an invalid partial acc_delete on nvidia targets.  */
 
+/* { dg-do run { target openacc_nvidia_accel_selected } } */
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <openacc.h>
 
@@ -16,6 +19,7 @@ main (int argc, char **argv)
   if (!d)
     abort ();
 
+  fprintf (stderr, "CheCKpOInT\n");
   acc_delete (h, N - 2);
 
   free (h);
@@ -23,4 +27,6 @@ main (int argc, char **argv)
   return 0;
 }
 
-/* { dg-shouldfail "libgomp: \[\h+,256\] surrounds2 \[\h+,\+254\]" } */
+/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
+/* { dg-output "\\\[\[0-9a-fA-FxX\]+,256\\\] surrounds2 \\\[\[0-9a-fA-FxX\]+,\\\+254\\\]" } */
+/* { dg-shouldfail "" } */

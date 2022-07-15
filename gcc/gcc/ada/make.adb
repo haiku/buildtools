@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -84,12 +84,11 @@ package body Make is
    --  Make control characters visible
 
    Standard_Library_Package_Body_Name : constant String := "s-stalib.adb";
-   --  Every program depends on this package, that must then be checked,
-   --  especially when -f and -a are used.
-
-   procedure Kill (Pid : Process_Id; Sig_Num : Integer; Close : Integer);
-   pragma Import (C, Kill, "__gnat_kill");
-   --  Called by Sigint_Intercepted to kill all spawned compilation processes
+   System_Package_Spec_Name : constant String := "system.ads";
+   --  Every program depends on one of these packages: usually the first one,
+   --  or if Supress_Standard_Library is true on the second one. The dependency
+   --  is not always explicit and considering it is important when -f and -a
+   --  are used.
 
    type Sigint_Handler is access procedure;
    pragma Convention (C, Sigint_Handler);
@@ -671,18 +670,10 @@ package body Make is
    -- Compiler, Binder & Linker Data and Subprograms --
    ----------------------------------------------------
 
-   Gcc          : String_Access := Program_Name ("gcc", "gnatmake");
-   Original_Gcc : constant String_Access := Gcc;
-   --  Original_Gcc is used to check if Gcc has been modified by a switch
-   --  --GCC=, so that for VM platforms, it is not modified again, as it can
-   --  result in incorrect error messages if the compiler cannot be found.
-
+   Gcc      : String_Access := Program_Name ("gcc", "gnatmake");
    Gnatbind : String_Access := Program_Name ("gnatbind", "gnatmake");
    Gnatlink : String_Access := Program_Name ("gnatlink", "gnatmake");
    --  Default compiler, binder, linker programs
-
-   Globalizer : constant String := "codepeer_globalizer";
-   --  CodePeer globalizer executable name
 
    Saved_Gcc      : String_Access := null;
    Saved_Gnatbind : String_Access := null;
@@ -697,10 +688,6 @@ package body Make is
                      GNAT.OS_Lib.Locate_Exec_On_Path (Gnatlink.all);
    --  Path for compiler, binder, linker programs, defaulted now for gnatdist.
    --  Changed later if overridden on command line.
-
-   Globalizer_Path : constant String_Access :=
-                       GNAT.OS_Lib.Locate_Exec_On_Path (Globalizer);
-   --  Path for CodePeer globalizer
 
    Comp_Flag         : constant String_Access := new String'("-c");
    Output_Flag       : constant String_Access := new String'("-o");
@@ -1029,10 +1016,6 @@ package body Make is
    --  the main unit. Likewise the withed units in a generic body needed
    --  during a compilation are also transitively included in the W section
    --  of the originally compiled file.
-
-   procedure Globalize (Success : out Boolean);
-   --  Call the CodePeer globalizer on all the project's object directories,
-   --  or on the current directory if no projects.
 
    procedure Initialize
       (Project_Node_Tree : out Project_Node_Tree_Ref;
@@ -1577,11 +1560,20 @@ package body Make is
       Source_Name : File_Name_Type;
       Text        : Text_Buffer_Ptr;
 
-      Prev_Switch : String_Access;
-      --  Previous switch processed
+      First_Arg : Arg_Id;
+      --  Index of the first argument in Args.Table for a given unit
+
+      Last_Arg  : Arg_Id;
+      --  Index of the last argument in Args.Table for a given unit
 
       Arg : Arg_Id := Arg_Id'First;
       --  Current index in Args.Table for a given unit (init to stop warning)
+
+      Number_Of_Switches : Natural;
+      --  Number of switches recorded for a given unit
+
+      Prev_Switch : String_Access;
+      --  Previous switch processed
 
       Switch_Found : Boolean;
       --  True if a given switch has been found
@@ -1725,7 +1717,7 @@ package body Make is
 
             for J in 1 .. Last_Argument loop
 
-               --  Skip non switches -c, -I and -o switches
+               --  Skip -c, -I and -o switches
 
                if Arguments (J) (1) = '-'
                  and then Arguments (J) (2) /= 'c'
@@ -1745,6 +1737,9 @@ package body Make is
                end if;
             end loop;
 
+            First_Arg := Units.Table (ALIs.Table (ALI).First_Unit).First_Arg;
+            Last_Arg  := Units.Table (ALIs.Table (ALI).First_Unit).Last_Arg;
+
             for J in 1 .. Switches_To_Check.Last loop
 
                --  Comparing switches is delicate because gcc reorders a number
@@ -1762,15 +1757,12 @@ package body Make is
                     Prev_Switch (6) /= Switches_To_Check.Table (J) (6))
                then
                   Prev_Switch := Switches_To_Check.Table (J);
-                  Arg :=
-                    Units.Table (ALIs.Table (ALI).First_Unit).First_Arg;
+                  Arg := First_Arg;
                end if;
 
                Switch_Found := False;
 
-               for K in Arg ..
-                 Units.Table (ALIs.Table (ALI).First_Unit).Last_Arg
-               loop
+               for K in Arg .. Last_Arg loop
                   if
                     Switches_To_Check.Table (J).all = Args.Table (K).all
                   then
@@ -1792,17 +1784,23 @@ package body Make is
                end if;
             end loop;
 
-            if Switches_To_Check.Last /=
-              Integer (Units.Table (ALIs.Table (ALI).First_Unit).Last_Arg -
-                       Units.Table (ALIs.Table (ALI).First_Unit).First_Arg + 1)
-            then
+            Number_Of_Switches := Natural (Last_Arg - First_Arg + 1);
+
+            --  Do not count the multilib switches reinstated by the compiler
+            --  according to the lang-specs.h.settings.
+
+            for K in First_Arg .. Last_Arg loop
+               if Args.Table (K).all = "-mrtp" then
+                  Number_Of_Switches := Number_Of_Switches - 1;
+               end if;
+            end loop;
+
+            if Switches_To_Check.Last /= Number_Of_Switches then
                if Verbose_Mode then
                   Verbose_Msg (ALIs.Table (ALI).Sfile,
                                "different number of switches");
 
-                  for K in Units.Table (ALIs.Table (ALI).First_Unit).First_Arg
-                    .. Units.Table (ALIs.Table (ALI).First_Unit).Last_Arg
-                  loop
+                  for K in First_Arg .. Last_Arg loop
                      Write_Str (Args.Table (K).all);
                      Write_Char (' ');
                   end loop;
@@ -2165,15 +2163,15 @@ package body Make is
 
          for Ptr in Template'Range loop
             case Template (Ptr) is
-               when '*'    =>
+               when '*' =>
                   Add_Str_To_Name_Buffer (Name);
 
-               when ';'    =>
+               when ';' =>
                   File := Full_Lib_File_Name (Name_Find);
                   exit when File /= No_File;
                   Name_Len := 0;
 
-               when NUL    =>
+               when NUL =>
                   exit;
 
                when others =>
@@ -2694,40 +2692,43 @@ package body Make is
       procedure Check_Standard_Library is
       begin
          Need_To_Check_Standard_Library := False;
+         Name_Len := 0;
 
          if not Targparm.Suppress_Standard_Library_On_Target then
-            declare
-               Sfile  : File_Name_Type;
-               Add_It : Boolean := True;
+            Add_Str_To_Name_Buffer (Standard_Library_Package_Body_Name);
+         else
+            Add_Str_To_Name_Buffer (System_Package_Spec_Name);
+         end if;
 
-            begin
-               Name_Len := 0;
-               Add_Str_To_Name_Buffer (Standard_Library_Package_Body_Name);
-               Sfile := Name_Enter;
+         declare
+            Add_It : Boolean := True;
+            Sfile  : File_Name_Type;
 
-               --  If we have a special runtime, we add the standard
-               --  library only if we can find it.
+         begin
+            Sfile := Name_Enter;
 
-               if RTS_Switch then
-                  Add_It := Full_Source_Name (Sfile) /= No_File;
-               end if;
+            --  If we have a special runtime, we add the standard library only
+            --  if we can find it.
 
-               if Add_It then
-                  if not Queue.Insert
-                           ((Format  => Format_Gnatmake,
-                             File    => Sfile,
-                             Unit    => No_Unit_Name,
-                             Project => No_Project,
-                             Index   => 0,
-                             Sid     => No_Source))
-                  then
-                     if Is_In_Obsoleted (Sfile) then
-                        Executable_Obsolete := True;
-                     end if;
+            if RTS_Switch then
+               Add_It := Full_Source_Name (Sfile) /= No_File;
+            end if;
+
+            if Add_It then
+               if not Queue.Insert
+                        ((Format  => Format_Gnatmake,
+                          File    => Sfile,
+                          Unit    => No_Unit_Name,
+                          Project => No_Project,
+                          Index   => 0,
+                          Sid     => No_Source))
+               then
+                  if Is_In_Obsoleted (Sfile) then
+                     Executable_Obsolete := True;
                   end if;
                end if;
-            end;
-         end if;
+            end if;
+         end;
       end Check_Standard_Library;
 
       -----------------------------------
@@ -2972,7 +2973,7 @@ package body Make is
             Comp_Last := Comp_Last + 1;
             Comp_Args (Comp_Last) := AdaSCIL_Flag;
 
-         elsif not Ada_File_Name (S) and then not Targparm.AAMP_On_Target then
+         elsif not Ada_File_Name (S) then
             Comp_Last := Comp_Last + 1;
             Comp_Args (Comp_Last) := Ada_Flag_1;
             Comp_Last := Comp_Last + 1;
@@ -4075,55 +4076,6 @@ package body Make is
       Obsoleted.Set (F2, True);
    end Enter_Into_Obsoleted;
 
-   ---------------
-   -- Globalize --
-   ---------------
-
-   procedure Globalize (Success : out Boolean) is
-      Quiet_Str       : aliased String := "-quiet";
-      Globalizer_Args : constant Argument_List :=
-                          (1 => Quiet_Str'Unchecked_Access);
-      Previous_Dir    : String_Access;
-
-      procedure Globalize_Dir (Dir : String);
-      --  Call CodePeer globalizer on Dir
-
-      -------------------
-      -- Globalize_Dir --
-      -------------------
-
-      procedure Globalize_Dir (Dir : String) is
-         Result : Boolean;
-      begin
-         if Previous_Dir = null or else Dir /= Previous_Dir.all then
-            Free (Previous_Dir);
-            Previous_Dir := new String'(Dir);
-            Change_Dir (Dir);
-            GNAT.OS_Lib.Spawn (Globalizer_Path.all, Globalizer_Args, Result);
-            Success := Success and Result;
-         end if;
-      end Globalize_Dir;
-
-      procedure Globalize_Dirs is new
-        Prj.Env.For_All_Object_Dirs (Globalize_Dir);
-
-   --  Start of procedure Globalize
-
-   begin
-      Success := True;
-      Display (Globalizer, Globalizer_Args);
-
-      if Globalizer_Path = null then
-         Make_Failed ("error, unable to locate " & Globalizer);
-      end if;
-
-      if Main_Project = No_Project then
-         GNAT.OS_Lib.Spawn (Globalizer_Path.all, Globalizer_Args, Success);
-      else
-         Globalize_Dirs (Main_Project, Project_Tree);
-      end if;
-   end Globalize;
-
    -------------------
    -- Linking_Phase --
    -------------------
@@ -4861,12 +4813,10 @@ package body Make is
       end if;
 
       --  If the objects were up-to-date check if the executable file is also
-      --  up-to-date. For now always bind and link on the JVM since there is
-      --  currently no simple way to check whether objects are up to date wrt
-      --  the executable. Same in CodePeer mode where there is no executable.
+      --  up-to-date. For now always bind and link in CodePeer mode where there
+      --  is no executable.
 
-      if Targparm.VM_Target /= JVM_Target
-        and then not CodePeer_Mode
+      if not CodePeer_Mode
         and then First_Compiled_File = No_File
       then
          Executable_Stamp := File_Stamp (Executable);
@@ -5812,8 +5762,8 @@ package body Make is
             Finish_Program (Project_Tree, E_Success);
 
          else
-            --  Call Get_Target_Parameters to ensure that VM_Target and
-            --  AAMP_On_Target get set before calling Usage.
+            --  Call Get_Target_Parameters to ensure that flags are properly
+            --  set before calling Usage.
 
             Targparm.Get_Target_Parameters;
 
@@ -6027,39 +5977,6 @@ package body Make is
                   Make_Failed ("*** make failed.");
             end;
 
-            --  Special processing for VM targets
-
-            if Targparm.VM_Target /= No_VM then
-
-               --  Set proper processing commands
-
-               case Targparm.VM_Target is
-                  when Targparm.JVM_Target =>
-
-                     --  Do not check for an object file (".o") when compiling
-                     --  to JVM machine since ".class" files are generated
-                     --  instead.
-
-                     Check_Object_Consistency := False;
-
-                     --  Do not modify Gcc is --GCC= was specified
-
-                     if Gcc = Original_Gcc then
-                        Gcc := new String'("jvm-gnatcompile");
-                     end if;
-
-                  when Targparm.CLI_Target =>
-                     --  Do not modify Gcc is --GCC= was specified
-
-                     if Gcc = Original_Gcc then
-                        Gcc := new String'("dotnet-gnatcompile");
-                     end if;
-
-                  when Targparm.No_VM =>
-                     raise Program_Error;
-               end case;
-            end if;
-
             Gcc_Path       := GNAT.OS_Lib.Locate_Exec_On_Path (Gcc.all);
             Gnatbind_Path  := GNAT.OS_Lib.Locate_Exec_On_Path (Gnatbind.all);
             Gnatlink_Path  := GNAT.OS_Lib.Locate_Exec_On_Path (Gnatlink.all);
@@ -6212,23 +6129,6 @@ package body Make is
             Main_Source_File := Next_Main_Source;  --  No directory information
          end if;
       end loop Multiple_Main_Loop;
-
-      if CodePeer_Mode then
-         declare
-            Success : Boolean := False;
-         begin
-            Globalize (Success);
-
-            if not Success then
-               Set_Standard_Error;
-               Write_Str ("*** globalize failed.");
-
-               if Commands_To_Stdout then
-                  Set_Standard_Output;
-               end if;
-            end if;
-         end;
-      end if;
 
       if Failed_Links.Last > 0 then
          for Index in 1 .. Successful_Links.Last loop
@@ -6442,6 +6342,72 @@ package body Make is
       --  Scan again the switch and arguments, now that we are sure that they
       --  do not include --version or --help.
 
+      --  First, check for switch -P and, if found and gprbuild is available,
+      --  silently invoke gprbuild, with switch --target if not on a native
+      --  platform.
+
+      declare
+         Arg_Len       : Natural       := Argument_Count;
+         Call_Gprbuild : Boolean       := False;
+         Gprbuild      : String_Access := null;
+         Pos           : Natural       := 0;
+         Success       : Boolean;
+         Target        : String_Access := null;
+
+      begin
+         Find_Program_Name;
+
+         if Name_Len >= 8
+           and then Name_Buffer (Name_Len - 7 .. Name_Len) = "gnatmake"
+         then
+            if Name_Len > 8 then
+               Target  := new String'(Name_Buffer (1 .. Name_Len - 9));
+               Arg_Len := Arg_Len + 1;
+            end if;
+
+            for J in 1 .. Argument_Count loop
+               declare
+                  Arg : constant String := Argument (J);
+               begin
+                  if Arg'Length >= 2
+                    and then Arg (Arg'First .. Arg'First + 1) = "-P"
+                  then
+                     Call_Gprbuild := True;
+                     exit;
+                  end if;
+               end;
+            end loop;
+
+            if Call_Gprbuild then
+               Gprbuild := Locate_Exec_On_Path (Exec_Name => "gprbuild");
+
+               if Gprbuild /= null then
+                  declare
+                     Args : Argument_List (1 .. Arg_Len);
+                  begin
+                     if Target /= null then
+                        Args (1) := new String'("--target=" & Target.all);
+                        Pos := 1;
+                     end if;
+
+                     for J in 1 .. Argument_Count loop
+                        Pos := Pos + 1;
+                        Args (Pos) := new String'(Argument (J));
+                     end loop;
+
+                     Spawn (Gprbuild.all, Args, Success);
+
+                     Free (Gprbuild);
+
+                     if Success then
+                        Exit_Program (E_Success);
+                     end if;
+                  end;
+               end if;
+            end if;
+         end if;
+      end;
+
       Scan_Args : for Next_Arg in 1 .. Argument_Count loop
          Scan_Make_Arg (Env, Argument (Next_Arg), And_Save => True);
       end loop Scan_Args;
@@ -6484,14 +6450,6 @@ package body Make is
 
       if Object_Directory_Path /= null and then In_Place_Mode then
          Make_Failed ("-i and -D cannot be used simultaneously");
-      end if;
-
-      --  Warn about 'gnatmake -P'
-
-      if Project_File_Name /= null then
-         Write_Line
-           ("warning: gnatmake -P is obsolete and will not be available "
-            & "in the next release; use gprbuild instead");
       end if;
 
       --  If --subdirs= is specified, but not -P, this is equivalent to -D,
@@ -6927,7 +6885,7 @@ package body Make is
       Get_Name_String (ALI_File);
       Link_Args (1) := new String'(Name_Buffer (1 .. Name_Len));
 
-      Link_Args (2 .. Args'Length + 1) :=  Args;
+      Link_Args (2 .. Args'Length + 1) := Args;
 
       GNAT.OS_Lib.Normalize_Arguments (Link_Args);
 
@@ -7280,8 +7238,6 @@ package body Make is
    ------------------------
 
    procedure Sigint_Intercepted is
-      SIGINT  : constant := 2;
-
    begin
       Set_Standard_Error;
       Write_Line ("*** Interrupted ***");
@@ -7289,7 +7245,7 @@ package body Make is
       --  Send SIGINT to all outstanding compilation processes spawned
 
       for J in 1 .. Outstanding_Compiles loop
-         Kill (Running_Compile (J).Pid, SIGINT, 1);
+         Kill (Running_Compile (J).Pid, Hard_Kill => False);
       end loop;
 
       Finish_Program (Project_Tree, E_No_Compile);
@@ -7558,29 +7514,28 @@ package body Make is
                   elsif Src_Path_Name = null
                     and then Lib_Path_Name = null
                   then
-                     Make_Failed ("RTS path not valid: missing "
-                                  & "adainclude and adalib directories");
+                     Make_Failed
+                       ("RTS path not valid: missing adainclude and adalib "
+                        & "directories");
 
                   elsif Src_Path_Name = null then
-                     Make_Failed ("RTS path not valid: missing adainclude "
-                                  & "directory");
+                     Make_Failed
+                       ("RTS path not valid: missing adainclude directory");
 
-                  elsif  Lib_Path_Name = null then
-                     Make_Failed ("RTS path not valid: missing adalib "
-                                  & "directory");
+                  elsif Lib_Path_Name = null then
+                     Make_Failed
+                       ("RTS path not valid: missing adalib directory");
                   end if;
                end;
             end if;
 
-         elsif Argv'Length > Source_Info_Option'Length and then
-           Argv (1 .. Source_Info_Option'Length) = Source_Info_Option
+         elsif Argv'Length > Source_Info_Option'Length
+           and then Argv (1 .. Source_Info_Option'Length) = Source_Info_Option
          then
             Project_Tree.Source_Info_File_Name :=
               new String'(Argv (Source_Info_Option'Length + 1 .. Argv'Last));
 
-         elsif Argv'Length >= 8 and then
-           Argv (1 .. 8) = "--param="
-         then
+         elsif Argv'Length >= 8 and then Argv (1 .. 8) = "--param=" then
             Add_Switch (Argv, Compiler, And_Save => And_Save);
             Add_Switch (Argv, Linker,   And_Save => And_Save);
 

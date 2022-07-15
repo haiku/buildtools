@@ -9,7 +9,7 @@ ACLOCAL_AMFLAGS = -I .. -I ../config
 AM_CPPFLAGS = -I $(top_srcdir)/../include
 
 ## May be used by toolexeclibdir.
-gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
+gcc_version := $(shell @get_gcc_base_ver@ $(top_srcdir)/../gcc/BASE-VER)
 
 ## Symbol versioning (copied from libssp).
 if LIBQUAD_USE_SYMVER
@@ -57,7 +57,7 @@ libquadmath_la_SOURCES = \
   math/erfq.c math/logq.c math/sqrtq.c math/expm1q.c math/lroundq.c \
   math/tanhq.c math/expq.c math/modfq.c math/tanq.c math/fabsq.c \
   math/nanq.c math/tgammaq.c math/finiteq.c math/nextafterq.c \
-  math/truncq.c math/floorq.c math/powq.c math/fmaq.c \
+  math/truncq.c math/floorq.c math/powq.c math/fmaq.c math/logbq.c \
   math/cacoshq.c math/cacosq.c math/casinhq.c math/casinq.c \
   math/catanhq.c math/catanq.c math/cimagq.c math/conjq.c math/cprojq.c \
   math/crealq.c math/fdimq.c math/fmaxq.c math/fminq.c math/ilogbq.c \

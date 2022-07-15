@@ -1,5 +1,5 @@
 /* Export function prototypes from explow.c.
-   Copyright (C) 2015-2016 Free Software Foundation, Inc.
+   Copyright (C) 2015-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -57,6 +57,9 @@ extern machine_mode promote_mode (const_tree, machine_mode, int *);
 /* Return mode and signedness to use when object is promoted.  */
 machine_mode promote_decl_mode (const_tree, int *);
 
+/* Return mode and signedness to use when object is promoted.  */
+machine_mode promote_ssa_mode (const_tree, int *);
+
 /* Remove some bytes from the stack.  An rtx says how many.  */
 extern void adjust_stack (rtx);
 
@@ -78,8 +81,19 @@ extern void emit_stack_restore (enum save_level, rtx);
 /* Invoke emit_stack_save for the nonlocal_goto_save_area.  */
 extern void update_nonlocal_goto_save_area (void);
 
+/* Record a new stack level.  */
+extern void record_new_stack_level (void);
+
 /* Allocate some space on the stack dynamically and return its address.  */
 extern rtx allocate_dynamic_stack_space (rtx, unsigned, unsigned, bool);
+
+/* Calculate the necessary size of a constant dynamic stack allocation from the
+   size of the variable area.  */
+extern void get_dynamic_stack_size (rtx *, unsigned, unsigned, HOST_WIDE_INT *);
+
+/* Returns the address of the dynamic stack space without allocating it.  */
+extern rtx get_dynamic_stack_base (HOST_WIDE_INT offset,
+				   unsigned required_align);
 
 /* Emit one stack probe at ADDRESS, an address within the stack.  */
 extern void emit_stack_probe (rtx);

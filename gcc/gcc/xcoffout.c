@@ -1,5 +1,5 @@
 /* Output xcoff-format symbol table information from GNU compiler.
-   Copyright (C) 1992-2015 Free Software Foundation, Inc.
+   Copyright (C) 1992-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -25,24 +25,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "varasm.h"
-#include "rtl.h"
-#include "flags.h"
-#include "diagnostic-core.h"
-#include "output.h"
-#include "ggc.h"
 #include "target.h"
+#include "rtl.h"
+#include "tree.h"
+#include "diagnostic-core.h"
+#include "varasm.h"
+#include "output.h"
 #include "debug.h"
 
 #ifdef XCOFF_DEBUGGING_INFO
@@ -339,8 +327,8 @@ xcoffout_source_file (FILE *file, const char *filename, int inline_p)
 /* Output a line number symbol entry for location (FILENAME, LINE).  */
 
 void
-xcoffout_source_line (unsigned int line, const char *filename,
-                      int discriminator ATTRIBUTE_UNUSED,
+xcoffout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
+		      const char *filename, int discriminator ATTRIBUTE_UNUSED,
                       bool is_stmt ATTRIBUTE_UNUSED)
 {
   bool inline_p = (strcmp (xcoff_current_function_file, filename) != 0
@@ -458,6 +446,7 @@ xcoffout_declare_function (FILE *file, tree decl, const char *name)
 
 void
 xcoffout_begin_prologue (unsigned int line,
+			 unsigned int column ATTRIBUTE_UNUSED,
 			 const char *file ATTRIBUTE_UNUSED)
 {
   ASM_OUTPUT_LFB (asm_out_file, line);

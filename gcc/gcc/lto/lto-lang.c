@@ -1,5 +1,5 @@
 /* Language-dependent hooks for LTO.
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
    Contributed by CodeSourcery, Inc.
 
 This file is part of GCC.
@@ -21,48 +21,20 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "flags.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "fold-const.h"
-#include "stringpool.h"
-#include "stor-layout.h"
 #include "target.h"
+#include "function.h"
+#include "basic-block.h"
+#include "tree.h"
+#include "gimple.h"
+#include "stringpool.h"
+#include "diagnostic-core.h"
+#include "stor-layout.h"
 #include "langhooks.h"
 #include "langhooks-def.h"
 #include "debug.h"
 #include "lto-tree.h"
 #include "lto.h"
-#include "tree-inline.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
-#include "diagnostic-core.h"
-#include "toplev.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
-#include "lto-streamer.h"
 #include "cilk.h"
-
-static tree lto_type_for_size (unsigned, int);
 
 static tree handle_noreturn_attribute (tree *, tree, tree, int, bool *);
 static tree handle_leaf_attribute (tree *, tree, tree, int, bool *);
@@ -170,6 +142,12 @@ enum lto_builtin_type
 			    ARG6, ARG7) NAME,
 #define DEF_FUNCTION_TYPE_8(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
 			    ARG6, ARG7, ARG8) NAME,
+#define DEF_FUNCTION_TYPE_9(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			    ARG6, ARG7, ARG8, ARG9) NAME,
+#define DEF_FUNCTION_TYPE_10(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			     ARG6, ARG7, ARG8, ARG9, ARG10) NAME,
+#define DEF_FUNCTION_TYPE_11(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			     ARG6, ARG7, ARG8, ARG9, ARG10, ARG11) NAME,
 #define DEF_FUNCTION_TYPE_VAR_0(NAME, RETURN) NAME,
 #define DEF_FUNCTION_TYPE_VAR_1(NAME, RETURN, ARG1) NAME,
 #define DEF_FUNCTION_TYPE_VAR_2(NAME, RETURN, ARG1, ARG2) NAME,
@@ -177,10 +155,10 @@ enum lto_builtin_type
 #define DEF_FUNCTION_TYPE_VAR_4(NAME, RETURN, ARG1, ARG2, ARG3, ARG4) NAME,
 #define DEF_FUNCTION_TYPE_VAR_5(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG6) \
 				NAME,
+#define DEF_FUNCTION_TYPE_VAR_6(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+				 ARG6) NAME,
 #define DEF_FUNCTION_TYPE_VAR_7(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
 				ARG6, ARG7) NAME,
-#define DEF_FUNCTION_TYPE_VAR_11(NAME, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
-				 ARG6, ARG7, ARG8, ARG9, ARG10, ARG11) NAME,
 #define DEF_POINTER_TYPE(NAME, TYPE) NAME,
 #include "builtin-types.def"
 #undef DEF_PRIMITIVE_TYPE
@@ -193,14 +171,17 @@ enum lto_builtin_type
 #undef DEF_FUNCTION_TYPE_6
 #undef DEF_FUNCTION_TYPE_7
 #undef DEF_FUNCTION_TYPE_8
+#undef DEF_FUNCTION_TYPE_9
+#undef DEF_FUNCTION_TYPE_10
+#undef DEF_FUNCTION_TYPE_11
 #undef DEF_FUNCTION_TYPE_VAR_0
 #undef DEF_FUNCTION_TYPE_VAR_1
 #undef DEF_FUNCTION_TYPE_VAR_2
 #undef DEF_FUNCTION_TYPE_VAR_3
 #undef DEF_FUNCTION_TYPE_VAR_4
 #undef DEF_FUNCTION_TYPE_VAR_5
+#undef DEF_FUNCTION_TYPE_VAR_6
 #undef DEF_FUNCTION_TYPE_VAR_7
-#undef DEF_FUNCTION_TYPE_VAR_11
 #undef DEF_POINTER_TYPE
   BT_LAST
 };
@@ -369,10 +350,15 @@ handle_nonnull_attribute (tree *node, tree ARG_UNUSED (name),
 
   /* If no arguments are specified, all pointer arguments should be
      non-null.  Verify a full prototype is given so that the arguments
-     will have the correct types when we actually check them later.  */
+     will have the correct types when we actually check them later.
+     Avoid diagnosing type-generic built-ins since those have no
+     prototype.  */
   if (!args)
     {
-      gcc_assert (prototype_p (type));
+      gcc_assert (prototype_p (type)
+		  || !TYPE_ATTRIBUTES (type)
+		  || lookup_attribute ("type generic", TYPE_ATTRIBUTES (type)));
+
       return NULL_TREE;
     }
 
@@ -582,7 +568,7 @@ def_fn_type (builtin_type def, builtin_type ret, bool var, int n, ...)
 static tree
 builtin_type_for_size (int size, bool unsignedp)
 {
-  tree type = lto_type_for_size (size, unsignedp);
+  tree type = lang_hooks.types.type_for_size (size, unsignedp);
   return type ? type : error_mark_node;
 }
 
@@ -673,6 +659,18 @@ lto_define_builtins (tree va_list_ref_type_node ATTRIBUTE_UNUSED,
 			    ARG6, ARG7, ARG8)				\
   def_fn_type (ENUM, RETURN, 0, 8, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6,	\
 	       ARG7, ARG8);
+#define DEF_FUNCTION_TYPE_9(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			    ARG6, ARG7, ARG8, ARG9)			\
+  def_fn_type (ENUM, RETURN, 0, 9, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6,	\
+	       ARG7, ARG8, ARG9);
+#define DEF_FUNCTION_TYPE_10(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			     ARG6, ARG7, ARG8, ARG9, ARG10)		 \
+  def_fn_type (ENUM, RETURN, 0, 10, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6,	 \
+	       ARG7, ARG8, ARG9, ARG10);
+#define DEF_FUNCTION_TYPE_11(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+			     ARG6, ARG7, ARG8, ARG9, ARG10, ARG11)	 \
+  def_fn_type (ENUM, RETURN, 0, 11, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6,	 \
+	       ARG7, ARG8, ARG9, ARG10, ARG11);
 #define DEF_FUNCTION_TYPE_VAR_0(ENUM, RETURN) \
   def_fn_type (ENUM, RETURN, 1, 0);
 #define DEF_FUNCTION_TYPE_VAR_1(ENUM, RETURN, ARG1) \
@@ -685,13 +683,12 @@ lto_define_builtins (tree va_list_ref_type_node ATTRIBUTE_UNUSED,
   def_fn_type (ENUM, RETURN, 1, 4, ARG1, ARG2, ARG3, ARG4);
 #define DEF_FUNCTION_TYPE_VAR_5(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5) \
   def_fn_type (ENUM, RETURN, 1, 5, ARG1, ARG2, ARG3, ARG4, ARG5);
+#define DEF_FUNCTION_TYPE_VAR_6(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
+				 ARG6)	\
+  def_fn_type (ENUM, RETURN, 1, 6, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6);
 #define DEF_FUNCTION_TYPE_VAR_7(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
 				ARG6, ARG7)				\
   def_fn_type (ENUM, RETURN, 1, 7, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6, ARG7);
-#define DEF_FUNCTION_TYPE_VAR_11(ENUM, RETURN, ARG1, ARG2, ARG3, ARG4, ARG5, \
-				 ARG6, ARG7, ARG8, ARG9, ARG10, ARG11)	\
-  def_fn_type (ENUM, RETURN, 1, 11, ARG1, ARG2, ARG3, ARG4, ARG5, ARG6,	\
-	       ARG7, ARG8, ARG9, ARG10, ARG11);
 #define DEF_POINTER_TYPE(ENUM, TYPE) \
   builtin_types[(int) ENUM] = build_pointer_type (builtin_types[(int) TYPE]);
 
@@ -707,14 +704,17 @@ lto_define_builtins (tree va_list_ref_type_node ATTRIBUTE_UNUSED,
 #undef DEF_FUNCTION_TYPE_6
 #undef DEF_FUNCTION_TYPE_7
 #undef DEF_FUNCTION_TYPE_8
+#undef DEF_FUNCTION_TYPE_9
+#undef DEF_FUNCTION_TYPE_10
+#undef DEF_FUNCTION_TYPE_11
 #undef DEF_FUNCTION_TYPE_VAR_0
 #undef DEF_FUNCTION_TYPE_VAR_1
 #undef DEF_FUNCTION_TYPE_VAR_2
 #undef DEF_FUNCTION_TYPE_VAR_3
 #undef DEF_FUNCTION_TYPE_VAR_4
 #undef DEF_FUNCTION_TYPE_VAR_5
+#undef DEF_FUNCTION_TYPE_VAR_6
 #undef DEF_FUNCTION_TYPE_VAR_7
-#undef DEF_FUNCTION_TYPE_VAR_11
 #undef DEF_POINTER_TYPE
   builtin_types[(int) BT_LAST] = NULL_TREE;
 
@@ -727,7 +727,6 @@ lto_define_builtins (tree va_list_ref_type_node ATTRIBUTE_UNUSED,
 		     builtin_types[(int) LIBTYPE], BOTH_P, FALLBACK_P,	\
 		     NONANSI_P, built_in_attributes[(int) ATTRS], IMPLICIT);
 #include "builtins.def"
-#undef DEF_BUILTIN
 }
 
 static GTY(()) tree registered_builtin_types;
@@ -823,55 +822,48 @@ lto_post_options (const char **pfilename ATTRIBUTE_UNUSED)
   if (flag_wpa)
     flag_generate_lto = 1;
 
+  /* Initialize the codegen flags according to the output type.  */
+  switch (flag_lto_linker_output)
+    {
+    case LTO_LINKER_OUTPUT_REL: /* .o: incremental link producing LTO IL  */
+      flag_whole_program = 0;
+      flag_incremental_link = 1;
+      break;
+
+    case LTO_LINKER_OUTPUT_DYN: /* .so: PID library */
+      /* On some targets, like i386 it makes sense to build PIC library wihout
+	 -fpic for performance reasons.  So no need to adjust flags.  */
+      break;
+
+    case LTO_LINKER_OUTPUT_PIE: /* PIE binary */
+      /* If -fPIC or -fPIE was used at compile time, be sure that
+         flag_pie is 2.  */
+      flag_pie = MAX (flag_pie, flag_pic);
+      flag_pic = flag_pie;
+      break;
+
+    case LTO_LINKER_OUTPUT_EXEC: /* Normal executable */
+      flag_pic = 0;
+      flag_pie = 0;
+      break;
+
+    case LTO_LINKER_OUTPUT_UNKNOWN:
+      break;
+    }
+
   /* Excess precision other than "fast" requires front-end
      support.  */
   flag_excess_precision_cmdline = EXCESS_PRECISION_FAST;
 
+  /* When partitioning, we can tear appart STRING_CSTs uses from the same
+     TU into multiple partitions.  Without constant merging the constants
+     might not be equal at runtime.  See PR50199.  */
+  if (!flag_merge_constants)
+    flag_merge_constants = 1;
+
   /* Initialize the compiler back end.  */
   return false;
 }
-
-/* Return an integer type with PRECISION bits of precision,
-   that is unsigned if UNSIGNEDP is nonzero, otherwise signed.  */
-
-static tree
-lto_type_for_size (unsigned precision, int unsignedp)
-{
-  if (precision == TYPE_PRECISION (integer_type_node))
-    return unsignedp ? unsigned_type_node : integer_type_node;
-
-  if (precision == TYPE_PRECISION (signed_char_type_node))
-    return unsignedp ? unsigned_char_type_node : signed_char_type_node;
-
-  if (precision == TYPE_PRECISION (short_integer_type_node))
-    return unsignedp ? short_unsigned_type_node : short_integer_type_node;
-
-  if (precision == TYPE_PRECISION (long_integer_type_node))
-    return unsignedp ? long_unsigned_type_node : long_integer_type_node;
-
-  if (precision == TYPE_PRECISION (long_long_integer_type_node))
-    return unsignedp
-	   ? long_long_unsigned_type_node
-	   : long_long_integer_type_node;
-
-  if (precision <= TYPE_PRECISION (intQI_type_node))
-    return unsignedp ? unsigned_intQI_type_node : intQI_type_node;
-
-  if (precision <= TYPE_PRECISION (intHI_type_node))
-    return unsignedp ? unsigned_intHI_type_node : intHI_type_node;
-
-  if (precision <= TYPE_PRECISION (intSI_type_node))
-    return unsignedp ? unsigned_intSI_type_node : intSI_type_node;
-
-  if (precision <= TYPE_PRECISION (intDI_type_node))
-    return unsignedp ? unsigned_intDI_type_node : intDI_type_node;
-
-  if (precision <= TYPE_PRECISION (intTI_type_node))
-    return unsignedp ? unsigned_intTI_type_node : intTI_type_node;
-
-  return NULL_TREE;
-}
-
 
 /* Return a data type that has machine mode MODE.
    If the mode is an integer,
@@ -883,6 +875,7 @@ static tree
 lto_type_for_mode (machine_mode mode, int unsigned_p)
 {
   tree t;
+  int i;
 
   if (mode == TYPE_MODE (integer_type_node))
     return unsigned_p ? unsigned_type_node : integer_type_node;
@@ -898,6 +891,12 @@ lto_type_for_mode (machine_mode mode, int unsigned_p)
 
   if (mode == TYPE_MODE (long_long_integer_type_node))
     return unsigned_p ? long_long_unsigned_type_node : long_long_integer_type_node;
+
+  for (i = 0; i < NUM_INT_N_ENTS; i ++)
+    if (int_n_enabled_p[i]
+	&& mode == int_n_data[i].m)
+      return (unsigned_p ? int_n_trees[i].unsigned_type
+	      : int_n_trees[i].signed_type);
 
   if (mode == QImode)
     return unsigned_p ? unsigned_intQI_type_node : intQI_type_node;
@@ -1116,19 +1115,6 @@ lto_getdecls (void)
   return NULL_TREE;
 }
 
-static void
-lto_write_globals (void)
-{
-  if (flag_wpa)
-    return;
-
-  /* Output debug info for global variables.  */  
-  varpool_node *vnode;
-  FOR_EACH_DEFINED_VARIABLE (vnode)
-    if (!decl_function_context (vnode->decl))
-      debug_hooks->global_decl (vnode->decl);
-}
-
 static tree
 lto_builtin_function (tree decl)
 {
@@ -1219,7 +1205,7 @@ lto_init (void)
   flag_generate_lto = (flag_wpa != NULL);
 
   /* Create the basic integer types.  */
-  build_common_tree_nodes (flag_signed_char, flag_short_double);
+  build_common_tree_nodes (flag_signed_char);
 
   /* The global tree for the main identifier is filled in by
      language-specific front-end initialization that is not run in the
@@ -1229,13 +1215,15 @@ lto_init (void)
     main_identifier_node = get_identifier ("main");
 
   /* In the C++ front-end, fileptr_type_node is defined as a variant
-     copy of of ptr_type_node, rather than ptr_node itself.  The
+     copy of ptr_type_node, rather than ptr_node itself.  The
      distinction should only be relevant to the front-end, so we
      always use the C definition here in lto1.  */
   gcc_assert (fileptr_type_node == ptr_type_node);
   gcc_assert (TYPE_MAIN_VARIANT (fileptr_type_node) == ptr_type_node);
-
-  ptrdiff_type_node = integer_type_node;
+  /* Likewise for const struct tm*.  */
+  gcc_assert (const_tm_ptr_type_node == const_ptr_type_node);
+  gcc_assert (TYPE_MAIN_VARIANT (const_tm_ptr_type_node)
+	      == const_ptr_type_node);
 
   lto_build_c_type_nodes ();
   gcc_assert (va_list_type_node);
@@ -1324,8 +1312,6 @@ static void lto_init_ts (void)
 #define LANG_HOOKS_GET_ALIAS_SET gimple_get_alias_set
 #undef LANG_HOOKS_TYPE_FOR_MODE
 #define LANG_HOOKS_TYPE_FOR_MODE lto_type_for_mode
-#undef LANG_HOOKS_TYPE_FOR_SIZE
-#define LANG_HOOKS_TYPE_FOR_SIZE lto_type_for_size
 #undef LANG_HOOKS_SET_DECL_ASSEMBLER_NAME
 #define LANG_HOOKS_SET_DECL_ASSEMBLER_NAME lto_set_decl_assembler_name
 #undef LANG_HOOKS_GLOBAL_BINDINGS_P
@@ -1334,8 +1320,6 @@ static void lto_init_ts (void)
 #define LANG_HOOKS_PUSHDECL lto_pushdecl
 #undef LANG_HOOKS_GETDECLS
 #define LANG_HOOKS_GETDECLS lto_getdecls
-#undef LANG_HOOKS_WRITE_GLOBALS
-#define LANG_HOOKS_WRITE_GLOBALS lto_write_globals
 #undef LANG_HOOKS_REGISTER_BUILTIN_TYPE
 #define LANG_HOOKS_REGISTER_BUILTIN_TYPE lto_register_builtin_type
 #undef LANG_HOOKS_BUILTIN_FUNCTION

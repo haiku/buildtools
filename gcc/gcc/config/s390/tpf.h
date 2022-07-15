@@ -1,5 +1,5 @@
 /* Definitions for target OS TPF for GNU compiler, for IBM S/390 hardware
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
    Contributed by P.J. Darcy (darcypj@us.ibm.com),
                   Hartmut Penner (hpenner@de.ibm.com), and
                   Ulrich Weigand (uweigand@de.ibm.com).
@@ -90,9 +90,24 @@ along with GCC; see the file COPYING3.  If not see
 #undef CPLUSPLUS_CPP_SPEC
 #define CPLUSPLUS_CPP_SPEC "-D_GNU_SOURCE %(cpp)"
 
-#undef ASM_SPEC
-#define ASM_SPEC "%{m31&m64}%{mesa&mzarch}%{march=*} \
-                  -alshd=%b.lst"
+/* Rewrite -march=arch* options to the original CPU name in order to
+   make it work with older binutils.  */
+#undef  ASM_SPEC
+#define ASM_SPEC					\
+  "%{m31&m64}%{mesa&mzarch}%{march=z*}"			\
+  "%{march=arch3:-march=g5}"				\
+  "%{march=arch5:-march=z900}"				\
+  "%{march=arch6:-march=z990}"				\
+  "%{march=arch7:-march=z9-ec}"				\
+  "%{march=arch8:-march=z10}"				\
+  "%{march=arch9:-march=z196}"				\
+  "%{march=arch10:-march=zEC12}"			\
+  "%{march=arch11:-march=z13}"				\
+  " -alshd=%b.lst"
+
+#undef LIB_SPEC
+#define LIB_SPEC "-lCTIS -lCISO -lCLBM -lCTAL -lCFVS -lCTBX -lCTXO \
+                  -lCJ00 -lCTDF -lCOMX -lCOMS -lCTHD -lCTAD -lTPFSTUB"
 
 #define ENTRY_SPEC "%{mmain:-entry=_start} \
                     %{!mmain:-entry=0}"
@@ -110,9 +125,12 @@ along with GCC; see the file COPYING3.  If not see
 
 /* IBM copies these libraries over with these names.  */
 #define MATH_LIBRARY "CLBM"
-#define LIBSTDCXX "CPP2"
+#define LIBSTDCXX "CPP1"
 
 #undef TARGET_LIBC_HAS_FUNCTION
 #define TARGET_LIBC_HAS_FUNCTION gnu_libc_has_function
+
+/* GAS supports it, but the debuggers don't, so avoid it.  */
+#define SUPPORTS_DISCRIMINATOR 0
 
 #endif /* ! _TPF_H */

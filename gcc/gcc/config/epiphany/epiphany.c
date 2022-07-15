@@ -1,5 +1,5 @@
 /* Subroutines used for code generation on the EPIPHANY cpu.
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright (C) 1994-2017 Free Software Foundation, Inc.
    Contributed by Embecosm on behalf of Adapteva, Inc.
 
 This file is part of GCC.
@@ -21,60 +21,26 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "target.h"
+#include "rtl.h"
 #include "tree.h"
-#include "fold-const.h"
+#include "df.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "stringpool.h"
+#include "optabs.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "diagnostic-core.h"
+#include "alias.h"
 #include "stor-layout.h"
 #include "varasm.h"
 #include "calls.h"
-#include "stringpool.h"
-#include "rtl.h"
-#include "regs.h"
-#include "hard-reg-set.h"
-#include "real.h"
-#include "insn-config.h"
-#include "conditions.h"
 #include "output.h"
 #include "insn-attr.h"
-#include "flags.h"
-#include "function.h"
-#include "insn-codes.h"
-#include "optabs.h"
-#include "hashtab.h"
-#include "statistics.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
 #include "explow.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
-#include "diagnostic-core.h"
-#include "recog.h"
-#include "toplev.h"
-#include "tm_p.h"
-#include "target.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "predict.h"
-#include "basic-block.h"
-#include "df.h"
-#include "langhooks.h"
-#include "ggc.h"
 #include "tm-constrs.h"
 #include "tree-pass.h"	/* for current_pass */
 #include "context.h"
@@ -129,13 +95,15 @@ static rtx_insn *frame_insn (rtx);
 #define TARGET_SETUP_INCOMING_VARARGS epiphany_setup_incoming_varargs
 
 /* Using the simplistic varags handling forces us to do partial reg/stack
-   argument passing for types with larger size (> 4 bytes) than alignemnt.  */
+   argument passing for types with larger size (> 4 bytes) than alignment.  */
 #define TARGET_ARG_PARTIAL_BYTES epiphany_arg_partial_bytes
 
 #define TARGET_FUNCTION_OK_FOR_SIBCALL epiphany_function_ok_for_sibcall
 
 #define TARGET_SCHED_ISSUE_RATE epiphany_issue_rate
 #define TARGET_SCHED_ADJUST_COST epiphany_adjust_cost
+
+#define TARGET_LRA_P hook_bool_void_false
 
 #define TARGET_LEGITIMATE_ADDRESS_P epiphany_legitimate_address_p
 
@@ -590,7 +558,7 @@ sfunc_symbol (const char *name)
 }
 
 /* X and Y are two things to compare using CODE in IN_MODE.
-   Emit the compare insn, construct the the proper cc reg in the proper
+   Emit the compare insn, construct the proper cc reg in the proper
    mode, and return the rtx for the cc reg comparison in CMODE.  */
 
 rtx
@@ -669,7 +637,7 @@ gen_compare_reg (machine_mode cmode, enum rtx_code code,
   else
     x = force_reg (in_mode, x);
 
-  pat = gen_rtx_SET (VOIDmode, cc_reg, gen_rtx_COMPARE (mode, x, y));
+  pat = gen_rtx_SET (cc_reg, gen_rtx_COMPARE (mode, x, y));
   if (mode == CC_FP_EQmode || mode == CC_FP_GTEmode)
     {
       const char *name = mode == CC_FP_EQmode ? "__eqsf2" : "__gtesf2";
@@ -784,9 +752,12 @@ epiphany_arg_partial_bytes (cumulative_args_t cum, machine_mode mode,
    scanned.  In either case, *TOTAL contains the cost result.  */
 
 static bool
-epiphany_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
+epiphany_rtx_costs (rtx x, machine_mode mode, int outer_code,
+		    int opno ATTRIBUTE_UNUSED,
 		    int *total, bool speed ATTRIBUTE_UNUSED)
 {
+  int code = GET_CODE (x);
+
   switch (code)
     {
       /* Small integers in the right context are as cheap as registers.  */
@@ -827,7 +798,7 @@ epiphany_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       return true;
 
     case COMPARE:
-      switch (GET_MODE (x))
+      switch (mode)
 	{
 	/* There are a number of single-insn combiner patterns that use
 	   the flag side effects of arithmetic.  */
@@ -1349,7 +1320,7 @@ epiphany_print_operand (FILE *file, rtx x, int code)
 	    offset = 0;
 	    break;
 	}
-      output_address (addr);
+      output_address (GET_MODE (x), addr);
       fputc (']', file);
       if (offset)
 	{
@@ -1370,22 +1341,21 @@ epiphany_print_operand (FILE *file, rtx x, int code)
 	      case 1:
 		break;
 	    }
-	  output_address (offset);
+	  output_address (GET_MODE (x), offset);
 	}
       break;
     case CONST_DOUBLE :
       /* We handle SFmode constants here as output_addr_const doesn't.  */
       if (GET_MODE (x) == SFmode)
 	{
-	  REAL_VALUE_TYPE d;
 	  long l;
 
-	  REAL_VALUE_FROM_CONST_DOUBLE (d, x);
-	  REAL_VALUE_TO_TARGET_SINGLE (d, l);
+	  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (x), l);
 	  fprintf (file, "%s0x%08lx", IMMEDIATE_PREFIX, l);
 	  break;
 	}
-      /* Fall through.  Let output_addr_const deal with it.  */
+      /* FALLTHRU */
+      /* Let output_addr_const deal with it.  */
     case CONST_INT:
       fprintf(file,"%s",IMMEDIATE_PREFIX);
       if (code == 'C' || code == 'X')
@@ -1404,7 +1374,7 @@ epiphany_print_operand (FILE *file, rtx x, int code)
 /* Print a memory address as an operand to reference that memory location.  */
 
 static void
-epiphany_print_operand_address (FILE *file, rtx addr)
+epiphany_print_operand_address (FILE *file, machine_mode /*mode*/, rtx addr)
 {
   register rtx base, index = 0;
   int offset = 0;
@@ -1458,7 +1428,9 @@ epiphany_print_operand_address (FILE *file, rtx addr)
       break;
     case PRE_INC: case PRE_DEC: case POST_INC: case POST_DEC: case POST_MODIFY:
       /* We shouldn't get here as we've lost the mode of the memory object
-	 (which says how much to inc/dec by.  */
+	 (which says how much to inc/dec by.
+	 FIXME: We have the mode now, address printing can be moved into this
+	 function.  */
       gcc_unreachable ();
       break;
     default:
@@ -1570,7 +1542,7 @@ frame_subreg_note (rtx set, int offset)
   rtx src = simplify_gen_subreg (SImode, SET_SRC (set), DImode, offset);
   rtx dst = simplify_gen_subreg (SImode, SET_DEST (set), DImode, offset);
 
-  set = gen_rtx_SET (VOIDmode, dst ,src);
+  set = gen_rtx_SET (dst ,src);
   RTX_FRAME_RELATED_P (set) = 1;
   return set;
 }
@@ -1625,7 +1597,7 @@ frame_insn (rtx x)
 static rtx_insn *
 frame_move_insn (rtx to, rtx from)
 {
-  return frame_insn (gen_rtx_SET (VOIDmode, to, from));
+  return frame_insn (gen_rtx_SET (to, from));
 }
 
 /* Generate a MEM referring to a varargs argument slot.  */
@@ -1867,11 +1839,10 @@ epiphany_expand_prologue (void)
       /* Instruction scheduling can separate the instruction setting IP from
 	 INSN so that dwarf2out_frame_debug_expr becomes confused what the
 	 temporary register is.  Example: _gcov.o  */
-      note = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+      note = gen_rtx_SET (stack_pointer_rtx,
 			  gen_rtx_PLUS (Pmode, stack_pointer_rtx, off));
       note = gen_rtx_PARALLEL (VOIDmode,
-			       gen_rtvec (2, gen_rtx_SET (VOIDmode, mem2, reg),
-					  note));
+			       gen_rtvec (2, gen_rtx_SET (mem2, reg), note));
       add_reg_note (insn, REG_FRAME_RELATED_EXPR, note);
     }
   /* If there is only one or no register to save, yet we have a large frame,
@@ -2016,9 +1987,10 @@ epiphany_issue_rate (void)
    the same cost as a data-dependence.  The return value should be
    the new value for COST.  */
 static int
-epiphany_adjust_cost (rtx_insn *insn, rtx link, rtx_insn *dep_insn, int cost)
+epiphany_adjust_cost (rtx_insn *insn, int dep_type, rtx_insn *dep_insn,
+		      int cost, unsigned int)
 {
-  if (REG_NOTE_KIND (link) == 0)
+  if (dep_type == 0)
     {
       rtx dep_set;
 
@@ -2883,12 +2855,12 @@ epiphany_special_round_type_align (tree type, unsigned computed,
    arrays-at-the-end-of-structs work, like for struct gcov_fn_info in
    libgcov.c .  */
 unsigned
-epiphany_adjust_field_align (tree field, unsigned computed)
+epiphany_adjust_field_align (tree type, unsigned computed)
 {
   if (computed == 32
-      && TREE_CODE (TREE_TYPE (field)) == ARRAY_TYPE)
+      && TREE_CODE (type) == ARRAY_TYPE)
     {
-      tree elmsz = TYPE_SIZE (TREE_TYPE (TREE_TYPE (field)));
+      tree elmsz = TYPE_SIZE (TREE_TYPE (type));
 
       if (!tree_fits_uhwi_p (elmsz) || tree_to_uhwi (elmsz) >= 32)
 	return 64;

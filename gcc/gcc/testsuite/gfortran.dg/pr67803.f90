@@ -5,10 +5,10 @@
 !
 program p
   character(2) :: x(1)
-  x = '0' // [character :: 1]       ! { dg-error "Incompatiable typespec for" }
-  x = '0' // [character :: 1.]      ! { dg-error "Incompatiable typespec for" }
-  x = '0' // [character :: 1d1]     ! { dg-error "Incompatiable typespec for" }
-  x = '0' // [character :: (0.,1.)] ! { dg-error "Incompatiable typespec for" }
-  x = '0' // [character :: .true.]  ! { dg-error "Incompatiable typespec for" }
-  x = '0' // [character :: null()]  ! { dg-error "Incompatiable typespec for" }
+  x = '0' // [character :: 1]       ! { dg-error "Incompatible typespec for" }
+  x = '0' // [character :: 1.]      ! { dg-error "Incompatible typespec for" }
+  x = '0' // [character :: 1d1]     ! { dg-error "Incompatible typespec for" }
+  x = '0' // [character :: (0.,1.)] ! { dg-error "Incompatible typespec for" }
+  x = '0' // [character :: .true.]  ! { dg-error "Incompatible typespec for" }
+  x = '0' // [character :: null()]  ! { dg-error "Incompatible typespec for" }
 end

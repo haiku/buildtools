@@ -1,4 +1,4 @@
-/* { dg-do run } */
+#include "tree-vect.h"
 
 extern void abort (void);
 
@@ -22,6 +22,7 @@ int main ()
   struct giga g[8];
   unsigned int n = 1;
   int i, j;
+  check_vect ();
   for (i = 0; i < 8; ++i)
     for (j = 0; j < 16; ++j)
       {
@@ -40,4 +41,3 @@ int main ()
    should reject that in the end).  */
 
 /* { dg-final { scan-tree-dump-times "vectorized 0 loops in function" 2 "vect" } } */
-/* { dg-final { cleanup-tree-dump "vect" } } */

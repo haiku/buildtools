@@ -105,6 +105,13 @@
 #undef create_code
 #undef verify_code
 
+/* test-factorial-must-tail-call.c */
+#define create_code create_code_factorial_must_tail_call
+#define verify_code verify_code_factorial_must_tail_call
+#include "test-factorial-must-tail-call.c"
+#undef create_code
+#undef verify_code
+
 /* test-fibonacci.c */
 #define create_code create_code_fibonacci
 #define verify_code verify_code_fibonacci
@@ -158,6 +165,13 @@
 #define create_code create_code_pr66700_observing_write_through_ptr
 #define verify_code verify_code_pr66700_observing_write_through_ptr
 #include "test-pr66700-observing-write-through-ptr.c"
+#undef create_code
+#undef verify_code
+
+/* test-pr66779.c */
+#define create_code create_code_pr66779
+#define verify_code verify_code_pr66779
+#include "test-pr66779.c"
 #undef create_code
 #undef verify_code
 
@@ -265,6 +279,9 @@ const struct testcase testcases[] = {
   {"factorial",
    create_code_factorial,
    verify_code_factorial},
+  {"factorial_must_tail_call",
+   create_code_factorial_must_tail_call,
+   verify_code_factorial_must_tail_call},
   {"fibonacci",
    create_code_fibonacci,
    verify_code_fibonacci},
@@ -289,6 +306,9 @@ const struct testcase testcases[] = {
   {"pr66700_observing_write_through_ptr",
    create_code_pr66700_observing_write_through_ptr,
    verify_code_pr66700_observing_write_through_ptr},
+  {"pr66779",
+   create_code_pr66779,
+   verify_code_pr66779},
   {"reading_struct ",
    create_code_reading_struct ,
    verify_code_reading_struct },

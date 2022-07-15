@@ -1,4 +1,4 @@
-@c Copyright (C) 2002-2015 Free Software Foundation, Inc.
+@c Copyright (C) 2002-2017 Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
@@ -198,6 +198,8 @@ This is somewhat dangerous; the only safe use is in a union when one
 field really isn't ever used.
 
 @findex for_user
+@item for_user
+
 Use this to mark types that need to be marked by user gc routines, but are not
 refered to in a template argument.  So if you have some user gc type T1 and a
 non user gc type T2 you can give T2 the for_user option so that the marking
@@ -260,16 +262,6 @@ clear pointers in the variable.
 garbage collection runs, there's no need to mark anything pointed to
 by this variable, it can just be set to @code{NULL} instead.  This is used
 to keep a list of free structures around for re-use.
-
-@findex mark_hook
-@item mark_hook ("@var{hook-routine-name}")
-
-If provided for a structure or union type, the given
-@var{hook-routine-name} (between double-quotes) is the name of a
-routine called when the garbage collector has just marked the data as
-reachable. This routine should not change the data, or call any ggc
-routine. Its only argument is a pointer to the just marked (const)
-structure or union.
 
 @findex maybe_undef
 @item maybe_undef
@@ -429,13 +421,13 @@ public:
     tree a;
 @};
 
-class GTY((tag("1")) some_subclass : public example_base
+class GTY((tag("1"))) some_subclass : public example_base
 @{
 public:
     tree b;
 @};
 
-class GTY((tag("2")) some_other_subclass : public example_base
+class GTY((tag("2"))) some_other_subclass : public example_base
 @{
 public:
     tree c;

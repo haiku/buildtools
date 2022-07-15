@@ -1,5 +1,5 @@
 /* Convert RTL to assembler code and output it, for GNU compiler.
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -43,75 +43,45 @@ along with GCC; see the file COPYING3.  If not see
    function_epilogue.  Those instructions never exist as rtl.  */
 
 #include "config.h"
+#define INCLUDE_ALGORITHM /* reverse */
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "varasm.h"
-#include "hard-reg-set.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
+#include "tree.h"
+#include "cfghooks.h"
+#include "df.h"
+#include "memmodel.h"
 #include "tm_p.h"
-#include "regs.h"
 #include "insn-config.h"
-#include "insn-attr.h"
+#include "regs.h"
+#include "emit-rtl.h"
 #include "recog.h"
+#include "cgraph.h"
+#include "tree-pretty-print.h" /* for dump_function_header */
+#include "varasm.h"
+#include "insn-attr.h"
 #include "conditions.h"
 #include "flags.h"
 #include "output.h"
 #include "except.h"
-#include "function.h"
 #include "rtl-error.h"
 #include "toplev.h" /* exact_log2, floor_log2 */
 #include "reload.h"
 #include "intl.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "cfgrtl.h"
-#include "basic-block.h"
-#include "target.h"
-#include "targhooks.h"
 #include "debug.h"
-#include "hashtab.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "stmt.h"
-#include "expr.h"
 #include "tree-pass.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "tree-ssa.h"
-#include "coverage.h"
-#include "df.h"
-#include "ggc.h"
 #include "cfgloop.h"
 #include "params.h"
-#include "tree-pretty-print.h" /* for dump_function_header */
 #include "asan.h"
-#include "wide-int-print.h"
 #include "rtl-iter.h"
+#include "print-rtl.h"
 
 #ifdef XCOFF_DEBUGGING_INFO
-#include "xcoffout.h"		/* Needed for external data
-				   declarations for e.g. AIX 4.x.  */
+#include "xcoffout.h"		/* Needed for external data declarations.  */
 #endif
 
 #include "dwarf2out.h"
@@ -120,9 +90,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "dbxout.h"
 #endif
 
-#ifdef SDB_DEBUGGING_INFO
 #include "sdbout.h"
-#endif
 
 /* Most ports that aren't using cc0 don't need to define CC_STATUS_INIT.
    So define a null default for it to save conditionalization later.  */
@@ -150,6 +118,9 @@ rtx_insn *current_output_insn;
 /* Line number of last NOTE.  */
 static int last_linenum;
 
+/* Column number of last NOTE.  */
+static int last_columnnum;
+
 /* Last discriminator written to assembly.  */
 static int last_discriminator;
 
@@ -165,9 +136,10 @@ static int high_function_linenum;
 /* Filename of last NOTE.  */
 static const char *last_filename;
 
-/* Override filename and line number.  */
+/* Override filename, line and column number.  */
 static const char *override_filename;
 static int override_linenum;
+static int override_columnnum;
 
 /* Whether to force emission of a line note before the next insn.  */
 static bool force_source_line = false;
@@ -191,7 +163,6 @@ static rtx last_ignored_compare = 0;
 
 static int insn_counter = 0;
 
-#ifdef HAVE_cc0
 /* This variable contains machine-dependent flags (defined in tm.h)
    set and examined by output routines
    that describe how to interpret the condition codes properly.  */
@@ -202,7 +173,6 @@ CC_STATUS cc_status;
    from before the insn.  */
 
 CC_STATUS cc_prev_status;
-#endif
 
 /* Number of unmatched NOTE_INSN_BLOCK_BEG notes we have seen.  */
 
@@ -244,11 +214,11 @@ static void output_asm_operand_names (rtx *, int *, int);
 #ifdef LEAF_REGISTERS
 static void leaf_renumber_regs (rtx_insn *);
 #endif
-#ifdef HAVE_cc0
+#if HAVE_cc0
 static int alter_cond (rtx);
 #endif
 #ifndef ADDR_VEC_ALIGN
-static int final_addr_vec_align (rtx);
+static int final_addr_vec_align (rtx_insn *);
 #endif
 static int align_fuzz (rtx, rtx, int, unsigned);
 static void collect_fn_hard_reg_usage (void);
@@ -320,7 +290,6 @@ app_disable (void)
    delayed branch sequence (we don't count the insn needing the
    delay slot).   Zero if not in a delayed branch sequence.  */
 
-#ifdef DELAY_SLOTS
 int
 dbr_sequence_length (void)
 {
@@ -329,7 +298,6 @@ dbr_sequence_length (void)
   else
     return 0;
 }
-#endif
 
 /* The next two pages contain routines used to compute the length of an insn
    and to shorten branches.  */
@@ -549,7 +517,7 @@ default_jump_align_max_skip (rtx_insn *insn ATTRIBUTE_UNUSED)
 
 #ifndef ADDR_VEC_ALIGN
 static int
-final_addr_vec_align (rtx addr_vec)
+final_addr_vec_align (rtx_insn *addr_vec)
 {
   int align = GET_MODE_SIZE (GET_MODE (PATTERN (addr_vec)));
 
@@ -664,13 +632,13 @@ align_fuzz (rtx start, rtx end, int known_align_log, unsigned int growth)
 int
 insn_current_reference_address (rtx_insn *branch)
 {
-  rtx dest, seq;
+  rtx dest;
   int seq_uid;
 
   if (! INSN_ADDRESSES_SET_P ())
     return 0;
 
-  seq = NEXT_INSN (PREV_INSN (branch));
+  rtx_insn *seq = NEXT_INSN (PREV_INSN (branch));
   seq_uid = INSN_UID (seq);
   if (!JUMP_P (branch))
     /* This can happen for example on the PA; the objective is to know the
@@ -1179,11 +1147,11 @@ shorten_branches (rtx_insn *first)
 	{
 	  int i;
 	  int const_delay_slots;
-#ifdef DELAY_SLOTS
-	  const_delay_slots = const_num_delay_slots (body_seq->insn (0));
-#else
-	  const_delay_slots = 0;
-#endif
+	  if (DELAY_SLOTS)
+	    const_delay_slots = const_num_delay_slots (body_seq->insn (0));
+	  else
+	    const_delay_slots = 0;
+
 	  int (*inner_length_fun) (rtx_insn *)
 	    = const_delay_slots ? length_fun : insn_default_length;
 	  /* Inside a delay slot sequence, we do not do any branch shortening
@@ -1195,7 +1163,7 @@ shorten_branches (rtx_insn *first)
 	      int inner_uid = INSN_UID (inner_insn);
 	      int inner_length;
 
-	      if (GET_CODE (body) == ASM_INPUT
+	      if (GET_CODE (PATTERN (inner_insn)) == ASM_INPUT
 		  || asm_noperands (PATTERN (inner_insn)) >= 0)
 		inner_length = (asm_insn_count (PATTERN (inner_insn))
 				* insn_default_length (inner_insn));
@@ -1499,7 +1467,7 @@ shorten_branches (rtx_insn *first)
       if (!increasing)
 	break;
     }
-
+  crtl->max_insn_address = insn_current_address;
   free (varying_length);
 }
 
@@ -1542,14 +1510,14 @@ asm_str_count (const char *templ)
 /* Structure recording the mapping from source file and directory
    names at compile time to those to be embedded in debug
    information.  */
-typedef struct debug_prefix_map
+struct debug_prefix_map
 {
   const char *old_prefix;
   const char *new_prefix;
   size_t old_len;
   size_t new_len;
   struct debug_prefix_map *next;
-} debug_prefix_map;
+};
 
 /* Linked list of such structures.  */
 static debug_prefix_map *debug_prefix_maps;
@@ -1799,6 +1767,7 @@ final_start_function (rtx_insn *first, FILE *file,
 
   last_filename = LOCATION_FILE (prologue_location);
   last_linenum = LOCATION_LINE (prologue_location);
+  last_columnnum = LOCATION_COLUMN (prologue_location);
   last_discriminator = discriminator = 0;
 
   high_block_linenum = high_function_linenum = last_linenum;
@@ -1807,10 +1776,10 @@ final_start_function (rtx_insn *first, FILE *file,
     asan_function_start ();
 
   if (!DECL_IGNORED_P (current_function_decl))
-    debug_hooks->begin_prologue (last_linenum, last_filename);
+    debug_hooks->begin_prologue (last_linenum, last_columnnum, last_filename);
 
   if (!dwarf2_debug_info_emitted_p (current_function_decl))
-    dwarf2out_begin_prologue (0, NULL);
+    dwarf2out_begin_prologue (0, 0, NULL);
 
 #ifdef LEAF_REG_REMAP
   if (crtl->uses_only_leaf_regs)
@@ -1821,12 +1790,8 @@ final_start_function (rtx_insn *first, FILE *file,
      if the profiling code comes after the prologue.  */
   if (targetm.profile_before_prologue () && crtl->profile)
     {
-      if (targetm.asm_out.function_prologue
-	  == default_function_pro_epilogue
-#ifdef HAVE_prologue
-	  && HAVE_prologue
-#endif
-	 )
+      if (targetm.asm_out.function_prologue == default_function_pro_epilogue
+	  && targetm.have_prologue ())
 	{
 	  rtx_insn *insn;
 	  for (insn = first; insn; insn = NEXT_INSN (insn))
@@ -1882,9 +1847,7 @@ final_start_function (rtx_insn *first, FILE *file,
 
   /* If the machine represents the prologue as RTL, the profiling code must
      be emitted when NOTE_INSN_PROLOGUE_END is scanned.  */
-#ifdef HAVE_prologue
-  if (! HAVE_prologue)
-#endif
+  if (! targetm.have_prologue ())
     profile_after_prologue (file);
 }
 
@@ -1989,7 +1952,7 @@ dump_basic_block_info (FILE *file, rtx_insn *insn, basic_block *start_to_bb,
       if (bb->frequency)
         fprintf (file, " freq:%d", bb->frequency);
       if (bb->count)
-        fprintf (file, " count:%"PRId64,
+        fprintf (file, " count:%" PRId64,
                  bb->count);
       fprintf (file, " seq:%d", (*bb_seqn)++);
       fprintf (file, "\n%s PRED:", ASM_COMMENT_START);
@@ -2031,21 +1994,20 @@ final (rtx_insn *first, FILE *file, int optimize_p)
 
   last_ignored_compare = 0;
 
-#ifdef HAVE_cc0
-  for (insn = first; insn; insn = NEXT_INSN (insn))
-    {
-      /* If CC tracking across branches is enabled, record the insn which
-	 jumps to each branch only reached from one place.  */
-      if (optimize_p && JUMP_P (insn))
-	{
-	  rtx lab = JUMP_LABEL (insn);
-	  if (lab && LABEL_P (lab) && LABEL_NUSES (lab) == 1)
-	    {
-	      LABEL_REFS (lab) = insn;
-	    }
-	}
-    }
-#endif
+  if (HAVE_cc0)
+    for (insn = first; insn; insn = NEXT_INSN (insn))
+      {
+	/* If CC tracking across branches is enabled, record the insn which
+	   jumps to each branch only reached from one place.  */
+	if (optimize_p && JUMP_P (insn))
+	  {
+	    rtx lab = JUMP_LABEL (insn);
+	    if (lab && LABEL_P (lab) && LABEL_NUSES (lab) == 1)
+	      {
+		LABEL_REFS (lab) = insn;
+	      }
+	  }
+      }
 
   init_recog ();
 
@@ -2140,9 +2102,11 @@ output_alternate_entry_point (FILE *file, rtx_insn *insn)
     case LABEL_WEAK_ENTRY:
 #ifdef ASM_WEAKEN_LABEL
       ASM_WEAKEN_LABEL (file, name);
+      gcc_fallthrough ();
 #endif
     case LABEL_GLOBAL_ENTRY:
       targetm.asm_out.globalize_label (file, name);
+      gcc_fallthrough ();
     case LABEL_STATIC_ENTRY:
 #ifdef ASM_OUTPUT_TYPE_DIRECTIVE
       ASM_OUTPUT_TYPE_DIRECTIVE (file, name, "function");
@@ -2184,6 +2148,26 @@ call_from_call_insn (rtx_call_insn *insn)
   return x;
 }
 
+/* Print a comment into the asm showing FILENAME, LINENUM, and the
+   corresponding source line, if available.  */
+
+static void
+asm_show_source (const char *filename, int linenum)
+{
+  if (!filename)
+    return;
+
+  int line_size;
+  const char *line = location_get_source_line (filename, linenum, &line_size);
+  if (!line)
+    return;
+
+  fprintf (asm_out_file, "%s %s:%i: ", ASM_COMMENT_START, filename, linenum);
+  /* "line" is not 0-terminated, so we must use line_size.  */
+  fwrite (line, 1, line_size, asm_out_file);
+  fputc ('\n', asm_out_file);
+}
+
 /* The final scan for one insn, INSN.
    Args are same as in `final', except that INSN
    is the insn being scanned.
@@ -2200,7 +2184,7 @@ rtx_insn *
 final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 		 int nopeepholes ATTRIBUTE_UNUSED, int *seen)
 {
-#ifdef HAVE_cc0
+#if HAVE_cc0
   rtx set;
 #endif
   rtx_insn *next;
@@ -2218,6 +2202,7 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
       switch (NOTE_KIND (insn))
 	{
 	case NOTE_INSN_DELETED:
+	case NOTE_INSN_UPDATE_SJLJ_CONTEXT:
 	  break;
 
 	case NOTE_INSN_SWITCH_TEXT_SECTIONS:
@@ -2236,10 +2221,17 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 	     suffixing "cold" to the original function's name.  */
 	  if (in_cold_section_p)
 	    {
-	      tree cold_function_name
+	      cold_function_name
 		= clone_function_name (current_function_decl, "cold");
+#ifdef ASM_DECLARE_COLD_FUNCTION_NAME
+	      ASM_DECLARE_COLD_FUNCTION_NAME (asm_out_file,
+					      IDENTIFIER_POINTER
+					          (cold_function_name),
+					      current_function_decl);
+#else
 	      ASM_OUTPUT_LABEL (asm_out_file,
 				IDENTIFIER_POINTER (cold_function_name));
+#endif
 	    }
 	  break;
 
@@ -2336,6 +2328,7 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 
 	      /* Mark this block as output.  */
 	      TREE_ASM_WRITTEN (NOTE_BLOCK (insn)) = 1;
+	      BLOCK_IN_COLD_SECTION_P (NOTE_BLOCK (insn)) = in_cold_section_p;
 	    }
 	  if (write_symbols == DBX_DEBUG
 	      || write_symbols == SDB_DEBUG)
@@ -2347,6 +2340,7 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 		{
 		  override_filename = LOCATION_FILE (*locus_ptr);
 		  override_linenum = LOCATION_LINE (*locus_ptr);
+		  override_columnnum = LOCATION_COLUMN (*locus_ptr);
 		}
 	    }
 	  break;
@@ -2368,6 +2362,8 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 
 	      if (!DECL_IGNORED_P (current_function_decl))
 		debug_hooks->end_block (high_block_linenum, n);
+	      gcc_assert (BLOCK_IN_COLD_SECTION_P (NOTE_BLOCK (insn))
+			  == in_cold_section_p);
 	    }
 	  if (write_symbols == DBX_DEBUG
 	      || write_symbols == SDB_DEBUG)
@@ -2380,11 +2376,13 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 		{
 		  override_filename = LOCATION_FILE (*locus_ptr);
 		  override_linenum = LOCATION_LINE (*locus_ptr);
+		  override_columnnum = LOCATION_COLUMN (*locus_ptr);
 		}
 	      else
 		{
 		  override_filename = NULL;
 		  override_linenum = 0;
+		  override_columnnum = 0;
 		}
 	    }
 	  break;
@@ -2507,7 +2505,7 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 	    || GET_CODE (body) == CLOBBER)
 	  break;
 
-#ifdef HAVE_cc0
+#if HAVE_cc0
 	{
 	  /* If there is a REG_CC_SETTER note on this insn, it means that
 	     the setting of the condition code was done in the delay slot
@@ -2599,8 +2597,17 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 	   note in a row.  */
 	if (!DECL_IGNORED_P (current_function_decl)
 	    && notice_source_line (insn, &is_stmt))
-	  (*debug_hooks->source_line) (last_linenum, last_filename,
-				       last_discriminator, is_stmt);
+	  {
+	    if (flag_verbose_asm)
+	      asm_show_source (last_filename, last_linenum);
+	    (*debug_hooks->source_line) (last_linenum, last_columnnum,
+					 last_filename, last_discriminator,
+					 is_stmt);
+	  }
+
+	if (GET_CODE (body) == PARALLEL
+	    && GET_CODE (XVECEXP (body, 0, 0)) == ASM_INPUT)
+	  body = XVECEXP (body, 0, 0);
 
 	if (GET_CODE (body) == ASM_INPUT)
 	  {
@@ -2724,7 +2731,7 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 
 	body = PATTERN (insn);
 
-#ifdef HAVE_cc0
+#if HAVE_cc0
 	set = single_set (insn);
 
 	/* Check for redundant test and compare instructions
@@ -2900,10 +2907,9 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 
 #endif
 
-#ifdef HAVE_peephole
 	/* Do machine-specific peephole optimizations if desired.  */
 
-	if (optimize_p && !flag_no_peephole && !nopeepholes)
+	if (HAVE_peephole && optimize_p && !flag_no_peephole && !nopeepholes)
 	  {
 	    rtx_insn *next = peephole (insn);
 	    /* When peepholing, if there were notes within the peephole,
@@ -2932,7 +2938,6 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 	    /* PEEPHOLE might have changed this.  */
 	    body = PATTERN (insn);
 	  }
-#endif
 
 	/* Try to recognize the instruction.
 	   If successful, verify that the operands satisfy the
@@ -2969,7 +2974,7 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 	    && GET_CODE (PATTERN (insn)) == COND_EXEC)
 	  current_insn_predicate = COND_EXEC_TEST (PATTERN (insn));
 
-#ifdef HAVE_cc0
+#if HAVE_cc0
 	cc_prev_status = cc_status;
 
 	/* Update `cc_status' for this instruction.
@@ -3034,7 +3039,8 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 	    && targetm.asm_out.unwind_emit)
 	  targetm.asm_out.unwind_emit (asm_out_file, insn);
 
-	if (rtx_call_insn *call_insn = dyn_cast <rtx_call_insn *> (insn))
+	rtx_call_insn *call_insn = dyn_cast <rtx_call_insn *> (insn);
+	if (call_insn != NULL)
 	  {
 	    rtx x = call_from_call_insn (call_insn);
 	    x = XEXP (x, 0);
@@ -3046,8 +3052,6 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 		if (t)
 		  assemble_external (t);
 	      }
-	    if (!DECL_IGNORED_P (current_function_decl))
-	      debug_hooks->var_location (insn);
 	  }
 
 	/* Output assembler code from the template.  */
@@ -3063,6 +3067,12 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p ATTRIBUTE_UNUSED,
 	    && targetm.asm_out.unwind_emit)
 	  targetm.asm_out.unwind_emit (asm_out_file, insn);
 
+	/* Let the debug info back-end know about this call.  We do this only
+	   after the instruction has been emitted because labels that may be
+	   created to reference the call instruction must appear after it.  */
+	if (call_insn != NULL && !DECL_IGNORED_P (current_function_decl))
+	  debug_hooks->var_location (insn);
+
 	current_output_insn = debug_insn = 0;
       }
     }
@@ -3077,23 +3087,26 @@ static bool
 notice_source_line (rtx_insn *insn, bool *is_stmt)
 {
   const char *filename;
-  int linenum;
+  int linenum, columnnum;
 
   if (override_filename)
     {
       filename = override_filename;
       linenum = override_linenum;
+      columnnum = override_columnnum;
     }
   else if (INSN_HAS_LOCATION (insn))
     {
       expanded_location xloc = insn_location (insn);
       filename = xloc.file;
       linenum = xloc.line;
+      columnnum = xloc.column;
     }
   else
     {
       filename = NULL;
       linenum = 0;
+      columnnum = 0;
     }
 
   if (filename == NULL)
@@ -3101,11 +3114,13 @@ notice_source_line (rtx_insn *insn, bool *is_stmt)
 
   if (force_source_line
       || filename != last_filename
-      || last_linenum != linenum)
+      || last_linenum != linenum
+      || (debug_column_info && last_columnnum != columnnum))
     {
       force_source_line = false;
       last_filename = filename;
       last_linenum = linenum;
+      last_columnnum = columnnum;
       last_discriminator = discriminator;
       *is_stmt = true;
       high_block_linenum = MAX (last_linenum, high_block_linenum);
@@ -3258,7 +3273,7 @@ walk_alter_subreg (rtx *xp, bool *changed)
   return *xp;
 }
 
-#ifdef HAVE_cc0
+#if HAVE_cc0
 
 /* Given BODY, the body of a jump instruction, alter the jump condition
    as required by the bits that are set in cc_status.flags.
@@ -3750,7 +3765,7 @@ output_asm_insn (const char *templ, rtx *operands)
 	    else if (letter == 'l')
 	      output_asm_label (operands[opnum]);
 	    else if (letter == 'a')
-	      output_address (operands[opnum]);
+	      output_address (VOIDmode, operands[opnum]);
 	    else if (letter == 'c')
 	      {
 		if (CONSTANT_ADDRESS_P (operands[opnum]))
@@ -3828,7 +3843,7 @@ output_asm_label (rtx x)
   char buf[256];
 
   if (GET_CODE (x) == LABEL_REF)
-    x = LABEL_REF_LABEL (x);
+    x = label_ref_label (x);
   if (LABEL_P (x)
       || (NOTE_P (x)
 	  && NOTE_KIND (x) == NOTE_INSN_DELETED_LABEL))
@@ -3885,11 +3900,11 @@ output_operand (rtx x, int code ATTRIBUTE_UNUSED)
    machine-dependent assembler syntax.  */
 
 void
-output_address (rtx x)
+output_address (machine_mode mode, rtx x)
 {
   bool changed = false;
   walk_alter_subreg (&x, &changed);
-  targetm.asm_out.print_operand_address (asm_out_file, x);
+  targetm.asm_out.print_operand_address (asm_out_file, mode, x);
 }
 
 /* Print an integer constant expression in assembler syntax.
@@ -3919,7 +3934,7 @@ output_addr_const (FILE *file, rtx x)
       break;
 
     case LABEL_REF:
-      x = LABEL_REF_LABEL (x);
+      x = label_ref_label (x);
       /* Fall through.  */
     case CODE_LABEL:
       ASM_GENERATE_INTERNAL_LABEL (buf, "L", CODE_LABEL_NUMBER (x));
@@ -4127,25 +4142,10 @@ fprint_ul (FILE *f, unsigned long value)
 int
 sprint_ul (char *s, unsigned long value)
 {
-  int len;
-  char tmp_c;
-  int i;
-  int j;
-
-  len = sprint_ul_rev (s, value);
+  int len = sprint_ul_rev (s, value);
   s[len] = '\0';
 
-  /* Reverse the string. */
-  i = 0;
-  j = len - 1;
-  while (i < j)
-    {
-      tmp_c = s[i];
-      s[i] = s[j];
-      s[j] = tmp_c;
-      i++; j--;
-    }
-
+  std::reverse (s, s + len);
   return len;
 }
 
@@ -4434,6 +4434,7 @@ leaf_renumber_regs_insn (rtx in_rtx)
       df_set_regs_ever_live (newreg, true);
       SET_REGNO (in_rtx, newreg);
       in_rtx->used = 1;
+      return;
     }
 
   if (INSN_P (in_rtx))
@@ -4496,8 +4497,6 @@ rest_of_handle_final (void)
   output_function_exception_table (fnname);
 
   assemble_end_function (current_function_decl, fnname);
-
-  user_defined_section_attribute = false;
 
   /* Free up reg info memory.  */
   free_reg_info ();
@@ -4695,10 +4694,8 @@ rest_of_clean_state (void)
   /* In case the function was not output,
      don't leave any temporary anonymous types
      queued up for sdb output.  */
-#ifdef SDB_DEBUGGING_INFO
-  if (write_symbols == SDB_DEBUG)
+  if (SDB_DEBUGGING_INFO && write_symbols == SDB_DEBUG)
     sdbout_types (NULL_TREE);
-#endif
 
   flag_rerun_cse_after_global_opts = 0;
   reload_completed = 0;
@@ -4716,7 +4713,8 @@ rest_of_clean_state (void)
 
   free_bb_for_insn ();
 
-  delete_tree_ssa ();
+  if (cfun->gimple_df)
+    delete_tree_ssa (cfun);
 
   /* We can reduce stack alignment on call site only when we are sure that
      the function body just produced will be actually used in the final
@@ -4784,7 +4782,7 @@ make_pass_clean_state (gcc::context *ctxt)
   return new pass_clean_state (ctxt);
 }
 
-/* Return true if INSN is a call to the the current function.  */
+/* Return true if INSN is a call to the current function.  */
 
 static bool
 self_recursive_call_p (rtx_insn *insn)

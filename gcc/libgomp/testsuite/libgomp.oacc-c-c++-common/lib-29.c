@@ -1,5 +1,8 @@
-/* { dg-do run } */
+/* Exercise acc_delete with size zero on nvidia targets.  */
 
+/* { dg-do run { target openacc_nvidia_accel_selected } } */
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <openacc.h>
 
@@ -16,6 +19,7 @@ main (int argc, char **argv)
   if (!d)
     abort ();
 
+  fprintf (stderr, "CheCKpOInT\n");
   acc_delete (h, 0);
 
   free (h);
@@ -23,4 +27,6 @@ main (int argc, char **argv)
   return 0;
 }
 
-/* { dg-shouldfail "libgomp: \[\h+,0\] is not mapped" } */
+/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
+/* { dg-output "\\\[\[0-9a-fA-FxX\]+,0\\\] is not mapped" } */
+/* { dg-shouldfail "" } */

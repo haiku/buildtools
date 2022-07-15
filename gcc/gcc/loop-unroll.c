@@ -1,5 +1,5 @@
 /* Loop unrolling.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,48 +20,21 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "hard-reg-set.h"
-#include "obstack.h"
+#include "cfghooks.h"
+#include "memmodel.h"
+#include "optabs.h"
+#include "emit-rtl.h"
+#include "recog.h"
 #include "profile.h"
-#include "predict.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "cfgrtl.h"
-#include "basic-block.h"
 #include "cfgloop.h"
 #include "params.h"
-#include "insn-codes.h"
-#include "optabs.h"
-#include "hashtab.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
 #include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
 #include "expr.h"
-#include "hash-table.h"
-#include "recog.h"
-#include "target.h"
 #include "dumpfile.h"
 
 /* This pass performs loop unrolling.  We only perform this
@@ -124,19 +97,17 @@ struct var_to_expand
 
 /* Hashtable helper for iv_to_split.  */
 
-struct iv_split_hasher : typed_free_remove <iv_to_split>
+struct iv_split_hasher : free_ptr_hash <iv_to_split>
 {
-  typedef iv_to_split value_type;
-  typedef iv_to_split compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *, const compare_type *);
+  static inline hashval_t hash (const iv_to_split *);
+  static inline bool equal (const iv_to_split *, const iv_to_split *);
 };
 
 
 /* A hash function for information about insns to split.  */
 
 inline hashval_t
-iv_split_hasher::hash (const value_type *ivts)
+iv_split_hasher::hash (const iv_to_split *ivts)
 {
   return (hashval_t) INSN_UID (ivts->insn);
 }
@@ -144,25 +115,23 @@ iv_split_hasher::hash (const value_type *ivts)
 /* An equality functions for information about insns to split.  */
 
 inline bool
-iv_split_hasher::equal (const value_type *i1, const compare_type *i2)
+iv_split_hasher::equal (const iv_to_split *i1, const iv_to_split *i2)
 {
   return i1->insn == i2->insn;
 }
 
 /* Hashtable helper for iv_to_split.  */
 
-struct var_expand_hasher : typed_free_remove <var_to_expand>
+struct var_expand_hasher : free_ptr_hash <var_to_expand>
 {
-  typedef var_to_expand value_type;
-  typedef var_to_expand compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *, const compare_type *);
+  static inline hashval_t hash (const var_to_expand *);
+  static inline bool equal (const var_to_expand *, const var_to_expand *);
 };
 
 /* Return a hash for VES.  */
 
 inline hashval_t
-var_expand_hasher::hash (const value_type *ves)
+var_expand_hasher::hash (const var_to_expand *ves)
 {
   return (hashval_t) INSN_UID (ves->insn);
 }
@@ -170,7 +139,7 @@ var_expand_hasher::hash (const value_type *ves)
 /* Return true if I1 and I2 refer to the same instruction.  */
 
 inline bool
-var_expand_hasher::equal (const value_type *i1, const compare_type *i2)
+var_expand_hasher::equal (const var_to_expand *i1, const var_to_expand *i2)
 {
   return i1->insn == i2->insn;
 }
@@ -428,7 +397,7 @@ decide_unroll_constant_iterations (struct loop *loop, int flags)
      of iterations.  */
   if (desc->niter < 2 * nunroll
       || ((get_estimated_loop_iterations (loop, &iterations)
-	   || get_max_loop_iterations (loop, &iterations))
+	   || get_likely_max_loop_iterations (loop, &iterations))
 	  && wi::ltu_p (iterations, 2 * nunroll)))
     {
       if (dump_file)
@@ -493,7 +462,6 @@ unroll_loop_constant_iterations (struct loop *loop)
 {
   unsigned HOST_WIDE_INT niter;
   unsigned exit_mod;
-  sbitmap wont_exit;
   unsigned i;
   edge e;
   unsigned max_unroll = loop->lpt_decision.times;
@@ -509,7 +477,7 @@ unroll_loop_constant_iterations (struct loop *loop)
 
   exit_mod = niter % (max_unroll + 1);
 
-  wont_exit = sbitmap_alloc (max_unroll + 1);
+  auto_sbitmap wont_exit (max_unroll + 1);
   bitmap_ones (wont_exit);
 
   auto_vec<edge> remove_edges;
@@ -555,6 +523,11 @@ unroll_loop_constant_iterations (struct loop *loop)
 	    loop->nb_iterations_estimate -= exit_mod;
 	  else
 	    loop->any_estimate = false;
+	  if (loop->any_likely_upper_bound
+	      && wi::leu_p (exit_mod, loop->nb_iterations_likely_upper_bound))
+	    loop->nb_iterations_likely_upper_bound -= exit_mod;
+	  else
+	    loop->any_likely_upper_bound = false;
 	}
 
       bitmap_set_bit (wont_exit, 1);
@@ -598,6 +571,11 @@ unroll_loop_constant_iterations (struct loop *loop)
 	    loop->nb_iterations_estimate -= exit_mod + 1;
 	  else
 	    loop->any_estimate = false;
+	  if (loop->any_likely_upper_bound
+	      && wi::leu_p (exit_mod + 1, loop->nb_iterations_likely_upper_bound))
+	    loop->nb_iterations_likely_upper_bound -= exit_mod + 1;
+	  else
+	    loop->any_likely_upper_bound = false;
 	  desc->noloop_assumptions = NULL_RTX;
 
 	  bitmap_set_bit (wont_exit, 0);
@@ -626,8 +604,6 @@ unroll_loop_constant_iterations (struct loop *loop)
       free_opt_info (opt_info);
     }
 
-  free (wont_exit);
-
   if (exit_at_end)
     {
       basic_block exit_block = get_bb_copy (desc->in_edge->src);
@@ -651,6 +627,9 @@ unroll_loop_constant_iterations (struct loop *loop)
   if (loop->any_estimate)
     loop->nb_iterations_estimate
       = wi::udiv_trunc (loop->nb_iterations_estimate, max_unroll + 1);
+  if (loop->any_likely_upper_bound)
+    loop->nb_iterations_likely_upper_bound
+      = wi::udiv_trunc (loop->nb_iterations_likely_upper_bound, max_unroll + 1);
   desc->niter_expr = GEN_INT (desc->niter);
 
   /* Remove the edges.  */
@@ -725,7 +704,7 @@ decide_unroll_runtime_iterations (struct loop *loop, int flags)
 
   /* Check whether the loop rolls.  */
   if ((get_estimated_loop_iterations (loop, &iterations)
-       || get_max_loop_iterations (loop, &iterations))
+       || get_likely_max_loop_iterations (loop, &iterations))
       && wi::ltu_p (iterations, 2 * nunroll))
     {
       if (dump_file)
@@ -794,10 +773,11 @@ split_edge_and_insert (edge e, rtx_insn *insns)
    in order to create a jump.  */
 
 static rtx_insn *
-compare_and_jump_seq (rtx op0, rtx op1, enum rtx_code comp, rtx label, int prob,
-		      rtx_insn *cinsn)
+compare_and_jump_seq (rtx op0, rtx op1, enum rtx_code comp,
+		      rtx_code_label *label, int prob, rtx_insn *cinsn)
 {
-  rtx_insn *seq, *jump;
+  rtx_insn *seq;
+  rtx_jump_insn *jump;
   rtx cond;
   machine_mode mode;
 
@@ -816,8 +796,7 @@ compare_and_jump_seq (rtx op0, rtx op1, enum rtx_code comp, rtx label, int prob,
       gcc_assert (rtx_equal_p (op0, XEXP (cond, 0)));
       gcc_assert (rtx_equal_p (op1, XEXP (cond, 1)));
       emit_jump_insn (copy_insn (PATTERN (cinsn)));
-      jump = get_last_insn ();
-      gcc_assert (JUMP_P (jump));
+      jump = as_a <rtx_jump_insn *> (get_last_insn ());
       JUMP_LABEL (jump) = JUMP_LABEL (cinsn);
       LABEL_NUSES (JUMP_LABEL (jump))++;
       redirect_jump (jump, label, 0);
@@ -829,10 +808,9 @@ compare_and_jump_seq (rtx op0, rtx op1, enum rtx_code comp, rtx label, int prob,
       op0 = force_operand (op0, NULL_RTX);
       op1 = force_operand (op1, NULL_RTX);
       do_compare_rtx_and_jump (op0, op1, comp, 0,
-			       mode, NULL_RTX, NULL_RTX, label, -1);
-      jump = get_last_insn ();
-      gcc_assert (JUMP_P (jump));
-      JUMP_LABEL (jump) = label;
+			       mode, NULL_RTX, NULL, label, -1);
+      jump = as_a <rtx_jump_insn *> (get_last_insn ());
+      jump->set_jump_target (label);
       LABEL_NUSES (label)++;
     }
   add_int_reg_note (jump, REG_BR_PROB, prob);
@@ -880,9 +858,9 @@ unroll_loop_runtime_iterations (struct loop *loop)
   rtx old_niter, niter, tmp;
   rtx_insn *init_code, *branch_code;
   unsigned i, j, p;
-  basic_block preheader, *body, swtch, ezc_swtch;
-  sbitmap wont_exit;
-  int may_exit_copy;
+  basic_block preheader, *body, swtch, ezc_swtch = NULL;
+  int may_exit_copy, iter_freq, new_freq;
+  gcov_type iter_count, new_count;
   unsigned n_peel;
   edge e;
   bool extra_zero_check, last_may_exit;
@@ -940,6 +918,17 @@ unroll_loop_runtime_iterations (struct loop *loop)
   if (tmp != niter)
     emit_move_insn (niter, tmp);
 
+  /* For loops that exit at end and whose number of iterations is reliable,
+     add one to niter to account for first pass through loop body before
+     reaching exit test. */
+  if (exit_at_end && !desc->noloop_assumptions)
+    {
+      niter = expand_simple_binop (desc->mode, PLUS,
+				   niter, const1_rtx,
+				   NULL_RTX, 0, OPTAB_LIB_WIDEN);
+      old_niter = niter;
+    }
+
   /* Count modulo by ANDing it with max_unroll; we use the fact that
      the number of unrollings is a power of two, and thus this is correct
      even if there is overflow in the computation.  */
@@ -956,25 +945,35 @@ unroll_loop_runtime_iterations (struct loop *loop)
 
   auto_vec<edge> remove_edges;
 
-  wont_exit = sbitmap_alloc (max_unroll + 2);
+  auto_sbitmap wont_exit (max_unroll + 2);
 
-  /* Peel the first copy of loop body (almost always we must leave exit test
-     here; the only exception is when we have extra zero check and the number
-     of iterations is reliable.  Also record the place of (possible) extra
-     zero check.  */
-  bitmap_clear (wont_exit);
-  if (extra_zero_check
-      && !desc->noloop_assumptions)
-    bitmap_set_bit (wont_exit, 1);
-  ezc_swtch = loop_preheader_edge (loop)->src;
-  ok = duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
-				      1, wont_exit, desc->out_edge,
-				      &remove_edges,
-				      DLTHE_FLAG_UPDATE_FREQ);
-  gcc_assert (ok);
+  if (extra_zero_check || desc->noloop_assumptions)
+    {
+      /* Peel the first copy of loop body.  Leave the exit test if the number
+	 of iterations is not reliable.  Also record the place of the extra zero
+	 check.  */
+      bitmap_clear (wont_exit);
+      if (!desc->noloop_assumptions)
+	bitmap_set_bit (wont_exit, 1);
+      ezc_swtch = loop_preheader_edge (loop)->src;
+      ok = duplicate_loop_to_header_edge (loop, loop_preheader_edge (loop),
+					  1, wont_exit, desc->out_edge,
+					  &remove_edges,
+					  DLTHE_FLAG_UPDATE_FREQ);
+      gcc_assert (ok);
+    }
 
   /* Record the place where switch will be built for preconditioning.  */
   swtch = split_edge (loop_preheader_edge (loop));
+
+  /* Compute frequency/count increments for each switch block and initialize
+     innermost switch block.  Switch blocks and peeled loop copies are built
+     from innermost outward.  */
+  iter_freq = new_freq = swtch->frequency / (max_unroll + 1);
+  iter_count = new_count = swtch->count / (max_unroll + 1);
+  swtch->frequency = new_freq;
+  swtch->count = new_count;
+  single_succ_edge (swtch)->count = new_count;
 
   for (i = 0; i < n_peel; i++)
     {
@@ -993,6 +992,10 @@ unroll_loop_runtime_iterations (struct loop *loop)
       p = REG_BR_PROB_BASE / (i + 2);
 
       preheader = split_edge (loop_preheader_edge (loop));
+      /* Add in frequency/count of edge from switch block.  */
+      preheader->frequency += iter_freq;
+      preheader->count += iter_count;
+      single_succ_edge (preheader)->count = preheader->count;
       branch_code = compare_and_jump_seq (copy_rtx (niter), GEN_INT (j), EQ,
 					  block_label (preheader), p,
 					  NULL);
@@ -1003,10 +1006,15 @@ unroll_loop_runtime_iterations (struct loop *loop)
 
       swtch = split_edge_and_insert (single_pred_edge (swtch), branch_code);
       set_immediate_dominator (CDI_DOMINATORS, preheader, swtch);
-      single_pred_edge (swtch)->probability = REG_BR_PROB_BASE - p;
+      single_succ_edge (swtch)->probability = REG_BR_PROB_BASE - p;
+      single_succ_edge (swtch)->count = new_count;
+      new_freq += iter_freq;
+      new_count += iter_count;
+      swtch->frequency = new_freq;
+      swtch->count = new_count;
       e = make_edge (swtch, preheader,
 		     single_succ_edge (swtch)->flags & EDGE_IRREDUCIBLE_LOOP);
-      e->count = RDIV (preheader->count * REG_BR_PROB_BASE, p);
+      e->count = iter_count;
       e->probability = p;
     }
 
@@ -1016,6 +1024,14 @@ unroll_loop_runtime_iterations (struct loop *loop)
       p = REG_BR_PROB_BASE / (max_unroll + 1);
       swtch = ezc_swtch;
       preheader = split_edge (loop_preheader_edge (loop));
+      /* Recompute frequency/count adjustments since initial peel copy may
+	 have exited and reduced those values that were computed above.  */
+      iter_freq = swtch->frequency / (max_unroll + 1);
+      iter_count = swtch->count / (max_unroll + 1);
+      /* Add in frequency/count of edge from switch block.  */
+      preheader->frequency += iter_freq;
+      preheader->count += iter_count;
+      single_succ_edge (preheader)->count = preheader->count;
       branch_code = compare_and_jump_seq (copy_rtx (niter), const0_rtx, EQ,
 					  block_label (preheader), p,
 					  NULL);
@@ -1024,9 +1040,10 @@ unroll_loop_runtime_iterations (struct loop *loop)
       swtch = split_edge_and_insert (single_succ_edge (swtch), branch_code);
       set_immediate_dominator (CDI_DOMINATORS, preheader, swtch);
       single_succ_edge (swtch)->probability = REG_BR_PROB_BASE - p;
+      single_succ_edge (swtch)->count -= iter_count;
       e = make_edge (swtch, preheader,
 		     single_succ_edge (swtch)->flags & EDGE_IRREDUCIBLE_LOOP);
-      e->count = RDIV (preheader->count * REG_BR_PROB_BASE, p);
+      e->count = iter_count;
       e->probability = p;
     }
 
@@ -1054,8 +1071,6 @@ unroll_loop_runtime_iterations (struct loop *loop)
       apply_opt_in_copies (opt_info, max_unroll, true, true);
       free_opt_info (opt_info);
     }
-
-  free (wont_exit);
 
   if (exit_at_end)
     {
@@ -1092,6 +1107,9 @@ unroll_loop_runtime_iterations (struct loop *loop)
   if (loop->any_estimate)
     loop->nb_iterations_estimate
       = wi::udiv_trunc (loop->nb_iterations_estimate, max_unroll + 1);
+  if (loop->any_likely_upper_bound)
+    loop->nb_iterations_likely_upper_bound
+      = wi::udiv_trunc (loop->nb_iterations_likely_upper_bound, max_unroll + 1);
   if (exit_at_end)
     {
       desc->niter_expr =
@@ -1103,6 +1121,11 @@ unroll_loop_runtime_iterations (struct loop *loop)
 	--loop->nb_iterations_estimate;
       else
 	loop->any_estimate = false;
+      if (loop->any_likely_upper_bound
+	  && loop->nb_iterations_likely_upper_bound != 0)
+	--loop->nb_iterations_likely_upper_bound;
+      else
+	loop->any_likely_upper_bound = false;
     }
 
   if (dump_file)
@@ -1174,7 +1197,7 @@ decide_unroll_stupid (struct loop *loop, int flags)
 
   /* Check whether the loop rolls.  */
   if ((get_estimated_loop_iterations (loop, &iterations)
-       || get_max_loop_iterations (loop, &iterations))
+       || get_likely_max_loop_iterations (loop, &iterations))
       && wi::ltu_p (iterations, 2 * nunroll))
     {
       if (dump_file)
@@ -1213,7 +1236,6 @@ decide_unroll_stupid (struct loop *loop, int flags)
 static void
 unroll_loop_stupid (struct loop *loop)
 {
-  sbitmap wont_exit;
   unsigned nunroll = loop->lpt_decision.times;
   struct niter_desc *desc = get_simple_loop_desc (loop);
   struct opt_info *opt_info = NULL;
@@ -1223,8 +1245,7 @@ unroll_loop_stupid (struct loop *loop)
       || flag_variable_expansion_in_unroller)
     opt_info = analyze_insns_in_loop (loop);
 
-
-  wont_exit = sbitmap_alloc (nunroll + 1);
+  auto_sbitmap wont_exit (nunroll + 1);
   bitmap_clear (wont_exit);
   opt_info_start_duplication (opt_info);
 
@@ -1242,8 +1263,6 @@ unroll_loop_stupid (struct loop *loop)
       apply_opt_in_copies (opt_info, nunroll, true, true);
       free_opt_info (opt_info);
     }
-
-  free (wont_exit);
 
   if (desc->simple_p)
     {
@@ -1435,7 +1454,7 @@ analyze_insn_to_expand_var (struct loop *loop, rtx_insn *insn)
   if (debug_uses)
     /* Instead of resetting the debug insns, we could replace each
        debug use in the loop with the sum or product of all expanded
-       accummulators.  Since we'll only know of all expansions at the
+       accumulators.  Since we'll only know of all expansions at the
        end, we'd have to keep track of which vars_to_expand a debug
        insn in the loop references, take note of each copy of the
        debug insn during unrolling, and when it's all done, compute
@@ -1894,6 +1913,9 @@ combine_var_copies_in_loop_exit (struct var_to_expand *ve, basic_block place)
   if (ve->var_expansions.length () == 0)
     return;
 
+  /* ve->reg might be SUBREG or some other non-shareable RTL, and we use
+     it both here and as the destination of the assignment.  */
+  sum = copy_rtx (sum);
   start_sequence ();
   switch (ve->op)
     {

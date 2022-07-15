@@ -1,5 +1,5 @@
+// { dg-options -fno-new-ttp-matching }
 // { dg-do compile }
-// { dg-additional-options "-std=gnu++11" }
 namespace mpl {
 template <typename, typename = int> struct lambda;
 template <typename T3> struct if_ { typedef T3 type; };

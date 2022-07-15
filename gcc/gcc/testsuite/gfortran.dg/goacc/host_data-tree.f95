@@ -3,11 +3,9 @@
 
 program test
   implicit none
-  integer :: i
+  integer, pointer :: p
 
-  !$acc host_data use_device(i)
+  !$acc host_data use_device(p)
   !$acc end host_data
 end program test
-! { dg-prune-output "unimplemented" }
-! { dg-final { scan-tree-dump-times "pragma acc host_data use_device\\(i\\)" 1 "original" } } 
-! { dg-final { cleanup-tree-dump "original" } } 
+! { dg-final { scan-tree-dump-times "pragma acc host_data use_device_ptr\\(p\\)" 1 "original" } }

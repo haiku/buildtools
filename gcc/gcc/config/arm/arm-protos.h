@@ -1,5 +1,5 @@
 /* Prototypes for exported functions defined in arm.c and pe.c
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2017 Free Software Foundation, Inc.
    Contributed by Richard Earnshaw (rearnsha@arm.com)
    Minor hacks by Nick Clifton (nickc@cygnus.com)
 
@@ -22,6 +22,8 @@
 #ifndef GCC_ARM_PROTOS_H
 #define GCC_ARM_PROTOS_H
 
+#include "sbitmap.h"
+
 extern enum unwind_info_type arm_except_unwind_info (struct gcc_options *);
 extern int use_return_insn (int, rtx);
 extern bool use_simple_return_p (void);
@@ -30,6 +32,8 @@ extern void arm_load_pic_register (unsigned long);
 extern int arm_volatile_func (void);
 extern void arm_expand_prologue (void);
 extern void arm_expand_epilogue (bool);
+extern void arm_declare_function_name (FILE *, const char *, tree);
+extern void arm_asm_declare_function_name (FILE *, const char *, tree);
 extern void thumb2_expand_return (bool);
 extern const char *arm_strip_name_encoding (const char *);
 extern void arm_asm_output_labelref (FILE *, const char *);
@@ -49,8 +53,12 @@ extern tree arm_builtin_decl (unsigned code, bool initialize_p
 			      ATTRIBUTE_UNUSED);
 extern void arm_init_builtins (void);
 extern void arm_atomic_assign_expand_fenv (tree *hold, tree *clear, tree *update);
-
+extern rtx arm_simd_vect_par_cnst_half (machine_mode mode, bool high);
+extern bool arm_simd_check_vect_par_cnst_half_p (rtx op, machine_mode mode,
+						 bool high);
 #ifdef RTX_CODE
+extern void arm_gen_unlikely_cbranch (enum rtx_code, machine_mode cc_mode,
+				      rtx label_ref);
 extern bool arm_vector_mode_supported_p (machine_mode);
 extern bool arm_small_register_classes_for_mode_p (machine_mode);
 extern int arm_hard_regno_mode_ok (unsigned int, machine_mode);
@@ -66,10 +74,6 @@ extern rtx legitimize_tls_address (rtx, rtx);
 extern bool arm_legitimate_address_p (machine_mode, rtx, bool);
 extern int arm_legitimate_address_outer_p (machine_mode, rtx, RTX_CODE, int);
 extern int thumb_legitimate_offset_p (machine_mode, HOST_WIDE_INT);
-extern bool arm_legitimize_reload_address (rtx *, machine_mode, int, int,
-					   int);
-extern rtx thumb_legitimize_reload_address (rtx *, machine_mode, int, int,
-					    int);
 extern int thumb1_legitimate_address_p (machine_mode, rtx, int);
 extern bool ldm_stm_operation_p (rtx, bool, machine_mode mode,
                                  bool, bool);
@@ -87,12 +91,11 @@ extern char *neon_output_shift_immediate (const char *, char, rtx *,
 extern void neon_pairwise_reduce (rtx, rtx, machine_mode,
 				  rtx (*) (rtx, rtx, rtx));
 extern rtx neon_make_constant (rtx);
-extern tree arm_builtin_vectorized_function (tree, tree, tree);
+extern tree arm_builtin_vectorized_function (unsigned int, tree, tree);
 extern void neon_expand_vector_init (rtx, rtx);
-extern void neon_lane_bounds (rtx, HOST_WIDE_INT, HOST_WIDE_INT);
-extern void neon_const_bounds (rtx, HOST_WIDE_INT, HOST_WIDE_INT);
+extern void neon_lane_bounds (rtx, HOST_WIDE_INT, HOST_WIDE_INT, const_tree);
+extern void arm_const_bounds (rtx, HOST_WIDE_INT, HOST_WIDE_INT);
 extern HOST_WIDE_INT neon_element_bits (machine_mode);
-extern void neon_reinterpret (rtx, rtx);
 extern void neon_emit_pair_result_insn (machine_mode,
 					rtx (*) (rtx, rtx, rtx, rtx),
 					rtx, rtx, rtx);
@@ -134,8 +137,8 @@ extern int arm_const_double_inline_cost (rtx);
 extern bool arm_const_double_by_parts (rtx);
 extern bool arm_const_double_by_immediates (rtx);
 extern void arm_emit_call_insn (rtx, rtx, bool);
+bool detect_cmse_nonsecure_call (tree);
 extern const char *output_call (rtx *);
-extern const char *output_call_mem (rtx *);
 void arm_emit_movpair (rtx, rtx);
 extern const char *output_mov_long_double_arm_from_arm (rtx *);
 extern const char *output_move_double (rtx *, bool, int *count);
@@ -149,6 +152,7 @@ extern const char *output_add_immediate (rtx *);
 extern const char *arithmetic_instr (rtx, int);
 extern void output_ascii_pseudo_op (FILE *, const unsigned char *, int);
 extern const char *output_return_instruction (rtx, bool, bool, bool);
+extern const char *output_probe_stack_range (rtx, rtx);
 extern void arm_poke_function_name (FILE *, const char *);
 extern void arm_final_prescan_insn (rtx_insn *);
 extern int arm_debugger_arg_offset (int, rtx);
@@ -165,10 +169,13 @@ extern const char *arm_output_iwmmxt_shift_immediate (const char *, rtx *, bool)
 extern const char *arm_output_iwmmxt_tinsr (rtx *);
 extern unsigned int arm_sync_loop_insns (rtx , rtx *);
 extern int arm_attr_length_push_multi(rtx, rtx);
+extern int arm_attr_length_pop_multi(rtx *, bool, bool);
 extern void arm_expand_compare_and_swap (rtx op[]);
 extern void arm_split_compare_and_swap (rtx op[]);
 extern void arm_split_atomic_op (enum rtx_code, rtx, rtx, rtx, rtx, rtx, rtx);
 extern rtx arm_load_tp (rtx);
+extern bool arm_coproc_builtin_available (enum unspecv);
+extern bool arm_coproc_ldc_stc_legitimate_address (rtx);
 
 #if defined TREE_CODE
 extern void arm_init_cumulative_args (CUMULATIVE_ARGS *, tree, rtx, tree);
@@ -185,9 +192,6 @@ extern const char *thumb1_unexpanded_epilogue (void);
 extern void thumb1_expand_prologue (void);
 extern void thumb1_expand_epilogue (void);
 extern const char *thumb1_output_interwork (void);
-#ifdef TREE_CODE
-extern int is_called_in_ARM_mode (tree);
-#endif
 extern int thumb_shiftable_const (unsigned HOST_WIDE_INT);
 #ifdef RTX_CODE
 extern enum arm_cond_code maybe_get_arm_condition_code (rtx);
@@ -199,7 +203,6 @@ extern const char *thumb_call_via_reg (rtx);
 extern void thumb_expand_movmemqi (rtx *);
 extern rtx arm_return_addr (int, rtx);
 extern void thumb_reload_out_hi (rtx *);
-extern void thumb_reload_in_hi (rtx *);
 extern void thumb_set_return_address (rtx, rtx);
 extern const char *thumb1_output_casesi (rtx *);
 extern const char *thumb2_output_casesi (rtx *);
@@ -216,13 +219,17 @@ extern int arm_dllexport_p (tree);
 extern int arm_dllimport_p (tree);
 extern void arm_mark_dllexport (tree);
 extern void arm_mark_dllimport (tree);
+extern bool arm_change_mode_p (tree);
 #endif
 
+extern tree arm_valid_target_attribute_tree (tree, struct gcc_options *,
+					     struct gcc_options *);
+extern void arm_configure_build_target (struct arm_build_target *,
+					struct cl_target_option *,
+					struct gcc_options *, bool);
 extern void arm_pr_long_calls (struct cpp_reader *);
 extern void arm_pr_no_long_calls (struct cpp_reader *);
 extern void arm_pr_long_calls_off (struct cpp_reader *);
-
-extern void arm_lang_object_attributes_init(void);
 
 extern const char *arm_mangle_type (const_tree);
 extern const char *arm_mangle_builtin_type (const_tree);
@@ -257,53 +264,65 @@ struct cpu_vec_costs {
 
 struct cpu_cost_table;
 
-enum arm_sched_autopref
-  {
-    ARM_SCHED_AUTOPREF_OFF,
-    ARM_SCHED_AUTOPREF_RANK,
-    ARM_SCHED_AUTOPREF_FULL
-  };
-
 /* Dump function ARM_PRINT_TUNE_INFO should be updated whenever this
    structure is modified.  */
 
 struct tune_params
 {
-  bool (*rtx_costs) (rtx, RTX_CODE, RTX_CODE, int *, bool);
   const struct cpu_cost_table *insn_extra_cost;
-  bool (*sched_adjust_cost) (rtx_insn *, rtx, rtx_insn *, int *);
+  bool (*sched_adjust_cost) (rtx_insn *, int, rtx_insn *, int *);
+  int (*branch_cost) (bool, bool);
+  /* Vectorizer costs.  */
+  const struct cpu_vec_costs* vec_costs;
   int constant_limit;
   /* Maximum number of instructions to conditionalise.  */
   int max_insns_skipped;
-  int num_prefetch_slots;
-  int l1_cache_size;
-  int l1_cache_line_size;
-  bool prefer_constant_pool;
-  int (*branch_cost) (bool, bool);
+  /* Maximum number of instructions to inline calls to memset.  */
+  int max_insns_inline_memset;
+  /* Issue rate of the processor.  */
+  unsigned int issue_rate;
+  /* Explicit prefetch data.  */
+  struct
+    {
+      int num_slots;
+      int l1_cache_size;
+      int l1_cache_line_size;
+    } prefetch;
+  enum {PREF_CONST_POOL_FALSE, PREF_CONST_POOL_TRUE}
+    prefer_constant_pool: 1;
   /* Prefer STRD/LDRD instructions over PUSH/POP/LDM/STM.  */
-  bool prefer_ldrd_strd;
+  enum {PREF_LDRD_FALSE, PREF_LDRD_TRUE} prefer_ldrd_strd: 1;
   /* The preference for non short cirtcuit operation when optimizing for
      performance. The first element covers Thumb state and the second one
      is for ARM state.  */
-  bool logical_op_non_short_circuit[2];
-  /* Vectorizer costs.  */
-  const struct cpu_vec_costs* vec_costs;
-  /* Prefer Neon for 64-bit bitops.  */
-  bool prefer_neon_for_64bits;
+  enum log_op_non_short_circuit {LOG_OP_NON_SHORT_CIRCUIT_FALSE,
+				 LOG_OP_NON_SHORT_CIRCUIT_TRUE};
+  log_op_non_short_circuit logical_op_non_short_circuit_thumb: 1;
+  log_op_non_short_circuit logical_op_non_short_circuit_arm: 1;
   /* Prefer 32-bit encoding instead of flag-setting 16-bit encoding.  */
-  bool disparage_flag_setting_t16_encodings;
-  /* Prefer 32-bit encoding instead of 16-bit encoding where subset of flags
-     would be set.  */
-  bool disparage_partial_flag_setting_t16_encodings;
+  enum {DISPARAGE_FLAGS_NEITHER, DISPARAGE_FLAGS_PARTIAL, DISPARAGE_FLAGS_ALL}
+    disparage_flag_setting_t16_encodings: 2;
+  enum {PREF_NEON_64_FALSE, PREF_NEON_64_TRUE} prefer_neon_for_64bits: 1;
   /* Prefer to inline string operations like memset by using Neon.  */
-  bool string_ops_prefer_neon;
-  /* Maximum number of instructions to inline calls to memset.  */
-  int max_insns_inline_memset;
-  /* Bitfield encoding the fuseable pairs of instructions.  */
-  unsigned int fuseable_ops;
+  enum {PREF_NEON_STRINGOPS_FALSE, PREF_NEON_STRINGOPS_TRUE}
+    string_ops_prefer_neon: 1;
+  /* Bitfield encoding the fusible pairs of instructions.  Use FUSE_OPS
+     in an initializer if multiple fusion operations are supported on a
+     target.  */
+  enum fuse_ops
+  {
+    FUSE_NOTHING   = 0,
+    FUSE_MOVW_MOVT = 1 << 0,
+    FUSE_AES_AESMC = 1 << 1
+  } fusible_ops: 2;
   /* Depth of scheduling queue to check for L2 autoprefetcher.  */
-  enum arm_sched_autopref sched_autopref;
+  enum {SCHED_AUTOPREF_OFF, SCHED_AUTOPREF_RANK, SCHED_AUTOPREF_FULL}
+    sched_autopref: 2;
 };
+
+/* Smash multiple fusion operations into a type that can be used for an
+   initializer.  */
+#define FUSE_OPS(x) ((tune_params::fuse_ops) (x))
 
 extern const struct tune_params *current_tune;
 extern int vfp3_const_double_for_fract_bits (rtx);
@@ -312,6 +331,7 @@ extern int vfp3_const_double_for_bits (rtx);
 
 extern void arm_emit_coreregs_64bit_shift (enum rtx_code, rtx, rtx, rtx, rtx,
 					   rtx);
+extern bool arm_fusion_enabled_p (tune_params::fuse_ops);
 extern bool arm_valid_symbolic_address_p (rtx);
 extern bool arm_validize_comparison (rtx *, rtx *, rtx *);
 #endif /* RTX_CODE */
@@ -324,87 +344,22 @@ extern bool arm_autoinc_modes_ok_p (machine_mode, enum arm_auto_incmodes);
 
 extern void arm_emit_eabi_attribute (const char *, int, int);
 
+extern void arm_reset_previous_fndecl (void);
+extern void save_restore_target_globals (tree);
+
 /* Defined in gcc/common/config/arm-common.c.  */
 extern const char *arm_rewrite_selected_cpu (const char *name);
 
+/* Defined in gcc/common/config/arm-c.c.  */
+extern void arm_lang_object_attributes_init (void);
+extern void arm_register_target_pragmas (void);
+extern void arm_cpu_cpp_builtins (struct cpp_reader *);
+
 extern bool arm_is_constant_pool_ref (rtx);
-
-/* Flags used to identify the presence of processor capabilities.  */
-
-/* Bit values used to identify processor capabilities.  */
-#define FL_CO_PROC    (1 << 0)        /* Has external co-processor bus */
-#define FL_ARCH3M     (1 << 1)        /* Extended multiply */
-#define FL_MODE26     (1 << 2)        /* 26-bit mode support */
-#define FL_MODE32     (1 << 3)        /* 32-bit mode support */
-#define FL_ARCH4      (1 << 4)        /* Architecture rel 4 */
-#define FL_ARCH5      (1 << 5)        /* Architecture rel 5 */
-#define FL_THUMB      (1 << 6)        /* Thumb aware */
-#define FL_LDSCHED    (1 << 7)	      /* Load scheduling necessary */
-#define FL_STRONG     (1 << 8)	      /* StrongARM */
-#define FL_ARCH5E     (1 << 9)        /* DSP extensions to v5 */
-#define FL_XSCALE     (1 << 10)	      /* XScale */
-/* spare	      (1 << 11)	*/
-#define FL_ARCH6      (1 << 12)       /* Architecture rel 6.  Adds
-					 media instructions.  */
-#define FL_VFPV2      (1 << 13)       /* Vector Floating Point V2.  */
-#define FL_WBUF	      (1 << 14)	      /* Schedule for write buffer ops.
-					 Note: ARM6 & 7 derivatives only.  */
-#define FL_ARCH6K     (1 << 15)       /* Architecture rel 6 K extensions.  */
-#define FL_THUMB2     (1 << 16)	      /* Thumb-2.  */
-#define FL_NOTM	      (1 << 17)	      /* Instructions not present in the 'M'
-					 profile.  */
-#define FL_THUMB_DIV  (1 << 18)	      /* Hardware divide (Thumb mode).  */
-#define FL_VFPV3      (1 << 19)       /* Vector Floating Point V3.  */
-#define FL_NEON       (1 << 20)       /* Neon instructions.  */
-#define FL_ARCH7EM    (1 << 21)	      /* Instructions present in the ARMv7E-M
-					 architecture.  */
-#define FL_ARCH7      (1 << 22)       /* Architecture 7.  */
-#define FL_ARM_DIV    (1 << 23)	      /* Hardware divide (ARM mode).  */
-#define FL_ARCH8      (1 << 24)       /* Architecture 8.  */
-#define FL_CRC32      (1 << 25)	      /* ARMv8 CRC32 instructions.  */
-
-#define FL_SMALLMUL   (1 << 26)       /* Small multiply supported.  */
-#define FL_NO_VOLATILE_CE   (1 << 27) /* No volatile memory in IT block.  */
-
-#define FL_IWMMXT     (1 << 29)	      /* XScale v2 or "Intel Wireless MMX technology".  */
-#define FL_IWMMXT2    (1 << 30)       /* "Intel Wireless MMX2 technology".  */
-
-/* Flags that only effect tuning, not available instructions.  */
-#define FL_TUNE		(FL_WBUF | FL_VFPV2 | FL_STRONG | FL_LDSCHED \
-			 | FL_CO_PROC)
-
-#define FL_FOR_ARCH2	FL_NOTM
-#define FL_FOR_ARCH3	(FL_FOR_ARCH2 | FL_MODE32)
-#define FL_FOR_ARCH3M	(FL_FOR_ARCH3 | FL_ARCH3M)
-#define FL_FOR_ARCH4	(FL_FOR_ARCH3M | FL_ARCH4)
-#define FL_FOR_ARCH4T	(FL_FOR_ARCH4 | FL_THUMB)
-#define FL_FOR_ARCH5	(FL_FOR_ARCH4 | FL_ARCH5)
-#define FL_FOR_ARCH5T	(FL_FOR_ARCH5 | FL_THUMB)
-#define FL_FOR_ARCH5E	(FL_FOR_ARCH5 | FL_ARCH5E)
-#define FL_FOR_ARCH5TE	(FL_FOR_ARCH5E | FL_THUMB)
-#define FL_FOR_ARCH5TEJ	FL_FOR_ARCH5TE
-#define FL_FOR_ARCH6	(FL_FOR_ARCH5TE | FL_ARCH6)
-#define FL_FOR_ARCH6J	FL_FOR_ARCH6
-#define FL_FOR_ARCH6K	(FL_FOR_ARCH6 | FL_ARCH6K)
-#define FL_FOR_ARCH6Z	FL_FOR_ARCH6
-#define FL_FOR_ARCH6ZK	FL_FOR_ARCH6K
-#define FL_FOR_ARCH6T2	(FL_FOR_ARCH6 | FL_THUMB2)
-#define FL_FOR_ARCH6M	(FL_FOR_ARCH6 & ~FL_NOTM)
-#define FL_FOR_ARCH7	((FL_FOR_ARCH6T2 & ~FL_NOTM) | FL_ARCH7)
-#define FL_FOR_ARCH7A	(FL_FOR_ARCH7 | FL_NOTM | FL_ARCH6K)
-#define FL_FOR_ARCH7VE	(FL_FOR_ARCH7A | FL_THUMB_DIV | FL_ARM_DIV)
-#define FL_FOR_ARCH7R	(FL_FOR_ARCH7A | FL_THUMB_DIV)
-#define FL_FOR_ARCH7M	(FL_FOR_ARCH7 | FL_THUMB_DIV)
-#define FL_FOR_ARCH7EM  (FL_FOR_ARCH7M | FL_ARCH7EM)
-#define FL_FOR_ARCH8A	(FL_FOR_ARCH7VE | FL_ARCH8)
-
-/* The bits in this mask specify which
-   instructions we are allowed to generate.  */
-extern unsigned long insn_flags;
 
 /* The bits in this mask specify which instruction scheduling options should
    be used.  */
-extern unsigned long tune_flags;
+extern unsigned int tune_flags;
 
 /* Nonzero if this chip supports the ARM Architecture 3M extensions.  */
 extern int arm_arch3m;
@@ -427,11 +382,17 @@ extern int arm_arch6;
 /* Nonzero if this chip supports the ARM 6K extensions.  */
 extern int arm_arch6k;
 
+/* Nonzero if this chip supports the ARM 6KZ extensions.  */
+extern int arm_arch6kz;
+
 /* Nonzero if instructions present in ARMv6-M can be used.  */
 extern int arm_arch6m;
 
 /* Nonzero if this chip supports the ARM 7 extensions.  */
 extern int arm_arch7;
+
+/* Nonzero if this chip supports the Large Physical Address Extension.  */
+extern int arm_arch_lpae;
 
 /* Nonzero if instructions not present in the 'M' profile can be used.  */
 extern int arm_arch_notm;
@@ -467,18 +428,15 @@ extern int arm_tune_wbuf;
 /* Nonzero if tuning for Cortex-A9.  */
 extern int arm_tune_cortex_a9;
 
-/* Nonzero if generating Thumb instructions.  */
-extern int thumb_code;
-
-/* Nonzero if generating Thumb-1 instructions.  */
-extern int thumb1_code;
-
 /* Nonzero if we should define __THUMB_INTERWORK__ in the
    preprocessor.
    XXX This is a bit of a hack, it's intended to help work around
    problems in GLD which doesn't understand that armv5t code is
    interworking clean.  */
 extern int arm_cpp_interwork;
+
+/* Nonzero if chip supports Thumb 1.  */
+extern int arm_arch_thumb1;
 
 /* Nonzero if chip supports Thumb 2.  */
 extern int arm_arch_thumb2;
@@ -494,6 +452,31 @@ extern int arm_arch_no_volatile_ce;
    than core registers.  */
 extern int prefer_neon_for_64bits;
 
+/* Structure defining the current overall architectural target and tuning.  */
+struct arm_build_target
+{
+  /* Name of the target CPU, if known, or NULL if the target CPU was not
+     specified by the user (and inferred from the -march option).  */
+  const char *core_name;
+  /* Name of the target ARCH.  NULL if there is a selected CPU.  */
+  const char *arch_name;
+  /* Preprocessor substring (never NULL).  */
+  const char *arch_pp_name;
+  /* CPU identifier for the core we're compiling for (architecturally).  */
+  enum processor_type arch_core;
+  /* The base architecture value.  */
+  enum base_architecture base_arch;
+  /* Bitmap encapsulating the isa_bits for the target environment.  */
+  sbitmap isa;
+  /* Flags used for tuning.  Long term, these move into tune_params.  */
+  unsigned int tune_flags;
+  /* Tables with more detailed tuning information.  */
+  const struct tune_params *tune;
+  /* CPU identifier for the tuning target.  */
+  enum processor_type tune_core;
+};
+
+extern struct arm_build_target arm_active_target;
 
 
 #endif /* ! GCC_ARM_PROTOS_H */

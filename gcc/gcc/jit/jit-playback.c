@@ -1,5 +1,5 @@
 /* Internals of libgccjit: classes for playing back recorded API calls.
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -21,40 +21,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "opts.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "input.h"
-#include "statistics.h"
-#include "vec.h"
-#include "double-int.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "alias.h"
-#include "flags.h"
-#include "symtab.h"
-#include "tree-core.h"
-#include "inchash.h"
-#include "tree.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "machmode.h"
-#include "tm.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "ipa-ref.h"
-#include "dumpfile.h"
-#include "cgraph.h"
-#include "toplev.h"
-#include "timevar.h"
-#include "tree-cfg.h"
 #include "target.h"
-#include "convert.h"
+#include "tree.h"
 #include "stringpool.h"
+#include "cgraph.h"
+#include "dumpfile.h"
+#include "toplev.h"
+#include "tree-cfg.h"
+#include "convert.h"
 #include "stor-layout.h"
 #include "print-tree.h"
 #include "gimplify.h"
@@ -62,11 +36,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "context.h"
 #include "fold-const.h"
-#include "debug.h"
 #include "gcc.h"
+#include "diagnostic.h"
 
-#include "jit-common.h"
-#include "jit-logging.h"
+#include <pthread.h>
+
 #include "jit-playback.h"
 #include "jit-result.h"
 #include "jit-builtins.h"
@@ -519,6 +493,8 @@ new_global (location *loc,
 
   varpool_node::get_create (inner);
 
+  varpool_node::finalize_decl (inner);
+
   m_globals.safe_push (inner);
 
   return new lvalue (this, inner);
@@ -672,45 +648,6 @@ as_truth_value (tree expr, location *loc)
 
   return expr;
 }
-
-/* For use by jit_langhook_write_globals.
-   Calls varpool_node::finalize_decl on each global.  */
-
-void
-playback::context::
-write_global_decls_1 ()
-{
-  /* Compare with e.g. the C frontend's c_write_global_declarations.  */
-  JIT_LOG_SCOPE (get_logger ());
-
-  int i;
-  tree decl;
-  FOR_EACH_VEC_ELT (m_globals, i, decl)
-    {
-      gcc_assert (TREE_CODE (decl) == VAR_DECL);
-      varpool_node::finalize_decl (decl);
-    }
-}
-
-/* For use by jit_langhook_write_globals.
-   Calls debug_hooks->global_decl on each global.  */
-
-void
-playback::context::
-write_global_decls_2 ()
-{
-  /* Compare with e.g. the C frontend's c_write_global_declarations_2. */
-  JIT_LOG_SCOPE (get_logger ());
-
-  int i;
-  tree decl;
-  FOR_EACH_VEC_ELT (m_globals, i, decl)
-    {
-      gcc_assert (TREE_CODE (decl) == VAR_DECL);
-      debug_hooks->global_decl (decl);
-    }
-}
-
 
 /* Construct a playback::rvalue instance (wrapping a tree) for a
    unary op.  */
@@ -917,7 +854,8 @@ playback::rvalue *
 playback::context::
 build_call (location *loc,
 	    tree fn_ptr,
-	    const auto_vec<rvalue *> *args)
+	    const auto_vec<rvalue *> *args,
+	    bool require_tail_call)
 {
   vec<tree, va_gc> *tree_args;
   vec_alloc (tree_args, args->length ());
@@ -931,9 +869,13 @@ build_call (location *loc,
   tree fn_type = TREE_TYPE (fn);
   tree return_type = TREE_TYPE (fn_type);
 
-  return new rvalue (this,
-		     build_call_vec (return_type,
-				     fn_ptr, tree_args));
+  tree call = build_call_vec (return_type,
+			      fn_ptr, tree_args);
+
+  if (require_tail_call)
+    CALL_EXPR_MUST_TAIL_CALL (call) = 1;
+
+  return new rvalue (this, call);
 
   /* see c-typeck.c: build_function_call
      which calls build_function_call_vec
@@ -953,7 +895,8 @@ playback::rvalue *
 playback::context::
 new_call (location *loc,
 	  function *func,
-	  const auto_vec<rvalue *> *args)
+	  const auto_vec<rvalue *> *args,
+	  bool require_tail_call)
 {
   tree fndecl;
 
@@ -965,7 +908,7 @@ new_call (location *loc,
 
   tree fn = build1 (ADDR_EXPR, build_pointer_type (fntype), fndecl);
 
-  return build_call (loc, fn, args);
+  return build_call (loc, fn, args, require_tail_call);
 }
 
 /* Construct a playback::rvalue instance (wrapping a tree) for a
@@ -975,12 +918,13 @@ playback::rvalue *
 playback::context::
 new_call_through_ptr (location *loc,
 		      rvalue *fn_ptr,
-		      const auto_vec<rvalue *> *args)
+		      const auto_vec<rvalue *> *args,
+		      bool require_tail_call)
 {
   gcc_assert (fn_ptr);
   tree t_fn_ptr = fn_ptr->as_tree ();
 
-  return build_call (loc, t_fn_ptr, args);
+  return build_call (loc, t_fn_ptr, args, require_tail_call);
 }
 
 /* Construct a tree for a cast.  */
@@ -1843,7 +1787,7 @@ compile ()
     }
 
   /* This runs the compiler.  */
-  toplev toplev (false, /* use_TV_TOTAL */
+  toplev toplev (get_timer (), /* external_timer */
 		 false); /* init_signals */
   enter_scope ("toplev::main");
   if (get_logger ())
@@ -1954,6 +1898,7 @@ playback::compile_to_file::postprocess (const char *ctxt_progname)
     case GCC_JIT_OUTPUT_KIND_ASSEMBLER:
       copy_file (get_tempdir ()->get_path_s_file (),
 		 m_output_path);
+      /* The .s file is automatically unlinked by tempdir::~tempdir.  */
       break;
 
     case GCC_JIT_OUTPUT_KIND_OBJECT_FILE:
@@ -1968,9 +1913,13 @@ playback::compile_to_file::postprocess (const char *ctxt_progname)
 		       false, /* bool shared, */
 		       false);/* bool run_linker */
 	if (!errors_occurred ())
-	  copy_file (tmp_o_path,
-		     m_output_path);
-	free (tmp_o_path);
+	  {
+	    copy_file (tmp_o_path,
+		       m_output_path);
+	    get_tempdir ()->add_temp_file (tmp_o_path);
+	  }
+	else
+	  free (tmp_o_path);
       }
       break;
 
@@ -1984,6 +1933,7 @@ playback::compile_to_file::postprocess (const char *ctxt_progname)
       if (!errors_occurred ())
 	copy_file (get_tempdir ()->get_path_so_file (),
 		   m_output_path);
+      /* The .so file is automatically unlinked by tempdir::~tempdir.  */
       break;
 
     case GCC_JIT_OUTPUT_KIND_EXECUTABLE:
@@ -1998,9 +1948,13 @@ playback::compile_to_file::postprocess (const char *ctxt_progname)
 		       false, /* bool shared, */
 		       true);/* bool run_linker */
 	if (!errors_occurred ())
-	  copy_file (tmp_exe_path,
-		     m_output_path);
-	free (tmp_exe_path);
+	  {
+	    copy_file (tmp_exe_path,
+		       m_output_path);
+	    get_tempdir ()->add_temp_file (tmp_exe_path);
+	  }
+	else
+	  free (tmp_exe_path);
       }
       break;
 
@@ -2135,6 +2089,8 @@ static pthread_mutex_t jit_mutex = PTHREAD_MUTEX_INITIALIZER;
 void
 playback::context::acquire_mutex ()
 {
+  auto_timevar tv (get_timer (), TV_JIT_ACQUIRING_MUTEX);
+
   /* Acquire the big GCC mutex. */
   JIT_LOG_SCOPE (get_logger ());
   pthread_mutex_lock (&jit_mutex);
@@ -2302,6 +2258,9 @@ make_fake_args (vec <char *> *argvec,
       }
   }
 
+  if (get_timer ())
+    ADD_ARG ("-ftime-report");
+
   /* Add any user-provided extra options, starting with any from
      parent contexts.  */
   m_recording_ctxt->append_command_line_options (argvec);
@@ -2340,7 +2299,7 @@ extract_any_requested_dumps (vec <recording::requested_dump> *requested_dumps)
       filename = g->get_dumps ()->get_dump_file_name (dfi);
       content = read_dump_file (filename);
       *(d->m_out_ptr) = content;
-      free (filename);
+      m_tempdir->add_temp_file (filename);
     }
 }
 
@@ -2418,6 +2377,8 @@ convert_to_dso (const char *ctxt_progname)
 		 true);/* bool run_linker */
 }
 
+static const char * const gcc_driver_name = GCC_DRIVER_NAME;
+
 void
 playback::context::
 invoke_driver (const char *ctxt_progname,
@@ -2428,15 +2389,15 @@ invoke_driver (const char *ctxt_progname,
 	       bool run_linker)
 {
   JIT_LOG_SCOPE (get_logger ());
+
+  bool embedded_driver
+    = !get_inner_bool_option (INNER_BOOL_OPTION_USE_EXTERNAL_DRIVER);
+
   /* Currently this lumps together both assembling and linking into
      TV_ASSEMBLE.  */
-  auto_timevar assemble_timevar (tv_id);
-  const char *errmsg;
+  auto_timevar assemble_timevar (get_timer (), tv_id);
   auto_argvec argvec;
 #define ADD_ARG(arg) argvec.safe_push (xstrdup (arg))
-  int exit_status = 0;
-  int err = 0;
-  const char *gcc_driver_name = GCC_DRIVER_NAME;
 
   ADD_ARG (gcc_driver_name);
 
@@ -2470,8 +2431,10 @@ invoke_driver (const char *ctxt_progname,
   ADD_ARG ("-Wl,-undefined,dynamic_lookup");
 #endif
 
-  /* pex argv arrays are NULL-terminated.  */
-  argvec.safe_push (NULL);
+  if (0)
+    ADD_ARG ("-v");
+
+#undef ADD_ARG
 
   /* pex_one's error-handling requires pname to be non-NULL.  */
   gcc_assert (ctxt_progname);
@@ -2480,9 +2443,42 @@ invoke_driver (const char *ctxt_progname,
     for (unsigned i = 0; i < argvec.length (); i++)
       get_logger ()->log ("argv[%i]: %s", i, argvec[i]);
 
+  if (embedded_driver)
+    invoke_embedded_driver (&argvec);
+  else
+    invoke_external_driver (ctxt_progname, &argvec);
+}
+
+void
+playback::context::
+invoke_embedded_driver (const vec <char *> *argvec)
+{
+  JIT_LOG_SCOPE (get_logger ());
+  driver d (true, /* can_finalize */
+	    false); /* debug */
+  int result = d.main (argvec->length (),
+		       const_cast <char **> (argvec->address ()));
+  d.finalize ();
+  if (result)
+    add_error (NULL, "error invoking gcc driver");
+}
+
+void
+playback::context::
+invoke_external_driver (const char *ctxt_progname,
+			vec <char *> *argvec)
+{
+  JIT_LOG_SCOPE (get_logger ());
+  const char *errmsg;
+  int exit_status = 0;
+  int err = 0;
+
+  /* pex argv arrays are NULL-terminated.  */
+  argvec->safe_push (NULL);
+
   errmsg = pex_one (PEX_SEARCH, /* int flags, */
 		    gcc_driver_name,
-		    const_cast <char *const *> (argvec.address ()),
+		    const_cast <char *const *> (argvec->address ()),
 		    ctxt_progname, /* const char *pname */
 		    NULL, /* const char *outname */
 		    NULL, /* const char *errname */
@@ -2509,7 +2505,6 @@ invoke_driver (const char *ctxt_progname,
 		 getenv ("PATH"));
       return;
     }
-#undef ADD_ARG
 }
 
 /* Extract the target-specific MULTILIB_DEFAULTS to
@@ -2551,7 +2546,7 @@ playback::context::
 dlopen_built_dso ()
 {
   JIT_LOG_SCOPE (get_logger ());
-  auto_timevar load_timevar (TV_LOAD);
+  auto_timevar load_timevar (get_timer (), TV_LOAD);
   void *handle = NULL;
   const char *error = NULL;
   result *result_obj = NULL;
@@ -2748,7 +2743,7 @@ location_comparator (const void *lhs, const void *rhs)
    linemap API requires locations to be created in ascending order
    as if we were tokenizing files.
 
-   This hook sorts all of the the locations that have been created, and
+   This hook sorts all of the locations that have been created, and
    calls into the linemap API, creating linemap entries in sorted order
    for our locations.  */
 
@@ -2844,6 +2839,43 @@ add_error_va (location *loc, const char *fmt, va_list ap)
 {
   m_recording_ctxt->add_error_va (loc ? loc->get_recording_loc () : NULL,
 				  fmt, ap);
+}
+
+/* Report a diagnostic up to the jit context as an error,
+   so that the compilation is treated as a failure.
+   For now, any kind of diagnostic is treated as an error by the jit
+   API.  */
+
+void
+playback::context::
+add_diagnostic (struct diagnostic_context *diag_context,
+		struct diagnostic_info *diagnostic)
+{
+  /* At this point the text has been formatted into the pretty-printer's
+     output buffer.  */
+  pretty_printer *pp = diag_context->printer;
+  const char *text = pp_formatted_text (pp);
+
+  /* Get location information (if any) from the diagnostic.
+     The recording::context::add_error[_va] methods require a
+     recording::location.  We can't lookup the playback::location
+     from the file/line/column since any playback location instances
+     may have been garbage-collected away by now, so instead we create
+     another recording::location directly.  */
+  location_t gcc_loc = diagnostic_location (diagnostic);
+  recording::location *rec_loc = NULL;
+  if (gcc_loc)
+    {
+      expanded_location exploc = expand_location (gcc_loc);
+      if (exploc.file)
+	rec_loc = m_recording_ctxt->new_location (exploc.file,
+						  exploc.line,
+						  exploc.column,
+						  false);
+    }
+
+  m_recording_ctxt->add_error (rec_loc, "%s", text);
+  pp_clear_output_area (pp);
 }
 
 /* Dealing with the linemap API.  */

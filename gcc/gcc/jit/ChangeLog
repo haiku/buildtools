@@ -1,23 +1,516 @@
-2016-06-03  Release Manager
+2018-01-25  Release Manager
 
-	* GCC 5.4.0 released.
+	* GCC 7.3.0 released.
 
-2015-12-04  Release Manager
+2017-08-14  Release Manager
 
-	* GCC 5.3.0 released.
+	* GCC 7.2.0 released.
+
+2017-05-02  Release Manager
+
+	* GCC 7.1.0 released.
+
+2017-01-19  David Malcolm  <dmalcolm@redhat.com>
+
+	* dummy-frontend.c (jit_langhook_type_for_size): Delete.
+	(LANG_HOOKS_TYPE_FOR_SIZE): Don't redefine.
+
+2017-01-18  David Malcolm  <dmalcolm@redhat.com>
+
+	* dummy-frontend.c (jit_langhook_type_for_size): Implement, using
+	lto's lto_type_for_size.
+
+2017-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2016-05-20  David Malcolm  <dmalcolm@redhat.com>
+
+	* docs/topics/compatibility.rst: Add LIBGCCJIT_ABI_6.
+	* docs/topics/expressions.rst (Function calls): Add documentation
+	of gcc_jit_rvalue_set_bool_require_tail_call.
+	* docs/_build/texinfo/libgccjit.texi: Regenerate.
+	* jit-common.h (gcc::jit::recording::base_call): Add forward decl.
+	* jit-playback.c: Within namespace gcc::jit::playback...
+	(context::build_call) Add "require_tail_call" param and use it
+	to set CALL_EXPR_MUST_TAIL_CALL.
+	(context::new_call): Add "require_tail_call" param.
+	(context::new_call_through_ptr): Likewise.
+	* jit-playback.h: Within namespace gcc::jit::playback...
+	(context::new_call: Add "require_tail_call" param.
+	(context::new_call_through_ptr): Likewise.
+	(context::build_call): Likewise.
+	* jit-recording.c: Within namespace gcc::jit::recording...
+	(base_call::base_call): New constructor.
+	(base_call::write_reproducer_tail_call): New method.
+	(call::call): Update for inheritance from base_call.
+	(call::replay_into): Provide m_require_tail_call to call
+	to new_call.
+	(call::write_reproducer): Call write_reproducer_tail_call.
+	(call_through_ptr::call_through_ptr): Update for inheritance from
+	base_call.
+	(call_through_ptr::replay_into): Provide m_require_tail_call to call
+	to new_call_through_ptr.
+	(recording::call_through_ptr::write_reproducer): Call
+	write_reproducer_tail_call.
+	* jit-recording.h: Within namespace gcc::jit::recording...
+	(rvalue::dyn_cast_base_call): New virtual function.
+	(class base_call): New subclass of class rvalue.
+	(class call): Inherit from base_call rather than directly from
+	rvalue, moving get_precedence and m_args to base_call.
+	(class call_through_ptr): Likewise.
+	* libgccjit.c (gcc_jit_rvalue_set_bool_require_tail_call): New
+	function.
+	* libgccjit.h
+	(LIBGCCJIT_HAVE_gcc_jit_rvalue_set_bool_require_tail_call): New
+	macro.
+	(gcc_jit_rvalue_set_bool_require_tail_call): New function.
+	* libgccjit.map (LIBGCCJIT_ABI_6): New.
+	(gcc_jit_rvalue_set_bool_require_tail_call): Add.
+
+2016-05-17  David Malcolm  <dmalcolm@redhat.com>
+
+	* dummy-frontend.c: Include diagnostic.h.
+	(jit_begin_diagnostic): New function.
+	(jit_end_diagnostic): New function.
+	(jit_langhook_init): Register jit_begin_diagnostic
+	and jit_end_diagnostic with the global_dc.
+	* jit-playback.c: Include diagnostic.h.
+	(gcc::jit::playback::context::add_diagnostic): New method.
+	* jit-playback.h (struct diagnostic_context): Add forward
+	declaration.
+	(gcc::jit::playback::context::add_diagnostic): New method.
+
+2016-05-17  David Malcolm  <dmalcolm@redhat.com>
+
+	* docs/topics/expressions.rst (Function calls): Document
+	gcc_jit_context_new_call_through_ptr.
+	* docs/_build/texinfo/libgccjit.texi: Regenerate.
+
+2016-05-13  David Malcolm  <dmalcolm@redhat.com>
+
+	* jit-playback.h: Within namespace gcc:jit::playback...
+	(compile_to_memory::postprocess): Mark with FINAL OVERRIDE.
+	(compile_to_file::postprocess): Likewise.
+	(function::finalizer): Likewise.
+	(block::finalizer): Likewise.
+	(source_file::finalizer): Likewise.
+	(source_line::finalizer): Likewise.
+	* jit-recording.c (gcc::jit::rvalue_usage_validator):: Likewise.
+	* jit-recording.h: Within namespace gcc::jit::recording...
+	(string::replay_into): Mark with FINAL OVERRIDE.
+	(string::make_debug_string): Likewise.
+	(string::write_reproducer): Likewise.
+	(location::replay_into): Likewise.
+	(location::dyn_cast_location): Likewise.
+	(location::make_debug_string): Likewise.
+	(location::write_reproducer): Likewise.
+	(memento_of_get_type::dereference): Likewise.
+	(memento_of_get_type::accepts_writes_from): Likewise.
+	(memento_of_get_type::is_int): Likewise.
+	(memento_of_get_type::is_float): Likewise.
+	(memento_of_get_type::is_bool): Likewise.
+	(memento_of_get_type::is_pointer): Likewise.
+	(memento_of_get_type::is_array): Likewise.
+	(memento_of_get_type::is_void): Likewise.
+	(memento_of_get_type::replay_into): Likewise.
+	(memento_of_get_type::make_debug_string): Likewise.
+	(memento_of_get_type::write_reproducer): Likewise.
+	(memento_of_get_pointer::dereference): Likewise.
+	(memento_of_get_pointer::accepts_writes_from): Likewise.
+	(memento_of_get_pointer::replay_into): Likewise.
+	(memento_of_get_pointer::is_int): Likewise.
+	(memento_of_get_pointer::is_float): Likewise.
+	(memento_of_get_pointer::is_bool): Likewise.
+	(memento_of_get_pointer::is_pointer): Likewise.
+	(memento_of_get_pointer::is_array): Likewise.
+	(memento_of_get_pointer::make_debug_string): Likewise.
+	(memento_of_get_pointer::write_reproducer): Likewise.
+	(memento_of_get_const::dereference): Likewise.
+	(memento_of_get_const::accepts_writes_from): Likewise.
+	(memento_of_get_const::unqualified): Likewise.
+	(memento_of_get_const::is_int): Likewise.
+	(memento_of_get_const::is_float): Likewise.
+	(memento_of_get_const::is_bool): Likewise.
+	(memento_of_get_const::is_pointer): Likewise.
+	(memento_of_get_const::is_array): Likewise.
+	(memento_of_get_const::void replay_into): Likewise;
+	(memento_of_get_const::make_debug_string): Likewise.
+	(memento_of_get_const::write_reproducer): Likewise.
+	(memento_of_get_volatile::dereference): Likewise.
+	(memento_of_get_volatile::unqualified): Likewise.
+	(memento_of_get_volatile::is_int): Likewise.
+	(memento_of_get_volatile::is_float): Likewise.
+	(memento_of_get_volatile::is_bool): Likewise.
+	(memento_of_get_volatile::is_pointer): Likewise.
+	(memento_of_get_volatile::is_array): Likewise.
+	(memento_of_get_volatile::replay_into): Likewise;
+	(memento_of_get_volatile::make_debug_string): Likewise.
+	(memento_of_get_volatile::write_reproducer): Likewise.
+	(array_type::dereference): Likewise.
+	(array_type::is_int): Likewise.
+	(array_type::is_float): Likewise.
+	(array_type::is_bool): Likewise.
+	(array_type::is_pointer): Likewise.
+	(array_type::is_array): Likewise.
+	(array_type::replay_into): Likewise;
+	(array_type::make_debug_string): Likewise.
+	(array_type::write_reproducer): Likewise.
+	(function_type::dereference): Likewise.
+	(function_type::function_dyn_cast_function_type): Likewise.
+	(function_type::function_as_a_function_type): Likewise.
+	(function_type::is_int): Likewise.
+	(function_type::is_float): Likewise.
+	(function_type::is_bool): Likewise.
+	(function_type::is_pointer): Likewise.
+	(function_type::is_array): Likewise.
+	(function_type::replay_into): Likewise;
+	(function_type::make_debug_string): Likewise.
+	(function_type::write_reproducer): Likewise.
+	(field::replay_into): Likewise;
+	(field::write_to_dump): Likewise.
+	(field::make_debug_string): Likewise.
+	(field::write_reproducer): Likewise.
+	(compound_type::dereference): Likewise.
+	(compound_type::is_int): Likewise.
+	(compound_type::is_float): Likewise.
+	(compound_type::is_bool): Likewise.
+	(compound_type::is_pointer): Likewise.
+	(compound_type::is_array): Likewise.
+	(compound_type::has_known_size): Likewise.
+	(struct_::dyn_cast_struct): Likewise.
+	(struct_::replay_into): Likewise.
+	(struct_::access_as_type): Likewise.
+	(struct_::make_debug_string): Likewise.
+	(struct_::write_reproducer): Likewise.
+	(fields::replay_into): Likewise.
+	(fields::write_to_dump): Likewise.
+	(fields::make_debug_string): Likewise.
+	(fields::write_reproducer): Likewise.
+	(union_::replay_into): Likewise.
+	(union_::make_debug_string): Likewise.
+	(union_::write_reproducer): Likewise.
+	(lvalue::access_as_rvalue): Mark with OVERRIDE.
+	(param::replay_into): Mark with FINAL OVERRIDE.
+	(param::visit_children): Likewise.
+	(param::dyn_cast_param): Likewise.
+	(param::access_as_rvalue): Likewise.
+	(param::access_as_lvalue): Likewise.
+	(param::make_debug_string): Likewise.
+	(param::write_reproducer): Likewise.
+	(param::get_precedence): Likewise.
+	(function::replay_into): Likewise.
+	(function::write_to_dump): Likewise.
+	(function::make_debug_string): Likewise.
+	(function::write_reproducer): Likewise.
+	(block::write_to_dump): Likewise.
+	(block::make_debug_string): Likewise.
+	(block::write_reproducer): Likewise.
+	(block::replay_into): Likewise.
+	(global::replay_into): Likewise;
+	(global::visit_children): Likewise.
+	(global::write_to_dump): Likewise.
+	(global::make_debug_string): Likewise.
+	(global::write_reproducer): Likewise.
+	(global::get_precedence): Likewise.
+	(memento_of_new_rvalue_from_const::replay_into): Likewise.
+	(memento_of_new_rvalue_from_const::visit_children): Likewise.
+	(memento_of_new_rvalue_from_const::is_constant): Likewise.
+	(memento_of_new_rvalue_from_const::get_wide_int): Likewise.
+	(memento_of_new_rvalue_from_const::make_debug_string): Likewise.
+	(memento_of_new_rvalue_from_const::write_reproducer): Likewise.
+	(memento_of_new_rvalue_from_const::get_precedence): Likewise.
+	(memento_of_new_string_literal::replay_into): Likewise.
+	(memento_of_new_string_literal::visit_children): Likewise.
+	(memento_of_new_string_literal::make_debug_string): Likewise.
+	(memento_of_new_string_literal::write_reproducer): Likewise.
+	(memento_of_new_string_literal::get_precedence): Likewise.
+	(unary_op::replay_into): Likewise.
+	(unary_op::visit_children): Likewise.
+	(unary_op::make_debug_string): Likewise.
+	(unary_op::write_reproducer): Likewise.
+	(unary_op::get_precedence): Likewise.
+	(binary_op::replay_into): Likewise.
+	(binary_op::visit_children): Likewise.
+	(binary_op::make_debug_string): Likewise.
+	(binary_op::write_reproducer): Likewise.
+	(binary_op::get_precedence): Likewise.
+	(comparison::replay_into): Likewise.
+	(comparison::visit_children): Likewise.
+	(comparison::make_debug_string): Likewise.
+	(comparison::write_reproducer): Likewise.
+	(comparison::get_precedence): Likewise.
+	(cast::replay_into): Likewise.
+	(cast::visit_children): Likewise.
+	(cast::make_debug_string): Likewise.
+	(cast::write_reproducer): Likewise.
+	(cast::get_precedence): Likewise.
+	(call::replay_into): Likewise.
+	(call::visit_children): Likewise.
+	(call::make_debug_string): Likewise.
+	(call::write_reproducer): Likewise.
+	(call::get_precedence): Likewise.
+	(call_through_ptr::replay_into): Likewise.
+	(call_through_ptr::visit_children): Likewise.
+	(call_through_ptr::make_debug_string): Likewise.
+	(call_through_ptr::write_reproducer): Likewise.
+	(call_through_ptr::get_precedence): Likewise.
+	(array_access::replay_into): Likewise.
+	(array_access::visit_children): Likewise.
+	(array_access::make_debug_string): Likewise.
+	(array_access::write_reproducer): Likewise.
+	(array_access::get_precedence): Likewise.
+	(access_field_of_lvalue::replay_into): Likewise.
+	(access_field_of_lvalue::visit_children): Likewise.
+	(access_field_of_lvalue::make_debug_string): Likewise.
+	(access_field_of_lvalue::write_reproducer): Likewise.
+	(access_field_of_lvalue::get_precedence): Likewise.
+	(access_field_rvalue::replay_into): Likewise.
+	(access_field_rvalue::visit_children): Likewise.
+	(access_field_rvalue::make_debug_string): Likewise.
+	(access_field_rvalue::write_reproducer): Likewise.
+	(access_field_rvalue::get_precedence): Likewise.
+	(dereference_field_rvalue::replay_into): Likewise.
+	(dereference_field_rvalue::visit_children): Likewise.
+	(dereference_field_rvalue::make_debug_string): Likewise.
+	(dereference_field_rvalue::write_reproducer): Likewise.
+	(dereference_field_rvalue::get_precedence): Likewise.
+	(dereference_rvalue::replay_into): Likewise.
+	(dereference_rvalue::visit_children): Likewise.
+	(dereference_rvalue::make_debug_string): Likewise.
+	(dereference_rvalue::write_reproducer): Likewise.
+	(dereference_rvalue::get_precedence): Likewise.
+	(get_address_of_lvalue::replay_into): Likewise.
+	(get_address_of_lvalue::visit_children): Likewise.
+	(get_address_of_lvalue::make_debug_string): Likewise.
+	(get_address_of_lvalue::write_reproducer): Likewise.
+	(get_address_of_lvalue::get_precedence): Likewise.
+	(local::replay_into): Likewise.
+	(local::visit_children): Likewise.
+	(local::write_to_dump): Likewise.
+	(local::make_debug_string): Likewise.
+	(local::write_reproducer): Likewise.
+	(local::get_precedence): Likewise.
+	(statement::write_to_dump): Likewise.
+	(eval::replay_into): Likewise.
+	(eval::make_debug_string): Likewise.
+	(eval::write_reproducer): Likewise.
+	(assignment::replay_into): Likewise.
+	(assignment::make_debug_string): Likewise.
+	(assignment::write_reproducer): Likewise.
+	(assignment_op::replay_into): Likewise.
+	(assignment_op::make_debug_string): Likewise.
+	(assignment_op::write_reproducer): Likewise.
+	(comment::replay_into): Likewise.
+	(comment::make_debug_string): Likewise.
+	(comment::write_reproducer): Likewise.
+	(conditional::replay_into): Likewise.
+	(conditional::get_successor_blocks): Likewise.
+	(conditional::make_debug_string): Likewise.
+	(conditional::write_reproducer): Likewise.
+	(jump::replay_into): Likewise.
+	(jump::get_successor_blocks): Likewise.
+	(jump::make_debug_string): Likewise.
+	(jump::write_reproducer): Likewise.
+	(return_::replay_into): Likewise.
+	(return_::get_successor_blocks): Likewise.
+	(return_::make_debug_string): Likewise.
+	(return_::write_reproducer): Likewise.
+	(case_::replay_into): Likewise.
+	(case_::write_reproducer): Likewise.
+	(case_::make_debug_string): Likewise.
+	(switch_::replay_into): Likewise.
+	(switch_::get_successor_blocks): Likewise.
+	(switch_::make_debug_string): Likewise.
+	(switch_::write_reproducer): Likewise.
+
+2016-02-08  David Malcolm  <dmalcolm@redhat.com>
+
+	* dummy-frontend.c (jit_langhook_init): Remove
+	second argument to build_common_tree_nodes to
+	track r233218.
+
+2016-01-23  Iain Buclaw  <ibuclaw@gdcproject.org>
+
+	* jit-playback.c: Include pthread.h.
+
+2016-01-19  David Malcolm  <dmalcolm@redhat.com>
+
+	PR jit/69144
+	* jit-playback.c (gcc::jit::playback::compile_to_file::postprocess):
+	Potentially add the temporary artifact to the tempdir's list of
+	tempfiles needing additional cleanup.
+	(gcc::jit::playback::context::extract_any_requested_dumps): Likewise
+	for the dumpfile.
+	* jit-tempdir.c (gcc::jit::tempdir::~tempdir): Clean up additional
+	tempfiles.
+	* jit-tempdir.h (gcc::jit::tempdir::add_temp_file): New method.
+	(gcc::jit::tempdir::m_tempfiles): New field.
+	* docs/cp/intro/tutorial04.rst: Update for changes to toyvm.cc.
+	* docs/examples/tut04-toyvm/toyvm.cc (class compilation_result):
+	New.
+	(toyvm_function::compile): Change return type from function ptr
+	to a compilation_result.
+	(toyvm_function::get_function_name): New accessor.
+	(toyvm_function::m_funcname): New field.
+	(get_function_name): Convert to...
+	(toyvm_function::make_function_name): ...this new method.
+	(toyvm_function::parse): Call make_function_name.
+	(toyvm_function::compile): Convert return type from function ptr
+	to a compilation_result.  Use get_function_name.
+	(compilation_state::compile): Convert return type from
+	gcc_jit_result * to a compilation_result.
+	(test_script): Update for above changes, extracting the code from
+	the compilation_result.
+	(main): Likewise.
+	* docs/_build/texinfo/libgccjit.texi: Regenerate.
+
+2016-01-04  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2015-11-11  Andrew MacLeod  <amacleod@redhat.com>
+
+	* dummy-frontend.c: Remove unused header files.
+	* jit-builtins.c: Likewise.
+	* jit-playback.c: Likewise.
+	* jit-recording.c: Likewise.
+	* jit-spec.c: Likewise.
+	* libgccjit.c: Likewise.
+
+2015-11-07  Richard Sandiford  <richard.sandiford@arm.com>
+
+	* jit-builtins.c: Don't undef DEF_BUILTIN.
+
+2015-10-29  Andrew MacLeod  <amacleod@redhat.com>
+
+	* dummy-frontend.c: Reorder #include's and remove duplicates.
+	* jit-builtins.c: Likewise.
+	* jit-playback.c: Likewise.
+	* jit-recording.c: Likewise.
+	* libgccjit.c: Likewise.
+
+2015-10-13  Jakub Jelinek  <jakub@redhat.com>
+
+	* jit-builtins.c (DEF_FUNCTION_TYPE_9, DEF_FUNCTION_TYPE_10,
+	DEF_FUNCTION_TYPE_11): Define.
+	* jit-builtins.h (DEF_FUNCTION_TYPE_9, DEF_FUNCTION_TYPE_10,
+	DEF_FUNCTION_TYPE_11): Define.
+
+2015-09-30  Thomas Schwinge  <thomas@codesourcery.com>
+	    Ulrich Drepper  <drepper@gmail.com>
+
+	* jit-builtins.h: Undefine DEF_FUNCTION_TYPE_VAR_6 after use.
+
+2015-09-30  Matthias Klose  <doko@ubuntu.com>
+
+	* jit-builtins.h Define DEF_FUNCTION_TYPE_VAR_6,
+	remove DEF_FUNCTION_TYPE_VAR_11.
+	* jit-builtins.c (builtins_manager::make_type): Define and handle
+	DEF_FUNCTION_TYPE_VAR_6, remove DEF_FUNCTION_TYPE_VAR_11.
+
+2015-08-25  David Malcolm  <dmalcolm@redhat.com>
+
+	* docs/cp/topics/contexts.rst
+	(gccjit::context::set_bool_use_external_driver): New.
+	* docs/internals/test-hello-world.exe.log.txt: Update.
+	* docs/topics/compatibility.rst (LIBGCCJIT_ABI_5): New.
+	* docs/topics/contexts.rst
+	(gcc_jit_context_set_bool_use_external_driver): New.
+	* jit-common.h (enum inner_bool_option): Add
+	INNER_BOOL_OPTION_USE_EXTERNAL_DRIVER.
+	* jit-playback.c (gcc_driver_name): New global.
+	(gcc:jit::playback::context::invoke_driver): Split out second
+	half into...
+	(gcc::jit::playback::context::invoke_embedded_driver): ...this new
+	function, and...
+	(gcc::jit::playback::context::invoke_external_driver): ...this new
+	function.
+	* jit-playback.h
+	(gcc::jit::playback::context::get_inner_bool_option): New.
+	(gcc::jit::playback::context::invoke_embedded_driver): New.
+	(gcc::jit::playback::context::invoke_external_driver): New.
+	* jit-recording.c (inner_bool_option_reproducer_strings):
+	Add entry for INNER_BOOL_OPTION_USE_EXTERNAL_DRIVER.
+	* libgccjit++.h
+	(gccjit::context::set_bool_use_external_driver): New.
+	* libgccjit.c (gcc_jit_context_set_bool_use_external_driver): New.
+	* libgccjit.h (gcc_jit_context_set_bool_use_external_driver): New.
+	(LIBGCCJIT_HAVE_gcc_jit_context_set_bool_use_external_driver):
+	New.
+	* libgccjit.map (LIBGCCJIT_ABI_5): New.
+	* notes.txt: Show invocation of embedded copy of driver.
+	* docs/internals/test-hello-world.exe.log.txt: Update
 
 2015-08-13  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r226882
-	2015-08-13  David Malcolm  <dmalcolm@redhat.com>
 
 	* jit-playback.c (invoke_driver): On OS X, add
 	"-Wl,-undefined,dynamic_lookup" to the driver arguments.
 
-2015-07-23  David Malcolm  <dmalcolm@redhat.com>
+2015-08-03  David Malcolm  <dmalcolm@redhat.com>
 
-	Backport from mainline r226126
-	2015-07-23  David Malcolm  <dmalcolm@redhat.com>
+	* docs/topics/compatibility.rst (LIBGCCJIT_ABI_4): New.
+	* docs/topics/contexts.rst (GCC_JIT_BOOL_OPTION_DUMP_SUMMARY):
+	We no longer show a profile.
+	* docs/topics/index.rst (Topic Reference): Add performance.rst.
+	* docs/topics/performance.rst: New file.
+	* docs/_build/texinfo/libgccjit.texi: Regenerate.
+	* jit-playback.c (gcc::jit::playback::context::compile): Add timer
+	param when constructing the "toplev" instance.
+	(gcc::jit::playback::context::acquire_mutex): Add timer param when
+	constructing auto_timevar instance.
+	(gcc::jit::playback::context::make_fake_args): If we have a timer,
+	add "-ftime-report".
+	(gcc::jit::playback::context::invoke_driver): Add timer param when
+	constructing auto_timevar instance.
+	(gcc::jit::playback::context::dlopen_built_dso): Likewise.
+	* jit-playback.h (gcc::jit::playback::context::get_timer): New accessor.
+	* jit-recording.c: Include timevar.h.
+	(gcc::jit::recording::context::context): Initialize field "m_timer".
+	* jit-recording.h: Add forward declaration of class timer.
+	(gcc::jit::recording::context::set_timer): New method.
+	(gcc::jit::recording::context::get_timer): New method.
+	(gcc::jit::recording::context::m_timer): New field.
+	* libgccjit++.h (gccjit::timer): New class.
+	(gccjit::auto_time): New class.
+	(gccjit::context::set_timer): New method.
+	(gccjit::context::get_timer): New.
+	(gccjit::timer::timer): New.
+	(gccjit::timer::push): New.
+	(gccjit::timer::pop): New.
+	(timer::print): New.
+	(timer::get_inner_timer): New.
+	(timer::release): New.
+	(auto_time::auto_time): New.
+	(auto_time::~auto_time): New.
+	* libgccjit.c: Include timevar.h.
+	(struct gcc_jit_timer): New.
+	(gcc_jit_timer_new): New function.
+	(gcc_jit_timer_release): New function.
+	(gcc_jit_context_set_timer): New function.
+	(gcc_jit_context_get_timer): New function.
+	(gcc_jit_timer_push): New function.
+	(gcc_jit_timer_pop): New function.
+	(gcc_jit_timer_print): New function.
+	* libgccjit.h (LIBGCCJIT_HAVE_TIMING_API): New macro.
+	(gcc_jit_timer): New typedef.
+	(gcc_jit_timer_new): New function.
+	(gcc_jit_timer_release): New function.
+	(gcc_jit_context_set_timer): New function.
+	(gcc_jit_context_get_timer): New function.
+	(gcc_jit_timer_push): New function.
+	(gcc_jit_timer_pop): New function.
+	(gcc_jit_timer_print): New function.
+	* libgccjit.map (LIBGCCJIT_ABI_4): New.
+	(gcc_jit_timer_new): New function.
+	(gcc_jit_timer_release): New function.
+	(gcc_jit_context_set_timer): New function.
+	(gcc_jit_context_get_timer): New function.
+	(gcc_jit_timer_push): New function.
+	(gcc_jit_timer_pop): New function.
+	(gcc_jit_timer_print): New function.
+
+2015-07-23  David Malcolm  <dmalcolm@redhat.com>
 
 	* jit-playback.c (invoke_driver): Convert local "argvec"
 	to an auto_argvec, so that it owns copies of the strings,
@@ -35,14 +528,53 @@
 	* docs/internals/test-hello-world.exe.log.txt: Update.
 	* docs/_build/texinfo/libgccjit.texi: Regenerate.
 
-2015-07-16  Release Manager
+2015-07-16  David Malcolm  <dmalcolm@redhat.com>
 
-	* GCC 5.2.0 released.
+	* docs/internals/index.rst (Overview of code structure): Add note
+	that the implementation is in C++, despite the .c extension.
+	(Submitting patches): New subsection.
+	* docs/_build/texinfo/libgccjit.texi: Regenerate.
+
+2015-07-09  Andrew MacLeod  <amacleod@redhat.com>
+
+	* dummy-frontend.c: Adjust includes for flags.h changes.
+	* jit-common.h: Likewise.
+	* jit-playback.c: Likewise.
+
+2015-07-08  David Malcolm  <dmalcolm@redhat.com>
+
+	PR jit/66783
+	* libgccjit.c (gcc_jit_context_new_field): Show name of field in
+	"unknown size" error message.
+	(gcc_jit_struct_set_fields): Show name of struct in error message.
+	(gcc_jit_context_new_global): Show name of global in
+	"unknown size" error message.
+	(gcc_jit_function_new_local): Likewise for local.
+
+2015-07-07  Andrew MacLeod  <amacleod@redhat.com>
+
+	* dummy-frontend.c: Adjust includes.
+	* jit-common.h: Likewise.
+	* jit-playback.c: Likewise.
+
+2015-07-07  David Malcolm  <dmalcolm@redhat.com>
+
+	PR jit/66783
+	* jit-recording.h: Within namespace gcc:jit::recording...
+	(type::has_known_size): New virtual function.
+	(struct_has_known_size): New function.
+	* libgccjit.c (gcc_jit_context_new_field): Verify that the type
+	has a known size.
+	(gcc_jit_context_new_global): Likewise.
+	(gcc_jit_function_new_local): Likewise.
+
+2015-07-07  David Malcolm  <dmalcolm@redhat.com>
+
+	PR jit/66779
+	* dummy-frontend.c (jit_langhook_type_for_mode): Ensure that we
+	handle modes QI, HI, SI, DI, TI.
 
 2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r225248
-	2015-07-01  David Malcolm  <dmalcolm@redhat.com>
 
 	PR jit/66700
 	* jit-playback.c (jit_mark_addressable): New function.
@@ -51,17 +583,11 @@
 
 2015-07-01  David Malcolm  <dmalcolm@redhat.com>
 
-	Backport from mainline r225246
-	2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
 	* docs/topics/types.rst (gcc_jit_context_new_union_type): Add
 	documentation.
 	* docs/_build/texinfo/libgccjit.texi: Regenerate.
 
 2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r225245
-	2015-07-01  David Malcolm  <dmalcolm@redhat.com>
 
 	* docs/topics/contexts.rst (gcc_jit_context_set_bool_option):
 	Clarify lack of lifetime requirements on (const char *) parameter.
@@ -78,10 +604,7 @@
 	(gcc_jit_context_new_struct_type): Likewise.
 	* docs/_build/texinfo/libgccjit.texi: Regenerate.
 
-2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r225207
-	2015-06-30  David Malcolm  <dmalcolm@redhat.com>
+2015-06-30  David Malcolm  <dmalcolm@redhat.com>
 
 	* docs/cp/topics/functions.rst (Blocks): Add switch statements to
 	list of ways to terminate a block.
@@ -172,10 +695,7 @@
 	* libgccjit.map: Add gcc_jit_block_end_with_switch,
 	gcc_jit_case_as_object and gcc_jit_context_new_case.
 
-2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r225206
-	2015-06-30  David Malcolm  <dmalcolm@redhat.com>
+2015-06-30  David Malcolm  <dmalcolm@redhat.com>
 
 	PR jit/66546
 	* docs/cp/topics/contexts.rst
@@ -216,10 +736,7 @@
 	(gcc_jit_context_set_bool_allow_unreachable_blocks): ...this new
 	entrypoint.
 
-2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r225205
-	2015-06-30  David Malcolm  <dmalcolm@redhat.com>
+2015-06-30  David Malcolm  <dmalcolm@redhat.com>
 
 	PR jit/66628
 	* docs/cp/topics/contexts.rst (Additional command-line options):
@@ -254,38 +771,41 @@
 	* libgccjit.map: Put existing symbols within LIBGCCJIT_ABI_0; add
 	LIBGCCJIT_ABI_1 and gcc_jit_context_add_command_line_option.
 
-2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r225204
-	2015-06-30  David Malcolm  <dmalcolm@redhat.com>
+2015-06-30  David Malcolm  <dmalcolm@redhat.com>
 
 	* jit-recording.c
 	(gcc::jit::recording::context::dump_reproducer_to_file):
 	Add pragma to generated reproducers to disable -Wunused-variable.
 	Fix handling of NULL string options.
 
-2015-07-01  David Malcolm  <dmalcolm@redhat.com>
-
-	Backport from mainline r225203
-	2015-06-30  David Malcolm  <dmalcolm@redhat.com>
+2015-06-30  David Malcolm  <dmalcolm@redhat.com>
 
 	* docs/cp/topics/expressions.rst: Remove stray semicolon.
 	* docs/cp/topics/functions.rst: Remove stray backslash.
 	* docs/_build/texinfo/libgccjit.texi: Regenerate.
 
-2015-06-29  David Malcolm  <dmalcolm@redhat.com>
+2015-06-25  Andrew MacLeod  <amacleod@redhat.com>
 
-	Backport from mainline r224565
-	2015-06-17  David Malcolm  <dmalcolm@redhat.com>
+	* dummy-frontend.c: Remove ipa-ref.h and plugin-api.h from include list.
+	* jit-playback.c: Likewise.
+
+2015-06-25  Andrew Macleod  <amacleod@redhat.com>
+
+	* jit-common.h: Don't include alias.h.
+
+2015-06-17  David Malcolm  <dmalcolm@redhat.com>
 
 	* libgccjit.c (gcc_jit_lvalue_access_field): Verify that the field
 	is for the correct struct.
 	(gcc_jit_rvalue_access_field): Likewise.
 
-2015-06-29  David Malcolm  <dmalcolm@redhat.com>
+2015-06-17  Andrew MacLeod  <amacleod@redhat.com>
 
-	Backport from mainline r224531
-	2015-06-16  David Malcolm  <dmalcolm@redhat.com>
+	* dummy-frontend.c: Do not include input.h, line-map.h or is-a.h.
+	* jit-common.h: Likewise.
+	* jit-playback.c: Likewise.
+
+2015-06-16  David Malcolm  <dmalcolm@redhat.com>
 
 	PR jit/66539
 	* jit-recording.c: Within namespace gcc::jit::recording::
@@ -335,9 +855,56 @@
 
 	* Make-lang.in (jit.install-common): Install headers using INSTALL_DATA.
 
-2015-04-22  Release Manager
+2015-06-08  Andrew MacLeod  <amacleod@redhat.com>
 
-	* GCC 5.1.0 released.
+	* dummy-frontend.c : Adjust include files.
+	* jit-common.h : Likewise.
+	* jit-playback.c : Likewise.
+
+2015-06-05  David Malcolm  <dmalcolm@redhat.com>
+
+	* dummy-frontend.c
+	(jit_langhook_post_compilation_parsing_cleanups): Remove.
+	(LANG_HOOKS_POST_COMPILATION_PARSING_CLEANUPS): Remove
+	* jit-playback.c (gcc::jit::playback::context::new_global): Add
+	call to varpool_node::finalize_decl.
+	(gcc::jit::playback::context::finalize_global_decls): Remove.
+	* jit-playback.h
+	(gcc::jit::playback::context::finalize_global_decls): Remove.
+
+2015-06-05  David Malcolm  <dmalcolm@redhat.com>
+
+	* dummy-frontend.c (jit_langhook_write_globals): Rename to...
+	(jit_langhook_post_compilation_parsing_cleanups): ...this, and
+	eliminate calls to finalize_compilation_unit and
+	write_global_decls_2.
+	(LANG_HOOKS_WRITE_GLOBALS): Rename to...
+	(LANG_HOOKS_POST_COMPILATION_PARSING_CLEANUPS): ...this and
+	redirect from jit_langhook_write_globals to
+	jit_langhook_post_compilation_parsing_cleanups.
+	* jit-playback.c
+	(gcc::jit::playback::context::write_global_decls_1): Rename to...
+	(gcc::jit::playback::context::finalize_global_decls): ...this.
+	(gcc::jit::playback::context::write_global_decls_1): Delete.
+	* jit-playback.h
+	(gcc::jit::playback::context::write_global_decls_1): Rename to...
+	(gcc::jit::playback::context::finalize_global_decls): ...this.
+	(gcc::jit::playback::context::write_global_decls_1): Delete.
+
+2015-06-04  Andrew MacLeod  <amacleod@redhat.com>
+
+	* dummy-frontend.c: Adjust includes for restructured coretypes.h.
+	* jit-common.h: Likewise.
+	* jit-playback.c: Likewise.
+
+2015-05-12  David Malcolm  <dmalcolm@redhat.com>
+
+	* jit-builtins.c: Include vec.h before target.h.
+
+2015-04-27  Jim Wilson  <jim.wilson@linaro.org>
+
+	* Make-lang.in (jit.mostlyclean): Remove shared libraries and object
+	files.
 
 2015-04-09  David Malcolm  <dmalcolm@redhat.com>
 
@@ -1769,8 +2336,8 @@
 2013-07-26  David Malcolm  <dmalcolm@redhat.com>
 
 	* Initial creation
-
-Copyright (C) 2013-2015 Free Software Foundation, Inc.
+
+Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

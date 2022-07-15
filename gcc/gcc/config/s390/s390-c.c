@@ -1,6 +1,6 @@
 /* Language specific subroutines used for code generation on IBM S/390
    and zSeries
-   Copyright (C) 2015 Free Software Foundation, Inc.
+   Copyright (C) 2015-2017 Free Software Foundation, Inc.
 
    Contributed by Andreas Krebbel (Andreas.Krebbel@de.ibm.com).
 
@@ -30,28 +30,16 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "cpplib.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "fold-const.h"
-#include "stringpool.h"
-#include "c-family/c-common.h"
-#include "c-family/c-pragma.h"
-#include "diagnostic-core.h"
-#include "tm_p.h"
 #include "target.h"
+#include "tree.h"
+#include "c-family/c-common.h"
+#include "c/c-tree.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "stringpool.h"
+#include "c-family/c-pragma.h"
 #include "langhooks.h"
 #include "tree-pretty-print.h"
-#include "c/c-tree.h"
 
 #include "s390-builtins.h"
 
@@ -73,7 +61,7 @@ type_for_overloaded_builtin_var[S390_OVERLOADED_BUILTIN_VAR_MAX + 1] =
 #undef OB_DEF_VAR
 #define B_DEF(...)
 #define OB_DEF(...)
-#define OB_DEF_VAR(NAME, PATTERN, FLAGS, FNTYPE) FNTYPE,
+#define OB_DEF_VAR(NAME, PATTERN, FLAGS, OPFLAGS, FNTYPE) FNTYPE,
 #include "s390-builtins.def"
     BT_OV_MAX
   };
@@ -271,6 +259,7 @@ s390_macro_to_expand (cpp_reader *pfile, const cpp_token *tok)
   if (rid_code == RID_UNSIGNED || rid_code == RID_LONG
       || rid_code == RID_SHORT || rid_code == RID_SIGNED
       || rid_code == RID_INT || rid_code == RID_CHAR
+      || (rid_code == RID_FLOAT && TARGET_VXE)
       || rid_code == RID_DOUBLE)
     {
       expand_this = C_CPP_HASHNODE (__vector_keyword);
@@ -300,33 +289,74 @@ s390_macro_to_expand (cpp_reader *pfile, const cpp_token *tok)
   return expand_this;
 }
 
-/* Define platform dependent macros.  */
-void
-s390_cpu_cpp_builtins (cpp_reader *pfile)
+/* Helper function that defines or undefines macros.  If SET is true, the macro
+   MACRO_DEF is defined.  If SET is false, the macro MACRO_UNDEF is undefined.
+   Nothing is done if SET and WAS_SET have the same value.  */
+static void
+s390_def_or_undef_macro (cpp_reader *pfile,
+			 unsigned int mask,
+			 const struct cl_target_option *old_opts,
+			 const struct cl_target_option *new_opts,
+			 const char *macro_def, const char *macro_undef)
 {
-  cpp_assert (pfile, "cpu=s390");
-  cpp_assert (pfile, "machine=s390");
-  cpp_define (pfile, "__s390__");
-  if (TARGET_ZARCH)
-    cpp_define (pfile, "__zarch__");
-  if (TARGET_64BIT)
-    cpp_define (pfile, "__s390x__");
-  if (TARGET_LONG_DOUBLE_128)
-    cpp_define (pfile, "__LONG_DOUBLE_128__");
-  if (TARGET_HTM)
-    cpp_define (pfile, "__HTM__");
-  if (TARGET_ZVECTOR)
+  bool was_set;
+  bool set;
+
+  was_set = (!old_opts) ? false : old_opts->x_target_flags & mask;
+  set = new_opts->x_target_flags & mask;
+  if (was_set == set)
+    return;
+  if (set)
+    cpp_define (pfile, macro_def);
+  else
+    cpp_undef (pfile, macro_undef);
+}
+
+/* Internal function to either define or undef the appropriate system
+   macros.  */
+static void
+s390_cpu_cpp_builtins_internal (cpp_reader *pfile,
+				struct cl_target_option *opts,
+				const struct cl_target_option *old_opts)
+{
+  s390_def_or_undef_macro (pfile, MASK_OPT_HTM, old_opts, opts,
+			   "__HTM__", "__HTM__");
+  s390_def_or_undef_macro (pfile, MASK_OPT_VX, old_opts, opts,
+			   "__VX__", "__VX__");
+  s390_def_or_undef_macro (pfile, MASK_ZVECTOR, old_opts, opts,
+			   "__VEC__=10302", "__VEC__");
+  s390_def_or_undef_macro (pfile, MASK_ZVECTOR, old_opts, opts,
+			   "__vector=__attribute__((vector_size(16)))",
+			   "__vector__");
+  s390_def_or_undef_macro (pfile, MASK_ZVECTOR, old_opts, opts,
+			   "__bool=__attribute__((s390_vector_bool)) unsigned",
+			   "__bool");
+  {
+    char macro_def[64];
+    int arch_level;
+    gcc_assert (s390_arch != PROCESSOR_NATIVE);
+    arch_level = (int)s390_arch + 3;
+    if (s390_arch >= PROCESSOR_2094_Z9_EC)
+      /* Z9_EC has the same level as Z9_109.  */
+      arch_level--;
+    /* Review when a new arch is added and increase the value.  */
+    char dummy[(PROCESSOR_max > 12) ? -1 : 1] __attribute__((unused));
+    sprintf (macro_def, "__ARCH__=%d", arch_level);
+    cpp_undef (pfile, "__ARCH__");
+    cpp_define (pfile, macro_def);
+  }
+
+  if (!flag_iso)
     {
-      cpp_define (pfile, "__VEC__=10301");
-      cpp_define (pfile, "__vector=__attribute__((vector_size(16)))");
-      cpp_define (pfile, "__bool=__attribute__((s390_vector_bool)) unsigned");
-
-      if (!flag_iso)
+      s390_def_or_undef_macro (pfile, MASK_ZVECTOR, old_opts, opts,
+			       "__VECTOR_KEYWORD_SUPPORTED__",
+			       "__VECTOR_KEYWORD_SUPPORTED__");
+      s390_def_or_undef_macro (pfile, MASK_ZVECTOR, old_opts, opts,
+			       "vector=vector", "vector");
+      s390_def_or_undef_macro (pfile, MASK_ZVECTOR, old_opts, opts,
+			       "bool=bool", "bool");
+      if (TARGET_ZVECTOR_P (opts->x_target_flags) && __vector_keyword == NULL)
 	{
-	  cpp_define (pfile, "__VECTOR_KEYWORD_SUPPORTED__");
-	  cpp_define (pfile, "vector=vector");
-	  cpp_define (pfile, "bool=bool");
-
 	  __vector_keyword = get_identifier ("__vector");
 	  C_CPP_HASHNODE (__vector_keyword)->flags |= NODE_CONDITIONAL;
 
@@ -348,6 +378,79 @@ s390_cpu_cpp_builtins (cpp_reader *pfile)
     }
 }
 
+/* Define platform dependent macros.  */
+void
+s390_cpu_cpp_builtins (cpp_reader *pfile)
+{
+  struct cl_target_option opts;
+
+  cpp_assert (pfile, "cpu=s390");
+  cpp_assert (pfile, "machine=s390");
+  cpp_define (pfile, "__s390__");
+  if (TARGET_ZARCH)
+    cpp_define (pfile, "__zarch__");
+  if (TARGET_64BIT)
+    cpp_define (pfile, "__s390x__");
+  if (TARGET_LONG_DOUBLE_128)
+    cpp_define (pfile, "__LONG_DOUBLE_128__");
+  cl_target_option_save (&opts, &global_options);
+  s390_cpu_cpp_builtins_internal (pfile, &opts, NULL);
+}
+
+#if S390_USE_TARGET_ATTRIBUTE
+/* Hook to validate the current #pragma GCC target and set the state, and
+   update the macros based on what was changed.  If ARGS is NULL, then
+   POP_TARGET is used to reset the options.  */
+
+static bool
+s390_pragma_target_parse (tree args, tree pop_target)
+{
+  tree prev_tree = build_target_option_node (&global_options);
+  tree cur_tree;
+
+  if (! args)
+    cur_tree = pop_target;
+  else
+    {
+      cur_tree = s390_valid_target_attribute_tree (args, &global_options,
+						   &global_options_set, true);
+      if (!cur_tree || cur_tree == error_mark_node)
+	{
+	  cl_target_option_restore (&global_options,
+				    TREE_TARGET_OPTION (prev_tree));
+	  return false;
+	}
+    }
+
+  target_option_current_node = cur_tree;
+  s390_activate_target_options (target_option_current_node);
+
+  {
+    struct cl_target_option *prev_opt;
+    struct cl_target_option *cur_opt;
+
+    /* Figure out the previous/current differences.  */
+    prev_opt = TREE_TARGET_OPTION (prev_tree);
+    cur_opt = TREE_TARGET_OPTION (cur_tree);
+
+    /* For the definitions, ensure all newly defined macros are considered
+       as used for -Wunused-macros.  There is no point warning about the
+       compiler predefined macros.  */
+    cpp_options *cpp_opts = cpp_get_options (parse_in);
+    unsigned char saved_warn_unused_macros = cpp_opts->warn_unused_macros;
+
+    cpp_opts->warn_unused_macros = 0;
+
+    /* Define all of the macros for new options that were just turned on.  */
+    s390_cpu_cpp_builtins_internal (parse_in, cur_opt, prev_opt);
+
+    cpp_opts->warn_unused_macros = saved_warn_unused_macros;
+  }
+
+  return true;
+}
+#endif
+
 /* Expand builtins which can directly be mapped to tree expressions.
    LOC - location information
    FCODE - function code of the builtin
@@ -364,16 +467,18 @@ s390_expand_overloaded_builtin (location_t loc,
     case S390_OVERLOADED_BUILTIN_s390_vec_step:
       if (TREE_CODE (TREE_TYPE ((*arglist)[0])) != VECTOR_TYPE)
 	{
-	  error_at (loc, "Builtin vec_step can only be used on vector types.");
+	  error_at (loc, "builtin vec_step can only be used on vector types.");
 	  return error_mark_node;
 	}
       return build_int_cst (NULL_TREE,
 			    TYPE_VECTOR_SUBPARTS (TREE_TYPE ((*arglist)[0])));
+    case S390_OVERLOADED_BUILTIN_s390_vec_xl:
     case S390_OVERLOADED_BUILTIN_s390_vec_xld2:
     case S390_OVERLOADED_BUILTIN_s390_vec_xlw4:
       return build2 (MEM_REF, return_type,
 		     fold_build_pointer_plus ((*arglist)[1], (*arglist)[0]),
 		     build_int_cst (TREE_TYPE ((*arglist)[1]), 0));
+    case S390_OVERLOADED_BUILTIN_s390_vec_xst:
     case S390_OVERLOADED_BUILTIN_s390_vec_xstd2:
     case S390_OVERLOADED_BUILTIN_s390_vec_xstw4:
       return build2 (MODIFY_EXPR, TREE_TYPE((*arglist)[0]),
@@ -571,10 +676,18 @@ s390_adjust_builtin_arglist (unsigned int ob_fcode, tree decl,
 	case S390_OVERLOADED_BUILTIN_s390_vec_load_bndry:
 	  {
 	    int code;
-
 	    if (dest_arg_index == 1)
 	      {
-		switch (tree_to_uhwi ((**arglist)[src_arg_index]))
+		tree arg = (**arglist)[src_arg_index];
+
+		if (TREE_CODE (arg) != INTEGER_CST)
+		  {
+		    error ("constant value required for builtin %qF argument %d",
+			   decl, src_arg_index + 1);
+		    return;
+		  }
+
+		switch (tree_to_uhwi (arg))
 		  {
 		  case 64: code = 0; break;
 		  case 128: code = 1; break;
@@ -738,9 +851,10 @@ s390_resolve_overloaded_builtin (location_t loc,
   int last_match_type = INT_MAX;
   int last_match_index = -1;
   unsigned int all_op_flags;
+  const unsigned int ob_flags = bflags_for_builtin(ob_fcode);
   int num_matches = 0;
   tree target_builtin_decl, b_arg_chain, return_type;
-  enum s390_builtin_ov_type_index last_match_fntype_index;
+  enum s390_builtin_ov_type_index last_match_fntype_index = BT_OV_MAX;
 
   if (TARGET_DEBUG_ARG)
     fprintf (stderr,
@@ -751,14 +865,29 @@ s390_resolve_overloaded_builtin (location_t loc,
   /* 0...S390_BUILTIN_MAX-1 is for non-overloaded builtins.  */
   if (ob_fcode < S390_BUILTIN_MAX)
     {
-      if (bflags_for_builtin(ob_fcode) & B_INT)
+      if (ob_flags & B_INT)
 	{
 	  error_at (loc,
-		    "Builtin %qF is for GCC internal use only.",
+		    "builtin %qF is for GCC internal use only.",
 		    ob_fndecl);
 	  return error_mark_node;
 	}
       return NULL_TREE;
+    }
+
+  if (ob_flags & B_DEP)
+    warning_at (loc, 0, "builtin %qF is deprecated.", ob_fndecl);
+
+  if (!TARGET_VX && (ob_flags & B_VX))
+    {
+      error_at (loc, "%qF requires -mvx", ob_fndecl);
+      return error_mark_node;
+    }
+
+  if (!TARGET_VXE && (ob_flags & B_VXE))
+    {
+      error_at (loc, "%qF requires z14 or higher", ob_fndecl);
+      return error_mark_node;
     }
 
   ob_fcode -= S390_BUILTIN_MAX;
@@ -771,7 +900,7 @@ s390_resolve_overloaded_builtin (location_t loc,
   if (ob_args_num != in_args_num)
     {
       error_at (loc,
-		"Mismatch in number of arguments for builtin %qF. "
+		"mismatch in number of arguments for builtin %qF. "
 		"Expected: %d got %d", ob_fndecl,
 		ob_args_num, in_args_num);
       return error_mark_node;
@@ -831,6 +960,20 @@ s390_resolve_overloaded_builtin (location_t loc,
       return error_mark_node;
     }
 
+  if (!TARGET_VXE
+      && bflags_overloaded_builtin_var[last_match_index] & B_VXE)
+    {
+      error_at (loc, "%qs matching variant requires z14 or higher",
+		IDENTIFIER_POINTER (DECL_NAME (ob_fndecl)));
+      return error_mark_node;
+    }
+
+  if (bflags_overloaded_builtin_var[last_match_index] & B_DEP)
+    warning_at (loc, 0, "%qs matching variant is deprecated.",
+		IDENTIFIER_POINTER (DECL_NAME (ob_fndecl)));
+
+  /* Overloaded variants which have MAX set as low level builtin are
+     supposed to be replaced during expansion with something else.  */
   if (bt_for_overloaded_builtin_var[last_match_index] == S390_BUILTIN_MAX)
     target_builtin_decl = ob_fndecl;
   else
@@ -898,4 +1041,8 @@ void
 s390_register_target_pragmas (void)
 {
   targetm.resolve_overloaded_builtin = s390_resolve_overloaded_builtin;
+#if S390_USE_TARGET_ATTRIBUTE
+  /* Update pragma hook to allow parsing #pragma GCC target.  */
+  targetm.target_option.pragma_parse = s390_pragma_target_parse;
+#endif
 }

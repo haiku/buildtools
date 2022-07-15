@@ -1,5 +1,5 @@
-/* GNU compiler hardware transactional execution intrinsics
-   Copyright (C) 2015 Free Software Foundation, Inc.
+/* GNU compiler vector extension intrinsics
+   Copyright (C) 2015-2017 Free Software Foundation, Inc.
    Contributed by Andreas Krebbel (Andreas.Krebbel@de.ibm.com)
 
 This file is part of GCC.
@@ -21,20 +21,42 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef _VECINTRIN_H
 #define _VECINTRIN_H
 
-#ifdef __VEC__
+#define __VEC_CLASS_FP_ZERO_P      (1<<11)
+#define __VEC_CLASS_FP_ZERO_N      (1<<10)
+#define __VEC_CLASS_FP_ZERO	   (__VEC_CLASS_FP_ZERO_P	\
+				    | __VEC_CLASS_FP_ZERO_N)
 
-#define __VFTCI_ZERO           1<<11
-#define __VFTCI_ZERO_N         1<<10
-#define __VFTCI_NORMAL          1<<9
-#define __VFTCI_NORMAL_N        1<<8
-#define __VFTCI_SUBNORMAL       1<<7
-#define __VFTCI_SUBNORMAL_N     1<<6
-#define __VFTCI_INF             1<<5
-#define __VFTCI_INF_N           1<<4
-#define __VFTCI_QNAN            1<<3
-#define __VFTCI_QNAN_N          1<<2
-#define __VFTCI_SNAN            1<<1
-#define __VFTCI_SNAN_N          1<<0
+#define __VEC_CLASS_FP_NORMAL_P    (1<<9)
+#define __VEC_CLASS_FP_NORMAL_N    (1<<8)
+#define __VEC_CLASS_FP_NORMAL      (__VEC_CLASS_FP_NORMAL_P	\
+				    | __VEC_CLASS_FP_NORMAL_N)
+
+#define __VEC_CLASS_FP_SUBNORMAL_P (1<<7)
+#define __VEC_CLASS_FP_SUBNORMAL_N (1<<6)
+#define __VEC_CLASS_FP_SUBNORMAL   (__VEC_CLASS_FP_SUBNORMAL_P		\
+				    | __VEC_CLASS_FP_SUBNORMAL_N)
+
+#define __VEC_CLASS_FP_INFINITY_P  (1<<5)
+#define __VEC_CLASS_FP_INFINITY_N  (1<<4)
+#define __VEC_CLASS_FP_INFINITY    (__VEC_CLASS_FP_INFINITY_P		\
+				    | __VEC_CLASS_FP_INFINITY_N)
+
+#define __VEC_CLASS_FP_QNAN_P      (1<<3)
+#define __VEC_CLASS_FP_QNAN_N      (1<<2)
+#define __VEC_CLASS_FP_QNAN        (__VEC_CLASS_FP_QNAN_P	\
+				    | __VEC_CLASS_FP_QNAN_N)
+
+#define __VEC_CLASS_FP_SNAN_P      (1<<1)
+#define __VEC_CLASS_FP_SNAN_N      (1<<0)
+#define __VEC_CLASS_FP_SNAN        (__VEC_CLASS_FP_SNAN_P	\
+				    | __VEC_CLASS_FP_SNAN_N)
+
+#define __VEC_CLASS_FP_NAN         (__VEC_CLASS_FP_QNAN		\
+				    | __VEC_CLASS_FP_SNAN)
+#define __VEC_CLASS_FP_NOT_NORMAL  (__VEC_CLASS_FP_NAN			\
+				    | __VEC_CLASS_FP_SUBNORMAL		\
+				    |__VEC_CLASS_FP_ZERO		\
+				    | __VEC_CLASS_FP_INFINITY)
 
 /* This also accepts a type for its parameter, so it is not enough
    to #define vec_step to __builtin_vec_step.  */
@@ -75,76 +97,72 @@ __lcbb(const void *ptr, int bndry)
 #define vec_splat_s32 __builtin_s390_vec_splat_s32
 #define vec_splat_u64 __builtin_s390_vec_splat_u64
 #define vec_splat_s64 __builtin_s390_vec_splat_s64
-#define vec_add_u128 __builtin_s390_vaq
-#define vec_addc_u128 __builtin_s390_vaccq
-#define vec_adde_u128 __builtin_s390_vacq
-#define vec_addec_u128 __builtin_s390_vacccq
 #define vec_checksum __builtin_s390_vcksm
 #define vec_gfmsum_128 __builtin_s390_vgfmg
 #define vec_gfmsum_accum_128 __builtin_s390_vgfmag
-#define vec_sub_u128 __builtin_s390_vsq
-#define vec_subc_u128 __builtin_s390_vscbiq
-#define vec_sube_u128 __builtin_s390_vsbiq
-#define vec_subec_u128 __builtin_s390_vsbcbiq
-#define vec_ceil(X) __builtin_s390_vfidb((X), 4, 6)
-#define vec_roundp(X) __builtin_s390_vfidb((X), 4, 6)
-#define vec_floor(X) __builtin_s390_vfidb((X), 4, 7)
-#define vec_roundm(X) __builtin_s390_vfidb((X), 4, 7)
-#define vec_trunc(X) __builtin_s390_vfidb((X), 4, 5)
-#define vec_roundz(X) __builtin_s390_vfidb((X), 4, 5)
-#define vec_roundc(X) __builtin_s390_vfidb((X), 4, 0)
-#define vec_round(X) __builtin_s390_vfidb((X), 4, 4)
+#define vec_ceil(X)   __builtin_s390_vfi((X), 4, 6)
+#define vec_roundp(X) __builtin_s390_vfi((X), 4, 6)
+#define vec_floor(X)  __builtin_s390_vfi((X), 4, 7)
+#define vec_roundm(X) __builtin_s390_vfi((X), 4, 7)
+#define vec_trunc(X)  __builtin_s390_vfi((X), 4, 5)
+#define vec_roundz(X) __builtin_s390_vfi((X), 4, 5)
+#define vec_rint(X)   __builtin_s390_vfi((X), 0, 0)
+#define vec_roundc(X) __builtin_s390_vfi((X), 4, 0)
+#define vec_round(X)  __builtin_s390_vfi((X), 4, 4)
+#define vec_signed(X) __builtin_s390_vcgdb((X), 0, 0)
+#define vec_unsigned(X) __builtin_s390_vclgdb((X), 0, 0)
+#define vec_doublee(X) __builtin_s390_vfll((X))
+#define vec_floate(X) __builtin_s390_vflr((X), 0, 0)
 #define vec_madd __builtin_s390_vfmadb
 #define vec_msub __builtin_s390_vfmsdb
+#define vec_load_len_r(X,Y) __builtin_s390_vlrl((Y),(X))
+#define vec_store_len_r(X,Y) __builtin_s390_vstrl((Y),(X))
 
-static inline int
-vec_all_nan (__vector double a)
-{
-  int cc;
-  __builtin_s390_vftcidb (a,
-			  __VFTCI_QNAN
-			  | __VFTCI_QNAN_N
-			  | __VFTCI_SNAN
-			  | __VFTCI_SNAN_N, &cc);
-  return cc == 0 ? 1 : 0;
-}
+#define vec_all_nan(a)						\
+  __extension__ ({						\
+      int __cc;							\
+      __builtin_s390_vec_fp_test_data_class (a,			\
+			    __VEC_CLASS_FP_QNAN			\
+			    | __VEC_CLASS_FP_QNAN_N			\
+			    | __VEC_CLASS_FP_SNAN			\
+			    | __VEC_CLASS_FP_SNAN_N, &__cc);		\
+      __cc == 0 ? 1 : 0;					\
+    })
 
-static inline int
-vec_all_numeric (__vector double a)
-{
-  int cc;
-  __builtin_s390_vftcidb (a,
-			  __VFTCI_NORMAL
-			  | __VFTCI_NORMAL_N
-			  | __VFTCI_SUBNORMAL
-			  | __VFTCI_SUBNORMAL_N, &cc);
-  return cc == 0 ? 1 : 0;
-}
+#define vec_all_numeric(a)					\
+  __extension__ ({						\
+      int __cc;							\
+      __builtin_s390_vec_fp_test_data_class (a,				\
+			    __VEC_CLASS_FP_NORMAL			\
+			    | __VEC_CLASS_FP_NORMAL_N			\
+			    | __VEC_CLASS_FP_SUBNORMAL			\
+			    | __VEC_CLASS_FP_SUBNORMAL_N, &__cc);	\
+      __cc == 0 ? 1 : 0;					\
+    })
 
-static inline int
-vec_any_nan (__vector double a)
-{
-  int cc;
-  __builtin_s390_vftcidb (a,
-			  __VFTCI_QNAN
-			  | __VFTCI_QNAN_N
-			  | __VFTCI_SNAN
-			  | __VFTCI_SNAN_N, &cc);
-  return cc != 3 ? 1 : 0;
-}
+#define vec_any_nan(a)						\
+  __extension__ ({						\
+      int __cc;							\
+      __builtin_s390_vec_fp_test_data_class (a,			\
+			    __VEC_CLASS_FP_QNAN			\
+			    | __VEC_CLASS_FP_QNAN_N			\
+			    | __VEC_CLASS_FP_SNAN			\
+			    | __VEC_CLASS_FP_SNAN_N, &cc);		\
+      cc != 3 ? 1 : 0;						\
+    })
 
-static inline int
-vec_any_numeric (__vector double a)
-{
-  int cc;
-  __builtin_s390_vftcidb (a,
-			  __VFTCI_NORMAL
-			  | __VFTCI_NORMAL_N
-			  | __VFTCI_SUBNORMAL
-			  | __VFTCI_SUBNORMAL_N, &cc);
-  return cc != 3 ? 1 : 0;
-}
+#define vec_any_numeric(a)					\
+  __extension__ ({						\
+      int __cc;							\
+      __builtin_s390_vec_fp_test_data_class (a,				\
+			    __VEC_CLASS_FP_NORMAL			\
+			    | __VEC_CLASS_FP_NORMAL_N			\
+			    | __VEC_CLASS_FP_SUBNORMAL			\
+			    | __VEC_CLASS_FP_SUBNORMAL_N, &cc);	\
+      cc != 3 ? 1 : 0;						\
+    })
 #define vec_gather_element __builtin_s390_vec_gather_element
+#define vec_xl __builtin_s390_vec_xl
 #define vec_xld2 __builtin_s390_vec_xld2
 #define vec_xlw4 __builtin_s390_vec_xlw4
 #define vec_splats __builtin_s390_vec_splats
@@ -168,12 +186,18 @@ vec_any_numeric (__vector double a)
 #define vec_scatter_element __builtin_s390_vec_scatter_element
 #define vec_sel __builtin_s390_vec_sel
 #define vec_extend_s64 __builtin_s390_vec_extend_s64
+#define vec_xst __builtin_s390_vec_xst
 #define vec_xstd2 __builtin_s390_vec_xstd2
 #define vec_xstw4 __builtin_s390_vec_xstw4
 #define vec_store_len __builtin_s390_vec_store_len
+#define vec_bperm_u128 __builtin_s390_vec_bperm_u128
 #define vec_unpackh __builtin_s390_vec_unpackh
 #define vec_unpackl __builtin_s390_vec_unpackl
 #define vec_addc __builtin_s390_vec_addc
+#define vec_add_u128 __builtin_s390_vec_add_u128
+#define vec_addc_u128 __builtin_s390_vec_addc_u128
+#define vec_adde_u128 __builtin_s390_vec_adde_u128
+#define vec_addec_u128 __builtin_s390_vec_addec_u128
 #define vec_and __builtin_s390_vec_and
 #define vec_andc __builtin_s390_vec_andc
 #define vec_avg __builtin_s390_vec_avg
@@ -224,10 +248,18 @@ vec_any_numeric (__vector double a)
 #define vec_srl __builtin_s390_vec_srl
 #define vec_srb __builtin_s390_vec_srb
 #define vec_subc __builtin_s390_vec_subc
+#define vec_sub_u128 __builtin_s390_vec_sub_u128
+#define vec_subc_u128 __builtin_s390_vec_subc_u128
+#define vec_sube_u128 __builtin_s390_vec_sube_u128
+#define vec_subec_u128 __builtin_s390_vec_subec_u128
 #define vec_sum2 __builtin_s390_vec_sum2
 #define vec_sum_u128 __builtin_s390_vec_sum_u128
 #define vec_sum4 __builtin_s390_vec_sum4
 #define vec_test_mask __builtin_s390_vec_test_mask
+#define vec_msum_u128 __builtin_s390_vec_msum_u128
+#define vec_eqv __builtin_s390_vec_eqv
+#define vec_nand __builtin_s390_vec_nand
+#define vec_orc __builtin_s390_vec_orc
 #define vec_find_any_eq_idx __builtin_s390_vec_find_any_eq_idx
 #define vec_find_any_ne_idx __builtin_s390_vec_find_any_ne_idx
 #define vec_find_any_eq_or_0_idx __builtin_s390_vec_find_any_eq_or_0_idx
@@ -273,5 +305,10 @@ vec_any_numeric (__vector double a)
 #define vec_ctul __builtin_s390_vec_ctul
 #define vec_ld2f __builtin_s390_vec_ld2f
 #define vec_st2f __builtin_s390_vec_st2f
-#endif /* __VEC__ */
+#define vec_double __builtin_s390_vec_double
+#define vec_nmadd __builtin_s390_vec_nmadd
+#define vec_nmsub __builtin_s390_vec_nmsub
+#define vec_nabs __builtin_s390_vec_nabs
+#define vec_sqrt __builtin_s390_vec_sqrt
+#define vec_fp_test_data_class __builtin_s390_vec_fp_test_data_class
 #endif /* _VECINTRIN_H */

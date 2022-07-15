@@ -1,6 +1,6 @@
 /* Data structures and functions for streaming trees.
 
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright (C) 2011-2017 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@google.com>
 
 This file is part of GCC.
@@ -23,9 +23,7 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_TREE_STREAMER_H
 
 #include "streamer-hooks.h"
-#include "lto-streamer.h"
 #include "data-streamer.h"
-#include "hash-map.h"
 
 /* Cache of pickled nodes.  Used to avoid writing the same node more
    than once.  The first time a tree node is streamed out, it is
@@ -59,17 +57,6 @@ struct streamer_tree_cache_d
   unsigned next_idx;
 };
 
-/* Return true if tree node EXPR should be streamed as a builtin.  For
-   these nodes, we just emit the class and function code.  */
-static inline bool
-streamer_handle_as_builtin_p (tree expr)
-{
-  return (TREE_CODE (expr) == FUNCTION_DECL
-	  && DECL_IS_BUILTIN (expr)
-	  && (DECL_BUILT_IN_CLASS (expr) == BUILT_IN_NORMAL
-	      || DECL_BUILT_IN_CLASS (expr) == BUILT_IN_MD));
-}
-
 /* In tree-streamer-in.c.  */
 tree streamer_read_string_cst (struct data_in *, struct lto_input_block *);
 tree streamer_read_chain (struct lto_input_block *, struct data_in *);
@@ -77,7 +64,6 @@ tree streamer_alloc_tree (struct lto_input_block *, struct data_in *,
 		          enum LTO_tags);
 void streamer_read_tree_body (struct lto_input_block *, struct data_in *, tree);
 tree streamer_get_pickled_tree (struct lto_input_block *, struct data_in *);
-tree streamer_get_builtin_tree (struct lto_input_block *, struct data_in *);
 void streamer_read_tree_bitfields (struct lto_input_block *,
 				   struct data_in *, tree);
 
@@ -89,7 +75,6 @@ void streamer_write_tree_header (struct output_block *, tree);
 void streamer_write_tree_bitfields (struct output_block *, tree);
 void streamer_write_tree_body (struct output_block *, tree, bool);
 void streamer_write_integer_cst (struct output_block *, tree, bool);
-void streamer_write_builtin (struct output_block *, tree);
 
 /* In tree-streamer.c.  */
 extern unsigned char streamer_mode_table[1 << 8];

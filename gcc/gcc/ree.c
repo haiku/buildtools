@@ -1,5 +1,5 @@
 /* Redundant Extension Elimination pass for the GNU compiler.
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright (C) 2010-2017 Free Software Foundation, Inc.
    Contributed by Ilya Enkovich (ilya.enkovich@intel.com)
 
    Based on the Redundant Zero-extension elimination pass contributed by
@@ -218,60 +218,23 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "tm_p.h"
-#include "flags.h"
-#include "regs.h"
-#include "hard-reg-set.h"
-#include "predict.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "basic-block.h"
-#include "insn-config.h"
-#include "hashtab.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "insn-attr.h"
-#include "recog.h"
-#include "diagnostic-core.h"
+#include "backend.h"
 #include "target.h"
-#include "insn-codes.h"
-#include "optabs.h"
-#include "rtlhooks-def.h"
-#include "params.h"
-#include "tree-pass.h"
+#include "rtl.h"
+#include "tree.h"
 #include "df.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "optabs.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "cfgrtl.h"
+#include "expr.h"
+#include "tree-pass.h"
 
 /* This structure represents a candidate for elimination.  */
 
-typedef struct ext_cand
+struct ext_cand
 {
   /* The expression.  */
   const_rtx expr;
@@ -284,7 +247,7 @@ typedef struct ext_cand
 
   /* The instruction where it lives.  */
   rtx_insn *insn;
-} ext_cand;
+};
 
 
 static int max_insn_uid;
@@ -370,23 +333,13 @@ combine_set_extension (ext_cand *cand, rtx_insn *curr_insn, rtx *orig_set)
   else
     new_reg = gen_rtx_REG (cand->mode, REGNO (SET_DEST (*orig_set)));
 
-#if 0
-  /* Rethinking test.  Temporarily disabled.  */
-  /* We're going to be widening the result of DEF_INSN, ensure that doing so
-     doesn't change the number of hard registers needed for the result.  */
-  if (HARD_REGNO_NREGS (REGNO (new_reg), cand->mode)
-      != HARD_REGNO_NREGS (REGNO (SET_DEST (*orig_set)),
-			   GET_MODE (SET_DEST (*orig_set))))
-	return false;
-#endif
-
   /* Merge constants by directly moving the constant into the register under
      some conditions.  Recall that RTL constants are sign-extended.  */
   if (GET_CODE (orig_src) == CONST_INT
       && HOST_BITS_PER_WIDE_INT >= GET_MODE_BITSIZE (cand->mode))
     {
       if (INTVAL (orig_src) >= 0 || cand->code == SIGN_EXTEND)
-	new_set = gen_rtx_SET (VOIDmode, new_reg, orig_src);
+	new_set = gen_rtx_SET (new_reg, orig_src);
       else
 	{
 	  /* Zero-extend the negative constant by masking out the bits outside
@@ -394,7 +347,7 @@ combine_set_extension (ext_cand *cand, rtx_insn *curr_insn, rtx *orig_set)
 	  rtx new_const_int
 	    = gen_int_mode (INTVAL (orig_src) & GET_MODE_MASK (orig_mode),
 			    GET_MODE (new_reg));
-	  new_set = gen_rtx_SET (VOIDmode, new_reg, new_const_int);
+	  new_set = gen_rtx_SET (new_reg, new_const_int);
 	}
     }
   else if (GET_MODE (orig_src) == VOIDmode)
@@ -410,7 +363,7 @@ combine_set_extension (ext_cand *cand, rtx_insn *curr_insn, rtx *orig_set)
       rtx simplified_temp_extension = simplify_rtx (temp_extension);
       if (simplified_temp_extension)
         temp_extension = simplified_temp_extension;
-      new_set = gen_rtx_SET (VOIDmode, new_reg, temp_extension);
+      new_set = gen_rtx_SET (new_reg, temp_extension);
     }
   else if (GET_CODE (orig_src) == IF_THEN_ELSE)
     {
@@ -426,7 +379,7 @@ combine_set_extension (ext_cand *cand, rtx_insn *curr_insn, rtx *orig_set)
       rtx simplified_temp_extension = simplify_rtx (temp_extension);
       if (simplified_temp_extension)
         temp_extension = simplified_temp_extension;
-      new_set = gen_rtx_SET (VOIDmode, new_reg, temp_extension);
+      new_set = gen_rtx_SET (new_reg, temp_extension);
     }
 
   /* This change is a part of a group of changes.  Hence,
@@ -481,7 +434,7 @@ transform_ifelse (ext_cand *cand, rtx_insn *def_insn)
   map_srcreg2 = gen_rtx_REG (cand->mode, REGNO (srcreg2));
   map_dstreg = gen_rtx_REG (cand->mode, REGNO (dstreg));
   ifexpr = gen_rtx_IF_THEN_ELSE (cand->mode, cond, map_srcreg, map_srcreg2);
-  new_set = gen_rtx_SET (VOIDmode, map_dstreg, ifexpr);
+  new_set = gen_rtx_SET (map_dstreg, ifexpr);
 
   if (validate_change (def_insn, &PATTERN (def_insn), new_set, true)
       && update_reg_equal_equiv_notes (def_insn, cand->mode, GET_MODE (dstreg),
@@ -529,11 +482,48 @@ get_defs (rtx_insn *insn, rtx reg, vec<rtx_insn *> *dest)
         return NULL;
       if (DF_REF_INSN_INFO (ref_link->ref) == NULL)
         return NULL;
+      /* As global regs are assumed to be defined at each function call
+	 dataflow can report a call_insn as being a definition of REG.
+	 But we can't do anything with that in this pass so proceed only
+	 if the instruction really sets REG in a way that can be deduced
+	 from the RTL structure.  */
+      if (global_regs[REGNO (reg)]
+	  && !set_of (reg, DF_REF_INSN (ref_link->ref)))
+	return NULL;
     }
 
   if (dest)
     for (ref_link = ref_chain; ref_link; ref_link = ref_link->next)
       dest->safe_push (DF_REF_INSN (ref_link->ref));
+
+  return ref_chain;
+}
+
+/* Get all the reaching uses of an instruction.  The uses are desired for REG
+   set in INSN.  Return use list or NULL if a use is missing or irregular.  */
+
+static struct df_link *
+get_uses (rtx_insn *insn, rtx reg)
+{
+  df_ref def;
+  struct df_link *ref_chain, *ref_link;
+
+  FOR_EACH_INSN_DEF (def, insn)
+    if (REGNO (DF_REF_REG (def)) == REGNO (reg))
+      break;
+
+  gcc_assert (def != NULL);
+
+  ref_chain = DF_REF_CHAIN (def);
+
+  for (ref_link = ref_chain; ref_link; ref_link = ref_link->next)
+    {
+      /* Problem getting some use for this instruction.  */
+      if (ref_link->ref == NULL)
+        return NULL;
+      if (DF_REF_CLASS (ref_link->ref) != DF_REF_REGULAR)
+	return NULL;
+    }
 
   return ref_chain;
 }
@@ -587,21 +577,21 @@ struct ATTRIBUTE_PACKED ext_modified
 };
 
 /* Vectors used by combine_reaching_defs and its helpers.  */
-typedef struct ext_state
+struct ext_state
 {
   /* In order to avoid constant alloc/free, we keep these
      4 vectors live through the entire find_and_remove_re and just
      truncate them each time.  */
-  vec<rtx_insn *> defs_list;
-  vec<rtx_insn *> copies_list;
-  vec<rtx_insn *> modified_list;
-  vec<rtx_insn *> work_list;
+  auto_vec<rtx_insn *> defs_list;
+  auto_vec<rtx_insn *> copies_list;
+  auto_vec<rtx_insn *> modified_list;
+  auto_vec<rtx_insn *> work_list;
 
   /* For instructions that have been successfully modified, this is
      the original mode from which the insn is extending and
      kind of extension.  */
   struct ext_modified *modified;
-} ext_state;
+};
 
 /* Reaching Definitions of the extended register could be conditional copies
    or regular definitions.  This function separates the two types into two
@@ -627,7 +617,7 @@ make_defs_and_copies_lists (rtx_insn *extend_insn, const_rtx set_pat,
 
   /* Initialize the work list.  */
   if (!get_defs (extend_insn, src_reg, &state->work_list))
-    gcc_unreachable ();
+    return false;
 
   is_insn_visited = XCNEWVEC (bool, max_insn_uid);
 
@@ -827,6 +817,11 @@ combine_reaching_defs (ext_cand *cand, const_rtx set_pat, ext_state *state)
       machine_mode dst_mode = GET_MODE (SET_DEST (PATTERN (cand->insn)));
       rtx src_reg = get_extended_src_reg (SET_SRC (PATTERN (cand->insn)));
 
+      /* Ensure we can use the src_reg in dst_mode (needed for
+	 the (set (reg1) (reg2)) insn mentioned above).  */
+      if (!HARD_REGNO_MODE_OK (REGNO (src_reg), dst_mode))
+	return false;
+
       /* Ensure the number of hard registers of the copy match.  */
       if (HARD_REGNO_NREGS (REGNO (src_reg), dst_mode)
 	  != HARD_REGNO_NREGS (REGNO (src_reg), GET_MODE (src_reg)))
@@ -860,6 +855,23 @@ combine_reaching_defs (ext_cand *cand, const_rtx set_pat, ext_state *state)
 				 REGNO (SET_DEST (*dest_sub_rtx)));
       if (reg_overlap_mentioned_p (tmp_reg, SET_DEST (PATTERN (cand->insn))))
 	return false;
+
+      /* On RISC machines we must make sure that changing the mode of SRC_REG
+	 as destination register will not affect its reaching uses, which may
+	 read its value in a larger mode because DEF_INSN implicitly sets it
+	 in word mode.  */
+      const unsigned int prec
+	= GET_MODE_PRECISION (GET_MODE (SET_DEST (*dest_sub_rtx)));
+      if (WORD_REGISTER_OPERATIONS && prec < BITS_PER_WORD)
+	{
+	  struct df_link *uses = get_uses (def_insn, src_reg);
+	  if (!uses)
+	    return false;
+
+	  for (df_link *use = uses; use; use = use->next)
+	    if (GET_MODE_PRECISION (GET_MODE (*DF_REF_LOC (use->ref))) > prec)
+	      return false;
+	}
 
       /* The destination register of the extension insn must not be
 	 used or set between the def_insn and cand->insn exclusive.  */
@@ -1001,7 +1013,8 @@ combine_reaching_defs (ext_cand *cand, const_rtx set_pat, ext_state *state)
 static void
 add_removable_extension (const_rtx expr, rtx_insn *insn,
 			 vec<ext_cand> *insn_list,
-			 unsigned *def_map)
+			 unsigned *def_map,
+			 bitmap init_regs)
 {
   enum rtx_code code;
   machine_mode mode;
@@ -1021,11 +1034,29 @@ add_removable_extension (const_rtx expr, rtx_insn *insn,
       && (code == SIGN_EXTEND || code == ZERO_EXTEND)
       && REG_P (XEXP (src, 0)))
     {
+      rtx reg = XEXP (src, 0);
       struct df_link *defs, *def;
       ext_cand *cand;
 
-      /* First, make sure we can get all the reaching definitions.  */
-      defs = get_defs (insn, XEXP (src, 0), NULL);
+      /* Zero-extension of an undefined value is partly defined (it's
+	 completely undefined for sign-extension, though).  So if there exists
+	 a path from the entry to this zero-extension that leaves this register
+	 uninitialized, removing the extension could change the behavior of
+	 correct programs.  So first, check it is not the case.  */
+      if (code == ZERO_EXTEND && !bitmap_bit_p (init_regs, REGNO (reg)))
+	{
+	  if (dump_file)
+	    {
+	      fprintf (dump_file, "Cannot eliminate extension:\n");
+	      print_rtl_single (dump_file, insn);
+	      fprintf (dump_file, " because it can operate on uninitialized"
+			          " data\n");
+	    }
+	  return;
+	}
+
+      /* Second, make sure we can get all the reaching definitions.  */
+      defs = get_defs (insn, reg, NULL);
       if (!defs)
 	{
 	  if (dump_file)
@@ -1037,7 +1068,7 @@ add_removable_extension (const_rtx expr, rtx_insn *insn,
 	  return;
 	}
 
-      /* Second, make sure the reaching definitions don't feed another and
+      /* Third, make sure the reaching definitions don't feed another and
 	 different extension.  FIXME: this obviously can be improved.  */
       for (def = defs; def; def = def->next)
 	if ((idx = def_map[INSN_UID (DF_REF_INSN (def->ref))])
@@ -1054,11 +1085,11 @@ add_removable_extension (const_rtx expr, rtx_insn *insn,
 	    return;
 	  }
 	/* For vector mode extensions, ensure that all uses of the
-	   XEXP (src, 0) register are the same extension (both code
-	   and to which mode), as unlike integral extensions lowpart
-	   subreg of the sign/zero extended register are not equal
-	   to the original register, so we have to change all uses or
-	   none.  */
+	   XEXP (src, 0) register are in insn or debug insns, as unlike
+	   integral extensions lowpart subreg of the sign/zero extended
+	   register are not equal to the original register, so we have
+	   to change all uses or none and the current code isn't able
+	   to change them all at once in one transaction.  */
 	else if (VECTOR_MODE_P (GET_MODE (XEXP (src, 0))))
 	  {
 	    if (idx == 0)
@@ -1075,15 +1106,7 @@ add_removable_extension (const_rtx expr, rtx_insn *insn,
 			break;
 		      }
 		    rtx_insn *use_insn = DF_REF_INSN (ref_link->ref);
-		    const_rtx use_set;
-		    if (use_insn == insn || DEBUG_INSN_P (use_insn))
-		      continue;
-		    if (!(use_set = single_set (use_insn))
-			|| !REG_P (SET_DEST (use_set))
-			|| GET_MODE (SET_DEST (use_set)) != GET_MODE (dest)
-			|| GET_CODE (SET_SRC (use_set)) != code
-			|| !rtx_equal_p (XEXP (SET_SRC (use_set), 0),
-					 XEXP (src, 0)))
+		    if (use_insn != insn && !DEBUG_INSN_P (use_insn))
 		      {
 			idx = -1U;
 			break;
@@ -1104,6 +1127,18 @@ add_removable_extension (const_rtx expr, rtx_insn *insn,
 		return;
 	      }
 	  }
+
+      /* Fourth, if the extended version occupies more registers than the
+	 original and the source of the extension is the same hard register
+	 as the destination of the extension, then we can not eliminate
+	 the extension without deep analysis, so just punt.
+
+	 We allow this when the registers are different because the
+	 code in combine_reaching_defs will handle that case correctly.  */
+      if ((HARD_REGNO_NREGS (REGNO (dest), mode)
+	   != HARD_REGNO_NREGS (REGNO (reg), GET_MODE (reg)))
+	  && reg_overlap_mentioned_p (dest, reg))
+	return;
 
       /* Then add the candidate to the list and insert the reaching definitions
          into the definition map.  */
@@ -1127,18 +1162,33 @@ find_removable_extensions (void)
   rtx_insn *insn;
   rtx set;
   unsigned *def_map = XCNEWVEC (unsigned, max_insn_uid);
+  bitmap_head init, kill, gen, tmp;
+
+  bitmap_initialize (&init, NULL);
+  bitmap_initialize (&kill, NULL);
+  bitmap_initialize (&gen, NULL);
+  bitmap_initialize (&tmp, NULL);
 
   FOR_EACH_BB_FN (bb, cfun)
-    FOR_BB_INSNS (bb, insn)
-      {
-	if (!NONDEBUG_INSN_P (insn))
-	  continue;
+    {
+      bitmap_copy (&init, DF_MIR_IN (bb));
+      bitmap_clear (&kill);
+      bitmap_clear (&gen);
 
-	set = single_set (insn);
-	if (set == NULL_RTX)
-	  continue;
-	add_removable_extension (set, insn, &insn_list, def_map);
-      }
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (NONDEBUG_INSN_P (insn))
+	    {
+	      set = single_set (insn);
+	      if (set != NULL_RTX)
+		add_removable_extension (set, insn, &insn_list, def_map,
+					 &init);
+	      df_mir_simulate_one_insn (bb, insn, &kill, &gen);
+	      bitmap_ior_and_compl (&tmp, &gen, &init, &kill);
+	      bitmap_copy (&init, &tmp);
+	    }
+	}
+    }
 
   XDELETEVEC (def_map);
 
@@ -1157,21 +1207,19 @@ find_and_remove_re (void)
   vec<ext_cand> reinsn_list;
   auto_vec<rtx_insn *> reinsn_del_list;
   auto_vec<rtx_insn *> reinsn_copy_list;
-  ext_state state;
 
   /* Construct DU chain to get all reaching definitions of each
      extension instruction.  */
   df_set_flags (DF_RD_PRUNE_DEAD_DEFS);
   df_chain_add_problem (DF_UD_CHAIN + DF_DU_CHAIN);
+  df_mir_add_problem ();
   df_analyze ();
   df_set_flags (DF_DEFER_INSN_RESCAN);
 
   max_insn_uid = get_max_uid ();
   reinsn_list = find_removable_extensions ();
-  state.defs_list.create (0);
-  state.copies_list.create (0);
-  state.modified_list.create (0);
-  state.work_list.create (0);
+
+  ext_state state;
   if (reinsn_list.is_empty ())
     state.modified = NULL;
   else
@@ -1238,7 +1286,7 @@ find_and_remove_re (void)
 				 REGNO (XEXP (SET_SRC (pat), 0)));
       rtx new_src = gen_rtx_REG (GET_MODE (SET_DEST (sub_rtx)),
 				 REGNO (SET_DEST (pat)));
-      rtx set = gen_rtx_SET (VOIDmode, new_dst, new_src);
+      rtx set = gen_rtx_SET (new_dst, new_src);
       emit_insn_after (set, def_insn);
     }
 
@@ -1247,10 +1295,6 @@ find_and_remove_re (void)
     delete_insn (curr_insn);
 
   reinsn_list.release ();
-  state.defs_list.release ();
-  state.copies_list.release ();
-  state.modified_list.release ();
-  state.work_list.release ();
   XDELETEVEC (state.modified);
 
   if (dump_file && num_re_opportunities > 0)
@@ -1263,9 +1307,7 @@ find_and_remove_re (void)
 static unsigned int
 rest_of_handle_ree (void)
 {
-  timevar_push (TV_REE);
   find_and_remove_re ();
-  timevar_pop (TV_REE);
   return 0;
 }
 

@@ -66,6 +66,7 @@ package Ada.Containers.Formal_Doubly_Linked_Lists with
   SPARK_Mode
 is
    pragma Annotate (GNATprove, External_Axiomatization);
+   pragma Annotate (CodePeer, Skip_Analysis);
 
    type List (Capacity : Count_Type) is private with
      Iterable => (First       => First,
@@ -299,7 +300,7 @@ is
 
    generic
       with function "<" (Left, Right : Element_Type) return Boolean is <>;
-   package Generic_Sorting is
+   package Generic_Sorting with SPARK_Mode is
 
       function Is_Sorted (Container : List) return Boolean with
         Global => null;
@@ -352,12 +353,12 @@ private
    type Node_Array is array (Count_Type range <>) of Node_Type;
    function "=" (L, R : Node_Array) return Boolean is abstract;
 
-   type List (Capacity : Count_Type) is tagged record
-      Nodes  : Node_Array (1 .. Capacity) := (others => <>);
+   type List (Capacity : Count_Type) is record
       Free   : Count_Type'Base := -1;
       Length : Count_Type := 0;
       First  : Count_Type := 0;
       Last   : Count_Type := 0;
+      Nodes  : Node_Array (1 .. Capacity) := (others => <>);
    end record;
 
    type Cursor is record

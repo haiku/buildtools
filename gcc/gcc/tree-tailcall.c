@@ -1,5 +1,5 @@
 /* Tail call optimization on trees.
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,67 +20,26 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "rtl.h"
 #include "tree.h"
+#include "gimple.h"
+#include "cfghooks.h"
+#include "tree-pass.h"
+#include "ssa.h"
+#include "cgraph.h"
+#include "gimple-pretty-print.h"
 #include "fold-const.h"
 #include "stor-layout.h"
-#include "tm_p.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimple-iterator.h"
 #include "gimplify-me.h"
-#include "gimple-ssa.h"
 #include "tree-cfg.h"
-#include "tree-phinodes.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
 #include "tree-into-ssa.h"
-#include "hashtab.h"
-#include "rtl.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
 #include "tree-dfa.h"
-#include "gimple-pretty-print.h"
 #include "except.h"
-#include "tree-pass.h"
-#include "langhooks.h"
 #include "dbgcnt.h"
-#include "target.h"
 #include "cfgloop.h"
 #include "common/common-target.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
 #include "ipa-utils.h"
 
 /* The file implements the tail recursion elimination.  It is also used to
@@ -165,10 +124,8 @@ struct tailcall
    accumulator.  */
 static tree m_acc, a_acc;
 
-static bool suitable_for_tail_opt_p (void);
 static bool optimize_tail_call (struct tailcall *, bool);
 static void eliminate_tail_call (struct tailcall *);
-static void find_tail_calls (basic_block, struct tailcall **);
 
 /* Returns false when the function is not suitable for tail call optimization
    from some reason (e.g. if it takes variable number of arguments).  */
@@ -182,7 +139,7 @@ suitable_for_tail_opt_p (void)
   return true;
 }
 /* Returns false when the function is not suitable for tail call optimization
-   from some reason (e.g. if it takes variable number of arguments).
+   for some reason (e.g. if it takes variable number of arguments).
    This test must pass in addition to suitable_for_tail_opt_p in order to make
    tail call discovery happen.  */
 
@@ -227,7 +184,7 @@ suitable_for_tail_call_opt_p (void)
    containing the value of EXPR at GSI.  */
 
 static tree
-independent_of_stmt_p (tree expr, gimple at, gimple_stmt_iterator gsi)
+independent_of_stmt_p (tree expr, gimple *at, gimple_stmt_iterator gsi)
 {
   basic_block bb, call_bb, at_bb;
   edge e;
@@ -312,7 +269,7 @@ process_assignment (gassign *stmt, gimple_stmt_iterator call, tree *m,
      conversions that can never produce extra code between the function
      call and the function return.  */
   if ((rhs_class == GIMPLE_SINGLE_RHS || gimple_assign_cast_p (stmt))
-      && (TREE_CODE (src_var) == SSA_NAME))
+      && src_var == *ass_var)
     {
       /* Reject a tailcall if the type conversion might need
 	 additional code.  */
@@ -329,9 +286,6 @@ process_assignment (gassign *stmt, gimple_stmt_iterator call, tree *m,
 		  > TYPE_PRECISION (TREE_TYPE (dest))))
 	    return false;
 	}
-
-      if (src_var != *ass_var)
-	return false;
 
       *ass_var = dest;
       return true;
@@ -437,7 +391,7 @@ static void
 find_tail_calls (basic_block bb, struct tailcall **ret)
 {
   tree ass_var = NULL_TREE, ret_var, func, param;
-  gimple stmt;
+  gimple *stmt;
   gcall *call = NULL;
   gimple_stmt_iterator gsi, agsi;
   bool tail_recursion;
@@ -455,9 +409,10 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
     {
       stmt = gsi_stmt (gsi);
 
-      /* Ignore labels, returns, clobbers and debug stmts.  */
+      /* Ignore labels, returns, nops, clobbers and debug stmts.  */
       if (gimple_code (stmt) == GIMPLE_LABEL
 	  || gimple_code (stmt) == GIMPLE_RETURN
+	  || gimple_code (stmt) == GIMPLE_NOP
 	  || gimple_clobber_p (stmt)
 	  || is_gimple_debug (stmt))
 	continue;
@@ -469,6 +424,13 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
 	  ass_var = gimple_call_lhs (call);
 	  break;
 	}
+
+      /* Allow simple copies between local variables, even if they're
+	 aggregates.  */
+      if (is_gimple_assign (stmt)
+	  && auto_var_in_fn_p (gimple_assign_lhs (stmt), cfun->decl)
+	  && auto_var_in_fn_p (gimple_assign_rhs1 (stmt), cfun->decl))
+	continue;
 
       /* If the statement references memory or volatile operands, fail.  */
       if (gimple_references_memory_p (stmt)
@@ -486,18 +448,20 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
       return;
     }
 
-  /* If the LHS of our call is not just a simple register, we can't
-     transform this into a tail or sibling call.  This situation happens,
-     in (e.g.) "*p = foo()" where foo returns a struct.  In this case
-     we won't have a temporary here, but we need to carry out the side
-     effect anyway, so tailcall is impossible.
+  /* If the LHS of our call is not just a simple register or local
+     variable, we can't transform this into a tail or sibling call.
+     This situation happens, in (e.g.) "*p = foo()" where foo returns a
+     struct.  In this case we won't have a temporary here, but we need
+     to carry out the side effect anyway, so tailcall is impossible.
 
      ??? In some situations (when the struct is returned in memory via
      invisible argument) we could deal with this, e.g. by passing 'p'
      itself as that argument to foo, but it's too early to do this here,
      and expand_call() will not handle it anyway.  If it ever can, then
      we need to revisit this here, to allow that situation.  */
-  if (ass_var && !is_gimple_reg (ass_var))
+  if (ass_var
+      && !is_gimple_reg (ass_var)
+      && !auto_var_in_fn_p (ass_var, cfun->decl))
     return;
 
   /* We found the call, check whether it is suitable.  */
@@ -540,12 +504,14 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
 	tail_recursion = true;
     }
 
-  /* Make sure the tail invocation of this function does not refer
-     to local variables.  */
+  /* Make sure the tail invocation of this function does not indirectly
+     refer to local variables.  (Passing variables directly by value
+     is OK.)  */
   FOR_EACH_LOCAL_DECL (cfun, idx, var)
     {
       if (TREE_CODE (var) != PARM_DECL
 	  && auto_var_in_fn_p (var, cfun->decl)
+	  && may_be_aliased (var)
 	  && (ref_maybe_used_by_stmt_p (call, var)
 	      || call_may_clobber_ref_p (call, var)))
 	return;
@@ -575,7 +541,8 @@ find_tail_calls (basic_block bb, struct tailcall **ret)
 
       stmt = gsi_stmt (agsi);
 
-      if (gimple_code (stmt) == GIMPLE_LABEL)
+      if (gimple_code (stmt) == GIMPLE_LABEL
+	  || gimple_code (stmt) == GIMPLE_NOP)
 	continue;
 
       if (gimple_code (stmt) == GIMPLE_RETURN)
@@ -846,7 +813,7 @@ static void
 eliminate_tail_call (struct tailcall *t)
 {
   tree param, rslt;
-  gimple stmt, call;
+  gimple *stmt, *call;
   tree arg;
   size_t idx;
   basic_block bb, first;
@@ -854,7 +821,7 @@ eliminate_tail_call (struct tailcall *t)
   gphi *phi;
   gphi_iterator gpi;
   gimple_stmt_iterator gsi;
-  gimple orig_stmt;
+  gimple *orig_stmt;
 
   stmt = orig_stmt = gsi_stmt (t->call_gsi);
   bb = gsi_bb (t->call_gsi);
@@ -878,7 +845,7 @@ eliminate_tail_call (struct tailcall *t)
   gimple_stmt_iterator gsi2 = gsi_last_bb (gimple_bb (gsi_stmt (gsi)));
   while (gsi_stmt (gsi2) != gsi_stmt (gsi))
     {
-      gimple t = gsi_stmt (gsi2);
+      gimple *t = gsi_stmt (gsi2);
       /* Do not remove the return statement, so that redirect_edge_and_branch
 	 sees how the block ends.  */
       if (gimple_code (t) != GIMPLE_RETURN)
@@ -929,7 +896,7 @@ eliminate_tail_call (struct tailcall *t)
 
   call = gsi_stmt (t->call_gsi);
   rslt = gimple_call_lhs (call);
-  if (rslt != NULL_TREE)
+  if (rslt != NULL_TREE && TREE_CODE (rslt) == SSA_NAME)
     {
       /* Result of the call will no longer be defined.  So adjust the
 	 SSA_NAME_DEF_STMT accordingly.  */
@@ -1004,7 +971,7 @@ tree_optimize_tail_calls_1 (bool opt_tailcalls)
   bool changed = false;
   basic_block first = single_succ (ENTRY_BLOCK_PTR_FOR_FN (cfun));
   tree param;
-  gimple stmt;
+  gimple *stmt;
   edge_iterator ei;
 
   if (!suitable_for_tail_opt_p ())

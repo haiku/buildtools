@@ -1,5 +1,5 @@
 /* Get CPU type and Features for x86 processors.
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by Sriraman Tallam (tmsriram@google.com)
 
 This file is part of GCC.
@@ -26,6 +26,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include "cpuid.h"
 #include "tsystem.h"
 #include "auto-target.h"
+#include "cpuinfo.h"
 
 #ifdef HAVE_INIT_PRIORITY
 #define CONSTRUCTOR_PRIORITY (101)
@@ -36,80 +37,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 int __cpu_indicator_init (void)
   __attribute__ ((constructor CONSTRUCTOR_PRIORITY));
 
-/* Processor Vendor and Models. */
 
-enum processor_vendor
-{
-  VENDOR_INTEL = 1,
-  VENDOR_AMD,
-  VENDOR_OTHER,
-  VENDOR_MAX
-};
-
-/* Any new types or subtypes have to be inserted at the end. */
-
-enum processor_types
-{
-  INTEL_BONNELL = 1,
-  INTEL_CORE2,
-  INTEL_COREI7,
-  AMDFAM10H,
-  AMDFAM15H,
-  INTEL_SILVERMONT,
-  AMD_BTVER1,
-  AMD_BTVER2,  
-  CPU_TYPE_MAX
-};
-
-enum processor_subtypes
-{
-  INTEL_COREI7_NEHALEM = 1,
-  INTEL_COREI7_WESTMERE,
-  INTEL_COREI7_SANDYBRIDGE,
-  AMDFAM10H_BARCELONA,
-  AMDFAM10H_SHANGHAI,
-  AMDFAM10H_ISTANBUL,
-  AMDFAM15H_BDVER1,
-  AMDFAM15H_BDVER2,
-  AMDFAM15H_BDVER3,
-  AMDFAM15H_BDVER4,
-  INTEL_COREI7_IVYBRIDGE,
-  INTEL_COREI7_HASWELL,
-  INTEL_COREI7_BROADWELL,
-  CPU_SUBTYPE_MAX
-};
-
-/* ISA Features supported. */
-
-enum processor_features
-{
-  FEATURE_CMOV = 0,
-  FEATURE_MMX,
-  FEATURE_POPCNT,
-  FEATURE_SSE,
-  FEATURE_SSE2,
-  FEATURE_SSE3,
-  FEATURE_SSSE3,
-  FEATURE_SSE4_1,
-  FEATURE_SSE4_2,
-  FEATURE_AVX,
-  FEATURE_AVX2,
-  FEATURE_SSE4_A,
-  FEATURE_FMA4,
-  FEATURE_XOP,
-  FEATURE_FMA,
-  FEATURE_AVX512F,
-  FEATURE_BMI,
-  FEATURE_BMI2
-};
-
-struct __processor_model
-{
-  unsigned int __cpu_vendor;
-  unsigned int __cpu_type;
-  unsigned int __cpu_subtype;
-  unsigned int __cpu_features[1];
-} __cpu_model;
+struct __processor_model __cpu_model = { };
 
 
 /* Get the specific type of AMD CPU.  */
@@ -164,6 +93,12 @@ get_amd_cpu (unsigned int family, unsigned int model)
     case 0x16:
       __cpu_model.__cpu_type = AMD_BTVER2;
       break;
+    case 0x17:
+      __cpu_model.__cpu_type = AMDFAM17H;
+      /* AMD family 17h version 1.  */
+      if (model <= 0x1f)
+	__cpu_model.__cpu_subtype = AMDFAM17H_ZNVER1;
+      break;
     default:
       break;
     }
@@ -197,6 +132,10 @@ get_intel_cpu (unsigned int family, unsigned int model, unsigned int brand_id)
 	    case 0x5d:
 	      /* Silvermont.  */
 	      __cpu_model.__cpu_type = INTEL_SILVERMONT;
+	      break;
+	    case 0x57:
+	      /* Knights Landing.  */
+	      __cpu_model.__cpu_type = INTEL_KNL;
 	      break;
 	    case 0x1a:
 	    case 0x1e:
@@ -234,11 +173,23 @@ get_intel_cpu (unsigned int family, unsigned int model, unsigned int brand_id)
 	      __cpu_model.__cpu_subtype = INTEL_COREI7_HASWELL;
 	      break;
 	    case 0x3d:
+	    case 0x47:
 	    case 0x4f:
 	    case 0x56:
 	      /* Broadwell.  */
 	      __cpu_model.__cpu_type = INTEL_COREI7;
 	      __cpu_model.__cpu_subtype = INTEL_COREI7_BROADWELL;
+	      break;
+	    case 0x4e:
+	    case 0x5e:
+	      /* Skylake.  */
+	      __cpu_model.__cpu_type = INTEL_COREI7;
+	      __cpu_model.__cpu_subtype = INTEL_COREI7_SKYLAKE;
+	      break;
+	    case 0x55:
+	      /* Skylake with AVX-512 support.  */
+	      __cpu_model.__cpu_type = INTEL_COREI7;
+	      __cpu_model.__cpu_subtype = INTEL_COREI7_SKYLAKE_AVX512;
 	      break;
 	    case 0x17:
 	    case 0x1d:
@@ -264,6 +215,9 @@ static void
 get_available_features (unsigned int ecx, unsigned int edx,
 			int max_cpuid_level)
 {
+  unsigned int eax, ebx;
+  unsigned int ext_level;
+
   unsigned int features = 0;
 
   if (edx & bit_CMOV)
@@ -276,6 +230,10 @@ get_available_features (unsigned int ecx, unsigned int edx,
     features |= (1 << FEATURE_SSE2);
   if (ecx & bit_POPCNT)
     features |= (1 << FEATURE_POPCNT);
+  if (ecx & bit_AES)
+    features |= (1 << FEATURE_AES);
+  if (ecx & bit_PCLMUL)
+    features |= (1 << FEATURE_PCLMUL);
   if (ecx & bit_SSE3)
     features |= (1 << FEATURE_SSE3);
   if (ecx & bit_SSSE3)
@@ -292,7 +250,6 @@ get_available_features (unsigned int ecx, unsigned int edx,
   /* Get Advanced Features at level 7 (eax = 7, ecx = 0). */
   if (max_cpuid_level >= 7)
     {
-      unsigned int eax, ebx, ecx, edx;
       __cpuid_count (7, 0, eax, ebx, ecx, edx);
       if (ebx & bit_BMI)
         features |= (1 << FEATURE_BMI);
@@ -302,14 +259,34 @@ get_available_features (unsigned int ecx, unsigned int edx,
         features |= (1 << FEATURE_BMI2);
       if (ebx & bit_AVX512F)
 	features |= (1 << FEATURE_AVX512F);
+      if (ebx & bit_AVX512VL)
+	features |= (1 << FEATURE_AVX512VL);
+      if (ebx & bit_AVX512BW)
+	features |= (1 << FEATURE_AVX512BW);
+      if (ebx & bit_AVX512DQ)
+	features |= (1 << FEATURE_AVX512DQ);
+      if (ebx & bit_AVX512CD)
+	features |= (1 << FEATURE_AVX512CD);
+      if (ebx & bit_AVX512PF)
+	features |= (1 << FEATURE_AVX512PF);
+      if (ebx & bit_AVX512ER)
+	features |= (1 << FEATURE_AVX512ER);
+      if (ebx & bit_AVX512IFMA)
+	features |= (1 << FEATURE_AVX512IFMA);
+      if (ecx & bit_AVX512VBMI)
+	features |= (1 << FEATURE_AVX512VBMI);
+      if (ecx & bit_AVX512VPOPCNTDQ)
+	features |= (1 << FEATURE_AVX512VPOPCNTDQ);
+      if (edx & bit_AVX5124VNNIW)
+	features |= (1 << FEATURE_AVX5124VNNIW);
+      if (edx & bit_AVX5124FMAPS)
+	features |= (1 << FEATURE_AVX5124FMAPS);
     }
 
-  unsigned int ext_level;
-  unsigned int eax, ebx;
   /* Check cpuid level of extended features.  */
   __cpuid (0x80000000, ext_level, ebx, ecx, edx);
 
-  if (ext_level > 0x80000000)
+  if (ext_level >= 0x80000001)
     {
       __cpuid (0x80000001, eax, ebx, ecx, edx);
 
@@ -324,20 +301,6 @@ get_available_features (unsigned int ecx, unsigned int edx,
   __cpu_model.__cpu_features[0] = features;
 }
 
-/* A noinline function calling __get_cpuid. Having many calls to
-   cpuid in one function in 32-bit mode causes GCC to complain:
-   "can't find a register in class CLOBBERED_REGS".  This is
-   related to PR rtl-optimization 44174. */
-
-static int __attribute__ ((noinline))
-__get_cpuid_output (unsigned int __level,
-		    unsigned int *__eax, unsigned int *__ebx,
-		    unsigned int *__ecx, unsigned int *__edx)
-{
-  return __get_cpuid (__level, __eax, __ebx, __ecx, __edx);
-}
-
-
 /* A constructor function that is sets __cpu_model and __cpu_features with
    the right values.  This needs to run only once.  This constructor is
    given the highest priority and it should run before constructors without
@@ -349,7 +312,7 @@ __cpu_indicator_init (void)
 {
   unsigned int eax, ebx, ecx, edx;
 
-  int max_level = 5;
+  int max_level;
   unsigned int vendor;
   unsigned int model, family, brand_id;
   unsigned int extended_model, extended_family;
@@ -359,7 +322,7 @@ __cpu_indicator_init (void)
     return 0;
 
   /* Assume cpuid insn present. Run in level 0 to get vendor id. */
-  if (!__get_cpuid_output (0, &eax, &ebx, &ecx, &edx))
+  if (!__get_cpuid (0, &eax, &ebx, &ecx, &edx))
     {
       __cpu_model.__cpu_vendor = VENDOR_OTHER;
       return -1;
@@ -374,7 +337,7 @@ __cpu_indicator_init (void)
       return -1;
     }
 
-  if (!__get_cpuid_output (1, &eax, &ebx, &ecx, &edx))
+  if (!__get_cpuid (1, &eax, &ebx, &ecx, &edx))
     {
       __cpu_model.__cpu_vendor = VENDOR_OTHER;
       return -1;
@@ -427,3 +390,8 @@ __cpu_indicator_init (void)
 
   return 0;
 }
+
+#if defined SHARED && defined USE_ELF_SYMVER
+__asm__ (".symver __cpu_indicator_init, __cpu_indicator_init@GCC_4.8.0");
+__asm__ (".symver __cpu_model, __cpu_model@GCC_4.8.0");
+#endif

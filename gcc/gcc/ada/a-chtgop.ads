@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -37,7 +37,7 @@ generic
    with package HT_Types is
      new Generic_Hash_Table_Types (<>);
 
-   use HT_Types;
+   use HT_Types, HT_Types.Implementation;
 
    with function Hash_Node (Node : Node_Access) return Hash_Type;
 
@@ -107,7 +107,7 @@ package Ada.Containers.Hash_Tables.Generic_Operations is
 
    procedure Clear (HT : in out Hash_Table_Type);
    --  Deallocates each node in hash table HT. (Note that it only deallocates
-   --  the nodes, not the buckets array.)  Program_Error is raised if the hash
+   --  the nodes, not the buckets array.) Program_Error is raised if the hash
    --  table is busy.
 
    procedure Move (Target, Source : in out Hash_Table_Type);

@@ -5,12 +5,12 @@
 constexpr int square(int x);	// { dg-message "never defined" }
 
 // error: pixel is a type
-constexpr struct pixel {
+constexpr struct pixel {        // { dg-error "constexpr" }
   int x;
   int y;
   // OK: declaration
   constexpr pixel(int);
-};				// { dg-error "constexpr" }
+};
 constexpr pixel::pixel(int a)
 // OK: definition
   : x(square(a)), y(square(a))	// { dg-error "square" }
@@ -45,7 +45,7 @@ constexpr int g(int x, int n) {
 class debug_flag {
 public:
   explicit debug_flag(bool);
-  constexpr bool is_on();	// { dg-error "not a literal type" } debug_flag not literal type
+  constexpr bool is_on(); // { dg-error "not a literal type" "" { target c++11_only } } debug_flag not literal type
 private:
   bool flag;
 };

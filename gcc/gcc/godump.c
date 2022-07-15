@@ -1,5 +1,5 @@
 /* Output Go language descriptions of types.
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2017 Free Software Foundation, Inc.
    Written by Ian Lance Taylor <iant@google.com>.
 
 This file is part of GCC.
@@ -30,25 +30,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "diagnostic-core.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "ggc.h"
-#include "hash-set.h"
-#include "obstack.h"
-#include "debug.h"
 #include "wide-int-print.h"
+#include "diagnostic-core.h"
+#include "debug.h"
 #include "stor-layout.h"
-#include "defaults.h"
 
 /* We dump this information from the debug hooks.  This gives us a
    stable and maintainable API to hook into.  In order to work
@@ -514,13 +500,19 @@ go_function_decl (tree decl)
   go_decl (decl);
 }
 
+static void
+go_early_global_decl (tree decl)
+{
+  go_decl (decl);
+  real_debug_hooks->early_global_decl (decl);
+}
+
 /* A global variable decl.  */
 
 static void
-go_global_decl (tree decl)
+go_late_global_decl (tree decl)
 {
-  real_debug_hooks->global_decl (decl);
-  go_decl (decl);
+  real_debug_hooks->late_global_decl (decl);
 }
 
 /* A type declaration.  */
@@ -730,10 +722,6 @@ go_format_type (struct godump_container *container, tree type,
 
   switch (TREE_CODE (type))
     {
-    case ENUMERAL_TYPE:
-      obstack_grow (ob, "int", 3);
-      break;
-
     case TYPE_DECL:
       {
 	void **slot;
@@ -749,6 +737,7 @@ go_format_type (struct godump_container *container, tree type,
       }
       break;
 
+    case ENUMERAL_TYPE:
     case INTEGER_TYPE:
       {
 	const char *s;
@@ -901,6 +890,7 @@ go_format_type (struct godump_container *container, tree type,
     case UNION_TYPE:
       is_union = true;
       /* Fall through to RECORD_TYPE case.  */
+      gcc_fallthrough ();
     case RECORD_TYPE:
       {
 	unsigned int prev_field_end;
@@ -1013,14 +1003,9 @@ go_format_type (struct godump_container *container, tree type,
 	      }
 	  }
 	/* Padding.  */
-	{
-	  unsigned int align_unit;
-
-	  align_unit = (is_anon_record_or_union) ? 1 : TYPE_ALIGN_UNIT (type);
-	  *p_art_i = go_append_padding
-	    (ob, prev_field_end, TREE_INT_CST_LOW (TYPE_SIZE_UNIT (type)),
-	     align_unit, *p_art_i, &prev_field_end);
-	}
+	*p_art_i = go_append_padding (ob, prev_field_end,
+				      TREE_INT_CST_LOW (TYPE_SIZE_UNIT (type)),
+				      1, *p_art_i, &prev_field_end);
 	/* Alignment.  */
 	if (!is_anon_record_or_union
 	    && known_alignment < TYPE_ALIGN_UNIT (type))
@@ -1460,7 +1445,8 @@ dump_go_spec_init (const char *filename, const struct gcc_debug_hooks *hooks)
   go_debug_hooks.define = go_define;
   go_debug_hooks.undef = go_undef;
   go_debug_hooks.function_decl = go_function_decl;
-  go_debug_hooks.global_decl = go_global_decl;
+  go_debug_hooks.early_global_decl = go_early_global_decl;
+  go_debug_hooks.late_global_decl = go_late_global_decl;
   go_debug_hooks.type_decl = go_type_decl;
 
   macro_hash = htab_create (100, macro_hash_hashval, macro_hash_eq,

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -185,9 +185,10 @@ package body Sem_Cat is
 
    begin
       --  Intrinsic subprograms are preelaborated, so do not impose any
-      --  categorization dependencies.
+      --  categorization dependencies. Also, ignore categorization
+      --  dependencies when compilation switch -gnatdu is used.
 
-      if Is_Intrinsic_Subprogram (Depended_Entity) then
+      if Is_Intrinsic_Subprogram (Depended_Entity) or else Debug_Flag_U then
          return;
       end if;
 
@@ -440,21 +441,17 @@ package body Sem_Cat is
       Nam          : TSS_Name_Type;
       At_Any_Place : Boolean := False) return Boolean
    is
-      Rep_Item  : Node_Id;
-      Full_Type : Entity_Id := Typ;
+      Rep_Item : Node_Id;
+
+      Real_Rep : Node_Id;
+      --  The stream operation may be specified by an attribute definition
+      --  clause in the source, or by an aspect that generates such an
+      --  attribute definition. For an aspect, the generated attribute
+      --  definition may be placed at the freeze point of the full view of
+      --  the type, but the aspect specification makes the operation visible
+      --  to a client wherever the partial view is visible.
 
    begin
-      --  In the case of a type derived from a private view, any specified
-      --  stream attributes will be attached to the derived type's underlying
-      --  type rather the derived type entity itself (which is itself private).
-
-      if Is_Private_Type (Typ)
-        and then Is_Derived_Type (Typ)
-        and then Present (Full_View (Typ))
-      then
-         Full_Type := Underlying_Type (Typ);
-      end if;
-
       --  We start from the declaration node and then loop until the end of
       --  the list until we find the requested attribute definition clause.
       --  In Ada 2005 mode, clauses are ignored if they are not currently
@@ -462,10 +459,19 @@ package body Sem_Cat is
       --  inserted by the expander at the point where the clause occurs),
       --  unless At_Any_Place is true.
 
-      Rep_Item := First_Rep_Item (Full_Type);
+      Rep_Item := First_Rep_Item (Typ);
       while Present (Rep_Item) loop
-         if Nkind (Rep_Item) = N_Attribute_Definition_Clause then
-            case Chars (Rep_Item) is
+         Real_Rep := Rep_Item;
+
+         --  If the representation item is an aspect specification, retrieve
+         --  the corresponding pragma or attribute definition.
+
+         if Nkind (Rep_Item) = N_Aspect_Specification then
+            Real_Rep := Aspect_Rep_Item (Rep_Item);
+         end if;
+
+         if Nkind (Real_Rep) = N_Attribute_Definition_Clause then
+            case Chars (Real_Rep) is
                when Name_Read =>
                   exit when Nam = TSS_Stream_Read;
 
@@ -480,21 +486,35 @@ package body Sem_Cat is
 
                when others =>
                   null;
-
             end case;
          end if;
 
          Next_Rep_Item (Rep_Item);
       end loop;
 
-      --  If At_Any_Place is true, return True if the attribute is available
-      --  at any place; if it is false, return True only if the attribute is
-      --  currently visible.
+      --  If not found, and the type is derived from a private view, check
+      --  for a stream attribute inherited from parent. Any specified stream
+      --  attributes will be attached to the derived type's underlying type
+      --  rather the derived type entity itself (which is itself private).
 
-      return Present (Rep_Item)
-        and then (Ada_Version < Ada_2005
-                   or else At_Any_Place
-                   or else not Is_Hidden (Entity (Rep_Item)));
+      if No (Rep_Item)
+        and then Is_Private_Type (Typ)
+        and then Is_Derived_Type (Typ)
+        and then Present (Full_View (Typ))
+      then
+         return Has_Stream_Attribute_Definition
+            (Underlying_Type (Typ), Nam, At_Any_Place);
+
+      --  Otherwise, if At_Any_Place is true, return True if the attribute is
+      --  available at any place; if it is false, return True only if the
+      --  attribute is currently visible.
+
+      else
+         return Present (Rep_Item)
+           and then (Ada_Version < Ada_2005
+                      or else At_Any_Place
+                      or else not Is_Hidden (Entity (Rep_Item)));
+      end if;
    end Has_Stream_Attribute_Definition;
 
    ----------------------------
@@ -725,13 +745,17 @@ package body Sem_Cat is
 
             if Nkind (PN) = N_Pragma then
                case Get_Pragma_Id (PN) is
-                  when Pragma_All_Calls_Remote   |
-                    Pragma_Preelaborate          |
-                    Pragma_Pure                  |
-                    Pragma_Remote_Call_Interface |
-                    Pragma_Remote_Types          |
-                    Pragma_Shared_Passive        => Analyze (PN);
-                  when others                    => null;
+                  when Pragma_All_Calls_Remote
+                     | Pragma_Preelaborate
+                     | Pragma_Pure
+                     | Pragma_Remote_Call_Interface
+                     | Pragma_Remote_Types
+                     | Pragma_Shared_Passive
+                  =>
+                     Analyze (PN);
+
+                  when others =>
+                     null;
                end case;
             end if;
 
@@ -753,8 +777,13 @@ package body Sem_Cat is
       Specification : Node_Id := Empty;
 
    begin
-      Set_Is_Pure
-        (E, Is_Pure (Scop) and then Is_Library_Level_Entity (E));
+      --  Do not modify the purity of an internally generated entity if it has
+      --  been explicitly marked as pure for optimization purposes.
+
+      if not Has_Pragma_Pure_Function (E) then
+         Set_Is_Pure
+           (E, Is_Pure (Scop) and then Is_Library_Level_Entity (E));
+      end if;
 
       if not Is_Remote_Call_Interface (E) then
          if Ekind (E) in Subprogram_Kind then
@@ -986,17 +1015,23 @@ package body Sem_Cat is
          Item := First (Context_Items (P));
          while Present (Item) loop
             if Nkind (Item) = N_With_Clause
-              and then not (Implicit_With (Item)
-                             or else Limited_Present (Item)
+              and then
+                not (Implicit_With (Item)
+                      or else Limited_Present (Item)
 
-                             --  Skip if error already posted on the WITH
-                             --  clause (in which case the Name attribute
-                             --  may be invalid). In particular, this fixes
-                             --  the problem of hanging in the presence of a
-                             --  WITH clause on a child that is an illegal
-                             --  generic instantiation.
+                      --  Skip if error already posted on the WITH clause (in
+                      --  which case the Name attribute may be invalid). In
+                      --  particular, this fixes the problem of hanging in the
+                      --  presence of a WITH clause on a child that is an
+                      --  illegal generic instantiation.
 
-                             or else Error_Posted (Item))
+                      or else Error_Posted (Item))
+              and then
+                not (Try_Semantics
+
+                      --  Skip processing malformed trees
+
+                      and then Nkind (Name (Item)) not in N_Has_Entity)
             then
                Entity_Of_Withed := Entity (Name (Item));
                Check_Categorization_Dependencies
@@ -2068,30 +2103,37 @@ package body Sem_Cat is
 
       begin
          case K is
-            when N_Op | N_Membership_Test =>
-               return True;
-
             when N_Aggregate
                | N_Component_Association
-               | N_Index_Or_Discriminant_Constraint =>
+               | N_Index_Or_Discriminant_Constraint
+               | N_Membership_Test
+               | N_Op
+            =>
                return True;
 
             when N_Attribute_Reference =>
-               return Attribute_Name (Parent (N)) /= Name_Address
-                 and then Attribute_Name (Parent (N)) /= Name_Access
-                 and then Attribute_Name (Parent (N)) /= Name_Unchecked_Access
-                 and then
-                   Attribute_Name (Parent (N)) /= Name_Unrestricted_Access;
+               declare
+                  Attr : constant Name_Id := Attribute_Name (Parent (N));
+
+               begin
+                  return     Attr /= Name_Address
+                    and then Attr /= Name_Access
+                    and then Attr /= Name_Unchecked_Access
+                    and then Attr /= Name_Unrestricted_Access;
+               end;
 
             when N_Indexed_Component =>
-               return (N /= Prefix (Parent (N))
-                 or else Is_Primary (Parent (N)));
+               return N /= Prefix (Parent (N)) or else Is_Primary (Parent (N));
 
-            when N_Qualified_Expression | N_Type_Conversion =>
+            when N_Qualified_Expression
+               | N_Type_Conversion
+            =>
                return Is_Primary (Parent (N));
 
-            when N_Assignment_Statement | N_Object_Declaration =>
-               return (N = Expression (Parent (N)));
+            when N_Assignment_Statement
+               | N_Object_Declaration
+            =>
+               return N = Expression (Parent (N));
 
             when N_Selected_Component =>
                return Is_Primary (Parent (N));
@@ -2135,11 +2177,14 @@ package body Sem_Cat is
       --  Error if the name is a primary in an expression. The parent must not
       --  be an operator, or a selected component or an indexed component that
       --  is itself a primary. Entities that are actuals do not need to be
-      --  checked, because the call itself will be diagnosed.
+      --  checked, because the call itself will be diagnosed. Entities in a
+      --  generic unit or within a preanalyzed expression are not checked:
+      --  only their use in executable code matters.
 
       if Is_Primary (N)
         and then (not Inside_A_Generic
                    or else Present (Enclosing_Generic_Body (N)))
+        and then not In_Spec_Expression
       then
          if Ekind (Entity (N)) = E_Variable
            or else Ekind (Entity (N)) in Formal_Object_Kind

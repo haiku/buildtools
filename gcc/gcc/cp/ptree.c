@@ -1,5 +1,5 @@
 /* Prints out trees in human readable form.
-   Copyright (C) 1992-2015 Free Software Foundation, Inc.
+   Copyright (C) 1992-2017 Free Software Foundation, Inc.
    Hacked by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -22,19 +22,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "print-tree.h"
 #include "cp-tree.h"
+#include "print-tree.h"
 
 void
 cxx_print_decl (FILE *file, tree node, int indent)
@@ -61,6 +50,7 @@ cxx_print_decl (FILE *file, tree node, int indent)
     }
   else if (TREE_CODE (node) == TEMPLATE_DECL)
     {
+      print_node (file, "parms", DECL_TEMPLATE_PARMS (node), indent + 4);
       indent_to (file, indent + 3);
       fprintf (file, " full-name \"%s\"",
 	       decl_as_string (node, TFF_TEMPLATE_HEADER));
@@ -84,9 +74,12 @@ cxx_print_type (FILE *file, tree node, int indent)
 {
   switch (TREE_CODE (node))
     {
+    case BOUND_TEMPLATE_TEMPLATE_PARM:
+      print_node (file, "args", TYPE_TI_ARGS (node), indent + 4);
+      gcc_fallthrough ();
+
     case TEMPLATE_TYPE_PARM:
     case TEMPLATE_TEMPLATE_PARM:
-    case BOUND_TEMPLATE_TEMPLATE_PARM:
       indent_to (file, indent + 3);
       fprintf (file, "index %d level %d orig_level %d",
 	       TEMPLATE_TYPE_IDX (node), TEMPLATE_TYPE_LEVEL (node),
@@ -247,6 +240,7 @@ cxx_print_xnode (FILE *file, tree node, int indent)
       print_node (file, "chain", TREE_CHAIN (node), indent+4);
       break;
     case TEMPLATE_PARM_INDEX:
+      print_node (file, "decl", TEMPLATE_PARM_DECL (node), indent+4);
       indent_to (file, indent + 3);
       fprintf (file, "index %d level %d orig_level %d",
 	       TEMPLATE_PARM_IDX (node), TEMPLATE_PARM_LEVEL (node),
@@ -261,6 +255,18 @@ cxx_print_xnode (FILE *file, tree node, int indent)
 	  fprintf (file, "pending_template");
 	}
       break;
+    case CONSTRAINT_INFO:
+      {
+        tree_constraint_info *cinfo = (tree_constraint_info *)node;
+        if (cinfo->template_reqs)
+          print_node (file, "template_reqs", cinfo->template_reqs, indent+4);
+        if (cinfo->declarator_reqs)
+          print_node (file, "declarator_reqs", cinfo->declarator_reqs,
+		      indent+4);
+        print_node (file, "associated_constr",
+                          cinfo->associated_constr, indent+4);
+        break;
+      }
     case ARGUMENT_PACK_SELECT:
       print_node (file, "pack", ARGUMENT_PACK_SELECT_FROM_PACK (node),
 		  indent+4);
@@ -271,10 +277,25 @@ cxx_print_xnode (FILE *file, tree node, int indent)
       print_node (file, "pattern", DEFERRED_NOEXCEPT_PATTERN (node), indent+4);
       print_node (file, "args", DEFERRED_NOEXCEPT_ARGS (node), indent+4);
       break;
+    case TRAIT_EXPR:
+      indent_to (file, indent+4);
+      fprintf (file, "kind %d", TRAIT_EXPR_KIND (node));
+      print_node (file, "type 1", TRAIT_EXPR_TYPE1 (node), indent+4);
+      if (TRAIT_EXPR_TYPE2 (node))
+	print_node (file, "type 2", TRAIT_EXPR_TYPE2 (node), indent+4);
+      break;
     case LAMBDA_EXPR:
       cxx_print_lambda_node (file, node, indent);
       break;
     default:
       break;
     }
+}
+
+/* Print the node NODE on standard error, for debugging.  */
+
+DEBUG_FUNCTION void
+debug_tree (cp_expr node)
+{
+  debug_tree (node.get_value());
 }

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1998-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1998-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -89,6 +89,14 @@ package body System.OS_Primitives is
    type Signature_Type is mod 2**32;
    Signature : Signature_Type := 0;
    pragma Atomic (Signature);
+
+   function Monotonic_Clock return Duration;
+   pragma Export (Ada, Monotonic_Clock, "__gnat_monotonic_clock");
+   --  Return "absolute" time, represented as an offset relative to "the Unix
+   --  Epoch", which is Jan 1, 1970 00:00:00 UTC. This clock implementation is
+   --  immune to the system's clock changes. Export this function so that it
+   --  can be imported from s-taprop-mingw.adb without changing the shared
+   --  spec (s-osprim.ads).
 
    procedure Get_Base_Time (Data : in out Clock_Data);
    --  Retrieve the base time and base ticks. These values will be used by
@@ -321,7 +329,6 @@ package body System.OS_Primitives is
    -----------------
 
    procedure Timed_Delay (Time : Duration; Mode : Integer) is
-
       function Mode_Clock return Duration;
       pragma Inline (Mode_Clock);
       --  Return the current clock value using either the monotonic clock or
@@ -334,10 +341,8 @@ package body System.OS_Primitives is
       function Mode_Clock return Duration is
       begin
          case Mode is
-            when Absolute_RT =>
-               return Monotonic_Clock;
-            when others =>
-               return Clock;
+            when Absolute_RT => return Monotonic_Clock;
+            when others      => return Clock;
          end case;
       end Mode_Clock;
 

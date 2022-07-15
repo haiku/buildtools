@@ -1,5 +1,5 @@
 /* Header for Fortran 95 types backend support.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
    Contributed by Paul Brook <paul@nowt.org>
    and Steven Bosscher <s.bosscher@student.tudelft.nl>
 
@@ -30,8 +30,22 @@ extern GTY(()) tree ppvoid_type_node;
 extern GTY(()) tree pvoid_type_node;
 extern GTY(()) tree prvoid_type_node;
 extern GTY(()) tree pchar_type_node;
-extern GTY(()) tree float128_type_node;
-extern GTY(()) tree complex_float128_type_node;
+extern GTY(()) tree gfc_float128_type_node;
+extern GTY(()) tree gfc_complex_float128_type_node;
+
+/* logical_type_node is the Fortran LOGICAL type of default kind.  In
+   addition to uses mandated by the Fortran standard, also prefer it
+   for compiler generated temporary variables, is it avoids some minor
+   issues with boolean_type_node (the C/C++ _Bool/bool). Namely:
+   - On x86, partial register stalls with 8/16 bit register access,
+     and length prefix changes.
+   - On s390 there is a compare with immediate and jump instruction,
+     but it works only with 32-bit quantities and not 8-bit such as
+     boolean_type_node.
+*/
+extern GTY(()) tree logical_type_node;
+extern GTY(()) tree logical_true_node;
+extern GTY(()) tree logical_false_node;
 
 /* This is the type used to hold the lengths of character variables.
    It must be the same as the corresponding definition in gfortran.h.  */
@@ -44,12 +58,12 @@ extern GTY(()) tree gfc_charlen_type_node;
    and __float128.  */
 extern bool gfc_real16_is_float128;
 
-typedef enum {
+enum gfc_packed {
   PACKED_NO = 0,
   PACKED_PARTIAL,
   PACKED_FULL,
   PACKED_STATIC
-} gfc_packed;
+};
 
 /* be-function.c */
 void gfc_convert_function_code (gfc_namespace *);
@@ -70,7 +84,7 @@ tree gfc_get_character_type_len (int, tree);
 tree gfc_get_character_type_len_for_eltype (tree, tree);
 
 tree gfc_sym_type (gfc_symbol *);
-tree gfc_typenode_for_spec (gfc_typespec *);
+tree gfc_typenode_for_spec (gfc_typespec *, int c = 0);
 int gfc_copy_dt_decls_ifequal (gfc_symbol *, gfc_symbol *, bool);
 
 tree gfc_get_function_type (gfc_symbol *);
@@ -102,5 +116,6 @@ tree gfc_get_dtype (tree);
 
 tree gfc_get_ppc_type (gfc_component *);
 tree gfc_get_caf_vector_type (int dim);
+tree gfc_get_caf_reference_type ();
 
 #endif

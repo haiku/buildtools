@@ -1,5 +1,5 @@
 /* Fixed-point arithmetic support.
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright (C) 2006-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,19 +21,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "fixed-value.h"
 #include "tree.h"
 #include "diagnostic-core.h"
-#include "wide-int.h"
 
 /* Compare two fixed objects for bitwise identity.  */
 
@@ -74,8 +63,8 @@ check_real_for_fixed_mode (REAL_VALUE_TYPE *real_value, machine_mode mode)
 {
   REAL_VALUE_TYPE max_value, min_value, epsilon_value;
 
-  real_2expN (&max_value, GET_MODE_IBIT (mode), mode);
-  real_2expN (&epsilon_value, -GET_MODE_FBIT (mode), mode);
+  real_2expN (&max_value, GET_MODE_IBIT (mode), VOIDmode);
+  real_2expN (&epsilon_value, -GET_MODE_FBIT (mode), VOIDmode);
 
   if (SIGNED_FIXED_POINT_MODE_P (mode))
     min_value = real_value_negate (&max_value);
@@ -137,11 +126,11 @@ fixed_from_string (FIXED_VALUE_TYPE *f, const char *str, machine_mode mode)
       || (temp == FIXED_MAX_EPS && ALL_ACCUM_MODE_P (f->mode)))
     warning (OPT_Woverflow,
 	     "large fixed-point constant implicitly truncated to fixed-point type");
-  real_2expN (&base_value, fbit, mode);
+  real_2expN (&base_value, fbit, VOIDmode);
   real_arithmetic (&fixed_value, MULT_EXPR, &real_value, &base_value);
   wide_int w = real_to_integer (&fixed_value, &fail,
 				GET_MODE_PRECISION (mode));
-  f->data.low = w.elt (0);
+  f->data.low = w.ulow ();
   f->data.high = w.elt (1);
 
   if (temp == FIXED_MAX_EPS && ALL_FRACT_MODE_P (f->mode))
@@ -168,7 +157,7 @@ fixed_to_decimal (char *str, const FIXED_VALUE_TYPE *f_orig,
   REAL_VALUE_TYPE real_value, base_value, fixed_value;
 
   signop sgn = UNSIGNED_FIXED_POINT_MODE_P (f_orig->mode) ? UNSIGNED : SIGNED;
-  real_2expN (&base_value, GET_MODE_FBIT (f_orig->mode), f_orig->mode);
+  real_2expN (&base_value, GET_MODE_FBIT (f_orig->mode), VOIDmode);
   real_from_integer (&real_value, VOIDmode,
 		     wide_int::from (f_orig->data,
 				     GET_MODE_PRECISION (f_orig->mode), sgn),
@@ -741,35 +730,28 @@ fixed_arithmetic (FIXED_VALUE_TYPE *f, int icode, const FIXED_VALUE_TYPE *op0,
     {
     case NEGATE_EXPR:
       return do_fixed_neg (f, op0, sat_p);
-      break;
 
     case PLUS_EXPR:
       gcc_assert (op0->mode == op1->mode);
       return do_fixed_add (f, op0, op1, false, sat_p);
-      break;
 
     case MINUS_EXPR:
       gcc_assert (op0->mode == op1->mode);
       return do_fixed_add (f, op0, op1, true, sat_p);
-      break;
 
     case MULT_EXPR:
       gcc_assert (op0->mode == op1->mode);
       return do_fixed_multiply (f, op0, op1, sat_p);
-      break;
 
     case TRUNC_DIV_EXPR:
       gcc_assert (op0->mode == op1->mode);
       return do_fixed_divide (f, op0, op1, sat_p);
-      break;
 
     case LSHIFT_EXPR:
       return do_fixed_shift (f, op0, op1, true, sat_p);
-      break;
 
     case RSHIFT_EXPR:
       return do_fixed_shift (f, op0, op1, false, sat_p);
-      break;
 
     default:
       gcc_unreachable ();
@@ -1062,12 +1044,12 @@ fixed_convert_from_real (FIXED_VALUE_TYPE *f, machine_mode mode,
 
   real_value = *a;
   f->mode = mode;
-  real_2expN (&base_value, fbit, mode);
+  real_2expN (&base_value, fbit, VOIDmode);
   real_arithmetic (&fixed_value, MULT_EXPR, &real_value, &base_value);
 
   wide_int w = real_to_integer (&fixed_value, &fail,
 				GET_MODE_PRECISION (mode));
-  f->data.low = w.elt (0);
+  f->data.low = w.ulow ();
   f->data.high = w.elt (1);
   temp = check_real_for_fixed_mode (&real_value, mode);
   if (temp == FIXED_UNDERFLOW) /* Minimum.  */
@@ -1114,7 +1096,7 @@ real_convert_from_fixed (REAL_VALUE_TYPE *r, machine_mode mode,
   REAL_VALUE_TYPE base_value, fixed_value, real_value;
 
   signop sgn = UNSIGNED_FIXED_POINT_MODE_P (f->mode) ? UNSIGNED : SIGNED;
-  real_2expN (&base_value, GET_MODE_FBIT (f->mode), f->mode);
+  real_2expN (&base_value, GET_MODE_FBIT (f->mode), VOIDmode);
   real_from_integer (&fixed_value, VOIDmode,
 		     wide_int::from (f->data, GET_MODE_PRECISION (f->mode),
 				     sgn), sgn);

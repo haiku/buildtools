@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -36,6 +36,10 @@ package Sem_Ch12 is
    procedure Analyze_Formal_Type_Declaration            (N : Node_Id);
    procedure Analyze_Formal_Subprogram_Declaration      (N : Node_Id);
    procedure Analyze_Formal_Package_Declaration         (N : Node_Id);
+
+   procedure Add_Pending_Instantiation (Inst : Node_Id; Act_Decl : Node_Id);
+   --  Add an entry in the table of instance bodies that must be analyzed
+   --  when inlining requires its body or the body of a nested instance.
 
    function Build_Function_Wrapper
      (Formal_Subp : Entity_Id;
@@ -100,7 +104,7 @@ package Sem_Ch12 is
       Body_Optional : Boolean := False);
    --  Called after semantic analysis, to complete the instantiation of
    --  package instances. The flag Inlined_Body is set if the body is
-   --  being instantiated on the fly for inlined purposes.
+   --  being instantiated on the fly for inlining purposes.
    --
    --  The flag Body_Optional indicates that the call is for an instance
    --  that precedes the current instance in the same declarative part.
@@ -112,13 +116,13 @@ package Sem_Ch12 is
    --  appears in the context of some other unit P that contains an instance
    --  of G, we compile the body of I2, but not that of I1. However, when we
    --  compile U as the main unit, we compile both bodies. This will lead to
-   --  lead to link-time errors if the compilation of I1 generates public
-   --  symbols, because those in I2 will receive different names in both
-   --  cases. This forces us to analyze the body of I1 even when U is not the
-   --  main unit. We don't want this additional mechanism to generate an error
-   --  when the body of the generic for I1 is not present, and this is the
-   --  reason for the presence of the flag Body_Optional, which is exchanged
-   --  between the current procedure and Load_Parent_Of_Generic.
+   --  link-time errors if the compilation of I1 generates public symbols,
+   --  because those in I2 will receive different names in both cases. This
+   --  forces us to analyze the body of I1 even when U is not the main unit.
+   --  We don't want this additional mechanism to generate an error when the
+   --  body of the generic for I1 is not present, and this is the reason for
+   --  the presence of the flag Body_Optional, which is exchanged between the
+   --  current procedure and Load_Parent_Of_Generic.
 
    procedure Instantiate_Subprogram_Body
      (Body_Info     : Pending_Body_Info;
@@ -136,16 +140,16 @@ package Sem_Ch12 is
    --  pragma, or because a pragma appears for the instance in the scope.
    --  of the instance.
 
-   procedure Save_Global_References (N : Node_Id);
+   procedure Save_Global_References (Templ : Node_Id);
    --  Traverse the original generic unit, and capture all references to
-   --  entities that are defined outside of the generic in the analyzed
-   --  tree for the template. These references are copied into the original
-   --  tree, so that they appear automatically in every instantiation.
-   --  A critical invariant in this approach is that if an id in the generic
-   --  resolves to a local entity, the corresponding id in the instance
-   --  will resolve to the homologous entity in the instance, even though
-   --  the enclosing context for resolution is different, as long as the
-   --  global references have been captured as described here.
+   --  entities that are defined outside of the generic in the analyzed tree
+   --  for the template. These references are copied into the original tree,
+   --  so that they appear automatically in every instantiation. A critical
+   --  invariant in this approach is that if an id in the generic resolves to
+   --  a local entity, the corresponding id in the instance will resolve to
+   --  the homologous entity in the instance, even though the enclosing context
+   --  for resolution is different, as long as the global references have been
+   --  captured as described here.
 
    --  Because instantiations can be nested, the environment of the instance,
    --  involving the actuals and other data-structures, must be saved and
@@ -153,7 +157,8 @@ package Sem_Ch12 is
    --  structures for the management of private/full views.
 
    procedure Save_Global_References_In_Aspects (N : Node_Id);
-   --  Save all global references in the aspect specifications of node N
+   --  Save all global references found within the expressions of all aspects
+   --  that appear on node N.
 
    procedure Set_Copied_Sloc_For_Inlined_Body (N : Node_Id; E : Entity_Id);
    --  This procedure is used when a subprogram body is inlined. This process
@@ -166,6 +171,32 @@ package Sem_Ch12 is
    --  subprogram in question. The resulting Sloc adjustment factor is
    --  saved as part of the internal state of the Sem_Ch12 package for use
    --  in subsequent calls to copy nodes.
+
+   procedure Set_Copied_Sloc_For_Inherited_Pragma
+     (N : Node_Id;
+      E : Entity_Id);
+   --  This procedure is used when a class-wide pre- or postcondition is
+   --  inherited. This process shares the same circuitry as the creation of
+   --  an instantiated copy of a generic template. The call to this procedure
+   --  establishes a new source file entry representing the inherited pragma
+   --  as an instantiation, marked as an inherited pragma (so that errout can
+   --  distinguish cases for generating error messages, otherwise the treatment
+   --  is identical). In this call, N is the subprogram declaration from
+   --  which the pragma is inherited and E is the defining identifier of
+   --  the overriding subprogram (when the subprogram is redefined) or the
+   --  defining identifier of the extension type (when the subprogram is
+   --  inherited). The resulting Sloc adjustment factor is saved as part of the
+   --  internal state of the Sem_Ch12 package for use in subsequent calls to
+   --  copy nodes.
+
+   procedure Adjust_Inherited_Pragma_Sloc (N : Node_Id);
+   --  This procedure is used when a class-wide pre- or postcondition
+   --  is inherited. It is called on each node of the pragma expression
+   --  to adjust its sloc. These call should be preceded by a call to
+   --  Set_Copied_Sloc_For_Inherited_Pragma that sets the required sloc
+   --  adjustment. This is done directly, instead of using Copy_Generic_Node
+   --  to copy nodes and adjust slocs, as Copy_Generic_Node expects a specific
+   --  structure to be in place, which is not the case for inherited pragmas.
 
    procedure Save_Env
      (Gen_Unit : Entity_Id;

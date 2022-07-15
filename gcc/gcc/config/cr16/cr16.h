@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for CR16.
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2017 Free Software Foundation, Inc.
    Contributed by KPIT Cummins Infosystems Limited.
 
    This file is part of GCC.
@@ -114,7 +114,7 @@ while (0)
      && ((ALIGN) < BITS_PER_WORD))               \
      ? (BITS_PER_WORD) : (ALIGN))
 
-/* In CR16 strings are word-aligne; strcpy from constants will be faster.  */
+/* In CR16 strings are word-aligned; strcpy from constants will be faster.  */
 #define CONSTANT_ALIGNMENT(CONSTANT, ALIGN)                            \
   (((TREE_CODE (CONSTANT) == STRING_CST) && ((ALIGN) < BITS_PER_WORD)) \
      ? (BITS_PER_WORD) : (ALIGN))
@@ -368,7 +368,7 @@ enum reg_class
        && GET_CODE (XEXP ((XEXP (OP, 0)), 1)) == CONST_INT))
 
 /* Stack layout and calling conventions.  */
-#define STACK_GROWS_DOWNWARD
+#define STACK_GROWS_DOWNWARD 1
 
 #define STARTING_FRAME_OFFSET   0
 
@@ -467,7 +467,7 @@ struct cumulative_args
 
 /* It is as good or better to call a constant function address than to
    call an address kept in a register.  */
-#define NO_FUNCTION_CSE
+#define NO_FUNCTION_CSE 1
 
 /* Dividing the output into sections.  */
 

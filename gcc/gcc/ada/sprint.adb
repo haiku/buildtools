@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -624,11 +624,16 @@ package body Sprint is
          for U in Main_Unit .. Last_Unit loop
             Current_Source_File := Source_Index (U);
 
-            --  Dump all units if -gnatdf set, otherwise we dump only
-            --  the source files that are in the extended main source.
+            --  Dump all units if -gnatdf set, otherwise dump only the source
+            --  files that are in the extended main source. Note that, if we
+            --  are generating debug files, generating that of the main unit
+            --  has an effect on the outcome of In_Extended_Main_Source_Unit
+            --  because slocs are rewritten, so we also test for equality of
+            --  Cunit_Entity to work around this effect.
 
             if Debug_Flag_F
               or else In_Extended_Main_Source_Unit (Cunit_Entity (U))
+              or else Cunit_Entity (U) = Cunit_Entity (Main_Unit)
             then
                --  If we are generating debug files, setup to write them
 
@@ -638,6 +643,20 @@ package body Sprint is
                   First_Debug_Sloc := Debug_Sloc;
                   Write_Source_Line (1);
                   Last_Line_Printed := 1;
+
+                  --  If this unit has the same entity as the main unit, for
+                  --  example is the spec of a stand-alone instantiation of
+                  --  a package and the main unit is the body, its debug file
+                  --  will also be the same. Therefore, we need to print again
+                  --  the main unit to have both units in the debug file.
+
+                  if U /= Main_Unit
+                    and then Cunit_Entity (U) = Cunit_Entity (Main_Unit)
+                  then
+                     Sprint_Node (Cunit (Main_Unit));
+                     Write_Eol;
+                  end if;
+
                   Sprint_Node (Cunit (U));
                   Write_Source_Lines (Last_Source_Line (Current_Source_File));
                   Write_Eol;
@@ -1309,6 +1328,15 @@ package body Sprint is
                Sprint_Node (Expression (Node));
             end if;
 
+         when N_Iterated_Component_Association =>
+            Set_Debug_Sloc;
+            Write_Str (" for ");
+            Write_Id (Defining_Identifier (Node));
+            Write_Str (" in ");
+            Sprint_Bar_List (Discrete_Choices (Node));
+            Write_Str (" => ");
+            Sprint_Node (Expression (Node));
+
          when N_Component_Clause =>
             Write_Indent;
             Sprint_Node (Component_Name (Node));
@@ -1746,6 +1774,13 @@ package body Sprint is
             else
                Write_Indent_Str (";");
             end if;
+
+         when N_Delta_Aggregate =>
+            Write_Str_With_Col_Check_Sloc ("(");
+            Sprint_Node (Expression (Node));
+            Write_Str_With_Col_Check (" with delta ");
+            Sprint_Comma_List (Component_Associations (Node));
+            Write_Char (')');
 
          when N_Extension_Aggregate =>
             Write_Str_With_Col_Check_Sloc ("(");
@@ -2366,7 +2401,9 @@ package body Sprint is
                      end if;
                   end;
 
-                  if Present (Expression (Node)) then
+                  if Present (Expression (Node))
+                    and then Expression (Node) /= Error
+                  then
                      Write_Str (" := ");
                      Sprint_Node (Expression (Node));
                   end if;
@@ -2803,7 +2840,7 @@ package body Sprint is
 
          when N_Pragma =>
             Write_Indent_Str_Sloc ("pragma ");
-            Write_Name_With_Col_Check (Pragma_Name (Node));
+            Write_Name_With_Col_Check (Pragma_Name_Unmapped (Node));
 
             if Present (Pragma_Argument_Associations (Node)) then
                Sprint_Opt_Paren_Comma_List
@@ -3256,6 +3293,9 @@ package body Sprint is
             Write_Char (')');
             Extra_Blank_Line;
             Sprint_Node (Proper_Body (Node));
+
+         when N_Target_Name =>
+            Write_Char ('@');
 
          when N_Task_Body =>
             Write_Indent_Str_Sloc ("task body ");
@@ -3946,7 +3986,9 @@ package body Sprint is
 
             Write_Str (");");
 
-         when E_Signed_Integer_Subtype | E_Enumeration_Subtype =>
+         when E_Enumeration_Subtype
+            | E_Signed_Integer_Subtype
+         =>
             Write_Str_With_Col_Check ("subtype ");
             Write_Id (E);
             Write_Str (" is ");
@@ -3962,7 +4004,6 @@ package body Sprint is
             Write_Ekind (E);
             Write_Str (">;");
       end case;
-
    end Write_Implicit_Def;
 
    ------------------
@@ -4182,7 +4223,7 @@ package body Sprint is
 
                      Write_Id (Directly_Designated_Type (Typ));
 
-                  --  Array types and string types
+                  --  Array types
 
                   when E_Array_Type =>
                      Write_Header;
@@ -4211,10 +4252,11 @@ package body Sprint is
                      Sprint_Node (X);
                      Set_Sloc (X, Old_Sloc);
 
-                     --  Array subtypes and string subtypes.
-                     --  Preserve Sloc of index subtypes, as above.
+                     --  Array subtypes
 
-                  when E_Array_Subtype | E_String_Subtype =>
+                     --  Preserve Sloc of index subtypes, as above
+
+                  when E_Array_Subtype =>
                      Write_Header (False);
                      Write_Id (Etype (Typ));
                      Write_Str (" (");
@@ -4234,11 +4276,11 @@ package body Sprint is
                   --  Signed integer types, and modular integer subtypes,
                   --  and also enumeration subtypes.
 
-                  when E_Signed_Integer_Type     |
-                       E_Signed_Integer_Subtype  |
-                       E_Modular_Integer_Subtype |
-                       E_Enumeration_Subtype     =>
-
+                  when E_Enumeration_Subtype
+                     | E_Modular_Integer_Subtype
+                     | E_Signed_Integer_Subtype
+                     | E_Signed_Integer_Type
+                  =>
                      Write_Header (Ekind (Typ) = E_Signed_Integer_Type);
 
                      if Ekind (Typ) = E_Signed_Integer_Type then
@@ -4298,9 +4340,9 @@ package body Sprint is
 
                   --  Floating point types and subtypes
 
-                  when E_Floating_Point_Type    |
-                       E_Floating_Point_Subtype =>
-
+                  when E_Floating_Point_Subtype
+                     | E_Floating_Point_Type
+                  =>
                      Write_Header (Ekind (Typ) = E_Floating_Point_Type);
 
                      if Ekind (Typ) = E_Floating_Point_Type then
@@ -4343,7 +4385,9 @@ package body Sprint is
 
                   --  Record subtypes
 
-                  when E_Record_Subtype | E_Record_Subtype_With_Private =>
+                  when E_Record_Subtype
+                     | E_Record_Subtype_With_Private
+                  =>
                      Write_Header (False);
                      Write_Str ("record");
                      Indent_Begin;
@@ -4366,8 +4410,9 @@ package body Sprint is
 
                   --  Class-Wide types
 
-                  when E_Class_Wide_Type    |
-                       E_Class_Wide_Subtype =>
+                  when E_Class_Wide_Subtype
+                     | E_Class_Wide_Type
+                  =>
                      Write_Header (Ekind (Typ) = E_Class_Wide_Type);
                      Write_Name_With_Col_Check (Chars (Etype (Typ)));
                      Write_Str ("'Class");
@@ -4436,7 +4481,6 @@ package body Sprint is
                   when others =>
                      Write_Header (True);
                      Write_Str ("???");
-
                end case;
             end if;
 

@@ -1,18 +1,60 @@
-2016-06-03  Release Manager
+2018-01-25  Release Manager
 
-	* GCC 5.4.0 released.
+	* GCC 7.3.0 released.
 
-2015-12-04  Release Manager
+2017-08-14  Release Manager
 
-	* GCC 5.3.0 released.
+	* GCC 7.2.0 released.
 
-2015-07-16  Release Manager
+2017-05-02  Release Manager
 
-	* GCC 5.2.0 released.
+	* GCC 7.1.0 released.
 
-2015-04-22  Release Manager
+2017-01-01  Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 5.1.0 released.
+	Update copyright years.
+
+2016-01-04  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2015-11-13  Jason Merrill  <jason@redhat.com>
+
+	* config-lang.in (gtfiles): Add cp-gimplify.c.
+
+2015-11-11  Andrew MacLeod  <amacleod@redhat.com>
+
+	* objcp-decl.c: Remove unused header files.
+	* objcp-lang.c: Likewise.
+	
+2015-10-29  Andrew MacLeod  <amacleod@redhat.com>
+
+	* objcp-decl.c: Reorder #include's and remove duplicates.
+	* objcp-lang.c: Likewise.
+
+2015-07-07  Andrew MacLeod  <amacleod@redhat.com>
+
+	* objcp-decl.c: Adjust includes.
+	* objcp-lang.c: Likewise.
+
+2015-06-17  Andrew MacLeod  <amacleod@redhat.com>
+
+	* objcp-decl.c: Do not include input.h, line-map.h or is-a.h.
+	* objcp-lang.c: Likewise.
+	
+2015-06-08  Andrew MacLeod  <amacleod@redhat.com>
+
+	* objcp-decl.c : Adjust include files.
+	* objcp-lang.c : Likewise.
+
+2015-06-04  Andrew MacLeod  <amacleod@redhat.com>
+
+	* objcp-decl.c: Adjust includes for restructured coretypes.h.
+	* objcp-lang.c: Likewise.
+
+2015-04-27  Jim Wilson  <jim.wilson@linaro.org>
+
+	* Make-lang.in (obj-c++.mostlyclean): Remove cc1objplus.
 
 2015-01-09  Michael Collison  <michael.collison@linaro.org>
 
@@ -174,7 +216,7 @@
 2010-10-14  Iain Sandoe  <iains@gcc.gnu.org>
 
 	merge from FSF apple 'trunk' branch. 
-	2006 Fariborz Jahanian <fjahanian@apple.com>
+	2006 Fariborz Jahanian  <fjahanian@apple.com>
 	
 	Radars 4436866, 4505126, 4506903, 4517826
 	* objcp-lang.c (objcxx_init_ts): Update for property_decl.
@@ -195,7 +237,7 @@
 	(cc1objplus-checksum): Change to run checksum over object files
         and options only.
 
-2010-10-04  Andi Kleen <ak@linux.intel.com>
+2010-10-04  Andi Kleen  <ak@linux.intel.com>
 
 	* Make-lang.in (cc1objplus-dummy, cc1objplus): Add + to build rule.
 
@@ -400,7 +442,7 @@
 	* Make-lang.in (objcp/objcp-decl.o): Add dependency on
 	$(TARGET_H).
 
-2006-02-20 Rafael Ávila de Espíndola <rafael.espindola@gmail.com>
+2006-02-20  Rafael Ávila de Espíndola  <rafael.espindola@gmail.com>
 
 	* Make-lang.in (OBJ-C++): Remove
 	(.PHONY): Remove Obj-c++ and obj-C++. Add obj-c++
@@ -490,7 +532,7 @@
 	* objcp-lang.c: Likewise.
 
 
-Copyright (C) 2005-2015 Free Software Foundation, Inc.
+Copyright (C) 2005-2017 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

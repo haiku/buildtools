@@ -25,6 +25,7 @@ enum ReportType {
   ReportTypeThreadLeak,
   ReportTypeMutexDestroyLocked,
   ReportTypeMutexDoubleLock,
+  ReportTypeMutexInvalidAccess,
   ReportTypeMutexBadUnlock,
   ReportTypeMutexBadReadLock,
   ReportTypeMutexBadReadUnlock,
@@ -34,10 +35,9 @@ enum ReportType {
 };
 
 struct ReportStack {
-  ReportStack *next;
-  AddressInfo info;
+  SymbolizedStack *frames;
   bool suppressable;
-  static ReportStack *New(uptr addr);
+  static ReportStack *New();
 
  private:
   ReportStack();
@@ -85,7 +85,7 @@ struct ReportLocation {
 
 struct ReportThread {
   int id;
-  uptr pid;
+  uptr os_id;
   bool running;
   char *name;
   int parent_tid;

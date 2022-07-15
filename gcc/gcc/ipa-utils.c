@@ -1,5 +1,5 @@
 /* Utilities for ipa analysis.
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright (C) 2005-2017 Free Software Foundation, Inc.
    Contributed by Kenneth Zadeck <zadeck@naturalbridge.com>
 
 This file is part of GCC.
@@ -21,48 +21,18 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
 #include "gimple.h"
-#include "tree-inline.h"
-#include "dumpfile.h"
-#include "langhooks.h"
-#include "splay-tree.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
-#include "ipa-utils.h"
-#include "bitmap.h"
-#include "ipa-reference.h"
-#include "flags.h"
-#include "diagnostic.h"
-#include "langhooks.h"
-#include "lto-streamer.h"
+#include "predict.h"
 #include "alloc-pool.h"
+#include "cgraph.h"
+#include "lto-streamer.h"
+#include "dumpfile.h"
+#include "splay-tree.h"
+#include "ipa-utils.h"
 #include "symbol-summary.h"
+#include "tree-vrp.h"
 #include "ipa-prop.h"
 #include "ipa-inline.h"
 
@@ -88,8 +58,8 @@ ipa_print_order (FILE* out,
 
 struct searchc_env {
   struct cgraph_node **stack;
-  int stack_size;
   struct cgraph_node **result;
+  int stack_size;
   int order_pos;
   splay_tree nodes_marked_new;
   bool reduce;
@@ -669,6 +639,20 @@ recursive_call_p (tree func, tree dest)
 {
   struct cgraph_node *dest_node = cgraph_node::get_create (dest);
   struct cgraph_node *cnode = cgraph_node::get_create (func);
+  ipa_ref *alias;
+  enum availability avail;
 
-  return dest_node->semantically_equivalent_p (cnode);
+  gcc_assert (!cnode->alias);
+  if (cnode != dest_node->ultimate_alias_target (&avail))
+    return false;
+  if (avail >= AVAIL_AVAILABLE)
+    return true;
+  if (!dest_node->semantically_equivalent_p (cnode))
+    return false;
+  /* If there is only one way to call the fuction or we know all of them
+     are semantically equivalent, we still can consider call recursive.  */
+  FOR_EACH_ALIAS (cnode, alias)
+    if (!dest_node->semantically_equivalent_p (alias->referring))
+      return false;
+  return true;
 }

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2013, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -338,10 +338,10 @@ package body Ch9 is
          Decl_Sloc := Token_Ptr;
 
          if Token = Tok_Pragma then
-            Append (P_Pragma, Items);
+            P_Pragmas_Opt (Items);
 
-         --  Ada 2005 (AI-397): Reserved words NOT and OVERRIDING
-         --  may begin an entry declaration.
+         --  Ada 2005 (AI-397): Reserved words NOT and OVERRIDING may begin an
+         --  entry declaration.
 
          elsif Token = Tok_Entry
            or else Token = Tok_Not
@@ -350,8 +350,9 @@ package body Ch9 is
             Append (P_Entry_Declaration, Items);
 
          elsif Token = Tok_For then
-            --  Representation clause in task declaration. The only rep
-            --  clause which is legal in a protected is an address clause,
+
+            --  Representation clause in task declaration. The only rep clause
+            --  which is legal in a protected declaration is an address clause,
             --  so that is what we try to scan out.
 
             Item_Node := P_Representation_Clause;
@@ -617,8 +618,10 @@ package body Ch9 is
    --  Error recovery: cannot raise Error_Resync
 
    function P_Protected_Definition return Node_Id is
-      Def_Node  : Node_Id;
-      Item_Node : Node_Id;
+      Def_Node   : Node_Id;
+      Item_Node  : Node_Id;
+      Priv_Decls : List_Id;
+      Vis_Decls  : List_Id;
 
    begin
       Def_Node := New_Node (N_Protected_Definition, Token_Ptr);
@@ -631,33 +634,63 @@ package body Ch9 is
 
       --  Loop to scan visible declarations (protected operation declarations)
 
-      Set_Visible_Declarations (Def_Node, New_List);
+      Vis_Decls := New_List;
+      Set_Visible_Declarations (Def_Node, Vis_Decls);
+
+      --  Flag and discard all pragmas which cannot appear in the protected
+      --  definition. Note that certain pragmas are still allowed as long as
+      --  they apply to entries, entry families, or protected subprograms.
+
+      P_Pragmas_Opt (Vis_Decls);
 
       loop
          Item_Node := P_Protected_Operation_Declaration_Opt;
+
+         if Present (Item_Node) then
+            Append (Item_Node, Vis_Decls);
+         end if;
+
+         P_Pragmas_Opt (Vis_Decls);
+
          exit when No (Item_Node);
-         Append (Item_Node, Visible_Declarations (Def_Node));
       end loop;
 
       --  Deal with PRIVATE part (including graceful handling of multiple
       --  PRIVATE parts).
 
       Private_Loop : while Token = Tok_Private loop
-         if No (Private_Declarations (Def_Node)) then
-            Set_Private_Declarations (Def_Node, New_List);
-         else
+         Priv_Decls := Private_Declarations (Def_Node);
+
+         if Present (Priv_Decls) then
             Error_Msg_SC ("duplicate private part");
+         else
+            Priv_Decls := New_List;
+            Set_Private_Declarations (Def_Node, Priv_Decls);
          end if;
 
          Scan; -- past PRIVATE
 
+         --  Flag and discard all pragmas which cannot appear in the protected
+         --  definition. Note that certain pragmas are still allowed as long as
+         --  they apply to entries, entry families, or protected subprograms.
+
+         P_Pragmas_Opt (Priv_Decls);
+
          Declaration_Loop : loop
             if Token = Tok_Identifier then
-               P_Component_Items (Private_Declarations (Def_Node));
+               P_Component_Items (Priv_Decls);
+               P_Pragmas_Opt (Priv_Decls);
+
             else
                Item_Node := P_Protected_Operation_Declaration_Opt;
+
+               if Present (Item_Node) then
+                  Append (Item_Node, Priv_Decls);
+               end if;
+
+               P_Pragmas_Opt (Priv_Decls);
+
                exit Declaration_Loop when No (Item_Node);
-               Append (Item_Node, Private_Declarations (Def_Node));
             end if;
          end loop Declaration_Loop;
       end loop Private_Loop;
@@ -1089,7 +1122,6 @@ package body Ch9 is
          Resync_Past_Semicolon;
          Pop_Scope_Stack; -- discard unused entry
          return Error;
-
    end P_Accept_Statement;
 
    ------------------------
@@ -1098,12 +1130,45 @@ package body Ch9 is
 
    --  Parsed by P_Expression (4.4)
 
+   --------------------------
+   -- 9.5.2  Entry Barrier --
+   --------------------------
+
+   --  ENTRY_BARRIER ::= when CONDITION
+
+   --  Error_Recovery: cannot raise Error_Resync
+
+   function P_Entry_Barrier return Node_Id is
+      Bnode : Node_Id;
+
+   begin
+      if Token = Tok_When then
+         Scan; -- past WHEN;
+         Bnode := P_Expression_No_Right_Paren;
+
+         if Token = Tok_Colon_Equal then
+            Error_Msg_SC -- CODEFIX
+              ("|"":="" should be ""=""");
+            Scan;
+            Bnode := P_Expression_No_Right_Paren;
+         end if;
+
+      else
+         T_When; -- to give error message
+         Bnode := Error;
+      end if;
+
+      return Bnode;
+   end P_Entry_Barrier;
+
    -----------------------
    -- 9.5.2  Entry Body --
    -----------------------
 
    --  ENTRY_BODY ::=
-   --    entry DEFINING_IDENTIFIER ENTRY_BODY_FORMAL_PART ENTRY_BARRIER is
+   --    entry DEFINING_IDENTIFIER ENTRY_BODY_FORMAL_PART
+   --      [ASPECT_SPECIFICATIONS] ENTRY_BARRIER
+   --    is
    --      DECLARATIVE_PART
    --    begin
    --      HANDLED_SEQUENCE_OF_STATEMENTS
@@ -1114,6 +1179,7 @@ package body Ch9 is
    --  Error_Recovery: cannot raise Error_Resync
 
    function P_Entry_Body return Node_Id is
+      Dummy_Node       : Node_Id;
       Entry_Node       : Node_Id;
       Formal_Part_Node : Node_Id;
       Name_Node        : Node_Id;
@@ -1135,8 +1201,34 @@ package body Ch9 is
       Formal_Part_Node := P_Entry_Body_Formal_Part;
       Set_Entry_Body_Formal_Part (Entry_Node, Formal_Part_Node);
 
+      --  Ada 2012 (AI12-0169): Aspect specifications may appear on an entry
+      --  body immediately after the formal part. Do not parse the aspect
+      --  specifications directly because the "when" of the entry barrier may
+      --  be interpreted as a misused "with".
+
+      if Token = Tok_With then
+         P_Aspect_Specifications (Entry_Node, Semicolon => False);
+      end if;
+
       Set_Condition (Formal_Part_Node, P_Entry_Barrier);
+
+      --  Detect an illegal placement of aspect specifications following the
+      --  entry barrier.
+
+      --    entry E ... when Barrier with Aspect is
+
+      if Token = Tok_With then
+         Error_Msg_SC ("aspect specifications must come before entry barrier");
+
+         --  Consume the illegal aspects to allow for parsing to continue
+
+         Dummy_Node := New_Node (N_Entry_Body, Sloc (Entry_Node));
+         P_Aspect_Specifications (Dummy_Node, Semicolon => False);
+      end if;
+
+      TF_Is;
       Parse_Decls_Begin_End (Entry_Node);
+
       return Entry_Node;
    end P_Entry_Body;
 
@@ -1184,38 +1276,6 @@ package body Ch9 is
       Set_Parameter_Specifications (Fpart_Node, P_Parameter_Profile);
       return Fpart_Node;
    end P_Entry_Body_Formal_Part;
-
-   --------------------------
-   -- 9.5.2  Entry Barrier --
-   --------------------------
-
-   --  ENTRY_BARRIER ::= when CONDITION
-
-   --  Error_Recovery: cannot raise Error_Resync
-
-   function P_Entry_Barrier return Node_Id is
-      Bnode : Node_Id;
-
-   begin
-      if Token = Tok_When then
-         Scan; -- past WHEN;
-         Bnode := P_Expression_No_Right_Paren;
-
-         if Token = Tok_Colon_Equal then
-            Error_Msg_SC -- CODEFIX
-              ("|"":="" should be ""=""");
-            Scan;
-            Bnode := P_Expression_No_Right_Paren;
-         end if;
-
-      else
-         T_When; -- to give error message
-         Bnode := Error;
-      end if;
-
-      TF_Is;
-      return Bnode;
-   end P_Entry_Barrier;
 
    --------------------------------------
    -- 9.5.2  Entry Index Specification --

@@ -1,5 +1,6 @@
 /* { dg-do compile } */
 /* { dg-options "-O2 -fdump-ipa-icf-details"  } */
+/* { dg-require-effective-target ptr32plus } */
 
 typedef int size_t;
 
@@ -62,4 +63,3 @@ int main()
 
 /* { dg-final { scan-ipa-dump "Equal symbols: 0" "icf"  } } */
 /* { dg-final { scan-ipa-dump "PHI results are different" "icf"  } } */
-/* { dg-final { cleanup-ipa-dump "icf" } } */

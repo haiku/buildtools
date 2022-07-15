@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2003-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 2003-2015, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -686,7 +686,7 @@ package body Clean is
                         Delete_File := False;
 
                         if (Project.Library_Kind = Static
-                             and then Name (1 .. Last) =  Archive_Name)
+                             and then Name (1 .. Last) = Archive_Name)
                           or else
                             ((Project.Library_Kind = Dynamic
                                 or else
@@ -1387,8 +1387,8 @@ package body Clean is
 
          if Project_File_Name /= null then
             Put_Line
-              ("warning: gnatclean -P is obsolete and will not be available "
-               & "in the next release; use gprclean instead.");
+              ("warning: gnatclean -P is obsolete and will not be available" &
+               " in the next release; use gprclean instead.");
          end if;
 
          --  A project file was specified by a -P switch
@@ -1619,8 +1619,8 @@ package body Clean is
 
    procedure Parse_Cmd_Line is
       Last         : constant Natural := Argument_Count;
-      Source_Index : Int := 0;
       Index        : Positive;
+      Source_Index : Int := 0;
 
       procedure Check_Version_And_Help is new Check_Version_And_Help_G (Usage);
 
@@ -1628,6 +1628,72 @@ package body Clean is
       --  First, check for --version and --help
 
       Check_Version_And_Help ("GNATCLEAN", "2003");
+
+      --  First, check for switch -P and, if found and gprclean is available,
+      --  silently invoke gprclean, with switch --target if not on a native
+      --  platform.
+
+      declare
+         Arg_Len       : Positive      := Argument_Count;
+         Call_Gprclean : Boolean       := False;
+         Gprclean      : String_Access := null;
+         Pos           : Natural       := 0;
+         Success       : Boolean;
+         Target        : String_Access := null;
+
+      begin
+         Find_Program_Name;
+
+         if Name_Len >= 9
+           and then Name_Buffer (Name_Len - 8 .. Name_Len) = "gnatclean"
+         then
+            if Name_Len > 9 then
+               Target  := new String'(Name_Buffer (1 .. Name_Len - 10));
+               Arg_Len := Arg_Len + 1;
+            end if;
+
+            for J in 1 .. Argument_Count loop
+               declare
+                  Arg : constant String := Argument (J);
+               begin
+                  if Arg'Length >= 2
+                    and then Arg (Arg'First .. Arg'First + 1) = "-P"
+                  then
+                     Call_Gprclean := True;
+                     exit;
+                  end if;
+               end;
+            end loop;
+
+            if Call_Gprclean then
+               Gprclean := Locate_Exec_On_Path (Exec_Name => "gprclean");
+
+               if Gprclean /= null then
+                  declare
+                     Args : Argument_List (1 .. Arg_Len);
+                  begin
+                     if Target /= null then
+                        Args (1) := new String'("--target=" & Target.all);
+                        Pos := 1;
+                     end if;
+
+                     for J in 1 .. Argument_Count loop
+                        Pos := Pos + 1;
+                        Args (Pos) := new String'(Argument (J));
+                     end loop;
+
+                     Spawn (Gprclean.all, Args, Success);
+
+                     Free (Gprclean);
+
+                     if Success then
+                        Exit_Program (E_Success);
+                     end if;
+                  end;
+               end if;
+            end if;
+         end if;
+      end;
 
       Index := 1;
       while Index <= Last loop
@@ -1687,10 +1753,10 @@ package body Clean is
                            Bad_Argument;
                         end if;
 
-                     when 'c'    =>
+                     when 'c' =>
                         Compile_Only := True;
 
-                     when 'D'    =>
+                     when 'D' =>
                         if Object_Directory_Path /= null then
                            Fail ("duplicate -D switch");
 

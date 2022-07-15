@@ -2,7 +2,7 @@
 /* { dg-do assemble { target { powerpc64le-*-* } } } */
 /* { dg-options "-mcpu=powerpc64le" } */
 
-/* Verify that -mcpu=powerpc64le passes -mpower8/-mpwr8 to the assembler.  */
+/* Verify that -mcpu=powerpc64le passes -mpower8 to the assembler.  */
 
 long
 bar (unsigned char *ptr, unsigned char val)

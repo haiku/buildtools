@@ -1,18 +1,37 @@
-2016-06-03  Release Manager
+2018-01-25  Release Manager
 
-	* GCC 5.4.0 released.
+	* GCC 7.3.0 released.
 
-2015-12-04  Release Manager
+2017-08-14  Release Manager
 
-	* GCC 5.3.0 released.
+	* GCC 7.2.0 released.
 
-2015-07-16  Release Manager
+2017-05-02  Release Manager
 
-	* GCC 5.2.0 released.
+	* GCC 7.1.0 released.
 
-2015-04-22  Release Manager
+2016-05-16  Eric Botcazou  <ebotcazou@adacore.com>
 
-	* GCC 5.1.0 released.
+	* configure.ac: Add ACX_NONCANONICAL_HOST.
+	* configure: Regenerate.
+	* Makefile.in: Replace host_alias with host_noncanonical.
+	(gnattools-cross): Do not rename the tools.
+
+2016-04-04  Segher Boessenkool  <segher@kernel.crashing.org>
+
+	PR bootstrap/70173
+	* Makefile.in (distclean): Also delete config.cache .
+
+2015-12-06  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/50048
+	* Makefile.in (ftop_srcdir): New variable.
+	(INCLUDES_FOR_SUBDIR): Use -iquote and $(ftop_srcdir).
+
+2015-06-08  John Marino  <gnugcc@marino.st>
+
+	* configure.ac (*-*-dragonfly*): New configuration.
+	* configure: Regenerate.
 
 2014-02-23  Eric Botcazou  <ebotcazou@adacore.com>
 

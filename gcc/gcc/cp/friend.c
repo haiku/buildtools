@@ -1,5 +1,5 @@
 /* Help friends in C++.
-   Copyright (C) 1997-2015 Free Software Foundation, Inc.
+   Copyright (C) 1997-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,21 +20,49 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
 #include "cp-tree.h"
-#include "flags.h"
 
 /* Friend data structures are described in cp-tree.h.  */
+
+
+/* The GLOBAL_FRIEND scope (functions, classes, or templates) is
+   regarded as a friend of every class.  This is only used by libcc1,
+   to enable GDB's code snippets to access private members without
+   disabling access control in general, which could cause different
+   template overload resolution results when accessibility matters
+   (e.g. tests for an accessible member).  */
+
+static tree global_friend;
+
+/* Set the GLOBAL_FRIEND for this compilation session.  It might be
+   set multiple times, but always to the same scope.  */
+
+void
+set_global_friend (tree scope)
+{
+  gcc_checking_assert (scope != NULL_TREE);
+  gcc_assert (!global_friend || global_friend == scope);
+  global_friend = scope;
+}
+
+/* Return TRUE if SCOPE is the global friend.  */
+
+bool
+is_global_friend (tree scope)
+{
+  gcc_checking_assert (scope != NULL_TREE);
+
+  if (global_friend == scope)
+    return true;
+
+  if (!global_friend)
+    return false;
+
+  if (is_specialization_of_friend (global_friend, scope))
+    return true;
+
+  return false;
+}
 
 /* Returns nonzero if SUPPLICANT is a friend of TYPE.  */
 
@@ -47,6 +75,9 @@ is_friend (tree type, tree supplicant)
 
   if (supplicant == NULL_TREE || type == NULL_TREE)
     return 0;
+
+  if (is_global_friend (supplicant))
+    return 1;
 
   declp = DECL_P (supplicant);
 
@@ -164,11 +195,9 @@ add_friend (tree type, tree decl, bool complain)
 		}
 	    }
 
-	  maybe_add_class_template_decl_list (type, decl, /*friend_p=*/1);
-
 	  TREE_VALUE (list) = tree_cons (NULL_TREE, decl,
 					 TREE_VALUE (list));
-	  return;
+	  break;
 	}
       list = TREE_CHAIN (list);
     }
@@ -180,9 +209,10 @@ add_friend (tree type, tree decl, bool complain)
 
   maybe_add_class_template_decl_list (type, decl, /*friend_p=*/1);
 
-  DECL_FRIENDLIST (typedecl)
-    = tree_cons (DECL_NAME (decl), build_tree_list (NULL_TREE, decl),
-		 DECL_FRIENDLIST (typedecl));
+  if (!list)
+    DECL_FRIENDLIST (typedecl)
+      = tree_cons (DECL_NAME (decl), build_tree_list (NULL_TREE, decl),
+		   DECL_FRIENDLIST (typedecl));
   if (!uses_template_parms (type))
     DECL_BEFRIENDING_CLASSES (decl)
       = tree_cons (NULL_TREE, type,
@@ -268,6 +298,18 @@ make_friend_class (tree type, tree friend_type, bool complain)
 		 friend_type);
 	  return;
 	}
+      if (TYPE_TEMPLATE_INFO (friend_type)
+	  && !PRIMARY_TEMPLATE_P (TYPE_TI_TEMPLATE (friend_type)))
+	{
+	  error ("%qT is not a template", friend_type);
+	  inform (location_of (friend_type), "previous declaration here");
+	  if (TYPE_CLASS_SCOPE_P (friend_type)
+	      && CLASSTYPE_TEMPLATE_INFO (TYPE_CONTEXT (friend_type))
+	      && currently_open_class (TYPE_CONTEXT (friend_type)))
+	    inform (input_location, "perhaps you need explicit template "
+		    "arguments in your nested-name-specifier");
+	  return;
+	}
     }
   else if (same_type_p (type, friend_type))
     {
@@ -337,7 +379,8 @@ make_friend_class (tree type, tree friend_type, bool complain)
 		{
 		  error ("%qT is not a member class template of %qT",
 			 name, ctype);
-		  inform (input_location, "%q+D declared here", decl);
+		  inform (DECL_SOURCE_LOCATION (decl),
+			  "%qD declared here", decl);
 		  return;
 		}
 	      if (!template_member_p && (TREE_CODE (decl) != TYPE_DECL
@@ -345,7 +388,8 @@ make_friend_class (tree type, tree friend_type, bool complain)
 		{
 		  error ("%qT is not a nested class of %qT",
 			 name, ctype);
-		  inform (input_location, "%q+D declared here", decl);
+		  inform (DECL_SOURCE_LOCATION (decl),
+			  "%qD declared here", decl);
 		  return;
 		}
 

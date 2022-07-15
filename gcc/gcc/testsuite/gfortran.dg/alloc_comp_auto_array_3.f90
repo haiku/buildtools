@@ -12,7 +12,7 @@
   block
     type(foo_t) :: foo
     allocate(foo%bigarr)
-    call foo_1d (1,[foo]) ! was lost
+    call foo_1d (1,[foo]) ! wasy lost
     call foo_1d (1,bar_1d()) ! Check that this is OK
   end block
 contains
@@ -25,6 +25,6 @@ contains
     allocate (array(1)%bigarr)
   end function
 end
-! { dg-final { scan-tree-dump-times "builtin_malloc" 4 "original" } }
+! { dg-final { scan-tree-dump-times "builtin_malloc" 3 "original" } }
 ! { dg-final { scan-tree-dump-times "builtin_free" 4 "original" } }
 ! { dg-final { scan-tree-dump-times "while \\(1\\)" 4 "original" } }

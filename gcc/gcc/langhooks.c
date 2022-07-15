@@ -1,5 +1,5 @@
 /* Default language-specific hooks.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
    Contributed by Alexandre Oliva  <aoliva@redhat.com>
 
 This file is part of GCC.
@@ -21,41 +21,20 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "intl.h"
-#include "tm.h"
-#include "toplev.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "stringpool.h"
-#include "attribs.h"
-#include "tree-inline.h"
-#include "gimplify.h"
-#include "rtl.h"
-#include "insn-config.h"
-#include "flags.h"
-#include "langhooks.h"
 #include "target.h"
-#include "langhooks-def.h"
-#include "diagnostic.h"
-#include "tree-diagnostic.h"
-#include "hash-map.h"
-#include "is-a.h"
-#include "plugin-api.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
+#include "rtl.h"
+#include "tree.h"
 #include "timevar.h"
+#include "stringpool.h"
+#include "diagnostic.h"
+#include "intl.h"
+#include "toplev.h"
+#include "attribs.h"
+#include "gimplify.h"
+#include "langhooks.h"
+#include "tree-diagnostic.h"
 #include "output.h"
+#include "timevar.h"
 
 /* Do nothing; in many cases the default hook.  */
 
@@ -98,14 +77,6 @@ lhd_do_nothing_f (struct function * ARG_UNUSED (f))
 /* Do nothing (return NULL_TREE).  */
 
 tree
-lhd_return_null_tree_v (void)
-{
-  return NULL_TREE;
-}
-
-/* Do nothing (return NULL_TREE).  */
-
-tree
 lhd_return_null_tree (tree ARG_UNUSED (t))
 {
   return NULL_TREE;
@@ -139,17 +110,17 @@ lhd_print_tree_nothing (FILE * ARG_UNUSED (file),
 {
 }
 
-/* Called from check_global_declarations.  */
+/* Called from check_global_declaration.  */
 
 bool
 lhd_warn_unused_global_decl (const_tree decl)
 {
-  /* This is what used to exist in check_global_declarations.  Probably
+  /* This is what used to exist in check_global_declaration.  Probably
      not many of these actually apply to non-C languages.  */
 
   if (TREE_CODE (decl) == FUNCTION_DECL && DECL_DECLARED_INLINE_P (decl))
     return false;
-  if (TREE_CODE (decl) == VAR_DECL && TREE_READONLY (decl))
+  if (VAR_P (decl) && TREE_READONLY (decl))
     return false;
   if (DECL_IN_SYSTEM_HEADER (decl))
     return false;
@@ -173,7 +144,7 @@ lhd_set_decl_assembler_name (tree decl)
      VAR_DECLs for variables with static storage duration need a real
      DECL_ASSEMBLER_NAME.  */
   gcc_assert (TREE_CODE (decl) == FUNCTION_DECL
-	      || (TREE_CODE (decl) == VAR_DECL
+	      || (VAR_P (decl)
 		  && (TREE_STATIC (decl)
 		      || DECL_EXTERNAL (decl)
 		      || TREE_PUBLIC (decl))));
@@ -220,7 +191,8 @@ lhd_register_builtin_type (tree ARG_UNUSED (type),
 
 /* Invalid use of an incomplete type.  */
 void
-lhd_incomplete_type_error (const_tree ARG_UNUSED (value), const_tree type)
+lhd_incomplete_type_error (location_t ARG_UNUSED (loc),
+			   const_tree ARG_UNUSED (value), const_tree type)
 {
   gcc_assert (TREE_CODE (type) == ERROR_MARK);
   return;
@@ -311,14 +283,17 @@ lhd_decl_ok_for_sibcall (const_tree decl ATTRIBUTE_UNUSED)
   return true;
 }
 
-/* lang_hooks.decls.final_write_globals: perform final processing on
-   global variables.  */
+/* Generic global declaration processing.  This is meant to be called
+   by the front-ends at the end of parsing.  C/C++ do their own thing,
+   but other front-ends may call this.  */
+
 void
-write_global_declarations (void)
+global_decl_processing (void)
 {
   tree globals, decl, *vec;
   int len, i;
 
+  timevar_stop (TV_PHASE_PARSING);
   timevar_start (TV_PHASE_DEFERRED);
   /* Really define vars that have had only a tentative definition.
      Really output inline functions that must actually be callable
@@ -335,20 +310,9 @@ write_global_declarations (void)
     vec[len - i - 1] = decl;
 
   wrapup_global_declarations (vec, len);
-  check_global_declarations (vec, len);
   timevar_stop (TV_PHASE_DEFERRED);
 
-  timevar_start (TV_PHASE_OPT_GEN);
-  /* This lang hook is dual-purposed, and also finalizes the
-     compilation unit.  */
-  symtab->finalize_compilation_unit ();
-  timevar_stop (TV_PHASE_OPT_GEN);
-
-  timevar_start (TV_PHASE_DBGINFO);
-  emit_debug_global_declarations (vec, len);
-  timevar_stop (TV_PHASE_DBGINFO);
-
-  /* Clean up.  */
+  timevar_start (TV_PHASE_PARSING);
   free (vec);
 }
 
@@ -505,6 +469,56 @@ lhd_make_node (enum tree_code code)
   return make_node (code);
 }
 
+/* Default implementation of LANG_HOOKS_TYPE_FOR_SIZE.
+   Return an integer type with PRECISION bits of precision,
+   that is unsigned if UNSIGNEDP is nonzero, otherwise signed.  */
+
+tree
+lhd_type_for_size (unsigned precision, int unsignedp)
+{
+  int i;
+
+  if (precision == TYPE_PRECISION (integer_type_node))
+    return unsignedp ? unsigned_type_node : integer_type_node;
+
+  if (precision == TYPE_PRECISION (signed_char_type_node))
+    return unsignedp ? unsigned_char_type_node : signed_char_type_node;
+
+  if (precision == TYPE_PRECISION (short_integer_type_node))
+    return unsignedp ? short_unsigned_type_node : short_integer_type_node;
+
+  if (precision == TYPE_PRECISION (long_integer_type_node))
+    return unsignedp ? long_unsigned_type_node : long_integer_type_node;
+
+  if (precision == TYPE_PRECISION (long_long_integer_type_node))
+    return unsignedp
+	   ? long_long_unsigned_type_node
+	   : long_long_integer_type_node;
+
+  for (i = 0; i < NUM_INT_N_ENTS; i ++)
+    if (int_n_enabled_p[i]
+	&& precision == int_n_data[i].bitsize)
+      return (unsignedp ? int_n_trees[i].unsigned_type
+	      : int_n_trees[i].signed_type);
+
+  if (precision <= TYPE_PRECISION (intQI_type_node))
+    return unsignedp ? unsigned_intQI_type_node : intQI_type_node;
+
+  if (precision <= TYPE_PRECISION (intHI_type_node))
+    return unsignedp ? unsigned_intHI_type_node : intHI_type_node;
+
+  if (precision <= TYPE_PRECISION (intSI_type_node))
+    return unsignedp ? unsigned_intSI_type_node : intSI_type_node;
+
+  if (precision <= TYPE_PRECISION (intDI_type_node))
+    return unsignedp ? unsigned_intDI_type_node : intDI_type_node;
+
+  if (precision <= TYPE_PRECISION (intTI_type_node))
+    return unsignedp ? unsigned_intTI_type_node : intTI_type_node;
+
+  return NULL_TREE;
+}
+
 HOST_WIDE_INT
 lhd_to_target_charset (HOST_WIDE_INT c)
 {
@@ -541,6 +555,24 @@ lhd_omp_assignment (tree clause ATTRIBUTE_UNUSED, tree dst, tree src)
 void
 lhd_omp_finish_clause (tree, gimple_seq *)
 {
+}
+
+/* Return true if DECL is a scalar variable (for the purpose of
+   implicit firstprivatization).  */
+
+bool
+lhd_omp_scalar_p (tree decl)
+{
+  tree type = TREE_TYPE (decl);
+  if (TREE_CODE (type) == REFERENCE_TYPE)
+    type = TREE_TYPE (type);
+  if (TREE_CODE (type) == COMPLEX_TYPE)
+    type = TREE_TYPE (type);
+  if (INTEGRAL_TYPE_P (type)
+      || SCALAR_FLOAT_TYPE_P (type)
+      || TREE_CODE (type) == POINTER_TYPE)
+    return true;
+  return false;
 }
 
 /* Register language specific type size variables as potentially OpenMP
@@ -589,6 +621,8 @@ add_builtin_function_common (const char *name,
   if (library_name)
     {
       tree libname = get_identifier (library_name);
+
+      libname = targetm.mangle_decl_assembler_name (decl, libname);
       SET_DECL_ASSEMBLER_NAME (decl, libname);
     }
 
@@ -688,7 +722,11 @@ void
 lhd_append_data (const void *data, size_t len, void *)
 {
   if (data)
-    assemble_string ((const char *)data, len);
+    {
+      timevar_push (TV_IPA_LTO_OUTPUT);
+      assemble_string ((const char *)data, len);
+      timevar_pop (TV_IPA_LTO_OUTPUT);
+    }
 }
 
 
@@ -715,6 +753,41 @@ lhd_enum_underlying_base_type (const_tree enum_type)
 					 TYPE_UNSIGNED (enum_type));
 }
 
+/* Default implementation of LANG_HOOKS_GET_SUBSTRING_LOCATION.  */
+
+const char *
+lhd_get_substring_location (const substring_loc &, location_t *)
+{
+  return "unimplemented";
+}
+
+/* Default implementation of LANG_HOOKS_DECL_DWARF_ATTRIBUTE.  Don't add
+   any attributes.  */
+
+int
+lhd_decl_dwarf_attribute (const_tree, int)
+{
+  return -1;
+}
+
+/* Default implementation of LANG_HOOKS_TYPE_DWARF_ATTRIBUTE.  Don't add
+   any attributes.  */
+
+int
+lhd_type_dwarf_attribute (const_tree, int)
+{
+  return -1;
+}
+
+/* Default implementation of LANG_HOOKS_UNIT_SIZE_WITHOUT_REUSABLE_PADDING.
+   Just return TYPE_SIZE_UNIT unadjusted.  */
+
+tree
+lhd_unit_size_without_reusable_padding (tree t)
+{
+  return TYPE_SIZE_UNIT (t);
+}
+
 /* Returns true if the current lang_hooks represents the GNU C frontend.  */
 
 bool
@@ -738,4 +811,13 @@ bool
 lang_GNU_Fortran (void)
 {
   return strncmp (lang_hooks.name, "GNU Fortran", 11) == 0;
+}
+
+/* Returns true if the current lang_hooks represents the GNU Objective-C
+   frontend.  */
+
+bool
+lang_GNU_OBJC (void)
+{
+  return strncmp (lang_hooks.name, "GNU Objective-C", 15) == 0;
 }

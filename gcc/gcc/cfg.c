@@ -1,5 +1,5 @@
 /* Control flow graph manipulation code for GNU compiler.
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -49,35 +49,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "obstack.h"
-#include "ggc.h"
-#include "hash-table.h"
-#include "alloc-pool.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
-#include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "tm.h"
+#include "backend.h"
 #include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfganal.h"
-#include "basic-block.h"
+#include "tree.h"
+#include "cfghooks.h"
 #include "df.h"
+#include "cfganal.h"
 #include "cfgloop.h" /* FIXME: For struct loop.  */
 #include "dumpfile.h"
 
@@ -108,35 +85,35 @@ init_flow (struct function *the_fun)
    without actually removing it from the pred/succ arrays.  */
 
 static void
-free_edge (edge e)
+free_edge (function *fn, edge e)
 {
-  n_edges_for_fn (cfun)--;
+  n_edges_for_fn (fn)--;
   ggc_free (e);
 }
 
 /* Free the memory associated with the edge structures.  */
 
 void
-clear_edges (void)
+clear_edges (struct function *fn)
 {
   basic_block bb;
   edge e;
   edge_iterator ei;
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB_FN (bb, fn)
     {
       FOR_EACH_EDGE (e, ei, bb->succs)
-	free_edge (e);
+	free_edge (fn, e);
       vec_safe_truncate (bb->succs, 0);
       vec_safe_truncate (bb->preds, 0);
     }
 
-  FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR_FOR_FN (cfun)->succs)
-    free_edge (e);
-  vec_safe_truncate (EXIT_BLOCK_PTR_FOR_FN (cfun)->preds, 0);
-  vec_safe_truncate (ENTRY_BLOCK_PTR_FOR_FN (cfun)->succs, 0);
+  FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR_FOR_FN (fn)->succs)
+    free_edge (fn, e);
+  vec_safe_truncate (EXIT_BLOCK_PTR_FOR_FN (fn)->preds, 0);
+  vec_safe_truncate (ENTRY_BLOCK_PTR_FOR_FN (fn)->succs, 0);
 
-  gcc_assert (!n_edges_for_fn (cfun));
+  gcc_assert (!n_edges_for_fn (fn));
 }
 
 /* Allocate memory for basic_block.  */
@@ -370,7 +347,7 @@ remove_edge_raw (edge e)
   disconnect_src (e);
   disconnect_dest (e);
 
-  free_edge (e);
+  free_edge (cfun, e);
 }
 
 /* Redirect an edge's successor from one block to another.  */
@@ -409,7 +386,7 @@ clear_bb_flags (void)
 {
   basic_block bb;
 
-  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun), NULL, next_bb)
+  FOR_ALL_BB_FN (bb, cfun)
     bb->flags &= BB_FLAGS_TO_PRESERVE;
 }
 
@@ -435,20 +412,31 @@ check_bb_profile (basic_block bb, FILE * file, int indent, int flags)
 
   if (bb != EXIT_BLOCK_PTR_FOR_FN (fun))
     {
+      bool found = false;
       FOR_EACH_EDGE (e, ei, bb->succs)
-	sum += e->probability;
-      if (EDGE_COUNT (bb->succs) && abs (sum - REG_BR_PROB_BASE) > 100)
-	fprintf (file, "%s%sInvalid sum of outgoing probabilities %.1f%%\n",
-		 (flags & TDF_COMMENT) ? ";; " : "", s_indent,
-		 sum * 100.0 / REG_BR_PROB_BASE);
-      lsum = 0;
-      FOR_EACH_EDGE (e, ei, bb->succs)
-	lsum += e->count;
-      if (EDGE_COUNT (bb->succs)
-	  && (lsum - bb->count > 100 || lsum - bb->count < -100))
-	fprintf (file, "%s%sInvalid sum of outgoing counts %i, should be %i\n",
-		 (flags & TDF_COMMENT) ? ";; " : "", s_indent,
-		 (int) lsum, (int) bb->count);
+	{
+	  if (!(e->flags & EDGE_EH))
+	    found = true;
+	  sum += e->probability;
+	}
+      /* Only report mismatches for non-EH control flow. If there are only EH
+	 edges it means that the BB ends by noreturn call.  Here the control
+	 flow may just terminate.  */
+      if (found)
+	{
+	  if (EDGE_COUNT (bb->succs) && abs (sum - REG_BR_PROB_BASE) > 100)
+	    fprintf (file, "%s%sInvalid sum of outgoing probabilities %.1f%%\n",
+		     (flags & TDF_COMMENT) ? ";; " : "", s_indent,
+		     sum * 100.0 / REG_BR_PROB_BASE);
+	  lsum = 0;
+	  FOR_EACH_EDGE (e, ei, bb->succs)
+	    lsum += e->count;
+	  if (EDGE_COUNT (bb->succs)
+	      && (lsum - bb->count > 100 || lsum - bb->count < -100))
+	    fprintf (file, "%s%sInvalid sum of outgoing counts %i, should be %i\n",
+		     (flags & TDF_COMMENT) ? ";; " : "", s_indent,
+		     (int) lsum, (int) bb->count);
+	}
     }
     if (bb != ENTRY_BLOCK_PTR_FOR_FN (fun))
     {
@@ -508,7 +496,7 @@ dump_edge_info (FILE *file, edge e, int flags, int do_succ)
   if (e->count && do_details)
     {
       fputs (" count:", file);
-      fprintf (file, "%"PRId64, e->count);
+      fprintf (file, "%" PRId64, e->count);
     }
 
   if (e->flags && do_details)
@@ -756,7 +744,7 @@ dump_bb_info (FILE *outf, basic_block bb, int indent, int flags,
       if (flags & TDF_DETAILS)
 	{
 	  struct function *fun = DECL_STRUCT_FUNCTION (current_function_decl);
-	  fprintf (outf, ", count " "%"PRId64,
+	  fprintf (outf, ", count " "%" PRId64,
 		   (int64_t) bb->count);
 	  fprintf (outf, ", freq %i", bb->frequency);
 	  if (maybe_hot_bb_p (fun, bb))
@@ -881,6 +869,10 @@ update_bb_profile_for_threading (basic_block bb, int edge_frequency,
       bb->count = 0;
     }
 
+  bb->frequency -= edge_frequency;
+  if (bb->frequency < 0)
+    bb->frequency = 0;
+
   /* Compute the probability of TAKEN_EDGE being reached via threaded edge.
      Watch for overflows.  */
   if (bb->frequency)
@@ -894,15 +886,12 @@ update_bb_profile_for_threading (basic_block bb, int edge_frequency,
 		 "%i->%i too small (it is %i, should be %i).\n",
 		 taken_edge->src->index, taken_edge->dest->index,
 		 taken_edge->probability, prob);
-      prob = taken_edge->probability;
+      prob = taken_edge->probability * 6 / 8;
     }
 
   /* Now rescale the probabilities.  */
   taken_edge->probability -= prob;
   prob = REG_BR_PROB_BASE - prob;
-  bb->frequency -= edge_frequency;
-  if (bb->frequency < 0)
-    bb->frequency = 0;
   if (prob <= 0)
     {
       if (dump_file)
@@ -1037,23 +1026,22 @@ struct htab_bb_copy_original_entry
   int index2;
 };
 
-struct bb_copy_hasher : typed_noop_remove <htab_bb_copy_original_entry>
+struct bb_copy_hasher : nofree_ptr_hash <htab_bb_copy_original_entry>
 {
-  typedef htab_bb_copy_original_entry value_type;
-  typedef htab_bb_copy_original_entry compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline bool equal (const value_type *existing,
-			    const compare_type * candidate);
+  static inline hashval_t hash (const htab_bb_copy_original_entry *);
+  static inline bool equal (const htab_bb_copy_original_entry *existing,
+			    const htab_bb_copy_original_entry * candidate);
 };
 
 inline hashval_t
-bb_copy_hasher::hash (const value_type *data)
+bb_copy_hasher::hash (const htab_bb_copy_original_entry *data)
 {
   return data->index1;
 }
 
 inline bool
-bb_copy_hasher::equal (const value_type *data, const compare_type *data2)
+bb_copy_hasher::equal (const htab_bb_copy_original_entry *data,
+		       const htab_bb_copy_original_entry *data2)
 {
   return data->index1 == data2->index1;
 }
@@ -1065,21 +1053,30 @@ static hash_table<bb_copy_hasher> *bb_copy;
 
 /* And between loops and copies.  */
 static hash_table<bb_copy_hasher> *loop_copy;
-static alloc_pool original_copy_bb_pool;
-
+static object_allocator<htab_bb_copy_original_entry> *original_copy_bb_pool;
 
 /* Initialize the data structures to maintain mapping between blocks
    and its copies.  */
 void
 initialize_original_copy_tables (void)
 {
-  gcc_assert (!original_copy_bb_pool);
-  original_copy_bb_pool
-    = create_alloc_pool ("original_copy",
-			 sizeof (struct htab_bb_copy_original_entry), 10);
+  original_copy_bb_pool = new object_allocator<htab_bb_copy_original_entry>
+    ("original_copy");
   bb_original = new hash_table<bb_copy_hasher> (10);
   bb_copy = new hash_table<bb_copy_hasher> (10);
   loop_copy = new hash_table<bb_copy_hasher> (10);
+}
+
+/* Reset the data structures to maintain mapping between blocks and
+   its copies.  */
+
+void
+reset_original_copy_tables (void)
+{
+  gcc_assert (original_copy_bb_pool);
+  bb_original->empty ();
+  bb_copy->empty ();
+  loop_copy->empty ();
 }
 
 /* Free the data structures to maintain mapping between blocks and
@@ -1091,11 +1088,20 @@ free_original_copy_tables (void)
   delete bb_copy;
   bb_copy = NULL;
   delete bb_original;
-  bb_copy = NULL;
+  bb_original = NULL;
   delete loop_copy;
   loop_copy = NULL;
-  free_alloc_pool (original_copy_bb_pool);
+  delete original_copy_bb_pool;
   original_copy_bb_pool = NULL;
+}
+
+/* Return true iff we have had a call to initialize_original_copy_tables
+   without a corresponding call to free_original_copy_tables.  */
+
+bool
+original_copy_tables_initialized_p (void)
+{
+  return original_copy_bb_pool != NULL;
 }
 
 /* Removes the value associated with OBJ from table TAB.  */
@@ -1116,7 +1122,7 @@ copy_original_table_clear (hash_table<bb_copy_hasher> *tab, unsigned obj)
 
   elt = *slot;
   tab->clear_slot (slot);
-  pool_free (original_copy_bb_pool, elt);
+  original_copy_bb_pool->remove (elt);
 }
 
 /* Sets the value associated with OBJ in table TAB to VAL.
@@ -1136,8 +1142,7 @@ copy_original_table_set (hash_table<bb_copy_hasher> *tab,
   slot = tab->find_slot (&key, INSERT);
   if (!*slot)
     {
-      *slot = (struct htab_bb_copy_original_entry *)
-		pool_alloc (original_copy_bb_pool);
+      *slot = original_copy_bb_pool->allocate ();
       (*slot)->index1 = obj;
     }
   (*slot)->index2 = val;

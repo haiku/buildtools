@@ -1,5 +1,5 @@
 /* Tree-dumping functionality for intermediate representation.
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2017 Free Software Foundation, Inc.
    Written by Mark Mitchell <mark@codesourcery.com>
 
 This file is part of GCC.
@@ -21,27 +21,12 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "real.h"
 #include "tree.h"
-#include "fixed-value.h"
-#include "splay-tree.h"
-#include "filenames.h"
+#include "tree-pretty-print.h"
 #include "tree-dump.h"
 #include "langhooks.h"
 #include "tree-iterator.h"
-#include "tree-pretty-print.h"
 #include "tree-cfg.h"
-#include "wide-int-print.h"
 
 static unsigned int queue (dump_info_p, const_tree, int);
 static void dump_index (dump_info_p, unsigned int);
@@ -551,8 +536,7 @@ dequeue_and_dump (dump_info_p di)
 	  if (DECL_FIELD_OFFSET (t))
 	    dump_child ("bpos", bit_position (t));
 	}
-      else if (TREE_CODE (t) == VAR_DECL
-	       || TREE_CODE (t) == PARM_DECL)
+      else if (VAR_P (t) || TREE_CODE (t) == PARM_DECL)
 	{
 	  dump_int (di, "used", TREE_USED (t));
 	  if (DECL_REGISTER (t))
@@ -661,7 +645,7 @@ dequeue_and_dump (dump_info_p di)
       {
 	unsigned HOST_WIDE_INT cnt;
 	tree index, value;
-	dump_int (di, "lngt", vec_safe_length (CONSTRUCTOR_ELTS (t)));
+	dump_int (di, "lngt", CONSTRUCTOR_NELTS (t));
 	FOR_EACH_CONSTRUCTOR_ELT (CONSTRUCTOR_ELTS (t), cnt, index, value)
 	  {
 	    dump_child ("idx", index);

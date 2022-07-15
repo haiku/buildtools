@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -668,13 +668,12 @@ package body Layout is
 
       type Val_Status_Type is (Const, Dynamic);
 
-      type Val_Type (Status : Val_Status_Type := Const) is
-         record
-            case Status is
-               when Const   => Val : Uint;
-               when Dynamic => Nod : Node_Id;
-            end case;
-         end record;
+      type Val_Type (Status : Val_Status_Type := Const) is record
+         case Status is
+            when Const   => Val : Uint;
+            when Dynamic => Nod : Node_Id;
+         end case;
+      end record;
       --  Shows the status of the value so far. Const means that the value is
       --  constant, and Val is the current constant value. Dynamic means that
       --  the value is dynamic, and in this case Nod is the Node_Id of the
@@ -932,19 +931,19 @@ package body Layout is
 
       type Val_Status_Type is (Const, Dynamic, Discrim);
 
-      type Val_Type (Status : Val_Status_Type := Const) is
-         record
-            case Status is
-               when Const =>
-                  Val : Uint;
-                  --  Calculated value so far if Val_Status = Const
+      type Val_Type (Status : Val_Status_Type := Const) is record
+         case Status is
+            when Const =>
+               Val : Uint;
+               --  Calculated value so far if Val_Status = Const
 
-               when Dynamic | Discrim =>
-                  Nod : Node_Id;
-                  --  Expression value so far if Val_Status /= Const
-
-            end case;
-         end record;
+            when Discrim
+               | Dynamic
+            =>
+               Nod : Node_Id;
+               --  Expression value so far if Val_Status /= Const
+         end case;
+      end record;
       --  Records the value or expression computed so far. Const means that
       --  the value is constant, and Val is the current constant value.
       --  Dynamic means that the value is dynamic, and in this case Nod is
@@ -2430,7 +2429,7 @@ package body Layout is
       --  represents them the same way.
 
       if Is_Access_Type (E) then
-         Desig_Type :=  Underlying_Type (Designated_Type (E));
+         Desig_Type := Underlying_Type (Designated_Type (E));
 
          --  If we only have a limited view of the type, see whether the
          --  non-limited view is available.
@@ -2498,24 +2497,6 @@ package body Layout is
            and then Nkind (Type_Definition (Parent (Desig_Type))) =
                                              N_Unconstrained_Array_Definition
            and then not Debug_Flag_6
-         then
-            Init_Size (E, 2 * System_Address_Size);
-
-         --  When the target is AAMP, access-to-subprogram types are fat
-         --  pointers consisting of the subprogram address and a static link,
-         --  with the exception of library-level access types (including
-         --  library-level anonymous access types, such as for components),
-         --  where a simple subprogram address is used.
-
-         elsif AAMP_On_Target
-           and then
-             ((Ekind (E) = E_Access_Subprogram_Type
-                and then Present (Enclosing_Subprogram (E)))
-               or else
-                 (Ekind (E) = E_Anonymous_Access_Subprogram_Type
-                   and then
-                     (not Is_Local_Anonymous_Access (E)
-                       or else Present (Enclosing_Subprogram (E)))))
          then
             Init_Size (E, 2 * System_Address_Size);
 
@@ -2684,11 +2665,11 @@ package body Layout is
 
          elsif Is_Array_Type (E) then
 
-            --  For arrays that are required to be atomic, we do the same
+            --  For arrays that are required to be atomic/VFA, we do the same
             --  processing as described above for short records, since we
             --  really need to have the alignment set for the whole array.
 
-            if Is_Atomic (E) and then not Debug_Flag_Q then
+            if Is_Atomic_Or_VFA (E) and then not Debug_Flag_Q then
                Set_Composite_Alignment (E);
             end if;
 
@@ -2903,11 +2884,19 @@ package body Layout is
         and then Is_Record_Type (E)
         and then Is_Packed (E)
       then
-         --  No effect for record with atomic components
+         --  No effect for record with atomic/VFA components
 
-         if Is_Atomic (E) then
+         if Is_Atomic_Or_VFA (E) then
             Error_Msg_N ("Optimize_Alignment has no effect for &??", E);
-            Error_Msg_N ("\pragma ignored for atomic record??", E);
+
+            if Is_Atomic (E) then
+               Error_Msg_N
+                 ("\pragma ignored for atomic record??", E);
+            else
+               Error_Msg_N
+                 ("\pragma ignored for bolatile full access record??", E);
+            end if;
+
             return;
          end if;
 
@@ -2920,20 +2909,30 @@ package body Layout is
             return;
          end if;
 
-         --  No effect if any component is atomic or is a by reference type
+         --  No effect if any component is atomic/VFA or is a by-reference type
 
          declare
             Ent : Entity_Id;
+
          begin
             Ent := First_Component_Or_Discriminant (E);
             while Present (Ent) loop
                if Is_By_Reference_Type (Etype (Ent))
-                 or else Is_Atomic (Etype (Ent))
-                 or else Is_Atomic (Ent)
+                 or else Is_Atomic_Or_VFA (Etype (Ent))
+                 or else Is_Atomic_Or_VFA (Ent)
                then
                   Error_Msg_N ("Optimize_Alignment has no effect for &??", E);
-                  Error_Msg_N
-                    ("\pragma is ignored if atomic components present??", E);
+
+                  if Is_Atomic (Etype (Ent)) or else Is_Atomic (Ent) then
+                     Error_Msg_N
+                       ("\pragma is ignored if atomic "
+                        & "components present??", E);
+                  else
+                     Error_Msg_N
+                       ("\pragma is ignored if bolatile full access "
+                        & "components present??", E);
+                  end if;
+
                   return;
                else
                   Next_Component_Or_Discriminant (Ent);
@@ -3026,9 +3025,9 @@ package body Layout is
 
       --  Further processing for record types only to reduce the alignment
       --  set by the above processing in some specific cases. We do not
-      --  do this for atomic records, since we need max alignment there,
+      --  do this for atomic/VFA records, since we need max alignment there,
 
-      if Is_Record_Type (E) and then not Is_Atomic (E) then
+      if Is_Record_Type (E) and then not Is_Atomic_Or_VFA (E) then
 
          --  For records, there is generally no point in setting alignment
          --  higher than word size since we cannot do better than move by
@@ -3229,7 +3228,7 @@ package body Layout is
             A := 2 * A;
          end loop;
 
-         --  If alignment is currently not set, then we can safetly set it to
+         --  If alignment is currently not set, then we can safely set it to
          --  this new calculated value.
 
          if Unknown_Alignment (E) then
@@ -3238,7 +3237,7 @@ package body Layout is
          --  Cases where we have inherited an alignment
 
          --  For constructed types, always reset the alignment, these are
-         --  Generally invisible to the user anyway, and that way we are
+         --  generally invisible to the user anyway, and that way we are
          --  sure that no constructed types have weird alignments.
 
          elsif not Comes_From_Source (E) then
@@ -3250,80 +3249,114 @@ package body Layout is
          elsif Alignment (E) = A then
             null;
 
-         --  Now we come to the difficult cases where we have inherited an
-         --  alignment and size, but overridden the size but not the alignment.
-
-         elsif Has_Size_Clause (E) or else Has_Object_Size_Clause (E) then
-
-            --  This is tricky, it might be thought that we should try to
-            --  inherit the alignment, since that's what the RM implies, but
-            --  that leads to complex rules and oddities. Consider for example:
-
-            --    type R is new Character;
-            --    for R'Size use 16;
-
-            --  It seems quite bogus in this case to inherit an alignment of 1
-            --  from the parent type Character. Furthermore, if that's what the
-            --  programmer really wanted for some odd reason, then they could
-            --  specify the alignment they wanted.
-
-            --  Furthermore we really don't want to inherit the alignment in
-            --  the case of a specified Object_Size for a subtype, since then
-            --  there would be no way of overriding to give a reasonable value
-            --  (we don't have an Object_Subtype attribute). Consider:
-
-            --    subtype R is new Character;
-            --    for R'Object_Size use 16;
-
-            --  If we inherit the alignment of 1, then we have an odd
-            --  inefficient alignment for the subtype, which cannot be fixed.
-
-            --  So we make the decision that if Size (or Object_Size) is given
-            --  (and, in the case of a first subtype, the alignment is not set
-            --  with a specific alignment clause). We reset the alignment to
-            --  the appropriate value for the specified size. This is a nice
-            --  simple rule to implement and document.
-
-            --  There is one slight glitch, which is that a confirming size
-            --  clause can now change the alignment, which, if we really think
-            --  that confirming rep clauses should have no effect, is a no-no.
-
-            --    type R is new Character;
-            --    for R'Alignment use 2;
-            --    type S is new R;
-            --    for S'Size use Character'Size;
-
-            --  Now the alignment of S is 1 instead of 2, as a result of
-            --  applying the above rule to the confirming rep clause for S. Not
-            --  clear this is worth worrying about. If we recorded whether a
-            --  size clause was confirming we could avoid this, but right now
-            --  we have no way of doing that or easily figuring it out, so we
-            --  don't bother.
-
-            --  Historical note. In versions of GNAT prior to Nov 6th, 2010, an
-            --  odd distinction was made between inherited alignments greater
-            --  than the computed alignment (where the larger alignment was
-            --  inherited) and inherited alignments smaller than the computed
-            --  alignment (where the smaller alignment was overridden). This
-            --  was a dubious fix to get around an ACATS problem which seems
-            --  to have disappeared anyway, and in any case, this peculiarity
-            --  was never documented.
-
-            Init_Alignment (E, A);
-
-         --  If no Size (or Object_Size) was specified, then we inherited the
-         --  object size, so we should inherit the alignment as well and not
-         --  modify it. This takes care of cases like:
-
-         --    type R is new Integer;
-         --    for R'Alignment use 1;
-         --    subtype S is R;
-
-         --  Here we have R has a default Object_Size of 32, and a specified
-         --  alignment of 1, and it seeems right for S to inherit both values.
-
          else
-            null;
+            --  Now we come to the difficult cases of subtypes for which we
+            --  have inherited an alignment different from the computed one.
+            --  We resort to the presence of alignment and size clauses to
+            --  guide our choices. Note that they can generally be present
+            --  only on the first subtype (except for Object_Size) and that
+            --  we need to look at the Rep_Item chain to correctly handle
+            --  derived types.
+
+            declare
+               FST : constant Entity_Id := First_Subtype (E);
+
+               function Has_Attribute_Clause
+                 (E  : Entity_Id;
+                  Id : Attribute_Id) return Boolean;
+               --  Wrapper around Get_Attribute_Definition_Clause which tests
+               --  for the presence of the specified attribute clause.
+
+               --------------------------
+               -- Has_Attribute_Clause --
+               --------------------------
+
+               function Has_Attribute_Clause
+                 (E  : Entity_Id;
+                  Id : Attribute_Id) return Boolean is
+               begin
+                  return Present (Get_Attribute_Definition_Clause (E, Id));
+               end Has_Attribute_Clause;
+
+            begin
+               --  If the alignment comes from a clause, then we respect it.
+               --  Consider for example:
+
+               --    type R is new Character;
+               --    for R'Alignment use 1;
+               --    for R'Size use 16;
+               --    subtype S is R;
+
+               --  Here R has a specified size of 16 and a specified alignment
+               --  of 1, and it seems right for S to inherit both values.
+
+               if Has_Attribute_Clause (FST, Attribute_Alignment) then
+                  null;
+
+               --  Now we come to the cases where we have inherited alignment
+               --  and size, and overridden the size but not the alignment.
+
+               elsif Has_Attribute_Clause (FST, Attribute_Size)
+                 or else Has_Attribute_Clause (FST, Attribute_Object_Size)
+                 or else Has_Attribute_Clause (E, Attribute_Object_Size)
+               then
+                  --  This is tricky, it might be thought that we should try to
+                  --  inherit the alignment, since that's what the RM implies,
+                  --  but that leads to complex rules and oddities. Consider
+                  --  for example:
+
+                  --    type R is new Character;
+                  --    for R'Size use 16;
+
+                  --  It seems quite bogus in this case to inherit an alignment
+                  --  of 1 from the parent type Character. Furthermore, if that
+                  --  is what the programmer really wanted for some odd reason,
+                  --  then he could specify the alignment directly.
+
+                  --  Moreover we really don't want to inherit the alignment in
+                  --  the case of a specified Object_Size for a subtype, since
+                  --  there would be no way of overriding to give a reasonable
+                  --  value (as we don't have an Object_Alignment attribute).
+                  --  Consider for example:
+
+                  --    subtype R is Character;
+                  --    for R'Object_Size use 16;
+
+                  --  If we inherit the alignment of 1, then it will be very
+                  --  inefficient for the subtype and this cannot be fixed.
+
+                  --  So we make the decision that if Size (or Object_Size) is
+                  --  given and the alignment is not specified with a clause,
+                  --  we reset the alignment to the appropriate value for the
+                  --  specified size. This is a nice simple rule to implement
+                  --  and document.
+
+                  --  There is a theoretical glitch, which is that a confirming
+                  --  size clause could now change the alignment, which, if we
+                  --  really think that confirming rep clauses should have no
+                  --  effect, could be seen as a no-no. However that's already
+                  --  implemented by Alignment_Check_For_Size_Change so we do
+                  --  not change the philosophy here.
+
+                  --  Historical note: in versions prior to Nov 6th, 2011, an
+                  --  odd distinction was made between inherited alignments
+                  --  larger than the computed alignment (where the larger
+                  --  alignment was inherited) and inherited alignments smaller
+                  --  than the computed alignment (where the smaller alignment
+                  --  was overridden). This was a dubious fix to get around an
+                  --  ACATS problem which seems to have disappeared anyway, and
+                  --  in any case, this peculiarity was never documented.
+
+                  Init_Alignment (E, A);
+
+               --  If no Size (or Object_Size) was specified, then we have
+               --  inherited the object size, so we should also inherit the
+               --  alignment and not modify it.
+
+               else
+                  null;
+               end if;
+            end;
          end if;
       end;
    end Set_Elem_Alignment;
@@ -3394,7 +3427,7 @@ package body Layout is
          --  type is the partial or full view, so that types will always
          --  match on calls from one size function to another.
 
-         if  Has_Private_Declaration (Vtype) then
+         if Has_Private_Declaration (Vtype) then
             Vtype_Primary_View := Etype (Vtype);
          else
             Vtype_Primary_View := Vtype;

@@ -1,4 +1,4 @@
-//===-- sanitizer_allocator_internal.h -------------------------- C++ -----===//
+//===-- sanitizer_allocator_internal.h --------------------------*- C++ -*-===//
 //
 // This file is distributed under the University of Illinois Open Source
 // License. See LICENSE.TXT for details.
@@ -43,10 +43,24 @@ typedef SizeClassAllocatorLocalCache<PrimaryInternalAllocator>
 typedef CombinedAllocator<PrimaryInternalAllocator, InternalAllocatorCache,
                           LargeMmapAllocator<> > InternalAllocator;
 
-void *InternalAlloc(uptr size, InternalAllocatorCache *cache = 0);
-void InternalFree(void *p, InternalAllocatorCache *cache = 0);
+void *InternalAlloc(uptr size, InternalAllocatorCache *cache = nullptr,
+                    uptr alignment = 0);
+void *InternalRealloc(void *p, uptr size,
+                      InternalAllocatorCache *cache = nullptr);
+void *InternalCalloc(uptr countr, uptr size,
+                     InternalAllocatorCache *cache = nullptr);
+void InternalFree(void *p, InternalAllocatorCache *cache = nullptr);
 InternalAllocator *internal_allocator();
 
-}  // namespace __sanitizer
+enum InternalAllocEnum {
+  INTERNAL_ALLOC
+};
 
-#endif  // SANITIZER_ALLOCATOR_INTERNAL_H
+} // namespace __sanitizer
+
+inline void *operator new(__sanitizer::operator_new_size_type size,
+                          __sanitizer::InternalAllocEnum) {
+  return __sanitizer::InternalAlloc(size);
+}
+
+#endif // SANITIZER_ALLOCATOR_INTERNAL_H

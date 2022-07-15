@@ -1,5 +1,5 @@
 /* Core of implementation of libgccjit.so
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -23,15 +23,9 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "libgccjit.h"
 
-#include "hash-set.h"
-#include "input.h"
 #include "vec.h"
-#include "double-int.h"
-#include "alias.h"
-#include "flags.h"
-#include "symtab.h"
-#include "inchash.h"
 #include "tree.h"
+#include "inchash.h"
 #include "tree-iterator.h"
 
 #ifdef GCC_VERSION
@@ -132,6 +126,7 @@ namespace recording {
         class local;
 	class global;
         class param;
+      class base_call;
     class statement;
     class case_;
 
@@ -197,6 +192,7 @@ private:
 enum inner_bool_option
 {
   INNER_BOOL_OPTION_ALLOW_UNREACHABLE_BLOCKS,
+  INNER_BOOL_OPTION_USE_EXTERNAL_DRIVER,
 
   NUM_INNER_BOOL_OPTIONS
 };

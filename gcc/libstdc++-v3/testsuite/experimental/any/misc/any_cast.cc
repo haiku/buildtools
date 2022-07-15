@@ -1,7 +1,6 @@
-// { dg-options "-std=gnu++14" }
-// { dg-do run }
+// { dg-do run { target c++14 } }
 
-// Copyright (C) 2014-2015 Free Software Foundation, Inc.
+// Copyright (C) 2014-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -77,8 +76,51 @@ void test02()
   }
 }
 
+static int move_count = 0;
+
+void test03()
+{
+  struct MoveEnabled
+  {
+    MoveEnabled(MoveEnabled&&)
+    {
+      ++move_count;
+    }
+    MoveEnabled() = default;
+    MoveEnabled(const MoveEnabled&) = default;
+  };
+  MoveEnabled m;
+  MoveEnabled m2 = any_cast<MoveEnabled>(any(m));
+  VERIFY(move_count == 1);
+  MoveEnabled&& m3 = any_cast<MoveEnabled&&>(any(m));
+  VERIFY(move_count == 1);
+  struct MoveDeleted
+  {
+    MoveDeleted(MoveDeleted&&) = delete;
+    MoveDeleted() = default;
+    MoveDeleted(const MoveDeleted&) = default;
+  };
+  MoveDeleted md;
+  MoveDeleted&& md2 = any_cast<MoveDeleted>(any(std::move(md)));
+  MoveDeleted&& md3 = any_cast<MoveDeleted&&>(any(std::move(md)));
+}
+
+void test04()
+{
+  // PR libstdc++/69321
+  struct noncopyable {
+    noncopyable(noncopyable const&) = delete;
+  };
+
+  any a;
+  auto p = any_cast<noncopyable>(&a);
+  VERIFY( p == nullptr );
+}
+
 int main()
 {
   test01();
   test02();
+  test03();
+  test04();
 }

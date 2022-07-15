@@ -28,7 +28,6 @@ GNATRTL_TASKING_OBJS= \
   a-dispat$(objext) \
   a-dynpri$(objext) \
   a-interr$(objext) \
-  a-intsig$(objext) \
   a-intnam$(objext) \
   a-reatim$(objext) \
   a-retide$(objext) \
@@ -148,6 +147,7 @@ GNATRTL_NONTASKING_OBJS= \
   a-colire$(objext) \
   a-comlin$(objext) \
   a-comutr$(objext) \
+  a-conhel$(objext) \
   a-contai$(objext) \
   a-convec$(objext) \
   a-coorma$(objext) \
@@ -380,6 +380,7 @@ GNATRTL_NONTASKING_OBJS= \
   directio$(objext) \
   g-arrspl$(objext) \
   g-awk$(objext) \
+  g-binenv$(objext) \
   g-bubsor$(objext) \
   g-busora$(objext) \
   g-busorg$(objext) \
@@ -453,6 +454,7 @@ GNATRTL_NONTASKING_OBJS= \
   g-sptabo$(objext) \
   g-sptain$(objext) \
   g-sptavs$(objext) \
+  g-strhas$(objext) \
   g-string$(objext) \
   g-strspl$(objext) \
   g-table$(objext) \
@@ -491,6 +493,7 @@ GNATRTL_NONTASKING_OBJS= \
   s-bignum$(objext) \
   s-bitops$(objext) \
   s-boarop$(objext) \
+  s-boustr$(objext) \
   s-bytswa$(objext) \
   s-carsi8$(objext) \
   s-carun8$(objext) \
@@ -656,7 +659,6 @@ GNATRTL_NONTASKING_OBJS= \
   s-stache$(objext) \
   s-stalib$(objext) \
   s-stausa$(objext) \
-  s-stchop$(objext) \
   s-stoele$(objext) \
   s-stopoo$(objext) \
   s-stposu$(objext) \

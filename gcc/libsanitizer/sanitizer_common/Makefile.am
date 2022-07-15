@@ -1,7 +1,7 @@
 AM_CPPFLAGS = -I $(top_srcdir)/include -isystem $(top_srcdir)/include/system
 
 # May be used by toolexeclibdir.
-gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
+gcc_version := $(shell @get_gcc_base_ver@ $(top_srcdir)/../gcc/BASE-VER)
 
 DEFS = -D_GNU_SOURCE -D_DEBUG -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS @RPC_DEFS@
 AM_CXXFLAGS = -Wall -W -Wno-unused-parameter -Wwrite-strings -pedantic -Wno-long-long  -fPIC -fno-builtin -fno-exceptions -fno-rtti -fomit-frame-pointer -funwind-tables -fvisibility=hidden -Wno-variadic-macros
@@ -27,10 +27,12 @@ sanitizer_common_files = \
 	sanitizer_deadlock_detector1.cc \
 	sanitizer_deadlock_detector2.cc \
 	sanitizer_flags.cc \
+	sanitizer_flag_parser.cc \
 	sanitizer_libc.cc \
 	sanitizer_libignore.cc \
 	sanitizer_linux.cc \
 	sanitizer_linux_libcdep.cc \
+	sanitizer_linux_s390.cc \
 	sanitizer_mac.cc \
 	sanitizer_persistent_allocator.cc \
 	sanitizer_platform_limits_linux.cc \
@@ -45,6 +47,7 @@ sanitizer_common_files = \
 	sanitizer_stackdepot.cc \
 	sanitizer_stacktrace.cc \
 	sanitizer_stacktrace_libcdep.cc \
+	sanitizer_symbolizer_mac.cc \
 	sanitizer_stacktrace_printer.cc \
 	sanitizer_stoptheworld_linux_libcdep.cc \
 	sanitizer_suppressions.cc \
@@ -53,13 +56,17 @@ sanitizer_common_files = \
 	sanitizer_symbolizer_libcdep.cc \
 	sanitizer_symbolizer_posix_libcdep.cc \
 	sanitizer_symbolizer_win.cc \
+	sanitizer_termination.cc \
 	sanitizer_thread_registry.cc \
 	sanitizer_tls_get_addr.cc \
-	sanitizer_unwind_posix_libcdep.cc \
+	sanitizer_unwind_linux_libcdep.cc \
 	sanitizer_win.cc
 
 
 libsanitizer_common_la_SOURCES = $(sanitizer_common_files) 
+EXTRA_libsanitizer_common_la_SOURCES = sanitizer_linux_mips64.S sanitizer_linux_x86_64.S
+libsanitizer_common_la_LIBADD = $(SANITIZER_COMMON_TARGET_DEPENDENT_OBJECTS)
+libsanitizer_common_la_DEPENDENCIES =  $(SANITIZER_COMMON_TARGET_DEPENDENT_OBJECTS)
 
 # Work around what appears to be a GNU make bug handling MAKEFLAGS
 # values defined in terms of make variables, as is the case for CC and

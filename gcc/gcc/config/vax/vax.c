@@ -1,5 +1,5 @@
 /* Subroutines for insn-output.c for VAX.
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,60 +20,26 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "predict.h"
-#include "basic-block.h"
-#include "df.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
+#include "df.h"
+#include "memmodel.h"
+#include "tm_p.h"
+#include "optabs.h"
+#include "regs.h"
+#include "emit-rtl.h"
 #include "calls.h"
 #include "varasm.h"
-#include "regs.h"
-#include "hard-reg-set.h"
-#include "insn-config.h"
 #include "conditions.h"
-#include "function.h"
 #include "output.h"
-#include "insn-attr.h"
-#include "recog.h"
-#include "hashtab.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
-#include "insn-codes.h"
-#include "optabs.h"
-#include "debug.h"
-#include "diagnostic-core.h"
 #include "reload.h"
-#include "tm-preds.h"
-#include "tm-constrs.h"
-#include "tm_p.h"
-#include "target.h"
-#include "target-def.h"
 #include "builtins.h"
+
+/* This file should be included last.  */
+#include "target-def.h"
 
 static void vax_option_override (void);
 static bool vax_legitimate_address_p (machine_mode, rtx, bool);
@@ -83,7 +49,7 @@ static void vax_output_mi_thunk (FILE *, tree, HOST_WIDE_INT,
 				 HOST_WIDE_INT, tree);
 static int vax_address_cost_1 (rtx);
 static int vax_address_cost (rtx, machine_mode, addr_space_t, bool);
-static bool vax_rtx_costs (rtx, int, int, int, int *, bool);
+static bool vax_rtx_costs (rtx, machine_mode, int, int, int *, bool);
 static rtx vax_function_arg (cumulative_args_t, machine_mode,
 			     const_tree, bool);
 static void vax_function_arg_advance (cumulative_args_t, machine_mode,
@@ -131,6 +97,9 @@ static bool vax_mode_dependent_address_p (const_rtx, addr_space_t);
 #undef TARGET_BUILTIN_SETJMP_FRAME_VALUE
 #define TARGET_BUILTIN_SETJMP_FRAME_VALUE vax_builtin_setjmp_frame_value
 
+#undef TARGET_LRA_P
+#define TARGET_LRA_P hook_bool_void_false
+
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P vax_legitimate_address_p
 #undef TARGET_MODE_DEPENDENT_ADDRESS_P
@@ -172,7 +141,7 @@ vax_add_reg_cfa_offset (rtx insn, int offset, rtx src)
 
   x = plus_constant (Pmode, frame_pointer_rtx, offset);
   x = gen_rtx_MEM (SImode, x);
-  x = gen_rtx_SET (VOIDmode, x, src);
+  x = gen_rtx_SET (x, src);
   add_reg_note (insn, REG_CFA_OFFSET, x);
 }
 
@@ -507,7 +476,7 @@ print_operand_address (FILE * file, rtx addr)
 
 	    }
 
-	  output_address (offset);
+	  output_address (VOIDmode, offset);
 	}
 
       if (breg != 0)
@@ -562,7 +531,7 @@ print_operand (FILE *file, rtx x, int code)
   else if (REG_P (x))
     fprintf (file, "%s", reg_names[REGNO (x)]);
   else if (MEM_P (x))
-    output_address (XEXP (x, 0));
+    output_address (GET_MODE (x), XEXP (x, 0));
   else if (GET_CODE (x) == CONST_DOUBLE && GET_MODE (x) == SFmode)
     {
       char dstr[30];
@@ -655,7 +624,8 @@ static bool
 vax_float_literal (rtx c)
 {
   machine_mode mode;
-  REAL_VALUE_TYPE r, s;
+  const REAL_VALUE_TYPE *r;
+  REAL_VALUE_TYPE s;
   int i;
 
   if (GET_CODE (c) != CONST_DOUBLE)
@@ -668,7 +638,7 @@ vax_float_literal (rtx c)
       || c == const_tiny_rtx[(int) mode][2])
     return true;
 
-  REAL_VALUE_FROM_CONST_DOUBLE (r, c);
+  r = CONST_DOUBLE_REAL_VALUE (c);
 
   for (i = 0; i < 7; i++)
     {
@@ -676,11 +646,11 @@ vax_float_literal (rtx c)
       bool ok;
       real_from_integer (&s, mode, x, SIGNED);
 
-      if (REAL_VALUES_EQUAL (r, s))
+      if (real_equal (r, &s))
 	return true;
       ok = exact_real_inverse (mode, &s);
       gcc_assert (ok);
-      if (REAL_VALUES_EQUAL (r, s))
+      if (real_equal (r, &s))
 	return true;
     }
   return false;
@@ -708,6 +678,7 @@ vax_address_cost_1 (rtx addr)
     {
     case PRE_DEC:
       predec = 1;
+      /* FALLTHRU */
     case REG:
     case SUBREG:
     case POST_INC:
@@ -783,10 +754,11 @@ vax_address_cost (rtx x, machine_mode mode ATTRIBUTE_UNUSED,
    costs on a per cpu basis.  */
 
 static bool
-vax_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
+vax_rtx_costs (rtx x, machine_mode mode, int outer_code,
+	       int opno ATTRIBUTE_UNUSED,
 	       int *total, bool speed ATTRIBUTE_UNUSED)
 {
-  machine_mode mode = GET_MODE (x);
+  int code = GET_CODE (x);
   int i = 0;				   /* may be modified in switch */
   const char *fmt = GET_RTX_FORMAT (code); /* may be modified in switch */
 
@@ -826,7 +798,7 @@ vax_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       return true;
 
     case CONST_DOUBLE:
-      if (GET_MODE_CLASS (GET_MODE (x)) == MODE_FLOAT)
+      if (GET_MODE_CLASS (mode) == MODE_FLOAT)
 	*total = vax_float_literal (x) ? 5 : 8;
       else
 	*total = ((CONST_DOUBLE_HIGH (x) == 0
@@ -1014,7 +986,7 @@ vax_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 	{
 	case CONST_INT:
 	  if ((unsigned HOST_WIDE_INT)INTVAL (op) > 63
-	      && GET_MODE (x) != QImode)
+	      && mode != QImode)
 	    *total += 1;	/* 2 on VAX 2 */
 	  break;
 	case CONST:
@@ -1113,6 +1085,7 @@ vax_notice_update_cc (rtx exp, rtx insn ATTRIBUTE_UNUSED)
 	    case NEG:
 	      if (GET_MODE_CLASS (GET_MODE (exp)) == MODE_FLOAT)
 		break;
+	      /* FALLTHRU */
 	    case AND:
 	    case IOR:
 	    case XOR:

@@ -1,5 +1,5 @@
 /* Target definitions for PowerPC running Darwin (Mac OS X).
-   Copyright (C) 1997-2015 Free Software Foundation, Inc.
+   Copyright (C) 1997-2017 Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
    This file is part of GCC.
@@ -93,7 +93,6 @@ extern int darwin_emit_branch_islands;
   %(cc1_cpu) \
   %{g: %{!fno-eliminate-unused-debug-symbols: -feliminate-unused-debug-symbols }} \
   %{static: %{Zdynamic: %e conflicting code gen style switches are used}}\
-  %{!mmacosx-version-min=*:-mmacosx-version-min=%(darwin_minversion)} \
   %{!mkernel:%{!static:%{!mdynamic-no-pic:-fPIC}}} \
   %{faltivec:-maltivec -include altivec.h} %{fno-altivec:-mno-altivec} \
   %<faltivec %<fno-altivec " \
@@ -123,17 +122,6 @@ extern int darwin_emit_branch_islands;
 /* crt2.o is at least partially required for 10.3.x and earlier.  */
 #define DARWIN_CRT2_SPEC \
   "%{!m64:%:version-compare(!> 10.4 mmacosx-version-min= crt2.o%s)}"
-
-/* Determine a minimum version based on compiler options.  */
-#define DARWIN_MINVERSION_SPEC					\
-  "%{m64:%{fgnu-runtime:10.4;					\
-	   ,objective-c|,objc-cpp-output:10.5;			\
-	   ,objective-c-header:10.5;				\
-	   ,objective-c++|,objective-c++-cpp-output:10.5;	\
-	   ,objective-c++-header|,objc++-cpp-output:10.5;	\
-	   :10.4};						\
-     shared-libgcc:10.3;					\
-     :10.1}"
 
 #undef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS			\
@@ -331,7 +319,7 @@ extern int darwin_emit_branch_islands;
    suppressed for vector and long double items (both 128 in size).
    There is a dummy use of the FIELD argument to avoid an unused variable
    warning (see PR59496).  */
-#define ADJUST_FIELD_ALIGN(FIELD, COMPUTED)			\
+#define ADJUST_FIELD_ALIGN(FIELD, TYPE, COMPUTED)		\
   ((void) (FIELD),						\
     (TARGET_ALIGN_NATURAL					\
      ? (COMPUTED)						\

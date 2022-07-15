@@ -1,5 +1,5 @@
 /* Calculate branch probabilities, and basic block execution counts.
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright (C) 1990-2017 Free Software Foundation, Inc.
    Contributed by James E. Wilson, UC Berkeley/Cygnus Support;
    based on some ideas from Dain Samples of UC Berkeley.
    Further mangling by Bob Manson, Cygnus Support.
@@ -50,57 +50,20 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
 #include "rtl.h"
-#include "flags.h"
-#include "regs.h"
-#include "symtab.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "vec.h"
-#include "machmode.h"
-#include "hard-reg-set.h"
-#include "input.h"
-#include "function.h"
-#include "statistics.h"
-#include "double-int.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "alias.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "predict.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfganal.h"
-#include "basic-block.h"
-#include "diagnostic-core.h"
-#include "coverage.h"
-#include "value-prof.h"
-#include "fold-const.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
 #include "gimple.h"
+#include "cfghooks.h"
+#include "cgraph.h"
+#include "coverage.h"
+#include "diagnostic-core.h"
+#include "cfganal.h"
+#include "value-prof.h"
 #include "gimple-iterator.h"
 #include "tree-cfg.h"
-#include "cfgloop.h"
 #include "dumpfile.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
+#include "cfgloop.h"
 
 #include "profile.h"
 
@@ -216,10 +179,6 @@ instrument_values (histogram_values values)
 	  gimple_gen_one_value_profiler (hist, t, 0);
 	  break;
 
-	case HIST_TYPE_CONST_DELTA:
-	  gimple_gen_const_delta_profiler (hist, t, 0);
-	  break;
-
  	case HIST_TYPE_INDIR_CALL:
  	case HIST_TYPE_INDIR_CALL_TOPN:
  	  gimple_gen_ic_profiler (hist, t, 0);
@@ -233,15 +192,9 @@ instrument_values (histogram_values values)
 	  gimple_gen_ior_profiler (hist, t, 0);
 	  break;
 
-  case HIST_TYPE_TIME_PROFILE:
-    {
-      basic_block bb =
-     split_edge (single_succ_edge (ENTRY_BLOCK_PTR_FOR_FN (cfun)));
-      gimple_stmt_iterator gsi = gsi_start_bb (bb);
-
-      gimple_gen_time_profiler (t, 0, gsi);
-      break;
-    }
+	case HIST_TYPE_TIME_PROFILE:
+	  gimple_gen_time_profiler (t, 0);
+	  break;
 
 	default:
 	  gcc_unreachable ();
@@ -276,7 +229,7 @@ get_working_sets (void)
           ws_info = &gcov_working_sets[ws_ix];
           /* Print out the percentage using int arithmatic to avoid float.  */
           fprintf (dump_file, "\t\t%u.%02u%%: num counts=%u, min counter="
-                   "%"PRId64 "\n",
+                   "%" PRId64 "\n",
                    pct / 100, pct - (pct / 100 * 100),
                    ws_info->num_counters,
                    (int64_t)ws_info->min_counter);
@@ -357,7 +310,7 @@ is_edge_inconsistent (vec<edge, va_gc> *edges)
 	      if (dump_file)
 		{
 		  fprintf (dump_file,
-		  	   "Edge %i->%i is inconsistent, count%"PRId64,
+		  	   "Edge %i->%i is inconsistent, count%" PRId64,
 			   e->src->index, e->dest->index, e->count);
 		  dump_bb (dump_file, e->src, 0, TDF_DETAILS);
 		  dump_bb (dump_file, e->dest, 0, TDF_DETAILS);
@@ -406,7 +359,7 @@ is_inconsistent (void)
 	  if (dump_file)
 	    {
 	      fprintf (dump_file, "BB %i count is negative "
-		       "%"PRId64,
+		       "%" PRId64,
 		       bb->index,
 		       bb->count);
 	      dump_bb (dump_file, bb, 0, TDF_DETAILS);
@@ -418,7 +371,7 @@ is_inconsistent (void)
 	  if (dump_file)
 	    {
 	      fprintf (dump_file, "BB %i count does not match sum of incoming edges "
-		       "%"PRId64" should be %"PRId64,
+		       "%" PRId64" should be %" PRId64,
 		       bb->index,
 		       bb->count,
 		       sum_edge_counts (bb->preds));
@@ -433,7 +386,7 @@ is_inconsistent (void)
 	  if (dump_file)
 	    {
 	      fprintf (dump_file, "BB %i count does not match sum of outgoing edges "
-		       "%"PRId64" should be %"PRId64,
+		       "%" PRId64" should be %" PRId64,
 		       bb->index,
 		       bb->count,
 		       sum_edge_counts (bb->succs));
@@ -510,7 +463,7 @@ read_profile_edge_counts (gcov_type *exec_counts)
 	      {
 		fprintf (dump_file, "\nRead edge from %i to %i, count:",
 			 bb->index, e->dest->index);
-		fprintf (dump_file, "%"PRId64,
+		fprintf (dump_file, "%" PRId64,
 			 (int64_t) e->count);
 	      }
 	  }
@@ -864,8 +817,6 @@ compute_branch_probabilities (unsigned cfg_checksum, unsigned lineno_checksum)
 	}
     }
   counts_to_freqs ();
-  profile_status_for_fn (cfun) = PROFILE_READ;
-  compute_function_frequency ();
 
   if (dump_file)
     {
@@ -935,7 +886,7 @@ compute_value_histograms (histogram_values values, unsigned cfg_checksum,
   for (i = 0; i < values.length (); i++)
     {
       histogram_value hist = values[i];
-      gimple stmt = hist->hvalue.stmt;
+      gimple *stmt = hist->hvalue.stmt;
 
       t = (int) hist->type;
 
@@ -1075,7 +1026,7 @@ branch_prob (void)
       FOR_EACH_EDGE (e, ei, bb->succs)
 	{
 	  gimple_stmt_iterator gsi;
-	  gimple last = NULL;
+	  gimple *last = NULL;
 
 	  /* It may happen that there are compiler generated statements
 	     without a locus at all.  Go through the basic block from the
@@ -1085,7 +1036,7 @@ branch_prob (void)
 	       gsi_prev_nondebug (&gsi))
 	    {
 	      last = gsi_stmt (gsi);
-	      if (gimple_has_location (last))
+	      if (!RESERVED_LOCATION_P (gimple_location (last)))
 		break;
 	    }
 
@@ -1096,7 +1047,7 @@ branch_prob (void)
 	     is not computed twice.  */
 	  if (last
 	      && gimple_has_location (last)
-	      && LOCATION_LOCUS (e->goto_locus) != UNKNOWN_LOCATION
+	      && !RESERVED_LOCATION_P (e->goto_locus)
 	      && !single_succ_p (bb)
 	      && (LOCATION_FILE (e->goto_locus)
 	          != LOCATION_FILE (gimple_location (last))
@@ -1141,7 +1092,7 @@ branch_prob (void)
 	  if (have_exit_edge || need_exit_edge)
 	    {
 	      gimple_stmt_iterator gsi;
-	      gimple first;
+	      gimple *first;
 
 	      gsi = gsi_start_nondebug_after_labels_bb (bb);
 	      gcc_checking_assert (!gsi_end_p (gsi));
@@ -1304,16 +1255,15 @@ branch_prob (void)
 
 	  for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	    {
-	      gimple stmt = gsi_stmt (gsi);
-	      if (gimple_has_location (stmt))
+	      gimple *stmt = gsi_stmt (gsi);
+	      if (!RESERVED_LOCATION_P (gimple_location (stmt)))
 		output_location (gimple_filename (stmt), gimple_lineno (stmt),
 				 &offset, bb);
 	    }
 
 	  /* Notice GOTO expressions eliminated while constructing the CFG.  */
 	  if (single_succ_p (bb)
-	      && LOCATION_LOCUS (single_succ_edge (bb)->goto_locus)
-		 != UNKNOWN_LOCATION)
+	      && !RESERVED_LOCATION_P (single_succ_edge (bb)->goto_locus))
 	    {
 	      expanded_location curr_location
 		= expand_location (single_succ_edge (bb)->goto_locus);
@@ -1349,7 +1299,7 @@ branch_prob (void)
     {
       unsigned n_instrumented;
 
-      gimple_init_edge_profiler ();
+      gimple_init_gcov_profiler ();
 
       n_instrumented = instrument_edges (el);
 
@@ -1367,6 +1317,25 @@ branch_prob (void)
   values.release ();
   free_edge_list (el);
   coverage_end_function (lineno_checksum, cfg_checksum);
+  if (flag_branch_probabilities && profile_info)
+    {
+      struct loop *loop;
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	report_predictor_hitrates ();
+      profile_status_for_fn (cfun) = PROFILE_READ;
+
+      /* At this moment we have precise loop iteration count estimates.
+	 Record them to loop structure before the profile gets out of date. */
+      FOR_EACH_LOOP (loop, 0)
+	if (loop->header->count)
+	  {
+	    gcov_type nit = expected_loop_iterations_unbounded (loop);
+	    widest_int bound = gcov_type_to_wide_int (nit);
+	    loop->any_estimate = false;
+	    record_niter_bound (loop, bound, true, false);
+	  }
+      compute_function_frequency ();
+    }
 }
 
 /* Union find algorithm implementation for the basic blocks using

@@ -1,5 +1,5 @@
 /* Subroutines for insn-output.c for Tensilica's Xtensa architecture.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
    Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
 This file is part of GCC.
@@ -21,77 +21,40 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "regs.h"
-#include "hard-reg-set.h"
-#include "predict.h"
-#include "vec.h"
-#include "hashtab.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "input.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfgrtl.h"
-#include "cfganal.h"
-#include "lcm.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
-#include "basic-block.h"
-#include "insn-config.h"
-#include "conditions.h"
-#include "insn-flags.h"
-#include "insn-attr.h"
-#include "insn-codes.h"
-#include "recog.h"
-#include "output.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
+#include "gimple.h"
+#include "cfghooks.h"
+#include "df.h"
+#include "memmodel.h"
+#include "tm_p.h"
 #include "stringpool.h"
+#include "optabs.h"
+#include "regs.h"
+#include "emit-rtl.h"
+#include "recog.h"
+#include "diagnostic-core.h"
+#include "cfgrtl.h"
+#include "output.h"
+#include "fold-const.h"
 #include "stor-layout.h"
 #include "calls.h"
 #include "varasm.h"
-#include "flags.h"
-#include "statistics.h"
-#include "double-int.h"
-#include "real.h"
-#include "fixed-value.h"
 #include "alias.h"
-#include "expmed.h"
-#include "dojump.h"
 #include "explow.h"
-#include "emit-rtl.h"
-#include "stmt.h"
 #include "expr.h"
 #include "reload.h"
-#include "tm_p.h"
-#include "diagnostic-core.h"
-#include "optabs.h"
-#include "libfuncs.h"
-#include "ggc.h"
-#include "target.h"
-#include "target-def.h"
 #include "langhooks.h"
-#include "hash-table.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-fold.h"
-#include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimplify.h"
-#include "df.h"
 #include "builtins.h"
 #include "dumpfile.h"
 #include "hw-doloop.h"
 #include "rtl-iter.h"
 
+/* This file should be included last.  */
+#include "target-def.h"
 
 /* Enumeration for all of the relational tests, so that we can build
    arrays indexed by the test type, and not worry about the order
@@ -116,11 +79,6 @@ enum internal_test
    can support a given mode.  */
 char xtensa_hard_regno_mode_ok[(int) MAX_MACHINE_MODE][FIRST_PSEUDO_REGISTER];
 
-/* Current frame size calculated by compute_frame_size.  */
-unsigned xtensa_current_frame_size;
-/* Callee-save area size in the current frame calculated by compute_frame_size. */
-int xtensa_callee_save_size;
-
 /* Largest block move to handle in-line.  */
 #define LARGEST_MOVE_RATIO 15
 
@@ -132,6 +90,13 @@ struct GTY(()) machine_function
   bool vararg_a7;
   rtx vararg_a7_copy;
   rtx_insn *set_frame_ptr_insn;
+  /* Current frame size calculated by compute_frame_size.  */
+  unsigned current_frame_size;
+  /* Callee-save area size in the current frame calculated by
+     compute_frame_size.  */
+  int callee_save_size;
+  bool frame_laid_out;
+  bool epilogue_done;
 };
 
 /* Vector, indexed by hard register number, which contains 1 for a
@@ -164,7 +129,7 @@ static unsigned int xtensa_multibss_section_type_flags (tree, const char *,
 							int) ATTRIBUTE_UNUSED;
 static section *xtensa_select_rtx_section (machine_mode, rtx,
 					   unsigned HOST_WIDE_INT);
-static bool xtensa_rtx_costs (rtx, int, int, int, int *, bool);
+static bool xtensa_rtx_costs (rtx, machine_mode, int, int, int *, bool);
 static int xtensa_register_move_cost (machine_mode, reg_class_t,
 				      reg_class_t);
 static int xtensa_memory_move_cost (machine_mode, reg_class_t, bool);
@@ -211,6 +176,7 @@ static bool xtensa_member_type_forces_blk (const_tree,
 					   machine_mode mode);
 
 static void xtensa_conditional_register_usage (void);
+static unsigned HOST_WIDE_INT xtensa_asan_shadow_offset (void);
 
 
 
@@ -302,6 +268,9 @@ static void xtensa_conditional_register_usage (void);
 #undef TARGET_CANNOT_FORCE_CONST_MEM
 #define TARGET_CANNOT_FORCE_CONST_MEM xtensa_cannot_force_const_mem
 
+#undef TARGET_LRA_P
+#define TARGET_LRA_P hook_bool_void_false
+
 #undef TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P	xtensa_legitimate_address_p
 
@@ -335,6 +304,9 @@ static void xtensa_conditional_register_usage (void);
 
 #undef TARGET_CONDITIONAL_REGISTER_USAGE
 #define TARGET_CONDITIONAL_REGISTER_USAGE xtensa_conditional_register_usage
+
+#undef TARGET_ASAN_SHADOW_OFFSET
+#define TARGET_ASAN_SHADOW_OFFSET xtensa_asan_shadow_offset
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 
@@ -501,6 +473,9 @@ xtensa_valid_move (machine_mode mode, rtx *operands)
     {
       int dst_regnum = xt_true_regnum (operands[0]);
 
+      if (xtensa_tls_referenced_p (operands[1]))
+	return FALSE;
+
       /* The stack pointer can only be assigned with a MOVSP opcode.  */
       if (dst_regnum == STACK_POINTER_REGNUM)
 	return !TARGET_WINDOWED_ABI
@@ -634,6 +609,7 @@ xtensa_mem_offset (unsigned v, machine_mode mode)
     case HImode:
       return xtensa_uimm8x2 (v);
 
+    case DImode:
     case DFmode:
       return (xtensa_uimm8x4 (v) && xtensa_uimm8x4 (v + 4));
 
@@ -859,7 +835,7 @@ xtensa_expand_conditional_branch (rtx *operands, machine_mode mode)
       label1 = pc_rtx;
     }
 
-  emit_jump_insn (gen_rtx_SET (VOIDmode, pc_rtx,
+  emit_jump_insn (gen_rtx_SET (pc_rtx,
 			       gen_rtx_IF_THEN_ELSE (VOIDmode, cmp,
 						     label1,
 						     label2)));
@@ -1069,7 +1045,7 @@ xtensa_emit_move_sequence (rtx *operands, machine_mode mode)
 	  return 1;
 	}
 
-      if (! TARGET_CONST16)
+      if (! TARGET_AUTO_LITPOOLS && ! TARGET_CONST16)
 	{
 	  src = force_const_mem (SImode, src);
 	  operands[1] = src;
@@ -1335,7 +1311,7 @@ xtensa_expand_block_move (rtx *operands)
 	  temp[next] = gen_reg_rtx (mode[next]);
 
 	  x = adjust_address (src_mem, mode[next], offset_ld);
-	  emit_insn (gen_rtx_SET (VOIDmode, temp[next], x));
+	  emit_insn (gen_rtx_SET (temp[next], x));
 
 	  offset_ld += next_amount;
 	  bytes -= next_amount;
@@ -1347,7 +1323,7 @@ xtensa_expand_block_move (rtx *operands)
 	  active[phase] = false;
 	  
 	  x = adjust_address (dst_mem, mode[phase], offset_st);
-	  emit_insn (gen_rtx_SET (VOIDmode, x, temp[phase]));
+	  emit_insn (gen_rtx_SET (x, temp[phase]));
 
 	  offset_st += amount[phase];
 	}
@@ -1461,8 +1437,9 @@ init_alignment_context (struct alignment_context *ac, rtx mem)
   if (ac->shift != NULL_RTX)
     {
       /* Shift is the byte count, but we need the bitcount.  */
-      ac->shift = expand_simple_binop (SImode, MULT, ac->shift,
-				       GEN_INT (BITS_PER_UNIT),
+      gcc_assert (exact_log2 (BITS_PER_UNIT) >= 0);
+      ac->shift = expand_simple_binop (SImode, ASHIFT, ac->shift,
+				       GEN_INT (exact_log2 (BITS_PER_UNIT)),
 				       NULL_RTX, 1, OPTAB_DIRECT);
       ac->modemask = expand_simple_binop (SImode, ASHIFT,
 					  GEN_INT (GET_MODE_MASK (mode)),
@@ -1808,7 +1785,8 @@ xtensa_emit_call (int callop, rtx *operands)
   rtx tgt = operands[callop];
 
   if (GET_CODE (tgt) == CONST_INT)
-    sprintf (result, "call%d\t0x%lx", WINDOW_SIZE, INTVAL (tgt));
+    sprintf (result, "call%d\t" HOST_WIDE_INT_PRINT_HEX,
+	     WINDOW_SIZE, INTVAL (tgt));
   else if (register_operand (tgt, VOIDmode))
     sprintf (result, "callx%d\t%%%d", WINDOW_SIZE, callop);
   else
@@ -1891,23 +1869,23 @@ xtensa_tls_module_base (void)
 static rtx_insn *
 xtensa_call_tls_desc (rtx sym, rtx *retp)
 {
-  rtx fn, arg, a10;
+  rtx fn, arg, a_io;
   rtx_insn *call_insn, *insns;
 
   start_sequence ();
   fn = gen_reg_rtx (Pmode);
   arg = gen_reg_rtx (Pmode);
-  a10 = gen_rtx_REG (Pmode, 10);
+  a_io = gen_rtx_REG (Pmode, WINDOW_SIZE + 2);
 
   emit_insn (gen_tls_func (fn, sym));
   emit_insn (gen_tls_arg (arg, sym));
-  emit_move_insn (a10, arg);
-  call_insn = emit_call_insn (gen_tls_call (a10, fn, sym, const1_rtx));
-  use_reg (&CALL_INSN_FUNCTION_USAGE (call_insn), a10);
+  emit_move_insn (a_io, arg);
+  call_insn = emit_call_insn (gen_tls_call (a_io, fn, sym, const1_rtx));
+  use_reg (&CALL_INSN_FUNCTION_USAGE (call_insn), a_io);
   insns = get_insns ();
   end_sequence ();
 
-  *retp = a10;
+  *retp = a_io;
   return insns;
 }
 
@@ -1981,8 +1959,8 @@ xtensa_legitimize_address (rtx x,
 	{
 	  rtx temp = gen_reg_rtx (Pmode);
 	  rtx addmi_offset = GEN_INT (INTVAL (plus1) & ~0xff);
-	  emit_insn (gen_rtx_SET (Pmode, temp,
-				  gen_rtx_PLUS (Pmode, plus0, addmi_offset)));
+	  emit_insn (gen_rtx_SET (temp, gen_rtx_PLUS (Pmode, plus0,
+						      addmi_offset)));
 	  return gen_rtx_PLUS (Pmode, temp, GEN_INT (INTVAL (plus1) & 0xff));
 	}
     }
@@ -2352,7 +2330,7 @@ print_operand (FILE *file, rtx x, int letter)
 	  && (GET_MODE (x) == DFmode || GET_MODE (x) == DImode))
 	{
 	  x = adjust_address (x, GET_MODE (x) == DFmode ? SFmode : SImode, 4);
-	  output_address (XEXP (x, 0));
+	  output_address (GET_MODE (x), XEXP (x, 0));
 	}
       else
 	output_operand_lossage ("invalid %%N value");
@@ -2379,14 +2357,14 @@ print_operand (FILE *file, rtx x, int letter)
 
     case 'L':
       if (GET_CODE (x) == CONST_INT)
-	fprintf (file, "%ld", (32 - INTVAL (x)) & 0x1f);
+	fprintf (file, HOST_WIDE_INT_PRINT_DEC, (32 - INTVAL (x)) & 0x1f);
       else
 	output_operand_lossage ("invalid %%L value");
       break;
 
     case 'R':
       if (GET_CODE (x) == CONST_INT)
-	fprintf (file, "%ld", INTVAL (x) & 0x1f);
+	fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (x) & 0x1f);
       else
 	output_operand_lossage ("invalid %%R value");
       break;
@@ -2400,7 +2378,7 @@ print_operand (FILE *file, rtx x, int letter)
 
     case 'd':
       if (GET_CODE (x) == CONST_INT)
-	fprintf (file, "%ld", INTVAL (x));
+	fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (x));
       else
 	output_operand_lossage ("invalid %%d value");
       break;
@@ -2414,12 +2392,10 @@ print_operand (FILE *file, rtx x, int letter)
 	}
       else if (GET_CODE (x) == CONST_DOUBLE)
 	{
-	  REAL_VALUE_TYPE r;
-	  REAL_VALUE_FROM_CONST_DOUBLE (r, x);
 	  if (GET_MODE (x) == SFmode)
 	    {
 	      long l;
-	      REAL_VALUE_TO_TARGET_SINGLE (r, l);
+	      REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (x), l);
 	      fprintf (file, "0x%08lx@%c", l, letter == 't' ? 'h' : 'l');
 	    }
 	  else
@@ -2449,13 +2425,25 @@ print_operand (FILE *file, rtx x, int letter)
 	}
       break;
 
+    case 'y':
+      if (GET_CODE (x) == CONST_DOUBLE &&
+	  GET_MODE (x) == SFmode)
+	{
+	  long l;
+	  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (x), l);
+	  fprintf (file, "0x%08lx", l);
+	  break;
+	}
+
+      /* fall through */
+
     default:
       if (GET_CODE (x) == REG || GET_CODE (x) == SUBREG)
 	fprintf (file, "%s", reg_names[xt_true_regnum (x)]);
       else if (GET_CODE (x) == MEM)
-	output_address (XEXP (x, 0));
+	output_address (GET_MODE (x), XEXP (x, 0));
       else if (GET_CODE (x) == CONST_INT)
-	fprintf (file, "%ld", INTVAL (x));
+	fprintf (file, HOST_WIDE_INT_PRINT_DEC, INTVAL (x));
       else
 	output_addr_const (file, x);
     }
@@ -2553,14 +2541,32 @@ xtensa_output_addr_const_extra (FILE *fp, rtx x)
   return false;
 }
 
+static void
+xtensa_output_integer_literal_parts (FILE *file, rtx x, int size)
+{
+  if (size > 4 && !(size & (size - 1)))
+    {
+      rtx first, second;
+
+      split_double (x, &first, &second);
+      xtensa_output_integer_literal_parts (file, first, size / 2);
+      fputs (", ", file);
+      xtensa_output_integer_literal_parts (file, second, size / 2);
+    }
+  else if (size == 4)
+    {
+      output_addr_const (file, x);
+    }
+  else
+    {
+      gcc_unreachable();
+    }
+}
 
 void
 xtensa_output_literal (FILE *file, rtx x, machine_mode mode, int labelno)
 {
   long value_long[2];
-  REAL_VALUE_TYPE r;
-  int size;
-  rtx first, second;
 
   fprintf (file, "\t.literal .LC%u, ", (unsigned) labelno);
 
@@ -2569,18 +2575,19 @@ xtensa_output_literal (FILE *file, rtx x, machine_mode mode, int labelno)
     case MODE_FLOAT:
       gcc_assert (GET_CODE (x) == CONST_DOUBLE);
 
-      REAL_VALUE_FROM_CONST_DOUBLE (r, x);
       switch (mode)
 	{
 	case SFmode:
-	  REAL_VALUE_TO_TARGET_SINGLE (r, value_long[0]);
+	  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (x),
+				       value_long[0]);
 	  if (HOST_BITS_PER_LONG > 32)
 	    value_long[0] &= 0xffffffff;
 	  fprintf (file, "0x%08lx\n", value_long[0]);
 	  break;
 
 	case DFmode:
-	  REAL_VALUE_TO_TARGET_DOUBLE (r, value_long);
+	  REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (x),
+				       value_long);
 	  if (HOST_BITS_PER_LONG > 32)
 	    {
 	      value_long[0] &= 0xffffffff;
@@ -2598,25 +2605,8 @@ xtensa_output_literal (FILE *file, rtx x, machine_mode mode, int labelno)
 
     case MODE_INT:
     case MODE_PARTIAL_INT:
-      size = GET_MODE_SIZE (mode);
-      switch (size)
-	{
-	case 4:
-	  output_addr_const (file, x);
-	  fputs ("\n", file);
-	  break;
-
-	case 8:
-	  split_double (x, &first, &second);
-	  output_addr_const (file, first);
-	  fputs (", ", file);
-	  output_addr_const (file, second);
-	  fputs ("\n", file);
-	  break;
-
-	default:
-	  gcc_unreachable ();
-	}
+      xtensa_output_integer_literal_parts (file, x, GET_MODE_SIZE (mode));
+      fputs ("\n", file);
       break;
 
     default:
@@ -2652,24 +2642,29 @@ compute_frame_size (int size)
 {
   int regno;
 
+  if (reload_completed && cfun->machine->frame_laid_out)
+    return cfun->machine->current_frame_size;
+
   /* Add space for the incoming static chain value.  */
   if (cfun->static_chain_decl != NULL)
     size += (1 * UNITS_PER_WORD);
 
-  xtensa_callee_save_size = 0;
+  cfun->machine->callee_save_size = 0;
   for (regno = 0; regno < FIRST_PSEUDO_REGISTER; ++regno)
     {
       if (xtensa_call_save_reg(regno))
-	xtensa_callee_save_size += UNITS_PER_WORD;
+	cfun->machine->callee_save_size += UNITS_PER_WORD;
     }
 
-  xtensa_current_frame_size =
+  cfun->machine->current_frame_size =
     XTENSA_STACK_ALIGN (size
-			+ xtensa_callee_save_size
+			+ cfun->machine->callee_save_size
 			+ crtl->outgoing_args_size
 			+ (WINDOW_SIZE * UNITS_PER_WORD));
-  xtensa_callee_save_size = XTENSA_STACK_ALIGN (xtensa_callee_save_size);
-  return xtensa_current_frame_size;
+  cfun->machine->callee_save_size =
+    XTENSA_STACK_ALIGN (cfun->machine->callee_save_size);
+  cfun->machine->frame_laid_out = true;
+  return cfun->machine->current_frame_size;
 }
 
 
@@ -2687,6 +2682,30 @@ xtensa_frame_pointer_required (void)
   return false;
 }
 
+HOST_WIDE_INT
+xtensa_initial_elimination_offset (int from, int to)
+{
+  long frame_size = compute_frame_size (get_frame_size ());
+  HOST_WIDE_INT offset;
+
+  switch (from)
+    {
+    case FRAME_POINTER_REGNUM:
+      if (FRAME_GROWS_DOWNWARD)
+	offset = frame_size - (WINDOW_SIZE * UNITS_PER_WORD)
+	  - cfun->machine->callee_save_size;
+      else
+	offset = 0;
+      break;
+    case ARG_POINTER_REGNUM:
+      offset = frame_size;
+      break;
+    default:
+      gcc_unreachable ();
+    }
+
+  return offset;
+}
 
 /* minimum frame = reg save area (4 words) plus static chain (1 word)
    and the total number of words must be a multiple of 128 bits.  */
@@ -2701,6 +2720,9 @@ xtensa_expand_prologue (void)
 
 
   total_size = compute_frame_size (get_frame_size ());
+
+  if (flag_stack_usage_info)
+    current_function_static_stack_size = total_size;
 
   if (TARGET_WINDOWED_ABI)
     {
@@ -2720,6 +2742,7 @@ xtensa_expand_prologue (void)
     {
       int regno;
       HOST_WIDE_INT offset = 0;
+      int callee_save_size = cfun->machine->callee_save_size;
 
       /* -128 is a limit of single addi instruction. */
       if (total_size > 0 && total_size <= 128)
@@ -2727,13 +2750,13 @@ xtensa_expand_prologue (void)
 	  insn = emit_insn (gen_addsi3 (stack_pointer_rtx, stack_pointer_rtx,
 					GEN_INT (-total_size)));
 	  RTX_FRAME_RELATED_P (insn) = 1;
-	  note_rtx = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+	  note_rtx = gen_rtx_SET (stack_pointer_rtx,
 				  plus_constant (Pmode, stack_pointer_rtx,
 						 -total_size));
 	  add_reg_note (insn, REG_FRAME_RELATED_EXPR, note_rtx);
 	  offset = total_size - UNITS_PER_WORD;
 	}
-      else if (xtensa_callee_save_size)
+      else if (callee_save_size)
 	{
 	  /* 1020 is maximal s32i offset, if the frame is bigger than that
 	   * we move sp to the end of callee-saved save area, save and then
@@ -2741,13 +2764,13 @@ xtensa_expand_prologue (void)
 	  if (total_size > 1024)
 	    {
 	      insn = emit_insn (gen_addsi3 (stack_pointer_rtx, stack_pointer_rtx,
-					    GEN_INT (-xtensa_callee_save_size)));
+					    GEN_INT (-callee_save_size)));
 	      RTX_FRAME_RELATED_P (insn) = 1;
-	      note_rtx = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+	      note_rtx = gen_rtx_SET (stack_pointer_rtx,
 				      plus_constant (Pmode, stack_pointer_rtx,
-						     -xtensa_callee_save_size));
+						     -callee_save_size));
 	      add_reg_note (insn, REG_FRAME_RELATED_EXPR, note_rtx);
-	      offset = xtensa_callee_save_size - UNITS_PER_WORD;
+	      offset = callee_save_size - UNITS_PER_WORD;
 	    }
 	  else
 	    {
@@ -2756,7 +2779,7 @@ xtensa_expand_prologue (void)
 	      insn = emit_insn (gen_subsi3 (stack_pointer_rtx,
 					    stack_pointer_rtx, tmp_reg));
 	      RTX_FRAME_RELATED_P (insn) = 1;
-	      note_rtx = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+	      note_rtx = gen_rtx_SET (stack_pointer_rtx,
 				      plus_constant (Pmode, stack_pointer_rtx,
 						     -total_size));
 	      add_reg_note (insn, REG_FRAME_RELATED_EXPR, note_rtx);
@@ -2776,20 +2799,20 @@ xtensa_expand_prologue (void)
 	      insn = emit_move_insn (mem, reg);
 	      RTX_FRAME_RELATED_P (insn) = 1;
 	      add_reg_note (insn, REG_FRAME_RELATED_EXPR,
-			    gen_rtx_SET (VOIDmode, mem, reg));
+			    gen_rtx_SET (mem, reg));
 	    }
 	}
       if (total_size > 1024)
 	{
 	  rtx tmp_reg = gen_rtx_REG (Pmode, A9_REG);
 	  emit_move_insn (tmp_reg, GEN_INT (total_size -
-					    xtensa_callee_save_size));
+					    callee_save_size));
 	  insn = emit_insn (gen_subsi3 (stack_pointer_rtx,
 					stack_pointer_rtx, tmp_reg));
 	  RTX_FRAME_RELATED_P (insn) = 1;
-	  note_rtx = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
+	  note_rtx = gen_rtx_SET (stack_pointer_rtx,
 				  plus_constant (Pmode, stack_pointer_rtx,
-						 xtensa_callee_save_size -
+						 callee_save_size -
 						 total_size));
 	  add_reg_note (insn, REG_FRAME_RELATED_EXPR, note_rtx);
 	}
@@ -2826,7 +2849,7 @@ xtensa_expand_prologue (void)
 				       stack_pointer_rtx));
 	  if (!TARGET_WINDOWED_ABI)
 	    {
-	      note_rtx = gen_rtx_SET (VOIDmode, hard_frame_pointer_rtx,
+	      note_rtx = gen_rtx_SET (hard_frame_pointer_rtx,
 				      stack_pointer_rtx);
 	      RTX_FRAME_RELATED_P (insn) = 1;
 	      add_reg_note (insn, REG_FRAME_RELATED_EXPR, note_rtx);
@@ -2839,9 +2862,9 @@ xtensa_expand_prologue (void)
       /* Create a note to describe the CFA.  Because this is only used to set
 	 DW_AT_frame_base for debug info, don't bother tracking changes through
 	 each instruction in the prologue.  It just takes up space.  */
-      note_rtx = gen_rtx_SET (VOIDmode, (frame_pointer_needed
-					 ? hard_frame_pointer_rtx
-					 : stack_pointer_rtx),
+      note_rtx = gen_rtx_SET ((frame_pointer_needed
+			       ? hard_frame_pointer_rtx
+			       : stack_pointer_rtx),
 			      plus_constant (Pmode, stack_pointer_rtx,
 					     -total_size));
       RTX_FRAME_RELATED_P (insn) = 1;
@@ -2857,21 +2880,21 @@ xtensa_expand_epilogue (void)
       int regno;
       HOST_WIDE_INT offset;
 
-      if (xtensa_current_frame_size > (frame_pointer_needed ? 127 : 1024))
+      if (cfun->machine->current_frame_size > (frame_pointer_needed ? 127 : 1024))
 	{
 	  rtx tmp_reg = gen_rtx_REG (Pmode, A9_REG);
-	  emit_move_insn (tmp_reg, GEN_INT (xtensa_current_frame_size -
-					    xtensa_callee_save_size));
+	  emit_move_insn (tmp_reg, GEN_INT (cfun->machine->current_frame_size -
+					    cfun->machine->callee_save_size));
 	  emit_insn (gen_addsi3 (stack_pointer_rtx, frame_pointer_needed ?
 				 hard_frame_pointer_rtx : stack_pointer_rtx,
 				 tmp_reg));
-	  offset = xtensa_callee_save_size - UNITS_PER_WORD;
+	  offset = cfun->machine->callee_save_size - UNITS_PER_WORD;
 	}
       else
 	{
 	  if (frame_pointer_needed)
 	    emit_move_insn (stack_pointer_rtx, hard_frame_pointer_rtx);
-	  offset = xtensa_current_frame_size - UNITS_PER_WORD;
+	  offset = cfun->machine->current_frame_size - UNITS_PER_WORD;
 	}
 
       /* Prevent reordering of saved a0 update and loading it back from
@@ -2891,16 +2914,16 @@ xtensa_expand_epilogue (void)
 	    }
 	}
 
-      if (xtensa_current_frame_size > 0)
+      if (cfun->machine->current_frame_size > 0)
 	{
 	  if (frame_pointer_needed || /* always reachable with addi */
-	      xtensa_current_frame_size > 1024 ||
-	      xtensa_current_frame_size <= 127)
+	      cfun->machine->current_frame_size > 1024 ||
+	      cfun->machine->current_frame_size <= 127)
 	    {
-	      if (xtensa_current_frame_size <= 127)
-		offset = xtensa_current_frame_size;
+	      if (cfun->machine->current_frame_size <= 127)
+		offset = cfun->machine->current_frame_size;
 	      else
-		offset = xtensa_callee_save_size;
+		offset = cfun->machine->callee_save_size;
 
 	      emit_insn (gen_addsi3 (stack_pointer_rtx,
 				     stack_pointer_rtx,
@@ -2909,7 +2932,8 @@ xtensa_expand_epilogue (void)
 	  else
 	    {
 	      rtx tmp_reg = gen_rtx_REG (Pmode, A9_REG);
-	      emit_move_insn (tmp_reg, GEN_INT (xtensa_current_frame_size));
+	      emit_move_insn (tmp_reg,
+			      GEN_INT (cfun->machine->current_frame_size));
 	      emit_insn (gen_addsi3 (stack_pointer_rtx, stack_pointer_rtx,
 				     tmp_reg));
 	    }
@@ -2920,9 +2944,20 @@ xtensa_expand_epilogue (void)
 				  stack_pointer_rtx,
 				  EH_RETURN_STACKADJ_RTX));
     }
-  xtensa_current_frame_size = 0;
-  xtensa_callee_save_size = 0;
+  cfun->machine->epilogue_done = true;
   emit_jump_insn (gen_return ());
+}
+
+bool
+xtensa_use_return_instruction_p (void)
+{
+  if (!reload_completed)
+    return false;
+  if (TARGET_WINDOWED_ABI)
+    return true;
+  if (compute_frame_size (get_frame_size ()) == 0)
+    return true;
+  return cfun->machine->epilogue_done;
 }
 
 void
@@ -2933,8 +2968,7 @@ xtensa_set_return_address (rtx address, rtx scratch)
     hard_frame_pointer_rtx : stack_pointer_rtx;
   rtx a0_addr = plus_constant (Pmode, frame,
 			       total_size - UNITS_PER_WORD);
-  rtx note = gen_rtx_SET (VOIDmode,
-			  gen_frame_mem (SImode, a0_addr),
+  rtx note = gen_rtx_SET (gen_frame_mem (SImode, a0_addr),
 			  gen_rtx_REG (SImode, A0_REG));
   rtx insn;
 
@@ -3588,9 +3622,12 @@ xtensa_memory_move_cost (machine_mode mode ATTRIBUTE_UNUSED,
    scanned.  In either case, *TOTAL contains the cost result.  */
 
 static bool
-xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
+xtensa_rtx_costs (rtx x, machine_mode mode, int outer_code,
+		  int opno ATTRIBUTE_UNUSED,
 		  int *total, bool speed ATTRIBUTE_UNUSED)
 {
+  int code = GET_CODE (x);
+
   switch (code)
     {
     case CONST_INT:
@@ -3660,9 +3697,9 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
     case MEM:
       {
 	int num_words =
-	  (GET_MODE_SIZE (GET_MODE (x)) > UNITS_PER_WORD) ?  2 : 1;
+	  (GET_MODE_SIZE (mode) > UNITS_PER_WORD) ?  2 : 1;
 
-	if (memory_address_p (GET_MODE (x), XEXP ((x), 0)))
+	if (memory_address_p (mode, XEXP ((x), 0)))
 	  *total = COSTS_N_INSNS (num_words);
 	else
 	  *total = COSTS_N_INSNS (2*num_words);
@@ -3679,13 +3716,13 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       return true;
 
     case NOT:
-      *total = COSTS_N_INSNS ((GET_MODE (x) == DImode) ? 3 : 2);
+      *total = COSTS_N_INSNS (mode == DImode ? 3 : 2);
       return true;
 
     case AND:
     case IOR:
     case XOR:
-      if (GET_MODE (x) == DImode)
+      if (mode == DImode)
 	*total = COSTS_N_INSNS (2);
       else
 	*total = COSTS_N_INSNS (1);
@@ -3694,7 +3731,7 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
     case ASHIFT:
     case ASHIFTRT:
     case LSHIFTRT:
-      if (GET_MODE (x) == DImode)
+      if (mode == DImode)
 	*total = COSTS_N_INSNS (50);
       else
 	*total = COSTS_N_INSNS (1);
@@ -3702,10 +3739,9 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
 
     case ABS:
       {
-	machine_mode xmode = GET_MODE (x);
-	if (xmode == SFmode)
+	if (mode == SFmode)
 	  *total = COSTS_N_INSNS (TARGET_HARD_FLOAT ? 1 : 50);
-	else if (xmode == DFmode)
+	else if (mode == DFmode)
 	  *total = COSTS_N_INSNS (50);
 	else
 	  *total = COSTS_N_INSNS (4);
@@ -3715,10 +3751,9 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
     case PLUS:
     case MINUS:
       {
-	machine_mode xmode = GET_MODE (x);
-	if (xmode == SFmode)
+	if (mode == SFmode)
 	  *total = COSTS_N_INSNS (TARGET_HARD_FLOAT ? 1 : 50);
-	else if (xmode == DFmode || xmode == DImode)
+	else if (mode == DFmode || mode == DImode)
 	  *total = COSTS_N_INSNS (50);
 	else
 	  *total = COSTS_N_INSNS (1);
@@ -3726,17 +3761,16 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       }
 
     case NEG:
-      *total = COSTS_N_INSNS ((GET_MODE (x) == DImode) ? 4 : 2);
+      *total = COSTS_N_INSNS (mode == DImode ? 4 : 2);
       return true;
 
     case MULT:
       {
-	machine_mode xmode = GET_MODE (x);
-	if (xmode == SFmode)
+	if (mode == SFmode)
 	  *total = COSTS_N_INSNS (TARGET_HARD_FLOAT ? 4 : 50);
-	else if (xmode == DFmode)
+	else if (mode == DFmode)
 	  *total = COSTS_N_INSNS (50);
-	else if (xmode == DImode)
+	else if (mode == DImode)
 	  *total = COSTS_N_INSNS (TARGET_MUL32_HIGH ? 10 : 50);
 	else if (TARGET_MUL32)
 	  *total = COSTS_N_INSNS (4);
@@ -3752,13 +3786,12 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
     case DIV:
     case MOD:
       {
-	machine_mode xmode = GET_MODE (x);
-	if (xmode == SFmode)
+	if (mode == SFmode)
 	  {
 	    *total = COSTS_N_INSNS (TARGET_HARD_FLOAT_DIV ? 8 : 50);
 	    return true;
 	  }
-	else if (xmode == DFmode)
+	else if (mode == DFmode)
 	  {
 	    *total = COSTS_N_INSNS (50);
 	    return true;
@@ -3769,8 +3802,7 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
     case UDIV:
     case UMOD:
       {
-	machine_mode xmode = GET_MODE (x);
-	if (xmode == DImode)
+	if (mode == DImode)
 	  *total = COSTS_N_INSNS (50);
 	else if (TARGET_DIV32)
 	  *total = COSTS_N_INSNS (32);
@@ -3780,7 +3812,7 @@ xtensa_rtx_costs (rtx x, int code, int outer_code, int opno ATTRIBUTE_UNUSED,
       }
 
     case SQRT:
-      if (GET_MODE (x) == SFmode)
+      if (mode == SFmode)
 	*total = COSTS_N_INSNS (TARGET_HARD_FLOAT_SQRT ? 8 : 50);
       else
 	*total = COSTS_N_INSNS (50);
@@ -4165,7 +4197,10 @@ hwloop_optimize (hwloop_info loop)
       entry_after = BB_END (entry_bb);
       while (DEBUG_INSN_P (entry_after)
              || (NOTE_P (entry_after)
-                 && NOTE_KIND (entry_after) != NOTE_INSN_BASIC_BLOCK))
+                 && NOTE_KIND (entry_after) != NOTE_INSN_BASIC_BLOCK
+		 /* Make sure we don't split a call and its corresponding
+		    CALL_ARG_LOCATION note.  */
+                 && NOTE_KIND (entry_after) != NOTE_INSN_CALL_ARG_LOCATION))
         entry_after = PREV_INSN (entry_after);
 
       emit_insn_after (seq, entry_after);
@@ -4304,6 +4339,14 @@ enum reg_class xtensa_regno_to_class (int regno)
     return GR_REGS;
   else
     return regno_to_class[regno];
+}
+
+/* Implement TARGET_ASAN_SHADOW_OFFSET.  */
+
+static unsigned HOST_WIDE_INT
+xtensa_asan_shadow_offset (void)
+{
+  return HOST_WIDE_INT_UC (0x10000000);
 }
 
 #include "gt-xtensa.h"

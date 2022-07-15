@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2014, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -27,7 +27,6 @@ with Atree;    use Atree;
 with Checks;   use Checks;
 with Einfo;    use Einfo;
 with Errout;   use Errout;
-with Ghost;    use Ghost;
 with Lib;      use Lib;
 with Lib.Xref; use Lib.Xref;
 with Namet;    use Namet;
@@ -46,6 +45,7 @@ with Sem_Res;  use Sem_Res;
 with Sem_Util; use Sem_Util;
 with Sem_Warn; use Sem_Warn;
 with Sinfo;    use Sinfo;
+with Snames;   use Snames;
 with Stand;    use Stand;
 
 package body Sem_Ch11 is
@@ -59,25 +59,12 @@ package body Sem_Ch11 is
       PF : constant Boolean   := Is_Pure (Current_Scope);
 
    begin
-      --  The exception declaration may be subject to pragma Ghost with policy
-      --  Ignore. Set the mode now to ensure that any nodes generated during
-      --  analysis and expansion are properly flagged as ignored Ghost.
-
-      Set_Ghost_Mode (N);
-
       Generate_Definition         (Id);
       Enter_Name                  (Id);
       Set_Ekind                   (Id, E_Exception);
       Set_Etype                   (Id, Standard_Exception_Type);
       Set_Is_Statically_Allocated (Id);
       Set_Is_Pure                 (Id, PF);
-
-      --  An exception declared within a Ghost region is automatically Ghost
-      --  (SPARK RM 6.9(2)).
-
-      if Ghost_Mode > None then
-         Set_Is_Ghost_Entity (Id);
-      end if;
 
       if Has_Aspects (N) then
          Analyze_Aspect_Specifications (N, Id);
@@ -219,6 +206,7 @@ package body Sem_Ch11 is
                   H_Scope :=
                     New_Internal_Entity
                      (E_Block, Current_Scope, Sloc (Choice), 'E');
+                  Set_Is_Exception_Handler (H_Scope);
                end if;
 
                Push_Scope (H_Scope);
@@ -323,11 +311,11 @@ package body Sem_Ch11 is
                                            N_Formal_Package_Declaration
                            then
                               Error_Msg_NE
-                                ("exception& is declared in "  &
-                                 "generic formal package", Id, Ent);
+                                ("exception& is declared in generic formal "
+                                 & "package", Id, Ent);
                               Error_Msg_N
-                                ("\and therefore cannot appear in " &
-                                 "handler (RM 11.2(8))", Id);
+                                ("\and therefore cannot appear in handler "
+                                 & "(RM 11.2(8))", Id);
                               exit;
 
                            --  If the exception is declared in an inner
@@ -367,8 +355,8 @@ package body Sem_Ch11 is
 
             Analyze_Statements (Statements (Handler));
 
-            --  If a choice was present, we created a special scope for it,
-            --  so this is where we pop that special scope to get rid of it.
+            --  If a choice was present, we created a special scope for it, so
+            --  this is where we pop that special scope to get rid of it.
 
             if Present (Choice) then
                End_Scope;
@@ -421,11 +409,16 @@ package body Sem_Ch11 is
 
       Analyze_Statements (Statements (N));
 
-      --  If the current scope is a subprogram, then this is the right place to
-      --  check for hanging useless assignments from the statement sequence of
-      --  the subprogram body.
+      --  If the current scope is a subprogram, entry or task body or declare
+      --  block then this is the right place to check for hanging useless
+      --  assignments from the statement sequence. Skip this in the body of a
+      --  postcondition, since in that case there are no source references, and
+      --  we need to preserve deferred references from the enclosing scope.
 
-      if Is_Subprogram (Current_Scope) then
+      if ((Is_Subprogram (Current_Scope) or else Is_Entry (Current_Scope))
+           and then Chars (Current_Scope) /= Name_uPostconditions)
+         or else Ekind_In (Current_Scope, E_Block, E_Task_Type)
+      then
          Warn_On_Useless_Assignments (Current_Scope);
       end if;
 

@@ -1,7 +1,7 @@
 /* This file contains routines to construct and validate Cilk Plus
    constructs within the C and C++ front ends.
 
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com>.
 
 This file is part of GCC.
@@ -23,17 +23,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "options.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "tree.h"
 #include "c-common.h"
 
 /* Validate the body of a _Cilk_for construct or a <#pragma simd> for
@@ -50,56 +39,6 @@ c_check_cilk_loop (location_t loc, tree decl)
       return false;
     }
   return true;
-}
-
-/* Validate and emit code for <#pragma simd> clauses.  */
-
-tree
-c_finish_cilk_clauses (tree clauses)
-{
-  for (tree c = clauses; c; c = OMP_CLAUSE_CHAIN (c))
-    {
-      tree prev = clauses;
-
-      /* If a variable appears in a linear clause it cannot appear in
-	 any other OMP clause.  */
-      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LINEAR)
-	for (tree c2 = clauses; c2; c2 = OMP_CLAUSE_CHAIN (c2))
-	  {
-	    if (c == c2)
-	      continue;
-	    enum omp_clause_code code = OMP_CLAUSE_CODE (c2);
-
-	    switch (code)
-	      {
-	      case OMP_CLAUSE_LINEAR:
-	      case OMP_CLAUSE_PRIVATE:
-	      case OMP_CLAUSE_FIRSTPRIVATE:
-	      case OMP_CLAUSE_LASTPRIVATE:
-	      case OMP_CLAUSE_REDUCTION:
-		break;
-
-	      case OMP_CLAUSE_SAFELEN:
-		goto next;
-
-	      default:
-		gcc_unreachable ();
-	      }
-
-	    if (OMP_CLAUSE_DECL (c) == OMP_CLAUSE_DECL (c2))
-	      {
-		error_at (OMP_CLAUSE_LOCATION (c2),
-			  "variable appears in more than one clause");
-		inform (OMP_CLAUSE_LOCATION (c),
-			"other clause defined here");
-		// Remove problematic clauses.
-		OMP_CLAUSE_CHAIN (prev) = OMP_CLAUSE_CHAIN (c2);
-	      }
-	  next:
-	    prev = c2;
-	  }
-    }
-  return clauses;
 }
 
 /* Calculate number of iterations of CILK_FOR.  */

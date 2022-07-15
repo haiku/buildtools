@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-mavx512bw -O2 -ftree-vectorize" } */
+/* { dg-options "-mavx512bw -O2 -ftree-vectorize" { target i?86-*-* x86_64-*-* } } */
 
 void
 foo(const char *in, char *out, unsigned n)

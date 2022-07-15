@@ -1,5 +1,5 @@
 /* Subroutine for function pointer canonicalization on PA-RISC with ELF32.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
    Contributed by John David Anglin (dave.anglin@nrc.ca).
 
 This file is part of GCC.
@@ -45,7 +45,7 @@ static int fixup_branch_offset[NOFFSETS] = { -4, 32 };
 #define GET_FIELD(X, FROM, TO) \
   ((X) >> (31 - (TO)) & ((1 << ((TO) - (FROM) + 1)) - 1))
 #define SIGN_EXTEND(VAL,BITS) \
-  ((int) ((VAL) >> ((BITS) - 1) ? (-1 << (BITS)) | (VAL) : (VAL)))
+  ((int) ((VAL) >> ((BITS) - 1) ? ((unsigned)(-1) << (BITS)) | (VAL) : (VAL)))
 
 struct link_map;
 typedef int (*fptr_t) (void);
@@ -113,7 +113,7 @@ __canonicalize_funcptr_for_compare (fptr_t fptr)
   /* Build a plabel for an indirect call to _dl_fixup.  */
   fixup_plabel[0] = (unsigned int) iptr + 8;	/* address of fixup */
   fixup_plabel[1] = got[-1];			/* ltp for fixup */
-  fixup = (fixup_t) ((int) fixup_plabel | 3);
+  fixup = (fixup_t) ((int) fixup_plabel | 2);
 
   /* Call fixup to resolve the function address.  got[1] contains the
      link_map pointer and plabel[1] the relocation offset.  */

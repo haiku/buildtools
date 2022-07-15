@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -109,8 +109,9 @@ package Types is
      Character range Character'Val (16#80#) .. Character'Val (16#FF#);
    --  8-bit Characters with the upper bit set
 
-   type Character_Ptr is access all Character;
-   type String_Ptr    is access all String;
+   type Character_Ptr    is access all Character;
+   type String_Ptr       is access all String;
+   type String_Ptr_Const is access constant String;
    --  Standard character and string pointers
 
    procedure Free is new Unchecked_Deallocation (String, String_Ptr);
@@ -553,7 +554,7 @@ package Types is
    -- Types used for Library Management --
    ---------------------------------------
 
-   type Unit_Number_Type is new Int;
+   type Unit_Number_Type is new Int range -1 .. Int'Last;
    --  Unit number. The main source is unit 0, and subsidiary sources have
    --  non-zero numbers starting with 1. Unit numbers are used to index the
    --  Units table in package Lib.
@@ -629,7 +630,7 @@ package Types is
    --  copying operations during installation. We have particularly noticed
    --  that WinNT seems susceptible to such changes.
    --
-   --  Note : the Empty_Time_Stamp value looks equal to itself, and less than
+   --  Note: the Empty_Time_Stamp value looks equal to itself, and less than
    --  any non-empty time stamp value.
 
    procedure Split_Time_Stamp
@@ -679,11 +680,13 @@ package Types is
    Storage_Check          : constant := 15;
    Tag_Check              : constant := 16;
    Validity_Check         : constant := 17;
+   Container_Checks       : constant := 18;
+   Tampering_Check        : constant := 19;
    --  Values used to represent individual predefined checks (including the
    --  setting of Atomic_Synchronization, which is implemented internally using
    --  a "check" whose name is Atomic_Synchronization).
 
-   All_Checks : constant := 18;
+   All_Checks : constant := 20;
    --  Value used to represent All_Checks value
 
    subtype Predefined_Check_Id is Check_Id range 1 .. All_Checks;
@@ -827,9 +830,8 @@ package Types is
    --  To add a new code, you need to do the following:
 
    --    1. Assign a new number to the reason. Do not renumber existing codes,
-   --       since this causes compatibility/bootstrap issues, and problems in
-   --       the CIL/JVM backends. So always add the new code at the end of the
-   --       list.
+   --       since this causes compatibility/bootstrap issues, so always add the
+   --       new code at the end of the list.
 
    --    2. Update the contents of the array Kind
 
@@ -845,10 +847,7 @@ package Types is
    --  Note on ordering of references. For the tables in Ada.Exceptions units,
    --  usually the ordering does not matter, and we use the same ordering as
    --  is used here (note the requirement in the ordering here that CE/PE/SE
-   --  codes be kept together, so the subtype declarations work OK). However,
-   --  there is an important exception, which is in a-except-2005.adb, where
-   --  ordering of the Rcheck routines must correspond to the ordering of the
-   --  Rmsg_xx messages. This is required by the .NET scripts.
+   --  codes be kept together, so the subtype declarations work OK).
 
    type RT_Exception_Code is
      (CE_Access_Check_Failed,            -- 00
@@ -898,7 +897,7 @@ package Types is
    type Reason_Kind is (CE_Reason, PE_Reason, SE_Reason);
    --  Categorization of reason codes by exception raised
 
-   Rkind : array (RT_Exception_Code range <>) of Reason_Kind :=
+   Rkind : constant array (RT_Exception_Code range <>) of Reason_Kind :=
              (CE_Access_Check_Failed            => CE_Reason,
               CE_Access_Parameter_Is_Null       => CE_Reason,
               CE_Discriminant_Check_Failed      => CE_Reason,

@@ -32,9 +32,9 @@ GNAT requires that all alignment clauses specify a power of 2, and all
 default alignments are always a power of 2.  The default alignment
 values are as follows:
 
-* *Primitive Types*.
+* *Elementary Types*.
 
-  For primitive types, the alignment is the minimum of the actual size of
+  For elementary types, the alignment is the minimum of the actual size of
   objects of the type divided by `Storage_Unit`,
   and the maximum alignment supported by the target.
   (This maximum alignment is given by the GNAT-specific attribute
@@ -53,10 +53,11 @@ values are as follows:
   For arrays, the alignment is equal to the alignment of the component type
   for the normal case where no packing or component size is given.  If the
   array is packed, and the packing is effective (see separate section on
-  packed arrays), then the alignment will be one for long packed arrays,
-  or arrays whose length is not known at compile time.  For short packed
+  packed arrays), then the alignment will be either 4, 2, or 1 for long packed
+  arrays or arrays whose length is not known at compile time, depending on
+  whether the component size is divisible by 4, 2, or is odd.  For short packed
   arrays, which are handled internally as modular types, the alignment
-  will be as described for primitive types, e.g., a packed array of length
+  will be as described for elementary types, e.g. a packed array of length
   31 bits will have an object size of four bytes, and an alignment of 4.
 
 * *Records*.
@@ -371,10 +372,10 @@ Consider the following modified version of the above program:
 
   begin
      Put_Line (Integer'Image (V2'Size));
-     Put_Line (Integer'IMage (Size (V2)));
+     Put_Line (Integer'Image (Size (V2)));
      V2 := (True, 'x');
      Put_Line (Integer'Image (V2'Size));
-     Put_Line (Integer'IMage (Size (V2)));
+     Put_Line (Integer'Image (Size (V2)));
   end q;
 
 The output from this program is
@@ -489,7 +490,7 @@ discrete types are as follows:
   The `Object_Size` for base subtypes reflect the natural hardware
   size in bits (run the compiler with *-gnatS* to find those values
   for numeric types). Enumeration types and fixed-point base subtypes have
-  8, 16, 32 or 64 bits for this size, depending on the range of values
+  8, 16, 32, or 64 bits for this size, depending on the range of values
   to be stored.
 
 *
@@ -553,11 +554,6 @@ is illegal to convert from one access subtype to the other. For a more
 complete description of this additional legality rule, see the
 description of the `Object_Size` attribute.
 
-At the implementation level, Esize stores the Object_Size and the
-RM_Size field stores the `Value_Size` (and hence the value of the
-`Size` attribute,
-which, as noted above, is equivalent to `Value_Size`).
-
 To get a feel for the difference, consider the following examples (note
 that in each case the base is `Short_Short_Integer` with a size of 8):
 
@@ -573,15 +569,17 @@ that in each case the base is `Short_Short_Integer` with a size of 8):
 +---------------------------------------------+-------------+-------------+
 |``subtype x4 is x2'base range 0 .. 10;``     |  8          |    4        |
 +---------------------------------------------+-------------+-------------+
+|``dynamic : x2'Base range -64 .. +63;``      |             |             |
++---------------------------------------------+-------------+-------------+
 |``subtype x5 is x2 range 0 .. dynamic;``     | 16          |    3*       |
 +---------------------------------------------+-------------+-------------+
-|``subtype x6 is x2'base range 0 .. dynamic;``|  8          |    3*       |
+|``subtype x6 is x2'base range 0 .. dynamic;``|  8          |    7*       |
 +---------------------------------------------+-------------+-------------+
 
-Note: the entries marked '3*' are not actually specified by the Ada
-Reference Manual, but it seems in the spirit of the RM rules to allocate
-the minimum number of bits (here 3, given the range for `x2`)
-known to be large enough to hold the given range of values.
+Note: the entries marked '*' are not actually specified by the Ada
+Reference Manual, which has nothing to say about size in the dynamic
+case. What GNAT does is to allocate sufficient bits to accomodate any
+possible dynamic values for the bounds at run-time.
 
 So far, so good, but GNAT has to obey the RM rules, so the question is
 under what conditions must the RM `Size` be used.
@@ -620,7 +618,7 @@ since it must be rounded up so that this value is a multiple of the
 alignment (4 bytes = 32 bits).
 
 For all other types, the `Object_Size`
-and Value_Size are the same (and equivalent to the RM attribute `Size`).
+and `Value_Size` are the same (and equivalent to the RM attribute `Size`).
 Only `Size` may be specified for such types.
 
 Note that `Value_Size` can be used to force biased representation
@@ -792,7 +790,7 @@ restrictions placed on component clauses as follows:
   little-endian machines, this must be explicitly programmed.  This capability
   is not provided by `Bit_Order`.
 
-* Components that are positioned across byte boundaries
+* Components that are positioned across byte boundaries.
 
   but do not occupy an integral number of bytes.  Given that bytes are not
   reordered, such fields would occupy a non-contiguous sequence of bits
@@ -822,7 +820,7 @@ definition clause on byte ordering.  Briefly, it has no effect at all, but
 a detailed example will be helpful.  Before giving this
 example, let us review the precise
 definition of the effect of defining `Bit_Order`.  The effect of a
-non-standard bit order is described in section 15.5.3 of the Ada
+non-standard bit order is described in section 13.5.3 of the Ada
 Reference Manual:
 
    "2   A bit ordering is a method of interpreting the meaning of
@@ -840,7 +838,7 @@ this context, we visit section 13.5.1 of the manual:
 The critical point here is that storage places are taken from
 the values after normalization, not before.  So the `Bit_Order`
 interpretation applies to normalized values.  The interpretation
-is described in the later part of the 15.5.3 paragraph:
+is described in the later part of the 13.5.3 paragraph:
 
    "2   A bit ordering is a method of interpreting the meaning of
    the storage place attributes.  High_Order_First (known in the
@@ -1072,22 +1070,23 @@ Pragma Pack for Arrays
 
 .. index:: Pragma Pack (for arrays)
 
-Pragma `Pack` applied to an array has no effect unless the component type
-is packable.  For a component type to be packable, it must be one of the
-following cases:
+Pragma `Pack` applied to an array has an effect that depends upon whether the
+component type is *packable*.  For a component type to be *packable*, it must
+be one of the following cases:
 
-*
-  Any scalar type
-*
-  Any type whose size is specified with a size clause
-*
-  Any packed array type with a static size
-*
-  Any record type padded because of its default alignment
+* Any elementary type.
+
+* Any small packed array type with a static size.
+
+* Any small simple record type with a static size.
 
 For all these cases, if the component subtype size is in the range
-1 through 63, then the effect of the pragma `Pack` is exactly as though a
+1 through 64, then the effect of the pragma `Pack` is exactly as though a
 component size were specified giving the component subtype size.
+
+All other types are non-packable, they occupy an integral number of storage
+units and the only effect of pragma Pack is to remove alignment gaps.
+
 For example if we have:
 
 .. code-block:: ada
@@ -1098,7 +1097,7 @@ For example if we have:
      pragma Pack (ar);
 
 Then the component size of `ar` will be set to 5 (i.e., to `r'size`,
-and the size of the array `ar` will be exactly 40 bits.
+and the size of the array `ar` will be exactly 40 bits).
 
 Note that in some cases this rather fierce approach to packing can produce
 unexpected effects.  For example, in Ada 95 and Ada 2005,
@@ -1187,23 +1186,21 @@ taken by components.  We distinguish between *packable* components and
 *non-packable* components.
 Components of the following types are considered packable:
 
-*
-  Components of a primitive type are packable unless they are aliased
-  or of an atomic type.
+* Components of an elementary type are packable unless they are aliased,
+  independent, or of an atomic type.
 
-*
-  Small packed arrays, whose size does not exceed 64 bits, and where the
-  size is statically known at compile time, are represented internally
-  as modular integers, and so they are also packable.
+* Small packed arrays, where the size is statically known, are represented
+  internally as modular integers, and so they are also packable.
 
+* Small simple records, where the size is statically known, are also packable.
 
-All packable components occupy the exact number of bits corresponding to
-their `Size` value, and are packed with no padding bits, i.e., they
-can start on an arbitrary bit boundary.
+For all these cases, if the 'Size value is in the range 1 through 64, the
+components occupy the exact number of bits corresponding to this value
+and are packed with no padding bits, i.e. they can start on an arbitrary
+bit boundary.
 
-All other types are non-packable, they occupy an integral number of
-storage units, and
-are placed at a boundary corresponding to their alignment requirements.
+All other types are non-packable, they occupy an integral number of storage
+units and the only effect of pragma Pack is to remove alignment gaps.
 
 For example, consider the record
 
@@ -1334,7 +1331,7 @@ so for example, the following is permitted:
 
 Note: the above rules apply to recent releases of GNAT 5.
 In GNAT 3, there are more severe restrictions on larger components.
-For non-primitive types, including packed arrays with a size greater than
+For composite types, including packed arrays with a size greater than
 64 bits, component clauses must respect the alignment requirement of the
 type, in particular, always starting on a byte boundary, and the length
 must be a multiple of the storage unit.
@@ -1480,7 +1477,7 @@ as found in RM 13.1(22):
    a constant declared before the entity."
 
 In practice this is applicable only to address clauses, since this is the
-only case in which a non-static expression is permitted by the syntax.  As
+only case in which a nonstatic expression is permitted by the syntax.  As
 the AARM notes in sections 13.1 (22.a-22.h):
 
    22.a   Reason: This is to avoid the following sort of thing:
@@ -1512,7 +1509,7 @@ the AARM notes in sections 13.1 (22.a-22.h):
    might be known at compile time anyway in many
    cases.
 
-GNAT does indeed permit many additional cases of non-static expressions.  In
+GNAT does indeed permit many additional cases of nonstatic expressions.  In
 particular, if the type involved is elementary there are no restrictions
 (since in this case, holding a temporary copy of the initialization value,
 if one is present, is inexpensive).  In addition, if there is no implicit or
@@ -1527,7 +1524,7 @@ only the case where all three of these conditions hold:
   Note that access values are always implicitly initialized.
 
 *
-  The address value is non-static.  Here GNAT is more permissive than the
+  The address value is nonstatic.  Here GNAT is more permissive than the
   RM, and allows the address value to be the address of a previously declared
   stand-alone variable, as long as it does not itself have an address clause.
 
@@ -1540,9 +1537,9 @@ only the case where all three of these conditions hold:
   However, the prefix of the address clause cannot be an array component, or
   a component of a discriminated record.
 
-As noted above in section 22.h, address values are typically non-static.  In
+As noted above in section 22.h, address values are typically nonstatic.  In
 particular the To_Address function, even if applied to a literal value, is
-a non-static function call.  To avoid this minor annoyance, GNAT provides
+a nonstatic function call.  To avoid this minor annoyance, GNAT provides
 the implementation defined attribute 'To_Address.  The following two
 expressions have identical values:
 
@@ -1665,11 +1662,10 @@ or alternatively, using the form recommended by the RM:
     for B'Address use Addr;
 
 
-In both of these cases, `A`
-and `B` become aliased to one another via the
-address clause. This use of address clauses to overlay
-variables, achieving an effect similar to unchecked
-conversion was erroneous in Ada 83, but in Ada 95 and Ada 2005
+In both of these cases, `A` and `B` become aliased to one another
+via the address clause. This use of address clauses to overlay
+variables, achieving an effect similar to unchecked conversion
+was erroneous in Ada 83, but in Ada 95 and Ada 2005
 the effect is implementation defined. Furthermore, the
 Ada RM specifically recommends that in a situation
 like this, `B` should be subject to the following
@@ -1680,10 +1676,14 @@ implementation advice (RM 13.3(19)):
    optimizations based on assumptions of no aliases."
 
 GNAT follows this recommendation, and goes further by also applying
-this recommendation to the overlaid variable (`A`
-in the above example) in this case. This means that the overlay
-works "as expected", in that a modification to one of the variables
-will affect the value of the other.
+this recommendation to the overlaid variable (`A` in the above example)
+in this case. This means that the overlay works "as expected", in that
+a modification to one of the variables will affect the value of the other.
+
+More generally, GNAT interprets this recommendation conservatively for
+address clauses: in the cases other than overlays, it considers that the
+object is effectively subject to pragma `Volatile` and implements the
+associated semantics.
 
 Note that when address clause overlays are used in this way, there is an
 issue of unintentional initialization, as shown by this example:
@@ -1806,12 +1806,9 @@ operations, for example:
       Temp.A := 32;
       Mem := Temp;
 
-For a full access (reference or modification) of the variable (Mem) in
-this case, as in the above examples, GNAT guarantees that the entire atomic
-word will be accessed. It is not clear whether the RM requires this. For
-example in the above, can the compiler reference only the Mem.A field as
-an optimization? Whatever the answer to this question is, GNAT makes the
-guarantee that for such a reference, the entire word is read or written.
+For a full access (reference or modification) of the variable (Mem) in this
+case, as in the above examples, GNAT guarantees that the entire atomic word
+will be accessed, in accordance with the RM C.6(15) clause.
 
 A problem arises with a component access such as:
 
@@ -1837,6 +1834,9 @@ a warning in such a case:
 It is best to be explicit in this situation, by either declaring the
 components to be atomic if you want the byte store, or explicitly writing
 the full word access sequence if that is what the hardware requires.
+Alternatively, if the full word access sequence is required, GNAT also
+provides the pragma `Volatile_Full_Access` which can be used in lieu of
+pragma `Atomic` and will give the additional guarantee.
 
 
 .. _Effect_of_Convention_on_Representation:

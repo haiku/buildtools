@@ -1,5 +1,5 @@
 /*
- * Copyright 2010-2013 Intel Corporation.
+ * Copyright 2010-2016 Intel Corporation.
  *
  * This library is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published
@@ -48,10 +48,10 @@
 * @file common/COITypes_common.h
 */
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
-    #include <stdint.h>
-    #include <wchar.h>
-    #define COIACCESSAPI /* nothing */
-    #define COIACCESSAPI2 /* nothing */
+        #include <stdint.h>
+        #include <wchar.h>
+        #define COIACCESSAPI /* nothing */
+        #define COIACCESSAPI2 /* nothing */
 #endif /* DOXYGEN_SHOULD_SKIP_THIS */
 
 
@@ -60,21 +60,24 @@ extern "C" {
 #endif
 
 
-struct coievent  { uint64_t opaque[2]; };
+struct coievent
+{
+    uint64_t opaque[2];
+};
 
-typedef struct coiprocess  * COIPROCESS;
-typedef struct coipipeline * COIPIPELINE;
-typedef struct coifunction * COIFUNCTION;
-typedef struct coiengine   * COIENGINE;
+typedef struct coiprocess   *COIPROCESS;
+typedef struct coipipeline *COIPIPELINE;
+typedef struct coifunction *COIFUNCTION;
+typedef struct coiengine    *COIENGINE;
 typedef struct coievent      COIEVENT;
-typedef struct coibuffer   * COIBUFFER;
-typedef struct coilibrary  * COILIBRARY;
-typedef struct coimapinst  * COIMAPINSTANCE;
+typedef struct coibuffer    *COIBUFFER;
+typedef struct coilibrary   *COILIBRARY;
+typedef struct coimapinst   *COIMAPINSTANCE;
 
 typedef uint64_t COI_CPU_MASK[16];
 
-/** 
- *  On Windows, coi_wchar_t is a uint32_t. On Windows, wchar_t is 16 bits wide, and on Linux it is 32 bits wide, so uint32_t is used for portability.
+/**
+ * On Windows, coi_wchar_t is a uint32_t. On Windows, wchar_t is 16 bits wide, and on Linux it is 32 bits wide, so uint32_t is used for portability.
  */
 typedef wchar_t  coi_wchar_t;
 

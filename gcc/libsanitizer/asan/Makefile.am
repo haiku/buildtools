@@ -1,9 +1,9 @@
 AM_CPPFLAGS = -I $(top_srcdir)/include -I $(top_srcdir)
  
 # May be used by toolexeclibdir.
-gcc_version := $(shell cat $(top_srcdir)/../gcc/BASE-VER)
+gcc_version := $(shell @get_gcc_base_ver@ $(top_srcdir)/../gcc/BASE-VER)
 
-DEFS = -D_GNU_SOURCE -D_DEBUG -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DASAN_HAS_EXCEPTIONS=1 -DASAN_FLEXIBLE_MAPPING_AND_OFFSET=0 -DASAN_NEEDS_SEGV=1
+DEFS = -D_GNU_SOURCE -D_DEBUG -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -DASAN_HAS_EXCEPTIONS=1 -DASAN_NEEDS_SEGV=1 -DCAN_SANITIZE_UB=0
 if USING_MAC_INTERPOSE
 DEFS += -DMAC_INTERPOSE_FUNCTIONS -DMISSING_BLOCKS_SUPPORT
 endif
@@ -17,9 +17,12 @@ nodist_toolexeclib_HEADERS = libasan_preinit.o
 
 asan_files = \
 	asan_activation.cc \
-	asan_allocator2.cc \
+	asan_allocator.cc \
 	asan_debugging.cc \
+	asan_descriptions.cc \
+	asan_errors.cc \
 	asan_fake_stack.cc \
+	asan_flags.cc \
 	asan_globals.cc \
 	asan_interceptors.cc \
 	asan_linux.cc \
@@ -27,6 +30,7 @@ asan_files = \
 	asan_malloc_linux.cc \
 	asan_malloc_mac.cc \
 	asan_malloc_win.cc \
+	asan_memory_profile.cc \
 	asan_new_delete.cc \
 	asan_poisoning.cc \
 	asan_posix.cc \
@@ -34,6 +38,7 @@ asan_files = \
 	asan_rtl.cc \
 	asan_stack.cc \
 	asan_stats.cc \
+	asan_suppressions.cc \
 	asan_thread.cc \
 	asan_win.cc \
 	asan_win_dll_thunk.cc \

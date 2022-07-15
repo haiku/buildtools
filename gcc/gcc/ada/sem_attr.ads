@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -46,7 +46,8 @@ package Sem_Attr is
    --  in GNAT, as well as constructing an array of flags indicating which
    --  attributes these are.
 
-   Attribute_Impl_Def : Attribute_Class_Array := Attribute_Class_Array'(
+   Attribute_Impl_Def : constant Attribute_Class_Array :=
+     Attribute_Class_Array'(
 
       ------------------
       -- Abort_Signal --
@@ -241,6 +242,16 @@ package Sem_Attr is
       --  enumeration value. Constraint_Error is raised if no value of the
       --  enumeration type corresponds to the given integer value.
 
+      -----------------------
+      -- Finalization_Size --
+      -----------------------
+
+      Attribute_Finalization_Size => True,
+      --  For every object or non-class-wide-type, Finalization_Size returns
+      --  the size of the hidden header used for finalization purposes as if
+      --  the object or type was allocated on the heap. The size of the header
+      --  does take into account any extra padding due to alignment issues.
+
       -----------------
       -- Fixed_Value --
       -----------------
@@ -391,7 +402,7 @@ package Sem_Attr is
       --  fixed-point types and discrete types. For fixed-point types and
       --  discrete types, this attribute gives the size used for default
       --  allocation of objects and components of the size. See section in
-      --  Einfo ("Handling of type'Size values") for further details.
+      --  Einfo ("Handling of Type'Size values") for further details.
 
       -------------------------
       -- Passed_By_Reference --
@@ -508,16 +519,6 @@ package Sem_Attr is
       --  Aux_DEC into System, then the type Type_Class can be referenced
       --  as an entity within System, as can its enumeration literals.
 
-      -----------------
-      -- UET_Address --
-      -----------------
-
-      Attribute_UET_Address => True,
-      --  Unit'UET_Address, where Unit is a program unit, yields the address
-      --  of the unit exception table for the specified unit. This is only
-      --  used in the internal implementation of exception handling. See the
-      --  implementation of unit Ada.Exceptions for details on its use.
-
       ------------------------------
       -- Universal_Literal_String --
       ------------------------------
@@ -613,6 +614,44 @@ package Sem_Attr is
       --  in Default_Bit_Order description). This is a static attribute.
 
       others => False);
+
+   --  The following table lists all attributes that yield a result of a
+   --  universal type.
+
+   Universal_Type_Attribute : constant array (Attribute_Id) of Boolean :=
+     (Attribute_Aft                          => True,
+      Attribute_Alignment                    => True,
+      Attribute_Component_Size               => True,
+      Attribute_Count                        => True,
+      Attribute_Delta                        => True,
+      Attribute_Digits                       => True,
+      Attribute_Exponent                     => True,
+      Attribute_First_Bit                    => True,
+      Attribute_Fore                         => True,
+      Attribute_Last_Bit                     => True,
+      Attribute_Length                       => True,
+      Attribute_Machine_Emax                 => True,
+      Attribute_Machine_Emin                 => True,
+      Attribute_Machine_Mantissa             => True,
+      Attribute_Machine_Radix                => True,
+      Attribute_Max_Alignment_For_Allocation => True,
+      Attribute_Max_Size_In_Storage_Elements => True,
+      Attribute_Model_Emin                   => True,
+      Attribute_Model_Epsilon                => True,
+      Attribute_Model_Mantissa               => True,
+      Attribute_Model_Small                  => True,
+      Attribute_Modulus                      => True,
+      Attribute_Pos                          => True,
+      Attribute_Position                     => True,
+      Attribute_Safe_First                   => True,
+      Attribute_Safe_Last                    => True,
+      Attribute_Scale                        => True,
+      Attribute_Size                         => True,
+      Attribute_Small                        => True,
+      Attribute_Wide_Wide_Width              => True,
+      Attribute_Wide_Width                   => True,
+      Attribute_Width                        => True,
+      others                                 => False);
 
    -----------------
    -- Subprograms --

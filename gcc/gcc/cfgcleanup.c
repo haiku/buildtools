@@ -1,5 +1,5 @@
 /* Control flow optimization code for GNU compiler.
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright (C) 1987-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -32,53 +32,24 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
+#include "backend.h"
+#include "target.h"
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "hard-reg-set.h"
-#include "regs.h"
+#include "cfghooks.h"
+#include "df.h"
+#include "memmodel.h"
+#include "tm_p.h"
 #include "insn-config.h"
-#include "flags.h"
-#include "recog.h"
-#include "diagnostic-core.h"
+#include "emit-rtl.h"
 #include "cselib.h"
 #include "params.h"
-#include "tm_p.h"
-#include "target.h"
-#include "hashtab.h"
-#include "function.h" /* For inline functions in emit-rtl.h they need crtl.  */
-#include "emit-rtl.h"
 #include "tree-pass.h"
 #include "cfgloop.h"
-#include "function.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "dominance.h"
-#include "cfg.h"
 #include "cfgrtl.h"
 #include "cfganal.h"
 #include "cfgbuild.h"
 #include "cfgcleanup.h"
-#include "predict.h"
-#include "basic-block.h"
-#include "df.h"
 #include "dce.h"
 #include "dbgcnt.h"
 #include "rtl-iter.h"
@@ -89,7 +60,7 @@ along with GCC; see the file COPYING3.  If not see
 static bool first_pass;
 
 /* Set to true if crossjumps occurred in the latest run of try_optimize_cfg.  */
-static bool crossjumps_occured;
+static bool crossjumps_occurred;
 
 /* Set to true if we couldn't run an optimization due to stale liveness
    information; we should run df_analyze to enable more opportunities.  */
@@ -186,11 +157,13 @@ try_simplify_condjump (basic_block cbranch_block)
   cbranch_dest_block = cbranch_jump_edge->dest;
 
   if (cbranch_dest_block == EXIT_BLOCK_PTR_FOR_FN (cfun)
+      || jump_dest_block == EXIT_BLOCK_PTR_FOR_FN (cfun)
       || !can_fallthru (jump_block, cbranch_dest_block))
     return false;
 
   /* Invert the conditional branch.  */
-  if (!invert_jump (cbranch_insn, block_label (jump_dest_block), 0))
+  if (!invert_jump (as_a <rtx_jump_insn *> (cbranch_insn),
+		    block_label (jump_dest_block), 0))
     return false;
 
   if (dump_file)
@@ -222,23 +195,15 @@ try_simplify_condjump (basic_block cbranch_block)
 static bool
 mark_effect (rtx exp, regset nonequal)
 {
-  int regno;
   rtx dest;
   switch (GET_CODE (exp))
     {
       /* In case we do clobber the register, mark it as equal, as we know the
 	 value is dead so it don't have to match.  */
     case CLOBBER:
-      if (REG_P (XEXP (exp, 0)))
-	{
-	  dest = XEXP (exp, 0);
-	  regno = REGNO (dest);
-	  if (HARD_REGISTER_NUM_P (regno))
-	    bitmap_clear_range (nonequal, regno,
-				hard_regno_nregs[regno][GET_MODE (dest)]);
-	  else
-	    bitmap_clear_bit (nonequal, regno);
-	}
+      dest = XEXP (exp, 0);
+      if (REG_P (dest))
+	bitmap_clear_range (nonequal, REGNO (dest), REG_NREGS (dest));
       return false;
 
     case SET:
@@ -249,12 +214,7 @@ mark_effect (rtx exp, regset nonequal)
 	return false;
       if (!REG_P (dest))
 	return true;
-      regno = REGNO (dest);
-      if (HARD_REGISTER_NUM_P (regno))
-	bitmap_set_range (nonequal, regno,
-			  hard_regno_nregs[regno][GET_MODE (dest)]);
-      else
-	bitmap_set_bit (nonequal, regno);
+      bitmap_set_range (nonequal, REGNO (dest), REG_NREGS (dest));
       return false;
 
     default:
@@ -272,16 +232,10 @@ mentions_nonequal_regs (const_rtx x, regset nonequal)
       const_rtx x = *iter;
       if (REG_P (x))
 	{
-	  unsigned int regno = REGNO (x);
-	  if (REGNO_REG_SET_P (nonequal, regno))
-	    return true;
-	  if (regno < FIRST_PSEUDO_REGISTER)
-	    {
-	      int n = hard_regno_nregs[regno][GET_MODE (x)];
-	      while (--n > 0)
-		if (REGNO_REG_SET_P (nonequal, regno + n))
-		  return true;
-	    }
+	  unsigned int end_regno = END_REGNO (x);
+	  for (unsigned int regno = REGNO (x); regno < end_regno; ++regno)
+	    if (REGNO_REG_SET_P (nonequal, regno))
+	      return true;
 	}
     }
   return false;
@@ -734,7 +688,7 @@ static void
 merge_blocks_move_successor_nojumps (basic_block a, basic_block b)
 {
   rtx_insn *barrier, *real_b_end;
-  rtx label;
+  rtx_insn *label;
   rtx_jump_table_data *table;
 
   /* If we are partitioning hot/cold basic blocks, we don't want to
@@ -1032,10 +986,49 @@ equal_different_set_p (rtx p1, rtx s1, rtx p2, rtx s2)
           ? rtx_renumbered_equal_p (e1, e2) : rtx_equal_p (e1, e2))
         continue;
 
-        return false;
+      return false;
     }
 
   return true;
+}
+
+
+/* NOTE1 is the REG_EQUAL note, if any, attached to an insn
+   that is a single_set with a SET_SRC of SRC1.  Similarly
+   for NOTE2/SRC2.
+
+   So effectively NOTE1/NOTE2 are an alternate form of 
+   SRC1/SRC2 respectively.
+
+   Return nonzero if SRC1 or NOTE1 has the same constant
+   integer value as SRC2 or NOTE2.   Else return zero.  */
+static int
+values_equal_p (rtx note1, rtx note2, rtx src1, rtx src2)
+{
+  if (note1
+      && note2
+      && CONST_INT_P (XEXP (note1, 0))
+      && rtx_equal_p (XEXP (note1, 0), XEXP (note2, 0)))
+    return 1;
+
+  if (!note1
+      && !note2
+      && CONST_INT_P (src1)
+      && CONST_INT_P (src2)
+      && rtx_equal_p (src1, src2))
+    return 1;
+
+  if (note1
+      && CONST_INT_P (src2)
+      && rtx_equal_p (XEXP (note1, 0), src2))
+    return 1;
+
+  if (note2
+      && CONST_INT_P (src1)
+      && rtx_equal_p (XEXP (note2, 0), src1))
+    return 1;
+
+  return 0;
 }
 
 /* Examine register notes on I1 and I2 and return:
@@ -1066,8 +1059,11 @@ can_replace_by (rtx_insn *i1, rtx_insn *i2)
      set dest to the same value.  */
   note1 = find_reg_equal_equiv_note (i1);
   note2 = find_reg_equal_equiv_note (i2);
-  if (!note1 || !note2 || !rtx_equal_p (XEXP (note1, 0), XEXP (note2, 0))
-      || !CONST_INT_P (XEXP (note1, 0)))
+
+  src1 = SET_SRC (s1);
+  src2 = SET_SRC (s2);
+
+  if (!values_equal_p (note1, note2, src1, src2))
     return dir_none;
 
   if (!equal_different_set_p (PATTERN (i1), s1, PATTERN (i2), s2))
@@ -1079,8 +1075,6 @@ can_replace_by (rtx_insn *i1, rtx_insn *i2)
        (set (dest) (reg))
      because we don't know if the reg is live and has the same value at the
      location of replacement.  */
-  src1 = SET_SRC (s1);
-  src2 = SET_SRC (s2);
   c1 = CONST_INT_P (src1);
   c2 = CONST_INT_P (src2);
   if (c1 && c2)
@@ -1115,6 +1109,48 @@ merge_dir (enum replace_direction a, enum replace_direction b)
     return a;
 
   return dir_none;
+}
+
+/* Array of flags indexed by reg note kind, true if the given
+   reg note is CFA related.  */
+static const bool reg_note_cfa_p[] = {
+#undef REG_CFA_NOTE
+#define DEF_REG_NOTE(NAME) false,
+#define REG_CFA_NOTE(NAME) true,
+#include "reg-notes.def"
+#undef REG_CFA_NOTE
+#undef DEF_REG_NOTE
+  false
+};
+
+/* Return true if I1 and I2 have identical CFA notes (the same order
+   and equivalent content).  */
+
+static bool
+insns_have_identical_cfa_notes (rtx_insn *i1, rtx_insn *i2)
+{
+  rtx n1, n2;
+  for (n1 = REG_NOTES (i1), n2 = REG_NOTES (i2); ;
+       n1 = XEXP (n1, 1), n2 = XEXP (n2, 1))
+    {
+      /* Skip over reg notes not related to CFI information.  */
+      while (n1 && !reg_note_cfa_p[REG_NOTE_KIND (n1)])
+	n1 = XEXP (n1, 1);
+      while (n2 && !reg_note_cfa_p[REG_NOTE_KIND (n2)])
+	n2 = XEXP (n2, 1);
+      if (n1 == NULL_RTX && n2 == NULL_RTX)
+	return true;
+      if (n1 == NULL_RTX || n2 == NULL_RTX)
+	return false;
+      if (XEXP (n1, 0) == XEXP (n2, 0))
+	;
+      else if (XEXP (n1, 0) == NULL_RTX || XEXP (n2, 0) == NULL_RTX)
+	return false;
+      else if (!(reload_completed
+		 ? rtx_renumbered_equal_p (XEXP (n1, 0), XEXP (n2, 0))
+		 : rtx_equal_p (XEXP (n1, 0), XEXP (n2, 0))))
+	return false;
+    }
 }
 
 /* Examine I1 and I2 and return:
@@ -1153,6 +1189,11 @@ old_insns_match_p (int mode ATTRIBUTE_UNUSED, rtx_insn *i1, rtx_insn *i2)
 	return dir_none;
     }
   else if (p1 || p2)
+    return dir_none;
+
+  /* Do not allow cross-jumping between frame related insns and other
+     insns.  */
+  if (RTX_FRAME_RELATED_P (i1) != RTX_FRAME_RELATED_P (i2))
     return dir_none;
 
   p1 = PATTERN (i1);
@@ -1212,6 +1253,11 @@ old_insns_match_p (int mode ATTRIBUTE_UNUSED, rtx_insn *i1, rtx_insn *i2)
 	    }
 	}
     }
+
+  /* If both i1 and i2 are frame related, verify all the CFA notes
+     in the same order and with the same content.  */
+  if (RTX_FRAME_RELATED_P (i1) && !insns_have_identical_cfa_notes (i1, i2))
+    return dir_none;
 
 #ifdef STACK_REGS
   /* If cross_jump_death_matters is not 0, the insn's mode
@@ -1416,12 +1462,11 @@ flow_find_cross_jump (basic_block bb1, basic_block bb2, rtx_insn **f1,
       i2 = PREV_INSN (i2);
     }
 
-#ifdef HAVE_cc0
   /* Don't allow the insn after a compare to be shared by
      cross-jumping unless the compare is also shared.  */
-  if (ninsns && reg_mentioned_p (cc0_rtx, last1) && ! sets_cc0_p (last1))
+  if (HAVE_cc0 && ninsns && reg_mentioned_p (cc0_rtx, last1)
+      && ! sets_cc0_p (last1))
     last1 = afterlast1, last2 = afterlast2, last_dir = afterlast_dir, ninsns--;
-#endif
 
   /* Include preceding notes and labels in the cross-jump.  One,
      this may bring us to the head of the blocks as requested above.
@@ -1539,12 +1584,11 @@ flow_find_head_matching_sequence (basic_block bb1, basic_block bb2, rtx_insn **f
       i2 = NEXT_INSN (i2);
     }
 
-#ifdef HAVE_cc0
   /* Don't allow a compare to be shared by cross-jumping unless the insn
      after the compare is also shared.  */
-  if (ninsns && reg_mentioned_p (cc0_rtx, last1) && sets_cc0_p (last1))
+  if (HAVE_cc0 && ninsns && reg_mentioned_p (cc0_rtx, last1)
+      && sets_cc0_p (last1))
     last1 = beforelast1, last2 = beforelast2, ninsns--;
-#endif
 
   if (ninsns)
     {
@@ -1705,7 +1749,7 @@ outgoing_edges_match (int mode, basic_block bb1, basic_block bb2)
   /* Check whether there are tablejumps in the end of BB1 and BB2.
      Return true if they are identical.  */
     {
-      rtx label1, label2;
+      rtx_insn *label1, *label2;
       rtx_jump_table_data *table1, *table2;
 
       if (tablejump_p (BB_END (bb1), &label1, &table1)
@@ -1973,6 +2017,11 @@ try_crossjump_to_edge (int mode, edge e1, edge e2,
   if (newpos2 != NULL_RTX)
     src2 = BLOCK_FOR_INSN (newpos2);
 
+  /* Check that SRC1 and SRC2 have preds again.  They may have changed
+     above due to the call to flow_find_cross_jump.  */
+  if (EDGE_COUNT (src1->preds) == 0 || EDGE_COUNT (src2->preds) == 0)
+    return false;
+
   if (dir == dir_backward)
     {
 #define SWAP(T, X, Y) do { T tmp = (X); (X) = (Y); (Y) = tmp; } while (0)
@@ -2001,8 +2050,8 @@ try_crossjump_to_edge (int mode, edge e1, edge e2,
      If we have tablejumps in the end of SRC1 and SRC2
      they have been already compared for equivalence in outgoing_edges_match ()
      so replace the references to TABLE1 by references to TABLE2.  */
-    {
-      rtx label1, label2;
+  {
+      rtx_insn *label1, *label2;
       rtx_jump_table_data *table1, *table2;
 
       if (tablejump_p (BB_END (osrc1), &label1, &table1)
@@ -2021,7 +2070,7 @@ try_crossjump_to_edge (int mode, edge e1, edge e2,
 		replace_label_in_insn (insn, label1, label2, true);
 	    }
 	}
-    }
+  }
 
   /* Avoid splitting if possible.  We must always split when SRC2 has
      EH predecessor edges, or we may end up with basic blocks with both
@@ -2291,7 +2340,7 @@ try_crossjump_bb (int mode, basic_block bb)
     }
 
   if (changed)
-    crossjumps_occured = true;
+    crossjumps_occurred = true;
 
   return changed;
 }
@@ -2330,11 +2379,9 @@ try_head_merge_bb (basic_block bb)
   cond = get_condition (jump, &move_before, true, false);
   if (cond == NULL_RTX)
     {
-#ifdef HAVE_cc0
-      if (reg_mentioned_p (cc0_rtx, jump))
+      if (HAVE_cc0 && reg_mentioned_p (cc0_rtx, jump))
 	move_before = prev_nonnote_nondebug_insn (jump);
       else
-#endif
 	move_before = jump;
     }
 
@@ -2499,11 +2546,9 @@ try_head_merge_bb (basic_block bb)
       cond = get_condition (jump, &move_before, true, false);
       if (cond == NULL_RTX)
 	{
-#ifdef HAVE_cc0
-	  if (reg_mentioned_p (cc0_rtx, jump))
+	  if (HAVE_cc0 && reg_mentioned_p (cc0_rtx, jump))
 	    move_before = prev_nonnote_nondebug_insn (jump);
 	  else
-#endif
 	    move_before = jump;
 	}
     }
@@ -2522,12 +2567,10 @@ try_head_merge_bb (basic_block bb)
 	  /* Try again, using a different insertion point.  */
 	  move_before = jump;
 
-#ifdef HAVE_cc0
 	  /* Don't try moving before a cc0 user, as that may invalidate
 	     the cc0.  */
-	  if (reg_mentioned_p (cc0_rtx, jump))
+	  if (HAVE_cc0 && reg_mentioned_p (cc0_rtx, jump))
 	    break;
-#endif
 
 	  continue;
 	}
@@ -2582,12 +2625,10 @@ try_head_merge_bb (basic_block bb)
 	  /* For the unmerged insns, try a different insertion point.  */
 	  move_before = jump;
 
-#ifdef HAVE_cc0
 	  /* Don't try moving before a cc0 user, as that may invalidate
 	     the cc0.  */
-	  if (reg_mentioned_p (cc0_rtx, jump))
+	  if (HAVE_cc0 && reg_mentioned_p (cc0_rtx, jump))
 	    break;
-#endif
 
 	  for (ix = 0; ix < nedges; ix++)
 	    currptr[ix] = headptr[ix] = nextptr[ix];
@@ -2600,7 +2641,7 @@ try_head_merge_bb (basic_block bb)
   free (headptr);
   free (nextptr);
 
-  crossjumps_occured |= changed;
+  crossjumps_occurred |= changed;
 
   return changed;
 }
@@ -2623,6 +2664,35 @@ trivially_empty_bb_p (basic_block bb)
     }
 }
 
+/* Return true if BB contains just a return and possibly a USE of the
+   return value.  Fill in *RET and *USE with the return and use insns
+   if any found, otherwise NULL.  */
+
+static bool
+bb_is_just_return (basic_block bb, rtx_insn **ret, rtx_insn **use)
+{
+  *ret = *use = NULL;
+  rtx_insn *insn;
+
+  if (bb == EXIT_BLOCK_PTR_FOR_FN (cfun))
+    return false;
+
+  FOR_BB_INSNS (bb, insn)
+    if (NONDEBUG_INSN_P (insn))
+      {
+	if (!*ret && ANY_RETURN_P (PATTERN (insn)))
+	  *ret = insn;
+	else if (!*ret && !*use && GET_CODE (PATTERN (insn)) == USE
+	    && REG_P (XEXP (PATTERN (insn), 0))
+	    && REG_FUNCTION_VALUE_P (XEXP (PATTERN (insn), 0)))
+	  *use = insn;
+	else
+	  return false;
+      }
+
+  return !!*ret;
+}
+
 /* Do simple CFG optimizations - basic block merging, simplifying of jump
    instructions etc.  Return nonzero if changes were made.  */
 
@@ -2637,7 +2707,7 @@ try_optimize_cfg (int mode)
   if (mode & (CLEANUP_CROSSJUMP | CLEANUP_THREADING))
     clear_bb_flags ();
 
-  crossjumps_occured = false;
+  crossjumps_occurred = false;
 
   FOR_EACH_BB_FN (bb, cfun)
     update_forwarder_flag (bb);
@@ -2809,6 +2879,99 @@ try_optimize_cfg (int mode)
 		      }
 		}
 
+	      /* Try to change a branch to a return to just that return.  */
+	      rtx_insn *ret, *use;
+	      if (single_succ_p (b)
+		  && onlyjump_p (BB_END (b))
+		  && bb_is_just_return (single_succ (b), &ret, &use))
+		{
+		  if (redirect_jump (as_a <rtx_jump_insn *> (BB_END (b)),
+				     PATTERN (ret), 0))
+		    {
+		      if (use)
+			emit_insn_before (copy_insn (PATTERN (use)),
+					  BB_END (b));
+		      if (dump_file)
+			fprintf (dump_file, "Changed jump %d->%d to return.\n",
+				 b->index, single_succ (b)->index);
+		      redirect_edge_succ (single_succ_edge (b),
+					  EXIT_BLOCK_PTR_FOR_FN (cfun));
+		      single_succ_edge (b)->flags &= ~EDGE_CROSSING;
+		      changed_here = true;
+		    }
+		}
+
+	      /* Try to change a conditional branch to a return to the
+		 respective conditional return.  */
+	      if (EDGE_COUNT (b->succs) == 2
+		  && any_condjump_p (BB_END (b))
+		  && bb_is_just_return (BRANCH_EDGE (b)->dest, &ret, &use))
+		{
+		  if (redirect_jump (as_a <rtx_jump_insn *> (BB_END (b)),
+				     PATTERN (ret), 0))
+		    {
+		      if (use)
+			emit_insn_before (copy_insn (PATTERN (use)),
+					  BB_END (b));
+		      if (dump_file)
+			fprintf (dump_file, "Changed conditional jump %d->%d "
+				 "to conditional return.\n",
+				 b->index, BRANCH_EDGE (b)->dest->index);
+		      redirect_edge_succ (BRANCH_EDGE (b),
+					  EXIT_BLOCK_PTR_FOR_FN (cfun));
+		      BRANCH_EDGE (b)->flags &= ~EDGE_CROSSING;
+		      changed_here = true;
+		    }
+		}
+
+	      /* Try to flip a conditional branch that falls through to
+		 a return so that it becomes a conditional return and a
+		 new jump to the original branch target.  */
+	      if (EDGE_COUNT (b->succs) == 2
+		  && BRANCH_EDGE (b)->dest != EXIT_BLOCK_PTR_FOR_FN (cfun)
+		  && any_condjump_p (BB_END (b))
+		  && bb_is_just_return (FALLTHRU_EDGE (b)->dest, &ret, &use))
+		{
+		  if (invert_jump (as_a <rtx_jump_insn *> (BB_END (b)),
+				   JUMP_LABEL (BB_END (b)), 0))
+		    {
+		      basic_block new_ft = BRANCH_EDGE (b)->dest;
+		      if (redirect_jump (as_a <rtx_jump_insn *> (BB_END (b)),
+					 PATTERN (ret), 0))
+			{
+			  if (use)
+			    emit_insn_before (copy_insn (PATTERN (use)),
+					      BB_END (b));
+			  if (dump_file)
+			    fprintf (dump_file, "Changed conditional jump "
+				     "%d->%d to conditional return, adding "
+				     "fall-through jump.\n",
+				     b->index, BRANCH_EDGE (b)->dest->index);
+			  redirect_edge_succ (BRANCH_EDGE (b),
+					      EXIT_BLOCK_PTR_FOR_FN (cfun));
+			  BRANCH_EDGE (b)->flags &= ~EDGE_CROSSING;
+			  std::swap (BRANCH_EDGE (b)->probability,
+				     FALLTHRU_EDGE (b)->probability);
+			  update_br_prob_note (b);
+			  basic_block jb = force_nonfallthru (FALLTHRU_EDGE (b));
+			  notice_new_block (jb);
+			  if (!redirect_jump (as_a <rtx_jump_insn *> (BB_END (jb)),
+					      block_label (new_ft), 0))
+			    gcc_unreachable ();
+			  redirect_edge_succ (single_succ_edge (jb), new_ft);
+			  changed_here = true;
+			}
+		      else
+			{
+			  /* Invert the jump back to what it was.  This should
+			     never fail.  */
+			  if (!invert_jump (as_a <rtx_jump_insn *> (BB_END (b)),
+					    JUMP_LABEL (BB_END (b)), 0))
+			    gcc_unreachable ();
+			}
+		    }
+		}
+
 	      /* Simplify branch over branch.  */
 	      if ((mode & CLEANUP_EXPENSIVE)
 		   && !(mode & CLEANUP_CFGLAYOUT)
@@ -2878,11 +3041,8 @@ try_optimize_cfg (int mode)
                  to detect and fix during edge forwarding, and in some cases
                  is only visible after newly unreachable blocks are deleted,
                  which will be done in fixup_partitions.  */
-              fixup_partitions ();
-
-#ifdef ENABLE_CHECKING
-              verify_flow_info ();
-#endif
+	      fixup_partitions ();
+	      checking_verify_flow_info ();
             }
 
 	  changed_overall |= changed;
@@ -3066,7 +3226,7 @@ cleanup_cfg (int mode)
 	  if ((mode & CLEANUP_EXPENSIVE) && !reload_completed
 	      && !delete_trivially_dead_insns (get_insns (), max_reg_num ()))
 	    break;
-	  if ((mode & CLEANUP_CROSSJUMP) && crossjumps_occured)
+	  if ((mode & CLEANUP_CROSSJUMP) && crossjumps_occurred)
 	    run_fast_dce ();
 	}
       else

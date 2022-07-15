@@ -1,5 +1,5 @@
 /* Process source files and output type information.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2017 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -277,7 +277,7 @@ struct type {
     /* when TYPE_STRUCT or TYPE_UNION or TYPE_LANG_STRUCT, we have an
        aggregate type containing fields: */
     struct {
-      const char *tag;          /* the aggragate tag, if any.  */
+      const char *tag;          /* the aggregate tag, if any.  */
       struct fileloc line;      /* the source location.  */
       pair_p fields;            /* the linked list of fields.  */
       options_p opt;            /* the GTY options if any.  */
@@ -492,17 +492,12 @@ extern int do_dump;		/* (-d) program argument. */
    gengtype source code).  Only useful to debug gengtype itself.  */
 extern int do_debug;		/* (-D) program argument. */
 
-#if ENABLE_CHECKING
 #define DBGPRINTF(Fmt,...) do {if (do_debug)				\
       fprintf (stderr, "%s:%d: " Fmt "\n",				\
 	       lbasename (__FILE__),__LINE__, ##__VA_ARGS__);} while (0)
 void dbgprint_count_type_at (const char *, int, const char *, type_p);
 #define DBGPRINT_COUNT_TYPE(Msg,Ty) do {if (do_debug)			\
       dbgprint_count_type_at (__FILE__, __LINE__, Msg, Ty);}while (0)
-#else
-#define DBGPRINTF(Fmt,...) do {/*nodbgrintf*/} while (0)
-#define DBGPRINT_COUNT_TYPE(Msg,Ty) do{/*nodbgprint_count_type*/}while (0)
-#endif /*ENABLE_CHECKING */
 
 #define FOR_ALL_INHERITED_FIELDS(TYPE, FIELD_VAR) \
   for (type_p sub = (TYPE); sub; sub = sub->u.s.base_class) \

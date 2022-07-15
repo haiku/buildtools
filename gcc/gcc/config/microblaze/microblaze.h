@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler for Xilinx MicroBlaze.
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2017 Free Software Foundation, Inc.
 
    Contributed by Michael Eager <eager@eagercon.com>.
 
@@ -182,7 +182,23 @@ extern enum pipeline_type microblaze_pipe;
    NOTE:  GDB has a workaround and expects this incorrect value.
    If this is fixed, a corresponding fix to GDB is needed.  */
 #define INCOMING_RETURN_ADDR_RTX  			\
-  gen_rtx_REG (VOIDmode, GP_REG_FIRST + MB_ABI_SUB_RETURN_ADDR_REGNUM)
+  gen_rtx_REG (Pmode, GP_REG_FIRST + MB_ABI_SUB_RETURN_ADDR_REGNUM)
+
+/* Specifies the offset from INCOMING_RETURN_ADDR_RTX and the actual return PC.  */
+#define RETURN_ADDR_OFFSET (8)
+
+/* Describe how we implement __builtin_eh_return.  */
+#define EH_RETURN_DATA_REGNO(N)					\
+  (((N) < 2) ? MB_ABI_FIRST_ARG_REGNUM + (N) : INVALID_REGNUM)
+
+#define MB_EH_STACKADJ_REGNUM  MB_ABI_INT_RETURN_VAL2_REGNUM
+#define EH_RETURN_STACKADJ_RTX  gen_rtx_REG (Pmode, MB_EH_STACKADJ_REGNUM)
+
+/* Select a format to encode pointers in exception handling data.  CODE
+   is 0 for data, 1 for code labels, 2 for function pointers.  GLOBAL is
+   true if the symbol may be affected by dynamic relocations.  */
+#define ASM_PREFERRED_EH_DATA_FORMAT(CODE,GLOBAL) \
+  ((flag_pic || GLOBAL) ? DW_EH_PE_aligned : DW_EH_PE_absptr)
 
 /* Use DWARF 2 debugging information by default.  */
 #define DWARF2_DEBUGGING_INFO
@@ -235,7 +251,7 @@ extern enum pipeline_type microblaze_pipe;
        && TYPE_MODE (TREE_TYPE (TYPE)) == QImode)			\
      && (ALIGN) < BITS_PER_WORD) ? BITS_PER_WORD : (ALIGN))
 
-#define WORD_REGISTER_OPERATIONS
+#define WORD_REGISTER_OPERATIONS 1
 
 #define LOAD_EXTEND_OP(MODE)  ZERO_EXTEND
 
@@ -253,14 +269,14 @@ extern enum pipeline_type microblaze_pipe;
 #define FIXED_REGISTERS							\
 {									\
   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,			\
-  1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
+  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   1, 1, 1, 1 								\
 }
 
 #define CALL_USED_REGISTERS						\
 {									\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
-  1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
+  1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   1, 1, 1, 1								\
 }
 #define GP_REG_FIRST    0
@@ -413,7 +429,7 @@ extern enum reg_class microblaze_regno_to_class[];
 
 /* Stack layout; function entry, exit and calling.  */
 
-#define STACK_GROWS_DOWNWARD
+#define STACK_GROWS_DOWNWARD 1
 
 /* Changed the starting frame offset to including the new link stuff */
 #define STARTING_FRAME_OFFSET						\
@@ -657,7 +673,7 @@ do {									\
     }                                                                   \
   fprintf (FILE, "%s", COMMON_ASM_OP);                                  \
   assemble_name ((FILE), (NAME));					\
-  fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",		\
+  fprintf ((FILE), "," HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",		\
            (SIZE), (ALIGN) / BITS_PER_UNIT);                            \
   ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "object");			\
 } while (0)
@@ -677,7 +693,7 @@ do {									\
     }                                                                   \
   fprintf (FILE, "%s", LCOMMON_ASM_OP);                                 \
   assemble_name ((FILE), (NAME));					\
-  fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",		\
+  fprintf ((FILE), "," HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",		\
            (SIZE), (ALIGN) / BITS_PER_UNIT);                            \
   ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "object");			\
 } while (0)
@@ -741,7 +757,7 @@ do {									\
    an assembler-name for a local static variable named NAME.
    LABELNO is an integer which is different for each call.  */
 #define ASM_FORMAT_PRIVATE_NAME(OUTPUT, NAME, LABELNO)			\
-( (OUTPUT) = (char *) alloca (strlen ((NAME)) + 10),			\
+( (OUTPUT) = (char *) alloca (strlen ((NAME)) + 13),			\
   sprintf ((OUTPUT), "%s.%lu", (NAME), (unsigned long)(LABELNO)))
 
 /* How to start an assembler comment.

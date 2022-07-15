@@ -29,8 +29,7 @@ void FlushShadowMemory() {
 void WriteMemoryProfile(char *buf, uptr buf_size, uptr nthread, uptr nlive) {
 }
 
-uptr GetRSS() {
-  return 0;
+void InitializePlatformEarly() {
 }
 
 void InitializePlatform() {

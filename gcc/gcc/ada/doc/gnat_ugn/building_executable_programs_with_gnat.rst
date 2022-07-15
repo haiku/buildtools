@@ -27,6 +27,15 @@ Finally, this chapter provides examples of
 how to make use of the general GNU make mechanism
 in a GNAT context (see :ref:`Using_the_GNU_make_Utility`).
 
+.. only:: PRO or GPL
+
+   For building large systems with components possibly written
+   in different languages (such as Ada, C, C++ and Fortran)
+   and organized into subsystems and libraries, the GPRbuild
+   tool can be used. This tool, and the Project Manager
+   facility that it is based upon, is described in
+   *GPRbuild and GPR Companion Tools User's Guide*.
+
 
 .. _The_GNAT_Make_Program_gnatmake:
 
@@ -67,8 +76,9 @@ changes to the source program cause corresponding changes in
 dependencies, they will always be tracked exactly correctly by
 *gnatmake*.
 
-Note that for advanced description of project structure, we recommend creating
-a project file as explained in :ref:`GNAT_Project_Manager` and use the
+Note that for advanced forms of project structure, we recommend creating
+a project file as explained in the *GNAT_Project_Manager* chapter in the
+*GPRbuild User's Guide*, and using the
 *gprbuild* tool which supports building with project files and works similarly
 to *gnatmake*.
 
@@ -516,6 +526,8 @@ You may specify any of the following switches to *gnatmake*:
 
 :samp:`-P{project}`
   Use project file `project`. Only one such switch can be used.
+
+.. -- Comment:
   :ref:`gnatmake_and_Project_Files`.
 
 
@@ -545,8 +557,10 @@ You may specify any of the following switches to *gnatmake*:
 :samp:`-u`
   Unique. Recompile at most the main files. It implies -c. Combined with
   -f, it is equivalent to calling the compiler directly. Note that using
-  -u with a project file and no main has a special meaning
-  (:ref:`Project_Files_and_Main_Subprograms`).
+  -u with a project file and no main has a special meaning.
+
+.. --Comment:
+  (See :ref:`Project_Files_and_Main_Subprograms`.)
 
 
 .. index:: -U  (gnatmake)
@@ -1306,6 +1320,17 @@ Alphabetical List of All Switches
   :ref:`Optimization_and_Strict_Aliasing` for details.
 
 
+.. index:: -fno-strict-overflow  (gcc)
+
+:samp:`-fno-strict-overflow`
+  Causes the compiler to avoid assumptions regarding the rules of signed
+  integer overflow. These rules specify that signed integer overflow will
+  result in a Constraint_Error exception at run time and are enforced in
+  default mode by the compiler, so this switch should not be necessary in
+  normal operating mode. It might be useful in conjunction with *-gnato0*
+  for very peculiar cases of low-level programming.
+
+
 .. index:: -fstack-check  (gcc)
 
 :samp:`-fstack-check`
@@ -1420,9 +1445,7 @@ Alphabetical List of All Switches
   *-gnatc* as a builder switch (before *-cargs* or in package
   Builder of the project file) then *gnatmake* will not fail because
   it will not look for the object files after compilation, and it will not try
-  to build and link. This switch may not be given if a previous `-gnatR`
-  switch has been given, since `-gnatR` requires that the code generator
-  be called to complete determination of representation information.
+  to build and link.
 
 
 .. index:: -gnatC  (gcc)
@@ -1451,7 +1474,7 @@ Alphabetical List of All Switches
 
 :samp:`-gnatD`
   Create expanded source files for source level debugging. This switch
-  also suppress generation of cross-reference information
+  also suppresses generation of cross-reference information
   (see *-gnatx*). Note that this switch is not allowed if a previous
   -gnatR switch has been given, since these two switches are not compatible.
 
@@ -1546,6 +1569,17 @@ Alphabetical List of All Switches
   Check for overflow on all floating-point operations, including those
   for unconstrained predefined types. See description of pragma
   `Check_Float_Overflow` in GNAT RM.
+
+
+.. index:: -gnateg  (gcc)
+
+:samp:`-gnateg`
+:samp:`-gnatceg`
+
+  The `-gnatc` switch must always be specified before this switch, e.g.
+  `-gnatceg`. Generate a C header from the Ada input file. See
+  :ref:`Generating_C_Headers_for_Ada_Specifications` for more
+  information.
 
 
 .. index:: -gnateG  (gcc)
@@ -1881,8 +1915,8 @@ Alphabetical List of All Switches
 .. index:: -gnatn  (gcc)
 
 :samp:`-gnatn[12]`
-  Activate inlining for subprograms for which pragma `Inline` is
-  specified. This inlining is performed by the GCC back-end. An optional
+  Activate inlining across modules for subprograms for which pragma `Inline`
+  is specified. This inlining is performed by the GCC back-end. An optional
   digit sets the inlining level: 1 for moderate inlining across modules
   or 2 for full inlining across modules. If no inlining level is specified,
   the compiler will pick it based on the optimization level.
@@ -1928,23 +1962,25 @@ Alphabetical List of All Switches
   *3*   Eliminate intermediate overflows (`ELIMINATED`)
   ===== ===============================================================
 
-  If only one digit appears then it applies to all
+  If only one digit appears, then it applies to all
   cases; if two digits are given, then the first applies outside
-  assertions, and the second within assertions.
+  assertions, pre/postconditions, and type invariants, and the second
+  applies within assertions, pre/postconditions, and type invariants.
 
   If no digits follow the *-gnato*, then it is equivalent to
   *-gnato11*,
-  causing all intermediate overflows to be handled in strict mode.
+  causing all intermediate overflows to be handled in strict
+  mode.
 
   This switch also causes arithmetic overflow checking to be performed
-  (as though `pragma Unsuppress (Overflow_Mode)` had been specified.
+  (as though `pragma Unsuppress (Overflow_Mode)` had been specified).
 
   The default if no option *-gnato* is given is that overflow handling
   is in `STRICT` mode (computations done using the base type), and that
   overflow checking is enabled.
 
   Note that division by zero is a separate check that is not
-  controlled by this switch (division by zero checking is on by default).
+  controlled by this switch (divide-by-zero checking is on by default).
 
   See also :ref:`Specifying_the_Desired_Mode`.
 
@@ -2953,7 +2989,7 @@ of the pragma in the :title:`GNAT_Reference_manual`).
 .. index:: -gnatw.e  (gcc)
 
 :samp:`-gnatw.e`
-  *Activate every optional warning*
+  *Activate every optional warning.*
 
   .. index:: Warnings, activate every optional warning
 
@@ -3016,7 +3052,7 @@ of the pragma in the :title:`GNAT_Reference_manual`).
 .. index:: -gnatw.g  (gcc)
 
 :samp:`-gnatw.g`
-  *Warnings used for GNAT sources*
+  *Warnings used for GNAT sources.*
 
   This switch sets the warning categories that are used by the standard
   GNAT style. Currently this is equivalent to
@@ -3031,11 +3067,10 @@ of the pragma in the :title:`GNAT_Reference_manual`).
 
   .. index:: Hiding of Declarations
 
-  This switch activates warnings on hiding declarations.
-  A declaration is considered hiding
-  if it is for a non-overloadable entity, and it declares an entity with the
-  same name as some other entity that is directly or use-visible. The default
-  is that such warnings are not generated.
+  This switch activates warnings on hiding declarations that are considered
+  potentially confusing. Not all cases of hiding cause warnings; for example an
+  overriding declaration hides an implicit declaration, which is just normal
+  code. The default is that warnings on hiding are not generated.
 
 
 .. index:: -gnatwH  (gcc)
@@ -3143,16 +3178,18 @@ of the pragma in the :title:`GNAT_Reference_manual`).
   Second, the restriction does flag uses of package `ASCII`.
 
 
+.. index:: -gnatwJ  (gcc)
+
 :samp:`-gnatwJ`
   *Suppress warnings on obsolescent features (Annex J).*
-  .. index:: -gnatwJ  (gcc)
 
   This switch disables warnings on use of obsolescent features.
 
 
+.. index:: -gnatwk  (gcc)
+
 :samp:`-gnatwk`
   *Activate warnings on variables that could be constants.*
-  .. index:: -gnatwk  (gcc)
 
   This switch activates warnings for variables that are initialized but
   never modified, and then could be declared constants. The default is that
@@ -3724,7 +3761,7 @@ of the pragma in the :title:`GNAT_Reference_manual`).
 .. index:: Warnings Off control
 
 :samp:`-gnatw.w`
-  *Activate warnings on Warnings Off pragmas*
+  *Activate warnings on Warnings Off pragmas.*
 
   This switch activates warnings for use of `pragma Warnings (Off, entity)`
   where either the pragma is entirely useless (because it suppresses no
@@ -3739,7 +3776,7 @@ of the pragma in the :title:`GNAT_Reference_manual`).
 .. index:: -gnatw.W  (gcc)
 
 :samp:`-gnatw.W`
-  *Suppress warnings on unnecessary Warnings Off pragmas*
+  *Suppress warnings on unnecessary Warnings Off pragmas.*
 
   This switch suppresses warnings for use of `pragma Warnings (Off, ...)`.
 
@@ -3820,7 +3857,7 @@ of the pragma in the :title:`GNAT_Reference_manual`).
 .. index:: Package spec needing body
 
 :samp:`-gnatw.y`
-  *Activate information messages for why package spec needs body*
+  *Activate information messages for why package spec needs body.*
 
   There are a number of cases in which a package spec needs a body.
   For example, the use of pragma Elaborate_Body, or the declaration
@@ -3835,7 +3872,7 @@ of the pragma in the :title:`GNAT_Reference_manual`).
 .. index:: No information messages for why package spec needs body
 
 :samp:`-gnatw.Y`
-  *Disable information messages for why package spec needs body*
+  *Disable information messages for why package spec needs body.*
 
   This switch suppresses the output of information messages showing why
   a package specification needs a body.
@@ -4036,31 +4073,64 @@ Debugging and Assertion Control
   .. index:: Assert
   .. index:: Debug
   .. index:: Assertions
+  .. index:: Precondition
+  .. index:: Postcondition
+  .. index:: Type invariants
+  .. index:: Subtype predicates
+
+  The `-gnata` option is equivalent to the following Assertion_Policy pragma::
+
+       pragma Assertion_Policy (Check);
+
+  Which is a shorthand for::
+
+       pragma Assertion_Policy
+         (Assert               => Check,
+          Static_Predicate     => Check,
+          Dynamic_Predicate    => Check,
+          Pre                  => Check,
+          Pre'Class            => Check,
+          Post                 => Check,
+          Post'Class           => Check,
+          Type_Invariant       => Check,
+          Type_Invariant'Class => Check);
 
   The pragmas `Assert` and `Debug` normally have no effect and
   are ignored. This switch, where :samp:`a` stands for assert, causes
-  `Assert` and `Debug` pragmas to be activated.
+  pragmas `Assert` and `Debug` to be activated. This switch also
+  causes preconditions, postconditions, subtype predicates, and
+  type invariants to be activated.
 
   The pragmas have the form::
 
        pragma Assert (<Boolean-expression> [, <static-string-expression>])
        pragma Debug (<procedure call>)
+       pragma Type_Invariant (<type-local-name>, <Boolean-expression>)
+       pragma Predicate (<type-local-name>, <Boolean-expression>)
+       pragma Precondition (<Boolean-expression>, <string-expression>)
+       pragma Postcondition (<Boolean-expression>, <string-expression>)
 
+  The aspects have the form::
+
+       with [Pre|Post|Type_Invariant|Dynamic_Predicate|Static_Predicate]
+         => <Boolean-expression>;
 
   The `Assert` pragma causes `Boolean-expression` to be tested.
   If the result is `True`, the pragma has no effect (other than
   possible side effects from evaluating the expression). If the result is
   `False`, the exception `Assert_Failure` declared in the package
-  `System.Assertions` is
-  raised (passing `static-string-expression`, if present, as the
-  message associated with the exception). If no string expression is
-  given the default is a string giving the file name and line number
-  of the pragma.
+  `System.Assertions` is raised (passing `static-string-expression`, if
+  present, as the message associated with the exception). If no string
+  expression is given, the default is a string containing the file name and
+  line number of the pragma.
 
   The `Debug` pragma causes `procedure` to be called. Note that
   `pragma Debug` may appear within a declaration sequence, allowing
   debugging procedures to be called between declarations.
 
+  For the aspect specification, the `<Boolean-expression>` is evaluated.
+  If the result is `True`, the aspect has no effect. If the result
+  is `False`, the exception `Assert_Failure` is raised.
 
 .. _Validity_Checking:
 
@@ -4188,7 +4258,7 @@ to the default checks required by Ada as described above.
 .. index:: -gnatVi  (gcc)
 
 :samp:`-gnatVi`
-  *Validity checks for `in* mode parameters`
+  *Validity checks for `in` mode parameters.*
 
   Arguments for parameters of mode `in` are validity checked in function
   and procedure calls at the point of call.
@@ -4197,7 +4267,7 @@ to the default checks required by Ada as described above.
 .. index:: -gnatVm  (gcc)
 
 :samp:`-gnatVm`
-  *Validity checks for `in out* mode parameters.`
+  *Validity checks for `in out` mode parameters.*
 
   Arguments for parameters of mode `in out` are validity checked in
   procedure calls at the point of call. The `'m'` here stands for
@@ -4220,9 +4290,10 @@ to the default checks required by Ada as described above.
   is used, it cancels any other *-gnatV* previously issued.
 
 
+.. index:: -gnatVo  (gcc)
+
 :samp:`-gnatVo`
   *Validity checks for operator and attribute operands.*
-  .. index:: -gnatVo  (gcc)
 
   Arguments for predefined operators and attributes are validity checked.
   This includes all operators in package `Standard`,
@@ -4796,7 +4867,7 @@ checks to be performed. The following checks are defined:
 .. index:: -gnatyy (gcc)
 
 :samp:`-gnatyy`
-  *Set all standard style check options*
+  *Set all standard style check options.*
 
   This is equivalent to `gnaty3aAbcefhiklmnprst`, that is all checking
   options enabled with the exception of *-gnatyB*, *-gnatyd*,
@@ -4807,7 +4878,7 @@ checks to be performed. The following checks are defined:
 .. index:: -gnaty- (gcc)
 
 :samp:`-gnaty-`
-  *Remove style check options*
+  *Remove style check options.*
 
   This causes any subsequent options in the string to act as canceling the
   corresponding style check option. To cancel maximum nesting level control,
@@ -4821,7 +4892,7 @@ checks to be performed. The following checks are defined:
 .. index:: -gnaty+ (gcc)
 
 :samp:`-gnaty+`
-  *Enable style check options*
+  *Enable style check options.*
 
   This causes any subsequent options in the string to enable the corresponding
   style check option. That is, it cancels the effect of a previous -,
@@ -4868,11 +4939,11 @@ Run-Time Checks
 
 .. index:: Checks, stack overflow checking
 
-By default, the following checks are suppressed: integer overflow
-checks, stack overflow checks, and checks for access before
-elaboration on subprogram calls. All other checks, including range
-checks and array bounds checks, are turned on by default. The
-following *gcc* switches refine this default behavior.
+By default, the following checks are suppressed: stack overflow
+checks, and checks for access before elaboration on subprogram
+calls. All other checks, including overflow checks, range checks and
+array bounds checks, are turned on by default. The following *gcc*
+switches refine this default behavior.
 
 .. index:: -gnatp  (gcc)
 
@@ -4911,13 +4982,12 @@ following *gcc* switches refine this default behavior.
   the condition being checked is true, which can result in erroneous
   execution if that assumption is wrong.
 
-  The checks subject to suppression include all the checks defined by
-  the Ada standard, the additional implementation defined checks
-  `Alignment_Check`,
-  `Duplicated_Tag_Check`, `Predicate_Check`, and
-  `Validity_Check`, as well as any checks introduced using
-  `pragma Check_Name`. Note that `Atomic_Synchronization`
-  is not automatically suppressed by use of this option.
+  The checks subject to suppression include all the checks defined by the Ada
+  standard, the additional implementation defined checks `Alignment_Check`,
+  `Duplicated_Tag_Check`, `Predicate_Check`, Container_Checks, Tampering_Check,
+  and `Validity_Check`, as well as any checks introduced using `pragma
+  Check_Name`. Note that `Atomic_Synchronization` is not automatically
+  suppressed by use of this option.
 
   If the code depends on certain checks being active, you can use
   pragma `Unsuppress` either as a configuration pragma or as
@@ -5001,13 +5071,8 @@ following *gcc* switches refine this default behavior.
   checking is also quite expensive in time and space, since in general it
   requires the use of double length arithmetic.
 
-  Note again that the default is *-gnato00*,
-  so overflow checking is not performed in default mode. This means that out of
-  the box, with the default settings, GNAT does not do all the checks
-  expected from the language description in the Ada Reference Manual.
-  If you want all constraint checks to be performed, as described in this Manual,
-  then you must explicitly use the *-gnato??*
-  switch either on the *gnatmake* or *gcc* command.
+  Note again that the default is *-gnato11* (equivalent to *-gnato1*),
+  so overflow checking is performed in STRICT mode by default.
 
 
 .. index:: -gnatE  (gcc)
@@ -5146,7 +5211,7 @@ indicate Ada 83 compatibility mode.
 .. index:: ACVC, Ada 83 tests
 .. index:: Ada 83 mode
 
-:samp:`-gnat83 (Ada 83 Compatibility Mode)`
+:samp:`-gnat83` (Ada 83 Compatibility Mode)
   Although GNAT is primarily an Ada 95 / Ada 2005 compiler, this switch
   specifies that the program is to be compiled in Ada 83 mode. With
   *-gnat83*, GNAT rejects most post-Ada 83 extensions and applies Ada 83
@@ -5160,9 +5225,8 @@ indicate Ada 83 compatibility mode.
   using only Ada 83 features.
 
   With few exceptions (most notably the need to use `<>` on
-  .. index:: Generic formal parameters
-
-  unconstrained generic formal parameters, the use of the new Ada 95 / Ada 2005
+  unconstrained :index:`generic formal parameters <Generic formal parameters>`,
+  the use of the new Ada 95 / Ada 2005
   reserved words, and the use of packages
   with optional bodies), it is not necessary to specify the
   *-gnat83* switch when compiling Ada 83 programs, because, with rare
@@ -5351,16 +5415,16 @@ Subprogram Inlining Control
 .. index:: -gnatn  (gcc)
 
 :samp:`-gnatn[12]`
-  The `n` here is intended to suggest the first syllable of the
-  word 'inline'.
-  GNAT recognizes and processes `Inline` pragmas. However, for the
-  inlining to actually occur, optimization must be enabled and, in order
-  to enable inlining of subprograms specified by pragma `Inline`,
+  The `n` here is intended to suggest the first syllable of the word 'inline'.
+  GNAT recognizes and processes `Inline` pragmas. However, for inlining to
+  actually occur, optimization must be enabled and, by default, inlining of
+  subprograms across modules is not performed. If you want to additionally
+  enable inlining of subprograms specified by pragma `Inline` across modules,
   you must also specify this switch.
-  In the absence of this switch, GNAT does not attempt
-  inlining and does not need to access the bodies of
-  subprograms for which `pragma Inline` is specified if they are not
-  in the current unit.
+
+  In the absence of this switch, GNAT does not attempt inlining across modules
+  and does not access the bodies of subprograms for which `pragma Inline` is
+  specified if they are not in the current unit.
 
   You can optionally specify the inlining level: 1 for moderate inlining across
   modules, which is a good compromise between compilation times and performances
@@ -5593,7 +5657,7 @@ Debugging Control
   you to do source level debugging using the generated code which is
   sometimes useful for complex code, for example to find out exactly
   which part of a complex construction raised an exception. This switch
-  also suppress generation of cross-reference information (see
+  also suppresses generation of cross-reference information (see
   *-gnatx*) since otherwise the cross-reference information
   would refer to the :file:`.dg` file, which would cause
   confusion since this is not the original source file.
@@ -5660,12 +5724,6 @@ Debugging Control
   Note that it is possible for record components to have zero size. In
   this case, the component clause uses an obvious extension of permitted
   Ada syntax, for example `at 0 range 0 .. -1`.
-
-  Representation information requires that code be generated (since it is the
-  code generator that lays out complex data structures). If an attempt is made
-  to output representation information when no code is generated, for example
-  when a subunit is compiled on its own, then no information can be generated
-  and the compiler outputs a message to this effect.
 
 
 .. index:: -gnatS  (gcc)
@@ -5834,6 +5892,21 @@ special needs lead to requirements in this area. In particular,
 there is no point in using *-m* switches to improve performance
 unless you actually see a performance improvement.
 
+
+.. _Linker_Switches:
+
+Linker Switches
+===============
+
+Linker switches can be specified after :samp:`-largs` builder switch.
+
+.. index:: -fuse-ld=name
+
+:samp:`-fuse-ld={name}`
+  Linker to be used. The default is ``bfd`` for :file:`ld.bfd`,
+  the alternative being ``gold`` for :file:`ld.gold`. The later is
+  a more recent and faster linker, but only available on GNU/Linux
+  platforms.
 
 .. _Binding_with_gnatbind:
 
@@ -6047,10 +6120,12 @@ be presented in subsequent sections.
   blocks (whose size is the minimum of the default secondary stack size value,
   and the actual size needed for the current allocation request).
 
-  For certain targets, notably VxWorks 653,
-  the secondary stack is allocated by carving off a fixed ratio chunk of the
-  primary task stack. The -D option is used to define the
-  size of the environment task's secondary stack.
+  For certain targets, notably VxWorks 653 and bare board targets,
+  the secondary stack is allocated by carving off a chunk of the primary task 
+  stack. By default this is a fixed percentage of the primary task stack as
+  defined by System.Parameter.Sec_Stack_Percentage. This can be overridden per 
+  task using the Secondary_Stack_Size pragma/aspect. The -D option is used to
+  define the size of the environment task's secondary stack.
 
 
 .. index:: -e  (gnatbind)
@@ -6059,16 +6134,36 @@ be presented in subsequent sections.
   Output complete list of elaboration-order dependencies.
 
 
-.. index:: -E  (gnatbind)
+.. index:: -Ea  (gnatbind)
 
-:samp:`-E`
+:samp:`-Ea`
   Store tracebacks in exception occurrences when the target supports it.
+  The "a" is for "address"; tracebacks will contain hexadecimal addresses,
+  unless symbolic tracebacks are enabled.
 
   See also the packages `GNAT.Traceback` and
   `GNAT.Traceback.Symbolic` for more information.
   Note that on x86 ports, you must not use *-fomit-frame-pointer*
   *gcc* option.
 
+
+.. index:: -Es  (gnatbind)
+
+:samp:`-Es`
+  Store tracebacks in exception occurrences when the target supports it.
+  The "s" is for "symbolic"; symbolic tracebacks are enabled.
+
+
+.. index:: -E  (gnatbind)
+
+:samp:`-E`
+  Currently the same as `-Ea`.
+
+
+.. index:: -f  (gnatbind)
+
+:samp:`-f{elab-order}`
+  Force elaboration order.
 
 .. index:: -F  (gnatbind)
 
@@ -6085,7 +6180,7 @@ be presented in subsequent sections.
 .. index:: -h  (gnatbind)
 
 :samp:`-h`
-  Output usage (help) information
+  Output usage (help) information.
 
 
   .. index:: -H32  (gnatbind)
@@ -6195,7 +6290,7 @@ be presented in subsequent sections.
   .. index:: -p  (gnatbind)
 
 :samp:`-p`
-  Pessimistic (worst-case) elaboration order
+  Pessimistic (worst-case) elaboration order.
 
 
   .. index:: -P  (gnatbind)
@@ -6230,7 +6325,7 @@ be presented in subsequent sections.
   objects with pragma Initialize_Scalars.
   The `xxx` string specified with the switch is one of:
 
-  * ``in`` for an invalid value*.
+  * ``in`` for an invalid value.
 
     If zero is invalid for the discrete type in question,
     then the scalar value is set to all zero bits.
@@ -6290,7 +6385,7 @@ be presented in subsequent sections.
   .. index:: -t  (gnatbind)
 
 :samp:`-t`
-  Tolerate time stamp and other consistency errors
+  Tolerate time stamp and other consistency errors.
 
 
   .. index:: -T  (gnatbind)
@@ -6326,10 +6421,18 @@ be presented in subsequent sections.
   :file:`stdout`.
 
 
+  .. index:: -V  (gnatbind)
+
+:samp:`-V{key}={value}`
+  Store the given association of `key` to `value` in the bind environment.
+  Values stored this way can be retrieved at run time using
+  `GNAT.Bind_Environment`.
+
+
   .. index:: -w  (gnatbind)
 
 :samp:`-w{x}`
-  Warning mode; `x` = s/e for suppress/treat as error
+  Warning mode; `x` = s/e for suppress/treat as error.
 
 
   .. index:: -Wx  (gnatbind)
@@ -6509,6 +6612,47 @@ Elaboration Control
 
 The following switches provide additional control over the elaboration
 order. For full details see :ref:`Elaboration_Order_Handling_in_GNAT`.
+
+
+.. index:: -f  (gnatbind)
+
+:samp:`-f{elab-order}`
+  Force elaboration order.
+
+  `elab-order` should be the name of a "forced elaboration order file", that
+  is, a text file containing library item names, one per line. A name of the
+  form "some.unit%s" or "some.unit (spec)" denotes the spec of Some.Unit. A
+  name of the form "some.unit%b" or "some.unit (body)" denotes the body of
+  Some.Unit. Each pair of lines is taken to mean that there is an elaboration
+  dependence of the second line on the first. For example, if the file
+  contains:
+
+  .. code-block:: ada
+
+      this (spec)
+      this (body)
+      that (spec)
+      that (body)
+
+  then the spec of This will be elaborated before the body of This, and the
+  body of This will be elaborated before the spec of That, and the spec of That
+  will be elaborated before the body of That. The first and last of these three
+  dependences are already required by Ada rules, so this file is really just
+  forcing the body of This to be elaborated before the spec of That.
+
+  The given order must be consistent with Ada rules, or else `gnatbind` will
+  give elaboration cycle errors. For example, if you say x (body) should be
+  elaborated before x (spec), there will be a cycle, because Ada rules require
+  x (spec) to be elaborated before x (body); you can't have the spec and body
+  both elaborated before each other.
+
+  If you later add "with That;" to the body of This, there will be a cycle, in
+  which case you should erase either "this (body)" or "that (spec)" from the
+  above forced elaboration order file.
+
+  Blank lines and Ada-style comments are ignored. Unit names that do not exist
+  in the program are ignored. Units in the GNAT predefined library are also
+  ignored.
 
 
   .. index:: -p  (gnatbind)
@@ -6873,7 +7017,7 @@ Here are some examples of `gnatbind` invovations:
 Linking with *gnatlink*
 =======================
 
-.. index: ! gnatlink
+.. index:: ! gnatlink
 
 This chapter discusses *gnatlink*, a tool that links
 an Ada program and builds an executable file. This utility

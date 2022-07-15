@@ -1,6 +1,6 @@
 /* Utility functions for reading gcda files into in-memory
    gcov_info structures and offline profile processing. */
-/* Copyright (C) 2014-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2017 Free Software Foundation, Inc.
    Contributed by Rong Xu <xur@google.com>.
 
 This file is part of GCC.
@@ -673,6 +673,7 @@ gcov_profile_merge (struct gcov_info *tgt_profile, struct gcov_info *src_profile
     {
       gi_ptr = in_src_not_tgt[i];
       gcov_merge (gi_ptr, gi_ptr, w2 - 1);
+      gi_ptr->next = NULL;
       tgt_tail->next = gi_ptr;
       tgt_tail = gi_ptr;
     }
@@ -717,23 +718,6 @@ __gcov_time_profile_counter_op (gcov_type *counters ATTRIBUTE_UNUSED,
                                 void *data2 ATTRIBUTE_UNUSED)
 {
   /* Do nothing.  */
-}
-
-/* Performaing FN upon delta counters.  */
-
-static void
-__gcov_delta_counter_op (gcov_type *counters, unsigned n_counters,
-                         counter_op_fn fn, void *data1, void *data2)
-{
-  unsigned i, n_measures;
-
-  gcc_assert (!(n_counters % 4));
-  n_measures = n_counters / 4;
-  for (i = 0; i < n_measures; i++, counters += 4)
-    {
-      counters[2] = fn (counters[2], data1, data2);
-      counters[3] = fn (counters[3], data1, data2);
-    }
 }
 
 /* Performing FN upon single counters.  */
@@ -879,7 +863,7 @@ gcov_profile_normalize (struct gcov_info *profile, gcov_type max_val)
 
   scale_factor = (float)max_val / curr_max_val;
   if (verbose)
-    fnotice (stdout, "max_val is %"PRId64"\n", curr_max_val);
+    fnotice (stdout, "max_val is %" PRId64 "\n", curr_max_val);
 
   return gcov_profile_scale (profile, scale_factor, 0, 0);
 }
@@ -1374,22 +1358,25 @@ calculate_overlap (struct gcov_info *gcov_list1,
   printf ("  Statistics:\n"
           "                    profile1_#     profile2_#       overlap_#\n");
   printf ("    gcda files:  %12u\t%12u\t%12u\n", gcda_files[0], gcda_files[1],
-                                          gcda_files[0]-unique_gcda_files[0]);
+	  gcda_files[0]-unique_gcda_files[0]);
   printf ("  unique files:  %12u\t%12u\n", unique_gcda_files[0],
-                                        unique_gcda_files[1]);
+	  unique_gcda_files[1]);
   printf ("     hot files:  %12u\t%12u\t%12u\n", hot_gcda_files[0],
-                                            hot_gcda_files[1], both_hot_cnt);
+	  hot_gcda_files[1], both_hot_cnt);
   printf ("    cold files:  %12u\t%12u\t%12u\n", cold_gcda_files[0],
-                                            cold_gcda_files[1], both_cold_cnt);
+	  cold_gcda_files[1], both_cold_cnt);
   printf ("    zero files:  %12u\t%12u\t%12u\n", zero_gcda_files[0],
-                                            zero_gcda_files[1], both_zero_cnt);
-  printf ("       sum_all:  %12"PRId64"\t%12"PRId64"\n", p1_sum_all, p2_sum_all);
-  printf ("       run_max:  %12"PRId64"\t%12"PRId64"\n", p1_run_max, p2_run_max);
+	  zero_gcda_files[1], both_zero_cnt);
+  printf ("       sum_all:  %12" PRId64 "\t%12" PRId64 "\n",
+	  p1_sum_all, p2_sum_all);
+  printf ("       run_max:  %12" PRId64 "\t%12" PRId64 "\n",
+	  p1_run_max, p2_run_max);
 
   return prg_val;
 }
 
-/* Computer the overlap score of two lists of gcov_info objects PROFILE1 and PROFILE2.
+/* Compute the overlap score of two lists of gcov_info objects PROFILE1 and
+   PROFILE2.
    Return 0 on success: without mismatch. Reutrn 1 on error.  */
 
 int

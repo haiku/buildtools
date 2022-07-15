@@ -1,5 +1,5 @@
 /* Define control flow data structures for the CFG.
-   Copyright (C) 2014-2015 Free Software Foundation, Inc.
+   Copyright (C) 2014-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,9 +20,9 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_CFGRTL_H
 #define GCC_CFGRTL_H
 
-extern void delete_insn (rtx);
-extern void delete_insn_and_edges (rtx_insn *);
-extern void delete_insn_chain (rtx, rtx, bool);
+extern void delete_insn (rtx_insn *);
+extern bool delete_insn_and_edges (rtx_insn *);
+extern void delete_insn_chain (rtx, rtx_insn *, bool);
 extern basic_block create_basic_block_structure (rtx_insn *, rtx_insn *,
 						 rtx_note *, basic_block);
 extern void compute_bb_for_insn (void);
@@ -33,7 +33,7 @@ extern bool contains_no_active_insn_p (const_basic_block);
 extern bool forwarder_block_p (const_basic_block);
 extern bool can_fallthru (basic_block, basic_block);
 extern rtx_note *bb_note (basic_block);
-extern rtx block_label (basic_block);
+extern rtx_code_label *block_label (basic_block);
 extern edge try_redirect_by_replacing_jump (edge, basic_block, bool);
 extern void emit_barrier_after_bb (basic_block bb);
 extern basic_block force_nonfallthru_and_redirect (edge, basic_block, rtx);

@@ -1,5 +1,5 @@
 /* Machine mode definitions for GCC; included by rtl.h and tree.h.
-   Copyright (C) 1991-2015 Free Software Foundation, Inc.
+   Copyright (C) 1991-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -179,7 +179,7 @@ extern const unsigned char mode_class[NUM_MACHINE_MODES];
 
 /* Get the size in bytes and bits of an object of mode MODE.  */
 
-extern CONST_MODE_SIZE unsigned char mode_size[NUM_MACHINE_MODES];
+extern CONST_MODE_SIZE unsigned short mode_size[NUM_MACHINE_MODES];
 #if GCC_VERSION >= 4001
 #define GET_MODE_SIZE(MODE) \
   ((unsigned short) (__builtin_constant_p (MODE) \
@@ -209,7 +209,9 @@ extern const unsigned HOST_WIDE_INT mode_mask_array[NUM_MACHINE_MODES];
 
 #define GET_MODE_MASK(MODE) mode_mask_array[MODE]
 
-/* Return the mode of the inner elements in a vector.  */
+/* Return the mode of the basic parts of MODE.  For vector modes this is the
+   mode of the vector elements.  For complex modes it is the mode of the real
+   and imaginary parts.  For other modes it is MODE itself.  */
 
 extern const unsigned char mode_inner[NUM_MACHINE_MODES];
 #if GCC_VERSION >= 4001
@@ -220,21 +222,31 @@ extern const unsigned char mode_inner[NUM_MACHINE_MODES];
 #define GET_MODE_INNER(MODE) ((machine_mode) mode_inner[MODE])
 #endif
 
-/* Get the size in bytes or bites of the basic parts of an
+/* Get the size in bytes or bits of the basic parts of an
    object of mode MODE.  */
 
-#define GET_MODE_UNIT_SIZE(MODE)		\
-  (GET_MODE_INNER (MODE) == VOIDmode		\
-   ? GET_MODE_SIZE (MODE)			\
-   : GET_MODE_SIZE (GET_MODE_INNER (MODE)))
+extern CONST_MODE_UNIT_SIZE unsigned char mode_unit_size[NUM_MACHINE_MODES];
+#if GCC_VERSION >= 4001
+#define GET_MODE_UNIT_SIZE(MODE) \
+  ((unsigned char) (__builtin_constant_p (MODE) \
+		   ? mode_unit_size_inline (MODE) : mode_unit_size[MODE]))
+#else
+#define GET_MODE_UNIT_SIZE(MODE) mode_unit_size[MODE]
+#endif
 
 #define GET_MODE_UNIT_BITSIZE(MODE) \
   ((unsigned short) (GET_MODE_UNIT_SIZE (MODE) * BITS_PER_UNIT))
 
-#define GET_MODE_UNIT_PRECISION(MODE)		\
-  (GET_MODE_INNER (MODE) == VOIDmode		\
-   ? GET_MODE_PRECISION (MODE)			\
-   : GET_MODE_PRECISION (GET_MODE_INNER (MODE)))
+extern const unsigned short mode_unit_precision[NUM_MACHINE_MODES];
+#if GCC_VERSION >= 4001
+#define GET_MODE_UNIT_PRECISION(MODE) \
+  ((unsigned short) (__builtin_constant_p (MODE) \
+		    ? mode_unit_precision_inline (MODE)\
+		    : mode_unit_precision[MODE]))
+#else
+#define GET_MODE_UNIT_PRECISION(MODE) mode_unit_precision[MODE]
+#endif
+
 
 /* Get the number of units in the object.  */
 
@@ -256,6 +268,10 @@ extern const unsigned char mode_wider[NUM_MACHINE_MODES];
    this is a mode with the same inner mode but with twice the elements.  */
 extern const unsigned char mode_2xwider[NUM_MACHINE_MODES];
 #define GET_MODE_2XWIDER_MODE(MODE) ((machine_mode) mode_2xwider[MODE])
+
+/* Get the complex mode from the component mode.  */
+extern const unsigned char mode_complex[NUM_MACHINE_MODES];
+#define GET_MODE_COMPLEX_MODE(MODE) ((machine_mode) mode_complex[MODE])
 
 /* Return the mode for data of a given size SIZE and mode class CLASS.
    If LIMIT is nonzero, then don't use modes bigger than MAX_FIXED_MODE_SIZE.
@@ -314,15 +330,11 @@ extern machine_mode get_best_mode (int, int,
 
 /* Determine alignment, 1<=result<=BIGGEST_ALIGNMENT.  */
 
-extern CONST_MODE_BASE_ALIGN unsigned char mode_base_align[NUM_MACHINE_MODES];
+extern CONST_MODE_BASE_ALIGN unsigned short mode_base_align[NUM_MACHINE_MODES];
 
 extern unsigned get_mode_alignment (machine_mode);
 
 #define GET_MODE_ALIGNMENT(MODE) get_mode_alignment (MODE)
-
-/* Get the precision of the mode or its inner mode if it has one.  */
-
-extern unsigned int element_precision (machine_mode);
 
 /* For each class, get the narrowest mode in that class.  */
 
@@ -348,12 +360,12 @@ extern void init_adjust_machine_modes (void);
   (SCALAR_INT_MODE_P (MODE) \
    && GET_MODE_PRECISION (MODE) <= HOST_BITS_PER_WIDE_INT)
 
-typedef struct {
+struct int_n_data_t {
   /* These parts are initailized by genmodes output */
   unsigned int bitsize;
   machine_mode m;
   /* RID_* is RID_INTN_BASE + index into this array */
-} int_n_data_t;
+};
 
 /* This is also in tree.h.  genmodes.c guarantees the're sorted from
    smallest bitsize to largest bitsize. */

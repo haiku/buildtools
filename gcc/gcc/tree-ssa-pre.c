@@ -1,5 +1,5 @@
-/* SSA-PRE for trees.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+/* Full and partial redundancy elimination and code hoisting on SSA GIMPLE.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
    Contributed by Daniel Berlin <dan@dberlin.org> and Steven Bosscher
    <stevenb@suse.de>
 
@@ -22,89 +22,65 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
+#include "backend.h"
+#include "rtl.h"
 #include "tree.h"
-#include "fold-const.h"
+#include "gimple.h"
 #include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "cfganal.h"
-#include "basic-block.h"
+#include "alloc-pool.h"
+#include "tree-pass.h"
+#include "ssa.h"
+#include "cgraph.h"
 #include "gimple-pretty-print.h"
-#include "tree-inline.h"
-#include "hash-table.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
+#include "fold-const.h"
+#include "cfganal.h"
 #include "gimple-fold.h"
 #include "tree-eh.h"
-#include "gimple-expr.h"
-#include "is-a.h"
-#include "gimple.h"
 #include "gimplify.h"
 #include "gimple-iterator.h"
-#include "gimplify-me.h"
-#include "gimple-ssa.h"
 #include "tree-cfg.h"
-#include "tree-phinodes.h"
-#include "ssa-iterators.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
 #include "tree-ssa-loop.h"
 #include "tree-into-ssa.h"
-#include "hashtab.h"
-#include "rtl.h"
-#include "flags.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
 #include "tree-dfa.h"
 #include "tree-ssa.h"
-#include "tree-iterator.h"
-#include "alloc-pool.h"
-#include "obstack.h"
-#include "tree-pass.h"
-#include "langhooks.h"
 #include "cfgloop.h"
 #include "tree-ssa-sccvn.h"
 #include "tree-scalar-evolution.h"
 #include "params.h"
 #include "dbgcnt.h"
 #include "domwalk.h"
-#include "hash-map.h"
-#include "plugin-api.h"
-#include "ipa-ref.h"
-#include "cgraph.h"
-#include "symbol-summary.h"
-#include "ipa-prop.h"
 #include "tree-ssa-propagate.h"
 #include "ipa-utils.h"
 #include "tree-cfgcleanup.h"
+#include "langhooks.h"
+#include "alias.h"
+
+/* Even though this file is called tree-ssa-pre.c, we actually
+   implement a bit more than just PRE here.  All of them piggy-back
+   on GVN which is implemented in tree-ssa-sccvn.c.
+
+     1. Full Redundancy Elimination (FRE)
+	This is the elimination phase of GVN.
+
+     2. Partial Redundancy Elimination (PRE)
+	This is adds computation of AVAIL_OUT and ANTIC_IN and
+	doing expression insertion to form GVN-PRE.
+
+     3. Code hoisting
+	This optimization uses the ANTIC_IN sets computed for PRE
+	to move expressions further up than PRE would do, to make
+	multiple computations of the same value fully redundant.
+	This pass is explained below (after the explanation of the
+	basic algorithm for PRE).
+*/
 
 /* TODO:
 
    1. Avail sets can be shared by making an avail_find_leader that
       walks up the dominator tree and looks in those avail sets.
       This might affect code optimality, it's unclear right now.
+      Currently the AVAIL_OUT sets are the remaining quadraticness in
+      memory of GVN-PRE.
    2. Strength reduction can be performed by anticipating expressions
       we can repair later on.
    3. We can do back-substitution or smarter value numbering to catch
@@ -116,7 +92,7 @@ along with GCC; see the file COPYING3.  If not see
    represent the actual statement containing the expressions we care about,
    and we cache the value number by putting it in the expression.  */
 
-/* Basic algorithm
+/* Basic algorithm for Partial Redundancy Elimination:
 
    First we walk the statements to generate the AVAIL sets, the
    EXP_GEN sets, and the tmp_gen sets.  EXP_GEN sets represent the
@@ -156,16 +132,74 @@ along with GCC; see the file COPYING3.  If not see
    In order to make it fully redundant, we insert the expression into
    the predecessors where it is not available, but is ANTIC.
 
+   When optimizing for size, we only eliminate the partial redundancy
+   if we need to insert in only one predecessor.  This avoids almost
+   completely the code size increase that PRE usually causes.
+
    For the partial anticipation case, we only perform insertion if it
    is partially anticipated in some block, and fully available in all
    of the predecessors.
 
-   insert/insert_aux/do_regular_insertion/do_partial_partial_insertion
-   performs these steps.
+   do_pre_regular_insertion/do_pre_partial_partial_insertion
+   performs these steps, driven by insert/insert_aux.
 
    Fourth, we eliminate fully redundant expressions.
    This is a simple statement walk that replaces redundant
    calculations with the now available values.  */
+
+/* Basic algorithm for Code Hoisting:
+
+   Code hoisting is: Moving value computations up in the control flow
+   graph to make multiple copies redundant.  Typically this is a size
+   optimization, but there are cases where it also is helpful for speed.
+
+   A simple code hoisting algorithm is implemented that piggy-backs on
+   the PRE infrastructure.  For code hoisting, we have to know ANTIC_OUT
+   which is effectively ANTIC_IN - AVAIL_OUT.  The latter two have to be
+   computed for PRE, and we can use them to perform a limited version of
+   code hoisting, too.
+
+   For the purpose of this implementation, a value is hoistable to a basic
+   block B if the following properties are met:
+
+   1. The value is in ANTIC_IN(B) -- the value will be computed on all
+      paths from B to function exit and it can be computed in B);
+
+   2. The value is not in AVAIL_OUT(B) -- there would be no need to
+      compute the value again and make it available twice;
+
+   3. All successors of B are dominated by B -- makes sure that inserting
+      a computation of the value in B will make the remaining
+      computations fully redundant;
+
+   4. At least one successor has the value in AVAIL_OUT -- to avoid
+      hoisting values up too far;
+
+   5. There are at least two successors of B -- hoisting in straight
+      line code is pointless.
+
+   The third condition is not strictly necessary, but it would complicate
+   the hoisting pass a lot.  In fact, I don't know of any code hoisting
+   algorithm that does not have this requirement.  Fortunately, experiments
+   have show that most candidate hoistable values are in regions that meet
+   this condition (e.g. diamond-shape regions).
+
+   The forth condition is necessary to avoid hoisting things up too far
+   away from the uses of the value.  Nothing else limits the algorithm
+   from hoisting everything up as far as ANTIC_IN allows.  Experiments
+   with SPEC and CSiBE have shown that hoisting up too far results in more
+   spilling, less benefits for code size, and worse benchmark scores.
+   Fortunately, in practice most of the interesting hoisting opportunities
+   are caught despite this limitation.
+
+   For hoistable values that meet all conditions, expressions are inserted
+   to make the calculation of the hoistable value fully redundant.  We
+   perform code hoisting insertions after each round of PRE insertions,
+   because code hoisting never exposes new PRE opportunities, but PRE can
+   create new code hoisting opportunities.
+
+   The code hoisting algorithm is implemented in do_hoist_insert, driven
+   by insert/insert_aux.  */
 
 /* Representations of value numbers:
 
@@ -213,23 +247,21 @@ enum pre_expr_kind
     CONSTANT
 };
 
-typedef union pre_expr_union_d
+union pre_expr_union
 {
   tree name;
   tree constant;
   vn_nary_op_t nary;
   vn_reference_t reference;
-} pre_expr_union;
+};
 
-typedef struct pre_expr_d : typed_noop_remove <pre_expr_d>
+typedef struct pre_expr_d : nofree_ptr_hash <pre_expr_d>
 {
   enum pre_expr_kind kind;
   unsigned int id;
   pre_expr_union u;
 
   /* hash_table support.  */
-  typedef pre_expr_d value_type;
-  typedef pre_expr_d compare_type;
   static inline hashval_t hash (const pre_expr_d *);
   static inline int equal (const pre_expr_d *, const pre_expr_d *);
 } *pre_expr;
@@ -242,7 +274,7 @@ typedef struct pre_expr_d : typed_noop_remove <pre_expr_d>
 /* Compare E1 and E1 for equality.  */
 
 inline int
-pre_expr_d::equal (const value_type *e1, const compare_type *e2)
+pre_expr_d::equal (const pre_expr_d *e1, const pre_expr_d *e2)
 {
   if (e1->kind != e2->kind)
     return false;
@@ -267,7 +299,7 @@ pre_expr_d::equal (const value_type *e1, const compare_type *e2)
 /* Hash E.  */
 
 inline hashval_t
-pre_expr_d::hash (const value_type *e)
+pre_expr_d::hash (const pre_expr_d *e)
 {
   switch (e->kind)
     {
@@ -380,7 +412,7 @@ clear_expression_ids (void)
   expressions.release ();
 }
 
-static alloc_pool pre_expr_pool;
+static object_allocator<pre_expr_d> pre_expr_pool ("pre_expr nodes");
 
 /* Given an SSA_NAME NAME, get or create a pre_expr to represent it.  */
 
@@ -398,7 +430,7 @@ get_or_alloc_expr_for_name (tree name)
   if (result_id != 0)
     return expression_for_id (result_id);
 
-  result = (pre_expr) pool_alloc (pre_expr_pool);
+  result = pre_expr_pool.allocate ();
   result->kind = NAME;
   PRE_EXPR_NAME (result) = name;
   alloc_expression_id (result);
@@ -480,10 +512,6 @@ typedef struct bb_bitmap_sets
 #define BB_LIVE_VOP_ON_EXIT(BB) ((bb_value_sets_t) ((BB)->aux))->vop_on_exit
 
 
-/* Basic block list in postorder.  */
-static int *postorder;
-static int postorder_num;
-
 /* This structure is used to keep track of statistics on what
    optimization PRE was able to perform.  */
 static struct
@@ -497,6 +525,9 @@ static struct
   /* The number of inserts found due to partial anticipation  */
   int pa_insert;
 
+  /* The number of inserts made for code hoisting.  */
+  int hoist_insert;
+
   /* The number of new PHI nodes added by PRE.  */
   int phis;
 } pre_stats;
@@ -506,6 +537,7 @@ static pre_expr bitmap_find_leader (bitmap_set_t, unsigned int);
 static void bitmap_value_insert_into_set (bitmap_set_t, pre_expr);
 static void bitmap_value_replace_in_set (bitmap_set_t, pre_expr);
 static void bitmap_set_copy (bitmap_set_t, bitmap_set_t);
+static void bitmap_set_and (bitmap_set_t, bitmap_set_t);
 static bool bitmap_set_contains_value (bitmap_set_t, unsigned int);
 static void bitmap_insert_into_set (bitmap_set_t, pre_expr);
 static void bitmap_insert_into_set_1 (bitmap_set_t, pre_expr,
@@ -519,7 +551,7 @@ static unsigned int get_expr_value_id (pre_expr);
 /* We can add and remove elements and entries to and from sets
    and hash tables, so we use alloc pools for them.  */
 
-static alloc_pool bitmap_set_pool;
+static object_allocator<bitmap_set> bitmap_set_pool ("Bitmap sets");
 static bitmap_obstack grand_bitmap_obstack;
 
 /* Set of blocks with statements that have had their EH properties changed.  */
@@ -531,7 +563,7 @@ static bitmap need_ab_cleanup;
 /* A three tuple {e, pred, v} used to cache phi translations in the
    phi_translate_table.  */
 
-typedef struct expr_pred_trans_d : typed_free_remove<expr_pred_trans_d>
+typedef struct expr_pred_trans_d : free_ptr_hash<expr_pred_trans_d>
 {
   /* The expression.  */
   pre_expr e;
@@ -547,10 +579,8 @@ typedef struct expr_pred_trans_d : typed_free_remove<expr_pred_trans_d>
   hashval_t hashcode;
 
   /* hash_table support.  */
-  typedef expr_pred_trans_d value_type;
-  typedef expr_pred_trans_d compare_type;
-  static inline hashval_t hash (const value_type *);
-  static inline int equal (const value_type *, const compare_type *);
+  static inline hashval_t hash (const expr_pred_trans_d *);
+  static inline int equal (const expr_pred_trans_d *, const expr_pred_trans_d *);
 } *expr_pred_trans_t;
 typedef const struct expr_pred_trans_d *const_expr_pred_trans_t;
 
@@ -561,8 +591,8 @@ expr_pred_trans_d::hash (const expr_pred_trans_d *e)
 }
 
 inline int
-expr_pred_trans_d::equal (const value_type *ve1,
-			  const compare_type *ve2)
+expr_pred_trans_d::equal (const expr_pred_trans_d *ve1,
+			  const expr_pred_trans_d *ve2)
 {
   basic_block b1 = ve1->pred;
   basic_block b2 = ve2->pred;
@@ -635,7 +665,7 @@ add_to_value (unsigned int v, pre_expr e)
 static bitmap_set_t
 bitmap_set_new (void)
 {
-  bitmap_set_t ret = (bitmap_set_t) pool_alloc (bitmap_set_pool);
+  bitmap_set_t ret = bitmap_set_pool.allocate ();
   bitmap_initialize (&ret->expressions, &grand_bitmap_obstack);
   bitmap_initialize (&ret->values, &grand_bitmap_obstack);
   return ret;
@@ -1125,36 +1155,13 @@ get_or_alloc_expr_for_constant (tree constant)
   if (result_id != 0)
     return expression_for_id (result_id);
 
-  newexpr = (pre_expr) pool_alloc (pre_expr_pool);
+  newexpr = pre_expr_pool.allocate ();
   newexpr->kind = CONSTANT;
   PRE_EXPR_CONSTANT (newexpr) = constant;
   alloc_expression_id (newexpr);
   value_id = get_or_alloc_constant_value_id (constant);
   add_to_value (value_id, newexpr);
   return newexpr;
-}
-
-/* Given a value id V, find the actual tree representing the constant
-   value if there is one, and return it. Return NULL if we can't find
-   a constant.  */
-
-static tree
-get_constant_for_value_id (unsigned int v)
-{
-  if (value_id_constant_p (v))
-    {
-      unsigned int i;
-      bitmap_iterator bi;
-      bitmap exprset = value_expressions[v];
-
-      EXECUTE_IF_SET_IN_BITMAP (exprset, 0, i, bi)
-	{
-	  pre_expr expr = expression_for_id (i);
-	  if (expr->kind == CONSTANT)
-	    return PRE_EXPR_CONSTANT (expr);
-	}
-    }
-  return NULL;
 }
 
 /* Get or allocate a pre_expr for a piece of GIMPLE, and return it.
@@ -1176,13 +1183,13 @@ get_or_alloc_expr_for (tree t)
       vn_nary_op_lookup (t, &result);
       if (result != NULL)
 	{
-	  pre_expr e = (pre_expr) pool_alloc (pre_expr_pool);
+	  pre_expr e = pre_expr_pool.allocate ();
 	  e->kind = NARY;
 	  PRE_EXPR_NARY (e) = result;
 	  result_id = lookup_expression_id (e);
 	  if (result_id != 0)
 	    {
-	      pool_free (pre_expr_pool, e);
+	      pre_expr_pool.remove (e);
 	      e = expression_for_id (result_id);
 	      return e;
 	    }
@@ -1194,7 +1201,7 @@ get_or_alloc_expr_for (tree t)
 }
 
 /* Return the folded version of T if T, when folded, is a gimple
-   min_invariant.  Otherwise, return T.  */
+   min_invariant or an SSA name.  Otherwise, return T.  */
 
 static pre_expr
 fully_constant_expression (pre_expr e)
@@ -1206,76 +1213,14 @@ fully_constant_expression (pre_expr e)
     case NARY:
       {
 	vn_nary_op_t nary = PRE_EXPR_NARY (e);
-	switch (TREE_CODE_CLASS (nary->opcode))
-	  {
-	  case tcc_binary:
-	  case tcc_comparison:
-	    {
-	      /* We have to go from trees to pre exprs to value ids to
-		 constants.  */
-	      tree naryop0 = nary->op[0];
-	      tree naryop1 = nary->op[1];
-	      tree result;
-	      if (!is_gimple_min_invariant (naryop0))
-		{
-		  pre_expr rep0 = get_or_alloc_expr_for (naryop0);
-		  unsigned int vrep0 = get_expr_value_id (rep0);
-		  tree const0 = get_constant_for_value_id (vrep0);
-		  if (const0)
-		    naryop0 = fold_convert (TREE_TYPE (naryop0), const0);
-		}
-	      if (!is_gimple_min_invariant (naryop1))
-		{
-		  pre_expr rep1 = get_or_alloc_expr_for (naryop1);
-		  unsigned int vrep1 = get_expr_value_id (rep1);
-		  tree const1 = get_constant_for_value_id (vrep1);
-		  if (const1)
-		    naryop1 = fold_convert (TREE_TYPE (naryop1), const1);
-		}
-	      result = fold_binary (nary->opcode, nary->type,
-				    naryop0, naryop1);
-	      if (result && is_gimple_min_invariant (result))
-		return get_or_alloc_expr_for_constant (result);
-	      /* We might have simplified the expression to a
-		 SSA_NAME for example from x_1 * 1.  But we cannot
-		 insert a PHI for x_1 unconditionally as x_1 might
-		 not be available readily.  */
-	      return e;
-	    }
-	  case tcc_reference:
-	    if (nary->opcode != REALPART_EXPR
-		&& nary->opcode != IMAGPART_EXPR
-		&& nary->opcode != VIEW_CONVERT_EXPR)
-	      return e;
-	    /* Fallthrough.  */
-	  case tcc_unary:
-	    {
-	      /* We have to go from trees to pre exprs to value ids to
-		 constants.  */
-	      tree naryop0 = nary->op[0];
-	      tree const0, result;
-	      if (is_gimple_min_invariant (naryop0))
-		const0 = naryop0;
-	      else
-		{
-		  pre_expr rep0 = get_or_alloc_expr_for (naryop0);
-		  unsigned int vrep0 = get_expr_value_id (rep0);
-		  const0 = get_constant_for_value_id (vrep0);
-		}
-	      result = NULL;
-	      if (const0)
-		{
-		  tree type1 = TREE_TYPE (nary->op[0]);
-		  const0 = fold_convert (type1, const0);
-		  result = fold_unary (nary->opcode, nary->type, const0);
-		}
-	      if (result && is_gimple_min_invariant (result))
-		return get_or_alloc_expr_for_constant (result);
-	      return e;
-	    }
-	  default:
-	    return e;
-	  }
+	tree res = vn_nary_simplify (nary);
+	if (!res)
+	  return e;
+	if (is_gimple_min_invariant (res))
+	  return get_or_alloc_expr_for_constant (res);
+	if (TREE_CODE (res) == SSA_NAME)
+	  return get_or_alloc_expr_for_name (res);
+	return e;
       }
     case REFERENCE:
       {
@@ -1301,7 +1246,7 @@ translate_vuse_through_block (vec<vn_reference_op_s> operands,
 			      basic_block phiblock,
 			      basic_block block, bool *same_valid)
 {
-  gimple phi = SSA_NAME_DEF_STMT (vuse);
+  gimple *phi = SSA_NAME_DEF_STMT (vuse);
   ao_ref ref;
   edge e = NULL;
   bool use_oracle;
@@ -1418,7 +1363,7 @@ get_representative_for (const pre_expr e)
   switch (e->kind)
     {
     case NAME:
-      return PRE_EXPR_NAME (e);
+      return VN_INFO (PRE_EXPR_NAME (e))->valnum;
     case CONSTANT:
       return PRE_EXPR_CONSTANT (e);
     case NARY:
@@ -1433,7 +1378,7 @@ get_representative_for (const pre_expr e)
 	  {
 	    pre_expr rep = expression_for_id (i);
 	    if (rep->kind == NAME)
-	      return PRE_EXPR_NAME (rep);
+	      return VN_INFO (PRE_EXPR_NAME (rep))->valnum;
 	    else if (rep->kind == CONSTANT)
 	      return PRE_EXPR_CONSTANT (rep);
 	  }
@@ -1501,12 +1446,7 @@ phi_translate_1 (pre_expr expr, bitmap_set_t set1, bitmap_set_t set2,
 		leader = find_leader_in_sets (op_val_id, set1, set2);
                 result = phi_translate (leader, set1, set2, pred, phiblock);
 		if (result && result != leader)
-		  {
-		    tree name = get_representative_for (result);
-		    if (!name)
-		      return NULL;
-		    newnary->op[i] = name;
-		  }
+		  newnary->op[i] = get_representative_for (result);
 		else if (!result)
 		  return NULL;
 
@@ -1518,6 +1458,35 @@ phi_translate_1 (pre_expr expr, bitmap_set_t set1, bitmap_set_t set2,
 	    pre_expr constant;
 	    unsigned int new_val_id;
 
+	    PRE_EXPR_NARY (expr) = newnary;
+	    constant = fully_constant_expression (expr);
+	    PRE_EXPR_NARY (expr) = nary;
+	    if (constant != expr)
+	      {
+		/* For non-CONSTANTs we have to make sure we can eventually
+		   insert the expression.  Which means we need to have a
+		   leader for it.  */
+		if (constant->kind != CONSTANT)
+		  {
+		    /* Do not allow simplifications to non-constants over
+		       backedges as this will likely result in a loop PHI node
+		       to be inserted and increased register pressure.
+		       See PR77498 - this avoids doing predcoms work in
+		       a less efficient way.  */
+		    if (find_edge (pred, phiblock)->flags & EDGE_DFS_BACK)
+		      ;
+		    else
+		      {
+			unsigned value_id = get_expr_value_id (constant);
+			constant = find_leader_in_sets (value_id, set1, set2);
+			if (constant)
+			  return constant;
+		      }
+		  }
+		else
+		  return constant;
+	      }
+
 	    tree result = vn_nary_op_lookup_pieces (newnary->length,
 						    newnary->opcode,
 						    newnary->type,
@@ -1526,16 +1495,12 @@ phi_translate_1 (pre_expr expr, bitmap_set_t set1, bitmap_set_t set2,
 	    if (result && is_gimple_min_invariant (result))
 	      return get_or_alloc_expr_for_constant (result);
 
-	    expr = (pre_expr) pool_alloc (pre_expr_pool);
+	    expr = pre_expr_pool.allocate ();
 	    expr->kind = NARY;
 	    expr->id = 0;
 	    if (nary)
 	      {
 		PRE_EXPR_NARY (expr) = nary;
-		constant = fully_constant_expression (expr);
-		if (constant != expr)
-		  return constant;
-
 		new_val_id = nary->value_id;
 		get_or_alloc_expression_id (expr);
 	      }
@@ -1549,9 +1514,6 @@ phi_translate_1 (pre_expr expr, bitmap_set_t set1, bitmap_set_t set2,
 						 &newnary->op[0],
 						 result, new_val_id);
 		PRE_EXPR_NARY (expr) = nary;
-		constant = fully_constant_expression (expr);
-		if (constant != expr)
-		  return constant;
 		get_or_alloc_expression_id (expr);
 	      }
 	    add_to_value (new_val_id, expr);
@@ -1597,19 +1559,15 @@ phi_translate_1 (pre_expr expr, bitmap_set_t set1, bitmap_set_t set2,
 		  }
 		op_val_id = VN_INFO (op[n])->value_id;
 		leader = find_leader_in_sets (op_val_id, set1, set2);
-		if (!leader)
-		  break;
 		opresult = phi_translate (leader, set1, set2, pred, phiblock);
-		if (!opresult)
-		  break;
-		if (opresult != leader)
+		if (opresult && opresult != leader)
 		  {
 		    tree name = get_representative_for (opresult);
-		    if (!name)
-		      break;
 		    changed |= name != op[n];
 		    op[n] = name;
 		  }
+		else if (!opresult)
+		  break;
 	      }
 	    if (n != 3)
 	      {
@@ -1688,7 +1646,7 @@ phi_translate_1 (pre_expr expr, bitmap_set_t set1, bitmap_set_t set2,
 		return NULL;
 	      }
 
-	    expr = (pre_expr) pool_alloc (pre_expr_pool);
+	    expr = pre_expr_pool.allocate ();
 	    expr->kind = REFERENCE;
 	    expr->id = 0;
 
@@ -1735,7 +1693,7 @@ phi_translate_1 (pre_expr expr, bitmap_set_t set1, bitmap_set_t set2,
     case NAME:
       {
 	tree name = PRE_EXPR_NAME (expr);
-	gimple def_stmt = SSA_NAME_DEF_STMT (name);
+	gimple *def_stmt = SSA_NAME_DEF_STMT (name);
 	/* If the SSA name is defined by a PHI node in this block,
 	   translate it.  */
 	if (gimple_code (def_stmt) == GIMPLE_PHI
@@ -1900,7 +1858,7 @@ value_dies_in_block_x (pre_expr expr, basic_block block)
 {
   tree vuse = PRE_EXPR_REFERENCE (expr)->vuse;
   vn_reference_t refx = PRE_EXPR_REFERENCE (expr);
-  gimple def;
+  gimple *def;
   gimple_stmt_iterator gsi;
   unsigned id = get_expression_id (expr);
   bool res = false;
@@ -2077,23 +2035,31 @@ prune_clobbered_mems (bitmap_set_t set, basic_block block)
 {
   bitmap_iterator bi;
   unsigned i;
+  pre_expr to_remove = NULL;
 
   FOR_EACH_EXPR_ID_IN_SET (set, i, bi)
     {
+      /* Remove queued expr.  */
+      if (to_remove)
+	{
+	  bitmap_remove_from_set (set, to_remove);
+	  to_remove = NULL;
+	}
+
       pre_expr expr = expression_for_id (i);
       if (expr->kind == REFERENCE)
 	{
 	  vn_reference_t ref = PRE_EXPR_REFERENCE (expr);
 	  if (ref->vuse)
 	    {
-	      gimple def_stmt = SSA_NAME_DEF_STMT (ref->vuse);
+	      gimple *def_stmt = SSA_NAME_DEF_STMT (ref->vuse);
 	      if (!gimple_nop_p (def_stmt)
 		  && ((gimple_bb (def_stmt) != block
 		       && !dominated_by_p (CDI_DOMINATORS,
 					   block, gimple_bb (def_stmt)))
 		      || (gimple_bb (def_stmt) == block
 			  && value_dies_in_block_x (expr, block))))
-		bitmap_remove_from_set (set, expr);
+		to_remove = expr;
 	    }
 	}
       else if (expr->kind == NARY)
@@ -2105,9 +2071,13 @@ prune_clobbered_mems (bitmap_set_t set, basic_block block)
 	     as the available expression might be after the exit point.  */
 	  if (BB_MAY_NOTRETURN (block)
 	      && vn_nary_may_trap (nary))
-	    bitmap_remove_from_set (set, expr);
+	    to_remove = expr;
 	}
     }
+
+  /* Remove queued expr.  */
+  if (to_remove)
+    bitmap_remove_from_set (set, to_remove);
 }
 
 static sbitmap has_abnormal_preds;
@@ -2120,7 +2090,8 @@ static sbitmap has_abnormal_preds;
      ANTIC_OUT[BLOCK] = phi_translate (ANTIC_IN[succ(BLOCK)])
 
    ANTIC_IN[BLOCK] = clean(ANTIC_OUT[BLOCK] U EXP_GEN[BLOCK] - TMP_GEN[BLOCK])
-*/
+
+   Note that clean() is deferred until after the iteration.  */
 
 static bool
 compute_antic_aux (basic_block block, bool block_has_abnormal_pred_edge)
@@ -2220,7 +2191,8 @@ compute_antic_aux (basic_block block, bool block_has_abnormal_pred_edge)
     bitmap_value_insert_into_set (ANTIC_IN (block),
 				  expression_for_id (bii));
 
-  clean (ANTIC_IN (block));
+  /* clean (ANTIC_IN (block)) is defered to after the iteration converged
+     because it can cause non-convergence, see for example PR81181.  */
 
   if (!was_visited || !bitmap_set_equal (old, ANTIC_IN (block)))
     changed = true;
@@ -2260,11 +2232,10 @@ compute_antic_aux (basic_block block, bool block_has_abnormal_pred_edge)
 				  - ANTIC_IN[BLOCK])
 
 */
-static bool
+static void
 compute_partial_antic_aux (basic_block block,
 			   bool block_has_abnormal_pred_edge)
 {
-  bool changed = false;
   bitmap_set_t old_PA_IN;
   bitmap_set_t PA_OUT;
   edge e;
@@ -2363,9 +2334,6 @@ compute_partial_antic_aux (basic_block block,
 
   dependent_clean (PA_IN (block), ANTIC_IN (block));
 
-  if (!bitmap_set_equal (old_PA_IN, PA_IN (block)))
-    changed = true;
-
  maybe_dump_sets:
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
@@ -2378,7 +2346,6 @@ compute_partial_antic_aux (basic_block block,
     bitmap_set_free (old_PA_IN);
   if (PA_OUT)
     bitmap_set_free (PA_OUT);
-  return changed;
 }
 
 /* Compute ANTIC and partial ANTIC sets.  */
@@ -2414,13 +2381,20 @@ compute_antic (void)
 
       /* While we are here, give empty ANTIC_IN sets to each block.  */
       ANTIC_IN (block) = bitmap_set_new ();
-      PA_IN (block) = bitmap_set_new ();
+      if (do_partial_partial)
+	PA_IN (block) = bitmap_set_new ();
     }
 
   /* At the exit block we anticipate nothing.  */
   BB_VISITED (EXIT_BLOCK_PTR_FOR_FN (cfun)) = 1;
 
-  sbitmap worklist = sbitmap_alloc (last_basic_block_for_fn (cfun) + 1);
+  /* For ANTIC computation we need a postorder that also guarantees that
+     a block with a single successor is visited after its successor.
+     RPO on the inverted CFG has this property.  */
+  int *postorder = XNEWVEC (int, n_basic_blocks_for_fn (cfun));
+  int postorder_num = inverted_post_order_compute (postorder);
+
+  auto_sbitmap worklist (last_basic_block_for_fn (cfun) + 1);
   bitmap_ones (worklist);
   while (changed)
     {
@@ -2452,45 +2426,31 @@ compute_antic (void)
       gcc_checking_assert (num_iterations < 500);
     }
 
+  /* We have to clean after the dataflow problem converged as cleaning
+     can cause non-convergence because it is based on expressions
+     rather than values.  */
+  FOR_EACH_BB_FN (block, cfun)
+    clean (ANTIC_IN (block));
+
   statistics_histogram_event (cfun, "compute_antic iterations",
 			      num_iterations);
 
   if (do_partial_partial)
     {
-      bitmap_ones (worklist);
-      mark_dfs_back_edges ();
-      num_iterations = 0;
-      changed = true;
-      while (changed)
+      /* For partial antic we ignore backedges and thus we do not need
+         to perform any iteration when we process blocks in postorder.  */
+      postorder_num = pre_and_rev_post_order_compute (NULL, postorder, false);
+      for (i = postorder_num - 1 ; i >= 0; i--)
 	{
-	  if (dump_file && (dump_flags & TDF_DETAILS))
-	    fprintf (dump_file, "Starting iteration %d\n", num_iterations);
-	  num_iterations++;
-	  changed = false;
-	  for (i = postorder_num - 1 ; i >= 0; i--)
-	    {
-	      if (bitmap_bit_p (worklist, postorder[i]))
-		{
-		  basic_block block = BASIC_BLOCK_FOR_FN (cfun, postorder[i]);
-		  bitmap_clear_bit (worklist, block->index);
-		  if (compute_partial_antic_aux (block,
-						 bitmap_bit_p (has_abnormal_preds,
-							       block->index)))
-		    {
-		      FOR_EACH_EDGE (e, ei, block->preds)
-			bitmap_set_bit (worklist, e->src->index);
-		      changed = true;
-		    }
-		}
-	    }
-	  /* Theoretically possible, but *highly* unlikely.  */
-	  gcc_checking_assert (num_iterations < 500);
+	  basic_block block = BASIC_BLOCK_FOR_FN (cfun, postorder[i]);
+	  compute_partial_antic_aux (block,
+				     bitmap_bit_p (has_abnormal_preds,
+						   block->index));
 	}
-      statistics_histogram_event (cfun, "compute_partial_antic iterations",
-				  num_iterations);
     }
+
   sbitmap_free (has_abnormal_preds);
-  sbitmap_free (worklist);
+  free (postorder);
 }
 
 
@@ -2511,42 +2471,7 @@ create_component_ref_by_pieces_1 (basic_block block, vn_reference_t ref,
   switch (currop->opcode)
     {
     case CALL_EXPR:
-      {
-	tree folded, sc = NULL_TREE;
-	unsigned int nargs = 0;
-	tree fn, *args;
-	if (TREE_CODE (currop->op0) == FUNCTION_DECL)
-	  fn = currop->op0;
-	else
-	  fn = find_or_generate_expression (block, currop->op0, stmts);
-	if (!fn)
-	  return NULL_TREE;
-	if (currop->op1)
-	  {
-	    sc = find_or_generate_expression (block, currop->op1, stmts);
-	    if (!sc)
-	      return NULL_TREE;
-	  }
-	args = XNEWVEC (tree, ref->operands.length () - 1);
-	while (*operand < ref->operands.length ())
-	  {
-	    args[nargs] = create_component_ref_by_pieces_1 (block, ref,
-							    operand, stmts);
-	    if (!args[nargs])
-	      return NULL_TREE;
-	    nargs++;
-	  }
-	folded = build_call_array (currop->type,
-				   (TREE_CODE (fn) == FUNCTION_DECL
-				    ? build_fold_addr_expr (fn) : fn),
-				   nargs, args);
-	if (currop->with_bounds)
-	  CALL_WITH_BOUNDS_P (folded) = true;
-	free (args);
-	if (sc)
-	  CALL_EXPR_STATIC_CHAIN (folded) = sc;
-	return folded;
-      }
+      gcc_unreachable ();
 
     case MEM_REF:
       {
@@ -2568,7 +2493,11 @@ create_component_ref_by_pieces_1 (basic_block block, vn_reference_t ref,
 						     off));
 	    baseop = build_fold_addr_expr (base);
 	  }
-	return fold_build2 (MEM_REF, currop->type, baseop, offset);
+	genop = build2 (MEM_REF, currop->type, baseop, offset);
+	MR_DEPENDENCE_CLIQUE (genop) = currop->clique;
+	MR_DEPENDENCE_BASE (genop) = currop->base;
+	REF_REVERSE_STORAGE_ORDER (genop) = currop->reverse;
+	return genop;
       }
 
     case TARGET_MEM_REF:
@@ -2591,8 +2520,12 @@ create_component_ref_by_pieces_1 (basic_block block, vn_reference_t ref,
 	    if (!genop1)
 	      return NULL_TREE;
 	  }
-	return build5 (TARGET_MEM_REF, currop->type,
-		       baseop, currop->op2, genop0, currop->op1, genop1);
+	genop = build5 (TARGET_MEM_REF, currop->type,
+			baseop, currop->op2, genop0, currop->op1, genop1);
+
+	MR_DEPENDENCE_CLIQUE (genop) = currop->clique;
+	MR_DEPENDENCE_BASE (genop) = currop->base;
+	return genop;
       }
 
     case ADDR_EXPR:
@@ -2633,7 +2566,9 @@ create_component_ref_by_pieces_1 (basic_block block, vn_reference_t ref,
 	  return NULL_TREE;
 	tree op1 = currop->op0;
 	tree op2 = currop->op1;
-	return fold_build3 (BIT_FIELD_REF, currop->type, genop0, op1, op2);
+	tree t = build3 (BIT_FIELD_REF, currop->type, genop0, op1, op2);
+	REF_REVERSE_STORAGE_ORDER (t) = currop->reverse;
+	return fold (t);
       }
 
       /* For array ref vn_reference_op's, operand 1 of the array ref
@@ -2675,12 +2610,14 @@ create_component_ref_by_pieces_1 (basic_block block, vn_reference_t ref,
 	       here as the element alignment may be not visible.  See
 	       PR43783.  Simply drop the element size for constant
 	       sizes.  */
-	    if (tree_int_cst_equal (genop3, TYPE_SIZE_UNIT (elmt_type)))
+	    if (TREE_CODE (genop3) == INTEGER_CST
+		&& TREE_CODE (TYPE_SIZE_UNIT (elmt_type)) == INTEGER_CST
+		&& wi::eq_p (wi::to_offset (TYPE_SIZE_UNIT (elmt_type)),
+			     (wi::to_offset (genop3)
+			      * vn_ref_op_align_unit (currop))))
 	      genop3 = NULL_TREE;
 	    else
 	      {
-		genop3 = size_binop (EXACT_DIV_EXPR, genop3,
-				     size_int (TYPE_ALIGN_UNIT (elmt_type)));
 		genop3 = find_or_generate_expression (block, genop3, stmts);
 		if (!genop3)
 		  return NULL_TREE;
@@ -2828,21 +2765,75 @@ create_expression_by_pieces (basic_block block, pre_expr expr,
 
   switch (expr->kind)
     {
-      /* We may hit the NAME/CONSTANT case if we have to convert types
-	 that value numbering saw through.  */
+    /* We may hit the NAME/CONSTANT case if we have to convert types
+       that value numbering saw through.  */
     case NAME:
       folded = PRE_EXPR_NAME (expr);
+      if (useless_type_conversion_p (exprtype, TREE_TYPE (folded)))
+	return folded;
       break;
     case CONSTANT:
-      folded = PRE_EXPR_CONSTANT (expr);
-      break;
-    case REFERENCE:
-      {
-	vn_reference_t ref = PRE_EXPR_REFERENCE (expr);
-	folded = create_component_ref_by_pieces (block, ref, stmts);
-	if (!folded)
-	  return NULL_TREE;
+      { 
+	folded = PRE_EXPR_CONSTANT (expr);
+	tree tem = fold_convert (exprtype, folded);
+	if (is_gimple_min_invariant (tem))
+	  return tem;
+	break;
       }
+    case REFERENCE:
+      if (PRE_EXPR_REFERENCE (expr)->operands[0].opcode == CALL_EXPR)
+	{
+	  vn_reference_t ref = PRE_EXPR_REFERENCE (expr);
+	  unsigned int operand = 1;
+	  vn_reference_op_t currop = &ref->operands[0];
+	  tree sc = NULL_TREE;
+	  tree fn;
+	  if (TREE_CODE (currop->op0) == FUNCTION_DECL)
+	    fn = currop->op0;
+	  else
+	    fn = find_or_generate_expression (block, currop->op0, stmts);
+	  if (!fn)
+	    return NULL_TREE;
+	  if (currop->op1)
+	    {
+	      sc = find_or_generate_expression (block, currop->op1, stmts);
+	      if (!sc)
+		return NULL_TREE;
+	    }
+	  auto_vec<tree> args (ref->operands.length () - 1);
+	  while (operand < ref->operands.length ())
+	    {
+	      tree arg = create_component_ref_by_pieces_1 (block, ref,
+							   &operand, stmts);
+	      if (!arg)
+		return NULL_TREE;
+	      args.quick_push (arg);
+	    }
+	  gcall *call
+	    = gimple_build_call_vec ((TREE_CODE (fn) == FUNCTION_DECL
+				      ? build_fold_addr_expr (fn) : fn), args);
+	  gimple_call_set_with_bounds (call, currop->with_bounds);
+	  if (sc)
+	    gimple_call_set_chain (call, sc);
+	  tree forcedname = make_ssa_name (currop->type);
+	  gimple_call_set_lhs (call, forcedname);
+	  gimple_set_vuse (call, BB_LIVE_VOP_ON_EXIT (block));
+	  gimple_seq_add_stmt_without_update (&forced_stmts, call);
+	  folded = forcedname;
+	}
+      else
+	{
+	  folded = create_component_ref_by_pieces (block,
+						   PRE_EXPR_REFERENCE (expr),
+						   stmts);
+	  if (!folded)
+	    return NULL_TREE;
+	  name = make_temp_ssa_name (exprtype, NULL, "pretmp");
+	  newstmt = gimple_build_assign (name, folded);
+	  gimple_seq_add_stmt_without_update (&forced_stmts, newstmt);
+	  gimple_set_vuse (newstmt, BB_LIVE_VOP_ON_EXIT (block));
+	  folded = name;
+	}
       break;
     case NARY:
       {
@@ -2875,22 +2866,26 @@ create_expression_by_pieces (basic_block block, pre_expr expr,
 	    for (i = 0; i < nary->length; ++i)
 	      CONSTRUCTOR_APPEND_ELT (elts, NULL_TREE, genop[i]);
 	    folded = build_constructor (nary->type, elts);
+	    name = make_temp_ssa_name (exprtype, NULL, "pretmp");
+	    newstmt = gimple_build_assign (name, folded);
+	    gimple_seq_add_stmt_without_update (&forced_stmts, newstmt);
+	    folded = name;
 	  }
 	else
 	  {
 	    switch (nary->length)
 	      {
 	      case 1:
-		folded = fold_build1 (nary->opcode, nary->type,
-				      genop[0]);
+		folded = gimple_build (&forced_stmts, nary->opcode, nary->type,
+				       genop[0]);
 		break;
 	      case 2:
-		folded = fold_build2 (nary->opcode, nary->type,
-				      genop[0], genop[1]);
+		folded = gimple_build (&forced_stmts, nary->opcode, nary->type,
+				       genop[0], genop[1]);
 		break;
 	      case 3:
-		folded = fold_build3 (nary->opcode, nary->type,
-				      genop[0], genop[1], genop[2]);
+		folded = gimple_build (&forced_stmts, nary->opcode, nary->type,
+				       genop[0], genop[1], genop[2]);
 		break;
 	      default:
 		gcc_unreachable ();
@@ -2902,17 +2897,37 @@ create_expression_by_pieces (basic_block block, pre_expr expr,
       gcc_unreachable ();
     }
 
-  if (!useless_type_conversion_p (exprtype, TREE_TYPE (folded)))
-    folded = fold_convert (exprtype, folded);
+  folded = gimple_convert (&forced_stmts, exprtype, folded);
 
-  /* Force the generated expression to be a sequence of GIMPLE
-     statements.
-     We have to call unshare_expr because force_gimple_operand may
-     modify the tree we pass to it.  */
-  gimple_seq tem = NULL;
-  folded = force_gimple_operand (unshare_expr (folded), &tem,
-				 false, NULL);
-  gimple_seq_add_seq_without_update (&forced_stmts, tem);
+  /* If there is nothing to insert, return the simplified result.  */
+  if (gimple_seq_empty_p (forced_stmts))
+    return folded;
+  /* If we simplified to a constant return it and discard eventually
+     built stmts.  */
+  if (is_gimple_min_invariant (folded))
+    {
+      gimple_seq_discard (forced_stmts);
+      return folded;
+    }
+  /* Likewise if we simplified to sth not queued for insertion.  */
+  bool found = false;
+  gsi = gsi_last (forced_stmts);
+  for (; !gsi_end_p (gsi); gsi_prev (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      tree forcedname = gimple_get_lhs (stmt);
+      if (forcedname == folded)
+	{
+	  found = true;
+	  break;
+	}
+    }
+  if (! found)
+    {
+      gimple_seq_discard (forced_stmts);
+      return folded;
+    }
+  gcc_assert (TREE_CODE (folded) == SSA_NAME);
 
   /* If we have any intermediate expressions to the value sets, add them
      to the value sets and chain them in the instruction stream.  */
@@ -2921,13 +2936,12 @@ create_expression_by_pieces (basic_block block, pre_expr expr,
       gsi = gsi_start (forced_stmts);
       for (; !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gimple stmt = gsi_stmt (gsi);
+	  gimple *stmt = gsi_stmt (gsi);
 	  tree forcedname = gimple_get_lhs (stmt);
 	  pre_expr nameexpr;
 
-	  if (TREE_CODE (forcedname) == SSA_NAME)
+	  if (forcedname != folded)
 	    {
-	      bitmap_set_bit (inserted_exprs, SSA_NAME_VERSION (forcedname));
 	      VN_INFO_GET (forcedname)->valnum = forcedname;
 	      VN_INFO (forcedname)->value_id = get_next_value_id ();
 	      nameexpr = get_or_alloc_expr_for_name (forcedname);
@@ -2936,20 +2950,13 @@ create_expression_by_pieces (basic_block block, pre_expr expr,
 	      bitmap_value_replace_in_set (AVAIL_OUT (block), nameexpr);
 	    }
 
-	  gimple_set_vuse (stmt, BB_LIVE_VOP_ON_EXIT (block));
-	  gimple_set_modified (stmt, true);
+	  bitmap_set_bit (inserted_exprs, SSA_NAME_VERSION (forcedname));
+	  gimple_set_plf (stmt, NECESSARY, false);
 	}
       gimple_seq_add_seq (stmts, forced_stmts);
     }
 
-  name = make_temp_ssa_name (exprtype, NULL, "pretmp");
-  newstmt = gimple_build_assign (name, folded);
-  gimple_set_vuse (newstmt, BB_LIVE_VOP_ON_EXIT (block));
-  gimple_set_modified (newstmt, true);
-  gimple_set_plf (newstmt, NECESSARY, false);
-
-  gimple_seq_add_stmt (stmts, newstmt);
-  bitmap_set_bit (inserted_exprs, SSA_NAME_VERSION (name));
+  name = folded;
 
   /* Fold the last statement.  */
   gsi = gsi_last (*stmts);
@@ -2977,7 +2984,7 @@ create_expression_by_pieces (basic_block block, pre_expr expr,
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "Inserted ");
-      print_gimple_stmt (dump_file, newstmt, 0, 0);
+      print_gimple_stmt (dump_file, gsi_stmt (gsi_last (*stmts)), 0, 0);
       fprintf (dump_file, " in predecessor %d (%04d)\n",
 	       block->index, value_id);
     }
@@ -3034,106 +3041,25 @@ insert_into_preds_of_block (basic_block block, unsigned int exprnum,
       tree builtexpr;
       bprime = pred->src;
       eprime = avail[pred->dest_idx];
-
-      if (eprime->kind != NAME && eprime->kind != CONSTANT)
+      builtexpr = create_expression_by_pieces (bprime, eprime,
+					       &stmts, type);
+      gcc_assert (!(pred->flags & EDGE_ABNORMAL));
+      if (!gimple_seq_empty_p (stmts))
 	{
-	  builtexpr = create_expression_by_pieces (bprime, eprime,
-						   &stmts, type);
-	  gcc_assert (!(pred->flags & EDGE_ABNORMAL));
 	  gsi_insert_seq_on_edge (pred, stmts);
-	  if (!builtexpr)
-	    {
-	      /* We cannot insert a PHI node if we failed to insert
-		 on one edge.  */
-	      nophi = true;
-	      continue;
-	    }
-	  avail[pred->dest_idx] = get_or_alloc_expr_for_name (builtexpr);
 	  insertions = true;
 	}
-      else if (eprime->kind == CONSTANT)
+      if (!builtexpr)
 	{
-	  /* Constants may not have the right type, fold_convert
-	     should give us back a constant with the right type.  */
-	  tree constant = PRE_EXPR_CONSTANT (eprime);
-	  if (!useless_type_conversion_p (type, TREE_TYPE (constant)))
-	    {
-	      tree builtexpr = fold_convert (type, constant);
-	      if (!is_gimple_min_invariant (builtexpr))
-		{
-		  tree forcedexpr = force_gimple_operand (builtexpr,
-							  &stmts, true,
-							  NULL);
-		  if (!is_gimple_min_invariant (forcedexpr))
-		    {
-		      if (forcedexpr != builtexpr)
-			{
-			  VN_INFO_GET (forcedexpr)->valnum = PRE_EXPR_CONSTANT (eprime);
-			  VN_INFO (forcedexpr)->value_id = get_expr_value_id (eprime);
-			}
-		      if (stmts)
-			{
-			  gimple_stmt_iterator gsi;
-			  gsi = gsi_start (stmts);
-			  for (; !gsi_end_p (gsi); gsi_next (&gsi))
-			    {
-			      gimple stmt = gsi_stmt (gsi);
-			      tree lhs = gimple_get_lhs (stmt);
-			      if (TREE_CODE (lhs) == SSA_NAME)
-				bitmap_set_bit (inserted_exprs,
-						SSA_NAME_VERSION (lhs));
-			      gimple_set_plf (stmt, NECESSARY, false);
-			    }
-			  gsi_insert_seq_on_edge (pred, stmts);
-			}
-		      avail[pred->dest_idx]
-			= get_or_alloc_expr_for_name (forcedexpr);
-		    }
-		}
-	      else
-		avail[pred->dest_idx]
-		    = get_or_alloc_expr_for_constant (builtexpr);
-	    }
+	  /* We cannot insert a PHI node if we failed to insert
+	     on one edge.  */
+	  nophi = true;
+	  continue;
 	}
-      else if (eprime->kind == NAME)
-	{
-	  /* We may have to do a conversion because our value
-	     numbering can look through types in certain cases, but
-	     our IL requires all operands of a phi node have the same
-	     type.  */
-	  tree name = PRE_EXPR_NAME (eprime);
-	  if (!useless_type_conversion_p (type, TREE_TYPE (name)))
-	    {
-	      tree builtexpr;
-	      tree forcedexpr;
-	      builtexpr = fold_convert (type, name);
-	      forcedexpr = force_gimple_operand (builtexpr,
-						 &stmts, true,
-						 NULL);
-
-	      if (forcedexpr != name)
-		{
-		  VN_INFO_GET (forcedexpr)->valnum = VN_INFO (name)->valnum;
-		  VN_INFO (forcedexpr)->value_id = VN_INFO (name)->value_id;
-		}
-
-	      if (stmts)
-		{
-		  gimple_stmt_iterator gsi;
-		  gsi = gsi_start (stmts);
-		  for (; !gsi_end_p (gsi); gsi_next (&gsi))
-		    {
-		      gimple stmt = gsi_stmt (gsi);
-		      tree lhs = gimple_get_lhs (stmt);
-		      if (TREE_CODE (lhs) == SSA_NAME)
-			bitmap_set_bit (inserted_exprs, SSA_NAME_VERSION (lhs));
-		      gimple_set_plf (stmt, NECESSARY, false);
-		    }
-		  gsi_insert_seq_on_edge (pred, stmts);
-		}
-	      avail[pred->dest_idx] = get_or_alloc_expr_for_name (forcedexpr);
-	    }
-	}
+      if (is_gimple_min_invariant (builtexpr))
+	avail[pred->dest_idx] = get_or_alloc_expr_for_constant (builtexpr);
+      else
+	avail[pred->dest_idx] = get_or_alloc_expr_for_name (builtexpr);
     }
   /* If we didn't want a phi node, and we made insertions, we still have
      inserted new stuff, and thus return true.  If we didn't want a phi node,
@@ -3228,7 +3154,7 @@ insert_into_preds_of_block (basic_block block, unsigned int exprnum,
 
 
 
-/* Perform insertion of partially redundant values.
+/* Perform insertion of partially redundant or hoistable values.
    For BLOCK, do the following:
    1.  Propagate the NEW_SETS of the dominator into the current block.
    If the block has multiple predecessors,
@@ -3239,15 +3165,20 @@ insert_into_preds_of_block (basic_block block, unsigned int exprnum,
        2c. Insert a new PHI merging the values of the predecessors.
        2d. Insert the new PHI, and the new expressions, into the
 	   NEW_SETS set.
-   3. Recursively call ourselves on the dominator children of BLOCK.
+   If the block has multiple successors,
+       3a. Iterate over the ANTIC values for the block to see if
+	   any of them are good candidates for hoisting.
+       3b. If so, insert expressions computing the values in BLOCK,
+	   and add the new expressions into the NEW_SETS set.
+   4. Recursively call ourselves on the dominator children of BLOCK.
 
-   Steps 1, 2a, and 3 are done by insert_aux. 2b, 2c and 2d are done by
-   do_regular_insertion and do_partial_insertion.
-
+   Steps 1, 2a, and 4 are done by insert_aux. 2b, 2c and 2d are done by
+   do_pre_regular_insertion and do_partial_insertion.  3a and 3b are
+   done in do_hoist_insertion.
 */
 
 static bool
-do_regular_insertion (basic_block block, basic_block dom)
+do_pre_regular_insertion (basic_block block, basic_block dom)
 {
   bool new_stuff = false;
   vec<pre_expr> exprs;
@@ -3297,6 +3228,7 @@ do_regular_insertion (basic_block block, basic_block dom)
 	         and so not come across fake pred edges.  */
 	      gcc_assert (!(pred->flags & EDGE_FAKE));
 	      bprime = pred->src;
+	      /* We are looking at ANTIC_OUT of bprime.  */
 	      eprime = phi_translate (expr, ANTIC_IN (block), NULL,
 				      bprime, block);
 
@@ -3316,7 +3248,6 @@ do_regular_insertion (basic_block block, basic_block dom)
 		  break;
 		}
 
-	      eprime = fully_constant_expression (eprime);
 	      vprime = get_expr_value_id (eprime);
 	      edoubleprime = bitmap_find_leader (AVAIL_OUT (bprime),
 						 vprime);
@@ -3415,9 +3346,8 @@ do_regular_insertion (basic_block block, basic_block dom)
    In this case, we know that putting it earlier will enable us to
    remove the later computation.  */
 
-
 static bool
-do_partial_partial_insertion (basic_block block, basic_block dom)
+do_pre_partial_partial_insertion (basic_block block, basic_block dom)
 {
   bool new_stuff = false;
   vec<pre_expr> exprs;
@@ -3476,7 +3406,6 @@ do_partial_partial_insertion (basic_block block, basic_block dom)
 		  break;
 		}
 
-	      eprime = fully_constant_expression (eprime);
 	      vprime = get_expr_value_id (eprime);
 	      edoubleprime = bitmap_find_leader (AVAIL_OUT (bprime), vprime);
 	      avail[pred->dest_idx] = edoubleprime;
@@ -3546,8 +3475,146 @@ do_partial_partial_insertion (basic_block block, basic_block dom)
   return new_stuff;
 }
 
+/* Insert expressions in BLOCK to compute hoistable values up.
+   Return TRUE if something was inserted, otherwise return FALSE.
+   The caller has to make sure that BLOCK has at least two successors.  */
+
 static bool
-insert_aux (basic_block block)
+do_hoist_insertion (basic_block block)
+{
+  edge e;
+  edge_iterator ei;
+  bool new_stuff = false;
+  unsigned i;
+  gimple_stmt_iterator last;
+
+  /* At least two successors, or else...  */
+  gcc_assert (EDGE_COUNT (block->succs) >= 2);
+
+  /* Check that all successors of BLOCK are dominated by block.
+     We could use dominated_by_p() for this, but actually there is a much
+     quicker check: any successor that is dominated by BLOCK can't have
+     more than one predecessor edge.  */
+  FOR_EACH_EDGE (e, ei, block->succs)
+    if (! single_pred_p (e->dest))
+      return false;
+
+  /* Determine the insertion point.  If we cannot safely insert before
+     the last stmt if we'd have to, bail out.  */
+  last = gsi_last_bb (block);
+  if (!gsi_end_p (last)
+      && !is_ctrl_stmt (gsi_stmt (last))
+      && stmt_ends_bb_p (gsi_stmt (last)))
+    return false;
+
+  /* Compute the set of hoistable expressions from ANTIC_IN.  First compute
+     hoistable values.  */
+  bitmap_set hoistable_set;
+
+  /* A hoistable value must be in ANTIC_IN(block)
+     but not in AVAIL_OUT(BLOCK).  */
+  bitmap_initialize (&hoistable_set.values, &grand_bitmap_obstack);
+  bitmap_and_compl (&hoistable_set.values,
+		    &ANTIC_IN (block)->values, &AVAIL_OUT (block)->values);
+
+  /* Short-cut for a common case: hoistable_set is empty.  */
+  if (bitmap_empty_p (&hoistable_set.values))
+    return false;
+
+  /* Compute which of the hoistable values is in AVAIL_OUT of
+     at least one of the successors of BLOCK.  */
+  bitmap_head availout_in_some;
+  bitmap_initialize (&availout_in_some, &grand_bitmap_obstack);
+  FOR_EACH_EDGE (e, ei, block->succs)
+    /* Do not consider expressions solely because their availability
+       on loop exits.  They'd be ANTIC-IN throughout the whole loop
+       and thus effectively hoisted across loops by combination of
+       PRE and hoisting.  */
+    if (! loop_exit_edge_p (block->loop_father, e))
+      bitmap_ior_and_into (&availout_in_some, &hoistable_set.values,
+			   &AVAIL_OUT (e->dest)->values);
+  bitmap_clear (&hoistable_set.values);
+
+  /* Short-cut for a common case: availout_in_some is empty.  */
+  if (bitmap_empty_p (&availout_in_some))
+    return false;
+
+  /* Hack hoitable_set in-place so we can use sorted_array_from_bitmap_set.  */
+  hoistable_set.values = availout_in_some;
+  hoistable_set.expressions = ANTIC_IN (block)->expressions;
+
+  /* Now finally construct the topological-ordered expression set.  */
+  vec<pre_expr> exprs = sorted_array_from_bitmap_set (&hoistable_set);
+
+  bitmap_clear (&hoistable_set.values);
+
+  /* If there are candidate values for hoisting, insert expressions
+     strategically to make the hoistable expressions fully redundant.  */
+  pre_expr expr;
+  FOR_EACH_VEC_ELT (exprs, i, expr)
+    {
+      /* While we try to sort expressions topologically above the
+         sorting doesn't work out perfectly.  Catch expressions we
+	 already inserted.  */
+      unsigned int value_id = get_expr_value_id (expr);
+      if (bitmap_set_contains_value (AVAIL_OUT (block), value_id))
+	{
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      fprintf (dump_file,
+		       "Already inserted expression for ");
+	      print_pre_expr (dump_file, expr);
+	      fprintf (dump_file, " (%04d)\n", value_id);
+	    }
+	  continue;
+	}
+
+      /* OK, we should hoist this value.  Perform the transformation.  */
+      pre_stats.hoist_insert++;
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  fprintf (dump_file,
+		   "Inserting expression in block %d for code hoisting: ",
+		   block->index);
+	  print_pre_expr (dump_file, expr);
+	  fprintf (dump_file, " (%04d)\n", value_id);
+	}
+
+      gimple_seq stmts = NULL;
+      tree res = create_expression_by_pieces (block, expr, &stmts,
+					      get_expr_type (expr));
+
+      /* Do not return true if expression creation ultimately
+         did not insert any statements.  */
+      if (gimple_seq_empty_p (stmts))
+	res = NULL_TREE;
+      else
+	{
+	  if (gsi_end_p (last) || is_ctrl_stmt (gsi_stmt (last)))
+	    gsi_insert_seq_before (&last, stmts, GSI_SAME_STMT);
+	  else
+	    gsi_insert_seq_after (&last, stmts, GSI_NEW_STMT);
+	}
+
+      /* Make sure to not return true if expression creation ultimately
+         failed but also make sure to insert any stmts produced as they
+	 are tracked in inserted_exprs.  */
+      if (! res)
+	continue;
+
+      new_stuff = true;
+    }
+
+  exprs.release ();
+
+  return new_stuff;
+}
+
+/* Do a dominator walk on the control flow graph, and insert computations
+   of values as necessary for PRE and hoisting.  */
+
+static bool
+insert_aux (basic_block block, bool do_pre, bool do_hoist)
 {
   basic_block son;
   bool new_stuff = false;
@@ -3560,7 +3627,11 @@ insert_aux (basic_block block)
 	{
 	  unsigned i;
 	  bitmap_iterator bi;
-	  bitmap_set_t newset = NEW_SETS (dom);
+	  bitmap_set_t newset;
+
+	  /* First, update the AVAIL_OUT set with anything we may have
+	     inserted higher up in the dominator tree.  */
+	  newset = NEW_SETS (dom);
 	  if (newset)
 	    {
 	      /* Note that we need to value_replace both NEW_SETS, and
@@ -3574,25 +3645,31 @@ insert_aux (basic_block block)
 		  bitmap_value_replace_in_set (AVAIL_OUT (block), expr);
 		}
 	    }
-	  if (!single_pred_p (block))
+
+	  /* Insert expressions for partial redundancies.  */
+	  if (do_pre && !single_pred_p (block))
 	    {
-	      new_stuff |= do_regular_insertion (block, dom);
+	      new_stuff |= do_pre_regular_insertion (block, dom);
 	      if (do_partial_partial)
-		new_stuff |= do_partial_partial_insertion (block, dom);
+		new_stuff |= do_pre_partial_partial_insertion (block, dom);
 	    }
+
+	  /* Insert expressions for hoisting.  */
+	  if (do_hoist && EDGE_COUNT (block->succs) >= 2)
+	    new_stuff |= do_hoist_insertion (block);
 	}
     }
   for (son = first_dom_son (CDI_DOMINATORS, block);
        son;
        son = next_dom_son (CDI_DOMINATORS, son))
     {
-      new_stuff |= insert_aux (son);
+      new_stuff |= insert_aux (son, do_pre, do_hoist);
     }
 
   return new_stuff;
 }
 
-/* Perform insertion of partially redundant values.  */
+/* Perform insertion of partially redundant and hoistable values.  */
 
 static void
 insert (void)
@@ -3609,7 +3686,8 @@ insert (void)
       num_iterations++;
       if (dump_file && dump_flags & TDF_DETAILS)
 	fprintf (dump_file, "Starting insert iteration %d\n", num_iterations);
-      new_stuff = insert_aux (ENTRY_BLOCK_PTR_FOR_FN (cfun));
+      new_stuff = insert_aux (ENTRY_BLOCK_PTR_FOR_FN (cfun), flag_tree_pre,
+			      flag_code_hoisting);
 
       /* Clear the NEW sets before the next iteration.  We have already
          fully propagated its contents.  */
@@ -3639,15 +3717,14 @@ compute_avail (void)
   basic_block *worklist;
   size_t sp = 0;
   unsigned i;
+  tree name;
 
   /* We pretend that default definitions are defined in the entry block.
      This includes function arguments and the static chain decl.  */
-  for (i = 1; i < num_ssa_names; ++i)
+  FOR_EACH_SSA_NAME (i, name, cfun)
     {
-      tree name = ssa_name (i);
       pre_expr e;
-      if (!name
-	  || !SSA_NAME_IS_DEFAULT_DEF (name)
+      if (!SSA_NAME_IS_DEFAULT_DEF (name)
 	  || has_zero_uses (name)
 	  || virtual_operand_p (name))
 	continue;
@@ -3683,7 +3760,7 @@ compute_avail (void)
   /* Loop until the worklist is empty.  */
   while (sp)
     {
-      gimple stmt;
+      gimple *stmt;
       basic_block dom;
 
       /* Pick a block from the worklist.  */
@@ -3799,7 +3876,7 @@ compute_avail (void)
 		    || gimple_bb (SSA_NAME_DEF_STMT
 				    (gimple_vuse (stmt))) != block)
 		  {
-		    result = (pre_expr) pool_alloc (pre_expr_pool);
+		    result = pre_expr_pool.allocate ();
 		    result->kind = REFERENCE;
 		    result->id = 0;
 		    PRE_EXPR_REFERENCE (result) = ref;
@@ -3839,7 +3916,7 @@ compute_avail (void)
 			  && vn_nary_may_trap (nary))
 			continue;
 
-		      result = (pre_expr) pool_alloc (pre_expr_pool);
+		      result = pre_expr_pool.allocate ();
 		      result->kind = NARY;
 		      result->id = 0;
 		      PRE_EXPR_NARY (result) = nary;
@@ -3848,19 +3925,26 @@ compute_avail (void)
 
 		  case VN_REFERENCE:
 		    {
+		      tree rhs1 = gimple_assign_rhs1 (stmt);
+		      alias_set_type set = get_alias_set (rhs1);
+		      vec<vn_reference_op_s> operands
+			= vn_reference_operands_for_lookup (rhs1);
 		      vn_reference_t ref;
-		      vn_reference_lookup (gimple_assign_rhs1 (stmt),
-					   gimple_vuse (stmt),
-					   VN_WALK, &ref, true);
+		      vn_reference_lookup_pieces (gimple_vuse (stmt), set,
+						  TREE_TYPE (rhs1),
+						  operands, &ref, VN_WALK);
 		      if (!ref)
-			continue;
+			{
+			  operands.release ();
+			  continue;
+			}
 
 		      /* If the value of the reference is not invalidated in
 			 this block until it is computed, add the expression
 			 to EXP_GEN.  */
 		      if (gimple_vuse (stmt))
 			{
-			  gimple def_stmt;
+			  gimple *def_stmt;
 			  bool ok = true;
 			  def_stmt = SSA_NAME_DEF_STMT (gimple_vuse (stmt));
 			  while (!gimple_nop_p (def_stmt)
@@ -3877,10 +3961,68 @@ compute_avail (void)
 				= SSA_NAME_DEF_STMT (gimple_vuse (def_stmt));
 			    }
 			  if (!ok)
-			    continue;
+			    {
+			      operands.release ();
+			      continue;
+			    }
 			}
 
-		      result = (pre_expr) pool_alloc (pre_expr_pool);
+		      /* If the load was value-numbered to another
+			 load make sure we do not use its expression
+			 for insertion if it wouldn't be a valid
+			 replacement.  */
+		      /* At the momemt we have a testcase
+			 for hoist insertion of aligned vs. misaligned
+			 variants in gcc.dg/torture/pr65270-1.c thus
+			 with just alignment to be considered we can
+			 simply replace the expression in the hashtable
+			 with the most conservative one.  */
+		      vn_reference_op_t ref1 = &ref->operands.last ();
+		      while (ref1->opcode != TARGET_MEM_REF
+			     && ref1->opcode != MEM_REF
+			     && ref1 != &ref->operands[0])
+			--ref1;
+		      vn_reference_op_t ref2 = &operands.last ();
+		      while (ref2->opcode != TARGET_MEM_REF
+			     && ref2->opcode != MEM_REF
+			     && ref2 != &operands[0])
+			--ref2;
+		      if ((ref1->opcode == TARGET_MEM_REF
+			   || ref1->opcode == MEM_REF)
+			  && (TYPE_ALIGN (ref1->type)
+			      > TYPE_ALIGN (ref2->type)))
+			ref1->type
+			  = build_aligned_type (ref1->type,
+						TYPE_ALIGN (ref2->type));
+		      /* TBAA behavior is an obvious part so make sure
+		         that the hashtable one covers this as well
+			 by adjusting the ref alias set and its base.  */
+		      if (ref->set == set
+			  || alias_set_subset_of (set, ref->set))
+			;
+		      else if (alias_set_subset_of (ref->set, set))
+			{
+			  ref->set = set;
+			  if (ref1->opcode == MEM_REF)
+			    ref1->op0 = wide_int_to_tree (TREE_TYPE (ref2->op0),
+							  ref1->op0);
+			  else
+			    ref1->op2 = wide_int_to_tree (TREE_TYPE (ref2->op2),
+							  ref1->op2);
+			}
+		      else
+			{
+			  ref->set = 0;
+			  if (ref1->opcode == MEM_REF)
+			    ref1->op0 = wide_int_to_tree (ptr_type_node,
+							  ref1->op0);
+			  else
+			    ref1->op2 = wide_int_to_tree (ptr_type_node,
+							  ref1->op2);
+			}
+		      operands.release ();
+
+		      result = pre_expr_pool.allocate ();
 		      result->kind = REFERENCE;
 		      result->id = 0;
 		      PRE_EXPR_REFERENCE (result) = ref;
@@ -3926,8 +4068,8 @@ compute_avail (void)
 
 
 /* Local state for the eliminate domwalk.  */
-static vec<gimple> el_to_remove;
-static vec<gimple> el_to_fixup;
+static vec<gimple *> el_to_remove;
+static vec<gimple *> el_to_fixup;
 static unsigned int el_todo;
 static vec<tree> el_avail;
 static vec<tree> el_avail_stack;
@@ -3975,31 +4117,82 @@ eliminate_push_avail (tree op)
 static tree
 eliminate_insert (gimple_stmt_iterator *gsi, tree val)
 {
-  tree expr = vn_get_expr_for (val);
-  if (!CONVERT_EXPR_P (expr)
-      && TREE_CODE (expr) != VIEW_CONVERT_EXPR)
+  /* We can insert a sequence with a single assignment only.  */
+  gimple_seq stmts = VN_INFO (val)->expr;
+  if (!gimple_seq_singleton_p (stmts))
+    return NULL_TREE;
+  gassign *stmt = dyn_cast <gassign *> (gimple_seq_first_stmt (stmts));
+  if (!stmt
+      || (!CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (stmt))
+	  && gimple_assign_rhs_code (stmt) != VIEW_CONVERT_EXPR
+	  && gimple_assign_rhs_code (stmt) != BIT_FIELD_REF
+	  && (gimple_assign_rhs_code (stmt) != BIT_AND_EXPR
+	      || TREE_CODE (gimple_assign_rhs2 (stmt)) != INTEGER_CST)))
     return NULL_TREE;
 
-  tree op = TREE_OPERAND (expr, 0);
+  tree op = gimple_assign_rhs1 (stmt);
+  if (gimple_assign_rhs_code (stmt) == VIEW_CONVERT_EXPR
+      || gimple_assign_rhs_code (stmt) == BIT_FIELD_REF)
+    op = TREE_OPERAND (op, 0);
   tree leader = TREE_CODE (op) == SSA_NAME ? eliminate_avail (op) : op;
   if (!leader)
     return NULL_TREE;
 
-  tree res = make_temp_ssa_name (TREE_TYPE (val), NULL, "pretmp");
-  gassign *tem = gimple_build_assign (res,
-				      fold_build1 (TREE_CODE (expr),
-						   TREE_TYPE (expr), leader));
-  gsi_insert_before (gsi, tem, GSI_SAME_STMT);
-  VN_INFO_GET (res)->valnum = val;
+  tree res;
+  stmts = NULL;
+  if (gimple_assign_rhs_code (stmt) == BIT_FIELD_REF)
+    res = gimple_build (&stmts, BIT_FIELD_REF,
+			TREE_TYPE (val), leader,
+			TREE_OPERAND (gimple_assign_rhs1 (stmt), 1),
+			TREE_OPERAND (gimple_assign_rhs1 (stmt), 2));
+  else if (gimple_assign_rhs_code (stmt) == BIT_AND_EXPR)
+    res = gimple_build (&stmts, BIT_AND_EXPR,
+			TREE_TYPE (val), leader, gimple_assign_rhs2 (stmt));
+  else
+    res = gimple_build (&stmts, gimple_assign_rhs_code (stmt),
+			TREE_TYPE (val), leader);
+  if (TREE_CODE (res) != SSA_NAME
+      || SSA_NAME_IS_DEFAULT_DEF (res)
+      || gimple_bb (SSA_NAME_DEF_STMT (res)))
+    {
+      gimple_seq_discard (stmts);
 
-  if (TREE_CODE (leader) == SSA_NAME)
-    gimple_set_plf (SSA_NAME_DEF_STMT (leader), NECESSARY, true);
+      /* During propagation we have to treat SSA info conservatively
+         and thus we can end up simplifying the inserted expression
+	 at elimination time to sth not defined in stmts.  */
+      /* But then this is a redundancy we failed to detect.  Which means
+         res now has two values.  That doesn't play well with how
+	 we track availability here, so give up.  */
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  if (TREE_CODE (res) == SSA_NAME)
+	    res = eliminate_avail (res);
+	  if (res)
+	    {
+	      fprintf (dump_file, "Failed to insert expression for value ");
+	      print_generic_expr (dump_file, val, 0);
+	      fprintf (dump_file, " which is really fully redundant to ");
+	      print_generic_expr (dump_file, res, 0);
+	      fprintf (dump_file, "\n");
+	    }
+	}
+
+      return NULL_TREE;
+    }
+  else
+    {
+      gsi_insert_seq_before (gsi, stmts, GSI_SAME_STMT);
+      VN_INFO_GET (res)->valnum = val;
+
+      if (TREE_CODE (leader) == SSA_NAME)
+	gimple_set_plf (SSA_NAME_DEF_STMT (leader), NECESSARY, true);
+    }
 
   pre_stats.insertions++;
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       fprintf (dump_file, "Inserted ");
-      print_gimple_stmt (dump_file, tem, 0, 0);
+      print_gimple_stmt (dump_file, SSA_NAME_DEF_STMT (res), 0, 0);
     }
 
   return res;
@@ -4011,7 +4204,7 @@ public:
   eliminate_dom_walker (cdi_direction direction, bool do_pre_)
       : dom_walker (direction), do_pre (do_pre_) {}
 
-  virtual void before_dom_children (basic_block);
+  virtual edge before_dom_children (basic_block);
   virtual void after_dom_children (basic_block);
 
   bool do_pre;
@@ -4019,7 +4212,7 @@ public:
 
 /* Perform elimination for the basic-block B during the domwalk.  */
 
-void
+edge
 eliminate_dom_walker::before_dom_children (basic_block b)
 {
   /* Mark new bb.  */
@@ -4079,7 +4272,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 
 	  if (!useless_type_conversion_p (TREE_TYPE (res), TREE_TYPE (sprime)))
 	    sprime = fold_convert (TREE_TYPE (res), sprime);
-	  gimple stmt = gimple_build_assign (res, sprime);
+	  gimple *stmt = gimple_build_assign (res, sprime);
 	  /* ???  It cannot yet be necessary (DOM walk).  */
 	  gimple_set_plf (stmt, NECESSARY, gimple_plf (phi, NECESSARY));
 
@@ -4097,7 +4290,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
        gsi_next (&gsi))
     {
       tree sprime = NULL_TREE;
-      gimple stmt = gsi_stmt (gsi);
+      gimple *stmt = gsi_stmt (gsi);
       tree lhs = gimple_get_lhs (stmt);
       if (lhs && TREE_CODE (lhs) == SSA_NAME
 	  && !gimple_has_volatile_ops (stmt)
@@ -4123,7 +4316,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	      if (val != VN_TOP
 		  && TREE_CODE (val) == SSA_NAME
 		  && VN_INFO (val)->needs_insertion
-		  && VN_INFO (val)->expr != NULL_TREE
+		  && VN_INFO (val)->expr != NULL
 		  && (sprime = eliminate_insert (&gsi, val)) != NULL_TREE)
 		eliminate_push_avail (sprime);
 	    }
@@ -4137,22 +4330,22 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	    {
 	      basic_block sprime_b = gimple_bb (SSA_NAME_DEF_STMT (sprime));
 	      if (POINTER_TYPE_P (TREE_TYPE (lhs))
-		  && SSA_NAME_PTR_INFO (lhs)
-		  && !SSA_NAME_PTR_INFO (sprime))
+		  && VN_INFO_PTR_INFO (lhs)
+		  && ! VN_INFO_PTR_INFO (sprime))
 		{
 		  duplicate_ssa_name_ptr_info (sprime,
-					       SSA_NAME_PTR_INFO (lhs));
+					       VN_INFO_PTR_INFO (lhs));
 		  if (b != sprime_b)
 		    mark_ptr_info_alignment_unknown
 			(SSA_NAME_PTR_INFO (sprime));
 		}
-	      else if (!POINTER_TYPE_P (TREE_TYPE (lhs))
-		       && SSA_NAME_RANGE_INFO (lhs)
-		       && !SSA_NAME_RANGE_INFO (sprime)
+	      else if (INTEGRAL_TYPE_P (TREE_TYPE (lhs))
+		       && VN_INFO_RANGE_INFO (lhs)
+		       && ! VN_INFO_RANGE_INFO (sprime)
 		       && b == sprime_b)
 		duplicate_ssa_name_range_info (sprime,
-					       SSA_NAME_RANGE_TYPE (lhs),
-					       SSA_NAME_RANGE_INFO (lhs));
+					       VN_INFO_RANGE_TYPE (lhs),
+					       VN_INFO_RANGE_INFO (lhs));
 	    }
 
 	  /* Inhibit the use of an inserted PHI on a loop header when
@@ -4163,17 +4356,18 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	  if (sprime
 	      && TREE_CODE (sprime) == SSA_NAME
 	      && do_pre
-	      && flag_tree_loop_vectorize
+	      && (flag_tree_loop_vectorize || flag_tree_parallelize_loops > 1)
 	      && loop_outer (b->loop_father)
 	      && has_zero_uses (sprime)
 	      && bitmap_bit_p (inserted_exprs, SSA_NAME_VERSION (sprime))
 	      && gimple_assign_load_p (stmt))
 	    {
-	      gimple def_stmt = SSA_NAME_DEF_STMT (sprime);
+	      gimple *def_stmt = SSA_NAME_DEF_STMT (sprime);
 	      basic_block def_bb = gimple_bb (def_stmt);
 	      if (gimple_code (def_stmt) == GIMPLE_PHI
-		  && b->loop_father->header == def_bb)
+		  && def_bb->loop_father->header == def_bb)
 		{
+		  loop_p loop = def_bb->loop_father;
 		  ssa_op_iter iter;
 		  tree op;
 		  bool found = false;
@@ -4182,9 +4376,8 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 		      affine_iv iv;
 		      def_bb = gimple_bb (SSA_NAME_DEF_STMT (op));
 		      if (def_bb
-			  && flow_bb_inside_loop_p (b->loop_father, def_bb)
-			  && simple_iv (b->loop_father,
-					b->loop_father, op, &iv, true))
+			  && flow_bb_inside_loop_p (loop, def_bb)
+			  && simple_iv (loop, loop, op, &iv, true))
 			{
 			  found = true;
 			  break;
@@ -4200,7 +4393,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 			  print_generic_expr (dump_file, sprime, 0);
 			  fprintf (dump_file, " which would add a loop"
 				   " carried dependence to loop %d\n",
-				   b->loop_father->num);
+				   loop->num);
 			}
 		      /* Don't keep sprime available.  */
 		      sprime = NULL_TREE;
@@ -4264,7 +4457,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 				NECESSARY, true);
 
 	      pre_stats.eliminations++;
-	      gimple orig_stmt = stmt;
+	      gimple *orig_stmt = stmt;
 	      if (!useless_type_conversion_p (TREE_TYPE (lhs),
 					      TREE_TYPE (sprime)))
 		sprime = fold_convert (TREE_TYPE (lhs), sprime);
@@ -4308,27 +4501,61 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	  && !is_gimple_reg (gimple_assign_lhs (stmt))
 	  && (TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME
 	      || is_gimple_min_invariant (gimple_assign_rhs1 (stmt))))
-        {
-          tree val;
+	{
+	  tree val;
 	  tree rhs = gimple_assign_rhs1 (stmt);
-          val = vn_reference_lookup (gimple_assign_lhs (stmt),
-                                     gimple_vuse (stmt), VN_WALK, NULL, false);
-          if (TREE_CODE (rhs) == SSA_NAME)
-            rhs = VN_INFO (rhs)->valnum;
-          if (val
-              && operand_equal_p (val, rhs, 0))
-            {
+	  vn_reference_t vnresult;
+	  val = vn_reference_lookup (lhs, gimple_vuse (stmt), VN_WALKREWRITE,
+				     &vnresult, false);
+	  if (TREE_CODE (rhs) == SSA_NAME)
+	    rhs = VN_INFO (rhs)->valnum;
+	  if (val
+	      && operand_equal_p (val, rhs, 0))
+	    {
+	      /* We can only remove the later store if the former aliases
+		 at least all accesses the later one does or if the store
+		 was to readonly memory storing the same value.  */
+	      alias_set_type set = get_alias_set (lhs);
+	      if (! vnresult
+		  || vnresult->set == set
+		  || alias_set_subset_of (set, vnresult->set))
+		{
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    {
+		      fprintf (dump_file, "Deleted redundant store ");
+		      print_gimple_stmt (dump_file, stmt, 0, 0);
+		    }
+
+		  /* Queue stmt for removal.  */
+		  el_to_remove.safe_push (stmt);
+		  continue;
+		}
+	    }
+	}
+
+      /* If this is a control statement value numbering left edges
+	 unexecuted on force the condition in a way consistent with
+	 that.  */
+      if (gcond *cond = dyn_cast <gcond *> (stmt))
+	{
+	  if ((EDGE_SUCC (b, 0)->flags & EDGE_EXECUTABLE)
+	      ^ (EDGE_SUCC (b, 1)->flags & EDGE_EXECUTABLE))
+	    {
               if (dump_file && (dump_flags & TDF_DETAILS))
                 {
-                  fprintf (dump_file, "Deleted redundant store ");
+                  fprintf (dump_file, "Removing unexecutable edge from ");
                   print_gimple_stmt (dump_file, stmt, 0, 0);
                 }
-
-              /* Queue stmt for removal.  */
-              el_to_remove.safe_push (stmt);
+	      if (((EDGE_SUCC (b, 0)->flags & EDGE_TRUE_VALUE) != 0)
+		  == ((EDGE_SUCC (b, 0)->flags & EDGE_EXECUTABLE) != 0))
+		gimple_cond_make_true (cond);
+	      else
+		gimple_cond_make_false (cond);
+	      update_stmt (cond);
+	      el_todo |= TODO_cleanup_cfg;
 	      continue;
-            }
-        }
+	    }
+	}
 
       bool can_make_abnormal_goto = stmt_can_make_abnormal_goto (stmt);
       bool was_noreturn = (is_gimple_call (stmt)
@@ -4339,6 +4566,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
       /* If we didn't replace the whole stmt (or propagate the result
          into all uses), replace all uses on this stmt with their
 	 leaders.  */
+      bool modified = false;
       use_operand_p use_p;
       ssa_op_iter iter;
       FOR_EACH_SSA_USE_OPERAND (use_p, stmt, iter, SSA_OP_USE)
@@ -4360,7 +4588,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 		  || !bitmap_bit_p (inserted_exprs, SSA_NAME_VERSION (sprime))))
 	    {
 	      propagate_value (use_p, sprime);
-	      gimple_set_modified (stmt, true);
+	      modified = true;
 	      if (TREE_CODE (sprime) == SSA_NAME
 		  && !is_gimple_debug (stmt))
 		gimple_set_plf (SSA_NAME_DEF_STMT (sprime),
@@ -4368,8 +4596,34 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	    }
 	}
 
+      /* Fold the stmt if modified, this canonicalizes MEM_REFs we propagated
+         into which is a requirement for the IPA devirt machinery.  */
+      gimple *old_stmt = stmt;
+      if (modified)
+	{
+	  /* If a formerly non-invariant ADDR_EXPR is turned into an
+	     invariant one it was on a separate stmt.  */
+	  if (gimple_assign_single_p (stmt)
+	      && TREE_CODE (gimple_assign_rhs1 (stmt)) == ADDR_EXPR)
+	    recompute_tree_invariant_for_addr_expr (gimple_assign_rhs1 (stmt));
+	  if (is_gimple_call (stmt))
+	    {
+	      /* ???  Only fold calls inplace for now, this may create new
+		 SSA names which in turn will confuse free_scc_vn SSA name
+		 release code.  */
+	      fold_stmt_inplace (&gsi);
+	    }
+	  else
+	    {
+	      fold_stmt (&gsi);
+	      stmt = gsi_stmt (gsi);
+	    }
+	}
+
       /* Visit indirect calls and turn them into direct calls if
-	 possible using the devirtualization machinery.  */
+	 possible using the devirtualization machinery.  Do this before
+	 checking for required EH/abnormal/noreturn cleanup as devird
+	 may expose more of those.  */
       if (gcall *call_stmt = dyn_cast <gcall *> (stmt))
 	{
 	  tree fn = gimple_call_fn (call_stmt);
@@ -4378,24 +4632,21 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	      && virtual_method_call_p (fn))
 	    {
 	      tree otr_type = obj_type_ref_class (fn);
+	      unsigned HOST_WIDE_INT otr_tok
+		= tree_to_uhwi (OBJ_TYPE_REF_TOKEN (fn));
 	      tree instance;
-	      ipa_polymorphic_call_context context (current_function_decl, fn, stmt, &instance);
+	      ipa_polymorphic_call_context context (current_function_decl,
+						    fn, stmt, &instance);
+	      context.get_dynamic_type (instance, OBJ_TYPE_REF_OBJECT (fn),
+					otr_type, stmt);
 	      bool final;
-
-	      context.get_dynamic_type (instance, OBJ_TYPE_REF_OBJECT (fn), otr_type, stmt);
-
-	      vec <cgraph_node *>targets
+	      vec <cgraph_node *> targets
 		= possible_polymorphic_call_targets (obj_type_ref_class (fn),
-						     tree_to_uhwi
-						       (OBJ_TYPE_REF_TOKEN (fn)),
-						     context,
-						     &final);
+						     otr_tok, context, &final);
 	      if (dump_file)
 		dump_possible_polymorphic_call_targets (dump_file, 
 							obj_type_ref_class (fn),
-							tree_to_uhwi
-							  (OBJ_TYPE_REF_TOKEN (fn)),
-							context);
+							otr_tok, context);
 	      if (final && targets.length () <= 1 && dbg_cnt (devirt))
 		{
 		  tree fn;
@@ -4405,51 +4656,44 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 		    fn = builtin_decl_implicit (BUILT_IN_UNREACHABLE);
 		  if (dump_enabled_p ())
 		    {
-		      location_t loc = gimple_location_safe (stmt);
+		      location_t loc = gimple_location (stmt);
 		      dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, loc,
 				       "converting indirect call to "
 				       "function %s\n",
-				       cgraph_node::get (fn)->name ());
+				       lang_hooks.decl_printable_name (fn, 2));
 		    }
 		  gimple_call_set_fndecl (call_stmt, fn);
+		  /* If changing the call to __builtin_unreachable
+		     or similar noreturn function, adjust gimple_call_fntype
+		     too.  */
+		  if (gimple_call_noreturn_p (call_stmt)
+		      && VOID_TYPE_P (TREE_TYPE (TREE_TYPE (fn)))
+		      && TYPE_ARG_TYPES (TREE_TYPE (fn))
+		      && (TREE_VALUE (TYPE_ARG_TYPES (TREE_TYPE (fn)))
+			  == void_type_node))
+		    gimple_call_set_fntype (call_stmt, TREE_TYPE (fn));
 		  maybe_remove_unused_call_args (cfun, call_stmt);
-		  gimple_set_modified (stmt, true);
+		  modified = true;
 		}
 	    }
 	}
 
-      if (gimple_modified_p (stmt))
+      if (modified)
 	{
-	  /* If a formerly non-invariant ADDR_EXPR is turned into an
-	     invariant one it was on a separate stmt.  */
-	  if (gimple_assign_single_p (stmt)
-	      && TREE_CODE (gimple_assign_rhs1 (stmt)) == ADDR_EXPR)
-	    recompute_tree_invariant_for_addr_expr (gimple_assign_rhs1 (stmt));
-	  gimple old_stmt = stmt;
-	  if (is_gimple_call (stmt))
-	    {
-	      /* ???  Only fold calls inplace for now, this may create new
-		 SSA names which in turn will confuse free_scc_vn SSA name
-		 release code.  */
-	      fold_stmt_inplace (&gsi);
-	      /* When changing a call into a noreturn call, cfg cleanup
-		 is needed to fix up the noreturn call.  */
-	      if (!was_noreturn && gimple_call_noreturn_p (stmt))
-		el_to_fixup.safe_push  (stmt);
-	    }
-	  else
-	    {
-	      fold_stmt (&gsi);
-	      stmt = gsi_stmt (gsi);
-	      if ((gimple_code (stmt) == GIMPLE_COND
-		   && (gimple_cond_true_p (as_a <gcond *> (stmt))
-		       || gimple_cond_false_p (as_a <gcond *> (stmt))))
-		  || (gimple_code (stmt) == GIMPLE_SWITCH
-		      && TREE_CODE (gimple_switch_index (
-				      as_a <gswitch *> (stmt)))
-		         == INTEGER_CST))
-		el_todo |= TODO_cleanup_cfg;
-	    }
+	  /* When changing a call into a noreturn call, cfg cleanup
+	     is needed to fix up the noreturn call.  */
+	  if (!was_noreturn
+	      && is_gimple_call (stmt) && gimple_call_noreturn_p (stmt))
+	    el_to_fixup.safe_push  (stmt);
+	  /* When changing a condition or switch into one we know what
+	     edge will be executed, schedule a cfg cleanup.  */
+	  if ((gimple_code (stmt) == GIMPLE_COND
+	       && (gimple_cond_true_p (as_a <gcond *> (stmt))
+		   || gimple_cond_false_p (as_a <gcond *> (stmt))))
+	      || (gimple_code (stmt) == GIMPLE_SWITCH
+		  && TREE_CODE (gimple_switch_index
+				  (as_a <gswitch *> (stmt))) == INTEGER_CST))
+	    el_todo |= TODO_cleanup_cfg;
 	  /* If we removed EH side-effects from the statement, clean
 	     its EH information.  */
 	  if (maybe_clean_or_replace_eh_stmt (old_stmt, stmt))
@@ -4504,6 +4748,7 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	    }
 	}
     }
+  return NULL;
 }
 
 /* Make no longer available leaders no longer available.  */
@@ -4529,7 +4774,7 @@ static unsigned int
 eliminate (bool do_pre)
 {
   gimple_stmt_iterator gsi;
-  gimple stmt;
+  gimple *stmt;
 
   need_eh_cleanup = BITMAP_ALLOC (NULL);
   need_ab_cleanup = BITMAP_ALLOC (NULL);
@@ -4566,7 +4811,8 @@ eliminate (bool do_pre)
       else
 	lhs = gimple_get_lhs (stmt);
 
-      if (inserted_exprs
+      if (lhs
+	  && inserted_exprs
 	  && TREE_CODE (lhs) == SSA_NAME)
 	bitmap_clear_bit (inserted_exprs, SSA_NAME_VERSION (lhs));
 
@@ -4579,6 +4825,8 @@ eliminate (bool do_pre)
 	  unlink_stmt_vdef (stmt);
 	  if (gsi_remove (&gsi, true))
 	    bitmap_set_bit (need_eh_cleanup, bb->index);
+	  if (is_gimple_call (stmt) && stmt_can_make_abnormal_goto (stmt))
+	    bitmap_set_bit (need_ab_cleanup, bb->index);
 	  release_defs (stmt);
 	}
 
@@ -4639,10 +4887,10 @@ fini_eliminate (void)
    mark that statement necessary. Return the stmt, if it is newly
    necessary.  */
 
-static inline gimple
+static inline gimple *
 mark_operand_necessary (tree op)
 {
-  gimple stmt;
+  gimple *stmt;
 
   gcc_assert (op);
 
@@ -4671,7 +4919,7 @@ remove_dead_inserted_code (void)
   bitmap worklist;
   unsigned i;
   bitmap_iterator bi;
-  gimple t;
+  gimple *t;
 
   worklist = BITMAP_ALLOC (NULL);
   EXECUTE_IF_SET_IN_BITMAP (inserted_exprs, 0, i, bi)
@@ -4698,7 +4946,7 @@ remove_dead_inserted_code (void)
 	      tree arg = PHI_ARG_DEF (t, k);
 	      if (TREE_CODE (arg) == SSA_NAME)
 		{
-		  gimple n = mark_operand_necessary (arg);
+		  gimple *n = mark_operand_necessary (arg);
 		  if (n)
 		    bitmap_set_bit (worklist, SSA_NAME_VERSION (arg));
 		}
@@ -4719,7 +4967,7 @@ remove_dead_inserted_code (void)
 
 	  FOR_EACH_SSA_TREE_OPERAND (use, t, iter, SSA_OP_ALL_USES)
 	    {
-	      gimple n = mark_operand_necessary (use);
+	      gimple *n = mark_operand_necessary (use);
 	      if (n)
 		bitmap_set_bit (worklist, SSA_NAME_VERSION (use));
 	    }
@@ -4772,12 +5020,6 @@ init_pre (void)
   connect_infinite_loops_to_exit ();
   memset (&pre_stats, 0, sizeof (pre_stats));
 
-  /* For ANTIC computation we need a postorder that also guarantees that
-     a block with a single successor is visited after its successor.
-     RPO on the inverted CFG has this property.  */
-  postorder = XNEWVEC (int, n_basic_blocks_for_fn (cfun));
-  postorder_num = inverted_post_order_compute (postorder);
-
   alloc_aux_for_blocks (sizeof (struct bb_bitmap_sets));
 
   calculate_dominance_info (CDI_DOMINATORS);
@@ -4785,10 +5027,6 @@ init_pre (void)
   bitmap_obstack_initialize (&grand_bitmap_obstack);
   phi_translate_table = new hash_table<expr_pred_trans_d> (5110);
   expression_to_id = new hash_table<pre_expr_d> (num_ssa_names * 3);
-  bitmap_set_pool = create_alloc_pool ("Bitmap sets",
-				       sizeof (struct bitmap_set), 30);
-  pre_expr_pool = create_alloc_pool ("pre_expr nodes",
-				     sizeof (struct pre_expr_d), 30);
   FOR_ALL_BB_FN (bb, cfun)
     {
       EXP_GEN (bb) = bitmap_set_new ();
@@ -4804,12 +5042,11 @@ init_pre (void)
 static void
 fini_pre ()
 {
-  free (postorder);
   value_expressions.release ();
   BITMAP_FREE (inserted_exprs);
   bitmap_obstack_release (&grand_bitmap_obstack);
-  free_alloc_pool (bitmap_set_pool);
-  free_alloc_pool (pre_expr_pool);
+  bitmap_set_pool.release ();
+  pre_expr_pool.release ();
   delete phi_translate_table;
   phi_translate_table = NULL;
   delete expression_to_id;
@@ -4844,7 +5081,8 @@ public:
   {}
 
   /* opt_pass methods: */
-  virtual bool gate (function *) { return flag_tree_pre != 0; }
+  virtual bool gate (function *)
+    { return flag_tree_pre != 0 || flag_code_hoisting != 0; }
   virtual unsigned int execute (function *);
 
 }; // class pass_pre
@@ -4899,6 +5137,7 @@ pass_pre::execute (function *fun)
 
   statistics_counter_event (fun, "Insertions", pre_stats.insertions);
   statistics_counter_event (fun, "PA inserted", pre_stats.pa_insert);
+  statistics_counter_event (fun, "HOIST inserted", pre_stats.hoist_insert);
   statistics_counter_event (fun, "New PHIs", pre_stats.phis);
   statistics_counter_event (fun, "Eliminated", pre_stats.eliminations);
 
@@ -4909,6 +5148,9 @@ pass_pre::execute (function *fun)
   fini_pre ();
   todo |= fini_eliminate ();
   loop_optimizer_finalize ();
+
+  /* Restore SSA info before tail-merging as that resets it as well.  */
+  scc_vn_restore_ssa_info ();
 
   /* TODO: tail_merge_optimize may merge all predecessors of a block, in which
      case we can merge the block with the remaining predecessor of the block.
@@ -4983,6 +5225,7 @@ pass_fre::execute (function *fun)
 
   todo |= fini_eliminate ();
 
+  scc_vn_restore_ssa_info ();
   free_scc_vn ();
 
   statistics_counter_event (fun, "Insertions", pre_stats.insertions);

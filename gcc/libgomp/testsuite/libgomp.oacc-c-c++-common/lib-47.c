@@ -1,5 +1,8 @@
-/* { dg-do run } */
+/* Exercise acc_update_self with a NULL data mapping on nvidia targets.  */
 
+/* { dg-do run { target openacc_nvidia_accel_selected } } */
+
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <openacc.h>
@@ -25,6 +28,7 @@ main (int argc, char **argv)
 
   memset (&h[0], 0, N);
 
+  fprintf (stderr, "CheCKpOInT\n");
   acc_update_self (0, N);
 
   for (i = 0; i < N; i++)
@@ -40,4 +44,6 @@ main (int argc, char **argv)
   return 0;
 }
 
-/* { dg-shouldfail "libgomp: \[\(nil\),256\] is not mapped" } */
+/* { dg-output "CheCKpOInT(\n|\r\n|\r).*" } */
+/* { dg-output "\\\[\[^\n\r]*,256\\\] is not mapped" } */
+/* { dg-shouldfail "" } */

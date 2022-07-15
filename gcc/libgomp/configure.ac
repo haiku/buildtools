@@ -170,7 +170,7 @@ AC_SUBST(libtool_VERSION)
 AC_STDC_HEADERS
 AC_HEADER_TIME
 ACX_HEADER_STRING
-AC_CHECK_HEADERS(pthread.h unistd.h semaphore.h sys/loadavg.h sys/time.h sys/time.h)
+AC_CHECK_HEADERS(pthread.h unistd.h semaphore.h sys/loadavg.h sys/sysctl.h sys/time.h)
 
 GCC_HEADER_STDINT(gstdint.h)
 
@@ -178,6 +178,12 @@ XPCFLAGS=""
 case "$host" in
   *-*-rtems*)
     # RTEMS supports Pthreads, but the library is not available at GCC build time.
+    ;;
+  nvptx*-*-*)
+    # NVPTX does not support Pthreads, has its own code replacement.
+    libgomp_use_pthreads=no
+    # NVPTX is an accelerator-only target
+    libgomp_offloaded_only=yes
     ;;
   *)
     # Check to see if -pthread or -lpthread is needed.  Prefer the former.
@@ -199,6 +205,16 @@ case "$host" in
        [AC_MSG_ERROR([Pthreads are required to build libgomp])])])
 esac
 
+if test x$libgomp_use_pthreads != xno; then
+  AC_DEFINE(LIBGOMP_USE_PTHREADS, 1,
+            [Define to 1 if libgomp should use POSIX threads.])
+fi
+
+if test x$libgomp_offloaded_only = xyes; then
+  AC_DEFINE(LIBGOMP_OFFLOADED_ONLY, 1,
+            [Define to 1 if building libgomp for an accelerator-only target.])
+fi
+
 m4_include([plugin/configfrag.ac])
 
 # Check for functions needed.
@@ -210,6 +226,13 @@ case "$host" in
   *-darwin*)
     AC_DEFINE(HAVE_BROKEN_POSIX_SEMAPHORES, 1,
 	Define if the POSIX Semaphores do not work on your system.)
+    ;;
+esac
+
+# RTEMS specific checks
+case "$host" in
+  *-*-rtems*)
+    AC_CHECK_TYPES([struct _Mutex_Control],[],[],[#include <sys/lock.h>])
     ;;
 esac
 
@@ -355,6 +378,9 @@ AC_SUBST(OMP_NEST_LOCK_25_ALIGN)
 AC_SUBST(OMP_LOCK_25_KIND)
 AC_SUBST(OMP_NEST_LOCK_25_KIND)
 CFLAGS="$save_CFLAGS"
+
+# Determine what GCC version number to use in filesystem paths.
+GCC_BASE_VER
 
 AC_CONFIG_FILES(omp.h omp_lib.h omp_lib.f90 libgomp_f.h)
 AC_CONFIG_FILES(Makefile testsuite/Makefile libgomp.spec)

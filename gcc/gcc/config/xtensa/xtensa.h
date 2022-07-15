@@ -1,5 +1,5 @@
 /* Definitions of Tensilica's Xtensa target machine for GNU compiler.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2017 Free Software Foundation, Inc.
    Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
 This file is part of GCC.
@@ -22,8 +22,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "xtensa-config.h"
 
 /* External variables defined in xtensa.c.  */
-
-extern unsigned xtensa_current_frame_size;
 
 /* Macros used in the machine description to select various Xtensa
    configuration options.  */
@@ -67,6 +65,7 @@ extern unsigned xtensa_current_frame_size;
 #define TARGET_THREADPTR	XCHAL_HAVE_THREADPTR
 #define TARGET_LOOPS	        XCHAL_HAVE_LOOPS
 #define TARGET_WINDOWED_ABI	(XSHAL_ABI == XTHAL_ABI_WINDOWED)
+#define TARGET_DEBUG		XCHAL_HAVE_DEBUG
 
 #define TARGET_DEFAULT \
   ((XCHAL_HAVE_L32R	? 0 : MASK_CONST16) |				\
@@ -196,7 +195,7 @@ extern unsigned xtensa_current_frame_size;
 
 /* Operations between registers always perform the operation
    on the full register even if a narrower mode is specified.  */
-#define WORD_REGISTER_OPERATIONS
+#define WORD_REGISTER_OPERATIONS 1
 
 /* Xtensa loads are zero-extended by default.  */
 #define LOAD_EXTEND_OP(MODE) ZERO_EXTEND
@@ -459,11 +458,14 @@ enum reg_class
 
 /* Stack layout; function entry, exit and calling.  */
 
-#define STACK_GROWS_DOWNWARD
+#define STACK_GROWS_DOWNWARD 1
+
+#define FRAME_GROWS_DOWNWARD (flag_stack_protect \
+			      || (flag_sanitize & SANITIZE_ADDRESS) != 0)
 
 /* Offset within stack frame to start allocating local variables at.  */
 #define STARTING_FRAME_OFFSET						\
-  crtl->outgoing_args_size
+  (FRAME_GROWS_DOWNWARD ? 0 : crtl->outgoing_args_size)
 
 /* The ARG_POINTER and FRAME_POINTER are not real Xtensa registers, so
    they are eliminated to either the stack pointer or hard frame pointer.  */
@@ -475,20 +477,7 @@ enum reg_class
 
 /* Specify the initial difference between the specified pair of registers.  */
 #define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET)			\
-  do {									\
-    compute_frame_size (get_frame_size ());				\
-    switch (FROM)							\
-      {									\
-      case FRAME_POINTER_REGNUM:					\
-        (OFFSET) = 0;							\
-	break;								\
-      case ARG_POINTER_REGNUM:						\
-        (OFFSET) = xtensa_current_frame_size;				\
-	break;								\
-      default:								\
-	gcc_unreachable ();						\
-      }									\
-  } while (0)
+  (OFFSET) = xtensa_initial_elimination_offset ((FROM), (TO))
 
 /* If defined, the maximum amount of space required for outgoing
    arguments will be computed and placed into the variable
@@ -812,7 +801,9 @@ typedef struct xtensa_args
    for debugging.  */
 #define INCOMING_RETURN_ADDR_RTX gen_rtx_REG (Pmode, 0)
 #define DWARF_FRAME_RETURN_COLUMN DWARF_FRAME_REGNUM (0)
-#define DWARF_FRAME_REGISTERS 16
+#define DWARF_ALT_FRAME_RETURN_COLUMN 16
+#define DWARF_FRAME_REGISTERS (DWARF_ALT_FRAME_RETURN_COLUMN		\
+			       + (TARGET_WINDOWED_ABI ? 0 : 1))
 #define EH_RETURN_DATA_REGNO(N) ((N) < 2 ? (N) + 2 : INVALID_REGNUM)
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE, GLOBAL)			\
   (flag_pic								\

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,6 +31,7 @@ with CStand;
 with Debug;    use Debug;
 with Elists;
 with Exp_Dbug;
+with Exp_Unst;
 with Fmap;
 with Fname.UF;
 with Ghost;    use Ghost;
@@ -63,7 +64,6 @@ with Sinfo;    use Sinfo;
 with Sinput;   use Sinput;
 with Sinput.L; use Sinput.L;
 with SCIL_LL;  use SCIL_LL;
-with Targparm; use Targparm;
 with Tbuild;   use Tbuild;
 with Types;    use Types;
 
@@ -408,23 +408,22 @@ begin
 
          --  Cleanup processing after completing main analysis
 
-         --  Turn off unnesting of subprograms mode. This is not right
-         --  with respect to instantiations. What needs to happen is that
-         --  we do the unnesting AFTER the call to Instantiate_Bodies. We
-         --  will take care of that later ???
-
-         Opt.Unnest_Subprogram_Mode := False;
-
          --  Comment needed for ASIS mode test and GNATprove mode test???
 
+         pragma Assert
+           (Operating_Mode = Generate_Code
+             or else Operating_Mode = Check_Semantics);
+
          if Operating_Mode = Generate_Code
-           or else (Operating_Mode = Check_Semantics
-                     and then (ASIS_Mode or GNATprove_Mode))
+           or else (ASIS_Mode or GNATprove_Mode)
          then
             Instantiate_Bodies;
          end if;
 
-         if Operating_Mode = Generate_Code then
+         --  Analyze inlined bodies and check elaboration rules in GNATprove
+         --  mode as well as during compilation.
+
+         if Operating_Mode = Generate_Code or else GNATprove_Mode then
             if Inline_Processing_Required then
                Analyze_Inlined_Bodies;
             end if;
@@ -444,6 +443,10 @@ begin
             Remove_Ignored_Ghost_Code;
          end if;
 
+         --  At this stage we can unnest subprogram bodies if required
+
+         Exp_Unst.Unnest_Subprograms (Cunit (Main_Unit));
+
          --  List library units if requested
 
          if List_Units then
@@ -460,14 +463,9 @@ begin
       end if;
    end if;
 
-   --  Qualify all entity names in inner packages, package bodies, etc.,
-   --  except when compiling for the VM back-ends, which depend on having
-   --  unqualified names in certain cases and handles the generation of
-   --  qualified names when needed.
+   --  Qualify all entity names in inner packages, package bodies, etc
 
-   if VM_Target = No_VM then
-      Exp_Dbug.Qualify_All_Entity_Names;
-   end if;
+   Exp_Dbug.Qualify_All_Entity_Names;
 
    --  SCIL backend requirement. Check that SCIL nodes associated with
    --  dispatching calls reference subprogram calls.
@@ -483,8 +481,8 @@ begin
 
    Sprint.Source_Dump;
 
-   --  Check again for configuration pragmas that appear in the context of
-   --  the main unit. These pragmas only affect the main unit, and the
+   --  Check again for configuration pragmas that appear in the context
+   --  of the main unit. These pragmas only affect the main unit, and the
    --  corresponding flag is reset after each call to Semantics, but they
    --  may affect the generated ali for the unit, and therefore the flag
    --  must be set properly after compilation. Currently we only check for

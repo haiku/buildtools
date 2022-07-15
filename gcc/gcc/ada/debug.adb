@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2015, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2016, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -73,14 +73,14 @@ package body Debug is
    --  dG   Generate all warnings including those normally suppressed
    --  dH   Hold (kill) call to gigi
    --  dI   Inhibit internal name numbering in gnatG listing
-   --  dJ   Output debugging trace info for JGNAT (Java VM version of GNAT)
+   --  dJ
    --  dK   Kill all error messages
    --  dL   Output trace information on elaboration checking
    --  dM   Assume all variables are modified (no current values)
    --  dN   No file name information in exception messages
    --  dO   Output immediate error messages
    --  dP   Do not check for controlled objects in preelaborable packages
-   --  dQ
+   --  dQ   Use old secondary stack method
    --  dR   Bypass check for correct version of s-rpc
    --  dS   Never convert numbers to machine numbers in Sem_Eval
    --  dT   Convert to machine numbers only for constant declarations
@@ -101,15 +101,15 @@ package body Debug is
    --  d.h  Minimize the creation of public internal symbols for concatenation
    --  d.i  Ignore Warnings pragmas
    --  d.j  Generate listing of frontend inlined calls
-   --  d.k
+   --  d.k  Kill referenced run-time library unit line numbers
    --  d.l  Use Ada 95 semantics for limited function returns
    --  d.m  For -gnatl, print full source only for main unit
    --  d.n  Print source file names
-   --  d.o  Generate .NET listing of CIL code
-   --  d.p  Enable the .NET CIL verifier
+   --  d.o  Conservative elaboration order for indirect calls
+   --  d.p  Use original Ada 95 semantics for Bit_Order (disable AI95-0133)
    --  d.q
    --  d.r  Enable OK_To_Reorder_Components in non-variant records
-   --  d.s  Disable expansion of slice move, use memmove
+   --  d.s
    --  d.t  Disable static allocation of library level dispatch tables
    --  d.u  Enable Modify_Tree_For_C (update tree for c)
    --  d.v  Enable OK_To_Reorder_Components in variant records
@@ -119,16 +119,16 @@ package body Debug is
    --  d.z  Restore previous support for frontend handling of Inline_Always
 
    --  d.A  Read/write Aspect_Specifications hash table to tree
-   --  d.B
+   --  d.B  Generate a bug box on abort_statement
    --  d.C  Generate concatenation call, do not generate inline code
    --  d.D  Disable errors on use of overriding keyword in Ada 95 mode
    --  d.E  Turn selected errors into warnings
    --  d.F  Debug mode for GNATprove
    --  d.G  Ignore calls through generic formal parameters for elaboration
-   --  d.H
+   --  d.H  GNSA mode for ASIS
    --  d.I  Do not ignore enum representation clauses in CodePeer mode
-   --  d.J  Disable parallel SCIL generation mode
-   --  d.K
+   --  d.J
+   --  d.K  Enable generation of contract-only procedures in CodePeer mode
    --  d.L  Depend on back end for limited types in if and case expressions
    --  d.M  Relaxed RM semantics
    --  d.N  Add node to all entities
@@ -139,7 +139,7 @@ package body Debug is
    --  d.S  Force Optimize_Alignment (Space)
    --  d.T  Force Optimize_Alignment (Time)
    --  d.U  Ignore indirect calls for static elaboration
-   --  d.V
+   --  d.V  Do not verify validity of SCIL files (CodePeer mode)
    --  d.W  Print out debugging information for Walk_Library_Items
    --  d.X  Old treatment of indexing aspects
    --  d.Y
@@ -157,10 +157,10 @@ package body Debug is
 
    --  d.1  Enable unnesting of nested procedures
    --  d.2  Allow statements in declarative part
-   --  d.3
-   --  d.4
-   --  d.5
-   --  d.6
+   --  d.3  Output debugging information from Exp_Unst
+   --  d.4  Do not delete generated C file in case of errors
+   --  d.5  Do not generate imported subprogram definitions in C code
+   --  d.6  Do not avoid declaring unreferenced itypes in C code
    --  d.7
    --  d.8
    --  d.9
@@ -181,14 +181,14 @@ package body Debug is
    --  dl
    --  dm
    --  dn  List details of manipulation of Num_Pred values
-   --  do  Use old preference for elaboration order
-   --  dp
+   --  do  Use older preference for elaboration order
+   --  dp  Use old preference for elaboration order
    --  dq
    --  dr
    --  ds
    --  dt
    --  du  List units as they are acquired
-   --  dv
+   --  dv  Verbose debugging printouts
    --  dw
    --  dx  Force binder to read xref information from ali files
    --  dy
@@ -316,14 +316,15 @@ package body Debug is
    --  dt   Print full tree. The generated tree is output (see also df,dy)
 
    --  du   Uncheck categorization pragmas. This debug switch causes the
-   --       categorization pragmas (Pure, Preelaborate etc) to be ignored
-   --       so that normal checks are not made (this is particularly useful
-   --       for adding temporary debugging code to units that have pragmas
-   --       that are inconsistent with the debugging code added.
+   --       elaboration control pragmas (Pure, Preelaborate, etc.) and the
+   --       categorization pragmas (Shared_Passive, Remote_Types, etc.) to be
+   --       ignored, so that normal checks are not made (this is particularly
+   --       useful for adding temporary debugging code to units that have
+   --       pragmas that are inconsistent with the debugging code added).
 
    --  dv   Output trace of overload resolution. Outputs messages for
    --       overload attempts that involve cascaded errors, or where
-   --       an interepretation is incompatible with the context.
+   --       an interpretation is incompatible with the context.
 
    --  dw   Write semantic scope stack messages. Each time a scope is created
    --       or removed, a message is output (see the Sem_Ch8.Push_Scope and
@@ -375,8 +376,7 @@ package body Debug is
    --       general Elaborate_All is still required because of nested calls.
 
    --  dE   Apply compile time elaboration checking for with relations between
-   --       predefined units. Normally no checks are made (it seems that at
-   --       least on the SGI, such checks run into trouble).
+   --       predefined units. Normally no checks are made.
 
    --  dF   Front end data layout enabled. Normally front end data layout
    --       is only enabled if the target parameter Backend_Layout is False.
@@ -399,11 +399,6 @@ package body Debug is
    --       is used in the fixed bugs run to minimize system and version
    --       dependency in filed -gnatD or -gnatG output.
 
-   --  dJ   Generate debugging trace output for the JGNAT back end. This
-   --       consists of symbolic Java Byte Code sequences for all generated
-   --       classes plus additional information to indicate local variables
-   --       and methods.
-
    --  dK   Kill all error messages. This debug flag suppresses the output
    --       of all error messages. It is used in regression tests where the
    --       error messages are target dependent and irrelevant.
@@ -411,7 +406,7 @@ package body Debug is
    --  dL   Output trace information on elaboration checking. This debug
    --       switch causes output to be generated showing each call or
    --       instantiation as it is checked, and the progress of the recursive
-   --       trace through calls at elaboration time.
+   --       trace through elaboration calls at compile time.
 
    --  dM   Assume all variables have been modified, and ignore current value
    --       indications. This debug flag disconnects the tracking of constant
@@ -429,6 +424,11 @@ package body Debug is
    --       RM 10.2.1(9) forbids the use of library level controlled objects
    --       in preelaborable packages, but this restriction is a huge pain,
    --       especially in the predefined library units.
+
+   --  dQ   Use old method for determining what goes on the secondary stack.
+   --       This disables some newer optimizations. The intent is to use this
+   --       temporarily to measure before/after efficiency. ???Remove this
+   --       when we are done (see Sem_Util.Requires_Transient_Scope).
 
    --  dR   Bypass the check for a proper version of s-rpc being present
    --       to use the -gnatz? switch. This allows debugging of the use
@@ -534,6 +534,9 @@ package body Debug is
    --       be used in particular to disable Warnings (Off) to check if any of
    --       these statements are inappropriate.
 
+   --  d.k  If an error message contains a reference to a location in an
+   --       internal unit, then suppress the line number in this reference.
+
    --  d.j  Generate listing of frontend inlined calls and inline calls passed
    --       to the backend. This is useful to locate skipped calls that must be
    --       inlined by the frontend.
@@ -552,20 +555,15 @@ package body Debug is
    --       compiler has a bug -- these are the files that need to be included
    --       in a bug report.
 
-   --  d.o  Generate listing showing the IL instructions generated by the .NET
-   --       compiler for each subprogram.
+   --  d.o  Conservative elaboration order for indirect calls. This causes
+   --       P'Access to be treated as a call in more cases.
 
-   --  d.p  Enable the .NET CIL verifier. During development the verifier is
-   --       disabled by default and this flag is used to enable it. In the
-   --       future we will reverse this functionality.
+   --  d.p  In Ada 95 (or 83) mode, use original Ada 95 behavior for the
+   --       interpretation of component clauses crossing byte boundaries when
+   --       using the non-default bit order (i.e. ignore AI95-0133).
 
    --  d.r  Forces the flag OK_To_Reorder_Components to be set in all record
    --       base types that have no discriminants.
-
-   --  d.s  Normally the compiler expands slice moves into loops if overlap
-   --       might be possible. This debug flag inhibits that expansion, and
-   --       the back end is expected to use an appropriate routine to handle
-   --       overlap, based on Forward_OK and Backwards_OK flags.
 
    --  d.t  The compiler has been modified (a fairly extensive modification)
    --       to generate static dispatch tables for library level tagged types.
@@ -588,8 +586,7 @@ package body Debug is
    --       code generation step.
 
    --  d.z  Restore previous front-end support for Inline_Always. In default
-   --       mode, for targets that use the GCC back end (i.e. currently all
-   --       targets except AAMP, .NET, JVM, and GNATprove), Inline_Always is
+   --       mode, for targets that use the GCC back end, Inline_Always is
    --       handled by the back end. Use of this switch restores the previous
    --       handling of Inline_Always by the front end on such targets. For the
    --       targets that do not use the GCC back end, this switch is ignored.
@@ -598,6 +595,13 @@ package body Debug is
    --       for reading and writing the aspect specification hash table, so
    --       for now, this is controlled by the debug flag d.A. The hash table
    --       is only written and read if this flag is set.
+
+   --  d.B  Generate a bug box when we see an abort_statement, even though
+   --       there is no bug. Useful for testing Comperr.Compiler_Abort: write
+   --       some code containing an abort_statement, and compile it with
+   --       -gnatd.B. There is nothing special about abort_statements; it just
+   --       provides a way to control where the bug box is generated. See "when
+   --       N_Abort_Statement" in package body Expander.
 
    --  d.C  Generate call to System.Concat_n.Str_Concat_n routines in cases
    --       where we would normally generate inline concatenation code.
@@ -632,15 +636,21 @@ package body Debug is
    --       now fixed, but we provide this debug flag to revert to the previous
    --       situation of ignoring such calls to aid in transition.
 
+   --  d.H  Sets ASIS_GNSA_Mode to True. This signals the front end to suppress
+   --       the call to gigi in ASIS_Mode.
+
    --  d.I  Do not ignore enum representation clauses in CodePeer mode.
    --       The default of ignoring representation clauses for enumeration
    --       types in CodePeer is good for the majority of Ada code, but in some
    --       cases being able to change this default might be useful to remove
    --       some false positives.
 
-   --  d.J  Disable parallel SCIL generation. Normally SCIL file generation is
-   --       done in parallel to speed processing. This switch disables this
-   --       behavior.
+   --  d.K  Enable generation of contract-only procedures in CodePeer mode and
+   --       report a warning on subprograms for which the contract-only body
+   --       cannot be built. Currently reported on subprograms defined in
+   --       nested package specs that have some formal (or return type) whose
+   --       type is a private type defined in some enclosing package and that
+   --       have pre/postconditions.
 
    --  d.L  Normally the front end generates special expansion for conditional
    --       expressions of a limited type. This debug flag removes this special
@@ -685,15 +695,21 @@ package body Debug is
    --       reverts to the behavior of earlier compilers, which ignored
    --       indirect calls.
 
+   --  d.V  Do not verify the validity of SCIL files (CodePeer mode). When
+   --       generating SCIL files for CodePeer, by default we verify that the
+   --       SCIL is well formed before saving it on disk. This switch can be
+   --       used to disable this checking, either to improve speed or to shut
+   --       down a false positive detected during the verification.
+
    --  d.W  Print out debugging information for Walk_Library_Items, including
    --       the order in which units are walked. This is primarily for use in
    --       debugging CodePeer mode.
 
-   --  d.X  A previous version of GNAT allowed indexing aspects to be
-   --       redefined on derived container types, while the default iterator
-   --       was inherited from the aprent type. This non-standard extension
-   --       is preserved temporarily for use by the modelling project under
-   --       debug flag d.X.
+   --  d.X  A previous version of GNAT allowed indexing aspects to be redefined
+   --       on derived container types, while the default iterator was
+   --       inherited from the parent type. This nonstandard extension is
+   --       preserved temporarily for use by the modeling project under debug
+   --       flag d.X.
 
    --  d.Z  Normally we always enable expansion in configurable run-time mode
    --       to make sure we get error messages about unsupported features even
@@ -755,6 +771,20 @@ package body Debug is
    --       allowed, but in some debugging contexts (e.g. testing the circuit
    --       for unnesting of procedures), it is useful to allow this.
 
+   --  d.3  Output debugging information from Exp_Unst, including the name of
+   --       any unreachable subprograms that get deleted.
+
+   --  d.4  By default in case of an error during C generation, the .c or .h
+   --       file is deleted. This flag keeps the C file.
+
+   --  d.5  By default a subprogram imported generates a subprogram profile.
+   --       This debug flag disables this generation when generating C code,
+   --       assuming a proper #include will be used instead.
+
+   --  d.6  By default the C back-end avoids declaring itypes that are not
+   --       referenced by the generated C code. This debug flag restores the
+   --       output of all the itypes.
+
    ------------------------------------------
    -- Documentation for Binder Debug Flags --
    ------------------------------------------
@@ -787,13 +817,23 @@ package body Debug is
    --      the algorithm used to determine a correct order of elaboration. This
    --      is useful in diagnosing any problems in its behavior.
 
-   --  do  Use old elaboration order preference. The new preference rules
+   --  do  Use older elaboration order preference. The new preference rules
    --      prefer specs with no bodies to specs with bodies, and between two
    --      specs with bodies, prefers the one whose body is closer to being
    --      able to be elaborated. This is a clear improvement, but we provide
-   --      this debug flag in case of regressions.
+   --      this debug flag in case of regressions. Note: -do is even older than
+   --      -dp.
+
+   --  dp  Use old elaboration order preference. The new preference rules
+   --      elaborate all units within a strongly connected component together,
+   --      with no other units in between. In particular, if a spec/body pair
+   --      can be elaborated together, it will be. In the new order, the binder
+   --      behaves as if every pragma Elaborate_All that would be legal is
+   --      present, even if it does not appear in the source code.
 
    --  du  List unit name and file name for each unit as it is read in
+
+   --  dv  Verbose debugging printouts
 
    --  dx  Force the binder to read (and then ignore) the xref information
    --      in ali files (used to check that read circuit is working OK).

@@ -1,6 +1,6 @@
 ## Makefile for the C++03 sources of the GNU C++ Standard library.
 ##
-## Copyright (C) 1997-2015 Free Software Foundation, Inc.
+## Copyright (C) 1997-2017 Free Software Foundation, Inc.
 ##
 ## This file is part of the libstdc++ version 3 distribution.
 ## Process this file with automake to produce Makefile.in.
@@ -23,7 +23,7 @@
 include $(top_srcdir)/fragment.am
 
 # Convenience library for C++98 runtime.
-noinst_LTLIBRARIES = libc++98convenience.la 
+noinst_LTLIBRARIES = libc++98convenience.la
 
 headers =
 
@@ -155,6 +155,12 @@ vpath % $(top_srcdir)/src/c++98
 
 libc__98convenience_la_SOURCES = $(sources)
 
+# Use special rules to compile with -fimplicit-templates.
+c++locale.lo: c++locale.cc
+	$(LTCXXCOMPILE) -fimplicit-templates -c $<
+c++locale.o: c++locale.cc
+	$(CXXCOMPILE) -fimplicit-templates -c $<
+
 if ENABLE_DUAL_ABI
 GLIBCXX_ABI_FLAGS = -D_GLIBCXX_USE_CXX11_ABI=@glibcxx_cxx98_abi@
 # Use special rules to compile with the non-default string ABI.
@@ -203,7 +209,7 @@ concept-inst.o: concept-inst.cc
 	$(CXXCOMPILE) -D_GLIBCXX_CONCEPT_CHECKS -fimplicit-templates -c $<
 
 # Use special rules for parallel mode compilation.
-PARALLEL_FLAGS = -D_GLIBCXX_PARALLEL 
+PARALLEL_FLAGS = -D_GLIBCXX_PARALLEL
 parallel_settings.lo: parallel_settings.cc
 	$(LTCXXCOMPILE) $(PARALLEL_FLAGS) -c $<
 parallel_settings.o: parallel_settings.cc
@@ -215,6 +221,7 @@ parallel_settings.o: parallel_settings.cc
 # OPTIMIZE_CXXFLAGS on the compile line so that -O2 can be overridden
 # as the occasion calls for it.
 AM_CXXFLAGS = \
+	-std=gnu++98 \
 	$(glibcxx_lt_pic_flag) $(glibcxx_compiler_shared_flag) \
 	$(XTEMPLATE_FLAGS) $(VTV_CXXFLAGS) \
 	$(WARN_CXXFLAGS) $(OPTIMIZE_CXXFLAGS) $(CONFIG_CXXFLAGS)
@@ -236,7 +243,7 @@ AM_MAKEFLAGS = \
 # correct solution is to add `--tag CXX' to LTCXXCOMPILE and maybe
 # CXXLINK, just after $(LIBTOOL), so that libtool doesn't have to
 # attempt to infer which configuration to use.
-# 
+#
 # The second tag argument, `--tag disable-shared` means that libtool
 # only compiles each source once, for static objects. In actuality,
 # glibcxx_lt_pic_flag and glibcxx_compiler_shared_flag are added to

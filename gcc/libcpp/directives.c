@@ -1,5 +1,5 @@
 /* CPP Library. (Directive handling.)
-   Copyright (C) 1986-2015 Free Software Foundation, Inc.
+   Copyright (C) 1986-2017 Free Software Foundation, Inc.
    Contributed by Per Bothner, 1994-95.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -122,7 +122,8 @@ static void do_pragma_error (cpp_reader *);
 static void do_linemarker (cpp_reader *);
 static const cpp_token *get_token_no_padding (cpp_reader *);
 static const cpp_token *get__Pragma_string (cpp_reader *);
-static void destringize_and_run (cpp_reader *, const cpp_string *);
+static void destringize_and_run (cpp_reader *, const cpp_string *,
+				 source_location);
 static int parse_answer (cpp_reader *, struct answer **, int, source_location);
 static cpp_hashnode *parse_assertion (cpp_reader *, struct answer **, int);
 static struct answer ** find_answer (cpp_hashnode *, const struct answer *);
@@ -187,6 +188,16 @@ static const directive dtable[] =
 DIRECTIVE_TABLE
 };
 #undef D
+
+/* A NULL-terminated array of directive names for use
+   when suggesting corrections for misspelled directives.  */
+#define D(name, t, origin, flags) #name,
+static const char * const directive_names[] = {
+DIRECTIVE_TABLE
+  NULL
+};
+#undef D
+
 #undef DIRECTIVE_TABLE
 
 /* Wrapper struct directive for linemarkers.
@@ -497,8 +508,35 @@ _cpp_handle_directive (cpp_reader *pfile, int indented)
       if (CPP_OPTION (pfile, lang) == CLK_ASM)
 	skip = 0;
       else if (!pfile->state.skipping)
-	cpp_error (pfile, CPP_DL_ERROR, "invalid preprocessing directive #%s",
-		   cpp_token_as_text (pfile, dname));
+	{
+	  const char *unrecognized
+	    = (const char *)cpp_token_as_text (pfile, dname);
+	  const char *hint = NULL;
+
+	  /* Call back into gcc to get a spelling suggestion.  Ideally
+	     we'd just use best_match from gcc/spellcheck.h (and filter
+	     out the uncommon directives), but that requires moving it
+	     to a support library.  */
+	  if (pfile->cb.get_suggestion)
+	    hint = pfile->cb.get_suggestion (pfile, unrecognized,
+					     directive_names);
+
+	  if (hint)
+	    {
+	      rich_location richloc (pfile->line_table, dname->src_loc);
+	      source_range misspelled_token_range
+		= get_range_from_loc (pfile->line_table, dname->src_loc);
+	      richloc.add_fixit_replace (misspelled_token_range, hint);
+	      cpp_error_at_richloc (pfile, CPP_DL_ERROR, &richloc,
+				    "invalid preprocessing directive #%s;"
+				    " did you mean #%s?",
+				    unrecognized, hint);
+	    }
+	  else
+	    cpp_error (pfile, CPP_DL_ERROR,
+		       "invalid preprocessing directive #%s",
+		       unrecognized);
+	}
     }
 
   pfile->directive = dir;
@@ -817,7 +855,7 @@ do_include_common (cpp_reader *pfile, enum include_type type)
 			   pfile->directive->name, fname, angle_brackets,
 			   buf);
 
-      _cpp_stack_include (pfile, fname, angle_brackets, type);
+      _cpp_stack_include (pfile, fname, angle_brackets, type, location);
     }
 
   XDELETEVEC (fname);
@@ -911,8 +949,8 @@ strtolinenum (const uchar *str, size_t len, linenum_type *nump, bool *wrapped)
 static void
 do_line (cpp_reader *pfile)
 {
-  const struct line_maps *line_table = pfile->line_table;
-  const struct line_map *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
+  struct line_maps *line_table = pfile->line_table;
+  const line_map_ordinary *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
 
   /* skip_rest_of_line() may cause line table to be realloc()ed so note down
      sysp right now.  */
@@ -965,6 +1003,7 @@ do_line (cpp_reader *pfile)
   skip_rest_of_line (pfile);
   _cpp_do_file_change (pfile, LC_RENAME_VERBATIM, new_file, new_lineno,
 		       map_sysp);
+  line_table->seen_line_directive = true;
 }
 
 /* Interpret the # 44 "file" [flags] notation, which has slightly
@@ -973,8 +1012,8 @@ do_line (cpp_reader *pfile)
 static void
 do_linemarker (cpp_reader *pfile)
 {
-  const struct line_maps *line_table = pfile->line_table;
-  const struct line_map *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
+  struct line_maps *line_table = pfile->line_table;
+  const line_map_ordinary *map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
   const cpp_token *token;
   const char *new_file = ORDINARY_MAP_FILE_NAME (map);
   linenum_type new_lineno;
@@ -1044,6 +1083,23 @@ do_linemarker (cpp_reader *pfile)
 
   skip_rest_of_line (pfile);
 
+  if (reason == LC_LEAVE)
+    {
+      /* Reread map since cpp_get_token can invalidate it with a
+	 reallocation.  */
+      map = LINEMAPS_LAST_ORDINARY_MAP (line_table);
+      const line_map_ordinary *from;      
+      if (MAIN_FILE_P (map)
+	  || (new_file
+	      && (from = INCLUDED_FROM (pfile->line_table, map)) != NULL
+	      && filename_cmp (ORDINARY_MAP_FILE_NAME (from), new_file) != 0))
+	{
+	  cpp_warning (pfile, CPP_W_NONE,
+		       "file \"%s\" linemarker ignored due to "
+		       "incorrect nesting", new_file);
+	  return;
+	}
+    }
   /* Compensate for the increment in linemap_add that occurs in
      _cpp_do_file_change.  We're currently at the start of the line
      *following* the #line directive.  A separate source_location for this
@@ -1052,6 +1108,7 @@ do_linemarker (cpp_reader *pfile)
   pfile->line_table->highest_location--;
 
   _cpp_do_file_change (pfile, reason, new_file, new_lineno, new_sysp);
+  line_table->seen_line_directive = true;
 }
 
 /* Arrange the file_change callback.  pfile->line has changed to
@@ -1063,15 +1120,20 @@ _cpp_do_file_change (cpp_reader *pfile, enum lc_reason reason,
 		     const char *to_file, linenum_type file_line,
 		     unsigned int sysp)
 {
+  linemap_assert (reason != LC_ENTER_MACRO);
   const struct line_map *map = linemap_add (pfile->line_table, reason, sysp,
 					    to_file, file_line);
+  const line_map_ordinary *ord_map = NULL;
   if (map != NULL)
-    linemap_line_start (pfile->line_table,
-			ORDINARY_MAP_STARTING_LINE_NUMBER (map),
-			127);
+    {
+      ord_map = linemap_check_ordinary (map);
+      linemap_line_start (pfile->line_table,
+			  ORDINARY_MAP_STARTING_LINE_NUMBER (ord_map),
+			  127);
+    }
 
   if (pfile->cb.file_change)
-    pfile->cb.file_change (pfile, map);
+    pfile->cb.file_change (pfile, ord_map);
 }
 
 /* Report a warning or error detected by the program we are
@@ -1746,7 +1808,8 @@ get__Pragma_string (cpp_reader *pfile)
 /* Destringize IN into a temporary buffer, by removing the first \ of
    \" and \\ sequences, and process the result as a #pragma directive.  */
 static void
-destringize_and_run (cpp_reader *pfile, const cpp_string *in)
+destringize_and_run (cpp_reader *pfile, const cpp_string *in,
+		     source_location expansion_loc)
 {
   const unsigned char *src, *limit;
   char *dest, *result;
@@ -1826,6 +1889,12 @@ destringize_and_run (cpp_reader *pfile, const cpp_string *in)
 	      toks = XRESIZEVEC (cpp_token, toks, maxcount);
 	    }
 	  toks[count] = *cpp_get_token (pfile);
+	  /* _Pragma is a builtin, so we're not within a macro-map, and so
+	     the token locations are set to bogus ordinary locations
+	     near to, but after that of the "_Pragma".
+	     Paper over this by setting them equal to the location of the
+	     _Pragma itself (PR preprocessor/69126).  */
+	  toks[count].src_loc = expansion_loc;
 	  /* Macros have been already expanded by cpp_get_token
 	     if the pragma allowed expansion.  */
 	  toks[count++].flags |= NO_EXPAND;
@@ -1860,14 +1929,14 @@ destringize_and_run (cpp_reader *pfile, const cpp_string *in)
 
 /* Handle the _Pragma operator.  Return 0 on error, 1 if ok.  */
 int
-_cpp_do__Pragma (cpp_reader *pfile)
+_cpp_do__Pragma (cpp_reader *pfile, source_location expansion_loc)
 {
   const cpp_token *string = get__Pragma_string (pfile);
   pfile->directive_result.type = CPP_PADDING;
 
   if (string)
     {
-      destringize_and_run (pfile, &string->val.str);
+      destringize_and_run (pfile, &string->val.str, expansion_loc);
       return 1;
     }
   cpp_error (pfile, CPP_DL_ERROR,

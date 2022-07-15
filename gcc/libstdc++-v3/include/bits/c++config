@@ -1,6 +1,6 @@
 // Predefined symbols and macros -*- C++ -*-
 
-// Copyright (C) 1997-2015 Free Software Foundation, Inc.
+// Copyright (C) 1997-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,7 +30,10 @@
 #ifndef _GLIBCXX_CXX_CONFIG_H
 #define _GLIBCXX_CXX_CONFIG_H 1
 
-// The current version of the C++ library in compressed ISO date format.
+// The major release number for the GCC release the C++ library belongs to.
+#define _GLIBCXX_RELEASE
+
+// The datestamp of the C++ library in compressed ISO date format.
 #define __GLIBCXX__
 
 // Macros for various attributes.
@@ -111,14 +114,32 @@
 # endif
 #endif
 
+#ifndef _GLIBCXX17_CONSTEXPR
+# if __cplusplus > 201402L
+#  define _GLIBCXX17_CONSTEXPR constexpr
+# else
+#  define _GLIBCXX17_CONSTEXPR
+# endif
+#endif
+
+#ifndef _GLIBCXX17_INLINE
+# if __cplusplus > 201402L
+#  define _GLIBCXX17_INLINE inline
+# else
+#  define _GLIBCXX17_INLINE
+# endif
+#endif
+
 // Macro for noexcept, to support in mixed 03/0x mode.
 #ifndef _GLIBCXX_NOEXCEPT
 # if __cplusplus >= 201103L
 #  define _GLIBCXX_NOEXCEPT noexcept
+#  define _GLIBCXX_NOEXCEPT_IF(_COND) noexcept(_COND)
 #  define _GLIBCXX_USE_NOEXCEPT noexcept
 #  define _GLIBCXX_THROW(_EXC)
 # else
 #  define _GLIBCXX_NOEXCEPT
+#  define _GLIBCXX_NOEXCEPT_IF(_COND)
 #  define _GLIBCXX_USE_NOEXCEPT throw()
 #  define _GLIBCXX_THROW(_EXC) throw(_EXC)
 # endif
@@ -136,7 +157,15 @@
 # endif
 #endif
 
-// Macro for extern template, ie controling template linkage via use
+#if __cpp_noexcept_function_type
+#define _GLIBCXX_NOEXCEPT_PARM , bool _NE
+#define _GLIBCXX_NOEXCEPT_QUAL noexcept (_NE)
+#else
+#define _GLIBCXX_NOEXCEPT_PARM
+#define _GLIBCXX_NOEXCEPT_QUAL
+#endif
+
+// Macro for extern template, ie controlling template linkage via use
 // of extern keyword on template declaration. As documented in the g++
 // manual, it inhibits all implicit instantiations and is used
 // throughout the library to avoid multiple weak definitions for
@@ -158,7 +187,9 @@
     namespace __profile { }
     namespace __cxx1998 { }
 
-    namespace __detail { }
+    namespace __detail {
+      namespace __variant { }				// C++17
+    }
 
     namespace rel_ops { }
 
@@ -173,12 +204,16 @@
     
     namespace decimal { }
 
-    namespace chrono { }
-    namespace placeholders { }
-    namespace regex_constants { }
-    namespace this_thread { }
-
-    namespace experimental { }
+    namespace chrono { }				// C++11
+    namespace placeholders { }				// C++11
+    namespace regex_constants { }			// C++11
+    namespace this_thread { }				// C++11
+    inline namespace literals {				// C++14
+      inline namespace chrono_literals { }		// C++14
+      inline namespace complex_literals { }		// C++14
+      inline namespace string_literals { }		// C++14
+      inline namespace string_view_literals { }		// C++17
+    }
   }
 
   namespace abi { }
@@ -258,14 +293,30 @@ namespace std
 
   namespace decimal { inline namespace __7 { } }
 
+#if __cplusplus >= 201103L
   namespace chrono { inline namespace __7 { } }
   namespace placeholders { inline namespace __7 { } }
   namespace regex_constants { inline namespace __7 { } }
   namespace this_thread { inline namespace __7 { } }
 
-  namespace experimental { inline namespace __7 { } }
+#if __cplusplus >= 201402L
+  inline namespace literals {
+    inline namespace chrono_literals { inline namespace __7 { } }
+    inline namespace complex_literals { inline namespace __7 { } }
+    inline namespace string_literals { inline namespace __7 { } }
+#if __cplusplus > 201402L
+    inline namespace string_view_literals { inline namespace __7 { } }
+#endif // C++17
+  }
+#endif // C++14
+#endif // C++11
 
-  namespace __detail { inline namespace __7 { } }
+  namespace __detail {
+    inline namespace __7 { }
+#if __cplusplus > 201402L
+    namespace __variant { inline namespace __7 { } }
+#endif
+  }
 }
 
 namespace __gnu_cxx
@@ -348,8 +399,10 @@ namespace std
 	 namespace _GLIBCXX_STD_C { _GLIBCXX_BEGIN_NAMESPACE_VERSION
 # define _GLIBCXX_END_NAMESPACE_CONTAINER \
 	 _GLIBCXX_END_NAMESPACE_VERSION }
-# undef _GLIBCXX_EXTERN_TEMPLATE
-# define _GLIBCXX_EXTERN_TEMPLATE -1
+#else
+# define _GLIBCXX_STD_C std
+# define _GLIBCXX_BEGIN_NAMESPACE_CONTAINER _GLIBCXX_BEGIN_NAMESPACE_VERSION
+# define _GLIBCXX_END_NAMESPACE_CONTAINER _GLIBCXX_END_NAMESPACE_VERSION
 #endif
 
 #ifdef _GLIBCXX_PARALLEL
@@ -358,30 +411,10 @@ namespace std
 	 namespace _GLIBCXX_STD_A { _GLIBCXX_BEGIN_NAMESPACE_VERSION
 # define _GLIBCXX_END_NAMESPACE_ALGO \
 	 _GLIBCXX_END_NAMESPACE_VERSION }
-#endif
-
-#ifndef _GLIBCXX_STD_A
+#else
 # define _GLIBCXX_STD_A std
-#endif
-
-#ifndef _GLIBCXX_STD_C
-# define _GLIBCXX_STD_C std
-#endif
-
-#ifndef _GLIBCXX_BEGIN_NAMESPACE_ALGO
-# define _GLIBCXX_BEGIN_NAMESPACE_ALGO
-#endif
-
-#ifndef _GLIBCXX_END_NAMESPACE_ALGO
-# define _GLIBCXX_END_NAMESPACE_ALGO
-#endif
-
-#ifndef _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
-# define _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
-#endif
-
-#ifndef _GLIBCXX_END_NAMESPACE_CONTAINER
-# define _GLIBCXX_END_NAMESPACE_CONTAINER
+# define _GLIBCXX_BEGIN_NAMESPACE_ALGO _GLIBCXX_BEGIN_NAMESPACE_VERSION
+# define _GLIBCXX_END_NAMESPACE_ALGO _GLIBCXX_END_NAMESPACE_VERSION
 #endif
 
 // GLIBCXX_ABI Deprecated
@@ -412,10 +445,20 @@ namespace std
 # define _GLIBCXX_END_NAMESPACE_LDBL_OR_CXX11 _GLIBCXX_END_NAMESPACE_LDBL
 #endif
 
+// Debug Mode implies checking assertions.
+#if defined(_GLIBCXX_DEBUG) && !defined(_GLIBCXX_ASSERTIONS)
+# define _GLIBCXX_ASSERTIONS 1
+#endif
+
+// Disable std::string explicit instantiation declarations in order to assert.
+#ifdef _GLIBCXX_ASSERTIONS
+# undef _GLIBCXX_EXTERN_TEMPLATE
+# define _GLIBCXX_EXTERN_TEMPLATE -1
+#endif
+
 // Assert.
-#if !defined(_GLIBCXX_DEBUG) && !defined(_GLIBCXX_PARALLEL)
-# define __glibcxx_assert(_Condition)
-#else
+#if defined(_GLIBCXX_ASSERTIONS) \
+  || defined(_GLIBCXX_PARALLEL) || defined(_GLIBCXX_PARALLEL_ASSERTIONS)
 namespace std
 {
   // Avoid the use of assert, because we're trying to keep the <cassert>
@@ -429,13 +472,19 @@ namespace std
     __builtin_abort();
   }
 }
-#define __glibcxx_assert(_Condition)				   	 \
+#define __glibcxx_assert_impl(_Condition)				 \
   do 									 \
   {							      		 \
     if (! (_Condition))                                                  \
       std::__replacement_assert(__FILE__, __LINE__, __PRETTY_FUNCTION__, \
 				#_Condition);				 \
   } while (false)
+#endif
+
+#if defined(_GLIBCXX_ASSERTIONS)
+# define __glibcxx_assert(_Condition) __glibcxx_assert_impl(_Condition)
+#else
+# define __glibcxx_assert(_Condition)
 #endif
 
 // Macros for race detectors.
@@ -470,6 +519,8 @@ namespace std
 # define _GLIBCXX_BEGIN_EXTERN_C extern "C" {
 # define _GLIBCXX_END_EXTERN_C }
 
+#define _GLIBCXX_USE_ALLOCATOR_NEW
+
 #else // !__cplusplus
 # define _GLIBCXX_BEGIN_EXTERN_C
 # define _GLIBCXX_END_EXTERN_C
@@ -497,6 +548,35 @@ namespace std
 # define _GLIBCXX_WEAK_DEFINITION
 #endif
 
+// By default, we assume that __GXX_WEAK__ also means that there is support
+// for declaring functions as weak while not defining such functions.  This
+// allows for referring to functions provided by other libraries (e.g.,
+// libitm) without depending on them if the respective features are not used.
+#ifndef _GLIBCXX_USE_WEAK_REF
+# define _GLIBCXX_USE_WEAK_REF __GXX_WEAK__
+#endif
+
+// Conditionally enable annotations for the Transactional Memory TS on C++11.
+// Most of the following conditions are due to limitations in the current
+// implementation.
+#if __cplusplus >= 201103L && _GLIBCXX_USE_CXX11_ABI			\
+  && _GLIBCXX_USE_DUAL_ABI && __cpp_transactional_memory >= 201505L	\
+  &&  !_GLIBCXX_FULLY_DYNAMIC_STRING && _GLIBCXX_USE_WEAK_REF		\
+  && _GLIBCXX_USE_ALLOCATOR_NEW
+#define _GLIBCXX_TXN_SAFE transaction_safe
+#define _GLIBCXX_TXN_SAFE_DYN transaction_safe_dynamic
+#else
+#define _GLIBCXX_TXN_SAFE
+#define _GLIBCXX_TXN_SAFE_DYN
+#endif
+
+#if __cplusplus > 201402L
+// In C++17 mathematical special functions are in namespace std.
+# define _GLIBCXX_USE_STD_SPEC_FUNCS 1
+#elif __cplusplus >= 201103L && __STDCPP_WANT_MATH_SPEC_FUNCS__ != 0
+// For C++11 and C++14 they are in namespace std when requested.
+# define _GLIBCXX_USE_STD_SPEC_FUNCS 1
+#endif
 
 // The remainder of the prewritten config is automatic; all the
 // user hooks are listed above.
@@ -517,5 +597,41 @@ namespace std
 // For example, <windows.h> is known to #define min and max as macros...
 #undef min
 #undef max
+
+// N.B. these _GLIBCXX_USE_C99_XXX macros are defined unconditionally
+// so they should be tested with #if not with #ifdef.
+#if __cplusplus >= 201103L
+# ifndef _GLIBCXX_USE_C99_MATH
+#  define _GLIBCXX_USE_C99_MATH _GLIBCXX11_USE_C99_MATH
+# endif
+# ifndef _GLIBCXX_USE_C99_COMPLEX
+# define _GLIBCXX_USE_C99_COMPLEX _GLIBCXX11_USE_C99_COMPLEX
+# endif
+# ifndef _GLIBCXX_USE_C99_STDIO
+# define _GLIBCXX_USE_C99_STDIO _GLIBCXX11_USE_C99_STDIO
+# endif
+# ifndef _GLIBCXX_USE_C99_STDLIB
+# define _GLIBCXX_USE_C99_STDLIB _GLIBCXX11_USE_C99_STDLIB
+# endif
+# ifndef _GLIBCXX_USE_C99_WCHAR
+# define _GLIBCXX_USE_C99_WCHAR _GLIBCXX11_USE_C99_WCHAR
+# endif
+#else
+# ifndef _GLIBCXX_USE_C99_MATH
+#  define _GLIBCXX_USE_C99_MATH _GLIBCXX98_USE_C99_MATH
+# endif
+# ifndef _GLIBCXX_USE_C99_COMPLEX
+# define _GLIBCXX_USE_C99_COMPLEX _GLIBCXX98_USE_C99_COMPLEX
+# endif
+# ifndef _GLIBCXX_USE_C99_STDIO
+# define _GLIBCXX_USE_C99_STDIO _GLIBCXX98_USE_C99_STDIO
+# endif
+# ifndef _GLIBCXX_USE_C99_STDLIB
+# define _GLIBCXX_USE_C99_STDLIB _GLIBCXX98_USE_C99_STDLIB
+# endif
+# ifndef _GLIBCXX_USE_C99_WCHAR
+# define _GLIBCXX_USE_C99_WCHAR _GLIBCXX98_USE_C99_WCHAR
+# endif
+#endif
 
 // End of prewritten config; the settings discovered at configure time follow.
