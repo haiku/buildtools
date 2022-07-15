@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"reflect"
@@ -461,6 +460,15 @@ func TestWriter(t *testing.T) {
 			testHeader{Header{Name: strings.Repeat("123456789/", 30)}, nil},
 			testClose{nil},
 		},
+	}, {
+		// Automatically promote zero value of Typeflag depending on the name.
+		file: "testdata/file-and-dir.tar",
+		tests: []testFnc{
+			testHeader{Header{Name: "small.txt", Size: 5}, nil},
+			testWrite{"Kilts", 5, nil},
+			testHeader{Header{Name: "dir/"}, nil},
+			testClose{nil},
+		},
 	}}
 
 	equalError := func(x, y error) bool {
@@ -511,7 +519,7 @@ func TestWriter(t *testing.T) {
 			}
 
 			if v.file != "" {
-				want, err := ioutil.ReadFile(v.file)
+				want, err := os.ReadFile(v.file)
 				if err != nil {
 					t.Fatalf("ReadFile() = %v, want nil", err)
 				}
@@ -809,8 +817,8 @@ func TestValidTypeflagWithPAXHeader(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to read header: %s", err)
 		}
-		if header.Typeflag != 0 {
-			t.Fatalf("Typeflag should've been 0, found %d", header.Typeflag)
+		if header.Typeflag != TypeReg {
+			t.Fatalf("Typeflag should've been %d, found %d", TypeReg, header.Typeflag)
 		}
 	}
 }

@@ -1,5 +1,5 @@
 /* Dwarf2 assembler output helper routines.
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -46,6 +46,52 @@ along with GCC; see the file COPYING3.  If not see
 void
 dw2_assemble_integer (int size, rtx x)
 {
+  if (size == 2 * (int) DWARF2_ADDR_SIZE && !CONST_SCALAR_INT_P (x))
+    {
+      /* On 32-bit targets with -gdwarf64, DImode values with
+	 relocations usually result in assembler errors.  Assume
+	 all such values are positive and emit the relocation only
+	 in the least significant half.  */
+      const char *op = integer_asm_op (DWARF2_ADDR_SIZE, FALSE);
+      if (BYTES_BIG_ENDIAN)
+	{
+	  if (op)
+	    {
+	      fputs (op, asm_out_file);
+	      fprint_whex (asm_out_file, 0);
+	      fputs (", ", asm_out_file);
+	      output_addr_const (asm_out_file, x);
+	    }
+	  else
+	    {
+	      assemble_integer (const0_rtx, DWARF2_ADDR_SIZE,
+				BITS_PER_UNIT, 1);
+	      putc ('\n', asm_out_file);
+	      assemble_integer (x, DWARF2_ADDR_SIZE,
+				BITS_PER_UNIT, 1);
+	    }
+	}
+      else
+	{
+	  if (op)
+	    {
+	      fputs (op, asm_out_file);
+	      output_addr_const (asm_out_file, x);
+	      fputs (", ", asm_out_file);
+	      fprint_whex (asm_out_file, 0);
+	    }
+	  else
+	    {
+	      assemble_integer (x, DWARF2_ADDR_SIZE,
+				BITS_PER_UNIT, 1);
+	      putc ('\n', asm_out_file);
+	      assemble_integer (const0_rtx, DWARF2_ADDR_SIZE,
+				BITS_PER_UNIT, 1);
+	    }
+	}
+      return;
+    }
+
   const char *op = integer_asm_op (size, FALSE);
 
   if (op)
@@ -811,7 +857,17 @@ dw2_asm_output_delta_uleb128 (const char *lab1 ATTRIBUTE_UNUSED,
   fputs ("\t.uleb128 ", asm_out_file);
   assemble_name (asm_out_file, lab1);
   putc ('-', asm_out_file);
-  assemble_name (asm_out_file, lab2);
+  /* dwarf2out.c might give us a label expression (e.g. .LVL548-1)
+     as second argument.  If so, make it a subexpression, to make
+     sure the substraction is done in the right order.  */
+  if (strchr (lab2, '-') != NULL)
+    {
+      putc ('(', asm_out_file);
+      assemble_name (asm_out_file, lab2);
+      putc (')', asm_out_file);
+    }
+  else
+    assemble_name (asm_out_file, lab2);
 
   if (flag_debug_asm && comment)
     {

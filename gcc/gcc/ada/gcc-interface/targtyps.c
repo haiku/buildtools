@@ -6,7 +6,7 @@
  *                                                                          *
  *                                  Body                                    *
  *                                                                          *
- *          Copyright (C) 1992-2015, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2020, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -29,6 +29,7 @@
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
+#include "target.h"
 #include "tree.h"
 
 #include "ada.h"
@@ -95,6 +96,15 @@ get_target_long_long_size (void)
 }
 
 Pos
+get_target_long_long_long_size (void)
+{
+  if (targetm.scalar_mode_supported_p (TImode))
+    return GET_MODE_BITSIZE (TImode);
+  else
+    return LONG_LONG_TYPE_SIZE;
+}
+
+Pos
 get_target_pointer_size (void)
 {
   return POINTER_SIZE;
@@ -132,7 +142,7 @@ get_target_maximum_default_alignment (void)
 #ifdef MALLOC_OBSERVABLE_ALIGNMENT
 #define MALLOC_ALIGNMENT MALLOC_OBSERVABLE_ALIGNMENT
 #else
-#define MALLOC_OBSERVABLE_ALIGNMENT (2 * LONG_TYPE_SIZE)
+#define MALLOC_OBSERVABLE_ALIGNMENT (2 * POINTER_SIZE)
 #define MALLOC_ALIGNMENT \
   MAX (MALLOC_ABI_ALIGNMENT, MALLOC_OBSERVABLE_ALIGNMENT)
 #endif

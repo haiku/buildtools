@@ -1,7 +1,7 @@
 # configure.ac for libdecnumber			-*- Autoconf -*-
 # Process this file with autoconf to generate a configuration script.
 
-# Copyright (C) 2005-2018 Free Software Foundation, Inc.
+# Copyright (C) 2005-2021 Free Software Foundation, Inc.
 
 # This file is part of GCC.
 
@@ -19,7 +19,6 @@
 # along with GCC; see the file COPYING3.  If not see
 # <http://www.gnu.org/licenses/>.
 
-AC_PREREQ(2.64)
 AC_INIT(libdecnumber, [ ], gcc-bugs@gcc.gnu.org, libdecnumber)
 AC_CONFIG_SRCDIR(decNumber.h)
 AC_CONFIG_MACRO_DIR(../config)
@@ -29,6 +28,7 @@ AC_CONFIG_AUX_DIR(..)
 AC_PROG_MAKE_SET
 AC_PROG_CC
 AC_PROG_RANLIB
+AC_CHECK_TOOL(AR, ar)
 
 MISSING=`cd $ac_aux_dir && ${PWDCMD-pwd}`/missing
 AC_CHECK_PROGS([ACLOCAL], [aclocal], [$MISSING aclocal])
@@ -103,6 +103,18 @@ AC_ARG_ENABLE(host-shared,
 		[build host code as shared libraries])],
 [PICFLAG=-fPIC], [PICFLAG=])
 AC_SUBST(PICFLAG)
+
+# Enable Intel CET on Intel CET enabled host if jit is enabled.
+GCC_CET_HOST_FLAGS(CET_HOST_FLAGS)
+case x$enable_languages in
+*jit*)
+  ;;
+*)
+  CET_HOST_FLAGS=
+  ;;
+esac
+AC_SUBST(CET_HOST_FLAGS)
+
 
 # Output.
 

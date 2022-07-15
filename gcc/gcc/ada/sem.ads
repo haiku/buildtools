@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -32,7 +32,7 @@
 
 --    Analysis     implements the bulk of semantic analysis such as
 --                 name analysis and type resolution for declarations,
---                 instructions and expressions.  The main routine
+--                 instructions and expressions. The main routine
 --                 driving this process is procedure Analyze given below.
 --                 This analysis phase is really a bottom up pass that is
 --                 achieved during the recursive traversal performed by the
@@ -51,7 +51,7 @@
 --                 recursive calls to itself to resolve operands.
 
 --    Expansion    if we are not generating code this phase is a no-op.
---                 otherwise this phase expands, i.e. transforms, original
+--                 Otherwise this phase expands, i.e. transforms, original
 --                 declaration, expressions or instructions into simpler
 --                 structures that can be handled by the back-end. This
 --                 phase is also in charge of generating code which is
@@ -72,7 +72,7 @@
 --  up. For instructions and declarations, before the call to the Analyze
 --  routine completes we perform expansion since at that point we have all
 --  semantic information needed. For expression nodes, after the call to
---  Analysis terminates we invoke the Resolve routine to transmit top-down
+--  Analyze terminates we invoke the Resolve routine to transmit top-down
 --  the type that was gathered by Analyze which will resolve possible
 --  ambiguities in the expression. Just before the call to Resolve
 --  terminates, the expression can be expanded since all the semantic
@@ -138,7 +138,7 @@
 --  this is the one case where this model falls down. Here is how we patch
 --  it up without causing too much distortion to our basic model.
 
---  A switch (In_Spec_Expression) is set to show that we are in the initial
+--  A flag (In_Spec_Expression) is set to show that we are in the initial
 --  occurrence of a default expression. The analyzer is then called on this
 --  expression with the switch set true. Analysis and resolution proceed almost
 --  as usual, except that Freeze_Expression will not freeze non-static
@@ -161,7 +161,7 @@
 --  code for the pragma is generated.
 
 ------------------
--- Pre-Analysis --
+-- Preanalysis --
 ------------------
 
 --  For certain kind of expressions, such as aggregates, we need to defer
@@ -178,7 +178,7 @@
 --  needs to be called 100 times.)
 
 --  The reason this mechanism does not work is that the expanded code for the
---  children is typically inserted above the parent and thus when the father
+--  children is typically inserted above the parent and thus when the parent
 --  gets expanded no re-evaluation takes place. For instance in the case of
 --  aggregates if "new Thing (Function_Call)" is expanded before the aggregate
 --  the expanded code will be placed outside of the aggregate and when
@@ -186,17 +186,17 @@
 --  expanded code for "new Thing (Function_Call)".
 
 --  To remedy this situation we introduce a flag that signals whether we want a
---  full analysis (i.e. expansion is enabled) or a pre-analysis which performs
+--  full analysis (i.e. expansion is enabled) or a preanalysis which performs
 --  Analysis and Resolution but no expansion.
 
---  After the complete pre-analysis of an expression has been carried out we
+--  After the complete preanalysis of an expression has been carried out we
 --  can transform the expression and then carry out the full three stage
 --  (Analyze-Resolve-Expand) cycle on the transformed expression top-down so
 --  that the expansion of inner expressions happens inside the newly generated
 --  node for the parent expression.
 
 --  Note that the difference between processing of default expressions and
---  pre-analysis of other expressions is that we do carry out freezing in
+--  preanalysis of other expressions is that we do carry out freezing in
 --  the latter but not in the former (except for static scalar expressions).
 --  The routine that performs preanalysis and corresponding resolution is
 --  called Preanalyze_And_Resolve and is in Sem_Res.
@@ -214,12 +214,12 @@ package Sem is
    -----------------------------
 
    Full_Analysis : Boolean := True;
-   --  Switch to indicate if we are doing a full analysis or a pre-analysis.
+   --  Switch to indicate if we are doing a full analysis or a preanalysis.
    --  In normal analysis mode (Analysis-Expansion for instructions or
    --  declarations) or (Analysis-Resolution-Expansion for expressions) this
    --  flag is set. Note that if we are not generating code the expansion phase
    --  merely sets the Analyzed flag to True in this case. If we are in
-   --  Pre-Analysis mode (see above) this flag is set to False then the
+   --  Preanalysis mode (see above) this flag is set to False then the
    --  expansion phase is skipped.
    --
    --  When this flag is False the flag Expander_Active is also False (the
@@ -245,13 +245,20 @@ package Sem is
 
    In_Assertion_Expr : Nat := 0;
    --  This is set non-zero if we are within the expression of an assertion
-   --  pragma or aspect. It is a counter which is incremented at the start of
-   --  expanding such an expression, and decremented on completion of expanding
-   --  that expression. Probably a boolean would be good enough, since we think
-   --  that such expressions cannot nest, but that might not be true in the
-   --  future (e.g. if let expressions are added to Ada) so we prepare for that
-   --  future possibility by making it a counter. As with In_Spec_Expression,
-   --  it must be recursively saved and restored for a Semantics call.
+   --  pragma or aspect. It is incremented at the start of expanding such an
+   --  expression, and decremented on completion of expanding that
+   --  expression. This needs to be a counter, rather than a Boolean, because
+   --  assertions can contain declare_expressions, which can contain
+   --  assertions. As with In_Spec_Expression, it must be recursively saved and
+   --  restored for a Semantics call.
+
+   In_Declare_Expr : Nat := 0;
+   --  This is set non-zero if we are within a declare_expression. It is
+   --  incremented at the start of expanding such an expression, and
+   --  decremented on completion of expanding that expression. This needs to be
+   --  a counter, rather than a Boolean, because declare_expressions can
+   --  nest. As with In_Spec_Expression, it must be recursively saved and
+   --  restored for a Semantics call.
 
    In_Compile_Time_Warning_Or_Error : Boolean := False;
    --  Switch to indicate that we are validating a pragma Compile_Time_Warning
@@ -275,7 +282,6 @@ package Sem is
    --  flag is False to disable any code expansion (see package Expander). Only
    --  the generic processing can modify the status of this flag, any other
    --  client should regard it as read-only.
-   --  Probably should be called Inside_A_Generic_Template ???
 
    Inside_Freezing_Actions : Nat := 0;
    --  Flag indicating whether we are within a call to Expand_N_Freeze_Actions.
@@ -285,6 +291,11 @@ package Sem is
    --  indications from entities in the current scope. Only the expansion of
    --  freezing nodes can modify the status of this flag, any other client
    --  should regard it as read-only.
+
+   Inside_Preanalysis_Without_Freezing : Nat := 0;
+   --  Flag indicating whether we are preanalyzing an expression performing no
+   --  freezing. Non-zero means we are inside (it is actually a level counter
+   --  to deal with nested calls).
 
    Unloaded_Subunits : Boolean := False;
    --  This flag is set True if we have subunits that are not loaded. This
@@ -660,6 +671,13 @@ package Sem is
    --  Suppress argument is present, then the analysis is done with the
    --  specified check suppressed (can be All_Checks to suppress all checks).
 
+   procedure Insert_Before_First_Source_Declaration
+     (Stmt  : Node_Id;
+      Decls : List_Id);
+   --  Insert node Stmt before the first source declaration of the related
+   --  subprogram's body. If no such declaration exists, Stmt becomes the last
+   --  declaration.
+
    function External_Ref_In_Generic (E : Entity_Id) return Boolean;
    --  Return True if we are in the context of a generic and E is
    --  external (more global) to it.
@@ -688,9 +706,9 @@ package Sem is
    --  Determine whether preanalysis is active at the point of invocation
 
    procedure Preanalyze (N : Node_Id);
-   --  Performs a pre-analysis of node N. During pre-analysis no expansion is
-   --  carried out for N or its children. For more info on pre-analysis read
-   --  the spec of Sem.
+   --  Performs a preanalysis of node N. During preanalysis no expansion is
+   --  carried out for N or its children. See above for more info on
+   --  preanalysis.
 
    generic
       with procedure Action (Item : Node_Id);

@@ -9,13 +9,13 @@ import (
 	"syscall"
 )
 
-// BUG(mikio): On NaCl and Plan 9, the ReadMsgUDP and
+// BUG(mikio): On Plan 9, the ReadMsgUDP and
 // WriteMsgUDP methods of UDPConn are not implemented.
 
 // BUG(mikio): On Windows, the File method of UDPConn is not
 // implemented.
 
-// BUG(mikio): On NaCl, the ListenMulticastUDP function is not
+// BUG(mikio): On JS, methods and functions related to UDPConn are not
 // implemented.
 
 // UDPAddr represents the address of a UDP end point.
@@ -208,7 +208,8 @@ func DialUDP(network string, laddr, raddr *UDPAddr) (*UDPConn, error) {
 	if raddr == nil {
 		return nil, &OpError{Op: "dial", Net: network, Source: laddr.opAddr(), Addr: nil, Err: errMissingAddress}
 	}
-	c, err := dialUDP(context.Background(), network, laddr, raddr)
+	sd := &sysDialer{network: network, address: raddr.String()}
+	c, err := sd.dialUDP(context.Background(), laddr, raddr)
 	if err != nil {
 		return nil, &OpError{Op: "dial", Net: network, Source: laddr.opAddr(), Addr: raddr.opAddr(), Err: err}
 	}
@@ -233,7 +234,8 @@ func ListenUDP(network string, laddr *UDPAddr) (*UDPConn, error) {
 	if laddr == nil {
 		laddr = &UDPAddr{}
 	}
-	c, err := listenUDP(context.Background(), network, laddr)
+	sl := &sysListener{network: network, address: laddr.String()}
+	c, err := sl.listenUDP(context.Background(), laddr)
 	if err != nil {
 		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: laddr.opAddr(), Err: err}
 	}
@@ -257,6 +259,9 @@ func ListenUDP(network string, laddr *UDPAddr) (*UDPConn, error) {
 // ListenMulticastUDP is just for convenience of simple, small
 // applications. There are golang.org/x/net/ipv4 and
 // golang.org/x/net/ipv6 packages for general purpose uses.
+//
+// Note that ListenMulticastUDP will set the IP_MULTICAST_LOOP socket option
+// to 0 under IPPROTO_IP, to disable loopback of multicast packets.
 func ListenMulticastUDP(network string, ifi *Interface, gaddr *UDPAddr) (*UDPConn, error) {
 	switch network {
 	case "udp", "udp4", "udp6":
@@ -266,7 +271,8 @@ func ListenMulticastUDP(network string, ifi *Interface, gaddr *UDPAddr) (*UDPCon
 	if gaddr == nil || gaddr.IP == nil {
 		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: gaddr.opAddr(), Err: errMissingAddress}
 	}
-	c, err := listenMulticastUDP(context.Background(), network, ifi, gaddr)
+	sl := &sysListener{network: network, address: gaddr.String()}
+	c, err := sl.listenMulticastUDP(context.Background(), ifi, gaddr)
 	if err != nil {
 		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: gaddr.opAddr(), Err: err}
 	}

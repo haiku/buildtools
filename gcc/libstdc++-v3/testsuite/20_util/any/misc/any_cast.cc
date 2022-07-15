@@ -1,7 +1,6 @@
-// { dg-options "-std=gnu++17" }
-// { dg-do run }
+// { dg-do run { target c++17 } }
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -20,6 +19,7 @@
 
 #include <any>
 #include <string>
+#include <utility>
 #include <cstring>
 #include <testsuite_hooks.h>
 
@@ -36,7 +36,7 @@ void test01()
   any x(5);                                   // x holds int
   VERIFY(any_cast<int>(x) == 5);              // cast to value
   any_cast<int&>(x) = 10;                     // cast to reference
-  VERIFY(any_cast<int>(x) == 10); 
+  VERIFY(any_cast<int>(x) == 10);
 
   x = "Meow";                                 // x holds const char*
   VERIFY(strcmp(any_cast<const char*>(x), "Meow") == 0);
@@ -45,7 +45,7 @@ void test01()
 
   x = string("Meow");                         // x holds string
   string s, s2("Jane");
-  s = move(any_cast<string&>(x));             // move from any 
+  s = move(any_cast<string&>(x));             // move from any
   VERIFY(s == "Meow");
   any_cast<string&>(x) = move(s2);            // move to any
   VERIFY(any_cast<const string&>(x) == "Jane");
@@ -121,6 +121,54 @@ void test05()
   VERIFY( p == nullptr );
 }
 
+void test06()
+{
+  // The contained value of a std::any is always an object type,
+  // but std::any_cast does not forbid checking for function types.
+
+  any a(1);
+  void (*p1)() = any_cast<void()>(&a);
+  VERIFY( p1 == nullptr );
+  int (*p2)(int) = any_cast<int(int)>(&a);
+  VERIFY( p2 == nullptr );
+  int (*p3)() = any_cast<int()>(&std::as_const(a));
+  VERIFY( p3 == nullptr );
+
+  try {
+    any_cast<int(&)()>(a);
+    VERIFY( false );
+  } catch (const std::bad_any_cast&) {
+  }
+
+  try {
+    any_cast<int(&)()>(std::move(a));
+    VERIFY( false );
+  } catch (const std::bad_any_cast&) {
+  }
+
+  try {
+    any_cast<int(&)()>(std::as_const(a));
+    VERIFY( false );
+  } catch (const std::bad_any_cast&) {
+  }
+}
+
+void test07()
+{
+  int arr[3];
+  any a(arr);
+  VERIFY( a.type() == typeid(int*) );	// contained value is decayed
+
+  int (*p1)[3] = any_cast<int[3]>(&a);
+  VERIFY( a.type() != typeid(int[3]) ); // so any_cast should return nullptr
+  VERIFY( p1 == nullptr );
+  int (*p2)[] = any_cast<int[]>(&a);
+  VERIFY( a.type() != typeid(int[]) );	// so any_cast should return nullptr
+  VERIFY( p2 == nullptr );
+  const int (*p3)[] = any_cast<int[]>(&std::as_const(a));
+  VERIFY( p3 == nullptr );
+}
+
 int main()
 {
   test01();
@@ -128,4 +176,6 @@ int main()
   test03();
   test04();
   test05();
+  test06();
+  test07();
 }

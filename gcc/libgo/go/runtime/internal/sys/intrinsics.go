@@ -32,6 +32,11 @@ func Ctz32(x uint32) int {
 	return int(builtinCtz32(x))
 }
 
+// Ctz8 returns the number of trailing zero bits in x; the result is 8 for x == 0.
+func Ctz8(x uint8) int {
+	return int(ntz8tab[x])
+}
+
 //extern __builtin_bswap64
 func bswap64(uint64) uint64
 

@@ -7,7 +7,7 @@
 
 
 @copying
-Copyright @copyright{} 2006-2018 Free Software Foundation, Inc.
+Copyright @copyright{} 2006-2021 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -68,13 +68,13 @@ Boston, MA 02110-1301, USA@*
 @page
 
 
-@node Top
+@node Top, Enabling OpenMP
 @top Introduction
 @cindex Introduction
 
 This manual documents the usage of libgomp, the GNU Offloading and
 Multi Processing Runtime Library.  This includes the GNU
-implementation of the @uref{http://www.openmp.org, OpenMP} Application
+implementation of the @uref{https://www.openmp.org, OpenMP} Application
 Programming Interface (API) for multi-platform shared-memory parallel
 programming in C/C++ and Fortran, and the GNU implementation of the
 @uref{https://www.openacc.org, OpenACC} Application Programming
@@ -95,10 +95,12 @@ changed to GNU Offloading and Multi Processing Runtime Library.
 @comment
 @menu
 * Enabling OpenMP::            How to enable OpenMP for your applications.
-* Runtime Library Routines::   The OpenMP runtime application programming 
+* OpenMP Runtime Library Routines: Runtime Library Routines.
+                               The OpenMP runtime application programming
                                interface.
-* Environment Variables::      Influencing runtime behavior with environment 
-                               variables.
+* OpenMP Environment Variables: Environment Variables.
+                               Influencing OpenMP runtime behavior with
+                               environment variables.
 * Enabling OpenACC::           How to enable OpenACC for your
                                applications.
 * OpenACC Runtime Library Routines:: The OpenACC runtime application
@@ -109,6 +111,7 @@ changed to GNU Offloading and Multi Processing Runtime Library.
                                asynchronous operations.
 * OpenACC Library Interoperability:: OpenACC library interoperability with the
                                NVIDIA CUBLAS library.
+* OpenACC Profiling Interface::
 * The libgomp ABI::            Notes on the external ABI presented by libgomp.
 * Reporting Bugs::             How to report bugs in the GNU Offloading and
                                Multi Processing Runtime Library.
@@ -139,16 +142,16 @@ arranges for automatic linking of the OpenMP runtime library
 (@ref{Runtime Library Routines}).
 
 A complete description of all OpenMP directives accepted may be found in 
-the @uref{http://www.openmp.org, OpenMP Application Program Interface} manual,
+the @uref{https://www.openmp.org, OpenMP Application Program Interface} manual,
 version 4.5.
 
 
 @c ---------------------------------------------------------------------
-@c Runtime Library Routines
+@c OpenMP Runtime Library Routines
 @c ---------------------------------------------------------------------
 
 @node Runtime Library Routines
-@chapter Runtime Library Routines
+@chapter OpenMP Runtime Library Routines
 
 The runtime routines described here are defined by Section 3 of the OpenMP
 specification in version 4.5.  The routines are structured in following
@@ -163,8 +166,9 @@ linkage, and do not throw exceptions.
 * omp_get_cancellation::        Whether cancellation support is enabled
 * omp_get_default_device::      Get the default device for target regions
 * omp_get_dynamic::             Dynamic teams setting
+* omp_get_initial_device::      Device number of host device
 * omp_get_level::               Number of parallel regions
-* omp_get_max_active_levels::   Maximum number of active regions
+* omp_get_max_active_levels::   Current maximum number of active regions
 * omp_get_max_task_priority::   Maximum task priority value that can be set
 * omp_get_max_threads::         Maximum number of threads of parallel region
 * omp_get_nested::              Nested parallel regions
@@ -174,6 +178,7 @@ linkage, and do not throw exceptions.
 * omp_get_num_threads::         Size of the active team
 * omp_get_proc_bind::           Whether theads may be moved between CPUs
 * omp_get_schedule::            Obtain the runtime scheduling method
+* omp_get_supported_active_levels:: Maximum number of active regions supported
 * omp_get_team_num::            Get team number
 * omp_get_team_size::           Number of threads in a team
 * omp_get_thread_limit::        Maximum number of threads
@@ -205,6 +210,10 @@ Portable, thread-based, wall clock timer.
 
 * omp_get_wtick::            Get timer precision.
 * omp_get_wtime::            Elapsed wall clock time.
+
+Support for event objects.
+
+* omp_fulfill_event::        Fulfill and destroy an OpenMP event.
 @end menu
 
 
@@ -230,7 +239,7 @@ which enclose the calling call.
 @ref{omp_get_level}, @ref{omp_get_max_active_levels}, @ref{omp_set_max_active_levels}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.20.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.20.
 @end table
 
 
@@ -259,7 +268,7 @@ zero to @code{omp_get_level} -1 is returned; if @var{level} is
 @ref{omp_get_level}, @ref{omp_get_thread_num}, @ref{omp_get_team_size}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.18.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.18.
 @end table
 
 
@@ -287,7 +296,7 @@ deactivated.
 @ref{OMP_CANCELLATION}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.9.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.9.
 @end table
 
 
@@ -312,7 +321,7 @@ Get the default device for target regions without device clause.
 @ref{OMP_DEFAULT_DEVICE}, @ref{omp_set_default_device}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.30.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.30.
 @end table
 
 
@@ -344,7 +353,34 @@ disabled by default.
 @ref{omp_set_dynamic}, @ref{OMP_DYNAMIC}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.8.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.8.
+@end table
+
+
+
+@node omp_get_initial_device
+@section @code{omp_get_initial_device} -- Return device number of initial device
+@table @asis
+@item @emph{Description}:
+This function returns a device number that represents the host device.
+For OpenMP 5.1, this must be equal to the value returned by the
+@code{omp_get_num_devices} function.
+
+@item @emph{C/C++}
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{int omp_get_initial_device(void);}
+@end multitable
+
+@item @emph{Fortran}:
+@multitable @columnfractions .20 .80
+@item @emph{Interface}: @tab @code{integer function omp_get_initial_device()}
+@end multitable
+
+@item @emph{See also}:
+@ref{omp_get_num_devices}
+
+@item @emph{Reference}:
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.35.
 @end table
 
 
@@ -370,13 +406,13 @@ which enclose the calling call.
 @ref{omp_get_active_level}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.17.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.17.
 @end table
 
 
 
 @node omp_get_max_active_levels
-@section @code{omp_get_max_active_levels} -- Maximum number of active regions
+@section @code{omp_get_max_active_levels} -- Current maximum number of active regions
 @table @asis
 @item @emph{Description}:
 This function obtains the maximum allowed number of nested, active parallel regions.
@@ -395,7 +431,7 @@ This function obtains the maximum allowed number of nested, active parallel regi
 @ref{omp_set_max_active_levels}, @ref{omp_get_active_level}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.16.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.16.
 @end table
 
 
@@ -417,7 +453,7 @@ This function obtains the maximum allowed priority number for tasks.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.29.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.29.
 @end table
 
 
@@ -442,7 +478,7 @@ that does not use the clause @code{num_threads}.
 @ref{omp_set_num_threads}, @ref{omp_set_dynamic}, @ref{omp_get_thread_limit}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.3.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.3.
 @end table
 
 
@@ -455,10 +491,20 @@ This function returns @code{true} if nested parallel regions are
 enabled, @code{false} otherwise.  Here, @code{true} and @code{false}
 represent their language-specific counterparts.
 
-Nested parallel regions may be initialized at startup by the 
-@env{OMP_NESTED} environment variable or at runtime using
-@code{omp_set_nested}.  If undefined, nested parallel regions are
-disabled by default.
+The state of nested parallel regions at startup depends on several
+environment variables.  If @env{OMP_MAX_ACTIVE_LEVELS} is defined
+and is set to greater than one, then nested parallel regions will be
+enabled.  If not defined, then the value of the @env{OMP_NESTED}
+environment variable will be followed if defined.  If neither are
+defined, then if either @env{OMP_NUM_THREADS} or @env{OMP_PROC_BIND}
+are defined with a list of more than one value, then nested parallel
+regions are enabled.  If none of these are defined, then nested parallel
+regions are disabled by default.
+
+Nested parallel regions can be enabled or disabled at runtime using
+@code{omp_set_nested}, or by setting the maximum number of nested
+regions with @code{omp_set_max_active_levels} to one to disable, or
+above one to enable.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
@@ -471,10 +517,11 @@ disabled by default.
 @end multitable
 
 @item @emph{See also}:
-@ref{omp_set_nested}, @ref{OMP_NESTED}
+@ref{omp_set_max_active_levels}, @ref{omp_set_nested},
+@ref{OMP_MAX_ACTIVE_LEVELS}, @ref{OMP_NESTED}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.11.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.11.
 @end table
 
 
@@ -496,7 +543,7 @@ Returns the number of target devices.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.31.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.31.
 @end table
 
 
@@ -518,7 +565,7 @@ Returns the number of processors online on that device.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.5.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.5.
 @end table
 
 
@@ -540,7 +587,7 @@ Returns the number of teams in the current team region.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.32.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.32.
 @end table
 
 
@@ -573,7 +620,7 @@ one thread per CPU online is used.
 @ref{omp_get_max_threads}, @ref{omp_set_num_threads}, @ref{OMP_NUM_THREADS}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.2.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.2.
 @end table
 
 
@@ -601,7 +648,7 @@ set via @env{OMP_PROC_BIND}.  Possible values are @code{omp_proc_bind_false},
 @ref{OMP_PROC_BIND}, @ref{OMP_PLACES}, @ref{GOMP_CPU_AFFINITY},
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.22.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.22.
 @end table
 
 
@@ -631,7 +678,32 @@ set to the value @code{omp_sched_static}, @code{omp_sched_dynamic},
 @ref{omp_set_schedule}, @ref{OMP_SCHEDULE}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.13.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.13.
+@end table
+
+
+@node omp_get_supported_active_levels
+@section @code{omp_get_supported_active_levels} -- Maximum number of active regions supported
+@table @asis
+@item @emph{Description}:
+This function returns the maximum number of nested, active parallel regions
+supported by this implementation.
+
+@item @emph{C/C++}
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{int omp_get_supported_active_levels(void);}
+@end multitable
+
+@item @emph{Fortran}:
+@multitable @columnfractions .20 .80
+@item @emph{Interface}: @tab @code{integer function omp_get_supported_active_levels()}
+@end multitable
+
+@item @emph{See also}:
+@ref{omp_get_max_active_levels}, @ref{omp_set_max_active_levels}
+
+@item @emph{Reference}:
+@uref{https://www.openmp.org, OpenMP specification v5.0}, Section 3.2.15.
 @end table
 
 
@@ -653,7 +725,7 @@ Returns the team number of the calling thread.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.33.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.33.
 @end table
 
 
@@ -683,7 +755,7 @@ to @code{omp_get_num_threads}.
 @ref{omp_get_num_threads}, @ref{omp_get_level}, @ref{omp_get_ancestor_thread_num}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.19.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.19.
 @end table
 
 
@@ -708,7 +780,7 @@ Return the maximum number of threads of the program.
 @ref{omp_get_max_threads}, @ref{OMP_THREAD_LIMIT}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.14.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.14.
 @end table
 
 
@@ -737,7 +809,7 @@ value of the master thread of a team is always 0.
 @ref{omp_get_num_threads}, @ref{omp_get_ancestor_thread_num}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.4.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.4.
 @end table
 
 
@@ -761,7 +833,7 @@ their language-specific counterparts.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.6.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.6.
 @end table
 
 
@@ -784,7 +856,7 @@ and @code{false} represent their language-specific counterparts.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.21.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.21.
 @end table
 
 
@@ -808,7 +880,7 @@ their language-specific counterparts.
 @end multitable
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.34.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.34.
 @end table
 
 
@@ -835,7 +907,7 @@ shall be a nonnegative device number.
 @ref{OMP_DEFAULT_DEVICE}, @ref{omp_get_default_device}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.29.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.29.
 @end table
 
 
@@ -864,7 +936,7 @@ adjustment of team sizes and @code{false} disables it.
 @ref{OMP_DYNAMIC}, @ref{omp_get_dynamic}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.7.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.7.
 @end table
 
 
@@ -874,7 +946,8 @@ adjustment of team sizes and @code{false} disables it.
 @table @asis
 @item @emph{Description}:
 This function limits the maximum allowed number of nested, active
-parallel regions.
+parallel regions.  @var{max_levels} must be less or equal to
+the value returned by @code{omp_get_supported_active_levels}.
 
 @item @emph{C/C++}
 @multitable @columnfractions .20 .80
@@ -888,10 +961,11 @@ parallel regions.
 @end multitable
 
 @item @emph{See also}:
-@ref{omp_get_max_active_levels}, @ref{omp_get_active_level}
+@ref{omp_get_max_active_levels}, @ref{omp_get_active_level},
+@ref{omp_get_supported_active_levels}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.15.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.15.
 @end table
 
 
@@ -905,6 +979,10 @@ are allowed to create new teams.  The function takes the language-specific
 equivalent of @code{true} and @code{false}, where @code{true} enables 
 dynamic adjustment of team sizes and @code{false} disables it.
 
+Enabling nested parallel regions will also set the maximum number of
+active nested regions to the maximum supported.  Disabling nested parallel
+regions will set the maximum number of active nested regions to one.
+
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
 @item @emph{Prototype}: @tab @code{void omp_set_nested(int nested);}
@@ -917,10 +995,11 @@ dynamic adjustment of team sizes and @code{false} disables it.
 @end multitable
 
 @item @emph{See also}:
-@ref{OMP_NESTED}, @ref{omp_get_nested}
+@ref{omp_get_nested}, @ref{omp_set_max_active_levels},
+@ref{OMP_MAX_ACTIVE_LEVELS}, @ref{OMP_NESTED}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.10.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.10.
 @end table
 
 
@@ -948,7 +1027,7 @@ argument of @code{omp_set_num_threads} shall be a positive integer.
 @ref{OMP_NUM_THREADS}, @ref{omp_get_num_threads}, @ref{omp_get_max_threads}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.1.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.1.
 @end table
 
 
@@ -981,7 +1060,7 @@ For @code{omp_sched_auto} the @var{chunk_size} argument is ignored.
 @ref{OMP_SCHEDULE}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.2.12.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.2.12.
 @end table
 
 
@@ -1008,7 +1087,7 @@ an unlocked state.
 @ref{omp_destroy_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.1.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.1.
 @end table
 
 
@@ -1037,7 +1116,7 @@ a deadlock occurs.
 @ref{omp_init_lock}, @ref{omp_test_lock}, @ref{omp_unset_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.4.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.4.
 @end table
 
 
@@ -1067,7 +1146,7 @@ does not block if the lock is not available.  This function returns
 @ref{omp_init_lock}, @ref{omp_set_lock}, @ref{omp_set_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.6.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.6.
 @end table
 
 
@@ -1097,7 +1176,7 @@ again, set the lock to itself.
 @ref{omp_set_lock}, @ref{omp_test_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.5.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.5.
 @end table
 
 
@@ -1124,7 +1203,7 @@ in the unlocked state.
 @ref{omp_init_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.3.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.3.
 @end table
 
 
@@ -1151,7 +1230,7 @@ an unlocked state and the nesting count is set to zero.
 @ref{omp_destroy_nest_lock}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.1.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.1.
 @end table
 
 
@@ -1179,7 +1258,7 @@ nesting count for the lock is incremented.
 @ref{omp_init_nest_lock}, @ref{omp_unset_nest_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.4.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.4.
 @end table
 
 
@@ -1210,7 +1289,7 @@ is returned.  Otherwise, the return value equals zero.
 @ref{omp_init_lock}, @ref{omp_set_lock}, @ref{omp_set_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.6.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.6.
 @end table
 
 
@@ -1240,7 +1319,7 @@ one of them is chosen to, again, set the lock to itself.
 @ref{omp_set_nest_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.5.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.5.
 @end table
 
 
@@ -1267,7 +1346,7 @@ in the unlocked state and its nesting count must equal zero.
 @ref{omp_init_lock}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.3.3.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.3.3.
 @end table
 
 
@@ -1293,7 +1372,7 @@ successive clock ticks.
 @ref{omp_get_wtime}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.4.2.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.4.2.
 @end table
 
 
@@ -1321,17 +1400,47 @@ guaranteed not to change during the execution of the program.
 @ref{omp_get_wtick}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 3.4.1.
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 3.4.1.
+@end table
+
+
+
+@node omp_fulfill_event
+@section @code{omp_fulfill_event} -- Fulfill and destroy an OpenMP event
+@table @asis
+@item @emph{Description}:
+Fulfill the event associated with the event handle argument.  Currently, it
+is only used to fulfill events generated by detach clauses on task
+constructs - the effect of fulfilling the event is to allow the task to
+complete.
+
+The result of calling @code{omp_fulfill_event} with an event handle other
+than that generated by a detach clause is undefined.  Calling it with an
+event handle that has already been fulfilled is also undefined.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{void omp_fulfill_event(omp_event_handle_t event);}
+@end multitable
+
+@item @emph{Fortran}:
+@multitable @columnfractions .20 .80
+@item @emph{Interface}: @tab @code{subroutine omp_fulfill_event(event)}
+@item                   @tab @code{integer (kind=omp_event_handle_kind) :: event}
+@end multitable
+
+@item @emph{Reference}:
+@uref{https://www.openmp.org, OpenMP specification v5.0}, Section 3.5.1.
 @end table
 
 
 
 @c ---------------------------------------------------------------------
-@c Environment Variables
+@c OpenMP Environment Variables
 @c ---------------------------------------------------------------------
 
 @node Environment Variables
-@chapter Environment Variables
+@chapter OpenMP Environment Variables
 
 The environment variables which beginning with @env{OMP_} are defined by
 section 4 of the OpenMP specification in version 4.5, while those
@@ -1350,6 +1459,7 @@ beginning with @env{GOMP_} are GNU extensions.
 * OMP_PLACES::              Specifies on which CPUs the theads should be placed
 * OMP_STACKSIZE::           Set default thread stack size
 * OMP_SCHEDULE::            How threads are scheduled
+* OMP_TARGET_OFFLOAD::      Controls offloading behaviour
 * OMP_THREAD_LIMIT::        Set the maximum number of threads
 * OMP_WAIT_POLICY::         How waiting threads are handled
 * GOMP_CPU_AFFINITY::       Bind threads to specific CPUs
@@ -1372,7 +1482,7 @@ if unset, cancellation is disabled and the @code{cancel} construct is ignored.
 @ref{omp_get_cancellation}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.11
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.11
 @end table
 
 
@@ -1390,7 +1500,7 @@ this information will not be shown.
 
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.12
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.12
 @end table
 
 
@@ -1411,7 +1521,7 @@ device number 0 will be used.
 @ref{omp_get_default_device}, @ref{omp_set_default_device},
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.13
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.13
 @end table
 
 
@@ -1430,7 +1540,7 @@ disabled by default.
 @ref{omp_set_dynamic}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.3
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.3
 @end table
 
 
@@ -1442,13 +1552,17 @@ disabled by default.
 @item @emph{Description}:
 Specifies the initial value for the maximum number of nested parallel
 regions.  The value of this variable shall be a positive integer.
-If undefined, the number of active levels is unlimited.
+If undefined, then if @env{OMP_NESTED} is defined and set to true, or
+if @env{OMP_NUM_THREADS} or @env{OMP_PROC_BIND} are defined and set to
+a list with more than one item, the maximum number of nested parallel
+regions will be initialized to the largest number supported, otherwise
+it will be set to one.
 
 @item @emph{See also}:
-@ref{omp_set_max_active_levels}
+@ref{omp_set_max_active_levels}, @ref{OMP_NESTED}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.9
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.9
 @end table
 
 
@@ -1468,7 +1582,7 @@ integer, and zero is allowed.  If undefined, the default priority is
 @ref{omp_get_max_task_priority}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.14
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.14
 @end table
 
 
@@ -1481,14 +1595,19 @@ integer, and zero is allowed.  If undefined, the default priority is
 @item @emph{Description}:
 Enable or disable nested parallel regions, i.e., whether team members
 are allowed to create new teams.  The value of this environment variable 
-shall be @code{TRUE} or @code{FALSE}.  If undefined, nested parallel 
-regions are disabled by default.
+shall be @code{TRUE} or @code{FALSE}.  If set to @code{TRUE}, the number
+of maximum active nested regions supported will by default be set to the
+maximum supported, otherwise it will be set to one.  If
+@env{OMP_MAX_ACTIVE_LEVELS} is defined, its setting will override this
+setting.  If both are undefined, nested parallel regions are enabled if
+@env{OMP_NUM_THREADS} or @env{OMP_PROC_BINDS} are defined to a list with
+more than one item, otherwise they are disabled by default.
 
 @item @emph{See also}:
-@ref{omp_set_nested}
+@ref{omp_set_max_active_levels}, @ref{omp_set_nested}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.6
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.6
 @end table
 
 
@@ -1501,14 +1620,15 @@ regions are disabled by default.
 @item @emph{Description}:
 Specifies the default number of threads to use in parallel regions.  The 
 value of this variable shall be a comma-separated list of positive integers;
-the value specified the number of threads to use for the corresponding nested
-level.  If undefined one thread per CPU is used.
+the value specifies the number of threads to use for the corresponding nested
+level.  Specifying more than one item in the list will automatically enable
+nesting by default.  If undefined one thread per CPU is used.
 
 @item @emph{See also}:
-@ref{omp_set_num_threads}
+@ref{omp_set_num_threads}, @ref{OMP_NESTED}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.2
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.2
 @end table
 
 
@@ -1526,16 +1646,18 @@ the thread affinity policy for the corresponding nesting level.  With
 @code{MASTER} the worker threads are in the same place partition as the
 master thread.  With @code{CLOSE} those are kept close to the master thread
 in contiguous place partitions.  And with @code{SPREAD} a sparse distribution
-across the place partitions is used.
+across the place partitions is used.  Specifying more than one item in the
+list will automatically enable nesting by default.
 
 When undefined, @env{OMP_PROC_BIND} defaults to @code{TRUE} when
 @env{OMP_PLACES} or @env{GOMP_CPU_AFFINITY} is set and @code{FALSE} otherwise.
 
 @item @emph{See also}:
-@ref{OMP_PLACES}, @ref{GOMP_CPU_AFFINITY}, @ref{omp_get_proc_bind}
+@ref{omp_get_proc_bind}, @ref{GOMP_CPU_AFFINITY},
+@ref{OMP_NESTED}, @ref{OMP_PLACES}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.4
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.4
 @end table
 
 
@@ -1577,7 +1699,7 @@ between CPUs following no placement policy.
 @ref{OMP_DISPLAY_ENV}
 
 @item @emph{Reference}:
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.5
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.5
 @end table
 
 
@@ -1597,7 +1719,7 @@ stack size is left unchanged.  If undefined, the stack size is system
 dependent.
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.7
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.7
 @end table
 
 
@@ -1618,7 +1740,31 @@ dynamic scheduling and a chunk size of 1 is used.
 @ref{omp_set_schedule}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Sections 2.7.1.1 and 4.1
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Sections 2.7.1.1 and 4.1
+@end table
+
+
+
+@node OMP_TARGET_OFFLOAD
+@section @env{OMP_TARGET_OFFLOAD} -- Controls offloading behaviour
+@cindex Environment Variable
+@cindex Implementation specific setting
+@table @asis
+@item @emph{Description}:
+Specifies the behaviour with regard to offloading code to a device.  This
+variable can be set to one of three values - @code{MANDATORY}, @code{DISABLED}
+or @code{DEFAULT}.
+
+If set to @code{MANDATORY}, the program will terminate with an error if
+the offload device is not present or is not supported.  If set to
+@code{DISABLED}, then offloading is disabled and all code will run on the
+host. If set to @code{DEFAULT}, the program will try offloading to the
+device first, then fall back to running code on the host if it cannot.
+
+If undefined, then the program will behave as if @code{DEFAULT} was set.
+
+@item @emph{Reference}:
+@uref{https://www.openmp.org, OpenMP specification v5.0}, Section 6.17
 @end table
 
 
@@ -1636,7 +1782,7 @@ the number of threads is not limited.
 @ref{OMP_NUM_THREADS}, @ref{omp_get_thread_limit}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.10
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.10
 @end table
 
 
@@ -1656,7 +1802,7 @@ before waiting passively.
 @ref{GOMP_SPINCOUNT}
 
 @item @emph{Reference}: 
-@uref{http://www.openmp.org/, OpenMP specification v4.5}, Section 4.8
+@uref{https://www.openmp.org, OpenMP specification v4.5}, Section 4.8
 @end table
 
 
@@ -1724,9 +1870,9 @@ the stack size is system dependent.
 @ref{OMP_STACKSIZE}
 
 @item @emph{Reference}: 
-@uref{http://gcc.gnu.org/ml/gcc-patches/2006-06/msg00493.html, 
+@uref{https://gcc.gnu.org/ml/gcc-patches/2006-06/msg00493.html,
 GCC Patches Mailinglist}, 
-@uref{http://gcc.gnu.org/ml/gcc-patches/2006-06/msg00496.html,
+@uref{https://gcc.gnu.org/ml/gcc-patches/2006-06/msg00496.html,
 GCC Patches Mailinglist}
 @end table
 
@@ -1808,20 +1954,18 @@ pools available and their worker threads run at priority four.
 
 To activate the OpenACC extensions for C/C++ and Fortran, the compile-time 
 flag @option{-fopenacc} must be specified.  This enables the OpenACC directive
-@code{#pragma acc} in C/C++ and @code{!$accp} directives in free form,
+@code{#pragma acc} in C/C++ and @code{!$acc} directives in free form,
 @code{c$acc}, @code{*$acc} and @code{!$acc} directives in fixed form,
 @code{!$} conditional compilation sentinels in free form and @code{c$},
 @code{*$} and @code{!$} sentinels in fixed form, for Fortran.  The flag also
 arranges for automatic linking of the OpenACC runtime library 
 (@ref{OpenACC Runtime Library Routines}).
 
+See @uref{https://gcc.gnu.org/wiki/OpenACC} for more information.
+
 A complete description of all OpenACC directives accepted may be found in 
 the @uref{https://www.openacc.org, OpenACC} Application Programming
-Interface manual, version 2.0.
-
-Note that this is an experimental feature and subject to
-change in future versions of GCC.  See
-@uref{https://gcc.gnu.org/wiki/OpenACC} for more information.
+Interface manual, version 2.6.
 
 
 
@@ -1833,7 +1977,7 @@ change in future versions of GCC.  See
 @chapter OpenACC Runtime Library Routines
 
 The runtime routines described here are defined by section 3 of the OpenACC
-specifications in version 2.0.
+specifications in version 2.6.
 They have C linkage, and do not throw exceptions.
 Generally, they are available only for the host, with the exception of
 @code{acc_on_device}, which is available for both the host and the
@@ -1846,13 +1990,14 @@ acceleration device.
 * acc_get_device_type::         Get type of device accelerator to be used.
 * acc_set_device_num::          Set device number to use.
 * acc_get_device_num::          Get device number to be used.
+* acc_get_property::            Get device property.
 * acc_async_test::              Tests for completion of a specific asynchronous
                                 operation.
-* acc_async_test_all::          Tests for completion of all asychronous
+* acc_async_test_all::          Tests for completion of all asynchronous
                                 operations.
 * acc_wait::                    Wait for completion of a specific asynchronous
                                 operation.
-* acc_wait_all::                Waits for completion of all asyncrhonous
+* acc_wait_all::                Waits for completion of all asynchronous
                                 operations.
 * acc_wait_all_async::          Wait for completion of all asynchronous
                                 operations.
@@ -1884,10 +2029,12 @@ acceleration device.
                                 host address.
 * acc_hostptr::                 Get host pointer associated with specific
                                 device address.
-* acc_is_present::              Indiciate whether host variable / array is
+* acc_is_present::              Indicate whether host variable / array is
                                 present on device.
 * acc_memcpy_to_device::        Copy host memory to device memory.
 * acc_memcpy_from_device::      Copy device memory to host memory.
+* acc_attach::                  Let device pointer point to device-pointer target.
+* acc_detach::                  Let device pointer point to host-pointer target.
 
 API routines for target platforms.
 
@@ -1895,6 +2042,13 @@ API routines for target platforms.
 * acc_get_current_cuda_context::Get CUDA context handle.
 * acc_get_cuda_stream::         Get CUDA stream handle.
 * acc_set_cuda_stream::         Set CUDA stream handle.
+
+API routines for the OpenACC Profiling Interface.
+
+* acc_prof_register::           Register callbacks.
+* acc_prof_unregister::         Unregister callbacks.
+* acc_prof_lookup::             Obtain inquiry functions.
+* acc_register_library::        Library registration.
 @end menu
 
 
@@ -1918,7 +2072,7 @@ for the device type specified in @var{devicetype}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 3.2.1.
 @end table
 
@@ -1928,7 +2082,7 @@ for the device type specified in @var{devicetype}.
 @section @code{acc_set_device_type} -- Set type of device accelerator to use.
 @table @asis
 @item @emph{Description}
-This function indicates to the runtime library which device typr, specified
+This function indicates to the runtime library which device type, specified
 in @var{devicetype}, to use when executing a parallel or kernels region. 
 
 @item @emph{C/C++}:
@@ -1943,7 +2097,7 @@ in @var{devicetype}, to use when executing a parallel or kernels region.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 3.2.2.
 @end table
 
@@ -1955,6 +2109,12 @@ in @var{devicetype}, to use when executing a parallel or kernels region.
 @item @emph{Description}
 This function returns what device type will be used when executing a
 parallel or kernels region.
+
+This function returns @code{acc_device_none} if
+@code{acc_get_device_type} is called from
+@code{acc_ev_device_init_start}, @code{acc_ev_device_init_end}
+callbacks of the OpenACC Profiling Interface (@ref{OpenACC Profiling
+Interface}), that is, if the device is currently being initialized.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
@@ -1968,7 +2128,7 @@ parallel or kernels region.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 3.2.3.
 @end table
 
@@ -1979,12 +2139,12 @@ parallel or kernels region.
 @table @asis
 @item @emph{Description}
 This function will indicate to the runtime which device number,
-specified by @var{num}, associated with the specifed device
+specified by @var{devicenum}, associated with the specified device
 type @var{devicetype}.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
-@item @emph{Prototype}: @tab @code{acc_set_device_num(int num, acc_device_t devicetype);}
+@item @emph{Prototype}: @tab @code{acc_set_device_num(int devicenum, acc_device_t devicetype);}
 @end multitable
 
 @item @emph{Fortran}:
@@ -1995,7 +2155,7 @@ type @var{devicetype}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 3.2.4.
 @end table
 
@@ -2022,8 +2182,55 @@ region.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 3.2.5.
+@end table
+
+
+
+@node acc_get_property
+@section @code{acc_get_property} -- Get device property.
+@cindex acc_get_property
+@cindex acc_get_property_string
+@table @asis
+@item @emph{Description}
+These routines return the value of the specified @var{property} for the
+device being queried according to @var{devicenum} and @var{devicetype}.
+Integer-valued and string-valued properties are returned by
+@code{acc_get_property} and @code{acc_get_property_string} respectively.
+The Fortran @code{acc_get_property_string} subroutine returns the string
+retrieved in its fourth argument while the remaining entry points are
+functions, which pass the return value as their result.
+
+Note for Fortran, only: the OpenACC technical committee corrected and, hence,
+modified the interface introduced in OpenACC 2.6.  The kind-value parameter
+@code{acc_device_property} has been renamed to @code{acc_device_property_kind}
+for consistency and the return type of the @code{acc_get_property} function is
+now a @code{c_size_t} integer instead of a @code{acc_device_property} integer.
+The parameter @code{acc_device_property} will continue to be provided,
+but might be removed in a future version of GCC.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{size_t acc_get_property(int devicenum, acc_device_t devicetype, acc_device_property_t property);}
+@item @emph{Prototype}: @tab @code{const char *acc_get_property_string(int devicenum, acc_device_t devicetype, acc_device_property_t property);}
+@end multitable
+
+@item @emph{Fortran}:
+@multitable @columnfractions .20 .80
+@item @emph{Interface}: @tab @code{function acc_get_property(devicenum, devicetype, property)}
+@item @emph{Interface}: @tab @code{subroutine acc_get_property_string(devicenum, devicetype, property, string)}
+@item                   @tab @code{use ISO_C_Binding, only: c_size_t}
+@item                   @tab @code{integer devicenum}
+@item                   @tab @code{integer(kind=acc_device_kind) devicetype}
+@item                   @tab @code{integer(kind=acc_device_property_kind) property}
+@item                   @tab @code{integer(kind=c_size_t) acc_get_property}
+@item                   @tab @code{character(*) string}
+@end multitable
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.6.
 @end table
 
 
@@ -2032,10 +2239,10 @@ region.
 @section @code{acc_async_test} -- Test for completion of a specific asynchronous operation.
 @table @asis
 @item @emph{Description}
-This function tests for completion of the asynchrounous operation specified
+This function tests for completion of the asynchronous operation specified
 in @var{arg}. In C/C++, a non-zero value will be returned to indicate
 the specified asynchronous operation has completed. While Fortran will return
-a @code{true}. If the asynchrounous operation has not completed, C/C++ returns
+a @code{true}. If the asynchronous operation has not completed, C/C++ returns
 a zero and Fortran returns a @code{false}.
 
 @item @emph{C/C++}:
@@ -2051,8 +2258,8 @@ a zero and Fortran returns a @code{false}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.6.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.9.
 @end table
 
 
@@ -2061,7 +2268,7 @@ a zero and Fortran returns a @code{false}.
 @section @code{acc_async_test_all} -- Tests for completion of all asynchronous operations.
 @table @asis
 @item @emph{Description}
-This function tests for completion of all asynchrounous operations.
+This function tests for completion of all asynchronous operations.
 In C/C++, a non-zero value will be returned to indicate all asynchronous
 operations have completed. While Fortran will return a @code{true}. If
 any asynchronous operation has not completed, C/C++ returns a zero and
@@ -2079,8 +2286,8 @@ Fortran returns a @code{false}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.7.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.10.
 @end table
 
 
@@ -2107,8 +2314,8 @@ specified in @var{arg}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.8.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.11.
 @end table
 
 
@@ -2132,8 +2339,8 @@ This function waits for the completion of all asynchronous operations.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.10.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.13.
 @end table
 
 
@@ -2158,8 +2365,8 @@ any queue.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.11.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.14.
 @end table
 
 
@@ -2183,8 +2390,8 @@ asynchronous operations enqueued on queue @var{arg}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.9.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.12.
 @end table
 
 
@@ -2208,8 +2415,8 @@ This function initializes the runtime for the device type specified in
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.12.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.7.
 @end table
 
 
@@ -2233,8 +2440,8 @@ This function shuts down the runtime for the device type specified in
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.13.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.8.
 @end table
 
 
@@ -2245,7 +2452,7 @@ This function shuts down the runtime for the device type specified in
 @item @emph{Description}:
 This function returns whether the program is executing on a particular
 device specified in @var{devicetype}. In C/C++ a non-zero value is
-returned to indicate the device is execiting on the specified device type.
+returned to indicate the device is executing on the specified device type.
 In Fortran, @code{true} will be returned. If the program is not executing
 on the specified device type C/C++ will return a zero, while Fortran will
 return @code{false}.
@@ -2264,8 +2471,8 @@ return @code{false}.
 
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.14.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.17.
 @end table
 
 
@@ -2283,8 +2490,8 @@ the device address of the allocated memory.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.15.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.18.
 @end table
 
 
@@ -2301,8 +2508,8 @@ Free previously allocated device memory at the device address @code{a}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.16.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.19.
 @end table
 
 
@@ -2322,6 +2529,7 @@ variable or array element and @var{len} specifies the length in bytes.
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
 @item @emph{Prototype}: @tab @code{void *acc_copyin(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{void *acc_copyin_async(h_void *a, size_t len, int async);}
 @end multitable
 
 @item @emph{Fortran}:
@@ -2331,11 +2539,18 @@ variable or array element and @var{len} specifies the length in bytes.
 @item @emph{Interface}: @tab @code{subroutine acc_copyin(a, len)}
 @item                   @tab @code{type, dimension(:[,:]...) :: a}
 @item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_copyin_async(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_copyin_async(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.17.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.20.
 @end table
 
 
@@ -2344,7 +2559,7 @@ variable or array element and @var{len} specifies the length in bytes.
 @section @code{acc_present_or_copyin} -- If the data is not present on the device, allocate device memory and copy from host memory.
 @table @asis
 @item @emph{Description}
-This function tests if the host data specifed by @var{a} and of length
+This function tests if the host data specified by @var{a} and of length
 @var{len} is present or not. If it is not present, then device memory
 will be allocated and the host memory copied. The device address of
 the newly allocated device memory is returned.
@@ -2352,6 +2567,9 @@ the newly allocated device memory is returned.
 In Fortran, two (2) forms are supported. In the first form, @var{a} specifies
 a contiguous array section. The second form @var{a} specifies a variable or
 array element and @var{len} specifies the length in bytes.
+
+Note that @code{acc_present_or_copyin} and @code{acc_pcopyin} exist for
+backward compatibility with OpenACC 2.0; use @ref{acc_copyin} instead.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
@@ -2374,8 +2592,8 @@ array element and @var{len} specifies the length in bytes.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.18.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.20.
 @end table
 
 
@@ -2395,6 +2613,7 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
 @item @emph{Prototype}: @tab @code{void *acc_create(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{void *acc_create_async(h_void *a, size_t len, int async);}
 @end multitable
 
 @item @emph{Fortran}:
@@ -2404,11 +2623,18 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{Interface}: @tab @code{subroutine acc_create(a, len)}
 @item                   @tab @code{type, dimension(:[,:]...) :: a}
 @item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_create_async(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_create_async(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.19.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.21.
 @end table
 
 
@@ -2417,7 +2643,7 @@ array element and @var{len} specifies the length in bytes.
 @section @code{acc_present_or_create} -- If the data is not present on the device, allocate device memory and map it to host memory.
 @table @asis
 @item @emph{Description}
-This function tests if the host data specifed by @var{a} and of length
+This function tests if the host data specified by @var{a} and of length
 @var{len} is present or not. If it is not present, then device memory
 will be allocated and mapped to host memory. In C/C++, the device address
 of the newly allocated device memory is returned.
@@ -2426,6 +2652,8 @@ In Fortran, two (2) forms are supported. In the first form, @var{a} specifies
 a contiguous array section. The second form @var{a} specifies a variable or
 array element and @var{len} specifies the length in bytes.
 
+Note that @code{acc_present_or_create} and @code{acc_pcreate} exist for
+backward compatibility with OpenACC 2.0; use @ref{acc_create} instead.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
@@ -2448,8 +2676,8 @@ array element and @var{len} specifies the length in bytes.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.20.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.21.
 @end table
 
 
@@ -2468,6 +2696,9 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
 @item @emph{Prototype}: @tab @code{acc_copyout(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{acc_copyout_async(h_void *a, size_t len, int async);}
+@item @emph{Prototype}: @tab @code{acc_copyout_finalize(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{acc_copyout_finalize_async(h_void *a, size_t len, int async);}
 @end multitable
 
 @item @emph{Fortran}:
@@ -2477,11 +2708,30 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{Interface}: @tab @code{subroutine acc_copyout(a, len)}
 @item                   @tab @code{type, dimension(:[,:]...) :: a}
 @item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_copyout_async(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_copyout_async(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_copyout_finalize(a)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item @emph{Interface}: @tab @code{subroutine acc_copyout_finalize(a, len)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_copyout_finalize_async(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_copyout_finalize_async(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.21.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.22.
 @end table
 
 
@@ -2500,6 +2750,9 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
 @item @emph{Prototype}: @tab @code{acc_delete(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{acc_delete_async(h_void *a, size_t len, int async);}
+@item @emph{Prototype}: @tab @code{acc_delete_finalize(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{acc_delete_finalize_async(h_void *a, size_t len, int async);}
 @end multitable
 
 @item @emph{Fortran}:
@@ -2509,11 +2762,30 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{Interface}: @tab @code{subroutine acc_delete(a, len)}
 @item                   @tab @code{type, dimension(:[,:]...) :: a}
 @item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_delete_async(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_delete_async(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_delete_finalize(a)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item @emph{Interface}: @tab @code{subroutine acc_delete_finalize(a, len)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_delete_async_finalize(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_delete_async_finalize(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.22.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.23.
 @end table
 
 
@@ -2533,6 +2805,7 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
 @item @emph{Prototype}: @tab @code{acc_update_device(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{acc_update_device(h_void *a, size_t len, async);}
 @end multitable
 
 @item @emph{Fortran}:
@@ -2542,11 +2815,18 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{Interface}: @tab @code{subroutine acc_update_device(a, len)}
 @item                   @tab @code{type, dimension(:[,:]...) :: a}
 @item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_update_device_async(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_update_device_async(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.23.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.24.
 @end table
 
 
@@ -2566,6 +2846,7 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
 @item @emph{Prototype}: @tab @code{acc_update_self(h_void *a, size_t len);}
+@item @emph{Prototype}: @tab @code{acc_update_self_async(h_void *a, size_t len, int async);}
 @end multitable
 
 @item @emph{Fortran}:
@@ -2575,11 +2856,18 @@ array element and @var{len} specifies the length in bytes.
 @item @emph{Interface}: @tab @code{subroutine acc_update_self(a, len)}
 @item                   @tab @code{type, dimension(:[,:]...) :: a}
 @item                   @tab @code{integer len}
+@item @emph{Interface}: @tab @code{subroutine acc_update_self_async(a, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
+@item @emph{Interface}: @tab @code{subroutine acc_update_self_async(a, len, async)}
+@item                   @tab @code{type, dimension(:[,:]...) :: a}
+@item                   @tab @code{integer len}
+@item                   @tab @code{integer(acc_handle_kind) :: async}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.24.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.25.
 @end table
 
 
@@ -2598,8 +2886,8 @@ specified with the host address @var{h} and a length of @var{len}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.25.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.26.
 @end table
 
 
@@ -2617,8 +2905,8 @@ specified by @var{h}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.26.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.27.
 @end table
 
 
@@ -2636,8 +2924,8 @@ host address specified by @var{h}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.27.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.28.
 @end table
 
 
@@ -2655,8 +2943,8 @@ device address specified by @var{d}.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.28.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.29.
 @end table
 
 
@@ -2694,8 +2982,8 @@ a @code{false} is return to indicate the mapped memory is not present.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.29.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.30.
 @end table
 
 
@@ -2714,8 +3002,8 @@ device memory specified by the device address @var{dest} for a length of
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.30.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.31.
 @end table
 
 
@@ -2734,8 +3022,50 @@ device memory specified by the device address @var{dest} for a length of
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
-3.2.31.
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.32.
+@end table
+
+
+
+@node acc_attach
+@section @code{acc_attach} -- Let device pointer point to device-pointer target.
+@table @asis
+@item @emph{Description}
+This function updates a pointer on the device from pointing to a host-pointer
+address to pointing to the corresponding device data.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{acc_attach(h_void **ptr);}
+@item @emph{Prototype}: @tab @code{acc_attach_async(h_void **ptr, int async);}
+@end multitable
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.34.
+@end table
+
+
+
+@node acc_detach
+@section @code{acc_detach} -- Let device pointer point to host-pointer target.
+@table @asis
+@item @emph{Description}
+This function updates a pointer on the device from pointing to a device-pointer
+address to pointing to the corresponding host data.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{acc_detach(h_void **ptr);}
+@item @emph{Prototype}: @tab @code{acc_detach_async(h_void **ptr, int async);}
+@item @emph{Prototype}: @tab @code{acc_detach_finalize(h_void **ptr);}
+@item @emph{Prototype}: @tab @code{acc_detach_finalize_async(h_void **ptr, int async);}
+@end multitable
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+3.2.35.
 @end table
 
 
@@ -2753,7 +3083,7 @@ as used by the CUDA Runtime or Driver API's.
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 A.2.1.1.
 @end table
 
@@ -2768,11 +3098,11 @@ as used by the CUDA Runtime or Driver API's.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
-@item @emph{Prototype}: @tab @code{acc_get_current_cuda_context(void);}
+@item @emph{Prototype}: @tab @code{void *acc_get_current_cuda_context(void);}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 A.2.1.2.
 @end table
 
@@ -2782,16 +3112,16 @@ A.2.1.2.
 @section @code{acc_get_cuda_stream} -- Get CUDA stream handle.
 @table @asis
 @item @emph{Description}
-This function returns the CUDA stream handle. This handle is the same
-as used by the CUDA Runtime or Driver API's.
+This function returns the CUDA stream handle for the queue @var{async}.
+This handle is the same as used by the CUDA Runtime or Driver API's.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
-@item @emph{Prototype}: @tab @code{acc_get_cuda_stream(void);}
+@item @emph{Prototype}: @tab @code{void *acc_get_cuda_stream(int async);}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 A.2.1.3.
 @end table
 
@@ -2802,16 +3132,105 @@ A.2.1.3.
 @table @asis
 @item @emph{Description}
 This function associates the stream handle specified by @var{stream} with
-the asynchronous value specified by @var{async}.
+the queue @var{async}.
+
+This cannot be used to change the stream handle associated with
+@code{acc_async_sync}.
+
+The return value is not specified.
 
 @item @emph{C/C++}:
 @multitable @columnfractions .20 .80
-@item @emph{Prototype}: @tab @code{acc_set_cuda_stream(int async void *stream);}
+@item @emph{Prototype}: @tab @code{int acc_set_cuda_stream(int async, void *stream);}
 @end multitable
 
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 A.2.1.4.
+@end table
+
+
+
+@node acc_prof_register
+@section @code{acc_prof_register} -- Register callbacks.
+@table @asis
+@item @emph{Description}:
+This function registers callbacks.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{void acc_prof_register (acc_event_t, acc_prof_callback, acc_register_t);}
+@end multitable
+
+@item @emph{See also}:
+@ref{OpenACC Profiling Interface}
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+5.3.
+@end table
+
+
+
+@node acc_prof_unregister
+@section @code{acc_prof_unregister} -- Unregister callbacks.
+@table @asis
+@item @emph{Description}:
+This function unregisters callbacks.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{void acc_prof_unregister (acc_event_t, acc_prof_callback, acc_register_t);}
+@end multitable
+
+@item @emph{See also}:
+@ref{OpenACC Profiling Interface}
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+5.3.
+@end table
+
+
+
+@node acc_prof_lookup
+@section @code{acc_prof_lookup} -- Obtain inquiry functions.
+@table @asis
+@item @emph{Description}:
+Function to obtain inquiry functions.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{acc_query_fn acc_prof_lookup (const char *);}
+@end multitable
+
+@item @emph{See also}:
+@ref{OpenACC Profiling Interface}
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+5.3.
+@end table
+
+
+
+@node acc_register_library
+@section @code{acc_register_library} -- Library registration.
+@table @asis
+@item @emph{Description}:
+Function for library registration.
+
+@item @emph{C/C++}:
+@multitable @columnfractions .20 .80
+@item @emph{Prototype}: @tab @code{void acc_register_library (acc_prof_reg, acc_prof_reg, acc_prof_lookup_func);}
+@end multitable
+
+@item @emph{See also}:
+@ref{OpenACC Profiling Interface}, @ref{ACC_PROFLIB}
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+5.3.
 @end table
 
 
@@ -2825,11 +3244,14 @@ A.2.1.4.
 
 The variables @env{ACC_DEVICE_TYPE} and @env{ACC_DEVICE_NUM}
 are defined by section 4 of the OpenACC specification in version 2.0.
+The variable @env{ACC_PROFLIB}
+is defined by section 4 of the OpenACC specification in version 2.6.
 The variable @env{GCC_ACC_NOTIFY} is used for diagnostic purposes.
 
 @menu
 * ACC_DEVICE_TYPE::
 * ACC_DEVICE_NUM::
+* ACC_PROFLIB::
 * GCC_ACC_NOTIFY::
 @end menu
 
@@ -2839,7 +3261,7 @@ The variable @env{GCC_ACC_NOTIFY} is used for diagnostic purposes.
 @section @code{ACC_DEVICE_TYPE}
 @table @asis
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 4.1.
 @end table
 
@@ -2849,8 +3271,21 @@ The variable @env{GCC_ACC_NOTIFY} is used for diagnostic purposes.
 @section @code{ACC_DEVICE_NUM}
 @table @asis
 @item @emph{Reference}:
-@uref{https://www.openacc.org, OpenACC specification v2.0}, section
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
 4.2.
+@end table
+
+
+
+@node ACC_PROFLIB
+@section @code{ACC_PROFLIB}
+@table @asis
+@item @emph{See also}:
+@ref{acc_register_library}, @ref{OpenACC Profiling Interface}
+
+@item @emph{Reference}:
+@uref{https://www.openacc.org, OpenACC specification v2.6}, section
+4.3.
 @end table
 
 
@@ -2879,7 +3314,7 @@ asynchronous functionality is implemented by making use of CUDA
 streams@footnote{See "Stream Management" in "CUDA Driver API",
 TRM-06703-001, Version 5.5, for additional information}.
 
-The primary means by that the asychronous functionality is accessed
+The primary means by that the asynchronous functionality is accessed
 is through the use of those OpenACC directives which make use of the
 @code{async} and @code{wait} clauses.  When the @code{async} clause is
 first used with a directive, it creates a CUDA stream.  If an
@@ -3052,8 +3487,8 @@ similarly to the first use case.
 
 There are two environment variables associated with the OpenACC library
 that may be used to control the device type and device number:
-@env{ACC_DEVICE_TYPE} and @env{ACC_DEVICE_NUM}, respecively. These two
-environement variables can be used as an alternative to calling
+@env{ACC_DEVICE_TYPE} and @env{ACC_DEVICE_NUM}, respectively. These two
+environment variables can be used as an alternative to calling
 @code{acc_set_device_num()}. As seen in the second use case, the device
 type and device number were specified using @code{acc_set_device_num()}.
 If however, the aforementioned environment variables were set, then the
@@ -3066,7 +3501,316 @@ is called prior to a call to an OpenACC function, then you must call
 @code{acc_set_device_num()}@footnote{More complete information
 about @env{ACC_DEVICE_TYPE} and @env{ACC_DEVICE_NUM} can be found in
 sections 4.1 and 4.2 of the @uref{https://www.openacc.org, OpenACC}
-Application Programming Interface”, Version 2.0.}
+Application Programming Interface”, Version 2.6.}
+
+
+
+@c ---------------------------------------------------------------------
+@c OpenACC Profiling Interface
+@c ---------------------------------------------------------------------
+
+@node OpenACC Profiling Interface
+@chapter OpenACC Profiling Interface
+
+@section Implementation Status and Implementation-Defined Behavior
+
+We're implementing the OpenACC Profiling Interface as defined by the
+OpenACC 2.6 specification.  We're clarifying some aspects here as
+@emph{implementation-defined behavior}, while they're still under
+discussion within the OpenACC Technical Committee.
+
+This implementation is tuned to keep the performance impact as low as
+possible for the (very common) case that the Profiling Interface is
+not enabled.  This is relevant, as the Profiling Interface affects all
+the @emph{hot} code paths (in the target code, not in the offloaded
+code).  Users of the OpenACC Profiling Interface can be expected to
+understand that performance will be impacted to some degree once the
+Profiling Interface has gotten enabled: for example, because of the
+@emph{runtime} (libgomp) calling into a third-party @emph{library} for
+every event that has been registered.
+
+We're not yet accounting for the fact that @cite{OpenACC events may
+occur during event processing}.
+We just handle one case specially, as required by CUDA 9.0
+@command{nvprof}, that @code{acc_get_device_type}
+(@ref{acc_get_device_type})) may be called from
+@code{acc_ev_device_init_start}, @code{acc_ev_device_init_end}
+callbacks.
+
+We're not yet implementing initialization via a
+@code{acc_register_library} function that is either statically linked
+in, or dynamically via @env{LD_PRELOAD}.
+Initialization via @code{acc_register_library} functions dynamically
+loaded via the @env{ACC_PROFLIB} environment variable does work, as
+does directly calling @code{acc_prof_register},
+@code{acc_prof_unregister}, @code{acc_prof_lookup}.
+
+As currently there are no inquiry functions defined, calls to
+@code{acc_prof_lookup} will always return @code{NULL}.
+
+There aren't separate @emph{start}, @emph{stop} events defined for the
+event types @code{acc_ev_create}, @code{acc_ev_delete},
+@code{acc_ev_alloc}, @code{acc_ev_free}.  It's not clear if these
+should be triggered before or after the actual device-specific call is
+made.  We trigger them after.
+
+Remarks about data provided to callbacks:
+
+@table @asis
+
+@item @code{acc_prof_info.event_type}
+It's not clear if for @emph{nested} event callbacks (for example,
+@code{acc_ev_enqueue_launch_start} as part of a parent compute
+construct), this should be set for the nested event
+(@code{acc_ev_enqueue_launch_start}), or if the value of the parent
+construct should remain (@code{acc_ev_compute_construct_start}).  In
+this implementation, the value will generally correspond to the
+innermost nested event type.
+
+@item @code{acc_prof_info.device_type}
+@itemize
+
+@item
+For @code{acc_ev_compute_construct_start}, and in presence of an
+@code{if} clause with @emph{false} argument, this will still refer to
+the offloading device type.
+It's not clear if that's the expected behavior.
+
+@item
+Complementary to the item before, for
+@code{acc_ev_compute_construct_end}, this is set to
+@code{acc_device_host} in presence of an @code{if} clause with
+@emph{false} argument.
+It's not clear if that's the expected behavior.
+
+@end itemize
+
+@item @code{acc_prof_info.thread_id}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.async}
+@itemize
+
+@item
+Not yet implemented correctly for
+@code{acc_ev_compute_construct_start}.
+
+@item
+In a compute construct, for host-fallback
+execution/@code{acc_device_host} it will always be
+@code{acc_async_sync}.
+It's not clear if that's the expected behavior.
+
+@item
+For @code{acc_ev_device_init_start} and @code{acc_ev_device_init_end},
+it will always be @code{acc_async_sync}.
+It's not clear if that's the expected behavior.
+
+@end itemize
+
+@item @code{acc_prof_info.async_queue}
+There is no @cite{limited number of asynchronous queues} in libgomp.
+This will always have the same value as @code{acc_prof_info.async}.
+
+@item @code{acc_prof_info.src_file}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_prof_info.func_name}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_prof_info.line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.end_line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.func_line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_prof_info.func_end_line_no}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_event_info.event_type}, @code{acc_event_info.*.event_type}
+Relating to @code{acc_prof_info.event_type} discussed above, in this
+implementation, this will always be the same value as
+@code{acc_prof_info.event_type}.
+
+@item @code{acc_event_info.*.parent_construct}
+@itemize
+
+@item
+Will be @code{acc_construct_parallel} for all OpenACC compute
+constructs as well as many OpenACC Runtime API calls; should be the
+one matching the actual construct, or
+@code{acc_construct_runtime_api}, respectively.
+
+@item
+Will be @code{acc_construct_enter_data} or
+@code{acc_construct_exit_data} when processing variable mappings
+specified in OpenACC @emph{declare} directives; should be
+@code{acc_construct_declare}.
+
+@item
+For implicit @code{acc_ev_device_init_start},
+@code{acc_ev_device_init_end}, and explicit as well as implicit
+@code{acc_ev_alloc}, @code{acc_ev_free},
+@code{acc_ev_enqueue_upload_start}, @code{acc_ev_enqueue_upload_end},
+@code{acc_ev_enqueue_download_start}, and
+@code{acc_ev_enqueue_download_end}, will be
+@code{acc_construct_parallel}; should reflect the real parent
+construct.
+
+@end itemize
+
+@item @code{acc_event_info.*.implicit}
+For @code{acc_ev_alloc}, @code{acc_ev_free},
+@code{acc_ev_enqueue_upload_start}, @code{acc_ev_enqueue_upload_end},
+@code{acc_ev_enqueue_download_start}, and
+@code{acc_ev_enqueue_download_end}, this currently will be @code{1}
+also for explicit usage.
+
+@item @code{acc_event_info.data_event.var_name}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_event_info.data_event.host_ptr}
+For @code{acc_ev_alloc}, and @code{acc_ev_free}, this is always
+@code{NULL}.
+
+@item @code{typedef union acc_api_info}
+@dots{} as printed in @cite{5.2.3. Third Argument: API-Specific
+Information}.  This should obviously be @code{typedef @emph{struct}
+acc_api_info}.
+
+@item @code{acc_api_info.device_api}
+Possibly not yet implemented correctly for
+@code{acc_ev_compute_construct_start},
+@code{acc_ev_device_init_start}, @code{acc_ev_device_init_end}:
+will always be @code{acc_device_api_none} for these event types.
+For @code{acc_ev_enter_data_start}, it will be
+@code{acc_device_api_none} in some cases.
+
+@item @code{acc_api_info.device_type}
+Always the same as @code{acc_prof_info.device_type}.
+
+@item @code{acc_api_info.vendor}
+Always @code{-1}; not yet implemented.
+
+@item @code{acc_api_info.device_handle}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_api_info.context_handle}
+Always @code{NULL}; not yet implemented.
+
+@item @code{acc_api_info.async_handle}
+Always @code{NULL}; not yet implemented.
+
+@end table
+
+Remarks about certain event types:
+
+@table @asis
+
+@item @code{acc_ev_device_init_start}, @code{acc_ev_device_init_end}
+@itemize
+
+@item
+@c See 'DEVICE_INIT_INSIDE_COMPUTE_CONSTRUCT' in
+@c 'libgomp.oacc-c-c++-common/acc_prof-kernels-1.c',
+@c 'libgomp.oacc-c-c++-common/acc_prof-parallel-1.c'.
+Whan a compute construct triggers implicit
+@code{acc_ev_device_init_start} and @code{acc_ev_device_init_end}
+events, they currently aren't @emph{nested within} the corresponding
+@code{acc_ev_compute_construct_start} and
+@code{acc_ev_compute_construct_end}, but they're currently observed
+@emph{before} @code{acc_ev_compute_construct_start}.
+It's not clear what to do: the standard asks us provide a lot of
+details to the @code{acc_ev_compute_construct_start} callback, without
+(implicitly) initializing a device before?
+
+@item
+Callbacks for these event types will not be invoked for calls to the
+@code{acc_set_device_type} and @code{acc_set_device_num} functions.
+It's not clear if they should be.
+
+@end itemize
+
+@item @code{acc_ev_enter_data_start}, @code{acc_ev_enter_data_end}, @code{acc_ev_exit_data_start}, @code{acc_ev_exit_data_end}
+@itemize
+
+@item
+Callbacks for these event types will also be invoked for OpenACC
+@emph{host_data} constructs.
+It's not clear if they should be.
+
+@item
+Callbacks for these event types will also be invoked when processing
+variable mappings specified in OpenACC @emph{declare} directives.
+It's not clear if they should be.
+
+@end itemize
+
+@end table
+
+Callbacks for the following event types will be invoked, but dispatch
+and information provided therein has not yet been thoroughly reviewed:
+
+@itemize
+@item @code{acc_ev_alloc}
+@item @code{acc_ev_free}
+@item @code{acc_ev_update_start}, @code{acc_ev_update_end}
+@item @code{acc_ev_enqueue_upload_start}, @code{acc_ev_enqueue_upload_end}
+@item @code{acc_ev_enqueue_download_start}, @code{acc_ev_enqueue_download_end}
+@end itemize
+
+During device initialization, and finalization, respectively,
+callbacks for the following event types will not yet be invoked:
+
+@itemize
+@item @code{acc_ev_alloc}
+@item @code{acc_ev_free}
+@end itemize
+
+Callbacks for the following event types have not yet been implemented,
+so currently won't be invoked:
+
+@itemize
+@item @code{acc_ev_device_shutdown_start}, @code{acc_ev_device_shutdown_end}
+@item @code{acc_ev_runtime_shutdown}
+@item @code{acc_ev_create}, @code{acc_ev_delete}
+@item @code{acc_ev_wait_start}, @code{acc_ev_wait_end}
+@end itemize
+
+For the following runtime library functions, not all expected
+callbacks will be invoked (mostly concerning implicit device
+initialization):
+
+@itemize
+@item @code{acc_get_num_devices}
+@item @code{acc_set_device_type}
+@item @code{acc_get_device_type}
+@item @code{acc_set_device_num}
+@item @code{acc_get_device_num}
+@item @code{acc_init}
+@item @code{acc_shutdown}
+@end itemize
+
+Aside from implicit device initialization, for the following runtime
+library functions, no callbacks will be invoked for shared-memory
+offloading devices (it's not clear if they should be):
+
+@itemize
+@item @code{acc_malloc}
+@item @code{acc_free}
+@item @code{acc_copyin}, @code{acc_present_or_copyin}, @code{acc_copyin_async}
+@item @code{acc_create}, @code{acc_present_or_create}, @code{acc_create_async}
+@item @code{acc_copyout}, @code{acc_copyout_async}, @code{acc_copyout_finalize}, @code{acc_copyout_finalize_async}
+@item @code{acc_delete}, @code{acc_delete_async}, @code{acc_delete_finalize}, @code{acc_delete_finalize_async}
+@item @code{acc_update_device}, @code{acc_update_device_async}
+@item @code{acc_update_self}, @code{acc_update_self_async}
+@item @code{acc_map_data}, @code{acc_unmap_data}
+@item @code{acc_memcpy_to_device}, @code{acc_memcpy_to_device_async}
+@item @code{acc_memcpy_from_device}, @code{acc_memcpy_from_device_async}
+@end itemize
 
 
 
@@ -3477,7 +4221,7 @@ becomes
 @chapter Reporting Bugs
 
 Bugs in the GNU Offloading and Multi Processing Runtime Library should
-be reported via @uref{http://gcc.gnu.org/bugzilla/, Bugzilla}.  Please add
+be reported via @uref{https://gcc.gnu.org/bugzilla/, Bugzilla}.  Please add
 "openacc", or "openmp", or both to the keywords field in the bug
 report, as appropriate.
 

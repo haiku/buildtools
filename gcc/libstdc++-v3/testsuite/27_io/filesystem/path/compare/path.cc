@@ -1,8 +1,6 @@
-// { dg-options "-std=gnu++17 -lstdc++fs" }
 // { dg-do run { target c++17 } }
-// { dg-require-filesystem-ts "" }
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -19,7 +17,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// 8.4.8 path compare [path.compare]
+// C++17 30.10.8.4.8 path compare [fs.path.compare]
 
 #include <filesystem>
 #include <testsuite_hooks.h>
@@ -31,7 +29,7 @@ void
 test01()
 {
   const path p0 = "/a/a/b/b";
-  for (const path& p : __gnu_test::test_paths)
+  for (const path p : __gnu_test::test_paths)
   {
     VERIFY( p.compare(p) == 0 );
     int cmp = p.compare(p0);
@@ -44,8 +42,19 @@ test01()
   }
 }
 
+void
+test02()
+{
+  VERIFY( path("/").compare(path("////")) == 0 );
+  VERIFY( path("/a").compare(path("/")) > 0 );
+  VERIFY( path("/").compare(path("/a")) < 0 );
+  VERIFY( path("/ab").compare(path("/a")) > 0 );
+  VERIFY( path("/ab").compare(path("/a/b")) > 0 );
+}
+
 int
 main()
 {
   test01();
+  test02();
 }

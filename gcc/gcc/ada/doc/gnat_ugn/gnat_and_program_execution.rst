@@ -17,7 +17,7 @@ GNAT and Program Execution
 This chapter covers several topics:
 
 * `Running and Debugging Ada Programs`_
-* `Code Coverage and Profiling`_
+* `Profiling`_
 * `Improving Performance`_
 * `Overflow Check Handling in GNAT`_
 * `Performing Dimensionality Analysis in GNAT`_
@@ -116,9 +116,9 @@ Running GDB
 
 This section describes how to initiate the debugger.
 
-The debugger can be launched from a ``GPS`` menu or
+The debugger can be launched from a ``GNAT Studio`` menu or
 directly from the command line. The description below covers the latter use.
-All the commands shown can be used in the ``GPS`` debug console window,
+All the commands shown can be used in the ``GNAT Studio`` debug console window,
 but there are usually more GUI-based ways to achieve the same effect.
 
 The command to run ``GDB`` is
@@ -1206,103 +1206,15 @@ documentation
 for more information.
 
 
-.. index:: Code Coverage
 .. index:: Profiling
 
 
-.. _Code_Coverage_and_Profiling:
+.. _Profiling:
 
-Code Coverage and Profiling
-===========================
+Profiling
+=========
 
-This section describes how to use the ``gcov`` coverage testing tool and
-the ``gprof`` profiler tool on Ada programs.
-
-.. index:: !  gcov
-
-.. _Code_Coverage_of_Ada_Programs_with_gcov:
-
-Code Coverage of Ada Programs with gcov
----------------------------------------
-
-``gcov`` is a test coverage program: it analyzes the execution of a given
-program on selected tests, to help you determine the portions of the program
-that are still untested.
-
-``gcov`` is part of the GCC suite, and is described in detail in the GCC
-User's Guide. You can refer to this documentation for a more complete
-description.
-
-This chapter provides a quick startup guide, and
-details some GNAT-specific features.
-
-.. _Quick_startup_guide:
-
-Quick startup guide
-^^^^^^^^^^^^^^^^^^^
-
-In order to perform coverage analysis of a program using ``gcov``, several
-steps are needed:
-
-#. Instrument the code during the compilation process,
-#. Execute the instrumented program, and
-#. Invoke the ``gcov`` tool to generate the coverage results.
-
-.. index:: -fprofile-arcs (gcc)
-.. index:: -ftest-coverage (gcc
-.. index:: -fprofile-arcs (gnatbind)
-
-The code instrumentation needed by gcov is created at the object level.
-The source code is not modified in any way, because the instrumentation code is
-inserted by gcc during the compilation process. To compile your code with code
-coverage activated, you need to recompile your whole project using the
-switches
-:switch:`-fprofile-arcs` and :switch:`-ftest-coverage`, and link it using
-:switch:`-fprofile-arcs`.
-
-  ::
-
-     $ gnatmake -P my_project.gpr -f -cargs -fprofile-arcs -ftest-coverage \\
-        -largs -fprofile-arcs
-
-This compilation process will create :file:`.gcno` files together with
-the usual object files.
-
-Once the program is compiled with coverage instrumentation, you can
-run it as many times as needed -- on portions of a test suite for
-example. The first execution will produce :file:`.gcda` files at the
-same location as the :file:`.gcno` files.  Subsequent executions
-will update those files, so that a cumulative result of the covered
-portions of the program is generated.
-
-Finally, you need to call the ``gcov`` tool. The different options of
-``gcov`` are described in the GCC User's Guide, section *Invoking gcov*.
-
-This will create annotated source files with a :file:`.gcov` extension:
-:file:`my_main.adb` file will be analyzed in :file:`my_main.adb.gcov`.
-
-
-.. _GNAT_specifics:
-
-GNAT specifics
-^^^^^^^^^^^^^^
-
-Because of Ada semantics, portions of the source code may be shared among
-several object files. This is the case for example when generics are
-involved, when inlining is active  or when declarations generate  initialisation
-calls. In order to take
-into account this shared code, you need to call ``gcov`` on all
-source files of the tested program at once.
-
-The list of source files might exceed the system's maximum command line
-length. In order to bypass this limitation, a new mechanism has been
-implemented in ``gcov``: you can now list all your project's files into a
-text file, and provide this file to gcov as a parameter,  preceded by a ``@``
-(e.g. :samp:`gcov @mysrclist.txt`).
-
-Note that on AIX compiling a static library with :switch:`-fprofile-arcs` is
-not supported as there can be unresolved symbols during the final link.
-
+This section describes how to use the ``gprof`` profiler tool on Ada programs.
 
 .. index:: !  gprof
 .. index:: Profiling
@@ -1324,7 +1236,6 @@ better handle Ada programs and multitasking.
 It is currently supported on the following platforms
 
 * linux x86/x86_64
-* solaris sparc/sparc64/x86
 * windows x86
 
 In order to profile a program using ``gprof``, several steps are needed:
@@ -1494,18 +1405,8 @@ This section presents several topics related to program performance.
 It first describes some of the tradeoffs that need to be considered
 and some of the techniques for making your program run faster.
 
-.. only:: PRO or GPL
-
-   It then documents the unused subprogram/data elimination feature
-   and the ``gnatelim`` tool,
-   which can reduce the size of program executables.
-
-
-.. only:: FSF
-
-   It then documents the unused subprogram/data elimination feature,
-   which can reduce the size of program executables.
-
+It then documents the unused subprogram/data elimination feature,
+which can reduce the size of program executables.
 
 .. _Performance_Considerations:
 
@@ -1939,7 +1840,7 @@ improves performance for your program.
 
 .. _Floating_Point_Operations:
 
-Floating_Point_Operations
+Floating Point Operations
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. index:: Floating-Point Operations
@@ -2684,302 +2585,6 @@ It can be observed that the procedure ``Unused`` and the object
 ``Unused_Data`` are removed by the linker when using the
 appropriate options.
 
-.. only:: PRO or GPL
-
-  .. _Reducing_Size_of_Ada_Executables_with_gnatelim:
-
-  Reducing Size of Ada Executables with ``gnatelim``
-  --------------------------------------------------
-
-  .. index:: gnatelim
-
-  This section describes ``gnatelim``, a tool which detects unused
-  subprograms and helps the compiler to create a smaller executable for your
-  program.
-
-  ``gnatelim`` is a project-aware tool.
-  (See :ref:`Using_Project_Files_with_GNAT_Tools` for a description of
-  the project-related switches but note that ``gnatelim`` does not support
-  the :samp:`-U`, :samp:`-U {main_unit}`, :samp:`--subdirs={dir}`, or
-  :samp:`--no_objects_dir` switches.)
-  The project file package that can specify
-  ``gnatelim`` switches is named ``Eliminate``.
-
-  .. _About_gnatelim:
-
-  About ``gnatelim``
-  ^^^^^^^^^^^^^^^^^^
-
-  When a program shares a set of Ada
-  packages with other programs, it may happen that this program uses
-  only a fraction of the subprograms defined in these packages. The code
-  created for these unused subprograms increases the size of the executable.
-
-  ``gnatelim`` tracks unused subprograms in an Ada program and
-  outputs a list of GNAT-specific pragmas ``Eliminate`` marking all the
-  subprograms that are declared but never called. By placing the list of
-  ``Eliminate`` pragmas in the GNAT configuration file :file:`gnat.adc` and
-  recompiling your program, you may decrease the size of its executable,
-  because the compiler will not generate the code for 'eliminated' subprograms.
-  See ``Pragma_Eliminate`` in the :title:`GNAT_Reference_Manual` for more
-  information about this pragma.
-
-  ``gnatelim`` needs as its input data the name of the main subprogram.
-
-  If a set of source files is specified as ``gnatelim`` arguments, it
-  treats these files as a complete set of sources making up a program to
-  analyse, and analyses only these sources.
-
-  After a full successful build of the main subprogram ``gnatelim`` can be
-  called without  specifying sources to analyse, in this case it computes
-  the source closure of the main unit from the :file:`ALI` files.
-
-  If the set of sources to be processed by ``gnatelim`` contains sources with
-  preprocessing directives
-  then the needed options should be provided to run preprocessor as a part of
-  the ``gnatelim`` call, and the generated set of pragmas ``Eliminate``
-  will correspond to preprocessed sources.
-
-  The following command will create the set of :file:`ALI` files needed for
-  ``gnatelim``:
-
-    ::
-
-       $ gnatmake -c Main_Prog
-
-  Note that ``gnatelim`` does not need object files.
-
-
-  .. _Running_gnatelim:
-
-  Running ``gnatelim``
-  ^^^^^^^^^^^^^^^^^^^^
-
-  ``gnatelim`` has the following command-line interface:
-
-
-    ::
-
-        $ gnatelim [switches] -main=`main_unit_name {filename} [-cargs gcc_switches]
-
-  ``main_unit_name`` should be a name of a source file that contains the main
-  subprogram of a program (partition).
-
-  Each ``filename`` is the name (including the extension) of a source
-  file to process. 'Wildcards' are allowed, and
-  the file name may contain path information.
-
-  ``gcc_switches`` is a list of switches for
-  ``gcc``. They will be passed on to all compiler invocations made by
-  ``gnatelim`` to generate the ASIS trees. Here you can provide
-  :switch:`-I` switches to form the source search path,
-  use the :switch:`-gnatec` switch to set the configuration file,
-  use the :switch:`-gnat05` switch if sources should be compiled in
-  Ada 2005 mode etc.
-
-  ``gnatelim`` has the following switches:
-
-
-  .. index:: --version (gnatelim)
-
-  :samp:`--version`
-    Display Copyright and version, then exit disregarding all other options.
-
-
-  .. index:: --help (gnatelim)
-
-  :samp:`--help`
-    Display usage, then exit disregarding all other options.
-
-
-  .. index:: -P (gnatelim)
-
-  :samp:`-P {file}`
-    Indicates the name of the project file that describes the set of sources
-    to be processed.
-
-
-  .. index:: -X (gnatelim)
-
-  :samp:`-X{name}={value}`
-    Indicates that external variable ``name`` in the argument project
-    has the value ``value``. Has no effect if no project is specified as
-    tool argument.
-
-
-  .. index:: --RTS (gnatelim)
-
-  :samp:`--RTS={rts-path}`
-    Specifies the default location of the runtime library. Same meaning as the
-    equivalent ``gnatmake`` flag (:ref:`Switches_for_gnatmake`).
-
-
-  .. index:: -files (gnatelim)
-
-  :samp:`-files={filename}`
-    Take the argument source files from the specified file. This file should be an
-    ordinary text file containing file names separated by spaces or
-    line breaks. You can use this switch more than once in the same call to
-    ``gnatelim``. You also can combine this switch with
-    an explicit list of files.
-
-
-  .. index:: -log (gnatelim)
-
-  :samp:`-log`
-    Duplicate all the output sent to :file:`stderr` into a log file. The log file
-    is named :file:`gnatelim.log` and is located in the current directory.
-
-    .. index:: --no-elim-dispatch (gnatelim)
-
-  :samp:`--no-elim-dispatch`
-    Do not generate pragmas for dispatching operations.
-
-
-  .. index:: --ignore (gnatelim)
-
-  :samp:`--ignore={filename}`
-    Do not generate pragmas for subprograms declared in the sources
-    listed in a specified file
-
-  .. index:: -o (gnatelim)
-
-
-  :samp:`-o={report_file}`
-    Put ``gnatelim`` output into a specified file. If this file already exists,
-    it is overridden. If this switch is not used, ``gnatelim`` outputs its results
-    into :file:`stderr`
-
-
-  .. index:: -j (gnatelim)
-
-  :samp:`-j{n}`
-    Use ``n`` processes to carry out the tree creations (internal representations
-    of the argument sources). On a multiprocessor machine this speeds up processing
-    of big sets of argument sources. If ``n`` is 0, then the maximum number of
-    parallel tree creations is the number of core processors on the platform.
-
-
-  .. index:: -q (gnatelim)
-
-  :samp:`-q`
-    Quiet mode: by default ``gnatelim`` outputs to the standard error
-    stream the number of program units left to be processed. This option turns
-    this trace off.
-
-  .. index:: -t (gnatelim)
-
-
-  :samp:`-t`
-    Print out execution time.
-
-
-  .. index:: -v (gnatelim)
-
-  :samp:`-v`
-    Verbose mode: ``gnatelim`` version information is printed as Ada
-    comments to the standard output stream. Also, in addition to the number of
-    program units left ``gnatelim`` will output the name of the current unit
-    being processed.
-
-
-  .. index:: -wq (gnatelim)
-
-  :samp:`-wq`
-    Quiet warning mode - some warnings are suppressed. In particular warnings that
-    indicate that the analysed set of sources is incomplete to make up a
-    partition and that some subprogram bodies are missing are not generated.
-
-
-
-  .. _Processing_Precompiled_Libraries:
-
-  Processing Precompiled Libraries
-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  If some program uses a precompiled Ada library, it can be processed by
-  ``gnatelim`` in a usual way. ``gnatelim`` will newer generate an
-  Eliminate pragma for a subprogram if the body of this subprogram has not
-  been analysed, this is a typical case for subprograms from precompiled
-  libraries. Switch :switch:`-wq` may be used to suppress
-  warnings about missing source files and non-analyzed subprogram bodies
-  that can be generated when processing precompiled Ada libraries.
-
-
-  .. _Correcting_the_List_of_Eliminate_Pragmas:
-
-  Correcting the List of Eliminate Pragmas
-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  In some rare cases ``gnatelim`` may try to eliminate
-  subprograms that are actually called in the program. In this case, the
-  compiler will generate an error message of the form:
-
-    ::
-
-        main.adb:4:08: cannot reference subprogram "P" eliminated at elim.out:5
-
-  You will need to manually remove the wrong ``Eliminate`` pragmas from
-  the configuration file indicated in the error message. You should recompile
-  your program from scratch after that, because you need a consistent
-  configuration file(s) during the entire compilation.
-
-
-  .. _Making_Your_Executables_Smaller:
-
-  Making Your Executables Smaller
-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  In order to get a smaller executable for your program you now have to
-  recompile the program completely with the configuration file containing
-  pragmas Eliminate generated by gnatelim. If these pragmas are placed in
-  :file:`gnat.adc` file located in your current directory, just do:
-
-    ::
-
-       $ gnatmake -f main_prog
-
-  (Use the :switch:`-f` option for ``gnatmake`` to
-  recompile everything
-  with the set of pragmas ``Eliminate`` that you have obtained with
-  ``gnatelim``).
-
-  Be aware that the set of ``Eliminate`` pragmas is specific to each
-  program. It is not recommended to merge sets of ``Eliminate``
-  pragmas created for different programs in one configuration file.
-
-
-  .. _Summary_of_the_gnatelim_Usage_Cycle:
-
-  Summary of the ``gnatelim`` Usage Cycle
-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-  Here is a quick summary of the steps to be taken in order to reduce
-  the size of your executables with ``gnatelim``. You may use
-  other GNAT options to control the optimization level,
-  to produce the debugging information, to set search path, etc.
-
-  * Create a complete set of :file:`ALI` files (if the program has not been
-    built already)
-
-    ::
-
-        $ gnatmake -c main_prog
-
-  * Generate a list of ``Eliminate`` pragmas in default configuration file
-    :file:`gnat.adc` in the current directory
-
-    ::
-
-        $ gnatelim main_prog >[>] gnat.adc
-
-  * Recompile the application
-
-    ::
-
-        $ gnatmake -f main_prog
-
-
 
 .. index:: Overflow checks
 .. index:: Checks (overflow)
@@ -3359,7 +2964,7 @@ integer arithmetic package. The compiler will make calls
 to this package, though only in cases where it cannot be
 sure that ``Long_Long_Integer`` is sufficient to guard against
 intermediate overflows. This package does not use dynamic
-alllocation, but it does use the secondary stack, so an
+allocation, but it does use the secondary stack, so an
 appropriate secondary stack package must be present (this
 is always true for standard full Ada, but may require
 specific steps for restricted run times such as ZFP).
@@ -3409,19 +3014,18 @@ to use the proper subtypes in object declarations.
 .. index:: MKS_Type type
 
 The simplest way to impose dimensionality checking on a computation is to make
-use of the package ``System.Dim.Mks``,
-which is part of the GNAT library. This
-package defines a floating-point type ``MKS_Type``,
-for which a sequence of
-dimension names are specified, together with their conventional abbreviations.
-The following should be read together with the full specification of the
-package, in file :file:`s-dimmks.ads`.
+use of one of the instantiations of the package ``System.Dim.Generic_Mks``, which
+are part of the GNAT library. This generic package defines a floating-point
+type ``MKS_Type``, for which a sequence of dimension names are specified,
+together with their conventional abbreviations.  The following should be read
+together with the full specification of the package, in file
+:file:`s-digemk.ads`.
 
-  .. index:: s-dimmks.ads file
+  .. index:: s-digemk.ads file
 
   .. code-block:: ada
 
-     type Mks_Type is new Long_Long_Float
+     type Mks_Type is new Float_Type
        with
         Dimension_System => (
           (Unit_Name => Meter,    Unit_Symbol => 'm',   Dim_Symbol => 'L'),
@@ -3465,10 +3069,16 @@ as well as useful multiples of these units:
      day : constant Time   := 60.0 * 24.0 * min;
     ...
 
-Using this package, you can then define a derived unit by
-providing the aspect that
-specifies its dimensions within the MKS system, as well as the string to
-be used for output of a value of that unit:
+There are three instantiations of ``System.Dim.Generic_Mks`` defined in the
+GNAT library:
+
+* ``System.Dim.Float_Mks`` based on ``Float`` defined in :file:`s-diflmk.ads`.
+* ``System.Dim.Long_Mks`` based on ``Long_Float`` defined in :file:`s-dilomk.ads`.
+* ``System.Dim.Mks`` based on ``Long_Long_Float`` defined in :file:`s-dimmks.ads`.
+
+Using one of these packages, you can then define a derived unit by providing
+the aspect that specifies its dimensions within the MKS system, as well as the
+string to be used for output of a value of that unit:
 
   .. code-block:: ada
 
@@ -3785,8 +3395,11 @@ adding a switch to ``gnatbind``, as:
 
       $ gnatbind -u0 file
 
-With this option, at each task termination, its stack usage is  output on
+With this option, at each task termination, its stack usage is output on
 :file:`stderr`.
+Note that this switch is not compatible with tools like
+Valgrind and DrMemory; they will report errors.
+
 It is not always convenient to output the stack usage when the program
 is still running. Hence, it is possible to delay this output until program
 termination. for a given number of tasks specified as the argument of the
@@ -4096,7 +3709,7 @@ execution of this erroneous program:
 
     ::
 
-       $ gnatmem [ switches ] user_program
+       $ gnatmem [ switches ] [ DEPTH ] user_program
 
   The program must have been linked with the instrumented version of the
   allocation and deallocation routines. This is done by linking with the
@@ -4186,15 +3799,16 @@ execution of this erroneous program:
     memory leaks. Omits statistical information.
 
 
-  .. index:: N switch (gnatmem)
+  .. index:: DEPTH switch (gnatmem)
 
-  :samp:`{N}`
-    ``N`` is an integer literal (usually between 1 and 10) which controls the
-    depth of the backtraces defining allocation root. The default value for
-    N is 1. The deeper the backtrace, the more precise the localization of
+  :samp:`{DEPTH}`
+    ``DEPTH`` is an integer literal (usually between 1 and 10) which controls
+    the depth of the backtraces defining allocation root. The default value for
+    DEPTH is 1. The deeper the backtrace, the more precise the localization of
     the root. Note that the total number of roots can depend on this
-    parameter. This parameter must be specified *before* the name of the
-    executable to be analyzed, to avoid ambiguity.
+    parameter, in other words there may be more roots when the requested
+    backtrace depth is higher. This parameter must be specified *before* the
+    name of the executable to be analyzed, to avoid ambiguity.
 
 
   .. index:: -b (gnatmem)

@@ -1,8 +1,6 @@
-/* { dg-do compile { target { powerpc*-*-* } } } */
-/* { dg-skip-if "do not override -mcpu" { powerpc*-*-* } { "-mcpu=*" } { "-mcpu=power9" } } */
-/* { dg-require-effective-target lp64 } */
-/* { dg-require-effective-target powerpc_p9vector_ok } */
-/* { dg-options "-O2 -mcpu=power9" } */
+/* { dg-do compile }
+/* { dg-require-effective-target p9vector_hw } */
+/* { dg-options "-O2 -mdejagnu-cpu=power9" } */
 
 #include <altivec.h>
 
@@ -64,6 +62,6 @@ rlnm_test_2 (vector unsigned long long x, vector unsigned long long y,
 /* { dg-final { scan-assembler-times "vextsb2d" 1 } } */
 /* { dg-final { scan-assembler-times "vslw" 1 } } */
 /* { dg-final { scan-assembler-times "vsld" 1 } } */
-/* { dg-final { scan-assembler-times "xxlor" 2 } } */
+/* { dg-final { scan-assembler-times "xxlor" 5 } } */
 /* { dg-final { scan-assembler-times "vrlwnm" 2 } } */
 /* { dg-final { scan-assembler-times "vrldnm" 2 } } */

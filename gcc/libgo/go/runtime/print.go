@@ -6,35 +6,36 @@ package runtime
 
 import (
 	"runtime/internal/atomic"
+	"runtime/internal/sys"
 	"unsafe"
 )
 
-// For gccgo, use go:linkname to rename compiler-called functions to
-// themselves, so that the compiler will export them.
+// For gccgo, use go:linkname to export compiler-called functions.
 //
-//go:linkname printbool runtime.printbool
-//go:linkname printfloat runtime.printfloat
-//go:linkname printint runtime.printint
-//go:linkname printhex runtime.printhex
-//go:linkname printuint runtime.printuint
-//go:linkname printcomplex runtime.printcomplex
-//go:linkname printstring runtime.printstring
-//go:linkname printpointer runtime.printpointer
-//go:linkname printiface runtime.printiface
-//go:linkname printeface runtime.printeface
-//go:linkname printslice runtime.printslice
-//go:linkname printnl runtime.printnl
-//go:linkname printsp runtime.printsp
-//go:linkname printlock runtime.printlock
-//go:linkname printunlock runtime.printunlock
+//go:linkname printbool
+//go:linkname printfloat
+//go:linkname printint
+//go:linkname printhex
+//go:linkname printuint
+//go:linkname printcomplex
+//go:linkname printstring
+//go:linkname printpointer
+//go:linkname printiface
+//go:linkname printeface
+//go:linkname printslice
+//go:linkname printnl
+//go:linkname printsp
+//go:linkname printlock
+//go:linkname printunlock
 // Temporary for C code to call:
-//go:linkname gwrite runtime.gwrite
-//go:linkname printhex runtime.printhex
+//go:linkname gwrite
+//go:linkname printhex
 
 // The compiler knows that a print of a value of this type
 // should use printhex instead of printuint (decimal).
 type hex uint64
 
+//go:nowritebarrier
 func bytes(s string) (ret []byte) {
 	rp := (*slice)(unsafe.Pointer(&ret))
 	sp := stringStructOf(&s)
@@ -110,7 +111,12 @@ func gwrite(b []byte) {
 	}
 	recordForPanic(b)
 	gp := getg()
-	if gp == nil || gp.writebuf == nil {
+	// Don't use the writebuf if gp.m is dying. We want anything
+	// written through gwrite to appear in the terminal rather
+	// than be written to in some buffer, if we're in a panicking state.
+	// Note that we can't just clear writebuf in the gp.m.dying case
+	// because a panic isn't allowed to have any write barriers.
+	if gp == nil || gp.writebuf == nil || gp.m.dying > 0 {
 		writeErr(b)
 		return
 	}
@@ -253,6 +259,9 @@ func printhex(v uint64) {
 func printpointer(p unsafe.Pointer) {
 	printhex(uint64(uintptr(p)))
 }
+func printuintptr(p uintptr) {
+	printhex(uint64(p))
+}
 
 func printstring(s string) {
 	gwrite(bytes(s))
@@ -270,4 +279,57 @@ func printeface(e eface) {
 
 func printiface(i iface) {
 	print("(", i.tab, ",", i.data, ")")
+}
+
+// hexdumpWords prints a word-oriented hex dump of [p, end).
+//
+// If mark != nil, it will be called with each printed word's address
+// and should return a character mark to appear just before that
+// word's value. It can return 0 to indicate no mark.
+func hexdumpWords(p, end uintptr, mark func(uintptr) byte) {
+	p1 := func(x uintptr) {
+		var buf [2 * sys.PtrSize]byte
+		for i := len(buf) - 1; i >= 0; i-- {
+			if x&0xF < 10 {
+				buf[i] = byte(x&0xF) + '0'
+			} else {
+				buf[i] = byte(x&0xF) - 10 + 'a'
+			}
+			x >>= 4
+		}
+		gwrite(buf[:])
+	}
+
+	printlock()
+	var markbuf [1]byte
+	markbuf[0] = ' '
+	for i := uintptr(0); p+i < end; i += sys.PtrSize {
+		if i%16 == 0 {
+			if i != 0 {
+				println()
+			}
+			p1(p + i)
+			print(": ")
+		}
+
+		if mark != nil {
+			markbuf[0] = mark(p + i)
+			if markbuf[0] == 0 {
+				markbuf[0] = ' '
+			}
+		}
+		gwrite(markbuf[:])
+		val := *(*uintptr)(unsafe.Pointer(p + i))
+		p1(val)
+		print(" ")
+
+		// Can we symbolize val?
+		name, _, _, _ := funcfileline(val, -1, false)
+		if name != "" {
+			entry := funcentry(val)
+			print("<", name, "+", val-entry, "> ")
+		}
+	}
+	println()
+	printunlock()
 }

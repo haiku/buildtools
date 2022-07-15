@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1996-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -27,6 +27,7 @@ with Alloc;
 with Atree;    use Atree;
 with Debug;    use Debug;
 with Einfo;    use Einfo;
+with Exp_Util; use Exp_Util;
 with Nlists;   use Nlists;
 with Nmake;    use Nmake;
 with Opt;      use Opt;
@@ -132,11 +133,6 @@ package body Exp_Dbug is
    --  Determine whether the bounds of E match the size of the type. This is
    --  used to determine whether encoding is required for a discrete type.
 
-   function Is_Handled_Scale_Factor (U : Ureal) return Boolean;
-   --  The argument U is the Small_Value of a fixed-point type. This function
-   --  determines whether the back-end can handle this scale factor. When it
-   --  cannot, we have to output a GNAT encoding for the corresponding type.
-
    procedure Output_Homonym_Numbers_Suffix;
    --  If homonym numbers are stored, then output them into Name_Buffer
 
@@ -219,26 +215,12 @@ package body Exp_Dbug is
 
    begin
       if Has_Homonym (E) then
-         declare
-            H  : Entity_Id := Homonym (E);
-            Nr : Nat := 1;
+         if Homonym_Len > 0 then
+            Homonym_Len := Homonym_Len + 1;
+            Homonym_Numbers (Homonym_Len) := '_';
+         end if;
 
-         begin
-            while Present (H) loop
-               if Scope (H) = Scope (E) then
-                  Nr := Nr + 1;
-               end if;
-
-               H := Homonym (H);
-            end loop;
-
-            if Homonym_Len > 0 then
-               Homonym_Len := Homonym_Len + 1;
-               Homonym_Numbers (Homonym_Len) := '_';
-            end if;
-
-            Add_Nat_To_H (Nr);
-         end;
+         Add_Nat_To_H (Homonym_Number (E));
       end if;
    end Append_Homonym_Number;
 
@@ -260,7 +242,7 @@ package body Exp_Dbug is
 
       --  Here we check if the static bounds match the natural size, which is
       --  the size passed through with the debugging information. This is the
-      --  Esize rounded up to 8, 16, 32 or 64 as appropriate.
+      --  Esize rounded up to 8, 16, 32, 64 or 128 as appropriate.
 
       else
          declare
@@ -274,8 +256,10 @@ package body Exp_Dbug is
                Siz := Uint_16;
             elsif Esize (E) <= 32 then
                Siz := Uint_32;
-            else
+            elsif Esize (E) <= 64 then
                Siz := Uint_64;
+            else
+               Siz := Uint_128;
             end if;
 
             if Is_Modular_Integer_Type (E) or else Is_Enumeration_Type (E) then
@@ -437,7 +421,7 @@ package body Exp_Dbug is
                   --  anyway, so the renaming entity will be available in
                   --  debuggers.
 
-                  exit when not Ekind_In (Sel_Id, E_Component, E_Discriminant);
+                  exit when Ekind (Sel_Id) not in E_Component | E_Discriminant;
 
                   First_Bit := Normalized_First_Bit (Sel_Id);
                   Enable :=
@@ -605,27 +589,6 @@ package body Exp_Dbug is
          return Make_Null_Statement (Loc);
    end Debug_Renaming_Declaration;
 
-   -----------------------------
-   -- Is_Handled_Scale_Factor --
-   -----------------------------
-
-   function Is_Handled_Scale_Factor (U : Ureal) return Boolean is
-   begin
-      --  Keep in sync with gigi (see E_*_Fixed_Point_Type handling in
-      --  decl.c:gnat_to_gnu_entity).
-
-      if UI_Eq (Numerator (U), Uint_1) then
-         if Rbase (U) = 2 or else Rbase (U) = 10 then
-            return True;
-         end if;
-      end if;
-
-      return
-        (UI_Is_In_Int_Range (Norm_Num (U))
-           and then
-         UI_Is_In_Int_Range (Norm_Den (U)));
-   end Is_Handled_Scale_Factor;
-
    ----------------------
    -- Get_Encoded_Name --
    ----------------------
@@ -682,12 +645,10 @@ package body Exp_Dbug is
 
       Has_Suffix := True;
 
-      --  Fixed-point case: generate GNAT encodings when asked to or when we
-      --  know the back-end will not be able to handle the scale factor.
+      --  Fixed-point case: generate GNAT encodings when asked to
 
       if Is_Fixed_Point_Type (E)
-        and then (GNAT_Encodings /= DWARF_GNAT_Encodings_Minimal
-                   or else not Is_Handled_Scale_Factor (Small_Value (E)))
+        and then GNAT_Encodings = DWARF_GNAT_Encodings_All
       then
          Get_External_Name (E, True, "XF_");
          Add_Real_To_Buffer (Delta_Value (E));
@@ -852,11 +813,11 @@ package body Exp_Dbug is
 
       --  Case of interface name being used
 
-      if Ekind_In (E, E_Constant,
-                      E_Exception,
-                      E_Function,
-                      E_Procedure,
-                      E_Variable)
+      if Ekind (E) in E_Constant
+                    | E_Exception
+                    | E_Function
+                    | E_Procedure
+                    | E_Variable
         and then Present (Interface_Name (E))
         and then No (Address_Clause (E))
         and then not Has_Suffix
@@ -887,7 +848,7 @@ package body Exp_Dbug is
          if Is_Generic_Instance (E)
            and then Is_Subprogram (E)
            and then not Is_Compilation_Unit (Scope (E))
-           and then Ekind_In (Scope (E), E_Package, E_Package_Body)
+           and then Ekind (Scope (E)) in E_Package | E_Package_Body
            and then Present (Related_Instance (Scope (E)))
          then
             E := Related_Instance (Scope (E));
@@ -913,6 +874,14 @@ package body Exp_Dbug is
       --  underscores are used so that "___ghost_" is a unique substring of
       --  names produced for Ghost entities, while "__ghost_" can appear in
       --  names of entities inside a child/local package called "Ghost".
+
+      --  The compiler-generated finalizer for an enabled Ghost unit is treated
+      --  specially, as its name must be known to the binder, which has no
+      --  knowledge of Ghost status. In that case, the finalizer is not marked
+      --  as Ghost so that no prefix is added. Note that the special ___ghost_
+      --  prefix is retained when the Ghost unit is ignored, which still allows
+      --  inspecting the final executable for the presence of an ignored Ghost
+      --  finalizer procedure.
 
       if Is_Ghost_Entity (E)
         and then not Is_Compilation_Unit (E)
@@ -1053,7 +1022,7 @@ package body Exp_Dbug is
                Name                => New_Occurrence_Of (E, Loc));
 
             Append (Decl, Declarations (N));
-            Set_Needs_Debug_Info (Defining_Identifier (Decl));
+            Set_Debug_Info_Needed (Defining_Identifier (Decl));
          end if;
 
          Next_Entity (E);
@@ -1443,25 +1412,6 @@ package body Exp_Dbug is
       if Has_Qualified_Name (Ent) then
          return;
 
-      --  In formal verification mode, simply append a suffix for homonyms.
-      --  We used to qualify entity names as full expansion does, but this was
-      --  removed as this prevents the verification back-end from using a short
-      --  name for debugging and user interaction. The verification back-end
-      --  already takes care of qualifying names when needed. Still mark the
-      --  name as being qualified, as Qualify_Entity_Name may be called more
-      --  than once on the same entity.
-
-      elsif GNATprove_Mode then
-         if Has_Homonym (Ent) then
-            Get_Name_String (Chars (Ent));
-            Append_Homonym_Number (Ent);
-            Output_Homonym_Numbers_Suffix;
-            Set_Chars (Ent, Name_Enter);
-         end if;
-
-         Set_Has_Qualified_Name (Ent);
-         return;
-
       --  If the entity is a variable encoding the debug name for an object
       --  renaming, then the qualified name of the entity associated with the
       --  renamed object can now be incorporated in the debug name.
@@ -1531,6 +1481,7 @@ package body Exp_Dbug is
       elsif Is_Subprogram (Ent)
         or else Ekind (Ent) = E_Subprogram_Body
         or else Is_Type (Ent)
+        or else Ekind (Ent) = E_Exception
       then
          Fully_Qualify_Name (Ent);
          Name_Len := Full_Qualify_Len;

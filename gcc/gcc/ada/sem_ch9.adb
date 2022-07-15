@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -133,8 +133,8 @@ package body Sem_Ch9 is
       --  when Lock_Free_Given is True.
 
    begin
-      pragma Assert (Nkind_In (N, N_Protected_Type_Declaration,
-                                  N_Protected_Body));
+      pragma Assert
+        (Nkind (N) in N_Protected_Type_Declaration | N_Protected_Body);
 
       --  The lock-free implementation is currently enabled through a debug
       --  flag. When Lock_Free_Given is True, an aspect Lock_Free forces the
@@ -569,7 +569,7 @@ package body Sem_Ch9 is
                         if Ekind (Id) = E_Component then
                            Comp_Id := Id;
 
-                        elsif Ekind_In (Id, E_Constant, E_Variable)
+                        elsif Ekind (Id) in E_Constant | E_Variable
                           and then Present (Prival_Link (Id))
                         then
                            Comp_Id := Prival_Link (Id);
@@ -706,7 +706,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("abort statement is not allowed", N);
 
       T_Name := First (Names (N));
       while Present (T_Name) loop
@@ -777,7 +776,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("accept statement is not allowed", N);
 
       --  Entry name is initialized to Any_Id. It should get reset to the
       --  matching entry entity. An error is signalled if it is not reset.
@@ -792,13 +790,13 @@ package body Sem_Ch9 is
          if Kind /= E_Block and then Kind /= E_Loop
            and then not Is_Entry (Task_Nam)
          then
-            Error_Msg_N ("enclosing body of accept must be a task", N);
+            Error_Msg_N ("enclosing body of ACCEPT must be a task", N);
             return;
          end if;
       end loop;
 
       if Ekind (Etype (Task_Nam)) /= E_Task_Type then
-         Error_Msg_N ("invalid context for accept statement",  N);
+         Error_Msg_N ("invalid context for ACCEPT statement",  N);
          return;
       end if;
 
@@ -846,7 +844,7 @@ package body Sem_Ch9 is
       end loop;
 
       if Entry_Nam = Any_Id then
-         Error_Msg_N ("no entry declaration matches accept statement",  N);
+         Error_Msg_N ("no entry declaration matches ACCEPT statement",  N);
          return;
       else
          Set_Entity (Nam, Entry_Nam);
@@ -883,7 +881,13 @@ package body Sem_Ch9 is
          exit when Task_Nam = Scope_Stack.Table (J).Entity;
 
          if Entry_Nam = Scope_Stack.Table (J).Entity then
-            Error_Msg_N ("duplicate accept statement for same entry", N);
+            Error_Msg_N
+              ("duplicate ACCEPT statement for same entry (RM 9.5.2 (15))", N);
+
+            --  Do not continue analysis of accept statement, to prevent
+            --  cascaded errors.
+
+            return;
          end if;
       end loop;
 
@@ -900,8 +904,8 @@ package body Sem_Ch9 is
 
                when N_Asynchronous_Select =>
                   Error_Msg_N
-                    ("accept statements are not allowed within an "
-                     & "asynchronous select inner to the enclosing task body",
+                    ("ACCEPT statement not allowed within an "
+                     & "asynchronous SELECT inner to the enclosing task body",
                      N);
                   exit;
 
@@ -911,12 +915,12 @@ package body Sem_Ch9 is
          end loop;
       end;
 
-      if Ekind (E) = E_Entry_Family then
+      if Ekind (Entry_Nam) = E_Entry_Family then
          if No (Index) then
             Error_Msg_N ("missing entry index in accept for entry family", N);
          else
-            Analyze_And_Resolve (Index, Entry_Index_Type (E));
-            Apply_Range_Check (Index, Entry_Index_Type (E));
+            Analyze_And_Resolve (Index, Entry_Index_Type (Entry_Nam));
+            Apply_Scalar_Range_Check (Index, Entry_Index_Type (Entry_Nam));
          end if;
 
       elsif Present (Index) then
@@ -1013,7 +1017,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (Max_Asynchronous_Select_Nesting, N);
       Check_Restriction (No_Select_Statements, N);
 
@@ -1059,7 +1062,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (No_Select_Statements, N);
 
       --  Ada 2005 (AI-345): The trigger may be a dispatching call
@@ -1111,7 +1113,7 @@ package body Sem_Ch9 is
          Analyze_List (Pragmas_Before (N));
       end if;
 
-      if Nkind_In (Parent (N), N_Selective_Accept, N_Timed_Entry_Call) then
+      if Nkind (Parent (N)) in N_Selective_Accept | N_Timed_Entry_Call then
          Expr := Expression (Delay_Statement (N));
 
          --  Defer full analysis until the statement is expanded, to insure
@@ -1157,7 +1159,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("delay statement is not allowed", N);
       Check_Restriction (No_Relative_Delay, N);
       Check_Restriction (No_Delay, N);
       Check_Potentially_Blocking_Operation (N);
@@ -1183,7 +1184,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("delay statement is not allowed", N);
       Check_Restriction (No_Delay, N);
       Check_Potentially_Blocking_Operation (N);
       Analyze_And_Resolve (E);
@@ -1246,13 +1246,13 @@ package body Sem_Ch9 is
       --  Analyze any aspect specifications that appear on the entry body
 
       if Has_Aspects (N) then
-         Analyze_Aspect_Specifications_On_Body_Or_Stub (N);
+         Analyze_Aspects_On_Subprogram_Body_Or_Stub (N);
       end if;
 
       E := First_Entity (P_Type);
       while Present (E) loop
          if Chars (E) = Chars (Id)
-           and then (Ekind (E) = Ekind (Id))
+           and then Ekind (E) = Ekind (Id)
            and then Type_Conformant (Id, E)
          then
             Entry_Name := E;
@@ -1297,7 +1297,7 @@ package body Sem_Ch9 is
                         Set_Analyzed (Def, False);
 
                         --  Keep the original subtree to ensure a properly
-                        --  formed tree (e.g. for ASIS use).
+                        --  formed tree.
 
                         Rewrite
                           (Discrete_Subtype_Definition (Index_Spec), Def);
@@ -1499,7 +1499,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("entry call is not allowed", N);
 
       if Present (Pragmas_Before (N)) then
          Analyze_List (Pragmas_Before (N));
@@ -1662,8 +1661,9 @@ package body Sem_Ch9 is
       --  resolution, and expansion are over.
 
       Mark_Elaboration_Attributes
-        (N_Id   => Def_Id,
-         Checks => True);
+        (N_Id     => Def_Id,
+         Checks   => True,
+         Warnings => True);
 
       --  Process formals
 
@@ -1890,9 +1890,6 @@ package body Sem_Ch9 is
    ----------------------------------
 
    procedure Analyze_Protected_Definition (N : Node_Id) is
-      E : Entity_Id;
-      L : Entity_Id;
-
       procedure Undelay_Itypes (T : Entity_Id);
       --  Itypes created for the private components of a protected type
       --  do not receive freeze nodes, because there is no scope in which
@@ -1925,9 +1922,7 @@ package body Sem_Ch9 is
          end if;
 
          while Present (Comp) loop
-            if Is_Type (Comp)
-              and then Is_Itype (Comp)
-            then
+            if Is_Type (Comp) and then Is_Itype (Comp) then
                Set_Has_Delayed_Freeze (Comp, False);
                Set_Is_Frozen (Comp);
 
@@ -1935,9 +1930,7 @@ package body Sem_Ch9 is
                   Layout_Type (Comp);
                end if;
 
-               if Is_Record_Type (Comp)
-                 or else Is_Protected_Type (Comp)
-               then
+               if Is_Record_Type (Comp) or else Is_Protected_Type (Comp) then
                   Undelay_Itypes (Comp);
                end if;
             end if;
@@ -1946,42 +1939,52 @@ package body Sem_Ch9 is
          end loop;
       end Undelay_Itypes;
 
+      --  Local variables
+
+      Prot_Typ : constant Entity_Id := Current_Scope;
+      Item_Id  : Entity_Id;
+      Last_Id  : Entity_Id;
+
    --  Start of processing for Analyze_Protected_Definition
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("protected definition is not allowed", N);
       Analyze_Declarations (Visible_Declarations (N));
 
       if Present (Private_Declarations (N))
         and then not Is_Empty_List (Private_Declarations (N))
       then
-         L := Last_Entity (Current_Scope);
+         Last_Id := Last_Entity (Prot_Typ);
          Analyze_Declarations (Private_Declarations (N));
 
-         if Present (L) then
-            Set_First_Private_Entity (Current_Scope, Next_Entity (L));
+         if Present (Last_Id) then
+            Set_First_Private_Entity (Prot_Typ, Next_Entity (Last_Id));
          else
-            Set_First_Private_Entity (Current_Scope,
-              First_Entity (Current_Scope));
+            Set_First_Private_Entity (Prot_Typ, First_Entity (Prot_Typ));
          end if;
       end if;
 
-      E := First_Entity (Current_Scope);
-      while Present (E) loop
-         if Ekind_In (E, E_Function, E_Procedure) then
-            Set_Convention (E, Convention_Protected);
+      Item_Id := First_Entity (Prot_Typ);
+      while Present (Item_Id) loop
+         if Ekind (Item_Id) in E_Function | E_Procedure then
+            Set_Convention (Item_Id, Convention_Protected);
          else
-            Propagate_Concurrent_Flags (Current_Scope, Etype (E));
+            Propagate_Concurrent_Flags (Prot_Typ, Etype (Item_Id));
+
+            if Chars (Item_Id) /= Name_uParent
+              and then Needs_Finalization (Etype (Item_Id))
+            then
+               Set_Has_Controlled_Component (Prot_Typ);
+            end if;
          end if;
 
-         Next_Entity (E);
+         Next_Entity (Item_Id);
       end loop;
 
-      Undelay_Itypes (Current_Scope);
+      Undelay_Itypes (Prot_Typ);
 
       Check_Max_Entries (N, Max_Protected_Entries);
-      Process_End_Label (N, 'e', Current_Scope);
+      Process_End_Label (N, 'e', Prot_Typ);
    end Analyze_Protected_Definition;
 
    ----------------------------------------
@@ -2247,6 +2250,11 @@ package body Sem_Ch9 is
 
          Propagate_Invariant_Attributes (T, From_Typ => Def_Id);
 
+         --  Propagate predicate-related attributes from the private type to
+         --  the protected type.
+
+         Propagate_Predicate_Attributes (T, From_Typ => Def_Id);
+
          --  Create corresponding record now, because some private dependents
          --  may be subtypes of the partial view.
 
@@ -2301,7 +2309,6 @@ package body Sem_Ch9 is
          Warnings => True);
 
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("requeue statement is not allowed", N);
       Check_Restriction (No_Requeue_Statements, N);
       Check_Unreachable_Code (N);
 
@@ -2310,7 +2317,7 @@ package body Sem_Ch9 is
          Enclosing := Scope_Stack.Table (J).Entity;
          exit when Is_Entry (Enclosing);
 
-         if not Ekind_In (Enclosing, E_Block, E_Loop) then
+         if Ekind (Enclosing) not in E_Block | E_Loop then
             Error_Msg_N ("requeue must appear within accept or entry body", N);
             return;
          end if;
@@ -2339,8 +2346,7 @@ package body Sem_Ch9 is
          for S in reverse 0 .. Scope_Stack.Last loop
             Req_Scope := Scope_Stack.Table (S).Entity;
 
-            exit when Ekind (Req_Scope) in Task_Kind
-              or else Ekind (Req_Scope) in Protected_Kind;
+            exit when Is_Concurrent_Type (Req_Scope);
 
             if Is_Entry (Req_Scope) then
                Outer_Ent := Req_Scope;
@@ -2354,10 +2360,11 @@ package body Sem_Ch9 is
          --  entry body) unless it is a parameter of the innermost enclosing
          --  accept statement (or entry body).
 
-         if Object_Access_Level (Target_Obj) >= Scope_Depth (Outer_Ent)
+         if Static_Accessibility_Level (Target_Obj, Zero_On_Dynamic_Level)
+              >= Scope_Depth (Outer_Ent)
            and then
              (not Is_Entity_Name (Target_Obj)
-               or else Ekind (Entity (Target_Obj)) not in Formal_Kind
+               or else not Is_Formal (Entity (Target_Obj))
                or else Enclosing /= Scope (Entity (Target_Obj)))
          then
             Error_Msg_N
@@ -2544,7 +2551,7 @@ package body Sem_Ch9 is
                   --  perform an unconditional goto so that any further
                   --  references will not occur anyway.
 
-                  if Ekind_In (Ent, E_Out_Parameter, E_In_Out_Parameter) then
+                  if Ekind (Ent) in E_Out_Parameter | E_In_Out_Parameter then
                      Set_Never_Set_In_Source (Ent, False);
                      Set_Is_True_Constant    (Ent, False);
                   end if;
@@ -2596,7 +2603,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (No_Select_Statements, N);
 
       --  Loop to analyze alternatives
@@ -2665,7 +2671,7 @@ package body Sem_Ch9 is
                               if Entity (EDN1) = Ent then
                                  Error_Msg_Sloc := Sloc (Stm1);
                                  Error_Msg_N
-                                   ("accept duplicates one on line#??", Stm);
+                                   ("ACCEPT duplicates one on line#??", Stm);
                                  exit;
                               end if;
                            end if;
@@ -2685,16 +2691,16 @@ package body Sem_Ch9 is
       Check_Potentially_Blocking_Operation (N);
 
       if Terminate_Present and Delay_Present then
-         Error_Msg_N ("at most one of terminate or delay alternative", N);
+         Error_Msg_N ("at most one of TERMINATE or DELAY alternative", N);
 
       elsif not Accept_Present then
          Error_Msg_N
-           ("select must contain at least one accept alternative", N);
+           ("SELECT must contain at least one ACCEPT alternative", N);
       end if;
 
       if Present (Else_Statements (N)) then
          if Terminate_Present or Delay_Present then
-            Error_Msg_N ("else part not allowed with other alternatives", N);
+            Error_Msg_N ("ELSE part not allowed with other alternatives", N);
          end if;
 
          Analyze_Statements (Else_Statements (N));
@@ -2748,7 +2754,7 @@ package body Sem_Ch9 is
       Insert_After (N, Obj_Decl);
       Mark_Rewrite_Insertion (Obj_Decl);
 
-      --  Relocate aspect Part_Of from the the original single protected
+      --  Relocate aspect Part_Of from the original single protected
       --  declaration to the anonymous object declaration. This emulates the
       --  placement of an equivalent source pragma.
 
@@ -2866,8 +2872,9 @@ package body Sem_Ch9 is
       --  resolution, and expansion are over.
 
       Mark_Elaboration_Attributes
-        (N_Id   => Obj_Id,
-         Checks => True);
+        (N_Id     => Obj_Id,
+         Checks   => True,
+         Warnings => True);
 
       --  Instead of calling Analyze on the new node, call the proper analysis
       --  procedure directly. Otherwise the node would be expanded twice, with
@@ -2982,6 +2989,24 @@ package body Sem_Ch9 is
          else
             Set_First_Private_Entity (Spec_Id, First_Entity (Spec_Id));
          end if;
+
+         --  The entity list of the current scope now includes entities in
+         --  the spec as well as the body. Their declarations will become
+         --  part of the statement sequence of the task body procedure that
+         --  is built during expansion. Indicate that aspect specifications
+         --  for these entities need not be rechecked. The guards on
+         --  Check_Aspect_At_End_Of_Declarations are not sufficient to
+         --  suppress these checks, because the declarations come from source.
+
+         declare
+            Priv : Entity_Id := First_Private_Entity (Spec_Id);
+
+         begin
+            while Present (Priv) loop
+               Set_Has_Delayed_Aspects (Priv, False);
+               Next_Entity (Priv);
+            end loop;
+         end;
       end if;
 
       --  Mark all handlers as not suitable for local raise optimization,
@@ -3039,7 +3064,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("task definition is not allowed", N);
 
       if Present (Visible_Declarations (N)) then
          Analyze_Declarations (Visible_Declarations (N));
@@ -3137,8 +3161,9 @@ package body Sem_Ch9 is
       --  resolution, and expansion are over.
 
       Mark_Elaboration_Attributes
-        (N_Id   => T,
-         Checks => True);
+        (N_Id     => T,
+         Checks   => True,
+         Warnings => True);
 
       Push_Scope (T);
 
@@ -3227,6 +3252,11 @@ package body Sem_Ch9 is
 
          Propagate_Invariant_Attributes (T, From_Typ => Def_Id);
 
+         --  Propagate predicate-related attributes from the private type to
+         --  task type.
+
+         Propagate_Predicate_Attributes (T, From_Typ => Def_Id);
+
          --  Create corresponding record now, because some private dependents
          --  may be subtypes of the partial view.
 
@@ -3280,7 +3310,6 @@ package body Sem_Ch9 is
 
    begin
       Tasking_Used := True;
-      Check_SPARK_05_Restriction ("select statement is not allowed", N);
       Check_Restriction (No_Select_Statements, N);
 
       --  Ada 2005 (AI-345): The trigger may be a dispatching call
@@ -3442,7 +3471,7 @@ package body Sem_Ch9 is
 
    begin
       pragma Assert
-        (Nkind_In (N, N_Protected_Type_Declaration, N_Task_Type_Declaration));
+        (Nkind (N) in N_Protected_Type_Declaration | N_Task_Type_Declaration);
 
       if Present (Interface_List (N)) then
          Set_Is_Tagged_Type (T);
@@ -3450,7 +3479,7 @@ package body Sem_Ch9 is
          --  The primitive operations of a tagged synchronized type are placed
          --  on the Corresponding_Record for proper dispatching, but are
          --  attached to the synchronized type itself when expansion is
-         --  disabled, for ASIS use.
+         --  disabled.
 
          Set_Direct_Primitive_Operations (T, New_Elmt_List);
 
@@ -3504,6 +3533,14 @@ package body Sem_Ch9 is
 
             Next (Iface);
          end loop;
+
+         --  Check consistency of any nonoverridable aspects that are
+         --  inherited from multiple sources.
+
+         Check_Inherited_Nonoverridable_Aspects
+           (Inheritor      => N,
+            Interface_List => Interface_List (N),
+            Parent_Type    => Empty);
       end if;
 
       if not Has_Private_Declaration (T) then

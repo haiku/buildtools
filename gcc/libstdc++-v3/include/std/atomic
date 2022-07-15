@@ -1,6 +1,6 @@
 // -*- C++ -*- header.
 
-// Copyright (C) 2008-2018 Free Software Foundation, Inc.
+// Copyright (C) 2008-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -39,7 +39,6 @@
 #else
 
 #include <bits/atomic_base.h>
-#include <bits/move.h>
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -50,7 +49,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @{
    */
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
 # define __cpp_lib_atomic_is_always_lock_free 201603
 #endif
 
@@ -62,6 +61,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<>
   struct atomic<bool>
   {
+    using value_type = bool;
+
   private:
     __atomic_base<bool>	_M_base;
 
@@ -94,7 +95,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     bool
     is_lock_free() const volatile noexcept { return _M_base.is_lock_free(); }
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_BOOL_LOCK_FREE == 2;
 #endif
 
@@ -162,17 +163,40 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     compare_exchange_strong(bool& __i1, bool __i2,
 		    memory_order __m = memory_order_seq_cst) volatile noexcept
     { return _M_base.compare_exchange_strong(__i1, __i2, __m); }
+
+#if __cpp_lib_atomic_wait
+    void
+    wait(bool __old, memory_order __m = memory_order_seq_cst) const noexcept
+    { _M_base.wait(__old, __m); }
+
+    // TODO add const volatile overload
+
+    void
+    notify_one() const noexcept
+    { _M_base.notify_one(); }
+
+    void
+    notify_all() const noexcept
+    { _M_base.notify_all(); }
+#endif // __cpp_lib_atomic_wait
   };
 
+#if __cplusplus <= 201703L
+# define _GLIBCXX20_INIT(I)
+#else
+# define _GLIBCXX20_INIT(I) = I
+#endif
 
   /**
    *  @brief Generic atomic type, primary class template.
    *
-   *  @tparam _Tp  Type to be made atomic, must be trivally copyable.
+   *  @tparam _Tp  Type to be made atomic, must be trivially copyable.
    */
   template<typename _Tp>
     struct atomic
     {
+      using value_type = _Tp;
+
     private:
       // Align 1/2/4/8/16-byte types to at least their size.
       static constexpr int _S_min_alignment
@@ -182,7 +206,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       static constexpr int _S_alignment
         = _S_min_alignment > alignof(_Tp) ? _S_min_alignment : alignof(_Tp);
 
-      alignas(_S_alignment) _Tp _M_i;
+      alignas(_S_alignment) _Tp _M_i _GLIBCXX20_INIT(_Tp());
 
       static_assert(__is_trivially_copyable(_Tp),
 		    "std::atomic requires a trivially copyable type");
@@ -190,8 +214,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       static_assert(sizeof(_Tp) > 0,
 		    "Incomplete or zero-sized types are not supported");
 
+#if __cplusplus > 201703L
+      static_assert(is_copy_constructible_v<_Tp>);
+      static_assert(is_move_constructible_v<_Tp>);
+      static_assert(is_copy_assignable_v<_Tp>);
+      static_assert(is_move_assignable_v<_Tp>);
+#endif
+
     public:
-      atomic() noexcept = default;
+      atomic() = default;
       ~atomic() noexcept = default;
       atomic(const atomic&) = delete;
       atomic& operator=(const atomic&) = delete;
@@ -218,7 +249,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       {
 	// Produce a fake, minimally aligned pointer.
 	return __atomic_is_lock_free(sizeof(_M_i),
-	    reinterpret_cast<void *>(-__alignof(_M_i)));
+	    reinterpret_cast<void *>(-_S_alignment));
       }
 
       bool
@@ -226,28 +257,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       {
 	// Produce a fake, minimally aligned pointer.
 	return __atomic_is_lock_free(sizeof(_M_i),
-	    reinterpret_cast<void *>(-__alignof(_M_i)));
+	    reinterpret_cast<void *>(-_S_alignment));
       }
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
       static constexpr bool is_always_lock_free
 	= __atomic_always_lock_free(sizeof(_M_i), 0);
 #endif
 
       void
       store(_Tp __i, memory_order __m = memory_order_seq_cst) noexcept
-      { __atomic_store(std::__addressof(_M_i), std::__addressof(__i), __m); }
+      {
+	__atomic_store(std::__addressof(_M_i), std::__addressof(__i), int(__m));
+      }
 
       void
       store(_Tp __i, memory_order __m = memory_order_seq_cst) volatile noexcept
-      { __atomic_store(std::__addressof(_M_i), std::__addressof(__i), __m); }
+      {
+	__atomic_store(std::__addressof(_M_i), std::__addressof(__i), int(__m));
+      }
 
       _Tp
       load(memory_order __m = memory_order_seq_cst) const noexcept
       {
 	alignas(_Tp) unsigned char __buf[sizeof(_Tp)];
 	_Tp* __ptr = reinterpret_cast<_Tp*>(__buf);
-	__atomic_load(std::__addressof(_M_i), __ptr, __m);
+	__atomic_load(std::__addressof(_M_i), __ptr, int(__m));
 	return *__ptr;
       }
 
@@ -256,7 +291,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       {
         alignas(_Tp) unsigned char __buf[sizeof(_Tp)];
 	_Tp* __ptr = reinterpret_cast<_Tp*>(__buf);
-	__atomic_load(std::__addressof(_M_i), __ptr, __m);
+	__atomic_load(std::__addressof(_M_i), __ptr, int(__m));
 	return *__ptr;
       }
 
@@ -266,7 +301,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
         alignas(_Tp) unsigned char __buf[sizeof(_Tp)];
 	_Tp* __ptr = reinterpret_cast<_Tp*>(__buf);
 	__atomic_exchange(std::__addressof(_M_i), std::__addressof(__i),
-			  __ptr, __m);
+			  __ptr, int(__m));
 	return *__ptr;
       }
 
@@ -277,7 +312,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
         alignas(_Tp) unsigned char __buf[sizeof(_Tp)];
 	_Tp* __ptr = reinterpret_cast<_Tp*>(__buf);
 	__atomic_exchange(std::__addressof(_M_i), std::__addressof(__i),
-			  __ptr, __m);
+			  __ptr, int(__m));
 	return *__ptr;
       }
 
@@ -288,7 +323,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return __atomic_compare_exchange(std::__addressof(_M_i),
 					 std::__addressof(__e),
 					 std::__addressof(__i),
-					 true, __s, __f);
+					 true, int(__s), int(__f));
       }
 
       bool
@@ -298,7 +333,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return __atomic_compare_exchange(std::__addressof(_M_i),
 					 std::__addressof(__e),
 					 std::__addressof(__i),
-					 true, __s, __f);
+					 true, int(__s), int(__f));
       }
 
       bool
@@ -320,7 +355,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return __atomic_compare_exchange(std::__addressof(_M_i),
 					 std::__addressof(__e),
 					 std::__addressof(__i),
-					 false, __s, __f);
+					 false, int(__s), int(__f));
       }
 
       bool
@@ -330,7 +365,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return __atomic_compare_exchange(std::__addressof(_M_i),
 					 std::__addressof(__e),
 					 std::__addressof(__i),
-					 false, __s, __f);
+					 false, int(__s), int(__f));
       }
 
       bool
@@ -344,13 +379,36 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		     memory_order __m = memory_order_seq_cst) volatile noexcept
       { return compare_exchange_strong(__e, __i, __m,
                                        __cmpexch_failure_order(__m)); }
-    };
 
+#if __cpp_lib_atomic_wait 
+    void
+    wait(_Tp __old, memory_order __m = memory_order_seq_cst) const noexcept
+    {
+      std::__atomic_wait_address_v(&_M_i, __old,
+			 [__m, this] { return this->load(__m); });
+    }
+
+    // TODO add const volatile overload
+
+    void
+    notify_one() const noexcept
+    { std::__atomic_notify_address(&_M_i, false); }
+
+    void
+    notify_all() const noexcept
+    { std::__atomic_notify_address(&_M_i, true); }
+#endif // __cpp_lib_atomic_wait 
+
+    };
+#undef _GLIBCXX20_INIT
 
   /// Partial specialization for pointer types.
   template<typename _Tp>
     struct atomic<_Tp*>
     {
+      using value_type = _Tp*;
+      using difference_type = ptrdiff_t;
+
       typedef _Tp* 			__pointer_type;
       typedef __atomic_base<_Tp*>	__base_type;
       __base_type			_M_b;
@@ -379,51 +437,111 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       __pointer_type
       operator++(int) noexcept
-      { return _M_b++; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b++;
+      }
 
       __pointer_type
       operator++(int) volatile noexcept
-      { return _M_b++; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b++;
+      }
 
       __pointer_type
       operator--(int) noexcept
-      { return _M_b--; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b--;
+      }
 
       __pointer_type
       operator--(int) volatile noexcept
-      { return _M_b--; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b--;
+      }
 
       __pointer_type
       operator++() noexcept
-      { return ++_M_b; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return ++_M_b;
+      }
 
       __pointer_type
       operator++() volatile noexcept
-      { return ++_M_b; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return ++_M_b;
+      }
 
       __pointer_type
       operator--() noexcept
-      { return --_M_b; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return --_M_b;
+      }
 
       __pointer_type
       operator--() volatile noexcept
-      { return --_M_b; }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return --_M_b;
+      }
 
       __pointer_type
       operator+=(ptrdiff_t __d) noexcept
-      { return _M_b.operator+=(__d); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.operator+=(__d);
+      }
 
       __pointer_type
       operator+=(ptrdiff_t __d) volatile noexcept
-      { return _M_b.operator+=(__d); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.operator+=(__d);
+      }
 
       __pointer_type
       operator-=(ptrdiff_t __d) noexcept
-      { return _M_b.operator-=(__d); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.operator-=(__d);
+      }
 
       __pointer_type
       operator-=(ptrdiff_t __d) volatile noexcept
-      { return _M_b.operator-=(__d); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.operator-=(__d);
+      }
 
       bool
       is_lock_free() const noexcept
@@ -433,7 +551,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       is_lock_free() const volatile noexcept
       { return _M_b.is_lock_free(); }
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_POINTER_LOCK_FREE == 2;
 #endif
 
@@ -519,25 +637,60 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 					    __cmpexch_failure_order(__m));
       }
 
+#if __cpp_lib_atomic_wait 
+    void
+    wait(__pointer_type __old, memory_order __m = memory_order_seq_cst) noexcept
+    { _M_b.wait(__old, __m); }
+
+    // TODO add const volatile overload
+
+    void
+    notify_one() const noexcept
+    { _M_b.notify_one(); }
+
+    void
+    notify_all() const noexcept
+    { _M_b.notify_all(); }
+#endif // __cpp_lib_atomic_wait
       __pointer_type
       fetch_add(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) noexcept
-      { return _M_b.fetch_add(__d, __m); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.fetch_add(__d, __m);
+      }
 
       __pointer_type
       fetch_add(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) volatile noexcept
-      { return _M_b.fetch_add(__d, __m); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.fetch_add(__d, __m);
+      }
 
       __pointer_type
       fetch_sub(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) noexcept
-      { return _M_b.fetch_sub(__d, __m); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.fetch_sub(__d, __m);
+      }
 
       __pointer_type
       fetch_sub(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) volatile noexcept
-      { return _M_b.fetch_sub(__d, __m); }
+      {
+#if __cplusplus >= 201703L
+	static_assert( is_object<_Tp>::value, "pointer to object type" );
+#endif
+	return _M_b.fetch_sub(__d, __m);
+      }
     };
 
 
@@ -559,7 +712,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_CHAR_LOCK_FREE == 2;
 #endif
     };
@@ -582,7 +735,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_CHAR_LOCK_FREE == 2;
 #endif
     };
@@ -605,7 +758,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_CHAR_LOCK_FREE == 2;
 #endif
     };
@@ -628,7 +781,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_SHORT_LOCK_FREE == 2;
 #endif
     };
@@ -651,7 +804,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_SHORT_LOCK_FREE == 2;
 #endif
     };
@@ -674,7 +827,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_INT_LOCK_FREE == 2;
 #endif
     };
@@ -697,7 +850,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_INT_LOCK_FREE == 2;
 #endif
     };
@@ -720,7 +873,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_LONG_LOCK_FREE == 2;
 #endif
     };
@@ -743,7 +896,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_LONG_LOCK_FREE == 2;
 #endif
     };
@@ -766,7 +919,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_LLONG_LOCK_FREE == 2;
 #endif
     };
@@ -789,7 +942,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_LLONG_LOCK_FREE == 2;
 #endif
     };
@@ -812,10 +965,35 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_WCHAR_T_LOCK_FREE == 2;
 #endif
     };
+
+#ifdef _GLIBCXX_USE_CHAR8_T
+  /// Explicit specialization for char8_t.
+  template<>
+    struct atomic<char8_t> : __atomic_base<char8_t>
+    {
+      typedef char8_t 			__integral_type;
+      typedef __atomic_base<char8_t> 	__base_type;
+
+      atomic() noexcept = default;
+      ~atomic() noexcept = default;
+      atomic(const atomic&) = delete;
+      atomic& operator=(const atomic&) = delete;
+      atomic& operator=(const atomic&) volatile = delete;
+
+      constexpr atomic(__integral_type __i) noexcept : __base_type(__i) { }
+
+      using __base_type::operator __integral_type;
+      using __base_type::operator=;
+
+#if __cplusplus > 201402L
+    static constexpr bool is_always_lock_free = ATOMIC_CHAR8_T_LOCK_FREE == 2;
+#endif
+    };
+#endif
 
   /// Explicit specialization for char16_t.
   template<>
@@ -835,7 +1013,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_CHAR16_T_LOCK_FREE == 2;
 #endif
     };
@@ -858,7 +1036,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using __base_type::operator __integral_type;
       using __base_type::operator=;
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
     static constexpr bool is_always_lock_free = ATOMIC_CHAR32_T_LOCK_FREE == 2;
 #endif
     };
@@ -902,6 +1080,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /// atomic_wchar_t
   typedef atomic<wchar_t>		atomic_wchar_t;
+
+#ifdef _GLIBCXX_USE_CHAR8_T
+  /// atomic_char8_t
+  typedef atomic<char8_t>		atomic_char8_t;
+#endif
 
   /// atomic_char16_t
   typedef atomic<char16_t>		atomic_char16_t;
@@ -1046,6 +1229,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   { atomic_flag_clear_explicit(__a, memory_order_seq_cst); }
 
 
+  template<typename _Tp>
+    using __atomic_val_t = typename atomic<_Tp>::value_type;
+  template<typename _Tp>
+    using __atomic_diff_t = typename atomic<_Tp>::difference_type;
+
+  // [atomics.nonmembers] Non-member functions.
   // Function templates generally applicable to atomic types.
   template<typename _ITp>
     inline bool
@@ -1059,23 +1248,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _ITp>
     inline void
-    atomic_init(atomic<_ITp>* __a, _ITp __i) noexcept
+    atomic_init(atomic<_ITp>* __a, __atomic_val_t<_ITp> __i) noexcept
     { __a->store(__i, memory_order_relaxed); }
 
   template<typename _ITp>
     inline void
-    atomic_init(volatile atomic<_ITp>* __a, _ITp __i) noexcept
+    atomic_init(volatile atomic<_ITp>* __a, __atomic_val_t<_ITp> __i) noexcept
     { __a->store(__i, memory_order_relaxed); }
 
   template<typename _ITp>
     inline void
-    atomic_store_explicit(atomic<_ITp>* __a, _ITp __i,
+    atomic_store_explicit(atomic<_ITp>* __a, __atomic_val_t<_ITp> __i,
 			  memory_order __m) noexcept
     { __a->store(__i, __m); }
 
   template<typename _ITp>
     inline void
-    atomic_store_explicit(volatile atomic<_ITp>* __a, _ITp __i,
+    atomic_store_explicit(volatile atomic<_ITp>* __a, __atomic_val_t<_ITp> __i,
 			  memory_order __m) noexcept
     { __a->store(__i, __m); }
 
@@ -1092,20 +1281,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _ITp>
     inline _ITp
-    atomic_exchange_explicit(atomic<_ITp>* __a, _ITp __i,
+    atomic_exchange_explicit(atomic<_ITp>* __a, __atomic_val_t<_ITp> __i,
 			     memory_order __m) noexcept
     { return __a->exchange(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_exchange_explicit(volatile atomic<_ITp>* __a, _ITp __i,
+    atomic_exchange_explicit(volatile atomic<_ITp>* __a,
+			     __atomic_val_t<_ITp> __i,
 			     memory_order __m) noexcept
     { return __a->exchange(__i, __m); }
 
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_weak_explicit(atomic<_ITp>* __a,
-					  _ITp* __i1, _ITp __i2,
+					  __atomic_val_t<_ITp>* __i1,
+					  __atomic_val_t<_ITp> __i2,
 					  memory_order __m1,
 					  memory_order __m2) noexcept
     { return __a->compare_exchange_weak(*__i1, __i2, __m1, __m2); }
@@ -1113,7 +1304,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_weak_explicit(volatile atomic<_ITp>* __a,
-					  _ITp* __i1, _ITp __i2,
+					  __atomic_val_t<_ITp>* __i1,
+					  __atomic_val_t<_ITp> __i2,
 					  memory_order __m1,
 					  memory_order __m2) noexcept
     { return __a->compare_exchange_weak(*__i1, __i2, __m1, __m2); }
@@ -1121,7 +1313,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_strong_explicit(atomic<_ITp>* __a,
-					    _ITp* __i1, _ITp __i2,
+					    __atomic_val_t<_ITp>* __i1,
+					    __atomic_val_t<_ITp> __i2,
 					    memory_order __m1,
 					    memory_order __m2) noexcept
     { return __a->compare_exchange_strong(*__i1, __i2, __m1, __m2); }
@@ -1129,7 +1322,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_strong_explicit(volatile atomic<_ITp>* __a,
-					    _ITp* __i1, _ITp __i2,
+					    __atomic_val_t<_ITp>* __i1,
+					    __atomic_val_t<_ITp> __i2,
 					    memory_order __m1,
 					    memory_order __m2) noexcept
     { return __a->compare_exchange_strong(*__i1, __i2, __m1, __m2); }
@@ -1137,12 +1331,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _ITp>
     inline void
-    atomic_store(atomic<_ITp>* __a, _ITp __i) noexcept
+    atomic_store(atomic<_ITp>* __a, __atomic_val_t<_ITp> __i) noexcept
     { atomic_store_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline void
-    atomic_store(volatile atomic<_ITp>* __a, _ITp __i) noexcept
+    atomic_store(volatile atomic<_ITp>* __a, __atomic_val_t<_ITp> __i) noexcept
     { atomic_store_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
@@ -1157,18 +1351,20 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _ITp>
     inline _ITp
-    atomic_exchange(atomic<_ITp>* __a, _ITp __i) noexcept
+    atomic_exchange(atomic<_ITp>* __a, __atomic_val_t<_ITp> __i) noexcept
     { return atomic_exchange_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_exchange(volatile atomic<_ITp>* __a, _ITp __i) noexcept
+    atomic_exchange(volatile atomic<_ITp>* __a,
+		    __atomic_val_t<_ITp> __i) noexcept
     { return atomic_exchange_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_weak(atomic<_ITp>* __a,
-				 _ITp* __i1, _ITp __i2) noexcept
+				 __atomic_val_t<_ITp>* __i1,
+				 __atomic_val_t<_ITp> __i2) noexcept
     {
       return atomic_compare_exchange_weak_explicit(__a, __i1, __i2,
 						   memory_order_seq_cst,
@@ -1178,7 +1374,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_weak(volatile atomic<_ITp>* __a,
-				 _ITp* __i1, _ITp __i2) noexcept
+				 __atomic_val_t<_ITp>* __i1,
+				 __atomic_val_t<_ITp> __i2) noexcept
     {
       return atomic_compare_exchange_weak_explicit(__a, __i1, __i2,
 						   memory_order_seq_cst,
@@ -1188,7 +1385,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_strong(atomic<_ITp>* __a,
-				   _ITp* __i1, _ITp __i2) noexcept
+				   __atomic_val_t<_ITp>* __i1,
+				   __atomic_val_t<_ITp> __i2) noexcept
     {
       return atomic_compare_exchange_strong_explicit(__a, __i1, __i2,
 						     memory_order_seq_cst,
@@ -1198,173 +1396,241 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _ITp>
     inline bool
     atomic_compare_exchange_strong(volatile atomic<_ITp>* __a,
-				   _ITp* __i1, _ITp __i2) noexcept
+				   __atomic_val_t<_ITp>* __i1,
+				   __atomic_val_t<_ITp> __i2) noexcept
     {
       return atomic_compare_exchange_strong_explicit(__a, __i1, __i2,
 						     memory_order_seq_cst,
 						     memory_order_seq_cst);
     }
 
-  // Function templates for atomic_integral operations only, using
-  // __atomic_base. Template argument should be constricted to
-  // intergral types as specified in the standard, excluding address
-  // types.
+
+#if __cpp_lib_atomic_wait
+  template<typename _Tp>
+    inline void
+    atomic_wait(const atomic<_Tp>* __a,
+	        typename std::atomic<_Tp>::value_type __old) noexcept
+    { __a->wait(__old); }
+
+  template<typename _Tp>
+    inline void
+    atomic_wait_explicit(const atomic<_Tp>* __a,
+			 typename std::atomic<_Tp>::value_type __old,
+			 std::memory_order __m) noexcept
+    { __a->wait(__old, __m); }
+
+  template<typename _Tp>
+    inline void
+    atomic_notify_one(atomic<_Tp>* __a) noexcept
+    { __a->notify_one(); }
+
+  template<typename _Tp>
+    inline void
+    atomic_notify_all(atomic<_Tp>* __a) noexcept
+    { __a->notify_all(); }
+#endif // __cpp_lib_atomic_wait
+
+  // Function templates for atomic_integral and atomic_pointer operations only.
+  // Some operations (and, or, xor) are only available for atomic integrals,
+  // which is implemented by taking a parameter of type __atomic_base<_ITp>*.
+
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_add_explicit(__atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_add_explicit(atomic<_ITp>* __a,
+			      __atomic_diff_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_add(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_add_explicit(volatile __atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_add_explicit(volatile atomic<_ITp>* __a,
+			      __atomic_diff_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_add(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_sub_explicit(__atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_sub_explicit(atomic<_ITp>* __a,
+			      __atomic_diff_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_sub(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_sub_explicit(volatile __atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_sub_explicit(volatile atomic<_ITp>* __a,
+			      __atomic_diff_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_sub(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_and_explicit(__atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_and_explicit(__atomic_base<_ITp>* __a,
+			      __atomic_val_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_and(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_and_explicit(volatile __atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_and_explicit(volatile __atomic_base<_ITp>* __a,
+			      __atomic_val_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_and(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_or_explicit(__atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_or_explicit(__atomic_base<_ITp>* __a,
+			     __atomic_val_t<_ITp> __i,
 			     memory_order __m) noexcept
     { return __a->fetch_or(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_or_explicit(volatile __atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_or_explicit(volatile __atomic_base<_ITp>* __a,
+			     __atomic_val_t<_ITp> __i,
 			     memory_order __m) noexcept
     { return __a->fetch_or(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_xor_explicit(__atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_xor_explicit(__atomic_base<_ITp>* __a,
+			      __atomic_val_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_xor(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_xor_explicit(volatile __atomic_base<_ITp>* __a, _ITp __i,
+    atomic_fetch_xor_explicit(volatile __atomic_base<_ITp>* __a,
+			      __atomic_val_t<_ITp> __i,
 			      memory_order __m) noexcept
     { return __a->fetch_xor(__i, __m); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_add(__atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_add(atomic<_ITp>* __a,
+		     __atomic_diff_t<_ITp> __i) noexcept
     { return atomic_fetch_add_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_add(volatile __atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_add(volatile atomic<_ITp>* __a,
+		     __atomic_diff_t<_ITp> __i) noexcept
     { return atomic_fetch_add_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_sub(__atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_sub(atomic<_ITp>* __a,
+		     __atomic_diff_t<_ITp> __i) noexcept
     { return atomic_fetch_sub_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_sub(volatile __atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_sub(volatile atomic<_ITp>* __a,
+		     __atomic_diff_t<_ITp> __i) noexcept
     { return atomic_fetch_sub_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_and(__atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_and(__atomic_base<_ITp>* __a,
+		     __atomic_val_t<_ITp> __i) noexcept
     { return atomic_fetch_and_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_and(volatile __atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_and(volatile __atomic_base<_ITp>* __a,
+		     __atomic_val_t<_ITp> __i) noexcept
     { return atomic_fetch_and_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_or(__atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_or(__atomic_base<_ITp>* __a,
+		    __atomic_val_t<_ITp> __i) noexcept
     { return atomic_fetch_or_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_or(volatile __atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_or(volatile __atomic_base<_ITp>* __a,
+		    __atomic_val_t<_ITp> __i) noexcept
     { return atomic_fetch_or_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_xor(__atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_xor(__atomic_base<_ITp>* __a,
+		     __atomic_val_t<_ITp> __i) noexcept
     { return atomic_fetch_xor_explicit(__a, __i, memory_order_seq_cst); }
 
   template<typename _ITp>
     inline _ITp
-    atomic_fetch_xor(volatile __atomic_base<_ITp>* __a, _ITp __i) noexcept
+    atomic_fetch_xor(volatile __atomic_base<_ITp>* __a,
+		     __atomic_val_t<_ITp> __i) noexcept
     { return atomic_fetch_xor_explicit(__a, __i, memory_order_seq_cst); }
 
+#if __cplusplus > 201703L
+#define __cpp_lib_atomic_float 201711L
+  template<>
+    struct atomic<float> : __atomic_float<float>
+    {
+      atomic() noexcept = default;
 
-  // Partial specializations for pointers.
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_add_explicit(atomic<_ITp*>* __a, ptrdiff_t __d,
-			      memory_order __m) noexcept
-    { return __a->fetch_add(__d, __m); }
+      constexpr
+      atomic(float __fp) noexcept : __atomic_float<float>(__fp)
+      { }
 
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_add_explicit(volatile atomic<_ITp*>* __a, ptrdiff_t __d,
-			      memory_order __m) noexcept
-    { return __a->fetch_add(__d, __m); }
+      atomic& operator=(const atomic&) volatile = delete;
+      atomic& operator=(const atomic&) = delete;
 
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_add(volatile atomic<_ITp*>* __a, ptrdiff_t __d) noexcept
-    { return __a->fetch_add(__d); }
+      using __atomic_float<float>::operator=;
+    };
 
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_add(atomic<_ITp*>* __a, ptrdiff_t __d) noexcept
-    { return __a->fetch_add(__d); }
+  template<>
+    struct atomic<double> : __atomic_float<double>
+    {
+      atomic() noexcept = default;
 
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_sub_explicit(volatile atomic<_ITp*>* __a,
-			      ptrdiff_t __d, memory_order __m) noexcept
-    { return __a->fetch_sub(__d, __m); }
+      constexpr
+      atomic(double __fp) noexcept : __atomic_float<double>(__fp)
+      { }
 
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_sub_explicit(atomic<_ITp*>* __a, ptrdiff_t __d,
-			      memory_order __m) noexcept
-    { return __a->fetch_sub(__d, __m); }
+      atomic& operator=(const atomic&) volatile = delete;
+      atomic& operator=(const atomic&) = delete;
 
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_sub(volatile atomic<_ITp*>* __a, ptrdiff_t __d) noexcept
-    { return __a->fetch_sub(__d); }
+      using __atomic_float<double>::operator=;
+    };
 
-  template<typename _ITp>
-    inline _ITp*
-    atomic_fetch_sub(atomic<_ITp*>* __a, ptrdiff_t __d) noexcept
-    { return __a->fetch_sub(__d); }
-  // @} group atomics
+  template<>
+    struct atomic<long double> : __atomic_float<long double>
+    {
+      atomic() noexcept = default;
+
+      constexpr
+      atomic(long double __fp) noexcept : __atomic_float<long double>(__fp)
+      { }
+
+      atomic& operator=(const atomic&) volatile = delete;
+      atomic& operator=(const atomic&) = delete;
+
+      using __atomic_float<long double>::operator=;
+    };
+
+#define __cpp_lib_atomic_ref 201806L
+
+  /// Class template to provide atomic operations on a non-atomic variable.
+  template<typename _Tp>
+    struct atomic_ref : __atomic_ref<_Tp>
+    {
+      explicit
+      atomic_ref(_Tp& __t) noexcept : __atomic_ref<_Tp>(__t)
+      { }
+
+      atomic_ref& operator=(const atomic_ref&) = delete;
+
+      atomic_ref(const atomic_ref&) = default;
+
+      using __atomic_ref<_Tp>::operator=;
+    };
+
+#endif // C++2a
+
+  /// @} group atomics
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

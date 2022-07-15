@@ -5,11 +5,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build aix linux solaris,386 solaris,sparc
+// +build aix hurd linux solaris,386 solaris,sparc
 
 package os
 
 import "syscall"
 
-//extern readdir64_r
-func libc_readdir_r(*syscall.DIR, *syscall.Dirent, **syscall.Dirent) syscall.Errno
+//extern readdir64
+func libc_readdir(*syscall.DIR) *syscall.Dirent

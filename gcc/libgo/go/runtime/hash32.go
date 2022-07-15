@@ -6,16 +6,15 @@
 //   xxhash: https://code.google.com/p/xxhash/
 // cityhash: https://code.google.com/p/cityhash/
 
-// +build 386 arm armbe m68k mips mipsle ppc s390 sh shbe sparc
+// +build 386 arm armbe m68k mips mipsle nios2 ppc riscv s390 sh shbe sparc
 
 package runtime
 
 import "unsafe"
 
-// For gccgo, use go:linkname to rename compiler-called functions to
-// themselves, so that the compiler will export them.
+// For gccgo, use go:linkname to export compiler-called functions.
 //
-//go:linkname memhash runtime.memhash
+//go:linkname memhash
 
 const (
 	// Constants for multiplication: four random odd 32-bit numbers.

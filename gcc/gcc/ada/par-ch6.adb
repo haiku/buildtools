@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -229,12 +229,13 @@ package body Ch6 is
       --  Set up scope stack entry. Note that the Labl field will be set later
 
       SIS_Entry_Active := False;
+      SIS_Aspect_Import_Seen := False;
       SIS_Missing_Semicolon_Message := No_Error_Msg;
       Push_Scope_Stack;
-      Scope.Table (Scope.Last).Sloc := Token_Ptr;
-      Scope.Table (Scope.Last).Etyp := E_Name;
-      Scope.Table (Scope.Last).Ecol := Start_Column;
-      Scope.Table (Scope.Last).Lreq := False;
+      Scopes (Scope.Last).Sloc := Token_Ptr;
+      Scopes (Scope.Last).Etyp := E_Name;
+      Scopes (Scope.Last).Ecol := Start_Column;
+      Scopes (Scope.Last).Lreq := False;
 
       Aspects := Empty_List;
 
@@ -335,7 +336,7 @@ package body Ch6 is
          Name_Node := P_Defining_Program_Unit_Name;
       end if;
 
-      Scope.Table (Scope.Last).Labl := Name_Node;
+      Scopes (Scope.Last).Labl := Name_Node;
       Current_Node := Name_Node;
       Ignore (Tok_Colon);
 
@@ -425,11 +426,7 @@ package body Ch6 is
          --  Ada 2005 (AI-318-02)
 
          if Token = Tok_Access then
-            if Ada_Version < Ada_2005 then
-               Error_Msg_SC
-                 ("anonymous access result type is an Ada 2005 extension");
-               Error_Msg_SC ("\unit must be compiled with -gnat05 switch");
-            end if;
+            Error_Msg_Ada_2005_Extension ("anonymous access result type");
 
             Result_Node := P_Access_Definition (Result_Not_Null);
 
@@ -533,7 +530,7 @@ package body Ch6 is
          --  i.e. that the terminating semicolon should have been IS.
 
          elsif Token = Tok_Begin
-            and then Start_Column >= Scope.Table (Scope.Last).Ecol
+            and then Start_Column >= Scopes (Scope.Last).Ecol
          then
             Error_Msg_SP -- CODEFIX
               ("|"";"" should be IS!");
@@ -597,10 +594,7 @@ package body Ch6 is
             --  Ada 2005 (AI-248): Parse a null procedure declaration
 
             elsif Token = Tok_Null then
-               if Ada_Version < Ada_2005 then
-                  Error_Msg_SP ("null procedures are an Ada 2005 extension");
-                  Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-               end if;
+               Error_Msg_Ada_2005_Extension ("null procedure");
 
                Scan; -- past NULL
 
@@ -706,9 +700,6 @@ package body Ch6 is
          else
             Scan_Body_Or_Expression_Function : declare
 
-               Body_Is_Hidden_In_SPARK : Boolean;
-               Hidden_Region_Start     : Source_Ptr;
-
                function Likely_Expression_Function return Boolean;
                --  Returns True if we have a probable case of an expression
                --  function omitting the parentheses, if so, returns True
@@ -764,7 +755,7 @@ package body Ch6 is
 
                            Spec_Node : constant Node_Id :=
                                          Parent
-                                           (Scope.Table (Scope.Last).Labl);
+                                           (Scopes (Scope.Last).Labl);
                            Lib_Node : Node_Id := Spec_Node;
 
                         begin
@@ -773,7 +764,7 @@ package body Ch6 is
 
                            if Scope.Last > 1 then
                               Lib_Node  :=
-                                Parent (Scope.Table (Scope.Last - 1).Labl);
+                                Parent (Scopes (Scope.Last - 1).Labl);
                            end if;
 
                            if Ada_Version >= Ada_2012
@@ -885,9 +876,9 @@ package body Ch6 is
                      --  with syntactic parentheses.
 
                      if not (Paren_Count (Expr) /= 0
-                              or else Nkind_In (Expr, N_Aggregate,
-                                                      N_Extension_Aggregate,
-                                                      N_Quantified_Expression))
+                              or else Nkind (Expr) in N_Aggregate
+                                                    | N_Extension_Aggregate
+                                                    | N_Quantified_Expression)
                      then
                         Error_Msg
                           ("expression function must be enclosed in "
@@ -917,11 +908,11 @@ package body Ch6 is
                   if (Token in Token_Class_Declk
                         or else
                       Token = Tok_Identifier)
-                    and then Start_Column <= Scope.Table (Scope.Last).Ecol
+                    and then Start_Column <= Scopes (Scope.Last).Ecol
                     and then Scope.Last /= 1
                   then
-                     Scope.Table (Scope.Last).Etyp := E_Suspicious_Is;
-                     Scope.Table (Scope.Last).S_Is := Prev_Token_Ptr;
+                     Scopes (Scope.Last).Etyp := E_Suspicious_Is;
+                     Scopes (Scope.Last).S_Is := Prev_Token_Ptr;
                   end if;
 
                   --  Build and return subprogram body, parsing declarations
@@ -941,25 +932,7 @@ package body Ch6 is
                      Set_Aspect_Specifications (Body_Node, Aspects);
                   end if;
 
-                  --  In SPARK, a HIDE directive can be placed at the beginning
-                  --  of a subprogram implementation, thus hiding the
-                  --  subprogram body from SPARK tool-set. No violation of the
-                  --  SPARK restriction should be issued on nodes in a hidden
-                  --  part, which is obtained by marking such hidden parts.
-
-                  if Token = Tok_SPARK_Hide then
-                     Body_Is_Hidden_In_SPARK := True;
-                     Hidden_Region_Start     := Token_Ptr;
-                     Scan; -- past HIDE directive
-                  else
-                     Body_Is_Hidden_In_SPARK := False;
-                  end if;
-
                   Parse_Decls_Begin_End (Body_Node);
-
-                  if Body_Is_Hidden_In_SPARK then
-                     Set_Hidden_Part_In_SPARK (Hidden_Region_Start, Token_Ptr);
-                  end if;
                end if;
 
                return Body_Node;
@@ -979,6 +952,16 @@ package body Ch6 is
          --  the collected aspects, if any, to the body.
 
          if Token = Tok_Is then
+
+            --  If the subprogram is a procedure and already has a
+            --  specification, we can't define another.
+
+            if Nkind (Specification (Decl_Node)) = N_Procedure_Specification
+              and then Null_Present (Specification (Decl_Node))
+            then
+               Error_Msg_AP ("null procedure cannot have a body");
+            end if;
+
             Scan;
             goto Subprogram_Body;
 
@@ -998,18 +981,23 @@ package body Ch6 is
 
          if Pf_Flags.Pbod
 
-           --  Disconnnect this processing if we have scanned a null procedure
+           --  Disconnect this processing if we have scanned a null procedure
            --  because in this case the spec is complete anyway with no body.
 
            and then (Nkind (Specification_Node) /= N_Procedure_Specification
                       or else not Null_Present (Specification_Node))
          then
-            SIS_Labl := Scope.Table (Scope.Last).Labl;
-            SIS_Sloc := Scope.Table (Scope.Last).Sloc;
-            SIS_Ecol := Scope.Table (Scope.Last).Ecol;
+            SIS_Labl := Scopes (Scope.Last).Labl;
+            SIS_Sloc := Scopes (Scope.Last).Sloc;
+            SIS_Ecol := Scopes (Scope.Last).Ecol;
             SIS_Declaration_Node := Decl_Node;
             SIS_Semicolon_Sloc := Prev_Token_Ptr;
-            SIS_Entry_Active := True;
+
+            --  Do not activate the entry if we have "with Import"
+
+            if not SIS_Aspect_Import_Seen then
+               SIS_Entry_Active := True;
+            end if;
          end if;
 
          Pop_Scope_Stack;
@@ -1069,11 +1057,7 @@ package body Ch6 is
          --  Ada 2005 (AI-318-02)
 
          if Token = Tok_Access then
-            if Ada_Version < Ada_2005 then
-               Error_Msg_SC
-                 ("anonymous access result type is an Ada 2005 extension");
-               Error_Msg_SC ("\unit must be compiled with -gnat05 switch");
-            end if;
+            Error_Msg_Ada_2005_Extension ("anonymous access result type");
 
             Result_Node := P_Access_Definition (Result_Not_Null);
 
@@ -1442,7 +1426,7 @@ package body Ch6 is
                   Look_Ahead : loop
 
                      --  If we run into a semicolon, then assume that a
-                     --  colon was missing, e.g.  Parms (X Y; ...). Also
+                     --  colon was missing, e.g. Parms (X Y; ...). Also
                      --  assume missing colon on EOF (a real disaster)
                      --  and on a right paren, e.g. Parms (X Y), and also
                      --  on an assignment symbol, e.g. Parms (X Y := ..)
@@ -1632,11 +1616,28 @@ package body Ch6 is
             Scan; -- past right paren
             exit Specification_Loop;
 
+         --  Support for aspects on formal parameters is a GNAT extension for
+         --  the time being.
+
+         elsif Token = Tok_With then
+            Error_Msg_Ada_2020_Feature
+              ("aspect on formal parameter", Token_Ptr);
+
+            P_Aspect_Specifications (Specification_Node, False);
+
+            if Token = Tok_Right_Paren then
+               Scan;  -- past right paren
+               exit Specification_Loop;
+
+            elsif Token = Tok_Semicolon then
+               Save_Scan_State (Scan_State);
+               Scan; -- past semicolon
+            end if;
+
          --  Special check for common error of using comma instead of semicolon
 
          elsif Token = Tok_Comma then
             T_Semicolon;
-            Scan; -- past comma
 
          --  Special check for omitted separator
 
@@ -1757,7 +1758,8 @@ package body Ch6 is
    --
    --  EXTENDED_RETURN_STATEMENT ::=
    --    return DEFINING_IDENTIFIER : [aliased] RETURN_SUBTYPE_INDICATION
-   --                                           [:= EXPRESSION] [do
+   --                                           [:= EXPRESSION]
+   --                                           [ASPECT_SPECIFICATION] [do
    --      HANDLED_SEQUENCE_OF_STATEMENTS
    --    end return];
    --
@@ -1861,6 +1863,7 @@ package body Ch6 is
       if Token = Tok_Colon_Equal then
          Scan; -- past :=
          Set_Expression (Decl_Node, P_Expression_No_Right_Paren);
+         Set_Has_Init_Expression (Decl_Node);
       end if;
 
       return Decl_Node;
@@ -1902,6 +1905,7 @@ package body Ch6 is
       Ret_Sloc : constant Source_Ptr := Token_Ptr;
       Ret_Strt : constant Column_Number := Start_Column;
       Ret_Node : Node_Id;
+      Decl     : Node_Id;
 
    --  Start of processing for P_Return_Statement
 
@@ -1934,22 +1938,22 @@ package body Ch6 is
          --  Extended_return_statement (Ada 2005 only -- AI-318):
 
          else
-            if Ada_Version < Ada_2005 then
-               Error_Msg_SP
-                 (" extended_return_statement is an Ada 2005 extension");
-               Error_Msg_SP ("\unit must be compiled with -gnat05 switch");
-            end if;
+            Error_Msg_Ada_2005_Extension ("extended return statement");
 
             Ret_Node := New_Node (N_Extended_Return_Statement, Ret_Sloc);
-            Set_Return_Object_Declarations
-              (Ret_Node, New_List (P_Return_Object_Declaration));
+            Decl := P_Return_Object_Declaration;
+            Set_Return_Object_Declarations (Ret_Node, New_List (Decl));
+
+            if Token = Tok_With then
+               P_Aspect_Specifications (Decl, False);
+            end if;
 
             if Token = Tok_Do then
                Push_Scope_Stack;
-               Scope.Table (Scope.Last).Ecol := Ret_Strt;
-               Scope.Table (Scope.Last).Etyp := E_Return;
-               Scope.Table (Scope.Last).Labl := Error;
-               Scope.Table (Scope.Last).Sloc := Ret_Sloc;
+               Scopes (Scope.Last).Ecol := Ret_Strt;
+               Scopes (Scope.Last).Etyp := E_Return;
+               Scopes (Scope.Last).Labl := Error;
+               Scopes (Scope.Last).Sloc := Ret_Sloc;
 
                Scan; -- past DO
                Set_Handled_Statement_Sequence

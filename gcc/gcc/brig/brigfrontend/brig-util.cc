@@ -1,5 +1,5 @@
 /* brig-util.cc -- gccbrig utility functions
-   Copyright (C) 2016-2018 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    Contributed by Pekka Jaaskelainen <pekka.jaaskelainen@parmance.com>
    for General Processor Tech.
 
@@ -563,3 +563,12 @@ gccbrig_print_reg_use_info (FILE *dump, const regs_use_index &info)
 	}
     }
 }
+
+/* Return true if TYPE is a packed HSA type.  */
+
+bool
+hsa_type_packed_p (BrigType16_t type)
+{
+  return (type & BRIG_TYPE_PACK_MASK) != BRIG_TYPE_PACK_NONE;
+}
+

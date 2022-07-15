@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  S p e c                                 --
 --                                                                          --
---         Copyright (C) 1992-2018, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2020, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -102,7 +102,7 @@ package System.Tasking.Utilities is
 
    procedure Cancel_Queued_Entry_Calls (T : Task_Id);
    --  Cancel any entry calls queued on target task.
-   --  Call this while holding T's lock (or RTS_Lock in Single_Lock mode).
+   --  Call this while holding T's lock.
 
    procedure Exit_One_ATC_Level (Self_ID : Task_Id);
    pragma Inline (Exit_One_ATC_Level);
@@ -111,7 +111,8 @@ package System.Tasking.Utilities is
    --  The effect is to exit one level of ATC nesting.
 
    procedure Abort_One_Task (Self_ID : Task_Id; T : Task_Id);
-   --  Similar to Locked_Abort_To_Level (Self_ID, T, 0), but:
+   --  Similar to Locked_Abort_To_Level (Self_ID, T, Level_Completed_Task),
+   --  but:
    --    (1) caller should be holding no locks
    --    (2) may be called for tasks that have not yet been activated
    --    (3) always aborts whole task
@@ -123,7 +124,6 @@ package System.Tasking.Utilities is
    procedure Make_Passive (Self_ID : Task_Id; Task_Completed : Boolean);
    --  Update counts to indicate current task is either terminated or
    --  accepting on a terminate alternative. Call holding no locks except
-   --  Global_Task_Lock when calling from Terminate_Task, and RTS_Lock when
-   --  Single_Lock is True.
+   --  Global_Task_Lock when calling from Terminate_Task.
 
 end System.Tasking.Utilities;

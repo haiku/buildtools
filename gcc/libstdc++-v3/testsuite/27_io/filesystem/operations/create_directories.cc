@@ -1,4 +1,4 @@
-// Copyright (C) 2015-2018 Free Software Foundation, Inc.
+// Copyright (C) 2015-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,7 +15,6 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++17 -lstdc++fs" }
 // { dg-do run { target c++17 } }
 // { dg-require-filesystem-ts "" }
 
@@ -70,10 +69,20 @@ test01()
   b = fs::create_directories( p/"./d4/../d5", ec );
   VERIFY( !ec );
   VERIFY( b );
+#if defined(__MINGW32__) || defined(__MINGW64__)
+  // create_directories("./d4/..") is a no-op, does not create "d4"
+#else
+  VERIFY( is_directory(p/"d4") );
+#endif
+  VERIFY( is_directory(p/"d5") );
   VERIFY( is_directory(p/"./d4/../d5") );
 
   std::uintmax_t count = remove_all(p, ec);
+#if defined(__MINGW32__) || defined(__MINGW64__)
+  VERIFY( count == 5 );
+#else
   VERIFY( count == 6 );
+#endif
 }
 
 void
@@ -90,9 +99,11 @@ test02()
     result = create_directories(file.path, ec);
     VERIFY( !result );
     VERIFY( ec == std::errc::not_a_directory );
+    ec.clear();
     result = create_directories(file.path / "foo", ec);
     VERIFY( !result );
     VERIFY( ec == std::errc::not_a_directory );
+    ec.clear();
   }
 
   create_directories(p);
@@ -103,9 +114,18 @@ test02()
     result = create_directories(file.path, ec);
     VERIFY( !result );
     VERIFY( ec == std::errc::not_a_directory );
+    ec.clear();
     result = create_directories(file.path/"../bar", ec);
+#if defined(__MINGW32__) || defined(__MINGW64__)
+    VERIFY( result );
+    VERIFY( !ec );
+    VERIFY( is_directory(dir.path/"bar") );
+    remove(dir.path/"bar");
+#else
     VERIFY( !result );
     VERIFY( ec == std::errc::not_a_directory );
+    VERIFY( !is_directory(dir.path/"bar") );
+#endif
   }
 }
 

@@ -1,6 +1,6 @@
 // Experimental shared_ptr with array support -*- C++ -*-
 
-// Copyright (C) 2015-2018 Free Software Foundation, Inc.
+// Copyright (C) 2015-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -137,10 +137,13 @@ inline namespace fundamentals_v2
 	: _Base_type(__r) { }
 
 #if _GLIBCXX_USE_DEPRECATED
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
       template<typename _Tp1, typename = _Compatible<_Tp1>>
 	shared_ptr(std::auto_ptr<_Tp1>&& __r)
 	: _Base_type(std::move(__r))
 	{ _M_enable_shared_from_this_with(static_cast<_Tp1*>(this->get())); }
+#pragma GCC diagnostic pop
 #endif
 
       template<typename _Tp1, typename _Del,
@@ -157,10 +160,10 @@ inline namespace fundamentals_v2
       constexpr shared_ptr(nullptr_t __p)
       : _Base_type(__p) { }
 
-      // C++14 §20.8.2.2
+      // C++14 20.8.2.2
       ~shared_ptr() = default;
 
-      // C++14 §20.8.2.3
+      // C++14 20.8.2.3
       shared_ptr& operator=(const shared_ptr&) noexcept = default;
 
       template <typename _Tp1>
@@ -187,6 +190,8 @@ inline namespace fundamentals_v2
 	}
 
 #if _GLIBCXX_USE_DEPRECATED
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
       template<typename _Tp1>
 	_Compatible<_Tp1, shared_ptr&>
 	operator=(std::auto_ptr<_Tp1>&& __r)
@@ -194,6 +199,7 @@ inline namespace fundamentals_v2
 	  __shared_ptr<_Tp>::operator=(std::move(__r));
 	  return *this;
 	}
+#pragma GCC diagnostic pop
 #endif
 
       template <typename _Tp1, typename _Del>
@@ -204,7 +210,7 @@ inline namespace fundamentals_v2
 	  return *this;
 	}
 
-      // C++14 §20.8.2.2.4
+      // C++14 20.8.2.2.4
       // swap & reset
       // 8.2.1.2 shared_ptr observers
       // in __shared_ptr
@@ -255,7 +261,7 @@ inline namespace fundamentals_v2
 	{ }
     };
 
-  // C++14 §20.8.2.2.7 //DOING
+  // C++14 20.8.2.2.7
   template<typename _Tp1, typename _Tp2>
     bool operator==(const shared_ptr<_Tp1>& __a,
 		    const shared_ptr<_Tp2>& __b) noexcept
@@ -368,7 +374,7 @@ inline namespace fundamentals_v2
     operator>=(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     { return !(nullptr < __a); }
 
-  // C++14 §20.8.2.2.8
+  // C++14 20.8.2.2.8
   template<typename _Tp>
     inline void
     swap(shared_ptr<_Tp>& __a, shared_ptr<_Tp>& __b) noexcept
@@ -409,7 +415,7 @@ inline namespace fundamentals_v2
       return shared_ptr<_Tp>(__r, reinterpret_cast<__elem_t*>(__r.get()));
     }
 
-  // C++14 §20.8.2.3
+  // C++14 20.8.2.3
   template<typename _Tp>
     class weak_ptr : public __weak_ptr<_Tp>
     {
@@ -474,19 +480,19 @@ inline namespace fundamentals_v2
        friend class enable_shared_from_this<_Tp>;
     };
 
-  // C++14 §20.8.2.3.6
+  // C++14 20.8.2.3.6
   template<typename _Tp>
     inline void
     swap(weak_ptr<_Tp>& __a, weak_ptr<_Tp>& __b) noexcept
     { __a.swap(__b); }
 
-  /// C++14 §20.8.2.2.10
+  /// C++14 20.8.2.2.10
   template<typename _Del, typename _Tp>
     inline _Del*
     get_deleter(const shared_ptr<_Tp>& __p) noexcept
     { return std::get_deleter<_Del>(__p); }
 
-  // C++14 §20.8.2.2.11
+  // C++14 20.8.2.2.11
   template<typename _Ch, typename _Tr, typename _Tp>
     inline std::basic_ostream<_Ch, _Tr>&
     operator<<(std::basic_ostream<_Ch, _Tr>& __os, const shared_ptr<_Tp>& __p)
@@ -495,7 +501,7 @@ inline namespace fundamentals_v2
       return __os;
     }
 
-  // C++14 §20.8.2.4
+  // C++14 20.8.2.4
   template<typename _Tp = void> class owner_less;
 
    /// Partial specialization of owner_less for shared_ptr.
@@ -540,7 +546,7 @@ inline namespace fundamentals_v2
       typedef void is_transparent;
     };
 
-   // C++14 §20.8.2.6
+   // C++14 20.8.2.6
    template<typename _Tp>
      inline bool
      atomic_is_lock_free(const shared_ptr<_Tp>* __p)

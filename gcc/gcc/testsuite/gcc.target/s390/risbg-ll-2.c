@@ -34,7 +34,7 @@ i64 f2 (i64 v_a, i64 v_b)
 // Test a case with two ANDs and a shift.
 i32 f3 (i32 v_a, i32 v_b)
 {
-  /* { dg-final { scan-assembler "f3:\n\trisbg\t%r2,%r3,64-4,63,4\\\+52" } } */
+  /* { dg-final { scan-assembler "f3:\n\trisbg\t%r2,%r3,64-4,63,\\(64-32\\)\\+4\\+20\n\tlgfr\t%r2,%r2" } } */
   i32 v_anda = v_a & -16;
   i32 v_shr = ((ui32)v_b) >> 8;
   i32 v_andb = v_shr & 15;
@@ -45,8 +45,8 @@ i32 f3 (i32 v_a, i32 v_b)
 // ...and again with i64.
 i64 f4 (i64 v_a, i64 v_b)
 {
-  /* { dg-final { scan-assembler "f4:\n\trisbg\t%r2,%r3,60,60\\\+4-1,128-60-4-8" { target { lp64 } } } } */
-  /* { dg-final { scan-assembler "f4:\n\(\t.*\n\)*\trisbg\t%r5,%r5,64-4,128\\\+63,52\\\+4" { target { ! lp64 } } } } */
+  /* { dg-final { scan-assembler "f4:\n\trisbg\t%r2,%r3,64-4,63,\\(64-64\\)\\+4\\+52" { target { lp64 } } } } */
+  /* { dg-final { scan-assembler "f4:\n\(\t.*\n\)*\trisbg\t%r5,%r5,64-4,128\\+63,\\(64-64\\)\\+52\\+4" { target { ! lp64 } } } } */
   i64 v_anda = v_a & -16;
   i64 v_shr = ((ui64)v_b) >> 8;
   i64 v_andb = v_shr & 15;
@@ -114,7 +114,7 @@ i32 f9 (i64 v_x, i32 v_y)
 i32 f10 (i64 v_x, i32 v_y)
 {
   /* { dg-final { scan-assembler "f10:\n\tsrlg\t%r2,%r2,48\n\trosbg\t%r2,%r3,32,39,0" { target { lp64 } } } } */
-  /* { dg-final { scan-assembler "f10:\n\tnilf\t%r4,4278190080\n\trosbg\t%r4,%r2,32\\\+16,63,64-16" { target { ! lp64 } } } } */
+  /* { dg-final { scan-assembler "f10:\n\tnilf\t%r4,4278190080\n\trosbg\t%r4,%r2,48,63,48" { target { ! lp64 } } } } */
   i64 v_shr6 = ((ui64)v_x) >> 48;
   i32 v_conv = (ui32)v_shr6;
   i32 v_and1 = v_y & -16777216;

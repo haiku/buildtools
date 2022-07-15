@@ -1,5 +1,6 @@
 ## Process this file with automake to produce Makefile.in
 
+AUTOMAKE_OPTIONS = info-in-builddir
 ACLOCAL_AMFLAGS = -I .. -I ../config
 SUBDIRS = testsuite
 
@@ -63,7 +64,8 @@ libgomp_la_SOURCES = alloc.c atomic.c barrier.c critical.c env.c error.c \
 	parallel.c sections.c single.c task.c team.c work.c lock.c mutex.c \
 	proc.c sem.c bar.c ptrlock.c time.c fortran.c affinity.c target.c \
 	splay-tree.c libgomp-plugin.c oacc-parallel.c oacc-host.c oacc-init.c \
-	oacc-mem.c oacc-async.c oacc-plugin.c oacc-cuda.c priority_queue.c
+	oacc-mem.c oacc-async.c oacc-plugin.c oacc-cuda.c priority_queue.c \
+	affinity-fmt.c teams.c allocator.c oacc-profiling.c oacc-target.c
 
 include $(top_srcdir)/plugin/Makefrag.am
 
@@ -72,7 +74,7 @@ libgomp_la_SOURCES += openacc.f90
 endif
 
 nodist_noinst_HEADERS = libgomp_f.h
-nodist_libsubinclude_HEADERS = omp.h openacc.h
+nodist_libsubinclude_HEADERS = omp.h openacc.h acc_prof.h
 if USE_FORTRAN
 nodist_finclude_HEADERS = omp_lib.h omp_lib.f90 omp_lib.mod omp_lib_kinds.mod \
 	openacc_lib.h openacc.f90 openacc.mod openacc_kinds.mod
@@ -90,7 +92,7 @@ openacc_kinds.mod: openacc.mod
 openacc.mod: openacc.lo
 	:
 %.mod: %.f90
-	$(FC) $(FCFLAGS) -fsyntax-only $<
+	$(FC) $(FCFLAGS) -cpp -fopenmp -fsyntax-only $<
 fortran.lo: libgomp_f.h
 fortran.o: libgomp_f.h
 env.lo: libgomp_f.h
@@ -136,5 +138,10 @@ stamp-build-info: libgomp.texi
 	@touch $@
 
 
-CLEANFILES = $(STAMP_GENINSRC) $(STAMP_BUILD_INFO) libgomp.info
+CLEANFILES = $(STAMP_GENINSRC) $(STAMP_BUILD_INFO)
 MAINTAINERCLEANFILES = $(srcdir)/libgomp.info
+
+# target overrides
+-include $(tmake_file)
+
+include $(top_srcdir)/../multilib.am

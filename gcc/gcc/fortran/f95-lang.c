@@ -1,5 +1,5 @@
 /* gfortran backend interface
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
    Contributed by Paul Brook.
 
 This file is part of GCC.
@@ -91,7 +91,7 @@ static const struct attribute_spec gfc_attribute_table[] =
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
        affects_type_identity, handler, exclude } */
-  { "omp declare target", 0, 0, true,  false, false, false,
+  { "omp declare target", 0, -1, true,  false, false, false,
     gfc_handle_omp_declare_target_attribute, NULL },
   { "omp declare target link", 0, 0, true,  false, false, false,
     gfc_handle_omp_declare_target_attribute, NULL },
@@ -113,8 +113,12 @@ static const struct attribute_spec gfc_attribute_table[] =
 #undef LANG_HOOKS_TYPE_FOR_MODE
 #undef LANG_HOOKS_TYPE_FOR_SIZE
 #undef LANG_HOOKS_INIT_TS
+#undef LANG_HOOKS_OMP_ARRAY_DATA
+#undef LANG_HOOKS_OMP_IS_ALLOCATABLE_OR_PTR
+#undef LANG_HOOKS_OMP_CHECK_OPTIONAL_ARGUMENT
 #undef LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE
 #undef LANG_HOOKS_OMP_PREDETERMINED_SHARING
+#undef LANG_HOOKS_OMP_PREDETERMINED_MAPPING
 #undef LANG_HOOKS_OMP_REPORT_DECL
 #undef LANG_HOOKS_OMP_CLAUSE_DEFAULT_CTOR
 #undef LANG_HOOKS_OMP_CLAUSE_COPY_CTOR
@@ -145,8 +149,12 @@ static const struct attribute_spec gfc_attribute_table[] =
 #define LANG_HOOKS_TYPE_FOR_MODE	gfc_type_for_mode
 #define LANG_HOOKS_TYPE_FOR_SIZE	gfc_type_for_size
 #define LANG_HOOKS_INIT_TS		gfc_init_ts
+#define LANG_HOOKS_OMP_ARRAY_DATA		gfc_omp_array_data
+#define LANG_HOOKS_OMP_IS_ALLOCATABLE_OR_PTR	gfc_omp_is_allocatable_or_ptr
+#define LANG_HOOKS_OMP_CHECK_OPTIONAL_ARGUMENT	gfc_omp_check_optional_argument
 #define LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE	gfc_omp_privatize_by_reference
 #define LANG_HOOKS_OMP_PREDETERMINED_SHARING	gfc_omp_predetermined_sharing
+#define LANG_HOOKS_OMP_PREDETERMINED_MAPPING	gfc_omp_predetermined_mapping
 #define LANG_HOOKS_OMP_REPORT_DECL		gfc_omp_report_decl
 #define LANG_HOOKS_OMP_CLAUSE_DEFAULT_CTOR	gfc_omp_clause_default_ctor
 #define LANG_HOOKS_OMP_CLAUSE_COPY_CTOR		gfc_omp_clause_copy_ctor
@@ -248,7 +256,7 @@ gfc_init (void)
   gfc_init_1 ();
 
   if (!gfc_new_file ())
-    fatal_error (input_location, "can't open input file: %s", gfc_source_file);
+    fatal_error (input_location, "cannot open input file: %s", gfc_source_file);
 
   if (flag_preprocess_only)
     return false;
@@ -523,7 +531,7 @@ gfc_builtin_function (tree decl)
   return decl;
 }
 
-/* So far we need just these 7 attribute types.  */
+/* So far we need just these 8 attribute types.  */
 #define ATTR_NULL			0
 #define ATTR_LEAF_LIST			(ECF_LEAF)
 #define ATTR_NOTHROW_LEAF_LIST		(ECF_NOTHROW | ECF_LEAF)
@@ -532,6 +540,8 @@ gfc_builtin_function (tree decl)
 #define ATTR_PURE_NOTHROW_LEAF_LIST	(ECF_NOTHROW | ECF_LEAF | ECF_PURE)
 #define ATTR_NOTHROW_LIST		(ECF_NOTHROW)
 #define ATTR_CONST_NOTHROW_LIST		(ECF_NOTHROW | ECF_CONST)
+#define ATTR_ALLOC_WARN_UNUSED_RESULT_SIZE_2_NOTHROW_LIST \
+					(ECF_NOTHROW)
 
 static void
 gfc_define_builtin (const char *name, tree type, enum built_in_function code,
@@ -873,7 +883,7 @@ gfc_init_builtin_functions (void)
 		      BUILT_IN_POWIF, "powif", ATTR_CONST_NOTHROW_LEAF_LIST);
 
 
-  if (targetm.libc_has_function (function_c99_math_complex))
+  if (targetm.libc_has_function (function_c99_math_complex, NULL_TREE))
     {
       gfc_define_builtin ("__builtin_cbrtl", mfunc_longdouble[0],
 			  BUILT_IN_CBRTL, "cbrtl",
@@ -895,7 +905,7 @@ gfc_init_builtin_functions (void)
 			  ATTR_CONST_NOTHROW_LEAF_LIST);
     }
 
-  if (targetm.libc_has_function (function_sincos))
+  if (targetm.libc_has_function (function_sincos, NULL_TREE))
     {
       gfc_define_builtin ("__builtin_sincosl",
 			  func_longdouble_longdoublep_longdoublep,
@@ -1202,6 +1212,10 @@ gfc_init_builtin_functions (void)
 #undef DEF_GOACC_BUILTIN_COMPILER
 #define DEF_GOACC_BUILTIN_COMPILER(code, name, type, attr) \
       gfc_define_builtin (name, builtin_types[type], code, name, attr);
+#undef DEF_GOACC_BUILTIN_ONLY
+#define DEF_GOACC_BUILTIN_ONLY(code, name, type, attr) \
+      gfc_define_builtin ("__builtin_" name, builtin_types[type], code, NULL, \
+			  attr);
 #undef DEF_GOMP_BUILTIN
 #define DEF_GOMP_BUILTIN(code, name, type, attr) /* ignore */
 #include "../omp-builtins.def"
@@ -1224,18 +1238,14 @@ gfc_init_builtin_functions (void)
 #undef DEF_GOACC_BUILTIN
 #undef DEF_GOACC_BUILTIN_COMPILER
 #undef DEF_GOMP_BUILTIN
+      tree gomp_alloc = builtin_decl_explicit (BUILT_IN_GOMP_ALLOC);
+      tree two = build_int_cst (integer_type_node, 2);
+      DECL_ATTRIBUTES (gomp_alloc)
+	= tree_cons (get_identifier ("warn_unused_result"), NULL_TREE,
+		     tree_cons (get_identifier ("alloc_size"),
+				build_tree_list (NULL_TREE, two),
+				DECL_ATTRIBUTES (gomp_alloc)));
     }
-
-#ifdef ENABLE_HSA
-  if (!flag_disable_hsa)
-    {
-#undef DEF_HSA_BUILTIN
-#define DEF_HSA_BUILTIN(code, name, type, attr) \
-      gfc_define_builtin ("__builtin_" name, builtin_types[type], \
-			  code, name, attr);
-#include "../hsa-builtins.def"
-    }
-#endif
 
   gfc_define_builtin ("__builtin_trap", builtin_types[BT_FN_VOID],
 		      BUILT_IN_TRAP, NULL, ATTR_NOTHROW_LEAF_LIST);

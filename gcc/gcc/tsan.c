@@ -1,5 +1,5 @@
 /* GCC instrumentation plugin for ThreadSanitizer.
-   Copyright (C) 2011-2018 Free Software Foundation, Inc.
+   Copyright (C) 2011-2021 Free Software Foundation, Inc.
    Contributed by Dmitry Vyukov <dvyukov@google.com>
 
 This file is part of GCC.
@@ -45,6 +45,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "asan.h"
 #include "builtins.h"
 #include "target.h"
+#include "diagnostic-core.h"
 
 /* Number of instrumented memory accesses in the current function.  */
 
@@ -52,25 +53,29 @@ along with GCC; see the file COPYING3.  If not see
    void __tsan_read/writeX (void *addr);  */
 
 static tree
-get_memory_access_decl (bool is_write, unsigned size)
+get_memory_access_decl (bool is_write, unsigned size, bool volatilep)
 {
   enum built_in_function fcode;
+  int pos;
 
   if (size <= 1)
+    pos = 0;
+  else if (size <= 3)
+    pos = 1;
+  else if (size <= 7)
+    pos = 2;
+  else if (size <= 15)
+    pos = 3;
+  else
+    pos = 4;
+
+  if (param_tsan_distinguish_volatile && volatilep)
+    fcode = is_write ? BUILT_IN_TSAN_VOLATILE_WRITE1
+		     : BUILT_IN_TSAN_VOLATILE_READ1;
+  else
     fcode = is_write ? BUILT_IN_TSAN_WRITE1
 		     : BUILT_IN_TSAN_READ1;
-  else if (size <= 3)
-    fcode = is_write ? BUILT_IN_TSAN_WRITE2
-		     : BUILT_IN_TSAN_READ2;
-  else if (size <= 7)
-    fcode = is_write ? BUILT_IN_TSAN_WRITE4
-		     : BUILT_IN_TSAN_READ4;
-  else if (size <= 15)
-    fcode = is_write ? BUILT_IN_TSAN_WRITE8
-		     : BUILT_IN_TSAN_READ8;
-  else
-    fcode = is_write ? BUILT_IN_TSAN_WRITE16
-		     : BUILT_IN_TSAN_READ16;
+  fcode = (built_in_function)(fcode + pos);
 
   return builtin_decl_implicit (fcode);
 }
@@ -204,7 +209,8 @@ instrument_expr (gimple_stmt_iterator gsi, tree expr, bool is_write)
       g = gimple_build_call (builtin_decl, 2, expr_ptr, size_int (size));
     }
   else if (rhs == NULL)
-    g = gimple_build_call (get_memory_access_decl (is_write, size),
+    g = gimple_build_call (get_memory_access_decl (is_write, size,
+						   TREE_THIS_VOLATILE (expr)),
 			   1, expr_ptr);
   else
     {
@@ -495,6 +501,11 @@ instrument_builtin_call (gimple_stmt_iterator *gsi)
       continue;
     else
       {
+	if (fcode == BUILT_IN_ATOMIC_THREAD_FENCE)
+	  warning_at (gimple_location (stmt), OPT_Wtsan,
+		      "%qs is not supported with %qs", "atomic_thread_fence",
+		      "-fsanitize=thread");
+
 	tree decl = builtin_decl_implicit (tsan_atomic_table[i].tsan_fcode);
 	if (decl == NULL_TREE)
 	  return;
@@ -799,7 +810,9 @@ instrument_memory_accesses (bool *cfg_changed)
 	      func_exit_seen = true;
 	    }
 	  else
-	    fentry_exit_instrument |= instrument_gimple (&gsi);
+	    fentry_exit_instrument
+	      |= (instrument_gimple (&gsi)
+		  && param_tsan_instrument_func_entry_exit);
 	}
       if (gimple_purge_dead_eh_edges (bb))
 	*cfg_changed = true;

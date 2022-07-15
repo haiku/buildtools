@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -800,9 +800,9 @@ package body System.File_IO is
 
       Text_Encoding : Content_Encoding;
 
-      Tempfile : constant Boolean := Name = "";
+      Tempfile : constant Boolean := Name = "" and Stream = NULL_Stream;
       --  Indicates temporary file case, which is indicated by an empty file
-      --  name.
+      --  name and no specified Stream.
 
       Namelen : constant Integer := max_path_len;
       --  Length required for file name, not including final ASCII.NUL.

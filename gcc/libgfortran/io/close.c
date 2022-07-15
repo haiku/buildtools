@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2018 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2021 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of the GNU Fortran 95 runtime library (libgfortran).
@@ -24,13 +24,14 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #include "io.h"
 #include "unix.h"
+#include "async.h"
 #include <limits.h>
 #if !HAVE_UNLINK_OPEN_FILE
 #include <string.h>
 #endif
 
 typedef enum
-{ CLOSE_DELETE, CLOSE_KEEP, CLOSE_UNSPECIFIED }
+{ CLOSE_INVALID = - 1, CLOSE_DELETE, CLOSE_KEEP, CLOSE_UNSPECIFIED }
 close_status;
 
 static const st_option status_opt[] = {
@@ -60,13 +61,27 @@ st_close (st_parameter_close *clp)
     find_option (&clp->common, clp->status, clp->status_len,
 		 status_opt, "Bad STATUS parameter in CLOSE statement");
 
+  if (status == CLOSE_INVALID)
+    {
+      library_end ();
+      return;
+    }
+
+  u = find_unit (clp->common.unit);
+
+  if (ASYNC_IO && u && u->au)
+    if (async_wait (&(clp->common), u->au))
+      {
+	library_end ();
+	return;
+      }
+
   if ((clp->common.flags & IOPARM_LIBRETURN_MASK) != IOPARM_LIBRETURN_OK)
   {
     library_end ();
     return;
   }
 
-  u = find_unit (clp->common.unit);
   if (u != NULL)
     {
       if (close_share (u) < 0)
@@ -90,7 +105,10 @@ st_close (st_parameter_close *clp)
 	      else
 		{
 #if HAVE_UNLINK_OPEN_FILE
-		  remove (u->filename);
+
+		  if (remove (u->filename))
+		    generate_error (&clp->common, LIBERROR_OS,
+				    "File cannot be deleted");
 #else
 		  path = strdup (u->filename);
 #endif
@@ -103,7 +121,9 @@ st_close (st_parameter_close *clp)
 #if !HAVE_UNLINK_OPEN_FILE
       if (path != NULL)
 	{
-	  remove (path);
+	  if (remove (path))
+	    generate_error (&clp->common, LIBERROR_OS,
+			    "File cannot be deleted");
 	  free (path);
 	}
 #endif

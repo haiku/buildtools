@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -30,13 +30,16 @@
 ------------------------------------------------------------------------------
 
 with Ada.Calendar;               use Ada.Calendar;
-with Ada.Calendar.Formatting;    use Ada.Calendar.Formatting;
 with Ada.Characters.Handling;    use Ada.Characters.Handling;
 with Ada.Directories.Validity;   use Ada.Directories.Validity;
+with Ada.Directories.Hierarchical_File_Names;
+use Ada.Directories.Hierarchical_File_Names;
 with Ada.Strings.Fixed;
 with Ada.Strings.Maps;           use Ada.Strings.Maps;
 with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
 with Ada.Unchecked_Deallocation;
+
+with Interfaces.C;
 
 with System;                 use System;
 with System.CRTL;            use System.CRTL;
@@ -66,6 +69,15 @@ package body Ada.Directories is
    pragma Import (C, Max_Path, "__gnat_max_path_len");
    --  The maximum length of a path
 
+   function C_Modification_Time (N : System.Address) return Ada.Calendar.Time;
+   pragma Import (C, C_Modification_Time, "__gnat_file_time");
+   --  Get modification time for file with name referenced by N
+
+   Invalid_Time : constant Ada.Calendar.Time :=
+                    C_Modification_Time (System.Null_Address);
+   --  Result returned from C_Modification_Time call when routine unable to get
+   --  file modification time.
+
    type Search_Data is record
       Is_Valid      : Boolean := False;
       Name          : Unbounded_String;
@@ -90,6 +102,16 @@ package body Ada.Directories is
    procedure Fetch_Next_Entry (Search : Search_Type);
    --  Get the next entry in a directory, setting Entry_Fetched if successful
    --  or resetting Is_Valid if not.
+
+   procedure Start_Search_Internal
+     (Search                 : in out Search_Type;
+      Directory              : String;
+      Pattern                : String;
+      Filter                 : Filter_Type := (others => True);
+      Force_Case_Insensitive : Boolean);
+   --  Similar to Start_Search except we can force a search to be
+   --  case-insensitive, which is important for detecting the name-case
+   --  equivalence for a given directory.
 
    ---------------
    -- Base_Name --
@@ -212,30 +234,21 @@ package body Ada.Directories is
               Strings.Fixed.Index (Name, Dir_Seps, Going => Strings.Backward);
 
          begin
-            if Last_DS = 0 then
-
-               --  There is no directory separator, returns "." representing
-               --  the current working directory.
-
-               return ".";
-
             --  If Name indicates a root directory, raise Use_Error, because
             --  it has no containing directory.
 
-            elsif Name = "/"
-              or else
-                (Windows
-                  and then
-                  (Name = "\"
-                      or else
-                        (Name'Length = 3
-                          and then Name (Name'Last - 1 .. Name'Last) = ":\"
-                          and then (Name (Name'First) in 'a' .. 'z'
-                                     or else
-                                       Name (Name'First) in 'A' .. 'Z'))))
+            if Is_Parent_Directory_Name (Name)
+              or else Is_Current_Directory_Name (Name)
+              or else Is_Root_Directory_Name (Name)
             then
                raise Use_Error with
                  "directory """ & Name & """ has no containing directory";
+
+            elsif Last_DS = 0 then
+               --  There is no directory separator, so return ".", representing
+               --  the current working directory.
+
+               return ".";
 
             else
                declare
@@ -250,31 +263,14 @@ package body Ada.Directories is
                   --  number on Windows.
 
                   while Last > 1 loop
-                     exit when
-                       Result (Last) /= '/'
-                         and then
-                       Result (Last) /= Directory_Separator;
-
-                     exit when Windows
-                       and then Last = 3
-                       and then Result (2) = ':'
-                       and then
-                         (Result (1) in 'A' .. 'Z'
-                           or else
-                          Result (1) in 'a' .. 'z');
+                     exit when Is_Root_Directory_Name (Result (1 .. Last))
+                                 or else (Result (Last) /= Directory_Separator
+                                           and then Result (Last) /= '/');
 
                      Last := Last - 1;
                   end loop;
 
-                  --  Special case of "..": the current directory may be a root
-                  --  directory.
-
-                  if Last = 2 and then Result (1 .. 2) = ".." then
-                     return Containing_Directory (Current_Directory);
-
-                  else
-                     return Result (1 .. Last);
-                  end if;
+                  return Result (1 .. Last);
                end;
             end if;
          end;
@@ -794,6 +790,20 @@ package body Ada.Directories is
                end if;
 
                if Exists = 1 then
+                  --  Ignore special directories "." and ".."
+
+                  if (Full_Name'Length > 1
+                       and then
+                         Full_Name
+                            (Full_Name'Last - 1 .. Full_Name'Last) = "\.")
+                    or else
+                     (Full_Name'Length > 2
+                        and then
+                          Full_Name
+                            (Full_Name'Last - 2 .. Full_Name'Last) = "\..")
+                  then
+                     Exists := 0;
+                  end if;
 
                   --  Now check if the file kind matches the filter
 
@@ -989,14 +999,9 @@ package body Ada.Directories is
    -----------------------
 
    function Modification_Time (Name : String) return Time is
-      Date   : OS_Time;
-      Year   : Year_Type;
-      Month  : Month_Type;
-      Day    : Day_Type;
-      Hour   : Hour_Type;
-      Minute : Minute_Type;
-      Second : Second_Type;
 
+      Date   : Time;
+      C_Name : aliased String (1 .. Name'Length + 1);
    begin
       --  First, the invalid cases
 
@@ -1004,19 +1009,15 @@ package body Ada.Directories is
          raise Name_Error with '"' & Name & """ not a file or directory";
 
       else
-         Date := File_Time_Stamp (Name);
+         C_Name := Name & ASCII.NUL;
+         Date := C_Modification_Time (C_Name'Address);
 
-         --  Break down the time stamp into its constituents relative to GMT.
-         --  This version of Split does not recognize leap seconds or buffer
-         --  space for time zone processing.
+         if Date = Invalid_Time then
+            raise Use_Error with
+              "Unable to get modification time of the file """ & Name & '"';
+         end if;
 
-         GM_Split (Date, Year, Month, Day, Hour, Minute, Second);
-
-         --  The result must be in GMT. Ada.Calendar.
-         --  Formatting.Time_Of with default time zone of zero (0) is the
-         --  routine of choice.
-
-         return Time_Of (Year, Month, Day, Hour, Minute, Second, 0.0);
+         return Date;
       end if;
    end Modification_Time;
 
@@ -1056,6 +1057,105 @@ package body Ada.Directories is
 
       return Search.Value.Is_Valid;
    end More_Entries;
+
+   ---------------------------
+   -- Name_Case_Equivalence --
+   ---------------------------
+
+   function Name_Case_Equivalence (Name : String) return Name_Case_Kind is
+      Dir_Path  : Unbounded_String := To_Unbounded_String (Name);
+      S         : Search_Type;
+      Test_File : Directory_Entry_Type;
+
+      function GNAT_name_case_equivalence return Interfaces.C.int;
+      pragma Import (C, GNAT_name_case_equivalence,
+                     "__gnat_name_case_equivalence");
+
+   begin
+      --  Check for the invalid case
+
+      if not Is_Valid_Path_Name (Name) then
+         raise Name_Error with "invalid path name """ & Name & '"';
+      end if;
+
+      --  We were passed a "full path" to a file and not a directory, so obtain
+      --  the containing directory.
+
+      if Is_Regular_File (Name) then
+         Dir_Path := To_Unbounded_String (Containing_Directory (Name));
+      end if;
+
+      --  Since we must obtain a file within the Name directory, let's grab the
+      --  first for our test. When the directory is empty, Get_Next_Entry will
+      --  fall through to a Status_Error where we then take the imprecise
+      --  default for the host OS.
+
+      Start_Search
+        (Search    => S,
+         Directory => To_String (Dir_Path),
+         Pattern   => "",
+         Filter    => (Directory => False, others => True));
+
+      loop
+         Get_Next_Entry (S, Test_File);
+
+         --  Check if we have found a "caseable" file
+
+         exit when To_Lower (Simple_Name (Test_File)) /=
+                   To_Upper (Simple_Name (Test_File));
+      end loop;
+
+      End_Search (S);
+
+      --  Search for files within the directory with the same name, but
+      --  differing cases.
+
+      Start_Search_Internal
+        (Search                 => S,
+         Directory              => To_String (Dir_Path),
+         Pattern                => Simple_Name (Test_File),
+         Filter                 => (Directory => False, others => True),
+         Force_Case_Insensitive => True);
+
+      --  We will find at least one match due to the search hitting our test
+      --  file.
+
+      Get_Next_Entry (S, Test_File);
+
+      begin
+         --  If we hit two then we know we have a case-sensitive directory
+
+         Get_Next_Entry (S, Test_File);
+         End_Search (S);
+
+         return Case_Sensitive;
+      exception
+         when Status_Error =>
+            null;
+      end;
+
+      --  Finally, we have a file in the directory whose name is unique and
+      --  "caseable". Let's test to see if the OS is able to identify the file
+      --  in multiple cases, which will give us our result without having to
+      --  resort to defaults.
+
+      if Exists (To_String (Dir_Path) & Directory_Separator
+                  & To_Lower (Simple_Name (Test_File)))
+        and then Exists (To_String (Dir_Path) & Directory_Separator
+                          & To_Upper (Simple_Name (Test_File)))
+      then
+         return Case_Preserving;
+      end if;
+
+      return Case_Sensitive;
+   exception
+      when Status_Error =>
+
+         --  There is no unobtrusive way to check for the directory's casing so
+         --  return the OS default.
+
+         return Name_Case_Kind'Val (Integer (GNAT_name_case_equivalence));
+   end Name_Case_Equivalence;
 
    ------------
    -- Rename --
@@ -1169,16 +1269,30 @@ package body Ada.Directories is
       function Simple_Name_Internal (Path : String) return String is
          Cut_Start : Natural :=
            Strings.Fixed.Index (Path, Dir_Seps, Going => Strings.Backward);
-         Cut_End   : Natural;
+
+         --  Cut_End points to the last simple name character
+
+         Cut_End   : Natural := Path'Last;
 
       begin
-         --  Cut_Start pointS to the first simple name character
+         --  Root directories are considered simple
+
+         if Is_Root_Directory_Name (Path) then
+            return Path;
+         end if;
+
+         --  Handle trailing directory separators
+
+         if Cut_Start = Path'Last then
+            Cut_End   := Path'Last - 1;
+            Cut_Start := Strings.Fixed.Index
+                           (Path (Path'First .. Path'Last - 1),
+                             Dir_Seps, Going => Strings.Backward);
+         end if;
+
+         --  Cut_Start points to the first simple name character
 
          Cut_Start := (if Cut_Start = 0 then Path'First else Cut_Start + 1);
-
-         --  Cut_End point to the last simple name character
-
-         Cut_End := Path'Last;
 
          Check_For_Standard_Dirs : declare
             BN : constant String := Path (Cut_Start .. Cut_End);
@@ -1190,7 +1304,7 @@ package body Ada.Directories is
 
          begin
             if BN = "." or else BN = ".." then
-               return "";
+               return BN;
 
             elsif Has_Drive_Letter
               and then BN'Length > 2
@@ -1289,6 +1403,21 @@ package body Ada.Directories is
       Pattern   : String;
       Filter    : Filter_Type := (others => True))
    is
+   begin
+      Start_Search_Internal (Search, Directory, Pattern, Filter, False);
+   end Start_Search;
+
+   ---------------------------
+   -- Start_Search_Internal --
+   ---------------------------
+
+   procedure Start_Search_Internal
+     (Search                 : in out Search_Type;
+      Directory              : String;
+      Pattern                : String;
+      Filter                 : Filter_Type := (others => True);
+      Force_Case_Insensitive : Boolean)
+   is
       function opendir (file_name : String) return DIRs;
       pragma Import (C, opendir, "__gnat_opendir");
 
@@ -1306,11 +1435,18 @@ package body Ada.Directories is
 
       --  Check the pattern
 
+      declare
+         Case_Sensitive : Boolean := Is_Path_Name_Case_Sensitive;
       begin
-         Pat := Compile
-           (Pattern,
-            Glob           => True,
-            Case_Sensitive => Is_Path_Name_Case_Sensitive);
+         if Force_Case_Insensitive then
+            Case_Sensitive := False;
+         end if;
+
+         Pat :=
+           Compile
+             (Pattern,
+              Glob           => True,
+              Case_Sensitive => Case_Sensitive);
       exception
          when Error_In_Regexp =>
             Free (Search.Value);
@@ -1339,6 +1475,6 @@ package body Ada.Directories is
       Search.Value.Pattern  := Pat;
       Search.Value.Dir      := Dir;
       Search.Value.Is_Valid := True;
-   end Start_Search;
+   end Start_Search_Internal;
 
 end Ada.Directories;

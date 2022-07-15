@@ -1,5 +1,5 @@
 /* Support routines for Splitting Paths to loop backedges
-   Copyright (C) 2015-2018 Free Software Foundation, Inc.
+   Copyright (C) 2015-2021 Free Software Foundation, Inc.
    Contributed by Ajit Kumar Agarwal <ajitkum@xilinx.com>.
 
  This file is part of GCC.
@@ -31,10 +31,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-iterator.h"
 #include "tracer.h"
 #include "predict.h"
-#include "params.h"
 #include "gimple-ssa.h"
 #include "tree-phinodes.h"
 #include "ssa-iterators.h"
+#include "fold-const.h"
 
 /* Given LATCH, the latch block in a loop, see if the shape of the
    path reaching LATCH is suitable for being split by duplication.
@@ -68,8 +68,14 @@ find_block_to_duplicate_for_splitting_paths (basic_block latch)
 	 region.  Verify that it is.
 
 	 First, verify that BB has two predecessors (each arm of the
-	 IF-THEN-ELSE) and two successors (the latch and exit).  */
-      if (EDGE_COUNT (bb->preds) == 2 && EDGE_COUNT (bb->succs) == 2)
+	 IF-THEN-ELSE) and two successors (the latch and exit) and that
+	 all edges are normal.  */
+      if (EDGE_COUNT (bb->preds) == 2
+	  && !(EDGE_PRED (bb, 0)->flags & EDGE_COMPLEX)
+	  && !(EDGE_PRED (bb, 1)->flags & EDGE_COMPLEX)
+	  && EDGE_COUNT (bb->succs) == 2
+	  && !(EDGE_SUCC (bb, 0)->flags & EDGE_COMPLEX)
+	  && !(EDGE_SUCC (bb, 1)->flags & EDGE_COMPLEX))
 	{
 	  /* Now verify that BB's immediate dominator ends in a
 	     conditional as well.  */
@@ -203,6 +209,90 @@ is_feasible_trace (basic_block bb)
 	}
     }
 
+  /* Canonicalize the form.  */
+  if (num_stmts_in_pred1 == 0 && num_stmts_in_pred2 == 1)
+    {
+      std::swap (pred1, pred2);
+      std::swap (num_stmts_in_pred1, num_stmts_in_pred2);
+    }
+
+  /* Another variant.  This one is half-diamond.  */
+  if (num_stmts_in_pred1 == 1 && num_stmts_in_pred2 == 0
+      && dominated_by_p (CDI_DOMINATORS, pred1, pred2))
+    {
+      gimple *stmt1 = last_and_only_stmt (pred1);
+
+      /* The only statement in PRED1 must be an assignment that is
+	 not a good candidate for if-conversion.   This may need some
+	 generalization.  */
+      if (stmt1 && gimple_code (stmt1) == GIMPLE_ASSIGN)
+	{
+	  enum tree_code code1 = gimple_assign_rhs_code (stmt1);
+
+	  if (!poor_ifcvt_candidate_code (code1))
+	    {
+	      tree lhs1 = gimple_assign_lhs (stmt1);
+	      tree rhs1 = gimple_assign_rhs1 (stmt1);
+
+	      gimple_stmt_iterator gsi;
+	      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+		{
+		  gimple *phi = gsi_stmt (gsi);
+		  if ((gimple_phi_arg_def (phi, 0) == lhs1
+		       && gimple_phi_arg_def (phi, 1) == rhs1)
+		      || (gimple_phi_arg_def (phi, 1) == lhs1
+			  && gimple_phi_arg_def (phi, 0) == rhs1))
+		    {
+		      if (dump_file && (dump_flags & TDF_DETAILS))
+			fprintf (dump_file,
+				 "Block %d appears to be a join point for "
+				 "if-convertable half-diamond.\n",
+				 bb->index);
+		      return false;
+		    }
+		}
+	    }
+	}
+    }
+
+  /* Canonicalize the form.  */
+  if (single_pred_p (pred1) && single_pred (pred1) == pred2
+      && num_stmts_in_pred1 == 0)
+    std::swap (pred1, pred2);
+
+  /* This is meant to catch another kind of cases that are likely opportunities
+     for if-conversion.  After canonicalizing, PRED2 must be an empty block and
+     PRED1 must be the only predecessor of PRED2.  Moreover, PRED1 is supposed
+     to end with a cond_stmt which has the same args with the PHI in BB.  */
+  if (single_pred_p (pred2) && single_pred (pred2) == pred1
+      && num_stmts_in_pred2 == 0)
+    {
+      gimple *cond_stmt = last_stmt (pred1);
+      if (cond_stmt && gimple_code (cond_stmt) == GIMPLE_COND)
+	{
+	  tree lhs = gimple_cond_lhs (cond_stmt);
+	  tree rhs = gimple_cond_rhs (cond_stmt);
+
+	  gimple_stmt_iterator gsi;
+	  for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	    {
+	      gimple *phi = gsi_stmt (gsi);
+	      if ((operand_equal_p (gimple_phi_arg_def (phi, 0), lhs)
+		   && operand_equal_p (gimple_phi_arg_def (phi, 1), rhs))
+		  || (operand_equal_p (gimple_phi_arg_def (phi, 0), rhs)
+		      && (operand_equal_p (gimple_phi_arg_def (phi, 1), lhs))))
+		{
+		  if (dump_file && (dump_flags & TDF_DETAILS))
+		    fprintf (dump_file,
+			     "Block %d appears to be optimized to a join "
+			     "point for if-convertable half-diamond.\n",
+			     bb->index);
+		  return false;
+		}
+	    }
+	}
+    }
+
   /* If the joiner has no PHIs with useful uses there is zero chance
      of CSE/DCE/jump-threading possibilities exposed by duplicating it.  */
   bool found_useful_phi = false;
@@ -218,8 +308,12 @@ is_feasible_trace (basic_block bb)
 	  if (is_gimple_debug (stmt))
 	    continue;
 	  /* If there's a use in the joiner this might be a CSE/DCE
-	     opportunity.  */
-	  if (gimple_bb (stmt) == bb)
+	     opportunity, but not if the use is in a conditional
+	     which makes this a likely if-conversion candidate.  */
+	  if (gimple_bb (stmt) == bb
+	      && (!is_gimple_assign (stmt)
+		  || (TREE_CODE_CLASS (gimple_assign_rhs_code (stmt))
+		      != tcc_comparison)))
 	    {
 	      found_useful_phi = true;
 	      break;
@@ -316,7 +410,7 @@ is_feasible_trace (basic_block bb)
 
   /* Upper Hard limit on the number statements to copy.  */
   if (num_stmts_in_join
-      >= PARAM_VALUE (PARAM_MAX_JUMP_THREAD_DUPLICATION_STMTS))
+      >= param_max_jump_thread_duplication_stmts)
     return false;
 
   return true;

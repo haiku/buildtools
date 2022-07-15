@@ -6,7 +6,7 @@
  *                                                                          *
  *                           C Implementation File                          *
  *                                                                          *
- *          Copyright (C) 1992-2018, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2020, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -35,6 +35,7 @@
 #include "stor-layout.h"
 #include "print-tree.h"
 #include "toplev.h"
+#include "tree-pass.h"
 #include "langhooks.h"
 #include "langhooks-def.h"
 #include "plugin.h"
@@ -47,15 +48,13 @@
 #include "atree.h"
 #include "namet.h"
 #include "nlists.h"
+#include "snames.h"
 #include "uintp.h"
 #include "fe.h"
 #include "sinfo.h"
 #include "einfo.h"
 #include "ada-tree.h"
 #include "gigi.h"
-
-/* This symbol needs to be defined for the front-end.  */
-void *callgraph_info_file = NULL;
 
 /* Command-line argc and argv.  These variables are global since they are
    imported in back_end.adb.  */
@@ -76,9 +75,6 @@ int optimize;
 
 #undef optimize_size
 int optimize_size;
-
-#undef flag_compare_debug
-int flag_compare_debug;
 
 #undef flag_short_enums
 int flag_short_enums;
@@ -138,8 +134,9 @@ gnat_option_lang_mask (void)
    are marked as Ada-specific.  Return true on success or false on failure.  */
 
 static bool
-gnat_handle_option (size_t scode, const char *arg, int value, int kind,
-		    location_t loc, const struct cl_option_handlers *handlers)
+gnat_handle_option (size_t scode, const char *arg, HOST_WIDE_INT value,
+		    int kind, location_t loc,
+		    const struct cl_option_handlers *handlers)
 {
   enum opt_code code = (enum opt_code) scode;
 
@@ -163,6 +160,7 @@ gnat_handle_option (size_t scode, const char *arg, int value, int kind,
     case OPT_gnatO:
     case OPT_fRTS_:
     case OPT_I:
+    case OPT_fdump_scos:
     case OPT_nostdinc:
     case OPT_nostdlib:
       /* These are handled by the front-end.  */
@@ -170,6 +168,7 @@ gnat_handle_option (size_t scode, const char *arg, int value, int kind,
 
     case OPT_fshort_enums:
     case OPT_fsigned_char:
+    case OPT_funsigned_char:
       /* These are handled by the middle-end.  */
       break;
 
@@ -255,9 +254,9 @@ static bool
 gnat_post_options (const char **pfilename ATTRIBUTE_UNUSED)
 {
   /* Excess precision other than "fast" requires front-end support.  */
-  if (flag_excess_precision_cmdline == EXCESS_PRECISION_STANDARD)
-    sorry ("-fexcess-precision=standard for Ada");
-  flag_excess_precision_cmdline = EXCESS_PRECISION_FAST;
+  if (flag_excess_precision == EXCESS_PRECISION_STANDARD)
+    sorry ("%<-fexcess-precision=standard%> for Ada");
+  flag_excess_precision = EXCESS_PRECISION_FAST;
 
   /* No psABI change warnings for Ada.  */
   warn_psabi = 0;
@@ -282,7 +281,6 @@ gnat_post_options (const char **pfilename ATTRIBUTE_UNUSED)
   gnat_encodings = global_options.x_gnat_encodings;
   optimize = global_options.x_optimize;
   optimize_size = global_options.x_optimize_size;
-  flag_compare_debug = global_options.x_flag_compare_debug;
   flag_stack_check = global_options.x_flag_stack_check;
   flag_short_enums = global_options.x_flag_short_enums;
 
@@ -309,6 +307,9 @@ internal_error_function (diagnostic_context *context, const char *msgid,
 
   /* Warn if plugins present.  */
   warn_if_plugins ();
+
+  /* Dump the representation of the function.  */
+  emergency_dump_function ();
 
   /* Reset the pretty-printer.  */
   pp_clear_output_area (context->printer);
@@ -345,7 +346,6 @@ internal_error_function (diagnostic_context *context, const char *msgid,
   sp_loc.Bounds = &temp_loc;
   sp_loc.Array = loc;
 
-  Current_Error_Node = error_gnat_node;
   Compiler_Abort (sp, sp_loc, true);
 }
 
@@ -369,6 +369,9 @@ gnat_init (void)
 
   sbitsize_one_node = sbitsize_int (1);
   sbitsize_unit_node = sbitsize_int (BITS_PER_UNIT);
+
+  /* In Ada, we do not use location ranges.  */
+  line_table->default_range_bits = 0;
 
   /* Register our internal error function.  */
   global_dc->internal_error = &internal_error_function;
@@ -421,7 +424,8 @@ gnat_init_gcc_eh (void)
     }
   else
     {
-      flag_non_call_exceptions = 1;
+      if (!global_options_set.x_flag_non_call_exceptions)
+        flag_non_call_exceptions = 1;
       flag_aggressive_loop_optimizations = 0;
       warn_aggressive_loop_optimizations = 0;
     }
@@ -470,9 +474,6 @@ gnat_print_decl (FILE *file, tree node, int indent)
       if (DECL_LOOP_PARM_P (node))
 	print_node (file, "induction var", DECL_INDUCTION_VAR (node),
 		    indent + 4);
-      else
-	print_node (file, "renamed object", DECL_RENAMED_OBJECT (node),
-		    indent + 4);
       break;
 
     default:
@@ -488,6 +489,7 @@ gnat_print_type (FILE *file, tree node, int indent)
   switch (TREE_CODE (node))
     {
     case FUNCTION_TYPE:
+    case METHOD_TYPE:
       print_node (file, "ci/co list", TYPE_CI_CO_LIST (node), indent + 4);
       break;
 
@@ -560,7 +562,7 @@ gnat_printable_name (tree decl, int verbosity)
 
   __gnat_decode (coded_name, ada_name, 0);
 
-  if (verbosity == 2 && !DECL_IS_BUILTIN (decl))
+  if (verbosity == 2 && !DECL_IS_UNDECLARED_BUILTIN (decl))
     {
       Set_Identifier_Casing (ada_name, DECL_SOURCE_FILE (decl));
       return ggc_strdup (Name_Buffer);
@@ -604,20 +606,10 @@ gnat_enum_underlying_base_type (const_tree)
 static tree
 gnat_get_debug_type (const_tree type)
 {
-  if (TYPE_CAN_HAVE_DEBUG_TYPE_P (type) && TYPE_DEBUG_TYPE (type))
-    {
-      type = TYPE_DEBUG_TYPE (type);
-
-      /* ??? The get_debug_type language hook is processed after the array
-	 descriptor language hook, so if there is an array behind this type,
-	 the latter is supposed to handle it.  Still, we can get here with
-	 a type we are not supposed to handle (e.g. when the DWARF back-end
-	 processes the type of a variable), so keep this guard.  */
-      if (type && TYPE_CAN_HAVE_DEBUG_TYPE_P (type))
-	return const_cast<tree> (type);
-    }
-
-  return NULL_TREE;
+  if (TYPE_CAN_HAVE_DEBUG_TYPE_P (type))
+    return TYPE_DEBUG_TYPE (type);
+  else
+    return NULL_TREE;
 }
 
 /* Provide information in INFO for debugging output about the TYPE fixed-point
@@ -629,10 +621,9 @@ gnat_get_fixed_point_type_info (const_tree type,
 {
   tree scale_factor;
 
-  /* GDB cannot handle fixed-point types yet, so rely on GNAT encodings
-     instead for it.  */
+  /* Do nothing if the GNAT encodings are used.  */
   if (!TYPE_IS_FIXED_POINT_P (type)
-      || gnat_encodings != DWARF_GNAT_ENCODINGS_MINIMAL)
+      || gnat_encodings == DWARF_GNAT_ENCODINGS_ALL)
     return false;
 
   scale_factor = TYPE_SCALE_FACTOR (type);
@@ -640,26 +631,16 @@ gnat_get_fixed_point_type_info (const_tree type,
   /* We expect here only a finite set of pattern.  See fixed-point types
      handling in gnat_to_gnu_entity.  */
 
-  /* Put invalid values when compiler internals cannot represent the scale
-     factor.  */
-  if (scale_factor == integer_zero_node)
-    {
-      info->scale_factor_kind = fixed_point_scale_factor_arbitrary;
-      info->scale_factor.arbitrary.numerator = 0;
-      info->scale_factor.arbitrary.denominator = 0;
-      return true;
-    }
-
   if (TREE_CODE (scale_factor) == RDIV_EXPR)
     {
-      const tree num = TREE_OPERAND (scale_factor, 0);
-      const tree den = TREE_OPERAND (scale_factor, 1);
+      tree num = TREE_OPERAND (scale_factor, 0);
+      tree den = TREE_OPERAND (scale_factor, 1);
 
       /* See if we have a binary or decimal scale.  */
       if (TREE_CODE (den) == POWER_EXPR)
 	{
-	  const tree base = TREE_OPERAND (den, 0);
-	  const tree exponent = TREE_OPERAND (den, 1);
+	  tree base = TREE_OPERAND (den, 0);
+	  tree exponent = TREE_OPERAND (den, 1);
 
 	  /* We expect the scale factor to be 1 / 2 ** N or 1 / 10 ** N.  */
 	  gcc_assert (num == integer_one_node
@@ -689,8 +670,8 @@ gnat_get_fixed_point_type_info (const_tree type,
 		  && TREE_CODE (den) == INTEGER_CST);
 
       info->scale_factor_kind = fixed_point_scale_factor_arbitrary;
-      info->scale_factor.arbitrary.numerator = tree_to_uhwi (num);
-      info->scale_factor.arbitrary.denominator = tree_to_shwi (den);
+      info->scale_factor.arbitrary.numerator = num;
+      info->scale_factor.arbitrary.denominator = den;
       return true;
     }
 
@@ -699,12 +680,12 @@ gnat_get_fixed_point_type_info (const_tree type,
 
 /* Return true if types T1 and T2 are identical for type hashing purposes.
    Called only after doing all language independent checks.  At present,
-   this function is only called when both types are FUNCTION_TYPE.  */
+   this is only called when both types are FUNCTION_TYPE or METHOD_TYPE.  */
 
 static bool
 gnat_type_hash_eq (const_tree t1, const_tree t2)
 {
-  gcc_assert (TREE_CODE (t1) == FUNCTION_TYPE);
+  gcc_assert (FUNC_OR_METHOD_TYPE_P (t1) && TREE_CODE (t1) == TREE_CODE (t2));
   return fntype_same_flags_p (t1, TYPE_CI_CO_LIST (t2),
 			      TYPE_RETURN_UNCONSTRAINED_P (t2),
 			      TYPE_RETURN_BY_DIRECT_REF_P (t2),
@@ -727,6 +708,10 @@ gnat_get_alias_set (tree type)
   /* If this is a padding type, use the type of the first field.  */
   if (TYPE_IS_PADDING_P (type))
     return get_alias_set (TREE_TYPE (TYPE_FIELDS (type)));
+
+  /* If this is an extra subtype, use the base type.  */
+  else if (TYPE_IS_EXTRA_SUBTYPE_P (type))
+    return get_alias_set (get_base_type (type));
 
   /* If the type is an unconstrained array, use the type of the
      self-referential array we make.  */
@@ -752,64 +737,27 @@ gnat_type_max_size (const_tree gnu_type)
   /* First see what we can get from TYPE_SIZE_UNIT, which might not
      be constant even for simple expressions if it has already been
      elaborated and possibly replaced by a VAR_DECL.  */
-  tree max_unitsize = max_size (TYPE_SIZE_UNIT (gnu_type), true);
+  tree max_size_unit = max_size (TYPE_SIZE_UNIT (gnu_type), true);
 
-  /* If we don't have a constant, try to look at attributes which should have
-     stayed untouched.  */
-  if (!tree_fits_uhwi_p (max_unitsize))
+  /* If we don't have a constant, see what we can get from TYPE_ADA_SIZE,
+     which should stay untouched.  */
+  if (!tree_fits_uhwi_p (max_size_unit)
+      && RECORD_OR_UNION_TYPE_P (gnu_type)
+      && !TYPE_FAT_POINTER_P (gnu_type)
+      && TYPE_ADA_SIZE (gnu_type))
     {
-      /* For record types, see what we can get from TYPE_ADA_SIZE.  */
-      if (RECORD_OR_UNION_TYPE_P (gnu_type)
-	  && !TYPE_FAT_POINTER_P (gnu_type)
-	  && TYPE_ADA_SIZE (gnu_type))
-	{
-	  tree max_adasize = max_size (TYPE_ADA_SIZE (gnu_type), true);
+      tree max_ada_size = max_size (TYPE_ADA_SIZE (gnu_type), true);
 
-	  /* If we have succeeded in finding a constant, round it up to the
-	     type's alignment and return the result in units.  */
-	  if (tree_fits_uhwi_p (max_adasize))
-	    max_unitsize
-	      = size_binop (CEIL_DIV_EXPR,
-			    round_up (max_adasize, TYPE_ALIGN (gnu_type)),
-			    bitsize_unit_node);
-	}
-
-      /* For array types, see what we can get from TYPE_INDEX_TYPE.  */
-      else if (TREE_CODE (gnu_type) == ARRAY_TYPE
-	       && TYPE_INDEX_TYPE (TYPE_DOMAIN (gnu_type))
-	       && tree_fits_uhwi_p (TYPE_SIZE_UNIT (TREE_TYPE (gnu_type))))
-	{
-	  tree lb = TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (gnu_type)));
-	  tree hb = TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (gnu_type)));
-	  if (TREE_CODE (lb) != INTEGER_CST
-	      && TYPE_RM_SIZE (TREE_TYPE (lb))
-	      && compare_tree_int (TYPE_RM_SIZE (TREE_TYPE (lb)), 16) <= 0)
-	    lb = TYPE_MIN_VALUE (TREE_TYPE (lb));
-	  if (TREE_CODE (hb) != INTEGER_CST
-	      && TYPE_RM_SIZE (TREE_TYPE (hb))
-	      && compare_tree_int (TYPE_RM_SIZE (TREE_TYPE (hb)), 16) <= 0)
-	    hb = TYPE_MAX_VALUE (TREE_TYPE (hb));
-	  if (TREE_CODE (lb) == INTEGER_CST && TREE_CODE (hb) == INTEGER_CST)
-	    {
-	      tree ctype = get_base_type (TREE_TYPE (lb));
-	      lb = fold_convert (ctype, lb);
-	      hb = fold_convert (ctype, hb);
-	      if (tree_int_cst_le (lb, hb))
-		{
-		  tree length
-		    = fold_build2 (PLUS_EXPR, ctype,
-				   fold_build2 (MINUS_EXPR, ctype, hb, lb),
-				   build_int_cst (ctype, 1));
-		  max_unitsize
-		    = fold_build2 (MULT_EXPR, sizetype,
-				   fold_convert (sizetype, length),
-				   TYPE_SIZE_UNIT (TREE_TYPE (gnu_type)));
-		}
-	    }
-	}
+      /* If we have succeeded in finding a constant, round it up to the
+	 type's alignment and return the result in units.  */
+      if (tree_fits_uhwi_p (max_ada_size))
+	max_size_unit
+	  = size_binop (CEIL_DIV_EXPR,
+			round_up (max_ada_size, TYPE_ALIGN (gnu_type)),
+			bitsize_unit_node);
     }
 
-  return max_unitsize;
+  return max_size_unit;
 }
 
 static tree get_array_bit_stride (tree);
@@ -821,14 +769,9 @@ static bool
 gnat_get_array_descr_info (const_tree const_type,
 			   struct array_descr_info *info)
 {
-  bool convention_fortran_p;
-  bool is_array = false;
-  bool is_fat_ptr = false;
-  bool is_packed_array = false;
   tree type = const_cast<tree> (const_type);
-  const_tree first_dimen = NULL_TREE;
-  const_tree last_dimen = NULL_TREE;
-  const_tree dimen;
+  tree first_dimen, dimen;
+  bool is_packed_array, is_array;
   int i;
 
   /* Temporaries created in the first pass and used in the second one for thin
@@ -838,9 +781,6 @@ gnat_get_array_descr_info (const_tree const_type,
   tree thinptr_template_expr = NULL_TREE;
   tree thinptr_bound_field = NULL_TREE;
 
-  /* ??? See gnat_get_debug_type.  */
-  type = maybe_debug_type (type);
-
   /* If we have an implementation type for a packed array, get the orignial
      array type.  */
   if (TYPE_IMPL_PACKED_ARRAY_P (type) && TYPE_ORIGINAL_PACKED_ARRAY (type))
@@ -848,6 +788,8 @@ gnat_get_array_descr_info (const_tree const_type,
       type = TYPE_ORIGINAL_PACKED_ARRAY (type);
       is_packed_array = true;
     }
+  else
+    is_packed_array = false;
 
   /* First pass: gather all information about this array except everything
      related to dimensions.  */
@@ -859,54 +801,27 @@ gnat_get_array_descr_info (const_tree const_type,
     {
       is_array = true;
       first_dimen = type;
-      info->data_location = NULL_TREE;
     }
 
-  else if (TYPE_IS_FAT_POINTER_P (type)
-	   && gnat_encodings == DWARF_GNAT_ENCODINGS_MINIMAL)
-    {
-      const tree ua_type = TYPE_UNCONSTRAINED_ARRAY (type);
-
-      /* This will be our base object address.  */
-      const tree placeholder_expr = build0 (PLACEHOLDER_EXPR, type);
-
-      /* We assume below that maybe_unconstrained_array returns an INDIRECT_REF
-	 node.  */
-      const tree ua_val
-        = maybe_unconstrained_array (build_unary_op (INDIRECT_REF,
-						     ua_type,
-						     placeholder_expr));
-
-      is_fat_ptr = true;
-      first_dimen = TREE_TYPE (ua_val);
-
-      /* Get the *address* of the array, not the array itself.  */
-      info->data_location = TREE_OPERAND (ua_val, 0);
-    }
-
-  /* Unlike fat pointers (which appear for unconstrained arrays passed in
-     argument), thin pointers are used only for array access types, so we want
-     them to appear in the debug info as pointers to an array type.  That's why
-     we match only the RECORD_TYPE here instead of the POINTER_TYPE with the
-     TYPE_IS_THIN_POINTER_P predicate.  */
+  /* As well as array types embedded in a record type with their bounds.  */
   else if (TREE_CODE (type) == RECORD_TYPE
 	   && TYPE_CONTAINS_TEMPLATE_P (type)
 	   && gnat_encodings == DWARF_GNAT_ENCODINGS_MINIMAL)
     {
       /* This will be our base object address.  Note that we assume that
-	 pointers to these will actually point to the array field (thin
+	 pointers to this will actually point to the array field (thin
 	 pointers are shifted).  */
-      const tree placeholder_expr = build0 (PLACEHOLDER_EXPR, type);
-      const tree placeholder_addr
-        = build_unary_op (ADDR_EXPR, NULL_TREE, placeholder_expr);
+      tree placeholder_expr = build0 (PLACEHOLDER_EXPR, type);
+      tree placeholder_addr
+	= build_unary_op (ADDR_EXPR, NULL_TREE, placeholder_expr);
 
-      const tree bounds_field = TYPE_FIELDS (type);
-      const tree bounds_type = TREE_TYPE (bounds_field);
-      const tree array_field = DECL_CHAIN (bounds_field);
-      const tree array_type = TREE_TYPE (array_field);
+      tree bounds_field = TYPE_FIELDS (type);
+      tree bounds_type = TREE_TYPE (bounds_field);
+      tree array_field = DECL_CHAIN (bounds_field);
+      tree array_type = TREE_TYPE (array_field);
 
-      /* Shift the thin pointer address to get the address of the template.  */
-      const tree shift_amount
+      /* Shift back the address to get the address of the template.  */
+      tree shift_amount
 	= fold_build1 (NEGATE_EXPR, sizetype, byte_position (array_field));
       tree template_addr
 	= build_binary_op (POINTER_PLUS_EXPR, TREE_TYPE (placeholder_addr),
@@ -914,46 +829,44 @@ gnat_get_array_descr_info (const_tree const_type,
       template_addr
 	= fold_convert (TYPE_POINTER_TO (bounds_type), template_addr);
 
-      first_dimen = array_type;
-
-      /* The thin pointer is already the pointer to the array data, so there's
-	 no need for a specific "data location" expression.  */
-      info->data_location = NULL_TREE;
-
-      thinptr_template_expr = build_unary_op (INDIRECT_REF,
-					      bounds_type,
-					      template_addr);
+      thinptr_template_expr
+	= build_unary_op (INDIRECT_REF, NULL_TREE, template_addr);
       thinptr_bound_field = TYPE_FIELDS (bounds_type);
+
+      is_array = false;
+      first_dimen = array_type;
     }
+
   else
     return false;
 
   /* Second pass: compute the remaining information: dimensions and
      corresponding bounds.  */
 
-  if (TYPE_PACKED (first_dimen))
-    is_packed_array = true;
   /* If this array has fortran convention, it's arranged in column-major
      order, so our view here has reversed dimensions.  */
-  convention_fortran_p = TYPE_CONVENTION_FORTRAN_P (first_dimen);
+  const bool convention_fortran_p = TYPE_CONVENTION_FORTRAN_P (first_dimen);
+
+  if (TYPE_PACKED (first_dimen))
+    is_packed_array = true;
+
   /* ??? For row major ordering, we probably want to emit nothing and
      instead specify it as the default in Dw_TAG_compile_unit.  */
   info->ordering = (convention_fortran_p
 		    ? array_descr_ordering_column_major
 		    : array_descr_ordering_row_major);
-
-  /* Count how many dimensions this array has.  */
-  for (i = 0, dimen = first_dimen; ; ++i, dimen = TREE_TYPE (dimen))
-    {
-      if (i > 0
-	  && (TREE_CODE (dimen) != ARRAY_TYPE
-	      || !TYPE_MULTI_ARRAY_P (dimen)))
-	break;
-      last_dimen = dimen;
-    }
-
-  info->ndimensions = i;
   info->rank = NULL_TREE;
+
+  /* Count the number of dimensions and determine the element type.  */
+  i = 1;
+  dimen = TREE_TYPE (first_dimen);
+  while (TREE_CODE (dimen) == ARRAY_TYPE && TYPE_MULTI_ARRAY_P (dimen))
+    {
+      i++;
+      dimen = TREE_TYPE (dimen);
+    }
+  info->ndimensions = i;
+  info->element_type = dimen;
 
   /* Too many dimensions?  Give up generating proper description: yield instead
      nested arrays.  Note that in this case, this hook is invoked once on each
@@ -963,12 +876,10 @@ gnat_get_array_descr_info (const_tree const_type,
       || TYPE_MULTI_ARRAY_P (first_dimen))
     {
       info->ndimensions = 1;
-      last_dimen = first_dimen;
+      info->element_type = TREE_TYPE (first_dimen);
     }
 
-  info->element_type = TREE_TYPE (last_dimen);
-
-  /* Now iterate over all dimensions in source-order and fill the info
+  /* Now iterate over all dimensions in source order and fill the info
      structure.  */
   for (i = (convention_fortran_p ? info->ndimensions - 1 : 0),
        dimen = first_dimen;
@@ -979,7 +890,7 @@ gnat_get_array_descr_info (const_tree const_type,
       /* We are interested in the stored bounds for the debug info.  */
       tree index_type = TYPE_INDEX_TYPE (TYPE_DOMAIN (dimen));
 
-      if (is_array || is_fat_ptr)
+      if (is_array)
 	{
 	  /* GDB does not handle very well the self-referencial bound
 	     expressions we are able to generate here for XUA types (they are
@@ -1030,6 +941,7 @@ gnat_get_array_descr_info (const_tree const_type,
   /* These are Fortran-specific fields.  They make no sense here.  */
   info->allocated = NULL_TREE;
   info->associated = NULL_TREE;
+  info->data_location = NULL_TREE;
 
   if (gnat_encodings == DWARF_GNAT_ENCODINGS_MINIMAL)
     {
@@ -1083,6 +995,13 @@ get_array_bit_stride (tree comp_type)
   /* Simple case: the array contains an integral type: return its RM size.  */
   if (INTEGRAL_TYPE_P (comp_type))
     return TYPE_RM_SIZE (comp_type);
+
+  /* Likewise for record or union types.  */
+  if (RECORD_OR_UNION_TYPE_P (comp_type) && !TYPE_FAT_POINTER_P (comp_type))
+    return TYPE_ADA_SIZE (comp_type);
+
+  /* The gnat_get_array_descr_info debug hook expects a debug tyoe.  */
+  comp_type = maybe_debug_type (comp_type);
 
   /* Otherwise, see if this is an array we can analyze; if it's not, punt.  */
   memset (&info, 0, sizeof (info));
@@ -1144,7 +1063,7 @@ gnat_get_type_bias (const_tree gnu_type)
 {
   if (TREE_CODE (gnu_type) == INTEGER_TYPE
       && TYPE_BIASED_REPRESENTATION_P (gnu_type)
-      && gnat_encodings == DWARF_GNAT_ENCODINGS_MINIMAL)
+      && gnat_encodings != DWARF_GNAT_ENCODINGS_ALL)
     return TYPE_RM_MIN_VALUE (gnu_type);
 
   return NULL_TREE;
@@ -1169,7 +1088,7 @@ default_pass_by_ref (tree gnu_type)
 			       TYPE_ALIGN (gnu_type)) > 0))
     return true;
 
-  if (pass_by_reference (NULL, TYPE_MODE (gnu_type), gnu_type, true))
+  if (pass_by_reference (NULL, function_arg_info (gnu_type, /*named=*/true)))
     return true;
 
   if (targetm.calls.return_in_memory (gnu_type, NULL_TREE))
@@ -1221,7 +1140,7 @@ must_pass_by_ref (tree gnu_type)
 void
 enumerate_modes (void (*f) (const char *, int, int, int, int, int, int, int))
 {
-  const tree c_types[]
+  tree const c_types[]
     = { float_type_node, double_type_node, long_double_type_node };
   const char *const c_names[]
     = { "float", "double", "long double" };

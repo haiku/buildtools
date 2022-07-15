@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -59,8 +59,32 @@ with System.WCh_Con;   use System.WCh_Con;
 package body Lib.Writ is
 
    -----------------------
-   -- Local Subprograms --
+   -- Local subprograms --
    -----------------------
+
+   function Present (N_Id : Name_Id) return Boolean;
+   pragma Inline (Present);
+   --  Determine whether a name with id N_Id exists
+
+   procedure Write_Invocation_Construct (IC_Id : Invocation_Construct_Id);
+   pragma Inline (Write_Invocation_Construct);
+   --  Write invocation construct IC_Id to the ALI file
+
+   procedure Write_Invocation_Graph;
+   pragma Inline (Write_Invocation_Graph);
+   --  Write out the invocation graph
+
+   procedure Write_Invocation_Graph_Attributes;
+   pragma Inline (Write_Invocation_Graph_Attributes);
+   --  Write out the attributes of the invocation graph
+
+   procedure Write_Invocation_Relation (IR_Id : Invocation_Relation_Id);
+   pragma Inline (Write_Invocation_Relation);
+   --  Write invocation relation IR_Id to the ALI file
+
+   procedure Write_Invocation_Signature (IS_Id : Invocation_Signature_Id);
+   pragma Inline (Write_Invocation_Signature);
+   --  Write invocation signature IS_Id to the ALI file
 
    procedure Write_Unit_Name (N : Node_Id);
    --  Used to write out the unit name for R (pragma Restriction) lines
@@ -119,7 +143,7 @@ package body Lib.Writ is
       --  Nothing to do if we already compiled System
 
       for Unum in Units.First .. Last_Unit loop
-         if Units.Table (Unum).Source_Index = System_Source_File_Index then
+         if Source_Index (Unum) = System_Source_File_Index then
             return;
          end if;
       end loop;
@@ -165,6 +189,7 @@ package body Lib.Writ is
          Version                => 0,
          Error_Location         => No_Location,
          OA_Setting             => 'O');
+      Init_Unit_Name (Units.Last, System_Uname);
 
       --  Parse system.ads so that the checksum is set right. Style checks are
       --  not applied. The Ekind is set to ensure that this reference is always
@@ -184,6 +209,15 @@ package body Lib.Writ is
          Multiple_Unit_Index := Save_Mindex;
       end;
    end Ensure_System_Dependency;
+
+   -------------
+   -- Present --
+   -------------
+
+   function Present (N_Id : Name_Id) return Boolean is
+   begin
+      return N_Id /= No_Name;
+   end Present;
 
    ---------------
    -- Write_ALI --
@@ -226,10 +260,6 @@ package body Lib.Writ is
       Num_Sdep : Nat := 0;
       --  Number of active entries in Sdep_Table
 
-      flag_compare_debug : Int;
-      pragma Import (C, flag_compare_debug);
-      --  Import from toplev.c
-
       -----------------------
       -- Local Subprograms --
       -----------------------
@@ -237,17 +267,6 @@ package body Lib.Writ is
       procedure Collect_Withs (Cunit : Node_Id);
       --  Collect with lines for entries in the context clause of the given
       --  compilation unit, Cunit.
-
-      procedure Update_Tables_From_ALI_File;
-      --  Given an up to date ALI file (see Up_To_Date_ALI_file_Exists
-      --  function), update tables from the ALI information, including
-      --  specifically the Compilation_Switches table.
-
-      function Up_To_Date_ALI_File_Exists return Boolean;
-      --  If there exists an ALI file that is up to date, then this function
-      --  initializes the tables in the ALI spec to contain information on
-      --  this file (using Scan_ALI) and returns True. If no file exists,
-      --  or the file is not up to date, then False is returned.
 
       procedure Write_Unit_Information (Unit_Num : Unit_Number_Type);
       --  Write out the library information for one unit for which code is
@@ -367,76 +386,6 @@ package body Lib.Writ is
          end loop;
       end Collect_Withs;
 
-      --------------------------------
-      -- Up_To_Date_ALI_File_Exists --
-      --------------------------------
-
-      function Up_To_Date_ALI_File_Exists return Boolean is
-         Name : File_Name_Type;
-         Text : Text_Buffer_Ptr;
-         Id   : Sdep_Id;
-         Sind : Source_File_Index;
-
-      begin
-         Opt.Check_Object_Consistency := True;
-         Read_Library_Info (Name, Text);
-
-         --  Return if we could not find an ALI file
-
-         if Text = null then
-            return False;
-         end if;
-
-         --  Return if ALI file has bad format
-
-         Initialize_ALI;
-
-         if Scan_ALI (Name, Text, False, Err => True) = No_ALI_Id then
-            return False;
-         end if;
-
-         --  If we have an OK ALI file, check if it is up to date
-         --  Note that we assume that the ALI read has all the entries
-         --  we have in our table, plus some additional ones (that can
-         --  come from expansion).
-
-         Id := First_Sdep_Entry;
-         for J in 1 .. Num_Sdep loop
-            Sind := Units.Table (Sdep_Table (J)).Source_Index;
-
-            while Sdep.Table (Id).Sfile /= File_Name (Sind) loop
-               if Id = Sdep.Last then
-                  return False;
-               else
-                  Id := Id + 1;
-               end if;
-            end loop;
-
-            if Sdep.Table (Id).Stamp /= Time_Stamp (Sind) then
-               return False;
-            end if;
-         end loop;
-
-         return True;
-      end Up_To_Date_ALI_File_Exists;
-
-      ---------------------------------
-      -- Update_Tables_From_ALI_File --
-      ---------------------------------
-
-      procedure Update_Tables_From_ALI_File is
-      begin
-         --  Build Compilation_Switches table
-
-         Compilation_Switches.Init;
-
-         for J in First_Arg_Entry .. Args.Last loop
-            Compilation_Switches.Increment_Last;
-            Compilation_Switches.Table (Compilation_Switches.Last) :=
-              Args.Table (J);
-         end loop;
-      end Update_Tables_From_ALI_File;
-
       ----------------------------
       -- Write_Unit_Information --
       ----------------------------
@@ -532,7 +481,7 @@ package body Lib.Writ is
          Write_Info_Str (" O");
          Write_Info_Char (OA_Setting (Unit_Num));
 
-         if Ekind_In (Uent, E_Package, E_Package_Body)
+         if Ekind (Uent) in E_Package | E_Package_Body
            and then Present (Finalizer (Uent))
          then
             Write_Info_Str (" PF");
@@ -744,7 +693,14 @@ package body Lib.Writ is
                   Note_Unit := U;
                end if;
 
-               if Note_Unit = Unit_Num then
+               --  No action needed for pragmas removed by the expander (for
+               --  example, pragmas of ignored ghost entities).
+
+               if Nkind (N) = N_Null_Statement then
+                  pragma Assert (Nkind (Original_Node (N)) = N_Pragma);
+                  null;
+
+               elsif Note_Unit = Unit_Num then
                   Write_Info_Initiate ('N');
                   Write_Info_Char (' ');
 
@@ -844,9 +800,9 @@ package body Lib.Writ is
          --  Write source file name Nam and ALI file name for unit index Idx.
          --  Possibly change Nam to lowercase (generating a new file name).
 
-         --------------------------
-         -- Write_With_File_Name --
-         --------------------------
+         ---------------------------
+         -- Write_With_File_Names --
+         ---------------------------
 
          procedure Write_With_File_Names
            (Nam : in out File_Name_Type;
@@ -881,7 +837,7 @@ package body Lib.Writ is
             --  preprocessing data and definition files, there is no Unit_Name,
             --  check for that first.
 
-            if Unit_Name (J) /= No_Unit_Name
+            if Present (Unit_Name (J))
               and then (With_Flags (J) or else Unit_Name (J) = Pname)
             then
                Num_Withs := Num_Withs + 1;
@@ -952,18 +908,16 @@ package body Lib.Writ is
                if Is_Spec_Name (Uname) then
                   Body_Fname :=
                     Get_File_Name
-                      (Get_Body_Name (Uname),
-                       Subunit => False, May_Fail => True);
+                      (Uname    => Get_Body_Name (Uname),
+                       Subunit  => False,
+                       May_Fail => True);
 
-                  Body_Index :=
-                    Get_Unit_Index
-                      (Get_Body_Name (Uname));
+                  Body_Index := Get_Unit_Index (Get_Body_Name (Uname));
 
                   if Body_Fname = No_File then
                      Body_Fname := Get_File_Name (Uname, Subunit => False);
                      Body_Index := Get_Unit_Index (Uname);
                   end if;
-
                else
                   Body_Fname := Get_File_Name (Uname, Subunit => False);
                   Body_Index := Get_Unit_Index (Uname);
@@ -1047,11 +1001,9 @@ package body Lib.Writ is
 
    begin
       --  We never write an ALI file if the original operating mode was
-      --  syntax-only (-gnats switch used in compiler invocation line)
+      --  syntax-only (-gnats switch used in compiler invocation line).
 
-      if Original_Operating_Mode = Check_Syntax
-        or flag_compare_debug /= 0
-      then
+      if Original_Operating_Mode = Check_Syntax then
          return;
       end if;
 
@@ -1062,8 +1014,7 @@ package body Lib.Writ is
          return;
       end if;
 
-      --  Build sorted source dependency table. We do this right away, because
-      --  it is referenced by Up_To_Date_ALI_File_Exists.
+      --  Build sorted source dependency table.
 
       for Unum in Units.First .. Last_Unit loop
          if Cunit_Entity (Unum) = Empty
@@ -1097,20 +1048,8 @@ package body Lib.Writ is
 
       Lib.Sort (Sdep_Table (1 .. Num_Sdep));
 
-      --  If we are not generating code, and there is an up to date ALI file
-      --  file accessible, read it, and acquire the compilation arguments from
-      --  this file. In GNATprove mode, always generate the ALI file, which
-      --  contains a special section for formal verification.
-
-      if Operating_Mode /= Generate_Code and then not GNATprove_Mode then
-         if Up_To_Date_ALI_File_Exists then
-            Update_Tables_From_ALI_File;
-            return;
-         end if;
-      end if;
-
-      --  Otherwise acquire compilation arguments and prepare to write out a
-      --  new ali file.
+      --  Acquire compilation arguments and prepare to write out a new ali
+      --  file.
 
       Create_Output_Library_Info;
 
@@ -1186,9 +1125,7 @@ package body Lib.Writ is
 
             if Nkind (U) = N_Subprogram_Body
               and then Present (Corresponding_Spec (U))
-              and then
-                Ekind_In (Corresponding_Spec (U), E_Generic_Procedure,
-                                                  E_Generic_Function)
+              and then Is_Generic_Subprogram (Corresponding_Spec (U))
             then
                null;
 
@@ -1531,7 +1468,7 @@ package body Lib.Writ is
          for J in 1 .. Num_Sdep loop
             Unum := Sdep_Table (J);
             Units.Table (Unum).Dependency_Num := J;
-            Sind := Units.Table (Unum).Source_Index;
+            Sind := Source_Index (Unum);
 
             Write_Info_Initiate ('D');
             Write_Info_Char (' ');
@@ -1539,10 +1476,15 @@ package body Lib.Writ is
             --  Normal case of a unit entry with a source index
 
             if Sind > No_Source_File then
-               Fname := File_Name (Sind);
 
-               --  Ensure that on platforms where the file names are not case
-               --  sensitive, the recorded file name is in lower case.
+               if Config_Files_Store_Basename then
+                  Fname := Strip_Directory (File_Name (Sind));
+               else
+                  Fname := File_Name (Sind);
+               end if;
+
+               --  Ensure that on platforms where the file names are not
+               --  case sensitive, the recorded file name is in lower case.
 
                if not File_Names_Case_Sensitive then
                   Get_Name_String (Fname);
@@ -1611,6 +1553,10 @@ package body Lib.Writ is
          end loop;
       end;
 
+      --  Output the invocation graph
+
+      Write_Invocation_Graph;
+
       --  Output cross-references
 
       if Opt.Xref_Active then
@@ -1630,6 +1576,179 @@ package body Lib.Writ is
       Write_Info_Terminate;
       Close_Output_Library_Info;
    end Write_ALI;
+
+   --------------------------------
+   -- Write_Invocation_Construct --
+   --------------------------------
+
+   procedure Write_Invocation_Construct (IC_Id : Invocation_Construct_Id) is
+   begin
+      --  G header
+
+      Write_Info_Initiate ('G');
+      Write_Info_Char     (' ');
+
+      --  line-kind
+
+      Write_Info_Char
+        (Invocation_Graph_Line_Kind_To_Code (Invocation_Construct_Line));
+      Write_Info_Char (' ');
+
+      --  construct-kind
+
+      Write_Info_Char (Invocation_Construct_Kind_To_Code (Kind (IC_Id)));
+      Write_Info_Char (' ');
+
+      --  construct-spec-placement
+
+      Write_Info_Char
+        (Declaration_Placement_Kind_To_Code (Spec_Placement (IC_Id)));
+      Write_Info_Char (' ');
+
+      --  construct-body-placement
+
+      Write_Info_Char
+        (Declaration_Placement_Kind_To_Code (Body_Placement (IC_Id)));
+      Write_Info_Char (' ');
+
+      --  construct-signature
+
+      Write_Invocation_Signature (Signature (IC_Id));
+      Write_Info_EOL;
+   end Write_Invocation_Construct;
+
+   ---------------------------------------
+   -- Write_Invocation_Graph_Attributes --
+   ---------------------------------------
+
+   procedure Write_Invocation_Graph_Attributes is
+   begin
+      --  G header
+
+      Write_Info_Initiate ('G');
+      Write_Info_Char     (' ');
+
+      --  line-kind
+
+      Write_Info_Char
+        (Invocation_Graph_Line_Kind_To_Code
+          (Invocation_Graph_Attributes_Line));
+      Write_Info_Char (' ');
+
+      --  encoding-kind
+
+      Write_Info_Char
+        (Invocation_Graph_Encoding_Kind_To_Code (Invocation_Graph_Encoding));
+      Write_Info_EOL;
+   end Write_Invocation_Graph_Attributes;
+
+   ----------------------------
+   -- Write_Invocation_Graph --
+   ----------------------------
+
+   procedure Write_Invocation_Graph is
+   begin
+      Write_Invocation_Graph_Attributes;
+
+      --  First write out all invocation constructs declared within the current
+      --  unit. This ensures that when this invocation is read, the invocation
+      --  constructs are materialized before they are referenced by invocation
+      --  relations.
+
+      For_Each_Invocation_Construct (Write_Invocation_Construct'Access);
+
+      --  Write out all invocation relations that originate from invocation
+      --  constructs delared in the current unit.
+
+      For_Each_Invocation_Relation (Write_Invocation_Relation'Access);
+   end Write_Invocation_Graph;
+
+   -------------------------------
+   -- Write_Invocation_Relation --
+   -------------------------------
+
+   procedure Write_Invocation_Relation (IR_Id : Invocation_Relation_Id) is
+   begin
+      --  G header
+
+      Write_Info_Initiate ('G');
+      Write_Info_Char     (' ');
+
+      --  line-kind
+
+      Write_Info_Char
+        (Invocation_Graph_Line_Kind_To_Code (Invocation_Relation_Line));
+      Write_Info_Char (' ');
+
+      --  relation-kind
+
+      Write_Info_Char (Invocation_Kind_To_Code (Kind (IR_Id)));
+      Write_Info_Char (' ');
+
+      --  (extra-name | "none")
+
+      if Present (Extra (IR_Id)) then
+         Write_Info_Name (Extra (IR_Id));
+      else
+         Write_Info_Str ("none");
+      end if;
+
+      Write_Info_Char (' ');
+
+      --  invoker-signature
+
+      Write_Invocation_Signature (Invoker (IR_Id));
+      Write_Info_Char (' ');
+
+      --  target-signature
+
+      Write_Invocation_Signature (Target (IR_Id));
+
+      Write_Info_EOL;
+   end Write_Invocation_Relation;
+
+   --------------------------------
+   -- Write_Invocation_Signature --
+   --------------------------------
+
+   procedure Write_Invocation_Signature (IS_Id : Invocation_Signature_Id) is
+   begin
+      --  [
+
+      Write_Info_Char ('[');
+
+      --  name
+
+      Write_Info_Name (Name (IS_Id));
+      Write_Info_Char (' ');
+
+      --  scope
+
+      Write_Info_Name (IS_Scope (IS_Id));
+      Write_Info_Char (' ');
+
+      --  line
+
+      Write_Info_Nat  (Line (IS_Id));
+      Write_Info_Char (' ');
+
+      --  column
+
+      Write_Info_Nat  (Column (IS_Id));
+      Write_Info_Char (' ');
+
+      --  (locations | "none")
+
+      if Present (Locations (IS_Id)) then
+         Write_Info_Name (Locations (IS_Id));
+      else
+         Write_Info_Str ("none");
+      end if;
+
+      --  ]
+
+      Write_Info_Char (']');
+   end Write_Invocation_Signature;
 
    ---------------------
    -- Write_Unit_Name --

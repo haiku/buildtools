@@ -1,6 +1,6 @@
 /* Breadth-first and depth-first routines for
    searching multiple-inheritance lattice for GNU C++.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
    Contributed by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -119,6 +119,41 @@ dfs_lookup_base (tree binfo, void *data_)
 	}
     }
 
+  return NULL_TREE;
+}
+
+/* This deals with bug PR17314.
+
+   DECL is a declaration and BINFO represents a class that has attempted (but
+   failed) to access DECL.
+
+   Examine the parent binfos of BINFO and determine whether any of them had
+   private access to DECL.  If they did, return the parent binfo.  This helps
+   in figuring out the correct error message to show (if the parents had
+   access, it's their fault for not giving sufficient access to BINFO).
+
+   If no parents had access, return NULL_TREE.  */
+
+tree
+get_parent_with_private_access (tree decl, tree binfo)
+{
+  /* Only BINFOs should come through here.  */
+  gcc_assert (TREE_CODE (binfo) == TREE_BINFO);
+
+  tree base_binfo = NULL_TREE;
+
+  /* Iterate through immediate parent classes.  */
+  for (int i = 0; BINFO_BASE_ITERATE (binfo, i, base_binfo); i++)
+    {
+      /* This parent had private access.  Therefore that's why BINFO can't
+	  access DECL.  */
+      if (access_in_type (BINFO_TYPE (base_binfo), decl) == ak_private)
+	return base_binfo;
+    }
+
+  /* None of the parents had access.  Note: it's impossible for one of the
+     parents to have had public or protected access to DECL, since then
+     BINFO would have been able to access DECL too.  */
   return NULL_TREE;
 }
 
@@ -623,10 +658,15 @@ protected_accessible_p (tree decl, tree derived, tree type, tree otype)
   if (!DERIVED_FROM_P (type, derived))
     return 0;
 
+  /* DECL_NONSTATIC_MEMBER_P won't work for USING_DECLs.  */
+  decl = strip_using_decl (decl);
+  /* We don't expect or support dependent decls.  */
+  gcc_assert (TREE_CODE (decl) != USING_DECL);
+
   /* [class.protected]
 
      When a friend or a member function of a derived class references
-     a protected nonstatic member of a base class, an access check
+     a protected non-static member of a base class, an access check
      applies in addition to those described earlier in clause
      _class.access_) Except when forming a pointer to member
      (_expr.unary.op_), the access must be through a pointer to,
@@ -693,6 +733,14 @@ friend_accessible_p (tree scope, tree decl, tree type, tree otype)
       if (DECL_CLASS_SCOPE_P (scope)
 	  && friend_accessible_p (DECL_CONTEXT (scope), decl, type, otype))
 	return 1;
+      /* Perhaps SCOPE is a friend function defined inside a class from which
+	 DECL is accessible.  Checking this is necessary only when the class
+	 is dependent, for otherwise add_friend will already have added the
+	 class to SCOPE's DECL_BEFRIENDING_CLASSES.  */
+      if (tree fctx = DECL_FRIEND_CONTEXT (scope))
+	if (dependent_type_p (fctx)
+	    && protected_accessible_p (decl, fctx, type, otype))
+	  return 1;
     }
 
   /* Maybe scope's template is a friend.  */
@@ -822,18 +870,6 @@ accessible_p (tree type, tree decl, bool consider_local_p)
   if (current_function_decl && DECL_THUNK_P (current_function_decl))
     return 1;
 
-  /* In a template declaration, we cannot be sure whether the
-     particular specialization that is instantiated will be a friend
-     or not.  Therefore, all access checks are deferred until
-     instantiation.  However, PROCESSING_TEMPLATE_DECL is set in the
-     parameter list for a template (because we may see dependent types
-     in default arguments for template parameters), and access
-     checking should be performed in the outermost parameter list.  */
-  if (processing_template_decl
-      && !expanding_concept ()
-      && (!processing_template_parmlist || processing_template_decl > 1))
-    return 1;
-
   tree otype = NULL_TREE;
   if (!TYPE_P (type))
     {
@@ -909,30 +945,37 @@ struct lookup_field_info {
   const char *errstr;
 };
 
-/* Nonzero for a class member means that it is shared between all objects
+/* True for a class member means that it is shared between all objects
    of that class.
 
    [class.member.lookup]:If the resulting set of declarations are not all
-   from sub-objects of the same type, or the set has a  nonstatic  member
+   from sub-objects of the same type, or the set has a non-static member
    and  includes members from distinct sub-objects, there is an ambiguity
    and the program is ill-formed.
 
-   This function checks that T contains no nonstatic members.  */
+   This function checks that T contains no non-static members.  */
 
-int
+bool
 shared_member_p (tree t)
 {
-  if (VAR_P (t) || TREE_CODE (t) == TYPE_DECL \
+  if (VAR_P (t) || TREE_CODE (t) == TYPE_DECL
       || TREE_CODE (t) == CONST_DECL)
-    return 1;
+    return true;
   if (is_overloaded_fn (t))
     {
       for (ovl_iterator iter (get_fns (t)); iter; ++iter)
-	if (DECL_NONSTATIC_MEMBER_FUNCTION_P (*iter))
-	  return 0;
-      return 1;
+	{
+	  tree decl = strip_using_decl (*iter);
+	  if (TREE_CODE (decl) == USING_DECL)
+	    /* Conservatively assume a dependent using-declaration
+	       might resolve to a non-static member.  */
+	    return false;
+	  if (DECL_NONSTATIC_MEMBER_FUNCTION_P (decl))
+	    return false;
+	}
+      return true;
     }
-  return 0;
+  return false;
 }
 
 /* Routine to see if the sub-object denoted by the binfo PARENT can be
@@ -978,17 +1021,6 @@ lookup_field_r (tree binfo, void *data)
     return dfs_skip_bases;
 
   nval = get_class_binding (type, lfi->name, lfi->want_type);
-
-  /* If we're looking up a type (as with an elaborated type specifier)
-     we ignore all non-types we find.  */
-  if (lfi->want_type && nval && !DECL_DECLARES_TYPE_P (nval))
-    {
-      nval = NULL_TREE;
-      if (CLASSTYPE_NESTED_UTDS (type))
-	if (binding_entry e = binding_table_find (CLASSTYPE_NESTED_UTDS (type),
-						  lfi->name))
-	  nval = TYPE_MAIN_DECL (e->type);
-    }
 
   /* If there is no declaration with the indicated name in this type,
      then there's nothing to do.  */
@@ -1048,10 +1080,7 @@ build_baselink (tree binfo, tree access_binfo, tree functions, tree optype)
 {
   tree baselink;
 
-  gcc_assert (TREE_CODE (functions) == FUNCTION_DECL
-	      || TREE_CODE (functions) == TEMPLATE_DECL
-	      || TREE_CODE (functions) == TEMPLATE_ID_EXPR
-	      || TREE_CODE (functions) == OVERLOAD);
+  gcc_assert (OVL_P (functions) || TREE_CODE (functions) == TEMPLATE_ID_EXPR);
   gcc_assert (!optype || TYPE_P (optype));
   gcc_assert (TREE_TYPE (functions));
 
@@ -1177,7 +1206,10 @@ lookup_member (tree xbasetype, tree name, int protect, bool want_type,
       && !really_overloaded_fn (rval))
     {
       tree decl = is_overloaded_fn (rval) ? get_first_fn (rval) : rval;
-      if (!DECL_NONSTATIC_MEMBER_FUNCTION_P (decl)
+      decl = strip_using_decl (decl);
+      /* A dependent USING_DECL will be checked after tsubsting.  */
+      if (TREE_CODE (decl) != USING_DECL
+	  && !DECL_NONSTATIC_MEMBER_FUNCTION_P (decl)
 	  && !perform_or_defer_access_check (basetype_path, decl, decl,
 					     complain, afi))
 	rval = error_mark_node;
@@ -1265,7 +1297,7 @@ tree
 lookup_member_fuzzy (tree xbasetype, tree name, bool want_type_p)
 {
   tree type = NULL_TREE, basetype_path = NULL_TREE;
-  struct lookup_field_fuzzy_info lffi (want_type_p);
+  class lookup_field_fuzzy_info lffi (want_type_p);
 
   /* rval_binfo is the binfo associated with the found member, note,
      this can be set with useful information, even when rval is not
@@ -1334,10 +1366,11 @@ lookup_field (tree xbasetype, tree name, int protect, bool want_type)
    return NULL_TREE.  */
 
 tree
-lookup_fnfields (tree xbasetype, tree name, int protect)
+lookup_fnfields (tree xbasetype, tree name, int protect,
+		 tsubst_flags_t complain)
 {
   tree rval = lookup_member (xbasetype, name, protect, /*want_type=*/false,
-			     tf_warning_or_error);
+			     complain);
 
   /* Ignore non-functions, but propagate the ambiguity list.  */
   if (!error_operand_p (rval)
@@ -1793,8 +1826,9 @@ field_accessor_p (tree fn, tree field_decl, bool const_p)
 
 /* Callback data for dfs_locate_field_accessor_pre.  */
 
-struct locate_field_data
+class locate_field_data
 {
+public:
   locate_field_data (tree field_decl_, bool const_p_)
   : field_decl (field_decl_), const_p (const_p_) {}
 
@@ -1850,6 +1884,39 @@ locate_field_accessor (tree basetype_path, tree field_decl, bool const_p)
 				   NULL, &lfd);
 }
 
+/* Check throw specifier of OVERRIDER is at least as strict as
+   the one of BASEFN.  */
+
+bool
+maybe_check_overriding_exception_spec (tree overrider, tree basefn)
+{
+  maybe_instantiate_noexcept (basefn);
+  maybe_instantiate_noexcept (overrider);
+  tree base_throw = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (basefn));
+  tree over_throw = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (overrider));
+
+  if (DECL_INVALID_OVERRIDER_P (overrider))
+    return true;
+
+  /* Can't check this yet.  Pretend this is fine and let
+     noexcept_override_late_checks check this later.  */
+  if (UNPARSED_NOEXCEPT_SPEC_P (base_throw)
+      || UNPARSED_NOEXCEPT_SPEC_P (over_throw))
+    return true;
+
+  if (!comp_except_specs (base_throw, over_throw, ce_derived))
+    {
+      auto_diagnostic_group d;
+      error ("looser exception specification on overriding virtual function "
+	     "%q+#F", overrider);
+      inform (DECL_SOURCE_LOCATION (basefn),
+	      "overridden function is %q#F", basefn);
+      DECL_INVALID_OVERRIDER_P (overrider) = 1;
+      return false;
+    }
+  return true;
+}
+
 /* Check that virtual overrider OVERRIDER is acceptable for base function
    BASEFN. Issue diagnostic, and return zero, if unacceptable.  */
 
@@ -1860,7 +1927,6 @@ check_final_overrider (tree overrider, tree basefn)
   tree base_type = TREE_TYPE (basefn);
   tree over_return = fndecl_declared_return_type (overrider);
   tree base_return = fndecl_declared_return_type (basefn);
-  tree over_throw, base_throw;
 
   int fail = 0;
 
@@ -1871,12 +1937,12 @@ check_final_overrider (tree overrider, tree basefn)
     /* OK */;
   else if ((CLASS_TYPE_P (over_return) && CLASS_TYPE_P (base_return))
 	   || (TREE_CODE (base_return) == TREE_CODE (over_return)
-	       && POINTER_TYPE_P (base_return)))
+	       && INDIRECT_TYPE_P (base_return)))
     {
       /* Potentially covariant.  */
       unsigned base_quals, over_quals;
 
-      fail = !POINTER_TYPE_P (base_return);
+      fail = !INDIRECT_TYPE_P (base_return);
       if (!fail)
 	{
 	  fail = cp_type_quals (base_return) != cp_type_quals (over_return);
@@ -1911,6 +1977,7 @@ check_final_overrider (tree overrider, tree basefn)
 	/* GNU extension, allow trivial pointer conversions such as
 	   converting to void *, or qualification conversion.  */
 	{
+	  auto_diagnostic_group d;
 	  if (pedwarn (DECL_SOURCE_LOCATION (overrider), 0,
 		       "invalid covariant return type for %q#D", overrider))
 	    inform (DECL_SOURCE_LOCATION (basefn),
@@ -1925,36 +1992,19 @@ check_final_overrider (tree overrider, tree basefn)
     /* OK */;
   else
     {
+      auto_diagnostic_group d;
       if (fail == 1)
-	{
-	  error ("invalid covariant return type for %q+#D", overrider);
-	  inform (DECL_SOURCE_LOCATION (basefn),
-		  "overridden function is %q#D", basefn);
-	}
+	error ("invalid covariant return type for %q+#D", overrider);
       else
-	{
-	  error ("conflicting return type specified for %q+#D", overrider);
-	  inform (DECL_SOURCE_LOCATION (basefn),
-		  "overridden function is %q#D", basefn);
-	}
-      DECL_INVALID_OVERRIDER_P (overrider) = 1;
-      return 0;
-    }
-
-  /* Check throw specifier is at least as strict.  */
-  maybe_instantiate_noexcept (basefn);
-  maybe_instantiate_noexcept (overrider);
-  base_throw = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (basefn));
-  over_throw = TYPE_RAISES_EXCEPTIONS (TREE_TYPE (overrider));
-
-  if (!comp_except_specs (base_throw, over_throw, ce_derived))
-    {
-      error ("looser throw specifier for %q+#F", overrider);
+	error ("conflicting return type specified for %q+#D", overrider);
       inform (DECL_SOURCE_LOCATION (basefn),
-	      "overridden function is %q#F", basefn);
+	      "overridden function is %q#D", basefn);
       DECL_INVALID_OVERRIDER_P (overrider) = 1;
       return 0;
     }
+
+  if (!maybe_check_overriding_exception_spec (overrider, basefn))
+    return 0;
 
   /* Check for conflicting type attributes.  But leave transaction_safe for
      set_one_vmethod_tm_attributes.  */
@@ -1962,9 +2012,29 @@ check_final_overrider (tree overrider, tree basefn)
       && !tx_safe_fn_type_p (base_type)
       && !tx_safe_fn_type_p (over_type))
     {
+      auto_diagnostic_group d;
       error ("conflicting type attributes specified for %q+#D", overrider);
       inform (DECL_SOURCE_LOCATION (basefn),
 	      "overridden function is %q#D", basefn);
+      DECL_INVALID_OVERRIDER_P (overrider) = 1;
+      return 0;
+    }
+
+  /* A consteval virtual function shall not override a virtual function that is
+     not consteval. A consteval virtual function shall not be overridden by a
+     virtual function that is not consteval.  */
+  if (DECL_IMMEDIATE_FUNCTION_P (overrider)
+      != DECL_IMMEDIATE_FUNCTION_P (basefn))
+    {
+      auto_diagnostic_group d;
+      if (DECL_IMMEDIATE_FUNCTION_P (overrider))
+	error ("%<consteval%> function %q+D overriding non-%<consteval%> "
+	       "function", overrider);
+      else
+	error ("non-%<consteval%> function %q+D overriding %<consteval%> "
+	       "function", overrider);
+      inform (DECL_SOURCE_LOCATION (basefn),
+	      "overridden function is %qD", basefn);
       DECL_INVALID_OVERRIDER_P (overrider) = 1;
       return 0;
     }
@@ -1978,6 +2048,7 @@ check_final_overrider (tree overrider, tree basefn)
       && !lookup_attribute ("transaction_safe_dynamic",
 			    DECL_ATTRIBUTES (basefn)))
     {
+      auto_diagnostic_group d;
       error_at (DECL_SOURCE_LOCATION (overrider),
 		"%qD declared %<transaction_safe_dynamic%>", overrider);
       inform (DECL_SOURCE_LOCATION (basefn),
@@ -1988,6 +2059,7 @@ check_final_overrider (tree overrider, tree basefn)
     {
       if (DECL_DELETED_FN (overrider))
 	{
+	  auto_diagnostic_group d;
 	  error ("deleted function %q+D overriding non-deleted function",
 		 overrider);
 	  inform (DECL_SOURCE_LOCATION (basefn),
@@ -1996,6 +2068,7 @@ check_final_overrider (tree overrider, tree basefn)
 	}
       else
 	{
+	  auto_diagnostic_group d;
 	  error ("non-deleted function %q+D overriding deleted function",
 		 overrider);
 	  inform (DECL_SOURCE_LOCATION (basefn),
@@ -2005,6 +2078,7 @@ check_final_overrider (tree overrider, tree basefn)
     }
   if (DECL_FINAL_P (basefn))
     {
+      auto_diagnostic_group d;
       error ("virtual function %q+D overriding final function", overrider);
       inform (DECL_SOURCE_LOCATION (basefn),
 	      "overridden function is %qD", basefn);
@@ -2089,6 +2163,7 @@ look_for_overrides_r (tree type, tree fndecl)
 	{
 	  /* A static member function cannot match an inherited
 	     virtual member function.  */
+	  auto_diagnostic_group d;
 	  error ("%q+#D cannot be declared", fndecl);
 	  error ("  since %q+#D declared in base class", fn);
 	}

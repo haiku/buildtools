@@ -3,12 +3,12 @@
 // license that can be found in the LICENSE file.
 
 // Package crc32 implements the 32-bit cyclic redundancy check, or CRC-32,
-// checksum. See http://en.wikipedia.org/wiki/Cyclic_redundancy_check for
+// checksum. See https://en.wikipedia.org/wiki/Cyclic_redundancy_check for
 // information.
 //
 // Polynomials are represented in LSB-first form also known as reversed representation.
 //
-// See http://en.wikipedia.org/wiki/Mathematics_of_cyclic_redundancy_checks#Reversed_representations_and_reciprocal_polynomials
+// See https://en.wikipedia.org/wiki/Mathematics_of_cyclic_redundancy_checks#Reversed_representations_and_reciprocal_polynomials
 // for information.
 package crc32
 
@@ -16,6 +16,7 @@ import (
 	"errors"
 	"hash"
 	"sync"
+	"sync/atomic"
 )
 
 // The size of a CRC-32 checksum in bytes.
@@ -29,12 +30,12 @@ const (
 
 	// Castagnoli's polynomial, used in iSCSI.
 	// Has better error detection characteristics than IEEE.
-	// http://dx.doi.org/10.1109/26.231911
+	// https://dx.doi.org/10.1109/26.231911
 	Castagnoli = 0x82f63b78
 
 	// Koopman's polynomial.
 	// Also has better error detection characteristics than IEEE.
-	// http://dx.doi.org/10.1109/DSN.2002.1028931
+	// https://dx.doi.org/10.1109/DSN.2002.1028931
 	Koopman = 0xeb31d82e
 )
 
@@ -78,6 +79,7 @@ var castagnoliTable8 *slicing8Table
 var castagnoliArchImpl bool
 var updateCastagnoli func(crc uint32, p []byte) uint32
 var castagnoliOnce sync.Once
+var haveCastagnoli uint32
 
 func castagnoliInit() {
 	castagnoliTable = simpleMakeTable(Castagnoli)
@@ -93,6 +95,8 @@ func castagnoliInit() {
 			return slicingUpdate(crc, castagnoliTable8, p)
 		}
 	}
+
+	atomic.StoreUint32(&haveCastagnoli, 1)
 }
 
 // IEEETable is the table for the IEEE polynomial.
@@ -208,10 +212,10 @@ func readUint32(b []byte) uint32 {
 
 // Update returns the result of adding the bytes in p to the crc.
 func Update(crc uint32, tab *Table, p []byte) uint32 {
-	switch tab {
-	case castagnoliTable:
+	switch {
+	case atomic.LoadUint32(&haveCastagnoli) != 0 && tab == castagnoliTable:
 		return updateCastagnoli(crc, p)
-	case IEEETable:
+	case tab == IEEETable:
 		// Unfortunately, because IEEETable is exported, IEEE may be used without a
 		// call to MakeTable. We have to make sure it gets initialized in that case.
 		ieeeOnce.Do(ieeeInit)
@@ -222,10 +226,10 @@ func Update(crc uint32, tab *Table, p []byte) uint32 {
 }
 
 func (d *digest) Write(p []byte) (n int, err error) {
-	switch d.tab {
-	case castagnoliTable:
+	switch {
+	case atomic.LoadUint32(&haveCastagnoli) != 0 && d.tab == castagnoliTable:
 		d.crc = updateCastagnoli(d.crc, p)
-	case IEEETable:
+	case d.tab == IEEETable:
 		// We only create digest objects through New() which takes care of
 		// initialization in this case.
 		d.crc = updateIEEE(d.crc, p)

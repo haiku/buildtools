@@ -5,6 +5,7 @@
 package os
 
 import (
+	"errors"
 	"internal/testlog"
 	"runtime"
 	"sync"
@@ -12,6 +13,9 @@ import (
 	"syscall"
 	"time"
 )
+
+// ErrProcessDone indicates a Process has finished.
+var ErrProcessDone = errors.New("os: process already finished")
 
 // Process stores the information about a process created by StartProcess.
 type Process struct {
@@ -109,7 +113,9 @@ func (p *Process) Release() error {
 	return p.release()
 }
 
-// Kill causes the Process to exit immediately.
+// Kill causes the Process to exit immediately. Kill does not wait until
+// the Process has actually exited. This only kills the Process itself,
+// not any other processes it may have started.
 func (p *Process) Kill() error {
 	return p.kill()
 }

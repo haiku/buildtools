@@ -34,7 +34,6 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 
 AC_INIT([phsa HSAIL runtime library], [1.0], [pekka.jaaskelainen@parmance.com])
-AC_PREREQ([2.64])
 
 # Needed to define ${target}.  Needs to be very early to avoid annoying
 # warning about calling AC_ARG_PROGRAM before AC_CANONICAL_SYSTEM
@@ -70,6 +69,8 @@ ler-specific directory]),
   [enable_version_specific_runtime_libs=no])
 AC_MSG_RESULT($enable_version_specific_runtime_libs)
 
+GCC_WITH_TOOLEXECLIBDIR
+
 # Calculate toolexeclibdir
 # Also toolexecdir, though it's only used in toolexeclibdir
 case ${enable_version_specific_runtime_libs} in
@@ -85,7 +86,14 @@ case ${enable_version_specific_runtime_libs} in
        test x"$with_cross_host" != x"no"; then
       # Install a library built with a cross compiler in tooldir, not libdir.
       toolexecdir='$(exec_prefix)/$(target_alias)'
-      toolexeclibdir='$(toolexecdir)/lib'
+      case ${with_toolexeclibdir} in
+	no)
+	  toolexeclibdir='$(toolexecdir)/lib'
+	  ;;
+	*)
+	  toolexeclibdir=${with_toolexeclibdir}
+	  ;;
+      esac
     else
       toolexecdir='$(libdir)/gcc-lib/$(target_alias)'
       toolexeclibdir='$(libdir)'

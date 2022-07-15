@@ -1,6 +1,6 @@
 // PR c++/80449
-// { dg-options -std=c++17 }
+// { dg-do compile { target c++17 } }
 
 template<class S> struct C;
 template<> struct C<int> { C(int, int) {} };
-auto k = C{0, 0};  // { dg-error "cannot deduce" }
+auto k = C{0, 0};  // { dg-error "" }

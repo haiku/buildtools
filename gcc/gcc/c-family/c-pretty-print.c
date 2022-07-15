@@ -1,5 +1,5 @@
 /* Subroutines common to both C and C++ pretty-printers.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2021 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
 This file is part of GCC.
@@ -22,6 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "c-pretty-print.h"
+#include "gimple-pretty-print.h"
 #include "diagnostic.h"
 #include "stor-layout.h"
 #include "stringpool.h"
@@ -29,6 +30,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "intl.h"
 #include "tree-pretty-print.h"
 #include "selftest.h"
+#include "langhooks.h"
+#include "options.h"
 
 /* The pretty-printer code is primarily designed to closely follow
    (GNU) C and C++ grammars.  That is to be contrasted with spaghetti
@@ -192,7 +195,7 @@ pp_c_cv_qualifiers (c_pretty_printer *pp, int qualifiers, bool func_type)
 
 /* Pretty-print T using the type-cast notation '( type-name )'.  */
 
-static void
+void
 pp_c_type_cast (c_pretty_printer *pp, tree t)
 {
   pp_c_left_paren (pp);
@@ -248,9 +251,12 @@ pp_c_type_qualifier_list (c_pretty_printer *pp, tree t)
   if (!TYPE_P (t))
     t = TREE_TYPE (t);
 
-  qualifiers = TYPE_QUALS (t);
-  pp_c_cv_qualifiers (pp, qualifiers,
-		      TREE_CODE (t) == FUNCTION_TYPE);
+  if (TREE_CODE (t) != ARRAY_TYPE)
+    {
+      qualifiers = TYPE_QUALS (t);
+      pp_c_cv_qualifiers (pp, qualifiers,
+			  TREE_CODE (t) == FUNCTION_TYPE);
+    }
 
   if (!ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (t)))
     {
@@ -278,7 +284,11 @@ pp_c_pointer (c_pretty_printer *pp, tree t)
       if (TREE_CODE (t) == POINTER_TYPE)
 	pp_c_star (pp);
       else
-	pp_c_ampersand (pp);
+	{
+	  pp_c_ampersand (pp);
+	  if (TYPE_REF_IS_RVALUE (t))
+	    pp_c_ampersand (pp);
+	}
       pp_c_type_qualifier_list (pp, t);
       break;
 
@@ -334,6 +344,7 @@ c_pretty_printer::simple_type_specifier (tree t)
       break;
 
     case VOID_TYPE:
+    case OPAQUE_TYPE:
     case BOOLEAN_TYPE:
     case INTEGER_TYPE:
     case REAL_TYPE:
@@ -470,6 +481,16 @@ pp_c_specifier_qualifier_list (c_pretty_printer *pp, tree t)
 			     ? "_Complex" : "__complex__"));
       else if (code == VECTOR_TYPE)
 	{
+	  /* The syntax we print for vector types isn't real C or C++ syntax,
+	     so it's better to print the type name if we have one.  */
+	  tree name = TYPE_NAME (t);
+	  if (!(pp->flags & pp_c_flag_gnu_v3)
+	      && name
+	      && TREE_CODE (name) == TYPE_DECL)
+	    {
+	      pp->id_expression (name);
+	      break;
+	    }
 	  pp_c_ws_string (pp, "__vector");
 	  pp_c_left_paren (pp);
 	  pp_wide_integer (pp, TYPE_VECTOR_SUBPARTS (t));
@@ -525,7 +546,7 @@ pp_c_parameter_type_list (c_pretty_printer *pp, tree t)
       if (!first && !parms)
 	{
 	  pp_separate_with (pp, ',');
-	  pp_c_ws_string (pp, "...");
+	  pp_string (pp, "...");
 	}
     }
   pp_c_right_paren (pp);
@@ -558,6 +579,8 @@ c_pretty_printer::abstract_declarator (tree t)
 void
 c_pretty_printer::direct_abstract_declarator (tree t)
 {
+  bool add_space = false;
+
   switch (TREE_CODE (t))
     {
     case POINTER_TYPE:
@@ -571,16 +594,70 @@ c_pretty_printer::direct_abstract_declarator (tree t)
 
     case ARRAY_TYPE:
       pp_c_left_bracket (this);
-      if (TYPE_DOMAIN (t) && TYPE_MAX_VALUE (TYPE_DOMAIN (t)))
-	{
-	  tree maxval = TYPE_MAX_VALUE (TYPE_DOMAIN (t));
-	  tree type = TREE_TYPE (maxval);
 
-	  if (tree_fits_shwi_p (maxval))
-	    pp_wide_integer (this, tree_to_shwi (maxval) + 1);
-	  else
-	    expression (fold_build2 (PLUS_EXPR, type, maxval,
-                                     build_int_cst (type, 1)));
+      if (int quals = TYPE_QUALS (t))
+	{
+	  /* Print the array qualifiers such as in "T[const restrict 3]".  */
+	  pp_c_cv_qualifiers (this, quals, false);
+	  add_space = true;
+	}
+
+      if (tree arr = lookup_attribute ("array", TYPE_ATTRIBUTES (t)))
+	{
+	  if (TREE_VALUE (arr))
+	    {
+	      /* Print the specifier as in "T[static 3]" that's not actually
+		 part of the type but may be added by the front end.  */
+	      pp_c_ws_string (this, "static");
+	      add_space = true;
+	    }
+	  else if (!TYPE_DOMAIN (t))
+	    /* For arrays of unspecified bound using the [*] notation. */
+	    pp_character (this, '*');
+	}
+
+      if (tree dom = TYPE_DOMAIN (t))
+	{
+	  if (tree maxval = TYPE_MAX_VALUE (dom))
+	    {
+	      if (add_space)
+		pp_space (this);
+
+	      tree type = TREE_TYPE (maxval);
+
+	      if (tree_fits_shwi_p (maxval))
+		pp_wide_integer (this, tree_to_shwi (maxval) + 1);
+	      else if (TREE_CODE (maxval) == INTEGER_CST)
+		expression (fold_build2 (PLUS_EXPR, type, maxval,
+					 build_int_cst (type, 1)));
+	      else
+		{
+		  /* Strip the expressions from around a VLA bound added
+		     internally to make it fit the domain mold, including
+		     any casts.  */
+		  if (TREE_CODE (maxval) == NOP_EXPR)
+		    maxval = TREE_OPERAND (maxval, 0);
+		  if (TREE_CODE (maxval) == PLUS_EXPR
+		      && integer_all_onesp (TREE_OPERAND (maxval, 1)))
+		    {
+		      maxval = TREE_OPERAND (maxval, 0);
+		      if (TREE_CODE (maxval) == NOP_EXPR)
+			maxval = TREE_OPERAND (maxval, 0);
+		    }
+		  if (TREE_CODE (maxval) == SAVE_EXPR)
+		    {
+		      maxval = TREE_OPERAND (maxval, 0);
+		      if (TREE_CODE (maxval) == NOP_EXPR)
+			maxval = TREE_OPERAND (maxval, 0);
+		    }
+
+		  expression (maxval);
+		}
+	    }
+	  else if (TYPE_SIZE (t))
+	    /* Print zero for zero-length arrays but not for flexible
+	       array members whose TYPE_SIZE is null.  */
+	    pp_string (this, "0");
 	}
       pp_c_right_bracket (this);
       direct_abstract_declarator (TREE_TYPE (t));
@@ -588,6 +665,7 @@ c_pretty_printer::direct_abstract_declarator (tree t)
 
     case IDENTIFIER_NODE:
     case VOID_TYPE:
+    case OPAQUE_TYPE:
     case BOOLEAN_TYPE:
     case INTEGER_TYPE:
     case REAL_TYPE:
@@ -598,6 +676,7 @@ c_pretty_printer::direct_abstract_declarator (tree t)
     case VECTOR_TYPE:
     case COMPLEX_TYPE:
     case TYPE_DECL:
+    case ERROR_MARK:
       break;
 
     default:
@@ -908,7 +987,7 @@ pp_c_void_constant (c_pretty_printer *pp)
 
 /* Pretty-print an INTEGER literal.  */
 
-static void
+void
 pp_c_integer_constant (c_pretty_printer *pp, tree i)
 {
   if (tree_fits_shwi_p (i))
@@ -968,23 +1047,22 @@ pp_c_bool_constant (c_pretty_printer *pp, tree b)
     pp_unsupported_tree (pp, b);
 }
 
-/* Attempt to print out an ENUMERATOR.  Return true on success.  Else return
-   false; that means the value was obtained by a cast, in which case
-   print out the type-id part of the cast-expression -- the casted value
-   is then printed by pp_c_integer_literal.  */
+/* Given a value e of ENUMERAL_TYPE:
+   Print out the first ENUMERATOR id with value e, if one is found,
+   else print out the value as a C-style cast (type-id)value.  */
 
-static bool
+static void
 pp_c_enumeration_constant (c_pretty_printer *pp, tree e)
 {
-  bool value_is_named = true;
   tree type = TREE_TYPE (e);
-  tree value;
+  tree value = NULL_TREE;
 
   /* Find the name of this constant.  */
-  for (value = TYPE_VALUES (type);
-       value != NULL_TREE && !tree_int_cst_equal (TREE_VALUE (value), e);
-       value = TREE_CHAIN (value))
-    ;
+  if ((pp->flags & pp_c_flag_gnu_v3) == 0)
+    for (value = TYPE_VALUES (type); value != NULL_TREE;
+	 value = TREE_CHAIN (value))
+      if (tree_int_cst_equal (DECL_INITIAL (TREE_VALUE (value)), e))
+	break;
 
   if (value != NULL_TREE)
     pp->id_expression (TREE_PURPOSE (value));
@@ -992,10 +1070,8 @@ pp_c_enumeration_constant (c_pretty_printer *pp, tree e)
     {
       /* Value must have been cast.  */
       pp_c_type_cast (pp, type);
-      value_is_named = false;
+      pp_c_integer_constant (pp, e);
     }
-
-  return value_is_named;
 }
 
 /* Print out a REAL value as a decimal-floating-constant.  */
@@ -1140,9 +1216,8 @@ c_pretty_printer::constant (tree e)
 	  pp_c_bool_constant (this, e);
 	else if (type == char_type_node)
 	  pp_c_character_constant (this, e);
-	else if (TREE_CODE (type) == ENUMERAL_TYPE
-		 && pp_c_enumeration_constant (this, e))
-	  ;
+	else if (TREE_CODE (type) == ENUMERAL_TYPE)
+	  pp_c_enumeration_constant (this, e);
 	else
 	  pp_c_integer_constant (this, e);
       }
@@ -1262,11 +1337,49 @@ c_pretty_printer::primary_expression (tree e)
       pp_c_right_paren (this);
       break;
 
+    case SSA_NAME:
+      if (SSA_NAME_VAR (e))
+	{
+	  tree var = SSA_NAME_VAR (e);
+	  if (tree id = SSA_NAME_IDENTIFIER (e))
+	    {
+	      const char *name = IDENTIFIER_POINTER (id);
+	      const char *dot;
+	      if (DECL_ARTIFICIAL (var) && (dot = strchr (name, '.')))
+		{
+		  /* Print the name without the . suffix (such as in VLAs).
+		     Use pp_c_identifier so that it can be converted into
+		     the appropriate encoding.  */
+		  size_t size = dot - name;
+		  char *ident = XALLOCAVEC (char, size + 1);
+		  memcpy (ident, name, size);
+		  ident[size] = '\0';
+		  pp_c_identifier (this, ident);
+		}
+	      else
+		primary_expression (var);
+	    }
+	  else
+	    primary_expression (var);
+	}
+      else
+	{
+	  /* Print only the right side of the GIMPLE assignment.  */
+	  gimple *def_stmt = SSA_NAME_DEF_STMT (e);
+	  pp_gimple_stmt_1 (this, def_stmt, 0, TDF_RHS_ONLY);
+	}
+      break;
+
     default:
       /* FIXME:  Make sure we won't get into an infinite loop.  */
-      pp_c_left_paren (this);
-      expression (e);
-      pp_c_right_paren (this);
+      if (location_wrapper_p (e))
+	expression (e);
+      else
+	{
+	  pp_c_left_paren (this);
+	  expression (e);
+	  pp_c_right_paren (this);
+	}
       break;
     }
 }
@@ -1619,6 +1732,7 @@ c_pretty_printer::postfix_expression (tree e)
       break;
 
     case MEM_REF:
+    case TARGET_MEM_REF:
       expression (e);
       break;
 
@@ -1702,6 +1816,302 @@ pp_c_call_argument_list (c_pretty_printer *pp, tree t)
   pp_c_right_paren (pp);
 }
 
+/* Try to fold *(type *)&op into op.fld.fld2[1] if possible.
+   Only used for printing expressions.  Should punt if ambiguous
+   (e.g. in unions).  */
+
+static tree
+c_fold_indirect_ref_for_warn (location_t loc, tree type, tree op,
+			      offset_int &off)
+{
+  tree optype = TREE_TYPE (op);
+  if (off == 0)
+    {
+      if (lang_hooks.types_compatible_p (optype, type))
+	return op;
+      /* *(foo *)&complexfoo => __real__ complexfoo */
+      else if (TREE_CODE (optype) == COMPLEX_TYPE
+	       && lang_hooks.types_compatible_p (type, TREE_TYPE (optype)))
+	return build1_loc (loc, REALPART_EXPR, type, op);
+    }
+  /* ((foo*)&complexfoo)[1] => __imag__ complexfoo */
+  else if (TREE_CODE (optype) == COMPLEX_TYPE
+	   && lang_hooks.types_compatible_p (type, TREE_TYPE (optype))
+	   && tree_to_uhwi (TYPE_SIZE_UNIT (type)) == off)
+    {
+      off = 0;
+      return build1_loc (loc, IMAGPART_EXPR, type, op);
+    }
+  /* ((foo *)&fooarray)[x] => fooarray[x] */
+  if (TREE_CODE (optype) == ARRAY_TYPE
+      && TYPE_SIZE_UNIT (TREE_TYPE (optype))
+      && TREE_CODE (TYPE_SIZE_UNIT (TREE_TYPE (optype))) == INTEGER_CST
+      && !integer_zerop (TYPE_SIZE_UNIT (TREE_TYPE (optype))))
+    {
+      tree type_domain = TYPE_DOMAIN (optype);
+      tree min_val = size_zero_node;
+      if (type_domain && TYPE_MIN_VALUE (type_domain))
+	min_val = TYPE_MIN_VALUE (type_domain);
+      offset_int el_sz = wi::to_offset (TYPE_SIZE_UNIT (TREE_TYPE (optype)));
+      offset_int idx = off / el_sz;
+      offset_int rem = off % el_sz;
+      if (TREE_CODE (min_val) == INTEGER_CST)
+	{
+	  tree index
+	    = wide_int_to_tree (sizetype, idx + wi::to_offset (min_val));
+	  op = build4_loc (loc, ARRAY_REF, TREE_TYPE (optype), op, index,
+			   NULL_TREE, NULL_TREE);
+	  off = rem;
+	  if (tree ret = c_fold_indirect_ref_for_warn (loc, type, op, off))
+	    return ret;
+	  return op;
+	}
+    }
+  /* ((foo *)&struct_with_foo_field)[x] => COMPONENT_REF */
+  else if (TREE_CODE (optype) == RECORD_TYPE)
+    {
+      for (tree field = TYPE_FIELDS (optype);
+	   field; field = DECL_CHAIN (field))
+	if (TREE_CODE (field) == FIELD_DECL
+	    && TREE_TYPE (field) != error_mark_node
+	    && TYPE_SIZE_UNIT (TREE_TYPE (field))
+	    && TREE_CODE (TYPE_SIZE_UNIT (TREE_TYPE (field))) == INTEGER_CST)
+	  {
+	    tree pos = byte_position (field);
+	    if (TREE_CODE (pos) != INTEGER_CST)
+	      continue;
+	    offset_int upos = wi::to_offset (pos);
+	    offset_int el_sz
+	      = wi::to_offset (TYPE_SIZE_UNIT (TREE_TYPE (field)));
+	    if (upos <= off && off < upos + el_sz)
+	      {
+		tree cop = build3_loc (loc, COMPONENT_REF, TREE_TYPE (field),
+				       op, field, NULL_TREE);
+		off = off - upos;
+		if (tree ret = c_fold_indirect_ref_for_warn (loc, type, cop,
+							     off))
+		  return ret;
+		return cop;
+	      }
+	  }
+    }
+  /* Similarly for unions, but in this case try to be very conservative,
+     only match if some field has type compatible with type and it is the
+     only such field.  */
+  else if (TREE_CODE (optype) == UNION_TYPE)
+    {
+      tree fld = NULL_TREE;
+      for (tree field = TYPE_FIELDS (optype);
+	   field; field = DECL_CHAIN (field))
+	if (TREE_CODE (field) == FIELD_DECL
+	    && TREE_TYPE (field) != error_mark_node
+	    && lang_hooks.types_compatible_p (TREE_TYPE (field), type))
+	  {
+	    if (fld)
+	      return NULL_TREE;
+	    else
+	      fld = field;
+	  }
+      if (fld)
+	{
+	  off = 0;
+	  return build3_loc (loc, COMPONENT_REF, TREE_TYPE (fld), op, fld,
+			     NULL_TREE);
+	}
+    }
+
+  return NULL_TREE;
+}
+
+/* Print the MEM_REF expression REF, including its type and offset.
+   Apply casts as necessary if the type of the access is different
+   from the type of the accessed object.  Produce compact output
+   designed to include both the element index as well as any
+   misalignment by preferring
+     ((int*)((char*)p + 1))[2]
+   over
+     *(int*)((char*)p + 9)
+   The former is more verbose but makes it clearer that the access
+   to the third element of the array is misaligned by one byte.  */
+
+static void
+print_mem_ref (c_pretty_printer *pp, tree e)
+{
+  tree arg = TREE_OPERAND (e, 0);
+
+  /* The byte offset.  Initially equal to the MEM_REF offset, then
+     adjusted to the remainder of the division by the byte size of
+     the access.  */
+  offset_int byte_off = wi::to_offset (TREE_OPERAND (e, 1));
+  /* The result of dividing BYTE_OFF by the size of the access.  */
+  offset_int elt_idx = 0;
+  /* True to include a cast to char* (for a nonzero final BYTE_OFF).  */
+  bool char_cast = false;
+  tree op = NULL_TREE;
+  bool array_ref_only = false;
+  if (TREE_CODE (arg) == ADDR_EXPR)
+    {
+      op = c_fold_indirect_ref_for_warn (EXPR_LOCATION (e), TREE_TYPE (e),
+					 TREE_OPERAND (arg, 0), byte_off);
+      /* Try to fold it back to component, array ref or their combination,
+	 but print it only if the types and TBAA types are compatible.  */
+      if (op
+	  && byte_off == 0
+	  && lang_hooks.types_compatible_p (TREE_TYPE (e), TREE_TYPE (op))
+	  && (!flag_strict_aliasing
+	      || (get_deref_alias_set (TREE_OPERAND (e, 1))
+		  == get_alias_set (op))))
+	{
+	  pp->expression (op);
+	  return;
+	}
+      if (op == NULL_TREE)
+	op = TREE_OPERAND (arg, 0);
+      /* If the types or TBAA types are incompatible, undo the
+	 UNION_TYPE handling from c_fold_indirect_ref_for_warn, and similarly
+	 undo __real__/__imag__ the code below doesn't try to handle.  */
+      if (op != TREE_OPERAND (arg, 0)
+	  && ((TREE_CODE (op) == COMPONENT_REF
+	       && TREE_CODE (TREE_TYPE (TREE_OPERAND (op, 0))) == UNION_TYPE)
+	      || TREE_CODE (op) == REALPART_EXPR
+	      || TREE_CODE (op) == IMAGPART_EXPR))
+	op = TREE_OPERAND (op, 0);
+      if (op != TREE_OPERAND (arg, 0))
+	{
+	  array_ref_only = true;
+	  for (tree ref = op; ref != TREE_OPERAND (arg, 0);
+	       ref = TREE_OPERAND (ref, 0))
+	    if (TREE_CODE (ref) != ARRAY_REF)
+	      {
+		array_ref_only = false;
+		break;
+	      }
+	}
+    }
+
+  tree access_type = TREE_TYPE (e);
+  tree arg_type = TREE_TYPE (TREE_TYPE (arg));
+  if (tree access_size = TYPE_SIZE_UNIT (access_type))
+    if (byte_off != 0
+	&& TREE_CODE (access_size) == INTEGER_CST
+	&& !integer_zerop (access_size))
+      {
+	offset_int asize = wi::to_offset (access_size);
+	elt_idx = byte_off / asize;
+	byte_off = byte_off % asize;
+      }
+
+  /* True to include a cast to the accessed type.  */
+  const bool access_cast
+    = ((op && op != TREE_OPERAND (arg, 0))
+       || VOID_TYPE_P (arg_type)
+       || !lang_hooks.types_compatible_p (access_type, arg_type));
+  const bool has_off = byte_off != 0 || (op && op != TREE_OPERAND (arg, 0));
+
+  if (has_off && (byte_off != 0 || !array_ref_only))
+    {
+      /* When printing the byte offset for a pointer to a type of
+	 a different size than char, include a cast to char* first,
+	 before printing the cast to a pointer to the accessed type.  */
+      tree size = TYPE_SIZE (arg_type);
+      if (size == NULL_TREE
+	  || TREE_CODE (size) != INTEGER_CST
+	  || wi::to_wide (size) != BITS_PER_UNIT)
+	char_cast = true;
+    }
+
+  if (elt_idx == 0)
+    pp_c_star (pp);
+  else if (access_cast || char_cast)
+    pp_c_left_paren (pp);
+
+  if (access_cast)
+    {
+      /* Include a cast to the accessed type if it isn't compatible
+	 with the type of the referenced object (or if the object
+	 is typeless).  */
+      pp_c_left_paren (pp);
+      pp->type_id (build_pointer_type (access_type));
+      pp_c_right_paren (pp);
+    }
+
+  if (has_off)
+    pp_c_left_paren (pp);
+
+  if (char_cast)
+    {
+      /* Include a cast to char *.  */
+      pp_c_left_paren (pp);
+      pp->type_id (string_type_node);
+      pp_c_right_paren (pp);
+    }
+
+  pp->unary_expression (arg);
+
+  if (op && op != TREE_OPERAND (arg, 0))
+    {
+      auto_vec<tree, 16> refs;
+      tree ref;
+      unsigned i;
+      bool array_refs = true;
+      for (ref = op; ref != TREE_OPERAND (arg, 0); ref = TREE_OPERAND (ref, 0))
+	refs.safe_push (ref);
+      FOR_EACH_VEC_ELT_REVERSE (refs, i, ref)
+	if (array_refs && TREE_CODE (ref) == ARRAY_REF)
+	  {
+	    pp_c_left_bracket (pp);
+	    pp->expression (TREE_OPERAND (ref, 1));
+	    pp_c_right_bracket (pp);
+	  }
+	else
+	  {
+	    if (array_refs)
+	      {
+		array_refs = false;
+		pp_string (pp, " + offsetof");
+		pp_c_left_paren (pp);
+		pp->type_id (TREE_TYPE (TREE_OPERAND (ref, 0)));
+		pp_comma (pp);
+	      }
+	    else if (TREE_CODE (ref) == COMPONENT_REF)
+	      pp_c_dot (pp);
+	    if (TREE_CODE (ref) == COMPONENT_REF)
+	      pp->expression (TREE_OPERAND (ref, 1));
+	    else
+	      {
+		pp_c_left_bracket (pp);
+		pp->expression (TREE_OPERAND (ref, 1));
+		pp_c_right_bracket (pp);
+	      }
+	  }
+      if (!array_refs)
+	pp_c_right_paren (pp);
+    }
+
+  if (byte_off != 0)
+    {
+      pp_space (pp);
+      pp_plus (pp);
+      pp_space (pp);
+      tree off = wide_int_to_tree (ssizetype, byte_off);
+      pp->constant (off);
+    }
+
+  if (has_off)
+    pp_c_right_paren (pp);
+
+  if (elt_idx != 0)
+    {
+      if (access_cast || char_cast)
+	pp_c_right_paren (pp);
+
+      pp_c_left_bracket (pp);
+      tree idx = wide_int_to_tree (ssizetype, elt_idx);
+      pp->constant (idx);
+      pp_c_right_bracket (pp);
+    }
+}
+
 /* unary-expression:
       postfix-expression
       ++ cast-expression
@@ -1759,29 +2169,63 @@ c_pretty_printer::unary_expression (tree e)
       break;
 
     case MEM_REF:
-      if (TREE_CODE (TREE_OPERAND (e, 0)) == ADDR_EXPR
-	  && integer_zerop (TREE_OPERAND (e, 1)))
-	expression (TREE_OPERAND (TREE_OPERAND (e, 0), 0));
-      else
+      print_mem_ref (this, e);
+      break;
+
+    case TARGET_MEM_REF:
+      /* TARGET_MEM_REF can't appear directly from source, but can appear
+	 during late GIMPLE optimizations and through late diagnostic we might
+	 need to support it.  Print it as dereferencing of a pointer after
+	 cast to the TARGET_MEM_REF type, with pointer arithmetics on some
+	 pointer to single byte types, so
+	 *(type *)((char *) ptr + step * index + index2) if all the operands
+	 are present and the casts are needed.  */
+      pp_c_star (this);
+      if (TYPE_SIZE_UNIT (TREE_TYPE (TREE_TYPE (TMR_BASE (e)))) == NULL_TREE
+	  || !integer_onep (TYPE_SIZE_UNIT
+				(TREE_TYPE (TREE_TYPE (TMR_BASE (e))))))
 	{
-	  pp_c_star (this);
-	  if (!integer_zerop (TREE_OPERAND (e, 1)))
+	  if (TYPE_SIZE_UNIT (TREE_TYPE (e))
+	      && integer_onep (TYPE_SIZE_UNIT (TREE_TYPE (e))))
 	    {
 	      pp_c_left_paren (this);
-	      if (!integer_onep (TYPE_SIZE_UNIT
-				 (TREE_TYPE (TREE_TYPE (TREE_OPERAND (e, 0))))))
-		pp_c_type_cast (this, ptr_type_node);
+	      pp_c_type_cast (this, build_pointer_type (TREE_TYPE (e)));
 	    }
-	  pp_c_cast_expression (this, TREE_OPERAND (e, 0));
-	  if (!integer_zerop (TREE_OPERAND (e, 1)))
+	  else
 	    {
-	      pp_plus (this);
-	      pp_c_integer_constant (this,
-				     fold_convert (ssizetype,
-						   TREE_OPERAND (e, 1)));
-	      pp_c_right_paren (this);
+	      pp_c_type_cast (this, build_pointer_type (TREE_TYPE (e)));
+	      pp_c_left_paren (this);
+	      pp_c_type_cast (this, build_pointer_type (char_type_node));
 	    }
 	}
+      else if (!lang_hooks.types_compatible_p
+		  (TREE_TYPE (e), TREE_TYPE (TREE_TYPE (TMR_BASE (e)))))
+	{
+	  pp_c_type_cast (this, build_pointer_type (TREE_TYPE (e)));
+	  pp_c_left_paren (this);
+	}
+      else
+	pp_c_left_paren (this);
+      pp_c_cast_expression (this, TMR_BASE (e));
+      if (TMR_STEP (e) && TMR_INDEX (e))
+	{
+	  pp_plus (this);
+	  pp_c_cast_expression (this, TMR_INDEX (e));
+	  pp_c_star (this);
+	  pp_c_cast_expression (this, TMR_STEP (e));
+	}
+      if (TMR_INDEX2 (e))
+	{
+	  pp_plus (this);
+	  pp_c_cast_expression (this, TMR_INDEX2 (e));
+	}
+      if (!integer_zerop (TMR_OFFSET (e)))
+	{
+	  pp_plus (this);
+	  pp_c_integer_constant (this,
+				 fold_convert (ssizetype, TMR_OFFSET (e)));
+	}
+      pp_c_right_paren (this);
       break;
 
     case REALPART_EXPR:
@@ -1877,7 +2321,16 @@ pp_c_additive_expression (c_pretty_printer *pp, tree e)
       else
 	pp_minus (pp);
       pp_c_whitespace (pp);
-      pp->multiplicative_expression (TREE_OPERAND (e, 1));
+      {
+	tree op1 = TREE_OPERAND (e, 1);
+	if (code == POINTER_PLUS_EXPR
+	    && TREE_CODE (op1) == INTEGER_CST
+	    && tree_int_cst_sign_bit (op1))
+	  /* A pointer minus an integer is represented internally as plus a very
+	     large number, don't expose that to users.  */
+	  op1 = convert (ssizetype, op1);
+	pp->multiplicative_expression (op1);
+      }
       break;
 
     default:
@@ -2211,6 +2664,7 @@ c_pretty_printer::expression (tree e)
     case ADDR_EXPR:
     case INDIRECT_REF:
     case MEM_REF:
+    case TARGET_MEM_REF:
     case NEGATE_EXPR:
     case BIT_NOT_EXPR:
     case TRUTH_NOT_EXPR:
@@ -2333,15 +2787,97 @@ c_pretty_printer::expression (tree e)
 /* Statements.  */
 
 void
-c_pretty_printer::statement (tree stmt)
+c_pretty_printer::statement (tree t)
 {
-  if (stmt == NULL)
+  if (t == NULL)
     return;
 
-  if (pp_needs_newline (this))
-    pp_newline_and_indent (this, 0);
+  switch (TREE_CODE (t))
+    {
 
-  dump_generic_node (this, stmt, pp_indentation (this), 0, true);
+    case SWITCH_STMT:
+      pp_c_ws_string (this, "switch");
+      pp_space (this);
+      pp_c_left_paren (this);
+      expression (SWITCH_STMT_COND (t));
+      pp_c_right_paren (this);
+      pp_indentation (this) += 3;
+      pp_needs_newline (this) = true;
+      statement (SWITCH_STMT_BODY (t));
+      pp_newline_and_indent (this, -3);
+      break;
+
+      /* iteration-statement:
+	    while ( expression ) statement
+	    do statement while ( expression ) ;
+	    for ( expression(opt) ; expression(opt) ; expression(opt) ) statement
+	    for ( declaration expression(opt) ; expression(opt) ) statement  */
+    case WHILE_STMT:
+      pp_c_ws_string (this, "while");
+      pp_space (this);
+      pp_c_left_paren (this);
+      expression (WHILE_COND (t));
+      pp_c_right_paren (this);
+      pp_newline_and_indent (this, 3);
+      statement (WHILE_BODY (t));
+      pp_indentation (this) -= 3;
+      pp_needs_newline (this) = true;
+      break;
+
+    case DO_STMT:
+      pp_c_ws_string (this, "do");
+      pp_newline_and_indent (this, 3);
+      statement (DO_BODY (t));
+      pp_newline_and_indent (this, -3);
+      pp_c_ws_string (this, "while");
+      pp_space (this);
+      pp_c_left_paren (this);
+      expression (DO_COND (t));
+      pp_c_right_paren (this);
+      pp_c_semicolon (this);
+      pp_needs_newline (this) = true;
+      break;
+
+    case FOR_STMT:
+      pp_c_ws_string (this, "for");
+      pp_space (this);
+      pp_c_left_paren (this);
+      if (FOR_INIT_STMT (t))
+	statement (FOR_INIT_STMT (t));
+      else
+	pp_c_semicolon (this);
+      pp_needs_newline (this) = false;
+      pp_c_whitespace (this);
+      if (FOR_COND (t))
+	expression (FOR_COND (t));
+      pp_c_semicolon (this);
+      pp_needs_newline (this) = false;
+      pp_c_whitespace (this);
+      if (FOR_EXPR (t))
+	expression (FOR_EXPR (t));
+      pp_c_right_paren (this);
+      pp_newline_and_indent (this, 3);
+      statement (FOR_BODY (t));
+      pp_indentation (this) -= 3;
+      pp_needs_newline (this) = true;
+      break;
+
+      /* jump-statement:
+	    goto identifier;
+	    continue ;
+	    return expression(opt) ;  */
+    case BREAK_STMT:
+    case CONTINUE_STMT:
+      pp_string (this, TREE_CODE (t) == BREAK_STMT ? "break" : "continue");
+      pp_c_semicolon (this);
+      pp_needs_newline (this) = true;
+      break;
+
+    default:
+      if (pp_needs_newline (this))
+	pp_newline_and_indent (this, 0);
+      dump_generic_node (this, t, pp_indentation (this), TDF_NONE, true);
+    }
 }
 
 
@@ -2357,6 +2893,13 @@ c_pretty_printer::c_pretty_printer ()
   parameter_list            = pp_c_parameter_type_list;
 }
 
+/* c_pretty_printer's implementation of pretty_printer::clone vfunc.  */
+
+pretty_printer *
+c_pretty_printer::clone () const
+{
+  return new c_pretty_printer (*this);
+}
 
 /* Print the tree T in full, on file FILE.  */
 

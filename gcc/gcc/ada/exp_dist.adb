@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -27,7 +27,6 @@ with Atree;    use Atree;
 with Einfo;    use Einfo;
 with Elists;   use Elists;
 with Exp_Atag; use Exp_Atag;
-with Exp_Disp; use Exp_Disp;
 with Exp_Strm; use Exp_Strm;
 with Exp_Tss;  use Exp_Tss;
 with Exp_Util; use Exp_Util;
@@ -903,7 +902,7 @@ package body Exp_Dist is
    -- Local variables and structures --
    ------------------------------------
 
-   RCI_Cache : Node_Id;
+   RCI_Cache : Node_Id := Empty;
    --  Needs comments ???
 
    Output_From_Constrained : constant array (Boolean) of Name_Id :=
@@ -933,9 +932,9 @@ package body Exp_Dist is
       procedure Visit_Nested_Pkg (Nested_Pkg_Decl : Node_Id);
       --  Recurse for the given nested package declaration
 
-      -----------------------
-      -- Visit_Nested_Spec --
-      -----------------------
+      ----------------------
+      -- Visit_Nested_Pkg --
+      ----------------------
 
       procedure Visit_Nested_Pkg (Nested_Pkg_Decl : Node_Id) is
          Nested_Pkg_Spec : constant Node_Id := Specification (Nested_Pkg_Decl);
@@ -964,10 +963,8 @@ package body Exp_Dist is
             when N_Package_Declaration =>
 
                --  Case of a nested package or package instantiation coming
-               --  from source. Note that the anonymous wrapper package for
-               --  subprogram instances is not flagged Is_Generic_Instance at
-               --  this point, so there is a distinct circuit to handle them
-               --  (see case N_Subprogram_Instantiation below).
+               --  from source, including the wrapper package for an instance
+               --  of a generic subprogram.
 
                declare
                   Pkg_Ent : constant Entity_Id :=
@@ -982,16 +979,6 @@ package body Exp_Dist is
                      Visit_Nested_Pkg (Decl);
                   end if;
                end;
-
-            when N_Subprogram_Instantiation =>
-
-               --  The subprogram declaration for an instance of a generic
-               --  subprogram is wrapped in a package that does not come from
-               --  source, so we need to explicitly traverse it here.
-
-               if Comes_From_Source (Decl) then
-                  Visit_Nested_Pkg (Instance_Spec (Decl));
-               end if;
 
             when others =>
                null;
@@ -5309,7 +5296,7 @@ package body Exp_Dist is
 
    function Hash (F : Name_Id) return Hash_Index is
    begin
-      return Hash_Index (Natural (F) mod Positive (Hash_Index'Last + 1));
+      return Hash_Index (Integer (F) mod Positive (Hash_Index'Last + 1));
    end Hash;
 
    --------------------------
@@ -8214,6 +8201,12 @@ package body Exp_Dist is
          --  type from Interfaces, or the smallest floating point type from
          --  Standard whose range encompasses that of Typ.
 
+         function Is_Generic_Actual_Subtype (Typ : Entity_Id) return Boolean;
+         --  Return true if Typ is a subtype representing a generic formal type
+         --  as a subtype of the actual type in an instance. This is needed to
+         --  recognize these subtypes because the Is_Generic_Actual_Type flag
+         --  can only be relied upon within the instance.
+
          function Make_Helper_Function_Name
            (Loc : Source_Ptr;
             Typ : Entity_Id;
@@ -8466,7 +8459,7 @@ package body Exp_Dist is
             --  For the subtype representing a generic actual type, go to the
             --  actual type.
 
-            if Is_Generic_Actual_Type (U_Type) then
+            if Is_Generic_Actual_Subtype (U_Type) then
                U_Type := Underlying_Type (Base_Type (U_Type));
             end if;
 
@@ -9219,9 +9212,9 @@ package body Exp_Dist is
                 Idx));
          end Build_Get_Aggregate_Element;
 
-         -------------------------
-         -- Build_Reposiroty_Id --
-         -------------------------
+         ----------------------------------
+         -- Build_Name_And_Repository_Id --
+         ----------------------------------
 
          procedure Build_Name_And_Repository_Id
            (E           : Entity_Id;
@@ -9275,7 +9268,7 @@ package body Exp_Dist is
             --  For the subtype representing a generic actual type, go to the
             --  actual type.
 
-            if Is_Generic_Actual_Type (U_Type) then
+            if Is_Generic_Actual_Subtype (U_Type) then
                U_Type := Underlying_Type (Base_Type (U_Type));
             end if;
 
@@ -10129,7 +10122,7 @@ package body Exp_Dist is
             --  For the subtype representing a generic actual type, go to the
             --  actual type.
 
-            if Is_Generic_Actual_Type (U_Type) then
+            if Is_Generic_Actual_Subtype (U_Type) then
                U_Type := Underlying_Type (Base_Type (U_Type));
             end if;
 
@@ -10913,6 +10906,30 @@ package body Exp_Dist is
             --  TBverified numeric types with a biased representation???
 
          end Find_Numeric_Representation;
+
+         ---------------------------------
+         --  Is_Generic_Actual_Subtype  --
+         ---------------------------------
+
+         function Is_Generic_Actual_Subtype (Typ : Entity_Id) return Boolean is
+         begin
+            if Is_Itype (Typ)
+              and then Present (Associated_Node_For_Itype (Typ))
+            then
+               declare
+                  N : constant Node_Id := Associated_Node_For_Itype (Typ);
+               begin
+                  if Nkind (N) = N_Subtype_Declaration
+                    and then Nkind (Parent (N)) = N_Package_Specification
+                    and then Is_Generic_Instance (Scope_Of_Spec (Parent (N)))
+                  then
+                     return True;
+                  end if;
+               end;
+            end if;
+
+            return False;
+         end Is_Generic_Actual_Subtype;
 
          ---------------------------
          -- Append_Array_Traversal --

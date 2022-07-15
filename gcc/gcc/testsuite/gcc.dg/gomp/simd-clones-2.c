@@ -6,6 +6,7 @@ int addit(int a, int b, int *c)
 {
   return a + b;
 }
+/* { dg-warning "GCC does not currently support mixed size types for 'simd' functions" "" { target aarch64*-*-* } .-4 } */
 
 #pragma omp declare simd uniform(a) aligned(a:32) linear(k:1) notinbranch
 float setArray(float *a, float x, int k)

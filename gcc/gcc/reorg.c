@@ -1,5 +1,5 @@
 /* Perform instruction reorganizations for delay slot filling.
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu).
    Hacked by Michael Tiemann (tiemann@cygnus.com).
 
@@ -116,7 +116,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "insn-attr.h"
 #include "resource.h"
-#include "params.h"
 #include "tree-pass.h"
 
 
@@ -137,7 +136,20 @@ skip_consecutive_labels (rtx label_or_return)
 
   rtx_insn *label = as_a <rtx_insn *> (label_or_return);
 
-  for (insn = label; insn != 0 && !INSN_P (insn); insn = NEXT_INSN (insn))
+  /* __builtin_unreachable can create a CODE_LABEL followed by a BARRIER.
+
+     Since reaching the CODE_LABEL is undefined behavior, we can return
+     any code label and we're OK at run time.
+
+     However, if we return a CODE_LABEL which leads to a shrink-wrapped
+     epilogue, but the path does not have a prologue, then we will trip
+     a sanity check in the dwarf2 cfi code which wants to verify that
+     the CFIs are all the same on the traces leading to the epilogue.
+
+     So we explicitly disallow looking through BARRIERS here.  */
+  for (insn = label;
+       insn != 0 && !INSN_P (insn) && !BARRIER_P (insn);
+       insn = NEXT_INSN (insn))
     if (LABEL_P (insn))
       label = insn;
 
@@ -563,8 +575,9 @@ add_to_delay_list (rtx_insn *insn, vec<rtx_insn *> *delay_list)
 {
   /* If INSN has its block number recorded, clear it since we may
      be moving the insn to a new block.  */
-      clear_hashed_info_for_insn (insn);
-      delay_list->safe_push (insn);
+  clear_hashed_info_for_insn (insn);
+
+  delay_list->safe_push (insn);
 }
 
 /* Delete INSN from the delay slot of the insn that it is in, which may
@@ -1063,10 +1076,10 @@ steal_delay_list_from_target (rtx_insn *insn, rtx condition, rtx_sequence *seq,
      ??? It may be possible to move other sets into INSN in addition to
      moving the instructions in the delay slots.
 
-     We can not steal the delay list if one of the instructions in the
+     We cannot steal the delay list if one of the instructions in the
      current delay_list modifies the condition codes and the jump in the
-     sequence is a conditional jump. We can not do this because we can
-     not change the direction of the jump because the condition codes
+     sequence is a conditional jump. We cannot do this because we cannot
+     change the direction of the jump because the condition codes
      will effect the direction of the jump in the sequence.  */
 
   CLEAR_RESOURCE (&cc_set);
@@ -1476,7 +1489,7 @@ redundant_insn (rtx insn, rtx_insn *target, const vec<rtx_insn *> &delay_list)
 
   /* Scan backwards looking for a match.  */
   for (trial = PREV_INSN (target),
-	 insns_to_search = MAX_DELAY_SLOT_INSN_SEARCH;
+	 insns_to_search = param_max_delay_slot_insn_search;
        trial && insns_to_search > 0;
        trial = PREV_INSN (trial))
     {
@@ -1559,7 +1572,7 @@ redundant_insn (rtx insn, rtx_insn *target, const vec<rtx_insn *> &delay_list)
   /* Insns we pass may not set either NEEDED or SET, so merge them for
      simpler tests.  */
   needed.memory |= set.memory;
-  IOR_HARD_REG_SET (needed.regs, set.regs);
+  needed.regs |= set.regs;
 
   /* This insn isn't redundant if it conflicts with an insn that either is
      or will be in a delay slot of TARGET.  */
@@ -1580,7 +1593,7 @@ redundant_insn (rtx insn, rtx_insn *target, const vec<rtx_insn *> &delay_list)
      INSN sets or sets something insn uses or sets.  */
 
   for (trial = PREV_INSN (target),
-	 insns_to_search = MAX_DELAY_SLOT_INSN_SEARCH;
+	 insns_to_search = param_max_delay_slot_insn_search;
        trial && !LABEL_P (trial) && insns_to_search > 0;
        trial = PREV_INSN (trial))
     {
@@ -2399,6 +2412,21 @@ fill_slots_from_thread (rtx_jump_insn *insn, rtx condition,
   CLEAR_RESOURCE (&needed);
   CLEAR_RESOURCE (&set);
 
+  /* Handle the flags register specially, to be able to accept a
+     candidate that clobbers it.  See also fill_simple_delay_slots.  */
+  bool filter_flags
+    = (slots_to_fill == 1
+       && targetm.flags_regnum != INVALID_REGNUM
+       && find_regno_note (insn, REG_DEAD, targetm.flags_regnum));
+  struct resources fset;
+  struct resources flags_res;
+  if (filter_flags)
+    {
+      CLEAR_RESOURCE (&fset);
+      CLEAR_RESOURCE (&flags_res);
+      SET_HARD_REG_BIT (flags_res.regs, targetm.flags_regnum);
+    }
+
   /* If we do not own this thread, we must stop as soon as we find
      something that we can't put in a delay slot, since all we can do
      is branch into THREAD at a later point.  Therefore, labels stop
@@ -2427,8 +2455,18 @@ fill_slots_from_thread (rtx_jump_insn *insn, rtx condition,
       /* If TRIAL conflicts with the insns ahead of it, we lose.  Also,
 	 don't separate or copy insns that set and use CC0.  */
       if (! insn_references_resource_p (trial, &set, true)
-	  && ! insn_sets_resource_p (trial, &set, true)
+	  && ! insn_sets_resource_p (trial, filter_flags ? &fset : &set, true)
 	  && ! insn_sets_resource_p (trial, &needed, true)
+	  /* If we're handling sets to the flags register specially, we
+	     only allow an insn into a delay-slot, if it either:
+	     - doesn't set the flags register,
+	     - the "set" of the flags register isn't used (clobbered),
+	     - insns between the delay-slot insn and the trial-insn
+	     as accounted in "set", have not affected the flags register.  */
+	  && (! filter_flags
+	      || ! insn_sets_resource_p (trial, &flags_res, true)
+	      || find_regno_note (trial, REG_UNUSED, targetm.flags_regnum)
+	      || ! TEST_HARD_REG_BIT (set.regs, targetm.flags_regnum))
 	  && (!HAVE_cc0 || (! (reg_mentioned_p (cc0_rtx, pat)
 			      && (! own_thread || ! sets_cc0_p (pat)))))
 	  && ! can_throw_internal (trial))
@@ -2606,6 +2644,16 @@ fill_slots_from_thread (rtx_jump_insn *insn, rtx condition,
       lose = 1;
       mark_set_resources (trial, &set, 0, MARK_SRC_DEST_CALL);
       mark_referenced_resources (trial, &needed, true);
+      if (filter_flags)
+	{
+	  mark_set_resources (trial, &fset, 0, MARK_SRC_DEST_CALL);
+
+	  /* Groups of flags-register setters with users should not
+	     affect opportunities to move flags-register-setting insns
+	     (clobbers) into the delay-slot.  */
+	  CLEAR_HARD_REG_BIT (needed.regs, targetm.flags_regnum);
+	  CLEAR_HARD_REG_BIT (fset.regs, targetm.flags_regnum);
+	}
 
       /* Ensure we don't put insns between the setting of cc and the comparison
 	 by moving a setting of cc into an earlier delay slot since these insns
@@ -2687,14 +2735,13 @@ fill_slots_from_thread (rtx_jump_insn *insn, rtx condition,
       && GET_CODE (PATTERN (new_thread)) != ASM_INPUT
       && asm_noperands (PATTERN (new_thread)) < 0)
     {
-      rtx pat = PATTERN (new_thread);
       rtx dest;
       rtx src;
 
       /* We know "new_thread" is an insn due to NONJUMP_INSN_P (new_thread)
 	 above.  */
       trial = as_a <rtx_insn *> (new_thread);
-      pat = PATTERN (trial);
+      rtx pat = PATTERN (trial);
 
       if (!NONJUMP_INSN_P (trial)
 	  || GET_CODE (pat) != SET
@@ -3163,6 +3210,23 @@ relax_delay_slots (rtx_insn *first)
 	      && ! condjump_in_parallel_p (jump_insn)
 	      && ! (next && switch_text_sections_between_p (jump_insn, next)))
 	    {
+	      rtx_insn *direct_label = as_a<rtx_insn *> (JUMP_LABEL (insn));
+	      rtx_insn *prev = prev_nonnote_insn (direct_label);
+
+	      /* If the insn jumps over a BARRIER and is the only way to reach
+		 its target, then we need to delete the BARRIER before the jump
+		 because, otherwise, the target may end up being considered as
+		 unreachable and thus also deleted.  */
+	      if (BARRIER_P (prev) && LABEL_NUSES (direct_label) == 1)
+		{
+		  delete_related_insns (prev);
+
+		  /* We have just removed a BARRIER, which means that the block
+		     number of the next insns has effectively been changed (see
+		     find_basic_block in resource.c), so clear it.  */
+		  clear_hashed_info_until_next_barrier (direct_label);
+		}
+
 	      delete_jump (jump_insn);
 	      continue;
 	    }
@@ -3200,7 +3264,14 @@ relax_delay_slots (rtx_insn *first)
 
 	      if (invert_jump (jump_insn, label, 1))
 		{
-		  delete_related_insns (next);
+		  rtx_insn *from = delete_related_insns (next);
+
+		  /* We have just removed a BARRIER, which means that the block
+		     number of the next insns has effectively been changed (see
+		     find_basic_block in resource.c), so clear it.  */
+		  if (from)
+		    clear_hashed_info_until_next_barrier (from);
+
 		  next = jump_insn;
 		}
 
@@ -3473,18 +3544,22 @@ relax_delay_slots (rtx_insn *first)
 
 	      if (invert_jump (delay_jump_insn, label, 1))
 		{
-		  int i;
-
 		  /* Must update the INSN_FROM_TARGET_P bits now that
 		     the branch is reversed, so that mark_target_live_regs
 		     will handle the delay slot insn correctly.  */
-		  for (i = 1; i < XVECLEN (PATTERN (insn), 0); i++)
+		  for (int i = 1; i < XVECLEN (PATTERN (insn), 0); i++)
 		    {
 		      rtx slot = XVECEXP (PATTERN (insn), 0, i);
 		      INSN_FROM_TARGET_P (slot) = ! INSN_FROM_TARGET_P (slot);
 		    }
 
-		  delete_related_insns (next);
+		  /* We have just removed a BARRIER, which means that the block
+		     number of the next insns has effectively been changed (see
+		     find_basic_block in resource.c), so clear it.  */
+		  rtx_insn *from = delete_related_insns (next);
+		  if (from)
+		    clear_hashed_info_until_next_barrier (from);
+
 		  next = insn;
 		}
 
@@ -3630,18 +3705,13 @@ make_return_insns (rtx_insn *first)
 	 insns for its delay slots, if it needs some.  */
       if (ANY_RETURN_P (PATTERN (jump_insn)))
 	{
-	  rtx_insn *prev = PREV_INSN (insn);
+	  rtx_insn *after = PREV_INSN (insn);
 
 	  delete_related_insns (insn);
-	  for (i = 1; i < XVECLEN (pat, 0); i++)
-	    {
-	      rtx_insn *in_seq_insn = as_a<rtx_insn *> (XVECEXP (pat, 0, i));
-	      prev = emit_insn_after_setloc (PATTERN (in_seq_insn), prev,
-					     INSN_LOCATION (in_seq_insn));
-	    }
-
-	  insn = emit_jump_insn_after_setloc (PATTERN (jump_insn), prev,
-					      INSN_LOCATION (jump_insn));
+	  insn = jump_insn;
+	  for (i = 1; i < pat->len (); i++)
+	    after = emit_copy_of_insn_after (pat->insn (i), after);
+	  add_insn_after (insn, after, NULL);
 	  emit_barrier_after (insn);
 
 	  if (slots)

@@ -1,5 +1,5 @@
 // Support routines for the -*- C++ -*- dynamic memory management.
-// Copyright (C) 1997-2018 Free Software Foundation, Inc.
+// Copyright (C) 1997-2021 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -26,34 +26,27 @@
 #include <bits/exception_defines.h>
 #include "new"
 
-using std::new_handler;
-using std::bad_alloc;
-
 extern "C" void *malloc (std::size_t);
 
 _GLIBCXX_WEAK_DEFINITION void *
-operator new (std::size_t sz, const std::nothrow_t&) _GLIBCXX_USE_NOEXCEPT
+operator new (std::size_t sz, const std::nothrow_t&) noexcept
 {
-  void *p;
-
-  /* malloc (0) is unpredictable; avoid it.  */
-  if (sz == 0)
-    sz = 1;
-
-  while (__builtin_expect ((p = malloc (sz)) == 0, false))
+  // _GLIBCXX_RESOLVE_LIB_DEFECTS
+  // 206. operator new(size_t, nothrow) may become unlinked to ordinary
+  // operator new if ordinary version replaced
+  __try
     {
-      new_handler handler = std::get_new_handler ();
-      if (! handler)
-	return 0;
-      __try
-	{
-	  handler ();
-	}
-      __catch(const bad_alloc&)
-	{
-	  return 0;
-	}
+      return ::operator new(sz);
     }
-
-  return p;
+  __catch (...)
+    {
+      // N.B. catch (...) means the process will terminate if operator new(sz)
+      // exits with a __forced_unwind exception. The process will print
+      // "FATAL: exception not rethrown" to stderr before exiting.
+      //
+      // If we propagated that exception the process would still terminate
+      // (because this function is noexcept) but with a less informative error:
+      // "terminate called without active exception".
+      return nullptr;
+    }
 }

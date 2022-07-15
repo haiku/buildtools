@@ -1,5 +1,5 @@
 /* Generate the machine mode enumeration and associated tables.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -53,6 +53,7 @@ struct mode_data
 
   const char *name;		/* printable mode name -- SI, not SImode */
   enum mode_class cl;		/* this mode class */
+  unsigned int order;		/* top-level sorting order */
   unsigned int precision;	/* size in bits, equiv to TYPE_PRECISION */
   unsigned int bytesize;	/* storage size in addressable units */
   unsigned int ncomponents;	/* number of subunits */
@@ -85,7 +86,7 @@ static struct mode_data *void_mode;
 
 static const struct mode_data blank_mode = {
   0, "<unknown>", MAX_MODE_CLASS,
-  -1U, -1U, -1U, -1U,
+  0, -1U, -1U, -1U, -1U,
   0, 0, 0, 0, 0, 0,
   "<unknown>", 0, 0, 0, 0, false, false, 0
 };
@@ -340,7 +341,6 @@ complete_mode (struct mode_data *m)
       break;
 
     case MODE_INT:
-    case MODE_POINTER_BOUNDS:
     case MODE_FLOAT:
     case MODE_DECIMAL_FLOAT:
     case MODE_FRACT:
@@ -353,6 +353,14 @@ complete_mode (struct mode_data *m)
       validate_mode (m, OPTIONAL, SET, UNSET, UNSET,
 		     (m->cl == MODE_FLOAT || m->cl == MODE_DECIMAL_FLOAT)
 		     ? SET : UNSET);
+
+      m->ncomponents = 1;
+      m->component = 0;
+      break;
+
+    case MODE_OPAQUE:
+      /* Opaque modes have size and precision.  */
+      validate_mode (m, OPTIONAL, SET, UNSET, UNSET, UNSET);
 
       m->ncomponents = 1;
       m->component = 0;
@@ -485,14 +493,15 @@ make_complex_modes (enum mode_class cl,
     }
 }
 
-/* For all modes in class CL, construct vector modes of width
-   WIDTH, having as many components as necessary.  */
-#define VECTOR_MODES_WITH_PREFIX(PREFIX, C, W) \
-  make_vector_modes (MODE_##C, #PREFIX, W, __FILE__, __LINE__)
-#define VECTOR_MODES(C, W) VECTOR_MODES_WITH_PREFIX (V, C, W)
+/* For all modes in class CL, construct vector modes of width WIDTH,
+   having as many components as necessary.  ORDER is the sorting order
+   of the mode, with smaller numbers indicating a higher priority.  */
+#define VECTOR_MODES_WITH_PREFIX(PREFIX, C, W, ORDER) \
+  make_vector_modes (MODE_##C, #PREFIX, W, ORDER, __FILE__, __LINE__)
+#define VECTOR_MODES(C, W) VECTOR_MODES_WITH_PREFIX (V, C, W, 0)
 static void ATTRIBUTE_UNUSED
 make_vector_modes (enum mode_class cl, const char *prefix, unsigned int width,
-		   const char *file, unsigned int line)
+		   unsigned int order, const char *file, unsigned int line)
 {
   struct mode_data *m;
   struct mode_data *v;
@@ -531,6 +540,7 @@ make_vector_modes (enum mode_class cl, const char *prefix, unsigned int width,
 	}
 
       v = new_mode (vclass, xstrdup (buf), file, line);
+      v->order = order;
       v->component = m;
       v->ncomponents = ncomponents;
     }
@@ -572,19 +582,6 @@ make_special_mode (enum mode_class cl, const char *name,
   new_mode (cl, name, file, line);
 }
 
-#define POINTER_BOUNDS_MODE(N, Y) \
-  make_pointer_bounds_mode (#N, Y, __FILE__, __LINE__)
-
-static void ATTRIBUTE_UNUSED
-make_pointer_bounds_mode (const char *name,
-			  unsigned int bytesize,
-			  const char *file, unsigned int line)
-{
-  struct mode_data *m = new_mode (MODE_POINTER_BOUNDS, name, file, line);
-  m->bytesize = bytesize;
-}
-
-
 #define INT_MODE(N, Y) FRACTIONAL_INT_MODE (N, -1U, Y)
 #define FRACTIONAL_INT_MODE(N, B, Y) \
   make_int_mode (#N, B, Y, __FILE__, __LINE__)
@@ -595,6 +592,20 @@ make_int_mode (const char *name,
 	       const char *file, unsigned int line)
 {
   struct mode_data *m = new_mode (MODE_INT, name, file, line);
+  m->bytesize = bytesize;
+  m->precision = precision;
+}
+
+#define OPAQUE_MODE(N, B)			\
+  make_opaque_mode (#N, -1U, B, __FILE__, __LINE__)
+
+static void ATTRIBUTE_UNUSED
+make_opaque_mode (const char *name,
+		  unsigned int precision,
+		  unsigned int bytesize,
+		  const char *file, unsigned int line)
+{
+  struct mode_data *m = new_mode (MODE_OPAQUE, name, file, line);
   m->bytesize = bytesize;
   m->precision = precision;
 }
@@ -845,6 +856,11 @@ cmp_modes (const void *a, const void *b)
 {
   const struct mode_data *const m = *(const struct mode_data *const*)a;
   const struct mode_data *const n = *(const struct mode_data *const*)b;
+
+  if (m->order > n->order)
+    return 1;
+  else if (m->order < n->order)
+    return -1;
 
   if (m->bytesize > n->bytesize)
     return 1;
@@ -1213,7 +1229,6 @@ get_mode_class (struct mode_data *mode)
     case MODE_UFRACT:
     case MODE_ACCUM:
     case MODE_UACCUM:
-    case MODE_POINTER_BOUNDS:
       return "scalar_mode";
 
     case MODE_FLOAT:
@@ -1309,6 +1324,7 @@ enum machine_mode\n{");
 #endif
   printf ("#define CONST_MODE_IBIT%s\n", adj_ibit ? "" : " const");
   printf ("#define CONST_MODE_FBIT%s\n", adj_fbit ? "" : " const");
+  printf ("#define CONST_MODE_MASK%s\n", adj_nunits ? "" : " const");
   emit_max_int ();
 
   for_all_modes (c, m)
@@ -1546,8 +1562,8 @@ emit_mode_mask (void)
   int c;
   struct mode_data *m;
 
-  print_decl ("unsigned HOST_WIDE_INT", "mode_mask_array",
-	      "NUM_MACHINE_MODES");
+  print_maybe_const_decl ("%sunsigned HOST_WIDE_INT", "mode_mask_array",
+			  "NUM_MACHINE_MODES", adj_nunits);
   puts ("\
 #define MODE_MASK(m)                          \\\n\
   ((m) >= HOST_BITS_PER_WIDE_INT)             \\\n\
@@ -1704,6 +1720,20 @@ emit_mode_adjustments (void)
   struct mode_adjust *a;
   struct mode_data *m;
 
+  if (adj_nunits)
+    printf ("\n"
+	    "void\n"
+	    "adjust_mode_mask (machine_mode mode)\n"
+	    "{\n"
+	    "  unsigned int precision;\n"
+	    "  if (GET_MODE_PRECISION (mode).is_constant (&precision)\n"
+	    "      && precision < HOST_BITS_PER_WIDE_INT)\n"
+	    "    mode_mask_array[mode] = (HOST_WIDE_INT_1U << precision) - 1;"
+	    "\n"
+	    "  else\n"
+	    "    mode_mask_array[mode] = HOST_WIDE_INT_M1U;\n"
+	    "}\n");
+
   puts ("\
 \nvoid\
 \ninit_adjust_machine_modes (void)\
@@ -1721,10 +1751,11 @@ emit_mode_adjustments (void)
       printf ("    int old_factor = vector_element_size"
 	      " (mode_precision[E_%smode], mode_nunits[E_%smode]);\n",
 	      m->name, m->name);
-      printf ("    mode_precision[E_%smode] = ps * old_factor;\n",  m->name);
+      printf ("    mode_precision[E_%smode] = ps * old_factor;\n", m->name);
       printf ("    mode_size[E_%smode] = exact_div (mode_precision[E_%smode],"
 	      " BITS_PER_UNIT);\n", m->name, m->name);
       printf ("    mode_nunits[E_%smode] = ps;\n", m->name);
+      printf ("    adjust_mode_mask (E_%smode);\n", m->name);
       printf ("  }\n");
     }
 

@@ -1,5 +1,5 @@
 /* Determining the results of applying fix-it hints.
-   Copyright (C) 2016-2018 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -48,8 +48,9 @@ class line_event;
 
 /* A struct to hold the params of a print_diff call.  */
 
-struct diff
+class diff
 {
+public:
   diff (pretty_printer *pp, bool show_filenames)
   : m_pp (pp), m_show_filenames (show_filenames) {}
 
@@ -182,7 +183,7 @@ class line_event
 {
  public:
   line_event (int start, int next, int len) : m_start (start),
-    m_next (next), m_delta (len - (next - start)) {}
+    m_delta (len - (next - start)) {}
 
   int get_effective_column (int orig_column) const
   {
@@ -194,7 +195,6 @@ class line_event
 
  private:
   int m_start;
-  int m_next;
   int m_delta;
 };
 
@@ -422,12 +422,10 @@ edited_file::print_content (pretty_printer *pp)
 	el->print_content (pp);
       else
 	{
-	  int len;
-	  const char *line
-	    = location_get_source_line (m_filename, line_num, &len);
+	  char_span line = location_get_source_line (m_filename, line_num);
 	  if (!line)
 	    return false;
-	  for (int i = 0; i < len; i++)
+	  for (size_t i = 0; i < line.length (); i++)
 	    pp_character (pp, line[i]);
 	}
       if (line_num < line_count)
@@ -449,8 +447,13 @@ edited_file::print_diff (pretty_printer *pp, bool show_filenames)
   if (show_filenames)
     {
       pp_string (pp, colorize_start (pp_show_color (pp), "diff-filename"));
-      pp_printf (pp, "--- %s\n", m_filename);
-      pp_printf (pp, "+++ %s\n", m_filename);
+      /* Avoid -Wformat-diag in non-diagnostic output.  */
+      pp_string (pp, "--- ");
+      pp_string (pp, m_filename);
+      pp_newline (pp);
+      pp_string (pp, "+++ ");
+      pp_string (pp, m_filename);
+      pp_newline (pp);
       pp_string (pp, colorize_stop (pp_show_color (pp)));
     }
 
@@ -521,8 +524,9 @@ edited_file::print_diff_hunk (pretty_printer *pp, int old_start_of_hunk,
     = get_effective_line_count (old_start_of_hunk, old_end_of_hunk);
 
   pp_string (pp, colorize_start (pp_show_color (pp), "diff-hunk"));
-  pp_printf (pp, "@@ -%i,%i +%i,%i @@\n", old_start_of_hunk, old_num_lines,
-	     new_start_of_hunk, new_num_lines);
+  pp_printf (pp, "%s -%i,%i +%i,%i %s",
+	     "@@", old_start_of_hunk, old_num_lines,
+	     new_start_of_hunk, new_num_lines, "@@\n");
   pp_string (pp, colorize_stop (pp_show_color (pp)));
 
   int line_num = old_start_of_hunk;
@@ -543,10 +547,8 @@ edited_file::print_diff_hunk (pretty_printer *pp, int old_start_of_hunk,
       else
 	{
 	  /* Unchanged line.  */
-	  int line_len;
-	  const char *old_line
-	    = location_get_source_line (m_filename, line_num, &line_len);
-	  print_diff_line (pp, ' ', old_line, line_len);
+	  char_span old_line = location_get_source_line (m_filename, line_num);
+	  print_diff_line (pp, ' ', old_line.get_buffer (), old_line.length ());
 	  line_num++;
 	}
     }
@@ -574,10 +576,9 @@ edited_file::print_run_of_changed_lines (pretty_printer *pp,
       gcc_assert (el_in_run);
       if (el_in_run->actually_edited_p ())
 	{
-	  int line_len;
-	  const char *old_line
-	    = location_get_source_line (m_filename, line_num, &line_len);
-	  print_diff_line (pp, '-', old_line, line_len);
+	  char_span old_line = location_get_source_line (m_filename, line_num);
+	  print_diff_line (pp, '-', old_line.get_buffer (),
+			   old_line.length ());
 	}
     }
   pp_string (pp, colorize_stop (pp_show_color (pp)));
@@ -671,10 +672,8 @@ edited_file::get_num_lines (bool *missing_trailing_newline)
       m_num_lines = 0;
       while (true)
 	{
-	  int line_size;
-	  const char *line
-	    = location_get_source_line (m_filename, m_num_lines + 1,
-					&line_size);
+	  char_span line
+	    = location_get_source_line (m_filename, m_num_lines + 1);
 	  if (line)
 	    m_num_lines++;
 	  else
@@ -695,12 +694,12 @@ edited_line::edited_line (const char *filename, int line_num)
   m_line_events (),
   m_predecessors ()
 {
-  const char *line = location_get_source_line (filename, line_num,
-					       &m_len);
+  char_span line = location_get_source_line (filename, line_num);
   if (!line)
     return;
+  m_len = line.length ();
   ensure_capacity (m_len);
-  memcpy (m_content, line, m_len);
+  memcpy (m_content, line.get_buffer (), m_len);
   ensure_terminated ();
 }
 
@@ -1647,7 +1646,7 @@ static void
 test_applying_fixits_unreadable_file ()
 {
   const char *filename = "this-does-not-exist.txt";
-  line_table_test ltt ();
+  line_table_test ltt;
   linemap_add (line_table, LC_ENTER, false, filename, 1);
 
   location_t loc = linemap_position_for_column (line_table, 1);
@@ -1678,7 +1677,7 @@ test_applying_fixits_line_out_of_range ()
   const char *old_content = "One-liner file\n";
   temp_source_file tmp (SELFTEST_LOCATION, ".txt", old_content);
   const char *filename = tmp.get_filename ();
-  line_table_test ltt ();
+  line_table_test ltt;
   linemap_add (line_table, LC_ENTER, false, filename, 2);
 
   /* Try to insert a string in line 2.  */

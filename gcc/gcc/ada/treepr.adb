@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -242,6 +242,14 @@ package body Treepr is
 
    function par (N : Union_Id) return Node_Or_Entity_Id renames p;
 
+   procedure ppar (N : Union_Id) is
+   begin
+      if N /= Empty_List_Or_Node then
+         pp (N);
+         ppar (Union_Id (p (N)));
+      end if;
+   end ppar;
+
    --------
    -- pe --
    --------
@@ -256,6 +264,9 @@ package body Treepr is
       Lid : Int;
 
    begin
+      Push_Output;
+      Set_Standard_Output;
+
       if L < 0 then
          Lid := L;
 
@@ -284,6 +295,7 @@ package body Treepr is
       --  Now output the list
 
       Print_Tree_List (List_Id (Lid));
+      Pop_Output;
    end pl;
 
    --------
@@ -292,6 +304,9 @@ package body Treepr is
 
    procedure pn (N : Union_Id) is
    begin
+      Push_Output;
+      Set_Standard_Output;
+
       case N is
          when List_Low_Bound .. List_High_Bound - 1 =>
             pl (Int (N));
@@ -324,6 +339,8 @@ package body Treepr is
             Write_Int (Int (N));
             Write_Eol;
       end case;
+
+      Pop_Output;
    end pn;
 
    --------
@@ -861,6 +878,8 @@ package body Treepr is
    ----------------
 
    procedure Print_Init is
+      Max_Hash_Entries : constant Nat :=
+        Approx_Num_Nodes_And_Entities + Num_Lists + Num_Elists;
    begin
       Printing_Descendants := True;
       Write_Eol;
@@ -869,7 +888,7 @@ package body Treepr is
       --  the maximum possible number of entries, so that the hash table
       --  cannot get significantly overloaded.
 
-      Hash_Table_Len := (150 * (Num_Nodes + Num_Lists + Num_Elists)) / 100;
+      Hash_Table_Len := (150 * Max_Hash_Entries) / 100;
       Hash_Table := new Hash_Table_Type  (0 .. Hash_Table_Len - 1);
 
       for J in Hash_Table'Range loop
@@ -994,6 +1013,15 @@ package body Treepr is
       if N > Atree_Private_Part.Nodes.Last then
          Print_Str ("No such node: ");
          Print_Int (Int (N));
+         Print_Eol;
+         return;
+      end if;
+
+      --  Similarly, if N points to an extension, avoid crashing
+
+      if Atree_Private_Part.Nodes.Table (N).Is_Extension then
+         Print_Int (Int (N));
+         Print_Str (" is an extension, not a node");
          Print_Eol;
          return;
       end if;
@@ -1123,12 +1151,6 @@ package body Treepr is
                Print_Eol;
             end if;
 
-            if Has_Dynamic_Range_Check (N) then
-               Print_Str (Prefix_Str_Char);
-               Print_Str ("Has_Dynamic_Range_Check = True");
-               Print_Eol;
-            end if;
-
             if Is_Controlling_Actual (N) then
                Print_Str (Prefix_Str_Char);
                Print_Str ("Is_Controlling_Actual = True");
@@ -1162,7 +1184,7 @@ package body Treepr is
 
             if Raises_Constraint_Error (N) then
                Print_Str (Prefix_Str_Char);
-               Print_Str ("Raise_Constraint_Error = True");
+               Print_Str ("Raises_Constraint_Error = True");
                Print_Eol;
             end if;
 
@@ -1263,7 +1285,7 @@ package body Treepr is
                --  Special case End_Span = Uint5
 
                when F_Field5 =>
-                  if Nkind_In (N, N_Case_Statement, N_If_Statement) then
+                  if Nkind (N) in N_Case_Statement | N_If_Statement then
                      Print_End_Span (N);
                   else
                      Print_Field (Field5 (N), Fmt);
@@ -2177,7 +2199,7 @@ package body Treepr is
                Nod := N;
                while Present (Nod) loop
                   Visit_Descendant (Union_Id (Next_Entity (Nod)));
-                  Nod := Next_Entity (Nod);
+                  Next_Entity (Nod);
                end loop;
             end;
          end if;

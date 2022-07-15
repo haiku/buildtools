@@ -1,5 +1,5 @@
 /* Separate lexical analyzer for GNU C++.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
    Hacked by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -22,12 +22,17 @@ along with GCC; see the file COPYING3.  If not see
 /* This file is the lexical analyzer for GNU C++.  */
 
 #include "config.h"
+/* For use with name_hint.  */
+#define INCLUDE_UNIQUE_PTR
 #include "system.h"
 #include "coretypes.h"
 #include "cp-tree.h"
 #include "stringpool.h"
 #include "c-family/c-pragma.h"
 #include "c-family/c-objc.h"
+#include "gcc-rich-location.h"
+#include "cp-name-hint.h"
+#include "langhooks.h"
 
 static int interface_strcmp (const char *);
 static void init_cp_pragma (void);
@@ -225,10 +230,18 @@ init_reswords (void)
 
   if (cxx_dialect < cxx11)
     mask |= D_CXX11;
+  if (cxx_dialect < cxx20)
+    mask |= D_CXX20;
   if (!flag_concepts)
     mask |= D_CXX_CONCEPTS;
+  if (!flag_coroutines)
+    mask |= D_CXX_COROUTINES;
+  if (!flag_modules)
+    mask |= D_CXX_MODULES;
   if (!flag_tm)
     mask |= D_TRANSMEM;
+  if (!flag_char8_t)
+    mask |= D_CXX_CHAR8_T;
   if (flag_no_asm)
     mask |= D_ASM | D_EXT;
   if (flag_no_gnu_keywords)
@@ -253,6 +266,11 @@ init_reswords (void)
     {
       char name[50];
       sprintf (name, "__int%d", int_n_data[i].bitsize);
+      id = get_identifier (name);
+      C_SET_RID_CODE (id, RID_FIRST_INT_N + i);
+      set_identifier_kind (id, cik_keyword);
+
+      sprintf (name, "__int%d__", int_n_data[i].bitsize);
       id = get_identifier (name);
       C_SET_RID_CODE (id, RID_FIRST_INT_N + i);
       set_identifier_kind (id, cik_keyword);
@@ -289,7 +307,7 @@ cxx_init (void)
    IF_STMT,		CLEANUP_STMT,	FOR_STMT,
    RANGE_FOR_STMT,	WHILE_STMT,	DO_STMT,
    BREAK_STMT,		CONTINUE_STMT,	SWITCH_STMT,
-   EXPR_STMT
+   EXPR_STMT,		OMP_DEPOBJ
   };
 
   memset (&statement_code_p, 0, sizeof (statement_code_p));
@@ -318,8 +336,6 @@ cxx_init (void)
     }
 
   init_cp_pragma ();
-
-  init_repo ();
 
   input_location = saved_loc;
   return true;
@@ -365,7 +381,206 @@ interface_strcmp (const char* s)
   return 1;
 }
 
-
+/* We've just read a cpp-token, figure out our next state.  Hey, this
+   is a hand-coded co-routine!  */
+
+struct module_token_filter
+{
+  enum state
+  {
+   idle,
+   module_first,
+   module_cont,
+   module_end,
+  };
+
+  enum state state : 8;
+  bool is_import : 1;
+  bool got_export : 1;
+  bool got_colon : 1;
+  bool want_dot : 1;
+
+  location_t token_loc;
+  cpp_reader *reader;
+  module_state *module;
+  module_state *import;
+
+  module_token_filter (cpp_reader *reader)
+    : state (idle), is_import (false),
+    got_export (false), got_colon (false), want_dot (false),
+    token_loc (UNKNOWN_LOCATION),
+    reader (reader), module (NULL), import (NULL)
+  {
+  };
+
+  /* Process the next token.  Note we cannot see CPP_EOF inside a
+     pragma -- a CPP_PRAGMA_EOL always happens.  */
+  uintptr_t resume (int type, int keyword, tree value, location_t loc)
+  {
+    unsigned res = 0;
+
+    switch (state)
+      {
+      case idle:
+	if (type == CPP_KEYWORD)
+	  switch (keyword)
+	    {
+	    default:
+	      break;
+
+	    case RID__EXPORT:
+	      got_export = true;
+	      res = lang_hooks::PT_begin_pragma;
+	      break;
+
+	    case RID__IMPORT:
+	      is_import = true;
+	      /* FALLTHRU */
+	    case RID__MODULE:
+	      state = module_first;
+	      want_dot = false;
+	      got_colon = false;
+	      token_loc = loc;
+	      import = NULL;
+	      if (!got_export)
+		res = lang_hooks::PT_begin_pragma;
+	      break;
+	    }
+	break;
+
+      case module_first:
+	if (is_import && type == CPP_HEADER_NAME)
+	  {
+	    /* A header name.  The preprocessor will have already
+	       done include searching and canonicalization.  */
+	    state = module_end;
+	    goto header_unit;
+	  }
+	
+	if (type == CPP_PADDING || type == CPP_COMMENT)
+	  break;
+
+	state = module_cont;
+	if (type == CPP_COLON && module)
+	  {
+	    got_colon = true;
+	    import = module;
+	    break;
+	  }
+	/* FALLTHROUGH  */
+
+      case module_cont:
+	switch (type)
+	  {
+	  case CPP_PADDING:
+	  case CPP_COMMENT:
+	    break;
+
+	  default:
+	    /* If we ever need to pay attention to attributes for
+	       header modules, more logic will be needed.  */
+	    state = module_end;
+	    break;
+
+	  case CPP_COLON:
+	    if (got_colon)
+	      state = module_end;
+	    got_colon = true;
+	    /* FALLTHROUGH  */
+	  case CPP_DOT:
+	    if (!want_dot)
+	      state = module_end;
+	    want_dot = false;
+	    break;
+
+	  case CPP_PRAGMA_EOL:
+	    goto module_end;
+
+	  case CPP_NAME:
+	    if (want_dot)
+	      {
+		/* Got name instead of [.:].  */
+		state = module_end;
+		break;
+	      }
+	  header_unit:
+	    import = get_module (value, import, got_colon);
+	    want_dot = true;
+	    break;
+	  }
+	break;
+
+      case module_end:
+	if (type == CPP_PRAGMA_EOL)
+	  {
+	  module_end:;
+	    /* End of the directive, handle the name.  */
+	    if (import && (is_import || !flag_header_unit))
+	      if (module_state *m
+		  = preprocess_module (import, token_loc, module != NULL,
+				       is_import, got_export, reader))
+		if (!module)
+		  module = m;
+
+	    is_import = got_export = false;
+	    state = idle;
+	  }
+	break;
+      }
+
+    return res;
+  }
+};
+
+/* Initialize or teardown.  */
+
+uintptr_t
+module_token_cdtor (cpp_reader *pfile, uintptr_t data_)
+{
+  if (module_token_filter *filter = reinterpret_cast<module_token_filter *> (data_))
+    {
+      preprocessed_module (pfile);
+      delete filter;
+      data_ = 0;
+    }
+  else if (modules_p ())
+    data_ = reinterpret_cast<uintptr_t > (new module_token_filter (pfile));
+
+  return data_;
+}
+
+uintptr_t
+module_token_lang (int type, int keyword, tree value, location_t loc,
+		   uintptr_t data_)
+{
+  module_token_filter *filter = reinterpret_cast<module_token_filter *> (data_);
+  return filter->resume (type, keyword, value, loc);
+}
+
+uintptr_t
+module_token_pre (cpp_reader *pfile, const cpp_token *tok, uintptr_t data_)
+{
+  if (!tok)
+    return module_token_cdtor (pfile, data_);
+
+  int type = tok->type;
+  int keyword = RID_MAX;
+  tree value = NULL_TREE;
+
+  if (tok->type == CPP_NAME)
+    {
+      value = HT_IDENT_TO_GCC_IDENT (HT_NODE (tok->val.node.node));
+      if (IDENTIFIER_KEYWORD_P (value))
+	{
+	  keyword = C_RID_CODE (value);
+	  type = CPP_KEYWORD;
+	}
+    }
+  else if (tok->type == CPP_HEADER_NAME)
+    value = build_string (tok->val.str.len, (const char *)tok->val.str.text);
+
+  return module_token_lang (type, keyword, value, tok->src_loc, data_);
+}
 
 /* Parse a #pragma whose sole argument is a string constant.
    If OPT is true, the argument is optional.  */
@@ -379,14 +594,14 @@ parse_strconst_pragma (const char* name, int opt)
   if (t == CPP_STRING)
     {
       if (pragma_lex (&x) != CPP_EOF)
-	warning (0, "junk at end of #pragma %s", name);
+	warning (0, "junk at end of %<#pragma %s%>", name);
       return result;
     }
 
   if (t == CPP_EOF && opt)
     return NULL_TREE;
 
-  error ("invalid #pragma %s", name);
+  error ("invalid %<#pragma %s%>", name);
   return error_mark_node;
 }
 
@@ -394,7 +609,7 @@ static void
 handle_pragma_vtable (cpp_reader* /*dfile*/)
 {
   parse_strconst_pragma ("vtable", 0);
-  sorry ("#pragma vtable no longer supported");
+  sorry ("%<#pragma vtable%> no longer supported");
 }
 
 static void
@@ -466,7 +681,7 @@ handle_pragma_implementation (cpp_reader* /*dfile*/)
     {
       filename = TREE_STRING_POINTER (fname);
       if (cpp_included_before (parse_in, filename, input_location))
-	warning (0, "#pragma implementation for %qs appears after "
+	warning (0, "%<#pragma implementation%> for %qs appears after "
 		 "file is included", filename);
     }
 
@@ -491,7 +706,7 @@ tree
 unqualified_name_lookup_error (tree name, location_t loc)
 {
   if (loc == UNKNOWN_LOCATION)
-    loc = EXPR_LOC_OR_LOC (name, input_location);
+    loc = cp_expr_loc_or_input_loc (name);
 
   if (IDENTIFIER_ANY_OP_P (name))
     error_at (loc, "%qD not defined", name);
@@ -499,8 +714,18 @@ unqualified_name_lookup_error (tree name, location_t loc)
     {
       if (!objc_diagnose_private_ivar (name))
 	{
-	  error_at (loc, "%qD was not declared in this scope", name);
-	  suggest_alternatives_for (loc, name, true);
+	  auto_diagnostic_group d;
+	  name_hint hint = suggest_alternatives_for (loc, name, true);
+	  if (const char *suggestion = hint.suggestion ())
+	    {
+	      gcc_rich_location richloc (loc);
+	      richloc.add_fixit_replace (suggestion);
+	      error_at (&richloc,
+			"%qD was not declared in this scope; did you mean %qs?",
+			name, suggestion);
+	    }
+	  else
+	    error_at (loc, "%qD was not declared in this scope", name);
 	}
       /* Prevent repeated error messages by creating a VAR_DECL with
 	 this NAME in the innermost block scope.  */
@@ -527,6 +752,9 @@ unqualified_fn_lookup_error (cp_expr name_expr)
   if (loc == UNKNOWN_LOCATION)
     loc = input_location;
 
+  if (TREE_CODE (name) == TEMPLATE_ID_EXPR)
+    name = TREE_OPERAND (name, 0);
+
   if (processing_template_decl)
     {
       /* In a template, it is invalid to write "f()" or "f(3)" if no
@@ -549,8 +777,8 @@ unqualified_fn_lookup_error (cp_expr name_expr)
 	  if (!hint)
 	    {
 	      inform (loc, "(if you use %<-fpermissive%>, G++ will accept your "
-		     "code, but allowing the use of an undeclared name is "
-		     "deprecated)");
+		      "code, but allowing the use of an undeclared name is "
+		      "deprecated)");
 	      hint = true;
 	    }
 	}
@@ -652,7 +880,7 @@ build_lang_decl_loc (location_t loc, enum tree_code code, tree name, tree type)
 /* Maybe add a raw lang_decl to T, a decl.  Return true if it needed
    one.  */
 
-static bool
+bool
 maybe_add_lang_decl_raw (tree t, bool decomp_p)
 {
   size_t size;
@@ -778,6 +1006,12 @@ cxx_dup_lang_specific_decl (tree node)
   memcpy (ld, DECL_LANG_SPECIFIC (node), size);
   DECL_LANG_SPECIFIC (node) = ld;
 
+  /* Directly clear some flags that do not apply to the copy
+     (module_purview_p still does).  */
+  ld->u.base.module_entity_p = false;
+  ld->u.base.module_import_p = false;
+  ld->u.base.module_attached_p = false;
+  
   if (GATHER_STATISTICS)
     {
       tree_node_counts[(int)lang_decl] += 1;
@@ -805,8 +1039,7 @@ copy_lang_type (tree node)
   if (! TYPE_LANG_SPECIFIC (node))
     return;
 
-  struct lang_type *lt
-    = (struct lang_type *) ggc_internal_alloc (sizeof (struct lang_type));
+  auto *lt = (struct lang_type *) ggc_internal_alloc (sizeof (struct lang_type));
 
   memcpy (lt, TYPE_LANG_SPECIFIC (node), (sizeof (struct lang_type)));
   TYPE_LANG_SPECIFIC (node) = lt;
@@ -832,15 +1065,15 @@ copy_type (tree type MEM_STAT_DECL)
 
 /* Add a raw lang_type to T, a type, should it need one.  */
 
-static bool
+bool
 maybe_add_lang_type_raw (tree t)
 {
   if (!RECORD_OR_UNION_CODE_P (TREE_CODE (t)))
     return false;
   
-  TYPE_LANG_SPECIFIC (t)
-    = (struct lang_type *) (ggc_internal_cleared_alloc
-			    (sizeof (struct lang_type)));
+  auto *lt = (struct lang_type *) (ggc_internal_cleared_alloc
+				   (sizeof (struct lang_type)));
+  TYPE_LANG_SPECIFIC (t) = lt;
 
   if (GATHER_STATISTICS)
     {
@@ -852,9 +1085,9 @@ maybe_add_lang_type_raw (tree t)
 }
 
 tree
-cxx_make_type (enum tree_code code)
+cxx_make_type (enum tree_code code MEM_STAT_DECL)
 {
-  tree t = make_node (code);
+  tree t = make_node (code PASS_MEM_STAT);
 
   if (maybe_add_lang_type_raw (t))
     {
@@ -865,13 +1098,24 @@ cxx_make_type (enum tree_code code)
       CLASSTYPE_INTERFACE_ONLY (t) = finfo->interface_only;
     }
 
+  if (code == RECORD_TYPE || code == UNION_TYPE)
+    TYPE_CXX_ODR_P (t) = 1;
+
   return t;
 }
 
+/* A wrapper without the memory stats for LANG_HOOKS_MAKE_TYPE.  */
+
 tree
-make_class_type (enum tree_code code)
+cxx_make_type_hook (enum tree_code code)
 {
-  tree t = cxx_make_type (code);
+  return cxx_make_type (code);
+}
+
+tree
+make_class_type (enum tree_code code MEM_STAT_DECL)
+{
+  tree t = cxx_make_type (code PASS_MEM_STAT);
   SET_CLASS_TYPE_P (t, 1);
   return t;
 }

@@ -1,5 +1,5 @@
 /* Data and functions related to line maps and input files.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "intl.h"
+#include "diagnostic.h"
 #include "diagnostic-core.h"
 #include "selftest.h"
 #include "cpplib.h"
@@ -31,11 +32,13 @@ along with GCC; see the file COPYING3.  If not see
 
 /* This is a cache used by get_next_line to store the content of a
    file to be searched for file lines.  */
-struct fcache
+class fcache
 {
+public:
   /* These are information used to store a line boundary.  */
-  struct line_info
+  class line_info
   {
+  public:
     /* The line number.  It starts from 1.  */
     size_t line_num;
 
@@ -121,14 +124,14 @@ struct fcache
 
 location_t input_location = UNKNOWN_LOCATION;
 
-struct line_maps *line_table;
+class line_maps *line_table;
 
 /* A stashed copy of "line_table" for use by selftest::line_table_test.
    This needs to be a global so that it can be a GC root, and thus
    prevent the stashed copy from being garbage-collected if the GC runs
    during a line_table_test.  */
 
-struct line_maps *saved_line_table;
+class line_maps *saved_line_table;
 
 static fcache *fcache_tab;
 static const size_t fcache_tab_size = 16;
@@ -152,7 +155,7 @@ static const size_t fcache_line_record_size = 100;
    ASPECT controls which part of the location to use.  */
 
 static expanded_location
-expand_location_1 (source_location loc,
+expand_location_1 (location_t loc,
 		   bool expansion_point_p,
 		   enum location_aspect aspect)
 {
@@ -201,14 +204,14 @@ expand_location_1 (source_location loc,
 	  break;
 	case LOCATION_ASPECT_START:
 	  {
-	    source_location start = get_start (loc);
+	    location_t start = get_start (loc);
 	    if (start != loc)
 	      return expand_location_1 (start, expansion_point_p, aspect);
 	  }
 	  break;
 	case LOCATION_ASPECT_FINISH:
 	  {
-	    source_location finish = get_finish (loc);
+	    location_t finish = get_finish (loc);
 	    if (finish != loc)
 	      return expand_location_1 (finish, expansion_point_p, aspect);
 	  }
@@ -256,7 +259,7 @@ static size_t
 total_lines_num (const char *file_path)
 {
   size_t r = 0;
-  source_location l = 0;
+  location_t l = 0;
   if (linemap_get_file_highest_location (line_table, file_path, &l))
     {
       gcc_assert (l >= RESERVED_LOCATION_COUNT);
@@ -741,29 +744,27 @@ read_line_num (fcache *c, size_t line_num,
    The line is not nul-terminated.  The returned pointer is only
    valid until the next call of location_get_source_line.
    Note that the line can contain several null characters,
-   so LINE_LEN, if non-null, points to the actual length of the line.
-   If the function fails, NULL is returned.  */
+   so the returned value's length has the actual length of the line.
+   If the function fails, a NULL char_span is returned.  */
 
-const char *
-location_get_source_line (const char *file_path, int line,
-			  int *line_len)
+char_span
+location_get_source_line (const char *file_path, int line)
 {
   char *buffer = NULL;
   ssize_t len;
 
   if (line == 0)
-    return NULL;
+    return char_span (NULL, 0);
 
   fcache *c = lookup_or_add_file_to_cache_tab (file_path);
   if (c == NULL)
-    return NULL;
+    return char_span (NULL, 0);
 
   bool read = read_line_num (c, line, &buffer, &len);
+  if (!read)
+    return char_span (NULL, 0);
 
-  if (read && line_len)
-    *line_len = len;
-
-  return read ? buffer : NULL;
+  return char_span (buffer, len);
 }
 
 /* Determine if FILE_PATH missing a trailing newline on its final line.
@@ -788,7 +789,7 @@ location_missing_trailing_newline (const char *file_path)
    function would return true if passed a token "4" that is the result
    of the expansion of the built-in __LINE__ macro.  */
 bool
-is_location_from_builtin_token (source_location loc)
+is_location_from_builtin_token (location_t loc)
 {
   const line_map_ordinary *map = NULL;
   loc = linemap_resolve_location (line_table, loc,
@@ -802,7 +803,7 @@ is_location_from_builtin_token (source_location loc)
    readable location is set to the string "<built-in>".  */
 
 expanded_location
-expand_location (source_location loc)
+expand_location (location_t loc)
 {
   return expand_location_1 (loc, /*expansion_point_p=*/true,
 			    LOCATION_ASPECT_CARET);
@@ -815,14 +816,14 @@ expand_location (source_location loc)
    "<built-in>".  */
 
 expanded_location
-expand_location_to_spelling_point (source_location loc)
+expand_location_to_spelling_point (location_t loc,
+				   enum location_aspect aspect)
 {
-  return expand_location_1 (loc, /*expansion_point_p=*/false,
-			    LOCATION_ASPECT_CARET);
+  return expand_location_1 (loc, /*expansion_point_p=*/false, aspect);
 }
 
 /* The rich_location class within libcpp requires a way to expand
-   source_location instances, and relies on the client code
+   location_t instances, and relies on the client code
    providing a symbol named
      linemap_client_expand_location_to_spelling_point
    to do this.
@@ -831,7 +832,7 @@ expand_location_to_spelling_point (source_location loc)
    which simply calls into expand_location_1.  */
 
 expanded_location
-linemap_client_expand_location_to_spelling_point (source_location loc,
+linemap_client_expand_location_to_spelling_point (location_t loc,
 						  enum location_aspect aspect)
 {
   return expand_location_1 (loc, /*expansion_point_p=*/false, aspect);
@@ -850,8 +851,8 @@ linemap_client_expand_location_to_spelling_point (source_location loc,
    warning_at, the diagnostic would be suppressed (unless
    -Wsystem-headers).  */
 
-source_location
-expansion_point_location_if_in_system_header (source_location location)
+location_t
+expansion_point_location_if_in_system_header (location_t location)
 {
   if (in_system_header_at (location))
     location = linemap_resolve_location (line_table, location,
@@ -863,8 +864,8 @@ expansion_point_location_if_in_system_header (source_location location)
 /* If LOCATION is a virtual location for a token coming from the expansion
    of a macro, unwind to the location of the expansion point of the macro.  */
 
-source_location
-expansion_point_location (source_location location)
+location_t
+expansion_point_location (location_t location)
 {
   return linemap_resolve_location (line_table, location,
 				   LRK_MACRO_EXPANSION_POINT, NULL);
@@ -907,30 +908,21 @@ make_location (location_t caret, source_range src_range)
   return COMBINE_LOCATION_DATA (line_table, pure_loc, src_range, NULL);
 }
 
-#define ONE_K 1024
-#define ONE_M (ONE_K * ONE_K)
-
-/* Display a number as an integer multiple of either:
-   - 1024, if said integer is >= to 10 K (in base 2)
-   - 1024 * 1024, if said integer is >= 10 M in (base 2)
- */
-#define SCALE(x) ((unsigned long) ((x) < 10 * ONE_K \
-		  ? (x) \
-		  : ((x) < 10 * ONE_M \
-		     ? (x) / ONE_K \
-		     : (x) / ONE_M)))
-
-/* For a given integer, display either:
-   - the character 'k', if the number is higher than 10 K (in base 2)
-     but strictly lower than 10 M (in base 2)
-   - the character 'M' if the number is higher than 10 M (in base2)
-   - the charcter ' ' if the number is strictly lower  than 10 K  */
-#define STAT_LABEL(x) ((x) < 10 * ONE_K ? ' ' : ((x) < 10 * ONE_M ? 'k' : 'M'))
-
-/* Display an integer amount as multiple of 1K or 1M (in base 2).
-   Display the correct unit (either k, M, or ' ') after the amount, as
-   well.  */
-#define FORMAT_AMOUNT(size) SCALE (size), STAT_LABEL (size)
+/* An expanded_location stores the column in byte units.  This function
+   converts that column to display units.  That requires reading the associated
+   source line in order to calculate the display width.  If that cannot be done
+   for any reason, then returns the byte column as a fallback.  */
+int
+location_compute_display_column (expanded_location exploc, int tabstop)
+{
+  if (!(exploc.file && *exploc.file && exploc.line && exploc.column))
+    return exploc.column;
+  char_span line = location_get_source_line (exploc.file, exploc.line);
+  /* If line is NULL, this function returns exploc.column which is the
+     desired fallback.  */
+  return cpp_byte_column_to_display_column (line.get_buffer (), line.length (),
+					    exploc.column, tabstop);
+}
 
 /* Dump statistics to stderr about the memory usage of the line_table
    set of line maps.  This also displays some statistics about macro
@@ -966,57 +958,45 @@ dump_line_table_statistics (void)
              s.num_macro_tokens / s.num_expanded_macros);
   fprintf (stderr,
            "\nLine Table allocations during the "
-           "compilation process\n");
-  fprintf (stderr, "Number of ordinary maps used:        %5ld%c\n",
-           SCALE (s.num_ordinary_maps_used),
-           STAT_LABEL (s.num_ordinary_maps_used));
-  fprintf (stderr, "Ordinary map used size:              %5ld%c\n",
-           SCALE (s.ordinary_maps_used_size),
-           STAT_LABEL (s.ordinary_maps_used_size));
-  fprintf (stderr, "Number of ordinary maps allocated:   %5ld%c\n",
-           SCALE (s.num_ordinary_maps_allocated),
-           STAT_LABEL (s.num_ordinary_maps_allocated));
-  fprintf (stderr, "Ordinary maps allocated size:        %5ld%c\n",
-           SCALE (s.ordinary_maps_allocated_size),
-           STAT_LABEL (s.ordinary_maps_allocated_size));
-  fprintf (stderr, "Number of macro maps used:           %5ld%c\n",
-           SCALE (s.num_macro_maps_used),
-           STAT_LABEL (s.num_macro_maps_used));
-  fprintf (stderr, "Macro maps used size:                %5ld%c\n",
-           SCALE (s.macro_maps_used_size),
-           STAT_LABEL (s.macro_maps_used_size));
-  fprintf (stderr, "Macro maps locations size:           %5ld%c\n",
-           SCALE (s.macro_maps_locations_size),
-           STAT_LABEL (s.macro_maps_locations_size));
-  fprintf (stderr, "Macro maps size:                     %5ld%c\n",
-           SCALE (macro_maps_size),
-           STAT_LABEL (macro_maps_size));
-  fprintf (stderr, "Duplicated maps locations size:      %5ld%c\n",
-           SCALE (s.duplicated_macro_maps_locations_size),
-           STAT_LABEL (s.duplicated_macro_maps_locations_size));
-  fprintf (stderr, "Total allocated maps size:           %5ld%c\n",
-           SCALE (total_allocated_map_size),
-           STAT_LABEL (total_allocated_map_size));
-  fprintf (stderr, "Total used maps size:                %5ld%c\n",
-           SCALE (total_used_map_size),
-           STAT_LABEL (total_used_map_size));
-  fprintf (stderr, "Ad-hoc table size:                   %5ld%c\n",
-	   SCALE (s.adhoc_table_size),
-	   STAT_LABEL (s.adhoc_table_size));
-  fprintf (stderr, "Ad-hoc table entries used:           %5ld\n",
-	   s.adhoc_table_entries_used);
-  fprintf (stderr, "optimized_ranges: %i\n",
-	   line_table->num_optimized_ranges);
-  fprintf (stderr, "unoptimized_ranges: %i\n",
-	   line_table->num_unoptimized_ranges);
+	   "compilation process\n");
+  fprintf (stderr, "Number of ordinary maps used:        " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.num_ordinary_maps_used));
+  fprintf (stderr, "Ordinary map used size:              " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.ordinary_maps_used_size));
+  fprintf (stderr, "Number of ordinary maps allocated:   " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.num_ordinary_maps_allocated));
+  fprintf (stderr, "Ordinary maps allocated size:        " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.ordinary_maps_allocated_size));
+  fprintf (stderr, "Number of macro maps used:           " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.num_macro_maps_used));
+  fprintf (stderr, "Macro maps used size:                " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.macro_maps_used_size));
+  fprintf (stderr, "Macro maps locations size:           " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.macro_maps_locations_size));
+  fprintf (stderr, "Macro maps size:                     " PRsa (5) "\n",
+	   SIZE_AMOUNT (macro_maps_size));
+  fprintf (stderr, "Duplicated maps locations size:      " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.duplicated_macro_maps_locations_size));
+  fprintf (stderr, "Total allocated maps size:           " PRsa (5) "\n",
+	   SIZE_AMOUNT (total_allocated_map_size));
+  fprintf (stderr, "Total used maps size:                " PRsa (5) "\n",
+	   SIZE_AMOUNT (total_used_map_size));
+  fprintf (stderr, "Ad-hoc table size:                   " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.adhoc_table_size));
+  fprintf (stderr, "Ad-hoc table entries used:           " PRsa (5) "\n",
+	   SIZE_AMOUNT (s.adhoc_table_entries_used));
+  fprintf (stderr, "optimized_ranges:                    " PRsa (5) "\n",
+	   SIZE_AMOUNT (line_table->num_optimized_ranges));
+  fprintf (stderr, "unoptimized_ranges:                  " PRsa (5) "\n",
+	   SIZE_AMOUNT (line_table->num_unoptimized_ranges));
 
   fprintf (stderr, "\n");
 }
 
 /* Get location one beyond the final location in ordinary map IDX.  */
 
-static source_location
-get_end_location (struct line_maps *set, unsigned int idx)
+static location_t
+get_end_location (class line_maps *set, unsigned int idx)
 {
   if (idx == LINEMAPS_ORDINARY_USED (set) - 1)
     return set->highest_location;
@@ -1040,37 +1020,37 @@ write_digit (FILE *stream, int digit)
 static void
 write_digit_row (FILE *stream, int indent,
 		 const line_map_ordinary *map,
-		 source_location loc, int max_col, int divisor)
+		 location_t loc, int max_col, int divisor)
 {
   fprintf (stream, "%*c", indent, ' ');
   fprintf (stream, "|");
   for (int column = 1; column < max_col; column++)
     {
-      source_location column_loc = loc + (column << map->m_range_bits);
+      location_t column_loc = loc + (column << map->m_range_bits);
       write_digit (stream, column_loc / divisor);
     }
   fprintf (stream, "\n");
 }
 
 /* Write a half-closed (START) / half-open (END) interval of
-   source_location to STREAM.  */
+   location_t to STREAM.  */
 
 static void
 dump_location_range (FILE *stream,
-		     source_location start, source_location end)
+		     location_t start, location_t end)
 {
   fprintf (stream,
-	   "  source_location interval: %u <= loc < %u\n",
+	   "  location_t interval: %u <= loc < %u\n",
 	   start, end);
 }
 
 /* Write a labelled description of a half-closed (START) / half-open (END)
-   interval of source_location to STREAM.  */
+   interval of location_t to STREAM.  */
 
 static void
 dump_labelled_location_range (FILE *stream,
 			      const char *name,
-			      source_location start, source_location end)
+			      location_t start, location_t end)
 {
   fprintf (stream, "%s\n", name);
   dump_location_range (stream, start, end);
@@ -1089,7 +1069,7 @@ dump_location_info (FILE *stream)
   /* Visualize the ordinary line_map instances, rendering the sources. */
   for (unsigned int idx = 0; idx < LINEMAPS_ORDINARY_USED (line_table); idx++)
     {
-      source_location end_location = get_end_location (line_table, idx);
+      location_t end_location = get_end_location (line_table, idx);
       /* half-closed: doesn't include this one. */
 
       const line_map_ordinary *map
@@ -1106,9 +1086,40 @@ dump_location_info (FILE *stream)
 	       map->m_column_and_range_bits - map->m_range_bits);
       fprintf (stream, "  range bits: %i\n",
 	       map->m_range_bits);
+      const char * reason;
+      switch (map->reason) {
+      case LC_ENTER:
+	reason = "LC_ENTER";
+	break;
+      case LC_LEAVE:
+	reason = "LC_LEAVE";
+	break;
+      case LC_RENAME:
+	reason = "LC_RENAME";
+	break;
+      case LC_RENAME_VERBATIM:
+	reason = "LC_RENAME_VERBATIM";
+	break;
+      case LC_ENTER_MACRO:
+	reason = "LC_RENAME_MACRO";
+	break;
+      default:
+	reason = "Unknown";
+      }
+      fprintf (stream, "  reason: %d (%s)\n", map->reason, reason);
+
+      const line_map_ordinary *includer_map
+	= linemap_included_from_linemap (line_table, map);
+      fprintf (stream, "  included from location: %d",
+	       linemap_included_from (map));
+      if (includer_map) {
+	fprintf (stream, " (in ordinary map %d)",
+		 int (includer_map - line_table->info_ordinary.maps));
+      }
+      fprintf (stream, "\n");
 
       /* Render the span of source lines that this "map" covers.  */
-      for (source_location loc = MAP_START_LOCATION (map);
+      for (location_t loc = MAP_START_LOCATION (map);
 	   loc < end_location;
 	   loc += (1 << map->m_range_bits) )
 	{
@@ -1121,27 +1132,32 @@ dump_location_info (FILE *stream)
 	    {
 	      /* Beginning of a new source line: draw the line.  */
 
-	      int line_size;
-	      const char *line_text = location_get_source_line (exploc.file,
-								exploc.line,
-								&line_size);
+	      char_span line_text = location_get_source_line (exploc.file,
+							      exploc.line);
 	      if (!line_text)
 		break;
 	      fprintf (stream,
 		       "%s:%3i|loc:%5i|%.*s\n",
 		       exploc.file, exploc.line,
 		       loc,
-		       line_size, line_text);
+		       (int)line_text.length (), line_text.get_buffer ());
 
 	      /* "loc" is at column 0, which means "the whole line".
 		 Render the locations *within* the line, by underlining
-		 it, showing the source_location numeric values
+		 it, showing the location_t numeric values
 		 at each column.  */
-	      int max_col = (1 << map->m_column_and_range_bits) - 1;
-	      if (max_col > line_size)
-		max_col = line_size + 1;
+	      size_t max_col = (1 << map->m_column_and_range_bits) - 1;
+	      if (max_col > line_text.length ())
+		max_col = line_text.length () + 1;
 
-	      int indent = 14 + strlen (exploc.file);
+	      int len_lnum = num_digits (exploc.line);
+	      if (len_lnum < 3)
+		len_lnum = 3;
+	      int len_loc = num_digits (loc);
+	      if (len_loc < 5)
+		len_loc = 5;
+
+	      int indent = 6 + strlen (exploc.file) + len_lnum + len_loc;
 
 	      /* Thousands.  */
 	      if (end_location > 999)
@@ -1169,12 +1185,12 @@ dump_location_info (FILE *stream)
   /* Visualize the macro line_map instances, rendering the sources. */
   for (unsigned int i = 0; i < LINEMAPS_MACRO_USED (line_table); i++)
     {
-      /* Each macro map that is allocated owns source_location values
+      /* Each macro map that is allocated owns location_t values
 	 that are *lower* that the one before them.
 	 Hence it's meaningful to view them either in order of ascending
 	 source locations, or in order of ascending macro map index.  */
-      const bool ascending_source_locations = true;
-      unsigned int idx = (ascending_source_locations
+      const bool ascending_location_ts = true;
+      unsigned int idx = (ascending_location_ts
 			  ? (LINEMAPS_MACRO_USED (line_table) - (i + 1))
 			  : i);
       const line_map_macro *map = LINEMAPS_MACRO_MAP_AT (line_table, idx);
@@ -1195,8 +1211,8 @@ dump_location_info (FILE *stream)
       fprintf (stream, "  macro_locations:\n");
       for (unsigned int i = 0; i < MACRO_MAP_NUM_MACRO_TOKENS (map); i++)
 	{
-	  source_location x = MACRO_MAP_LOCATIONS (map)[2 * i];
-	  source_location y = MACRO_MAP_LOCATIONS (map)[(2 * i) + 1];
+	  location_t x = MACRO_MAP_LOCATIONS (map)[2 * i];
+	  location_t y = MACRO_MAP_LOCATIONS (map)[(2 * i) + 1];
 
 	  /* linemap_add_macro_token encodes token numbers in an expansion
 	     by putting them after MAP_START_LOCATION. */
@@ -1207,7 +1223,7 @@ dump_location_info (FILE *stream)
 	     adding 2 extra args for padding tokens; presumably there may
 	     be a leading and/or trailing padding token injected,
 	     each for 2 more location slots.
-	     This would explain there being up to 4 source_locations slots
+	     This would explain there being up to 4 location_ts slots
 	     that may be uninitialized.  */
 
 	  fprintf (stream, "    %u: %u, %u\n",
@@ -1217,7 +1233,8 @@ dump_location_info (FILE *stream)
 	  if (x == y)
 	    {
 	      if (x < MAP_START_LOCATION (map))
-		inform (x, "token %u has x-location == y-location == %u", i, x);
+		inform (x, "token %u has %<x-location == y-location == %u%>",
+			i, x);
 	      else
 		fprintf (stream,
 			 "x-location == y-location == %u encodes token # %u\n",
@@ -1225,24 +1242,24 @@ dump_location_info (FILE *stream)
 		}
 	  else
 	    {
-	      inform (x, "token %u has x-location == %u", i, x);
-	      inform (x, "token %u has y-location == %u", i, y);
+	      inform (x, "token %u has %<x-location == %u%>", i, x);
+	      inform (x, "token %u has %<y-location == %u%>", i, y);
 	    }
 	}
       fprintf (stream, "\n");
     }
 
-  /* It appears that MAX_SOURCE_LOCATION itself is never assigned to a
+  /* It appears that MAX_LOCATION_T itself is never assigned to a
      macro map, presumably due to an off-by-one error somewhere
      between the logic in linemap_enter_macro and
      LINEMAPS_MACRO_LOWEST_LOCATION.  */
-  dump_labelled_location_range (stream, "MAX_SOURCE_LOCATION",
-				MAX_SOURCE_LOCATION,
-				MAX_SOURCE_LOCATION + 1);
+  dump_labelled_location_range (stream, "MAX_LOCATION_T",
+				MAX_LOCATION_T,
+				MAX_LOCATION_T + 1);
 
   /* Visualize ad-hoc values.  */
   dump_labelled_location_range (stream, "AD-HOC LOCATIONS",
-				MAX_SOURCE_LOCATION + 1, UINT_MAX);
+				MAX_LOCATION_T + 1, UINT_MAX);
 }
 
 /* string_concat's constructor.  */
@@ -1279,7 +1296,7 @@ string_concat_db::record_string_concatenation (int num, location_t *locs)
   m_table->put (key_loc, concat);
 }
 
-/* Determine if LOC was the location of the the initial token of a
+/* Determine if LOC was the location of the initial token of a
    concatenation of string literal tokens.
    If so, *OUT_NUM is written to with the number of tokens, and
    *OUT_LOCS with the location of an array of locations of the
@@ -1401,24 +1418,32 @@ get_substring_ranges_for_loc (cpp_reader *pfile,
       source_range src_range = get_range_from_loc (line_table, strlocs[i]);
 
       if (src_range.m_start >= LINEMAPS_MACRO_LOWEST_LOCATION (line_table))
-	/* If the string is within a macro expansion, we can't get at the
-	   end location.  */
-	return "macro expansion";
+	{
+	  /* If the string token was within a macro expansion, then we can
+	     cope with it for the simple case where we have a single token.
+	     Otherwise, bail out.  */
+	  if (src_range.m_start != src_range.m_finish)
+	    return "macro expansion";
+	}
+      else
+	{
+	  if (src_range.m_start >= LINE_MAP_MAX_LOCATION_WITH_COLS)
+	    /* If so, we can't reliably determine where the token started within
+	       its line.  */
+	    return "range starts after LINE_MAP_MAX_LOCATION_WITH_COLS";
 
-      if (src_range.m_start >= LINE_MAP_MAX_LOCATION_WITH_COLS)
-	/* If so, we can't reliably determine where the token started within
-	   its line.  */
-	return "range starts after LINE_MAP_MAX_LOCATION_WITH_COLS";
-
-      if (src_range.m_finish >= LINE_MAP_MAX_LOCATION_WITH_COLS)
-	/* If so, we can't reliably determine where the token finished within
-	   its line.  */
-	return "range ends after LINE_MAP_MAX_LOCATION_WITH_COLS";
+	  if (src_range.m_finish >= LINE_MAP_MAX_LOCATION_WITH_COLS)
+	    /* If so, we can't reliably determine where the token finished
+	       within its line.  */
+	    return "range ends after LINE_MAP_MAX_LOCATION_WITH_COLS";
+	}
 
       expanded_location start
-	= expand_location_to_spelling_point (src_range.m_start);
+	= expand_location_to_spelling_point (src_range.m_start,
+					     LOCATION_ASPECT_START);
       expanded_location finish
-	= expand_location_to_spelling_point (src_range.m_finish);
+	= expand_location_to_spelling_point (src_range.m_finish,
+					     LOCATION_ASPECT_FINISH);
       if (start.file != finish.file)
 	return "range endpoints are in different files";
       if (start.line != finish.line)
@@ -1426,37 +1451,53 @@ get_substring_ranges_for_loc (cpp_reader *pfile,
       if (start.column > finish.column)
 	return "range endpoints are reversed";
 
-      int line_width;
-      const char *line = location_get_source_line (start.file, start.line,
-						   &line_width);
-      if (line == NULL)
+      char_span line = location_get_source_line (start.file, start.line);
+      if (!line)
 	return "unable to read source line";
 
       /* Determine the location of the literal (including quotes
 	 and leading prefix chars, such as the 'u' in a u""
 	 token).  */
-      const char *literal = line + start.column - 1;
-      int literal_length = finish.column - start.column + 1;
+      size_t literal_length = finish.column - start.column + 1;
 
       /* Ensure that we don't crash if we got the wrong location.  */
-      if (line_width < (start.column - 1 + literal_length))
+      if (start.column < 1)
+	return "zero start column";
+      if (line.length () < (start.column - 1 + literal_length))
 	return "line is not wide enough";
+
+      char_span literal = line.subspan (start.column - 1, literal_length);
 
       cpp_string from;
       from.len = literal_length;
       /* Make a copy of the literal, to avoid having to rely on
 	 the lifetime of the copy of the line within the cache.
 	 This will be released by the auto_cpp_string_vec dtor.  */
-      from.text = XDUPVEC (unsigned char, literal, literal_length);
+      from.text = (unsigned char *)literal.xstrdup ();
       strs.safe_push (from);
 
       /* For very long lines, a new linemap could have started
 	 halfway through the token.
 	 Ensure that the loc_reader uses the linemap of the
 	 *end* of the token for its start location.  */
+      const line_map_ordinary *start_ord_map;
+      linemap_resolve_location (line_table, src_range.m_start,
+				LRK_SPELLING_LOCATION, &start_ord_map);
       const line_map_ordinary *final_ord_map;
       linemap_resolve_location (line_table, src_range.m_finish,
-				LRK_MACRO_EXPANSION_POINT, &final_ord_map);
+				LRK_SPELLING_LOCATION, &final_ord_map);
+      if (start_ord_map == NULL || final_ord_map == NULL)
+	return "failed to get ordinary maps";
+      /* Bulletproofing.  We ought to only have different ordinary maps
+	 for start vs finish due to line-length jumps.  */
+      if (start_ord_map != final_ord_map
+	  && start_ord_map->to_file != final_ord_map->to_file)
+	return "start and finish are spelled in different ordinary maps";
+      /* The file from linemap_resolve_location ought to match that from
+	 expand_location_to_spelling_point.  */
+      if (start_ord_map->to_file != start.file)
+	return "mismatching file after resolving linemap";
+
       location_t start_loc
 	= linemap_position_for_line_and_column (line_table, final_ord_map,
 						start.line, start.column);
@@ -1497,12 +1538,12 @@ get_substring_ranges_for_loc (cpp_reader *pfile,
    than for end-users.  */
 
 const char *
-get_source_location_for_substring (cpp_reader *pfile,
-				   string_concat_db *concats,
-				   location_t strloc,
-				   enum cpp_ttype type,
-				   int caret_idx, int start_idx, int end_idx,
-				   source_location *out_loc)
+get_location_within_string (cpp_reader *pfile,
+			    string_concat_db *concats,
+			    location_t strloc,
+			    enum cpp_ttype type,
+			    int caret_idx, int start_idx, int end_idx,
+			    location_t *out_loc)
 {
   gcc_checking_assert (caret_idx >= 0);
   gcc_checking_assert (start_idx >= 0);
@@ -1662,7 +1703,7 @@ assert_loceq (const char *exp_filename, int exp_linenum, int exp_colnum,
    - line_table->default_range_bits: some frontends use a non-zero value
    and others use zero
    - the fallback modes within line-map.c: there are various threshold
-   values for source_location/location_t beyond line-map.c changes
+   values for location_t beyond line-map.c changes
    behavior (disabling of the range-packing optimization, disabling
    of column-tracking).  We can exercise these by starting the line_table
    at interesting values at or near these thresholds.
@@ -1670,8 +1711,9 @@ assert_loceq (const char *exp_filename, int exp_linenum, int exp_colnum,
    The following struct describes a particular case within our test
    matrix.  */
 
-struct line_table_case
+class line_table_case
 {
+public:
   line_table_case (int default_range_bits, int base_location)
   : m_default_range_bits (default_range_bits),
     m_base_location (base_location)
@@ -1908,24 +1950,23 @@ test_reading_source_line ()
 			"This is the 3rd line");
 
   /* Read back a specific line from the tempfile.  */
-  int line_size;
-  const char *source_line = location_get_source_line (tmp.get_filename (),
-						      3, &line_size);
-  ASSERT_TRUE (source_line != NULL);
-  ASSERT_EQ (20, line_size);
+  char_span source_line = location_get_source_line (tmp.get_filename (), 3);
+  ASSERT_TRUE (source_line);
+  ASSERT_TRUE (source_line.get_buffer () != NULL);
+  ASSERT_EQ (20, source_line.length ());
   ASSERT_TRUE (!strncmp ("This is the 3rd line",
-			 source_line, line_size));
+			 source_line.get_buffer (), source_line.length ()));
 
-  source_line = location_get_source_line (tmp.get_filename (),
-					  2, &line_size);
-  ASSERT_TRUE (source_line != NULL);
-  ASSERT_EQ (21, line_size);
+  source_line = location_get_source_line (tmp.get_filename (), 2);
+  ASSERT_TRUE (source_line);
+  ASSERT_TRUE (source_line.get_buffer () != NULL);
+  ASSERT_EQ (21, source_line.length ());
   ASSERT_TRUE (!strncmp ("This is the test text",
-			 source_line, line_size));
+			 source_line.get_buffer (), source_line.length ()));
 
-  source_line = location_get_source_line (tmp.get_filename (),
-					  4, &line_size);
-  ASSERT_TRUE (source_line == NULL);
+  source_line = location_get_source_line (tmp.get_filename (), 4);
+  ASSERT_FALSE (source_line);
+  ASSERT_TRUE (source_line.get_buffer () == NULL);
 }
 
 /* Tests of lexing.  */
@@ -2028,7 +2069,7 @@ test_lexer (const line_table_case &case_)
 
 /* Forward decls.  */
 
-struct lexer_test;
+class lexer_test;
 class lexer_test_options;
 
 /* A class for specifying options of a lexer_test.
@@ -2065,8 +2106,9 @@ class cpp_reader_ptr
 
 /* A struct for writing lexer tests.  */
 
-struct lexer_test
+class lexer_test
 {
+public:
   lexer_test (const line_table_case &case_, const char *content,
 	      lexer_test_options *options);
   ~lexer_test ();
@@ -2114,14 +2156,14 @@ class ebcdic_execution_charset : public lexer_test_options
     cpp_opts->narrow_charset = "IBM1047";
 
     cpp_callbacks *callbacks = cpp_get_callbacks (test.m_parser);
-    callbacks->error = on_error;
+    callbacks->diagnostic = on_diagnostic;
   }
 
-  static bool on_error (cpp_reader *pfile ATTRIBUTE_UNUSED,
-			int level ATTRIBUTE_UNUSED,
-			int reason ATTRIBUTE_UNUSED,
-			rich_location *richloc ATTRIBUTE_UNUSED,
-			const char *msgid, va_list *ap ATTRIBUTE_UNUSED)
+  static bool on_diagnostic (cpp_reader *pfile ATTRIBUTE_UNUSED,
+			     enum cpp_diagnostic_level level ATTRIBUTE_UNUSED,
+			     enum cpp_warning_reason reason ATTRIBUTE_UNUSED,
+			     rich_location *richloc ATTRIBUTE_UNUSED,
+			     const char *msgid, va_list *ap ATTRIBUTE_UNUSED)
     ATTRIBUTE_FPTR_PRINTF(5,0)
   {
     gcc_assert (s_singleton);
@@ -2151,53 +2193,53 @@ class ebcdic_execution_charset : public lexer_test_options
 
 ebcdic_execution_charset *ebcdic_execution_charset::s_singleton;
 
-/* A lexer_test_options subclass that records a list of error
+/* A lexer_test_options subclass that records a list of diagnostic
    messages emitted by the lexer.  */
 
-class lexer_error_sink : public lexer_test_options
+class lexer_diagnostic_sink : public lexer_test_options
 {
  public:
-  lexer_error_sink ()
+  lexer_diagnostic_sink ()
   {
     gcc_assert (s_singleton == NULL);
     s_singleton = this;
   }
-  ~lexer_error_sink ()
+  ~lexer_diagnostic_sink ()
   {
     gcc_assert (s_singleton == this);
     s_singleton = NULL;
 
     int i;
     char *str;
-    FOR_EACH_VEC_ELT (m_errors, i, str)
+    FOR_EACH_VEC_ELT (m_diagnostics, i, str)
       free (str);
   }
 
   void apply (lexer_test &test) FINAL OVERRIDE
   {
     cpp_callbacks *callbacks = cpp_get_callbacks (test.m_parser);
-    callbacks->error = on_error;
+    callbacks->diagnostic = on_diagnostic;
   }
 
-  static bool on_error (cpp_reader *pfile ATTRIBUTE_UNUSED,
-			int level ATTRIBUTE_UNUSED,
-			int reason ATTRIBUTE_UNUSED,
-			rich_location *richloc ATTRIBUTE_UNUSED,
-			const char *msgid, va_list *ap)
+  static bool on_diagnostic (cpp_reader *pfile ATTRIBUTE_UNUSED,
+			     enum cpp_diagnostic_level level ATTRIBUTE_UNUSED,
+			     enum cpp_warning_reason reason ATTRIBUTE_UNUSED,
+			     rich_location *richloc ATTRIBUTE_UNUSED,
+			     const char *msgid, va_list *ap)
     ATTRIBUTE_FPTR_PRINTF(5,0)
   {
     char *msg = xvasprintf (msgid, *ap);
-    s_singleton->m_errors.safe_push (msg);
+    s_singleton->m_diagnostics.safe_push (msg);
     return true;
   }
 
-  auto_vec<char *> m_errors;
+  auto_vec<char *> m_diagnostics;
 
  private:
-  static lexer_error_sink *s_singleton;
+  static lexer_diagnostic_sink *s_singleton;
 };
 
-lexer_error_sink *lexer_error_sink::s_singleton;
+lexer_diagnostic_sink *lexer_diagnostic_sink::s_singleton;
 
 /* Constructor.  Override line_table with a new instance based on CASE_,
    and write CONTENT to a tempfile.  Create a cpp_reader, and use it to
@@ -2661,7 +2703,7 @@ test_lexer_string_locations_ucn4 (const line_table_case &case_)
 
   /* Verify that cpp_interpret_string works.
      The string should be encoded in the execution character
-     set.  Assuming that that is UTF-8, we should have the following:
+     set.  Assuming that is UTF-8, we should have the following:
      -----------  ----  -----  -------  ----------------
      Byte offset  Byte  Octal  Unicode  Source Column(s)
      -----------  ----  -----  -------  ----------------
@@ -3411,21 +3453,21 @@ test_lexer_string_locations_raw_string_unterminated (const line_table_case &case
 {
   const char *content = "R\"ouch()ouCh\" /* etc */";
 
-  lexer_error_sink errors;
-  lexer_test test (case_, content, &errors);
+  lexer_diagnostic_sink diagnostics;
+  lexer_test test (case_, content, &diagnostics);
   test.m_implicitly_expect_EOF = false;
 
   /* Attempt to parse the raw string.  */
   const cpp_token *tok = test.get_token ();
   ASSERT_EQ (tok->type, CPP_EOF);
 
-  ASSERT_EQ (1, errors.m_errors.length ());
+  ASSERT_EQ (1, diagnostics.m_diagnostics.length ());
   /* We expect the message "unterminated raw string"
      in the "cpplib" translation domain.
      It's not clear that dgettext is available on all supported hosts,
      so this assertion is commented-out for now.
        ASSERT_STREQ (dgettext ("cpplib", "unterminated raw string"),
-                     errors.m_errors[0]);
+                     diagnostics.m_diagnostics[0]);
   */
 }
 
@@ -3538,6 +3580,141 @@ for_each_line_table_case (void (*testcase) (const line_table_case &))
   ASSERT_EQ (num_cases_tested, 2 * 12);
 }
 
+/* Verify that when presented with a consecutive pair of locations with
+   a very large line offset, we don't attempt to consolidate them into
+   a single ordinary linemap where the line offsets within the line map
+   would lead to overflow (PR lto/88147).  */
+
+static void
+test_line_offset_overflow ()
+{
+  line_table_test ltt (line_table_case (5, 0));
+
+  linemap_add (line_table, LC_ENTER, false, "foo.c", 0);
+  linemap_line_start (line_table, 1, 100);
+  location_t loc_a = linemap_line_start (line_table, 2578, 255);
+  assert_loceq ("foo.c", 2578, 0, loc_a);
+
+  const line_map_ordinary *ordmap_a = LINEMAPS_LAST_ORDINARY_MAP (line_table);
+  ASSERT_EQ (ordmap_a->m_column_and_range_bits, 13);
+  ASSERT_EQ (ordmap_a->m_range_bits, 5);
+
+  location_t loc_b = linemap_line_start (line_table, 404198, 512);
+  assert_loceq ("foo.c", 404198, 0, loc_b);
+
+  /* We should have started a new linemap, rather than attempting to store
+     a very large line offset.  */
+  const line_map_ordinary *ordmap_b = LINEMAPS_LAST_ORDINARY_MAP (line_table);
+  ASSERT_NE (ordmap_a, ordmap_b);
+}
+
+void test_cpp_utf8 ()
+{
+  const int def_tabstop = 8;
+  /* Verify that wcwidth of invalid UTF-8 or control bytes is 1.  */
+  {
+    int w_bad = cpp_display_width ("\xf0!\x9f!\x98!\x82!", 8, def_tabstop);
+    ASSERT_EQ (8, w_bad);
+    int w_ctrl = cpp_display_width ("\r\n\v\0\1", 5, def_tabstop);
+    ASSERT_EQ (5, w_ctrl);
+  }
+
+  /* Verify that wcwidth of valid UTF-8 is as expected.  */
+  {
+    const int w_pi = cpp_display_width ("\xcf\x80", 2, def_tabstop);
+    ASSERT_EQ (1, w_pi);
+    const int w_emoji = cpp_display_width ("\xf0\x9f\x98\x82", 4, def_tabstop);
+    ASSERT_EQ (2, w_emoji);
+    const int w_umlaut_precomposed = cpp_display_width ("\xc3\xbf", 2,
+							def_tabstop);
+    ASSERT_EQ (1, w_umlaut_precomposed);
+    const int w_umlaut_combining = cpp_display_width ("y\xcc\x88", 3,
+						      def_tabstop);
+    ASSERT_EQ (1, w_umlaut_combining);
+    const int w_han = cpp_display_width ("\xe4\xb8\xba", 3, def_tabstop);
+    ASSERT_EQ (2, w_han);
+    const int w_ascii = cpp_display_width ("GCC", 3, def_tabstop);
+    ASSERT_EQ (3, w_ascii);
+    const int w_mixed = cpp_display_width ("\xcf\x80 = 3.14 \xf0\x9f\x98\x82"
+					   "\x9f! \xe4\xb8\xba y\xcc\x88",
+					   24, def_tabstop);
+    ASSERT_EQ (18, w_mixed);
+  }
+
+  /* Verify that display width properly expands tabs.  */
+  {
+    const char *tstr = "\tabc\td";
+    ASSERT_EQ (6, cpp_display_width (tstr, 6, 1));
+    ASSERT_EQ (10, cpp_display_width (tstr, 6, 3));
+    ASSERT_EQ (17, cpp_display_width (tstr, 6, 8));
+    ASSERT_EQ (1, cpp_display_column_to_byte_column (tstr, 6, 7, 8));
+  }
+
+  /* Verify that cpp_byte_column_to_display_column can go past the end,
+     and similar edge cases.  */
+  {
+    const char *str
+      /* Display columns.
+         111111112345  */
+      = "\xcf\x80 abc";
+      /* 111122223456
+	 Byte columns.  */
+
+    ASSERT_EQ (5, cpp_display_width (str, 6, def_tabstop));
+    ASSERT_EQ (105,
+	       cpp_byte_column_to_display_column (str, 6, 106, def_tabstop));
+    ASSERT_EQ (10000,
+	       cpp_byte_column_to_display_column (NULL, 0, 10000, def_tabstop));
+    ASSERT_EQ (0,
+	       cpp_byte_column_to_display_column (NULL, 10000, 0, def_tabstop));
+  }
+
+  /* Verify that cpp_display_column_to_byte_column can go past the end,
+     and similar edge cases, and check invertibility.  */
+  {
+    const char *str
+      /* Display columns.
+	 000000000000000000000000000000000000011
+	 111111112222222234444444455555555678901  */
+      = "\xf0\x9f\x98\x82 \xf0\x9f\x98\x82 hello";
+      /* 000000000000000000000000000000000111111
+	 111122223333444456666777788889999012345
+	 Byte columns.  */
+    ASSERT_EQ (4, cpp_display_column_to_byte_column (str, 15, 2, def_tabstop));
+    ASSERT_EQ (15,
+	       cpp_display_column_to_byte_column (str, 15, 11, def_tabstop));
+    ASSERT_EQ (115,
+	       cpp_display_column_to_byte_column (str, 15, 111, def_tabstop));
+    ASSERT_EQ (10000,
+	       cpp_display_column_to_byte_column (NULL, 0, 10000, def_tabstop));
+    ASSERT_EQ (0,
+	       cpp_display_column_to_byte_column (NULL, 10000, 0, def_tabstop));
+
+    /* Verify that we do not interrupt a UTF-8 sequence.  */
+    ASSERT_EQ (4, cpp_display_column_to_byte_column (str, 15, 1, def_tabstop));
+
+    for (int byte_col = 1; byte_col <= 15; ++byte_col)
+      {
+	const int disp_col
+	  = cpp_byte_column_to_display_column (str, 15, byte_col, def_tabstop);
+	const int byte_col2
+	  = cpp_display_column_to_byte_column (str, 15, disp_col, def_tabstop);
+
+	/* If we ask for the display column in the middle of a UTF-8
+	   sequence, it will return the length of the partial sequence,
+	   matching the behavior of GCC before display column support.
+	   Otherwise check the round trip was successful.  */
+	if (byte_col < 4)
+	  ASSERT_EQ (byte_col, disp_col);
+	else if (byte_col >= 6 && byte_col < 9)
+	  ASSERT_EQ (3 + (byte_col - 5), disp_col);
+	else
+	  ASSERT_EQ (byte_col2, byte_col);
+      }
+  }
+
+}
+
 /* Run all of the selftests within this file.  */
 
 void
@@ -3577,6 +3754,10 @@ input_c_tests ()
   for_each_line_table_case (test_lexer_char_constants);
 
   test_reading_source_line ();
+
+  test_line_offset_overflow ();
+
+  test_cpp_utf8 ();
 }
 
 } // namespace selftest

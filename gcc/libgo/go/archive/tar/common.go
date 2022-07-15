@@ -13,8 +13,8 @@ package tar
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"math"
-	"os"
 	"path"
 	"reflect"
 	"strconv"
@@ -56,7 +56,7 @@ func (he headerError) Error() string {
 const (
 	// Type '0' indicates a regular file.
 	TypeReg  = '0'
-	TypeRegA = '\x00' // For legacy support; use TypeReg instead
+	TypeRegA = '\x00' // Deprecated: Use TypeReg instead.
 
 	// Type '1' to '6' are header-only flags and may not have a data body.
 	TypeLink    = '1' // Hard link
@@ -138,7 +138,10 @@ var basicKeys = map[string]bool{
 // should do so by creating a new Header and copying the fields
 // that they are interested in preserving.
 type Header struct {
-	Typeflag byte // Type of header entry (should be TypeReg for most files)
+	// Typeflag is the type of header entry.
+	// The zero value is automatically promoted to either TypeReg or TypeDir
+	// depending on the presence of a trailing slash in Name.
+	Typeflag byte
 
 	Name     string // Name of file entry
 	Linkname string // Target name of link (valid for TypeLink or TypeSymlink)
@@ -184,7 +187,7 @@ type Header struct {
 	// The key and value should be non-empty UTF-8 strings.
 	//
 	// When Writer.WriteHeader is called, PAX records derived from the
-	// the other fields in Header take precedence over PAXRecords.
+	// other fields in Header take precedence over PAXRecords.
 	PAXRecords map[string]string
 
 	// Format specifies the format of the tar header.
@@ -522,12 +525,12 @@ func (h Header) allowedFormats() (format Format, paxHdrs map[string]string, err 
 	return format, paxHdrs, err
 }
 
-// FileInfo returns an os.FileInfo for the Header.
-func (h *Header) FileInfo() os.FileInfo {
+// FileInfo returns an fs.FileInfo for the Header.
+func (h *Header) FileInfo() fs.FileInfo {
 	return headerFileInfo{h}
 }
 
-// headerFileInfo implements os.FileInfo.
+// headerFileInfo implements fs.FileInfo.
 type headerFileInfo struct {
 	h *Header
 }
@@ -546,57 +549,57 @@ func (fi headerFileInfo) Name() string {
 }
 
 // Mode returns the permission and mode bits for the headerFileInfo.
-func (fi headerFileInfo) Mode() (mode os.FileMode) {
+func (fi headerFileInfo) Mode() (mode fs.FileMode) {
 	// Set file permission bits.
-	mode = os.FileMode(fi.h.Mode).Perm()
+	mode = fs.FileMode(fi.h.Mode).Perm()
 
 	// Set setuid, setgid and sticky bits.
 	if fi.h.Mode&c_ISUID != 0 {
-		mode |= os.ModeSetuid
+		mode |= fs.ModeSetuid
 	}
 	if fi.h.Mode&c_ISGID != 0 {
-		mode |= os.ModeSetgid
+		mode |= fs.ModeSetgid
 	}
 	if fi.h.Mode&c_ISVTX != 0 {
-		mode |= os.ModeSticky
+		mode |= fs.ModeSticky
 	}
 
 	// Set file mode bits; clear perm, setuid, setgid, and sticky bits.
-	switch m := os.FileMode(fi.h.Mode) &^ 07777; m {
+	switch m := fs.FileMode(fi.h.Mode) &^ 07777; m {
 	case c_ISDIR:
-		mode |= os.ModeDir
+		mode |= fs.ModeDir
 	case c_ISFIFO:
-		mode |= os.ModeNamedPipe
+		mode |= fs.ModeNamedPipe
 	case c_ISLNK:
-		mode |= os.ModeSymlink
+		mode |= fs.ModeSymlink
 	case c_ISBLK:
-		mode |= os.ModeDevice
+		mode |= fs.ModeDevice
 	case c_ISCHR:
-		mode |= os.ModeDevice
-		mode |= os.ModeCharDevice
+		mode |= fs.ModeDevice
+		mode |= fs.ModeCharDevice
 	case c_ISSOCK:
-		mode |= os.ModeSocket
+		mode |= fs.ModeSocket
 	}
 
 	switch fi.h.Typeflag {
 	case TypeSymlink:
-		mode |= os.ModeSymlink
+		mode |= fs.ModeSymlink
 	case TypeChar:
-		mode |= os.ModeDevice
-		mode |= os.ModeCharDevice
+		mode |= fs.ModeDevice
+		mode |= fs.ModeCharDevice
 	case TypeBlock:
-		mode |= os.ModeDevice
+		mode |= fs.ModeDevice
 	case TypeDir:
-		mode |= os.ModeDir
+		mode |= fs.ModeDir
 	case TypeFifo:
-		mode |= os.ModeNamedPipe
+		mode |= fs.ModeNamedPipe
 	}
 
 	return mode
 }
 
 // sysStat, if non-nil, populates h from system-dependent fields of fi.
-var sysStat func(fi os.FileInfo, h *Header) error
+var sysStat func(fi fs.FileInfo, h *Header) error
 
 const (
 	// Mode constants from the USTAR spec:
@@ -620,10 +623,10 @@ const (
 // If fi describes a symlink, FileInfoHeader records link as the link target.
 // If fi describes a directory, a slash is appended to the name.
 //
-// Since os.FileInfo's Name method only returns the base name of
+// Since fs.FileInfo's Name method only returns the base name of
 // the file it describes, it may be necessary to modify Header.Name
 // to provide the full path name of the file.
-func FileInfoHeader(fi os.FileInfo, link string) (*Header, error) {
+func FileInfoHeader(fi fs.FileInfo, link string) (*Header, error) {
 	if fi == nil {
 		return nil, errors.New("archive/tar: FileInfo is nil")
 	}
@@ -640,29 +643,29 @@ func FileInfoHeader(fi os.FileInfo, link string) (*Header, error) {
 	case fi.IsDir():
 		h.Typeflag = TypeDir
 		h.Name += "/"
-	case fm&os.ModeSymlink != 0:
+	case fm&fs.ModeSymlink != 0:
 		h.Typeflag = TypeSymlink
 		h.Linkname = link
-	case fm&os.ModeDevice != 0:
-		if fm&os.ModeCharDevice != 0 {
+	case fm&fs.ModeDevice != 0:
+		if fm&fs.ModeCharDevice != 0 {
 			h.Typeflag = TypeChar
 		} else {
 			h.Typeflag = TypeBlock
 		}
-	case fm&os.ModeNamedPipe != 0:
+	case fm&fs.ModeNamedPipe != 0:
 		h.Typeflag = TypeFifo
-	case fm&os.ModeSocket != 0:
+	case fm&fs.ModeSocket != 0:
 		return nil, fmt.Errorf("archive/tar: sockets not supported")
 	default:
 		return nil, fmt.Errorf("archive/tar: unknown file mode %v", fm)
 	}
-	if fm&os.ModeSetuid != 0 {
+	if fm&fs.ModeSetuid != 0 {
 		h.Mode |= c_ISUID
 	}
-	if fm&os.ModeSetgid != 0 {
+	if fm&fs.ModeSetgid != 0 {
 		h.Mode |= c_ISGID
 	}
-	if fm&os.ModeSticky != 0 {
+	if fm&fs.ModeSticky != 0 {
 		h.Mode |= c_ISVTX
 	}
 	// If possible, populate additional fields from OS-specific

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2018, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2020, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -33,21 +33,15 @@
 
 --  These declarations are not part of the GNARLI
 
-pragma Polling (Off);
---  Turn off polling, we do not want ATC polling to take place during tasking
---  operations. It causes infinite loops and other problems.
-
 with System.Tasking.Debug;
 with System.Task_Primitives.Operations;
 with System.Tasking.Initialization;
 with System.Tasking.Queuing;
-with System.Parameters;
 
 package body System.Tasking.Utilities is
 
    package STPO renames System.Task_Primitives.Operations;
 
-   use Parameters;
    use Tasking.Debug;
    use Task_Primitives;
    use Task_Primitives.Operations;
@@ -56,8 +50,9 @@ package body System.Tasking.Utilities is
    -- Abort_One_Task --
    --------------------
 
-   --  Similar to Locked_Abort_To_Level (Self_ID, T, 0), but:
-   --    (1) caller should be holding no locks except RTS_Lock when Single_Lock
+   --  Similar to Locked_Abort_To_Level (Self_ID, T, Level_Completed_Task),
+   --  but:
+   --    (1) caller should be holding no locks
    --    (2) may be called for tasks that have not yet been activated
    --    (3) always aborts whole task
 
@@ -72,7 +67,8 @@ package body System.Tasking.Utilities is
          Cancel_Queued_Entry_Calls (T);
 
       elsif T.Common.State /= Terminated then
-         Initialization.Locked_Abort_To_Level (Self_ID, T, 0);
+         Initialization.Locked_Abort_To_Level
+           (Self_ID, T, Level_Completed_Task);
       end if;
 
       Unlock (T);
@@ -123,11 +119,11 @@ package body System.Tasking.Utilities is
       C := All_Tasks_List;
 
       while C /= null loop
-         if C.Pending_ATC_Level > 0 then
+         if C.Pending_ATC_Level > Level_Completed_Task then
             P := C.Common.Parent;
 
             while P /= null loop
-               if P.Pending_ATC_Level = 0 then
+               if P.Pending_ATC_Level = Level_Completed_Task then
                   Abort_One_Task (Self_Id, C);
                   exit;
                end if;
@@ -204,23 +200,24 @@ package body System.Tasking.Utilities is
 
    procedure Exit_One_ATC_Level (Self_ID : Task_Id) is
    begin
+      pragma Assert (Self_ID.ATC_Nesting_Level > Level_No_ATC_Occurring);
+
       Self_ID.ATC_Nesting_Level := Self_ID.ATC_Nesting_Level - 1;
 
       pragma Debug
         (Debug.Trace (Self_ID, "EOAL: exited to ATC level: " &
          ATC_Level'Image (Self_ID.ATC_Nesting_Level), 'A'));
 
-      pragma Assert (Self_ID.ATC_Nesting_Level >= 1);
+      if Self_ID.Pending_ATC_Level < Level_No_Pending_Abort then
 
-      if Self_ID.Pending_ATC_Level < ATC_Level_Infinity then
          if Self_ID.Pending_ATC_Level = Self_ID.ATC_Nesting_Level then
-            Self_ID.Pending_ATC_Level := ATC_Level_Infinity;
+            Self_ID.Pending_ATC_Level := Level_No_Pending_Abort;
             Self_ID.Aborting := False;
          else
             --  Force the next Undefer_Abort to re-raise Abort_Signal
 
             pragma Assert
-             (Self_ID.Pending_ATC_Level < Self_ID.ATC_Nesting_Level);
+              (Self_ID.Pending_ATC_Level < Self_ID.ATC_Nesting_Level);
 
             if Self_ID.Aborting then
                Self_ID.ATC_Hack := True;
@@ -245,11 +242,6 @@ package body System.Tasking.Utilities is
       end if;
 
       Initialization.Defer_Abort (Self_Id);
-
-      if Single_Lock then
-         Lock_RTS;
-      end if;
-
       Write_Lock (Environment_Task);
       Write_Lock (Self_Id);
 
@@ -274,11 +266,6 @@ package body System.Tasking.Utilities is
       pragma Assert (Environment_Task.Common.State /= Master_Completion_Sleep);
 
       Unlock (Environment_Task);
-
-      if Single_Lock then
-         Unlock_RTS;
-      end if;
-
       Initialization.Undefer_Abort (Self_Id);
 
       --  Return True. Actually the return value is junk, since we expect it

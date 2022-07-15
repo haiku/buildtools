@@ -1,5 +1,5 @@
 /* OpenMP directive translation -- generate GCC trees from gfc_code.
-   Copyright (C) 2005-2018 Free Software Foundation, Inc.
+   Copyright (C) 2005-2021 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>
 
 This file is part of GCC.
@@ -38,13 +38,133 @@ along with GCC; see the file COPYING3.  If not see
 #include "gomp-constants.h"
 #include "omp-general.h"
 #include "omp-low.h"
+#include "memmodel.h"  /* For MEMMODEL_ enums.  */
+
 #undef GCC_DIAG_STYLE
 #define GCC_DIAG_STYLE __gcc_tdiag__
 #include "diagnostic-core.h"
 #undef GCC_DIAG_STYLE
 #define GCC_DIAG_STYLE __gcc_gfc__
+#include "attribs.h"
+#include "function.h"
 
 int ompws_flags;
+
+/* True if OpenMP should regard this DECL as being a scalar which has Fortran's
+   allocatable or pointer attribute.  */
+
+bool
+gfc_omp_is_allocatable_or_ptr (const_tree decl)
+{
+  return (DECL_P (decl)
+	  && (GFC_DECL_GET_SCALAR_POINTER (decl)
+	      || GFC_DECL_GET_SCALAR_ALLOCATABLE (decl)));
+}
+
+/* True if the argument is an optional argument; except that false is also
+   returned for arguments with the value attribute (nonpointers) and for
+   assumed-shape variables (decl is a local variable containing arg->data).
+   Note that for 'procedure(), optional' the value false is used as that's
+   always a pointer and no additional indirection is used.
+   Note that pvoid_type_node is for 'type(c_ptr), value' (and c_funloc).  */
+
+static bool
+gfc_omp_is_optional_argument (const_tree decl)
+{
+  return (TREE_CODE (decl) == PARM_DECL
+	  && DECL_LANG_SPECIFIC (decl)
+	  && TREE_CODE (TREE_TYPE (decl)) == POINTER_TYPE
+	  && !VOID_TYPE_P (TREE_TYPE (TREE_TYPE (decl)))
+	  && TREE_CODE (TREE_TYPE (TREE_TYPE (decl))) != FUNCTION_TYPE
+	  && GFC_DECL_OPTIONAL_ARGUMENT (decl));
+}
+
+/* Check whether this DECL belongs to a Fortran optional argument.
+   With 'for_present_check' set to false, decls which are optional parameters
+   themselve are returned as tree - or a NULL_TREE otherwise. Those decls are
+   always pointers.  With 'for_present_check' set to true, the decl for checking
+   whether an argument is present is returned; for arguments with value
+   attribute this is the hidden argument and of BOOLEAN_TYPE.  If the decl is
+   unrelated to optional arguments, NULL_TREE is returned.  */
+
+tree
+gfc_omp_check_optional_argument (tree decl, bool for_present_check)
+{
+  if (!for_present_check)
+    return gfc_omp_is_optional_argument (decl) ? decl : NULL_TREE;
+
+  if (!DECL_LANG_SPECIFIC (decl))
+    return NULL_TREE;
+
+  tree orig_decl = decl;
+
+  /* For assumed-shape arrays, a local decl with arg->data is used.  */
+  if (TREE_CODE (decl) != PARM_DECL
+      && (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (decl))
+	  || GFC_ARRAY_TYPE_P (TREE_TYPE (decl))))
+    decl = GFC_DECL_SAVED_DESCRIPTOR (decl);
+
+  if (decl == NULL_TREE
+      || TREE_CODE (decl) != PARM_DECL
+      || !DECL_LANG_SPECIFIC (decl)
+      || !GFC_DECL_OPTIONAL_ARGUMENT (decl))
+    return NULL_TREE;
+
+   /* Scalars with VALUE attribute which are passed by value use a hidden
+      argument to denote the present status.  They are passed as nonpointer type
+      with one exception: 'type(c_ptr), value' as 'void*'.  */
+   /* Cf. trans-expr.c's gfc_conv_expr_present.  */
+   if (TREE_CODE (TREE_TYPE (decl)) != POINTER_TYPE
+       || VOID_TYPE_P (TREE_TYPE (TREE_TYPE (decl))))
+    {
+      char name[GFC_MAX_SYMBOL_LEN + 2];
+      tree tree_name;
+
+      name[0] = '_';
+      strcpy (&name[1], IDENTIFIER_POINTER (DECL_NAME (decl)));
+      tree_name = get_identifier (name);
+
+      /* Walk function argument list to find the hidden arg.  */
+      decl = DECL_ARGUMENTS (DECL_CONTEXT (decl));
+      for ( ; decl != NULL_TREE; decl = TREE_CHAIN (decl))
+	if (DECL_NAME (decl) == tree_name
+	    && DECL_ARTIFICIAL (decl))
+	  break;
+
+      gcc_assert (decl);
+      return decl;
+    }
+
+  return fold_build2_loc (input_location, NE_EXPR, boolean_type_node,
+			  orig_decl, null_pointer_node);
+}
+
+
+/* Returns tree with NULL if it is not an array descriptor and with the tree to
+   access the 'data' component otherwise.  With type_only = true, it returns the
+   TREE_TYPE without creating a new tree.  */
+
+tree
+gfc_omp_array_data (tree decl, bool type_only)
+{
+  tree type = TREE_TYPE (decl);
+
+  if (POINTER_TYPE_P (type))
+    type = TREE_TYPE (type);
+
+  if (!GFC_DESCRIPTOR_TYPE_P (type))
+    return NULL_TREE;
+
+  if (type_only)
+    return GFC_TYPE_ARRAY_DATAPTR_TYPE (type);
+
+  if (POINTER_TYPE_P (TREE_TYPE (decl)))
+    decl = build_fold_indirect_ref (decl);
+
+  decl = gfc_conv_descriptor_data_get (decl);
+  STRIP_NOPS (decl);
+  return decl;
+}
 
 /* True if OpenMP should privatize what this DECL points to rather
    than the DECL itself.  */
@@ -58,8 +178,15 @@ gfc_omp_privatize_by_reference (const_tree decl)
       && (!DECL_ARTIFICIAL (decl) || TREE_CODE (decl) == PARM_DECL))
     return true;
 
+  if (TREE_CODE (type) == POINTER_TYPE
+      && gfc_omp_is_optional_argument (decl))
+    return true;
+
   if (TREE_CODE (type) == POINTER_TYPE)
     {
+      while (TREE_CODE (decl) == COMPONENT_REF)
+	decl = TREE_OPERAND (decl, 1);
+
       /* Array POINTER/ALLOCATABLE have aggregate types, all user variables
 	 that have POINTER_TYPE type and aren't scalar pointers, scalar
 	 allocatables, Cray pointees or C pointers are supposed to be
@@ -85,7 +212,8 @@ gfc_omp_privatize_by_reference (const_tree decl)
   return false;
 }
 
-/* True if OpenMP sharing attribute of DECL is predetermined.  */
+/* OMP_CLAUSE_DEFAULT_UNSPECIFIED unless OpenMP sharing attribute
+   of DECL is predetermined.  */
 
 enum omp_clause_default_kind
 gfc_omp_predetermined_sharing (tree decl)
@@ -156,6 +284,28 @@ gfc_omp_predetermined_sharing (tree decl)
   return OMP_CLAUSE_DEFAULT_UNSPECIFIED;
 }
 
+
+/* OMP_CLAUSE_DEFAULTMAP_CATEGORY_UNSPECIFIED unless OpenMP mapping attribute
+   of DECL is predetermined.  */
+
+enum omp_clause_defaultmap_kind
+gfc_omp_predetermined_mapping (tree decl)
+{
+  if (DECL_ARTIFICIAL (decl)
+      && ! GFC_DECL_RESULT (decl)
+      && ! (DECL_LANG_SPECIFIC (decl)
+	    && GFC_DECL_SAVED_DESCRIPTOR (decl)))
+    return OMP_CLAUSE_DEFAULTMAP_TO;
+
+  /* These are either array or derived parameters, or vtables.  */
+  if (VAR_P (decl) && TREE_READONLY (decl)
+      && (TREE_STATIC (decl) || DECL_EXTERNAL (decl)))
+    return OMP_CLAUSE_DEFAULTMAP_TO;
+
+  return OMP_CLAUSE_DEFAULTMAP_CATEGORY_UNSPECIFIED;
+}
+
+
 /* Return decl that should be used when reporting DEFAULT(NONE)
    diagnostics.  */
 
@@ -184,6 +334,11 @@ gfc_has_alloc_comps (tree type, tree decl)
       else if (GFC_DECL_GET_SCALAR_POINTER (decl))
 	return false;
     }
+
+  if (GFC_DESCRIPTOR_TYPE_P (type)
+      && (GFC_TYPE_ARRAY_AKIND (type) == GFC_ARRAY_POINTER
+	  || GFC_TYPE_ARRAY_AKIND (type) == GFC_ARRAY_POINTER_CONT))
+    return false;
 
   if (GFC_DESCRIPTOR_TYPE_P (type) || GFC_ARRAY_TYPE_P (type))
     type = gfc_get_element_type (type);
@@ -297,10 +452,19 @@ gfc_walk_alloc_comps (tree decl, tree dest, tree var,
 	}
       else
 	{
+	  bool compute_nelts = false;
 	  if (!TYPE_DOMAIN (type)
 	      || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == NULL_TREE
 	      || TYPE_MIN_VALUE (TYPE_DOMAIN (type)) == error_mark_node
 	      || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == error_mark_node)
+	    compute_nelts = true;
+	  else if (VAR_P (TYPE_MAX_VALUE (TYPE_DOMAIN (type))))
+	    {
+	      tree a = DECL_ATTRIBUTES (TYPE_MAX_VALUE (TYPE_DOMAIN (type)));
+	      if (lookup_attribute ("omp dummy var", a))
+		compute_nelts = true;
+	    }
+	  if (compute_nelts)
 	    {
 	      tem = fold_build2 (EXACT_DIV_EXPR, sizetype,
 				 TYPE_SIZE_UNIT (type),
@@ -454,10 +618,23 @@ gfc_omp_clause_default_ctor (tree clause, tree decl, tree outer)
   tree type = TREE_TYPE (decl), size, ptr, cond, then_b, else_b;
   stmtblock_t block, cond_block;
 
-  gcc_assert (OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_PRIVATE
-	      || OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_LASTPRIVATE
-	      || OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_LINEAR
-	      || OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_REDUCTION);
+  switch (OMP_CLAUSE_CODE (clause))
+    {
+    case OMP_CLAUSE__LOOPTEMP_:
+    case OMP_CLAUSE__REDUCTEMP_:
+    case OMP_CLAUSE__CONDTEMP_:
+    case OMP_CLAUSE__SCANTEMP_:
+      return NULL;
+    case OMP_CLAUSE_PRIVATE:
+    case OMP_CLAUSE_LASTPRIVATE:
+    case OMP_CLAUSE_LINEAR:
+    case OMP_CLAUSE_REDUCTION:
+    case OMP_CLAUSE_IN_REDUCTION:
+    case OMP_CLAUSE_TASK_REDUCTION:
+      break;
+    default:
+      gcc_unreachable ();
+    }
 
   if ((! GFC_DESCRIPTOR_TYPE_P (type)
        || GFC_TYPE_ARRAY_AKIND (type) != GFC_ARRAY_ALLOCATABLE)
@@ -527,7 +704,9 @@ gfc_omp_clause_default_ctor (tree clause, tree decl, tree outer)
   then_b = gfc_finish_block (&cond_block);
 
   /* Reduction clause requires allocated ALLOCATABLE.  */
-  if (OMP_CLAUSE_CODE (clause) != OMP_CLAUSE_REDUCTION)
+  if (OMP_CLAUSE_CODE (clause) != OMP_CLAUSE_REDUCTION
+      && OMP_CLAUSE_CODE (clause) != OMP_CLAUSE_IN_REDUCTION
+      && OMP_CLAUSE_CODE (clause) != OMP_CLAUSE_TASK_REDUCTION)
     {
       gfc_init_block (&cond_block);
       if (GFC_DESCRIPTOR_TYPE_P (type))
@@ -548,6 +727,9 @@ gfc_omp_clause_default_ctor (tree clause, tree decl, tree outer)
 			     build3_loc (input_location, COND_EXPR,
 					 void_type_node, cond, then_b,
 					 else_b));
+      /* Avoid -W*uninitialized warnings.  */
+      if (DECL_P (decl))
+	TREE_NO_WARNING (decl) = 1;
     }
   else
     gfc_add_expr_to_block (&block, then_b);
@@ -654,6 +836,9 @@ gfc_omp_clause_copy_ctor (tree clause, tree dest, tree src)
   gfc_add_expr_to_block (&block,
 			 build3_loc (input_location, COND_EXPR,
 				     void_type_node, cond, then_b, else_b));
+  /* Avoid -W*uninitialized warnings.  */
+  if (DECL_P (dest))
+    TREE_NO_WARNING (dest) = 1;
 
   return gfc_finish_block (&block);
 }
@@ -912,11 +1097,20 @@ gfc_omp_clause_linear_ctor (tree clause, tree dest, tree src, tree add)
       && (!GFC_DECL_GET_SCALAR_ALLOCATABLE (OMP_CLAUSE_DECL (clause))
 	  || !POINTER_TYPE_P (type)))
     {
+      bool compute_nelts = false;
       gcc_assert (TREE_CODE (type) == ARRAY_TYPE);
       if (!TYPE_DOMAIN (type)
 	  || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == NULL_TREE
 	  || TYPE_MIN_VALUE (TYPE_DOMAIN (type)) == error_mark_node
 	  || TYPE_MAX_VALUE (TYPE_DOMAIN (type)) == error_mark_node)
+	compute_nelts = true;
+      else if (VAR_P (TYPE_MAX_VALUE (TYPE_DOMAIN (type))))
+	{
+	  tree a = DECL_ATTRIBUTES (TYPE_MAX_VALUE (TYPE_DOMAIN (type)));
+	  if (lookup_attribute ("omp dummy var", a))
+	    compute_nelts = true;
+	}
+      if (compute_nelts)
 	{
 	  nelems = fold_build2 (EXACT_DIV_EXPR, sizetype,
 				TYPE_SIZE_UNIT (type),
@@ -1042,9 +1236,56 @@ gfc_omp_clause_dtor (tree clause, tree decl)
   return tem;
 }
 
+/* Build a conditional expression in BLOCK.  If COND_VAL is not
+   null, then the block THEN_B is executed, otherwise ELSE_VAL
+   is assigned to VAL.  */
+
+static void
+gfc_build_cond_assign (stmtblock_t *block, tree val, tree cond_val,
+		       tree then_b, tree else_val)
+{
+  stmtblock_t cond_block;
+  tree else_b = NULL_TREE;
+  tree val_ty = TREE_TYPE (val);
+
+  if (else_val)
+    {
+      gfc_init_block (&cond_block);
+      gfc_add_modify (&cond_block, val, fold_convert (val_ty, else_val));
+      else_b = gfc_finish_block (&cond_block);
+    }
+  gfc_add_expr_to_block (block,
+			 build3_loc (input_location, COND_EXPR, void_type_node,
+				     cond_val, then_b, else_b));
+}
+
+/* Build a conditional expression in BLOCK, returning a temporary
+   variable containing the result.  If COND_VAL is not null, then
+   THEN_VAL will be assigned to the variable, otherwise ELSE_VAL
+   is assigned.
+ */
+
+static tree
+gfc_build_cond_assign_expr (stmtblock_t *block, tree cond_val,
+			    tree then_val, tree else_val)
+{
+  tree val;
+  tree val_ty = TREE_TYPE (then_val);
+  stmtblock_t cond_block;
+
+  val = create_tmp_var (val_ty);
+
+  gfc_init_block (&cond_block);
+  gfc_add_modify (&cond_block, val, then_val);
+  tree then_b = gfc_finish_block (&cond_block);
+
+  gfc_build_cond_assign (block, val, cond_val, then_b, else_val);
+
+  return val;
+}
 
 void
-gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
+gfc_omp_finish_clause (tree c, gimple_seq *pre_p, bool openacc)
 {
   if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
     return;
@@ -1066,6 +1307,7 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
     }
 
   tree c2 = NULL_TREE, c3 = NULL_TREE, c4 = NULL_TREE;
+  tree present = gfc_omp_check_optional_argument (decl, true);
   if (POINTER_TYPE_P (TREE_TYPE (decl)))
     {
       if (!gfc_omp_privatize_by_reference (decl)
@@ -1075,13 +1317,36 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
 	  && !GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (TREE_TYPE (decl))))
 	return;
       tree orig_decl = decl;
+
       c4 = build_omp_clause (OMP_CLAUSE_LOCATION (c), OMP_CLAUSE_MAP);
       OMP_CLAUSE_SET_MAP_KIND (c4, GOMP_MAP_POINTER);
       OMP_CLAUSE_DECL (c4) = decl;
       OMP_CLAUSE_SIZE (c4) = size_int (0);
       decl = build_fold_indirect_ref (decl);
-      OMP_CLAUSE_DECL (c) = decl;
-      OMP_CLAUSE_SIZE (c) = NULL_TREE;
+      if (present
+	  && (GFC_DECL_GET_SCALAR_POINTER (orig_decl)
+	      || GFC_DECL_GET_SCALAR_ALLOCATABLE (orig_decl)))
+	{
+	  c2 = build_omp_clause (input_location, OMP_CLAUSE_MAP);
+	  OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_POINTER);
+	  OMP_CLAUSE_DECL (c2) = decl;
+	  OMP_CLAUSE_SIZE (c2) = size_int (0);
+
+	  stmtblock_t block;
+	  gfc_start_block (&block);
+	  tree ptr = decl;
+	  ptr = gfc_build_cond_assign_expr (&block, present, decl,
+					    null_pointer_node);
+	  gimplify_and_add (gfc_finish_block (&block), pre_p);
+	  ptr = build_fold_indirect_ref (ptr);
+	  OMP_CLAUSE_DECL (c) = ptr;
+	  OMP_CLAUSE_SIZE (c) = TYPE_SIZE_UNIT (TREE_TYPE (ptr));
+	}
+      else
+	{
+	  OMP_CLAUSE_DECL (c) = decl;
+	  OMP_CLAUSE_SIZE (c) = NULL_TREE;
+	}
       if (TREE_CODE (TREE_TYPE (orig_decl)) == REFERENCE_TYPE
 	  && (GFC_DECL_GET_SCALAR_POINTER (orig_decl)
 	      || GFC_DECL_GET_SCALAR_ALLOCATABLE (orig_decl)))
@@ -1100,16 +1365,49 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
       gfc_start_block (&block);
       tree type = TREE_TYPE (decl);
       tree ptr = gfc_conv_descriptor_data_get (decl);
+
+      /* OpenMP: automatically map pointer targets with the pointer;
+	 hence, always update the descriptor/pointer itself.
+	 NOTE: This also remaps the pointer for allocatable arrays with
+	 'target' attribute which also don't have the 'restrict' qualifier.  */
+      bool always_modifier = false;
+
+      if (!openacc
+	  && !(TYPE_QUALS (TREE_TYPE (ptr)) & TYPE_QUAL_RESTRICT))
+	always_modifier = true;
+
+      if (present)
+	ptr = gfc_build_cond_assign_expr (&block, present, ptr,
+					  null_pointer_node);
       ptr = fold_convert (build_pointer_type (char_type_node), ptr);
       ptr = build_fold_indirect_ref (ptr);
       OMP_CLAUSE_DECL (c) = ptr;
       c2 = build_omp_clause (input_location, OMP_CLAUSE_MAP);
       OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_TO_PSET);
-      OMP_CLAUSE_DECL (c2) = decl;
+      if (present)
+	{
+	  ptr = create_tmp_var (TREE_TYPE (TREE_OPERAND (decl, 0)));
+	  gfc_add_modify (&block, ptr, TREE_OPERAND (decl, 0));
+
+	  OMP_CLAUSE_DECL (c2) = build_fold_indirect_ref (ptr);
+	}
+      else
+	OMP_CLAUSE_DECL (c2) = decl;
       OMP_CLAUSE_SIZE (c2) = TYPE_SIZE_UNIT (type);
       c3 = build_omp_clause (OMP_CLAUSE_LOCATION (c), OMP_CLAUSE_MAP);
-      OMP_CLAUSE_SET_MAP_KIND (c3, GOMP_MAP_POINTER);
-      OMP_CLAUSE_DECL (c3) = gfc_conv_descriptor_data_get (decl);
+      OMP_CLAUSE_SET_MAP_KIND (c3, always_modifier ? GOMP_MAP_ALWAYS_POINTER
+						   : GOMP_MAP_POINTER);
+      if (present)
+	{
+	  ptr = gfc_conv_descriptor_data_get (decl);
+	  ptr = gfc_build_addr_expr (NULL, ptr);
+	  ptr = gfc_build_cond_assign_expr (&block, present,
+					    ptr, null_pointer_node);
+	  ptr = build_fold_indirect_ref (ptr);
+	  OMP_CLAUSE_DECL (c3) = ptr;
+	}
+      else
+	OMP_CLAUSE_DECL (c3) = gfc_conv_descriptor_data_get (decl);
       OMP_CLAUSE_SIZE (c3) = size_int (0);
       tree size = create_tmp_var (gfc_array_index_type);
       tree elemsz = TYPE_SIZE_UNIT (gfc_get_element_type (type));
@@ -1135,10 +1433,32 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
 	  tem = gfc_conv_descriptor_data_get (decl);
 	  tem = fold_convert (pvoid_type_node, tem);
 	  cond = fold_build2_loc (input_location, NE_EXPR,
-				  logical_type_node, tem, null_pointer_node);
+				  boolean_type_node, tem, null_pointer_node);
+	  if (present)
+	    {
+	      cond = fold_build2_loc (input_location, TRUTH_ANDIF_EXPR,
+				      boolean_type_node, present, cond);
+	    }
 	  gfc_add_expr_to_block (&block, build3_loc (input_location, COND_EXPR,
 						     void_type_node, cond,
 						     then_b, else_b));
+	}
+      else if (present)
+	{
+	  stmtblock_t cond_block;
+	  tree then_b;
+
+	  gfc_init_block (&cond_block);
+	  gfc_add_modify (&cond_block, size,
+			  gfc_full_array_size (&cond_block, decl,
+					       GFC_TYPE_ARRAY_RANK (type)));
+	  gfc_add_modify (&cond_block, size,
+			  fold_build2 (MULT_EXPR, gfc_array_index_type,
+				       size, elemsz));
+	  then_b = gfc_finish_block (&cond_block);
+
+	  gfc_build_cond_assign (&block, size, present, then_b,
+				 build_int_cst (gfc_array_index_type, 0));
 	}
       else
 	{
@@ -1158,6 +1478,9 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
     OMP_CLAUSE_SIZE (c)
       = DECL_P (decl) ? DECL_SIZE_UNIT (decl)
 		      : TYPE_SIZE_UNIT (TREE_TYPE (decl));
+  if (gimplify_expr (&OMP_CLAUSE_SIZE (c), pre_p,
+		     NULL, is_gimple_val, fb_rvalue) == GS_ERROR)
+    OMP_CLAUSE_SIZE (c) = size_int (0);
   if (c2)
     {
       OMP_CLAUSE_CHAIN (c2) = OMP_CLAUSE_CHAIN (last);
@@ -1174,7 +1497,6 @@ gfc_omp_finish_clause (tree c, gimple_seq *pre_p)
     {
       OMP_CLAUSE_CHAIN (c4) = OMP_CLAUSE_CHAIN (last);
       OMP_CLAUSE_CHAIN (last) = c4;
-      last = c4;
     }
 }
 
@@ -1197,7 +1519,8 @@ gfc_omp_scalar_p (tree decl)
 	  || GFC_CLASS_TYPE_P (type))
 	return false;
     }
-  if (TYPE_STRING_FLAG (type))
+  if ((TREE_CODE (type) == ARRAY_TYPE || TREE_CODE (type) == INTEGER_TYPE)
+      && TYPE_STRING_FLAG (type))
     return false;
   if (INTEGRAL_TYPE_P (type)
       || SCALAR_FLOAT_TYPE_P (type)
@@ -1389,6 +1712,10 @@ gfc_trans_omp_variable_list (enum omp_clause_code code,
 	    tree node = build_omp_clause (input_location, code);
 	    OMP_CLAUSE_DECL (node) = t;
 	    list = gfc_trans_add_clause (node, list);
+
+	    if (code == OMP_CLAUSE_LASTPRIVATE
+		&& namelist->u.lastprivate_conditional)
+	      OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (node) = 1;
 	  }
       }
   return list;
@@ -1712,20 +2039,40 @@ gfc_trans_omp_array_reduction_or_udr (tree c, gfc_omp_namelist *n, locus where)
 }
 
 static tree
-gfc_trans_omp_reduction_list (gfc_omp_namelist *namelist, tree list,
+gfc_trans_omp_reduction_list (int kind, gfc_omp_namelist *namelist, tree list,
 			      locus where, bool mark_addressable)
 {
+  omp_clause_code clause = OMP_CLAUSE_REDUCTION;
+  switch (kind)
+    {
+    case OMP_LIST_REDUCTION:
+    case OMP_LIST_REDUCTION_INSCAN:
+    case OMP_LIST_REDUCTION_TASK:
+      break;
+    case OMP_LIST_IN_REDUCTION:
+      clause = OMP_CLAUSE_IN_REDUCTION;
+      break;
+    case OMP_LIST_TASK_REDUCTION:
+      clause = OMP_CLAUSE_TASK_REDUCTION;
+      break;
+    default:
+      gcc_unreachable ();
+    }
   for (; namelist != NULL; namelist = namelist->next)
     if (namelist->sym->attr.referenced)
       {
 	tree t = gfc_trans_omp_variable (namelist->sym, false);
 	if (t != error_mark_node)
 	  {
-	    tree node = build_omp_clause (where.lb->location,
-					  OMP_CLAUSE_REDUCTION);
+	    tree node = build_omp_clause (gfc_get_location (&namelist->where),
+					  clause);
 	    OMP_CLAUSE_DECL (node) = t;
 	    if (mark_addressable)
 	      TREE_ADDRESSABLE (t) = 1;
+	    if (kind == OMP_LIST_REDUCTION_INSCAN)
+	      OMP_CLAUSE_REDUCTION_INSCAN (node) = 1;
+	    if (kind == OMP_LIST_REDUCTION_TASK)
+	      OMP_CLAUSE_REDUCTION_TASK (node) = 1;
 	    switch (namelist->u.reduction_op)
 	      {
 	      case OMP_REDUCTION_PLUS:
@@ -1797,9 +2144,141 @@ gfc_convert_expr_to_tree (stmtblock_t *block, gfc_expr *expr)
 
 static vec<tree, va_heap, vl_embed> *doacross_steps;
 
+
+/* Translate an array section or array element.  */
+
+static void
+gfc_trans_omp_array_section (stmtblock_t *block, gfc_omp_namelist *n,
+			     tree decl, bool element, gomp_map_kind ptr_kind,
+			     tree &node, tree &node2, tree &node3, tree &node4)
+{
+  gfc_se se;
+  tree ptr, ptr2;
+  tree elemsz = NULL_TREE;
+
+  gfc_init_se (&se, NULL);
+
+  if (element)
+    {
+      gfc_conv_expr_reference (&se, n->expr);
+      gfc_add_block_to_block (block, &se.pre);
+      ptr = se.expr;
+      OMP_CLAUSE_SIZE (node) = TYPE_SIZE_UNIT (TREE_TYPE (TREE_TYPE (ptr)));
+      elemsz = OMP_CLAUSE_SIZE (node);
+    }
+  else
+    {
+      gfc_conv_expr_descriptor (&se, n->expr);
+      ptr = gfc_conv_array_data (se.expr);
+      tree type = TREE_TYPE (se.expr);
+      gfc_add_block_to_block (block, &se.pre);
+      OMP_CLAUSE_SIZE (node) = gfc_full_array_size (block, se.expr,
+						    GFC_TYPE_ARRAY_RANK (type));
+      elemsz = TYPE_SIZE_UNIT (gfc_get_element_type (type));
+      elemsz = fold_convert (gfc_array_index_type, elemsz);
+      OMP_CLAUSE_SIZE (node) = fold_build2 (MULT_EXPR, gfc_array_index_type,
+					    OMP_CLAUSE_SIZE (node), elemsz);
+    }
+  gcc_assert (se.post.head == NULL_TREE);
+  ptr = fold_convert (build_pointer_type (char_type_node), ptr);
+  OMP_CLAUSE_DECL (node) = build_fold_indirect_ref (ptr);
+  ptr = fold_convert (ptrdiff_type_node, ptr);
+
+  if (POINTER_TYPE_P (TREE_TYPE (decl))
+      && GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (TREE_TYPE (decl)))
+      && ptr_kind == GOMP_MAP_POINTER)
+    {
+      node4 = build_omp_clause (input_location,
+				OMP_CLAUSE_MAP);
+      OMP_CLAUSE_SET_MAP_KIND (node4, GOMP_MAP_POINTER);
+      OMP_CLAUSE_DECL (node4) = decl;
+      OMP_CLAUSE_SIZE (node4) = size_int (0);
+      decl = build_fold_indirect_ref (decl);
+    }
+  else if (ptr_kind == GOMP_MAP_ALWAYS_POINTER
+	   && n->expr->ts.type == BT_CHARACTER
+	   && n->expr->ts.deferred)
+    {
+      gomp_map_kind map_kind;
+      if (GOMP_MAP_COPY_TO_P (OMP_CLAUSE_MAP_KIND (node)))
+	map_kind = GOMP_MAP_TO;
+      else if (OMP_CLAUSE_MAP_KIND (node) == GOMP_MAP_RELEASE
+	       || OMP_CLAUSE_MAP_KIND (node) == GOMP_MAP_DELETE)
+	map_kind = OMP_CLAUSE_MAP_KIND (node);
+      else
+	map_kind = GOMP_MAP_ALLOC;
+      gcc_assert (se.string_length);
+      node4 = build_omp_clause (input_location, OMP_CLAUSE_MAP);
+      OMP_CLAUSE_SET_MAP_KIND (node4, map_kind);
+      OMP_CLAUSE_DECL (node4) = se.string_length;
+      OMP_CLAUSE_SIZE (node4) = TYPE_SIZE_UNIT (gfc_charlen_type_node);
+    }
+  if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (decl)))
+    {
+      tree desc_node;
+      tree type = TREE_TYPE (decl);
+      ptr2 = gfc_conv_descriptor_data_get (decl);
+      desc_node = build_omp_clause (input_location, OMP_CLAUSE_MAP);
+      OMP_CLAUSE_DECL (desc_node) = decl;
+      OMP_CLAUSE_SIZE (desc_node) = TYPE_SIZE_UNIT (type);
+      if (ptr_kind == GOMP_MAP_ALWAYS_POINTER)
+	{
+	  OMP_CLAUSE_SET_MAP_KIND (desc_node, GOMP_MAP_TO);
+	  node2 = node;
+	  node = desc_node;  /* Needs to come first.  */
+	}
+      else
+	{
+	  OMP_CLAUSE_SET_MAP_KIND (desc_node, GOMP_MAP_TO_PSET);
+	  node2 = desc_node;
+	}
+      node3 = build_omp_clause (input_location,
+				OMP_CLAUSE_MAP);
+      OMP_CLAUSE_SET_MAP_KIND (node3, ptr_kind);
+      OMP_CLAUSE_DECL (node3)
+	= gfc_conv_descriptor_data_get (decl);
+      /* This purposely does not include GOMP_MAP_ALWAYS_POINTER.  The extra
+	 cast prevents gimplify.c from recognising it as being part of the
+	 struct – and adding an 'alloc: for the 'desc.data' pointer, which
+	 would break as the 'desc' (the descriptor) is also mapped
+	 (see node4 above).  */
+      if (ptr_kind == GOMP_MAP_ATTACH_DETACH)
+	STRIP_NOPS (OMP_CLAUSE_DECL (node3));
+    }
+  else
+    {
+      if (TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE)
+	{
+	  tree offset;
+	  ptr2 = build_fold_addr_expr (decl);
+	  offset = fold_build2 (MINUS_EXPR, ptrdiff_type_node, ptr,
+				fold_convert (ptrdiff_type_node, ptr2));
+	  offset = build2 (TRUNC_DIV_EXPR, ptrdiff_type_node,
+			   offset, fold_convert (ptrdiff_type_node, elemsz));
+	  offset = build4_loc (input_location, ARRAY_REF,
+			       TREE_TYPE (TREE_TYPE (decl)),
+			       decl, offset, NULL_TREE, NULL_TREE);
+	  OMP_CLAUSE_DECL (node) = offset;
+	}
+      else
+	{
+	  gcc_assert (POINTER_TYPE_P (TREE_TYPE (decl)));
+	  ptr2 = decl;
+	}
+      node3 = build_omp_clause (input_location,
+				OMP_CLAUSE_MAP);
+      OMP_CLAUSE_SET_MAP_KIND (node3, ptr_kind);
+      OMP_CLAUSE_DECL (node3) = decl;
+    }
+  ptr2 = fold_convert (ptrdiff_type_node, ptr2);
+  OMP_CLAUSE_SIZE (node3) = fold_build2 (MINUS_EXPR, ptrdiff_type_node,
+					 ptr, ptr2);
+}
+
 static tree
 gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
-		       locus where, bool declare_simd = false)
+		       locus where, bool declare_simd = false,
+		       bool openacc = false)
 {
   tree omp_clauses = NULL_TREE, chunk_size, c;
   int list, ifc;
@@ -1818,10 +2297,14 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       switch (list)
 	{
 	case OMP_LIST_REDUCTION:
+	case OMP_LIST_REDUCTION_INSCAN:
+	case OMP_LIST_REDUCTION_TASK:
+	case OMP_LIST_IN_REDUCTION:
+	case OMP_LIST_TASK_REDUCTION:
 	  /* An OpenACC async clause indicates the need to set reduction
 	     arguments addressable, to allow asynchronous copy-out.  */
-	  omp_clauses = gfc_trans_omp_reduction_list (n, omp_clauses, where,
-						      clauses->async);
+	  omp_clauses = gfc_trans_omp_reduction_list (list, n, omp_clauses,
+						      where, clauses->async);
 	  break;
 	case OMP_LIST_PRIVATE:
 	  clause_code = OMP_CLAUSE_PRIVATE;
@@ -1848,8 +2331,20 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 	case OMP_LIST_USE_DEVICE_PTR:
 	  clause_code = OMP_CLAUSE_USE_DEVICE_PTR;
 	  goto add_clause;
+	case OMP_LIST_USE_DEVICE_ADDR:
+	  clause_code = OMP_CLAUSE_USE_DEVICE_ADDR;
+	  goto add_clause;
 	case OMP_LIST_IS_DEVICE_PTR:
 	  clause_code = OMP_CLAUSE_IS_DEVICE_PTR;
+	  goto add_clause;
+	case OMP_LIST_NONTEMPORAL:
+	  clause_code = OMP_CLAUSE_NONTEMPORAL;
+	  goto add_clause;
+	case OMP_LIST_SCAN_IN:
+	  clause_code = OMP_CLAUSE_INCLUSIVE;
+	  goto add_clause;
+	case OMP_LIST_SCAN_EX:
+	  clause_code = OMP_CLAUSE_EXCLUSIVE;
 	  goto add_clause;
 
 	add_clause:
@@ -2050,7 +2545,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 	      tree node = build_omp_clause (input_location, OMP_CLAUSE_DEPEND);
 	      if (n->expr == NULL || n->expr->ref->u.ar.type == AR_FULL)
 		{
-		  tree decl = gfc_get_symbol_decl (n->sym);
+		  tree decl = gfc_trans_omp_variable (n->sym, false);
 		  if (gfc_omp_privatize_by_reference (decl))
 		    decl = build_fold_indirect_ref (decl);
 		  if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (decl)))
@@ -2107,31 +2602,186 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 	      if (!n->sym->attr.referenced)
 		continue;
 
+	      bool always_modifier = false;
 	      tree node = build_omp_clause (input_location, OMP_CLAUSE_MAP);
 	      tree node2 = NULL_TREE;
 	      tree node3 = NULL_TREE;
 	      tree node4 = NULL_TREE;
-	      tree decl = gfc_get_symbol_decl (n->sym);
+
+	      /* OpenMP: automatically map pointer targets with the pointer;
+		 hence, always update the descriptor/pointer itself.  */
+	      if (!openacc
+		  && ((n->expr == NULL && n->sym->attr.pointer)
+		      || (n->expr && gfc_expr_attr (n->expr).pointer)))
+		always_modifier = true;
+
+	      switch (n->u.map_op)
+		{
+		case OMP_MAP_ALLOC:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALLOC);
+		  break;
+		case OMP_MAP_IF_PRESENT:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_IF_PRESENT);
+		  break;
+		case OMP_MAP_ATTACH:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ATTACH);
+		  break;
+		case OMP_MAP_TO:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_TO);
+		  break;
+		case OMP_MAP_FROM:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FROM);
+		  break;
+		case OMP_MAP_TOFROM:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_TOFROM);
+		  break;
+		case OMP_MAP_ALWAYS_TO:
+		  always_modifier = true;
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALWAYS_TO);
+		  break;
+		case OMP_MAP_ALWAYS_FROM:
+		  always_modifier = true;
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALWAYS_FROM);
+		  break;
+		case OMP_MAP_ALWAYS_TOFROM:
+		  always_modifier = true;
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALWAYS_TOFROM);
+		  break;
+		case OMP_MAP_RELEASE:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_RELEASE);
+		  break;
+		case OMP_MAP_DELETE:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_DELETE);
+		  break;
+		case OMP_MAP_DETACH:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_DETACH);
+		  break;
+		case OMP_MAP_FORCE_ALLOC:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_ALLOC);
+		  break;
+		case OMP_MAP_FORCE_TO:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_TO);
+		  break;
+		case OMP_MAP_FORCE_FROM:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_FROM);
+		  break;
+		case OMP_MAP_FORCE_TOFROM:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_TOFROM);
+		  break;
+		case OMP_MAP_FORCE_PRESENT:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_PRESENT);
+		  break;
+		case OMP_MAP_FORCE_DEVICEPTR:
+		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_DEVICEPTR);
+		  break;
+		default:
+		  gcc_unreachable ();
+		}
+
+	      tree decl = gfc_trans_omp_variable (n->sym, false);
 	      if (DECL_P (decl))
 		TREE_ADDRESSABLE (decl) = 1;
-	      if (n->expr == NULL || n->expr->ref->u.ar.type == AR_FULL)
+
+	      gfc_ref *lastref = NULL;
+
+	      if (n->expr)
+		for (gfc_ref *ref = n->expr->ref; ref; ref = ref->next)
+		  if (ref->type == REF_COMPONENT || ref->type == REF_ARRAY)
+		    lastref = ref;
+
+	      bool allocatable = false, pointer = false;
+
+	      if (lastref && lastref->type == REF_COMPONENT)
 		{
-		  if (POINTER_TYPE_P (TREE_TYPE (decl))
-		      && (gfc_omp_privatize_by_reference (decl)
-			  || GFC_DECL_GET_SCALAR_POINTER (decl)
-			  || GFC_DECL_GET_SCALAR_ALLOCATABLE (decl)
-			  || GFC_DECL_CRAY_POINTEE (decl)
-			  || GFC_DESCRIPTOR_TYPE_P
-					(TREE_TYPE (TREE_TYPE (decl)))))
+		  gfc_component *c = lastref->u.c.component;
+
+		  if (c->ts.type == BT_CLASS)
+		    {
+		      pointer = CLASS_DATA (c)->attr.class_pointer;
+		      allocatable = CLASS_DATA (c)->attr.allocatable;
+		    }
+		  else
+		    {
+		      pointer = c->attr.pointer;
+		      allocatable = c->attr.allocatable;
+		    }
+		}
+
+	      if (n->expr == NULL
+		  || (n->expr->ref->type == REF_ARRAY
+		      && n->expr->ref->u.ar.type == AR_FULL))
+		{
+		  tree present = gfc_omp_check_optional_argument (decl, true);
+		  if (openacc && n->sym->ts.type == BT_CLASS)
+		    {
+		      tree type = TREE_TYPE (decl);
+		      if (n->sym->attr.optional)
+			sorry ("optional class parameter");
+		      if (POINTER_TYPE_P (type))
+			{
+			  node4 = build_omp_clause (input_location,
+						    OMP_CLAUSE_MAP);
+			  OMP_CLAUSE_SET_MAP_KIND (node4, GOMP_MAP_POINTER);
+			  OMP_CLAUSE_DECL (node4) = decl;
+			  OMP_CLAUSE_SIZE (node4) = size_int (0);
+			  decl = build_fold_indirect_ref (decl);
+			}
+		      tree ptr = gfc_class_data_get (decl);
+		      ptr = build_fold_indirect_ref (ptr);
+		      OMP_CLAUSE_DECL (node) = ptr;
+		      OMP_CLAUSE_SIZE (node) = gfc_class_vtab_size_get (decl);
+		      node2 = build_omp_clause (input_location, OMP_CLAUSE_MAP);
+		      OMP_CLAUSE_SET_MAP_KIND (node2, GOMP_MAP_TO_PSET);
+		      OMP_CLAUSE_DECL (node2) = decl;
+		      OMP_CLAUSE_SIZE (node2) = TYPE_SIZE_UNIT (type);
+		      node3 = build_omp_clause (input_location, OMP_CLAUSE_MAP);
+		      OMP_CLAUSE_SET_MAP_KIND (node3, GOMP_MAP_ATTACH_DETACH);
+		      OMP_CLAUSE_DECL (node3) = gfc_class_data_get (decl);
+		      OMP_CLAUSE_SIZE (node3) = size_int (0);
+		      goto finalize_map_clause;
+		    }
+		  else if (POINTER_TYPE_P (TREE_TYPE (decl))
+			   && (gfc_omp_privatize_by_reference (decl)
+			       || GFC_DECL_GET_SCALAR_POINTER (decl)
+			       || GFC_DECL_GET_SCALAR_ALLOCATABLE (decl)
+			       || GFC_DECL_CRAY_POINTEE (decl)
+			       || GFC_DESCRIPTOR_TYPE_P
+					     (TREE_TYPE (TREE_TYPE (decl)))
+			       || n->sym->ts.type == BT_DERIVED))
 		    {
 		      tree orig_decl = decl;
+
+		      /* For nonallocatable, nonpointer arrays, a temporary
+			 variable is generated, but this one is only defined if
+			 the variable is present; hence, we now set it to NULL
+			 to avoid accessing undefined variables.  We cannot use
+			 a temporary variable here as otherwise the replacement
+			 of the variables in omp-low.c will not work.  */
+		      if (present && GFC_ARRAY_TYPE_P (TREE_TYPE (decl)))
+			{
+			  tree tmp = fold_build2_loc (input_location,
+						      MODIFY_EXPR,
+						      void_type_node, decl,
+						      null_pointer_node);
+			  tree cond = fold_build1_loc (input_location,
+						       TRUTH_NOT_EXPR,
+						       boolean_type_node,
+						       present);
+			  gfc_add_expr_to_block (block,
+						 build3_loc (input_location,
+							     COND_EXPR,
+							     void_type_node,
+							     cond, tmp,
+							     NULL_TREE));
+			}
 		      node4 = build_omp_clause (input_location,
 						OMP_CLAUSE_MAP);
 		      OMP_CLAUSE_SET_MAP_KIND (node4, GOMP_MAP_POINTER);
 		      OMP_CLAUSE_DECL (node4) = decl;
 		      OMP_CLAUSE_SIZE (node4) = size_int (0);
 		      decl = build_fold_indirect_ref (decl);
-		      if (TREE_CODE (TREE_TYPE (orig_decl)) == REFERENCE_TYPE
+		      if ((TREE_CODE (TREE_TYPE (orig_decl)) == REFERENCE_TYPE
+			   || gfc_omp_is_optional_argument (orig_decl))
 			  && (GFC_DECL_GET_SCALAR_POINTER (orig_decl)
 			      || GFC_DECL_GET_SCALAR_ALLOCATABLE (orig_decl)))
 			{
@@ -2147,6 +2797,9 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 		    {
 		      tree type = TREE_TYPE (decl);
 		      tree ptr = gfc_conv_descriptor_data_get (decl);
+		      if (present)
+			ptr = gfc_build_cond_assign_expr (block, present, ptr,
+							  null_pointer_node);
 		      ptr = fold_convert (build_pointer_type (char_type_node),
 					  ptr);
 		      ptr = build_fold_indirect_ref (ptr);
@@ -2158,10 +2811,49 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 		      OMP_CLAUSE_SIZE (node2) = TYPE_SIZE_UNIT (type);
 		      node3 = build_omp_clause (input_location,
 						OMP_CLAUSE_MAP);
-		      OMP_CLAUSE_SET_MAP_KIND (node3, GOMP_MAP_POINTER);
-		      OMP_CLAUSE_DECL (node3)
-			= gfc_conv_descriptor_data_get (decl);
+		      if (present)
+			{
+			  ptr = gfc_conv_descriptor_data_get (decl);
+			  ptr = gfc_build_addr_expr (NULL, ptr);
+			  ptr = gfc_build_cond_assign_expr (block, present, ptr,
+							    null_pointer_node);
+			  ptr = build_fold_indirect_ref (ptr);
+			  OMP_CLAUSE_DECL (node3) = ptr;
+			}
+		      else
+			OMP_CLAUSE_DECL (node3)
+			  = gfc_conv_descriptor_data_get (decl);
 		      OMP_CLAUSE_SIZE (node3) = size_int (0);
+		      if (n->u.map_op == OMP_MAP_ATTACH)
+			{
+			  /* Standalone attach clauses used with arrays with
+			     descriptors must copy the descriptor to the target,
+			     else they won't have anything to perform the
+			     attachment onto (see OpenACC 2.6, "2.6.3. Data
+			     Structures with Pointers").  */
+			  OMP_CLAUSE_SET_MAP_KIND (node3, GOMP_MAP_ATTACH);
+			  /* We don't want to map PTR at all in this case, so
+			     delete its node and shuffle the others down.  */
+			  node = node2;
+			  node2 = node3;
+			  node3 = NULL;
+			  goto finalize_map_clause;
+			}
+		      else if (n->u.map_op == OMP_MAP_DETACH)
+			{
+			  OMP_CLAUSE_SET_MAP_KIND (node3, GOMP_MAP_DETACH);
+			  /* Similarly to above, we don't want to unmap PTR
+			     here.  */
+			  node = node2;
+			  node2 = node3;
+			  node3 = NULL;
+			  goto finalize_map_clause;
+			}
+		      else
+			OMP_CLAUSE_SET_MAP_KIND (node3,
+						 always_modifier
+						 ? GOMP_MAP_ALWAYS_POINTER
+						 : GOMP_MAP_POINTER);
 
 		      /* We have to check for n->sym->attr.dimension because
 			 of scalar coarrays.  */
@@ -2185,8 +2877,13 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 			  tem = gfc_conv_descriptor_data_get (decl);
 			  tem = fold_convert (pvoid_type_node, tem);
 			  cond = fold_build2_loc (input_location, NE_EXPR,
-						  logical_type_node,
+						  boolean_type_node,
 						  tem, null_pointer_node);
+			  if (present)
+			    cond = fold_build2_loc (input_location,
+						    TRUTH_ANDIF_EXPR,
+						    boolean_type_node,
+						    present, cond);
 			  gfc_add_expr_to_block (block,
 						 build3_loc (input_location,
 							     COND_EXPR,
@@ -2196,9 +2893,29 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 			  OMP_CLAUSE_SIZE (node) = size;
 			}
 		      else if (n->sym->attr.dimension)
-			OMP_CLAUSE_SIZE (node)
-			  = gfc_full_array_size (block, decl,
-						 GFC_TYPE_ARRAY_RANK (type));
+			{
+			  stmtblock_t cond_block;
+			  gfc_init_block (&cond_block);
+			  tree size = gfc_full_array_size (&cond_block, decl,
+					GFC_TYPE_ARRAY_RANK (type));
+			  if (present)
+			    {
+			      tree var = gfc_create_var (gfc_array_index_type,
+							 NULL);
+			      gfc_add_modify (&cond_block, var, size);
+			      tree cond_body = gfc_finish_block (&cond_block);
+			      tree cond = build3_loc (input_location, COND_EXPR,
+						      void_type_node, present,
+						      cond_body, NULL_TREE);
+			      gfc_add_expr_to_block (block, cond);
+			      OMP_CLAUSE_SIZE (node) = var;
+			    }
+			  else
+			    {
+			      gfc_add_block_to_block (block, &cond_block);
+			      OMP_CLAUSE_SIZE (node) = size;
+			    }
+			}
 		      if (n->sym->attr.dimension)
 			{
 			  tree elemsz
@@ -2209,136 +2926,271 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 					   OMP_CLAUSE_SIZE (node), elemsz);
 			}
 		    }
+		  else if (present
+			   && TREE_CODE (decl) == INDIRECT_REF
+			   && (TREE_CODE (TREE_OPERAND (decl, 0))
+			       == INDIRECT_REF))
+		    {
+		      /* A single indirectref is handled by the middle end.  */
+		      gcc_assert (!POINTER_TYPE_P (TREE_TYPE (decl)));
+		      decl = TREE_OPERAND (decl, 0);
+		      decl = gfc_build_cond_assign_expr (block, present, decl,
+							 null_pointer_node);
+		      OMP_CLAUSE_DECL (node) = build_fold_indirect_ref (decl);
+		    }
 		  else
 		    OMP_CLAUSE_DECL (node) = decl;
 		}
-	      else
+	      else if (n->expr
+		       && n->expr->expr_type == EXPR_VARIABLE
+		       && n->expr->ref->type == REF_ARRAY
+		       && !n->expr->ref->next)
 		{
-		  tree ptr, ptr2;
+		  /* An array element or array section which is not part of a
+		     derived type, etc.  */
+		  bool element = n->expr->ref->u.ar.type == AR_ELEMENT;
+		  gfc_trans_omp_array_section (block, n, decl, element,
+					       GOMP_MAP_POINTER, node, node2,
+					       node3, node4);
+		}
+	      else if (n->expr
+		       && n->expr->expr_type == EXPR_VARIABLE
+		       && (n->expr->ref->type == REF_COMPONENT
+			   || n->expr->ref->type == REF_ARRAY)
+		       && lastref
+		       && lastref->type == REF_COMPONENT
+		       && lastref->u.c.component->ts.type != BT_CLASS
+		       && lastref->u.c.component->ts.type != BT_DERIVED
+		       && !lastref->u.c.component->attr.dimension)
+		{
+		  /* Derived type access with last component being a scalar.  */
 		  gfc_init_se (&se, NULL);
-		  if (n->expr->ref->u.ar.type == AR_ELEMENT)
-		    {
-		      gfc_conv_expr_reference (&se, n->expr);
-		      gfc_add_block_to_block (block, &se.pre);
-		      ptr = se.expr;
-		      OMP_CLAUSE_SIZE (node)
-			= TYPE_SIZE_UNIT (TREE_TYPE (ptr));
-		    }
-		  else
-		    {
-		      gfc_conv_expr_descriptor (&se, n->expr);
-		      ptr = gfc_conv_array_data (se.expr);
-		      tree type = TREE_TYPE (se.expr);
-		      gfc_add_block_to_block (block, &se.pre);
-		      OMP_CLAUSE_SIZE (node)
-			= gfc_full_array_size (block, se.expr,
-					       GFC_TYPE_ARRAY_RANK (type));
-		      tree elemsz
-			= TYPE_SIZE_UNIT (gfc_get_element_type (type));
-		      elemsz = fold_convert (gfc_array_index_type, elemsz);
-		      OMP_CLAUSE_SIZE (node)
-			= fold_build2 (MULT_EXPR, gfc_array_index_type,
-				       OMP_CLAUSE_SIZE (node), elemsz);
-		    }
-		  gfc_add_block_to_block (block, &se.post);
-		  ptr = fold_convert (build_pointer_type (char_type_node),
-				      ptr);
-		  OMP_CLAUSE_DECL (node) = build_fold_indirect_ref (ptr);
 
-		  if (POINTER_TYPE_P (TREE_TYPE (decl))
-		      && GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (TREE_TYPE (decl))))
+		  gfc_conv_expr (&se, n->expr);
+		  gfc_add_block_to_block (block, &se.pre);
+		  /* For BT_CHARACTER a pointer is returned.  */
+		  OMP_CLAUSE_DECL (node)
+		    = POINTER_TYPE_P (TREE_TYPE (se.expr))
+		      ? build_fold_indirect_ref (se.expr) : se.expr;
+		  gfc_add_block_to_block (block, &se.post);
+		  if (pointer || allocatable)
 		    {
-		      node4 = build_omp_clause (input_location,
-						OMP_CLAUSE_MAP);
-		      OMP_CLAUSE_SET_MAP_KIND (node4, GOMP_MAP_POINTER);
-		      OMP_CLAUSE_DECL (node4) = decl;
-		      OMP_CLAUSE_SIZE (node4) = size_int (0);
-		      decl = build_fold_indirect_ref (decl);
-		    }
-		  ptr = fold_convert (sizetype, ptr);
-		  if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (decl)))
-		    {
-		      tree type = TREE_TYPE (decl);
-		      ptr2 = gfc_conv_descriptor_data_get (decl);
 		      node2 = build_omp_clause (input_location,
 						OMP_CLAUSE_MAP);
-		      OMP_CLAUSE_SET_MAP_KIND (node2, GOMP_MAP_TO_PSET);
-		      OMP_CLAUSE_DECL (node2) = decl;
-		      OMP_CLAUSE_SIZE (node2) = TYPE_SIZE_UNIT (type);
-		      node3 = build_omp_clause (input_location,
-						OMP_CLAUSE_MAP);
-		      OMP_CLAUSE_SET_MAP_KIND (node3, GOMP_MAP_POINTER);
-		      OMP_CLAUSE_DECL (node3)
-			= gfc_conv_descriptor_data_get (decl);
+		      gomp_map_kind kind
+			= (openacc ? GOMP_MAP_ATTACH_DETACH
+				   : GOMP_MAP_ALWAYS_POINTER);
+		      OMP_CLAUSE_SET_MAP_KIND (node2, kind);
+		      OMP_CLAUSE_DECL (node2)
+			= POINTER_TYPE_P (TREE_TYPE (se.expr))
+			  ? se.expr
+			  : gfc_build_addr_expr (NULL, se.expr);
+		      OMP_CLAUSE_SIZE (node2) = size_int (0);
+		      if (!openacc
+			  && n->expr->ts.type == BT_CHARACTER
+			  && n->expr->ts.deferred)
+			{
+			  gcc_assert (se.string_length);
+			  tree tmp
+			    = gfc_get_char_type (n->expr->ts.kind);
+			  OMP_CLAUSE_SIZE (node)
+			    = fold_build2 (MULT_EXPR, size_type_node,
+					   fold_convert (size_type_node,
+					       se.string_length),
+					   TYPE_SIZE_UNIT (tmp));
+			  node3 = build_omp_clause (input_location,
+						    OMP_CLAUSE_MAP);
+			  OMP_CLAUSE_SET_MAP_KIND (node3, GOMP_MAP_TO);
+			  OMP_CLAUSE_DECL (node3) = se.string_length;
+			  OMP_CLAUSE_SIZE (node3)
+			    = TYPE_SIZE_UNIT (gfc_charlen_type_node);
+			}
 		    }
-		  else
+		}
+	      else if (n->expr
+		       && n->expr->expr_type == EXPR_VARIABLE
+		       && (n->expr->ref->type == REF_COMPONENT
+			   || n->expr->ref->type == REF_ARRAY))
+		{
+		  gfc_init_se (&se, NULL);
+		  se.expr = gfc_maybe_dereference_var (n->sym, decl);
+
+		  for (gfc_ref *ref = n->expr->ref; ref; ref = ref->next)
 		    {
-		      if (TREE_CODE (TREE_TYPE (decl)) == ARRAY_TYPE)
-			ptr2 = build_fold_addr_expr (decl);
+		      if (ref->type == REF_COMPONENT)
+			{
+			  if (ref->u.c.sym->attr.extension)
+			    conv_parent_component_references (&se, ref);
+
+			  gfc_conv_component_ref (&se, ref);
+			}
+		      else if (ref->type == REF_ARRAY)
+			{
+			  if (ref->u.ar.type == AR_ELEMENT && ref->next)
+			    gfc_conv_array_ref (&se, &ref->u.ar, n->expr,
+						&n->expr->where);
+			  else
+			    gcc_assert (!ref->next);
+			}
+		      else
+			sorry ("unhandled expression type");
+		    }
+
+		  tree inner = se.expr;
+
+		  /* Last component is a derived type or class pointer.  */
+		  if (lastref->type == REF_COMPONENT
+		      && (lastref->u.c.component->ts.type == BT_DERIVED
+			  || lastref->u.c.component->ts.type == BT_CLASS))
+		    {
+		      if (pointer || (openacc && allocatable))
+			{
+			  tree data, size;
+
+			  if (lastref->u.c.component->ts.type == BT_CLASS)
+			    {
+			      data = gfc_class_data_get (inner);
+			      gcc_assert (POINTER_TYPE_P (TREE_TYPE (data)));
+			      data = build_fold_indirect_ref (data);
+			      size = gfc_class_vtab_size_get (inner);
+			    }
+			  else  /* BT_DERIVED.  */
+			    {
+			      data = inner;
+			      size = TYPE_SIZE_UNIT (TREE_TYPE (inner));
+			    }
+
+			  OMP_CLAUSE_DECL (node) = data;
+			  OMP_CLAUSE_SIZE (node) = size;
+			  node2 = build_omp_clause (input_location,
+						    OMP_CLAUSE_MAP);
+			  OMP_CLAUSE_SET_MAP_KIND (node2,
+						   openacc
+						   ? GOMP_MAP_ATTACH_DETACH
+						   : GOMP_MAP_ALWAYS_POINTER);
+			  OMP_CLAUSE_DECL (node2) = build_fold_addr_expr (data);
+			  OMP_CLAUSE_SIZE (node2) = size_int (0);
+			}
 		      else
 			{
-			  gcc_assert (POINTER_TYPE_P (TREE_TYPE (decl)));
-			  ptr2 = decl;
+			  OMP_CLAUSE_DECL (node) = inner;
+			  OMP_CLAUSE_SIZE (node)
+			    = TYPE_SIZE_UNIT (TREE_TYPE (inner));
 			}
-		      node3 = build_omp_clause (input_location,
-						OMP_CLAUSE_MAP);
-		      OMP_CLAUSE_SET_MAP_KIND (node3, GOMP_MAP_POINTER);
-		      OMP_CLAUSE_DECL (node3) = decl;
 		    }
-		  ptr2 = fold_convert (sizetype, ptr2);
-		  OMP_CLAUSE_SIZE (node3)
-		    = fold_build2 (MINUS_EXPR, sizetype, ptr, ptr2);
+		  else if (lastref->type == REF_ARRAY
+			   && lastref->u.ar.type == AR_FULL)
+		    {
+		      /* Just pass the (auto-dereferenced) decl through for
+			 bare attach and detach clauses.  */
+		      if (n->u.map_op == OMP_MAP_ATTACH
+			  || n->u.map_op == OMP_MAP_DETACH)
+			{
+			  OMP_CLAUSE_DECL (node) = inner;
+			  OMP_CLAUSE_SIZE (node) = size_zero_node;
+			  goto finalize_map_clause;
+			}
+
+		      if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (inner)))
+			{
+			  gomp_map_kind map_kind;
+			  tree desc_node;
+			  tree type = TREE_TYPE (inner);
+			  tree ptr = gfc_conv_descriptor_data_get (inner);
+			  ptr = build_fold_indirect_ref (ptr);
+			  OMP_CLAUSE_DECL (node) = ptr;
+			  int rank = GFC_TYPE_ARRAY_RANK (type);
+			  OMP_CLAUSE_SIZE (node)
+			    = gfc_full_array_size (block, inner, rank);
+			  tree elemsz
+			    = TYPE_SIZE_UNIT (gfc_get_element_type (type));
+			  if (GOMP_MAP_COPY_TO_P (OMP_CLAUSE_MAP_KIND (node)))
+			    map_kind = GOMP_MAP_TO;
+			  else if (n->u.map_op == OMP_MAP_RELEASE
+				   || n->u.map_op == OMP_MAP_DELETE)
+			    map_kind = OMP_CLAUSE_MAP_KIND (node);
+			  else
+			    map_kind = GOMP_MAP_ALLOC;
+			  if (!openacc
+			      && n->expr->ts.type == BT_CHARACTER
+			      && n->expr->ts.deferred)
+			    {
+			      gcc_assert (se.string_length);
+			      tree len = fold_convert (size_type_node,
+						       se.string_length);
+			      elemsz = gfc_get_char_type (n->expr->ts.kind);
+			      elemsz = TYPE_SIZE_UNIT (elemsz);
+			      elemsz = fold_build2 (MULT_EXPR, size_type_node,
+						    len, elemsz);
+			      node4 = build_omp_clause (input_location,
+							OMP_CLAUSE_MAP);
+			      OMP_CLAUSE_SET_MAP_KIND (node4, map_kind);
+			      OMP_CLAUSE_DECL (node4) = se.string_length;
+			      OMP_CLAUSE_SIZE (node4)
+				= TYPE_SIZE_UNIT (gfc_charlen_type_node);
+			    }
+			  elemsz = fold_convert (gfc_array_index_type, elemsz);
+			  OMP_CLAUSE_SIZE (node)
+			    = fold_build2 (MULT_EXPR, gfc_array_index_type,
+					   OMP_CLAUSE_SIZE (node), elemsz);
+			  desc_node = build_omp_clause (input_location,
+							OMP_CLAUSE_MAP);
+			  if (openacc)
+			    OMP_CLAUSE_SET_MAP_KIND (desc_node,
+						     GOMP_MAP_TO_PSET);
+			  else
+			    OMP_CLAUSE_SET_MAP_KIND (desc_node, map_kind);
+			  OMP_CLAUSE_DECL (desc_node) = inner;
+			  OMP_CLAUSE_SIZE (desc_node) = TYPE_SIZE_UNIT (type);
+			  if (openacc)
+			    node2 = desc_node;
+			  else
+			    {
+			      node2 = node;
+			      node = desc_node;  /* Put first.  */
+			    }
+			  node3 = build_omp_clause (input_location,
+						    OMP_CLAUSE_MAP);
+			  OMP_CLAUSE_SET_MAP_KIND (node3,
+						   openacc
+						   ? GOMP_MAP_ATTACH_DETACH
+						   : GOMP_MAP_ALWAYS_POINTER);
+			  OMP_CLAUSE_DECL (node3)
+			    = gfc_conv_descriptor_data_get (inner);
+			  /* Similar to gfc_trans_omp_array_section (details
+			     there), we add/keep the cast for OpenMP to prevent
+			     that an 'alloc:' gets added for node3 ('desc.data')
+			     as that is part of the whole descriptor (node3).
+			     TODO: Remove once the ME handles this properly.  */
+			  if (!openacc)
+			    OMP_CLAUSE_DECL (node3)
+				= fold_convert (TREE_TYPE (TREE_OPERAND(ptr, 0)),
+						OMP_CLAUSE_DECL (node3));
+			  else
+			    STRIP_NOPS (OMP_CLAUSE_DECL (node3));
+			  OMP_CLAUSE_SIZE (node3) = size_int (0);
+			}
+		      else
+			OMP_CLAUSE_DECL (node) = inner;
+		    }
+		  else if (lastref->type == REF_ARRAY)
+		    {
+		      /* An array element or section.  */
+		      bool element = lastref->u.ar.type == AR_ELEMENT;
+		      gomp_map_kind kind = (openacc ? GOMP_MAP_ATTACH_DETACH
+						    : GOMP_MAP_ALWAYS_POINTER);
+		      gfc_trans_omp_array_section (block, n, inner, element,
+						   kind, node, node2, node3,
+						   node4);
+		    }
+		  else
+		    gcc_unreachable ();
 		}
-	      switch (n->u.map_op)
-		{
-		case OMP_MAP_ALLOC:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALLOC);
-		  break;
-		case OMP_MAP_TO:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_TO);
-		  break;
-		case OMP_MAP_FROM:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FROM);
-		  break;
-		case OMP_MAP_TOFROM:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_TOFROM);
-		  break;
-		case OMP_MAP_ALWAYS_TO:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALWAYS_TO);
-		  break;
-		case OMP_MAP_ALWAYS_FROM:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALWAYS_FROM);
-		  break;
-		case OMP_MAP_ALWAYS_TOFROM:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_ALWAYS_TOFROM);
-		  break;
-		case OMP_MAP_RELEASE:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_RELEASE);
-		  break;
-		case OMP_MAP_DELETE:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_DELETE);
-		  break;
-		case OMP_MAP_FORCE_ALLOC:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_ALLOC);
-		  break;
-		case OMP_MAP_FORCE_TO:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_TO);
-		  break;
-		case OMP_MAP_FORCE_FROM:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_FROM);
-		  break;
-		case OMP_MAP_FORCE_TOFROM:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_TOFROM);
-		  break;
-		case OMP_MAP_FORCE_PRESENT:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_PRESENT);
-		  break;
-		case OMP_MAP_FORCE_DEVICEPTR:
-		  OMP_CLAUSE_SET_MAP_KIND (node, GOMP_MAP_FORCE_DEVICEPTR);
-		  break;
-		default:
-		  gcc_unreachable ();
-		}
+	      else
+		sorry ("unhandled expression");
+
+	      finalize_map_clause:
+
 	      omp_clauses = gfc_trans_add_clause (node, omp_clauses);
 	      if (node2)
 		omp_clauses = gfc_trans_add_clause (node2, omp_clauses);
@@ -2373,9 +3225,13 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 	      tree node = build_omp_clause (input_location, clause_code);
 	      if (n->expr == NULL || n->expr->ref->u.ar.type == AR_FULL)
 		{
-		  tree decl = gfc_get_symbol_decl (n->sym);
+		  tree decl = gfc_trans_omp_variable (n->sym, false);
 		  if (gfc_omp_privatize_by_reference (decl))
-		    decl = build_fold_indirect_ref (decl);
+		    {
+		      if (gfc_omp_is_allocatable_or_ptr (decl))
+			decl = build_fold_indirect_ref (decl);
+		      decl = build_fold_indirect_ref (decl);
+		    }
 		  else if (DECL_P (decl))
 		    TREE_ADDRESSABLE (decl) = 1;
 		  if (GFC_DESCRIPTOR_TYPE_P (TREE_TYPE (decl)))
@@ -2397,7 +3253,12 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 				       OMP_CLAUSE_SIZE (node), elemsz);
 		    }
 		  else
-		    OMP_CLAUSE_DECL (node) = decl;
+		    {
+		      OMP_CLAUSE_DECL (node) = decl;
+		      if (gfc_omp_is_allocatable_or_ptr (decl))
+			OMP_CLAUSE_SIZE (node)
+				= TYPE_SIZE_UNIT (TREE_TYPE (TREE_TYPE (decl)));
+		    }
 		}
 	      else
 		{
@@ -2450,7 +3311,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       if_var = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_IF);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_IF);
       OMP_CLAUSE_IF_MODIFIER (c) = ERROR_MARK;
       OMP_CLAUSE_IF_EXPR (c) = if_var;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
@@ -2466,11 +3327,17 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 	if_var = gfc_evaluate_now (se.expr, block);
 	gfc_add_block_to_block (block, &se.post);
 
-	c = build_omp_clause (where.lb->location, OMP_CLAUSE_IF);
+	c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_IF);
 	switch (ifc)
 	  {
+	  case OMP_IF_CANCEL:
+	    OMP_CLAUSE_IF_MODIFIER (c) = VOID_CST;
+	    break;
 	  case OMP_IF_PARALLEL:
 	    OMP_CLAUSE_IF_MODIFIER (c) = OMP_PARALLEL;
+	    break;
+	  case OMP_IF_SIMD:
+	    OMP_CLAUSE_IF_MODIFIER (c) = OMP_SIMD;
 	    break;
 	  case OMP_IF_TASK:
 	    OMP_CLAUSE_IF_MODIFIER (c) = OMP_TASK;
@@ -2510,7 +3377,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       final_var = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_FINAL);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_FINAL);
       OMP_CLAUSE_FINAL_EXPR (c) = final_var;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2525,7 +3392,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       num_threads = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NUM_THREADS);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NUM_THREADS);
       OMP_CLAUSE_NUM_THREADS_EXPR (c) = num_threads;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2542,7 +3409,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 
   if (clauses->sched_kind != OMP_SCHED_NONE)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_SCHEDULE);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_SCHEDULE);
       OMP_CLAUSE_SCHEDULE_CHUNK_EXPR (c) = chunk_size;
       switch (clauses->sched_kind)
 	{
@@ -2579,7 +3446,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 
   if (clauses->default_sharing != OMP_DEFAULT_UNKNOWN)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_DEFAULT);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_DEFAULT);
       switch (clauses->default_sharing)
 	{
 	case OMP_DEFAULT_NONE:
@@ -2605,34 +3472,40 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 
   if (clauses->nowait)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NOWAIT);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NOWAIT);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
   if (clauses->ordered)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_ORDERED);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_ORDERED);
       OMP_CLAUSE_ORDERED_EXPR (c)
 	= clauses->orderedc ? build_int_cst (integer_type_node,
 					     clauses->orderedc) : NULL_TREE;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
+  if (clauses->order_concurrent)
+    {
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_ORDER);
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+    }
+
   if (clauses->untied)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_UNTIED);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_UNTIED);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
   if (clauses->mergeable)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_MERGEABLE);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_MERGEABLE);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
   if (clauses->collapse)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_COLLAPSE);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_COLLAPSE);
       OMP_CLAUSE_COLLAPSE_EXPR (c)
 	= build_int_cst (integer_type_node, clauses->collapse);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
@@ -2640,13 +3513,13 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 
   if (clauses->inbranch)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_INBRANCH);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_INBRANCH);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
   if (clauses->notinbranch)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NOTINBRANCH);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NOTINBRANCH);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
@@ -2655,26 +3528,26 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
     case OMP_CANCEL_UNKNOWN:
       break;
     case OMP_CANCEL_PARALLEL:
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_PARALLEL);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_PARALLEL);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
       break;
     case OMP_CANCEL_SECTIONS:
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_SECTIONS);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_SECTIONS);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
       break;
     case OMP_CANCEL_DO:
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_FOR);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_FOR);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
       break;
     case OMP_CANCEL_TASKGROUP:
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_TASKGROUP);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_TASKGROUP);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
       break;
     }
 
   if (clauses->proc_bind != OMP_PROC_BIND_UNKNOWN)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_PROC_BIND);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_PROC_BIND);
       switch (clauses->proc_bind)
 	{
 	case OMP_PROC_BIND_MASTER:
@@ -2702,7 +3575,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       safelen_var = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_SAFELEN);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_SAFELEN);
       OMP_CLAUSE_SAFELEN_EXPR (c) = safelen_var;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2711,7 +3584,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
     {
       if (declare_simd)
 	{
-	  c = build_omp_clause (where.lb->location, OMP_CLAUSE_SIMDLEN);
+	  c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_SIMDLEN);
 	  OMP_CLAUSE_SIMDLEN_EXPR (c)
 	    = gfc_conv_constant_to_tree (clauses->simdlen_expr);
 	  omp_clauses = gfc_trans_add_clause (c, omp_clauses);
@@ -2726,7 +3599,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 	  simdlen_var = gfc_evaluate_now (se.expr, block);
 	  gfc_add_block_to_block (block, &se.post);
 
-	  c = build_omp_clause (where.lb->location, OMP_CLAUSE_SIMDLEN);
+	  c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_SIMDLEN);
 	  OMP_CLAUSE_SIMDLEN_EXPR (c) = simdlen_var;
 	  omp_clauses = gfc_trans_add_clause (c, omp_clauses);
 	}
@@ -2742,7 +3615,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       num_teams = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NUM_TEAMS);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NUM_TEAMS);
       OMP_CLAUSE_NUM_TEAMS_EXPR (c) = num_teams;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2757,7 +3630,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       device = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_DEVICE);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_DEVICE);
       OMP_CLAUSE_DEVICE_ID (c) = device;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2772,7 +3645,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       thread_limit = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_THREAD_LIMIT);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_THREAD_LIMIT);
       OMP_CLAUSE_THREAD_LIMIT_EXPR (c) = thread_limit;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2789,7 +3662,8 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 
   if (clauses->dist_sched_kind != OMP_SCHED_NONE)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_DIST_SCHEDULE);
+      c = build_omp_clause (gfc_get_location (&where),
+			    OMP_CLAUSE_DIST_SCHEDULE);
       OMP_CLAUSE_DIST_SCHEDULE_CHUNK_EXPR (c) = chunk_size;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2804,7 +3678,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       grainsize = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_GRAINSIZE);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_GRAINSIZE);
       OMP_CLAUSE_GRAINSIZE_EXPR (c) = grainsize;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2819,7 +3693,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       num_tasks = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NUM_TASKS);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NUM_TASKS);
       OMP_CLAUSE_NUM_TASKS_EXPR (c) = num_tasks;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2834,8 +3708,24 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       priority = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_PRIORITY);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_PRIORITY);
       OMP_CLAUSE_PRIORITY_EXPR (c) = priority;
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+    }
+
+  if (clauses->detach)
+    {
+      tree detach;
+
+      gfc_init_se (&se, NULL);
+      gfc_conv_expr (&se, clauses->detach);
+      gfc_add_block_to_block (block, &se.pre);
+      detach = se.expr;
+      gfc_add_block_to_block (block, &se.post);
+
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_DETACH);
+      TREE_ADDRESSABLE (detach) = 1;
+      OMP_CLAUSE_DECL (c) = detach;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
@@ -2849,41 +3739,43 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       hint = gfc_evaluate_now (se.expr, block);
       gfc_add_block_to_block (block, &se.post);
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_HINT);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_HINT);
       OMP_CLAUSE_HINT_EXPR (c) = hint;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
   if (clauses->simd)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_SIMD);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_SIMD);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
   if (clauses->threads)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_THREADS);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_THREADS);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
   if (clauses->nogroup)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NOGROUP);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NOGROUP);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
   if (clauses->defaultmap)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_DEFAULTMAP);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_DEFAULTMAP);
+      OMP_CLAUSE_DEFAULTMAP_SET_KIND (c, OMP_CLAUSE_DEFAULTMAP_TOFROM,
+				      OMP_CLAUSE_DEFAULTMAP_CATEGORY_SCALAR);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
   if (clauses->depend_source)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_DEPEND);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_DEPEND);
       OMP_CLAUSE_DEPEND_KIND (c) = OMP_CLAUSE_DEPEND_SOURCE;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
 
   if (clauses->async)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_ASYNC);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_ASYNC);
       if (clauses->async_expr)
 	OMP_CLAUSE_ASYNC_EXPR (c)
 	  = gfc_convert_expr_to_tree (block, clauses->async_expr);
@@ -2893,17 +3785,27 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
     }
   if (clauses->seq)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_SEQ);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_SEQ);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
   if (clauses->par_auto)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_AUTO);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_AUTO);
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+    }
+  if (clauses->if_present)
+    {
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_IF_PRESENT);
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+    }
+  if (clauses->finalize)
+    {
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_FINALIZE);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
   if (clauses->independent)
     {
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_INDEPENDENT);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_INDEPENDENT);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
   if (clauses->wait_list)
@@ -2912,7 +3814,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
 
       for (el = clauses->wait_list; el; el = el->next)
 	{
-	  c = build_omp_clause (where.lb->location, OMP_CLAUSE_WAIT);
+	  c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_WAIT);
 	  OMP_CLAUSE_DECL (c) = gfc_convert_expr_to_tree (block, el->expr);
 	  OMP_CLAUSE_CHAIN (c) = omp_clauses;
 	  omp_clauses = c;
@@ -2922,7 +3824,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
     {
       tree num_gangs_var
 	= gfc_convert_expr_to_tree (block, clauses->num_gangs_expr);
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NUM_GANGS);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NUM_GANGS);
       OMP_CLAUSE_NUM_GANGS_EXPR (c) = num_gangs_var;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2930,7 +3832,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
     {
       tree num_workers_var
 	= gfc_convert_expr_to_tree (block, clauses->num_workers_expr);
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_NUM_WORKERS);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_NUM_WORKERS);
       OMP_CLAUSE_NUM_WORKERS_EXPR (c) = num_workers_var;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2938,7 +3840,7 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
     {
       tree vector_length_var
 	= gfc_convert_expr_to_tree (block, clauses->vector_length_expr);
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_VECTOR_LENGTH);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_VECTOR_LENGTH);
       OMP_CLAUSE_VECTOR_LENGTH_EXPR (c) = vector_length_var;
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
     }
@@ -2952,53 +3854,65 @@ gfc_trans_omp_clauses (stmtblock_t *block, gfc_omp_clauses *clauses,
       for (el = clauses->tile_list; el; el = el->next)
 	vec_safe_push (tvec, gfc_convert_expr_to_tree (block, el->expr));
 
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_TILE);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_TILE);
       OMP_CLAUSE_TILE_LIST (c) = build_tree_list_vec (tvec);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
       tvec->truncate (0);
     }
   if (clauses->vector)
     {
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_VECTOR);
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+
       if (clauses->vector_expr)
 	{
 	  tree vector_var
 	    = gfc_convert_expr_to_tree (block, clauses->vector_expr);
-	  c = build_omp_clause (where.lb->location, OMP_CLAUSE_VECTOR);
 	  OMP_CLAUSE_VECTOR_EXPR (c) = vector_var;
-	  omp_clauses = gfc_trans_add_clause (c, omp_clauses);
-	}
-      else
-	{
-	  c = build_omp_clause (where.lb->location, OMP_CLAUSE_VECTOR);
-	  omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+
+	  /* TODO: We're not capturing location information for individual
+	     clauses.  However, if we have an expression attached to the
+	     clause, that one provides better location information.  */
+	  OMP_CLAUSE_LOCATION (c)
+	    = gfc_get_location (&clauses->vector_expr->where);
 	}
     }
   if (clauses->worker)
     {
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_WORKER);
+      omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+
       if (clauses->worker_expr)
 	{
 	  tree worker_var
 	    = gfc_convert_expr_to_tree (block, clauses->worker_expr);
-	  c = build_omp_clause (where.lb->location, OMP_CLAUSE_WORKER);
 	  OMP_CLAUSE_WORKER_EXPR (c) = worker_var;
-	  omp_clauses = gfc_trans_add_clause (c, omp_clauses);
-	}
-      else
-	{
-	  c = build_omp_clause (where.lb->location, OMP_CLAUSE_WORKER);
-	  omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+
+	  /* TODO: We're not capturing location information for individual
+	     clauses.  However, if we have an expression attached to the
+	     clause, that one provides better location information.  */
+	  OMP_CLAUSE_LOCATION (c)
+	    = gfc_get_location (&clauses->worker_expr->where);
 	}
     }
   if (clauses->gang)
     {
       tree arg;
-      c = build_omp_clause (where.lb->location, OMP_CLAUSE_GANG);
+      c = build_omp_clause (gfc_get_location (&where), OMP_CLAUSE_GANG);
       omp_clauses = gfc_trans_add_clause (c, omp_clauses);
+
       if (clauses->gang_num_expr)
 	{
 	  arg = gfc_convert_expr_to_tree (block, clauses->gang_num_expr);
 	  OMP_CLAUSE_GANG_EXPR (c) = arg;
+
+	  /* TODO: We're not capturing location information for individual
+	     clauses.  However, if we have an expression attached to the
+	     clause, that one provides better location information.  */
+	  OMP_CLAUSE_LOCATION (c)
+	    = gfc_get_location (&clauses->gang_num_expr->where);
 	}
+
       if (clauses->gang_static)
 	{
 	  arg = clauses->gang_static_expr
@@ -3035,8 +3949,9 @@ gfc_trans_omp_code (gfc_code *code, bool force_empty)
   return stmt;
 }
 
-/* Trans OpenACC directives. */
-/* parallel, kernels, data and host_data. */
+/* Translate OpenACC 'parallel', 'kernels', 'serial', 'data', 'host_data'
+   construct. */
+
 static tree
 gfc_trans_oacc_construct (gfc_code *code)
 {
@@ -3052,6 +3967,9 @@ gfc_trans_oacc_construct (gfc_code *code)
       case EXEC_OACC_KERNELS:
 	construct_code = OACC_KERNELS;
 	break;
+      case EXEC_OACC_SERIAL:
+	construct_code = OACC_SERIAL;
+	break;
       case EXEC_OACC_DATA:
 	construct_code = OACC_DATA;
 	break;
@@ -3064,10 +3982,10 @@ gfc_trans_oacc_construct (gfc_code *code)
 
   gfc_start_block (&block);
   oacc_clauses = gfc_trans_omp_clauses (&block, code->ext.omp_clauses,
-					code->loc);
+					code->loc, false, true);
   stmt = gfc_trans_omp_code (code->block->next, true);
-  stmt = build2_loc (input_location, construct_code, void_type_node, stmt,
-		     oacc_clauses);
+  stmt = build2_loc (gfc_get_location (&code->loc), construct_code,
+		     void_type_node, stmt, oacc_clauses);
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
 }
@@ -3100,7 +4018,7 @@ gfc_trans_oacc_executable_directive (gfc_code *code)
 
   gfc_start_block (&block);
   oacc_clauses = gfc_trans_omp_clauses (&block, code->ext.omp_clauses,
-					code->loc);
+					code->loc, false, true);
   stmt = build1_loc (input_location, construct_code, void_type_node, 
 		     oacc_clauses);
   gfc_add_expr_to_block (&block, stmt);
@@ -3151,7 +4069,7 @@ static tree gfc_trans_omp_workshare (gfc_code *, gfc_omp_clauses *);
 static tree
 gfc_trans_omp_atomic (gfc_code *code)
 {
-  gfc_code *atomic_code = code;
+  gfc_code *atomic_code = code->block;
   gfc_se lse;
   gfc_se rse;
   gfc_se vse;
@@ -3162,7 +4080,17 @@ gfc_trans_omp_atomic (gfc_code *code)
   enum tree_code op = ERROR_MARK;
   enum tree_code aop = OMP_ATOMIC;
   bool var_on_left = false;
-  bool seq_cst = (atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_SEQ_CST) != 0;
+  enum omp_memory_order mo;
+  switch (atomic_code->ext.omp_clauses->memorder)
+    {
+    case OMP_MEMORDER_UNSET: mo = OMP_MEMORY_ORDER_UNSPECIFIED; break;
+    case OMP_MEMORDER_ACQ_REL: mo = OMP_MEMORY_ORDER_ACQ_REL; break;
+    case OMP_MEMORDER_ACQUIRE: mo = OMP_MEMORY_ORDER_ACQUIRE; break;
+    case OMP_MEMORDER_RELAXED: mo = OMP_MEMORY_ORDER_RELAXED; break;
+    case OMP_MEMORDER_RELEASE: mo = OMP_MEMORY_ORDER_RELEASE; break;
+    case OMP_MEMORDER_SEQ_CST: mo = OMP_MEMORY_ORDER_SEQ_CST; break;
+    default: gcc_unreachable ();
+    }
 
   code = code->block->next;
   gcc_assert (code->op == EXEC_ASSIGN);
@@ -3174,17 +4102,16 @@ gfc_trans_omp_atomic (gfc_code *code)
   gfc_start_block (&block);
 
   expr2 = code->expr2;
-  if (((atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_MASK)
+  if (((atomic_code->ext.omp_clauses->atomic_op & GFC_OMP_ATOMIC_MASK)
        != GFC_OMP_ATOMIC_WRITE)
-      && (atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_SWAP) == 0
       && expr2->expr_type == EXPR_FUNCTION
       && expr2->value.function.isym
       && expr2->value.function.isym->id == GFC_ISYM_CONVERSION)
     expr2 = expr2->value.function.actual->expr;
 
-  switch (atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_MASK)
+  if ((atomic_code->ext.omp_clauses->atomic_op & GFC_OMP_ATOMIC_MASK)
+      == GFC_OMP_ATOMIC_READ)
     {
-    case GFC_OMP_ATOMIC_READ:
       gfc_conv_expr (&vse, code->expr1);
       gfc_add_block_to_block (&block, &vse.pre);
 
@@ -3194,7 +4121,7 @@ gfc_trans_omp_atomic (gfc_code *code)
       lhsaddr = gfc_build_addr_expr (NULL, lse.expr);
 
       x = build1 (OMP_ATOMIC_READ, type, lhsaddr);
-      OMP_ATOMIC_SEQ_CST (x) = seq_cst;
+      OMP_ATOMIC_MEMORY_ORDER (x) = mo;
       x = convert (TREE_TYPE (vse.expr), x);
       gfc_add_modify (&block, vse.expr, x);
 
@@ -3202,7 +4129,9 @@ gfc_trans_omp_atomic (gfc_code *code)
       gfc_add_block_to_block (&block, &rse.pre);
 
       return gfc_finish_block (&block);
-    case GFC_OMP_ATOMIC_CAPTURE:
+    }
+  if (atomic_code->ext.omp_clauses->capture)
+    {
       aop = OMP_ATOMIC_CAPTURE_NEW;
       if (expr2->expr_type == EXPR_VARIABLE)
 	{
@@ -3221,9 +4150,6 @@ gfc_trans_omp_atomic (gfc_code *code)
 	      && expr2->value.function.isym->id == GFC_ISYM_CONVERSION)
 	    expr2 = expr2->value.function.actual->expr;
 	}
-      break;
-    default:
-      break;
     }
 
   gfc_conv_expr (&lse, code->expr1);
@@ -3231,9 +4157,9 @@ gfc_trans_omp_atomic (gfc_code *code)
   type = TREE_TYPE (lse.expr);
   lhsaddr = gfc_build_addr_expr (NULL, lse.expr);
 
-  if (((atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_MASK)
+  if (((atomic_code->ext.omp_clauses->atomic_op & GFC_OMP_ATOMIC_MASK)
        == GFC_OMP_ATOMIC_WRITE)
-      || (atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_SWAP))
+      || (atomic_code->ext.omp_clauses->atomic_op & GFC_OMP_ATOMIC_SWAP))
     {
       gfc_conv_expr (&rse, expr2);
       gfc_add_block_to_block (&block, &rse.pre);
@@ -3369,9 +4295,9 @@ gfc_trans_omp_atomic (gfc_code *code)
 
   rhs = gfc_evaluate_now (rse.expr, &block);
 
-  if (((atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_MASK)
+  if (((atomic_code->ext.omp_clauses->atomic_op & GFC_OMP_ATOMIC_MASK)
        == GFC_OMP_ATOMIC_WRITE)
-      || (atomic_code->ext.omp_atomic & GFC_OMP_ATOMIC_SWAP))
+      || (atomic_code->ext.omp_clauses->atomic_op & GFC_OMP_ATOMIC_SWAP))
     x = rhs;
   else
     {
@@ -3394,7 +4320,7 @@ gfc_trans_omp_atomic (gfc_code *code)
   if (aop == OMP_ATOMIC)
     {
       x = build2_v (OMP_ATOMIC, lhsaddr, convert (type, x));
-      OMP_ATOMIC_SEQ_CST (x) = seq_cst;
+      OMP_ATOMIC_MEMORY_ORDER (x) = mo;
       gfc_add_expr_to_block (&block, x);
     }
   else
@@ -3417,7 +4343,7 @@ gfc_trans_omp_atomic (gfc_code *code)
 	  gfc_add_block_to_block (&block, &lse.pre);
 	}
       x = build2 (aop, type, lhsaddr, convert (type, x));
-      OMP_ATOMIC_SEQ_CST (x) = seq_cst;
+      OMP_ATOMIC_MEMORY_ORDER (x) = mo;
       x = convert (TREE_TYPE (vse.expr), x);
       gfc_add_modify (&block, vse.expr, x);
     }
@@ -3447,13 +4373,18 @@ gfc_trans_omp_cancel (gfc_code *code)
     default: gcc_unreachable ();
     }
   gfc_start_block (&block);
-  if (code->ext.omp_clauses->if_expr)
+  if (code->ext.omp_clauses->if_expr
+      || code->ext.omp_clauses->if_exprs[OMP_IF_CANCEL])
     {
       gfc_se se;
       tree if_var;
 
+      gcc_assert ((code->ext.omp_clauses->if_expr == NULL)
+		  ^ (code->ext.omp_clauses->if_exprs[OMP_IF_CANCEL] == NULL));
       gfc_init_se (&se, NULL);
-      gfc_conv_expr (&se, code->ext.omp_clauses->if_expr);
+      gfc_conv_expr (&se, code->ext.omp_clauses->if_expr != NULL
+			  ? code->ext.omp_clauses->if_expr
+			  : code->ext.omp_clauses->if_exprs[OMP_IF_CANCEL]);
       gfc_add_block_to_block (&block, &se.pre);
       if_var = gfc_evaluate_now (se.expr, &block);
       gfc_add_block_to_block (&block, &se.post);
@@ -3492,12 +4423,20 @@ gfc_trans_omp_cancellation_point (gfc_code *code)
 static tree
 gfc_trans_omp_critical (gfc_code *code)
 {
-  tree name = NULL_TREE, stmt;
-  if (code->ext.omp_clauses != NULL)
+  stmtblock_t block;
+  tree stmt, name = NULL_TREE;
+  if (code->ext.omp_clauses->critical_name != NULL)
     name = get_identifier (code->ext.omp_clauses->critical_name);
-  stmt = gfc_trans_code (code->block->next);
-  return build3_loc (input_location, OMP_CRITICAL, void_type_node, stmt,
-		     NULL_TREE, name);
+  gfc_start_block (&block);
+  stmt = make_node (OMP_CRITICAL);
+  TREE_TYPE (stmt) = void_type_node;
+  OMP_CRITICAL_BODY (stmt) = gfc_trans_code (code->block->next);
+  OMP_CRITICAL_NAME (stmt) = name;
+  OMP_CRITICAL_CLAUSES (stmt) = gfc_trans_omp_clauses (&block,
+						       code->ext.omp_clauses,
+						       code->loc);
+  gfc_add_expr_to_block (&block, stmt);
+  return gfc_finish_block (&block);
 }
 
 typedef struct dovar_init_d {
@@ -3569,20 +4508,29 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
       if (clauses)
 	{
 	  gfc_omp_namelist *n = NULL;
-	  if (op != EXEC_OMP_DISTRIBUTE)
-	    for (n = clauses->lists[(op == EXEC_OMP_SIMD && collapse == 1)
-				    ? OMP_LIST_LINEAR : OMP_LIST_LASTPRIVATE];
+	  if (op == EXEC_OMP_SIMD && collapse == 1)
+	    for (n = clauses->lists[OMP_LIST_LINEAR];
 		 n != NULL; n = n->next)
 	      if (code->ext.iterator->var->symtree->n.sym == n->sym)
-		break;
-	  if (n != NULL)
-	    dovar_found = 1;
-	  else if (n == NULL && op != EXEC_OMP_SIMD)
+		{
+		  dovar_found = 3;
+		  break;
+		}
+	  if (n == NULL && op != EXEC_OMP_DISTRIBUTE)
+	    for (n = clauses->lists[OMP_LIST_LASTPRIVATE];
+		 n != NULL; n = n->next)
+	      if (code->ext.iterator->var->symtree->n.sym == n->sym)
+		{
+		  dovar_found = 2;
+		  break;
+		}
+	  if (n == NULL)
 	    for (n = clauses->lists[OMP_LIST_PRIVATE]; n != NULL; n = n->next)
 	      if (code->ext.iterator->var->symtree->n.sym == n->sym)
-		break;
-	  if (n != NULL)
-	    dovar_found++;
+		{
+		  dovar_found = 1;
+		  break;
+		}
 	}
 
       /* Evaluate all the expressions in the iterator.  */
@@ -3673,14 +4621,14 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
 	  if (clauses->orderedc)
 	    {
 	      if (doacross_steps == NULL)
-		vec_safe_grow_cleared (doacross_steps, clauses->orderedc);
+		vec_safe_grow_cleared (doacross_steps, clauses->orderedc, true);
 	      (*doacross_steps)[i] = step;
 	    }
 	}
       if (orig_decls)
 	TREE_VEC_ELT (orig_decls, i) = dovar_decl;
 
-      if (dovar_found == 2
+      if (dovar_found == 3
 	  && op == EXEC_OMP_SIMD
 	  && collapse == 1
 	  && !simple)
@@ -3693,27 +4641,26 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
 		break;
 	      }
 	}
-      if (!dovar_found)
+      if (!dovar_found && op == EXEC_OMP_SIMD)
 	{
-	  if (op == EXEC_OMP_SIMD)
+	  if (collapse == 1)
 	    {
-	      if (collapse == 1)
-		{
-		  tmp = build_omp_clause (input_location, OMP_CLAUSE_LINEAR);
-		  OMP_CLAUSE_LINEAR_STEP (tmp) = step;
-		  OMP_CLAUSE_LINEAR_NO_COPYIN (tmp) = 1;
-		}
-	      else
-		tmp = build_omp_clause (input_location, OMP_CLAUSE_LASTPRIVATE);
-	      if (!simple)
-		dovar_found = 2;
+	      tmp = build_omp_clause (input_location, OMP_CLAUSE_LINEAR);
+	      OMP_CLAUSE_LINEAR_STEP (tmp) = step;
+	      OMP_CLAUSE_LINEAR_NO_COPYIN (tmp) = 1;
+	      OMP_CLAUSE_DECL (tmp) = dovar_decl;
+	      omp_clauses = gfc_trans_add_clause (tmp, omp_clauses);
 	    }
-	  else
-	    tmp = build_omp_clause (input_location, OMP_CLAUSE_PRIVATE);
+	  if (!simple)
+	    dovar_found = 3;
+	}
+      else if (!dovar_found && !simple)
+	{
+	  tmp = build_omp_clause (input_location, OMP_CLAUSE_PRIVATE);
 	  OMP_CLAUSE_DECL (tmp) = dovar_decl;
 	  omp_clauses = gfc_trans_add_clause (tmp, omp_clauses);
 	}
-      if (dovar_found == 2)
+      if (dovar_found > 1)
 	{
 	  tree c = NULL;
 
@@ -3767,6 +4714,8 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
 		  {
 		    tree l = build_omp_clause (input_location,
 					       OMP_CLAUSE_LASTPRIVATE);
+		    if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (c))
+		      OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (l) = 1;
 		    OMP_CLAUSE_DECL (l) = dovar_decl;
 		    OMP_CLAUSE_CHAIN (l) = omp_clauses;
 		    OMP_CLAUSE_LASTPRIVATE_STMT (l) = tmp;
@@ -3779,7 +4728,7 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
 	}
       if (!simple)
 	{
-	  if (op != EXEC_OMP_SIMD)
+	  if (op != EXEC_OMP_SIMD || dovar_found == 1)
 	    tmp = build_omp_clause (input_location, OMP_CLAUSE_PRIVATE);
 	  else if (collapse == 1)
 	    {
@@ -3820,7 +4769,31 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
   code->exit_label = NULL_TREE;
 
   /* Main loop body.  */
-  tmp = gfc_trans_omp_code (code->block->next, true);
+  if (clauses->lists[OMP_LIST_REDUCTION_INSCAN])
+    {
+      gcc_assert (code->block->next->next->op == EXEC_OMP_SCAN);
+      gcc_assert (code->block->next->next->next->next == NULL);
+      locus *cloc = &code->block->next->next->loc;
+      location_t loc = gfc_get_location (cloc);
+
+      gfc_code code2 = *code->block->next;
+      code2.next = NULL;
+      tmp = gfc_trans_code (&code2);
+      tmp = build2 (OMP_SCAN, void_type_node, tmp, NULL_TREE);
+      SET_EXPR_LOCATION (tmp, loc);
+      gfc_add_expr_to_block (&body, tmp);
+      input_location = loc;
+      tree c = gfc_trans_omp_clauses (&body,
+				      code->block->next->next->ext.omp_clauses,
+				      *cloc);
+      code2 = *code->block->next->next->next;
+      code2.next = NULL;
+      tmp = gfc_trans_code (&code2);
+      tmp = build2 (OMP_SCAN, void_type_node, tmp, c);
+      SET_EXPR_LOCATION (tmp, loc);
+    }
+  else
+    tmp = gfc_trans_omp_code (code->block->next, true);
   gfc_add_expr_to_block (&body, tmp);
 
   /* Label for cycle statements (if needed).  */
@@ -3857,7 +4830,9 @@ gfc_trans_omp_do (gfc_code *code, gfc_exec_op op, stmtblock_t *pblock,
   return gfc_finish_block (&block);
 }
 
-/* parallel loop and kernels loop. */
+/* Translate combined OpenACC 'parallel loop', 'kernels loop', 'serial loop'
+   construct. */
+
 static tree
 gfc_trans_oacc_combined_directive (gfc_code *code)
 {
@@ -3865,6 +4840,7 @@ gfc_trans_oacc_combined_directive (gfc_code *code)
   gfc_omp_clauses construct_clauses, loop_clauses;
   tree stmt, oacc_clauses = NULL_TREE;
   enum tree_code construct_code;
+  location_t loc = input_location;
 
   switch (code->op)
     {
@@ -3873,6 +4849,9 @@ gfc_trans_oacc_combined_directive (gfc_code *code)
 	break;
       case EXEC_OACC_KERNELS_LOOP:
 	construct_code = OACC_KERNELS;
+	break;
+      case EXEC_OACC_SERIAL_LOOP:
+	construct_code = OACC_SERIAL;
 	break;
       default:
 	gcc_unreachable ();
@@ -3919,28 +4898,48 @@ gfc_trans_oacc_combined_directive (gfc_code *code)
       if (construct_code == OACC_KERNELS)
 	construct_clauses.lists[OMP_LIST_REDUCTION] = NULL;
       oacc_clauses = gfc_trans_omp_clauses (&block, &construct_clauses,
-					    code->loc);
+					    code->loc, false, true);
     }
   if (!loop_clauses.seq)
     pblock = &block;
   else
     pushlevel ();
   stmt = gfc_trans_omp_do (code, EXEC_OACC_LOOP, pblock, &loop_clauses, NULL);
+  protected_set_expr_location (stmt, loc);
   if (TREE_CODE (stmt) != BIND_EXPR)
     stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
   else
     poplevel (0, 0);
-  stmt = build2_loc (input_location, construct_code, void_type_node, stmt,
-		     oacc_clauses);
+  stmt = build2_loc (loc, construct_code, void_type_node, stmt, oacc_clauses);
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
 }
 
 static tree
-gfc_trans_omp_flush (void)
+gfc_trans_omp_flush (gfc_code *code)
 {
-  tree decl = builtin_decl_explicit (BUILT_IN_SYNC_SYNCHRONIZE);
-  return build_call_expr_loc (input_location, decl, 0);
+  tree call;
+  if (!code->ext.omp_clauses
+      || code->ext.omp_clauses->memorder == OMP_MEMORDER_UNSET)
+    {
+      call = builtin_decl_explicit (BUILT_IN_SYNC_SYNCHRONIZE);
+      call = build_call_expr_loc (input_location, call, 0);
+    }
+  else
+    {
+      enum memmodel mo = MEMMODEL_LAST;
+      switch (code->ext.omp_clauses->memorder)
+	{
+	case OMP_MEMORDER_ACQ_REL: mo = MEMMODEL_ACQ_REL; break;
+	case OMP_MEMORDER_RELEASE: mo = MEMMODEL_RELEASE; break;
+	case OMP_MEMORDER_ACQUIRE: mo = MEMMODEL_ACQUIRE; break;
+	default: gcc_unreachable (); break;
+	}
+      call = builtin_decl_explicit (BUILT_IN_ATOMIC_THREAD_FENCE);
+      call = build_call_expr_loc (input_location, call, 1,
+				  build_int_cst (integer_type_node, mo));
+    }
+  return call;
 }
 
 static tree
@@ -4150,7 +5149,7 @@ gfc_split_omp_clauses (gfc_code *code,
 	  clausesa[GFC_OMP_SPLIT_TARGET].if_exprs[OMP_IF_TARGET]
 	    = code->ext.omp_clauses->if_exprs[OMP_IF_TARGET];
 	  /* And this is copied to all.  */
-	  clausesa[GFC_OMP_SPLIT_PARALLEL].if_expr
+	  clausesa[GFC_OMP_SPLIT_TARGET].if_expr
 	    = code->ext.omp_clauses->if_expr;
 	}
       if (mask & GFC_OMP_MASK_TEAMS)
@@ -4177,6 +5176,8 @@ gfc_split_omp_clauses (gfc_code *code,
 	  /* Duplicate collapse.  */
 	  clausesa[GFC_OMP_SPLIT_DISTRIBUTE].collapse
 	    = code->ext.omp_clauses->collapse;
+	  clausesa[GFC_OMP_SPLIT_DISTRIBUTE].order_concurrent
+	    = code->ext.omp_clauses->order_concurrent;
 	}
       if (mask & GFC_OMP_MASK_PARALLEL)
 	{
@@ -4222,6 +5223,8 @@ gfc_split_omp_clauses (gfc_code *code,
 	  /* Duplicate collapse.  */
 	  clausesa[GFC_OMP_SPLIT_DO].collapse
 	    = code->ext.omp_clauses->collapse;
+	  clausesa[GFC_OMP_SPLIT_DO].order_concurrent
+	    = code->ext.omp_clauses->order_concurrent;
 	}
       if (mask & GFC_OMP_MASK_SIMD)
 	{
@@ -4234,6 +5237,13 @@ gfc_split_omp_clauses (gfc_code *code,
 	  /* Duplicate collapse.  */
 	  clausesa[GFC_OMP_SPLIT_SIMD].collapse
 	    = code->ext.omp_clauses->collapse;
+	  clausesa[GFC_OMP_SPLIT_SIMD].if_exprs[OMP_IF_SIMD]
+	    = code->ext.omp_clauses->if_exprs[OMP_IF_SIMD];
+	  clausesa[GFC_OMP_SPLIT_SIMD].order_concurrent
+	    = code->ext.omp_clauses->order_concurrent;
+	  /* And this is copied to all.  */
+	  clausesa[GFC_OMP_SPLIT_SIMD].if_expr
+	    = code->ext.omp_clauses->if_expr;
 	}
       if (mask & GFC_OMP_MASK_TASKLOOP)
 	{
@@ -4310,19 +5320,30 @@ gfc_split_omp_clauses (gfc_code *code,
 	  = code->ext.omp_clauses->lists[OMP_LIST_LASTPRIVATE];
       /* Reduction is allowed on simd, do, parallel and teams.
 	 Duplicate it on all of them, but omit on do if
-	 parallel is present.  */
-      if (mask & GFC_OMP_MASK_TEAMS)
-	clausesa[GFC_OMP_SPLIT_TEAMS].lists[OMP_LIST_REDUCTION]
-	  = code->ext.omp_clauses->lists[OMP_LIST_REDUCTION];
-      if (mask & GFC_OMP_MASK_PARALLEL)
-	clausesa[GFC_OMP_SPLIT_PARALLEL].lists[OMP_LIST_REDUCTION]
-	  = code->ext.omp_clauses->lists[OMP_LIST_REDUCTION];
-      else if (mask & GFC_OMP_MASK_DO)
-	clausesa[GFC_OMP_SPLIT_DO].lists[OMP_LIST_REDUCTION]
-	  = code->ext.omp_clauses->lists[OMP_LIST_REDUCTION];
-      if (mask & GFC_OMP_MASK_SIMD)
-	clausesa[GFC_OMP_SPLIT_SIMD].lists[OMP_LIST_REDUCTION]
-	  = code->ext.omp_clauses->lists[OMP_LIST_REDUCTION];
+	 parallel is present; additionally, inscan applies to do/simd only.  */
+      for (int i = OMP_LIST_REDUCTION; i <= OMP_LIST_REDUCTION_TASK; i++)
+	{
+	  if (mask & GFC_OMP_MASK_TEAMS
+	      && i != OMP_LIST_REDUCTION_INSCAN)
+	    clausesa[GFC_OMP_SPLIT_TEAMS].lists[i]
+	      = code->ext.omp_clauses->lists[i];
+	  if (mask & GFC_OMP_MASK_PARALLEL
+	      && i != OMP_LIST_REDUCTION_INSCAN)
+	    clausesa[GFC_OMP_SPLIT_PARALLEL].lists[i]
+	      = code->ext.omp_clauses->lists[i];
+	  else if (mask & GFC_OMP_MASK_DO)
+	    clausesa[GFC_OMP_SPLIT_DO].lists[i]
+	      = code->ext.omp_clauses->lists[i];
+	  if (mask & GFC_OMP_MASK_SIMD)
+	    clausesa[GFC_OMP_SPLIT_SIMD].lists[i]
+	      = code->ext.omp_clauses->lists[i];
+	}
+      if (mask & GFC_OMP_MASK_TARGET)
+	clausesa[GFC_OMP_SPLIT_TARGET].lists[OMP_LIST_IN_REDUCTION]
+	  = code->ext.omp_clauses->lists[OMP_LIST_IN_REDUCTION];
+      if (mask & GFC_OMP_MASK_TASKLOOP)
+	clausesa[GFC_OMP_SPLIT_TASKLOOP].lists[OMP_LIST_IN_REDUCTION]
+	  = code->ext.omp_clauses->lists[OMP_LIST_IN_REDUCTION];
       /* Linear clause is supported on do and simd,
 	 put it on the innermost one.  */
       clausesa[innermost].lists[OMP_LIST_LINEAR]
@@ -4418,8 +5439,8 @@ gfc_trans_omp_parallel_do (gfc_code *code, stmtblock_t *pblock,
     }
   else if (TREE_CODE (stmt) != BIND_EXPR)
     stmt = build3_v (BIND_EXPR, NULL, stmt, NULL_TREE);
-  stmt = build2_loc (input_location, OMP_PARALLEL, void_type_node, stmt,
-		     omp_clauses);
+  stmt = build2_loc (gfc_get_location (&code->loc), OMP_PARALLEL,
+		     void_type_node, stmt, omp_clauses);
   OMP_PARALLEL_COMBINED (stmt) = 1;
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
@@ -4461,8 +5482,8 @@ gfc_trans_omp_parallel_do_simd (gfc_code *code, stmtblock_t *pblock,
     stmt = build3_v (BIND_EXPR, NULL, stmt, NULL_TREE);
   if (flag_openmp)
     {
-      stmt = build2_loc (input_location, OMP_PARALLEL, void_type_node, stmt,
-			 omp_clauses);
+      stmt = build2_loc (gfc_get_location (&code->loc), OMP_PARALLEL,
+			 void_type_node, stmt, omp_clauses);
       OMP_PARALLEL_COMBINED (stmt) = 1;
     }
   gfc_add_expr_to_block (&block, stmt);
@@ -4488,8 +5509,8 @@ gfc_trans_omp_parallel_sections (gfc_code *code)
     stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
   else
     poplevel (0, 0);
-  stmt = build2_loc (input_location, OMP_PARALLEL, void_type_node, stmt,
-		     omp_clauses);
+  stmt = build2_loc (gfc_get_location (&code->loc), OMP_PARALLEL,
+		     void_type_node, stmt, omp_clauses);
   OMP_PARALLEL_COMBINED (stmt) = 1;
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
@@ -4511,8 +5532,8 @@ gfc_trans_omp_parallel_workshare (gfc_code *code)
   pushlevel ();
   stmt = gfc_trans_omp_workshare (code, &workshare_clauses);
   stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
-  stmt = build2_loc (input_location, OMP_PARALLEL, void_type_node, stmt,
-		     omp_clauses);
+  stmt = build2_loc (gfc_get_location (&code->loc), OMP_PARALLEL,
+		     void_type_node, stmt, omp_clauses);
   OMP_PARALLEL_COMBINED (stmt) = 1;
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
@@ -4524,6 +5545,7 @@ gfc_trans_omp_sections (gfc_code *code, gfc_omp_clauses *clauses)
   stmtblock_t block, body;
   tree omp_clauses, stmt;
   bool has_lastprivate = clauses->lists[OMP_LIST_LASTPRIVATE] != NULL;
+  location_t loc = gfc_get_location (&code->loc);
 
   gfc_start_block (&block);
 
@@ -4544,8 +5566,7 @@ gfc_trans_omp_sections (gfc_code *code, gfc_omp_clauses *clauses)
     }
   stmt = gfc_finish_block (&body);
 
-  stmt = build2_loc (input_location, OMP_SECTIONS, void_type_node, stmt,
-		     omp_clauses);
+  stmt = build2_loc (loc, OMP_SECTIONS, void_type_node, stmt, omp_clauses);
   gfc_add_expr_to_block (&block, stmt);
 
   return gfc_finish_block (&block);
@@ -4556,8 +5577,8 @@ gfc_trans_omp_single (gfc_code *code, gfc_omp_clauses *clauses)
 {
   tree omp_clauses = gfc_trans_omp_clauses (NULL, clauses, code->loc);
   tree stmt = gfc_trans_omp_code (code->block->next, true);
-  stmt = build2_loc (input_location, OMP_SINGLE, void_type_node, stmt,
-		     omp_clauses);
+  stmt = build2_loc (gfc_get_location (&code->loc), OMP_SINGLE, void_type_node,
+		     stmt, omp_clauses);
   return stmt;
 }
 
@@ -4573,8 +5594,8 @@ gfc_trans_omp_task (gfc_code *code)
   pushlevel ();
   stmt = gfc_trans_omp_code (code->block->next, true);
   stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
-  stmt = build2_loc (input_location, OMP_TASK, void_type_node, stmt,
-		     omp_clauses);
+  stmt = build2_loc (gfc_get_location (&code->loc), OMP_TASK, void_type_node,
+		     stmt, omp_clauses);
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
 }
@@ -4582,8 +5603,12 @@ gfc_trans_omp_task (gfc_code *code)
 static tree
 gfc_trans_omp_taskgroup (gfc_code *code)
 {
-  tree stmt = gfc_trans_code (code->block->next);
-  return build1_loc (input_location, OMP_TASKGROUP, void_type_node, stmt);
+  tree body = gfc_trans_code (code->block->next);
+  tree stmt = make_node (OMP_TASKGROUP);
+  TREE_TYPE (stmt) = void_type_node;
+  OMP_TASKGROUP_BODY (stmt) = body;
+  OMP_TASKGROUP_CLAUSES (stmt) = NULL_TREE;
+  return stmt;
 }
 
 static tree
@@ -4684,10 +5709,14 @@ gfc_trans_omp_teams (gfc_code *code, gfc_omp_clauses *clausesa,
       gfc_split_omp_clauses (code, clausesa);
     }
   if (flag_openmp)
-    omp_clauses
-      = chainon (omp_clauses,
-		 gfc_trans_omp_clauses (&block, &clausesa[GFC_OMP_SPLIT_TEAMS],
-					code->loc));
+    {
+      omp_clauses
+	= chainon (omp_clauses,
+		   gfc_trans_omp_clauses (&block,
+					  &clausesa[GFC_OMP_SPLIT_TEAMS],
+					  code->loc));
+      pushlevel ();
+    }
   switch (code->op)
     {
     case EXEC_OMP_TARGET_TEAMS:
@@ -4707,8 +5736,9 @@ gfc_trans_omp_teams (gfc_code *code, gfc_omp_clauses *clausesa,
     }
   if (flag_openmp)
     {
-      stmt = build2_loc (input_location, OMP_TEAMS, void_type_node, stmt,
-			 omp_clauses);
+      stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
+      stmt = build2_loc (gfc_get_location (&code->loc), OMP_TEAMS,
+			 void_type_node, stmt, omp_clauses);
       if (combined)
 	OMP_TEAMS_COMBINED (stmt) = 1;
     }
@@ -4740,9 +5770,10 @@ gfc_trans_omp_target (gfc_code *code)
       {
 	stmtblock_t iblock;
 
+	pushlevel ();
 	gfc_start_block (&iblock);
 	tree inner_clauses
-	  = gfc_trans_omp_clauses (&block, &clausesa[GFC_OMP_SPLIT_PARALLEL],
+	  = gfc_trans_omp_clauses (&iblock, &clausesa[GFC_OMP_SPLIT_PARALLEL],
 				   code->loc);
 	stmt = gfc_trans_omp_code (code->block->next, true);
 	stmt = build2_loc (input_location, OMP_PARALLEL, void_type_node, stmt,
@@ -4756,8 +5787,14 @@ gfc_trans_omp_target (gfc_code *code)
       }
       break;
     case EXEC_OMP_TARGET_PARALLEL_DO:
-    case EXEC_OMP_TARGET_PARALLEL_DO_SIMD:
       stmt = gfc_trans_omp_parallel_do (code, &block, clausesa);
+      if (TREE_CODE (stmt) != BIND_EXPR)
+	stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
+      else
+	poplevel (0, 0);
+      break;
+    case EXEC_OMP_TARGET_PARALLEL_DO_SIMD:
+      stmt = gfc_trans_omp_parallel_do_simd (code, &block, clausesa);
       if (TREE_CODE (stmt) != BIND_EXPR)
 	stmt = build3_v (BIND_EXPR, NULL, stmt, poplevel (1, 0));
       else
@@ -4804,10 +5841,11 @@ gfc_trans_omp_target (gfc_code *code)
     }
   if (flag_openmp)
     {
-      stmt = build2_loc (input_location, OMP_TARGET, void_type_node, stmt,
-			 omp_clauses);
+      stmt = build2_loc (gfc_get_location (&code->loc), OMP_TARGET,
+			 void_type_node, stmt, omp_clauses);
       if (code->op != EXEC_OMP_TARGET)
 	OMP_TARGET_COMBINED (stmt) = 1;
+      cfun->has_omp_target = true;
     }
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
@@ -4865,8 +5903,8 @@ gfc_trans_omp_target_data (gfc_code *code)
   omp_clauses = gfc_trans_omp_clauses (&block, code->ext.omp_clauses,
 				       code->loc);
   stmt = gfc_trans_omp_code (code->block->next, true);
-  stmt = build2_loc (input_location, OMP_TARGET_DATA, void_type_node, stmt,
-		     omp_clauses);
+  stmt = build2_loc (gfc_get_location (&code->loc), OMP_TARGET_DATA,
+		     void_type_node, stmt, omp_clauses);
   gfc_add_expr_to_block (&block, stmt);
   return gfc_finish_block (&block);
 }
@@ -4926,6 +5964,7 @@ gfc_trans_omp_workshare (gfc_code *code, gfc_omp_clauses *clauses)
   bool singleblock_in_progress = false;
   /* True if previous gfc_code in workshare construct is not workshared.  */
   bool prev_singleunit;
+  location_t loc = gfc_get_location (&code->loc);
 
   code = code->block->next;
 
@@ -5016,7 +6055,7 @@ gfc_trans_omp_workshare (gfc_code *code, gfc_omp_clauses *clauses)
 		{
 		  /* Finish single block and add it to pblock.  */
 		  tmp = gfc_finish_block (&singleblock);
-		  tmp = build2_loc (input_location, OMP_SINGLE,
+		  tmp = build2_loc (loc, OMP_SINGLE,
 				    void_type_node, tmp, NULL_TREE);
 		  gfc_add_expr_to_block (pblock, tmp);
 		  /* Add current gfc_code to pblock.  */
@@ -5032,6 +6071,7 @@ gfc_trans_omp_workshare (gfc_code *code, gfc_omp_clauses *clauses)
 		  gfc_init_block (&singleblock);
 		  gfc_add_expr_to_block (&singleblock, res);
 		  singleblock_in_progress = true;
+		  loc = gfc_get_location (&code->loc);
 		}
 	      else
 		/* Add the new statement to the block.  */
@@ -5046,7 +6086,7 @@ gfc_trans_omp_workshare (gfc_code *code, gfc_omp_clauses *clauses)
     {
       /* Finish single block and add it to pblock.  */
       tmp = gfc_finish_block (&singleblock);
-      tmp = build2_loc (input_location, OMP_SINGLE, void_type_node, tmp,
+      tmp = build2_loc (loc, OMP_SINGLE, void_type_node, tmp,
 			clauses->nowait
 			? build_omp_clause (input_location, OMP_CLAUSE_NOWAIT)
 			: NULL_TREE);
@@ -5086,7 +6126,7 @@ gfc_trans_oacc_declare (gfc_code *code)
   gfc_start_block (&block);
 
   oacc_clauses = gfc_trans_omp_clauses (&block, code->ext.oacc_declare->clauses,
-					code->loc);
+					code->loc, false, true);
   stmt = gfc_trans_omp_code (code->block->next, true);
   stmt = build2_loc (input_location, construct_code, void_type_node, stmt,
 		     oacc_clauses);
@@ -5102,9 +6142,11 @@ gfc_trans_oacc_directive (gfc_code *code)
     {
     case EXEC_OACC_PARALLEL_LOOP:
     case EXEC_OACC_KERNELS_LOOP:
+    case EXEC_OACC_SERIAL_LOOP:
       return gfc_trans_oacc_combined_directive (code);
     case EXEC_OACC_PARALLEL:
     case EXEC_OACC_KERNELS:
+    case EXEC_OACC_SERIAL:
     case EXEC_OACC_DATA:
     case EXEC_OACC_HOST_DATA:
       return gfc_trans_oacc_construct (code);
@@ -5155,7 +6197,7 @@ gfc_trans_omp_directive (gfc_code *code)
     case EXEC_OMP_DO_SIMD:
       return gfc_trans_omp_do_simd (code, NULL, NULL, NULL_TREE);
     case EXEC_OMP_FLUSH:
-      return gfc_trans_omp_flush ();
+      return gfc_trans_omp_flush (code);
     case EXEC_OMP_MASTER:
       return gfc_trans_omp_master (code);
     case EXEC_OMP_ORDERED:

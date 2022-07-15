@@ -1,5 +1,5 @@
 /* If-conversion support.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -45,7 +45,6 @@
 #include "shrink-wrap.h"
 #include "rtl-iter.h"
 #include "ifcvt.h"
-#include "params.h"
 
 #ifndef MAX_CONDITIONAL_EXECUTE
 #define MAX_CONDITIONAL_EXECUTE \
@@ -503,7 +502,7 @@ cond_exec_process_if_block (ce_if_block * ce_info,
     return FALSE;
 
   /* If the conditional jump is more than just a conditional jump,
-     then we can not do conditional execution conversion on this block.  */
+     then we cannot do conditional execution conversion on this block.  */
   if (! onlyjump_p (BB_END (test_bb)))
     return FALSE;
 
@@ -652,7 +651,7 @@ cond_exec_process_if_block (ce_if_block * ce_info,
 	    goto fail;
 
 	  /* If the conditional jump is more than just a conditional jump, then
-	     we can not do conditional execution conversion on this block.  */
+	     we cannot do conditional execution conversion on this block.  */
 	  if (! onlyjump_p (BB_END (bb)))
 	    goto fail;
 
@@ -886,6 +885,60 @@ noce_emit_store_flag (struct noce_if_info *if_info, rtx x, int reversep,
 			   || code == GEU || code == GTU), normalize);
 }
 
+/* Return true if X can be safely forced into a register by copy_to_mode_reg
+   / force_operand.  */
+
+static bool
+noce_can_force_operand (rtx x)
+{
+  if (general_operand (x, VOIDmode))
+    return true;
+  if (SUBREG_P (x))
+    {
+      if (!noce_can_force_operand (SUBREG_REG (x)))
+	return false;
+      return true;
+    }
+  if (ARITHMETIC_P (x))
+    {
+      if (!noce_can_force_operand (XEXP (x, 0))
+	  || !noce_can_force_operand (XEXP (x, 1)))
+	return false;
+      switch (GET_CODE (x))
+	{
+	case MULT:
+	case DIV:
+	case MOD:
+	case UDIV:
+	case UMOD:
+	  return true;
+	default:
+	  return code_to_optab (GET_CODE (x));
+	}
+    }
+  if (UNARY_P (x))
+    {
+      if (!noce_can_force_operand (XEXP (x, 0)))
+	return false;
+      switch (GET_CODE (x))
+	{
+	case ZERO_EXTEND:
+	case SIGN_EXTEND:
+	case TRUNCATE:
+	case FLOAT_EXTEND:
+	case FLOAT_TRUNCATE:
+	case FIX:
+	case UNSIGNED_FIX:
+	case FLOAT:
+	case UNSIGNED_FLOAT:
+	  return true;
+	default:
+	  return code_to_optab (GET_CODE (x));
+	}
+    }
+  return false;
+}
+
 /* Emit instruction to move an rtx, possibly into STRICT_LOW_PART.
    X is the destination/target and Y is the value to copy.  */
 
@@ -944,7 +997,7 @@ noce_emit_move_insn (rtx x, rtx y)
 	    {
 	    case RTX_UNARY:
 	      ot = code_to_optab (GET_CODE (y));
-	      if (ot)
+	      if (ot && noce_can_force_operand (XEXP (y, 0)))
 		{
 		  start_sequence ();
 		  target = expand_unop (GET_MODE (y), ot, XEXP (y, 0), x, 0);
@@ -961,7 +1014,9 @@ noce_emit_move_insn (rtx x, rtx y)
 	    case RTX_BIN_ARITH:
 	    case RTX_COMM_ARITH:
 	      ot = code_to_optab (GET_CODE (y));
-	      if (ot)
+	      if (ot
+		  && noce_can_force_operand (XEXP (y, 0))
+		  && noce_can_force_operand (XEXP (y, 1)))
 		{
 		  start_sequence ();
 		  target = expand_binop (GET_MODE (y), ot,
@@ -2343,7 +2398,7 @@ noce_get_alt_condition (struct noce_if_info *if_info, rtx target,
       rtx_insn *prev_insn;
 
       /* First, look to see if we put a constant in a register.  */
-      prev_insn = prev_nonnote_insn (if_info->cond_earliest);
+      prev_insn = prev_nonnote_nondebug_insn (if_info->cond_earliest);
       if (prev_insn
 	  && BLOCK_FOR_INSN (prev_insn)
 	     == BLOCK_FOR_INSN (if_info->cond_earliest)
@@ -2614,7 +2669,7 @@ noce_try_abs (struct noce_if_info *if_info)
   if (REG_P (c))
     {
       rtx set;
-      rtx_insn *insn = prev_nonnote_insn (earliest);
+      rtx_insn *insn = prev_nonnote_nondebug_insn (earliest);
       if (insn
 	  && BLOCK_FOR_INSN (insn) == BLOCK_FOR_INSN (earliest)
 	  && (set = single_set (insn))
@@ -2764,13 +2819,16 @@ noce_try_sign_mask (struct noce_if_info *if_info)
      INSN_B which can happen for e.g. conditional stores to memory.  For the
      cost computation use the block TEST_BB where the evaluation will end up
      after the transformation.  */
-  t_unconditional =
-    (t == if_info->b
-     && (if_info->insn_b == NULL_RTX
-	 || BLOCK_FOR_INSN (if_info->insn_b) == if_info->test_bb));
+  t_unconditional
+    = (t == if_info->b
+       && (if_info->insn_b == NULL_RTX
+	   || BLOCK_FOR_INSN (if_info->insn_b) == if_info->test_bb));
   if (!(t_unconditional
 	|| (set_src_cost (t, mode, if_info->speed_p)
 	    < COSTS_N_INSNS (2))))
+    return FALSE;
+
+  if (!noce_can_force_operand (t))
     return FALSE;
 
   start_sequence ();
@@ -3311,7 +3369,7 @@ bb_ok_for_noce_convert_multiple_sets (basic_block test_bb)
 {
   rtx_insn *insn;
   unsigned count = 0;
-  unsigned param = PARAM_VALUE (PARAM_MAX_RTL_IF_CONVERSION_INSNS);
+  unsigned param = param_max_rtl_if_conversion_insns;
 
   FOR_BB_INSNS (test_bb, insn)
     {
@@ -3356,6 +3414,16 @@ bb_ok_for_noce_convert_multiple_sets (basic_block test_bb)
      that are emitted, they set this through PARAM, we need to respect
      that.  */
   return count > 1 && count <= param;
+}
+
+/* Compute average of two given costs weighted by relative probabilities
+   of respective basic blocks in an IF-THEN-ELSE.  E is the IF-THEN edge.
+   With P as the probability to take the IF-THEN branch, return
+   P * THEN_COST + (1 - P) * ELSE_COST.  */
+static unsigned
+average_cost (unsigned then_cost, unsigned else_cost, edge e)
+{
+  return else_cost + e->probability.apply ((signed) (then_cost - else_cost));
 }
 
 /* Given a simple IF-THEN-JOIN or IF-THEN-ELSE-JOIN block, attempt to convert
@@ -3413,10 +3481,9 @@ noce_process_if_block (struct noce_if_info *if_info)
 				       &if_info->else_simple))
     return false;
 
-  if (else_bb == NULL)
-    if_info->original_cost += then_cost;
-  else if (speed_p)
-    if_info->original_cost += MIN (then_cost, else_cost);
+  if (speed_p)
+    if_info->original_cost += average_cost (then_cost, else_cost,
+					    find_edge (test_bb, then_bb));
   else
     if_info->original_cost += then_cost + else_cost;
 
@@ -3829,7 +3896,7 @@ cond_move_process_if_block (struct noce_if_info *if_info)
   vec<rtx> else_regs = vNULL;
   unsigned int i;
   int success_p = FALSE;
-  int limit = PARAM_VALUE (PARAM_MAX_RTL_IF_CONVERSION_INSNS);
+  int limit = param_max_rtl_if_conversion_insns;
 
   /* Build a mapping for each block to the value used for each
      register.  */
@@ -4022,7 +4089,7 @@ noce_find_if_block (basic_block test_bb, edge then_edge, edge else_edge,
     }
 
   /* If the conditional jump is more than just a conditional
-     jump, then we can not do if-conversion on this block.  */
+     jump, then we cannot do if-conversion on this block.  */
   jump = BB_END (test_bb);
   if (! onlyjump_p (jump))
     return FALSE;
@@ -4642,7 +4709,7 @@ find_cond_trap (basic_block test_bb, edge then_edge, edge else_edge)
     return FALSE;
 
   /* If the conditional jump is more than just a conditional jump, then
-     we can not do if-conversion on this block.  Give up for returnjump_p,
+     we cannot do if-conversion on this block.  Give up for returnjump_p,
      changing a conditional return followed by unconditional trap for
      conditional trap followed by unconditional return is likely not
      beneficial and harder to handle.  */
@@ -5119,6 +5186,11 @@ dead_or_predicable (basic_block test_bb, basic_block merge_bb,
 
       rtx cond;
 
+      /* If the conditional jump is more than just a conditional jump,
+	 then we cannot do conditional execution conversion on this block.  */
+      if (!onlyjump_p (jump))
+	goto nce;
+
       cond = cond_exec_get_condition (jump);
       if (! cond)
 	return FALSE;
@@ -5146,6 +5218,7 @@ dead_or_predicable (basic_block test_bb, basic_block merge_bb,
 
       earliest = jump;
     }
+ nce:
 #endif
 
   /* If we allocated new pseudos (e.g. in the conditional move
@@ -5457,6 +5530,8 @@ if_convert (bool after_combine)
 static unsigned int
 rest_of_handle_if_conversion (void)
 {
+  int flags = 0;
+
   if (flag_if_conversion)
     {
       if (dump_file)
@@ -5466,9 +5541,12 @@ rest_of_handle_if_conversion (void)
 	}
       cleanup_cfg (CLEANUP_EXPENSIVE);
       if_convert (false);
+      if (num_updated_if_blocks)
+	/* Get rid of any dead CC-related instructions.  */
+	flags |= CLEANUP_FORCE_FAST_DCE;
     }
 
-  cleanup_cfg (0);
+  cleanup_cfg (flags);
   return 0;
 }
 

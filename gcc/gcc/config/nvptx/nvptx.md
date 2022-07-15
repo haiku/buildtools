@@ -1,5 +1,5 @@
 ;; Machine description for NVPTX.
-;; Copyright (C) 2014-2018 Free Software Foundation, Inc.
+;; Copyright (C) 2014-2021 Free Software Foundation, Inc.
 ;; Contributed by Bernd Schmidt <bernds@codesourcery.com>
 ;;
 ;; This file is part of GCC.
@@ -56,6 +56,7 @@
    UNSPECV_XCHG
    UNSPECV_BARSYNC
    UNSPECV_MEMBAR
+   UNSPECV_MEMBAR_CTA
    UNSPECV_DIM_POS
 
    UNSPECV_FORK
@@ -67,6 +68,8 @@
 
    UNSPECV_SIMT_ENTER
    UNSPECV_SIMT_EXIT
+
+   UNSPECV_RED_PART
 ])
 
 (define_attr "subregs_ok" "false,true"
@@ -115,6 +118,10 @@
 (define_predicate "nvptx_float_comparison_operator"
   (match_code "eq,ne,le,ge,lt,gt,uneq,unle,unge,unlt,ungt,unordered,ordered"))
 
+(define_predicate "nvptx_vector_index_operand"
+  (and (match_code "const_int")
+       (match_test "UINTVAL (op) < 4")))
+
 ;; Test for a valid operand for a call instruction.
 (define_predicate "call_insn_operand"
   (match_code "symbol_ref,reg")
@@ -137,6 +144,13 @@
         return false;
     }
   return true;
+})
+
+;; Test for a function symbol ref operand
+(define_predicate "symbol_ref_function_operand"
+  (match_code "symbol_ref")
+{
+  return SYMBOL_REF_FUNCTION_P (op);
 })
 
 (define_attr "predicable" "false,true"
@@ -191,6 +205,10 @@
 ;; pointer-sized quantities.  Exactly one of the two alternatives will match.
 (define_mode_iterator P [(SI "Pmode == SImode") (DI "Pmode == DImode")])
 
+;; Define element mode for each vector mode.
+(define_mode_attr VECELEM [(V2SI "SI") (V2DI "DI")])
+(define_mode_attr Vecelem [(V2SI "si") (V2DI "di")])
+
 ;; We should get away with not defining memory alternatives, since we don't
 ;; get variables in this mode and pseudos are never spilled.
 (define_insn "movbi"
@@ -229,6 +247,17 @@
   return nvptx_output_mov_insn (operands[0], operands[1]);
 }
   [(set_attr "subregs_ok" "true")])
+
+;; ptxas segfaults on 'mov.u64 %r24,bar+4096', so break it up.
+(define_split
+  [(set (match_operand:DI 0 "nvptx_register_operand")
+	(const:DI (plus:DI (match_operand:DI 1 "symbol_ref_function_operand")
+			   (match_operand 2 "const_int_operand"))))]
+  ""
+  [(set (match_dup 0) (match_dup 1))
+   (set (match_dup 0) (plus:DI (match_dup 0) (match_dup 2)))
+  ]
+  "")
 
 (define_insn "*mov<mode>_insn"
   [(set (match_operand:SDFM 0 "nonimmediate_operand" "=R,R,m")
@@ -316,6 +345,13 @@
    %.\\tld%A1%u1\\t%0, %1;"
   [(set_attr "subregs_ok" "true")])
 
+(define_insn "extendqihi2"
+  [(set (match_operand:HI 0 "nvptx_register_operand" "=R")
+	(sign_extend:HI (match_operand:QI 1 "nvptx_register_operand" "R")))]
+  ""
+  "%.\\tcvt.s16.s8\\t%0, %1;"
+  [(set_attr "subregs_ok" "true")])
+
 (define_insn "extend<mode>si2"
   [(set (match_operand:SI 0 "nvptx_register_operand" "=R,R")
 	(sign_extend:SI (match_operand:QHIM 1 "nvptx_nonimmediate_operand" "R,m")))]
@@ -347,9 +383,13 @@
   [(set (match_operand:QHIM 0 "nvptx_nonimmediate_operand" "=R,m")
 	(truncate:QHIM (match_operand:SI 1 "nvptx_register_operand" "R,R")))]
   ""
-  "@
-   %.\\tcvt%t0.u32\\t%0, %1;
-   %.\\tst%A0.u%T0\\t%0, %1;"
+  {
+    if (which_alternative == 1)
+      return "%.\\tst%A0.u%T0\\t%0, %1;";
+    if (GET_MODE (operands[0]) == QImode)
+      return "%.\\tmov%t0\\t%0, %1;";
+    return "%.\\tcvt%t0.u32\\t%0, %1;";
+  }
   [(set_attr "subregs_ok" "true")])
 
 (define_insn "truncdi<mode>2"
@@ -369,6 +409,22 @@
 		    (match_operand:HSDIM 2 "nvptx_nonmemory_operand" "Ri")))]
   ""
   "%.\\tadd%t0\\t%0, %1, %2;")
+
+(define_insn "*vadd_addsi4"
+  [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
+        (plus:SI (plus:SI (match_operand:SI 1 "nvptx_register_operand" "R")
+			  (match_operand:SI 2 "nvptx_register_operand" "R"))
+		 (match_operand:SI 3 "nvptx_register_operand" "R")))]
+  ""
+  "%.\\tvadd%t0%t1%t2.add\\t%0, %1, %2, %3;")
+
+(define_insn "*vsub_addsi4"
+  [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
+        (plus:SI (minus:SI (match_operand:SI 1 "nvptx_register_operand" "R")
+			   (match_operand:SI 2 "nvptx_register_operand" "R"))
+		 (match_operand:SI 3 "nvptx_register_operand" "R")))]
+  ""
+  "%.\\tvsub%t0%t1%t2.add\\t%0, %1, %2, %3;")
 
 (define_insn "sub<mode>3"
   [(set (match_operand:HSDIM 0 "nvptx_register_operand" "=R")
@@ -490,26 +546,118 @@
   DONE;
 })
 
+(define_insn "popcount<mode>2"
+  [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
+	(popcount:SI (match_operand:SDIM 1 "nvptx_register_operand" "R")))]
+  ""
+  "%.\\tpopc.b%T1\\t%0, %1;")
+
+;; Multiplication variants
+
+(define_insn "mulhisi3"
+  [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
+	(mult:SI (sign_extend:SI
+		  (match_operand:HI 1 "nvptx_register_operand" "R"))
+		 (sign_extend:SI
+		  (match_operand:HI 2 "nvptx_register_operand" "R"))))]
+  ""
+  "%.\\tmul.wide.s16\\t%0, %1, %2;")
+
+(define_insn "mulsidi3"
+  [(set (match_operand:DI 0 "nvptx_register_operand" "=R")
+	(mult:DI (sign_extend:DI
+		  (match_operand:SI 1 "nvptx_register_operand" "R"))
+		 (sign_extend:DI
+		  (match_operand:SI 2 "nvptx_register_operand" "R"))))]
+  ""
+  "%.\\tmul.wide.s32\\t%0, %1, %2;")
+
+(define_insn "umulhisi3"
+  [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
+	(mult:SI (zero_extend:SI
+		  (match_operand:HI 1 "nvptx_register_operand" "R"))
+		 (zero_extend:SI
+		  (match_operand:HI 2 "nvptx_register_operand" "R"))))]
+  ""
+  "%.\\tmul.wide.u16\\t%0, %1, %2;")
+
+(define_insn "umulsidi3"
+  [(set (match_operand:DI 0 "nvptx_register_operand" "=R")
+	(mult:DI (zero_extend:DI
+		  (match_operand:SI 1 "nvptx_register_operand" "R"))
+		 (zero_extend:DI
+		  (match_operand:SI 2 "nvptx_register_operand" "R"))))]
+  ""
+  "%.\\tmul.wide.u32\\t%0, %1, %2;")
+
+(define_insn "smulhi3_highpart"
+  [(set (match_operand:HI 0 "nvptx_register_operand" "=R")
+	(truncate:HI
+	 (lshiftrt:SI
+	  (mult:SI (sign_extend:SI
+		    (match_operand:HI 1 "nvptx_register_operand" "R"))
+		   (sign_extend:SI
+		    (match_operand:HI 2 "nvptx_register_operand" "R")))
+	  (const_int 16))))]
+  ""
+  "%.\\tmul.hi.s16\\t%0, %1, %2;")
+
+(define_insn "smulsi3_highpart"
+  [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
+	(truncate:SI
+	 (lshiftrt:DI
+	  (mult:DI (sign_extend:DI
+		    (match_operand:SI 1 "nvptx_register_operand" "R"))
+		   (sign_extend:DI
+		    (match_operand:SI 2 "nvptx_register_operand" "R")))
+	  (const_int 32))))]
+  ""
+  "%.\\tmul.hi.s32\\t%0, %1, %2;")
+
+(define_insn "umulhi3_highpart"
+  [(set (match_operand:HI 0 "nvptx_register_operand" "=R")
+	(truncate:HI
+	 (lshiftrt:SI
+	  (mult:SI (zero_extend:SI
+		    (match_operand:HI 1 "nvptx_register_operand" "R"))
+		   (zero_extend:SI
+		    (match_operand:HI 2 "nvptx_register_operand" "R")))
+	  (const_int 16))))]
+  ""
+  "%.\\tmul.hi.u16\\t%0, %1, %2;")
+
+(define_insn "umulsi3_highpart"
+  [(set (match_operand:SI 0 "nvptx_register_operand" "=R")
+	(truncate:SI
+	 (lshiftrt:DI
+	  (mult:DI (zero_extend:DI
+		    (match_operand:SI 1 "nvptx_register_operand" "R"))
+		   (zero_extend:DI
+		    (match_operand:SI 2 "nvptx_register_operand" "R")))
+	  (const_int 32))))]
+  ""
+  "%.\\tmul.hi.u32\\t%0, %1, %2;")
+
 ;; Shifts
 
 (define_insn "ashl<mode>3"
-  [(set (match_operand:SDIM 0 "nvptx_register_operand" "=R")
-	(ashift:SDIM (match_operand:SDIM 1 "nvptx_register_operand" "R")
-		     (match_operand:SI 2 "nvptx_nonmemory_operand" "Ri")))]
+  [(set (match_operand:HSDIM 0 "nvptx_register_operand" "=R")
+	(ashift:HSDIM (match_operand:HSDIM 1 "nvptx_register_operand" "R")
+		      (match_operand:SI 2 "nvptx_nonmemory_operand" "Ri")))]
   ""
   "%.\\tshl.b%T0\\t%0, %1, %2;")
 
 (define_insn "ashr<mode>3"
-  [(set (match_operand:SDIM 0 "nvptx_register_operand" "=R")
-	(ashiftrt:SDIM (match_operand:SDIM 1 "nvptx_register_operand" "R")
-		       (match_operand:SI 2 "nvptx_nonmemory_operand" "Ri")))]
+  [(set (match_operand:HSDIM 0 "nvptx_register_operand" "=R")
+	(ashiftrt:HSDIM (match_operand:HSDIM 1 "nvptx_register_operand" "R")
+			(match_operand:SI 2 "nvptx_nonmemory_operand" "Ri")))]
   ""
   "%.\\tshr.s%T0\\t%0, %1, %2;")
 
 (define_insn "lshr<mode>3"
-  [(set (match_operand:SDIM 0 "nvptx_register_operand" "=R")
-	(lshiftrt:SDIM (match_operand:SDIM 1 "nvptx_register_operand" "R")
-		       (match_operand:SI 2 "nvptx_nonmemory_operand" "Ri")))]
+  [(set (match_operand:HSDIM 0 "nvptx_register_operand" "=R")
+	(lshiftrt:HSDIM (match_operand:HSDIM 1 "nvptx_register_operand" "R")
+			(match_operand:SI 2 "nvptx_nonmemory_operand" "Ri")))]
   ""
   "%.\\tshr.u%T0\\t%0, %1, %2;")
 
@@ -742,19 +890,19 @@
 
 ;; Calls
 
-(define_insn "call_insn"
+(define_insn "call_insn_<mode>"
   [(match_parallel 2 "call_operation"
-    [(call (mem:QI (match_operand 0 "call_insn_operand" "Rs"))
+    [(call (mem:QI (match_operand:P 0 "call_insn_operand" "Rs"))
 	   (match_operand 1))])]
   ""
 {
   return nvptx_output_call_insn (insn, NULL_RTX, operands[0]);
 })
 
-(define_insn "call_value_insn"
+(define_insn "call_value_insn_<mode>"
   [(match_parallel 3 "call_operation"
     [(set (match_operand 0 "nvptx_register_operand" "=R")
-	  (call (mem:QI (match_operand 1 "call_insn_operand" "Rs"))
+	  (call (mem:QI (match_operand:P 1 "call_insn_operand" "Rs"))
 		(match_operand 2)))])]
   ""
 {
@@ -808,6 +956,15 @@
 		  (match_operand:SDFM 3 "nvptx_nonmemory_operand" "RF")))]
   ""
   "%.\\tfma%#%t0\\t%0, %1, %2, %3;")
+
+(define_insn "*recip<mode>2"
+  [(set (match_operand:SDFM 0 "nvptx_register_operand" "=R")
+	(div:SDFM
+	  (match_operand:SDFM 2 "const_double_operand" "F")
+	  (match_operand:SDFM 1 "nvptx_register_operand" "R")))]
+  "CONST_DOUBLE_P (operands[2])
+   && real_identical (CONST_DOUBLE_REAL_VALUE (operands[2]), &dconst1)"
+  "%.\\trcp%#%t0\\t%0, %1;")
 
 (define_insn "div<mode>3"
   [(set (match_operand:SDFM 0 "nvptx_register_operand" "=R")
@@ -988,6 +1145,78 @@
   ""
   "%.\\tcvt<FPINT2:fpint2_roundingmode>.s%T0%t1\\t%0, %1;")
 
+;; Vector operations
+
+(define_insn "*vec_set<mode>_0"
+  [(set (match_operand:VECIM 0 "nvptx_register_operand" "=R")
+	(vec_merge:VECIM
+	  (vec_duplicate:VECIM
+	    (match_operand:<VECELEM> 1 "nvptx_register_operand" "R"))
+	  (match_dup 0)
+	  (const_int 1)))]
+  ""
+  "%.\\tmov%t1\\t%0.x, %1;")
+
+(define_insn "*vec_set<mode>_1"
+  [(set (match_operand:VECIM 0 "nvptx_register_operand" "=R")
+	(vec_merge:VECIM
+	  (vec_duplicate:VECIM
+	    (match_operand:<VECELEM> 1 "nvptx_register_operand" "R"))
+	  (match_dup 0)
+	  (const_int 2)))]
+  ""
+  "%.\\tmov%t1\\t%0.y, %1;")
+
+(define_insn "*vec_set<mode>_2"
+  [(set (match_operand:VECIM 0 "nvptx_register_operand" "=R")
+	(vec_merge:VECIM
+	  (vec_duplicate:VECIM
+	    (match_operand:<VECELEM> 1 "nvptx_register_operand" "R"))
+	  (match_dup 0)
+	  (const_int 4)))]
+  ""
+  "%.\\tmov%t1\\t%0.z, %1;")
+
+(define_insn "*vec_set<mode>_3"
+  [(set (match_operand:VECIM 0 "nvptx_register_operand" "=R")
+	(vec_merge:VECIM
+	  (vec_duplicate:VECIM
+	    (match_operand:<VECELEM> 1 "nvptx_register_operand" "R"))
+	  (match_dup 0)
+	  (const_int 8)))]
+  ""
+  "%.\\tmov%t1\\t%0.w, %1;")
+
+(define_expand "vec_set<mode>"
+  [(match_operand:VECIM 0 "nvptx_register_operand")
+   (match_operand:<VECELEM> 1 "nvptx_register_operand")
+   (match_operand:SI 2 "nvptx_vector_index_operand")]
+  ""
+{
+  enum machine_mode mode = GET_MODE (operands[0]);
+  int mask = 1 << INTVAL (operands[2]);
+  rtx tmp = gen_rtx_VEC_DUPLICATE (mode, operands[1]);
+  tmp = gen_rtx_VEC_MERGE (mode, tmp, operands[0], GEN_INT (mask));
+  emit_insn (gen_rtx_SET (operands[0], tmp));
+  DONE;
+})
+
+(define_insn "vec_extract<mode><Vecelem>"
+  [(set (match_operand:<VECELEM> 0 "nvptx_register_operand" "=R")
+	(vec_select:<VECELEM>
+	  (match_operand:VECIM 1 "nvptx_register_operand" "R")
+	  (parallel [(match_operand:SI 2 "nvptx_vector_index_operand" "")])))]
+  ""
+{
+  static const char *const asms[4] = {
+    "%.\\tmov%t0\\t%0, %1.x;",
+    "%.\\tmov%t0\\t%0, %1.y;",
+    "%.\\tmov%t0\\t%0, %1.z;",
+    "%.\\tmov%t0\\t%0, %1.w;"
+  };
+  return asms[INTVAL (operands[2])];
+})
+
 ;; Miscellaneous
 
 (define_insn "nop"
@@ -1022,8 +1251,8 @@
   ""
 {
   if (TARGET_SOFT_STACK)
-    emit_insn (gen_set_softstack_insn (gen_rtx_REG (Pmode,
-						    SOFTSTACK_PREV_REGNUM)));
+    emit_insn (gen_set_softstack (Pmode, gen_rtx_REG (Pmode,
+						      SOFTSTACK_PREV_REGNUM)));
   emit_jump_insn (gen_return ());
   DONE;
 })
@@ -1056,7 +1285,7 @@
     {
       emit_move_insn (stack_pointer_rtx,
 		      gen_rtx_MINUS (Pmode, stack_pointer_rtx, operands[1]));
-      emit_insn (gen_set_softstack_insn (stack_pointer_rtx));
+      emit_insn (gen_set_softstack (Pmode, stack_pointer_rtx));
       emit_move_insn (operands[0], virtual_stack_dynamic_rtx);
       DONE;
     }
@@ -1068,8 +1297,8 @@
   DONE;
 })
 
-(define_insn "set_softstack_insn"
-  [(unspec [(match_operand 0 "nvptx_register_operand" "R")]
+(define_insn "@set_softstack_<mode>"
+  [(unspec [(match_operand:P 0 "nvptx_register_operand" "R")]
 	   UNSPEC_SET_SOFTSTACK)]
   "TARGET_SOFT_STACK"
 {
@@ -1084,7 +1313,7 @@
   if (TARGET_SOFT_STACK)
     {
       emit_move_insn (operands[0], operands[1]);
-      emit_insn (gen_set_softstack_insn (operands[0]));
+      emit_insn (gen_set_softstack (Pmode, operands[0]));
     }
   DONE;
 })
@@ -1100,14 +1329,14 @@
 (define_insn "trap"
   [(trap_if (const_int 1) (const_int 0))]
   ""
-  "trap;")
+  "trap; exit;")
 
 (define_insn "trap_if_true"
   [(trap_if (ne (match_operand:BI 0 "nvptx_register_operand" "R")
 		(const_int 0))
 	    (const_int 0))]
   ""
-  "%j0 trap;"
+  "%j0 trap; %j0 exit;"
   [(set_attr "predicable" "false")])
 
 (define_insn "trap_if_false"
@@ -1115,7 +1344,7 @@
 		(const_int 0))
 	    (const_int 0))]
   ""
-  "%J0 trap;"
+  "%J0 trap; %J0 exit;"
   [(set_attr "predicable" "false")])
 
 (define_expand "ctrap<mode>4"
@@ -1234,10 +1463,10 @@
 
 ;; Patterns for OpenMP SIMD-via-SIMT lowering
 
-(define_insn "omp_simt_enter_insn"
-  [(set (match_operand 0 "nvptx_register_operand" "=R")
-	(unspec_volatile [(match_operand 1 "nvptx_nonmemory_operand" "Ri")
-			    (match_operand 2 "nvptx_nonmemory_operand" "Ri")]
+(define_insn "@omp_simt_enter_<mode>"
+  [(set (match_operand:P 0 "nvptx_register_operand" "=R")
+	(unspec_volatile:P [(match_operand:P 1 "nvptx_nonmemory_operand" "Ri")
+			    (match_operand:P 2 "nvptx_nonmemory_operand" "Ri")]
 			   UNSPECV_SIMT_ENTER))]
   ""
 {
@@ -1258,12 +1487,20 @@
   cfun->machine->simt_stack_align = MAX (UINTVAL (operands[2]),
 					 cfun->machine->simt_stack_align);
   cfun->machine->has_simtreg = true;
-  emit_insn (gen_omp_simt_enter_insn (operands[0], operands[1], operands[2]));
+  emit_insn (gen_omp_simt_enter (Pmode, operands[0], operands[1], operands[2]));
   DONE;
 })
 
-(define_insn "omp_simt_exit"
-  [(unspec_volatile [(match_operand 0 "nvptx_register_operand" "R")]
+(define_expand "omp_simt_exit"
+  [(match_operand 0 "nvptx_register_operand" "R")]
+  ""
+{
+  emit_insn (gen_omp_simt_exit (Pmode, operands[0]));
+  DONE;
+})
+
+(define_insn "@omp_simt_exit_<mode>"
+  [(unspec_volatile [(match_operand:P 0 "nvptx_register_operand" "R")]
 		    UNSPECV_SIMT_EXIT)]
   ""
 {
@@ -1439,7 +1676,6 @@
 (define_code_iterator any_logic [and ior xor])
 (define_code_attr logic [(and "and") (ior "or") (xor "xor")])
 
-;; Currently disabled until we add better subtarget support - requires sm_32.
 (define_insn "atomic_fetch_<logic><mode>"
   [(set (match_operand:SDIM 1 "memory_operand" "+m")
 	(unspec_volatile:SDIM
@@ -1449,15 +1685,37 @@
 	  UNSPECV_LOCK))
    (set (match_operand:SDIM 0 "nvptx_register_operand" "=R")
 	(match_dup 1))]
-  "0"
+  "<MODE>mode == SImode || TARGET_SM35"
   "%.\\tatom%A1.b%T0.<logic>\\t%0, %1, %2;"
   [(set_attr "atomic" "true")])
 
+(define_expand "atomic_test_and_set"
+  [(match_operand:SI 0 "nvptx_register_operand")	;; bool success output
+   (match_operand:QI 1 "memory_operand")		;; memory
+   (match_operand:SI 2 "const_int_operand")]		;; model
+  ""
+{
+  rtx libfunc;
+  rtx addr;
+  libfunc = init_one_libfunc ("__atomic_test_and_set_1");
+  addr = convert_memory_address (ptr_mode, XEXP (operands[1], 0));
+  emit_library_call_value (libfunc, operands[0], LCT_NORMAL, SImode,
+			  addr, ptr_mode,
+			  operands[2], SImode);
+  DONE;
+})
+
 (define_insn "nvptx_barsync"
-  [(unspec_volatile [(match_operand:SI 0 "const_int_operand" "")]
+  [(unspec_volatile [(match_operand:SI 0 "nvptx_nonmemory_operand" "Ri")
+		     (match_operand:SI 1 "const_int_operand")]
 		    UNSPECV_BARSYNC)]
   ""
-  "\\tbar.sync\\t%0;"
+  {
+    if (INTVAL (operands[1]) == 0)
+      return "\\tbar.sync\\t%0;";
+    else
+      return "\\tbar.sync\\t%0, %1;";
+  }
   [(set_attr "predicable" "false")])
 
 (define_expand "memory_barrier"
@@ -1481,8 +1739,34 @@
   "\\tmembar.sys;"
   [(set_attr "predicable" "false")])
 
+(define_expand "nvptx_membar_cta"
+  [(set (match_dup 0)
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMBAR_CTA))]
+  ""
+{
+  operands[0] = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
+  MEM_VOLATILE_P (operands[0]) = 1;
+})
+
+(define_insn "*nvptx_membar_cta"
+  [(set (match_operand:BLK 0 "" "")
+	(unspec_volatile:BLK [(match_dup 0)] UNSPECV_MEMBAR_CTA))]
+  ""
+  "\\tmembar.cta;"
+  [(set_attr "predicable" "false")])
+
 (define_insn "nvptx_nounroll"
   [(unspec_volatile [(const_int 0)] UNSPECV_NOUNROLL)]
   ""
   "\\t.pragma \\\"nounroll\\\";"
+  [(set_attr "predicable" "false")])
+
+(define_insn "nvptx_red_partition"
+  [(set (match_operand:DI 0 "nonimmediate_operand" "=R")
+	(unspec_volatile:DI [(match_operand:DI 1 "const_int_operand")]
+	 UNSPECV_RED_PART))]
+  ""
+  {
+    return nvptx_output_red_partition (operands[0], operands[1]);
+  }
   [(set_attr "predicable" "false")])

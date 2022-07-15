@@ -3,6 +3,12 @@
 /* { dg-require-effective-target freorder } */
 /* { dg-options "-O2 -freorder-blocks-and-partition -save-temps -fdump-tree-optimized" } */
 
+#ifdef FOR_AUTOFDO_TESTING
+#define MAXITER 1000000
+#else
+#define MAXITER 10000
+#endif
+
 #define SIZE 10000
 
 const char *sarr[SIZE];
@@ -32,11 +38,11 @@ main (int argc, char *argv[])
   int i;
   buf_hot =  "hello";
   buf_cold = "world";
-  for (i = 0; i < 1000000; i++)
+  for (i = 0; i < MAXITER; i++)
     foo (argc);
   return 0;
 }
 
-/* { dg-final-use { scan-assembler "foo\[._\]+cold\[\._\]+0" { target *-*-linux* *-*-gnu* } } } */
-/* { dg-final-use { scan-assembler "size\[ \ta-zA-Z0-0\]+foo\[._\]+cold\[\._\]+0" { target *-*-linux* *-*-gnu* } } } */
+/* { dg-final-use { scan-assembler "foo\[._\]+cold" { target *-*-linux* *-*-gnu* } } } */
+/* { dg-final-use { scan-assembler "size\[ \ta-zA-Z0-0\]+foo\[._\]+cold" { target *-*-linux* *-*-gnu* } } } */
 /* { dg-final-use { scan-tree-dump-not "Invalid sum" "optimized"} } */

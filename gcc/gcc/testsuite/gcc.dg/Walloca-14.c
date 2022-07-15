@@ -1,7 +1,9 @@
 /* PR tree-optimization/80109 */
 /* { dg-do compile } */
 /* { dg-require-effective-target alloca } */
-/* { dg-options "-O2 -Walloca-larger-than=126812070" } */
+/* { dg-skip-if "small address space" { "pdp11-*-*" } } */
+/* { dg-options "-O2 -Walloca-larger-than=126812070" { target ptr32plus }  } */
+/* { dg-options "-O2 -Walloca-larger-than=12070" { target { ! ptr32plus } } } */
 
 void
 g (int *p)

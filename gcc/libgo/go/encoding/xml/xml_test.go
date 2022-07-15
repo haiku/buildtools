@@ -14,6 +14,111 @@ import (
 	"unicode/utf8"
 )
 
+type toks struct {
+	earlyEOF bool
+	t        []Token
+}
+
+func (t *toks) Token() (Token, error) {
+	if len(t.t) == 0 {
+		return nil, io.EOF
+	}
+	var tok Token
+	tok, t.t = t.t[0], t.t[1:]
+	if t.earlyEOF && len(t.t) == 0 {
+		return tok, io.EOF
+	}
+	return tok, nil
+}
+
+func TestDecodeEOF(t *testing.T) {
+	start := StartElement{Name: Name{Local: "test"}}
+	tests := []struct {
+		name   string
+		tokens []Token
+		ok     bool
+	}{
+		{
+			name: "OK",
+			tokens: []Token{
+				start,
+				start.End(),
+			},
+			ok: true,
+		},
+		{
+			name: "Malformed",
+			tokens: []Token{
+				start,
+				StartElement{Name: Name{Local: "bad"}},
+				start.End(),
+			},
+			ok: false,
+		},
+	}
+	for _, tc := range tests {
+		for _, eof := range []bool{true, false} {
+			name := fmt.Sprintf("%s/earlyEOF=%v", tc.name, eof)
+			t.Run(name, func(t *testing.T) {
+				d := NewTokenDecoder(&toks{
+					earlyEOF: eof,
+					t:        tc.tokens,
+				})
+				err := d.Decode(&struct {
+					XMLName Name `xml:"test"`
+				}{})
+				if tc.ok && err != nil {
+					t.Fatalf("d.Decode: expected nil error, got %v", err)
+				}
+				if _, ok := err.(*SyntaxError); !tc.ok && !ok {
+					t.Errorf("d.Decode: expected syntax error, got %v", err)
+				}
+			})
+		}
+	}
+}
+
+type toksNil struct {
+	returnEOF bool
+	t         []Token
+}
+
+func (t *toksNil) Token() (Token, error) {
+	if len(t.t) == 0 {
+		if !t.returnEOF {
+			// Return nil, nil before returning an EOF. It's legal, but
+			// discouraged.
+			t.returnEOF = true
+			return nil, nil
+		}
+		return nil, io.EOF
+	}
+	var tok Token
+	tok, t.t = t.t[0], t.t[1:]
+	return tok, nil
+}
+
+func TestDecodeNilToken(t *testing.T) {
+	for _, strict := range []bool{true, false} {
+		name := fmt.Sprintf("Strict=%v", strict)
+		t.Run(name, func(t *testing.T) {
+			start := StartElement{Name: Name{Local: "test"}}
+			bad := StartElement{Name: Name{Local: "bad"}}
+			d := NewTokenDecoder(&toksNil{
+				// Malformed
+				t: []Token{start, bad, start.End()},
+			})
+			d.Strict = strict
+			err := d.Decode(&struct {
+				XMLName Name `xml:"test"`
+			}{})
+			if _, ok := err.(*SyntaxError); !ok {
+				t.Errorf("d.Decode: expected syntax error, got %v", err)
+			}
+		})
+	}
+}
+
 const testInput = `
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
@@ -646,6 +751,20 @@ func TestDisallowedCharacters(t *testing.T) {
 		}
 		if synerr.Msg != tt.err {
 			t.Fatalf("input %d synerr.Msg wrong: want %q, got %q", i, tt.err, synerr.Msg)
+		}
+	}
+}
+
+func TestIsInCharacterRange(t *testing.T) {
+	invalid := []rune{
+		utf8.MaxRune + 1,
+		0xD800, // surrogate min
+		0xDFFF, // surrogate max
+		-1,
+	}
+	for _, r := range invalid {
+		if isInCharacterRange(r) {
+			t.Errorf("rune %U considered valid", r)
 		}
 	}
 }

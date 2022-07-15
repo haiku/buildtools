@@ -1,5 +1,5 @@
 /* Support routines for Value Range Propagation (VRP).
-   Copyright (C) 2005-2018 Free Software Foundation, Inc.
+   Copyright (C) 2005-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -41,244 +41,269 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfgcleanup.h"
 #include "vr-values.h"
 #include "gimple-ssa-evrp-analyze.h"
+#include "gimple-range.h"
+
+// This is the classic EVRP folder which uses a dominator walk and pushes
+// ranges into the next block if it is a single predecessor block.
 
 class evrp_folder : public substitute_and_fold_engine
 {
- public:
-  tree get_value (tree) FINAL OVERRIDE;
-  evrp_folder (class vr_values *vr_values_) : vr_values (vr_values_) { }
-  class vr_values *vr_values;
+public:
+  evrp_folder () :
+    substitute_and_fold_engine (),
+    m_range_analyzer (/*update_global_ranges=*/true),
+    simplifier (&m_range_analyzer)
+  { }
 
- private:
+  ~evrp_folder ()
+  {
+    if (dump_file)
+      {
+	fprintf (dump_file, "\nValue ranges after Early VRP:\n\n");
+	m_range_analyzer.dump_all_value_ranges (dump_file);
+	fprintf (dump_file, "\n");
+      }
+  }
+
+  tree value_of_expr (tree name, gimple *stmt) OVERRIDE
+  {
+    return m_range_analyzer.value_of_expr (name, stmt);
+  }
+
+  void pre_fold_bb (basic_block bb) OVERRIDE
+  {
+    if (dump_file && (dump_flags & TDF_DETAILS))
+      fprintf (dump_file, "evrp visiting BB%d\n", bb->index);
+    m_range_analyzer.enter (bb);
+  }
+
+  void pre_fold_stmt (gimple *stmt) OVERRIDE
+  {
+    if (dump_file && (dump_flags & TDF_DETAILS))
+      {
+	fprintf (dump_file, "evrp visiting stmt ");
+	print_gimple_stmt (dump_file, stmt, 0);
+      }
+    m_range_analyzer.record_ranges_from_stmt (stmt, false);
+  }
+
+  bool fold_stmt (gimple_stmt_iterator *gsi) OVERRIDE
+  {
+    return simplifier.simplify (gsi);
+  }
+
+  void post_fold_bb (basic_block bb) OVERRIDE
+  {
+    m_range_analyzer.leave (bb);
+  }
+
+  void post_new_stmt (gimple *stmt) OVERRIDE
+  {
+    m_range_analyzer.set_defs_to_varying (stmt);
+  }
+
+protected:
   DISABLE_COPY_AND_ASSIGN (evrp_folder);
+  evrp_range_analyzer m_range_analyzer;
+  simplify_using_ranges simplifier;
 };
 
-tree
-evrp_folder::get_value (tree op)
-{
-  return vr_values->op_with_constant_singleton_value_range (op);
-}
+// This is a ranger based folder which continues to use the dominator
+// walk to access the substitute and fold machinery.  Ranges are calculated
+// on demand.
 
-/* evrp_dom_walker visits the basic blocks in the dominance order and set
-   the Value Ranges (VR) for SSA_NAMEs in the scope.  Use this VR to
-   discover more VRs.  */
-
-class evrp_dom_walker : public dom_walker
+class rvrp_folder : public substitute_and_fold_engine
 {
 public:
-  evrp_dom_walker ()
-    : dom_walker (CDI_DOMINATORS),
-      evrp_folder (evrp_range_analyzer.get_vr_values ())
-    {
-      need_eh_cleanup = BITMAP_ALLOC (NULL);
-    }
-  ~evrp_dom_walker ()
-    {
-      BITMAP_FREE (need_eh_cleanup);
-    }
-  virtual edge before_dom_children (basic_block);
-  virtual void after_dom_children (basic_block);
-  void cleanup (void);
 
- private:
-  DISABLE_COPY_AND_ASSIGN (evrp_dom_walker);
-  bitmap need_eh_cleanup;
-  auto_vec<gimple *> stmts_to_fixup;
-  auto_vec<gimple *> stmts_to_remove;
+  rvrp_folder () : substitute_and_fold_engine (), m_simplifier ()
+  { 
+    if (param_evrp_mode & EVRP_MODE_TRACE)
+      m_ranger = new trace_ranger ();
+    else
+      m_ranger = new gimple_ranger ();
+    m_simplifier.set_range_query (m_ranger);
+  }
+      
+  ~rvrp_folder ()
+  {
+    if (dump_file && (dump_flags & TDF_DETAILS))
+      m_ranger->dump (dump_file);
+    delete m_ranger;
+  }
 
-  class evrp_range_analyzer evrp_range_analyzer;
-  class evrp_folder evrp_folder;
+  tree value_of_expr (tree name, gimple *s = NULL) OVERRIDE
+  {
+    return m_ranger->value_of_expr (name, s);
+  }
+
+  tree value_on_edge (edge e, tree name) OVERRIDE
+  {
+    return m_ranger->value_on_edge (e, name);
+  }
+
+  tree value_of_stmt (gimple *s, tree name = NULL) OVERRIDE
+  {
+    return m_ranger->value_of_stmt (s, name);
+  }
+
+  bool fold_stmt (gimple_stmt_iterator *gsi) OVERRIDE
+  {
+    return m_simplifier.simplify (gsi);
+  }
+
+private:
+  DISABLE_COPY_AND_ASSIGN (rvrp_folder);
+  gimple_ranger *m_ranger;
+  simplify_using_ranges m_simplifier;
 };
 
-edge
-evrp_dom_walker::before_dom_children (basic_block bb)
+// In a hybrid folder, start with an EVRP folder, and add the required
+// fold_stmt bits to either try the ranger first or second.
+//
+// The 3 value_* routines will always query both EVRP and the ranger for
+// a result, and ensure they return the same value.  If either returns a value
+// when the other doesn't, it is flagged in the listing, and the discoverd
+// value is returned.
+//
+// The simplifier is unable to process 2 different sources, thus we try to 
+// use one engine, and if it fails to simplify, try using the other engine.
+// It is reported when the first attempt fails and the second succeeds.
+
+class hybrid_folder : public evrp_folder
 {
-  if (dump_file && (dump_flags & TDF_DETAILS))
-    fprintf (dump_file, "Visiting BB%d\n", bb->index);
+public:
+  hybrid_folder (bool evrp_first)
+  {
+    if (param_evrp_mode & EVRP_MODE_TRACE)
+      m_ranger = new trace_ranger ();
+    else
+      m_ranger = new gimple_ranger ();
 
-  evrp_range_analyzer.enter (bb);
+    if (evrp_first)
+      {
+	first = &m_range_analyzer;
+	second = m_ranger;
+      }
+     else
+      {
+	first = m_ranger;
+	second = &m_range_analyzer;
+      }
+  }
 
-  for (gphi_iterator gpi = gsi_start_phis (bb);
-       !gsi_end_p (gpi); gsi_next (&gpi))
+  ~hybrid_folder ()
+  {
+    if (dump_file && (dump_flags & TDF_DETAILS))
+      m_ranger->dump (dump_file);
+    delete m_ranger;
+  }
+
+  bool fold_stmt (gimple_stmt_iterator *gsi) OVERRIDE
     {
-      gphi *phi = gpi.phi ();
-      tree lhs = PHI_RESULT (phi);
-      if (virtual_operand_p (lhs))
-	continue;
+      simplifier.set_range_query (first);
+      if (simplifier.simplify (gsi))
+	return true;
 
-      value_range *vr = evrp_range_analyzer.get_value_range (lhs);
-      /* Mark PHIs whose lhs we fully propagate for removal.  */
-      tree val = value_range_constant_singleton (vr);
-      if (val && may_propagate_copy (lhs, val))
+      simplifier.set_range_query (second);
+      if (simplifier.simplify (gsi))
 	{
-	  stmts_to_remove.safe_push (phi);
-	  continue;
+	  if (dump_file)
+	    fprintf (dump_file, "EVRP:hybrid: Second query simplifed stmt\n");
+	  return true;
 	}
+      return false;
     }
 
-  edge taken_edge = NULL;
+  tree value_of_expr (tree name, gimple *) OVERRIDE;
+  tree value_on_edge (edge, tree name) OVERRIDE;
+  tree value_of_stmt (gimple *, tree name) OVERRIDE;
 
-  /* Visit all other stmts and discover any new VRs possible.  */
-  for (gimple_stmt_iterator gsi = gsi_start_bb (bb);
-       !gsi_end_p (gsi); gsi_next (&gsi))
-    {
-      gimple *stmt = gsi_stmt (gsi);
-      tree output = NULL_TREE;
-      gimple *old_stmt = stmt;
-      bool was_noreturn = (is_gimple_call (stmt)
-			   && gimple_call_noreturn_p (stmt));
+private:
+  DISABLE_COPY_AND_ASSIGN (hybrid_folder);
+  gimple_ranger *m_ranger;
+  range_query *first;
+  range_query *second;
+  tree choose_value (tree evrp_val, tree ranger_val);
+};
 
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	{
-	  fprintf (dump_file, "Visiting stmt ");
-	  print_gimple_stmt (dump_file, stmt, 0);
-	}
 
-      evrp_range_analyzer.record_ranges_from_stmt (stmt, false);
-
-      if (gcond *cond = dyn_cast <gcond *> (stmt))
-	{
-	  evrp_range_analyzer.vrp_visit_cond_stmt (cond, &taken_edge);
-	  if (taken_edge)
-	    {
-	      if (taken_edge->flags & EDGE_TRUE_VALUE)
-		gimple_cond_make_true (cond);
-	      else if (taken_edge->flags & EDGE_FALSE_VALUE)
-		gimple_cond_make_false (cond);
-	      else
-		gcc_unreachable ();
-	      update_stmt (stmt);
-	    }
-	}
-      else if (stmt_interesting_for_vrp (stmt))
-	{
-	  output = get_output_for_vrp (stmt);
-	  if (output)
-	    {
-	      tree val;
-	      value_range *vr = evrp_range_analyzer.get_value_range (output);
-
-	      /* Mark stmts whose output we fully propagate for removal.  */
-	      if ((vr->type == VR_RANGE || vr->type == VR_ANTI_RANGE)
-		  && (val = value_range_constant_singleton (vr))
-		  && may_propagate_copy (output, val)
-		  && !stmt_could_throw_p (stmt)
-		  && !gimple_has_side_effects (stmt))
-		{
-		  stmts_to_remove.safe_push (stmt);
-		  continue;
-		}
-	    }
-	}
-
-      /* Try folding stmts with the VR discovered.  */
-      bool did_replace = evrp_folder.replace_uses_in (stmt);
-      if (fold_stmt (&gsi, follow_single_use_edges)
-	  || did_replace)
-	{
-	  stmt = gsi_stmt (gsi);
-	  update_stmt (stmt);
-	  did_replace = true;
-	}
-
-      if (did_replace)
-	{
-	  /* If we cleaned up EH information from the statement,
-	     remove EH edges.  */
-	  if (maybe_clean_or_replace_eh_stmt (old_stmt, stmt))
-	    bitmap_set_bit (need_eh_cleanup, bb->index);
-
-	  /* If we turned a not noreturn call into a noreturn one
-	     schedule it for fixup.  */
-	  if (!was_noreturn
-	      && is_gimple_call (stmt)
-	      && gimple_call_noreturn_p (stmt))
-	    stmts_to_fixup.safe_push (stmt);
-
-	  if (gimple_assign_single_p (stmt))
-	    {
-	      tree rhs = gimple_assign_rhs1 (stmt);
-	      if (TREE_CODE (rhs) == ADDR_EXPR)
-		recompute_tree_invariant_for_addr_expr (rhs);
-	    }
-	}
-    }
-
-  /* Visit BB successor PHI nodes and replace PHI args.  */
-  edge e;
-  edge_iterator ei;
-  FOR_EACH_EDGE (e, ei, bb->succs)
-    {
-      for (gphi_iterator gpi = gsi_start_phis (e->dest);
-	   !gsi_end_p (gpi); gsi_next (&gpi))
-	{
-	  gphi *phi = gpi.phi ();
-	  use_operand_p use_p = PHI_ARG_DEF_PTR_FROM_EDGE (phi, e);
-	  tree arg = USE_FROM_PTR (use_p);
-	  if (TREE_CODE (arg) != SSA_NAME
-	      || virtual_operand_p (arg))
-	    continue;
-	  value_range *vr = evrp_range_analyzer.get_value_range (arg);
-	  tree val = value_range_constant_singleton (vr);
-	  if (val && may_propagate_copy (arg, val))
-	    propagate_value (use_p, val);
-	}
-    }
- 
-  return taken_edge;
+tree
+hybrid_folder::value_of_expr (tree op, gimple *stmt)
+{
+  tree evrp_ret = evrp_folder::value_of_expr (op, stmt);
+  tree ranger_ret = m_ranger->value_of_expr (op, stmt);
+  return choose_value (evrp_ret, ranger_ret);
 }
 
-void
-evrp_dom_walker::after_dom_children (basic_block bb)
+tree
+hybrid_folder::value_on_edge (edge e, tree op)
 {
-  evrp_range_analyzer.leave (bb);
+  // Call evrp::value_of_expr directly.  Otherwise another dual call is made
+  // via hybrid_folder::value_of_expr, but without an edge.
+  tree evrp_ret = evrp_folder::value_of_expr (op, NULL);
+  tree ranger_ret = m_ranger->value_on_edge (e, op);
+  return choose_value (evrp_ret, ranger_ret);
 }
 
-/* Perform any cleanups after the main phase of EVRP has completed.  */
-
-void
-evrp_dom_walker::cleanup (void)
+tree
+hybrid_folder::value_of_stmt (gimple *stmt, tree op) 
 {
+  // Call evrp::value_of_expr directly.  Otherwise another dual call is made
+  // via hybrid_folder::value_of_expr, but without a stmt.
+  tree evrp_ret;
+  if (op)
+    evrp_ret = evrp_folder::value_of_expr (op, NULL);
+  else
+    evrp_ret = NULL_TREE;
+
+  tree ranger_ret = m_ranger->value_of_stmt (stmt, op);
+  return choose_value (evrp_ret, ranger_ret);
+}
+
+// Given trees returned by EVRP and Ranger, choose/report the value to use
+// by the folder.
+
+tree
+hybrid_folder::choose_value (tree evrp_val, tree ranger_val)
+{
+  // If both found the same value, just return it.
+  if (evrp_val && ranger_val && !compare_values (evrp_val, ranger_val))
+    return evrp_val;
+
+  // If neither returned a value, return NULL_TREE.
+  if (!ranger_val && !evrp_val)
+    return NULL_TREE;
+
+  // Otherwise there is a discrepancy to flag.
   if (dump_file)
     {
-      fprintf (dump_file, "\nValue ranges after Early VRP:\n\n");
-      evrp_range_analyzer.dump_all_value_ranges (dump_file);
-      fprintf (dump_file, "\n");
-    }
-
-  /* Remove stmts in reverse order to make debug stmt creation possible.  */
-  while (! stmts_to_remove.is_empty ())
-    {
-      gimple *stmt = stmts_to_remove.pop ();
-      if (dump_file && dump_flags & TDF_DETAILS)
+      if (evrp_val && ranger_val)
+	fprintf (dump_file, "EVRP:hybrid: Disagreement\n");
+      if (evrp_val)
 	{
-	  fprintf (dump_file, "Removing dead stmt ");
-	  print_gimple_stmt (dump_file, stmt, 0);
+	  fprintf (dump_file, "EVRP:hybrid: EVRP found singleton ");
+	  print_generic_expr (dump_file, evrp_val);
 	  fprintf (dump_file, "\n");
 	}
-      gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
-      if (gimple_code (stmt) == GIMPLE_PHI)
-	remove_phi_node (&gsi, true);
-      else
+      if (ranger_val)
 	{
-	  unlink_stmt_vdef (stmt);
-	  gsi_remove (&gsi, true);
-	  release_defs (stmt);
+	  fprintf (dump_file, "EVRP:hybrid: RVRP found singleton ");
+	  print_generic_expr (dump_file, ranger_val);
+	  fprintf (dump_file, "\n");
 	}
     }
 
-  if (!bitmap_empty_p (need_eh_cleanup))
-    gimple_purge_all_dead_eh_edges (need_eh_cleanup);
+  // If one value was found, return it.
+  if (!evrp_val)
+    return ranger_val;
+  if (!ranger_val)
+    return evrp_val;
 
-  /* Fixup stmts that became noreturn calls.  This may require splitting
-     blocks and thus isn't possible during the dominator walk.  Do this
-     in reverse order so we don't inadvertedly remove a stmt we want to
-     fixup by visiting a dominating now noreturn call first.  */
-  while (!stmts_to_fixup.is_empty ())
-    {
-      gimple *stmt = stmts_to_fixup.pop ();
-      fixup_noreturn_call (stmt);
-    }
+  // If values are different, return the first calculated value.
+  if ((param_evrp_mode & EVRP_MODE_RVRP_FIRST) == EVRP_MODE_RVRP_FIRST)
+    return ranger_val;
+  return evrp_val;
 }
 
 /* Main entry point for the early vrp pass which is a simplified non-iterative
@@ -288,19 +313,45 @@ evrp_dom_walker::cleanup (void)
 static unsigned int
 execute_early_vrp ()
 {
-  /* Ideally this setup code would move into the ctor for the dominator
-     walk.  However, this setup can change the number of blocks which
+  /* Ideally this setup code would move into the ctor for the folder
+     However, this setup can change the number of blocks which
      invalidates the internal arrays that are set up by the dominator
-     walker.  */
+     walker in substitute_and_fold_engine.  */
   loop_optimizer_init (LOOPS_NORMAL | LOOPS_HAVE_RECORDED_EXITS);
   rewrite_into_loop_closed_ssa (NULL, TODO_update_ssa);
   scev_initialize ();
   calculate_dominance_info (CDI_DOMINATORS);
 
-  /* Walk stmts in dominance order and propagate VRP.  */
-  evrp_dom_walker walker;
-  walker.walk (ENTRY_BLOCK_PTR_FOR_FN (cfun));
-  walker.cleanup ();
+  // Only the last 2 bits matter for choosing the folder.
+  switch (param_evrp_mode & EVRP_MODE_RVRP_FIRST)
+    {
+    case EVRP_MODE_EVRP_ONLY:
+      {
+	evrp_folder folder;
+	folder.substitute_and_fold ();
+	break;
+      }
+    case EVRP_MODE_RVRP_ONLY:
+      {
+	rvrp_folder folder;
+	folder.substitute_and_fold ();
+	break;
+      }
+    case EVRP_MODE_EVRP_FIRST:
+      {
+	hybrid_folder folder (true);
+	folder.substitute_and_fold ();
+	break;
+      }
+    case EVRP_MODE_RVRP_FIRST:
+      {
+	hybrid_folder folder (false);
+	folder.substitute_and_fold ();
+	break;
+      }
+    default:
+      gcc_unreachable ();
+    }
 
   scev_finalize ();
   loop_optimizer_finalize ();
@@ -346,4 +397,3 @@ make_pass_early_vrp (gcc::context *ctxt)
 {
   return new pass_early_vrp (ctxt);
 }
-

@@ -1,4 +1,4 @@
-.. Copyright (C) 2017-2018 Free Software Foundation, Inc.
+.. Copyright (C) 2017-2021 Free Software Foundation, Inc.
    Originally contributed by David Malcolm <dmalcolm@redhat.com>
 
    This is free software: you can redistribute it and/or modify it
@@ -78,3 +78,5 @@ Here's an example of creating a function pointer type corresponding to C's
 
    Generate a :c:type:`gcc_jit_type` for a function pointer with the
    given return type and parameters.
+
+   Each of `param_types` must be non-`void`; `return_type` may be `void`.

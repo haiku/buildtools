@@ -1,7 +1,6 @@
-// { dg-options "-std=gnu++17" }
-// { dg-do compile { target c++17 } }
+// { dg-do compile { target c++17 }  }
 
-// Copyright (C) 2013-2018 Free Software Foundation, Inc.
+// Copyright (C) 2013-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -19,7 +18,6 @@
 // <http://www.gnu.org/licenses/>.
 
 #include <optional>
-
 #include <string>
 #include <memory>
 

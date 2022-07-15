@@ -11,7 +11,7 @@ struct __is_void_helper : false_type {};
 struct is_void : __is_void_helper {};
 template < typename > struct is_array : false_type {};
 namespace __gnu_cxx {
-enum _Lock_policy { _S_single, _S_mutex, _S_atomic }; // { dg-lto-warning "6: type '_Lock_policy' violates the C\\+\\+ One Definition Rule" }
+enum _Lock_policy { _S_single, _S_mutex, _S_atomic }; // { dg-lto-warning "6: type '__gnu_cxx::_Lock_policy' violates the C\\+\\+ One Definition Rule" }
 const _Lock_policy __default_lock_policy = _S_atomic;
 } namespace std {
 using __gnu_cxx::_Lock_policy;
@@ -23,7 +23,7 @@ template < typename _Tp, _Lock_policy, bool = is_array< _Tp >::value,
            bool = is_void::value >
 class __shared_ptr_access {};
 template < typename _Tp, _Lock_policy _Lp >
-class __shared_ptr : __shared_ptr_access< _Tp, _Lp > { // { dg-lto-warning "7: type 'struct __shared_ptr' violates the C\\+\\+ One Definition Rule" }
+class __shared_ptr : __shared_ptr_access< _Tp, _Lp > {
   using element_type = _Tp;
   element_type *_M_ptr;
   __shared_count< _Lp > _M_refcount;
@@ -90,7 +90,7 @@ class ExtNameBuff;
 class ExtSheetBuffer;
 class ExcelToSc;
 class XclImpColRowSettings;
-struct RootData { // { dg-lto-warning "8: type 'struct RootData' violates the C\\+\\+ One Definition Rule" }
+struct RootData { 
   BiffTyp eDateiTyp;
   ExtSheetBuffer *pExtSheetBuff;
   SharedFormulaBuffer *pShrfmlaBuff;
@@ -105,7 +105,7 @@ class ScExtDocOptions;
 class XclFontPropSetHelper;
 class XclChPropSetHelper;
 class XclTracer;
-struct XclRootData { // { dg-lto-warning "8: type 'struct XclRootData' violates the C\\+\\+ One Definition Rule" }
+struct XclRootData {
   typedef std::shared_ptr< ScEditEngineDefaulter > ScEEDefaulterRef;
   typedef std::shared_ptr< ScHeaderEditEngine > ScHeaderEERef;
   typedef std::shared_ptr< EditEngine > EditEngineRef;
@@ -141,13 +141,13 @@ struct XclRootData { // { dg-lto-warning "8: type 'struct XclRootData' violates 
   RootDataRef mxRD;
   virtual ~XclRootData();
 };
-class XclRoot { // { dg-lto-warning "7: type 'struct XclRoot' violates the C\\+\\+ One Definition Rule" }
+class XclRoot {
 public:
   virtual ~XclRoot();
   XclRootData &mrData;
 };
-class XclImpRoot : XclRoot {}; // { dg-lto-warning "7: type 'struct XclImpRoot' violates the C\\+\\+ One Definition Rule" }
+class XclImpRoot : XclRoot {}; 
 class XclImpColRowSettings : XclImpRoot {};
 void lcl_ExportExcelBiff() {
-XclRootData aExpData();
+extern XclRootData aExpData();
 }

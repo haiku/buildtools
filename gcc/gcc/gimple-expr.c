@@ -1,6 +1,6 @@
 /* Gimple decl, type, and expression support functions.
 
-   Copyright (C) 2007-2018 Free Software Foundation, Inc.
+   Copyright (C) 2007-2021 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com>
 
 This file is part of GCC.
@@ -37,6 +37,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "stringpool.h"
 #include "attribs.h"
+#include "target.h"
 
 /* ----- Type related -----  */
 
@@ -147,10 +148,12 @@ useless_type_conversion_p (tree outer_type, tree inner_type)
 
   /* Recurse for vector types with the same number of subparts.  */
   else if (TREE_CODE (inner_type) == VECTOR_TYPE
-	   && TREE_CODE (outer_type) == VECTOR_TYPE
-	   && TYPE_PRECISION (inner_type) == TYPE_PRECISION (outer_type))
-    return useless_type_conversion_p (TREE_TYPE (outer_type),
-				      TREE_TYPE (inner_type));
+	   && TREE_CODE (outer_type) == VECTOR_TYPE)
+    return (known_eq (TYPE_VECTOR_SUBPARTS (inner_type),
+		      TYPE_VECTOR_SUBPARTS (outer_type))
+	    && useless_type_conversion_p (TREE_TYPE (outer_type),
+					  TREE_TYPE (inner_type))
+	    && targetm.compatible_vector_types_p (inner_type, outer_type));
 
   else if (TREE_CODE (inner_type) == ARRAY_TYPE
 	   && TREE_CODE (outer_type) == ARRAY_TYPE)
@@ -370,7 +373,7 @@ copy_var_decl (tree var, tree name, tree type)
 
   TREE_ADDRESSABLE (copy) = TREE_ADDRESSABLE (var);
   TREE_THIS_VOLATILE (copy) = TREE_THIS_VOLATILE (var);
-  DECL_GIMPLE_REG_P (copy) = DECL_GIMPLE_REG_P (var);
+  DECL_NOT_GIMPLE_REG_P (copy) = DECL_NOT_GIMPLE_REG_P (var);
   DECL_ARTIFICIAL (copy) = DECL_ARTIFICIAL (var);
   DECL_IGNORED_P (copy) = DECL_IGNORED_P (var);
   DECL_CONTEXT (copy) = DECL_CONTEXT (var);
@@ -490,14 +493,7 @@ create_tmp_var (tree type, const char *prefix)
 tree
 create_tmp_reg (tree type, const char *prefix)
 {
-  tree tmp;
-
-  tmp = create_tmp_var (type, prefix);
-  if (TREE_CODE (type) == COMPLEX_TYPE
-      || TREE_CODE (type) == VECTOR_TYPE)
-    DECL_GIMPLE_REG_P (tmp) = 1;
-
-  return tmp;
+  return create_tmp_var (type, prefix);
 }
 
 /* Create a new temporary variable declaration of type TYPE by calling
@@ -511,9 +507,6 @@ create_tmp_reg_fn (struct function *fn, tree type, const char *prefix)
 
   tmp = create_tmp_var_raw (type, prefix);
   gimple_add_tmp_var_fn (fn, tmp);
-  if (TREE_CODE (type) == COMPLEX_TYPE
-      || TREE_CODE (type) == VECTOR_TYPE)
-    DECL_GIMPLE_REG_P (tmp) = 1;
 
   return tmp;
 }
@@ -528,37 +521,40 @@ void
 extract_ops_from_tree (tree expr, enum tree_code *subcode_p, tree *op1_p,
 		       tree *op2_p, tree *op3_p)
 {
-  enum gimple_rhs_class grhs_class;
-
   *subcode_p = TREE_CODE (expr);
-  grhs_class = get_gimple_rhs_class (*subcode_p);
-
-  if (grhs_class == GIMPLE_TERNARY_RHS)
+  switch (get_gimple_rhs_class (*subcode_p))
     {
-      *op1_p = TREE_OPERAND (expr, 0);
-      *op2_p = TREE_OPERAND (expr, 1);
-      *op3_p = TREE_OPERAND (expr, 2);
+    case GIMPLE_TERNARY_RHS:
+      {
+	*op1_p = TREE_OPERAND (expr, 0);
+	*op2_p = TREE_OPERAND (expr, 1);
+	*op3_p = TREE_OPERAND (expr, 2);
+	break;
+      }
+    case GIMPLE_BINARY_RHS:
+      {
+	*op1_p = TREE_OPERAND (expr, 0);
+	*op2_p = TREE_OPERAND (expr, 1);
+	*op3_p = NULL_TREE;
+	break;
+      }
+    case GIMPLE_UNARY_RHS:
+      {
+	*op1_p = TREE_OPERAND (expr, 0);
+	*op2_p = NULL_TREE;
+	*op3_p = NULL_TREE;
+	break;
+      }
+    case GIMPLE_SINGLE_RHS:
+      {
+	*op1_p = expr;
+	*op2_p = NULL_TREE;
+	*op3_p = NULL_TREE;
+	break;
+      }
+    default:
+      gcc_unreachable ();
     }
-  else if (grhs_class == GIMPLE_BINARY_RHS)
-    {
-      *op1_p = TREE_OPERAND (expr, 0);
-      *op2_p = TREE_OPERAND (expr, 1);
-      *op3_p = NULL_TREE;
-    }
-  else if (grhs_class == GIMPLE_UNARY_RHS)
-    {
-      *op1_p = TREE_OPERAND (expr, 0);
-      *op2_p = NULL_TREE;
-      *op3_p = NULL_TREE;
-    }
-  else if (grhs_class == GIMPLE_SINGLE_RHS)
-    {
-      *op1_p = expr;
-      *op2_p = NULL_TREE;
-      *op3_p = NULL_TREE;
-    }
-  else
-    gcc_unreachable ();
 }
 
 /* Extract operands for a GIMPLE_COND statement out of COND_EXPR tree COND.  */
@@ -571,6 +567,7 @@ gimple_cond_get_ops_from_tree (tree cond, enum tree_code *code_p,
 	      || TREE_CODE (cond) == TRUTH_NOT_EXPR
 	      || is_gimple_min_invariant (cond)
 	      || SSA_VAR_P (cond));
+  gcc_checking_assert (!tree_could_throw_p (cond));
 
   extract_ops_from_tree (cond, code_p, lhs_p, rhs_p);
 
@@ -602,15 +599,31 @@ is_gimple_lvalue (tree t)
 	  || TREE_CODE (t) == BIT_FIELD_REF);
 }
 
-/*  Return true if T is a GIMPLE condition.  */
+/* Helper for is_gimple_condexpr and is_gimple_condexpr_for_cond.  */
+
+static bool
+is_gimple_condexpr_1 (tree t, bool allow_traps)
+{
+  return (is_gimple_val (t) || (COMPARISON_CLASS_P (t)
+				&& (allow_traps || !tree_could_throw_p (t))
+				&& is_gimple_val (TREE_OPERAND (t, 0))
+				&& is_gimple_val (TREE_OPERAND (t, 1))));
+}
+
+/* Return true if T is a GIMPLE condition.  */
 
 bool
 is_gimple_condexpr (tree t)
 {
-  return (is_gimple_val (t) || (COMPARISON_CLASS_P (t)
-				&& !tree_could_throw_p (t)
-				&& is_gimple_val (TREE_OPERAND (t, 0))
-				&& is_gimple_val (TREE_OPERAND (t, 1))));
+  return is_gimple_condexpr_1 (t, true);
+}
+
+/* Like is_gimple_condexpr, but does not allow T to trap.  */
+
+bool
+is_gimple_condexpr_for_cond (tree t)
+{
+  return is_gimple_condexpr_1 (t, false);
 }
 
 /* Return true if T is a gimple address.  */
@@ -769,13 +782,9 @@ is_gimple_reg (tree t)
   if (TREE_CODE (t) == VAR_DECL && DECL_HARD_REGISTER (t))
     return false;
 
-  /* Complex and vector values must have been put into SSA-like form.
-     That is, no assignments to the individual components.  */
-  if (TREE_CODE (TREE_TYPE (t)) == COMPLEX_TYPE
-      || TREE_CODE (TREE_TYPE (t)) == VECTOR_TYPE)
-    return DECL_GIMPLE_REG_P (t);
-
-  return true;
+  /* Variables can be marked as having partial definitions, avoid
+     putting them into SSA form.  */
+  return !DECL_NOT_GIMPLE_REG_P (t);
 }
 
 

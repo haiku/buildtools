@@ -1,5 +1,5 @@
 /* Pretty formatting of GENERIC trees in C syntax.
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2021 Free Software Foundation, Inc.
    Adapted from c-pretty-print.c by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -34,10 +34,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "internal-fn.h"
 #include "gomp-constants.h"
 #include "gimple.h"
+#include "fold-const.h"
+
+/* Routines in this file get invoked via the default tree printer
+   used by diagnostics and thus they are called from pp_printf which
+   isn't reentrant.  Avoid using pp_printf in this file.  */
+#pragma GCC poison pp_printf
+
+/* Disable warnings about quoting issues in the pp_xxx calls below
+   that (intentionally) don't follow GCC diagnostic conventions.  */
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat-diag"
+#endif
 
 /* Local functions, macros and variables.  */
 static const char *op_symbol (const_tree);
-static void pretty_print_string (pretty_printer *, const char*);
 static void newline_and_indent (pretty_printer *, int);
 static void maybe_init_pretty_print (FILE *);
 static void print_struct_decl (pretty_printer *, const_tree, int, dump_flags_t);
@@ -162,6 +174,17 @@ print_generic_expr (FILE *file, tree t, dump_flags_t flags)
   pp_flush (tree_pp);
 }
 
+/* Print a single expression T to string, and return it.  The caller
+   must free the returned memory.  */
+
+char *
+print_generic_expr_to_str (tree t)
+{
+  pretty_printer pp;
+  dump_generic_node (&pp, t, 0, TDF_VOPS|TDF_MEMSYMS, false);
+  return xstrdup (pp_formatted_text (&pp));
+}
+
 /* Dump NAME, an IDENTIFIER_POINTER, sanitized so that D<num> sequences
    in it are replaced with Dxxxx, as long as they are at the start or
    preceded by $ and at the end or followed by $.  See make_fancy_name
@@ -275,29 +298,41 @@ dump_decl_name (pretty_printer *pp, tree node, dump_flags_t flags)
   if ((flags & TDF_UID) || name == NULL_TREE)
     {
       if (TREE_CODE (node) == LABEL_DECL && LABEL_DECL_UID (node) != -1)
-	pp_printf (pp, "L%c%d", uid_sep, (int) LABEL_DECL_UID (node));
+	{
+	  pp_character (pp, 'L');
+	  pp_character (pp, uid_sep);
+	  pp_decimal_int (pp, (int) LABEL_DECL_UID (node));
+	}
       else if (TREE_CODE (node) == DEBUG_EXPR_DECL)
 	{
 	  if (flags & TDF_NOUID)
 	    pp_string (pp, "D#xxxx");
 	  else
-	    pp_printf (pp, "D#%i", DEBUG_TEMP_UID (node));
+	    {
+	      pp_string (pp, "D#");
+	      pp_decimal_int (pp, (int) DEBUG_TEMP_UID (node));
+	    }
 	}
       else
 	{
 	  char c = TREE_CODE (node) == CONST_DECL ? 'C' : 'D';
+	  pp_character (pp, c);
+	  pp_character (pp, uid_sep);
 	  if (flags & TDF_NOUID)
-	    pp_printf (pp, "%c.xxxx", c);
+	    pp_string (pp, "xxxx");
 	  else
-	    pp_printf (pp, "%c%c%u", c, uid_sep, DECL_UID (node));
+	    pp_scalar (pp, "%u", DECL_UID (node));
 	}
     }
   if ((flags & TDF_ALIAS) && DECL_PT_UID (node) != DECL_UID (node))
     {
       if (flags & TDF_NOUID)
-	pp_printf (pp, "ptD.xxxx");
+	pp_string (pp, "ptD.xxxx");
       else
-	pp_printf (pp, "ptD.%u", DECL_PT_UID (node));
+	{
+	  pp_string (pp, "ptD.");
+	  pp_scalar (pp, "%u", DECL_PT_UID (node));
+	}
     }
 }
 
@@ -382,6 +417,31 @@ dump_array_domain (pretty_printer *pp, tree domain, int spc, dump_flags_t flags)
 }
 
 
+/* Dump OpenMP iterators ITER.  */
+
+static void
+dump_omp_iterators (pretty_printer *pp, tree iter, int spc, dump_flags_t flags)
+{
+  pp_string (pp, "iterator(");
+  for (tree it = iter; it; it = TREE_CHAIN (it))
+    {
+      if (it != iter)
+	pp_string (pp, ", ");
+      dump_generic_node (pp, TREE_TYPE (TREE_VEC_ELT (it, 0)), spc, flags,
+			 false);
+      pp_space (pp);
+      dump_generic_node (pp, TREE_VEC_ELT (it, 0), spc, flags, false);
+      pp_equal (pp);
+      dump_generic_node (pp, TREE_VEC_ELT (it, 1), spc, flags, false);
+      pp_colon (pp);
+      dump_generic_node (pp, TREE_VEC_ELT (it, 2), spc, flags, false);
+      pp_colon (pp);
+      dump_generic_node (pp, TREE_VEC_ELT (it, 3), spc, flags, false);
+    }
+  pp_right_paren (pp);
+}
+
+
 /* Dump OpenMP clause CLAUSE.  PP, CLAUSE, SPC and FLAGS are as in
    dump_generic_node.  */
 
@@ -389,7 +449,7 @@ static void
 dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 {
   const char *name;
-
+  const char *modifier = NULL;
   switch (OMP_CLAUSE_CODE (clause))
     {
     case OMP_CLAUSE_PRIVATE:
@@ -403,6 +463,8 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       goto print_remap;
     case OMP_CLAUSE_LASTPRIVATE:
       name = "lastprivate";
+      if (OMP_CLAUSE_LASTPRIVATE_CONDITIONAL (clause))
+	modifier = "conditional:";
       goto print_remap;
     case OMP_CLAUSE_COPYIN:
       name = "copyin";
@@ -415,12 +477,32 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       goto print_remap;
     case OMP_CLAUSE_USE_DEVICE_PTR:
       name = "use_device_ptr";
+      if (OMP_CLAUSE_USE_DEVICE_PTR_IF_PRESENT (clause))
+	modifier = "if_present:";
+      goto print_remap;
+    case OMP_CLAUSE_USE_DEVICE_ADDR:
+      name = "use_device_addr";
       goto print_remap;
     case OMP_CLAUSE_IS_DEVICE_PTR:
       name = "is_device_ptr";
       goto print_remap;
+    case OMP_CLAUSE_INCLUSIVE:
+      name = "inclusive";
+      goto print_remap;
+    case OMP_CLAUSE_EXCLUSIVE:
+      name = "exclusive";
+      goto print_remap;
     case OMP_CLAUSE__LOOPTEMP_:
       name = "_looptemp_";
+      goto print_remap;
+    case OMP_CLAUSE__REDUCTEMP_:
+      name = "_reductemp_";
+      goto print_remap;
+    case OMP_CLAUSE__CONDTEMP_:
+      name = "_condtemp_";
+      goto print_remap;
+    case OMP_CLAUSE__SCANTEMP_:
+      name = "_scantemp_";
       goto print_remap;
     case OMP_CLAUSE_TO_DECLARE:
       name = "to";
@@ -428,16 +510,33 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
     case OMP_CLAUSE_LINK:
       name = "link";
       goto print_remap;
+    case OMP_CLAUSE_NONTEMPORAL:
+      name = "nontemporal";
+      goto print_remap;
   print_remap:
       pp_string (pp, name);
       pp_left_paren (pp);
+      if (modifier)
+	pp_string (pp, modifier);
       dump_generic_node (pp, OMP_CLAUSE_DECL (clause),
 			 spc, flags, false);
       pp_right_paren (pp);
       break;
 
+    case OMP_CLAUSE_TASK_REDUCTION:
+    case OMP_CLAUSE_IN_REDUCTION:
+      pp_string (pp, OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_IN_REDUCTION
+		     ? "in_" : "task_");
+      /* FALLTHRU */
     case OMP_CLAUSE_REDUCTION:
       pp_string (pp, "reduction(");
+      if (OMP_CLAUSE_CODE (clause) == OMP_CLAUSE_REDUCTION)
+	{
+	  if (OMP_CLAUSE_REDUCTION_TASK (clause))
+	    pp_string (pp, "task,");
+	  else if (OMP_CLAUSE_REDUCTION_INSCAN (clause))
+	    pp_string (pp, "inscan,");
+	}
       if (OMP_CLAUSE_REDUCTION_CODE (clause) != ERROR_MARK)
 	{
 	  pp_string (pp,
@@ -454,7 +553,9 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       switch (OMP_CLAUSE_IF_MODIFIER (clause))
 	{
 	case ERROR_MARK: break;
+	case VOID_CST: pp_string (pp, "cancel:"); break;
 	case OMP_PARALLEL: pp_string (pp, "parallel:"); break;
+	case OMP_SIMD: pp_string (pp, "simd:"); break;
 	case OMP_TASK: pp_string (pp, "task:"); break;
 	case OMP_TASKLOOP: pp_string (pp, "taskloop:"); break;
 	case OMP_TARGET_DATA: pp_string (pp, "target data:"); break;
@@ -629,22 +730,44 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       pp_right_paren (pp);
       break;
 
+    case OMP_CLAUSE_ALLOCATE:
+      pp_string (pp, "allocate(");
+      if (OMP_CLAUSE_ALLOCATE_ALLOCATOR (clause))
+	{
+	  dump_generic_node (pp, OMP_CLAUSE_ALLOCATE_ALLOCATOR (clause),
+			     spc, flags, false);
+	  pp_colon (pp);
+	}
+      dump_generic_node (pp, OMP_CLAUSE_DECL (clause),
+			 spc, flags, false);
+      pp_right_paren (pp);
+      break;
+
     case OMP_CLAUSE_DEPEND:
       pp_string (pp, "depend(");
       switch (OMP_CLAUSE_DEPEND_KIND (clause))
 	{
+	case OMP_CLAUSE_DEPEND_DEPOBJ:
+	  name = "depobj";
+	  break;
 	case OMP_CLAUSE_DEPEND_IN:
-	  pp_string (pp, "in");
+	  name = "in";
 	  break;
 	case OMP_CLAUSE_DEPEND_OUT:
-	  pp_string (pp, "out");
+	  name = "out";
 	  break;
 	case OMP_CLAUSE_DEPEND_INOUT:
-	  pp_string (pp, "inout");
+	  name = "inout";
+	  break;
+	case OMP_CLAUSE_DEPEND_MUTEXINOUTSET:
+	  name = "mutexinoutset";
 	  break;
 	case OMP_CLAUSE_DEPEND_SOURCE:
 	  pp_string (pp, "source)");
 	  return;
+	case OMP_CLAUSE_DEPEND_LAST:
+	  name = "__internal__";
+	  break;
 	case OMP_CLAUSE_DEPEND_SINK:
 	  pp_string (pp, "sink:");
 	  for (tree t = OMP_CLAUSE_DECL (clause); t; t = TREE_CHAIN (t))
@@ -670,10 +793,21 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 	default:
 	  gcc_unreachable ();
 	}
-      pp_colon (pp);
-      dump_generic_node (pp, OMP_CLAUSE_DECL (clause),
-			 spc, flags, false);
-      pp_right_paren (pp);
+      {
+	tree t = OMP_CLAUSE_DECL (clause);
+	if (TREE_CODE (t) == TREE_LIST
+	    && TREE_PURPOSE (t)
+	    && TREE_CODE (TREE_PURPOSE (t)) == TREE_VEC)
+	  {
+	    dump_omp_iterators (pp, TREE_PURPOSE (t), spc, flags);
+	    pp_colon (pp);
+	    t = TREE_VALUE (t);
+	  }
+	pp_string (pp, name);
+	pp_colon (pp);
+	dump_generic_node (pp, t, spc, flags, false);
+	pp_right_paren (pp);
+      }
       break;
 
     case OMP_CLAUSE_MAP:
@@ -683,6 +817,9 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 	case GOMP_MAP_ALLOC:
 	case GOMP_MAP_POINTER:
 	  pp_string (pp, "alloc");
+	  break;
+	case GOMP_MAP_IF_PRESENT:
+	  pp_string (pp, "no_alloc");
 	  break;
 	case GOMP_MAP_TO:
 	case GOMP_MAP_TO_PSET:
@@ -745,6 +882,18 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 	case GOMP_MAP_LINK:
 	  pp_string (pp, "link");
 	  break;
+	case GOMP_MAP_ATTACH:
+	  pp_string (pp, "attach");
+	  break;
+	case GOMP_MAP_DETACH:
+	  pp_string (pp, "detach");
+	  break;
+	case GOMP_MAP_FORCE_DETACH:
+	  pp_string (pp, "force_detach");
+	  break;
+	case GOMP_MAP_ATTACH_DETACH:
+	  pp_string (pp, "attach_detach");
+	  break;
 	default:
 	  gcc_unreachable ();
 	}
@@ -765,6 +914,12 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
 	      break;
 	    case GOMP_MAP_TO_PSET:
 	      pp_string (pp, " [pointer set, len: ");
+	      break;
+	    case GOMP_MAP_ATTACH:
+	    case GOMP_MAP_DETACH:
+	    case GOMP_MAP_FORCE_DETACH:
+	    case GOMP_MAP_ATTACH_DETACH:
+	      pp_string (pp, " [bias: ");
 	      break;
 	    default:
 	      pp_string (pp, " [len: ");
@@ -847,6 +1002,25 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       pp_right_paren (pp);
       break;
 
+    case OMP_CLAUSE_DEVICE_TYPE:
+      pp_string (pp, "device_type(");
+      switch (OMP_CLAUSE_DEVICE_TYPE_KIND (clause))
+	{
+	case OMP_CLAUSE_DEVICE_TYPE_HOST:
+	  pp_string (pp, "host");
+	  break;
+	case OMP_CLAUSE_DEVICE_TYPE_NOHOST:
+	  pp_string (pp, "nohost");
+	  break;
+	case OMP_CLAUSE_DEVICE_TYPE_ANY:
+	  pp_string (pp, "any");
+	  break;
+	default:
+	  gcc_unreachable ();
+	}
+      pp_right_paren (pp);
+      break;
+
     case OMP_CLAUSE_SAFELEN:
       pp_string (pp, "safelen(");
       dump_generic_node (pp, OMP_CLAUSE_SAFELEN_EXPR (clause),
@@ -890,7 +1064,76 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       break;
 
     case OMP_CLAUSE_DEFAULTMAP:
-      pp_string (pp, "defaultmap(tofrom:scalar)");
+      pp_string (pp, "defaultmap(");
+      switch (OMP_CLAUSE_DEFAULTMAP_BEHAVIOR (clause))
+	{
+	case OMP_CLAUSE_DEFAULTMAP_ALLOC:
+	  pp_string (pp, "alloc");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_TO:
+	  pp_string (pp, "to");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_FROM:
+	  pp_string (pp, "from");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_TOFROM:
+	  pp_string (pp, "tofrom");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_FIRSTPRIVATE:
+	  pp_string (pp, "firstprivate");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_NONE:
+	  pp_string (pp, "none");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_DEFAULT:
+	  pp_string (pp, "default");
+	  break;
+	default:
+	  gcc_unreachable ();
+	}
+      switch (OMP_CLAUSE_DEFAULTMAP_CATEGORY (clause))
+	{
+	case OMP_CLAUSE_DEFAULTMAP_CATEGORY_UNSPECIFIED:
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_CATEGORY_SCALAR:
+	  pp_string (pp, ":scalar");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_CATEGORY_AGGREGATE:
+	  pp_string (pp, ":aggregate");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_CATEGORY_ALLOCATABLE:
+	  pp_string (pp, ":allocatable");
+	  break;
+	case OMP_CLAUSE_DEFAULTMAP_CATEGORY_POINTER:
+	  pp_string (pp, ":pointer");
+	  break;
+	default:
+	  gcc_unreachable ();
+	}
+      pp_right_paren (pp);
+      break;
+
+    case OMP_CLAUSE_ORDER:
+      pp_string (pp, "order(concurrent)");
+      break;
+
+    case OMP_CLAUSE_BIND:
+      pp_string (pp, "bind(");
+      switch (OMP_CLAUSE_BIND_KIND (clause))
+	{
+	case OMP_CLAUSE_BIND_TEAMS:
+	  pp_string (pp, "teams");
+	  break;
+	case OMP_CLAUSE_BIND_PARALLEL:
+	  pp_string (pp, "parallel");
+	  break;
+	case OMP_CLAUSE_BIND_THREAD:
+	  pp_string (pp, "thread");
+	  break;
+	default:
+	  gcc_unreachable ();
+	}
+      pp_right_paren (pp);
       break;
 
     case OMP_CLAUSE__SIMDUID_:
@@ -1034,22 +1277,21 @@ dump_omp_clause (pretty_printer *pp, tree clause, int spc, dump_flags_t flags)
       pp_right_paren (pp);
       break;
 
-    case OMP_CLAUSE__GRIDDIM_:
-      pp_string (pp, "_griddim_(");
-      pp_unsigned_wide_integer (pp, OMP_CLAUSE__GRIDDIM__DIMENSION (clause));
-      pp_colon (pp);
-      dump_generic_node (pp, OMP_CLAUSE__GRIDDIM__SIZE (clause), spc, flags,
-			 false);
-      pp_comma (pp);
-      dump_generic_node (pp, OMP_CLAUSE__GRIDDIM__GROUP (clause), spc, flags,
+    case OMP_CLAUSE_IF_PRESENT:
+      pp_string (pp, "if_present");
+      break;
+    case OMP_CLAUSE_FINALIZE:
+      pp_string (pp, "finalize");
+      break;
+    case OMP_CLAUSE_DETACH:
+      pp_string (pp, "detach(");
+      dump_generic_node (pp, OMP_CLAUSE_DECL (clause), spc, flags,
 			 false);
       pp_right_paren (pp);
       break;
 
     default:
-      /* Should never happen.  */
-      dump_generic_node (pp, clause, spc, flags, false);
-      break;
+      gcc_unreachable ();
     }
 }
 
@@ -1103,13 +1345,16 @@ dump_block_node (pretty_printer *pp, tree block, int spc, dump_flags_t flags)
 {
   tree t;
 
-  pp_printf (pp, "BLOCK #%d ", BLOCK_NUMBER (block));
+  pp_string (pp, "BLOCK #");
+  pp_decimal_int (pp, BLOCK_NUMBER (block));
+  pp_character (pp, ' ');
 
   if (flags & TDF_ADDRESS)
-    pp_printf (pp, "[%p] ", (void *) block);
-
-  if (BLOCK_ABSTRACT (block))
-    pp_string (pp, "[abstract] ");
+    {
+      pp_character (pp, '[');
+      pp_scalar (pp, "%p", (void *) block);
+      pp_string (pp, "] ");
+    }
 
   if (TREE_ASM_WRITTEN (block))
     pp_string (pp, "[written] ");
@@ -1205,6 +1450,207 @@ dump_block_node (pretty_printer *pp, tree block, int spc, dump_flags_t flags)
     }
 }
 
+/* Dump #pragma omp atomic memory order clause.  */
+
+void
+dump_omp_atomic_memory_order (pretty_printer *pp, enum omp_memory_order mo)
+{
+  switch (mo)
+    {
+    case OMP_MEMORY_ORDER_RELAXED:
+      pp_string (pp, " relaxed");
+      break;
+    case OMP_MEMORY_ORDER_SEQ_CST:
+      pp_string (pp, " seq_cst");
+      break;
+    case OMP_MEMORY_ORDER_ACQ_REL:
+      pp_string (pp, " acq_rel");
+      break;
+    case OMP_MEMORY_ORDER_ACQUIRE:
+      pp_string (pp, " acquire");
+      break;
+    case OMP_MEMORY_ORDER_RELEASE:
+      pp_string (pp, " release");
+      break;
+    case OMP_MEMORY_ORDER_UNSPECIFIED:
+      break;
+    default:
+      gcc_unreachable ();
+    }
+}
+
+/* Helper to dump a MEM_REF node.  */
+
+static void
+dump_mem_ref (pretty_printer *pp, tree node, int spc, dump_flags_t flags)
+{
+  if (TREE_CODE (node) == MEM_REF && (flags & TDF_GIMPLE))
+    {
+      pp_string (pp, "__MEM <");
+      dump_generic_node (pp, TREE_TYPE (node),
+			 spc, flags | TDF_SLIM, false);
+      if (TYPE_ALIGN (TREE_TYPE (node))
+	  != TYPE_ALIGN (TYPE_MAIN_VARIANT (TREE_TYPE (node))))
+	{
+	  pp_string (pp, ", ");
+	  pp_decimal_int (pp, TYPE_ALIGN (TREE_TYPE (node)));
+	}
+      pp_greater (pp);
+      pp_string (pp, " (");
+      if (TREE_TYPE (TREE_OPERAND (node, 0))
+	  != TREE_TYPE (TREE_OPERAND (node, 1)))
+	{
+	  pp_left_paren (pp);
+	  dump_generic_node (pp, TREE_TYPE (TREE_OPERAND (node, 1)),
+			     spc, flags | TDF_SLIM, false);
+	  pp_right_paren (pp);
+	}
+      dump_generic_node (pp, TREE_OPERAND (node, 0),
+			 spc, flags | TDF_SLIM, false);
+      if (! integer_zerop (TREE_OPERAND (node, 1)))
+	{
+	  pp_string (pp, " + ");
+	  dump_generic_node (pp, TREE_OPERAND (node, 1),
+			     spc, flags | TDF_SLIM, false);
+	}
+      pp_right_paren (pp);
+    }
+  else if (TREE_CODE (node) == MEM_REF
+	   && integer_zerop (TREE_OPERAND (node, 1))
+	   /* Dump the types of INTEGER_CSTs explicitly, for we can't
+	      infer them and MEM_ATTR caching will share MEM_REFs
+	      with differently-typed op0s.  */
+	   && TREE_CODE (TREE_OPERAND (node, 0)) != INTEGER_CST
+	   /* Released SSA_NAMES have no TREE_TYPE.  */
+	   && TREE_TYPE (TREE_OPERAND (node, 0)) != NULL_TREE
+	   /* Same pointer types, but ignoring POINTER_TYPE vs.
+	      REFERENCE_TYPE.  */
+	   && (TREE_TYPE (TREE_TYPE (TREE_OPERAND (node, 0)))
+	       == TREE_TYPE (TREE_TYPE (TREE_OPERAND (node, 1))))
+	   && (TYPE_MODE (TREE_TYPE (TREE_OPERAND (node, 0)))
+	       == TYPE_MODE (TREE_TYPE (TREE_OPERAND (node, 1))))
+	   && (TYPE_REF_CAN_ALIAS_ALL (TREE_TYPE (TREE_OPERAND (node, 0)))
+	       == TYPE_REF_CAN_ALIAS_ALL (TREE_TYPE (TREE_OPERAND (node, 1))))
+	   /* Same value types ignoring qualifiers.  */
+	   && (TYPE_MAIN_VARIANT (TREE_TYPE (node))
+	       == TYPE_MAIN_VARIANT
+	       (TREE_TYPE (TREE_TYPE (TREE_OPERAND (node, 1)))))
+	   && (!(flags & TDF_ALIAS)
+	       || MR_DEPENDENCE_CLIQUE (node) == 0))
+    {
+      if (TREE_CODE (TREE_OPERAND (node, 0)) != ADDR_EXPR)
+	{
+	  /* Enclose pointers to arrays in parentheses.  */
+	  tree op0 = TREE_OPERAND (node, 0);
+	  tree op0type = TREE_TYPE (op0);
+	  if (POINTER_TYPE_P (op0type)
+	      && TREE_CODE (TREE_TYPE (op0type)) == ARRAY_TYPE)
+	    pp_left_paren (pp);
+	  pp_star (pp);
+	  dump_generic_node (pp, op0, spc, flags, false);
+	  if (POINTER_TYPE_P (op0type)
+	      && TREE_CODE (TREE_TYPE (op0type)) == ARRAY_TYPE)
+	    pp_right_paren (pp);
+	}
+      else
+	dump_generic_node (pp,
+			   TREE_OPERAND (TREE_OPERAND (node, 0), 0),
+			   spc, flags, false);
+    }
+  else
+    {
+      pp_string (pp, "MEM");
+
+      tree nodetype = TREE_TYPE (node);
+      tree op0 = TREE_OPERAND (node, 0);
+      tree op1 = TREE_OPERAND (node, 1);
+      tree op1type = TYPE_MAIN_VARIANT (TREE_TYPE (op1));
+
+      tree op0size = TYPE_SIZE (nodetype);
+      tree op1size = TYPE_SIZE (TREE_TYPE (op1type));
+
+      if (!op0size || !op1size
+	  || !operand_equal_p (op0size, op1size, 0))
+	{
+	  pp_string (pp, " <");
+	  /* If the size of the type of the operand is not the same
+	     as the size of the MEM_REF expression include the type
+	     of the latter similar to the TDF_GIMPLE output to make
+	     it clear how many bytes of memory are being accessed.  */
+	  dump_generic_node (pp, nodetype, spc, flags | TDF_SLIM, false);
+	  pp_string (pp, "> ");
+	}
+
+      pp_string (pp, "[(");
+      dump_generic_node (pp, op1type, spc, flags | TDF_SLIM, false);
+      pp_right_paren (pp);
+      dump_generic_node (pp, op0, spc, flags, false);
+      if (!integer_zerop (op1))
+	{
+	  pp_string (pp, " + ");
+	  dump_generic_node (pp, op1, spc, flags, false);
+	}
+      if (TREE_CODE (node) == TARGET_MEM_REF)
+	{
+	  tree tmp = TMR_INDEX2 (node);
+	  if (tmp)
+	    {
+	      pp_string (pp, " + ");
+	      dump_generic_node (pp, tmp, spc, flags, false);
+	    }
+	  tmp = TMR_INDEX (node);
+	  if (tmp)
+	    {
+	      pp_string (pp, " + ");
+	      dump_generic_node (pp, tmp, spc, flags, false);
+	      tmp = TMR_STEP (node);
+	      pp_string (pp, " * ");
+	      if (tmp)
+		dump_generic_node (pp, tmp, spc, flags, false);
+	      else
+		pp_string (pp, "1");
+	    }
+	}
+      if ((flags & TDF_ALIAS)
+	  && MR_DEPENDENCE_CLIQUE (node) != 0)
+	{
+	  pp_string (pp, " clique ");
+	  pp_unsigned_wide_integer (pp, MR_DEPENDENCE_CLIQUE (node));
+	  pp_string (pp, " base ");
+	  pp_unsigned_wide_integer (pp, MR_DEPENDENCE_BASE (node));
+	}
+      pp_right_bracket (pp);
+    }
+}
+
+/* Helper function for dump_generic_node.  Dump INIT or COND expression for
+   OpenMP loop non-rectangular iterators.  */
+
+void
+dump_omp_loop_non_rect_expr (pretty_printer *pp, tree node, int spc,
+			     dump_flags_t flags)
+{
+  gcc_assert (TREE_CODE (node) == TREE_VEC);
+  dump_generic_node (pp, TREE_VEC_ELT (node, 0), spc, flags, false);
+  pp_string (pp, " * ");
+  if (op_prio (TREE_VEC_ELT (node, 1)) <= op_code_prio (MULT_EXPR))
+    {
+      pp_left_paren (pp);
+      dump_generic_node (pp, TREE_VEC_ELT (node, 1), spc, flags, false);
+      pp_right_paren (pp);
+    }
+  else
+    dump_generic_node (pp, TREE_VEC_ELT (node, 1), spc, flags, false);
+  pp_string (pp, " + ");
+  if (op_prio (TREE_VEC_ELT (node, 1)) <= op_code_prio (PLUS_EXPR))
+    {
+      pp_left_paren (pp);
+      dump_generic_node (pp, TREE_VEC_ELT (node, 2), spc, flags, false);
+      pp_right_paren (pp);
+    }
+  else
+    dump_generic_node (pp, TREE_VEC_ELT (node, 2), spc, flags, false);
+}
 
 /* Dump the node NODE on the pretty_printer PP, SPC spaces of
    indent.  FLAGS specifies details to show in the dump (see TDF_* in
@@ -1227,7 +1673,11 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
   is_expr = EXPR_P (node);
 
   if (is_stmt && (flags & TDF_STMTADDR))
-    pp_printf (pp, "<&%p> ", (void *)node);
+    {
+      pp_string (pp, "<&");
+      pp_scalar (pp, "%p", (void *)node);
+      pp_string (pp, "> ");
+    }
 
   if ((flags & TDF_LINENO) && EXPR_HAS_LOCATION (node))
     dump_location (pp, EXPR_LOCATION (node));
@@ -1285,7 +1735,6 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       break;
 
     case VOID_TYPE:
-    case POINTER_BOUNDS_TYPE:
     case INTEGER_TYPE:
     case REAL_TYPE:
     case FIXED_POINT_TYPE:
@@ -1293,6 +1742,7 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
     case VECTOR_TYPE:
     case ENUMERAL_TYPE:
     case BOOLEAN_TYPE:
+    case OPAQUE_TYPE:
       {
 	unsigned int quals = TYPE_QUALS (node);
 	enum tree_code_class tclass;
@@ -1301,9 +1751,9 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	  pp_string (pp, "atomic ");
 	if (quals & TYPE_QUAL_CONST)
 	  pp_string (pp, "const ");
-	else if (quals & TYPE_QUAL_VOLATILE)
+	if (quals & TYPE_QUAL_VOLATILE)
 	  pp_string (pp, "volatile ");
-	else if (quals & TYPE_QUAL_RESTRICT)
+	if (quals & TYPE_QUAL_RESTRICT)
 	  pp_string (pp, "restrict ");
 
 	if (!ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (node)))
@@ -1398,6 +1848,14 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 		pp_decimal_int (pp, TYPE_PRECISION (node));
 		pp_greater (pp);
 	      }
+	    else if (TREE_CODE (node) == BOOLEAN_TYPE)
+	      {
+		pp_string (pp, (TYPE_UNSIGNED (node)
+				? "<unsigned-boolean:"
+				: "<signed-boolean:"));
+		pp_decimal_int (pp, TYPE_PRECISION (node));
+		pp_greater (pp);
+	      }
 	    else if (TREE_CODE (node) == VOID_TYPE)
 	      pp_string (pp, "void");
 	    else
@@ -1426,9 +1884,13 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	  if (TYPE_IDENTIFIER (node))
 	    dump_generic_node (pp, TYPE_NAME (node), spc, flags, false);
 	  else if (flags & TDF_NOUID)
-	    pp_printf (pp, "<Txxxx>");
+	    pp_string (pp, "<Txxxx>");
 	  else
-	    pp_printf (pp, "<T%x>", TYPE_UID (node));
+	    {
+	      pp_string (pp, "<T");
+	      pp_scalar (pp, "%x", TYPE_UID (node));
+	      pp_character (pp, '>');
+	    }
 
 	  pp_right_paren (pp);
 	  dump_function_declaration (pp, fnode, spc, flags);
@@ -1465,163 +1927,21 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       break;
 
     case MEM_REF:
-      {
-	if (flags & TDF_GIMPLE)
-	  {
-	    pp_string (pp, "__MEM <");
-	    dump_generic_node (pp, TREE_TYPE (node),
-			       spc, flags | TDF_SLIM, false);
-	    if (TYPE_ALIGN (TREE_TYPE (node))
-		!= TYPE_ALIGN (TYPE_MAIN_VARIANT (TREE_TYPE (node))))
-	      {
-		pp_string (pp, ", ");
-		pp_decimal_int (pp, TYPE_ALIGN (TREE_TYPE (node)));
-	      }
-	    pp_greater (pp);
-	    pp_string (pp, " (");
-	    if (TREE_TYPE (TREE_OPERAND (node, 0))
-		!= TREE_TYPE (TREE_OPERAND (node, 1)))
-	      {
-		pp_left_paren (pp);
-		dump_generic_node (pp, TREE_TYPE (TREE_OPERAND (node, 1)),
-				   spc, flags | TDF_SLIM, false);
-		pp_right_paren (pp);
-	      }
-	    dump_generic_node (pp, TREE_OPERAND (node, 0),
-			       spc, flags | TDF_SLIM, false);
-	    if (! integer_zerop (TREE_OPERAND (node, 1)))
-	      {
-		pp_string (pp, " + ");
-		dump_generic_node (pp, TREE_OPERAND (node, 1),
-				   spc, flags | TDF_SLIM, false);
-	      }
-	    pp_right_paren (pp);
-	  }
-	else if (integer_zerop (TREE_OPERAND (node, 1))
-	    /* Dump the types of INTEGER_CSTs explicitly, for we can't
-	       infer them and MEM_ATTR caching will share MEM_REFs
-	       with differently-typed op0s.  */
-	    && TREE_CODE (TREE_OPERAND (node, 0)) != INTEGER_CST
-	    /* Released SSA_NAMES have no TREE_TYPE.  */
-	    && TREE_TYPE (TREE_OPERAND (node, 0)) != NULL_TREE
-	    /* Same pointer types, but ignoring POINTER_TYPE vs.
-	       REFERENCE_TYPE.  */
-	    && (TREE_TYPE (TREE_TYPE (TREE_OPERAND (node, 0)))
-		== TREE_TYPE (TREE_TYPE (TREE_OPERAND (node, 1))))
-	    && (TYPE_MODE (TREE_TYPE (TREE_OPERAND (node, 0)))
-		== TYPE_MODE (TREE_TYPE (TREE_OPERAND (node, 1))))
-	    && (TYPE_REF_CAN_ALIAS_ALL (TREE_TYPE (TREE_OPERAND (node, 0)))
-		== TYPE_REF_CAN_ALIAS_ALL (TREE_TYPE (TREE_OPERAND (node, 1))))
-	    /* Same value types ignoring qualifiers.  */
-	    && (TYPE_MAIN_VARIANT (TREE_TYPE (node))
-		== TYPE_MAIN_VARIANT
-		    (TREE_TYPE (TREE_TYPE (TREE_OPERAND (node, 1)))))
-	    && (!(flags & TDF_ALIAS)
-		|| MR_DEPENDENCE_CLIQUE (node) == 0))
-	  {
-	    if (TREE_CODE (TREE_OPERAND (node, 0)) != ADDR_EXPR)
-	      {
-		pp_star (pp);
-		dump_generic_node (pp, TREE_OPERAND (node, 0),
-				   spc, flags, false);
-	      }
-	    else
-	      dump_generic_node (pp,
-				 TREE_OPERAND (TREE_OPERAND (node, 0), 0),
-				 spc, flags, false);
-	  }
-	else
-	  {
-	    tree ptype;
-
-	    pp_string (pp, "MEM[");
-	    pp_left_paren (pp);
-	    ptype = TYPE_MAIN_VARIANT (TREE_TYPE (TREE_OPERAND (node, 1)));
-	    dump_generic_node (pp, ptype,
-			       spc, flags | TDF_SLIM, false);
-	    pp_right_paren (pp);
-	    dump_generic_node (pp, TREE_OPERAND (node, 0),
-			       spc, flags, false);
-	    if (!integer_zerop (TREE_OPERAND (node, 1)))
-	      {
-		pp_string (pp, " + ");
-		dump_generic_node (pp, TREE_OPERAND (node, 1),
-				   spc, flags, false);
-	      }
-	    if ((flags & TDF_ALIAS)
-		&& MR_DEPENDENCE_CLIQUE (node) != 0)
-	      {
-		pp_string (pp, " clique ");
-		pp_unsigned_wide_integer (pp, MR_DEPENDENCE_CLIQUE (node));
-		pp_string (pp, " base ");
-		pp_unsigned_wide_integer (pp, MR_DEPENDENCE_BASE (node));
-	      }
-	    pp_right_bracket (pp);
-	  }
-	break;
-      }
-
     case TARGET_MEM_REF:
-      {
-	const char *sep = "";
-	tree tmp;
-
-	pp_string (pp, "MEM[");
-
-	if (TREE_CODE (TMR_BASE (node)) == ADDR_EXPR)
-	  {
-	    pp_string (pp, sep);
-	    sep = ", ";
-	    pp_string (pp, "symbol: ");
-	    dump_generic_node (pp, TREE_OPERAND (TMR_BASE (node), 0),
-			       spc, flags, false);
-	  }
-	else
-	  {
-	    pp_string (pp, sep);
-	    sep = ", ";
-	    pp_string (pp, "base: ");
-	    dump_generic_node (pp, TMR_BASE (node), spc, flags, false);
-	  }
-	tmp = TMR_INDEX2 (node);
-	if (tmp)
-	  {
-	    pp_string (pp, sep);
-	    sep = ", ";
-	    pp_string (pp, "base: ");
-	    dump_generic_node (pp, tmp, spc, flags, false);
-	  }
-	tmp = TMR_INDEX (node);
-	if (tmp)
-	  {
-	    pp_string (pp, sep);
-	    sep = ", ";
-	    pp_string (pp, "index: ");
-	    dump_generic_node (pp, tmp, spc, flags, false);
-	  }
-	tmp = TMR_STEP (node);
-	if (tmp)
-	  {
-	    pp_string (pp, sep);
-	    sep = ", ";
-	    pp_string (pp, "step: ");
-	    dump_generic_node (pp, tmp, spc, flags, false);
-	  }
-	tmp = TMR_OFFSET (node);
-	if (tmp)
-	  {
-	    pp_string (pp, sep);
-	    sep = ", ";
-	    pp_string (pp, "offset: ");
-	    dump_generic_node (pp, tmp, spc, flags, false);
-	  }
-	pp_right_bracket (pp);
-      }
+      dump_mem_ref (pp, node, spc, flags);
       break;
 
     case ARRAY_TYPE:
       {
+	unsigned int quals = TYPE_QUALS (node);
 	tree tmp;
+
+	if (quals & TYPE_QUAL_ATOMIC)
+	  pp_string (pp, "atomic ");
+	if (quals & TYPE_QUAL_CONST)
+	  pp_string (pp, "const ");
+	if (quals & TYPE_QUAL_VOLATILE)
+	  pp_string (pp, "volatile ");
 
 	/* Print the innermost component type.  */
 	for (tmp = TREE_TYPE (node); TREE_CODE (tmp) == ARRAY_TYPE;
@@ -1647,6 +1967,13 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	  pp_string (pp, "const ");
 	if (quals & TYPE_QUAL_VOLATILE)
 	  pp_string (pp, "volatile ");
+
+	if (!ADDR_SPACE_GENERIC_P (TYPE_ADDR_SPACE (node)))
+	  {
+	    pp_string (pp, "<address-space-");
+	    pp_decimal_int (pp, TYPE_ADDR_SPACE (node));
+	    pp_string (pp, "> ");
+	  }
 
         /* Print the name of the structure.  */
         if (TREE_CODE (node) == RECORD_TYPE)
@@ -1675,7 +2002,8 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	  && (POINTER_TYPE_P (TREE_TYPE (node))
 	      || (TYPE_PRECISION (TREE_TYPE (node))
 		  < TYPE_PRECISION (integer_type_node))
-	      || exact_log2 (TYPE_PRECISION (TREE_TYPE (node))) == -1))
+	      || exact_log2 (TYPE_PRECISION (TREE_TYPE (node))) == -1
+	      || tree_int_cst_sgn (node) < 0))
 	{
 	  pp_string (pp, "_Literal (");
 	  dump_generic_node (pp, TREE_TYPE (node), spc, flags, false);
@@ -1795,14 +2123,23 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       break;
 
     case STRING_CST:
-      pp_string (pp, "\"");
-      pretty_print_string (pp, TREE_STRING_POINTER (node));
-      pp_string (pp, "\"");
-      break;
+      {
+	pp_string (pp, "\"");
+	if (unsigned nbytes = TREE_STRING_LENGTH (node))
+	  pretty_print_string (pp, TREE_STRING_POINTER (node), nbytes);
+	pp_string (pp, "\"");
+	break;
+      }
 
     case VECTOR_CST:
       {
 	unsigned i;
+	if (flags & TDF_GIMPLE)
+	  {
+	    pp_string (pp, "_Literal (");
+	    dump_generic_node (pp, TREE_TYPE (node), spc, flags, false);
+	    pp_string (pp, ") ");
+	  }
 	pp_string (pp, "{ ");
 	unsigned HOST_WIDE_INT nunits;
 	if (!VECTOR_CST_NELTS (node).is_constant (&nunits))
@@ -1838,9 +2175,13 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       else if (TYPE_NAME (node) && DECL_NAME (TYPE_NAME (node)))
 	dump_decl_name (pp, TYPE_NAME (node), flags);
       else if (flags & TDF_NOUID)
-	pp_printf (pp, "<Txxxx>");
+	pp_string (pp, "<Txxxx>");
       else
-	pp_printf (pp, "<T%x>", TYPE_UID (node));
+	{
+	  pp_string (pp, "<T");
+	  pp_scalar (pp, "%x", TYPE_UID (node));
+	  pp_character (pp, '>');
+	}
       dump_function_declaration (pp, node, spc, flags);
       break;
 
@@ -1855,9 +2196,16 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       else if (LABEL_DECL_UID (node) != -1)
 	{
 	  if (flags & TDF_GIMPLE)
-	    pp_printf (pp, "L%d", (int) LABEL_DECL_UID (node));
+	    {
+	      pp_character (pp, 'L');
+	      pp_decimal_int (pp, (int) LABEL_DECL_UID (node));
+	    }
 	  else
-	    pp_printf (pp, "<L%d>", (int) LABEL_DECL_UID (node));
+	    {
+	      pp_string (pp, "<L");
+	      pp_decimal_int (pp, (int) LABEL_DECL_UID (node));
+	      pp_character (pp, '>');
+	    }
 	}
       else
 	{
@@ -1866,15 +2214,22 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	  else
 	    {
 	      if (flags & TDF_GIMPLE)
-		pp_printf (pp, "<D%u>", DECL_UID (node));
+		{
+		  pp_character (pp, 'D');
+		  pp_scalar (pp, "%u", DECL_UID (node));
+		}
 	      else
-		pp_printf (pp, "<D.%u>", DECL_UID (node));
+		{
+		  pp_string (pp, "<D.");
+		  pp_scalar (pp, "%u", DECL_UID (node));
+		  pp_character (pp, '>');
+		}
 	    }
 	}
       break;
 
     case TYPE_DECL:
-      if (DECL_IS_BUILTIN (node))
+      if (DECL_IS_UNDECLARED_BUILTIN (node))
 	{
 	  /* Don't print the declaration of built-in types.  */
 	  break;
@@ -1952,13 +2307,39 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       break;
 
     case BIT_FIELD_REF:
-      pp_string (pp, "BIT_FIELD_REF <");
-      dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
-      pp_string (pp, ", ");
-      dump_generic_node (pp, TREE_OPERAND (node, 1), spc, flags, false);
-      pp_string (pp, ", ");
-      dump_generic_node (pp, TREE_OPERAND (node, 2), spc, flags, false);
-      pp_greater (pp);
+      if (flags & TDF_GIMPLE)
+	{
+	  pp_string (pp, "__BIT_FIELD_REF <");
+	  dump_generic_node (pp, TREE_TYPE (node),
+			     spc, flags | TDF_SLIM, false);
+	  if (TYPE_ALIGN (TREE_TYPE (node))
+	      != TYPE_ALIGN (TYPE_MAIN_VARIANT (TREE_TYPE (node))))
+	    {
+	      pp_string (pp, ", ");
+	      pp_decimal_int (pp, TYPE_ALIGN (TREE_TYPE (node)));
+	    }
+	  pp_greater (pp);
+	  pp_string (pp, " (");
+	  dump_generic_node (pp, TREE_OPERAND (node, 0), spc,
+			     flags | TDF_SLIM, false);
+	  pp_string (pp, ", ");
+	  dump_generic_node (pp, TREE_OPERAND (node, 1), spc,
+			     flags | TDF_SLIM, false);
+	  pp_string (pp, ", ");
+	  dump_generic_node (pp, TREE_OPERAND (node, 2), spc,
+			     flags | TDF_SLIM, false);
+	  pp_right_paren (pp);
+	}
+      else
+	{
+	  pp_string (pp, "BIT_FIELD_REF <");
+	  dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
+	  pp_string (pp, ", ");
+	  dump_generic_node (pp, TREE_OPERAND (node, 1), spc, flags, false);
+	  pp_string (pp, ", ");
+	  dump_generic_node (pp, TREE_OPERAND (node, 2), spc, flags, false);
+	  pp_greater (pp);
+	}
       break;
 
     case BIT_INSERT_EXPR:
@@ -2014,6 +2395,12 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	bool is_struct_init = false;
 	bool is_array_init = false;
 	widest_int curidx;
+	if (flags & TDF_GIMPLE)
+	  {
+	    pp_string (pp, "_Literal (");
+	    dump_generic_node (pp, TREE_TYPE (node), spc, flags, false);
+	    pp_string (pp, ") ");
+	  }
 	pp_left_brace (pp);
 	if (TREE_CLOBBER_P (node))
 	  pp_string (pp, "CLOBBER");
@@ -2262,7 +2649,10 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       if (CALL_EXPR_FN (node) != NULL_TREE)
 	print_call_name (pp, CALL_EXPR_FN (node), flags);
       else
-	pp_string (pp, internal_fn_name (CALL_EXPR_IFN (node)));
+	{
+	  pp_dot (pp);
+	  pp_string (pp, internal_fn_name (CALL_EXPR_IFN (node)));
+	}
 
       /* Print parameters.  */
       pp_space (pp);
@@ -2322,6 +2712,8 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       break;
 
       /* Binary arithmetic and logic expressions.  */
+    case WIDEN_PLUS_EXPR:
+    case WIDEN_MINUS_EXPR:
     case WIDEN_SUM_EXPR:
     case WIDEN_MULT_EXPR:
     case MULT_EXPR:
@@ -2460,6 +2852,12 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       pp_greater (pp);
       break;
 
+    case ABSU_EXPR:
+      pp_string (pp, "ABSU_EXPR <");
+      dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
+      pp_greater (pp);
+      break;
+
     case RANGE_EXPR:
       NIY;
       break;
@@ -2485,7 +2883,10 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       break;
 
     case VIEW_CONVERT_EXPR:
-      pp_string (pp, "VIEW_CONVERT_EXPR<");
+      if (flags & TDF_GIMPLE)
+	pp_string (pp, "__VIEW_CONVERT <");
+      else
+	pp_string (pp, "VIEW_CONVERT_EXPR<");
       dump_generic_node (pp, TREE_TYPE (node), spc, flags, false);
       pp_string (pp, ">(");
       dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
@@ -2568,12 +2969,34 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       newline_and_indent (pp, spc+2);
       pp_right_brace (pp);
       newline_and_indent (pp, spc);
-      pp_string (pp,
-			 (TREE_CODE (node) == TRY_CATCH_EXPR) ? "catch" : "finally");
+      if (TREE_CODE (node) == TRY_CATCH_EXPR)
+	{
+	  node = TREE_OPERAND (node, 1);
+	  pp_string (pp, "catch");
+	}
+      else
+	{
+	  gcc_assert (TREE_CODE (node) == TRY_FINALLY_EXPR);
+	  node = TREE_OPERAND (node, 1);
+	  pp_string (pp, "finally");
+	  if (TREE_CODE (node) == EH_ELSE_EXPR)
+	    {
+	      newline_and_indent (pp, spc+2);
+	      pp_left_brace (pp);
+	      newline_and_indent (pp, spc+4);
+	      dump_generic_node (pp, TREE_OPERAND (node, 0), spc+4,
+				 flags, true);
+	      newline_and_indent (pp, spc+2);
+	      pp_right_brace (pp);
+	      newline_and_indent (pp, spc);
+	      node = TREE_OPERAND (node, 1);
+	      pp_string (pp, "else");
+	    }
+	}
       newline_and_indent (pp, spc+2);
       pp_left_brace (pp);
       newline_and_indent (pp, spc+4);
-      dump_generic_node (pp, TREE_OPERAND (node, 1), spc+4, flags, true);
+      dump_generic_node (pp, node, spc+4, flags, true);
       newline_and_indent (pp, spc+2);
       pp_right_brace (pp);
       is_expr = false;
@@ -2654,9 +3077,12 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	  pp_string (pp, ", ivdep");
 	  break;
 	case annot_expr_unroll_kind:
-	  pp_printf (pp, ", unroll %d",
-		     (int) TREE_INT_CST_LOW (TREE_OPERAND (node, 2)));
-	  break;
+	  {
+	    pp_string (pp, ", unroll ");
+	    pp_decimal_int (pp,
+			    (int) TREE_INT_CST_LOW (TREE_OPERAND (node, 2)));
+	    break;
+	  }
 	case annot_expr_no_vector_kind:
 	  pp_string (pp, ", no-vector");
 	  break;
@@ -2776,10 +3202,11 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 	 libstdc++-prettyprinters/shared_ptr.cc with and without -g,
 	 for example, at occurrences of OBJ_TYPE_REF.  */
       if (!(flags & (TDF_SLIM | TDF_COMPARE_DEBUG))
-	  && virtual_method_call_p (node))
+	  && virtual_method_call_p (node, true))
 	{
 	  pp_string (pp, "(");
-	  dump_generic_node (pp, obj_type_ref_class (node), spc, flags, false);
+	  dump_generic_node (pp, obj_type_ref_class (node, true),
+			     spc, flags, false);
 	  pp_string (pp, ")");
 	}
       dump_generic_node (pp, OBJ_TYPE_REF_OBJECT (node), spc, flags, false);
@@ -2837,7 +3264,8 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       dump_generic_node (pp, CHREC_LEFT (node), spc, flags, false);
       pp_string (pp, ", +, ");
       dump_generic_node (pp, CHREC_RIGHT (node), spc, flags, false);
-      pp_printf (pp, "}_%u", CHREC_VARIABLE (node));
+      pp_string (pp, "}_");
+      pp_scalar (pp, "%u", CHREC_VARIABLE (node));
       is_stmt = false;
       break;
 
@@ -2901,22 +3329,16 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       pp_string (pp, " > ");
       break;
 
-    case FMA_EXPR:
-      pp_string (pp, " FMA_EXPR < ");
-      dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
-      pp_string (pp, ", ");
-      dump_generic_node (pp, TREE_OPERAND (node, 1), spc, flags, false);
-      pp_string (pp, ", ");
-      dump_generic_node (pp, TREE_OPERAND (node, 2), spc, flags, false);
-      pp_string (pp, " > ");
-      break;
-
     case OACC_PARALLEL:
       pp_string (pp, "#pragma acc parallel");
       goto dump_omp_clauses_body;
 
     case OACC_KERNELS:
       pp_string (pp, "#pragma acc kernels");
+      goto dump_omp_clauses_body;
+
+    case OACC_SERIAL:
+      pp_string (pp, "#pragma acc serial");
       goto dump_omp_clauses_body;
 
     case OACC_DATA:
@@ -2977,7 +3399,8 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       break;
 
     case OMP_TASK:
-      pp_string (pp, "#pragma omp task");
+      pp_string (pp, OMP_TASK_BODY (node) ? "#pragma omp task"
+					  : "#pragma omp taskwait");
       dump_omp_clauses (pp, OMP_TASK_CLAUSES (node), spc, flags);
       goto dump_omp_body;
 
@@ -2995,6 +3418,10 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 
     case OMP_TASKLOOP:
       pp_string (pp, "#pragma omp taskloop");
+      goto dump_omp_loop;
+
+    case OMP_LOOP:
+      pp_string (pp, "#pragma omp loop");
       goto dump_omp_loop;
 
     case OACC_LOOP:
@@ -3057,13 +3484,34 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 		  spc += 2;
 		  newline_and_indent (pp, spc);
 		  pp_string (pp, "for (");
-		  dump_generic_node (pp,
-				     TREE_VEC_ELT (OMP_FOR_INIT (node), i),
-				     spc, flags, false);
+		  tree init = TREE_VEC_ELT (OMP_FOR_INIT (node), i);
+		  if (TREE_CODE (init) != MODIFY_EXPR
+		      || TREE_CODE (TREE_OPERAND (init, 1)) != TREE_VEC)
+		    dump_generic_node (pp, init, spc, flags, false);
+		  else
+		    {
+		      dump_generic_node (pp, TREE_OPERAND (init, 0),
+					 spc, flags, false);
+		      pp_string (pp, " = ");
+		      dump_omp_loop_non_rect_expr (pp, TREE_OPERAND (init, 1),
+						   spc, flags);
+		    }
 		  pp_string (pp, "; ");
-		  dump_generic_node (pp,
-				     TREE_VEC_ELT (OMP_FOR_COND (node), i),
-				     spc, flags, false);
+		  tree cond = TREE_VEC_ELT (OMP_FOR_COND (node), i);
+		  if (!COMPARISON_CLASS_P (cond)
+		      || TREE_CODE (TREE_OPERAND (cond, 1)) != TREE_VEC)
+		    dump_generic_node (pp, cond, spc, flags, false);
+		  else
+		    {
+		      dump_generic_node (pp, TREE_OPERAND (cond, 0),
+					 spc, flags, false);
+		      const char *op = op_symbol (cond);
+		      pp_space (pp);
+		      pp_string (pp, op);
+		      pp_space (pp);
+		      dump_omp_loop_non_rect_expr (pp, TREE_OPERAND (cond, 1),
+						   spc, flags);
+		    }
 		  pp_string (pp, "; ");
 		  dump_generic_node (pp,
 				     TREE_VEC_ELT (OMP_FOR_INCR (node), i),
@@ -3102,12 +3550,21 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       pp_string (pp, "#pragma omp section");
       goto dump_omp_body;
 
+    case OMP_SCAN:
+      if (OMP_SCAN_CLAUSES (node))
+	{
+	  pp_string (pp, "#pragma omp scan");
+	  dump_omp_clauses (pp, OMP_SCAN_CLAUSES (node), spc, flags);
+	}
+      goto dump_omp_body;
+
     case OMP_MASTER:
       pp_string (pp, "#pragma omp master");
       goto dump_omp_body;
 
     case OMP_TASKGROUP:
       pp_string (pp, "#pragma omp taskgroup");
+      dump_omp_clauses (pp, OMP_TASKGROUP_CLAUSES (node), spc, flags);
       goto dump_omp_body;
 
     case OMP_ORDERED:
@@ -3130,8 +3587,7 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 
     case OMP_ATOMIC:
       pp_string (pp, "#pragma omp atomic");
-      if (OMP_ATOMIC_SEQ_CST (node))
-	pp_string (pp, " seq_cst");
+      dump_omp_atomic_memory_order (pp, OMP_ATOMIC_MEMORY_ORDER (node));
       newline_and_indent (pp, spc + 2);
       dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
       pp_space (pp);
@@ -3142,8 +3598,7 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 
     case OMP_ATOMIC_READ:
       pp_string (pp, "#pragma omp atomic read");
-      if (OMP_ATOMIC_SEQ_CST (node))
-	pp_string (pp, " seq_cst");
+      dump_omp_atomic_memory_order (pp, OMP_ATOMIC_MEMORY_ORDER (node));
       newline_and_indent (pp, spc + 2);
       dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
       pp_space (pp);
@@ -3152,8 +3607,7 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
     case OMP_ATOMIC_CAPTURE_OLD:
     case OMP_ATOMIC_CAPTURE_NEW:
       pp_string (pp, "#pragma omp atomic capture");
-      if (OMP_ATOMIC_SEQ_CST (node))
-	pp_string (pp, " seq_cst");
+      dump_omp_atomic_memory_order (pp, OMP_ATOMIC_MEMORY_ORDER (node));
       newline_and_indent (pp, spc + 2);
       dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
       pp_space (pp);
@@ -3195,6 +3649,10 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
     case VEC_SERIES_EXPR:
     case VEC_WIDEN_MULT_HI_EXPR:
     case VEC_WIDEN_MULT_LO_EXPR:
+    case VEC_WIDEN_PLUS_HI_EXPR:
+    case VEC_WIDEN_PLUS_LO_EXPR:
+    case VEC_WIDEN_MINUS_HI_EXPR:
+    case VEC_WIDEN_MINUS_LO_EXPR:
     case VEC_WIDEN_MULT_EVEN_EXPR:
     case VEC_WIDEN_MULT_ODD_EXPR:
     case VEC_WIDEN_LSHIFT_HI_EXPR:
@@ -3242,6 +3700,18 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
       pp_string (pp, " > ");
       break;
 
+    case VEC_UNPACK_FIX_TRUNC_HI_EXPR:
+      pp_string (pp, " VEC_UNPACK_FIX_TRUNC_HI_EXPR < ");
+      dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
+      pp_string (pp, " > ");
+      break;
+
+    case VEC_UNPACK_FIX_TRUNC_LO_EXPR:
+      pp_string (pp, " VEC_UNPACK_FIX_TRUNC_LO_EXPR < ");
+      dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
+      pp_string (pp, " > ");
+      break;
+
     case VEC_PACK_TRUNC_EXPR:
       pp_string (pp, " VEC_PACK_TRUNC_EXPR < ");
       dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
@@ -3260,6 +3730,14 @@ dump_generic_node (pretty_printer *pp, tree node, int spc, dump_flags_t flags,
 
     case VEC_PACK_FIX_TRUNC_EXPR:
       pp_string (pp, " VEC_PACK_FIX_TRUNC_EXPR < ");
+      dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
+      pp_string (pp, ", ");
+      dump_generic_node (pp, TREE_OPERAND (node, 1), spc, flags, false);
+      pp_string (pp, " > ");
+      break;
+
+    case VEC_PACK_FLOAT_EXPR:
+      pp_string (pp, " VEC_PACK_FLOAT_EXPR < ");
       dump_generic_node (pp, TREE_OPERAND (node, 0), spc, flags, false);
       pp_string (pp, ", ");
       dump_generic_node (pp, TREE_OPERAND (node, 1), spc, flags, false);
@@ -3404,7 +3882,7 @@ print_struct_decl (pretty_printer *pp, const_tree node, int spc,
 		|| TREE_CODE (node) == QUAL_UNION_TYPE))
 	pp_string (pp, "union ");
 
-      dump_generic_node (pp, TYPE_NAME (node), spc, 0, false);
+      dump_generic_node (pp, TYPE_NAME (node), spc, TDF_NONE, false);
     }
 
   /* Print the contents of the structure.  */
@@ -3549,7 +4027,6 @@ op_code_prio (enum tree_code code)
     case CEIL_MOD_EXPR:
     case FLOOR_MOD_EXPR:
     case ROUND_MOD_EXPR:
-    case FMA_EXPR:
       return 13;
 
     case TRUTH_NOT_EXPR:
@@ -3583,6 +4060,8 @@ op_code_prio (enum tree_code code)
     case VEC_UNPACK_LO_EXPR:
     case VEC_UNPACK_FLOAT_HI_EXPR:
     case VEC_UNPACK_FLOAT_LO_EXPR:
+    case VEC_UNPACK_FIX_TRUNC_HI_EXPR:
+    case VEC_UNPACK_FIX_TRUNC_LO_EXPR:
     case VEC_PACK_TRUNC_EXPR:
     case VEC_PACK_SAT_EXPR:
       return 16;
@@ -3690,6 +4169,12 @@ op_symbol_code (enum tree_code code)
 
     case WIDEN_LSHIFT_EXPR:
       return "w<<";
+
+    case WIDEN_PLUS_EXPR:
+      return "w+";
+
+    case WIDEN_MINUS_EXPR:
+      return "w-";
 
     case POINTER_PLUS_EXPR:
       return "+";
@@ -3840,15 +4325,16 @@ print_call_name (pretty_printer *pp, tree node, dump_flags_t flags)
     }
 }
 
-/* Parses the string STR and replaces new-lines by '\n', tabs by '\t', ...  */
+/* Print the first N characters in the array STR, replacing non-printable
+   characters (including embedded nuls) with unambiguous escape sequences.  */
 
-static void
-pretty_print_string (pretty_printer *pp, const char *str)
+void
+pretty_print_string (pretty_printer *pp, const char *str, size_t n)
 {
   if (str == NULL)
     return;
 
-  while (*str)
+  for ( ; n; --n, ++str)
     {
       switch (str[0])
 	{
@@ -3888,48 +4374,20 @@ pretty_print_string (pretty_printer *pp, const char *str)
 	  pp_string (pp, "\\'");
 	  break;
 
-	  /* No need to handle \0; the loop terminates on \0.  */
-
-	case '\1':
-	  pp_string (pp, "\\1");
-	  break;
-
-	case '\2':
-	  pp_string (pp, "\\2");
-	  break;
-
-	case '\3':
-	  pp_string (pp, "\\3");
-	  break;
-
-	case '\4':
-	  pp_string (pp, "\\4");
-	  break;
-
-	case '\5':
-	  pp_string (pp, "\\5");
-	  break;
-
-	case '\6':
-	  pp_string (pp, "\\6");
-	  break;
-
-	case '\7':
-	  pp_string (pp, "\\7");
-	  break;
-
 	default:
-	  if (!ISPRINT (str[0]))
+	  if (str[0] || n > 1)
 	    {
-	      char buf[5];
-	      sprintf (buf, "\\x%x", (unsigned char)str[0]);
-	      pp_string (pp, buf);
+	      if (!ISPRINT (str[0]))
+		{
+		  char buf[5];
+		  sprintf (buf, "\\x%02x", (unsigned char)str[0]);
+		  pp_string (pp, buf);
+		}
+	      else
+		pp_character (pp, str[0]);
+	      break;
 	    }
-	  else
-	    pp_character (pp, str[0]);
-	  break;
 	}
-      str++;
     }
 }
 
@@ -3955,46 +4413,21 @@ newline_and_indent (pretty_printer *pp, int spc)
 
 /* Handle the %K format for TEXT.  Separate from default_tree_printer
    so it can also be used in front ends.
-   Argument is a statement from which EXPR_LOCATION and TREE_BLOCK will
-   be recorded.  */
+   The location LOC and BLOCK are expected to be extracted by the caller
+   from the %K argument arg via EXPR_LOCATION(arg) and TREE_BLOCK(arg).  */
 
 void
-percent_K_format (text_info *text, tree t)
+percent_K_format (text_info *text, location_t loc, tree block)
 {
-  text->set_location (0, EXPR_LOCATION (t), true);
+  text->set_location (0, loc, SHOW_RANGE_WITH_CARET);
   gcc_assert (pp_ti_abstract_origin (text) != NULL);
-  tree block = TREE_BLOCK (t);
   *pp_ti_abstract_origin (text) = NULL;
-
-  if (in_lto_p)
-    {
-      /* ???  LTO drops all BLOCK_ABSTRACT_ORIGINs apart from those
-         representing the outermost block of an inlined function.
-	 So walk the BLOCK tree until we hit such a scope.  */
-      while (block
-	     && TREE_CODE (block) == BLOCK)
-	{
-	  if (inlined_function_outer_scope_p (block))
-	    {
-	      *pp_ti_abstract_origin (text) = block;
-	      break;
-	    }
-	  block = BLOCK_SUPERCONTEXT (block);
-	}
-      return;
-    }
 
   while (block
 	 && TREE_CODE (block) == BLOCK
 	 && BLOCK_ABSTRACT_ORIGIN (block))
     {
       tree ao = BLOCK_ABSTRACT_ORIGIN (block);
-
-      while (TREE_CODE (ao) == BLOCK
-	     && BLOCK_ABSTRACT_ORIGIN (ao)
-	     && BLOCK_ABSTRACT_ORIGIN (ao) != ao)
-	ao = BLOCK_ABSTRACT_ORIGIN (ao);
-
       if (TREE_CODE (ao) == FUNCTION_DECL)
 	{
 	  *pp_ti_abstract_origin (text) = block;
@@ -4043,7 +4476,7 @@ dump_function_header (FILE *dump_file, tree fdecl, dump_flags_t flags)
     fprintf (dump_file, ", decl_uid=%d", DECL_UID (fdecl));
   if (node)
     {
-      fprintf (dump_file, ", cgraph_uid=%d", node->uid);
+      fprintf (dump_file, ", cgraph_uid=%d", node->get_uid ());
       fprintf (dump_file, ", symbol_order=%d)%s\n\n", node->order,
                node->frequency == NODE_FREQUENCY_HOT
                ? " (hot)"
@@ -4084,3 +4517,7 @@ pp_double_int (pretty_printer *pp, double_int d, bool uns)
       pp_string (pp, pp_buffer (pp)->digit_buffer);
     }
 }
+
+#if __GNUC__ >= 10
+#  pragma GCC diagnostic pop
+#endif

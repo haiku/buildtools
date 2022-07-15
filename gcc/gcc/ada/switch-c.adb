@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -486,6 +486,12 @@ package body Switch.C is
                      Ptr := Ptr + 1;
                      Check_Aliasing_Of_Parameters := True;
 
+                  --  -gnateb (config file basenames and checksums in ALI)
+
+                  when 'b' =>
+                     Ptr := Ptr + 1;
+                     Config_Files_Store_Basename := True;
+
                   --  -gnatec (configuration pragmas)
 
                   when 'c' =>
@@ -673,6 +679,13 @@ package body Switch.C is
                        new String'(Switch_Chars (Ptr .. Max));
                      return;
 
+                  --  -gnaten (memory to allocate for nodes)
+
+                  when 'n' =>
+                     Ptr := Ptr + 1;
+                     Scan_Pos
+                       (Switch_Chars, Max, Ptr, Nodes_Size_In_Meg, C);
+
                   --  -gnateO= (object path file)
 
                   --  This is an internal switch
@@ -723,6 +736,7 @@ package body Switch.C is
 
                   when 'P' =>
                      Treat_Categorization_Errors_As_Warnings := True;
+                     Ptr := Ptr + 1;
 
                   --  -gnates=file (specify extra file switches for gnat2why)
 
@@ -808,8 +822,8 @@ package body Switch.C is
                   --  -gnateu (unrecognized y,V,w switches)
 
                   when 'u' =>
-                     Ptr := Ptr + 1;
                      Ignore_Unrecognized_VWY_Switches := True;
+                     Ptr := Ptr + 1;
 
                   --  -gnateV (validity checks on parameters)
 
@@ -974,6 +988,8 @@ package body Switch.C is
                --    -gnatd_i (ignore activations and calls to instances for
                --              elaboration)
                --    -gnatd_p (ignore assertion pragmas for elaboration)
+               --    -gnatd_s (stop elaboration checks on synchronous
+               --              suspension)
                --    -gnatdL  (ignore external calls from instances for
                --              elaboration)
 
@@ -982,6 +998,7 @@ package body Switch.C is
                   Debug_Flag_Underscore_E := True;
                   Debug_Flag_Underscore_I := True;
                   Debug_Flag_Underscore_P := True;
+                  Debug_Flag_Underscore_S := True;
                   Debug_Flag_LL           := True;
                end if;
 
@@ -1151,12 +1168,6 @@ package body Switch.C is
                   Suppress_Options.Overflow_Mode_Assertions := Strict;
                end if;
 
-            --  -gnatP (periodic poll)
-
-            when 'P' =>
-               Ptr := Ptr + 1;
-               Polling_Required := True;
-
             --  -gnatq (don't quit)
 
             when 'q' =>
@@ -1167,7 +1178,7 @@ package body Switch.C is
 
             when 'Q' =>
                Ptr := Ptr + 1;
-               Force_ALI_Tree_File := True;
+               Force_ALI_File := True;
                Try_Semantics := True;
 
             --  -gnatr (restrictions as warnings)
@@ -1201,12 +1212,15 @@ package body Switch.C is
 
                   case C is
 
-                  when '0' .. '3' =>
+                  when '0' .. '4' =>
                      List_Representation_Info :=
                        Character'Pos (C) - Character'Pos ('0');
 
                   when 's' =>
                      List_Representation_Info_To_File := True;
+
+                  when 'j' =>
+                     List_Representation_Info_To_JSON := True;
 
                   when 'm' =>
                      List_Representation_Info_Mechanisms := True;
@@ -1220,6 +1234,12 @@ package body Switch.C is
 
                   Ptr := Ptr + 1;
                end loop;
+
+               if List_Representation_Info_To_JSON
+                 and then List_Representation_Info_Extended
+               then
+                  Osint.Fail ("-gnatRe is incompatible with -gnatRj");
+               end if;
 
             --  -gnats (syntax check only)
 
@@ -1237,13 +1257,6 @@ package body Switch.C is
             when 'S' =>
                Print_Standard := True;
                Ptr := Ptr + 1;
-
-            --  -gnatt (output tree)
-
-            when 't' =>
-               Ptr := Ptr + 1;
-               Tree_Output := True;
-               Back_Annotate_Rep_Info := True;
 
             --  -gnatT (change start of internal table sizes)
 

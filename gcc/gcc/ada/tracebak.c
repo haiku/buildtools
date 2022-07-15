@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *            Copyright (C) 2000-2018, Free Software Foundation, Inc.       *
+ *            Copyright (C) 2000-2020, Free Software Foundation, Inc.       *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -50,14 +50,10 @@
 extern "C" {
 #endif
 
-#ifdef __alpha_vxworks
-#include "vxWorks.h"
-#endif
-
 #ifdef IN_RTS
 #define POSIX
-#include "tconfig.h"
-#include "tsystem.h"
+#include "runtime.h"
+#include <stddef.h>
 #else
 #include "config.h"
 #include "system.h"
@@ -313,6 +309,13 @@ __gnat_backtrace (void **array,
 #define USING_ARM_UNWINDING 1
 #endif
 
+/*---------------------- ARM Linux ------------------------------------ -*/
+#elif (defined (__ARMEL__) && defined (__linux))
+
+#define USE_GCC_UNWINDER
+#define PC_ADJUST -2
+#define USING_ARM_UNWINDING 1
+
 /*---------------------- PPC AIX/PPC Lynx 178/Older Darwin --------------*/
 #elif ((defined (_POWER) && defined (_AIX)) || \
        (defined (__powerpc__) && defined (__Lynx__) && !defined(__ELF__)) || \
@@ -478,10 +481,11 @@ struct layout
 #define PC_ADJUST -2
 #define STOP_FRAME(CURRENT, TOP_STACK) \
   (IS_BAD_PTR((long)(CURRENT)) \
+   || (void *) (CURRENT) < (TOP_STACK) \
    || IS_BAD_PTR((long)(CURRENT)->return_address) \
    || (CURRENT)->return_address == 0 \
    || (void *) ((CURRENT)->next) < (TOP_STACK)  \
-   || (void *) (CURRENT) < (TOP_STACK))
+   || EXTRA_STOP_CONDITION(CURRENT))
 
 #define BASE_SKIP (1+FRAME_LEVEL)
 
@@ -504,6 +508,37 @@ struct layout
         || ((*((ptr) - 1) & 0xff) == 0xff) \
         || (((*(ptr) & 0xd0ff) == 0xd0ff))))
 
+#if defined (__vxworks) && defined (__RTP__)
+
+/* For VxWorks following backchains past the "main" frame gets us into the
+   kernel space, where it can't be dereferenced. So lets stop at the main
+   symbol.  */
+extern void main();
+
+static int
+is_return_from(void *symbol_addr, void *ret_addr)
+{
+  int ret = 0;
+  char *ptr = (char *)ret_addr;
+
+  if ((*(ptr - 5) & 0xff) == 0xe8)
+    {
+      /* call addr16  E8 xx xx xx xx  */
+      int32_t offset = *(int32_t *)(ptr - 4);
+      ret = (ptr + offset) == symbol_addr;
+    }
+
+  /* Others not implemented yet...  But it is very likely that call addr16
+     is used here.  */
+  return ret;
+}
+
+#define EXTRA_STOP_CONDITION(CURRENT) \
+  (is_return_from(&main, (CURRENT)->return_address))
+#else /* not (defined (__vxworks) && defined (__RTP__)) */
+#define EXTRA_STOP_CONDITION(CURRENT) (0)
+#endif /* not (defined (__vxworks) && defined (__RTP__)) */
+
 /*----------------------------- qnx ----------------------------------*/
 
 #elif defined (__QNX__)
@@ -515,6 +550,13 @@ struct layout
 #else
 #error Unhandled QNX architecture.
 #endif
+
+/*------------------- aarch64-linux ----------------------------------*/
+
+#elif (defined (__aarch64__) && defined (__linux__))
+
+#define USE_GCC_UNWINDER
+#define PC_ADJUST -4
 
 /*----------------------------- ia64 ---------------------------------*/
 
@@ -553,13 +595,110 @@ struct layout
    define it to a reasonable value to avoid a compilation error.  */
 #define _URC_NORMAL_STOP 0
 #endif
-#include "tb-gcc.c"
+
+/* This is an implementation of the __gnat_backtrace routine using the
+   underlying GCC unwinding support associated with the exception handling
+   infrastructure.  This will only work for ZCX based applications.  */
+
+#include <unwind.h>
+
+/* The implementation boils down to a call to _Unwind_Backtrace with a
+   tailored callback and carried-on data structure to keep track of the
+   input parameters we got as well as of the basic processing state.  */
+
+/******************
+ * trace_callback *
+ ******************/
+
+#if !defined (__USING_SJLJ_EXCEPTIONS__)
+
+typedef struct {
+  void ** traceback;
+  int max_len;
+  void * exclude_min;
+  void * exclude_max;
+  int  n_frames_to_skip;
+  int  n_frames_skipped;
+  int  n_entries_filled;
+} uw_data_t;
+
+#if defined (__ia64__) && defined (__hpux__)
+#include <uwx.h>
+#endif
+
+static _Unwind_Reason_Code
+trace_callback (struct _Unwind_Context * uw_context, uw_data_t * uw_data)
+{
+  char * pc;
+
+#if defined (__ia64__) && defined (__hpux__) && defined (USE_LIBUNWIND_EXCEPTIONS)
+  /* Work around problem with _Unwind_GetIP on ia64 HP-UX. */
+  uwx_get_reg ((struct uwx_env *) uw_context, UWX_REG_IP, (uint64_t *) &pc);
+#else
+  pc = (char *) _Unwind_GetIP (uw_context);
+#endif
+
+  if (uw_data->n_frames_skipped < uw_data->n_frames_to_skip)
+    {
+      uw_data->n_frames_skipped ++;
+      return _URC_NO_REASON;
+    }
+
+  if (uw_data->n_entries_filled >= uw_data->max_len)
+    return _URC_NORMAL_STOP;
+
+  if (pc < (char *)uw_data->exclude_min || pc > (char *)uw_data->exclude_max)
+    uw_data->traceback [uw_data->n_entries_filled ++] = pc + PC_ADJUST;
+
+  return _URC_NO_REASON;
+}
+
+#endif
+
+/********************
+ * __gnat_backtrace *
+ ********************/
+
+int
+__gnat_backtrace (void ** traceback __attribute__((unused)),
+		  int max_len __attribute__((unused)),
+		  void * exclude_min __attribute__((unused)),
+		  void * exclude_max __attribute__((unused)),
+		  int skip_frames __attribute__((unused)))
+{
+#if defined (__USING_SJLJ_EXCEPTIONS__)
+  /* We have no unwind material (tables) at hand with sjlj eh, and no
+     way to retrieve complete and accurate call chain information from
+     the context stack we maintain.  */
+  return 0;
+#else
+  uw_data_t uw_data;
+  /* State carried over during the whole unwinding process.  */
+
+  uw_data.traceback   = traceback;
+  uw_data.max_len     = max_len;
+  uw_data.exclude_min = exclude_min;
+  uw_data.exclude_max = exclude_max;
+
+  uw_data.n_frames_to_skip = skip_frames;
+
+  uw_data.n_frames_skipped = 0;
+  uw_data.n_entries_filled = 0;
+
+  _Unwind_Backtrace ((_Unwind_Trace_Fn)trace_callback, &uw_data);
+
+  return uw_data.n_entries_filled;
+#endif
+}
 
 /*------------------------------------------------------------------*
  *-- The generic implementation based on frame layout assumptions --*
  *------------------------------------------------------------------*/
 
 #elif defined (USE_GENERIC_UNWINDER)
+
+/* No warning since the cases where FRAME_LEVEL > 0 are known to work.  */
+#pragma GCC diagnostic ignored "-Wframe-address"
 
 #ifndef CURRENT_STACK_FRAME
 # define CURRENT_STACK_FRAME  ({ char __csf; &__csf; })

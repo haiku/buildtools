@@ -1,5 +1,5 @@
 /* PowerPC AltiVec include file.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2021 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez (aldyh@redhat.com).
    Rewritten by Paolo Bonzini (bonzini@gnu.org).
 
@@ -37,10 +37,12 @@
 /* If __APPLE_ALTIVEC__ is defined, the compiler supports 'vector',
    'pixel' and 'bool' as context-sensitive AltiVec keywords (in 
    non-AltiVec contexts, they revert to their original meanings,
-   if any), so we do not need to define them as macros.  */
+   if any), so we do not need to define them as macros.  Also,
+   avoid defining them as macros for C++ with strict ANSI, as
+   this is not compatible.  */
 
-#if !defined(__APPLE_ALTIVEC__)
-/* You are allowed to undef these for C++ compatibility.  */
+#if !defined(__APPLE_ALTIVEC__) \
+    && (!defined(__STRICT_ANSI__) || !defined(__cplusplus))
 #define vector __vector
 #define pixel __pixel
 #define bool __bool
@@ -159,6 +161,7 @@
 #define vec_vmsumubm __builtin_vec_vmsumubm
 #define vec_vmsumshs __builtin_vec_vmsumshs
 #define vec_vmsumuhs __builtin_vec_vmsumuhs
+#define vec_vmsumudm __builtin_vec_vmsumudm
 #define vec_vmulesb __builtin_vec_vmulesb
 #define vec_vmulesh __builtin_vec_vmulesh
 #define vec_vmuleuh __builtin_vec_vmuleuh
@@ -180,7 +183,7 @@
 #define vec_recipdiv __builtin_vec_recipdiv
 #define vec_rlmi __builtin_vec_rlmi
 #define vec_vrlnm __builtin_vec_rlnm
-#define vec_rlnm(a,b,c) (__builtin_vec_rlnm((a),((b)<<8)|(c)))
+#define vec_rlnm(a,b,c) (__builtin_vec_rlnm((a),((c)<<8)|(b)))
 #define vec_rsqrt __builtin_vec_rsqrt
 #define vec_rsqrte __builtin_vec_rsqrte
 #define vec_signed __builtin_vec_vsigned
@@ -233,6 +236,9 @@
 #define vec_lvebx __builtin_vec_lvebx
 #define vec_lvehx __builtin_vec_lvehx
 #define vec_lvewx __builtin_vec_lvewx
+#define vec_xl_zext __builtin_vec_ze_lxvrx
+#define vec_xl_sext __builtin_vec_se_lxvrx
+#define vec_xst_trunc __builtin_vec_tr_stxvrx
 #define vec_neg __builtin_vec_neg
 #define vec_pmsum_be __builtin_vec_vpmsum
 #define vec_shasigma_be __builtin_crypto_vshasigma
@@ -404,10 +410,6 @@
 #define vec_vpopcnth __builtin_vec_vpopcnth
 #define vec_vpopcntw __builtin_vec_vpopcntw
 #define vec_popcnt __builtin_vec_vpopcntu
-#define vec_popcntb __builtin_vec_vpopcntub
-#define vec_popcnth __builtin_vec_vpopcntuh
-#define vec_popcntw __builtin_vec_vpopcntuw
-#define vec_popcntd __builtin_vec_vpopcntud
 #define vec_vrld __builtin_vec_vrld
 #define vec_vsld __builtin_vec_vsld
 #define vec_vsrad __builtin_vec_vsrad
@@ -418,6 +420,11 @@
 #define vec_vupkhsw __builtin_vec_vupkhsw
 #define vec_vupklsw __builtin_vec_vupklsw
 #define vec_revb __builtin_vec_revb
+#define vec_sbox_be __builtin_crypto_vsbox_be
+#define vec_cipher_be __builtin_crypto_vcipher_be
+#define vec_cipherlast_be __builtin_crypto_vcipherlast_be
+#define vec_ncipher_be __builtin_crypto_vncipher_be
+#define vec_ncipherlast_be __builtin_crypto_vncipherlast_be
 #endif
 
 #ifdef __POWER9_VECTOR__
@@ -426,7 +433,7 @@
 #define vec_first_match_or_eos_index __builtin_vec_first_match_or_eos_index
 #define vec_first_mismatch_index __builtin_vec_first_mismatch_index
 #define vec_first_mismatch_or_eos_index __builtin_vec_first_mismatch_or_eos_index
-#define vec_pack_to_short_fp32 __builtin_vec_convert_4f32_8i16
+#define vec_pack_to_short_fp32 __builtin_vec_convert_4f32_8f16
 #define vec_parity_lsbb __builtin_vec_vparity_lsbb
 #define vec_vctz __builtin_vec_vctz
 #define vec_cnttz __builtin_vec_vctz
@@ -485,9 +492,39 @@
 #define vec_cntlz_lsbb __builtin_vec_vclzlsbb
 #define vec_cnttz_lsbb __builtin_vec_vctzlsbb
 
+#define vec_test_lsbb_all_ones __builtin_vec_xvtlsbb_all_ones
+#define vec_test_lsbb_all_zeros __builtin_vec_xvtlsbb_all_zeros
+
 #define vec_xlx __builtin_vec_vextulx
 #define vec_xrx __builtin_vec_vexturx
+#define vec_signexti  __builtin_vec_vsignexti
+#define vec_signextll __builtin_vec_vsignextll
+
 #endif
+
+/* BCD builtins, map ABI builtin name to existing builtin name.  */
+#define __builtin_bcdadd     __builtin_vec_bcdadd
+#define __builtin_bcdadd_lt  __builtin_vec_bcdadd_lt
+#define __builtin_bcdadd_eq  __builtin_vec_bcdadd_eq
+#define __builtin_bcdadd_gt  __builtin_vec_bcdadd_gt
+#define __builtin_bcdadd_ofl __builtin_vec_bcdadd_ov
+#define __builtin_bcdadd_ov  __builtin_vec_bcdadd_ov
+#define __builtin_bcdsub     __builtin_vec_bcdsub
+#define __builtin_bcdsub_lt  __builtin_vec_bcdsub_lt
+#define __builtin_bcdsub_eq  __builtin_vec_bcdsub_eq
+#define __builtin_bcdsub_gt  __builtin_vec_bcdsub_gt
+#define __builtin_bcdsub_ofl __builtin_vec_bcdsub_ov
+#define __builtin_bcdsub_ov  __builtin_vec_bcdsub_ov
+#define __builtin_bcdinvalid __builtin_vec_bcdinvalid
+#define __builtin_bcdmul10   __builtin_vec_bcdmul10
+#define __builtin_bcddiv10   __builtin_vec_bcddiv10
+#define __builtin_bcd2dfp    __builtin_vec_denb2dfp
+#define __builtin_bcdcmpeq(a,b)   __builtin_vec_bcdsub_eq(a,b,0)
+#define __builtin_bcdcmpgt(a,b)   __builtin_vec_bcdsub_gt(a,b,0)
+#define __builtin_bcdcmplt(a,b)   __builtin_vec_bcdsub_lt(a,b,0)
+#define __builtin_bcdcmpge(a,b)   __builtin_vec_bcdsub_ge(a,b,0)
+#define __builtin_bcdcmple(a,b)   __builtin_vec_bcdsub_le(a,b,0)
+
 
 /* Predicates.
    For C++, we use templates in order to allow non-parenthesized arguments.
@@ -678,5 +715,60 @@ __altivec_scalar_pred(vec_any_nle,
 /* This also accepts a type for its parameter, so it is not enough
    to #define vec_step to __builtin_vec_step.  */
 #define vec_step(x) __builtin_vec_step (* (__typeof__ (x) *) 0)
+
+#ifdef _ARCH_PWR10
+#define vec_signextq  __builtin_vec_vsignextq
+#define vec_dive __builtin_vec_dive
+#define vec_mod  __builtin_vec_mod
+
+/* May modify these macro definitions if future capabilities overload
+   with support for different vector argument and result types.  */
+#define vec_cntlzm(a, b)	__builtin_altivec_vclzdm (a, b)
+#define vec_cnttzm(a, b)	__builtin_altivec_vctzdm (a, b)
+#define vec_pdep(a, b)	__builtin_altivec_vpdepd (a, b)
+#define vec_pext(a, b)	__builtin_altivec_vpextd (a, b)
+#define vec_cfuge(a, b)	__builtin_altivec_vcfuged (a, b)
+#define vec_genpcvm(a, b)	__builtin_vec_xxgenpcvm (a, b)
+
+/* Overloaded built-in functions for ISA 3.1.  */
+#define vec_extractl(a, b, c)	__builtin_vec_extractl (a, b, c)
+#define vec_extracth(a, b, c)	__builtin_vec_extracth (a, b, c)
+#define vec_insertl(a, b, c)   __builtin_vec_insertl (a, b, c)
+#define vec_inserth(a, b, c)   __builtin_vec_inserth (a, b, c)
+#define vec_replace_elt(a, b, c)       __builtin_vec_replace_elt (a, b, c)
+#define vec_replace_unaligned(a, b, c) __builtin_vec_replace_un (a, b, c)
+#define vec_sldb(a, b, c)      __builtin_vec_sldb (a, b, c)
+#define vec_srdb(a, b, c)      __builtin_vec_srdb (a, b, c)
+#define vec_splati(a)  __builtin_vec_xxspltiw (a)
+#define vec_splatid(a) __builtin_vec_xxspltid (a)
+#define vec_splati_ins(a, b, c)        __builtin_vec_xxsplti32dx (a, b, c)
+#define vec_blendv(a, b, c)    __builtin_vec_xxblend (a, b, c)
+#define vec_permx(a, b, c, d)  __builtin_vec_xxpermx (a, b, c, d)
+
+#define vec_gnb(a, b)	__builtin_vec_gnb (a, b)
+#define vec_clrl(a, b)	__builtin_vec_clrl (a, b)
+#define vec_clrr(a, b)	__builtin_vec_clrr (a, b)
+#define vec_ternarylogic(a, b, c, d)	__builtin_vec_xxeval (a, b, c, d)
+
+#define vec_strir(a)	__builtin_vec_strir (a)
+#define vec_stril(a)	__builtin_vec_stril (a)
+
+#define vec_strir_p(a)	__builtin_vec_strir_p (a)
+#define vec_stril_p(a)	__builtin_vec_stril_p (a)
+
+#define vec_mulh(a, b) __builtin_vec_mulh ((a), (b))
+#define vec_dive(a, b) __builtin_vec_dive ((a), (b))
+#define vec_mod(a, b) __builtin_vec_mod ((a), (b))
+
+/* VSX Mask Manipulation builtin. */
+#define vec_genbm __builtin_vec_mtvsrbm
+#define vec_genhm __builtin_vec_mtvsrhm
+#define vec_genwm __builtin_vec_mtvsrwm
+#define vec_gendm __builtin_vec_mtvsrdm
+#define vec_genqm __builtin_vec_mtvsrqm
+#define vec_cntm __builtin_vec_cntm
+#define vec_expandm __builtin_vec_vexpandm
+#define vec_extractm __builtin_vec_vextractm
+#endif
 
 #endif /* _ALTIVEC_H */

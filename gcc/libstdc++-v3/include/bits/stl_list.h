@@ -1,6 +1,6 @@
 // List implementation -*- C++ -*-
 
-// Copyright (C) 2001-2018 Free Software Foundation, Inc.
+// Copyright (C) 2001-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -243,13 +243,15 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	return __tmp;
       }
 
-      bool
-      operator==(const _Self& __x) const _GLIBCXX_NOEXCEPT
-      { return _M_node == __x._M_node; }
+      friend bool
+      operator==(const _Self& __x, const _Self& __y) _GLIBCXX_NOEXCEPT
+      { return __x._M_node == __y._M_node; }
 
-      bool
-      operator!=(const _Self& __x) const _GLIBCXX_NOEXCEPT
-      { return _M_node != __x._M_node; }
+#if __cpp_impl_three_way_comparison < 201907L
+      friend bool
+      operator!=(const _Self& __x, const _Self& __y) _GLIBCXX_NOEXCEPT
+      { return __x._M_node != __y._M_node; }
+#endif
 
       // The only member points to the %list element.
       __detail::_List_node_base* _M_node;
@@ -327,29 +329,19 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	return __tmp;
       }
 
-      bool
-      operator==(const _Self& __x) const _GLIBCXX_NOEXCEPT
-      { return _M_node == __x._M_node; }
+      friend bool
+      operator==(const _Self& __x, const _Self& __y) _GLIBCXX_NOEXCEPT
+      { return __x._M_node == __y._M_node; }
 
-      bool
-      operator!=(const _Self& __x) const _GLIBCXX_NOEXCEPT
-      { return _M_node != __x._M_node; }
+#if __cpp_impl_three_way_comparison < 201907L
+      friend bool
+      operator!=(const _Self& __x, const _Self& __y) _GLIBCXX_NOEXCEPT
+      { return __x._M_node != __y._M_node; }
+#endif
 
       // The only member points to the %list element.
       const __detail::_List_node_base* _M_node;
     };
-
-  template<typename _Val>
-    inline bool
-    operator==(const _List_iterator<_Val>& __x,
-	       const _List_const_iterator<_Val>& __y) _GLIBCXX_NOEXCEPT
-    { return __x._M_node == __y._M_node; }
-
-  template<typename _Val>
-    inline bool
-    operator!=(const _List_iterator<_Val>& __x,
-	       const _List_const_iterator<_Val>& __y) _GLIBCXX_NOEXCEPT
-    { return __x._M_node != __y._M_node; }
 
 _GLIBCXX_BEGIN_NAMESPACE_CXX11
   /// See bits/stl_deque.h's _Deque_base for an explanation.
@@ -575,7 +567,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 #if __cplusplus >= 201103L
       static_assert(is_same<typename remove_cv<_Tp>::type, _Tp>::value,
 	  "std::list must have a non-const, non-volatile value_type");
-# ifdef __STRICT_ANSI__
+# if __cplusplus > 201703L || defined __STRICT_ANSI__
       static_assert(is_same<typename _Alloc::value_type, _Tp>::value,
 	  "std::list must have the same value_type as its allocator");
 # endif
@@ -1059,7 +1051,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  Returns true if the %list is empty.  (Thus begin() would equal
        *  end().)
        */
-      bool
+      _GLIBCXX_NODISCARD bool
       empty() const _GLIBCXX_NOEXCEPT
       { return this->_M_impl._M_node._M_next == &this->_M_impl._M_node; }
 
@@ -1674,6 +1666,18 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       { splice(__position, std::move(__x), __first, __last); }
 #endif
 
+    private:
+#if __cplusplus > 201703L
+# define __cpp_lib_list_remove_return_type 201806L
+      typedef size_type __remove_return_type;
+# define _GLIBCXX_LIST_REMOVE_RETURN_TYPE_TAG \
+      __attribute__((__abi_tag__("__cxx20")))
+#else
+      typedef void __remove_return_type;
+# define _GLIBCXX_LIST_REMOVE_RETURN_TYPE_TAG
+#endif
+    public:
+
       /**
        *  @brief  Remove all elements equal to value.
        *  @param  __value  The value to remove.
@@ -1685,7 +1689,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  touched in any way.  Managing the pointer is the user's
        *  responsibility.
        */
-      void
+      _GLIBCXX_LIST_REMOVE_RETURN_TYPE_TAG
+      __remove_return_type
       remove(const _Tp& __value);
 
       /**
@@ -1700,7 +1705,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  responsibility.
        */
       template<typename _Predicate>
-	void
+	__remove_return_type
 	remove_if(_Predicate);
 
       /**
@@ -1713,7 +1718,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  the pointed-to memory is not touched in any way.  Managing
        *  the pointer is the user's responsibility.
        */
-      void
+      _GLIBCXX_LIST_REMOVE_RETURN_TYPE_TAG
+      __remove_return_type
       unique();
 
       /**
@@ -1729,8 +1735,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
        *  Managing the pointer is the user's responsibility.
        */
       template<typename _BinaryPredicate>
-	void
+	__remove_return_type
 	unique(_BinaryPredicate);
+
+#undef _GLIBCXX_LIST_REMOVE_RETURN_TYPE_TAG
 
       /**
        *  @brief  Merge sorted lists.
@@ -1939,7 +1947,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
       void
       _M_move_assign(list&& __x, true_type) noexcept
       {
-	this->_M_clear();
+	this->clear();
 	this->_M_move_nodes(std::move(__x));
 	std::__alloc_on_move(this->_M_get_Node_allocator(),
 			     __x._M_get_Node_allocator());
@@ -1953,8 +1961,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 	else
 	  // The rvalue's allocator cannot be moved, or is not equal,
 	  // so we need to individually move each element.
-	  _M_assign_dispatch(std::__make_move_if_noexcept_iterator(__x.begin()),
-			     std::__make_move_if_noexcept_iterator(__x.end()),
+	  _M_assign_dispatch(std::make_move_iterator(__x.begin()),
+			     std::make_move_iterator(__x.end()),
 			     __false_type{});
       }
 #endif
@@ -2005,6 +2013,27 @@ _GLIBCXX_END_NAMESPACE_CXX11
       return __i1 == __end1 && __i2 == __end2;
     }
 
+#if __cpp_lib_three_way_comparison
+/**
+   *  @brief  List ordering relation.
+   *  @param  __x  A `list`.
+   *  @param  __y  A `list` of the same type as `__x`.
+   *  @return  A value indicating whether `__x` is less than, equal to,
+   *           greater than, or incomparable with `__y`.
+   *
+   *  See `std::lexicographical_compare_three_way()` for how the determination
+   *  is made. This operator is used to synthesize relational operators like
+   *  `<` and `>=` etc.
+  */
+  template<typename _Tp, typename _Alloc>
+    inline __detail::__synth3way_t<_Tp>
+    operator<=>(const list<_Tp, _Alloc>& __x, const list<_Tp, _Alloc>& __y)
+    {
+      return std::lexicographical_compare_three_way(__x.begin(), __x.end(),
+						    __y.begin(), __y.end(),
+						    __detail::__synth3way);
+    }
+#else
   /**
    *  @brief  List ordering relation.
    *  @param  __x  A %list.
@@ -2045,6 +2074,7 @@ _GLIBCXX_END_NAMESPACE_CXX11
     inline bool
     operator>=(const list<_Tp, _Alloc>& __x, const list<_Tp, _Alloc>& __y)
     { return !(__x < __y); }
+#endif // three-way comparison
 
   /// See std::list::swap().
   template<typename _Tp, typename _Alloc>

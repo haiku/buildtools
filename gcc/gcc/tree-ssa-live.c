@@ -1,5 +1,5 @@
 /* Liveness for SSA trees.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -40,6 +40,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "cfgloop.h"
 #include "stringpool.h"
 #include "attribs.h"
+#include "optinfo.h"
+#include "gimple-walk.h"
+#include "cfganal.h"
 
 static void verify_live_on_entry (tree_live_info_p);
 
@@ -71,10 +74,12 @@ var_map_base_fini (var_map map)
       map->num_basevars = 0;
     }
 }
-/* Create a variable partition map of SIZE, initialize and return it.  */
+/* Create a variable partition map of SIZE for region, initialize and return
+   it.  Region is a loop if LOOP is non-NULL, otherwise is the current
+   function.  */
 
 var_map
-init_var_map (int size)
+init_var_map (int size, class loop *loop)
 {
   var_map map;
 
@@ -87,6 +92,27 @@ init_var_map (int size)
   map->partition_size = size;
   map->num_basevars = 0;
   map->partition_to_base_index = NULL;
+  map->vec_bbs = vNULL;
+  if (loop)
+    {
+      map->bmp_bbs = BITMAP_ALLOC (NULL);
+      map->outofssa_p = false;
+      basic_block *bbs = get_loop_body_in_dom_order (loop);
+      for (unsigned i = 0; i < loop->num_nodes; ++i)
+	{
+	  bitmap_set_bit (map->bmp_bbs, bbs[i]->index);
+	  map->vec_bbs.safe_push (bbs[i]);
+	}
+      free (bbs);
+    }
+  else
+    {
+      map->bmp_bbs = NULL;
+      map->outofssa_p = true;
+      basic_block bb;
+      FOR_EACH_BB_FN (bb, cfun)
+	map->vec_bbs.safe_push (bb);
+    }
   return map;
 }
 
@@ -100,6 +126,9 @@ delete_var_map (var_map map)
   partition_delete (map->var_partition);
   free (map->partition_to_view);
   free (map->view_to_partition);
+  if (map->bmp_bbs)
+    BITMAP_FREE (map->bmp_bbs);
+  map->vec_bbs.release ();
   free (map);
 }
 
@@ -526,24 +555,17 @@ remove_unused_scope_block_p (tree scope, bool in_ctor_dtor_block)
      ;
    /* When not generating debug info we can eliminate info on unused
       variables.  */
-   else if (!flag_auto_profile && debug_info_level == DINFO_LEVEL_NONE)
+   else if (!flag_auto_profile
+	    && debug_info_level == DINFO_LEVEL_NONE
+	    && !optinfo_wants_inlining_info_p ())
      {
-       /* Even for -g0 don't prune outer scopes from artificial
-	  functions, otherwise diagnostics using tree_nonartificial_location
-	  will not be emitted properly.  */
+       /* Even for -g0 don't prune outer scopes from inlined functions,
+	  otherwise late diagnostics from such functions will not be
+	  emitted or suppressed properly.  */
        if (inlined_function_outer_scope_p (scope))
 	 {
-	   tree ao = scope;
-
-	   while (ao
-		  && TREE_CODE (ao) == BLOCK
-		  && BLOCK_ABSTRACT_ORIGIN (ao) != ao)
-	     ao = BLOCK_ABSTRACT_ORIGIN (ao);
-	   if (ao
-	       && TREE_CODE (ao) == FUNCTION_DECL
-	       && DECL_DECLARED_INLINE_P (ao)
-	       && lookup_attribute ("artificial", DECL_ATTRIBUTES (ao)))
-	     unused = false;
+	   gcc_assert (TREE_CODE (BLOCK_ORIGIN (scope)) == FUNCTION_DECL);
+	   unused = false;
 	 }
      }
    else if (BLOCK_VARS (scope) || BLOCK_NUM_NONLOCALIZED_VARS (scope))
@@ -598,13 +620,43 @@ clear_unused_block_pointer (void)
       {
 	unsigned i;
 	tree b;
-	gimple *stmt = gsi_stmt (gsi);
+	gimple *stmt;
 
+      next:
+	stmt = gsi_stmt (gsi);
 	if (!is_gimple_debug (stmt) && !gimple_clobber_p (stmt))
 	  continue;
 	b = gimple_block (stmt);
 	if (b && !TREE_USED (b))
-	  gimple_set_block (stmt, NULL);
+	  {
+	    /* Elide debug marker stmts that have an associated BLOCK from an
+	       inline instance removed with also the outermost scope BLOCK of
+	       said inline instance removed.  If the outermost scope BLOCK of
+	       said inline instance is preserved use that in place of the
+	       removed BLOCK.  That keeps the marker associated to the correct
+	       inline instance (or no inline instance in case it was not from
+	       an inline instance).  */
+	    if (gimple_debug_nonbind_marker_p (stmt)
+		&& BLOCK_ABSTRACT_ORIGIN (b))
+	      {
+		while (TREE_CODE (b) == BLOCK
+		       && !inlined_function_outer_scope_p (b))
+		  b = BLOCK_SUPERCONTEXT (b);
+		if (TREE_CODE (b) == BLOCK)
+		  {
+		    if (TREE_USED (b))
+		      {
+			gimple_set_block (stmt, b);
+			continue;
+		      }
+		    gsi_remove (&gsi, true);
+		    if (gsi_end_p (gsi))
+		      break;
+		    goto next;
+		  }
+	      }
+	    gimple_set_block (stmt, NULL);
+	  }
 	for (i = 0; i < gimple_num_ops (stmt); i++)
 	  walk_tree (gimple_op_ptr (stmt, i), clear_unused_block_pointer_1,
 		     NULL, NULL);
@@ -620,9 +672,8 @@ dump_scope_block (FILE *file, int indent, tree scope, dump_flags_t flags)
   tree var, t;
   unsigned int i;
 
-  fprintf (file, "\n%*s{ Scope block #%i%s%s",indent, "" , BLOCK_NUMBER (scope),
-  	   TREE_USED (scope) ? "" : " (unused)",
-	   BLOCK_ABSTRACT (scope) ? " (abstract)": "");
+  fprintf (file, "\n%*s{ Scope block #%i%s",indent, "" , BLOCK_NUMBER (scope),
+  	   TREE_USED (scope) ? "" : " (unused)");
   if (LOCATION_LOCUS (BLOCK_SOURCE_LOCATION (scope)) != UNKNOWN_LOCATION)
     {
       expanded_location s = expand_location (BLOCK_SOURCE_LOCATION (scope));
@@ -719,6 +770,7 @@ remove_unused_locals (void)
   mark_scope_block_unused (DECL_INITIAL (current_function_decl));
 
   usedvars = BITMAP_ALLOC (NULL);
+  auto_bitmap useddebug;
 
   /* Walk the CFG marking all referenced symbols.  */
   FOR_EACH_BB_FN (bb, cfun)
@@ -739,7 +791,21 @@ remove_unused_locals (void)
 	     do it.  If the block is not otherwise used, the stmt will
 	     be cleaned up in clean_unused_block_pointer.  */
 	  if (is_gimple_debug (stmt))
-	    continue;
+	    {
+	      if (gimple_debug_bind_p (stmt))
+		{
+		  tree var = gimple_debug_bind_get_var  (stmt);
+		  if (VAR_P (var))
+		    {
+		      if (!gimple_debug_bind_get_value (stmt))
+			/* Run the 2nd phase.  */
+			have_local_clobbers = true;
+		      else
+			bitmap_set_bit (useddebug, DECL_UID (var));
+		    }
+		}
+	      continue;
+	    }
 
 	  if (gimple_clobber_p (stmt))
 	    {
@@ -822,13 +888,27 @@ remove_unused_locals (void)
 		if (b)
 		  TREE_USED (b) = true;
 	      }
+	    else if (gimple_debug_bind_p (stmt))
+	      {
+		tree var = gimple_debug_bind_get_var (stmt);
+		if (VAR_P (var)
+		    && !bitmap_bit_p (useddebug, DECL_UID (var))
+		    && !is_used_p (var))
+		  {
+		    if (dump_file && (dump_flags & TDF_DETAILS))
+		      fprintf (dump_file, "Dead debug bind reset to %u\n",
+			       DECL_UID (var));
+		    gsi_remove (&gsi, true);
+		    continue;
+		  }
+	      }
 	    gsi_next (&gsi);
 	  }
       }
 
   if (cfun->has_simduid_loops)
     {
-      struct loop *loop;
+      class loop *loop;
       FOR_EACH_LOOP (loop, 0)
 	if (loop->simduid && !is_used_p (loop->simduid))
 	  loop->simduid = NULL_TREE;
@@ -901,13 +981,14 @@ new_tree_live_info (var_map map)
 
   bitmap_obstack_initialize (&live->livein_obstack);
   bitmap_obstack_initialize (&live->liveout_obstack);
-  live->livein = XNEWVEC (bitmap_head, last_basic_block_for_fn (cfun));
-  FOR_EACH_BB_FN (bb, cfun)
-    bitmap_initialize (&live->livein[bb->index], &live->livein_obstack);
 
-  live->liveout = XNEWVEC (bitmap_head, last_basic_block_for_fn (cfun));
-  FOR_EACH_BB_FN (bb, cfun)
-    bitmap_initialize (&live->liveout[bb->index], &live->liveout_obstack);
+  live->livein = XCNEWVEC (bitmap_head, last_basic_block_for_fn (cfun));
+  live->liveout = XCNEWVEC (bitmap_head, last_basic_block_for_fn (cfun));
+  for (unsigned i = 0; map->vec_bbs.iterate (i, &bb); ++i)
+    {
+      bitmap_initialize (&live->livein[bb->index], &live->livein_obstack);
+      bitmap_initialize (&live->liveout[bb->index], &live->liveout_obstack);
+    }
 
   live->work_stack = XNEWVEC (int, last_basic_block_for_fn (cfun));
   live->stack_top = live->work_stack;
@@ -960,7 +1041,7 @@ loe_visit_block (tree_live_info_p live, basic_block bb, sbitmap visited)
   FOR_EACH_EDGE (e, ei, bb->preds)
     {
       pred_bb = e->src;
-      if (pred_bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+      if (!region_contains_p (live->map, pred_bb))
 	continue;
       /* Variables live-on-entry from BB that aren't defined in the
 	 predecessor block.  This should be the live on entry vars to pred.
@@ -993,9 +1074,10 @@ live_worklist (tree_live_info_p live)
 
   bitmap_clear (visited);
 
-  /* Visit all the blocks in reverse order and propagate live on entry values
+  /* Visit region's blocks in reverse order and propagate live on entry values
      into the predecessors blocks.  */
-  FOR_EACH_BB_REVERSE_FN (bb, cfun)
+  for (unsigned i = live->map->vec_bbs.length () - 1;
+       live->map->vec_bbs.iterate (i, &bb); --i)
     loe_visit_block (live, bb, visited);
 
   /* Process any blocks which require further iteration.  */
@@ -1030,7 +1112,7 @@ set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
     {
       def_bb = gimple_bb (stmt);
       /* Mark defs in liveout bitmap temporarily.  */
-      if (def_bb)
+      if (def_bb && region_contains_p (live->map, def_bb))
 	bitmap_set_bit (&live->liveout[def_bb->index], p);
     }
   else
@@ -1054,11 +1136,8 @@ set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
 	     defined in that block, or whether its live on entry.  */
 	  int index = PHI_ARG_INDEX_FROM_USE (use);
 	  edge e = gimple_phi_arg_edge (as_a <gphi *> (use_stmt), index);
-	  if (e->src != ENTRY_BLOCK_PTR_FOR_FN (cfun))
-	    {
-	      if (e->src != def_bb)
-		add_block = e->src;
-	    }
+	  if (e->src != def_bb && region_contains_p (live->map, e->src))
+	    add_block = e->src;
 	}
       else if (is_gimple_debug (use_stmt))
 	continue;
@@ -1066,7 +1145,7 @@ set_var_live_on_entry (tree ssa_name, tree_live_info_p live)
         {
 	  /* If its not defined in this block, its live on entry.  */
 	  basic_block use_bb = gimple_bb (use_stmt);
-	  if (use_bb != def_bb)
+	  if (use_bb != def_bb && region_contains_p (live->map, use_bb))
 	    add_block = use_bb;
 	}
 
@@ -1095,7 +1174,7 @@ calculate_live_on_exit (tree_live_info_p liveinfo)
   edge_iterator ei;
 
   /* live on entry calculations used liveout vectors for defs, clear them.  */
-  FOR_EACH_BB_FN (bb, cfun)
+  for (unsigned i = 0; liveinfo->map->vec_bbs.iterate (i, &bb); ++i)
     bitmap_clear (&liveinfo->liveout[bb->index]);
 
   /* Set all the live-on-exit bits for uses in PHIs.  */
@@ -1108,6 +1187,8 @@ calculate_live_on_exit (tree_live_info_p liveinfo)
       for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  gphi *phi = gsi.phi ();
+	  if (virtual_operand_p (gimple_phi_result (phi)))
+	    continue;
 	  for (i = 0; i < gimple_phi_num_args (phi); i++)
 	    {
 	      tree t = PHI_ARG_DEF (phi, i);
@@ -1120,14 +1201,17 @@ calculate_live_on_exit (tree_live_info_p liveinfo)
 	      if (p == NO_PARTITION)
 		continue;
 	      e = gimple_phi_arg_edge (phi, i);
-	      if (e->src != ENTRY_BLOCK_PTR_FOR_FN (cfun))
+	      if (region_contains_p (liveinfo->map, e->src))
 		bitmap_set_bit (&liveinfo->liveout[e->src->index], p);
 	    }
 	}
 
+      if (!region_contains_p (liveinfo->map, bb))
+	continue;
+
       /* Add each successors live on entry to this bock live on exit.  */
       FOR_EACH_EDGE (e, ei, bb->succs)
-	if (e->dest != EXIT_BLOCK_PTR_FOR_FN (cfun))
+	if (region_contains_p (liveinfo->map, e->dest))
 	  bitmap_ior_into (&liveinfo->liveout[bb->index],
 			   live_on_entry (liveinfo, e->dest));
     }
@@ -1168,8 +1252,149 @@ calculate_live_ranges (var_map map, bool want_livein)
 
   return live;
 }
+
+/* Data structure for compute_live_vars* functions.  */
 
+struct compute_live_vars_data {
+  /* Vector of bitmaps for live vars indices at the end of basic blocks,
+     indexed by bb->index.  ACTIVE[ENTRY_BLOCK] must be empty bitmap,
+     ACTIVE[EXIT_BLOCK] is used for STOP_AFTER.  */
+  vec<bitmap_head> active;
+  /* Work bitmap of currently live variables.  */
+  bitmap work;
+  /* Set of interesting variables.  Variables with uids not in this
+     hash_map are not tracked.  */
+  live_vars_map *vars;
+};
 
+/* Callback for walk_stmt_load_store_addr_ops.  If OP is a VAR_DECL with
+   uid set in DATA->vars, enter its corresponding index into bitmap
+   DATA->work.  */
+
+static bool
+compute_live_vars_visit (gimple *, tree op, tree, void *pdata)
+{
+  compute_live_vars_data *data = (compute_live_vars_data *) pdata;
+  op = get_base_address (op);
+  if (op && VAR_P (op))
+    if (unsigned int *v = data->vars->get (DECL_UID (op)))
+      bitmap_set_bit (data->work, *v);
+  return false;
+}
+
+/* Helper routine for compute_live_vars, calculating the sets of live
+   variables at the end of BB, leaving the result in DATA->work.
+   If STOP_AFTER is non-NULL, stop processing after that stmt.  */
+
+static void
+compute_live_vars_1 (basic_block bb, compute_live_vars_data *data,
+		     gimple *stop_after)
+{
+  edge e;
+  edge_iterator ei;
+  gimple_stmt_iterator gsi;
+  walk_stmt_load_store_addr_fn visit = compute_live_vars_visit;
+
+  bitmap_clear (data->work);
+  FOR_EACH_EDGE (e, ei, bb->preds)
+    bitmap_ior_into (data->work, &data->active[e->src->index]);
+
+  for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+    walk_stmt_load_store_addr_ops (gsi_stmt (gsi), data, NULL, NULL, visit);
+  for (gsi = gsi_after_labels (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+
+      if (gimple_clobber_p (stmt))
+	{
+	  tree lhs = gimple_assign_lhs (stmt);
+	  if (VAR_P (lhs))
+	    if (unsigned int *v = data->vars->get (DECL_UID (lhs)))
+	      bitmap_clear_bit (data->work, *v);
+	}
+      else if (!is_gimple_debug (stmt))
+	walk_stmt_load_store_addr_ops (stmt, data, visit, visit, visit);
+      if (stmt == stop_after)
+	break;
+    }
+}
+
+/* For function FN and live_vars_map (hash map from DECL_UIDs to a dense set of
+   indexes of automatic variables VARS, compute which of those variables are
+   (might be) live at the end of each basic block.  */
+
+vec<bitmap_head>
+compute_live_vars (struct function *fn, live_vars_map *vars)
+{
+  vec<bitmap_head> active;
+
+  /* We approximate the live range of a stack variable by taking the first
+     mention of its name as starting point(s), and by the end-of-scope
+     death clobber added by gimplify as ending point(s) of the range.
+     This overapproximates in the case we for instance moved an address-taken
+     operation upward, without also moving a dereference to it upwards.
+     But it's conservatively correct as a variable never can hold values
+     before its name is mentioned at least once.
+
+     We then do a mostly classical bitmap liveness algorithm.  */
+
+  active.create (last_basic_block_for_fn (fn));
+  active.quick_grow (last_basic_block_for_fn (fn));
+  for (int i = 0; i < last_basic_block_for_fn (fn); i++)
+    bitmap_initialize (&active[i], &bitmap_default_obstack);
+
+  bitmap work = BITMAP_ALLOC (NULL);
+
+  int *rpo = XNEWVEC (int, last_basic_block_for_fn (fn));
+  int n_bbs = pre_and_rev_post_order_compute_fn (fn, NULL, rpo, false);
+
+  bool changed = true;
+  compute_live_vars_data data = { active, work, vars };
+  while (changed)
+    {
+      int i;
+      changed = false;
+      for (i = 0; i < n_bbs; i++)
+	{
+	  basic_block bb = BASIC_BLOCK_FOR_FN (fn, rpo[i]);
+	  compute_live_vars_1 (bb, &data, NULL);
+	  if (bitmap_ior_into (&active[bb->index], work))
+	    changed = true;
+	}
+    }
+
+  free (rpo);
+  BITMAP_FREE (work);
+
+  return active;
+}
+
+/* For ACTIVE computed by compute_live_vars, compute a bitmap of variables
+   live after the STOP_AFTER statement and return that bitmap.  */
+
+bitmap
+live_vars_at_stmt (vec<bitmap_head> &active, live_vars_map *vars,
+		   gimple *stop_after)
+{
+  bitmap work = BITMAP_ALLOC (NULL);
+  compute_live_vars_data data = { active, work, vars };
+  basic_block bb = gimple_bb (stop_after);
+  compute_live_vars_1 (bb, &data, stop_after);
+  return work;
+}
+
+/* Destroy what compute_live_vars has returned when it is no longer needed.  */
+
+void
+destroy_live_vars (vec<bitmap_head> &active)
+{
+  unsigned len = active.length ();
+  for (unsigned i = 0; i < len; i++)
+    bitmap_clear (&active[i]);
+
+  active.release ();
+}
+
 /* Output partition map MAP to file F.  */
 
 void
@@ -1314,7 +1539,7 @@ verify_live_on_entry (tree_live_info_p live)
   FOR_EACH_EDGE (e, ei, bb->succs)
     {
       int entry_block = e->dest->index;
-      if (e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+      if (!region_contains_p (live->map, e->dest))
         continue;
       for (i = 0; i < (unsigned)num_var_partitions (map); i++)
 	{
@@ -1380,6 +1605,8 @@ verify_live_on_entry (tree_live_info_p live)
 		     gsi_next (&gsi))
 		  {
 		    gphi *phi = gsi.phi ();
+		    if (virtual_operand_p (gimple_phi_result (phi)))
+		      continue;
 		    for (z = 0; z < gimple_phi_num_args (phi); z++)
 		      if (var == gimple_phi_arg_def (phi, z))
 			{

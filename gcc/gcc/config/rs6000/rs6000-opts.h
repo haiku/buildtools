@@ -1,6 +1,6 @@
 /* Definitions of target machine needed for option handling for GNU compiler,
    for IBM RS/6000.
-   Copyright (C) 2010-2018 Free Software Foundation, Inc.
+   Copyright (C) 2010-2021 Free Software Foundation, Inc.
    Contributed by Michael Meissner (meissner@linux.vnet.ibm.com)
 
    This file is part of GCC.
@@ -61,23 +61,13 @@ enum processor_type
    PROCESSOR_POWER7,
    PROCESSOR_POWER8,
    PROCESSOR_POWER9,
+   PROCESSOR_POWER10,
 
    PROCESSOR_RS64A,
    PROCESSOR_MPCCORE,
    PROCESSOR_CELL,
    PROCESSOR_PPCA2,
    PROCESSOR_TITAN
-};
-
-
-/* FP processor type.  */
-enum fpu_type_t
-{
-  FPU_NONE,			/* No FPU */
-  FPU_SF_LITE,			/* Limited Single Precision FPU */
-  FPU_DF_LITE,			/* Limited Double Precision FPU */
-  FPU_SF_FULL,			/* Full Single Precision FPU */
-  FPU_DF_FULL			/* Full Double Single Precision FPU */
 };
 
 
@@ -148,9 +138,7 @@ enum rs6000_vector {
   VECTOR_NONE,			/* Type is not  a vector or not supported */
   VECTOR_ALTIVEC,		/* Use altivec for vector processing */
   VECTOR_VSX,			/* Use VSX for vector processing */
-  VECTOR_P8_VECTOR,		/* Use ISA 2.07 VSX for vector processing */
-  VECTOR_PAIRED,		/* Use paired floating point for vectors */
-  VECTOR_OTHER			/* Some other vector unit */
+  VECTOR_P8_VECTOR		/* Use ISA 2.07 VSX for vector processing */
 };
 
 /* Where to get the canary for the stack protector.  */

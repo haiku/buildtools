@@ -1,5 +1,5 @@
 /* Internals of libgccjit: classes for recording calls made to the JIT API.
-   Copyright (C) 2013-2018 Free Software Foundation, Inc.
+   Copyright (C) 2013-2021 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -29,6 +29,9 @@ class timer;
 namespace gcc {
 
 namespace jit {
+
+extern const char * const unary_op_reproducer_strings[];
+extern const char * const binary_op_reproducer_strings[];
 
 class result;
 class dump;
@@ -71,7 +74,7 @@ public:
   void disassociate_from_playback ();
 
   string *
-  new_string (const char *text);
+  new_string (const char *text, bool escaped = false);
 
   location *
   new_location (const char *filename,
@@ -94,6 +97,12 @@ public:
   new_field (location *loc,
 	     type *type,
 	     const char *name);
+
+  field *
+  new_bitfield (location *loc,
+                type *type,
+                int width,
+                const char *name);
 
   struct_ *
   new_struct_type (location *loc,
@@ -218,6 +227,12 @@ public:
   append_command_line_options (vec <char *> *argvec);
 
   void
+  add_driver_option (const char *optname);
+
+  void
+  append_driver_options (auto_string_vec *argvec);
+
+  void
   enable_dump (const char *dumpname,
 	       char **out_ptr);
 
@@ -286,6 +301,8 @@ public:
   void set_timer (timer *t) { m_timer = t; }
   timer *get_timer () const { return m_timer; }
 
+  void add_top_level_asm (location *loc, const char *asm_stmts);
+
 private:
   void log_all_options () const;
   void log_str_option (enum gcc_jit_str_option opt) const;
@@ -317,6 +334,7 @@ private:
   bool m_bool_options[GCC_JIT_NUM_BOOL_OPTIONS];
   bool m_inner_bool_options[NUM_INNER_BOOL_OPTIONS];
   auto_vec <char *> m_command_line_options;
+  auto_vec <char *> m_driver_options;
 
   /* Dumpfiles that were requested via gcc_jit_context_enable_dump.  */
   auto_vec<requested_dump> m_requested_dumps;
@@ -328,6 +346,7 @@ private:
   auto_vec<compound_type *> m_compound_types;
   auto_vec<global *> m_globals;
   auto_vec<function *> m_functions;
+  auto_vec<top_level_asm *> m_top_level_asms;
 
   type *m_basic_types[NUM_GCC_JIT_TYPES];
   type *m_FILE_type;
@@ -398,7 +417,7 @@ private:
 class string : public memento
 {
 public:
-  string (context *ctxt, const char *text);
+  string (context *ctxt, const char *text, bool escaped);
   ~string ();
 
   const char *c_str () { return m_buffer; }
@@ -415,6 +434,11 @@ private:
 private:
   size_t m_len;
   char *m_buffer;
+
+  /* Flag to track if this string is the result of string::make_debug_string,
+     to avoid infinite recursion when logging all mementos: don't re-escape
+     such strings.  */
+  bool m_escaped;
 };
 
 class location : public memento
@@ -486,6 +510,12 @@ public:
      This will return NULL if it's not valid to dereference this type.
      The caller is responsible for setting an error.  */
   virtual type *dereference () = 0;
+  /* Get the type size in bytes.
+
+     This is implemented only for memento_of_get_type and
+     memento_of_get_pointer as it is used for initializing globals of
+     these types.  */
+  virtual size_t get_size () { gcc_unreachable (); }
 
   /* Dynamic casts.  */
   virtual function_type *dyn_cast_function_type () { return NULL; }
@@ -553,6 +583,8 @@ public:
 
   type *dereference () FINAL OVERRIDE;
 
+  size_t get_size () FINAL OVERRIDE;
+
   bool accepts_writes_from (type *rtype) FINAL OVERRIDE
   {
     if (m_kind == GCC_JIT_TYPE_VOID_PTR)
@@ -593,6 +625,8 @@ public:
     m_other_type (other_type) {}
 
   type *dereference () FINAL OVERRIDE { return m_other_type; }
+
+  size_t get_size () FINAL OVERRIDE;
 
   bool accepts_writes_from (type *rtype) FINAL OVERRIDE;
 
@@ -739,6 +773,7 @@ class array_type : public type
   bool is_bool () const FINAL OVERRIDE { return false; }
   type *is_pointer () FINAL OVERRIDE { return NULL; }
   type *is_array () FINAL OVERRIDE { return m_element_type; }
+  int num_elements () { return m_num_elements; }
 
   void replay_into (replayer *) FINAL OVERRIDE;
 
@@ -815,9 +850,9 @@ public:
   compound_type * get_container () const { return m_container; }
   void set_container (compound_type *c) { m_container = c; }
 
-  void replay_into (replayer *) FINAL OVERRIDE;
+  void replay_into (replayer *) OVERRIDE;
 
-  void write_to_dump (dump &d) FINAL OVERRIDE;
+  void write_to_dump (dump &d) OVERRIDE;
 
   playback::field *
   playback_field () const
@@ -826,14 +861,39 @@ public:
   }
 
 private:
-  string * make_debug_string () FINAL OVERRIDE;
-  void write_reproducer (reproducer &r) FINAL OVERRIDE;
+  string * make_debug_string () OVERRIDE;
+  void write_reproducer (reproducer &r) OVERRIDE;
 
-private:
+protected:
   location *m_loc;
   type *m_type;
   string *m_name;
   compound_type *m_container;
+};
+
+
+class bitfield : public field
+{
+public:
+  bitfield (context *ctxt,
+	    location *loc,
+	    type *type,
+	    int width,
+	    string *name)
+    : field (ctxt, loc, type, name),
+      m_width (width)
+  {}
+
+  void replay_into (replayer *) FINAL OVERRIDE;
+
+  void write_to_dump (dump &d) FINAL OVERRIDE;
+
+private:
+  string * make_debug_string () FINAL OVERRIDE;
+  void write_reproducer (reproducer &r) FINAL OVERRIDE;
+
+private:
+  int m_width;
 };
 
 /* Base class for struct_ and union_ */
@@ -1066,6 +1126,7 @@ public:
 
   const char *access_as_rvalue (reproducer &r) OVERRIDE;
   virtual const char *access_as_lvalue (reproducer &r);
+  virtual bool is_global () const { return false; }
 };
 
 class param : public lvalue
@@ -1217,6 +1278,10 @@ public:
   add_comment (location *loc,
 	       const char *text);
 
+  extended_asm *
+  add_extended_asm (location *loc,
+		    const char *asm_template);
+
   statement *
   end_with_conditional (location *loc,
 			rvalue *boolval,
@@ -1237,6 +1302,13 @@ public:
 		   block *default_block,
 		   int num_cases,
 		   case_ **cases);
+
+  extended_asm *
+  end_with_extended_asm_goto (location *loc,
+			      const char *asm_template,
+			      int num_goto_blocks,
+			      block **goto_blocks,
+			      block *fallthrough_block);
 
   playback::block *
   playback_block () const
@@ -1286,7 +1358,14 @@ public:
   : lvalue (ctxt, loc, type),
     m_kind (kind),
     m_name (name)
-  {}
+  {
+    m_initializer = NULL;
+    m_initializer_num_bytes = 0;
+  }
+  ~global ()
+  {
+    free (m_initializer);
+  }
 
   void replay_into (replayer *) FINAL OVERRIDE;
 
@@ -1294,8 +1373,23 @@ public:
 
   void write_to_dump (dump &d) FINAL OVERRIDE;
 
+  bool is_global () const FINAL OVERRIDE { return true; }
+
+  void
+  set_initializer (const void *initializer,
+                   size_t num_bytes)
+  {
+    if (m_initializer)
+      free (m_initializer);
+    m_initializer = xmalloc (num_bytes);
+    memcpy (m_initializer, initializer, num_bytes);
+    m_initializer_num_bytes = num_bytes;
+  }
+
 private:
   string * make_debug_string () FINAL OVERRIDE { return m_name; }
+  template <typename T>
+  void write_initializer_reproducer (const char *id, reproducer &r);
   void write_reproducer (reproducer &r) FINAL OVERRIDE;
   enum precedence get_precedence () const FINAL OVERRIDE
   {
@@ -1305,6 +1399,8 @@ private:
 private:
   enum gcc_jit_global_kind m_kind;
   string *m_name;
+  void *m_initializer;
+  size_t m_initializer_num_bytes;
 };
 
 template <typename HOST_TYPE>
@@ -2028,6 +2124,207 @@ private:
   rvalue *m_expr;
   block *m_default_block;
   auto_vec <case_ *> m_cases;
+};
+
+class asm_operand : public memento
+{
+public:
+  asm_operand (extended_asm *ext_asm,
+	       string *asm_symbolic_name,
+	       string *constraint);
+
+  const char *get_symbolic_name () const
+  {
+    if (m_asm_symbolic_name)
+      return m_asm_symbolic_name->c_str ();
+    else
+      return NULL;
+  }
+
+  const char *get_constraint () const
+  {
+    return m_constraint->c_str ();
+  }
+
+  virtual void print (pretty_printer *pp) const;
+
+private:
+  string * make_debug_string () FINAL OVERRIDE;
+
+protected:
+  extended_asm *m_ext_asm;
+  string *m_asm_symbolic_name;
+  string *m_constraint;
+};
+
+class output_asm_operand : public asm_operand
+{
+public:
+  output_asm_operand (extended_asm *ext_asm,
+		      string *asm_symbolic_name,
+		      string *constraint,
+		      lvalue *dest)
+  : asm_operand (ext_asm, asm_symbolic_name, constraint),
+    m_dest (dest)
+  {}
+
+  lvalue *get_lvalue () const { return m_dest; }
+
+  void replay_into (replayer *) FINAL OVERRIDE {}
+
+  void print (pretty_printer *pp) const FINAL OVERRIDE;
+
+private:
+  void write_reproducer (reproducer &r) FINAL OVERRIDE;
+
+private:
+  lvalue *m_dest;
+};
+
+class input_asm_operand : public asm_operand
+{
+public:
+  input_asm_operand (extended_asm *ext_asm,
+		     string *asm_symbolic_name,
+		     string *constraint,
+		     rvalue *src)
+  : asm_operand (ext_asm, asm_symbolic_name, constraint),
+    m_src (src)
+  {}
+
+  rvalue *get_rvalue () const { return m_src; }
+
+  void replay_into (replayer *) FINAL OVERRIDE {}
+
+  void print (pretty_printer *pp) const FINAL OVERRIDE;
+
+private:
+  void write_reproducer (reproducer &r) FINAL OVERRIDE;
+
+private:
+  rvalue *m_src;
+};
+
+/* Abstract base class for extended_asm statements.  */
+
+class extended_asm : public statement
+{
+public:
+  extended_asm (block *b,
+		location *loc,
+		string *asm_template)
+  : statement (b, loc),
+    m_asm_template (asm_template),
+    m_is_volatile (false),
+    m_is_inline (false)
+  {}
+
+  void set_volatile_flag (bool flag) { m_is_volatile = flag; }
+  void set_inline_flag (bool flag) { m_is_inline = flag; }
+
+  void add_output_operand (const char *asm_symbolic_name,
+			   const char *constraint,
+			   lvalue *dest);
+  void add_input_operand (const char *asm_symbolic_name,
+			  const char *constraint,
+			  rvalue *src);
+  void add_clobber (const char *victim);
+
+  void replay_into (replayer *r) OVERRIDE;
+
+  string *get_asm_template () const { return m_asm_template; }
+
+  virtual bool is_goto () const = 0;
+  virtual void maybe_print_gotos (pretty_printer *) const = 0;
+
+protected:
+  void write_flags (reproducer &r);
+  void write_clobbers (reproducer &r);
+
+private:
+  string * make_debug_string () FINAL OVERRIDE;
+  virtual void maybe_populate_playback_blocks
+    (auto_vec <playback::block *> *out) = 0;
+
+protected:
+  string *m_asm_template;
+  bool m_is_volatile;
+  bool m_is_inline;
+  auto_vec<output_asm_operand *> m_output_ops;
+  auto_vec<input_asm_operand *> m_input_ops;
+  auto_vec<string *> m_clobbers;
+};
+
+/* An extended_asm that's not a goto, as created by
+   gcc_jit_block_add_extended_asm. */
+
+class extended_asm_simple : public extended_asm
+{
+public:
+  extended_asm_simple (block *b,
+		       location *loc,
+		       string *asm_template)
+  : extended_asm (b, loc, asm_template)
+  {}
+
+  void write_reproducer (reproducer &r) OVERRIDE;
+  bool is_goto () const FINAL OVERRIDE { return false; }
+  void maybe_print_gotos (pretty_printer *) const FINAL OVERRIDE {}
+
+private:
+  void maybe_populate_playback_blocks
+    (auto_vec <playback::block *> *) FINAL OVERRIDE
+  {}
+};
+
+/* An extended_asm that's a asm goto, as created by
+   gcc_jit_block_end_with_extended_asm_goto.  */
+
+class extended_asm_goto : public extended_asm
+{
+public:
+  extended_asm_goto (block *b,
+		     location *loc,
+		     string *asm_template,
+		     int num_goto_blocks,
+		     block **goto_blocks,
+		     block *fallthrough_block);
+
+  void replay_into (replayer *r) FINAL OVERRIDE;
+  void write_reproducer (reproducer &r) OVERRIDE;
+
+  vec <block *> get_successor_blocks () const FINAL OVERRIDE;
+
+  bool is_goto () const FINAL OVERRIDE { return true; }
+  void maybe_print_gotos (pretty_printer *) const FINAL OVERRIDE;
+
+private:
+  void maybe_populate_playback_blocks
+    (auto_vec <playback::block *> *out) FINAL OVERRIDE;
+
+private:
+  auto_vec <block *> m_goto_blocks;
+  block *m_fallthrough_block;
+};
+
+/* A group of top-level asm statements, as created by
+   gcc_jit_context_add_top_level_asm.  */
+
+class top_level_asm : public memento
+{
+public:
+  top_level_asm (context *ctxt, location *loc, string *asm_stmts);
+
+  void write_to_dump (dump &d) FINAL OVERRIDE;
+
+private:
+  void replay_into (replayer *r) FINAL OVERRIDE;
+  string * make_debug_string () FINAL OVERRIDE;
+  void write_reproducer (reproducer &r) FINAL OVERRIDE;
+
+private:
+  location *m_loc;
+  string *m_asm_stmts;
 };
 
 } // namespace gcc::jit::recording

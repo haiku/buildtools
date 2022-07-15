@@ -1,5 +1,4 @@
-! { dg-do compile } 
-! { dg-additional-options "-fdump-tree-original" } 
+! { dg-additional-options "-fdump-tree-original" }
 
 ! test for tree-dump-original and spaces-commas
 
@@ -10,11 +9,13 @@ program test
 
   !$acc parallel if(l) async num_gangs(i) num_workers(i) vector_length(i) &
   !$acc reduction(max:q), copy(i), copyin(j), copyout(k), create(m) &
+  !$acc no_create(n) &
   !$acc present(o), pcopy(p), pcopyin(r), pcopyout(s), pcreate(t) &
   !$acc deviceptr(u), private(v), firstprivate(w)
   !$acc end parallel
 
 end program test
+
 ! { dg-final { scan-tree-dump-times "pragma acc parallel" 1 "original" } } 
 
 ! { dg-final { scan-tree-dump-times "if" 1 "original" } }
@@ -24,11 +25,11 @@ end program test
 ! { dg-final { scan-tree-dump-times "vector_length" 1 "original" } } 
 
 ! { dg-final { scan-tree-dump-times "reduction\\(max:q\\)" 1 "original" } } 
-! { dg-final { scan-tree-dump-times "map\\(force_tofrom:i\\)" 1 "original" } } 
-! { dg-final { scan-tree-dump-times "map\\(force_to:j\\)" 1 "original" } } 
-! { dg-final { scan-tree-dump-times "map\\(force_from:k\\)" 1 "original" } } 
-! { dg-final { scan-tree-dump-times "map\\(force_alloc:m\\)" 1 "original" } } 
-
+! { dg-final { scan-tree-dump-times "map\\(tofrom:i\\)" 1 "original" } } 
+! { dg-final { scan-tree-dump-times "map\\(to:j\\)" 1 "original" } } 
+! { dg-final { scan-tree-dump-times "map\\(from:k\\)" 1 "original" } } 
+! { dg-final { scan-tree-dump-times "map\\(alloc:m\\)" 1 "original" } } 
+! { dg-final { scan-tree-dump-times "map\\(no_alloc:n\\)" 1 "original" } } 
 ! { dg-final { scan-tree-dump-times "map\\(force_present:o\\)" 1 "original" } } 
 ! { dg-final { scan-tree-dump-times "map\\(tofrom:p\\)" 1 "original" } } 
 ! { dg-final { scan-tree-dump-times "map\\(to:r\\)" 1 "original" } } 

@@ -1,6 +1,6 @@
 /* Callee-saved register spill and fill routines for RISC-V.
 
-   Copyright (C) 2016-2018 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -45,7 +45,7 @@ FUNC_BEGIN (__riscv_save_10)
   .cfi_restore 27
   addi sp, sp, -112
   .cfi_def_cfa_offset 112
-  li t1, -16
+  li t1, 1
 .Ls10:
   sd s10, 16(sp)
   .cfi_offset 26, -96
@@ -60,7 +60,7 @@ FUNC_BEGIN (__riscv_save_8)
   .cfi_restore 27
   addi sp, sp, -112
   .cfi_def_cfa_offset 112
-  li t1, -32
+  li t1, 2
 .Ls8:
   sd s8, 32(sp)
   .cfi_offset 24, -80
@@ -77,7 +77,7 @@ FUNC_BEGIN (__riscv_save_6)
   .cfi_restore 27
   addi sp, sp, -112
   .cfi_def_cfa_offset 112
-  li t1, -48
+  li t1, 3
 .Ls6:
   sd s6, 48(sp)
   .cfi_offset 22, -64
@@ -99,7 +99,7 @@ FUNC_BEGIN (__riscv_save_4)
   .cfi_restore 27
   addi sp, sp, -112
   .cfi_def_cfa_offset 112
-  li t1, -64
+  li t1, 4
 .Ls4:
   sd s4, 64(sp)
   .cfi_offset 20, -48
@@ -123,7 +123,7 @@ FUNC_BEGIN (__riscv_save_2)
   .cfi_restore 27
   addi sp, sp, -112
   .cfi_def_cfa_offset 112
-  li t1, -80
+  li t1, 5
 .Ls2:
   sd s2, 80(sp)
   .cfi_offset 18, -32
@@ -133,9 +133,10 @@ FUNC_BEGIN (__riscv_save_2)
   .cfi_offset 8, -16
   sd ra, 104(sp)
   .cfi_offset 1, -8
+  slli t1, t1, 4
   # CFA info is not correct in next 2 instruction since t1's
   # value is depend on how may register really save.
-  sub sp, sp, t1
+  add sp, sp, t1
   jr t0
   .cfi_endproc
 FUNC_END (__riscv_save_12)
@@ -291,6 +292,48 @@ FUNC_END (__riscv_restore_3)
 FUNC_END (__riscv_restore_2)
 FUNC_END (__riscv_restore_1)
 FUNC_END (__riscv_restore_0)
+
+#else
+
+#ifdef __riscv_32e
+FUNC_BEGIN(__riscv_save_2)
+FUNC_BEGIN(__riscv_save_1)
+FUNC_BEGIN(__riscv_save_0)
+  .cfi_startproc
+  # __riscv_save_* routine use t0/x5 as return address
+  .cfi_return_column 5
+  addi sp, sp, -12
+  .cfi_def_cfa_offset 12
+  sw s1, 0(sp)
+  .cfi_offset 9, -12
+  sw s0, 4(sp)
+  .cfi_offset 8, -8
+  sw ra, 8(sp)
+  .cfi_offset 1, 0
+  jr t0
+  .cfi_endproc
+FUNC_END(__riscv_save_2)
+FUNC_END(__riscv_save_1)
+FUNC_END(__riscv_save_0)
+
+FUNC_BEGIN(__riscv_restore_2)
+FUNC_BEGIN(__riscv_restore_1)
+FUNC_BEGIN(__riscv_restore_0)
+  .cfi_startproc
+  .cfi_def_cfa_offset 14
+  lw s1, 0(sp)
+  .cfi_restore 9
+  lw s0, 4(sp)
+  .cfi_restore 8
+  lw ra, 8(sp)
+  .cfi_restore 1
+  addi sp, sp, 12
+  .cfi_def_cfa_offset 0
+  ret
+  .cfi_endproc
+FUNC_END(__riscv_restore_2)
+FUNC_END(__riscv_restore_1)
+FUNC_END(__riscv_restore_0)
 
 #else
 
@@ -486,4 +529,6 @@ FUNC_END (__riscv_restore_2)
 FUNC_END (__riscv_restore_1)
 FUNC_END (__riscv_restore_0)
 
-#endif
+#endif /* __riscv_32e */
+
+#endif /* __riscv_xlen == 64 */

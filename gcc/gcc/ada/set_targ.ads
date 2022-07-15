@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2013-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2013-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -71,6 +71,7 @@ package Set_Targ is
    Float_Words_BE             : Nat; -- Float words stored big-endian?
    Int_Size                   : Pos; -- Standard.Integer'Size
    Long_Double_Size           : Pos; -- Standard.Long_Long_Float'Size
+   Long_Long_Long_Size        : Pos; -- Standard.Long_Long_Long_Integer'Size
    Long_Long_Size             : Pos; -- Standard.Long_Long_Integer'Size
    Long_Size                  : Pos; -- Standard.Long_Integer'Size
    Maximum_Alignment          : Pos; -- Maximum permitted alignment

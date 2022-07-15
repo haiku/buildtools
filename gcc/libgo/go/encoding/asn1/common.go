@@ -37,6 +37,7 @@ const (
 	TagUTCTime         = 23
 	TagGeneralizedTime = 24
 	TagGeneralString   = 27
+	TagBMPString       = 30
 )
 
 // ASN.1 class types represent the namespace of the tag.
@@ -75,6 +76,7 @@ type fieldParameters struct {
 	optional     bool   // true iff the field is OPTIONAL
 	explicit     bool   // true iff an EXPLICIT tag is in use.
 	application  bool   // true iff an APPLICATION tag is in use.
+	private      bool   // true iff a PRIVATE tag is in use.
 	defaultValue *int64 // a default value for INTEGER typed fields (maybe nil).
 	tag          *int   // the EXPLICIT or IMPLICIT tag (maybe nil).
 	stringType   int    // the string tag to use when marshaling.
@@ -90,7 +92,16 @@ type fieldParameters struct {
 // parseFieldParameters will parse it into a fieldParameters structure,
 // ignoring unknown parts of the string.
 func parseFieldParameters(str string) (ret fieldParameters) {
-	for _, part := range strings.Split(str, ",") {
+	var part string
+	for len(str) > 0 {
+		// This loop uses IndexByte and explicit slicing
+		// instead of strings.Split(str, ",") to reduce allocations.
+		i := strings.IndexByte(str, ',')
+		if i < 0 {
+			part, str = str, ""
+		} else {
+			part, str = str[:i], str[i+1:]
+		}
 		switch {
 		case part == "optional":
 			ret.optional = true
@@ -127,6 +138,11 @@ func parseFieldParameters(str string) (ret fieldParameters) {
 			ret.set = true
 		case part == "application":
 			ret.application = true
+			if ret.tag == nil {
+				ret.tag = new(int)
+			}
+		case part == "private":
+			ret.private = true
 			if ret.tag == nil {
 				ret.tag = new(int)
 			}

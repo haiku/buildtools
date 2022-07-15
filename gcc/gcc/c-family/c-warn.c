@@ -1,5 +1,5 @@
 /* Diagnostic routines shared by all languages that are variants of C.
-   Copyright (C) 1992-2018 Free Software Foundation, Inc.
+   Copyright (C) 1992-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#define INCLUDE_STRING
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -34,7 +35,10 @@ along with GCC; see the file COPYING3.  If not see
 #include "gcc-rich-location.h"
 #include "gimplify.h"
 #include "c-family/c-indentation.h"
+#include "c-family/c-spellcheck.h"
 #include "calls.h"
+#include "stor-layout.h"
+#include "tree-pretty-print.h"
 
 /* Print a warning if a constant expression had overflow in folding.
    Invoke this function on every expression that the language
@@ -99,10 +103,10 @@ overflow_warning (location_t loc, tree value, tree expr)
 
     case REAL_CST:
       warnfmt = (expr
-		 ? G_ ("floating point overflow in expression %qE "
-		       "of type %qT results in %qE")
-		 : G_ ("floating point overflow in expression of type %qT "
-		       "results in %qE"));
+		 ? G_("floating point overflow in expression %qE "
+		      "of type %qT results in %qE")
+		 : G_("floating point overflow in expression of type %qT "
+		      "results in %qE"));
       break;
 
     case FIXED_CST:
@@ -142,12 +146,16 @@ overflow_warning (location_t loc, tree value, tree expr)
       return;
     }
 
+  bool warned;
   if (expr)
-    warning_at (loc, OPT_Woverflow, warnfmt, expr, TREE_TYPE (expr), value);
+    warned = warning_at (loc, OPT_Woverflow, warnfmt, expr, TREE_TYPE (expr),
+			 value);
   else
-    warning_at (loc, OPT_Woverflow, warnfmt, TREE_TYPE (value), value);
+    warned = warning_at (loc, OPT_Woverflow, warnfmt, TREE_TYPE (value),
+			 value);
 
-  TREE_NO_WARNING (value) = 1;
+  if (warned)
+    TREE_NO_WARNING (value) = 1;
 }
 
 /* Helper function for walk_tree.  Unwrap C_MAYBE_CONST_EXPRs in an expression
@@ -202,24 +210,31 @@ warn_logical_operator (location_t location, enum tree_code code, tree type,
      programmer. That is, an expression such as op && MASK
      where op should not be any boolean expression, nor a
      constant, and mask seems to be a non-boolean integer constant.  */
+  STRIP_ANY_LOCATION_WRAPPER (op_right);
   if (TREE_CODE (op_right) == CONST_DECL)
     /* An enumerator counts as a constant.  */
     op_right = DECL_INITIAL (op_right);
+  tree stripped_op_left = tree_strip_any_location_wrapper (op_left);
   if (!truth_value_p (code_left)
       && INTEGRAL_TYPE_P (TREE_TYPE (op_left))
-      && !CONSTANT_CLASS_P (op_left)
+      && !CONSTANT_CLASS_P (stripped_op_left)
+      && TREE_CODE (stripped_op_left) != CONST_DECL
       && !TREE_NO_WARNING (op_left)
       && TREE_CODE (op_right) == INTEGER_CST
       && !integer_zerop (op_right)
       && !integer_onep (op_right))
     {
+      bool warned;
       if (or_op)
-	warning_at (location, OPT_Wlogical_op, "logical %<or%>"
-		    " applied to non-boolean constant");
+	warned
+	  = warning_at (location, OPT_Wlogical_op,
+			"logical %<or%> applied to non-boolean constant");
       else
-	warning_at (location, OPT_Wlogical_op, "logical %<and%>"
-		    " applied to non-boolean constant");
-      TREE_NO_WARNING (op_left) = true;
+	warned
+	  = warning_at (location, OPT_Wlogical_op,
+			"logical %<and%> applied to non-boolean constant");
+      if (warned)
+	TREE_NO_WARNING (op_left) = true;
       return;
     }
 
@@ -319,7 +334,8 @@ find_array_ref_with_const_idx_r (tree *expr_p, int *, void *)
 
   if ((TREE_CODE (expr) == ARRAY_REF
        || TREE_CODE (expr) == ARRAY_RANGE_REF)
-      && TREE_CODE (TREE_OPERAND (expr, 1)) == INTEGER_CST)
+      && (TREE_CODE (fold_for_warn (TREE_OPERAND (expr, 1)))
+	  == INTEGER_CST))
     return integer_type_node;
 
   return NULL_TREE;
@@ -331,7 +347,7 @@ find_array_ref_with_const_idx_r (tree *expr_p, int *, void *)
    of this comparison.  */
 
 static void
-warn_tautological_bitwise_comparison (location_t loc, tree_code code,
+warn_tautological_bitwise_comparison (const op_location_t &loc, tree_code code,
 				      tree lhs, tree rhs)
 {
   if (code != EQ_EXPR && code != NE_EXPR)
@@ -340,24 +356,30 @@ warn_tautological_bitwise_comparison (location_t loc, tree_code code,
   /* Extract the operands from e.g. (x & 8) == 4.  */
   tree bitop;
   tree cst;
+  tree stripped_lhs = tree_strip_any_location_wrapper (lhs);
+  tree stripped_rhs = tree_strip_any_location_wrapper (rhs);
   if ((TREE_CODE (lhs) == BIT_AND_EXPR
        || TREE_CODE (lhs) == BIT_IOR_EXPR)
-      && TREE_CODE (rhs) == INTEGER_CST)
-    bitop = lhs, cst = rhs;
+      && TREE_CODE (stripped_rhs) == INTEGER_CST)
+    bitop = lhs, cst = stripped_rhs;
   else if ((TREE_CODE (rhs) == BIT_AND_EXPR
 	    || TREE_CODE (rhs) == BIT_IOR_EXPR)
-	   && TREE_CODE (lhs) == INTEGER_CST)
-    bitop = rhs, cst = lhs;
+	   && TREE_CODE (stripped_lhs) == INTEGER_CST)
+    bitop = rhs, cst = stripped_lhs;
   else
     return;
 
   tree bitopcst;
-  if (TREE_CODE (TREE_OPERAND (bitop, 0)) == INTEGER_CST)
-    bitopcst = TREE_OPERAND (bitop, 0);
-  else if (TREE_CODE (TREE_OPERAND (bitop, 1)) == INTEGER_CST)
-    bitopcst = TREE_OPERAND (bitop, 1);
-  else
-    return;
+  tree bitop_op0 = fold_for_warn (TREE_OPERAND (bitop, 0));
+  if (TREE_CODE (bitop_op0) == INTEGER_CST)
+    bitopcst = bitop_op0;
+  else {
+    tree bitop_op1 = fold_for_warn (TREE_OPERAND (bitop, 1));
+    if (TREE_CODE (bitop_op1) == INTEGER_CST)
+      bitopcst = bitop_op1;
+    else
+      return;
+  }
 
   /* Note that the two operands are from before the usual integer
      conversions, so their types might not be the same.
@@ -380,12 +402,52 @@ warn_tautological_bitwise_comparison (location_t loc, tree_code code,
   if (res == cstw)
     return;
 
+  binary_op_rich_location richloc (loc, lhs, rhs, false);
   if (code == EQ_EXPR)
-    warning_at (loc, OPT_Wtautological_compare,
+    warning_at (&richloc, OPT_Wtautological_compare,
 		"bitwise comparison always evaluates to false");
   else
-    warning_at (loc, OPT_Wtautological_compare,
+    warning_at (&richloc, OPT_Wtautological_compare,
 		"bitwise comparison always evaluates to true");
+}
+
+/* Given LOC from a macro expansion, return the map for the outermost
+   macro in the nest of expansions.  */
+
+static const line_map_macro *
+get_outermost_macro_expansion (location_t loc)
+{
+  gcc_assert (from_macro_expansion_at (loc));
+
+  const line_map *map = linemap_lookup (line_table, loc);
+  const line_map_macro *macro_map;
+  do
+    {
+      macro_map = linemap_check_macro (map);
+      loc = linemap_unwind_toward_expansion (line_table, loc, &map);
+    } while (linemap_macro_expansion_map_p (map));
+
+  return macro_map;
+}
+
+/* Given LOC_A and LOC_B from macro expansions, return true if
+   they are "spelled the same" i.e. if they are both directly from
+   expansion of the same non-function-like macro.  */
+
+static bool
+spelled_the_same_p (location_t loc_a, location_t loc_b)
+{
+  gcc_assert (from_macro_expansion_at (loc_a));
+  gcc_assert (from_macro_expansion_at (loc_b));
+
+  const line_map_macro *map_a = get_outermost_macro_expansion (loc_a);
+  const line_map_macro *map_b = get_outermost_macro_expansion (loc_b);
+
+  if (map_a->macro == map_b->macro)
+    if (!cpp_fun_like_macro_p (map_a->macro))
+      return true;
+
+  return false;
 }
 
 /* Warn if a self-comparison always evaluates to true or false.  LOC
@@ -393,16 +455,27 @@ warn_tautological_bitwise_comparison (location_t loc, tree_code code,
    operands of the comparison.  */
 
 void
-warn_tautological_cmp (location_t loc, enum tree_code code, tree lhs, tree rhs)
+warn_tautological_cmp (const op_location_t &loc, enum tree_code code,
+		       tree lhs, tree rhs)
 {
   if (TREE_CODE_CLASS (code) != tcc_comparison)
     return;
 
   /* Don't warn for various macro expansions.  */
-  if (from_macro_expansion_at (loc)
-      || from_macro_expansion_at (EXPR_LOCATION (lhs))
-      || from_macro_expansion_at (EXPR_LOCATION (rhs)))
+  if (from_macro_expansion_at (loc))
     return;
+  bool lhs_in_macro = from_macro_expansion_at (EXPR_LOCATION (lhs));
+  bool rhs_in_macro = from_macro_expansion_at (EXPR_LOCATION (rhs));
+  if (lhs_in_macro || rhs_in_macro)
+    {
+      /* Don't warn if exactly one is from a macro.  */
+      if (!(lhs_in_macro && rhs_in_macro))
+	return;
+
+      /* If both are in a macro, only warn if they're spelled the same.  */
+      if (!spelled_the_same_p (EXPR_LOCATION (lhs), EXPR_LOCATION (rhs)))
+	return;
+    }
 
   warn_tautological_bitwise_comparison (loc, code, lhs, rhs);
 
@@ -437,11 +510,12 @@ warn_tautological_cmp (location_t loc, enum tree_code code, tree lhs, tree rhs)
       const bool always_true = (code == EQ_EXPR || code == LE_EXPR
 				|| code == GE_EXPR || code == UNLE_EXPR
 				|| code == UNGE_EXPR || code == UNEQ_EXPR);
+      binary_op_rich_location richloc (loc, lhs, rhs, false);
       if (always_true)
-	warning_at (loc, OPT_Wtautological_compare,
+	warning_at (&richloc, OPT_Wtautological_compare,
 		    "self-comparison always evaluates to true");
       else
-	warning_at (loc, OPT_Wtautological_compare,
+	warning_at (&richloc, OPT_Wtautological_compare,
 		    "self-comparison always evaluates to false");
     }
 }
@@ -491,6 +565,7 @@ warn_logical_not_parentheses (location_t location, enum tree_code code,
       && integer_zerop (rhs))
     return;
 
+  auto_diagnostic_group d;
   if (warning_at (location, OPT_Wlogical_not_parentheses,
 		  "logical not is only applied to the left hand side of "
 		  "comparison")
@@ -510,7 +585,7 @@ warn_logical_not_parentheses (location_t location, enum tree_code code,
    (potential) location of the expression.  */
 
 bool
-warn_if_unused_value (const_tree exp, location_t locus)
+warn_if_unused_value (const_tree exp, location_t locus, bool quiet)
 {
  restart:
   if (TREE_USED (exp) || TREE_NO_WARNING (exp))
@@ -558,7 +633,7 @@ warn_if_unused_value (const_tree exp, location_t locus)
       goto restart;
 
     case COMPOUND_EXPR:
-      if (warn_if_unused_value (TREE_OPERAND (exp, 0), locus))
+      if (warn_if_unused_value (TREE_OPERAND (exp, 0), locus, quiet))
 	return true;
       /* Let people do `(foo (), 0)' without a warning.  */
       if (TREE_CONSTANT (TREE_OPERAND (exp, 1)))
@@ -572,6 +647,13 @@ warn_if_unused_value (const_tree exp, location_t locus)
       if (TREE_SIDE_EFFECTS (exp))
 	return false;
       goto warn;
+
+    case COMPLEX_EXPR:
+      /* Warn only if both operands are unused.  */
+      if (warn_if_unused_value (TREE_OPERAND (exp, 0), locus, true)
+	  && warn_if_unused_value (TREE_OPERAND (exp, 1), locus, true))
+	goto warn;
+      return false;
 
     case INDIRECT_REF:
       /* Don't warn about automatic dereferencing of references, since
@@ -596,6 +678,8 @@ warn_if_unused_value (const_tree exp, location_t locus)
 	return false;
 
     warn:
+      if (quiet)
+	return true;
       return warning_at (locus, OPT_Wunused_value, "value computed is not used");
     }
 }
@@ -674,7 +758,7 @@ strict_aliasing_warning (location_t loc, tree type, tree expr)
 	 are not revealed at higher levels.  */
       alias_set_type set1 = get_alias_set (TREE_TYPE (otype));
       alias_set_type set2 = get_alias_set (TREE_TYPE (type));
-      if (!COMPLETE_TYPE_P (type)
+      if (!COMPLETE_TYPE_P (TREE_TYPE (type))
 	  || !alias_sets_must_conflict_p (set1, set2))
 	{
 	  warning_at (loc, OPT_Wstrict_aliasing,
@@ -701,7 +785,7 @@ sizeof_pointer_memaccess_warning (location_t *sizeof_arg_loc, tree callee,
   location_t loc;
 
   if (TREE_CODE (callee) != FUNCTION_DECL
-      || DECL_BUILT_IN_CLASS (callee) != BUILT_IN_NORMAL
+      || !fndecl_built_in_p (callee, BUILT_IN_NORMAL)
       || vec_safe_length (params) <= 1)
     return;
 
@@ -783,7 +867,12 @@ sizeof_pointer_memaccess_warning (location_t *sizeof_arg_loc, tree callee,
   if (idx >= 3)
     return;
 
-  if (sizeof_arg[idx] == NULL || sizeof_arg[idx] == error_mark_node)
+  /* Use error_operand_p to detect non-error arguments with an error
+     type that the C++ front-end constructs.  */
+  if (error_operand_p (src)
+      || error_operand_p (dest)
+      || !sizeof_arg[idx]
+      || error_operand_p (sizeof_arg[idx]))
     return;
 
   type = TYPE_P (sizeof_arg[idx])
@@ -793,7 +882,9 @@ sizeof_pointer_memaccess_warning (location_t *sizeof_arg_loc, tree callee,
     {
       /* The argument type may be an array.  Diagnose bounded string
 	 copy functions that specify the bound in terms of the source
-	 argument rather than the destination.  */
+	 argument rather than the destination unless they are equal
+	 to one another.  Handle constant sizes and also try to handle
+	 sizeof expressions involving VLAs.  */
       if (strop && !cmp && fncode != BUILT_IN_STRNDUP && src)
 	{
 	  tem = tree_strip_nop_conversions (src);
@@ -806,7 +897,17 @@ sizeof_pointer_memaccess_warning (location_t *sizeof_arg_loc, tree callee,
 	  if (get_attr_nonstring_decl (tem, &dummy))
 	    return;
 
-	  if (operand_equal_p (tem, sizeof_arg[idx], OEP_ADDRESS_OF))
+	  tree d = tree_strip_nop_conversions (dest);
+	  if (TREE_CODE (d) == ADDR_EXPR)
+	    d = TREE_OPERAND (d, 0);
+
+	  tree dstsz = TYPE_SIZE_UNIT (TREE_TYPE (d));
+	  tree srcsz = TYPE_SIZE_UNIT (TREE_TYPE (tem));
+
+	  if ((!dstsz
+	       || !srcsz
+	       || !operand_equal_p (dstsz, srcsz, OEP_LEXICOGRAPHIC))
+	      && operand_equal_p (tem, sizeof_arg[idx], OEP_ADDRESS_OF))
 	    warning_at (sizeof_arg_loc[idx], OPT_Wsizeof_pointer_memaccess,
 			"argument to %<sizeof%> in %qD call is the same "
 			"expression as the source; did you mean to use "
@@ -1065,17 +1166,18 @@ check_main_parameter_types (tree decl)
 	     "%q+D declared as variadic function", decl);
 }
 
-/* Warns if the conversion of EXPR to TYPE may alter a value.
+/* Warns and returns true if the conversion of EXPR to TYPE may alter a value.
    This is a helper function for warnings_for_convert_and_check.  */
 
-static void
+static bool
 conversion_warning (location_t loc, tree type, tree expr, tree result)
 {
   tree expr_type = TREE_TYPE (expr);
   enum conversion_safety conversion_kind;
+  int arith_ops = 0;
 
   if (!warn_conversion && !warn_sign_conversion && !warn_float_conversion)
-    return;
+    return false;
 
   /* This may happen, because for LHS op= RHS we preevaluate
      RHS and create C_MAYBE_CONST_EXPR <SAVE_EXPR <RHS>>, which
@@ -1105,13 +1207,13 @@ conversion_warning (location_t loc, tree type, tree expr, tree result)
       if (TYPE_PRECISION (type) == 1 && !TYPE_UNSIGNED (type))
 	warning_at (loc, OPT_Wconversion,
 		    "conversion to %qT from boolean expression", type);
-      return;
+      return true;
 
     case REAL_CST:
     case INTEGER_CST:
     case COMPLEX_CST:
       {
-	conversion_kind = unsafe_conversion_p (loc, type, expr, result, true);
+	conversion_kind = unsafe_conversion_p (type, expr, result, true);
 	int warnopt;
 	if (conversion_kind == UNSAFE_REAL)
 	  warnopt = OPT_Wfloat_conversion;
@@ -1120,7 +1222,39 @@ conversion_warning (location_t loc, tree type, tree expr, tree result)
 	else
 	  break;
 
-	if (TREE_CODE_CLASS (TREE_CODE (result)) == tcc_constant)
+	if (conversion_kind == UNSAFE_SIGN)
+	  {
+	    bool cstresult
+	      = (result
+		 && TREE_CODE_CLASS (TREE_CODE (result)) == tcc_constant);
+	    if (TYPE_UNSIGNED (type))
+	      {
+		if (cstresult)
+		  warning_at (loc, OPT_Wsign_conversion,
+			      "unsigned conversion from %qT to %qT "
+			      "changes value from %qE to %qE",
+			      expr_type, type, expr, result);
+		else
+		  warning_at (loc, OPT_Wsign_conversion,
+			      "unsigned conversion from %qT to %qT "
+			      "changes the value of %qE",
+			      expr_type, type, expr);
+	      }
+	    else
+	      {
+		if (cstresult)
+		  warning_at (loc, OPT_Wsign_conversion,
+			      "signed conversion from %qT to %qT changes "
+			      "value from %qE to %qE",
+			      expr_type, type, expr, result);
+		else
+		  warning_at (loc, OPT_Wsign_conversion,
+			      "signed conversion from %qT to %qT changes "
+			      "the value of %qE",
+			      expr_type, type, expr);
+	      }
+	  }
+	else if (TREE_CODE_CLASS (TREE_CODE (result)) == tcc_constant)
 	  warning_at (loc, warnopt,
 		      "conversion from %qT to %qT changes value from %qE to %qE",
 		      expr_type, type, expr, result);
@@ -1128,40 +1262,102 @@ conversion_warning (location_t loc, tree type, tree expr, tree result)
 	  warning_at (loc, warnopt,
 		      "conversion from %qT to %qT changes the value of %qE",
 		      expr_type, type, expr);
-	break;
+	return true;
       }
+
+    case PLUS_EXPR:
+    case MINUS_EXPR:
+    case MULT_EXPR:
+    case MAX_EXPR:
+    case MIN_EXPR:
+    case TRUNC_MOD_EXPR:
+    case FLOOR_MOD_EXPR:
+    case TRUNC_DIV_EXPR:
+    case FLOOR_DIV_EXPR:
+    case CEIL_DIV_EXPR:
+    case EXACT_DIV_EXPR:
+    case RDIV_EXPR:
+      arith_ops = 2;
+      goto default_;
+
+    case PREDECREMENT_EXPR:
+    case PREINCREMENT_EXPR:
+    case POSTDECREMENT_EXPR:
+    case POSTINCREMENT_EXPR:
+    case LSHIFT_EXPR:
+    case RSHIFT_EXPR:
+    case FIX_TRUNC_EXPR:
+    case NON_LVALUE_EXPR:
+    case NEGATE_EXPR:
+    case BIT_NOT_EXPR:
+      arith_ops = 1;
+      goto default_;
+
     case COND_EXPR:
-	  {
+      {
 	/* In case of COND_EXPR, we do not care about the type of
 	   COND_EXPR, only about the conversion of each operand.  */
 	tree op1 = TREE_OPERAND (expr, 1);
 	tree op2 = TREE_OPERAND (expr, 2);
 
-	conversion_warning (loc, type, op1, result);
-	conversion_warning (loc, type, op2, result);
-	return;
+	return (conversion_warning (loc, type, op1, result)
+		|| conversion_warning (loc, type, op2, result));
       }
 
-    default: /* 'expr' is not a constant.  */
-      conversion_kind = unsafe_conversion_p (loc, type, expr, result, true);
-      if (conversion_kind == UNSAFE_IMAGINARY)
-	warning_at (loc, OPT_Wconversion,
-		    "conversion from %qT to %qT discards imaginary component",
-		    expr_type, type);
-      else
-	{
-	  int warnopt;
-	  if (conversion_kind == UNSAFE_REAL)
-	    warnopt = OPT_Wfloat_conversion;
-	  else if (conversion_kind)
-	    warnopt = OPT_Wconversion;
-	  else
-	    break;
+    default_:
+    default:
+      conversion_kind = unsafe_conversion_p (type, expr, result, true);
+      {
+	int warnopt;
+	if (conversion_kind == UNSAFE_REAL)
+	  warnopt = OPT_Wfloat_conversion;
+	else if (conversion_kind == UNSAFE_SIGN)
+	  warnopt = OPT_Wsign_conversion;
+	else if (conversion_kind)
+	  warnopt = OPT_Wconversion;
+	else
+	  break;
+
+	if (arith_ops
+	    && global_dc->option_enabled (warnopt,
+					  global_dc->lang_mask,
+					  global_dc->option_state))
+	  {
+	    for (int i = 0; i < arith_ops; ++i)
+	      {
+		tree op = TREE_OPERAND (expr, i);
+		/* Avoid -Wsign-conversion for (unsigned)(x + (-1)).  */
+		if (TREE_CODE (expr) == PLUS_EXPR && i == 1
+		    && INTEGRAL_TYPE_P (type) && TYPE_UNSIGNED (type)
+		    && TREE_CODE (op) == INTEGER_CST
+		    && tree_int_cst_sgn (op) < 0)
+		  op = fold_build1 (NEGATE_EXPR, TREE_TYPE (op), op);
+		tree opr = convert (type, op);
+		if (unsafe_conversion_p (type, op, opr, true))
+		  goto op_unsafe;
+	      }
+	    /* The operands seem safe, we might still want to warn if
+	       -Warith-conversion.  */
+	    warnopt = OPT_Warith_conversion;
+	  op_unsafe:;
+	  }
+
+	if (conversion_kind == UNSAFE_SIGN)
+	  warning_at (loc, warnopt, "conversion to %qT from %qT "
+		      "may change the sign of the result",
+		      type, expr_type);
+	else if (conversion_kind == UNSAFE_IMAGINARY)
+	  warning_at (loc, warnopt,
+		      "conversion from %qT to %qT discards imaginary component",
+		      expr_type, type);
+	else
 	  warning_at (loc, warnopt,
 		      "conversion from %qT to %qT may change value",
 		      expr_type, type);
-	}
+	return true;
+      }
     }
+  return false;
 }
 
 /* Produce warnings after a conversion. RESULT is the result of
@@ -1173,6 +1369,11 @@ warnings_for_convert_and_check (location_t loc, tree type, tree expr,
 				tree result)
 {
   loc = expansion_point_location_if_in_system_header (loc);
+
+  while (TREE_CODE (expr) == COMPOUND_EXPR)
+    expr = TREE_OPERAND (expr, 1);
+  while (TREE_CODE (result) == COMPOUND_EXPR)
+    result = TREE_OPERAND (result, 1);
 
   bool cst = TREE_CODE_CLASS (TREE_CODE (result)) == tcc_constant;
 
@@ -1339,12 +1540,88 @@ match_case_to_enum (splay_tree_node node, void *data)
 
 void
 c_do_switch_warnings (splay_tree cases, location_t switch_location,
-		      tree type, tree cond, bool bool_cond_p,
-		      bool outside_range_p)
+		      tree type, tree cond, bool bool_cond_p)
 {
   splay_tree_node default_node;
   splay_tree_node node;
   tree chain;
+  bool outside_range_p = false;
+
+  if (type != error_mark_node
+      && type != TREE_TYPE (cond)
+      && INTEGRAL_TYPE_P (type)
+      && INTEGRAL_TYPE_P (TREE_TYPE (cond))
+      && (!tree_int_cst_equal (TYPE_MIN_VALUE (type),
+			       TYPE_MIN_VALUE (TREE_TYPE (cond)))
+	  || !tree_int_cst_equal (TYPE_MAX_VALUE (type),
+				  TYPE_MAX_VALUE (TREE_TYPE (cond)))))
+    {
+      tree min_value = TYPE_MIN_VALUE (type);
+      tree max_value = TYPE_MAX_VALUE (type);
+
+      node = splay_tree_predecessor (cases, (splay_tree_key) min_value);
+      if (node && node->key)
+	{
+	  outside_range_p = true;
+	  /* There is at least one case smaller than TYPE's minimum value.
+	     NODE itself could be still a range overlapping the valid values,
+	     but any predecessors thereof except the default case will be
+	     completely outside of range.  */
+	  if (CASE_HIGH ((tree) node->value)
+	      && tree_int_cst_compare (CASE_HIGH ((tree) node->value),
+				       min_value) >= 0)
+	    {
+	      location_t loc = EXPR_LOCATION ((tree) node->value);
+	      warning_at (loc, OPT_Wswitch_outside_range,
+			  "lower value in case label range less than minimum"
+			  " value for type");
+	      CASE_LOW ((tree) node->value) = convert (TREE_TYPE (cond),
+						       min_value);
+	      node->key = (splay_tree_key) CASE_LOW ((tree) node->value);
+	    }
+	  /* All the following ones are completely outside of range.  */
+	  do
+	    {
+	      node = splay_tree_predecessor (cases,
+					     (splay_tree_key) min_value);
+	      if (node == NULL || !node->key)
+		break;
+	      location_t loc = EXPR_LOCATION ((tree) node->value);
+	      warning_at (loc, OPT_Wswitch_outside_range, "case label value is"
+			  " less than minimum value for type");
+	      splay_tree_remove (cases, node->key);
+	    }
+	  while (1);
+	}
+      node = splay_tree_lookup (cases, (splay_tree_key) max_value);
+      if (node == NULL)
+	node = splay_tree_predecessor (cases, (splay_tree_key) max_value);
+      /* Handle a single node that might partially overlap the range.  */
+      if (node
+	  && node->key
+	  && CASE_HIGH ((tree) node->value)
+	  && tree_int_cst_compare (CASE_HIGH ((tree) node->value),
+				   max_value) > 0)
+	{
+	  location_t loc = EXPR_LOCATION ((tree) node->value);
+	  warning_at (loc, OPT_Wswitch_outside_range, "upper value in case"
+		      " label range exceeds maximum value for type");
+	  CASE_HIGH ((tree) node->value)
+	    = convert (TREE_TYPE (cond), max_value);
+	  outside_range_p = true;
+	}
+      /* And any nodes that are completely outside of the range.  */
+      while ((node = splay_tree_successor (cases,
+					   (splay_tree_key) max_value))
+	     != NULL)
+	{
+	  location_t loc = EXPR_LOCATION ((tree) node->value);
+	  warning_at (loc, OPT_Wswitch_outside_range,
+		      "case label value exceeds maximum value for type");
+	  splay_tree_remove (cases, node->key);
+	  outside_range_p = true;
+	}
+    }
 
   if (!warn_switch && !warn_switch_enum && !warn_switch_default
       && !warn_switch_bool)
@@ -1463,6 +1740,15 @@ c_do_switch_warnings (splay_tree cases, location_t switch_location,
       if (cond && tree_int_cst_compare (cond, value))
 	continue;
 
+      /* If the enumerator is defined in a system header and uses a reserved
+	 name, then we continue to avoid throwing a warning.  */
+      location_t loc = DECL_SOURCE_LOCATION
+	    (TYPE_STUB_DECL (TYPE_MAIN_VARIANT (type)));
+      if (in_system_header_at (loc)
+	  && name_reserved_for_implementation_p
+	      (IDENTIFIER_POINTER (TREE_PURPOSE (chain))))
+	continue;
+
       /* If there is a default_node, the only relevant option is
 	 Wswitch-enum.  Otherwise, if both are enabled then we prefer
 	 to warn using -Wswitch because -Wswitch is enabled by -Wall
@@ -1499,7 +1785,7 @@ warn_for_omitted_condop (location_t location, tree cond)
       || (TREE_TYPE (cond) != NULL_TREE
 	  && TREE_CODE (TREE_TYPE (cond)) == BOOLEAN_TYPE))
       warning_at (location, OPT_Wparentheses,
-		"the omitted middle operand in ?: will always be %<true%>, "
+		"the omitted middle operand in %<?:%> will always be %<true%>, "
 		"suggest explicit middle operand");
 }
 
@@ -1511,6 +1797,7 @@ readonly_error (location_t loc, tree arg, enum lvalue_use use)
 {
   gcc_assert (use == lv_assign || use == lv_increment || use == lv_decrement
 	      || use == lv_asm);
+  STRIP_ANY_LOCATION_WRAPPER (arg);
   /* Using this macro rather than (for example) arrays of messages
      ensures that all the format strings are checked at compile
      time.  */
@@ -1597,7 +1884,7 @@ lvalue_error (location_t loc, enum lvalue_use use)
       error_at (loc, "lvalue required as unary %<&%> operand");
       break;
     case lv_asm:
-      error_at (loc, "lvalue required in asm statement");
+      error_at (loc, "lvalue required in %<asm%> statement");
       break;
     default:
       gcc_unreachable ();
@@ -1651,15 +1938,22 @@ invalid_indirection_error (location_t loc, tree type, ref_operator errstring)
    warn for unsigned char since that type is safe.  Don't warn for
    signed char because anyone who uses that must have done so
    deliberately. Furthermore, we reduce the false positive load by
-   warning only for non-constant value of type char.  */
+   warning only for non-constant value of type char.
+   LOC is the location of the subscripting expression.  */
 
 void
 warn_array_subscript_with_type_char (location_t loc, tree index)
 {
-  if (TYPE_MAIN_VARIANT (TREE_TYPE (index)) == char_type_node
-      && TREE_CODE (index) != INTEGER_CST)
-    warning_at (loc, OPT_Wchar_subscripts,
-		"array subscript has type %<char%>");
+  if (TYPE_MAIN_VARIANT (TREE_TYPE (index)) == char_type_node)
+    {
+      /* If INDEX has a location, use it; otherwise use LOC (the location
+	 of the subscripting expression as a whole).  */
+      loc = EXPR_LOC_OR_LOC (index, loc);
+      STRIP_ANY_LOCATION_WRAPPER (index);
+      if (TREE_CODE (index) != INTEGER_CST)
+	warning_at (loc, OPT_Wchar_subscripts,
+		    "array subscript has type %<char%>");
+    }
 }
 
 /* Implement -Wparentheses for the unexpected C precedence rules, to
@@ -1946,18 +2240,6 @@ warn_for_sign_compare (location_t location,
   int op1_signed = !TYPE_UNSIGNED (TREE_TYPE (orig_op1));
   int unsignedp0, unsignedp1;
 
-  /* In C++, check for comparison of different enum types.  */
-  if (c_dialect_cxx()
-      && TREE_CODE (TREE_TYPE (orig_op0)) == ENUMERAL_TYPE
-      && TREE_CODE (TREE_TYPE (orig_op1)) == ENUMERAL_TYPE
-      && TYPE_MAIN_VARIANT (TREE_TYPE (orig_op0))
-	 != TYPE_MAIN_VARIANT (TREE_TYPE (orig_op1)))
-    {
-      warning_at (location,
-		  OPT_Wsign_compare, "comparison between types %qT and %qT",
-		  TREE_TYPE (orig_op0), TREE_TYPE (orig_op1));
-    }
-
   /* Do not warn if the comparison is being done in a signed type,
      since the signed type will only be chosen if it can represent
      all the values of the unsigned type.  */
@@ -1975,6 +2257,9 @@ warn_for_sign_compare (location_t location,
 	sop = orig_op0, uop = orig_op1;
       else
 	sop = orig_op1, uop = orig_op0;
+
+      sop = fold_for_warn (sop);
+      uop = fold_for_warn (uop);
 
       STRIP_TYPE_NOPS (sop);
       STRIP_TYPE_NOPS (uop);
@@ -2057,10 +2342,12 @@ warn_for_sign_compare (location_t location,
 		{
 		  if (constant == 0)
 		    warning_at (location, OPT_Wsign_compare,
-				"promoted ~unsigned is always non-zero");
+				"promoted bitwise complement of an unsigned "
+				"value is always nonzero");
 		  else
 		    warning_at (location, OPT_Wsign_compare,
-				"comparison of promoted ~unsigned with constant");
+				"comparison of promoted bitwise complement "
+				"of an unsigned value with constant");
 		}
 	    }
 	}
@@ -2070,7 +2357,8 @@ warn_for_sign_compare (location_t location,
 	       && (TYPE_PRECISION (TREE_TYPE (op1))
 		   < TYPE_PRECISION (result_type)))
 	warning_at (location, OPT_Wsign_compare,
-		    "comparison of promoted ~unsigned with unsigned");
+		    "comparison of promoted bitwise complement "
+		    "of an unsigned value with unsigned");
     }
 }
 
@@ -2094,7 +2382,7 @@ do_warn_double_promotion (tree result_type, tree type1, tree type2,
      warn about it.  */
   if (c_inhibit_evaluation_warnings)
     return;
-  /* If an invalid conversion has occured, don't warn.  */
+  /* If an invalid conversion has occurred, don't warn.  */
   if (result_type == error_mark_node)
     return;
   if (TYPE_MAIN_VARIANT (result_type) != double_type_node
@@ -2220,6 +2508,7 @@ warn_duplicated_cond_add_or_warn (location_t loc, tree cond, vec<tree> **chain)
   FOR_EACH_VEC_ELT (**chain, ix, t)
     if (operand_equal_p (cond, t, 0))
       {
+	auto_diagnostic_group d;
 	if (warning_at (loc, OPT_Wduplicated_cond,
 			"duplicated %<if%> condition"))
 	  inform (EXPR_LOCATION (t), "previously used here");
@@ -2259,12 +2548,12 @@ diagnose_mismatched_attributes (tree olddecl, tree newdecl)
       && DECL_UNINLINABLE (olddecl)
       && lookup_attribute ("noinline", DECL_ATTRIBUTES (olddecl)))
     warned |= warning (OPT_Wattributes, "inline declaration of %qD follows "
-		       "declaration with attribute %qs", newdecl, "noinline");
+		       "declaration with attribute %<noinline%>", newdecl);
   else if (DECL_DECLARED_INLINE_P (olddecl)
 	   && DECL_UNINLINABLE (newdecl)
 	   && lookup_attribute ("noinline", DECL_ATTRIBUTES (newdecl)))
     warned |= warning (OPT_Wattributes, "declaration of %q+D with attribute "
-		       "%qs follows inline declaration", newdecl, "noinline");
+		       "%<noinline%> follows inline declaration", newdecl);
 
   return warned;
 }
@@ -2272,6 +2561,8 @@ diagnose_mismatched_attributes (tree olddecl, tree newdecl)
 /* Warn if signed left shift overflows.  We don't warn
    about left-shifting 1 into the sign bit in C++14; cf.
    <http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3367.html#1457>
+   and don't warn for C++20 at all, as signed left shifts never
+   overflow.
    LOC is a location of the shift; OP0 and OP1 are the operands.
    Return true if an overflow is detected, false otherwise.  */
 
@@ -2286,7 +2577,7 @@ maybe_warn_shift_overflow (location_t loc, tree op0, tree op1)
   unsigned int prec0 = TYPE_PRECISION (type0);
 
   /* Left-hand operand must be signed.  */
-  if (TYPE_UNSIGNED (type0))
+  if (TYPE_UNSIGNED (type0) || cxx_dialect >= cxx20)
     return false;
 
   unsigned int min_prec = (wi::min_precision (wi::to_wide (op0), SIGNED)
@@ -2295,7 +2586,7 @@ maybe_warn_shift_overflow (location_t loc, tree op0, tree op1)
    * However, shifting 1 _out_ of the sign bit, as in
    * INT_MIN << 1, is considered an overflow.
    */
-  if (!tree_int_cst_sign_bit(op0) && min_prec == prec0 + 1)
+  if (!tree_int_cst_sign_bit (op0) && min_prec == prec0 + 1)
     {
       /* Never warn for C++14 onwards.  */
       if (cxx_dialect >= cxx14)
@@ -2415,15 +2706,15 @@ warn_for_restrict (unsigned param_pos, tree *argarray, unsigned nargs)
     {
       arg = argarray[pos - 1];
       if (EXPR_HAS_LOCATION (arg))
-	richloc.add_range (EXPR_LOCATION (arg), false);
+	richloc.add_range (EXPR_LOCATION (arg));
     }
 
   return warning_n (&richloc, OPT_Wrestrict, arg_positions.length (),
-		    "passing argument %i to restrict-qualified parameter"
+		    "passing argument %i to %qs-qualified parameter"
 		    " aliases with argument %Z",
-		    "passing argument %i to restrict-qualified parameter"
+		    "passing argument %i to %qs-qualified parameter"
 		    " aliases with arguments %Z",
-		    param_pos + 1, arg_positions.address (),
+		    param_pos + 1, "restrict", arg_positions.address (),
 		    arg_positions.length ());
 }
 
@@ -2476,7 +2767,8 @@ do_warn_duplicated_branches (tree expr)
 
   /* Compare the hashes.  */
   if (h0 == h1
-      && operand_equal_p (thenb, elseb, OEP_LEXICOGRAPHIC)
+      && operand_equal_p (thenb, elseb, OEP_LEXICOGRAPHIC
+					| OEP_ADDRESS_OF_SAME_FIELD)
       /* Don't warn if any of the branches or their subexpressions comes
 	 from a macro.  */
       && !walk_tree_without_duplicates (&thenb, expr_from_macro_expansion_r,
@@ -2589,8 +2881,846 @@ warn_for_multistatement_macros (location_t body_loc, location_t next_loc,
 	return;
     }
 
+  auto_diagnostic_group d;
   if (warning_at (body_loc, OPT_Wmultistatement_macros,
 		  "macro expands to multiple statements"))
     inform (guard_loc, "some parts of macro expansion are not guarded by "
 	    "this %qs clause", guard_tinfo_to_string (keyword));
+}
+
+/* Return struct or union type if the alignment of data member, FIELD,
+   is less than the alignment of TYPE.  Otherwise, return NULL_TREE.
+   If RVALUE is true, only arrays evaluate to pointers.  */
+
+static tree
+check_alignment_of_packed_member (tree type, tree field, bool rvalue)
+{
+  /* Check alignment of the data member.  */
+  if (TREE_CODE (field) == FIELD_DECL
+      && (DECL_PACKED (field) || TYPE_PACKED (TREE_TYPE (field)))
+      /* Ignore FIELDs not laid out yet.  */
+      && DECL_FIELD_OFFSET (field)
+      && (!rvalue || TREE_CODE (TREE_TYPE (field)) == ARRAY_TYPE))
+    {
+      /* Check the expected alignment against the field alignment.  */
+      unsigned int type_align = min_align_of_type (type);
+      tree context = DECL_CONTEXT (field);
+      unsigned int record_align = min_align_of_type (context);
+      if (record_align < type_align)
+	return context;
+      tree field_off = byte_position (field);
+      if (!multiple_of_p (TREE_TYPE (field_off), field_off,
+			  size_int (type_align)))
+	return context;
+    }
+
+  return NULL_TREE;
+}
+
+/* Return struct or union type if the right hand value, RHS:
+   1. Is a pointer value which isn't aligned to a pointer type TYPE.
+   2. Is an address which takes the unaligned address of packed member
+      of struct or union when assigning to TYPE.
+   Otherwise, return NULL_TREE.  */
+
+static tree
+check_address_or_pointer_of_packed_member (tree type, tree rhs)
+{
+  bool rvalue = true;
+  bool indirect = false;
+
+  if (INDIRECT_REF_P (rhs))
+    {
+      rhs = TREE_OPERAND (rhs, 0);
+      STRIP_NOPS (rhs);
+      indirect = true;
+    }
+
+  if (TREE_CODE (rhs) == ADDR_EXPR)
+    {
+      rhs = TREE_OPERAND (rhs, 0);
+      rvalue = indirect;
+    }
+
+  if (!POINTER_TYPE_P (type))
+    return NULL_TREE;
+
+  type = TREE_TYPE (type);
+
+  if (TREE_CODE (rhs) == PARM_DECL
+      || VAR_P (rhs)
+      || TREE_CODE (rhs) == CALL_EXPR)
+    {
+      tree rhstype = TREE_TYPE (rhs);
+      if (TREE_CODE (rhs) == CALL_EXPR)
+	{
+	  rhs = CALL_EXPR_FN (rhs);	/* Pointer expression.  */
+	  if (rhs == NULL_TREE)
+	    return NULL_TREE;
+	  rhs = TREE_TYPE (rhs);	/* Pointer type.  */
+	  rhs = TREE_TYPE (rhs);	/* Function type.  */
+	  rhstype = TREE_TYPE (rhs);
+	  if (!rhstype || !POINTER_TYPE_P (rhstype))
+	    return NULL_TREE;
+	  rvalue = true;
+	}
+      if (rvalue && POINTER_TYPE_P (rhstype))
+	rhstype = TREE_TYPE (rhstype);
+      while (TREE_CODE (rhstype) == ARRAY_TYPE)
+	rhstype = TREE_TYPE (rhstype);
+      if (TYPE_PACKED (rhstype))
+	{
+	  unsigned int type_align = min_align_of_type (type);
+	  unsigned int rhs_align = min_align_of_type (rhstype);
+	  if (rhs_align < type_align)
+	    {
+	      auto_diagnostic_group d;
+	      location_t location = EXPR_LOC_OR_LOC (rhs, input_location);
+	      if (warning_at (location, OPT_Waddress_of_packed_member,
+			      "converting a packed %qT pointer (alignment %d) "
+			      "to a %qT pointer (alignment %d) may result in "
+			      "an unaligned pointer value",
+			      rhstype, rhs_align, type, type_align))
+		{
+		  tree decl = TYPE_STUB_DECL (rhstype);
+		  if (decl)
+		    inform (DECL_SOURCE_LOCATION (decl), "defined here");
+		  decl = TYPE_STUB_DECL (type);
+		  if (decl)
+		    inform (DECL_SOURCE_LOCATION (decl), "defined here");
+		}
+	    }
+	}
+      return NULL_TREE;
+    }
+
+  tree context = NULL_TREE;
+
+  /* Check alignment of the object.  */
+  while (handled_component_p (rhs))
+    {
+      if (TREE_CODE (rhs) == COMPONENT_REF)
+	{
+	  tree field = TREE_OPERAND (rhs, 1);
+	  context = check_alignment_of_packed_member (type, field, rvalue);
+	  if (context)
+	    break;
+	}
+      if (TREE_CODE (TREE_TYPE (rhs)) == ARRAY_TYPE)
+	rvalue = false;
+      if (rvalue)
+	return NULL_TREE;
+      rhs = TREE_OPERAND (rhs, 0);
+    }
+
+  return context;
+}
+
+/* Check and warn if the right hand value, RHS:
+   1. Is a pointer value which isn't aligned to a pointer type TYPE.
+   2. Is an address which takes the unaligned address of packed member
+      of struct or union when assigning to TYPE.
+ */
+
+static void
+check_and_warn_address_or_pointer_of_packed_member (tree type, tree rhs)
+{
+  bool nop_p = false;
+  tree orig_rhs;
+
+  do
+    {
+      while (TREE_CODE (rhs) == COMPOUND_EXPR)
+	rhs = TREE_OPERAND (rhs, 1);
+      orig_rhs = rhs;
+      STRIP_NOPS (rhs);
+      nop_p |= orig_rhs != rhs;
+    }
+  while (orig_rhs != rhs);
+
+  if (TREE_CODE (rhs) == COND_EXPR)
+    {
+      /* Check the THEN path.  */
+      check_and_warn_address_or_pointer_of_packed_member
+	(type, TREE_OPERAND (rhs, 1));
+
+      /* Check the ELSE path.  */
+      check_and_warn_address_or_pointer_of_packed_member
+	(type, TREE_OPERAND (rhs, 2));
+    }
+  else
+    {
+      if (nop_p)
+	{
+	  switch (TREE_CODE (rhs))
+	    {
+	    case ADDR_EXPR:
+	      /* Address is taken.   */
+	    case PARM_DECL:
+	    case VAR_DECL:
+	      /* Pointer conversion.  */
+	      break;
+	    case CALL_EXPR:
+	      /* Function call. */
+	      break;
+	    default:
+	      return;
+	    }
+	}
+
+      tree context
+	= check_address_or_pointer_of_packed_member (type, rhs);
+      if (context)
+	{
+	  location_t loc = EXPR_LOC_OR_LOC (rhs, input_location);
+	  warning_at (loc, OPT_Waddress_of_packed_member,
+		      "taking address of packed member of %qT may result "
+		      "in an unaligned pointer value",
+		      context);
+	}
+    }
+}
+
+/* Warn if the right hand value, RHS:
+   1. Is a pointer value which isn't aligned to a pointer type TYPE.
+   2. Is an address which takes the unaligned address of packed member
+      of struct or union when assigning to TYPE.
+*/
+
+void
+warn_for_address_or_pointer_of_packed_member (tree type, tree rhs)
+{
+  if (!warn_address_of_packed_member)
+    return;
+
+  /* Don't warn if we don't assign RHS to a pointer.  */
+  if (!POINTER_TYPE_P (type))
+    return;
+
+  check_and_warn_address_or_pointer_of_packed_member (type, rhs);
+}
+
+/* Return EXPR + 1.  Convenience helper used below.  */
+
+static inline tree
+plus_one (tree expr)
+{
+  tree type = TREE_TYPE (expr);
+  return fold_build2 (PLUS_EXPR, type, expr, build_int_cst (type, 1));
+}
+
+/* Try to strip the expressions from around a VLA bound added internally
+   to make it fit the domain mold, including any casts, and return
+   the result.  The goal is to obtain the PARM_DECL the VLA bound may
+   refer to.  */
+
+static tree
+vla_bound_parm_decl (tree expr)
+{
+  if (!expr)
+    return NULL_TREE;
+
+  if (TREE_CODE (expr) == NOP_EXPR)
+    expr = TREE_OPERAND (expr, 0);
+  if (TREE_CODE (expr) == PLUS_EXPR
+      && integer_all_onesp (TREE_OPERAND (expr, 1)))
+    {
+      expr = TREE_OPERAND (expr, 0);
+      if (TREE_CODE (expr) == NOP_EXPR)
+	expr = TREE_OPERAND (expr, 0);
+    }
+  if (TREE_CODE (expr) == SAVE_EXPR)
+    {
+      expr = TREE_OPERAND (expr, 0);
+      if (TREE_CODE (expr) == NOP_EXPR)
+	expr = TREE_OPERAND (expr, 0);
+    }
+  return expr;
+}
+
+/* Diagnose mismatches in VLA bounds between function parameters NEWPARMS
+   of pointer types on a redeclaration of a function previously declared
+   with CURPARMS at ORIGLOC.  */
+
+static void
+warn_parm_ptrarray_mismatch (location_t origloc, tree curparms, tree newparms)
+{
+  /* Maps each named integral parameter seen so far to its position
+     in the argument list; used to associate VLA sizes with arguments.  */
+  hash_map<tree, unsigned> curparm2pos;
+  hash_map<tree, unsigned> newparm2pos;
+
+  unsigned parmpos = 1;
+  for (tree curp = curparms, newp = newparms; curp && newp;
+       curp = TREE_CHAIN (curp), newp = TREE_CHAIN (newp), ++parmpos)
+    {
+      tree curtyp = TREE_TYPE (curp), newtyp = TREE_TYPE (newp);
+      if (INTEGRAL_TYPE_P (curtyp))
+	{
+	  /* Only add named parameters; unnamed ones cannot be referred
+	     to in VLA bounds.  */
+	  if (DECL_NAME (curp))
+	    curparm2pos.put (curp, parmpos);
+	  if (DECL_NAME (newp))
+	    newparm2pos.put (newp, parmpos);
+
+	  continue;
+	}
+
+      /* The parameter types should match at this point so only test one.  */
+      if (TREE_CODE (curtyp) != POINTER_TYPE)
+	continue;
+
+      do
+	{
+	  curtyp = TREE_TYPE (curtyp);
+	  newtyp = TREE_TYPE (newtyp);
+
+	  if (!newtyp)
+	    /* Bail on error.  */
+	    return;
+	}
+      while (TREE_CODE (curtyp) == POINTER_TYPE
+	     && TREE_CODE (newtyp) == POINTER_TYPE);
+
+      if (TREE_CODE (curtyp) != ARRAY_TYPE
+	  || TREE_CODE (newtyp) != ARRAY_TYPE)
+	{
+	  if (curtyp == error_mark_node
+	      || newtyp == error_mark_node)
+	    /* Bail on error.  */
+	    return;
+
+	  continue;
+	}
+
+      tree curdom = TYPE_DOMAIN (curtyp), newdom = TYPE_DOMAIN (newtyp);
+      tree curbnd = curdom ? TYPE_MAX_VALUE (curdom) : NULL_TREE;
+      tree newbnd = newdom ? TYPE_MAX_VALUE (newdom) : NULL_TREE;
+
+      if (DECL_P (curp))
+	origloc = DECL_SOURCE_LOCATION (curp);
+      else if (EXPR_P (curp) && EXPR_HAS_LOCATION (curp))
+	origloc = EXPR_LOCATION (curp);
+
+      /* The location of the parameter in the current redeclaration.  */
+      location_t newloc = DECL_SOURCE_LOCATION (newp);
+      if (origloc == UNKNOWN_LOCATION)
+	origloc = newloc;
+
+      /* Issue -Warray-parameter unless one or more mismatches involves
+	 a VLA bound; then issue -Wvla-parameter.  */
+      int opt = OPT_Warray_parameter_;
+      /* Traverse the two array types looking for variable bounds and
+	 comparing the two in each pair for mismatches either in their
+	 positions in the function parameter list or lexicographically
+	 for others.  Record the 1-based parameter position of each
+	 mismatch in BNDVEC, and the location of each parameter in
+	 the mismatch in WARNLOC (for the new parameter list) and
+	 NOTELOC (for the current parameter list).  */
+      unsigned bndpos = 1;
+      auto_vec<int> bndvec;
+      gcc_rich_location warnloc (newloc);
+      gcc_rich_location noteloc (origloc);
+      for ( ; curtyp || newtyp;
+	    ++bndpos,
+	      curbnd = curdom ? TYPE_MAX_VALUE (curdom) : NULL_TREE,
+	      newbnd = newdom ? TYPE_MAX_VALUE (newdom) : NULL_TREE)
+	{
+	  /* Try to strip each bound down to the PARM_DECL if it does
+	     correspond to one.  Either bound can be null if it's
+	     unspecified (i.e., has the [*] form).  */
+	  curbnd = vla_bound_parm_decl (curbnd);
+	  newbnd = vla_bound_parm_decl (newbnd);
+
+	  /* Peel the current bound off CURTYP and NEWTYP, skipping
+	     over any subsequent pointer types.  */
+	  if (curtyp && TREE_CODE (curtyp) == ARRAY_TYPE)
+	    {
+	      do
+		curtyp = TREE_TYPE (curtyp);
+	      while (TREE_CODE (curtyp) == POINTER_TYPE);
+	      if (TREE_CODE (curtyp) == ARRAY_TYPE)
+		curdom = TYPE_DOMAIN (curtyp);
+	      else
+		curdom = NULL_TREE;
+	    }
+	  else
+	    curtyp = NULL_TREE;
+
+	  if (newtyp && TREE_CODE (newtyp) == ARRAY_TYPE)
+	    {
+	      do
+		newtyp = TREE_TYPE (newtyp);
+	      while (TREE_CODE (newtyp) == POINTER_TYPE);
+	      if (TREE_CODE (newtyp) == ARRAY_TYPE)
+		newdom = TYPE_DOMAIN (newtyp);
+	      else
+		newdom = NULL_TREE;
+	    }
+	  else
+	    newtyp = NULL_TREE;
+
+	  /* Move on to the next bound if this one is unspecified.  */
+	  if (!curbnd && !newbnd)
+	    continue;
+
+	  /* Try to find each bound in the parameter list.  */
+	  const unsigned* const pcurbndpos = curparm2pos.get (curbnd);
+	  const unsigned* const pnewbndpos = newparm2pos.get (newbnd);
+	  /* Move on if both bounds refer to the same parameter.  */
+	  if (pcurbndpos && pnewbndpos && *pcurbndpos == *pnewbndpos)
+	    continue;
+
+	  /* Move on if the bounds look the same.  */
+	  if (!pcurbndpos && !pnewbndpos
+	      && curbnd && newbnd
+	      && operand_equal_p (curbnd, newbnd, OEP_LEXICOGRAPHIC))
+	    continue;
+
+	  if ((curbnd && TREE_CODE (curbnd) != INTEGER_CST)
+	      || (newbnd && TREE_CODE (newbnd) != INTEGER_CST))
+	    opt = OPT_Wvla_parameter;
+
+	  /* Record the mismatch.  */
+	  bndvec.safe_push (bndpos);
+	  /* Underline the bounding parameter in the declaration.  */
+	  if (curbnd && TREE_CODE (curbnd) == PARM_DECL)
+	    noteloc.add_range (DECL_SOURCE_LOCATION (curbnd));
+	  if (newbnd && TREE_CODE (newbnd) == PARM_DECL)
+	    warnloc.add_range (DECL_SOURCE_LOCATION (newbnd));
+	}
+
+      const unsigned nbnds = bndvec.length ();
+      if (!nbnds)
+	continue;
+
+      /* Use attr_access to format the parameter types.  */
+      attr_access spec = { };
+      const std::string newparmstr = spec.array_as_string (TREE_TYPE (newp));
+      const std::string curparmstr = spec.array_as_string (TREE_TYPE (curp));
+
+      if (warning_n (&warnloc, opt, nbnds,
+		     "mismatch in bound %Z of argument %u declared as %s",
+		     "mismatch in bounds %Z of argument %u declared as %s",
+		     bndvec.address (), nbnds, parmpos, newparmstr.c_str ()))
+	inform (&noteloc, "previously declared as %s",	curparmstr.c_str ());
+    }
+}
+
+/* Format EXPR if nonnull and return the formatted string.  If EXPR is
+   null return DFLT.  */
+
+static inline const char*
+expr_to_str (pretty_printer &pp, tree expr, const char *dflt)
+{
+  if (!expr)
+    return dflt;
+
+  dump_generic_node (&pp, expr, 0, TDF_VOPS | TDF_MEMSYMS, false);
+  return pp_formatted_text (&pp);
+}
+
+/* Detect and diagnose a mismatch between an attribute access specification
+   on the original declaration of FNDECL and that on the parameters NEWPARMS
+   from its redeclaration.  ORIGLOC is the location of the first declaration
+   (FNDECL's is set to the location of the redeclaration).  */
+
+void
+warn_parm_array_mismatch (location_t origloc, tree fndecl, tree newparms)
+{
+  /* The original parameter list (copied from the original declaration
+     into the current [re]declaration, FNDECL)).  The two are equal if
+     and only if FNDECL is the first declaration.  */
+  tree curparms = DECL_ARGUMENTS (fndecl);
+  if (!curparms || !newparms || curparms == newparms)
+    return;
+
+  if (TREE_CODE (curparms) != PARM_DECL
+      || TREE_CODE (newparms) != PARM_DECL)
+    return;
+  /* Extract the (possibly empty) attribute access specification from
+     the declaration and its type (it doesn't yet reflect those created
+     in response to NEWPARMS).  */
+  rdwr_map cur_idx;
+  tree fntype = TREE_TYPE (fndecl);
+  init_attr_rdwr_indices (&cur_idx, TYPE_ATTRIBUTES (fntype));
+
+  /* Build a (possibly null) chain of access attributes corresponding
+     to NEWPARMS.  */
+  const bool builtin = fndecl_built_in_p (fndecl);
+  tree newattrs = build_attr_access_from_parms (newparms, builtin);
+
+  /* Extract the (possibly empty) attribute access specification from
+     NEWATTRS.  */
+  rdwr_map new_idx;
+  init_attr_rdwr_indices (&new_idx, newattrs);
+
+  if (cur_idx.is_empty () && new_idx.is_empty ())
+    {
+      /* If both specs are empty check pointers to VLAs for mismatches. */
+      warn_parm_ptrarray_mismatch (origloc, curparms, newparms);
+      return;
+    }
+  /* ...otherwise, if at least one spec isn't empty there may be mismatches,
+     such as between f(T*) and f(T[1]), where the former mapping would be
+     empty.  */
+
+  /* Create an empty access specification and use it for pointers with
+     no spec of their own.  */
+  attr_access ptr_spec = { };
+
+  /* Iterate over the two lists of function parameters, comparing their
+     respective mappings and diagnosing mismatches.  */
+  unsigned parmpos = 0;
+  for (tree curp = curparms, newp = newparms; curp;
+       curp = TREE_CHAIN (curp), newp = TREE_CHAIN (newp), ++parmpos)
+    {
+      if (!newp)
+	/* Bail on invalid redeclarations with fewer arguments.  */
+	return;
+
+      /* Only check pointers and C++ references.  */
+      tree curptype = TREE_TYPE (curp);
+      tree newptype = TREE_TYPE (newp);
+      if (!POINTER_TYPE_P (curptype) || !POINTER_TYPE_P (newptype))
+	continue;
+
+      /* Skip mismatches in __builtin_va_list that is commonly
+	 an array but that in declarations of built-ins decays
+	 to a pointer.  */
+      if (builtin && TREE_TYPE (newptype) == TREE_TYPE (va_list_type_node))
+	continue;
+
+      /* Access specs for the argument on the current (previous) and
+	 new (to replace the current) declarations.  Either may be null,
+	 indicating the parameter is an ordinary pointer with no size
+	 associated with it.  */
+      attr_access *cura = cur_idx.get (parmpos);
+      attr_access *newa = new_idx.get (parmpos);
+
+      if (!newa)
+	{
+	  /* Continue of both parameters are pointers with no size
+	     associated with it.  */
+	  if (!cura)
+	    continue;
+
+	  /* Otherwise point at PTR_SPEC and set its parameter pointer
+	     and number.  */
+	  newa = &ptr_spec;
+	  newa->ptr = newp;
+	  newa->ptrarg = parmpos;
+	}
+      else if (!cura)
+	{
+	  cura = &ptr_spec;
+	  cura->ptr = curp;
+	  cura->ptrarg = parmpos;
+	}
+
+      /* Set if the parameter is [re]declared as a VLA.  */
+      const bool cur_vla_p = cura->size || cura->minsize == HOST_WIDE_INT_M1U;
+      const bool new_vla_p = newa->size || newa->minsize == HOST_WIDE_INT_M1U;
+
+      if (DECL_P (curp))
+	origloc = DECL_SOURCE_LOCATION (curp);
+      else if (EXPR_P (curp) && EXPR_HAS_LOCATION (curp))
+	origloc = EXPR_LOCATION (curp);
+
+      /* The location of the parameter in the current redeclaration.  */
+      location_t newloc = DECL_SOURCE_LOCATION (newp);
+      if (origloc == UNKNOWN_LOCATION)
+	origloc = newloc;
+
+      const std::string newparmstr = newa->array_as_string (newptype);
+      const std::string curparmstr = cura->array_as_string (curptype);
+      if (new_vla_p && !cur_vla_p)
+	{
+	  if (warning_at (newloc, OPT_Wvla_parameter,
+			  "argument %u of type %s declared as "
+			  "a variable length array",
+			  parmpos + 1, newparmstr.c_str ()))
+	    inform (origloc,
+		    (cura == &ptr_spec
+		     ? G_("previously declared as a pointer %s")
+		     : G_("previously declared as an ordinary array %s")),
+		    curparmstr.c_str ());
+	  continue;
+	}
+
+      if (newa == &ptr_spec)
+	{
+	  /* The new declaration uses the pointer form.  Detect mismatches
+	     between the pointer and a previous array or VLA forms.  */
+	  if (cura->minsize == HOST_WIDE_INT_M1U)
+	    {
+	      /* Diagnose a pointer/VLA mismatch.  */
+	      if (warning_at (newloc, OPT_Wvla_parameter,
+			      "argument %u of type %s declared "
+			      "as a pointer",
+			      parmpos + 1, newparmstr.c_str ()))
+		inform (origloc,
+			"previously declared as a variable length array %s",
+			curparmstr.c_str ());
+	      continue;
+	    }
+
+	  if (cura->minsize && cura->minsize != HOST_WIDE_INT_M1U)
+	    {
+	      /* Diagnose mismatches between arrays with a constant
+		 bound and pointers.  */
+	      if (warning_at (newloc, OPT_Warray_parameter_,
+			      "argument %u of type %s declared "
+			      "as a pointer",
+			      parmpos + 1, newparmstr.c_str ()))
+		inform (origloc, "previously declared as an array %s",
+			curparmstr.c_str ());
+	      continue;
+	    }
+	}
+
+      if (!new_vla_p && cur_vla_p)
+	{
+	  if (warning_at (newloc, OPT_Wvla_parameter,
+			  "argument %u of type %s declared "
+			  "as an ordinary array",
+			  parmpos + 1, newparmstr.c_str ()))
+	    inform (origloc,
+		    "previously declared as a variable length array %s",
+		    curparmstr.c_str ());
+	  continue;
+	}
+
+      /* Move on to the next pair of parameters if both of the current
+	 pair are VLAs with a single variable bound that refers to
+	 a parameter at the same position.  */
+      if (newa->size && cura->size
+	  && newa->sizarg != UINT_MAX
+	  && newa->sizarg == cura->sizarg
+	  && newa->minsize == cura->minsize
+	  && !TREE_CHAIN (newa->size) && !TREE_CHAIN (cura->size))
+	continue;
+
+      if (newa->size || cura->size)
+	{
+	  unsigned newunspec, curunspec;
+	  unsigned newbnds = newa->vla_bounds (&newunspec) + newunspec;
+	  unsigned curbnds = cura->vla_bounds (&curunspec) + curunspec;
+
+	  if (newbnds != curbnds)
+	    {
+	      if (warning_n (newloc, OPT_Wvla_parameter, newbnds,
+			     "argument %u of type %s declared with "
+			     "%u variable bound",
+			     "argument %u of type %s declared with "
+			     "%u variable bounds",
+			     parmpos + 1, newparmstr.c_str (),
+			     newbnds))
+		inform_n (origloc, curbnds,
+			  "previously declared as %s with %u variable bound",
+			  "previously declared as %s with %u variable bounds",
+			  curparmstr.c_str (), curbnds);
+	      continue;
+	    }
+
+	  if (newunspec != curunspec)
+	    {
+	      location_t warnloc = newloc, noteloc = origloc;
+	      const char *warnparmstr = newparmstr.c_str ();
+	      const char *noteparmstr = curparmstr.c_str ();
+	      unsigned warnunspec = newunspec, noteunspec = curunspec;
+
+	      if (newunspec < curunspec)
+		{
+		  /* If the new declaration has fewer unspecified bounds
+		     point the warning to the previous declaration to make
+		     it clear that that's the one to change.  Otherwise,
+		     point it to the new decl.  */
+		  std::swap (warnloc, noteloc);
+		  std::swap (warnparmstr, noteparmstr);
+		  std::swap (warnunspec, noteunspec);
+		}
+	      if (warning_n (warnloc, OPT_Wvla_parameter, warnunspec,
+			     "argument %u of type %s declared with "
+			     "%u unspecified variable bound",
+			     "argument %u of type %s declared with "
+			     "%u unspecified variable bounds",
+			     parmpos + 1, warnparmstr, warnunspec))
+		{
+		  if (warnloc == newloc)
+		    inform_n (noteloc, noteunspec,
+			      "previously declared as %s with %u unspecified "
+			      "variable bound",
+			      "previously declared as %s with %u unspecified "
+			      "variable bounds",
+			      noteparmstr, noteunspec);
+		  else
+		    inform_n (noteloc, noteunspec,
+			      "subsequently declared as %s with %u unspecified "
+			      "variable bound",
+			      "subsequently declared as %s with %u unspecified "
+			      "variable bounds",
+			      noteparmstr, noteunspec);
+		}
+	      continue;
+	    }
+	}
+
+      /* Iterate over the lists of VLA variable bounds, comparing each
+	 pair for equality, and diagnosing mismatches.  The case of
+	 the lists having different lengths is handled above so at
+	 this point they do .  */
+      for (tree newvbl = newa->size, curvbl = cura->size; newvbl;
+	   newvbl = TREE_CHAIN (newvbl), curvbl = TREE_CHAIN (curvbl))
+	{
+	  tree newpos = TREE_PURPOSE (newvbl);
+	  tree curpos = TREE_PURPOSE (curvbl);
+
+	  tree newbnd = vla_bound_parm_decl (TREE_VALUE (newvbl));
+	  tree curbnd = vla_bound_parm_decl (TREE_VALUE (curvbl));
+
+	  if (newpos == curpos && newbnd == curbnd)
+	    /* In the expected case when both bounds either refer to
+	       the same positional parameter or when neither does,
+	       and both are the same expression they are necessarily
+	       the same.  */
+	    continue;
+
+	  pretty_printer pp1, pp2;
+	  const char* const newbndstr = expr_to_str (pp1, newbnd, "*");
+	  const char* const curbndstr = expr_to_str (pp2, curbnd, "*");
+
+	  if (!newpos != !curpos
+	      || (newpos && !tree_int_cst_equal (newpos, curpos)))
+	    {
+	      /* Diagnose a mismatch between a specified VLA bound and
+		 an unspecified one.  This can only happen in the most
+		 significant bound.
+
+		 Distinguish between the common case of bounds that are
+		 other function parameters such as in
+		   f (int n, int[n]);
+		 and others.  */
+
+	      gcc_rich_location richloc (newloc);
+	      bool warned;
+	      if (newpos)
+		{
+		  /* Also underline the VLA bound argument.  */
+		  richloc.add_range (DECL_SOURCE_LOCATION (newbnd));
+		  warned = warning_at (&richloc, OPT_Wvla_parameter,
+				       "argument %u of type %s declared "
+				       "with mismatched bound argument %E",
+				       parmpos + 1, newparmstr.c_str (),
+				       plus_one (newpos));
+		}
+	      else
+		warned = warning_at (&richloc, OPT_Wvla_parameter,
+				     "argument %u of type %s declared "
+				     "with mismatched bound %<%s%>",
+				     parmpos + 1, newparmstr.c_str (),
+				     newbndstr);
+
+	      if (warned)
+		{
+		  gcc_rich_location richloc (origloc);
+		  if (curpos)
+		    {
+		      /* Also underline the VLA bound argument.  */
+		      richloc.add_range (DECL_SOURCE_LOCATION (curbnd));
+		      inform (&richloc, "previously declared as %s with "
+			      "bound argument %E",
+			      curparmstr.c_str (), plus_one (curpos));
+		    }
+		  else
+		    inform (&richloc, "previously declared as %s with bound "
+			    "%<%s%>", curparmstr.c_str (), curbndstr);
+
+		  continue;
+		}
+	    }
+
+	  if (!newpos && newbnd && curbnd)
+	    {
+	      /* The VLA bounds don't refer to other function parameters.
+		 Compare them lexicographically to detect gross mismatches
+		 such as between T[foo()] and T[bar()].  */
+	      if (operand_equal_p (newbnd, curbnd, OEP_LEXICOGRAPHIC))
+		continue;
+
+	      if (warning_at (newloc, OPT_Wvla_parameter,
+			      "argument %u of type %s declared with "
+			      "mismatched bound %<%s%>",
+			      parmpos + 1, newparmstr.c_str (), newbndstr))
+		inform (origloc, "previously declared as %s with bound %qs",
+			curparmstr.c_str (), curbndstr);
+	      continue;
+	    }
+	}
+
+      if (newa->minsize == cura->minsize
+	  || (((newa->minsize == 0 && newa->mode != access_deferred)
+	       || (cura->minsize == 0 && cura->mode != access_deferred))
+	      && newa != &ptr_spec
+	      && cura != &ptr_spec))
+	continue;
+
+      if (!newa->static_p && !cura->static_p && warn_array_parameter < 2)
+	/* Avoid warning about mismatches in ordinary (non-static) arrays
+	   at levels below 2.  */
+	continue;
+
+      if (warning_at (newloc, OPT_Warray_parameter_,
+		      "argument %u of type %s with mismatched bound",
+		      parmpos + 1, newparmstr.c_str ()))
+	inform (origloc, "previously declared as %s", curparmstr.c_str ());
+    }
+}
+
+/* Warn about divisions of two sizeof operators when the first one is applied
+   to an array and the divisor does not equal the size of the array element.
+   For instance:
+
+     sizeof (ARR) / sizeof (OP)
+
+   ARR is the array argument of the first sizeof, ARR_TYPE is its ARRAY_TYPE.
+   OP1 is the whole second SIZEOF_EXPR, or its argument; TYPE1 is the type
+   of the second argument.  */
+
+void
+maybe_warn_sizeof_array_div (location_t loc, tree arr, tree arr_type,
+			     tree op1, tree type1)
+{
+  tree elt_type = TREE_TYPE (arr_type);
+
+  if (!warn_sizeof_array_div
+      /* Don't warn on multidimensional arrays.  */
+      || TREE_CODE (elt_type) == ARRAY_TYPE)
+    return;
+
+  if (!tree_int_cst_equal (TYPE_SIZE (elt_type), TYPE_SIZE (type1)))
+    {
+      auto_diagnostic_group d;
+      if (warning_at (loc, OPT_Wsizeof_array_div,
+		      "expression does not compute the number of "
+		      "elements in this array; element type is "
+		      "%qT, not %qT", elt_type, type1))
+	{
+	  if (EXPR_HAS_LOCATION (op1))
+	    {
+	      location_t op1_loc = EXPR_LOCATION (op1);
+	      gcc_rich_location richloc (op1_loc);
+	      richloc.add_fixit_insert_before (op1_loc, "(");
+	      richloc.add_fixit_insert_after (op1_loc, ")");
+	      inform (&richloc, "add parentheses around %qE to "
+		      "silence this warning", op1);
+	    }
+	  else
+	    inform (loc, "add parentheses around the second %<sizeof%> "
+		    "to silence this warning");
+	  if (DECL_P (arr))
+	    inform (DECL_SOURCE_LOCATION (arr), "array %qD declared here", arr);
+	}
+    }
 }

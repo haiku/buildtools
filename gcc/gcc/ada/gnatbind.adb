@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -26,9 +26,9 @@
 with ALI;      use ALI;
 with ALI.Util; use ALI.Util;
 with Bcheck;   use Bcheck;
-with Binde;    use Binde;
 with Binderr;  use Binderr;
 with Bindgen;  use Bindgen;
+with Bindo;    use Bindo;
 with Bindusg;
 with Casing;   use Casing;
 with Csets;
@@ -167,55 +167,64 @@ procedure Gnatbind is
       --  -r switch is used. Not all restrictions are output for the reasons
       --  given below in the list, and this array is used to test whether
       --  the corresponding pragma should be listed. True means that it
-      --  should not be listed.
+      --  should be listed.
 
-      No_Restriction_List : constant array (All_Restrictions) of Boolean :=
-        (No_Standard_Allocators_After_Elaboration => True,
+      Restrictions_To_List : constant array (All_Restrictions) of Boolean :=
+        (No_Standard_Allocators_After_Elaboration => False,
          --  This involves run-time conditions not checkable at compile time
 
-         No_Anonymous_Allocators         => True,
+         No_Anonymous_Allocators         => False,
          --  Premature, since we have not implemented this yet
 
-         No_Exception_Propagation        => True,
+         No_Exception_Propagation        => False,
          --  Modifies code resulting in different exception semantics
 
-         No_Exceptions                   => True,
+         No_Exceptions                   => False,
          --  Has unexpected Suppress (All_Checks) effect
 
-         No_Implicit_Conditionals        => True,
+         No_Implicit_Conditionals        => False,
          --  This could modify and pessimize generated code
 
-         No_Implicit_Dynamic_Code        => True,
+         No_Implicit_Dynamic_Code        => False,
          --  This could modify and pessimize generated code
 
-         No_Implicit_Loops               => True,
+         No_Implicit_Loops               => False,
          --  This could modify and pessimize generated code
 
-         No_Recursion                    => True,
+         No_Recursion                    => False,
          --  Not checkable at compile time
 
-         No_Reentrancy                   => True,
+         No_Reentrancy                   => False,
          --  Not checkable at compile time
 
-         Max_Entry_Queue_Length           => True,
+         Max_Entry_Queue_Length          => False,
          --  Not checkable at compile time
 
-         Max_Storage_At_Blocking         => True,
+         Max_Storage_At_Blocking         => False,
          --  Not checkable at compile time
+
+         No_Implementation_Restrictions  => False,
+         --  Listing this one would cause a chicken&egg problem; the program
+         --  doesn't use implementation-defined restrictions, but after
+         --  applying the listed restrictions, it probably WILL use them,
+         --  so No_Implementation_Restrictions will cause an error.
 
          --  The following three should not be partition-wide, so the
          --  following tests are junk to be removed eventually ???
 
-         No_Specification_Of_Aspect      => True,
+         No_Specification_Of_Aspect      => False,
          --  Requires a parameter value, not a count
 
-         No_Use_Of_Attribute             => True,
+         No_Use_Of_Attribute             => False,
          --  Requires a parameter value, not a count
 
-         No_Use_Of_Pragma                => True,
+         No_Use_Of_Pragma                => False,
          --  Requires a parameter value, not a count
 
-         others                          => False);
+         SPARK_05                        => False,
+         --  Obsolete restriction
+
+         others                          => True);
 
       Additional_Restrictions_Listed : Boolean := False;
       --  Set True if we have listed header for restrictions
@@ -229,8 +238,8 @@ procedure Gnatbind is
       ------------------------------
 
       function Restriction_Could_Be_Set (R : Restriction_Id) return Boolean is
-         CR : Restrictions_Info renames Cumulative_Restrictions;
-
+         CR     : Restrictions_Info renames Cumulative_Restrictions;
+         Result : Boolean;
       begin
          case R is
 
@@ -238,11 +247,19 @@ procedure Gnatbind is
 
             when All_Boolean_Restrictions =>
 
-               --  The condition for listing a boolean restriction as an
-               --  additional restriction that could be set is that it is
-               --  not violated by any unit, and not already set.
+               --  Print it if not violated by any unit, and not already set...
 
-               return CR.Violated (R) = False and then CR.Set (R) = False;
+               Result := not CR.Violated (R) and then not CR.Set (R);
+
+               --  ...except that for No_Tasks_Unassigned_To_CPU, we don't want
+               --  to print it if it would violate the restriction post
+               --  compilation.
+
+               if R = No_Tasks_Unassigned_To_CPU
+                 and then ALIs.Table (ALIs.First).Main_CPU = No_Main_CPU
+               then
+                  Result := False;
+               end if;
 
             --  Parameter restriction
 
@@ -252,18 +269,18 @@ procedure Gnatbind is
                --  unknown, the restriction can definitely not be listed.
 
                if CR.Violated (R) and then CR.Unknown (R) then
-                  return False;
+                  Result := False;
 
                --  We can list the restriction if it is not set
 
                elsif not CR.Set (R) then
-                  return True;
+                  Result := True;
 
                --  We can list the restriction if is set to a greater value
                --  than the maximum value known for the violation.
 
                else
-                  return CR.Value (R) > CR.Count (R);
+                  Result := CR.Value (R) > CR.Count (R);
                end if;
 
             --  No other values for R possible
@@ -271,6 +288,8 @@ procedure Gnatbind is
             when others =>
                raise Program_Error;
          end case;
+
+         return Result;
       end Restriction_Could_Be_Set;
 
    --  Start of processing for List_Applicable_Restrictions
@@ -279,14 +298,14 @@ procedure Gnatbind is
       --  Loop through restrictions
 
       for R in All_Restrictions loop
-         if not No_Restriction_List (R)
+         if Restrictions_To_List (R)
            and then Restriction_Could_Be_Set (R)
          then
             if not Additional_Restrictions_Listed then
                Write_Eol;
                Write_Line
-                 ("The following additional restrictions may be applied to "
-                  & "this partition:");
+                 ("--  The following additional restrictions may be applied "
+                  & "to this partition:");
                Additional_Restrictions_Listed := True;
             end if;
 
@@ -468,6 +487,17 @@ procedure Gnatbind is
 
             Mapping_File := new String'(Argv (4 .. Argv'Last));
 
+         --  -minimal
+
+         elsif Argv (2 .. Argv'Last) = "minimal" then
+            if not Is_Cross_Compiler then
+               Write_Line
+                 ("gnatbind: -minimal not expected to be used on native " &
+                  "platforms");
+            end if;
+
+            Opt.Minimal_Binder := True;
+
          --  -Mname
 
          elsif Argv'Length >= 3 and then Argv (2) = 'M' then
@@ -478,6 +508,11 @@ procedure Gnatbind is
 
             Opt.Bind_Alternate_Main_Name := True;
             Opt.Alternate_Main_Name := new String'(Argv (3 .. Argv'Last));
+
+         --  -xdr
+
+         elsif Argv (2 .. Argv'Last) = "xdr" then
+            Opt.XDR_Stream := True;
 
          --  All other options are single character and are handled by
          --  Scan_Binder_Switches.
@@ -784,6 +819,7 @@ begin
       --  Quit if some file needs compiling
 
       if No_Object_Specified then
+         Error_Msg ("no object specified");
          raise Unrecoverable_Error;
       end if;
 
@@ -855,6 +891,17 @@ begin
       --  mode where we want to be more flexible.
 
       if not CodePeer_Mode then
+         --  AI12-0117-1, "Restriction No_Tasks_Unassigned_To_CPU":
+         --  If the restriction No_Tasks_Unassigned_To_CPU applies, then
+         --  check that the main subprogram has a CPU assigned.
+
+         if Cumulative_Restrictions.Set (No_Tasks_Unassigned_To_CPU)
+           and then ALIs.Table (ALIs.First).Main_CPU = No_Main_CPU
+         then
+            Error_Msg ("No_Tasks_Unassigned_To_CPU restriction requires CPU" &
+                         " aspect to be specified for main procedure");
+         end if;
+
          Check_Duplicated_Subunits;
          Check_Versions;
          Check_Consistency;
@@ -871,11 +918,11 @@ begin
 
       if Errors_Detected = 0 then
          declare
-            Elab_Order : Unit_Id_Table;
             use Unit_Id_Tables;
+            Elab_Order : Unit_Id_Table;
 
          begin
-            Find_Elab_Order (Elab_Order, First_Main_Lib_File);
+            Find_Elaboration_Order (Elab_Order, First_Main_Lib_File);
 
             if Errors_Detected = 0 and then not Check_Only then
                Gen_Output_File
@@ -885,12 +932,12 @@ begin
          end;
       end if;
 
-      Total_Errors := Total_Errors + Errors_Detected;
+      Total_Errors   := Total_Errors   + Errors_Detected;
       Total_Warnings := Total_Warnings + Warnings_Detected;
 
    exception
       when Unrecoverable_Error =>
-         Total_Errors := Total_Errors + Errors_Detected;
+         Total_Errors   := Total_Errors   + Errors_Detected;
          Total_Warnings := Total_Warnings + Warnings_Detected;
    end;
 

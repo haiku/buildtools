@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2018 Free Software Foundation, Inc.
+/* Copyright (C) 2007-2021 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -23,12 +23,13 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
-/* This file handles the maintainence of tasks in response to task
+/* This file handles the maintenance of tasks in response to task
    creation and termination.  */
 
 #include "libgomp.h"
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "gomp-constants.h"
 
 typedef struct gomp_task_depend_entry *hash_entry_type;
@@ -74,18 +75,20 @@ gomp_init_task (struct gomp_task *task, struct gomp_task *parent_task,
      benchmark the overhead of creating tasks as there are millions of
      tiny tasks created that all run undeferred.  */
   task->parent = parent_task;
-  task->icv = *prev_icv;
-  task->kind = GOMP_TASK_IMPLICIT;
-  task->taskwait = NULL;
-  task->in_tied_task = false;
-  task->final_task = false;
-  task->copy_ctors_done = false;
-  task->parent_depends_on = false;
   priority_queue_init (&task->children_queue);
   task->taskgroup = NULL;
   task->dependers = NULL;
   task->depend_hash = NULL;
+  task->taskwait = NULL;
   task->depend_count = 0;
+  task->completion_sem = NULL;
+  task->deferred_p = false;
+  task->icv = *prev_icv;
+  task->kind = GOMP_TASK_IMPLICIT;
+  task->in_tied_task = false;
+  task->final_task = false;
+  task->copy_ctors_done = false;
+  task->parent_depends_on = false;
 }
 
 /* Clean up a task, after completing it.  */
@@ -166,21 +169,72 @@ gomp_task_handle_depend (struct gomp_task *task, struct gomp_task *parent,
 			 void **depend)
 {
   size_t ndepend = (uintptr_t) depend[0];
-  size_t nout = (uintptr_t) depend[1];
   size_t i;
   hash_entry_type ent;
 
+  if (ndepend)
+    {
+      /* depend[0] is total # */
+      size_t nout = (uintptr_t) depend[1]; /* # of out: and inout: */
+      /* ndepend - nout is # of in: */
+      for (i = 0; i < ndepend; i++)
+	{
+	  task->depend[i].addr = depend[2 + i];
+	  task->depend[i].is_in = i >= nout;
+	}
+    }
+  else
+    {
+      ndepend = (uintptr_t) depend[1]; /* total # */
+      size_t nout = (uintptr_t) depend[2]; /* # of out: and inout: */
+      size_t nmutexinoutset = (uintptr_t) depend[3]; /* # of mutexinoutset: */
+      /* For now we treat mutexinoutset like out, which is compliant, but
+	 inefficient.  */
+      size_t nin = (uintptr_t) depend[4]; /* # of in: */
+      /* ndepend - nout - nmutexinoutset - nin is # of depobjs */
+      size_t normal = nout + nmutexinoutset + nin;
+      size_t n = 0;
+      for (i = normal; i < ndepend; i++)
+	{
+	  void **d = (void **) (uintptr_t) depend[5 + i];
+	  switch ((uintptr_t) d[1])
+	    {
+	    case GOMP_DEPEND_OUT:
+	    case GOMP_DEPEND_INOUT:
+	    case GOMP_DEPEND_MUTEXINOUTSET:
+	      break;
+	    case GOMP_DEPEND_IN:
+	      continue;
+	    default:
+	      gomp_fatal ("unknown omp_depend_t dependence type %d",
+			  (int) (uintptr_t) d[1]);
+	    }
+	  task->depend[n].addr = d[0];
+	  task->depend[n++].is_in = 0;
+	}
+      for (i = 0; i < normal; i++)
+	{
+	  task->depend[n].addr = depend[5 + i];
+	  task->depend[n++].is_in = i >= nout + nmutexinoutset;
+	}
+      for (i = normal; i < ndepend; i++)
+	{
+	  void **d = (void **) (uintptr_t) depend[5 + i];
+	  if ((uintptr_t) d[1] != GOMP_DEPEND_IN)
+	    continue;
+	  task->depend[n].addr = d[0];
+	  task->depend[n++].is_in = 1;
+	}
+    }
   task->depend_count = ndepend;
   task->num_dependees = 0;
   if (parent->depend_hash == NULL)
     parent->depend_hash = htab_create (2 * ndepend > 12 ? 2 * ndepend : 12);
   for (i = 0; i < ndepend; i++)
     {
-      task->depend[i].addr = depend[2 + i];
       task->depend[i].next = NULL;
       task->depend[i].prev = NULL;
       task->depend[i].task = task;
-      task->depend[i].is_in = i >= nout;
       task->depend[i].redundant = false;
       task->depend[i].redundant_out = false;
 
@@ -205,7 +259,7 @@ gomp_task_handle_depend (struct gomp_task *task, struct gomp_task *parent,
 	      last = ent;
 
 	      /* depend(in:...) doesn't depend on earlier depend(in:...).  */
-	      if (i >= nout && ent->is_in)
+	      if (task->depend[i].is_in && ent->is_in)
 		continue;
 
 	      if (!ent->is_in)
@@ -280,17 +334,27 @@ gomp_task_handle_depend (struct gomp_task *task, struct gomp_task *parent,
    then the task may be executed by any member of the team.
 
    DEPEND is an array containing:
+     if depend[0] is non-zero, then:
 	depend[0]: number of depend elements.
-	depend[1]: number of depend elements of type "out".
-	depend[2..N+1]: address of [1..N]th depend element.  */
+	depend[1]: number of depend elements of type "out/inout".
+	depend[2..N+1]: address of [1..N]th depend element.
+     otherwise, when depend[0] is zero, then:
+	depend[1]: number of depend elements.
+	depend[2]: number of depend elements of type "out/inout".
+	depend[3]: number of depend elements of type "mutexinoutset".
+	depend[4]: number of depend elements of type "in".
+	depend[5..4+depend[2]+depend[3]+depend[4]]: address of depend elements
+	depend[5+depend[2]+depend[3]+depend[4]..4+depend[1]]: address of
+		   omp_depend_t objects.  */
 
 void
 GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
 	   long arg_size, long arg_align, bool if_clause, unsigned flags,
-	   void **depend, int priority)
+	   void **depend, int priority_arg, void *detach)
 {
   struct gomp_thread *thr = gomp_thread ();
   struct gomp_team *team = thr->ts.team;
+  int priority = 0;
 
 #ifdef HAVE_BROKEN_POSIX_SEMAPHORES
   /* If pthread_mutex_* is used for omp_*lock*, then each task must be
@@ -303,21 +367,34 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
 #endif
 
   /* If parallel or taskgroup has been cancelled, don't start new tasks.  */
-  if (team
-      && (gomp_team_barrier_cancelled (&team->barrier)
-	  || (thr->task->taskgroup && thr->task->taskgroup->cancelled)))
-    return;
+  if (__builtin_expect (gomp_cancel_var, 0) && team)
+    {
+      if (gomp_team_barrier_cancelled (&team->barrier))
+	return;
+      if (thr->task->taskgroup)
+	{
+	  if (thr->task->taskgroup->cancelled)
+	    return;
+	  if (thr->task->taskgroup->workshare
+	      && thr->task->taskgroup->prev
+	      && thr->task->taskgroup->prev->cancelled)
+	    return;
+	}
+    }
 
-  if ((flags & GOMP_TASK_FLAG_PRIORITY) == 0)
-    priority = 0;
-  else if (priority > gomp_max_task_priority_var)
-    priority = gomp_max_task_priority_var;
+  if (__builtin_expect ((flags & GOMP_TASK_FLAG_PRIORITY) != 0, 0))
+    {
+      priority = priority_arg;
+      if (priority > gomp_max_task_priority_var)
+	priority = gomp_max_task_priority_var;
+    }
 
   if (!if_clause || team == NULL
       || (thr->task && thr->task->final_task)
       || team->task_count > 64 * team->nthreads)
     {
       struct gomp_task task;
+      gomp_sem_t completion_sem;
 
       /* If there are depend clauses and earlier deferred sibling tasks
 	 with depend clauses, check if there isn't a dependency.  If there
@@ -334,6 +411,19 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
       task.final_task = (thr->task && thr->task->final_task)
 			|| (flags & GOMP_TASK_FLAG_FINAL);
       task.priority = priority;
+
+      if ((flags & GOMP_TASK_FLAG_DETACH) != 0)
+	{
+	  gomp_sem_init (&completion_sem, 0);
+	  task.completion_sem = &completion_sem;
+	  *(void **) detach = &task;
+	  if (data)
+	    *(void **) data = &task;
+
+	  gomp_debug (0, "Thread %d: new event: %p\n",
+		      thr->ts.team_id, &task);
+	}
+
       if (thr->task)
 	{
 	  task.in_tied_task = thr->task->in_tied_task;
@@ -350,6 +440,13 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
 	}
       else
 	fn (data);
+
+      if ((flags & GOMP_TASK_FLAG_DETACH) != 0)
+	{
+	  gomp_sem_wait (&completion_sem);
+	  gomp_sem_destroy (&completion_sem);
+	}
+
       /* Access to "children" is normally done inside a task_lock
 	 mutex region, but the only way this particular task.children
 	 can be set is if this thread's task work function (fn)
@@ -377,7 +474,7 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
       size_t depend_size = 0;
 
       if (flags & GOMP_TASK_FLAG_DEPEND)
-	depend_size = ((uintptr_t) depend[0]
+	depend_size = ((uintptr_t) (depend[0] ? depend[0] : depend[1])
 		       * sizeof (struct gomp_task_depend_entry));
       task = gomp_malloc (sizeof (*task) + depend_size
 			  + arg_size + arg_align - 1);
@@ -388,6 +485,17 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
       task->kind = GOMP_TASK_UNDEFERRED;
       task->in_tied_task = parent->in_tied_task;
       task->taskgroup = taskgroup;
+      task->deferred_p = true;
+      if ((flags & GOMP_TASK_FLAG_DETACH) != 0)
+	{
+	  task->detach_team = team;
+
+	  *(void **) detach = task;
+	  if (data)
+	    *(void **) data = task;
+
+	  gomp_debug (0, "Thread %d: new event: %p\n", thr->ts.team_id, task);
+	}
       thr->task = task;
       if (cpyfn)
 	{
@@ -404,14 +512,26 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
       gomp_mutex_lock (&team->task_lock);
       /* If parallel or taskgroup has been cancelled, don't start new
 	 tasks.  */
-      if (__builtin_expect ((gomp_team_barrier_cancelled (&team->barrier)
-			     || (taskgroup && taskgroup->cancelled))
-			    && !task->copy_ctors_done, 0))
+      if (__builtin_expect (gomp_cancel_var, 0)
+	  && !task->copy_ctors_done)
 	{
-	  gomp_mutex_unlock (&team->task_lock);
-	  gomp_finish_task (task);
-	  free (task);
-	  return;
+	  if (gomp_team_barrier_cancelled (&team->barrier))
+	    {
+	    do_cancel:
+	      gomp_mutex_unlock (&team->task_lock);
+	      gomp_finish_task (task);
+	      free (task);
+	      return;
+	    }
+	  if (taskgroup)
+	    {
+	      if (taskgroup->cancelled)
+		goto do_cancel;
+	      if (taskgroup->workshare
+		  && taskgroup->prev
+		  && taskgroup->prev->cancelled)
+		goto do_cancel;
+	    }
 	}
       if (taskgroup)
 	taskgroup->num_children++;
@@ -463,6 +583,7 @@ GOMP_task (void (*fn) (void *), void *data, void (*cpyfn) (void *, void *),
 
 ialias (GOMP_taskgroup_start)
 ialias (GOMP_taskgroup_end)
+ialias (GOMP_taskgroup_reduction_register)
 
 #define TYPE long
 #define UTYPE unsigned long
@@ -601,10 +722,20 @@ gomp_create_target_task (struct gomp_device_descr *devicep,
   struct gomp_team *team = thr->ts.team;
 
   /* If parallel or taskgroup has been cancelled, don't start new tasks.  */
-  if (team
-      && (gomp_team_barrier_cancelled (&team->barrier)
-	  || (thr->task->taskgroup && thr->task->taskgroup->cancelled)))
-    return true;
+  if (__builtin_expect (gomp_cancel_var, 0) && team)
+    {
+      if (gomp_team_barrier_cancelled (&team->barrier))
+	return true;
+      if (thr->task->taskgroup)
+	{
+	  if (thr->task->taskgroup->cancelled)
+	    return true;
+	  if (thr->task->taskgroup->workshare
+	      && thr->task->taskgroup->prev
+	      && thr->task->taskgroup->prev->cancelled)
+	    return true;
+	}
+    }
 
   struct gomp_target_task *ttask;
   struct gomp_task *task;
@@ -617,7 +748,7 @@ gomp_create_target_task (struct gomp_device_descr *devicep,
 
   if (depend != NULL)
     {
-      depend_cnt = (uintptr_t) depend[0];
+      depend_cnt = (uintptr_t) (depend[0] ? depend[0] : depend[1]);
       depend_size = depend_cnt * sizeof (struct gomp_task_depend_entry);
     }
   if (fn)
@@ -687,13 +818,25 @@ gomp_create_target_task (struct gomp_device_descr *devicep,
   task->final_task = 0;
   gomp_mutex_lock (&team->task_lock);
   /* If parallel or taskgroup has been cancelled, don't start new tasks.  */
-  if (__builtin_expect (gomp_team_barrier_cancelled (&team->barrier)
-			|| (taskgroup && taskgroup->cancelled), 0))
+  if (__builtin_expect (gomp_cancel_var, 0))
     {
-      gomp_mutex_unlock (&team->task_lock);
-      gomp_finish_task (task);
-      free (task);
-      return true;
+      if (gomp_team_barrier_cancelled (&team->barrier))
+	{
+	do_cancel:
+	  gomp_mutex_unlock (&team->task_lock);
+	  gomp_finish_task (task);
+	  free (task);
+	  return true;
+	}
+      if (taskgroup)
+	{
+	  if (taskgroup->cancelled)
+	    goto do_cancel;
+	  if (taskgroup->workshare
+	      && taskgroup->prev
+	      && taskgroup->prev->cancelled)
+	    goto do_cancel;
+	}
     }
   if (depend_size)
     {
@@ -986,10 +1129,21 @@ gomp_task_run_pre (struct gomp_task *child_task, struct gomp_task *parent,
 
   if (--team->task_queued_count == 0)
     gomp_team_barrier_clear_task_pending (&team->barrier);
-  if ((gomp_team_barrier_cancelled (&team->barrier)
-       || (taskgroup && taskgroup->cancelled))
+  if (__builtin_expect (gomp_cancel_var, 0)
       && !child_task->copy_ctors_done)
-    return true;
+    {
+      if (gomp_team_barrier_cancelled (&team->barrier))
+	return true;
+      if (taskgroup)
+	{
+	  if (taskgroup->cancelled)
+	    return true;
+	  if (taskgroup->workshare
+	      && taskgroup->prev
+	      && taskgroup->prev->cancelled)
+	    return true;
+	}
+    }
   return false;
 }
 
@@ -1041,7 +1195,7 @@ gomp_task_run_post_handle_dependers (struct gomp_task *child_task,
 
       /* CHILD_TASK satisfies a dependency for TASK.  Keep track of
 	 TASK's remaining dependencies.  Once TASK has no other
-	 depenencies, put it into the various queues so it will get
+	 dependencies, put it into the various queues so it will get
 	 scheduled for execution.  */
       if (--task->num_dependees != 0)
 	continue;
@@ -1209,6 +1363,7 @@ gomp_barrier_handle_tasks (gomp_barrier_state_t state)
   while (1)
     {
       bool cancelled = false;
+
       if (!priority_queue_empty_p (&team->task_queue, MEMMODEL_RELAXED))
 	{
 	  bool ignored;
@@ -1230,6 +1385,19 @@ gomp_barrier_handle_tasks (gomp_barrier_state_t state)
 	    }
 	  team->task_running_count++;
 	  child_task->in_tied_task = true;
+	}
+      else if (team->task_count == 0
+	       && gomp_team_barrier_waiting_for_tasks (&team->barrier))
+	{
+	  gomp_team_barrier_done (&team->barrier, state);
+	  gomp_mutex_unlock (&team->task_lock);
+	  gomp_team_barrier_wake (&team->barrier, 0);
+	  if (to_free)
+	    {
+	      gomp_finish_task (to_free);
+	      free (to_free);
+	    }
+	  return;
 	}
       gomp_mutex_unlock (&team->task_lock);
       if (do_wake)
@@ -1276,6 +1444,20 @@ gomp_barrier_handle_tasks (gomp_barrier_state_t state)
       gomp_mutex_lock (&team->task_lock);
       if (child_task)
 	{
+	  if (child_task->detach_team)
+	    {
+	      assert (child_task->detach_team == team);
+	      child_task->kind = GOMP_TASK_DETACHED;
+	      ++team->task_detach_count;
+	      --team->task_running_count;
+	      gomp_debug (0,
+			  "thread %d: task with event %p finished without "
+			  "completion event fulfilled in team barrier\n",
+			  thr->ts.team_id, child_task);
+	      child_task = NULL;
+	      continue;
+	    }
+
 	 finish_cancelled:;
 	  size_t new_tasks
 	    = gomp_task_run_post_handle_depend (child_task, team);
@@ -1283,23 +1465,16 @@ gomp_barrier_handle_tasks (gomp_barrier_state_t state)
 	  gomp_clear_parent (&child_task->children_queue);
 	  gomp_task_run_post_remove_taskgroup (child_task);
 	  to_free = child_task;
-	  child_task = NULL;
 	  if (!cancelled)
 	    team->task_running_count--;
+	  child_task = NULL;
 	  if (new_tasks > 1)
 	    {
 	      do_wake = team->nthreads - team->task_running_count;
 	      if (do_wake > new_tasks)
 		do_wake = new_tasks;
 	    }
-	  if (--team->task_count == 0
-	      && gomp_team_barrier_waiting_for_tasks (&team->barrier))
-	    {
-	      gomp_team_barrier_done (&team->barrier, state);
-	      gomp_mutex_unlock (&team->task_lock);
-	      gomp_team_barrier_wake (&team->barrier, 0);
-	      gomp_mutex_lock (&team->task_lock);
-	    }
+	  --team->task_count;
 	}
     }
 }
@@ -1371,7 +1546,8 @@ GOMP_taskwait (void)
       else
 	{
 	/* All tasks we are waiting for are either running in other
-	   threads, or they are tasks that have not had their
+	   threads, are detached and waiting for the completion event to be
+	   fulfilled, or they are tasks that have not had their
 	   dependencies met (so they're not even in the queue).  Wait
 	   for them.  */
 	  if (task->taskwait == NULL)
@@ -1426,6 +1602,19 @@ GOMP_taskwait (void)
       gomp_mutex_lock (&team->task_lock);
       if (child_task)
 	{
+	  if (child_task->detach_team)
+	    {
+	      assert (child_task->detach_team == team);
+	      child_task->kind = GOMP_TASK_DETACHED;
+	      ++team->task_detach_count;
+	      gomp_debug (0,
+			  "thread %d: task with event %p finished without "
+			  "completion event fulfilled in taskwait\n",
+			  thr->ts.team_id, child_task);
+	      child_task = NULL;
+	      continue;
+	    }
+
 	 finish_cancelled:;
 	  size_t new_tasks
 	    = gomp_task_run_post_handle_depend (child_task, team);
@@ -1456,6 +1645,35 @@ GOMP_taskwait (void)
     }
 }
 
+/* Called when encountering a taskwait directive with depend clause(s).
+   Wait as if it was an mergeable included task construct with empty body.  */
+
+void
+GOMP_taskwait_depend (void **depend)
+{
+  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_team *team = thr->ts.team;
+
+  /* If parallel or taskgroup has been cancelled, return early.  */
+  if (__builtin_expect (gomp_cancel_var, 0) && team)
+    {
+      if (gomp_team_barrier_cancelled (&team->barrier))
+	return;
+      if (thr->task->taskgroup)
+	{
+	  if (thr->task->taskgroup->cancelled)
+	    return;
+	  if (thr->task->taskgroup->workshare
+	      && thr->task->taskgroup->prev
+	      && thr->task->taskgroup->prev->cancelled)
+	    return;
+	}
+    }
+
+  if (thr->task && thr->task->depend_hash)
+    gomp_task_maybe_wait_for_dependencies (depend);
+}
+
 /* An undeferred task is about to run.  Wait for all tasks that this
    undeferred task depends on.
 
@@ -1464,7 +1682,7 @@ GOMP_taskwait (void)
    the scheduling queues.  Then we iterate through these imminently
    ready tasks (and possibly other high priority tasks), and run them.
    If we run out of ready dependencies to execute, we either wait for
-   the reamining dependencies to finish, or wait for them to get
+   the remaining dependencies to finish, or wait for them to get
    scheduled so we can run them.
 
    DEPEND is as in GOMP_task.  */
@@ -1477,21 +1695,50 @@ gomp_task_maybe_wait_for_dependencies (void **depend)
   struct gomp_team *team = thr->ts.team;
   struct gomp_task_depend_entry elem, *ent = NULL;
   struct gomp_taskwait taskwait;
-  size_t ndepend = (uintptr_t) depend[0];
+  size_t orig_ndepend = (uintptr_t) depend[0];
   size_t nout = (uintptr_t) depend[1];
+  size_t ndepend = orig_ndepend;
+  size_t normal = ndepend;
+  size_t n = 2;
   size_t i;
   size_t num_awaited = 0;
   struct gomp_task *child_task = NULL;
   struct gomp_task *to_free = NULL;
   int do_wake = 0;
 
+  if (ndepend == 0)
+    {
+      ndepend = nout;
+      nout = (uintptr_t) depend[2] + (uintptr_t) depend[3];
+      normal = nout + (uintptr_t) depend[4];
+      n = 5;
+    }
   gomp_mutex_lock (&team->task_lock);
   for (i = 0; i < ndepend; i++)
     {
-      elem.addr = depend[i + 2];
+      elem.addr = depend[i + n];
+      elem.is_in = i >= nout;
+      if (__builtin_expect (i >= normal, 0))
+	{
+	  void **d = (void **) elem.addr;
+	  switch ((uintptr_t) d[1])
+	    {
+	    case GOMP_DEPEND_IN:
+	      break;
+	    case GOMP_DEPEND_OUT:
+	    case GOMP_DEPEND_INOUT:
+	    case GOMP_DEPEND_MUTEXINOUTSET:
+	      elem.is_in = 0;
+	      break;
+	    default:
+	      gomp_fatal ("unknown omp_depend_t dependence type %d",
+			  (int) (uintptr_t) d[1]);
+	    }
+	  elem.addr = d[0];
+	}
       ent = htab_find (task->depend_hash, &elem);
       for (; ent; ent = ent->next)
-	if (i >= nout && ent->is_in)
+	if (elem.is_in && ent->is_in)
 	  continue;
 	else
 	  {
@@ -1500,7 +1747,7 @@ gomp_task_maybe_wait_for_dependencies (void **depend)
 	      {
 		tsk->parent_depends_on = true;
 		++num_awaited;
-		/* If depenency TSK itself has no dependencies and is
+		/* If dependency TSK itself has no dependencies and is
 		   ready to run, move it up front so that we run it as
 		   soon as possible.  */
 		if (tsk->num_dependees == 0 && tsk->kind == GOMP_TASK_WAITING)
@@ -1654,13 +1901,28 @@ GOMP_taskyield (void)
   /* Nothing at the moment.  */
 }
 
+static inline struct gomp_taskgroup *
+gomp_taskgroup_init (struct gomp_taskgroup *prev)
+{
+  struct gomp_taskgroup *taskgroup
+    = gomp_malloc (sizeof (struct gomp_taskgroup));
+  taskgroup->prev = prev;
+  priority_queue_init (&taskgroup->taskgroup_queue);
+  taskgroup->reductions = prev ? prev->reductions : NULL;
+  taskgroup->in_taskgroup_wait = false;
+  taskgroup->cancelled = false;
+  taskgroup->workshare = false;
+  taskgroup->num_children = 0;
+  gomp_sem_init (&taskgroup->taskgroup_sem, 0);
+  return taskgroup;
+}
+
 void
 GOMP_taskgroup_start (void)
 {
   struct gomp_thread *thr = gomp_thread ();
   struct gomp_team *team = thr->ts.team;
   struct gomp_task *task = thr->task;
-  struct gomp_taskgroup *taskgroup;
 
   /* If team is NULL, all tasks are executed as
      GOMP_TASK_UNDEFERRED tasks and thus all children tasks of
@@ -1668,14 +1930,7 @@ GOMP_taskgroup_start (void)
      by the time GOMP_taskgroup_end is called.  */
   if (team == NULL)
     return;
-  taskgroup = gomp_malloc (sizeof (struct gomp_taskgroup));
-  taskgroup->prev = task->taskgroup;
-  priority_queue_init (&taskgroup->taskgroup_queue);
-  taskgroup->in_taskgroup_wait = false;
-  taskgroup->cancelled = false;
-  taskgroup->num_children = 0;
-  gomp_sem_init (&taskgroup->taskgroup_sem, 0);
-  task->taskgroup = taskgroup;
+  task->taskgroup = gomp_taskgroup_init (task->taskgroup);
 }
 
 void
@@ -1815,6 +2070,19 @@ GOMP_taskgroup_end (void)
       gomp_mutex_lock (&team->task_lock);
       if (child_task)
 	{
+	  if (child_task->detach_team)
+	    {
+	      assert (child_task->detach_team == team);
+	      child_task->kind = GOMP_TASK_DETACHED;
+	      ++team->task_detach_count;
+	      gomp_debug (0,
+			  "thread %d: task with event %p finished without "
+			  "completion event fulfilled in taskgroup\n",
+			  thr->ts.team_id, child_task);
+	      child_task = NULL;
+	      continue;
+	    }
+
 	 finish_cancelled:;
 	  size_t new_tasks
 	    = gomp_task_run_post_handle_depend (child_task, team);
@@ -1840,6 +2108,302 @@ GOMP_taskgroup_end (void)
   free (taskgroup);
 }
 
+static inline __attribute__((always_inline)) void
+gomp_reduction_register (uintptr_t *data, uintptr_t *old, uintptr_t *orig,
+			 unsigned nthreads)
+{
+  size_t total_cnt = 0;
+  uintptr_t *d = data;
+  struct htab *old_htab = NULL, *new_htab;
+  do
+    {
+      if (__builtin_expect (orig != NULL, 0))
+	{
+	  /* For worksharing task reductions, memory has been allocated
+	     already by some other thread that encountered the construct
+	     earlier.  */
+	  d[2] = orig[2];
+	  d[6] = orig[6];
+	  orig = (uintptr_t *) orig[4];
+	}
+      else
+	{
+	  size_t sz = d[1] * nthreads;
+	  /* Should use omp_alloc if d[3] is not -1.  */
+	  void *ptr = gomp_aligned_alloc (d[2], sz);
+	  memset (ptr, '\0', sz);
+	  d[2] = (uintptr_t) ptr;
+	  d[6] = d[2] + sz;
+	}
+      d[5] = 0;
+      total_cnt += d[0];
+      if (d[4] == 0)
+	{
+	  d[4] = (uintptr_t) old;
+	  break;
+	}
+      else
+	d = (uintptr_t *) d[4];
+    }
+  while (1);
+  if (old && old[5])
+    {
+      old_htab = (struct htab *) old[5];
+      total_cnt += htab_elements (old_htab);
+    }
+  new_htab = htab_create (total_cnt);
+  if (old_htab)
+    {
+      /* Copy old hash table, like in htab_expand.  */
+      hash_entry_type *p, *olimit;
+      new_htab->n_elements = htab_elements (old_htab);
+      olimit = old_htab->entries + old_htab->size;
+      p = old_htab->entries;
+      do
+	{
+	  hash_entry_type x = *p;
+	  if (x != HTAB_EMPTY_ENTRY && x != HTAB_DELETED_ENTRY)
+	    *find_empty_slot_for_expand (new_htab, htab_hash (x)) = x;
+	  p++;
+	}
+      while (p < olimit);
+    }
+  d = data;
+  do
+    {
+      size_t j;
+      for (j = 0; j < d[0]; ++j)
+	{
+	  uintptr_t *p = d + 7 + j * 3;
+	  p[2] = (uintptr_t) d;
+	  /* Ugly hack, hash_entry_type is defined for the task dependencies,
+	     which hash on the first element which is a pointer.  We need
+	     to hash also on the first sizeof (uintptr_t) bytes which contain
+	     a pointer.  Hide the cast from the compiler.  */
+	  hash_entry_type n;
+	  __asm ("" : "=g" (n) : "0" (p));
+	  *htab_find_slot (&new_htab, n, INSERT) = n;
+	}
+      if (d[4] == (uintptr_t) old)
+	break;
+      else
+	d = (uintptr_t *) d[4];
+    }
+  while (1);
+  d[5] = (uintptr_t) new_htab;
+}
+
+static void
+gomp_create_artificial_team (void)
+{
+  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_task_icv *icv;
+  struct gomp_team *team = gomp_new_team (1);
+  struct gomp_task *task = thr->task;
+  icv = task ? &task->icv : &gomp_global_icv;
+  team->prev_ts = thr->ts;
+  thr->ts.team = team;
+  thr->ts.team_id = 0;
+  thr->ts.work_share = &team->work_shares[0];
+  thr->ts.last_work_share = NULL;
+#ifdef HAVE_SYNC_BUILTINS
+  thr->ts.single_count = 0;
+#endif
+  thr->ts.static_trip = 0;
+  thr->task = &team->implicit_task[0];
+  gomp_init_task (thr->task, NULL, icv);
+  if (task)
+    {
+      thr->task = task;
+      gomp_end_task ();
+      free (task);
+      thr->task = &team->implicit_task[0];
+    }
+#ifdef LIBGOMP_USE_PTHREADS
+  else
+    pthread_setspecific (gomp_thread_destructor, thr);
+#endif
+}
+
+/* The format of data is:
+   data[0]	cnt
+   data[1]	size
+   data[2]	alignment (on output array pointer)
+   data[3]	allocator (-1 if malloc allocator)
+   data[4]	next pointer
+   data[5]	used internally (htab pointer)
+   data[6]	used internally (end of array)
+   cnt times
+   ent[0]	address
+   ent[1]	offset
+   ent[2]	used internally (pointer to data[0])
+   The entries are sorted by increasing offset, so that a binary
+   search can be performed.  Normally, data[8] is 0, exception is
+   for worksharing construct task reductions in cancellable parallel,
+   where at offset 0 there should be space for a pointer and an integer
+   which are used internally.  */
+
+void
+GOMP_taskgroup_reduction_register (uintptr_t *data)
+{
+  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_team *team = thr->ts.team;
+  struct gomp_task *task;
+  unsigned nthreads;
+  if (__builtin_expect (team == NULL, 0))
+    {
+      /* The task reduction code needs a team and task, so for
+	 orphaned taskgroups just create the implicit team.  */
+      gomp_create_artificial_team ();
+      ialias_call (GOMP_taskgroup_start) ();
+      team = thr->ts.team;
+    }
+  nthreads = team->nthreads;
+  task = thr->task;
+  gomp_reduction_register (data, task->taskgroup->reductions, NULL, nthreads);
+  task->taskgroup->reductions = data;
+}
+
+void
+GOMP_taskgroup_reduction_unregister (uintptr_t *data)
+{
+  uintptr_t *d = data;
+  htab_free ((struct htab *) data[5]);
+  do
+    {
+      gomp_aligned_free ((void *) d[2]);
+      d = (uintptr_t *) d[4];
+    }
+  while (d && !d[5]);
+}
+ialias (GOMP_taskgroup_reduction_unregister)
+
+/* For i = 0 to cnt-1, remap ptrs[i] which is either address of the
+   original list item or address of previously remapped original list
+   item to address of the private copy, store that to ptrs[i].
+   For i < cntorig, additionally set ptrs[cnt+i] to the address of
+   the original list item.  */
+
+void
+GOMP_task_reduction_remap (size_t cnt, size_t cntorig, void **ptrs)
+{
+  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_task *task = thr->task;
+  unsigned id = thr->ts.team_id;
+  uintptr_t *data = task->taskgroup->reductions;
+  uintptr_t *d;
+  struct htab *reduction_htab = (struct htab *) data[5];
+  size_t i;
+  for (i = 0; i < cnt; ++i)
+    {
+      hash_entry_type ent, n;
+      __asm ("" : "=g" (ent) : "0" (ptrs + i));
+      n = htab_find (reduction_htab, ent);
+      if (n)
+	{
+	  uintptr_t *p;
+	  __asm ("" : "=g" (p) : "0" (n));
+	  /* At this point, p[0] should be equal to (uintptr_t) ptrs[i],
+	     p[1] is the offset within the allocated chunk for each
+	     thread, p[2] is the array registered with
+	     GOMP_taskgroup_reduction_register, d[2] is the base of the
+	     allocated memory and d[1] is the size of the allocated chunk
+	     for one thread.  */
+	  d = (uintptr_t *) p[2];
+	  ptrs[i] = (void *) (d[2] + id * d[1] + p[1]);
+	  if (__builtin_expect (i < cntorig, 0))
+	    ptrs[cnt + i] = (void *) p[0];
+	  continue;
+	}
+      d = data;
+      while (d != NULL)
+	{
+	  if ((uintptr_t) ptrs[i] >= d[2] && (uintptr_t) ptrs[i] < d[6])
+	    break;
+	  d = (uintptr_t *) d[4];
+	}
+      if (d == NULL)
+	gomp_fatal ("couldn't find matching task_reduction or reduction with "
+		    "task modifier for %p", ptrs[i]);
+      uintptr_t off = ((uintptr_t) ptrs[i] - d[2]) % d[1];
+      ptrs[i] = (void *) (d[2] + id * d[1] + off);
+      if (__builtin_expect (i < cntorig, 0))
+	{
+	  size_t lo = 0, hi = d[0] - 1;
+	  while (lo <= hi)
+	    {
+	      size_t m = (lo + hi) / 2;
+	      if (d[7 + 3 * m + 1] < off)
+		lo = m + 1;
+	      else if (d[7 + 3 * m + 1] == off)
+		{
+		  ptrs[cnt + i] = (void *) d[7 + 3 * m];
+		  break;
+		}
+	      else
+		hi = m - 1;
+	    }
+	  if (lo > hi)
+	    gomp_fatal ("couldn't find matching task_reduction or reduction "
+			"with task modifier for %p", ptrs[i]);
+	}
+    }
+}
+
+struct gomp_taskgroup *
+gomp_parallel_reduction_register (uintptr_t *data, unsigned nthreads)
+{
+  struct gomp_taskgroup *taskgroup = gomp_taskgroup_init (NULL);
+  gomp_reduction_register (data, NULL, NULL, nthreads);
+  taskgroup->reductions = data;
+  return taskgroup;
+}
+
+void
+gomp_workshare_task_reduction_register (uintptr_t *data, uintptr_t *orig)
+{
+  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_team *team = thr->ts.team;
+  struct gomp_task *task = thr->task;
+  unsigned nthreads = team->nthreads;
+  gomp_reduction_register (data, task->taskgroup->reductions, orig, nthreads);
+  task->taskgroup->reductions = data;
+}
+
+void
+gomp_workshare_taskgroup_start (void)
+{
+  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_team *team = thr->ts.team;
+  struct gomp_task *task;
+
+  if (team == NULL)
+    {
+      gomp_create_artificial_team ();
+      team = thr->ts.team;
+    }
+  task = thr->task;
+  task->taskgroup = gomp_taskgroup_init (task->taskgroup);
+  task->taskgroup->workshare = true;
+}
+
+void
+GOMP_workshare_task_reduction_unregister (bool cancelled)
+{
+  struct gomp_thread *thr = gomp_thread ();
+  struct gomp_task *task = thr->task;
+  struct gomp_team *team = thr->ts.team;
+  uintptr_t *data = task->taskgroup->reductions;
+  ialias_call (GOMP_taskgroup_end) ();
+  if (thr->ts.team_id == 0)
+    ialias_call (GOMP_taskgroup_reduction_unregister) (data);
+  else
+    htab_free ((struct htab *) data[5]);
+
+  if (!cancelled)
+    gomp_team_barrier_wait (&team->barrier);
+}
+
 int
 omp_in_final (void)
 {
@@ -1848,3 +2412,80 @@ omp_in_final (void)
 }
 
 ialias (omp_in_final)
+
+void
+omp_fulfill_event (omp_event_handle_t event)
+{
+  struct gomp_task *task = (struct gomp_task *) event;
+  if (!task->deferred_p)
+    {
+      if (gomp_sem_getcount (task->completion_sem) > 0)
+	gomp_fatal ("omp_fulfill_event: %p event already fulfilled!\n", task);
+
+      gomp_debug (0, "omp_fulfill_event: %p event for undeferred task\n",
+		  task);
+      gomp_sem_post (task->completion_sem);
+      return;
+    }
+
+  struct gomp_team *team = __atomic_load_n (&task->detach_team,
+					    MEMMODEL_RELAXED);
+  if (!team)
+    gomp_fatal ("omp_fulfill_event: %p event is invalid or has already "
+		"been fulfilled!\n", task);
+
+  gomp_mutex_lock (&team->task_lock);
+  if (task->kind != GOMP_TASK_DETACHED)
+    {
+      /* The task has not finished running yet.  */
+      gomp_debug (0,
+		  "omp_fulfill_event: %p event fulfilled for unfinished "
+		  "task\n", task);
+      __atomic_store_n (&task->detach_team, NULL, MEMMODEL_RELAXED);
+      gomp_mutex_unlock (&team->task_lock);
+      return;
+    }
+
+  gomp_debug (0, "omp_fulfill_event: %p event fulfilled for finished task\n",
+	      task);
+  size_t new_tasks = gomp_task_run_post_handle_depend (task, team);
+  gomp_task_run_post_remove_parent (task);
+  gomp_clear_parent (&task->children_queue);
+  gomp_task_run_post_remove_taskgroup (task);
+  team->task_count--;
+  team->task_detach_count--;
+
+  int do_wake = 0;
+  bool shackled_thread_p = team == gomp_thread ()->ts.team;
+  if (new_tasks > 0)
+    {
+      /* Wake up threads to run new tasks.  */
+      gomp_team_barrier_set_task_pending (&team->barrier);
+      do_wake = team->nthreads - team->task_running_count;
+      if (do_wake > new_tasks)
+	do_wake = new_tasks;
+    }
+
+  if (!shackled_thread_p
+      && !do_wake
+      && team->task_detach_count == 0
+      && gomp_team_barrier_waiting_for_tasks (&team->barrier))
+    /* Ensure that at least one thread is woken up to signal that the
+       barrier can finish.  */
+    do_wake = 1;
+
+  /* If we are running in an unshackled thread, the team might vanish before
+     gomp_team_barrier_wake is run if we release the lock first, so keep the
+     lock for the call in that case.  */
+  if (shackled_thread_p)
+    gomp_mutex_unlock (&team->task_lock);
+  if (do_wake)
+    gomp_team_barrier_wake (&team->barrier, do_wake);
+  if (!shackled_thread_p)
+    gomp_mutex_unlock (&team->task_lock);
+
+  gomp_finish_task (task);
+  free (task);
+}
+
+ialias (omp_fulfill_event)

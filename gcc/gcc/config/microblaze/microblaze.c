@@ -1,5 +1,5 @@
 /* Subroutines used for code generation on Xilinx MicroBlaze.
-   Copyright (C) 2009-2018 Free Software Foundation, Inc.
+   Copyright (C) 2009-2021 Free Software Foundation, Inc.
 
    Contributed by Michael Eager <eager@eagercon.com>.
 
@@ -91,7 +91,8 @@ enum microblaze_address_type
   ADDRESS_SYMBOLIC,
   ADDRESS_GOTOFF,
   ADDRESS_PLT,
-  ADDRESS_TLS
+  ADDRESS_TLS,
+  ADDRESS_SYMBOLIC_TXT_REL
 };
 
 /* Classifies symbols
@@ -650,6 +651,10 @@ microblaze_classify_unspec (struct microblaze_address_info *info, rtx x)
       info->type = ADDRESS_TLS;
       info->tls_type = tls_reloc (INTVAL (XVECEXP (x, 0, 1)));
     }
+  else if (XINT (x, 1) == UNSPEC_TEXT)
+    {
+      info->type = ADDRESS_SYMBOLIC_TXT_REL;
+    }
   else
     {
       return false;
@@ -701,8 +706,10 @@ get_base_reg (rtx x)
 }
 
 /* Return true if X is a valid address for machine mode MODE.  If it is,
-   fill in INFO appropriately.  STRICT is true if we should only accept
-   hard base registers.  
+   fill in INFO appropriately.
+   STRICT > 0 if we should only accept hard base registers.
+   STRICT = 2 if the operand address is being printed thus
+   function has been called by print_operand_address.
 
       type                     regA      regB    offset      symbol
 
@@ -728,6 +735,7 @@ microblaze_classify_address (struct microblaze_address_info *info, rtx x,
 {
   rtx xplus0;
   rtx xplus1;
+  rtx offset;
 
   info->type = ADDRESS_INVALID;
   info->regA = NULL;
@@ -735,6 +743,7 @@ microblaze_classify_address (struct microblaze_address_info *info, rtx x,
   info->offset = NULL;
   info->symbol = NULL;
   info->symbol_type = SYMBOL_TYPE_INVALID;
+  offset = NULL;
 
   switch (GET_CODE (x))
     {
@@ -795,8 +804,13 @@ microblaze_classify_address (struct microblaze_address_info *info, rtx x,
 		/* for (plus x const_int) just look at x.  */
 		if (GET_CODE (xconst0) == PLUS
 		    && GET_CODE (XEXP (xconst0, 1)) == CONST_INT
-		    && SMALL_INT (XEXP (xconst0, 1)))
+		    && (SMALL_INT (XEXP (xconst0, 1))
+		       || GET_CODE (XEXP (xconst0, 0)) == UNSPEC))
 		  {
+		    /* Hold CONST_INT Value in offset in case of
+		       UNSPEC + CONST_INT.  */
+		    offset = XEXP (xconst0, 1);
+
 		    /* This is ok as info->symbol is set to xplus1 the full
 		       const-expression below.  */
 		    xconst0 = XEXP (xconst0, 0);
@@ -812,6 +826,15 @@ microblaze_classify_address (struct microblaze_address_info *info, rtx x,
 		    info->symbol = xplus1;
 		    info->symbol_type = SYMBOL_TYPE_GENERAL;
 		    return true;
+		  }
+
+		if (GET_CODE (xconst0) == UNSPEC && TARGET_PIC_DATA_TEXT_REL)
+		  {
+		    if (GET_MODE_SIZE (mode) > UNITS_PER_WORD)
+		      return false;
+
+		    info->offset = offset;
+		    return microblaze_classify_unspec (info, xconst0);
 		  }
 
 		/* Not base + symbol || base + UNSPEC.  */
@@ -858,6 +881,15 @@ microblaze_classify_address (struct microblaze_address_info *info, rtx x,
 	     return !(flag_pic && pic_address_needs_scratch (x));
 	  }
 
+	/* Avoid error in print_operand_address in case UNSPEC
+	 is removed from SYMBOL or LABEL REFS during optimization.  */
+	if ((GET_CODE (x) == SYMBOL_REF || GET_CODE (x) == LABEL_REF)
+	    && flag_pic && TARGET_PIC_DATA_TEXT_REL && strict == 2)
+	  {
+	    info->type = ADDRESS_SYMBOLIC_TXT_REL;
+	    return true;
+	  }
+
 	if (flag_pic == 2)
 	  return false;
 	else if (microblaze_tls_symbol_p(x))
@@ -893,6 +925,15 @@ microblaze_legitimate_address_p (machine_mode mode, rtx x, bool strict)
   return microblaze_classify_address (&addr, x, mode, strict);
 }
 
+bool
+microblaze_constant_address_p (rtx x)
+{
+  return ((GET_CODE (x) == LABEL_REF) || (GET_CODE (x) == SYMBOL_REF)
+	  || GET_CODE (x) == CONST_INT
+	  || (GET_CODE (x) == CONST
+	  && ! (flag_pic && pic_address_needs_scratch (x))));
+}
+
 int
 microblaze_valid_pic_const (rtx x)
 {
@@ -910,7 +951,8 @@ microblaze_valid_pic_const (rtx x)
 int
 microblaze_legitimate_pic_operand (rtx x)
 {
-  if (flag_pic == 2 && (symbol_mentioned_p(x) || label_mentioned_p(x)))
+  if (flag_pic == 2 && (symbol_mentioned_p (x) || label_mentioned_p (x))
+      && !(TARGET_PIC_DATA_TEXT_REL && call_insn_operand (x,VOIDmode)))
     return 0;
 
   if (microblaze_tls_referenced_p(x))
@@ -1024,17 +1066,35 @@ microblaze_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
 		}
 	      else if (flag_pic == 2)
 		{
-		  rtx pic_ref, reg;
-		  reg = gen_reg_rtx (Pmode);
+		  if (!TARGET_PIC_DATA_TEXT_REL)
+		    {
+		      rtx pic_ref, reg;
+		      reg = gen_reg_rtx (Pmode);
 
-		  pic_ref = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, xplus1),
-					    UNSPEC_GOTOFF);
-		  pic_ref = gen_rtx_CONST (Pmode, pic_ref);
-		  pic_ref = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, pic_ref);
-		  pic_ref = gen_const_mem (Pmode, pic_ref);
-		  emit_move_insn (reg, pic_ref);
-		  result = gen_rtx_PLUS (Pmode, xplus0, reg);
-		  return result;
+		      pic_ref = gen_rtx_UNSPEC (Pmode,
+						gen_rtvec (1, xplus1),
+						UNSPEC_GOTOFF);
+		      pic_ref = gen_rtx_CONST (Pmode, pic_ref);
+		      pic_ref = gen_rtx_PLUS (Pmode,
+					      pic_offset_table_rtx, pic_ref);
+		      pic_ref = gen_const_mem (Pmode, pic_ref);
+		      emit_move_insn (reg, pic_ref);
+		      result = gen_rtx_PLUS (Pmode, xplus0, reg);
+		      return result;
+		    }
+		  else
+		    {
+		      rtx pic_ref, reg;
+		      reg = gen_reg_rtx (Pmode);
+		      pic_ref = gen_rtx_UNSPEC (Pmode,
+						gen_rtvec (1, xplus1),
+						UNSPEC_TEXT);
+		      pic_ref = gen_rtx_CONST (Pmode, pic_ref);
+		      emit_insn (gen_addsi3 (reg,
+				 pic_offset_table_rtx, xplus0));
+		      result = gen_rtx_PLUS (Pmode, reg, pic_ref);
+		      return result;
+		    }
 		}
 	    }
 	}
@@ -1047,19 +1107,31 @@ microblaze_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
         {
           reg = microblaze_legitimize_tls_address (xinsn, NULL_RTX);
         }
-      else
+      else if (flag_pic == 2)
         {
-          rtx pic_ref;
+	  if (reload_in_progress)
+	    df_set_regs_ever_live (PIC_OFFSET_TABLE_REGNUM, true);
 
-          if (reload_in_progress)
-            df_set_regs_ever_live (PIC_OFFSET_TABLE_REGNUM, true);
+	  if (!TARGET_PIC_DATA_TEXT_REL)
+	    {
+	      rtx pic_ref;
 
-          pic_ref = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, xinsn), UNSPEC_GOTOFF);
-          pic_ref = gen_rtx_CONST (Pmode, pic_ref);
-          pic_ref = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, pic_ref);
-          pic_ref = gen_const_mem (Pmode, pic_ref);
-          reg = pic_ref;
-        }
+	      pic_ref = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, xinsn), UNSPEC_GOTOFF);
+	      pic_ref = gen_rtx_CONST (Pmode, pic_ref);
+	      pic_ref = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, pic_ref);
+	      pic_ref = gen_const_mem (Pmode, pic_ref);
+	      reg = pic_ref;
+	    }
+	  else
+	    {
+	      rtx pic_ref;
+
+	      pic_ref = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, xinsn), UNSPEC_TEXT);
+	      pic_ref = gen_rtx_CONST (Pmode, pic_ref);
+	      pic_ref = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, pic_ref);
+	      reg = pic_ref;
+	    }
+	}
       return reg;
     }
 
@@ -1108,7 +1180,7 @@ microblaze_block_move_straight (rtx dest, rtx src, HOST_WIDE_INT length)
       src = adjust_address (src, BLKmode, offset);
       dest = adjust_address (dest, BLKmode, offset);
       move_by_pieces (dest, src, length - offset,
-		      MIN (MEM_ALIGN (src), MEM_ALIGN (dest)), 0);
+		      MIN (MEM_ALIGN (src), MEM_ALIGN (dest)), RETURN_BEGIN);
     }
 }
 
@@ -1178,7 +1250,7 @@ microblaze_block_move_loop (rtx dest, rtx src, HOST_WIDE_INT length)
     microblaze_block_move_straight (dest, src, leftover);
 }
 
-/* Expand a movmemsi instruction.  */
+/* Expand a cpymemsi instruction.  */
 
 bool
 microblaze_expand_block_move (rtx dest, rtx src, rtx length, rtx align_rtx)
@@ -1186,8 +1258,8 @@ microblaze_expand_block_move (rtx dest, rtx src, rtx length, rtx align_rtx)
 
   if (GET_CODE (length) == CONST_INT)
     {
-      HOST_WIDE_INT bytes = INTVAL (length);
-      int align = INTVAL (align_rtx);
+      unsigned HOST_WIDE_INT bytes = UINTVAL (length);
+      unsigned int align = UINTVAL (align_rtx);
 
       if (align > UNITS_PER_WORD)
 	{
@@ -1195,23 +1267,23 @@ microblaze_expand_block_move (rtx dest, rtx src, rtx length, rtx align_rtx)
 	}
       else if (align < UNITS_PER_WORD)
 	{
-	  if (INTVAL (length) <= MAX_MOVE_BYTES)
+	  if (UINTVAL (length) <= MAX_MOVE_BYTES)
 	    {
-	      move_by_pieces (dest, src, bytes, align, 0);
+	      move_by_pieces (dest, src, bytes, align, RETURN_BEGIN);
 	      return true;
 	    }
 	  else
 	    return false;
 	}
 
-      if (INTVAL (length) <= 2 * MAX_MOVE_BYTES)
+      if (UINTVAL (length) <= 2 * MAX_MOVE_BYTES)
 	{
-	  microblaze_block_move_straight (dest, src, INTVAL (length));
+	  microblaze_block_move_straight (dest, src, UINTVAL (length));
 	  return true;
 	}
       else if (optimize)
 	{
-	  microblaze_block_move_loop (dest, src, INTVAL (length));
+	  microblaze_block_move_loop (dest, src, UINTVAL (length));
 	  return true;
 	}
     }
@@ -1388,6 +1460,7 @@ microblaze_address_insns (rtx x, machine_mode mode)
 	case ADDRESS_REG_INDEX:
 	  return 1;
 	case ADDRESS_SYMBOLIC:
+	case ADDRESS_SYMBOLIC_TXT_REL:
 	case ADDRESS_GOTOFF:
 	  return 2;
 	case ADDRESS_TLS:
@@ -1470,29 +1543,28 @@ init_cumulative_args (CUMULATIVE_ARGS * cum, tree fntype,
 
 static void
 microblaze_function_arg_advance (cumulative_args_t cum_v,
-				 machine_mode mode,
-				 const_tree type, bool named ATTRIBUTE_UNUSED)
+				 const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
 
   cum->arg_number++;
-  switch (mode)
+  switch (arg.mode)
     {
     case E_VOIDmode:
       break;
 
     default:
-      gcc_assert (GET_MODE_CLASS (mode) == MODE_COMPLEX_INT
-	  || GET_MODE_CLASS (mode) == MODE_COMPLEX_FLOAT);
+      gcc_assert (GET_MODE_CLASS (arg.mode) == MODE_COMPLEX_INT
+		  || GET_MODE_CLASS (arg.mode) == MODE_COMPLEX_FLOAT);
 
       cum->gp_reg_found = 1;
-      cum->arg_words += ((GET_MODE_SIZE (mode) + UNITS_PER_WORD - 1)
+      cum->arg_words += ((GET_MODE_SIZE (arg.mode) + UNITS_PER_WORD - 1)
 			 / UNITS_PER_WORD);
       break;
 
     case E_BLKmode:
       cum->gp_reg_found = 1;
-      cum->arg_words += ((int_size_in_bytes (type) + UNITS_PER_WORD - 1)
+      cum->arg_words += ((int_size_in_bytes (arg.type) + UNITS_PER_WORD - 1)
 			 / UNITS_PER_WORD);
       break;
 
@@ -1523,13 +1595,11 @@ microblaze_function_arg_advance (cumulative_args_t cum_v,
     }
 }
 
-/* Return an RTL expression containing the register for the given mode,
+/* Return an RTL expression containing the register for the given argument
    or 0 if the argument is to be passed on the stack.  */
 
 static rtx
-microblaze_function_arg (cumulative_args_t cum_v, machine_mode mode, 
-			 const_tree type ATTRIBUTE_UNUSED,
-			 bool named ATTRIBUTE_UNUSED)
+microblaze_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
 
@@ -1538,7 +1608,7 @@ microblaze_function_arg (cumulative_args_t cum_v, machine_mode mode,
   int *arg_words = &cum->arg_words;
 
   cum->last_arg_fp = 0;
-  switch (mode)
+  switch (arg.mode)
     {
     case E_SFmode:
     case E_DFmode:
@@ -1551,8 +1621,8 @@ microblaze_function_arg (cumulative_args_t cum_v, machine_mode mode,
       regbase = GP_ARG_FIRST;
       break;
     default:
-      gcc_assert (GET_MODE_CLASS (mode) == MODE_COMPLEX_INT
-	  || GET_MODE_CLASS (mode) == MODE_COMPLEX_FLOAT);
+      gcc_assert (GET_MODE_CLASS (arg.mode) == MODE_COMPLEX_INT
+		  || GET_MODE_CLASS (arg.mode) == MODE_COMPLEX_FLOAT);
       /* FALLTHRU */
     case E_BLKmode:
       regbase = GP_ARG_FIRST;
@@ -1565,10 +1635,10 @@ microblaze_function_arg (cumulative_args_t cum_v, machine_mode mode,
     {
       gcc_assert (regbase != -1);
 
-      ret = gen_rtx_REG (mode, regbase + *arg_words);
+      ret = gen_rtx_REG (arg.mode, regbase + *arg_words);
     }
 
-  if (mode == VOIDmode)
+  if (arg.end_marker_p ())
     {
       if (cum->num_adjusts > 0)
 	ret = gen_rtx_PARALLEL ((machine_mode) cum->fp_code,
@@ -1580,30 +1650,25 @@ microblaze_function_arg (cumulative_args_t cum_v, machine_mode mode,
 
 /* Return number of bytes of argument to put in registers. */
 static int
-function_arg_partial_bytes (cumulative_args_t cum_v, machine_mode mode,	
-			    tree type, bool named ATTRIBUTE_UNUSED)	
+function_arg_partial_bytes (cumulative_args_t cum_v,
+			    const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
 
-  if ((mode == BLKmode
-       || GET_MODE_CLASS (mode) != MODE_COMPLEX_INT
-       || GET_MODE_CLASS (mode) != MODE_COMPLEX_FLOAT)
+  if ((arg.mode == BLKmode
+       || GET_MODE_CLASS (arg.mode) != MODE_COMPLEX_INT
+       || GET_MODE_CLASS (arg.mode) != MODE_COMPLEX_FLOAT)
       && cum->arg_words < MAX_ARGS_IN_REGISTERS)
     {
-      int words;
-      if (mode == BLKmode)
-	words = ((int_size_in_bytes (type) + UNITS_PER_WORD - 1)
-		 / UNITS_PER_WORD);
-      else
-	words = (GET_MODE_SIZE (mode) + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
-
+      int words = ((arg.promoted_size_in_bytes () + UNITS_PER_WORD - 1)
+		   / UNITS_PER_WORD);
       if (words + cum->arg_words <= MAX_ARGS_IN_REGISTERS)
 	return 0;		/* structure fits in registers */
 
       return (MAX_ARGS_IN_REGISTERS - cum->arg_words) * UNITS_PER_WORD;
     }
 
-  else if (mode == DImode && cum->arg_words == MAX_ARGS_IN_REGISTERS - 1)
+  else if (arg.mode == DImode && cum->arg_words == MAX_ARGS_IN_REGISTERS - 1)
     return UNITS_PER_WORD;
 
   return 0;
@@ -1686,7 +1751,7 @@ microblaze_option_override (void)
       flag_pic = 2;
       if (!TARGET_SUPPORTS_PIC)
         {
-          error ("-fPIC/-fpic not supported for this target");
+	  error ("%<-fPIC%>/%<-fpic%> not supported for this target");
           /* Clear it to avoid further errors.  */
           flag_pic = 0;
         }
@@ -1698,7 +1763,7 @@ microblaze_option_override (void)
   ver = microblaze_version_to_int (microblaze_select_cpu);
   if (ver == -1)
     {
-      error ("%qs is an invalid argument to -mcpu=", microblaze_select_cpu);
+      error ("%qs is an invalid argument to %<-mcpu=%>", microblaze_select_cpu);
     }
 
   ver = MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v3.00.a");
@@ -1747,7 +1812,8 @@ microblaze_option_override (void)
     {
       if (TARGET_MULTIPLY_HIGH)
 	warning (0,
-		 "-mxl-multiply-high can be used only with -mcpu=v6.00.a or greater");
+		 "%<-mxl-multiply-high%> can be used only with "
+		 "%<-mcpu=v6.00.a%> or greater");
     }
 
   ver = MICROBLAZE_VERSION_COMPARE (microblaze_select_cpu, "v8.10.a");
@@ -1763,18 +1829,20 @@ microblaze_option_override (void)
   if (ver < 0)
     {
         if (TARGET_REORDER == 1)
-          warning (0, "-mxl-reorder can be used only with -mcpu=v8.30.a or greater");
+	  warning (0, "%<-mxl-reorder%> can be used only with "
+		   "%<-mcpu=v8.30.a%> or greater");
         TARGET_REORDER = 0;
     }
   else if ((ver == 0) && !TARGET_PATTERN_COMPARE)
     {
         if (TARGET_REORDER == 1)
-          warning (0, "-mxl-reorder requires -mxl-pattern-compare for -mcpu=v8.30.a");
+	  warning (0, "%<-mxl-reorder%> requires %<-mxl-pattern-compare%> for "
+		   "%<-mcpu=v8.30.a%>");
         TARGET_REORDER = 0;
     }
 
   if (TARGET_MULTIPLY_HIGH && TARGET_SOFT_MUL)
-    error ("-mxl-multiply-high requires -mno-xl-soft-mul");
+    error ("%<-mxl-multiply-high%> requires %<-mno-xl-soft-mul%>");
 
   /* Always use DFA scheduler.  */
   microblaze_sched_use_dfa = 1;
@@ -1944,7 +2012,7 @@ microblaze_must_save_register (int regno)
       (regno == MB_ABI_PIC_ADDR_REGNUM) && df_regs_ever_live_p (regno))
     return 1;
 
-  if (df_regs_ever_live_p (regno) && !call_used_regs[regno])
+  if (df_regs_ever_live_p (regno) && !call_used_or_fixed_reg_p (regno))
     return 1;
 
   if (frame_pointer_needed && (regno == HARD_FRAME_POINTER_REGNUM))
@@ -1967,7 +2035,7 @@ microblaze_must_save_register (int regno)
     {
       if (df_regs_ever_live_p (regno) 
 	  || regno == MB_ABI_MSR_SAVE_REG
-	  || (interrupt_handler
+	  || ((interrupt_handler || fast_interrupt)
               && (regno == MB_ABI_ASM_TEMP_REGNUM
 	          || regno == MB_ABI_EXCEPTION_RETURN_ADDR_REGNUM)))
 	return 1;
@@ -2066,7 +2134,7 @@ compute_frame_size (HOST_WIDE_INT size)
 
   total_size = var_size + args_size;
 
-  if (flag_pic == 2)
+  if (flag_pic == 2 && !TARGET_PIC_DATA_TEXT_REL)
     /* force setting GOT.  */
     df_set_regs_ever_live (MB_ABI_PIC_ADDR_REGNUM, true);
 
@@ -2322,6 +2390,7 @@ print_operand (FILE * file, rtx op, int letter)
 	    case ADDRESS_REG:
 	    case ADDRESS_CONST_INT:
 	    case ADDRESS_SYMBOLIC:
+	    case ADDRESS_SYMBOLIC_TXT_REL:
 	    case ADDRESS_GOTOFF:
 	    case ADDRESS_TLS:
 	      fputs ("i", file);
@@ -2399,7 +2468,7 @@ print_operand (FILE * file, rtx op, int letter)
 	  unsigned long value_long;
 	  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (op),
 				       value_long);
-	  fprintf (file, HOST_WIDE_INT_PRINT_HEX, value_long);
+	  fprintf (file, "0x%lx", value_long);
 	}
       else
 	{
@@ -2458,7 +2527,7 @@ print_operand (FILE * file, rtx op, int letter)
       print_operand_address (file, XEXP (op, 0));
     }
   else if (letter == 'm')
-    fprintf (file, HOST_WIDE_INT_PRINT_DEC, (1L << INTVAL (op)));
+    fprintf (file, "%ld", (1L << INTVAL (op)));
   else
     output_addr_const (file, op);
 }
@@ -2489,7 +2558,7 @@ print_operand_address (FILE * file, rtx addr)
 {
   struct microblaze_address_info info;
   enum microblaze_address_type type;
-  if (!microblaze_classify_address (&info, addr, GET_MODE (addr), 1))
+  if (!microblaze_classify_address (&info, addr, GET_MODE (addr), 2))
     fatal_insn ("insn contains an invalid address !", addr);
 
   type = info.type;
@@ -2515,6 +2584,7 @@ print_operand_address (FILE * file, rtx addr)
       output_addr_const (file, info.offset);
       break;
     case ADDRESS_SYMBOLIC:
+    case ADDRESS_SYMBOLIC_TXT_REL:
     case ADDRESS_GOTOFF:
     case ADDRESS_PLT:
     case ADDRESS_TLS:
@@ -2529,6 +2599,16 @@ print_operand_address (FILE * file, rtx addr)
 	{
 	  fputs ("@PLT", file);
 	}
+      else if (type == ADDRESS_SYMBOLIC_TXT_REL)
+    {
+      if (info.offset != NULL && CONST_INT_P (info.offset)
+	  && INTVAL (info.offset) > 0)
+	{
+	  fprintf (file, "+");
+	  output_addr_const (file, info.offset);
+	}
+      fputs ("@TXTREL", file);
+    }
       else if (type == ADDRESS_TLS)
 	{
 	  switch (info.tls_type)
@@ -2833,8 +2913,8 @@ microblaze_expand_prologue (void)
 	  passed_mode = Pmode;
 	}
 
-      entry_parm = targetm.calls.function_arg (args_so_far, passed_mode,
-					       passed_type, true);
+      function_arg_info arg (passed_type, passed_mode, /*named=*/true);
+      entry_parm = targetm.calls.function_arg (args_so_far, arg);
 
       if (entry_parm)
 	{
@@ -2854,8 +2934,7 @@ microblaze_expand_prologue (void)
 	  break;
 	}
 
-      targetm.calls.function_arg_advance (args_so_far, passed_mode,
-					  passed_type, true);
+      targetm.calls.function_arg_advance (args_so_far, arg);
 
       next_arg = TREE_CHAIN (cur_arg);
       if (next_arg == 0)
@@ -2869,8 +2948,8 @@ microblaze_expand_prologue (void)
 
   /* Split parallel insn into a sequence of insns.  */
 
-  next_arg_reg = targetm.calls.function_arg (args_so_far, VOIDmode,
-					     void_type_node, true);
+  next_arg_reg = targetm.calls.function_arg (args_so_far,
+					     function_arg_info::end_marker ());
   if (next_arg_reg != 0 && GET_CODE (next_arg_reg) == PARALLEL)
     {
       rtvec adjust = XVEC (next_arg_reg, 0);
@@ -2887,7 +2966,6 @@ microblaze_expand_prologue (void)
 
   if (flag_stack_usage_info)
     current_function_static_stack_size = fsiz;
-
 
   /* If this function is a varargs function, store any registers that
      would normally hold arguments ($5 - $10) on the stack.  */
@@ -2913,7 +2991,6 @@ microblaze_expand_prologue (void)
 
 	  offset += GET_MODE_SIZE (SImode);
 	}
-
     }
 
   if (fsiz > 0)
@@ -2960,8 +3037,18 @@ microblaze_expand_prologue (void)
   if ((flag_pic == 2 || TLS_NEEDS_GOT )
       && df_regs_ever_live_p (MB_ABI_PIC_ADDR_REGNUM))
     {
-      SET_REGNO (pic_offset_table_rtx, MB_ABI_PIC_ADDR_REGNUM);
-      emit_insn (gen_set_got (pic_offset_table_rtx));	/* setting GOT.  */
+      if ((flag_pic == 2 && !TARGET_PIC_DATA_TEXT_REL) || TLS_NEEDS_GOT)
+	{
+	  SET_REGNO (pic_offset_table_rtx, MB_ABI_PIC_ADDR_REGNUM);
+	  /* setting GOT.  */
+	  emit_insn (gen_set_got (pic_offset_table_rtx));
+	}
+      else
+	{
+	  SET_REGNO (pic_offset_table_rtx, MB_ABI_PIC_ADDR_REGNUM);
+	  /* setting start of text.  */
+	  emit_insn (gen_set_text (pic_offset_table_rtx));
+	}
     }
 
   /* If we are profiling, make sure no instructions are scheduled before
@@ -3154,6 +3241,14 @@ microblaze_elf_in_small_data_p (const_tree decl)
   return (size > 0 && size <= microblaze_section_threshold);
 }
 
+/* We need to disable address diff vectors in
+case of pic data text relative mode.  */
+
+static bool
+microblaze_gen_pic_addr_dif_vec (void)
+{
+  return (flag_pic && !TARGET_PIC_DATA_TEXT_REL);
+}
 
 static section *
 microblaze_select_section (tree decl, int reloc, unsigned HOST_WIDE_INT align)
@@ -3187,10 +3282,19 @@ static rtx
 expand_pic_symbol_ref (machine_mode mode ATTRIBUTE_UNUSED, rtx op)
 {
   rtx result;
-  result = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, op), UNSPEC_GOTOFF);
+  bool isFunc = (GET_CODE (op) == SYMBOL_REF
+		 && (SYMBOL_REF_FLAGS (op) & SYMBOL_FLAG_FUNCTION));
+  result = (!TARGET_PIC_DATA_TEXT_REL)
+	    ? gen_rtx_UNSPEC (Pmode, gen_rtvec (1, op), UNSPEC_GOTOFF)
+	    : gen_rtx_UNSPEC (Pmode, gen_rtvec (1, op), UNSPEC_TEXT);
   result = gen_rtx_CONST (Pmode, result);
-  result = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, result);
-  result = gen_const_mem (Pmode, result);
+  result = (TARGET_PIC_DATA_TEXT_REL && isFunc)
+	    ? gen_rtx_PLUS (Pmode, gen_raw_REG (Pmode,
+			    get_base_reg (op)), result)
+	    : gen_rtx_PLUS (Pmode, pic_offset_table_rtx, result);
+  result = (!TARGET_PIC_DATA_TEXT_REL)
+	    ? gen_const_mem (Pmode, result) : result;
+
   return result;
 }
 
@@ -3199,6 +3303,7 @@ microblaze_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
         HOST_WIDE_INT delta, HOST_WIDE_INT vcall_offset,
         tree function)
 {
+  const char *fnname = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (thunk_fndecl));
   rtx this_rtx, funexp;
   rtx_insn *insn;
 
@@ -3254,9 +3359,11 @@ microblaze_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
      "borrowed" from rs6000.c.  */
   insn = get_insns ();
   shorten_branches (insn);
+  assemble_start_function (thunk_fndecl, fnname);
   final_start_function (insn, file, 1);
   final (insn, file, 1);
   final_end_function ();
+  assemble_end_function (thunk_fndecl, fnname);
 
   reload_completed = 0;
   epilogue_completed = 0;
@@ -3294,7 +3401,34 @@ microblaze_expand_move (machine_mode mode, rtx operands[])
 	  if (reload_in_progress)
 	    df_set_regs_ever_live (PIC_OFFSET_TABLE_REGNUM, true);
 	  result = expand_pic_symbol_ref (mode, op1);
+
+	  if (TARGET_PIC_DATA_TEXT_REL && GET_CODE (op0) == REG
+	      && REGNO (op0) >= FIRST_PSEUDO_REGISTER)
+	    result = force_reg (SImode, result);
+
 	  emit_move_insn (op0, result);
+	  return true;
+	}
+    }
+  if (GET_CODE (op1) == PLUS && GET_CODE (XEXP (op1,1)) == CONST)
+    {
+      rtx p0, p1, result, temp;
+
+      p0 = XEXP (XEXP (op1,1), 0);
+
+      if (GET_CODE (p0) == PLUS)
+	{
+	  p1 = XEXP (p0, 1);
+	  p0 = XEXP (p0, 0);
+	}
+
+      if (GET_CODE (p0) == UNSPEC && GET_CODE (p1) == CONST_INT
+	  && flag_pic && TARGET_PIC_DATA_TEXT_REL)
+	{
+	  result = gen_rtx_CONST (Pmode, p0);
+	  result = gen_rtx_PLUS (Pmode, pic_offset_table_rtx, result);
+	  temp = force_reg (SImode, result);
+	  emit_move_insn (op0, gen_rtx_PLUS (SImode, temp, p1));
 	  return true;
 	}
     }
@@ -3911,6 +4045,9 @@ microblaze_starting_frame_offset (void)
 
 #undef TARGET_LEGITIMATE_CONSTANT_P
 #define TARGET_LEGITIMATE_CONSTANT_P microblaze_legitimate_constant_p
+
+#undef  TARGET_ASM_GENERATE_PIC_ADDR_DIFF_VEC
+#define TARGET_ASM_GENERATE_PIC_ADDR_DIFF_VEC	microblaze_gen_pic_addr_dif_vec
 
 #undef TARGET_MACHINE_DEPENDENT_REORG
 #define TARGET_MACHINE_DEPENDENT_REORG microblaze_machine_dependent_reorg

@@ -1,5 +1,5 @@
 /* Compilation switch flag definitions for GCC.
-   Copyright (C) 1987-2018 Free Software Foundation, Inc.
+   Copyright (C) 1987-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -42,47 +42,28 @@ extern bool final_insns_dump_p;
 
 /* Other basic status info about current function.  */
 
-/* Target-dependent global state.  */
-struct target_flag_state {
-  /* Values of the -falign-* flags: how much to align labels in code.
-     0 means `use default', 1 means `don't align'.
-     For each variable, there is an _log variant which is the power
-     of two not less than the variable, for .align output.  */
-  int x_align_loops_log;
-  int x_align_loops_max_skip;
-  int x_align_jumps_log;
-  int x_align_jumps_max_skip;
-  int x_align_labels_log;
-  int x_align_labels_max_skip;
-  int x_align_functions_log;
-
-  /* The excess precision currently in effect.  */
-  enum excess_precision x_flag_excess_precision;
+class target_flag_state
+{
+public:
+  /* Each falign-foo can generate up to two levels of alignment:
+     -falign-foo=N:M[:N2:M2] */
+  align_flags x_align_loops;
+  align_flags x_align_jumps;
+  align_flags x_align_labels;
+  align_flags x_align_functions;
 };
 
-extern struct target_flag_state default_target_flag_state;
+extern class target_flag_state default_target_flag_state;
 #if SWITCHABLE_TARGET
-extern struct target_flag_state *this_target_flag_state;
+extern class target_flag_state *this_target_flag_state;
 #else
 #define this_target_flag_state (&default_target_flag_state)
 #endif
 
-#define align_loops_log \
-  (this_target_flag_state->x_align_loops_log)
-#define align_loops_max_skip \
-  (this_target_flag_state->x_align_loops_max_skip)
-#define align_jumps_log \
-  (this_target_flag_state->x_align_jumps_log)
-#define align_jumps_max_skip \
-  (this_target_flag_state->x_align_jumps_max_skip)
-#define align_labels_log \
-  (this_target_flag_state->x_align_labels_log)
-#define align_labels_max_skip \
-  (this_target_flag_state->x_align_labels_max_skip)
-#define align_functions_log \
-  (this_target_flag_state->x_align_functions_log)
-#define flag_excess_precision \
-  (this_target_flag_state->x_flag_excess_precision)
+#define align_loops	 (this_target_flag_state->x_align_loops)
+#define align_jumps	 (this_target_flag_state->x_align_jumps)
+#define align_labels	 (this_target_flag_state->x_align_labels)
+#define align_functions	 (this_target_flag_state->x_align_functions)
 
 /* Returns TRUE if generated code should match ABI version N or
    greater is in use.  */

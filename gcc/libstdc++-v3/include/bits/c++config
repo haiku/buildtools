@@ -1,6 +1,6 @@
 // Predefined symbols and macros -*- C++ -*-
 
-// Copyright (C) 1997-2018 Free Software Foundation, Inc.
+// Copyright (C) 1997-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +24,7 @@
 
 /** @file bits/c++config.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iosfwd}
+ *  Do not attempt to use it directly. @headername{version}
  */
 
 #ifndef _GLIBCXX_CXX_CONFIG_H
@@ -77,27 +77,62 @@
 // Macros for deprecated attributes.
 //   _GLIBCXX_USE_DEPRECATED
 //   _GLIBCXX_DEPRECATED
+//   _GLIBCXX_DEPRECATED_SUGGEST( string-literal )
+//   _GLIBCXX11_DEPRECATED
+//   _GLIBCXX11_DEPRECATED_SUGGEST( string-literal )
 //   _GLIBCXX17_DEPRECATED
+//   _GLIBCXX17_DEPRECATED_SUGGEST( string-literal )
+//   _GLIBCXX20_DEPRECATED( string-literal )
+//   _GLIBCXX20_DEPRECATED_SUGGEST( string-literal )
 #ifndef _GLIBCXX_USE_DEPRECATED
 # define _GLIBCXX_USE_DEPRECATED 1
 #endif
 
-#if defined(__DEPRECATED) && (__cplusplus >= 201103L)
+#if defined(__DEPRECATED)
 # define _GLIBCXX_DEPRECATED __attribute__ ((__deprecated__))
+# define _GLIBCXX_DEPRECATED_SUGGEST(ALT) \
+  __attribute__ ((__deprecated__ ("use '" ALT "' instead")))
 #else
 # define _GLIBCXX_DEPRECATED
+# define _GLIBCXX_DEPRECATED_SUGGEST(ALT)
+#endif
+
+#if defined(__DEPRECATED) && (__cplusplus >= 201103L)
+# define _GLIBCXX11_DEPRECATED _GLIBCXX_DEPRECATED
+# define _GLIBCXX11_DEPRECATED_SUGGEST(ALT) _GLIBCXX_DEPRECATED_SUGGEST(ALT)
+#else
+# define _GLIBCXX11_DEPRECATED
+# define _GLIBCXX11_DEPRECATED_SUGGEST(ALT)
 #endif
 
 #if defined(__DEPRECATED) && (__cplusplus >= 201703L)
 # define _GLIBCXX17_DEPRECATED [[__deprecated__]]
+# define _GLIBCXX17_DEPRECATED_SUGGEST(ALT) _GLIBCXX_DEPRECATED_SUGGEST(ALT)
 #else
 # define _GLIBCXX17_DEPRECATED
+# define _GLIBCXX17_DEPRECATED_SUGGEST(ALT)
+#endif
+
+#if defined(__DEPRECATED) && (__cplusplus > 201703L)
+# define _GLIBCXX20_DEPRECATED(MSG) [[deprecated(MSG)]]
+# define _GLIBCXX20_DEPRECATED_SUGGEST(ALT) _GLIBCXX_DEPRECATED_SUGGEST(ALT)
+#else
+# define _GLIBCXX20_DEPRECATED(MSG)
+# define _GLIBCXX20_DEPRECATED_SUGGEST(ALT)
 #endif
 
 // Macros for ABI tag attributes.
 #ifndef _GLIBCXX_ABI_TAG_CXX11
 # define _GLIBCXX_ABI_TAG_CXX11 __attribute ((__abi_tag__ ("cxx11")))
 #endif
+
+// Macro to warn about unused results.
+#if __cplusplus >= 201703L
+# define _GLIBCXX_NODISCARD [[__nodiscard__]]
+#else
+# define _GLIBCXX_NODISCARD
+#endif
+
 
 
 #if __cplusplus
@@ -122,15 +157,23 @@
 #endif
 
 #ifndef _GLIBCXX17_CONSTEXPR
-# if __cplusplus > 201402L
+# if __cplusplus >= 201703L
 #  define _GLIBCXX17_CONSTEXPR constexpr
 # else
 #  define _GLIBCXX17_CONSTEXPR
 # endif
 #endif
 
+#ifndef _GLIBCXX20_CONSTEXPR
+# if __cplusplus > 201703L
+#  define _GLIBCXX20_CONSTEXPR constexpr
+# else
+#  define _GLIBCXX20_CONSTEXPR
+# endif
+#endif
+
 #ifndef _GLIBCXX17_INLINE
-# if __cplusplus > 201402L
+# if __cplusplus >= 201703L
 #  define _GLIBCXX17_INLINE inline
 # else
 #  define _GLIBCXX17_INLINE
@@ -141,12 +184,12 @@
 #ifndef _GLIBCXX_NOEXCEPT
 # if __cplusplus >= 201103L
 #  define _GLIBCXX_NOEXCEPT noexcept
-#  define _GLIBCXX_NOEXCEPT_IF(_COND) noexcept(_COND)
+#  define _GLIBCXX_NOEXCEPT_IF(...) noexcept(__VA_ARGS__)
 #  define _GLIBCXX_USE_NOEXCEPT noexcept
 #  define _GLIBCXX_THROW(_EXC)
 # else
 #  define _GLIBCXX_NOEXCEPT
-#  define _GLIBCXX_NOEXCEPT_IF(_COND)
+#  define _GLIBCXX_NOEXCEPT_IF(...)
 #  define _GLIBCXX_USE_NOEXCEPT throw()
 #  define _GLIBCXX_THROW(_EXC) throw(_EXC)
 # endif
@@ -191,7 +234,6 @@
   {
     namespace __debug { }
     namespace __parallel { }
-    namespace __profile { }
     namespace __cxx1998 { }
 
     namespace __detail {
@@ -309,9 +351,8 @@ _GLIBCXX_END_NAMESPACE_VERSION
 # define _GLIBCXX_END_NAMESPACE_VERSION
 #endif
 
-// Inline namespaces for special modes: debug, parallel, profile.
-#if defined(_GLIBCXX_DEBUG) || defined(_GLIBCXX_PARALLEL) \
-    || defined(_GLIBCXX_PROFILE)
+// Inline namespaces for special modes: debug, parallel.
+#if defined(_GLIBCXX_DEBUG) || defined(_GLIBCXX_PARALLEL)
 namespace std
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
@@ -335,21 +376,10 @@ _GLIBCXX_END_NAMESPACE_VERSION
 # ifdef _GLIBCXX_PARALLEL
   inline namespace __parallel { }
 # endif
-
-  // Inline namespaces for profile mode
-# ifdef _GLIBCXX_PROFILE
-  inline namespace __profile { }
-# endif
 }
 
 // Check for invalid usage and unsupported mixed-mode use.
 # if defined(_GLIBCXX_DEBUG) && defined(_GLIBCXX_PARALLEL)
-#  error illegal use of multiple inlined namespaces
-# endif
-# if defined(_GLIBCXX_PROFILE) && defined(_GLIBCXX_DEBUG)
-#  error illegal use of multiple inlined namespaces
-# endif
-# if defined(_GLIBCXX_PROFILE) && defined(_GLIBCXX_PARALLEL)
 #  error illegal use of multiple inlined namespaces
 # endif
 
@@ -370,7 +400,7 @@ _GLIBCXX_END_NAMESPACE_VERSION
 // _GLIBCXX_END_NAMESPACE_ALGO
 // _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 // _GLIBCXX_END_NAMESPACE_CONTAINER
-#if defined(_GLIBCXX_DEBUG) || defined(_GLIBCXX_PROFILE)
+#if defined(_GLIBCXX_DEBUG)
 # define _GLIBCXX_STD_C __cxx1998
 # define _GLIBCXX_BEGIN_NAMESPACE_CONTAINER \
 	 namespace _GLIBCXX_STD_C {
@@ -396,7 +426,30 @@ _GLIBCXX_END_NAMESPACE_VERSION
 // Define if compatibility should be provided for -mlong-double-64.
 #undef _GLIBCXX_LONG_DOUBLE_COMPAT
 
-// Inline namespace for long double 128 mode.
+// Define if compatibility should be provided for alternative 128-bit long
+// double formats. Not possible for Clang until __ibm128 is supported.
+#ifndef __clang__
+#undef _GLIBCXX_LONG_DOUBLE_ALT128_COMPAT
+#endif
+
+// Inline namespaces for long double 128 modes.
+#if defined _GLIBCXX_LONG_DOUBLE_ALT128_COMPAT \
+  && defined __LONG_DOUBLE_IEEE128__
+namespace std
+{
+  // Namespaces for 128-bit IEEE long double format on 64-bit POWER LE.
+  inline namespace __gnu_cxx_ieee128 { }
+  inline namespace __gnu_cxx11_ieee128 { }
+}
+# define _GLIBCXX_NAMESPACE_LDBL __gnu_cxx_ieee128::
+# define _GLIBCXX_BEGIN_NAMESPACE_LDBL namespace __gnu_cxx_ieee128 {
+# define _GLIBCXX_END_NAMESPACE_LDBL }
+# define _GLIBCXX_NAMESPACE_LDBL_OR_CXX11 __gnu_cxx11_ieee128::
+# define _GLIBCXX_BEGIN_NAMESPACE_LDBL_OR_CXX11 namespace __gnu_cxx11_ieee128 {
+# define _GLIBCXX_END_NAMESPACE_LDBL_OR_CXX11 }
+
+#else // _GLIBCXX_LONG_DOUBLE_ALT128_COMPAT && IEEE128
+
 #if defined _GLIBCXX_LONG_DOUBLE_COMPAT && defined __LONG_DOUBLE_128__
 namespace std
 {
@@ -410,6 +463,7 @@ namespace std
 # define _GLIBCXX_BEGIN_NAMESPACE_LDBL
 # define _GLIBCXX_END_NAMESPACE_LDBL
 #endif
+
 #if _GLIBCXX_USE_CXX11_ABI
 # define _GLIBCXX_NAMESPACE_LDBL_OR_CXX11 _GLIBCXX_NAMESPACE_CXX11
 # define _GLIBCXX_BEGIN_NAMESPACE_LDBL_OR_CXX11 _GLIBCXX_BEGIN_NAMESPACE_CXX11
@@ -419,6 +473,8 @@ namespace std
 # define _GLIBCXX_BEGIN_NAMESPACE_LDBL_OR_CXX11 _GLIBCXX_BEGIN_NAMESPACE_LDBL
 # define _GLIBCXX_END_NAMESPACE_LDBL_OR_CXX11 _GLIBCXX_END_NAMESPACE_LDBL
 #endif
+
+#endif // _GLIBCXX_LONG_DOUBLE_ALT128_COMPAT && IEEE128
 
 // Debug Mode implies checking assertions.
 #if defined(_GLIBCXX_DEBUG) && !defined(_GLIBCXX_ASSERTIONS)
@@ -431,6 +487,16 @@ namespace std
 # define _GLIBCXX_EXTERN_TEMPLATE -1
 #endif
 
+
+#if __has_builtin(__builtin_is_constant_evaluated)
+# define __glibcxx_constexpr_assert(cond) \
+  if (__builtin_is_constant_evaluated() && !bool(cond))	\
+    __builtin_unreachable() /* precondition violation detected! */
+#else
+# define __glibcxx_constexpr_assert(unevaluated)
+#endif
+
+
 // Assert.
 #if defined(_GLIBCXX_ASSERTIONS) \
   || defined(_GLIBCXX_PARALLEL) || defined(_GLIBCXX_PARALLEL_ASSERTIONS)
@@ -438,6 +504,7 @@ namespace std
 {
   // Avoid the use of assert, because we're trying to keep the <cassert>
   // include out of the mix.
+  extern "C++" _GLIBCXX_NORETURN
   inline void
   __replacement_assert(const char* __file, int __line,
 		       const char* __function, const char* __condition)
@@ -447,19 +514,21 @@ namespace std
     __builtin_abort();
   }
 }
-#define __glibcxx_assert_impl(_Condition)				 \
-  do 									 \
-  {							      		 \
-    if (! (_Condition))                                                  \
-      std::__replacement_assert(__FILE__, __LINE__, __PRETTY_FUNCTION__, \
-				#_Condition);				 \
-  } while (false)
+#define __glibcxx_assert_impl(_Condition)			       \
+  if (__builtin_expect(!bool(_Condition), false))		       \
+  {								       \
+    __glibcxx_constexpr_assert(_Condition);			       \
+    std::__replacement_assert(__FILE__, __LINE__, __PRETTY_FUNCTION__, \
+			      #_Condition);			       \
+  }
 #endif
 
 #if defined(_GLIBCXX_ASSERTIONS)
-# define __glibcxx_assert(_Condition) __glibcxx_assert_impl(_Condition)
+# define __glibcxx_assert(cond) \
+  do { __glibcxx_assert_impl(cond); } while (false)
 #else
-# define __glibcxx_assert(_Condition)
+# define __glibcxx_assert(cond) \
+  do { __glibcxx_constexpr_assert(cond); } while (false)
 #endif
 
 // Macros for race detectors.
@@ -495,6 +564,15 @@ namespace std
 # define _GLIBCXX_END_EXTERN_C }
 
 #define _GLIBCXX_USE_ALLOCATOR_NEW
+
+#ifdef __SIZEOF_INT128__
+#if ! defined __GLIBCXX_TYPE_INT_N_0 && ! defined __STRICT_ANSI__
+// If __int128 is supported, we expect __GLIBCXX_TYPE_INT_N_0 to be defined
+// unless the compiler is in strict mode. If it's not defined and the strict
+// macro is not defined, something is wrong.
+#warning "__STRICT_ANSI__ seems to have been undefined; this is not supported"
+#endif
+#endif
 
 #else // !__cplusplus
 # define _GLIBCXX_BEGIN_EXTERN_C
@@ -535,7 +613,7 @@ namespace std
 // Most of the following conditions are due to limitations in the current
 // implementation.
 #if __cplusplus >= 201103L && _GLIBCXX_USE_CXX11_ABI			\
-  && _GLIBCXX_USE_DUAL_ABI && __cpp_transactional_memory >= 201505L	\
+  && _GLIBCXX_USE_DUAL_ABI && __cpp_transactional_memory >= 201500L	\
   &&  !_GLIBCXX_FULLY_DYNAMIC_STRING && _GLIBCXX_USE_WEAK_REF		\
   && _GLIBCXX_USE_ALLOCATOR_NEW
 #define _GLIBCXX_TXN_SAFE transaction_safe
@@ -609,9 +687,95 @@ namespace std
 # endif
 #endif
 
-/* Define if __float128 is supported on this host. */
-#if defined(__FLOAT128__) || defined(__SIZEOF_FLOAT128__)
-#define _GLIBCXX_USE_FLOAT128
+// Unless explicitly specified, enable char8_t extensions only if the core
+// language char8_t feature macro is defined.
+#ifndef _GLIBCXX_USE_CHAR8_T
+# ifdef __cpp_char8_t
+#  define _GLIBCXX_USE_CHAR8_T 1
+# endif
 #endif
+#ifdef _GLIBCXX_USE_CHAR8_T
+# define __cpp_lib_char8_t 201907L
+#endif
+
+/* Define if __float128 is supported on this host.  */
+#if defined(__FLOAT128__) || defined(__SIZEOF_FLOAT128__)
+/* For powerpc64 don't use __float128 when it's the same type as long double. */
+# if !(defined(_GLIBCXX_LONG_DOUBLE_ALT128_COMPAT) && defined(__LONG_DOUBLE_IEEE128__))
+#  define _GLIBCXX_USE_FLOAT128
+# endif
+#endif
+
+// Define if float has the IEEE binary32 format.
+#if __FLT_MANT_DIG__ == 24 \
+  && __FLT_MIN_EXP__ == -125 \
+  && __FLT_MAX_EXP__ == 128
+# define _GLIBCXX_FLOAT_IS_IEEE_BINARY32 1
+#endif
+
+// Define if double has the IEEE binary64 format.
+#if __DBL_MANT_DIG__ == 53 \
+  && __DBL_MIN_EXP__ == -1021 \
+  && __DBL_MAX_EXP__ == 1024
+# define _GLIBCXX_DOUBLE_IS_IEEE_BINARY64 1
+#endif
+
+#ifdef __has_builtin
+# ifdef __is_identifier
+// Intel and older Clang require !__is_identifier for some built-ins:
+#  define _GLIBCXX_HAS_BUILTIN(B) __has_builtin(B) || ! __is_identifier(B)
+# else
+#  define _GLIBCXX_HAS_BUILTIN(B) __has_builtin(B)
+# endif
+#endif
+
+#if _GLIBCXX_HAS_BUILTIN(__has_unique_object_representations)
+# define _GLIBCXX_HAVE_BUILTIN_HAS_UNIQ_OBJ_REP 1
+#endif
+
+#if _GLIBCXX_HAS_BUILTIN(__is_aggregate)
+# define _GLIBCXX_HAVE_BUILTIN_IS_AGGREGATE 1
+#endif
+
+#if _GLIBCXX_HAS_BUILTIN(__builtin_is_constant_evaluated)
+#  define _GLIBCXX_HAVE_BUILTIN_IS_CONSTANT_EVALUATED 1
+#endif
+
+#if _GLIBCXX_HAS_BUILTIN(__is_same)
+#  define _GLIBCXX_HAVE_BUILTIN_IS_SAME 1
+#endif
+
+#if _GLIBCXX_HAS_BUILTIN(__builtin_launder)
+# define _GLIBCXX_HAVE_BUILTIN_LAUNDER 1
+#endif
+
+#undef _GLIBCXX_HAS_BUILTIN
+
+
+// PSTL configuration
+
+#if __cplusplus >= 201703L
+// This header is not installed for freestanding:
+#if __has_include(<pstl/pstl_config.h>)
+// Preserved here so we have some idea which version of upstream we've pulled in
+// #define PSTL_VERSION 9000
+
+// For now this defaults to being based on the presence of Thread Building Blocks
+# ifndef _GLIBCXX_USE_TBB_PAR_BACKEND
+#  define _GLIBCXX_USE_TBB_PAR_BACKEND __has_include(<tbb/tbb.h>)
+# endif
+// This section will need some rework when a new (default) backend type is added
+# if _GLIBCXX_USE_TBB_PAR_BACKEND
+#  define _PSTL_PAR_BACKEND_TBB
+# else
+#  define _PSTL_PAR_BACKEND_SERIAL
+# endif
+
+# define _PSTL_ASSERT(_Condition) __glibcxx_assert(_Condition)
+# define _PSTL_ASSERT_MSG(_Condition, _Message) __glibcxx_assert(_Condition)
+
+#include <pstl/pstl_config.h>
+#endif // __has_include
+#endif // C++17
 
 // End of prewritten config; the settings discovered at configure time follow.

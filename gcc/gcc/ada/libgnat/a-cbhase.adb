@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2004-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,8 +38,12 @@ with Ada.Containers.Helpers; use Ada.Containers.Helpers;
 with Ada.Containers.Prime_Numbers; use Ada.Containers.Prime_Numbers;
 
 with System; use type System.Address;
+with System.Put_Images;
 
-package body Ada.Containers.Bounded_Hashed_Sets is
+package body Ada.Containers.Bounded_Hashed_Sets with
+  SPARK_Mode => Off
+is
+   use Ada.Finalization;
 
    pragma Warnings (Off, "variable ""Busy*"" is not referenced");
    pragma Warnings (Off, "variable ""Lock*"" is not referenced");
@@ -231,7 +235,7 @@ package body Ada.Containers.Bounded_Hashed_Sets is
            (Element => N.Element'Access,
             Control => (Controlled with TC))
          do
-            Lock (TC.all);
+            Busy (TC.all);
          end return;
       end;
    end Constant_Reference;
@@ -254,16 +258,14 @@ package body Ada.Containers.Bounded_Hashed_Sets is
       Capacity : Count_Type := 0;
       Modulus  : Hash_Type := 0) return Set
    is
-      C : Count_Type;
+      C : constant Count_Type :=
+        (if Capacity = 0 then Source.Length
+         else Capacity);
       M : Hash_Type;
 
    begin
-      if Capacity = 0 then
-         C := Source.Length;
-      elsif Capacity >= Source.Length then
-         C := Capacity;
-      elsif Checks then
-         raise Capacity_Error with "Capacity value too small";
+      if Checks and then C < Source.Length then
+         raise Capacity_Error with "Capacity too small";
       end if;
 
       if Modulus = 0 then
@@ -311,6 +313,8 @@ package body Ada.Containers.Bounded_Hashed_Sets is
       Position  : in out Cursor)
    is
    begin
+      TC_Check (Container.TC);
+
       if Checks and then Position.Node = 0 then
          raise Constraint_Error with "Position cursor equals No_Element";
       end if;
@@ -319,8 +323,6 @@ package body Ada.Containers.Bounded_Hashed_Sets is
       then
          raise Program_Error with "Position cursor designates wrong set";
       end if;
-
-      TC_Check (Container.TC);
 
       pragma Assert (Vet (Position), "bad cursor in Delete");
 
@@ -453,6 +455,17 @@ package body Ada.Containers.Bounded_Hashed_Sets is
          return N.Element;
       end;
    end Element;
+
+   -----------
+   -- Empty --
+   -----------
+
+   function Empty (Capacity : Count_Type := 10) return Set is
+   begin
+      return Result : Set (Capacity, 0) do
+         Reserve_Capacity (Result, Capacity);
+      end return;
+   end Empty;
 
    ---------------------
    -- Equivalent_Sets --
@@ -1079,7 +1092,7 @@ package body Ada.Containers.Bounded_Hashed_Sets is
         Container.TC'Unrestricted_Access;
    begin
       return R : constant Reference_Control_Type := (Controlled with TC) do
-         Lock (TC.all);
+         Busy (TC.all);
       end return;
    end Pseudo_Reference;
 
@@ -1106,6 +1119,31 @@ package body Ada.Containers.Bounded_Hashed_Sets is
          Process (S.Nodes (Position.Node).Element);
       end;
    end Query_Element;
+
+   ---------------
+   -- Put_Image --
+   ---------------
+
+   procedure Put_Image
+     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Set)
+   is
+      First_Time : Boolean := True;
+      use System.Put_Images;
+   begin
+      Array_Before (S);
+
+      for X of V loop
+         if First_Time then
+            First_Time := False;
+         else
+            Simple_Array_Between (S);
+         end if;
+
+         Element_Type'Put_Image (S, X);
+      end loop;
+
+      Array_After (S);
+   end Put_Image;
 
    ----------
    -- Read --
@@ -1181,12 +1219,12 @@ package body Ada.Containers.Bounded_Hashed_Sets is
       Node : constant Count_Type := Element_Keys.Find (Container, New_Item);
 
    begin
+      TE_Check (Container.TC);
+
       if Checks and then Node = 0 then
          raise Constraint_Error with
            "attempt to replace element not in set";
       end if;
-
-      TE_Check (Container.TC);
 
       Container.Nodes (Node).Element := New_Item;
    end Replace;
@@ -1608,7 +1646,7 @@ package body Ada.Containers.Bounded_Hashed_Sets is
               (Element => N.Element'Access,
                Control => (Controlled with TC))
             do
-               Lock (TC.all);
+               Busy (TC.all);
             end return;
          end;
       end Constant_Reference;
@@ -1745,7 +1783,7 @@ package body Ada.Containers.Bounded_Hashed_Sets is
       -- Read --
       ----------
 
-      procedure  Read
+      procedure Read
         (Stream : not null access Root_Stream_Type'Class;
          Item   : out Reference_Type)
       is
@@ -1789,7 +1827,7 @@ package body Ada.Containers.Bounded_Hashed_Sets is
                      Old_Pos  => Position,
                      Old_Hash => Hash (Key (Position))))
             do
-               Lock (Container.TC);
+               Busy (Container.TC);
             end return;
          end;
       end Reference_Preserving_Key;
@@ -1818,7 +1856,7 @@ package body Ada.Containers.Bounded_Hashed_Sets is
                     Old_Pos => P,
                     Old_Hash => Hash (Key)))
             do
-               Lock (Container.TC);
+               Busy (Container.TC);
             end return;
          end;
       end Reference_Preserving_Key;

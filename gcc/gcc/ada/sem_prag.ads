@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -49,6 +49,7 @@ package Sem_Prag is
       Pragma_Contract_Cases               => True,
       Pragma_Convention                   => True,
       Pragma_CPU                          => True,
+      Pragma_CUDA_Global                  => True,
       Pragma_Default_Initial_Condition    => True,
       Pragma_Default_Storage_Pool         => True,
       Pragma_Depends                      => True,
@@ -218,8 +219,9 @@ package Sem_Prag is
      (N        : Node_Id;
       Expr_Val : out Boolean);
    --  Perform full analysis of delayed pragmas Async_Readers, Async_Writers,
-   --  Effective_Reads and Effective_Writes. Flag Expr_Val contains the Boolean
-   --  argument of the pragma or a default True if no argument is present.
+   --  Effective_Reads, Effective_Writes and No_Caching. Flag Expr_Val contains
+   --  the Boolean argument of the pragma or a default True if no argument
+   --  is present.
 
    procedure Analyze_Global_In_Decl_Part (N : Node_Id);
    --  Perform full analysis of delayed pragma Global. This routine is also
@@ -260,6 +262,13 @@ package Sem_Prag is
      (N         : Node_Id;
       Freeze_Id : Entity_Id := Empty);
    --  Perform full analysis of delayed pragma Refined_State. Freeze_Id denotes
+   --  the entity of [generic] package body or [generic] subprogram body which
+   --  caused "freezing" of the related contract where the pragma resides.
+
+   procedure Analyze_Subprogram_Variant_In_Decl_Part
+     (N         : Node_Id;
+      Freeze_Id : Entity_Id := Empty);
+   --  Perform full analysis of delayed pragma Subprogram_Variant. Freeze_Id is
    --  the entity of [generic] package body or [generic] subprogram body which
    --  caused "freezing" of the related contract where the pragma resides.
 
@@ -397,6 +406,8 @@ package Sem_Prag is
    --    Extensions_Visible
    --    Global
    --    Initializes
+   --    Max_Entry_Queue_Depth
+   --    Max_Entry_Queue_Length
    --    Max_Queue_Length
    --    Post
    --    Post_Class
@@ -423,7 +434,7 @@ package Sem_Prag is
    --  of the pragma. The argument is extracted in the following manner:
    --
    --    When the pragma is generated from an aspect, return the corresponding
-   --    aspect for ASIS or when Context_Id denotes a generic unit.
+   --    aspect when Context_Id denotes a generic unit.
    --
    --    Otherwise return the first argument of Prag
    --
@@ -496,14 +507,6 @@ package Sem_Prag is
    --  Name_uInvariant, and Name_uType_Invariant (_Pre, _Post, _Invariant,
    --  and _Type_Invariant).
 
-   procedure Process_Compile_Time_Warning_Or_Error
-     (N    : Node_Id;
-      Eloc : Source_Ptr);
-   --  Common processing for Compile_Time_Error and Compile_Time_Warning of
-   --  pragma N. Called when the pragma is processed as part of its regular
-   --  analysis but also called after calling the back end to validate these
-   --  pragmas for size and alignment appropriateness.
-
    procedure Process_Compilation_Unit_Pragmas (N : Node_Id);
    --  Called at the start of processing compilation unit N to deal with any
    --  special issues regarding pragmas. In particular, we have to deal with
@@ -535,6 +538,11 @@ package Sem_Prag is
    --  the value of the Interface_Name. Otherwise it is encoded as needed by
    --  particular operating systems. See the body for details of the encoding.
 
+   procedure Set_Overflow_Mode (N : Node_Id);
+   --  Sets Sem.Scope_Suppress according to the overflow modes specified in
+   --  the pragma Overflow_Mode passed in argument. This should only be called
+   --  after N has been successfully analyzed.
+
    function Test_Case_Arg
      (Prag        : Node_Id;
       Arg_Nam     : Name_Id;
@@ -553,5 +561,11 @@ package Sem_Prag is
    --    the argument appears in positional form.
    --
    --    Empty if there is no such argument
+
+   procedure Validate_Compile_Time_Warning_Errors;
+   --  This routine is called after calling the back end to validate pragmas
+   --  Compile_Time_Error and Compile_Time_Warning for size and alignment
+   --  appropriateness. The reason it is called that late is to take advantage
+   --  of any back-annotation of size and alignment performed by the back end.
 
 end Sem_Prag;

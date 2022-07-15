@@ -1,6 +1,6 @@
 // thread -*- C++ -*-
 
-// Copyright (C) 2008-2018 Free Software Foundation, Inc.
+// Copyright (C) 2008-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,12 +24,24 @@
 
 
 #define _GLIBCXX_THREAD_ABI_COMPAT 1
+#include <memory> // include this first so <thread> can use shared_ptr
 #include <thread>
 #include <system_error>
 #include <cerrno>
 #include <cxxabi_forced.h>
 
-#if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1)
+#ifndef _GLIBCXX_USE_NANOSLEEP
+# ifdef _GLIBCXX_HAVE_SLEEP
+#  include <unistd.h>
+# elif defined(_GLIBCXX_HAVE_WIN32_SLEEP)
+#  include <windows.h>
+# elif defined _GLIBCXX_NO_SLEEP && defined _GLIBCXX_HAS_GTHREADS
+// We expect to be able to sleep for targets that support multiple threads:
+#  error "No sleep function known for this target"
+# endif
+#endif
+
+#ifdef _GLIBCXX_HAS_GTHREADS
 
 #if defined(_GLIBCXX_USE_GET_NPROCS)
 # include <sys/sysinfo.h>
@@ -57,16 +69,6 @@ static inline int get_nprocs()
 # define _GLIBCXX_NPROCS sysconf(_SC_NPROC_ONLN)
 #else
 # define _GLIBCXX_NPROCS 0
-#endif
-
-#ifndef _GLIBCXX_USE_NANOSLEEP
-# ifdef _GLIBCXX_HAVE_SLEEP
-#  include <unistd.h>
-# elif defined(_GLIBCXX_HAVE_WIN32_SLEEP)
-#  include <windows.h>
-# else
-#  error "No sleep function known for this target"
-# endif
 #endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
@@ -132,6 +134,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   void
   thread::_M_start_thread(_State_ptr state, void (*)())
   {
+    if (!__gthread_active_p())
+      {
+#if __cpp_exceptions
+	throw system_error(make_error_code(errc::operation_not_permitted),
+			   "Enable multithreading to use std::thread");
+#else
+	__builtin_abort();
+#endif
+      }
+
     const int err = __gthread_create(&_M_id._M_thread,
 				     &execute_native_thread_routine,
 				     state.get());
@@ -180,13 +192,22 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     return __n;
   }
 
+_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace std
+
+#endif // _GLIBCXX_HAS_GTHREADS
+
+#ifndef _GLIBCXX_NO_SLEEP
+namespace std _GLIBCXX_VISIBILITY(default)
+{
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 namespace this_thread
 {
   void
   __sleep_for(chrono::seconds __s, chrono::nanoseconds __ns)
   {
 #ifdef _GLIBCXX_USE_NANOSLEEP
-    __gthread_time_t __ts =
+    struct ::timespec __ts =
       {
 	static_cast<std::time_t>(__s.count()),
 	static_cast<long>(__ns.count())
@@ -194,18 +215,35 @@ namespace this_thread
     while (::nanosleep(&__ts, &__ts) == -1 && errno == EINTR)
       { }
 #elif defined(_GLIBCXX_HAVE_SLEEP)
-# ifdef _GLIBCXX_HAVE_USLEEP
-    ::sleep(__s.count());
-    if (__ns.count() > 0)
+    const auto target = chrono::steady_clock::now() + __s + __ns;
+    while (true)
       {
-        long __us = __ns.count() / 1000;
-        if (__us == 0)
-          __us = 1;
-        ::usleep(__us);
-      }
+	unsigned secs = __s.count();
+	if (__ns.count() > 0)
+	  {
+# ifdef _GLIBCXX_HAVE_USLEEP
+	    long us = __ns.count() / 1000;
+	    if (us == 0)
+	      us = 1;
+	    ::usleep(us);
 # else
-    ::sleep(__s.count() + (__ns.count() >= 1000000));
+	    if (__ns.count() > 1000000 || secs == 0)
+	      ++secs; // No sub-second sleep function, so round up.
 # endif
+	  }
+
+	if (secs > 0)
+	  {
+	    // Sleep in a loop to handle interruption by signals:
+	    while ((secs = ::sleep(secs)))
+	      { }
+	  }
+	const auto now = chrono::steady_clock::now();
+	if (now >= target)
+	  break;
+	__s = chrono::duration_cast<chrono::seconds>(target - now);
+	__ns = chrono::duration_cast<chrono::nanoseconds>(target - (now + __s));
+    }
 #elif defined(_GLIBCXX_HAVE_WIN32_SLEEP)
     unsigned long ms = __ns.count() / 1000000;
     if (__ns.count() > 0 && ms == 0)
@@ -214,8 +252,6 @@ namespace this_thread
 #endif
   }
 }
-
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
-
-#endif // _GLIBCXX_HAS_GTHREADS && _GLIBCXX_USE_C99_STDINT_TR1
+#endif // ! NO_SLEEP

@@ -63,9 +63,11 @@ enum GoPragma
   GOPRAGMA_SYSTEMSTACK = 1 << 5,	// Must run on system stack.
   GOPRAGMA_NOWRITEBARRIER = 1 << 6,	// No write barriers.
   GOPRAGMA_NOWRITEBARRIERREC = 1 << 7,	// No write barriers here or callees.
-  GOPRAGMA_CGOUNSAFEARGS = 1 << 8,	// Pointer to arg is pointer to all.
-  GOPRAGMA_UINTPTRESCAPES = 1 << 9,	// uintptr(p) escapes.
-  GOPRAGMA_NOTINHEAP = 1 << 10		// type is not in heap.
+  GOPRAGMA_YESWRITEBARRIERREC = 1 << 8,	// Stops nowritebarrierrec.
+  GOPRAGMA_MARK = 1 << 9,		// Marker for nowritebarrierrec.
+  GOPRAGMA_CGOUNSAFEARGS = 1 << 10,	// Pointer to arg is pointer to all.
+  GOPRAGMA_UINTPTRESCAPES = 1 << 11,	// uintptr(p) escapes.
+  GOPRAGMA_NOTINHEAP = 1 << 12		// type is not in heap.
 };
 
 // A token returned from the lexer.
@@ -378,7 +380,7 @@ class Lex
 
   struct Linkname
   {
-    std::string ext_name;	// External name.
+    std::string ext_name;	// External name; empty to just export.
     bool is_exported;		// Whether the internal name is exported.
     Location loc;		// Location of go:linkname directive.
 
@@ -403,8 +405,28 @@ class Lex
     return ret;
   }
 
+  // Return whether there are any current go:embed patterns.
+  bool
+  has_embeds() const
+  { return !this->embeds_.empty(); }
+
+  // If there are any go:embed patterns seen so far, store them in
+  // *EMBEDS and clear the saved set.  *EMBEDS must be an empty
+  // vector.
+  void
+  get_and_clear_embeds(std::vector<std::string>* embeds)
+  {
+    go_assert(embeds->empty());
+    std::swap(*embeds, this->embeds_);
+  }
+
   // Return whether the identifier NAME should be exported.  NAME is a
   // mangled name which includes only ASCII characters.
+  static bool
+  is_exported_mangled_name(const std::string& name);
+
+  // Return whether the identifier NAME should be exported.  NAME is
+  // an unmangled utf-8 string and may contain non-ASCII characters.
   static bool
   is_exported_name(const std::string& name);
 
@@ -433,6 +455,10 @@ class Lex
   static bool
   is_unicode_space(unsigned int c);
 
+  // Convert the specified hex char into an unsigned integer value.
+  static unsigned
+  hex_val(char c);
+
  private:
   ssize_t
   get_line();
@@ -451,12 +477,12 @@ class Lex
   static bool
   is_hex_digit(char);
 
+  static bool
+  is_base_digit(int base, char);
+
   static unsigned char
   octal_value(char c)
   { return c - '0'; }
-
-  static unsigned
-  hex_val(char c);
 
   Token
   make_invalid_token()
@@ -474,10 +500,13 @@ class Lex
   gather_identifier();
 
   static bool
-  could_be_exponent(const char*, const char*);
+  could_be_exponent(int base, const char*, const char*);
 
   Token
   gather_number();
+
+  void
+  skip_exponent();
 
   Token
   gather_character();
@@ -522,6 +551,9 @@ class Lex
   void
   skip_cpp_comment();
 
+  void
+  gather_embed(const char*, const char*);
+
   // The input file name.
   const char* input_file_name_;
   // The input file.
@@ -547,6 +579,8 @@ class Lex
   std::string extern_;
   // The list of //go:linkname comments, if any.
   Linknames* linknames_;
+  // The list of //go:embed patterns, if any.
+  std::vector<std::string> embeds_;
 };
 
 #endif // !defined(GO_LEX_H)

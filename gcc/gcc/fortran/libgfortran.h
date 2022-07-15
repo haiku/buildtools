@@ -1,5 +1,5 @@
 /* Header file to the Fortran front-end and runtime library
-   Copyright (C) 2007-2018 Free Software Foundation, Inc.
+   Copyright (C) 2007-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,10 +22,9 @@ along with GCC; see the file COPYING3.  If not see
    Note that no features were obsoleted nor deleted in F2003.
    Please remember to keep those definitions in sync with
    gfortran.texi.  */
-#define GFC_STD_F2018_DEL      (1<<12)  /* Deleted in F2018.  */
-#define GFC_STD_F2018_OBS      (1<<11)  /* Obsolescent in F2018.  */
-#define GFC_STD_F2018          (1<<10)  /* New in F2018.  */
-#define GFC_STD_F2008_TS	(1<<9)	/* POST-F2008 technical reports.  */
+#define GFC_STD_F2018_DEL	(1<<11)	/* Deleted in F2018.  */
+#define GFC_STD_F2018_OBS	(1<<10)	/* Obsolescent in F2018.  */
+#define GFC_STD_F2018		(1<<9)	/* New in F2018.  */
 #define GFC_STD_F2008_OBS	(1<<8)	/* Obsolescent in F2008.  */
 #define GFC_STD_F2008		(1<<7)	/* New in F2008.  */
 #define GFC_STD_LEGACY		(1<<6)	/* Backward compatibility.  */
@@ -37,6 +36,15 @@ along with GCC; see the file COPYING3.  If not see
 #define GFC_STD_F77		(1<<0)	/* Included in F77, but not deleted or
 					   obsolescent in later standards.  */
 
+/* Combinations of the above flags that specify which classes of features
+ * are allowed with a certain -std option.  */
+#define GFC_STD_OPT_F95		(GFC_STD_F77 | GFC_STD_F95 | GFC_STD_F95_OBS  \
+				| GFC_STD_F2008_OBS | GFC_STD_F2018_OBS \
+				| GFC_STD_F2018_DEL)
+#define GFC_STD_OPT_F03		(GFC_STD_OPT_F95 | GFC_STD_F2003)
+#define GFC_STD_OPT_F08		(GFC_STD_OPT_F03 | GFC_STD_F2008)
+#define GFC_STD_OPT_F18		((GFC_STD_OPT_F08 | GFC_STD_F2018) \
+				& (~GFC_STD_F2018_DEL))
 
 /* Bitmasks for the various FPE that can be enabled.  These need to be straight integers
    e.g., 8 instead of (1<<3), because they will be included in Fortran source.  */
@@ -65,9 +73,11 @@ along with GCC; see the file COPYING3.  If not see
 #define GFC_RTCHECK_DO          (1<<3)
 #define GFC_RTCHECK_POINTER     (1<<4)
 #define GFC_RTCHECK_MEM         (1<<5)
+#define GFC_RTCHECK_BITS        (1<<6)
 #define GFC_RTCHECK_ALL        (GFC_RTCHECK_BOUNDS | GFC_RTCHECK_ARRAY_TEMPS \
 				| GFC_RTCHECK_RECURSION | GFC_RTCHECK_DO \
-				| GFC_RTCHECK_POINTER | GFC_RTCHECK_MEM)
+				| GFC_RTCHECK_POINTER | GFC_RTCHECK_MEM \
+				| GFC_RTCHECK_BITS)
 
 /* Special unit numbers used to convey certain conditions.  Numbers -4
    thru -9 available.  NEWUNIT values start at -10.  */
@@ -114,6 +124,7 @@ typedef enum
   LIBERROR_SHORT_RECORD,
   LIBERROR_CORRUPT_FILE,
   LIBERROR_INQUIRE_INTERNAL_UNIT, /* Must be different from STAT_STOPPED_IMAGE.  */
+  LIBERROR_BAD_WAIT_ID,
   LIBERROR_LAST			/* Not a real error, the last error # + 1.  */
 }
 libgfortran_error_codes;
@@ -164,6 +175,6 @@ typedef enum
 typedef enum
 { BT_UNKNOWN = 0, BT_INTEGER, BT_LOGICAL, BT_REAL, BT_COMPLEX,
   BT_DERIVED, BT_CHARACTER, BT_CLASS, BT_PROCEDURE, BT_HOLLERITH, BT_VOID,
-  BT_ASSUMED, BT_UNION
+  BT_ASSUMED, BT_UNION, BT_BOZ
 }
 bt;

@@ -1,5 +1,5 @@
 /* ARMv8-M Security Extensions routines.
-   Copyright (C) 2015-2018 Free Software Foundation, Inc.
+   Copyright (C) 2015-2021 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is free software; you can redistribute it and/or modify it
@@ -30,13 +30,14 @@
    address range.  See ACLE changes for ARMv8-M.  */
 
 void *
+__attribute__ ((warn_unused_result))
 cmse_check_address_range (void *p, size_t size, int flags)
 {
   cmse_address_info_t permb, perme;
   char *pb = (char *) p, *pe;
 
   /* Check if the range wraps around.  */
-  if (UINTPTR_MAX - (uintptr_t) p < size)
+  if (__UINTPTR_MAX__ - (__UINTPTR_TYPE__) p < size)
     return NULL;
 
   /* Check if an unknown flag is present.  */
@@ -51,7 +52,8 @@ cmse_check_address_range (void *p, size_t size, int flags)
 
   /* Execute the right variant of the TT instructions.  */
   pe = pb + size - 1;
-  const int singleCheck = (((uintptr_t) pb ^ (uintptr_t) pe) < 32);
+  const int singleCheck
+    = (((__UINTPTR_TYPE__) pb ^ (__UINTPTR_TYPE__) pe) < 32);
   switch (flags & known_secure_level)
     {
     case 0:

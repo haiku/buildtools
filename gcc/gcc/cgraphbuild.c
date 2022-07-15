@@ -1,5 +1,5 @@
 /* Callgraph construction.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
    Contributed by Jan Hubicka
 
 This file is part of GCC.
@@ -36,7 +36,7 @@ along with GCC; see the file COPYING3.  If not see
 struct record_reference_ctx
 {
   bool only_vars;
-  class varpool_node *varpool_node;
+  struct varpool_node *varpool_node;
 };
 
 /* Walk tree and record all calls and references to functions/variables.
@@ -428,12 +428,7 @@ cgraph_edge::rebuild_edges (void)
 	node->record_stmt_references (gsi_stmt (gsi));
     }
   record_eh_tables (node, cfun);
-  gcc_assert (!node->global.inlined_to);
-
-  if (node->instrumented_version
-      && !node->instrumentation_clone)
-    node->create_reference (node->instrumented_version, IPA_REF_CHKP, NULL);
-
+  gcc_assert (!node->inlined_to);
   return 0;
 }
 
@@ -464,10 +459,6 @@ cgraph_edge::rebuild_references (void)
 	node->record_stmt_references (gsi_stmt (gsi));
     }
   record_eh_tables (node, cfun);
-
-  if (node->instrumented_version
-      && !node->instrumentation_clone)
-    node->create_reference (node->instrumented_version, IPA_REF_CHKP, NULL);
 }
 
 namespace {

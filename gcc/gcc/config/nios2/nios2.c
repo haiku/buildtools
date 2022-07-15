@@ -1,5 +1,5 @@
 /* Target machine subroutines for Altera Nios II.
-   Copyright (C) 2012-2018 Free Software Foundation, Inc.
+   Copyright (C) 2012-2021 Free Software Foundation, Inc.
    Contributed by Jonah Graham (jgraham@altera.com), 
    Will Reece (wreece@altera.com), and Jeff DaSilva (jdasilva@altera.com).
    Contributed by Mentor Graphics, Inc.
@@ -1080,7 +1080,7 @@ prologue_saved_reg_p (unsigned regno)
 {
   gcc_assert (GP_REG_P (regno));
   
-  if (df_regs_ever_live_p (regno) && !call_used_regs[regno])
+  if (df_regs_ever_live_p (regno) && !call_used_or_fixed_reg_p (regno))
     return true;
 
   if (regno == HARD_FRAME_POINTER_REGNUM && frame_pointer_needed)
@@ -1179,44 +1179,18 @@ nios2_custom_check_insns (void)
 	for (j = 0; j < ARRAY_SIZE (nios2_fpu_insn); j++)
 	  if (N2FPU_DOUBLE_REQUIRED_P (j) && ! N2FPU_ENABLED_P (j))
 	    {
-	      error ("switch %<-mcustom-%s%> is required for double "
-		     "precision floating point", N2FPU_NAME (j));
+	      error ("switch %<-mcustom-%s%> is required for "
+		     "double-precision floating-point", N2FPU_NAME (j));
 	      errors = true;
 	    }
 	break;
       }
 
-  /* Warn if the user has certain exotic operations that won't get used
-     without -funsafe-math-optimizations.  See expand_builtin () in
-     builtins.c.  */
-  if (!flag_unsafe_math_optimizations)
-    for (i = 0; i < ARRAY_SIZE (nios2_fpu_insn); i++)
-      if (N2FPU_ENABLED_P (i) && N2FPU_UNSAFE_P (i))
-	warning (0, "switch %<-mcustom-%s%> has no effect unless "
-		 "-funsafe-math-optimizations is specified", N2FPU_NAME (i));
-
-  /* Warn if the user is trying to use -mcustom-fmins et. al, that won't
-     get used without -ffinite-math-only.  See fold_builtin_fmin_fmax ()
-     in builtins.c.  */
-  if (!flag_finite_math_only)
-    for (i = 0; i < ARRAY_SIZE (nios2_fpu_insn); i++)
-      if (N2FPU_ENABLED_P (i) && N2FPU_FINITE_P (i))
-	warning (0, "switch %<-mcustom-%s%> has no effect unless "
-		 "-ffinite-math-only is specified", N2FPU_NAME (i));
-
-  /* Warn if the user is trying to use a custom rounding instruction
-     that won't get used without -fno-math-errno.  See
-     expand_builtin_int_roundingfn_2 () in builtins.c.  */
-  if (flag_errno_math)
-    for (i = 0; i < ARRAY_SIZE (nios2_fpu_insn); i++)
-      if (N2FPU_ENABLED_P (i) && N2FPU_NO_ERRNO_P (i))
-	warning (0, "switch %<-mcustom-%s%> has no effect unless "
-		 "-fno-math-errno is specified", N2FPU_NAME (i));
-
   if (errors || custom_code_conflict)
     fatal_error (input_location,
-		 "conflicting use of -mcustom switches, target attributes, "
-		 "and/or __builtin_custom_ functions");
+		 "conflicting use of %<-mcustom%> switches, "
+		 "target attributes, "
+		 "and/or %<__builtin_custom_%> functions");
 }
 
 static void
@@ -1235,7 +1209,7 @@ struct nios2_fpu_config
   int code[n2fpu_code_num];
 };
 
-#define NIOS2_FPU_CONFIG_NUM 3
+#define NIOS2_FPU_CONFIG_NUM 4
 static struct nios2_fpu_config custom_fpu_config[NIOS2_FPU_CONFIG_NUM];
 
 static void
@@ -1274,6 +1248,27 @@ nios2_init_fpu_configs (void)
   cfg->code[n2fpu_fcmples] = 249;
   cfg->code[n2fpu_fcmpeqs] = 250;
   cfg->code[n2fpu_fcmpnes] = 251;
+  cfg->code[n2fpu_fmuls]   = 252;
+  cfg->code[n2fpu_fadds]   = 253;
+  cfg->code[n2fpu_fsubs]   = 254;
+  cfg->code[n2fpu_fdivs]   = 255;
+
+  NEXT_FPU_CONFIG;
+  cfg->name = "fph2";
+  cfg->code[n2fpu_fabss]   = 224;
+  cfg->code[n2fpu_fnegs]   = 225;
+  cfg->code[n2fpu_fcmpnes] = 226;
+  cfg->code[n2fpu_fcmpeqs] = 227;
+  cfg->code[n2fpu_fcmpges] = 228;
+  cfg->code[n2fpu_fcmpgts] = 229;
+  cfg->code[n2fpu_fcmples] = 230;
+  cfg->code[n2fpu_fcmplts] = 231;
+  cfg->code[n2fpu_fmaxs]   = 232;
+  cfg->code[n2fpu_fmins]   = 233;
+  cfg->code[n2fpu_round]   = 248;
+  cfg->code[n2fpu_fixsi]   = 249;
+  cfg->code[n2fpu_floatis] = 250;
+  cfg->code[n2fpu_fsqrts]  = 251;
   cfg->code[n2fpu_fmuls]   = 252;
   cfg->code[n2fpu_fadds]   = 253;
   cfg->code[n2fpu_fsubs]   = 254;
@@ -1362,7 +1357,7 @@ nios2_option_override (void)
     sorry ("position-independent code requires the Linux ABI");
   if (flag_pic && stack_limit_rtx
       && GET_CODE (stack_limit_rtx) == SYMBOL_REF)
-    sorry ("PIC support for -fstack-limit-symbol");
+    sorry ("PIC support for %<-fstack-limit-symbol%>");
 
   /* Function to allocate machine-dependent function status.  */
   init_machine_status = &nios2_init_machine_status;
@@ -1384,11 +1379,11 @@ nios2_option_override (void)
   if (flag_pic)
     {
       if (nios2_gpopt_option != gpopt_none)
-	error ("-mgpopt not supported with PIC.");
+	error ("%<-mgpopt%> not supported with PIC");
       if (nios2_gprel_sec)
-	error ("-mgprel-sec= not supported with PIC.");
+	error ("%<-mgprel-sec=%> not supported with PIC");
       if (nios2_r0rel_sec)
-	error ("-mr0rel-sec= not supported with PIC.");
+	error ("%<-mr0rel-sec=%> not supported with PIC");
     }
 
   /* Process -mgprel-sec= and -m0rel-sec=.  */
@@ -1396,13 +1391,13 @@ nios2_option_override (void)
     {
       if (regcomp (&nios2_gprel_sec_regex, nios2_gprel_sec, 
 		   REG_EXTENDED | REG_NOSUB))
-	error ("-mgprel-sec= argument is not a valid regular expression.");
+	error ("%<-mgprel-sec=%> argument is not a valid regular expression");
     }
   if (nios2_r0rel_sec)
     {
       if (regcomp (&nios2_r0rel_sec_regex, nios2_r0rel_sec, 
 		   REG_EXTENDED | REG_NOSUB))
-	error ("-mr0rel-sec= argument is not a valid regular expression.");
+	error ("%<-mr0rel-sec=%> argument is not a valid regular expression");
     }
 
   /* If we don't have mul, we don't have mulx either!  */
@@ -1447,7 +1442,7 @@ nios2_option_override (void)
   /* Save the initial options in case the user does function specific
      options.  */
   target_option_default_node = target_option_current_node
-    = build_target_option_node (&global_options);
+    = build_target_option_node (&global_options, &global_options_set);
 }
 
 
@@ -1539,6 +1534,19 @@ nios2_rtx_costs (rtx x, machine_mode mode,
 	    *total = COSTS_N_INSNS (2);  /* Latency adjustment.  */
 	  else 
 	    *total = COSTS_N_INSNS (1);
+	  if (TARGET_HAS_MULX && GET_MODE (x) == DImode)
+	    {
+	      enum rtx_code c0 = GET_CODE (XEXP (x, 0));
+	      enum rtx_code c1 = GET_CODE (XEXP (x, 1));
+	      if ((c0 == SIGN_EXTEND && c1 == SIGN_EXTEND)
+		  || (c0 == ZERO_EXTEND && c1 == ZERO_EXTEND))
+		/* This is the <mul>sidi3 pattern, which expands into 4 insns,
+		   2 multiplies and 2 moves.  */
+		{
+		  *total = *total * 2 + COSTS_N_INSNS (2);
+		  return true;
+		}
+	    }
           return false;
         }
 
@@ -2358,6 +2366,22 @@ nios2_in_small_data_p (const_tree exp)
 	  const char *section = DECL_SECTION_NAME (exp);
 	  if (nios2_small_section_name_p (section))
 	    return true;
+	}
+      else if (flexible_array_type_p (TREE_TYPE (exp))
+	       && (!TREE_PUBLIC (exp) || DECL_EXTERNAL (exp)))
+	{
+	  /* We really should not consider any objects of any flexibly-sized
+	     type to be small data, but pre-GCC 10 did not test
+	     for this and just fell through to the next case.  Thus older
+	     code compiled with -mgpopt=global could contain GP-relative
+	     accesses to objects defined in this compilation unit with
+	     external linkage.  We retain the possible small-data treatment
+	     of such definitions for backward ABI compatibility, but
+	     no longer generate GP-relative accesses for external
+	     references (so that the ABI could be changed in the future
+	     with less potential impact), or objects with internal
+	     linkage.  */
+	  return false;
 	}
       else
 	{
@@ -3348,25 +3372,18 @@ nios2_fpu_insn_asm (enum n2fpu_code code)
    push the argument on the stack, or a hard register in which to
    store the argument.
 
-   MODE is the argument's machine mode.
-   TYPE is the data type of the argument (as a tree).
-   This is null for libcalls where that information may
-   not be available.
    CUM is a variable of type CUMULATIVE_ARGS which gives info about
    the preceding args and about the function being called.
-   NAMED is nonzero if this argument is a named parameter
-   (otherwise it is an extra parameter matching an ellipsis).  */
+   ARG is a description of the argument.  */
 
 static rtx
-nios2_function_arg (cumulative_args_t cum_v, machine_mode mode,
-		    const_tree type ATTRIBUTE_UNUSED,
-		    bool named ATTRIBUTE_UNUSED)
+nios2_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v); 
   rtx return_rtx = NULL_RTX;
 
   if (cum->regs_used < NUM_ARG_REGS)
-    return_rtx = gen_rtx_REG (mode, FIRST_ARG_REGNO + cum->regs_used);
+    return_rtx = gen_rtx_REG (arg.mode, FIRST_ARG_REGNO + cum->regs_used);
 
   return return_rtx;
 }
@@ -3376,20 +3393,11 @@ nios2_function_arg (cumulative_args_t cum_v, machine_mode mode,
    in memory.  */
 
 static int
-nios2_arg_partial_bytes (cumulative_args_t cum_v,
-                         machine_mode mode, tree type ATTRIBUTE_UNUSED,
-                         bool named ATTRIBUTE_UNUSED)
+nios2_arg_partial_bytes (cumulative_args_t cum_v, const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v); 
-  HOST_WIDE_INT param_size;
-
-  if (mode == BLKmode)
-    {
-      param_size = int_size_in_bytes (type);
-      gcc_assert (param_size >= 0);
-    }
-  else
-    param_size = GET_MODE_SIZE (mode);
+  HOST_WIDE_INT param_size = arg.promoted_size_in_bytes ();
+  gcc_assert (param_size >= 0);
 
   /* Convert to words (round up).  */
   param_size = (UNITS_PER_WORD - 1 + param_size) / UNITS_PER_WORD;
@@ -3401,25 +3409,15 @@ nios2_arg_partial_bytes (cumulative_args_t cum_v,
   return 0;
 }
 
-/* Update the data in CUM to advance over an argument of mode MODE
-   and data type TYPE; TYPE is null for libcalls where that information
-   may not be available.  */
+/* Update the data in CUM to advance over argument ARG.  */
 
 static void
-nios2_function_arg_advance (cumulative_args_t cum_v, machine_mode mode,
-			    const_tree type ATTRIBUTE_UNUSED,
-			    bool named ATTRIBUTE_UNUSED)
+nios2_function_arg_advance (cumulative_args_t cum_v,
+			    const function_arg_info &arg)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v); 
-  HOST_WIDE_INT param_size;
-
-  if (mode == BLKmode)
-    {
-      param_size = int_size_in_bytes (type);
-      gcc_assert (param_size >= 0);
-    }
-  else
-    param_size = GET_MODE_SIZE (mode);
+  HOST_WIDE_INT param_size = arg.promoted_size_in_bytes ();
+  gcc_assert (param_size >= 0);
 
   /* Convert to words (round up).  */
   param_size = (UNITS_PER_WORD - 1 + param_size) / UNITS_PER_WORD;
@@ -3511,8 +3509,8 @@ nios2_return_in_memory (const_tree type, const_tree fntype ATTRIBUTE_UNUSED)
    own va_arg type.  */
 static void
 nios2_setup_incoming_varargs (cumulative_args_t cum_v,
-                              machine_mode mode, tree type,
-                              int *pretend_size, int second_time)
+			      const function_arg_info &arg,
+			      int *pretend_size, int second_time)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v); 
   CUMULATIVE_ARGS local_cum;
@@ -3522,7 +3520,7 @@ nios2_setup_incoming_varargs (cumulative_args_t cum_v,
 
   cfun->machine->uses_anonymous_args = 1;
   local_cum = *cum;
-  nios2_function_arg_advance (local_cum_v, mode, type, true);
+  nios2_function_arg_advance (local_cum_v, arg);
 
   regs_to_push = NUM_ARG_REGS - local_cum.regs_used;
 
@@ -3577,8 +3575,9 @@ nios2_expand_fpu_builtin (tree exp, unsigned int code, rtx target)
 
   if (N2FPU_N (code) < 0)
     fatal_error (input_location,
-		 "Cannot call %<__builtin_custom_%s%> without specifying switch"
-		 " %<-mcustom-%s%>", N2FPU_NAME (code), N2FPU_NAME (code));
+		 "cannot call %<__builtin_custom_%s%> without specifying "
+		 "switch %<-mcustom-%s%>",
+		 N2FPU_NAME (code), N2FPU_NAME (code));
   if (has_target_p)
     create_output_operand (&ops[opno++], target, dst_mode);
   else
@@ -3644,10 +3643,10 @@ nios2_init_custom_builtins (int start_code)
 	    = build_function_type_list (ret_type, integer_type_node,
 					op[rhs1].type, op[rhs2].type,
 					NULL_TREE);
-	  snprintf (builtin_name + n, 32 - n, "%sn%s%s",
-		    op[lhs].c, op[rhs1].c, op[rhs2].c);
 	  /* Save copy of parameter string into custom_builtin_name[].  */
-	  strncpy (custom_builtin_name[builtin_code], builtin_name + n, 5);
+	  snprintf (custom_builtin_name[builtin_code], 5, "%sn%s%s",
+		    op[lhs].c, op[rhs1].c, op[rhs2].c);
+	  strncpy (builtin_name + n, custom_builtin_name[builtin_code], 5);
 	  fndecl =
 	    add_builtin_function (builtin_name, builtin_ftype,
 				  start_code + builtin_code,
@@ -3685,8 +3684,8 @@ nios2_expand_custom_builtin (tree exp, unsigned int index, rtx target)
       if (argno == 0)
 	{
 	  if (!custom_insn_opcode (value, VOIDmode))
-	    error ("custom instruction opcode must be compile time "
-		   "constant in the range 0-255 for __builtin_custom_%s",
+	    error ("custom instruction opcode must be a compile-time "
+		   "constant in the range 0-255 for %<__builtin_custom_%s%>",
 		   custom_builtin_name[index]);
 	}
       else
@@ -3890,7 +3889,7 @@ nios2_expand_rdwrctl_builtin (tree exp, rtx target,
   struct expand_operand ops[MAX_RECOG_OPERANDS];
   if (!rdwrctl_operand (ctlcode, VOIDmode))
     {
-      error ("Control register number must be in range 0-31 for %s",
+      error ("control register number must be in range 0-31 for %s",
 	     d->name);
       return has_target_p ? gen_reg_rtx (SImode) : const0_rtx;
     }
@@ -3918,14 +3917,14 @@ nios2_expand_rdprs_builtin (tree exp, rtx target,
 
   if (!rdwrctl_operand (reg, VOIDmode))
     {
-      error ("Register number must be in range 0-31 for %s",
+      error ("register number must be in range 0-31 for %s",
 	     d->name);
       return gen_reg_rtx (SImode);
     }
 
   if (!rdprs_dcache_operand (imm, VOIDmode))
     {
-      error ("The immediate value must fit into a %d-bit integer for %s",
+      error ("immediate value must fit into a %d-bit integer for %s",
 	     (TARGET_ARCH_R2) ? 12 : 16, d->name);
       return gen_reg_rtx (SImode);
     }
@@ -3975,7 +3974,7 @@ nios2_expand_eni_builtin (tree exp, rtx target ATTRIBUTE_UNUSED,
 
   if (INTVAL (imm) != 0 && INTVAL (imm) != 1)
     {
-      error ("The ENI instruction operand must be either 0 or 1");
+      error ("the ENI instruction operand must be either 0 or 1");
       return const0_rtx;      
     }
   create_integer_operand (&ops[0], INTVAL (imm));
@@ -3995,7 +3994,7 @@ nios2_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 		      int ignore ATTRIBUTE_UNUSED)
 {
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
-  unsigned int fcode = DECL_FUNCTION_CODE (fndecl);
+  unsigned int fcode = DECL_MD_FUNCTION_CODE (fndecl);
 
   if (fcode < nios2_fpu_builtin_base)
     {
@@ -4003,7 +4002,7 @@ nios2_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 
       if (d->arch > nios2_arch_option)
 	{
-	  error ("Builtin function %s requires Nios II R%d",
+	  error ("built-in function %s requires Nios II R%d",
 		 d->name, (int) d->arch);
 	  /* Given it is invalid, just generate a normal call.  */
 	  return expand_call (exp, target, ignore);
@@ -4083,14 +4082,16 @@ nios2_register_custom_code (unsigned int N, enum nios2_ccs_code status,
       if (custom_code_status[N] == CCS_FPU && index != custom_code_index[N])
 	{
 	  custom_code_conflict = true;
-	  error ("switch %<-mcustom-%s%> conflicts with switch %<-mcustom-%s%>",
+	  error ("switch %<-mcustom-%s%> conflicts with "
+		 "switch %<-mcustom-%s%>",
 		 N2FPU_NAME (custom_code_index[N]), N2FPU_NAME (index));
 	}
       else if (custom_code_status[N] == CCS_BUILTIN_CALL)
 	{
 	  custom_code_conflict = true;
-	  error ("call to %<__builtin_custom_%s%> conflicts with switch "
-		 "%<-mcustom-%s%>", custom_builtin_name[custom_code_index[N]],
+	  error ("call to %<__builtin_custom_%s%> conflicts with "
+		 "switch %<-mcustom-%s%>",
+		 custom_builtin_name[custom_code_index[N]],
 		 N2FPU_NAME (index));
 	}
     }
@@ -4099,8 +4100,9 @@ nios2_register_custom_code (unsigned int N, enum nios2_ccs_code status,
       if (custom_code_status[N] == CCS_FPU)
 	{
 	  custom_code_conflict = true;
-	  error ("call to %<__builtin_custom_%s%> conflicts with switch "
-		 "%<-mcustom-%s%>", custom_builtin_name[index],
+	  error ("call to %<__builtin_custom_%s%> conflicts with "
+		 "switch %<-mcustom-%s%>",
+		 custom_builtin_name[index],
 		 N2FPU_NAME (custom_code_index[N]));
 	}
       else
@@ -4133,7 +4135,8 @@ nios2_deregister_custom_code (unsigned int N)
 
 static void
 nios2_option_save (struct cl_target_option *ptr,
-		   struct gcc_options *opts ATTRIBUTE_UNUSED)
+		   struct gcc_options *opts ATTRIBUTE_UNUSED,
+		   struct gcc_options *opts_set ATTRIBUTE_UNUSED)
 {
   unsigned int i;
   for (i = 0; i < ARRAY_SIZE (nios2_fpu_insn); i++)
@@ -4146,6 +4149,7 @@ nios2_option_save (struct cl_target_option *ptr,
 
 static void
 nios2_option_restore (struct gcc_options *opts ATTRIBUTE_UNUSED,
+		      struct gcc_options *opts_set ATTRIBUTE_UNUSED,
 		      struct cl_target_option *ptr)
 {
   unsigned int i;
@@ -4205,13 +4209,13 @@ nios2_valid_target_attribute_rec (tree args)
 	      char *end_eq = p;
 	      if (no_opt)
 		{
-		  error ("custom-fpu-cfg option does not support %<no-%>");
+		  error ("%<custom-fpu-cfg%> option does not support %<no-%>");
 		  return false;
 		}
 	      if (!eq)
 		{
-		  error ("custom-fpu-cfg option requires configuration"
-			 " argument");
+		  error ("%<custom-fpu-cfg%> option requires configuration "
+			 "argument");
 		  return false;
 		}
 	      /* Increment and skip whitespace.  */
@@ -4264,8 +4268,8 @@ nios2_valid_target_attribute_rec (tree args)
 			    continue;
 			  if (!ISDIGIT (*t))
 			    {			 
-			      error ("`custom-%s=' argument requires "
-				     "numeric digits", N2FPU_NAME (code));
+			      error ("%<custom-%s=%> argument should be "
+				     "a non-negative integer", N2FPU_NAME (code));
 			      return false;
 			    }
 			}
@@ -4283,7 +4287,7 @@ nios2_valid_target_attribute_rec (tree args)
 	    }
 	  else
 	    {
-	      error ("%<%s%> is unknown", argstr);
+	      error ("invalid custom instruction option %qs", argstr);
 	      return false;
 	    }
 
@@ -4306,7 +4310,7 @@ nios2_valid_target_attribute_tree (tree args)
   if (!nios2_valid_target_attribute_rec (args))
     return NULL_TREE;
   nios2_custom_check_insns ();
-  return build_target_option_node (&global_options);
+  return build_target_option_node (&global_options, &global_options_set);
 }
 
 /* Hook to validate attribute((target("string"))).  */
@@ -4317,21 +4321,22 @@ nios2_valid_target_attribute_p (tree fndecl, tree ARG_UNUSED (name),
 {
   struct cl_target_option cur_target;
   bool ret = true;
-  tree old_optimize = build_optimization_node (&global_options);
+  tree old_optimize
+    = build_optimization_node (&global_options, &global_options_set);
   tree new_target, new_optimize;
   tree func_optimize = DECL_FUNCTION_SPECIFIC_OPTIMIZATION (fndecl);
 
   /* If the function changed the optimization levels as well as setting target
      options, start with the optimizations specified.  */
   if (func_optimize && func_optimize != old_optimize)
-    cl_optimization_restore (&global_options,
+    cl_optimization_restore (&global_options, &global_options_set,
 			     TREE_OPTIMIZATION (func_optimize));
 
   /* The target attributes may also change some optimization flags, so update
      the optimization options if necessary.  */
-  cl_target_option_save (&cur_target, &global_options);
+  cl_target_option_save (&cur_target, &global_options, &global_options_set);
   new_target = nios2_valid_target_attribute_tree (args);
-  new_optimize = build_optimization_node (&global_options);
+  new_optimize = build_optimization_node (&global_options, &global_options_set);
 
   if (!new_target)
     ret = false;
@@ -4344,10 +4349,10 @@ nios2_valid_target_attribute_p (tree fndecl, tree ARG_UNUSED (name),
 	DECL_FUNCTION_SPECIFIC_OPTIMIZATION (fndecl) = new_optimize;
     }
 
-  cl_target_option_restore (&global_options, &cur_target);
+  cl_target_option_restore (&global_options, &global_options_set, &cur_target);
 
   if (old_optimize != new_optimize)
-    cl_optimization_restore (&global_options,
+    cl_optimization_restore (&global_options, &global_options_set,
 			     TREE_OPTIMIZATION (old_optimize));
   return ret;
 }
@@ -4377,7 +4382,7 @@ nios2_set_current_function (tree fndecl)
 
       else if (new_tree)
 	{
-	  cl_target_option_restore (&global_options,
+	  cl_target_option_restore (&global_options, &global_options_set,
 				    TREE_TARGET_OPTION (new_tree));
 	  target_reinit ();
 	}
@@ -4387,7 +4392,7 @@ nios2_set_current_function (tree fndecl)
 	  struct cl_target_option *def
 	    = TREE_TARGET_OPTION (target_option_current_node);
 
-	  cl_target_option_restore (&global_options, def);
+	  cl_target_option_restore (&global_options, &global_options_set, def);
 	  target_reinit ();
 	}
     }
@@ -4405,7 +4410,7 @@ nios2_pragma_target_parse (tree args, tree pop_target)
       cur_tree = ((pop_target)
 		  ? pop_target
 		  : target_option_default_node);
-      cl_target_option_restore (&global_options,
+      cl_target_option_restore (&global_options, &global_options_set,
 				TREE_TARGET_OPTION (cur_tree));
     }
   else
@@ -4455,6 +4460,7 @@ nios2_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 			   HOST_WIDE_INT delta, HOST_WIDE_INT vcall_offset,
 			   tree function)
 {
+  const char *fnname = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (thunk_fndecl));
   rtx this_rtx, funexp;
   rtx_insn *insn;
 
@@ -4504,13 +4510,14 @@ nios2_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 
   /* Run just enough of rest_of_compilation to get the insns emitted.
      There's not really enough bulk here to make other passes such as
-     instruction scheduling worth while.  Note that use_thunk calls
-     assemble_start_function and assemble_end_function.  */
+     instruction scheduling worth while.  */
   insn = get_insns ();
   shorten_branches (insn);
+  assemble_start_function (thunk_fndecl, fnname);
   final_start_function (insn, file, 1);
   final (insn, file, 1);
   final_end_function ();
+  assemble_end_function (thunk_fndecl, fnname);
 
   /* Stop pretending to be a post-reload pass.  */
   reload_completed = 0;
@@ -4705,7 +4712,7 @@ nios2_add_insn_asm (rtx_insn *insn, rtx *operands)
 bool
 nios2_cdx_narrow_form_p (rtx_insn *insn)
 {
-  rtx pat, lhs, rhs1, rhs2;
+  rtx pat, lhs, rhs1 = NULL_RTX, rhs2 = NULL_RTX;
   enum attr_type type;
   if (!TARGET_HAS_CDX)
     return false;
@@ -5403,8 +5410,8 @@ nios2_label_align (rtx label)
   int n = CODE_LABEL_NUMBER (label);
 
   if (label_align && n >= min_labelno && n <= max_labelno)
-    return MAX (label_align[n - min_labelno], align_labels_log);
-  return align_labels_log;
+    return MAX (label_align[n - min_labelno], align_labels.levels[0].log);
+  return align_labels.levels[0].log;
 }
 
 /* Implement ADJUST_REG_ALLOC_ORDER.  We use the default ordering
@@ -5571,6 +5578,9 @@ nios2_adjust_reg_alloc_order (void)
 
 #undef TARGET_CONSTANT_ALIGNMENT
 #define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
+
+#undef TARGET_HAVE_SPECULATION_SAFE_VALUE
+#define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

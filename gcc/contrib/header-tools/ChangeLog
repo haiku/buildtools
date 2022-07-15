@@ -1,14 +1,15 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
 
-2018-07-26  Release Manager
+2021-04-27  Release Manager
 
-	* GCC 8.2.0 released.
+	* GCC 11.1.0 released.
 
-2018-05-02  Release Manager
+2019-09-03  Ulrich Weigand  <uweigand@de.ibm.com>
 
-	* GCC 8.1.0 released.
+	* README: Remove references to spu.
+	* reduce-headers: Likewise.
 
 2017-07-02  Richard Sandiford  <richard.sandiford@linaro.org>
 	    Alan Hayward  <alan.hayward@arm.com>

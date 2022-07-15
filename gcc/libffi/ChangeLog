@@ -1,14 +1,121 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
 
-2018-07-26  Release Manager
+2021-06-17  Jakub Jelinek  <jakub@redhat.com>
 
-	* GCC 8.2.0 released.
+	Backported from master:
+	2021-06-16  Jakub Jelinek  <jakub@redhat.com>
 
-2018-05-02  Release Manager
+	* src/x86/ffi64.c (classify_argument): For FFI_TYPE_STRUCT set words
+	to number of words needed for type->size + byte_offset bytes rather
+	than just type->size bytes.  Compute pos before the loop and check
+	total size of the structure.
+	* testsuite/libffi.call/nested_struct12.c: New test.
 
-	* GCC 8.1.0 released.
+2021-04-27  Release Manager
+
+	* GCC 11.1.0 released.
+
+2021-01-05  Samuel Thibault  <samuel.thibault@ens-lyon.org>
+
+	* configure: Re-generate.
+
+2020-12-05  Iain Sandoe  <iain@sandoe.co.uk>
+
+	PR target/97865
+	* configure: Regenerate.
+
+2020-11-29  John David Anglin  <danglin@gcc.gnu.org>
+
+	* configure: Regenerate.
+
+2020-09-24  Alan Modra  <amodra@gmail.com>
+
+	* src/powerpc/linux64_closure.S (ffi_closure_LINUX64): Correct
+	location of .Lret.
+
+2020-09-24  Alan Modra  <amodra@gmail.com>
+
+	* src/powerpc/linux64.S (ffi_call_LINUX64): Don't emit global
+	entry when __PCREL__.  Call using @notoc.  Add nops.
+	* src/powerpc/linux64_closure.S (ffi_closure_LINUX64): Likewise.
+	(ffi_go_closure_linux64): Likewise.
+
+2020-04-25  Maciej W. Rozycki  <macro@wdc.com>
+
+	* Makefile.am (DISTCLEANFILES): New variable.
+	* configure.ac: Produce `local.exp'.
+	* Makefile.in: Regenerate.
+	* configure: Regenerate.
+	* testsuite/Makefile.am (EXTRA_DEJAGNU_SITE_CONFIG): New
+	variable.
+	* testsuite/Makefile.in: Regenerate.
+
+2020-01-24  Maciej W. Rozycki  <macro@wdc.com>
+
+	* configure.ac: Handle `--with-toolexeclibdir='.
+	* Makefile.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* include/Makefile.in: Regenerate.
+	* man/Makefile.in: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
+
+2019-09-27  Maciej W. Rozycki  <macro@wdc.com>
+
+	* configure: Regenerate.
+
+2019-09-03  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	PR other/79543
+	* acinclude.m4 (LIBAT_CHECK_LINKER_FEATURES): Fix GNU ld --version
+	scanning to conform to the GNU Coding Standards.
+	* configure: Regenerate.
+
+2018-10-31  Joseph Myers  <joseph@codesourcery.com>
+
+	PR bootstrap/82856
+	* Makefile.am: Include multilib.am.
+	(AUTOMAKE_OPTIONS): Add info-in-builddir.
+	(CLEANFILES): Remove doc/libffi.info.
+	* configure.ac: Remove AC_PREREQ.
+	* Makefile.in, aclocal.m4, configure, fficonfig.h.in,
+	include/Makefile.in, man/Makefile.in, testsuite/Makefile.in:
+	Regenerate.
+
+2018-08-15  Andreas Schwab  <schwab@suse.de>
+
+	Backport of RISC-V support for libffi go closures
+	* src/riscv/ffi.c (ffi_call_go, ffi_prep_go_closure): New
+	functions.
+	(ffi_call_int): Renamed from ffi_call.
+	(ffi_call_asm, ffi_closure_inner): Adjust interface.
+	* src/riscv/ffitarget.h (FFI_GO_CLOSURES): Define.
+	* src/riscv/sysv.S (ffi_go_closure_asm): New function.
+	(ffi_closure_asm, ffi_call_asm): Update for adjusted interfaces.
+
+2018-05-08  Andreas Schwab  <schwab@suse.de>
+
+	Backport of RISC-V support for libffi
+	* configure.host: Add RISC-V support.
+	* Makefile.am: Likewise.
+	* Makefile.in: Regenerate.
+	* src/riscv/ffi.c, src/riscv/ffitarget.h, src/riscv/sysv.S: New
+	files.
+
+2018-05-04  Alan Modra  <amodra@gmail.com>
+
+	Import from upstream
+	* src/powerpc/ffi_linux64.c (discover_homogeneous_aggregate):
+	Compile for ELFv1 too, handling single element aggregates.
+	(ffi_prep_cif_linux64_core): Call discover_homogeneous_aggregate
+	for ELFv1.  Set FLAG_RETURNS_64BITS for FFI_TYPE_POINTER return.
+	(ffi_prep_args64): Call discover_homogeneous_aggregate for ELFv1,
+	and handle single element structs containing float or double
+	as if the element wasn't wrapped in a struct.  Store floats in
+	second word of doubleword slot when big-endian.
+	(ffi_closure_helper_LINUX64): Similarly.
 
 2018-04-18  David Malcolm  <dmalcolm@redhat.com>
 
@@ -441,7 +548,7 @@
 	* configure: Rebuild.
 
 2012-10-30  James Greenhalgh  <james.greenhalgh at arm.com>
-            Marcus Shawcroft  <marcus.shawcroft at arm.com>
+	    Marcus Shawcroft  <marcus.shawcroft at arm.com>
 
 	* README: Add details of aarch64 port.
 	* src/aarch64/ffi.c: New.
@@ -452,7 +559,7 @@
 	* Makefile.in, configure: Rebuilt.
 
 2012-10-30  James Greenhalgh  <james.greenhalgh at arm.com>
-            Marcus Shawcroft  <marcus.shawcroft at arm.com>
+	    Marcus Shawcroft  <marcus.shawcroft at arm.com>
 
 	* testsuite/lib/libffi.exp: Add support for aarch64.
 	* testsuite/libffi.call/cls_struct_va1.c: New.

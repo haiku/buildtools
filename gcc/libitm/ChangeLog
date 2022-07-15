@@ -1,22 +1,216 @@
-2019-02-22  Release Manager
+2021-07-28  Release Manager
 
-	* GCC 8.3.0 released.
+	* GCC 11.2.0 released.
+
+2021-06-18  Jonathan Wakely  <jwakely@redhat.com>
+
+	Backported from master:
+	2021-06-17  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/91488
+	* testsuite/libitm.c++/libstdc++-pr91488.C: New test.
+
+2021-04-27  Release Manager
+
+	* GCC 11.1.0 released.
+
+2021-01-15  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/70454
+	* configure.tgt: For i?86 and x86_64 determine if -march=i486 needs to
+	be added through preprocessor check on
+	__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4.
+
+2021-01-05  Samuel Thibault  <samuel.thibault@ens-lyon.org>
+
+	* configure: Re-generate.
+
+2021-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	* libitm.texi: Bump @copying's copyright year.
+
+2020-12-05  Iain Sandoe  <iain@sandoe.co.uk>
+
+	PR target/97865
+	* configure.tgt: Add dynamic_lookup to XLDFLAGS for Darwin.
+	* configure: Regenerate.
+
+2020-11-29  John David Anglin  <danglin@gcc.gnu.org>
+
+	* configure: Regenerate.
+
+2020-10-01  Alan Modra  <amodra@gmail.com>
+
+	* config/powerpc/sjlj.S: Support __PCREL__ code.
+
+2020-07-24  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	* config/aarch64/sjlj.S: Add conditional pac-ret protection.
+
+2020-07-09  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	* config/aarch64/sjlj.S: Add BTI marking and related definitions,
+	and add BTI c to function entries.
+
+2020-07-09  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	* config/aarch64/sjlj.S: Add stack note if __FreeBSD__ is defined.
+
+2020-05-29  H.J. Lu  <hjl.tools@gmail.com>
+
+	PR bootstrap/95413
+	* configure: Regenerated.
+
+2020-05-15  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR bootstrap/95147
+	* configure: Regenerated.
+
+2020-05-14  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* configure: Regenerated.
+
+2020-05-12  Nathan Sidwell  <nathan@acm.org>
+
+	Fix throw specifiers on interface.
+	* libitm/libitm.h (_ITM_NOTHROW): Define.
+	(_ITM_cxa_allocate_exception, _ITM_cxa_free_exception)
+	(_ITM_cxa_begin_catch): Use it.
+	* eh_cpp.cc: Add throw() to __cxa_allocate_exception,
+	__cxa_free_exception, __cxa_begin_catch, __cxa_tm_cleanup,
+	__cxa_get_globals.
+	(_ITM_cxa_allocate_exception, _ITM_cxa_free_exception)
+	(_ITM_cxa_begin_catch): Likewise.
+
+2020-05-05  Nathan Sidwell  <nathan@acm.org>
+
+	* testsuite/lib/libitm.exp (libitm_init): Add
+	-fdiagnostics-color=never to options.
+
+2020-02-12  Sandra Loosemore  <sandra@codesourcery.com>
+
+	PR libstdc++/79193
+	PR libstdc++/88999
+
+	* configure: Regenerated.
+
+2020-01-24  Maciej W. Rozycki  <macro@wdc.com>
+
+	* configure.ac: Handle `--with-toolexeclibdir='.
+	* Makefile.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* testsuite/Makefile.in: Regenerate.
+
+2020-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+	* libitm.texi: Bump @copying's copyright year.
+
+2019-12-03  Szabolcs Nagy  <szabolcs.nagy@arm.com>
+
+	PR libgomp/91938
+	* configure.tgt: Avoid IE tls on *-*-musl*.
+
+2019-09-27  Maciej W. Rozycki  <macro@wdc.com>
+
+	* configure: Regenerate.
+
+2019-09-10  Christophe Lyon  <christophe.lyon@st.com>
+
+	* config/arm/sjlj.S (ldaddr): Add FDPIC support.
+
+2019-09-10  Christophe Lyon  <christophe.lyon@st.com>
+
+	* configure.tgt: Handle *-*-uclinux*.
+	* configure: Regenerate.
+
+2019-09-06  Florian Weimer  <fweimer@redhat.com>
+
+	* configure: Regenerate.
+
+2019-09-03  Chung-Lin Tang  <cltang@codesourcery.com>
+
+	PR other/79543
+	* acinclude.m4 (LIBITM_CHECK_LINKER_FEATURES): Fix GNU ld --version
+	scanning to conform to the GNU Coding Standards.
+	* configure: Regenerate.
+
+2019-05-03  Jakub Jelinek  <jakub@redhat.com>
+
+	* Makefile.am (finclude): Remove.
+	* Makefile.in: Regenerated.
+
+2019-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	Update copyright years.
+
+2019-01-01  Jakub Jelinek  <jakub@redhat.com>
+
+	* libitm.texi: Bump @copying's copyright year.
+
+2018-12-16  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/88482
+	* eh_cpp.cc (__cxa_throw): Change DEST argument type from
+	void * to void (*) (void *).
+	(_ITM_cxa_throw): Likewise.
+	* libitm.h (_ITM_cxa_throw): Likewise.
+	* libitm.texi (_ITM_cxa_throw): Likewise.
 
 2018-12-13  Peter Bergner  <bergner@linux.ibm.com>
-
-	Backport from mainline
-	2018-12-13  Peter Bergner  <bergner@linux.ibm.com>
 
 	* config/powerpc/target.h (htm_available):  Add support for
 	PPC_FEATURE2_HTM_NO_SUSPEND.  Use __builtin_cpu_supports if available.
 
-2018-07-26  Release Manager
+2018-10-31  Joseph Myers  <joseph@codesourcery.com>
 
-	* GCC 8.2.0 released.
+	PR bootstrap/82856
+	* Makefile.am: Include multilib.am.
+	(AUTOMAKE_OPTIONS): Add info-in-builddir.
+	(CLEANFILES): Remove libitm.info.
+	* configure.ac: Remove AC_PREREQ.
+	* testsuite/Makefile.am (RUNTEST): Remove quotes.
+	* Makefile.in, aclocal.m4, configure, testsuite/Makefile.in:
+	Regenerate.
 
-2018-05-02  Release Manager
+2018-10-30  Nicholas Krause <xerofoify@gmail.com>
 
-	* GCC 8.1.0 released.
+	PR libitm/86293
+	* method-serial.cc: Mark varible as potentially unused
+	to silence warning.
+
+2018-08-03  Sergei Trofimovich  <slyfox@gentoo.org>
+
+	* config/sh/sjlj.S: Adjust to use PIC vs normal code to avoid
+	absolute relocation in a shared library.
+
+2018-06-12  H.J. Lu  <hongjiu.lu@intel.com>
+
+	PR libitm/85988
+	* config/linux/x86/tls.h (SEG_READ): Use the offset of
+	__private_tm as base.
+	(SEG_WRITE): Likewise.
+	(SEG_ENCODE_WRITE): Correct the offset of pointer_guard for x32.
+	(gtm_thr): Replace SEG_READ(10) with SEG_READ(0).
+	(set_gtm_thr): Replace SEG_WRITE(10) with SEG_WRITE(0).
+	(abi_disp): Replace SEG_DECODE_READ(11) with SEG_DECODE_READ(1).
+	(set_abi_disp): Replace SEG_ENCODE_WRITE(11) with
+
+2018-05-17  Jason Merrill  <jason@redhat.com>
+
+	* beginend.cc (save): Disable -Werror=deprecated-copy.
+
+2018-05-02  Tom de Vries  <tom@codesourcery.com>
+
+	PR testsuite/85106
+	* testsuite/lib/libitm.exp: Include scanltranstree.exp.
+
+2018-05-02  Tom de Vries  <tom@codesourcery.com>
+
+	PR testsuite/85106
+	* testsuite/lib/libitm.exp: Include scanwpaipa.exp.
 
 2018-04-24  H.J. Lu  <hongjiu.lu@intel.com>
 
@@ -2115,7 +2309,7 @@
 
 	* Initial commit.
 
-Copyright (C) 2008-2018 Free Software Foundation, Inc.
+Copyright (C) 2008-2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

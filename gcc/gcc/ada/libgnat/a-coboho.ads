@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---            Copyright (C) 2015-2018, Free Software Foundation, Inc.       --
+--            Copyright (C) 2015-2020, Free Software Foundation, Inc.       --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -30,6 +30,7 @@
 ------------------------------------------------------------------------------
 
 private with System;
+private with Ada.Strings.Text_Output;
 
 generic
    type Element_Type (<>) is private;
@@ -88,15 +89,18 @@ private
    pragma Assert (Element_Type'Alignment <= Standard'Maximum_Alignment);
    --  This prevents elements with a user-specified Alignment that is too big
 
-   type Storage_Element is mod System.Storage_Unit;
+   type Storage_Element is mod 2 ** System.Storage_Unit;
    type Storage_Array is array (Positive range <>) of Storage_Element;
    type Holder is record
       Data : Storage_Array (1 .. Max_Size_In_Storage_Elements);
    end record
-     with Alignment => Standard'Maximum_Alignment;
+     with Alignment => Standard'Maximum_Alignment, Put_Image => Put_Image;
    --  We would like to say "Alignment => Element_Type'Alignment", but that
    --  is illegal because it's not static, so we use the maximum possible
    --  (default) alignment instead.
+
+   procedure Put_Image
+     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Holder);
 
    type Element_Access is access all Element_Type;
    pragma Assert (Element_Access'Size = Standard'Address_Size,

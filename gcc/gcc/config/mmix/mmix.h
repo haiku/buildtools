@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for MMIX.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
    Contributed by Hans-Peter Nilsson (hp@bitrange.com)
 
 This file is part of GCC.
@@ -577,6 +577,9 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 
 #define SLOW_BYTE_ACCESS 0
 
+/* A PUSHJ doesn't cost more than a PUSHGO, so don't needlessly create
+   the latter.  */
+#define NO_FUNCTION_CSE 1
 
 /* Node: Sections */
 
@@ -616,6 +619,11 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 
 #define ASM_OUTPUT_ASCII(STREAM, PTR, LEN) \
  mmix_asm_output_ascii (STREAM, PTR, LEN)
+
+/* Make output more ELF-like, by emitting .hidden for hidden symbols
+   (which don't really matter for mmix-knuth-mmixware). */
+#define ASM_OUTPUT_EXTERNAL(FILE, DECL, NAME) \
+ default_elf_asm_output_external (FILE, DECL, NAME)
 
 /* Node: Uninitialized Data */
 
@@ -788,8 +796,6 @@ typedef struct { int regs; int lib; } CUMULATIVE_ARGS;
 #define Pmode DImode
 
 #define FUNCTION_MODE QImode
-
-#define NO_IMPLICIT_EXTERN_C
 
 /* mmix-knuth-mmixware target has no support of C99 runtime */
 #undef TARGET_LIBC_HAS_FUNCTION

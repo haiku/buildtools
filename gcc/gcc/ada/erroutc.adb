@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -52,9 +52,15 @@ package body Erroutc is
    -----------------------
 
    function Matches (S : String; P : String) return Boolean;
-   --  Returns true if the String S patches the pattern P, which can contain
-   --  wild card chars (*). The entire pattern must match the entire string.
+   --  Returns true if the String S matches the pattern P, which can contain
+   --  wildcard chars (*). The entire pattern must match the entire string.
    --  Case is ignored in the comparison (so X matches x).
+
+   function Sloc_In_Range (Loc, Start, Stop : Source_Ptr) return Boolean;
+   --  Return whether Loc is in the range Start .. Stop, taking instantiation
+   --  locations of Loc into account. This is useful for suppressing warnings
+   --  from generic instantiations by using pragma Warnings around generic
+   --  instances, as needed in GNATprove.
 
    ---------------
    -- Add_Class --
@@ -243,13 +249,47 @@ package body Erroutc is
    ------------------------
 
    function Compilation_Errors return Boolean is
+      Warnings_Count : constant Int
+         := Warnings_Detected - Warning_Info_Messages;
    begin
-      return
-        Total_Errors_Detected /= 0
-          or else (Warnings_Detected - Warning_Info_Messages /= 0
-                    and then Warning_Mode = Treat_As_Error)
-          or else Warnings_Treated_As_Errors /= 0;
+      if Total_Errors_Detected /= 0 then
+         return True;
+
+      elsif Warnings_Treated_As_Errors /= 0 then
+         return True;
+
+      --  We should never treat warnings that originate from a
+      --  Compile_Time_Warning pragma as an error. Warnings_Count is the sum
+      --  of both "normal" and Compile_Time_Warning warnings. This means that
+      --  there are only one or more non-Compile_Time_Warning warnings when
+      --  Warnings_Count is greater than Count_Compile_Time_Pragma_Warnings.
+
+      elsif Warning_Mode = Treat_As_Error
+         and then Warnings_Count > Count_Compile_Time_Pragma_Warnings
+      then
+         return True;
+      end if;
+
+      return False;
    end Compilation_Errors;
+
+   ----------------------------------------
+   -- Count_Compile_Time_Pragma_Warnings  --
+   ----------------------------------------
+
+   function Count_Compile_Time_Pragma_Warnings return Int is
+      Result : Int := 0;
+   begin
+      for J in 1 .. Errors.Last loop
+         begin
+            if Errors.Table (J).Warn and Errors.Table (J).Compile_Time_Pragma
+            then
+               Result := Result + 1;
+            end if;
+         end;
+      end loop;
+      return Result;
+   end Count_Compile_Time_Pragma_Warnings;
 
    ------------------
    -- Debug_Output --
@@ -369,17 +409,17 @@ package body Erroutc is
          if PPtr = PLast and then P (PPtr) = '*' then
             return True;
 
-            --  Return True if both pattern and string exhausted
+         --  Return True if both pattern and string exhausted
 
          elsif PPtr > PLast and then SPtr > Slast then
             return True;
 
-            --  Return False, if one exhausted and not the other
+         --  Return False, if one exhausted and not the other
 
          elsif PPtr > PLast or else SPtr > Slast then
             return False;
 
-            --  Case where pattern starts with asterisk
+         --  Case where pattern starts with asterisk
 
          elsif P (PPtr) = '*' then
 
@@ -395,13 +435,13 @@ package body Erroutc is
 
             return False;
 
-            --  Dealt with end of string and *, advance if we have a match
+         --  Dealt with end of string and *, advance if we have a match
 
          elsif Fold_Lower (S (SPtr)) = Fold_Lower (P (PPtr)) then
             SPtr := SPtr + 1;
             PPtr := PPtr + 1;
 
-            --  If first characters do not match, that's decisive
+         --  If first characters do not match, that's decisive
 
          else
             return False;
@@ -618,155 +658,152 @@ package body Erroutc is
       Length : Nat;
       --  Maximum total length of lines
 
-      Text  : constant String_Ptr := Errors.Table (E).Text;
+      E_Msg : Error_Msg_Object renames Errors.Table (E);
+      Text  : constant String_Ptr := E_Msg.Text;
       Ptr   : Natural;
       Split : Natural;
       Start : Natural;
+      Tag : constant String := Get_Warning_Tag (E);
+      Txt : String_Ptr;
+      Len : Natural;
 
    begin
-      declare
-         Tag : constant String := Get_Warning_Tag (E);
-         Txt : String_Ptr;
-         Len : Natural;
+      --  Postfix warning tag to message if needed
 
-      begin
-         --  Postfix warning tag to message if needed
-
-         if Tag /= "" and then Warning_Doc_Switch then
-            if Include_Subprogram_In_Messages then
-               Txt :=
-                 new String'
-                   (Subprogram_Name_Ptr (Errors.Table (E).Node) &
-                    ": " & Text.all & ' ' & Tag);
-            else
-               Txt := new String'(Text.all & ' ' & Tag);
-            end if;
-
-         elsif Include_Subprogram_In_Messages
-           and then (Errors.Table (E).Warn or else Errors.Table (E).Style)
-         then
+      if Tag /= "" and then Warning_Doc_Switch then
+         if Include_Subprogram_In_Messages then
             Txt :=
               new String'
-                (Subprogram_Name_Ptr (Errors.Table (E).Node) &
-                 ": " & Text.all);
+                (Subprogram_Name_Ptr (E_Msg.Node) &
+                 ": " & Text.all & ' ' & Tag);
          else
-            Txt := Text;
+            Txt := new String'(Text.all & ' ' & Tag);
          end if;
 
-         --  Deal with warning case
+      elsif Include_Subprogram_In_Messages
+        and then (E_Msg.Warn or else E_Msg.Style)
+      then
+         Txt :=
+           new String'(Subprogram_Name_Ptr (E_Msg.Node) & ": " & Text.all);
+      else
+         Txt := Text;
+      end if;
 
-         if Errors.Table (E).Warn or else Errors.Table (E).Info then
+      --  If -gnatdF is used, continuation messages follow the main message
+      --  with only an indentation of two space characters, without repeating
+      --  any prefix.
 
-            --  For info messages, prefix message with "info: "
+      if Debug_Flag_FF and then E_Msg.Msg_Cont then
+         null;
 
-            if Errors.Table (E).Info then
-               Txt := new String'("info: " & Txt.all);
+      --  For info messages, prefix message with "info: "
 
-            --  Warning treated as error
+      elsif E_Msg.Info then
+         Txt := new String'("info: " & Txt.all);
 
-            elsif Errors.Table (E).Warn_Err then
+      --  Warning treated as error
 
-               --  We prefix with "error:" rather than warning: and postfix
-               --  [warning-as-error] at the end.
+      elsif E_Msg.Warn_Err then
 
-               Warnings_Treated_As_Errors := Warnings_Treated_As_Errors + 1;
-               Txt := new String'("error: " & Txt.all & " [warning-as-error]");
+      --  We prefix with "error:" rather than warning: and postfix
+      --  [warning-as-error] at the end.
 
-            --  Normal case, prefix with "warning: "
+         Warnings_Treated_As_Errors := Warnings_Treated_As_Errors + 1;
+         Txt := new String'("error: " & Txt.all & " [warning-as-error]");
 
-            else
-               Txt := new String'("warning: " & Txt.all);
-            end if;
+      --  Normal warning, prefix with "warning: "
 
-            --  No prefix needed for style message, "(style)" is there already
+      elsif E_Msg.Warn then
+         Txt := new String'("warning: " & Txt.all);
 
-         elsif Errors.Table (E).Style then
-            null;
+      --  No prefix needed for style message, "(style)" is there already
 
-            --  No prefix needed for check message, severity is there already
+      elsif E_Msg.Style then
+         null;
 
-         elsif Errors.Table (E).Check then
-            null;
+      --  No prefix needed for check message, severity is there already
 
-            --  All other cases, add "error: " if unique error tag set
+      elsif E_Msg.Check then
+         null;
 
-         elsif Opt.Unique_Error_Tag then
-            Txt := new String'("error: " & Txt.all);
+      --  All other cases, add "error: " if unique error tag set
+
+      elsif Opt.Unique_Error_Tag then
+         Txt := new String'("error: " & Txt.all);
+      end if;
+
+      --  Set error message line length and length of message
+
+      if Error_Msg_Line_Length = 0 then
+         Length := Nat'Last;
+      else
+         Length := Error_Msg_Line_Length;
+      end if;
+
+      Max := Integer (Length - Column + 1);
+      Len := Txt'Length;
+
+      --  Here we have to split the message up into multiple lines
+
+      Ptr := 1;
+      loop
+         --  Make sure we do not have ludicrously small line
+
+         Max := Integer'Max (Max, 20);
+
+         --  If remaining text fits, output it respecting LF and we are done
+
+         if Len - Ptr < Max then
+            for J in Ptr .. Len loop
+               if Txt (J) = ASCII.LF then
+                  Write_Eol;
+                  Write_Spaces (Offs);
+               else
+                  Write_Char (Txt (J));
+               end if;
+            end loop;
+
+            return;
+
+         --  Line does not fit
+
+         else
+            Start := Ptr;
+
+            --  First scan forward looking for a hard end of line
+
+            for Scan in Ptr .. Ptr + Max - 1 loop
+               if Txt (Scan) = ASCII.LF then
+                  Split := Scan - 1;
+                  Ptr := Scan + 1;
+                  goto Continue;
+               end if;
+            end loop;
+
+            --  Otherwise scan backwards looking for a space
+
+            for Scan in reverse Ptr .. Ptr + Max - 1 loop
+               if Txt (Scan) = ' ' then
+                  Split := Scan - 1;
+                  Ptr := Scan + 1;
+                  goto Continue;
+               end if;
+            end loop;
+
+            --  If we fall through, no space, so split line arbitrarily
+
+            Split := Ptr + Max - 1;
+            Ptr := Split + 1;
          end if;
 
-         --  Set error message line length and length of message
-
-         if Error_Msg_Line_Length = 0 then
-            Length := Nat'Last;
-         else
-            Length := Error_Msg_Line_Length;
+         <<Continue>>
+         if Start <= Split then
+            Write_Line (Txt (Start .. Split));
+            Write_Spaces (Offs);
          end if;
 
          Max := Integer (Length - Column + 1);
-         Len := Txt'Length;
-
-         --  Here we have to split the message up into multiple lines
-
-         Ptr := 1;
-         loop
-            --  Make sure we do not have ludicrously small line
-
-            Max := Integer'Max (Max, 20);
-
-            --  If remaining text fits, output it respecting LF and we are done
-
-            if Len - Ptr < Max then
-               for J in Ptr .. Len loop
-                  if Txt (J) = ASCII.LF then
-                     Write_Eol;
-                     Write_Spaces (Offs);
-                  else
-                     Write_Char (Txt (J));
-                  end if;
-               end loop;
-
-               return;
-
-            --  Line does not fit
-
-            else
-               Start := Ptr;
-
-               --  First scan forward looking for a hard end of line
-
-               for Scan in Ptr .. Ptr + Max - 1 loop
-                  if Txt (Scan) = ASCII.LF then
-                     Split := Scan - 1;
-                     Ptr := Scan + 1;
-                     goto Continue;
-                  end if;
-               end loop;
-
-               --  Otherwise scan backwards looking for a space
-
-               for Scan in reverse Ptr .. Ptr + Max - 1 loop
-                  if Txt (Scan) = ' ' then
-                     Split := Scan - 1;
-                     Ptr := Scan + 1;
-                     goto Continue;
-                  end if;
-               end loop;
-
-               --  If we fall through, no space, so split line arbitrarily
-
-               Split := Ptr + Max - 1;
-               Ptr := Split + 1;
-            end if;
-
-            <<Continue>>
-            if Start <= Split then
-               Write_Line (Txt (Start .. Split));
-               Write_Spaces (Offs);
-            end if;
-
-            Max := Integer (Length - Column + 1);
-         end loop;
-      end;
+      end loop;
    end Output_Msg_Text;
 
    ---------------------
@@ -777,37 +814,49 @@ package body Erroutc is
       J : Natural;
 
    begin
-      --  Nothing to do for continuation line
+      --  Nothing to do for continuation line, unless -gnatdF is set
 
-      if Msg (Msg'First) = '\' then
+      if not Debug_Flag_FF and then Msg (Msg'First) = '\' then
          return;
+
+      --  Some global variables are not set for continuation messages, as they
+      --  only make sense for the initial mesage.
+
+      elsif Msg (Msg'First) /= '\' then
+
+         --  Set initial values of globals (may be changed during scan)
+
+         Is_Serious_Error     := True;
+         Is_Unconditional_Msg := False;
+         Is_Warning_Msg       := False;
+
+         --  Check style message
+
+         Is_Style_Msg :=
+           Msg'Length > 7
+             and then Msg (Msg'First .. Msg'First + 6) = "(style)";
+
+         --  Check info message
+
+         Is_Info_Msg :=
+           Msg'Length > 6
+             and then Msg (Msg'First .. Msg'First + 5) = "info: ";
+
+         --  Check check message
+
+         Is_Check_Msg :=
+           (Msg'Length > 8
+             and then Msg (Msg'First .. Msg'First + 7) = "medium: ")
+           or else
+           (Msg'Length > 6
+             and then Msg (Msg'First .. Msg'First + 5) = "high: ")
+           or else
+           (Msg'Length > 5
+             and then Msg (Msg'First .. Msg'First + 4) = "low: ");
       end if;
 
-      --  Set initial values of globals (may be changed during scan)
-
-      Is_Serious_Error     := True;
-      Is_Unconditional_Msg := False;
-      Is_Warning_Msg       := False;
-      Has_Double_Exclam    := False;
-
-      --  Check style message
-
-      Is_Style_Msg :=
-        Msg'Length > 7 and then Msg (Msg'First .. Msg'First + 6) = "(style)";
-
-      --  Check info message
-
-      Is_Info_Msg :=
-        Msg'Length > 6 and then Msg (Msg'First .. Msg'First + 5) = "info: ";
-
-      --  Check check message
-
-      Is_Check_Msg :=
-        (Msg'Length > 8 and then Msg (Msg'First .. Msg'First + 7) = "medium: ")
-        or else
-          (Msg'Length > 6 and then Msg (Msg'First .. Msg'First + 5) = "high: ")
-        or else
-          (Msg'Length > 5 and then Msg (Msg'First .. Msg'First + 4) = "low: ");
+      Has_Double_Exclam  := False;
+      Has_Insertion_Line := False;
 
       --  Loop through message looking for relevant insertion sequences
 
@@ -865,6 +914,12 @@ package body Erroutc is
                Has_Double_Exclam := True;
                J := J + 1;
             end if;
+
+         --  Insertion line (# insertion)
+
+         elsif Msg (J) = '#' then
+            Has_Insertion_Line := True;
+            J := J + 1;
 
          --  Non-serious error (| insertion)
 
@@ -1588,6 +1643,25 @@ package body Erroutc is
       end if;
    end Set_Warnings_Mode_On;
 
+   -------------------
+   -- Sloc_In_Range --
+   -------------------
+
+   function Sloc_In_Range (Loc, Start, Stop : Source_Ptr) return Boolean is
+      Cur_Loc : Source_Ptr := Loc;
+
+   begin
+      while Cur_Loc /= No_Location loop
+         if Start <= Cur_Loc and then Cur_Loc <= Stop then
+            return True;
+         end if;
+
+         Cur_Loc := Instantiation_Location (Cur_Loc);
+      end loop;
+
+      return False;
+   end Sloc_In_Range;
+
    --------------------------------
    -- Validate_Specific_Warnings --
    --------------------------------
@@ -1652,7 +1726,7 @@ package body Erroutc is
             --  location is in range of a specific non-configuration pragma.
 
             if SWE.Config
-              or else (SWE.Start <= Loc and then Loc <= SWE.Stop)
+              or else Sloc_In_Range (Loc, SWE.Start, SWE.Stop)
             then
                if Matches (Msg.all, SWE.Msg.all)
                  or else Matches (Tag, SWE.Msg.all)
@@ -1691,8 +1765,8 @@ package body Erroutc is
       --  Loop through table of ON/OFF warnings
 
       for J in Warnings.First .. Warnings.Last loop
-         if Warnings.Table (J).Start <= Loc
-           and then Loc <= Warnings.Table (J).Stop
+         if Sloc_In_Range (Loc, Warnings.Table (J).Start,
+                                Warnings.Table (J).Stop)
          then
             return Warnings.Table (J).Reason;
          end if;

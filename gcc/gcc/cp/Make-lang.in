@@ -1,5 +1,5 @@
 # Top level -*- makefile -*- fragment for GNU C++.
-#   Copyright (C) 1994-2018 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2021 Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -47,11 +47,25 @@ CP_PLUGIN_HEADERS := cp-tree.h cxx-pretty-print.h name-lookup.h type-utils.h ope
 # into the C++ rule, but that needs a little bit of work
 # to do the right thing within all.cross.
 c++: cc1plus$(exeext)
+c++.serial = cc1plus$(exeext)
 
 # Tell GNU make to ignore these if they exist.
 .PHONY: c++
 
 CFLAGS-cp/g++spec.o += $(DRIVER_DEFINES)
+
+CFLAGS-cp/module.o += -DHOST_MACHINE=\"$(host)\" \
+	-DTARGET_MACHINE=\"$(target)\"
+
+# In non-release builds, use a date-related module version.
+ifneq ($(DEVPHASE_c),)
+# Some date's don't grok 'r', if so, simply use today's
+# date (don't bootstrap at midnight).
+MODULE_VERSION := $(shell date -r $(srcdir)/cp/module.cc '+%y%m%d-%H%M' \
+  2>/dev/null || date '+%y%m%d-0000' 2>/dev/null || echo 0)
+
+CFLAGS-cp/module.o += -DMODULE_VERSION='($(subst -,,$(MODULE_VERSION))U)'
+endif
 
 # Create the compiler driver for g++.
 GXX_OBJS = $(GCC_OBJS) cp/g++spec.o
@@ -73,17 +87,18 @@ CXX_C_OBJS = attribs.o incpath.o \
 # Language-specific object files for C++ and Objective C++.
 CXX_AND_OBJCXX_OBJS = \
 	cp/call.o cp/class.o cp/constexpr.o cp/constraint.o \
-	cp/cp-gimplify.o \
+	cp/coroutines.o cp/cp-gimplify.o \
 	cp/cp-objcp-common.o cp/cp-ubsan.o \
 	cp/cvt.o cp/cxx-pretty-print.o \
 	cp/decl.o cp/decl2.o cp/dump.o \
 	cp/error.o cp/except.o cp/expr.o \
 	cp/friend.o cp/init.o \
 	cp/lambda.o cp/lex.o cp/logic.o \
-	cp/mangle.o cp/method.o \
+	cp/mangle.o cp/mapper-client.o cp/mapper-resolver.o \
+	cp/method.o cp/module.o \
 	cp/name-lookup.o cp/optimize.o \
 	cp/parser.o cp/pt.o cp/ptree.o \
-	cp/repo.o cp/rtti.o \
+	cp/rtti.o \
 	cp/search.o cp/semantics.o \
 	cp/tree.o cp/typeck.o cp/typeck2.o \
 	cp/vtable-class-hierarchy.o $(CXX_C_OBJS)
@@ -106,19 +121,22 @@ cp-warn = $(STRICT_WARN)
 # re-use the checksum from the prev-final stage so it passes
 # the bootstrap comparison and allows comparing of the cc1 binary
 cc1plus-checksum.c : build/genchecksum$(build_exeext) checksum-options \
-	$(CXX_OBJS) $(BACKEND) $(LIBDEPS) 
+	$(CXX_OBJS) $(BACKEND) $(CODYLIB) $(LIBDEPS) 
 	if [ -f ../stage_final ] \
 	   && cmp -s ../stage_current ../stage_final; then \
 	   cp ../prev-gcc/cc1plus-checksum.c cc1plus-checksum.c; \
 	else \
-	  build/genchecksum$(build_exeext) $(CXX_OBJS) $(BACKEND) $(LIBDEPS) \
+	  build/genchecksum$(build_exeext) $(CXX_OBJS) $(BACKEND) $(CODYLIB) $(LIBDEPS) \
                      checksum-options > cc1plus-checksum.c.tmp &&	   \
 	  $(srcdir)/../move-if-change cc1plus-checksum.c.tmp cc1plus-checksum.c; \
 	fi
 
-cc1plus$(exeext): $(CXX_OBJS) cc1plus-checksum.o $(BACKEND) $(LIBDEPS)
+cc1plus$(exeext): $(CXX_OBJS) cc1plus-checksum.o $(BACKEND) $(CODYLIB) $(LIBDEPS) $(c++.prev)
+	@$(call LINK_PROGRESS,$(INDEX.c++),start)
 	+$(LLINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) -o $@ \
-	      $(CXX_OBJS) cc1plus-checksum.o $(BACKEND) $(LIBS) $(BACKENDLIBS)
+	      $(CXX_OBJS) cc1plus-checksum.o $(BACKEND) $(CODYLIB) $(NETLIBS) \
+		$(LIBS) $(BACKENDLIBS)
+	@$(call LINK_PROGRESS,$(INDEX.c++),end)
 
 ifeq ($(ENABLE_MAINTAINER_RULES), true)
 # Special build rule.  This is a maintainer rule, that is only
@@ -164,6 +182,32 @@ c++.man: doc/g++.1
 c++.srcman: doc/g++.1
 	-cp -p $^ $(srcdir)/doc
 
+# C++ selftests
+
+# If C++ is enabled, require the selftests to be run for it
+# at each stage of the build:
+selftest-c++: s-selftest-c++
+
+CPP_SELFTEST_DEPS = cc1plus$(exeext) $(SELFTEST_DEPS)
+CPP_SELFTEST_FLAGS = -xc++ $(SELFTEST_FLAGS)
+
+# Run the C++ selftests
+s-selftest-c++: $(CPP_SELFTEST_DEPS)
+	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS)
+	$(STAMP) $@
+
+# Convenience method for running C++ selftests under gdb:
+.PHONY: selftest-c++-gdb
+selftest-c++-gdb: $(CPP_SELFTEST_DEPS)
+	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS) \
+	  -wrapper gdb,--args
+
+# Convenience method for running C++ selftests under valgrind:
+.PHONY: selftest-c++-valgrind
+selftest-c++-valgrind: $(CPP_SELFTEST_DEPS)
+	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS) \
+	  -wrapper valgrind,--leak-check=full
+
 # 'make check' in gcc/ looks for check-c++, as do all toplevel C++-related
 # check targets.  However, our DejaGNU framework requires 'check-g++' as its
 # entry point.  We feed the former to the latter here.
@@ -180,7 +224,7 @@ check-c++-all:
 
 # Run the testsuite with garbage collection at every opportunity.
 check-g++-strict-gc:
-	$(MAKE) RUNTESTFLAGS="$(RUNTESTFLAGS) --extra_opts,--param,ggc-min-heapsize=0,--param,ggc-min-expand=0" \
+	$(MAKE) RUNTESTFLAGS="$(RUNTESTFLAGS) --extra_opts,--param,ggc-min-heapsize=0,--param,ggc-min-expand=0,--param,hash-table-verification-limit=10000" \
 	  TESTSUITEDIR="$(TESTSUITEDIR).gc" check-g++
 check-c++-subtargets : check-g++-subtargets
 # List of targets that can use the generic check- rule and its // variant.
@@ -261,7 +305,6 @@ c++.mostlyclean:
 c++.clean:
 c++.distclean:
 	-rm -f cp/config.status cp/Makefile
-	-rm -f cxxmain.c
 c++.maintainer-clean:
 #
 # Stage hooks:

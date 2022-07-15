@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1998-2018, Free Software Foundation, Inc.          --
+--         Copyright (C) 1998-2020, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -29,10 +29,6 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-pragma Polling (Off);
---  Turn off polling, we do not want ATC polling to take place during
---  tasking operations. It causes infinite loops and other problems.
-
 with Ada.Unchecked_Conversion;
 with Ada.Task_Identification;
 
@@ -50,8 +46,6 @@ package body System.Tasking.Async_Delays is
    package STU renames System.Tasking.Utilities;
    package STI renames System.Tasking.Initialization;
    package OSP renames System.OS_Primitives;
-
-   use Parameters;
 
    function To_System is new Ada.Unchecked_Conversion
      (Ada.Task_Identification.Task_Id, Task_Id);
@@ -96,6 +90,7 @@ package body System.Tasking.Async_Delays is
    --  for an async. select statement with delay statement as trigger. The
    --  effect should be to remove the delay from the timer queue, and exit one
    --  ATC nesting level.
+
    --  The usage and logic are similar to Cancel_Protected_Entry_Call, but
    --  simplified because this is not a true entry call.
 
@@ -104,25 +99,19 @@ package body System.Tasking.Async_Delays is
       Dsucc : Delay_Block_Access;
 
    begin
-      --  Note that we mark the delay as being cancelled
-      --  using a level value that is reserved.
+      --  A delay block level of Level_No_Pending_Abort indicates the delay
+      --  has been canceled. If the delay has already been canceled, there is
+      --  nothing more to be done.
 
-      --  make this operation idempotent
-
-      if D.Level = ATC_Level_Infinity then
+      if D.Level = Level_No_Pending_Abort then
          return;
       end if;
 
-      D.Level := ATC_Level_Infinity;
+      D.Level := Level_No_Pending_Abort;
 
-      --  remove self from timer queue
+      --  Remove self from timer queue
 
       STI.Defer_Abort_Nestable (D.Self_Id);
-
-      if Single_Lock then
-         STPO.Lock_RTS;
-      end if;
-
       STPO.Write_Lock (Timer_Server_ID);
       Dpred := D.Pred;
       Dsucc := D.Succ;
@@ -141,11 +130,6 @@ package body System.Tasking.Async_Delays is
       STPO.Write_Lock (D.Self_Id);
       STU.Exit_One_ATC_Level (D.Self_Id);
       STPO.Unlock (D.Self_Id);
-
-      if Single_Lock then
-         STPO.Unlock_RTS;
-      end if;
-
       STI.Undefer_Abort_Nestable (D.Self_Id);
    end Cancel_Async_Delay;
 
@@ -181,8 +165,8 @@ package body System.Tasking.Async_Delays is
 
    --  Allocate a queue element for the wakeup time T and put it in the
    --  queue in wakeup time order.  Assume we are on an asynchronous
-   --  select statement with delay trigger.  Put the calling task to
-   --  sleep until either the delay expires or is cancelled.
+   --  select statement with delay trigger. Put the calling task to
+   --  sleep until either the delay expires or is canceled.
 
    --  We use one entry call record for this delay, since we have
    --  to increment the ATC nesting level, but since it is not a
@@ -217,11 +201,6 @@ package body System.Tasking.Async_Delays is
       D.Level := Self_Id.ATC_Nesting_Level;
       D.Self_Id := Self_Id;
       D.Resume_Time := T;
-
-      if Single_Lock then
-         STPO.Lock_RTS;
-      end if;
-
       STPO.Write_Lock (Timer_Server_ID);
 
       --  Previously, there was code here to dynamically create
@@ -258,10 +237,6 @@ package body System.Tasking.Async_Delays is
       end if;
 
       STPO.Unlock (Timer_Server_ID);
-
-      if Single_Lock then
-         STPO.Unlock_RTS;
-      end if;
    end Time_Enqueue;
 
    ---------------
@@ -305,11 +280,6 @@ package body System.Tasking.Async_Delays is
 
       loop
          STI.Defer_Abort (Timer_Server_ID);
-
-         if Single_Lock then
-            STPO.Lock_RTS;
-         end if;
-
          STPO.Write_Lock (Timer_Server_ID);
 
          --  The timer server needs to catch pending aborts after finalization
@@ -383,11 +353,6 @@ package body System.Tasking.Async_Delays is
          --  an actual delay in this server.
 
          STPO.Unlock (Timer_Server_ID);
-
-         if Single_Lock then
-            STPO.Unlock_RTS;
-         end if;
-
          STI.Undefer_Abort (Timer_Server_ID);
       end loop;
    end Timer_Server;

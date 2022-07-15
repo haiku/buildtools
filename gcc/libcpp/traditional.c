@@ -1,5 +1,5 @@
 /* CPP Library - traditional lexical analysis and macro expansion.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2021 Free Software Foundation, Inc.
    Contributed by Neil Booth, May 2002
 
 This program is free software; you can redistribute it and/or modify it
@@ -60,7 +60,7 @@ struct fun_macro
   size_t offset;
 
   /* The line the macro name appeared on.  */
-  source_location line;
+  location_t line;
 
   /* Number of parameters.  */
   unsigned int paramc;
@@ -77,9 +77,8 @@ enum ls {ls_none = 0,		/* Normal state.  */
 	 ls_defined_close,	/* Looking for ')' of defined().  */
 	 ls_hash,		/* After # in preprocessor conditional.  */
 	 ls_predicate,		/* After the predicate, maybe paren?  */
-	 ls_answer,		/* In answer to predicate.  */
-	 ls_has_include,	/* After __has_include__.  */
-	 ls_has_include_close};	/* Looking for ')' of __has_include__.  */
+	 ls_answer		/* In answer to predicate.  */
+};
 
 /* Lexing TODO: Maybe handle space in escaped newlines.  Stop lex.c
    from recognizing comments and directives during its lexing pass.  */
@@ -89,7 +88,7 @@ static cpp_hashnode *lex_identifier (cpp_reader *, const uchar *);
 static const uchar *copy_comment (cpp_reader *, const uchar *, int);
 static void check_output_buffer (cpp_reader *, size_t);
 static void push_replacement_text (cpp_reader *, cpp_hashnode *);
-static bool scan_parameters (cpp_reader *, cpp_macro *);
+static bool scan_parameters (cpp_reader *, unsigned *);
 static bool recursive_macro (cpp_reader *, cpp_hashnode *);
 static void save_replacement_text (cpp_reader *, cpp_macro *, unsigned int);
 static void maybe_start_funlike (cpp_reader *, cpp_hashnode *, const uchar *,
@@ -161,7 +160,7 @@ static const uchar *
 copy_comment (cpp_reader *pfile, const uchar *cur, int in_define)
 {
   bool unterminated, copy = false;
-  source_location src_loc = pfile->line_table->highest_line;
+  location_t src_loc = pfile->line_table->highest_line;
   cpp_buffer *buffer = pfile->buffer;
 
   buffer->cur = cur;
@@ -313,7 +312,11 @@ _cpp_read_logical_line_trad (cpp_reader *pfile)
   do
     {
       if (pfile->buffer->need_line && !_cpp_get_fresh_line (pfile))
-	return false;
+	{
+	  /* Now pop the buffer that _cpp_get_fresh_line did not.  */
+	  _cpp_pop_buffer (pfile);
+	  return false;
+	}
     }
   while (!_cpp_scan_out_logical_line (pfile, NULL, false)
 	 || pfile->state.skipping);
@@ -325,10 +328,13 @@ _cpp_read_logical_line_trad (cpp_reader *pfile)
 static inline bool
 fun_like_macro (cpp_hashnode *node)
 {
-  if (node->flags & NODE_BUILTIN)
-    return node->value.builtin == BT_HAS_ATTRIBUTE;
-  else
-    return node->value.macro->fun_like;
+  if (cpp_builtin_macro_p (node))
+    return (node->value.builtin == BT_HAS_ATTRIBUTE
+	    || node->value.builtin == BT_HAS_STD_ATTRIBUTE
+	    || node->value.builtin == BT_HAS_BUILTIN
+	    || node->value.builtin == BT_HAS_INCLUDE
+	    || node->value.builtin == BT_HAS_INCLUDE_NEXT);
+  return node->value.macro->fun_like;
 }
 
 /* Set up state for finding the opening '(' of a function-like
@@ -338,7 +344,7 @@ maybe_start_funlike (cpp_reader *pfile, cpp_hashnode *node, const uchar *start,
 		     struct fun_macro *macro)
 {
   unsigned int n;
-  if (node->flags & NODE_BUILTIN)
+  if (cpp_builtin_macro_p (node))
     n = 1;
   else
     n = node->value.macro->paramc;
@@ -521,7 +527,7 @@ _cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
 	      out = pfile->out.cur;
 	      cur = CUR (context);
 
-	      if (node->type == NT_MACRO
+	      if (cpp_macro_p (node)
 		  /* Should we expand for ls_answer?  */
 		  && (lex_state == ls_none || lex_state == ls_fun_open)
 		  && !pfile->state.prevent_expansion)
@@ -545,7 +551,7 @@ _cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
 		      goto new_context;
 		    }
 		}
-	      else if (macro && (node->flags & NODE_MACRO_ARG) != 0)
+	      else if (macro && node->type == NT_MACRO_ARG)
 		{
 		  /* Found a parameter in the replacement text of a
 		     #define.  Remove its name from the output.  */
@@ -562,13 +568,6 @@ _cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
 		       && node == pfile->spec_nodes.n_defined)
 		{
 		  lex_state = ls_defined;
-		  continue;
-		}
-	      else if (pfile->state.in_expression
-		       && (node == pfile->spec_nodes.n__has_include__
-			|| node == pfile->spec_nodes.n__has_include_next__))
-		{
-		  lex_state = ls_has_include;
 		  continue;
 		}
 	    }
@@ -594,8 +593,6 @@ _cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
 		lex_state = ls_answer;
 	      else if (lex_state == ls_defined)
 		lex_state = ls_defined_close;
-	      else if (lex_state == ls_has_include)
-		lex_state = ls_has_include_close;
 	    }
 	  break;
 
@@ -610,7 +607,7 @@ _cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
 	      paren_depth--;
 	      if (lex_state == ls_fun_close && paren_depth == 0)
 		{
-		  if (fmacro.node->flags & NODE_BUILTIN)
+		  if (cpp_builtin_macro_p (fmacro.node))
 		    {
 		      /* Handle builtin function-like macros like
 			 __has_attribute.  The already parsed arguments
@@ -729,8 +726,7 @@ _cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
 		      goto new_context;
 		    }
 		}
-	      else if (lex_state == ls_answer || lex_state == ls_defined_close
-			|| lex_state == ls_has_include_close)
+	      else if (lex_state == ls_answer || lex_state == ls_defined_close)
 		lex_state = ls_none;
 	    }
 	  break;
@@ -811,8 +807,7 @@ _cpp_scan_out_logical_line (cpp_reader *pfile, cpp_macro *macro,
 	lex_state = ls_none;
       else if (lex_state == ls_hash
 	       || lex_state == ls_predicate
-	       || lex_state == ls_defined
-	       || lex_state == ls_has_include)
+	       || lex_state == ls_defined)
 	lex_state = ls_none;
 
       /* ls_answer and ls_defined_close keep going until ')'.  */
@@ -839,7 +834,7 @@ push_replacement_text (cpp_reader *pfile, cpp_hashnode *node)
   const uchar *text;
   uchar *buf;
 
-  if (node->flags & NODE_BUILTIN)
+  if (cpp_builtin_macro_p (node))
     {
       text = _cpp_builtin_macro_text (pfile, node);
       len = ustrlen (text);
@@ -853,7 +848,6 @@ push_replacement_text (cpp_reader *pfile, cpp_hashnode *node)
       cpp_macro *macro = node->value.macro;
       macro->used = 1;
       text = macro->exp.text;
-      macro->traditional = 1;
       len = macro->count;
     }
 
@@ -919,7 +913,7 @@ _cpp_replacement_text_len (const cpp_macro *macro)
 	  len += b->text_len;
 	  if (b->arg_index == 0)
 	    break;
-	  len += NODE_LEN (macro->params[b->arg_index - 1]);
+	  len += NODE_LEN (macro->parm.params[b->arg_index - 1]);
 	  exp += BLOCK_LEN (b->text_len);
 	}
     }
@@ -948,7 +942,7 @@ _cpp_copy_replacement_text (const cpp_macro *macro, uchar *dest)
 	  dest += b->text_len;
 	  if (b->arg_index == 0)
 	    break;
-	  param = macro->params[b->arg_index - 1];
+	  param = macro->parm.params[b->arg_index - 1];
 	  memcpy (dest, NODE_NAME (param), NODE_LEN (param));
 	  dest += NODE_LEN (param);
 	  exp += BLOCK_LEN (b->text_len);
@@ -1082,11 +1076,12 @@ replace_args_and_push (cpp_reader *pfile, struct fun_macro *fmacro)
    duplicate parameter).  On success, CUR (pfile->context) is just
    past the closing parenthesis.  */
 static bool
-scan_parameters (cpp_reader *pfile, cpp_macro *macro)
+scan_parameters (cpp_reader *pfile, unsigned *n_ptr)
 {
   const uchar *cur = CUR (pfile->context) + 1;
   bool ok;
 
+  unsigned nparms = 0;
   for (;;)
     {
       cur = skip_whitespace (pfile, cur, true /* skip_comments */);
@@ -1095,8 +1090,9 @@ scan_parameters (cpp_reader *pfile, cpp_macro *macro)
 	{
 	  struct cpp_hashnode *id = lex_identifier (pfile, cur);
 	  ok = false;
-	  if (_cpp_save_parameter (pfile, macro, id, id))
+	  if (!_cpp_save_parameter (pfile, nparms, id, id))
 	    break;
+	  nparms++;
 	  cur = skip_whitespace (pfile, CUR (pfile->context),
 				 true /* skip_comments */);
 	  if (*cur == ',')
@@ -1108,9 +1104,11 @@ scan_parameters (cpp_reader *pfile, cpp_macro *macro)
 	  break;
 	}
 
-      ok = (*cur == ')' && macro->paramc == 0);
+      ok = (*cur == ')' && !nparms);
       break;
     }
+
+  *n_ptr = nparms;
 
   if (!ok)
     cpp_error (pfile, CPP_DL_ERROR, "syntax error in macro parameter list");
@@ -1139,7 +1137,6 @@ save_replacement_text (cpp_reader *pfile, cpp_macro *macro,
       memcpy (exp, pfile->out.base, len);
       exp[len] = '\n';
       macro->exp.text = exp;
-      macro->traditional = 1;
       macro->count = len;
     }
   else
@@ -1155,7 +1152,6 @@ save_replacement_text (cpp_reader *pfile, cpp_macro *macro,
       exp = BUFF_FRONT (pfile->a_buff);
       block = (struct block *) (exp + macro->count);
       macro->exp.text = exp;
-      macro->traditional = 1;
 
       /* Write out the block information.  */
       block->text_len = len;
@@ -1175,12 +1171,15 @@ save_replacement_text (cpp_reader *pfile, cpp_macro *macro,
 
 /* Analyze and save the replacement text of a macro.  Returns true on
    success.  */
-bool
-_cpp_create_trad_definition (cpp_reader *pfile, cpp_macro *macro)
+cpp_macro *
+_cpp_create_trad_definition (cpp_reader *pfile)
 {
   const uchar *cur;
   uchar *limit;
   cpp_context *context = pfile->context;
+  unsigned nparms = 0;
+  int fun_like = 0;
+  cpp_hashnode **params = NULL;
 
   /* The context has not been set up for command line defines, and CUR
      has not been updated for the macro name for in-file defines.  */
@@ -1192,20 +1191,23 @@ _cpp_create_trad_definition (cpp_reader *pfile, cpp_macro *macro)
   /* Is this a function-like macro?  */
   if (* CUR (context) == '(')
     {
-      bool ok = scan_parameters (pfile, macro);
-
-      /* Remember the params so we can clear NODE_MACRO_ARG flags.  */
-      macro->params = (cpp_hashnode **) BUFF_FRONT (pfile->a_buff);
-
-      /* Setting macro to NULL indicates an error occurred, and
-	 prevents unnecessary work in _cpp_scan_out_logical_line.  */
-      if (!ok)
-	macro = NULL;
+      fun_like = +1;
+      if (scan_parameters (pfile, &nparms))
+	params = (cpp_hashnode **)_cpp_commit_buff
+	  (pfile, sizeof (cpp_hashnode *) * nparms);
       else
-	{
-	  BUFF_FRONT (pfile->a_buff) = (uchar *) &macro->params[macro->paramc];
-	  macro->fun_like = 1;
-	}
+	fun_like = -1;
+    }
+
+  cpp_macro *macro = NULL;
+
+  if (fun_like >= 0)
+    {
+      macro = _cpp_new_macro (pfile, cmk_traditional,
+			      _cpp_aligned_alloc (pfile, sizeof (cpp_macro)));
+      macro->parm.params = params;
+      macro->paramc = nparms;
+      macro->fun_like = fun_like != 0;
     }
 
   /* Skip leading whitespace in the replacement text.  */
@@ -1217,18 +1219,20 @@ _cpp_create_trad_definition (cpp_reader *pfile, cpp_macro *macro)
   _cpp_scan_out_logical_line (pfile, macro, false);
   pfile->state.prevent_expansion--;
 
-  if (!macro)
-    return false;
+  _cpp_unsave_parameters (pfile, nparms);
 
-  /* Skip trailing white space.  */
-  cur = pfile->out.base;
-  limit = pfile->out.cur;
-  while (limit > cur && is_space (limit[-1]))
-    limit--;
-  pfile->out.cur = limit;
-  save_replacement_text (pfile, macro, 0);
+  if (macro)
+    {
+      /* Skip trailing white space.  */
+      cur = pfile->out.base;
+      limit = pfile->out.cur;
+      while (limit > cur && is_space (limit[-1]))
+	limit--;
+      pfile->out.cur = limit;
+      save_replacement_text (pfile, macro, 0);
+    }
 
-  return true;
+  return macro;
 }
 
 /* Copy SRC of length LEN to DEST, but convert all contiguous

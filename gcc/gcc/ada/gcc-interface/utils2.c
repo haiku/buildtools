@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *          Copyright (C) 1992-2017, Free Software Foundation, Inc.         *
+ *          Copyright (C) 1992-2020, Free Software Foundation, Inc.         *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -32,6 +32,7 @@
 #include "alias.h"
 #include "tree.h"
 #include "inchash.h"
+#include "builtins.h"
 #include "fold-const.h"
 #include "stor-layout.h"
 #include "stringpool.h"
@@ -72,7 +73,7 @@ get_base_type (tree type)
 
   return type;
 }
-
+
 /* EXP is a GCC tree representing an address.  See if we can find how strictly
    the object at this address is aligned and, if so, return the alignment of
    the object in bits.  Otherwise return 0.  */
@@ -167,7 +168,10 @@ known_alignment (tree exp)
       break;
 
     case ADDR_EXPR:
-      this_alignment = expr_align (TREE_OPERAND (exp, 0));
+      if (DECL_P (TREE_OPERAND (exp, 0)))
+	this_alignment = DECL_ALIGN (TREE_OPERAND (exp, 0));
+      else
+	this_alignment = get_object_alignment (TREE_OPERAND (exp, 0));
       break;
 
     case CALL_EXPR:
@@ -199,7 +203,7 @@ known_alignment (tree exp)
 
   return this_alignment;
 }
-
+
 /* We have a comparison or assignment operation on two types, T1 and T2, which
    are either both array types or both record types.  T1 is assumed to be for
    the left hand side operand, and T2 for the right hand side.  Return the
@@ -267,7 +271,7 @@ find_common_type (tree t1, tree t2)
      could cause a bad self-referential reference.  */
   return NULL_TREE;
 }
-
+
 /* Return an expression tree representing an equality comparison of A1 and A2,
    two objects of type ARRAY_TYPE.  The result should be of type RESULT_TYPE.
 
@@ -301,19 +305,31 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
      in order to suppress the comparison of the data at the end.  */
   while (TREE_CODE (t1) == ARRAY_TYPE && TREE_CODE (t2) == ARRAY_TYPE)
     {
-      tree lb1 = TYPE_MIN_VALUE (TYPE_DOMAIN (t1));
-      tree ub1 = TYPE_MAX_VALUE (TYPE_DOMAIN (t1));
-      tree lb2 = TYPE_MIN_VALUE (TYPE_DOMAIN (t2));
-      tree ub2 = TYPE_MAX_VALUE (TYPE_DOMAIN (t2));
-      tree length1 = size_binop (PLUS_EXPR, size_binop (MINUS_EXPR, ub1, lb1),
+      tree dom1 = TYPE_DOMAIN (t1);
+      tree dom2 = TYPE_DOMAIN (t2);
+      tree length1 = size_binop (PLUS_EXPR,
+				 size_binop (MINUS_EXPR,
+					     TYPE_MAX_VALUE (dom1),
+					     TYPE_MIN_VALUE (dom1)),
 				 size_one_node);
-      tree length2 = size_binop (PLUS_EXPR, size_binop (MINUS_EXPR, ub2, lb2),
+      tree length2 = size_binop (PLUS_EXPR,
+				 size_binop (MINUS_EXPR,
+					     TYPE_MAX_VALUE (dom2),
+					     TYPE_MIN_VALUE (dom2)),
 				 size_one_node);
+      tree ind1 = TYPE_INDEX_TYPE (dom1);
+      tree ind2 = TYPE_INDEX_TYPE (dom2);
+      tree base_type = maybe_character_type (get_base_type (ind1));
+      tree lb1 = convert (base_type, TYPE_MIN_VALUE (ind1));
+      tree ub1 = convert (base_type, TYPE_MAX_VALUE (ind1));
+      tree lb2 = convert (base_type, TYPE_MIN_VALUE (ind2));
+      tree ub2 = convert (base_type, TYPE_MAX_VALUE (ind2));
       tree comparison, this_a1_is_null, this_a2_is_null;
 
-      /* If the length of the first array is a constant, swap our operands
-	 unless the length of the second array is the constant zero.  */
-      if (TREE_CODE (length1) == INTEGER_CST && !integer_zerop (length2))
+      /* If the length of the first array is a constant and that of the second
+	 array is not, swap our operands to have the constant second.  */
+      if (TREE_CODE (length1) == INTEGER_CST
+	  && TREE_CODE (length2) != INTEGER_CST)
 	{
 	  tree tem;
 	  bool btem;
@@ -333,17 +349,12 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
 	 last < first holds.  */
       if (integer_zerop (length2))
 	{
-	  tree b = get_base_type (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
-
 	  length_zero_p = true;
 
-	  ub1
-	    = convert (b, TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
-	  lb1
-	    = convert (b, TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
+	  lb1 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (lb1, a1);
+	  ub1 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (ub1, a1);
 
 	  comparison = fold_build2_loc (loc, LT_EXPR, result_type, ub1, lb1);
-	  comparison = SUBSTITUTE_PLACEHOLDER_IN_EXPR (comparison, a1);
 	  if (EXPR_P (comparison))
 	    SET_EXPR_LOCATION (comparison, loc);
 
@@ -356,24 +367,17 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
 	 just use its length computed from the actual stored bounds.  */
       else if (TREE_CODE (length2) == INTEGER_CST)
 	{
-	  tree b = get_base_type (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1)));
-
-	  ub1
-	    = convert (b, TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
-	  lb1
-	    = convert (b, TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t1))));
-	  /* Note that we know that UB2 and LB2 are constant and hence
+	  /* Note that we know that LB2 and UB2 are constant and hence
 	     cannot contain a PLACEHOLDER_EXPR.  */
-	  ub2
-	    = convert (b, TYPE_MAX_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t2))));
-	  lb2
-	    = convert (b, TYPE_MIN_VALUE (TYPE_INDEX_TYPE (TYPE_DOMAIN (t2))));
+	  lb1 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (lb1, a1);
+	  ub1 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (ub1, a1);
 
 	  comparison
 	    = fold_build2_loc (loc, EQ_EXPR, result_type,
-			       build_binary_op (MINUS_EXPR, b, ub1, lb1),
-			       build_binary_op (MINUS_EXPR, b, ub2, lb2));
-	  comparison = SUBSTITUTE_PLACEHOLDER_IN_EXPR (comparison, a1);
+			       build_binary_op (MINUS_EXPR, base_type,
+						ub1, lb1),
+			       build_binary_op (MINUS_EXPR, base_type,
+						ub2, lb2));
 	  if (EXPR_P (comparison))
 	    SET_EXPR_LOCATION (comparison, loc);
 
@@ -391,26 +395,20 @@ compare_arrays (location_t loc, tree result_type, tree a1, tree a2)
 
 	  comparison
 	    = fold_build2_loc (loc, EQ_EXPR, result_type, length1, length2);
+	  if (EXPR_P (comparison))
+	    SET_EXPR_LOCATION (comparison, loc);
 
-	  /* If the length expression is of the form (cond ? val : 0), assume
-	     that cond is equivalent to (length != 0).  That's guaranteed by
-	     construction of the array types in gnat_to_gnu_entity.  */
-	  if (TREE_CODE (length1) == COND_EXPR
-	      && integer_zerop (TREE_OPERAND (length1, 2)))
-	    this_a1_is_null
-	      = invert_truthvalue_loc (loc, TREE_OPERAND (length1, 0));
-	  else
-	    this_a1_is_null = fold_build2_loc (loc, EQ_EXPR, result_type,
-					       length1, size_zero_node);
+	  lb1 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (lb1, a1);
+	  ub1 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (ub1, a1);
 
-	  /* Likewise for the second array.  */
-	  if (TREE_CODE (length2) == COND_EXPR
-	      && integer_zerop (TREE_OPERAND (length2, 2)))
-	    this_a2_is_null
-	      = invert_truthvalue_loc (loc, TREE_OPERAND (length2, 0));
-	  else
-	    this_a2_is_null = fold_build2_loc (loc, EQ_EXPR, result_type,
-					       length2, size_zero_node);
+	  this_a1_is_null
+	    = fold_build2_loc (loc, LT_EXPR, result_type, ub1, lb1);
+
+	  lb2 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (lb2, a2);
+	  ub2 = SUBSTITUTE_PLACEHOLDER_IN_EXPR (ub2, a2);
+
+	  this_a2_is_null
+	    = fold_build2_loc (loc, LT_EXPR, result_type, ub2, lb2);
 	}
 
       /* Append expressions for this dimension to the final expressions.  */
@@ -535,7 +533,7 @@ compare_fat_pointers (location_t loc, tree result_type, tree p1, tree p2)
 			  build_binary_op (TRUTH_ORIF_EXPR, result_type,
 					   p1_array_is_null, same_bounds));
 }
-
+
 /* Compute the result of applying OP_CODE to LHS and RHS, where both are of
    type TYPE.  We know that TYPE is a modular type with a nonbinary
    modulus.  */
@@ -631,7 +629,7 @@ nonbinary_modular_operation (enum tree_code op_code, tree type, tree lhs,
 
   return convert (type, result);
 }
-
+
 /* This page contains routines that implement the Ada semantics with regard
    to atomic objects.  They are fully piggybacked on the middle-end support
    for atomic loads and stores.
@@ -830,7 +828,7 @@ build_load_modify_store (tree dest, tree src, Node_Id gnat_node)
   /* Something went wrong earlier if we have not found the atomic load.  */
   gcc_unreachable ();
 }
-
+
 /* Make a binary operation of kind OP_CODE.  RESULT_TYPE is the type
    desired for the result.  Usually the operation is to be performed
    in that type.  For INIT_EXPR and MODIFY_EXPR, RESULT_TYPE must be
@@ -861,9 +859,7 @@ build_binary_op (enum tree_code op_code, tree result_type,
       && TYPE_JUSTIFIED_MODULAR_P (operation_type))
     operation_type = TREE_TYPE (TYPE_FIELDS (operation_type));
 
-  if (operation_type
-      && TREE_CODE (operation_type) == INTEGER_TYPE
-      && TYPE_EXTRA_SUBTYPE_P (operation_type))
+  if (operation_type && TYPE_IS_EXTRA_SUBTYPE_P (operation_type))
     operation_type = get_base_type (operation_type);
 
   modulus = (operation_type
@@ -879,31 +875,21 @@ build_binary_op (enum tree_code op_code, tree result_type,
 
       /* If there were integral or pointer conversions on the LHS, remove
 	 them; we'll be putting them back below if needed.  Likewise for
-	 conversions between array and record types, except for justified
-	 modular types.  But don't do this if the right operand is not
-	 BLKmode (for packed arrays) unless we are not changing the mode.  */
+	 conversions between record types, except for justified modular types.
+	 But don't do this if the right operand is not BLKmode (for packed
+	 arrays) unless we are not changing the mode.  */
       while ((CONVERT_EXPR_P (left_operand)
 	      || TREE_CODE (left_operand) == VIEW_CONVERT_EXPR)
 	     && (((INTEGRAL_TYPE_P (left_type)
 		   || POINTER_TYPE_P (left_type))
-		  && (INTEGRAL_TYPE_P (TREE_TYPE
-				       (TREE_OPERAND (left_operand, 0)))
-		      || POINTER_TYPE_P (TREE_TYPE
-					 (TREE_OPERAND (left_operand, 0)))))
-		 || (((TREE_CODE (left_type) == RECORD_TYPE
-		       && !TYPE_JUSTIFIED_MODULAR_P (left_type))
-		      || TREE_CODE (left_type) == ARRAY_TYPE)
-		     && ((TREE_CODE (TREE_TYPE
-				     (TREE_OPERAND (left_operand, 0)))
-			  == RECORD_TYPE)
-			 || (TREE_CODE (TREE_TYPE
-					(TREE_OPERAND (left_operand, 0)))
-			     == ARRAY_TYPE))
+		  && (INTEGRAL_TYPE_P (operand_type (left_operand))
+		      || POINTER_TYPE_P (operand_type (left_operand))))
+		 || (TREE_CODE (left_type) == RECORD_TYPE
+		     && !TYPE_JUSTIFIED_MODULAR_P (left_type)
+		     && TREE_CODE (operand_type (left_operand)) == RECORD_TYPE
 		     && (TYPE_MODE (right_type) == BLKmode
-			 || (TYPE_MODE (left_type)
-			     == TYPE_MODE (TREE_TYPE
-					   (TREE_OPERAND
-					    (left_operand, 0))))))))
+			 || TYPE_MODE (left_type)
+			    == TYPE_MODE (operand_type (left_operand))))))
 	{
 	  left_operand = TREE_OPERAND (left_operand, 0);
 	  left_type = TREE_TYPE (left_operand);
@@ -925,8 +911,7 @@ build_binary_op (enum tree_code op_code, tree result_type,
 	       && TREE_CONSTANT (TYPE_SIZE (left_type))
 	       && ((TREE_CODE (right_operand) == COMPONENT_REF
 		    && TYPE_MAIN_VARIANT (left_type)
-		       == TYPE_MAIN_VARIANT
-			  (TREE_TYPE (TREE_OPERAND (right_operand, 0))))
+		       == TYPE_MAIN_VARIANT (operand_type (right_operand)))
 		   || (TREE_CODE (right_operand) == CONSTRUCTOR
 		       && !CONTAINS_PLACEHOLDER_P
 			   (DECL_SIZE (TYPE_FIELDS (left_type)))))
@@ -980,22 +965,23 @@ build_binary_op (enum tree_code op_code, tree result_type,
 	      || TREE_CODE (result) == ARRAY_RANGE_REF)
 	    while (handled_component_p (result))
 	      result = TREE_OPERAND (result, 0);
+
 	  else if (TREE_CODE (result) == REALPART_EXPR
 		   || TREE_CODE (result) == IMAGPART_EXPR
 		   || (CONVERT_EXPR_P (result)
 		       && (((TREE_CODE (restype)
-			     == TREE_CODE (TREE_TYPE
-					   (TREE_OPERAND (result, 0))))
-			     && (TYPE_MODE (TREE_TYPE
-					    (TREE_OPERAND (result, 0)))
-				 == TYPE_MODE (restype)))
+			     == TREE_CODE (operand_type (result))
+			     && TYPE_MODE (restype)
+				== TYPE_MODE (operand_type (result))))
 			   || TYPE_ALIGN_OK (restype))))
 	    result = TREE_OPERAND (result, 0);
+
 	  else if (TREE_CODE (result) == VIEW_CONVERT_EXPR)
 	    {
 	      TREE_ADDRESSABLE (result) = 1;
 	      result = TREE_OPERAND (result, 0);
 	    }
+
 	  else
 	    break;
 	}
@@ -1044,8 +1030,15 @@ build_binary_op (enum tree_code op_code, tree result_type,
       /* For a range, make sure the element type is consistent.  */
       if (op_code == ARRAY_RANGE_REF
 	  && TREE_TYPE (operation_type) != TREE_TYPE (left_type))
-	operation_type = build_array_type (TREE_TYPE (left_type),
-					   TYPE_DOMAIN (operation_type));
+	{
+	  operation_type
+	    = build_nonshared_array_type (TREE_TYPE (left_type),
+					  TYPE_DOMAIN (operation_type));
+	  /* Declare it now since it will never be declared otherwise.  This
+	     is necessary to ensure that its subtrees are properly marked.  */
+	  create_type_decl (TYPE_NAME (operation_type), operation_type, true,
+			    false, Empty);
+	}
 
       /* Then convert the right operand to its base type.  This will prevent
 	 unneeded sign conversions when sizetype is wider than integer.  */
@@ -1330,7 +1323,7 @@ build_binary_op (enum tree_code op_code, tree result_type,
 
   return result;
 }
-
+
 /* Similar, but for unary operations.  */
 
 tree
@@ -1690,7 +1683,7 @@ build_unary_op (enum tree_code op_code, tree result_type, tree operand)
 
   return result;
 }
-
+
 /* Similar, but for COND_EXPR.  */
 
 tree
@@ -1765,7 +1758,7 @@ build_compound_expr (tree result_type, tree stmt_operand, tree expr_operand)
 
   return result;
 }
-
+
 /* Conveniently construct a function call expression.  FNDECL names the
    function to be called, N is the number of arguments, and the "..."
    parameters are the argument expressions.  Unlike build_call_expr
@@ -1783,7 +1776,7 @@ build_call_n_expr (tree fndecl, int n, ...)
   va_end (ap);
   return fn;
 }
-
+
 /* Build a goto to LABEL for a raise, with an optional call to Local_Raise.
    MSG gives the exception's identity for the call to Local_Raise, if any.  */
 
@@ -1931,7 +1924,7 @@ build_call_raise_range (int msg, Node_Id gnat_node, char kind,
 		       convert (integer_type_node, first),
 		       convert (integer_type_node, last));
 }
-
+
 /* qsort comparer for the bit positions of two constructor elements
    for record components.  */
 
@@ -1994,7 +1987,7 @@ gnat_build_constructor (tree type, vec<constructor_elt, va_gc> *v)
   TREE_READONLY (result) = TYPE_READONLY (type) || read_only || allconstant;
   return result;
 }
-
+
 /* Return a COMPONENT_REF to access FIELD in RECORD, or NULL_TREE if the field
    is not found in the record.  Don't fold the result if NO_FOLD is true.  */
 
@@ -2004,6 +1997,8 @@ build_simple_component_ref (tree record, tree field, bool no_fold)
   tree type = TYPE_MAIN_VARIANT (TREE_TYPE (record));
   tree ref;
 
+  /* The failure of this assertion will very likely come from a missing
+     insertion of an explicit dereference.  */
   gcc_assert (RECORD_OR_UNION_TYPE_P (type) && COMPLETE_TYPE_P (type));
 
   /* Try to fold a conversion from another record or union type unless the type
@@ -2118,7 +2113,7 @@ build_component_ref (tree record, tree field, bool no_fold)
 		 build_call_raise (CE_Discriminant_Check_Failed, Empty,
 				   N_Raise_Constraint_Error));
 }
-
+
 /* Helper for build_call_alloc_dealloc, with arguments to be interpreted
    identically.  Process the case where a GNAT_PROC to call is provided.  */
 
@@ -2331,7 +2326,7 @@ build_call_alloc_dealloc (tree gnu_obj, tree gnu_size, tree gnu_type,
       return maybe_wrap_malloc (gnu_size, gnu_type, gnat_node);
     }
 }
-
+
 /* Build a GCC tree that corresponds to allocating an object of TYPE whose
    initial value is INIT, if INIT is nonzero.  Convert the expression to
    RESULT_TYPE, which must be some pointer type, and return the result.
@@ -2431,16 +2426,13 @@ build_allocator (tree type, tree init, tree result_type, Entity_Id gnat_proc,
     size = TYPE_SIZE_UNIT (TREE_TYPE (init));
 
   /* If the size is still self-referential, reference the initializing
-     expression, if it is present.  If not, this must have been a
-     call to allocate a library-level object, in which case we use
-     the maximum size.  */
-  if (CONTAINS_PLACEHOLDER_P (size))
-    {
-      if (!ignore_init_type && init)
-	size = substitute_placeholder_in_expr (size, init);
-      else
-	size = max_size (size, true);
-    }
+     expression, if it is present.  If not, this must have been a call
+     to allocate a library-level object, in which case we just use the
+     maximum size.  */
+  if (!ignore_init_type && init)
+    size = SUBSTITUTE_PLACEHOLDER_IN_EXPR (size, init);
+  else if (CONTAINS_PLACEHOLDER_P (size))
+    size = max_size (size, true);
 
   /* If the size overflows, pass -1 so Storage_Error will be raised.  */
   if (TREE_CODE (size) == INTEGER_CST && !valid_constant_size_p (size))
@@ -2465,7 +2457,7 @@ build_allocator (tree type, tree init, tree result_type, Entity_Id gnat_proc,
 
   return storage;
 }
-
+
 /* Indicate that we need to take the address of T and that it therefore
    should not be allocated in a register.  Return true if successful.  */
 
@@ -2513,7 +2505,7 @@ gnat_mark_addressable (tree t)
 	return true;
     }
 }
-
+
 /* Return true if EXP is a stable expression for the purpose of the functions
    below and, therefore, can be returned unmodified by them.  We accept things
    that are actual constants or that have already been handled.  */
@@ -2927,7 +2919,7 @@ is_simple_additive_expression (tree expr, tree *add, tree *cst, bool *minus_p)
 tree
 gnat_invariant_expr (tree expr)
 {
-  const tree type = TREE_TYPE (expr);
+  tree type = TREE_TYPE (expr);
   tree add, cst;
   bool minus_p;
 
@@ -2941,8 +2933,7 @@ gnat_invariant_expr (tree expr)
     {
       expr = DECL_INITIAL (expr);
       /* Look into CONSTRUCTORs built to initialize padded types.  */
-      if (TYPE_IS_PADDING_P (TREE_TYPE (expr)))
-	expr = convert (TREE_TYPE (TYPE_FIELDS (TREE_TYPE (expr))), expr);
+      expr = maybe_padded_object (expr);
       expr = remove_conversions (expr, false);
     }
 

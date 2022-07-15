@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2002-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2002-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -56,6 +56,7 @@ generic
    --  Returns True if Item is found in Set, False otherwise
 
 package GNAT.Array_Split is
+   pragma Preelaborate;
 
    Index_Error : exception;
    --  Raised by all operations below if Index > Field_Count (S)
@@ -71,7 +72,12 @@ package GNAT.Array_Split is
       --  separator and no empty slice is created.
      );
 
-   type Slice_Set is private;
+   type Slice_Set is private
+     with Iterable => (First        => First_Cursor,
+                       Next         => Advance,
+                       Has_Element  => Has_Element,
+                       Element      => Slice);
+
    --  This type uses by-reference semantics. This is a set of slices as
    --  returned by Create or Set routines below. The abstraction represents
    --  a set of items. Each item is a part of the original array named a
@@ -84,6 +90,10 @@ package GNAT.Array_Split is
       From       : Element_Sequence;
       Separators : Element_Sequence;
       Mode       : Separator_Mode := Single);
+   function Create
+     (From       : Element_Sequence;
+      Separators : Element_Sequence;
+      Mode       : Separator_Mode := Single) return Slice_Set;
    --  Create a cut array object. From is the source array, and Separators
    --  is a sequence of Element along which to split the array. The source
    --  array is sliced at separator boundaries. The separators are not
@@ -98,6 +108,10 @@ package GNAT.Array_Split is
       From       : Element_Sequence;
       Separators : Element_Set;
       Mode       : Separator_Mode := Single);
+   function Create
+     (From       : Element_Sequence;
+      Separators : Element_Set;
+      Mode       : Separator_Mode := Single) return Slice_Set;
    --  Same as above but using a Element_Set
 
    procedure Set
@@ -116,14 +130,21 @@ package GNAT.Array_Split is
    type Slice_Number is new Natural;
    --  Type used to count number of slices
 
-   function Slice_Count (S : Slice_Set) return Slice_Number;
-   pragma Inline (Slice_Count);
+   function Slice_Count (S : Slice_Set) return Slice_Number with Inline;
    --  Returns the number of slices (fields) in S
+
+   function First_Cursor (Unused : Slice_Set) return Slice_Number is (1);
+   function Advance
+     (Unused : Slice_Set; Position : Slice_Number) return Slice_Number
+   is (Position + 1);
+   function Has_Element
+     (Cont : Slice_Set; Position : Slice_Number) return Boolean
+   is (Position <= Slice_Count (Cont));
+   --  Functions used to iterate over a Slice_Set
 
    function Slice
      (S     : Slice_Set;
-      Index : Slice_Number) return Element_Sequence;
-   pragma Inline (Slice);
+      Index : Slice_Number) return Element_Sequence with Inline;
    --  Returns the slice at position Index. First slice is 1. If Index is 0
    --  the whole array is returned including the separators (this is the
    --  original source array).
@@ -183,8 +204,8 @@ private
       D : Data_Access;
    end record;
 
-   procedure Initialize (S : in out Slice_Set);
-   procedure Adjust     (S : in out Slice_Set);
-   procedure Finalize   (S : in out Slice_Set);
+   overriding procedure Initialize (S : in out Slice_Set);
+   overriding procedure Adjust     (S : in out Slice_Set);
+   overriding procedure Finalize   (S : in out Slice_Set);
 
 end GNAT.Array_Split;

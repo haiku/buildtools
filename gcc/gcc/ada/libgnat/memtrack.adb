@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -102,14 +102,11 @@ package body System.Memory is
    pragma Import (C, OS_Exit, "__gnat_os_exit");
    pragma No_Return (OS_Exit);
 
-   procedure fwrite
-     (Ptr    : System.Address;
-      Size   : size_t;
-      Nmemb  : size_t;
-      Stream : File_Ptr);
+   In_Child_After_Fork : Integer;
+   pragma Import (C, In_Child_After_Fork, "__gnat_in_child_after_fork");
 
    procedure fwrite
-     (Str    : String;
+     (Ptr    : System.Address;
       Size   : size_t;
       Nmemb  : size_t;
       Stream : File_Ptr);
@@ -155,6 +152,24 @@ package body System.Memory is
    --  themselves do dynamic allocation. We use First_Call flag to avoid
    --  infinite recursion
 
+   function Allow_Trace return Boolean;
+   pragma Inline (Allow_Trace);
+   --  Check if the memory trace is allowed
+
+   -----------------
+   -- Allow_Trace --
+   -----------------
+
+   function Allow_Trace return Boolean is
+   begin
+      if First_Call then
+         First_Call := False;
+         return In_Child_After_Fork = 0;
+      else
+         return False;
+      end if;
+   end Allow_Trace;
+
    -----------
    -- Alloc --
    -----------
@@ -182,13 +197,11 @@ package body System.Memory is
 
       Result := c_malloc (Actual_Size);
 
-      if First_Call then
+      if Allow_Trace then
 
          --  Logs allocation call
          --  format is:
          --   'A' <mem addr> <size chunk> <len backtrace> <addr1> ... <addrn>
-
-         First_Call := False;
 
          if Needs_Init then
             Gmem_Initialize;
@@ -249,13 +262,11 @@ package body System.Memory is
    begin
       Lock_Task.all;
 
-      if First_Call then
+      if Allow_Trace then
 
          --  Logs deallocation call
          --  format is:
          --   'D' <mem addr> <len backtrace> <addr1> ... <addrn>
-
-         First_Call := False;
 
          if Needs_Init then
             Gmem_Initialize;
@@ -306,9 +317,13 @@ package body System.Memory is
             OS_Exit (255);
          end if;
 
-         fwrite ("GMEM DUMP" & ASCII.LF, 10, 1, Gmemfile);
-         fwrite (Timestamp'Address, Duration'Max_Size_In_Storage_Elements, 1,
-                 Gmemfile);
+         declare
+            S : constant String := "GMEM DUMP" & ASCII.LF;
+         begin
+            fwrite (S'Address, S'Length, 1, Gmemfile);
+            fwrite (Timestamp'Address, Duration'Max_Size_In_Storage_Elements,
+                    1, Gmemfile);
+         end;
       end if;
    end Gmem_Initialize;
 
@@ -336,9 +351,7 @@ package body System.Memory is
       Abort_Defer.all;
       Lock_Task.all;
 
-      if First_Call then
-         First_Call := False;
-
+      if Allow_Trace then
          --  We first log deallocation call
 
          if Needs_Init then

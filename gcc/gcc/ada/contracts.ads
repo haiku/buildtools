@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2015-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2015-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -33,8 +33,9 @@ package Contracts is
    procedure Add_Contract_Item (Prag : Node_Id; Id : Entity_Id);
    --  Add pragma Prag to the contract of a constant, entry, entry family,
    --  [generic] package, package body, protected unit, [generic] subprogram,
-   --  subprogram body, variable or task unit denoted by Id. The following are
-   --  valid pragmas:
+   --  subprogram body, variable, task unit, or type denoted by Id.
+   --  The following are valid pragmas:
+   --
    --    Abstract_State
    --    Async_Readers
    --    Async_Writers
@@ -49,6 +50,7 @@ package Contracts is
    --    Initial_Condition
    --    Initializes
    --    Interrupt_Handler
+   --    No_Caching
    --    Part_Of
    --    Postcondition
    --    Precondition
@@ -66,15 +68,17 @@ package Contracts is
    --  Analyze all delayed pragmas chained on the contract of entry or
    --  subprogram body Body_Id as if they appeared at the end of a declarative
    --  region. Pragmas in question are:
-   --    Contract_Cases   (stand alone subprogram body)
-   --    Depends          (stand alone subprogram body)
-   --    Global           (stand alone subprogram body)
-   --    Postcondition    (stand alone subprogram body)
-   --    Precondition     (stand alone subprogram body)
+   --
+   --    Contract_Cases     (stand alone subprogram body)
+   --    Depends            (stand alone subprogram body)
+   --    Global             (stand alone subprogram body)
+   --    Postcondition      (stand alone subprogram body)
+   --    Precondition       (stand alone subprogram body)
    --    Refined_Depends
    --    Refined_Global
    --    Refined_Post
-   --    Test_Case        (stand alone subprogram body)
+   --    Subprogram_Variant (stand alone subprogram body)
+   --    Test_Case          (stand alone subprogram body)
 
    procedure Analyze_Entry_Or_Subprogram_Contract
      (Subp_Id   : Entity_Id;
@@ -82,11 +86,13 @@ package Contracts is
    --  Analyze all delayed pragmas chained on the contract of entry or
    --  subprogram Subp_Id as if they appeared at the end of a declarative
    --  region. The pragmas in question are:
+   --
    --    Contract_Cases
    --    Depends
    --    Global
    --    Postcondition
    --    Precondition
+   --    Subprogram_Variant
    --    Test_Case
    --
    --  Freeze_Id is the entity of a [generic] package body or a [generic]
@@ -98,6 +104,7 @@ package Contracts is
    --  Analyze all delayed pragmas chained on the contract of object Obj_Id as
    --  if they appeared at the end of the declarative region. The pragmas to be
    --  considered are:
+   --
    --    Async_Readers
    --    Async_Writers
    --    Depends           (single concurrent object)
@@ -109,12 +116,26 @@ package Contracts is
    --  Freeze_Id is the entity of a [generic] package body or a [generic]
    --  subprogram body which "freezes" the contract of Obj_Id.
 
+   procedure Analyze_Type_Contract (Type_Id : Entity_Id);
+   --  Analyze all delayed pragmas chained on the contract of object Obj_Id as
+   --  if they appeared at the end of the declarative region. The pragmas to be
+   --  considered are:
+   --
+   --    Async_Readers
+   --    Async_Writers
+   --    Effective_Reads
+   --    Effective_Writes
+   --
+   --  In the case of a protected or task type, there will also be
+   --  a call to Analyze_Protected_Contract or Analyze_Task_Contract.
+
    procedure Analyze_Package_Body_Contract
      (Body_Id   : Entity_Id;
       Freeze_Id : Entity_Id := Empty);
    --  Analyze all delayed pragmas chained on the contract of package body
    --  Body_Id as if they appeared at the end of a declarative region. The
    --  pragmas that are considered are:
+   --
    --    Refined_State
    --
    --  Freeze_Id is the entity of a [generic] package body or a [generic]
@@ -124,9 +145,9 @@ package Contracts is
    --  Analyze all delayed pragmas chained on the contract of package Pack_Id
    --  as if they appeared at the end of a declarative region. The pragmas
    --  that are considered are:
+   --
    --    Initial_Condition
    --    Initializes
-   --    Part_Of
 
    procedure Analyze_Protected_Contract (Prot_Id : Entity_Id);
    --  Analyze all delayed pragmas chained on the contract of protected unit
@@ -137,6 +158,7 @@ package Contracts is
    --  Analyze all delayed pragmas chained on the contract of subprogram body
    --  stub Stub_Id as if they appeared at the end of a declarative region. The
    --  pragmas in question are:
+   --
    --    Contract_Cases
    --    Depends
    --    Global
@@ -151,6 +173,7 @@ package Contracts is
    --  Analyze all delayed pragmas chained on the contract of task unit Task_Id
    --  as if they appeared at the end of a declarative region. The pragmas in
    --  question are:
+   --
    --    Depends
    --    Global
 
@@ -164,6 +187,21 @@ package Contracts is
    --  list which contains entry, package, protected, subprogram, or task body
    --  denoted by Body_Decl. In addition, freeze the contract of the nearest
    --  enclosing package body.
+
+   function Get_Postcond_Enabled (Subp : Entity_Id) return Entity_Id;
+   --  Get the defining identifier for a subprogram's Postcond_Enabled
+   --  object created during the expansion of the subprogram's postconditions.
+
+   function Get_Result_Object_For_Postcond (Subp : Entity_Id) return Entity_Id;
+   --  Get the defining identifier for a subprogram's
+   --  Result_Object_For_Postcond object created during the expansion of the
+   --  subprogram's postconditions.
+
+   function Get_Return_Success_For_Postcond
+     (Subp : Entity_Id) return Entity_Id;
+   --  Get the defining identifier for a subprogram's
+   --  Return_Success_For_Postcond object created during the expansion of the
+   --  subprogram's postconditions.
 
    procedure Inherit_Subprogram_Contract
      (Subp      : Entity_Id;

@@ -28,11 +28,11 @@ version='(unversioned)'
 # `contrib/prerequisites.md5` with the new checksums.
 
 gmp='gmp-6.1.0.tar.bz2'
-mpfr='mpfr-3.1.4.tar.bz2'
+mpfr='mpfr-3.1.6.tar.bz2'
 mpc='mpc-1.0.3.tar.gz'
 isl='isl-0.18.tar.bz2'
 
-base_url='ftp://gcc.gnu.org/pub/gcc/infrastructure/'
+base_url='http://gcc.gnu.org/pub/gcc/infrastructure/'
 
 echo_archives() {
     echo "${gmp}"
@@ -47,18 +47,21 @@ force=0
 OS=$(uname)
 
 case $OS in
-  "Darwin"|"FreeBSD"|"DragonFly")
+  "Darwin"|"FreeBSD"|"DragonFly"|"AIX")
     chksum='shasum -a 512 --check'
   ;;
+  "OpenBSD")
+    chksum='sha512 -c'
+  ;;
   *)
-    chksum='sha512sum --check'
+    chksum='sha512sum -c'
   ;;
 esac
 
 if type wget > /dev/null ; then
   fetch='wget'
 else
-  fetch='curl -LO -u anonymous:'
+  fetch='curl -LO'
 fi
 chksum_extension='sha512'
 directory='.'
@@ -219,7 +222,7 @@ for ar in $(echo_archives)
 do
     if [ ${force} -gt 0 ]; then rm -f "${directory}/${ar}"; fi
     [ -e "${directory}/${ar}" ]                                               \
-        || ${fetch} --no-verbose -O "${directory}/${ar}" "${base_url}${ar}"       \
+        || ( cd "${directory}" && ${fetch} --no-verbose "${base_url}${ar}" )  \
         || die "Cannot download ${ar} from ${base_url}"
 done
 unset ar
@@ -242,8 +245,19 @@ for ar in $(echo_archives)
 do
     package="${ar%.tar*}"
     if [ ${force} -gt 0 ]; then rm -rf "${directory}/${package}"; fi
+    case $ar in
+    *.gz)
+	uncompress='gzip -d'
+	;;
+    *.bz2)
+	uncompress='bzip2 -d'
+	;;
+    *)
+	uncompress='cat'
+	;;
+    esac
     [ -e "${directory}/${package}" ]                                          \
-        || ( cd "${directory}" && tar -xf "${ar}" )                           \
+        || ( cd "${directory}" && $uncompress <"${ar}" | tar -xf - )          \
         || die "Cannot extract package from ${ar}"
     unset package
 done

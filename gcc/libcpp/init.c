@@ -1,5 +1,5 @@
 /* CPP Library.
-   Copyright (C) 1986-2018 Free Software Foundation, Inc.
+   Copyright (C) 1986-2021 Free Software Foundation, Inc.
    Contributed by Per Bothner, 1994-95.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -36,7 +36,7 @@ along with this program; see the file COPYING3.  If not see
 
 static void init_library (void);
 static void mark_named_operators (cpp_reader *, int);
-static void read_original_filename (cpp_reader *);
+static bool read_original_filename (cpp_reader *);
 static void read_original_directory (cpp_reader *);
 static void post_options (cpp_reader *);
 
@@ -92,30 +92,37 @@ struct lang_flags
   char trigraphs;
   char utf8_char_literals;
   char va_opt;
+  char scope;
+  char dfp_constants;
+  char size_t_literals;
 };
 
 static const struct lang_flags lang_defaults[] =
-{ /*              c99 c++ xnum xid c11 std digr ulit rlit udlit bincst digsep trig u8chlit vaopt */
-  /* GNUC89   */  { 0,  0,  1,  0,  0,  0,  1,   0,   0,   0,    0,     0,     0,   0,      1 },
-  /* GNUC99   */  { 1,  0,  1,  1,  0,  0,  1,   1,   1,   0,    0,     0,     0,   0,      1 },
-  /* GNUC11   */  { 1,  0,  1,  1,  1,  0,  1,   1,   1,   0,    0,     0,     0,   0,      1 },
-  /* GNUC17   */  { 1,  0,  1,  1,  1,  0,  1,   1,   1,   0,    0,     0,     0,   0,      1 },
-  /* STDC89   */  { 0,  0,  0,  0,  0,  1,  0,   0,   0,   0,    0,     0,     1,   0,      0 },
-  /* STDC94   */  { 0,  0,  0,  0,  0,  1,  1,   0,   0,   0,    0,     0,     1,   0,      0 },
-  /* STDC99   */  { 1,  0,  1,  1,  0,  1,  1,   0,   0,   0,    0,     0,     1,   0,      0 },
-  /* STDC11   */  { 1,  0,  1,  1,  1,  1,  1,   1,   0,   0,    0,     0,     1,   0,      0 },
-  /* STDC17   */  { 1,  0,  1,  1,  1,  1,  1,   1,   0,   0,    0,     0,     1,   0,      0 },
-  /* GNUCXX   */  { 0,  1,  1,  1,  0,  0,  1,   0,   0,   0,    0,     0,     0,   0,      1 },
-  /* CXX98    */  { 0,  1,  0,  1,  0,  1,  1,   0,   0,   0,    0,     0,     1,   0,      0 },
-  /* GNUCXX11 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    0,     0,     0,   0,      1 },
-  /* CXX11    */  { 1,  1,  0,  1,  1,  1,  1,   1,   1,   1,    0,     0,     1,   0,      0 },
-  /* GNUCXX14 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    1,     1,     0,   0,      1 },
-  /* CXX14    */  { 1,  1,  0,  1,  1,  1,  1,   1,   1,   1,    1,     1,     1,   0,      0 },
-  /* GNUCXX17 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    1,     1,     0,   1,      1 },
-  /* CXX17    */  { 1,  1,  1,  1,  1,  1,  1,   1,   1,   1,    1,     1,     0,   1,      0 },
-  /* GNUCXX2A */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    1,     1,     0,   1,      1 },
-  /* CXX2A    */  { 1,  1,  1,  1,  1,  1,  1,   1,   1,   1,    1,     1,     0,   1,      1 },
-  /* ASM      */  { 0,  0,  1,  0,  0,  0,  0,   0,   0,   0,    0,     0,     0,   0,      0 }
+{ /*              c99 c++ xnum xid c11 std digr ulit rlit udlit bincst digsep trig u8chlit vaopt scope dfp szlit */
+  /* GNUC89   */  { 0,  0,  1,  0,  0,  0,  1,   0,   0,   0,    0,     0,     0,   0,      1,   1,     0,   0 },
+  /* GNUC99   */  { 1,  0,  1,  1,  0,  0,  1,   1,   1,   0,    0,     0,     0,   0,      1,   1,     0,   0 },
+  /* GNUC11   */  { 1,  0,  1,  1,  1,  0,  1,   1,   1,   0,    0,     0,     0,   0,      1,   1,     0,   0 },
+  /* GNUC17   */  { 1,  0,  1,  1,  1,  0,  1,   1,   1,   0,    0,     0,     0,   0,      1,   1,     0,   0 },
+  /* GNUC2X   */  { 1,  0,  1,  1,  1,  0,  1,   1,   1,   0,    1,     0,     0,   1,      1,   1,     1,   0 },
+  /* STDC89   */  { 0,  0,  0,  0,  0,  1,  0,   0,   0,   0,    0,     0,     1,   0,      0,   0,     0,   0 },
+  /* STDC94   */  { 0,  0,  0,  0,  0,  1,  1,   0,   0,   0,    0,     0,     1,   0,      0,   0,     0,   0 },
+  /* STDC99   */  { 1,  0,  1,  1,  0,  1,  1,   0,   0,   0,    0,     0,     1,   0,      0,   0,     0,   0 },
+  /* STDC11   */  { 1,  0,  1,  1,  1,  1,  1,   1,   0,   0,    0,     0,     1,   0,      0,   0,     0,   0 },
+  /* STDC17   */  { 1,  0,  1,  1,  1,  1,  1,   1,   0,   0,    0,     0,     1,   0,      0,   0,     0,   0 },
+  /* STDC2X   */  { 1,  0,  1,  1,  1,  1,  1,   1,   0,   0,    1,     0,     1,   1,      0,   1,     1,   0 },
+  /* GNUCXX   */  { 0,  1,  1,  1,  0,  0,  1,   0,   0,   0,    0,     0,     0,   0,      1,   1,     0,   0 },
+  /* CXX98    */  { 0,  1,  0,  1,  0,  1,  1,   0,   0,   0,    0,     0,     1,   0,      0,   1,     0,   0 },
+  /* GNUCXX11 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    0,     0,     0,   0,      1,   1,     0,   0 },
+  /* CXX11    */  { 1,  1,  0,  1,  1,  1,  1,   1,   1,   1,    0,     0,     1,   0,      0,   1,     0,   0 },
+  /* GNUCXX14 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    1,     1,     0,   0,      1,   1,     0,   0 },
+  /* CXX14    */  { 1,  1,  0,  1,  1,  1,  1,   1,   1,   1,    1,     1,     1,   0,      0,   1,     0,   0 },
+  /* GNUCXX17 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    1,     1,     0,   1,      1,   1,     0,   0 },
+  /* CXX17    */  { 1,  1,  1,  1,  1,  1,  1,   1,   1,   1,    1,     1,     0,   1,      0,   1,     0,   0 },
+  /* GNUCXX20 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    1,     1,     0,   1,      1,   1,     0,   0 },
+  /* CXX20    */  { 1,  1,  1,  1,  1,  1,  1,   1,   1,   1,    1,     1,     0,   1,      1,   1,     0,   0 },
+  /* GNUCXX23 */  { 1,  1,  1,  1,  1,  0,  1,   1,   1,   1,    1,     1,     0,   1,      1,   1,     0,   1 },
+  /* CXX23    */  { 1,  1,  1,  1,  1,  1,  1,   1,   1,   1,    1,     1,     0,   1,      1,   1,     0,   1 },
+  /* ASM      */  { 0,  0,  1,  0,  0,  0,  0,   0,   0,   0,    0,     0,     0,   0,      0,   0,     0,   0 }
 };
 
 /* Sets internal flags correctly for a given language.  */
@@ -141,6 +148,9 @@ cpp_set_lang (cpp_reader *pfile, enum c_lang lang)
   CPP_OPTION (pfile, trigraphs)			 = l->trigraphs;
   CPP_OPTION (pfile, utf8_char_literals)	 = l->utf8_char_literals;
   CPP_OPTION (pfile, va_opt)			 = l->va_opt;
+  CPP_OPTION (pfile, scope)			 = l->scope;
+  CPP_OPTION (pfile, dfp_constants)		 = l->dfp_constants;
+  CPP_OPTION (pfile, size_t_literals)		 = l->size_t_literals;
 }
 
 /* Initialize library global state.  */
@@ -169,7 +179,7 @@ init_library (void)
 /* Initialize a cpp_reader structure.  */
 cpp_reader *
 cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
-		   struct line_maps *line_table)
+		   class line_maps *line_table)
 {
   cpp_reader *pfile;
 
@@ -183,11 +193,12 @@ cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
   CPP_OPTION (pfile, warn_multichar) = 1;
   CPP_OPTION (pfile, discard_comments) = 1;
   CPP_OPTION (pfile, discard_comments_in_macro_exp) = 1;
-  CPP_OPTION (pfile, tabstop) = 8;
+  CPP_OPTION (pfile, max_include_depth) = 200;
   CPP_OPTION (pfile, operator_names) = 1;
   CPP_OPTION (pfile, warn_trigraphs) = 2;
   CPP_OPTION (pfile, warn_endif_labels) = 1;
   CPP_OPTION (pfile, cpp_warn_c90_c99_compat) = -1;
+  CPP_OPTION (pfile, cpp_warn_c11_c2x_compat) = -1;
   CPP_OPTION (pfile, cpp_warn_cxx11_compat) = 0;
   CPP_OPTION (pfile, cpp_warn_deprecated) = 1;
   CPP_OPTION (pfile, cpp_warn_long_long) = 0;
@@ -241,8 +252,10 @@ cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
   /* Set up static tokens.  */
   pfile->avoid_paste.type = CPP_PADDING;
   pfile->avoid_paste.val.source = NULL;
-  pfile->eof.type = CPP_EOF;
-  pfile->eof.flags = 0;
+  pfile->avoid_paste.src_loc = 0;
+  pfile->endarg.type = CPP_EOF;
+  pfile->endarg.flags = 0;
+  pfile->endarg.src_loc = 0;
 
   /* Create a token buffer for the lexer.  */
   _cpp_init_tokenrun (&pfile->base_run, 250);
@@ -262,10 +275,11 @@ cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
   pfile->pushed_macros = 0;
 
   /* Do not force token locations by default.  */
-  pfile->forced_token_location_p = NULL;
+  pfile->forced_token_location = 0;
 
-  /* Initialize source_date_epoch to -2 (not yet set).  */
-  pfile->source_date_epoch = (time_t) -2;
+  /* Note the timestamp is unset.  */
+  pfile->time_stamp = time_t (-1);
+  pfile->time_stamp_kind = 0;
 
   /* The expression parser stack.  */
   _cpp_expand_op_stack (pfile);
@@ -283,7 +297,7 @@ cpp_create_reader (enum c_lang lang, cpp_hash_table *table,
 /* Set the line_table entry in PFILE.  This is called after reading a
    PCH file, as the old line_table will be incorrect.  */
 void
-cpp_set_line_map (cpp_reader *pfile, struct line_maps *line_table)
+cpp_set_line_map (cpp_reader *pfile, class line_maps *line_table)
 {
   pfile->line_table = line_table;
 }
@@ -393,8 +407,15 @@ static const struct builtin_macro builtin_array[] =
   B("__LINE__",		 BT_SPECLINE,      true),
   B("__INCLUDE_LEVEL__", BT_INCLUDE_LEVEL, true),
   B("__COUNTER__",	 BT_COUNTER,       true),
+  /* Make sure to update the list of built-in
+     function-like macros in traditional.c:
+     fun_like_macro() when adding more following */
   B("__has_attribute",	 BT_HAS_ATTRIBUTE, true),
+  B("__has_c_attribute", BT_HAS_STD_ATTRIBUTE, true),
   B("__has_cpp_attribute", BT_HAS_ATTRIBUTE, true),
+  B("__has_builtin",	 BT_HAS_BUILTIN,   true),
+  B("__has_include",	 BT_HAS_INCLUDE,   true),
+  B("__has_include_next",BT_HAS_INCLUDE_NEXT,   true),
   /* Keep builtins not used for -traditional-cpp at the end, and
      update init_builtins() if any more are added.  */
   B("_Pragma",		 BT_PRAGMA,        true),
@@ -475,17 +496,37 @@ cpp_init_special_builtins (cpp_reader *pfile)
 
   for (b = builtin_array; b < builtin_array + n; b++)
     {
-      if (b->value == BT_HAS_ATTRIBUTE
+      if ((b->value == BT_HAS_ATTRIBUTE
+	   || b->value == BT_HAS_STD_ATTRIBUTE
+	   || b->value == BT_HAS_BUILTIN)
 	  && (CPP_OPTION (pfile, lang) == CLK_ASM
 	      || pfile->cb.has_attribute == NULL))
 	continue;
       cpp_hashnode *hp = cpp_lookup (pfile, b->name, b->len);
-      hp->type = NT_MACRO;
-      hp->flags |= NODE_BUILTIN;
+      hp->type = NT_BUILTIN_MACRO;
       if (b->always_warn_if_redefined)
 	hp->flags |= NODE_WARN;
       hp->value.builtin = (enum cpp_builtin_type) b->value;
     }
+}
+
+/* Restore macro C to builtin macro definition.  */
+
+void
+_cpp_restore_special_builtin (cpp_reader *pfile, struct def_pragma_macro *c)
+{
+  size_t len = strlen (c->name);
+
+  for (const struct builtin_macro *b = builtin_array;
+       b < builtin_array + ARRAY_SIZE (builtin_array); b++)
+    if (b->len == len && memcmp (c->name, b->name, len + 1) == 0)
+      {
+	cpp_hashnode *hp = cpp_lookup (pfile, b->name, b->len);
+	hp->type = NT_BUILTIN_MACRO;
+	if (b->always_warn_if_redefined)
+	  hp->flags |= NODE_WARN;
+	hp->value.builtin = (enum cpp_builtin_type) b->value;
+      }
 }
 
 /* Read the builtins table above and enter them, and language-specific
@@ -503,9 +544,14 @@ cpp_init_builtins (cpp_reader *pfile, int hosted)
 
   if (CPP_OPTION (pfile, cplusplus))
     {
-      if (CPP_OPTION (pfile, lang) == CLK_CXX2A
-	  || CPP_OPTION (pfile, lang) == CLK_GNUCXX2A)
-	_cpp_define_builtin (pfile, "__cplusplus 201709L");
+      /* C++23 is not yet a standard.  For now, use an invalid
+       * year/month, 202100L, which is larger than 202002L.  */
+      if (CPP_OPTION (pfile, lang) == CLK_CXX23
+	  || CPP_OPTION (pfile, lang) == CLK_GNUCXX23)
+	_cpp_define_builtin (pfile, "__cplusplus 202100L");
+      else if (CPP_OPTION (pfile, lang) == CLK_CXX20
+	  || CPP_OPTION (pfile, lang) == CLK_GNUCXX20)
+	_cpp_define_builtin (pfile, "__cplusplus 202002L");
       else if (CPP_OPTION (pfile, lang) == CLK_CXX17
 	  || CPP_OPTION (pfile, lang) == CLK_GNUCXX17)
 	_cpp_define_builtin (pfile, "__cplusplus 201703L");
@@ -522,6 +568,9 @@ cpp_init_builtins (cpp_reader *pfile, int hosted)
     _cpp_define_builtin (pfile, "__ASSEMBLER__ 1");
   else if (CPP_OPTION (pfile, lang) == CLK_STDC94)
     _cpp_define_builtin (pfile, "__STDC_VERSION__ 199409L");
+  else if (CPP_OPTION (pfile, lang) == CLK_STDC2X
+	   || CPP_OPTION (pfile, lang) == CLK_GNUC2X)
+    _cpp_define_builtin (pfile, "__STDC_VERSION__ 202000L");
   else if (CPP_OPTION (pfile, lang) == CLK_STDC17
 	   || CPP_OPTION (pfile, lang) == CLK_GNUC17)
     _cpp_define_builtin (pfile, "__STDC_VERSION__ 201710L");
@@ -624,120 +673,163 @@ cpp_post_options (cpp_reader *pfile)
 }
 
 /* Setup for processing input from the file named FNAME, or stdin if
-   it is the empty string.  Return the original filename
-   on success (e.g. foo.i->foo.c), or NULL on failure.  */
+   it is the empty string.  Return the original filename on success
+   (e.g. foo.i->foo.c), or NULL on failure.  INJECTING is true if
+   there may be injected headers before line 1 of the main file.  */
 const char *
-cpp_read_main_file (cpp_reader *pfile, const char *fname)
+cpp_read_main_file (cpp_reader *pfile, const char *fname, bool injecting)
 {
-  const source_location loc = 0;
-
-  if (CPP_OPTION (pfile, deps.style) != DEPS_NONE)
-    {
-      if (!pfile->deps)
-	pfile->deps = deps_init ();
-
-      /* Set the default target (if there is none already).  */
-      deps_add_default_target (pfile->deps, fname);
-    }
+  if (mkdeps *deps = cpp_get_deps (pfile))
+    /* Set the default target (if there is none already).  */
+    deps_add_default_target (deps, fname);
 
   pfile->main_file
-    = _cpp_find_file (pfile, fname, &pfile->no_search_path, false, 0, false,
-		      loc);
+    = _cpp_find_file (pfile, fname,
+		      CPP_OPTION (pfile, preprocessed) ? &pfile->no_search_path
+		      : CPP_OPTION (pfile, main_search) == CMS_user
+		      ? pfile->quote_include
+		      : CPP_OPTION (pfile, main_search) == CMS_system
+		      ? pfile->bracket_include : &pfile->no_search_path,
+		      /*angle=*/0, _cpp_FFK_NORMAL, 0);
+
   if (_cpp_find_failed (pfile->main_file))
     return NULL;
 
-  _cpp_stack_file (pfile, pfile->main_file, false, loc);
+  _cpp_stack_file (pfile, pfile->main_file,
+		   injecting || CPP_OPTION (pfile, preprocessed)
+		   ? IT_PRE_MAIN : IT_MAIN, 0);
 
   /* For foo.i, read the original filename foo.c now, for the benefit
      of the front ends.  */
   if (CPP_OPTION (pfile, preprocessed))
-    {
-      read_original_filename (pfile);
-      fname =
-	ORDINARY_MAP_FILE_NAME
-	((LINEMAPS_LAST_ORDINARY_MAP (pfile->line_table)));
-    }
-  return fname;
+    if (!read_original_filename (pfile))
+      {
+	/* We're on line 1 after all.  */
+	auto *last = linemap_check_ordinary
+	  (LINEMAPS_LAST_MAP (pfile->line_table, false));
+	last->to_line = 1;
+	/* Inform of as-if a file change.  */
+	_cpp_do_file_change (pfile, LC_RENAME_VERBATIM, LINEMAP_FILE (last),
+			     LINEMAP_LINE (last), LINEMAP_SYSP (last));
+      }
+
+  auto *map = LINEMAPS_LAST_ORDINARY_MAP (pfile->line_table);
+  pfile->main_loc = MAP_START_LOCATION (map);
+
+  return ORDINARY_MAP_FILE_NAME (map);
 }
 
-/* For preprocessed files, if the first tokens are of the form # NUM.
-   handle the directive so we know the original file name.  This will
-   generate file_change callbacks, which the front ends must handle
-   appropriately given their state of initialization.  */
-static void
+location_t
+cpp_main_loc (const cpp_reader *pfile)
+{
+  return pfile->main_loc;
+}
+
+/* For preprocessed files, if the very first characters are
+   '#<SPACE>[01]<SPACE>', then handle a line directive so we know the
+   original file name.  This will generate file_change callbacks,
+   which the front ends must handle appropriately given their state of
+   initialization.  We peek directly into the character buffer, so
+   that we're not confused by otherwise-skipped white space &
+   comments.  We can be very picky, because this should have been
+   machine-generated text (by us, no less).  This way we do not
+   interfere with the module directive state machine.  */
+
+static bool
 read_original_filename (cpp_reader *pfile)
 {
-  const cpp_token *token, *token1;
+  auto *buf = pfile->buffer->next_line;
 
-  /* Lex ahead; if the first tokens are of the form # NUM, then
-     process the directive, otherwise back up.  */
-  token = _cpp_lex_direct (pfile);
-  if (token->type == CPP_HASH)
+  if (pfile->buffer->rlimit - buf > 4
+      && buf[0] == '#'
+      && buf[1] == ' '
+      // Also permit '1', as that's what used to be here
+      && (buf[2] == '0' || buf[2] == '1')
+      && buf[3] == ' ')
     {
-      pfile->state.in_directive = 1;
-      token1 = _cpp_lex_direct (pfile);
-      _cpp_backup_tokens (pfile, 1);
-      pfile->state.in_directive = 0;
-
-      /* If it's a #line directive, handle it.  */
-      if (token1->type == CPP_NUMBER
-	  && _cpp_handle_directive (pfile, token->flags & PREV_WHITE))
+      const cpp_token *token = _cpp_lex_direct (pfile);
+      gcc_checking_assert (token->type == CPP_HASH);
+      if (_cpp_handle_directive (pfile, token->flags & PREV_WHITE))
 	{
 	  read_original_directory (pfile);
-	  return;
+
+	  auto *penult = &linemap_check_ordinary
+	    (LINEMAPS_LAST_MAP (pfile->line_table, false))[-1];
+	  if (penult[1].reason == LC_RENAME_VERBATIM)
+	    {
+	      /* Expunge any evidence of the original linemap.  */
+	      pfile->line_table->highest_location
+		= pfile->line_table->highest_line
+		= penult[0].start_location;
+
+	      penult[1].start_location = penult[0].start_location;
+	      penult[1].reason = penult[0].reason;
+	      penult[0] = penult[1];
+	      pfile->line_table->info_ordinary.used--;
+	      pfile->line_table->info_ordinary.cache = 0;
+	    }
+
+	  return true;
 	}
     }
 
-  /* Backup as if nothing happened.  */
-  _cpp_backup_tokens (pfile, 1);
+  return false;
 }
 
 /* For preprocessed files, if the tokens following the first filename
    line is of the form # <line> "/path/name//", handle the
-   directive so we know the original current directory.  */
+   directive so we know the original current directory.
+
+   As with the first line peeking, we can do this without lexing by
+   being picky.  */
 static void
 read_original_directory (cpp_reader *pfile)
 {
-  const cpp_token *hash, *token;
+  auto *buf = pfile->buffer->next_line;
 
-  /* Lex ahead; if the first tokens are of the form # NUM, then
-     process the directive, otherwise back up.  */
-  hash = _cpp_lex_direct (pfile);
-  if (hash->type != CPP_HASH)
+  if (pfile->buffer->rlimit - buf > 4
+      && buf[0] == '#'
+      && buf[1] == ' '
+      // Also permit '1', as that's what used to be here
+      && (buf[2] == '0' || buf[2] == '1')
+      && buf[3] == ' ')
     {
-      _cpp_backup_tokens (pfile, 1);
-      return;
+      const cpp_token *hash = _cpp_lex_direct (pfile);
+      gcc_checking_assert (hash->type == CPP_HASH);
+      pfile->state.in_directive = 1;
+      const cpp_token *number = _cpp_lex_direct (pfile);
+      gcc_checking_assert (number->type == CPP_NUMBER);
+      const cpp_token *string = _cpp_lex_direct (pfile);
+      pfile->state.in_directive = 0;
+
+      const unsigned char *text = nullptr;
+      size_t len = 0;
+      if (string->type == CPP_STRING)
+	{
+	  /* The string value includes the quotes.  */
+	  text = string->val.str.text;
+	  len = string->val.str.len;
+	}
+      if (len < 5
+	  || !IS_DIR_SEPARATOR (text[len - 2])
+	  || !IS_DIR_SEPARATOR (text[len - 3]))
+	{
+	  /* That didn't work out, back out.   */
+	  _cpp_backup_tokens (pfile, 3);
+	  return;
+	}
+
+      if (pfile->cb.dir_change)
+	{
+	  /* Smash the string directly, it's dead at this point  */
+	  char *smashy = (char *)text;
+	  smashy[len - 3] = 0;
+	  
+	  pfile->cb.dir_change (pfile, smashy + 1);
+	}
+
+      /* We should be at EOL.  */
     }
-
-  token = _cpp_lex_direct (pfile);
-
-  if (token->type != CPP_NUMBER)
-    {
-      _cpp_backup_tokens (pfile, 2);
-      return;
-    }
-
-  token = _cpp_lex_direct (pfile);
-
-  if (token->type != CPP_STRING
-      || ! (token->val.str.len >= 5
-	    && IS_DIR_SEPARATOR (token->val.str.text[token->val.str.len-2])
-	    && IS_DIR_SEPARATOR (token->val.str.text[token->val.str.len-3])))
-    {
-      _cpp_backup_tokens (pfile, 3);
-      return;
-    }
-
-  if (pfile->cb.dir_change)
-    {
-      char *debugdir = (char *) alloca (token->val.str.len - 3);
-
-      memcpy (debugdir, (const char *) token->val.str.text + 1,
-	      token->val.str.len - 4);
-      debugdir[token->val.str.len - 4] = '\0';
-
-      pfile->cb.dir_change (pfile, debugdir);
-    }      
 }
 
 /* This is called at the end of preprocessing.  It pops the last
@@ -760,14 +852,8 @@ cpp_finish (cpp_reader *pfile, FILE *deps_stream)
   while (pfile->buffer)
     _cpp_pop_buffer (pfile);
 
-  if (CPP_OPTION (pfile, deps.style) != DEPS_NONE
-      && deps_stream)
-    {
-      deps_write (pfile->deps, deps_stream, 72);
-
-      if (CPP_OPTION (pfile, deps.phony_targets))
-	deps_phony_targets (pfile->deps, deps_stream);
-    }
+  if (deps_stream)
+    deps_write (pfile, deps_stream, 72);
 
   /* Report on headers that could use multiple include guards.  */
   if (CPP_OPTION (pfile, print_include_names))
@@ -797,5 +883,28 @@ post_options (cpp_reader *pfile)
     {
       CPP_OPTION (pfile, trigraphs) = 0;
       CPP_OPTION (pfile, warn_trigraphs) = 0;
+    }
+
+  if (CPP_OPTION (pfile, module_directives))
+    {
+      /* These unspellable tokens have a leading space.  */
+      const char *const inits[spec_nodes::M_HWM]
+	= {"export ", "module ", "import ", "__import"};
+
+      for (int ix = 0; ix != spec_nodes::M_HWM; ix++)
+	{
+	  cpp_hashnode *node = cpp_lookup (pfile, UC (inits[ix]),
+					   strlen (inits[ix]));
+
+	  /* Token we pass to the compiler.  */
+	  pfile->spec_nodes.n_modules[ix][1] = node;
+
+	  if (ix != spec_nodes::M__IMPORT)
+	    /* Token we recognize when lexing, drop the trailing ' '.  */
+	    node = cpp_lookup (pfile, NODE_NAME (node), NODE_LEN (node) - 1);
+
+	  node->flags |= NODE_MODULE;
+	  pfile->spec_nodes.n_modules[ix][0] = node;
+	}
     }
 }

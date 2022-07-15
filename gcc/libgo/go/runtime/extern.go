@@ -27,6 +27,10 @@ It is a comma-separated list of name=val pairs setting these named variables:
 	allocfreetrace: setting allocfreetrace=1 causes every allocation to be
 	profiled and a stack trace printed on each object's allocation and free.
 
+	clobberfree: setting clobberfree=1 causes the garbage collector to
+	clobber the memory content of an object with bad content when it frees
+	the object.
+
 	cgocheck: setting cgocheck=0 disables all checks for packages
 	using cgo to incorrectly pass Go pointers to non-Go code.
 	Setting cgocheck=1 (the default) enables relatively cheap
@@ -50,19 +54,13 @@ It is a comma-separated list of name=val pairs setting these named variables:
 	gcshrinkstackoff: setting gcshrinkstackoff=1 disables moving goroutines
 	onto smaller stacks. In this mode, a goroutine's stack can only grow.
 
-	gcrescanstacks: setting gcrescanstacks=1 enables stack
-	re-scanning during the STW mark termination phase. This is
-	helpful for debugging if objects are being prematurely
-	garbage collected.
-
 	gcstoptheworld: setting gcstoptheworld=1 disables concurrent garbage collection,
 	making every garbage collection a stop-the-world event. Setting gcstoptheworld=2
 	also disables concurrent sweeping after the garbage collection finishes.
 
 	gctrace: setting gctrace=1 causes the garbage collector to emit a single line to standard
 	error at each collection, summarizing the amount of memory collected and the
-	length of the pause. Setting gctrace=2 emits the same summary but also
-	repeats each collection. The format of this line is subject to change.
+	length of the pause. The format of this line is subject to change.
 	Currently, it is:
 		gc # @#s #%: #+#+# ms clock, #+#/#/#+# ms cpu, #->#-># MB, # MB goal, # P
 	where the fields are as follows:
@@ -80,34 +78,53 @@ It is a comma-separated list of name=val pairs setting these named variables:
 	If the line ends with "(forced)", this GC was forced by a
 	runtime.GC() call.
 
-	Setting gctrace to any value > 0 also causes the garbage collector
-	to emit a summary when memory is released back to the system.
-	This process of returning memory to the system is called scavenging.
-	The format of this summary is subject to change.
-	Currently it is:
-		scvg#: # MB released  printed only if non-zero
-		scvg#: inuse: # idle: # sys: # released: # consumed: # (MB)
+	inittrace: setting inittrace=1 causes the runtime to emit a single line to standard
+	error for each package with init work, summarizing the execution time and memory
+	allocation. No information is printed for inits executed as part of plugin loading
+	and for packages without both user defined and compiler generated init work.
+	The format of this line is subject to change. Currently, it is:
+		init # @#ms, # ms clock, # bytes, # allocs
 	where the fields are as follows:
-		scvg#        the scavenge cycle number, incremented at each scavenge
-		inuse: #     MB used or partially used spans
-		idle: #      MB spans pending scavenging
-		sys: #       MB mapped from the system
-		released: #  MB released to the system
-		consumed: #  MB allocated from the system
+		init #      the package name
+		@# ms       time in milliseconds when the init started since program start
+		# clock     wall-clock time for package initialization work
+		# bytes     memory allocated on the heap
+		# allocs    number of heap allocations
+
+	madvdontneed: setting madvdontneed=0 will use MADV_FREE
+	instead of MADV_DONTNEED on Linux when returning memory to the
+	kernel. This is more efficient, but means RSS numbers will
+	drop only when the OS is under memory pressure.
 
 	memprofilerate: setting memprofilerate=X will update the value of runtime.MemProfileRate.
 	When set to 0 memory profiling is disabled.  Refer to the description of
 	MemProfileRate for the default value.
 
-	memprofilerate:  setting memprofilerate=X changes the setting for
-	runtime.MemProfileRate.  Refer to the description of this variable for how
-	it is used and its default value.
+	invalidptr: invalidptr=1 (the default) causes the garbage collector and stack
+	copier to crash the program if an invalid pointer value (for example, 1)
+	is found in a pointer-typed location. Setting invalidptr=0 disables this check.
+	This should only be used as a temporary workaround to diagnose buggy code.
+	The real fix is to not store integers in pointer-typed locations.
 
 	sbrk: setting sbrk=1 replaces the memory allocator and garbage collector
 	with a trivial allocator that obtains memory from the operating system and
 	never reclaims any memory.
 
 	scavenge: scavenge=1 enables debugging mode of heap scavenger.
+
+	scavtrace: setting scavtrace=1 causes the runtime to emit a single line to standard
+	error, roughly once per GC cycle, summarizing the amount of work done by the
+	scavenger as well as the total amount of memory returned to the operating system
+	and an estimate of physical memory utilization. The format of this line is subject
+	to change, but currently it is:
+		scav # # KiB work, # KiB total, #% util
+	where the fields are as follows:
+		scav #       the scavenge cycle number
+		# KiB work   the amount of memory returned to the OS since the last line
+		# KiB total  the total amount of memory returned to the OS
+		#% util      the fraction of all unscavenged memory which is in-use
+	If the line ends with "(forced)", then scavenging was forced by a
+	debug.FreeOSMemory() call.
 
 	scheddetail: setting schedtrace=X and scheddetail=1 causes the scheduler to emit
 	detailed multiline info every X milliseconds, describing state of the scheduler,
@@ -116,7 +133,20 @@ It is a comma-separated list of name=val pairs setting these named variables:
 	schedtrace: setting schedtrace=X causes the scheduler to emit a single line to standard
 	error every X milliseconds, summarizing the scheduler state.
 
-The net and net/http packages also refer to debugging variables in GODEBUG.
+	tracebackancestors: setting tracebackancestors=N extends tracebacks with the stacks at
+	which goroutines were created, where N limits the number of ancestor goroutines to
+	report. This also extends the information returned by runtime.Stack. Ancestor's goroutine
+	IDs will refer to the ID of the goroutine at the time of creation; it's possible for this
+	ID to be reused for another goroutine. Setting N to 0 will report no ancestry information.
+
+	asyncpreemptoff: asyncpreemptoff=1 disables signal-based
+	asynchronous goroutine preemption. This makes some loops
+	non-preemptible for long periods, which may delay GC and
+	goroutine scheduling. This is useful for debugging GC issues
+	because it also disables the conservative stack scanning used
+	for asynchronously preempted goroutines.
+
+The net, net/http, and crypto/tls packages also refer to debugging variables in GODEBUG.
 See the documentation for those packages for details.
 
 The GOMAXPROCS variable limits the number of operating system threads that
@@ -124,6 +154,9 @@ can execute user-level Go code simultaneously. There is no limit to the number o
 that can be blocked in system calls on behalf of Go code; those do not count against
 the GOMAXPROCS limit. This package's GOMAXPROCS function queries and changes
 the limit.
+
+The GORACE variable configures the race detector, for programs built using -race.
+See https://golang.org/doc/articles/race_detector.html for details.
 
 The GOTRACEBACK variable controls the amount of output generated when a Go
 program fails due to an unrecovered panic or an unexpected runtime condition.
@@ -200,6 +233,7 @@ func Version() string {
 
 // GOOS is the running program's operating system target:
 // one of darwin, freebsd, linux, and so on.
+// To view possible combinations of GOOS and GOARCH, run "go tool dist list".
 const GOOS string = sys.GOOS
 
 // GOARCH is the running program's architecture target:

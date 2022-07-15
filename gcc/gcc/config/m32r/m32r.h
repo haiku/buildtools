@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, Renesas M32R cpu.
-   Copyright (C) 1996-2018 Free Software Foundation, Inc.
+   Copyright (C) 1996-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -348,15 +348,13 @@
 #define SUBTARGET_CALL_USED_REGISTERS
 #endif
 
-#define CALL_USED_REGISTERS	\
+#define CALL_REALLY_USED_REGISTERS \
 {				\
   1, 1, 1, 1, 1, 1, 1, 1,	\
   0, 0, 0, 0, 0, 0, 1, 1,	\
   1, 1, 1			\
   SUBTARGET_CALL_USED_REGISTERS	\
 }
-
-#define CALL_REALLY_USED_REGISTERS CALL_USED_REGISTERS
 
 /* If defined, an initializer for a vector of integers, containing the
    numbers of hard registers in the order in which GCC should
@@ -866,7 +864,8 @@ L2:     .word STATIC
    of a loop.  */
 /* On the M32R, align loops to 32 byte boundaries (cache line size)
    if -malign-loops.  */
-#define LOOP_ALIGN(LABEL) (TARGET_ALIGN_LOOPS ? 5 : 0)
+#define LOOP_ALIGN(LABEL) ((TARGET_ALIGN_LOOPS \
+			    ? align_flags (5) : align_flags ()))
 
 /* Define this to be the maximum number of insns to move around when moving
    a loop test from the top of a loop to the bottom

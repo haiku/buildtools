@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler. NEC V850 series
-   Copyright (C) 1996-2018 Free Software Foundation, Inc.
+   Copyright (C) 1996-2021 Free Software Foundation, Inc.
    Contributed by Jeff Law (law@cygnus.com).
 
    This file is part of GCC.
@@ -25,9 +25,6 @@
 
 #ifndef GCC_V850_H
 #define GCC_V850_H
-
-extern GTY(()) rtx v850_compare_op0;
-extern GTY(()) rtx v850_compare_op1;
 
 #undef LIB_SPEC
 #define LIB_SPEC "%{!shared:%{!symbolic:--start-group -lc -lgcc --end-group}}"
@@ -441,8 +438,9 @@ enum reg_class
 /* Base register for access to arguments of the function.  */
 #define ARG_POINTER_REGNUM 35
 
-/* Register in which static-chain is passed to a function.  */
-#define STATIC_CHAIN_REGNUM 20
+/* Register in which static-chain is passed to a function.
+   This must be a call used register.  */
+#define STATIC_CHAIN_REGNUM 19
 
 /* If defined, this macro specifies a table of register pairs used to
    eliminate unneeded registers that point into the stack frame.  If
@@ -566,20 +564,6 @@ struct cum_arg { int nbytes; };
    possible, to allow for more combinations.  */
 
 #define SELECT_CC_MODE(OP, X, Y)       v850_select_cc_mode (OP, X, Y)
-
-/* Tell final.c how to eliminate redundant test instructions.  */
-
-/* Here we define machine-dependent flags and fields in cc_status
-   (see `conditions.h').  No extra ones are needed for the VAX.  */
-
-/* Store in cc_status the expressions
-   that the condition codes will describe
-   after execution of an instruction whose pattern is EXP.
-   Do not alter them if the instruction would not alter the cc's.  */
-
-#define CC_OVERFLOW_UNUSABLE 0x200
-#define CC_NO_CARRY CC_NO_OVERFLOW
-#define NOTICE_UPDATE_CC(EXP, INSN) notice_update_cc(EXP, INSN)
 
 /* Nonzero if access to memory by bytes or half words is no faster
    than accessing full words.  */
@@ -716,6 +700,7 @@ typedef enum
 /* Use dwarf2 debugging info by default.  */
 #undef  PREFERRED_DEBUGGING_TYPE
 #define PREFERRED_DEBUGGING_TYPE   DWARF2_DEBUG
+#define DWARF2_DEBUGGING_INFO	   1
 
 #define DWARF2_FRAME_INFO          1
 #define DWARF2_UNWIND_INFO         0
@@ -850,12 +835,6 @@ extern const char * GHS_current_section_names [(int) COUNT_OF_GHS_SECTION_KINDS]
 #define SYMBOL_REF_SDA_P(X)	((SYMBOL_REF_FLAGS (X) & SYMBOL_FLAG_SDA) != 0)
 
 #define TARGET_ASM_INIT_SECTIONS v850_asm_init_sections
-
-/* Define this so that the cc1plus will not think that system header files
-   need an implicit 'extern "C" { ... }' assumed.  This breaks testing C++
-   in a build directory where the libstdc++ header files are found via a
-   -isystem <path-to-build-dir>.  */
-#define NO_IMPLICIT_EXTERN_C
 
 #define ADJUST_INSN_LENGTH(INSN, LENGTH) \
   ((LENGTH) = v850_adjust_insn_length ((INSN), (LENGTH)))

@@ -1,6 +1,6 @@
 // Filesystem directory utilities -*- C++ -*-
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -36,17 +36,21 @@
 # include <bits/unique_ptr.h>
 # include <bits/shared_ptr.h>
 
+#if __cplusplus > 201703L
+# include <compare>	// std::strong_ordering
+#endif
+
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 namespace filesystem
 {
-  /**
-   * @ingroup filesystem
-   * @{
+  /** @addtogroup filesystem
+   *  @{
    */
 
+  /// Information about a file's type and permissions.
   class file_status
   {
   public:
@@ -72,6 +76,11 @@ namespace filesystem
     void       type(file_type __ft) noexcept { _M_type = __ft; }
     void       permissions(perms __prms) noexcept { _M_perms = __prms; }
 
+#if __cpp_lib_three_way_comparison
+    friend bool
+    operator==(const file_status&, const file_status&) noexcept = default;
+#endif
+
   private:
     file_type	_M_type;
     perms	_M_perms;
@@ -83,6 +92,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
   class directory_iterator;
   class recursive_directory_iterator;
 
+  /// The value type used by directory iterators
   class directory_entry
   {
   public:
@@ -272,16 +282,21 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     { return filesystem::symlink_status(_M_path, __ec); }
 
     bool
-    operator< (const directory_entry& __rhs) const noexcept
-    { return _M_path < __rhs._M_path; }
-
-    bool
     operator==(const directory_entry& __rhs) const noexcept
     { return _M_path == __rhs._M_path; }
 
+#if __cpp_lib_three_way_comparison
+    strong_ordering
+    operator<=>(const directory_entry& __rhs) const noexcept
+    { return _M_path <=> __rhs._M_path; }
+#else
     bool
     operator!=(const directory_entry& __rhs) const noexcept
     { return _M_path != __rhs._M_path; }
+
+    bool
+    operator< (const directory_entry& __rhs) const noexcept
+    { return _M_path < __rhs._M_path; }
 
     bool
     operator<=(const directory_entry& __rhs) const noexcept
@@ -294,11 +309,20 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     bool
     operator>=(const directory_entry& __rhs) const noexcept
     { return _M_path >= __rhs._M_path; }
+#endif
 
   private:
-    friend class _Dir;
+    friend struct _Dir;
     friend class directory_iterator;
     friend class recursive_directory_iterator;
+
+    // _GLIBCXX_RESOLVE_LIB_DEFECTS
+    // 3171. LWG 2989 breaks directory_entry stream insertion
+    template<typename _CharT, typename _Traits>
+      friend basic_ostream<_CharT, _Traits>&
+      operator<<(basic_ostream<_CharT, _Traits>& __os,
+		 const directory_entry& __d)
+      { return __os << __d.path(); }
 
     directory_entry(const filesystem::path& __p, file_type __t)
     : _M_path(__p), _M_type(__t)
@@ -329,6 +353,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     file_type		_M_type = file_type::none;
   };
 
+  /// Proxy returned by post-increment on directory iterators.
   struct __directory_iterator_proxy
   {
     const directory_entry& operator*() const& noexcept { return _M_entry; }
@@ -345,6 +370,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     directory_entry _M_entry;
   };
 
+  /// Iterator type for traversing the entries in a single directory.
   class directory_iterator
   {
   public:
@@ -382,8 +408,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     directory_iterator&
     operator=(directory_iterator&& __rhs) noexcept = default;
 
-    const directory_entry& operator*() const;
-    const directory_entry* operator->() const { return &**this; }
+    const directory_entry& operator*() const noexcept;
+    const directory_entry* operator->() const noexcept { return &**this; }
     directory_iterator&    operator++();
     directory_iterator&    increment(error_code& __ec);
 
@@ -399,32 +425,39 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
 
     friend bool
     operator==(const directory_iterator& __lhs,
-               const directory_iterator& __rhs);
+               const directory_iterator& __rhs) noexcept
+    {
+      return !__rhs._M_dir.owner_before(__lhs._M_dir)
+	&& !__lhs._M_dir.owner_before(__rhs._M_dir);
+    }
+
+    friend bool
+    operator!=(const directory_iterator& __lhs,
+	       const directory_iterator& __rhs) noexcept
+    { return !(__lhs == __rhs); }
 
     friend class recursive_directory_iterator;
 
-    std::shared_ptr<_Dir> _M_dir;
+    std::__shared_ptr<_Dir> _M_dir;
   };
 
+  /// @relates std::filesystem::directory_iterator @{
+
+  /** @brief Enable range-based `for` using directory_iterator.
+   *
+   *  e.g. `for (auto& entry : std::filesystem::directory_iterator(".")) ...`
+   */
   inline directory_iterator
   begin(directory_iterator __iter) noexcept
   { return __iter; }
 
+  /// Return a past-the-end directory_iterator
   inline directory_iterator
   end(directory_iterator) noexcept
   { return directory_iterator(); }
+  /// @}
 
-  inline bool
-  operator==(const directory_iterator& __lhs, const directory_iterator& __rhs)
-  {
-    return !__rhs._M_dir.owner_before(__lhs._M_dir)
-      && !__lhs._M_dir.owner_before(__rhs._M_dir);
-  }
-
-  inline bool
-  operator!=(const directory_iterator& __lhs, const directory_iterator& __rhs)
-  { return !(__lhs == __rhs); }
-
+  /// Iterator type for recursively traversing a directory hierarchy.
   class recursive_directory_iterator
   {
   public:
@@ -458,12 +491,12 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     ~recursive_directory_iterator();
 
     // observers
-    directory_options  options() const { return _M_options; }
-    int                depth() const;
-    bool               recursion_pending() const { return _M_pending; }
+    directory_options  options() const noexcept;
+    int                depth() const noexcept;
+    bool               recursion_pending() const noexcept;
 
-    const directory_entry& operator*() const;
-    const directory_entry* operator->() const { return &**this; }
+    const directory_entry& operator*() const noexcept;
+    const directory_entry* operator->() const noexcept { return &**this; }
 
     // modifiers
     recursive_directory_iterator&
@@ -484,46 +517,56 @@ _GLIBCXX_BEGIN_NAMESPACE_CXX11
     void pop();
     void pop(error_code&);
 
-    void disable_recursion_pending() { _M_pending = false; }
+    void disable_recursion_pending() noexcept;
 
   private:
     recursive_directory_iterator(const path&, directory_options, error_code*);
 
     friend bool
     operator==(const recursive_directory_iterator& __lhs,
-               const recursive_directory_iterator& __rhs);
+               const recursive_directory_iterator& __rhs) noexcept
+    {
+      return !__rhs._M_dirs.owner_before(__lhs._M_dirs)
+	&& !__lhs._M_dirs.owner_before(__rhs._M_dirs);
+    }
+
+    friend bool
+    operator!=(const recursive_directory_iterator& __lhs,
+               const recursive_directory_iterator& __rhs) noexcept
+    { return !(__lhs == __rhs); }
 
     struct _Dir_stack;
-    std::shared_ptr<_Dir_stack> _M_dirs;
-    directory_options _M_options = {};
-    bool _M_pending = false;
+    std::__shared_ptr<_Dir_stack> _M_dirs;
   };
 
+  /// @relates std::filesystem::recursive_directory_iterator @{
+
+  /** @brief Enable range-based `for` using recursive_directory_iterator.
+   *
+   *  e.g. `for (auto& entry : recursive_directory_iterator(".")) ...`
+   */
   inline recursive_directory_iterator
   begin(recursive_directory_iterator __iter) noexcept
   { return __iter; }
 
+  /// Return a past-the-end recursive_directory_iterator
   inline recursive_directory_iterator
   end(recursive_directory_iterator) noexcept
   { return recursive_directory_iterator(); }
-
-  inline bool
-  operator==(const recursive_directory_iterator& __lhs,
-             const recursive_directory_iterator& __rhs)
-  {
-    return !__rhs._M_dirs.owner_before(__lhs._M_dirs)
-      && !__lhs._M_dirs.owner_before(__rhs._M_dirs);
-  }
-
-  inline bool
-  operator!=(const recursive_directory_iterator& __lhs,
-             const recursive_directory_iterator& __rhs)
-  { return !(__lhs == __rhs); }
+  /// @}
 
 _GLIBCXX_END_NAMESPACE_CXX11
 
-  // @} group filesystem
+  /// @} group filesystem
 } // namespace filesystem
+
+  // Use explicit instantiations of these types. Any inconsistency in the
+  // value of __default_lock_policy between code including this header and
+  // the library will cause a linker error.
+  extern template class
+    __shared_ptr<filesystem::_Dir>;
+  extern template class
+    __shared_ptr<filesystem::recursive_directory_iterator::_Dir_stack>;
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std

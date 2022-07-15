@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build aix darwin dragonfly freebsd !android,linux netbsd openbsd solaris
-// +build cgo
+// +build aix darwin dragonfly freebsd hurd !android,linux netbsd openbsd solaris
+// +build cgo,!osusergo
 
 package user
 
@@ -116,10 +116,6 @@ func buildUser(pwd *syscall.Passwd) *User {
 		u.Name = u.Name[:i]
 	}
 	return u
-}
-
-func currentGroup() (*Group, error) {
-	return lookupUnixGid(syscall.Getgid())
 }
 
 func lookupGroup(groupname string) (*Group, error) {

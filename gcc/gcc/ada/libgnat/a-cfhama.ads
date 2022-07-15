@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -59,6 +59,7 @@ generic
    with function Equivalent_Keys
      (Left  : Key_Type;
       Right : Key_Type) return Boolean is "=";
+   with function "=" (Left, Right : Element_Type) return Boolean is <>;
 
 package Ada.Containers.Formal_Hashed_Maps with
   SPARK_Mode
@@ -668,9 +669,10 @@ is
                 Find (Container, Key)'Old);
 
    procedure Delete (Container : in out Map; Position : in out Cursor) with
-     Global => null,
-     Pre    => Has_Element (Container, Position),
-     Post   =>
+     Global  => null,
+     Depends => (Container =>+ Position, Position => null),
+     Pre     => Has_Element (Container, Position),
+     Post    =>
        Position = No_Element
          and Length (Container) = Length (Container)'Old - 1
 

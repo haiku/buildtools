@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -140,8 +140,12 @@ package body System.Img_Char is
             declare
                VP : constant Natural := Character'Pos (V);
             begin
-               S (1 .. 9) := "RESERVED_";
-               S (10) := Character'Val (48 + VP / 100);
+               pragma Assert (S'First = 1 and S'Last >= 12);
+               --  As described in the header description, this procedure
+               --  doesn't check the size of the string provided by the caller
+               --  and suppose S'First is 1.
+               S (1 .. 10) := "RESERVED_1";
+               --  Since C1_Range is 127..159, the first character is always 1
                S (11) := Character'Val (48 + (VP / 10) mod 10);
                S (12) := Character'Val (48 + VP mod 10);
                P := 12;

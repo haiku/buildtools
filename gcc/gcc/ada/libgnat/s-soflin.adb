@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -30,10 +30,6 @@
 ------------------------------------------------------------------------------
 
 pragma Compiler_Unit_Warning;
-
-pragma Polling (Off);
---  We must turn polling off for this unit, because otherwise we get an
---  infinite loop from the code within the Poll routine itself.
 
 pragma Warnings (Off);
 --  Disable warnings as System.Soft_Links.Initialize is not Preelaborate. It is

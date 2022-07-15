@@ -1,7 +1,7 @@
 /* The tracer pass for the GNU compiler.
    Contributed by Jan Hubicka, SuSE Labs.
    Adapted to work on GIMPLE instead of RTL by Robert Kidd, UIUC.
-   Copyright (C) 2001-2018 Free Software Foundation, Inc.
+   Copyright (C) 2001-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -44,16 +44,16 @@
 #include "tree-pass.h"
 #include "profile.h"
 #include "cfganal.h"
-#include "params.h"
 #include "gimple-iterator.h"
 #include "tree-cfg.h"
 #include "tree-ssa.h"
 #include "tree-inline.h"
 #include "cfgloop.h"
+#include "alloc-pool.h"
 #include "fibonacci_heap.h"
 #include "tracer.h"
 
-static int count_insns (basic_block);
+static void analyze_bb (basic_block, int *);
 static bool better_p (const_edge, const_edge);
 static edge find_best_successor (basic_block);
 static edge find_best_predecessor (basic_block);
@@ -84,6 +84,33 @@ bb_seen_p (basic_block bb)
   return bitmap_bit_p (bb_seen, bb->index);
 }
 
+static sbitmap can_duplicate_bb;
+
+/* Cache VAL as value of can_duplicate_bb_p for BB.  */
+static inline void
+cache_can_duplicate_bb_p (const_basic_block bb, bool val)
+{
+  if (val)
+    bitmap_set_bit (can_duplicate_bb, bb->index);
+}
+
+/* Return cached value of can_duplicate_bb_p for BB.  */
+static bool
+cached_can_duplicate_bb_p (const_basic_block bb)
+{
+  if (can_duplicate_bb)
+    {
+      unsigned int size = SBITMAP_SIZE (can_duplicate_bb);
+      if ((unsigned int)bb->index < size)
+	return bitmap_bit_p (can_duplicate_bb, bb->index);
+
+      /* Assume added bb's should not be duplicated.  */
+      return false;
+    }
+
+  return can_duplicate_block_p (bb);
+}
+
 /* Return true if we should ignore the basic block for purposes of tracing.  */
 bool
 ignore_bb_p (const_basic_block bb)
@@ -93,28 +120,13 @@ ignore_bb_p (const_basic_block bb)
   if (optimize_bb_for_size_p (bb))
     return true;
 
-  if (gimple *g = last_stmt (CONST_CAST_BB (bb)))
-    {
-      /* A transaction is a single entry multiple exit region.  It
-	 must be duplicated in its entirety or not at all.  */
-      if (gimple_code (g) == GIMPLE_TRANSACTION)
-	return true;
-
-      /* An IFN_UNIQUE call must be duplicated as part of its group,
-	 or not at all.  */
-      if (is_gimple_call (g)
-	  && gimple_call_internal_p (g)
-	  && gimple_call_internal_unique_p (g))
-	return true;
-    }
-
-  return false;
+  return !cached_can_duplicate_bb_p (bb);
 }
 
 /* Return number of instructions in the block.  */
 
-static int
-count_insns (basic_block bb)
+static void
+analyze_bb (basic_block bb, int *count)
 {
   gimple_stmt_iterator gsi;
   gimple *stmt;
@@ -125,7 +137,9 @@ count_insns (basic_block bb)
       stmt = gsi_stmt (gsi);
       n += estimate_num_insns (stmt, &eni_size_weights);
     }
-  return n;
+  *count = n;
+
+  cache_can_duplicate_bb_p (bb, can_duplicate_block_p (CONST_CAST_BB (bb)));
 }
 
 /* Return true if E1 is more frequent than E2.  */
@@ -257,7 +271,7 @@ static bool
 tail_duplicate (void)
 {
   auto_vec<fibonacci_node<long, basic_block_def>*> blocks;
-  blocks.safe_grow_cleared (last_basic_block_for_fn (cfun));
+  blocks.safe_grow_cleared (last_basic_block_for_fn (cfun), true);
 
   basic_block *trace = XNEWVEC (basic_block, n_basic_blocks_for_fn (cfun));
   int *counts = XNEWVEC (int, last_basic_block_for_fn (cfun));
@@ -273,20 +287,23 @@ tail_duplicate (void)
      resize it.  */
   bb_seen = sbitmap_alloc (last_basic_block_for_fn (cfun) * 2);
   bitmap_clear (bb_seen);
+  can_duplicate_bb = sbitmap_alloc (last_basic_block_for_fn (cfun));
+  bitmap_clear (can_duplicate_bb);
   initialize_original_copy_tables ();
 
   if (profile_info && profile_status_for_fn (cfun) == PROFILE_READ)
-    probability_cutoff = PARAM_VALUE (TRACER_MIN_BRANCH_PROBABILITY_FEEDBACK);
+    probability_cutoff = param_tracer_min_branch_probability_feedback;
   else
-    probability_cutoff = PARAM_VALUE (TRACER_MIN_BRANCH_PROBABILITY);
+    probability_cutoff = param_tracer_min_branch_probability;
   probability_cutoff = REG_BR_PROB_BASE / 100 * probability_cutoff;
 
   branch_ratio_cutoff =
-    (REG_BR_PROB_BASE / 100 * PARAM_VALUE (TRACER_MIN_BRANCH_RATIO));
+    (REG_BR_PROB_BASE / 100 * param_tracer_min_branch_ratio);
 
   FOR_EACH_BB_FN (bb, cfun)
     {
-      int n = count_insns (bb);
+      int n;
+      analyze_bb (bb, &n);
       if (!ignore_bb_p (bb))
 	blocks[bb->index] = heap.insert (-bb->count.to_frequency (cfun), bb);
 
@@ -296,11 +313,11 @@ tail_duplicate (void)
     }
 
   if (profile_info && profile_status_for_fn (cfun) == PROFILE_READ)
-    cover_insns = PARAM_VALUE (TRACER_DYNAMIC_COVERAGE_FEEDBACK);
+    cover_insns = param_tracer_dynamic_coverage_feedback;
   else
-    cover_insns = PARAM_VALUE (TRACER_DYNAMIC_COVERAGE);
+    cover_insns = param_tracer_dynamic_coverage;
   cover_insns = (weighted_insns * cover_insns + 50) / 100;
-  max_dup_insns = (ninsns * PARAM_VALUE (TRACER_MAX_CODE_GROWTH) + 50) / 100;
+  max_dup_insns = (ninsns * param_tracer_max_code_growth + 50) / 100;
 
   while (traced_insns < cover_insns && nduplicated < max_dup_insns
          && !heap.empty ())
@@ -376,6 +393,8 @@ tail_duplicate (void)
 
   free_original_copy_tables ();
   sbitmap_free (bb_seen);
+  sbitmap_free (can_duplicate_bb);
+  can_duplicate_bb = NULL;
   free (trace);
   free (counts);
 

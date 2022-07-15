@@ -1,25 +1,22 @@
-/* This code uses nvptx inline assembly guarded with acc_on_device, which is
-   not optimized away at -O0, and then confuses the target assembler.  */
-/* { dg-skip-if "" { *-*-* } { "-O0" } { "" } } */
 /* { dg-additional-options "-fopenacc-dim=16:16" } */
 
 #include <openacc.h>
-#include <alloca.h>
 #include <string.h>
 #include <stdio.h>
+#include <gomp-constants.h>
 
 #pragma acc routine
 static int __attribute__ ((noinline)) coord ()
 {
   int res = 0;
 
-  if (acc_on_device (acc_device_nvidia))
+  if (acc_on_device (acc_device_not_host))
     {
-      int g = 0, w = 0, v = 0;
+      int g, w, v;
 
-      __asm__ volatile ("mov.u32 %0,%%ctaid.x;" : "=r" (g));
-      __asm__ volatile ("mov.u32 %0,%%tid.y;" : "=r" (w));
-      __asm__ volatile ("mov.u32 %0,%%tid.x;" : "=r" (v));
+      g = __builtin_goacc_parlevel_id (GOMP_DIM_GANG);
+      w = __builtin_goacc_parlevel_id (GOMP_DIM_WORKER);
+      v = __builtin_goacc_parlevel_id (GOMP_DIM_VECTOR);
       res = (1 << 24) | (g << 16) | (w << 8) | v;
     }
   return res;
@@ -30,9 +27,9 @@ int check (const int *ary, int size, int gp, int wp, int vp)
 {
   int exit = 0;
   int ix;
-  int *gangs = (int *)alloca (gp * sizeof (int));
-  int *workers = (int *)alloca (wp * sizeof (int));
-  int *vectors = (int *)alloca (vp * sizeof (int));
+  int *gangs = (int *)__builtin_alloca (gp * sizeof (int));
+  int *workers = (int *)__builtin_alloca (wp * sizeof (int));
+  int *vectors = (int *)__builtin_alloca (vp * sizeof (int));
   int offloaded = 0;
   
   memset (gangs, 0, gp * sizeof (int));
@@ -131,5 +128,14 @@ int test_1 (int gp, int wp, int vp)
 
 int main ()
 {
+#ifdef ACC_DEVICE_TYPE_radeon
+  /* AMD GCN uses the autovectorizer for the vector dimension: the use
+     of a function call in vector-partitioned code in this test is not
+     currently supported.  */
+  /* AMD GCN does not currently support multiple workers.  This should be
+     set to 16 when that changes.  */
+  return test_1 (16, 1, 1);
+#else
   return test_1 (16, 16, 32);
+#endif
 }

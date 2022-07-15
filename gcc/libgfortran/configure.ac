@@ -1,7 +1,6 @@
 # Process this file with autoconf to produce a configure script, like so:
 # aclocal && autoconf && autoheader && automake
 
-AC_PREREQ(2.64)
 AC_INIT([GNU Fortran Runtime Library], 0.3,,[libgfortran])
 AC_CONFIG_HEADER(config.h)
 GCC_TOPLEV_SUBDIRS
@@ -87,6 +86,8 @@ fi
 
 AC_USE_SYSTEM_EXTENSIONS
 
+GCC_WITH_TOOLEXECLIBDIR
+
 # Calculate toolexeclibdir
 # Also toolexecdir, though it's only used in toolexeclibdir
 case ${version_specific_libs} in
@@ -102,7 +103,14 @@ case ${version_specific_libs} in
        test x"$with_cross_host" != x"no"; then
       # Install a library built with a cross compiler in tooldir, not libdir.
       toolexecdir='$(exec_prefix)/$(target_alias)'
-      toolexeclibdir='$(toolexecdir)/lib'
+      case ${with_toolexeclibdir} in
+	no)
+	  toolexeclibdir='$(toolexecdir)/lib'
+	  ;;
+	*)
+	  toolexeclibdir=${with_toolexeclibdir}
+	  ;;
+      esac
     else
       toolexecdir='$(libdir)/gcc-lib/$(target_alias)'
       toolexeclibdir='$(libdir)'
@@ -208,6 +216,19 @@ AM_CONDITIONAL(LIBGFOR_USE_SYMVER_SUN, [test "x$gfortran_use_symver" = xsun])
 
 AM_CONDITIONAL(LIBGFOR_MINIMAL, [test "x${target_cpu}" = xnvptx])
 
+# Some compiler target support may have limited support for integer
+# or floating point numbers – or may want to reduce the libgfortran size
+# although they do have the support.
+LIBGOMP_CHECKED_INT_KINDS="1 2 4 8 16"
+LIBGOMP_CHECKED_REAL_KINDS="4 8 10 16"
+
+if test "x${target_cpu}" = xamdgcn; then
+  # amdgcn only has limited support for __int128.
+  LIBGOMP_CHECKED_INT_KINDS="1 2 4 8"
+fi
+AC_SUBST(LIBGOMP_CHECKED_INT_KINDS)
+AC_SUBST(LIBGOMP_CHECKED_REAL_KINDS)
+
 # Figure out whether the compiler supports "-ffunction-sections -fdata-sections",
 # similarly to how libstdc++ does it
 ac_test_CFLAGS="${CFLAGS+set}"
@@ -275,8 +296,9 @@ AC_TYPE_UINTPTR_T
 AC_CHECK_TYPES([ptrdiff_t])
 
 # check header files (we assume C89 is available, so don't check for that)
-AC_CHECK_HEADERS_ONCE(unistd.h sys/time.h sys/times.h sys/resource.h \
-sys/types.h sys/stat.h sys/wait.h floatingpoint.h ieeefp.h fenv.h fptrap.h \
+AC_CHECK_HEADERS_ONCE(unistd.h sys/random.h sys/time.h sys/times.h \
+sys/resource.h sys/types.h sys/stat.h sys/uio.h sys/wait.h \
+floatingpoint.h ieeefp.h fenv.h fptrap.h \
 fpxcp.h pwd.h complex.h xlocale.h)
 
 GCC_HEADER_STDINT(gstdint.h)
@@ -312,8 +334,9 @@ if test "${hardwire_newlib:-0}" -eq 1; then
    fi
 else
    AC_CHECK_FUNCS_ONCE(getrusage times mkstemp strtof strtold snprintf \
-   ftruncate chsize chdir getlogin gethostname kill link symlink sleep ttyname \
-   alarm access fork setmode fcntl \
+   ftruncate chsize chdir getentropy getlogin gethostname kill link symlink \
+   sleep ttyname sigaction waitpid \
+   alarm access fork posix_spawn setmode fcntl writev \
    gettimeofday stat fstat lstat getpwuid vsnprintf dup \
    getcwd localtime_r gmtime_r getpwuid_r ttyname_r clock_gettime \
    getgid getpid getuid geteuid umask getegid \
@@ -382,6 +405,9 @@ GCC_CHECK_MATH_FUNC([cabsl])
 GCC_CHECK_MATH_FUNC([floorf])
 GCC_CHECK_MATH_FUNC([floor])
 GCC_CHECK_MATH_FUNC([floorl])
+GCC_CHECK_MATH_FUNC([fmaf])
+GCC_CHECK_MATH_FUNC([fma])
+GCC_CHECK_MATH_FUNC([fmal])
 GCC_CHECK_MATH_FUNC([fmodf])
 GCC_CHECK_MATH_FUNC([fmod])
 GCC_CHECK_MATH_FUNC([fmodl])
@@ -506,6 +532,11 @@ GCC_CHECK_MATH_FUNC([catanl])
 # On AIX, clog is present in libm as __clog
 AC_CHECK_LIB([m],[__clog],[AC_DEFINE([HAVE_CLOG],[1],[libm includes clog])])
 
+GCC_CHECK_MATH_INLINE_BUILTIN_FALLBACK2([copysign], [double])
+GCC_CHECK_MATH_INLINE_BUILTIN_FALLBACK2([copysignl], [long double])
+GCC_CHECK_MATH_INLINE_BUILTIN_FALLBACK1([fabs], [double])
+GCC_CHECK_MATH_INLINE_BUILTIN_FALLBACK1([fabsl], [long double])
+
 # Check whether the system has a working stat()
 LIBGFOR_CHECK_WORKING_STAT
 
@@ -583,6 +614,18 @@ AC_SUBST(IEEE_SUPPORT)
 IEEE_FLAGS="${ieee_flags}"
 AC_SUBST(IEEE_FLAGS)
 
+# Conditionalize the makefile for this target machine.
+tmake_file_=
+for f in ${tmake_file}
+do
+	if test -f ${srcdir}/config/$f
+	then
+		tmake_file_="${tmake_file_} \$(srcdir)/config/$f"
+	fi
+done
+tmake_file="${tmake_file_}"
+AC_SUBST(tmake_file)
+
 
 # Check for POSIX getpwuid_r 
 #
@@ -607,8 +650,8 @@ fi
 LIBGFOR_CHECK_ATTRIBUTE_VISIBILITY
 LIBGFOR_CHECK_ATTRIBUTE_ALIAS
 
-# Check out sync builtins support.
-LIBGFOR_CHECK_SYNC_FETCH_AND_ADD
+# Check out atomic builtins support.
+LIBGFOR_CHECK_ATOMIC_FETCH_ADD
 
 # Check out #pragma weak.
 LIBGFOR_GTHREAD_WEAK

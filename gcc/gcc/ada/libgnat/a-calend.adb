@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -38,7 +38,6 @@ with System.OS_Primitives;
 package body Ada.Calendar with
   SPARK_Mode => Off
 is
-
    --------------------------
    -- Implementation Notes --
    --------------------------
@@ -157,7 +156,7 @@ is
    Leap_Support : constant Boolean := (Flag = 1);
    --  Flag to controls the usage of leap seconds in all Ada.Calendar routines
 
-   Leap_Seconds_Count : constant Natural := 25;
+   Leap_Seconds_Count : constant Natural := 27;
 
    ---------------------
    -- Local Constants --
@@ -168,9 +167,9 @@ is
    Secs_In_Non_Leap_Year : constant := 365 * Secs_In_Day;
    Nanos_In_Four_Years   : constant := Secs_In_Four_Years * Nano;
 
-   --  Lower and upper bound of Ada time. The zero (0) value of type Time is
-   --  positioned at year 2150. Note that the lower and upper bound account
-   --  for the non-leap centennial years.
+   --  Lower and upper bound of Ada time. Note that the lower and upper bound
+   --  account for the non-leap centennial years. See "Implementation of Time"
+   --  in the spec for what the zero value represents.
 
    Ada_Low  : constant Time_Rep := -(61 * 366 + 188 * 365) * Nanos_In_Day;
    Ada_High : constant Time_Rep :=  (60 * 366 + 190 * 365) * Nanos_In_Day;
@@ -202,10 +201,6 @@ is
    Unix_Max : constant Time_Rep :=
      Ada_Low + Time_Rep (34 * 366 + 102 * 365) * Nanos_In_Day +
      Time_Rep (Leap_Seconds_Count) * Nano;
-
-   Epoch_Offset : constant Time_Rep := (136 * 365 + 44 * 366) * Nanos_In_Day;
-   --  The difference between 2150-1-1 UTC and 1970-1-1 UTC expressed in
-   --  nanoseconds. Note that year 2100 is non-leap.
 
    Cumulative_Days_Before_Month :
      constant array (Month_Number) of Natural :=
@@ -240,7 +235,9 @@ is
       -4765132779000000000,
       -4544207978000000000,
       -4449513577000000000,
-      -4339180776000000000);
+      -4339180776000000000,
+      -4244572775000000000,
+      -4197052774000000000);
 
    ---------
    -- "+" --
@@ -438,18 +435,14 @@ is
       if End_T < Leap_Second_Times (1) then
          Elapsed_Leaps := 0;
          Next_Leap     := Leap_Second_Times (1);
-         return;
 
       elsif Start_T > Leap_Second_Times (Leap_Seconds_Count) then
          Elapsed_Leaps := 0;
          Next_Leap     := End_Of_Time;
-         return;
-      end if;
 
-      --  Perform the calculations only if the start date is within the leap
-      --  second occurrences table.
-
-      if Start_T <= Leap_Second_Times (Leap_Seconds_Count) then
+      else
+         --  Perform the calculations only if the start date is within the leap
+         --  second occurrences table.
 
          --    1    2                  N - 1   N
          --  +----+----+--  . . .  --+-------+---+
@@ -483,9 +476,6 @@ is
          end if;
 
          Elapsed_Leaps := End_Index - Start_Index;
-
-      else
-         Elapsed_Leaps := 0;
       end if;
    end Cumulative_Leap_Seconds;
 
@@ -503,6 +493,15 @@ is
       Split (Date, Y, M, D, S);
       return D;
    end Day;
+
+   ------------------
+   -- Epoch_Offset --
+   ------------------
+
+   function Epoch_Offset return Time_Rep is
+   begin
+      return (136 * 365 + 44 * 366) * Nanos_In_Day;
+   end Epoch_Offset;
 
    -------------
    -- Is_Leap --
@@ -757,6 +756,7 @@ is
         (Secs_T'Unchecked_Access,
          Flag'Unchecked_Access,
          Offset'Unchecked_Access);
+      pragma Annotate (CodePeer, Modified, Offset);
 
       return Long_Integer (Offset);
    end UTC_Time_Offset;

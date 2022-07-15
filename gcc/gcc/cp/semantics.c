@@ -3,7 +3,7 @@
    building RTL.  These routines are used both during actual parsing
    and during the instantiation of template functions.
 
-   Copyright (C) 1998-2018 Free Software Foundation, Inc.
+   Copyright (C) 1998-2021 Free Software Foundation, Inc.
    Written by Mark Mitchell (mmitchell@usa.net) based on code found
    formerly in parse.y and pt.c.
 
@@ -44,6 +44,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "gomp-constants.h"
 #include "predict.h"
+#include "memmodel.h"
 
 /* There routines provide a modular interface to perform many parsing
    operations.  They may therefore be used during actual parsing, or
@@ -126,11 +127,10 @@ struct GTY(()) deferred_access {
        A::B* A::f() { return 0; }
 
      is valid, even though `A::B' is not generally accessible.  */
-  vec<deferred_access_check, va_gc> * GTY(()) deferred_access_checks;
+  vec<deferred_access_check, va_gc> *deferred_access_checks;
 
   /* The current mode of access checks.  */
   enum deferring_kind deferring_access_checks_kind;
-
 };
 
 /* Data for deferred access checking.  */
@@ -256,6 +256,169 @@ pop_to_parent_deferring_access_checks (void)
     }
 }
 
+/* Called from enforce_access.  A class has attempted (but failed) to access
+   DECL.  It is already established that a baseclass of that class,
+   PARENT_BINFO, has private access to DECL.  Examine certain special cases
+   to find a decl that accurately describes the source of the problem.  If
+   none of the special cases apply, simply return DECL as the source of the
+   problem.  */
+
+static tree
+get_class_access_diagnostic_decl (tree parent_binfo, tree decl)
+{
+  /* When a class is denied access to a decl in a baseclass, most of the
+     time it is because the decl itself was declared as private at the point
+     of declaration.
+
+     However, in C++, there are (at least) two situations in which a decl
+     can be private even though it was not originally defined as such.
+     These two situations only apply if a baseclass had private access to
+     DECL (this function is only called if that is the case).  */
+
+  /* We should first check whether the reason the parent had private access
+     to DECL was simply because DECL was created and declared as private in
+     the parent.  If it was, then DECL is definitively the source of the
+     problem.  */
+  if (SAME_BINFO_TYPE_P (context_for_name_lookup (decl),
+			 BINFO_TYPE (parent_binfo)))
+    return decl;
+
+  /* 1.  If the "using" keyword is used to inherit DECL within the parent,
+     this may cause DECL to be private, so we should return the using
+     statement as the source of the problem.
+
+     Scan the fields of PARENT_BINFO and see if there are any using decls.  If
+     there are, see if they inherit DECL.  If they do, that's where DECL must
+     have been declared private.  */
+
+  for (tree parent_field = TYPE_FIELDS (BINFO_TYPE (parent_binfo));
+       parent_field;
+       parent_field = DECL_CHAIN (parent_field))
+    /* Not necessary, but also check TREE_PRIVATE for the sake of
+       eliminating obviously non-relevant using decls.  */
+    if (TREE_CODE (parent_field) == USING_DECL
+	&& TREE_PRIVATE (parent_field))
+      {
+	tree decl_stripped = strip_using_decl (parent_field);
+
+	/* The using statement might be overloaded.  If so, we need to
+	   check all of the overloads.  */
+	for (ovl_iterator iter (decl_stripped); iter; ++iter)
+	  /* If equal, the using statement inherits DECL, and so is the
+	     source of the access failure, so return it.  */
+	  if (*iter == decl)
+	    return parent_field;
+      }
+
+  /* 2.  If DECL was privately inherited by the parent class, then DECL will
+     be inaccessible, even though it may originally have been accessible to
+     deriving classes.  In that case, the fault lies with the parent, since it
+     used a private inheritance, so we return the parent as the source of the
+     problem.
+
+     Since this is the last check, we just assume it's true.  At worst, it
+     will simply point to the class that failed to give access, which is
+     technically true.  */
+  return TYPE_NAME (BINFO_TYPE (parent_binfo));
+}
+
+/* If the current scope isn't allowed to access DECL along
+   BASETYPE_PATH, give an error, or if we're parsing a function or class
+   template, defer the access check to be performed at instantiation time.
+   The most derived class in BASETYPE_PATH is the one used to qualify DECL.
+   DIAG_DECL is the declaration to use in the error diagnostic.  */
+
+static bool
+enforce_access (tree basetype_path, tree decl, tree diag_decl,
+		tsubst_flags_t complain, access_failure_info *afi = NULL)
+{
+  gcc_assert (TREE_CODE (basetype_path) == TREE_BINFO);
+
+  if (flag_new_inheriting_ctors
+      && DECL_INHERITED_CTOR (decl))
+    {
+      /* 7.3.3/18: The additional constructors are accessible if they would be
+	 accessible when used to construct an object of the corresponding base
+	 class.  */
+      decl = strip_inheriting_ctors (decl);
+      basetype_path = lookup_base (basetype_path, DECL_CONTEXT (decl),
+				   ba_any, NULL, complain);
+    }
+
+  tree cs = current_scope ();
+  if (processing_template_decl
+      && (CLASS_TYPE_P (cs) || TREE_CODE (cs) == FUNCTION_DECL))
+    if (tree template_info = get_template_info (cs))
+      {
+	/* When parsing a function or class template, we in general need to
+	   defer access checks until template instantiation time, since a friend
+	   declaration may grant access only to a particular specialization of
+	   the template.  */
+
+	if (accessible_p (basetype_path, decl, /*consider_local_p=*/true))
+	  /* But if the member is deemed accessible at parse time, then we can
+	     assume it'll be accessible at instantiation time.  */
+	  return true;
+
+	/* Access of a dependent decl should be rechecked after tsubst'ing
+	   into the user of the decl, rather than explicitly deferring the
+	   check here.  */
+	gcc_assert (!uses_template_parms (decl));
+	if (TREE_CODE (decl) == FIELD_DECL)
+	  gcc_assert (!uses_template_parms (DECL_CONTEXT (decl)));
+
+	/* Defer this access check until instantiation time.  */
+	deferred_access_check access_check;
+	access_check.binfo = basetype_path;
+	access_check.decl = decl;
+	access_check.diag_decl = diag_decl;
+	access_check.loc = input_location;
+	vec_safe_push (TI_DEFERRED_ACCESS_CHECKS (template_info), access_check);
+	return true;
+      }
+
+  if (!accessible_p (basetype_path, decl, /*consider_local_p=*/true))
+    {
+      if (flag_new_inheriting_ctors)
+	diag_decl = strip_inheriting_ctors (diag_decl);
+      if (complain & tf_error)
+	{
+	  access_kind access_failure_reason = ak_none;
+
+	  /* By default, using the decl as the source of the problem will
+	     usually give correct results.  */
+	  tree diag_location = diag_decl;
+
+	  /* However, if a parent of BASETYPE_PATH had private access to decl,
+	     then it actually might be the case that the source of the problem
+	     is not DECL.  */
+	  tree parent_binfo = get_parent_with_private_access (decl,
+							      basetype_path);
+
+	  /* So if a parent did have private access, then we need to do
+	     special checks to obtain the best diagnostic location decl.  */
+	  if (parent_binfo != NULL_TREE)
+	    {
+	      diag_location = get_class_access_diagnostic_decl (parent_binfo,
+								diag_decl);
+
+	      /* We also at this point know that the reason access failed was
+		 because decl was private.  */
+	      access_failure_reason = ak_private;
+	    }
+
+	  /* Finally, generate an error message.  */
+	  complain_about_access (decl, diag_decl, diag_location, true,
+				 access_failure_reason);
+	}
+      if (afi)
+	afi->record_access_failure (basetype_path, decl, diag_decl);
+      return false;
+    }
+
+  return true;
+}
+
 /* Perform the access checks in CHECKS.  The TREE_PURPOSE of each node
    is the BINFO indicating the qualifying scope used to access the
    DECL node stored in the TREE_VALUE of the node.  If CHECKS is empty
@@ -320,9 +483,7 @@ perform_or_defer_access_check (tree binfo, tree decl, tree diag_decl,
   deferred_access *ptr;
   deferred_access_check *chk;
 
-
-  /* Exit if we are in a context that no access checking is performed.
-     */
+  /* Exit if we are in a context that no access checking is performed.  */
   if (deferred_access_no_check)
     return true;
 
@@ -379,7 +540,8 @@ add_stmt (tree t)
 
       /* When we expand a statement-tree, we must know whether or not the
 	 statements are full-expressions.  We record that fact here.  */
-      STMT_IS_FULL_EXPR_P (t) = stmts_are_full_exprs_p ();
+      if (STATEMENT_CODE_P (TREE_CODE (t)))
+	STMT_IS_FULL_EXPR_P (t) = stmts_are_full_exprs_p ();
     }
 
   if (code == LABEL_EXPR || code == CASE_LABEL_EXPR)
@@ -440,6 +602,22 @@ add_decl_expr (tree decl)
   add_stmt (r);
 }
 
+/* Set EXPR_LOCATION of the cleanups of any CLEANUP_STMT in STMTS to LOC.  */
+
+static void
+set_cleanup_locs (tree stmts, location_t loc)
+{
+  if (TREE_CODE (stmts) == CLEANUP_STMT)
+    {
+      protected_set_expr_location (CLEANUP_EXPR (stmts), loc);
+      set_cleanup_locs (CLEANUP_BODY (stmts), loc);
+    }
+  else if (TREE_CODE (stmts) == STATEMENT_LIST)
+    for (tree_stmt_iterator i = tsi_start (stmts);
+	 !tsi_end_p (i); tsi_next (&i))
+      set_cleanup_locs (tsi_stmt (i), loc);
+}
+
 /* Finish a scope.  */
 
 tree
@@ -451,6 +629,9 @@ do_poplevel (tree stmt_list)
     block = poplevel (kept_level_p (), 1, 0);
 
   stmt_list = pop_stmt_list (stmt_list);
+
+  /* input_location is the last token of the scope, usually a }.  */
+  set_cleanup_locs (stmt_list, input_location);
 
   if (!processing_template_decl)
     {
@@ -645,10 +826,10 @@ maybe_convert_cond (tree cond)
     return NULL_TREE;
 
   /* Wait until we instantiate templates before doing conversion.  */
-  if (processing_template_decl)
+  if (type_dependent_expression_p (cond))
     return cond;
 
-  if (warn_sequence_point)
+  if (warn_sequence_point && !processing_template_decl)
     verify_sequence_points (cond);
 
   /* Do the conversion.  */
@@ -656,12 +837,11 @@ maybe_convert_cond (tree cond)
 
   if (TREE_CODE (cond) == MODIFY_EXPR
       && !TREE_NO_WARNING (cond)
-      && warn_parentheses)
-    {
-      warning_at (EXPR_LOC_OR_LOC (cond, input_location), OPT_Wparentheses,
-		  "suggest parentheses around assignment used as truth value");
-      TREE_NO_WARNING (cond) = 1;
-    }
+      && warn_parentheses
+      && warning_at (cp_expr_loc_or_input_loc (cond),
+		     OPT_Wparentheses, "suggest parentheses around "
+				       "assignment used as truth value"))
+    TREE_NO_WARNING (cond) = 1;
 
   return condition_conversion (cond);
 }
@@ -686,7 +866,7 @@ finish_expr_stmt (tree expr)
 	  expr = convert_to_void (expr, ICV_STATEMENT, tf_warning_or_error);
 	}
       else if (!type_dependent_expression_p (expr))
-	convert_to_void (build_non_dependent_expr (expr), ICV_STATEMENT, 
+	convert_to_void (build_non_dependent_expr (expr), ICV_STATEMENT,
                          tf_warning_or_error);
 
       if (check_for_bare_parameter_packs (expr))
@@ -723,6 +903,31 @@ begin_if_stmt (void)
   return r;
 }
 
+/* Returns true if FN, a CALL_EXPR, is a call to
+   std::is_constant_evaluated or __builtin_is_constant_evaluated.  */
+
+static bool
+is_std_constant_evaluated_p (tree fn)
+{
+  /* std::is_constant_evaluated takes no arguments.  */
+  if (call_expr_nargs (fn) != 0)
+    return false;
+
+  tree fndecl = cp_get_callee_fndecl_nofold (fn);
+  if (fndecl == NULL_TREE)
+    return false;
+
+  if (fndecl_built_in_p (fndecl, CP_BUILT_IN_IS_CONSTANT_EVALUATED,
+			 BUILT_IN_FRONTEND))
+    return true;
+
+  if (!decl_in_std_namespace_p (fndecl))
+    return false;
+
+  tree name = DECL_NAME (fndecl);
+  return name && id_equal (name, "is_constant_evaluated");
+}
+
 /* Process the COND of an if-statement, which may be given by
    IF_STMT.  */
 
@@ -738,6 +943,20 @@ finish_if_stmt_cond (tree cond, tree if_stmt)
 	 converted to bool.  */
       && TYPE_MAIN_VARIANT (TREE_TYPE (cond)) == boolean_type_node)
     {
+      /* if constexpr (std::is_constant_evaluated()) is always true,
+	 so give the user a clue.  */
+      if (warn_tautological_compare)
+	{
+	  tree t = cond;
+	  if (TREE_CODE (t) == CLEANUP_POINT_EXPR)
+	    t = TREE_OPERAND (t, 0);
+	  if (TREE_CODE (t) == CALL_EXPR
+	      && is_std_constant_evaluated_p (t))
+	    warning_at (EXPR_LOCATION (cond), OPT_Wtautological_compare,
+			"%qs always evaluates to true in %<if constexpr%>",
+			"std::is_constant_evaluated");
+	}
+
       cond = instantiate_non_dependent_expr (cond);
       cond = cxx_constant_value (cond, NULL_TREE);
     }
@@ -774,6 +993,18 @@ finish_else_clause (tree if_stmt)
   ELSE_CLAUSE (if_stmt) = pop_stmt_list (ELSE_CLAUSE (if_stmt));
 }
 
+/* Callback for cp_walk_tree to mark all {VAR,PARM}_DECLs in a tree as
+   read.  */
+
+static tree
+maybe_mark_exp_read_r (tree *tp, int *, void *)
+{
+  tree t = *tp;
+  if (VAR_P (t) || TREE_CODE (t) == PARM_DECL)
+    mark_exp_read (t);
+  return NULL_TREE;
+}
+
 /* Finish an if-statement.  */
 
 void
@@ -781,6 +1012,16 @@ finish_if_stmt (tree if_stmt)
 {
   tree scope = IF_SCOPE (if_stmt);
   IF_SCOPE (if_stmt) = NULL;
+  if (IF_STMT_CONSTEXPR_P (if_stmt))
+    {
+      /* Prevent various -Wunused warnings.  We might not instantiate
+	 either of these branches, so we would not mark the variables
+	 used in that branch as read.  */
+      cp_walk_tree_without_duplicates (&THEN_CLAUSE (if_stmt),
+				       maybe_mark_exp_read_r, NULL);
+      cp_walk_tree_without_duplicates (&ELSE_CLAUSE (if_stmt),
+				       maybe_mark_exp_read_r, NULL);
+    }
   add_stmt (do_poplevel (scope));
 }
 
@@ -871,6 +1112,11 @@ finish_do_stmt (tree cond, tree do_stmt, bool ivdep, unsigned short unroll)
 {
   cond = maybe_convert_cond (cond);
   end_maybe_infinite_loop (cond);
+  /* Unlike other iteration statements, the condition may not contain
+     a declaration, so we don't call finish_cond which checks for
+     unexpanded parameter packs.  */
+  if (check_for_bare_parameter_packs (cond))
+    cond = error_mark_node;
   if (ivdep && cond != error_mark_node)
     cond = build3 (ANNOTATE_EXPR, TREE_TYPE (cond), cond,
 		   build_int_cst (integer_type_node, annot_expr_ivdep_kind),
@@ -906,7 +1152,7 @@ finish_return_stmt (tree expr)
     {
       if (warn_sequence_point)
 	verify_sequence_points (expr);
-      
+
       if (DECL_DESTRUCTOR_P (current_function_decl)
 	  || (DECL_CONSTRUCTOR_P (current_function_decl)
 	      && targetm.cxx.cdtor_returns_this ()))
@@ -934,9 +1180,7 @@ finish_return_stmt (tree expr)
 tree
 begin_for_scope (tree *init)
 {
-  tree scope = NULL_TREE;
-  if (flag_new_for_scope)
-    scope = do_pushlevel (sk_for);
+  tree scope = do_pushlevel (sk_for);
 
   if (processing_template_decl)
     *init = push_stmt_list ();
@@ -960,10 +1204,10 @@ begin_for_stmt (tree scope, tree init)
 
   if (scope == NULL_TREE)
     {
-      gcc_assert (!init || !flag_new_for_scope);
-      if (!init)
-	scope = begin_for_scope (&init);
+      gcc_assert (!init);
+      scope = begin_for_scope (&init);
     }
+
   FOR_INIT_STMT (r) = init;
   FOR_SCOPE (r) = scope;
 
@@ -1057,16 +1301,40 @@ finish_for_stmt (tree for_stmt)
     FOR_BODY (for_stmt) = do_poplevel (FOR_BODY (for_stmt));
 
   /* Pop the scope for the body of the loop.  */
-  if (flag_new_for_scope)
+  tree *scope_ptr = (TREE_CODE (for_stmt) == RANGE_FOR_STMT
+		     ? &RANGE_FOR_SCOPE (for_stmt)
+		     : &FOR_SCOPE (for_stmt));
+  tree scope = *scope_ptr;
+  *scope_ptr = NULL;
+
+  /* During parsing of the body, range for uses "__for_{range,begin,end} "
+     decl names to make those unaccessible by code in the body.
+     Change it to ones with underscore instead of space, so that it can
+     be inspected in the debugger.  */
+  tree range_for_decl[3] = { NULL_TREE, NULL_TREE, NULL_TREE };
+  gcc_assert (CPTI_FOR_BEGIN__IDENTIFIER == CPTI_FOR_RANGE__IDENTIFIER + 1
+	      && CPTI_FOR_END__IDENTIFIER == CPTI_FOR_RANGE__IDENTIFIER + 2
+	      && CPTI_FOR_RANGE_IDENTIFIER == CPTI_FOR_RANGE__IDENTIFIER + 3
+	      && CPTI_FOR_BEGIN_IDENTIFIER == CPTI_FOR_BEGIN__IDENTIFIER + 3
+	      && CPTI_FOR_END_IDENTIFIER == CPTI_FOR_END__IDENTIFIER + 3);
+  for (int i = 0; i < 3; i++)
     {
-      tree scope;
-      tree *scope_ptr = (TREE_CODE (for_stmt) == RANGE_FOR_STMT
-			 ? &RANGE_FOR_SCOPE (for_stmt)
-			 : &FOR_SCOPE (for_stmt));
-      scope = *scope_ptr;
-      *scope_ptr = NULL;
-      add_stmt (do_poplevel (scope));
+      tree id = cp_global_trees[CPTI_FOR_RANGE__IDENTIFIER + i];
+      if (IDENTIFIER_BINDING (id)
+	  && IDENTIFIER_BINDING (id)->scope == current_binding_level)
+	{
+	  range_for_decl[i] = IDENTIFIER_BINDING (id)->value;
+	  gcc_assert (VAR_P (range_for_decl[i])
+		      && DECL_ARTIFICIAL (range_for_decl[i]));
+	}
     }
+
+  add_stmt (do_poplevel (scope));
+
+  for (int i = 0; i < 3; i++)
+    if (range_for_decl[i])
+      DECL_NAME (range_for_decl[i])
+	= cp_global_trees[CPTI_FOR_RANGE_IDENTIFIER + i];
 }
 
 /* Begin a range-for-statement.  Returns a new RANGE_FOR_STMT.
@@ -1077,36 +1345,34 @@ finish_for_stmt (tree for_stmt)
 tree
 begin_range_for_stmt (tree scope, tree init)
 {
-  tree r;
-
   begin_maybe_infinite_loop (boolean_false_node);
 
-  r = build_stmt (input_location, RANGE_FOR_STMT,
-		  NULL_TREE, NULL_TREE, NULL_TREE, NULL_TREE, NULL_TREE);
+  tree r = build_stmt (input_location, RANGE_FOR_STMT, NULL_TREE, NULL_TREE,
+		       NULL_TREE, NULL_TREE, NULL_TREE, NULL_TREE);
 
   if (scope == NULL_TREE)
     {
-      gcc_assert (!init || !flag_new_for_scope);
-      if (!init)
-	scope = begin_for_scope (&init);
+      gcc_assert (!init);
+      scope = begin_for_scope (&init);
     }
 
-  /* RANGE_FOR_STMTs do not use nor save the init tree, so we
-     pop it now.  */
-  if (init)
-    pop_stmt_list (init);
+  /* Since C++20, RANGE_FOR_STMTs can use the init tree, so save it.  */
+  RANGE_FOR_INIT_STMT (r) = init;
   RANGE_FOR_SCOPE (r) = scope;
 
   return r;
 }
 
 /* Finish the head of a range-based for statement, which may
-   be given by RANGE_FOR_STMT. DECL must be the declaration
+   be given by RANGE_FOR_STMT.  DECL must be the declaration
    and EXPR must be the loop expression. */
 
 void
 finish_range_for_decl (tree range_for_stmt, tree decl, tree expr)
 {
+  if (processing_template_decl)
+    RANGE_FOR_INIT_STMT (range_for_stmt)
+      = pop_stmt_list (RANGE_FOR_INIT_STMT (range_for_stmt));
   RANGE_FOR_DECL (range_for_stmt) = decl;
   RANGE_FOR_EXPR (range_for_stmt) = expr;
   add_stmt (range_for_stmt);
@@ -1165,10 +1431,12 @@ finish_switch_cond (tree cond, tree switch_stmt)
   if (!processing_template_decl)
     {
       /* Convert the condition to an integer or enumeration type.  */
+      tree orig_cond = cond;
       cond = build_expr_type_conversion (WANT_INT | WANT_ENUM, cond, true);
       if (cond == NULL_TREE)
 	{
-	  error ("switch quantity not an integer");
+	  error_at (cp_expr_loc_or_input_loc (orig_cond),
+		    "switch quantity not an integer");
 	  cond = error_mark_node;
 	}
       /* We want unlowered type here to handle enum bit-fields.  */
@@ -1343,21 +1611,25 @@ finish_handler_parms (tree decl, tree handler)
       if (warn_catch_value
 	  && type != NULL_TREE
 	  && type != error_mark_node
-	  && TREE_CODE (TREE_TYPE (decl)) != REFERENCE_TYPE)
+	  && !TYPE_REF_P (TREE_TYPE (decl)))
 	{
 	  tree orig_type = TREE_TYPE (decl);
 	  if (CLASS_TYPE_P (orig_type))
 	    {
 	      if (TYPE_POLYMORPHIC_P (orig_type))
-		warning (OPT_Wcatch_value_,
-			 "catching polymorphic type %q#T by value", orig_type);
+		warning_at (DECL_SOURCE_LOCATION (decl),
+			    OPT_Wcatch_value_,
+			    "catching polymorphic type %q#T by value",
+			    orig_type);
 	      else if (warn_catch_value > 1)
-		warning (OPT_Wcatch_value_,
-			 "catching type %q#T by value", orig_type);
+		warning_at (DECL_SOURCE_LOCATION (decl),
+			    OPT_Wcatch_value_,
+			    "catching type %q#T by value", orig_type);
 	    }
 	  else if (warn_catch_value > 2)
-	    warning (OPT_Wcatch_value_,
-		     "catching non-reference type %q#T", orig_type);
+	    warning_at (DECL_SOURCE_LOCATION (decl),
+			OPT_Wcatch_value_,
+			"catching non-reference type %q#T", orig_type);
 	}
     }
   HANDLER_TYPE (handler) = type;
@@ -1464,8 +1736,9 @@ finish_compound_stmt (tree stmt)
    considered volatile, and whether it is asm inline.  */
 
 tree
-finish_asm_stmt (int volatile_p, tree string, tree output_operands,
-		 tree input_operands, tree clobbers, tree labels, bool inline_p)
+finish_asm_stmt (location_t loc, int volatile_p, tree string,
+		 tree output_operands, tree input_operands, tree clobbers,
+		 tree labels, bool inline_p)
 {
   tree r;
   tree t;
@@ -1507,13 +1780,12 @@ finish_asm_stmt (int volatile_p, tree string, tree output_operands,
 		  || CP_TYPE_CONST_P (TREE_TYPE (operand))
 		  /* Functions are not modifiable, even though they are
 		     lvalues.  */
-		  || TREE_CODE (TREE_TYPE (operand)) == FUNCTION_TYPE
-		  || TREE_CODE (TREE_TYPE (operand)) == METHOD_TYPE
+		  || FUNC_OR_METHOD_TYPE_P (TREE_TYPE (operand))
 		  /* If it's an aggregate and any field is const, then it is
 		     effectively const.  */
 		  || (CLASS_TYPE_P (TREE_TYPE (operand))
 		      && C_TYPE_FIELDS_READONLY (TREE_TYPE (operand)))))
-	    cxx_readonly_error (operand, lv_asm);
+	    cxx_readonly_error (loc, operand, lv_asm);
 
 	  tree *op = &operand;
 	  while (TREE_CODE (*op) == COMPOUND_EXPR)
@@ -1551,7 +1823,7 @@ finish_asm_stmt (int volatile_p, tree string, tree output_operands,
 	{
 	  constraint = TREE_STRING_POINTER (TREE_VALUE (TREE_PURPOSE (t)));
 	  bool constraint_parsed
-	    = parse_input_constraint (&constraint, i, ninputs, noutputs, 0,   
+	    = parse_input_constraint (&constraint, i, ninputs, noutputs, 0,
 				      oconstraints, &allows_mem, &allows_reg);
 	  /* If the operand is going to end up in memory, don't call
 	     decay_conversion.  */
@@ -1566,8 +1838,9 @@ finish_asm_stmt (int volatile_p, tree string, tree output_operands,
 	     resolve the overloading.  */
 	  if (TREE_TYPE (operand) == unknown_type_node)
 	    {
-	      error ("type of asm operand %qE could not be determined",
-		     TREE_VALUE (t));
+	      error_at (loc,
+			"type of %<asm%> operand %qE could not be determined",
+			TREE_VALUE (t));
 	      operand = error_mark_node;
 	    }
 
@@ -1615,7 +1888,7 @@ finish_asm_stmt (int volatile_p, tree string, tree output_operands,
 	}
     }
 
-  r = build_stmt (input_location, ASM_EXPR, string,
+  r = build_stmt (loc, ASM_EXPR, string,
 		  output_operands, input_operands,
 		  clobbers, labels);
   ASM_VOLATILE_P (r) = volatile_p || noutputs == 0;
@@ -1648,7 +1921,7 @@ finish_label_decl (tree name)
 {
   if (!at_function_scope_p ())
     {
-      error ("__label__ declarations are only allowed in function scopes");
+      error ("%<__label__%> declarations are only allowed in function scopes");
       return;
     }
 
@@ -1707,10 +1980,10 @@ finish_mem_initializers (tree mem_inits)
 
 /* Obfuscate EXPR if it looks like an id-expression or member access so
    that the call to finish_decltype in do_auto_deduction will give the
-   right result.  */
+   right result.  If EVEN_UNEVAL, do this even in unevaluated context.  */
 
 tree
-force_paren_expr (tree expr)
+force_paren_expr (tree expr, bool even_uneval)
 {
   /* This is only needed for decltype(auto) in C++14.  */
   if (cxx_dialect < cxx14)
@@ -1718,35 +1991,25 @@ force_paren_expr (tree expr)
 
   /* If we're in unevaluated context, we can't be deducing a
      return/initializer type, so we don't need to mess with this.  */
-  if (cp_unevaluated_operand)
+  if (cp_unevaluated_operand && !even_uneval)
     return expr;
 
-  if (!DECL_P (expr) && TREE_CODE (expr) != COMPONENT_REF
+  if (!DECL_P (tree_strip_any_location_wrapper (expr))
+      && TREE_CODE (expr) != COMPONENT_REF
       && TREE_CODE (expr) != SCOPE_REF)
     return expr;
+
+  location_t loc = cp_expr_location (expr);
 
   if (TREE_CODE (expr) == COMPONENT_REF
       || TREE_CODE (expr) == SCOPE_REF)
     REF_PARENTHESIZED_P (expr) = true;
   else if (processing_template_decl)
-    expr = build1 (PAREN_EXPR, TREE_TYPE (expr), expr);
-  else if (VAR_P (expr) && DECL_HARD_REGISTER (expr))
-    /* We can't bind a hard register variable to a reference.  */;
+    expr = build1_loc (loc, PAREN_EXPR, TREE_TYPE (expr), expr);
   else
     {
-      cp_lvalue_kind kind = lvalue_kind (expr);
-      if ((kind & ~clk_class) != clk_none)
-	{
-	  tree type = unlowered_expr_type (expr);
-	  bool rval = !!(kind & clk_rvalueref);
-	  type = cp_build_reference_type (type, rval);
-	  /* This inhibits warnings in, eg, cxx_mark_addressable
-	     (c++/60955).  */
-	  warning_sentinel s (extra_warnings);
-	  expr = build_static_cast (type, expr, tf_error);
-	  if (expr != error_mark_node)
-	    REF_PARENTHESIZED_P (expr) = true;
-	}
+      expr = build1_loc (loc, VIEW_CONVERT_EXPR, TREE_TYPE (expr), expr);
+      REF_PARENTHESIZED_P (expr) = true;
     }
 
   return expr;
@@ -1775,6 +2038,9 @@ maybe_undo_parenthesized_ref (tree t)
     }
   else if (TREE_CODE (t) == PAREN_EXPR)
     t = TREE_OPERAND (t, 0);
+  else if (TREE_CODE (t) == VIEW_CONVERT_EXPR
+	   && REF_PARENTHESIZED_P (t))
+    t = TREE_OPERAND (t, 0);
 
   return t;
 }
@@ -1794,8 +2060,9 @@ finish_parenthesized_expr (cp_expr expr)
        enclosed in parentheses.  */
     PTRMEM_OK_P (expr) = 0;
 
-  if (TREE_CODE (expr) == STRING_CST)
-    PAREN_STRING_LITERAL_P (expr) = 1;
+  tree stripped_expr = tree_strip_any_location_wrapper (expr);
+  if (TREE_CODE (stripped_expr) == STRING_CST)
+    PAREN_STRING_LITERAL_P (stripped_expr) = 1;
 
   expr = cp_expr (force_paren_expr (expr), expr.get_location ());
 
@@ -1816,7 +2083,15 @@ finish_non_static_data_member (tree decl, tree object, tree qualifying_scope)
     {
       tree scope = qualifying_scope;
       if (scope == NULL_TREE)
-	scope = context_for_name_lookup (decl);
+	{
+	  scope = context_for_name_lookup (decl);
+	  if (!TYPE_P (scope))
+	    {
+	      /* Can happen during error recovery (c++/85014).  */
+	      gcc_assert (seen_error ());
+	      return error_mark_node;
+	    }
+	}
       object = maybe_dummy_object (scope, NULL);
     }
 
@@ -1841,11 +2116,11 @@ finish_non_static_data_member (tree decl, tree object, tree qualifying_scope)
 
   if (current_class_ptr)
     TREE_USED (current_class_ptr) = 1;
-  if (processing_template_decl && !qualifying_scope)
+  if (processing_template_decl)
     {
       tree type = TREE_TYPE (decl);
 
-      if (TREE_CODE (type) == REFERENCE_TYPE)
+      if (TYPE_REF_P (type))
 	/* Quals on the object don't matter.  */;
       else if (PACK_EXPANSION_P (type))
 	/* Don't bother trying to represent this.  */
@@ -1862,17 +2137,16 @@ finish_non_static_data_member (tree decl, tree object, tree qualifying_scope)
 	  type = cp_build_qualified_type (type, quals);
 	}
 
-      ret = (convert_from_reference
-	      (build_min (COMPONENT_REF, type, object, decl, NULL_TREE)));
+      if (qualifying_scope)
+	/* Wrap this in a SCOPE_REF for now.  */
+	ret = build_qualified_name (type, qualifying_scope, decl,
+				    /*template_p=*/false);
+      else
+	ret = (convert_from_reference
+	       (build_min (COMPONENT_REF, type, object, decl, NULL_TREE)));
     }
   /* If PROCESSING_TEMPLATE_DECL is nonzero here, then
-     QUALIFYING_SCOPE is also non-null.  Wrap this in a SCOPE_REF
-     for now.  */
-  else if (processing_template_decl)
-    ret = build_qualified_name (TREE_TYPE (decl),
-				qualifying_scope,
-				decl,
-				/*template_p=*/false);
+     QUALIFYING_SCOPE is also non-null.  */
   else
     {
       tree access_type = TREE_TYPE (object);
@@ -1903,70 +2177,34 @@ finish_non_static_data_member (tree decl, tree object, tree qualifying_scope)
   return ret;
 }
 
-/* If we are currently parsing a template and we encountered a typedef
-   TYPEDEF_DECL that is being accessed though CONTEXT, this function
-   adds the typedef to a list tied to the current template.
-   At template instantiation time, that list is walked and access check
-   performed for each typedef.
-   LOCATION is the location of the usage point of TYPEDEF_DECL.  */
-
-void
-add_typedef_to_current_template_for_access_check (tree typedef_decl,
-                                                  tree context,
-						  location_t location)
-{
-    tree template_info = NULL;
-    tree cs = current_scope ();
-
-    if (!is_typedef_decl (typedef_decl)
-	|| !context
-	|| !CLASS_TYPE_P (context)
-	|| !cs)
-      return;
-
-    if (CLASS_TYPE_P (cs) || TREE_CODE (cs) == FUNCTION_DECL)
-      template_info = get_template_info (cs);
-
-    if (template_info
-	&& TI_TEMPLATE (template_info)
-	&& !currently_open_class (context))
-      append_type_to_template_for_access_check (cs, typedef_decl,
-						context, location);
-}
-
 /* DECL was the declaration to which a qualified-id resolved.  Issue
    an error message if it is not accessible.  If OBJECT_TYPE is
    non-NULL, we have just seen `x->' or `x.' and OBJECT_TYPE is the
    type of `*x', or `x', respectively.  If the DECL was named as
-   `A::B' then NESTED_NAME_SPECIFIER is `A'.  */
+   `A::B' then NESTED_NAME_SPECIFIER is `A'.  Return value is like
+   perform_access_checks above.  */
 
-void
+bool
 check_accessibility_of_qualified_id (tree decl,
 				     tree object_type,
-				     tree nested_name_specifier)
+				     tree nested_name_specifier,
+				     tsubst_flags_t complain)
 {
-  tree scope;
-  tree qualifying_type = NULL_TREE;
-
-  /* If we are parsing a template declaration and if decl is a typedef,
-     add it to a list tied to the template.
-     At template instantiation time, that list will be walked and
-     access check performed.  */
-  add_typedef_to_current_template_for_access_check (decl,
-						    nested_name_specifier
-						    ? nested_name_specifier
-						    : DECL_CONTEXT (decl),
-						    input_location);
-
   /* If we're not checking, return immediately.  */
   if (deferred_access_no_check)
-    return;
+    return true;
 
   /* Determine the SCOPE of DECL.  */
-  scope = context_for_name_lookup (decl);
+  tree scope = context_for_name_lookup (decl);
   /* If the SCOPE is not a type, then DECL is not a member.  */
-  if (!TYPE_P (scope))
-    return;
+  if (!TYPE_P (scope)
+      /* If SCOPE is dependent then we can't perform this access check now,
+	 and since we'll perform this access check again after substitution
+	 there's no need to explicitly defer it.  */
+      || dependent_type_p (scope))
+    return true;
+
+  tree qualifying_type = NULL_TREE;
   /* Compute the scope through which DECL is being accessed.  */
   if (object_type
       /* OBJECT_TYPE might not be a class type; consider:
@@ -1987,14 +2225,24 @@ check_accessibility_of_qualified_id (tree decl,
       /* If the reference is to a non-static member of the
 	 current class, treat it as if it were referenced through
 	 `this'.  */
-      tree ct;
       if (DECL_NONSTATIC_MEMBER_P (decl)
-	  && current_class_ptr
-	  && DERIVED_FROM_P (scope, ct = current_nonlambda_class_type ()))
-	qualifying_type = ct;
+	  && current_class_ptr)
+	if (tree current = current_nonlambda_class_type ())
+	  {
+	    if (dependent_type_p (current))
+	    /* In general we can't know whether this access goes through
+	       `this' until instantiation time.  Punt now, or else we might
+	       create a deferred access check that's not relative to `this'
+	       when it ought to be.  We'll check this access again after
+	       substitution, e.g. from tsubst_qualified_id.  */
+	      return true;
+
+	    if (DERIVED_FROM_P (scope, current))
+	      qualifying_type = current;
+	  }
       /* Otherwise, use the type indicated by the
 	 nested-name-specifier.  */
-      else
+      if (!qualifying_type)
 	qualifying_type = nested_name_specifier;
     }
   else
@@ -2002,13 +2250,14 @@ check_accessibility_of_qualified_id (tree decl,
        its bases.  */
     qualifying_type = currently_open_derived_class (scope);
 
-  if (qualifying_type 
+  if (qualifying_type
       /* It is possible for qualifying type to be a TEMPLATE_TYPE_PARM
 	 or similar in a default argument value.  */
-      && CLASS_TYPE_P (qualifying_type)
-      && !dependent_type_p (qualifying_type))
-    perform_or_defer_access_check (TYPE_BINFO (qualifying_type), decl,
-				   decl, tf_warning_or_error);
+      && CLASS_TYPE_P (qualifying_type))
+    return perform_or_defer_access_check (TYPE_BINFO (qualifying_type), decl,
+					  decl, complain);
+
+  return true;
 }
 
 /* EXPR is the result of a qualified-id.  The QUALIFYING_CLASS was the
@@ -2099,6 +2348,14 @@ finish_qualified_id_expr (tree qualifying_class,
 	expr = build_offset_ref (qualifying_class, expr, /*address_p=*/false,
 				 complain);
     }
+  else if (!template_p
+	   && TREE_CODE (expr) == TEMPLATE_DECL
+	   && !DECL_FUNCTION_TEMPLATE_P (expr))
+    {
+      if (complain & tf_error)
+	error ("%qE missing template arguments", expr);
+      return error_mark_node;
+    }
   else
     {
       /* In a template, return a SCOPE_REF for most qualified-ids
@@ -2114,6 +2371,8 @@ finish_qualified_id_expr (tree qualifying_class,
 	expr = build_qualified_name (TREE_TYPE (expr),
 				     qualifying_class, expr,
 				     template_p);
+      else if (tree wrap = maybe_get_tls_wrapper_call (expr))
+	expr = wrap;
 
       expr = convert_from_reference (expr);
     }
@@ -2288,19 +2547,22 @@ empty_expr_stmt_p (tree expr_stmt)
   return false;
 }
 
-/* Perform Koenig lookup.  FN is the postfix-expression representing
+/* Perform Koenig lookup.  FN_EXPR is the postfix-expression representing
    the function (or functions) to call; ARGS are the arguments to the
    call.  Returns the functions to be considered by overload resolution.  */
 
 cp_expr
-perform_koenig_lookup (cp_expr fn, vec<tree, va_gc> *args,
+perform_koenig_lookup (cp_expr fn_expr, vec<tree, va_gc> *args,
 		       tsubst_flags_t complain)
 {
   tree identifier = NULL_TREE;
   tree functions = NULL_TREE;
   tree tmpl_args = NULL_TREE;
   bool template_id = false;
-  location_t loc = fn.get_location ();
+  location_t loc = fn_expr.get_location ();
+  tree fn = fn_expr.get_value ();
+
+  STRIP_ANY_LOCATION_WRAPPER (fn);
 
   if (TREE_CODE (fn) == TEMPLATE_ID_EXPR)
     {
@@ -2340,7 +2602,7 @@ perform_koenig_lookup (cp_expr fn, vec<tree, va_gc> *args,
   if (fn && template_id && fn != error_mark_node)
     fn = build2 (TEMPLATE_ID_EXPR, unknown_type_node, fn, tmpl_args);
   
-  return fn;
+  return cp_expr (fn, loc);
 }
 
 /* Generate an expression for `FN (ARGS)'.  This may change the
@@ -2360,7 +2622,7 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
 {
   tree result;
   tree orig_fn;
-  vec<tree, va_gc> *orig_args = NULL;
+  vec<tree, va_gc> *orig_args = *args;
 
   if (fn == error_mark_node)
     return error_mark_node;
@@ -2370,6 +2632,8 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
   /* If FN may be a FUNCTION_DECL obfuscated by force_paren_expr, undo
      it so that we can tell this is a call to a known function.  */
   fn = maybe_undo_parenthesized_ref (fn);
+
+  STRIP_ANY_LOCATION_WRAPPER (fn);
 
   orig_fn = fn;
 
@@ -2381,7 +2645,7 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
 	{
 	  tree ifn = get_first_fn (fn);
 	  if (TREE_CODE (ifn) == FUNCTION_DECL
-	      && DECL_LOCAL_FUNCTION_P (ifn))
+	      && DECL_LOCAL_DECL_P (ifn))
 	    orig_fn = DECL_NAME (ifn);
 	}
 
@@ -2392,20 +2656,17 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
 	  || any_type_dependent_arguments_p (*args))
 	{
 	  result = build_min_nt_call_vec (orig_fn, *args);
-	  SET_EXPR_LOCATION (result, EXPR_LOC_OR_LOC (fn, input_location));
+	  SET_EXPR_LOCATION (result, cp_expr_loc_or_input_loc (fn));
 	  KOENIG_LOOKUP_P (result) = koenig_p;
 	  if (is_overloaded_fn (fn))
-	    {
-	      fn = get_fns (fn);
-	      lookup_keep (fn, true);
-	    }
+	    fn = get_fns (fn);
 
 	  if (cfun)
 	    {
 	      bool abnormal = true;
 	      for (lkp_iterator iter (fn); abnormal && iter; ++iter)
 		{
-		  tree fndecl = *iter;
+		  tree fndecl = STRIP_TEMPLATE (*iter);
 		  if (TREE_CODE (fndecl) != FUNCTION_DECL
 		      || !TREE_THIS_VOLATILE (fndecl))
 		    abnormal = false;
@@ -2494,6 +2755,23 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
 				      /*fn_p=*/NULL,
 				      complain);
     }
+  else if (concept_check_p (fn))
+    {
+      /* FN is actually a template-id referring to a concept definition.  */
+      tree id = unpack_concept_check (fn);
+      tree tmpl = TREE_OPERAND (id, 0);
+      tree args = TREE_OPERAND (id, 1);
+
+      if (!function_concept_p (tmpl))
+	{
+	  error_at (EXPR_LOC_OR_LOC (fn, input_location),
+		    "cannot call a concept as a function");
+	  return error_mark_node;
+	}
+
+      /* Ensure the result is wrapped as a call expression.  */
+      result = build_concept_check (tmpl, args, tf_warning_or_error);
+    }
   else if (is_overloaded_fn (fn))
     {
       /* If the function is an overloaded builtin, resolve it.  */
@@ -2534,6 +2812,20 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
 		 sizeof_arg, same_type_ignoring_top_level_qualifiers_p);
 	    }
 
+	  if ((complain & tf_warning)
+	      && TREE_CODE (fn) == FUNCTION_DECL
+	      && fndecl_built_in_p (fn, BUILT_IN_MEMSET)
+	      && vec_safe_length (*args) == 3
+	      && !any_type_dependent_arguments_p (*args))
+	    {
+	      tree arg0 = (*orig_args)[0];
+	      tree arg1 = (*orig_args)[1];
+	      tree arg2 = (*orig_args)[2];
+	      int literal_mask = ((literal_integer_zerop (arg1) << 1)
+				  | (literal_integer_zerop (arg2) << 2));
+	      warn_for_memset (input_location, arg0, arg2, literal_mask);
+	    }
+
 	  /* A call to a namespace-scope function.  */
 	  result = build_new_function_call (fn, args, complain);
 	}
@@ -2542,12 +2834,16 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
     {
       if (!vec_safe_is_empty (*args))
 	error ("arguments to destructor are not allowed");
-      /* Mark the pseudo-destructor call as having side-effects so
-	 that we do not issue warnings about its use.  */
-      result = build1 (NOP_EXPR,
-		       void_type_node,
-		       TREE_OPERAND (fn, 0));
-      TREE_SIDE_EFFECTS (result) = 1;
+      /* C++20/DR: If the postfix-expression names a pseudo-destructor (in
+	 which case the postfix-expression is a possibly-parenthesized class
+	 member access), the function call destroys the object of scalar type
+	 denoted by the object expression of the class member access.  */
+      tree ob = TREE_OPERAND (fn, 0);
+      if (obvalue_p (ob))
+	result = build_trivial_dtor_call (ob, true);
+      else
+	/* No location to clobber.  */
+	result = convert_to_void (ob, ICV_STATEMENT, complain);
     }
   else if (CLASS_TYPE_P (TREE_TYPE (fn)))
     /* If the "function" is really an object of class type, it might
@@ -2568,10 +2864,6 @@ finish_call_expr (tree fn, vec<tree, va_gc> **args, bool disallow_virtual,
       release_tree_vector (orig_args);
       result = convert_from_reference (result);
     }
-
-  /* Free or retain OVERLOADs from lookup.  */
-  if (is_overloaded_fn (orig_fn))
-    lookup_keep (get_fns (orig_fn), processing_template_decl);
 
   return result;
 }
@@ -2684,7 +2976,10 @@ finish_pseudo_destructor_expr (tree object, tree scope, tree destructor,
 	}
     }
 
-  return build3_loc (loc, PSEUDO_DTOR_EXPR, void_type_node, object,
+  tree type = (type_dependent_expression_p (object)
+	       ? NULL_TREE : void_type_node);
+
+  return build3_loc (loc, PSEUDO_DTOR_EXPR, type, object,
 		     scope, destructor);
 }
 
@@ -2742,12 +3037,15 @@ finish_compound_literal (tree type, tree compound_literal,
   if (type == error_mark_node)
     return error_mark_node;
 
-  if (TREE_CODE (type) == REFERENCE_TYPE)
+  if (TYPE_REF_P (type))
     {
       compound_literal
 	= finish_compound_literal (TREE_TYPE (type), compound_literal,
 				   complain, fcl_context);
-      return cp_build_c_cast (type, compound_literal, complain);
+      /* The prvalue is then used to direct-initialize the reference.  */
+      tree r = (perform_implicit_conversion_flags
+		(type, compound_literal, complain, LOOKUP_NORMAL));
+      return convert_from_reference (r);
     }
 
   if (!TYPE_OBJ_P (type))
@@ -2757,23 +3055,39 @@ finish_compound_literal (tree type, tree compound_literal,
       return error_mark_node;
     }
 
-  if (tree anode = type_uses_auto (type))
-    if (CLASS_PLACEHOLDER_TEMPLATE (anode))
-      {
-	type = do_auto_deduction (type, compound_literal, anode, complain,
-				  adc_variable_type);
-	if (type == error_mark_node)
-	  return error_mark_node;
-      }
+  if (template_placeholder_p (type))
+    {
+      type = do_auto_deduction (type, compound_literal, type, complain,
+				adc_variable_type);
+      if (type == error_mark_node)
+	return error_mark_node;
+    }
+
+  /* Used to hold a copy of the compound literal in a template.  */
+  tree orig_cl = NULL_TREE;
 
   if (processing_template_decl)
     {
-      TREE_TYPE (compound_literal) = type;
+      const bool dependent_p
+	= (instantiation_dependent_expression_p (compound_literal)
+	   || dependent_type_p (type));
+      if (dependent_p)
+	/* We're about to return, no need to copy.  */
+	orig_cl = compound_literal;
+      else
+	/* We're going to need a copy.  */
+	orig_cl = unshare_constructor (compound_literal);
+      TREE_TYPE (orig_cl) = type;
       /* Mark the expression as a compound literal.  */
-      TREE_HAS_CONSTRUCTOR (compound_literal) = 1;
+      TREE_HAS_CONSTRUCTOR (orig_cl) = 1;
+      /* And as instantiation-dependent.  */
+      CONSTRUCTOR_IS_DEPENDENT (orig_cl) = dependent_p;
       if (fcl_context == fcl_c99)
-	CONSTRUCTOR_C99_COMPOUND_LITERAL (compound_literal) = 1;
-      return compound_literal;
+	CONSTRUCTOR_C99_COMPOUND_LITERAL (orig_cl) = 1;
+      /* If the compound literal is dependent, we're done for now.  */
+      if (dependent_p)
+	return orig_cl;
+      /* Otherwise, do go on to e.g. check narrowing.  */
     }
 
   type = complete_type (type);
@@ -2786,7 +3100,8 @@ finish_compound_literal (tree type, tree compound_literal,
 	 that it came from T{} rather than T({}).  */
       CONSTRUCTOR_IS_DIRECT_INIT (compound_literal) = 1;
       compound_literal = build_tree_list (NULL_TREE, compound_literal);
-      return build_functional_cast (type, compound_literal, complain);
+      return build_functional_cast (input_location, type,
+				    compound_literal, complain);
     }
 
   if (TREE_CODE (type) == ARRAY_TYPE
@@ -2794,9 +3109,13 @@ finish_compound_literal (tree type, tree compound_literal,
     return error_mark_node;
   compound_literal = reshape_init (type, compound_literal, complain);
   if (SCALAR_TYPE_P (type)
-      && !BRACE_ENCLOSED_INITIALIZER_P (compound_literal)
-      && !check_narrowing (type, compound_literal, complain))
-    return error_mark_node;
+      && !BRACE_ENCLOSED_INITIALIZER_P (compound_literal))
+    {
+      tree t = instantiate_non_dependent_expr_sfinae (compound_literal,
+						      complain);
+      if (!check_narrowing (type, t, complain))
+	return error_mark_node;
+    }
   if (TREE_CODE (type) == ARRAY_TYPE
       && TYPE_DOMAIN (type) == NULL_TREE)
     {
@@ -2805,8 +3124,16 @@ finish_compound_literal (tree type, tree compound_literal,
       if (type == error_mark_node)
 	return error_mark_node;
     }
-  compound_literal = digest_init_flags (type, compound_literal, LOOKUP_NORMAL,
+  compound_literal = digest_init_flags (type, compound_literal,
+					LOOKUP_NORMAL | LOOKUP_NO_NARROWING,
 					complain);
+  if (compound_literal == error_mark_node)
+    return error_mark_node;
+
+  /* If we're in a template, return the original compound literal.  */
+  if (orig_cl)
+    return orig_cl;
+
   if (TREE_CODE (compound_literal) == CONSTRUCTOR)
     {
       TREE_HAS_CONSTRUCTOR (compound_literal) = true;
@@ -2824,6 +3151,7 @@ finish_compound_literal (tree type, tree compound_literal,
       && initializer_constant_valid_p (compound_literal, type))
     {
       tree decl = create_temporary_var (type);
+      DECL_CONTEXT (decl) = NULL_TREE;
       DECL_INITIAL (decl) = compound_literal;
       TREE_STATIC (decl) = 1;
       if (literal_type_p (type) && CP_TYPE_CONST_NON_VOLATILE_P (type))
@@ -2884,6 +3212,14 @@ finish_translation_unit (void)
 
   /* Do file scope __FUNCTION__ et al.  */
   finish_fname_decls ();
+
+  if (scope_chain->omp_declare_target_attribute)
+    {
+      if (!errorcount)
+	error ("%<#pragma omp declare target%> without corresponding "
+	       "%<#pragma omp end declare target%>");
+      scope_chain->omp_declare_target_attribute = 0;
+    }
 }
 
 /* Finish a template type parameter, specified as AGGR IDENTIFIER.
@@ -2915,8 +3251,8 @@ finish_template_template_parm (tree aggr, tree identifier)
   DECL_TEMPLATE_RESULT (tmpl) = decl;
   DECL_ARTIFICIAL (decl) = 1;
 
-  // Associate the constraints with the underlying declaration,
-  // not the template.
+  /* Associate the constraints with the underlying declaration,
+     not the template.  */
   tree reqs = TEMPLATE_PARMS_CONSTRAINTS (current_template_parms);
   tree constr = build_constraints (reqs, NULL_TREE);
   set_constraints (decl, constr);
@@ -2925,7 +3261,7 @@ finish_template_template_parm (tree aggr, tree identifier)
 
   gcc_assert (DECL_TEMPLATE_PARMS (tmpl));
 
-  check_default_tmpl_args (decl, DECL_TEMPLATE_PARMS (tmpl), 
+  check_default_tmpl_args (decl, DECL_TEMPLATE_PARMS (tmpl),
 			   /*is_primary=*/true, /*is_partial=*/false,
 			   /*is_friend=*/0);
 
@@ -2962,7 +3298,7 @@ begin_class_definition (tree t)
   if (error_operand_p (t) || error_operand_p (TYPE_MAIN_DECL (t)))
     return error_mark_node;
 
-  if (processing_template_parmlist)
+  if (processing_template_parmlist && !LAMBDA_TYPE_P (t))
     {
       error ("definition of %q#T inside template parameter list", t);
       return error_mark_node;
@@ -3002,14 +3338,27 @@ begin_class_definition (tree t)
   if (t == error_mark_node || ! MAYBE_CLASS_TYPE_P (t))
     {
       t = make_class_type (RECORD_TYPE);
-      pushtag (make_anon_name (), t, /*tag_scope=*/ts_current);
+      pushtag (make_anon_name (), t);
     }
 
   if (TYPE_BEING_DEFINED (t))
     {
       t = make_class_type (TREE_CODE (t));
-      pushtag (TYPE_IDENTIFIER (t), t, /*tag_scope=*/ts_current);
+      pushtag (TYPE_IDENTIFIER (t), t);
     }
+
+  if (modules_p ())
+    {
+      if (!module_may_redeclare (TYPE_NAME (t)))
+	{
+	  error ("cannot declare %qD in a different module", TYPE_NAME (t));
+	  inform (DECL_SOURCE_LOCATION (TYPE_NAME (t)), "declared here");
+	  return error_mark_node;
+	}
+      set_instantiating_module (TYPE_NAME (t));
+      set_defining_module (TYPE_NAME (t));
+    }
+
   maybe_process_partial_specialization (t);
   pushclass (t);
   TYPE_BEING_DEFINED (t) = 1;
@@ -3036,7 +3385,7 @@ begin_class_definition (tree t)
       SET_CLASSTYPE_INTERFACE_UNKNOWN_X
 	(t, finfo->interface_unknown);
     }
-  reset_specialization();
+  reset_specialization ();
 
   /* Make a declaration for this class in its own scope.  */
   build_self_reference ();
@@ -3300,7 +3649,7 @@ baselink_for_fns (tree fns)
   tree scope;
   tree cl;
 
-  if (BASELINK_P (fns) 
+  if (BASELINK_P (fns)
       || error_operand_p (fns))
     return fns;
 
@@ -3311,8 +3660,10 @@ baselink_for_fns (tree fns)
   cl = currently_open_derived_class (scope);
   if (!cl)
     cl = scope;
-  cl = TYPE_BINFO (cl);
-  return build_baselink (cl, cl, fns, /*optype=*/NULL_TREE);
+  tree access_path = TYPE_BINFO (cl);
+  tree conv_path = (cl == scope ? access_path
+		    : lookup_base (cl, scope, ba_any, NULL, tf_none));
+  return build_baselink (conv_path, access_path, fns, /*optype=*/NULL_TREE);
 }
 
 /* Returns true iff DECL is a variable from a function outside
@@ -3349,8 +3700,15 @@ tree
 process_outer_var_ref (tree decl, tsubst_flags_t complain, bool odr_use)
 {
   if (cp_unevaluated_operand)
-    /* It's not a use (3.2) if we're in an unevaluated context.  */
-    return decl;
+    {
+      tree type = TREE_TYPE (decl);
+      if (!dependent_type_p (type)
+	  && variably_modified_type_p (type, NULL_TREE))
+	/* VLAs are used even in unevaluated context.  */;
+      else
+	/* It's not a use (3.2) if we're in an unevaluated context.  */
+	return decl;
+    }
   if (decl == error_mark_node)
     return decl;
 
@@ -3402,26 +3760,23 @@ process_outer_var_ref (tree decl, tsubst_flags_t complain, bool odr_use)
 	/* A lambda in an NSDMI (c++/64496).  */
 	break;
 
-      if (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (lambda_expr)
-	  == CPLD_NONE)
+      if (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (lambda_expr) == CPLD_NONE)
 	break;
 
-      lambda_stack = tree_cons (NULL_TREE,
-				lambda_expr,
-				lambda_stack);
+      lambda_stack = tree_cons (NULL_TREE, lambda_expr, lambda_stack);
 
-      containing_function
-	= decl_function_context (containing_function);
+      containing_function = decl_function_context (containing_function);
     }
 
-  /* In a lambda within a template, wait until instantiation
-     time to implicitly capture a dependent type.  */
+  /* In a lambda within a template, wait until instantiation time to implicitly
+     capture a parameter pack.  We want to wait because we don't know if we're
+     capturing the whole pack or a single element, and it's OK to wait because
+     find_parameter_packs_r walks into the lambda body.  */
   if (context == containing_function
-      && dependent_type_p (TREE_TYPE (decl)))
+      && DECL_PACK_P (decl))
     return decl;
 
-  if (lambda_expr && VAR_P (decl)
-      && DECL_ANON_UNION_VAR_P (decl))
+  if (lambda_expr && VAR_P (decl) && DECL_ANON_UNION_VAR_P (decl))
     {
       if (complain & tf_error)
 	error ("cannot capture member %qD of anonymous union", decl);
@@ -3430,11 +3785,8 @@ process_outer_var_ref (tree decl, tsubst_flags_t complain, bool odr_use)
   /* Do lambda capture when processing the id-expression, not when
      odr-using a variable.  */
   if (!odr_use && context == containing_function)
-    {
-      decl = add_default_capture (lambda_stack,
-				  /*id=*/DECL_NAME (decl),
-				  initializer);
-    }
+    decl = add_default_capture (lambda_stack,
+				/*id=*/DECL_NAME (decl), initializer);
   /* Only an odr-use of an outer automatic variable causes an
      error, and a constant variable can decay to a prvalue
      constant without odr-use.  So don't complain yet.  */
@@ -3446,8 +3798,7 @@ process_outer_var_ref (tree decl, tsubst_flags_t complain, bool odr_use)
 	{
 	  error ("%qD is not captured", decl);
 	  tree closure = LAMBDA_EXPR_CLOSURE (lambda_expr);
-	  if (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (lambda_expr)
-	      == CPLD_NONE)
+	  if (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (lambda_expr) == CPLD_NONE)
 	    inform (location_of (closure),
 		    "the lambda has no capture-default");
 	  else if (TYPE_CLASS_SCOPE_P (closure))
@@ -3506,20 +3857,20 @@ process_outer_var_ref (tree decl, tsubst_flags_t complain, bool odr_use)
    the use of "this" explicit.
 
    Upon return, *IDK will be filled in appropriately.  */
-cp_expr
-finish_id_expression (tree id_expression,
-		      tree decl,
-		      tree scope,
-		      cp_id_kind *idk,
-		      bool integral_constant_expression_p,
-		      bool allow_non_integral_constant_expression_p,
-		      bool *non_integral_constant_expression_p,
-		      bool template_p,
-		      bool done,
-		      bool address_p,
-		      bool template_arg_p,
-		      const char **error_msg,
-		      location_t location)
+static cp_expr
+finish_id_expression_1 (tree id_expression,
+			tree decl,
+			tree scope,
+			cp_id_kind *idk,
+			bool integral_constant_expression_p,
+			bool allow_non_integral_constant_expression_p,
+			bool *non_integral_constant_expression_p,
+			bool template_p,
+			bool done,
+			bool address_p,
+			bool template_arg_p,
+			const char **error_msg,
+			location_t location)
 {
   decl = strip_using_decl (decl);
 
@@ -3563,11 +3914,6 @@ finish_id_expression (tree id_expression,
 	  else
 	    decl = id_expression;
 	}
-      /* If DECL is a variable that would be out of scope under
-	 ANSI/ISO rules, but in scope in the ARM, name lookup
-	 will succeed.  Issue a diagnostic here.  */
-      else
-	decl = check_for_out_of_scope_variable (decl);
 
       /* Remember that the name was used in the definition of
 	 the current class so that we can check later to see if
@@ -3627,8 +3973,17 @@ finish_id_expression (tree id_expression,
       *idk = CP_ID_KIND_NONE;
       if (TREE_CODE (decl) == TEMPLATE_PARM_INDEX)
 	decl = TEMPLATE_PARM_DECL (decl);
-      r = convert_from_reference (DECL_INITIAL (decl));
-
+      r = DECL_INITIAL (decl);
+      if (CLASS_TYPE_P (TREE_TYPE (r)) && !CP_TYPE_CONST_P (TREE_TYPE (r)))
+	{
+	  /* If the entity is a template parameter object for a template
+	     parameter of type T, the type of the expression is const T.  */
+	  tree ctype = TREE_TYPE (r);
+	  ctype = cp_build_qualified_type (ctype, (cp_type_quals (ctype)
+						   | TYPE_QUAL_CONST));
+	  r = build1 (VIEW_CONVERT_EXPR, ctype, r);
+	}
+      r = convert_from_reference (r);
       if (integral_constant_expression_p
 	  && !dependent_type_p (TREE_TYPE (decl))
 	  && !(INTEGRAL_OR_ENUMERATION_TYPE_P (TREE_TYPE (r))))
@@ -3663,17 +4018,13 @@ finish_id_expression (tree id_expression,
 	   wrong, so just return the identifier.  */
 	return id_expression;
 
-      if (TREE_CODE (decl) == NAMESPACE_DECL)
-	{
-	  error ("use of namespace %qD as expression", decl);
-	  return error_mark_node;
-	}
-      else if (DECL_CLASS_TEMPLATE_P (decl))
+      if (DECL_CLASS_TEMPLATE_P (decl))
 	{
 	  error ("use of class template %qT as expression", decl);
 	  return error_mark_node;
 	}
-      else if (TREE_CODE (decl) == TREE_LIST)
+
+      if (TREE_CODE (decl) == TREE_LIST)
 	{
 	  /* Ambiguous reference to base members.  */
 	  error ("request for member %qD is ambiguous in "
@@ -3697,9 +4048,10 @@ finish_id_expression (tree id_expression,
       if (! error_operand_p (decl)
 	  && !dependent_p
 	  && integral_constant_expression_p
-	  && ! decl_constant_var_p (decl)
+	  && !decl_constant_var_p (decl)
 	  && TREE_CODE (decl) != CONST_DECL
-	  && ! builtin_valid_in_constant_expr_p (decl))
+	  && !builtin_valid_in_constant_expr_p (decl)
+	  && !concept_check_p (decl))
 	{
 	  if (!allow_non_integral_constant_expression_p)
 	    {
@@ -3709,25 +4061,23 @@ finish_id_expression (tree id_expression,
 	  *non_integral_constant_expression_p = true;
 	}
 
-      tree wrap;
-      if (VAR_P (decl)
-	  && !cp_unevaluated_operand
-	  && !processing_template_decl
-	  && (TREE_STATIC (decl) || DECL_EXTERNAL (decl))
-	  && CP_DECL_THREAD_LOCAL_P (decl)
-	  && (wrap = get_tls_wrapper_fn (decl)))
-	{
-	  /* Replace an evaluated use of the thread_local variable with
-	     a call to its wrapper.  */
-	  decl = build_cxx_call (wrap, 0, NULL, tf_warning_or_error);
-	}
+      if (tree wrap = maybe_get_tls_wrapper_call (decl))
+	/* Replace an evaluated use of the thread_local variable with
+	   a call to its wrapper.  */
+	decl = wrap;
       else if (TREE_CODE (decl) == TEMPLATE_ID_EXPR
 	       && !dependent_p
-	       && variable_template_p (TREE_OPERAND (decl, 0)))
+	       && variable_template_p (TREE_OPERAND (decl, 0))
+	       && !concept_check_p (decl))
 	{
 	  decl = finish_template_variable (decl);
 	  mark_used (decl);
 	  decl = convert_from_reference (decl);
+	}
+      else if (concept_check_p (decl))
+	{
+	  /* Nothing more to do. All of the analysis for concept checks
+	     is done by build_conept_id, called from the parser.  */
 	}
       else if (scope)
 	{
@@ -3742,6 +4092,8 @@ finish_id_expression (tree id_expression,
 
 	  if (TREE_CODE (decl) == FUNCTION_DECL)
 	    mark_used (decl);
+
+	  cp_warn_deprecated_use_scopes (scope);
 
 	  if (TYPE_P (scope))
 	    decl = finish_qualified_id_expr (scope,
@@ -3766,10 +4118,11 @@ finish_id_expression (tree id_expression,
 	}
       else if (is_overloaded_fn (decl))
 	{
+	  /* We only need to look at the first function,
+	     because all the fns share the attribute we're
+	     concerned with (all member fns or all non-members).  */
 	  tree first_fn = get_first_fn (decl);
-
-	  if (TREE_CODE (first_fn) == TEMPLATE_DECL)
-	    first_fn = DECL_TEMPLATE_RESULT (first_fn);
+	  first_fn = STRIP_TEMPLATE (first_fn);
 
 	  /* [basic.def.odr]: "A function whose name appears as a
 	     potentially-evaluated expression is odr-used if it is the unique
@@ -3803,13 +4156,21 @@ finish_id_expression (tree id_expression,
 	  if (DECL_P (decl) && DECL_NONLOCAL (decl)
 	      && DECL_CLASS_SCOPE_P (decl))
 	    {
-	      tree context = context_for_name_lookup (decl); 
+	      tree context = context_for_name_lookup (decl);
 	      if (context != current_class_type)
 		{
 		  tree path = currently_open_derived_class (context);
-		  perform_or_defer_access_check (TYPE_BINFO (path),
-						 decl, decl,
-						 tf_warning_or_error);
+		  if (!path)
+		    /* PATH can be null for using an enum of an unrelated
+		       class; we checked its access in lookup_using_decl.
+
+		       ??? Should this case make a clone instead, like
+		       handle_using_decl?  */
+		    gcc_assert (TREE_CODE (decl) == CONST_DECL);
+		  else
+		    perform_or_defer_access_check (TYPE_BINFO (path),
+						   decl, decl,
+						   tf_warning_or_error);
 		}
 	    }
 
@@ -3818,6 +4179,34 @@ finish_id_expression (tree id_expression,
     }
 
   return cp_expr (decl, location);
+}
+
+/* As per finish_id_expression_1, but adding a wrapper node
+   around the result if needed to express LOCATION.  */
+
+cp_expr
+finish_id_expression (tree id_expression,
+		      tree decl,
+		      tree scope,
+		      cp_id_kind *idk,
+		      bool integral_constant_expression_p,
+		      bool allow_non_integral_constant_expression_p,
+		      bool *non_integral_constant_expression_p,
+		      bool template_p,
+		      bool done,
+		      bool address_p,
+		      bool template_arg_p,
+		      const char **error_msg,
+		      location_t location)
+{
+  cp_expr result
+    = finish_id_expression_1 (id_expression, decl, scope, idk,
+			      integral_constant_expression_p,
+			      allow_non_integral_constant_expression_p,
+			      non_integral_constant_expression_p,
+			      template_p, done, address_p, template_arg_p,
+			      error_msg, location);
+  return result.maybe_add_location_wrapper ();
 }
 
 /* Implement the __typeof keyword: Return the type of EXPR, suitable for
@@ -3899,7 +4288,7 @@ calculate_direct_bases (tree type, tsubst_flags_t complain)
       || !NON_UNION_CLASS_TYPE_P (type))
     return make_tree_vec (0);
 
-  vec<tree, va_gc> *vector = make_tree_vector ();
+  releasing_vec vector;
   vec<tree, va_gc> *base_binfos = BINFO_BASE_BINFOS (TYPE_BINFO (type));
   tree binfo;
   unsigned i;
@@ -3919,7 +4308,6 @@ calculate_direct_bases (tree type, tsubst_flags_t complain)
   for (i = 0; i < vector->length (); ++i)
     TREE_VEC_ELT (bases_vec, i) = BINFO_TYPE ((*vector)[i]);
 
-  release_tree_vector (vector);
   return bases_vec;
 }
 
@@ -3965,27 +4353,24 @@ calculate_bases (tree type, tsubst_flags_t complain)
       || !NON_UNION_CLASS_TYPE_P (type))
     return make_tree_vec (0);
 
-  vec<tree, va_gc> *vector = make_tree_vector ();
+  releasing_vec vector;
   tree bases_vec = NULL_TREE;
   unsigned i;
   vec<tree, va_gc> *vbases;
-  vec<tree, va_gc> *nonvbases;
   tree binfo;
 
   /* First go through virtual base classes */
   for (vbases = CLASSTYPE_VBASECLASSES (type), i = 0;
        vec_safe_iterate (vbases, i, &binfo); i++)
     {
-      vec<tree, va_gc> *vbase_bases
+      releasing_vec vbase_bases
 	= calculate_bases_helper (BINFO_TYPE (binfo));
       vec_safe_splice (vector, vbase_bases);
-      release_tree_vector (vbase_bases);
     }
 
   /* Now for the non-virtual bases */
-  nonvbases = calculate_bases_helper (type);
+  releasing_vec nonvbases = calculate_bases_helper (type);
   vec_safe_splice (vector, nonvbases);
-  release_tree_vector (nonvbases);
 
   /* Note that during error recovery vector->length can even be zero.  */
   if (vector->length () > 1)
@@ -3999,7 +4384,6 @@ calculate_bases (tree type, tsubst_flags_t complain)
   else
     bases_vec = make_tree_vec (0);
 
-  release_tree_vector (vector);
   return bases_vec;
 }
 
@@ -4011,7 +4395,7 @@ finish_bases (tree type, bool direct)
   if (!processing_template_decl)
     {
       /* Parameter packs can only be used in templates */
-      error ("Parameter pack __bases only valid in template declaration");
+      error ("parameter pack %<__bases%> only valid in template declaration");
       return error_mark_node;
     }
 
@@ -4038,14 +4422,16 @@ finish_offsetof (tree object_ptr, tree expr, location_t loc)
       return expr;
     }
 
+  if (expr == error_mark_node)
+    return error_mark_node;
+
   if (TREE_CODE (expr) == PSEUDO_DTOR_EXPR)
     {
       error ("cannot apply %<offsetof%> to destructor %<~%T%>",
 	      TREE_OPERAND (expr, 2));
       return error_mark_node;
     }
-  if (TREE_CODE (TREE_TYPE (expr)) == FUNCTION_TYPE
-      || TREE_CODE (TREE_TYPE (expr)) == METHOD_TYPE
+  if (FUNC_OR_METHOD_TYPE_P (TREE_TYPE (expr))
       || TREE_TYPE (expr) == unknown_type_node)
     {
       while (TREE_CODE (expr) == COMPONENT_REF
@@ -4074,7 +4460,7 @@ finish_offsetof (tree object_ptr, tree expr, location_t loc)
       && CLASS_TYPE_P (TREE_TYPE (TREE_TYPE (object_ptr)))
       && CLASSTYPE_NON_STD_LAYOUT (TREE_TYPE (TREE_TYPE (object_ptr)))
       && cp_unevaluated_operand == 0)
-    warning_at (loc, OPT_Winvalid_offsetof, "offsetof within "
+    warning_at (loc, OPT_Winvalid_offsetof, "%<offsetof%> within "
 		"non-standard-layout type %qT is conditionally-supported",
 		TREE_TYPE (TREE_TYPE (object_ptr)));
   return fold_offsetof (expr);
@@ -4229,7 +4615,9 @@ expand_or_defer_fn_1 (tree fn)
       if (DECL_INTERFACE_KNOWN (fn))
 	/* We've already made a decision as to how this function will
 	   be handled.  */;
-      else if (!at_eof)
+      else if (!at_eof
+	       || DECL_IMMEDIATE_FUNCTION_P (fn)
+	       || DECL_OMP_DECLARE_REDUCTION_P (fn))
 	tentative_decl_linkage (fn);
       else
 	import_export_decl (fn);
@@ -4240,6 +4628,8 @@ expand_or_defer_fn_1 (tree fn)
 	 be emitted; there may be callers in other DLLs.  */
       if (DECL_DECLARED_INLINE_P (fn)
 	  && !DECL_REALLY_EXTERN (fn)
+	  && !DECL_IMMEDIATE_FUNCTION_P (fn)
+	  && !DECL_OMP_DECLARE_REDUCTION_P (fn)
 	  && (flag_keep_inline_functions
 	      || (flag_keep_inline_dllexport
 		  && lookup_attribute ("dllexport", DECL_ATTRIBUTES (fn)))))
@@ -4257,7 +4647,8 @@ expand_or_defer_fn_1 (tree fn)
 	 it out, even though we haven't.  */
       TREE_ASM_WRITTEN (fn) = 1;
       /* If this is a constexpr function, keep DECL_SAVED_TREE.  */
-      if (!DECL_DECLARED_CONSTEXPR_P (fn))
+      if (!DECL_DECLARED_CONSTEXPR_P (fn)
+	  && !(modules_p () && DECL_DECLARED_INLINE_P (fn)))
 	DECL_SAVED_TREE (fn) = NULL_TREE;
       return false;
     }
@@ -4265,6 +4656,14 @@ expand_or_defer_fn_1 (tree fn)
   /* There's no reason to do any of the work here if we're only doing
      semantic analysis; this code just generates RTL.  */
   if (flag_syntax_only)
+    {
+      /* Pretend that this function has been written out so that we don't try
+	 to expand it again.  */
+      TREE_ASM_WRITTEN (fn) = 1;
+      return false;
+    }
+
+  if (DECL_OMP_DECLARE_REDUCTION_P (fn))
     return false;
 
   return true;
@@ -4285,8 +4684,9 @@ expand_or_defer_fn (tree fn)
     }
 }
 
-struct nrv_data
+class nrv_data
 {
+public:
   nrv_data () : visited (37) {}
 
   tree var;
@@ -4299,7 +4699,7 @@ struct nrv_data
 static tree
 finalize_nrv_r (tree* tp, int* walk_subtrees, void* data)
 {
-  struct nrv_data *dp = (struct nrv_data *)data;
+  class nrv_data *dp = (class nrv_data *)data;
   tree_node **slot;
 
   /* No need to walk into types.  There wouldn't be any need to walk into
@@ -4357,7 +4757,7 @@ finalize_nrv_r (tree* tp, int* walk_subtrees, void* data)
 void
 finalize_nrv (tree *tp, tree var, tree result)
 {
-  struct nrv_data data;
+  class nrv_data data;
 
   /* Copy name from VAR to RESULT.  */
   DECL_NAME (result) = DECL_NAME (var);
@@ -4483,7 +4883,7 @@ omp_privatize_field (tree t, bool shared)
     return error_mark_node;
   if (!omp_private_member_map && !shared)
     omp_private_member_map = new hash_map<tree, tree>;
-  if (TREE_CODE (TREE_TYPE (t)) == REFERENCE_TYPE)
+  if (TYPE_REF_P (TREE_TYPE (t)))
     {
       gcc_assert (INDIRECT_REF_P (m));
       m = TREE_OPERAND (m, 0);
@@ -4538,7 +4938,6 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 	t = TREE_OPERAND (t, 0);
       ret = t;
       if (TREE_CODE (t) == COMPONENT_REF
-	  && ort == C_ORT_OMP
 	  && (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TO
 	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FROM)
@@ -4562,6 +4961,8 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 		  return error_mark_node;
 		}
 	      t = TREE_OPERAND (t, 0);
+	      if (ort == C_ORT_ACC && TREE_CODE (t) == INDIRECT_REF)
+		t = TREE_OPERAND (t, 0);
 	    }
 	  if (REFERENCE_REF_P (t))
 	    t = TREE_OPERAND (t, 0);
@@ -4580,7 +4981,8 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 		      omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	  return error_mark_node;
 	}
-      else if (TREE_CODE (t) == PARM_DECL
+      else if (ort == C_ORT_OMP
+	       && TREE_CODE (t) == PARM_DECL
 	       && DECL_ARTIFICIAL (t)
 	       && DECL_NAME (t) == this_identifier)
 	{
@@ -4604,7 +5006,9 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
     }
 
   if (ort == C_ORT_OMP
-      && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+      && (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+	  || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+	  || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
       && TREE_CODE (TREE_CHAIN (t)) == FIELD_DECL)
     TREE_CHAIN (t) = omp_privatize_field (TREE_CHAIN (t), false);
   ret = handle_omp_array_sections_1 (c, TREE_CHAIN (t), types,
@@ -4658,12 +5062,26 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
   if (low_bound == NULL_TREE)
     low_bound = integer_zero_node;
 
+  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
+      && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ATTACH
+	  || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_DETACH))
+    {
+      if (length != integer_one_node)
+	{
+	  error_at (OMP_CLAUSE_LOCATION (c),
+		    "expected single pointer in %qs clause",
+		    c_omp_map_clause_name (c, ort == C_ORT_ACC));
+	  return error_mark_node;
+	}
+    }
   if (length != NULL_TREE)
     {
       if (!integer_nonzerop (length))
 	{
 	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_DEPEND
-	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
 	    {
 	      if (integer_zerop (length))
 		{
@@ -4729,7 +5147,9 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 	      if (tree_int_cst_equal (size, low_bound))
 		{
 		  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_DEPEND
-		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
 		    {
 		      error_at (OMP_CLAUSE_LOCATION (c),
 				"zero length array section in %qs clause",
@@ -4748,7 +5168,9 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 	  else if (length == NULL_TREE)
 	    {
 	      if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_DEPEND
-		  && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_REDUCTION)
+		  && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_REDUCTION
+		  && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_IN_REDUCTION
+		  && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_TASK_REDUCTION)
 		maybe_zero_len = true;
 	      if (first_non_one == types.length ())
 		first_non_one++;
@@ -4784,7 +5206,9 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
       else if (length == NULL_TREE)
 	{
 	  if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_DEPEND
-	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_REDUCTION)
+	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_REDUCTION
+	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_IN_REDUCTION
+	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_TASK_REDUCTION)
 	    maybe_zero_len = true;
 	  if (first_non_one == types.length ())
 	    first_non_one++;
@@ -4801,12 +5225,17 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
 	    }
 	}
     }
-  else if (TREE_CODE (type) == POINTER_TYPE)
+  else if (TYPE_PTR_P (type))
     {
       if (length == NULL_TREE)
 	{
-	  error_at (OMP_CLAUSE_LOCATION (c),
-		    "for pointer type length expression must be specified");
+	  if (TREE_CODE (ret) == PARM_DECL && DECL_ARRAY_PARAMETER_P (ret))
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "for array function parameter length expression "
+		      "must be specified");
+	  else
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "for pointer type length expression must be specified");
 	  return error_mark_node;
 	}
       if (length != NULL_TREE
@@ -4844,6 +5273,17 @@ handle_omp_array_sections_1 (tree c, tree t, vec<tree> &types,
       TREE_PURPOSE (t) = lb;
       low_bound = lb;
     }
+  /* Temporarily disable -fstrong-eval-order for array reductions.
+     The SAVE_EXPR and COMPOUND_EXPR added if low_bound has side-effects
+     is something the middle-end can't cope with and more importantly,
+     it needs to be the actual base variable that is privatized, not some
+     temporary assigned previous value of it.  That, together with OpenMP
+     saying how many times the side-effects are evaluated is unspecified,
+     makes int *a, *b; ... reduction(+:a[a = b, 3:10]) really unspecified.  */
+  warning_sentinel s (flag_strong_eval_order,
+		      OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION);
   ret = grok_array_decl (OMP_CLAUSE_LOCATION (c), ret, low_bound, false);
   return ret;
 }
@@ -4856,7 +5296,13 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
   bool maybe_zero_len = false;
   unsigned int first_non_one = 0;
   auto_vec<tree, 10> types;
-  tree first = handle_omp_array_sections_1 (c, OMP_CLAUSE_DECL (c), types,
+  tree *tp = &OMP_CLAUSE_DECL (c);
+  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_DEPEND
+      && TREE_CODE (*tp) == TREE_LIST
+      && TREE_PURPOSE (*tp)
+      && TREE_CODE (TREE_PURPOSE (*tp)) == TREE_VEC)
+    tp = &TREE_VALUE (*tp);
+  tree first = handle_omp_array_sections_1 (c, *tp, types,
 					    maybe_zero_len, first_non_one,
 					    ort);
   if (first == error_mark_node)
@@ -4865,7 +5311,7 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
     return false;
   if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_DEPEND)
     {
-      tree t = OMP_CLAUSE_DECL (c);
+      tree t = *tp;
       tree tem = NULL_TREE;
       if (processing_template_decl)
 	return false;
@@ -4885,7 +5331,7 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	}
       if (tem)
 	first = build2 (COMPOUND_EXPR, TREE_TYPE (first), tem, first);
-      OMP_CLAUSE_DECL (c) = first;
+      *tp = first;
     }
   else
     {
@@ -4962,7 +5408,9 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 
 	      if (i > first_non_one
 		  && ((length && integer_nonzerop (length))
-		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION))
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION))
 		continue;
 	      if (length)
 		l = fold_convert (sizetype, length);
@@ -4990,7 +5438,9 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 		  tree eltype = TREE_TYPE (types[num - 1]);
 		  while (TREE_CODE (eltype) == ARRAY_TYPE)
 		    eltype = TREE_TYPE (eltype);
-		  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
+		  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+		      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
 		    size = size_binop (EXACT_DIV_EXPR, size,
 				       size_in_bytes (eltype));
 		  size = size_binop (MULT_EXPR, size, l);
@@ -5006,17 +5456,20 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	{
 	  if (side_effects)
 	    size = build2 (COMPOUND_EXPR, sizetype, side_effects, size);
-	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
+	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
 	    {
 	      size = size_binop (MINUS_EXPR, size, size_one_node);
+	      size = save_expr (size);
 	      tree index_type = build_index_type (size);
 	      tree eltype = TREE_TYPE (first);
 	      while (TREE_CODE (eltype) == ARRAY_TYPE)
 		eltype = TREE_TYPE (eltype);
 	      tree type = build_array_type (eltype, index_type);
 	      tree ptype = build_pointer_type (eltype);
-	      if (TREE_CODE (TREE_TYPE (t)) == REFERENCE_TYPE
-		  && POINTER_TYPE_P (TREE_TYPE (TREE_TYPE (t))))
+	      if (TYPE_REF_P (TREE_TYPE (t))
+		  && INDIRECT_TYPE_P (TREE_TYPE (TREE_TYPE (t))))
 		t = convert_from_reference (t);
 	      else if (TREE_CODE (TREE_TYPE (t)) == ARRAY_TYPE)
 		t = build_fold_addr_expr (t);
@@ -5051,6 +5504,7 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	    switch (OMP_CLAUSE_MAP_KIND (c))
 	      {
 	      case GOMP_MAP_ALLOC:
+	      case GOMP_MAP_IF_PRESENT:
 	      case GOMP_MAP_TO:
 	      case GOMP_MAP_FROM:
 	      case GOMP_MAP_TOFROM:
@@ -5073,12 +5527,14 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	  if ((ort & C_ORT_OMP_DECLARE_SIMD) != C_ORT_OMP && ort != C_ORT_ACC)
 	    OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_POINTER);
 	  else if (TREE_CODE (t) == COMPONENT_REF)
-	    OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_ALWAYS_POINTER);
+	    OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_ATTACH_DETACH);
 	  else if (REFERENCE_REF_P (t)
 		   && TREE_CODE (TREE_OPERAND (t, 0)) == COMPONENT_REF)
 	    {
 	      t = TREE_OPERAND (t, 0);
-	      OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_ALWAYS_POINTER);
+	      gomp_map_kind k = (ort == C_ORT_ACC) ? GOMP_MAP_ATTACH_DETACH
+						   : GOMP_MAP_ALWAYS_POINTER;
+	      OMP_CLAUSE_SET_MAP_KIND (c2, k);
 	    }
 	  else
 	    OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_FIRSTPRIVATE_POINTER);
@@ -5091,7 +5547,7 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 				ptrdiff_type_node, t);
 	  tree ptr = OMP_CLAUSE_DECL (c2);
 	  ptr = convert_from_reference (ptr);
-	  if (!POINTER_TYPE_P (TREE_TYPE (ptr)))
+	  if (!INDIRECT_TYPE_P (TREE_TYPE (ptr)))
 	    ptr = build_fold_addr_expr (ptr);
 	  t = fold_build2_loc (OMP_CLAUSE_LOCATION (c), MINUS_EXPR,
 			       ptrdiff_type_node, t,
@@ -5102,15 +5558,19 @@ handle_omp_array_sections (tree c, enum c_omp_region_type ort)
 	  OMP_CLAUSE_CHAIN (c) = c2;
 	  ptr = OMP_CLAUSE_DECL (c2);
 	  if (OMP_CLAUSE_MAP_KIND (c2) != GOMP_MAP_FIRSTPRIVATE_POINTER
-	      && TREE_CODE (TREE_TYPE (ptr)) == REFERENCE_TYPE
-	      && POINTER_TYPE_P (TREE_TYPE (TREE_TYPE (ptr))))
+	      && TYPE_REF_P (TREE_TYPE (ptr))
+	      && INDIRECT_TYPE_P (TREE_TYPE (TREE_TYPE (ptr))))
 	    {
 	      tree c3 = build_omp_clause (OMP_CLAUSE_LOCATION (c),
 					  OMP_CLAUSE_MAP);
 	      OMP_CLAUSE_SET_MAP_KIND (c3, OMP_CLAUSE_MAP_KIND (c2));
 	      OMP_CLAUSE_DECL (c3) = ptr;
-	      if (OMP_CLAUSE_MAP_KIND (c2) == GOMP_MAP_ALWAYS_POINTER)
-		OMP_CLAUSE_DECL (c2) = build_simple_mem_ref (ptr);
+	      if (OMP_CLAUSE_MAP_KIND (c2) == GOMP_MAP_ALWAYS_POINTER
+		  || OMP_CLAUSE_MAP_KIND (c2) == GOMP_MAP_ATTACH_DETACH)
+		{
+		  OMP_CLAUSE_DECL (c2) = build_simple_mem_ref (ptr);
+		  OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_ALWAYS_POINTER);
+		}
 	      else
 		OMP_CLAUSE_DECL (c2) = convert_from_reference (ptr);
 	      OMP_CLAUSE_SIZE (c3) = size_zero_node;
@@ -5213,7 +5673,7 @@ omp_reduction_lookup (location_t loc, tree id, tree type, tree *baselinkp,
 				omp_reduction_id (ERROR_MARK,
 						  TREE_OPERAND (id, 1),
 						  type),
-				false, false);
+				LOOK_want::NORMAL, false);
   tree fns = id;
   id = NULL_TREE;
   if (fns && is_overloaded_fn (fns))
@@ -5365,17 +5825,17 @@ cp_check_omp_declare_reduction_r (tree *tp, int *, void *data)
 
 /* Diagnose violation of OpenMP #pragma omp declare reduction restrictions.  */
 
-void
+bool
 cp_check_omp_declare_reduction (tree udr)
 {
   tree type = TREE_VALUE (TYPE_ARG_TYPES (TREE_TYPE (udr)));
-  gcc_assert (TREE_CODE (type) == REFERENCE_TYPE);
+  gcc_assert (TYPE_REF_P (type));
   type = TREE_TYPE (type);
   int i;
   location_t loc = DECL_SOURCE_LOCATION (udr);
 
   if (type == error_mark_node)
-    return;
+    return false;
   if (ARITHMETIC_TYPE_P (type))
     {
       static enum tree_code predef_codes[]
@@ -5409,33 +5869,32 @@ cp_check_omp_declare_reduction (tree udr)
 	{
 	  error_at (loc, "predeclared arithmetic type %qT in "
 			 "%<#pragma omp declare reduction%>", type);
-	  return;
+	  return false;
 	}
     }
-  else if (TREE_CODE (type) == FUNCTION_TYPE
-	   || TREE_CODE (type) == METHOD_TYPE
+  else if (FUNC_OR_METHOD_TYPE_P (type)
 	   || TREE_CODE (type) == ARRAY_TYPE)
     {
       error_at (loc, "function or array type %qT in "
 		     "%<#pragma omp declare reduction%>", type);
-      return;
+      return false;
     }
-  else if (TREE_CODE (type) == REFERENCE_TYPE)
+  else if (TYPE_REF_P (type))
     {
       error_at (loc, "reference type %qT in %<#pragma omp declare reduction%>",
 		type);
-      return;
+      return false;
     }
   else if (TYPE_QUALS_NO_ADDR_SPACE (type))
     {
-      error_at (loc, "const, volatile or __restrict qualified type %qT in "
-		     "%<#pragma omp declare reduction%>", type);
-      return;
+      error_at (loc, "%<const%>, %<volatile%> or %<__restrict%>-qualified "
+		"type %qT in %<#pragma omp declare reduction%>", type);
+      return false;
     }
 
   tree body = DECL_SAVED_TREE (udr);
   if (body == NULL_TREE || TREE_CODE (body) != STATEMENT_LIST)
-    return;
+    return true;
 
   tree_stmt_iterator tsi;
   struct cp_check_omp_declare_reduction_data data;
@@ -5451,7 +5910,7 @@ cp_check_omp_declare_reduction (tree udr)
       gcc_assert (TREE_CODE (data.stmts[0]) == DECL_EXPR
 		  && TREE_CODE (data.stmts[1]) == DECL_EXPR);
       if (TREE_NO_WARNING (DECL_EXPR_DECL (data.stmts[0])))
-	return;
+	return true;
       data.combiner_p = true;
       if (cp_walk_tree (&data.stmts[2], cp_check_omp_declare_reduction_r,
 			&data, NULL))
@@ -5470,6 +5929,7 @@ cp_check_omp_declare_reduction (tree udr)
       if (i == 7)
 	gcc_assert (TREE_CODE (data.stmts[6]) == DECL_EXPR);
     }
+  return true;
 }
 
 /* Helper function of finish_omp_clauses.  Clone STMT as if we were making
@@ -5529,7 +5989,7 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
   tree type = TREE_TYPE (t);
   if (TREE_CODE (t) == MEM_REF)
     type = TREE_TYPE (type);
-  if (TREE_CODE (type) == REFERENCE_TYPE)
+  if (TYPE_REF_P (type))
     type = TREE_TYPE (type);
   if (TREE_CODE (type) == ARRAY_TYPE)
     {
@@ -5540,17 +6000,20 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
       if (!processing_template_decl)
 	{
 	  t = require_complete_type (t);
-	  if (t == error_mark_node)
+	  if (t == error_mark_node
+	      || !complete_type_or_else (oatype, NULL_TREE))
 	    return true;
 	  tree size = size_binop (EXACT_DIV_EXPR, TYPE_SIZE_UNIT (oatype),
 				  TYPE_SIZE_UNIT (type));
 	  if (integer_zerop (size))
 	    {
-	      error ("%qE in %<reduction%> clause is a zero size array",
-		     omp_clause_printable_decl (t));
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qE in %<reduction%> clause is a zero size array",
+			omp_clause_printable_decl (t));
 	      return true;
 	    }
 	  size = size_binop (MINUS_EXPR, size, size_one_node);
+	  size = save_expr (size);
 	  tree index_type = build_index_type (size);
 	  tree atype = build_array_type (type, index_type);
 	  tree ptype = build_pointer_type (type);
@@ -5568,6 +6031,8 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
       case PLUS_EXPR:
       case MULT_EXPR:
       case MINUS_EXPR:
+      case TRUTH_ANDIF_EXPR:
+      case TRUTH_ORIF_EXPR:
 	predefined = true;
 	break;
       case MIN_EXPR:
@@ -5583,19 +6048,14 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
 	  break;
 	predefined = true;
 	break;
-      case TRUTH_ANDIF_EXPR:
-      case TRUTH_ORIF_EXPR:
-	if (FLOAT_TYPE_P (type))
-	  break;
-	predefined = true;
-	break;
       default:
 	break;
       }
   else if (TYPE_READONLY (type))
     {
-      error ("%qE has const type for %<reduction%>",
-	     omp_clause_printable_decl (t));
+      error_at (OMP_CLAUSE_LOCATION (c),
+		"%qE has const type for %<reduction%>",
+		omp_clause_printable_decl (t));
       return true;
     }
   else if (!processing_template_decl)
@@ -5669,8 +6129,8 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
 	      if (TREE_ADDRESSABLE (DECL_EXPR_DECL (stmts[0])))
 		cxx_mark_addressable (placeholder);
 	      if (TREE_ADDRESSABLE (DECL_EXPR_DECL (stmts[1]))
-		  && TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c)))
-		     != REFERENCE_TYPE)
+		  && (decl_placeholder
+		      || !TYPE_REF_P (TREE_TYPE (OMP_CLAUSE_DECL (c)))))
 		cxx_mark_addressable (decl_placeholder ? decl_placeholder
 				      : OMP_CLAUSE_DECL (c));
 	      tree omp_out = placeholder;
@@ -5679,9 +6139,11 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
 	      if (need_static_cast)
 		{
 		  tree rtype = build_reference_type (atype);
-		  omp_out = build_static_cast (rtype, omp_out,
+		  omp_out = build_static_cast (input_location,
+					       rtype, omp_out,
 					       tf_warning_or_error);
-		  omp_in = build_static_cast (rtype, omp_in,
+		  omp_in = build_static_cast (input_location,
+					      rtype, omp_in,
 					      tf_warning_or_error);
 		  if (omp_out == error_mark_node || omp_in == error_mark_node)
 		    return true;
@@ -5696,7 +6158,9 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
 	    {
 	      gcc_assert (TREE_CODE (stmts[3]) == DECL_EXPR
 			  && TREE_CODE (stmts[4]) == DECL_EXPR);
-	      if (TREE_ADDRESSABLE (DECL_EXPR_DECL (stmts[3])))
+	      if (TREE_ADDRESSABLE (DECL_EXPR_DECL (stmts[3]))
+		  && (decl_placeholder
+		      || !TYPE_REF_P (TREE_TYPE (OMP_CLAUSE_DECL (c)))))
 		cxx_mark_addressable (decl_placeholder ? decl_placeholder
 				      : OMP_CLAUSE_DECL (c));
 	      if (TREE_ADDRESSABLE (DECL_EXPR_DECL (stmts[4])))
@@ -5714,9 +6178,11 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
 		      return true;
 		    }
 		  tree rtype = build_reference_type (atype);
-		  omp_priv = build_static_cast (rtype, omp_priv,
+		  omp_priv = build_static_cast (input_location,
+						rtype, omp_priv,
 						tf_warning_or_error);
-		  omp_orig = build_static_cast (rtype, omp_orig,
+		  omp_orig = build_static_cast (input_location,
+						rtype, omp_orig,
 						tf_warning_or_error);
 		  if (omp_priv == error_mark_node
 		      || omp_orig == error_mark_node)
@@ -5757,8 +6223,9 @@ finish_omp_reduction_clause (tree c, bool *need_default_ctor, bool *need_dtor)
     *need_dtor = true;
   else
     {
-      error ("user defined reduction not found for %qE",
-	     omp_clause_printable_decl (t));
+      error_at (OMP_CLAUSE_LOCATION (c),
+		"user defined reduction not found for %qE",
+		omp_clause_printable_decl (t));
       return true;
     }
   if (TREE_CODE (OMP_CLAUSE_DECL (c)) == MEM_REF)
@@ -5779,7 +6246,8 @@ finish_omp_declare_simd_methods (tree t)
 
   for (tree x = TYPE_FIELDS (t); x; x = DECL_CHAIN (x))
     {
-      if (TREE_CODE (TREE_TYPE (x)) != METHOD_TYPE)
+      if (TREE_CODE (x) == USING_DECL
+	  || !DECL_NONSTATIC_MEMBER_FUNCTION_P (x))
 	continue;
       tree ods = lookup_attribute ("omp declare simd", DECL_ATTRIBUTES (x));
       if (!ods || !TREE_VALUE (ods))
@@ -5788,8 +6256,7 @@ finish_omp_declare_simd_methods (tree t)
 	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LINEAR
 	    && integer_zerop (OMP_CLAUSE_DECL (c))
 	    && OMP_CLAUSE_LINEAR_STEP (c)
-	    && TREE_CODE (TREE_TYPE (OMP_CLAUSE_LINEAR_STEP (c)))
-	       == POINTER_TYPE)
+	    && TYPE_PTR_P (TREE_TYPE (OMP_CLAUSE_LINEAR_STEP (c))))
 	  {
 	    tree s = OMP_CLAUSE_LINEAR_STEP (c);
 	    s = fold_convert_loc (OMP_CLAUSE_LOCATION (c), sizetype, s);
@@ -5818,7 +6285,7 @@ cp_finish_omp_clause_depend_sink (tree sink_clause)
   for (; t; t = TREE_CHAIN (t))
     {
       tree decl = TREE_VALUE (t);
-      if (TREE_CODE (TREE_TYPE (decl)) == POINTER_TYPE)
+      if (TYPE_PTR_P (TREE_TYPE (decl)))
 	{
 	  tree offset = TREE_PURPOSE (t);
 	  bool neg = wi::neg_p (wi::to_wide (offset));
@@ -5840,6 +6307,193 @@ cp_finish_omp_clause_depend_sink (tree sink_clause)
   return false;
 }
 
+/* Finish OpenMP iterators ITER.  Return true if they are errorneous
+   and clauses containing them should be removed.  */
+
+static bool
+cp_omp_finish_iterators (tree iter)
+{
+  bool ret = false;
+  for (tree it = iter; it; it = TREE_CHAIN (it))
+    {
+      tree var = TREE_VEC_ELT (it, 0);
+      tree begin = TREE_VEC_ELT (it, 1);
+      tree end = TREE_VEC_ELT (it, 2);
+      tree step = TREE_VEC_ELT (it, 3);
+      tree orig_step;
+      tree type = TREE_TYPE (var);
+      location_t loc = DECL_SOURCE_LOCATION (var);
+      if (type == error_mark_node)
+	{
+	  ret = true;
+	  continue;
+	}
+      if (type_dependent_expression_p (var))
+	continue;
+      if (!INTEGRAL_TYPE_P (type) && !POINTER_TYPE_P (type))
+	{
+	  error_at (loc, "iterator %qD has neither integral nor pointer type",
+		    var);
+	  ret = true;
+	  continue;
+	}
+      else if (TYPE_READONLY (type))
+	{
+	  error_at (loc, "iterator %qD has const qualified type", var);
+	  ret = true;
+	  continue;
+	}
+      if (type_dependent_expression_p (begin)
+	  || type_dependent_expression_p (end)
+	  || type_dependent_expression_p (step))
+	continue;
+      else if (error_operand_p (step))
+	{
+	  ret = true;
+	  continue;
+	}
+      else if (!INTEGRAL_TYPE_P (TREE_TYPE (step)))
+	{
+	  error_at (EXPR_LOC_OR_LOC (step, loc),
+		    "iterator step with non-integral type");
+	  ret = true;
+	  continue;
+	}
+
+      begin = mark_rvalue_use (begin);
+      end = mark_rvalue_use (end);
+      step = mark_rvalue_use (step);
+      begin = cp_build_c_cast (input_location, type, begin,
+			       tf_warning_or_error);
+      end = cp_build_c_cast (input_location, type, end,
+			     tf_warning_or_error);
+      orig_step = step;
+      if (!processing_template_decl)
+	step = orig_step = save_expr (step);
+      tree stype = POINTER_TYPE_P (type) ? sizetype : type;
+      step = cp_build_c_cast (input_location, stype, step,
+			      tf_warning_or_error);
+      if (POINTER_TYPE_P (type) && !processing_template_decl)
+	{
+	  begin = save_expr (begin);
+	  step = pointer_int_sum (loc, PLUS_EXPR, begin, step);
+	  step = fold_build2_loc (loc, MINUS_EXPR, sizetype,
+				  fold_convert (sizetype, step),
+				  fold_convert (sizetype, begin));
+	  step = fold_convert (ssizetype, step);
+	}
+      if (!processing_template_decl)
+	{
+	  begin = maybe_constant_value (begin);
+	  end = maybe_constant_value (end);
+	  step = maybe_constant_value (step);
+	  orig_step = maybe_constant_value (orig_step);
+	}
+      if (integer_zerop (step))
+	{
+	  error_at (loc, "iterator %qD has zero step", var);
+	  ret = true;
+	  continue;
+	}
+
+      if (begin == error_mark_node
+	  || end == error_mark_node
+	  || step == error_mark_node
+	  || orig_step == error_mark_node)
+	{
+	  ret = true;
+	  continue;
+	}
+
+      if (!processing_template_decl)
+	{
+	  begin = fold_build_cleanup_point_expr (TREE_TYPE (begin), begin);
+	  end = fold_build_cleanup_point_expr (TREE_TYPE (end), end);
+	  step = fold_build_cleanup_point_expr (TREE_TYPE (step), step);
+	  orig_step = fold_build_cleanup_point_expr (TREE_TYPE (orig_step),
+						     orig_step);
+	}
+      hash_set<tree> pset;
+      tree it2;
+      for (it2 = TREE_CHAIN (it); it2; it2 = TREE_CHAIN (it2))
+	{
+	  tree var2 = TREE_VEC_ELT (it2, 0);
+	  tree begin2 = TREE_VEC_ELT (it2, 1);
+	  tree end2 = TREE_VEC_ELT (it2, 2);
+	  tree step2 = TREE_VEC_ELT (it2, 3);
+	  location_t loc2 = DECL_SOURCE_LOCATION (var2);
+	  if (cp_walk_tree (&begin2, find_omp_placeholder_r, var, &pset))
+	    {
+	      error_at (EXPR_LOC_OR_LOC (begin2, loc2),
+			"begin expression refers to outer iterator %qD", var);
+	      break;
+	    }
+	  else if (cp_walk_tree (&end2, find_omp_placeholder_r, var, &pset))
+	    {
+	      error_at (EXPR_LOC_OR_LOC (end2, loc2),
+			"end expression refers to outer iterator %qD", var);
+	      break;
+	    }
+	  else if (cp_walk_tree (&step2, find_omp_placeholder_r, var, &pset))
+	    {
+	      error_at (EXPR_LOC_OR_LOC (step2, loc2),
+			"step expression refers to outer iterator %qD", var);
+	      break;
+	    }
+	}
+      if (it2)
+	{
+	  ret = true;
+	  continue;
+	}
+      TREE_VEC_ELT (it, 1) = begin;
+      TREE_VEC_ELT (it, 2) = end;
+      if (processing_template_decl)
+	TREE_VEC_ELT (it, 3) = orig_step;
+      else
+	{
+	  TREE_VEC_ELT (it, 3) = step;
+	  TREE_VEC_ELT (it, 4) = orig_step;
+	}
+    }
+  return ret;
+}
+
+/* Ensure that pointers are used in OpenACC attach and detach clauses.
+   Return true if an error has been detected.  */
+
+static bool
+cp_oacc_check_attachments (tree c)
+{
+  if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
+    return false;
+
+  /* OpenACC attach / detach clauses must be pointers.  */
+  if (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ATTACH
+      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_DETACH)
+    {
+      tree t = OMP_CLAUSE_DECL (c);
+      tree type;
+
+      while (TREE_CODE (t) == TREE_LIST)
+	t = TREE_CHAIN (t);
+
+      type = TREE_TYPE (t);
+
+      if (TREE_CODE (type) == REFERENCE_TYPE)
+	type = TREE_TYPE (type);
+
+      if (TREE_CODE (type) != POINTER_TYPE)
+	{
+	  error_at (OMP_CLAUSE_LOCATION (c), "expected pointer in %qs clause",
+		    c_omp_map_clause_name (c, true));
+	  return true;
+	}
+    }
+
+  return false;
+}
+
 /* For all elements of CLAUSES, validate them vs OpenMP constraints.
    Remove any elements from the list that are invalid.  */
 
@@ -5853,15 +6507,28 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
   bool branch_seen = false;
   bool copyprivate_seen = false;
   bool ordered_seen = false;
+  bool order_seen = false;
+  bool schedule_seen = false;
   bool oacc_async = false;
+  tree last_iterators = NULL_TREE;
+  bool last_iterators_remove = false;
+  /* 1 if normal/task reduction has been seen, -1 if inscan reduction
+     has been seen, -2 if mixed inscan/normal reduction diagnosed.  */
+  int reduction_seen = 0;
+  bool allocate_seen = false;
+  tree detach_seen = NULL_TREE;
+  bool mergeable_seen = false;
 
   bitmap_obstack_initialize (NULL);
   bitmap_initialize (&generic_head, &bitmap_default_obstack);
   bitmap_initialize (&firstprivate_head, &bitmap_default_obstack);
   bitmap_initialize (&lastprivate_head, &bitmap_default_obstack);
   bitmap_initialize (&aligned_head, &bitmap_default_obstack);
+  /* If ort == C_ORT_OMP_DECLARE_SIMD used as uniform_head instead.  */
   bitmap_initialize (&map_head, &bitmap_default_obstack);
   bitmap_initialize (&map_field_head, &bitmap_default_obstack);
+  /* If ort == C_ORT_OMP used as nontemporal_head or use_device_xxx_head
+     instead.  */
   bitmap_initialize (&oacc_reduction_head, &bitmap_default_obstack);
 
   if (ort & C_ORT_ACC)
@@ -5886,12 +6553,35 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  goto check_dup_generic;
 	case OMP_CLAUSE_REDUCTION:
+	  if (reduction_seen == 0)
+	    reduction_seen = OMP_CLAUSE_REDUCTION_INSCAN (c) ? -1 : 1;
+	  else if (reduction_seen != -2
+		   && reduction_seen != (OMP_CLAUSE_REDUCTION_INSCAN (c)
+					 ? -1 : 1))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<inscan%> and non-%<inscan%> %<reduction%> clauses "
+			"on the same construct");
+	      reduction_seen = -2;
+	    }
+	  /* FALLTHRU */
+	case OMP_CLAUSE_IN_REDUCTION:
+	case OMP_CLAUSE_TASK_REDUCTION:
 	  field_ok = ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP);
 	  t = OMP_CLAUSE_DECL (c);
 	  if (TREE_CODE (t) == TREE_LIST)
 	    {
 	      if (handle_omp_array_sections (c, ort))
 		{
+		  remove = true;
+		  break;
+		}
+	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+		  && OMP_CLAUSE_REDUCTION_INSCAN (c))
+		{
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%<inscan%> %<reduction%> clause with array "
+			    "section");
 		  remove = true;
 		  break;
 		}
@@ -5941,24 +6631,27 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      tree type = TREE_TYPE (t);
 	      if ((OMP_CLAUSE_LINEAR_KIND (c) == OMP_CLAUSE_LINEAR_REF
 		   || OMP_CLAUSE_LINEAR_KIND (c) == OMP_CLAUSE_LINEAR_UVAL)
-		  && TREE_CODE (type) != REFERENCE_TYPE)
+		  && !TYPE_REF_P (type))
 		{
-		  error ("linear clause with %qs modifier applied to "
-			 "non-reference variable with %qT type",
-			 OMP_CLAUSE_LINEAR_KIND (c) == OMP_CLAUSE_LINEAR_REF
-			 ? "ref" : "uval", TREE_TYPE (t));
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "linear clause with %qs modifier applied to "
+			    "non-reference variable with %qT type",
+			    OMP_CLAUSE_LINEAR_KIND (c) == OMP_CLAUSE_LINEAR_REF
+			    ? "ref" : "uval", TREE_TYPE (t));
 		  remove = true;
 		  break;
 		}
-	      if (TREE_CODE (type) == REFERENCE_TYPE)
+	      if (TYPE_REF_P (type))
 		type = TREE_TYPE (type);
 	      if (OMP_CLAUSE_LINEAR_KIND (c) != OMP_CLAUSE_LINEAR_REF)
 		{
 		  if (!INTEGRAL_TYPE_P (type)
-		      && TREE_CODE (type) != POINTER_TYPE)
+		      && !TYPE_PTR_P (type))
 		    {
-		      error ("linear clause applied to non-integral non-pointer"
-			     " variable with %qT type", TREE_TYPE (t));
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"linear clause applied to non-integral "
+				"non-pointer variable with %qT type",
+				TREE_TYPE (t));
 		      remove = true;
 		      break;
 		    }
@@ -5976,10 +6669,11 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t))
 		   && (ort != C_ORT_OMP_DECLARE_SIMD
 		       || TREE_CODE (t) != PARM_DECL
-		       || TREE_CODE (TREE_TYPE (t)) != REFERENCE_TYPE
+		       || !TYPE_REF_P (TREE_TYPE (t))
 		       || !INTEGRAL_TYPE_P (TREE_TYPE (TREE_TYPE (t)))))
 	    {
-	      error ("linear step expression must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"linear step expression must be integral");
 	      remove = true;
 	      break;
 	    }
@@ -6009,7 +6703,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		    }
 		  t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
 		  tree type = TREE_TYPE (OMP_CLAUSE_DECL (c));
-		  if (TREE_CODE (type) == REFERENCE_TYPE)
+		  if (TYPE_REF_P (type))
 		    type = TREE_TYPE (type);
 		  if (OMP_CLAUSE_LINEAR_KIND (c) == OMP_CLAUSE_LINEAR_REF)
 		    {
@@ -6027,7 +6721,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 			  break;
 			}
 		    }
-		  else if (TREE_CODE (type) == POINTER_TYPE
+		  else if (TYPE_PTR_P (type)
 			   /* Can't multiply the step yet if *this
 			      is still incomplete type.  */
 			   && (ort != C_ORT_OMP_DECLARE_SIMD
@@ -6067,12 +6761,13 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    t = OMP_CLAUSE_DECL (c);
 	check_dup_generic_t:
 	  if (t == current_class_ptr
-	      && (ort != C_ORT_OMP_DECLARE_SIMD
+	      && ((ort != C_ORT_OMP_DECLARE_SIMD && ort != C_ORT_ACC)
 		  || (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_LINEAR
 		      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_UNIFORM)))
 	    {
-	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
-		     " clauses");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> allowed in OpenMP only in %<declare simd%>"
+			" clauses");
 	      remove = true;
 	      break;
 	    }
@@ -6082,19 +6777,29 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
 		break;
 	      if (DECL_P (t))
-		error ("%qD is not a variable in clause %qs", t,
-		       omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in clause %qs", t,
+			  omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      else
-		error ("%qE is not a variable in clause %qs", t,
-		       omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in clause %qs", t,
+			  omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      remove = true;
 	    }
-	  else if (ort == C_ORT_ACC
-		   && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
+	  else if ((ort == C_ORT_ACC
+		    && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
+		   || (ort == C_ORT_OMP
+		       && (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_USE_DEVICE_PTR
+			   || (OMP_CLAUSE_CODE (c)
+			       == OMP_CLAUSE_USE_DEVICE_ADDR))))
 	    {
 	      if (bitmap_bit_p (&oacc_reduction_head, DECL_UID (t)))
 		{
-		  error ("%qD appears more than once in reduction clauses", t);
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    ort == C_ORT_ACC
+			    ? "%qD appears more than once in reduction clauses"
+			    : "%qD appears more than once in data clauses",
+			    t);
 		  remove = true;
 		}
 	      else
@@ -6104,16 +6809,19 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		   || bitmap_bit_p (&firstprivate_head, DECL_UID (t))
 		   || bitmap_bit_p (&lastprivate_head, DECL_UID (t)))
 	    {
-	      error ("%qD appears more than once in data clauses", t);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD appears more than once in data clauses", t);
 	      remove = true;
 	    }
 	  else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_PRIVATE
 		   && bitmap_bit_p (&map_head, DECL_UID (t)))
 	    {
 	      if (ort == C_ORT_ACC)
-		error ("%qD appears more than once in data clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears more than once in data clauses", t);
 	      else
-		error ("%qD appears both in data and map clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears both in data and map clauses", t);
 	      remove = true;
 	    }
 	  else
@@ -6123,8 +6831,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	handle_field_decl:
 	  if (!remove
 	      && TREE_CODE (t) == FIELD_DECL
-	      && t == OMP_CLAUSE_DECL (c)
-	      && ort != C_ORT_ACC)
+	      && t == OMP_CLAUSE_DECL (c))
 	    {
 	      OMP_CLAUSE_DECL (c)
 		= omp_privatize_field (t, (OMP_CLAUSE_CODE (c)
@@ -6142,8 +6849,9 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    t = OMP_CLAUSE_DECL (c);
 	  if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
-	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
-		     " clauses");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> allowed in OpenMP only in %<declare simd%>"
+			" clauses");
 	      remove = true;
 	      break;
 	    }
@@ -6154,23 +6862,30 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
 		break;
 	      if (DECL_P (t))
-		error ("%qD is not a variable in clause %<firstprivate%>", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in clause %<firstprivate%>",
+			  t);
 	      else
-		error ("%qE is not a variable in clause %<firstprivate%>", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in clause %<firstprivate%>",
+			  t);
 	      remove = true;
 	    }
 	  else if (bitmap_bit_p (&generic_head, DECL_UID (t))
 		   || bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
 	    {
-	      error ("%qD appears more than once in data clauses", t);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD appears more than once in data clauses", t);
 	      remove = true;
 	    }
 	  else if (bitmap_bit_p (&map_head, DECL_UID (t)))
 	    {
 	      if (ort == C_ORT_ACC)
-		error ("%qD appears more than once in data clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears more than once in data clauses", t);
 	      else
-		error ("%qD appears both in data and map clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears both in data and map clauses", t);
 	      remove = true;
 	    }
 	  else
@@ -6183,10 +6898,11 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    omp_note_field_privatization (t, OMP_CLAUSE_DECL (c));
 	  else
 	    t = OMP_CLAUSE_DECL (c);
-	  if (t == current_class_ptr)
+	  if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
-	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
-		     " clauses");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> allowed in OpenMP only in %<declare simd%>"
+			" clauses");
 	      remove = true;
 	      break;
 	    }
@@ -6197,15 +6913,20 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
 		break;
 	      if (DECL_P (t))
-		error ("%qD is not a variable in clause %<lastprivate%>", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in clause %<lastprivate%>",
+			  t);
 	      else
-		error ("%qE is not a variable in clause %<lastprivate%>", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in clause %<lastprivate%>",
+			  t);
 	      remove = true;
 	    }
 	  else if (bitmap_bit_p (&generic_head, DECL_UID (t))
 		   || bitmap_bit_p (&lastprivate_head, DECL_UID (t)))
 	    {
-	      error ("%qD appears more than once in data clauses", t);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD appears more than once in data clauses", t);
 	      remove = true;
 	    }
 	  else
@@ -6242,7 +6963,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      else if (!type_dependent_expression_p (t)
 		       && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 		{
-		  error ("%<gang%> static expression must be integral");
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%<gang%> static expression must be integral");
 		  remove = true;
 		}
 	      else
@@ -6346,30 +7068,6 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  break;
 
 	case OMP_CLAUSE_SCHEDULE:
-	  if (OMP_CLAUSE_SCHEDULE_KIND (c) & OMP_CLAUSE_SCHEDULE_NONMONOTONIC)
-	    {
-	      const char *p = NULL;
-	      switch (OMP_CLAUSE_SCHEDULE_KIND (c) & OMP_CLAUSE_SCHEDULE_MASK)
-		{
-		case OMP_CLAUSE_SCHEDULE_STATIC: p = "static"; break;
-		case OMP_CLAUSE_SCHEDULE_DYNAMIC: break;
-		case OMP_CLAUSE_SCHEDULE_GUIDED: break;
-		case OMP_CLAUSE_SCHEDULE_AUTO: p = "auto"; break;
-		case OMP_CLAUSE_SCHEDULE_RUNTIME: p = "runtime"; break;
-		default: gcc_unreachable ();
-		}
-	      if (p)
-		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%<nonmonotonic%> modifier specified for %qs "
-			    "schedule kind", p);
-		  OMP_CLAUSE_SCHEDULE_KIND (c)
-		    = (enum omp_clause_schedule_kind)
-		      (OMP_CLAUSE_SCHEDULE_KIND (c)
-		       & ~OMP_CLAUSE_SCHEDULE_NONMONOTONIC);
-		}
-	    }
-
 	  t = OMP_CLAUSE_SCHEDULE_CHUNK_EXPR (c);
 	  if (t == NULL)
 	    ;
@@ -6378,7 +7076,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("schedule chunk size expression must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"schedule chunk size expression must be integral");
 	      remove = true;
 	    }
 	  else
@@ -6398,6 +7097,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		}
 	      OMP_CLAUSE_SCHEDULE_CHUNK_EXPR (c) = t;
 	    }
+	  if (!remove)
+	    schedule_seen = true;
 	  break;
 
 	case OMP_CLAUSE_SIMDLEN:
@@ -6408,8 +7109,9 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%qs length expression must be integral",
-		     omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qs length expression must be integral",
+			omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      remove = true;
 	    }
 	  else
@@ -6421,9 +7123,10 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		  if (TREE_CODE (t) != INTEGER_CST
 		      || tree_int_cst_sgn (t) != 1)
 		    {
-		      error ("%qs length expression must be positive constant"
-			     " integer expression",
-			     omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"%qs length expression must be positive "
+				"constant integer expression",
+				omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 		      remove = true;
 		    }
 		}
@@ -6440,7 +7143,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<async%> expression must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<async%> expression must be integral");
 	      remove = true;
 	    }
 	  else
@@ -6468,7 +7172,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<thread_limit%> expression must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<thread_limit%> expression must be integral");
 	      remove = true;
 	    }
 	  else
@@ -6497,7 +7202,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<device%> id must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<device%> id must be integral");
 	      remove = true;
 	    }
 	  else
@@ -6518,14 +7224,15 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<dist_schedule%> chunk size expression must be "
-		     "integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<dist_schedule%> chunk size expression must be "
+			"integral");
 	      remove = true;
 	    }
 	  else
 	    {
 	      t = mark_rvalue_use (t);
-	      if (!processing_template_decl)
+ 	      if (!processing_template_decl)
 		t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
 	      OMP_CLAUSE_DIST_SCHEDULE_CHUNK_EXPR (c) = t;
 	    }
@@ -6535,8 +7242,9 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  t = OMP_CLAUSE_DECL (c);
 	  if (t == current_class_ptr && ort != C_ORT_OMP_DECLARE_SIMD)
 	    {
-	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
-		     " clauses");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> allowed in OpenMP only in %<declare simd%>"
+			" clauses");
 	      remove = true;
 	      break;
 	    }
@@ -6545,16 +7253,18 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
 		break;
 	      if (DECL_P (t))
-		error ("%qD is not a variable in %<aligned%> clause", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in %<aligned%> clause", t);
 	      else
-		error ("%qE is not a variable in %<aligned%> clause", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in %<aligned%> clause", t);
 	      remove = true;
 	    }
 	  else if (!type_dependent_expression_p (t)
-		   && TREE_CODE (TREE_TYPE (t)) != POINTER_TYPE
+		   && !TYPE_PTR_P (TREE_TYPE (t))
 		   && TREE_CODE (TREE_TYPE (t)) != ARRAY_TYPE
-		   && (TREE_CODE (TREE_TYPE (t)) != REFERENCE_TYPE
-		       || (!POINTER_TYPE_P (TREE_TYPE (TREE_TYPE (t)))
+		   && (!TYPE_REF_P (TREE_TYPE (t))
+		       || (!INDIRECT_TYPE_P (TREE_TYPE (TREE_TYPE (t)))
 			   && (TREE_CODE (TREE_TYPE (TREE_TYPE (t)))
 			       != ARRAY_TYPE))))
 	    {
@@ -6565,7 +7275,9 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    }
 	  else if (bitmap_bit_p (&aligned_head, DECL_UID (t)))
 	    {
-	      error ("%qD appears more than once in %<aligned%> clauses", t);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD appears more than once in %<aligned%> clauses",
+			t);
 	      remove = true;
 	    }
 	  else
@@ -6578,8 +7290,9 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<aligned%> clause alignment expression must "
-		     "be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<aligned%> clause alignment expression must "
+			"be integral");
 	      remove = true;
 	    }
 	  else
@@ -6591,14 +7304,118 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		  if (TREE_CODE (t) != INTEGER_CST
 		      || tree_int_cst_sgn (t) != 1)
 		    {
-		      error ("%<aligned%> clause alignment expression must be "
-			     "positive constant integer expression");
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"%<aligned%> clause alignment expression must "
+				"be positive constant integer expression");
 		      remove = true;
 		    }
+		  else
+		    t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
 		}
 	      OMP_CLAUSE_ALIGNED_ALIGNMENT (c) = t;
 	    }
 	  break;
+
+	case OMP_CLAUSE_NONTEMPORAL:
+	  t = OMP_CLAUSE_DECL (c);
+	  if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL)
+	    {
+	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
+		break;
+	      if (DECL_P (t))
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in %<nontemporal%> clause",
+			  t);
+	      else
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in %<nontemporal%> clause",
+			  t);
+	      remove = true;
+	    }
+	  else if (bitmap_bit_p (&oacc_reduction_head, DECL_UID (t)))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD appears more than once in %<nontemporal%> "
+			"clauses", t);
+	      remove = true;
+	    }
+	  else
+	    bitmap_set_bit (&oacc_reduction_head, DECL_UID (t));
+	  break;
+
+	case OMP_CLAUSE_ALLOCATE:
+	  t = omp_clause_decl_field (OMP_CLAUSE_DECL (c));
+	  if (t)
+	    omp_note_field_privatization (t, OMP_CLAUSE_DECL (c));
+	  else
+	    t = OMP_CLAUSE_DECL (c);
+	  if (t == current_class_ptr)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> not allowed in %<allocate%> clause");
+	      remove = true;
+	      break;
+	    }
+	  if (!VAR_P (t)
+	      && TREE_CODE (t) != PARM_DECL
+	      && TREE_CODE (t) != FIELD_DECL)
+	    {
+	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
+		break;
+	      if (DECL_P (t))
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in %<allocate%> clause", t);
+	      else
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in %<allocate%> clause", t);
+	      remove = true;
+	    }
+	  else if (bitmap_bit_p (&aligned_head, DECL_UID (t)))
+	    {
+	      warning_at (OMP_CLAUSE_LOCATION (c), 0,
+			"%qD appears more than once in %<allocate%> clauses",
+			t);
+	      remove = true;
+	    }
+	  else
+	    {
+	      bitmap_set_bit (&aligned_head, DECL_UID (t));
+	      allocate_seen = true;
+	    }
+	  tree allocator;
+	  allocator = OMP_CLAUSE_ALLOCATE_ALLOCATOR (c);
+	  if (error_operand_p (allocator))
+	    {
+	      remove = true;
+	      break;
+	    }
+	  if (allocator == NULL_TREE)
+	    goto handle_field_decl;
+	  tree allocatort;
+	  allocatort = TYPE_MAIN_VARIANT (TREE_TYPE (allocator));
+	  if (!type_dependent_expression_p (allocator)
+	      && (TREE_CODE (allocatort) != ENUMERAL_TYPE
+		  || TYPE_NAME (allocatort) == NULL_TREE
+		  || TREE_CODE (TYPE_NAME (allocatort)) != TYPE_DECL
+		  || (DECL_NAME (TYPE_NAME (allocatort))
+		      != get_identifier ("omp_allocator_handle_t"))
+		  || (TYPE_CONTEXT (allocatort)
+		      != DECL_CONTEXT (global_namespace))))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<allocate%> clause allocator expression has "
+			"type %qT rather than %<omp_allocator_handle_t%>",
+			TREE_TYPE (allocator));
+	      remove = true;
+	    }
+	  else
+	    {
+	      allocator = mark_rvalue_use (allocator);
+	      if (!processing_template_decl)
+		allocator = maybe_constant_value (allocator);
+	      OMP_CLAUSE_ALLOCATE_ALLOCATOR (c) = allocator;
+	    }
+	  goto handle_field_decl;
 
 	case OMP_CLAUSE_DEPEND:
 	  t = OMP_CLAUSE_DECL (c);
@@ -6614,33 +7431,145 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		remove = true;
 	      break;
 	    }
+	  if (TREE_CODE (t) == TREE_LIST
+	      && TREE_PURPOSE (t)
+	      && TREE_CODE (TREE_PURPOSE (t)) == TREE_VEC)
+	    {
+	      if (TREE_PURPOSE (t) != last_iterators)
+		last_iterators_remove
+		  = cp_omp_finish_iterators (TREE_PURPOSE (t));
+	      last_iterators = TREE_PURPOSE (t);
+	      t = TREE_VALUE (t);
+	      if (last_iterators_remove)
+		t = error_mark_node;
+	    }
+	  else
+	    last_iterators = NULL_TREE;
+
 	  if (TREE_CODE (t) == TREE_LIST)
 	    {
 	      if (handle_omp_array_sections (c, ort))
 		remove = true;
+	      else if (OMP_CLAUSE_DEPEND_KIND (c) == OMP_CLAUSE_DEPEND_DEPOBJ)
+		{
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%<depend%> clause with %<depobj%> dependence "
+			    "type on array section");
+		  remove = true;
+		}
 	      break;
 	    }
 	  if (t == error_mark_node)
 	    remove = true;
-	  else if (!VAR_P (t) && TREE_CODE (t) != PARM_DECL)
+	  else if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
-	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
-		break;
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> allowed in OpenMP only in %<declare simd%>"
+			" clauses");
+	      remove = true;
+	    }
+	  else if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
+	    break;
+	  else if (!lvalue_p (t))
+	    {
 	      if (DECL_P (t))
-		error ("%qD is not a variable in %<depend%> clause", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not lvalue expression nor array section "
+			  "in %<depend%> clause", t);
 	      else
-		error ("%qE is not a variable in %<depend%> clause", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not lvalue expression nor array section "
+			  "in %<depend%> clause", t);
 	      remove = true;
 	    }
-	  else if (t == current_class_ptr)
+	  else if (TREE_CODE (t) == COMPONENT_REF
+		   && TREE_CODE (TREE_OPERAND (t, 1)) == FIELD_DECL
+		   && DECL_BIT_FIELD (TREE_OPERAND (t, 1)))
 	    {
-	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
-		     " clauses");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"bit-field %qE in %qs clause", t, "depend");
 	      remove = true;
 	    }
-	  else if (!processing_template_decl
-		   && !cxx_mark_addressable (t))
-	    remove = true;
+	  else if (OMP_CLAUSE_DEPEND_KIND (c) == OMP_CLAUSE_DEPEND_DEPOBJ)
+	    {
+	      if (!c_omp_depend_t_p (TYPE_REF_P (TREE_TYPE (t))
+				     ? TREE_TYPE (TREE_TYPE (t))
+				     : TREE_TYPE (t)))
+		{
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%qE does not have %<omp_depend_t%> type in "
+			    "%<depend%> clause with %<depobj%> dependence "
+			    "type", t);
+		  remove = true;
+		}
+	    }
+	  else if (c_omp_depend_t_p (TYPE_REF_P (TREE_TYPE (t))
+				     ? TREE_TYPE (TREE_TYPE (t))
+				     : TREE_TYPE (t)))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qE should not have %<omp_depend_t%> type in "
+			"%<depend%> clause with dependence type other than "
+			"%<depobj%>", t);
+	      remove = true;
+	    }
+	  if (!remove)
+	    {
+	      tree addr = cp_build_addr_expr (t, tf_warning_or_error);
+	      if (addr == error_mark_node)
+		remove = true;
+	      else
+		{
+		  t = cp_build_indirect_ref (OMP_CLAUSE_LOCATION (c),
+					     addr, RO_UNARY_STAR,
+					     tf_warning_or_error);
+		  if (t == error_mark_node)
+		    remove = true;
+		  else if (TREE_CODE (OMP_CLAUSE_DECL (c)) == TREE_LIST
+			   && TREE_PURPOSE (OMP_CLAUSE_DECL (c))
+			   && (TREE_CODE (TREE_PURPOSE (OMP_CLAUSE_DECL (c)))
+			       == TREE_VEC))
+		    TREE_VALUE (OMP_CLAUSE_DECL (c)) = t;
+		  else
+		    OMP_CLAUSE_DECL (c) = t;
+		}
+	    }
+	  break;
+	case OMP_CLAUSE_DETACH:
+	  t = OMP_CLAUSE_DECL (c);
+	  if (detach_seen)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"too many %qs clauses on a task construct",
+			"detach");
+	      remove = true;
+	      break;
+	    }
+	  else if (error_operand_p (t))
+	    {
+	      remove = true;
+	      break;
+	    }
+	  else
+	    {
+	      tree type = TYPE_MAIN_VARIANT (TREE_TYPE (t));
+	      if (!type_dependent_expression_p (t)
+		  && (!INTEGRAL_TYPE_P (type)
+		      || TREE_CODE (type) != ENUMERAL_TYPE
+		      || TYPE_NAME (type) == NULL_TREE
+		      || (DECL_NAME (TYPE_NAME (type))
+			  != get_identifier ("omp_event_handle_t"))))
+		{
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%<detach%> clause event handle "
+			    "has type %qT rather than "
+			    "%<omp_event_handle_t%>",
+			    type);
+		  remove = true;
+		}
+	      detach_seen = c;
+	      cxx_mark_addressable (t);
+	    }
 	  break;
 
 	case OMP_CLAUSE_MAP:
@@ -6663,6 +7592,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 				"array section does not have mappable type "
 				"in %qs clause",
 				omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		      cp_omp_emit_unmappable_type_notes (TREE_TYPE (t));
 		      remove = true;
 		    }
 		  while (TREE_CODE (t) == ARRAY_REF)
@@ -6679,14 +7609,17 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		      if (bitmap_bit_p (&map_head, DECL_UID (t)))
 			{
 			  if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
-			    error ("%qD appears more than once in motion"
-				   " clauses", t);
+			    error_at (OMP_CLAUSE_LOCATION (c),
+				      "%qD appears more than once in motion"
+				      " clauses", t);
 			  else if (ort == C_ORT_ACC)
-			    error ("%qD appears more than once in data"
-				   " clauses", t);
+			    error_at (OMP_CLAUSE_LOCATION (c),
+				      "%qD appears more than once in data"
+				      " clauses", t);
 			  else
-			    error ("%qD appears more than once in map"
-				   " clauses", t);
+			    error_at (OMP_CLAUSE_LOCATION (c),
+				      "%qD appears more than once in map"
+				      " clauses", t);
 			  remove = true;
 			}
 		      else
@@ -6696,6 +7629,17 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 			}
 		    }
 		}
+	      if (cp_oacc_check_attachments (c))
+		remove = true;
+	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
+		  && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ATTACH
+		      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_DETACH))
+		/* In this case, we have a single array element which is a
+		   pointer, and we already set OMP_CLAUSE_SIZE in
+		   handle_omp_array_sections above.  For attach/detach clauses,
+		   reset the OMP_CLAUSE_SIZE (representing a bias) to zero
+		   here.  */
+		OMP_CLAUSE_SIZE (c) = size_zero_node;
 	      break;
 	    }
 	  if (t == error_mark_node)
@@ -6703,14 +7647,32 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      remove = true;
 	      break;
 	    }
+	  /* OpenACC attach / detach clauses must be pointers.  */
+	  if (cp_oacc_check_attachments (c))
+	    {
+	      remove = true;
+	      break;
+	    }
+	  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
+	      && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ATTACH
+		  || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_DETACH))
+	    /* For attach/detach clauses, set OMP_CLAUSE_SIZE (representing a
+	       bias) to zero here, so it is not set erroneously to the pointer
+	       size later on in gimplify.c.  */
+	    OMP_CLAUSE_SIZE (c) = size_zero_node;
 	  if (REFERENCE_REF_P (t)
 	      && TREE_CODE (TREE_OPERAND (t, 0)) == COMPONENT_REF)
 	    {
 	      t = TREE_OPERAND (t, 0);
 	      OMP_CLAUSE_DECL (c) = t;
 	    }
+	  if ((ort == C_ORT_ACC || ort == C_ORT_OMP)
+	      && TREE_CODE (t) == COMPONENT_REF
+	      && TREE_CODE (TREE_OPERAND (t, 0)) == INDIRECT_REF)
+	    t = TREE_OPERAND (TREE_OPERAND (t, 0), 0);
 	  if (TREE_CODE (t) == COMPONENT_REF
-	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+	      && ((ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
+		  || ort == C_ORT_ACC)
 	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE__CACHE_)
 	    {
 	      if (type_dependent_expression_p (t))
@@ -6728,6 +7690,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		  error_at (OMP_CLAUSE_LOCATION (c),
 			    "%qE does not have a mappable type in %qs clause",
 			    t, omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		  cp_omp_emit_unmappable_type_notes (TREE_TYPE (t));
 		  remove = true;
 		}
 	      while (TREE_CODE (t) == COMPONENT_REF)
@@ -6749,7 +7712,9 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		t = TREE_OPERAND (t, 0);
 	      if (VAR_P (t) || TREE_CODE (t) == PARM_DECL)
 		{
-		  if (bitmap_bit_p (&map_field_head, DECL_UID (t)))
+		  if (bitmap_bit_p (&map_field_head, DECL_UID (t))
+		      || (ort == C_ORT_OMP
+			  && bitmap_bit_p (&map_head, DECL_UID (t))))
 		    goto handle_map_references;
 		}
 	    }
@@ -6759,31 +7724,36 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		break;
 	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 		  && (OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_POINTER
-		      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ALWAYS_POINTER))
+		      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ALWAYS_POINTER
+		      || OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_ATTACH_DETACH))
 		break;
 	      if (DECL_P (t))
-		error ("%qD is not a variable in %qs clause", t,
-		       omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in %qs clause", t,
+			  omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      else
-		error ("%qE is not a variable in %qs clause", t,
-		       omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in %qs clause", t,
+			  omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      remove = true;
 	    }
 	  else if (VAR_P (t) && CP_DECL_THREAD_LOCAL_P (t))
 	    {
-	      error ("%qD is threadprivate variable in %qs clause", t,
-		     omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD is threadprivate variable in %qs clause", t,
+			omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      remove = true;
 	    }
 	  else if (ort != C_ORT_ACC && t == current_class_ptr)
 	    {
-	      error ("%<this%> allowed in OpenMP only in %<declare simd%>"
-		     " clauses");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> allowed in OpenMP only in %<declare simd%>"
+			" clauses");
 	      remove = true;
 	      break;
 	    }
 	  else if (!processing_template_decl
-		   && TREE_CODE (TREE_TYPE (t)) != REFERENCE_TYPE
+		   && !TYPE_REF_P (TREE_TYPE (t))
 		   && (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP
 		       || (OMP_CLAUSE_MAP_KIND (c)
 			   != GOMP_MAP_FIRSTPRIVATE_POINTER))
@@ -6795,22 +7765,23 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 			     == GOMP_MAP_FIRSTPRIVATE_POINTER)))
 		   && t == OMP_CLAUSE_DECL (c)
 		   && !type_dependent_expression_p (t)
-		   && !cp_omp_mappable_type ((TREE_CODE (TREE_TYPE (t))
-					      == REFERENCE_TYPE)
+		   && !cp_omp_mappable_type (TYPE_REF_P (TREE_TYPE (t))
 					     ? TREE_TYPE (TREE_TYPE (t))
 					     : TREE_TYPE (t)))
 	    {
 	      error_at (OMP_CLAUSE_LOCATION (c),
 			"%qD does not have a mappable type in %qs clause", t,
 			omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      cp_omp_emit_unmappable_type_notes (TREE_TYPE (t));
 	      remove = true;
 	    }
 	  else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
 		   && OMP_CLAUSE_MAP_KIND (c) == GOMP_MAP_FORCE_DEVICEPTR
 		   && !type_dependent_expression_p (t)
-		   && !POINTER_TYPE_P (TREE_TYPE (t)))
+		   && !INDIRECT_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%qD is not a pointer variable", t);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD is not a pointer variable", t);
 	      remove = true;
 	    }
 	  else if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_MAP
@@ -6819,37 +7790,52 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (bitmap_bit_p (&generic_head, DECL_UID (t))
 		  || bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
 		{
-		  error ("%qD appears more than once in data clauses", t);
+		  error_at (OMP_CLAUSE_LOCATION (c),
+			    "%qD appears more than once in data clauses", t);
 		  remove = true;
 		}
 	      else if (bitmap_bit_p (&map_head, DECL_UID (t)))
 		{
 		  if (ort == C_ORT_ACC)
-		    error ("%qD appears more than once in data clauses", t);
+		    error_at (OMP_CLAUSE_LOCATION (c),
+			      "%qD appears more than once in data clauses", t);
 		  else
-		    error ("%qD appears both in data and map clauses", t);
+		    error_at (OMP_CLAUSE_LOCATION (c),
+			      "%qD appears both in data and map clauses", t);
 		  remove = true;
 		}
 	      else
 		bitmap_set_bit (&generic_head, DECL_UID (t));
 	    }
-	  else if (bitmap_bit_p (&map_head, DECL_UID (t)))
+	  else if (bitmap_bit_p (&map_head, DECL_UID (t))
+		   && !bitmap_bit_p (&map_field_head, DECL_UID (t)))
 	    {
 	      if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
-		error ("%qD appears more than once in motion clauses", t);
-	      if (ort == C_ORT_ACC)
-		error ("%qD appears more than once in data clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears more than once in motion clauses", t);
+	      else if (ort == C_ORT_ACC)
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears more than once in data clauses", t);
 	      else
-		error ("%qD appears more than once in map clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears more than once in map clauses", t);
 	      remove = true;
 	    }
 	  else if (bitmap_bit_p (&generic_head, DECL_UID (t))
-		   || bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
+		   && ort == C_ORT_ACC)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qD appears more than once in data clauses", t);
+	      remove = true;
+	    }
+	  else if (bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
 	    {
 	      if (ort == C_ORT_ACC)
-		error ("%qD appears more than once in data clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears more than once in data clauses", t);
 	      else
-		error ("%qD appears both in data and map clauses", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD appears both in data and map clauses", t);
 	      remove = true;
 	    }
 	  else
@@ -6862,8 +7848,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	handle_map_references:
 	  if (!remove
 	      && !processing_template_decl
-	      && (ort & C_ORT_OMP_DECLARE_SIMD) == C_ORT_OMP
-	      && TREE_CODE (TREE_TYPE (OMP_CLAUSE_DECL (c))) == REFERENCE_TYPE)
+	      && ort != C_ORT_DECLARE_SIMD
+	      && TYPE_REF_P (TREE_TYPE (OMP_CLAUSE_DECL (c))))
 	    {
 	      t = OMP_CLAUSE_DECL (c);
 	      if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_MAP)
@@ -6878,12 +7864,14 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		       && (OMP_CLAUSE_MAP_KIND (c)
 			   != GOMP_MAP_FIRSTPRIVATE_REFERENCE)
 		       && (OMP_CLAUSE_MAP_KIND (c)
-			   != GOMP_MAP_ALWAYS_POINTER))
+			   != GOMP_MAP_ALWAYS_POINTER)
+		       && (OMP_CLAUSE_MAP_KIND (c)
+			   != GOMP_MAP_ATTACH_DETACH))
 		{
 		  tree c2 = build_omp_clause (OMP_CLAUSE_LOCATION (c),
 					      OMP_CLAUSE_MAP);
 		  if (TREE_CODE (t) == COMPONENT_REF)
-		    OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_ALWAYS_POINTER);
+		    OMP_CLAUSE_SET_MAP_KIND (c2, GOMP_MAP_ATTACH_DETACH);
 		  else
 		    OMP_CLAUSE_SET_MAP_KIND (c2,
 					     GOMP_MAP_FIRSTPRIVATE_REFERENCE);
@@ -6942,6 +7930,7 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      error_at (OMP_CLAUSE_LOCATION (c),
 			"%qD does not have a mappable type in %qs clause", t,
 			omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      cp_omp_emit_unmappable_type_notes (TREE_TYPE (t));
 	      remove = true;
 	    }
 	  if (remove)
@@ -6964,9 +7953,11 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	      if (processing_template_decl)
 		break;
 	      if (DECL_P (t))
-		error ("%qD is not an argument in %<uniform%> clause", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not an argument in %<uniform%> clause", t);
 	      else
-		error ("%qE is not an argument in %<uniform%> clause", t);
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not an argument in %<uniform%> clause", t);
 	      remove = true;
 	      break;
 	    }
@@ -6981,7 +7972,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<grainsize%> expression must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<grainsize%> expression must be integral");
 	      remove = true;
 	    }
 	  else
@@ -7010,7 +8002,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<priority%> expression must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<priority%> expression must be integral");
 	      remove = true;
 	    }
 	  else
@@ -7039,7 +8032,8 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  else if (!type_dependent_expression_p (t)
 		   && !INTEGRAL_TYPE_P (TREE_TYPE (t)))
 	    {
-	      error ("%<num_tasks%> expression must be integral");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<hint%> expression must be integral");
 	      remove = true;
 	    }
 	  else
@@ -7049,6 +8043,13 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		{
 		  t = maybe_constant_value (t);
 		  t = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+		  if (TREE_CODE (t) != INTEGER_CST)
+		    {
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"%<hint%> expression must be constant integer "
+				"expression");
+		      remove = true;
+		    }
 		}
 	      OMP_CLAUSE_HINT_EXPR (c) = t;
 	    }
@@ -7061,38 +8062,66 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  if (!type_dependent_expression_p (t))
 	    {
 	      tree type = TREE_TYPE (t);
-	      if (TREE_CODE (type) != POINTER_TYPE
-		  && TREE_CODE (type) != ARRAY_TYPE
-		  && (TREE_CODE (type) != REFERENCE_TYPE
-		      || (TREE_CODE (TREE_TYPE (type)) != POINTER_TYPE
-			  && TREE_CODE (TREE_TYPE (type)) != ARRAY_TYPE)))
+	      if (!TYPE_PTR_P (type)
+		  && (!TYPE_REF_P (type) || !TYPE_PTR_P (TREE_TYPE (type))))
 		{
-		  error_at (OMP_CLAUSE_LOCATION (c),
-			    "%qs variable is neither a pointer, nor an array "
-			    "nor reference to pointer or array",
-			    omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
-		  remove = true;
+		  if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_USE_DEVICE_PTR
+		      && ort == C_ORT_OMP)
+		    {
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"%qs variable is neither a pointer "
+				"nor reference to pointer",
+				omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		      remove = true;
+		    }
+		  else if (TREE_CODE (type) != ARRAY_TYPE
+			   && (!TYPE_REF_P (type)
+			       || TREE_CODE (TREE_TYPE (type)) != ARRAY_TYPE))
+		    {
+		      error_at (OMP_CLAUSE_LOCATION (c),
+				"%qs variable is neither a pointer, nor an "
+				"array nor reference to pointer or array",
+				omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+		      remove = true;
+		    }
 		}
 	    }
+	  goto check_dup_generic;
+
+	case OMP_CLAUSE_USE_DEVICE_ADDR:
+	  field_ok = true;
+	  t = OMP_CLAUSE_DECL (c);
+	  if (!processing_template_decl
+	      && (VAR_P (t) || TREE_CODE (t) == PARM_DECL)
+	      && !TYPE_REF_P (TREE_TYPE (t))
+	      && !cxx_mark_addressable (t))
+	    remove = true;
 	  goto check_dup_generic;
 
 	case OMP_CLAUSE_NOWAIT:
 	case OMP_CLAUSE_DEFAULT:
 	case OMP_CLAUSE_UNTIED:
 	case OMP_CLAUSE_COLLAPSE:
-	case OMP_CLAUSE_MERGEABLE:
 	case OMP_CLAUSE_PARALLEL:
 	case OMP_CLAUSE_FOR:
 	case OMP_CLAUSE_SECTIONS:
 	case OMP_CLAUSE_TASKGROUP:
 	case OMP_CLAUSE_PROC_BIND:
+	case OMP_CLAUSE_DEVICE_TYPE:
 	case OMP_CLAUSE_NOGROUP:
 	case OMP_CLAUSE_THREADS:
 	case OMP_CLAUSE_SIMD:
 	case OMP_CLAUSE_DEFAULTMAP:
+	case OMP_CLAUSE_BIND:
 	case OMP_CLAUSE_AUTO:
 	case OMP_CLAUSE_INDEPENDENT:
 	case OMP_CLAUSE_SEQ:
+	case OMP_CLAUSE_IF_PRESENT:
+	case OMP_CLAUSE_FINALIZE:
+	  break;
+
+	case OMP_CLAUSE_MERGEABLE:
+	  mergeable_seen = true;
 	  break;
 
 	case OMP_CLAUSE_TILE:
@@ -7139,15 +8168,54 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  ordered_seen = true;
 	  break;
 
+	case OMP_CLAUSE_ORDER:
+	  if (order_seen)
+	    remove = true;
+	  else
+	    order_seen = true;
+	  break;
+
 	case OMP_CLAUSE_INBRANCH:
 	case OMP_CLAUSE_NOTINBRANCH:
 	  if (branch_seen)
 	    {
-	      error ("%<inbranch%> clause is incompatible with "
-		     "%<notinbranch%>");
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<inbranch%> clause is incompatible with "
+			"%<notinbranch%>");
 	      remove = true;
 	    }
 	  branch_seen = true;
+	  break;
+
+	case OMP_CLAUSE_INCLUSIVE:
+	case OMP_CLAUSE_EXCLUSIVE:
+	  t = omp_clause_decl_field (OMP_CLAUSE_DECL (c));
+	  if (!t)
+	    t = OMP_CLAUSE_DECL (c);
+	  if (t == current_class_ptr)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<this%> allowed in OpenMP only in %<declare simd%>"
+			" clauses");
+	      remove = true;
+	      break;
+	    }
+	  if (!VAR_P (t)
+	      && TREE_CODE (t) != PARM_DECL
+	      && TREE_CODE (t) != FIELD_DECL)
+	    {
+	      if (processing_template_decl && TREE_CODE (t) != OVERLOAD)
+		break;
+	      if (DECL_P (t))
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qD is not a variable in clause %qs", t,
+			  omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      else
+		error_at (OMP_CLAUSE_LOCATION (c),
+			  "%qE is not a variable in clause %qs", t,
+			  omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      remove = true;
+	    }
 	  break;
 
 	default:
@@ -7159,6 +8227,9 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
       else
 	pc = &OMP_CLAUSE_CHAIN (c);
     }
+
+  if (reduction_seen < 0 && (ordered_seen || schedule_seen))
+    reduction_seen = -2;
 
   for (pc = &clauses, c = clauses; c ; c = *pc)
     {
@@ -7195,6 +8266,16 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  need_implicitly_determined = true;
 	  break;
 	case OMP_CLAUSE_REDUCTION:
+	  if (reduction_seen == -2)
+	    OMP_CLAUSE_REDUCTION_INSCAN (c) = 0;
+	  if (OMP_CLAUSE_REDUCTION_INSCAN (c))
+	    need_copy_assignment = true;
+	  need_implicitly_determined = true;
+	  break;
+	case OMP_CLAUSE_IN_REDUCTION:
+	case OMP_CLAUSE_TASK_REDUCTION:
+	case OMP_CLAUSE_INCLUSIVE:
+	case OMP_CLAUSE_EXCLUSIVE:
 	  need_implicitly_determined = true;
 	  break;
 	case OMP_CLAUSE_LINEAR:
@@ -7245,6 +8326,50 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 		  (OMP_CLAUSE_SCHEDULE_KIND (c)
 		   & ~OMP_CLAUSE_SCHEDULE_NONMONOTONIC);
 	    }
+	  if (reduction_seen == -2)
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "%qs clause specified together with %<inscan%> "
+		      "%<reduction%> clause", "schedule");
+	  pc = &OMP_CLAUSE_CHAIN (c);
+	  continue;
+	case OMP_CLAUSE_NOGROUP:
+	  if (reduction_seen)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<nogroup%> clause must not be used together with "
+			"%<reduction%> clause");
+	      *pc = OMP_CLAUSE_CHAIN (c);
+	      continue;
+	    }
+	  pc = &OMP_CLAUSE_CHAIN (c);
+	  continue;
+	case OMP_CLAUSE_ORDERED:
+	  if (reduction_seen == -2)
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "%qs clause specified together with %<inscan%> "
+		      "%<reduction%> clause", "ordered");
+	  pc = &OMP_CLAUSE_CHAIN (c);
+	  continue;
+	case OMP_CLAUSE_ORDER:
+	  if (ordered_seen)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<order%> clause must not be used together "
+			"with %<ordered%>");
+	      *pc = OMP_CLAUSE_CHAIN (c);
+	      continue;
+	    }
+	  pc = &OMP_CLAUSE_CHAIN (c);
+	  continue;
+	case OMP_CLAUSE_DETACH:
+	  if (mergeable_seen)
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<detach%> clause must not be used together with "
+			"%<mergeable%> clause");
+	      *pc = OMP_CLAUSE_CHAIN (c);
+	      continue;
+	    }
 	  pc = &OMP_CLAUSE_CHAIN (c);
 	  continue;
 	case OMP_CLAUSE_NOWAIT:
@@ -7263,17 +8388,11 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	}
 
       t = OMP_CLAUSE_DECL (c);
-      if (processing_template_decl
-	  && !VAR_P (t) && TREE_CODE (t) != PARM_DECL)
-	{
-	  pc = &OMP_CLAUSE_CHAIN (c);
-	  continue;
-	}
-
       switch (c_kind)
 	{
 	case OMP_CLAUSE_LASTPRIVATE:
-	  if (!bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
+	  if (DECL_P (t)
+	      && !bitmap_bit_p (&firstprivate_head, DECL_UID (t)))
 	    {
 	      need_default_ctor = true;
 	      need_dtor = true;
@@ -7281,6 +8400,36 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  break;
 
 	case OMP_CLAUSE_REDUCTION:
+	case OMP_CLAUSE_IN_REDUCTION:
+	case OMP_CLAUSE_TASK_REDUCTION:
+	  if (allocate_seen)
+	    {
+	      if (TREE_CODE (t) == MEM_REF)
+		{
+		  t = TREE_OPERAND (t, 0);
+		  if (TREE_CODE (t) == POINTER_PLUS_EXPR)
+		    t = TREE_OPERAND (t, 0);
+		  if (TREE_CODE (t) == ADDR_EXPR
+		      || TREE_CODE (t) == INDIRECT_REF)
+		    t = TREE_OPERAND (t, 0);
+		  if (DECL_P (t))
+		    bitmap_clear_bit (&aligned_head, DECL_UID (t));
+		}
+	      else if (TREE_CODE (t) == TREE_LIST)
+		{
+		  while (TREE_CODE (t) == TREE_LIST)
+		    t = TREE_CHAIN (t);
+		  if (DECL_P (t))
+		    bitmap_clear_bit (&aligned_head, DECL_UID (t));
+		  t = OMP_CLAUSE_DECL (c);
+		}
+	      else if (DECL_P (t))
+		bitmap_clear_bit (&aligned_head, DECL_UID (t));
+	      t = OMP_CLAUSE_DECL (c);
+	    }
+	  if (processing_template_decl
+	      && !VAR_P (t) && TREE_CODE (t) != PARM_DECL)
+	    break;
 	  if (finish_omp_reduction_clause (c, &need_default_ctor,
 					   &need_dtor))
 	    remove = true;
@@ -7289,9 +8438,13 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  break;
 
 	case OMP_CLAUSE_COPYIN:
+	  if (processing_template_decl
+	      && !VAR_P (t) && TREE_CODE (t) != PARM_DECL)
+	    break;
 	  if (!VAR_P (t) || !CP_DECL_THREAD_LOCAL_P (t))
 	    {
-	      error ("%qE must be %<threadprivate%> for %<copyin%>", t);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qE must be %<threadprivate%> for %<copyin%>", t);
 	      remove = true;
 	    }
 	  break;
@@ -7300,12 +8453,20 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	  break;
 	}
 
+      if (processing_template_decl
+	  && !VAR_P (t) && TREE_CODE (t) != PARM_DECL)
+	{
+	  pc = &OMP_CLAUSE_CHAIN (c);
+	  continue;
+	}
+
       if (need_complete_type || need_copy_assignment)
 	{
 	  t = require_complete_type (t);
 	  if (t == error_mark_node)
 	    remove = true;
-	  else if (TREE_CODE (TREE_TYPE (t)) == REFERENCE_TYPE
+	  else if (!processing_template_decl
+		   && TYPE_REF_P (TREE_TYPE (t))
 		   && !complete_type_or_else (TREE_TYPE (TREE_TYPE (t)), t))
 	    remove = true;
 	}
@@ -7313,6 +8474,11 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	{
 	  const char *share_name = NULL;
 
+	  if (allocate_seen
+	      && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_SHARED
+	      && DECL_P (t))
+	    bitmap_clear_bit (&aligned_head, DECL_UID (t));
+	    
 	  if (VAR_P (t) && CP_DECL_THREAD_LOCAL_P (t))
 	    share_name = "threadprivate";
 	  else switch (cxx_omp_predetermined_sharing_1 (t))
@@ -7320,10 +8486,24 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    case OMP_CLAUSE_DEFAULT_UNSPECIFIED:
 	      break;
 	    case OMP_CLAUSE_DEFAULT_SHARED:
-	      /* const vars may be specified in firstprivate clause.  */
-	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
-		  && cxx_omp_const_qual_no_mutable (t))
+	      if ((OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+		   || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE)
+		  && c_omp_predefined_variable (t))
+		/* The __func__ variable and similar function-local predefined
+		   variables may be listed in a shared or firstprivate
+		   clause.  */
 		break;
+	      if (VAR_P (t)
+		  && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
+		  && TREE_STATIC (t)
+		  && cxx_omp_const_qual_no_mutable (t))
+		{
+		  tree ctx = CP_DECL_CONTEXT (t);
+		  /* const qualified static data members without mutable
+		     member may be specified in firstprivate clause.  */
+		  if (TYPE_P (ctx) && MAYBE_CLASS_TYPE_P (ctx))
+		    break;
+		}
 	      share_name = "shared";
 	      break;
 	    case OMP_CLAUSE_DEFAULT_PRIVATE:
@@ -7334,19 +8514,45 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
 	    }
 	  if (share_name)
 	    {
-	      error ("%qE is predetermined %qs for %qs",
-		     omp_clause_printable_decl (t), share_name,
-		     omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%qE is predetermined %qs for %qs",
+			omp_clause_printable_decl (t), share_name,
+			omp_clause_code_name[OMP_CLAUSE_CODE (c)]);
 	      remove = true;
 	    }
+	  else if (OMP_CLAUSE_CODE (c) != OMP_CLAUSE_SHARED
+		   && OMP_CLAUSE_CODE (c) != OMP_CLAUSE_FIRSTPRIVATE
+		   && cxx_omp_const_qual_no_mutable (t))
+	    {
+	      error_at (OMP_CLAUSE_LOCATION (c),
+			"%<const%> qualified %qE without %<mutable%> member "
+			"may appear only in %<shared%> or %<firstprivate%> "
+			"clauses", omp_clause_printable_decl (t));
+	      remove = true;
+	    }
+	}
+
+      if (detach_seen
+	  && (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_PRIVATE
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
+	      || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE)
+	  && OMP_CLAUSE_DECL (c) == OMP_CLAUSE_DECL (detach_seen))
+	{
+	  error_at (OMP_CLAUSE_LOCATION (c),
+		    "the event handle of a %<detach%> clause "
+		    "should not be in a data-sharing clause");
+	  remove = true;
 	}
 
       /* We're interested in the base element, not arrays.  */
       inner_type = type = TREE_TYPE (t);
       if ((need_complete_type
 	   || need_copy_assignment
-	   || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION)
-	  && TREE_CODE (inner_type) == REFERENCE_TYPE)
+	   || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_REDUCTION
+	   || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_IN_REDUCTION
+	   || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_TASK_REDUCTION)
+	  && TYPE_REF_P (inner_type))
 	inner_type = TREE_TYPE (inner_type);
       while (TREE_CODE (inner_type) == ARRAY_TYPE)
 	inner_type = TREE_TYPE (inner_type);
@@ -7378,6 +8584,26 @@ finish_omp_clauses (tree clauses, enum c_omp_region_type ort)
       else
 	pc = &OMP_CLAUSE_CHAIN (c);
     }
+
+  if (allocate_seen)
+    for (pc = &clauses, c = clauses; c ; c = *pc)
+      {
+	bool remove = false;
+	if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_ALLOCATE
+	    && !OMP_CLAUSE_ALLOCATE_COMBINED (c)
+	    && DECL_P (OMP_CLAUSE_DECL (c))
+	    && bitmap_bit_p (&aligned_head, DECL_UID (OMP_CLAUSE_DECL (c))))
+	  {
+	    error_at (OMP_CLAUSE_LOCATION (c),
+		      "%qD specified in %<allocate%> clause but not in "
+		      "an explicit privatization clause", OMP_CLAUSE_DECL (c));
+	    remove = true;
+	  }
+	if (remove)
+	  *pc = OMP_CLAUSE_CHAIN (c);
+	else
+	  pc = &OMP_CLAUSE_CHAIN (c);
+      }
 
   bitmap_obstack_release (NULL);
   return clauses;
@@ -7485,7 +8711,7 @@ restore_omp_privatization_clauses (vec<tree> &save)
       save.release ();
       return;
     }
-    
+
   omp_private_member_map = new hash_map <tree, tree>;
   while (!save.is_empty ())
     {
@@ -7546,14 +8772,7 @@ finish_omp_threadprivate (tree vars)
 	{
 	  /* Allocate a LANG_SPECIFIC structure for V, if needed.  */
 	  if (DECL_LANG_SPECIFIC (v) == NULL)
-	    {
-	      retrofit_lang_decl (v);
-
-	      /* Make sure that DECL_DISCRIMINATOR_P continues to be true
-		 after the allocation of the lang_decl structure.  */
-	      if (DECL_DISCRIMINATOR_P (v))
-		DECL_LANG_SPECIFIC (v)->u.base.u2sel = 1;
-	    }
+	    retrofit_lang_decl (v);
 
 	  if (! CP_DECL_THREAD_LOCAL_P (v))
 	    {
@@ -7689,7 +8908,7 @@ static bool
 handle_omp_for_class_iterator (int i, location_t locus, enum tree_code code,
 			       tree declv, tree orig_declv, tree initv,
 			       tree condv, tree incrv, tree *body,
-			       tree *pre_body, tree &clauses, tree *lastp,
+			       tree *pre_body, tree &clauses,
 			       int collapse, int ordered)
 {
   tree diff, iter_init, iter_incr = NULL, last;
@@ -7704,7 +8923,6 @@ handle_omp_for_class_iterator (int i, location_t locus, enum tree_code code,
   if (init && EXPR_HAS_LOCATION (init))
     elocus = EXPR_LOCATION (init);
 
-  cond = cp_fully_fold (cond);
   switch (TREE_CODE (cond))
     {
     case GT_EXPR:
@@ -7749,7 +8967,7 @@ handle_omp_for_class_iterator (int i, location_t locus, enum tree_code code,
 		TREE_OPERAND (cond, 1), iter);
       return true;
     }
-  if (!c_omp_check_loop_iv_exprs (locus, orig_declv,
+  if (!c_omp_check_loop_iv_exprs (locus, orig_declv, i,
 				  TREE_VEC_ELT (declv, i), NULL_TREE,
 				  cond, cp_walk_subtrees))
     return true;
@@ -7854,24 +9072,26 @@ handle_omp_for_class_iterator (int i, location_t locus, enum tree_code code,
     }
 
   incr = cp_convert (TREE_TYPE (diff), incr, tf_warning_or_error);
-  bool taskloop_iv_seen = false;
+  incr = cp_fully_fold (incr);
+  tree loop_iv_seen = NULL_TREE;
   for (c = clauses; c ; c = OMP_CLAUSE_CHAIN (c))
     if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE
 	&& OMP_CLAUSE_DECL (c) == iter)
       {
-	if (code == OMP_TASKLOOP)
+	if (code == OMP_TASKLOOP || code == OMP_LOOP)
 	  {
-	    taskloop_iv_seen = true;
-	    OMP_CLAUSE_LASTPRIVATE_TASKLOOP_IV (c) = 1;
+	    loop_iv_seen = c;
+	    OMP_CLAUSE_LASTPRIVATE_LOOP_IV (c) = 1;
 	  }
 	break;
       }
-    else if (code == OMP_TASKLOOP
+    else if ((code == OMP_TASKLOOP || code == OMP_LOOP)
 	     && OMP_CLAUSE_CODE (c) == OMP_CLAUSE_PRIVATE
 	     && OMP_CLAUSE_DECL (c) == iter)
       {
-	taskloop_iv_seen = true;
-	OMP_CLAUSE_PRIVATE_TASKLOOP_IV (c) = 1;
+	loop_iv_seen = c;
+	if (code == OMP_TASKLOOP)
+	  OMP_CLAUSE_PRIVATE_TASKLOOP_IV (c) = 1;
       }
 
   decl = create_temporary_var (TREE_TYPE (diff));
@@ -7891,11 +9111,11 @@ handle_omp_for_class_iterator (int i, location_t locus, enum tree_code code,
   tree diffvar = NULL_TREE;
   if (code == OMP_TASKLOOP)
     {
-      if (!taskloop_iv_seen)
+      if (!loop_iv_seen)
 	{
 	  tree ivc = build_omp_clause (locus, OMP_CLAUSE_FIRSTPRIVATE);
 	  OMP_CLAUSE_DECL (ivc) = iter;
-	  cxx_omp_finish_clause (ivc, NULL);
+	  cxx_omp_finish_clause (ivc, NULL, false);
 	  OMP_CLAUSE_CHAIN (ivc) = clauses;
 	  clauses = ivc;
 	}
@@ -7906,6 +9126,28 @@ handle_omp_for_class_iterator (int i, location_t locus, enum tree_code code,
       diffvar = create_temporary_var (TREE_TYPE (diff));
       pushdecl (diffvar);
       add_decl_expr (diffvar);
+    }
+  else if (code == OMP_LOOP)
+    {
+      if (!loop_iv_seen)
+	{
+	  /* While iterators on the loop construct are predetermined
+	     lastprivate, if the decl is not declared inside of the
+	     loop, OMP_CLAUSE_LASTPRIVATE should have been added
+	     already.  */
+	  loop_iv_seen = build_omp_clause (locus, OMP_CLAUSE_FIRSTPRIVATE);
+	  OMP_CLAUSE_DECL (loop_iv_seen) = iter;
+	  OMP_CLAUSE_CHAIN (loop_iv_seen) = clauses;
+	  clauses = loop_iv_seen;
+	}
+      else if (OMP_CLAUSE_CODE (loop_iv_seen) == OMP_CLAUSE_PRIVATE)
+	{
+	  OMP_CLAUSE_PRIVATE_DEBUG (loop_iv_seen) = 0;
+	  OMP_CLAUSE_PRIVATE_OUTER_REF (loop_iv_seen) = 0;
+	  OMP_CLAUSE_CODE (loop_iv_seen) = OMP_CLAUSE_FIRSTPRIVATE;
+	}
+      if (OMP_CLAUSE_CODE (loop_iv_seen) == OMP_CLAUSE_FIRSTPRIVATE)
+	cxx_omp_finish_clause (loop_iv_seen, NULL, false);
     }
 
   orig_pre_body = *pre_body;
@@ -7989,11 +9231,22 @@ handle_omp_for_class_iterator (int i, location_t locus, enum tree_code code,
 	= pop_stmt_list (OMP_CLAUSE_LASTPRIVATE_STMT (c));
     }
 
+  if (TREE_CODE (TREE_VEC_ELT (orig_declv, i)) == TREE_LIST)
+    {
+      tree t = TREE_VEC_ELT (orig_declv, i);
+      gcc_assert (TREE_PURPOSE (t) == NULL_TREE
+		  && TREE_VALUE (t) == NULL_TREE
+		  && TREE_CODE (TREE_CHAIN (t)) == TREE_VEC);
+      TREE_PURPOSE (t) = TREE_VEC_ELT (declv, i);
+      TREE_VALUE (t) = last;
+    }
+  else
+    TREE_VEC_ELT (orig_declv, i)
+      = tree_cons (TREE_VEC_ELT (declv, i), last, NULL_TREE);
   TREE_VEC_ELT (declv, i) = decl;
   TREE_VEC_ELT (initv, i) = init;
   TREE_VEC_ELT (condv, i) = cond;
   TREE_VEC_ELT (incrv, i) = incr;
-  *lastp = last;
 
   return false;
 }
@@ -8012,7 +9265,6 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
 {
   tree omp_for = NULL, orig_incr = NULL;
   tree decl = NULL, init, cond, incr;
-  tree last = NULL_TREE;
   location_t elocus;
   int i;
   int collapse = 1;
@@ -8076,6 +9328,9 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
       if (init && EXPR_HAS_LOCATION (init))
 	elocus = EXPR_LOCATION (init);
 
+      if (cond == global_namespace)
+	continue;
+
       if (cond == NULL)
 	{
 	  error_at (elocus, "missing controlling predicate");
@@ -8098,7 +9353,8 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
       tree orig_init;
       FOR_EACH_VEC_ELT (*orig_inits, i, orig_init)
 	if (orig_init
-	    && !c_omp_check_loop_iv_exprs (locus, declv,
+	    && !c_omp_check_loop_iv_exprs (locus,
+					   orig_declv ? orig_declv : declv, i,
 					   TREE_VEC_ELT (declv, i), orig_init,
 					   NULL_TREE, cp_walk_subtrees))
 	  fail = true;
@@ -8179,7 +9435,7 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
 	    }
 	  if (handle_omp_for_class_iterator (i, locus, code, declv, orig_declv,
 					     initv, condv, incrv, &body,
-					     &pre_body, clauses, &last,
+					     &pre_body, clauses,
 					     collapse, ordered))
 	    return NULL;
 	  continue;
@@ -8192,35 +9448,11 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
 	  return NULL;
 	}
 
-      if (!processing_template_decl)
-	{
-	  init = fold_build_cleanup_point_expr (TREE_TYPE (init), init);
-	  init = cp_build_modify_expr (elocus, decl, NOP_EXPR, init,
-				       tf_warning_or_error);
-	}
+      if (!processing_template_decl && TREE_CODE (init) != TREE_VEC)
+	init = cp_build_modify_expr (elocus, decl, NOP_EXPR, init,
+				     tf_warning_or_error);
       else
 	init = build2 (MODIFY_EXPR, void_type_node, decl, init);
-      if (cond
-	  && TREE_SIDE_EFFECTS (cond)
-	  && COMPARISON_CLASS_P (cond)
-	  && !processing_template_decl)
-	{
-	  tree t = TREE_OPERAND (cond, 0);
-	  if (TREE_SIDE_EFFECTS (t)
-	      && t != decl
-	      && (TREE_CODE (t) != NOP_EXPR
-		  || TREE_OPERAND (t, 0) != decl))
-	    TREE_OPERAND (cond, 0)
-	      = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
-
-	  t = TREE_OPERAND (cond, 1);
-	  if (TREE_SIDE_EFFECTS (t)
-	      && t != decl
-	      && (TREE_CODE (t) != NOP_EXPR
-		  || TREE_OPERAND (t, 0) != decl))
-	    TREE_OPERAND (cond, 1)
-	      = fold_build_cleanup_point_expr (TREE_TYPE (t), t);
-	}
       if (decl == error_mark_node || init == error_mark_node)
 	return NULL;
 
@@ -8231,27 +9463,62 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
       i++;
     }
 
-  if (IS_EMPTY_STMT (pre_body))
+  if (pre_body && IS_EMPTY_STMT (pre_body))
     pre_body = NULL;
 
   omp_for = c_finish_omp_for (locus, code, declv, orig_declv, initv, condv,
-			      incrv, body, pre_body);
+			      incrv, body, pre_body,
+			      !processing_template_decl);
 
   /* Check for iterators appearing in lb, b or incr expressions.  */
   if (omp_for && !c_omp_check_loop_iv (omp_for, orig_declv, cp_walk_subtrees))
     omp_for = NULL_TREE;
 
   if (omp_for == NULL)
-    {
-      return NULL;
-    }
+    return NULL;
 
   add_stmt (omp_for);
 
   for (i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INCR (omp_for)); i++)
     {
-      decl = TREE_OPERAND (TREE_VEC_ELT (OMP_FOR_INIT (omp_for), i), 0);
+      init = TREE_VEC_ELT (OMP_FOR_INIT (omp_for), i);
+      decl = TREE_OPERAND (init, 0);
+      cond = TREE_VEC_ELT (OMP_FOR_COND (omp_for), i);
       incr = TREE_VEC_ELT (OMP_FOR_INCR (omp_for), i);
+
+      if (!processing_template_decl)
+	{
+	  if (TREE_CODE (TREE_OPERAND (init, 1)) == TREE_VEC)
+	    {
+	      tree t = TREE_VEC_ELT (TREE_OPERAND (init, 1), 1);
+	      TREE_VEC_ELT (TREE_OPERAND (init, 1), 1)
+		= fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	      t = TREE_VEC_ELT (TREE_OPERAND (init, 1), 2);
+	      TREE_VEC_ELT (TREE_OPERAND (init, 1), 2)
+		= fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	    }
+	  else
+	    {
+	      tree t = TREE_OPERAND (init, 1);
+	      TREE_OPERAND (init, 1)
+		= fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	    }
+	  if (TREE_CODE (TREE_OPERAND (cond, 1)) == TREE_VEC)
+	    {
+	      tree t = TREE_VEC_ELT (TREE_OPERAND (cond, 1), 1);
+	      TREE_VEC_ELT (TREE_OPERAND (cond, 1), 1)
+		= fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	      t = TREE_VEC_ELT (TREE_OPERAND (cond, 1), 2);
+	      TREE_VEC_ELT (TREE_OPERAND (cond, 1), 2)
+		= fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	    }
+	  else
+	    {
+	      tree t = TREE_OPERAND (cond, 1);
+	      TREE_OPERAND (cond, 1)
+		= fold_build_cleanup_point_expr (TREE_TYPE (t), t);
+	    }
+	}
 
       if (TREE_CODE (incr) != MODIFY_EXPR)
 	continue;
@@ -8301,14 +9568,14 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
 	    case POSTINCREMENT_EXPR:
 	      /* c_omp_for_incr_canonicalize_ptr() should have been
 		 called to massage things appropriately.  */
-	      gcc_assert (!POINTER_TYPE_P (TREE_TYPE (decl)));
+	      gcc_assert (!INDIRECT_TYPE_P (TREE_TYPE (decl)));
 	      OMP_CLAUSE_LINEAR_STEP (c) = build_int_cst (TREE_TYPE (decl), 1);
 	      break;
 	    case PREDECREMENT_EXPR:
 	    case POSTDECREMENT_EXPR:
 	      /* c_omp_for_incr_canonicalize_ptr() should have been
 		 called to massage things appropriately.  */
-	      gcc_assert (!POINTER_TYPE_P (TREE_TYPE (decl)));
+	      gcc_assert (!INDIRECT_TYPE_P (TREE_TYPE (decl)));
 	      OMP_CLAUSE_LINEAR_STEP (c)
 		= build_int_cst (TREE_TYPE (decl), -1);
 	      break;
@@ -8332,7 +9599,7 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
 		  gcc_unreachable ();
 		}
 	      stept = TREE_TYPE (decl);
-	      if (POINTER_TYPE_P (stept))
+	      if (INDIRECT_TYPE_P (stept))
 		stept = sizetype;
 	      step = fold_convert (stept, step);
 	      if (TREE_CODE (incr) == MINUS_EXPR)
@@ -8343,13 +9610,69 @@ finish_omp_for (location_t locus, enum tree_code code, tree declv,
 	      gcc_unreachable ();
 	    }
 	}
+  /* Override saved methods on OMP_LOOP's OMP_CLAUSE_LASTPRIVATE_LOOP_IV
+     clauses, we need copy ctor for those rather than default ctor,
+     plus as for other lastprivates assignment op and dtor.  */
+  if (code == OMP_LOOP && !processing_template_decl)
+    for (tree c = clauses; c; c = OMP_CLAUSE_CHAIN (c))
+      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_LASTPRIVATE
+	  && OMP_CLAUSE_LASTPRIVATE_LOOP_IV (c)
+	  && cxx_omp_create_clause_info (c, TREE_TYPE (OMP_CLAUSE_DECL (c)),
+					 false, true, true, true))
+	CP_OMP_CLAUSE_INFO (c) = NULL_TREE;
 
   return omp_for;
 }
 
+/* Fix up range for decls.  Those decls were pushed into BIND's BIND_EXPR_VARS
+   and need to be moved into the BIND_EXPR inside of the OMP_FOR's body.  */
+
+tree
+finish_omp_for_block (tree bind, tree omp_for)
+{
+  if (omp_for == NULL_TREE
+      || !OMP_FOR_ORIG_DECLS (omp_for)
+      || bind == NULL_TREE
+      || TREE_CODE (bind) != BIND_EXPR)
+    return bind;
+  tree b = NULL_TREE;
+  for (int i = 0; i < TREE_VEC_LENGTH (OMP_FOR_INIT (omp_for)); i++)
+    if (TREE_CODE (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (omp_for), i)) == TREE_LIST
+	&& TREE_CHAIN (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (omp_for), i)))
+      {
+	tree v = TREE_CHAIN (TREE_VEC_ELT (OMP_FOR_ORIG_DECLS (omp_for), i));
+	gcc_assert (BIND_EXPR_BLOCK (bind)
+		    && (BIND_EXPR_VARS (bind)
+			== BLOCK_VARS (BIND_EXPR_BLOCK (bind))));
+	for (int j = 2; j < TREE_VEC_LENGTH (v); j++)
+	  for (tree *p = &BIND_EXPR_VARS (bind); *p; p = &DECL_CHAIN (*p))
+	    {
+	      if (*p == TREE_VEC_ELT (v, j))
+		{
+		  tree var = *p;
+		  *p = DECL_CHAIN (*p);
+		  if (b == NULL_TREE)
+		    {
+		      b = make_node (BLOCK);
+		      b = build3 (BIND_EXPR, void_type_node, NULL_TREE,
+				  OMP_FOR_BODY (omp_for), b);
+		      TREE_SIDE_EFFECTS (b) = 1;
+		      OMP_FOR_BODY (omp_for) = b;
+		    }
+		  DECL_CHAIN (var) = BIND_EXPR_VARS (b);
+		  BIND_EXPR_VARS (b) = var;
+		  BLOCK_VARS (BIND_EXPR_BLOCK (b)) = var;
+		}
+	    }
+	BLOCK_VARS (BIND_EXPR_BLOCK (bind)) = BIND_EXPR_VARS (bind);
+      }
+  return bind;
+}
+
 void
-finish_omp_atomic (enum tree_code code, enum tree_code opcode, tree lhs,
-		   tree rhs, tree v, tree lhs1, tree rhs1, bool seq_cst)
+finish_omp_atomic (location_t loc, enum tree_code code, enum tree_code opcode,
+		   tree lhs, tree rhs, tree v, tree lhs1, tree rhs1,
+		   tree clauses, enum omp_memory_order mo)
 {
   tree orig_lhs;
   tree orig_rhs;
@@ -8376,6 +9699,15 @@ finish_omp_atomic (enum tree_code code, enum tree_code opcode, tree lhs,
 		     || (v && type_dependent_expression_p (v))
 		     || (lhs1 && type_dependent_expression_p (lhs1))
 		     || (rhs1 && type_dependent_expression_p (rhs1)));
+      if (clauses)
+	{
+	  gcc_assert (TREE_CODE (clauses) == OMP_CLAUSE
+		      && OMP_CLAUSE_CODE (clauses) == OMP_CLAUSE_HINT
+		      && OMP_CLAUSE_CHAIN (clauses) == NULL_TREE);
+	  if (type_dependent_expression_p (OMP_CLAUSE_HINT_EXPR (clauses))
+	      || TREE_CODE (OMP_CLAUSE_HINT_EXPR (clauses)) != INTEGER_CST)
+	    dependent_p = true;
+	}
       if (!dependent_p)
 	{
 	  lhs = build_non_dependent_expr (lhs);
@@ -8417,8 +9749,8 @@ finish_omp_atomic (enum tree_code code, enum tree_code opcode, tree lhs,
 		   "expressions for memory");
 	  return;
 	}
-      stmt = c_finish_omp_atomic (input_location, code, opcode, lhs, rhs,
-				  v, lhs1, rhs1, swapped, seq_cst,
+      stmt = c_finish_omp_atomic (loc, code, opcode, lhs, rhs,
+				  v, lhs1, rhs1, swapped, mo,
 				  processing_template_decl != 0);
       if (stmt == error_mark_node)
 	return;
@@ -8427,31 +9759,36 @@ finish_omp_atomic (enum tree_code code, enum tree_code opcode, tree lhs,
     {
       if (code == OMP_ATOMIC_READ)
 	{
-	  stmt = build_min_nt_loc (EXPR_LOCATION (orig_lhs),
-				   OMP_ATOMIC_READ, orig_lhs);
-	  OMP_ATOMIC_SEQ_CST (stmt) = seq_cst;
+	  stmt = build_min_nt_loc (loc, OMP_ATOMIC_READ, orig_lhs);
+	  OMP_ATOMIC_MEMORY_ORDER (stmt) = mo;
 	  stmt = build2 (MODIFY_EXPR, void_type_node, orig_v, stmt);
 	}
       else
 	{
 	  if (opcode == NOP_EXPR)
 	    stmt = build2 (MODIFY_EXPR, void_type_node, orig_lhs, orig_rhs);
-	  else 
+	  else
 	    stmt = build2 (opcode, void_type_node, orig_lhs, orig_rhs);
 	  if (orig_rhs1)
 	    stmt = build_min_nt_loc (EXPR_LOCATION (orig_rhs1),
 				     COMPOUND_EXPR, orig_rhs1, stmt);
 	  if (code != OMP_ATOMIC)
 	    {
-	      stmt = build_min_nt_loc (EXPR_LOCATION (orig_lhs1),
-				       code, orig_lhs1, stmt);
-	      OMP_ATOMIC_SEQ_CST (stmt) = seq_cst;
+	      stmt = build_min_nt_loc (loc, code, orig_lhs1, stmt);
+	      OMP_ATOMIC_MEMORY_ORDER (stmt) = mo;
 	      stmt = build2 (MODIFY_EXPR, void_type_node, orig_v, stmt);
 	    }
 	}
-      stmt = build2 (OMP_ATOMIC, void_type_node, integer_zero_node, stmt);
-      OMP_ATOMIC_SEQ_CST (stmt) = seq_cst;
+      stmt = build2 (OMP_ATOMIC, void_type_node,
+		     clauses ? clauses : integer_zero_node, stmt);
+      OMP_ATOMIC_MEMORY_ORDER (stmt) = mo;
+      SET_EXPR_LOCATION (stmt, loc);
     }
+
+  /* Avoid -Wunused-value warnings here, the whole construct has side-effects
+     and even if it might be wrapped from fold-const.c or c-omp.c wrapped
+     in some tree that appears to be unused, the value is not unused.  */
+  warning_sentinel w (warn_unused_value);
   finish_expr_stmt (stmt);
 }
 
@@ -8459,19 +9796,57 @@ void
 finish_omp_barrier (void)
 {
   tree fn = builtin_decl_explicit (BUILT_IN_GOMP_BARRIER);
-  vec<tree, va_gc> *vec = make_tree_vector ();
+  releasing_vec vec;
   tree stmt = finish_call_expr (fn, &vec, false, false, tf_warning_or_error);
-  release_tree_vector (vec);
   finish_expr_stmt (stmt);
 }
 
 void
-finish_omp_flush (void)
+finish_omp_depobj (location_t loc, tree depobj,
+		   enum omp_clause_depend_kind kind, tree clause)
+{
+  if (!error_operand_p (depobj) && !type_dependent_expression_p (depobj))
+    {
+      if (!lvalue_p (depobj))
+	{
+	  error_at (EXPR_LOC_OR_LOC (depobj, loc),
+		    "%<depobj%> expression is not lvalue expression");
+	  depobj = error_mark_node;
+	}
+    }
+
+  if (processing_template_decl)
+    {
+      if (clause == NULL_TREE)
+	clause = build_int_cst (integer_type_node, kind);
+      add_stmt (build_min_nt_loc (loc, OMP_DEPOBJ, depobj, clause));
+      return;
+    }
+
+  if (!error_operand_p (depobj))
+    {
+      tree addr = cp_build_addr_expr (depobj, tf_warning_or_error);
+      if (addr == error_mark_node)
+	depobj = error_mark_node;
+      else
+	depobj = cp_build_indirect_ref (loc, addr, RO_UNARY_STAR,
+					tf_warning_or_error);
+    }
+
+  c_finish_omp_depobj (loc, depobj, kind, clause);
+}
+
+void
+finish_omp_flush (int mo)
 {
   tree fn = builtin_decl_explicit (BUILT_IN_SYNC_SYNCHRONIZE);
-  vec<tree, va_gc> *vec = make_tree_vector ();
+  releasing_vec vec;
+  if (mo != MEMMODEL_LAST)
+    {
+      fn = builtin_decl_explicit (BUILT_IN_ATOMIC_THREAD_FENCE);
+      vec->quick_push (build_int_cst (integer_type_node, mo));
+    }
   tree stmt = finish_call_expr (fn, &vec, false, false, tf_warning_or_error);
-  release_tree_vector (vec);
   finish_expr_stmt (stmt);
 }
 
@@ -8479,9 +9854,8 @@ void
 finish_omp_taskwait (void)
 {
   tree fn = builtin_decl_explicit (BUILT_IN_GOMP_TASKWAIT);
-  vec<tree, va_gc> *vec = make_tree_vector ();
+  releasing_vec vec;
   tree stmt = finish_call_expr (fn, &vec, false, false, tf_warning_or_error);
-  release_tree_vector (vec);
   finish_expr_stmt (stmt);
 }
 
@@ -8489,9 +9863,8 @@ void
 finish_omp_taskyield (void)
 {
   tree fn = builtin_decl_explicit (BUILT_IN_GOMP_TASKYIELD);
-  vec<tree, va_gc> *vec = make_tree_vector ();
+  releasing_vec vec;
   tree stmt = finish_call_expr (fn, &vec, false, false, tf_warning_or_error);
-  release_tree_vector (vec);
   finish_expr_stmt (stmt);
 }
 
@@ -8514,10 +9887,27 @@ finish_omp_cancel (tree clauses)
 	     "%<parallel%>, %<for%>, %<sections%> or %<taskgroup%> clauses");
       return;
     }
-  vec<tree, va_gc> *vec = make_tree_vector ();
+  releasing_vec vec;
   tree ifc = omp_find_clause (clauses, OMP_CLAUSE_IF);
   if (ifc != NULL_TREE)
     {
+      if (OMP_CLAUSE_IF_MODIFIER (ifc) != ERROR_MARK
+	  && OMP_CLAUSE_IF_MODIFIER (ifc) != VOID_CST)
+	error_at (OMP_CLAUSE_LOCATION (ifc),
+		  "expected %<cancel%> %<if%> clause modifier");
+      else
+	{
+	  tree ifc2 = omp_find_clause (OMP_CLAUSE_CHAIN (ifc), OMP_CLAUSE_IF);
+	  if (ifc2 != NULL_TREE)
+	    {
+	      gcc_assert (OMP_CLAUSE_IF_MODIFIER (ifc) == VOID_CST
+			  && OMP_CLAUSE_IF_MODIFIER (ifc2) != ERROR_MARK
+			  && OMP_CLAUSE_IF_MODIFIER (ifc2) != VOID_CST);
+	      error_at (OMP_CLAUSE_LOCATION (ifc2),
+			"expected %<cancel%> %<if%> clause modifier");
+	    }
+	}
+
       if (!processing_template_decl)
 	ifc = maybe_convert_cond (OMP_CLAUSE_IF_EXPR (ifc));
       else
@@ -8531,7 +9921,6 @@ finish_omp_cancel (tree clauses)
   vec->quick_push (build_int_cst (integer_type_node, mask));
   vec->quick_push (ifc);
   tree stmt = finish_call_expr (fn, &vec, false, false, tf_warning_or_error);
-  release_tree_vector (vec);
   finish_expr_stmt (stmt);
 }
 
@@ -8554,10 +9943,9 @@ finish_omp_cancellation_point (tree clauses)
 	     "%<parallel%>, %<for%>, %<sections%> or %<taskgroup%> clauses");
       return;
     }
-  vec<tree, va_gc> *vec
+  releasing_vec vec
     = make_tree_vector_single (build_int_cst (integer_type_node, mask));
   tree stmt = finish_call_expr (fn, &vec, false, false, tf_warning_or_error);
-  release_tree_vector (vec);
   finish_expr_stmt (stmt);
 }
 
@@ -8646,13 +10034,53 @@ init_cp_semantics (void)
 {
 }
 
+
+/* If we have a condition in conjunctive normal form (CNF), find the first
+   failing clause.  In other words, given an expression like
+
+     true && true && false && true && false
+
+   return the first 'false'.  EXPR is the expression.  */
+
+static tree
+find_failing_clause_r (tree expr)
+{
+  if (TREE_CODE (expr) == TRUTH_ANDIF_EXPR)
+    {
+      /* First check the left side...  */
+      tree e = find_failing_clause_r (TREE_OPERAND (expr, 0));
+      if (e == NULL_TREE)
+	/* ...if we didn't find a false clause, check the right side.  */
+	e = find_failing_clause_r (TREE_OPERAND (expr, 1));
+      return e;
+    }
+  tree e = contextual_conv_bool (expr, tf_none);
+  e = fold_non_dependent_expr (e, tf_none, /*manifestly_const_eval=*/true);
+  if (integer_zerop (e))
+    /* This is the failing clause.  */
+    return expr;
+  return NULL_TREE;
+}
+
+/* Wrapper for find_failing_clause_r.  */
+
+static tree
+find_failing_clause (tree expr)
+{
+  if (TREE_CODE (expr) != TRUTH_ANDIF_EXPR)
+    return NULL_TREE;
+  return find_failing_clause_r (expr);
+}
+
 /* Build a STATIC_ASSERT for a static assertion with the condition
    CONDITION and the message text MESSAGE.  LOCATION is the location
    of the static assertion in the source code.  When MEMBER_P, this
-   static assertion is a member of a class.  */
-void 
-finish_static_assert (tree condition, tree message, location_t location, 
-                      bool member_p)
+   static assertion is a member of a class.  If SHOW_EXPR_P is true,
+   print the condition (because it was instantiation-dependent).  */
+
+void
+finish_static_assert (tree condition, tree message, location_t location,
+		      bool member_p, bool show_expr_p)
 {
   tsubst_flags_t complain = tf_warning_or_error;
 
@@ -8677,7 +10105,7 @@ finish_static_assert (tree condition, tree message, location_t location,
       STATIC_ASSERT_SOURCE_LOCATION (assertion) = location;
 
       if (member_p)
-        maybe_add_class_template_decl_list (current_class_type, 
+        maybe_add_class_template_decl_list (current_class_type,
                                             assertion,
                                             /*friend_p=*/0);
       else
@@ -8686,31 +10114,51 @@ finish_static_assert (tree condition, tree message, location_t location,
       return;
     }
 
+  /* Save the condition in case it was a concept check.  */
+  tree orig_condition = condition;
+
   /* Fold the expression and convert it to a boolean value. */
-  condition = perform_implicit_conversion_flags (boolean_type_node, condition,
-						 complain, LOOKUP_NORMAL);
-  condition = fold_non_dependent_expr (condition);
+  condition = contextual_conv_bool (condition, complain);
+  condition = fold_non_dependent_expr (condition, complain,
+				       /*manifestly_const_eval=*/true);
 
   if (TREE_CODE (condition) == INTEGER_CST && !integer_zerop (condition))
     /* Do nothing; the condition is satisfied. */
     ;
-  else 
+  else
     {
-      location_t saved_loc = input_location;
+      iloc_sentinel ils (location);
 
-      input_location = location;
-      if (TREE_CODE (condition) == INTEGER_CST 
-          && integer_zerop (condition))
+      if (integer_zerop (condition))
 	{
 	  int sz = TREE_INT_CST_LOW (TYPE_SIZE_UNIT
 				     (TREE_TYPE (TREE_TYPE (message))));
 	  int len = TREE_STRING_LENGTH (message) / sz - 1;
+
+	  /* See if we can find which clause was failing (for logical AND).  */
+	  tree bad = find_failing_clause (orig_condition);
+	  /* If not, or its location is unusable, fall back to the previous
+	     location.  */
+	  location_t cloc = location;
+	  if (cp_expr_location (bad) != UNKNOWN_LOCATION)
+	    cloc = cp_expr_location (bad);
+
           /* Report the error. */
 	  if (len == 0)
-            error ("static assertion failed");
+	    error_at (cloc, "static assertion failed");
 	  else
-            error ("static assertion failed: %s",
-		   TREE_STRING_POINTER (message));
+	    error_at (cloc, "static assertion failed: %s",
+		      TREE_STRING_POINTER (message));
+	  if (show_expr_p)
+	    inform (cloc, "%qE evaluates to false",
+		    /* Nobody wants to see the artificial (bool) cast.  */
+		    (bad ? tree_strip_nop_conversions (bad) : orig_condition));
+
+	  /* Actually explain the failure if this is a concept check or a
+	     requires-expression.  */
+	  if (concept_check_p (orig_condition)
+	      || TREE_CODE (orig_condition) == REQUIRES_EXPR)
+	    diagnose_constraints (location, orig_condition, NULL_TREE);
 	}
       else if (condition && condition != error_mark_node)
 	{
@@ -8718,7 +10166,6 @@ finish_static_assert (tree condition, tree message, location_t location,
 	  if (require_rvalue_constant_expression (condition))
 	    cxx_constant_value (condition);
 	}
-      input_location = saved_loc;
     }
 }
 
@@ -8744,9 +10191,12 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
 	  && TYPE_P (TREE_OPERAND (expr, 0))))
     {
       if (complain & tf_error)
-	error ("argument to decltype must be an expression");
+	error ("argument to %<decltype%> must be an expression");
       return error_mark_node;
     }
+
+  /* decltype is an unevaluated context.  */
+  cp_unevaluated u;
 
   /* Depending on the resolution of DR 1172, we may later need to distinguish
      instantiation-dependent but not type-dependent expressions so that, say,
@@ -8761,6 +10211,12 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
 
       return type;
     }
+  else if (processing_template_decl)
+    {
+      expr = instantiate_non_dependent_expr_sfinae (expr, complain);
+      if (expr == error_mark_node)
+	return error_mark_node;
+    }
 
   /* The type denoted by decltype(e) is defined as follows:  */
 
@@ -8772,7 +10228,7 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
   if (type_unknown_p (expr))
     {
       if (complain & tf_error)
-	error ("decltype cannot resolve address of overloaded function");
+	error ("%<decltype%> cannot resolve address of overloaded function");
       return error_mark_node;
     }
 
@@ -8792,7 +10248,8 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
       if (identifier_p (expr))
         expr = lookup_name (expr);
 
-      if (INDIRECT_REF_P (expr))
+      if (INDIRECT_REF_P (expr)
+	  || TREE_CODE (expr) == VIEW_CONVERT_EXPR)
         /* This can happen when the expression is, e.g., "a.b". Just
            look at the underlying operand.  */
         expr = TREE_OPERAND (expr, 0);
@@ -8899,7 +10356,7 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
 	     decltype(e) is defined as T&; if an xvalue, T&&; otherwise, T. */
 	  cp_lvalue_kind clk = lvalue_kind (expr);
 	  type = unlowered_expr_type (expr);
-	  gcc_assert (TREE_CODE (type) != REFERENCE_TYPE);
+	  gcc_assert (!TYPE_REF_P (type));
 
 	  /* For vector types, pick a non-opaque variant.  */
 	  if (VECTOR_TYPE_P (type))
@@ -8913,7 +10370,7 @@ finish_decltype_type (tree expr, bool id_expression_or_member_access_p,
   return type;
 }
 
-/* Called from trait_expr_value to evaluate either __has_nothrow_assign or 
+/* Called from trait_expr_value to evaluate either __has_nothrow_assign or
    __has_nothrow_copy, depending on assign_p.  Returns true iff all
    the copy {ctor,assign} fns are nothrow.  */
 
@@ -8934,8 +10391,8 @@ classtype_has_nothrow_assign_or_copy_p (tree type, bool assign_p)
       if (copy_fn_p (fn) > 0)
 	{
 	  saw_copy = true;
-	  maybe_instantiate_noexcept (fn);
-	  if (!TYPE_NOTHROW_P (TREE_TYPE (fn)))
+	  if (!maybe_instantiate_noexcept (fn)
+	      || !TYPE_NOTHROW_P (TREE_TYPE (fn)))
 	    return false;
 	}
     }
@@ -8974,11 +10431,11 @@ trait_expr_value (cp_trait_kind kind, tree type1, tree type2)
 
     case CPTK_HAS_NOTHROW_CONSTRUCTOR:
       type1 = strip_array_types (type1);
-      return (trait_expr_value (CPTK_HAS_TRIVIAL_CONSTRUCTOR, type1, type2) 
+      return (trait_expr_value (CPTK_HAS_TRIVIAL_CONSTRUCTOR, type1, type2)
 	      || (CLASS_TYPE_P (type1)
 		  && (t = locate_ctor (type1))
-		  && (maybe_instantiate_noexcept (t),
-		      TYPE_NOTHROW_P (TREE_TYPE (t)))));
+		  && maybe_instantiate_noexcept (t)
+		  && TYPE_NOTHROW_P (TREE_TYPE (t))));
 
     case CPTK_HAS_TRIVIAL_CONSTRUCTOR:
       type1 = strip_array_types (type1);
@@ -9069,6 +10526,12 @@ trait_expr_value (cp_trait_kind kind, tree type1, tree type2)
     case CPTK_IS_CONSTRUCTIBLE:
       return is_xible (INIT_EXPR, type1, type2);
 
+    case CPTK_IS_NOTHROW_ASSIGNABLE:
+      return is_nothrow_xible (MODIFY_EXPR, type1, type2);
+
+    case CPTK_IS_NOTHROW_CONSTRUCTIBLE:
+      return is_nothrow_xible (INIT_EXPR, type1, type2);
+
     default:
       gcc_unreachable ();
       return false;
@@ -9101,7 +10564,7 @@ check_trait_type (tree type)
 /* Process a trait expression.  */
 
 tree
-finish_trait_expr (cp_trait_kind kind, tree type1, tree type2)
+finish_trait_expr (location_t loc, cp_trait_kind kind, tree type1, tree type2)
 {
   if (type1 == error_mark_node
       || type2 == error_mark_node)
@@ -9114,6 +10577,7 @@ finish_trait_expr (cp_trait_kind kind, tree type1, tree type2)
       TRAIT_EXPR_TYPE1 (trait_expr) = type1;
       TRAIT_EXPR_TYPE2 (trait_expr) = type2;
       TRAIT_EXPR_KIND (trait_expr) = kind;
+      TRAIT_EXPR_LOCATION (trait_expr) = loc;
       return trait_expr;
     }
 
@@ -9148,6 +10612,8 @@ finish_trait_expr (cp_trait_kind kind, tree type1, tree type2)
 
     case CPTK_IS_TRIVIALLY_ASSIGNABLE:
     case CPTK_IS_TRIVIALLY_CONSTRUCTIBLE:
+    case CPTK_IS_NOTHROW_ASSIGNABLE:
+    case CPTK_IS_NOTHROW_CONSTRUCTIBLE:
       if (!check_trait_type (type1)
 	  || !check_trait_type (type2))
 	return error_mark_node;
@@ -9171,8 +10637,9 @@ finish_trait_expr (cp_trait_kind kind, tree type1, tree type2)
       gcc_unreachable ();
     }
 
-  return (trait_expr_value (kind, type1, type2)
-	  ? boolean_true_node : boolean_false_node);
+tree val = (trait_expr_value (kind, type1, type2)
+	    ? boolean_true_node : boolean_false_node);
+ return maybe_wrap_with_location (val, loc);
 }
 
 /* Do-nothing variants of functions to handle pragma FLOAT_CONST_DECIMAL64,
@@ -9253,7 +10720,6 @@ apply_deduced_return_type (tree fco, tree return_type)
 #endif
       cfun->returns_struct = aggr;
     }
-
 }
 
 /* DECL is a local variable or parameter from the surrounding scope of a
@@ -9264,12 +10730,12 @@ static tree
 capture_decltype (tree decl)
 {
   tree lam = CLASSTYPE_LAMBDA_EXPR (DECL_CONTEXT (current_function_decl));
-  /* FIXME do lookup instead of list walk? */
-  tree cap = value_member (decl, LAMBDA_EXPR_CAPTURE_LIST (lam));
+  tree cap = lookup_name (DECL_NAME (decl), LOOK_where::BLOCK,
+			  LOOK_want::HIDDEN_LAMBDA);
   tree type;
 
-  if (cap)
-    type = TREE_TYPE (TREE_PURPOSE (cap));
+  if (cap && is_capture_proxy (cap))
+    type = TREE_TYPE (cap);
   else
     switch (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (lam))
       {
@@ -9279,14 +10745,14 @@ capture_decltype (tree decl)
 
       case CPLD_COPY:
 	type = TREE_TYPE (decl);
-	if (TREE_CODE (type) == REFERENCE_TYPE
+	if (TYPE_REF_P (type)
 	    && TREE_CODE (TREE_TYPE (type)) != FUNCTION_TYPE)
 	  type = TREE_TYPE (type);
 	break;
 
       case CPLD_REFERENCE:
 	type = TREE_TYPE (decl);
-	if (TREE_CODE (type) != REFERENCE_TYPE)
+	if (!TYPE_REF_P (type))
 	  type = build_reference_type (TREE_TYPE (decl));
 	break;
 
@@ -9294,7 +10760,7 @@ capture_decltype (tree decl)
 	gcc_unreachable ();
       }
 
-  if (TREE_CODE (type) != REFERENCE_TYPE)
+  if (!TYPE_REF_P (type))
     {
       if (!LAMBDA_EXPR_MUTABLE_P (lam))
 	type = cp_build_qualified_type (type, (cp_type_quals (type)
@@ -9310,7 +10776,7 @@ capture_decltype (tree decl)
 static tree
 finish_unary_fold_expr (tree expr, int op, tree_code dir)
 {
-  // Build a pack expansion (assuming expr has pack type).
+  /* Build a pack expansion (assuming expr has pack type).  */
   if (!uses_parameter_packs (expr))
     {
       error_at (location_of (expr), "operand of fold expression has no "
@@ -9319,7 +10785,7 @@ finish_unary_fold_expr (tree expr, int op, tree_code dir)
     }
   tree pack = make_pack_expansion (expr);
 
-  // Build the fold expression.
+  /* Build the fold expression.  */
   tree code = build_int_cstu (integer_type_node, abs (op));
   tree fold = build_min_nt_loc (UNKNOWN_LOCATION, dir, code, pack);
   FOLD_EXPR_MODIFY_P (fold) = (op < 0);
@@ -9384,7 +10850,7 @@ finish_builtin_launder (location_t loc, tree arg, tsubst_flags_t complain)
   if (error_operand_p (arg))
     return error_mark_node;
   if (!type_dependent_expression_p (arg)
-      && TREE_CODE (TREE_TYPE (arg)) != POINTER_TYPE)
+      && !TYPE_PTR_P (TREE_TYPE (arg)))
     {
       error_at (loc, "non-pointer argument to %<__builtin_launder%>");
       return error_mark_node;
@@ -9393,6 +10859,104 @@ finish_builtin_launder (location_t loc, tree arg, tsubst_flags_t complain)
     arg = orig_arg;
   return build_call_expr_internal_loc (loc, IFN_LAUNDER,
 				       TREE_TYPE (arg), 1, arg);
+}
+
+/* Finish __builtin_convertvector (arg, type).  */
+
+tree
+cp_build_vec_convert (tree arg, location_t loc, tree type,
+		      tsubst_flags_t complain)
+{
+  if (error_operand_p (type))
+    return error_mark_node;
+  if (error_operand_p (arg))
+    return error_mark_node;
+
+  tree ret = NULL_TREE;
+  if (!type_dependent_expression_p (arg) && !dependent_type_p (type))
+    ret = c_build_vec_convert (cp_expr_loc_or_input_loc (arg),
+			       decay_conversion (arg, complain),
+			       loc, type, (complain & tf_error) != 0);
+
+  if (!processing_template_decl)
+    return ret;
+
+  return build_call_expr_internal_loc (loc, IFN_VEC_CONVERT, type, 1, arg);
+}
+
+/* Finish __builtin_bit_cast (type, arg).  */
+
+tree
+cp_build_bit_cast (location_t loc, tree type, tree arg,
+		   tsubst_flags_t complain)
+{
+  if (error_operand_p (type))
+    return error_mark_node;
+  if (!dependent_type_p (type))
+    {
+      if (!complete_type_or_maybe_complain (type, NULL_TREE, complain))
+	return error_mark_node;
+      if (TREE_CODE (type) == ARRAY_TYPE)
+	{
+	  /* std::bit_cast for destination ARRAY_TYPE is not possible,
+	     as functions may not return an array, so don't bother trying
+	     to support this (and then deal with VLAs etc.).  */
+	  error_at (loc, "%<__builtin_bit_cast%> destination type %qT "
+			 "is an array type", type);
+	  return error_mark_node;
+	}
+      if (!trivially_copyable_p (type))
+	{
+	  error_at (loc, "%<__builtin_bit_cast%> destination type %qT "
+			 "is not trivially copyable", type);
+	  return error_mark_node;
+	}
+    }
+
+  if (error_operand_p (arg))
+    return error_mark_node;
+
+  if (!type_dependent_expression_p (arg))
+    {
+      if (TREE_CODE (TREE_TYPE (arg)) == ARRAY_TYPE)
+	{
+	  /* Don't perform array-to-pointer conversion.  */
+	  arg = mark_rvalue_use (arg, loc, true);
+	  if (!complete_type_or_maybe_complain (TREE_TYPE (arg), arg, complain))
+	    return error_mark_node;
+	}
+      else
+	arg = decay_conversion (arg, complain);
+
+      if (error_operand_p (arg))
+	return error_mark_node;
+
+      if (!trivially_copyable_p (TREE_TYPE (arg)))
+	{
+	  error_at (cp_expr_loc_or_loc (arg, loc),
+		    "%<__builtin_bit_cast%> source type %qT "
+		    "is not trivially copyable", TREE_TYPE (arg));
+	  return error_mark_node;
+	}
+      if (!dependent_type_p (type)
+	  && !cp_tree_equal (TYPE_SIZE_UNIT (type),
+			     TYPE_SIZE_UNIT (TREE_TYPE (arg))))
+	{
+	  error_at (loc, "%<__builtin_bit_cast%> source size %qE "
+			 "not equal to destination type size %qE",
+			 TYPE_SIZE_UNIT (TREE_TYPE (arg)),
+			 TYPE_SIZE_UNIT (type));
+	  return error_mark_node;
+	}
+    }
+
+  tree ret = build_min (BIT_CAST_EXPR, type, arg);
+  SET_EXPR_LOCATION (ret, loc);
+
+  if (!processing_template_decl && CLASS_TYPE_P (type))
+    ret = get_target_expr_sfinae (ret, complain);
+
+  return ret;
 }
 
 #include "gt-cp-semantics.h"

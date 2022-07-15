@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1999-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1999-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -100,9 +100,6 @@ package Targparm is
    --  Opt.Task_Dispatching_Policy is set to the first character of the
    --  policy name, and Opt.Task_Dispatching_Policy_Sloc is set to
    --  System_Location.
-
-   --  If a pragma Polling (On) appears, then the flag Opt.Polling_Required
-   --  is set to True.
 
    --  If a pragma Detect_Blocking appears, then the flag Opt.Detect_Blocking
    --  is set to True.
@@ -455,11 +452,15 @@ package Targparm is
    Stack_Check_Probes_On_Target : Boolean := False;
    --  Indicates if the GCC probing mechanism is used
 
+   --  WARNING: There is a matching C declaration of this variable in fe.h
+
    Stack_Check_Limits_On_Target : Boolean := False;
    --  Indicates if the GCC stack-limit mechanism is used
 
    --  Both flags cannot be simultaneously set to True. If neither
    --  is, the target independent fallback method is used.
+
+   --  WARNING: There is a matching C declaration of this variable in fe.h
 
    Stack_Check_Default_On_Target : Boolean := False;
    --  Indicates if stack checking is on by default
@@ -536,18 +537,12 @@ package Targparm is
    Machine_Overflows_On_Target : Boolean := False;
    --  Set to True for targets where S'Machine_Overflows is True
 
+   --  WARNING: There is a matching C declaration of this variable in fe.h
+
    Signed_Zeros_On_Target : Boolean := True;
    --  Set to False on targets that do not reliably support signed zeros
 
-   -------------------------------------------
-   -- Boolean-Valued Fixed-Point Attributes --
-   -------------------------------------------
-
-   Fractional_Fixed_Ops_On_Target : Boolean := False;
-   --  Set to True for targets that support fixed-by-fixed multiplication
-   --  and division for fixed-point types with a small value equal to
-   --  2 ** (-(T'Object_Size - 1)) and whose values have an absolute
-   --  value less than 1.0.
+   --  WARNING: There is a matching C declaration of this variable in fe.h
 
    -----------------
    -- Subprograms --

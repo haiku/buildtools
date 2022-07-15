@@ -1,6 +1,6 @@
 /* Header file for intrinsics check, resolve and simplify function
    prototypes.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
    Contributed by Andy Vaught & Katherine Holcomb
 
 This file is part of GCC.
@@ -74,6 +74,7 @@ bool gfc_check_event_query (gfc_expr *, gfc_expr *, gfc_expr *);
 bool gfc_check_failed_or_stopped_images (gfc_expr *, gfc_expr *);
 bool gfc_check_fgetputc (gfc_expr *, gfc_expr *);
 bool gfc_check_fgetput (gfc_expr *);
+bool gfc_check_findloc (gfc_actual_arglist *);
 bool gfc_check_float (gfc_expr *);
 bool gfc_check_fstat (gfc_expr *, gfc_expr *);
 bool gfc_check_ftell (gfc_expr *);
@@ -88,18 +89,17 @@ bool gfc_check_hostnm (gfc_expr *);
 bool gfc_check_huge (gfc_expr *);
 bool gfc_check_hypot (gfc_expr *, gfc_expr *);
 bool gfc_check_i (gfc_expr *);
-bool gfc_check_iand (gfc_expr *, gfc_expr *);
+bool gfc_check_iand_ieor_ior (gfc_expr *, gfc_expr *);
 bool gfc_check_and (gfc_expr *, gfc_expr *);
 bool gfc_check_ibits (gfc_expr *, gfc_expr *, gfc_expr *);
 bool gfc_check_ichar_iachar (gfc_expr *, gfc_expr *);
 bool gfc_check_idnint (gfc_expr *);
-bool gfc_check_ieor (gfc_expr *, gfc_expr *);
 bool gfc_check_image_status (gfc_expr *, gfc_expr *);
 bool gfc_check_index (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
 bool gfc_check_int (gfc_expr *, gfc_expr *);
 bool gfc_check_intconv (gfc_expr *);
-bool gfc_check_ior (gfc_expr *, gfc_expr *);
 bool gfc_check_irand (gfc_expr *);
+bool gfc_check_is_contiguous (gfc_expr *);
 bool gfc_check_isatty (gfc_expr *);
 bool gfc_check_isnan (gfc_expr *);
 bool gfc_check_ishft (gfc_expr *, gfc_expr *);
@@ -205,6 +205,7 @@ bool gfc_check_getlog (gfc_expr *);
 bool gfc_check_move_alloc (gfc_expr *, gfc_expr *);
 bool gfc_check_mvbits (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *,
 		      gfc_expr *);
+bool gfc_check_random_init (gfc_expr *, gfc_expr *);
 bool gfc_check_random_number (gfc_expr *);
 bool gfc_check_random_seed (gfc_expr *, gfc_expr *, gfc_expr *);
 bool gfc_check_dtime_etime_sub (gfc_expr *, gfc_expr *);
@@ -236,13 +237,14 @@ bool gfc_check_unlink_sub (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_abs (gfc_expr *);
 gfc_expr *gfc_simplify_achar (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_acos (gfc_expr *);
+gfc_expr *gfc_simplify_acosd (gfc_expr *);
 gfc_expr *gfc_simplify_acosh (gfc_expr *);
 gfc_expr *gfc_simplify_adjustl (gfc_expr *);
 gfc_expr *gfc_simplify_adjustr (gfc_expr *);
 gfc_expr *gfc_simplify_aimag (gfc_expr *);
 gfc_expr *gfc_simplify_aint (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_all (gfc_expr *, gfc_expr *);
-gfc_expr *gfc_simplify_atrigd (gfc_expr *);
+gfc_expr *gfc_simplify_asind (gfc_expr *);
 gfc_expr *gfc_simplify_dint (gfc_expr *);
 gfc_expr *gfc_simplify_anint (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_dnint (gfc_expr *);
@@ -251,6 +253,7 @@ gfc_expr *gfc_simplify_any (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_asin (gfc_expr *);
 gfc_expr *gfc_simplify_asinh (gfc_expr *);
 gfc_expr *gfc_simplify_atan (gfc_expr *);
+gfc_expr *gfc_simplify_atand (gfc_expr *);
 gfc_expr *gfc_simplify_atanh (gfc_expr *);
 gfc_expr *gfc_simplify_atan2 (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_atan2d (gfc_expr *, gfc_expr *);
@@ -276,8 +279,10 @@ gfc_expr *gfc_simplify_compiler_version (void);
 gfc_expr *gfc_simplify_complex (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_conjg (gfc_expr *);
 gfc_expr *gfc_simplify_cos (gfc_expr *);
+gfc_expr *gfc_simplify_cosd (gfc_expr *);
 gfc_expr *gfc_simplify_cosh (gfc_expr *);
 gfc_expr *gfc_simplify_cotan (gfc_expr *);
+gfc_expr *gfc_simplify_cotand (gfc_expr *);
 gfc_expr *gfc_simplify_count (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_cshift (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_dcmplx (gfc_expr *, gfc_expr *);
@@ -298,6 +303,8 @@ gfc_expr *gfc_simplify_exp (gfc_expr *);
 gfc_expr *gfc_simplify_exponent (gfc_expr *);
 gfc_expr *gfc_simplify_extends_type_of (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_failed_or_stopped_images (gfc_expr *, gfc_expr *);
+gfc_expr *gfc_simplify_findloc (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *,
+				gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_float (gfc_expr *);
 gfc_expr *gfc_simplify_floor (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_fraction (gfc_expr *);
@@ -325,6 +332,7 @@ gfc_expr *gfc_simplify_ifix (gfc_expr *);
 gfc_expr *gfc_simplify_idint (gfc_expr *);
 gfc_expr *gfc_simplify_ior (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_iparity (gfc_expr *, gfc_expr *, gfc_expr *);
+gfc_expr *gfc_simplify_is_contiguous (gfc_expr *);
 gfc_expr *gfc_simplify_is_iostat_end (gfc_expr *);
 gfc_expr *gfc_simplify_is_iostat_eor (gfc_expr *);
 gfc_expr *gfc_simplify_isnan (gfc_expr *);
@@ -400,6 +408,7 @@ gfc_expr *gfc_simplify_shifta (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_shiftl (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_shiftr (gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_sin (gfc_expr *);
+gfc_expr *gfc_simplify_sind (gfc_expr *);
 gfc_expr *gfc_simplify_sinh (gfc_expr *);
 gfc_expr *gfc_simplify_size (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_sizeof (gfc_expr *);
@@ -410,13 +419,13 @@ gfc_expr *gfc_simplify_spread (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_sqrt (gfc_expr *);
 gfc_expr *gfc_simplify_sum (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_tan (gfc_expr *);
+gfc_expr *gfc_simplify_tand (gfc_expr *);
 gfc_expr *gfc_simplify_tanh (gfc_expr *);
 gfc_expr *gfc_simplify_this_image (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_tiny (gfc_expr *);
 gfc_expr *gfc_simplify_trailz (gfc_expr *);
 gfc_expr *gfc_simplify_transfer (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_transpose (gfc_expr *);
-gfc_expr *gfc_simplify_trigd (gfc_expr *);
 gfc_expr *gfc_simplify_trim (gfc_expr *);
 gfc_expr *gfc_simplify_ubound (gfc_expr *, gfc_expr *, gfc_expr *);
 gfc_expr *gfc_simplify_ucobound (gfc_expr *, gfc_expr *, gfc_expr *);
@@ -469,7 +478,6 @@ void gfc_resolve_conjg (gfc_expr *, gfc_expr *);
 void gfc_resolve_cos (gfc_expr *, gfc_expr *);
 void gfc_resolve_cosh (gfc_expr *, gfc_expr *);
 void gfc_resolve_count (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
-void gfc_resolve_cotan (gfc_expr *, gfc_expr *);
 void gfc_resolve_cshift (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_ctime (gfc_expr *, gfc_expr *);
 void gfc_resolve_dble (gfc_expr *, gfc_expr *);
@@ -487,6 +495,8 @@ void gfc_resolve_exponent (gfc_expr *, gfc_expr *);
 void gfc_resolve_extends_type_of (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_failed_images (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_fdate (gfc_expr *);
+void gfc_resolve_findloc (gfc_expr *,gfc_expr *, gfc_expr *, gfc_expr *,
+			  gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_floor (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_fnum (gfc_expr *, gfc_expr *);
 void gfc_resolve_fraction (gfc_expr *, gfc_expr *);
@@ -511,8 +521,7 @@ void gfc_resolve_ibits (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_ibset (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_image_index (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_image_status (gfc_expr *, gfc_expr *, gfc_expr *);
-void gfc_resolve_index_func (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *,
-			     gfc_expr *);
+void gfc_resolve_index_func (gfc_expr *, gfc_actual_arglist *);
 void gfc_resolve_ierrno (gfc_expr *);
 void gfc_resolve_ieor (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_ichar (gfc_expr *, gfc_expr *, gfc_expr *);
@@ -527,6 +536,7 @@ void gfc_resolve_long (gfc_expr *, gfc_expr *);
 void gfc_resolve_ior (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_iparity (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_isatty (gfc_expr *, gfc_expr *);
+void gfc_resolve_is_contiguous (gfc_expr *, gfc_expr *);
 void gfc_resolve_rank (gfc_expr *, gfc_expr *);
 void gfc_resolve_rshift (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_lshift (gfc_expr *, gfc_expr *, gfc_expr *);
@@ -606,7 +616,7 @@ void gfc_resolve_time8 (gfc_expr *);
 void gfc_resolve_transfer (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_transpose (gfc_expr *, gfc_expr *);
 void gfc_resolve_trigd (gfc_expr *, gfc_expr *);
-void gfc_resolve_atrigd (gfc_expr *, gfc_expr *);
+void gfc_resolve_trigd2 (gfc_expr *, gfc_expr *, gfc_expr *);
 void gfc_resolve_trim (gfc_expr *, gfc_expr *);
 void gfc_resolve_ttynam (gfc_expr *, gfc_expr *);
 void gfc_resolve_ubound (gfc_expr *, gfc_expr *, gfc_expr *, gfc_expr *);
@@ -653,6 +663,7 @@ void gfc_resolve_lstat_sub (gfc_code *);
 void gfc_resolve_ltime (gfc_code *);
 void gfc_resolve_mvbits (gfc_code *);
 void gfc_resolve_perror (gfc_code *);
+void gfc_resolve_random_init (gfc_code *);
 void gfc_resolve_random_number (gfc_code *);
 void gfc_resolve_random_seed (gfc_code *);
 void gfc_resolve_rename_sub (gfc_code *);
@@ -668,9 +679,9 @@ void gfc_resolve_umask_sub (gfc_code *);
 void gfc_resolve_unlink_sub (gfc_code *);
 
 
-/* The mvbits() subroutine requires the most arguments: five.  */
+/* The findloc() subroutine requires the most arguments: six.  */
 
-#define MAX_INTRINSIC_ARGS 5
+#define MAX_INTRINSIC_ARGS 6
 
 extern const char *gfc_current_intrinsic;
 extern gfc_intrinsic_arg *gfc_current_intrinsic_arg[MAX_INTRINSIC_ARGS];

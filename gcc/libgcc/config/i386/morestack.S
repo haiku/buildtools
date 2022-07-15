@@ -1,5 +1,5 @@
 # x86/x86_64 support for -fsplit-stack.
-# Copyright (C) 2009-2018 Free Software Foundation, Inc.
+# Copyright (C) 2009-2021 Free Software Foundation, Inc.
 # Contributed by Ian Lance Taylor <iant@google.com>.
 
 # This file is part of GCC.
@@ -79,7 +79,7 @@
 #ifndef __x86_64__
 #define BACKOFF (1024)
 #else
-#define BACKOFF (1536)
+#define BACKOFF (3584)
 #endif
 
 

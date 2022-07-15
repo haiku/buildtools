@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -63,8 +63,8 @@ package body Exp_Ch11 is
    --  N is the node on which the warning is placed.
 
    procedure Warn_If_No_Propagation (N : Node_Id);
-   --  Called for an exception raise that is not a local raise (and thus can
-   --  not be optimized to a goto). Issues warning if No_Exception_Propagation
+   --  Called for an exception raise that is not a local raise (and thus cannot
+   --  be optimized to a goto). Issues warning if No_Exception_Propagation
    --  restriction is set. N is the node for the raise or equivalent call.
 
    ---------------------------
@@ -189,19 +189,12 @@ package body Exp_Ch11 is
       Handlrs       : constant List_Id    := Exception_Handlers (HSS);
       Loc           : constant Source_Ptr := Sloc (HSS);
       Handler       : Node_Id;
-      Others_Choice : Boolean;
       Obj_Decl      : Node_Id;
       Next_Handler  : Node_Id;
 
       procedure Expand_Local_Exception_Handlers;
       --  This procedure handles the expansion of exception handlers for the
       --  optimization of local raise statements into goto statements.
-
-      procedure Prepend_Call_To_Handler
-        (Proc : RE_Id;
-         Args : List_Id := No_List);
-      --  Routine to prepend a call to the procedure referenced by Proc at
-      --  the start of the handler code for the current Handler.
 
       procedure Replace_Raise_By_Goto (Raise_S : Node_Id; Goto_L1 : Node_Id);
       --  Raise_S is a raise statement (possibly expanded, and possibly of the
@@ -850,36 +843,6 @@ package body Exp_Ch11 is
          end;
       end Expand_Local_Exception_Handlers;
 
-      -----------------------------
-      -- Prepend_Call_To_Handler --
-      -----------------------------
-
-      procedure Prepend_Call_To_Handler
-        (Proc : RE_Id;
-         Args : List_Id := No_List)
-      is
-         Ent : constant Entity_Id := RTE (Proc);
-
-      begin
-         --  If we have no Entity, then we are probably in no run time mode or
-         --  some weird error has occurred. In either case do nothing. Note use
-         --  of No_Location to hide this code from the debugger, so single
-         --  stepping doesn't jump back and forth.
-
-         if Present (Ent) then
-            declare
-               Call : constant Node_Id :=
-                        Make_Procedure_Call_Statement (No_Location,
-                          Name => New_Occurrence_Of (RTE (Proc), No_Location),
-                          Parameter_Associations => Args);
-
-            begin
-               Prepend_To (Statements (Handler), Call);
-               Analyze (Call, Suppress => All_Checks);
-            end;
-         end if;
-      end Prepend_Call_To_Handler;
-
       ---------------------------
       -- Replace_Raise_By_Goto --
       ---------------------------
@@ -913,13 +876,13 @@ package body Exp_Ch11 is
             Cond := Condition (Raise_S);
 
             --  The only other possibility is a node that is or used to be a
-            --  simple raise statement.
+            --  simple raise statement. Note that the string expression in the
+            --  original Raise statement is ignored.
 
          else
             Orig := Original_Node (Raise_S);
             pragma Assert (Nkind (Orig) = N_Raise_Statement
-                             and then Present (Name (Orig))
-                             and then No (Expression (Orig)));
+                             and then Present (Name (Orig)));
             Excep := Entity (Name (Orig));
             Cond := Empty;
          end if;
@@ -1088,44 +1051,6 @@ package body Exp_Ch11 is
                      Analyze_List
                        (Statements (Handler), Suppress => All_Checks);
                   end;
-               end if;
-
-               --  For the normal case, we have to worry about the state of
-               --  abort deferral. Generally, we defer abort during runtime
-               --  handling of exceptions. When control is passed to the
-               --  handler, then in the normal case we undefer aborts. In
-               --  any case this entire handling is relevant only if aborts
-               --  are allowed.
-
-               if Abort_Allowed
-                 and then not ZCX_Exceptions
-               then
-                  --  There are some special cases in which we do not do the
-                  --  undefer. In particular a finalization (AT END) handler
-                  --  wants to operate with aborts still deferred.
-
-                  --  We also suppress the call if this is the special handler
-                  --  for Abort_Signal, since if we are aborting, we want to
-                  --  keep aborts deferred (one abort is enough).
-
-                  --  If abort really needs to be deferred the expander must
-                  --  add this call explicitly, see
-                  --  Expand_N_Asynchronous_Select.
-
-                  Others_Choice :=
-                    Nkind (First (Exception_Choices (Handler))) =
-                                                         N_Others_Choice;
-
-                  if (Others_Choice
-                       or else Entity (First (Exception_Choices (Handler))) /=
-                                                         Stand.Abort_Signal)
-                    and then not
-                      (Others_Choice
-                        and then
-                          All_Others (First (Exception_Choices (Handler))))
-                  then
-                     Prepend_Call_To_Handler (RE_Abort_Undefer);
-                  end if;
                end if;
             end if;
          end if;
@@ -1307,8 +1232,8 @@ package body Exp_Ch11 is
 
       Append_To (L,
         Make_Character_Literal (Loc,
-          Chars              =>  Name_uA,
-          Char_Literal_Value =>  UI_From_Int (Character'Pos ('A'))));
+          Chars              => Name_uA,
+          Char_Literal_Value => UI_From_Int (Character'Pos ('A'))));
 
       --  Name_Length component: Nam'Length
 
@@ -1426,9 +1351,9 @@ package body Exp_Ch11 is
       --  objects of controlled types, for example. We do not want to clean up
       --  the return object.
 
-      if not Nkind_In (Parent (N), N_Accept_Statement,
-                                   N_Extended_Return_Statement,
-                                   N_Package_Body)
+      if Nkind (Parent (N)) not in N_Accept_Statement
+                                 | N_Extended_Return_Statement
+                                 | N_Package_Body
         and then not Delay_Cleanups (Current_Scope)
         and then not Is_Thunk (Current_Scope)
       then
@@ -1505,7 +1430,7 @@ package body Exp_Ch11 is
              Actions     => New_List (
                Make_Simple_Return_Statement (Loc,
                  Expression => New_Occurrence_Of (Standard_False, Loc))),
-              Expression => RCE));
+               Expression => RCE));
 
       else
          Rewrite (N,
@@ -1514,7 +1439,7 @@ package body Exp_Ch11 is
                Make_Raise_Statement (Loc,
                  Name       => Name (N),
                  Expression => Expression (N))),
-              Expression => RCE));
+               Expression => RCE));
       end if;
 
       Analyze_And_Resolve (N, Typ);
@@ -1553,7 +1478,7 @@ package body Exp_Ch11 is
    begin
       --  Processing for locally handled exception (exclude reraise case)
 
-      if Present (Name (N)) and then Nkind (Name (N)) = N_Identifier then
+      if Present (Name (N)) and then Is_Entity_Name (Name (N)) then
          if Debug_Flag_Dot_G
            or else Restriction_Active (No_Exception_Propagation)
          then
@@ -1657,7 +1582,7 @@ package body Exp_Ch11 is
       --  but this is also faster in all modes). Propagate Comes_From_Source
       --  flag to the new node.
 
-      if Present (Name (N)) and then Nkind (Name (N)) = N_Identifier then
+      if Present (Name (N)) and then Is_Entity_Name (Name (N)) then
          Src := Comes_From_Source (N);
 
          if Entity (Name (N)) = Standard_Constraint_Error then
@@ -1689,7 +1614,7 @@ package body Exp_Ch11 is
 
       --  where location_string identifies the file/line of the raise
 
-      if Present (Name (N)) then
+      if Present (Name (N)) and then Is_Entity_Name (Name (N)) then
          declare
             Id : Entity_Id := Entity (Name (N));
             Buf : Bounded_String;
@@ -1939,8 +1864,8 @@ package body Exp_Ch11 is
          then
             return Empty;
 
-            --  Test for handled sequence of statements with at least one
-            --  exception handler which might be the one we are looking for.
+         --  Test for handled sequence of statements with at least one
+         --  exception handler which might be the one we are looking for.
 
          elsif Nkind (P) = N_Handled_Sequence_Of_Statements
            and then Present (Exception_Handlers (P))

@@ -1,5 +1,5 @@
 /* Pipeline hazard description translator.
-   Copyright (C) 2000-2018 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
 
    Written by Vladimir Makarov <vmakarov@redhat.com>
 
@@ -5539,9 +5539,9 @@ form_reservs_matter (automaton_t automaton)
       if (units_array [unit]->automaton_decl
 	  == automaton->corresponding_automaton_decl
 	  && (cycle >= units_array [unit]->min_occ_cycle_num
-	      /* We can not remove queried unit from reservations.  */
+	      /* We cannot remove queried unit from reservations.  */
 	      || units_array [unit]->query_p
-	      /* We can not remove units which are used
+	      /* We cannot remove units which are used
 		 `exclusion_set', `presence_set',
 		 `final_presence_set', `absence_set', and
 		 `final_absence_set'.  */
@@ -7247,7 +7247,7 @@ create_state_ainsn_table (automaton_t automaton)
   tab->check_vect.create (10000);
 
   tab->base_vect.create (0);
-  tab->base_vect.safe_grow (automaton->achieved_states_num);
+  tab->base_vect.safe_grow (automaton->achieved_states_num, true);
 
   full_vect_length = (automaton->insn_equiv_classes_num
                       * automaton->achieved_states_num);
@@ -7339,7 +7339,7 @@ add_vect (state_ainsn_table_t tab, int vect_num, vla_hwint_t vect)
   {
     size_t full_base = tab->automaton->insn_equiv_classes_num * vect_num;
     if (tab->full_vect.length () < full_base + vect_length)
-      tab->full_vect.safe_grow (full_base + vect_length);
+      tab->full_vect.safe_grow (full_base + vect_length, true);
     for (i = 0; i < vect_length; i++)
       tab->full_vect[full_base + i] = vect[i];
   }
@@ -7743,7 +7743,7 @@ output_dead_lock_vect (automaton_t automaton)
   output_states_vect.create (0);
   pass_states (automaton, add_states_vect_el);
 
-  dead_lock_vect.safe_grow (output_states_vect.length ());
+  dead_lock_vect.safe_grow (output_states_vect.length (), true);
   for (i = 0; i < output_states_vect.length (); i++)
     {
       state_t s = output_states_vect[i];
@@ -9207,7 +9207,7 @@ generate (void)
 #define STANDARD_OUTPUT_DESCRIPTION_FILE_SUFFIX ".dfa"
 
 /* The function returns suffix of given file name.  The returned
-   string can not be changed.  */
+   string cannot be changed.  */
 static const char *
 file_name_suffix (const char *file_name)
 {
@@ -9222,7 +9222,7 @@ file_name_suffix (const char *file_name)
 /* The function returns base name of given file name, i.e. pointer to
    first char after last `/' (or `\' for WIN32) in given file name,
    given file name itself if the directory name is absent.  The
-   returned string can not be changed.  */
+   returned string cannot be changed.  */
 static const char *
 base_file_name (const char *file_name)
 {

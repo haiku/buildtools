@@ -1,5 +1,5 @@
 /* Define builtin-in macros for all front ends that perform preprocessing
-   Copyright (C) 2010-2018 Free Software Foundation, Inc.
+   Copyright (C) 2010-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -25,7 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "version.h"
 #include "flags.h"
-#include "cpp-id-data.h"
+#include "cpplib.h"
 #include "cppbuiltin.h"
 
 
@@ -93,6 +93,9 @@ define_builtin_macros_for_compilation_flags (cpp_reader *pfile)
   if (flag_sanitize & SANITIZE_ADDRESS)
     cpp_define (pfile, "__SANITIZE_ADDRESS__");
 
+  if (flag_sanitize & SANITIZE_HWADDRESS)
+    cpp_define (pfile, "__SANITIZE_HWADDRESS__");
+
   if (flag_sanitize & SANITIZE_THREAD)
     cpp_define (pfile, "__SANITIZE_THREAD__");
 
@@ -110,9 +113,6 @@ define_builtin_macros_for_compilation_flags (cpp_reader *pfile)
 
   cpp_define_formatted (pfile, "__FINITE_MATH_ONLY__=%d",
 			flag_finite_math_only);
-
-  if (flag_check_pointer_bounds)
-    cpp_define (pfile, "__CHKP__");
 }
 
 

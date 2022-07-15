@@ -9,9 +9,9 @@ import (
 	"time"
 )
 
-const _BIT16SZ = 2
+const bitSize16 = 2
 
-func fileInfoFromStat(d *syscall.Dir) FileInfo {
+func fileInfoFromStat(d *syscall.Dir) *fileStat {
 	fs := &fileStat{
 		name:    d.Name,
 		size:    d.Length,
@@ -35,6 +35,10 @@ func fileInfoFromStat(d *syscall.Dir) FileInfo {
 	if d.Type != 'M' {
 		fs.mode |= ModeDevice
 	}
+	// Consider all files served by #c as character device files.
+	if d.Type == 'c' {
+		fs.mode |= ModeCharDevice
+	}
 	return fs
 }
 
@@ -46,7 +50,7 @@ func dirstat(arg interface{}) (*syscall.Dir, error) {
 	size := syscall.STATFIXLEN + 16*4
 
 	for i := 0; i < 2; i++ {
-		buf := make([]byte, _BIT16SZ+size)
+		buf := make([]byte, bitSize16+size)
 
 		var n int
 		switch a := arg.(type) {
@@ -60,8 +64,8 @@ func dirstat(arg interface{}) (*syscall.Dir, error) {
 			panic("phase error in dirstat")
 		}
 
-		if n < _BIT16SZ {
-			return nil, &PathError{"stat", name, err}
+		if n < bitSize16 {
+			return nil, &PathError{Op: "stat", Path: name, Err: err}
 		}
 
 		// Pull the real size out of the stat message.
@@ -72,7 +76,7 @@ func dirstat(arg interface{}) (*syscall.Dir, error) {
 		if size <= n {
 			d, err := syscall.UnmarshalDir(buf[:n])
 			if err != nil {
-				return nil, &PathError{"stat", name, err}
+				return nil, &PathError{Op: "stat", Path: name, Err: err}
 			}
 			return d, nil
 		}
@@ -83,7 +87,7 @@ func dirstat(arg interface{}) (*syscall.Dir, error) {
 		err = syscall.ErrBadStat
 	}
 
-	return nil, &PathError{"stat", name, err}
+	return nil, &PathError{Op: "stat", Path: name, Err: err}
 }
 
 // statNolog implements Stat for Plan 9.

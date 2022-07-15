@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -66,6 +66,7 @@ with Sinput.L; use Sinput.L;
 with SCIL_LL;
 with Tbuild;   use Tbuild;
 with Types;    use Types;
+with VAST;
 
 procedure Frontend is
 begin
@@ -303,7 +304,7 @@ begin
       --  capture the values of the configuration switches (see Opt for further
       --  details).
 
-      Opt.Register_Opt_Config_Switches;
+      Register_Config_Switches;
 
       --  Check for file which contains No_Body pragma
 
@@ -381,6 +382,16 @@ begin
          Warn_On_Non_Local_Exception := True;
       end if;
 
+      --  Disable Initialize_Scalars for runtime files to avoid circular
+      --  dependencies.
+
+      if Initialize_Scalars
+        and then Fname.Is_Predefined_File_Name (File_Name (Main_Source_File))
+      then
+         Initialize_Scalars   := False;
+         Init_Or_Norm_Scalars := Normalize_Scalars;
+      end if;
+
       --  Now on to the semantics. Skip if in syntax only mode
 
       if Operating_Mode /= Check_Syntax then
@@ -412,14 +423,15 @@ begin
 
             --  Cleanup processing after completing main analysis
 
-            --  Comment needed for ASIS mode test and GNATprove mode test???
+            --  In GNATprove_Mode we do not perform most expansions but body
+            --  instantiation is needed.
 
             pragma Assert
               (Operating_Mode = Generate_Code
                 or else Operating_Mode = Check_Semantics);
 
             if Operating_Mode = Generate_Code
-              or else (ASIS_Mode or GNATprove_Mode)
+              or else GNATprove_Mode
             then
                Instantiate_Bodies;
             end if;
@@ -451,11 +463,6 @@ begin
 
                Check_Elaboration_Scenarios;
 
-               --  Remove any ignored Ghost code as it must not appear in the
-               --  executable.
-
-               Remove_Ignored_Ghost_Code;
-
             --  Examine all top level scenarios collected during analysis and
             --  resolution in order to diagnose conditional ABEs, even in the
             --  presence of serious errors.
@@ -466,7 +473,9 @@ begin
 
             --  At this stage we can unnest subprogram bodies if required
 
-            Exp_Unst.Unnest_Subprograms (Cunit (Main_Unit));
+            if Total_Errors_Detected = 0 then
+               Exp_Unst.Unnest_Subprograms (Cunit (Main_Unit));
+            end if;
 
             --  List library units if requested
 
@@ -481,13 +490,23 @@ begin
             Sem_Warn.Output_Unreferenced_Messages;
             Sem_Warn.Check_Unused_Withs;
             Sem_Warn.Output_Unused_Warnings_Off_Warnings;
+
+            --  Remove any ignored Ghost code as it must not appear in the
+            --  executable. This action must be performed last because it
+            --  heavily alters the tree.
+
+            if Operating_Mode = Generate_Code or else GNATprove_Mode then
+               Remove_Ignored_Ghost_Code;
+            end if;
          end if;
       end if;
    end;
 
    --  Qualify all entity names in inner packages, package bodies, etc
 
-   Exp_Dbug.Qualify_All_Entity_Names;
+   if not GNATprove_Mode then
+      Exp_Dbug.Qualify_All_Entity_Names;
+   end if;
 
    --  SCIL backend requirement. Check that SCIL nodes associated with
    --  dispatching calls reference subprogram calls.
@@ -495,6 +514,12 @@ begin
    if Generate_SCIL then
       pragma Debug (Sem_SCIL.Check_SCIL_Nodes (Cunit (Main_Unit)));
       null;
+   end if;
+
+   --  Verify the validity of the tree
+
+   if Debug_Flag_Underscore_VV then
+      VAST.Check_Tree (Cunit (Main_Unit));
    end if;
 
    --  Dump the source now. Note that we do this as soon as the analysis

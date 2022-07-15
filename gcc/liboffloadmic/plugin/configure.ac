@@ -29,7 +29,6 @@
 # Process this file with autoconf to produce a configure script, like so:
 # aclocal -I ../.. -I ../../config && autoconf && automake
 
-AC_PREREQ([2.64])
 AC_INIT([Intel MIC Offload Plugin], [1.0], ,[libgomp-plugin-intelmic])
 
 AC_CONFIG_AUX_DIR(../..)
@@ -96,6 +95,8 @@ AC_ARG_ENABLE([version-specific-runtime-libs],
 AC_MSG_RESULT($enable_version_specific_runtime_libs)
 
 
+GCC_WITH_TOOLEXECLIBDIR
+
 # Calculate toolexeclibdir.
 # Also toolexecdir, though it's only used in toolexeclibdir.
 case ${enable_version_specific_runtime_libs} in
@@ -111,7 +112,14 @@ case ${enable_version_specific_runtime_libs} in
        test x"$with_cross_host" != x"no"; then
       # Install a library built with a cross compiler in tooldir, not libdir.
       toolexecdir='$(exec_prefix)/$(target_alias)'
-      toolexeclibdir='$(toolexecdir)/lib'
+      case ${with_toolexeclibdir} in
+	no)
+	  toolexeclibdir='$(toolexecdir)/lib'
+	  ;;
+	*)
+	  toolexeclibdir=${with_toolexeclibdir}
+	  ;;
+      esac
     else
       toolexecdir='$(libdir)/gcc-lib/$(target_alias)'
       toolexeclibdir='$(libdir)'

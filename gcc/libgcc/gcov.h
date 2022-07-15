@@ -1,5 +1,5 @@
 /* GCOV interface routines.
-   Copyright (C) 2017-2018 Free Software Foundation, Inc.
+   Copyright (C) 2017-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -32,10 +32,5 @@ extern void __gcov_reset (void);
 /* Write profile information to a file.  */
 
 extern void __gcov_dump (void);
-
-/* Write profile information to a file and reset counters to zero.
-   The function does operations under a mutex.  */
-
-extern void __gcov_flush (void);
 
 #endif /* GCC_GCOV_H */

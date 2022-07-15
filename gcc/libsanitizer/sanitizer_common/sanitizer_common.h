@@ -1,7 +1,8 @@
 //===-- sanitizer_common.h --------------------------------------*- C++ -*-===//
 //
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -37,11 +38,7 @@ struct StackTrace;
 const uptr kWordSize = SANITIZER_WORDSIZE / 8;
 const uptr kWordSizeInBits = 8 * kWordSize;
 
-#if defined(__powerpc__) || defined(__powerpc64__)
-  const uptr kCacheLineSize = 128;
-#else
-  const uptr kCacheLineSize = 64;
-#endif
+const uptr kCacheLineSize = SANITIZER_CACHE_LINE_SIZE;
 
 const uptr kMaxPathLength = 4096;
 
@@ -50,30 +47,42 @@ const uptr kMaxThreadStackSize = 1 << 30;  // 1Gb
 static const uptr kErrorMessageBufferSize = 1 << 16;
 
 // Denotes fake PC values that come from JIT/JAVA/etc.
-// For such PC values __tsan_symbolize_external() will be called.
+// For such PC values __tsan_symbolize_external_ex() will be called.
 const u64 kExternalPCBit = 1ULL << 60;
 
 extern const char *SanitizerToolName;  // Can be changed by the tool.
 
 extern atomic_uint32_t current_verbosity;
-INLINE void SetVerbosity(int verbosity) {
+inline void SetVerbosity(int verbosity) {
   atomic_store(&current_verbosity, verbosity, memory_order_relaxed);
 }
-INLINE int Verbosity() {
+inline int Verbosity() {
   return atomic_load(&current_verbosity, memory_order_relaxed);
 }
 
+#if SANITIZER_ANDROID
+inline uptr GetPageSize() {
+// Android post-M sysconf(_SC_PAGESIZE) crashes if called from .preinit_array.
+  return 4096;
+}
+inline uptr GetPageSizeCached() {
+  return 4096;
+}
+#else
 uptr GetPageSize();
 extern uptr PageSizeCached;
-INLINE uptr GetPageSizeCached() {
+inline uptr GetPageSizeCached() {
   if (!PageSizeCached)
     PageSizeCached = GetPageSize();
   return PageSizeCached;
 }
+#endif
 uptr GetMmapGranularity();
 uptr GetMaxVirtualAddress();
+uptr GetMaxUserVirtualAddress();
 // Threads
 tid_t GetTid();
+int TgKill(pid_t pid, tid_t tid, int sig);
 uptr GetThreadSelf();
 void GetThreadStackTopAndBottom(bool at_initialization, uptr *stack_top,
                                 uptr *stack_bottom);
@@ -82,20 +91,23 @@ void GetThreadStackAndTls(bool main, uptr *stk_addr, uptr *stk_size,
 
 // Memory management
 void *MmapOrDie(uptr size, const char *mem_type, bool raw_report = false);
-INLINE void *MmapOrDieQuietly(uptr size, const char *mem_type) {
+inline void *MmapOrDieQuietly(uptr size, const char *mem_type) {
   return MmapOrDie(size, mem_type, /*raw_report*/ true);
 }
 void UnmapOrDie(void *addr, uptr size);
 // Behaves just like MmapOrDie, but tolerates out of memory condition, in that
 // case returns nullptr.
 void *MmapOrDieOnFatalError(uptr size, const char *mem_type);
-void *MmapFixedNoReserve(uptr fixed_addr, uptr size,
-                         const char *name = nullptr);
+bool MmapFixedNoReserve(uptr fixed_addr, uptr size, const char *name = nullptr)
+     WARN_UNUSED_RESULT;
+bool MmapFixedSuperNoReserve(uptr fixed_addr, uptr size,
+                             const char *name = nullptr) WARN_UNUSED_RESULT;
 void *MmapNoReserveOrDie(uptr size, const char *mem_type);
-void *MmapFixedOrDie(uptr fixed_addr, uptr size);
+void *MmapFixedOrDie(uptr fixed_addr, uptr size, const char *name = nullptr);
 // Behaves just like MmapFixedOrDie, but tolerates out of memory condition, in
 // that case returns nullptr.
-void *MmapFixedOrDieOnFatalError(uptr fixed_addr, uptr size);
+void *MmapFixedOrDieOnFatalError(uptr fixed_addr, uptr size,
+                                 const char *name = nullptr);
 void *MmapFixedNoAccess(uptr fixed_addr, uptr size, const char *name = nullptr);
 void *MmapNoAccess(uptr size);
 // Map aligned chunk of address space; size and alignment are powers of two.
@@ -107,9 +119,36 @@ void *MmapAlignedOrDieOnFatalError(uptr size, uptr alignment,
 bool MprotectNoAccess(uptr addr, uptr size);
 bool MprotectReadOnly(uptr addr, uptr size);
 
+void MprotectMallocZones(void *addr, int prot);
+
+#if SANITIZER_LINUX
+// Unmap memory. Currently only used on Linux.
+void UnmapFromTo(uptr from, uptr to);
+#endif
+
+// Maps shadow_size_bytes of shadow memory and returns shadow address. It will
+// be aligned to the mmap granularity * 2^shadow_scale, or to
+// 2^min_shadow_base_alignment if that is larger. The returned address will
+// have max(2^min_shadow_base_alignment, mmap granularity) on the left, and
+// shadow_size_bytes bytes on the right, which on linux is mapped no access.
+// The high_mem_end may be updated if the original shadow size doesn't fit.
+uptr MapDynamicShadow(uptr shadow_size_bytes, uptr shadow_scale,
+                      uptr min_shadow_base_alignment, uptr &high_mem_end);
+
+// Reserve memory range [beg, end]. If madvise_shadow is true then apply
+// madvise (e.g. hugepages, core dumping) requested by options.
+void ReserveShadowMemoryRange(uptr beg, uptr end, const char *name,
+                              bool madvise_shadow = true);
+
+// Protect size bytes of memory starting at addr. Also try to protect
+// several pages at the start of the address space as specified by
+// zero_base_shadow_start, at most up to the size or zero_base_max_shadow_start.
+void ProtectGap(uptr addr, uptr size, uptr zero_base_shadow_start,
+                uptr zero_base_max_shadow_start);
+
 // Find an available address space.
 uptr FindAvailableMemoryRange(uptr size, uptr alignment, uptr left_padding,
-                              uptr *largest_gap_found);
+                              uptr *largest_gap_found, uptr *max_occupied_addr);
 
 // Used to check if we can map shadow memory to a fixed location.
 bool MemoryRangeIsAvailable(uptr range_start, uptr range_end);
@@ -119,12 +158,29 @@ void ReleaseMemoryPagesToOS(uptr beg, uptr end);
 void IncreaseTotalMmap(uptr size);
 void DecreaseTotalMmap(uptr size);
 uptr GetRSS();
-void NoHugePagesInRegion(uptr addr, uptr length);
-void DontDumpShadowMemory(uptr addr, uptr length);
+void SetShadowRegionHugePageMode(uptr addr, uptr length);
+bool DontDumpShadowMemory(uptr addr, uptr length);
 // Check if the built VMA size matches the runtime one.
 void CheckVMASize();
 void RunMallocHooks(const void *ptr, uptr size);
 void RunFreeHooks(const void *ptr);
+
+class ReservedAddressRange {
+ public:
+  uptr Init(uptr size, const char *name = nullptr, uptr fixed_addr = 0);
+  uptr InitAligned(uptr size, uptr align, const char *name = nullptr);
+  uptr Map(uptr fixed_addr, uptr size, const char *name = nullptr);
+  uptr MapOrDie(uptr fixed_addr, uptr size, const char *name = nullptr);
+  void Unmap(uptr addr, uptr size);
+  void *base() const { return base_; }
+  uptr size() const { return size_; }
+
+ private:
+  void* base_;
+  uptr size_;
+  const char* name_;
+  uptr os_handle_;
+};
 
 typedef void (*fill_profile_f)(uptr start, uptr rss, bool file,
                                /*out*/uptr *stats, uptr stats_size);
@@ -133,49 +189,6 @@ typedef void (*fill_profile_f)(uptr start, uptr rss, bool file,
 // |cb| is a tool-specific callback that fills the |stats| array containing
 // |stats_size| elements.
 void GetMemoryProfile(fill_profile_f cb, uptr *stats, uptr stats_size);
-
-// InternalScopedBuffer can be used instead of large stack arrays to
-// keep frame size low.
-// FIXME: use InternalAlloc instead of MmapOrDie once
-// InternalAlloc is made libc-free.
-template <typename T>
-class InternalScopedBuffer {
- public:
-  explicit InternalScopedBuffer(uptr cnt) {
-    cnt_ = cnt;
-    ptr_ = (T *)MmapOrDie(cnt * sizeof(T), "InternalScopedBuffer");
-  }
-  ~InternalScopedBuffer() { UnmapOrDie(ptr_, cnt_ * sizeof(T)); }
-  T &operator[](uptr i) { return ptr_[i]; }
-  T *data() { return ptr_; }
-  uptr size() { return cnt_ * sizeof(T); }
-
- private:
-  T *ptr_;
-  uptr cnt_;
-  // Disallow copies and moves.
-  InternalScopedBuffer(const InternalScopedBuffer &) = delete;
-  InternalScopedBuffer &operator=(const InternalScopedBuffer &) = delete;
-  InternalScopedBuffer(InternalScopedBuffer &&) = delete;
-  InternalScopedBuffer &operator=(InternalScopedBuffer &&) = delete;
-};
-
-class InternalScopedString : public InternalScopedBuffer<char> {
- public:
-  explicit InternalScopedString(uptr max_length)
-      : InternalScopedBuffer<char>(max_length), length_(0) {
-    (*this)[0] = '\0';
-  }
-  uptr length() { return length_; }
-  void clear() {
-    (*this)[0] = '\0';
-    length_ = 0;
-  }
-  void append(const char *format, ...);
-
- private:
-  uptr length_;
-};
 
 // Simple low-level (mmap-based) allocator for internal use. Doesn't have
 // constructor, so all instances of LowLevelAllocator should be
@@ -188,6 +201,8 @@ class LowLevelAllocator {
   char *allocated_end_;
   char *allocated_current_;
 };
+// Set the min alignment of LowLevelAllocator to at least alignment.
+void SetLowLevelAllocateMinAlignment(uptr alignment);
 typedef void (*LowLevelAllocateCallback)(uptr ptr, uptr size);
 // Allows to register tool-specific callbacks for LowLevelAllocator.
 // Passing NULL removes the callback.
@@ -210,10 +225,6 @@ void SetPrintfAndReportCallback(void (*callback)(const char *));
     if ((uptr)Verbosity() >= (level)) Printf(__VA_ARGS__); \
   } while (0)
 
-// Can be used to prevent mixing error reports from different sanitizers.
-// FIXME: Replace with ScopedErrorReportLock and hide.
-extern StaticSpinMutex CommonSanitizerReportMutex;
-
 // Lock sanitizer error reporting and protects against nested errors.
 class ScopedErrorReportLock {
  public:
@@ -225,15 +236,6 @@ class ScopedErrorReportLock {
 
 extern uptr stoptheworld_tracer_pid;
 extern uptr stoptheworld_tracer_ppid;
-
-// Opens the file 'file_name" and reads up to 'max_len' bytes.
-// The resulting buffer is mmaped and stored in '*buff'.
-// The size of the mmaped region is stored in '*buff_size'.
-// The total number of read bytes is stored in '*read_len'.
-// Returns true if file was successfully opened and read.
-bool ReadFileToBuffer(const char *file_name, char **buff, uptr *buff_size,
-                      uptr *read_len, uptr max_len = 1 << 26,
-                      error_t *errno_p = nullptr);
 
 bool IsAccessibleMemoryRange(uptr beg, uptr size);
 
@@ -252,21 +254,22 @@ void UpdateProcessName();
 void CacheBinaryName();
 void DisableCoreDumperIfNecessary();
 void DumpProcessMap();
-void PrintModuleMap();
 const char *GetEnv(const char *name);
 bool SetEnv(const char *name, const char *value);
 
 u32 GetUid();
 void ReExec();
+void CheckASLR();
+void CheckMPROTECT();
 char **GetArgv();
+char **GetEnviron();
 void PrintCmdline();
 bool StackSizeIsUnlimited();
-uptr GetStackSizeLimitInBytes();
 void SetStackSizeLimitInBytes(uptr limit);
 bool AddressSpaceIsUnlimited();
 void SetAddressSpaceUnlimited();
 void AdjustStackSize(void *attr);
-void PrepareForSandboxing(__sanitizer_sandbox_arguments *args);
+void PlatformPrepareForSandboxing(__sanitizer_sandbox_arguments *args);
 void SetSandboxingCallback(void (*f)());
 
 void InitializeCoverage(bool enabled, const char *coverage_dir);
@@ -278,9 +281,8 @@ uptr GetTlsSize();
 void SleepForSeconds(int seconds);
 void SleepForMillis(int millis);
 u64 NanoTime();
+u64 MonotonicNanoTime();
 int Atexit(void (*function)(void));
-void SortArray(uptr *array, uptr size);
-void SortArray(u32 *array, uptr size);
 bool TemplateMatch(const char *templ, const char *str);
 
 // Exit
@@ -291,13 +293,6 @@ CheckFailed(const char *file, int line, const char *cond, u64 v1, u64 v2);
 void NORETURN ReportMmapFailureAndDie(uptr size, const char *mem_type,
                                       const char *mmap_type, error_t err,
                                       bool raw_report = false);
-
-// Set the name of the current thread to 'name', return true on succees.
-// The name may be truncated to a system-dependent limit.
-bool SanitizerSetThreadName(const char *name);
-// Get the name of the current thread (no more than max_len bytes),
-// return true on succees. name should have space for at least max_len+1 bytes.
-bool SanitizerGetThreadName(char *name, int max_len);
 
 // Specific tools may override behavior of "Die" and "CheckFailed" functions
 // to do tool-specific job.
@@ -364,21 +359,23 @@ void ReportErrorSummary(const char *error_type, const AddressInfo &info,
 void ReportErrorSummary(const char *error_type, const StackTrace *trace,
                         const char *alt_tool_name = nullptr);
 
+void ReportMmapWriteExec(int prot);
+
 // Math
 #if SANITIZER_WINDOWS && !defined(__clang__) && !defined(__GNUC__)
 extern "C" {
-unsigned char _BitScanForward(unsigned long *index, unsigned long mask);  // NOLINT
-unsigned char _BitScanReverse(unsigned long *index, unsigned long mask);  // NOLINT
+unsigned char _BitScanForward(unsigned long *index, unsigned long mask);
+unsigned char _BitScanReverse(unsigned long *index, unsigned long mask);
 #if defined(_WIN64)
-unsigned char _BitScanForward64(unsigned long *index, unsigned __int64 mask);  // NOLINT
-unsigned char _BitScanReverse64(unsigned long *index, unsigned __int64 mask);  // NOLINT
+unsigned char _BitScanForward64(unsigned long *index, unsigned __int64 mask);
+unsigned char _BitScanReverse64(unsigned long *index, unsigned __int64 mask);
 #endif
 }
 #endif
 
-INLINE uptr MostSignificantSetBitIndex(uptr x) {
+inline uptr MostSignificantSetBitIndex(uptr x) {
   CHECK_NE(x, 0U);
-  unsigned long up;  // NOLINT
+  unsigned long up;
 #if !SANITIZER_WINDOWS || defined(__clang__) || defined(__GNUC__)
 # ifdef _WIN64
   up = SANITIZER_WORDSIZE - 1 - __builtin_clzll(x);
@@ -393,9 +390,9 @@ INLINE uptr MostSignificantSetBitIndex(uptr x) {
   return up;
 }
 
-INLINE uptr LeastSignificantSetBitIndex(uptr x) {
+inline uptr LeastSignificantSetBitIndex(uptr x) {
   CHECK_NE(x, 0U);
-  unsigned long up;  // NOLINT
+  unsigned long up;
 #if !SANITIZER_WINDOWS || defined(__clang__) || defined(__GNUC__)
 # ifdef _WIN64
   up = __builtin_ctzll(x);
@@ -410,11 +407,11 @@ INLINE uptr LeastSignificantSetBitIndex(uptr x) {
   return up;
 }
 
-INLINE bool IsPowerOfTwo(uptr x) {
+inline bool IsPowerOfTwo(uptr x) {
   return (x & (x - 1)) == 0;
 }
 
-INLINE uptr RoundUpToPowerOfTwo(uptr size) {
+inline uptr RoundUpToPowerOfTwo(uptr size) {
   CHECK(size);
   if (IsPowerOfTwo(size)) return size;
 
@@ -424,20 +421,20 @@ INLINE uptr RoundUpToPowerOfTwo(uptr size) {
   return 1ULL << (up + 1);
 }
 
-INLINE uptr RoundUpTo(uptr size, uptr boundary) {
+inline uptr RoundUpTo(uptr size, uptr boundary) {
   RAW_CHECK(IsPowerOfTwo(boundary));
   return (size + boundary - 1) & ~(boundary - 1);
 }
 
-INLINE uptr RoundDownTo(uptr x, uptr boundary) {
+inline uptr RoundDownTo(uptr x, uptr boundary) {
   return x & ~(boundary - 1);
 }
 
-INLINE bool IsAligned(uptr a, uptr alignment) {
+inline bool IsAligned(uptr a, uptr alignment) {
   return (a & (alignment - 1)) == 0;
 }
 
-INLINE uptr Log2(uptr x) {
+inline uptr Log2(uptr x) {
   CHECK(IsPowerOfTwo(x));
   return LeastSignificantSetBitIndex(x);
 }
@@ -453,14 +450,14 @@ template<class T> void Swap(T& a, T& b) {
 }
 
 // Char handling
-INLINE bool IsSpace(int c) {
+inline bool IsSpace(int c) {
   return (c == ' ') || (c == '\n') || (c == '\t') ||
          (c == '\f') || (c == '\r') || (c == '\v');
 }
-INLINE bool IsDigit(int c) {
+inline bool IsDigit(int c) {
   return (c >= '0') && (c <= '9');
 }
-INLINE int ToLower(int c) {
+inline int ToLower(int c) {
   return (c >= 'A' && c <= 'Z') ? (c + 'a' - 'A') : c;
 }
 
@@ -471,13 +468,12 @@ template<typename T>
 class InternalMmapVectorNoCtor {
  public:
   void Initialize(uptr initial_capacity) {
-    capacity_ = Max(initial_capacity, (uptr)1);
+    capacity_bytes_ = 0;
     size_ = 0;
-    data_ = (T *)MmapOrDie(capacity_ * sizeof(T), "InternalMmapVectorNoCtor");
+    data_ = 0;
+    reserve(initial_capacity);
   }
-  void Destroy() {
-    UnmapOrDie(data_, capacity_ * sizeof(T));
-  }
+  void Destroy() { UnmapOrDie(data_, capacity_bytes_); }
   T &operator[](uptr i) {
     CHECK_LT(i, size_);
     return data_[i];
@@ -487,10 +483,10 @@ class InternalMmapVectorNoCtor {
     return data_[i];
   }
   void push_back(const T &element) {
-    CHECK_LE(size_, capacity_);
-    if (size_ == capacity_) {
+    CHECK_LE(size_, capacity());
+    if (size_ == capacity()) {
       uptr new_capacity = RoundUpToPowerOfTwo(size_ + 1);
-      Resize(new_capacity);
+      Realloc(new_capacity);
     }
     internal_memcpy(&data_[size_++], &element, sizeof(T));
   }
@@ -511,12 +507,15 @@ class InternalMmapVectorNoCtor {
   T *data() {
     return data_;
   }
-  uptr capacity() const {
-    return capacity_;
+  uptr capacity() const { return capacity_bytes_ / sizeof(T); }
+  void reserve(uptr new_size) {
+    // Never downsize internal buffer.
+    if (new_size > capacity())
+      Realloc(new_size);
   }
   void resize(uptr new_size) {
-    Resize(new_size);
     if (new_size > size_) {
+      reserve(new_size);
       internal_memset(&data_[size_], 0, sizeof(T) * (new_size - size_));
     }
     size_ = new_size;
@@ -538,39 +537,84 @@ class InternalMmapVectorNoCtor {
     return data() + size();
   }
 
+  void swap(InternalMmapVectorNoCtor &other) {
+    Swap(data_, other.data_);
+    Swap(capacity_bytes_, other.capacity_bytes_);
+    Swap(size_, other.size_);
+  }
+
  private:
-  void Resize(uptr new_capacity) {
+  void Realloc(uptr new_capacity) {
     CHECK_GT(new_capacity, 0);
     CHECK_LE(size_, new_capacity);
-    T *new_data = (T *)MmapOrDie(new_capacity * sizeof(T),
-                                 "InternalMmapVector");
+    uptr new_capacity_bytes =
+        RoundUpTo(new_capacity * sizeof(T), GetPageSizeCached());
+    T *new_data = (T *)MmapOrDie(new_capacity_bytes, "InternalMmapVector");
     internal_memcpy(new_data, data_, size_ * sizeof(T));
-    T *old_data = data_;
+    UnmapOrDie(data_, capacity_bytes_);
     data_ = new_data;
-    UnmapOrDie(old_data, capacity_ * sizeof(T));
-    capacity_ = new_capacity;
+    capacity_bytes_ = new_capacity_bytes;
   }
 
   T *data_;
-  uptr capacity_;
+  uptr capacity_bytes_;
   uptr size_;
 };
+
+template <typename T>
+bool operator==(const InternalMmapVectorNoCtor<T> &lhs,
+                const InternalMmapVectorNoCtor<T> &rhs) {
+  if (lhs.size() != rhs.size()) return false;
+  return internal_memcmp(lhs.data(), rhs.data(), lhs.size() * sizeof(T)) == 0;
+}
+
+template <typename T>
+bool operator!=(const InternalMmapVectorNoCtor<T> &lhs,
+                const InternalMmapVectorNoCtor<T> &rhs) {
+  return !(lhs == rhs);
+}
 
 template<typename T>
 class InternalMmapVector : public InternalMmapVectorNoCtor<T> {
  public:
-  explicit InternalMmapVector(uptr initial_capacity) {
-    InternalMmapVectorNoCtor<T>::Initialize(initial_capacity);
+  InternalMmapVector() { InternalMmapVectorNoCtor<T>::Initialize(0); }
+  explicit InternalMmapVector(uptr cnt) {
+    InternalMmapVectorNoCtor<T>::Initialize(cnt);
+    this->resize(cnt);
   }
   ~InternalMmapVector() { InternalMmapVectorNoCtor<T>::Destroy(); }
-  // Disallow evil constructors.
-  InternalMmapVector(const InternalMmapVector&);
-  void operator=(const InternalMmapVector&);
+  // Disallow copies and moves.
+  InternalMmapVector(const InternalMmapVector &) = delete;
+  InternalMmapVector &operator=(const InternalMmapVector &) = delete;
+  InternalMmapVector(InternalMmapVector &&) = delete;
+  InternalMmapVector &operator=(InternalMmapVector &&) = delete;
+};
+
+class InternalScopedString : public InternalMmapVector<char> {
+ public:
+  explicit InternalScopedString(uptr max_length)
+      : InternalMmapVector<char>(max_length), length_(0) {
+    (*this)[0] = '\0';
+  }
+  uptr length() { return length_; }
+  void clear() {
+    (*this)[0] = '\0';
+    length_ = 0;
+  }
+  void append(const char *format, ...);
+
+ private:
+  uptr length_;
+};
+
+template <class T>
+struct CompareLess {
+  bool operator()(const T &a, const T &b) const { return a < b; }
 };
 
 // HeapSort for arrays and InternalMmapVector.
-template<class Container, class Compare>
-void InternalSort(Container *v, uptr size, Compare comp) {
+template <class T, class Compare = CompareLess<T>>
+void Sort(T *v, uptr size, Compare comp = {}) {
   if (size < 2)
     return;
   // Stage 1: insert elements to the heap.
@@ -578,8 +622,8 @@ void InternalSort(Container *v, uptr size, Compare comp) {
     uptr j, p;
     for (j = i; j > 0; j = p) {
       p = (j - 1) / 2;
-      if (comp((*v)[p], (*v)[j]))
-        Swap((*v)[j], (*v)[p]);
+      if (comp(v[p], v[j]))
+        Swap(v[j], v[p]);
       else
         break;
     }
@@ -587,18 +631,18 @@ void InternalSort(Container *v, uptr size, Compare comp) {
   // Stage 2: swap largest element with the last one,
   // and sink the new top.
   for (uptr i = size - 1; i > 0; i--) {
-    Swap((*v)[0], (*v)[i]);
+    Swap(v[0], v[i]);
     uptr j, max_ind;
     for (j = 0; j < i; j = max_ind) {
       uptr left = 2 * j + 1;
       uptr right = 2 * j + 2;
       max_ind = j;
-      if (left < i && comp((*v)[max_ind], (*v)[left]))
+      if (left < i && comp(v[max_ind], v[left]))
         max_ind = left;
-      if (right < i && comp((*v)[max_ind], (*v)[right]))
+      if (right < i && comp(v[max_ind], v[right]))
         max_ind = right;
       if (max_ind != j)
-        Swap((*v)[j], (*v)[max_ind]);
+        Swap(v[j], v[max_ind]);
       else
         break;
     }
@@ -629,11 +673,31 @@ enum ModuleArch {
   kModuleArchARMV7,
   kModuleArchARMV7S,
   kModuleArchARMV7K,
-  kModuleArchARM64
+  kModuleArchARM64,
+  kModuleArchRISCV64
 };
 
+// Opens the file 'file_name" and reads up to 'max_len' bytes.
+// The resulting buffer is mmaped and stored in '*buff'.
+// Returns true if file was successfully opened and read.
+bool ReadFileToVector(const char *file_name,
+                      InternalMmapVectorNoCtor<char> *buff,
+                      uptr max_len = 1 << 26, error_t *errno_p = nullptr);
+
+// Opens the file 'file_name" and reads up to 'max_len' bytes.
+// This function is less I/O efficient than ReadFileToVector as it may reread
+// file multiple times to avoid mmap during read attempts. It's used to read
+// procmap, so short reads with mmap in between can produce inconsistent result.
+// The resulting buffer is mmaped and stored in '*buff'.
+// The size of the mmaped region is stored in '*buff_size'.
+// The total number of read bytes is stored in '*read_len'.
+// Returns true if file was successfully opened and read.
+bool ReadFileToBuffer(const char *file_name, char **buff, uptr *buff_size,
+                      uptr *read_len, uptr max_len = 1 << 26,
+                      error_t *errno_p = nullptr);
+
 // When adding a new architecture, don't forget to also update
-// script/asan_symbolize.py and sanitizer_symbolizer_libcdep.cc.
+// script/asan_symbolize.py and sanitizer_symbolizer_libcdep.cpp.
 inline const char *ModuleArchToString(ModuleArch arch) {
   switch (arch) {
     case kModuleArchUnknown:
@@ -654,6 +718,8 @@ inline const char *ModuleArchToString(ModuleArch arch) {
       return "armv7k";
     case kModuleArchARM64:
       return "arm64";
+    case kModuleArchRISCV64:
+      return "riscv64";
   }
   CHECK(0 && "Invalid module arch");
   return "";
@@ -767,40 +833,46 @@ enum AndroidApiLevel {
 
 void WriteToSyslog(const char *buffer);
 
-#if SANITIZER_MAC
+#if defined(SANITIZER_WINDOWS) && defined(_MSC_VER) && !defined(__clang__)
+#define SANITIZER_WIN_TRACE 1
+#else
+#define SANITIZER_WIN_TRACE 0
+#endif
+
+#if SANITIZER_MAC || SANITIZER_WIN_TRACE
 void LogFullErrorReport(const char *buffer);
 #else
-INLINE void LogFullErrorReport(const char *buffer) {}
+inline void LogFullErrorReport(const char *buffer) {}
 #endif
 
 #if SANITIZER_LINUX || SANITIZER_MAC
 void WriteOneLineToSyslog(const char *s);
 void LogMessageOnPrintf(const char *str);
 #else
-INLINE void WriteOneLineToSyslog(const char *s) {}
-INLINE void LogMessageOnPrintf(const char *str) {}
+inline void WriteOneLineToSyslog(const char *s) {}
+inline void LogMessageOnPrintf(const char *str) {}
 #endif
 
-#if SANITIZER_LINUX
+#if SANITIZER_LINUX || SANITIZER_WIN_TRACE
 // Initialize Android logging. Any writes before this are silently lost.
 void AndroidLogInit();
 void SetAbortMessage(const char *);
 #else
-INLINE void AndroidLogInit() {}
+inline void AndroidLogInit() {}
 // FIXME: MacOS implementation could use CRSetCrashLogMessage.
-INLINE void SetAbortMessage(const char *) {}
+inline void SetAbortMessage(const char *) {}
 #endif
 
 #if SANITIZER_ANDROID
 void SanitizerInitializeUnwinder();
 AndroidApiLevel AndroidGetApiLevel();
 #else
-INLINE void AndroidLogWrite(const char *buffer_unused) {}
-INLINE void SanitizerInitializeUnwinder() {}
-INLINE AndroidApiLevel AndroidGetApiLevel() { return ANDROID_NOT_ANDROID; }
+inline void AndroidLogWrite(const char *buffer_unused) {}
+inline void SanitizerInitializeUnwinder() {}
+inline AndroidApiLevel AndroidGetApiLevel() { return ANDROID_NOT_ANDROID; }
 #endif
 
-INLINE uptr GetPthreadDestructorIterations() {
+inline uptr GetPthreadDestructorIterations() {
 #if SANITIZER_ANDROID
   return (AndroidGetApiLevel() == ANDROID_LOLLIPOP_MR1) ? 8 : 4;
 #elif SANITIZER_POSIX
@@ -811,7 +883,7 @@ INLINE uptr GetPthreadDestructorIterations() {
 #endif
 }
 
-void *internal_start_thread(void(*func)(void*), void *arg);
+void *internal_start_thread(void *(*func)(void*), void *arg);
 void internal_join_thread(void *th);
 void MaybeStartBackgroudThread();
 
@@ -837,6 +909,11 @@ struct SignalContext {
   bool is_memory_access;
   enum WriteFlag { UNKNOWN, READ, WRITE } write_flag;
 
+  // In some cases the kernel cannot provide the true faulting address; `addr`
+  // will be zero then.  This field allows to distinguish between these cases
+  // and dereferences of null.
+  bool is_true_faulting_addr;
+
   // VS2013 doesn't implement unrestricted unions, so we need a trivial default
   // constructor
   SignalContext() = default;
@@ -849,7 +926,8 @@ struct SignalContext {
         context(context),
         addr(GetAddress()),
         is_memory_access(IsMemoryAccess()),
-        write_flag(GetWriteFlag()) {
+        write_flag(GetWriteFlag()),
+        is_true_faulting_addr(IsTrueFaultingAddress()) {
     InitPcSpBp();
   }
 
@@ -870,8 +948,10 @@ struct SignalContext {
   uptr GetAddress() const;
   WriteFlag GetWriteFlag() const;
   bool IsMemoryAccess() const;
+  bool IsTrueFaultingAddress() const;
 };
 
+void InitializePlatformEarly();
 void MaybeReexec();
 
 template <typename Fn>
@@ -898,7 +978,7 @@ RunOnDestruction<Fn> at_scope_exit(Fn fn) {
 #if SANITIZER_LINUX && SANITIZER_S390_64
 void AvoidCVE_2016_2143();
 #else
-INLINE void AvoidCVE_2016_2143() {}
+inline void AvoidCVE_2016_2143() {}
 #endif
 
 struct StackDepotStats {
@@ -916,10 +996,33 @@ void CheckNoDeepBind(const char *filename, int flag);
 // be used to seed a PRNG. Defaults to blocking like the underlying syscall.
 bool GetRandom(void *buffer, uptr length, bool blocking = true);
 
+// Returns the number of logical processors on the system.
+u32 GetNumberOfCPUs();
+extern u32 NumberOfCPUsCached;
+inline u32 GetNumberOfCPUsCached() {
+  if (!NumberOfCPUsCached)
+    NumberOfCPUsCached = GetNumberOfCPUs();
+  return NumberOfCPUsCached;
+}
+
+template <typename T>
+class ArrayRef {
+ public:
+  ArrayRef() {}
+  ArrayRef(T *begin, T *end) : begin_(begin), end_(end) {}
+
+  T *begin() { return begin_; }
+  T *end() { return end_; }
+
+ private:
+  T *begin_ = nullptr;
+  T *end_ = nullptr;
+};
+
 }  // namespace __sanitizer
 
 inline void *operator new(__sanitizer::operator_new_size_type size,
-                          __sanitizer::LowLevelAllocator &alloc) {
+                          __sanitizer::LowLevelAllocator &alloc) {  // NOLINT
   return alloc.Allocate(size);
 }
 

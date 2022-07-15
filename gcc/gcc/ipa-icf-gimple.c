@@ -1,5 +1,5 @@
 /* Interprocedural Identical Code Folding pass
-   Copyright (C) 2014-2018 Free Software Foundation, Inc.
+   Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
    Contributed by Jan Hubicka <hubicka@ucw.cz> and Martin Liska <mliska@suse.cz>
 
@@ -31,13 +31,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "cgraph.h"
 #include "data-streamer.h"
 #include "gimple-pretty-print.h"
-#include "alias.h"
 #include "fold-const.h"
 #include "gimple-iterator.h"
 #include "ipa-utils.h"
 #include "tree-eh.h"
 #include "builtins.h"
+#include "cfgloop.h"
+#include "attribs.h"
+#include "gimple-walk.h"
 
+#include "tree-ssa-alias-compare.h"
 #include "ipa-icf-gimple.h"
 
 namespace ipa_icf_gimple {
@@ -50,15 +53,13 @@ namespace ipa_icf_gimple {
    of declarations that can be skipped.  */
 
 func_checker::func_checker (tree source_func_decl, tree target_func_decl,
-			    bool compare_polymorphic,
-			    bool ignore_labels,
+			    bool ignore_labels, bool tbaa,
 			    hash_set<symtab_node *> *ignored_source_nodes,
 			    hash_set<symtab_node *> *ignored_target_nodes)
   : m_source_func_decl (source_func_decl), m_target_func_decl (target_func_decl),
     m_ignored_source_nodes (ignored_source_nodes),
     m_ignored_target_nodes (ignored_target_nodes),
-    m_compare_polymorphic (compare_polymorphic),
-    m_ignore_labels (ignore_labels)
+    m_ignore_labels (ignore_labels), m_tbaa (tbaa)
 {
   function *source_func = DECL_STRUCT_FUNCTION (source_func_decl);
   function *target_func = DECL_STRUCT_FUNCTION (target_func_decl);
@@ -87,7 +88,7 @@ func_checker::~func_checker ()
 /* Verifies that trees T1 and T2 are equivalent from perspective of ICF.  */
 
 bool
-func_checker::compare_ssa_name (tree t1, tree t2)
+func_checker::compare_ssa_name (const_tree t1, const_tree t2)
 {
   gcc_assert (TREE_CODE (t1) == SSA_NAME);
   gcc_assert (TREE_CODE (t2) == SSA_NAME);
@@ -110,13 +111,7 @@ func_checker::compare_ssa_name (tree t1, tree t2)
       tree b1 = SSA_NAME_VAR (t1);
       tree b2 = SSA_NAME_VAR (t2);
 
-      if (b1 == NULL && b2 == NULL)
-	return true;
-
-      if (b1 == NULL || b2 == NULL || TREE_CODE (b1) != TREE_CODE (b2))
-	return return_false ();
-
-      return compare_cst_or_decl (b1, b2);
+      return compare_operand (b1, b2, OP_NORMAL);
     }
 
   return true;
@@ -147,7 +142,7 @@ func_checker::compare_edge (edge e1, edge e2)
    come from functions FUNC1 and FUNC2.  */
 
 bool
-func_checker::compare_decl (tree t1, tree t2)
+func_checker::compare_decl (const_tree t1, const_tree t2)
 {
   if (!auto_var_in_fn_p (t1, m_source_func_decl)
       || !auto_var_in_fn_p (t2, m_target_func_decl))
@@ -158,27 +153,24 @@ func_checker::compare_decl (tree t1, tree t2)
       && DECL_BY_REFERENCE (t1) != DECL_BY_REFERENCE (t2))
     return return_false_with_msg ("DECL_BY_REFERENCE flags are different");
 
-  if (!compatible_types_p (TREE_TYPE (t1), TREE_TYPE (t2)))
-    return return_false ();
-
-  /* TODO: we are actually too strict here.  We only need to compare if
-     T1 can be used in polymorphic call.  */
-  if (TREE_ADDRESSABLE (t1)
-      && m_compare_polymorphic
-      && !compatible_polymorphic_types_p (TREE_TYPE (t1), TREE_TYPE (t2),
-					  false))
-    return return_false ();
-
-  if ((t == VAR_DECL || t == PARM_DECL || t == RESULT_DECL)
-      && DECL_BY_REFERENCE (t1)
-      && m_compare_polymorphic
-      && !compatible_polymorphic_types_p (TREE_TYPE (t1), TREE_TYPE (t2),
-					  true))
-    return return_false ();
+  /* We do not really need to check types of variables, since they are just
+     blocks of memory and we verify types of the accesses to them.
+     However do compare types of other kinds of decls
+     (parm decls and result decl types may affect ABI convetions).  */
+  if (t != VAR_DECL)
+    {
+      if (!compatible_types_p (TREE_TYPE (t1), TREE_TYPE (t2)))
+	return return_false ();
+    }
+  else
+    {
+      if (!operand_equal_p (DECL_SIZE (t1), DECL_SIZE (t2),
+			    OEP_MATCH_SIDE_EFFECTS))
+	return return_false_with_msg ("DECL_SIZEs are different");
+    }
 
   bool existed_p;
-
-  tree &slot = m_decl_map.get_or_insert (t1, &existed_p);
+  const_tree &slot = m_decl_map.get_or_insert (t1, &existed_p);
   if (existed_p)
     return return_with_debug (slot == t2);
   else
@@ -232,175 +224,97 @@ func_checker::compatible_types_p (tree t1, tree t2)
   if (!types_compatible_p (t1, t2))
     return return_false_with_msg ("types are not compatible");
 
-  /* We do a lot of unnecesary matching of types that are not being
-     accessed and thus do not need to be compatible.  In longer term we should
-     remove these checks on all types which are not accessed as memory
-     locations.
-
-     For time being just avoid calling get_alias_set on types that are not
-     having alias sets defined at all.  */
-  if (type_with_alias_set_p (t1) && type_with_alias_set_p (t2)
-      && get_alias_set (t1) != get_alias_set (t2))
-    return return_false_with_msg ("alias sets are different");
-
   return true;
 }
 
-/* Function compare for equality given memory operands T1 and T2.  */
+/* Add hash of ARG to HSTATE. FLAGS have same meaning
+   as for operand_equal_p.  Works only if operand acces type is OP_NORMAL.  */
 
-bool
-func_checker::compare_memory_operand (tree t1, tree t2)
+void
+func_checker::hash_operand (const_tree arg, inchash::hash &hstate,
+			    unsigned int flags)
 {
-  if (!t1 && !t2)
-    return true;
-  else if (!t1 || !t2)
-    return false;
-
-  ao_ref r1, r2;
-  ao_ref_init (&r1, t1);
-  ao_ref_init (&r2, t2);
-
-  tree b1 = ao_ref_base (&r1);
-  tree b2 = ao_ref_base (&r2);
-
-  bool source_is_memop = DECL_P (b1) || INDIRECT_REF_P (b1)
-			 || TREE_CODE (b1) == MEM_REF
-			 || TREE_CODE (b1) == TARGET_MEM_REF;
-
-  bool target_is_memop = DECL_P (b2) || INDIRECT_REF_P (b2)
-			 || TREE_CODE (b2) == MEM_REF
-			 || TREE_CODE (b2) == TARGET_MEM_REF;
-
-  /* Compare alias sets for memory operands.  */
-  if (source_is_memop && target_is_memop)
+  if (arg == NULL_TREE)
     {
-      if (TREE_THIS_VOLATILE (t1) != TREE_THIS_VOLATILE (t2))
-	return return_false_with_msg ("different operand volatility");
-
-      if (ao_ref_alias_set (&r1) != ao_ref_alias_set (&r2)
-	  || ao_ref_base_alias_set (&r1) != ao_ref_base_alias_set (&r2))
-	return return_false_with_msg ("ao alias sets are different");
-
-      /* We can't simply use get_object_alignment_1 on the full
-         reference as for accesses with variable indexes this reports
-	 too conservative alignment.  We also can't use the ao_ref_base
-	 base objects as ao_ref_base happily strips MEM_REFs around
-	 decls even though that may carry alignment info.  */
-      b1 = t1;
-      while (handled_component_p (b1))
-	b1 = TREE_OPERAND (b1, 0);
-      b2 = t2;
-      while (handled_component_p (b2))
-	b2 = TREE_OPERAND (b2, 0);
-      unsigned int align1, align2;
-      unsigned HOST_WIDE_INT tem;
-      get_object_alignment_1 (b1, &align1, &tem);
-      get_object_alignment_1 (b2, &align2, &tem);
-      if (align1 != align2)
-	return return_false_with_msg ("different access alignment");
-
-      /* Similarly we have to compare dependence info where equality
-         tells us we are safe (even some unequal values would be safe
-	 but then we have to maintain a map of bases and cliques).  */
-      unsigned short clique1 = 0, base1 = 0, clique2 = 0, base2 = 0;
-      if (TREE_CODE (b1) == MEM_REF)
-	{
-	  clique1 = MR_DEPENDENCE_CLIQUE (b1);
-	  base1 = MR_DEPENDENCE_BASE (b1);
-	}
-      if (TREE_CODE (b2) == MEM_REF)
-	{
-	  clique2 = MR_DEPENDENCE_CLIQUE (b2);
-	  base2 = MR_DEPENDENCE_BASE (b2);
-	}
-      if (clique1 != clique2 || base1 != base2)
-	return return_false_with_msg ("different dependence info");
+      hstate.merge_hash (0);
+      return;
     }
 
-  return compare_operand (t1, t2);
-}
-
-/* Function compare for equality given trees T1 and T2 which
-   can be either a constant or a declaration type.  */
-
-bool
-func_checker::compare_cst_or_decl (tree t1, tree t2)
-{
-  bool ret;
-
-  switch (TREE_CODE (t1))
+  switch (TREE_CODE (arg))
     {
-    case INTEGER_CST:
-    case COMPLEX_CST:
-    case VECTOR_CST:
-    case STRING_CST:
-    case REAL_CST:
-      {
-	ret = compatible_types_p (TREE_TYPE (t1), TREE_TYPE (t2))
-	      && operand_equal_p (t1, t2, OEP_ONLY_CONST);
-	return return_with_debug (ret);
-      }
-    case FUNCTION_DECL:
-      /* All function decls are in the symbol table and known to match
-	 before we start comparing bodies.  */
-      return true;
-    case VAR_DECL:
-      return return_with_debug (compare_variable_decl (t1, t2));
-    case FIELD_DECL:
-      {
-	tree offset1 = DECL_FIELD_OFFSET (t1);
-	tree offset2 = DECL_FIELD_OFFSET (t2);
-
-	tree bit_offset1 = DECL_FIELD_BIT_OFFSET (t1);
-	tree bit_offset2 = DECL_FIELD_BIT_OFFSET (t2);
-
-	ret = compare_operand (offset1, offset2)
-	      && compare_operand (bit_offset1, bit_offset2);
-
-	return return_with_debug (ret);
-      }
-    case LABEL_DECL:
-      {
-	if (t1 == t2)
-	  return true;
-
-	int *bb1 = m_label_bb_map.get (t1);
-	int *bb2 = m_label_bb_map.get (t2);
-
-	/* Labels can point to another function (non-local GOTOs).  */
-	return return_with_debug (bb1 != NULL && bb2 != NULL && *bb1 == *bb2);
-      }
     case PARM_DECL:
+      {
+	unsigned int index = 0;
+	if (DECL_CONTEXT (arg))
+	  for (tree p = DECL_ARGUMENTS (DECL_CONTEXT (arg));
+	       p && index < 32; p = DECL_CHAIN (p), index++)
+	    if (p == arg)
+	      break;
+	hstate.add_int (PARM_DECL);
+	hstate.add_int (index);
+      }
+      return;
+    case FUNCTION_DECL:
+    case VAR_DECL:
+    case LABEL_DECL:
     case RESULT_DECL:
     case CONST_DECL:
-      {
-	ret = compare_decl (t1, t2);
-	return return_with_debug (ret);
-      }
+      hstate.add_int (TREE_CODE (arg));
+      return;
+    case SSA_NAME:
+      hstate.add_int (SSA_NAME);
+      if (SSA_NAME_IS_DEFAULT_DEF (arg))
+	hash_operand (SSA_NAME_VAR (arg), hstate, flags);
+      return;
+    case FIELD_DECL:
+      inchash::add_expr (DECL_FIELD_OFFSET (arg), hstate, flags);
+      inchash::add_expr (DECL_FIELD_BIT_OFFSET (arg), hstate, flags);
+      return;
     default:
-      gcc_unreachable ();
+      break;
     }
+
+  /* In gimple all clobbers can be considered equal: while comparaing two
+     gimple clobbers we match the left hand memory accesses.  */
+  if (TREE_CLOBBER_P (arg))
+    {
+      hstate.add_int (0xc10bbe5);
+      return;
+    }
+  gcc_assert (!DECL_P (arg));
+  gcc_assert (!TYPE_P (arg));
+
+  return operand_compare::hash_operand (arg, hstate, flags);
 }
 
-/* Function responsible for comparison of various operands T1 and T2.
-   If these components, from functions FUNC1 and FUNC2, are equal, true
-   is returned.  */
+/* Add hash of ARG accesses according to ACCESS to HSTATE.
+   FLAGS have same meaning as for operand_equal_p.  */
+
+void
+func_checker::hash_operand (const_tree arg, inchash::hash &hstate,
+			    unsigned int flags, operand_access_type access)
+{
+  if (access == OP_MEMORY)
+    {
+      ao_ref ref;
+      ao_ref_init (&ref, const_cast <tree> (arg));
+      return hash_ao_ref (&ref, lto_streaming_expected_p (), m_tbaa, hstate);
+    }
+  else
+    return hash_operand (arg, hstate, flags);
+}
 
 bool
-func_checker::compare_operand (tree t1, tree t2)
+func_checker::operand_equal_p (const_tree t1, const_tree t2,
+			       unsigned int flags)
 {
-  tree x1, x2, y1, y2, z1, z2;
-  bool ret;
+  bool r;
+  if (verify_hash_value (t1, t2, flags, &r))
+    return r;
 
-  if (!t1 && !t2)
+  if (t1 == t2)
     return true;
   else if (!t1 || !t2)
-    return false;
-
-  tree tt1 = TREE_TYPE (t1);
-  tree tt2 = TREE_TYPE (t2);
-
-  if (!func_checker::compatible_types_p (tt1, tt2))
     return false;
 
   if (TREE_CODE (t1) != TREE_CODE (t2))
@@ -408,143 +322,88 @@ func_checker::compare_operand (tree t1, tree t2)
 
   switch (TREE_CODE (t1))
     {
-    case CONSTRUCTOR:
-      {
-	unsigned length1 = CONSTRUCTOR_NELTS (t1);
-	unsigned length2 = CONSTRUCTOR_NELTS (t2);
-
-	if (length1 != length2)
-	  return return_false ();
-
-	for (unsigned i = 0; i < length1; i++)
-	  if (!compare_operand (CONSTRUCTOR_ELT (t1, i)->value,
-				CONSTRUCTOR_ELT (t2, i)->value))
-	    return return_false();
-
-	return true;
-      }
-    case ARRAY_REF:
-    case ARRAY_RANGE_REF:
-      /* First argument is the array, second is the index.  */
-      x1 = TREE_OPERAND (t1, 0);
-      x2 = TREE_OPERAND (t2, 0);
-      y1 = TREE_OPERAND (t1, 1);
-      y2 = TREE_OPERAND (t2, 1);
-
-      if (!compare_operand (array_ref_low_bound (t1),
-			    array_ref_low_bound (t2)))
-	return return_false_with_msg ("");
-      if (!compare_operand (array_ref_element_size (t1),
-			    array_ref_element_size (t2)))
-	return return_false_with_msg ("");
-
-      if (!compare_operand (x1, x2))
-	return return_false_with_msg ("");
-      return compare_operand (y1, y2);
-    case MEM_REF:
-      {
-	x1 = TREE_OPERAND (t1, 0);
-	x2 = TREE_OPERAND (t2, 0);
-	y1 = TREE_OPERAND (t1, 1);
-	y2 = TREE_OPERAND (t2, 1);
-
-	/* See if operand is an memory access (the test originate from
-	 gimple_load_p).
-
-	In this case the alias set of the function being replaced must
-	be subset of the alias set of the other function.  At the moment
-	we seek for equivalency classes, so simply require inclussion in
-	both directions.  */
-
-	if (!func_checker::compatible_types_p (TREE_TYPE (x1), TREE_TYPE (x2)))
-	  return return_false ();
-
-	if (!compare_operand (x1, x2))
-	  return return_false_with_msg ("");
-
-	/* Type of the offset on MEM_REF does not matter.  */
-	return wi::to_offset  (y1) == wi::to_offset  (y2);
-      }
-    case COMPONENT_REF:
-      {
-	x1 = TREE_OPERAND (t1, 0);
-	x2 = TREE_OPERAND (t2, 0);
-	y1 = TREE_OPERAND (t1, 1);
-	y2 = TREE_OPERAND (t2, 1);
-
-	ret = compare_operand (x1, x2)
-	      && compare_cst_or_decl (y1, y2);
-
-	return return_with_debug (ret);
-      }
-    /* Virtual table call.  */
-    case OBJ_TYPE_REF:
-      {
-	if (!compare_ssa_name (OBJ_TYPE_REF_EXPR (t1), OBJ_TYPE_REF_EXPR (t2)))
-	  return return_false ();
-	if (opt_for_fn (m_source_func_decl, flag_devirtualize)
-	    && virtual_method_call_p (t1))
-	  {
-	    if (tree_to_uhwi (OBJ_TYPE_REF_TOKEN (t1))
-		!= tree_to_uhwi (OBJ_TYPE_REF_TOKEN (t2)))
-	      return return_false_with_msg ("OBJ_TYPE_REF token mismatch");
-	    if (!types_same_for_odr (obj_type_ref_class (t1),
-				     obj_type_ref_class (t2)))
-	      return return_false_with_msg ("OBJ_TYPE_REF OTR type mismatch");
-	    if (!compare_operand (OBJ_TYPE_REF_OBJECT (t1),
-				  OBJ_TYPE_REF_OBJECT (t2)))
-	      return return_false_with_msg ("OBJ_TYPE_REF object mismatch");
-	  }
-
-	return return_with_debug (true);
-      }
-    case IMAGPART_EXPR:
-    case REALPART_EXPR:
-    case ADDR_EXPR:
-      {
-	x1 = TREE_OPERAND (t1, 0);
-	x2 = TREE_OPERAND (t2, 0);
-
-	ret = compare_operand (x1, x2);
-	return return_with_debug (ret);
-      }
-    case BIT_FIELD_REF:
-      {
-	x1 = TREE_OPERAND (t1, 0);
-	x2 = TREE_OPERAND (t2, 0);
-	y1 = TREE_OPERAND (t1, 1);
-	y2 = TREE_OPERAND (t2, 1);
-	z1 = TREE_OPERAND (t1, 2);
-	z2 = TREE_OPERAND (t2, 2);
-
-	ret = compare_operand (x1, x2)
-	      && compare_cst_or_decl (y1, y2)
-	      && compare_cst_or_decl (z1, z2);
-
-	return return_with_debug (ret);
-      }
-    case SSA_NAME:
-	return compare_ssa_name (t1, t2);
-    case INTEGER_CST:
-    case COMPLEX_CST:
-    case VECTOR_CST:
-    case STRING_CST:
-    case REAL_CST:
     case FUNCTION_DECL:
+      /* All function decls are in the symbol table and known to match
+	 before we start comparing bodies.  */
+      return true;
     case VAR_DECL:
-    case FIELD_DECL:
+      return return_with_debug (compare_variable_decl (t1, t2));
     case LABEL_DECL:
+      {
+	int *bb1 = m_label_bb_map.get (t1);
+	int *bb2 = m_label_bb_map.get (t2);
+	/* Labels can point to another function (non-local GOTOs).  */
+	return return_with_debug (bb1 != NULL && bb2 != NULL && *bb1 == *bb2);
+      }
+
     case PARM_DECL:
     case RESULT_DECL:
     case CONST_DECL:
-      return compare_cst_or_decl (t1, t2);
+      return compare_decl (t1, t2);
+    case SSA_NAME:
+      return compare_ssa_name (t1, t2);
     default:
-      return return_false_with_msg ("Unknown TREE code reached");
+      break;
+    }
+  /* In gimple all clobbers can be considered equal.  We match the left hand
+     memory accesses.  */
+  if (TREE_CLOBBER_P (t1) || TREE_CLOBBER_P (t2))
+    return TREE_CLOBBER_P (t1) == TREE_CLOBBER_P (t2);
+
+  return operand_compare::operand_equal_p (t1, t2, flags);
+}
+
+/* Function responsible for comparison of various operands T1 and T2
+   which are accessed as ACCESS.
+   If these components, from functions FUNC1 and FUNC2, are equal, true
+   is returned.  */
+
+bool
+func_checker::compare_operand (tree t1, tree t2, operand_access_type access)
+{
+  if (!t1 && !t2)
+    return true;
+  else if (!t1 || !t2)
+    return false;
+  if (access == OP_MEMORY)
+    {
+      ao_ref ref1, ref2;
+      ao_ref_init (&ref1, const_cast <tree> (t1));
+      ao_ref_init (&ref2, const_cast <tree> (t2));
+      int flags = compare_ao_refs (&ref1, &ref2,
+				   lto_streaming_expected_p (), m_tbaa);
+
+      if (!flags)
+	return true;
+      if (flags & SEMANTICS)
+	return return_false_with_msg
+		("compare_ao_refs failed (semantic difference)");
+      if (flags & BASE_ALIAS_SET)
+	return return_false_with_msg
+		("compare_ao_refs failed (base alias set difference)");
+      if (flags & REF_ALIAS_SET)
+	return return_false_with_msg
+		 ("compare_ao_refs failed (ref alias set difference)");
+      if (flags & ACCESS_PATH)
+	return return_false_with_msg
+		 ("compare_ao_refs failed (access path difference)");
+      if (flags & DEPENDENCE_CLIQUE)
+	return return_false_with_msg
+		 ("compare_ao_refs failed (dependence clique difference)");
+      gcc_unreachable ();
+    }
+  else
+    {
+      if (operand_equal_p (t1, t2, OEP_MATCH_SIDE_EFFECTS))
+	return true;
+      return return_false_with_msg
+		 ("operand_equal_p failed");
     }
 }
 
 bool
-func_checker::compare_asm_inputs_outputs (tree t1, tree t2)
+func_checker::compare_asm_inputs_outputs (tree t1, tree t2,
+					  operand_access_type_map *map)
 {
   gcc_assert (TREE_CODE (t1) == TREE_LIST);
   gcc_assert (TREE_CODE (t2) == TREE_LIST);
@@ -554,7 +413,8 @@ func_checker::compare_asm_inputs_outputs (tree t1, tree t2)
       if (!t2)
 	return false;
 
-      if (!compare_operand (TREE_VALUE (t1), TREE_VALUE (t2)))
+      if (!compare_operand (TREE_VALUE (t1), TREE_VALUE (t2),
+			    get_operand_access_type (map, t1)))
 	return return_false ();
 
       tree p1 = TREE_PURPOSE (t1);
@@ -579,7 +439,7 @@ func_checker::compare_asm_inputs_outputs (tree t1, tree t2)
 /* Verifies that trees T1 and T2 do correspond.  */
 
 bool
-func_checker::compare_variable_decl (tree t1, tree t2)
+func_checker::compare_variable_decl (const_tree t1, const_tree t2)
 {
   bool ret = false;
 
@@ -593,7 +453,7 @@ func_checker::compare_variable_decl (tree t1, tree t2)
     return return_false_with_msg ("DECL_HARD_REGISTER are different");
 
   if (DECL_HARD_REGISTER (t1)
-      && DECL_ASSEMBLER_NAME (t1) != DECL_ASSEMBLER_NAME (t2))
+      && DECL_ASSEMBLER_NAME_RAW (t1) != DECL_ASSEMBLER_NAME_RAW (t2))
     return return_false_with_msg ("HARD REGISTERS are different");
 
   /* Symbol table variables are known to match before we start comparing
@@ -605,6 +465,42 @@ func_checker::compare_variable_decl (tree t1, tree t2)
   return return_with_debug (ret);
 }
 
+/* Compare loop information for basic blocks BB1 and BB2.  */
+
+bool
+func_checker::compare_loops (basic_block bb1, basic_block bb2)
+{
+  if ((bb1->loop_father == NULL) != (bb2->loop_father == NULL))
+    return return_false ();
+
+  class loop *l1 = bb1->loop_father;
+  class loop *l2 = bb2->loop_father;
+  if (l1 == NULL)
+    return true;
+
+  if ((bb1 == l1->header) != (bb2 == l2->header))
+    return return_false_with_msg ("header");
+  if ((bb1 == l1->latch) != (bb2 == l2->latch))
+    return return_false_with_msg ("latch");
+  if (l1->simdlen != l2->simdlen)
+    return return_false_with_msg ("simdlen");
+  if (l1->safelen != l2->safelen)
+    return return_false_with_msg ("safelen");
+  if (l1->can_be_parallel != l2->can_be_parallel)
+    return return_false_with_msg ("can_be_parallel");
+  if (l1->dont_vectorize != l2->dont_vectorize)
+    return return_false_with_msg ("dont_vectorize");
+  if (l1->force_vectorize != l2->force_vectorize)
+    return return_false_with_msg ("force_vectorize");
+  if (l1->finite_p != l2->finite_p)
+    return return_false_with_msg ("finite_p");
+  if (l1->unroll != l2->unroll)
+    return return_false_with_msg ("unroll");
+  if (!compare_variable_decl (l1->simduid, l2->simduid))
+    return return_false_with_msg ("simduid");
+
+  return true;
+}
 
 /* Function visits all gimple labels and creates corresponding
    mapping between basic blocks and labels.  */
@@ -619,7 +515,7 @@ func_checker::parse_labels (sem_bb *bb)
 
       if (glabel *label_stmt = dyn_cast <glabel *> (stmt))
 	{
-	  tree t = gimple_label_label (label_stmt);
+	  const_tree t = gimple_label_label (label_stmt);
 	  gcc_assert (TREE_CODE (t) == LABEL_DECL);
 
 	  m_label_bb_map.put (t, bb->bb->index);
@@ -727,6 +623,9 @@ func_checker::compare_bb (sem_bb *bb1, sem_bb *bb2)
   if (!gsi_end_p (gsi2))
     return return_false ();
 
+  if (!compare_loops (bb1->bb, bb2->bb))
+    return return_false ();
+
   return true;
 }
 
@@ -742,9 +641,12 @@ func_checker::compare_gimple_call (gcall *s1, gcall *s2)
   if (gimple_call_num_args (s1) != gimple_call_num_args (s2))
     return false;
 
+  operand_access_type_map map (5);
+  classify_operands (s1, &map);
+
   t1 = gimple_call_fn (s1);
   t2 = gimple_call_fn (s2);
-  if (!compare_operand (t1, t2))
+  if (!compare_operand (t1, t2, get_operand_access_type (&map, t1)))
     return return_false ();
 
   /* Compare flags.  */
@@ -753,9 +655,9 @@ func_checker::compare_gimple_call (gcall *s1, gcall *s2)
       || gimple_call_tail_p (s1) != gimple_call_tail_p (s2)
       || gimple_call_return_slot_opt_p (s1) != gimple_call_return_slot_opt_p (s2)
       || gimple_call_from_thunk_p (s1) != gimple_call_from_thunk_p (s2)
+      || gimple_call_from_new_or_delete (s1) != gimple_call_from_new_or_delete (s2)
       || gimple_call_va_arg_pack_p (s1) != gimple_call_va_arg_pack_p (s2)
-      || gimple_call_alloca_for_var_p (s1) != gimple_call_alloca_for_var_p (s2)
-      || gimple_call_with_bounds_p (s1) != gimple_call_with_bounds_p (s2))
+      || gimple_call_alloca_for_var_p (s1) != gimple_call_alloca_for_var_p (s2))
     return false;
 
   if (gimple_call_internal_p (s1)
@@ -764,16 +666,27 @@ func_checker::compare_gimple_call (gcall *s1, gcall *s2)
 
   tree fntype1 = gimple_call_fntype (s1);
   tree fntype2 = gimple_call_fntype (s2);
-  if ((fntype1 && !fntype2)
-      || (!fntype1 && fntype2)
-      || (fntype1 && !types_compatible_p (fntype1, fntype2)))
-    return return_false_with_msg ("call function types are not compatible");
+
+  /* For direct calls we verify that types are compatible so if we matched
+     callees, callers must match, too.  For indirect calls however verify
+     function type.  */
+  if (!gimple_call_fndecl (s1))
+    {
+      if ((fntype1 && !fntype2)
+	  || (!fntype1 && fntype2)
+	  || (fntype1 && !types_compatible_p (fntype1, fntype2)))
+	return return_false_with_msg ("call function types are not compatible");
+    }
+
+  if (fntype1 && fntype2 && comp_type_attributes (fntype1, fntype2) != 1)
+    return return_false_with_msg ("different fntype attributes");
 
   tree chain1 = gimple_call_chain (s1);
   tree chain2 = gimple_call_chain (s2);
   if ((chain1 && !chain2)
       || (!chain1 && chain2)
-      || !compare_operand (chain1, chain2))
+      || !compare_operand (chain1, chain2,
+			   get_operand_access_type (&map, chain1)))
     return return_false_with_msg ("static call chains are different");
 
   /* Checking of argument.  */
@@ -782,15 +695,23 @@ func_checker::compare_gimple_call (gcall *s1, gcall *s2)
       t1 = gimple_call_arg (s1, i);
       t2 = gimple_call_arg (s2, i);
 
-      if (!compare_memory_operand (t1, t2))
-	return return_false_with_msg ("memory operands are different");
+      if (!compare_operand (t1, t2, get_operand_access_type (&map, t1)))
+	return return_false_with_msg ("GIMPLE call operands are different");
     }
 
   /* Return value checking.  */
   t1 = gimple_get_lhs (s1);
   t2 = gimple_get_lhs (s2);
 
-  return compare_memory_operand (t1, t2);
+  /* For internal calls, lhs types need to be verified, as neither fntype nor
+     callee comparisons can catch that.  */
+  if (gimple_call_internal_p (s1)
+      && t1
+      && t2
+      && !compatible_types_p (TREE_TYPE (t1), TREE_TYPE (t2)))
+    return return_false_with_msg ("GIMPLE internal call LHS type mismatch");
+
+  return compare_operand (t1, t2, get_operand_access_type (&map, t1));
 }
 
 
@@ -804,25 +725,30 @@ func_checker::compare_gimple_assign (gimple *s1, gimple *s2)
   tree_code code1, code2;
   unsigned i;
 
-  code1 = gimple_expr_code (s1);
-  code2 = gimple_expr_code (s2);
-
-  if (code1 != code2)
-    return false;
-
   code1 = gimple_assign_rhs_code (s1);
   code2 = gimple_assign_rhs_code (s2);
 
   if (code1 != code2)
     return false;
 
+  operand_access_type_map map (5);
+  classify_operands (s1, &map);
+
   for (i = 0; i < gimple_num_ops (s1); i++)
     {
       arg1 = gimple_op (s1, i);
       arg2 = gimple_op (s2, i);
 
-      if (!compare_memory_operand (arg1, arg2))
-	return return_false_with_msg ("memory operands are different");
+      /* Compare types for LHS.  */
+      if (i == 0 && !gimple_store_p (s1))
+	{
+	  if (!compatible_types_p (TREE_TYPE (arg1), TREE_TYPE (arg2)))
+	    return return_false_with_msg ("GIMPLE LHS type mismatch");
+	}
+
+      if (!compare_operand (arg1, arg2, get_operand_access_type (&map, arg1)))
+	return return_false_with_msg ("GIMPLE assignment operands "
+				      "are different");
     }
 
 
@@ -838,8 +764,8 @@ func_checker::compare_gimple_cond (gimple *s1, gimple *s2)
   tree t1, t2;
   tree_code code1, code2;
 
-  code1 = gimple_expr_code (s1);
-  code2 = gimple_expr_code (s2);
+  code1 = gimple_cond_code (s1);
+  code2 = gimple_cond_code (s2);
 
   if (code1 != code2)
     return false;
@@ -847,21 +773,13 @@ func_checker::compare_gimple_cond (gimple *s1, gimple *s2)
   t1 = gimple_cond_lhs (s1);
   t2 = gimple_cond_lhs (s2);
 
-  if (!compare_operand (t1, t2))
+  if (!compare_operand (t1, t2, OP_NORMAL))
     return false;
 
   t1 = gimple_cond_rhs (s1);
   t2 = gimple_cond_rhs (s2);
 
-  return compare_operand (t1, t2);
-}
-
-/* Verifies that tree labels T1 and T2 correspond in FUNC1 and FUNC2.  */
-
-bool
-func_checker::compare_tree_ssa_label (tree t1, tree t2)
-{
-  return compare_operand (t1, t2);
+  return compare_operand (t1, t2, OP_NORMAL);
 }
 
 /* Verifies for given GIMPLE_LABEL stmts S1 and S2 that
@@ -900,7 +818,7 @@ func_checker::compare_gimple_switch (const gswitch *g1, const gswitch *g2)
   tree t1 = gimple_switch_index (g1);
   tree t2 = gimple_switch_index (g2);
 
-  if (!compare_operand (t1, t2))
+  if (!compare_operand (t1, t2, OP_NORMAL))
     return false;
 
   for (i = 0; i < lsize1; i++)
@@ -927,7 +845,7 @@ func_checker::compare_gimple_switch (const gswitch *g1, const gswitch *g2)
 	  label1 = CASE_LABEL (label1);
 	  label2 = CASE_LABEL (label2);
 
-	  if (!compare_operand (label1, label2))
+	  if (!compare_operand (label1, label2, OP_NORMAL))
 	    return return_false_with_msg ("switch label_exprs are different");
 	}
       else if (!tree_int_cst_equal (label1, label2))
@@ -952,7 +870,10 @@ func_checker::compare_gimple_return (const greturn *g1, const greturn *g2)
   if (t1 == NULL && t2 == NULL)
     return true;
   else
-    return compare_operand (t1, t2);
+    {
+      operand_access_type_map map (3);
+      return compare_operand (t1, t2, get_operand_access_type (&map, t1));
+    }
 }
 
 /* Verifies for given GIMPLEs S1 and S2 that
@@ -969,7 +890,7 @@ func_checker::compare_gimple_goto (gimple *g1, gimple *g2)
   if (TREE_CODE (dest1) != TREE_CODE (dest2) || TREE_CODE (dest1) != SSA_NAME)
     return false;
 
-  return compare_operand (dest1, dest2);
+  return compare_operand (dest1, dest2, OP_NORMAL);
 }
 
 /* Verifies for given GIMPLE_RESX stmts S1 and S2 that
@@ -1013,12 +934,15 @@ func_checker::compare_gimple_asm (const gasm *g1, const gasm *g2)
   if (strcmp (gimple_asm_string (g1), gimple_asm_string (g2)) != 0)
     return return_false_with_msg ("ASM strings are different");
 
+  operand_access_type_map map (5);
+  classify_operands (g1, &map);
+
   for (unsigned i = 0; i < gimple_asm_ninputs (g1); i++)
     {
       tree input1 = gimple_asm_input_op (g1, i);
       tree input2 = gimple_asm_input_op (g2, i);
 
-      if (!compare_asm_inputs_outputs (input1, input2))
+      if (!compare_asm_inputs_outputs (input1, input2, &map))
 	return return_false_with_msg ("ASM input is different");
     }
 
@@ -1027,7 +951,7 @@ func_checker::compare_gimple_asm (const gasm *g1, const gasm *g2)
       tree output1 = gimple_asm_output_op (g1, i);
       tree output2 = gimple_asm_output_op (g2, i);
 
-      if (!compare_asm_inputs_outputs (output1, output2))
+      if (!compare_asm_inputs_outputs (output1, output2, &map))
 	return return_false_with_msg ("ASM output is different");
     }
 
@@ -1042,6 +966,37 @@ func_checker::compare_gimple_asm (const gasm *g1, const gasm *g2)
     }
 
   return true;
+}
+
+/* Helper for func_checker::classify_operands.  Record that T is a load.  */
+
+static bool
+visit_load_store (gimple *, tree, tree t, void *data)
+{
+  func_checker::operand_access_type_map *map =
+    (func_checker::operand_access_type_map *) data;
+  map->add (t);
+  return false;
+}
+
+/* Compute hash map determining access types of operands.  */
+
+void
+func_checker::classify_operands (const gimple *stmt,
+				 operand_access_type_map *map)
+{
+  walk_stmt_load_store_ops (const_cast <gimple *> (stmt),
+			    (void *)map, visit_load_store, visit_load_store);
+}
+
+/* Return access type of a given operand.  */
+
+func_checker::operand_access_type
+func_checker::get_operand_access_type (operand_access_type_map *map, tree t)
+{
+  if (map->contains (t))
+    return OP_MEMORY;
+  return OP_NORMAL;
 }
 
 } // ipa_icf_gimple namespace

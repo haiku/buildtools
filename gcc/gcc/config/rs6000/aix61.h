@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler,
    for IBM RS/6000 POWER running AIX V6.1.
-   Copyright (C) 2002-2018 Free Software Foundation, Inc.
+   Copyright (C) 2002-2021 Free Software Foundation, Inc.
    Contributed by David Edelsohn (edelsohn@gnu.org).
 
    This file is part of GCC.
@@ -27,7 +27,7 @@ do {									\
   if (TARGET_64BIT && ! TARGET_POWERPC64)				\
     {									\
       rs6000_isa_flags |= OPTION_MASK_POWERPC64;			\
-      warning (0, "-maix64 requires PowerPC64 architecture remain enabled"); \
+      warning (0, "%<-maix64%> requires PowerPC64 architecture remain enabled"); \
     }									\
   if (TARGET_SOFT_FLOAT && TARGET_LONG_DOUBLE_128)			\
     {									\
@@ -37,20 +37,20 @@ do {									\
     }									\
   if (TARGET_POWERPC64 && ! TARGET_64BIT)				\
     {									\
-      error ("-maix64 required: 64-bit computation with 32-bit addressing not yet supported"); \
+      error ("%<-maix64%> required: 64-bit computation with 32-bit addressing not yet supported"); \
     }									\
   if ((rs6000_isa_flags_explicit					\
        & OPTION_MASK_MINIMAL_TOC) != 0)					\
     {									\
       if (global_options_set.x_rs6000_current_cmodel			\
 	  && rs6000_current_cmodel != CMODEL_SMALL)			\
-	error ("-mcmodel incompatible with other toc options"); 	\
+	error ("%<-mcmodel%> incompatible with other toc options"); 	\
       SET_CMODEL (CMODEL_SMALL);					\
     }									\
   if (rs6000_current_cmodel != CMODEL_SMALL)				\
     {									\
-      TARGET_NO_FP_IN_TOC = 0;						\
-      TARGET_NO_SUM_IN_TOC = 0;						\
+      TARGET_NO_FP_IN_TOC = 1;						\
+      TARGET_NO_SUM_IN_TOC = 1;						\
     }									\
   if (rs6000_current_cmodel == CMODEL_MEDIUM)				\
     {									\
@@ -154,6 +154,7 @@ do {									\
    %{!maix64:%{!shared:%{g*:-lg}}}\
    %{fprofile-arcs|fprofile-generate*|coverage:-lpthreads}\
    %{mpe:-L%R/usr/lpp/ppe.poe/lib -lmpi -lvtd}\
+   %{mlong-double-128:-lc128}\
    %{pthread:-lpthreads} -lc"
 
 #undef LINK_SPEC

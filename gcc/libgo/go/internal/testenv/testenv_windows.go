@@ -5,7 +5,6 @@
 package testenv
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,7 +15,7 @@ var symlinkOnce sync.Once
 var winSymlinkErr error
 
 func initWinHasSymlink() {
-	tmpdir, err := ioutil.TempDir("", "symtest")
+	tmpdir, err := os.MkdirTemp("", "symtest")
 	if err != nil {
 		panic("failed to create temp directory: " + err.Error())
 	}
@@ -45,13 +44,4 @@ func hasSymlink() (ok bool, reason string) {
 	}
 
 	return false, ""
-}
-
-func IsWindowsXP() bool {
-	v, err := syscall.GetVersion()
-	if err != nil {
-		panic("GetVersion failed: " + err.Error())
-	}
-	major := byte(v)
-	return major < 6
 }

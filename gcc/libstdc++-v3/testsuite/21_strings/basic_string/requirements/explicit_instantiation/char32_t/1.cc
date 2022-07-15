@@ -1,7 +1,6 @@
 // { dg-do compile { target c++11 } }
-// { dg-require-cstdint "" }
 
-// Copyright (C) 2008-2018 Free Software Foundation, Inc.
+// Copyright (C) 2008-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -19,5 +18,7 @@
 // <http://www.gnu.org/licenses/>.
 
 #include <string>
+#include <debug/string>
 
 template class std::basic_string<char32_t>;
+template class __gnu_debug::basic_string<char32_t>;

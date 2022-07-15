@@ -1,5 +1,5 @@
 /* AddressSanitizer, a fast memory error detector.
-   Copyright (C) 2011-2018 Free Software Foundation, Inc.
+   Copyright (C) 2011-2021 Free Software Foundation, Inc.
    Contributed by Kostya Serebryany <kcc@google.com>
 
 This file is part of GCC.
@@ -34,6 +34,25 @@ extern bool asan_expand_mark_ifn (gimple_stmt_iterator *);
 extern bool asan_expand_poison_ifn (gimple_stmt_iterator *, bool *,
 				    hash_map<tree, tree> &);
 
+extern void hwasan_record_frame_init ();
+extern void hwasan_record_stack_var (rtx, rtx, poly_int64, poly_int64);
+extern void hwasan_emit_prologue ();
+extern rtx_insn *hwasan_emit_untag_frame (rtx, rtx);
+extern rtx hwasan_get_frame_extent ();
+extern rtx hwasan_frame_base ();
+extern void hwasan_maybe_emit_frame_base_init (void);
+extern bool stack_vars_base_reg_p (rtx);
+extern uint8_t hwasan_current_frame_tag ();
+extern void hwasan_increment_frame_tag ();
+extern rtx hwasan_truncate_to_tag_size (rtx, rtx);
+extern void hwasan_finish_file (void);
+extern bool hwasan_sanitize_p (void);
+extern bool hwasan_sanitize_stack_p (void);
+extern bool hwasan_sanitize_allocas_p (void);
+extern bool hwasan_expand_check_ifn (gimple_stmt_iterator *, bool);
+extern bool hwasan_expand_mark_ifn (gimple_stmt_iterator *);
+extern bool gate_hwasan (void);
+
 extern gimple_stmt_iterator create_cond_insert_point
      (gimple_stmt_iterator *, bool, bool, bool, basic_block *, basic_block *);
 
@@ -53,6 +72,11 @@ extern hash_set <tree> *asan_used_labels;
    up to 2 * ASAN_RED_ZONE_SIZE - 1 bytes.  */
 #define ASAN_RED_ZONE_SIZE	32
 
+/* Stack variable use more compact red zones.  The size includes also
+   size of variable itself.  */
+
+#define ASAN_MIN_RED_ZONE_SIZE	16
+
 /* Shadow memory values for stack protection.  Left is below protected vars,
    the first pointer in stack corresponding to that offset contains
    ASAN_STACK_FRAME_MAGIC word, the second pointer to a string describing
@@ -69,6 +93,26 @@ extern hash_set <tree> *asan_used_labels;
 #define ASAN_STACK_RETIRED_MAGIC	0x45e0360e
 
 #define ASAN_USE_AFTER_SCOPE_ATTRIBUTE	"use after scope memory"
+
+/* NOTE: The values below and the hooks under targetm.memtag define an ABI and
+   are hard-coded to these values in libhwasan, hence they can't be changed
+   independently here.  */
+/* How many bits are used to store a tag in a pointer.
+   The default version uses the entire top byte of a pointer (i.e. 8 bits).  */
+#define HWASAN_TAG_SIZE targetm.memtag.tag_size ()
+/* Tag Granule of HWASAN shadow stack.
+   This is the size in real memory that each byte in the shadow memory refers
+   to.  I.e. if a variable is X bytes long in memory then its tag in shadow
+   memory will span X / HWASAN_TAG_GRANULE_SIZE bytes.
+   Most variables will need to be aligned to this amount since two variables
+   that are neighbors in memory and share a tag granule would need to share the
+   same tag (the shared tag granule can only store one tag).  */
+#define HWASAN_TAG_GRANULE_SIZE targetm.memtag.granule_size ()
+/* Define the tag for the stack background.
+   This defines what tag the stack pointer will be and hence what tag all
+   variables that are not given special tags are (e.g. spilled registers,
+   and parameters passed on the stack).  */
+#define HWASAN_STACK_BACKGROUND gen_int_mode (0, QImode)
 
 /* Various flags for Asan builtins.  */
 enum asan_check_flags
@@ -102,7 +146,29 @@ asan_red_zone_size (unsigned int size)
   return c ? 2 * ASAN_RED_ZONE_SIZE - c : ASAN_RED_ZONE_SIZE;
 }
 
+/* Return how much a stack variable occupis on a stack
+   including a space for red zone.  */
+
+static inline unsigned HOST_WIDE_INT
+asan_var_and_redzone_size (unsigned HOST_WIDE_INT size)
+{
+  if (size <= 4)
+    return 16;
+  else if (size <= 16)
+    return 32;
+  else if (size <= 128)
+    return size + 32;
+  else if (size <= 512)
+    return size + 64;
+  else if (size <= 4096)
+    return size + 128;
+  else
+    return size + 256;
+}
+
 extern bool set_asan_shadow_offset (const char *);
+
+extern bool asan_shadow_offset_set_p ();
 
 extern void set_sanitized_sections (const char *);
 
@@ -118,6 +184,9 @@ extern hash_set<tree> *asan_handled_variables;
 static inline bool
 asan_intercepted_p (enum built_in_function fcode)
 {
+  if (hwasan_sanitize_p ())
+    return false;
+
   return fcode == BUILT_IN_INDEX
 	 || fcode == BUILT_IN_MEMCHR
 	 || fcode == BUILT_IN_MEMCMP
@@ -146,7 +215,8 @@ asan_intercepted_p (enum built_in_function fcode)
 static inline bool
 asan_sanitize_use_after_scope (void)
 {
-  return (flag_sanitize_address_use_after_scope && asan_sanitize_stack_p ());
+  return (flag_sanitize_address_use_after_scope
+	  && (asan_sanitize_stack_p () || hwasan_sanitize_stack_p ()));
 }
 
 /* Return true if DECL should be guarded on the stack.  */

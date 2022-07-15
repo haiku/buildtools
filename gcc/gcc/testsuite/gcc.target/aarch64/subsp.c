@@ -1,4 +1,4 @@
-/* { dg-options "-O" } */
+/* { dg-options "-O -fno-stack-clash-protection" } */
 
 int foo (void *);
 
@@ -16,4 +16,4 @@ f2 (int *x, int y)
 }
 
 /* { dg-final { scan-assembler "sub\tsp, sp, x\[0-9\]*\n" } } */
-/* { dg-final { scan-assembler "sub\tsp, sp, x\[0-9\]*, sxtw 4\n" } } */
+/* { dg-final { scan-assembler "sub\tsp, sp, w\[0-9\]*, sxtw 4\n" { target lp64 } } } */

@@ -1,8 +1,6 @@
-// { dg-options "-std=gnu++17 -lstdc++fs" }
 // { dg-do run { target c++17 } }
-// { dg-require-filesystem-ts "" }
 
-// Copyright (C) 2014-2018 Free Software Foundation, Inc.
+// Copyright (C) 2014-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -35,7 +33,11 @@ test01()
   path p2 = "/foo/bar";
   VERIFY( p2.root_directory() == path("/") );
   path p3 = "//foo";
+#ifdef __CYGWIN__
+  VERIFY( p3.root_directory() == path() );
+#else
   VERIFY( p3.root_directory() == path("/") );
+#endif
   path p4 = "///foo";
   VERIFY( p4.root_directory() == path("/") );
 }
@@ -43,11 +45,16 @@ test01()
 void
 test02()
 {
-  for (const path& p : __gnu_test::test_paths)
+  for (const path p : __gnu_test::test_paths)
   {
     path rootdir = p.root_directory();
     VERIFY( !rootdir.has_relative_path() );
-    VERIFY( rootdir.empty() || rootdir.native() == "/");
+    if (!rootdir.empty())
+#if defined(__MINGW32__) || defined(__MINGW64__)
+      VERIFY( rootdir.string() == "/" || rootdir.string() == "\\" );
+#else
+      VERIFY( rootdir.string() == "/" );
+#endif
   }
 }
 

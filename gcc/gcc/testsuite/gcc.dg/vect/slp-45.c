@@ -1,5 +1,5 @@
 /* { dg-require-effective-target vect_int } */
-/* { dg-additional-options "-O3" } */
+/* { dg-additional-options "-O3 -fno-version-loops-for-strides" } */
 
 #include <string.h>
 #include "tree-vect.h"
@@ -78,4 +78,3 @@ int main()
 }
 
 /* { dg-final { scan-tree-dump-times "vectorized 1 loops" 13 "vect" { target vect_hw_misalign } } } */
-/* { dg-final { scan-tree-dump-times "vectorized 1 loops" 2 "vect" { target { ! vect_hw_misalign } } } } */

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2010-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 2010-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -40,7 +40,7 @@ is
    --  When growing a container, multiply current capacity by this. Doubling
    --  leads to amortized linear-time copying.
 
-   type Int is range System.Min_Int .. System.Max_Int;
+   subtype Int is Long_Long_Integer;
 
    procedure Free is
      new Ada.Unchecked_Deallocation (Elements_Array, Elements_Array_Ptr);
@@ -426,9 +426,9 @@ is
       end;
    end Element;
 
-   --------------
-   -- Elements --
-   --------------
+   -----------
+   -- Elems --
+   -----------
 
    function Elems (Container : in out Vector) return Maximal_Array_Ptr is
    begin
@@ -457,8 +457,8 @@ is
       Item      : Element_Type;
       Index     : Index_Type := Index_Type'First) return Extended_Index
    is
-      K    : Capacity_Range;
-      Last : constant Index_Type := Last_Index (Container);
+      K    : Count_Type;
+      Last : constant Extended_Index := Last_Index (Container);
 
    begin
       K := Capacity_Range (Int (Index) - Int (No_Index));
@@ -590,7 +590,7 @@ is
       end M_Elements_Reversed;
 
       ------------------------
-      -- M_Elements_Swapted --
+      -- M_Elements_Swapped --
       ------------------------
 
       function M_Elements_Swapped
@@ -1277,7 +1277,7 @@ is
       Index     : Index_Type := Index_Type'Last) return Extended_Index
    is
       Last : Index_Type'Base;
-      K    : Capacity_Range;
+      K    : Count_Type'Base;
 
    begin
       if Index > Last_Index (Container) then

@@ -1,6 +1,6 @@
 /* Target macros for arc*-*-linux targets.
 
-   Copyright (C) 2017-2018 Free Software Foundation, Inc.
+   Copyright (C) 2017-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -29,7 +29,8 @@ along with GCC; see the file COPYING3.  If not see
     }						\
   while (0)
 
-#define GLIBC_DYNAMIC_LINKER   "/lib/ld-linux-arc.so.2"
+#define GLIBC_DYNAMIC_LINKER					\
+  "/lib/ld-linux-arc%{mbig-endian:eb}%{mcpu=arc700:700}.so.2"
 #define UCLIBC_DYNAMIC_LINKER  "/lib/ld-uClibc.so.0"
 
 /* Note that the default is to link against dynamic libraries, if they are
@@ -133,3 +134,7 @@ along with GCC; see the file COPYING3.  If not see
    fun = gen_rtx_SYMBOL_REF (Pmode, "_mcount");			\
    emit_library_call (fun, LCT_NORMAL, VOIDmode, rt, Pmode);	\
   }
+
+/* Enter/Leave ops are default off for linux targets.  */
+#undef TARGET_CODE_DENSITY_FRAME_DEFAULT
+#define TARGET_CODE_DENSITY_FRAME_DEFAULT 0

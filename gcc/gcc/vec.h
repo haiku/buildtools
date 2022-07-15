@@ -1,5 +1,5 @@
 /* Vector API for GNU compiler.
-   Copyright (C) 2004-2018 Free Software Foundation, Inc.
+   Copyright (C) 2004-2021 Free Software Foundation, Inc.
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
    Re-implemented in C++ by Diego Novillo <dnovillo@google.com>
 
@@ -195,7 +195,7 @@ struct vec_prefix
 
   /* Memory allocation support routines in vec.c.  */
   void register_overhead (void *, size_t, size_t CXX_MEM_STAT_INFO);
-  void release_overhead (void *, size_t, bool CXX_MEM_STAT_INFO);
+  void release_overhead (void *, size_t, size_t, bool CXX_MEM_STAT_INFO);
   static unsigned calculate_allocation (vec_prefix *, unsigned, bool);
   static unsigned calculate_allocation_1 (unsigned, unsigned);
 
@@ -276,12 +276,14 @@ inline void
 va_heap::reserve (vec<T, va_heap, vl_embed> *&v, unsigned reserve, bool exact
 		  MEM_STAT_DECL)
 {
+  size_t elt_size = sizeof (T);
   unsigned alloc
     = vec_prefix::calculate_allocation (v ? &v->m_vecpfx : 0, reserve, exact);
   gcc_checking_assert (alloc);
 
   if (GATHER_STATISTICS && v)
-    v->m_vecpfx.release_overhead (v, v->allocated (), false);
+    v->m_vecpfx.release_overhead (v, elt_size * v->allocated (),
+				  v->allocated (), false);
 
   size_t size = vec<T, va_heap, vl_embed>::embedded_size (alloc);
   unsigned nelem = v ? v->length () : 0;
@@ -289,9 +291,14 @@ va_heap::reserve (vec<T, va_heap, vl_embed> *&v, unsigned reserve, bool exact
   v->embedded_init (alloc, nelem);
 
   if (GATHER_STATISTICS)
-    v->m_vecpfx.register_overhead (v, alloc, nelem PASS_MEM_STAT);
+    v->m_vecpfx.register_overhead (v, alloc, elt_size PASS_MEM_STAT);
 }
 
+
+#if GCC_VERSION >= 4007
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
 
 /* Free the heap space allocated for vector V.  */
 
@@ -299,15 +306,20 @@ template<typename T>
 void
 va_heap::release (vec<T, va_heap, vl_embed> *&v)
 {
+  size_t elt_size = sizeof (T);
   if (v == NULL)
     return;
 
   if (GATHER_STATISTICS)
-    v->m_vecpfx.release_overhead (v, v->allocated (), true);
+    v->m_vecpfx.release_overhead (v, elt_size * v->allocated (),
+				  v->allocated (), true);
   ::free (v);
   v = NULL;
 }
 
+#if GCC_VERSION >= 4007
+#pragma GCC diagnostic pop
+#endif
 
 /* Allocator type for GC vectors.  Notice that we need the structure
    declaration even if GC is not enabled.  */
@@ -406,6 +418,16 @@ template<typename T,
 struct GTY((user)) vec
 {
 };
+
+/* Allow C++11 range-based 'for' to work directly on vec<T>*.  */
+template<typename T, typename A, typename L>
+T* begin (vec<T,A,L> *v) { return v ? v->begin () : nullptr; }
+template<typename T, typename A, typename L>
+T* end (vec<T,A,L> *v) { return v ? v->end () : nullptr; }
+template<typename T, typename A, typename L>
+const T* begin (const vec<T,A,L> *v) { return v ? v->begin () : nullptr; }
+template<typename T, typename A, typename L>
+const T* end (const vec<T,A,L> *v) { return v ? v->end () : nullptr; }
 
 /* Generic vec<> debug helpers.
 
@@ -528,7 +550,7 @@ vec_copy_construct (T *dst, const T *src, unsigned n)
 struct vnull
 {
   template <typename T, typename A, typename L>
-  CONSTEXPR operator vec<T, A, L> () { return vec<T, A, L>(); }
+  CONSTEXPR operator vec<T, A, L> () const { return vec<T, A, L>(); }
 };
 extern vnull vNULL;
 
@@ -589,7 +611,10 @@ public:
   void unordered_remove (unsigned);
   void block_remove (unsigned, unsigned);
   void qsort (int (*) (const void *, const void *));
+  void sort (int (*) (const void *, const void *, void *), void *);
   T *bsearch (const void *key, int (*compar)(const void *, const void *));
+  T *bsearch (const void *key,
+	      int (*compar)(const void *, const void *, void *), void *);
   unsigned lower_bound (T, bool (*)(const T &, const T &)) const;
   bool contains (const T &search) const;
   static size_t embedded_size (unsigned);
@@ -708,11 +733,12 @@ vec_free (vec<T, A, vl_embed> *&v)
 /* Grow V to length LEN.  Allocate it, if necessary.  */
 template<typename T, typename A>
 inline void
-vec_safe_grow (vec<T, A, vl_embed> *&v, unsigned len CXX_MEM_STAT_INFO)
+vec_safe_grow (vec<T, A, vl_embed> *&v, unsigned len,
+	       bool exact = false CXX_MEM_STAT_INFO)
 {
   unsigned oldlen = vec_safe_length (v);
   gcc_checking_assert (len >= oldlen);
-  vec_safe_reserve_exact (v, len - oldlen PASS_MEM_STAT);
+  vec_safe_reserve (v, len - oldlen, exact PASS_MEM_STAT);
   v->quick_grow (len);
 }
 
@@ -720,11 +746,34 @@ vec_safe_grow (vec<T, A, vl_embed> *&v, unsigned len CXX_MEM_STAT_INFO)
 /* If V is NULL, allocate it.  Call V->safe_grow_cleared(LEN).  */
 template<typename T, typename A>
 inline void
-vec_safe_grow_cleared (vec<T, A, vl_embed> *&v, unsigned len CXX_MEM_STAT_INFO)
+vec_safe_grow_cleared (vec<T, A, vl_embed> *&v, unsigned len,
+		       bool exact = false CXX_MEM_STAT_INFO)
 {
   unsigned oldlen = vec_safe_length (v);
-  vec_safe_grow (v, len PASS_MEM_STAT);
+  vec_safe_grow (v, len, exact PASS_MEM_STAT);
   vec_default_construct (v->address () + oldlen, len - oldlen);
+}
+
+
+/* Assume V is not NULL.  */
+
+template<typename T>
+inline void
+vec_safe_grow_cleared (vec<T, va_heap, vl_ptr> *&v,
+		       unsigned len, bool exact = false CXX_MEM_STAT_INFO)
+{
+  v->safe_grow_cleared (len, exact PASS_MEM_STAT);
+}
+
+/* If V does not have space for NELEMS elements, call
+   V->reserve(NELEMS, EXACT).  */
+
+template<typename T>
+inline bool
+vec_safe_reserve (vec<T, va_heap, vl_ptr> *&v, unsigned nelems, bool exact = false
+		  CXX_MEM_STAT_INFO)
+{
+  return v->reserve (nelems, exact);
 }
 
 
@@ -1028,6 +1077,40 @@ vec<T, A, vl_embed>::ordered_remove (unsigned ix)
 }
 
 
+/* Remove elements in [START, END) from VEC for which COND holds.  Ordering of
+   remaining elements is preserved.  This is an O(N) operation.  */
+
+#define VEC_ORDERED_REMOVE_IF_FROM_TO(vec, read_index, write_index,	\
+				      elem_ptr, start, end, cond)	\
+  {									\
+    gcc_assert ((end) <= (vec).length ());				\
+    for (read_index = write_index = (start); read_index < (end);	\
+	 ++read_index)							\
+      {									\
+	elem_ptr = &(vec)[read_index];					\
+	bool remove_p = (cond);						\
+	if (remove_p)							\
+	  continue;							\
+									\
+	if (read_index != write_index)					\
+	  (vec)[write_index] = (vec)[read_index];			\
+									\
+	write_index++;							\
+      }									\
+									\
+    if (read_index - write_index > 0)					\
+      (vec).block_remove (write_index, read_index - write_index);	\
+  }
+
+
+/* Remove elements from VEC for which COND holds.  Ordering of remaining
+   elements is preserved.  This is an O(N) operation.  */
+
+#define VEC_ORDERED_REMOVE_IF(vec, read_index, write_index, elem_ptr,	\
+			      cond)					\
+  VEC_ORDERED_REMOVE_IF_FROM_TO ((vec), read_index, write_index,	\
+				 elem_ptr, 0, (vec).length (), (cond))
+
 /* Remove an element from the IXth position of this vector.  Ordering of
    remaining elements is destroyed.  This is an O(1) operation.  */
 
@@ -1062,7 +1145,19 @@ inline void
 vec<T, A, vl_embed>::qsort (int (*cmp) (const void *, const void *))
 {
   if (length () > 1)
-    ::qsort (address (), length (), sizeof (T), cmp);
+    gcc_qsort (address (), length (), sizeof (T), cmp);
+}
+
+/* Sort the contents of this vector with qsort.  CMP is the comparison
+   function to pass to qsort.  */
+
+template<typename T, typename A>
+inline void
+vec<T, A, vl_embed>::sort (int (*cmp) (const void *, const void *, void *),
+			   void *data)
+{
+  if (length () > 1)
+    gcc_sort_r (address (), length (), sizeof (T), cmp, data);
 }
 
 
@@ -1089,6 +1184,41 @@ vec<T, A, vl_embed>::bsearch (const void *key,
       idx = (l + u) / 2;
       p = (const void *) (((const char *) base) + (idx * size));
       comparison = (*compar) (key, p);
+      if (comparison < 0)
+	u = idx;
+      else if (comparison > 0)
+	l = idx + 1;
+      else
+	return (T *)const_cast<void *>(p);
+    }
+
+  return NULL;
+}
+
+/* Search the contents of the sorted vector with a binary search.
+   CMP is the comparison function to pass to bsearch.  */
+
+template<typename T, typename A>
+inline T *
+vec<T, A, vl_embed>::bsearch (const void *key,
+			      int (*compar) (const void *, const void *,
+					     void *), void *data)
+{
+  const void *base = this->address ();
+  size_t nmemb = this->length ();
+  size_t size = sizeof (T);
+  /* The following is a copy of glibc stdlib-bsearch.h.  */
+  size_t l, u, idx;
+  const void *p;
+  int comparison;
+
+  l = 0;
+  u = nmemb;
+  while (l < u)
+    {
+      idx = (l + u) / 2;
+      p = (const void *) (((const char *) base) + (idx * size));
+      comparison = (*compar) (key, p, data);
       if (comparison < 0)
 	u = idx;
       else if (comparison > 0)
@@ -1163,8 +1293,13 @@ template<typename T, typename A>
 inline size_t
 vec<T, A, vl_embed>::embedded_size (unsigned alloc)
 {
-  typedef vec<T, A, vl_embed> vec_embedded;
-  return offsetof (vec_embedded, m_vecdata) + alloc * sizeof (T);
+  struct alignas (T) U { char data[sizeof (T)]; };
+  typedef vec<U, A, vl_embed> vec_embedded;
+  typedef typename std::conditional<std::is_standard_layout<T>::value,
+				    vec, vec_embedded>::type vec_stdlayout;
+  static_assert (sizeof (vec_stdlayout) == sizeof (vec), "");
+  static_assert (alignof (vec_stdlayout) == alignof (vec), "");
+  return offsetof (vec_stdlayout, m_vecdata) + alloc * sizeof (T);
 }
 
 
@@ -1342,8 +1477,8 @@ public:
   T *safe_push (const T &CXX_MEM_STAT_INFO);
   T &pop (void);
   void truncate (unsigned);
-  void safe_grow (unsigned CXX_MEM_STAT_INFO);
-  void safe_grow_cleared (unsigned CXX_MEM_STAT_INFO);
+  void safe_grow (unsigned, bool = false CXX_MEM_STAT_INFO);
+  void safe_grow_cleared (unsigned, bool = false CXX_MEM_STAT_INFO);
   void quick_grow (unsigned);
   void quick_grow_cleared (unsigned);
   void quick_insert (unsigned, const T &);
@@ -1352,9 +1487,13 @@ public:
   void unordered_remove (unsigned);
   void block_remove (unsigned, unsigned);
   void qsort (int (*) (const void *, const void *));
+  void sort (int (*) (const void *, const void *, void *), void *);
   T *bsearch (const void *key, int (*compar)(const void *, const void *));
+  T *bsearch (const void *key,
+	      int (*compar)(const void *, const void *, void *), void *);
   unsigned lower_bound (T, bool (*)(const T &, const T &)) const;
   bool contains (const T &search) const;
+  void reverse (void);
 
   bool using_auto_storage () const;
 
@@ -1380,11 +1519,11 @@ public:
     this->m_vec = &m_auto;
   }
 
-  auto_vec (size_t s)
+  auto_vec (size_t s CXX_MEM_STAT_INFO)
   {
     if (s > N)
       {
-	this->create (s);
+	this->create (s PASS_MEM_STAT);
 	return;
       }
 
@@ -1409,8 +1548,23 @@ class auto_vec<T, 0> : public vec<T, va_heap>
 {
 public:
   auto_vec () { this->m_vec = NULL; }
-  auto_vec (size_t n) { this->create (n); }
+  auto_vec (size_t n CXX_MEM_STAT_INFO) { this->create (n PASS_MEM_STAT); }
   ~auto_vec () { this->release (); }
+
+  auto_vec (vec<T, va_heap>&& r)
+    {
+      gcc_assert (!r.using_auto_storage ());
+      this->m_vec = r.m_vec;
+      r.m_vec = NULL;
+    }
+  auto_vec& operator= (vec<T, va_heap>&& r)
+    {
+      gcc_assert (!r.using_auto_storage ());
+      this->release ();
+      this->m_vec = r.m_vec;
+      r.m_vec = NULL;
+      return *this;
+    }
 };
 
 
@@ -1426,6 +1580,40 @@ vec_alloc (vec<T> *&v, unsigned nelems CXX_MEM_STAT_INFO)
   v->create (nelems PASS_MEM_STAT);
 }
 
+
+/* A subclass of auto_vec <char *> that frees all of its elements on
+   deletion.  */
+
+class auto_string_vec : public auto_vec <char *>
+{
+ public:
+  ~auto_string_vec ();
+};
+
+/* A subclass of auto_vec <T *> that deletes all of its elements on
+   destruction.
+
+   This is a crude way for a vec to "own" the objects it points to
+   and clean up automatically.
+
+   For example, no attempt is made to delete elements when an item
+   within the vec is overwritten.
+
+   We can't rely on gnu::unique_ptr within a container,
+   since we can't rely on move semantics in C++98.  */
+
+template <typename T>
+class auto_delete_vec : public auto_vec <T *>
+{
+ public:
+  auto_delete_vec () {}
+  auto_delete_vec (size_t s) : auto_vec <T *> (s) {}
+
+  ~auto_delete_vec ();
+
+private:
+  DISABLE_COPY_AND_ASSIGN(auto_delete_vec);
+};
 
 /* Conditionally allocate heap memory for VEC and its internal vector.  */
 
@@ -1519,6 +1707,31 @@ vec<T, va_heap, vl_ptr>::iterate (unsigned ix, T **ptr) const
        vec_safe_iterate ((V), (I), &(P));	\
        (I)--)
 
+/* auto_string_vec's dtor, freeing all contained strings, automatically
+   chaining up to ~auto_vec <char *>, which frees the internal buffer.  */
+
+inline
+auto_string_vec::~auto_string_vec ()
+{
+  int i;
+  char *str;
+  FOR_EACH_VEC_ELT (*this, i, str)
+    free (str);
+}
+
+/* auto_delete_vec's dtor, deleting all contained items, automatically
+   chaining up to ~auto_vec <T*>, which frees the internal buffer.  */
+
+template <typename T>
+inline
+auto_delete_vec<T>::~auto_delete_vec ()
+{
+  int i;
+  T *item;
+  FOR_EACH_VEC_ELT (*this, i, item)
+    delete item;
+}
+
 
 /* Return a copy of this vector.  */
 
@@ -1528,7 +1741,7 @@ vec<T, va_heap, vl_ptr>::copy (ALONE_MEM_STAT_DECL) const
 {
   vec<T, va_heap, vl_ptr> new_vec = vNULL;
   if (length ())
-    new_vec.m_vec = m_vec->copy ();
+    new_vec.m_vec = m_vec->copy (ALONE_PASS_MEM_STAT);
   return new_vec;
 }
 
@@ -1628,7 +1841,7 @@ template<typename T>
 inline void
 vec<T, va_heap, vl_ptr>::splice (const vec<T, va_heap, vl_ptr> &src)
 {
-  if (src.m_vec)
+  if (src.length ())
     m_vec->splice (*(src.m_vec));
 }
 
@@ -1706,11 +1919,11 @@ vec<T, va_heap, vl_ptr>::truncate (unsigned size)
 
 template<typename T>
 inline void
-vec<T, va_heap, vl_ptr>::safe_grow (unsigned len MEM_STAT_DECL)
+vec<T, va_heap, vl_ptr>::safe_grow (unsigned len, bool exact MEM_STAT_DECL)
 {
   unsigned oldlen = length ();
   gcc_checking_assert (oldlen <= len);
-  reserve_exact (len - oldlen PASS_MEM_STAT);
+  reserve (len - oldlen, exact PASS_MEM_STAT);
   if (m_vec)
     m_vec->quick_grow (len);
   else
@@ -1724,11 +1937,12 @@ vec<T, va_heap, vl_ptr>::safe_grow (unsigned len MEM_STAT_DECL)
 
 template<typename T>
 inline void
-vec<T, va_heap, vl_ptr>::safe_grow_cleared (unsigned len MEM_STAT_DECL)
+vec<T, va_heap, vl_ptr>::safe_grow_cleared (unsigned len, bool exact
+					    MEM_STAT_DECL)
 {
   unsigned oldlen = length ();
   size_t growby = len - oldlen;
-  safe_grow (len PASS_MEM_STAT);
+  safe_grow (len, exact PASS_MEM_STAT);
   if (growby != 0)
     vec_default_construct (address () + oldlen, growby);
 }
@@ -1827,6 +2041,18 @@ vec<T, va_heap, vl_ptr>::qsort (int (*cmp) (const void *, const void *))
     m_vec->qsort (cmp);
 }
 
+/* Sort the contents of this vector with qsort.  CMP is the comparison
+   function to pass to qsort.  */
+
+template<typename T>
+inline void
+vec<T, va_heap, vl_ptr>::sort (int (*cmp) (const void *, const void *,
+					   void *), void *data)
+{
+  if (m_vec)
+    m_vec->sort (cmp, data);
+}
+
 
 /* Search the contents of the sorted vector with a binary search.
    CMP is the comparison function to pass to bsearch.  */
@@ -1838,6 +2064,20 @@ vec<T, va_heap, vl_ptr>::bsearch (const void *key,
 {
   if (m_vec)
     return m_vec->bsearch (key, cmp);
+  return NULL;
+}
+
+/* Search the contents of the sorted vector with a binary search.
+   CMP is the comparison function to pass to bsearch.  */
+
+template<typename T>
+inline T *
+vec<T, va_heap, vl_ptr>::bsearch (const void *key,
+				  int (*cmp) (const void *, const void *,
+					      void *), void *data)
+{
+  if (m_vec)
+    return m_vec->bsearch (key, cmp, data);
   return NULL;
 }
 
@@ -1866,6 +2106,19 @@ vec<T, va_heap, vl_ptr>::contains (const T &search) const
   return m_vec ? m_vec->contains (search) : false;
 }
 
+/* Reverse content of the vector.  */
+
+template<typename T>
+inline void
+vec<T, va_heap, vl_ptr>::reverse (void)
+{
+  unsigned l = length ();
+  T *ptr = address ();
+
+  for (unsigned i = 0; i < l / 2; i++)
+    std::swap (ptr[i], ptr[l - i - 1]);
+}
+
 template<typename T>
 inline bool
 vec<T, va_heap, vl_ptr>::using_auto_storage () const
@@ -1883,6 +2136,126 @@ release_vec_vec (vec<vec<T> > &vec)
     vec[i].release ();
 
   vec.release ();
+}
+
+// Provide a subset of the std::span functionality.  (We can't use std::span
+// itself because it's a C++20 feature.)
+//
+// In addition, provide an invalid value that is distinct from all valid
+// sequences (including the empty sequence).  This can be used to return
+// failure without having to use std::optional.
+//
+// There is no operator bool because it would be ambiguous whether it is
+// testing for a valid value or an empty sequence.
+template<typename T>
+class array_slice
+{
+  template<typename OtherT> friend class array_slice;
+
+public:
+  using value_type = T;
+  using iterator = T *;
+  using const_iterator = const T *;
+
+  array_slice () : m_base (nullptr), m_size (0) {}
+
+  template<typename OtherT>
+  array_slice (array_slice<OtherT> other)
+    : m_base (other.m_base), m_size (other.m_size) {}
+
+  array_slice (iterator base, unsigned int size)
+    : m_base (base), m_size (size) {}
+
+  template<size_t N>
+  array_slice (T (&array)[N]) : m_base (array), m_size (N) {}
+
+  template<typename OtherT>
+  array_slice (const vec<OtherT> &v)
+    : m_base (v.address ()), m_size (v.length ()) {}
+
+  iterator begin () { return m_base; }
+  iterator end () { return m_base + m_size; }
+
+  const_iterator begin () const { return m_base; }
+  const_iterator end () const { return m_base + m_size; }
+
+  value_type &front ();
+  value_type &back ();
+  value_type &operator[] (unsigned int i);
+
+  const value_type &front () const;
+  const value_type &back () const;
+  const value_type &operator[] (unsigned int i) const;
+
+  size_t size () const { return m_size; }
+  size_t size_bytes () const { return m_size * sizeof (T); }
+  bool empty () const { return m_size == 0; }
+
+  // An invalid array_slice that represents a failed operation.  This is
+  // distinct from an empty slice, which is a valid result in some contexts.
+  static array_slice invalid () { return { nullptr, ~0U }; }
+
+  // True if the array is valid, false if it is an array like INVALID.
+  bool is_valid () const { return m_base || m_size == 0; }
+
+private:
+  iterator m_base;
+  unsigned int m_size;
+};
+
+template<typename T>
+inline typename array_slice<T>::value_type &
+array_slice<T>::front ()
+{
+  gcc_checking_assert (m_size);
+  return m_base[0];
+}
+
+template<typename T>
+inline const typename array_slice<T>::value_type &
+array_slice<T>::front () const
+{
+  gcc_checking_assert (m_size);
+  return m_base[0];
+}
+
+template<typename T>
+inline typename array_slice<T>::value_type &
+array_slice<T>::back ()
+{
+  gcc_checking_assert (m_size);
+  return m_base[m_size - 1];
+}
+
+template<typename T>
+inline const typename array_slice<T>::value_type &
+array_slice<T>::back () const
+{
+  gcc_checking_assert (m_size);
+  return m_base[m_size - 1];
+}
+
+template<typename T>
+inline typename array_slice<T>::value_type &
+array_slice<T>::operator[] (unsigned int i)
+{
+  gcc_checking_assert (i < m_size);
+  return m_base[i];
+}
+
+template<typename T>
+inline const typename array_slice<T>::value_type &
+array_slice<T>::operator[] (unsigned int i) const
+{
+  gcc_checking_assert (i < m_size);
+  return m_base[i];
+}
+
+template<typename T>
+array_slice<T>
+make_array_slice (T *base, unsigned int size)
+{
+  return array_slice<T> (base, size);
 }
 
 #if (GCC_VERSION >= 3000)

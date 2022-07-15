@@ -10,6 +10,8 @@
 #include "config.h"
 
 #include <stddef.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <errno.h>
@@ -46,6 +48,9 @@
 #endif
 #if defined(HAVE_SYS_SYSCALL_H)
 #include <sys/syscall.h>
+#endif
+#if defined(HAVE_SYS_SYSCTL_H)
+#include <sys/sysctl.h>
 #endif
 #if defined(HAVE_SYS_EPOLL_H)
 #include <sys/epoll.h>
@@ -117,6 +122,9 @@
 #if defined(HAVE_LINUX_RTNETLINK_H)
 #include <linux/rtnetlink.h>
 #endif
+#if defined(HAVE_NET_BPF_H)
+#include <net/bpf.h>
+#endif
 #if defined(HAVE_NET_IF_H)
 #include <net/if.h>
 #endif
@@ -170,6 +178,9 @@
 #endif
 #if defined(HAVE_PORT_H)
 #include <port.h>
+#endif
+#if defined(HAVE_LWP_H)
+#include <lwp.h>
 #endif
 
 #ifdef USE_LIBFFI
@@ -279,10 +290,284 @@ enum {
 #ifdef NLA_HDRLEN
   NLA_HDRLEN_val = NLA_HDRLEN,
 #endif
+#ifdef BIOCFLUSH
+  BIOCFLUSH_val = BIOCFLUSH,
+#endif
+#ifdef BIOCGBLEN
+  BIOCGBLEN_val = BIOCGBLEN,
+#endif
+#ifdef BIOCGDLT
+  BIOCGDLT_val = BIOCGDLT,
+#endif
+#ifdef BIOCGETIF
+  BIOCGETIF_val = BIOCGETIF,
+#endif
+#ifdef BIOCGHDRCMPLT
+  BIOCGHDRCMPLT_val = BIOCGHDRCMPLT,
+#endif
+#ifdef BIOCGRTIMEOUT
+  BIOCGRTIMEOUT_val = BIOCGRTIMEOUT,
+#endif
+#ifdef BIOCGSTATS
+  BIOCGSTATS_val = BIOCGSTATS,
+#endif
+#ifdef BIOCIMMEDIATE
+  BIOCIMMEDIATE_val = BIOCIMMEDIATE,
+#endif
+#ifdef BIOCPROMISC
+  BIOCPROMISC_val = BIOCPROMISC,
+#endif
+#ifdef BIOCSBLEN
+  BIOCSBLEN_val = BIOCSBLEN,
+#endif
+#ifdef BIOCSDLT
+  BIOCSDLT_val = BIOCSDLT,
+#endif
+#ifdef BIOCSETF
+  BIOCSETF_val = BIOCSETF,
+#endif
+#ifdef BIOCSETIF
+  BIOCSETIF_val = BIOCSETIF,
+#endif
+#ifdef BIOCSHDRCMPLT
+  BIOCSHDRCMPLT_val = BIOCSHDRCMPLT,
+#endif
+#ifdef BIOCSRTIMEOUT
+  BIOCSRTIMEOUT_val = BIOCSRTIMEOUT,
+#endif
+#ifdef BIOCVERSION
+  BIOCVERSION_val = BIOCVERSION,
+#endif
+#ifdef SO_RCVTIMEO
+  SO_RCVTIMEO_val = SO_RCVTIMEO,
+#endif
 };
+
+// SIOCGIFMTU can't be added in the above enum as it might
+// be signed in some OSes.
+#ifdef SIOCGIFMTU
+enum {
+  SIOCGIFMTU_val = SIOCGIFMTU,
+};
+#endif
 
 #if defined(HAVE_SYS_EPOLL_H)
 enum {
   epoll_data_offset = offsetof(struct epoll_event, data)
 };
 #endif
+
+// The following section introduces explicit references to types and
+// constants of interest to support bootstrapping libgo using a
+// compiler that doesn't support -fdump-go-spec (e.g., clang), via
+// DWARF-based tools. This process is made more difficult due to the
+// fact that clang tries hard to omit types/constants from DWARF if it
+// can't find explicit references to them, so here we make sure that
+// key items are mentioned in ways that will force them into the
+// generated DWARF.
+
+#if defined(__clang__)
+
+// Make a reference to a type
+#define TREF(typ) typ typ ## ref
+
+// Make a reference to an opaque type
+#define OTREF(typ) typ *typ ## ref
+
+// Make a reference to a struct tag
+#define SREF(stag) struct stag stag ## ref
+
+// Make a reference to an enum literal
+#define EREF(elit) unsigned elit ## fn(unsigned x) { return x == elit ? 1 : 0; }
+
+//......................................................................
+
+// From dirent.h
+SREF(dirent);
+SREF(dirent64);
+OTREF(DIR);
+EREF(DT_UNKNOWN);
+
+// From fcntl.h
+SREF(flock);
+SREF(flock64);
+
+// From ffi headers
+SREF(_ffi_type);
+TREF(ffi_cif);
+TREF(ffi_abi);
+TREF(ffi_status);
+EREF(FFI_OK);
+
+// From grp.h
+SREF(group);
+
+#if defined(HAVE_LINUX_FILTER_H)
+// From linux/filter.h
+SREF(sock_filter);
+SREF(sock_fprog);
+#endif
+
+// From linux/if.h
+EREF(IFF_UP);
+
+#if defined(HAVE_LINUX_IF_ADDR_H)
+// From linux/if_addr.h
+SREF(ifaddrmsg);
+EREF(IFA_ADDRESS);
+#endif
+
+#if defined(HAVE_LINUX_RTNETLINK_H)
+// From linux/if_link.h
+EREF(IFLA_ADDRESS);
+#endif
+
+// From in.h, in6.h, icmp6.h
+SREF(ip_mreq);
+SREF(ip_mreqn);
+SREF(ipv6_mreq);
+SREF(ip6_mtuinfo);
+SREF(icmp6_filter);
+SREF(in_pktinfo);
+EREF(IPPROTO_TCP);
+
+#if defined(HAVE_LINUX_RTNETLINK_H)
+// From linux/rtnetlink.h
+SREF(rtgenmsg);
+SREF(rtmsg);
+SREF(ifinfomsg);
+SREF(rtattr);
+SREF(rtnexthop);
+EREF(RTM_BASE);
+EREF(RTN_UNSPEC);
+#endif
+
+// From netdb.h
+SREF(addrinfo);
+
+// From netlink.h
+SREF(nlattr);
+SREF(nlmsgerr);
+
+// From pthread.h and related
+TREF(pthread_attr_t);
+TREF(pthread_t);
+TREF(pthread_mutex_t);
+TREF(pthread_mutexattr_t);
+
+// From pwd.h
+SREF(passwd);
+
+// From signal.h and related
+TREF(sigset_t);
+TREF(siginfo_t);
+TREF(stack_t);
+SREF(sigaction);
+SREF(sigstack);
+EREF(SI_USER);
+EREF(FPE_INTOVF);
+EREF(BUS_ADRALN);
+EREF(SS_ONSTACK);
+EREF(SEGV_MAPERR);
+
+// From stat.h
+SREF(stat64);
+
+// From statfs.h
+SREF(statfs);
+SREF(statfs64);
+
+// From sysinfo.h
+SREF(sysinfo);
+
+// From <sys/epoll.h>
+#if defined(HAVE_SYS_EPOLL_H)
+SREF(epoll_event);
+EREF(EPOLLIN);
+EREF(epoll_data_offset);
+#endif
+
+#if defined(HAVE_SYS_MOUNT_H)
+// From sys/mount.h
+EREF(MS_PRIVATE);
+EREF(MNT_FORCE);
+#endif
+
+#if defined(HAVE_SYS_PTRACE_H)
+// From <sys/ptrace.h>
+#if defined (__aarch64__)
+SREF(user_pt_regs);
+#else
+SREF(pt_regs);
+#endif
+EREF(PTRACE_PEEKTEXT);
+#endif
+
+// From sys/resource.h
+SREF(rusage);
+SREF(rlimit64);
+EREF(RLIMIT_NOFILE);
+EREF(PRIO_USER);
+EREF(RUSAGE_SELF);
+
+// From sys/select.h
+TREF(fd_set);
+
+// From sys/socket.h
+SREF(msghdr);
+SREF(cmsghdr);
+SREF(ucred);
+EREF(MSG_OOB);
+EREF(SCM_RIGHTS);
+EREF(SOCK_RAW);
+EREF(SHUT_RD);
+
+// From sys/time.h and sys/times.h
+SREF(timespec);
+SREF(timeval);
+SREF(itimerval);
+SREF(tms);
+EREF(ITIMER_PROF);
+
+#if defined(HAVE_SYS_TIMEX_H)
+// From sys/timex.h
+SREF(timex);
+#endif
+
+// From sys/types.h
+TREF(pid_t);
+TREF(off_t);
+TREF(loff_t);
+TREF(size_t);
+TREF(ssize_t);
+TREF(mode_t);
+TREF(dev_t);
+TREF(time_t);
+
+// From sys/ucontext.h
+TREF(ucontext_t);
+
+#if defined(HAVE_SYS_USER_H)
+// From sys/user.h
+SREF(user_regs_struct);
+#endif
+
+#if defined(HAVE_SYS_UTSNAME_H)
+// From sys/utsname.h
+SREF(utsname);
+#endif
+
+// From termios.h
+SREF(termios);
+
+// From uio.h
+SREF(iovec);
+
+// From utime.h
+SREF(utimbuf);
+
+// From unistd.h
+EREF(_PC_NAME_MAX);
+EREF(_SC_GETPW_R_SIZE_MAX);
+
+#endif // clang

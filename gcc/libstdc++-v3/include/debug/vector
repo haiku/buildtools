@@ -1,6 +1,6 @@
 // Debugging vector implementation -*- C++ -*-
 
-// Copyright (C) 2003-2018 Free Software Foundation, Inc.
+// Copyright (C) 2003-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,6 +30,11 @@
 #define _GLIBCXX_DEBUG_VECTOR 1
 
 #pragma GCC system_header
+
+#include <bits/c++config.h>
+namespace std _GLIBCXX_VISIBILITY(default) { namespace __debug {
+  template<typename _Tp, typename _Allocator> class vector;
+} } // namespace std::__debug
 
 #include <vector>
 #include <utility>
@@ -127,6 +132,19 @@ namespace __debug
       typedef typename _Base::const_iterator	_Base_const_iterator;
       typedef __gnu_debug::_Equal_to<_Base_const_iterator> _Equal;
 
+      template<typename _ItT, typename _SeqT, typename _CatT>
+	friend class ::__gnu_debug::_Safe_iterator;
+
+      // Reference wrapper for base class. Disambiguates vector(const _Base&)
+      // from copy constructor by requiring a user-defined conversion.
+      // See PR libstdc++/90102.
+      struct _Base_ref
+      {
+	_Base_ref(const _Base& __r) : _M_ref(__r) { }
+
+	const _Base& _M_ref;
+      };
+
     public:
       typedef typename _Base::reference			reference;
       typedef typename _Base::const_reference		const_reference;
@@ -182,8 +200,8 @@ namespace __debug
 #endif
 	vector(_InputIterator __first, _InputIterator __last,
 	       const _Allocator& __a = _Allocator())
-	: _Base(__gnu_debug::__base(__gnu_debug::__check_valid_range(__first,
-								     __last)),
+	: _Base(__gnu_debug::__base(
+		  __glibcxx_check_valid_constructor_range(__first, __last)),
 		__gnu_debug::__base(__last), __a) { }
 
 #if __cplusplus < 201103L
@@ -199,6 +217,9 @@ namespace __debug
       : _Base(__x, __a) { }
 
       vector(vector&& __x, const allocator_type& __a)
+      noexcept(
+	std::is_nothrow_constructible<_Base,
+	  _Base, const allocator_type&>::value )
       : _Safe(std::move(__x._M_safe()), __a),
 	_Base(std::move(__x._M_base()), __a),
 	_Safe_vector(std::move(__x)) { }
@@ -211,8 +232,8 @@ namespace __debug
 #endif
 
       /// Construction from a normal-mode vector
-      vector(const _Base& __x)
-      : _Base(__x) { }
+      vector(_Base_ref __x)
+      : _Base(__x._M_ref) { }
 
 #if __cplusplus < 201103L
       vector&
@@ -511,7 +532,7 @@ namespace __debug
 	{
 	  __glibcxx_check_insert(__position);
 	  bool __realloc = this->_M_requires_reallocation(this->size() + 1);
-	  difference_type __offset = __position.base() - _Base::begin();
+	  difference_type __offset = __position.base() - _Base::cbegin();
 	  _Base_iterator __res = _Base::emplace(__position.base(),
 						std::forward<_Args>(__args)...);
 	  if (__realloc)
@@ -519,7 +540,7 @@ namespace __debug
 	  else
 	    this->_M_invalidate_after_nth(__offset);
 	  this->_M_update_guaranteed_capacity();
-	  return iterator(__res, this);
+	  return { __res, this };
 	}
 #endif
 
@@ -567,7 +588,7 @@ namespace __debug
 	else
 	  this->_M_invalidate_after_nth(__offset);
 	this->_M_update_guaranteed_capacity();
-	return iterator(__res, this);
+	return { __res, this };
       }
 #else
       void
@@ -613,7 +634,7 @@ namespace __debug
 	  else
 	    this->_M_invalidate_after_nth(__offset);
 	  this->_M_update_guaranteed_capacity();
-	  return iterator(__res, this);
+	  return { __res, this };
 	}
 #else
       template<class _InputIterator>
@@ -678,7 +699,7 @@ namespace __debug
 	  }
 	else
 #if __cplusplus >= 201103L
-	  return begin() + (__first.base() - cbegin().base());
+	  return { _Base::begin() + (__first.base() - _Base::cbegin()), this };
 #else
 	  return __first;
 #endif
@@ -721,6 +742,12 @@ namespace __debug
 	       const vector<_Tp, _Alloc>& __rhs)
     { return __lhs._M_base() == __rhs._M_base(); }
 
+#if __cpp_lib_three_way_comparison
+  template<typename _Tp, typename _Alloc>
+    constexpr __detail::__synth3way_t<_Tp>
+    operator<=>(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
+    { return __x._M_base() <=> __y._M_base(); }
+#else
   template<typename _Tp, typename _Alloc>
     inline bool
     operator!=(const vector<_Tp, _Alloc>& __lhs,
@@ -750,6 +777,7 @@ namespace __debug
     operator>(const vector<_Tp, _Alloc>& __lhs,
 	      const vector<_Tp, _Alloc>& __rhs)
     { return __lhs._M_base() > __rhs._M_base(); }
+#endif // three-way comparison
 
   template<typename _Tp, typename _Alloc>
     inline void
@@ -769,9 +797,9 @@ namespace __debug
 
 } // namespace __debug
 
-#if __cplusplus >= 201103L
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
+#if __cplusplus >= 201103L
   // DR 1182.
   /// std::hash specialization for vector<bool>.
   template<typename _Alloc>
@@ -782,10 +810,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       operator()(const __debug::vector<bool, _Alloc>& __b) const noexcept
       { return std::hash<_GLIBCXX_STD_C::vector<bool, _Alloc>>()(__b); }
     };
-
-_GLIBCXX_END_NAMESPACE_VERSION
 #endif
 
+#if __cplusplus >= 201703L
+  namespace __detail::__variant
+  {
+    template<typename> struct _Never_valueless_alt; // see <variant>
+
+    // Provide the strong exception-safety guarantee when emplacing a
+    // vector into a variant, but only if move assignment cannot throw.
+    template<typename _Tp, typename _Alloc>
+      struct _Never_valueless_alt<__debug::vector<_Tp, _Alloc>>
+      : std::is_nothrow_move_assignable<__debug::vector<_Tp, _Alloc>>
+      { };
+  }  // namespace __detail::__variant
+#endif // C++17
+
+_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 namespace __gnu_debug

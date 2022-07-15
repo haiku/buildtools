@@ -1,5 +1,6 @@
 // { dg-lto-do link }
 // { dg-require-effective-target fpic }
+// { dg-require-effective-target lto_incremental }
 // { dg-lto-options {{-fPIC -flto -Wno-return-type}} }
 // { dg-extra-ld-options "-fPIC -r -nostdlib" }
 
@@ -13,7 +14,7 @@ namespace std __attribute__ ((__visibility__ ("default")))
   typedef basic_ostream<char> ostream;
   template<typename _CharT, typename _InIter = istreambuf_iterator<_CharT> >
       class num_get;
-  class locale   {
+  struct locale   {
       class facet;
   };
   class locale::facet   {

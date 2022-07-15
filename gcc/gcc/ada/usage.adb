@@ -6,7 +6,7 @@
 --                                                                          --
 --                                B o d y                                   --
 --                                                                          --
---          Copyright (C) 1992-2018, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -352,7 +352,7 @@ begin
    --  Line for -gnatn switch
 
    Write_Switch_Char ("n[?]");
-   Write_Line ("Enable pragma Inline (both within and across units, ?=1/2)");
+   Write_Line ("Enable pragma Inline across units (?=1/2 for moderate/full)");
 
    --  Line for -gnato switch
 
@@ -378,11 +378,6 @@ begin
    Write_Switch_Char ("p");
    Write_Line ("Suppress all checks");
 
-   --  Line for -gnatP switch
-
-   Write_Switch_Char ("P");
-   Write_Line ("Generate periodic calls to System.Polling.Poll");
-
    --  Line for -gnatq switch
 
    Write_Switch_Char ("q");
@@ -402,7 +397,9 @@ begin
 
    Write_Switch_Char ("R?");
    Write_Line
-     ("List rep info (?=0/1/2/3/e/m for none/types/all/symbolic/ext/mech)");
+     ("List rep info (?=0/1/2/3/4/e/m for none/types/all/sym/cg/ext/mech)");
+   Write_Switch_Char ("R?j");
+   Write_Line ("List rep info in the JSON data interchange format");
    Write_Switch_Char ("R?s");
    Write_Line ("List rep info to file.rep instead of standard output");
 
@@ -415,11 +412,6 @@ begin
 
    Write_Switch_Char ("S");
    Write_Line ("Print listing of package Standard");
-
-   --  Line for -gnatt switch
-
-   Write_Switch_Char ("t");
-   Write_Line ("Tree output file to be generated");
 
    --  Line for -gnatTnn switch
 
@@ -459,6 +451,7 @@ begin
    Write_Line ("        I    turn off checking for in params");
    Write_Line ("        m    turn on checking for in out params");
    Write_Line ("        M    turn off checking for in out params");
+   Write_Line ("        n    turn off all validity checks (including RM)");
    Write_Line ("        o    turn on checking for operators/attributes");
    Write_Line ("        O    turn off checking for operators/attributes");
    Write_Line ("        p    turn on checking for parameters");
@@ -469,7 +462,6 @@ begin
    Write_Line ("        S    turn off checking for subscripts");
    Write_Line ("        t    turn on checking for tests");
    Write_Line ("        T    turn off checking for tests");
-   Write_Line ("        n    turn off all validity checks (including RM)");
 
    --  Lines for -gnatw switch
 
@@ -481,6 +473,8 @@ begin
    Write_Line ("        A    turn off all optional info/warnings");
    Write_Line ("        .a*+ turn on warnings for failing assertion");
    Write_Line ("        .A   turn off warnings for failing assertion");
+   Write_Line ("        _a*+ turn on warnings for anonymous allocators");
+   Write_Line ("        _A   turn off warnings for anonymous allocators");
    Write_Line ("        b+   turn on warnings for bad fixed value " &
                                                   "(not multiple of small)");
    Write_Line ("        B*   turn off warnings for bad fixed value " &
@@ -491,6 +485,10 @@ begin
    Write_Line ("        C*   turn off warnings for constant conditional");
    Write_Line ("        .c+  turn on warnings for unrepped components");
    Write_Line ("        .C*  turn off warnings for unrepped components");
+   Write_Line ("        _c*  turn on warnings for unknown " &
+                                                 "Compile_Time_Warning");
+   Write_Line ("        _C   turn off warnings for unknown " &
+                                                 "Compile_Time_Warning");
    Write_Line ("        d    turn on warnings for implicit dereference");
    Write_Line ("        D*   turn off warnings for implicit dereference");
    Write_Line ("        .d   turn on tagging of warnings with -gnatw switch");
@@ -567,6 +565,8 @@ begin
    Write_Line ("        R*   turn off warnings for redundant construct");
    Write_Line ("        .r+  turn on warnings for object renaming function");
    Write_Line ("        .R*  turn off warnings for object renaming function");
+   Write_Line ("        _r   turn on warnings for components out of order");
+   Write_Line ("        _R   turn off warnings for components out of order");
    Write_Line ("        s    suppress all info/warnings");
    Write_Line ("        .s   turn on warnings for overridden size clause");
    Write_Line ("        .S*  turn off warnings for overridden size clause");

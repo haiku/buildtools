@@ -56,6 +56,10 @@ Wall
 Ada AdaWhy AdaSCIL
 Enable most warning messages.
 
+fdump-scos
+Ada RejectNegative Var(flag_dump_scos) Init(0)
+Dump Source Coverage Obligations.
+
 k8
 Driver
 Synonym of -gnatk8.
@@ -79,6 +83,10 @@ Use the narrowest integer type possible for enumeration types.
 fsigned-char
 Ada AdaWhy AdaSCIL
 Make \"char\" signed by default.
+
+funsigned-char
+Ada AdaWhy AdaSCIL
+Make \"char\" unsigned by default.
 
 gant
 Ada AdaWhy AdaSCIL Driver Joined Undocumented RejectNegative

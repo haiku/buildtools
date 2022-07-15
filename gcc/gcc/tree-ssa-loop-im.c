@@ -1,5 +1,5 @@
 /* Loop invariant motion.
-   Copyright (C) 2003-2018 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -37,14 +37,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-ssa-loop.h"
 #include "tree-into-ssa.h"
 #include "cfgloop.h"
-#include "domwalk.h"
-#include "params.h"
 #include "tree-affine.h"
 #include "tree-ssa-propagate.h"
 #include "trans-mem.h"
 #include "gimple-fold.h"
 #include "tree-scalar-evolution.h"
 #include "tree-ssa-loop-niter.h"
+#include "alias.h"
+#include "builtins.h"
+#include "tree-dfa.h"
+#include "dbgcnt.h"
 
 /* TODO:  Support for predicated code motion.  I.e.
 
@@ -72,13 +74,13 @@ along with GCC; see the file COPYING3.  If not see
 
 struct lim_aux_data
 {
-  struct loop *max_loop;	/* The outermost loop in that the statement
+  class loop *max_loop;	/* The outermost loop in that the statement
 				   is invariant.  */
 
-  struct loop *tgt_loop;	/* The loop out of that we want to move the
+  class loop *tgt_loop;	/* The loop out of that we want to move the
 				   invariant.  */
 
-  struct loop *always_executed_in;
+  class loop *always_executed_in;
 				/* The outermost loop for that we are sure
 				   the statement is executed if the loop
 				   is entered.  */
@@ -110,10 +112,13 @@ struct mem_ref_loc
 
 /* Description of a memory reference.  */
 
-struct im_mem_ref
+class im_mem_ref
 {
-  unsigned id;			/* ID assigned to the memory reference
+public:
+  unsigned id : 30;		/* ID assigned to the memory reference
 				   (its index in memory_accesses.refs_list)  */
+  unsigned ref_canonical : 1;   /* Whether mem.ref was canonicalized.  */
+  unsigned ref_decomposed : 1;  /* Whether the ref was hashed from mem.  */
   hashval_t hash;		/* Its hash value.  */
 
   /* The memory access itself and associated caching of alias-oracle
@@ -122,39 +127,58 @@ struct im_mem_ref
 
   bitmap stored;		/* The set of loops in that this memory location
 				   is stored to.  */
+  bitmap loaded;		/* The set of loops in that this memory location
+				   is loaded from.  */
   vec<mem_ref_loc>		accesses_in_loop;
 				/* The locations of the accesses.  Vector
 				   indexed by the loop number.  */
 
-  /* The following sets are computed on demand.  We keep both set and
-     its complement, so that we know whether the information was
-     already computed or not.  */
-  bitmap_head indep_loop;	/* The set of loops in that the memory
-				   reference is independent, meaning:
-				   If it is stored in the loop, this store
-				     is independent on all other loads and
-				     stores.
-				   If it is only loaded, then it is independent
-				     on all stores in the loop.  */
-  bitmap_head dep_loop;		/* The complement of INDEP_LOOP.  */
+  /* The following set is computed on demand.  */
+  bitmap_head dep_loop;		/* The set of loops in that the memory
+				   reference is {in,}dependent in
+				   different modes.  */
 };
 
-/* We use two bits per loop in the ref->{in,}dep_loop bitmaps, the first
-   to record (in)dependence against stores in the loop and its subloops, the
-   second to record (in)dependence against all references in the loop
-   and its subloops.  */
-#define LOOP_DEP_BIT(loopnum, storedp) (2 * (loopnum) + (storedp ? 1 : 0))
+/* We use six bits per loop in the ref->dep_loop bitmap to record
+   the dep_kind x dep_state combinations.  */
+
+enum dep_kind { lim_raw, sm_war, sm_waw };
+enum dep_state { dep_unknown, dep_independent, dep_dependent };
+
+/* Populate the loop dependence cache of REF for LOOP, KIND with STATE.  */
+
+static void
+record_loop_dependence (class loop *loop, im_mem_ref *ref,
+			dep_kind kind, dep_state state)
+{
+  gcc_assert (state != dep_unknown);
+  unsigned bit = 6 * loop->num + kind * 2 + state == dep_dependent ? 1 : 0;
+  bitmap_set_bit (&ref->dep_loop, bit);
+}
+
+/* Query the loop dependence cache of REF for LOOP, KIND.  */
+
+static dep_state
+query_loop_dependence (class loop *loop, im_mem_ref *ref, dep_kind kind)
+{
+  unsigned first_bit = 6 * loop->num + kind * 2;
+  if (bitmap_bit_p (&ref->dep_loop, first_bit))
+    return dep_independent;
+  else if (bitmap_bit_p (&ref->dep_loop, first_bit + 1))
+    return dep_dependent;
+  return dep_unknown;
+}
 
 /* Mem_ref hashtable helpers.  */
 
 struct mem_ref_hasher : nofree_ptr_hash <im_mem_ref>
 {
-  typedef tree_node *compare_type;
+  typedef ao_ref *compare_type;
   static inline hashval_t hash (const im_mem_ref *);
-  static inline bool equal (const im_mem_ref *, const tree_node *);
+  static inline bool equal (const im_mem_ref *, const ao_ref *);
 };
 
-/* A hash function for struct im_mem_ref object OBJ.  */
+/* A hash function for class im_mem_ref object OBJ.  */
 
 inline hashval_t
 mem_ref_hasher::hash (const im_mem_ref *mem)
@@ -162,13 +186,34 @@ mem_ref_hasher::hash (const im_mem_ref *mem)
   return mem->hash;
 }
 
-/* An equality function for struct im_mem_ref object MEM1 with
+/* An equality function for class im_mem_ref object MEM1 with
    memory reference OBJ2.  */
 
 inline bool
-mem_ref_hasher::equal (const im_mem_ref *mem1, const tree_node *obj2)
+mem_ref_hasher::equal (const im_mem_ref *mem1, const ao_ref *obj2)
 {
-  return operand_equal_p (mem1->mem.ref, (const_tree) obj2, 0);
+  if (obj2->max_size_known_p ())
+    return (mem1->ref_decomposed
+	    && operand_equal_p (mem1->mem.base, obj2->base, 0)
+	    && known_eq (mem1->mem.offset, obj2->offset)
+	    && known_eq (mem1->mem.size, obj2->size)
+	    && known_eq (mem1->mem.max_size, obj2->max_size)
+	    && mem1->mem.volatile_p == obj2->volatile_p
+	    && (mem1->mem.ref_alias_set == obj2->ref_alias_set
+		/* We are not canonicalizing alias-sets but for the
+		   special-case we didn't canonicalize yet and the
+		   incoming ref is a alias-set zero MEM we pick
+		   the correct one already.  */
+		|| (!mem1->ref_canonical
+		    && (TREE_CODE (obj2->ref) == MEM_REF
+			|| TREE_CODE (obj2->ref) == TARGET_MEM_REF)
+		    && obj2->ref_alias_set == 0)
+		/* Likewise if there's a canonical ref with alias-set zero.  */
+		|| (mem1->ref_canonical && mem1->mem.ref_alias_set == 0))
+	    && types_compatible_p (TREE_TYPE (mem1->mem.ref),
+				   TREE_TYPE (obj2->ref)));
+  else
+    return operand_equal_p (mem1->mem.ref, obj2->ref, 0);
 }
 
 
@@ -183,7 +228,7 @@ static struct
   vec<im_mem_ref *> refs_list;
 
   /* The set of memory references accessed in each loop.  */
-  vec<bitmap_head> refs_in_loop;
+  vec<bitmap_head> refs_loaded_in_loop;
 
   /* The set of memory references stored in each loop.  */
   vec<bitmap_head> refs_stored_in_loop;
@@ -199,15 +244,16 @@ static struct
 static bitmap_obstack lim_bitmap_obstack;
 static obstack mem_ref_obstack;
 
-static bool ref_indep_loop_p (struct loop *, im_mem_ref *);
-static bool ref_always_accessed_p (struct loop *, im_mem_ref *, bool);
+static bool ref_indep_loop_p (class loop *, im_mem_ref *, dep_kind);
+static bool ref_always_accessed_p (class loop *, im_mem_ref *, bool);
+static bool refs_independent_p (im_mem_ref *, im_mem_ref *, bool = true);
 
 /* Minimum cost of an expensive expression.  */
-#define LIM_EXPENSIVE ((unsigned) PARAM_VALUE (PARAM_LIM_EXPENSIVE))
+#define LIM_EXPENSIVE ((unsigned) param_lim_expensive)
 
 /* The outermost loop for which execution of the header guarantees that the
    block will be executed.  */
-#define ALWAYS_EXECUTED_IN(BB) ((struct loop *) (BB)->aux)
+#define ALWAYS_EXECUTED_IN(BB) ((class loop *) (BB)->aux)
 #define SET_ALWAYS_EXECUTED_IN(BB, VAL) ((BB)->aux = (void *) (VAL))
 
 /* ID of the shared unanalyzable mem.  */
@@ -302,7 +348,7 @@ movement_possibility (gimple *stmt)
   if (stmt_ends_bb_p (stmt)
       || gimple_has_volatile_ops (stmt)
       || gimple_has_side_effects (stmt)
-      || stmt_could_throw_p (stmt))
+      || stmt_could_throw_p (cfun, stmt))
     return MOVE_IMPOSSIBLE;
 
   if (is_gimple_call (stmt))
@@ -369,12 +415,12 @@ movement_possibility (gimple *stmt)
    other operands, i.e. the outermost loop enclosing LOOP in that the value
    of DEF is invariant.  */
 
-static struct loop *
-outermost_invariant_loop (tree def, struct loop *loop)
+static class loop *
+outermost_invariant_loop (tree def, class loop *loop)
 {
   gimple *def_stmt;
   basic_block def_bb;
-  struct loop *max_loop;
+  class loop *max_loop;
   struct lim_aux_data *lim_data;
 
   if (!def)
@@ -417,12 +463,12 @@ outermost_invariant_loop (tree def, struct loop *loop)
    If DEF is not invariant in LOOP, return false.  Otherwise return TRUE.  */
 
 static bool
-add_dependency (tree def, struct lim_aux_data *data, struct loop *loop,
+add_dependency (tree def, struct lim_aux_data *data, class loop *loop,
 		bool add_cost)
 {
   gimple *def_stmt = SSA_NAME_DEF_STMT (def);
   basic_block def_bb = gimple_bb (def_stmt);
-  struct loop *max_loop;
+  class loop *max_loop;
   struct lim_aux_data *def_data;
 
   if (!def_bb)
@@ -471,9 +517,7 @@ stmt_cost (gimple *stmt)
       /* Unless the call is a builtin_constant_p; this always folds to a
 	 constant, so moving it is useless.  */
       fndecl = gimple_call_fndecl (stmt);
-      if (fndecl
-	  && DECL_BUILT_IN_CLASS (fndecl) == BUILT_IN_NORMAL
-	  && DECL_FUNCTION_CODE (fndecl) == BUILT_IN_CONSTANT_P)
+      if (fndecl && fndecl_built_in_p (fndecl, BUILT_IN_CONSTANT_P))
 	return 0;
 
       return LIM_EXPENSIVE;
@@ -493,7 +537,6 @@ stmt_cost (gimple *stmt)
     case WIDEN_MULT_PLUS_EXPR:
     case WIDEN_MULT_MINUS_EXPR:
     case DOT_PROD_EXPR:
-    case FMA_EXPR:
     case TRUNC_DIV_EXPR:
     case CEIL_DIV_EXPR:
     case FLOOR_DIV_EXPR:
@@ -536,10 +579,10 @@ stmt_cost (gimple *stmt)
    REF is independent.  If REF is not independent in LOOP, NULL is returned
    instead.  */
 
-static struct loop *
-outermost_indep_loop (struct loop *outer, struct loop *loop, im_mem_ref *ref)
+static class loop *
+outermost_indep_loop (class loop *outer, class loop *loop, im_mem_ref *ref)
 {
-  struct loop *aloop;
+  class loop *aloop;
 
   if (ref->stored && bitmap_bit_p (ref->stored, loop->num))
     return NULL;
@@ -548,10 +591,10 @@ outermost_indep_loop (struct loop *outer, struct loop *loop, im_mem_ref *ref)
        aloop != loop;
        aloop = superloop_at_depth (loop, loop_depth (aloop) + 1))
     if ((!ref->stored || !bitmap_bit_p (ref->stored, aloop->num))
-	&& ref_indep_loop_p (aloop, ref))
+	&& ref_indep_loop_p (aloop, ref, lim_raw))
       return aloop;
 
-  if (ref_indep_loop_p (loop, ref))
+  if (ref_indep_loop_p (loop, ref, lim_raw))
     return loop;
   else
     return NULL;
@@ -625,8 +668,8 @@ static bool
 determine_max_movement (gimple *stmt, bool must_preserve_exec)
 {
   basic_block bb = gimple_bb (stmt);
-  struct loop *loop = bb->loop_father;
-  struct loop *level;
+  class loop *loop = bb->loop_father;
+  class loop *level;
   struct lim_aux_data *lim_data = get_lim_data (stmt);
   tree val;
   ssa_op_iter iter;
@@ -753,9 +796,9 @@ determine_max_movement (gimple *stmt, bool must_preserve_exec)
    operands) is hoisted at least out of the loop LEVEL.  */
 
 static void
-set_level (gimple *stmt, struct loop *orig_loop, struct loop *level)
+set_level (gimple *stmt, class loop *orig_loop, class loop *level)
 {
-  struct loop *stmt_loop = gimple_bb (stmt)->loop_father;
+  class loop *stmt_loop = gimple_bb (stmt)->loop_father;
   struct lim_aux_data *lim_data;
   gimple *dep_stmt;
   unsigned i;
@@ -926,35 +969,22 @@ rewrite_bittest (gimple_stmt_iterator *bsi)
   return stmt;
 }
 
-/* For each statement determines the outermost loop in that it is invariant,
-   -   statements on whose motion it depends and the cost of the computation.
-   -   This information is stored to the LIM_DATA structure associated with
-   -   each statement.  */
-class invariantness_dom_walker : public dom_walker
-{
-public:
-  invariantness_dom_walker (cdi_direction direction)
-    : dom_walker (direction) {}
-
-  virtual edge before_dom_children (basic_block);
-};
-
 /* Determine the outermost loops in that statements in basic block BB are
-   invariant, and record them to the LIM_DATA associated with the statements.
-   Callback for dom_walker.  */
+   invariant, and record them to the LIM_DATA associated with the
+   statements.  */
 
-edge
-invariantness_dom_walker::before_dom_children (basic_block bb)
+static void
+compute_invariantness (basic_block bb)
 {
   enum move_pos pos;
   gimple_stmt_iterator bsi;
   gimple *stmt;
   bool maybe_never = ALWAYS_EXECUTED_IN (bb) == NULL;
-  struct loop *outermost = ALWAYS_EXECUTED_IN (bb);
+  class loop *outermost = ALWAYS_EXECUTED_IN (bb);
   struct lim_aux_data *lim_data;
 
   if (!loop_outer (bb->loop_father))
-    return NULL;
+    return;
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "Basic block %d (loop %d -- depth %d):\n\n",
@@ -1029,7 +1059,7 @@ invariantness_dom_walker::before_dom_children (basic_block bb)
 	{
 	  tree op0 = gimple_assign_rhs1 (stmt);
 	  tree op1 = gimple_assign_rhs2 (stmt);
-	  struct loop *ol1 = outermost_invariant_loop (op1,
+	  class loop *ol1 = outermost_invariant_loop (op1,
 					loop_containing_stmt (stmt));
 
 	  /* If divisor is invariant, convert a/b to a*(1/b), allowing reciprocal
@@ -1078,7 +1108,6 @@ invariantness_dom_walker::before_dom_children (basic_block bb)
       if (lim_data->cost >= LIM_EXPENSIVE)
 	set_profitable_level (stmt);
     }
-  return NULL;
 }
 
 /* Hoist the statements in basic block BB out of the loops prescribed by
@@ -1088,7 +1117,7 @@ invariantness_dom_walker::before_dom_children (basic_block bb)
 unsigned int
 move_computations_worker (basic_block bb)
 {
-  struct loop *level;
+  class loop *level;
   unsigned cost = 0;
   struct lim_aux_data *lim_data;
   unsigned int todo = 0;
@@ -1208,7 +1237,8 @@ move_computations_worker (basic_block bb)
 	      gphi *phi = gsi2.phi ();
 	      if (virtual_operand_p (gimple_phi_result (phi)))
 		{
-		  gimple_set_vuse (stmt, PHI_ARG_DEF_FROM_EDGE (phi, e));
+		  SET_USE (gimple_vuse_op (stmt),
+			   PHI_ARG_DEF_FROM_EDGE (phi, e));
 		  break;
 		}
 	    }
@@ -1244,35 +1274,13 @@ move_computations_worker (basic_block bb)
   return todo;
 }
 
-/* Hoist the statements out of the loops prescribed by data stored in
-   LIM_DATA structures associated with each statement.*/
-
-static unsigned int
-move_computations (void)
-{
-  int *rpo = XNEWVEC (int, last_basic_block_for_fn (cfun));
-  int n = pre_and_rev_post_order_compute_fn (cfun, NULL, rpo, false);
-  unsigned todo = 0;
-
-  for (int i = 0; i < n; ++i)
-    todo |= move_computations_worker (BASIC_BLOCK_FOR_FN (cfun, rpo[i]));
-
-  free (rpo);
-
-  gsi_commit_edge_inserts ();
-  if (need_ssa_update_p (cfun))
-    rewrite_into_loop_closed_ssa (NULL, TODO_update_ssa);
-
-  return todo;
-}
-
 /* Checks whether the statement defining variable *INDEX can be hoisted
    out of the loop passed in DATA.  Callback for for_each_index.  */
 
 static bool
 may_move_till (tree ref, tree *index, void *data)
 {
-  struct loop *loop = (struct loop *) data, *max_loop;
+  class loop *loop = (class loop *) data, *max_loop;
 
   /* If REF is an array reference, check also that the step and the lower
      bound is invariant in LOOP.  */
@@ -1301,7 +1309,7 @@ may_move_till (tree ref, tree *index, void *data)
    moved out of the LOOP.  ORIG_LOOP is the loop in that EXPR is used.  */
 
 static void
-force_move_till_op (tree op, struct loop *orig_loop, struct loop *loop)
+force_move_till_op (tree op, class loop *orig_loop, class loop *loop)
 {
   gimple *stmt;
 
@@ -1324,8 +1332,8 @@ force_move_till_op (tree op, struct loop *orig_loop, struct loop *loop)
 
 struct fmt_data
 {
-  struct loop *loop;
-  struct loop *orig_loop;
+  class loop *loop;
+  class loop *orig_loop;
 };
 
 static bool
@@ -1350,7 +1358,7 @@ force_move_till (tree ref, tree *index, void *data)
 /* A function to free the mem_ref object OBJ.  */
 
 static void
-memref_free (struct im_mem_ref *mem)
+memref_free (class im_mem_ref *mem)
 {
   mem->accesses_in_loop.release ();
 }
@@ -1359,14 +1367,19 @@ memref_free (struct im_mem_ref *mem)
    value is HASH and id is ID.  */
 
 static im_mem_ref *
-mem_ref_alloc (tree mem, unsigned hash, unsigned id)
+mem_ref_alloc (ao_ref *mem, unsigned hash, unsigned id)
 {
-  im_mem_ref *ref = XOBNEW (&mem_ref_obstack, struct im_mem_ref);
-  ao_ref_init (&ref->mem, mem);
+  im_mem_ref *ref = XOBNEW (&mem_ref_obstack, class im_mem_ref);
+  if (mem)
+    ref->mem = *mem;
+  else
+    ao_ref_init (&ref->mem, error_mark_node);
   ref->id = id;
+  ref->ref_canonical = false;
+  ref->ref_decomposed = false;
   ref->hash = hash;
   ref->stored = NULL;
-  bitmap_initialize (&ref->indep_loop, &lim_bitmap_obstack);
+  ref->loaded = NULL;
   bitmap_initialize (&ref->dep_loop, &lim_bitmap_obstack);
   ref->accesses_in_loop.create (1);
 
@@ -1389,7 +1402,7 @@ record_mem_ref_loc (im_mem_ref *ref, gimple *stmt, tree *loc)
    necessary.  Return whether a bit was changed.  */
 
 static bool
-set_ref_stored_in_loop (im_mem_ref *ref, struct loop *loop)
+set_ref_stored_in_loop (im_mem_ref *ref, class loop *loop)
 {
   if (!ref->stored)
     ref->stored = BITMAP_ALLOC (&lim_bitmap_obstack);
@@ -1399,10 +1412,31 @@ set_ref_stored_in_loop (im_mem_ref *ref, struct loop *loop)
 /* Marks reference REF as stored in LOOP.  */
 
 static void
-mark_ref_stored (im_mem_ref *ref, struct loop *loop)
+mark_ref_stored (im_mem_ref *ref, class loop *loop)
 {
   while (loop != current_loops->tree_root
 	 && set_ref_stored_in_loop (ref, loop))
+    loop = loop_outer (loop);
+}
+
+/* Set the LOOP bit in REF loaded bitmap and allocate that if
+   necessary.  Return whether a bit was changed.  */
+
+static bool
+set_ref_loaded_in_loop (im_mem_ref *ref, class loop *loop)
+{
+  if (!ref->loaded)
+    ref->loaded = BITMAP_ALLOC (&lim_bitmap_obstack);
+  return bitmap_set_bit (ref->loaded, loop->num);
+}
+
+/* Marks reference REF as loaded in LOOP.  */
+
+static void
+mark_ref_loaded (im_mem_ref *ref, class loop *loop)
+{
+  while (loop != current_loops->tree_root
+	 && set_ref_loaded_in_loop (ref, loop))
     loop = loop_outer (loop);
 }
 
@@ -1412,7 +1446,7 @@ mark_ref_stored (im_mem_ref *ref, struct loop *loop)
    well.  */
 
 static void
-gather_mem_refs_stmt (struct loop *loop, gimple *stmt)
+gather_mem_refs_stmt (class loop *loop, gimple *stmt)
 {
   tree *mem = NULL;
   hashval_t hash;
@@ -1439,17 +1473,90 @@ gather_mem_refs_stmt (struct loop *loop, gimple *stmt)
     }
   else
     {
-      hash = iterative_hash_expr (*mem, 0);
-      slot = memory_accesses.refs->find_slot_with_hash (*mem, hash, INSERT);
+      /* We are looking for equal refs that might differ in structure
+         such as a.b vs. MEM[&a + 4].  So we key off the ao_ref but
+	 make sure we can canonicalize the ref in the hashtable if
+	 non-operand_equal_p refs are found.  For the lookup we mark
+	 the case we want strict equality with aor.max_size == -1.  */
+      ao_ref aor;
+      ao_ref_init (&aor, *mem);
+      ao_ref_base (&aor);
+      ao_ref_alias_set (&aor);
+      HOST_WIDE_INT offset, size, max_size;
+      poly_int64 saved_maxsize = aor.max_size, mem_off;
+      tree mem_base;
+      bool ref_decomposed;
+      if (aor.max_size_known_p ()
+	  && aor.offset.is_constant (&offset)
+	  && aor.size.is_constant (&size)
+	  && aor.max_size.is_constant (&max_size)
+	  && size == max_size
+	  && (size % BITS_PER_UNIT) == 0
+	  /* We're canonicalizing to a MEM where TYPE_SIZE specifies the
+	     size.  Make sure this is consistent with the extraction.  */
+	  && poly_int_tree_p (TYPE_SIZE (TREE_TYPE (*mem)))
+	  && known_eq (wi::to_poly_offset (TYPE_SIZE (TREE_TYPE (*mem))),
+		       aor.size)
+	  && (mem_base = get_addr_base_and_unit_offset (aor.ref, &mem_off)))
+	{
+	  ref_decomposed = true;
+	  hash = iterative_hash_expr (ao_ref_base (&aor), 0);
+	  hash = iterative_hash_host_wide_int (offset, hash);
+	  hash = iterative_hash_host_wide_int (size, hash);
+	}
+      else
+	{
+	  ref_decomposed = false;
+	  hash = iterative_hash_expr (aor.ref, 0);
+	  aor.max_size = -1;
+	}
+      slot = memory_accesses.refs->find_slot_with_hash (&aor, hash, INSERT);
+      aor.max_size = saved_maxsize;
       if (*slot)
 	{
+	  if (!(*slot)->ref_canonical 
+	      && !operand_equal_p (*mem, (*slot)->mem.ref, 0))
+	    {
+	      /* If we didn't yet canonicalize the hashtable ref (which
+	         we'll end up using for code insertion) and hit a second
+		 equal ref that is not structurally equivalent create
+		 a canonical ref which is a bare MEM_REF.  */
+	      if (TREE_CODE (*mem) == MEM_REF
+		  || TREE_CODE (*mem) == TARGET_MEM_REF)
+		{
+		  (*slot)->mem.ref = *mem;
+		  (*slot)->mem.base_alias_set = ao_ref_base_alias_set (&aor);
+		}
+	      else
+		{
+		  tree ref_alias_type = reference_alias_ptr_type (*mem);
+		  unsigned int ref_align = get_object_alignment (*mem);
+		  tree ref_type = TREE_TYPE (*mem);
+		  tree tmp = build1 (ADDR_EXPR, ptr_type_node,
+				     unshare_expr (mem_base));
+		  if (TYPE_ALIGN (ref_type) != ref_align)
+		    ref_type = build_aligned_type (ref_type, ref_align);
+		  (*slot)->mem.ref
+		    = fold_build2 (MEM_REF, ref_type, tmp,
+				   build_int_cst (ref_alias_type, mem_off));
+		  if ((*slot)->mem.volatile_p)
+		    TREE_THIS_VOLATILE ((*slot)->mem.ref) = 1;
+		  gcc_checking_assert (TREE_CODE ((*slot)->mem.ref) == MEM_REF
+				       && is_gimple_mem_ref_addr
+				            (TREE_OPERAND ((*slot)->mem.ref,
+							   0)));
+		  (*slot)->mem.base_alias_set = (*slot)->mem.ref_alias_set;
+		}
+	      (*slot)->ref_canonical = true;
+	    }
 	  ref = *slot;
 	  id = ref->id;
 	}
       else
 	{
 	  id = memory_accesses.refs_list.length ();
-	  ref = mem_ref_alloc (*mem, hash, id);
+	  ref = mem_ref_alloc (&aor, hash, id);
+	  ref->ref_decomposed = ref_decomposed;
 	  memory_accesses.refs_list.safe_push (ref);
 	  *slot = ref;
 
@@ -1463,11 +1570,16 @@ gather_mem_refs_stmt (struct loop *loop, gimple *stmt)
 
       record_mem_ref_loc (ref, stmt, mem);
     }
-  bitmap_set_bit (&memory_accesses.refs_in_loop[loop->num], ref->id);
   if (is_stored)
     {
       bitmap_set_bit (&memory_accesses.refs_stored_in_loop[loop->num], ref->id);
       mark_ref_stored (ref, loop);
+    }
+  /* A not simple memory op is also a read when it is a write.  */
+  if (!is_stored || id == UNANALYZABLE_MEM_ID)
+    {
+      bitmap_set_bit (&memory_accesses.refs_loaded_in_loop[loop->num], ref->id);
+      mark_ref_loaded (ref, loop);
     }
   init_lim_data (stmt)->ref = ref->id;
   return;
@@ -1478,12 +1590,14 @@ static unsigned *bb_loop_postorder;
 /* qsort sort function to sort blocks after their loop fathers postorder.  */
 
 static int
-sort_bbs_in_loop_postorder_cmp (const void *bb1_, const void *bb2_)
+sort_bbs_in_loop_postorder_cmp (const void *bb1_, const void *bb2_,
+				void *bb_loop_postorder_)
 {
-  basic_block bb1 = *(basic_block *)const_cast<void *>(bb1_);
-  basic_block bb2 = *(basic_block *)const_cast<void *>(bb2_);
-  struct loop *loop1 = bb1->loop_father;
-  struct loop *loop2 = bb2->loop_father;
+  unsigned *bb_loop_postorder = (unsigned *)bb_loop_postorder_;
+  basic_block bb1 = *(const basic_block *)bb1_;
+  basic_block bb2 = *(const basic_block *)bb2_;
+  class loop *loop1 = bb1->loop_father;
+  class loop *loop2 = bb2->loop_father;
   if (loop1->num == loop2->num)
     return bb1->index - bb2->index;
   return bb_loop_postorder[loop1->num] < bb_loop_postorder[loop2->num] ? -1 : 1;
@@ -1492,12 +1606,14 @@ sort_bbs_in_loop_postorder_cmp (const void *bb1_, const void *bb2_)
 /* qsort sort function to sort ref locs after their loop fathers postorder.  */
 
 static int
-sort_locs_in_loop_postorder_cmp (const void *loc1_, const void *loc2_)
+sort_locs_in_loop_postorder_cmp (const void *loc1_, const void *loc2_,
+				 void *bb_loop_postorder_)
 {
-  mem_ref_loc *loc1 = (mem_ref_loc *)const_cast<void *>(loc1_);
-  mem_ref_loc *loc2 = (mem_ref_loc *)const_cast<void *>(loc2_);
-  struct loop *loop1 = gimple_bb (loc1->stmt)->loop_father;
-  struct loop *loop2 = gimple_bb (loc2->stmt)->loop_father;
+  unsigned *bb_loop_postorder = (unsigned *)bb_loop_postorder_;
+  const mem_ref_loc *loc1 = (const mem_ref_loc *)loc1_;
+  const mem_ref_loc *loc2 = (const mem_ref_loc *)loc2_;
+  class loop *loop1 = gimple_bb (loc1->stmt)->loop_father;
+  class loop *loop2 = gimple_bb (loc2->stmt)->loop_father;
   if (loop1->num == loop2->num)
     return 0;
   return bb_loop_postorder[loop1->num] < bb_loop_postorder[loop2->num] ? -1 : 1;
@@ -1506,11 +1622,11 @@ sort_locs_in_loop_postorder_cmp (const void *loc1_, const void *loc2_)
 /* Gathers memory references in loops.  */
 
 static void
-analyze_memory_references (void)
+analyze_memory_references (bool store_motion)
 {
   gimple_stmt_iterator bsi;
   basic_block bb, *bbs;
-  struct loop *loop, *outer;
+  class loop *loop, *outer;
   unsigned i, n;
 
   /* Collect all basic-blocks in loops and sort them after their
@@ -1521,10 +1637,13 @@ analyze_memory_references (void)
     if (bb->loop_father != current_loops->tree_root)
       bbs[i++] = bb;
   n = i;
-  qsort (bbs, n, sizeof (basic_block), sort_bbs_in_loop_postorder_cmp);
+  gcc_sort_r (bbs, n, sizeof (basic_block), sort_bbs_in_loop_postorder_cmp,
+	      bb_loop_postorder);
 
   /* Visit blocks in loop postorder and assign mem-ref IDs in that order.
-     That results in better locality for all the bitmaps.  */
+     That results in better locality for all the bitmaps.  It also
+     automatically sorts the location list of gathered memory references
+     after their loop postorder number allowing to binary-search it.  */
   for (i = 0; i < n; ++i)
     {
       basic_block bb = bbs[i];
@@ -1532,14 +1651,22 @@ analyze_memory_references (void)
         gather_mem_refs_stmt (bb->loop_father, gsi_stmt (bsi));
     }
 
-  /* Sort the location list of gathered memory references after their
+  /* Verify the list of gathered memory references is sorted after their
      loop postorder number.  */
-  im_mem_ref *ref;
-  FOR_EACH_VEC_ELT (memory_accesses.refs_list, i, ref)
-    ref->accesses_in_loop.qsort (sort_locs_in_loop_postorder_cmp);
+  if (flag_checking)
+    {
+      im_mem_ref *ref;
+      FOR_EACH_VEC_ELT (memory_accesses.refs_list, i, ref)
+	for (unsigned j = 1; j < ref->accesses_in_loop.length (); ++j)
+	  gcc_assert (sort_locs_in_loop_postorder_cmp
+			(&ref->accesses_in_loop[j-1], &ref->accesses_in_loop[j],
+			 bb_loop_postorder) <= 0);
+    }
 
   free (bbs);
-//  free (bb_loop_postorder);
+
+  if (!store_motion)
+    return;
 
   /* Propagate the information about accessed memory references up
      the loop hierarchy.  */
@@ -1565,7 +1692,8 @@ analyze_memory_references (void)
 
 static bool
 mem_refs_may_alias_p (im_mem_ref *mem1, im_mem_ref *mem2,
-		      hash_map<tree, name_expansion *> **ttae_cache)
+		      hash_map<tree, name_expansion *> **ttae_cache,
+		      bool tbaa_p)
 {
   /* Perform BASE + OFFSET analysis -- if MEM1 and MEM2 are based on the same
      object and their offset differ in such a way that the locations cannot
@@ -1574,7 +1702,7 @@ mem_refs_may_alias_p (im_mem_ref *mem1, im_mem_ref *mem2,
   aff_tree off1, off2;
 
   /* Perform basic offset and type-based disambiguation.  */
-  if (!refs_may_alias_p_1 (&mem1->mem, &mem2->mem, true))
+  if (!refs_may_alias_p_1 (&mem1->mem, &mem2->mem, tbaa_p))
     return false;
 
   /* The expansion of addresses may be a bit expensive, thus we only do
@@ -1599,11 +1727,13 @@ mem_refs_may_alias_p (im_mem_ref *mem1, im_mem_ref *mem2,
    in a loop.  */
 
 static int
-find_ref_loc_in_loop_cmp (const void *loop_, const void *loc_)
+find_ref_loc_in_loop_cmp (const void *loop_, const void *loc_,
+			  void *bb_loop_postorder_)
 {
-  struct loop *loop = (struct loop *)const_cast<void *>(loop_);
+  unsigned *bb_loop_postorder = (unsigned *)bb_loop_postorder_;
+  class loop *loop = (class loop *)const_cast<void *>(loop_);
   mem_ref_loc *loc = (mem_ref_loc *)const_cast<void *>(loc_);
-  struct loop *loc_loop = gimple_bb (loc->stmt)->loop_father;
+  class loop *loc_loop = gimple_bb (loc->stmt)->loop_father;
   if (loop->num  == loc_loop->num
       || flow_loop_nested_p (loop, loc_loop))
     return 0;
@@ -1618,14 +1748,15 @@ find_ref_loc_in_loop_cmp (const void *loop_, const void *loc_)
 
 template <typename FN>
 static bool
-for_all_locs_in_loop (struct loop *loop, im_mem_ref *ref, FN fn)
+for_all_locs_in_loop (class loop *loop, im_mem_ref *ref, FN fn)
 {
   unsigned i;
   mem_ref_loc *loc;
 
   /* Search for the cluster of locs in the accesses_in_loop vector
      which is sorted after postorder index of the loop father.  */
-  loc = ref->accesses_in_loop.bsearch (loop, find_ref_loc_in_loop_cmp);
+  loc = ref->accesses_in_loop.bsearch (loop, find_ref_loc_in_loop_cmp,
+				       bb_loop_postorder);
   if (!loc)
     return false;
 
@@ -1656,8 +1787,9 @@ for_all_locs_in_loop (struct loop *loop, im_mem_ref *ref, FN fn)
 
 /* Rewrites location LOC by TMP_VAR.  */
 
-struct rewrite_mem_ref_loc
+class rewrite_mem_ref_loc
 {
+public:
   rewrite_mem_ref_loc (tree tmp_var_) : tmp_var (tmp_var_) {}
   bool operator () (mem_ref_loc *loc);
   tree tmp_var;
@@ -1674,15 +1806,16 @@ rewrite_mem_ref_loc::operator () (mem_ref_loc *loc)
 /* Rewrites all references to REF in LOOP by variable TMP_VAR.  */
 
 static void
-rewrite_mem_refs (struct loop *loop, im_mem_ref *ref, tree tmp_var)
+rewrite_mem_refs (class loop *loop, im_mem_ref *ref, tree tmp_var)
 {
   for_all_locs_in_loop (loop, ref, rewrite_mem_ref_loc (tmp_var));
 }
 
 /* Stores the first reference location in LOCP.  */
 
-struct first_mem_ref_loc_1
+class first_mem_ref_loc_1
 {
+public:
   first_mem_ref_loc_1 (mem_ref_loc **locp_) : locp (locp_) {}
   bool operator () (mem_ref_loc *loc);
   mem_ref_loc **locp;
@@ -1698,20 +1831,12 @@ first_mem_ref_loc_1::operator () (mem_ref_loc *loc)
 /* Returns the first reference location to REF in LOOP.  */
 
 static mem_ref_loc *
-first_mem_ref_loc (struct loop *loop, im_mem_ref *ref)
+first_mem_ref_loc (class loop *loop, im_mem_ref *ref)
 {
   mem_ref_loc *locp = NULL;
   for_all_locs_in_loop (loop, ref, first_mem_ref_loc_1 (&locp));
   return locp;
 }
-
-struct prev_flag_edges {
-  /* Edge to insert new flag comparison code.  */
-  edge append_cond_position;
-
-  /* Edge for fall through from previous flag comparison.  */
-  edge last_cond_fallthru;
-};
 
 /* Helper function for execute_sm.  Emit code to store TMP_VAR into
    MEM along edge EX.
@@ -1760,14 +1885,14 @@ struct prev_flag_edges {
 
 static void
 execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag,
-		       edge preheader, hash_set <basic_block> *flag_bbs)
+		       edge preheader, hash_set <basic_block> *flag_bbs,
+		       edge &append_cond_position, edge &last_cond_fallthru)
 {
   basic_block new_bb, then_bb, old_dest;
   bool loop_has_only_one_exit;
-  edge then_old_edge, orig_ex = ex;
+  edge then_old_edge;
   gimple_stmt_iterator gsi;
   gimple *stmt;
-  struct prev_flag_edges *prev_edges = (struct prev_flag_edges *) ex->aux;
   bool irr = ex->flags & EDGE_IRREDUCIBLE_LOOP;
 
   profile_count count_sum = profile_count::zero ();
@@ -1777,7 +1902,7 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag,
   /* Flag is set in FLAG_BBS. Determine probability that flag will be true
      at loop exit.
 
-     This code may look fancy, but it can not update profile very realistically
+     This code may look fancy, but it cannot update profile very realistically
      because we do not know the probability that flag will be true at given
      loop exit.
 
@@ -1815,8 +1940,8 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag,
 
   /* ?? Insert store after previous store if applicable.  See note
      below.  */
-  if (prev_edges)
-    ex = prev_edges->append_cond_position;
+  if (append_cond_position)
+    ex = append_cond_position;
 
   loop_has_only_one_exit = single_pred_p (ex->dest);
 
@@ -1873,10 +1998,10 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag,
 
   set_immediate_dominator (CDI_DOMINATORS, then_bb, new_bb);
 
-  if (prev_edges)
+  if (append_cond_position)
     {
-      basic_block prevbb = prev_edges->last_cond_fallthru->src;
-      redirect_edge_succ (prev_edges->last_cond_fallthru, new_bb);
+      basic_block prevbb = last_cond_fallthru->src;
+      redirect_edge_succ (last_cond_fallthru, new_bb);
       set_immediate_dominator (CDI_DOMINATORS, new_bb, prevbb);
       set_immediate_dominator (CDI_DOMINATORS, old_dest,
 			       recompute_dominator (CDI_DOMINATORS, old_dest));
@@ -1886,17 +2011,8 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag,
      sequence they originally happened.  Save the position right after
      the (_lsm) store we just created so we can continue appending after
      it and maintain the original order.  */
-  {
-    struct prev_flag_edges *p;
-
-    if (orig_ex->aux)
-      orig_ex->aux = NULL;
-    alloc_aux_for_edge (orig_ex, sizeof (struct prev_flag_edges));
-    p = (struct prev_flag_edges *) orig_ex->aux;
-    p->append_cond_position = then_old_edge;
-    p->last_cond_fallthru = find_edge (new_bb, old_dest);
-    orig_ex->aux = (void *) p;
-  }
+  append_cond_position = then_old_edge;
+  last_cond_fallthru = find_edge (new_bb, old_dest);
 
   if (!loop_has_only_one_exit)
     for (gphi_iterator gpi = gsi_start_phis (old_dest);
@@ -1917,8 +2033,9 @@ execute_sm_if_changed (edge ex, tree mem, tree tmp_var, tree flag,
 
 /* When REF is set on the location, set flag indicating the store.  */
 
-struct sm_set_flag_if_changed
+class sm_set_flag_if_changed
 {
+public:
   sm_set_flag_if_changed (tree flag_, hash_set <basic_block> *bbs_)
 	 : flag (flag_), bbs (bbs_) {}
   bool operator () (mem_ref_loc *loc);
@@ -1945,7 +2062,7 @@ sm_set_flag_if_changed::operator () (mem_ref_loc *loc)
    set, set an appropriate flag indicating the store.  */
 
 static tree
-execute_sm_if_changed_flag_set (struct loop *loop, im_mem_ref *ref,
+execute_sm_if_changed_flag_set (class loop *loop, im_mem_ref *ref,
 				hash_set <basic_block> *bbs)
 {
   tree flag;
@@ -1955,23 +2072,28 @@ execute_sm_if_changed_flag_set (struct loop *loop, im_mem_ref *ref,
   return flag;
 }
 
+struct sm_aux
+{
+  tree tmp_var;
+  tree store_flag;
+  hash_set <basic_block> flag_bbs;
+};
+
 /* Executes store motion of memory reference REF from LOOP.
    Exits from the LOOP are stored in EXITS.  The initialization of the
    temporary variable is put to the preheader of the loop, and assignments
    to the reference from the temporary variable are emitted to exits.  */
 
 static void
-execute_sm (struct loop *loop, vec<edge> exits, im_mem_ref *ref)
+execute_sm (class loop *loop, im_mem_ref *ref,
+	    hash_map<im_mem_ref *, sm_aux *> &aux_map, bool maybe_mt)
 {
-  tree tmp_var, store_flag = NULL_TREE;
-  unsigned i;
   gassign *load;
   struct fmt_data fmt_data;
-  edge ex;
   struct lim_aux_data *lim_data;
   bool multi_threaded_model_p = false;
   gimple_stmt_iterator gsi;
-  hash_set<basic_block> flag_bbs;
+  sm_aux *aux = new sm_aux;
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
@@ -1980,32 +2102,50 @@ execute_sm (struct loop *loop, vec<edge> exits, im_mem_ref *ref)
       fprintf (dump_file, " from loop %d\n", loop->num);
     }
 
-  tmp_var = create_tmp_reg (TREE_TYPE (ref->mem.ref),
-			    get_lsm_tmp_name (ref->mem.ref, ~0));
+  aux->tmp_var = create_tmp_reg (TREE_TYPE (ref->mem.ref),
+				 get_lsm_tmp_name (ref->mem.ref, ~0));
 
   fmt_data.loop = loop;
   fmt_data.orig_loop = loop;
   for_each_index (&ref->mem.ref, force_move_till, &fmt_data);
 
-  if (bb_in_transaction (loop_preheader_edge (loop)->src)
-      || (! PARAM_VALUE (PARAM_ALLOW_STORE_DATA_RACES)
-	  && ! ref_always_accessed_p (loop, ref, true)))
+  bool always_stored = ref_always_accessed_p (loop, ref, true);
+  if (maybe_mt
+      && (bb_in_transaction (loop_preheader_edge (loop)->src)
+	  || (! flag_store_data_races && ! always_stored)))
     multi_threaded_model_p = true;
 
   if (multi_threaded_model_p)
-    store_flag = execute_sm_if_changed_flag_set (loop, ref, &flag_bbs);
+    aux->store_flag
+      = execute_sm_if_changed_flag_set (loop, ref, &aux->flag_bbs);
+  else
+    aux->store_flag = NULL_TREE;
 
-  rewrite_mem_refs (loop, ref, tmp_var);
+  /* Remember variable setup.  */
+  aux_map.put (ref, aux);
+
+  rewrite_mem_refs (loop, ref, aux->tmp_var);
 
   /* Emit the load code on a random exit edge or into the latch if
      the loop does not exit, so that we are sure it will be processed
      by move_computations after all dependencies.  */
   gsi = gsi_for_stmt (first_mem_ref_loc (loop, ref)->stmt);
 
-  /* FIXME/TODO: For the multi-threaded variant, we could avoid this
-     load altogether, since the store is predicated by a flag.  We
-     could, do the load only if it was originally in the loop.  */
-  load = gimple_build_assign (tmp_var, unshare_expr (ref->mem.ref));
+  /* Avoid doing a load if there was no load of the ref in the loop.
+     Esp. when the ref is not always stored we cannot optimize it
+     away later.  But when it is not always stored we must use a conditional
+     store then.  */
+  if ((!always_stored && !multi_threaded_model_p)
+      || (ref->loaded && bitmap_bit_p (ref->loaded, loop->num)))
+    load = gimple_build_assign (aux->tmp_var, unshare_expr (ref->mem.ref));
+  else
+    {
+      /* If not emitting a load mark the uninitialized state on the
+	 loop entry as not to be warned for.  */
+      tree uninit = create_tmp_reg (TREE_TYPE (aux->tmp_var));
+      TREE_NO_WARNING (uninit) = 1;
+      load = gimple_build_assign (aux->tmp_var, uninit);
+    }
   lim_data = init_lim_data (load);
   lim_data->max_loop = loop;
   lim_data->tgt_loop = loop;
@@ -2013,72 +2153,566 @@ execute_sm (struct loop *loop, vec<edge> exits, im_mem_ref *ref)
 
   if (multi_threaded_model_p)
     {
-      load = gimple_build_assign (store_flag, boolean_false_node);
+      load = gimple_build_assign (aux->store_flag, boolean_false_node);
       lim_data = init_lim_data (load);
       lim_data->max_loop = loop;
       lim_data->tgt_loop = loop;
       gsi_insert_before (&gsi, load, GSI_SAME_STMT);
     }
+}
 
-  /* Sink the store to every exit from the loop.  */
-  FOR_EACH_VEC_ELT (exits, i, ex)
-    if (!multi_threaded_model_p)
+/* sm_ord is used for ordinary stores we can retain order with respect
+       to other stores
+   sm_unord is used for conditional executed stores which need to be
+       able to execute in arbitrary order with respect to other stores
+   sm_other is used for stores we do not try to apply store motion to.  */
+enum sm_kind { sm_ord, sm_unord, sm_other };
+struct seq_entry
+{
+  seq_entry () {}
+  seq_entry (unsigned f, sm_kind k, tree fr = NULL)
+    : first (f), second (k), from (fr) {}
+  unsigned first;
+  sm_kind second;
+  tree from;
+};
+
+static void
+execute_sm_exit (class loop *loop, edge ex, vec<seq_entry> &seq,
+		 hash_map<im_mem_ref *, sm_aux *> &aux_map, sm_kind kind,
+		 edge &append_cond_position, edge &last_cond_fallthru)
+{
+  /* Sink the stores to exit from the loop.  */
+  for (unsigned i = seq.length (); i > 0; --i)
+    {
+      im_mem_ref *ref = memory_accesses.refs_list[seq[i-1].first];
+      if (seq[i-1].second == sm_other)
+	{
+	  gcc_assert (kind == sm_ord && seq[i-1].from != NULL_TREE);
+	  if (dump_file && (dump_flags & TDF_DETAILS))
+	    {
+	      fprintf (dump_file, "Re-issueing dependent store of ");
+	      print_generic_expr (dump_file, ref->mem.ref);
+	      fprintf (dump_file, " from loop %d on exit %d -> %d\n",
+		       loop->num, ex->src->index, ex->dest->index);
+	    }
+	  gassign *store = gimple_build_assign (unshare_expr (ref->mem.ref),
+						seq[i-1].from);
+	  gsi_insert_on_edge (ex, store);
+	}
+      else
+	{
+	  sm_aux *aux = *aux_map.get (ref);
+	  if (!aux->store_flag || kind == sm_ord)
+	    {
+	      gassign *store;
+	      store = gimple_build_assign (unshare_expr (ref->mem.ref),
+					   aux->tmp_var);
+	      gsi_insert_on_edge (ex, store);
+	    }
+	  else
+	    execute_sm_if_changed (ex, ref->mem.ref, aux->tmp_var,
+				   aux->store_flag,
+				   loop_preheader_edge (loop), &aux->flag_bbs,
+				   append_cond_position, last_cond_fallthru);
+	}
+    }
+}
+
+/* Push the SM candidate at index PTR in the sequence SEQ down until
+   we hit the next SM candidate.  Return true if that went OK and
+   false if we could not disambiguate agains another unrelated ref.
+   Update *AT to the index where the candidate now resides.  */
+
+static bool
+sm_seq_push_down (vec<seq_entry> &seq, unsigned ptr, unsigned *at)
+{
+  *at = ptr;
+  for (; ptr > 0; --ptr)
+    {
+      seq_entry &new_cand = seq[ptr];
+      seq_entry &against = seq[ptr-1];
+      if (against.second == sm_ord
+	  || (against.second == sm_other && against.from != NULL_TREE))
+	/* Found the tail of the sequence.  */
+	break;
+      /* We may not ignore self-dependences here.  */
+      if (new_cand.first == against.first
+	  || !refs_independent_p (memory_accesses.refs_list[new_cand.first],
+				  memory_accesses.refs_list[against.first],
+				  false))
+	/* ???  Prune new_cand from the list of refs to apply SM to.  */
+	return false;
+      std::swap (new_cand, against);
+      *at = ptr - 1;
+    }
+  return true;
+}
+
+/* Computes the sequence of stores from candidates in REFS_NOT_IN_SEQ to SEQ
+   walking backwards from VDEF (or the end of BB if VDEF is NULL).  */
+
+static int
+sm_seq_valid_bb (class loop *loop, basic_block bb, tree vdef,
+		 vec<seq_entry> &seq, bitmap refs_not_in_seq,
+		 bitmap refs_not_supported, bool forked,
+		 bitmap fully_visited)
+{
+  if (!vdef)
+    for (gimple_stmt_iterator gsi = gsi_last_bb (bb); !gsi_end_p (gsi);
+	 gsi_prev (&gsi))
       {
-	gassign *store;
-	store = gimple_build_assign (unshare_expr (ref->mem.ref), tmp_var);
-	gsi_insert_on_edge (ex, store);
+	vdef = gimple_vdef (gsi_stmt (gsi));
+	if (vdef)
+	  break;
       }
-    else
-      execute_sm_if_changed (ex, ref->mem.ref, tmp_var, store_flag,
-			     loop_preheader_edge (loop), &flag_bbs);
+  if (!vdef)
+    {
+      gphi *vphi = get_virtual_phi (bb);
+      if (vphi)
+	vdef = gimple_phi_result (vphi);
+    }
+  if (!vdef)
+    {
+      if (single_pred_p (bb))
+	/* This handles the perfect nest case.  */
+	return sm_seq_valid_bb (loop, single_pred (bb), vdef,
+				seq, refs_not_in_seq, refs_not_supported,
+				forked, fully_visited);
+      return 0;
+    }
+  do
+    {
+      gimple *def = SSA_NAME_DEF_STMT (vdef);
+      if (gimple_bb (def) != bb)
+	{
+	  /* If we forked by processing a PHI do not allow our walk to
+	     merge again until we handle that robustly.  */
+	  if (forked)
+	    {
+	      /* Mark refs_not_in_seq as unsupported.  */
+	      bitmap_ior_into (refs_not_supported, refs_not_in_seq);
+	      return 1;
+	    }
+	  /* Otherwise it doesn't really matter if we end up in different
+	     BBs.  */
+	  bb = gimple_bb (def);
+	}
+      if (gphi *phi = dyn_cast <gphi *> (def))
+	{
+	  /* Handle CFG merges.  Until we handle forks (gimple_bb (def) != bb)
+	     this is still linear.
+	     Eventually we want to cache intermediate results per BB
+	     (but we can't easily cache for different exits?).  */
+	  /* Stop at PHIs with possible backedges.  */
+	  if (bb == bb->loop_father->header
+	      || bb->flags & BB_IRREDUCIBLE_LOOP)
+	    {
+	      /* Mark refs_not_in_seq as unsupported.  */
+	      bitmap_ior_into (refs_not_supported, refs_not_in_seq);
+	      return 1;
+	    }
+	  if (gimple_phi_num_args (phi) == 1)
+	    return sm_seq_valid_bb (loop, gimple_phi_arg_edge (phi, 0)->src,
+				    gimple_phi_arg_def (phi, 0), seq,
+				    refs_not_in_seq, refs_not_supported,
+				    false, fully_visited);
+	  if (bitmap_bit_p (fully_visited,
+			    SSA_NAME_VERSION (gimple_phi_result (phi))))
+	    return 1;
+	  auto_vec<seq_entry> first_edge_seq;
+	  auto_bitmap tem_refs_not_in_seq (&lim_bitmap_obstack);
+	  int eret;
+	  bitmap_copy (tem_refs_not_in_seq, refs_not_in_seq);
+	  eret = sm_seq_valid_bb (loop, gimple_phi_arg_edge (phi, 0)->src,
+				  gimple_phi_arg_def (phi, 0),
+				  first_edge_seq,
+				  tem_refs_not_in_seq, refs_not_supported,
+				  true, fully_visited);
+	  if (eret != 1)
+	    return -1;
+	  /* Simplify our lives by pruning the sequence of !sm_ord.  */
+	  while (!first_edge_seq.is_empty ()
+		 && first_edge_seq.last ().second != sm_ord)
+	    first_edge_seq.pop ();
+	  for (unsigned int i = 1; i < gimple_phi_num_args (phi); ++i)
+	    {
+	      tree vuse = gimple_phi_arg_def (phi, i);
+	      edge e = gimple_phi_arg_edge (phi, i);
+	      auto_vec<seq_entry> edge_seq;
+	      bitmap_and_compl (tem_refs_not_in_seq,
+				refs_not_in_seq, refs_not_supported);
+	      /* If we've marked all refs we search for as unsupported
+		 we can stop processing and use the sequence as before
+		 the PHI.  */
+	      if (bitmap_empty_p (tem_refs_not_in_seq))
+		return 1;
+	      eret = sm_seq_valid_bb (loop, e->src, vuse, edge_seq,
+				      tem_refs_not_in_seq, refs_not_supported,
+				      true, fully_visited);
+	      if (eret != 1)
+		return -1;
+	      /* Simplify our lives by pruning the sequence of !sm_ord.  */
+	      while (!edge_seq.is_empty ()
+		     && edge_seq.last ().second != sm_ord)
+		edge_seq.pop ();
+	      unsigned min_len = MIN(first_edge_seq.length (),
+				     edge_seq.length ());
+	      /* Incrementally merge seqs into first_edge_seq.  */
+	      int first_uneq = -1;
+	      auto_vec<seq_entry, 2> extra_refs;
+	      for (unsigned int i = 0; i < min_len; ++i)
+		{
+		  /* ???  We can more intelligently merge when we face different
+		     order by additional sinking operations in one sequence.
+		     For now we simply mark them as to be processed by the
+		     not order-preserving SM code.  */
+		  if (first_edge_seq[i].first != edge_seq[i].first)
+		    {
+		      if (first_edge_seq[i].second == sm_ord)
+			bitmap_set_bit (refs_not_supported,
+					first_edge_seq[i].first);
+		      if (edge_seq[i].second == sm_ord)
+			bitmap_set_bit (refs_not_supported, edge_seq[i].first);
+		      first_edge_seq[i].second = sm_other;
+		      first_edge_seq[i].from = NULL_TREE;
+		      /* Record the dropped refs for later processing.  */
+		      if (first_uneq == -1)
+			first_uneq = i;
+		      extra_refs.safe_push (seq_entry (edge_seq[i].first,
+						       sm_other, NULL_TREE));
+		    }
+		  /* sm_other prevails.  */
+		  else if (first_edge_seq[i].second != edge_seq[i].second)
+		    {
+		      /* Make sure the ref is marked as not supported.  */
+		      bitmap_set_bit (refs_not_supported,
+				      first_edge_seq[i].first);
+		      first_edge_seq[i].second = sm_other;
+		      first_edge_seq[i].from = NULL_TREE;
+		    }
+		  else if (first_edge_seq[i].second == sm_other
+			   && first_edge_seq[i].from != NULL_TREE
+			   && (edge_seq[i].from == NULL_TREE
+			       || !operand_equal_p (first_edge_seq[i].from,
+						    edge_seq[i].from, 0)))
+		    first_edge_seq[i].from = NULL_TREE;
+		}
+	      /* Any excess elements become sm_other since they are now
+		 coonditionally executed.  */
+	      if (first_edge_seq.length () > edge_seq.length ())
+		{
+		  for (unsigned i = edge_seq.length ();
+		       i < first_edge_seq.length (); ++i)
+		    {
+		      if (first_edge_seq[i].second == sm_ord)
+			bitmap_set_bit (refs_not_supported,
+					first_edge_seq[i].first);
+		      first_edge_seq[i].second = sm_other;
+		    }
+		}
+	      else if (edge_seq.length () > first_edge_seq.length ())
+		{
+		  if (first_uneq == -1)
+		    first_uneq = first_edge_seq.length ();
+		  for (unsigned i = first_edge_seq.length ();
+		       i < edge_seq.length (); ++i)
+		    {
+		      if (edge_seq[i].second == sm_ord)
+			bitmap_set_bit (refs_not_supported, edge_seq[i].first);
+		      extra_refs.safe_push (seq_entry (edge_seq[i].first,
+						       sm_other, NULL_TREE));
+		    }
+		}
+	      /* Put unmerged refs at first_uneq to force dependence checking
+		 on them.  */
+	      if (first_uneq != -1)
+		{
+		  /* Missing ordered_splice_at.  */
+		  if ((unsigned)first_uneq == first_edge_seq.length ())
+		    first_edge_seq.safe_splice (extra_refs);
+		  else
+		    {
+		      unsigned fes_length = first_edge_seq.length ();
+		      first_edge_seq.safe_grow (fes_length
+						+ extra_refs.length ());
+		      memmove (&first_edge_seq[first_uneq + extra_refs.length ()],
+			       &first_edge_seq[first_uneq],
+			       (fes_length - first_uneq) * sizeof (seq_entry));
+		      memcpy (&first_edge_seq[first_uneq],
+			      extra_refs.address (),
+			      extra_refs.length () * sizeof (seq_entry));
+		    }
+		}
+	    }
+	  /* Use the sequence from the first edge and push SMs down.  */
+	  for (unsigned i = 0; i < first_edge_seq.length (); ++i)
+	    {
+	      unsigned id = first_edge_seq[i].first;
+	      seq.safe_push (first_edge_seq[i]);
+	      unsigned new_idx;
+	      if ((first_edge_seq[i].second == sm_ord
+		   || (first_edge_seq[i].second == sm_other
+		       && first_edge_seq[i].from != NULL_TREE))
+		  && !sm_seq_push_down (seq, seq.length () - 1, &new_idx))
+		{
+		  if (first_edge_seq[i].second == sm_ord)
+		    bitmap_set_bit (refs_not_supported, id);
+		  /* Mark it sm_other.  */
+		  seq[new_idx].second = sm_other;
+		  seq[new_idx].from = NULL_TREE;
+		}
+	    }
+	  bitmap_set_bit (fully_visited,
+			  SSA_NAME_VERSION (gimple_phi_result (phi)));
+	  return 1;
+	}
+      lim_aux_data *data = get_lim_data (def);
+      gcc_assert (data);
+      if (data->ref == UNANALYZABLE_MEM_ID)
+	return -1;
+      /* One of the stores we want to apply SM to and we've not yet seen.  */
+      else if (bitmap_clear_bit (refs_not_in_seq, data->ref))
+	{
+	  seq.safe_push (seq_entry (data->ref, sm_ord));
+
+	  /* 1) push it down the queue until a SMed
+	     and not ignored ref is reached, skipping all not SMed refs
+	     and ignored refs via non-TBAA disambiguation.  */
+	  unsigned new_idx;
+	  if (!sm_seq_push_down (seq, seq.length () - 1, &new_idx)
+	      /* If that fails but we did not fork yet continue, we'll see
+		 to re-materialize all of the stores in the sequence then.
+		 Further stores will only be pushed up to this one.  */
+	      && forked)
+	    {
+	      bitmap_set_bit (refs_not_supported, data->ref);
+	      /* Mark it sm_other.  */
+	      seq[new_idx].second = sm_other;
+	    }
+
+	  /* 2) check whether we've seen all refs we want to SM and if so
+	     declare success for the active exit  */
+	  if (bitmap_empty_p (refs_not_in_seq))
+	    return 1;
+	}
+      else
+	/* Another store not part of the final sequence.  Simply push it.  */
+	seq.safe_push (seq_entry (data->ref, sm_other,
+				  gimple_assign_rhs1 (def)));
+
+      vdef = gimple_vuse (def);
+    }
+  while (1);
 }
 
 /* Hoists memory references MEM_REFS out of LOOP.  EXITS is the list of exit
    edges of the LOOP.  */
 
 static void
-hoist_memory_references (struct loop *loop, bitmap mem_refs,
+hoist_memory_references (class loop *loop, bitmap mem_refs,
 			 vec<edge> exits)
 {
   im_mem_ref *ref;
   unsigned  i;
   bitmap_iterator bi;
 
+  /* To address PR57359 before actually applying store-motion check
+     the candidates found for validity with regards to reordering
+     relative to other stores which we until here disambiguated using
+     TBAA which isn't valid.
+     What matters is the order of the last stores to the mem_refs
+     with respect to the other stores of the loop at the point of the
+     loop exits.  */
+
+  /* For each exit compute the store order, pruning from mem_refs
+     on the fly.  */
+  /* The complexity of this is at least
+     O(number of exits * number of SM refs) but more approaching
+     O(number of exits * number of SM refs * number of stores).  */
+  /* ???  Somehow do this in a single sweep over the loop body.  */
+  auto_vec<std::pair<edge, vec<seq_entry> > > sms;
+  auto_bitmap refs_not_supported (&lim_bitmap_obstack);
+  edge e;
+  FOR_EACH_VEC_ELT (exits, i, e)
+    {
+      vec<seq_entry> seq;
+      seq.create (4);
+      auto_bitmap refs_not_in_seq (&lim_bitmap_obstack);
+      bitmap_and_compl (refs_not_in_seq, mem_refs, refs_not_supported);
+      if (bitmap_empty_p (refs_not_in_seq))
+	{
+	  seq.release ();
+	  break;
+	}
+      auto_bitmap fully_visited;
+      int res = sm_seq_valid_bb (loop, e->src, NULL_TREE,
+				 seq, refs_not_in_seq,
+				 refs_not_supported, false,
+				 fully_visited);
+      if (res != 1)
+	{
+	  bitmap_copy (refs_not_supported, mem_refs);
+	  seq.release ();
+	  break;
+	}
+      sms.safe_push (std::make_pair (e, seq));
+    }
+
+  /* Prune pruned mem_refs from earlier processed exits.  */
+  bool changed = !bitmap_empty_p (refs_not_supported);
+  while (changed)
+    {
+      changed = false;
+      std::pair<edge, vec<seq_entry> > *seq;
+      FOR_EACH_VEC_ELT (sms, i, seq)
+	{
+	  bool need_to_push = false;
+	  for (unsigned i = 0; i < seq->second.length (); ++i)
+	    {
+	      sm_kind kind = seq->second[i].second;
+	      if (kind == sm_other && seq->second[i].from == NULL_TREE)
+		break;
+	      unsigned id = seq->second[i].first;
+	      unsigned new_idx;
+	      if (kind == sm_ord
+		  && bitmap_bit_p (refs_not_supported, id))
+		{
+		  seq->second[i].second = sm_other;
+		  gcc_assert (seq->second[i].from == NULL_TREE);
+		  need_to_push = true;
+		}
+	      else if (need_to_push
+		       && !sm_seq_push_down (seq->second, i, &new_idx))
+		{
+		  /* We need to push down both sm_ord and sm_other
+		     but for the latter we need to disqualify all
+		     following refs.  */
+		  if (kind == sm_ord)
+		    {
+		      if (bitmap_set_bit (refs_not_supported, id))
+			changed = true;
+		      seq->second[new_idx].second = sm_other;
+		    }
+		  else
+		    {
+		      for (unsigned j = seq->second.length () - 1;
+			   j > new_idx; --j)
+			if (seq->second[j].second == sm_ord
+			    && bitmap_set_bit (refs_not_supported,
+					       seq->second[j].first))
+			  changed = true;
+		      seq->second.truncate (new_idx);
+		      break;
+		    }
+		}
+	    }
+	}
+    }
+  std::pair<edge, vec<seq_entry> > *seq;
+  FOR_EACH_VEC_ELT (sms, i, seq)
+    {
+      /* Prune sm_other from the end.  */
+      while (!seq->second.is_empty ()
+	     && seq->second.last ().second == sm_other)
+	seq->second.pop ();
+      /* Prune duplicates from the start.  */
+      auto_bitmap seen (&lim_bitmap_obstack);
+      unsigned j, k;
+      for (j = k = 0; j < seq->second.length (); ++j)
+	if (bitmap_set_bit (seen, seq->second[j].first))
+	  {
+	    if (k != j)
+	      seq->second[k] = seq->second[j];
+	    ++k;
+	  }
+      seq->second.truncate (k);
+      /* And verify.  */
+      seq_entry *e;
+      FOR_EACH_VEC_ELT (seq->second, j, e)
+	gcc_assert (e->second == sm_ord
+		    || (e->second == sm_other && e->from != NULL_TREE));
+    }
+
+  /* Verify dependence for refs we cannot handle with the order preserving
+     code (refs_not_supported) or prune them from mem_refs.  */
+  auto_vec<seq_entry> unord_refs;
+  EXECUTE_IF_SET_IN_BITMAP (refs_not_supported, 0, i, bi)
+    {
+      ref = memory_accesses.refs_list[i];
+      if (!ref_indep_loop_p (loop, ref, sm_waw))
+	bitmap_clear_bit (mem_refs, i);
+      /* We've now verified store order for ref with respect to all other
+	 stores in the loop does not matter.  */
+      else
+	unord_refs.safe_push (seq_entry (i, sm_unord));
+    }
+
+  hash_map<im_mem_ref *, sm_aux *> aux_map;
+
+  /* Execute SM but delay the store materialization for ordered
+     sequences on exit.  */
   EXECUTE_IF_SET_IN_BITMAP (mem_refs, 0, i, bi)
     {
       ref = memory_accesses.refs_list[i];
-      execute_sm (loop, exits, ref);
+      execute_sm (loop, ref, aux_map, bitmap_bit_p (refs_not_supported, i));
     }
+
+  /* Materialize ordered store sequences on exits.  */
+  FOR_EACH_VEC_ELT (exits, i, e)
+    {
+      edge append_cond_position = NULL;
+      edge last_cond_fallthru = NULL;
+      if (i < sms.length ())
+	{
+	  gcc_assert (sms[i].first == e);
+	  execute_sm_exit (loop, e, sms[i].second, aux_map, sm_ord,
+			   append_cond_position, last_cond_fallthru);
+	  sms[i].second.release ();
+	}
+      if (!unord_refs.is_empty ())
+	execute_sm_exit (loop, e, unord_refs, aux_map, sm_unord,
+			 append_cond_position, last_cond_fallthru);
+      /* Commit edge inserts here to preserve the order of stores
+	 when an exit exits multiple loops.  */
+      gsi_commit_one_edge_insert (e, NULL);
+    }
+
+  for (hash_map<im_mem_ref *, sm_aux *>::iterator iter = aux_map.begin ();
+       iter != aux_map.end (); ++iter)
+    delete (*iter).second;
 }
 
-struct ref_always_accessed
+class ref_always_accessed
 {
-  ref_always_accessed (struct loop *loop_, bool stored_p_)
+public:
+  ref_always_accessed (class loop *loop_, bool stored_p_)
       : loop (loop_), stored_p (stored_p_) {}
   bool operator () (mem_ref_loc *loc);
-  struct loop *loop;
+  class loop *loop;
   bool stored_p;
 };
 
 bool
 ref_always_accessed::operator () (mem_ref_loc *loc)
 {
-  struct loop *must_exec;
+  class loop *must_exec;
 
-  if (!get_lim_data (loc->stmt))
+  struct lim_aux_data *lim_data = get_lim_data (loc->stmt);
+  if (!lim_data)
     return false;
 
   /* If we require an always executed store make sure the statement
-     stores to the reference.  */
+     is a store.  */
   if (stored_p)
     {
       tree lhs = gimple_get_lhs (loc->stmt);
       if (!lhs
-	  || lhs != *loc->ref)
+	  || !(DECL_P (lhs) || REFERENCE_CLASS_P (lhs)))
 	return false;
     }
 
-  must_exec = get_lim_data (loc->stmt)->always_executed_in;
+  must_exec = lim_data->always_executed_in;
   if (!must_exec)
     return false;
 
@@ -2093,7 +2727,7 @@ ref_always_accessed::operator () (mem_ref_loc *loc)
    make sure REF is always stored to in LOOP.  */
 
 static bool
-ref_always_accessed_p (struct loop *loop, im_mem_ref *ref, bool stored_p)
+ref_always_accessed_p (class loop *loop, im_mem_ref *ref, bool stored_p)
 {
   return for_all_locs_in_loop (loop, ref,
 			       ref_always_accessed (loop, stored_p));
@@ -2102,7 +2736,7 @@ ref_always_accessed_p (struct loop *loop, im_mem_ref *ref, bool stored_p)
 /* Returns true if REF1 and REF2 are independent.  */
 
 static bool
-refs_independent_p (im_mem_ref *ref1, im_mem_ref *ref2)
+refs_independent_p (im_mem_ref *ref1, im_mem_ref *ref2, bool tbaa_p)
 {
   if (ref1 == ref2)
     return true;
@@ -2111,7 +2745,7 @@ refs_independent_p (im_mem_ref *ref1, im_mem_ref *ref2)
     fprintf (dump_file, "Querying dependency of refs %u and %u: ",
 	     ref1->id, ref2->id);
 
-  if (mem_refs_may_alias_p (ref1, ref2, &memory_accesses.ttae_cache))
+  if (mem_refs_may_alias_p (ref1, ref2, &memory_accesses.ttae_cache, tbaa_p))
     {
       if (dump_file && (dump_flags & TDF_DETAILS))
 	fprintf (dump_file, "dependent.\n");
@@ -2125,32 +2759,23 @@ refs_independent_p (im_mem_ref *ref1, im_mem_ref *ref2)
     }
 }
 
-/* Mark REF dependent on stores or loads (according to STORED_P) in LOOP
-   and its super-loops.  */
-
-static void
-record_dep_loop (struct loop *loop, im_mem_ref *ref, bool stored_p)
-{
-  /* We can propagate dependent-in-loop bits up the loop
-     hierarchy to all outer loops.  */
-  while (loop != current_loops->tree_root
-	 && bitmap_set_bit (&ref->dep_loop, LOOP_DEP_BIT (loop->num, stored_p)))
-    loop = loop_outer (loop);
-}
-
-/* Returns true if REF is independent on all other memory
-   references in LOOP.  */
+/* Returns true if REF is independent on all other accessess in LOOP.
+   KIND specifies the kind of dependence to consider.
+     lim_raw assumes REF is not stored in LOOP and disambiguates RAW
+	     dependences so if true REF can be hoisted out of LOOP
+     sm_war disambiguates a store REF against all other loads to see
+	    whether the store can be sunk across loads out of LOOP
+     sm_waw disambiguates a store REF against all other stores to see
+	    whether the store can be sunk across stores out of LOOP.  */
 
 static bool
-ref_indep_loop_p_1 (struct loop *loop, im_mem_ref *ref, bool stored_p)
+ref_indep_loop_p (class loop *loop, im_mem_ref *ref, dep_kind kind)
 {
-  stored_p |= (ref->stored && bitmap_bit_p (ref->stored, loop->num));
-
   bool indep_p = true;
   bitmap refs_to_check;
 
-  if (stored_p)
-    refs_to_check = &memory_accesses.refs_in_loop[loop->num];
+  if (kind == sm_war)
+    refs_to_check = &memory_accesses.refs_loaded_in_loop[loop->num];
   else
     refs_to_check = &memory_accesses.refs_stored_in_loop[loop->num];
 
@@ -2158,15 +2783,15 @@ ref_indep_loop_p_1 (struct loop *loop, im_mem_ref *ref, bool stored_p)
     indep_p = false;
   else
     {
-      if (bitmap_bit_p (&ref->indep_loop, LOOP_DEP_BIT (loop->num, stored_p)))
-	return true;
-      if (bitmap_bit_p (&ref->dep_loop, LOOP_DEP_BIT (loop->num, stored_p)))
-	return false;
+      /* tri-state, { unknown, independent, dependent }  */
+      dep_state state = query_loop_dependence (loop, ref, kind);
+      if (state != dep_unknown)
+	return state == dep_independent ? true : false;
 
-      struct loop *inner = loop->inner;
+      class loop *inner = loop->inner;
       while (inner)
 	{
-	  if (!ref_indep_loop_p_1 (inner, ref, stored_p))
+	  if (!ref_indep_loop_p (inner, ref, kind))
 	    {
 	      indep_p = false;
 	      break;
@@ -2181,7 +2806,7 @@ ref_indep_loop_p_1 (struct loop *loop, im_mem_ref *ref, bool stored_p)
 	  EXECUTE_IF_SET_IN_BITMAP (refs_to_check, 0, i, bi)
 	    {
 	      im_mem_ref *aref = memory_accesses.refs_list[i];
-	      if (!refs_independent_p (ref, aref))
+	      if (!refs_independent_p (ref, aref, kind != sm_waw))
 		{
 		  indep_p = false;
 		  break;
@@ -2191,49 +2816,22 @@ ref_indep_loop_p_1 (struct loop *loop, im_mem_ref *ref, bool stored_p)
     }
 
   if (dump_file && (dump_flags & TDF_DETAILS))
-    fprintf (dump_file, "Querying dependencies of ref %u in loop %d: %s\n",
+    fprintf (dump_file, "Querying %s dependencies of ref %u in loop %d: %s\n",
+	     kind == lim_raw ? "RAW" : (kind == sm_war ? "SM WAR" : "SM WAW"),
 	     ref->id, loop->num, indep_p ? "independent" : "dependent");
 
   /* Record the computed result in the cache.  */
-  if (indep_p)
-    {
-      if (bitmap_set_bit (&ref->indep_loop, LOOP_DEP_BIT (loop->num, stored_p))
-	  && stored_p)
-	{
-	  /* If it's independend against all refs then it's independent
-	     against stores, too.  */
-	  bitmap_set_bit (&ref->indep_loop, LOOP_DEP_BIT (loop->num, false));
-	}
-    }
-  else
-    {
-      record_dep_loop (loop, ref, stored_p);
-      if (!stored_p)
-	{
-	  /* If it's dependent against stores it's dependent against
-	     all refs, too.  */
-	  record_dep_loop (loop, ref, true);
-	}
-    }
+  record_loop_dependence (loop, ref, kind,
+			  indep_p ? dep_independent : dep_dependent);
 
   return indep_p;
 }
 
-/* Returns true if REF is independent on all other memory references in
-   LOOP.  */
-
-static bool
-ref_indep_loop_p (struct loop *loop, im_mem_ref *ref)
-{
-  gcc_checking_assert (MEM_ANALYZABLE (ref));
-
-  return ref_indep_loop_p_1 (loop, ref, false);
-}
 
 /* Returns true if we can perform store motion of REF from LOOP.  */
 
 static bool
-can_sm_ref_p (struct loop *loop, im_mem_ref *ref)
+can_sm_ref_p (class loop *loop, im_mem_ref *ref)
 {
   tree base;
 
@@ -2258,12 +2856,25 @@ can_sm_ref_p (struct loop *loop, im_mem_ref *ref)
   base = get_base_address (ref->mem.ref);
   if ((tree_could_trap_p (ref->mem.ref)
        || (DECL_P (base) && TREE_READONLY (base)))
+      /* ???  We can at least use false here, allowing loads?  We
+	 are forcing conditional stores if the ref is not always
+	 stored to later anyway.  So this would only guard
+	 the load we need to emit.  Thus when the ref is not
+	 loaded we can elide this completely?  */
       && !ref_always_accessed_p (loop, ref, true))
     return false;
 
-  /* And it must be independent on all other memory references
-     in LOOP.  */
-  if (!ref_indep_loop_p (loop, ref))
+  /* Verify all loads of ref can be hoisted.  */
+  if (ref->loaded
+      && bitmap_bit_p (ref->loaded, loop->num)
+      && !ref_indep_loop_p (loop, ref, lim_raw))
+    return false;
+
+  /* Verify the candidate can be disambiguated against all loads,
+     that is, we can elide all in-loop stores.  Disambiguation
+     against stores is done later when we cannot guarantee preserving
+     the order of stores.  */
+  if (!ref_indep_loop_p (loop, ref, sm_war))
     return false;
 
   return true;
@@ -2274,7 +2885,7 @@ can_sm_ref_p (struct loop *loop, im_mem_ref *ref)
    motion was performed in one of the outer loops.  */
 
 static void
-find_refs_for_sm (struct loop *loop, bitmap sm_executed, bitmap refs_to_sm)
+find_refs_for_sm (class loop *loop, bitmap sm_executed, bitmap refs_to_sm)
 {
   bitmap refs = &memory_accesses.all_refs_stored_in_loop[loop->num];
   unsigned i;
@@ -2284,7 +2895,7 @@ find_refs_for_sm (struct loop *loop, bitmap sm_executed, bitmap refs_to_sm)
   EXECUTE_IF_AND_COMPL_IN_BITMAP (refs, sm_executed, 0, i, bi)
     {
       ref = memory_accesses.refs_list[i];
-      if (can_sm_ref_p (loop, ref))
+      if (can_sm_ref_p (loop, ref) && dbg_cnt (lim))
 	bitmap_set_bit (refs_to_sm, i);
     }
 }
@@ -2294,7 +2905,7 @@ find_refs_for_sm (struct loop *loop, bitmap sm_executed, bitmap refs_to_sm)
    on its exits).  */
 
 static bool
-loop_suitable_for_sm (struct loop *loop ATTRIBUTE_UNUSED,
+loop_suitable_for_sm (class loop *loop ATTRIBUTE_UNUSED,
 		      vec<edge> exits)
 {
   unsigned i;
@@ -2312,18 +2923,18 @@ loop_suitable_for_sm (struct loop *loop ATTRIBUTE_UNUSED,
    store motion was executed in one of the outer loops.  */
 
 static void
-store_motion_loop (struct loop *loop, bitmap sm_executed)
+store_motion_loop (class loop *loop, bitmap sm_executed)
 {
-  vec<edge> exits = get_loop_exit_edges (loop);
-  struct loop *subloop;
+  auto_vec<edge> exits = get_loop_exit_edges (loop);
+  class loop *subloop;
   bitmap sm_in_loop = BITMAP_ALLOC (&lim_bitmap_obstack);
 
   if (loop_suitable_for_sm (loop, exits))
     {
       find_refs_for_sm (loop, sm_executed, sm_in_loop);
-      hoist_memory_references (loop, sm_in_loop, exits);
+      if (!bitmap_empty_p (sm_in_loop))
+	hoist_memory_references (loop, sm_in_loop, exits);
     }
-  exits.release ();
 
   bitmap_ior_into (sm_executed, sm_in_loop);
   for (subloop = loop->inner; subloop != NULL; subloop = subloop->next)
@@ -2336,16 +2947,15 @@ store_motion_loop (struct loop *loop, bitmap sm_executed)
    loops.  */
 
 static void
-store_motion (void)
+do_store_motion (void)
 {
-  struct loop *loop;
+  class loop *loop;
   bitmap sm_executed = BITMAP_ALLOC (&lim_bitmap_obstack);
 
   for (loop = current_loops->tree_root->inner; loop != NULL; loop = loop->next)
     store_motion_loop (loop, sm_executed);
 
   BITMAP_FREE (sm_executed);
-  gsi_commit_edge_inserts ();
 }
 
 /* Fills ALWAYS_EXECUTED_IN information for basic blocks of LOOP, i.e.
@@ -2354,12 +2964,12 @@ store_motion (void)
    blocks that contain a nonpure call.  */
 
 static void
-fill_always_executed_in_1 (struct loop *loop, sbitmap contains_call)
+fill_always_executed_in_1 (class loop *loop, sbitmap contains_call)
 {
   basic_block bb = NULL, *bbs, last = NULL;
   unsigned i;
   edge e;
-  struct loop *inn_loop = loop;
+  class loop *inn_loop = loop;
 
   if (ALWAYS_EXECUTED_IN (loop->header) == NULL)
     {
@@ -2432,7 +3042,7 @@ static void
 fill_always_executed_in (void)
 {
   basic_block bb;
-  struct loop *loop;
+  class loop *loop;
 
   auto_sbitmap contains_call (last_basic_block_for_fn (cfun));
   bitmap_clear (contains_call);
@@ -2457,9 +3067,9 @@ fill_always_executed_in (void)
 /* Compute the global information needed by the loop invariant motion pass.  */
 
 static void
-tree_ssa_lim_initialize (void)
+tree_ssa_lim_initialize (bool store_motion)
 {
-  struct loop *loop;
+  class loop *loop;
   unsigned i;
 
   bitmap_obstack_initialize (&lim_bitmap_obstack);
@@ -2469,29 +3079,32 @@ tree_ssa_lim_initialize (void)
   if (flag_tm)
     compute_transaction_bits ();
 
-  alloc_aux_for_edges (0);
-
   memory_accesses.refs = new hash_table<mem_ref_hasher> (100);
   memory_accesses.refs_list.create (100);
   /* Allocate a special, unanalyzable mem-ref with ID zero.  */
   memory_accesses.refs_list.quick_push
-    (mem_ref_alloc (error_mark_node, 0, UNANALYZABLE_MEM_ID));
+    (mem_ref_alloc (NULL, 0, UNANALYZABLE_MEM_ID));
 
-  memory_accesses.refs_in_loop.create (number_of_loops (cfun));
-  memory_accesses.refs_in_loop.quick_grow (number_of_loops (cfun));
+  memory_accesses.refs_loaded_in_loop.create (number_of_loops (cfun));
+  memory_accesses.refs_loaded_in_loop.quick_grow (number_of_loops (cfun));
   memory_accesses.refs_stored_in_loop.create (number_of_loops (cfun));
   memory_accesses.refs_stored_in_loop.quick_grow (number_of_loops (cfun));
-  memory_accesses.all_refs_stored_in_loop.create (number_of_loops (cfun));
-  memory_accesses.all_refs_stored_in_loop.quick_grow (number_of_loops (cfun));
+  if (store_motion)
+    {
+      memory_accesses.all_refs_stored_in_loop.create (number_of_loops (cfun));
+      memory_accesses.all_refs_stored_in_loop.quick_grow
+						      (number_of_loops (cfun));
+    }
 
   for (i = 0; i < number_of_loops (cfun); i++)
     {
-      bitmap_initialize (&memory_accesses.refs_in_loop[i],
+      bitmap_initialize (&memory_accesses.refs_loaded_in_loop[i],
 			 &lim_bitmap_obstack);
       bitmap_initialize (&memory_accesses.refs_stored_in_loop[i],
 			 &lim_bitmap_obstack);
-      bitmap_initialize (&memory_accesses.all_refs_stored_in_loop[i],
-			 &lim_bitmap_obstack);
+      if (store_motion)
+	bitmap_initialize (&memory_accesses.all_refs_stored_in_loop[i],
+			   &lim_bitmap_obstack);
     }
 
   memory_accesses.ttae_cache = NULL;
@@ -2513,8 +3126,6 @@ tree_ssa_lim_finalize (void)
   unsigned i;
   im_mem_ref *ref;
 
-  free_aux_for_edges ();
-
   FOR_EACH_BB_FN (bb, cfun)
     SET_ALWAYS_EXECUTED_IN (bb, NULL);
 
@@ -2529,7 +3140,7 @@ tree_ssa_lim_finalize (void)
   memory_accesses.refs_list.release ();
   obstack_free (&mem_ref_obstack, NULL);
 
-  memory_accesses.refs_in_loop.release ();
+  memory_accesses.refs_loaded_in_loop.release ();
   memory_accesses.refs_stored_in_loop.release ();
   memory_accesses.all_refs_stored_in_loop.release ();
 
@@ -2540,32 +3151,48 @@ tree_ssa_lim_finalize (void)
 }
 
 /* Moves invariants from loops.  Only "expensive" invariants are moved out --
-   i.e. those that are likely to be win regardless of the register pressure.  */
+   i.e. those that are likely to be win regardless of the register pressure.
+   Only perform store motion if STORE_MOTION is true.  */
 
-static unsigned int
-tree_ssa_lim (void)
+unsigned int
+loop_invariant_motion_in_fun (function *fun, bool store_motion)
 {
-  unsigned int todo;
+  unsigned int todo = 0;
 
-  tree_ssa_lim_initialize ();
+  tree_ssa_lim_initialize (store_motion);
 
   /* Gathers information about memory accesses in the loops.  */
-  analyze_memory_references ();
+  analyze_memory_references (store_motion);
 
   /* Fills ALWAYS_EXECUTED_IN information for basic blocks.  */
   fill_always_executed_in ();
 
+  int *rpo = XNEWVEC (int, last_basic_block_for_fn (fun));
+  int n = pre_and_rev_post_order_compute_fn (fun, NULL, rpo, false);
+
   /* For each statement determine the outermost loop in that it is
      invariant and cost for computing the invariant.  */
-  invariantness_dom_walker (CDI_DOMINATORS)
-    .walk (cfun->cfg->x_entry_block_ptr);
+  for (int i = 0; i < n; ++i)
+    compute_invariantness (BASIC_BLOCK_FOR_FN (fun, rpo[i]));
 
   /* Execute store motion.  Force the necessary invariants to be moved
      out of the loops as well.  */
-  store_motion ();
+  if (store_motion)
+    do_store_motion ();
+
+  free (rpo);
+  rpo = XNEWVEC (int, last_basic_block_for_fn (fun));
+  n = pre_and_rev_post_order_compute_fn (fun, NULL, rpo, false);
 
   /* Move the expressions that are expensive enough.  */
-  todo = move_computations ();
+  for (int i = 0; i < n; ++i)
+    todo |= move_computations_worker (BASIC_BLOCK_FOR_FN (fun, rpo[i]));
+
+  free (rpo);
+
+  gsi_commit_edge_inserts ();
+  if (need_ssa_update_p (fun))
+    rewrite_into_loop_closed_ssa (NULL, TODO_update_ssa);
 
   tree_ssa_lim_finalize ();
 
@@ -2612,7 +3239,7 @@ pass_lim::execute (function *fun)
 
   if (number_of_loops (fun) <= 1)
     return 0;
-  unsigned int todo = tree_ssa_lim ();
+  unsigned int todo = loop_invariant_motion_in_fun (fun, true);
 
   if (!in_loop_pipeline)
     loop_optimizer_finalize ();

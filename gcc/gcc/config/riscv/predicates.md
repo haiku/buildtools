@@ -1,5 +1,5 @@
 ;; Predicate description for RISC-V target.
-;; Copyright (C) 2011-2018 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2021 Free Software Foundation, Inc.
 ;; Contributed by Andrew Waterman (andrew@sifive.com).
 ;; Based on MIPS target for GNU compiler.
 ;;
@@ -26,6 +26,14 @@
 (define_predicate "arith_operand"
   (ior (match_operand 0 "const_arith_operand")
        (match_operand 0 "register_operand")))
+
+(define_predicate "lui_operand"
+  (and (match_code "const_int")
+       (match_test "LUI_OPERAND (INTVAL (op))")))
+
+(define_predicate "sfb_alu_operand"
+  (ior (match_operand 0 "arith_operand")
+       (match_operand 0 "lui_operand")))
 
 (define_predicate "const_csr_operand"
   (and (match_code "const_int")
@@ -69,6 +77,26 @@
   /* Otherwise check whether the constant can be loaded in a single
      instruction.  */
   return !LUI_OPERAND (INTVAL (op)) && !SMALL_OPERAND (INTVAL (op));
+})
+
+(define_predicate "p2m1_shift_operand"
+  (match_code "const_int")
+{
+  int val = exact_log2 (INTVAL (op) + 1);
+  if (val < 12)
+    return false;
+  return true;
+ })
+
+(define_predicate "high_mask_shift_operand"
+  (match_code "const_int")
+{
+  int val1 = clz_hwi (~ INTVAL (op));
+  int val0 = ctz_hwi (INTVAL (op));
+  if ((val0 + val1 == BITS_PER_WORD)
+      && val0 > 31 && val0 < 64)
+    return true;
+  return false;
 })
 
 (define_predicate "move_operand"
@@ -170,6 +198,11 @@
 (define_predicate "signed_order_operator"
   (match_code "eq,ne,lt,le,ge,gt"))
 
+(define_predicate "subreg_lowpart_operator"
+  (ior (match_code "truncate")
+       (and (match_code "subreg")
+            (match_test "subreg_lowpart_p (op)"))))
+
 (define_predicate "fp_native_comparison"
   (match_code "eq,lt,le,gt,ge"))
 
@@ -178,3 +211,9 @@
 
 (define_predicate "fp_branch_comparison"
   (match_code "unordered,ordered,unlt,unge,unle,ungt,uneq,ltgt,ne,eq,lt,le,gt,ge"))
+
+(define_special_predicate "gpr_save_operation"
+  (match_code "parallel")
+{
+  return riscv_gpr_save_operation_p (op);
+})

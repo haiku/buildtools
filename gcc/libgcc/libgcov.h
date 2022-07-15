@@ -1,5 +1,5 @@
 /* Header file for libgcov-*.c.
-   Copyright (C) 1996-2018 Free Software Foundation, Inc.
+   Copyright (C) 1996-2021 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -45,6 +45,10 @@
 #include "libgcc_tm.h"
 #include "gcov.h"
 
+#if HAVE_SYS_MMAN_H
+#include <sys/mman.h>
+#endif
+
 #if __CHAR_BIT__ == 8
 typedef unsigned gcov_unsigned_t __attribute__ ((mode (SI)));
 typedef unsigned gcov_position_t __attribute__ ((mode (SI)));
@@ -85,6 +89,19 @@ typedef unsigned gcov_type_unsigned __attribute__ ((mode (QI)));
 #define GCOV_LOCKED 0
 #endif
 
+#ifndef GCOV_SUPPORTS_ATOMIC
+/* Detect whether target can support atomic update of profilers.  */
+#if __SIZEOF_LONG_LONG__ == 4 && __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+#define GCOV_SUPPORTS_ATOMIC 1
+#else
+#if __SIZEOF_LONG_LONG__ == 8 && __GCC_HAVE_SYNC_COMPARE_AND_SWAP_8
+#define GCOV_SUPPORTS_ATOMIC 1
+#else
+#define GCOV_SUPPORTS_ATOMIC 0
+#endif
+#endif
+#endif
+
 /* In libgcov we need these functions to be extern, so prefix them with
    __gcov.  In libgcov they must also be hidden so that the instance in
    the executable is not also used in a DSO.  */
@@ -102,7 +119,6 @@ typedef unsigned gcov_type_unsigned __attribute__ ((mode (QI)));
 #define gcov_read_unsigned __gcov_read_unsigned
 #define gcov_read_counter __gcov_read_counter
 #define gcov_read_summary __gcov_read_summary
-#define gcov_sort_n_vals __gcov_sort_n_vals
 
 #else /* IN_GCOV_TOOL */
 /* About the host.  */
@@ -127,10 +143,9 @@ typedef unsigned gcov_position_t;
 
 #define L_gcov 1
 #define L_gcov_merge_add 1
-#define L_gcov_merge_single 1
+#define L_gcov_merge_topn 1
 #define L_gcov_merge_ior 1
 #define L_gcov_merge_time_profile 1
-#define L_gcov_merge_icall_topn 1
 
 extern gcov_type gcov_read_counter_mem ();
 extern unsigned gcov_get_merge_weight ();
@@ -149,12 +164,22 @@ extern struct gcov_info *gcov_list;
 
 /* Poison these, so they don't accidentally slip in.  */
 #pragma GCC poison gcov_write_string gcov_write_tag gcov_write_length
-#pragma GCC poison gcov_time gcov_magic
+#pragma GCC poison gcov_time
 
 #ifdef HAVE_GAS_HIDDEN
 #define ATTRIBUTE_HIDDEN  __attribute__ ((__visibility__ ("hidden")))
 #else
 #define ATTRIBUTE_HIDDEN
+#endif
+
+#if HAVE_SYS_MMAN_H
+#ifndef MAP_FAILED
+#define MAP_FAILED ((void *)-1)
+#endif
+
+#if !defined (MAP_ANONYMOUS) && defined (MAP_ANON)
+#define MAP_ANONYMOUS MAP_ANON
+#endif
 #endif
 
 #include "gcov-io.h"
@@ -205,7 +230,8 @@ struct gcov_info
   const struct gcov_fn_info *const *functions; /* pointer to pointers
                                                   to function information  */
 #else
-  const struct gcov_fn_info **functions;
+  struct gcov_fn_info **functions;
+  struct gcov_summary summary;
 #endif /* !IN_GCOV_TOOL */
 };
 
@@ -226,9 +252,21 @@ struct gcov_master
   gcov_unsigned_t version;
   struct gcov_root *root;
 };
+
+struct indirect_call_tuple
+{
+  /* Callee function.  */
+  void *callee;
+
+  /* Pointer to counters.  */
+  gcov_type *counters;
+};
   
 /* Exactly one of these will be active in the process.  */
 extern struct gcov_master __gcov_master;
+extern struct gcov_kvp *__gcov_kvp_dynamic_pool;
+extern unsigned __gcov_kvp_dynamic_pool_index;
+extern unsigned __gcov_kvp_dynamic_pool_size;
 
 /* Dump a set of gcov objects.  */
 extern void __gcov_dump_one (struct gcov_root *) ATTRIBUTE_HIDDEN;
@@ -246,20 +284,23 @@ extern void __gcov_reset_int (void) ATTRIBUTE_HIDDEN;
 /* User function to enable early write of profile information so far.  */
 extern void __gcov_dump_int (void) ATTRIBUTE_HIDDEN;
 
+/* Lock critical section for __gcov_dump and __gcov_reset functions.  */
+extern void __gcov_lock (void) ATTRIBUTE_HIDDEN;
+
+/* Unlock critical section for __gcov_dump and __gcov_reset functions.  */
+extern void __gcov_unlock (void) ATTRIBUTE_HIDDEN;
+
 /* The merge function that just sums the counters.  */
 extern void __gcov_merge_add (gcov_type *, unsigned) ATTRIBUTE_HIDDEN;
 
 /* The merge function to select the minimum valid counter value.  */
 extern void __gcov_merge_time_profile (gcov_type *, unsigned) ATTRIBUTE_HIDDEN;
 
-/* The merge function to choose the most common value.  */
-extern void __gcov_merge_single (gcov_type *, unsigned) ATTRIBUTE_HIDDEN;
+/* The merge function to choose the most common N values.  */
+extern void __gcov_merge_topn (gcov_type *, unsigned) ATTRIBUTE_HIDDEN;
 
 /* The merge function that just ors the counters together.  */
 extern void __gcov_merge_ior (gcov_type *, unsigned) ATTRIBUTE_HIDDEN;
-
-/* The merge function is used for topn indirect call counters.  */
-extern void __gcov_merge_icall_topn (gcov_type *, unsigned) ATTRIBUTE_HIDDEN;
 
 /* The profiler functions.  */
 extern void __gcov_interval_profiler (gcov_type *, gcov_type, int, unsigned);
@@ -267,17 +308,16 @@ extern void __gcov_interval_profiler_atomic (gcov_type *, gcov_type, int,
 					     unsigned);
 extern void __gcov_pow2_profiler (gcov_type *, gcov_type);
 extern void __gcov_pow2_profiler_atomic (gcov_type *, gcov_type);
-extern void __gcov_one_value_profiler (gcov_type *, gcov_type);
-extern void __gcov_one_value_profiler_atomic (gcov_type *, gcov_type);
-extern void __gcov_indirect_call_profiler_v2 (gcov_type, void *);
+extern void __gcov_topn_values_profiler (gcov_type *, gcov_type);
+extern void __gcov_topn_values_profiler_atomic (gcov_type *, gcov_type);
+extern void __gcov_indirect_call_profiler_v4 (gcov_type, void *);
+extern void __gcov_indirect_call_profiler_v4_atomic (gcov_type, void *);
 extern void __gcov_time_profiler (gcov_type *);
 extern void __gcov_time_profiler_atomic (gcov_type *);
 extern void __gcov_average_profiler (gcov_type *, gcov_type);
 extern void __gcov_average_profiler_atomic (gcov_type *, gcov_type);
 extern void __gcov_ior_profiler (gcov_type *, gcov_type);
 extern void __gcov_ior_profiler_atomic (gcov_type *, gcov_type);
-extern void __gcov_indirect_call_topn_profiler (gcov_type, void *);
-extern void gcov_sort_n_vals (gcov_type *, int);
 
 #ifndef inhibit_libc
 /* The wrappers around some library functions..  */
@@ -322,6 +362,29 @@ gcov_get_counter (void)
 #endif
 }
 
+/* Similar function as gcov_get_counter(), but do not scale
+   when read value is equal to IGNORE_SCALING.  */
+
+static inline gcov_type
+gcov_get_counter_ignore_scaling (gcov_type ignore_scaling ATTRIBUTE_UNUSED)
+{
+#ifndef IN_GCOV_TOOL
+  /* This version is for reading count values in libgcov runtime:
+     we read from gcda files.  */
+
+  return gcov_read_counter ();
+#else
+  /* This version is for gcov-tool. We read the value from memory and
+     multiply it by the merge weight.  */
+
+  gcov_type v = gcov_read_counter_mem ();
+  if (v != ignore_scaling)
+    v *= gcov_get_merge_weight ();
+
+  return v;
+#endif
+}
+
 /* Similar function as gcov_get_counter(), but handles target address
    counters.  */
 
@@ -339,6 +402,175 @@ gcov_get_counter_target (void)
 
   return gcov_read_counter_mem ();
 #endif
+}
+
+/* Add VALUE to *COUNTER and make it with atomic operation
+   if USE_ATOMIC is true.  */
+
+static inline void
+gcov_counter_add (gcov_type *counter, gcov_type value,
+		  int use_atomic ATTRIBUTE_UNUSED)
+{
+#if GCOV_SUPPORTS_ATOMIC
+  if (use_atomic)
+    __atomic_fetch_add (counter, value, __ATOMIC_RELAXED);
+  else
+#endif
+    *counter += value;
+}
+
+#if HAVE_SYS_MMAN_H
+
+/* Allocate LENGTH with mmap function.  */
+
+static inline void *
+malloc_mmap (size_t length)
+{
+  return mmap (NULL, length, PROT_READ | PROT_WRITE,
+	       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+}
+
+#endif
+
+/* Allocate gcov_kvp from statically pre-allocated pool,
+   or use heap otherwise.  */
+
+static inline struct gcov_kvp *
+allocate_gcov_kvp (void)
+{
+#define MMAP_CHUNK_SIZE	(128 * 1024)
+  struct gcov_kvp *new_node = NULL;
+  unsigned kvp_sizeof = sizeof(struct gcov_kvp);
+
+  /* Try mmaped pool if available.  */
+#if !defined(IN_GCOV_TOOL) && !defined(L_gcov_merge_topn) && HAVE_SYS_MMAN_H
+  if (__gcov_kvp_dynamic_pool == NULL
+      || __gcov_kvp_dynamic_pool_index >= __gcov_kvp_dynamic_pool_size)
+    {
+      void *ptr = malloc_mmap (MMAP_CHUNK_SIZE);
+      if (ptr != MAP_FAILED)
+	{
+	  __gcov_kvp_dynamic_pool = ptr;
+	  __gcov_kvp_dynamic_pool_size = MMAP_CHUNK_SIZE / kvp_sizeof;
+	  __gcov_kvp_dynamic_pool_index = 0;
+	}
+    }
+
+  if (__gcov_kvp_dynamic_pool != NULL)
+    {
+      unsigned index;
+#if GCOV_SUPPORTS_ATOMIC
+      index
+	= __atomic_fetch_add (&__gcov_kvp_dynamic_pool_index, 1,
+			      __ATOMIC_RELAXED);
+#else
+      index = __gcov_kvp_dynamic_pool_index++;
+#endif
+      if (index < __gcov_kvp_dynamic_pool_size)
+	new_node = __gcov_kvp_dynamic_pool + index;
+    }
+#endif
+
+  /* Fallback to malloc.  */
+  if (new_node == NULL)
+    new_node = (struct gcov_kvp *)xcalloc (1, kvp_sizeof);
+
+  return new_node;
+}
+
+/* Add key value pair VALUE:COUNT to a top N COUNTERS.  When INCREMENT_TOTAL
+   is true, add COUNT to total of the TOP counter.  If USE_ATOMIC is true,
+   do it in atomic way.  Return true when the counter is full, otherwise
+   return false.  */
+
+static inline unsigned
+gcov_topn_add_value (gcov_type *counters, gcov_type value, gcov_type count,
+		     int use_atomic, int increment_total)
+{
+  if (increment_total)
+    {
+      /* In the multi-threaded mode, we can have an already merged profile
+	 with a negative total value.  In that case, we should bail out.  */
+      if (counters[0] < 0)
+	return 0;
+      gcov_counter_add (&counters[0], 1, use_atomic);
+    }
+
+  struct gcov_kvp *prev_node = NULL;
+  struct gcov_kvp *minimal_node = NULL;
+  struct gcov_kvp *current_node  = (struct gcov_kvp *)(intptr_t)counters[2];
+
+  while (current_node)
+    {
+      if (current_node->value == value)
+	{
+	  gcov_counter_add (&current_node->count, count, use_atomic);
+	  return 0;
+	}
+
+      if (minimal_node == NULL
+	  || current_node->count < minimal_node->count)
+	minimal_node = current_node;
+
+      prev_node = current_node;
+      current_node = current_node->next;
+    }
+
+  if (counters[1] == GCOV_TOPN_MAXIMUM_TRACKED_VALUES)
+    {
+      if (--minimal_node->count < count)
+	{
+	  minimal_node->value = value;
+	  minimal_node->count = count;
+	}
+
+      return 1;
+    }
+  else
+    {
+      struct gcov_kvp *new_node = allocate_gcov_kvp ();
+      if (new_node == NULL)
+	return 0;
+
+      new_node->value = value;
+      new_node->count = count;
+
+      int success = 0;
+      if (!counters[2])
+	{
+#if GCOV_SUPPORTS_ATOMIC
+	  if (use_atomic)
+	    {
+	      struct gcov_kvp **ptr = (struct gcov_kvp **)(intptr_t)&counters[2];
+	      success = !__sync_val_compare_and_swap (ptr, 0, new_node);
+	    }
+	  else
+#endif
+	    {
+	      counters[2] = (intptr_t)new_node;
+	      success = 1;
+	    }
+	}
+      else if (prev_node && !prev_node->next)
+	{
+#if GCOV_SUPPORTS_ATOMIC
+	  if (use_atomic)
+	    success = !__sync_val_compare_and_swap (&prev_node->next, 0,
+						    new_node);
+	  else
+#endif
+	    {
+	      prev_node->next = new_node;
+	      success = 1;
+	    }
+	}
+
+      /* Increment number of nodes.  */
+      if (success)
+	gcov_counter_add (&counters[1], 1, use_atomic);
+    }
+
+  return 0;
 }
 
 #endif /* !inhibit_libc */

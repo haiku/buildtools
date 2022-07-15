@@ -1,6 +1,6 @@
 // List implementation (out of line) -*- C++ -*-
 
-// Copyright (C) 2001-2018 Free Software Foundation, Inc.
+// Copyright (C) 2001-2021 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -312,7 +312,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
         iterator __first1 = begin();
         iterator __last1 = end();
         for (; __first1 != __last1 && __first2 != __last2;
-	     ++__first1, ++__first2)
+	     ++__first1, (void)++__first2)
           *__first1 = *__first2;
         if (__first2 == __last2)
           erase(__first1, __last1);
@@ -320,14 +320,23 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
           insert(__last1, __first2, __last2);
       }
 
+#if __cplusplus > 201703L
+# define _GLIBCXX20_ONLY(__expr) __expr
+#else
+# define _GLIBCXX20_ONLY(__expr)
+#endif
+
   template<typename _Tp, typename _Alloc>
-    void
+    typename list<_Tp, _Alloc>::__remove_return_type
     list<_Tp, _Alloc>::
     remove(const value_type& __value)
     {
+#if !_GLIBCXX_USE_CXX11_ABI
+      size_type __removed __attribute__((__unused__)) = 0;
+#endif
+      list __to_destroy(get_allocator());
       iterator __first = begin();
       iterator __last = end();
-      iterator __extra = __last;
       while (__first != __last)
 	{
 	  iterator __next = __first;
@@ -337,35 +346,55 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
 	      // 526. Is it undefined if a function in the standard changes
 	      // in parameters?
-	      if (std::__addressof(*__first) != std::__addressof(__value))
-		_M_erase(__first);
-	      else
-		__extra = __first;
+	      __to_destroy.splice(__to_destroy.begin(), *this, __first);
+#if !_GLIBCXX_USE_CXX11_ABI
+	      _GLIBCXX20_ONLY( __removed++ );
+#endif
 	    }
+
 	  __first = __next;
 	}
-      if (__extra != __last)
-	_M_erase(__extra);
+
+#if !_GLIBCXX_USE_CXX11_ABI
+	return _GLIBCXX20_ONLY( __removed );
+#else
+	return _GLIBCXX20_ONLY( __to_destroy.size() );
+#endif
     }
 
   template<typename _Tp, typename _Alloc>
-    void
+    typename list<_Tp, _Alloc>::__remove_return_type
     list<_Tp, _Alloc>::
     unique()
     {
       iterator __first = begin();
       iterator __last = end();
       if (__first == __last)
-	return;
+	return _GLIBCXX20_ONLY( 0 );
+#if !_GLIBCXX_USE_CXX11_ABI
+      size_type __removed __attribute__((__unused__)) = 0;
+#endif
+      list __to_destroy(get_allocator());
       iterator __next = __first;
       while (++__next != __last)
 	{
 	  if (*__first == *__next)
-	    _M_erase(__next);
+	    {
+	      __to_destroy.splice(__to_destroy.begin(), *this, __next);
+#if !_GLIBCXX_USE_CXX11_ABI
+	      _GLIBCXX20_ONLY( __removed++ );
+#endif
+	    }
 	  else
 	    __first = __next;
 	  __next = __first;
 	}
+
+#if !_GLIBCXX_USE_CXX11_ABI
+      return _GLIBCXX20_ONLY( __removed );
+#else
+      return _GLIBCXX20_ONLY( __to_destroy.size() );
+#endif
     }
 
   template<typename _Tp, typename _Alloc>
@@ -510,42 +539,74 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
   template<typename _Tp, typename _Alloc>
     template <typename _Predicate>
-      void
+      typename list<_Tp, _Alloc>::__remove_return_type
       list<_Tp, _Alloc>::
       remove_if(_Predicate __pred)
       {
-        iterator __first = begin();
-        iterator __last = end();
-        while (__first != __last)
+#if !_GLIBCXX_USE_CXX11_ABI
+	size_type __removed __attribute__((__unused__)) = 0;
+#endif
+	list __to_destroy(get_allocator());
+	iterator __first = begin();
+	iterator __last = end();
+	while (__first != __last)
 	  {
 	    iterator __next = __first;
 	    ++__next;
 	    if (__pred(*__first))
-	      _M_erase(__first);
+	      {
+		__to_destroy.splice(__to_destroy.begin(), *this, __first);
+#if !_GLIBCXX_USE_CXX11_ABI
+		_GLIBCXX20_ONLY( __removed++ );
+#endif
+	      }
 	    __first = __next;
 	  }
+
+#if !_GLIBCXX_USE_CXX11_ABI
+	return _GLIBCXX20_ONLY( __removed );
+#else
+	return _GLIBCXX20_ONLY( __to_destroy.size() );
+#endif
       }
 
   template<typename _Tp, typename _Alloc>
     template <typename _BinaryPredicate>
-      void
+      typename list<_Tp, _Alloc>::__remove_return_type
       list<_Tp, _Alloc>::
       unique(_BinaryPredicate __binary_pred)
       {
         iterator __first = begin();
         iterator __last = end();
         if (__first == __last)
-	  return;
+	  return _GLIBCXX20_ONLY(0);
+#if !_GLIBCXX_USE_CXX11_ABI
+        size_type __removed __attribute__((__unused__)) = 0;
+#endif
+	list __to_destroy(get_allocator());
         iterator __next = __first;
         while (++__next != __last)
 	  {
 	    if (__binary_pred(*__first, *__next))
-	      _M_erase(__next);
+	      {
+		__to_destroy.splice(__to_destroy.begin(), *this, __next);
+#if !_GLIBCXX_USE_CXX11_ABI
+		_GLIBCXX20_ONLY( __removed++ );
+#endif
+	      }
 	    else
 	      __first = __next;
 	    __next = __first;
 	  }
+
+#if !_GLIBCXX_USE_CXX11_ABI
+	return _GLIBCXX20_ONLY( __removed );
+#else
+	return _GLIBCXX20_ONLY( __to_destroy.size() );
+#endif
       }
+
+#undef _GLIBCXX20_ONLY
 
   template<typename _Tp, typename _Alloc>
     template <typename _StrictWeakOrdering>

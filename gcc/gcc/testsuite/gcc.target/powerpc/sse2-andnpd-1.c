@@ -1,6 +1,5 @@
-/* { dg-do run } */
+/* { dg-do run { target le } } */
 /* { dg-options "-O3 -mpower8-vector -Wno-psabi" } */
-/* { dg-require-effective-target lp64 } */
 /* { dg-require-effective-target p8vector_hw } */
 
 #ifndef CHECK_H
@@ -29,6 +28,7 @@ TEST (void)
   long long source1[2]={34545, 95567};
   long long source2[2]={674, 57897};
   long long e[2];
+  double d[2];
    
   s1.x = _mm_loadu_pd ((double *)source1);
   s2.x = _mm_loadu_pd ((double *)source2);
@@ -36,7 +36,8 @@ TEST (void)
    
   e[0] = (~source1[0]) & source2[0];
   e[1] = (~source1[1]) & source2[1];
+  __builtin_memcpy (d, e, sizeof (d));
 
-  if (check_union128d (u, (double *)e))
+  if (check_union128d (u, d))
     abort ();
 }

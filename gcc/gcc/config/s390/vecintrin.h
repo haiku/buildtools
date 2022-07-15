@@ -1,5 +1,5 @@
 /* GNU compiler vector extension intrinsics
-   Copyright (C) 2015-2018 Free Software Foundation, Inc.
+   Copyright (C) 2015-2021 Free Software Foundation, Inc.
    Contributed by Andreas Krebbel (Andreas.Krebbel@de.ibm.com)
 
 This file is part of GCC.
@@ -109,12 +109,12 @@ __lcbb(const void *ptr, int bndry)
 #define vec_rint(X)   __builtin_s390_vfi((X), 0, 0)
 #define vec_roundc(X) __builtin_s390_vfi((X), 4, 0)
 #define vec_round(X)  __builtin_s390_vfi((X), 4, 4)
-#define vec_signed(X) __builtin_s390_vcgdb((X), 0, 0)
-#define vec_unsigned(X) __builtin_s390_vclgdb((X), 0, 0)
-#define vec_doublee(X) __builtin_s390_vfll((X))
-#define vec_floate(X) __builtin_s390_vflr((X), 0, 0)
-#define vec_load_len_r(X,Y) __builtin_s390_vlrl((Y),(X))
-#define vec_store_len_r(X,Y) __builtin_s390_vstrl((Y),(X))
+#define vec_doublee(X) __builtin_s390_vflls((X))
+#define vec_floate(X) __builtin_s390_vflrd((X), 0, 0)
+#define vec_load_len_r(X,L)				\
+  (__vector unsigned char)__builtin_s390_vlrlr((L),(X))
+#define vec_store_len_r(X,Y,L) \
+  __builtin_s390_vstrlr((__vector signed char)(X),(L),(Y))
 
 #define vec_all_nan(a)						\
   __extension__ ({						\
@@ -159,6 +159,26 @@ __lcbb(const void *ptr, int bndry)
 			    | __VEC_CLASS_FP_SUBNORMAL_N, &cc);	\
       cc != 3 ? 1 : 0;						\
     })
+
+#define vec_vstbrh vec_vlbrh
+#define vec_vstbrf vec_vlbrf
+#define vec_vstbrg vec_vlbrg
+#define vec_vstbrq vec_vlbrq
+#define vec_vstbrf_flt vec_vlbrf_flt
+#define vec_vstbrg_dbl vec_vlbrg_dbl
+
+#define vec_vsterb vec_vlerb
+#define vec_vsterh vec_vlerh
+#define vec_vsterf vec_vlerh
+#define vec_vsterg vec_vlerh
+#define vec_vsterf_flt vec_vlerf_flt
+#define vec_vsterg_dbl vec_vlerg_dbl
+
+#define vec_extend_to_fp32_hi __builtin_s390_vclfnhs
+#define vec_extend_to_fp32_lo __builtin_s390_vclfnls
+#define vec_round_from_fp32 __builtin_s390_vcrnfs
+#define vec_convert_to_fp16 __builtin_s390_vcfn
+#define vec_convert_from_fp16 __builtin_s390_vcnf
 #define vec_gather_element __builtin_s390_vec_gather_element
 #define vec_xl __builtin_s390_vec_xl
 #define vec_xld2 __builtin_s390_vec_xld2
@@ -301,9 +321,12 @@ __lcbb(const void *ptr, int bndry)
 #define vec_ctd_u64 __builtin_s390_vec_ctd_u64
 #define vec_ctsl __builtin_s390_vec_ctsl
 #define vec_ctul __builtin_s390_vec_ctul
+#define vec_float __builtin_s390_vec_float
+#define vec_double __builtin_s390_vec_double
+#define vec_signed __builtin_s390_vec_signed
+#define vec_unsigned __builtin_s390_vec_unsigned
 #define vec_ld2f __builtin_s390_vec_ld2f
 #define vec_st2f __builtin_s390_vec_st2f
-#define vec_double __builtin_s390_vec_double
 #define vec_madd __builtin_s390_vec_madd
 #define vec_msub __builtin_s390_vec_msub
 #define vec_nmadd __builtin_s390_vec_nmadd
@@ -311,4 +334,10 @@ __lcbb(const void *ptr, int bndry)
 #define vec_nabs __builtin_s390_vec_nabs
 #define vec_sqrt __builtin_s390_vec_sqrt
 #define vec_fp_test_data_class __builtin_s390_vec_fp_test_data_class
+#define vec_revb __builtin_s390_vec_revb
+#define vec_reve __builtin_s390_vec_reve
+#define vec_sldb __builtin_s390_vec_sldb
+#define vec_srdb __builtin_s390_vec_srdb
+#define vec_search_string_cc __builtin_s390_vec_search_string_cc
+#define vec_search_string_until_zero_cc __builtin_s390_vec_search_string_until_zero_cc
 #endif /* _VECINTRIN_H */

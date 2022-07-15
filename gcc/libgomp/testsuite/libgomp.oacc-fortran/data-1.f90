@@ -1,45 +1,212 @@
 ! { dg-do run }
+! { dg-additional-options "-cpp" }
 
-program test
-  integer, parameter :: N = 8
-  real, allocatable :: a(:), b(:)
+function is_mapped (n) result (rc)
+  use openacc
 
-  allocate (a(N))
-  allocate (b(N))
+  integer, intent (in) :: n
+  logical rc
 
-  a(:) = 3.0
-  b(:) = 0.0
+#if ACC_MEM_SHARED
+  integer i
 
-  !$acc enter data copyin (a(1:N), b(1:N))
+  rc = .TRUE.
+  i = n
+#else
+  rc = acc_is_present (n, sizeof (n))
+#endif
 
-  !$acc parallel
-  do i = 1, n
-    b(i) = a (i)
-  end do
-  !$acc end parallel
+end function is_mapped
 
-  !$acc exit data copyout (a(1:N), b(1:N))
+program main
+  integer i, j
+  logical is_mapped
 
-  do i = 1, n
-    if (a(i) .ne. 3.0) STOP 1
-    if (b(i) .ne. 3.0) STOP 2
-  end do
+  i = -1
+  j = -2
 
-  a(:) = 5.0
-  b(:) = 1.0
+  !$acc data copyin (i, j)
+    if (is_mapped (i) .eqv. .FALSE.) stop 1
+    if (is_mapped (j) .eqv. .FALSE.) stop 2
 
-  !$acc enter data copyin (a(1:N), b(1:N))
+    if (i .ne. -1 .or. j .ne. -2) stop 3
 
-  !$acc parallel
-  do i = 1, n
-    b(i) = a (i)
-  end do
-  !$acc end parallel
+    i = 2
+    j = 1
 
-  !$acc exit data copyout (a(1:N), b(1:N))
+    if (i .ne. 2 .or. j .ne. 1) stop 4
+  !$acc end data
 
-  do i = 1, n
-    if (a(i) .ne. 5.0) STOP 3
-    if (b(i) .ne. 5.0) STOP 4
-  end do
-end program test
+  if (i .ne. 2 .or. j .ne. 1) stop 5
+
+  i = -1
+  j = -2
+
+  !$acc data copyout (i, j)
+    if (is_mapped (i) .eqv. .FALSE.) stop 6
+    if (is_mapped (j) .eqv. .FALSE.) stop 7
+
+    if (i .ne. -1 .or. j .ne. -2) stop 8
+
+    i = 2
+    j = 1
+
+    if (i .ne. 2 .or. j .ne. 1) stop 9
+
+    !$acc parallel present (i, j)
+      i = 4
+      j = 2
+    !$acc end parallel
+  !$acc end data
+
+  if (i .ne. 4 .or. j .ne. 2) stop 10
+
+  i = -1
+  j = -2
+
+  !$acc data create (i, j)
+    if (is_mapped (i) .eqv. .FALSE.) stop 11
+    if (is_mapped (j) .eqv. .FALSE.) stop 12
+
+    if (i .ne. -1 .or. j .ne. -2) stop 13
+
+    i = 2
+    j = 1
+
+    if (i .ne. 2 .or. j .ne. 1) stop 14
+  !$acc end data
+
+  if (i .ne. 2 .or. j .ne. 1) stop 15
+
+  i = -1
+  j = -2
+
+  !$acc data present_or_copyin (i, j)
+    if (is_mapped (i) .eqv. .FALSE.) stop 16
+    if (is_mapped (j) .eqv. .FALSE.) stop 17
+
+    if (i .ne. -1 .or. j .ne. -2) stop 18
+
+    i = 2
+    j = 1
+
+    if (i .ne. 2 .or. j .ne. 1) stop 19
+  !$acc end data
+
+  if (i .ne. 2 .or. j .ne. 1) stop 20
+
+  i = -1
+  j = -2
+
+  !$acc data present_or_copyout (i, j)
+    if (is_mapped (i) .eqv. .FALSE.) stop 21
+    if (is_mapped (j) .eqv. .FALSE.) stop 22
+
+    if (i .ne. -1 .or. j .ne. -2) stop 23
+
+    i = 2
+    j = 1
+
+    if (i .ne. 2 .or. j .ne. 1) stop 24
+
+    !$acc parallel present (i, j)
+      i = 4
+      j = 2
+    !$acc end parallel
+  !$acc end data
+
+  if (i .ne. 4 .or. j .ne. 2) stop 25
+
+  i = -1
+  j = -2
+
+  !$acc data present_or_copy (i, j)
+    if (is_mapped (i) .eqv. .FALSE.) stop 26
+    if (is_mapped (j) .eqv. .FALSE.) stop 27
+
+    if (i .ne. -1 .or. j .ne. -2) stop 28
+
+    i = 2
+    j = 1
+
+    if (i .ne. 2 .or. j .ne. 1) stop 29
+  !$acc end data
+
+#if ACC_MEM_SHARED
+  if (i .ne. 2 .or. j .ne. 1) stop 30
+#else
+  if (i .ne. -1 .or. j .ne. -2) stop 31
+#endif
+
+  i = -1
+  j = -2
+
+  !$acc data present_or_create (i, j)
+    if (is_mapped (i) .eqv. .FALSE.) stop 32
+    if (is_mapped (j) .eqv. .FALSE.) stop 33
+
+    i = 2
+    j = 1
+
+    if (i .ne. 2 .or. j .ne. 1) stop 34
+  !$acc end data
+
+  if (i .ne. 2 .or. j .ne. 1) stop 35
+
+  i = -1
+  j = -2
+
+  !$acc data copyin (i, j)
+    !$acc data present (i, j)
+      if (is_mapped (i) .eqv. .FALSE.) stop 36
+      if (is_mapped (j) .eqv. .FALSE.) stop 37
+
+      if (i .ne. -1 .or. j .ne. -2) stop 38
+
+      i = 2
+      j = 1
+
+      if (i .ne. 2 .or. j .ne. 1) stop 39
+    !$acc end data
+  !$acc end data
+
+  if (i .ne. 2 .or. j .ne. 1) stop 40
+
+  i = -1
+  j = -2
+
+  !$acc data copyin (i, j)
+    !$acc data present (i, j)
+      if (is_mapped (i) .eqv. .FALSE.) stop 41
+      if (is_mapped (j) .eqv. .FALSE.) stop 42
+
+      if (i .ne. -1 .or. j .ne. -2) stop 43
+
+      i = 2
+      j = 1
+
+      if (i .ne. 2 .or. j .ne. 1) stop 44
+    !$acc end data
+  !$acc end data
+
+  if (i .ne. 2 .or. j .ne. 1) stop 45
+
+  i = -1
+  j = -2
+
+  !$acc data
+#if !ACC_MEM_SHARED
+    if (is_mapped (i) .eqv. .TRUE.) stop 46
+    if (is_mapped (j) .eqv. .TRUE.) stop 47
+#endif
+    if (i .ne. -1 .or. j .ne. -2) stop 48
+
+    i = 2
+    j = 1
+
+    if (i .ne. 2 .or. j .ne. 1) stop 49
+  !$acc end data
+
+  if (i .ne. 2 .or. j .ne. 1) stop 50
+
+end program main

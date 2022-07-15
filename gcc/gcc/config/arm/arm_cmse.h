@@ -1,6 +1,6 @@
 /* ARMv8-M Secure Extensions intrinsics include file.
 
-   Copyright (C) 2015-2018 Free Software Foundation, Inc.
+   Copyright (C) 2015-2021 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GCC.
@@ -35,7 +35,6 @@ extern "C" {
 #if __ARM_FEATURE_CMSE & 1
 
 #include <stddef.h>
-#include <stdint.h>
 
 #ifdef __ARM_BIG_ENDIAN
 
@@ -165,6 +164,7 @@ __CMSE_TT_ASM (at)
 
 /* FIXME: diagnose use outside cmse_nonsecure_entry functions.  */
 __extension__ static __inline int __attribute__ ((__always_inline__))
+__attribute__ ((warn_unused_result))
 cmse_nonsecure_caller (void)
 {
   return __builtin_arm_cmse_nonsecure_caller ();
@@ -174,9 +174,9 @@ cmse_nonsecure_caller (void)
 #define CMSE_MPU_NONSECURE	16
 #define CMSE_NONSECURE		18
 
-#define cmse_nsfptr_create(p) ((typeof ((p))) ((intptr_t) (p) & ~1))
+#define cmse_nsfptr_create(p) ((__typeof__ ((p))) ((__INTPTR_TYPE__) (p) & ~1))
 
-#define cmse_is_nsfptr(p) (!((intptr_t) (p) & 1))
+#define cmse_is_nsfptr(p) (!((__INTPTR_TYPE__) (p) & 1))
 
 #endif /* __ARM_FEATURE_CMSE & 2 */
 
@@ -185,10 +185,11 @@ cmse_nonsecure_caller (void)
 #define CMSE_MPU_READ		8
 
 __extension__ void *
+__attribute__ ((warn_unused_result))
 cmse_check_address_range (void *, size_t, int);
 
 #define cmse_check_pointed_object(p, f) \
-  ((typeof ((p))) cmse_check_address_range ((p), sizeof (*(p)), (f)))
+  ((__typeof__ ((p))) cmse_check_address_range ((p), sizeof (*(p)), (f)))
 
 #endif /* __ARM_FEATURE_CMSE & 1 */
 
