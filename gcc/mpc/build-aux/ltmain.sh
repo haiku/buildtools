@@ -1,4 +1,4 @@
-#!/gnu/store/311nvir0pz1mhf0mgsmfrw00qfj7yq0j-bash-4.3.39/bin/sh
+#!/bin/sh
 ## DO NOT EDIT - This file generated from ./build-aux/ltmain.in
 ##               by inline-source v2014-01-03.01
 
@@ -1367,7 +1367,7 @@ func_lt_ver ()
 # time-stamp-pattern: "10/scriptversion=%:y-%02m-%02d.%02H; # UTC"
 # time-stamp-time-zone: "UTC"
 # End:
-#! /bin/sh
+#!/bin/sh
 
 # Set a version string for this script.
 scriptversion=2014-01-07.03; # UTC

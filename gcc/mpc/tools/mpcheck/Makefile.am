@@ -1,4 +1,4 @@
-## tools/Makefile.am -- Process this file with automake to produce Makefile.in
+## tools/mpcheck/Makefile.am -- Process this file with automake to produce Makefile.in
 ##
 ## Copyright (C) 2014 CNRS
 ## Copyright (C) 2020 INRIA
@@ -18,5 +18,14 @@
 ## You should have received a copy of the GNU Lesser General Public License
 ## along with this program. If not, see http://www.gnu.org/licenses/ .
 
-SUBDIRS = bench mpcheck
+AM_CPPFLAGS = -I$(top_srcdir)/src
+AM_DEFAULT_SOURCE_EXT = .c
+
+LDADD = $(top_builddir)/src/libmpc.la -lm
+
+BINARIES = mpcheck-float mpcheck-double mpcheck-longdouble mpcheck-float128
+EXTRA_PROGRAMS = $(BINARIES)
+CLEANFILES = $(BINARIES)
+
+mpcheck : $(BINARIES)
 

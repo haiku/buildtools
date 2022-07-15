@@ -13,7 +13,6 @@
 # PARTICULAR PURPOSE.
 
 @SET_MAKE@
-
 VPATH = @srcdir@
 am__is_gnu_make = { \
   if test -z '$(MAKELEVEL)'; then \
@@ -88,8 +87,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-EXTRA_PROGRAMS = mpcbench$(EXEEXT)
-subdir = tools/bench
+EXTRA_PROGRAMS = $(am__EXEEXT_1)
+subdir = tools/mpcheck
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_c_check_flag.m4 \
 	$(top_srcdir)/m4/ax_gcc_option.m4 \
@@ -100,20 +99,33 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/ax_c_check_flag.m4 \
 	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(noinst_HEADERS) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-mpcbench_SOURCES = mpcbench.c
-mpcbench_OBJECTS = mpcbench.$(OBJEXT)
-mpcbench_LDADD = $(LDADD)
-mpcbench_DEPENDENCIES = $(top_builddir)/src/libmpc.la
+am__EXEEXT_1 = mpcheck-float$(EXEEXT) mpcheck-double$(EXEEXT) \
+	mpcheck-longdouble$(EXEEXT) mpcheck-float128$(EXEEXT)
+mpcheck_double_SOURCES = mpcheck-double.c
+mpcheck_double_OBJECTS = mpcheck-double.$(OBJEXT)
+mpcheck_double_LDADD = $(LDADD)
+mpcheck_double_DEPENDENCIES = $(top_builddir)/src/libmpc.la
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+mpcheck_float_SOURCES = mpcheck-float.c
+mpcheck_float_OBJECTS = mpcheck-float.$(OBJEXT)
+mpcheck_float_LDADD = $(LDADD)
+mpcheck_float_DEPENDENCIES = $(top_builddir)/src/libmpc.la
+mpcheck_float128_SOURCES = mpcheck-float128.c
+mpcheck_float128_OBJECTS = mpcheck-float128.$(OBJEXT)
+mpcheck_float128_LDADD = $(LDADD)
+mpcheck_float128_DEPENDENCIES = $(top_builddir)/src/libmpc.la
+mpcheck_longdouble_SOURCES = mpcheck-longdouble.c
+mpcheck_longdouble_OBJECTS = mpcheck-longdouble.$(OBJEXT)
+mpcheck_longdouble_LDADD = $(LDADD)
+mpcheck_longdouble_DEPENDENCIES = $(top_builddir)/src/libmpc.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -129,7 +141,9 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/mpcbench.Po
+am__depfiles_remade = ./$(DEPDIR)/mpcheck-double.Po \
+	./$(DEPDIR)/mpcheck-float.Po ./$(DEPDIR)/mpcheck-float128.Po \
+	./$(DEPDIR)/mpcheck-longdouble.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -149,14 +163,15 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = mpcbench.c
-DIST_SOURCES = mpcbench.c
+SOURCES = mpcheck-double.c mpcheck-float.c mpcheck-float128.c \
+	mpcheck-longdouble.c
+DIST_SOURCES = mpcheck-double.c mpcheck-float.c mpcheck-float128.c \
+	mpcheck-longdouble.c
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-HEADERS = $(noinst_HEADERS)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
 # and print each of them once, without duplicates.  Input order is
@@ -177,7 +192,7 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 am__DIST_COMMON = $(srcdir)/Makefile.in \
-	$(top_srcdir)/build-aux/depcomp
+	$(top_srcdir)/build-aux/depcomp README
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
@@ -306,7 +321,8 @@ top_srcdir = @top_srcdir@
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_DEFAULT_SOURCE_EXT = .c
 LDADD = $(top_builddir)/src/libmpc.la -lm
-noinst_HEADERS = benchtime.h
+BINARIES = mpcheck-float mpcheck-double mpcheck-longdouble mpcheck-float128
+CLEANFILES = $(BINARIES)
 all: all-am
 
 .SUFFIXES:
@@ -320,9 +336,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu tools/bench/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu tools/mpcheck/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu tools/bench/Makefile
+	  $(AUTOMAKE) --gnu tools/mpcheck/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -341,9 +357,21 @@ $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
 
-mpcbench$(EXEEXT): $(mpcbench_OBJECTS) $(mpcbench_DEPENDENCIES) $(EXTRA_mpcbench_DEPENDENCIES) 
-	@rm -f mpcbench$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(mpcbench_OBJECTS) $(mpcbench_LDADD) $(LIBS)
+mpcheck-double$(EXEEXT): $(mpcheck_double_OBJECTS) $(mpcheck_double_DEPENDENCIES) $(EXTRA_mpcheck_double_DEPENDENCIES) 
+	@rm -f mpcheck-double$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(mpcheck_double_OBJECTS) $(mpcheck_double_LDADD) $(LIBS)
+
+mpcheck-float$(EXEEXT): $(mpcheck_float_OBJECTS) $(mpcheck_float_DEPENDENCIES) $(EXTRA_mpcheck_float_DEPENDENCIES) 
+	@rm -f mpcheck-float$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(mpcheck_float_OBJECTS) $(mpcheck_float_LDADD) $(LIBS)
+
+mpcheck-float128$(EXEEXT): $(mpcheck_float128_OBJECTS) $(mpcheck_float128_DEPENDENCIES) $(EXTRA_mpcheck_float128_DEPENDENCIES) 
+	@rm -f mpcheck-float128$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(mpcheck_float128_OBJECTS) $(mpcheck_float128_LDADD) $(LIBS)
+
+mpcheck-longdouble$(EXEEXT): $(mpcheck_longdouble_OBJECTS) $(mpcheck_longdouble_DEPENDENCIES) $(EXTRA_mpcheck_longdouble_DEPENDENCIES) 
+	@rm -f mpcheck-longdouble$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(mpcheck_longdouble_OBJECTS) $(mpcheck_longdouble_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -351,7 +379,10 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mpcbench.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mpcheck-double.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mpcheck-float.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mpcheck-float128.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mpcheck-longdouble.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -473,7 +504,7 @@ distdir-am: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(HEADERS)
+all-am: Makefile
 installdirs:
 install: install-am
 install-exec: install-exec-am
@@ -497,6 +528,7 @@ install-strip:
 mostlyclean-generic:
 
 clean-generic:
+	-test -z "$(CLEANFILES)" || rm -f $(CLEANFILES)
 
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
@@ -510,7 +542,10 @@ clean: clean-am
 clean-am: clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ./$(DEPDIR)/mpcbench.Po
+		-rm -f ./$(DEPDIR)/mpcheck-double.Po
+	-rm -f ./$(DEPDIR)/mpcheck-float.Po
+	-rm -f ./$(DEPDIR)/mpcheck-float128.Po
+	-rm -f ./$(DEPDIR)/mpcheck-longdouble.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -556,7 +591,10 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ./$(DEPDIR)/mpcbench.Po
+		-rm -f ./$(DEPDIR)/mpcheck-double.Po
+	-rm -f ./$(DEPDIR)/mpcheck-float.Po
+	-rm -f ./$(DEPDIR)/mpcheck-float128.Po
+	-rm -f ./$(DEPDIR)/mpcheck-longdouble.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -594,8 +632,7 @@ uninstall-am:
 .PRECIOUS: Makefile
 
 
-bench : mpcbench
-	./mpcbench
+mpcheck : $(BINARIES)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
