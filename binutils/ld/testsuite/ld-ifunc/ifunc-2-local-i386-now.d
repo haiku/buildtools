@@ -3,15 +3,15 @@
 #as: --32
 #objdump: -dw
 #target: x86_64-*-* i?86-*-*
-#notarget: x86_64-*-nacl* i?86-*-nacl*
+#notarget: *-*-lynxos *-*-nto*
 
 .*: +file format .*
 
 
 Disassembly of section .plt:
 
-0+e0 <.plt>:
- +[a-f0-9]+:	ff b3 04 00 00 00    	pushl  0x4\(%ebx\)
+0+e0 <\*ABS\*@plt-0x10>:
+ +[a-f0-9]+:	ff b3 04 00 00 00    	push   0x4\(%ebx\)
  +[a-f0-9]+:	ff a3 08 00 00 00    	jmp    \*0x8\(%ebx\)
  +[a-f0-9]+:	00 00                	add    %al,\(%eax\)
 	...
@@ -19,7 +19,7 @@ Disassembly of section .plt:
 0+f0 <\*ABS\*@plt>:
  +[a-f0-9]+:	ff a3 0c 00 00 00    	jmp    \*0xc\(%ebx\)
  +[a-f0-9]+:	68 00 00 00 00       	push   \$0x0
- +[a-f0-9]+:	e9 e0 ff ff ff       	jmp    e0 <.plt>
+ +[a-f0-9]+:	e9 e0 ff ff ff       	jmp    e0 <\*ABS\*@plt-0x10>
 
 Disassembly of section .text:
 

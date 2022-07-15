@@ -1,5 +1,5 @@
 /* tc-rx.c -- Assembler for the Renesas RX
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2021 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -41,16 +41,15 @@ const char line_separator_chars[] = "!";
 const char EXP_CHARS[]            = "eE";
 const char FLT_CHARS[]            = "dD";
 
-/* ELF flags to set in the output file header.  */
-static int elf_flags = E_FLAG_RX_ABI;
-
 #ifndef TE_LINUX
 bfd_boolean rx_use_conventional_section_names = FALSE;
+static int elf_flags = E_FLAG_RX_ABI;
 #else
 bfd_boolean rx_use_conventional_section_names = TRUE;
+static int elf_flags;
 #endif
-static bfd_boolean rx_use_small_data_limit = FALSE;
 
+static bfd_boolean rx_use_small_data_limit = FALSE;
 static bfd_boolean rx_pid_mode = FALSE;
 static int rx_num_int_regs = 0;
 int rx_pid_register;
@@ -491,7 +490,7 @@ parse_rx_section (char * name)
       else
 	type = SHT_NOBITS;
 
-      obj_elf_change_section (name, type, 0, attr, 0, NULL, FALSE, FALSE);
+      obj_elf_change_section (name, type, attr, 0, NULL, FALSE, FALSE);
     }
   else /* Try not to redefine a section, especially B_1.  */
     {
@@ -506,10 +505,10 @@ parse_rx_section (char * name)
 	| ((flags & SEC_STRINGS) ? SHF_STRINGS : 0)
 	| ((flags & SEC_THREAD_LOCAL) ? SHF_TLS : 0);
 
-      obj_elf_change_section (name, type, 0, attr, 0, NULL, FALSE, FALSE);
+      obj_elf_change_section (name, type, attr, 0, NULL, FALSE, FALSE);
     }
 
-  bfd_set_section_alignment (stdoutput, now_seg, align);
+  bfd_set_section_alignment (now_seg, align);
 }
 
 static void
@@ -740,8 +739,8 @@ typedef struct rx_bytesT
   int n_relax;
   int link_relax;
   fixS *link_relax_fixP;
-  char times_grown;
-  char times_shrank;
+  unsigned long times_grown;
+  unsigned long times_shrank;
 } rx_bytesT;
 
 static rx_bytesT rx_bytes;
@@ -1290,7 +1289,7 @@ md_operand (expressionS * exp ATTRIBUTE_UNUSED)
 valueT
 md_section_align (segT segment, valueT size)
 {
-  int align = bfd_get_section_alignment (stdoutput, segment);
+  int align = bfd_section_alignment (segment);
   return ((size + (1 << align) - 1) & -(1 << align));
 }
 
@@ -1558,7 +1557,7 @@ rx_next_opcode (fragS *fragP)
    fr_subtype to calculate the difference.  */
 
 int
-rx_relax_frag (segT segment ATTRIBUTE_UNUSED, fragS * fragP, long stretch)
+rx_relax_frag (segT segment ATTRIBUTE_UNUSED, fragS * fragP, long stretch, unsigned long max_iterations)
 {
   addressT addr0, sym_addr;
   addressT mypc;
@@ -1755,9 +1754,16 @@ rx_relax_frag (segT segment ATTRIBUTE_UNUSED, fragS * fragP, long stretch)
   /* This prevents infinite loops in align-heavy sources.  */
   if (newsize < oldsize)
     {
-      if (fragP->tc_frag_data->times_shrank > 10
-         && fragP->tc_frag_data->times_grown > 10)
-       newsize = oldsize;
+      /* Make sure that our iteration limit is no bigger than the one being
+	 used inside write.c:relax_segment().  Otherwise we can end up
+	 iterating for too long, and triggering a fatal error there.  See
+	 PR 24464 for more details.  */
+      unsigned long limit = max_iterations > 10 ? 10 : max_iterations;
+
+      if (fragP->tc_frag_data->times_shrank > limit
+	  && fragP->tc_frag_data->times_grown > limit)
+	newsize = oldsize;
+
       if (fragP->tc_frag_data->times_shrank < 20)
        fragP->tc_frag_data->times_shrank ++;
     }
@@ -2179,8 +2185,7 @@ md_convert_frag (bfd *   abfd ATTRIBUTE_UNUSED,
   fragP->fr_var = 0;
 
   if (fragP->fr_next != NULL
-	  && ((offsetT) (fragP->fr_next->fr_address - fragP->fr_address)
-	      != fragP->fr_fix))
+      && fragP->fr_next->fr_address - fragP->fr_address != fragP->fr_fix)
     as_bad (_("bad frag at %p : fix %ld addr %ld %ld \n"), fragP,
 	    (long) fragP->fr_fix,
 	    (long) fragP->fr_address, (long) fragP->fr_next->fr_address);

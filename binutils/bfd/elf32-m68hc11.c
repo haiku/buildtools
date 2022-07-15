@@ -1,5 +1,5 @@
 /* Motorola 68HC11-specific support for 32-bit ELF
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999-2021 Free Software Foundation, Inc.
    Contributed by Stephane Carrez (stcarrez@nerim.fr)
    (Heavily copied from the D10V port by Martin Hunt (hunt@cygnus.com))
 
@@ -415,6 +415,14 @@ m68hc11_elf_build_one_stub (struct bfd_hash_entry *gen_entry, void *in_arg)
   stub_entry = (struct elf32_m68hc11_stub_hash_entry *) gen_entry;
   info = (struct bfd_link_info *) in_arg;
 
+  /* Fail if the target section could not be assigned to an output
+     section.  The user should fix his linker script.  */
+  if (stub_entry->target_section->output_section == NULL
+      && info->non_contiguous_regions)
+    info->callbacks->einfo (_("%F%P: Could not assign '%pA' to an output section. "
+			      "Retry without --enable-non-contiguous-regions.\n"),
+			    stub_entry->target_section);
+
   htab = m68hc11_elf_hash_table (info);
   if (htab == NULL)
     return FALSE;
@@ -497,7 +505,7 @@ m68hc11_elf_bfd_link_hash_table_create (bfd *abfd)
 
 /* 68HC11 Linker Relaxation.  */
 
-struct m68hc11_direct_relax
+const struct m68hc11_direct_relax
 {
   const char *name;
   unsigned char code;
@@ -540,7 +548,7 @@ struct m68hc11_direct_relax
   { 0, 0, 0 }
 };
 
-static struct m68hc11_direct_relax *
+static const struct m68hc11_direct_relax *
 find_relaxable_insn (unsigned char code)
 {
   int i;
@@ -954,7 +962,7 @@ m68hc11_elf_relax_section (bfd *abfd, asection *sec,
 	{
 	  unsigned char code;
 	  unsigned short offset;
-	  struct m68hc11_direct_relax *rinfo;
+	  const struct m68hc11_direct_relax *rinfo;
 
 	  prev_insn_branch = 0;
 	  offset = bfd_get_16 (abfd, contents + irel->r_offset);
@@ -1074,11 +1082,8 @@ m68hc11_elf_relax_section (bfd *abfd, asection *sec,
       prev_insn_group = 0;
     }
 
-  if (free_relocs != NULL)
-    {
-      free (free_relocs);
-      free_relocs = NULL;
-    }
+  free (free_relocs);
+  free_relocs = NULL;
 
   if (free_contents != NULL)
     {
@@ -1107,12 +1112,9 @@ m68hc11_elf_relax_section (bfd *abfd, asection *sec,
   return TRUE;
 
  error_return:
-  if (free_relocs != NULL)
-    free (free_relocs);
-  if (free_contents != NULL)
-    free (free_contents);
-  if (free_extsyms != NULL)
-    free (free_extsyms);
+  free (free_relocs);
+  free (free_contents);
+  free (free_extsyms);
   return FALSE;
 }
 
@@ -1306,7 +1308,6 @@ static const struct bfd_elf_special_section elf32_m68hc11_special_sections[] =
 #define elf_backend_relocate_section elf32_m68hc11_relocate_section
 #define elf_backend_add_symbol_hook  elf32_m68hc11_add_symbol_hook
 #define elf_backend_object_p	0
-#define elf_backend_final_write_processing	0
 #define elf_backend_can_gc_sections		1
 #define elf_backend_special_sections  elf32_m68hc11_special_sections
 #define elf_backend_merge_symbol_attribute elf32_m68hc11_merge_symbol_attribute

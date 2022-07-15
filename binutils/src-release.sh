@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#   Copyright (C) 1990-2018 Free Software Foundation
+#   Copyright (C) 1990-2020 Free Software Foundation
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ BZIPPROG=bzip2
 GZIPPROG=gzip
 LZIPPROG=lzip
 XZPROG=xz
-MD5PROG=md5sum
+SHA256PROG=sha256sum
 MAKE=make
 CC=gcc
 CXX=g++
@@ -38,15 +38,13 @@ MAKEINFOFLAGS=--split-size=5000000
 # Support for building net releases
 
 # Files in root used in any net release.
-DEVO_SUPPORT="README Makefile.in configure configure.ac \
-	config.guess config.sub config move-if-change \
-	COPYING COPYING.LIB install-sh config-ml.in symlink-tree \
-	mkinstalldirs ltmain.sh missing ylwrap \
-	libtool.m4 ltsugar.m4 ltversion.m4 ltoptions.m4 \
-	Makefile.def Makefile.tpl src-release.sh config.rpath \
-	ChangeLog MAINTAINERS README-maintainer-mode \
-	lt~obsolete.m4 ltgcc.m4 depcomp mkdep compile \
-	COPYING3 COPYING3.LIB test-driver ar-lib"
+DEVO_SUPPORT="ar-lib ChangeLog compile config config-ml.in config.guess \
+	config.rpath config.sub configure configure.ac COPYING COPYING.LIB \
+	COPYING3 COPYING3.LIB depcomp install-sh libtool.m4 ltgcc.m4 \
+	ltmain.sh ltoptions.m4 ltsugar.m4 ltversion.m4 lt~obsolete.m4 \
+	MAINTAINERS Makefile.def Makefile.in Makefile.tpl missing mkdep \
+	mkinstalldirs move-if-change README README-maintainer-mode \
+	src-release.sh symlink-tree test-driver ylwrap"
 
 # Files in devo/etc used in any net release.
 ETC_SUPPORT="Makefile.in configure configure.in standards.texi \
@@ -63,8 +61,12 @@ getver()
 	$tool/common/create-version.sh $tool 'dummy-host' 'dummy-target' VER.tmp
 	cat VER.tmp | grep 'version\[\]' | sed 's/.*"\([^"]*\)".*/\1/' | sed 's/-git$//'
         rm -f VER.tmp
+    elif test $tool = "gdb"; then
+	./gdbsupport/create-version.sh $tool 'dummy-host' 'dummy-target' VER.tmp
+	cat VER.tmp | grep 'version\[\]' | sed 's/.*"\([^"]*\)".*/\1/' | sed 's/-git$//'
+        rm -f VER.tmp
     elif test -f $tool/version.in; then
-	head -1 $tool/version.in
+	head -n 1 $tool/version.in
     else
 	echo VERSION
     fi
@@ -91,7 +93,7 @@ do_proto_toplev()
     # built in the gold dir.  The disables speed the build a little.
     enables=
     disables=
-    for dir in binutils gas gdb gold gprof ld libdecnumber readline sim; do
+    for dir in binutils gas gdb gold gprof ld libctf libdecnumber readline sim; do
 	case " $tool $support_files " in
 	    *" $dir "*) enables="$enables --enable-$dir" ;;
 	    *) disables="$disables --disable-$dir" ;;
@@ -166,15 +168,15 @@ do_proto_toplev()
 
 CVS_NAMES='-name CVS -o -name .cvsignore'
 
-# Add an md5sum to the built tarball
-do_md5sum()
+# Add a sha256sum to the built tarball
+do_sha256sum()
 {
-    echo "==> Adding md5 checksum to top-level directory"
+    echo "==> Adding sha256 checksum to top-level directory"
     (cd proto-toplev && find * -follow \( $CVS_NAMES \) -prune \
 	-o -type f -print \
-	| xargs $MD5PROG > ../md5.new)
-    rm -f proto-toplev/md5.sum
-    mv md5.new proto-toplev/md5.sum
+	| xargs $SHA256PROG > ../sha256.new)
+    rm -f proto-toplev/sha256.sum
+    mv sha256.new proto-toplev/sha256.sum
 }
 
 # Build the release tarball
@@ -274,7 +276,7 @@ tar_compress()
     verdir=${5:-$tool}
     ver=$(getver $verdir)
     do_proto_toplev $package $ver $tool "$support_files"
-    do_md5sum
+    do_sha256sum
     do_tar $package $ver
     do_compress $package $ver "$compressors"
 }
@@ -288,14 +290,14 @@ gdb_tar_compress()
     compressors=$4
     ver=$(getver $tool)
     do_proto_toplev $package $ver $tool "$support_files"
-    do_md5sum
+    do_sha256sum
     do_djunpack $package $ver
     do_tar $package $ver
     do_compress $package $ver "$compressors"
 }
 
 # The FSF "binutils" release includes gprof and ld.
-BINUTILS_SUPPORT_DIRS="bfd gas include libiberty opcodes ld elfcpp gold gprof intl setup.com makefile.vms cpu zlib"
+BINUTILS_SUPPORT_DIRS="bfd gas include libiberty libctf opcodes ld elfcpp gold gprof intl setup.com makefile.vms cpu zlib"
 binutils_release()
 {
     compressors=$1
@@ -313,7 +315,7 @@ gas_release()
     tar_compress $package $tool "$GAS_SUPPORT_DIRS" "$compressors"
 }
 
-GDB_SUPPORT_DIRS="bfd include libiberty opcodes readline sim intl libdecnumber cpu zlib contrib"
+GDB_SUPPORT_DIRS="bfd include libiberty libctf opcodes readline sim intl libdecnumber cpu zlib contrib gnulib gdbsupport gdbserver"
 gdb_release()
 {
     compressors=$1

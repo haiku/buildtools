@@ -1,5 +1,5 @@
 /* windres.c -- a program to manipulate Windows resources
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2021 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Rewritten by Kai Tietz, Onevision.
 
@@ -527,6 +527,8 @@ extended_menuitems (const rc_menuitem *menuitems)
 		| MENUITEM_HELP
 		| MENUITEM_INACTIVE
 		| MENUITEM_MENUBARBREAK
+		| MENUITEM_BITMAP
+		| MENUITEM_OWNERDRAW
 		| MENUITEM_MENUBREAK))
 	  != 0)
 	return 1;
@@ -704,8 +706,7 @@ quot (const char *string)
   if ((buflen < slen * 2 + 2) || ! buf)
     {
       buflen = slen * 2 + 2;
-      if (buf)
-	free (buf);
+      free (buf);
       buf = (char *) xmalloc (buflen);
     }
 
@@ -884,7 +885,13 @@ main (int argc, char **argv)
 	  break;
 
 	case OPTION_PREPROCESSOR:
-	  preprocessor = optarg;
+	  if (strchr (optarg, ' '))
+	    {
+	      if (asprintf (& preprocessor, "\"%s\"", optarg) == -1)
+		preprocessor = optarg;
+	    }
+	  else
+	    preprocessor = optarg;	    
 	  break;
 
 	case OPTION_PREPROCESSOR_ARG:

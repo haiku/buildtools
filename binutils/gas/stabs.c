@@ -1,5 +1,5 @@
 /* Generic stabs parsing for gas.
-   Copyright (C) 1989-2019 Free Software Foundation, Inc.
+   Copyright (C) 1989-2021 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -109,7 +109,7 @@ get_stab_string_offset (const char *string, const char *stabstr_secname,
       p = frag_more (1);
       *p = 0;
       retval = seg_info (seg)->stabu.stab_string_size = 1;
-      bfd_set_section_flags (stdoutput, seg, SEC_READONLY | SEC_DEBUGGING);
+      bfd_set_section_flags (seg, SEC_READONLY | SEC_DEBUGGING);
     }
 
   if (length > 0)
@@ -144,8 +144,7 @@ aout_process_stab (int what, const char *string, int type, int other, int desc)
      symbol chain.  This is to avoid "continuation symbols" (where one
      ends in "\" and the debug info is continued in the next .stabs
      directive) from being separated by other random symbols.  */
-  symbol = symbol_create (string, undefined_section, 0,
-			  &zero_address_frag);
+  symbol = symbol_create (string, undefined_section, &zero_address_frag, 0);
   if (what == 's' || what == 'n')
     {
       /* Pick up the value from the input line.  */
@@ -336,7 +335,7 @@ s_stab_generic (int what,
 
       if (! seg_info (seg)->hadone)
 	{
-	  bfd_set_section_flags (stdoutput, seg,
+	  bfd_set_section_flags (seg,
 				 SEC_READONLY | SEC_RELOC | SEC_DEBUGGING);
 #ifdef INIT_STAB_SECTION
 	  INIT_STAB_SECTION (seg);
@@ -378,7 +377,7 @@ s_stab_generic (int what,
 	  expressionS exp;
 
 	  /* Arrange for a value representing the current location.  */
-	  symbol = symbol_temp_new (saved_seg, dot, saved_frag);
+	  symbol = symbol_temp_new (saved_seg, saved_frag, dot);
 
 	  exp.X_op = O_symbol;
 	  exp.X_add_symbol = symbol;
@@ -564,8 +563,7 @@ generate_asm_file (int type, const char *file)
 
   colon (sym);
 
-  if (last_file != NULL)
-    free (last_file);
+  free (last_file);
   last_file = xstrdup (file);
 
   free (buf);

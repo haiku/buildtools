@@ -1,71 +1,66 @@
-2019-02-02  Nick Clifton  <nickc@redhat.com>
+2021-02-06  Nick Clifton  <nickc@redhat.com>
 
-	2.32 Release.
+	This is the 2.36.1 release.
 
-2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+2021-02-05  Nelson Chu  <nelson.chu@sifive.com>
 
-	Backport from mainline
-	2019-01-31  Andreas Krebbel  <krebbel@linux.ibm.com>
+	* opcode/riscv-opc.h: Removed macros for zb* extensions.
+	* opcode/riscv.h (riscv_insn_class): Removed INSN_CLASS_ZB*.
 
-	* opcode/s390.h (enum s390_opcode_cpu_val): Add
-	S390_OPCODE_ARCH13.
+2021-01-24  Nick Clifton  <nickc@redhat.com>
 
-2019-01-25  Sudakshina Das  <sudi.das@arm.com>
-	    Ramana Radhakrishnan  <ramana.radhakrishnan@arm.com>
+	This is the 2.36 release.
 
-	* opcode/aarch64.h (enum aarch64_opnd): Remove
-	AARCH64_OPND_ADDR_SIMPLE_2.
-	(enum aarch64_insn_class): Remove ldstgv_indexed.
+2021-01-11  Kyrylo Tkachov  <kyrylo.tkachov@arm.com>
 
-2018-06-24  Nick Clifton  <nickc@redhat.com>
+	* opcode/aarch64.h (AARCH64_FEATURE_CSRE): Delete.
+	(aarch64_opnd): Delete AARCH64_OPND_CSRE_CSR.
 
-	2.32 branch created.
+2021-01-09  Nick Clifton  <nickc@redhat.com>
 
-2019-01-16  Kito Cheng  <kito@andestech.com>
+	* 2.36 release branch crated.
 
-	* elf/riscv.h (SHT_RISCV_ATTRIBUTES): Define.
-	(Tag_RISCV_arch): Likewise.
-	(Tag_RISCV_priv_spec): Likewise.
-	(Tag_RISCV_priv_spec_minor): Likewise.
-	(Tag_RISCV_priv_spec_revision): Likewise.
-	(Tag_RISCV_unaligned_access): Likewise.
-	(Tag_RISCV_stack_align): Likewise.
+2021-01-07  Philipp Tomsich  <prt@gnu.org>
 
-2019-01-14  Pavel I. Kryukov  <kryukov@frtk.ru>
+	* opcode/riscv-opc.h: Added MATCH_PAUSE, MASK_PAUSE and DECLARE_INSN
+	for pause hint instruction.
+	* opcode/riscv.h (enum riscv_insn_class): Added INSN_CLASS_ZIHINTPAUSE.
 
-	* dis-asm.h: include <string.h>
+2021-01-07  Claire Xenia Wolf  <claire@symbioticeda.com>
+	    Jim Wilson  <jimw@sifive.com>
+	    Andrew Waterman  <andrew@sifive.com>
+	    Maxim Blinov  <maxim.blinov@embecosm.com>
+	    Kito Cheng  <kito.cheng@sifive.com>
+	    Nelson Chu  <nelson.chu@sifive.com>
 
-2019-01-10  Nick Clifton  <nickc@redhat.com>
+	* opcode/riscv-opc.h: Added MASK/MATCH/DECLARE_INSN for ZBA/ZBB/ZBC.
+	* opcode/riscv.h (riscv_insn_class): Added INSN_CLASS_ZB*.
+	(enum riscv_isa_spec_class): Added ISA_SPEC_CLASS_DRAFT for the
+	frozen extensions.
 
-	* Merge from GCC:
-	2018-12-22  Jason Merrill  <jason@redhat.com>
+2021-01-05  Nick Alcock  <nick.alcock@oracle.com>
 
-	* demangle.h: Remove support for ancient GNU (pre-3.0), Lucid,
-	ARM, HP, and EDG demangling styles.
+	* ctf-api.h (CTF_MN_RECURSE): New.
+	(ctf_member_next): Add flags argument.
 
-2019-01-09  Sandra Loosemore  <sandra@codesourcery.com>
+2021-01-05  Nick Alcock  <nick.alcock@oracle.com>
 
-	Merge from GCC:
-	PR other/16615
+	* ctf-api.h (ECTF_INCOMPLETE): New.
+	(ECTF_NERR): Adjust.
 
-	* libiberty.h: Mechanically replace "can not" with "cannot".
-	* plugin-api.h: Likewise.
+2021-01-01  Nicolas Boulenguez  <nicolas@debian.org>
 
-2018-12-25  Yoshinori Sato <ysato@users.sourceforge.jp>
+	* coff/internal.h: Correct comment spelling.
+	* coff/sym.h: Likewise.
+	* opcode/aarch64.h: Likewise.
 
-	* elf/rx.h (EF_RX_CPU_MASK): Update new bits.
-	(E_FLAG_RX_V3): New RXv3 type.
-	* opcode/rx.h (RX_Size): Add double size.
-	(RX_Operand_Type): Add double FPU registers.
-	(RX_Opcode_ID): Add new instuctions.
-
-2019-01-01  Alan Modra  <amodra@gmail.com>
+2021-01-01  Alan Modra  <amodra@gmail.com>
 
 	Update year range in copyright notice of all files.
 
-For older changes see ChangeLog-2018
+For older changes see ChangeLog-2020
 
-Copyright (C) 2019 Free Software Foundation, Inc.
+Copyright (C) 2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

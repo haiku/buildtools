@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+# Copyright (C) 2014-2021 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -60,8 +60,8 @@ cat <<EOF
 SECTIONS
 {
   .init ${RELOCATING-0} : {
-    KEEP (*(.init))
-    ${RELOCATING+KEEP (*(.fini))}
+    KEEP (*(SORT_NONE(.init)))
+    ${RELOCATING+KEEP (*(SORT_NONE(.fini)))}
     ${RELOCATING+ _einit  =  .;}
   } ${RELOCATING+ > init}
 

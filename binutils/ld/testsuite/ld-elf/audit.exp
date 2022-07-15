@@ -1,5 +1,5 @@
 # Expect script for various ELF tests.
-#   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2009-2021 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -32,7 +32,7 @@ if ![check_shared_lib_support] {
 }
 
 # Check if compiler works
-if { [which $CC] == 0 } {
+if { ![check_compiler_available] } {
     return
 }
 

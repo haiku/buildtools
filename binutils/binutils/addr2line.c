@@ -1,5 +1,5 @@
 /* addr2line.c -- convert addresses to line number and function name
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2021 Free Software Foundation, Inc.
    Contributed by Ulrich Lauther <Ulrich.Lauther@mchp.siemens.de>
 
    This file is part of GNU Binutils.
@@ -182,14 +182,14 @@ find_address_in_section (bfd *abfd, asection *section,
   if (found)
     return;
 
-  if ((bfd_get_section_flags (abfd, section) & SEC_ALLOC) == 0)
+  if ((bfd_section_flags (section) & SEC_ALLOC) == 0)
     return;
 
-  vma = bfd_get_section_vma (abfd, section);
+  vma = bfd_section_vma (section);
   if (pc < vma)
     return;
 
-  size = bfd_get_section_size (section);
+  size = bfd_section_size (section);
   if (pc >= vma + size)
     return;
 
@@ -208,10 +208,10 @@ find_offset_in_section (bfd *abfd, asection *section)
   if (found)
     return;
 
-  if ((bfd_get_section_flags (abfd, section) & SEC_ALLOC) == 0)
+  if ((bfd_section_flags (section) & SEC_ALLOC) == 0)
     return;
 
-  size = bfd_get_section_size (section);
+  size = bfd_section_size (section);
   if (pc >= size)
     return;
 
@@ -314,8 +314,7 @@ translate_addresses (bfd *abfd, asection *section)
                   else
                     printf ("\n");
 
-                  if (alloc != NULL)
-                    free (alloc);
+		  free (alloc);
                 }
 
               if (base_names && filename != NULL)
@@ -410,11 +409,8 @@ process_file (const char *file_name, const char *section_name,
 
   translate_addresses (abfd, section);
 
-  if (syms != NULL)
-    {
-      free (syms);
-      syms = NULL;
-    }
+  free (syms);
+  syms = NULL;
 
   bfd_close (abfd);
 

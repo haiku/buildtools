@@ -8,16 +8,16 @@
 Disassembly of section .plt:
 
 [a-f0-9]+ <.plt>:
- +[a-f0-9]+:	ff b3 04 00 00 00    	pushl  0x4\(%ebx\)
+ +[a-f0-9]+:	ff b3 04 00 00 00    	push   0x4\(%ebx\)
  +[a-f0-9]+:	ff a3 08 00 00 00    	jmp    \*0x8\(%ebx\)
  +[a-f0-9]+:	0f 1f 40 00          	nopl   0x0\(%eax\)
  +[a-f0-9]+:	f3 0f 1e fb          	endbr32 
  +[a-f0-9]+:	68 00 00 00 00       	push   \$0x0
- +[a-f0-9]+:	e9 e2 ff ff ff       	jmp    [a-f0-9]+ <.plt>
+ +[a-f0-9]+:	e9 e2 ff ff ff       	jmp    [a-f0-9]+ <bar1@plt-0x30>
  +[a-f0-9]+:	66 90                	xchg   %ax,%ax
  +[a-f0-9]+:	f3 0f 1e fb          	endbr32 
  +[a-f0-9]+:	68 08 00 00 00       	push   \$0x8
- +[a-f0-9]+:	e9 d2 ff ff ff       	jmp    [a-f0-9]+ <.plt>
+ +[a-f0-9]+:	e9 d2 ff ff ff       	jmp    [a-f0-9]+ <bar1@plt-0x30>
  +[a-f0-9]+:	66 90                	xchg   %ax,%ax
 
 Disassembly of section .plt.sec:

@@ -1,5 +1,5 @@
 /* BFD support for the ns32k architecture.
-   Copyright (C) 1990-2019 Free Software Foundation, Inc.
+   Copyright (C) 1990-2021 Free Software Foundation, Inc.
    Almost totally rewritten by Ian Dall from initial work
    by Andrew Cagney.
 
@@ -26,16 +26,16 @@
 #include "ns32k.h"
 
 #define N(machine, printable, d, next)  \
-{  32, 32, 8, bfd_arch_ns32k, machine, "ns32k",printable,3,d, \
-   bfd_default_compatible,bfd_default_scan,bfd_arch_default_fill,next, }
+ { 32, 32, 8, bfd_arch_ns32k, machine, "ns32k",printable,3,d, \
+   bfd_default_compatible,bfd_default_scan,bfd_arch_default_fill,next, 0 }
 
 static const bfd_arch_info_type arch_info_struct[] =
 {
-  N(32532,"ns32k:32532",TRUE, 0), /* The word ns32k will match this too.  */
+  N (32532, "ns32k:32532", TRUE, 0), /* The word ns32k will match this too.  */
 };
 
 const bfd_arch_info_type bfd_ns32k_arch =
-  N(32032,"ns32k:32032",FALSE, &arch_info_struct[0]);
+  N (32032, "ns32k:32032", FALSE, &arch_info_struct[0]);
 
 bfd_vma
 _bfd_ns32k_get_displacement (bfd_byte *buffer, int size)
@@ -574,9 +574,7 @@ _bfd_do_ns32k_reloc_contents (reloc_howto_type *howto,
   bfd_vma x;
   bfd_boolean overflow;
 
-  /* If the size is negative, negate RELOCATION.  This isn't very
-     general.  */
-  if (howto->size < 0)
+  if (howto->negate)
     relocation = -relocation;
 
   /* Get the value we are going to relocate.  */

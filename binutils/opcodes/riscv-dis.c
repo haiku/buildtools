@@ -1,5 +1,5 @@
 /* RISC-V disassembler
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2021 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
@@ -27,9 +27,12 @@
 #include "opintl.h"
 #include "elf-bfd.h"
 #include "elf/riscv.h"
+#include "elfxx-riscv.h"
 
 #include "bfd_stdint.h"
 #include <ctype.h>
+
+static enum riscv_priv_spec_class default_priv_spec = PRIV_SPEC_CLASS_NONE;
 
 struct riscv_private_data
 {
@@ -52,8 +55,8 @@ set_default_riscv_dis_options (void)
   no_aliases = 0;
 }
 
-static void
-parse_riscv_dis_option (const char *option)
+static bfd_boolean
+parse_riscv_dis_option_without_args (const char *option)
 {
   if (strcmp (option, "no-aliases") == 0)
     no_aliases = 1;
@@ -61,6 +64,52 @@ parse_riscv_dis_option (const char *option)
     {
       riscv_gpr_names = riscv_gpr_names_numeric;
       riscv_fpr_names = riscv_fpr_names_numeric;
+    }
+  else
+    return FALSE;
+  return TRUE;
+}
+
+static void
+parse_riscv_dis_option (const char *option)
+{
+  char *equal, *value;
+
+  if (parse_riscv_dis_option_without_args (option))
+    return;
+
+  equal = strchr (option, '=');
+  if (equal == NULL)
+    {
+      /* The option without '=' should be defined above.  */
+      opcodes_error_handler (_("unrecognized disassembler option: %s"), option);
+      return;
+    }
+  if (equal == option
+      || *(equal + 1) == '\0')
+    {
+      /* Invalid options with '=', no option name before '=',
+       and no value after '='.  */
+      opcodes_error_handler (_("unrecognized disassembler option with '=': %s"),
+                            option);
+      return;
+    }
+
+  *equal = '\0';
+  value = equal + 1;
+  if (strcmp (option, "priv-spec") == 0)
+    {
+      enum riscv_priv_spec_class priv_spec = PRIV_SPEC_CLASS_NONE;
+      if (!riscv_get_priv_spec_class (value, &priv_spec))
+	opcodes_error_handler (_("unknown privilege spec set by %s=%s"),
+			       option, value);
+      else if (default_priv_spec == PRIV_SPEC_CLASS_NONE)
+	default_priv_spec = priv_spec;
+      else if (default_priv_spec != priv_spec)
+	opcodes_error_handler (_("mis-matched privilege spec set by %s=%s, "
+				 "the elf privilege attribute is %s"),
+			       option, value,
+			       riscv_get_priv_spec_name (default_priv_spec));
     }
   else
     {
@@ -322,16 +371,35 @@ print_insn_args (const char *d, insn_t l, bfd_vma pc, disassemble_info *info)
 
 	case 'E':
 	  {
-	    const char* csr_name = NULL;
+	    static const char *riscv_csr_hash[4096];    /* Total 2^12 CSR.  */
+	    static bfd_boolean init_csr = FALSE;
 	    unsigned int csr = EXTRACT_OPERAND (CSR, l);
-	    switch (csr)
+
+	    if (!init_csr)
 	      {
-#define DECLARE_CSR(name, num) case num: csr_name = #name; break;
+		unsigned int i;
+		for (i = 0; i < 4096; i++)
+		  riscv_csr_hash[i] = NULL;
+
+		/* Set to the newest privilege version.  */
+		if (default_priv_spec == PRIV_SPEC_CLASS_NONE)
+		  default_priv_spec = PRIV_SPEC_CLASS_DRAFT - 1;
+
+#define DECLARE_CSR(name, num, class, define_version, abort_version)	\
+		if (riscv_csr_hash[num] == NULL 			\
+		    && ((define_version == PRIV_SPEC_CLASS_NONE 	\
+			 && abort_version == PRIV_SPEC_CLASS_NONE)	\
+			|| (default_priv_spec >= define_version 	\
+			    && default_priv_spec < abort_version)))	\
+		  riscv_csr_hash[num] = #name;
+#define DECLARE_CSR_ALIAS(name, num, class, define_version, abort_version) \
+		DECLARE_CSR (name, num, class, define_version, abort_version)
 #include "opcode/riscv-opc.h"
 #undef DECLARE_CSR
 	      }
-	    if (csr_name)
-	      print (info->stream, "%s", csr_name);
+
+	    if (riscv_csr_hash[csr] != NULL)
+	      print (info->stream, "%s", riscv_csr_hash[csr]);
 	    else
 	      print (info->stream, "0x%x", csr);
 	    break;
@@ -395,9 +463,13 @@ riscv_disassemble_insn (bfd_vma memaddr, insn_t word, disassemble_info *info)
 
   insnlen = riscv_insn_length (word);
 
+  /* RISC-V instructions are always little-endian.  */
+  info->endian_code = BFD_ENDIAN_LITTLE;
+
   info->bytes_per_chunk = insnlen % 4 == 0 ? 4 : 2;
   info->bytes_per_line = 8;
-  info->display_endian = info->endian;
+  /* We don't support constant pools, so this must be code.  */
+  info->display_endian = info->endian_code;
   info->insn_info_valid = 1;
   info->branch_delay_insns = 0;
   info->data_size = 0;
@@ -518,6 +590,29 @@ print_insn_riscv (bfd_vma memaddr, struct disassemble_info *info)
   return riscv_disassemble_insn (memaddr, insn, info);
 }
 
+disassembler_ftype
+riscv_get_disassembler (bfd *abfd)
+{
+  /* If -Mpriv-spec= isn't set, then try to set it by checking the elf
+     privileged attributes.  */
+  if (abfd)
+    {
+      const char *sec_name = get_elf_backend_data (abfd)->obj_attrs_section;
+      if (bfd_get_section_by_name (abfd, sec_name) != NULL)
+        {
+	  obj_attribute *attr = elf_known_obj_attributes_proc (abfd);
+	  unsigned int Tag_a = Tag_RISCV_priv_spec;
+	  unsigned int Tag_b = Tag_RISCV_priv_spec_minor;
+	  unsigned int Tag_c = Tag_RISCV_priv_spec_revision;
+	  riscv_get_priv_spec_class_from_numbers (attr[Tag_a].i,
+						  attr[Tag_b].i,
+						  attr[Tag_c].i,
+						  &default_priv_spec);
+        }
+    }
+   return print_insn_riscv;
+}
+
 /* Prevent use of the fake labels that are generated as part of the DWARF
    and for relaxable relocations in the assembler.  */
 
@@ -543,11 +638,15 @@ The following RISC-V-specific disassembler options are supported for use\n\
 with the -M switch (multiple options should be separated by commas):\n"));
 
   fprintf (stream, _("\n\
-  numeric       Print numeric register names, rather than ABI names.\n"));
+  numeric         Print numeric register names, rather than ABI names.\n"));
 
   fprintf (stream, _("\n\
-  no-aliases    Disassemble only into canonical instructions, rather\n\
-                than into pseudoinstructions.\n"));
+  no-aliases      Disassemble only into canonical instructions, rather\n\
+                  than into pseudoinstructions.\n"));
+
+  fprintf (stream, _("\n\
+  priv-spec=PRIV  Print the CSR according to the chosen privilege spec\n\
+                  (1.9, 1.9.1, 1.10, 1.11).\n"));
 
   fprintf (stream, _("\n"));
 }

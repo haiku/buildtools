@@ -1,5 +1,127 @@
 -*- text -*-
 
+Changes in 2.36:
+
+* Add support for Intel AVX VNNI instructions.
+
+* Add support for Intel HRESET instruction.
+
+* Add support for Intel UINTR instructions.
+
+* Support non-absolute segment values for i386 lcall and ljmp.
+
+* When setting the link order attribute of ELF sections, it is now possible to
+  use a numeric section index instead of symbol name.
+
+* Add support for Cortex-A78, Cortex-A78AE, Cortex-A78C and Cortex-X1 for
+  AArch64 and ARM.
+  Add support for Cortex-R82, Neoverse V1, and Neoverse N2 for ARM.
+
+* Add support for ETMv4 (Embedded Trace Macrocell), ETE (Embedded Trace
+  Extension), TRBE (Trace Buffer Extension)and BRBE (Branch Record Buffer
+  Extension) system registers for AArch64.
+
+* Add support for Armv8-R and Armv8.7-A AArch64.
+
+* Add support for DSB memory nXS barrier, WFET and WFIT instruction for Armv8.7
+  AArch64.
+
+* Add support for +flagm feature for -march in Armv8.4 AArch64.
+
+* Add support for +ls64 feature for -march in Armv8.7 AArch64. Add atomic
+  64-byte load/store instructions for this feature.
+
+* Add support for +pauth (Pointer Authentication) feature for -march in
+  AArch64.
+
+* Add support for Intel TDX instructions.
+
+* Add support for Intel Key Locker instructions.
+
+* Added a .nop directive to generate a single no-op instruction in a target
+  neutral manner.  This instruction does have an effect on DWARF line number
+  generation, if that is active.
+
+* Removed --reduce-memory-overheads and --hash-size as gas now
+  uses hash tables that can be expand and shrink automatically.
+
+* Add {disp16} pseudo prefix to x86 assembler.
+
+* Add support for Intel AMX instructions.
+
+* Configure with --enable-x86-used-note by default for Linux/x86.
+
+* Add support for the SHF_GNU_RETAIN flag, which can be applied to
+  sections using the 'R' flag in the .section directive.
+  SHF_GNU_RETAIN specifies that the section should not be garbage
+  collected by the linker.  It requires the GNU or FreeBSD ELF OSABIs.
+
+Changes in 2.35:
+
+* X86 NaCl target support is removed.
+
+* Extend .symver directive to update visibility of the original symbol
+  and assign one original symbol to different versioned symbols.
+
+* Add support for Intel SERIALIZE and TSXLDTRK instructions.
+
+* Add -mlfence-after-load=, -mlfence-before-indirect-branch= and
+  -mlfence-before-ret= options to x86 assembler to help mitigate
+  CVE-2020-0551.
+
+* Add --gdwarf-5 option to the assembler to generate DWARF 5 debug output
+  (if such output is being generated).  Added the ability to generate
+  version 5 .debug_line sections.
+
+* Add -mbig-obj support to i386 MingW targets.
+
+Changes in 2.34:
+
+* Add -malign-branch-boundary=NUM, -malign-branch=TYPE[+TYPE...],
+  -malign-branch-prefix-size=NUM and -mbranches-within-32B-boundaries
+  options to x86 assembler to align branches within a fixed boundary
+  with segment prefixes or NOPs.
+
+* Add support for Zilog eZ80 and Zilog Z180 CPUs.
+
+* Add support for z80-elf target.
+
+* Add support for relocation of each byte or word of multibyte value to Z80
+  targets (just use right shift to 0, 8, 16, or 24 bits or AND operation
+  with 0xff/0xffff mask): ld a, label >> 16 \ ld hl, label & 0xffff
+
+* Add SDCC support for Z80 targets.
+
+Changes in 2.33:
+
+* Add support for the Arm Scalable Vector Extension version 2 (SVE2)
+  instructions.
+
+* Add support for the Arm Transactional Memory Extension (TME)
+  instructions.
+
+* Add support for the Armv8.1-M Mainline and M-profile Vector Extension (MVE)
+  instructions.
+
+* For MIPS, Add -m[no-]fix-loongson3-llsc option to fix (or not) Loongson3
+  LLSC Errata.  Add a --enable-mips-fix-loongson3-llsc=[yes|no] configure
+  time option to set the default behavior. Set the default if the configure
+  option is not used to "no".
+
+* Add support for the Arm Cortex-A76AE, Cortex-A77 and Cortex-M35P
+  processors.
+
+* Add support for the AArch64 Cortex-A34, Cortex-A65, Cortex-A65AE,
+  Cortex-A76AE, and Cortex-A77 processors.
+
+* Add .float16 directive for both Arm and AArch64 to allow encoding of 16-bit
+  floating point literals.  Add .float16_format directive and
+  -mfp16-format=[ieee|alternative] option for Arm to control the format of the
+  encoding.
+
+* Add --gdwarf-cie-version command line flag.  This allows control over which
+  version of DWARF CIE the assembler creates.
+
 Changes in 2.32:
 
 * Add -mvexwig=[0|1] option to x86 assembler to control encoding of
@@ -767,7 +889,7 @@ Changes in 1.93.01:
   of new CPUs and formats, lots of bugs fixed.
 
 
-Copyright (C) 2012-2019 Free Software Foundation, Inc.
+Copyright (C) 2012-2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

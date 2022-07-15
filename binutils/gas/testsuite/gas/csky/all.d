@@ -20,7 +20,7 @@ Disassembly of section \.text:
 \s*[0-9a-f]*:\s*0032\s*mvcv\s*r2
 \s*[0-9a-f]*:\s*0042\s*ldq\s*r4-r7, \(r2\)
 \s*[0-9a-f]*:\s*0052\s*stq\s*r4-r7, \(r2\)
-\s*[0-9a-f]*:\s*0061\s*ldm\s*r1-r15, \(sp\)
+\s*[0-9a-f]*:\s*0061\s*ldm\s*r1-r15, \(r0\)
 \s*[0-9a-f]*:\s*0082\s*dect\s*r2, r2, 1
 \s*[0-9a-f]*:\s*0092\s*decf\s*r2, r2, 1
 \s*[0-9a-f]*:\s*00a2\s*inct\s*r2, r2, 1
@@ -148,3 +148,4 @@ Disassembly of section \.text:
 \s*[0-9a-f]*:\s*1e37\s*or\s*r7, r7, r3
 \s*[0-9a-f]*:\s*1715\s*xor\s*r5, r5, r1
 \s*[0-9a-f]*:\s*1726\s*xor\s*r6, r6, r2
+#...

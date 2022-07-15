@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 #
-#   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2012-2021 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@ CPU_DOCS = \
 	c-arm.texi \
 	c-avr.texi \
 	c-bfin.texi \
+	c-bpf.texi \
 	c-cr16.texi \
 	c-cris.texi \
 	c-csky.texi \

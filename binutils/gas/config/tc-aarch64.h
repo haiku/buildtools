@@ -1,5 +1,5 @@
 /* tc-aarch64.h -- Header file for tc-aarch64.c.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2021 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GAS.
@@ -130,6 +130,12 @@ void aarch64_copy_symbol_attributes (symbolS *, symbolS *);
   (aarch64_copy_symbol_attributes (DEST, SRC))
 #endif
 
+#ifdef OBJ_ELF
+void aarch64_elf_copy_symbol_attributes (symbolS *, symbolS *);
+#define OBJ_COPY_SYMBOL_ATTRIBUTES(DEST, SRC) \
+  aarch64_elf_copy_symbol_attributes (DEST, SRC)
+#endif
+
 #define TC_START_LABEL(STR, NUL_CHAR, NEXT_CHAR)			\
   (NEXT_CHAR == ':' || (NEXT_CHAR == '/' && aarch64_data_in_code ()))
 #define tc_canonicalize_symbol_name(str) aarch64_canonicalize_symbol_name (str);
@@ -173,8 +179,7 @@ struct aarch64_frag_type
 };
 
 #define TC_FRAG_TYPE		struct aarch64_frag_type
-/* NOTE: max_chars is a local variable from frag_var / frag_variant.  */
-#define TC_FRAG_INIT(fragp)	aarch64_init_frag (fragp, max_chars)
+#define TC_FRAG_INIT(fragp, max_bytes) aarch64_init_frag (fragp, max_bytes)
 #define HANDLE_ALIGN(fragp)	aarch64_handle_align (fragp)
 
 #define md_do_align(N, FILL, LEN, MAX, LABEL)					\
@@ -250,7 +255,6 @@ extern void aarch64_after_parse_args (void);
 
 #define MD_PCREL_FROM_SECTION(F,S) md_pcrel_from_section(F,S)
 
-extern long md_pcrel_from_section (struct fix *, segT);
 extern void aarch64_frag_align_code (int, int);
 extern const char * elf64_aarch64_target_format (void);
 extern int aarch64_force_relocation (struct fix *);

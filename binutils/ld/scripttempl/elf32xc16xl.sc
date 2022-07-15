@@ -1,11 +1,11 @@
-# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+# Copyright (C) 2014-2021 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
 # notice and this notice are preserved.
 
 cat <<EOF
-/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -40,7 +40,8 @@ SECTIONS
 	} ${RELOCATING+ > vectarea} */
 .init :
 	{
-	  *(.init)
+	  KEEP (*(SORT_NONE(.init)))
+	  ${RELOCATING+KEEP (*(SORT_NONE(.fini)))}
 	} ${RELOCATING+ >introm}
 
 .text :

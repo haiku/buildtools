@@ -1,4 +1,4 @@
-@c Copyright (C) 2009-2019 Free Software Foundation, Inc.
+@c Copyright (C) 2009-2021 Free Software Foundation, Inc.
 @c Contributed by ARM Ltd.
 @c This is part of the GAS manual.
 @c For copying conditions, see the file as.texinfo.
@@ -55,24 +55,38 @@ file in ELF32 and ELF64 format respectively.  The default is @code{lp64}.
 This option specifies the target processor.  The assembler will issue an error
 message if an attempt is made to assemble an instruction which will not execute
 on the target processor.  The following processor names are recognized:
+@code{cortex-a34},
 @code{cortex-a35},
 @code{cortex-a53},
 @code{cortex-a55},
 @code{cortex-a57},
+@code{cortex-a65},
+@code{cortex-a65ae},
 @code{cortex-a72},
 @code{cortex-a73},
 @code{cortex-a75},
 @code{cortex-a76},
+@code{cortex-a76ae},
+@code{cortex-a77},
+@code{cortex-a78},
+@code{cortex-a78ae},
+@code{cortex-a78c},
 @code{ares},
 @code{exynos-m1},
 @code{falkor},
+@code{neoverse-n1},
+@code{neoverse-n2},
+@code{neoverse-e1},
+@code{neoverse-v1},
 @code{qdf24xx},
 @code{saphira},
 @code{thunderx},
 @code{vulcan},
 @code{xgene1}
+@code{xgene2},
+@code{cortex-r82},
 and
-@code{xgene2}.
+@code{cortex-x1}.
 The special name @code{all} may be used to allow the assembler to accept
 instructions valid for any supported processor, including all optional
 extensions.
@@ -93,7 +107,7 @@ issue an error message if an attempt is made to assemble an
 instruction which will not execute on the target architecture.  The
 following architecture names are recognized: @code{armv8-a},
 @code{armv8.1-a}, @code{armv8.2-a}, @code{armv8.3-a}, @code{armv8.4-a}
-and @code{armv8.5-a}.
+@code{armv8.5-a}, @code{armv8.6-a}, @code{armv8.7-a}, and @code{armv8-r}.
 
 If both @option{-mcpu} and @option{-march} are specified, the
 assembler will use the setting for @option{-mcpu}.  If neither are
@@ -137,6 +151,14 @@ automatically cause those extensions to be disabled.
 @multitable @columnfractions .12 .17 .17 .54
 @headitem Extension @tab Minimum Architecture @tab Enabled by default
  @tab Description
+@item @code{i8mm} @tab ARMv8.2-A @tab ARMv8.6-A or later
+ @tab Enable Int8 Matrix Multiply extension.
+@item @code{f32mm} @tab ARMv8.2-A @tab No
+ @tab Enable F32 Matrix Multiply extension.
+@item @code{f64mm} @tab ARMv8.2-A @tab No
+ @tab Enable F64 Matrix Multiply extension.
+@item @code{bf16} @tab ARMv8.2-A @tab ARMv8.6-A or later
+ @tab Enable BFloat16 extension.
 @item @code{compnum} @tab ARMv8.2-A @tab ARMv8.3-A or later
  @tab Enable the complex number SIMD extensions.  This implies
  @code{fp16} and @code{simd}.
@@ -192,6 +214,25 @@ automatically cause those extensions to be disabled.
  @tab Enable Speculative Store Bypassing Safe state read and write.
 @item @code{memtag} @tab ARMv8.5-A @tab No
  @tab Enable ARMv8.5-A Memory Tagging Extensions.
+@item @code{tme} @tab ARMv8-A @tab No
+ @tab Enable Transactional Memory Extensions.
+@item @code{sve2} @tab ARMv8-A @tab No
+ @tab Enable the SVE2 Extension.
+@item @code{sve2-bitperm} @tab ARMv8-A @tab No
+ @tab Enable SVE2 BITPERM Extension.
+@item @code{sve2-sm4} @tab ARMv8-A @tab No
+ @tab Enable SVE2 SM4 Extension.
+@item @code{sve2-aes} @tab ARMv8-A @tab No
+ @tab Enable SVE2 AES Extension.  This also enables the .Q->.B form of the
+ @code{pmullt} and @code{pmullb} instructions.
+@item @code{sve2-sha3} @tab ARMv8-A @tab No
+ @tab Enable SVE2 SHA3 Extension.
+@item @code{flagm} @tab ARMv8-A @tab ARMv8.4-A or later
+ @tab Enable Flag Manipulation instructions.
+@item @code{ls64} @tab ARMv8.6-A @tab ARMv8.7-A or later
+ @tab Enable 64 Byte Loads/Stores.
+@item @code{pauth} @tab ARMv8-A @tab No
+ @tab Enable Pointer Authentication.
 @end multitable
 
 @node AArch64 Syntax
@@ -338,6 +379,14 @@ The @code{.even} directive aligns the output on the next even byte
 boundary.
 
 @c FFFFFFFFFFFFFFFFFFFFFFFFFF
+
+@cindex @code{.float16} directive, AArch64
+@item .float16 @var{value [,...,value_n]}
+Place the half precision floating point representation of one or more
+floating-point values into the current section.
+The format used to encode the floating point values is always the
+IEEE 754-2008 half precision floating point format.
+
 @c GGGGGGGGGGGGGGGGGGGGGGGGGG
 @c HHHHHHHHHHHHHHHHHHHHHHHHHH
 @c IIIIIIIIIIIIIIIIIIIIIIIIII
@@ -424,6 +473,12 @@ be used to delete builtin in register name aliases (eg 'w0').  This
 should only be done if it is really necessary.
 
 @c VVVVVVVVVVVVVVVVVVVVVVVVVV
+
+@cindex @code{.variant_pcs} directive, AArch64
+@item .variant_pcs @var{symbol}
+This directive marks @var{symbol} referencing a function that may
+follow a variant procedure call standard with different register
+usage convention from the base procedure call standard.
 
 @c WWWWWWWWWWWWWWWWWWWWWWWWWW
 @c XXXXXXXXXXXXXXXXXXXXXXXXXX

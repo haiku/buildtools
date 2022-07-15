@@ -5,13 +5,13 @@ LITTLE_OUTPUT_FORMAT="elf32-csky-little"
 NO_REL_RELOCS=yes
 TARGET_PAGE_SIZE=0x400
 MAXPAGESIZE="CONSTANT (MAXPAGESIZE)"
-COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
-CHECK_RELOCS_AFTER_OPEN_INPUT=yes
 TEXT_START_ADDR=0x8000
+CHECK_RELOCS_AFTER_OPEN_INPUT=yes
 NONPAGED_TEXT_START_ADDR=0
+ATTRS_SECTIONS='.csky.attributes 0 : { KEEP (*(.csky.attributes)) KEEP (*(.csky.attributes)) }'
 ARCH=csky
-GENERATE_SHLIB_SCRIPT=yes
-GENERATE_PIE_SCRIPT=yes
+EMBEDDED=yes
+EXTRA_EM_FILE=cskyelf
 
 # There is a problem with the NOP value - it must work for both
 # big endian and little endian systems.  Unfortunately there is
@@ -24,13 +24,20 @@ GENERATE_PIE_SCRIPT=yes
 # not matter.
 NOP=0
 
+ENTRY=__start
 OTHER_BSS_SYMBOLS="__bss_start__ = . ;"
 OTHER_BSS_END_SYMBOLS="__bss_end__ = . ;"
 
 # This sets the stack to the top of the simulator memory (2^19 bytes).
 # STACK_ADDR=0x80000
 
-TEMPLATE_NAME=elf32
+TEMPLATE_NAME=elf
+
+
+unset EMBEDDED
+unset ENTRY
+COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
+GENERATE_SHLIB_SCRIPT=yes
+GENERATE_PIE_SCRIPT=yes
 GENERATE_SHLIB_SCRIPT=yes
 GENERATE_COMBRELOC_SCRIPT=yes
-EXTRA_EM_FILE=cskyelf

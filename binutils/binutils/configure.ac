@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl
-dnl   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+dnl   Copyright (C) 2012-2021 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@ dnl <http://www.gnu.org/licenses/>.
 dnl
 
 m4_include([../bfd/version.m4])
+m4_include([../config/debuginfod.m4])
 AC_INIT([binutils], BFD_VERSION)
 AC_CONFIG_SRCDIR(ar.c)
 
@@ -42,6 +43,7 @@ AC_ARG_ENABLE(targets,
   *)        enable_targets=$enableval ;;
 esac])dnl
 
+
 AC_ARG_ENABLE(deterministic-archives,
 [AS_HELP_STRING([--enable-deterministic-archives],
 		[ar and ranlib default to -D behavior])], [
@@ -54,6 +56,7 @@ fi], [default_ar_deterministic=0])
 AC_DEFINE_UNQUOTED(DEFAULT_AR_DETERMINISTIC, $default_ar_deterministic,
 		   [Should ar and ranlib use -D behavior by default?])
 
+
 AC_ARG_ENABLE(default-strings-all,
 [AS_HELP_STRING([--disable-default-strings-all],
 		[strings defaults to --data behavior])], [
@@ -65,6 +68,27 @@ fi], [default_strings_all=1])
 
 AC_DEFINE_UNQUOTED(DEFAULT_STRINGS_ALL, $default_strings_all,
 		   [Should strings use -a behavior by default?])
+
+
+AC_ARG_ENABLE(f-for-ifunc-symbols,
+[AS_HELP_STRING([--enable-f-for-ifunc-symbols],
+	[Have nm use F and f for global and local ifunc symbols])], [
+if test "${enableval}" = no; then
+  default_f_for_ifunc=0
+else
+  default_f_for_ifunc=1
+fi], [default_f_for_ifunc=0])
+
+AC_DEFINE_UNQUOTED(DEFAULT_F_FOR_IFUNC_SYMBOLS, $default_f_for_ifunc,
+		   [Have nm use F and f for global and local ifunc symbols])
+
+AC_DEBUGINFOD
+
+GCC_ENABLE([libctf], [yes], [], [Handle .ctf type-info sections])
+if test "${enable_libctf}" = yes; then
+    AC_DEFINE(ENABLE_LIBCTF, 1, [Handle .ctf type-info sections])
+fi
+AM_CONDITIONAL(ENABLE_LIBCTF, test "${enable_libctf}" = yes)
 
 AM_BINUTILS_WARNINGS
 
@@ -320,15 +344,6 @@ changequote(,)dnl
 	powerpc*-aix[5-9].*)
 changequote([,])dnl
 	  OBJDUMP_DEFS="-DAIX_WEAK_SUPPORT"
-	  ;;
-	powerpc*-*-pe* | powerpc*-*-cygwin*)
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
-	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_PPC"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_PPC"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
 	  ;;
 	powerpc*-*-linux* | powerpc*-*-elf* | powerpc*-*-eabi*)
 	  case "$BUILD_INSTALL_MISC" in

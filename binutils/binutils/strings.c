@@ -1,5 +1,5 @@
 /* strings -- print the strings of printable characters in files
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993-2021 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -332,7 +332,7 @@ strings_a_section (bfd *abfd, asection *sect, const char *filename,
   if ((sect->flags & DATA_FLAGS) != DATA_FLAGS)
     return;
 
-  sectsize = bfd_get_section_size (sect);
+  sectsize = bfd_section_size (sect);
   if (sectsize == 0)
     return;
 
@@ -633,7 +633,7 @@ print_strings (const char *filename, FILE *stream, file_ptr address,
 	    if (sizeof (start) > sizeof (long))
 	      {
 # ifndef __MSVCRT__
-		printf ("%7lld ", (unsigned long long) start);
+		printf ("%7llu ", (unsigned long long) start);
 # else
 		printf ("%7I64d ", (unsigned long long) start);
 # endif
@@ -641,7 +641,7 @@ print_strings (const char *filename, FILE *stream, file_ptr address,
 	    else
 #elif !BFD_HOST_64BIT_LONG
 	      if (start != (unsigned long) start)
-		printf ("++%7ld ", (unsigned long) start);
+		printf ("++%7lu ", (unsigned long) start);
 	      else
 #endif
 		printf ("%7ld ", (long) start);

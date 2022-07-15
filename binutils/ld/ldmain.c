@@ -1,5 +1,5 @@
 /* Main program of GNU linker.
-   Copyright (C) 1991-2019 Free Software Foundation, Inc.
+   Copyright (C) 1991-2021 Free Software Foundation, Inc.
    Written by Steve Chamberlain steve@cygnus.com
 
    This file is part of the GNU Binutils.
@@ -25,7 +25,9 @@
 #include "libiberty.h"
 #include "progress.h"
 #include "bfdlink.h"
+#include "ctf-api.h"
 #include "filenames.h"
+#include "elf/common.h"
 
 #include "ld.h"
 #include "ldmain.h"
@@ -38,10 +40,10 @@
 #include "ldfile.h"
 #include "ldemul.h"
 #include "ldctor.h"
-#ifdef ENABLE_PLUGINS
+#if BFD_SUPPORTS_PLUGINS
 #include "plugin.h"
 #include "plugin-api.h"
-#endif /* ENABLE_PLUGINS */
+#endif /* BFD_SUPPORTS_PLUGINS */
 
 /* Somewhere above, sys/stat.h got included.  */
 #if !defined(S_ISDIR) && defined(S_IFDIR)
@@ -148,7 +150,11 @@ static struct bfd_link_callbacks link_callbacks =
   einfo,
   info_msg,
   minfo,
-  ldlang_override_segment_assignment
+  ldlang_override_segment_assignment,
+  ldlang_ctf_acquire_strings,
+  NULL,
+  ldlang_ctf_new_dynsym,
+  ldlang_write_ctf_late
 };
 
 static bfd_assert_handler_type default_bfd_assert_handler;
@@ -156,11 +162,58 @@ static bfd_error_handler_type default_bfd_error_handler;
 
 struct bfd_link_info link_info;
 
+struct dependency_file
+{
+  struct dependency_file *next;
+  char *name;
+};
+
+static struct dependency_file *dependency_files, *dependency_files_tail;
+
+void
+track_dependency_files (const char *filename)
+{
+  struct dependency_file *dep
+    = (struct dependency_file *) xmalloc (sizeof (*dep));
+  dep->name = xstrdup (filename);
+  dep->next = NULL;
+  if (dependency_files == NULL)
+    dependency_files = dep;
+  else
+    dependency_files_tail->next = dep;
+  dependency_files_tail = dep;
+}
+
+static void
+write_dependency_file (void)
+{
+  FILE *out;
+  struct dependency_file *dep;
+
+  out = fopen (config.dependency_file, FOPEN_WT);
+  if (out == NULL)
+    {
+      einfo (_("%F%P: cannot open dependency file %s: %E\n"),
+	     config.dependency_file);
+    }
+
+  fprintf (out, "%s:", output_filename);
+
+  for (dep = dependency_files; dep != NULL; dep = dep->next)
+    fprintf (out, " \\\n  %s", dep->name);
+
+  fprintf (out, "\n");
+  for (dep = dependency_files; dep != NULL; dep = dep->next)
+    fprintf (out, "\n%s:\n", dep->name);
+
+  fclose (out);
+}
+
 static void
 ld_cleanup (void)
 {
   bfd_cache_close_all ();
-#ifdef ENABLE_PLUGINS
+#if BFD_SUPPORTS_PLUGINS
   plugin_call_cleanup ();
 #endif
   if (output_filename && delete_output_file_on_failure)
@@ -235,7 +288,7 @@ main (int argc, char **argv)
       /* is_sysrooted_pathname() relies on no trailing dirsep.  */
       if (ld_canon_sysroot_len > 0
 	  && IS_DIR_SEPARATOR (ld_canon_sysroot [ld_canon_sysroot_len - 1]))
-        ld_canon_sysroot [--ld_canon_sysroot_len] = '\0';
+	ld_canon_sysroot [--ld_canon_sysroot_len] = '\0';
     }
   else
     ld_canon_sysroot_len = -1;
@@ -264,6 +317,7 @@ main (int argc, char **argv)
   config.make_executable = TRUE;
   config.magic_demand_paged = TRUE;
   config.text_read_only = TRUE;
+  config.print_map_discarded = TRUE;
   link_info.disable_target_specific_optimizations = -1;
 
   command_line.warn_mismatch = TRUE;
@@ -282,6 +336,7 @@ main (int argc, char **argv)
   link_info.combreloc = TRUE;
   link_info.strip_discarded = TRUE;
   link_info.prohibit_multiple_definition_absolute = FALSE;
+  link_info.textrel_check = DEFAULT_LD_TEXTREL_CHECK;
   link_info.emit_hash = DEFAULT_EMIT_SYSV_HASH;
   link_info.emit_gnu_hash = DEFAULT_EMIT_GNU_HASH;
   link_info.callbacks = &link_callbacks;
@@ -302,6 +357,7 @@ main (int argc, char **argv)
 #ifdef DEFAULT_NEW_DTAGS
   link_info.new_dtags = DEFAULT_NEW_DTAGS;
 #endif
+  link_info.start_stop_visibility = STV_PROTECTED;
 
   ldfile_add_arch ("");
   emulation = get_emulation (argc, argv);
@@ -316,10 +372,10 @@ main (int argc, char **argv)
   if (config.hash_table_size != 0)
     bfd_hash_set_default_size (config.hash_table_size);
 
-#ifdef ENABLE_PLUGINS
+#if BFD_SUPPORTS_PLUGINS
   /* Now all the plugin arguments have been gathered, we can load them.  */
   plugin_load_plugins ();
-#endif /* ENABLE_PLUGINS */
+#endif /* BFD_SUPPORTS_PLUGINS */
 
   ldemul_set_symbols ();
 
@@ -328,7 +384,7 @@ main (int argc, char **argv)
   if (saved_script_handle == NULL
       && command_line.default_script != NULL)
     {
-      ldfile_open_command_file (command_line.default_script);
+      ldfile_open_script_file (command_line.default_script);
       parser_input = input_script;
       yyparse ();
     }
@@ -473,6 +529,9 @@ main (int argc, char **argv)
 #endif
   ldexp_finish ();
   lang_finish ();
+
+  if (config.dependency_file != NULL)
+    write_dependency_file ();
 
   /* Even if we're producing relocatable output, some non-fatal errors should
      be reported in the exit status.  (What non-fatal errors, if any, do we
@@ -641,9 +700,13 @@ get_emulation (int argc, char **argv)
 		   || strcmp (argv[i], "-mips5") == 0
 		   || strcmp (argv[i], "-mips32") == 0
 		   || strcmp (argv[i], "-mips32r2") == 0
+		   || strcmp (argv[i], "-mips32r3") == 0
+		   || strcmp (argv[i], "-mips32r5") == 0
 		   || strcmp (argv[i], "-mips32r6") == 0
 		   || strcmp (argv[i], "-mips64") == 0
 		   || strcmp (argv[i], "-mips64r2") == 0
+		   || strcmp (argv[i], "-mips64r3") == 0
+		   || strcmp (argv[i], "-mips64r5") == 0
 		   || strcmp (argv[i], "-mips64r6") == 0)
 	    {
 	      /* FIXME: The arguments -mips1, -mips2, -mips3, etc. are
@@ -811,19 +874,15 @@ add_archive_element (struct bfd_link_info *info,
   input = (lang_input_statement_type *)
       xcalloc (1, sizeof (lang_input_statement_type));
   input->header.type = lang_input_statement_enum;
-  input->filename = abfd->filename;
-  input->local_sym_name = abfd->filename;
+  input->filename = bfd_get_filename (abfd);
+  input->local_sym_name = bfd_get_filename (abfd);
   input->the_bfd = abfd;
-
-  parent = abfd->my_archive->usrdata;
-  if (parent != NULL && !parent->flags.reload)
-    parent->next = (lang_statement_union_type *) input;
 
   /* Save the original data for trace files/tries below, as plugins
      (if enabled) may possibly alter it to point to a replacement
      BFD, but we still want to output the original BFD filename.  */
   orig_input = *input;
-#ifdef ENABLE_PLUGINS
+#if BFD_SUPPORTS_PLUGINS
   if (link_info.lto_plugin_active)
     {
       /* We must offer this archive member to the plugins to claim.  */
@@ -835,7 +894,7 @@ add_archive_element (struct bfd_link_info *info,
 	      /* Don't claim new IR symbols after all IR symbols have
 		 been claimed.  */
 	      if (verbose)
-		info_msg ("%pI: no new IR symbols to claimi\n",
+		info_msg ("%pI: no new IR symbols to claim\n",
 			  &orig_input);
 	      input->flags.claimed = 0;
 	      return FALSE;
@@ -844,7 +903,24 @@ add_archive_element (struct bfd_link_info *info,
 	  *subsbfd = input->the_bfd;
 	}
     }
-#endif /* ENABLE_PLUGINS */
+#endif /* BFD_SUPPORTS_PLUGINS */
+
+  if (link_info.input_bfds_tail == &input->the_bfd->link.next
+      || input->the_bfd->link.next != NULL)
+    {
+      /* We have already loaded this element, and are attempting to
+	 load it again.  This can happen when the archive map doesn't
+	 match actual symbols defined by the element.  */
+      free (input);
+      bfd_set_error (bfd_error_malformed_archive);
+      return FALSE;
+    }
+
+  /* Set the file_chain pointer of archives to the last element loaded
+     from the archive.  See ldlang.c:find_rescan_insertion.  */
+  parent = bfd_usrdata (abfd->my_archive);
+  if (parent != NULL && !parent->flags.reload)
+    parent->next = input;
 
   ldlang_add_file (input);
 
@@ -1312,6 +1388,10 @@ warning_find_reloc (bfd *abfd, asection *sec, void *iarg)
   free (relpp);
 }
 
+#if SUPPORT_ERROR_HANDLING_SCRIPT
+char * error_handling_script = NULL;
+#endif
+
 /* This is called when an undefined symbol is found.  */
 
 static void
@@ -1345,11 +1425,44 @@ undefined_symbol (struct bfd_link_info *info,
   else
     {
       error_count = 0;
-      if (error_name != NULL)
-	free (error_name);
+      free (error_name);
       error_name = xstrdup (name);
     }
 
+#if SUPPORT_ERROR_HANDLING_SCRIPT
+  if (error_handling_script != NULL
+      && error_count < MAX_ERRORS_IN_A_ROW)
+    {
+      char *        argv[4];
+      const char *  res;
+      int           status, err;
+
+      argv[0] = error_handling_script;
+      argv[1] = "undefined-symbol";
+      argv[2] = (char *) name;
+      argv[3] = NULL;
+      
+      if (verbose)
+	einfo (_("%P: About to run error handling script '%s' with arguments: '%s' '%s'\n"),
+	       argv[0], argv[1], argv[2]);
+
+      res = pex_one (PEX_SEARCH, error_handling_script, argv,
+		     N_("error handling script"),
+		     NULL /* Send stdout to random, temp file.  */,
+		     NULL /* Write to stderr.  */,
+		     &status, &err);
+      if (res != NULL)
+	{
+	  einfo (_("%P: Failed to run error handling script '%s', reason: "),
+		 error_handling_script);
+	  /* FIXME: We assume here that errrno == err.  */
+	  perror (res);
+	}
+      /* We ignore the return status of the script and
+	 carry on to issue the normal error message.  */
+    }
+#endif /* SUPPORT_ERROR_HANDLING_SCRIPT */
+  
   if (section != NULL)
     {
       if (error_count < MAX_ERRORS_IN_A_ROW)

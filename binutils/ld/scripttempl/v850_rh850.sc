@@ -1,11 +1,11 @@
-# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+# Copyright (C) 2014-2021 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
 # notice and this notice are preserved.
 
 cat << EOF
-/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -75,7 +75,7 @@ SECTIONS
   .rela.bss	: { *(.rela.bss) }
   .rel.plt	: { *(.rel.plt) }
   .rela.plt	: { *(.rela.plt) }
-  .init		: { KEEP (*(.init)) } =0
+  .init		: { KEEP (*(SORT_NONE(.init))) } =0
   .plt		: { *(.plt) }
 
   .text		:
@@ -83,7 +83,7 @@ SECTIONS
     *(.text)
     ${RELOCATING+*(.text.*)}
 
-    /* .gnu.warning sections are handled specially by elf32.em.  */
+    /* .gnu.warning sections are handled specially by elf.em.  */
     *(.gnu.warning)
     ${RELOCATING+*(.gnu.linkonce.t*)}
   } =0
@@ -106,7 +106,7 @@ SECTIONS
     *(.call_table_text)
   }
 
-  .fini		: { KEEP (*(.fini)) } =0
+  .fini		: { KEEP (*(SORT_NONE(.fini))) } =0
   .rodata	:
   {
 	*(.rodata)

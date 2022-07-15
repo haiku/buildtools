@@ -1,5 +1,5 @@
 /* tc-csky.h -- Header file for tc-csky.c
-   Copyright (C) 1989-2019 Free Software Foundation, Inc.
+   Copyright (C) 1989-2021 Free Software Foundation, Inc.
    Contributed by C-SKY Microsystems and Mentor Graphics.
 
    This file is part of GAS, the GNU Assembler.
@@ -91,7 +91,6 @@ struct tls_addend
 extern const relax_typeS csky_relax_table [];
 
 extern void md_csky_end (void);
-extern long md_pcrel_from_section (fixS *, segT);
 extern void csky_cons_fix_new (fragS *,
 			       unsigned int off,
 			       unsigned int len,

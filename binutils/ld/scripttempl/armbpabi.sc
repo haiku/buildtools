@@ -3,7 +3,7 @@
 # executable or shared object.  See elf.sc for configuration variables
 # that apply; only BPABI-specific variables will be noted here.
 #
-# Copyright (C) 2014-2019 Free Software Foundation, Inc.
+# Copyright (C) 2014-2021 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -145,7 +145,7 @@ else
 fi
 
 cat <<EOF
-/* Copyright (C) 2014-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2021 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -208,21 +208,21 @@ cat <<EOF
   .init         ${RELOCATING-0} :
   {
     ${RELOCATING+${INIT_START}}
-    KEEP (*(.init))
+    KEEP (*(SORT_NONE(.init)))
     ${RELOCATING+${INIT_END}}
   } =${NOP-0}
   .text         ${RELOCATING-0} :
   {
     ${RELOCATING+${TEXT_START_SYMBOLS}}
     *(.text .stub${RELOCATING+ .text.* .gnu.linkonce.t.*})
-    /* .gnu.warning sections are handled specially by elf32.em.  */
+    /* .gnu.warning sections are handled specially by elf.em.  */
     *(.gnu.warning)
     ${RELOCATING+${OTHER_TEXT_SECTIONS}}
   } =${NOP-0}
   .fini         ${RELOCATING-0} :
   {
     ${RELOCATING+${FINI_START}}
-    KEEP (*(.fini))
+    KEEP (*(SORT_NONE(.fini)))
     ${RELOCATING+${FINI_END}}
   } =${NOP-0}
   /* The SymbianOS kernel requires that the PLT go at the end of the

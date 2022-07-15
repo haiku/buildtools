@@ -1,6 +1,6 @@
 // dwarf_reader.cc -- parse dwarf2/3 debug information
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007-2021 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -1657,6 +1657,10 @@ Sized_dwarf_line_info<size, big_endian>::read_header_prolog(
 
   header_.version = elfcpp::Swap_unaligned<16, big_endian>::readval(lineptr);
   lineptr += 2;
+
+  // Skip address size and segment selector for DWARF5.
+  if (header_.version >= 5)
+    lineptr += 2;
 
   if (header_.offset_size == 4)
     header_.prologue_length = elfcpp::Swap_unaligned<32, big_endian>::readval(lineptr);

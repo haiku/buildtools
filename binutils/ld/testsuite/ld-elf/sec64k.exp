@@ -1,5 +1,5 @@
 # Expect script for tests for >64k sections
-#   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+#   Copyright (C) 2002-2021 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -29,19 +29,15 @@ if ![is_elf_format] {
 
 # Targets using _bfd_generic_final_link don't sort section symbols
 # before local symbols, so don't bother testing them.
-if { [istarget "d30v-*-*"]
-     || [istarget "dlx-*-*"]
-     || [istarget "pj*-*-*"] } {
+if { [is_generic] } {
     return
 }
 
-# ft32, h8300, ip2k, m68hc11, m68hc12 and xgate run out of address space.
+# ft32, h8300, ip2k, m68hc11 and m68hc12 run out of address space.
 if {[istarget "ft32-*-*"]
     || [istarget "h8300-*-*"]
     || [istarget "ip2k-*-*"]
-    || [istarget "m68hc1*-*"]
-    || [istarget "s12z-*"]
-    || [istarget "xgate-*"] } {
+    || [istarget "m68hc1*-*"] } {
     return
 }
 
@@ -134,6 +130,10 @@ if { ![istarget "m32r-*-*"] } then {
     foreach sfile [lrange $sfiles 0 [expr [llength $sfiles] / 2]] {
 	puts $ofd "#source: $sfile"
     }
+    #force z80 target to compile for eZ80 in ADL mode
+    if { [istarget "z80-*-*"] } then {
+	puts $ofd "#as: -ez80-adl"
+    }
     puts $ofd "#ld: -r"
     puts $ofd "#readelf: -W -Ss"
     puts $ofd "There are 680.. section headers.*:"
@@ -145,7 +145,7 @@ if { ![istarget "m32r-*-*"] } then {
     puts $ofd "  \\\[65279\\\] (.rel\[a\]?)?\\.foo\\.\[0-9\]+ .*"
     puts $ofd "  \\\[65280\\\] (.rel\[a\]?)?\\.foo\\.\[0-9\]+ .*"
     puts $ofd "#..."
-    puts $ofd " 340..: 0+\[ \]+0\[ \]+SECTION\[ \]+LOCAL\[ \]+DEFAULT\[ \]+68... "
+    puts $ofd " 340..: 0+\[ \]+0\[ \]+SECTION\[ \]+LOCAL\[ \]+DEFAULT\[ \]+68... .*"
     puts $ofd "#..."
     puts $ofd " 340..: 0+(2|4|8)\[ \]+0\[ \]+NOTYPE\[ \]+LOCAL\[ \]+DEFAULT\[ \]+\[2-7\] bar_1$"
     puts $ofd "#..."
@@ -170,11 +170,13 @@ if [catch { set ofd [open "tmpdir/$test2.d" w] } x] {
 
 # too big for avr, d10v and msp
 # lack of fancy orphan section handling causes overlap on fr30 and iq2000
+# lm32 complains about relocations in read-only sections
 if { ![istarget "d10v-*-*"]
      && ![istarget "avr-*-*"]
      && ![istarget "msp*-*-*"]
      && ![istarget "fr30-*-*"] 
      && ![istarget "iq2000-*-*"]
+     && ![istarget "lm32-*-linux*"]
      && ![istarget "pru-*-*"] } {
     foreach sfile $sfiles { puts $ofd "#source: $sfile" }
     if { [istarget spu*-*-*] } {
@@ -184,6 +186,10 @@ if { ![istarget "d10v-*-*"]
     } else {
 	puts $ofd "#ld:"
     }
+    #force z80 target to compile for eZ80 in ADL mode
+    if { [istarget "z80-*-*"] } then {
+	puts $ofd "#as: -ez80-adl"
+    }
     puts $ofd "#readelf: -W -Ss"
     puts $ofd "There are 660.. section headers.*:"
     puts $ofd "#..."
@@ -192,11 +198,15 @@ if { ![istarget "d10v-*-*"]
     puts $ofd "  \\\[65279\\\] \\.foo\\.\[0-9\]+ .*"
     puts $ofd "  \\\[65280\\\] \\.foo\\.\[0-9\]+ .*"
     puts $ofd "#..."
-    puts $ofd " 660..: \[0-9a-f\]+\[ \]+0\[ \]+SECTION\[ \]+LOCAL\[ \]+DEFAULT\[ \]+660.. "
-    puts $ofd "#..."
-    puts $ofd " 660..: \[0-9a-f\]+\[ \]+0\[ \]+NOTYPE\[ \]+LOCAL\[ \]+DEFAULT\[ \]+\[0-9\] bar_1$"
-    puts $ofd "#..."
-    puts $ofd ".* bar_66000$"
+    if { [is_elf_unused_section_symbols ] } {
+	puts $ofd " 660..: \[0-9a-f\]+\[ \]+0\[ \]+SECTION\[ \]+LOCAL\[ \]+DEFAULT\[ \]+660.. "
+	puts $ofd "#..."
+	puts $ofd " 660..: \[0-9a-f\]+\[ \]+0\[ \]+NOTYPE\[ \]+LOCAL\[ \]+DEFAULT\[ \]+\[0-9\] bar_1$"
+	puts $ofd "#..."
+	puts $ofd ".* bar_66000$"
+    } else {
+	puts $ofd " 66...: \[0-9a-f\]+\[ \]+0\[ \]+NOTYPE\[ \]+LOCAL\[ \]+DEFAULT\[ \]+660.. bar_66000$"
+    }
     puts $ofd "#..."
     # Global symbols are not in "alphanumeric" order, so we just check
     # that the first and the last are present in any order (assuming no

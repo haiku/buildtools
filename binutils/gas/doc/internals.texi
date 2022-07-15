@@ -1,5 +1,5 @@
 \input texinfo
-@c  Copyright (C) 1991-2019 Free Software Foundation, Inc.
+@c  Copyright (C) 1991-2021 Free Software Foundation, Inc.
 @setfilename internals.info
 @node Top
 @top Assembler Internals
@@ -1118,10 +1118,11 @@ These fields are defined with the @code{TC_FIX_TYPE} macro.
 A C statement to output target specific debugging information for
 fixup @var{fixp} to @var{stream}.  This macro is called by @code{print_fixup}.
 
-@item TC_FRAG_INIT (@var{fragp})
+@item TC_FRAG_INIT (@var{fragp}, @var{max_bytes})
 @cindex TC_FRAG_INIT
-A C statement to initialize the target specific fields of frag @var{fragp}.
-These fields are defined with the @code{TC_FRAG_TYPE} macro.
+A C statement to initialize the target specific fields of frag @var{fragp}
+with maximum number of bytes @var{max_bytes}.  These fields are defined
+with the @code{TC_FRAG_TYPE} macro.
 
 @item md_number_to_chars
 @cindex md_number_to_chars
@@ -1208,6 +1209,11 @@ If you do not define @code{md_relax_frag}, you may define
 @code{TC_GENERIC_RELAX_TABLE} as a table of @code{relax_typeS} structures.  The
 machine independent code knows how to use such a table to relax PC relative
 references.  See @file{tc-m68k.c} for an example.  @xref{Relaxation}.
+
+@item md_generic_table_relax_frag
+@cindex md_generic_table_relax_frag
+If defined, it is a C statement that is invoked, instead of
+the default implementation, to scan @code{TC_GENERIC_RELAX_TABLE}.
 
 @item md_prepare_relax_scan
 @cindex md_prepare_relax_scan
@@ -1540,6 +1546,16 @@ prototype for the function looks like this:
 The function should return the debug format that is preferred by the CPU
 backend.  This format will be used when generating assembler specific debug
 information.
+
+@item md_emit_single_noop_insn
+@itemx md_single_noop_insn
+These macro facilitate the @var{.nop} directive.  If defined the
+@var{md_emit_single_noop_insn) macro provides code to insert a single no-op
+instruction into the output stream.  If this involves calling @var{md_assemble}
+with a fixed string then the alternative macro @var{md_single_noop_insn} can be
+defined, specifying the string to pass.  If neither of these macros are defined
+then the @var{.nop} directive will call @var{md_assemble} with the string
+@option{nop}.
 
 @item md_allow_local_subtract (@var{left}, @var{right}, @var{section})
 If defined, GAS will call this macro when evaluating an expression which is the
@@ -1907,38 +1923,6 @@ This function is helpful for converting a @code{valueT} value into printable
 format, in case it's wider than modes that @code{*printf} can handle.  If the
 type is narrow enough, a decimal number will be produced; otherwise, it will be
 in hexadecimal.  The value itself is not examined to make this determination.
-@end deftypefun
-
-@node Hash tables
-@subsection Hash tables
-@cindex hash tables
-
-@deftypefun @{@} @{struct hash_control *@} hash_new (void)
-Creates the hash table control structure.
-@end deftypefun
-
-@deftypefun @{@} void hash_die (struct hash_control *)
-Destroy a hash table.
-@end deftypefun
-
-@deftypefun @{@} void *hash_delete (struct hash_control *, const char *, int)
-Deletes entry from the hash table, returns the value it had.  If the last
-arg is non-zero, free memory allocated for this entry and all entries
-allocated more recently than this entry.
-@end deftypefun
-
-@deftypefun @{@} void *hash_replace (struct hash_control *, const char *, void *)
-Updates the value for an entry already in the table, returning the old value.
-If no entry was found, just returns NULL.
-@end deftypefun
-
-@deftypefun @{@} @{const char *@} hash_insert (struct hash_control *, const char *, void *)
-Inserting a value already in the table is an error.
-Returns an error message or NULL.
-@end deftypefun
-
-@deftypefun @{@} @{const char *@} hash_jam (struct hash_control *, const char *, void *)
-Inserts if the value isn't already present, updates it if it is.
 @end deftypefun
 
 @node Test suite
