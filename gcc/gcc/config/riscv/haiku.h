@@ -22,12 +22,6 @@ along with GCC; see the file COPYING3.  If not see
   do									\
     {									\
       builtin_define ("__HAIKU__");					\
-      if (POINTER_SIZE == 64)						\
-        builtin_define ("__riscv64__");				\
-      else											\
-        builtin_define ("__riscv32__");				\
-      builtin_define ("__RISCV__");					\
-      builtin_define ("__riscv__");					\
       builtin_define ("__stdcall=__attribute__((__stdcall__))");	\
       builtin_define ("__cdecl=__attribute__((__cdecl__))");		\
       builtin_define ("__STDC_ISO_10646__=201103L"); \
