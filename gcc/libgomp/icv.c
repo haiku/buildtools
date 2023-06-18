@@ -1,4 +1,4 @@
-/* Copyright (C) 2005-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2005-2023 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -29,6 +29,8 @@
 #include "libgomp.h"
 #include "gomp-constants.h"
 #include <limits.h>
+
+ialias_redirect (omp_get_active_level)
 
 void
 omp_set_num_threads (int n)

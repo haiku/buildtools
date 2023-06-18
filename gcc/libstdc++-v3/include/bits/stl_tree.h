@@ -1,6 +1,6 @@
 // RB tree implementation -*- C++ -*-
 
-// Copyright (C) 2001-2021 Free Software Foundation, Inc.
+// Copyright (C) 2001-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -77,7 +77,7 @@ namespace std _GLIBCXX_VISIBILITY(default)
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #if __cplusplus > 201103L
-# define __cpp_lib_generic_associative_lookup 201304
+# define __cpp_lib_generic_associative_lookup 201304L
 #endif
 
   // Red-black tree class, designed for use in implementing STL
@@ -322,7 +322,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
 
       _Base_ptr _M_node;
-  };
+    };
 
   template<typename _Tp>
     struct _Rb_tree_const_iterator
@@ -405,12 +405,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _Base_ptr _M_node;
     };
 
+  __attribute__((__nonnull__))
   void
   _Rb_tree_insert_and_rebalance(const bool __insert_left,
 				_Rb_tree_node_base* __x,
 				_Rb_tree_node_base* __p,
 				_Rb_tree_node_base& __header) throw ();
 
+  __attribute__((__nonnull__,__returns_nonnull__))
   _Rb_tree_node_base*
   _Rb_tree_rebalance_for_erase(_Rb_tree_node_base* const __z,
 			       _Rb_tree_node_base& __header) throw ();
@@ -637,9 +639,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_clone_node(_Link_type __x, _NodeGen& __node_gen)
 	{
 #if __cplusplus >= 201103L
-	  using _Vp = typename conditional<_MoveValue,
-					   value_type&&,
-					   const value_type&>::type;
+	  using _Vp = __conditional_t<_MoveValue,
+				      value_type&&,
+				      const value_type&>;
 #endif
 	  _Link_type __tmp
 	    = __node_gen(_GLIBCXX_FORWARD(_Vp, *__x->_M_valptr()));
@@ -821,7 +823,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if __cplusplus > 201402L
       using node_type = _Node_handle<_Key, _Val, _Node_allocator>;
       using insert_return_type = _Node_insert_return<
-	conditional_t<is_same_v<_Key, _Val>, const_iterator, iterator>,
+	__conditional_t<is_same_v<_Key, _Val>, const_iterator, iterator>,
 	node_type>;
 #endif
 
@@ -1123,7 +1125,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__enable_if_t<!__same_value_type<_InputIterator>::value>
 	_M_insert_range_equal(_InputIterator __first, _InputIterator __last)
 	{
-	  _Alloc_node __an(*this);
 	  for (; __first != __last; ++__first)
 	    _M_emplace_equal(*__first);
 	}
@@ -1624,6 +1625,52 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 					    __y.begin(), __y.end());
       }
 #endif
+
+    private:
+#if __cplusplus >= 201103L
+      // An RAII _Node handle
+      struct _Auto_node
+      {
+	template<typename... _Args>
+	  _Auto_node(_Rb_tree& __t, _Args&&... __args)
+	  : _M_t(__t),
+	    _M_node(__t._M_create_node(std::forward<_Args>(__args)...))
+	  { }
+
+	~_Auto_node()
+	{
+	  if (_M_node)
+	    _M_t._M_drop_node(_M_node);
+	}
+
+	_Auto_node(_Auto_node&& __n)
+	: _M_t(__n._M_t), _M_node(__n._M_node)
+	{ __n._M_node = nullptr; }
+
+	const _Key&
+	_M_key() const
+	{ return _S_key(_M_node); }
+
+	iterator
+	_M_insert(pair<_Base_ptr, _Base_ptr> __p)
+	{
+	  auto __it = _M_t._M_insert_node(__p.first, __p.second, _M_node);
+	  _M_node = nullptr;
+	  return __it;
+	}
+
+	iterator
+	_M_insert_equal_lower()
+	{
+	  auto __it = _M_t._M_insert_equal_lower_node(_M_node);
+	  _M_node = nullptr;
+	  return __it;
+	}
+
+	_Rb_tree& _M_t;
+	_Link_type _M_node;
+      };
+#endif // C++11
     };
 
   template<typename _Key, typename _Val, typename _KeyOfValue,
@@ -1731,7 +1778,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
     operator=(const _Rb_tree& __x)
     {
-      if (this != &__x)
+      if (this != std::__addressof(__x))
 	{
 	  // Note that _Key may be a constant type.
 #if __cplusplus >= 201103L
@@ -2326,9 +2373,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if __cplusplus >= 201103L
   template<typename _Key, typename _Val, typename _KeyOfValue,
 	   typename _Compare, typename _Alloc>
-    typename _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator
+    auto
     _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
     _M_insert_node(_Base_ptr __x, _Base_ptr __p, _Link_type __z)
+    -> iterator
     {
       bool __insert_left = (__x != 0 || __p == _M_end()
 			    || _M_impl._M_key_compare(_S_key(__z),
@@ -2342,9 +2390,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Key, typename _Val, typename _KeyOfValue,
 	   typename _Compare, typename _Alloc>
-    typename _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator
+    auto
     _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
     _M_insert_lower_node(_Base_ptr __p, _Link_type __z)
+    -> iterator
     {
       bool __insert_left = (__p == _M_end()
 			    || !_M_impl._M_key_compare(_S_key(__p),
@@ -2358,9 +2407,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Key, typename _Val, typename _KeyOfValue,
 	   typename _Compare, typename _Alloc>
-    typename _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator
+    auto
     _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
     _M_insert_equal_lower_node(_Link_type __z)
+    -> iterator
     {
       _Link_type __x = _M_begin();
       _Base_ptr __y = _M_end();
@@ -2376,100 +2426,59 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Key, typename _Val, typename _KeyOfValue,
 	   typename _Compare, typename _Alloc>
     template<typename... _Args>
-      pair<typename _Rb_tree<_Key, _Val, _KeyOfValue,
-			     _Compare, _Alloc>::iterator, bool>
+      auto
       _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
       _M_emplace_unique(_Args&&... __args)
+      -> pair<iterator, bool>
       {
-	_Link_type __z = _M_create_node(std::forward<_Args>(__args)...);
-
-	__try
-	  {
-	    typedef pair<iterator, bool> _Res;
-	    auto __res = _M_get_insert_unique_pos(_S_key(__z));
-	    if (__res.second)
-	      return _Res(_M_insert_node(__res.first, __res.second, __z), true);
-	
-	    _M_drop_node(__z);
-	    return _Res(iterator(__res.first), false);
-	  }
-	__catch(...)
-	  {
-	    _M_drop_node(__z);
-	    __throw_exception_again;
-	  }
+	_Auto_node __z(*this, std::forward<_Args>(__args)...);
+	auto __res = _M_get_insert_unique_pos(__z._M_key());
+	if (__res.second)
+	  return {__z._M_insert(__res), true};
+	return {iterator(__res.first), false};
       }
 
   template<typename _Key, typename _Val, typename _KeyOfValue,
 	   typename _Compare, typename _Alloc>
     template<typename... _Args>
-      typename _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator
+      auto
       _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
       _M_emplace_equal(_Args&&... __args)
+      -> iterator
       {
-	_Link_type __z = _M_create_node(std::forward<_Args>(__args)...);
-
-	__try
-	  {
-	    auto __res = _M_get_insert_equal_pos(_S_key(__z));
-	    return _M_insert_node(__res.first, __res.second, __z);
-	  }
-	__catch(...)
-	  {
-	    _M_drop_node(__z);
-	    __throw_exception_again;
-	  }
+	_Auto_node __z(*this, std::forward<_Args>(__args)...);
+	auto __res = _M_get_insert_equal_pos(__z._M_key());
+	return __z._M_insert(__res);
       }
 
   template<typename _Key, typename _Val, typename _KeyOfValue,
 	   typename _Compare, typename _Alloc>
     template<typename... _Args>
-      typename _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator
+      auto
       _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
       _M_emplace_hint_unique(const_iterator __pos, _Args&&... __args)
+      -> iterator
       {
-	_Link_type __z = _M_create_node(std::forward<_Args>(__args)...);
-
-	__try
-	  {
-	    auto __res = _M_get_insert_hint_unique_pos(__pos, _S_key(__z));
-
-	    if (__res.second)
-	      return _M_insert_node(__res.first, __res.second, __z);
-
-	    _M_drop_node(__z);
-	    return iterator(__res.first);
-	  }
-	__catch(...)
-	  {
-	    _M_drop_node(__z);
-	    __throw_exception_again;
-	  }
+	_Auto_node __z(*this, std::forward<_Args>(__args)...);
+	auto __res = _M_get_insert_hint_unique_pos(__pos, __z._M_key());
+	if (__res.second)
+	  return __z._M_insert(__res);
+	return iterator(__res.first);
       }
 
   template<typename _Key, typename _Val, typename _KeyOfValue,
 	   typename _Compare, typename _Alloc>
     template<typename... _Args>
-      typename _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::iterator
+      auto
       _Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::
       _M_emplace_hint_equal(const_iterator __pos, _Args&&... __args)
+      -> iterator
       {
-	_Link_type __z = _M_create_node(std::forward<_Args>(__args)...);
-
-	__try
-	  {
-	    auto __res = _M_get_insert_hint_equal_pos(__pos, _S_key(__z));
-
-	    if (__res.second)
-	      return _M_insert_node(__res.first, __res.second, __z);
-
-	    return _M_insert_equal_lower_node(__z);
-	  }
-	__catch(...)
-	  {
-	    _M_drop_node(__z);
-	    __throw_exception_again;
-	  }
+	_Auto_node __z(*this, std::forward<_Args>(__args)...);
+	auto __res = _M_get_insert_hint_equal_pos(__pos, __z._M_key());
+	if (__res.second)
+	  return __z._M_insert(__res);
+	return __z._M_insert_equal_lower();
       }
 #endif
 

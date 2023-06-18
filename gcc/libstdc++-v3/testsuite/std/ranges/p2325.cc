@@ -1,12 +1,7 @@
 // { dg-options "-std=gnu++20" }
 // { dg-do compile { target c++20 } }
+// { dg-require-effective-target hosted }
 // P2325R3 "Views should not be required to be default constructible"
-
-// Parts of P2325R3 are deliberately omitted in libstdc++ 11, in particular the
-// removal of default ctors for back_/front_insert_iterator, ostream_iterator,
-// ref_view and basic_istream_view/::iterator, so as to maximize backward
-// compatibility with pre-P2325R3 code.  So most static_asserts in this test fail,
-// see the xfails at the end of this file.
 
 #include <ranges>
 #include <iterator>
@@ -119,6 +114,20 @@ test07()
 void
 test08()
 {
+  // Verify lazy_split_view is conditionally default constructible.
+  using type1 = ranges::lazy_split_view<ranges::ref_view<int[2]>, ranges::single_view<int>>;
+  static_assert(!default_initializable<type1>);
+  using type2 = ranges::lazy_split_view<ranges::single_view<int>, ranges::ref_view<int[2]>>;
+  static_assert(!default_initializable<type2>);
+  using type3 = ranges::lazy_split_view<ranges::ref_view<int[2]>, ranges::ref_view<int[2]>>;
+  static_assert(!default_initializable<type3>);
+  using type4 = ranges::lazy_split_view<ranges::single_view<int>, ranges::single_view<int>>;
+  static_assert(default_initializable<type4>);
+}
+
+void
+test08a()
+{
   // Verify split_view is conditionally default constructible.
   using type1 = ranges::split_view<ranges::ref_view<int[2]>, ranges::single_view<int>>;
   static_assert(!default_initializable<type1>);
@@ -159,23 +168,3 @@ test11()
   using type2 = ranges::elements_view<ranges::single_view<pair<int,int>>, 0>;
   static_assert(default_initializable<type2>);
 }
-
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 35 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 36 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 37 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 38 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 43 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 47 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 57 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 58 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 63 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 67 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 76 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 77 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 84 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 124 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 126 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 128 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 138 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 148 }
-// { dg-bogus "static assertion failed" "" { xfail *-*-* } 158 }

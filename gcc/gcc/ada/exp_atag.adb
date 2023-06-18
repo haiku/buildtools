@@ -4,9 +4,9 @@
 --                                                                          --
 --                             E X P _ A T A G                              --
 --                                                                          --
---                                 S p e c                                  --
+--                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2006-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 2006-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,22 +23,25 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Einfo;    use Einfo;
-with Elists;   use Elists;
-with Exp_Disp; use Exp_Disp;
-with Namet;    use Namet;
-with Nlists;   use Nlists;
-with Nmake;    use Nmake;
-with Opt;      use Opt;
-with Rtsfind;  use Rtsfind;
-with Sinfo;    use Sinfo;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Disp; use Sem_Disp;
-with Sem_Util; use Sem_Util;
-with Stand;    use Stand;
-with Snames;   use Snames;
-with Tbuild;   use Tbuild;
+with Atree;          use Atree;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Exp_Disp;       use Exp_Disp;
+with Namet;          use Namet;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
+with Opt;            use Opt;
+with Rtsfind;        use Rtsfind;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Disp;       use Sem_Disp;
+with Sem_Util;       use Sem_Util;
+with Stand;          use Stand;
+with Snames;         use Snames;
+with Tbuild;         use Tbuild;
 
 package body Exp_Atag is
 
@@ -309,7 +312,7 @@ package body Exp_Atag is
 
          if not Is_Predefined_Dispatching_Operation (Prim)
            and then not Is_Predefined_Dispatching_Operation (E)
-           and then not Present (Interface_Alias (Prim))
+           and then No (Interface_Alias (Prim))
            and then not Is_Abstract_Subprogram (E)
            and then not Is_Eliminated (E)
            and then Prim_Pos <= CPP_Nb_Prims

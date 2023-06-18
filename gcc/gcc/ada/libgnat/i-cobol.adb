@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -34,8 +34,7 @@
 --  particular COBOL format is completely contained in the private part of
 --  the spec.
 
-with Interfaces; use Interfaces;
-with System;     use System;
+with System; use System;
 with Ada.Unchecked_Conversion;
 
 package body Interfaces.COBOL is
@@ -692,7 +691,7 @@ package body Interfaces.COBOL is
             --  For signed, accept all standard and non-standard signs
 
             else
-               return Item (Item'Last) in 16#A# .. 16#F#;
+               return Item (Item'Last) >= 16#A#;
             end if;
       end case;
    end Valid_Packed;

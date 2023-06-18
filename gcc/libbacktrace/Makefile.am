@@ -1,5 +1,5 @@
 # Makefile.am -- Backtrace Makefile.
-# Copyright (C) 2012-2021 Free Software Foundation, Inc.
+# Copyright (C) 2012-2023 Free Software Foundation, Inc.
 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -85,13 +85,19 @@ libbacktrace_la_DEPENDENCIES = $(libbacktrace_la_LIBADD)
 
 # Testsuite.
 
-# Add a test to this variable if you want it to be built.
+# Add a test to this variable if you want it to be built as a program,
+# with SOURCES, etc.
 check_PROGRAMS =
 
 # Add a test to this variable if you want it to be run.
 TESTS =
 
-# Add a test to this variable if you want it to be built and run.
+# Add a test to this variable if you want it to be built as a Makefile
+# target and run.
+MAKETESTS =
+
+# Add a test to this variable if you want it to be built as a program,
+# with SOURCES, etc., and run.
 BUILDTESTS =
 
 # Add a file to this variable if you want it to be built for testing.
@@ -145,18 +151,18 @@ endif HAVE_OBJCOPY_DEBUGLINK
 endif HAVE_ELF
 
 elf_%.c: elf.c
+	nlinit=`echo 'nl="'; echo '"'`; eval "$$nlinit"; \
 	SEARCH='#error "Unknown BACKTRACE_ELF_SIZE"'; \
-	REPLACE='#undef BACKTRACE_ELF_SIZE\
-	#define BACKTRACE_ELF_SIZE'; \
+	REPLACE="#undef BACKTRACE_ELF_SIZE\\$${nl}#define BACKTRACE_ELF_SIZE"; \
 	$(SED) "s/^$$SEARCH\$$/$$REPLACE $*/" \
 		$< \
 		> $@.tmp
 	mv $@.tmp $@
 
 xcoff_%.c: xcoff.c
+	nlinit=`echo 'nl="'; echo '"'`; eval "$$nlinit"; \
 	SEARCH='#error "Unknown BACKTRACE_XCOFF_SIZE"'; \
-	REPLACE='#undef BACKTRACE_XCOFF_SIZE\
-	#define BACKTRACE_XCOFF_SIZE'; \
+	REPLACE="#undef BACKTRACE_XCOFF_SIZE\\$${nl}#define BACKTRACE_XCOFF_SIZE"; \
 	$(SED) "s/^$$SEARCH\$$/$$REPLACE $*/" \
 		$< \
 		> $@.tmp
@@ -242,6 +248,7 @@ check_DATA += allocfail.dSYM
 endif USE_DSYMUTIL
 
 if HAVE_ELF
+if HAVE_BUILDID
 if HAVE_OBJCOPY_DEBUGLINK
 
 b2test_SOURCES = $(btest_SOURCES)
@@ -250,7 +257,7 @@ b2test_LDFLAGS = -Wl,--build-id
 b2test_LDADD = libbacktrace_elf_for_test.la
 
 check_PROGRAMS += b2test
-TESTS += b2test_buildid
+MAKETESTS += b2test_buildid
 
 if HAVE_DWZ
 
@@ -260,11 +267,12 @@ b3test_LDFLAGS = -Wl,--build-id
 b3test_LDADD = libbacktrace_elf_for_test.la
 
 check_PROGRAMS += b3test
-TESTS += b3test_dwz_buildid
+MAKETESTS += b3test_dwz_buildid
 
 endif HAVE_DWZ
 
 endif HAVE_OBJCOPY_DEBUGLINK
+endif HAVE_BUILDID
 endif HAVE_ELF
 
 btest_SOURCES = btest.c testlib.c
@@ -311,11 +319,11 @@ if HAVE_DWZ
 	  cp $< $@; \
 	fi
 
-TESTS += btest_dwz
+MAKETESTS += btest_dwz
 
 if HAVE_OBJCOPY_DEBUGLINK
 
-TESTS += btest_dwz_gnudebuglink
+MAKETESTS += btest_dwz_gnudebuglink
 
 endif HAVE_OBJCOPY_DEBUGLINK
 
@@ -361,6 +369,25 @@ ztest_alloc_SOURCES = $(ztest_SOURCES)
 ztest_alloc_CFLAGS = $(ztest_CFLAGS)
 
 BUILDTESTS += ztest_alloc
+
+zstdtest_SOURCES = zstdtest.c testlib.c
+zstdtest_CFLAGS = $(libbacktrace_TEST_CFLAGS) -DSRCDIR=\"$(srcdir)\"
+zstdtest_LDADD = libbacktrace.la
+zstdtest_alloc_LDADD = libbacktrace_alloc.la
+
+if HAVE_ZSTD
+zstdtest_LDADD += -lzstd
+zstdtest_alloc_LDADD += -lzstd
+endif
+zstdtest_LDADD += $(CLOCK_GETTIME_LINK)
+zstdtest_alloc_LDADD += $(CLOCK_GETTIME_LINK)
+
+BUILDTESTS += zstdtest
+
+zstdtest_alloc_SOURCES = $(zstdtest_SOURCES)
+zstdtest_alloc_CFLAGS = $(zstdtest_CFLAGS)
+
+BUILDTESTS += zstdtest_alloc
 
 endif HAVE_ELF
 
@@ -416,7 +443,7 @@ endif HAVE_PTHREAD
 
 if HAVE_OBJCOPY_DEBUGLINK
 
-TESTS += btest_gnudebuglink
+MAKETESTS += btest_gnudebuglink
 
 %_gnudebuglink: %
 	$(OBJCOPY) --only-keep-debug $< $@.debug
@@ -443,6 +470,17 @@ ctesta_LDFLAGS = -Wl,--compress-debug-sections=zlib-gabi
 ctesta_LDADD = libbacktrace.la
 
 BUILDTESTS += ctestg ctesta
+
+if HAVE_COMPRESSED_DEBUG_ZSTD
+
+ctestzstd_SOURCES = btest.c testlib.c
+ctestzstd_CFLAGS = $(libbacktrace_TEST_CFLAGS)
+ctestzstd_LDFLAGS = -Wl,--compress-debug-sections=zstd
+ctestzstd_LDADD = libbacktrace.la
+
+BUILDTESTS += ctestzstd
+
+endif
 
 ctestg_alloc_SOURCES = $(ctestg_SOURCES)
 ctestg_alloc_CFLAGS = $(ctestg_CFLAGS)
@@ -494,7 +532,7 @@ endif USE_DSYMUTIL
 
 if HAVE_MINIDEBUG
 
-TESTS += mtest_minidebug
+MAKETESTS += mtest_minidebug
 
 %_minidebug: %
 	$(NM) -D $< -P --defined-only | $(AWK) '{ print $$1 }' | sort > $<.dsyms
@@ -536,10 +574,11 @@ endif HAVE_ELF
 
 check_PROGRAMS += $(BUILDTESTS)
 
-TESTS += $(BUILDTESTS)
+TESTS += $(MAKETESTS) $(BUILDTESTS)
 
 CLEANFILES = \
-	$(TESTS) *.debug elf_for_test.c edtest2_build.c gen_edtest2_build \
+	$(MAKETESTS) $(BUILDTESTS) *.debug elf_for_test.c edtest2_build.c \
+	gen_edtest2_build \
 	*.dsyms *.fsyms *.keepsyms *.dbg *.mdbg *.mdbg.xz *.strip
 
 clean-local:

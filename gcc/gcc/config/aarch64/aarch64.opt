@@ -1,5 +1,5 @@
 ; Machine description for AArch64 architecture.
-; Copyright (C) 2009-2021 Free Software Foundation, Inc.
+; Copyright (C) 2009-2023 Free Software Foundation, Inc.
 ; Contributed by ARM Ltd.
 ;
 ; This file is part of GCC.
@@ -21,20 +21,26 @@
 HeaderInclude
 config/aarch64/aarch64-opts.h
 
-TargetVariable
-enum aarch64_processor explicit_tune_core = aarch64_none
+HeaderInclude
+config/arm/aarch-common.h
 
 TargetVariable
-enum aarch64_arch explicit_arch = aarch64_no_arch
-
-TargetSave
-const char *x_aarch64_override_tune_string
+enum aarch64_processor selected_tune = aarch64_none
 
 TargetVariable
-uint64_t aarch64_isa_flags = 0
+enum aarch64_arch selected_arch = aarch64_no_arch
 
 TargetVariable
-unsigned aarch64_enable_bti = 2
+aarch64_feature_flags aarch64_asm_isa_flags = 0
+
+TargetVariable
+aarch64_feature_flags aarch64_isa_flags = 0
+
+TargetVariable
+unsigned aarch_enable_bti = 2
+
+TargetVariable
+enum aarch_key_type aarch_ra_sign_key = AARCH_KEY_A
 
 ; The TLS dialect names to use with -mtls-dialect.
 
@@ -139,7 +145,7 @@ Target RejectNegative Joined Enum(aarch64_abi) Var(aarch64_abi) Init(AARCH64_ABI
 Generate code that conforms to the specified ABI.
 
 moverride=
-Target RejectNegative ToLower Joined Var(aarch64_override_tune_string)
+Target RejectNegative ToLower Joined Var(aarch64_override_tune_string) Save
 -moverride=<string>	Power users only! Override CPU optimization parameters.
 
 Enum
@@ -161,21 +167,21 @@ Target RejectNegative Joined Var(aarch64_branch_protection_string) Save
 Use branch-protection features.
 
 msign-return-address=
-Target WarnRemoved RejectNegative Joined Enum(aarch64_ra_sign_scope_t) Var(aarch64_ra_sign_scope) Init(AARCH64_FUNCTION_NONE) Save
+Target WarnRemoved RejectNegative Joined Enum(aarch_ra_sign_scope_t) Var(aarch_ra_sign_scope) Init(AARCH_FUNCTION_NONE) Save
 Select return address signing scope.
 
 Enum
-Name(aarch64_ra_sign_scope_t) Type(enum aarch64_function_type)
+Name(aarch_ra_sign_scope_t) Type(enum aarch_function_type)
 Supported AArch64 return address signing scope (for use with -msign-return-address= option):
 
 EnumValue
-Enum(aarch64_ra_sign_scope_t) String(none) Value(AARCH64_FUNCTION_NONE)
+Enum(aarch_ra_sign_scope_t) String(none) Value(AARCH_FUNCTION_NONE)
 
 EnumValue
-Enum(aarch64_ra_sign_scope_t) String(non-leaf) Value(AARCH64_FUNCTION_NON_LEAF)
+Enum(aarch_ra_sign_scope_t) String(non-leaf) Value(AARCH_FUNCTION_NON_LEAF)
 
 EnumValue
-Enum(aarch64_ra_sign_scope_t) String(all) Value(AARCH64_FUNCTION_ALL)
+Enum(aarch_ra_sign_scope_t) String(all) Value(AARCH_FUNCTION_ALL)
 
 mlow-precision-recip-sqrt
 Target Var(flag_mrecip_low_precision_sqrt) Optimization
@@ -280,3 +286,19 @@ Target Joined UInteger Var(aarch64_autovec_preference) Init(0) IntegerRange(0, 4
 
 -param=aarch64-loop-vect-issue-rate-niters=
 Target Joined UInteger Var(aarch64_loop_vect_issue_rate_niters) Init(6) IntegerRange(0, 65536) Param
+
+-param=aarch64-mops-memcpy-size-threshold=
+Target Joined UInteger Var(aarch64_mops_memcpy_size_threshold) Init(256) Param
+Constant memcpy size in bytes above which to start using MOPS sequence.
+
+-param=aarch64-mops-memmove-size-threshold=
+Target Joined UInteger Var(aarch64_mops_memmove_size_threshold) Init(0) Param
+Constant memmove size in bytes above which to start using MOPS sequence.
+
+-param=aarch64-mops-memset-size-threshold=
+Target Joined UInteger Var(aarch64_mops_memset_size_threshold) Init(256) Param
+Constant memset size in bytes from which to start using MOPS sequence.
+
+-param=aarch64-vect-unroll-limit=
+Target Joined UInteger Var(aarch64_vect_unroll_limit) Init(4) Param
+Limit how much the autovectorizer may unroll a loop.

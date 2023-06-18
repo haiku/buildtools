@@ -1,4 +1,4 @@
-#   Copyright (C) 1997-2021 Free Software Foundation, Inc.
+#   Copyright (C) 1997-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ load_lib scanltranstree.exp
 load_lib scanipa.exp
 load_lib scanwpaipa.exp
 load_lib scanlang.exp
+load_lib scansarif.exp
 load_lib timeout.exp
 load_lib timeout-dg.exp
 load_lib prune.exp
@@ -315,13 +316,13 @@ proc gcc-dg-test-1 { target_compile prog do_what extra_tool_flags } {
     # to avoid a second failure for excess errors.
     # "Error reporting routines re-entered" ICE says "Internal" rather than
     # "internal", so match that too.
-    if [string match {*[Ii]nternal compiler error*} $comp_output] {
+    if [regexp -line -- {[Ii]nternal compiler error.*} $comp_output ice] {
 	upvar 2 name name
 	if { $expect_ice == 0 } {
-	  fail "$name (internal compiler error)"
+	  fail "$name ($ice)"
 	} else {
 	  # We expected an ICE and we got it.
-	  xfail "$name (internal compiler error)"
+	  xfail "$name ($ice)"
 	  # Prune the ICE from the output.
 	  set comp_output [prune_ices $comp_output]
 	}
@@ -621,18 +622,52 @@ proc gcc-dg-runtest { testcases flags default-extra-flags } {
     }
 }
 
-proc gcc-dg-debug-runtest { target_compile trivial opt_opts testcases } {
+# Check if frontend has CTF support
+proc gcc-dg-frontend-supports-ctf { target_compile trivial } {
     global srcdir subdir
 
+    set comp_output [$target_compile \
+	    "$srcdir/$subdir/$trivial" "trivial.S" assembly \
+	    "additional_flags=-gctf"]
+    if { ! [string match \
+	    "*CTF debug info requested, but not supported for * frontend*" \
+	    $comp_output] } {
+	remove-build-file "trivial.S"
+	return 1
+    }
+    return 0
+}
+
+# Check if the target system supports the debug format
+proc gcc-dg-target-supports-debug-format { target_compile trivial type } {
+    global srcdir subdir
+
+    set comp_output [$target_compile \
+	    "$srcdir/$subdir/$trivial" "trivial.S" assembly \
+	    "additional_flags=$type"]
+    if { ! [string match "*: target system does not support the * debug format*" \
+	    $comp_output] } {
+	remove-build-file "trivial.S"
+	return 1
+    }
+    return 0
+}
+
+proc gcc-dg-debug-runtest { target_compile trivial opt_opts testcases } {
     if ![info exists DEBUG_TORTURE_OPTIONS] {
 	set DEBUG_TORTURE_OPTIONS ""
-	foreach type {-gdwarf-2 -gstabs -gstabs+ -gxcoff -gxcoff+} {
-	    set comp_output [$target_compile \
-		    "$srcdir/$subdir/$trivial" "trivial.S" assembly \
-		    "additional_flags=$type"]
-	    if { ! [string match "*: target system does not support the * debug format*" \
-		    $comp_output] } {
-		remove-build-file "trivial.S"
+	foreach type {-gctf -gdwarf-2} {
+	    if [expr [gcc-dg-target-supports-debug-format \
+		      $target_compile $trivial $type]] {
+		if { $type == "-gctf" } {
+		    if [expr [gcc-dg-frontend-supports-ctf \
+			      $target_compile $trivial]] {
+			# At this time, running tests with various opt levels or
+			# ctf debug info levels does not add value.
+			lappend DEBUG_TORTURE_OPTIONS  [list "${type}"]
+		    }
+		    continue
+		}
 		foreach level {1 "" 3} {
 		    if { ($type == "-gdwarf-2") && ($level != "") } {
 			lappend DEBUG_TORTURE_OPTIONS [list "${type}" "-g${level}"]
@@ -686,6 +721,15 @@ proc gcc-dg-debug-runtest { target_compile trivial opt_opts testcases } {
 		    && [string match "*O*" "$flags"] \
 		    && ( [string match "*coff*" "$flags"] \
 			 || [string match "*stabs*" "$flags"] ) } {
+		set doit 0
+	    }
+
+	    # These tests check for information which is not emitted for CTF
+	    # as CTF type information is emitted for entities at file and 
+	    # global scope only.
+	    if { ([string match {*/debug-[126].c} "$nshort"] \
+		  || [string match {*/enum-[12].C} "$nshort"] ) \
+		  && [string match "*ctf*" "$flags"] } {
 		set doit 0
 	    }
 
@@ -1012,6 +1056,8 @@ if { [info procs saved-dg-test] == [list] } {
 	    }
 	    unset save_linenr_varnames
 	}
+
+	initialize_prune_notes
     }
 
     proc dg-test { args } {
@@ -1146,8 +1192,18 @@ proc process-message { msgproc msgprefix dgargs } {
     upvar dg-messages dg-messages
 
     if { [llength $dgargs] == 5 } {
-	set num [get-absolute-line [lindex $dgargs 0] [lindex $dgargs 4]]
-	set dgargs [lreplace $dgargs 4 4 $num]
+	set useline [lindex $dgargs 0]
+
+	# Resolve absolute line number.
+	set line [get-absolute-line $useline [lindex $dgargs 4]]
+	set dgargs [lreplace $dgargs 4 4 $line]
+
+	if { $line != $useline } {
+	    # Make sure that we get unique test names if different USELINEs
+	    # refer to the same LINE.
+	    set comment "[lindex $dgargs 2] at line $useline"
+	    set dgargs [lreplace $dgargs 2 2 $comment]
+	}
     }
 
     # Process the dg- directive, including adding the regular expression
@@ -1243,6 +1299,36 @@ proc dg-missed { args } {
     upvar dg-messages dg-messages
 
     process-message saved-dg-warning "missed:" "$args"
+}
+
+# Look for messages with 'note: ' prefixes.
+# In addition to standard compiler diagnostics ('DK_NOTE', 'inform' functions,
+# "for additional details on an error message"),
+# this also includes output from '-fopt-info' for 'MSG_NOTE':
+# a general optimization info.
+# By default, any *excess* notes are pruned, meaning their appearance doesn't
+# trigger *excess errors*.  However, if 'dg-note' is used at least once in a
+# testcase, they're not pruned and instead must *all* be handled explicitly.
+# Thus, if looking for just single instances of messages with 'note: ' prefixes
+# without caring for all of them, use 'dg-message "note: [...]"' instead of
+# 'dg-note', or use 'dg-note' together with 'dg-prune-output "note: "'.
+
+variable prune_notes
+
+proc initialize_prune_notes { } {
+    global prune_notes
+    set prune_notes 1
+}
+
+initialize_prune_notes
+
+proc dg-note { args } {
+    upvar dg-messages dg-messages
+
+    global prune_notes
+    set prune_notes 0
+
+    process-message saved-dg-warning "note:" "$args"
 }
 
 # Check the existence of a gdb in the path, and return true if there
@@ -1341,6 +1427,19 @@ proc scan-symbol-not { args } {
     } else {
 	pass "$testcase   scan-symbol-not $args"
     }
+}
+
+# Transform a tool-name to its canonical-target-name by "transform"
+# (which may return the original name for native targets) but only if
+# testing out-of-tree.  When in-tree, the tool is expected to be found
+# by its original name, typically with some build-directory prefix
+# prepended by the caller.
+proc gcc-transform-out-of-tree { args } {
+    global TESTING_IN_BUILD_TREE
+    if { [info exists TESTING_IN_BUILD_TREE] } {
+	return $args;
+    }
+    return [transform $args]
 }
 
 set additional_prunes ""

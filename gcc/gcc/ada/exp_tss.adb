@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,18 +23,21 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Einfo;    use Einfo;
-with Elists;   use Elists;
-with Exp_Util; use Exp_Util;
-with Nlists;   use Nlists;
-with Lib;      use Lib;
-with Restrict; use Restrict;
-with Rident;   use Rident;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Ch6;  use Sem_Ch6;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
+with Atree;          use Atree;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Exp_Util;       use Exp_Util;
+with Nlists;         use Nlists;
+with Lib;            use Lib;
+with Restrict;       use Restrict;
+with Rident;         use Rident;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Ch6;        use Sem_Ch6;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
 
 package body Exp_Tss is
 
@@ -46,7 +49,7 @@ package body Exp_Tss is
      (Typ : Entity_Id;
       Ref : Entity_Id := Empty) return Entity_Id
    is
-      Full_Type : E;
+      Full_Type : Entity_Id;
       Proc      : Entity_Id;
 
    begin
@@ -75,8 +78,11 @@ package body Exp_Tss is
       else
          Proc := Init_Proc (Base_Type (Full_Type), Ref);
 
+         --  For derived record types, if the base type does not have one,
+         --  we use the Init_Proc of the ancestor type.
+
          if No (Proc)
-           and then Is_Composite_Type (Full_Type)
+           and then Is_Record_Type (Full_Type)
            and then Is_Derived_Type (Full_Type)
          then
             return Init_Proc (Root_Type (Full_Type), Ref);

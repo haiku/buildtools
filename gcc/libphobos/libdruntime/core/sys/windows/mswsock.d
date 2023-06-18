@@ -5,11 +5,10 @@
  *
  * Authors: Daniel Keep
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_mswsock.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_mswsock.d)
  */
 module core.sys.windows.mswsock;
 version (Windows):
-@system:
 
 import core.sys.windows.winbase, core.sys.windows.windef;
 import core.sys.windows.basetyps, core.sys.windows.w32api;

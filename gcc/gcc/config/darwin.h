@@ -1,5 +1,5 @@
 /* Target definitions for Darwin (Mac OS X) systems.
-   Copyright (C) 1989-2021 Free Software Foundation, Inc.
+   Copyright (C) 1989-2023 Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
 This file is part of GCC.
@@ -42,6 +42,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #define DARWIN_X86 0
 #define DARWIN_PPC 0
+
+#define OBJECT_FORMAT_MACHO 1
 
 /* Suppress g++ attempt to link in the math library automatically. */
 #define MATH_LIBRARY ""
@@ -141,10 +143,7 @@ extern GTY(()) int darwin_ms_struct;
    Right now there's no mechanism to split up the "variable portion" (%*) of
    the matched spec string, so where we have some driver specs that take 2
    or 3 arguments, these cannot be processed here, but are deferred until the
-   LINK_SPEC, where they are copied verbatim.
-   We have a "safe" version of the MacOS version string, that's been sanity-
-   checked and truncated to minor version.  If the 'tiny' (3rd) portion of the
-   value is not significant, it's better to use this in version-compare().  */
+   LINK_SPEC, where they are copied verbatim.  */
 
 #undef SUBTARGET_DRIVER_SELF_SPECS
 #define SUBTARGET_DRIVER_SELF_SPECS					\
@@ -218,13 +217,8 @@ extern GTY(()) int darwin_ms_struct;
   "%{image_base*:-Xlinker -image_base -Xlinker %*} %<image_base*",	\
   "%{init*:-Xlinker -init -Xlinker %*} %<init*",			\
   "%{multi_module:-Xlinker -multi_module} %<multi_module",		\
-  "%{multiply_defined*:-Xlinker -multiply_defined -Xlinker %*; \
-     :%{shared-libgcc: \
-       %:version-compare(< 10.5 asm_macosx_version_min= -Xlinker) \
-       %:version-compare(< 10.5 asm_macosx_version_min= -multiply_defined) \
-       %:version-compare(< 10.5 asm_macosx_version_min= -Xlinker) \
-       %:version-compare(< 10.5 asm_macosx_version_min= suppress)}} \
-     %<multiply_defined*",						\
+  "%{multiply_defined*:-Xlinker -multiply_defined -Xlinker %*} \
+     %<multiply_defined* ",						\
   "%{multiplydefinedunused*:\
      -Xlinker -multiply_defined_unused -Xlinker %*} \
      %<multiplydefinedunused* ",					\
@@ -283,13 +277,17 @@ extern GTY(()) int darwin_ms_struct;
 #define DARWIN_RDYNAMIC "%{rdynamic:%nrdynamic is not supported}"
 #endif
 
-/* FIXME: we should check that the linker supports the -pie and -no_pie.
+/* Code built with mdynamic-no-pic does not support PIE/PIC, so  we disallow
+   these combinations; we also ensure that the no_pie option is passed to
+   ld64 on system versions that default to PIE when mdynamic-no-pic is given.
+   FIXME: we should check that the linker supports the -pie and -no_pie.
    options.  */
 #define DARWIN_PIE_SPEC \
 "%{pie|fpie|fPIE:\
    %{mdynamic-no-pic: \
      %n'-mdynamic-no-pic' overrides '-pie', '-fpie' or '-fPIE'; \
-     :%:version-compare(>= 10.5 mmacosx-version-min= -pie) }} "
+     :%:version-compare(>= 10.5 mmacosx-version-min= -pie) }; \
+   mdynamic-no-pic:%:version-compare(>= 10.7 mmacosx-version-min= -no_pie) } "
 
 #define DARWIN_NOPIE_SPEC \
 "%{no-pie|fno-pie|fno-PIE: \
@@ -317,7 +315,7 @@ extern GTY(()) int darwin_ms_struct;
   } while (0)
 
 /* Machine dependent cpp options.  Don't add more options here, add
-   them to darwin_cpp_builtins in darwin-c.c.  */
+   them to darwin_cpp_builtins in darwin-c.cc.  */
 
 #undef	CPP_SPEC
 #define CPP_SPEC "%{static:%{!dynamic:-D__STATIC__}}%{!static:-D__DYNAMIC__}" \
@@ -334,7 +332,7 @@ extern GTY(()) int darwin_ms_struct;
 " %:version-compare(>= 10.6 mmacosx-version-min= -no_compact_unwind) "
 
 /* In Darwin linker specs we can put -lcrt0.o and ld will search the library
-   path for crt0.o or -lcrtx.a and it will search for for libcrtx.a.  As for
+   path for crt0.o or -lcrtx.a and it will search for libcrtx.a.  As for
    other ports, we can also put xxx.{o,a}%s and get the appropriate complete
    startfile absolute directory.  This latter point is important when we want
    to override ld's rule of .dylib being found ahead of .a and the user wants
@@ -389,7 +387,7 @@ extern GTY(()) int darwin_ms_struct;
     DARWIN_NOPIE_SPEC \
     DARWIN_RDYNAMIC \
     DARWIN_NOCOMPACT_UNWIND \
-    "}}}}}}} %<pie %<no-pie %<rdynamic %<X "
+    "}}}}}}} %<pie %<no-pie %<rdynamic %<X %<rpath "
 
 /* Spec that controls whether the debug linker is run automatically for
    a link step.  This needs to be done if there is a source file on the
@@ -398,10 +396,10 @@ extern GTY(()) int darwin_ms_struct;
 
 #define DSYMUTIL_SPEC \
   "%{!c:%{!E:%{!S:%{!r:%{!M:%{!MM:%{!fsyntax-only:%{!fdump=*:\
-     %{g*:%{!gstabs*:%{%:debug-level-gt(0): -idsym \
+     %{g*:%{!gctf:%{!gbtf:%{%:debug-level-gt(0): -idsym \
        %{.c|.cc|.C|.cpp|.cp|.c++|.cxx|.CPP|.m|.mm|.s|.f|.f90|\
 	 .f95|.f03|.f77|.for|.F|.F90|.F95|.F03|.d: -dsym }\
-      }}}\
+      }}}}\
    }}}}}}}}"
 
 #define LINK_COMMAND_SPEC LINK_COMMAND_SPEC_A DSYMUTIL_SPEC
@@ -445,12 +443,22 @@ extern GTY(()) int darwin_ms_struct;
                      %:replace-outfile(-lobjc libobjc-gnu.a%s); \
                     :%:replace-outfile(-lobjc -lobjc-gnu )}}\
    %{static|static-libgcc|static-libgfortran:%:replace-outfile(-lgfortran libgfortran.a%s)}\
+   %{static|static-libgcc|static-libquadmath:%:replace-outfile(-lquadmath libquadmath.a%s)}\
+   %{static|static-libgcc|static-libphobos:%:replace-outfile(-lgphobos libgphobos.a%s)}\
    %{static|static-libgcc|static-libstdc++|static-libgfortran:%:replace-outfile(-lgomp libgomp.a%s)}\
    %{static|static-libgcc|static-libstdc++:%:replace-outfile(-lstdc++ libstdc++.a%s)}\
-   %{force_cpusubtype_ALL:-arch %(darwin_arch)} \
+   %{static|static-libgm2:%:replace-outfile(-lm2pim libm2pim.a%s)}\
+   %{static|static-libgm2:%:replace-outfile(-lm2iso libm2iso.a%s)}\
+   %{static|static-libgm2:%:replace-outfile(-lm2min libm2min.a%s)}\
+   %{static|static-libgm2:%:replace-outfile(-lm2log libm2log.a%s)}\
+   %{static|static-libgm2:%:replace-outfile(-lm2cor libm2cor.a%s)}\
+  %{force_cpusubtype_ALL:-arch %(darwin_arch)} \
    %{!force_cpusubtype_ALL:-arch %(darwin_subarch)} "\
    LINK_SYSROOT_SPEC \
   "%{mmacosx-version-min=*:-macosx_version_min %*} \
+   %{!multiply_defined*:%{shared-libgcc: \
+     %:version-compare(< 10.5 mmacosx-version-min= -multiply_defined) \
+     %:version-compare(< 10.5 mmacosx-version-min= suppress) }} \
    %{sectalign*} %{sectcreate*} %{sectobjectsymbols*}  %{sectorder*} \
    %{segaddr*} %{segcreate*} %{segprot*} "
 
@@ -458,48 +466,36 @@ extern GTY(()) int darwin_ms_struct;
 
 #define LIB_SPEC "%{!static:-lSystem}"
 
-/*
-   Note that by default, -lgcc_eh is not linked against.
-   This is because,in general, we need to unwind through system libraries that
-   are linked with the shared unwinder in libunwind (or libgcc_s for 10.4/5).
+/* Note that by default, -lgcc_eh (which provides a statically-linked unwinder)
+   is not used. This is because, in general, we need to unwind through system
+   libraries that are linked with the shared unwinder in libunwind (or libgcc_s
+   for OSX 10.4/5 [darwin8/9]).
 
-   For -static-libgcc: < 10.6, use the unwinder in libgcc_eh (and find
-   the emultls impl. there too).
+   When -static-libgcc is forced: < 10.6, use the unwinder in libgcc_eh (and
+   find the emultls impl. there too).
 
    For -static-libgcc: >= 10.6, the unwinder *still* comes from libSystem and
    we find the emutls impl from lemutls_w. In either case, the builtins etc.
-   are linked from -lgcc.
+   are linked from -lgcc.  The eh library is still available so that it could
+   be specified explicitly if there is some reason to do so.
 
    When we have specified shared-libgcc or any case that might require
    exceptions, we pull the libgcc content (including emulated tls) from
-   -lgcc_s.1 in GCC and the unwinder from /usr/lib/libgcc_s.1 for < 10.6 and
+   -lgcc_s.1.1 in GCC and the unwinder from /usr/lib/libgcc_s.1 for < 10.6 and
    libSystem for >= 10.6 respectively.
    Otherwise, we just link the emutls/builtins from convenience libs.
-
-   If we need exceptions, prior to 10.3.9, then we have to link the static
-   eh lib, since there's no shared version on the system.
-
-   In all cases, libgcc_s.1 will be installed with the compiler, or any app
-   built using it, so we can link the builtins and emutls shared on all.
 
    We have to work around that DYLD_XXXX are disabled in macOS 10.11+ which
    means that any bootstrap trying to use a shared libgcc with a bumped SO-
    name will fail.  This means that we do not accept shared libgcc for these
-   versions.
+   versions (the primary reason for forcing a shared libgcc was that it
+   contained the unwinder on Darwin8 and 9).
 
-   For -static-libgcc: >= 10.6, the unwinder *still* comes from libSystem and
-   we find the emutls impl from lemutls_w. In either case, the builtins etc.
-   are linked from -lgcc.
->
-   Otherwise, we just link the shared version of gcc_s.1.1 and pick up
-   exceptions:
+   When using the shared version of gcc_s.1.1 the unwinder is provided by:
      * Prior to 10.3.9, then we have to link the static eh lib, since there
-       is no shared version on the system.
+       is no shared unwinder version on the system.
      * from 10.3.9 to 10.5, from /usr/lib/libgcc_s.1.dylib
      * from 10.6 onwards, from libSystem.dylib
-
-   In all cases, libgcc_s.1.1 will be installed with the compiler, or any app
-   built using it, so we can link the builtins and emutls shared on all.
 */
 #undef REAL_LIBGCC_SPEC
 #define REAL_LIBGCC_SPEC \
@@ -579,7 +575,7 @@ extern GTY(()) int darwin_ms_struct;
 #endif
 
 #if HAVE_GNU_AS
-/* The options are added in gcc.c for this case.  */
+/* The options are added in gcc.cc for this case.  */
 #define ASM_OPTIONS ""
 #else
 /* When we detect that we're cctools or llvm as, we need to insert the right
@@ -592,14 +588,7 @@ extern GTY(()) int darwin_ms_struct;
 "%{static} -arch %(darwin_arch) " \
 ASM_OPTIONS ASM_MMACOSX_VERSION_MIN_SPEC
 
-#ifdef HAVE_AS_STABS_DIRECTIVE
-/* We only pass a debug option to the assembler if that supports stabs, since
-   dwarf is not uniformly supported in the assemblers.  */
-#define ASM_DEBUG_SPEC  "%{g*:%{%:debug-level-gt(0):%{!gdwarf*:--gstabs}}}"
-#else
 #define ASM_DEBUG_SPEC  ""
-#endif
-
 #undef  ASM_DEBUG_OPTION_SPEC
 #define ASM_DEBUG_OPTION_SPEC	""
 
@@ -610,13 +599,8 @@ ASM_OPTIONS ASM_MMACOSX_VERSION_MIN_SPEC
 /* We now require C++11 to bootstrap and newer tools than those based on
    stabs, so require DWARF-2, even if stabs is supported by the assembler.  */
 
-#define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
-#define DARWIN_PREFER_DWARF
 #define DWARF2_DEBUGGING_INFO 1
-
-#ifdef HAVE_AS_STABS_DIRECTIVE
-#define DBX_DEBUGGING_INFO 1
-#endif
+#define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
 #define DEBUG_FRAME_SECTION	  "__DWARF,__debug_frame,regular,debug"
 #define DEBUG_INFO_SECTION	  "__DWARF,__debug_info,regular,debug"
@@ -648,18 +632,6 @@ ASM_OPTIONS ASM_MMACOSX_VERSION_MIN_SPEC
 #define DEBUG_PUBTYPES_SECTION   ((debug_generate_pub_sections == 2) \
                                ? "__DWARF,__debug_gnu_pubt,regular,debug" \
                                : "__DWARF,__debug_pubtypes,regular,debug")
-
-/* When generating stabs debugging, use N_BINCL entries.  */
-
-#define DBX_USE_BINCL
-
-/* There is no limit to the length of stabs strings.  */
-
-#define DBX_CONTIN_LENGTH 0
-
-/* gdb needs a null N_SO at the end of each file for scattered loading.  */
-
-#define DBX_OUTPUT_NULL_N_SO_AT_MAIN_SOURCE_FILE_END
 
 /* GCC's definition of 'one_only' is the same as its definition of 'weak'.  */
 #define MAKE_DECL_ONE_ONLY(DECL) (DECL_WEAK (DECL) = 1)
@@ -867,13 +839,12 @@ int darwin_label_is_anonymous_local_objc_name (const char *name);
   if ((LOG) != 0)			\
     fprintf (FILE, "\t%s\t%d\n", ALIGN_ASM_OP, (LOG))
 
-/* The maximum alignment which the object file format can support in
-   bits.  For Mach-O, this is 2^15 bytes.  */
+/* The maximum alignment which the object file format can support in bits
+   which depends on the OS version and whether the object is a common
+   variable.  */
 
 #undef	MAX_OFILE_ALIGNMENT
-#define MAX_OFILE_ALIGNMENT (0x8000 * 8)
-
-#define L2_MAX_OFILE_ALIGNMENT 15
+#define MAX_OFILE_ALIGNMENT ((1U << L2_MAX_OFILE_ALIGNMENT) * 8U)
 
 /*  These are the three variants that emit referenced blank space.  */
 #define ASM_OUTPUT_ALIGNED_BSS(FILE, DECL, NAME, SIZE, ALIGN)		\
@@ -1229,5 +1200,11 @@ extern void darwin_driver_init (unsigned int *,struct cl_decoded_option **);
 #  define LD64_VERSION DEF_LD64
 # endif
 #endif
+
+/* CTF and BTF support.  */
+#undef CTF_INFO_SECTION_NAME
+#define CTF_INFO_SECTION_NAME "__CTF_BTF,__ctf,regular,debug"
+#undef BTF_INFO_SECTION_NAME
+#define BTF_INFO_SECTION_NAME "__CTF_BTF,__btf,regular,debug"
 
 #endif /* CONFIG_DARWIN_H */

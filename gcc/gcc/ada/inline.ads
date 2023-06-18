@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -94,7 +94,7 @@ package Inline is
       --  This means we have to capture this information from the current scope
       --  at the point of instantiation.
 
-      Warnings : Warning_Record;
+      Warnings : Warnings_State;
       --  Capture values of warning flags
    end record;
 
@@ -197,6 +197,15 @@ package Inline is
    --  the subprogram body N. If N can be inlined by the frontend (supported
    --  cases documented in Check_Body_To_Inline) then build the body-to-inline
    --  associated with N and attach it to the declaration node of Spec_Id.
+
+   procedure Check_Object_Renaming_In_GNATprove_Mode (Spec_Id : Entity_Id)
+   with
+     Pre => GNATprove_Mode;
+   --  This procedure is called only in GNATprove mode, on subprograms for
+   --  which a Body_To_Inline was created, to check if the subprogram has
+   --  references to object renamings which will be replaced by the special
+   --  SPARK expansion into nodes of a different kind, which is not expected
+   --  by the inlining mechanism. In that case, the Body_To_Inline is deleted.
 
    procedure Check_Package_Body_For_Inlining (N : Node_Id; P : Entity_Id);
    --  If front-end inlining is enabled and a package declaration contains

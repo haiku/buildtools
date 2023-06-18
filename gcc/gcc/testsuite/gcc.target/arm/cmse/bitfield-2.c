@@ -1,5 +1,5 @@
-/* { dg-do run } */
-/* { dg-options "--save-temps -mcmse -Wl,--section-start,.gnu.sgstubs=0x00400000" } */
+/* This test is executed only if the execution engine supports CMSE instructions.  */
+/* { dg-options "--save-temps -mcmse -Wl,--section-start,.gnu.sgstubs=[cmse_sgstubs]" } */
 
 typedef struct
 {

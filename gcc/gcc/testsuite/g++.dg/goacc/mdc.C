@@ -43,9 +43,11 @@ t1 ()
 #pragma acc exit data detach(rz[:]) /* { dg-error "expected single pointer in .detach. clause" } */
 /* { dg-error "has no data movement clause" "" { target *-*-* } .-1 } */
 #pragma acc enter data attach(rz[3]) /* { dg-error "expected pointer in .attach. clause" } */
+/* { dg-error "has no data movement clause" "" { target *-*-* } .-1 } */
 #pragma acc exit data detach(rz[3]) /* { dg-error "expected pointer in .detach. clause" } */
+/* { dg-error "has no data movement clause" "" { target *-*-* } .-1 } */
 
-#pragma acc acc enter data attach(rs.e)
+#pragma acc enter data attach(rs.e)
 #pragma acc exit data detach(rs.e) attach(rz) /* { dg-error ".attach. is not valid for" } */
 
 #pragma acc data attach(rs.e)

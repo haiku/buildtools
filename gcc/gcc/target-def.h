@@ -1,5 +1,5 @@
 /* Default initializers for a generic GCC target.
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2023 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -63,7 +63,7 @@
 #  ifdef TARGET_ASM_NAMED_SECTION
 #   define TARGET_ASM_CONSTRUCTOR default_named_section_asm_out_constructor
 #  else
-#   define TARGET_ASM_CONSTRUCTOR default_stabs_asm_out_constructor
+#   define TARGET_ASM_CONSTRUCTOR default_asm_out_constructor
 #  endif
 # endif
 #endif
@@ -75,7 +75,7 @@
 #  ifdef TARGET_ASM_NAMED_SECTION
 #   define TARGET_ASM_DESTRUCTOR default_named_section_asm_out_destructor
 #  else
-#   define TARGET_ASM_DESTRUCTOR default_stabs_asm_out_destructor
+#   define TARGET_ASM_DESTRUCTOR default_asm_out_destructor
 #  endif
 # endif
 #endif

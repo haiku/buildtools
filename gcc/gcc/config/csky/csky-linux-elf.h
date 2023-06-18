@@ -1,5 +1,5 @@
 /* Declarations for C-SKY targets running Linux.
-   Copyright (C) 2018-2021 Free Software Foundation, Inc.
+   Copyright (C) 2018-2023 Free Software Foundation, Inc.
    Contributed by C-SKY Microsystems and Mentor Graphics.
 
    This file is part of GCC.
@@ -64,6 +64,17 @@
   "
 
 #define GLIBC_DYNAMIC_LINKER "/lib/ld-linux-cskyv2%{mfloat-abi=hard:-hf}%{mbig-endian:-be}.so.1"
+
+#ifdef CSKY_ENABLE_MULTILIB
+#undef SYSROOT_SUFFIX_SPEC
+#define SYSROOT_SUFFIX_SPEC					\
+  "%{mbig-endian:/big}"						\
+  "%{mcpu=ck807*:/ck807}"					\
+  "%{mcpu=ck860*:/ck860}"					\
+  "%{mcpu=ck800*:/ck800}"					\
+  "%{mfloat-abi=softfp:/soft-fp}"				\
+  "%{mfloat-abi=hard:/hard-fp}"
+#endif
 
 #define LINUX_TARGET_LINK_SPEC	"%{h*} %{version:-v}		\
    %{b}								\
@@ -133,3 +144,13 @@
 #ifdef IN_LIBGCC2
 extern int cacheflush (void *__addr, const int __nbytes, const int __op);
 #endif
+
+/* The SYNC operations are implemented as library functions, not
+   INSN patterns.  As a result, the HAVE defines for the patterns are
+   not defined.  We need to define them to generate the corresponding
+   __GCC_HAVE_SYNC_COMPARE_AND_SWAP_* and __GCC_ATOMIC_*_LOCK_FREE
+   defines.  */
+
+#define HAVE_sync_compare_and_swapqi 1
+#define HAVE_sync_compare_and_swaphi 1
+#define HAVE_sync_compare_and_swapsi 1

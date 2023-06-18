@@ -1,4 +1,5 @@
-/* { dg-options "-Os -march=rv32imc -mabi=ilp32" } */
+/* { dg-options "-march=rv32imc -mabi=ilp32" } */
+/* { dg-skip-if "" { *-*-* } { "*" } { "-Os" } } */
 
 /* shorten_memrefs should use a correct base address*/
 
@@ -22,6 +23,6 @@ load (char *p)
   return a;
 }
 
-/* { dg-final { scan-assembler "store:\n\taddi\ta\[0-7\],a\[0-7\],1" } } */
-/* { dg-final { scan-assembler "load:\n\taddi\ta\[0-7\],a\[0-7\],1" } } */
+/* { dg-final { scan-assembler "store:\n(\t?\\.\[^\n\]*\n)*\taddi\ta\[0-7\],a\[0-7\],1" } } */
+/* { dg-final { scan-assembler "load:\n(\t?\\.\[^\n\]*\n)*\taddi\ta\[0-7\],a\[0-7\],1" } } */
 

@@ -1,5 +1,5 @@
-/* Declarations for interface to insn recognizer and insn-output.c.
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+/* Declarations for interface to insn recognizer and insn-output.cc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -24,7 +24,7 @@ along with GCC; see the file COPYING3.  If not see
    a type that has at least MAX_RECOG_ALTERNATIVES + 1 bits, with the extra
    bit giving an invalid value that can be used to mean "uninitialized".  */
 #define MAX_RECOG_ALTERNATIVES 35
-typedef uint64_t alternative_mask;  /* Keep in sync with genattrtab.c.  */
+typedef uint64_t alternative_mask;  /* Keep in sync with genattrtab.cc.  */
 
 /* A mask of all alternatives.  */
 #define ALL_ALTERNATIVES ((alternative_mask) -1)
@@ -76,7 +76,7 @@ struct operand_alternative
 /* Return the class for operand I of alternative ALT, taking matching
    constraints into account.  */
 
-static inline enum reg_class
+inline enum reg_class
 alternative_class (const operand_alternative *alt, int i)
 {
   return alt[i].matches >= 0 ? alt[alt[i].matches].cl : alt[i].cl;
@@ -200,11 +200,11 @@ extern void temporarily_undo_changes (int);
 extern void redo_changes (int);
 extern int constrain_operands (int, alternative_mask);
 extern int constrain_operands_cached (rtx_insn *, int);
-extern int memory_address_addr_space_p (machine_mode, rtx, addr_space_t);
+extern bool memory_address_addr_space_p (machine_mode, rtx, addr_space_t);
 #define memory_address_p(mode,addr) \
 	memory_address_addr_space_p ((mode), (addr), ADDR_SPACE_GENERIC)
-extern int strict_memory_address_addr_space_p (machine_mode, rtx,
-					       addr_space_t);
+extern bool strict_memory_address_addr_space_p (machine_mode, rtx,
+						addr_space_t);
 #define strict_memory_address_p(mode,addr) \
 	strict_memory_address_addr_space_p ((mode), (addr), ADDR_SPACE_GENERIC)
 extern int validate_replace_rtx_subexp (rtx, rtx, rtx_insn *, rtx *);
@@ -218,9 +218,9 @@ extern int num_changes_pending (void);
 extern bool reg_fits_class_p (const_rtx, reg_class_t, int, machine_mode);
 extern bool valid_insn_p (rtx_insn *);
 
-extern int offsettable_memref_p (rtx);
-extern int offsettable_nonstrict_memref_p (rtx);
-extern int offsettable_address_addr_space_p (int, machine_mode, rtx,
+extern bool offsettable_memref_p (rtx);
+extern bool offsettable_nonstrict_memref_p (rtx);
+extern bool offsettable_address_addr_space_p (int, machine_mode, rtx,
 					     addr_space_t);
 #define offsettable_address_p(strict,mode,addr) \
 	offsettable_address_addr_space_p ((strict), (mode), (addr), \
@@ -229,7 +229,7 @@ extern bool mode_dependent_address_p (rtx, addr_space_t);
 
 extern int recog (rtx, rtx_insn *, int *);
 #ifndef GENERATOR_FILE
-static inline int recog_memoized (rtx_insn *insn);
+inline int recog_memoized (rtx_insn *insn);
 #endif
 extern void add_clobbers (rtx, int);
 extern int added_clobbers_hard_reg_p (int);
@@ -266,7 +266,7 @@ extern void copy_frame_info_to_split_insn (rtx_insn *, rtx_insn *);
    The automatically-generated function `recog' is normally called
    through this one.  */
 
-static inline int
+inline int
 recog_memoized (rtx_insn *insn)
 {
   if (INSN_CODE (insn) < 0)
@@ -277,7 +277,7 @@ recog_memoized (rtx_insn *insn)
 
 /* Skip chars until the next ',' or the end of the string.  This is
    useful to skip alternatives in a constraint string.  */
-static inline const char *
+inline const char *
 skip_alternative (const char *p)
 {
   const char *r = p;
@@ -382,7 +382,7 @@ extern const operand_alternative *recog_op_alt;
    on operand OP of the current instruction alternative (which_alternative).
    Only valid after calling preprocess_constraints and constrain_operands.  */
 
-inline static const operand_alternative *
+inline const operand_alternative *
 which_op_alt ()
 {
   gcc_checking_assert (IN_RANGE (which_alternative, 0,
@@ -390,10 +390,10 @@ which_op_alt ()
   return &recog_op_alt[which_alternative * recog_data.n_operands];
 }
 
-/* A table defined in insn-output.c that give information about
+/* A table defined in insn-output.cc that give information about
    each insn-code value.  */
 
-typedef int (*insn_operand_predicate_fn) (rtx, machine_mode);
+typedef bool (*insn_operand_predicate_fn) (rtx, machine_mode);
 typedef const char * (*insn_output_fn) (rtx *, rtx_insn *);
 
 struct insn_gen_fn
@@ -413,7 +413,7 @@ struct insn_gen_fn
 
   // The wrapped function pointer must be public and there must not be any
   // constructors.  Otherwise the insn_data_d struct initializers generated
-  // by genoutput.c will result in static initializer functions, which defeats
+  // by genoutput.cc will result in static initializer functions, which defeats
   // the purpose of the generated insn_data_d array.
   stored_funcptr func;
 };

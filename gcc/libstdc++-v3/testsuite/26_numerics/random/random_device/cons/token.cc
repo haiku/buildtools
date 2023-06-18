@@ -3,7 +3,7 @@
 //
 // 2008-11-24  Edward M. Smith-Rowland <3dw4rd@verizon.net>
 //
-// Copyright (C) 2008-2021 Free Software Foundation, Inc.
+// Copyright (C) 2008-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -52,8 +52,10 @@ test03()
 {
   // At least one of these tokens should be valid.
   const std::string tokens[] = {
-    "rdseed", "rdrand", "rand_s", "/dev/urandom", "/dev/random", "mt19937",
-    "prng"
+    "rdseed", "rdrand", "darn",
+    "rand_s", "/dev/urandom", "/dev/random",
+    "getentropy", "arc4random",
+    "mt19937", "prng"
   };
   int count = 0;
   for (const std::string& token : tokens)

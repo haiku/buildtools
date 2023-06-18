@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2007-2023 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -365,17 +365,18 @@ _mm_insert_ps (__m128 __D, __m128 __S, const int __N)
 extern __inline int __attribute__((__gnu_inline__, __always_inline__, __artificial__))
 _mm_extract_ps (__m128 __X, const int __N)
 {
-  union { int i; float f; } __tmp;
-  __tmp.f = __builtin_ia32_vec_ext_v4sf ((__v4sf)__X, __N);
-  return __tmp.i;
+  union { int __i; float __f; } __tmp;
+  __tmp.__f = __builtin_ia32_vec_ext_v4sf ((__v4sf)__X, __N);
+  return __tmp.__i;
 }
 #else
 #define _mm_extract_ps(X, N)						\
   (__extension__							\
    ({									\
-     union { int i; float f; } __tmp;					\
-     __tmp.f = __builtin_ia32_vec_ext_v4sf ((__v4sf)(__m128)(X), (int)(N)); \
-     __tmp.i;								\
+     union { int __i; float __f; } __tmp;				\
+     __tmp.__f = __builtin_ia32_vec_ext_v4sf ((__v4sf)(__m128)(X),	\
+					      (int)(N));		\
+     __tmp.__i;								\
    }))
 #endif
 
@@ -810,17 +811,11 @@ _mm_cmpgt_epi64 (__m128i __X, __m128i __Y)
 
 #include <popcntintrin.h>
 
-#ifndef __SSE4_1__
+#ifndef __CRC32__
 #pragma GCC push_options
-#pragma GCC target("sse4.1")
-#define __DISABLE_SSE4_1__
-#endif /* __SSE4_1__ */
-
-#ifndef __SSE4_2__
-#pragma GCC push_options
-#pragma GCC target("sse4.2")
-#define __DISABLE_SSE4_2__
-#endif /* __SSE4_1__ */
+#pragma GCC target("crc32")
+#define __DISABLE_CRC32__
+#endif /* __CRC32__ */
 
 /* Accumulate CRC32 (polynomial 0x11EDC6F41) value.  */
 extern __inline unsigned int __attribute__((__gnu_inline__, __always_inline__, __artificial__))
@@ -849,14 +844,9 @@ _mm_crc32_u64 (unsigned long long __C, unsigned long long __V)
 }
 #endif
 
-#ifdef __DISABLE_SSE4_2__
-#undef __DISABLE_SSE4_2__
+#ifdef __DISABLE_CRC32__
+#undef __DISABLE_CRC32__
 #pragma GCC pop_options
-#endif /* __DISABLE_SSE4_2__ */
-
-#ifdef __DISABLE_SSE4_1__
-#undef __DISABLE_SSE4_1__
-#pragma GCC pop_options
-#endif /* __DISABLE_SSE4_1__ */
+#endif /* __DISABLE_CRC32__ */
 
 #endif /* _SMMINTRIN_H_INCLUDED */

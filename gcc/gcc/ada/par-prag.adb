@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -65,7 +65,7 @@ function Prag (Pragma_Node : Node_Id; Semi : Source_Ptr) return Node_Id is
    --  the routine for the argument one past the last present argument, but
    --  that is the only case in which a non-present argument can be referenced.
 
-   procedure Check_Arg_Count (Required : Int);
+   procedure Check_Arg_Count (Required : Nat);
    --  Check argument count for pragma = Required. If not give error and raise
    --  Error_Resync.
 
@@ -73,10 +73,12 @@ function Prag (Pragma_Node : Node_Id; Semi : Source_Ptr) return Node_Id is
    --  Check the expression of the specified argument to make sure that it
    --  is a string literal. If not give error and raise Error_Resync.
 
-   procedure Check_Arg_Is_On_Or_Off (Arg : Node_Id);
+   procedure Check_Arg_Is_On_Or_Off
+     (Arg : Node_Id; All_OK_Too : Boolean := False);
    --  Check the expression of the specified argument to make sure that it
    --  is an identifier which is either ON or OFF, and if not, then issue
-   --  an error message and raise Error_Resync.
+   --  an error message and raise Error_Resync. If All_OK_Too is True,
+   --  then an ALL identifer is also acceptable.
 
    procedure Check_No_Identifier (Arg : Node_Id);
    --  Checks that the given argument does not have an identifier. If
@@ -155,10 +157,10 @@ function Prag (Pragma_Node : Node_Id; Semi : Source_Ptr) return Node_Id is
    -- Check_Arg_Count --
    ---------------------
 
-   procedure Check_Arg_Count (Required : Int) is
+   procedure Check_Arg_Count (Required : Nat) is
    begin
       if Arg_Count /= Required then
-         Error_Msg ("wrong number of arguments for pragma%", Pragma_Sloc);
+         Error_Msg_N ("wrong number of arguments for pragma%", Pragma_Node);
          raise Error_Resync;
       end if;
    end Check_Arg_Count;
@@ -167,17 +169,26 @@ function Prag (Pragma_Node : Node_Id; Semi : Source_Ptr) return Node_Id is
    -- Check_Arg_Is_On_Or_Off --
    ----------------------------
 
-   procedure Check_Arg_Is_On_Or_Off (Arg : Node_Id) is
+   procedure Check_Arg_Is_On_Or_Off
+     (Arg : Node_Id; All_OK_Too : Boolean := False)
+   is
       Argx : constant Node_Id := Expression (Arg);
-
+      Error : Boolean := Nkind (Expression (Arg)) /= N_Identifier;
    begin
-      if Nkind (Expression (Arg)) /= N_Identifier
-        or else Chars (Argx) not in Name_On | Name_Off
-      then
+      if not Error then
+         Error := (Chars (Argx) not in Name_On | Name_Off)
+           and then not (All_OK_Too and Chars (Argx) = Name_All);
+      end if;
+      if Error then
          Error_Msg_Name_2 := Name_On;
          Error_Msg_Name_3 := Name_Off;
 
-         Error_Msg ("argument for pragma% must be% or%", Sloc (Argx));
+         if All_OK_Too then
+            Error_Msg_Name_4 := Name_All;
+            Error_Msg_N ("argument for pragma% must be% or% or%", Argx);
+         else
+            Error_Msg_N ("argument for pragma% must be% or%", Argx);
+         end if;
          raise Error_Resync;
       end if;
    end Check_Arg_Is_On_Or_Off;
@@ -189,9 +200,9 @@ function Prag (Pragma_Node : Node_Id; Semi : Source_Ptr) return Node_Id is
    procedure Check_Arg_Is_String_Literal (Arg : Node_Id) is
    begin
       if Nkind (Expression (Arg)) /= N_String_Literal then
-         Error_Msg
+         Error_Msg_N
            ("argument for pragma% must be string literal",
-             Sloc (Expression (Arg)));
+            Expression (Arg));
          raise Error_Resync;
       end if;
    end Check_Arg_Is_String_Literal;
@@ -385,32 +396,14 @@ begin
          end if;
 
       --------------
-      -- Ada_2020 --
+      -- Ada_2022 --
       --------------
 
-      when Pragma_Ada_2020 =>
+      when Pragma_Ada_2022 =>
          if Arg_Count = 0 then
-            Ada_Version := Ada_2020;
-            Ada_Version_Explicit := Ada_2020;
+            Ada_Version := Ada_2022;
+            Ada_Version_Explicit := Ada_2022;
             Ada_Version_Pragma := Pragma_Node;
-         end if;
-
-      ---------------------------
-      -- Compiler_Unit_Warning --
-      ---------------------------
-
-      --  This pragma must be processed at parse time, since the resulting
-      --  status may be tested during the parsing of the program.
-
-      when Pragma_Compiler_Unit
-         | Pragma_Compiler_Unit_Warning
-      =>
-         Check_Arg_Count (0);
-
-         --  Only recognized in main unit
-
-         if Current_Source_Unit = Main_Unit then
-            Compiler_Unit := True;
          end if;
 
       -----------
@@ -432,7 +425,7 @@ begin
       -- Extensions_Allowed (GNAT) --
       -------------------------------
 
-      --  pragma Extensions_Allowed (Off | On)
+      --  pragma Extensions_Allowed (Off | On | All)
 
       --  The processing for pragma Extensions_Allowed must be done at
       --  parse time, since extensions mode may affect what is accepted.
@@ -440,13 +433,13 @@ begin
       when Pragma_Extensions_Allowed =>
          Check_Arg_Count (1);
          Check_No_Identifier (Arg1);
-         Check_Arg_Is_On_Or_Off (Arg1);
+         Check_Arg_Is_On_Or_Off (Arg1, All_OK_Too => True);
 
          if Chars (Expression (Arg1)) = Name_On then
-            Extensions_Allowed := True;
-            Ada_Version := Ada_Version_Type'Last;
+            Ada_Version := Ada_With_Core_Extensions;
+         elsif Chars (Expression (Arg1)) = Name_All then
+            Ada_Version := Ada_With_All_Extensions;
          else
-            Extensions_Allowed := False;
             Ada_Version := Ada_Version_Explicit;
          end if;
 
@@ -466,7 +459,7 @@ begin
          A := Expression (Arg1);
 
          if Nkind (A) /= N_Identifier then
-            Error_Msg ("incorrect argument for pragma %", Sloc (A));
+            Error_Msg_N ("incorrect argument for pragma %", A);
          else
             Set_Name_Table_Boolean3 (Chars (A), True);
          end if;
@@ -718,9 +711,9 @@ begin
          begin
             if Prag_Id = Pragma_Source_File_Name then
                if Project_File_In_Use = In_Use then
-                  Error_Msg
+                  Error_Msg_N
                     ("pragma Source_File_Name cannot be used " &
-                     "with a project file", Pragma_Sloc);
+                     "with a project file", Pragma_Node);
 
                else
                   Project_File_In_Use := Not_In_Use;
@@ -728,9 +721,9 @@ begin
 
             else
                if Project_File_In_Use = Not_In_Use then
-                  Error_Msg
+                  Error_Msg_N
                     ("pragma Source_File_Name_Project should only be used " &
-                     "with a project file", Pragma_Sloc);
+                     "with a project file", Pragma_Node);
                else
                   Project_File_In_Use := In_Use;
                end if;
@@ -773,9 +766,9 @@ begin
                     or else Intval (Expr) > 999
                     or else Intval (Expr) <= 0
                   then
-                     Error_Msg
+                     Error_Msg_N
                        ("pragma% index must be integer literal" &
-                        " in range 1 .. 999", Sloc (Expr));
+                        " in range 1 .. 999", Expr);
                      raise Error_Resync;
                   else
                      Index := UI_To_Int (Intval (Expr));
@@ -908,8 +901,8 @@ begin
            and then Num_SRef_Pragmas (Current_Source_File) = 0
            and then Operating_Mode /= Check_Syntax
          then
-            Error_Msg -- CODEFIX
-              ("first % pragma must be first line of file", Pragma_Sloc);
+            Error_Msg_N -- CODEFIX
+              ("first % pragma must be first line of file", Pragma_Node);
             raise Error_Resync;
          end if;
 
@@ -917,9 +910,9 @@ begin
 
          if Arg_Count = 1 then
             if Num_SRef_Pragmas (Current_Source_File) = 0 then
-               Error_Msg
+               Error_Msg_N
                  ("file name required for first % pragma in file",
-                  Pragma_Sloc);
+                  Pragma_Node);
                raise Error_Resync;
             else
                Fname := No_File;
@@ -934,17 +927,17 @@ begin
 
             if Num_SRef_Pragmas (Current_Source_File) > 0 then
                if Fname /= Full_Ref_Name (Current_Source_File) then
-                  Error_Msg
-                    ("file name must be same in all % pragmas", Pragma_Sloc);
+                  Error_Msg_N
+                    ("file name must be same in all % pragmas", Pragma_Node);
                   raise Error_Resync;
                end if;
             end if;
          end if;
 
          if Nkind (Expression (Arg1)) /= N_Integer_Literal then
-            Error_Msg
+            Error_Msg_N
               ("argument for pragma% must be integer literal",
-                Sloc (Expression (Arg1)));
+               Expression (Arg1));
             raise Error_Resync;
 
          --  OK, this source reference pragma is effective, however, we
@@ -1059,7 +1052,7 @@ begin
             end if;
 
             if not OK then
-               Error_Msg ("incorrect argument for pragma%", Sloc (A));
+               Error_Msg_N ("incorrect argument for pragma%", A);
                raise Error_Resync;
             end if;
          end if;
@@ -1286,8 +1279,7 @@ begin
 
          elsif Nkind (A) = N_Character_Literal then
             declare
-               R : constant Char_Code :=
-                     Char_Code (UI_To_Int (Char_Literal_Value (A)));
+               R : constant Char_Code := UI_To_CC (Char_Literal_Value (A));
             begin
                if In_Character_Range (R) then
                   Wide_Character_Encoding_Method :=
@@ -1340,6 +1332,7 @@ begin
          | Pragma_CPP_Virtual
          | Pragma_CPP_Vtable
          | Pragma_CPU
+         | Pragma_CUDA_Device
          | Pragma_CUDA_Execute
          | Pragma_CUDA_Global
          | Pragma_C_Pass_By_Copy
@@ -1381,7 +1374,6 @@ begin
          | Pragma_Export_Function
          | Pragma_Export_Object
          | Pragma_Export_Procedure
-         | Pragma_Export_Value
          | Pragma_Export_Valued_Procedure
          | Pragma_Extend_System
          | Pragma_Extensions_Visible
@@ -1392,6 +1384,7 @@ begin
          | Pragma_Finalize_Storage_Only
          | Pragma_Ghost
          | Pragma_Global
+         | Pragma_GNAT_Annotate
          | Pragma_Ident
          | Pragma_Implementation_Defined
          | Pragma_Implemented
@@ -1525,7 +1518,6 @@ begin
          | Pragma_Unevaluated_Use_Of_Old
          | Pragma_Unimplemented_Unit
          | Pragma_Universal_Aliasing
-         | Pragma_Universal_Data
          | Pragma_Unmodified
          | Pragma_Unreferenced
          | Pragma_Unreferenced_Objects

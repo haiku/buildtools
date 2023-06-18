@@ -1,5 +1,5 @@
 ;;- Machine description for Renesas / SuperH SH.
-;;  Copyright (C) 1993-2021 Free Software Foundation, Inc.
+;;  Copyright (C) 1993-2023 Free Software Foundation, Inc.
 ;;  Contributed by Steve Chamberlain (sac@cygnus.com).
 ;;  Improved by Jim Wilson (wilson@cygnus.com).
 
@@ -6424,7 +6424,7 @@
    (clobber (reg:SI T_REG))]
   "TARGET_SH2"
   "#"
-  ""
+  "&& 1"
   [(parallel [(set (reg:SI T_REG)
 		   (eq:SI (match_dup 2) (const_int 1)))
 	      (set (match_dup 0) (plus:SI (match_dup 2) (const_int -1)))])

@@ -1,6 +1,6 @@
 /* Plugin for AMD GCN execution.
 
-   Copyright (C) 2013-2021 Free Software Foundation, Inc.
+   Copyright (C) 2013-2023 Free Software Foundation, Inc.
 
    Contributed by Mentor Embedded
 
@@ -29,6 +29,7 @@
 /* {{{ Includes and defines  */
 
 #include "config.h"
+#include "symcat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +42,7 @@
 #include <dlfcn.h>
 #include <signal.h>
 #include "libgomp-plugin.h"
+#include "config/gcn/libgomp-gcn.h"  /* For struct output.  */
 #include "gomp-constants.h"
 #include <elf.h>
 #include "oacc-plugin.h"
@@ -235,37 +237,10 @@ struct kernel_dispatch
    in libgomp target code.  */
 
 struct kernargs {
-  /* Leave space for the real kernel arguments.
-     OpenACC and OpenMP only use one pointer.  */
-  int64_t dummy1;
-  int64_t dummy2;
-
-  /* A pointer to struct output, below, for console output data.  */
-  int64_t out_ptr;
-
-  /* A pointer to struct heap, below.  */
-  int64_t heap_ptr;
-
-  /* A pointer to an ephemeral memory arena.
-    Only needed for OpenMP.  */
-  int64_t arena_ptr;
+  struct kernargs_abi abi;
 
   /* Output data.  */
-  struct output {
-    int return_value;
-    unsigned int next_output;
-    struct printf_data {
-      int written;
-      char msg[128];
-      int type;
-      union {
-	int64_t ivalue;
-	double dvalue;
-	char text[128];
-      };
-    } queue[1024];
-    unsigned int consumed;
-  } output_data;
+  struct output output_data;
 };
 
 /* A queue entry for a future asynchronous launch.  */
@@ -292,7 +267,6 @@ struct copy_data
   void *dst;
   const void *src;
   size_t len;
-  bool free_src;
   struct goacc_asyncqueue *aq;
 };
 
@@ -392,7 +366,6 @@ struct gcn_image_desc
   const unsigned kernel_count;
   struct hsa_kernel_description *kernel_infos;
   const unsigned global_variable_count;
-  struct global_var_info *global_variables;
 };
 
 /* This enum mirrors the corresponding LLVM enum's values for all ISAs that we
@@ -403,7 +376,8 @@ typedef enum {
   EF_AMDGPU_MACH_AMDGCN_GFX803 = 0x02a,
   EF_AMDGPU_MACH_AMDGCN_GFX900 = 0x02c,
   EF_AMDGPU_MACH_AMDGCN_GFX906 = 0x02f,
-  EF_AMDGPU_MACH_AMDGCN_GFX908 = 0x030
+  EF_AMDGPU_MACH_AMDGCN_GFX908 = 0x030,
+  EF_AMDGPU_MACH_AMDGCN_GFX90a = 0x03f
 } EF_AMDGPU_MACH;
 
 const static int EF_AMDGPU_MACH_MASK = 0x000000ff;
@@ -439,9 +413,9 @@ struct agent_info
   /* The HSA memory region from which to allocate device data.  */
   hsa_region_t data_region;
 
-  /* Allocated team arenas.  */
-  struct team_arena_list *team_arena_list;
-  pthread_mutex_t team_arena_write_lock;
+  /* Allocated ephemeral memories (team arena and stack space).  */
+  struct ephemeral_memories_list *ephemeral_memories_list;
+  pthread_mutex_t ephemeral_memories_write_lock;
 
   /* Read-write lock that protects kernels which are running or about to be run
      from interference with loading and unloading of images.  Needs to be
@@ -523,17 +497,18 @@ struct module_info
 };
 
 /* A linked list of memory arenas allocated on the device.
-   These are only used by OpenMP, as a means to optimize per-team malloc.  */
+   These are used by OpenMP, as a means to optimize per-team malloc,
+   and for host-accessible stack space.  */
 
-struct team_arena_list
+struct ephemeral_memories_list
 {
-  struct team_arena_list *next;
+  struct ephemeral_memories_list *next;
 
-  /* The number of teams determines the size of the allocation.  */
-  int num_teams;
-  /* The device address of the arena itself.  */
-  void *arena;
-  /* A flag to prevent two asynchronous kernels trying to use the same arena.
+  /* The size is determined by the number of teams and threads.  */
+  size_t size;
+  /* The device address allocated memory.  */
+  void *address;
+  /* A flag to prevent two asynchronous kernels trying to use the same memory.
      The mutex is locked until the kernel exits.  */
   pthread_mutex_t in_use;
 };
@@ -552,15 +527,6 @@ struct hsa_context_info
   char driver_version_s[30];
 };
 
-/* Format of the on-device heap.
-
-   This must match the definition in Newlib and gcn-run.  */
-
-struct heap {
-  int64_t size;
-  char data[0];
-};
-
 /* }}}  */
 /* {{{ Global variables  */
 
@@ -577,6 +543,11 @@ static struct hsa_runtime_fn_info hsa_fns;
    Beware that heap usage increases with OpenMP teams.  See also arenas.  */
 
 static size_t gcn_kernel_heap_size = DEFAULT_GCN_HEAP_SIZE;
+
+/* Ephemeral memory sizes for each kernel launch.  */
+
+static int team_arena_size = DEFAULT_TEAM_ARENA_SIZE;
+static int stack_size = DEFAULT_GCN_STACK_SIZE;
 
 /* Flag to decide whether print to stderr information about what is going on.
    Set in init_debug depending on environment variables.  */
@@ -1033,9 +1004,13 @@ print_kernel_dispatch (struct kernel_dispatch *dispatch, unsigned indent)
   fprintf (stderr, "%*squeue: %p\n", indent, "", dispatch->queue);
   fprintf (stderr, "%*skernarg_address: %p\n", indent, "", kernargs);
   fprintf (stderr, "%*sheap address: %p\n", indent, "",
-	   (void*)kernargs->heap_ptr);
-  fprintf (stderr, "%*sarena address: %p\n", indent, "",
-	   (void*)kernargs->arena_ptr);
+	   (void*)kernargs->abi.heap_ptr);
+  fprintf (stderr, "%*sarena address: %p (%d bytes per workgroup)\n", indent,
+	   "", (void*)kernargs->abi.arena_ptr,
+	   kernargs->abi.arena_size_per_team);
+  fprintf (stderr, "%*sstack address: %p (%d bytes per wavefront)\n", indent,
+	   "", (void*)kernargs->abi.stack_ptr,
+	   kernargs->abi.stack_size_per_thread);
   fprintf (stderr, "%*sobject: %lu\n", indent, "", dispatch->object);
   fprintf (stderr, "%*sprivate_segment_size: %u\n", indent, "",
 	   dispatch->private_segment_size);
@@ -1094,6 +1069,22 @@ init_environment_variables (void)
       size_t tmp = atol (heap);
       if (tmp)
 	gcn_kernel_heap_size = tmp;
+    }
+
+  const char *arena = secure_getenv ("GCN_TEAM_ARENA_SIZE");
+  if (arena)
+    {
+      int tmp = atoi (arena);
+      if (tmp)
+	team_arena_size = tmp;;
+    }
+
+  const char *stack = secure_getenv ("GCN_STACK_SIZE");
+  if (stack)
+    {
+      int tmp = atoi (stack);
+      if (tmp)
+	stack_size = tmp;;
     }
 }
 
@@ -1163,6 +1154,18 @@ limit_worker_threads (int threads)
   return threads;
 }
 
+/* This sets the maximum number of teams to twice the number of GPU Compute
+   Units to avoid memory waste and corresponding memory access faults.  */
+
+static int
+limit_teams (int teams, struct agent_info *agent)
+{
+  int max_teams = 2 * get_cu_count (agent);
+  if (teams > max_teams)
+    teams = max_teams;
+  return teams;
+}
+
 /* Parse the target attributes INPUT provided by the compiler and return true
    if we should run anything all.  If INPUT is NULL, fill DEF with default
    values, then store INPUT or DEF into *RESULT.
@@ -1207,7 +1210,7 @@ parse_target_attributes (void **input,
 	  switch (id & GOMP_TARGET_ARG_ID_MASK)
 	    {
 	    case GOMP_TARGET_ARG_NUM_TEAMS:
-	      gcn_teams = val;
+	      gcn_teams = limit_teams (val, agent);
 	      break;
 	    case GOMP_TARGET_ARG_THREAD_LIMIT:
 	      gcn_threads = limit_worker_threads (val);
@@ -1220,24 +1223,55 @@ parse_target_attributes (void **input,
 
   if (gcn_dims_found)
     {
+      bool gfx900_workaround_p = false;
+
       if (agent->device_isa == EF_AMDGPU_MACH_AMDGCN_GFX900
 	  && gcn_threads == 0 && override_z_dim == 0)
 	{
-	  gcn_threads = 4;
+	  gfx900_workaround_p = true;
 	  GCN_WARNING ("VEGA BUG WORKAROUND: reducing default number of "
-		       "threads to 4 per team.\n");
+		       "threads to at most 4 per team.\n");
 	  GCN_WARNING (" - If this is not a Vega 10 device, please use "
 		       "GCN_NUM_THREADS=16\n");
 	}
 
+      /* Ideally, when a dimension isn't explicitly specified, we should
+	 tune it to run 40 (or 32?) threads per CU with no threads getting queued.
+	 In practice, we tune for peak performance on BabelStream, which
+	 for OpenACC is currently 32 threads per CU.  */
       def->ndim = 3;
-      /* Fiji has 64 CUs, but Vega20 has 60.  */
-      def->gdims[0] = (gcn_teams > 0) ? gcn_teams : get_cu_count (agent);
-      /* Each thread is 64 work items wide.  */
-      def->gdims[1] = 64;
-      /* A work group can have 16 wavefronts.  */
-      def->gdims[2] = (gcn_threads > 0) ? gcn_threads : 16;
-      def->wdims[0] = 1; /* Single team per work-group.  */
+      if (gcn_teams <= 0 && gcn_threads <= 0)
+	{
+	  /* Set up a reasonable number of teams and threads.  */
+	  gcn_threads = gfx900_workaround_p ? 4 : 16; // 8;
+	  def->gdims[0] = get_cu_count (agent); // * (40 / gcn_threads);
+	  def->gdims[2] = gcn_threads;
+	}
+      else if (gcn_teams <= 0 && gcn_threads > 0)
+	{
+	  /* Auto-scale the number of teams with the number of threads.  */
+	  def->gdims[0] = get_cu_count (agent); // * (40 / gcn_threads);
+	  def->gdims[2] = gcn_threads;
+	}
+      else if (gcn_teams > 0 && gcn_threads <= 0)
+	{
+	  int max_threads = gfx900_workaround_p ? 4 : 16;
+
+	  /* Auto-scale the number of threads with the number of teams.  */
+	  def->gdims[0] = gcn_teams;
+	  def->gdims[2] = 16; // get_cu_count (agent) * 40 / gcn_teams;
+	  if (def->gdims[2] == 0)
+	    def->gdims[2] = 1;
+	  else if (def->gdims[2] > max_threads)
+	    def->gdims[2] = max_threads;
+	}
+      else
+	{
+	  def->gdims[0] = gcn_teams;
+	  def->gdims[2] = gcn_threads;
+	}
+      def->gdims[1] = 64; /* Each thread is 64 work items wide.  */
+      def->wdims[0] = 1;  /* Single team per work-group.  */
       def->wdims[1] = 64;
       def->wdims[2] = 16;
       *result = def;
@@ -1598,6 +1632,7 @@ const static char *gcn_gfx803_s = "gfx803";
 const static char *gcn_gfx900_s = "gfx900";
 const static char *gcn_gfx906_s = "gfx906";
 const static char *gcn_gfx908_s = "gfx908";
+const static char *gcn_gfx90a_s = "gfx90a";
 const static int gcn_isa_name_len = 6;
 
 /* Returns the name that the HSA runtime uses for the ISA or NULL if we do not
@@ -1615,6 +1650,8 @@ isa_hsa_name (int isa) {
       return gcn_gfx906_s;
     case EF_AMDGPU_MACH_AMDGCN_GFX908:
       return gcn_gfx908_s;
+    case EF_AMDGPU_MACH_AMDGCN_GFX90a:
+      return gcn_gfx90a_s;
     }
   return NULL;
 }
@@ -1651,91 +1688,112 @@ isa_code(const char *isa) {
   if (!strncmp (isa, gcn_gfx908_s, gcn_isa_name_len))
     return EF_AMDGPU_MACH_AMDGCN_GFX908;
 
+  if (!strncmp (isa, gcn_gfx90a_s, gcn_isa_name_len))
+    return EF_AMDGPU_MACH_AMDGCN_GFX90a;
+
   return -1;
 }
 
 /* }}}  */
 /* {{{ Run  */
 
-/* Create or reuse a team arena.
+/* Create or reuse a team arena and stack space.
  
    Team arenas are used by OpenMP to avoid calling malloc multiple times
    while setting up each team.  This is purely a performance optimization.
 
-   Allocating an arena also costs performance, albeit on the host side, so
-   this function will reuse an existing arena if a large enough one is idle.
-   The arena is released, but not deallocated, when the kernel exits.  */
+   The stack space is used by all kernels.  We must allocate it in such a
+   way that the reverse offload implmentation can access the data.
 
-static void *
-get_team_arena (struct agent_info *agent, int num_teams)
+   Allocating this memory costs performance, so this function will reuse an
+   existing allocation if a large enough one is idle.
+   The memory lock is released, but not deallocated, when the kernel exits.  */
+
+static void
+configure_ephemeral_memories (struct kernel_info *kernel,
+			      struct kernargs_abi *kernargs, int num_teams,
+			      int num_threads)
 {
-  struct team_arena_list **next_ptr = &agent->team_arena_list;
-  struct team_arena_list *item;
+  struct agent_info *agent = kernel->agent;
+  struct ephemeral_memories_list **next_ptr = &agent->ephemeral_memories_list;
+  struct ephemeral_memories_list *item;
+
+  int actual_arena_size = (kernel->kind == KIND_OPENMP
+			   ? team_arena_size : 0);
+  int actual_arena_total_size = actual_arena_size * num_teams;
+  size_t size = (actual_arena_total_size
+		 + num_teams * num_threads * stack_size);
 
   for (item = *next_ptr; item; next_ptr = &item->next, item = item->next)
     {
-      if (item->num_teams < num_teams)
+      if (item->size < size)
 	continue;
 
-      if (pthread_mutex_trylock (&item->in_use))
-	continue;
-
-      return item->arena;
+      if (pthread_mutex_trylock (&item->in_use) == 0)
+	break;
     }
 
-  GCN_DEBUG ("Creating a new arena for %d teams\n", num_teams);
-
-  if (pthread_mutex_lock (&agent->team_arena_write_lock))
+  if (!item)
     {
-      GOMP_PLUGIN_error ("Could not lock a GCN agent program mutex");
-      return false;
-    }
-  item = malloc (sizeof (*item));
-  item->num_teams = num_teams;
-  item->next = NULL;
-  *next_ptr = item;
+      GCN_DEBUG ("Creating a new %sstack for %d teams with %d threads"
+		 " (%zd bytes)\n", (actual_arena_size ? "arena and " : ""),
+		 num_teams, num_threads, size);
 
-  if (pthread_mutex_init (&item->in_use, NULL))
-    {
-      GOMP_PLUGIN_error ("Failed to initialize a GCN team arena write mutex");
-      return false;
-    }
-  if (pthread_mutex_lock (&item->in_use))
-    {
-      GOMP_PLUGIN_error ("Could not lock a GCN agent program mutex");
-      return false;
-    }
-  if (pthread_mutex_unlock (&agent->team_arena_write_lock))
-    {
-      GOMP_PLUGIN_error ("Could not unlock a GCN agent program mutex");
-      return false;
+      if (pthread_mutex_lock (&agent->ephemeral_memories_write_lock))
+	{
+	  GOMP_PLUGIN_error ("Could not lock a GCN agent program mutex");
+	  return;
+	}
+      item = malloc (sizeof (*item));
+      item->size = size;
+      item->next = NULL;
+      *next_ptr = item;
+
+      if (pthread_mutex_init (&item->in_use, NULL))
+	{
+	  GOMP_PLUGIN_error ("Failed to initialize a GCN memory write mutex");
+	  return;
+	}
+      if (pthread_mutex_lock (&item->in_use))
+	{
+	  GOMP_PLUGIN_error ("Could not lock a GCN agent program mutex");
+	  return;
+	}
+      if (pthread_mutex_unlock (&agent->ephemeral_memories_write_lock))
+	{
+	  GOMP_PLUGIN_error ("Could not unlock a GCN agent program mutex");
+	  return;
+	}
+
+      hsa_status_t status;
+      status = hsa_fns.hsa_memory_allocate_fn (agent->data_region, size,
+					       &item->address);
+      if (status != HSA_STATUS_SUCCESS)
+	hsa_fatal ("Could not allocate memory for GCN kernel arena", status);
+      status = hsa_fns.hsa_memory_assign_agent_fn (item->address, agent->id,
+						   HSA_ACCESS_PERMISSION_RW);
+      if (status != HSA_STATUS_SUCCESS)
+	hsa_fatal ("Could not assign arena & stack memory to device", status);
     }
 
-  const int TEAM_ARENA_SIZE = 64*1024;  /* Must match libgomp.h.  */
-  hsa_status_t status;
-  status = hsa_fns.hsa_memory_allocate_fn (agent->data_region,
-					   TEAM_ARENA_SIZE*num_teams,
-					   &item->arena);
-  if (status != HSA_STATUS_SUCCESS)
-    hsa_fatal ("Could not allocate memory for GCN kernel arena", status);
-  status = hsa_fns.hsa_memory_assign_agent_fn (item->arena, agent->id,
-					       HSA_ACCESS_PERMISSION_RW);
-  if (status != HSA_STATUS_SUCCESS)
-    hsa_fatal ("Could not assign arena memory to device", status);
-
-  return item->arena;
+  kernargs->arena_ptr = (actual_arena_total_size
+			 ? (uint64_t)item->address
+			 : 0);
+  kernargs->stack_ptr = (uint64_t)item->address + actual_arena_total_size;
+  kernargs->arena_size_per_team = actual_arena_size;
+  kernargs->stack_size_per_thread = stack_size;
 }
 
-/* Mark a team arena available for reuse.  */
+/* Mark an ephemeral memory space available for reuse.  */
 
 static void
-release_team_arena (struct agent_info* agent, void *arena)
+release_ephemeral_memories (struct agent_info* agent, void *address)
 {
-  struct team_arena_list *item;
+  struct ephemeral_memories_list *item;
 
-  for (item = agent->team_arena_list; item; item = item->next)
+  for (item = agent->ephemeral_memories_list; item; item = item->next)
     {
-      if (item->arena == arena)
+      if (item->address == address)
 	{
 	  if (pthread_mutex_unlock (&item->in_use))
 	    GOMP_PLUGIN_error ("Could not unlock a GCN agent program mutex");
@@ -1748,22 +1806,22 @@ release_team_arena (struct agent_info* agent, void *arena)
 /* Clean up all the allocated team arenas.  */
 
 static bool
-destroy_team_arenas (struct agent_info *agent)
+destroy_ephemeral_memories (struct agent_info *agent)
 {
-  struct team_arena_list *item, *next;
+  struct ephemeral_memories_list *item, *next;
 
-  for (item = agent->team_arena_list; item; item = next)
+  for (item = agent->ephemeral_memories_list; item; item = next)
     {
       next = item->next;
-      hsa_fns.hsa_memory_free_fn (item->arena);
+      hsa_fns.hsa_memory_free_fn (item->address);
       if (pthread_mutex_destroy (&item->in_use))
 	{
-	  GOMP_PLUGIN_error ("Failed to destroy a GCN team arena mutex");
+	  GOMP_PLUGIN_error ("Failed to destroy a GCN memory mutex");
 	  return false;
 	}
       free (item);
     }
-  agent->team_arena_list = NULL;
+  agent->ephemeral_memories_list = NULL;
 
   return true;
 }
@@ -1774,13 +1832,6 @@ static void *
 alloc_by_agent (struct agent_info *agent, size_t size)
 {
   GCN_DEBUG ("Allocating %zu bytes on device %d\n", size, agent->device_id);
-
-  /* Zero-size allocations are invalid, so in order to return a valid pointer
-     we need to pass a valid size.  One source of zero-size allocations is
-     kernargs for kernels that have no inputs or outputs (the kernel may
-     only use console output, for example).  */
-  if (size == 0)
-    size = 4;
 
   void *ptr;
   hsa_status_t status = hsa_fns.hsa_memory_allocate_fn (agent->data_region,
@@ -1835,7 +1886,8 @@ alloc_by_agent (struct agent_info *agent, size_t size)
    the necessary device signals and memory allocations.  */
 
 static struct kernel_dispatch *
-create_kernel_dispatch (struct kernel_info *kernel, int num_teams)
+create_kernel_dispatch (struct kernel_info *kernel, int num_teams,
+			int num_threads)
 {
   struct agent_info *agent = kernel->agent;
   struct kernel_dispatch *shadow
@@ -1870,7 +1922,7 @@ create_kernel_dispatch (struct kernel_info *kernel, int num_teams)
   struct kernargs *kernargs = shadow->kernarg_address;
 
   /* Zero-initialize the output_data (minimum needed).  */
-  kernargs->out_ptr = (int64_t)&kernargs->output_data;
+  kernargs->abi.out_ptr = (int64_t)&kernargs->output_data;
   kernargs->output_data.next_output = 0;
   for (unsigned i = 0;
        i < (sizeof (kernargs->output_data.queue)
@@ -1880,18 +1932,24 @@ create_kernel_dispatch (struct kernel_info *kernel, int num_teams)
   kernargs->output_data.consumed = 0;
 
   /* Pass in the heap location.  */
-  kernargs->heap_ptr = (int64_t)kernel->module->heap;
+  kernargs->abi.heap_ptr = (int64_t)kernel->module->heap;
 
-  /* Create an arena.  */
-  if (kernel->kind == KIND_OPENMP)
-    kernargs->arena_ptr = (int64_t)get_team_arena (agent, num_teams);
-  else
-    kernargs->arena_ptr = 0;
+  /* Create the ephemeral memory spaces.  */
+  configure_ephemeral_memories (kernel, &kernargs->abi, num_teams, num_threads);
 
   /* Ensure we can recognize unset return values.  */
   kernargs->output_data.return_value = 0xcafe0000;
 
   return shadow;
+}
+
+static void
+process_reverse_offload (uint64_t fn, uint64_t mapnum, uint64_t hostaddrs,
+			 uint64_t sizes, uint64_t kinds, uint64_t dev_num64)
+{
+  int dev_num = dev_num64;
+  GOMP_PLUGIN_target_rev (fn, mapnum, hostaddrs, sizes, kinds, dev_num,
+			  NULL, NULL, NULL);
 }
 
 /* Output any data written to console output from the kernel.  It is expected
@@ -1938,6 +1996,11 @@ console_output (struct kernel_info *kernel, struct kernargs *kernargs,
 	case 1: printf ("%.128s%f\n", data->msg, data->dvalue); break;
 	case 2: printf ("%.128s%.128s\n", data->msg, data->text); break;
 	case 3: printf ("%.128s%.128s", data->msg, data->text); break;
+	case 4:
+	  process_reverse_offload (data->value_u64[0], data->value_u64[1],
+				   data->value_u64[2], data->value_u64[3],
+				   data->value_u64[4], data->value_u64[5]);
+	  break;
 	default: printf ("GCN print buffer error!\n"); break;
 	}
       data->written = 0;
@@ -1956,9 +2019,10 @@ release_kernel_dispatch (struct kernel_dispatch *shadow)
   GCN_DEBUG ("Released kernel dispatch: %p\n", shadow);
 
   struct kernargs *kernargs = shadow->kernarg_address;
-  void *arena = (void *)kernargs->arena_ptr;
-  if (arena)
-    release_team_arena (shadow->agent, arena);
+  void *addr = (void *)kernargs->abi.arena_ptr;
+  if (!addr)
+    addr = (void *)kernargs->abi.stack_ptr;
+  release_ephemeral_memories (shadow->agent, addr);
 
   hsa_fns.hsa_memory_free_fn (shadow->kernarg_address);
 
@@ -2188,7 +2252,8 @@ run_kernel (struct kernel_info *kernel, void *vars,
 	     packet->workgroup_size_z);
 
   struct kernel_dispatch *shadow
-    = create_kernel_dispatch (kernel, packet->grid_size_x);
+    = create_kernel_dispatch (kernel, packet->grid_size_x,
+			      packet->grid_size_z);
   shadow->queue = command_q;
 
   if (debug)
@@ -2322,7 +2387,7 @@ isa_matches_agent (struct agent_info *agent, Elf64_Ehdr *image)
 
       snprintf (msg, sizeof msg,
 		"GCN code object ISA '%s' does not match GPU ISA '%s'.\n"
-		"Try to recompile with '-foffload=-march=%s'.\n",
+		"Try to recompile with '-foffload-options=-march=%s'.\n",
 		isa_s, agent_isa_s, agent_isa_gcc_s);
 
       hsa_error (msg, HSA_STATUS_ERROR);
@@ -2914,27 +2979,15 @@ copy_data (void *data_)
 	     data->aq->agent->device_id, data->aq->id, data->len, data->src,
 	     data->dst);
   hsa_memory_copy_wrapper (data->dst, data->src, data->len);
-  if (data->free_src)
-    free ((void *) data->src);
   free (data);
 }
 
-/* Free device data.  This is intended for use as an async callback event.  */
-
-static void
-gomp_offload_free (void *ptr)
-{
-  GCN_DEBUG ("Async thread ?:?: Freeing %p\n", ptr);
-  GOMP_OFFLOAD_free (0, ptr);
-}
-
 /* Request an asynchronous data copy, to or from a device, on a given queue.
-   The event will be registered as a callback.  If FREE_SRC is true
-   then the source data will be freed following the copy.  */
+   The event will be registered as a callback.  */
 
 static void
 queue_push_copy (struct goacc_asyncqueue *aq, void *dst, const void *src,
-		 size_t len, bool free_src)
+		 size_t len)
 {
   if (DEBUG_QUEUES)
     GCN_DEBUG ("queue_push_copy %d:%d: %zu bytes from (%p) to (%p)\n",
@@ -2944,7 +2997,6 @@ queue_push_copy (struct goacc_asyncqueue *aq, void *dst, const void *src,
   data->dst = dst;
   data->src = src;
   data->len = len;
-  data->free_src = free_src;
   data->aq = aq;
   queue_push_callback (aq, copy_data, data);
 }
@@ -2996,7 +3048,7 @@ wait_queue (struct goacc_asyncqueue *aq)
 /* Execute an OpenACC kernel, synchronously or asynchronously.  */
 
 static void
-gcn_exec (struct kernel_info *kernel, size_t mapnum, void **hostaddrs,
+gcn_exec (struct kernel_info *kernel,
 	  void **devaddrs, unsigned *dims, void *targ_mem_desc, bool async,
 	  struct goacc_asyncqueue *aq)
 {
@@ -3005,13 +3057,6 @@ gcn_exec (struct kernel_info *kernel, size_t mapnum, void **hostaddrs,
 
   /* If we get here then this must be an OpenACC kernel.  */
   kernel->kind = KIND_OPENACC;
-
-  /* devaddrs must be double-indirect on the target.  */
-  void **ind_da = alloc_by_agent (kernel->agent, sizeof (void*) * mapnum);
-  for (size_t i = 0; i < mapnum; i++)
-    hsa_fns.hsa_memory_copy_fn (&ind_da[i],
-				devaddrs[i] ? &devaddrs[i] : &hostaddrs[i],
-				sizeof (void *));
 
   struct hsa_kernel_description *hsa_kernel_desc = NULL;
   for (unsigned i = 0; i < kernel->module->image_desc->kernel_count; i++)
@@ -3036,15 +3081,34 @@ gcn_exec (struct kernel_info *kernel, size_t mapnum, void **hostaddrs,
   if (hsa_kernel_desc->oacc_dims[2] > 0)
     dims[2] = hsa_kernel_desc->oacc_dims[2];
 
-  /* If any of the OpenACC dimensions remain 0 then we get to pick a number.
-     There isn't really a correct answer for this without a clue about the
-     problem size, so let's do a reasonable number of single-worker gangs.
-     64 gangs matches a typical Fiji device.  */
+  /* Ideally, when a dimension isn't explicitly specified, we should
+     tune it to run 40 (or 32?) threads per CU with no threads getting queued.
+     In practice, we tune for peak performance on BabelStream, which
+     for OpenACC is currently 32 threads per CU.  */
+  if (dims[0] == 0 && dims[1] == 0)
+    {
+      /* If any of the OpenACC dimensions remain 0 then we get to pick a
+	 number.  There isn't really a correct answer for this without a clue
+	 about the problem size, so let's do a reasonable number of workers
+	 and gangs.  */
 
-  /* NOTE: Until support for middle-end worker partitioning is merged, use 1
-     for the default number of workers.  */
-  if (dims[0] == 0) dims[0] = get_cu_count (kernel->agent); /* Gangs.  */
-  if (dims[1] == 0) dims[1] = 1;  /* Workers.  */
+      dims[0] = get_cu_count (kernel->agent) * 4; /* Gangs.  */
+      dims[1] = 8; /* Workers.  */
+    }
+  else if (dims[0] == 0 && dims[1] > 0)
+    {
+      /* Auto-scale the number of gangs with the requested number of workers.  */
+      dims[0] = get_cu_count (kernel->agent) * (32 / dims[1]);
+    }
+  else if (dims[0] > 0 && dims[1] == 0)
+    {
+      /* Auto-scale the number of workers with the requested number of gangs.  */
+      dims[1] = get_cu_count (kernel->agent) * 32 / dims[0];
+      if (dims[1] == 0)
+	dims[1] = 1;
+      if (dims[1] > 16)
+	dims[1] = 16;
+    }
 
   /* The incoming dimensions are expressed in terms of gangs, workers, and
      vectors.  The HSA dimensions are expressed in terms of "work-items",
@@ -3105,18 +3169,9 @@ gcn_exec (struct kernel_info *kernel, size_t mapnum, void **hostaddrs,
     }
 
   if (!async)
-    {
-      run_kernel (kernel, ind_da, &kla, NULL, false);
-      gomp_offload_free (ind_da);
-    }
+    run_kernel (kernel, devaddrs, &kla, NULL, false);
   else
-    {
-      queue_push_launch (aq, kernel, ind_da, &kla);
-      if (DEBUG_QUEUES)
-	GCN_DEBUG ("queue_push_callback %d:%d gomp_offload_free, %p\n",
-		   aq->agent->device_id, aq->id, ind_da);
-      queue_push_callback (aq, gomp_offload_free, ind_da);
-    }
+    queue_push_launch (aq, kernel, devaddrs, &kla);
 
   if (profiling_dispatch_p)
     {
@@ -3169,10 +3224,15 @@ GOMP_OFFLOAD_version (void)
 /* Return the number of GCN devices on the system.  */
 
 int
-GOMP_OFFLOAD_get_num_devices (void)
+GOMP_OFFLOAD_get_num_devices (unsigned int omp_requires_mask)
 {
   if (!init_hsa_context ())
     return 0;
+  /* Return -1 if no omp_requires_mask cannot be fulfilled but
+     devices were present.  */
+  if (hsa_context.agent_count > 0
+      && (omp_requires_mask & ~GOMP_REQUIRES_REVERSE_OFFLOAD) != 0)
+    return -1;
   return hsa_context.agent_count;
 }
 
@@ -3211,14 +3271,14 @@ GOMP_OFFLOAD_init_device (int n)
       GOMP_PLUGIN_error ("Failed to initialize a GCN agent queue mutex");
       return false;
     }
-  if (pthread_mutex_init (&agent->team_arena_write_lock, NULL))
+  if (pthread_mutex_init (&agent->ephemeral_memories_write_lock, NULL))
     {
       GOMP_PLUGIN_error ("Failed to initialize a GCN team arena write mutex");
       return false;
     }
   agent->async_queues = NULL;
   agent->omp_async_queue = NULL;
-  agent->team_arena_list = NULL;
+  agent->ephemeral_memories_list = NULL;
 
   uint32_t queue_size;
   hsa_status_t status;
@@ -3290,11 +3350,14 @@ GOMP_OFFLOAD_init_device (int n)
 
 /* Load GCN object-code module described by struct gcn_image_desc in
    TARGET_DATA and return references to kernel descriptors in TARGET_TABLE.
-   If there are any constructors then run them.  */
+   If there are any constructors then run them.  If not NULL, REV_FN_TABLE will
+   contain the on-device addresses of the functions for reverse offload.  To be
+   freed by the caller.  */
 
 int
 GOMP_OFFLOAD_load_image (int ord, unsigned version, const void *target_data,
-			 struct addr_pair **target_table)
+			 struct addr_pair **target_table,
+			 uint64_t **rev_fn_table)
 {
   if (GOMP_VERSION_DEV (version) != GOMP_VERSION_GCN)
     {
@@ -3311,6 +3374,8 @@ GOMP_OFFLOAD_load_image (int ord, unsigned version, const void *target_data,
   struct kernel_info *kernel;
   int kernel_count = image_desc->kernel_count;
   unsigned var_count = image_desc->global_variable_count;
+  /* Currently, "others" is a struct of ICVS.  */
+  int other_count = 1;
 
   agent = get_agent_info (ord);
   if (!agent)
@@ -3327,7 +3392,8 @@ GOMP_OFFLOAD_load_image (int ord, unsigned version, const void *target_data,
 
   GCN_DEBUG ("Encountered %d kernels in an image\n", kernel_count);
   GCN_DEBUG ("Encountered %u global variables in an image\n", var_count);
-  pair = GOMP_PLUGIN_malloc ((kernel_count + var_count - 2)
+  GCN_DEBUG ("Expect %d other variables in an image\n", other_count);
+  pair = GOMP_PLUGIN_malloc ((kernel_count + var_count + other_count - 2)
 			     * sizeof (struct addr_pair));
   *target_table = pair;
   module = (struct module_info *)
@@ -3369,37 +3435,76 @@ GOMP_OFFLOAD_load_image (int ord, unsigned version, const void *target_data,
   if (!create_and_finalize_hsa_program (agent))
     return -1;
 
-  for (unsigned i = 0; i < var_count; i++)
+  if (var_count > 0)
     {
-      struct global_var_info *v = &image_desc->global_variables[i];
-      GCN_DEBUG ("Looking for variable %s\n", v->name);
-
       hsa_status_t status;
       hsa_executable_symbol_t var_symbol;
       status = hsa_fns.hsa_executable_get_symbol_fn (agent->executable, NULL,
-						     v->name, agent->id,
+						     ".offload_var_table",
+						     agent->id,
 						     0, &var_symbol);
 
       if (status != HSA_STATUS_SUCCESS)
 	hsa_fatal ("Could not find symbol for variable in the code object",
 		   status);
 
-      uint64_t var_addr;
-      uint32_t var_size;
+      uint64_t var_table_addr;
       status = hsa_fns.hsa_executable_symbol_get_info_fn
-	(var_symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS, &var_addr);
+	(var_symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS,
+	 &var_table_addr);
+      if (status != HSA_STATUS_SUCCESS)
+	hsa_fatal ("Could not extract a variable from its symbol", status);
+
+      struct {
+	uint64_t addr;
+	uint64_t size;
+      } var_table[var_count];
+      GOMP_OFFLOAD_dev2host (agent->device_id, var_table,
+			     (void*)var_table_addr, sizeof (var_table));
+
+      for (unsigned i = 0; i < var_count; i++)
+	{
+	  pair->start = var_table[i].addr;
+	  pair->end = var_table[i].addr + var_table[i].size;
+	  GCN_DEBUG ("Found variable at %p with size %lu\n",
+		     (void *)var_table[i].addr, var_table[i].size);
+	  pair++;
+	}
+    }
+
+  GCN_DEBUG ("Looking for variable %s\n", XSTRING (GOMP_ADDITIONAL_ICVS));
+
+  hsa_status_t status;
+  hsa_executable_symbol_t var_symbol;
+  status = hsa_fns.hsa_executable_get_symbol_fn (agent->executable, NULL,
+						 XSTRING (GOMP_ADDITIONAL_ICVS),
+						 agent->id, 0, &var_symbol);
+  if (status == HSA_STATUS_SUCCESS)
+    {
+      uint64_t varptr;
+      uint32_t varsize;
+
+      status = hsa_fns.hsa_executable_symbol_get_info_fn
+	(var_symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS,
+	 &varptr);
       if (status != HSA_STATUS_SUCCESS)
 	hsa_fatal ("Could not extract a variable from its symbol", status);
       status = hsa_fns.hsa_executable_symbol_get_info_fn
-	(var_symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_SIZE, &var_size);
+	(var_symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_SIZE,
+	 &varsize);
       if (status != HSA_STATUS_SUCCESS)
-	hsa_fatal ("Could not extract a variable size from its symbol", status);
+	hsa_fatal ("Could not extract a variable size from its symbol",
+		   status);
 
-      pair->start = var_addr;
-      pair->end = var_addr + var_size;
-      GCN_DEBUG ("Found variable %s at %p with size %u\n", v->name,
-		 (void *)var_addr, var_size);
-      pair++;
+      pair->start = varptr;
+      pair->end = varptr + varsize;
+    }
+  else
+    {
+      /* The variable was not in this image.  */
+      GCN_DEBUG ("Variable not found in image: %s\n",
+		 XSTRING (GOMP_ADDITIONAL_ICVS));
+      pair->start = pair->end = 0;
     }
 
   /* Ensure that constructors are run first.  */
@@ -3424,7 +3529,31 @@ GOMP_OFFLOAD_load_image (int ord, unsigned version, const void *target_data,
   if (module->fini_array_func)
     kernel_count--;
 
-  return kernel_count + var_count;
+  if (rev_fn_table != NULL && kernel_count == 0)
+    *rev_fn_table = NULL;
+  else if (rev_fn_table != NULL)
+    {
+      hsa_status_t status;
+      hsa_executable_symbol_t var_symbol;
+      status = hsa_fns.hsa_executable_get_symbol_fn (agent->executable, NULL,
+						     ".offload_func_table",
+						     agent->id, 0, &var_symbol);
+      if (status != HSA_STATUS_SUCCESS)
+	hsa_fatal ("Could not find symbol for variable in the code object",
+		   status);
+      uint64_t fn_table_addr;
+      status = hsa_fns.hsa_executable_symbol_get_info_fn
+	(var_symbol, HSA_EXECUTABLE_SYMBOL_INFO_VARIABLE_ADDRESS,
+	 &fn_table_addr);
+      if (status != HSA_STATUS_SUCCESS)
+	hsa_fatal ("Could not extract a variable from its symbol", status);
+      *rev_fn_table = GOMP_PLUGIN_malloc (kernel_count * sizeof (uint64_t));
+      GOMP_OFFLOAD_dev2host (agent->device_id, *rev_fn_table,
+			     (void*) fn_table_addr,
+			     kernel_count * sizeof (uint64_t));
+    }
+
+  return kernel_count + var_count + other_count;
 }
 
 /* Unload GCN object-code module described by struct gcn_image_desc in
@@ -3502,7 +3631,7 @@ GOMP_OFFLOAD_fini_device (int n)
       agent->module = NULL;
     }
 
-  if (!destroy_team_arenas (agent))
+  if (!destroy_ephemeral_memories (agent))
     return false;
 
   if (!destroy_hsa_program (agent))
@@ -3528,9 +3657,9 @@ GOMP_OFFLOAD_fini_device (int n)
       GOMP_PLUGIN_error ("Failed to destroy a GCN agent queue mutex");
       return false;
     }
-  if (pthread_mutex_destroy (&agent->team_arena_write_lock))
+  if (pthread_mutex_destroy (&agent->ephemeral_memories_write_lock))
     {
-      GOMP_PLUGIN_error ("Failed to destroy a GCN team arena mutex");
+      GOMP_PLUGIN_error ("Failed to destroy a GCN memory mutex");
       return false;
     }
   agent->initialized = false;
@@ -3647,7 +3776,7 @@ GOMP_OFFLOAD_dev2dev (int device, void *dst, const void *src, size_t n)
     {
       struct agent_info *agent = get_agent_info (device);
       maybe_init_omp_async (agent);
-      queue_push_copy (agent->omp_async_queue, dst, src, n, false);
+      queue_push_copy (agent->omp_async_queue, dst, src, n);
       return true;
     }
 
@@ -3724,28 +3853,30 @@ GOMP_OFFLOAD_async_run (int device, void *tgt_fn, void *tgt_vars,
    already-loaded KERNEL.  */
 
 void
-GOMP_OFFLOAD_openacc_exec (void (*fn_ptr) (void *), size_t mapnum,
-			   void **hostaddrs, void **devaddrs, unsigned *dims,
+GOMP_OFFLOAD_openacc_exec (void (*fn_ptr) (void *),
+			   size_t mapnum __attribute__((unused)),
+			   void **hostaddrs __attribute__((unused)),
+			   void **devaddrs, unsigned *dims,
 			   void *targ_mem_desc)
 {
   struct kernel_info *kernel = (struct kernel_info *) fn_ptr;
 
-  gcn_exec (kernel, mapnum, hostaddrs, devaddrs, dims, targ_mem_desc, false,
-	    NULL);
+  gcn_exec (kernel, devaddrs, dims, targ_mem_desc, false, NULL);
 }
 
 /* Run an asynchronous OpenACC kernel on the specified queue.  */
 
 void
-GOMP_OFFLOAD_openacc_async_exec (void (*fn_ptr) (void *), size_t mapnum,
-				 void **hostaddrs, void **devaddrs,
+GOMP_OFFLOAD_openacc_async_exec (void (*fn_ptr) (void *),
+				 size_t mapnum __attribute__((unused)),
+				 void **hostaddrs __attribute__((unused)),
+				 void **devaddrs,
 				 unsigned *dims, void *targ_mem_desc,
 				 struct goacc_asyncqueue *aq)
 {
   struct kernel_info *kernel = (struct kernel_info *) fn_ptr;
 
-  gcn_exec (kernel, mapnum, hostaddrs, devaddrs, dims, targ_mem_desc, true,
-	    aq);
+  gcn_exec (kernel, devaddrs, dims, targ_mem_desc, true, aq);
 }
 
 /* Create a new asynchronous thread and queue for running future kernels.  */
@@ -3917,15 +4048,7 @@ GOMP_OFFLOAD_openacc_async_host2dev (int device, void *dst, const void *src,
 {
   struct agent_info *agent = get_agent_info (device);
   assert (agent == aq->agent);
-  /* The source data does not necessarily remain live until the deferred
-     copy happens.  Taking a snapshot of the data here avoids reading
-     uninitialised data later, but means that (a) data is copied twice and
-     (b) modifications to the copied data between the "spawning" point of
-     the asynchronous kernel and when it is executed will not be seen.
-     But, that is probably correct.  */
-  void *src_copy = GOMP_PLUGIN_malloc (n);
-  memcpy (src_copy, src, n);
-  queue_push_copy (aq, dst, src_copy, n, true);
+  queue_push_copy (aq, dst, src, n);
   return true;
 }
 
@@ -3937,7 +4060,7 @@ GOMP_OFFLOAD_openacc_async_dev2host (int device, void *dst, const void *src,
 {
   struct agent_info *agent = get_agent_info (device);
   assert (agent == aq->agent);
-  queue_push_copy (aq, dst, src, n, false);
+  queue_push_copy (aq, dst, src, n);
   return true;
 }
 

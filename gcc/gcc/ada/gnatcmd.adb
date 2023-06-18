@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1996-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -57,7 +57,6 @@ procedure GNATCmd is
       Compile,
       Check,
       Elim,
-      Find,
       Krunch,
       Link,
       List,
@@ -69,10 +68,9 @@ procedure GNATCmd is
       Stack,
       Stub,
       Test,
-      Xref,
       Undefined);
 
-   subtype Real_Command_Type is Command_Type range Bind .. Xref;
+   subtype Real_Command_Type is Command_Type range Bind .. Test;
    --  All real command types (excludes only Undefined).
 
    type Alternate_Command is (Comp, Ls, Kr, Pp, Prep);
@@ -160,11 +158,6 @@ procedure GNATCmd is
          Unixcmd  => new String'("gnatelim"),
          Unixsws  => null),
 
-      Find =>
-        (Cname    => new String'("FIND"),
-         Unixcmd  => new String'("gnatfind"),
-         Unixsws  => null),
-
       Krunch =>
         (Cname    => new String'("KRUNCH"),
          Unixcmd  => new String'("gnatkr"),
@@ -218,11 +211,6 @@ procedure GNATCmd is
       Test =>
         (Cname    => new String'("TEST"),
          Unixcmd  => new String'("gnattest"),
-         Unixsws  => null),
-
-      Xref =>
-        (Cname    => new String'("XREF"),
-         Unixcmd  => new String'("gnatxref"),
          Unixsws  => null)
      );
 
@@ -472,6 +460,15 @@ begin
 
          Program := new String'(Command_List (The_Command).Unixcmd.all);
 
+      elsif The_Command in Check | Test then
+         Program := new String'(Command_List (The_Command).Unixcmd.all);
+         Find_Program_Name;
+
+         if Name_Len > 5 then
+            First_Switches.Append
+              (new String'
+                 ("--target=" & Name_Buffer (1 .. Name_Len - 5)));
+         end if;
       else
          Program :=
            Program_Name (Command_List (The_Command).Unixcmd.all, "gnat");
@@ -481,13 +478,7 @@ begin
          --  instead of gnatmake/gnatclean.
          --  Ditto for gnatname -> gprname and gnatls -> gprls.
 
-         if The_Command = Make
-           or else The_Command = Compile
-           or else The_Command = Bind
-           or else The_Command = Link
-           or else The_Command = Clean
-           or else The_Command = Name
-           or else The_Command = List
+         if The_Command in Make | Compile | Bind | Link | Clean | Name | List
          then
             declare
                Switch        : String_Access;
@@ -585,30 +576,6 @@ begin
             First_Switches.Table (First_Switches.Last) :=
               Command_List (The_Command).Unixsws (J);
          end loop;
-      end if;
-
-      --  For FIND and XREF, look for switch -P. If it is specified, then
-      --  report an error indicating that the command is no longer supporting
-      --  project files.
-
-      if The_Command = Find or else The_Command = Xref then
-         declare
-            Argv : String_Access;
-         begin
-            for Arg_Num in 1 .. Last_Switches.Last loop
-               Argv := Last_Switches.Table (Arg_Num);
-
-               if Argv'Length >= 2 and then
-                  Argv (Argv'First .. Argv'First + 1) = "-P"
-               then
-                  if The_Command = Find then
-                     Fail ("'gnat find -P' is no longer supported;");
-                  else
-                     Fail ("'gnat xref -P' is no longer supported;");
-                  end if;
-               end if;
-            end loop;
-         end;
       end if;
 
       --  Gather all the arguments and invoke the executable

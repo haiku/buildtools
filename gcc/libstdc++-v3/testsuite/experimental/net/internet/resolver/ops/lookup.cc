@@ -1,4 +1,4 @@
-// Copyright (C) 2015-2021 Free Software Foundation, Inc.
+// Copyright (C) 2015-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -18,6 +18,7 @@
 // { dg-do run { target c++14 } }
 // { dg-require-effective-target net_ts_ip }
 // { dg-add-options net_ts }
+// { dg-xfail-run-if "io_context requires a working pipe" { *-*-rtems* } }
 
 #include <experimental/internet>
 #include <testsuite_hooks.h>
@@ -97,7 +98,7 @@ test03()
   std::error_code ec;
   io_context ctx;
   ip::tcp::resolver resolv(ctx);
-  auto addrs = resolv.resolve("test.invalid", "http", ec);
+  auto addrs = resolv.resolve("test.invalid.", "http", ec);
   VERIFY( ec );
   VERIFY( addrs.size() == 0 );
   VERIFY( addrs.begin() == addrs.end() );
@@ -105,7 +106,7 @@ test03()
 #if __cpp_exceptions
   bool caught = false;
   try {
-    resolv.resolve("test.invalid", "http");
+    resolv.resolve("test.invalid.", "http");
   } catch (const std::system_error& e) {
     caught = true;
     VERIFY( e.code() == ec );

@@ -1,5 +1,5 @@
 /* Get CPU type and Features for x86 processors.
-   Copyright (C) 2012-2021 Free Software Foundation, Inc.
+   Copyright (C) 2012-2023 Free Software Foundation, Inc.
    Contributed by Sriraman Tallam (tmsriram@google.com)
 
 This file is part of GCC.
@@ -29,12 +29,15 @@ enum processor_vendor
 {
   VENDOR_INTEL = 1,
   VENDOR_AMD,
+  VENDOR_ZHAOXIN,
   VENDOR_OTHER,
   VENDOR_CENTAUR,
   VENDOR_CYRIX,
   VENDOR_NSC,
-  BUILTIN_VENDOR_MAX = VENDOR_OTHER,
-  VENDOR_MAX
+
+  /* Maximum values must be at the end of this enum.  */
+  VENDOR_MAX,
+  BUILTIN_VENDOR_MAX = VENDOR_OTHER
 };
 
 /* Any new types or subtypes have to be inserted at the end. */
@@ -56,6 +59,9 @@ enum processor_types
   INTEL_GOLDMONT_PLUS,
   INTEL_TREMONT,
   AMDFAM19H,
+  ZHAOXIN_FAM7H,
+  INTEL_SIERRAFOREST,
+  INTEL_GRANDRIDGE,
   CPU_TYPE_MAX,
   BUILTIN_CPU_TYPE_MAX = CPU_TYPE_MAX
 };
@@ -89,6 +95,9 @@ enum processor_subtypes
   INTEL_COREI7_ALDERLAKE,
   AMDFAM19H_ZNVER3,
   INTEL_COREI7_ROCKETLAKE,
+  ZHAOXIN_FAM7H_LUJIAZUI,
+  AMDFAM19H_ZNVER4,
+  INTEL_COREI7_GRANITERAPIDS,
   CPU_SUBTYPE_MAX
 };
 
@@ -102,6 +111,7 @@ enum feature_priority
   P_MMX,
   P_SSE,
   P_SSE2,
+  P_X86_64_BASELINE,
   P_SSE3,
   P_SSSE3,
   P_PROC_SSSE3,
@@ -111,6 +121,7 @@ enum feature_priority
   P_SSE4_2,
   P_PROC_SSE4_2,
   P_POPCNT,
+  P_X86_64_V2,
   P_AES,
   P_PCLMUL,
   P_AVX,
@@ -125,8 +136,10 @@ enum feature_priority
   P_BMI2,
   P_AVX2,
   P_PROC_AVX2,
+  P_X86_64_V3,
   P_AVX512F,
   P_PROC_AVX512F,
+  P_X86_64_V4,
   P_PROC_DYNAMIC
 };
 
@@ -228,6 +241,19 @@ enum processor_features
   FEATURE_AESKLE,
   FEATURE_WIDEKL,
   FEATURE_AVXVNNI,
+  FEATURE_AVX512FP16,
+  FEATURE_X86_64_BASELINE,
+  FEATURE_X86_64_V2,
+  FEATURE_X86_64_V3,
+  FEATURE_X86_64_V4,
+  FEATURE_AVXIFMA,
+  FEATURE_AVXVNNIINT8,
+  FEATURE_AVXNECONVERT,
+  FEATURE_CMPCCXADD,
+  FEATURE_AMX_FP16,
+  FEATURE_PREFETCHI,
+  FEATURE_RAOINT,
+  FEATURE_AMX_COMPLEX,
   CPU_FEATURE_MAX
 };
 

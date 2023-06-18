@@ -1,5 +1,5 @@
 ;; Predicate definitions for ARM and Thumb
-;; Copyright (C) 2004-2021 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2023 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 
 ;; This file is part of GCC.
@@ -199,6 +199,10 @@
 (define_predicate "zero_operand"
   (and (match_code "const_int,const_double,const_vector")
        (match_test "op == CONST0_RTX (mode)")))
+
+(define_predicate "minus_one_operand"
+  (and (match_code "const_int,const_double,const_vector")
+       (match_test "op == CONSTM1_RTX (mode)")))
 
 ;; Match a register, or zero in the appropriate mode.
 (define_predicate "reg_or_zero_operand"
@@ -871,6 +875,10 @@
 (define_predicate "neon_struct_operand"
   (and (match_code "mem")
        (match_test "TARGET_32BIT && neon_vector_mem_operand (op, 2, true)")))
+
+(define_predicate "mve_struct_operand"
+  (and (match_code "mem")
+       (match_test "TARGET_HAVE_MVE && mve_struct_mem_operand (op)")))
 
 (define_predicate "neon_permissive_struct_operand"
   (and (match_code "mem")

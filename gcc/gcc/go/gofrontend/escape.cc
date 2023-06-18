@@ -990,7 +990,7 @@ Gogo::analyze_escape()
       for (std::vector<Named_object*>::iterator fn = stack.begin();
            fn != stack.end();
            ++fn)
-        this->tag_function(context, *fn);
+       this->tag_function(*fn);
 
       if (this->debug_escape_level() != 0)
 	{
@@ -1246,10 +1246,10 @@ Escape_analysis_loop::statement(Block*, size_t*, Statement* s)
 class Escape_analysis_assign : public Traverse
 {
 public:
-  Escape_analysis_assign(Escape_context* context, Named_object* fn)
+  Escape_analysis_assign(Escape_context* context)
     : Traverse(traverse_statements
 	       | traverse_expressions),
-      context_(context), fn_(fn)
+      context_(context)
   { }
 
   // Model statements within a function as assignments and flows between nodes.
@@ -1286,8 +1286,6 @@ public:
 private:
   // The escape context for this set of functions.
   Escape_context* context_;
-  // The current function being analyzed.
-  Named_object* fn_;
 };
 
 // Helper function to detect self assignment like the following.
@@ -1608,8 +1606,33 @@ Escape_analysis_assign::expression(Expression** pexpr)
                 }
                 break;
 
-              default:
+              case Builtin_call_expression::BUILTIN_CLOSE:
+              case Builtin_call_expression::BUILTIN_DELETE:
+              case Builtin_call_expression::BUILTIN_PRINT:
+              case Builtin_call_expression::BUILTIN_PRINTLN:
+              case Builtin_call_expression::BUILTIN_LEN:
+              case Builtin_call_expression::BUILTIN_CAP:
+              case Builtin_call_expression::BUILTIN_COMPLEX:
+              case Builtin_call_expression::BUILTIN_REAL:
+              case Builtin_call_expression::BUILTIN_IMAG:
+              case Builtin_call_expression::BUILTIN_RECOVER:
+              case Builtin_call_expression::BUILTIN_ALIGNOF:
+              case Builtin_call_expression::BUILTIN_OFFSETOF:
+              case Builtin_call_expression::BUILTIN_SIZEOF:
+                // these do not escape.
                 break;
+
+              case Builtin_call_expression::BUILTIN_ADD:
+              case Builtin_call_expression::BUILTIN_SLICE:
+                // handled in ::assign.
+                break;
+
+              case Builtin_call_expression::BUILTIN_MAKE:
+              case Builtin_call_expression::BUILTIN_NEW:
+                // should have been lowered to runtime calls at this point.
+                // fallthrough
+              default:
+                go_unreachable();
               }
             break;
           }
@@ -1621,6 +1644,7 @@ Escape_analysis_assign::expression(Expression** pexpr)
 	      case Runtime::MAKECHAN:
 	      case Runtime::MAKECHAN64:
 	      case Runtime::MAKEMAP:
+	      case Runtime::MAKEMAP64:
 	      case Runtime::MAKESLICE:
 	      case Runtime::MAKESLICE64:
                 this->context_->track(n);
@@ -1680,8 +1704,52 @@ Escape_analysis_assign::expression(Expression** pexpr)
                 }
                 break;
 
+              case Runtime::MEMCMP:
+              case Runtime::DECODERUNE:
+              case Runtime::INTSTRING:
+              case Runtime::MAKEMAP_SMALL:
+              case Runtime::MAPACCESS1:
+              case Runtime::MAPACCESS1_FAST32:
+              case Runtime::MAPACCESS1_FAST64:
+              case Runtime::MAPACCESS1_FASTSTR:
+              case Runtime::MAPACCESS1_FAT:
+              case Runtime::MAPACCESS2:
+              case Runtime::MAPACCESS2_FAST32:
+              case Runtime::MAPACCESS2_FAST64:
+              case Runtime::MAPACCESS2_FASTSTR:
+              case Runtime::MAPACCESS2_FAT:
+              case Runtime::MAPASSIGN_FAST32:
+              case Runtime::MAPASSIGN_FAST64:
+              case Runtime::MAPITERINIT:
+              case Runtime::MAPITERNEXT:
+              case Runtime::MAPCLEAR:
+              case Runtime::CHANRECV2:
+              case Runtime::SELECTGO:
+              case Runtime::SELECTNBSEND:
+              case Runtime::SELECTNBRECV:
+              case Runtime::BLOCK:
+              case Runtime::IFACET2IP:
+              case Runtime::EQTYPE:
+              case Runtime::MEMCLRHASPTR:
+              case Runtime::FIELDTRACK:
+              case Runtime::BUILTIN_MEMSET:
+              case Runtime::PANIC_SLICE_CONVERT:
+                // these do not escape.
+                break;
+
+              case Runtime::IFACEE2E2:
+              case Runtime::IFACEI2E2:
+              case Runtime::IFACEE2I2:
+              case Runtime::IFACEI2I2:
+              case Runtime::IFACEE2T2P:
+              case Runtime::IFACEI2T2P:
+                // handled in ::assign.
+                break;
+
 	      default:
-		break;
+                // should not see other runtime calls. they are not yet
+                // lowered to runtime calls at this point.
+                go_unreachable();
 	      }
 	  }
         else
@@ -2325,19 +2393,82 @@ Escape_analysis_assign::assign(Node* dst, Node* src)
 	  }
 	  break;
 
+        case Expression::EXPRESSION_SLICE_INFO:
+          {
+            Slice_info_expression* sie = e->slice_info_expression();
+            if (sie->info() == Expression::SLICE_INFO_VALUE_POINTER)
+              {
+                Node* slice = Node::make_node(sie->slice());
+                this->assign(dst, slice);
+              }
+          }
+          break;
+
 	case Expression::EXPRESSION_CALL:
 	  {
 	    Call_expression* call = e->call_expression();
             if (call->is_builtin())
               {
                 Builtin_call_expression* bce = call->builtin_call_expression();
-                if (bce->code() == Builtin_call_expression::BUILTIN_APPEND)
+                switch (bce->code())
                   {
-                    // Append returns the first argument.
-                    // The subsequent arguments are already leaked because
-                    // they are operands to append.
-                    Node* appendee = Node::make_node(call->args()->front());
-                    this->assign(dst, appendee);
+                  case Builtin_call_expression::BUILTIN_APPEND:
+                    {
+                      // Append returns the first argument.
+                      // The subsequent arguments are already leaked because
+                      // they are operands to append.
+                      Node* appendee = Node::make_node(call->args()->front());
+                      this->assign(dst, appendee);
+                    }
+                    break;
+
+                  case Builtin_call_expression::BUILTIN_ADD:
+                    {
+                      // unsafe.Add(p, off).
+                      // Flow p to result.
+                      Node* arg = Node::make_node(call->args()->front());
+                      this->assign(dst, arg);
+                    }
+                    break;
+
+                  case Builtin_call_expression::BUILTIN_SLICE:
+                    {
+                      // unsafe.Slice(p, len).
+                      // The resulting slice has the same backing store as p. Flow p to result.
+                      Node* arg = Node::make_node(call->args()->front());
+                      this->assign(dst, arg);
+                    }
+                    break;
+
+                  case Builtin_call_expression::BUILTIN_LEN:
+                  case Builtin_call_expression::BUILTIN_CAP:
+                  case Builtin_call_expression::BUILTIN_COMPLEX:
+                  case Builtin_call_expression::BUILTIN_REAL:
+                  case Builtin_call_expression::BUILTIN_IMAG:
+                  case Builtin_call_expression::BUILTIN_RECOVER:
+                  case Builtin_call_expression::BUILTIN_ALIGNOF:
+                  case Builtin_call_expression::BUILTIN_OFFSETOF:
+                  case Builtin_call_expression::BUILTIN_SIZEOF:
+                    // these do not escape.
+                    break;
+
+                  case Builtin_call_expression::BUILTIN_COPY:
+                    // handled in ::expression.
+                    break;
+
+                  case Builtin_call_expression::BUILTIN_CLOSE:
+                  case Builtin_call_expression::BUILTIN_DELETE:
+                  case Builtin_call_expression::BUILTIN_PRINT:
+                  case Builtin_call_expression::BUILTIN_PRINTLN:
+                  case Builtin_call_expression::BUILTIN_PANIC:
+                    // these do not have result.
+                    // fallthrough
+                  case Builtin_call_expression::BUILTIN_MAKE:
+                  case Builtin_call_expression::BUILTIN_NEW:
+                    // should have been lowered to runtime calls at this point.
+                    // fallthrough
+                  default:
+                    go_unreachable();
                   }
                 break;
               }
@@ -2592,6 +2723,21 @@ Escape_analysis_assign::assign(Node* dst, Node* src)
 	  }
 	  break;
 
+        case Expression::EXPRESSION_CONDITIONAL:
+          {
+            Conditional_expression* ce = e->conditional_expression();
+            this->assign(dst, Node::make_node(ce->then_expr()));
+            this->assign(dst, Node::make_node(ce->else_expr()));
+          }
+          break;
+
+        case Expression::EXPRESSION_COMPOUND:
+          {
+            Compound_expression* ce = e->compound_expression();
+            this->assign(dst, Node::make_node(ce->expr()));
+          }
+          break;
+
 	default:
 	  // TODO(cmang): Add debug info here; this should not be reachable.
 	  // For now, just to be conservative, we'll just say dst flows to src.
@@ -2751,7 +2897,7 @@ Gogo::assign_connectivity(Escape_context* context, Named_object* fn)
   int save_depth = context->loop_depth();
   context->set_loop_depth(1);
 
-  Escape_analysis_assign ea(context, fn);
+  Escape_analysis_assign ea(context);
   Function::Results* res = fn->func_value()->result_variables();
   if (res != NULL)
     {
@@ -3317,17 +3463,13 @@ Gogo::propagate_escape(Escape_context* context, Node* dst)
 class Escape_analysis_tag
 {
  public:
-  Escape_analysis_tag(Escape_context* context)
-    : context_(context)
+  Escape_analysis_tag()
   { }
 
   // Add notes to the function's type about the escape information of its
   // input parameters.
   void
   tag(Named_object* fn);
-
- private:
-  Escape_context* context_;
 };
 
 void
@@ -3432,9 +3574,9 @@ Escape_analysis_tag::tag(Named_object* fn)
 // retain analysis results across imports.
 
 void
-Gogo::tag_function(Escape_context* context, Named_object* fn)
+Gogo::tag_function(Named_object* fn)
 {
-  Escape_analysis_tag eat(context);
+  Escape_analysis_tag eat;
   eat.tag(fn);
 }
 

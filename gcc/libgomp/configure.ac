@@ -121,10 +121,13 @@ AC_SUBST(CFLAGS)
 # in both places for now and restore CFLAGS at the end of config.
 save_CFLAGS="$CFLAGS"
 
+AC_ARG_ENABLE([werror],
+  [AS_HELP_STRING([--disable-werror], [disable building with -Werror])])
 # Add -Wall -Werror if we are using GCC.
-if test "x$GCC" = "xyes"; then
-  XCFLAGS="$XCFLAGS -Wall -Werror"
-fi
+AS_IF([test "x$GCC" = "xyes"],
+  [XCFLAGS="$XCFLAGS -Wall"])
+AS_IF([test "x$enable_werror" != "xno" && test "x$GCC" = "xyes"],
+  [XCFLAGS="$XCFLAGS -Werror"])
 
 # Find other programs we need.
 AC_CHECK_TOOL(AR, ar)
@@ -219,6 +222,11 @@ fi
 if test x$libgomp_offloaded_only = xyes; then
   AC_DEFINE(LIBGOMP_OFFLOADED_ONLY, 1,
             [Define to 1 if building libgomp for an accelerator-only target.])
+fi
+
+if test "x$enable_offload_defaulted" = xyes; then
+  AC_DEFINE(OFFLOAD_DEFAULTED, 1,
+    [Define to 1 to if -foffload is defaulted])
 fi
 
 AC_CHECK_SIZEOF([void *])

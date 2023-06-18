@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1997-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1997-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,43 +23,48 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with ALI;      use ALI;
-with Atree;    use Atree;
-with Checks;   use Checks;
-with Debug;    use Debug;
-with Einfo;    use Einfo;
-with Elists;   use Elists;
-with Errout;   use Errout;
-with Exp_Ch11; use Exp_Ch11;
-with Exp_Tss;  use Exp_Tss;
-with Exp_Util; use Exp_Util;
-with Expander; use Expander;
-with Lib;      use Lib;
-with Lib.Load; use Lib.Load;
-with Namet;    use Namet;
-with Nlists;   use Nlists;
-with Nmake;    use Nmake;
-with Opt;      use Opt;
-with Output;   use Output;
-with Restrict; use Restrict;
-with Rident;   use Rident;
-with Rtsfind;  use Rtsfind;
-with Sem;      use Sem;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Cat;  use Sem_Cat;
-with Sem_Ch7;  use Sem_Ch7;
-with Sem_Ch8;  use Sem_Ch8;
-with Sem_Disp; use Sem_Disp;
-with Sem_Prag; use Sem_Prag;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
-with Sinput;   use Sinput;
-with Snames;   use Snames;
-with Stand;    use Stand;
+with ALI;            use ALI;
+with Atree;          use Atree;
+with Checks;         use Checks;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Errout;         use Errout;
+with Exp_Ch11;       use Exp_Ch11;
+with Exp_Tss;        use Exp_Tss;
+with Exp_Util;       use Exp_Util;
+with Expander;       use Expander;
+with Lib;            use Lib;
+with Lib.Load;       use Lib.Load;
+with Namet;          use Namet;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
+with Opt;            use Opt;
+with Output;         use Output;
+with Restrict;       use Restrict;
+with Rident;         use Rident;
+with Rtsfind;        use Rtsfind;
+with Sem;            use Sem;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Cat;        use Sem_Cat;
+with Sem_Ch7;        use Sem_Ch7;
+with Sem_Ch8;        use Sem_Ch8;
+with Sem_Disp;       use Sem_Disp;
+with Sem_Prag;       use Sem_Prag;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Sinput;         use Sinput;
+with Snames;         use Snames;
+with Stand;          use Stand;
 with Table;
-with Tbuild;   use Tbuild;
-with Uintp;    use Uintp;
-with Uname;    use Uname;
+with Tbuild;         use Tbuild;
+with Uintp;          use Uintp;
+with Uname;          use Uname;
+with Warnsw;         use Warnsw;
 
 with GNAT;                 use GNAT;
 with GNAT.Dynamic_HTables; use GNAT.Dynamic_HTables;
@@ -876,6 +881,10 @@ package body Sem_Elab is
       --  The subprogram body traversal mode. Once set, this value should not
       --  be changed.
 
+      Within_Freezing_Actions : Boolean := False;
+      --  This flag is set when the Processing phase is currently examining a
+      --  scenario which was reached from the actions of a freeze node.
+
       Within_Generic : Boolean := False;
       --  This flag is set when the Processing phase is currently within a
       --  generic unit.
@@ -1304,15 +1313,11 @@ package body Sem_Elab is
       --  is set, then string " in SPARK" is added to the end of the message.
 
       procedure Info_Variable_Reference
-        (Ref      : Node_Id;
-         Var_Id   : Entity_Id;
-         Info_Msg : Boolean;
-         In_SPARK : Boolean);
+        (Ref    : Node_Id;
+         Var_Id : Entity_Id);
       pragma Inline (Info_Variable_Reference);
       --  Output information concerning reference Ref which mentions variable
-      --  Var_Id. If flag Info_Msg is set, the routine emits an information
-      --  message, otherwise it emits an error. If flag In_SPARK is set, then
-      --  string " in SPARK" is added to the end of the message.
+      --  Var_Id. The routine emits an error suffixed with " in SPARK".
 
    end Diagnostics;
    use Diagnostics;
@@ -1752,13 +1757,13 @@ package body Sem_Elab is
 
       function Is_Ada_Semantic_Target (Id : Entity_Id) return Boolean;
       pragma Inline (Is_Ada_Semantic_Target);
-      --  Determine whether arbitrary entity Id denodes a source or internally
+      --  Determine whether arbitrary entity Id denotes a source or internally
       --  generated subprogram which emulates Ada semantics.
 
       function Is_Assertion_Pragma_Target (Id : Entity_Id) return Boolean;
       pragma Inline (Is_Assertion_Pragma_Target);
       --  Determine whether arbitrary entity Id denotes a procedure which
-      --  varifies the run-time semantics of an assertion pragma.
+      --  verifies the run-time semantics of an assertion pragma.
 
       function Is_Bodiless_Subprogram (Subp_Id : Entity_Id) return Boolean;
       pragma Inline (Is_Bodiless_Subprogram);
@@ -1809,11 +1814,6 @@ package body Sem_Elab is
       --  Determine whether arbitrary entity Id denotes a partial invariant
       --  procedure.
 
-      function Is_Postconditions_Proc (Id : Entity_Id) return Boolean;
-      pragma Inline (Is_Postconditions_Proc);
-      --  Determine whether arbitrary entity Id denotes internally generated
-      --  routine _Postconditions.
-
       function Is_Preelaborated_Unit (Id : Entity_Id) return Boolean;
       pragma Inline (Is_Preelaborated_Unit);
       --  Determine whether arbitrary entity Id denotes a unit which is subject
@@ -1845,7 +1845,7 @@ package body Sem_Elab is
 
       function Is_SPARK_Semantic_Target (Id : Entity_Id) return Boolean;
       pragma Inline (Is_SPARK_Semantic_Target);
-      --  Determine whether arbitrary entity Id nodes a source or internally
+      --  Determine whether arbitrary entity Id denotes a source or internally
       --  generated subprogram which emulates SPARK semantics.
 
       function Is_Subprogram_Inst (Id : Entity_Id) return Boolean;
@@ -2066,7 +2066,7 @@ package body Sem_Elab is
    --  Change the status of the elaboration phase of the compiler to Status
 
    procedure Spec_And_Body_From_Entity
-     (Id        : Node_Id;
+     (Id        : Entity_Id;
       Spec_Decl : out Node_Id;
       Body_Decl : out Node_Id);
    pragma Inline (Spec_And_Body_From_Entity);
@@ -2480,14 +2480,6 @@ package body Sem_Elab is
 
          elsif Is_Partial_Invariant_Proc (Subp_Id) then
             null;
-
-         --  _Postconditions
-
-         elsif Is_Postconditions_Proc (Subp_Id) then
-            Output_Verification_Call
-              (Pred    => "postconditions",
-               Id      => Find_Enclosing_Scope (Call),
-               Id_Kind => "subprogram");
 
          --  Subprograms must come last because some of the previous cases fall
          --  under this category.
@@ -3032,11 +3024,9 @@ package body Sem_Elab is
       pragma Inline (Nested_Scenarios);
       --  Obtain the list of scenarios associated with subprogram body N
 
-      procedure Set_Is_Traversed_Body
-        (N   : Node_Id;
-         Val : Boolean := True);
+      procedure Set_Is_Traversed_Body (N : Node_Id);
       pragma Inline (Set_Is_Traversed_Body);
-      --  Mark subprogram body N as traversed depending on value Val
+      --  Mark subprogram body N as traversed
 
       procedure Set_Nested_Scenarios
         (N         : Node_Id;
@@ -3101,18 +3091,11 @@ package body Sem_Elab is
       -- Set_Is_Traversed_Body --
       ---------------------------
 
-      procedure Set_Is_Traversed_Body
-        (N   : Node_Id;
-         Val : Boolean := True)
-      is
+      procedure Set_Is_Traversed_Body (N : Node_Id) is
          pragma Assert (Present (N));
 
       begin
-         if Val then
-            NE_Set.Insert (Traversed_Bodies_Set, N);
-         else
-            NE_Set.Delete (Traversed_Bodies_Set, N);
-         end if;
+         NE_Set.Insert (Traversed_Bodies_Set, N);
       end Set_Is_Traversed_Body;
 
       --------------------------
@@ -3348,7 +3331,9 @@ package body Sem_Elab is
                Traverse_List (Else_Actions (Scen));
 
             elsif Nkind (Scen) in
-                    N_Component_Association | N_Iterated_Component_Association
+                    N_Component_Association
+                  | N_Iterated_Component_Association
+                  | N_Iterated_Element_Association
             then
                Traverse_List (Loop_Actions (Scen));
 
@@ -3758,10 +3743,10 @@ package body Sem_Elab is
       Set_Is_SPARK_Mode_On_Node (Marker, Is_SPARK_Mode_On_Node (N));
       Set_Target                (Marker, Subp_Id);
 
-      --  Ada 2020 (AI12-0175): Calls to certain functions that are essentially
+      --  Ada 2022 (AI12-0175): Calls to certain functions that are essentially
       --  unchecked conversions are preelaborable.
 
-      if Ada_Version >= Ada_2020 then
+      if Ada_Version >= Ada_2022 then
          Set_Is_Preelaborable_Call (Marker, Is_Preelaborable_Construct (N));
       else
          Set_Is_Preelaborable_Call (Marker, False);
@@ -3824,14 +3809,14 @@ package body Sem_Elab is
       -----------------------
 
       function Ultimate_Variable (Var_Id : Entity_Id) return Entity_Id is
+         pragma Assert (Ekind (Var_Id) = E_Variable);
          Ren_Id : Entity_Id;
-
       begin
          Ren_Id := Var_Id;
-         while Present (Renamed_Entity (Ren_Id))
-           and then Nkind (Renamed_Entity (Ren_Id)) in N_Entity
+         while Present (Renamed_Object (Ren_Id))
+           and then Nkind (Renamed_Object (Ren_Id)) in N_Entity
          loop
-            Ren_Id := Renamed_Entity (Ren_Id);
+            Ren_Id := Renamed_Object (Ren_Id);
          end loop;
 
          return Ren_Id;
@@ -4958,7 +4943,7 @@ package body Sem_Elab is
          --  which started the recursive search. If this is not the case, then
          --  there is a potential ABE if the access value is used to call the
          --  subprogram. Emit a warning only when switch -gnatw.f (warnings on
-         --  suspucious 'Access) is in effect.
+         --  suspicious 'Access) is in effect.
 
          elsif Warn_On_Elab_Access
            and then Present (Body_Decl)
@@ -4967,7 +4952,7 @@ package body Sem_Elab is
          then
             Error_Msg_Name_1 := Attribute_Name (Attr);
             Error_Msg_NE
-              ("??% attribute of & before body seen", Attr, Subp_Id);
+              ("?.f?% attribute of & before body seen", Attr, Subp_Id);
             Error_Msg_N ("\possible Program_Error on later references", Attr);
 
             Output_Active_Scenarios (Attr, New_In_State);
@@ -5372,6 +5357,7 @@ package body Sem_Elab is
          Subp_Id   : constant Entity_Id     := Target (Call_Rep);
          Subp_Rep  : constant Target_Rep_Id :=
                        Target_Representation_Of (Subp_Id, In_State);
+         Body_Decl : constant Node_Id       := Body_Declaration (Subp_Rep);
          Subp_Decl : constant Node_Id       := Spec_Declaration (Subp_Rep);
 
          SPARK_Rules_On : constant Boolean :=
@@ -5471,6 +5457,16 @@ package body Sem_Elab is
              or else not Elaboration_Warnings_OK (Call_Rep)
              or else not Elaboration_Warnings_OK (Subp_Rep);
 
+         --  The call occurs in freezing actions context when a prior scenario
+         --  is already in that mode, or when the target is a subprogram whose
+         --  body has been generated as a freezing action. Update the state of
+         --  the Processing phase to reflect this.
+
+         New_In_State.Within_Freezing_Actions :=
+           New_In_State.Within_Freezing_Actions
+             or else (Present (Body_Decl)
+                       and then Nkind (Parent (Body_Decl)) = N_Freeze_Entity);
+
          --  The call occurs in an initial condition context when a prior
          --  scenario is already in that mode, or when the target is an
          --  Initial_Condition procedure. Update the state of the Processing
@@ -5521,7 +5517,7 @@ package body Sem_Elab is
             In_State => New_In_State);
 
          Traverse_Conditional_ABE_Body
-           (N        => Body_Declaration (Subp_Rep),
+           (N        => Body_Decl,
             In_State => New_In_State);
       end Process_Conditional_ABE_Call;
 
@@ -5738,6 +5734,13 @@ package body Sem_Elab is
             --  this traversal has suppressed elaboration warnings.
 
             if In_State.Suppress_Warnings then
+               null;
+
+            --  Do not emit any ABE diagnostics when the call occurs in a
+            --  freezing actions context because this leads to incorrect
+            --  diagnostics.
+
+            elsif In_State.Within_Freezing_Actions then
                null;
 
             --  Do not emit any ABE diagnostics when the call occurs in an
@@ -6645,14 +6648,6 @@ package body Sem_Elab is
             elsif Is_Partial_Invariant_Proc (Subp_Id) then
                null;
 
-            --  _Postconditions
-
-            elsif Is_Postconditions_Proc (Subp_Id) then
-               Info_Verification_Call
-                 (Pred    => "postconditions",
-                  Id      => Find_Enclosing_Scope (Call),
-                  Id_Kind => "subprogram");
-
             --  Subprograms must come last because some of the previous cases
             --  fall under this category.
 
@@ -6693,10 +6688,8 @@ package body Sem_Elab is
       -----------------------------
 
       procedure Info_Variable_Reference
-        (Ref      : Node_Id;
-         Var_Id   : Entity_Id;
-         Info_Msg : Boolean;
-         In_SPARK : Boolean)
+        (Ref    : Node_Id;
+         Var_Id : Entity_Id)
       is
       begin
          if Is_Read (Ref) then
@@ -6704,8 +6697,8 @@ package body Sem_Elab is
               (Msg      => "read of variable & during elaboration",
                N        => Ref,
                Id       => Var_Id,
-               Info_Msg => Info_Msg,
-               In_SPARK => In_SPARK);
+               Info_Msg => False,
+               In_SPARK => True);
          end if;
       end Info_Variable_Reference;
    end Diagnostics;
@@ -6976,6 +6969,11 @@ package body Sem_Elab is
          --  Determine whether arbitrary node N denotes a suitable construct
          --  for inclusion into the early call region.
 
+         function Previous_Suitable_Construct (N : Node_Id) return Node_Id;
+         pragma Inline (Previous_Suitable_Construct);
+         --  Return the previous node suitable for inclusion into the early
+         --  call region.
+
          procedure Transition_Body_Declarations
            (Bod  : Node_Id;
             Curr : out Node_Id);
@@ -7220,7 +7218,7 @@ package body Sem_Elab is
          begin
             --  The early call region starts at N
 
-            Curr  := Prev (N);
+            Curr  := Previous_Suitable_Construct (N);
             Start := N;
 
             --  Inspect each node in reverse declarative order while going in
@@ -7297,7 +7295,7 @@ package body Sem_Elab is
             --  Otherwise the input node is still within some list
 
             else
-               Curr := Prev (Start);
+               Curr := Previous_Suitable_Construct (Start);
             end if;
          end Include;
 
@@ -7352,12 +7350,22 @@ package body Sem_Elab is
             --  is a byproduct of the parser. Such a null statement should be
             --  excluded from the early call region because it carries the
             --  source location of the "end" keyword, and may lead to confusing
-            --  diagnistics.
+            --  diagnostics.
 
             if Nkind (N) = N_Null_Statement
               and then not Comes_From_Source (N)
               and then Present (Context)
               and then Nkind (Context) = N_Handled_Sequence_Of_Statements
+            then
+               return False;
+
+            --  Similarly, internally-generated objects and types may have
+            --  out-of-order source locations that confuse diagnostics, e.g.
+            --  source locations in the body for objects/types generated in
+            --  the spec.
+
+            elsif Nkind (N) in N_Full_Type_Declaration | N_Object_Declaration
+              and then not Comes_From_Source (N)
             then
                return False;
             end if;
@@ -7388,6 +7396,23 @@ package body Sem_Elab is
                   return True;
             end case;
          end Is_Suitable_Construct;
+
+         ---------------------------------
+         -- Previous_Suitable_Construct --
+         ---------------------------------
+
+         function Previous_Suitable_Construct (N : Node_Id) return Node_Id is
+            P : Node_Id;
+
+         begin
+            P := Prev (N);
+
+            while Present (P) and then not Is_Suitable_Construct (P) loop
+               Prev (P);
+            end loop;
+
+            return P;
+         end Previous_Suitable_Construct;
 
          ----------------------------------
          -- Transition_Body_Declarations --
@@ -8634,10 +8659,8 @@ package body Sem_Elab is
 
             elsif Is_Suitable_Variable_Reference (N) then
                Info_Variable_Reference
-                 (Ref      => N,
-                  Var_Id   => Targ_Id,
-                  Info_Msg => False,
-                  In_SPARK => True);
+                 (Ref    => N,
+                  Var_Id => Targ_Id);
 
             --  No other scenario may impose a requirement on the context of
             --  the main unit.
@@ -8873,10 +8896,10 @@ package body Sem_Elab is
 
       Error_Msg_Warn := GNAT_Mode;
 
-      --  Ada 2020 (AI12-0175): Calls to certain functions that are essentially
+      --  Ada 2022 (AI12-0175): Calls to certain functions that are essentially
       --  unchecked conversions are preelaborable.
 
-      if Ada_Version >= Ada_2020 then
+      if Ada_Version >= Ada_2022 then
          Error_Msg_N
            ("<<non-preelaborable call not allowed in preelaborated unit", N);
       else
@@ -9024,7 +9047,7 @@ package body Sem_Elab is
             if not Comes_From_Source (Curr) then
                null;
 
-            --  If the traversal came from the handled sequence of statments,
+            --  If the traversal came from the handled sequence of statements,
             --  then the node appears at the level of the enclosing construct.
             --  This is a more reliable test because transients scopes within
             --  the declarative region of the encapsulator are hard to detect.
@@ -9046,7 +9069,7 @@ package body Sem_Elab is
          elsif Nkind (Curr) in
                  N_Entry_Body | N_Subprogram_Body | N_Task_Body
          then
-            --  If the traversal came from the handled sequence of statments,
+            --  If the traversal came from the handled sequence of statements,
             --  then the node cannot possibly appear at any level. This is
             --  a more reliable test because transients scopes within the
             --  declarative region of the encapsulator are hard to detect.
@@ -11801,19 +11824,15 @@ package body Sem_Elab is
       --  by creating an entry for it in the ALI file of the main unit. Formal
       --  In_State denotes the current state of the Processing phase.
 
-      procedure Set_Is_Saved_Construct
-        (Constr : Entity_Id;
-         Val    : Boolean := True);
+      procedure Set_Is_Saved_Construct (Constr : Entity_Id);
       pragma Inline (Set_Is_Saved_Construct);
       --  Mark invocation construct Constr as declared in the ALI file of the
-      --  main unit depending on value Val.
+      --  main unit.
 
-      procedure Set_Is_Saved_Relation
-        (Rel : Invoker_Target_Relation;
-         Val : Boolean := True);
+      procedure Set_Is_Saved_Relation (Rel : Invoker_Target_Relation);
       pragma Inline (Set_Is_Saved_Relation);
       --  Mark simple invocation relation Rel as recorded in the ALI file of
-      --  the main unit depending on value Val.
+      --  the main unit.
 
       function Target_Of
         (Pos      : Active_Scenario_Pos;
@@ -11883,7 +11902,7 @@ package body Sem_Elab is
          --  Partially decorate the elaboration procedure because it will not
          --  be insertred into the tree and analyzed.
 
-         Set_Ekind (Proc_Id, E_Procedure);
+         Mutate_Ekind (Proc_Id, E_Procedure);
          Set_Etype (Proc_Id, Standard_Void_Type);
          Set_Scope (Proc_Id, Unique_Entity (Main_Unit_Entity));
 
@@ -12008,7 +12027,7 @@ package body Sem_Elab is
          --  it will not be inserted into the tree and analyzed.
 
          Task_Obj := Make_Temporary (Loc, 'T');
-         Set_Ekind (Task_Obj, E_Variable);
+         Mutate_Ekind (Task_Obj, E_Variable);
          Set_Etype (Task_Obj, Task_Typ);
 
          --  Associate the dummy task object with the activation call
@@ -13074,10 +13093,6 @@ package body Sem_Elab is
            (Extra : out Entity_Id;
             Kind  : out Invocation_Kind)
          is
-            Targ_Rep  : constant Target_Rep_Id :=
-                          Target_Representation_Of (Targ_Id, In_State);
-            Spec_Decl : constant Node_Id := Spec_Declaration (Targ_Rep);
-
          begin
             --  Accept within a task body
 
@@ -13162,12 +13177,6 @@ package body Sem_Elab is
             then
                Extra := First_Formal_Type (Targ_Id);
                Kind  := Invariant_Verification;
-
-            --  Postcondition verification
-
-            elsif Is_Postconditions_Proc (Targ_Id) then
-               Extra := Find_Enclosing_Scope (Spec_Decl);
-               Kind  := Postcondition_Verification;
 
             --  Protected entry call
 
@@ -13303,34 +13312,20 @@ package body Sem_Elab is
       -- Set_Is_Saved_Construct --
       ----------------------------
 
-      procedure Set_Is_Saved_Construct
-        (Constr : Entity_Id;
-         Val    : Boolean := True)
-      is
+      procedure Set_Is_Saved_Construct (Constr : Entity_Id) is
          pragma Assert (Present (Constr));
 
       begin
-         if Val then
-            NE_Set.Insert (Saved_Constructs_Set, Constr);
-         else
-            NE_Set.Delete (Saved_Constructs_Set, Constr);
-         end if;
+         NE_Set.Insert (Saved_Constructs_Set, Constr);
       end Set_Is_Saved_Construct;
 
       ---------------------------
       -- Set_Is_Saved_Relation --
       ---------------------------
 
-      procedure Set_Is_Saved_Relation
-        (Rel : Invoker_Target_Relation;
-         Val : Boolean := True)
-      is
+      procedure Set_Is_Saved_Relation (Rel : Invoker_Target_Relation) is
       begin
-         if Val then
-            IR_Set.Insert (Saved_Relations_Set, Rel);
-         else
-            IR_Set.Delete (Saved_Relations_Set, Rel);
-         end if;
+         IR_Set.Insert (Saved_Relations_Set, Rel);
       end Set_Is_Saved_Relation;
 
       ------------------
@@ -13615,6 +13610,13 @@ package body Sem_Elab is
       elsif Nkind (Spec_Decl) = N_Subprogram_Body_Stub
         and then No (Corresponding_Spec_Of_Stub (Spec_Decl))
       then
+         return True;
+
+      --  A call to an expression function that is not a completion cannot
+      --  cause an ABE because it has no prior declaration; this remains
+      --  true even if the FE transforms the callee into something else.
+
+      elsif Nkind (Original_Node (Spec_Decl)) = N_Expression_Function then
          return True;
 
       --  Subprogram bodies which wrap attribute references used as actuals
@@ -14444,8 +14446,7 @@ package body Sem_Elab is
            Is_Default_Initial_Condition_Proc (Id)
              or else Is_Initial_Condition_Proc (Id)
              or else Is_Invariant_Proc (Id)
-             or else Is_Partial_Invariant_Proc (Id)
-             or else Is_Postconditions_Proc (Id);
+             or else Is_Partial_Invariant_Proc (Id);
       end Is_Assertion_Pragma_Target;
 
       ----------------------------
@@ -14487,7 +14488,6 @@ package body Sem_Elab is
            Is_Accept_Alternative_Proc (Id)
              or else Is_Finalizer_Proc (Id)
              or else Is_Partial_Invariant_Proc (Id)
-             or else Is_Postconditions_Proc (Id)
              or else Is_TSS (Id, TSS_Deep_Adjust)
              or else Is_TSS (Id, TSS_Deep_Finalize)
              or else Is_TSS (Id, TSS_Deep_Initialize);
@@ -14642,18 +14642,6 @@ package body Sem_Elab is
            Ekind (Id) = E_Procedure
              and then Is_Partial_Invariant_Procedure (Id);
       end Is_Partial_Invariant_Proc;
-
-      ----------------------------
-      -- Is_Postconditions_Proc --
-      ----------------------------
-
-      function Is_Postconditions_Proc (Id : Entity_Id) return Boolean is
-      begin
-         --  To qualify, the entity must denote a _Postconditions procedure
-
-         return
-           Ekind (Id) = E_Procedure and then Chars (Id) = Name_uPostconditions;
-      end Is_Postconditions_Proc;
 
       ---------------------------
       -- Is_Preelaborated_Unit --
@@ -15121,7 +15109,7 @@ package body Sem_Elab is
          Inst_Rep : Scenario_Rep_Id;
          In_State : Processing_In_State);
       pragma Inline (Process_SPARK_Instantiation);
-      --  Verify that instanciation Inst does not precede the generic body it
+      --  Verify that instantiation Inst does not precede the generic body it
       --  instantiates (SPARK RM 7.7(6)). Inst_Rep is the representation of the
       --  instantiation. In_State is the current state of the Processing phase.
 
@@ -15384,7 +15372,7 @@ package body Sem_Elab is
 
                elsif Present (Vis_Decls)
                  and then List_Containing (FNode) = Vis_Decls
-                 and then (No (Prv_Decls) or else Is_Empty_List (Prv_Decls))
+                 and then Is_Empty_List (Prv_Decls)
                then
                   null;
 
@@ -15831,7 +15819,7 @@ package body Sem_Elab is
    -------------------------------
 
    procedure Spec_And_Body_From_Entity
-     (Id        : Node_Id;
+     (Id        : Entity_Id;
       Spec_Decl : out Node_Id;
       Body_Decl : out Node_Id)
    is
@@ -17472,7 +17460,7 @@ package body Sem_Elab is
 
       if Nkind (N) = N_Procedure_Call_Statement
         and then Is_Entity_Name (Name (N))
-        and then Chars (Entity (Name (N))) = Name_uPostconditions
+        and then Chars (Entity (Name (N))) = Name_uWrapped_Statements
       then
          return;
       end if;
@@ -17554,14 +17542,14 @@ package body Sem_Elab is
             --  Complain if ref that comes from source in preelaborated unit
             --  and we are not inside a subprogram (i.e. we are in elab code).
 
-            --  Ada 2020 (AI12-0175): Calls to certain functions that are
+            --  Ada 2022 (AI12-0175): Calls to certain functions that are
             --  essentially unchecked conversions are preelaborable.
 
             if Comes_From_Source (N)
               and then In_Preelaborated_Unit
               and then not In_Inlined_Body
               and then Nkind (N) /= N_Attribute_Reference
-              and then not (Ada_Version >= Ada_2020
+              and then not (Ada_Version >= Ada_2022
                              and then Is_Preelaborable_Construct (N))
             then
                Error_Preelaborated_Call (N);
@@ -18757,9 +18745,9 @@ package body Sem_Elab is
                      T : constant Entity_Id := Etype (First_Formal (E));
                   begin
                      if Is_Controlled (T) then
-                        if Warnings_Off (T)
+                        if Has_Warnings_Off (T)
                           or else (Ekind (T) = E_Private_Type
-                                    and then Warnings_Off (Full_View (T)))
+                                    and then Has_Warnings_Off (Full_View (T)))
                         then
                            goto Output;
                         end if;
@@ -18902,18 +18890,16 @@ package body Sem_Elab is
 
       procedure Collect_Tasks (Decls : List_Id) is
       begin
-         if Present (Decls) then
-            Decl := First (Decls);
-            while Present (Decl) loop
-               if Nkind (Decl) = N_Object_Declaration
-                 and then Has_Task (Etype (Defining_Identifier (Decl)))
-               then
-                  Add_Task_Proc (Etype (Defining_Identifier (Decl)));
-               end if;
+         Decl := First (Decls);
+         while Present (Decl) loop
+            if Nkind (Decl) = N_Object_Declaration
+              and then Has_Task (Etype (Defining_Identifier (Decl)))
+            then
+               Add_Task_Proc (Etype (Defining_Identifier (Decl)));
+            end if;
 
-               Next (Decl);
-            end loop;
-         end if;
+            Next (Decl);
+         end loop;
       end Collect_Tasks;
 
       ----------------

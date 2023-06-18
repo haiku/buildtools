@@ -52,14 +52,22 @@ void ProcessPlatformSpecificAllocations(Frontier *frontier) {}
 // behavior and causes rare race conditions.
 void HandleLeaks() {}
 
+// This is defined differently in asan_fuchsia.cpp and lsan_fuchsia.cpp.
+bool UseExitcodeOnLeak();
+
 int ExitHook(int status) {
+  if (common_flags()->detect_leaks && common_flags()->leak_check_at_exit) {
+    if (UseExitcodeOnLeak())
+      DoLeakCheck();
+    else
+      DoRecoverableLeakCheckVoid();
+  }
   return status == 0 && HasReportedLeaks() ? common_flags()->exitcode : status;
 }
 
 void LockStuffAndStopTheWorld(StopTheWorldCallback callback,
                               CheckForLeaksParam *argument) {
-  LockThreadRegistry();
-  LockAllocator();
+  ScopedStopTheWorldLock lock;
 
   struct Params {
     InternalMmapVector<uptr> allocator_caches;
@@ -107,9 +115,7 @@ void LockStuffAndStopTheWorld(StopTheWorldCallback callback,
     auto params = static_cast<const Params *>(data);
     uptr begin = reinterpret_cast<uptr>(chunk);
     uptr end = begin + size;
-    auto i = __sanitizer::InternalLowerBound(params->allocator_caches, 0,
-                                             params->allocator_caches.size(),
-                                             begin, CompareLess<uptr>());
+    auto i = __sanitizer::InternalLowerBound(params->allocator_caches, begin);
     if (i < params->allocator_caches.size() &&
         params->allocator_caches[i] >= begin &&
         end - params->allocator_caches[i] <= sizeof(AllocatorCache)) {
@@ -151,9 +157,6 @@ void LockStuffAndStopTheWorld(StopTheWorldCallback callback,
         params->callback(SuspendedThreadsListFuchsia(), params->argument);
       },
       &params);
-
-  UnlockAllocator();
-  UnlockThreadRegistry();
 }
 
 }  // namespace __lsan

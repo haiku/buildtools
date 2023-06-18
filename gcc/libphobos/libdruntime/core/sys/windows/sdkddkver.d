@@ -4,12 +4,11 @@
  * Translated from Windows SDK API
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/sdkddkver.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/sdkddkver.d)
  */
 module core.sys.windows.sdkddkver;
 
 version (Windows):
-@system:
 
 enum _WIN32_WINNT_NT4                    = 0x0400;
 enum _WIN32_WINNT_WIN2K                  = 0x0500;

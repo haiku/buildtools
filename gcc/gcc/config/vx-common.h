@@ -1,5 +1,5 @@
 /* Target-independent configuration for VxWorks and VxWorks AE.   
-   Copyright (C) 2005-2021 Free Software Foundation, Inc.
+   Copyright (C) 2005-2023 Free Software Foundation, Inc.
    Contributed by CodeSourcery, LLC.
 
 This file is part of GCC.
@@ -23,8 +23,11 @@ along with GCC; see the file COPYING3.  If not see
 /* Most of these will probably be overridden by subsequent headers.  We
    undefine them here just in case, and define VXWORKS_ versions of each,
    to be used in port-specific vxworks.h.  */
-#undef LIBGCC_SPEC
-#define LIBGCC_SPEC VXWORKS_LIBGCC_SPEC
+
+/* REAL_LIBGCC_SPEC needs to be used since the non-static option is not
+   handled in gcc.cc.  */
+#undef REAL_LIBGCC_SPEC
+#define REAL_LIBGCC_SPEC VXWORKS_LIBGCC_SPEC
 #undef STARTFILE_SPEC
 #undef ENDFILE_SPEC
 
@@ -66,12 +69,13 @@ along with GCC; see the file COPYING3.  If not see
 #undef WINT_TYPE_SIZE
 #define WINT_TYPE_SIZE WCHAR_TYPE_SIZE
 #undef WINT_TYPE
-#define WINT_TYPE WCHAR_TYPE
+#define WINT_TYPE "wchar_t"
 
 /* ---------------------- Debug and unwind info formats ------------------  */
 
 /* Dwarf2 unwind info is supported, unless overriden by a request for a target
-   specific format.
+   specific format.  Always #define DWARF2_UNWIND_INFO to prevent defaults.h
+   from picking a possibly different value.
 
    Taking care of this here allows using DWARF2_UNWIND_INFO in #if conditions
    from the common config/vxworks.h files, included before the cpu
@@ -81,8 +85,10 @@ along with GCC; see the file COPYING3.  If not see
    #if point.  Since <cpu>/vxworks.h. is typically included after
    config/vxworks.h, #if expressions in the latter can't rely on possible
    redefinitions in the former.  */
-#if !ARM_UNWIND_INFO
 #undef DWARF2_UNWIND_INFO
+#if ARM_UNWIND_INFO
+#define DWARF2_UNWIND_INFO 0
+#else
 #define DWARF2_UNWIND_INFO 1
 #endif
 
@@ -91,8 +97,6 @@ along with GCC; see the file COPYING3.  If not see
 #define PREFERRED_DEBUGGING_TYPE DWARF2_DEBUG
 
 /* None of these other formats is supported.  */
-#undef DBX_DEBUGGING_INFO
-#undef XCOFF_DEBUGGING_INFO
 #undef VMS_DEBUGGING_INFO
 
 /* ------------------------ Misc configuration bits ----------------------  */

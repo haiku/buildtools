@@ -533,6 +533,10 @@ class Gogo
   register_package(const std::string& pkgpath,
 		   const std::string& pkgpath_symbol, Location);
 
+  // Add the unsafe bindings to the unsafe package.
+  void
+  add_unsafe_bindings(Package*);
+
   // Look up a package by pkgpath, and return its pkgpath_symbol.
   std::string
   pkgpath_symbol_for_package(const std::string&);
@@ -838,6 +842,11 @@ class Gogo
   void
   check_return_statements();
 
+  // Gather references from global variables initializers to other
+  // variables.
+  void
+  record_global_init_refs();
+
   // Remove deadcode.
   void
   remove_deadcode();
@@ -870,7 +879,7 @@ class Gogo
   // Add notes about the escape level of a function's input and output
   // parameters for exporting and importing top level functions.
   void
-  tag_function(Escape_context*, Named_object*);
+  tag_function(Named_object*);
 
   // Reclaim memory of escape analysis Nodes.
   void
@@ -2329,6 +2338,15 @@ class Variable
     this->toplevel_decl_ = s;
   }
 
+  // Note that the initializer of this global variable refers to VAR.
+  void
+  add_init_ref(Named_object* var);
+
+  // The variables that this variable's initializers refer to.
+  const std::vector<Named_object*>*
+  init_refs() const
+  { return this->init_refs_; }
+
   // Traverse the initializer expression.
   int
   traverse_expression(Traverse*, unsigned int traverse_mask);
@@ -2385,6 +2403,12 @@ class Variable
   Block* preinit_;
   // Location of variable definition.
   Location location_;
+  // The top-level declaration for this variable. Only used for local
+  // variables. Must be a Temporary_statement if not NULL.
+  Statement* toplevel_decl_;
+  // Variables that the initializer of a global variable refers to.
+  // Used for initializer ordering.
+  std::vector<Named_object*>* init_refs_;
   // Any associated go:embed comments.
   std::vector<std::string>* embeds_;
   // Backend representation.
@@ -2435,9 +2459,6 @@ class Variable
   // True if this variable is referenced from an inlined body that
   // will be put into the export data.
   bool is_referenced_by_inline_ : 1;
-  // The top-level declaration for this variable. Only used for local
-  // variables. Must be a Temporary_statement if not NULL.
-  Statement* toplevel_decl_;
 };
 
 // A variable which is really the name for a function return value, or
@@ -3042,6 +3063,10 @@ class Named_object
   // The location where this object was defined or referenced.
   Location
   location() const;
+
+  // Traverse a Named_object.
+  int
+  traverse(Traverse*, bool is_global);
 
   // Convert a variable to the backend representation.
   Bvariable*

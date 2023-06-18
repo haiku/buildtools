@@ -1,6 +1,6 @@
 // Components for manipulating non-owning sequences of objects -*- C++ -*-
 
-// Copyright (C) 2019-2021 Free Software Foundation, Inc.
+// Copyright (C) 2019-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -58,16 +58,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   namespace __detail
   {
     template<typename _Tp>
-      struct __is_std_span : false_type { };
+      inline constexpr bool __is_span = false;
 
     template<typename _Tp, size_t _Num>
-      struct __is_std_span<span<_Tp, _Num>> : true_type { };
+      inline constexpr bool __is_span<span<_Tp, _Num>> = true;
 
     template<typename _Tp>
-      struct __is_std_array : false_type { };
+      inline constexpr bool __is_std_array = false;
 
     template<typename _Tp, size_t _Num>
-      struct __is_std_array<std::array<_Tp, _Num>> : true_type { };
+      inline constexpr bool __is_std_array<std::array<_Tp, _Num>> = true;
 
     template<size_t _Extent>
       class __extent_storage
@@ -137,6 +137,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       using const_reference        = const element_type&;
       using iterator = __gnu_cxx::__normal_iterator<pointer, span>;
       using reverse_iterator       = std::reverse_iterator<iterator>;
+#if __cplusplus > 202002L
+      using const_iterator         = std::const_iterator<iterator>;
+      using const_reverse_iterator = std::const_iterator<reverse_iterator>;
+#endif
 
       // member constants
       static constexpr size_t extent = _Extent;
@@ -145,7 +149,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       constexpr
       span() noexcept
-      requires ((_Extent + 1u) <= 1u)
+      requires (_Extent == dynamic_extent || _Extent == 0)
       : _M_ptr(nullptr), _M_extent(0)
       { }
 
@@ -201,11 +205,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{ }
 
       template<typename _Range>
-	requires ranges::contiguous_range<_Range> && ranges::sized_range<_Range>
-	  && (ranges::borrowed_range<_Range> || is_const_v<element_type>)
-	  && (!__detail::__is_std_span<remove_cvref_t<_Range>>::value)
-	  && (!__detail::__is_std_array<remove_cvref_t<_Range>>::value)
+	requires (!__detail::__is_span<remove_cvref_t<_Range>>)
+	  && (!__detail::__is_std_array<remove_cvref_t<_Range>>)
 	  && (!is_array_v<remove_cvref_t<_Range>>)
+	  && ranges::contiguous_range<_Range> && ranges::sized_range<_Range>
+	  && (ranges::borrowed_range<_Range> || is_const_v<element_type>)
 	  && __is_compatible_ref<ranges::range_reference_t<_Range>>::value
 	constexpr explicit(extent != dynamic_extent)
 	span(_Range&& __range)
@@ -300,6 +304,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       constexpr reverse_iterator
       rend() const noexcept
       { return reverse_iterator(this->begin()); }
+
+#if __cplusplus > 202002L
+      constexpr const_iterator
+      cbegin() const noexcept
+      { return begin(); }
+
+      constexpr const_iterator
+      cend() const noexcept
+      { return end(); }
+
+      constexpr const_reverse_iterator
+      crbegin() const noexcept
+      { return rbegin(); }
+
+      constexpr const_reverse_iterator
+      crend() const noexcept
+      { return rend(); }
+#endif
 
       // subviews
 

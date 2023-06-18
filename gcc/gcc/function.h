@@ -1,5 +1,5 @@
 /* Structure for saving state for a nested function.
-   Copyright (C) 1989-2021 Free Software Foundation, Inc.
+   Copyright (C) 1989-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -157,6 +157,7 @@ struct GTY(()) rtl_eh {
 struct gimple_df;
 struct call_site_record_d;
 struct dw_fde_node;
+class range_query;
 
 struct GTY(()) varasm_status {
   /* If we're using a per-function constant pool, this is it.  */
@@ -269,14 +270,7 @@ struct GTY(()) function {
   /* Value histograms attached to particular statements.  */
   htab_t GTY((skip)) value_histograms;
 
-  /* Different from normal TODO_flags which are handled right at the
-     beginning or the end of one pass execution, the pending_TODOs
-     are passed down in the pipeline until one of its consumers can
-     perform the requested action.  Consumers should then clear the
-     flags for the actions that they have taken.  */
-  unsigned int pending_TODOs;
-
-  /* For function.c.  */
+  /* For function.cc.  */
 
   /* Points to the FUNCTION_DECL of this function.  */
   tree decl;
@@ -309,6 +303,12 @@ struct GTY(()) function {
      debugging is enabled.  */
   struct dw_fde_node *fde;
 
+  /* Range query mechanism for functions.  The default is to pick up
+     global ranges.  If a pass wants on-demand ranges OTOH, it must
+     call enable/disable_ranger().  The pointer is never null.  It
+     should be queried by calling get_range_query().  */
+  range_query * GTY ((skip)) x_range_query;
+
   /* Last statement uid.  */
   int last_stmt_uid;
 
@@ -330,6 +330,13 @@ struct GTY(()) function {
   /* Properties used by the pass manager.  */
   unsigned int curr_properties;
   unsigned int last_verified;
+
+  /* Different from normal TODO_flags which are handled right at the
+     beginning or the end of one pass execution, the pending_TODOs
+     are passed down in the pipeline until one of its consumers can
+     perform the requested action.  Consumers should then clear the
+     flags for the actions that they have taken.  */
+  unsigned int pending_TODOs;
 
   /* Non-null if the function does something that would prevent it from
      being copied; this applies to both versioning and inlining.  Set to
@@ -431,6 +438,10 @@ struct GTY(()) function {
 
   /* Set if there are any OMP_TARGET regions in the function.  */
   unsigned int has_omp_target : 1;
+
+  /* Set for artificial function created for [[assume (cond)]].
+     These should be GIMPLE optimized, but not expanded to RTL.  */
+  unsigned int assume_function : 1;
 };
 
 /* Add the decl D to the local_decls list of FUN.  */
@@ -676,7 +687,7 @@ extern void pop_cfun (void);
 extern int get_next_funcdef_no (void);
 extern int get_last_funcdef_no (void);
 extern void allocate_struct_function (tree, bool);
-extern void push_struct_function (tree fndecl);
+extern void push_struct_function (tree fndecl, bool = false);
 extern void push_dummy_function (bool);
 extern void pop_dummy_function (void);
 extern void init_dummy_function_start (void);
@@ -711,5 +722,7 @@ extern const char *function_name (struct function *);
 extern const char *current_function_name (void);
 
 extern void used_types_insert (tree);
+
+extern bool currently_expanding_function_start;
 
 #endif  /* GCC_FUNCTION_H */

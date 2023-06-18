@@ -5,11 +5,10 @@
  *
  * Authors: Stewart Gordon
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_wincrypt.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_wincrypt.d)
  */
 module core.sys.windows.wincrypt;
 version (Windows):
-@system:
 pragma(lib, "advapi32");
 
 version (ANSI) {} else version = Unicode;

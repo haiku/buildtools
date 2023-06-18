@@ -1,5 +1,5 @@
 /* Vector API for GNU compiler.
-   Copyright (C) 2004-2021 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
    Re-implemented in C++ by Diego Novillo <dnovillo@google.com>
 
@@ -193,7 +193,7 @@ struct vec_prefix
   /* FIXME - These fields should be private, but we need to cater to
 	     compilers that have stricter notions of PODness for types.  */
 
-  /* Memory allocation support routines in vec.c.  */
+  /* Memory allocation support routines in vec.cc.  */
   void register_overhead (void *, size_t, size_t CXX_MEM_STAT_INFO);
   void release_overhead (void *, size_t, size_t, bool CXX_MEM_STAT_INFO);
   static unsigned calculate_allocation (vec_prefix *, unsigned, bool);
@@ -541,18 +541,16 @@ vec_copy_construct (T *dst, const T *src, unsigned n)
     ::new (static_cast<void*>(dst)) T (*src);
 }
 
-/* Type to provide NULL values for vec<T, A, L>.  This is used to
-   provide nil initializers for vec instances.  Since vec must be
-   a POD, we cannot have proper ctor/dtor for it.  To initialize
-   a vec instance, you can assign it the value vNULL.  This isn't
-   needed for file-scope and function-local static vectors, which
-   are zero-initialized by default.  */
-struct vnull
-{
-  template <typename T, typename A, typename L>
-  CONSTEXPR operator vec<T, A, L> () const { return vec<T, A, L>(); }
-};
-extern vnull vNULL;
+/* Type to provide zero-initialized values for vec<T, A, L>.  This is
+   used to  provide nil initializers for vec instances.  Since vec must
+   be a trivially copyable type that can be copied by memcpy and zeroed
+   out by memset, it must have defaulted default and copy ctor and copy
+   assignment.  To initialize a vec either use value initialization
+   (e.g., vec() or vec v{ };) or assign it the value vNULL.  This isn't
+   needed for file-scope and function-local static vectors, which are
+   zero-initialized by default.  */
+struct vnull { };
+constexpr vnull vNULL{ };
 
 
 /* Embeddable vector.  These vectors are suitable to be embedded
@@ -588,8 +586,9 @@ public:
   unsigned allocated (void) const { return m_vecpfx.m_alloc; }
   unsigned length (void) const { return m_vecpfx.m_num; }
   bool is_empty (void) const { return m_vecpfx.m_num == 0; }
-  T *address (void) { return m_vecdata; }
-  const T *address (void) const { return m_vecdata; }
+  T *address (void) { return reinterpret_cast <T *> (this + 1); }
+  const T *address (void) const
+    { return reinterpret_cast <const T *> (this + 1); }
   T *begin () { return address (); }
   const T *begin () const { return address (); }
   T *end () { return address () + length (); }
@@ -612,10 +611,11 @@ public:
   void block_remove (unsigned, unsigned);
   void qsort (int (*) (const void *, const void *));
   void sort (int (*) (const void *, const void *, void *), void *);
-  T *bsearch (const void *key, int (*compar)(const void *, const void *));
+  void stablesort (int (*) (const void *, const void *, void *), void *);
+  T *bsearch (const void *key, int (*compar) (const void *, const void *));
   T *bsearch (const void *key,
 	      int (*compar)(const void *, const void *, void *), void *);
-  unsigned lower_bound (T, bool (*)(const T &, const T &)) const;
+  unsigned lower_bound (const T &, bool (*) (const T &, const T &)) const;
   bool contains (const T &search) const;
   static size_t embedded_size (unsigned);
   void embedded_init (unsigned, unsigned = 0, unsigned = 0);
@@ -630,10 +630,10 @@ public:
   friend struct va_gc_atomic;
   friend struct va_heap;
 
-  /* FIXME - These fields should be private, but we need to cater to
+  /* FIXME - This field should be private, but we need to cater to
 	     compilers that have stricter notions of PODness for types.  */
-  vec_prefix m_vecpfx;
-  T m_vecdata[1];
+  /* Align m_vecpfx to simplify address ().  */
+  alignas (T) alignas (vec_prefix) vec_prefix m_vecpfx;
 };
 
 
@@ -880,7 +880,7 @@ inline const T &
 vec<T, A, vl_embed>::operator[] (unsigned ix) const
 {
   gcc_checking_assert (ix < m_vecpfx.m_num);
-  return m_vecdata[ix];
+  return address ()[ix];
 }
 
 template<typename T, typename A>
@@ -888,7 +888,7 @@ inline T &
 vec<T, A, vl_embed>::operator[] (unsigned ix)
 {
   gcc_checking_assert (ix < m_vecpfx.m_num);
-  return m_vecdata[ix];
+  return address ()[ix];
 }
 
 
@@ -917,11 +917,11 @@ vec<T, A, vl_embed>::space (unsigned nelems) const
 }
 
 
-/* Return iteration condition and update PTR to point to the IX'th
+/* Return iteration condition and update *PTR to (a copy of) the IX'th
    element of this vector.  Use this to iterate over the elements of a
    vector as follows,
 
-     for (ix = 0; vec<T, A>::iterate (v, ix, &ptr); ix++)
+     for (ix = 0; v->iterate (ix, &val); ix++)
        continue;  */
 
 template<typename T, typename A>
@@ -930,7 +930,7 @@ vec<T, A, vl_embed>::iterate (unsigned ix, T *ptr) const
 {
   if (ix < m_vecpfx.m_num)
     {
-      *ptr = m_vecdata[ix];
+      *ptr = address ()[ix];
       return true;
     }
   else
@@ -956,7 +956,7 @@ vec<T, A, vl_embed>::iterate (unsigned ix, T **ptr) const
 {
   if (ix < m_vecpfx.m_num)
     {
-      *ptr = CONST_CAST (T *, &m_vecdata[ix]);
+      *ptr = CONST_CAST (T *, &address ()[ix]);
       return true;
     }
   else
@@ -979,7 +979,7 @@ vec<T, A, vl_embed>::copy (ALONE_MEM_STAT_DECL) const
     {
       vec_alloc (new_vec, len PASS_MEM_STAT);
       new_vec->embedded_init (len, len);
-      vec_copy_construct (new_vec->address (), m_vecdata, len);
+      vec_copy_construct (new_vec->address (), address (), len);
     }
   return new_vec;
 }
@@ -1019,7 +1019,7 @@ inline T *
 vec<T, A, vl_embed>::quick_push (const T &obj)
 {
   gcc_checking_assert (space (1));
-  T *slot = &m_vecdata[m_vecpfx.m_num++];
+  T *slot = &address ()[m_vecpfx.m_num++];
   *slot = obj;
   return slot;
 }
@@ -1032,7 +1032,7 @@ inline T &
 vec<T, A, vl_embed>::pop (void)
 {
   gcc_checking_assert (length () > 0);
-  return m_vecdata[--m_vecpfx.m_num];
+  return address ()[--m_vecpfx.m_num];
 }
 
 
@@ -1057,7 +1057,7 @@ vec<T, A, vl_embed>::quick_insert (unsigned ix, const T &obj)
 {
   gcc_checking_assert (length () < allocated ());
   gcc_checking_assert (ix <= length ());
-  T *slot = &m_vecdata[ix];
+  T *slot = &address ()[ix];
   memmove (slot + 1, slot, (m_vecpfx.m_num++ - ix) * sizeof (T));
   *slot = obj;
 }
@@ -1072,7 +1072,7 @@ inline void
 vec<T, A, vl_embed>::ordered_remove (unsigned ix)
 {
   gcc_checking_assert (ix < length ());
-  T *slot = &m_vecdata[ix];
+  T *slot = &address ()[ix];
   memmove (slot, slot + 1, (--m_vecpfx.m_num - ix) * sizeof (T));
 }
 
@@ -1119,7 +1119,8 @@ inline void
 vec<T, A, vl_embed>::unordered_remove (unsigned ix)
 {
   gcc_checking_assert (ix < length ());
-  m_vecdata[ix] = m_vecdata[--m_vecpfx.m_num];
+  T *p = address ();
+  p[ix] = p[--m_vecpfx.m_num];
 }
 
 
@@ -1131,7 +1132,7 @@ inline void
 vec<T, A, vl_embed>::block_remove (unsigned ix, unsigned len)
 {
   gcc_checking_assert (ix + len <= length ());
-  T *slot = &m_vecdata[ix];
+  T *slot = &address ()[ix];
   m_vecpfx.m_num -= len;
   memmove (slot, slot + len, (m_vecpfx.m_num - ix) * sizeof (T));
 }
@@ -1160,6 +1161,17 @@ vec<T, A, vl_embed>::sort (int (*cmp) (const void *, const void *, void *),
     gcc_sort_r (address (), length (), sizeof (T), cmp, data);
 }
 
+/* Sort the contents of this vector with gcc_stablesort_r.  CMP is the
+   comparison function to pass to qsort.  */
+
+template<typename T, typename A>
+inline void
+vec<T, A, vl_embed>::stablesort (int (*cmp) (const void *, const void *,
+					     void *), void *data)
+{
+  if (length () > 1)
+    gcc_stablesort_r (address (), length (), sizeof (T), cmp, data);
+}
 
 /* Search the contents of the sorted vector with a binary search.
    CMP is the comparison function to pass to bsearch.  */
@@ -1238,9 +1250,13 @@ inline bool
 vec<T, A, vl_embed>::contains (const T &search) const
 {
   unsigned int len = length ();
+  const T *p = address ();
   for (unsigned int i = 0; i < len; i++)
-    if ((*this)[i] == search)
-      return true;
+    {
+      const T *slot = &p[i];
+      if (*slot == search)
+	return true;
+    }
 
   return false;
 }
@@ -1252,7 +1268,8 @@ vec<T, A, vl_embed>::contains (const T &search) const
 
 template<typename T, typename A>
 unsigned
-vec<T, A, vl_embed>::lower_bound (T obj, bool (*lessthan)(const T &, const T &))
+vec<T, A, vl_embed>::lower_bound (const T &obj,
+				  bool (*lessthan)(const T &, const T &))
   const
 {
   unsigned int len = length ();
@@ -1263,7 +1280,7 @@ vec<T, A, vl_embed>::lower_bound (T obj, bool (*lessthan)(const T &, const T &))
       half = len / 2;
       middle = first;
       middle += half;
-      T middle_elem = (*this)[middle];
+      const T &middle_elem = address ()[middle];
       if (lessthan (middle_elem, obj))
 	{
 	  first = middle;
@@ -1299,7 +1316,7 @@ vec<T, A, vl_embed>::embedded_size (unsigned alloc)
 				    vec, vec_embedded>::type vec_stdlayout;
   static_assert (sizeof (vec_stdlayout) == sizeof (vec), "");
   static_assert (alignof (vec_stdlayout) == alignof (vec), "");
-  return offsetof (vec_stdlayout, m_vecdata) + alloc * sizeof (T);
+  return sizeof (vec_stdlayout) + alloc * sizeof (T);
 }
 
 
@@ -1378,7 +1395,7 @@ void
 gt_pch_nx (vec<T *, A, vl_embed> *v, gt_pointer_operator op, void *cookie)
 {
   for (unsigned i = 0; i < v->length (); i++)
-    op (&((*v)[i]), cookie);
+    op (&((*v)[i]), NULL, cookie);
 }
 
 template<typename T, typename A>
@@ -1419,10 +1436,34 @@ gt_pch_nx (vec<T, A, vl_embed> *v, gt_pointer_operator op, void *cookie)
    As long as we use C++03, we cannot have constructors nor
    destructors in classes that are stored in unions.  */
 
+template<typename T, size_t N = 0>
+class auto_vec;
+
 template<typename T>
 struct vec<T, va_heap, vl_ptr>
 {
 public:
+  /* Default ctors to ensure triviality.  Use value-initialization
+     (e.g., vec() or vec v{ };) or vNULL to create a zero-initialized
+     instance.  */
+  vec () = default;
+  vec (const vec &) = default;
+  /* Initialization from the generic vNULL.  */
+  vec (vnull): m_vec () { }
+  /* Same as default ctor: vec storage must be released manually.  */
+  ~vec () = default;
+
+  /* Defaulted same as copy ctor.  */
+  vec& operator= (const vec &) = default;
+
+  /* Prevent implicit conversion from auto_vec.  Use auto_vec::to_vec()
+     instead.  */
+  template <size_t N>
+  vec (auto_vec<T, N> &) = delete;
+
+  template <size_t N>
+  void operator= (auto_vec<T, N> &) = delete;
+
   /* Memory allocation and deallocation for the embedded vector.
      Needed because we cannot have proper ctors/dtors defined.  */
   void create (unsigned nelems CXX_MEM_STAT_INFO);
@@ -1435,14 +1476,17 @@ public:
   bool is_empty (void) const
   { return m_vec ? m_vec->is_empty () : true; }
 
+  unsigned allocated (void) const
+  { return m_vec ? m_vec->allocated () : 0; }
+
   unsigned length (void) const
   { return m_vec ? m_vec->length () : 0; }
 
   T *address (void)
-  { return m_vec ? m_vec->m_vecdata : NULL; }
+  { return m_vec ? m_vec->address () : NULL; }
 
   const T *address (void) const
-  { return m_vec ? m_vec->m_vecdata : NULL; }
+  { return m_vec ? m_vec->address () : NULL; }
 
   T *begin () { return address (); }
   const T *begin () const { return address (); }
@@ -1488,6 +1532,7 @@ public:
   void block_remove (unsigned, unsigned);
   void qsort (int (*) (const void *, const void *));
   void sort (int (*) (const void *, const void *, void *), void *);
+  void stablesort (int (*) (const void *, const void *, void *), void *);
   T *bsearch (const void *key, int (*compar)(const void *, const void *));
   T *bsearch (const void *key,
 	      int (*compar)(const void *, const void *, void *), void *);
@@ -1509,14 +1554,20 @@ public:
    want to ask for internal storage for vectors on the stack because if the
    size of the vector is larger than the internal storage that space is wasted.
    */
-template<typename T, size_t N = 0>
+template<typename T, size_t N /* = 0 */>
 class auto_vec : public vec<T, va_heap>
 {
 public:
   auto_vec ()
   {
-    m_auto.embedded_init (MAX (N, 2), 0, 1);
-    this->m_vec = &m_auto;
+    m_auto.embedded_init (N, 0, 1);
+    /* ???  Instead of initializing m_vec from &m_auto directly use an
+       expression that avoids refering to a specific member of 'this'
+       to derail the -Wstringop-overflow diagnostic code, avoiding
+       the impression that data accesses are supposed to be to the
+       m_auto member storage.  */
+    size_t off = (char *) &m_auto - (char *) this;
+    this->m_vec = (vec<T, va_heap, vl_embed> *) ((char *) this + off);
   }
 
   auto_vec (size_t s CXX_MEM_STAT_INFO)
@@ -1527,8 +1578,10 @@ public:
 	return;
       }
 
-    m_auto.embedded_init (MAX (N, 2), 0, 1);
-    this->m_vec = &m_auto;
+    m_auto.embedded_init (N, 0, 1);
+    /* ???  See above.  */
+    size_t off = (char *) &m_auto - (char *) this;
+    this->m_vec = (vec<T, va_heap, vl_embed> *) ((char *) this + off);
   }
 
   ~auto_vec ()
@@ -1536,9 +1589,17 @@ public:
     this->release ();
   }
 
+  /* Explicitly convert to the base class.  There is no conversion
+     from a const auto_vec because a copy of the returned vec can
+     be used to modify *THIS.
+     This is a legacy function not to be used in new code.  */
+  vec<T, va_heap> to_vec_legacy () {
+    return *static_cast<vec<T, va_heap> *>(this);
+  }
+
 private:
   vec<T, va_heap, vl_embed> m_auto;
-  T m_data[MAX (N - 1, 1)];
+  unsigned char m_data[sizeof (T) * N];
 };
 
 /* auto_vec is a sub class of vec whose storage is released when it is
@@ -1557,14 +1618,51 @@ public:
       this->m_vec = r.m_vec;
       r.m_vec = NULL;
     }
+
+  auto_vec (auto_vec<T> &&r)
+    {
+      gcc_assert (!r.using_auto_storage ());
+      this->m_vec = r.m_vec;
+      r.m_vec = NULL;
+    }
+
   auto_vec& operator= (vec<T, va_heap>&& r)
     {
+	    if (this == &r)
+		    return *this;
+
       gcc_assert (!r.using_auto_storage ());
       this->release ();
       this->m_vec = r.m_vec;
       r.m_vec = NULL;
       return *this;
     }
+
+  auto_vec& operator= (auto_vec<T> &&r)
+    {
+	    if (this == &r)
+		    return *this;
+
+      gcc_assert (!r.using_auto_storage ());
+      this->release ();
+      this->m_vec = r.m_vec;
+      r.m_vec = NULL;
+      return *this;
+    }
+
+  /* Explicitly convert to the base class.  There is no conversion
+     from a const auto_vec because a copy of the returned vec can
+     be used to modify *THIS.
+     This is a legacy function not to be used in new code.  */
+  vec<T, va_heap> to_vec_legacy () {
+    return *static_cast<vec<T, va_heap> *>(this);
+  }
+
+  // You probably don't want to copy a vector, so these are deleted to prevent
+  // unintentional use.  If you really need a copy of the vectors contents you
+  // can use copy ().
+  auto_vec(const auto_vec &) = delete;
+  auto_vec &operator= (const auto_vec &) = delete;
 };
 
 
@@ -1739,7 +1837,7 @@ template<typename T>
 inline vec<T, va_heap, vl_ptr>
 vec<T, va_heap, vl_ptr>::copy (ALONE_MEM_STAT_DECL) const
 {
-  vec<T, va_heap, vl_ptr> new_vec = vNULL;
+  vec<T, va_heap, vl_ptr> new_vec{ };
   if (length ())
     new_vec.m_vec = m_vec->copy (ALONE_PASS_MEM_STAT);
   return new_vec;
@@ -2053,6 +2151,17 @@ vec<T, va_heap, vl_ptr>::sort (int (*cmp) (const void *, const void *,
     m_vec->sort (cmp, data);
 }
 
+/* Sort the contents of this vector with gcc_stablesort_r.  CMP is the
+   comparison function to pass to qsort.  */
+
+template<typename T>
+inline void
+vec<T, va_heap, vl_ptr>::stablesort (int (*cmp) (const void *, const void *,
+						 void *), void *data)
+{
+  if (m_vec)
+    m_vec->stablesort (cmp, data);
+}
 
 /* Search the contents of the sorted vector with a binary search.
    CMP is the comparison function to pass to bsearch.  */
@@ -2123,7 +2232,7 @@ template<typename T>
 inline bool
 vec<T, va_heap, vl_ptr>::using_auto_storage () const
 {
-  return m_vec->m_vecpfx.m_using_auto_storage;
+  return m_vec ? m_vec->m_vecpfx.m_using_auto_storage : false;
 }
 
 /* Release VEC and call release of all element vectors.  */
@@ -2172,6 +2281,18 @@ public:
   template<typename OtherT>
   array_slice (const vec<OtherT> &v)
     : m_base (v.address ()), m_size (v.length ()) {}
+
+  template<typename OtherT>
+  array_slice (vec<OtherT> &v)
+    : m_base (v.address ()), m_size (v.length ()) {}
+
+  template<typename OtherT>
+  array_slice (const vec<OtherT, va_gc> *v)
+    : m_base (v ? v->address () : nullptr), m_size (v ? v->length () : 0) {}
+
+  template<typename OtherT>
+  array_slice (vec<OtherT, va_gc> *v)
+    : m_base (v ? v->address () : nullptr), m_size (v ? v->length () : 0) {}
 
   iterator begin () { return m_base; }
   iterator end () { return m_base + m_size; }

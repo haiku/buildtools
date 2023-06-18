@@ -1,5 +1,5 @@
 /* A type-safe hash map.
-   Copyright (C) 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2014-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -107,27 +107,31 @@ class GTY((user)) hash_map
 	  gt_pch_nx (&x, op, cookie);
 	}
 
-    static void
-      pch_nx_helper (int, gt_pointer_operator, void *)
-	{
-	}
-
-    static void
-      pch_nx_helper (unsigned int, gt_pointer_operator, void *)
-	{
-	}
-
-    static void
-      pch_nx_helper (bool, gt_pointer_operator, void *)
-	{
-	}
-
     template<typename T>
       static void
       pch_nx_helper (T *&x, gt_pointer_operator op, void *cookie)
 	{
-	  op (&x, cookie);
+	  op (&x, NULL, cookie);
 	}
+
+    /* The overloads below should match those in ggc.h.  */
+#define DEFINE_PCH_HELPER(T)			\
+    static void pch_nx_helper (T, gt_pointer_operator, void *) { }
+
+    DEFINE_PCH_HELPER (bool);
+    DEFINE_PCH_HELPER (char);
+    DEFINE_PCH_HELPER (signed char);
+    DEFINE_PCH_HELPER (unsigned char);
+    DEFINE_PCH_HELPER (short);
+    DEFINE_PCH_HELPER (unsigned short);
+    DEFINE_PCH_HELPER (int);
+    DEFINE_PCH_HELPER (unsigned int);
+    DEFINE_PCH_HELPER (long);
+    DEFINE_PCH_HELPER (unsigned long);
+    DEFINE_PCH_HELPER (long long);
+    DEFINE_PCH_HELPER (unsigned long long);
+
+#undef DEFINE_PCH_HELPER
   };
 
 public:
@@ -165,11 +169,13 @@ public:
     {
       hash_entry *e = m_table.find_slot_with_hash (k, Traits::hash (k),
 						   INSERT);
-      bool ins = hash_entry::is_empty (*e);
+      bool ins = Traits::is_empty (*e);
       if (ins)
 	{
 	  e->m_key = k;
-	  new ((void *) &e->m_value) Value (v);
+	  new ((void *)&e->m_value) Value (v);
+	  gcc_checking_assert (!Traits::is_empty (*e)
+			       && !Traits::is_deleted (*e));
 	}
       else
 	e->m_value = v;
@@ -199,6 +205,8 @@ public:
 	{
 	  e->m_key = k;
 	  new ((void *)&e->m_value) Value ();
+	  gcc_checking_assert (!Traits::is_empty (*e)
+			       && !Traits::is_deleted (*e));
 	}
 
       if (existed != NULL)
@@ -213,7 +221,8 @@ public:
     }
 
   /* Call the call back on each pair of key and value with the passed in
-     arg.  */
+     arg until either the call back returns false or all pairs have been seen.
+     The traversal is unordered.  */
 
   template<typename Arg, bool (*f)(const typename Traits::key_type &,
 				   const Value &, Arg)>
@@ -221,7 +230,8 @@ public:
     {
       for (typename hash_table<hash_entry>::iterator iter = m_table.begin ();
 	   iter != m_table.end (); ++iter)
-	f ((*iter).m_key, (*iter).m_value, a);
+	if (!f ((*iter).m_key, (*iter).m_value, a))
+	  break;
     }
 
   template<typename Arg, bool (*f)(const typename Traits::key_type &,
@@ -273,8 +283,12 @@ public:
       return reference_pair (e.m_key, e.m_value);
     }
 
-    bool
-    operator != (const iterator &other) const
+    bool operator== (const iterator &other) const
+    {
+      return m_iter == other.m_iter;
+    }
+
+    bool operator != (const iterator &other) const
     {
       return m_iter != other.m_iter;
     }
@@ -301,21 +315,21 @@ private:
 /* ggc marking routines.  */
 
 template<typename K, typename V, typename H>
-static inline void
+inline void
 gt_ggc_mx (hash_map<K, V, H> *h)
 {
   gt_ggc_mx (&h->m_table);
 }
 
 template<typename K, typename V, typename H>
-static inline void
+inline void
 gt_pch_nx (hash_map<K, V, H> *h)
 {
   gt_pch_nx (&h->m_table);
 }
 
 template<typename K, typename V, typename H>
-static inline void
+inline void
 gt_cleare_cache (hash_map<K, V, H> *h)
 {
   if (h)
@@ -323,10 +337,10 @@ gt_cleare_cache (hash_map<K, V, H> *h)
 }
 
 template<typename K, typename V, typename H>
-static inline void
+inline void
 gt_pch_nx (hash_map<K, V, H> *h, gt_pointer_operator op, void *cookie)
 {
-  op (&h->m_table.m_entries, cookie);
+  op (&h->m_table.m_entries, NULL, cookie);
 }
 
 enum hm_alloc { hm_heap = false, hm_ggc = true };

@@ -1,5 +1,5 @@
 /* OS independent definitions for AMD x86-64.
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2023 Free Software Foundation, Inc.
    Contributed by Bo Thorsen <bo@suse.de>.
 
 This file is part of GCC.
@@ -26,9 +26,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START "#"
 
-#undef DBX_REGISTER_NUMBER
-#define DBX_REGISTER_NUMBER(n) \
-  (TARGET_64BIT ? dbx64_register_map[n] : svr4_dbx_register_map[n])
+#undef DEBUGGER_REGNO
+#define DEBUGGER_REGNO(n) \
+  (TARGET_64BIT ? debugger64_register_map[n] : svr4_debugger_register_map[n])
 
 /* Output assembler code to FILE to call the profiler.  */
 #define NO_PROFILE_COUNTERS 1
@@ -70,31 +70,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
     }								      \
   while (0)
 
-/* This is used to align code labels according to Intel recommendations.  */
-
 #define SUBALIGN_LOG 3
-
-#ifdef HAVE_GAS_MAX_SKIP_P2ALIGN
-#define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE,LOG,MAX_SKIP)			\
-  do {									\
-    if ((LOG) != 0) {							\
-      if ((MAX_SKIP) == 0 || (MAX_SKIP) >= (1 << (LOG)) - 1)		\
-	fprintf ((FILE), "\t.p2align %d\n", (LOG));			\
-      else								\
-	fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP));	\
-    }									\
-  } while (0)
-#undef  ASM_OUTPUT_MAX_SKIP_PAD
-#define ASM_OUTPUT_MAX_SKIP_PAD(FILE, LOG, MAX_SKIP)			\
-  if ((LOG) != 0)							\
-    {									\
-      if ((MAX_SKIP) == 0 || (MAX_SKIP) >= (1 << (LOG)) - 1)		\
-        fprintf ((FILE), "\t.p2align %d\n", (LOG));			\
-      else								\
-        fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP));	\
-    }
-#endif
-
 
 /* i386 System V Release 4 uses DWARF debugging info.
    x86-64 ABI specifies DWARF2.  */

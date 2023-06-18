@@ -1,6 +1,6 @@
 /* Data structures and functions for streaming trees.
 
-   Copyright (C) 2011-2021 Free Software Foundation, Inc.
+   Copyright (C) 2011-2023 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@google.com>
 
 This file is part of GCC.
@@ -57,7 +57,7 @@ struct streamer_tree_cache_d
   unsigned next_idx;
 };
 
-/* In tree-streamer-in.c.  */
+/* In tree-streamer-in.cc.  */
 tree streamer_read_string_cst (class data_in *, class lto_input_block *);
 tree streamer_alloc_tree (class lto_input_block *, class data_in *,
 		          enum LTO_tags);
@@ -66,7 +66,7 @@ tree streamer_get_pickled_tree (class lto_input_block *, class data_in *);
 void streamer_read_tree_bitfields (class lto_input_block *,
 				   class data_in *, tree);
 
-/* In tree-streamer-out.c.  */
+/* In tree-streamer-out.cc.  */
 void streamer_write_string_cst (struct output_block *,
 				struct lto_output_stream *, tree);
 void streamer_write_tree_header (struct output_block *, tree);
@@ -74,7 +74,7 @@ void streamer_write_tree_bitfields (struct output_block *, tree);
 void streamer_write_tree_body (struct output_block *, tree);
 void streamer_write_integer_cst (struct output_block *, tree);
 
-/* In tree-streamer.c.  */
+/* In tree-streamer.cc.  */
 extern unsigned char streamer_mode_table[1 << 8];
 void streamer_check_handled_ts_structures (void);
 bool streamer_tree_cache_insert (struct streamer_tree_cache_d *, tree,
@@ -90,7 +90,7 @@ void streamer_tree_cache_delete (struct streamer_tree_cache_d *);
 
 /* Return the tree node at slot IX in CACHE.  */
 
-static inline tree
+inline tree
 streamer_tree_cache_get_tree (struct streamer_tree_cache_d *cache, unsigned ix)
 {
   return cache->nodes[ix];
@@ -98,20 +98,20 @@ streamer_tree_cache_get_tree (struct streamer_tree_cache_d *cache, unsigned ix)
 
 /* Return the tree hash value at slot IX in CACHE.  */
 
-static inline hashval_t
+inline hashval_t
 streamer_tree_cache_get_hash (struct streamer_tree_cache_d *cache, unsigned ix)
 {
   return cache->hashes[ix];
 }
 
-static inline void
+inline void
 bp_pack_machine_mode (struct bitpack_d *bp, machine_mode mode)
 {
   streamer_mode_table[mode] = 1;
   bp_pack_enum (bp, machine_mode, 1 << 8, mode);
 }
 
-static inline machine_mode
+inline machine_mode
 bp_unpack_machine_mode (struct bitpack_d *bp)
 {
   return (machine_mode)

@@ -6,11 +6,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_rpcnsi.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_rpcnsi.d)
  */
 module core.sys.windows.rpcnsi;
 version (Windows):
-@system:
 
 version (ANSI) {} else version = Unicode;
 pragma(lib, "rpcns4");

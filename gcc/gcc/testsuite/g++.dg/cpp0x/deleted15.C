@@ -2,5 +2,5 @@
 // { dg-do compile { target c++11 } }
 // { dg-options "" }
 
-int f();		// { dg-bogus "previous declaration" }
-int f() = delete;
+int f();
+int f() = delete;		// { dg-message "not first declaration" }

@@ -12,7 +12,6 @@ module core.sys.posix.locale;
 
 version (Posix):
 extern(C):
-@system:
 nothrow:
 @nogc:
 
@@ -31,7 +30,7 @@ version (FreeBSD)
     version = DarwinBSDLocale;
 version (NetBSD)
     version = DarwinBSDLocale;
-version (DragonflyBSD)
+version (DragonFlyBSD)
     version = DarwinBSDLocale;
 
 version (CRuntime_Glibc)

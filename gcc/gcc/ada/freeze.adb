@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,52 +23,59 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Aspects;   use Aspects;
-with Atree;     use Atree;
-with Checks;    use Checks;
-with Contracts; use Contracts;
-with Debug;     use Debug;
-with Einfo;     use Einfo;
-with Elists;    use Elists;
-with Errout;    use Errout;
-with Exp_Ch3;   use Exp_Ch3;
-with Exp_Ch7;   use Exp_Ch7;
-with Exp_Pakd;  use Exp_Pakd;
-with Exp_Util;  use Exp_Util;
-with Exp_Tss;   use Exp_Tss;
-with Ghost;     use Ghost;
-with Layout;    use Layout;
-with Lib;       use Lib;
-with Namet;     use Namet;
-with Nlists;    use Nlists;
-with Nmake;     use Nmake;
-with Opt;       use Opt;
-with Restrict;  use Restrict;
-with Rident;    use Rident;
-with Rtsfind;   use Rtsfind;
-with Sem;       use Sem;
-with Sem_Aux;   use Sem_Aux;
-with Sem_Cat;   use Sem_Cat;
-with Sem_Ch3;   use Sem_Ch3;
-with Sem_Ch6;   use Sem_Ch6;
-with Sem_Ch7;   use Sem_Ch7;
-with Sem_Ch8;   use Sem_Ch8;
-with Sem_Ch13;  use Sem_Ch13;
-with Sem_Eval;  use Sem_Eval;
-with Sem_Mech;  use Sem_Mech;
-with Sem_Prag;  use Sem_Prag;
-with Sem_Res;   use Sem_Res;
-with Sem_Util;  use Sem_Util;
-with Sinfo;     use Sinfo;
-with Snames;    use Snames;
-with Stand;     use Stand;
-with Stringt;   use Stringt;
-with Targparm;  use Targparm;
-with Tbuild;    use Tbuild;
-with Ttypes;    use Ttypes;
-with Uintp;     use Uintp;
-with Urealp;    use Urealp;
-with Warnsw;    use Warnsw;
+with Aspects;        use Aspects;
+with Atree;          use Atree;
+with Checks;         use Checks;
+with Contracts;      use Contracts;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Errout;         use Errout;
+with Exp_Ch3;        use Exp_Ch3;
+with Exp_Ch7;        use Exp_Ch7;
+with Exp_Disp;       use Exp_Disp;
+with Exp_Pakd;       use Exp_Pakd;
+with Exp_Util;       use Exp_Util;
+with Exp_Tss;        use Exp_Tss;
+with Ghost;          use Ghost;
+with Layout;         use Layout;
+with Lib;            use Lib;
+with Namet;          use Namet;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
+with Opt;            use Opt;
+with Restrict;       use Restrict;
+with Rident;         use Rident;
+with Rtsfind;        use Rtsfind;
+with Sem;            use Sem;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Cat;        use Sem_Cat;
+with Sem_Ch3;        use Sem_Ch3;
+with Sem_Ch6;        use Sem_Ch6;
+with Sem_Ch7;        use Sem_Ch7;
+with Sem_Ch8;        use Sem_Ch8;
+with Sem_Ch13;       use Sem_Ch13;
+with Sem_Disp;       use Sem_Disp;
+with Sem_Eval;       use Sem_Eval;
+with Sem_Mech;       use Sem_Mech;
+with Sem_Prag;       use Sem_Prag;
+with Sem_Res;        use Sem_Res;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Snames;         use Snames;
+with Stand;          use Stand;
+with Stringt;        use Stringt;
+with Strub;          use Strub;
+with Targparm;       use Targparm;
+with Tbuild;         use Tbuild;
+with Ttypes;         use Ttypes;
+with Uintp;          use Uintp;
+with Urealp;         use Urealp;
+with Warnsw;         use Warnsw;
 
 package body Freeze is
 
@@ -128,11 +135,6 @@ package body Freeze is
    --  Attribute references to outer types are freeze points for those types;
    --  this routine generates the required freeze nodes for them.
 
-   procedure Check_Inherited_Conditions (R : Entity_Id);
-   --  For a tagged derived type, create wrappers for inherited operations
-   --  that have a class-wide condition, so it can be properly rewritten if
-   --  it involves calls to other overriding primitives.
-
    procedure Check_Strict_Alignment (E : Entity_Id);
    --  E is a base type. If E is tagged or has a component that is aliased
    --  or tagged or contains something this is aliased or tagged, set
@@ -156,7 +158,7 @@ package body Freeze is
    procedure Freeze_Enumeration_Type (Typ : Entity_Id);
    --  Freeze enumeration type. The Esize field is set as processing
    --  proceeds (i.e. set by default when the type is declared and then
-   --  adjusted by rep clauses. What this procedure does is to make sure
+   --  adjusted by rep clauses). What this procedure does is to make sure
    --  that if a foreign convention is specified, and no specific size
    --  is given, then the size must be at least Integer'Size.
 
@@ -181,6 +183,75 @@ package body Freeze is
    --  allocator is frozen, or an expression that may involve attributes of
    --  the designated type. Otherwise freezing the access type does not freeze
    --  the designated type.
+
+   function Should_Freeze_Type
+     (Typ : Entity_Id; E : Entity_Id; N : Node_Id) return Boolean;
+   --  If Typ is in the current scope, then return True.
+   --  N is a node whose source location corresponds to the freeze point.
+   --  ??? Expression functions (represented by E) shouldn't freeze types in
+   --  general, but our current expansion and freezing model requires an early
+   --  freezing when the dispatch table is needed or when building an aggregate
+   --  with a subtype of Typ, so return True also in this case.
+   --  Note that expression function completions do freeze and are
+   --  handled in Sem_Ch6.Analyze_Expression_Function.
+
+   ------------------------
+   -- Should_Freeze_Type --
+   ------------------------
+
+   function Should_Freeze_Type
+     (Typ : Entity_Id; E : Entity_Id; N : Node_Id) return Boolean
+   is
+      function Is_Dispatching_Call_Or_Aggregate
+        (N : Node_Id) return Traverse_Result;
+      --  Return Abandon if N is a dispatching call to a subprogram
+      --  declared in the same scope as Typ or an aggregate whose type
+      --  is Typ.
+
+      --------------------------------------
+      -- Is_Dispatching_Call_Or_Aggregate --
+      --------------------------------------
+
+      function Is_Dispatching_Call_Or_Aggregate
+        (N : Node_Id) return Traverse_Result is
+      begin
+         if Nkind (N) = N_Function_Call
+           and then Present (Controlling_Argument (N))
+           and then Scope (Entity (Original_Node (Name (N))))
+                      = Scope (Typ)
+         then
+            return Abandon;
+         elsif Nkind (N) = N_Aggregate
+           and then Base_Type (Etype (N)) = Base_Type (Typ)
+         then
+            return Abandon;
+         else
+            return OK;
+         end if;
+      end Is_Dispatching_Call_Or_Aggregate;
+
+      -------------------------
+      -- Need_Dispatch_Table --
+      -------------------------
+
+      function Need_Dispatch_Table is new
+        Traverse_Func (Is_Dispatching_Call_Or_Aggregate);
+      --  Return Abandon if the input expression requires access to
+      --  Typ's dispatch table.
+
+      Decl : constant Node_Id :=
+        (if No (E) then E else Original_Node (Unit_Declaration_Node (E)));
+
+   --  Start of processing for Should_Freeze_Type
+
+   begin
+      return Within_Scope (Typ, Current_Scope)
+        or else (Nkind (N) = N_Subprogram_Renaming_Declaration
+                 and then Present (Corresponding_Formal_Spec (N)))
+        or else (Present (Decl)
+                 and then Nkind (Decl) = N_Expression_Function
+                 and then Need_Dispatch_Table (Expression (Decl)) = Abandon);
+   end Should_Freeze_Type;
 
    procedure Process_Default_Expressions
      (E     : Entity_Id;
@@ -214,11 +285,11 @@ package body Freeze is
    --  Full_View or Corresponding_Record_Type.
 
    procedure Warn_Overlay (Expr : Node_Id; Typ : Entity_Id; Nam : Node_Id);
-   --  Expr is the expression for an address clause for entity Nam whose type
-   --  is Typ. If Typ has a default initialization, and there is no explicit
-   --  initialization in the source declaration, check whether the address
-   --  clause might cause overlaying of an entity, and emit a warning on the
-   --  side effect that the initialization will cause.
+   --  Expr is the expression for an address clause for the entity denoted by
+   --  Nam whose type is Typ. If Typ has a default initialization, and there is
+   --  no explicit initialization in the source declaration, check whether the
+   --  address clause might cause overlaying of an entity, and emit a warning
+   --  on the side effect that the initialization will cause.
 
    -------------------------------
    -- Adjust_Esize_For_Alignment --
@@ -327,7 +398,7 @@ package body Freeze is
       Nam        : constant Node_Id := Name (N);
       Old_S      : Entity_Id;
       Spec       : constant Node_Id := New_Copy_Tree (Specification (Decl));
-      Actuals    : List_Id := No_List;
+      Actuals    : List_Id;
       Call_Node  : Node_Id;
       Call_Name  : Node_Id;
       Body_Node  : Node_Id;
@@ -402,18 +473,20 @@ package body Freeze is
          Set_Is_Overloaded (Call_Name, False);
       end if;
 
+      if Nkind (Decl) /= N_Subprogram_Declaration then
+         Rewrite (N,
+           Make_Subprogram_Declaration (Loc,
+             Specification => Specification (N)));
+      end if;
+
       --  For simple renamings, subsequent calls can be expanded directly as
       --  calls to the renamed entity. The body must be generated in any case
       --  for calls that may appear elsewhere. This is not done in the case
       --  where the subprogram is an instantiation because the actual proper
-      --  body has not been built yet. This is also not done in GNATprove mode
-      --  as we need to check other conditions for creating a body to inline
-      --  in that case, which are controlled in Analyze_Subprogram_Body_Helper.
+      --  body has not been built yet.
 
       if Ekind (Old_S) in E_Function | E_Procedure
-        and then Nkind (Decl) = N_Subprogram_Declaration
         and then not Is_Generic_Instance (Old_S)
-        and then not GNATprove_Mode
       then
          Set_Body_To_Inline (Decl, Old_S);
       end if;
@@ -478,12 +551,10 @@ package body Freeze is
          Actuals := No_List;
       end if;
 
-      if Present (Formal) then
-         while Present (Formal) loop
-            Append (New_Occurrence_Of (Formal, Loc), Actuals);
-            Next_Formal (Formal);
-         end loop;
-      end if;
+      while Present (Formal) loop
+         Append (New_Occurrence_Of (Formal, Loc), Actuals);
+         Next_Formal (Formal);
+      end loop;
 
       --  If the renamed entity is an entry, inherit its profile. For other
       --  renamings as bodies, both profiles must be subtype conformant, so it
@@ -568,18 +639,25 @@ package body Freeze is
          Next (Param_Spec);
       end loop;
 
-      Body_Node :=
-        Make_Subprogram_Body (Loc,
-          Specification => Spec,
-          Declarations => New_List,
-          Handled_Statement_Sequence =>
-            Make_Handled_Sequence_Of_Statements (Loc,
-              Statements => New_List (Call_Node)));
+      --  In GNATprove, prefer to generate an expression function whenever
+      --  possible, to benefit from the more precise analysis in that case
+      --  (as if an implicit postcondition had been generated).
 
-      if Nkind (Decl) /= N_Subprogram_Declaration then
-         Rewrite (N,
-           Make_Subprogram_Declaration (Loc,
-             Specification => Specification (N)));
+      if GNATprove_Mode
+        and then Nkind (Call_Node) = N_Simple_Return_Statement
+      then
+         Body_Node :=
+           Make_Expression_Function (Loc,
+             Specification => Spec,
+             Expression    => Expression (Call_Node));
+      else
+         Body_Node :=
+           Make_Subprogram_Body (Loc,
+             Specification              => Spec,
+             Declarations               => New_List,
+             Handled_Statement_Sequence =>
+               Make_Handled_Sequence_Of_Statements (Loc,
+                 Statements => New_List (Call_Node)));
       end if;
 
       --  Link the body to the entity whose declaration it completes. If
@@ -707,7 +785,7 @@ package body Freeze is
                then
                   Error_Msg_Sloc := Sloc (Addr);
                   Error_Msg_NE
-                    ("??constant& may be modified via address clause#",
+                    ("?o?constant& may be modified via address clause#",
                      Decl, O_Ent);
                end if;
             end;
@@ -787,9 +865,12 @@ package body Freeze is
                Error_Msg_NE (Size_Too_Small_Message, Size_Clause (T), T);
             end if;
 
-         --  Set size if not set already
+         --  Set size if not set already. Do not set it to Uint_0, because in
+         --  some cases (notably array-of-record), the Component_Size is
+         --  No_Uint, which causes S to be Uint_0. Presumably the RM_Size and
+         --  Component_Size will eventually be set correctly by the back end.
 
-         elsif Unknown_RM_Size (T) then
+         elsif not Known_RM_Size (T) and then S /= Uint_0 then
             Set_RM_Size (T, S);
          end if;
       end Set_Small_Size;
@@ -799,11 +880,8 @@ package body Freeze is
       ----------------
 
       function Size_Known (T : Entity_Id) return Boolean is
-         Index : Entity_Id;
          Comp  : Entity_Id;
          Ctyp  : Entity_Id;
-         Low   : Node_Id;
-         High  : Node_Id;
 
       begin
          if Size_Known_At_Compile_Time (T) then
@@ -824,8 +902,17 @@ package body Freeze is
             --  String literals always have known size, and we can set it
 
             if Ekind (T) = E_String_Literal_Subtype then
-               Set_Small_Size
-                 (T, Component_Size (T) * String_Literal_Length (T));
+               if Known_Component_Size (T) then
+                  Set_Small_Size
+                    (T, Component_Size (T) * String_Literal_Length (T));
+
+               else
+                  --  The following is wrong, but does what previous versions
+                  --  did. The Component_Size is unknown for the string in a
+                  --  pragma Warnings.
+                  Set_Small_Size (T, Uint_0);
+               end if;
+
                return True;
 
             --  Unconstrained types never have known at compile time size
@@ -850,10 +937,19 @@ package body Freeze is
             --  thus may be packable).
 
             declare
-               Size : Uint := Component_Size (T);
-               Dim  : Uint;
+               Index : Entity_Id;
+               Low   : Node_Id;
+               High  : Node_Id;
+               Size  : Uint := Component_Size (T);
+               Dim   : Uint;
 
             begin
+               --  See comment in Set_Small_Size above
+
+               if No (Size) then
+                  Size := Uint_0;
+               end if;
+
                Index := First_Index (T);
                while Present (Index) loop
                   if Nkind (Index) = N_Range then
@@ -876,7 +972,7 @@ package body Freeze is
                   else
                      Dim := Expr_Value (High) - Expr_Value (Low) + 1;
 
-                     if Dim >= 0 then
+                     if Dim > Uint_0 then
                         Size := Size * Dim;
                      else
                         Size := Uint_0;
@@ -975,7 +1071,7 @@ package body Freeze is
                   if not Is_Constrained (T)
                     and then
                       No (Discriminant_Default_Value (First_Discriminant (T)))
-                    and then Unknown_RM_Size (T)
+                    and then not Known_RM_Size (T)
                   then
                      return False;
                   end if;
@@ -1200,9 +1296,13 @@ package body Freeze is
 
             if Present (Component_Clause (Comp)) then
                Comp_Byte_Aligned :=
-                 (Normalized_First_Bit (Comp) mod System_Storage_Unit = 0)
+                 Known_Normalized_First_Bit (Comp)
                    and then
-                 (Esize (Comp) mod System_Storage_Unit = 0);
+                 Known_Esize (Comp)
+                   and then
+                 Normalized_First_Bit (Comp) mod System_Storage_Unit = 0
+                   and then
+                 Esize (Comp) mod System_Storage_Unit = 0;
             else
                Comp_Byte_Aligned := not Is_Packed (Encl_Type);
             end if;
@@ -1280,9 +1380,15 @@ package body Freeze is
             elsif Is_Record_Type (Encl_Base)
               and then not Comp_Byte_Aligned
             then
-               Error_Msg_N
-                 ("type of non-byte-aligned component must have same scalar "
-                  & "storage order as enclosing composite", Err_Node);
+               if Present (Component_Clause (Comp)) then
+                  Error_Msg_N
+                    ("type of non-byte-aligned component must have same scalar"
+                     & " storage order as enclosing record", Err_Node);
+               else
+                  Error_Msg_N
+                    ("type of packed component must have same scalar"
+                     & " storage order as enclosing record", Err_Node);
+               end if;
 
             --  Warn if specified only for the outer composite
 
@@ -1348,7 +1454,8 @@ package body Freeze is
                                                          N_Object_Declaration
            and then not Is_Imported (Entity (Nod))
            and then not Has_Completion (Entity (Nod))
-           and then not Is_Frozen (Entity (Nod))
+           and then not (Present (Full_View (Entity (Nod)))
+                          and then Has_Completion (Full_View (Entity (Nod))))
          then
             Error_Msg_NE
               ("premature use of& in call or instance", N, Entity (Nod));
@@ -1359,6 +1466,10 @@ package body Freeze is
             if Is_Entity_Name (Prefix (Nod))
               and then Is_Type (Entity (Prefix (Nod)))
             then
+               if Expander_Active then
+                  Check_Fully_Declared (Entity (Prefix (Nod)), N);
+               end if;
+
                Freeze_Before (N, Entity (Prefix (Nod)));
             end if;
          end if;
@@ -1392,90 +1503,331 @@ package body Freeze is
    -- Check_Inherited_Conditions --
    --------------------------------
 
-   procedure Check_Inherited_Conditions (R : Entity_Id) is
-      Prim_Ops      : constant Elist_Id := Primitive_Operations (R);
-      Decls         : List_Id;
-      Needs_Wrapper : Boolean;
-      Op_Node       : Elmt_Id;
-      Par_Prim      : Entity_Id;
-      Prim          : Entity_Id;
+   procedure Check_Inherited_Conditions
+     (R               : Entity_Id;
+      Late_Overriding : Boolean := False)
+   is
+      Prim_Ops       : constant Elist_Id := Primitive_Operations (R);
+      Decls          : List_Id;
+      Op_Node        : Elmt_Id;
+      Par_Prim       : Entity_Id;
+      Prim           : Entity_Id;
+      Wrapper_Needed : Boolean;
 
-      procedure Build_Inherited_Condition_Pragmas (Subp : Entity_Id);
+      function Build_DTW_Body
+        (Loc          : Source_Ptr;
+         DTW_Spec     : Node_Id;
+         DTW_Decls    : List_Id;
+         Par_Prim     : Entity_Id;
+         Wrapped_Subp : Entity_Id) return Node_Id;
+      --  Build the body of the dispatch table wrapper containing the given
+      --  spec and declarations; the call to the wrapped subprogram includes
+      --  the proper type conversion.
+
+      function Build_DTW_Spec (Par_Prim : Entity_Id) return Node_Id;
+      --  Build the spec of the dispatch table wrapper
+
+      procedure Build_Inherited_Condition_Pragmas
+        (Subp           : Entity_Id;
+         Wrapper_Needed : out Boolean);
       --  Build corresponding pragmas for an operation whose ancestor has
-      --  class-wide pre/postconditions. If the operation is inherited, the
-      --  pragmas force the creation of a wrapper for the inherited operation.
-      --  If the ancestor is being overridden, the pragmas are constructed only
-      --  to verify their legality, in case they contain calls to other
-      --  primitives that may haven been overridden.
+      --  class-wide pre/postconditions. If the operation is inherited then
+      --  Wrapper_Needed is returned True to force the creation of a wrapper
+      --  for the inherited operation. If the ancestor is being overridden,
+      --  the pragmas are constructed only to verify their legality, in case
+      --  they contain calls to other primitives that may have been overridden.
+
+      function Needs_Wrapper
+        (Class_Cond : Node_Id;
+         Subp       : Entity_Id;
+         Par_Subp   : Entity_Id) return Boolean;
+      --  Checks whether the dispatch-table wrapper (DTW) for Subp must be
+      --  built to evaluate the given class-wide condition.
+
+      --------------------
+      -- Build_DTW_Body --
+      --------------------
+
+      function Build_DTW_Body
+        (Loc          : Source_Ptr;
+         DTW_Spec     : Node_Id;
+         DTW_Decls    : List_Id;
+         Par_Prim     : Entity_Id;
+         Wrapped_Subp : Entity_Id) return Node_Id
+      is
+         Par_Typ    : constant Entity_Id := Find_Dispatching_Type (Par_Prim);
+         Actuals    : constant List_Id   := Empty_List;
+         Call       : Node_Id;
+         Formal     : Entity_Id := First_Formal (Par_Prim);
+         New_F_Spec : Entity_Id := First (Parameter_Specifications (DTW_Spec));
+         New_Formal : Entity_Id;
+
+      begin
+         --  Build parameter association for call to wrapped subprogram
+
+         while Present (Formal) loop
+            New_Formal := Defining_Identifier (New_F_Spec);
+
+            --  If the controlling argument is inherited, add conversion to
+            --  parent type for the call.
+
+            if Etype (Formal) = Par_Typ
+              and then Is_Controlling_Formal (Formal)
+            then
+               Append_To (Actuals,
+                 Make_Type_Conversion (Loc,
+                   New_Occurrence_Of (Par_Typ, Loc),
+                   New_Occurrence_Of (New_Formal, Loc)));
+            else
+               Append_To (Actuals, New_Occurrence_Of (New_Formal, Loc));
+            end if;
+
+            Next_Formal (Formal);
+            Next (New_F_Spec);
+         end loop;
+
+         if Ekind (Wrapped_Subp) = E_Procedure then
+            Call :=
+              Make_Procedure_Call_Statement (Loc,
+                Name => New_Occurrence_Of (Wrapped_Subp, Loc),
+                Parameter_Associations => Actuals);
+         else
+            Call :=
+              Make_Simple_Return_Statement (Loc,
+                Expression =>
+                  Make_Function_Call (Loc,
+                    Name => New_Occurrence_Of (Wrapped_Subp, Loc),
+                    Parameter_Associations => Actuals));
+         end if;
+
+         return
+           Make_Subprogram_Body (Loc,
+             Specification              => Copy_Subprogram_Spec (DTW_Spec),
+             Declarations               => DTW_Decls,
+             Handled_Statement_Sequence =>
+               Make_Handled_Sequence_Of_Statements (Loc,
+                 Statements => New_List (Call),
+                 End_Label  => Make_Identifier (Loc,
+                                 Chars (Defining_Entity (DTW_Spec)))));
+      end Build_DTW_Body;
+
+      --------------------
+      -- Build_DTW_Spec --
+      --------------------
+
+      function Build_DTW_Spec (Par_Prim : Entity_Id) return Node_Id is
+         DTW_Id   : Entity_Id;
+         DTW_Spec : Node_Id;
+
+      begin
+         DTW_Spec := Build_Overriding_Spec (Par_Prim, R);
+         DTW_Id   := Defining_Entity (DTW_Spec);
+
+         --  Clear the not-overriding indicator since the DTW wrapper overrides
+         --  its wrapped subprogram; required because if present in the parent
+         --  primitive, given that Build_Overriding_Spec inherits it, we report
+         --  spurious errors.
+
+         Set_Must_Not_Override (DTW_Spec, False);
+
+         --  Add minimal decoration of fields
+
+         Mutate_Ekind (DTW_Id, Ekind (Par_Prim));
+         Set_LSP_Subprogram (DTW_Id, Par_Prim);
+         Set_Is_Dispatch_Table_Wrapper (DTW_Id);
+         Set_Is_Wrapper (DTW_Id);
+
+         --  The DTW wrapper is never a null procedure
+
+         if Nkind (DTW_Spec) = N_Procedure_Specification then
+            Set_Null_Present (DTW_Spec, False);
+         end if;
+
+         return DTW_Spec;
+      end Build_DTW_Spec;
 
       ---------------------------------------
       -- Build_Inherited_Condition_Pragmas --
       ---------------------------------------
 
-      procedure Build_Inherited_Condition_Pragmas (Subp : Entity_Id) is
-         A_Post   : Node_Id;
-         A_Pre    : Node_Id;
-         New_Prag : Node_Id;
+      procedure Build_Inherited_Condition_Pragmas
+        (Subp           : Entity_Id;
+         Wrapper_Needed : out Boolean)
+      is
+         Class_Pre  : constant Node_Id :=
+                        Class_Preconditions (Ultimate_Alias (Subp));
+         Class_Post : Node_Id := Class_Postconditions (Par_Prim);
+         A_Post     : Node_Id;
+         New_Prag   : Node_Id;
 
       begin
-         A_Pre := Get_Class_Wide_Pragma (Par_Prim, Pragma_Precondition);
+         Wrapper_Needed := False;
 
-         if Present (A_Pre) then
-            New_Prag := New_Copy_Tree (A_Pre);
-            Build_Class_Wide_Expression
-              (Prag          => New_Prag,
-               Subp          => Prim,
-               Par_Subp      => Par_Prim,
-               Adjust_Sloc   => False,
-               Needs_Wrapper => Needs_Wrapper);
-
-            if Needs_Wrapper
-              and then not Comes_From_Source (Subp)
-              and then Expander_Active
-            then
-               Append (New_Prag, Decls);
-            end if;
+         if No (Class_Pre) and then No (Class_Post) then
+            return;
          end if;
 
-         A_Post := Get_Class_Wide_Pragma (Par_Prim, Pragma_Postcondition);
+         --  For class-wide preconditions we just evaluate whether the wrapper
+         --  is needed; there is no need to build the pragma since the check
+         --  is performed on the caller side.
 
-         if Present (A_Post) then
-            New_Prag := New_Copy_Tree (A_Post);
+         if Present (Class_Pre)
+           and then Needs_Wrapper (Class_Pre, Subp, Par_Prim)
+         then
+            Wrapper_Needed := True;
+         end if;
+
+         --  For class-wide postconditions we evaluate whether the wrapper is
+         --  needed and we build the class-wide postcondition pragma to install
+         --  it in the wrapper.
+
+         if Present (Class_Post)
+           and then Needs_Wrapper (Class_Post, Subp, Par_Prim)
+         then
+            Wrapper_Needed := True;
+
+            --  Update the class-wide postcondition
+
+            Class_Post := New_Copy_Tree (Class_Post);
             Build_Class_Wide_Expression
-              (Prag           => New_Prag,
-               Subp           => Prim,
+              (Pragma_Or_Expr => Class_Post,
+               Subp           => Subp,
                Par_Subp       => Par_Prim,
-               Adjust_Sloc    => False,
-               Needs_Wrapper  => Needs_Wrapper);
+               Adjust_Sloc    => False);
 
-            if Needs_Wrapper
-              and then not Comes_From_Source (Subp)
-              and then Expander_Active
-            then
+            --  Install the updated class-wide postcondition in a copy of the
+            --  pragma postcondition defined for the nearest ancestor.
+
+            A_Post := Get_Class_Wide_Pragma (Par_Prim,
+                        Pragma_Postcondition);
+
+            if No (A_Post) then
+               declare
+                  Subps : constant Subprogram_List :=
+                            Inherited_Subprograms (Subp);
+               begin
+                  for Index in Subps'Range loop
+                     A_Post := Get_Class_Wide_Pragma (Subps (Index),
+                                 Pragma_Postcondition);
+                     exit when Present (A_Post);
+                  end loop;
+               end;
+            end if;
+
+            --  A_Post can be null here if the postcondition was inlined in the
+            --  called subprogram.
+
+            if Present (A_Post) then
+               New_Prag := New_Copy_Tree (A_Post);
+               Rewrite
+                 (Expression (First (Pragma_Argument_Associations (New_Prag))),
+                  Class_Post);
                Append (New_Prag, Decls);
             end if;
          end if;
       end Build_Inherited_Condition_Pragmas;
 
+      -------------------
+      -- Needs_Wrapper --
+      -------------------
+
+      function Needs_Wrapper
+        (Class_Cond : Node_Id;
+         Subp       : Entity_Id;
+         Par_Subp   : Entity_Id) return Boolean
+      is
+         Result : Boolean := False;
+
+         function Check_Entity (N : Node_Id) return Traverse_Result;
+         --  Check calls to overridden primitives
+
+         --------------------
+         -- Replace_Entity --
+         --------------------
+
+         function Check_Entity (N : Node_Id) return Traverse_Result is
+            New_E : Entity_Id;
+
+         begin
+            if Nkind (N) = N_Identifier
+              and then Present (Entity (N))
+              and then
+                (Is_Formal (Entity (N)) or else Is_Subprogram (Entity (N)))
+              and then
+                (Nkind (Parent (N)) /= N_Attribute_Reference
+                  or else Attribute_Name (Parent (N)) /= Name_Class)
+            then
+               --  Determine whether entity has a renaming
+
+               New_E := Get_Mapped_Entity (Entity (N));
+
+               --  If the entity is an overridden primitive and we are not
+               --  in GNATprove mode, we must build a wrapper for the current
+               --  inherited operation. If the reference is the prefix of an
+               --  attribute such as 'Result (or others ???) there is no need
+               --  for a wrapper: the condition is just rewritten in terms of
+               --  the inherited subprogram.
+
+               if Present (New_E)
+                 and then Comes_From_Source (New_E)
+                 and then Is_Subprogram (New_E)
+                 and then Nkind (Parent (N)) /= N_Attribute_Reference
+                 and then not GNATprove_Mode
+               then
+                  Result := True;
+                  return Abandon;
+               end if;
+            end if;
+
+            return OK;
+         end Check_Entity;
+
+         procedure Check_Condition_Entities is
+           new Traverse_Proc (Check_Entity);
+
+      --  Start of processing for Needs_Wrapper
+
+      begin
+         Update_Primitives_Mapping (Par_Subp, Subp);
+
+         Map_Formals (Par_Subp, Subp);
+         Check_Condition_Entities (Class_Cond);
+
+         return Result;
+      end Needs_Wrapper;
+
+      Ifaces_List    : Elist_Id := No_Elist;
+      Ifaces_Listed  : Boolean := False;
+      --  Cache the list of interface operations inherited by R
+
+      Wrappers_List  : Elist_Id := No_Elist;
+      --  List containing identifiers of built wrappers. Used to defer building
+      --  and analyzing their class-wide precondition subprograms.
+
    --  Start of processing for Check_Inherited_Conditions
 
    begin
-      Op_Node := First_Elmt (Prim_Ops);
-      while Present (Op_Node) loop
-         Prim := Node (Op_Node);
+      if Late_Overriding then
+         Op_Node := First_Elmt (Prim_Ops);
+         while Present (Op_Node) loop
+            Prim := Node (Op_Node);
 
-         --  Map the overridden primitive to the overriding one. This takes
-         --  care of all overridings and is done only once.
+            --  Map the overridden primitive to the overriding one
 
-         if Present (Overridden_Operation (Prim))
-           and then Comes_From_Source (Prim)
-         then
-            Par_Prim := Overridden_Operation (Prim);
-            Update_Primitives_Mapping (Par_Prim, Prim);
-         end if;
+            if Present (Overridden_Operation (Prim))
+              and then Comes_From_Source (Prim)
+            then
+               Par_Prim := Overridden_Operation (Prim);
+               Update_Primitives_Mapping (Par_Prim, Prim);
 
-         Next_Elmt (Op_Node);
-      end loop;
+               --  Force discarding previous mappings of its formals
+
+               Map_Formals (Par_Prim, Prim, Force_Update => True);
+            end if;
+
+            Next_Elmt (Op_Node);
+         end loop;
+      end if;
 
       --  Perform validity checks on the inherited conditions of overriding
       --  operations, for conformance with LSP, and apply SPARK-specific
@@ -1485,10 +1837,23 @@ package body Freeze is
       while Present (Op_Node) loop
          Prim := Node (Op_Node);
 
-         if Present (Overridden_Operation (Prim))
+         Par_Prim := Overridden_Operation (Prim);
+         if Present (Par_Prim)
            and then Comes_From_Source (Prim)
          then
-            Par_Prim := Overridden_Operation (Prim);
+            --  When the primitive is an LSP wrapper we climb to the parent
+            --  primitive that has the inherited contract.
+
+            if Is_Wrapper (Par_Prim)
+              and then Present (LSP_Subprogram (Par_Prim))
+            then
+               Par_Prim := LSP_Subprogram (Par_Prim);
+            end if;
+
+            --  Check that overrider and overridden operations have
+            --  the same strub mode.
+
+            Check_Same_Strub_Mode (Prim, Par_Prim);
 
             --  Analyze the contract items of the overridden operation, before
             --  they are rewritten as pragmas.
@@ -1502,13 +1867,55 @@ package body Freeze is
 
             if GNATprove_Mode then
                Collect_Inherited_Class_Wide_Conditions (Prim);
-
-            --  Otherwise build the corresponding pragmas to check for legality
-            --  of the inherited condition.
-
-            else
-               Build_Inherited_Condition_Pragmas (Prim);
             end if;
+         end if;
+
+         --  Go over operations inherited from interfaces and check
+         --  them for strub mode compatibility as well.
+
+         if Has_Interfaces (R)
+           and then Is_Dispatching_Operation (Prim)
+           and then Find_Dispatching_Type (Prim) = R
+         then
+            declare
+               Elmt        : Elmt_Id;
+               Iface_Elmt  : Elmt_Id;
+               Iface       : Entity_Id;
+               Iface_Prim  : Entity_Id;
+
+            begin
+               --  Collect the interfaces only once. We haven't
+               --  finished freezing yet, so we can't use the faster
+               --  search from Sem_Disp.Covered_Interface_Primitives.
+
+               if not Ifaces_Listed then
+                  Collect_Interfaces (R, Ifaces_List);
+                  Ifaces_Listed := True;
+               end if;
+
+               Iface_Elmt := First_Elmt (Ifaces_List);
+               while Present (Iface_Elmt) loop
+                  Iface := Node (Iface_Elmt);
+
+                  Elmt := First_Elmt (Primitive_Operations (Iface));
+                  while Present (Elmt) loop
+                     Iface_Prim := Node (Elmt);
+
+                     if Iface_Prim /= Par_Prim
+                       and then Chars (Iface_Prim) = Chars (Prim)
+                       and then Comes_From_Source (Iface_Prim)
+                       and then (Is_Interface_Conformant
+                                   (R, Iface_Prim, Prim))
+                     then
+                        Check_Same_Strub_Mode (Prim, Iface_Prim);
+                     end if;
+
+                     Next_Elmt (Elmt);
+                  end loop;
+
+                  Next_Elmt (Iface_Elmt);
+               end loop;
+            end;
          end if;
 
          Next_Elmt (Op_Node);
@@ -1521,12 +1928,26 @@ package body Freeze is
       Op_Node := First_Elmt (Prim_Ops);
 
       while Present (Op_Node) loop
-         Decls         := Empty_List;
-         Prim          := Node (Op_Node);
-         Needs_Wrapper := False;
+         Decls          := Empty_List;
+         Prim           := Node (Op_Node);
+         Wrapper_Needed := False;
 
-         if not Comes_From_Source (Prim) and then Present (Alias (Prim)) then
-            Par_Prim := Alias (Prim);
+         --  Skip internal entities built for mapping interface primitives
+
+         if not Comes_From_Source (Prim)
+           and then Present (Alias (Prim))
+           and then No (Interface_Alias (Prim))
+         then
+            Par_Prim := Ultimate_Alias (Prim);
+
+            --  When the primitive is an LSP wrapper we climb to the parent
+            --  primitive that has the inherited contract.
+
+            if Is_Wrapper (Par_Prim)
+              and then Present (LSP_Subprogram (Par_Prim))
+            then
+               Par_Prim := LSP_Subprogram (Par_Prim);
+            end if;
 
             --  Analyze the contract items of the parent operation, and
             --  determine whether a wrapper is needed. This is determined
@@ -1535,69 +1956,237 @@ package body Freeze is
             --  in the loop above.
 
             Analyze_Entry_Or_Subprogram_Contract (Par_Prim);
-            Build_Inherited_Condition_Pragmas (Prim);
+            Build_Inherited_Condition_Pragmas (Prim, Wrapper_Needed);
          end if;
 
-         if Needs_Wrapper
+         if Wrapper_Needed
            and then not Is_Abstract_Subprogram (Par_Prim)
            and then Expander_Active
          then
-            --  We need to build a new primitive that overrides the inherited
-            --  one, and whose inherited expression has been updated above.
-            --  These expressions are the arguments of pragmas that are part
-            --  of the declarations of the wrapper. The wrapper holds a single
-            --  statement that is a call to the class-wide clone, where the
-            --  controlling actuals are conversions to the corresponding type
-            --  in the parent primitive:
-
-            --    procedure New_Prim (F1 : T1; ...);
-            --    procedure New_Prim (F1 : T1; ...) is
-            --       pragma Check (Precondition, Expr);
-            --    begin
-            --       Par_Prim_Clone (Par_Type (F1), ...);
-            --    end;
-
-            --  If the primitive is a function the statement is a return
-            --  statement with a call.
+            --  Build the dispatch-table wrapper (DTW). The support for
+            --  AI12-0195 relies on two kind of wrappers: one for indirect
+            --  calls (also used for AI12-0220), and one for putting in the
+            --  dispatch table:
+            --
+            --    1) "indirect-call wrapper" (ICW) is needed anytime there are
+            --       class-wide preconditions. Prim'Access will point directly
+            --       at the ICW if any, or at the "pristine" body if Prim has
+            --       no class-wide preconditions.
+            --
+            --    2) "dispatch-table wrapper" (DTW) is needed anytime the class
+            --       wide preconditions *or* the class-wide postconditions are
+            --       affected by overriding.
+            --
+            --  The DTW holds a single statement that is a single call where
+            --  the controlling actuals are conversions to the corresponding
+            --  type in the parent primitive. If the primitive is a function
+            --  the statement is a return statement with a call.
 
             declare
+               Alias_Id : constant Entity_Id  := Ultimate_Alias (Prim);
                Loc      : constant Source_Ptr := Sloc (R);
-               Par_R    : constant Node_Id    := Parent (R);
-               New_Body : Node_Id;
-               New_Decl : Node_Id;
-               New_Spec : Node_Id;
+               DTW_Body : Node_Id;
+               DTW_Decl : Node_Id;
+               DTW_Id   : Entity_Id;
+               DTW_Spec : Node_Id;
+
+               Prim_Next_E : constant Entity_Id := Next_Entity (Prim);
+               Prim_Prev_E : constant Entity_Id := Prev_Entity (Prim);
 
             begin
-               New_Spec := Build_Overriding_Spec (Par_Prim, R);
-               New_Decl :=
-                 Make_Subprogram_Declaration (Loc,
-                   Specification => New_Spec);
+               DTW_Spec := Build_DTW_Spec (Par_Prim);
+               DTW_Id   := Defining_Entity (DTW_Spec);
+               DTW_Decl := Make_Subprogram_Declaration (Loc,
+                             Specification => DTW_Spec);
 
-               --  Insert the declaration and the body of the wrapper after
-               --  type declaration that generates inherited operation. For
-               --  a null procedure, the declaration implies a null body.
+               --  The spec of the wrapper has been built using the source
+               --  location of its parent primitive; we must update it now
+               --  (with the source location of the internal primitive built
+               --  by Derive_Subprogram that will override this wrapper) to
+               --  avoid inlining conflicts between internally built helpers
+               --  for class-wide pre/postconditions of the parent and the
+               --  helpers built for this wrapper.
 
-               if Nkind (New_Spec) = N_Procedure_Specification
-                 and then Null_Present (New_Spec)
-               then
-                  Insert_After_And_Analyze (Par_R, New_Decl);
+               Set_Sloc (DTW_Id, Sloc (Prim));
+
+               --  For inherited class-wide preconditions the DTW wrapper
+               --  reuses the ICW of the parent (which checks the parent
+               --  interpretation of the class-wide preconditions); the
+               --  interpretation of the class-wide preconditions for the
+               --  inherited subprogram is checked at the caller side.
+
+               --  When the subprogram inherits class-wide postconditions
+               --  the DTW also checks the interpretation of the class-wide
+               --  postconditions for the inherited subprogram, and the body
+               --  of the parent checks its interpretation of the parent for
+               --  the class-wide postconditions.
+
+               --      procedure Prim (F1 : T1; ...) is
+               --         [ pragma Check (Postcondition, Expr); ]
+               --      begin
+               --         Par_Prim_ICW (Par_Type (F1), ...);
+               --      end;
+
+               if Present (Indirect_Call_Wrapper (Par_Prim)) then
+                  DTW_Body :=
+                    Build_DTW_Body (Loc,
+                      DTW_Spec     => DTW_Spec,
+                      DTW_Decls    => Decls,
+                      Par_Prim     => Par_Prim,
+                      Wrapped_Subp => Indirect_Call_Wrapper (Par_Prim));
+
+               --  For subprograms that only inherit class-wide postconditions
+               --  the DTW wrapper calls the parent primitive (which on its
+               --  body checks the interpretation of the class-wide post-
+               --  conditions for the parent subprogram), and the DTW checks
+               --  the interpretation of the class-wide postconditions for the
+               --  inherited subprogram.
+
+               --      procedure Prim (F1 : T1; ...) is
+               --         pragma Check (Postcondition, Expr);
+               --      begin
+               --         Par_Prim (Par_Type (F1), ...);
+               --      end;
 
                else
-                  --  Build body as wrapper to a call to the already built
-                  --  class-wide clone.
+                  DTW_Body :=
+                    Build_DTW_Body (Loc,
+                      DTW_Spec     => DTW_Spec,
+                      DTW_Decls    => Decls,
+                      Par_Prim     => Par_Prim,
+                      Wrapped_Subp => Par_Prim);
+               end if;
 
-                  New_Body :=
-                    Build_Class_Wide_Clone_Call
-                      (Loc, Decls, Par_Prim, New_Spec);
+               --  Insert the declaration of the wrapper before the freezing
+               --  node of the record type declaration to ensure that it will
+               --  override the internal primitive built by Derive_Subprogram.
 
-                  Insert_List_After_And_Analyze
-                    (Par_R, New_List (New_Decl, New_Body));
+               if Late_Overriding then
+                  Ensure_Freeze_Node (R);
+                  Insert_Before_And_Analyze (Freeze_Node (R), DTW_Decl);
+               else
+                  Append_Freeze_Action (R, DTW_Decl);
+                  Analyze (DTW_Decl);
+               end if;
+
+               --  The analyis of DTW_Decl has removed Prim from its scope
+               --  chain and added DTW_Id at the end of the scope chain. Move
+               --  DTW_Id to its correct place in the scope chain: the analysis
+               --  of the wrapper declaration has just added DTW_Id at the end
+               --  of the list of entities of its scope. However, given that
+               --  this wrapper overrides Prim, we must move DTW_Id to the
+               --  original place of Prim in its scope chain. This is required
+               --  for wrappers of private type primitives to ensure their
+               --  correct visibility since wrappers are built when the full
+               --  tagged type declaration is frozen (in the private part of
+               --  the package) but they may override primitives defined in the
+               --  public part of the package.
+
+               declare
+                  DTW_Prev_E : constant Entity_Id := Prev_Entity (DTW_Id);
+
+               begin
+                  pragma Assert (Last_Entity (Current_Scope) = DTW_Id);
+                  pragma Assert
+                    (Ekind (Current_Scope) not in E_Package | E_Generic_Package
+                       or else No (First_Private_Entity (Current_Scope))
+                       or else First_Private_Entity (Current_Scope) /= DTW_Id);
+
+                  --  Remove DTW_Id from the end of the doubly-linked list of
+                  --  entities of this scope; no need to handle removing it
+                  --  from the beginning of the chain since such case can never
+                  --  occur for this entity.
+
+                  Set_Last_Entity (Current_Scope, DTW_Prev_E);
+                  Set_Next_Entity (DTW_Prev_E, Empty);
+
+                  --  Place DTW_Id back in the original place of its wrapped
+                  --  primitive in the list of entities of this scope.
+
+                  Link_Entities (Prim_Prev_E, DTW_Id);
+                  Link_Entities (DTW_Id, Prim_Next_E);
+               end;
+
+               --  Insert the body of the wrapper in the freeze actions of
+               --  its record type declaration to ensure that it is placed
+               --  in the scope of its declaration but not too early to cause
+               --  premature freezing of other entities.
+
+               Append_Freeze_Action (R, DTW_Body);
+               Analyze (DTW_Body);
+
+               --  Ensure correct decoration
+
+               pragma Assert (Is_Dispatching_Operation (DTW_Id));
+               pragma Assert (Present (Overridden_Operation (DTW_Id)));
+               pragma Assert (Overridden_Operation (DTW_Id) = Alias_Id);
+
+               --  Inherit dispatch table slot
+
+               Set_DTC_Entity_Value (R, DTW_Id);
+               Set_DT_Position (DTW_Id, DT_Position (Alias_Id));
+
+               --  Register the wrapper in the dispatch table
+
+               if Late_Overriding
+                 and then not Building_Static_DT (R)
+               then
+                  Insert_List_After_And_Analyze (Freeze_Node (R),
+                    Register_Primitive (Loc, DTW_Id));
+               end if;
+
+               --  Defer building helpers and ICW for the DTW. Required to
+               --  ensure uniqueness in their names because when building
+               --  these wrappers for overlapped subprograms their homonym
+               --  number is not definite until all these dispatch table
+               --  wrappers of tagged type R have been analyzed.
+
+               if Present (Indirect_Call_Wrapper (Par_Prim)) then
+                  Append_New_Elmt (DTW_Id, Wrappers_List);
                end if;
             end;
          end if;
 
          Next_Elmt (Op_Node);
       end loop;
+
+      --  Build and analyze deferred class-wide precondition subprograms of
+      --  built wrappers.
+
+      if Present (Wrappers_List) then
+         declare
+            Body_N  : Node_Id;
+            CW_Subp : Entity_Id;
+            Decl_N  : Node_Id;
+            DTW_Id  : Entity_Id;
+            Elmt    : Elmt_Id;
+
+         begin
+            Elmt := First_Elmt (Wrappers_List);
+
+            while Present (Elmt) loop
+               DTW_Id := Node (Elmt);
+               Next_Elmt (Elmt);
+
+               Merge_Class_Conditions (DTW_Id);
+               Make_Class_Precondition_Subps (DTW_Id, Late_Overriding);
+
+               CW_Subp := Static_Call_Helper (DTW_Id);
+               Decl_N  := Unit_Declaration_Node (CW_Subp);
+               Analyze (Decl_N);
+
+               --  If the DTW was built for a late-overriding primitive
+               --  its body must be analyzed now (since the tagged type
+               --  is already frozen).
+
+               if Late_Overriding then
+                  Body_N :=
+                    Unit_Declaration_Node (Corresponding_Body (Decl_N));
+                  Analyze (Body_N);
+               end if;
+            end loop;
+         end;
+      end if;
    end Check_Inherited_Conditions;
 
    ----------------------------
@@ -1605,7 +2194,7 @@ package body Freeze is
    ----------------------------
 
    procedure Check_Strict_Alignment (E : Entity_Id) is
-      Comp  : Entity_Id;
+      Comp : Entity_Id;
 
    begin
       --  Bit-packed array types do not require strict alignment, even if they
@@ -1725,67 +2314,6 @@ package body Freeze is
       end loop;
    end Check_Unsigned_Type;
 
-   ------------------------------
-   -- Is_Full_Access_Aggregate --
-   ------------------------------
-
-   function Is_Full_Access_Aggregate (N : Node_Id) return Boolean is
-      Loc   : constant Source_Ptr := Sloc (N);
-      New_N : Node_Id;
-      Par   : Node_Id;
-      Temp  : Entity_Id;
-      Typ   : Entity_Id;
-
-   begin
-      Par := Parent (N);
-
-      --  Array may be qualified, so find outer context
-
-      if Nkind (Par) = N_Qualified_Expression then
-         Par := Parent (Par);
-      end if;
-
-      if not Comes_From_Source (Par) then
-         return False;
-      end if;
-
-      case Nkind (Par) is
-         when N_Assignment_Statement =>
-            Typ := Etype (Name (Par));
-
-            if not Is_Full_Access (Typ)
-              and then not Is_Full_Access_Object (Name (Par))
-            then
-               return False;
-            end if;
-
-         when N_Object_Declaration =>
-            Typ := Etype (Defining_Identifier (Par));
-
-            if not Is_Full_Access (Typ)
-              and then not Is_Full_Access (Defining_Identifier (Par))
-            then
-               return False;
-            end if;
-
-         when others =>
-            return False;
-      end case;
-
-      Temp := Make_Temporary (Loc, 'T', N);
-      New_N :=
-        Make_Object_Declaration (Loc,
-          Defining_Identifier => Temp,
-          Constant_Present    => True,
-          Object_Definition   => New_Occurrence_Of (Typ, Loc),
-          Expression          => Relocate_Node (N));
-      Insert_Before (Par, New_N);
-      Analyze (New_N);
-
-      Set_Expression (Par, New_Occurrence_Of (Temp, Loc));
-      return True;
-   end Is_Full_Access_Aggregate;
-
    -----------------------------------------------
    -- Explode_Initialization_Compound_Statement --
    -----------------------------------------------
@@ -1835,7 +2363,6 @@ package body Freeze is
       procedure Freeze_All_Ent (From : Entity_Id; After : in out Node_Id) is
          E     : Entity_Id;
          Flist : List_Id;
-         Lastn : Node_Id;
 
          procedure Process_Flist;
          --  If freeze nodes are present, insert and analyze, and reset cursor
@@ -1846,6 +2373,7 @@ package body Freeze is
          -------------------
 
          procedure Process_Flist is
+            Lastn : Node_Id;
          begin
             if Is_Non_Empty_List (Flist) then
                Lastn := Next (After);
@@ -1874,7 +2402,7 @@ package body Freeze is
             --  created for entry parameters must be frozen.
 
             if Ekind (E) = E_Package
-              and then No (Renamed_Object (E))
+              and then No (Renamed_Entity (E))
               and then not Is_Child_Unit (E)
               and then not Is_Frozen (E)
             then
@@ -2041,6 +2569,18 @@ package body Freeze is
                Process_Default_Expressions (E, After);
             end if;
 
+            --  Check subprogram renamings for the same strub-mode.
+            --  Avoid rechecking dispatching operations, that's taken
+            --  care of in Check_Inherited_Conditions, that covers
+            --  inherited interface operations.
+
+            Item := Alias (E);
+            if Present (Item)
+              and then not Is_Dispatching_Operation (E)
+            then
+               Check_Same_Strub_Mode (E, Item);
+            end if;
+
             if not Has_Completion (E) then
                Decl := Unit_Declaration_Node (E);
 
@@ -2068,7 +2608,7 @@ package body Freeze is
          elsif Is_Concurrent_Type (E) then
             Item := First_Entity (E);
             while Present (Item) loop
-               if (Is_Entry (Item) or else Is_Subprogram (Item))
+               if Is_Subprogram_Or_Entry (Item)
                  and then not Default_Expressions_Processed (Item)
                then
                   Process_Default_Expressions (Item, After);
@@ -2097,7 +2637,13 @@ package body Freeze is
       N      : Node_Id;
       Result : in out List_Id)
    is
-      L : constant List_Id := Freeze_Entity (Ent, N);
+      --  Freezing an Expression_Function does not freeze its profile:
+      --  the formals will have been frozen otherwise before the E_F
+      --  can be called.
+
+      L : constant List_Id :=
+        Freeze_Entity
+          (Ent, N, Do_Freeze_Profile => not Is_Expression_Function (Ent));
    begin
       if Is_Non_Empty_List (L) then
          if Result = No_List then
@@ -2180,7 +2726,11 @@ package body Freeze is
       --  List of freezing actions, left at No_List if none
 
       Test_E : Entity_Id := E;
-      --  This could use a comment ???
+      --  A local temporary used to test if freezing is necessary for E, since
+      --  its value can be set to something other than E in certain cases. For
+      --  example, E cannot be used directly in cases such as when it is an
+      --  Itype defined within a record - since it is the location of record
+      --  which matters.
 
       procedure Add_To_Result (Fnod : Node_Id);
       --  Add freeze action Fnod to list Result
@@ -2193,6 +2743,14 @@ package body Freeze is
       --  Check that an Access or Unchecked_Access attribute with a prefix
       --  which is the current instance type can only be applied when the type
       --  is limited.
+
+      procedure Check_No_Parts_Violations
+        (Typ : Entity_Id; Aspect_No_Parts : Aspect_Id) with
+         Pre => Aspect_No_Parts in
+                  Aspect_No_Controlled_Parts | Aspect_No_Task_Parts;
+      --  Check that Typ does not violate the semantics of the specified
+      --  Aspect_No_Parts (No_Controlled_Parts or No_Task_Parts) when it is
+      --  specified on Typ or one of its ancestors.
 
       procedure Check_Suspicious_Convention (Rec_Type : Entity_Id);
       --  Give a warning for pragma Convention with language C or C++ applied
@@ -2414,6 +2972,386 @@ package body Freeze is
          end if;
       end Check_Current_Instance;
 
+      -------------------------------
+      -- Check_No_Parts_Violations --
+      -------------------------------
+
+      procedure Check_No_Parts_Violations
+        (Typ : Entity_Id; Aspect_No_Parts : Aspect_Id)
+      is
+
+         function Find_Aspect_No_Parts
+           (Typ : Entity_Id) return Node_Id;
+         --  Search for Aspect_No_Parts on a given type. When
+         --  the aspect is not explicity specified Empty is returned.
+
+         function Get_Aspect_No_Parts_Value
+           (Typ : Entity_Id) return Entity_Id;
+         --  Obtain the value for the Aspect_No_Parts on a given
+         --  type. When the aspect is not explicitly specified Empty is
+         --  returned.
+
+         function Has_Aspect_No_Parts
+           (Typ : Entity_Id) return Boolean;
+         --  Predicate function which identifies whether No_Parts
+         --  is explicitly specified on a given type.
+
+         -------------------------------------
+         -- Find_Aspect_No_Parts --
+         -------------------------------------
+
+         function Find_Aspect_No_Parts
+           (Typ : Entity_Id) return Node_Id
+         is
+            Partial_View : constant Entity_Id :=
+              Incomplete_Or_Partial_View (Typ);
+
+            Aspect_Spec : Entity_Id :=
+              Find_Aspect (Typ, Aspect_No_Parts);
+            Curr_Aspect_Spec : Entity_Id;
+         begin
+
+            --  Examine Typ's associated node, when present, since aspect
+            --  specifications do not get transferred when nodes get rewritten.
+
+            --  For example, this can happen in the expansion of array types
+
+            if No (Aspect_Spec)
+              and then Present (Associated_Node_For_Itype (Typ))
+              and then Nkind (Associated_Node_For_Itype (Typ))
+                         = N_Full_Type_Declaration
+            then
+               Aspect_Spec :=
+                 Find_Aspect
+                   (Id => Defining_Identifier
+                            (Associated_Node_For_Itype (Typ)),
+                    A  => Aspect_No_Parts);
+            end if;
+
+            --  Examine aspects specifications on private type declarations
+
+            --  Should Find_Aspect be improved to handle this case ???
+
+            if No (Aspect_Spec)
+              and then Present (Partial_View)
+              and then Present
+                         (Aspect_Specifications
+                           (Declaration_Node
+                             (Partial_View)))
+            then
+               Curr_Aspect_Spec :=
+                 First
+                   (Aspect_Specifications
+                     (Declaration_Node
+                       (Partial_View)));
+
+               --  Search through aspects present on the private type
+
+               while Present (Curr_Aspect_Spec) loop
+                  if Get_Aspect_Id (Curr_Aspect_Spec)
+                       = Aspect_No_Parts
+                  then
+                     Aspect_Spec := Curr_Aspect_Spec;
+                     exit;
+                  end if;
+
+                  Next (Curr_Aspect_Spec);
+               end loop;
+
+            end if;
+
+            --  When errors are posted on the aspect return Empty
+
+            if Error_Posted (Aspect_Spec) then
+               return Empty;
+            end if;
+
+            return Aspect_Spec;
+         end Find_Aspect_No_Parts;
+
+         ------------------------------------------
+         -- Get_Aspect_No_Parts_Value --
+         ------------------------------------------
+
+         function Get_Aspect_No_Parts_Value
+           (Typ : Entity_Id) return Entity_Id
+         is
+            Aspect_Spec : constant Entity_Id :=
+              Find_Aspect_No_Parts (Typ);
+         begin
+
+            --  Return the value of the aspect when present
+
+            if Present (Aspect_Spec) then
+
+               --  No expression is the same as True
+
+               if No (Expression (Aspect_Spec)) then
+                  return Standard_True;
+               end if;
+
+               --  Assume its expression has already been constant folded into
+               --  a Boolean value and return its value.
+
+               return Entity (Expression (Aspect_Spec));
+            end if;
+
+            --  Otherwise, the aspect is not specified - so return Empty
+
+            return Empty;
+         end Get_Aspect_No_Parts_Value;
+
+         ------------------------------------
+         -- Has_Aspect_No_Parts --
+         ------------------------------------
+
+         function Has_Aspect_No_Parts
+           (Typ : Entity_Id) return Boolean
+         is (Present (Find_Aspect_No_Parts (Typ)));
+
+         --  Generic instances
+
+         -------------------------------------------
+         -- Get_Generic_Formal_Types_In_Hierarchy --
+         -------------------------------------------
+
+         function Get_Generic_Formal_Types_In_Hierarchy
+           is new Collect_Types_In_Hierarchy (Predicate => Is_Generic_Formal);
+         --  Return a list of all types within a given type's hierarchy which
+         --  are generic formals.
+
+         ----------------------------------------
+         -- Get_Types_With_Aspect_In_Hierarchy --
+         ----------------------------------------
+
+         function Get_Types_With_Aspect_In_Hierarchy
+           is new Collect_Types_In_Hierarchy
+                    (Predicate => Has_Aspect_No_Parts);
+         --  Returns a list of all types within a given type's hierarchy which
+         --  have the Aspect_No_Parts specified.
+
+         --  Local declarations
+
+         Aspect_Value      : Entity_Id;
+         Curr_Value        : Entity_Id;
+         Curr_Typ_Elmt     : Elmt_Id;
+         Curr_Body_Elmt    : Elmt_Id;
+         Curr_Formal_Elmt  : Elmt_Id;
+         Gen_Bodies        : Elist_Id;
+         Gen_Formals       : Elist_Id;
+         Scop              : Entity_Id;
+         Types_With_Aspect : Elist_Id;
+
+      --  Start of processing for Check_No_Parts_Violations
+
+      begin
+         --  Nothing to check if the type is elementary or artificial
+
+         if Is_Elementary_Type (Typ) or else not Comes_From_Source (Typ) then
+            return;
+         end if;
+
+         Types_With_Aspect := Get_Types_With_Aspect_In_Hierarchy (Typ);
+
+         --  Nothing to check if there are no types with No_Parts specified
+
+         if Is_Empty_Elmt_List (Types_With_Aspect) then
+            return;
+         end if;
+
+         --  Set name for all errors below
+
+         Error_Msg_Name_1 := Aspect_Names (Aspect_No_Parts);
+
+         --  Obtain the aspect value for No_Parts for comparison
+
+         Aspect_Value :=
+           Get_Aspect_No_Parts_Value
+             (Node (First_Elmt (Types_With_Aspect)));
+
+         --  When the value is True and there are controlled/task parts or the
+         --  type itself is controlled/task, trigger the appropriate error.
+
+         if Aspect_Value = Standard_True then
+            if Aspect_No_Parts = Aspect_No_Controlled_Parts then
+               if Is_Controlled (Typ) or else Has_Controlled_Component (Typ)
+               then
+                  Error_Msg_N
+                    ("aspect % applied to controlled type &", Typ);
+               end if;
+
+            elsif Aspect_No_Parts = Aspect_No_Task_Parts then
+               if Has_Task (Typ) then
+                  Error_Msg_N
+                    ("aspect % applied to task type &", Typ);
+                  Error_Msg_N
+                    ("\replace task components with access-to-task-type "
+                     & "components??", Typ);
+               end if;
+
+            else
+               raise Program_Error;
+            end if;
+         end if;
+
+         --  Move through Types_With_Aspect - checking that the value specified
+         --  for their corresponding Aspect_No_Parts do not override each
+         --  other.
+
+         Curr_Typ_Elmt := First_Elmt (Types_With_Aspect);
+         while Present (Curr_Typ_Elmt) loop
+            Curr_Value :=
+              Get_Aspect_No_Parts_Value (Node (Curr_Typ_Elmt));
+
+            --  Compare the aspect value against the current type
+
+            if Curr_Value /= Aspect_Value then
+               Error_Msg_NE
+                 ("cannot override aspect % of "
+                   & "ancestor type &", Typ, Node (Curr_Typ_Elmt));
+               return;
+            end if;
+
+            Next_Elmt (Curr_Typ_Elmt);
+         end loop;
+
+         --  Issue an error if the aspect applies to a type declared inside a
+         --  generic body and if said type derives from or has a component
+         --  of ageneric formal type - since those are considered to have
+         --  controlled/task parts and have Aspect_No_Parts specified as
+         --  False by default (RM H.4.1(4/5) is about the language-defined
+         --  No_Controlled_Parts aspect, and we are using the same rules for
+         --  No_Task_Parts).
+
+         --  We do not check tagged types since deriving from a formal type
+         --  within an enclosing generic unit is already illegal
+         --  (RM 3.9.1 (4/2)).
+
+         if Aspect_Value = Standard_True
+           and then In_Generic_Body (Typ)
+           and then not Is_Tagged_Type (Typ)
+         then
+            Gen_Bodies  := New_Elmt_List;
+            Gen_Formals :=
+              Get_Generic_Formal_Types_In_Hierarchy
+                (Typ                => Typ,
+                 Examine_Components => True);
+
+            --  Climb scopes collecting generic bodies
+
+            Scop := Scope (Typ);
+            while Present (Scop) and then Scop /= Standard_Standard loop
+
+               --  Generic package body
+
+               if Ekind (Scop) = E_Generic_Package
+                 and then In_Package_Body (Scop)
+               then
+                  Append_Elmt (Scop, Gen_Bodies);
+
+               --  Generic subprogram body
+
+               elsif Is_Generic_Subprogram (Scop) then
+                  Append_Elmt (Scop, Gen_Bodies);
+               end if;
+
+               Scop := Scope (Scop);
+            end loop;
+
+            --  Warn about the improper use of Aspect_No_Parts on a type
+            --  declaration deriving from or that has a component of a generic
+            --  formal type within the formal type's corresponding generic
+            --  body by moving through all formal types in Typ's hierarchy and
+            --  checking if they are formals in any of the enclosing generic
+            --  bodies.
+
+            --  However, a special exception gets made for formal types which
+            --  derive from a type which has Aspect_No_Parts True.
+
+            --  For example:
+
+            --  generic
+            --     type Form is private;
+            --  package G is
+            --     type Type_A is new Form with No_Controlled_Parts; --  OK
+            --  end;
+            --
+            --  package body G is
+            --     type Type_B is new Form with No_Controlled_Parts; --  ERROR
+            --  end;
+
+            --  generic
+            --     type Form is private;
+            --  package G is
+            --     type Type_A is record C : Form; end record
+            --       with No_Controlled_Parts;                       --  OK
+            --  end;
+            --
+            --  package body G is
+            --     type Type_B is record C : Form; end record
+            --       with No_Controlled_Parts;                       --  ERROR
+            --  end;
+
+            --  type Root is tagged null record with No_Controlled_Parts;
+            --
+            --  generic
+            --     type Form is new Root with private;
+            --  package G is
+            --     type Type_A is record C : Form; end record
+            --       with No_Controlled_Parts;                       --  OK
+            --  end;
+            --
+            --  package body G is
+            --     type Type_B is record C : Form; end record
+            --       with No_Controlled_Parts;                       --  OK
+            --  end;
+
+            Curr_Formal_Elmt := First_Elmt (Gen_Formals);
+            while Present (Curr_Formal_Elmt) loop
+
+               Curr_Body_Elmt := First_Elmt (Gen_Bodies);
+               while Present (Curr_Body_Elmt) loop
+
+                  --  Obtain types in the formal type's hierarchy which have
+                  --  the aspect specified.
+
+                  Types_With_Aspect :=
+                    Get_Types_With_Aspect_In_Hierarchy
+                      (Node (Curr_Formal_Elmt));
+
+                  --  We found a type declaration in a generic body where both
+                  --  Aspect_No_Parts is true and one of its ancestors is a
+                  --  generic formal type.
+
+                  if Scope (Node (Curr_Formal_Elmt)) =
+                       Node (Curr_Body_Elmt)
+
+                    --  Check that no ancestors of the formal type have
+                    --  Aspect_No_Parts True before issuing the error.
+
+                    and then (Is_Empty_Elmt_List (Types_With_Aspect)
+                               or else
+                                 Get_Aspect_No_Parts_Value
+                                   (Node (First_Elmt (Types_With_Aspect)))
+                                  = Standard_False)
+                  then
+                     Error_Msg_Node_1 := Typ;
+                     Error_Msg_Node_2 := Node (Curr_Formal_Elmt);
+                     Error_Msg
+                       ("aspect % cannot be applied to "
+                         & "type & which has an ancestor or component of "
+                         & "formal type & within the formal type's "
+                         & "corresponding generic body", Sloc (Typ));
+                  end if;
+
+                  Next_Elmt (Curr_Body_Elmt);
+               end loop;
+
+               Next_Elmt (Curr_Formal_Elmt);
+            end loop;
+         end if;
+      end Check_No_Parts_Violations;
+
       ---------------------------------
       -- Check_Suspicious_Convention --
       ---------------------------------
@@ -2523,7 +3461,7 @@ package body Freeze is
 
                            Error_Msg_Uint_1 := Modv;
                            Error_Msg_N
-                             ("?M?2 '*'*^' may have been intended here",
+                             ("?.m?2 '*'*^' may have been intended here",
                               Modulus);
                         end;
                      end if;
@@ -2661,7 +3599,7 @@ package body Freeze is
                      end if;
                   end Complain_CS;
 
-                  --  Start of processing for Alias_Atomic_Check
+               --  Start of processing for Alias_Atomic_Check
 
                begin
                   --  If object size of component type isn't known, we cannot
@@ -2811,7 +3749,7 @@ package body Freeze is
                   --  cases of types whose alignment exceeds their size (the
                   --  padded type cases).
 
-                  if Csiz /= 0 then
+                  if Csiz /= 0 and then Known_Alignment (Ctyp) then
                      declare
                         A : constant Uint := Alignment_In_Bits (Ctyp);
                      begin
@@ -2859,7 +3797,7 @@ package body Freeze is
                      --  Set component size if not already set by a component
                      --  size clause.
 
-                     if not Present (Comp_Size_C) then
+                     if No (Comp_Size_C) then
                         Set_Component_Size (Arr, Csiz);
                      end if;
 
@@ -2871,8 +3809,9 @@ package body Freeze is
                      --  explicitly, then generate a warning.
 
                      if Has_Pragma_Pack (Arr)
-                       and then not Present (Comp_Size_C)
+                       and then No (Comp_Size_C)
                        and then (Csiz = 7 or else Csiz = 15 or else Csiz = 31)
+                       and then Known_Esize (Base_Type (Ctyp))
                        and then Esize (Base_Type (Ctyp)) = Csiz + 1
                      then
                         Error_Msg_Uint_1 := Csiz;
@@ -2982,9 +3921,12 @@ package body Freeze is
          --  Processing that is done only for subtypes
 
          else
-            --  Acquire alignment from base type
+            --  Acquire alignment from base type. Known_Alignment of the base
+            --  type is False for Wide_String, for example.
 
-            if Unknown_Alignment (Arr) then
+            if not Known_Alignment (Arr)
+              and then Known_Alignment (Base_Type (Arr))
+            then
                Set_Alignment (Arr, Alignment (Base_Type (Arr)));
                Adjust_Esize_Alignment (Arr);
             end if;
@@ -3141,12 +4083,13 @@ package body Freeze is
                 (No (Ancestor_Subtype (Arr))
                   or else not Has_Size_Clause (Ancestor_Subtype (Arr)))
             then
-               Set_Esize     (Arr, Esize     (Packed_Array_Impl_Type (Arr)));
-               Set_RM_Size   (Arr, RM_Size   (Packed_Array_Impl_Type (Arr)));
+               Copy_Esize (To => Arr, From => Packed_Array_Impl_Type (Arr));
+               Copy_RM_Size (To => Arr, From => Packed_Array_Impl_Type (Arr));
             end if;
 
             if not Has_Alignment_Clause (Arr) then
-               Set_Alignment (Arr, Alignment (Packed_Array_Impl_Type (Arr)));
+               Copy_Alignment
+                 (To => Arr, From => Packed_Array_Impl_Type (Arr));
             end if;
          end if;
 
@@ -3619,7 +4562,9 @@ package body Freeze is
                Set_Etype (Formal, F_Type);
             end if;
 
-            if not From_Limited_With (F_Type) then
+            if not From_Limited_With (F_Type)
+              and then Should_Freeze_Type (F_Type, E, N)
+            then
                Freeze_And_Append (F_Type, N, Result);
             end if;
 
@@ -3640,12 +4585,11 @@ package body Freeze is
                   Result := No_List;
                   return False;
 
-               elsif not After_Last_Declaration
-                 and then not Freezing_Library_Level_Tagged_Type
-               then
-                  Error_Msg_Node_1 := F_Type;
-                  Error_Msg
-                    ("type & must be fully defined before this point", Loc);
+               elsif not After_Last_Declaration then
+                  Error_Msg_NE
+                    ("type & must be fully defined before this point",
+                     N,
+                     F_Type);
                end if;
             end if;
 
@@ -3670,6 +4614,7 @@ package body Freeze is
                --  active.
 
                if Is_Access_Type (F_Type)
+                 and then Known_Esize (F_Type)
                  and then Esize (F_Type) > Ttypes.System_Address_Size
                  and then (not Unnest_Subprogram_Mode
                             or else not Is_Access_Subprogram_Type (F_Type))
@@ -3749,25 +4694,14 @@ package body Freeze is
 
                Error_Msg_NE ("?x?type of argument& is unconstrained array",
                   Warn_Node, Formal);
-               Error_Msg_NE ("?x?foreign caller must pass bounds explicitly",
-                  Warn_Node, Formal);
+               Error_Msg_N ("\?x?foreign caller must pass bounds explicitly",
+                  Warn_Node);
                Error_Msg_Qual_Level := 0;
             end if;
 
             if not From_Limited_With (F_Type) then
                if Is_Access_Type (F_Type) then
                   F_Type := Designated_Type (F_Type);
-               end if;
-
-               --  If the formal is an anonymous_access_to_subprogram
-               --  freeze the  subprogram type as well, to prevent
-               --  scope anomalies in gigi, because there is no other
-               --  clear point at which it could be frozen.
-
-               if Is_Itype (Etype (Formal))
-                 and then Ekind (F_Type) = E_Subprogram_Type
-               then
-                  Freeze_And_Append (F_Type, N, Result);
                end if;
             end if;
 
@@ -3796,7 +4730,9 @@ package body Freeze is
                Set_Etype (E, R_Type);
             end if;
 
-            Freeze_And_Append (R_Type, N, Result);
+            if Should_Freeze_Type (R_Type, E, N) then
+               Freeze_And_Append (R_Type, N, Result);
+            end if;
 
             --  Check suspicious return type for C function
 
@@ -3808,6 +4744,7 @@ package body Freeze is
                --  Check suspicious return of fat C pointer
 
                if Is_Access_Type (R_Type)
+                 and then Known_Esize (R_Type)
                  and then Esize (R_Type) > Ttypes.System_Address_Size
                  and then not Has_Warnings_Off (E)
                  and then not Has_Warnings_Off (R_Type)
@@ -3930,8 +4867,7 @@ package body Freeze is
 
            and then Convention (E) /= Convention_Intrinsic
 
-           --  Assume that ASM interface knows what it is doing. This deals
-           --  with e.g. unsigned.ads in the AAMP back end.
+           --  Assume that ASM interface knows what it is doing
 
            and then Convention (E) /= Convention_Assembler
          then
@@ -4002,11 +4938,6 @@ package body Freeze is
          --  Set True if we find at least one component with no component
          --  clause (used to warn about useless Pack pragmas).
 
-         function Check_Allocator (N : Node_Id) return Node_Id;
-         --  If N is an allocator, possibly wrapped in one or more level of
-         --  qualified expression(s), return the inner allocator node, else
-         --  return Empty.
-
          procedure Check_Itype (Typ : Entity_Id);
          --  If the component subtype is an access to a constrained subtype of
          --  an already frozen type, make the subtype frozen as well. It might
@@ -4021,25 +4952,6 @@ package body Freeze is
          --  Make sure that all types mentioned in Discrete_Choices of the
          --  variants referenceed by the Variant_Part VP are frozen. This is
          --  a recursive routine to deal with nested variants.
-
-         ---------------------
-         -- Check_Allocator --
-         ---------------------
-
-         function Check_Allocator (N : Node_Id) return Node_Id is
-            Inner : Node_Id;
-         begin
-            Inner := N;
-            loop
-               if Nkind (Inner) = N_Allocator then
-                  return Inner;
-               elsif Nkind (Inner) = N_Qualified_Expression then
-                  Inner := Expression (Inner);
-               else
-                  return Empty;
-               end if;
-            end loop;
-         end Check_Allocator;
 
          -----------------
          -- Check_Itype --
@@ -4071,6 +4983,7 @@ package body Freeze is
               and then Convention (Desig) /= Convention_Protected
             then
                Set_Is_Frozen (Desig);
+               Create_Extra_Formals (Desig);
             end if;
          end Check_Itype;
 
@@ -4355,22 +5268,24 @@ package body Freeze is
 
             elsif Is_Access_Type (Etype (Comp))
               and then Present (Parent (Comp))
+              and then
+                Nkind (Parent (Comp))
+                  in N_Component_Declaration | N_Discriminant_Specification
               and then Present (Expression (Parent (Comp)))
             then
                declare
                   Alloc : constant Node_Id :=
-                            Check_Allocator (Expression (Parent (Comp)));
+                            Unqualify (Expression (Parent (Comp)));
 
                begin
-                  if Present (Alloc) then
+                  if Nkind (Alloc) = N_Allocator then
 
                      --  If component is pointer to a class-wide type, freeze
                      --  the specific type in the expression being allocated.
                      --  The expression may be a subtype indication, in which
                      --  case freeze the subtype mark.
 
-                     if Is_Class_Wide_Type
-                          (Designated_Type (Etype (Comp)))
+                     if Is_Class_Wide_Type (Designated_Type (Etype (Comp)))
                      then
                         if Is_Entity_Name (Expression (Alloc)) then
                            Freeze_And_Append
@@ -4382,17 +5297,14 @@ package body Freeze is
                             (Entity (Subtype_Mark (Expression (Alloc))),
                              N, Result);
                         end if;
-
                      elsif Is_Itype (Designated_Type (Etype (Comp))) then
                         Check_Itype (Etype (Comp));
-
                      else
                         Freeze_And_Append
                           (Designated_Type (Etype (Comp)), N, Result);
                      end if;
                   end if;
                end;
-
             elsif Is_Access_Type (Etype (Comp))
               and then Is_Itype (Designated_Type (Etype (Comp)))
             then
@@ -5341,6 +6253,35 @@ package body Freeze is
         and then Scope (Test_E) /= Current_Scope
         and then Ekind (Test_E) /= E_Constant
       then
+         --  Here we deal with the special case of the expansion of
+         --  postconditions. Previously this was handled by the loop below,
+         --  since these postcondition checks got isolated to a separate,
+         --  internally generated, subprogram. Now, however, the postcondition
+         --  checks get contained within their corresponding subprogram
+         --  directly.
+
+         if not Comes_From_Source (N)
+           and then Nkind (N) = N_Pragma
+           and then From_Aspect_Specification (N)
+           and then Is_Valid_Assertion_Kind (Original_Aspect_Pragma_Name (N))
+
+           --  Now, verify the placement of the pragma is within an expanded
+           --  subprogram which contains postcondition expansion - detected
+           --  through the presence of the "Wrapped_Statements" field.
+
+           and then Present (Enclosing_Subprogram (Current_Scope))
+           and then Present (Wrapped_Statements
+                              (Enclosing_Subprogram (Current_Scope)))
+         then
+            goto Leave;
+         end if;
+
+         --  Otherwise, loop through scopes checking if an enclosing scope
+         --  comes from source or is a generic. Note that, for the purpose
+         --  of this test, we need to consider that the internally generated
+         --  subprogram described above comes from source too if the original
+         --  subprogram itself does.
+
          declare
             S : Entity_Id;
 
@@ -5349,6 +6290,8 @@ package body Freeze is
             while Present (S) loop
                if Is_Overloadable (S) then
                   if Comes_From_Source (S)
+                    or else (Chars (S) = Name_uWrapped_Statements
+                              and then Comes_From_Source (Scope (S)))
                     or else Is_Generic_Instance (S)
                     or else Is_Child_Unit (S)
                   then
@@ -5425,11 +6368,9 @@ package body Freeze is
             --  to the components of Rec.
 
          begin
-            Comp := First_Entity (E);
+            Comp := First_Component (E);
             while Present (Comp) loop
-               if Ekind (Comp) = E_Component
-                 and then Has_Delayed_Aspects (Comp)
-               then
+               if Has_Delayed_Aspects (Comp) then
                   if not Rec_Pushed then
                      Push_Scope (E);
                      Rec_Pushed := True;
@@ -5445,7 +6386,7 @@ package body Freeze is
                   Analyze_Aspects_At_Freeze_Point (Comp);
                end if;
 
-               Next_Entity (Comp);
+               Next_Component (Comp);
             end loop;
 
             --  Pop the scope if Rec scope has been pushed on the scope stack
@@ -5461,9 +6402,7 @@ package body Freeze is
          end;
       end if;
 
-      if Has_Delayed_Aspects (E)
-        or else May_Inherit_Delayed_Rep_Aspects (E)
-      then
+      if Has_Delayed_Aspects (E) then
          Analyze_Aspects_At_Freeze_Point (E);
       end if;
 
@@ -5491,20 +6430,6 @@ package body Freeze is
          then
             Set_Encoded_Interface_Name
               (E, Get_Default_External_Name (E));
-
-         --  If entity is an atomic object appearing in a declaration and
-         --  the expression is an aggregate, assign it to a temporary to
-         --  ensure that the actual assignment is done atomically rather
-         --  than component-wise (the assignment to the temp may be done
-         --  component-wise, but that is harmless).
-
-         elsif Is_Full_Access (E)
-           and then Nkind (Parent (E)) = N_Object_Declaration
-           and then Present (Expression (Parent (E)))
-           and then Nkind (Expression (Parent (E))) = N_Aggregate
-           and then Is_Full_Access_Aggregate (Expression (Parent (E)))
-         then
-            null;
          end if;
 
          --  Subprogram case
@@ -5522,9 +6447,10 @@ package body Freeze is
 
             --  In Ada 2012, freezing a subprogram does not always freeze the
             --  corresponding profile (see AI05-019). An attribute reference
-            --  is not a freezing point of the profile. Flag Do_Freeze_Profile
+            --  is not a freezing point of the profile. Similarly, we do not
+            --  freeze the profile of primitives of a library-level tagged type
+            --  when we are building its dispatch table. Flag Do_Freeze_Profile
             --  indicates whether the profile should be frozen now.
-            --  Other constructs that should not freeze ???
 
             --  This processing doesn't apply to internal entities (see below)
 
@@ -5578,7 +6504,7 @@ package body Freeze is
                         then
                            Error_Msg_NE
                              ("useless postcondition, & is marked "
-                              & "No_Return?T?", Exp, E);
+                              & "No_Return?.t?", Exp, E);
                         end if;
                      end if;
 
@@ -5590,11 +6516,12 @@ package body Freeze is
          --  Here for other than a subprogram or type
 
          else
-            --  If entity has a type, and it is not a generic unit, then freeze
-            --  it first (RM 13.14(10)).
+            --  If entity has a type declared in the current scope, and it is
+            --  not a generic unit, then freeze it first.
 
             if Present (Etype (E))
               and then Ekind (E) /= E_Generic_Function
+              and then Within_Scope (Etype (E), Current_Scope)
             then
                Freeze_And_Append (Etype (E), N, Result);
 
@@ -5616,9 +6543,13 @@ package body Freeze is
                end if;
             end if;
 
-            --  Special processing for objects created by object declaration
+            --  Special processing for objects created by object declaration;
+            --  we protect the call to Declaration_Node against entities of
+            --  expressions replaced by the frontend with an N_Raise_CE node.
 
-            if Nkind (Declaration_Node (E)) = N_Object_Declaration then
+            if Ekind (E) in E_Constant | E_Variable
+              and then Nkind (Declaration_Node (E)) = N_Object_Declaration
+            then
                Freeze_Object_Declaration (E);
             end if;
 
@@ -5769,7 +6700,8 @@ package body Freeze is
             if Is_Array_Type (E) then
                declare
                   Ctyp : constant Entity_Id := Component_Type (E);
-                  Rsiz : constant Uint      := RM_Size (Ctyp);
+                  Rsiz : constant Uint :=
+                    (if Known_RM_Size (Ctyp) then RM_Size (Ctyp) else Uint_0);
                   SZ   : constant Node_Id   := Size_Clause (E);
                   Btyp : constant Entity_Id := Base_Type (E);
 
@@ -5829,7 +6761,7 @@ package body Freeze is
 
                         Dim := Expr_Value (Hi) - Expr_Value (Lo) + 1;
 
-                        if Dim >= 0 then
+                        if Dim > Uint_0 then
                            Num_Elmts := Num_Elmts * Dim;
                         else
                            Num_Elmts := Uint_0;
@@ -5851,9 +6783,12 @@ package body Freeze is
                         if Implicit_Packing then
                            Set_Component_Size (Btyp, Rsiz);
 
-                        --  Otherwise give an error message
+                        --  Otherwise give an error message, except that if the
+                        --  specified Size is zero, there is no need for pragma
+                        --  Pack. Note that size zero is not considered
+                        --  Addressable.
 
-                        else
+                        elsif RM_Size (E) /= Uint_0 then
                            Error_Msg_NE
                              ("size given for& too small", SZ, E);
                            Error_Msg_N -- CODEFIX
@@ -5898,17 +6833,24 @@ package body Freeze is
             --  A subtype inherits all the type-related representation aspects
             --  from its parents (RM 13.1(8)).
 
+            if May_Inherit_Delayed_Rep_Aspects (E) then
+               Inherit_Delayed_Rep_Aspects (E);
+            end if;
+
             Inherit_Aspects_At_Freeze_Point (E);
 
          --  For a derived type, freeze its parent type first (RM 13.14(15))
 
          elsif Is_Derived_Type (E) then
             Freeze_And_Append (Etype (E), N, Result);
-            Freeze_And_Append (First_Subtype (Etype (E)), N, Result);
 
             --  A derived type inherits each type-related representation aspect
             --  of its parent type that was directly specified before the
             --  declaration of the derived type (RM 13.1(15)).
+
+            if May_Inherit_Delayed_Rep_Aspects (E) then
+               Inherit_Delayed_Rep_Aspects (E);
+            end if;
 
             Inherit_Aspects_At_Freeze_Point (E);
          end if;
@@ -5954,24 +6896,24 @@ package body Freeze is
                   if Sloc (SC) > Sloc (AC) then
                      Loc := SC;
                      Error_Msg_NE
-                       ("?Z?size is not a multiple of alignment for &",
+                       ("?.z?size is not a multiple of alignment for &",
                         Loc, E);
                      Error_Msg_Sloc := Sloc (AC);
                      Error_Msg_Uint_1 := Alignment (E);
-                     Error_Msg_N ("\?Z?alignment of ^ specified #", Loc);
+                     Error_Msg_N ("\?.z?alignment of ^ specified #", Loc);
 
                   else
                      Loc := AC;
                      Error_Msg_NE
-                       ("?Z?size is not a multiple of alignment for &",
+                       ("?.z?size is not a multiple of alignment for &",
                         Loc, E);
                      Error_Msg_Sloc := Sloc (SC);
                      Error_Msg_Uint_1 := RM_Size (E);
-                     Error_Msg_N ("\?Z?size of ^ specified #", Loc);
+                     Error_Msg_N ("\?.z?size of ^ specified #", Loc);
                   end if;
 
                   Error_Msg_Uint_1 := ((RM_Size (E) / Abits) + 1) * Abits;
-                  Error_Msg_N ("\?Z?Object_Size will be increased to ^", Loc);
+                  Error_Msg_N ("\?.z?Object_Size will be increased to ^", Loc);
                end if;
             end;
          end if;
@@ -6127,7 +7069,7 @@ package body Freeze is
             --  end of a declarative part.
 
             if Is_Library_Level_Tagged_Type (E)
-              and then not Present (Full_View (E))
+              and then No (Full_View (E))
             then
                Set_Is_Frozen (E, False);
                goto Leave;
@@ -6194,11 +7136,11 @@ package body Freeze is
 
                Check_Debug_Info_Needed (E);
 
-               --  AI-117 requires that the convention of a partial view be the
-               --  same as the convention of the full view. Note that this is a
-               --  recognized breach of privacy, but it's essential for logical
-               --  consistency of representation, and the lack of a rule in
-               --  RM95 was an oversight.
+               --  AI95-117 requires that the convention of a partial view be
+               --  the same as the convention of the full view. Note that this
+               --  is a recognized breach of privacy, but it's essential for
+               --  logical consistency of representation, and the lack of a
+               --  rule in RM95 was an oversight.
 
                Set_Convention (E, Convention (Full_View (E)));
 
@@ -6215,7 +7157,7 @@ package body Freeze is
 
                if Is_Type (Full_View (E)) then
                   Set_Size_Info (E, Full_View (E));
-                  Set_RM_Size   (E, RM_Size (Full_View (E)));
+                  Copy_RM_Size (To => E, From => Full_View (E));
                end if;
 
                goto Leave;
@@ -6423,7 +7365,7 @@ package body Freeze is
 
          if Is_Composite_Type (E) then
 
-            --  AI-117 requires that all new primitives of a tagged type must
+            --  AI95-117 requires that all new primitives of a tagged type must
             --  inherit the convention of the full view of the type. Inherited
             --  and overriding operations are defined to inherit the convention
             --  of their parent or overridden subprogram (also specified in
@@ -6535,7 +7477,7 @@ package body Freeze is
                      --  If no formal is passed in, then issue an error for a
                      --  missing formal.
 
-                     elsif not Present (Pool_Op_Formal) then
+                     elsif No (Pool_Op_Formal) then
                         Error_Msg_NE
                           ("simple storage pool op missing formal " &
                            Formal_Name & " of type&", Pool_Op, Expected_Type);
@@ -6667,7 +7609,7 @@ package body Freeze is
                            --  and no excess formals are present, then this
                            --  operation has been validated, so record it.
 
-                           if not Present (Formal) and then Is_OK then
+                           if No (Formal) and then Is_OK then
                               Found_Op := Op;
                            end if;
                         end if;
@@ -6679,7 +7621,7 @@ package body Freeze is
                      --  so issue an error if none was found.
 
                      if Op_Name = Name_Allocate
-                       and then not Present (Found_Op)
+                       and then No (Found_Op)
                      then
                         Error_Msg_N ("missing % operation for simple " &
                                      "storage pool type", Pool_Type);
@@ -6828,6 +7770,18 @@ package body Freeze is
             end;
          end if;
 
+         --  Verify at this point that No_Controlled_Parts and No_Task_Parts,
+         --  when specified on the current type or one of its ancestors, has
+         --  not been overridden and that no violation of the aspect has
+         --  occurred.
+
+         --  It is important that we perform the checks here after the type has
+         --  been processed because if said type depended on a private type it
+         --  will not have been marked controlled or having tasks.
+
+         Check_No_Parts_Violations (E, Aspect_No_Controlled_Parts);
+         Check_No_Parts_Violations (E, Aspect_No_Task_Parts);
+
          --  End of freeze processing for type entities
       end if;
 
@@ -6874,10 +7828,9 @@ package body Freeze is
             begin
                Comp := First_Component (E);
                while Present (Comp) loop
-                  Typ  := Etype (Comp);
+                  Typ := Etype (Comp);
 
-                  if Ekind (Comp) = E_Component
-                    and then Is_Access_Type (Typ)
+                  if Is_Access_Type (Typ)
                     and then Scope (Typ) /= E
                     and then Base_Type (Designated_Type (Typ)) = E
                     and then Is_Itype (Designated_Type (Typ))
@@ -6900,16 +7853,42 @@ package body Freeze is
       if Is_Type (E) then
          Freeze_And_Append (First_Subtype (E), N, Result);
 
-         --  If we just froze a tagged non-class wide record, then freeze the
+         --  If we just froze a tagged non-class-wide record, then freeze the
          --  corresponding class-wide type. This must be done after the tagged
          --  type itself is frozen, because the class-wide type refers to the
          --  tagged type which generates the class.
+
+         --  For a tagged type, freeze explicitly those primitive operations
+         --  that are expression functions, which otherwise have no clear
+         --  freeze point: these have to be frozen before the dispatch table
+         --  for the type is built, and before any explicit call to the
+         --  primitive, which would otherwise be the freeze point for it.
 
          if Is_Tagged_Type (E)
            and then not Is_Class_Wide_Type (E)
            and then Present (Class_Wide_Type (E))
          then
             Freeze_And_Append (Class_Wide_Type (E), N, Result);
+
+            declare
+               Ops  : constant Elist_Id := Primitive_Operations (E);
+
+               Elmt : Elmt_Id;
+               Subp : Entity_Id;
+
+            begin
+               if Ops /= No_Elist  then
+                  Elmt := First_Elmt (Ops);
+                  while Present (Elmt) loop
+                     Subp := Node (Elmt);
+                     if Is_Expression_Function (Subp) then
+                        Freeze_And_Append (Subp, N, Result);
+                     end if;
+
+                     Next_Elmt (Elmt);
+                  end loop;
+               end if;
+            end;
          end if;
       end if;
 
@@ -6976,22 +7955,24 @@ package body Freeze is
 
         and then not Target_Short_Enums
       then
-         Init_Esize (Typ, Standard_Integer_Size);
+         Set_Esize (Typ, UI_From_Int (Standard_Integer_Size));
          Set_Alignment (Typ, Alignment (Standard_Integer));
 
       --  Normal Ada case or size clause present or not Long_C_Enums on target
 
       else
          --  If the enumeration type interfaces to C, and it has a size clause
-         --  that specifies less than int size, it warrants a warning. The
-         --  user may intend the C type to be an enum or a char, so this is
+         --  that is smaller than the size of int, it warrants a warning. The
+         --  user may intend the C type to be a boolean or a char, so this is
          --  not by itself an error that the Ada compiler can detect, but it
-         --  it is a worth a heads-up. For Boolean and Character types we
+         --  is worth a heads-up. For Boolean and Character types we
          --  assume that the programmer has the proper C type in mind.
+         --  For explicit sizes larger than int, assume the user knows what
+         --  he is doing and that the code is intentional.
 
          if Convention (Typ) = Convention_C
            and then Has_Size_Clause (Typ)
-           and then Esize (Typ) /= Esize (Standard_Integer)
+           and then Esize (Typ) < Standard_Integer_Size
            and then not Is_Boolean_Type (Typ)
            and then not Is_Character_Type (Typ)
 
@@ -7000,7 +7981,12 @@ package body Freeze is
            and then not Target_Short_Enums
          then
             Error_Msg_N
-              ("C enum types have the size of a C int??", Size_Clause (Typ));
+              ("??the size of enums in C is implementation-defined",
+               Size_Clause (Typ));
+            Error_Msg_N
+              ("\??check that the C counterpart has size of " &
+               UI_Image (Esize (Typ)),
+               Size_Clause (Typ));
          end if;
 
          Adjust_Esize_For_Alignment (Typ);
@@ -7104,6 +8090,7 @@ package body Freeze is
                          or else Is_TSS (Id, TSS_Stream_Output)
                          or else Is_TSS (Id, TSS_Stream_Read)
                          or else Is_TSS (Id, TSS_Stream_Write)
+                         or else Is_TSS (Id, TSS_Put_Image)
                          or else Nkind (Original_Node (P)) =
                                              N_Subprogram_Renaming_Declaration)
             then
@@ -7203,7 +8190,7 @@ package body Freeze is
 
       Typ := Empty;
 
-      if Nkind (N) in N_Has_Etype then
+      if Nkind (N) in N_Has_Etype and then Present (Etype (N)) then
          if not Is_Frozen (Etype (N)) then
             Typ := Etype (N);
 
@@ -7224,6 +8211,7 @@ package body Freeze is
       --  an initialization procedure from freezing the variable.
 
       if Is_Entity_Name (N)
+        and then Present (Entity (N))
         and then not Is_Frozen (Entity (N))
         and then (Nkind (N) /= N_Identifier
                    or else Comes_From_Source (N)
@@ -7285,7 +8273,7 @@ package body Freeze is
             if Present (Nam)
               and then Ekind (Nam) = E_Function
               and then Nkind (Parent (N)) = N_Function_Call
-              and then Convention (Nam) = Convention_Ada
+              and then not Has_Foreign_Convention (Nam)
             then
                Create_Extra_Formals (Nam);
             end if;
@@ -7378,9 +8366,9 @@ package body Freeze is
             --  If the parent is a subprogram body, the candidate insertion
             --  point is just ahead of it.
 
-            if  Nkind (Parent_P) = N_Subprogram_Body
-                and then Unique_Defining_Entity (Parent_P) =
-                           Freeze_Outside_Subp
+            if Nkind (Parent_P) = N_Subprogram_Body
+              and then Unique_Defining_Entity (Parent_P) =
+                         Freeze_Outside_Subp
             then
                P := Parent_P;
                exit;
@@ -7410,7 +8398,7 @@ package body Freeze is
             --  tree. This is an unusual case, but there are some legitimate
             --  situations in which this occurs, notably when the expressions
             --  in the range of a type declaration are resolved. We simply
-            --  ignore the freeze request in this case. Is this right ???
+            --  ignore the freeze request in this case.
 
             if No (Parent_P) then
                return;
@@ -7670,7 +8658,7 @@ package body Freeze is
             end case;
 
             --  We fall through the case if we did not yet find the proper
-            --  place in the free for inserting the freeze node, so climb.
+            --  place in the tree for inserting the freeze node, so climb.
 
             P := Parent_P;
          end loop;
@@ -8076,8 +9064,9 @@ package body Freeze is
       Brng  : constant Node_Id    := Scalar_Range (Btyp);
       BLo   : constant Node_Id    := Low_Bound (Brng);
       BHi   : constant Node_Id    := High_Bound (Brng);
-      Par   : constant Entity_Id  := First_Subtype (Typ);
-      Small : constant Ureal      := Small_Value (Typ);
+      Ftyp  : constant Entity_Id  := Underlying_Type (First_Subtype (Typ));
+
+      Small : Ureal;
       Loval : Ureal;
       Hival : Ureal;
       Atype : Entity_Id;
@@ -8086,10 +9075,10 @@ package body Freeze is
       Orig_Hi : Ureal;
       --  Save original bounds (for shaving tests)
 
-      Actual_Size : Nat;
+      Actual_Size : Int;
       --  Actual size chosen
 
-      function Fsize (Lov, Hiv : Ureal) return Nat;
+      function Fsize (Lov, Hiv : Ureal) return Int;
       --  Returns size of type with given bounds. Also leaves these
       --  bounds set as the current bounds of the Typ.
 
@@ -8103,7 +9092,7 @@ package body Freeze is
       -- Fsize --
       -----------
 
-      function Fsize (Lov, Hiv : Ureal) return Nat is
+      function Fsize (Lov, Hiv : Ureal) return Int is
       begin
          Set_Realval (Lo, Lov);
          Set_Realval (Hi, Hiv);
@@ -8116,7 +9105,7 @@ package body Freeze is
 
       function Larger (A, B : Ureal) return Boolean is
       begin
-         return A > B and then A - Small > B;
+         return A > B and then A - Small_Value (Typ) > B;
       end Larger;
 
       -------------
@@ -8125,7 +9114,7 @@ package body Freeze is
 
       function Smaller (A, B : Ureal) return Boolean is
       begin
-         return A < B and then A + Small < B;
+         return A < B and then A + Small_Value (Typ) < B;
       end Smaller;
 
    --  Start of processing for Freeze_Fixed_Point_Type
@@ -8136,31 +9125,32 @@ package body Freeze is
       --  so that all characteristics of the type (size, bounds) can be
       --  computed and validated in the call to Minimum_Size that follows.
 
-      if Has_Delayed_Aspects (First_Subtype (Typ)) then
-         Analyze_Aspects_At_Freeze_Point (First_Subtype (Typ));
-         Set_Has_Delayed_Aspects (First_Subtype (Typ), False);
+      if Has_Delayed_Aspects (Ftyp) then
+         Analyze_Aspects_At_Freeze_Point (Ftyp);
+         Set_Has_Delayed_Aspects (Ftyp, False);
+      end if;
+
+      if May_Inherit_Delayed_Rep_Aspects (Ftyp) then
+         Inherit_Delayed_Rep_Aspects (Ftyp);
+         Set_May_Inherit_Delayed_Rep_Aspects (Ftyp, False);
+      end if;
+
+      --  Inherit the Small value from the first subtype in any case
+
+      if Typ /= Ftyp then
+         Set_Small_Value (Typ, Small_Value (Ftyp));
       end if;
 
       --  If Esize of a subtype has not previously been set, set it now
 
-      if Unknown_Esize (Typ) then
+      if not Known_Esize (Typ) then
          Atype := Ancestor_Subtype (Typ);
 
          if Present (Atype) then
             Set_Esize (Typ, Esize (Atype));
          else
-            Set_Esize (Typ, Esize (Btyp));
+            Copy_Esize (To => Typ, From => Btyp);
          end if;
-      end if;
-
-      --  The 'small attribute may have been specified with an aspect,
-      --  in which case it is processed after a subtype declaration, so
-      --  inherit now the specified value.
-
-      if Typ /= Par
-        and then Present (Find_Aspect (Par, Aspect_Small))
-      then
-         Set_Small_Value (Typ, Small_Value (Par));
       end if;
 
       --  Immediate return if the range is already analyzed. This means that
@@ -8179,6 +9169,7 @@ package body Freeze is
          return;
       end if;
 
+      Small := Small_Value (Typ);
       Loval := Realval (Lo);
       Hival := Realval (Hi);
 
@@ -8212,11 +9203,10 @@ package body Freeze is
             Loval_Excl_EP : Ureal;
             Hival_Excl_EP : Ureal;
 
-            Size_Incl_EP  : Nat;
-            Size_Excl_EP  : Nat;
+            Size_Incl_EP  : Int;
+            Size_Excl_EP  : Int;
 
             Model_Num     : Ureal;
-            First_Subt    : Entity_Id;
             Actual_Lo     : Ureal;
             Actual_Hi     : Ureal;
 
@@ -8358,10 +9348,8 @@ package body Freeze is
                --  to get a base type whose size is smaller than the specified
                --  size of the first subtype.
 
-               First_Subt := First_Subtype (Typ);
-
-               if Has_Size_Clause (First_Subt)
-                 and then Size_Incl_EP <= Esize (First_Subt)
+               if Has_Size_Clause (Ftyp)
+                 and then Size_Incl_EP <= Esize (Ftyp)
                then
                   Actual_Size := Size_Incl_EP;
                   Actual_Lo   := Loval_Incl_EP;
@@ -8583,7 +9571,7 @@ package body Freeze is
             Actual_Size := 128;
          end if;
 
-         Init_Esize (Typ, Actual_Size);
+         Set_Esize (Typ, UI_From_Int (Actual_Size));
          Adjust_Esize_For_Alignment (Typ);
       end if;
 
@@ -8638,8 +9626,8 @@ package body Freeze is
 
       --  Set Esize to calculated size if not set already
 
-      if Unknown_Esize (Typ) then
-         Init_Esize (Typ, Actual_Size);
+      if not Known_Esize (Typ) then
+         Set_Esize (Typ, UI_From_Int (Actual_Size));
       end if;
 
       --  Set RM_Size if not already set. If already set, check value
@@ -8648,7 +9636,7 @@ package body Freeze is
          Minsiz : constant Uint := UI_From_Int (Minimum_Size (Typ));
 
       begin
-         if RM_Size (Typ) /= Uint_0 then
+         if Known_RM_Size (Typ) then
             if RM_Size (Typ) < Minsiz then
                Error_Msg_Uint_1 := RM_Size (Typ);
                Error_Msg_Uint_2 := Minsiz;
@@ -8711,9 +9699,7 @@ package body Freeze is
       Set_Has_Delayed_Freeze (T);
       L := Freeze_Entity (T, N);
 
-      if Is_Non_Empty_List (L) then
-         Insert_Actions (N, L);
-      end if;
+      Insert_Actions (N, L);
    end Freeze_Itype;
 
    --------------------------
@@ -8894,76 +9880,10 @@ package body Freeze is
    -----------------------
 
    procedure Freeze_Subprogram (E : Entity_Id) is
-      function Check_Extra_Formals (E : Entity_Id) return Boolean;
-      --  Return True if the decoration of the attributes associated with extra
-      --  formals are properly set.
 
       procedure Set_Profile_Convention (Subp_Id : Entity_Id);
       --  Set the conventions of all anonymous access-to-subprogram formals and
       --  result subtype of subprogram Subp_Id to the convention of Subp_Id.
-
-      -------------------------
-      -- Check_Extra_Formals --
-      -------------------------
-
-      function Check_Extra_Formals (E : Entity_Id) return Boolean is
-         Last_Formal       : Entity_Id := Empty;
-         Formal            : Entity_Id;
-         Has_Extra_Formals : Boolean := False;
-
-      begin
-         --  No check required if expansion is disabled because extra
-         --  formals are only generated when we are generating code.
-         --  See Create_Extra_Formals.
-
-         if not Expander_Active then
-            return True;
-         end if;
-
-         --  Check attribute Extra_Formal: If available, it must be set only
-         --  on the last formal of E.
-
-         Formal := First_Formal (E);
-         while Present (Formal) loop
-            if Present (Extra_Formal (Formal)) then
-               if Has_Extra_Formals then
-                  return False;
-               end if;
-
-               Has_Extra_Formals := True;
-            end if;
-
-            Last_Formal := Formal;
-            Next_Formal (Formal);
-         end loop;
-
-         --  Check attribute Extra_Accessibility_Of_Result
-
-         if Ekind (E) in E_Function | E_Subprogram_Type
-           and then Needs_Result_Accessibility_Level (E)
-           and then No (Extra_Accessibility_Of_Result (E))
-         then
-            return False;
-         end if;
-
-         --  Check attribute Extra_Formals: If E has extra formals, then this
-         --  attribute must point to the first extra formal of E.
-
-         if Has_Extra_Formals then
-            return Present (Extra_Formals (E))
-              and then Present (Extra_Formal (Last_Formal))
-              and then Extra_Formal (Last_Formal) = Extra_Formals (E);
-
-         --  When E has no formals, the first extra formal is available through
-         --  the Extra_Formals attribute.
-
-         elsif Present (Extra_Formals (E)) then
-            return No (First_Formal (E));
-
-         else
-            return True;
-         end if;
-      end Check_Extra_Formals;
 
       ----------------------------
       -- Set_Profile_Convention --
@@ -9081,15 +10001,18 @@ package body Freeze is
       end if;
 
       --  Ensure that all anonymous access-to-subprogram types inherit the
-      --  convention of their related subprogram (RM 6.3.1 13.1/3). This is
+      --  convention of their related subprogram (RM 6.3.1(13.1/5)). This is
       --  not done for a defaulted convention Ada because those types also
       --  default to Ada. Convention Protected must not be propagated when
       --  the subprogram is an entry because this would be illegal. The only
       --  way to force convention Protected on these kinds of types is to
-      --  include keyword "protected" in the access definition.
+      --  include keyword "protected" in the access definition. Conventions
+      --  Entry and Intrinsic are also not propagated (specified by AI12-0207).
 
       if Convention (E) /= Convention_Ada
         and then Convention (E) /= Convention_Protected
+        and then Convention (E) /= Convention_Entry
+        and then Convention (E) /= Convention_Intrinsic
       then
          Set_Profile_Convention (E);
       end if;
@@ -9100,30 +10023,26 @@ package body Freeze is
       --  that we know the convention.
 
       if not Has_Foreign_Convention (E) then
-         if No (Extra_Formals (E)) then
 
-            --  Extra formals are shared by derived subprograms; therefore, if
-            --  the ultimate alias of E has been frozen before E then the extra
-            --  formals have been added, but the attribute Extra_Formals is
-            --  still unset (and must be set now).
+         --  Extra formals of dispatching operations are added later by
+         --  Expand_Freeze_Record_Type, which also adds extra formals to
+         --  internal entities built to handle interface types.
 
-            if Present (Alias (E))
-              and then Is_Frozen (Ultimate_Alias (E))
-              and then Present (Extra_Formals (Ultimate_Alias (E)))
-              and then Last_Formal (Ultimate_Alias (E)) = Last_Formal (E)
-            then
-               Set_Extra_Formals (E, Extra_Formals (Ultimate_Alias (E)));
+         if not Is_Dispatching_Operation (E) then
+            Create_Extra_Formals (E);
 
-               if Ekind (E) = E_Function then
-                  Set_Extra_Accessibility_Of_Result (E,
-                    Extra_Accessibility_Of_Result (Ultimate_Alias (E)));
-               end if;
-            else
-               Create_Extra_Formals (E);
-            end if;
+            pragma Assert
+              ((Ekind (E) = E_Subprogram_Type
+                  and then Extra_Formals_OK (E))
+               or else
+                 (Is_Subprogram (E)
+                   and then Extra_Formals_OK (E)
+                   and then
+                     (No (Overridden_Operation (E))
+                       or else Extra_Formals_Match_OK (E,
+                                 Ultimate_Alias (Overridden_Operation (E))))));
          end if;
 
-         pragma Assert (Check_Extra_Formals (E));
          Set_Mechanisms (E);
 
          --  If this is convention Ada and a Valued_Procedure, that's odd
@@ -9557,7 +10476,7 @@ package body Freeze is
    -- Warn_Overlay --
    ------------------
 
-   procedure Warn_Overlay (Expr : Node_Id; Typ : Entity_Id; Nam : Entity_Id) is
+   procedure Warn_Overlay (Expr : Node_Id; Typ : Entity_Id; Nam : Node_Id) is
       Ent : constant Entity_Id := Entity (Nam);
       --  The object to which the address clause applies
 
@@ -9655,11 +10574,11 @@ package body Freeze is
          if Present (Old) then
             Error_Msg_Node_2 := Old;
             Error_Msg_N
-              ("default initialization of & may modify &??",
+              ("default initialization of & may modify &?o?",
                Nam);
          else
             Error_Msg_N
-              ("default initialization of & may modify overlaid storage??",
+              ("default initialization of & may modify overlaid storage?o?",
                Nam);
          end if;
 

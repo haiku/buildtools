@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Free Software Foundation, Inc.
+// Copyright (C) 2021-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -49,12 +49,12 @@ test01()
   // Verify the changes to transform_view.
   only_cxx20_input_range auto v2 = v0 | views::transform([](int& c) -> auto& { return c; });
 
-  // Verify the changes to split_view.
-  only_cxx20_input_range auto v3 = v0 | views::split(12);
+  // Verify the changes to lazy_split_view.
+  only_cxx20_input_range auto v3 = v0 | views::lazy_split(12);
   static_assert(only_cxx20_input_range<decltype(*v3.begin())>);
 
   // Verify the changes to join_view.
-  only_cxx20_input_range auto v4 = v0 | views::split(12) | views::join;
+  only_cxx20_input_range auto v4 = v0 | views::lazy_split(12) | views::join;
 
   // Verify the changes to elements_view.
   only_cxx20_input_range auto v5
@@ -64,7 +64,7 @@ test01()
 
   // Verify the changes to common_iterator.
   only_cxx20_input_range auto v6 = v0 | views::common;
-  *(v6.begin()++);
+  (void) *(v6.begin()++);
 
   // Verify the changes to iota_view.
   only_cxx20_input_range auto v8 = ranges::iota_view{v0.begin()};
@@ -77,7 +77,7 @@ test01()
   static_assert(std::contiguous_iterator<decltype(i10)>);
   static_assert(std::same_as<std::iterator_traits<decltype(i10)>::iterator_category,
 			     std::random_access_iterator_tag>);
-  i10.operator->();
+  (void) i10.operator->();
   __iter_without_category auto i11 = std::counted_iterator{v0.begin(), 5};
 }
 

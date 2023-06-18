@@ -1,6 +1,6 @@
 // <memory_resource> implementation -*- C++ -*-
 
-// Copyright (C) 2018-2021 Free Software Foundation, Inc.
+// Copyright (C) 2018-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,7 +29,11 @@
 #include <new>
 #if ATOMIC_POINTER_LOCK_FREE != 2
 # include <bits/std_mutex.h>	// std::mutex, std::lock_guard
-# include <bits/move.h>		// std::exchange
+# include <bits/move.h>		// std::__exchange
+#endif
+
+#if __has_cpp_attribute(clang::require_constant_initialization)
+#  define __constinit [[clang::require_constant_initialization]]
 #endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
@@ -78,7 +82,6 @@ namespace pmr
       struct constant_init
       {
 	union {
-	  unsigned char unused;
 	  T obj;
 	};
 	constexpr constant_init() : obj() { }
@@ -108,16 +111,16 @@ namespace pmr
       mutex mx;
       memory_resource* val;
 
-      memory_resource* load()
+      memory_resource* load(std::memory_order)
       {
 	lock_guard<mutex> lock(mx);
 	return val;
       }
 
-      memory_resource* exchange(memory_resource* r)
+      memory_resource* exchange(memory_resource* r, std::memory_order)
       {
 	lock_guard<mutex> lock(mx);
-	return std::exchange(val, r);
+	return std::__exchange(val, r);
       }
     };
 #else
@@ -130,14 +133,14 @@ namespace pmr
 
       memory_resource* val;
 
-      memory_resource* load() const
+      memory_resource* load(std::memory_order) const
       {
 	return val;
       }
 
-      memory_resource* exchange(memory_resource* r)
+      memory_resource* exchange(memory_resource* r, std::memory_order)
       {
-	return std::exchange(val, r);
+	return std::__exchange(val, r);
       }
     };
 #endif // ATOMIC_POINTER_LOCK_FREE == 2
@@ -162,12 +165,12 @@ namespace pmr
   {
     if (r == nullptr)
       r = new_delete_resource();
-    return default_res.obj.exchange(r);
+    return default_res.obj.exchange(r, std::memory_order_acq_rel);
   }
 
   memory_resource*
   get_default_resource() noexcept
-  { return default_res.obj.load(); }
+  { return default_res.obj.load(std::memory_order_acquire); }
 
   // Member functions for std::pmr::monotonic_buffer_resource
 
@@ -502,7 +505,7 @@ namespace pmr
     }
 
     // Allocated size of chunk:
-    uint32_t _M_bytes = 0;
+    bitset::size_type _M_bytes = 0;
     // Start of allocated chunk:
     std::byte* _M_p = nullptr;
 
@@ -576,7 +579,7 @@ namespace pmr
   // For 16-bit pointers it's five pointers (10 bytes).
   // TODO pad 64-bit to 4*sizeof(void*) to avoid splitting across cache lines?
   static_assert(sizeof(chunk)
-      == sizeof(bitset::size_type) + sizeof(uint32_t) + 2 * sizeof(void*));
+      == 2 * sizeof(bitset::size_type) + 2 * sizeof(void*));
 
   // An oversized allocation that doesn't fit in a pool.
   struct big_block
@@ -603,7 +606,7 @@ namespace pmr
     void* pointer = nullptr;
     aligned_size<min> _M_size;
 
-    size_t size() const noexcept
+    constexpr size_t size() const noexcept
     {
       if (_M_size.value == size_t(-1)) [[unlikely]]
 	return size_t(-1);
@@ -731,7 +734,7 @@ namespace pmr
 	  _M_blocks_per_chunk = std::min({
 	      max_blocks,
 	      __opts.max_blocks_per_chunk,
-	      (size_t)_M_blocks_per_chunk * 2
+	      size_t(_M_blocks_per_chunk * 2)
 	  });
 	}
     }
@@ -870,9 +873,11 @@ namespace pmr
       256, 320, 384, 448,
       512, 768,
 #if __SIZE_WIDTH__ > 16
+      // Use bigger pools if size_t has at least 20 bits.
       1024, 1536,
       2048, 3072,
-#if __SIZE_WIDTH__ > 20
+#if __INT_WIDTH__ >= 32
+      // Use even bigger pools if int has at least 32 bits.
       1<<12, 1<<13, 1<<14,
       1<<15, 1<<16, 1<<17,
       1<<20, 1<<21, 1<<22 // 4MB should be enough for anybody
@@ -1052,7 +1057,8 @@ namespace pmr
 	// Decide on initial number of blocks per chunk.
 	// At least 16 blocks per chunk seems reasonable,
 	// more for smaller blocks:
-	size_t blocks_per_chunk = std::max(size_t(16), 1024 / block_size);
+	size_t blocks_per_chunk = 1024 / block_size;
+	blocks_per_chunk = std::max(size_t(16), blocks_per_chunk);
 	// But don't exceed the requested max_blocks_per_chunk:
 	blocks_per_chunk
 	  = std::min(blocks_per_chunk, _M_opts.max_blocks_per_chunk);

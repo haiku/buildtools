@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -fdisable-tree-evrp -fdump-tree-vrp1" } */
+/* { dg-options "-O2 -fdisable-tree-evrp -fdump-tree-vrp1 -fno-tree-ccp" } */
 
 int foo (void)
 {
@@ -10,4 +10,4 @@ int foo (void)
     return 0;
 }
 
-/* { dg-final { scan-tree-dump "\\\[-INF, 0\\\]" "vrp1" } } */
+/* { dg-final { scan-tree-dump "\\\[-INF, -INF\\\]\\\[0, 0\\\]" "vrp1" } } */

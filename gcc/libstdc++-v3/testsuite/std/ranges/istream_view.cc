@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -103,6 +103,29 @@ test06()
   static_assert( std::is_same_v<V, W> );
 }
 
+void
+test07()
+{
+  // P2432R1, views::istream
+  auto nums = std::istringstream("0 1 2 3 4");
+  ranges::istream_view<int> v(nums);
+  int sum = 0;
+  for (int val : views::istream<int>(nums))
+    sum += val;
+  VERIFY( sum == 10 );
+}
+
+template<class T, class U>
+concept can_istream_view = requires (U u) { views::istream<T>(u); };
+
+void
+test08()
+{
+  // Verify SFINAE behavior.
+  struct S { };
+  static_assert(!can_istream_view<S, std::istringstream>);
+}
+
 int
 main()
 {
@@ -112,4 +135,6 @@ main()
   test04();
   test05();
   test06();
+  test07();
+  test08();
 }

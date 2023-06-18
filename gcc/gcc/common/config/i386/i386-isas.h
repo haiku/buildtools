@@ -1,5 +1,5 @@
 /* i386 ISA table.
-   Copyright (C) 2020-2021 Free Software Foundation, Inc.
+   Copyright (C) 2020-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -27,9 +27,9 @@ struct _isa_names_table
   const char *const option;
 };
 
-/* NB: isa_names_table is shared by i386-builtins.c, driver-i386.c and
+/* NB: isa_names_table is shared by i386-builtins.cc, driver-i386.cc and
    gcc.target/i386/builtin_target.c.  isa_names_table is a static const
-   array in i386-builtins.c and driver-i386.c.  But it is a list of
+   array in i386-builtins.cc and driver-i386.cc.  But it is a list of
    assert statements in gcc.target/i386/builtin_target.c.  */
 
 #ifndef ISA_NAMES_TABLE_START
@@ -169,4 +169,21 @@ ISA_NAMES_TABLE_START
   ISA_NAMES_TABLE_ENTRY("aeskle", FEATURE_AESKLE, P_NONE, NULL)
   ISA_NAMES_TABLE_ENTRY("widekl", FEATURE_WIDEKL, P_NONE, "-mwidekl")
   ISA_NAMES_TABLE_ENTRY("avxvnni", FEATURE_AVXVNNI, P_NONE, "-mavxvnni")
+  ISA_NAMES_TABLE_ENTRY("avx512fp16", FEATURE_AVX512FP16, P_NONE, "-mavx512fp16")
+  ISA_NAMES_TABLE_ENTRY("x86-64", FEATURE_X86_64_BASELINE, P_X86_64_BASELINE,
+			NULL)
+  ISA_NAMES_TABLE_ENTRY("x86-64-v2", FEATURE_X86_64_V2, P_X86_64_V2, NULL)
+  ISA_NAMES_TABLE_ENTRY("x86-64-v3", FEATURE_X86_64_V3, P_X86_64_V3, NULL)
+  ISA_NAMES_TABLE_ENTRY("x86-64-v4", FEATURE_X86_64_V4, P_X86_64_V4, NULL)
+  ISA_NAMES_TABLE_ENTRY("avxifma", FEATURE_AVXIFMA, P_NONE, "-mavxifma")
+  ISA_NAMES_TABLE_ENTRY("avxvnniint8", FEATURE_AVXVNNIINT8,
+			P_NONE, "-mavxvnniint8")
+  ISA_NAMES_TABLE_ENTRY("avxneconvert", FEATURE_AVXNECONVERT,
+			P_NONE, "-mavxneconvert")
+  ISA_NAMES_TABLE_ENTRY("cmpccxadd", FEATURE_CMPCCXADD, P_NONE, "-mcmpccxadd")
+  ISA_NAMES_TABLE_ENTRY("amx-fp16", FEATURE_AMX_FP16, P_NONE, "-mamx-fp16")
+  ISA_NAMES_TABLE_ENTRY("prefetchi", FEATURE_PREFETCHI, P_NONE, "-mprefetchi")
+  ISA_NAMES_TABLE_ENTRY("raoint", FEATURE_RAOINT, P_NONE, "-mraoint")
+  ISA_NAMES_TABLE_ENTRY("amx-complex", FEATURE_AMX_COMPLEX,
+			P_NONE, "-mamx-complex")
 ISA_NAMES_TABLE_END

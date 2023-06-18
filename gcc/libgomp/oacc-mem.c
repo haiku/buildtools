@@ -1,6 +1,6 @@
 /* OpenACC Runtime initialization routines
 
-   Copyright (C) 2013-2021 Free Software Foundation, Inc.
+   Copyright (C) 2013-2023 Free Software Foundation, Inc.
 
    Contributed by Mentor Embedded.
 
@@ -202,7 +202,7 @@ memcpy_tofrom_device (bool from, void *d, void *h, size_t s, int async,
   if (from)
     gomp_copy_dev2host (thr->dev, aq, h, d, s);
   else
-    gomp_copy_host2dev (thr->dev, aq, d, h, s, /* TODO: cbuf? */ NULL);
+    gomp_copy_host2dev (thr->dev, aq, d, h, s, false, /* TODO: cbuf? */ NULL);
 
   if (profiling_p)
     {
@@ -402,9 +402,8 @@ acc_map_data (void *h, void *d, size_t s)
       gomp_mutex_unlock (&acc_dev->lock);
 
       struct target_mem_desc *tgt
-	= gomp_map_vars (acc_dev, mapnum, &hostaddrs, &devaddrs, &sizes,
-			 &kinds, true,
-			 GOMP_MAP_VARS_OPENACC | GOMP_MAP_VARS_ENTER_DATA);
+	= goacc_map_vars (acc_dev, NULL, mapnum, &hostaddrs, &devaddrs, &sizes,
+			  &kinds, true, GOMP_MAP_VARS_ENTER_DATA);
       assert (tgt);
       assert (tgt->list_count == 1);
       splay_tree_key n = tgt->list[0].key;
@@ -572,9 +571,8 @@ goacc_enter_datum (void **hostaddrs, size_t *sizes, void *kinds, int async)
       goacc_aq aq = get_goacc_asyncqueue (async);
 
       struct target_mem_desc *tgt
-	= gomp_map_vars_async (acc_dev, aq, mapnum, hostaddrs, NULL, sizes,
-			       kinds, true, (GOMP_MAP_VARS_OPENACC
-					     | GOMP_MAP_VARS_ENTER_DATA));
+	= goacc_map_vars (acc_dev, aq, mapnum, hostaddrs, NULL, sizes,
+			  kinds, true, GOMP_MAP_VARS_ENTER_DATA);
       assert (tgt);
       assert (tgt->list_count == 1);
       n = tgt->list[0].key;
@@ -876,7 +874,7 @@ update_dev_host (int is_dev, void *h, size_t s, int async)
   goacc_aq aq = get_goacc_asyncqueue (async);
 
   if (is_dev)
-    gomp_copy_host2dev (acc_dev, aq, d, h, s, /* TODO: cbuf? */ NULL);
+    gomp_copy_host2dev (acc_dev, aq, d, h, s, false, /* TODO: cbuf? */ NULL);
   else
     gomp_copy_dev2host (acc_dev, aq, h, d, s);
 
@@ -939,7 +937,7 @@ acc_attach_async (void **hostaddr, int async)
     }
 
   gomp_attach_pointer (acc_dev, aq, &acc_dev->mem_map, n, (uintptr_t) hostaddr,
-		       0, NULL);
+		       0, NULL, false);
 
   gomp_mutex_unlock (&acc_dev->lock);
 }
@@ -1070,7 +1068,7 @@ find_group_last (int pos, size_t mapnum, size_t *sizes, unsigned short *kinds)
 }
 
 /* Map variables for OpenACC "enter data".  We can't just call
-   gomp_map_vars_async once, because individual mapped variables might have
+   goacc_map_vars once, because individual mapped variables might have
    "exit data" called for them at different times.  */
 
 static void
@@ -1143,7 +1141,7 @@ goacc_enter_data_internal (struct gomp_device_descr *acc_dev, size_t mapnum,
 	  if ((kinds[i] & 0xff) == GOMP_MAP_ATTACH)
 	    {
 	      gomp_attach_pointer (acc_dev, aq, &acc_dev->mem_map, n,
-				   (uintptr_t) h, s, NULL);
+				   (uintptr_t) h, s, NULL, false);
 	      /* OpenACC 'attach'/'detach' doesn't affect structured/dynamic
 		 reference counts ('n->refcount', 'n->dynamic_refcount').  */
 	    }
@@ -1152,8 +1150,7 @@ goacc_enter_data_internal (struct gomp_device_descr *acc_dev, size_t mapnum,
 	}
       else if (n && groupnum > 1)
 	{
-	  assert (n->refcount != REFCOUNT_INFINITY
-		  && n->refcount != REFCOUNT_LINK);
+	  assert (n->refcount != REFCOUNT_LINK);
 
 	  for (size_t j = i + 1; j <= group_last; j++)
 	    if ((kinds[j] & 0xff) == GOMP_MAP_ATTACH)
@@ -1161,12 +1158,51 @@ goacc_enter_data_internal (struct gomp_device_descr *acc_dev, size_t mapnum,
 		splay_tree_key m
 		  = lookup_host (acc_dev, hostaddrs[j], sizeof (void *));
 		gomp_attach_pointer (acc_dev, aq, &acc_dev->mem_map, m,
-				     (uintptr_t) hostaddrs[j], sizes[j], NULL);
+				     (uintptr_t) hostaddrs[j], sizes[j], NULL,
+				     false);
 	      }
 
 	  bool processed = false;
 
 	  struct target_mem_desc *tgt = n->tgt;
+
+	  /* Minimal OpenACC variant corresponding to PR96668
+	     "[OpenMP] Re-mapping allocated but previously unallocated
+	     allocatable does not work" 'libgomp/target.c' changes, so that
+	     OpenACC 'declare' code à la PR106643
+	     "[gfortran + OpenACC] Allocate in module causes refcount error"
+	     has a chance to work.  */
+	  if ((kinds[i] & 0xff) == GOMP_MAP_TO_PSET
+	      && tgt->list_count == 0)
+	    {
+	      /* 'declare target'.  */
+	      assert (n->refcount == REFCOUNT_INFINITY);
+
+	      for (size_t k = 1; k < groupnum; k++)
+		{
+		  /* The only thing we expect to see here.  */
+		  assert ((kinds[i + k] & 0xff) == GOMP_MAP_POINTER);
+		}
+
+	      /* Let 'goacc_map_vars' -> 'gomp_map_vars_internal' handle
+		 this.  */
+	      gomp_mutex_unlock (&acc_dev->lock);
+	      struct target_mem_desc *tgt_
+		= goacc_map_vars (acc_dev, aq, groupnum, &hostaddrs[i], NULL,
+				  &sizes[i], &kinds[i], true,
+				  GOMP_MAP_VARS_ENTER_DATA);
+	      assert (tgt_ == NULL);
+	      gomp_mutex_lock (&acc_dev->lock);
+
+	      /* Given that 'goacc_exit_data_internal'/'goacc_exit_datum_1'
+		 will always see 'n->refcount == REFCOUNT_INFINITY',
+		 there's no need to adjust 'n->dynamic_refcount' here.  */
+
+	      processed = true;
+	    }
+	  else
+	    assert (n->refcount != REFCOUNT_INFINITY);
+
 	  for (size_t j = 0; j < tgt->list_count; j++)
 	    if (tgt->list[j].key == n)
 	      {
@@ -1202,10 +1238,9 @@ goacc_enter_data_internal (struct gomp_device_descr *acc_dev, size_t mapnum,
 	  gomp_mutex_unlock (&acc_dev->lock);
 
 	  struct target_mem_desc *tgt
-	    = gomp_map_vars_async (acc_dev, aq, groupnum, &hostaddrs[i], NULL,
-				   &sizes[i], &kinds[i], true,
-				   (GOMP_MAP_VARS_OPENACC
-				    | GOMP_MAP_VARS_ENTER_DATA));
+	    = goacc_map_vars (acc_dev, aq, groupnum, &hostaddrs[i], NULL,
+			      &sizes[i], &kinds[i], true,
+			      GOMP_MAP_VARS_ENTER_DATA);
 	  assert (tgt);
 
 	  gomp_mutex_lock (&acc_dev->lock);
@@ -1320,55 +1355,21 @@ goacc_exit_data_internal (struct gomp_device_descr *acc_dev, size_t mapnum,
   gomp_mutex_unlock (&acc_dev->lock);
 }
 
-void
-GOACC_enter_exit_data (int flags_m, size_t mapnum, void **hostaddrs,
-		       size_t *sizes, unsigned short *kinds, int async,
-		       int num_waits, ...)
+static void
+goacc_enter_exit_data_internal (int flags_m, size_t mapnum, void **hostaddrs,
+				size_t *sizes, unsigned short *kinds,
+				bool data_enter, int async, int num_waits,
+				va_list *ap)
 {
   int flags = GOACC_FLAGS_UNMARSHAL (flags_m);
 
   struct goacc_thread *thr;
   struct gomp_device_descr *acc_dev;
-  bool data_enter = false;
-  size_t i;
 
   goacc_lazy_initialize ();
 
   thr = goacc_thread ();
   acc_dev = thr->dev;
-
-  /* Determine if this is an "acc enter data".  */
-  for (i = 0; i < mapnum; ++i)
-    {
-      unsigned char kind = kinds[i] & 0xff;
-
-      if (kind == GOMP_MAP_POINTER
-	  || kind == GOMP_MAP_TO_PSET
-	  || kind == GOMP_MAP_STRUCT)
-	continue;
-
-      if (kind == GOMP_MAP_FORCE_ALLOC
-	  || kind == GOMP_MAP_FORCE_PRESENT
-	  || kind == GOMP_MAP_ATTACH
-	  || kind == GOMP_MAP_FORCE_TO
-	  || kind == GOMP_MAP_TO
-	  || kind == GOMP_MAP_ALLOC)
-	{
-	  data_enter = true;
-	  break;
-	}
-
-      if (kind == GOMP_MAP_RELEASE
-	  || kind == GOMP_MAP_DELETE
-	  || kind == GOMP_MAP_DETACH
-	  || kind == GOMP_MAP_FORCE_DETACH
-	  || kind == GOMP_MAP_FROM
-	  || kind == GOMP_MAP_FORCE_FROM)
-	break;
-
-      gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind 0x%.2x",
-		      kind);
-    }
 
   bool profiling_p = GOACC_PROFILING_DISPATCH_P (true);
 
@@ -1433,13 +1434,7 @@ GOACC_enter_exit_data (int flags_m, size_t mapnum, void **hostaddrs,
     }
 
   if (num_waits)
-    {
-      va_list ap;
-
-      va_start (ap, num_waits);
-      goacc_wait (async, num_waits, &ap);
-      va_end (ap);
-    }
+    goacc_wait (async, num_waits, ap);
 
   goacc_aq aq = get_goacc_asyncqueue (async);
 
@@ -1459,5 +1454,125 @@ GOACC_enter_exit_data (int flags_m, size_t mapnum, void **hostaddrs,
 
       thr->prof_info = NULL;
       thr->api_info = NULL;
+    }
+}
+
+/* Legacy entry point (GCC 11 and earlier).  */
+
+void
+GOACC_enter_exit_data (int flags_m, size_t mapnum, void **hostaddrs,
+		       size_t *sizes, unsigned short *kinds, int async,
+		       int num_waits, ...)
+{
+  /* Determine if this is an OpenACC "enter data".  */
+  bool data_enter = false;
+  for (size_t i = 0; i < mapnum; ++i)
+    {
+      unsigned char kind = kinds[i] & 0xff;
+
+      if (kind == GOMP_MAP_POINTER
+	  || kind == GOMP_MAP_TO_PSET
+	  || kind == GOMP_MAP_STRUCT)
+	continue;
+
+      if (kind == GOMP_MAP_FORCE_ALLOC
+	  || kind == GOMP_MAP_FORCE_PRESENT
+	  || kind == GOMP_MAP_ATTACH
+	  || kind == GOMP_MAP_FORCE_TO
+	  || kind == GOMP_MAP_TO
+	  || kind == GOMP_MAP_ALLOC)
+	{
+	  data_enter = true;
+	  break;
+	}
+
+      if (kind == GOMP_MAP_RELEASE
+	  || kind == GOMP_MAP_DELETE
+	  || kind == GOMP_MAP_DETACH
+	  || kind == GOMP_MAP_FORCE_DETACH
+	  || kind == GOMP_MAP_FROM
+	  || kind == GOMP_MAP_FORCE_FROM)
+	break;
+
+      gomp_fatal (">>>> GOACC_enter_exit_data UNHANDLED kind 0x%.2x",
+		      kind);
+    }
+
+  va_list ap;
+  va_start (ap, num_waits);
+  goacc_enter_exit_data_internal (flags_m, mapnum, hostaddrs, sizes, kinds,
+				  data_enter, async, num_waits, &ap);
+  va_end (ap);
+}
+
+void
+GOACC_enter_data (int flags_m, size_t mapnum, void **hostaddrs,
+		  size_t *sizes, unsigned short *kinds, int async,
+		  int num_waits, ...)
+{
+  va_list ap;
+  va_start (ap, num_waits);
+  goacc_enter_exit_data_internal (flags_m, mapnum, hostaddrs, sizes, kinds,
+				  true, async, num_waits, &ap);
+  va_end (ap);
+}
+
+void
+GOACC_exit_data (int flags_m, size_t mapnum, void **hostaddrs,
+		 size_t *sizes, unsigned short *kinds, int async,
+		 int num_waits, ...)
+{
+  va_list ap;
+  va_start (ap, num_waits);
+  goacc_enter_exit_data_internal (flags_m, mapnum, hostaddrs, sizes, kinds,
+				  false, async, num_waits, &ap);
+  va_end (ap);
+}
+
+void
+GOACC_declare (int flags_m, size_t mapnum,
+	       void **hostaddrs, size_t *sizes, unsigned short *kinds)
+{
+  for (size_t i = 0; i < mapnum; i++)
+    {
+      unsigned char kind = kinds[i] & 0xff;
+
+      if (kind == GOMP_MAP_POINTER || kind == GOMP_MAP_TO_PSET)
+	continue;
+
+      switch (kind)
+	{
+	case GOMP_MAP_ALLOC:
+	  if (acc_is_present (hostaddrs[i], sizes[i]))
+	    continue;
+	  /* FALLTHRU */
+	case GOMP_MAP_FORCE_ALLOC:
+	case GOMP_MAP_TO:
+	case GOMP_MAP_FORCE_TO:
+	  goacc_enter_exit_data_internal (flags_m, 1, &hostaddrs[i], &sizes[i],
+					  &kinds[i], true, GOMP_ASYNC_SYNC, 0, NULL);
+	  break;
+
+	case GOMP_MAP_FROM:
+	case GOMP_MAP_FORCE_FROM:
+	case GOMP_MAP_RELEASE:
+	case GOMP_MAP_DELETE:
+	  goacc_enter_exit_data_internal (flags_m, 1, &hostaddrs[i], &sizes[i],
+					  &kinds[i], false, GOMP_ASYNC_SYNC, 0, NULL);
+	  break;
+
+	case GOMP_MAP_FORCE_DEVICEPTR:
+	  break;
+
+	case GOMP_MAP_FORCE_PRESENT:
+	  if (!acc_is_present (hostaddrs[i], sizes[i]))
+	    gomp_fatal ("[%p,%ld] is not mapped", hostaddrs[i],
+			(unsigned long) sizes[i]);
+	  break;
+
+	default:
+	  assert (0);
+	  break;
+	}
     }
 }

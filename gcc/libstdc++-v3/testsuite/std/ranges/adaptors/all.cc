@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -19,7 +19,9 @@
 // { dg-do run { target c++2a } }
 
 #include <algorithm>
+#include <array>
 #include <ranges>
+#include <vector>
 #include <testsuite_hooks.h>
 #include <testsuite_iterators.h>
 
@@ -131,6 +133,21 @@ test05()
 }
 
 void
+test06()
+{
+  int x[] { 1, 2, 3 };
+
+  // Using ref_view:
+  static_assert(noexcept(views::all(x)));
+
+  // Using owning_view:
+  static_assert(noexcept(views::all(std::array<int, 3>{})));
+  struct A { A(); A(const A&); };
+  static_assert(!std::is_nothrow_move_constructible_v<std::array<A, 3>>);
+  static_assert(!noexcept(views::all(std::array<A, 3>{})));
+}
+
+void
 test07()
 {
   // LWG 3481
@@ -144,6 +161,44 @@ test07()
   static_assert(!ranges::viewable_range<view_t&>);
 }
 
+constexpr bool
+test08()
+{
+#ifdef _GLIBCXX_DEBUG
+  using std::_GLIBCXX_STD_C::vector;
+#else
+  using std::vector;
+#endif
+
+  // Verify P2415R2 "What is a view?" changes.
+  // In particular, rvalue non-view non-borrowed ranges are now viewable.
+  static_assert(ranges::viewable_range<vector<int>&&>);
+  static_assert(!ranges::viewable_range<const vector<int>&&>);
+
+  static_assert(ranges::viewable_range<std::initializer_list<int>&>);
+  static_assert(ranges::viewable_range<const std::initializer_list<int>&>);
+  static_assert(!ranges::viewable_range<std::initializer_list<int>&&>);
+  static_assert(!ranges::viewable_range<const std::initializer_list<int>&&>);
+
+  using type = views::all_t<vector<int>&&>;
+  using type = ranges::owning_view<vector<int>>;
+
+  std::same_as<type> auto v = vector<int>{{1,2,3}} | views::all;
+
+  VERIFY( ranges::equal(v, (int[]){1,2,3}) );
+  VERIFY( ranges::size(v) == 3 );
+  VERIFY( !ranges::empty(v) );
+  VERIFY( ranges::data(v) == &v[0] );
+
+  const auto w = std::move(v);
+  VERIFY( ranges::equal(w, (int[]){1,2,3}) );
+  VERIFY( ranges::size(w) == 3 );
+  VERIFY( !ranges::empty(w) );
+  VERIFY( ranges::data(w) == &w[0] );
+
+  return true;
+}
+
 int
 main()
 {
@@ -152,5 +207,7 @@ main()
   static_assert(test03());
   static_assert(test04());
   test05();
+  test06();
   test07();
+  static_assert(test08());
 }

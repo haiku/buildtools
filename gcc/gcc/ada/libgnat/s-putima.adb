@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---            Copyright (C) 2020, Free Software Foundation, Inc.            --
+--            Copyright (C) 2020-2023, Free Software Foundation, Inc.       --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -29,10 +29,10 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Unchecked_Conversion;
-with Ada.Strings.Text_Output.Utils;
-use Ada.Strings.Text_Output;
-use Ada.Strings.Text_Output.Utils;
+with Ada.Strings.Text_Buffers.Utils;
+use Ada.Strings.Text_Buffers;
+use Ada.Strings.Text_Buffers.Utils;
+with Ada.Unchecked_Conversion;
 
 package body System.Put_Images is
 
@@ -133,7 +133,7 @@ package body System.Put_Images is
    procedure Put_Image_Pointer
      (S : in out Sink'Class; X : Pointer; Type_Kind : String)
    is
-      function Cast is new Unchecked_Conversion
+      function Cast is new Ada.Unchecked_Conversion
         (System.Address, Unsigned_Address);
    begin
       if X = null then
@@ -174,48 +174,74 @@ package body System.Put_Images is
       Thin_Instance (S, X, "access protected subprogram");
    end Put_Image_Access_Prot_Subp;
 
-   procedure Put_Image_String (S : in out Sink'Class; X : String) is
+   procedure Put_Image_String
+     (S               : in out Sink'Class;
+      X               : String;
+      With_Delimiters : Boolean := True) is
    begin
-      Put_UTF_8 (S, """");
+      if With_Delimiters then
+         Put_UTF_8 (S, """");
+      end if;
+
       for C of X loop
-         if C = '"' then
+         if C = '"' and then With_Delimiters then
             Put_UTF_8 (S, """");
          end if;
          Put_Character (S, C);
       end loop;
-      Put_UTF_8 (S, """");
+
+      if With_Delimiters then
+         Put_UTF_8 (S, """");
+      end if;
    end Put_Image_String;
 
-   procedure Put_Image_Wide_String (S : in out Sink'Class; X : Wide_String) is
+   procedure Put_Image_Wide_String
+     (S               : in out Sink'Class;
+      X               : Wide_String;
+      With_Delimiters : Boolean := True) is
    begin
-      Put_UTF_8 (S, """");
+      if With_Delimiters then
+         Put_UTF_8 (S, """");
+      end if;
+
       for C of X loop
-         if C = '"' then
+         if C = '"' and then With_Delimiters then
             Put_UTF_8 (S, """");
          end if;
          Put_Wide_Character (S, C);
       end loop;
-      Put_UTF_8 (S, """");
+
+      if With_Delimiters then
+         Put_UTF_8 (S, """");
+      end if;
    end Put_Image_Wide_String;
 
    procedure Put_Image_Wide_Wide_String
-     (S : in out Sink'Class; X : Wide_Wide_String) is
+     (S               : in out Sink'Class;
+      X               : Wide_Wide_String;
+      With_Delimiters : Boolean := True) is
    begin
-      Put_UTF_8 (S, """");
+      if With_Delimiters then
+         Put_UTF_8 (S, """");
+      end if;
+
       for C of X loop
-         if C = '"' then
+         if C = '"' and then With_Delimiters then
             Put_UTF_8 (S, """");
          end if;
          Put_Wide_Wide_Character (S, C);
       end loop;
-      Put_UTF_8 (S, """");
+
+      if With_Delimiters then
+         Put_UTF_8 (S, """");
+      end if;
    end Put_Image_Wide_Wide_String;
 
    procedure Array_Before (S : in out Sink'Class) is
    begin
       New_Line (S);
       Put_7bit (S, '[');
-      Indent (S, 1);
+      Increase_Indent (S, 1);
    end Array_Before;
 
    procedure Array_Between (S : in out Sink'Class) is
@@ -226,7 +252,7 @@ package body System.Put_Images is
 
    procedure Array_After (S : in out Sink'Class) is
    begin
-      Outdent (S, 1);
+      Decrease_Indent (S, 1);
       Put_7bit (S, ']');
    end Array_After;
 
@@ -244,7 +270,7 @@ package body System.Put_Images is
    begin
       New_Line (S);
       Put_7bit (S, '(');
-      Indent (S, 1);
+      Increase_Indent (S, 1);
    end Record_Before;
 
    procedure Record_Between (S : in out Sink'Class) is
@@ -255,7 +281,7 @@ package body System.Put_Images is
 
    procedure Record_After (S : in out Sink'Class) is
    begin
-      Outdent (S, 1);
+      Decrease_Indent (S, 1);
       Put_7bit (S, ')');
    end Record_After;
 
@@ -267,7 +293,7 @@ package body System.Put_Images is
    procedure Put_Image_Unknown (S : in out Sink'Class; Type_Name : String) is
    begin
       Put_UTF_8 (S, "{");
-      Put_String (S, Type_Name);
+      Put (S, Type_Name);
       Put_UTF_8 (S, " object}");
    end Put_Image_Unknown;
 

@@ -128,14 +128,6 @@ void SetAddressSpaceUnlimited() {
   CHECK(AddressSpaceIsUnlimited());
 }
 
-void SleepForSeconds(int seconds) {
-  sleep(seconds);
-}
-
-void SleepForMillis(int millis) {
-  usleep(millis * 1000);
-}
-
 void Abort() {
 #if !SANITIZER_GO
   // If we are handling SIGABRT, unhandle it first.
@@ -143,7 +135,7 @@ void Abort() {
   if (GetHandleSignalMode(SIGABRT) != kHandleSignalNo) {
     struct sigaction sigact;
     internal_memset(&sigact, 0, sizeof(sigact));
-    sigact.sa_sigaction = (sa_sigaction_t)SIG_DFL;
+    sigact.sa_handler = SIG_DFL;
     internal_sigaction(SIGABRT, &sigact, nullptr);
   }
 #endif
@@ -158,6 +150,8 @@ int Atexit(void (*function)(void)) {
   return 0;
 #endif
 }
+
+bool CreateDir(const char *pathname) { return mkdir(pathname, 0755) == 0; }
 
 bool SupportsColoredOutput(fd_t fd) {
   return isatty(fd) != 0;
@@ -296,7 +290,7 @@ bool IsAccessibleMemoryRange(uptr beg, uptr size) {
   return result;
 }
 
-void PlatformPrepareForSandboxing(__sanitizer_sandbox_arguments *args) {
+void PlatformPrepareForSandboxing(void *args) {
   // Some kinds of sandboxes may forbid filesystem access, so we won't be able
   // to read the file mappings from /proc/self/maps. Luckily, neither the
   // process will be able to load additional libraries, so it's fine to use the
@@ -390,7 +384,7 @@ real_pthread_attr_getstack(void *attr, void **addr, size_t *size);
 } // extern "C"
 
 int my_pthread_attr_getstack(void *attr, void **addr, uptr *size) {
-#if !SANITIZER_GO && !SANITIZER_MAC
+#if !SANITIZER_GO && !SANITIZER_APPLE
   if (&real_pthread_attr_getstack)
     return real_pthread_attr_getstack((pthread_attr_t *)attr, addr,
                                       (size_t *)size);

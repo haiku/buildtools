@@ -30,8 +30,7 @@ union union1 {
 /* Pointers to sizeless types.  */
 
 svint8_t *global_sve_sc_ptr;
-svint8_t *invalid_sve_sc_ptr = &(svint8_t) { *global_sve_sc_ptr }; /* { dg-error {initializer element is not constant} } */
-  /* { dg-error {SVE type 'svint8_t' does not have a fixed size} "2nd line" { target *-*-* } .-1 } */
+svint8_t *invalid_sve_sc_ptr = &(svint8_t) {}; /* { dg-error {SVE type 'svint8_t' does not have a fixed size} } */
 
 /* Sizeless arguments and return values.  */
 
@@ -66,14 +65,14 @@ statements (int n)
 
   svint8_t init_sve_sc1 = sve_sc1;
   svint8_t init_sve_sc2 = sve_sh1; /* { dg-error {incompatible types when initializing type 'svint8_t' using type 'svint16_t'} } */
-  svint8_t init_sve_sc3 = {}; /* { dg-error {empty scalar initializer} } */
+  svint8_t init_sve_sc3 = {};
 
   int initi_a = sve_sc1; /* { dg-error {incompatible types when initializing type 'int' using type 'svint8_t'} } */
   int initi_b = { sve_sc1 }; /* { dg-error {incompatible types when initializing type 'int' using type 'svint8_t'} } */
 
   /* Compound literals.  */
 
-  (svint8_t) {}; /* { dg-error {empty scalar initializer} } */
+  (svint8_t) {};
   (svint8_t) { sve_sc1 };
 
   (int) { sve_sc1 }; /* { dg-error {incompatible types when initializing type 'int' using type 'svint8_t'} } */

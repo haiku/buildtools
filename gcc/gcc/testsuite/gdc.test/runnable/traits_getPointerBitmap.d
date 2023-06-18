@@ -1,8 +1,6 @@
-
 module traits_getPointerBitmap;
 
-import std.stdio;
-static import std.traits;
+import core.stdc.stdio;
 
 // version = RTInfo;
 // debug = LOG;
@@ -77,19 +75,6 @@ template pOff(T)
     enum pOff = T.p.offsetof / bytesPerPtr;
 }
 
-class C(T, aliasTo = void)
-{
-    static if(!is(aliasTo == void))
-    {
-        aliasTo a;
-        alias a this;
-    }
-
-    size_t x;
-    T t = void;
-    void* p;
-}
-
 ///////////////////////////////////////
 
 void _testType(T)(size_t[] expected)
@@ -119,21 +104,6 @@ void testType(T)(size_t[] expected)
     // prepend string
     sexp[0] = (expected[0] << tOff!(S!(T, string))) | (1 << pOff!(S!(T, string))) | 2; // arr ptr
     _testType!(S!(T, string))(sexp);
-
-    // generate bit pattern for C!T
-    C!T ct = null;
-    size_t mutexBit = (RTInfoMark__Monitor ? 2 : 0);
-    size_t ctpOff = ct.p.offsetof / bytesPerPtr;
-    size_t cttOff = ct.t.offsetof / bytesPerPtr;
-    sexp[0] = (expected[0] << cttOff) | (1 << ctpOff) | mutexBit;
-    _testType!(C!(T))(sexp);
-
-    C!(T, string) cts = null;
-    size_t ctspOff = cts.p.offsetof / bytesPerPtr;
-    size_t ctstOff = cts.t.offsetof / bytesPerPtr;
-    // generate bit pattern for C!T
-    sexp[0] = (expected[0] << ctstOff) | (1 << ctspOff) | mutexBit | 0b1000; // arr ptr
-    _testType!(C!(T, string))(sexp);
 }
 
 ///////////////////////////////////////
@@ -190,7 +160,7 @@ class N
 
 union U
 {
-    size_t data[4];
+    size_t[4] data;
     Large*[] arr; // { length, ptr }
 
     struct
@@ -210,13 +180,11 @@ void testRTInfo()
     testType!(int)          ([ 0b0 ]);
     testType!(long)         ([ 0b00 ]);
     testType!(double)       ([ 0b00 ]);
-    testType!(ifloat)       ([ 0b0 ]);
-    testType!(cdouble)      ([ 0b0000 ]);
     testType!(dg)           ([ 0b01 ]);
     testType!(fn)           ([ 0b0 ]);
     testType!(S!fn)         ([ 0b100 ]);
     testType!(NullType)     ([ 0b0 ]);
-    version(D_LP64)
+    static if (__traits(compiles, __vector(float[4])))
         testType!(__vector(float[4]))  ([ 0b00 ]);
 
     testType!(Object[int])       ([ 0b1 ]);

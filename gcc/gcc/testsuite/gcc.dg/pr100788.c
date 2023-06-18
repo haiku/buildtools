@@ -1,8 +1,8 @@
 /* { dg-do compile } */
-/* { dg-options "--coverage" } */
+/* { dg-options "--coverage -Wno-error=coverage-invalid-line-number" } */
 
 void
-foo()
+foo() // { dg-warning "function starts on a higher line number than it ends" }
 {
 #line 1
 }

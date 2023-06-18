@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---            Copyright (C) 2020, Free Software Foundation, Inc.            --
+--            Copyright (C) 2020-2023, Free Software Foundation, Inc.       --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -29,7 +29,7 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Ada.Strings.Text_Output;
+with Ada.Strings.Text_Buffers;
 with System.Unsigned_Types;
 
 package System.Put_Images with Pure is
@@ -50,7 +50,7 @@ package System.Put_Images with Pure is
 
    pragma Preelaborate;
 
-   subtype Sink is Ada.Strings.Text_Output.Sink;
+   subtype Sink is Ada.Strings.Text_Buffers.Root_Buffer_Type;
 
    procedure Put_Image_Integer (S : in out Sink'Class; X : Integer);
    procedure Put_Image_Long_Long_Integer
@@ -84,10 +84,20 @@ package System.Put_Images with Pure is
      (S : in out Sink'Class; X : Thin_Pointer);
    --  For access-to-protected-subprogram types
 
-   procedure Put_Image_String (S : in out Sink'Class; X : String);
-   procedure Put_Image_Wide_String (S : in out Sink'Class; X : Wide_String);
+   procedure Put_Image_String
+     (S               : in out Sink'Class;
+      X               : String;
+      With_Delimiters : Boolean := True);
+
+   procedure Put_Image_Wide_String
+     (S               : in out Sink'Class;
+      X               : Wide_String;
+      With_Delimiters : Boolean := True);
+
    procedure Put_Image_Wide_Wide_String
-     (S : in out Sink'Class; X : Wide_Wide_String);
+     (S               : in out Sink'Class;
+      X               : Wide_Wide_String;
+      With_Delimiters : Boolean := True);
 
    procedure Array_Before (S : in out Sink'Class);
    procedure Array_Between (S : in out Sink'Class);

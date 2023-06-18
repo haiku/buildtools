@@ -613,12 +613,14 @@ DSYMUTIL_FOR_TARGET
 DLLTOOL_FOR_TARGET
 AS_FOR_TARGET
 AR_FOR_TARGET
+GM2_FOR_TARGET
 GDC_FOR_TARGET
 GOC_FOR_TARGET
 GFORTRAN_FOR_TARGET
 GCC_FOR_TARGET
 CXX_FOR_TARGET
 CC_FOR_TARGET
+GDCFLAGS
 READELF
 OTOOL
 OBJDUMP
@@ -655,6 +657,8 @@ DSYMUTIL_FOR_BUILD
 DLLTOOL_FOR_BUILD
 CXX_FOR_BUILD
 CXXFLAGS_FOR_BUILD
+CPPFLAGS_FOR_BUILD
+CPP_FOR_BUILD
 CFLAGS_FOR_BUILD
 CC_FOR_BUILD
 AS_FOR_BUILD
@@ -682,6 +686,7 @@ get_gcc_base_ver
 extra_host_zlib_configure_flags
 extra_host_libiberty_configure_flags
 stage1_languages
+host_libs_picflag
 host_shared
 extra_linker_plugin_flags
 extra_linker_plugin_configure_flags
@@ -697,9 +702,13 @@ extra_mpc_gmp_configure_flags
 extra_mpfr_configure_flags
 gmpinc
 gmplibs
+PGO_BUILD_LTO_CFLAGS
+PGO_BUILD_USE_CFLAGS
+PGO_BUILD_GEN_CFLAGS
 HAVE_CXX11_FOR_BUILD
 HAVE_CXX11
 do_compare
+GDC
 GNATMAKE
 GNATBIND
 ac_ct_CXX
@@ -712,7 +721,6 @@ CPPFLAGS
 LDFLAGS
 CFLAGS
 CC
-extra_liboffloadmic_configure_flags
 target_subdir
 host_subdir
 build_subdir
@@ -789,24 +797,24 @@ with_build_libsubdir
 with_system_zlib
 enable_as_accelerator_for
 enable_offload_targets
+enable_offload_defaulted
 enable_gold
 enable_ld
 enable_compressed_debug_sections
 enable_libquadmath
 enable_libquadmath_support
 enable_libada
+enable_libgm2
 enable_libssp
 enable_libstdcxx
-enable_liboffloadmic
 enable_bootstrap
+enable_pgo_build
 with_mpc
 with_mpc_include
 with_mpc_lib
-with_mpfr_dir
 with_mpfr
 with_mpfr_include
 with_mpfr_lib
-with_gmp_dir
 with_gmp
 with_gmp_include
 with_gmp_lib
@@ -874,6 +882,7 @@ GCC_FOR_TARGET
 GFORTRAN_FOR_TARGET
 GOC_FOR_TARGET
 GDC_FOR_TARGET
+GM2_FOR_TARGET
 AR_FOR_TARGET
 AS_FOR_TARGET
 DLLTOOL_FOR_TARGET
@@ -1520,6 +1529,11 @@ Optional Features:
                           enable offloading to devices from comma-separated
                           LIST of TARGET[=DIR]. Use optional path to find
                           offload target compiler during the build
+  --enable-offload-defaulted
+		If enabled, configured but not installed offload compilers and
+		libgomp plugins are silently ignored.  Useful for distribution
+		compilers where those are in separate optional packages.
+
   --enable-gold[=ARG]     build gold [ARG={default,yes,no}]
   --enable-ld[=ARG]       build ld [ARG={default,yes,no}]
   --enable-compressed-debug-sections={all,gas,gold,ld,none}
@@ -1529,11 +1543,12 @@ Optional Features:
   --disable-libquadmath-support
                           disable libquadmath support for Fortran
   --enable-libada         build libada directory
+  --enable-libgm2         build libgm2 directory
   --enable-libssp         build libssp directory
   --disable-libstdcxx     do not build libstdc++-v3 directory
-  --enable-liboffloadmic=ARG
-                          build liboffloadmic [ARG={no,host,target}]
   --enable-bootstrap      enable bootstrapping [yes if native build]
+  --enable-pgo-build[=lto]
+                          enable the PGO build
   --disable-isl-version-check
                           disable check for isl version
   --enable-lto            enable link time optimization support
@@ -1572,14 +1587,12 @@ Optional Packages:
                           --with-mpc-lib=PATH/lib
   --with-mpc-include=PATH specify directory for installed MPC include files
   --with-mpc-lib=PATH     specify directory for the installed MPC library
-  --with-mpfr-dir=PATH    this option has been REMOVED
   --with-mpfr=PATH        specify prefix directory for installed MPFR package.
                           Equivalent to --with-mpfr-include=PATH/include plus
                           --with-mpfr-lib=PATH/lib
   --with-mpfr-include=PATH
                           specify directory for installed MPFR include files
   --with-mpfr-lib=PATH    specify directory for the installed MPFR library
-  --with-gmp-dir=PATH     this option has been REMOVED
   --with-gmp=PATH         specify prefix directory for the installed GMP
                           package. Equivalent to
                           --with-gmp-include=PATH/include plus
@@ -1665,6 +1678,8 @@ Some influential environment variables:
               GOC for the target
   GDC_FOR_TARGET
               GDC for the target
+  GM2_FOR_TARGET
+              GM2 for the target
   AR_FOR_TARGET
               AR for the target
   AS_FOR_TARGET
@@ -2795,7 +2810,7 @@ build_tools="build-texinfo build-flex build-bison build-m4 build-fixincludes"
 
 # these libraries are used by various programs built for the host environment
 #f
-host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libelf libiconv libctf"
+host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libiconv libctf libsframe"
 
 # these tools are built for the host environment
 # Note, the powerpc-eabi build depends on sim occurring before gdb in order to
@@ -2803,7 +2818,7 @@ host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktr
 # binutils, gas and ld appear in that order because it makes sense to run
 # "make check" in that particular order.
 # If --enable-gold is used, "gold" may replace "ld".
-host_tools="texinfo flex bison binutils gas ld fixincludes gcc cgen sid sim gdb gdbserver gprof etc expect dejagnu m4 utils guile fastjar gnattools libcc1 gotools c++tools"
+host_tools="texinfo flex bison binutils gas ld fixincludes gcc cgen sid sim gdb gdbserver gprof etc expect dejagnu m4 utils guile fastjar gnattools libcc1 gm2tools gotools c++tools"
 
 # these libraries are built for the target environment, and are built after
 # the host libraries and the host tools (which may be a cross compiler)
@@ -2813,8 +2828,6 @@ target_libraries="target-libgcc \
 		target-libgloss \
 		target-newlib \
 		target-libgomp \
-		target-liboffloadmic \
-		target-libhsail-rt \
 		target-libatomic \
 		target-libitm \
 		target-libstdc++-v3 \
@@ -2826,6 +2839,7 @@ target_libraries="target-libgcc \
 		target-libffi \
 		target-libobjc \
 		target-libada \
+		target-libgm2 \
 		target-libgo \
 		target-libphobos \
 		target-zlib"
@@ -2935,6 +2949,12 @@ if test x$with_system_zlib = xyes ; then
   noconfigdirs="$noconfigdirs zlib"
 fi
 
+# Don't compile the bundled readline/libreadline.a if --with-system-readline
+# is provided.
+if test x$with_system_readline = xyes ; then
+  noconfigdirs="$noconfigdirs readline"
+fi
+
 # some tools are so dependent upon X11 that if we're not building with X,
 # it's not even worth trying to configure, much less build, that tool.
 
@@ -2989,6 +3009,14 @@ else
 fi
 
 
+# Check whether --enable-offload-defaulted was given.
+if test "${enable_offload_defaulted+set}" = set; then :
+  enableval=$enable_offload_defaulted; enable_offload_defaulted=$enableval
+else
+  enable_offload_defaulted=
+fi
+
+
 # Handle --enable-gold, --enable-ld.
 # --disable-gold [--enable-ld]
 #     Build only ld.  Default option.
@@ -3037,7 +3065,7 @@ case "${ENABLE_GOLD}" in
       # Check for target supported by gold.
       case "${target}" in
         i?86-*-* | x86_64-*-* | sparc*-*-* | powerpc*-*-* | arm*-*-* \
-        | aarch64*-*-* | tilegx*-*-* | mips*-*-* | s390*-*-*)
+        | aarch64*-*-* | mips*-*-* | s390*-*-* | loongarch*-*-*)
 	  configdirs="$configdirs gold"
 	  if test x${ENABLE_GOLD} = xdefault; then
 	    default_ld=gold
@@ -3155,6 +3183,17 @@ if test "${ENABLE_LIBADA}" != "yes" ; then
   noconfigdirs="$noconfigdirs gnattools"
 fi
 
+# Check whether --enable-libgm2 was given.
+if test "${enable_libgm2+set}" = set; then :
+  enableval=$enable_libgm2; ENABLE_LIBGM2=$enableval
+else
+  ENABLE_LIBGM2=no
+fi
+
+if test "${ENABLE_LIBGM2}" != "yes" ; then
+  noconfigdirs="$noconfigdirs gm2tools"
+fi
+
 # Check whether --enable-libssp was given.
 if test "${enable_libssp+set}" = set; then :
   enableval=$enable_libssp; ENABLE_LIBSSP=$enableval
@@ -3173,44 +3212,6 @@ fi
 if test "${ENABLE_LIBSTDCXX}" = "no" ; then
   noconfigdirs="$noconfigdirs target-libstdc++-v3"
 fi
-
-# If this is accelerator compiler and its target is intelmic we enable
-# target liboffloadmic by default.  If this is compiler with offloading
-# for intelmic we enable host liboffloadmic by default.  Otherwise
-# liboffloadmic is disabled by default.
-# Check whether --enable-liboffloadmic was given.
-if test "${enable_liboffloadmic+set}" = set; then :
-  enableval=$enable_liboffloadmic; case "$enableval" in
-  no | host | target)
-    enable_liboffloadmic=$enableval ;;
-  *)
-    as_fn_error $? "--enable-liboffloadmic=no/host/target" "$LINENO" 5 ;;
-esac
-else
-  if test x"$enable_as_accelerator_for" != x; then
-  case "${target}" in
-    *-intelmic-* | *-intelmicemul-*)
-      enable_liboffloadmic=target
-      extra_liboffloadmic_configure_flags="--enable-liboffloadmic=target"
-      ;;
-    *)
-      enable_liboffloadmic=no
-      ;;
-  esac
-else
-  case "${enable_offload_targets}" in
-    *-intelmic-* | *-intelmicemul-*)
-      enable_liboffloadmic=host
-      extra_liboffloadmic_configure_flags="--enable-liboffloadmic=host"
-      ;;
-    *)
-      enable_liboffloadmic=no
-      ;;
-    esac
-fi
-fi
-
-
 
 # Enable libgomp by default on hosted POSIX systems, and a few others.
 if test x$enable_libgomp = x ; then
@@ -3243,25 +3244,6 @@ $as_echo_n "checking for libatomic support... " >&6; }
 	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	    noconfigdirs="$noconfigdirs target-libatomic"
-	else
-	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-	fi
-    fi
-fi
-
-# Disable liboffloadmic on unsupported systems.
-if test -d ${srcdir}/liboffloadmic; then
-    if test x$enable_liboffloadmic != xno; then
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for liboffloadmic support" >&5
-$as_echo_n "checking for liboffloadmic support... " >&6; }
-	if (srcdir=${srcdir}/liboffloadmic; \
-		. ${srcdir}/configure.tgt; \
-		test -n "$UNSUPPORTED")
-	then
-	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-	    noconfigdirs="$noconfigdirs target-liboffloadmic"
 	else
 	    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
@@ -3326,29 +3308,6 @@ $as_echo "yes" >&6; }
     fi
 fi
 
-
-# Disable libhsail-rt on unsupported systems.
-if test -d ${srcdir}/libhsail-rt; then
-    if test x$enable_libhsail_rt = x; then
-        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for libhsail-rt support" >&5
-$as_echo_n "checking for libhsail-rt support... " >&6; }
-        if (srcdir=${srcdir}/libhsail-rt; \
-                . ${srcdir}/configure.tgt; \
-                test -n "$UNSUPPORTED")
-        then
-            { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
-$as_echo "no" >&6; }
-            unsupported_languages="$unsupported_languages brig"
-            # This implicitly disables also target-libhsail-rt as it won't
-            # get added to the build without BRIG FE.
-        else
-            { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-$as_echo "yes" >&6; }
-        fi
-    fi
-fi
-
-
 # Disable libquadmath for some systems.
 case "${target}" in
   avr-*-*)
@@ -3390,7 +3349,7 @@ case "${target}" in
 esac
 
 # Disable libstdc++-v3 for some systems.
-# Allow user to override this if they pass --enable-libstdc++-v3
+# Allow user to override this if they pass --enable-libstdcxx
 if test "${ENABLE_LIBSTDCXX}" = "default" ; then
   case "${target}" in
     *-*-vxworks*)
@@ -3548,11 +3507,6 @@ case "${target}" in
   hppa*64*-*-hpux*)
     noconfigdirs="$noconfigdirs target-libffi"
     ;;
-  hppa*-hp-hpux11*)
-    ;;
-  hppa*-*-hpux*)
-    noconfigdirs="$noconfigdirs target-libffi"
-    ;;
   ia64*-*-*vms*)
     noconfigdirs="$noconfigdirs target-libffi"
     ;;
@@ -3645,6 +3599,9 @@ case "${target}" in
     ;;
   i[3456789]86-*-*)
     libgloss_dir=i386
+    ;;
+  loongarch*-*-*)
+    libgloss_dir=loongarch
     ;;
   m68hc11-*-*|m6811-*-*|m68hc12-*-*|m6812-*-*)
     libgloss_dir=m68hc11
@@ -3768,7 +3725,7 @@ case "${target}" in
   *-*-dragonfly*)
     ;;
   *-*-freebsd*)
-    if test "x$with_gmp" = x && test "x$with_gmp_dir" = x \
+    if test "x$with_gmp" = x \
 	&& ! test -d ${srcdir}/gmp \
 	&& test -f /usr/local/include/gmp.h; then
       with_gmp=/usr/local
@@ -3856,13 +3813,8 @@ case "${target}" in
   h8500-*-*)
     noconfigdirs="$noconfigdirs target-libgloss"
     ;;
-  hppa1.1-*-osf* | hppa1.1-*-bsd* )
-    ;;
   hppa*64*-*-hpux*)
     noconfigdirs="$noconfigdirs gdb"
-    ;;
-  hppa*-*-hpux11*)
-    noconfigdirs="$noconfigdirs gdb ld"
     ;;
   hppa*64*-*-linux*)
     ;;
@@ -4018,9 +3970,6 @@ case "${target}" in
   tic6x-*-*)
     noconfigdirs="$noconfigdirs sim"
     ;;
-  tilepro*-*-* | tilegx*-*-*)
-    noconfigdirs="$noconfigdirs sim"
-    ;;
   v810-*-*)
     noconfigdirs="$noconfigdirs bfd binutils gas gdb ld opcodes target-libgloss"
     ;;
@@ -4029,6 +3978,11 @@ case "${target}" in
     ;;
   wasm32-*-*)
     noconfigdirs="$noconfigdirs ld"
+    ;;
+  loongarch*-*-linux*)
+    ;;
+  loongarch*-*-*)
+    noconfigdirs="$noconfigdirs gprof"
     ;;
 esac
 
@@ -4075,9 +4029,6 @@ fi
   alpha*-linux*)
     host_makefile_frag="config/mh-alpha-linux"
     ;;
-  hppa*-hp-hpux10*)
-    host_makefile_frag="config/mh-pa-hpux10"
-    ;;
   hppa*-hp-hpux*)
     host_makefile_frag="config/mh-pa"
     ;;
@@ -4100,6 +4051,7 @@ if test "${build}" != "${host}" ; then
   AR_FOR_BUILD=${AR_FOR_BUILD-ar}
   AS_FOR_BUILD=${AS_FOR_BUILD-as}
   CC_FOR_BUILD=${CC_FOR_BUILD-gcc}
+  CPP_FOR_BUILD="${CPP_FOR_BUILD-\$(CC_FOR_BUILD) -E}"
   CXX_FOR_BUILD=${CXX_FOR_BUILD-g++}
   DSYMUTIL_FOR_BUILD=${DSYMUTIL_FOR_BUILD-dsymutil}
   GFORTRAN_FOR_BUILD=${GFORTRAN_FOR_BUILD-gfortran}
@@ -4917,6 +4869,183 @@ ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
 ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
+   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for $CC option to accept ISO C99" >&5
+$as_echo_n "checking for $CC option to accept ISO C99... " >&6; }
+if ${ac_cv_prog_cc_c99+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_cv_prog_cc_c99=no
+ac_save_CC=$CC
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <wchar.h>
+#include <stdio.h>
+
+// Check varargs macros.  These examples are taken from C99 6.10.3.5.
+#define debug(...) fprintf (stderr, __VA_ARGS__)
+#define showlist(...) puts (#__VA_ARGS__)
+#define report(test,...) ((test) ? puts (#test) : printf (__VA_ARGS__))
+static void
+test_varargs_macros (void)
+{
+  int x = 1234;
+  int y = 5678;
+  debug ("Flag");
+  debug ("X = %d\n", x);
+  showlist (The first, second, and third items.);
+  report (x>y, "x is %d but y is %d", x, y);
+}
+
+// Check long long types.
+#define BIG64 18446744073709551615ull
+#define BIG32 4294967295ul
+#define BIG_OK (BIG64 / BIG32 == 4294967297ull && BIG64 % BIG32 == 0)
+#if !BIG_OK
+  your preprocessor is broken;
+#endif
+#if BIG_OK
+#else
+  your preprocessor is broken;
+#endif
+static long long int bignum = -9223372036854775807LL;
+static unsigned long long int ubignum = BIG64;
+
+struct incomplete_array
+{
+  int datasize;
+  double data[];
+};
+
+struct named_init {
+  int number;
+  const wchar_t *name;
+  double average;
+};
+
+typedef const char *ccp;
+
+static inline int
+test_restrict (ccp restrict text)
+{
+  // See if C++-style comments work.
+  // Iterate through items via the restricted pointer.
+  // Also check for declarations in for loops.
+  for (unsigned int i = 0; *(text+i) != '\0'; ++i)
+    continue;
+  return 0;
+}
+
+// Check varargs and va_copy.
+static void
+test_varargs (const char *format, ...)
+{
+  va_list args;
+  va_start (args, format);
+  va_list args_copy;
+  va_copy (args_copy, args);
+
+  const char *str;
+  int number;
+  float fnumber;
+
+  while (*format)
+    {
+      switch (*format++)
+	{
+	case 's': // string
+	  str = va_arg (args_copy, const char *);
+	  break;
+	case 'd': // int
+	  number = va_arg (args_copy, int);
+	  break;
+	case 'f': // float
+	  fnumber = va_arg (args_copy, double);
+	  break;
+	default:
+	  break;
+	}
+    }
+  va_end (args_copy);
+  va_end (args);
+}
+
+int
+main ()
+{
+
+  // Check bool.
+  _Bool success = false;
+
+  // Check restrict.
+  if (test_restrict ("String literal") == 0)
+    success = true;
+  char *restrict newvar = "Another string";
+
+  // Check varargs.
+  test_varargs ("s, d' f .", "string", 65, 34.234);
+  test_varargs_macros ();
+
+  // Check flexible array members.
+  struct incomplete_array *ia =
+    malloc (sizeof (struct incomplete_array) + (sizeof (double) * 10));
+  ia->datasize = 10;
+  for (int i = 0; i < ia->datasize; ++i)
+    ia->data[i] = i * 1.234;
+
+  // Check named initializers.
+  struct named_init ni = {
+    .number = 34,
+    .name = L"Test wide string",
+    .average = 543.34343,
+  };
+
+  ni.number = 58;
+
+  int dynamic_array[ni.number];
+  dynamic_array[ni.number - 1] = 543;
+
+  // work around unused variable warnings
+  return (!success || bignum == 0LL || ubignum == 0uLL || newvar[0] == 'x'
+	  || dynamic_array[ni.number - 1] != 543);
+
+  ;
+  return 0;
+}
+_ACEOF
+for ac_arg in '' -std=gnu99 -std=c99 -c99 -AC99 -D_STDC_C99= -qlanglvl=extc99
+do
+  CC="$ac_save_CC $ac_arg"
+  if ac_fn_c_try_compile "$LINENO"; then :
+  ac_cv_prog_cc_c99=$ac_arg
+fi
+rm -f core conftest.err conftest.$ac_objext
+  test "x$ac_cv_prog_cc_c99" != "xno" && break
+done
+rm -f conftest.$ac_ext
+CC=$ac_save_CC
+
+fi
+# AC_CACHE_VAL
+case "x$ac_cv_prog_cc_c99" in
+  x)
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: none needed" >&5
+$as_echo "none needed" >&6; } ;;
+  xno)
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: unsupported" >&5
+$as_echo "unsupported" >&6; } ;;
+  *)
+    CC="$CC $ac_cv_prog_cc_c99"
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_prog_cc_c99" >&5
+$as_echo "$ac_cv_prog_cc_c99" >&6; } ;;
+esac
+if test "x$ac_cv_prog_cc_c99" != xno; then :
+
+fi
+
+
 ac_ext=cpp
 ac_cpp='$CXXCPP $CPPFLAGS'
 ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
@@ -5423,12 +5552,16 @@ else
   GNATMAKE="$ac_cv_prog_GNATMAKE"
 fi
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether compiler driver understands Ada" >&5
-$as_echo_n "checking whether compiler driver understands Ada... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether compiler driver understands Ada and is recent enough" >&5
+$as_echo_n "checking whether compiler driver understands Ada and is recent enough... " >&6; }
 if ${acx_cv_cc_gcc_supports_ada+:} false; then :
   $as_echo_n "(cached) " >&6
 else
   cat >conftest.adb <<EOF
+pragma Warnings (Off);
+with System.CRTL;
+pragma Warnings (On);
+use type System.CRTL.int64;
 procedure conftest is begin null; end conftest;
 EOF
 acx_cv_cc_gcc_supports_ada=no
@@ -5453,6 +5586,125 @@ if test "x$GNATBIND" != xno && test "x$GNATMAKE" != xno && test x$acx_cv_cc_gcc_
   have_gnat=yes
 else
   have_gnat=no
+fi
+
+
+
+if test -n "$ac_tool_prefix"; then
+  # Extract the first word of "${ac_tool_prefix}gdc", so it can be a program name with args.
+set dummy ${ac_tool_prefix}gdc; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_prog_GDC+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test -n "$GDC"; then
+  ac_cv_prog_GDC="$GDC" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_prog_GDC="${ac_tool_prefix}gdc"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+fi
+fi
+GDC=$ac_cv_prog_GDC
+if test -n "$GDC"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $GDC" >&5
+$as_echo "$GDC" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+fi
+if test -z "$ac_cv_prog_GDC"; then
+  ac_ct_GDC=$GDC
+  # Extract the first word of "gdc", so it can be a program name with args.
+set dummy gdc; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_prog_ac_ct_GDC+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test -n "$ac_ct_GDC"; then
+  ac_cv_prog_ac_ct_GDC="$ac_ct_GDC" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_prog_ac_ct_GDC="gdc"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+fi
+fi
+ac_ct_GDC=$ac_cv_prog_ac_ct_GDC
+if test -n "$ac_ct_GDC"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_ct_GDC" >&5
+$as_echo "$ac_ct_GDC" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+  if test "x$ac_ct_GDC" = x; then
+    GDC="no"
+  else
+    case $cross_compiling:$ac_tool_warned in
+yes:)
+{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: using cross tools not prefixed with host triplet" >&5
+$as_echo "$as_me: WARNING: using cross tools not prefixed with host triplet" >&2;}
+ac_tool_warned=yes ;;
+esac
+    GDC=$ac_ct_GDC
+  fi
+else
+  GDC="$ac_cv_prog_GDC"
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the D compiler works" >&5
+$as_echo_n "checking whether the D compiler works... " >&6; }
+if ${acx_cv_d_compiler_works+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  cat >conftest.d <<EOF
+module conftest; int main() { return 0; }
+EOF
+acx_cv_d_compiler_works=no
+if test "x$GDC" != xno; then
+  errors=`(${GDC} -c conftest.d) 2>&1 || echo failure`
+  if test x"$errors" = x && test -f conftest.$ac_objext; then
+    acx_cv_d_compiler_works=yes
+  fi
+  rm -f conftest.*
+fi
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $acx_cv_d_compiler_works" >&5
+$as_echo "$acx_cv_d_compiler_works" >&6; }
+if test "x$GDC" != xno && test x$acx_cv_d_compiler_works != xno; then
+  have_gdc=yes
+else
+  have_gdc=no
 fi
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking how to compare bootstrapped objects" >&5
@@ -7538,6 +7790,91 @@ $as_echo "#define HAVE_CXX11_FOR_BUILD 1" >>confdefs.h
   fi
 fi
 
+# Check whether --enable-pgo-build was given.
+if test "${enable_pgo_build+set}" = set; then :
+  enableval=$enable_pgo_build; enable_pgo_build=$enableval
+else
+  enable_pgo_build=no
+fi
+
+
+# Issue errors and warnings for invalid/strange PGO build combinations.
+case "$have_compiler:$host:$target:$enable_pgo_build" in
+  *:*:*:no) ;;
+
+  # Allow the PGO build only if we aren't building a compiler and
+  # we are in a native configuration.
+  no:$build:$build:yes | no:$build:$build:lto) ;;
+
+  # Disallow the PGO bootstrap if we are building a compiler.
+  yes:*:*:yes | yes:*:*:lto)
+    as_fn_error $? "cannot perform the PGO bootstrap when building a compiler" "$LINENO" 5 ;;
+
+  *)
+    as_fn_error $? "invalid option for --enable-pgo-build" "$LINENO" 5
+    ;;
+esac
+
+if test "$enable_pgo_build" != "no"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -fprofile-generate" >&5
+$as_echo_n "checking whether the compiler supports -fprofile-generate... " >&6; }
+  old_CFLAGS="$CFLAGS"
+  PGO_BUILD_GEN_CFLAGS="-fprofile-generate"
+  CFLAGS="$CFLAGS $PGO_BUILD_CFLAGS"
+
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+int foo;
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+
+else
+  PGO_BUILD_GEN_CFLAGS=
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+  CFLAGS="$old_CFLAGS"
+  if test -n "$PGO_BUILD_GEN_CFLAGS"; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+    PGO_BUILD_USE_CFLAGS="-fprofile-use"
+  else
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+    as_fn_error $? "cannot perform the PGO build without -fprofile-generate" "$LINENO" 5
+  fi
+
+  if test "$enable_pgo_build" = "lto"; then
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether the compiler supports -flto=jobserver -ffat-lto-objects" >&5
+$as_echo_n "checking whether the compiler supports -flto=jobserver -ffat-lto-objects... " >&6; }
+    old_CFLAGS="$CFLAGS"
+    PGO_BUILD_LTO_CFLAGS="-flto=jobserver -ffat-lto-objects"
+    CFLAGS="$CFLAGS $PGO_BUILD_LTO_CFLAGS"
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+int foo;
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+
+else
+  PGO_BUILD_LTO_CFLAGS=
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+    CFLAGS="$old_CFLAGS"
+    if test -n "$PGO_BUILD_LTO_CFLAGS"; then
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+    else
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: LTO is disabled for the PGO build" >&5
+$as_echo "$as_me: WARNING: LTO is disabled for the PGO build" >&2;}
+    fi
+  fi
+fi
+
+
+
+
 # Used for setting $lt_cv_objdir
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for objdir" >&5
 $as_echo_n "checking for objdir... " >&6; }
@@ -7569,7 +7906,22 @@ _ACEOF
 
 
 # Check for GMP, MPFR and MPC
-gmplibs="-lmpc -lmpfr -lgmp"
+require_gmp=no
+require_mpc=no
+if test -d ${srcdir}/gcc ; then
+  require_gmp=yes
+  require_mpc=yes
+fi
+if test -d ${srcdir}/gdb ; then
+  if test "x$enable_gdb" != xno; then
+   require_gmp=yes
+  fi
+fi
+
+gmplibs="-lmpfr -lgmp"
+if test x"$require_mpc" = "xyes" ; then
+  gmplibs="-lmpc $gmplibs"
+fi
 gmpinc=
 have_gmp=no
 
@@ -7617,14 +7969,6 @@ fi
 # Specify a location for mpfr
 # check for this first so it ends up on the link line before gmp.
 
-# Check whether --with-mpfr-dir was given.
-if test "${with_mpfr_dir+set}" = set; then :
-  withval=$with_mpfr_dir; as_fn_error $? "The --with-mpfr-dir=PATH option has been removed.
-Use --with-mpfr=PATH or --with-mpfr-include=PATH plus --with-mpfr-lib=PATH" "$LINENO" 5
-fi
-
-
-
 # Check whether --with-mpfr was given.
 if test "${with_mpfr+set}" = set; then :
   withval=$with_mpfr;
@@ -7670,14 +8014,6 @@ fi
 
 # Specify a location for gmp
 
-# Check whether --with-gmp-dir was given.
-if test "${with_gmp_dir+set}" = set; then :
-  withval=$with_gmp_dir; as_fn_error $? "The --with-gmp-dir=PATH option has been removed.
-Use --with-gmp=PATH or --with-gmp-include=PATH plus --with-gmp-lib=PATH" "$LINENO" 5
-fi
-
-
-
 # Check whether --with-gmp was given.
 if test "${with_gmp+set}" = set; then :
   withval=$with_gmp;
@@ -7720,15 +8056,14 @@ if test "x$with_gmp$with_gmp_include$with_gmp_lib" = x && test -d ${srcdir}/gmp;
   have_gmp=yes
 fi
 
-if test -d ${srcdir}/gcc && test "x$have_gmp" = xno; then
+if test "x$require_gmp" = xyes && test "x$have_gmp" = xno; then
   have_gmp=yes
   saved_CFLAGS="$CFLAGS"
   CFLAGS="$CFLAGS $gmpinc"
   # Check for the recommended and required versions of GMP.
   { $as_echo "$as_me:${as_lineno-$LINENO}: checking for the correct version of gmp.h" >&5
 $as_echo_n "checking for the correct version of gmp.h... " >&6; }
-
-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 #include "gmp.h"
 int
@@ -7831,7 +8166,7 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
   fi
 
   # Check for the MPC header version.
-  if test x"$have_gmp" = xyes ; then
+  if test "x$require_mpc" = xyes && test x"$have_gmp" = xyes ; then
     # Check for the recommended and required versions of MPC.
     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for the correct version of mpc.h" >&5
 $as_echo_n "checking for the correct version of mpc.h... " >&6; }
@@ -7885,18 +8220,17 @@ rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
   if test x"$have_gmp" = xyes; then
     saved_LIBS="$LIBS"
     LIBS="$LIBS $gmplibs"
-    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for the correct version of the gmp/mpfr/mpc libraries" >&5
-$as_echo_n "checking for the correct version of the gmp/mpfr/mpc libraries... " >&6; }
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for the correct version of the gmp/mpfr libraries" >&5
+$as_echo_n "checking for the correct version of the gmp/mpfr libraries... " >&6; }
     cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
-#include <mpc.h>
+#include <mpfr.h>
 int
 main ()
 {
 
     mpfr_t n;
     mpfr_t x;
-    mpc_t c;
     int t;
     mpfr_init (n);
     mpfr_init (x);
@@ -7905,6 +8239,37 @@ main ()
     mpfr_subnormalize (x, t, MPFR_RNDN);
     mpfr_clear(n);
     mpfr_clear(x);
+
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }; have_gmp=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+    LIBS="$saved_LIBS"
+  fi
+
+  # Now check the MPC library
+  if test "x$require_mpc" = xyes && test x"$have_gmp" = xyes; then
+    saved_LIBS="$LIBS"
+    LIBS="$LIBS $gmplibs"
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for the correct version of the mpc libraries" >&5
+$as_echo_n "checking for the correct version of the mpc libraries... " >&6; }
+    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <mpc.h>
+int
+main ()
+{
+
+    mpc_t c;
     mpc_init2 (c, 53);
     mpc_set_ui_ui (c, 1, 1, MPC_RNDNN);
     mpc_cosh (c, c, MPC_RNDNN);
@@ -7933,7 +8298,8 @@ rm -f core conftest.err conftest.$ac_objext \
 # The library versions listed in the error message below should match
 # the HARD-minimums enforced above.
   if test x$have_gmp != xyes; then
-    as_fn_error $? "Building GCC requires GMP 4.2+, MPFR 3.1.0+ and MPC 0.8.0+.
+    if test -d ${srcdir}/gcc ; then
+      as_fn_error $? "Building GCC requires GMP 4.2+, MPFR 3.1.0+ and MPC 0.8.0+.
 Try the --with-gmp, --with-mpfr and/or --with-mpc options to specify
 their locations.  Source code for these libraries can be found at
 their respective hosting sites as well as at
@@ -7942,6 +8308,13 @@ http://gcc.gnu.org/install/prerequisites.html for additional info.  If
 you obtained GMP, MPFR and/or MPC from a vendor distribution package,
 make sure that you have installed both the libraries and the header
 files.  They may be located in separate packages." "$LINENO" 5
+    else
+      as_fn_error $? "Building GDB requires GMP 4.2+, and MPFR 3.1.0+.
+Try the --with-gmp and/or --with-mpfr options to specify
+their locations.  If you obtained GMP and/or MPFR from a vendor
+distribution package, make sure that you have installed both the libraries
+and the header files.  They may be located in separate packages." "$LINENO" 5
+    fi
   fi
 fi
 
@@ -8277,7 +8650,7 @@ fi
 # Check whether --enable-host-shared was given.
 if test "${enable_host_shared+set}" = set; then :
   enableval=$enable_host_shared; host_shared=$enableval
- case $target in
+ case $host in
    x86_64-*-darwin* | aarch64-*-darwin*)
      if test x$host_shared != xyes ; then
        # PIC is the default, and actually cannot be switched off.
@@ -8287,12 +8660,22 @@ if test "${enable_host_shared+set}" = set; then :
   *) ;;
  esac
 else
-  case $target in
+  case $host in
   x86_64-*-darwin* | aarch64-*-darwin*) host_shared=yes ;;
   *) host_shared=no ;;
  esac
 fi
 
+
+
+
+# If we are building PIC/PIE host executables, and we are building dependent
+# libs (e.g. GMP) in-tree those libs need to be configured to generate PIC
+# code.
+host_libs_picflag=
+if test "$host_shared" = "yes";then
+host_libs_picflag='--with-pic'
+fi
 
 
 # By default, C and C++ are the only stage 1 languages.
@@ -8509,6 +8892,35 @@ $as_echo "$as_me: WARNING: GNAT is required to build $language" >&2;}
             ;;
         esac
 
+        # Disable D if no preexisting GDC is available.
+        case ${add_this_lang}:${language}:${have_gdc} in
+          yes:d:no)
+            # Specifically requested language; tell them.
+            as_fn_error $? "GDC is required to build $language" "$LINENO" 5
+           ;;
+          all:d:no)
+            { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: GDC is required to build $language" >&5
+$as_echo "$as_me: WARNING: GDC is required to build $language" >&2;}
+            add_this_lang=unsupported
+            ;;
+          *:d:no)
+            # Silently disable.
+            add_this_lang=unsupported
+            ;;
+        esac
+
+        # Disable Rust for GCC 13 release.
+        case ${add_this_lang}:${language} in
+          yes:rust)
+            # Specifically requested language; tell them.
+            as_fn_error $? "Rust is not supported in GCC 13 release" "$LINENO" 5
+           ;;
+          *:rust)
+            # Silently disable.
+            add_this_lang=unsupported
+            ;;
+        esac
+
         # Disable jit if -enable-host-shared not specified
         # but not if building for Mingw. All code in Windows
         # is position independent code (PIC).
@@ -8578,7 +8990,7 @@ $as_echo "$as_me: WARNING: ${language} not supported for this target" >&2;}
 		  *) stage1_languages="${stage1_languages}${language}," ;;
 		esac
 		# We need to bootstrap any supporting libraries.
-		bootstrap_target_libs="${bootstrap_target_libs}${target_libs},"
+		bootstrap_target_libs=`echo "${bootstrap_target_libs}${target_libs}," | sed "s/ /,/g"`
 		;;
 	    esac
 	    ;;
@@ -8703,7 +9115,7 @@ $as_echo "using paths configured with --with-target-bdw-gc options" >&6; }
   fi
 esac
 
-# Disable libitm, libsanitizer, libvtv, liboffloadmic if we're not building C++
+# Disable libitm, libsanitizer, libvtv if we're not building C++
 case ,${enable_languages}, in
   *,c++,*)
     # Disable libitm, libsanitizer if we're not building libstdc++
@@ -8715,9 +9127,19 @@ case ,${enable_languages}, in
     esac
     ;;
   *)
-    noconfigdirs="$noconfigdirs target-liboffloadmic target-libitm target-libsanitizer target-libvtv"
+    noconfigdirs="$noconfigdirs target-libitm target-libsanitizer target-libvtv"
     ;;
 esac
+
+# If gcc/ is not in the source tree then we'll not be building a
+# target compiler, assume in that case we don't want to build any
+# target libraries or tools.
+#
+# This was added primarily for the benefit for binutils-gdb who reuse
+# this configure script, but don't always have target tools available.
+if test ! -d ${srcdir}/gcc; then
+   skipdirs="${skipdirs} ${target_configdirs}"
+fi
 
 # Remove the entries in $skipdirs and $noconfigdirs from $configdirs,
 # $build_configdirs and $target_configdirs.
@@ -8804,13 +9226,18 @@ fi
 
 # Sometimes we have special requirements for the host libiberty.
 extra_host_libiberty_configure_flags=
-extra_host_zlib_configure_flags=
 case " $configdirs " in
-  *" lto-plugin "* | *" libcc1 "*)
+  *" lto-plugin "* | *" libcc1 "* | *" gdbserver "*)
     # When these are to be built as shared libraries, the same applies to
     # libiberty.
     extra_host_libiberty_configure_flags=--enable-shared
     ;;
+esac
+
+
+# Sometimes we have special requirements for the host zlib.
+extra_host_zlib_configure_flags=
+case " $configdirs " in
   *" bfd "*)
     # When bfd is to be built as a shared library, the same applies to
     # zlib.
@@ -8819,7 +9246,6 @@ case " $configdirs " in
     fi
     ;;
 esac
-
 
 
 # Produce a warning message for the subdirs we can't configure.
@@ -9337,6 +9763,16 @@ if echo " ${target_configdirs} " | grep " libvtv " > /dev/null 2>&1 &&
   bootstrap_target_libs=${bootstrap_target_libs}target-libvtv,
 fi
 
+# If we are building libatomic and the list of enabled languages includes the
+# D frontend, bootstrap it.
+if echo " ${target_configdirs} " | grep " libatomic " > /dev/null 2>&1; then
+  case ,${enable_languages}, in
+    *,d,*)
+      bootstrap_target_libs=${bootstrap_target_libs}target-libatomic,
+      ;;
+  esac
+fi
+
 # Determine whether gdb needs tk/tcl or not.
 # Use 'maybe' since enable_gdbtk might be true even if tk isn't available
 # and in that case we want gdb to be built without tk.  Ugh!
@@ -9374,6 +9810,9 @@ case " ${configdirs} " in
     ;;
   *\ gdbserver\ *)
     configdirs="${configdirs} gnulib gdbsupport"
+    ;;
+  *\ sim\ *)
+    configdirs="${configdirs} gnulib"
     ;;
 esac
 
@@ -9465,6 +9904,12 @@ extrasub_target="$extrasub_target
 /^@if /,/^@endif /d
 /^@unless /d
 /^@endunless /d"
+
+if test "$enable_pgo_build" != "no"; then
+  extrasub_build="$extrasub_build
+/^@if pgo-build\$/d
+/^@endif pgo-build\$/d"
+fi
 
 # Create the serialization dependencies.  This uses a temporary file.
 
@@ -9831,6 +10276,7 @@ esac
 # our build compiler if desired.
 if test x"${build}" = x"${host}" ; then
   CFLAGS_FOR_BUILD=${CFLAGS_FOR_BUILD-${CFLAGS}}
+  CPPFLAGS_FOR_BUILD=${CPPFLAGS_FOR_BUILD-${CPPFLAGS}}
   CXXFLAGS_FOR_BUILD=${CXXFLAGS_FOR_BUILD-${CXXFLAGS}}
   LDFLAGS_FOR_BUILD=${LDFLAGS_FOR_BUILD-${LDFLAGS}}
 fi
@@ -9854,6 +10300,17 @@ fi
 case "${target}" in
   mep*)
     FLAGS_FOR_TARGET="$FLAGS_FOR_TARGET -mlibrary"
+    ;;
+  # The VxWorks support for shared libraries is getting in
+  # incrementally.  Make sure it doesn't get activated implicitly:
+  *vxworks*)
+    if test "${enable_shared-unset}" = unset ; then
+      enable_shared=no
+      # So the build of libraries knows ...
+      target_configargs="${target_configargs} --disable-shared"
+      # So gcc knows ...
+      host_configargs="${host_configargs} --disable-shared"
+    fi
     ;;
 esac
 
@@ -12430,6 +12887,8 @@ fi
 
 
 
+
+
 # Target tools.
 
 # Check whether --with-build-time-tools was given.
@@ -13406,6 +13865,167 @@ if test -z "$ac_cv_prog_GDC_FOR_TARGET" ; then
   fi
 else
   GDC_FOR_TARGET="$ac_cv_prog_GDC_FOR_TARGET"
+fi
+
+
+
+if test -n "$GM2_FOR_TARGET"; then
+  ac_cv_prog_GM2_FOR_TARGET=$GM2_FOR_TARGET
+elif test -n "$ac_cv_prog_GM2_FOR_TARGET"; then
+  GM2_FOR_TARGET=$ac_cv_prog_GM2_FOR_TARGET
+fi
+
+if test -n "$ac_cv_prog_GM2_FOR_TARGET"; then
+  for ncn_progname in gm2; do
+    # Extract the first word of "${ncn_progname}", so it can be a program name with args.
+set dummy ${ncn_progname}; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_prog_GM2_FOR_TARGET+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test -n "$GM2_FOR_TARGET"; then
+  ac_cv_prog_GM2_FOR_TARGET="$GM2_FOR_TARGET" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_prog_GM2_FOR_TARGET="${ncn_progname}"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+fi
+fi
+GM2_FOR_TARGET=$ac_cv_prog_GM2_FOR_TARGET
+if test -n "$GM2_FOR_TARGET"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $GM2_FOR_TARGET" >&5
+$as_echo "$GM2_FOR_TARGET" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+  done
+fi
+
+if test -z "$ac_cv_prog_GM2_FOR_TARGET" && test -n "$with_build_time_tools"; then
+  for ncn_progname in gm2; do
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ${ncn_progname} in $with_build_time_tools" >&5
+$as_echo_n "checking for ${ncn_progname} in $with_build_time_tools... " >&6; }
+    if test -x $with_build_time_tools/${ncn_progname}; then
+      ac_cv_prog_GM2_FOR_TARGET=$with_build_time_tools/${ncn_progname}
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+      break
+    else
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+    fi
+  done
+fi
+
+if test -z "$ac_cv_prog_GM2_FOR_TARGET"; then
+  for ncn_progname in gm2; do
+    if test -n "$ncn_target_tool_prefix"; then
+      # Extract the first word of "${ncn_target_tool_prefix}${ncn_progname}", so it can be a program name with args.
+set dummy ${ncn_target_tool_prefix}${ncn_progname}; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_prog_GM2_FOR_TARGET+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test -n "$GM2_FOR_TARGET"; then
+  ac_cv_prog_GM2_FOR_TARGET="$GM2_FOR_TARGET" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_prog_GM2_FOR_TARGET="${ncn_target_tool_prefix}${ncn_progname}"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+fi
+fi
+GM2_FOR_TARGET=$ac_cv_prog_GM2_FOR_TARGET
+if test -n "$GM2_FOR_TARGET"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $GM2_FOR_TARGET" >&5
+$as_echo "$GM2_FOR_TARGET" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+    fi
+    if test -z "$ac_cv_prog_GM2_FOR_TARGET" && test $build = $target ; then
+      # Extract the first word of "${ncn_progname}", so it can be a program name with args.
+set dummy ${ncn_progname}; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_prog_GM2_FOR_TARGET+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  if test -n "$GM2_FOR_TARGET"; then
+  ac_cv_prog_GM2_FOR_TARGET="$GM2_FOR_TARGET" # Let the user override the test.
+else
+as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_prog_GM2_FOR_TARGET="${ncn_progname}"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+fi
+fi
+GM2_FOR_TARGET=$ac_cv_prog_GM2_FOR_TARGET
+if test -n "$GM2_FOR_TARGET"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $GM2_FOR_TARGET" >&5
+$as_echo "$GM2_FOR_TARGET" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+    fi
+    test -n "$ac_cv_prog_GM2_FOR_TARGET" && break
+  done
+fi
+
+if test -z "$ac_cv_prog_GM2_FOR_TARGET" ; then
+  set dummy gm2
+  if test $build = $target ; then
+    GM2_FOR_TARGET="$2"
+  else
+    GM2_FOR_TARGET="${ncn_target_tool_prefix}$2"
+  fi
+else
+  GM2_FOR_TARGET="$ac_cv_prog_GM2_FOR_TARGET"
 fi
 
 
@@ -17342,6 +17962,51 @@ $as_echo "pre-installed" >&6; }
   fi
 fi
 
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking where to find the target gm2" >&5
+$as_echo_n "checking where to find the target gm2... " >&6; }
+if test "x${build}" != "x${host}" ; then
+  if expr "x$GM2_FOR_TARGET" : "x/" > /dev/null; then
+    # We already found the complete path
+    ac_dir=`dirname $GM2_FOR_TARGET`
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: pre-installed in $ac_dir" >&5
+$as_echo "pre-installed in $ac_dir" >&6; }
+  else
+    # Canadian cross, just use what we found
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: pre-installed" >&5
+$as_echo "pre-installed" >&6; }
+  fi
+else
+  ok=yes
+  case " ${configdirs} " in
+    *" gcc "*) ;;
+    *) ok=no ;;
+  esac
+  case ,${enable_languages}, in
+    *,m2,*) ;;
+    *) ok=no ;;
+  esac
+  if test $ok = yes; then
+    # An in-tree tool is available and we can use it
+    GM2_FOR_TARGET='$$r/$(HOST_SUBDIR)/gcc/gm2 -B$$r/$(HOST_SUBDIR)/gcc/'
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: just compiled" >&5
+$as_echo "just compiled" >&6; }
+  elif expr "x$GM2_FOR_TARGET" : "x/" > /dev/null; then
+    # We already found the complete path
+    ac_dir=`dirname $GM2_FOR_TARGET`
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: pre-installed in $ac_dir" >&5
+$as_echo "pre-installed in $ac_dir" >&6; }
+  elif test "x$target" = "x$host"; then
+    # We can use an host tool
+    GM2_FOR_TARGET='$(GM2)'
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: host tool" >&5
+$as_echo "host tool" >&6; }
+  else
+    # We need a cross tool
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: pre-installed" >&5
+$as_echo "pre-installed" >&6; }
+  fi
+fi
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking where to find the target ld" >&5
 $as_echo_n "checking where to find the target ld... " >&6; }
 if test "x${build}" != "x${host}" ; then
@@ -17903,9 +18568,11 @@ fi
 # Specify what files to not compare during bootstrap.
 
 compare_exclusions="gcc/cc*-checksum\$(objext) | gcc/ada/*tools/*"
+compare_exclusions="$compare_exclusions | gcc/m2/gm2-compiler-boot/M2Version*"
+compare_exclusions="$compare_exclusions | gcc/m2/gm2-compiler-boot/SYSTEM*"
+compare_exclusions="$compare_exclusions | gcc/m2/gm2version*"
 case "$target" in
   hppa*64*-*-hpux*) ;;
-  hppa*-*-hpux*) compare_exclusions="$compare_exclusions | */libgcc/lib2funcs* | gcc/function-tests.o" ;;
   powerpc*-ibm-aix*) compare_exclusions="$compare_exclusions | *libgomp*\$(objext)" ;;
 esac
 

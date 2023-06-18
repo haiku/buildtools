@@ -1,4 +1,4 @@
-/* Copyright (C) 2015-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2015-2023 Free Software Foundation, Inc.
    Contributed by Alexander Monakov <amonakov@ispras.ru>
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -79,9 +79,15 @@ extern void gomp_team_barrier_wait_end (gomp_barrier_t *,
 extern bool gomp_team_barrier_wait_cancel (gomp_barrier_t *);
 extern bool gomp_team_barrier_wait_cancel_end (gomp_barrier_t *,
 					       gomp_barrier_state_t);
-extern void gomp_team_barrier_wake (gomp_barrier_t *, int);
 struct gomp_team;
 extern void gomp_team_barrier_cancel (struct gomp_team *);
+
+static inline void
+gomp_team_barrier_wake (gomp_barrier_t *bar, int count)
+{
+  /* We never "wake up" threads on nvptx.  Threads wait at barrier
+     instructions till barrier fullfilled.  Do nothing here.  */
+}
 
 static inline gomp_barrier_state_t
 gomp_barrier_wait_start (gomp_barrier_t *bar)

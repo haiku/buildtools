@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -27,18 +27,20 @@ pragma Style_Checks (All_Checks);
 --  Subprogram ordering not enforced in this unit
 --  (because of some logical groupings).
 
-with Atree;    use Atree;
-with Csets;    use Csets;
-with Einfo;    use Einfo;
-with Nlists;   use Nlists;
-with Opt;      use Opt;
-with Output;   use Output;
-with Sinfo;    use Sinfo;
-with Sinput;   use Sinput;
-with Stand;    use Stand;
-with Stringt;  use Stringt;
-with Uname;    use Uname;
-with Widechar; use Widechar;
+with Atree;          use Atree;
+with Csets;          use Csets;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Nlists;         use Nlists;
+with Opt;            use Opt;
+with Output;         use Output;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinput;         use Sinput;
+with Stand;          use Stand;
+with Stringt;        use Stringt;
+with Uname;          use Uname;
+with Widechar;       use Widechar;
 
 package body Lib is
 
@@ -126,12 +128,12 @@ package body Lib is
       return Units.Table (U).Is_Predefined_Renaming;
    end Is_Predefined_Renaming;
 
-   function Is_Internal_Unit       (U : Unit_Number_Type) return Boolean is
+   function Is_Internal_Unit (U : Unit_Number_Type) return Boolean is
    begin
       return Units.Table (U).Is_Internal_Unit;
    end Is_Internal_Unit;
 
-   function Is_Predefined_Unit     (U : Unit_Number_Type) return Boolean is
+   function Is_Predefined_Unit (U : Unit_Number_Type) return Boolean is
    begin
       return Units.Table (U).Is_Predefined_Unit;
    end Is_Predefined_Unit;
@@ -318,15 +320,13 @@ package body Lib is
    begin
       if S1 = No_Location or else S2 = No_Location then
          return No;
+      end if;
 
-      elsif S1 = Standard_Location then
-         if S2 = Standard_Location then
-            return Yes_Same;
-         else
-            return No;
-         end if;
+      if S1 = S2 then
+         return Yes_Same;
+      end if;
 
-      elsif S2 = Standard_Location then
+      if S1 = Standard_Location or else S2 = Standard_Location then
          return No;
       end if;
 
@@ -480,18 +480,12 @@ package body Lib is
          --  body of the same unit. The location in the spec is considered
          --  earlier.
 
-         if Nkind (Unit1) = N_Subprogram_Body
-              or else
-            Nkind (Unit1) = N_Package_Body
-         then
+         if Nkind (Unit1) in N_Subprogram_Body | N_Package_Body then
             if Library_Unit (Cunit (Unum1)) = Cunit (Unum2) then
                return Yes_After;
             end if;
 
-         elsif Nkind (Unit2) = N_Subprogram_Body
-                 or else
-               Nkind (Unit2) = N_Package_Body
-         then
+         elsif Nkind (Unit2) in N_Subprogram_Body | N_Package_Body then
             if Library_Unit (Cunit (Unum2)) = Cunit (Unum1) then
                return Yes_Before;
             end if;
@@ -509,8 +503,8 @@ package body Lib is
 
          if Counter > Max_Iterations then
 
-            --  ??? Not quite right, but return a value to be able to generate
-            --  SCIL files and hope for the best.
+            --  In CodePeer_Mode, return a value to be able to generate SCIL
+            --  files and hope for the best.
 
             if CodePeer_Mode then
                return No;
@@ -845,53 +839,36 @@ package body Lib is
      (N : Node_Or_Entity_Id) return Boolean
    is
    begin
-      if Sloc (N) = Standard_Location then
-         return False;
-
-      elsif Sloc (N) = No_Location then
-         return False;
-
       --  Special case Itypes to test the Sloc of the associated node. The
       --  reason we do this is for possible calls from gigi after -gnatD
       --  processing is complete in sprint. This processing updates the
       --  sloc fields of all nodes in the tree, but itypes are not in the
       --  tree so their slocs do not get updated.
 
-      elsif Nkind (N) = N_Defining_Identifier
-        and then Is_Itype (N)
-      then
+      if Nkind (N) = N_Defining_Identifier and then Is_Itype (N) then
          return In_Extended_Main_Code_Unit (Associated_Node_For_Itype (N));
-
-      --  Otherwise see if we are in the main unit
-
-      elsif Get_Code_Unit (Sloc (N)) = Get_Code_Unit (Cunit (Main_Unit)) then
-         return True;
-
-      --  Node may be in spec (or subunit etc) of main unit
-
-      else
-         return In_Same_Extended_Unit (N, Cunit (Main_Unit));
       end if;
+
+      return In_Extended_Main_Code_Unit (Sloc (N));
    end In_Extended_Main_Code_Unit;
 
    function In_Extended_Main_Code_Unit (Loc : Source_Ptr) return Boolean is
    begin
-      if Loc = Standard_Location then
-         return False;
+      --  Special value cases
 
-      elsif Loc = No_Location then
+      if Loc in No_Location | Standard_Location then
          return False;
+      end if;
 
       --  Otherwise see if we are in the main unit
 
-      elsif Get_Code_Unit (Loc) = Get_Code_Unit (Cunit (Main_Unit)) then
+      if Get_Code_Unit (Loc) = Get_Code_Unit (Cunit (Main_Unit)) then
          return True;
+      end if;
 
       --  Location may be in spec (or subunit etc) of main unit
 
-      else
-         return In_Same_Extended_Unit (Loc, Sloc (Cunit (Main_Unit)));
-      end if;
+      return In_Same_Extended_Unit (Loc, Sloc (Cunit (Main_Unit)));
    end In_Extended_Main_Code_Unit;
 
    ----------------------------------
@@ -901,69 +878,42 @@ package body Lib is
    function In_Extended_Main_Source_Unit
      (N : Node_Or_Entity_Id) return Boolean
    is
-      Nloc : constant Source_Ptr := Sloc (N);
-      Mloc : constant Source_Ptr := Sloc (Cunit (Main_Unit));
-
    begin
-      --  If parsing, then use the global flag to indicate result
-
-      if Compiler_State = Parsing then
-         return Parsing_Main_Extended_Source;
-
-      --  Special value cases
-
-      elsif Nloc = Standard_Location then
-         return False;
-
-      elsif Nloc = No_Location then
-         return False;
-
       --  Special case Itypes to test the Sloc of the associated node. The
       --  reason we do this is for possible calls from gigi after -gnatD
       --  processing is complete in sprint. This processing updates the
       --  sloc fields of all nodes in the tree, but itypes are not in the
       --  tree so their slocs do not get updated.
 
-      elsif Nkind (N) = N_Defining_Identifier
-        and then Is_Itype (N)
-      then
+      if Nkind (N) = N_Defining_Identifier and then Is_Itype (N) then
+         pragma Assert (Compiler_State /= Parsing);
          return In_Extended_Main_Source_Unit (Associated_Node_For_Itype (N));
-
-      --  Otherwise compare original locations to see if in same unit
-
-      else
-         return
-           In_Same_Extended_Unit
-             (Original_Location (Nloc), Original_Location (Mloc));
       end if;
+
+      return In_Extended_Main_Source_Unit (Sloc (N));
    end In_Extended_Main_Source_Unit;
 
    function In_Extended_Main_Source_Unit
      (Loc : Source_Ptr) return Boolean
    is
-      Mloc : constant Source_Ptr := Sloc (Cunit (Main_Unit));
-
    begin
       --  If parsing, then use the global flag to indicate result
 
       if Compiler_State = Parsing then
          return Parsing_Main_Extended_Source;
+      end if;
 
       --  Special value cases
 
-      elsif Loc = Standard_Location then
+      if Loc in No_Location | Standard_Location then
          return False;
-
-      elsif Loc = No_Location then
-         return False;
-
-      --  Otherwise compare original locations to see if in same unit
-
-      else
-         return
-           In_Same_Extended_Unit
-             (Original_Location (Loc), Original_Location (Mloc));
       end if;
+
+      --  Otherwise compare original locations
+
+      return In_Same_Extended_Unit
+        (Original_Location (Loc),
+         Original_Location (Sloc (Cunit (Main_Unit))));
    end In_Extended_Main_Source_Unit;
 
    ----------------------
@@ -995,6 +945,15 @@ package body Lib is
    begin
       return Is_Predefined_Renaming (Unit);
    end In_Predefined_Renaming;
+
+   ---------
+   -- ipu --
+   ---------
+
+   function ipu (N : Node_Or_Entity_Id) return Boolean is
+   begin
+      return In_Predefined_Unit (N);
+   end ipu;
 
    ------------------------
    -- In_Predefined_Unit --
@@ -1178,10 +1137,9 @@ package body Lib is
 
    procedure Remove_Unit (U : Unit_Number_Type) is
    begin
-      if U = Units.Last then
-         Unit_Names.Set (Unit_Name (U), No_Unit);
-         Units.Decrement_Last;
-      end if;
+      pragma Assert (U = Units.Last);
+      Unit_Names.Set (Unit_Name (U), No_Unit);
+      Units.Decrement_Last;
    end Remove_Unit;
 
    ----------------------------------
@@ -1266,10 +1224,16 @@ package body Lib is
    -- Synchronize_Serial_Number --
    -------------------------------
 
-   procedure Synchronize_Serial_Number is
+   procedure Synchronize_Serial_Number (SN : Nat) is
       TSN : Int renames Units.Table (Current_Sem_Unit).Serial_Number;
    begin
-      TSN := TSN + 1;
+      --  We should not be trying to synchronize downward
+
+      pragma Assert (TSN <= SN);
+
+      if TSN < SN then
+         TSN := SN;
+      end if;
    end Synchronize_Serial_Number;
 
    --------------------

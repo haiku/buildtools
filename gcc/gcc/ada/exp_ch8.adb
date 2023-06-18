@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,26 +23,30 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Einfo;    use Einfo;
-with Exp_Ch3;  use Exp_Ch3;
-with Exp_Ch4;  use Exp_Ch4;
-with Exp_Ch6;  use Exp_Ch6;
-with Exp_Dbug; use Exp_Dbug;
-with Exp_Util; use Exp_Util;
-with Freeze;   use Freeze;
-with Namet;    use Namet;
-with Nmake;    use Nmake;
-with Nlists;   use Nlists;
-with Opt;      use Opt;
-with Sem;      use Sem;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Ch8;  use Sem_Ch8;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
-with Snames;   use Snames;
-with Stand;    use Stand;
-with Tbuild;   use Tbuild;
+with Atree;          use Atree;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Exp_Ch3;        use Exp_Ch3;
+with Exp_Ch4;        use Exp_Ch4;
+with Exp_Ch6;        use Exp_Ch6;
+with Exp_Dbug;       use Exp_Dbug;
+with Exp_Util;       use Exp_Util;
+with Freeze;         use Freeze;
+with Namet;          use Namet;
+with Nmake;          use Nmake;
+with Nlists;         use Nlists;
+with Opt;            use Opt;
+with Sem;            use Sem;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Ch8;        use Sem_Ch8;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Snames;         use Snames;
+with Stand;          use Stand;
+with Tbuild;         use Tbuild;
 
 package body Exp_Ch8 is
 
@@ -72,7 +76,7 @@ package body Exp_Ch8 is
    --  clause applies (that can specify an arbitrary bit boundary), or where
    --  the enclosing record itself has a non-standard representation.
 
-   --  In Ada 2020, a third case arises when the renamed object is a nonatomic
+   --  In Ada 2022, a third case arises when the renamed object is a nonatomic
    --  subcomponent of an atomic object, because reads of or writes to it must
    --  access the enclosing atomic object. That's also the case for an object
    --  subject to the Volatile_Full_Access GNAT aspect/pragma in any language
@@ -291,11 +295,11 @@ package body Exp_Ch8 is
          Set_Alias (Id, Empty);
          Set_Has_Completion (Id, False);
          Rewrite (N,
-           Make_Subprogram_Declaration (Sloc (N),
+           Make_Subprogram_Declaration (Loc,
              Specification => Specification (N)));
          Set_Has_Delayed_Freeze (Id);
 
-         Body_Id := Make_Defining_Identifier (Sloc (N), Chars (Id));
+         Body_Id := Make_Defining_Identifier (Loc, Chars (Id));
          Set_Debug_Info_Needed (Body_Id);
 
          if Has_Variant_Part (Typ) then
@@ -322,19 +326,16 @@ package body Exp_Ch8 is
                     Result_Definition        =>
                       New_Occurrence_Of (Standard_Boolean, Loc)),
                 Declarations               => Empty_List,
-                Handled_Statement_Sequence => Empty);
-
-            Set_Handled_Statement_Sequence (Decl,
-              Make_Handled_Sequence_Of_Statements (Loc,
-                Statements => New_List (
-                  Make_Simple_Return_Statement (Loc,
-                    Expression =>
-                      Expand_Record_Equality
-                        (Id,
-                         Typ    => Typ,
-                         Lhs    => Make_Identifier (Loc, Chars (Left)),
-                         Rhs    => Make_Identifier (Loc, Chars (Right)),
-                         Bodies => Declarations (Decl))))));
+                Handled_Statement_Sequence =>
+                  Make_Handled_Sequence_Of_Statements (Loc,
+                    Statements => New_List (
+                      Make_Simple_Return_Statement (Loc,
+                        Expression =>
+                          Expand_Record_Equality
+                            (Id,
+                             Typ => Typ,
+                             Lhs => Make_Identifier (Loc, Chars (Left)),
+                             Rhs => Make_Identifier (Loc, Chars (Right)))))));
          end if;
 
          return Decl;
@@ -371,7 +372,7 @@ package body Exp_Ch8 is
         and then Scope (Entity (Nam)) = Standard_Standard
       then
          declare
-            Typ  : constant Entity_Id := Etype (First_Formal (Id));
+            Typ : constant Entity_Id := Etype (First_Formal (Id));
 
          begin
             --  Check whether this is a renaming of a predefined equality on an

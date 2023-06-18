@@ -1,5 +1,5 @@
 /* Definitions for Intel 386 systems using GNU userspace.
-   Copyright (C) 1994-2021 Free Software Foundation, Inc.
+   Copyright (C) 1994-2023 Free Software Foundation, Inc.
    Contributed by Eric Youngdale.
    Modified for stabs-in-ELF by H.J. Lu.
 
@@ -26,9 +26,9 @@ along with GCC; see the file COPYING3.  If not see
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START "#"
 
-#undef DBX_REGISTER_NUMBER
-#define DBX_REGISTER_NUMBER(n) \
-  (TARGET_64BIT ? dbx64_register_map[n] : svr4_dbx_register_map[n])
+#undef DEBUGGER_REGNO
+#define DEBUGGER_REGNO(n) \
+  (TARGET_64BIT ? debugger64_register_map[n] : svr4_debugger_register_map[n])
 
 /* Output assembler code to FILE to call the profiler.
    To the best of my knowledge, no GNU userspace libc has required the label
@@ -92,18 +92,6 @@ along with GCC; see the file COPYING3.  If not see
    bytes if it is within MAX_SKIP bytes.  */
 
 #define SUBALIGN_LOG 3
-
-#ifdef HAVE_GAS_MAX_SKIP_P2ALIGN
-#define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE,LOG,MAX_SKIP)			\
-  do {									\
-    if ((LOG) != 0) {							\
-      if ((MAX_SKIP) == 0 || (MAX_SKIP) >= (1 << (LOG)) - 1)		\
-	fprintf ((FILE), "\t.p2align %d\n", (LOG));			\
-      else								\
-	fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP));	\
-    }									\
-  } while (0)
-#endif
 
 /* Handle special EH pointer encodings.  Absolute, pc-relative, and
    indirect are handled automatically.  */

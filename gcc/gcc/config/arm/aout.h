@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for ARM with a.out
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
+   Copyright (C) 1995-2023 Free Software Foundation, Inc.
    Contributed by Richard Earnshaw (rearnsha@armltd.co.uk).
    
    This file is part of GCC.
@@ -74,7 +74,8 @@
   "wr8",   "wr9",   "wr10",  "wr11",				\
   "wr12",  "wr13",  "wr14",  "wr15",				\
   "wcgr0", "wcgr1", "wcgr2", "wcgr3",				\
-  "cc", "vfpcc", "sfp", "afp", "apsrq", "apsrge", "p0"		\
+  "cc", "vfpcc", "sfp", "afp", "apsrq", "apsrge", "p0",		\
+  "ra_auth_code"						\
 }
 #endif
 
@@ -143,15 +144,6 @@
 
 #ifndef NO_DOLLAR_IN_LABEL
 #define NO_DOLLAR_IN_LABEL 1
-#endif
-
-/* Generate DBX debugging information.  riscix.h will undefine this because
-   the native assembler does not support stabs.  */
-#define DBX_DEBUGGING_INFO 1
-
-/* Acorn dbx moans about continuation chars, so don't use any.  */
-#ifndef DBX_CONTIN_LENGTH
-#define DBX_CONTIN_LENGTH  0
 #endif
 
 /* Output a function label definition.  */
@@ -257,7 +249,7 @@
 #define ASM_OUTPUT_ALIGN(STREAM, POWER)			\
   do							\
     {							\
-      register int amount = 1 << (POWER);		\
+      int amount = 1 << (POWER);			\
 							\
       if (amount == 2)					\
 	fprintf (STREAM, "\t.even\n");			\

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -335,12 +335,12 @@ package Stand is
    --  This is a type used to represent the Etype of exceptions
 
    Standard_A_String : Entity_Id;
-   --  An access to String type used for building elements of tables
-   --  carrying the enumeration literal names.
+   --  An access to String type used for building elements of tables carrying
+   --  the enumeration literal names.
 
    Standard_A_Char : Entity_Id;
-   --  Access to character, used as a component of the exception type to denote
-   --  a thin pointer component.
+   --  An access to character type, used as a component of the exception type
+   --  to denote a thin pointer component. Needed for non-GCC back-ends.
 
    Standard_Debug_Renaming_Type : Entity_Id;
    --  A zero-size subtype of Integer, used as the type of variables used to
@@ -374,9 +374,6 @@ package Stand is
    --  candidate interpretations has been examined. If after examining all of
    --  them the type is still Any_Type, the node has no possible interpretation
    --  and an error can be emitted (and Any_Type will be propagated upwards).
-
-   Any_Access : Entity_Id;
-   --  Used to resolve the overloaded literal NULL
 
    Any_Array : Entity_Id;
    --  Used to represent some unknown array type
@@ -450,6 +447,9 @@ package Stand is
    --  two fixed point numbers, and has no specified bounds (since, unlike
    --  universal integer and universal real, it is never used for runtime
    --  calculations).
+
+   Universal_Access : Entity_Id;
+   --  Entity for universal access type. It is only used for the literal null
 
    Standard_Integer_8   : Entity_Id;
    Standard_Integer_16  : Entity_Id;

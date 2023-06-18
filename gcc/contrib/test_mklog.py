@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020 Free Software Foundation, Inc.
+# Copyright (C) 2020-2023 Free Software Foundation, Inc.
 #
 # This file is part of GCC.
 #
@@ -155,7 +155,7 @@ index aab79492357..f0df1002488 100644
 +
 +
  /* Interprocedural Identical Code Folding pass
-    Copyright (C) 2014-2020 Free Software Foundation, Inc.
+    Copyright (C) 2014-2023 Free Software Foundation, Inc.
  
 diff --git a/gcc/testsuite/gcc.dg/pr32374.c b/gcc/testsuite/gcc.dg/pr32374.c
 deleted file mode 100644
@@ -222,7 +222,7 @@ index f062e48071f..fd3c7ca8cf3 100644
 +
 +
  /* Output variables, constants and external declarations, for GNU compiler.
-    Copyright (C) 1987-2020 Free Software Foundation, Inc.
+    Copyright (C) 1987-2023 Free Software Foundation, Inc.
  
 diff --git a/libssp/gets-chk.c b/libssp/gets-chk.c
 index 4ad78c1f77b..6687b368038 100644
@@ -443,6 +443,27 @@ gcc/ChangeLog:
 
 '''
 
+PATCH10 = '''\
+diff --git a/libgomp/doc/the-libgomp-abi/implementing-firstprivate-lastprivate-copyin-and-copyprivate-clauses.rst b/libgomp/doc/the-libgomp-abi/implementing-firstprivate-lastprivate-copyin-and-copyprivate-clauses.rst
+new file mode 100644
+index 00000000000..ad3c6d856fc
+--- /dev/null
++++ b/libgomp/doc/the-libgomp-abi/implementing-firstprivate-lastprivate-copyin-and-copyprivate-clauses.rst
+@@ -0,0 +1,3 @@
++
++
++
+
+'''
+
+EXPECTED10 = '''\
+libgomp/ChangeLog:
+
+	* doc/the-libgomp-abi/implementing-firstprivate-lastprivate-copyin-and-copyprivate-clauses.rst:
+	New file.
+
+'''
+
 class TestMklog(unittest.TestCase):
     def test_macro_definition(self):
         changelog = generate_changelog(PATCH1)
@@ -485,3 +506,7 @@ class TestMklog(unittest.TestCase):
     def test_define_macro_parsing(self):
         changelog = generate_changelog(PATCH9)
         assert changelog == EXPECTED9
+
+    def test_long_filenames(self):
+        changelog = generate_changelog(PATCH10)
+        assert changelog == EXPECTED10

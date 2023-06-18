@@ -4,11 +4,10 @@
  * Translated from MinGW API for MS-Windows 3.10
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_basetyps.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_basetyps.d)
  */
 module core.sys.windows.basetyps;
 version (Windows):
-@system:
 
 import core.sys.windows.windef, core.sys.windows.basetsd;
 

@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_rpcdce.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_rpcdce.d)
  */
 module core.sys.windows.rpcdce;
 version (Windows):
-@system:
 
 version (ANSI) {} else version = Unicode;
 pragma(lib, "Rpcrt4");

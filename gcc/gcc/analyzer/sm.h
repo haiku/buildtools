@@ -1,5 +1,5 @@
 /* Modeling API uses and misuses via state machines.
-   Copyright (C) 2019-2021 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -29,7 +29,8 @@ class state_machine;
 class sm_context;
 class pending_diagnostic;
 
-extern bool any_pointer_p (tree var);
+extern bool any_pointer_p (tree expr);
+extern bool any_pointer_p (const svalue *sval);
 
 /* An abstract base class for a state machine describing an API.
    Manages a set of state objects, and has various virtual functions
@@ -68,6 +69,15 @@ public:
      within a heap-allocated struct.  */
   virtual bool inherited_state_p () const = 0;
 
+  /* A vfunc for more general handling of inheritance.  */
+  virtual state_t
+  alt_get_inherited_state (const sm_state_map &,
+			   const svalue *,
+			   const extrinsic_state &) const
+  {
+    return NULL;
+  }
+
   virtual state_machine::state_t get_default_state (const svalue *) const
   {
     return m_start;
@@ -89,10 +99,29 @@ public:
   {
   }
 
-  virtual void on_condition (sm_context *sm_ctxt,
-			     const supernode *node,
-			     const gimple *stmt,
-			     tree lhs, enum tree_code op, tree rhs) const = 0;
+  virtual void on_condition (sm_context *sm_ctxt ATTRIBUTE_UNUSED,
+			     const supernode *node ATTRIBUTE_UNUSED,
+			     const gimple *stmt ATTRIBUTE_UNUSED,
+			     const svalue *lhs ATTRIBUTE_UNUSED,
+			     enum tree_code op ATTRIBUTE_UNUSED,
+			     const svalue *rhs ATTRIBUTE_UNUSED) const
+  {
+  }
+
+  virtual void
+  on_bounded_ranges (sm_context *sm_ctxt ATTRIBUTE_UNUSED,
+		     const supernode *node ATTRIBUTE_UNUSED,
+		     const gimple *stmt ATTRIBUTE_UNUSED,
+		     const svalue &sval ATTRIBUTE_UNUSED,
+		     const bounded_ranges &ranges ATTRIBUTE_UNUSED) const
+  {
+  }
+
+  virtual void
+  on_pop_frame (sm_state_map *smap ATTRIBUTE_UNUSED,
+		const frame_region *frame_reg ATTRIBUTE_UNUSED) const
+  {
+  }
 
   /* Return true if it safe to discard the given state (to help
      when simplifying state objects).
@@ -100,10 +129,8 @@ public:
   virtual bool can_purge_p (state_t s) const = 0;
 
   /* Called when VAR leaks (and !can_purge_p).  */
-  virtual pending_diagnostic *on_leak (tree var ATTRIBUTE_UNUSED) const
-  {
-    return NULL;
-  }
+  virtual std::unique_ptr<pending_diagnostic>
+  on_leak (tree var ATTRIBUTE_UNUSED) const;
 
   /* Return true if S should be reset to "start" for values passed (or reachable
      from) calls to unknown functions.  IS_MUTABLE is true for pointers as
@@ -116,6 +143,31 @@ public:
 						  bool is_mutable) const
   {
     return is_mutable;
+  }
+
+  /* Attempt to get a state for the merger of STATE_A and STATE_B,
+     or return NULL if merging shouldn't occur, so that differences
+     between sm-state will lead to separate exploded nodes.
+
+     Most state machines will only merge equal states, but can
+     override maybe_get_merged_states_nonequal to support mergers
+     of certain non-equal states.  */
+  state_t maybe_get_merged_state (state_t state_a,
+				  state_t state_b) const
+  {
+    if (state_a == state_b)
+      return state_a;
+    return maybe_get_merged_states_nonequal (state_a, state_b);
+  }
+
+  /* Base implementation of hook for maybe_get_merged_state on non-equal
+     states.  */
+  virtual state_t
+  maybe_get_merged_states_nonequal (state_t state_a ATTRIBUTE_UNUSED,
+				    state_t state_b ATTRIBUTE_UNUSED) const
+  {
+    /* By default, non-equal sm states should inhibit merger of enodes.  */
+    return NULL;
   }
 
   void validate (state_t s) const;
@@ -182,11 +234,17 @@ public:
   /* Get the old state of VAR at STMT.  */
   virtual state_machine::state_t get_state (const gimple *stmt,
 					    tree var) = 0;
+  virtual state_machine::state_t get_state (const gimple *stmt,
+					    const svalue *) = 0;
   /* Set the next state of VAR to be TO, recording the "origin" of the
      state as ORIGIN.
      Use STMT for location information.  */
   virtual void set_next_state (const gimple *stmt,
 			       tree var,
+			       state_machine::state_t to,
+			       tree origin = NULL_TREE) = 0;
+  virtual void set_next_state (const gimple *stmt,
+			       const svalue *var,
 			       state_machine::state_t to,
 			       tree origin = NULL_TREE) = 0;
 
@@ -206,10 +264,26 @@ public:
       set_next_state (stmt, var, to, origin);
   }
 
+  void on_transition (const supernode *node ATTRIBUTE_UNUSED,
+		      const gimple *stmt,
+		      const svalue *var,
+		      state_machine::state_t from,
+		      state_machine::state_t to,
+		      tree origin = NULL_TREE)
+  {
+    state_machine::state_t current = get_state (stmt, var);
+    if (current == from)
+      set_next_state (stmt, var, to, origin);
+  }
+
   /* Called by state_machine in response to pattern matches:
      issue a diagnostic D using NODE and STMT for location information.  */
   virtual void warn (const supernode *node, const gimple *stmt,
-		     tree var, pending_diagnostic *d) = 0;
+		     tree var,
+		     std::unique_ptr<pending_diagnostic> d) = 0;
+  virtual void warn (const supernode *node, const gimple *stmt,
+		     const svalue *var,
+		     std::unique_ptr<pending_diagnostic> d) = 0;
 
   /* For use when generating trees when creating pending_diagnostics, so that
      rather than e.g.
@@ -220,6 +294,7 @@ public:
   {
     return expr;
   }
+  virtual tree get_diagnostic_tree (const svalue *) = 0;
 
   virtual state_machine::state_t get_global_state () const = 0;
   virtual void set_global_state (state_machine::state_t) = 0;
@@ -232,6 +307,19 @@ public:
      the LHS.
      Otherwise return NULL_TREE.  */
   virtual tree is_zero_assignment (const gimple *stmt) = 0;
+
+  virtual path_context *get_path_context () const
+  {
+    return NULL;
+  }
+
+  /* Are we handling an external function with unknown side effects?  */
+  virtual bool unknown_side_effects_p () const { return false; }
+
+  virtual const program_state *get_old_program_state () const = 0;
+  virtual const program_state *get_new_program_state () const = 0;
+
+  const region_model *get_old_region_model () const;
 
 protected:
   sm_context (int sm_idx, const state_machine &sm)
@@ -254,6 +342,8 @@ extern state_machine *make_taint_state_machine (logger *logger);
 extern state_machine *make_sensitive_state_machine (logger *logger);
 extern state_machine *make_signal_state_machine (logger *logger);
 extern state_machine *make_pattern_test_state_machine (logger *logger);
+extern state_machine *make_va_list_state_machine (logger *logger);
+extern state_machine *make_fd_state_machine (logger *logger);
 
 } // namespace ana
 

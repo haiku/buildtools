@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---            Copyright (C) 2006-2020, Free Software Foundation, Inc.       --
+--            Copyright (C) 2006-2023, Free Software Foundation, Inc.       --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -28,6 +28,17 @@
 -- Extensive contributions were provided by Ada Core Technologies Inc.      --
 --                                                                          --
 ------------------------------------------------------------------------------
+
+--  Preconditions, postconditions, ghost code, loop invariants and assertions
+--  in this unit are meant for analysis only, not for run-time checking, as it
+--  would be too costly otherwise. This is enforced by setting the assertion
+--  policy to Ignore.
+
+pragma Assertion_Policy (Pre            => Ignore,
+                         Post           => Ignore,
+                         Ghost          => Ignore,
+                         Loop_Invariant => Ignore,
+                         Assert         => Ignore);
 
 with System.Generic_Array_Operations; use System.Generic_Array_Operations;
 
@@ -891,7 +902,7 @@ package body Ada.Numerics.Generic_Complex_Arrays is
    function "-"
      (Left  : Real_Vector;
       Right : Complex_Vector) return Complex_Vector
-      renames Instantiations."-";
+     renames Instantiations."-";
 
    function "-"
      (Left  : Complex_Vector;
@@ -945,7 +956,7 @@ package body Ada.Numerics.Generic_Complex_Arrays is
    -----------
 
    function "abs" (Right : Complex_Vector) return Real'Base
-      renames Instantiations."abs";
+     renames Instantiations."abs";
 
    --------------
    -- Argument --

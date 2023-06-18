@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,33 +23,36 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Aspects;  use Aspects;
-with Atree;    use Atree;
-with Casing;   use Casing;
-with Debug;    use Debug;
-with Elists;   use Elists;
-with Errout;   use Errout;
-with Fname;    use Fname;
-with Lib;      use Lib;
-with Namet;    use Namet;
-with Namet.Sp; use Namet.Sp;
-with Nlists;   use Nlists;
-with Nmake;    use Nmake;
-with Opt;      use Opt;
-with Output;   use Output;
-with Par_SCO;  use Par_SCO;
-with Restrict; use Restrict;
-with Scans;    use Scans;
-with Scn;      use Scn;
-with Sem_Util; use Sem_Util;
-with Sinput;   use Sinput;
-with Sinput.L; use Sinput.L;
-with Sinfo;    use Sinfo;
-with Snames;   use Snames;
+with Aspects;        use Aspects;
+with Atree;          use Atree;
+with Casing;         use Casing;
+with Debug;          use Debug;
+with Elists;         use Elists;
+with Errout;         use Errout;
+with Fname;          use Fname;
+with Lib;            use Lib;
+with Namet;          use Namet;
+with Namet.Sp;       use Namet.Sp;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
+with Opt;            use Opt;
+with Output;         use Output;
+with Par_SCO;        use Par_SCO;
+with Restrict;       use Restrict;
+with Scans;          use Scans;
+with Scn;            use Scn;
+with Sem_Util;       use Sem_Util;
+with Sinput;         use Sinput;
+with Sinput.L;       use Sinput.L;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Snames;         use Snames;
+with Stringt;        use Stringt;
 with Style;
-with Stylesw;  use Stylesw;
+with Stylesw;        use Stylesw;
 with Table;
-with Tbuild;   use Tbuild;
+with Tbuild;         use Tbuild;
 
 ---------
 -- Par --
@@ -359,36 +362,29 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
 
    Expr_Form : Expr_Form_Type;
 
-   --  The following type is used for calls to P_Subprogram, P_Package, P_Task,
-   --  P_Protected to indicate which of several possibilities is acceptable.
+   --  The following type is used by P_Subprogram, P_Package, to indicate which
+   --  of several possibilities is acceptable.
 
    type Pf_Rec is record
-      Spcn : Boolean;                  -- True if specification OK
-      Decl : Boolean;                  -- True if declaration OK
-      Gins : Boolean;                  -- True if generic instantiation OK
-      Pbod : Boolean;                  -- True if proper body OK
-      Rnam : Boolean;                  -- True if renaming declaration OK
-      Stub : Boolean;                  -- True if body stub OK
-      Pexp : Boolean;                  -- True if parameterized expression OK
-      Fil2 : Boolean;                  -- Filler to fill to 8 bits
+      Spcn : Boolean; -- True if specification OK
+      Decl : Boolean; -- True if declaration OK
+      Gins : Boolean; -- True if generic instantiation OK
+      Pbod : Boolean; -- True if proper body OK
+      Rnam : Boolean; -- True if renaming declaration OK
+      Stub : Boolean; -- True if body stub OK
+      Pexp : Boolean; -- True if parameterized expression OK
    end record;
    pragma Pack (Pf_Rec);
 
    function T return Boolean renames True;
    function F return Boolean renames False;
 
-   Pf_Decl_Gins_Pbod_Rnam_Stub_Pexp : constant Pf_Rec :=
-                                       Pf_Rec'(F, T, T, T, T, T, T, F);
-   Pf_Decl_Pexp                     : constant Pf_Rec :=
-                                       Pf_Rec'(F, T, F, F, F, F, T, F);
-   Pf_Decl_Gins_Pbod_Rnam_Pexp      : constant Pf_Rec :=
-                                       Pf_Rec'(F, T, T, T, T, F, T, F);
-   Pf_Decl_Pbod_Pexp                : constant Pf_Rec :=
-                                       Pf_Rec'(F, T, F, T, F, F, T, F);
-   Pf_Pbod_Pexp                     : constant Pf_Rec :=
-                                       Pf_Rec'(F, F, F, T, F, F, T, F);
-   Pf_Spcn                         : constant Pf_Rec :=
-                                       Pf_Rec'(T, F, F, F, F, F, F, F);
+   Pf_Decl_Gins_Pbod_Rnam_Stub_Pexp : constant Pf_Rec := (F, T, T, T, T, T, T);
+   Pf_Decl_Pexp                     : constant Pf_Rec := (F, T, F, F, F, F, T);
+   Pf_Decl_Gins_Pbod_Rnam_Pexp      : constant Pf_Rec := (F, T, T, T, T, F, T);
+   Pf_Decl_Pbod_Pexp                : constant Pf_Rec := (F, T, F, T, F, F, T);
+   Pf_Pbod_Pexp                     : constant Pf_Rec := (F, F, F, T, F, F, T);
+   Pf_Spcn                          : constant Pf_Rec := (T, F, F, F, F, F, F);
    --  The above are the only allowed values of Pf_Rec arguments
 
    type SS_Rec is record
@@ -403,15 +399,15 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
    end record;
    pragma Pack (SS_Rec);
 
-   SS_Eftm_Eltm_Sreq : constant SS_Rec := SS_Rec'(T, T, F, F, T, F, F, F);
-   SS_Eltm_Ortm_Tatm : constant SS_Rec := SS_Rec'(F, T, F, T, F, T, F, F);
-   SS_Extm_Sreq      : constant SS_Rec := SS_Rec'(F, F, T, F, T, F, F, F);
-   SS_None           : constant SS_Rec := SS_Rec'(F, F, F, F, F, F, F, F);
-   SS_Ortm_Sreq      : constant SS_Rec := SS_Rec'(F, F, F, T, T, F, F, F);
-   SS_Sreq           : constant SS_Rec := SS_Rec'(F, F, F, F, T, F, F, F);
-   SS_Sreq_Whtm      : constant SS_Rec := SS_Rec'(F, F, F, F, T, F, T, F);
-   SS_Whtm           : constant SS_Rec := SS_Rec'(F, F, F, F, F, F, T, F);
-   SS_Unco           : constant SS_Rec := SS_Rec'(F, F, F, F, F, F, F, T);
+   SS_Eftm_Eltm_Sreq : constant SS_Rec := (T, T, F, F, T, F, F, F);
+   SS_Eltm_Ortm_Tatm : constant SS_Rec := (F, T, F, T, F, T, F, F);
+   SS_Extm_Sreq      : constant SS_Rec := (F, F, T, F, T, F, F, F);
+   SS_None           : constant SS_Rec := (F, F, F, F, F, F, F, F);
+   SS_Ortm_Sreq      : constant SS_Rec := (F, F, F, T, T, F, F, F);
+   SS_Sreq           : constant SS_Rec := (F, F, F, F, T, F, F, F);
+   SS_Sreq_Whtm      : constant SS_Rec := (F, F, F, F, T, F, T, F);
+   SS_Whtm           : constant SS_Rec := (F, F, F, F, F, F, T, F);
+   SS_Unco           : constant SS_Rec := (F, F, F, F, F, F, F, T);
 
    Goto_List : Elist_Id;
    --  List of goto nodes appearing in the current compilation. Used to
@@ -482,11 +478,11 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
       --  This field is used to provide the name of the construct being parsed
       --  and indirectly its kind. For loops and blocks, the field contains the
       --  source name or the generated one. For package specifications, bodies,
-      --  subprogram specifications and bodies the field holds the correponding
-      --  program unit name. For task declarations and bodies, protected types
-      --  and bodies, and accept statements the field hold the name of the type
-      --  or operation. For if-statements, case-statements, return statements,
-      --  and selects, the field is initialized to Error.
+      --  subprogram specifications and bodies the field holds the
+      --  corresponding program unit name. For task declarations and bodies,
+      --  protected types and bodies, and accept statements the field hold the
+      --  name of the type or operation. For if-statements, case-statements,
+      --  return statements, and selects, the field is initialized to Error.
 
       --  Note: this is a bit of an odd (mis)use of Error, since there is no
       --  Error, but we use this value as a place holder to indicate that it
@@ -562,7 +558,7 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
    -- Table for Handling Suspicious Labels --
    ------------------------------------------
 
-   --  This is a special data structure which is used to deal very spefifically
+   --  This is a special data structure which is used to deal very specifically
    --  with the following error case
 
    --     label;
@@ -647,9 +643,17 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
       --  procedure more than once for the same pragma. All parse-time pragma
       --  handling must be prepared to handle such multiple calls correctly.
 
-      function P_Identifier (C : Id_Check := None) return Node_Id;
+      function P_Identifier
+        (C         : Id_Check := None;
+         Force_Msg : Boolean  := False) return Node_Id;
       --  Scans out an identifier. The parameter C determines the treatment
       --  of reserved identifiers. See declaration of Id_Check for details.
+
+      --  An appropriate error message, pointing to the token, is also issued
+      --  if either this is the first occurrence of misuse of this identifier,
+      --  or if Force_Msg is True.
+
+      function P_Interpolated_String_Literal return Node_Id;
 
       function P_Pragmas_Opt return List_Id;
       --  This function scans for a sequence of pragmas in other than a
@@ -692,6 +696,28 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
       function P_Subtype_Mark                         return Node_Id;
       function P_Subtype_Mark_Resync                  return Node_Id;
       function P_Unknown_Discriminant_Part_Opt        return Boolean;
+
+      procedure P_Declarative_Items
+        (Decls              : List_Id;
+         Declare_Expression : Boolean;
+         In_Spec            : Boolean;
+         In_Statements      : Boolean);
+      --  Parses a sequence of zero or more declarative items, and appends them
+      --  to Decls. Done indicates whether or not there might be additional
+      --  declarative items to parse. If Done is True, then there are no more
+      --  to parse; otherwise there might be more.
+      --
+      --  Declare_Expression is true if we are parsing a declare_expression, in
+      --  which case we want to suppress certain style checking.
+      --
+      --  In_Spec is true if we are scanning a package declaration, and is used
+      --  to generate an appropriate message if a statement is encountered in
+      --  such a context.
+      --
+      --  In_Statements is true if we are called to parse declarative items in
+      --  a sequence of statements. In this case, we do not give an error upon
+      --  encountering a statement, but return to the caller with Done = True,
+      --  so the caller can resume parsing statements.
 
       function P_Basic_Declarative_Items
         (Declare_Expression : Boolean) return List_Id;
@@ -850,9 +876,11 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
       function P_Loop_Parameter_Specification return Node_Id;
       --  Used in loop constructs and quantified expressions.
 
-      function P_Sequence_Of_Statements (SS_Flags : SS_Rec) return List_Id;
-      --  The argument indicates the acceptable termination tokens.
-      --  See body in Par.Ch5 for details of the use of this parameter.
+      function P_Sequence_Of_Statements
+        (SS_Flags : SS_Rec; Handled : Boolean := False) return List_Id;
+      --  SS_Flags indicates the acceptable termination tokens; see body for
+      --  details. Handled is true if we are parsing a handled sequence of
+      --  statements.
 
       procedure Parse_Decls_Begin_End (Parent : Node_Id);
       --  Parses declarations and handled statement sequence, setting
@@ -1213,6 +1241,7 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
       procedure T_Range;
       procedure T_Record;
       procedure T_Right_Bracket;
+      procedure T_Right_Curly_Bracket;
       procedure T_Right_Paren;
       procedure T_Semicolon;
       procedure T_Then;
@@ -1348,6 +1377,18 @@ function Par (Configuration_Pragmas : Boolean) return List_Id is
       --  merge is only attempted if the following token matches Nxt. If all
       --  conditions are met, an error message is issued, and the merge is
       --  carried out, modifying the Chars field of Prev.
+
+      function Missing_Semicolon_On_When return Boolean;
+      --  This function deals with the following specialized situations
+      --
+      --    when 'x' =>
+      --       exit/return [identifier]
+      --    when 'y' =>
+      --
+      --  This looks like a messed up EXIT WHEN or RETURN WHEN, when in fact
+      --  the problem is a missing semicolon. It is called with Token pointing
+      --  to the WHEN token, and returns True if a semicolon is missing before
+      --  the WHEN as in the above example.
 
       function Next_Token_Is (Tok : Token_Type) return Boolean;
       --  Looks at token after current one and returns True if the token type
@@ -1636,14 +1677,12 @@ begin
                      Uname : constant String :=
                                Get_Name_String
                                  (Unit_Name (Current_Source_Unit));
-                     Name  : String (1 .. Uname'Length - 2);
-
-                  begin
+                     Name  : String renames
+                       Uname (Uname'First .. Uname'Last - 2);
                      --  Because Unit_Name includes "%s"/"%b", we need to strip
                      --  the last two characters to get the real unit name.
 
-                     Name := Uname (Uname'First .. Uname'Last - 2);
-
+                  begin
                      if Name = "ada"         or else
                         Name = "interfaces"  or else
                         Name = "system"

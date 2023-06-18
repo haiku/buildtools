@@ -1,5 +1,5 @@
 /* Define per-register tables for data flow info and register allocation.
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -64,7 +64,7 @@ struct regstat_n_sets_and_refs_t
 extern struct regstat_n_sets_and_refs_t *regstat_n_sets_and_refs;
 
 /* Indexed by n, gives number of times (REG n) is used or set.  */
-static inline int
+inline int
 REG_N_REFS (int regno)
 {
   return regstat_n_sets_and_refs[regno].refs;
@@ -75,7 +75,7 @@ REG_N_REFS (int regno)
 #define INC_REG_N_REFS(N,V) (regstat_n_sets_and_refs[N].refs += V)
 
 /* Indexed by n, gives number of times (REG n) is set.  */
-static inline int
+inline int
 REG_N_SETS (int regno)
 {
   return regstat_n_sets_and_refs[regno].sets;
@@ -88,7 +88,7 @@ REG_N_SETS (int regno)
 /* Given a REG, return TRUE if the reg is a PARM_DECL, FALSE otherwise.  */
 extern bool reg_is_parm_p (rtx);
 
-/* Functions defined in regstat.c.  */
+/* Functions defined in regstat.cc.  */
 extern void regstat_init_n_sets_and_refs (void);
 extern void regstat_free_n_sets_and_refs (void);
 extern void regstat_compute_ri (void);
@@ -202,6 +202,9 @@ struct target_regs {
      registers that a given machine mode occupies.  */
   unsigned char x_hard_regno_nregs[FIRST_PSEUDO_REGISTER][MAX_MACHINE_MODE];
 
+  /* The max value found in x_hard_regno_nregs.  */
+  unsigned char x_hard_regno_max_nregs;
+
   /* For each hard register, the widest mode object that it can contain.
      This will be a MODE_INT mode if the register can hold integers.  Otherwise
      it will be a MODE_FLOAT or a MODE_CC mode, whichever is valid for the
@@ -235,6 +238,8 @@ extern struct target_regs *this_target_regs;
 #else
 #define this_target_regs (&default_target_regs)
 #endif
+#define hard_regno_max_nregs \
+  (this_target_regs->x_hard_regno_max_nregs)
 #define reg_raw_mode \
   (this_target_regs->x_reg_raw_mode)
 #define have_regs_of_mode \
@@ -261,7 +266,7 @@ hard_regno_nregs (unsigned int regno, machine_mode mode)
 /* Return an exclusive upper bound on the registers occupied by hard
    register (reg:MODE REGNO).  */
 
-static inline unsigned int
+inline unsigned int
 end_hard_regno (machine_mode mode, unsigned int regno)
 {
   return regno + hard_regno_nregs (regno, mode);
@@ -270,7 +275,7 @@ end_hard_regno (machine_mode mode, unsigned int regno)
 /* Add to REGS all the registers required to store a value of mode MODE
    in register REGNO.  */
 
-static inline void
+inline void
 add_to_hard_reg_set (HARD_REG_SET *regs, machine_mode mode,
 		     unsigned int regno)
 {
@@ -284,7 +289,7 @@ add_to_hard_reg_set (HARD_REG_SET *regs, machine_mode mode,
 
 /* Likewise, but remove the registers.  */
 
-static inline void
+inline void
 remove_from_hard_reg_set (HARD_REG_SET *regs, machine_mode mode,
 			  unsigned int regno)
 {
@@ -298,7 +303,7 @@ remove_from_hard_reg_set (HARD_REG_SET *regs, machine_mode mode,
 
 /* Return true if REGS contains the whole of (reg:MODE REGNO).  */
 
-static inline bool
+inline bool
 in_hard_reg_set_p (const_hard_reg_set regs, machine_mode mode,
 		   unsigned int regno)
 {
@@ -323,7 +328,7 @@ in_hard_reg_set_p (const_hard_reg_set regs, machine_mode mode,
 
 /* Return true if (reg:MODE REGNO) includes an element of REGS.  */
 
-static inline bool
+inline bool
 overlaps_hard_reg_set_p (const_hard_reg_set regs, machine_mode mode,
 			 unsigned int regno)
 {
@@ -343,7 +348,7 @@ overlaps_hard_reg_set_p (const_hard_reg_set regs, machine_mode mode,
 /* Like add_to_hard_reg_set, but use a REGNO/NREGS range instead of
    REGNO and MODE.  */
 
-static inline void
+inline void
 add_range_to_hard_reg_set (HARD_REG_SET *regs, unsigned int regno,
 			   int nregs)
 {
@@ -353,7 +358,7 @@ add_range_to_hard_reg_set (HARD_REG_SET *regs, unsigned int regno,
 
 /* Likewise, but remove the registers.  */
 
-static inline void
+inline void
 remove_range_from_hard_reg_set (HARD_REG_SET *regs, unsigned int regno,
 				int nregs)
 {
@@ -363,7 +368,7 @@ remove_range_from_hard_reg_set (HARD_REG_SET *regs, unsigned int regno,
 
 /* Like overlaps_hard_reg_set_p, but use a REGNO/NREGS range instead of
    REGNO and MODE.  */
-static inline bool
+inline bool
 range_overlaps_hard_reg_set_p (const_hard_reg_set set, unsigned regno,
 			       int nregs)
 {
@@ -375,7 +380,7 @@ range_overlaps_hard_reg_set_p (const_hard_reg_set set, unsigned regno,
 
 /* Like in_hard_reg_set_p, but use a REGNO/NREGS range instead of
    REGNO and MODE.  */
-static inline bool
+inline bool
 range_in_hard_reg_set_p (const_hard_reg_set set, unsigned regno, int nregs)
 {
   while (nregs-- > 0)

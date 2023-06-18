@@ -6,11 +6,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_ocidl.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_ocidl.d)
  */
 module core.sys.windows.ocidl;
 version (Windows):
-@system:
 
 import core.sys.windows.ole2, core.sys.windows.oleidl, core.sys.windows.oaidl, core.sys.windows.objfwd,
   core.sys.windows.windef, core.sys.windows.wtypes;

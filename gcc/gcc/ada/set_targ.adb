@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2013-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 2013-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,7 +31,7 @@ with Output;   use Output;
 with System;        use System;
 with System.OS_Lib; use System.OS_Lib;
 
-with Unchecked_Conversion;
+with Ada.Unchecked_Conversion;
 
 package body Set_Targ is
 
@@ -309,7 +309,6 @@ package body Set_Targ is
             Write_Str ("pragma Float_Representation (");
 
             case Float_Rep is
-               when AAMP        => Write_Str ("AAMP");
                when IEEE_Binary => Write_Str ("IEEE");
             end case;
 
@@ -405,7 +404,7 @@ package body Set_Targ is
       --  Pointer to Nat or Pos value (it is harmless to treat Pos values and
       --  Nat values as Natural via Unchecked_Conversion).
 
-      function To_ANat is new Unchecked_Conversion (Address, ANat);
+      function To_ANat is new Ada.Unchecked_Conversion (Address, ANat);
 
       procedure AddC (C : Character);
       --  Add one character to buffer
@@ -532,7 +531,6 @@ package body Set_Targ is
             AddC (' ');
 
             case E.FLOAT_REP is
-               when AAMP        => AddC ('A');
                when IEEE_Binary => AddC ('I');
             end case;
 
@@ -568,7 +566,7 @@ package body Set_Targ is
       --  Pointer to Nat or Pos value (it is harmless to treat Pos values
       --  as Nat via Unchecked_Conversion).
 
-      function To_ANat is new Unchecked_Conversion (Address, ANat);
+      function To_ANat is new Ada.Unchecked_Conversion (Address, ANat);
 
       VP : ANat;
 
@@ -795,9 +793,6 @@ package body Set_Targ is
                when 'I'    =>
                   E.FLOAT_REP := IEEE_Binary;
 
-               when 'A'    =>
-                  E.FLOAT_REP := AAMP;
-
                when others =>
                   FailN ("bad float rep field for");
             end case;
@@ -880,7 +875,7 @@ begin
          argv := save_argv;
          argc := save_argc;
       else
-         --  Case of a non gcc compiler, e.g. gnat2why or gnat2scil
+         --  Case of a non-GCC compiler, e.g. gnat2why or gnat2scil
          argv := gnat_argv;
          argc := gnat_argc;
       end if;

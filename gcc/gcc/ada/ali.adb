@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -33,6 +33,7 @@ with Snames; use Snames;
 
 with GNAT;                 use GNAT;
 with GNAT.Dynamic_HTables; use GNAT.Dynamic_HTables;
+with System.String_Hash;
 
 package body ALI is
 
@@ -251,6 +252,7 @@ package body ALI is
       'E' | --  external
       'G' | --  invocation graph
       'I' | --  interrupt
+      'K' | --  CUDA kernels
       'L' | --  linker option
       'M' | --  main program
       'N' | --  notes
@@ -268,7 +270,7 @@ package body ALI is
 
       --  Still available:
 
-      'B' | 'F' | 'H' | 'J' | 'K' | 'O' | 'Q' => False);
+      'B' | 'F' | 'H' | 'J' | 'O' | 'Q' => False);
 
    ------------------------------
    -- Add_Invocation_Construct --
@@ -578,20 +580,18 @@ package body ALI is
    function Hash
      (IS_Rec : Invocation_Signature_Record) return Bucket_Range_Type
    is
+      function String_Hash is new System.String_Hash.Hash
+        (Char_Type => Character,
+         Key_Type  => String,
+         Hash_Type => Bucket_Range_Type);
+
       Buffer : Bounded_String (2052);
-      IS_Nam : Name_Id;
 
    begin
-      --  The hash is obtained in the following manner:
-      --
-      --    * A String signature based on the scope, name, line number, column
-      --      number, and locations, in the following format:
+      --  The hash is obtained from a signature based on the scope, name, line
+      --  number, column number, and locations, in the following format:
       --
       --         scope__name__line_column__locations
-      --
-      --    * The String is converted into a Name_Id
-      --
-      --    * The absolute value of the Name_Id is used as the hash
 
       Append (Buffer, IS_Rec.Scope);
       Append (Buffer, "__");
@@ -606,8 +606,7 @@ package body ALI is
          Append (Buffer, IS_Rec.Locations);
       end if;
 
-      IS_Nam := Name_Find (Buffer);
-      return Bucket_Range_Type (abs IS_Nam);
+      return String_Hash (To_String (Buffer));
    end Hash;
 
    --------------------
@@ -672,7 +671,6 @@ package body ALI is
       SSO_Default_Specified                  := False;
       Task_Dispatching_Policy_Specified      := ' ';
       Unreserve_All_Interrupts_Specified     := False;
-      Frontend_Exceptions_Specified          := False;
       Zero_Cost_Exceptions_Specified         := False;
    end Initialize_ALI;
 
@@ -892,10 +890,7 @@ package body ALI is
    function Scan_ALI
      (F                : File_Name_Type;
       T                : Text_Buffer_Ptr;
-      Ignore_ED        : Boolean;
       Err              : Boolean;
-      Read_Xref        : Boolean := False;
-      Read_Lines       : String  := "";
       Ignore_Lines     : String  := "X";
       Ignore_Errors    : Boolean := False;
       Directly_Scanned : Boolean := False) return ALI_Id
@@ -907,7 +902,8 @@ package body ALI is
       NS_Found  : Boolean;
       First_Arg : Arg_Id;
 
-      Ignore : array (Character range 'A' .. 'Z') of Boolean;
+      Ignore : array (Character range 'A' .. 'Z') of Boolean :=
+                 (others => False);
       --  Ignore (X) is set to True if lines starting with X are to
       --  be ignored by Scan_ALI and skipped, and False if the lines
       --  are to be read and processed.
@@ -965,19 +961,18 @@ package body ALI is
       --  special characters are included in the returned name.
 
       function Get_Name
-        (Ignore_Spaces  : Boolean := False;
-         Ignore_Special : Boolean := False;
+        (Ignore_Special : Boolean := False;
          May_Be_Quoted  : Boolean := False) return Name_Id;
       --  Skip blanks, then scan out a name (name is left in Name_Buffer with
       --  length in Name_Len, as well as being returned in Name_Id form).
       --  If Lower is set to True then the Name_Buffer will be converted to
       --  all lower case, for systems where file names are not case sensitive.
       --  This ensures that gnatbind works correctly regardless of the case
-      --  of the file name on all systems. The termination condition depends
-      --  on the settings of Ignore_Spaces and Ignore_Special:
+      --  of the file name on all systems.
       --
-      --    If Ignore_Spaces is False (normal case), then scan is terminated
-      --    by the normal end of field condition (EOL, space, horizontal tab)
+      --  The scan is terminated by the normal end of field condition
+      --  (EOL, space, horizontal tab). Furthermore, the termination condition
+      --  depends on the setting of Ignore_Special:
       --
       --    If Ignore_Special is False (normal case), the scan is terminated by
       --    a typeref bracket or an equal sign except for the special case of
@@ -988,7 +983,6 @@ package body ALI is
       --    the name is 'unquoted'. In this case Ignore_Special is ignored and
       --    assumed to be True.
       --
-      --  It is an error to set both Ignore_Spaces and Ignore_Special to True.
       --  This function handles wide characters properly.
 
       function Get_Nat return Nat;
@@ -1005,16 +999,6 @@ package body ALI is
 
       function Nextc return Character;
       --  Return current character without modifying pointer P
-
-      procedure Get_Typeref
-        (Current_File_Num : Sdep_Id;
-         Ref             : out Tref_Kind;
-         File_Num        : out Sdep_Id;
-         Line            : out Nat;
-         Ref_Type        : out Character;
-         Col             : out Nat;
-         Standard_Entity : out Name_Id);
-      --  Parse the definition of a typeref (<...>, {...} or (...))
 
       procedure Scan_Invocation_Graph_Line;
       --  Parse a single line that encodes a piece of the invocation graph
@@ -1252,8 +1236,7 @@ package body ALI is
       --------------
 
       function Get_Name
-        (Ignore_Spaces  : Boolean := False;
-         Ignore_Special : Boolean := False;
+        (Ignore_Special : Boolean := False;
          May_Be_Quoted  : Boolean := False) return Name_Id
       is
          Char : Character;
@@ -1310,7 +1293,7 @@ package body ALI is
             loop
                Add_Char_To_Name_Buffer (Getc);
 
-               exit when At_End_Of_Field and then not Ignore_Spaces;
+               exit when At_End_Of_Field;
 
                if not Ignore_Special then
                   if Name_Buffer (1) = '"' then
@@ -1330,8 +1313,7 @@ package body ALI is
                      exit when Nextc = ',';
 
                      --  Terminate if left bracket not part of wide char
-                     --  sequence Note that we only recognize brackets
-                     --  notation so far ???
+                     --  sequence.
 
                      exit when Nextc = '[' and then T (P + 1) /= '"';
 
@@ -1422,94 +1404,6 @@ package body ALI is
 
          return T;
       end Get_Stamp;
-
-      -----------------
-      -- Get_Typeref --
-      -----------------
-
-      procedure Get_Typeref
-        (Current_File_Num : Sdep_Id;
-         Ref              : out Tref_Kind;
-         File_Num         : out Sdep_Id;
-         Line             : out Nat;
-         Ref_Type         : out Character;
-         Col              : out Nat;
-         Standard_Entity  : out Name_Id)
-      is
-         N : Nat;
-      begin
-         case Nextc is
-            when '<'    => Ref := Tref_Derived;
-            when '('    => Ref := Tref_Access;
-            when '{'    => Ref := Tref_Type;
-            when others => Ref := Tref_None;
-         end case;
-
-         --  Case of typeref field present
-
-         if Ref /= Tref_None then
-            P := P + 1; -- skip opening bracket
-
-            if Nextc in 'a' .. 'z' then
-               File_Num        := No_Sdep_Id;
-               Line            := 0;
-               Ref_Type        := ' ';
-               Col             := 0;
-               Standard_Entity := Get_Name (Ignore_Spaces => True);
-            else
-               N := Get_Nat;
-
-               if Nextc = '|' then
-                  File_Num := Sdep_Id (N + Nat (First_Sdep_Entry) - 1);
-                  P := P + 1;
-                  N := Get_Nat;
-               else
-                  File_Num := Current_File_Num;
-               end if;
-
-               Line            := N;
-               Ref_Type        := Getc;
-               Col             := Get_Nat;
-               Standard_Entity := No_Name;
-            end if;
-
-            --  ??? Temporary workaround for nested generics case:
-            --     4i4 Directories{1|4I9[4|6[3|3]]}
-            --  See C918-002
-
-            declare
-               Nested_Brackets : Natural := 0;
-
-            begin
-               loop
-                  case Nextc is
-                     when '[' =>
-                        Nested_Brackets := Nested_Brackets + 1;
-                     when ']' =>
-                        Nested_Brackets := Nested_Brackets - 1;
-                     when others =>
-                        if Nested_Brackets = 0 then
-                           exit;
-                        end if;
-                  end case;
-
-                  Skipc;
-               end loop;
-            end;
-
-            P := P + 1; -- skip closing bracket
-            Skip_Space;
-
-         --  No typeref entry present
-
-         else
-            File_Num        := No_Sdep_Id;
-            Line            := 0;
-            Ref_Type        := ' ';
-            Col             := 0;
-            Standard_Entity := No_Name;
-         end if;
-      end Get_Typeref;
 
       ----------
       -- Getc --
@@ -1836,31 +1730,10 @@ package body ALI is
    begin
       First_Sdep_Entry := Sdep.Last + 1;
 
-      --  Acquire lines to be ignored
-
-      if Read_Xref then
-         Ignore :=
-           ('T' | 'U' | 'W' | 'Y' | 'Z' | 'D' | 'X' => False, others => True);
-
-      --  Read_Lines parameter given
-
-      elsif Read_Lines /= "" then
-         Ignore := ('U' => False, others => True);
-
-         for J in Read_Lines'Range loop
-            Ignore (Read_Lines (J)) := False;
-         end loop;
-
-      --  Process Ignore_Lines parameter
-
-      else
-         Ignore := (others => False);
-
-         for J in Ignore_Lines'Range loop
-            pragma Assert (Ignore_Lines (J) /= 'U');
-            Ignore (Ignore_Lines (J)) := True;
-         end loop;
-      end if;
+      for J in Ignore_Lines'Range loop
+         pragma Assert (Ignore_Lines (J) /= 'U');
+         Ignore (Ignore_Lines (J)) := True;
+      end loop;
 
       --  Setup ALI Table entry with appropriate defaults
 
@@ -1871,12 +1744,14 @@ package body ALI is
       ALIs.Table (Id) := (
         Afile                        => F,
         Compile_Errors               => False,
+        First_CUDA_Kernel            => CUDA_Kernels.Last + 1,
         First_Interrupt_State        => Interrupt_States.Last + 1,
         First_Sdep                   => No_Sdep_Id,
         First_Specific_Dispatching   => Specific_Dispatching.Last + 1,
         First_Unit                   => No_Unit_Id,
         GNATprove_Mode               => False,
         Invocation_Graph_Encoding    => No_Encoding,
+        Last_CUDA_Kernel             => CUDA_Kernels.Last,
         Last_Interrupt_State         => Interrupt_States.Last,
         Last_Sdep                    => No_Sdep_Id,
         Last_Specific_Dispatching    => Specific_Dispatching.Last,
@@ -1901,7 +1776,6 @@ package body ALI is
         Unit_Exception_Table         => False,
         Ver                          => (others => ' '),
         Ver_Len                      => 0,
-        Frontend_Exceptions          => False,
         Zero_Cost_Exceptions         => False);
 
       --  Now we acquire the input lines from the ALI file. Note that the
@@ -2044,6 +1918,24 @@ package body ALI is
          C := Getc;
       end loop A_Loop;
 
+      --  Acquire 'K' lines if present
+
+      Check_Unknown_Line;
+
+      while C = 'K' loop
+         if Ignore ('K') then
+            Skip_Line;
+
+         else
+            Skip_Space;
+            CUDA_Kernels.Append ((Kernel_Name => Get_Name));
+            ALIs.Table (Id).Last_CUDA_Kernel := CUDA_Kernels.Last;
+            Skip_Eol;
+         end if;
+
+         C := Getc;
+      end loop;
+
       --  Acquire P line
 
       Check_Unknown_Line;
@@ -2098,9 +1990,10 @@ package body ALI is
             elsif C = 'F' then
                C := Getc;
 
+               --  Old front-end exceptions marker, ignore
+
                if C = 'X' then
-                  ALIs.Table (Id).Frontend_Exceptions := True;
-                  Frontend_Exceptions_Specified := True;
+                  null;
                else
                   Fatal_Error_Ignore;
                end if;
@@ -2186,7 +2079,24 @@ package body ALI is
                --  Processing for SS
 
                elsif C = 'S' then
-                  Opt.Sec_Stack_Used := True;
+                  --  Special case: a-tags/i-c* by themselves should not set
+                  --  Sec_Stack_Used, only if other code uses the secondary
+                  --  stack should we set this flag. This ensures that we do
+                  --  not bring the secondary stack unnecessarily when using
+                  --  one of these packages and not actually using the
+                  --  secondary stack.
+
+                  declare
+                     File : constant String := Get_Name_String (F);
+                  begin
+                     if File /= "a-tags.ali"
+                       and then File /= "i-c.ali"
+                       and then File /= "i-cstrin.ali"
+                       and then File /= "i-cpoint.ali"
+                     then
+                        Opt.Sec_Stack_Used := True;
+                     end if;
+                  end;
 
                --  Invalid switch starting with S
 
@@ -3058,9 +2968,7 @@ package body ALI is
 
                         --  Store AD indication unless ignore required
 
-                        if not Ignore_ED then
-                           Withs.Table (Withs.Last).Elab_All_Desirable := True;
-                        end if;
+                        Withs.Table (Withs.Last).Elab_All_Desirable := True;
 
                      elsif Nextc = 'E' then
                         P := P + 1;
@@ -3077,12 +2985,9 @@ package body ALI is
                            Checkc ('D');
                            Check_At_End_Of_Field;
 
-                           --  Store ED indication unless ignore required
+                           --  Store ED indication
 
-                           if not Ignore_ED then
-                              Withs.Table (Withs.Last).Elab_Desirable :=
-                                True;
-                           end if;
+                           Withs.Table (Withs.Last).Elab_Desirable := True;
                         end if;
 
                      else
@@ -3333,13 +3238,10 @@ package body ALI is
             Skip_Space;
             Sdep.Increment_Last;
 
-            --  In the following call, Lower is not set to True, this is either
-            --  a bug, or it deserves a special comment as to why this is so???
-
             --  The file/path name may be quoted
 
             Sdep.Table (Sdep.Last).Sfile :=
-              Get_File_Name (May_Be_Quoted => True);
+              Get_File_Name (Lower => True, May_Be_Quoted => True);
 
             Sdep.Table (Sdep.Last).Stamp := Get_Stamp;
             Sdep.Table (Sdep.Last).Dummy_Entry :=
@@ -3465,347 +3367,7 @@ package body ALI is
          Fatal_Error;
       end if;
 
-      --  If we are ignoring Xref sections we are done (we ignore all
-      --  remaining lines since only xref related lines follow X).
-
-      if Ignore ('X') and then not Debug_Flag_X then
-         return Id;
-      end if;
-
-      --  Loop through Xref sections
-
-      X_Loop : loop
-         Check_Unknown_Line;
-         exit X_Loop when C /= 'X';
-
-         --  Make new entry in section table
-
-         Xref_Section.Increment_Last;
-
-         Read_Refs_For_One_File : declare
-            XS : Xref_Section_Record renames
-                   Xref_Section.Table (Xref_Section.Last);
-
-            Current_File_Num : Sdep_Id;
-            --  Keeps track of the current file number (changed by nn|)
-
-         begin
-            XS.File_Num     := Sdep_Id (Get_Nat + Nat (First_Sdep_Entry) - 1);
-            XS.File_Name    := Get_File_Name;
-            XS.First_Entity := Xref_Entity.Last + 1;
-
-            Current_File_Num := XS.File_Num;
-
-            Skip_Space;
-
-            Skip_Eol;
-            C := Nextc;
-
-            --  Loop through Xref entities
-
-            while C /= 'X' and then C /= EOF loop
-               Xref_Entity.Increment_Last;
-
-               Read_Refs_For_One_Entity : declare
-                  XE : Xref_Entity_Record renames
-                         Xref_Entity.Table (Xref_Entity.Last);
-                  N  : Nat;
-
-                  procedure Read_Instantiation_Reference;
-                  --  Acquire instantiation reference. Caller has checked
-                  --  that current character is '[' and on return the cursor
-                  --  is skipped past the corresponding closing ']'.
-
-                  ----------------------------------
-                  -- Read_Instantiation_Reference --
-                  ----------------------------------
-
-                  procedure Read_Instantiation_Reference is
-                     Local_File_Num : Sdep_Id := Current_File_Num;
-
-                  begin
-                     Xref.Increment_Last;
-
-                     declare
-                        XR : Xref_Record renames Xref.Table (Xref.Last);
-
-                     begin
-                        P := P + 1; -- skip [
-                        N := Get_Nat;
-
-                        if Nextc = '|' then
-                           XR.File_Num :=
-                             Sdep_Id (N + Nat (First_Sdep_Entry) - 1);
-                           Local_File_Num := XR.File_Num;
-                           P := P + 1;
-                           N := Get_Nat;
-
-                        else
-                           XR.File_Num := Local_File_Num;
-                        end if;
-
-                        XR.Line  := N;
-                        XR.Rtype := ' ';
-                        XR.Col   := 0;
-
-                        --  Recursive call for next reference
-
-                        if Nextc = '[' then
-                           pragma Warnings (Off); -- kill recursion warning
-                           Read_Instantiation_Reference;
-                           pragma Warnings (On);
-                        end if;
-
-                        --  Skip closing bracket after recursive call
-
-                        P := P + 1;
-                     end;
-                  end Read_Instantiation_Reference;
-
-               --  Start of processing for Read_Refs_For_One_Entity
-
-               begin
-                  XE.Line  := Get_Nat;
-                  XE.Etype := Getc;
-                  XE.Col   := Get_Nat;
-
-                  case Getc is
-                     when '*' =>
-                        XE.Visibility := Global;
-                     when '+' =>
-                        XE.Visibility := Static;
-                     when others =>
-                        XE.Visibility := Other;
-                  end case;
-
-                  XE.Entity := Get_Name;
-
-                  --  Handle the information about generic instantiations
-
-                  if Nextc = '[' then
-                     Skipc; --  Opening '['
-                     N := Get_Nat;
-
-                     if Nextc /= '|' then
-                        XE.Iref_File_Num := Current_File_Num;
-                        XE.Iref_Line     := N;
-                     else
-                        XE.Iref_File_Num :=
-                          Sdep_Id (N + Nat (First_Sdep_Entry) - 1);
-                        Skipc;
-                        XE.Iref_Line := Get_Nat;
-                     end if;
-
-                     if Getc /= ']' then
-                        Fatal_Error;
-                     end if;
-
-                  else
-                     XE.Iref_File_Num := No_Sdep_Id;
-                     XE.Iref_Line     := 0;
-                  end if;
-
-                  Current_File_Num := XS.File_Num;
-
-                  --  Renaming reference is present
-
-                  if Nextc = '=' then
-                     P := P + 1;
-                     XE.Rref_Line := Get_Nat;
-
-                     if Getc /= ':' then
-                        Fatal_Error;
-                     end if;
-
-                     XE.Rref_Col := Get_Nat;
-
-                  --  No renaming reference present
-
-                  else
-                     XE.Rref_Line := 0;
-                     XE.Rref_Col  := 0;
-                  end if;
-
-                  Skip_Space;
-
-                  XE.Oref_File_Num := No_Sdep_Id;
-                  XE.Tref_File_Num := No_Sdep_Id;
-                  XE.Tref          := Tref_None;
-                  XE.First_Xref    := Xref.Last + 1;
-
-                  --  Loop to check for additional info present
-
-                  loop
-                     declare
-                        Ref  : Tref_Kind;
-                        File : Sdep_Id;
-                        Line : Nat;
-                        Typ  : Character;
-                        Col  : Nat;
-                        Std  : Name_Id;
-
-                     begin
-                        Get_Typeref
-                          (Current_File_Num, Ref, File, Line, Typ, Col, Std);
-                        exit when Ref = Tref_None;
-
-                        --  Do we have an overriding procedure?
-
-                        if Ref = Tref_Derived and then Typ = 'p' then
-                           XE.Oref_File_Num := File;
-                           XE.Oref_Line     := Line;
-                           XE.Oref_Col      := Col;
-
-                        --  Arrays never override anything, and <> points to
-                        --  the index types instead
-
-                        elsif Ref = Tref_Derived and then XE.Etype = 'A' then
-
-                           --  Index types are stored in the list of references
-
-                           Xref.Increment_Last;
-
-                           declare
-                              XR : Xref_Record renames Xref.Table (Xref.Last);
-                           begin
-                              XR.File_Num := File;
-                              XR.Line     := Line;
-                              XR.Rtype    := Array_Index_Reference;
-                              XR.Col      := Col;
-                              XR.Name     := Std;
-                           end;
-
-                        --  Interfaces are stored in the list of references,
-                        --  although the parent type itself is stored in XE.
-                        --  The first interface (when there are only
-                        --  interfaces) is stored in XE.Tref*)
-
-                        elsif Ref = Tref_Derived
-                          and then Typ = 'R'
-                          and then XE.Tref_File_Num /= No_Sdep_Id
-                        then
-                           Xref.Increment_Last;
-
-                           declare
-                              XR : Xref_Record renames Xref.Table (Xref.Last);
-                           begin
-                              XR.File_Num := File;
-                              XR.Line     := Line;
-                              XR.Rtype    := Interface_Reference;
-                              XR.Col      := Col;
-                              XR.Name     := Std;
-                           end;
-
-                        else
-                           XE.Tref                 := Ref;
-                           XE.Tref_File_Num        := File;
-                           XE.Tref_Line            := Line;
-                           XE.Tref_Type            := Typ;
-                           XE.Tref_Col             := Col;
-                           XE.Tref_Standard_Entity := Std;
-                        end if;
-                     end;
-                  end loop;
-
-                  --  Loop through cross-references for this entity
-
-                  loop
-                     Skip_Space;
-
-                     if At_Eol then
-                        Skip_Eol;
-                        exit when Nextc /= '.';
-                        P := P + 1;
-                     end if;
-
-                     Xref.Increment_Last;
-
-                     declare
-                        XR : Xref_Record renames Xref.Table (Xref.Last);
-
-                     begin
-                        N := Get_Nat;
-
-                        if Nextc = '|' then
-                           XR.File_Num :=
-                             Sdep_Id (N + Nat (First_Sdep_Entry) - 1);
-                           Current_File_Num := XR.File_Num;
-                           P := P + 1;
-                           N := Get_Nat;
-                        else
-                           XR.File_Num := Current_File_Num;
-                        end if;
-
-                        XR.Line  := N;
-                        XR.Rtype := Getc;
-
-                        --  Imported entities reference as in:
-                        --    494b<c,__gnat_copy_attribs>25
-
-                        if Nextc = '<' then
-                           Skipc;
-                           XR.Imported_Lang := Get_Name;
-
-                           pragma Assert (Nextc = ',');
-                           Skipc;
-
-                           XR.Imported_Name := Get_Name;
-
-                           pragma Assert (Nextc = '>');
-                           Skipc;
-
-                        else
-                           XR.Imported_Lang := No_Name;
-                           XR.Imported_Name := No_Name;
-                        end if;
-
-                        XR.Col   := Get_Nat;
-
-                        if Nextc = '[' then
-                           Read_Instantiation_Reference;
-                        end if;
-                     end;
-                  end loop;
-
-                  --  Record last cross-reference
-
-                  XE.Last_Xref := Xref.Last;
-                  C := Nextc;
-
-               exception
-                  when Bad_ALI_Format =>
-
-                     --  If ignoring errors, then we skip a line with an
-                     --  unexpected error, and try to continue subsequent
-                     --  xref lines.
-
-                     if Ignore_Errors then
-                        Xref_Entity.Decrement_Last;
-                        Skip_Line;
-                        C := Nextc;
-
-                     --  Otherwise, we reraise the fatal exception
-
-                     else
-                        raise;
-                     end if;
-               end Read_Refs_For_One_Entity;
-            end loop;
-
-            --  Record last entity
-
-            XS.Last_Entity := Xref_Entity.Last;
-         end Read_Refs_For_One_File;
-
-         C := Getc;
-      end loop X_Loop;
-
-      --  Here after dealing with xref sections
-
-      --  Ignore remaining lines, which belong to an additional section of the
-      --  ALI file not considered here (like SCO or SPARK information).
-
-      Check_Unknown_Line;
+      --  This ALI parser does not care about Xref lines.
 
       return Id;
 

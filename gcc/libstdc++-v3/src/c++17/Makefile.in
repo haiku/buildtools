@@ -104,7 +104,6 @@ am__aclocal_m4_deps = $(top_srcdir)/../config/acx.m4 \
 	$(top_srcdir)/../config/multi.m4 \
 	$(top_srcdir)/../config/no-executables.m4 \
 	$(top_srcdir)/../config/override.m4 \
-	$(top_srcdir)/../config/stdint.m4 \
 	$(top_srcdir)/../config/toolexeclibdir.m4 \
 	$(top_srcdir)/../config/unwind_ipinfo.m4 \
 	$(top_srcdir)/../libtool.m4 $(top_srcdir)/../ltoptions.m4 \
@@ -129,7 +128,8 @@ am__objects_2 = floating_from_chars.lo floating_to_chars.lo fs_dir.lo \
 @ENABLE_DUAL_ABI_TRUE@am__objects_3 = cow-string-inst.lo
 @ENABLE_EXTERN_TEMPLATE_TRUE@am__objects_4 = ostream-inst.lo \
 @ENABLE_EXTERN_TEMPLATE_TRUE@	string-inst.lo $(am__objects_3)
-am_libc__17convenience_la_OBJECTS = $(am__objects_2) $(am__objects_4)
+@GLIBCXX_HOSTED_TRUE@am_libc__17convenience_la_OBJECTS =  \
+@GLIBCXX_HOSTED_TRUE@	$(am__objects_2) $(am__objects_4)
 libc__17convenience_la_OBJECTS = $(am_libc__17convenience_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -190,6 +190,7 @@ ABI_TWEAKS_SRCDIR = @ABI_TWEAKS_SRCDIR@
 ACLOCAL = @ACLOCAL@
 ALLOCATOR_H = @ALLOCATOR_H@
 ALLOCATOR_NAME = @ALLOCATOR_NAME@
+ALLOC_FILE = @ALLOC_FILE@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AR = @AR@
@@ -201,6 +202,10 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CPPFLAGS = @BACKTRACE_CPPFLAGS@
+BACKTRACE_SUPPORTED = @BACKTRACE_SUPPORTED@
+BACKTRACE_SUPPORTS_THREADS = @BACKTRACE_SUPPORTS_THREADS@
+BACKTRACE_USES_MALLOC = @BACKTRACE_USES_MALLOC@
 BASIC_FILE_CC = @BASIC_FILE_CC@
 BASIC_FILE_H = @BASIC_FILE_H@
 CC = @CC@
@@ -240,11 +245,14 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
+EH_POOL_FLAGS = @EH_POOL_FLAGS@
 ERROR_CONSTANTS_SRCDIR = @ERROR_CONSTANTS_SRCDIR@
 EXEEXT = @EXEEXT@
 EXTRA_CFLAGS = @EXTRA_CFLAGS@
 EXTRA_CXX_FLAGS = @EXTRA_CXX_FLAGS@
 FGREP = @FGREP@
+FORMAT_FILE = @FORMAT_FILE@
+FREESTANDING_FLAGS = @FREESTANDING_FLAGS@
 GLIBCXX_INCLUDES = @GLIBCXX_INCLUDES@
 GLIBCXX_LIBS = @GLIBCXX_LIBS@
 GREP = @GREP@
@@ -299,6 +307,7 @@ SYMVER_FILE = @SYMVER_FILE@
 TOPLEVEL_INCLUDES = @TOPLEVEL_INCLUDES@
 USE_NLS = @USE_NLS@
 VERSION = @VERSION@
+VIEW_FILE = @VIEW_FILE@
 VTV_CXXFLAGS = @VTV_CXXFLAGS@
 VTV_CXXLINKFLAGS = @VTV_CXXLINKFLAGS@
 VTV_PCH_CXXFLAGS = @VTV_PCH_CXXFLAGS@
@@ -447,7 +456,8 @@ sources = \
 	memory_resource.cc \
 	$(extra_fs_sources)
 
-libc__17convenience_la_SOURCES = $(sources)  $(inst_sources)
+@GLIBCXX_HOSTED_FALSE@libc__17convenience_la_SOURCES = 
+@GLIBCXX_HOSTED_TRUE@libc__17convenience_la_SOURCES = $(sources)  $(inst_sources)
 
 # AM_CXXFLAGS needs to be in each subdirectory so that it can be
 # modified in a per-library or per-sub-library way.  Need to manually

@@ -1,9 +1,22 @@
+/*
+RUN_OUTPUT:
+---
+Foo.~this()
+Foo.~this()
+Foo.~this()
+Foo.~this()
+A2.this()
+Hello world.
+A2.~this()
+Success
+---
+*/
 
 import core.stdc.stdio;
 
 /******************************************/
 
-scope class Foo
+class Foo
 {
     static int x;
 
@@ -52,15 +65,15 @@ void test1()
 
 int ax;
 
-scope class A2
+class A2
 {
-  this()
+  this() scope
   {
     printf("A2.this()\n");
     ax += 1;
   }
 
-  ~this()
+  ~this() scope
   {
     printf("A2.~this()\n");
     ax += 1000;
@@ -83,18 +96,18 @@ void test2()
 
 int status3;
 
-scope class Parent3
+class Parent3
 {
 }
 
-scope class Child3 : Parent3
+class Child3 : Parent3
 {
-        this(){
+        this() scope {
                 assert(status3==0);
                 status3=1;
         }
 
-        ~this(){
+        ~this() scope {
                 assert(status3==1);
                 status3=2;
         }

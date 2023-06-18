@@ -1,5 +1,5 @@
 /* Data references and dependences detectors.
-   Copyright (C) 2003-2021 Free Software Foundation, Inc.
+   Copyright (C) 2003-2023 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <pop@cri.ensmp.fr>
 
 This file is part of GCC.
@@ -166,14 +166,19 @@ struct data_reference
      and runs to completion.  */
   bool is_conditional_in_stmt;
 
+  /* Alias information for the data reference.  */
+  struct dr_alias alias;
+
   /* Behavior of the memory reference in the innermost loop.  */
   struct innermost_loop_behavior innermost;
 
   /* Subscripts of this data reference.  */
   struct indices indices;
 
-  /* Alias information for the data reference.  */
-  struct dr_alias alias;
+  /* Alternate subscripts initialized lazily and used by data-dependence
+     analysis only when the main indices of two DRs are not comparable.
+     Keep last to keep vec_info_shared::check_datarefs happy.  */
+  struct indices alt_indices;
 };
 
 #define DR_STMT(DR)                (DR)->stmt
@@ -528,15 +533,15 @@ extern void debug_data_reference (struct data_reference *);
 extern void debug_data_references (vec<data_reference_p> );
 extern void debug (vec<data_reference_p> &ref);
 extern void debug (vec<data_reference_p> *ptr);
-extern void debug_data_dependence_relation (struct data_dependence_relation *);
-extern void dump_data_dependence_relations (FILE *, vec<ddr_p> );
+extern void debug_data_dependence_relation (const data_dependence_relation *);
+extern void dump_data_dependence_relations (FILE *, const vec<ddr_p> &);
 extern void debug (vec<ddr_p> &ref);
 extern void debug (vec<ddr_p> *ptr);
 extern void debug_data_dependence_relations (vec<ddr_p> );
 extern void free_dependence_relation (struct data_dependence_relation *);
-extern void free_dependence_relations (vec<ddr_p> );
+extern void free_dependence_relations (vec<ddr_p>& );
 extern void free_data_ref (data_reference_p);
-extern void free_data_refs (vec<data_reference_p> );
+extern void free_data_refs (vec<data_reference_p>& );
 extern opt_result find_data_references_in_stmt (class loop *, gimple *,
 						vec<data_reference_p> *);
 extern bool graphite_find_data_references_in_stmt (edge, loop_p, gimple *,
@@ -551,9 +556,9 @@ extern struct data_dependence_relation *initialize_data_dependence_relation
 extern void compute_affine_dependence (struct data_dependence_relation *,
 				       loop_p);
 extern void compute_self_dependence (struct data_dependence_relation *);
-extern bool compute_all_dependences (vec<data_reference_p> ,
+extern bool compute_all_dependences (const vec<data_reference_p> &,
 				     vec<ddr_p> *,
-				     vec<loop_p>, bool);
+				     const vec<loop_p> &, bool);
 extern tree find_data_references_in_bb (class loop *, basic_block,
                                         vec<data_reference_p> *);
 extern unsigned int dr_alignment (innermost_loop_behavior *);
@@ -578,7 +583,8 @@ extern int data_ref_compare_tree (tree, tree);
 extern void prune_runtime_alias_test_list (vec<dr_with_seg_len_pair_t> *,
 					   poly_uint64);
 extern void create_runtime_alias_checks (class loop *,
-					 vec<dr_with_seg_len_pair_t> *, tree*);
+					 const vec<dr_with_seg_len_pair_t> *,
+					 tree*);
 extern tree dr_direction_indicator (struct data_reference *);
 extern tree dr_zero_step_indicator (struct data_reference *);
 extern bool dr_known_forward_stride_p (struct data_reference *);
@@ -586,7 +592,7 @@ extern bool dr_known_forward_stride_p (struct data_reference *);
 /* Return true when the base objects of data references A and B are
    the same memory object.  */
 
-static inline bool
+inline bool
 same_data_refs_base_objects (data_reference_p a, data_reference_p b)
 {
   return DR_NUM_DIMENSIONS (a) == DR_NUM_DIMENSIONS (b)
@@ -597,7 +603,7 @@ same_data_refs_base_objects (data_reference_p a, data_reference_p b)
    memory object with the same access functions.  Optionally skip the
    last OFFSET dimensions in the data reference.  */
 
-static inline bool
+inline bool
 same_data_refs (data_reference_p a, data_reference_p b, int offset = 0)
 {
   unsigned int i;
@@ -635,7 +641,7 @@ known_dependences_p (vec<ddr_p> dependence_relations)
    LEVEL = 0 means a lexicographic dependence, i.e. a dependence due
    to the sequence of statements, not carried by any loop.  */
 
-static inline unsigned
+inline unsigned
 dependence_level (lambda_vector dist_vect, int length)
 {
   int i;
@@ -649,7 +655,7 @@ dependence_level (lambda_vector dist_vect, int length)
 
 /* Return the dependence level for the DDR relation.  */
 
-static inline unsigned
+inline unsigned
 ddr_dependence_level (ddr_p ddr)
 {
   unsigned vector;
@@ -666,8 +672,8 @@ ddr_dependence_level (ddr_p ddr)
 
 /* Return the index of the variable VAR in the LOOP_NEST array.  */
 
-static inline int
-index_in_loop_nest (int var, vec<loop_p> loop_nest)
+inline int
+index_in_loop_nest (int var, const vec<loop_p> &loop_nest)
 {
   class loop *loopi;
   int var_index;
@@ -682,7 +688,7 @@ index_in_loop_nest (int var, vec<loop_p> loop_nest)
 /* Returns true when the data reference DR the form "A[i] = ..."
    with a stride equal to its unit type size.  */
 
-static inline bool
+inline bool
 adjacent_dr_p (struct data_reference *dr)
 {
   /* If this is a bitfield store bail out.  */
@@ -703,7 +709,7 @@ void split_constant_offset (tree , tree *, tree *);
 
 /* Compute the greatest common divisor of a VECTOR of SIZE numbers.  */
 
-static inline lambda_int
+inline lambda_int
 lambda_vector_gcd (lambda_vector vector, int size)
 {
   int i;
@@ -720,7 +726,7 @@ lambda_vector_gcd (lambda_vector vector, int size)
 
 /* Allocate a new vector of given SIZE.  */
 
-static inline lambda_vector
+inline lambda_vector
 lambda_vector_new (int size)
 {
   /* ???  We shouldn't abuse the GC allocator here.  */
@@ -729,7 +735,7 @@ lambda_vector_new (int size)
 
 /* Clear out vector VEC1 of length SIZE.  */
 
-static inline void
+inline void
 lambda_vector_clear (lambda_vector vec1, int size)
 {
   memset (vec1, 0, size * sizeof (*vec1));
@@ -738,7 +744,7 @@ lambda_vector_clear (lambda_vector vec1, int size)
 /* Returns true when the vector V is lexicographically positive, in
    other words, when the first nonzero element is positive.  */
 
-static inline bool
+inline bool
 lambda_vector_lexico_pos (lambda_vector v,
 			  unsigned n)
 {
@@ -757,7 +763,7 @@ lambda_vector_lexico_pos (lambda_vector v,
 
 /* Return true if vector VEC1 of length SIZE is the zero vector.  */
 
-static inline bool
+inline bool
 lambda_vector_zerop (lambda_vector vec1, int size)
 {
   int i;
@@ -769,7 +775,7 @@ lambda_vector_zerop (lambda_vector vec1, int size)
 
 /* Allocate a matrix of M rows x  N cols.  */
 
-static inline lambda_matrix
+inline lambda_matrix
 lambda_matrix_new (int m, int n, struct obstack *lambda_obstack)
 {
   lambda_matrix mat;

@@ -1,3 +1,5 @@
+/* { dg-require-effective-target alloca } */
+
 #include <stdlib.h>
 
 typedef void *(*allocator_t) (size_t);
@@ -61,15 +63,14 @@ int *test_5 (void)
 {
   allocator_t alloc_fn = get_alloca ();
   deallocator_t dealloc_fn = get_free ();
-  int *ptr = alloc_fn (sizeof (int)); /* { dg-message "pointer is from here" } */
-  /* TODO: message should read "memory is allocated on the stack here".  */
-  dealloc_fn (ptr); /* { dg-warning "'free' of 'ptr' which points to memory not on the heap" } */
+  int *ptr = alloc_fn (sizeof (int)); /* dg-message "region created on stack here" } */
+  dealloc_fn (ptr); /* { dg-warning "'free' of 'ptr' which points to memory on the stack" } */
 }
 
 static void __attribute__((noinline))
 called_by_test_6a (void *ptr)
 {
-  free (ptr); /* { dg-warning "double-'free'" "" { xfail *-*-* } } */
+  free (ptr); /* { dg-warning "double-'free'" } */
 }
 
 static deallocator_t __attribute__((noinline))

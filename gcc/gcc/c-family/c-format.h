@@ -1,5 +1,5 @@
 /* Check calls to formatted I/O functions (-Wformat).
-   Copyright (C) 1992-2021 Free Software Foundation, Inc.
+   Copyright (C) 1992-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -36,6 +36,14 @@ enum format_lengths
   FMT_LEN_H,
   FMT_LEN_D,
   FMT_LEN_DD,
+  FMT_LEN_w8,
+  FMT_LEN_w16,
+  FMT_LEN_w32,
+  FMT_LEN_w64,
+  FMT_LEN_wf8,
+  FMT_LEN_wf16,
+  FMT_LEN_wf32,
+  FMT_LEN_wf64,
   FMT_LEN_w,   /* GCC's HOST_WIDE_INT.  */
   FMT_LEN_MAX
 };
@@ -124,9 +132,9 @@ struct format_type_detail
 
 
 /* Macros to fill out tables of these.  */
-#define NOARGUMENTS	{ T89_V, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN }
+#define NOARGUMENTS	{ T89_V, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN }
 #define BADLEN	{ STD_C89, NULL, NULL }
-#define NOLENGTHS	{ BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN }
+#define NOLENGTHS	{ BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN, BADLEN }
 
 
 /* Structure describing a format conversion specifier (or a set of specifiers
@@ -278,13 +286,17 @@ struct format_kind_info
 #define T89_S	{ STD_C89, NULL, T_S }
 #define T_UI	&unsigned_type_node
 #define T89_UI	{ STD_C89, NULL, T_UI }
+#define T2X_UI	{ STD_C2X, NULL, T_UI }
 #define T_UL	&long_unsigned_type_node
 #define T89_UL	{ STD_C89, NULL, T_UL }
+#define T2X_UL	{ STD_C2X, NULL, T_UL }
 #define T_ULL	&long_long_unsigned_type_node
 #define T9L_ULL	{ STD_C9L, NULL, T_ULL }
+#define T2X_ULL	{ STD_C2X, NULL, T_ULL }
 #define TEX_ULL	{ STD_EXT, NULL, T_ULL }
 #define T_US	&short_unsigned_type_node
 #define T89_US	{ STD_C89, NULL, T_US }
+#define T2X_US	{ STD_C2X, NULL, T_US }
 #define T_F	&float_type_node
 #define T89_F	{ STD_C89, NULL, T_F }
 #define T99_F	{ STD_C99, NULL, T_F }
@@ -300,6 +312,7 @@ struct format_kind_info
 #define T99_SC	{ STD_C99, NULL, T_SC }
 #define T_UC	&unsigned_char_type_node
 #define T99_UC	{ STD_C99, NULL, T_UC }
+#define T2X_UC	{ STD_C2X, NULL, T_UC }
 #define T_V	&void_type_node
 #define T89_G   { STD_C89, NULL, &local_gimple_ptr_node }
 #define T_CGRAPH_NODE   { STD_C89, NULL, &local_cgraph_node_ptr_node }
@@ -314,22 +327,57 @@ struct format_kind_info
 #define TEX_WI	{ STD_EXT, "wint_t", T_WI }
 #define T_ST    &size_type_node
 #define T99_ST	{ STD_C99, "size_t", T_ST }
+#define T2X_ST	{ STD_C2X, "size_t", T_ST }
 #define T_SST   &signed_size_type_node
 #define T99_SST	{ STD_C99, "signed size_t", T_SST }
 #define T_PD    &ptrdiff_type_node
 #define T99_PD	{ STD_C99, "ptrdiff_t", T_PD }
 #define T_UPD   &unsigned_ptrdiff_type_node
 #define T99_UPD	{ STD_C99, "unsigned ptrdiff_t", T_UPD }
+#define T2X_UPD	{ STD_C2X, "unsigned ptrdiff_t", T_UPD }
 #define T_IM    &intmax_type_node
 #define T99_IM	{ STD_C99, "intmax_t", T_IM }
 #define T_UIM   &uintmax_type_node
 #define T99_UIM	{ STD_C99, "uintmax_t", T_UIM }
+#define T2X_UIM	{ STD_C2X, "uintmax_t", T_UIM }
 #define T_D32   &dfloat32_type_node
-#define TEX_D32 { STD_EXT, "_Decimal32", T_D32 }
+#define T2X_D32 { STD_C2X, "_Decimal32", T_D32 }
 #define T_D64   &dfloat64_type_node
-#define TEX_D64 { STD_EXT, "_Decimal64", T_D64 }
+#define T2X_D64 { STD_C2X, "_Decimal64", T_D64 }
 #define T_D128  &dfloat128_type_node
-#define TEX_D128 { STD_EXT, "_Decimal128", T_D128 }
+#define T2X_D128 { STD_C2X, "_Decimal128", T_D128 }
+#define T_I8	&int_least8_type_node
+#define T2X_I8	{ STD_C2X, "int_least8_t", T_I8 }
+#define T_I16	&int_least16_type_node
+#define T2X_I16	{ STD_C2X, "int_least16_t", T_I16 }
+#define T_I32	&int_least32_type_node
+#define T2X_I32	{ STD_C2X, "int_least32_t", T_I32 }
+#define T_I64	&int_least64_type_node
+#define T2X_I64	{ STD_C2X, "int_least64_t", T_I64 }
+#define T_U8	&uint_least8_type_node
+#define T2X_U8	{ STD_C2X, "uint_least8_t", T_U8 }
+#define T_U16	&uint_least16_type_node
+#define T2X_U16	{ STD_C2X, "uint_least16_t", T_U16 }
+#define T_U32	&uint_least32_type_node
+#define T2X_U32	{ STD_C2X, "uint_least32_t", T_U32 }
+#define T_U64	&uint_least64_type_node
+#define T2X_U64	{ STD_C2X, "uint_least64_t", T_U64 }
+#define T_IF8	&int_fast8_type_node
+#define T2X_IF8	{ STD_C2X, "int_fast8_t", T_IF8 }
+#define T_IF16	&int_fast16_type_node
+#define T2X_IF16 { STD_C2X, "int_fast16_t", T_IF16 }
+#define T_IF32	&int_fast32_type_node
+#define T2X_IF32 { STD_C2X, "int_fast32_t", T_IF32 }
+#define T_IF64	&int_fast64_type_node
+#define T2X_IF64 { STD_C2X, "int_fast64_t", T_IF64 }
+#define T_UF8	&uint_fast8_type_node
+#define T2X_UF8	{ STD_C2X, "uint_fast8_t", T_UF8 }
+#define T_UF16	&uint_fast16_type_node
+#define T2X_UF16 { STD_C2X, "uint_fast16_t", T_UF16 }
+#define T_UF32	&uint_fast32_type_node
+#define T2X_UF32 { STD_C2X, "uint_fast32_t", T_UF32 }
+#define T_UF64	&uint_fast64_type_node
+#define T2X_UF64 { STD_C2X, "uint_fast64_t", T_UF64 }
 
 /* Structure describing how format attributes such as "printf" are
    interpreted as "gnu_printf" or "ms_printf" on a particular system.

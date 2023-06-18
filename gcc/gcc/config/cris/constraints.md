@@ -1,5 +1,5 @@
 ;; Constraint definitions for CRIS.
-;; Copyright (C) 2011-2021 Free Software Foundation, Inc.
+;; Copyright (C) 2011-2023 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -18,7 +18,12 @@
 ;; <http://www.gnu.org/licenses/>.
 
 ;; Register constraints.
-(define_register_constraint "b" "GENNONACR_REGS"
+
+;; Kept for compatibility.  It used to exclude the CRIS v32
+;; register "ACR", which was like GENERAL_REGS except it
+;; couldn't be used for autoincrement, and intended mainly
+;; for use in user asm statements.
+(define_register_constraint "b" "GENERAL_REGS"
   "@internal")
 
 (define_register_constraint "h" "MOF_REGS"
@@ -95,17 +100,7 @@
 					       || reload_completed)")))
 
 ;; Extra constraints.
-(define_constraint "R"
-  "An operand to BDAP or BIAP."
-       ;; A BIAP; r.S?
-  (ior (match_test "cris_biap_index_p (op, reload_in_progress
-					   || reload_completed)")
-       ;; A [reg] or (int) [reg], maybe with post-increment.
-       (match_test "cris_bdap_index_p (op, reload_in_progress
-					   || reload_completed)")
-       (match_test "CONSTANT_P (op)")))
-
-(define_constraint "T"
+(define_memory_constraint "T"
   "Memory three-address operand."
   ;; All are indirect-memory:
   (and (match_code "mem")

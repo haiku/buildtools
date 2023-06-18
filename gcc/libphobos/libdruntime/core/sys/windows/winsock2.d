@@ -6,7 +6,6 @@
 
 module core.sys.windows.winsock2;
 version (Windows):
-@system:
 
 pragma(lib, "ws2_32");
 
@@ -45,15 +44,15 @@ enum NI_MAXSERV = 32;
 @nogc
 {
 int WSAStartup(ushort wVersionRequested, LPWSADATA lpWSAData);
-int WSACleanup();
-SOCKET socket(int af, int type, int protocol);
+@trusted int WSACleanup();
+@trusted SOCKET socket(int af, int type, int protocol);
 int ioctlsocket(SOCKET s, int cmd, uint* argp);
 int bind(SOCKET s, const(sockaddr)* name, socklen_t namelen);
 int connect(SOCKET s, const(sockaddr)* name, socklen_t namelen);
-int listen(SOCKET s, int backlog);
+@trusted int listen(SOCKET s, int backlog);
 SOCKET accept(SOCKET s, sockaddr* addr, socklen_t* addrlen);
-int closesocket(SOCKET s);
-int shutdown(SOCKET s, int how);
+@trusted int closesocket(SOCKET s);
+@trusted int shutdown(SOCKET s, int how);
 int getpeername(SOCKET s, sockaddr* name, socklen_t* namelen);
 int getsockname(SOCKET s, sockaddr* name, socklen_t* namelen);
 int send(SOCKET s, const(void)* buf, int len, int flags);

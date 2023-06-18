@@ -1,5 +1,5 @@
 ;; Predicate definitions for IA-32 and x86-64.
-;; Copyright (C) 2004-2021 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2023 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -92,6 +92,14 @@
   (and (match_code "reg")
        (match_test "MASK_REGNO_P (REGNO (op))")))
 
+;; Match a DI, SI or HImode register operand.
+(define_special_predicate "int248_register_operand"
+  (and (match_operand 0 "register_operand")
+       (ior (and (match_test "TARGET_64BIT")
+		 (match_test "GET_MODE (op) == DImode"))
+	    (match_test "GET_MODE (op) == SImode")
+	    (match_test "GET_MODE (op) == HImode"))))
+
 ;; Match a DI, SI, HI or QImode nonimmediate_operand.
 (define_special_predicate "int_nonimmediate_operand"
   (and (match_operand 0 "nonimmediate_operand")
@@ -100,6 +108,20 @@
 	    (match_test "GET_MODE (op) == SImode")
 	    (match_test "GET_MODE (op) == HImode")
 	    (match_test "GET_MODE (op) == QImode"))))
+
+;; Match nonimmediate operand, but exclude non-constant addresses for x86_64.
+(define_predicate "nonimm_x64constmem_operand"
+  (ior (match_operand 0 "register_operand")
+       (and (match_operand 0 "memory_operand")
+	    (ior (not (match_test "TARGET_64BIT"))
+		 (match_test "constant_address_p (XEXP (op, 0))")))))
+
+;; Match general operand, but exclude non-constant addresses for x86_64.
+(define_predicate "general_x64constmem_operand"
+  (ior (match_operand 0 "nonmemory_operand")
+       (and (match_operand 0 "memory_operand")
+	    (ior (not (match_test "TARGET_64BIT"))
+		 (match_test "constant_address_p (XEXP (op, 0))")))))
 
 ;; Match register operands, but include memory operands for TARGET_SSE_MATH.
 (define_predicate "register_ssemem_operand"
@@ -145,16 +167,16 @@
        unsigned HOST_WIDE_INT val = TARGET_64BIT ? 0xfa1e0ff3 : 0xfb1e0ff3;
 
        if (imm == val)
-	 return 1;
+	 return true;
 
        /* NB: Encoding is byte based.  */
        if (TARGET_64BIT)
 	 for (; imm >= val; imm >>= 8)
 	   if (imm == val)
-	     return 1;
+	     return true;
       }
 
-  return 0;
+  return false;
 })
 
 ;; Return true if VALUE can be stored in a sign extended immediate field.
@@ -610,6 +632,21 @@
   return false;
 })
 
+(define_predicate "local_func_symbolic_operand"
+  (match_operand 0 "local_symbolic_operand")
+{
+  if (GET_CODE (op) == CONST
+      && GET_CODE (XEXP (op, 0)) == PLUS
+      && CONST_INT_P (XEXP (XEXP (op, 0), 1)))
+    op = XEXP (XEXP (op, 0), 0);
+
+  if (GET_CODE (op) == SYMBOL_REF
+      && !SYMBOL_REF_FUNCTION_P (op))
+    return false;
+
+  return true;
+})
+
 ;; Test for a legitimate @GOTOFF operand.
 ;;
 ;; VxWorks does not impose a fixed gap between segments; the run-time
@@ -617,9 +654,11 @@
 ;; use @GOTOFF unless we are absolutely sure that the symbol is in the
 ;; same segment as the GOT.  Unfortunately, the flexibility of linker
 ;; scripts means that we can't be sure of that in general, so assume
-;; that @GOTOFF is never valid on VxWorks.
+;; @GOTOFF is not valid on VxWorks, except with the large code model.
 (define_predicate "gotoff_operand"
-  (and (not (match_test "TARGET_VXWORKS_RTP"))
+  (and (ior (not (match_test "TARGET_VXWORKS_RTP"))
+            (match_test "ix86_cmodel == CM_LARGE")
+            (match_test "ix86_cmodel == CM_LARGE_PIC"))
        (match_operand 0 "local_symbolic_operand")))
 
 ;; Test for various thread-local symbols.
@@ -670,6 +709,12 @@
 {
   if (SUBREG_P (op))
     op = SUBREG_REG (op);
+
+  /* Before reload, we can allow (SUBREG (MEM...)) as a register operand
+     because it is guaranteed to be reloaded into one.  */
+  if (MEM_P (op))
+    return true;
+
   return !(op == arg_pointer_rtx
 	   || op == frame_pointer_rtx
 	   || IN_RANGE (REGNO (op),
@@ -683,6 +728,7 @@
 {
   if (SUBREG_P (op))
     op = SUBREG_REG (op);
+
   if (reload_completed)
     return REG_OK_FOR_INDEX_STRICT_P (op);
   else
@@ -734,13 +780,10 @@
 
 ;; Return true if OP is a GOT memory operand.
 (define_predicate "GOT_memory_operand"
-  (match_operand 0 "memory_operand")
-{
-  op = XEXP (op, 0);
-  return (GET_CODE (op) == CONST
-	  && GET_CODE (XEXP (op, 0)) == UNSPEC
-	  && XINT (XEXP (op, 0), 1) == UNSPEC_GOTPCREL);
-})
+  (and (match_operand 0 "memory_operand")
+       (match_code "const" "0")
+       (match_code "unspec" "00")
+       (match_test "XINT (XEXP (XEXP (op, 0), 0), 1) == UNSPEC_GOTPCREL")))
 
 ;; Test for a valid operand for a call instruction.
 ;; Allow constant call address operands in Pmode only.
@@ -767,9 +810,9 @@
 
 ;; Return true if OP is a 32-bit GOT symbol operand.
 (define_predicate "GOT32_symbol_operand"
-  (match_test "GET_CODE (op) == CONST
-               && GET_CODE (XEXP (op, 0)) == UNSPEC
-               && XINT (XEXP (op, 0), 1) == UNSPEC_GOT"))
+  (and (match_code "const")
+       (match_code "unspec" "0")
+       (match_test "XINT (XEXP (op, 0), 1) == UNSPEC_GOT")))
 
 ;; Match exactly zero.
 (define_predicate "const0_operand"
@@ -907,6 +950,11 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 0, 63)")))
 
+;; Match 0 to 127.
+(define_predicate "const_0_to_127_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 0, 127)")))
+
 ;; Match 0 to 255.
 (define_predicate "const_0_to_255_operand"
   (and (match_code "const_int")
@@ -918,6 +966,14 @@
 {
   unsigned HOST_WIDE_INT val = INTVAL (op);
   return val <= 255*8 && val % 8 == 0;
+})
+
+;; Match 1 to 255 except multiples of 8
+(define_predicate "const_0_to_255_not_mul_8_operand"
+  (match_code "const_int")
+{
+  unsigned HOST_WIDE_INT val = INTVAL (op);
+  return val <= 255 && val % 8 != 0;
 })
 
 ;; Return true if OP is CONST_INT >= 1 and <= 31 (a valid operand
@@ -1024,9 +1080,20 @@
 })
 
 ;; True for registers, or const_int_operand, used to vec_setm expander.
-(define_predicate "vec_setm_operand"
+(define_predicate "vec_setm_sse41_operand"
+  (ior (and (match_operand 0 "register_operand")
+	    (match_test "TARGET_SSE4_1"))
+       (match_code "const_int")))
+
+(define_predicate "vec_setm_avx2_operand"
   (ior (and (match_operand 0 "register_operand")
 	    (match_test "TARGET_AVX2"))
+       (match_code "const_int")))
+
+(define_predicate "vec_setm_mmx_operand"
+  (ior (and (match_operand 0 "register_operand")
+	    (match_test "TARGET_SSE4_1")
+	    (match_test "TARGET_MMX_WITH_SSE"))
        (match_code "const_int")))
 
 ;; True for registers, or 1 or -1.  Used to optimize double-word shifts.
@@ -1035,6 +1102,13 @@
        (and (match_code "const_int")
 	    (ior (match_test "op == const1_rtx")
 		 (match_test "op == constm1_rtx")))))
+
+;; True for registers, or (not: registers).  Used to optimize 3-operand
+;; bitwise operation.
+(define_predicate "regmem_or_bitnot_regmem_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
+       (and (match_code "not")
+	    (match_test "nonimmediate_operand (XEXP (op, 0), mode)"))))
 
 ;; True if OP is acceptable as operand of DImode shift expander.
 (define_predicate "shiftdi_operand"
@@ -1122,6 +1196,55 @@
        (match_test "INTEGRAL_MODE_P (GET_MODE (op))")
        (match_test "op == CONSTM1_RTX (GET_MODE (op))")))
 
+/* Return true if operand is an 128/256bit all ones vector
+   that zero-extends to 256/512bit.  */
+(define_predicate "vector_all_ones_zero_extend_half_operand"
+  (match_code "const_vector")
+{
+  mode = GET_MODE (op);
+  if (GET_MODE_CLASS (mode) != MODE_VECTOR_INT
+      || (GET_MODE_SIZE (mode) != 32
+	  && GET_MODE_SIZE (mode) != 64))
+    return false;
+
+  int nelts = CONST_VECTOR_NUNITS (op);
+  for (int i = 0; i != nelts; i++)
+    {
+      rtx elt = CONST_VECTOR_ELT (op, i);
+      if (i < nelts / 2
+	  && elt != CONSTM1_RTX (GET_MODE_INNER (mode)))
+	return false;
+      if (i >= nelts / 2
+	  && elt != CONST0_RTX (GET_MODE_INNER (mode)))
+	return false;
+    }
+  return true;
+})
+
+/* Return true if operand is an 128bit all ones vector
+   that zero extends to 512bit.  */
+(define_predicate "vector_all_ones_zero_extend_quarter_operand"
+  (match_code "const_vector")
+{
+  mode = GET_MODE (op);
+  if (GET_MODE_CLASS (mode) != MODE_VECTOR_INT
+      || GET_MODE_SIZE (mode) != 64)
+    return false;
+
+  int nelts = CONST_VECTOR_NUNITS (op);
+  for (int i = 0; i != nelts; i++)
+    {
+      rtx elt = CONST_VECTOR_ELT (op, i);
+      if (i < nelts / 4
+	  && elt != CONSTM1_RTX (GET_MODE_INNER (mode)))
+	return false;
+      if (i >= nelts / 4
+	  && elt != CONST0_RTX (GET_MODE_INNER (mode)))
+	return false;
+    }
+  return true;
+})
+
 ; Return true when OP is operand acceptable for vector memory operand.
 ; Only AVX can have misaligned memory operand.
 (define_predicate "vector_memory_operand"
@@ -1133,6 +1256,13 @@
 (define_predicate "vector_operand"
   (ior (match_operand 0 "register_operand")
        (match_operand 0 "vector_memory_operand")))
+
+; Return true when OP is register_operand, vector_memory_operand
+; or const_vector.
+(define_predicate "vector_or_const_vector_operand"
+  (ior (match_operand 0 "register_operand")
+       (match_operand 0 "vector_memory_operand")
+       (match_code "const_vector")))
 
 (define_predicate "bcst_mem_operand"
   (and (match_code "vec_duplicate")
@@ -1155,11 +1285,34 @@
   (ior (match_operand 0 "nonimmediate_operand")
        (match_code "const_vector")))
 
+(define_predicate "nonimmediate_or_const_vec_dup_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
+       (match_test "const_vec_duplicate_p (op)")))
+
 ;; Return true when OP is either register operand, or any
 ;; CONST_VECTOR.
 (define_predicate "reg_or_const_vector_operand"
   (ior (match_operand 0 "register_operand")
        (match_code "const_vector")))
+
+;; Return true when OP is CONST_VECTOR which can be converted to a
+;; sign extended 32-bit integer.
+(define_predicate "x86_64_const_vector_operand"
+  (match_code "const_vector")
+{
+  if (mode == VOIDmode)
+    mode = GET_MODE (op);
+  else if (GET_MODE (op) != mode)
+    return false;
+  if (GET_MODE_SIZE (mode) > UNITS_PER_WORD)
+    return false;
+  HOST_WIDE_INT val = ix86_convert_const_vector_to_integer (op, mode);
+  return trunc_int_for_mode (val, SImode) == val;
+})
+
+(define_predicate "nonimmediate_or_x86_64_const_vector_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
+       (match_operand 0 "x86_64_const_vector_operand")))
 
 ;; Return true when OP is nonimmediate or standard SSE constant.
 (define_predicate "nonimmediate_or_sse_const_operand"
@@ -1354,16 +1507,17 @@
   enum rtx_code code = GET_CODE (op);
 
   if (inmode == CCFPmode)
-    {
-      if (!ix86_trivial_fp_comparison_operator (op, mode))
-	return false;
-      code = ix86_fp_compare_code_to_integer (code);
-    }
+    code = ix86_fp_compare_code_to_integer (code);
+
   /* i387 supports just limited amount of conditional codes.  */
   switch (code)
     {
-    case LTU: case GTU: case LEU: case GEU:
-      if (inmode == CCmode || inmode == CCFPmode || inmode == CCCmode)
+    case GEU: case LTU:
+      if (inmode == CCCmode || inmode == CCGZmode)
+	return true;
+      /* FALLTHRU */
+    case GTU: case LEU:
+      if (inmode == CCmode || inmode == CCFPmode)
 	return true;
       return false;
     case ORDERED: case UNORDERED:
@@ -1420,11 +1574,11 @@
 	return true;
       return false;
     case GEU: case LTU:
-      if (inmode == CCGZmode)
+      if (inmode == CCCmode || inmode == CCGZmode)
 	return true;
       /* FALLTHRU */
     case GTU: case LEU:
-      if (inmode == CCmode || inmode == CCCmode || inmode == CCGZmode)
+      if (inmode == CCmode)
 	return true;
       return false;
     case ORDERED: case UNORDERED:
@@ -1443,23 +1597,33 @@
 ;; Return true if OP is a valid comparison operator
 ;; testing carry flag to be set.
 (define_predicate "ix86_carry_flag_operator"
-  (match_code "ltu,lt,unlt,gtu,gt,ungt,le,unle,ge,unge,ltgt,uneq")
+  (match_code "ltu,unlt")
 {
   machine_mode inmode = GET_MODE (XEXP (op, 0));
   enum rtx_code code = GET_CODE (op);
 
   if (inmode == CCFPmode)
-    {
-      if (!ix86_trivial_fp_comparison_operator (op, mode))
-	return false;
-      code = ix86_fp_compare_code_to_integer (code);
-    }
-  else if (inmode == CCCmode)
-   return code == LTU || code == GTU;
-  else if (inmode != CCmode)
+    code = ix86_fp_compare_code_to_integer (code);
+  else if (inmode != CCmode && inmode != CCCmode && inmode != CCGZmode)
     return false;
 
   return code == LTU;
+})
+
+;; Return true if OP is a valid comparison operator
+;; testing carry flag to be unset.
+(define_predicate "ix86_carry_flag_unset_operator"
+  (match_code "geu,ge")
+{
+  machine_mode inmode = GET_MODE (XEXP (op, 0));
+  enum rtx_code code = GET_CODE (op);
+
+  if (inmode == CCFPmode)
+    code = ix86_fp_compare_code_to_integer (code);
+  else if (inmode != CCmode && inmode != CCCmode && inmode != CCGZmode)
+    return false;
+
+  return code == GEU;
 })
 
 ;; Return true if this comparison only requires testing one flag bit.
@@ -1526,6 +1690,38 @@
   (and (match_code "mem")
        (match_test "MEM_ALIGN (op) < GET_MODE_BITSIZE (mode)")))
 
+;; Return true if OP is a parallel for an mov{d,q,dqa,ps,pd} vec_select,
+;; where one of the two operands of the vec_concat is const0_operand.
+(define_predicate "movq_parallel"
+  (match_code "parallel")
+{
+  unsigned nelt = XVECLEN (op, 0);
+  unsigned nelt2 = nelt >> 1;
+  unsigned i;
+
+  if (nelt < 2)
+    return false;
+
+  /* Validate that all of the elements are constants,
+     lower halves of permute are lower halves of the first operand,
+     upper halves of permute come from any of the second operand.  */
+  for (i = 0; i < nelt; ++i)
+    {
+      rtx er = XVECEXP (op, 0, i);
+      unsigned HOST_WIDE_INT ei;
+
+      if (!CONST_INT_P (er))
+	return false;
+      ei = INTVAL (er);
+      if (i < nelt2 && ei != i)
+	return false;
+      if (i >= nelt2 && (ei < nelt || ei >= nelt << 1))
+	return false;
+    }
+
+  return true;
+})
+
 ;; Return true if OP is a vzeroall operation, known to be a PARALLEL.
 (define_predicate "vzeroall_operation"
   (match_code "parallel")
@@ -1558,8 +1754,9 @@
 ;; return true if OP is a vzeroupper pattern.
 (define_predicate "vzeroupper_pattern"
   (and (match_code "parallel")
-       (match_code "unspec_volatile" "a")
-       (match_test "XINT (XVECEXP (op, 0, 0), 1) == UNSPECV_VZEROUPPER")))
+       (match_code "unspec" "b")
+       (match_test "XINT (XVECEXP (op, 0, 1), 1) == UNSPEC_CALLEE_ABI")
+       (match_test "INTVAL (XVECEXP (XVECEXP (op, 0, 1), 0, 0)) == ABI_VZEROUPPER")))
 
 ;; Return true if OP is an addsub vec_merge operation
 (define_predicate "addsub_vm_operator"
@@ -1659,6 +1856,96 @@
   return true;
 })
 
+;; Return true if OP is a constant pool in perm{w,d,b} which constains index
+;; match pmov{dw,wb,qd}.
+(define_predicate "permvar_truncate_operand"
+ (match_code "mem")
+{
+  int nelt = GET_MODE_NUNITS (mode);
+  int perm[128];
+  int id;
+
+  if (!INTEGRAL_MODE_P (mode) || !VECTOR_MODE_P (mode))
+    return false;
+
+  if (nelt < 2)
+    return false;
+
+  if (!ix86_extract_perm_from_pool_constant (&perm[0], op))
+    return false;
+
+  id = exact_log2 (nelt);
+
+  /* Check that the permutation is suitable for pmovz{bw,wd,dq}.
+     For example V16HImode to V8HImode
+     { 0 2 4 6 8 10 12 14 * * * * * * * * }.  */
+  for (int i = 0; i != nelt / 2; i++)
+    if ((perm[i] & ((1 << id) - 1)) != i * 2)
+      return false;
+
+  return true;
+})
+
+;; Return true if OP is a constant pool in shufb which constains index
+;; match pmovdw.
+(define_predicate "pshufb_truncv4siv4hi_operand"
+ (match_code "mem")
+{
+  int perm[128];
+
+  if (mode != E_V16QImode)
+    return false;
+
+  if (!ix86_extract_perm_from_pool_constant (&perm[0], op))
+    return false;
+
+  /* Check that the permutation is suitable for pmovdw.
+     For example V4SImode to V4HImode
+     { 0 1 4 5 8 9 12 13 * * * * * * * * }.
+     index = i % 2 + (i / 2) * 4.  */
+  for (int i = 0; i != 8; i++)
+    {
+      /* if (SRC2[(i * 8)+7] = 1) then DEST[(i*8)+7..(i*8)+0] := 0;  */
+      if (perm[i] & 128)
+	return false;
+
+      if ((perm[i] & 15) != ((i & 1) + (i & 0xFE) * 2))
+	return false;
+     }
+
+  return true;
+})
+
+;; Return true if OP is a constant pool in shufb which constains index
+;; match pmovdw.
+(define_predicate "pshufb_truncv8hiv8qi_operand"
+ (match_code "mem")
+{
+  int perm[128];
+
+  if (mode != E_V16QImode)
+    return false;
+
+  if (!ix86_extract_perm_from_pool_constant (&perm[0], op))
+    return false;
+
+  /* Check that the permutation is suitable for pmovwb.
+     For example V16QImode to V8QImode
+     { 0 2 4 6 8 10 12 14 * * * * * * * * }.
+     index = i % 2 + (i / 2) * 4.  */
+  for (int i = 0; i != 8; i++)
+    {
+      /* if (SRC2[(i * 8)+7] = 1) then DEST[(i*8)+7..(i*8)+0] := 0;  */
+      if (perm[i] & 128)
+	return false;
+
+      if ((perm[i] & 15) != i * 2)
+	 return false;
+    }
+
+  return true;
+})
+
 ;; Return true if OP is a parallel for an pmovz{bw,wd,dq} vec_select,
 ;; where one of the two operands of the vec_concat is const0_operand.
 (define_predicate "pmovzx_parallel"
@@ -1688,6 +1975,19 @@
   else
     return false;
 
+  return true;
+})
+
+;; Return true if OP is a const vector with duplicate value.
+(define_predicate "const_vector_duplicate_operand"
+  (match_code "const_vector")
+{
+  rtx elt = XVECEXP (op, 0, 0);
+  int i, nelt = XVECLEN (op, 0);
+
+  for (i = 1; i < nelt; ++i)
+    if (!rtx_equal_p (elt, XVECEXP (op, 0, i)))
+      return false;
   return true;
 })
 
@@ -1851,11 +2151,11 @@
   for(i = 4; i < 7; i++)
     {
       elt = XVECEXP (op, 0, i);
-      if (GET_CODE (elt) != SET
-	  || GET_CODE (SET_DEST (elt)) != REG
-	  || GET_MODE (SET_DEST (elt)) != V2DImode
-	  || REGNO (SET_DEST (elt)) != GET_SSE_REGNO (i)
-	  || SET_SRC (elt) != CONST0_RTX (V2DImode))
+      if (GET_CODE (elt) != CLOBBER
+	  || GET_MODE (elt) != VOIDmode
+	  || GET_CODE (XEXP (elt, 0)) != REG
+	  || GET_MODE (XEXP (elt, 0)) != V2DImode
+	  || REGNO (XEXP (elt, 0)) != GET_SSE_REGNO (i))
 	return false;
     }
 
@@ -1901,11 +2201,11 @@
   for(i = 4; i < 7; i++)
     {
       elt = XVECEXP (op, 0, i + 1);
-      if (GET_CODE (elt) != SET
-	  || GET_CODE (SET_DEST (elt)) != REG
-	  || GET_MODE (SET_DEST (elt)) != V2DImode
-	  || REGNO (SET_DEST (elt)) != GET_SSE_REGNO (i)
-	  || SET_SRC (elt) != CONST0_RTX (V2DImode))
+      if (GET_CODE (elt) != CLOBBER
+	  || GET_MODE (elt) != VOIDmode
+	  || GET_CODE (XEXP (elt, 0)) != REG
+	  || GET_MODE (XEXP (elt, 0)) != V2DImode
+	  || REGNO (XEXP (elt, 0)) != GET_SSE_REGNO (i))
 	return false;
     }
 

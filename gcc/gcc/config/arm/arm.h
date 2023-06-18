@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for ARM.
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
    Contributed by Pieter `Tiggr' Schoenmakers (rcpieter@win.tue.nl)
    and Martin Simmons (@harleqn.co.uk).
    More major hacks by Richard Earnshaw (rearnsha@arm.com)
@@ -47,10 +47,6 @@ extern char arm_arch_name[];
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS() arm_cpu_cpp_builtins (pfile)
 
-/* Target hooks for D language.  */
-#define TARGET_D_CPU_VERSIONS arm_d_target_versions
-#define TARGET_D_REGISTER_CPU_TARGET_INFO arm_d_register_target_info
-
 #include "config/arm/arm-opts.h"
 
 /* The processor for which instructions should be scheduled.  */
@@ -79,21 +75,17 @@ extern GTY(()) rtx arm_target_insn;
 extern void (*arm_lang_output_object_attributes_hook)(void);
 
 /* This type is the user-visible __fp16.  We need it in a few places in
-   the backend.  Defined in arm-builtins.c.  */
+   the backend.  Defined in arm-builtins.cc.  */
 extern tree arm_fp16_type_node;
 
 /* This type is the user-visible __bf16.  We need it in a few places in
-   the backend.  Defined in arm-builtins.c.  */
+   the backend.  Defined in arm-builtins.cc.  */
 extern tree arm_bf16_type_node;
 extern tree arm_bf16_ptr_type_node;
 
 
 #undef  CPP_SPEC
-#define CPP_SPEC "%(subtarget_cpp_spec)					\
-%{mfloat-abi=soft:%{mfloat-abi=hard:					\
-	%e-mfloat-abi=soft and -mfloat-abi=hard may not be used together}} \
-%{mbig-endian:%{mlittle-endian:						\
-	%e-mbig-endian and -mlittle-endian may not be used together}}"
+#define CPP_SPEC "%(subtarget_cpp_spec)"
 
 #ifndef CC1_SPEC
 #define CC1_SPEC ""
@@ -339,6 +331,12 @@ emission of floating point pcs attributes.  */
 						isa_bit_mve_float) \
 			       && !TARGET_GENERAL_REGS_ONLY)
 
+/* Non-zero if this target supports Armv8.1-M Mainline pointer-signing
+   extension.  */
+#define TARGET_HAVE_PACBTI (arm_arch8_1m_main \
+			    && bitmap_bit_p (arm_active_target.isa, \
+					     isa_bit_pacbti))
+
 /* MVE have few common instructions as VFP, like VLDM alias VPOP, VLDR, VSTM
    alia VPUSH, VSTR and VMOV, VMSR and VMRS.  In the same manner it updates few
    registers such as FPCAR, FPCCR, FPDSCR, FPSCR, MVFR0, MVFR1 and MVFR2.  All
@@ -456,7 +454,8 @@ enum base_architecture
   BASE_ARCH_8A = 8,
   BASE_ARCH_8M_BASE = 8,
   BASE_ARCH_8M_MAIN = 8,
-  BASE_ARCH_8R = 8
+  BASE_ARCH_8R = 8,
+  BASE_ARCH_9A = 9
 };
 
 /* The major revision number of the ARM Architecture implemented by the target.  */
@@ -506,6 +505,10 @@ extern int arm_arch8_3;
 
 /* Nonzero if this chip supports the ARM Architecture 8.4 extensions.  */
 extern int arm_arch8_4;
+
+/* Nonzero if this chip supports the ARM Architecture 8-M Mainline
+   extensions.  */
+extern int arm_arch8m_main;
 
 /* Nonzero if this chip supports the ARM Architecture 8.1-M Mainline
    extensions.  */
@@ -813,7 +816,8 @@ extern const int arm_arch_cde_coproc_bits[];
 	s16-s31	      S	VFP variable (aka d8-d15).
 	vfpcc		Not a real register.  Represents the VFP condition
 			code flags.
-	vpr		Used to represent MVE VPR predication.  */
+	vpr		Used to represent MVE VPR predication.
+	ra_auth_code	Pseudo register to save PAC.  */
 
 /* The stack backtrace structure is as follows:
   fp points to here:  |  save code pointer  |      [fp]
@@ -854,7 +858,7 @@ extern const int arm_arch_cde_coproc_bits[];
   1,1,1,1,1,1,1,1,		\
   1,1,1,1,			\
   /* Specials.  */		\
-  1,1,1,1,1,1,1			\
+  1,1,1,1,1,1,1,1		\
 }
 
 /* 1 for registers not available across function calls.
@@ -884,7 +888,7 @@ extern const int arm_arch_cde_coproc_bits[];
   1,1,1,1,1,1,1,1,		\
   1,1,1,1,			\
   /* Specials.  */		\
-  1,1,1,1,1,1,1			\
+  1,1,1,1,1,1,1,1		\
 }
 
 #ifndef SUBTARGET_CONDITIONAL_REGISTER_USAGE
@@ -1060,12 +1064,14 @@ extern const int arm_arch_cde_coproc_bits[];
    && (LAST_VFP_REGNUM - (REGNUM) >= 2 * (N) - 1))
 
 /* The number of hard registers is 16 ARM + 1 CC + 1 SFP + 1 AFP
-   + 1 APSRQ + 1 APSRGE + 1 VPR.  */
+   + 1 APSRQ + 1 APSRGE + 1 VPR + 1 Pseudo register to save PAC.  */
 /* Intel Wireless MMX Technology registers add 16 + 4 more.  */
 /* VFP (VFP3) adds 32 (64) + 1 VFPCC.  */
-#define FIRST_PSEUDO_REGISTER   107
+#define FIRST_PSEUDO_REGISTER   108
 
-#define DBX_REGISTER_NUMBER(REGNO) arm_dbx_register_number (REGNO)
+#define DWARF_PAC_REGNUM 143
+
+#define DEBUGGER_REGNO(REGNO) arm_debugger_regno (REGNO)
 
 /* Value should be nonzero if functions must have frame pointers.
    Zero means the frame pointer need not be set up (and parms may be accessed
@@ -1098,9 +1104,18 @@ extern const int arm_arch_cde_coproc_bits[];
    || (MODE) == V16QImode || (MODE) == V8HFmode || (MODE) == V4SFmode \
    || (MODE) == V2DFmode)
 
+#define VALID_MVE_PRED_MODE(MODE) \
+  ((MODE) == HImode							\
+   || (MODE) == V16BImode || (MODE) == V8BImode || (MODE) == V4BImode	\
+   || (MODE) == V2QImode)
+
 #define VALID_MVE_SI_MODE(MODE) \
   ((MODE) == V2DImode ||(MODE) == V4SImode || (MODE) == V8HImode \
    || (MODE) == V16QImode)
+
+/* Modes used in MVE's narrowing stores or widening loads.  */
+#define MVE_STN_LDW_MODE(MODE) \
+  ((MODE) == V4QImode || (MODE) == V8QImode || (MODE) == V4HImode)
 
 #define VALID_MVE_SF_MODE(MODE) \
   ((MODE) == V8HFmode || (MODE) == V4SFmode || (MODE) == V2DFmode)
@@ -1246,11 +1261,14 @@ extern int arm_regs_in_sequence[];
   CC_REGNUM, VFPCC_REGNUM,			\
   FRAME_POINTER_REGNUM, ARG_POINTER_REGNUM,	\
   SP_REGNUM, PC_REGNUM, APSRQ_REGNUM,		\
-  APSRGE_REGNUM, VPR_REGNUM			\
+  APSRGE_REGNUM, VPR_REGNUM, RA_AUTH_CODE	\
 }
 
 #define IS_VPR_REGNUM(REGNUM) \
   ((REGNUM) == VPR_REGNUM)
+
+#define IS_PAC_REGNUM(REGNUM) \
+  ((REGNUM) == RA_AUTH_CODE)
 
 /* Use different register alloc ordering for Thumb.  */
 #define ADJUST_REG_ALLOC_ORDER arm_order_regs_for_local_alloc ()
@@ -1290,6 +1308,8 @@ enum reg_class
   SFP_REG,
   AFP_REG,
   VPR_REG,
+  PAC_REG,
+  GENERAL_AND_VPR_REGS,
   ALL_REGS,
   LIM_REG_CLASSES
 };
@@ -1319,6 +1339,8 @@ enum reg_class
   "SFP_REG",		\
   "AFP_REG",		\
   "VPR_REG",		\
+  "PAC_REG",		\
+  "GENERAL_AND_VPR_REGS", \
   "ALL_REGS"		\
 }
 
@@ -1347,7 +1369,9 @@ enum reg_class
   { 0x00000000, 0x00000000, 0x00000000, 0x00000040 }, /* SFP_REG */	\
   { 0x00000000, 0x00000000, 0x00000000, 0x00000080 }, /* AFP_REG */	\
   { 0x00000000, 0x00000000, 0x00000000, 0x00000400 }, /* VPR_REG.  */	\
-  { 0xFFFF7FFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x0000000F }  /* ALL_REGS.  */	\
+  { 0x00000000, 0x00000000, 0x00000000, 0x00000800 }, /* PAC_REG.  */	\
+  { 0x00005FFF, 0x00000000, 0x00000000, 0x00000400 }, /* GENERAL_AND_VPR_REGS.  */ \
+  { 0xFFFF7FFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x0000040F }  /* ALL_REGS.  */	\
 }
 
 #define FP_SYSREGS \
@@ -1456,7 +1480,9 @@ extern const char *fp_sysreg_names[NB_FP_SYSREGS];
    ARM regs are UNITS_PER_WORD bits.  
    FIXME: Is this true for iWMMX?  */
 #define CLASS_MAX_NREGS(CLASS, MODE)  \
-  (ARM_NUM_REGS (MODE))
+  (CLASS == VPR_REG)		      \
+  ? CEIL (GET_MODE_SIZE (MODE), 2)    \
+  : (ARM_NUM_REGS (MODE))
 
 /* If defined, gives a class of registers that cannot be used as the
    operand of a SUBREG that changes the mode of the object illegally.  */
@@ -1609,6 +1635,9 @@ typedef struct GTY(()) machine_function
   /* The number of bytes used to store the static chain register on the
      stack, above the stack frame.  */
   int static_chain_stack_bytes;
+  /* Set to 1 when pointer authentication operation uses value of SP other
+     than the incoming stack pointer value.  */
+  int pacspval_needed;
 }
 machine_function;
 #endif
@@ -1718,7 +1747,7 @@ typedef struct
 		bl	mcount
 		.word	LP1
 
-   profile_function() in final.c outputs the .data section, FUNCTION_PROFILER
+   profile_function() in final.cc outputs the .data section, FUNCTION_PROFILER
    will output the .text section.
 
    The ``mov ip,lr'' seems like a good idea to stick with cc convention.
@@ -2231,7 +2260,7 @@ extern int making_const_table;
    that ASM_OUTPUT_REG_PUSH will be matched with ASM_OUTPUT_REG_POP, and
    that r7 isn't used by the function profiler, so we can use it as a
    scratch reg.  WARNING: This isn't safe in the general case!  It may be
-   sensitive to future changes in final.c:profile_function.  */
+   sensitive to future changes in final.cc:profile_function.  */
 #define ASM_OUTPUT_REG_PUSH(STREAM, REGNO)		\
   do							\
     {							\

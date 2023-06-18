@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,35 +23,41 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with ALI;      use ALI;
-with Atree;    use Atree;
-with Casing;   use Casing;
-with Debug;    use Debug;
-with Einfo;    use Einfo;
-with Errout;   use Errout;
-with Fname;    use Fname;
-with Fname.UF; use Fname.UF;
-with Lib.Util; use Lib.Util;
-with Lib.Xref; use Lib.Xref;
-with Nlists;   use Nlists;
-with Gnatvsn;  use Gnatvsn;
-with Opt;      use Opt;
-with Osint;    use Osint;
-with Osint.C;  use Osint.C;
-with Output;   use Output;
+with ALI;            use ALI;
+with Atree;          use Atree;
+with Casing;         use Casing;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Errout;         use Errout;
+with Fname;          use Fname;
+with Fname.UF;       use Fname.UF;
+with Lib.Util;       use Lib.Util;
+with Lib.Xref;       use Lib.Xref;
+with Nlists;         use Nlists;
+with Gnatvsn;        use Gnatvsn;
+with GNAT_CUDA;      use GNAT_CUDA;
+with Opt;            use Opt;
+with Osint;          use Osint;
+with Osint.C;        use Osint.C;
+with Output;         use Output;
 with Par;
-with Par_SCO;  use Par_SCO;
-with Restrict; use Restrict;
-with Rident;   use Rident;
-with Stand;    use Stand;
-with Scn;      use Scn;
-with Sem_Eval; use Sem_Eval;
-with Sinfo;    use Sinfo;
-with Sinput;   use Sinput;
-with Snames;   use Snames;
-with Stringt;  use Stringt;
-with Tbuild;   use Tbuild;
-with Uname;    use Uname;
+with Par_SCO;        use Par_SCO;
+with Restrict;       use Restrict;
+with Rident;         use Rident;
+with Stand;          use Stand;
+with Scn;            use Scn;
+with Sem_Eval;       use Sem_Eval;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Sinput;         use Sinput;
+with Snames;         use Snames;
+with Stringt;        use Stringt;
+with Tbuild;         use Tbuild;
+with Uname;          use Uname;
 
 with System.Case_Util; use System.Case_Util;
 with System.WCh_Con;   use System.WCh_Con;
@@ -133,7 +139,8 @@ package body Lib.Writ is
    ------------------------------
 
    procedure Ensure_System_Dependency is
-      System_Uname : Unit_Name_Type;
+      System_Uname : constant Unit_Name_Type :=
+        Name_To_Unit_Name (Name_System);
       --  Unit name for system spec if needed for dummy entry
 
       System_Fname : File_Name_Type;
@@ -142,11 +149,9 @@ package body Lib.Writ is
    begin
       --  Nothing to do if we already compiled System
 
-      for Unum in Units.First .. Last_Unit loop
-         if Source_Index (Unum) = System_Source_File_Index then
-            return;
-         end if;
-      end loop;
+      if Is_Loaded (System_Uname) then
+         return;
+      end if;
 
       --  If no entry for system.ads in the units table, then add a entry
       --  to the units table for system.ads, which will be referenced when
@@ -154,9 +159,6 @@ package body Lib.Writ is
       --  on system as a result of Targparm scanning the system.ads file to
       --  determine the target dependent parameters for the compilation.
 
-      Name_Len := 6;
-      Name_Buffer (1 .. 6) := "system";
-      System_Uname := Name_To_Unit_Name (Name_Enter);
       System_Fname := File_Name (System_Source_File_Index);
 
       Units.Increment_Last;
@@ -203,7 +205,7 @@ package body Lib.Writ is
          Style_Check := False;
          Initialize_Scanner (Units.Last, System_Source_File_Index);
          Discard_List (Par (Configuration_Pragmas => False));
-         Set_Ekind (Cunit_Entity (Units.Last), E_Package);
+         Mutate_Ekind (Cunit_Entity (Units.Last), E_Package);
          Set_Scope (Cunit_Entity (Units.Last), Standard_Standard);
          Style_Check := Save_Style;
          Multiple_Unit_Index := Save_Mindex;
@@ -267,6 +269,10 @@ package body Lib.Writ is
       procedure Collect_Withs (Cunit : Node_Id);
       --  Collect with lines for entries in the context clause of the given
       --  compilation unit, Cunit.
+
+      procedure Output_CUDA_Symbols (Unit_Num : Unit_Number_Type);
+      --  Output CUDA symbols, so that the rest of the toolchain may know what
+      --  symbols need registering with the CUDA runtime.
 
       procedure Write_Unit_Information (Unit_Num : Unit_Number_Type);
       --  Write out the library information for one unit for which code is
@@ -385,6 +391,43 @@ package body Lib.Writ is
             Next (Item);
          end loop;
       end Collect_Withs;
+
+      -------------------------
+      -- Output_CUDA_Symbols --
+      -------------------------
+
+      procedure Output_CUDA_Symbols (Unit_Num : Unit_Number_Type) is
+         Unit_Id     : constant Node_Id := Unit (Cunit (Unit_Num));
+         Spec_Id     : Node_Id;
+         Kernels     : Elist_Id;
+         Kernel_Elm  : Elmt_Id;
+         Kernel      : Entity_Id;
+      begin
+         if not Enable_CUDA_Expansion
+           or else Nkind (Unit_Id) = N_Null_Statement
+         then
+            return;
+         end if;
+         Spec_Id := (if Nkind (Unit_Id) = N_Package_Body
+           then Corresponding_Spec (Unit_Id)
+           else Defining_Unit_Name (Specification (Unit_Id)));
+         Kernels := Get_CUDA_Kernels (Spec_Id);
+         if No (Kernels) then
+            return;
+         end if;
+
+         Kernel_Elm := First_Elmt (Kernels);
+         while Present (Kernel_Elm) loop
+            Kernel := Node (Kernel_Elm);
+
+            Write_Info_Initiate ('K');
+            Write_Info_Char (' ');
+            Write_Info_Name (Chars (Kernel));
+            Write_Info_Terminate;
+            Next_Elmt (Kernel_Elm);
+         end loop;
+
+      end Output_CUDA_Symbols;
 
       ----------------------------
       -- Write_Unit_Information --
@@ -705,7 +748,7 @@ package body Lib.Writ is
                   Write_Info_Char (' ');
 
                   case Pragma_Name (N) is
-                     when Name_Annotate =>
+                     when Name_Annotate | Name_GNAT_Annotate =>
                         C := 'A';
                      when Name_Comment =>
                         C := 'C';
@@ -1014,7 +1057,7 @@ package body Lib.Writ is
          return;
       end if;
 
-      --  Build sorted source dependency table.
+      --  Build sorted source dependency table
 
       for Unum in Units.First .. Last_Unit loop
          if Cunit_Entity (Unum) = Empty
@@ -1166,6 +1209,14 @@ package body Lib.Writ is
          Write_Info_Terminate;
       end loop;
 
+      --  Output CUDA Kernel lines
+
+      for Unit in Units.First .. Last_Unit loop
+         if Present (Cunit (Unit)) then
+            Output_CUDA_Symbols (Unit);
+         end if;
+      end loop;
+
       --  Output parameters ('P') line
 
       Write_Info_Initiate ('P');
@@ -1234,10 +1285,6 @@ package body Lib.Writ is
          Write_Info_Str (" UA");
       end if;
 
-      if Front_End_Exceptions then
-         Write_Info_Str (" FX");
-      end if;
-
       if ZCX_Exceptions then
          Write_Info_Str (" ZX");
       end if;
@@ -1251,9 +1298,10 @@ package body Lib.Writ is
       --  for which we have generated code
 
       for Unit in Units.First .. Last_Unit loop
-         if Units.Table (Unit).Generate_Code or else Unit = Main_Unit then
+         if Units.Table (Unit).Generate_Code then
             if not Has_No_Elaboration_Code (Cunit (Unit)) then
                Main_Restrictions.Violated (No_Elaboration_Code) := True;
+               exit;
             end if;
          end if;
       end loop;

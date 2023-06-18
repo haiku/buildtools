@@ -1,6 +1,5 @@
-// { dg-do compile }
-// { dg-additional-options "-fvect-cost-model=cheap" }
-// { dg-additional-options "-mavx2" { target x86_64-*-* i?86-*-* } }
+// { dg-do compile { target i?86-*-* x86_64-*-* } }
+// { dg-additional-options "-fvect-cost-model=cheap -mavx2" }
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -81,4 +80,5 @@ void encrypt_n(const uint8_t in[], uint8_t out[], size_t blocks, uint32_t *EK)
     }
 }
 
-// { dg-final { scan-tree-dump-times "not vectorized: vectorization is not profitable" 2 "slp1" { target x86_64-*-* i?86-*-* } } }
+// { dg-final { scan-tree-dump "not vectorized: vectorization is not profitable" "slp1" } }
+// { dg-final { scan-tree-dump-not "vectorizing stmts using SLP" "slp1" } }

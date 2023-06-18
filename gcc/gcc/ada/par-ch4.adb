@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -225,9 +225,7 @@ package body Ch4 is
 
          --  If it looks like start of expression, complain and scan expression
 
-         if Token in Token_Class_Literal
-           or else Token = Tok_Left_Paren
-         then
+         if Token in Token_Class_Literal | Tok_Left_Paren then
             Error_Msg_SC ("name expected");
             return P_Expression;
 
@@ -303,7 +301,7 @@ package body Ch4 is
          --  The treatment for the range attribute is similar (we do not
          --  consider x'range to be a name in this grammar).
 
-         elsif Token = Tok_Left_Paren or else Token = Tok_Range then
+         elsif Token in Tok_Left_Paren | Tok_Range then
             Restore_Scan_State (Scan_State); -- to apostrophe
             Expr_Form := EF_Simple_Name;
             return Name_Node;
@@ -334,446 +332,449 @@ package body Ch4 is
 
       <<Scan_Name_Extension>>
 
-         --  Character literal used as name cannot be extended. Also this
-         --  cannot be a call, since the name for a call must be a designator.
-         --  Return in these cases, or if there is no name extension
+      --  Character literal used as name cannot be extended. Also this
+      --  cannot be a call, since the name for a call must be a designator.
+      --  Return in these cases, or if there is no name extension
 
-         if Token not in Token_Class_Namext
-           or else Prev_Token = Tok_Char_Literal
-         then
-            Expr_Form := EF_Name;
-            return Name_Node;
-         end if;
+      if Token not in Token_Class_Namext
+        or else Prev_Token = Tok_Char_Literal
+      then
+         Expr_Form := EF_Name;
+         return Name_Node;
+      end if;
 
       --  Merge here when we know there is a name extension
 
       <<Scan_Name_Extension_OK>>
 
-         if Token = Tok_Left_Paren then
+      case Token is
+         when Tok_Left_Paren =>
             Scan; -- past left paren
             goto Scan_Name_Extension_Left_Paren;
 
-         elsif Token = Tok_Apostrophe then
+         when Tok_Apostrophe =>
             Save_Scan_State (Scan_State); -- at apostrophe
             Scan; -- past apostrophe
             goto Scan_Name_Extension_Apostrophe;
 
-         else -- Token = Tok_Dot
+         when Tok_Dot =>
             Save_Scan_State (Scan_State); -- at dot
             Scan; -- past dot
             goto Scan_Name_Extension_Dot;
-         end if;
+
+         when others => raise Program_Error;
+      end case;
 
       --  Case of name extended by dot (selection), dot is already skipped
       --  and the scan state at the point of the dot is saved in Scan_State.
 
       <<Scan_Name_Extension_Dot>>
 
-         --  Explicit dereference case
+      --  Explicit dereference case
 
-         if Token = Tok_All then
-            Prefix_Node := Name_Node;
-            Name_Node := New_Node (N_Explicit_Dereference, Token_Ptr);
-            Set_Prefix (Name_Node, Prefix_Node);
-            Scan; -- past ALL
-            goto Scan_Name_Extension;
+      if Token = Tok_All then
+         Prefix_Node := Name_Node;
+         Name_Node := New_Node (N_Explicit_Dereference, Token_Ptr);
+         Set_Prefix (Name_Node, Prefix_Node);
+         Scan; -- past ALL
+         goto Scan_Name_Extension;
 
          --  Selected component case
 
-         elsif Token in Token_Class_Name then
-            Prefix_Node := Name_Node;
-            Name_Node := New_Node (N_Selected_Component, Prev_Token_Ptr);
-            Set_Prefix (Name_Node, Prefix_Node);
-            Set_Selector_Name (Name_Node, Token_Node);
-            Scan; -- past selector
-            goto Scan_Name_Extension;
+      elsif Token in Token_Class_Name then
+         Prefix_Node := Name_Node;
+         Name_Node := New_Node (N_Selected_Component, Prev_Token_Ptr);
+         Set_Prefix (Name_Node, Prefix_Node);
+         Set_Selector_Name (Name_Node, Token_Node);
+         Scan; -- past selector
+         goto Scan_Name_Extension;
 
          --  Reserved identifier as selector
 
-         elsif Is_Reserved_Identifier then
-            Scan_Reserved_Identifier (Force_Msg => False);
-            Prefix_Node := Name_Node;
-            Name_Node := New_Node (N_Selected_Component, Prev_Token_Ptr);
-            Set_Prefix (Name_Node, Prefix_Node);
-            Set_Selector_Name (Name_Node, Token_Node);
-            Scan; -- past identifier used as selector
-            goto Scan_Name_Extension;
+      elsif Is_Reserved_Identifier then
+         Scan_Reserved_Identifier (Force_Msg => False);
+         Prefix_Node := Name_Node;
+         Name_Node := New_Node (N_Selected_Component, Prev_Token_Ptr);
+         Set_Prefix (Name_Node, Prefix_Node);
+         Set_Selector_Name (Name_Node, Token_Node);
+         Scan; -- past identifier used as selector
+         goto Scan_Name_Extension;
 
          --  If dot is at end of line and followed by nothing legal,
          --  then assume end of name and quit (dot will be taken as
          --  an incorrect form of some other punctuation by our caller).
 
-         elsif Token_Is_At_Start_Of_Line then
-            Restore_Scan_State (Scan_State);
-            return Name_Node;
+      elsif Token_Is_At_Start_Of_Line then
+         Restore_Scan_State (Scan_State);
+         return Name_Node;
 
          --  Here if nothing legal after the dot
 
-         else
-            Error_Msg_AP ("selector expected");
-            raise Error_Resync;
-         end if;
+      else
+         Error_Msg_AP ("selector expected");
+         raise Error_Resync;
+      end if;
 
       --  Here for an apostrophe as name extension. The scan position at the
       --  apostrophe has already been saved, and the apostrophe scanned out.
 
       <<Scan_Name_Extension_Apostrophe>>
 
-         Scan_Apostrophe : declare
-            function Apostrophe_Should_Be_Semicolon return Boolean;
-            --  Checks for case where apostrophe should probably be
-            --  a semicolon, and if so, gives appropriate message,
-            --  resets the scan pointer to the apostrophe, changes
-            --  the current token to Tok_Semicolon, and returns True.
-            --  Otherwise returns False.
+      Scan_Apostrophe : declare
+         function Apostrophe_Should_Be_Semicolon return Boolean;
+         --  Checks for case where apostrophe should probably be
+         --  a semicolon, and if so, gives appropriate message,
+         --  resets the scan pointer to the apostrophe, changes
+         --  the current token to Tok_Semicolon, and returns True.
+         --  Otherwise returns False.
 
-            ------------------------------------
-            -- Apostrophe_Should_Be_Semicolon --
-            ------------------------------------
+         ------------------------------------
+         -- Apostrophe_Should_Be_Semicolon --
+         ------------------------------------
 
-            function Apostrophe_Should_Be_Semicolon return Boolean is
-            begin
-               if Token_Is_At_Start_Of_Line then
-                  Restore_Scan_State (Scan_State); -- to apostrophe
-                  Error_Msg_SC ("|""''"" should be "";""");
-                  Token := Tok_Semicolon;
-                  return True;
-               else
-                  return False;
-               end if;
-            end Apostrophe_Should_Be_Semicolon;
-
-         --  Start of processing for Scan_Apostrophe
-
+         function Apostrophe_Should_Be_Semicolon return Boolean is
          begin
-            --  Check for qualified expression case in Ada 2012 mode
-
-            if Ada_Version >= Ada_2012
-              and then Token in Tok_Left_Paren | Tok_Left_Bracket
-            then
-               Name_Node := P_Qualified_Expression (Name_Node);
-               goto Scan_Name_Extension;
-
-            --  If range attribute after apostrophe, then return with Token
-            --  pointing to the apostrophe. Note that in this case the prefix
-            --  need not be a simple name (cases like A.all'range). Similarly
-            --  if there is a left paren after the apostrophe, then we also
-            --  return with Token pointing to the apostrophe (this is the
-            --  aggregate case, or some error case).
-
-            elsif Token = Tok_Range or else Token = Tok_Left_Paren then
+            if Token_Is_At_Start_Of_Line then
                Restore_Scan_State (Scan_State); -- to apostrophe
-               Expr_Form := EF_Name;
-               return Name_Node;
-
-            --  Here for cases where attribute designator is an identifier
-
-            elsif Token = Tok_Identifier then
-               Attr_Name := Token_Name;
-
-               if not Is_Attribute_Name (Attr_Name) then
-                  if Apostrophe_Should_Be_Semicolon then
-                     Expr_Form := EF_Name;
-                     return Name_Node;
-
-                  --  Here for a bad attribute name
-
-                  else
-                     Signal_Bad_Attribute;
-                     Scan; -- past bad identifier
-
-                     if Token = Tok_Left_Paren then
-                        Scan; -- past left paren
-
-                        loop
-                           Discard_Junk_Node (P_Expression_If_OK);
-                           exit when not Comma_Present;
-                        end loop;
-
-                        T_Right_Paren;
-                     end if;
-
-                     return Error;
-                  end if;
-               end if;
-
-               if Style_Check then
-                  Style.Check_Attribute_Name (False);
-               end if;
-
-            --  Here for case of attribute designator is not an identifier
-
+               Error_Msg_SC ("|""''"" should be "";""");
+               Token := Tok_Semicolon;
+               return True;
             else
-               if Token = Tok_Delta then
-                  Attr_Name := Name_Delta;
+               return False;
+            end if;
+         end Apostrophe_Should_Be_Semicolon;
 
-               elsif Token = Tok_Digits then
-                  Attr_Name := Name_Digits;
+      --  Start of processing for Scan_Apostrophe
 
-               elsif Token = Tok_Access then
-                  Attr_Name := Name_Access;
+      begin
+         --  Check for qualified expression case in Ada 2012 mode
 
-               elsif Token = Tok_Mod and then Ada_Version >= Ada_95 then
-                  Attr_Name := Name_Mod;
+         if Ada_Version >= Ada_2012
+           and then Token in Tok_Left_Paren | Tok_Left_Bracket
+         then
+            Name_Node := P_Qualified_Expression (Name_Node);
+            goto Scan_Name_Extension;
 
-               elsif Apostrophe_Should_Be_Semicolon then
+         --  If range attribute after apostrophe, then return with Token
+         --  pointing to the apostrophe. Note that in this case the prefix
+         --  need not be a simple name (cases like A.all'range). Similarly
+         --  if there is a left paren after the apostrophe, then we also
+         --  return with Token pointing to the apostrophe (this is the
+         --  aggregate case, or some error case).
+
+         elsif Token in Tok_Range | Tok_Left_Paren then
+            Restore_Scan_State (Scan_State); -- to apostrophe
+            Expr_Form := EF_Name;
+            return Name_Node;
+
+         --  Here for cases where attribute designator is an identifier
+
+         elsif Token = Tok_Identifier then
+            Attr_Name := Token_Name;
+
+            if not Is_Attribute_Name (Attr_Name) then
+               if Apostrophe_Should_Be_Semicolon then
                   Expr_Form := EF_Name;
                   return Name_Node;
 
-               else
-                  Error_Msg_AP ("attribute designator expected");
-                  raise Error_Resync;
-               end if;
+               --  Here for a bad attribute name
 
-               if Style_Check then
-                  Style.Check_Attribute_Name (True);
+               else
+                  Signal_Bad_Attribute;
+                  Scan; -- past bad identifier
+
+                  if Token = Tok_Left_Paren then
+                     Scan; -- past left paren
+
+                     loop
+                        Discard_Junk_Node (P_Expression_If_OK);
+                        exit when not Comma_Present;
+                     end loop;
+
+                     T_Right_Paren;
+                  end if;
+
+                  return Error;
                end if;
             end if;
 
-            --  We come here with an OK attribute scanned, and corresponding
-            --  Attribute identifier node stored in Ident_Node.
+            if Style_Check then
+               Style.Check_Attribute_Name (False);
+            end if;
 
-            Prefix_Node := Name_Node;
-            Name_Node := New_Node (N_Attribute_Reference, Prev_Token_Ptr);
-            Scan; -- past attribute designator
-            Set_Prefix (Name_Node, Prefix_Node);
-            Set_Attribute_Name (Name_Node, Attr_Name);
+         --  Here for case of attribute designator is not an identifier
 
-            --  Scan attribute arguments/designator. We skip this if we know
-            --  that the attribute cannot have an argument (see documentation
-            --  of Is_Parameterless_Attribute for further details).
+         else
+            if Token = Tok_Delta then
+               Attr_Name := Name_Delta;
 
-            if Token = Tok_Left_Paren
-              and then not
-                Is_Parameterless_Attribute (Get_Attribute_Id (Attr_Name))
-            then
-               --  Attribute Update contains an array or record association
-               --  list which provides new values for various components or
-               --  elements. The list is parsed as an aggregate, and we get
-               --  better error handling by knowing that in the parser.
+            elsif Token = Tok_Digits then
+               Attr_Name := Name_Digits;
 
-               if Attr_Name = Name_Update then
-                  Set_Expressions (Name_Node, New_List);
-                  Append (P_Aggregate, Expressions (Name_Node));
+            elsif Token = Tok_Access then
+               Attr_Name := Name_Access;
 
-               --  All other cases of parsing attribute arguments
+            elsif Token = Tok_Mod and then Ada_Version >= Ada_95 then
+               Attr_Name := Name_Mod;
 
-               else
-                  Set_Expressions (Name_Node, New_List);
-                  Scan; -- past left paren
+            elsif Apostrophe_Should_Be_Semicolon then
+               Expr_Form := EF_Name;
+               return Name_Node;
 
-                  loop
-                     declare
-                        Expr : constant Node_Id := P_Expression_If_OK;
-                        Rnam : Node_Id;
+            else
+               Error_Msg_AP ("attribute designator expected");
+               raise Error_Resync;
+            end if;
 
-                     begin
-                        --  Case of => for named notation
+            if Style_Check then
+               Style.Check_Attribute_Name (True);
+            end if;
+         end if;
 
-                        if Token = Tok_Arrow then
+         --  We come here with an OK attribute scanned, and corresponding
+         --  Attribute identifier node stored in Ident_Node.
 
-                           --  Named notation allowed only for the special
-                           --  case of System'Restriction_Set (No_Dependence =>
-                           --  unit_NAME), in which case construct a parameter
-                           --  assocation node and append to the arguments.
+         Prefix_Node := Name_Node;
+         Name_Node := New_Node (N_Attribute_Reference, Prev_Token_Ptr);
+         Scan; -- past attribute designator
+         Set_Prefix (Name_Node, Prefix_Node);
+         Set_Attribute_Name (Name_Node, Attr_Name);
 
-                           if Attr_Name = Name_Restriction_Set
-                             and then Nkind (Expr) = N_Identifier
-                             and then Chars (Expr) = Name_No_Dependence
-                           then
-                              Scan; -- past arrow
-                              Rnam := P_Name;
-                              Append_To (Expressions (Name_Node),
-                                Make_Parameter_Association (Sloc (Rnam),
-                                  Selector_Name             => Expr,
-                                  Explicit_Actual_Parameter => Rnam));
-                              exit;
+         --  Scan attribute arguments/designator. We skip this if we know
+         --  that the attribute cannot have an argument (see documentation
+         --  of Is_Parameterless_Attribute for further details).
 
-                           --  For all other cases named notation is illegal
+         if Token = Tok_Left_Paren
+           and then not
+             Is_Parameterless_Attribute (Get_Attribute_Id (Attr_Name))
+         then
+            --  Attribute Update contains an array or record association
+            --  list which provides new values for various components or
+            --  elements. The list is parsed as an aggregate, and we get
+            --  better error handling by knowing that in the parser.
 
-                           else
-                              Error_Msg_SC
-                                ("named parameters not permitted "
-                                 & "for attributes");
-                              Scan; -- past junk arrow
-                           end if;
+            if Attr_Name = Name_Update then
+               Set_Expressions (Name_Node, New_List);
+               Append (P_Aggregate, Expressions (Name_Node));
 
-                        --  Here for normal case (not => for named parameter)
+            --  All other cases of parsing attribute arguments
+
+            else
+               Set_Expressions (Name_Node, New_List);
+               Scan; -- past left paren
+
+               loop
+                  declare
+                     Expr : constant Node_Id := P_Expression_If_OK;
+                     Rnam : Node_Id;
+
+                  begin
+                     --  Case of => for named notation
+
+                     if Token = Tok_Arrow then
+
+                        --  Named notation allowed only for the special
+                        --  case of System'Restriction_Set (No_Dependence =>
+                        --  unit_NAME), in which case construct a parameter
+                        --  assocation node and append to the arguments.
+
+                        if Attr_Name = Name_Restriction_Set
+                          and then Nkind (Expr) = N_Identifier
+                          and then Chars (Expr) = Name_No_Dependence
+                        then
+                           Scan; -- past arrow
+                           Rnam := P_Name;
+                           Append_To (Expressions (Name_Node),
+                             Make_Parameter_Association (Sloc (Rnam),
+                               Selector_Name             => Expr,
+                               Explicit_Actual_Parameter => Rnam));
+                           exit;
+
+                        --  For all other cases named notation is illegal
 
                         else
-                           --  Special handling for 'Image in Ada 2012, where
-                           --  the attribute can be parameterless and its value
-                           --  can be the prefix of a slice. Rewrite name as a
-                           --  slice, Expr is its low bound.
-
-                           if Token = Tok_Dot_Dot
-                             and then Attr_Name = Name_Image
-                             and then Ada_Version >= Ada_2012
-                           then
-                              Set_Expressions (Name_Node, No_List);
-                              Prefix_Node := Name_Node;
-                              Name_Node :=
-                                New_Node (N_Slice, Sloc (Prefix_Node));
-                              Set_Prefix (Name_Node, Prefix_Node);
-                              Range_Node := New_Node (N_Range, Token_Ptr);
-                              Set_Low_Bound (Range_Node, Expr);
-                              Scan; -- past ..
-                              Expr_Node := P_Expression;
-                              Check_Simple_Expression (Expr_Node);
-                              Set_High_Bound (Range_Node, Expr_Node);
-                              Set_Discrete_Range (Name_Node, Range_Node);
-                              T_Right_Paren;
-
-                              goto Scan_Name_Extension;
-
-                           else
-                              Append (Expr, Expressions (Name_Node));
-                              exit when not Comma_Present;
-                           end if;
+                           Error_Msg_SC
+                             ("named parameters not permitted "
+                              & "for attributes");
+                           Scan; -- past junk arrow
                         end if;
-                     end;
-                  end loop;
 
-                  T_Right_Paren;
-               end if;
+                     --  Here for normal case (not => for named parameter)
+
+                     else
+                        --  Special handling for 'Image in Ada 2012, where
+                        --  the attribute can be parameterless and its value
+                        --  can be the prefix of a slice. Rewrite name as a
+                        --  slice, Expr is its low bound.
+
+                        if Token = Tok_Dot_Dot
+                          and then Attr_Name = Name_Image
+                          and then Ada_Version >= Ada_2012
+                        then
+                           Set_Expressions (Name_Node, No_List);
+                           Prefix_Node := Name_Node;
+                           Name_Node :=
+                             New_Node (N_Slice, Sloc (Prefix_Node));
+                           Set_Prefix (Name_Node, Prefix_Node);
+                           Range_Node := New_Node (N_Range, Token_Ptr);
+                           Set_Low_Bound (Range_Node, Expr);
+                           Scan; -- past ..
+                           Expr_Node := P_Expression;
+                           Check_Simple_Expression (Expr_Node);
+                           Set_High_Bound (Range_Node, Expr_Node);
+                           Set_Discrete_Range (Name_Node, Range_Node);
+                           T_Right_Paren;
+
+                           goto Scan_Name_Extension;
+
+                        else
+                           Append (Expr, Expressions (Name_Node));
+                           exit when not Comma_Present;
+                        end if;
+                     end if;
+                  end;
+               end loop;
+
+               T_Right_Paren;
             end if;
+         end if;
 
-            goto Scan_Name_Extension;
-         end Scan_Apostrophe;
+         goto Scan_Name_Extension;
+      end Scan_Apostrophe;
 
       --  Here for left parenthesis extending name (left paren skipped)
 
       <<Scan_Name_Extension_Left_Paren>>
 
-         --  We now have to scan through a list of items, terminated by a
-         --  right parenthesis. The scan is handled by a finite state
-         --  machine. The possibilities are:
+      --  We now have to scan through a list of items, terminated by a
+      --  right parenthesis. The scan is handled by a finite state
+      --  machine. The possibilities are:
 
-         --   (discrete_range)
+      --   (discrete_range)
 
-         --      This is a slice. This case is handled in LP_State_Init
+      --      This is a slice. This case is handled in LP_State_Init
 
-         --   (expression, expression, ..)
+      --   (expression, expression, ..)
 
-         --      This is interpreted as an indexed component, i.e. as a
-         --      case of a name which can be extended in the normal manner.
-         --      This case is handled by LP_State_Name or LP_State_Expr.
+      --      This is interpreted as an indexed component, i.e. as a
+      --      case of a name which can be extended in the normal manner.
+      --      This case is handled by LP_State_Name or LP_State_Expr.
 
-         --      Note: if and case expressions (without an extra level of
-         --      parentheses) are permitted in this context).
+      --      Note: if and case expressions (without an extra level of
+      --      parentheses) are permitted in this context).
 
-         --   (..., identifier => expression , ...)
+      --   (..., identifier => expression , ...)
 
-         --      If there is at least one occurrence of identifier => (but
-         --      none of the other cases apply), then we have a call.
+      --      If there is at least one occurrence of identifier => (but
+      --      none of the other cases apply), then we have a call.
 
-         --  Test for Id => case
+      --  Test for Id => case
 
-         if Token = Tok_Identifier then
-            Save_Scan_State (Scan_State); -- at Id
-            Scan; -- past Id
+      if Token = Tok_Identifier then
+         Save_Scan_State (Scan_State); -- at Id
+         Scan; -- past Id
 
-            --  Test for => (allow := as an error substitute)
+         --  Test for => (allow := as an error substitute)
 
-            if Token = Tok_Arrow or else Token = Tok_Colon_Equal then
-               Restore_Scan_State (Scan_State); -- to Id
-               Arg_List := New_List;
-               goto LP_State_Call;
-
-            else
-               Restore_Scan_State (Scan_State); -- to Id
-            end if;
-         end if;
-
-         --  Here we have an expression after all
-
-         Expr_Node := P_Expression_Or_Range_Attribute_If_OK;
-
-         --  Check cases of discrete range for a slice
-
-         --  First possibility: Range_Attribute_Reference
-
-         if Expr_Form = EF_Range_Attr then
-            Range_Node := Expr_Node;
-
-         --  Second possibility: Simple_expression .. Simple_expression
-
-         elsif Token = Tok_Dot_Dot then
-            Check_Simple_Expression (Expr_Node);
-            Range_Node := New_Node (N_Range, Token_Ptr);
-            Set_Low_Bound (Range_Node, Expr_Node);
-            Scan; -- past ..
-            Expr_Node := P_Expression;
-            Check_Simple_Expression (Expr_Node);
-            Set_High_Bound (Range_Node, Expr_Node);
-
-         --  Third possibility: Type_name range Range
-
-         elsif Token = Tok_Range then
-            if Expr_Form /= EF_Simple_Name then
-               Error_Msg_SC ("subtype mark must precede RANGE");
-               raise Error_Resync;
-            end if;
-
-            Range_Node := P_Subtype_Indication (Expr_Node);
-
-         --  Otherwise we just have an expression. It is true that we might
-         --  have a subtype mark without a range constraint but this case
-         --  is syntactically indistinguishable from the expression case.
+         if Token in Tok_Arrow | Tok_Colon_Equal then
+            Restore_Scan_State (Scan_State); -- to Id
+            Arg_List := New_List;
+            goto LP_State_Call;
 
          else
-            Arg_List := New_List;
-            goto LP_State_Expr;
+            Restore_Scan_State (Scan_State); -- to Id
+         end if;
+      end if;
+
+      --  Here we have an expression after all
+
+      Expr_Node := P_Expression_Or_Range_Attribute_If_OK;
+
+      --  Check cases of discrete range for a slice
+
+      --  First possibility: Range_Attribute_Reference
+
+      if Expr_Form = EF_Range_Attr then
+         Range_Node := Expr_Node;
+
+      --  Second possibility: Simple_expression .. Simple_expression
+
+      elsif Token = Tok_Dot_Dot then
+         Check_Simple_Expression (Expr_Node);
+         Range_Node := New_Node (N_Range, Token_Ptr);
+         Set_Low_Bound (Range_Node, Expr_Node);
+         Scan; -- past ..
+         Expr_Node := P_Expression;
+         Check_Simple_Expression (Expr_Node);
+         Set_High_Bound (Range_Node, Expr_Node);
+
+      --  Third possibility: Type_name range Range
+
+      elsif Token = Tok_Range then
+         if Expr_Form /= EF_Simple_Name then
+            Error_Msg_SC ("subtype mark must precede RANGE");
+            raise Error_Resync;
          end if;
 
-         --  Fall through here with unmistakable Discrete range scanned,
-         --  which means that we definitely have the case of a slice. The
-         --  Discrete range is in Range_Node.
+         Range_Node := P_Subtype_Indication (Expr_Node);
 
-         if Token = Tok_Comma then
-            Error_Msg_SC ("slice cannot have more than one dimension");
+      --  Otherwise we just have an expression. It is true that we might
+      --  have a subtype mark without a range constraint but this case
+      --  is syntactically indistinguishable from the expression case.
+
+      else
+         Arg_List := New_List;
+         goto LP_State_Expr;
+      end if;
+
+      --  Fall through here with unmistakable Discrete range scanned,
+      --  which means that we definitely have the case of a slice. The
+      --  Discrete range is in Range_Node.
+
+      if Token = Tok_Comma then
+         Error_Msg_SC ("slice cannot have more than one dimension");
+         raise Error_Resync;
+
+      elsif Token /= Tok_Right_Paren then
+         if Token = Tok_Arrow then
+
+            --  This may be an aggregate that is missing a qualification
+
+            Error_Msg_SC
+              ("context of aggregate must be a qualified expression");
             raise Error_Resync;
 
-         elsif Token /= Tok_Right_Paren then
-            if Token = Tok_Arrow then
+         else
+            T_Right_Paren;
+            raise Error_Resync;
+         end if;
 
-               --  This may be an aggregate that is missing a qualification
+      else
+         Scan; -- past right paren
+         Prefix_Node := Name_Node;
+         Name_Node := New_Node (N_Slice, Sloc (Prefix_Node));
+         Set_Prefix (Name_Node, Prefix_Node);
+         Set_Discrete_Range (Name_Node, Range_Node);
 
-               Error_Msg_SC
-                 ("context of aggregate must be a qualified expression");
-               raise Error_Resync;
+         --  An operator node is legal as a prefix to other names,
+         --  but not for a slice.
 
-            else
-               T_Right_Paren;
-               raise Error_Resync;
-            end if;
+         if Nkind (Prefix_Node) = N_Operator_Symbol then
+            Error_Msg_N ("illegal prefix for slice", Prefix_Node);
+         end if;
+
+         --  If we have a name extension, go scan it
+
+         if Token in Token_Class_Namext then
+            goto Scan_Name_Extension_OK;
+
+         --  Otherwise return (a slice is a name, but is not a call)
 
          else
-            Scan; -- past right paren
-            Prefix_Node := Name_Node;
-            Name_Node := New_Node (N_Slice, Sloc (Prefix_Node));
-            Set_Prefix (Name_Node, Prefix_Node);
-            Set_Discrete_Range (Name_Node, Range_Node);
-
-            --  An operator node is legal as a prefix to other names,
-            --  but not for a slice.
-
-            if Nkind (Prefix_Node) = N_Operator_Symbol then
-               Error_Msg_N ("illegal prefix for slice", Prefix_Node);
-            end if;
-
-            --  If we have a name extension, go scan it
-
-            if Token in Token_Class_Namext then
-               goto Scan_Name_Extension_OK;
-
-            --  Otherwise return (a slice is a name, but is not a call)
-
-            else
-               Expr_Form := EF_Name;
-               return Name_Node;
-            end if;
+            Expr_Form := EF_Name;
+            return Name_Node;
          end if;
+      end if;
 
       --  In LP_State_Expr, we have scanned one or more expressions, and
       --  so we have a call or an indexed component which is a name. On
@@ -781,48 +782,48 @@ package body Ch4 is
       --  Arg_List contains the list of expressions encountered so far
 
       <<LP_State_Expr>>
-         Append (Expr_Node, Arg_List);
+      Append (Expr_Node, Arg_List);
 
-         if Token = Tok_Arrow then
-            Error_Msg
-              ("expect identifier in parameter association", Sloc (Expr_Node));
-            Scan;  -- past arrow
+      if Token = Tok_Arrow then
+         Error_Msg
+           ("expect identifier in parameter association", Sloc (Expr_Node));
+         Scan;  -- past arrow
 
-         elsif not Comma_Present then
-            T_Right_Paren;
+      elsif not Comma_Present then
+         T_Right_Paren;
 
-            Prefix_Node := Name_Node;
-            Name_Node := New_Node (N_Indexed_Component, Sloc (Prefix_Node));
-            Set_Prefix (Name_Node, Prefix_Node);
-            Set_Expressions (Name_Node, Arg_List);
+         Prefix_Node := Name_Node;
+         Name_Node := New_Node (N_Indexed_Component, Sloc (Prefix_Node));
+         Set_Prefix (Name_Node, Prefix_Node);
+         Set_Expressions (Name_Node, Arg_List);
 
-            goto Scan_Name_Extension;
+         goto Scan_Name_Extension;
+      end if;
+
+      --  Comma present (and scanned out), test for identifier => case
+      --  Test for identifier => case
+
+      if Token = Tok_Identifier then
+         Save_Scan_State (Scan_State); -- at Id
+         Scan; -- past Id
+
+         --  Test for => (allow := as error substitute)
+
+         if Token in Tok_Arrow | Tok_Colon_Equal then
+            Restore_Scan_State (Scan_State); -- to Id
+            goto LP_State_Call;
+
+         --  Otherwise it's just an expression after all, so backup
+
+         else
+            Restore_Scan_State (Scan_State); -- to Id
          end if;
+      end if;
 
-         --  Comma present (and scanned out), test for identifier => case
-         --  Test for identifier => case
+      --  Here we have an expression after all, so stay in this state
 
-         if Token = Tok_Identifier then
-            Save_Scan_State (Scan_State); -- at Id
-            Scan; -- past Id
-
-            --  Test for => (allow := as error substitute)
-
-            if Token = Tok_Arrow or else Token = Tok_Colon_Equal then
-               Restore_Scan_State (Scan_State); -- to Id
-               goto LP_State_Call;
-
-            --  Otherwise it's just an expression after all, so backup
-
-            else
-               Restore_Scan_State (Scan_State); -- to Id
-            end if;
-         end if;
-
-         --  Here we have an expression after all, so stay in this state
-
-         Expr_Node := P_Expression_If_OK;
-         goto LP_State_Expr;
+      Expr_Node := P_Expression_If_OK;
+      goto LP_State_Expr;
 
       --  LP_State_Call corresponds to the situation in which at least one
       --  instance of Id => Expression has been encountered, so we know that
@@ -832,78 +833,78 @@ package body Ch4 is
 
       <<LP_State_Call>>
 
-         --  Test for case of Id => Expression (named parameter)
+      --  Test for case of Id => Expression (named parameter)
 
-         if Token = Tok_Identifier then
-            Save_Scan_State (Scan_State); -- at Id
-            Ident_Node := Token_Node;
-            Scan; -- past Id
+      if Token = Tok_Identifier then
+         Save_Scan_State (Scan_State); -- at Id
+         Ident_Node := Token_Node;
+         Scan; -- past Id
 
-            --  Deal with => (allow := as incorrect substitute)
+         --  Deal with => (allow := as incorrect substitute)
 
-            if Token = Tok_Arrow or else Token = Tok_Colon_Equal then
-               Arg_Node := New_Node (N_Parameter_Association, Prev_Token_Ptr);
-               Set_Selector_Name (Arg_Node, Ident_Node);
-               T_Arrow;
-               Set_Explicit_Actual_Parameter (Arg_Node, P_Expression);
-               Append (Arg_Node, Arg_List);
+         if Token in Tok_Arrow | Tok_Colon_Equal then
+            Arg_Node := New_Node (N_Parameter_Association, Prev_Token_Ptr);
+            Set_Selector_Name (Arg_Node, Ident_Node);
+            T_Arrow;
+            Set_Explicit_Actual_Parameter (Arg_Node, P_Expression);
+            Append (Arg_Node, Arg_List);
 
-               --  If a comma follows, go back and scan next entry
+            --  If a comma follows, go back and scan next entry
 
-               if Comma_Present then
-                  goto LP_State_Call;
+            if Comma_Present then
+               goto LP_State_Call;
 
-               --  Otherwise we have the end of a call
-
-               else
-                  Prefix_Node := Name_Node;
-                  Name_Node := New_Node (N_Function_Call, Sloc (Prefix_Node));
-                  Set_Name (Name_Node, Prefix_Node);
-                  Set_Parameter_Associations (Name_Node, Arg_List);
-                  T_Right_Paren;
-
-                  if Token in Token_Class_Namext then
-                     goto Scan_Name_Extension_OK;
-
-                  --  This is a case of a call which cannot be a name
-
-                  else
-                     Expr_Form := EF_Name;
-                     return Name_Node;
-                  end if;
-               end if;
-
-            --  Not named parameter: Id started an expression after all
+            --  Otherwise we have the end of a call
 
             else
-               Restore_Scan_State (Scan_State); -- to Id
+               Prefix_Node := Name_Node;
+               Name_Node := New_Node (N_Function_Call, Sloc (Prefix_Node));
+               Set_Name (Name_Node, Prefix_Node);
+               Set_Parameter_Associations (Name_Node, Arg_List);
+               T_Right_Paren;
+
+               if Token in Token_Class_Namext then
+                  goto Scan_Name_Extension_OK;
+
+               --  This is a case of a call which cannot be a name
+
+               else
+                  Expr_Form := EF_Name;
+                  return Name_Node;
+               end if;
             end if;
+
+         --  Not named parameter: Id started an expression after all
+
+         else
+            Restore_Scan_State (Scan_State); -- to Id
          end if;
+      end if;
 
-         --  Here if entry did not start with Id => which means that it
-         --  is a positional parameter, which is not allowed, since we
-         --  have seen at least one named parameter already.
+      --  Here if entry did not start with Id => which means that it
+      --  is a positional parameter, which is not allowed, since we
+      --  have seen at least one named parameter already.
 
-         Error_Msg_SC
-            ("positional parameter association " &
-              "not allowed after named one");
+      Error_Msg_SC
+         ("positional parameter association " &
+           "not allowed after named one");
 
-         Expr_Node := P_Expression_If_OK;
+      Expr_Node := P_Expression_If_OK;
 
-         --  Leaving the '>' in an association is not unusual, so suggest
-         --  a possible fix.
+      --  Leaving the '>' in an association is not unusual, so suggest
+      --  a possible fix.
 
-         if Nkind (Expr_Node) = N_Op_Eq then
-            Error_Msg_N ("\maybe `='>` was intended", Expr_Node);
-         end if;
+      if Nkind (Expr_Node) = N_Op_Eq then
+         Error_Msg_N ("\maybe `='>` was intended", Expr_Node);
+      end if;
 
-         --  We go back to scanning out expressions, so that we do not get
-         --  multiple error messages when several positional parameters
-         --  follow a named parameter.
+      --  We go back to scanning out expressions, so that we do not get
+      --  multiple error messages when several positional parameters
+      --  follow a named parameter.
 
-         goto LP_State_Expr;
+      goto LP_State_Expr;
 
-         --  End of treatment for name extensions starting with left paren
+      --  End of treatment for name extensions starting with left paren
 
       --  End of loop through name extensions
 
@@ -1194,7 +1195,7 @@ package body Ch4 is
      (Prefix_Node : Node_Id)
       return        Node_Id
    is
-      Attr_Node  : Node_Id;
+      Attr_Node : Node_Id;
 
    begin
       Attr_Node := New_Node (N_Attribute_Reference, Token_Ptr);
@@ -1280,7 +1281,7 @@ package body Ch4 is
       if Nkind (Aggr_Node) /= N_Aggregate
            and then
          Nkind (Aggr_Node) /= N_Extension_Aggregate
-         and then Ada_Version < Ada_2020
+         and then Ada_Version < Ada_2022
       then
          Error_Msg
            ("aggregate may not have single positional component", Aggr_Sloc);
@@ -1384,7 +1385,7 @@ package body Ch4 is
       begin
          Save_Scan_State (Scan_State);
          Scan;   --  past FOR
-         Maybe := Token = Tok_All or else Token = Tok_Some;
+         Maybe := Token in Tok_All | Tok_Some;
          Restore_Scan_State (Scan_State);  --  to FOR
          return Maybe;
       end Is_Quantified_Expression;
@@ -1399,12 +1400,13 @@ package body Ch4 is
       if Token = Tok_Left_Bracket then
          Scan;
 
-         --  Special case for null aggregate in Ada 2020
+         --  Special case for null aggregate in Ada 2022
 
          if Token = Tok_Right_Bracket then
             Scan;   --  past ]
             Aggregate_Node := New_Node (N_Aggregate, Lparen_Sloc);
             Set_Expressions (Aggregate_Node, New_List);
+            Set_Component_Associations (Aggregate_Node, New_List);
             Set_Is_Homogeneous_Aggregate (Aggregate_Node);
             return Aggregate_Node;
          end if;
@@ -1601,18 +1603,15 @@ package body Ch4 is
          --  identifier or OTHERS follows (the latter cases are missing
          --  comma cases). Also assume positional if a semicolon follows,
          --  which can happen if there are missing parens.
-         --  In Ada_2012 and Ada_2020 an iterated association can appear.
+         --  In Ada 2012 and 2022 an iterated association can appear.
 
          elsif Nkind (Expr_Node) in
            N_Iterated_Component_Association | N_Iterated_Element_Association
          then
             Append_New (Expr_Node, Assoc_List);
 
-         elsif Token = Tok_Comma
-           or else Token = Tok_Right_Paren
-           or else Token = Tok_Others
-           or else Token in Token_Class_Lit_Or_Name
-           or else Token = Tok_Semicolon
+         elsif Token in Tok_Comma | Tok_Right_Paren | Tok_Others
+           | Token_Class_Lit_Or_Name | Tok_Semicolon
          then
             if Present (Assoc_List) then
                Error_Msg_BC -- CODEFIX
@@ -1682,6 +1681,7 @@ package body Ch4 is
 
       case Start_Token is
          when Tok_Left_Bracket =>
+
             Set_Component_Associations (Aggregate_Node, Assoc_List);
             Set_Is_Homogeneous_Aggregate (Aggregate_Node);
             T_Right_Bracket;
@@ -1694,6 +1694,10 @@ package body Ch4 is
                end if;
             end if;
          when Tok_Left_Paren =>
+            if Nkind (Aggregate_Node) = N_Aggregate then
+               Set_Is_Parenthesis_Aggregate (Aggregate_Node);
+            end if;
+
             T_Right_Paren;
          when others => raise Program_Error;
       end case;
@@ -1734,8 +1738,9 @@ package body Ch4 is
    --        aggregates (AI-287)
 
    function P_Record_Or_Array_Component_Association return Node_Id is
-      Assoc_Node : Node_Id;
-
+      Assoc_Node                  : Node_Id;
+      Box_Present                 : Boolean := False;
+      Box_With_Identifier_Present : Boolean := False;
    begin
       --  A loop indicates an iterated_component_association
 
@@ -1744,6 +1749,8 @@ package body Ch4 is
       end if;
 
       Assoc_Node := New_Node (N_Component_Association, Token_Ptr);
+      Set_Binding_Chars (Assoc_Node, No_Name);
+
       Set_Choices (Assoc_Node, P_Discrete_Choice_List);
       Set_Sloc (Assoc_Node, Token_Ptr);
       TF_Arrow;
@@ -1755,10 +1762,73 @@ package body Ch4 is
 
          Error_Msg_Ada_2005_Extension ("component association with '<'>");
 
+         Box_Present := True;
          Set_Box_Present (Assoc_Node);
-         Scan; -- Past box
-      else
+         Scan; -- past box
+      elsif Token = Tok_Less then
+         declare
+            Scan_State : Saved_Scan_State;
+            Id         : Node_Id;
+         begin
+            Save_Scan_State (Scan_State);
+            Scan; -- past "<"
+            if Token = Tok_Identifier then
+               Id := P_Defining_Identifier;
+               if Token = Tok_Greater then
+                  if Core_Extensions_Allowed then
+                     Set_Box_Present (Assoc_Node);
+                     Set_Binding_Chars (Assoc_Node, Chars (Id));
+                     Box_Present := True;
+                     Box_With_Identifier_Present := True;
+                     Scan; -- past ">"
+                  else
+                     Error_Msg_GNAT_Extension
+                       ("identifier within box", Token_Ptr);
+                     Box_Present := True;
+                     --  Avoid cascading errors by ignoring the identifier
+                  end if;
+               end if;
+            end if;
+            if not Box_Present then
+               --  it wasn't an "is <identifier>", so restore.
+               Restore_Scan_State (Scan_State);
+            end if;
+         end;
+      end if;
+
+      if not Box_Present then
          Set_Expression (Assoc_Node, P_Expression);
+      end if;
+
+      --  Check for "is <identifier>" for aggregate that is part of
+      --  a pattern for a general case statement.
+
+      if Token = Tok_Is then
+         declare
+            Scan_State : Saved_Scan_State;
+            Id         : Node_Id;
+         begin
+            Save_Scan_State (Scan_State);
+            Scan; -- past "is"
+            if Token = Tok_Identifier then
+               Id := P_Defining_Identifier;
+
+               if not Core_Extensions_Allowed then
+                  Error_Msg_GNAT_Extension
+                    ("IS following component association", Token_Ptr);
+               elsif Box_With_Identifier_Present then
+                  Error_Msg
+                    ("Both identifier-in-box and trailing identifier"
+                       & " specified for one component association",
+                     Token_Ptr);
+               else
+                  Set_Binding_Chars (Assoc_Node, Chars (Id));
+               end if;
+            else
+               --  It wasn't an "is <identifier>", so restore.
+               Restore_Scan_State (Scan_State);
+            end if;
+         end;
       end if;
 
       return Assoc_Node;
@@ -1873,7 +1943,7 @@ package body Ch4 is
 
             --  Check for case of errant comma or semicolon
 
-            if Token = Tok_Comma or else Token = Tok_Semicolon then
+            if Token in Tok_Comma | Tok_Semicolon then
                declare
                   Com        : constant Boolean := Token = Tok_Comma;
                   Scan_State : Saved_Scan_State;
@@ -1887,7 +1957,7 @@ package body Ch4 is
                   --  do not deal with AND/OR because those cases get mixed up
                   --  with the select alternatives case.
 
-                  if Token = Tok_And or else Token = Tok_Or then
+                  if Token in Tok_And | Tok_Or then
                      Logop := P_Logical_Operator;
                      Restore_Scan_State (Scan_State); -- to comma/semicolon
 
@@ -1936,11 +2006,7 @@ package body Ch4 is
    begin
       --  Case of conditional, case or quantified expression
 
-      if Token = Tok_Case
-        or else Token = Tok_If
-        or else Token = Tok_For
-        or else Token = Tok_Declare
-      then
+      if Token in Tok_Case | Tok_If | Tok_For | Tok_Declare then
          return P_Unparen_Cond_Expr_Etc;
 
       --  Normal case, not case/conditional/quantified expression
@@ -2049,11 +2115,7 @@ package body Ch4 is
    begin
       --  Case of conditional, case or quantified expression
 
-      if Token = Tok_Case
-        or else Token = Tok_If
-        or else Token = Tok_For
-        or else Token = Tok_Declare
-      then
+      if Token in Tok_Case | Tok_If | Tok_For | Tok_Declare then
          return P_Unparen_Cond_Expr_Etc;
 
       --  Normal case, not one of the above expression types
@@ -2257,6 +2319,14 @@ package body Ch4 is
          if Token in Token_Class_Sterm then
             null;
 
+         --  Handle '}' as expression terminator of an interpolated
+         --  expression.
+
+         elsif Inside_Interpolated_String_Literal
+           and then Token = Tok_Right_Curly_Bracket
+         then
+            null;
+
          --  If we do not have an expression terminator, then complete the
          --  scan of a simple expression. This code duplicates the code
          --  found in P_Term and P_Factor.
@@ -2398,9 +2468,6 @@ package body Ch4 is
               and then Num_Concats >= Num_Concats_Threshold
             then
                declare
-                  Empty_String_Val : String_Id;
-                  --  String_Id for ""
-
                   Strlit_Concat_Val : String_Id;
                   --  Contains the folded value (which will be correct if the
                   --  "&" operators are the predefined ones).
@@ -2436,11 +2503,9 @@ package body Ch4 is
                   --  Create new folded node, and rewrite result with a concat-
                   --  enation of an empty string literal and the folded node.
 
-                  Start_String;
-                  Empty_String_Val := End_String;
                   New_Node :=
                     Make_Op_Concat (Loc,
-                      Make_String_Literal (Loc, Empty_String_Val),
+                      Make_String_Literal (Loc, Null_String_Id),
                       Make_String_Literal (Loc, Strlit_Concat_Val,
                         Is_Folded_In_Parser => True));
                   Rewrite (Node1, New_Node);
@@ -2500,8 +2565,13 @@ package body Ch4 is
       --  an expression terminator, and is not in Token_Class_Sterm, but
       --  in this special case we know that the expression is complete.
 
+      --  We disable this error recovery machinery when we are processing an
+      --  interpolated string and we reach the expression terminator '}'.
+
       if not Token_Is_At_Start_Of_Line
          and then Token not in Token_Class_Sterm
+         and then not (Inside_Interpolated_String_Literal
+                         and then Token = Tok_Right_Curly_Bracket)
       then
          --  Normally the right error message is indeed that we expected a
          --  binary operator, but in the case of being between a right and left
@@ -2794,6 +2864,9 @@ package body Ch4 is
             when Tok_Left_Bracket =>
                return P_Aggregate;
 
+            when Tok_Left_Interpolated_String =>
+               return P_Interpolated_String_Literal;
+
             --  Allocator
 
             when Tok_New =>
@@ -2823,8 +2896,10 @@ package body Ch4 is
                if Token_Is_At_Start_Of_Line
                  and then not
                    (Ada_Version >= Ada_2012
-                     and then Style_Check_Indentation /= 0
-                     and then Start_Column rem Style_Check_Indentation /= 0)
+                      and then
+                        (Style_Check_Indentation = 0
+                           or else
+                             Start_Column rem Style_Check_Indentation /= 0))
                then
                   Error_Msg_AP ("missing operand");
                   return Error;
@@ -2898,7 +2973,7 @@ package body Ch4 is
                   Save_Scan_State (Scan_State);
                   Scan;   --  past FOR
 
-                  if Token = Tok_All or else Token = Tok_Some  then
+                  if Token in Tok_All | Tok_Some then
                      Restore_Scan_State (Scan_State);  -- To FOR
                      Node1 := P_Quantified_Expression;
 
@@ -2928,7 +3003,7 @@ package body Ch4 is
                Scan; -- past minus
 
             when Tok_At_Sign =>  --  AI12-0125 : target_name
-               Error_Msg_Ada_2020_Feature ("target name", Token_Ptr);
+               Error_Msg_Ada_2022_Feature ("target name", Token_Ptr);
 
                Node1 := P_Name;
                return Node1;
@@ -3396,7 +3471,7 @@ package body Ch4 is
 
       procedure Build_Iterated_Element_Association;
       --  If the iterator includes a key expression or a filter, it is
-      --  an Ada_2020 Iterator_Element_Association within a container
+      --  an Ada 2022 Iterator_Element_Association within a container
       --  aggregate.
 
       ----------------------------------------
@@ -3411,7 +3486,7 @@ package body Ch4 is
            New_Node (N_Loop_Parameter_Specification, Prev_Token_Ptr);
          Set_Defining_Identifier (Loop_Spec, Id);
 
-         Choice :=  First (Discrete_Choices (Assoc_Node));
+         Choice := First (Discrete_Choices (Assoc_Node));
          Assoc_Node :=
            New_Node (N_Iterated_Element_Association, Prev_Token_Ptr);
          Set_Loop_Parameter_Specification (Assoc_Node, Loop_Spec);
@@ -3432,7 +3507,7 @@ package body Ch4 is
       Save_Scan_State (State);
 
       --  A lookahead is necessary to differentiate between the
-      --  Ada 2012 form with a choice list, and the Ada 202x element
+      --  Ada 2012 form with a choice list, and the Ada 2022 element
       --  iterator form, recognized by the presence of "OF". Other
       --  disambiguation requires context and is done during semantic
       --  analysis. Note that "for X in E" is syntactically ambiguous:
@@ -3449,62 +3524,61 @@ package body Ch4 is
       Assoc_Node :=
         New_Node (N_Iterated_Component_Association, Prev_Token_Ptr);
 
-      if Token = Tok_In then
-         Set_Defining_Identifier (Assoc_Node, Id);
-         T_In;
-         Set_Discrete_Choices (Assoc_Node, P_Discrete_Choice_List);
+      case Token is
+         when Tok_In =>
+            Set_Defining_Identifier (Assoc_Node, Id);
+            T_In;
+            Set_Discrete_Choices (Assoc_Node, P_Discrete_Choice_List);
 
-         --  The iterator may include a filter
+            --  The iterator may include a filter
 
-         if Token = Tok_When then
-            Scan;    -- past WHEN
-            Filter := P_Condition;
-         end if;
+            if Token = Tok_When then
+               Scan;    -- past WHEN
+               Filter := P_Condition;
+            end if;
 
-         if Token = Tok_Use then
+            if Token = Tok_Use then
 
-            --  Ada_2020 Key-expression is present, rewrite node as an
-            --  Iterated_Element_Association.
+               --  Ada 2022 Key-expression is present, rewrite node as an
+               --  Iterated_Element_Association.
 
-            Scan;  --  past USE
-            Build_Iterated_Element_Association;
-            Set_Key_Expression (Assoc_Node, P_Expression);
+               Scan;  --  past USE
+               Build_Iterated_Element_Association;
+               Set_Key_Expression (Assoc_Node, P_Expression);
 
-         elsif Present (Filter) then
-            --  A loop_parameter_specification also indicates an Ada_2020
-            --  construct, in contrast with a subtype indication used in
-            --  array aggregates.
+            elsif Present (Filter) then
+               --  A loop_parameter_specification also indicates an Ada 2022
+               --  construct, in contrast with a subtype indication used in
+               --  array aggregates.
 
-            Build_Iterated_Element_Association;
-         end if;
+               Build_Iterated_Element_Association;
+            end if;
 
-         TF_Arrow;
-         Set_Expression (Assoc_Node, P_Expression);
+            TF_Arrow;
+            Set_Expression (Assoc_Node, P_Expression);
 
-      elsif Ada_Version >= Ada_2020
-        and then Token = Tok_Of
-      then
-         Restore_Scan_State (State);
-         Scan;  -- past OF
-         Set_Defining_Identifier (Assoc_Node, Id);
-         Iter_Spec := P_Iterator_Specification (Id);
-         Set_Iterator_Specification (Assoc_Node, Iter_Spec);
-
-         if Token = Tok_Use then
-            Scan;  -- past USE
-            --  This is an iterated_element_association
-
-            Assoc_Node :=
-              New_Node (N_Iterated_Element_Association, Prev_Token_Ptr);
+         when Tok_Of =>
+            Restore_Scan_State (State);
+            Scan;  -- past OF
+            Iter_Spec := P_Iterator_Specification (Id);
             Set_Iterator_Specification (Assoc_Node, Iter_Spec);
-            Set_Key_Expression (Assoc_Node, P_Expression);
-         end if;
 
-         TF_Arrow;
-         Set_Expression (Assoc_Node, P_Expression);
-      end if;
+            if Token = Tok_Use then
+               Scan;  -- past USE
+               --  This is an iterated_element_association
 
-      Error_Msg_Ada_2020_Feature ("iterated component", Token_Ptr);
+               Assoc_Node :=
+                 New_Node (N_Iterated_Element_Association, Prev_Token_Ptr);
+               Set_Iterator_Specification (Assoc_Node, Iter_Spec);
+               Set_Key_Expression (Assoc_Node, P_Expression);
+            end if;
+
+            TF_Arrow;
+            Set_Expression (Assoc_Node, P_Expression);
+
+         when others =>
+            Error_Msg_AP ("missing IN or OF");
+      end case;
 
       return Assoc_Node;
    end P_Iterated_Component_Association;
@@ -3570,7 +3644,7 @@ package body Ch4 is
             Save_Scan_State (State);
             Scan; -- past semicolon
 
-            if Token = Tok_Else or else Token = Tok_Elsif then
+            if Token in Tok_Else | Tok_Elsif then
                Error_Msg_SP -- CODEFIX
                  ("|extra "";"" ignored");
 
@@ -3689,7 +3763,7 @@ package body Ch4 is
             Result : constant Node_Id :=
               Make_Expression_With_Actions (Loc, Actions, Expression);
          begin
-            Error_Msg_Ada_2020_Feature ("declare expression", Loc);
+            Error_Msg_Ada_2022_Feature ("declare expression", Loc);
 
             return Result;
          end;
@@ -3769,7 +3843,7 @@ package body Ch4 is
          Save_Scan_State (Scan_State);
          Scan;  --  past FOR
 
-         if Token = Tok_All or else Token = Tok_Some then
+         if Token in Tok_All | Tok_Some then
             Restore_Scan_State (Scan_State);
             Result := P_Quantified_Expression;
 

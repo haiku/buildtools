@@ -4,7 +4,7 @@
 # repository, with an emphasis on treating generated files correctly, so
 # that autoconf, gperf et al are not required for the ``end'' user.
 #
-# (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009, 
+# (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009,
 # 2010, 2011, 2012, 2013, 2014, 2015, 2017 Free Software Foundation
 # Originally by Gerald Pfeifer <gerald@pfeifer.com>, August 1998.
 #
@@ -86,14 +86,19 @@ gcc/config/arm/arm-tables.opt: gcc/config/arm/arm-cpus.in gcc/config/arm/parsecp
 gcc/config/c6x/c6x-tables.opt: gcc/config/c6x/c6x-isas.def gcc/config/c6x/genopt.sh
 gcc/config/c6x/c6x-sched.md: gcc/config/c6x/c6x-sched.md.in gcc/config/c6x/gensched.sh
 gcc/config/c6x/c6x-mult.md: gcc/config/c6x/c6x-mult.md.in gcc/config/c6x/genmult.sh
+gcc/config/loongarch/loongarch-str.h: gcc/config/loongarch/genopts/genstr.sh gcc/config/loongarch/genopts/loongarch-strings
+gcc/config/loongarch/loongarch.opt: gcc/config/loongarch/genopts/genstr.sh gcc/config/loongarch/genopts/loongarch.opt.in
 gcc/config/m68k/m68k-tables.opt: gcc/config/m68k/m68k-devices.def gcc/config/m68k/m68k-isas.def gcc/config/m68k/m68k-microarchs.def gcc/config/m68k/genopt.sh
 gcc/config/mips/mips-tables.opt: gcc/config/mips/mips-cpus.def gcc/config/mips/genopt.sh
 gcc/config/rs6000/rs6000-tables.opt: gcc/config/rs6000/rs6000-cpus.def gcc/config/rs6000/genopt.sh
 gcc/config/rs6000/fusion.md: gcc/config/rs6000/genfusion.pl
-gcc/config/tilegx/mul-tables.c: gcc/config/tilepro/gen-mul-tables.cc
-gcc/config/tilepro/mul-tables.c: gcc/config/tilepro/gen-mul-tables.cc
 # And then, language-specific files
 gcc/cp/cfns.h: gcc/cp/cfns.gperf
+gcc/cp/std-name-hint.h: gcc/cp/std-name-hint.gperf
+gcc/cp/std-name-hint.gperf: gcc/cp/cxxapi-data.csv
+gcc/m2/configure: gcc/m2/configure.ac
+gcc/m2/gm2config.h.in: gcc/m2/configure.ac
+gcc/m2/gm2-libs/config-host: gcc/m2/gm2-libs/config-host.in
 # testsuite
 # Without this, _Pragma3.c can have a false negative.
 gcc/testsuite/gcc.dg/cpp/_Pragma3.c: gcc/testsuite/gcc.dg/cpp/mi1c.h
@@ -126,6 +131,13 @@ libffi/configure: libffi/configure.ac libffi/aclocal.m4
 libffi/fficonfig.h.in: libffi/configure.ac libffi/aclocal.m4
 libgfortran/aclocal.m4: libgfortran/configure.ac libgfortran/acinclude.m4
 libgfortran/Makefile.in: libgfortran/Makefile.am libgfortran/configure.ac libgfortran/aclocal.m4
+libgm2/Makefile.in: libgm2/Makefile.am libgm2/configure.ac libgm2/aclocal.m4
+libgm2/aclocal.m4: libgm2/configure.ac
+libgm2/libm2cor/Makefile.in: libgm2/libm2cor/Makefile.am
+libgm2/libm2pim/Makefile.in: libgm2/libm2pim/Makefile.am
+libgm2/libm2iso/Makefile.in: libgm2/libm2iso/Makefile.am
+libgm2/libm2log/Makefile.in: libgm2/libm2log/Makefile.am
+libgm2/libm2min/Makefile.in: libgm2/libm2min/Makefile.am
 libquadmath/configure: libquadmath/configure.ac libquadmath/aclocal.m4
 libquadmath/aclocal.m4: libquadmath/configure.ac libquadmath/acinclude.m4
 libquadmath/Makefile.in: libquadmath/Makefile.am libquadmath/configure.ac libgfortran/aclocal.m4
@@ -141,10 +153,6 @@ libgomp/testsuite/Makefile.in: libgomp/testsuite/Makefile.am libgomp/aclocal.m4
 libgomp/configure.ac: libgomp/plugin/configfrag.ac
 libgomp/configure: libgomp/configure.ac libgomp/aclocal.m4
 libgomp/config.h.in: libgomp/configure.ac libgomp/aclocal.m4
-libhsail-rt/aclocal.m4: libhsail-rt/configure.ac
-libhsail-rt/Makefile.in: libhsail-rt/Makefile.am libhsail-rt/aclocal.m4
-libhsail-rt/configure: libhsail-rt/configure.ac libhsail-rt/aclocal.m4
-libhsail-rt/target-config.h.in: libhsail-rt/configure.ac libhsail-rt/aclocal.m4
 libitm/aclocal.m4: libitm/configure.ac libitm/acinclude.m4
 libitm/Makefile.in: libitm/Makefile.am libitm/aclocal.m4
 libitm/testsuite/Makefile.in: libitm/testsuite/Makefile.am libitm/aclocal.m4
@@ -164,12 +172,6 @@ libsanitizer/sanitizer_common/Makefile.in: libsanitizer/sanitizer_common/Makefil
 libvtv/aclocal.m4: libvtv/configure.ac libvtv/acinclude.m4
 libvtv/Makefile.in: libvtv/Makefile.am libvtv/aclocal.m4
 libvtv/configure: libvtv/configure.ac libvtv/aclocal.m4
-liboffloadmic/aclocal.m4: liboffloadmic/configure.ac
-liboffloadmic/Makefile.in: liboffloadmic/Makefile.am
-liboffloadmic/configure: liboffloadmic/configure.ac
-liboffloadmic/plugin/aclocal.m4: liboffloadmic/plugin/configure.ac
-liboffloadmic/plugin/Makefile.in: liboffloadmic/plugin/Makefile.am
-liboffloadmic/plugin/configure: liboffloadmic/plugin/configure.ac
 libbacktrace/aclocal.m4: libbacktrace/configure.ac
 libbacktrace/Makefile.in: libbacktrace/Makefile.am libbacktrace/aclocal.m4
 libbacktrace/configure: libbacktrace/configure.ac libbacktrace/aclocal.m4
@@ -243,7 +245,7 @@ apply_patch () {
 }
 
 # Check whether this indeed looks like a local tree.
-if [ ! -f gcc/version.c ]; then
+if [ ! -f gcc/reload.cc ]; then
     echo "This does not seem to be a GCC tree!"
     exit
 fi
@@ -336,9 +338,24 @@ case $vcs_type in
             exit 1
 	fi
 
-	revision=`$GCC_GIT log -n1 --pretty=tformat:%p:%t:%H`
+	# Open-coded version of "git gcc-descr" from contrib/gcc-git-customization.sh
+	revision=`$GCC_GIT log -n1 --pretty=tformat:%h`
+	r=`$GCC_GIT describe --all --match 'basepoints/gcc-[0-9]*' HEAD \
+	   | sed -n 's,^\(tags/\)\?basepoints/gcc-\([0-9]\+\)-\([0-9]\+\)-g[0-9a-f]*$,r\2-\3,p;s,^\(tags/\)\?basepoints/gcc-\([0-9]\+\)$,r\2-0,p'`;
+	if test -n $r; then
+		o=`$GCC_GIT config --get gcc-config.upstream`;
+		rr=`echo $r | sed -n 's,^r\([0-9]\+\)-[0-9]\+\(-g[0-9a-f]\+\)\?$,\1,p'`;
+		if $GCC_GIT rev-parse --verify --quiet ${o:-origin}/releases/gcc-$rr >/dev/null; then
+			m=releases/gcc-$rr;
+		else
+			m=master;
+		fi;
+		if $GCC_GIT merge-base --is-ancestor HEAD ${o:-origin}/$m; then
+			revision=${r}-g${revision};
+		fi
+	fi
 	branch=`$GCC_GIT name-rev --name-only HEAD || :`
-	;;    
+	;;
 
     hg)
 	chat "Updating HG tree"
@@ -418,6 +435,6 @@ rm -f LAST_UPDATED gcc/REVISION
     date
     echo "`TZ=UTC date` (revision $revision)"
 } > LAST_UPDATED
-echo "[$branch revision $revision]" > gcc/REVISION
+echo "[$branch $revision]" > gcc/REVISION
 
 touch_files_reexec

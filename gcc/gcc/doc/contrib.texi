@@ -1,4 +1,4 @@
-@c Copyright (C) 1988-2021 Free Software Foundation, Inc.
+@c Copyright (C) 1988-2023 Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
@@ -9,7 +9,7 @@
 The GCC project would like to thank its many contributors.  Without them the
 project would not have been nearly as successful as it has been.  Any omissions
 in this list are accidental.  Feel free to contact
-@email{law@@redhat.com} or @email{gerald@@pfeifer.com} if you have been left
+@email{jlaw@@ventanamicro.com} or @email{gerald@@pfeifer.com} if you have been left
 out or some of your contributions are not listed.  Please keep this list in
 alphabetical order.
 
@@ -190,7 +190,7 @@ Eric Christopher for his Java porting help and clean-ups.
 Branko Cibej for more warning contributions.
 
 @item
-The @uref{http://www.gnu.org/software/classpath/,,GNU Classpath project}
+The @uref{https://www.gnu.org/software/classpath/,,GNU Classpath project}
 for all of their merged runtime code.
 
 @item
@@ -635,6 +635,10 @@ and unit testing.
 Bob Manson for his behind the scenes work on dejagnu.
 
 @item
+Jose E. Marchesi for contributing the eBPF backend and his ongoing
+work maintaining it.
+
+@item
 John Marino for contributing the DragonFly BSD port.
 
 @item
@@ -668,7 +672,7 @@ entire Debian archive.
 
 @item
 David Miller for his direction via the steering committee, lots of
-SPARC work, improvements in jump.c and interfacing with the Linux kernel
+SPARC work, improvements in jump.cc and interfacing with the Linux kernel
 developers.
 
 @item

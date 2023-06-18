@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -36,7 +36,7 @@ with Ada.Iterator_Interfaces;
 with Ada.Containers.Helpers;
 private with Ada.Finalization;
 private with Ada.Streams;
-private with Ada.Strings.Text_Output;
+private with Ada.Strings.Text_Buffers;
 
 --  The language-defined generic package Containers.Vectors provides private
 --  types Vector and Cursor, and a set of operations for each type. A vector
@@ -332,7 +332,7 @@ is
 
    function New_Vector (First, Last : Index_Type) return Vector
      with Pre => First = Index_Type'First;
-   --  Ada_2020 aggregate operation.
+   --  Ada 2022 aggregate operation.
 
    procedure Insert_Vector
      (Container : in out Vector;
@@ -745,7 +745,7 @@ private
    end record with Put_Image => Put_Image;
 
    procedure Put_Image
-     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Vector);
+     (S : in out Ada.Strings.Text_Buffers.Root_Buffer_Type'Class; V : Vector);
 
    overriding procedure Adjust (Container : in out Vector);
    overriding procedure Finalize (Container : in out Vector);
@@ -829,10 +829,13 @@ private
 
    for Reference_Type'Read use Read;
 
-   --  Three operations are used to optimize in the expansion of "for ... of"
-   --  loops: the Next(Cursor) procedure in the visible part, and the following
-   --  Pseudo_Reference and Get_Element_Access functions. See Exp_Ch5 for
-   --  details.
+   --  Three operations are used to optimize the expansion of "for ... of"
+   --  loops: the Next(Cursor) (or Previous) procedure in the visible part,
+   --  and the following Pseudo_Reference and Get_Element_Access functions.
+   --  See Exp_Ch5 for details, including the leading underscores here.
+
+   procedure _Next (Position : in out Cursor) renames Next;
+   procedure _Previous (Position : in out Cursor) renames Previous;
 
    function Pseudo_Reference
      (Container : aliased Vector'Class) return Reference_Control_Type;
