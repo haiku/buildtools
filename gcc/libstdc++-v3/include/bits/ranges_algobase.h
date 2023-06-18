@@ -1,6 +1,6 @@
 // Core algorithmic facilities -*- C++ -*-
 
-// Copyright (C) 2020-2021 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -33,7 +33,8 @@
 #if __cplusplus > 201703L
 
 #include <compare>
-#include <iterator>
+#include <bits/stl_iterator_base_funcs.h>
+#include <bits/stl_iterator.h>
 #include <bits/ranges_base.h> // ranges::begin, ranges::range etc.
 #include <bits/invoke.h>      // __invoke
 #include <bits/cpp_type_traits.h> // __is_byte
@@ -195,9 +196,9 @@ namespace ranges
     requires (_IsMove
 	      ? indirectly_movable<_Iter, _Out>
 	      : indirectly_copyable<_Iter, _Out>)
-    constexpr conditional_t<_IsMove,
-			    move_backward_result<_Iter, _Out>,
-			    copy_backward_result<_Iter, _Out>>
+    constexpr __conditional_t<_IsMove,
+			      move_backward_result<_Iter, _Out>,
+			      copy_backward_result<_Iter, _Out>>
     __copy_or_move_backward(_Iter __first, _Sent __last, _Out __result);
 
   template<bool _IsMove,
@@ -206,9 +207,9 @@ namespace ranges
     requires (_IsMove
 	      ? indirectly_movable<_Iter, _Out>
 	      : indirectly_copyable<_Iter, _Out>)
-    constexpr conditional_t<_IsMove,
-			    move_result<_Iter, _Out>,
-			    copy_result<_Iter, _Out>>
+    constexpr __conditional_t<_IsMove,
+			      move_result<_Iter, _Out>,
+			      copy_result<_Iter, _Out>>
     __copy_or_move(_Iter __first, _Sent __last, _Out __result)
     {
       // TODO: implement more specializations to be at least on par with
@@ -238,7 +239,7 @@ namespace ranges
 	{
 	  auto [__in,__out]
 	    = ranges::__copy_or_move<_IsMove>(__first.base(), __last.base(),
-					      __result);
+					      std::move(__result));
 	  return {decltype(__first){__in}, std::move(__out)};
 	}
       else if constexpr (__is_normal_iterator<_Out>)
@@ -249,9 +250,7 @@ namespace ranges
 	}
       else if constexpr (sized_sentinel_for<_Sent, _Iter>)
 	{
-#ifdef __cpp_lib_is_constant_evaluated
-	  if (!std::is_constant_evaluated())
-#endif
+	  if (!std::__is_constant_evaluated())
 	    {
 	      if constexpr (__memcpyable<_Iter, _Out>::__value)
 		{
@@ -349,9 +348,9 @@ namespace ranges
     requires (_IsMove
 	      ? indirectly_movable<_Iter, _Out>
 	      : indirectly_copyable<_Iter, _Out>)
-    constexpr conditional_t<_IsMove,
-			    move_backward_result<_Iter, _Out>,
-			    copy_backward_result<_Iter, _Out>>
+    constexpr __conditional_t<_IsMove,
+			      move_backward_result<_Iter, _Out>,
+			      copy_backward_result<_Iter, _Out>>
     __copy_or_move_backward(_Iter __first, _Sent __last, _Out __result)
     {
       // TODO: implement more specializations to be at least on par with
@@ -386,9 +385,7 @@ namespace ranges
 	}
       else if constexpr (sized_sentinel_for<_Sent, _Iter>)
 	{
-#ifdef __cpp_lib_is_constant_evaluated
-	  if (!std::is_constant_evaluated())
-#endif
+	  if (!std::__is_constant_evaluated())
 	    {
 	      if constexpr (__memcpyable<_Out, _Iter>::__value)
 		{
@@ -533,9 +530,7 @@ namespace ranges
 			  && __is_byte<remove_pointer_t<_Out>>::__value
 			  && integral<_Tp>)
 	      {
-#ifdef __cpp_lib_is_constant_evaluated
-		if (!std::is_constant_evaluated())
-#endif
+		if (!std::__is_constant_evaluated())
 		  {
 		    __builtin_memset(__first,
 				     static_cast<unsigned char>(__value),

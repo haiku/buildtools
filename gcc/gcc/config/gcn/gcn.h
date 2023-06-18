@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2016-2023 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -16,16 +16,32 @@
 
 #include "config/gcn/gcn-opts.h"
 
-#define TARGET_CPU_CPP_BUILTINS()	\
-  do					\
-    {					\
-      builtin_define ("__AMDGCN__");	\
-      if (TARGET_GCN3)			\
-	builtin_define ("__GCN3__");	\
-      else if (TARGET_GCN5)		\
-	builtin_define ("__GCN5__");	\
-    }					\
-  while(0)
+#define TARGET_CPU_CPP_BUILTINS()                                              \
+  do                                                                           \
+    {                                                                          \
+      builtin_define ("__AMDGCN__");                                           \
+      if (TARGET_GCN3)                                                         \
+	builtin_define ("__GCN3__");                                           \
+      else if (TARGET_GCN5)                                                    \
+	builtin_define ("__GCN5__");                                           \
+      else if (TARGET_CDNA1)                                                   \
+	builtin_define ("__CDNA1__");                                          \
+      else if (TARGET_CDNA2)                                                   \
+	builtin_define ("__CDNA2__");                                          \
+      if (TARGET_FIJI)                                                         \
+	{                                                                      \
+	  builtin_define ("__fiji__");                                         \
+	  builtin_define ("__gfx803__");                                       \
+	}                                                                      \
+      else if (TARGET_VEGA10)                                                  \
+	builtin_define ("__gfx900__");                                         \
+      else if (TARGET_VEGA20)                                                  \
+	builtin_define ("__gfx906__");                                         \
+      else if (TARGET_GFX908)                                                  \
+	builtin_define ("__gfx908__");                                         \
+      else if (TARGET_GFX90a)                                                  \
+	builtin_define ("__gfx90a__");                                         \
+  } while (0)
 
 /* Support for a compile-time default architecture and tuning.
    The rules are:
@@ -46,9 +62,12 @@
 #define BYTES_BIG_ENDIAN 0
 #define WORDS_BIG_ENDIAN 0
 
-#define BITS_PER_WORD 32
-#define UNITS_PER_WORD (BITS_PER_WORD/BITS_PER_UNIT)
-#define LIBGCC2_UNITS_PER_WORD 4
+#ifdef IN_LIBGCC2
+/* We want DImode and TImode helpers.  */
+#define UNITS_PER_WORD 8
+#else
+#define UNITS_PER_WORD 4
+#endif
 
 #define POINTER_SIZE	     64
 #define PARM_BOUNDARY	     64
@@ -56,7 +75,7 @@
 #define FUNCTION_BOUNDARY    32
 #define BIGGEST_ALIGNMENT    64
 #define EMPTY_FIELD_BOUNDARY 32
-#define MAX_FIXED_MODE_SIZE  64
+#define MAX_FIXED_MODE_SIZE  128
 #define MAX_REGS_PER_ADDRESS 2
 #define STACK_SIZE_MODE      DImode
 #define Pmode		     DImode
@@ -85,6 +104,7 @@
 #define FIRST_PARM_OFFSET(FNDECL)    0
 #define DYNAMIC_CHAIN_ADDRESS(FP)    plus_constant (Pmode, (FP), -16)
 #define INCOMING_RETURN_ADDR_RTX     gen_rtx_REG (Pmode, LINK_REGNUM)
+#define DWARF_FRAME_RETURN_COLUMN    16
 #define STACK_DYNAMIC_OFFSET(FNDECL) (-crtl->outgoing_args_size)
 #define ACCUMULATE_OUTGOING_ARGS     1
 #define RETURN_ADDR_RTX(COUNT,FRAMEADDR) \
@@ -130,14 +150,16 @@
 #define LINK_REGNUM		  18
 #define EXEC_SAVE_REG		  20
 #define CC_SAVE_REG		  22
-#define RETURN_VALUE_REG	  24	/* Must be divisible by 4.  */
+#define RETURN_VALUE_REG	  168	/* Must be divisible by 4.  */
 #define STATIC_CHAIN_REGNUM	  30
 #define WORK_ITEM_ID_Z_REG	  162
 #define SOFT_ARG_REG		  416
 #define FRAME_POINTER_REGNUM	  418
-#define FIRST_PSEUDO_REGISTER	  420
+#define DWARF_LINK_REGISTER	  420
+#define FIRST_PSEUDO_REGISTER	  421
 
-#define FIRST_PARM_REG 24
+#define FIRST_PARM_REG (FIRST_SGPR_REG + 24)
+#define FIRST_VPARM_REG (FIRST_VGPR_REG + 8)
 #define NUM_PARM_REGS  6
 
 /* There is no arg pointer.  Just choose random fixed register that does
@@ -155,12 +177,13 @@
 #define CC_REG_P(X)		(REG_P (X) && CC_REGNO_P (REGNO (X)))
 #define CC_REGNO_P(X)		((X) == SCC_REG || (X) == VCC_REG)
 #define FUNCTION_ARG_REGNO_P(N) \
-  ((N) >= FIRST_PARM_REG && (N) < (FIRST_PARM_REG + NUM_PARM_REGS))
+  (((N) >= FIRST_PARM_REG && (N) < (FIRST_PARM_REG + NUM_PARM_REGS)) \
+   || ((N) >= FIRST_VPARM_REG && (N) < (FIRST_VPARM_REG + NUM_PARM_REGS)))
 
 
 #define FIXED_REGISTERS {			    \
     /* Scalars.  */				    \
-    1, 1, 0, 0, 1, 1, 1, 1, 1, 1,		    \
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,		    \
 /*		fp    sp    lr.  */		    \
     1, 1, 0, 0, 0, 0, 1, 1, 0, 0,		    \
 /*  exec_save, cc_save */			    \
@@ -197,7 +220,7 @@
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
     /* Other registers.  */			    \
-    1, 1, 1, 1					    \
+    1, 1, 1, 1, 1				    \
 }
 
 #define CALL_USED_REGISTERS {			    \
@@ -235,7 +258,7 @@
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
     /* Other registers.  */			    \
-    1, 1, 1, 1					    \
+    1, 1, 1, 1, 1				    \
 }
 
 
@@ -514,7 +537,7 @@ enum gcn_address_spaces
     "v236", "v237", "v238", "v239", "v240", "v241", "v242", "v243", "v244", \
     "v245", "v246", "v247", "v248", "v249", "v250", "v251", "v252", "v253", \
     "v254", "v255",							    \
-    "?ap0", "?ap1", "?fp0", "?fp1" }
+    "?ap0", "?ap1", "?fp0", "?fp1", "?dwlr" }
 
 #define PRINT_OPERAND(FILE, X, CODE)  print_operand(FILE, X, CODE)
 #define PRINT_OPERAND_ADDRESS(FILE, ADDR)  print_operand_address (FILE, ADDR)
@@ -541,6 +564,7 @@ typedef struct gcn_args
   tree fntype;
   struct gcn_kernel_args args;
   int num;
+  int vnum;
   int offset;
   int alignment;
 } CUMULATIVE_ARGS;
@@ -571,10 +595,8 @@ struct GTY(()) machine_function
   HOST_WIDE_INT local_vars;
   HOST_WIDE_INT callee_saves;
 
-  unsigned lds_allocated;
-  hash_map<tree, int> *lds_allocs;
-
-  vec<tree, va_gc> *reduc_decls;
+  unsigned HOST_WIDE_INT reduction_base;
+  unsigned HOST_WIDE_INT reduction_limit;
 
   bool use_flat_addressing;
 };
@@ -646,7 +668,7 @@ enum gcn_builtin_codes
     }
 
 /* This needs to match gcn_function_value.  */
-#define LIBCALL_VALUE(MODE) gen_rtx_REG (MODE, SGPR_REGNO (RETURN_VALUE_REG))
+#define LIBCALL_VALUE(MODE) gen_rtx_REG (MODE, RETURN_VALUE_REG)
 
 /* The s_ff0 and s_flbit instructions return -1 if no input bits are set.  */
 #define CLZ_DEFINED_VALUE_AT_ZERO(MODE, VALUE) ((VALUE) = -1, 2)
@@ -668,3 +690,27 @@ enum gcn_builtin_codes
 /* Trampolines */
 #define TRAMPOLINE_SIZE 36
 #define TRAMPOLINE_ALIGNMENT 64
+
+/* MD Optimization.
+   The following are intended to be obviously constant at compile time to
+   allow genconditions to eliminate bad patterns at compile time.  */
+#define MODE_VF(M) \
+  ((M == V64QImode || M == V64HImode || M == V64HFmode || M == V64SImode \
+    || M == V64SFmode || M == V64DImode || M == V64DFmode) \
+   ? 64 \
+   : (M == V32QImode || M == V32HImode || M == V32HFmode || M == V32SImode \
+      || M == V32SFmode || M == V32DImode || M == V32DFmode) \
+   ? 32 \
+   : (M == V16QImode || M == V16HImode || M == V16HFmode || M == V16SImode \
+      || M == V16SFmode || M == V16DImode || M == V16DFmode) \
+   ? 16 \
+   : (M == V8QImode || M == V8HImode || M == V8HFmode || M == V8SImode \
+      || M == V8SFmode || M == V8DImode || M == V8DFmode) \
+   ? 8 \
+   : (M == V4QImode || M == V4HImode || M == V4HFmode || M == V4SImode \
+      || M == V4SFmode || M == V4DImode || M == V4DFmode) \
+   ? 4 \
+   : (M == V2QImode || M == V2HImode || M == V2HFmode || M == V2SImode \
+      || M == V2SFmode || M == V2DImode || M == V2DFmode) \
+   ? 2 \
+   : 1)

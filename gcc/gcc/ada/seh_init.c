@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *           Copyright (C) 2005-2020, Free Software Foundation, Inc.        *
+ *           Copyright (C) 2005-2023, Free Software Foundation, Inc.        *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -34,6 +34,7 @@
 
 #if defined (_WIN32) || (defined (__CYGWIN__) && defined (__SEH__))
 /* Include system headers, before system.h poisons malloc.  */
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <excpt.h>
 #endif
@@ -64,8 +65,8 @@ extern struct Exception_Data storage_error;
 extern struct Exception_Data tasking_error;
 extern struct Exception_Data _abort_signal;
 
-#define Raise_From_Signal_Handler ada__exceptions__raise_from_signal_handler
-extern void Raise_From_Signal_Handler (struct Exception_Data *, const char *)
+#define Raise_From_Signal_Handler __gnat_raise_from_signal_handler
+extern void Raise_From_Signal_Handler (struct Exception_Data *, const void *)
   ATTRIBUTE_NORETURN;
 
 

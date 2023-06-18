@@ -1,6 +1,6 @@
 // Types used in iterator implementation -*- C++ -*-
 
-// Copyright (C) 2001-2021 Free Software Foundation, Inc.
+// Copyright (C) 2001-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -124,7 +124,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   */
   template<typename _Category, typename _Tp, typename _Distance = ptrdiff_t,
            typename _Pointer = _Tp*, typename _Reference = _Tp&>
-    struct iterator
+    struct _GLIBCXX17_DEPRECATED iterator
     {
       /// One of the @link iterator_tags tag types@endlink.
       typedef _Category  iterator_category;
@@ -233,6 +233,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *  sugar for internal library use only.
   */
   template<typename _Iter>
+    __attribute__((__always_inline__))
     inline _GLIBCXX_CONSTEXPR
     typename iterator_traits<_Iter>::iterator_category
     __iterator_category(const _Iter&)

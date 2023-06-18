@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -28,47 +28,51 @@
 --  handling of private and full declarations, and the construction of dispatch
 --  tables for tagged types.
 
-with Aspects;   use Aspects;
-with Atree;     use Atree;
-with Contracts; use Contracts;
-with Debug;     use Debug;
-with Einfo;     use Einfo;
-with Elists;    use Elists;
-with Errout;    use Errout;
-with Exp_Disp;  use Exp_Disp;
-with Exp_Dist;  use Exp_Dist;
-with Exp_Dbug;  use Exp_Dbug;
-with Freeze;    use Freeze;
-with Ghost;     use Ghost;
-with GNAT_CUDA; use GNAT_CUDA;
-with Lib;       use Lib;
-with Lib.Xref;  use Lib.Xref;
-with Namet;     use Namet;
-with Nmake;     use Nmake;
-with Nlists;    use Nlists;
-with Opt;       use Opt;
-with Output;    use Output;
-with Rtsfind;   use Rtsfind;
-with Sem;       use Sem;
-with Sem_Aux;   use Sem_Aux;
-with Sem_Cat;   use Sem_Cat;
-with Sem_Ch3;   use Sem_Ch3;
-with Sem_Ch6;   use Sem_Ch6;
-with Sem_Ch8;   use Sem_Ch8;
-with Sem_Ch10;  use Sem_Ch10;
-with Sem_Ch12;  use Sem_Ch12;
-with Sem_Ch13;  use Sem_Ch13;
-with Sem_Disp;  use Sem_Disp;
-with Sem_Eval;  use Sem_Eval;
-with Sem_Prag;  use Sem_Prag;
-with Sem_Util;  use Sem_Util;
-with Sem_Warn;  use Sem_Warn;
-with Snames;    use Snames;
-with Stand;     use Stand;
-with Sinfo;     use Sinfo;
-with Sinput;    use Sinput;
+with Aspects;        use Aspects;
+with Atree;          use Atree;
+with Contracts;      use Contracts;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Errout;         use Errout;
+with Exp_Disp;       use Exp_Disp;
+with Exp_Dist;       use Exp_Dist;
+with Exp_Dbug;       use Exp_Dbug;
+with Freeze;         use Freeze;
+with Ghost;          use Ghost;
+with Lib;            use Lib;
+with Lib.Xref;       use Lib.Xref;
+with Namet;          use Namet;
+with Nmake;          use Nmake;
+with Nlists;         use Nlists;
+with Opt;            use Opt;
+with Output;         use Output;
+with Rtsfind;        use Rtsfind;
+with Sem;            use Sem;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Cat;        use Sem_Cat;
+with Sem_Ch3;        use Sem_Ch3;
+with Sem_Ch6;        use Sem_Ch6;
+with Sem_Ch8;        use Sem_Ch8;
+with Sem_Ch10;       use Sem_Ch10;
+with Sem_Ch12;       use Sem_Ch12;
+with Sem_Ch13;       use Sem_Ch13;
+with Sem_Disp;       use Sem_Disp;
+with Sem_Eval;       use Sem_Eval;
+with Sem_Prag;       use Sem_Prag;
+with Sem_Util;       use Sem_Util;
+with Sem_Warn;       use Sem_Warn;
+with Snames;         use Snames;
+with Stand;          use Stand;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Sinput;         use Sinput;
 with Style;
-with Uintp;     use Uintp;
+with Uintp;          use Uintp;
+with Warnsw;         use Warnsw;
 
 with GNAT.HTable;
 
@@ -266,7 +270,8 @@ package body Sem_Ch7 is
          --  declaration. Examine all declarations in list Decls in reverse
          --  and determine whether one such referencer exists. All entities
          --  in the range Last (Decls) .. Referencer are hidden from external
-         --  visibility.
+         --  visibility. In_Nested_Instance is true if we are inside a package
+         --  instance that has a body.
 
          function Scan_Subprogram_Ref (N : Node_Id) return Traverse_Result;
          --  Determine whether a node denotes a reference to a subprogram
@@ -279,8 +284,7 @@ package body Sem_Ch7 is
          --  tree traversal.
 
          procedure Scan_Subprogram_Refs (Node : Node_Id);
-         --  If we haven't already traversed Node, then mark it and traverse
-         --  it.
+         --  If we haven't already traversed Node, then mark and traverse it.
 
          --------------------
          -- Has_Referencer --
@@ -291,15 +295,56 @@ package body Sem_Ch7 is
             In_Nested_Instance                      : Boolean;
             Has_Outer_Referencer_Of_Non_Subprograms : Boolean) return Boolean
          is
-            Decl    : Node_Id;
-            Decl_Id : Entity_Id;
-            Spec    : Node_Id;
-
             Has_Referencer_Of_Non_Subprograms : Boolean :=
                                        Has_Outer_Referencer_Of_Non_Subprograms;
             --  Set if an inlined subprogram body was detected as a referencer.
             --  In this case, we do not return True immediately but keep hiding
             --  subprograms from external visibility.
+
+            Decl        : Node_Id;
+            Decl_Id     : Entity_Id;
+            In_Instance : Boolean;
+            Spec        : Node_Id;
+            Ignore      : Boolean;
+
+            function Set_Referencer_Of_Non_Subprograms return Boolean;
+            --  Set Has_Referencer_Of_Non_Subprograms and call
+            --  Scan_Subprogram_Refs if relevant.
+            --  Return whether Scan_Subprogram_Refs was called.
+
+            ---------------------------------------
+            -- Set_Referencer_Of_Non_Subprograms --
+            ---------------------------------------
+
+            function Set_Referencer_Of_Non_Subprograms return Boolean is
+            begin
+               --  An inlined subprogram body acts as a referencer
+               --  unless we generate C code since inlining is then
+               --  handled by the C compiler.
+
+               --  Note that we test Has_Pragma_Inline here in addition
+               --  to Is_Inlined. We are doing this for a client, since
+               --  we are computing which entities should be public, and
+               --  it is the client who will decide if actual inlining
+               --  should occur, so we need to catch all cases where the
+               --  subprogram may be inlined by the client.
+
+               if (not CCG_Mode or else Has_Pragma_Inline_Always (Decl_Id))
+                 and then (Is_Inlined (Decl_Id)
+                            or else Has_Pragma_Inline (Decl_Id))
+               then
+                  Has_Referencer_Of_Non_Subprograms := True;
+
+                  --  Inspect the statements of the subprogram body
+                  --  to determine whether the body references other
+                  --  subprograms.
+
+                  Scan_Subprogram_Refs (Decl);
+                  return True;
+               else
+                  return False;
+               end if;
+            end Set_Referencer_Of_Non_Subprograms;
 
          begin
             if No (Decls) then
@@ -328,16 +373,22 @@ package body Sem_Ch7 is
                   --  and hide more entities from external visibility.
 
                   if not Is_Generic_Unit (Decl_Id) then
+                     if In_Nested_Instance then
+                        In_Instance := True;
+                     elsif Is_Generic_Instance (Decl_Id) then
+                        In_Instance :=
+                          Has_Completion (Decl_Id)
+                            or else Unit_Requires_Body (Generic_Parent (Spec));
+                     else
+                        In_Instance := False;
+                     end if;
+
                      if Has_Referencer (Private_Declarations (Spec),
-                                        In_Nested_Instance
-                                          or else
-                                        Is_Generic_Instance (Decl_Id),
+                                        In_Instance,
                                         Has_Referencer_Of_Non_Subprograms)
                        or else
                         Has_Referencer (Visible_Declarations (Spec),
-                                        In_Nested_Instance
-                                          or else
-                                        Is_Generic_Instance (Decl_Id),
+                                        In_Instance,
                                         Has_Referencer_Of_Non_Subprograms)
                      then
                         return True;
@@ -388,54 +439,17 @@ package body Sem_Ch7 is
                         return True;
                      end if;
 
-                     --  An inlined subprogram body acts as a referencer
-                     --  unless we generate C code since inlining is then
-                     --  handled by the C compiler.
-
-                     --  Note that we test Has_Pragma_Inline here in addition
-                     --  to Is_Inlined. We are doing this for a client, since
-                     --  we are computing which entities should be public, and
-                     --  it is the client who will decide if actual inlining
-                     --  should occur, so we need to catch all cases where the
-                     --  subprogram may be inlined by the client.
-
-                     if not Generate_C_Code
-                       and then (Is_Inlined (Decl_Id)
-                                  or else Has_Pragma_Inline (Decl_Id))
-                     then
-                        Has_Referencer_Of_Non_Subprograms := True;
-
-                        --  Inspect the statements of the subprogram body
-                        --  to determine whether the body references other
-                        --  subprograms.
-
-                        Scan_Subprogram_Refs (Decl);
-                     end if;
+                     Ignore := Set_Referencer_Of_Non_Subprograms;
 
                   --  Otherwise this is a stand alone subprogram body
 
                   else
                      Decl_Id := Defining_Entity (Decl);
 
-                     --  An inlined subprogram body acts as a referencer
-                     --  unless we generate C code since inlining is then
-                     --  handled by the C compiler.
-
-                     if not Generate_C_Code
-                       and then (Is_Inlined (Decl_Id)
-                                  or else Has_Pragma_Inline (Decl_Id))
+                     if not Set_Referencer_Of_Non_Subprograms
+                       and then not Subprogram_Table.Get (Decl_Id)
                      then
-                        Has_Referencer_Of_Non_Subprograms := True;
-
-                        --  Inspect the statements of the subprogram body
-                        --  to determine whether the body references other
-                        --  subprograms.
-
-                        Scan_Subprogram_Refs (Decl);
-
-                     --  Otherwise we can reset Is_Public right away
-
-                     elsif not Subprogram_Table.Get (Decl_Id) then
+                        --  We can reset Is_Public right away
                         Set_Is_Public (Decl_Id, False);
                      end if;
                   end if;
@@ -470,6 +484,11 @@ package body Sem_Ch7 is
                                    | N_Object_Renaming_Declaration
                then
                   Decl_Id := Defining_Entity (Decl);
+
+                  --  We cannot say anything for objects declared in nested
+                  --  instances because instantiations are not done yet so the
+                  --  bodies are not visible and could contain references to
+                  --  them.
 
                   if not In_Nested_Instance
                     and then not Is_Imported (Decl_Id)
@@ -756,6 +775,8 @@ package body Sem_Ch7 is
                  ("optional package body (not allowed in Ada 95)??", N);
             else
                Error_Msg_N ("spec of this package does not allow a body", N);
+               Error_Msg_N ("\either remove the body or add pragma "
+                            & "Elaborate_Body in the spec", N);
             end if;
          end if;
       end if;
@@ -840,7 +861,7 @@ package body Sem_Ch7 is
          --  unannotated body will be used in all instantiations.
 
          Body_Id := Defining_Entity (N);
-         Set_Ekind (Body_Id, E_Package_Body);
+         Mutate_Ekind (Body_Id, E_Package_Body);
          Set_Scope (Body_Id, Scope (Spec_Id));
          Set_Is_Obsolescent (Body_Id, Is_Obsolescent (Spec_Id));
          Set_Body_Entity (Spec_Id, Body_Id);
@@ -872,7 +893,7 @@ package body Sem_Ch7 is
       --  current node otherwise. Note that N was rewritten above, so we must
       --  be sure to get the latest Body_Id value.
 
-      Set_Ekind (Body_Id, E_Package_Body);
+      Mutate_Ekind (Body_Id, E_Package_Body);
       Set_Body_Entity (Spec_Id, Body_Id);
       Set_Spec_Entity (Body_Id, Spec_Id);
 
@@ -999,13 +1020,6 @@ package body Sem_Ch7 is
          Append_RACW_Bodies (Declarations (N), Spec_Id);
          Analyze_List (Declarations (N));
       end if;
-
-      --  If procedures marked with CUDA_Global have been defined within N, we
-      --  need to register them with the CUDA runtime at program startup. This
-      --  requires multiple declarations and function calls which need to be
-      --  appended to N's declarations.
-
-      Build_And_Insert_CUDA_Initialization (N);
 
       HSS := Handled_Statement_Sequence (N);
 
@@ -1165,7 +1179,7 @@ package body Sem_Ch7 is
 
       Generate_Definition (Id);
       Enter_Name (Id);
-      Set_Ekind  (Id, E_Package);
+      Mutate_Ekind  (Id, E_Package);
       Set_Etype  (Id, Standard_Void_Type);
 
       --  Set SPARK_Mode from context
@@ -1229,17 +1243,24 @@ package body Sem_Ch7 is
          Check_Completion;
 
          --  If the package spec does not require an explicit body, then all
-         --  abstract states declared in nested packages cannot possibly get
-         --  a proper refinement (SPARK RM 7.2.2(3)). This check is performed
-         --  only when the compilation unit is the main unit to allow for
-         --  modular SPARK analysis where packages do not necessarily have
-         --  bodies.
+         --  abstract states declared in nested packages cannot possibly get a
+         --  proper refinement (SPARK RM 7.1.4(4) and SPARK RM 7.2.2(3)). This
+         --  check is performed only when the compilation unit is the main
+         --  unit to allow for modular SPARK analysis where packages do not
+         --  necessarily have bodies.
 
          if Is_Comp_Unit then
             Check_State_Refinements
               (Context      => N,
                Is_Main_Unit => Parent (N) = Cunit (Main_Unit));
          end if;
+
+         --  Warn about references to unset objects, which is straightforward
+         --  for packages with no bodies. For packages with bodies this is more
+         --  complicated, because some of the objects might be set between spec
+         --  and body elaboration, in nested or child packages, etc.
+
+         Check_References (Id);
       end if;
 
       --  Set Body_Required indication on the compilation unit node
@@ -1297,11 +1318,10 @@ package body Sem_Ch7 is
       --  private_with_clauses, and remove them at the end of the nested
       --  package.
 
-      procedure Clear_Constants (Id : Entity_Id; FE : Entity_Id);
-      --  Clears constant indications (Never_Set_In_Source, Constant_Value, and
-      --  Is_True_Constant) on all variables that are entities of Id, and on
-      --  the chain whose first element is FE. A recursive call is made for all
-      --  packages and generic packages.
+      procedure Clear_Constants (Id : Entity_Id);
+      --  Clears constant indications (Never_Set_In_Source, Constant_Value,
+      --  and Is_True_Constant) on all variables that are entities of Id.
+      --  A recursive call is made for all packages and generic packages.
 
       procedure Generate_Parent_References;
       --  For a child unit, generate references to parent units, for
@@ -1315,6 +1335,11 @@ package body Sem_Ch7 is
       --  Reject completion of an incomplete or private type declarations
       --  having a known discriminant part by an unchecked union.
 
+      procedure Inspect_Untagged_Record_Completion (Decls : List_Id);
+      --  Find out whether a nonlimited untagged record completion has got a
+      --  primitive equality operator and, if so, make it so that it will be
+      --  used as the predefined operator of the private view of the record.
+
       procedure Install_Parent_Private_Declarations (Inst_Id : Entity_Id);
       --  Given the package entity of a generic package instantiation or
       --  formal package whose corresponding generic is a child unit, installs
@@ -1327,7 +1352,7 @@ package body Sem_Ch7 is
       -- Clear_Constants --
       ---------------------
 
-      procedure Clear_Constants (Id : Entity_Id; FE : Entity_Id) is
+      procedure Clear_Constants (Id : Entity_Id) is
          E : Entity_Id;
 
       begin
@@ -1343,9 +1368,9 @@ package body Sem_Ch7 is
          --  package can contain a renaming declaration to itself, and such
          --  renamings are generated automatically within package instances.
 
-         E := FE;
+         E := First_Entity (Id);
          while Present (E) and then E /= Id loop
-            if Is_Assignable (E) then
+            if Ekind (E) = E_Variable then
                Set_Never_Set_In_Source (E, False);
                Set_Is_True_Constant    (E, False);
                Set_Current_Value       (E, Empty);
@@ -1357,8 +1382,7 @@ package body Sem_Ch7 is
                end if;
 
             elsif Is_Package_Or_Generic_Package (E) then
-               Clear_Constants (E, First_Entity (E));
-               Clear_Constants (E, First_Private_Entity (E));
+               Clear_Constants (E);
             end if;
 
             Next_Entity (E);
@@ -1439,7 +1463,7 @@ package body Sem_Ch7 is
          Decl := First (Decls);
          while Present (Decl) loop
 
-            --  We are looking at an incomplete or private type declaration
+            --  We are looking for an incomplete or private type declaration
             --  with a known_discriminant_part whose full view is an
             --  Unchecked_Union. The seemingly useless check with Is_Type
             --  prevents cascaded errors when routines defined only for type
@@ -1462,6 +1486,103 @@ package body Sem_Ch7 is
             Next (Decl);
          end loop;
       end Inspect_Unchecked_Union_Completion;
+
+      ----------------------------------------
+      -- Inspect_Untagged_Record_Completion --
+      ----------------------------------------
+
+      procedure Inspect_Untagged_Record_Completion (Decls : List_Id) is
+         Decl : Node_Id;
+
+      begin
+         Decl := First (Decls);
+         while Present (Decl) loop
+
+            --  We are looking for a full type declaration of an untagged
+            --  record with a private declaration and primitive operations.
+
+            if Nkind (Decl) in N_Full_Type_Declaration
+              and then Is_Record_Type (Defining_Identifier (Decl))
+              and then not Is_Limited_Type (Defining_Identifier (Decl))
+              and then not Is_Tagged_Type (Defining_Identifier (Decl))
+              and then Has_Private_Declaration (Defining_Identifier (Decl))
+              and then Has_Primitive_Operations (Defining_Identifier (Decl))
+            then
+               declare
+                  Prim_List : constant Elist_Id :=
+                     Collect_Primitive_Operations (Defining_Identifier (Decl));
+
+                  E       : Entity_Id;
+                  Ne_Id   : Entity_Id;
+                  Op_Decl : Node_Id;
+                  Op_Id   : Entity_Id;
+                  Prim    : Elmt_Id;
+
+               begin
+                  Prim := First_Elmt (Prim_List);
+                  while Present (Prim) loop
+                     Op_Id   := Node (Prim);
+                     Op_Decl := Declaration_Node (Op_Id);
+                     if Nkind (Op_Decl) in N_Subprogram_Specification then
+                        Op_Decl := Parent (Op_Decl);
+                     end if;
+
+                     --  We are looking for an equality operator immediately
+                     --  visible and declared in the private part followed by
+                     --  the synthesized inequality operator.
+
+                     if Is_User_Defined_Equality (Op_Id)
+                       and then Is_Immediately_Visible (Op_Id)
+                       and then List_Containing (Op_Decl) = Decls
+                     then
+                        Ne_Id := Next_Entity (Op_Id);
+                        pragma Assert (Ekind (Ne_Id) = E_Function
+                          and then Corresponding_Equality (Ne_Id) = Op_Id);
+
+                        E := First_Private_Entity (Id);
+
+                        --  Move them from the private part of the entity list
+                        --  up to the end of the visible part of the same list.
+
+                        Remove_Entity (Op_Id);
+                        Remove_Entity (Ne_Id);
+
+                        Link_Entities (Prev_Entity (E), Op_Id);
+                        Link_Entities (Op_Id, Ne_Id);
+                        Link_Entities (Ne_Id, E);
+
+                        --  And if the private part contains another equality
+                        --  operator, move the equality operator to after it
+                        --  in the homonym chain, so that all its next homonyms
+                        --  in the same scope, if any, also are in the visible
+                        --  part. This is relied upon to resolve expanded names
+                        --  in Collect_Interps for example.
+
+                        while Present (E) loop
+                           exit when Ekind (E) = E_Function
+                             and then Chars (E) = Name_Op_Eq;
+
+                           Next_Entity (E);
+                        end loop;
+
+                        if Present (E) then
+                           Remove_Homonym (Op_Id);
+
+                           Set_Homonym (Op_Id, Homonym (E));
+                           Set_Homonym (E, Op_Id);
+                        end if;
+
+                        exit;
+                     end if;
+
+                     Next_Elmt (Prim);
+                  end loop;
+               end;
+            end if;
+
+            Next (Decl);
+         end loop;
+      end Inspect_Untagged_Record_Completion;
 
       -----------------------------------------
       -- Install_Parent_Private_Declarations --
@@ -1713,14 +1834,18 @@ package body Sem_Ch7 is
 
       --  If this is a package associated with a generic instance or formal
       --  package, then the private declarations of each of the generic's
-      --  parents must be installed at this point.
+      --  parents must be installed at this point, but not if this is the
+      --  abbreviated instance created to check a formal package, see the
+      --  same condition in Analyze_Package_Instantiation.
 
-      if Is_Generic_Instance (Id) then
+      if Is_Generic_Instance (Id)
+        and then not Is_Abbreviated_Instance (Id)
+      then
          Install_Parent_Private_Declarations (Id);
       end if;
 
       --  Analyze private part if present. The flag In_Private_Part is reset
-      --  in End_Package_Scope.
+      --  in Uninstall_Declarations.
 
       L := Last_Entity (Id);
 
@@ -1772,14 +1897,34 @@ package body Sem_Ch7 is
          end if;
 
          --  Check preelaborable initialization for full type completing a
-         --  private type for which pragma Preelaborable_Initialization given.
+         --  private type when aspect Preelaborable_Initialization is True
+         --  or is specified by Preelaborable_Initialization attributes
+         --  (in the case of a private type in a generic unit). We pass
+         --  the expression of the aspect (when present) to the parameter
+         --  Preelab_Init_Expr to take into account the rule that presumes
+         --  that subcomponents of generic formal types mentioned in the
+         --  type's P_I aspect have preelaborable initialization (see
+         --  AI12-0409 and RM 10.2.1(11.8/5)).
 
-         if Is_Type (E)
-           and then Must_Have_Preelab_Init (E)
-           and then not Has_Preelaborable_Initialization (E)
-         then
-            Error_Msg_N
-              ("full view of & does not have preelaborable initialization", E);
+         if Is_Type (E) and then Must_Have_Preelab_Init (E) then
+            declare
+               PI_Aspect : constant Node_Id :=
+                             Find_Aspect
+                               (E, Aspect_Preelaborable_Initialization);
+               PI_Expr   : Node_Id := Empty;
+            begin
+               if Present (PI_Aspect) then
+                  PI_Expr := Expression (PI_Aspect);
+               end if;
+
+               if not Has_Preelaborable_Initialization
+                        (E, Preelab_Init_Expr => PI_Expr)
+               then
+                  Error_Msg_N
+                    ("full view of & does not have "
+                     & "preelaborable initialization", E);
+               end if;
+            end;
          end if;
 
          Next_Entity (E);
@@ -1795,6 +1940,14 @@ package body Sem_Ch7 is
 
       if Present (Priv_Decls) then
          Inspect_Unchecked_Union_Completion (Priv_Decls);
+      end if;
+
+      --  Implement AI12-0101 (which only removes a legality rule) and then
+      --  AI05-0123 (which directly applies in the previously illegal case)
+      --  in Ada 2012. Note that AI12-0101 is a binding interpretation.
+
+      if Present (Priv_Decls) and then Ada_Version >= Ada_2012 then
+         Inspect_Untagged_Record_Completion (Priv_Decls);
       end if;
 
       if Ekind (Id) = E_Generic_Package
@@ -1855,8 +2008,7 @@ package body Sem_Ch7 is
       if Is_Library_Level_Entity (Id)
         or else Is_Generic_Instance (Id)
       then
-         Clear_Constants (Id, First_Entity (Id));
-         Clear_Constants (Id, First_Private_Entity (Id));
+         Clear_Constants (Id);
       end if;
 
       --  Output relevant information as to why the package requires a body.
@@ -1895,7 +2047,7 @@ package body Sem_Ch7 is
    begin
       Generate_Definition (Id);
       Set_Is_Pure         (Id, PF);
-      Init_Size_Align     (Id);
+      Reinit_Size_Align   (Id);
 
       if not Is_Package_Or_Generic_Package (Current_Scope)
         or else In_Private_Part (Current_Scope)
@@ -2065,6 +2217,8 @@ package body Sem_Ch7 is
                            Replace_Elmt (Op_Elmt, New_Op);
                            Remove_Elmt  (Op_List, Op_Elmt_2);
                            Set_Overridden_Operation (New_Op, Parent_Subp);
+                           Set_Is_Ada_2022_Only     (New_Op,
+                             Is_Ada_2022_Only (Parent_Subp));
 
                            --  We don't need to inherit its dispatching slot.
                            --  Set_All_DT_Position has previously ensured that
@@ -2152,9 +2306,8 @@ package body Sem_Ch7 is
                   --  a derived scalar type). Further declarations cannot
                   --  include inherited operations of the type.
 
-                  if Present (Prim_Op) then
-                     exit when Ekind (Prim_Op) not in Overloadable_Kind;
-                  end if;
+                  exit when Present (Prim_Op)
+                    and then not Is_Overloadable (Prim_Op);
                end loop;
             end if;
          end if;
@@ -2562,15 +2715,15 @@ package body Sem_Ch7 is
       end if;
 
       if Limited_Present (Def) then
-         Set_Ekind (Id, E_Limited_Private_Type);
+         Mutate_Ekind (Id, E_Limited_Private_Type);
       else
-         Set_Ekind (Id, E_Private_Type);
+         Mutate_Ekind (Id, E_Private_Type);
       end if;
 
       Set_Etype              (Id, Id);
       Set_Has_Delayed_Freeze (Id);
       Set_Is_First_Subtype   (Id);
-      Init_Size_Align        (Id);
+      Reinit_Size_Align      (Id);
 
       Set_Is_Constrained (Id,
         No (Discriminant_Specifications (N))
@@ -2596,7 +2749,7 @@ package body Sem_Ch7 is
       Set_Private_Dependents (Id, New_Elmt_List);
 
       if Tagged_Present (Def) then
-         Set_Ekind                       (Id, E_Record_Type_With_Private);
+         Mutate_Ekind                    (Id, E_Record_Type_With_Private);
          Set_Direct_Primitive_Operations (Id, New_Elmt_List);
          Set_Is_Abstract_Type            (Id, Abstract_Present (Def));
          Set_Is_Limited_Record           (Id, Limited_Present (Def));
@@ -2614,6 +2767,15 @@ package body Sem_Ch7 is
 
       elsif Abstract_Present (Def) then
          Error_Msg_N ("only a tagged type can be abstract", N);
+
+      --  We initialize the primitive operations list of an untagged private
+      --  type to an empty element list. Do this even when Extensions_Allowed
+      --  is False to issue better error messages. (Note: This could be done
+      --  for all private types and shared with the tagged case above, but
+      --  for now we do it separately.)
+
+      else
+         Set_Direct_Primitive_Operations (Id, New_Elmt_List);
       end if;
    end New_Private_Type;
 
@@ -2721,13 +2883,15 @@ package body Sem_Ch7 is
 
       begin
          Set_Size_Info               (Priv,                             Full);
-         Set_RM_Size                 (Priv, RM_Size                    (Full));
+         Copy_RM_Size                (To => Priv, From => Full);
          Set_Size_Known_At_Compile_Time
                                      (Priv, Size_Known_At_Compile_Time (Full));
          Set_Is_Volatile             (Priv, Is_Volatile                (Full));
          Set_Treat_As_Volatile       (Priv, Treat_As_Volatile          (Full));
+         Set_Is_Atomic               (Priv, Is_Atomic                  (Full));
          Set_Is_Ada_2005_Only        (Priv, Is_Ada_2005_Only           (Full));
          Set_Is_Ada_2012_Only        (Priv, Is_Ada_2012_Only           (Full));
+         Set_Is_Ada_2022_Only        (Priv, Is_Ada_2022_Only           (Full));
          Set_Has_Pragma_Unmodified   (Priv, Has_Pragma_Unmodified      (Full));
          Set_Has_Pragma_Unreferenced (Priv, Has_Pragma_Unreferenced    (Full));
          Set_Has_Pragma_Unreferenced_Objects
@@ -2737,7 +2901,6 @@ package body Sem_Ch7 is
          if Is_Unchecked_Union (Full) then
             Set_Is_Unchecked_Union (Base_Type (Priv));
          end if;
-         --  Why is atomic not copied here ???
 
          if Referenced (Full) then
             Set_Referenced (Priv);
@@ -2932,6 +3095,11 @@ package body Sem_Ch7 is
                   Set_Is_Potentially_Use_Visible (Id);
                end if;
 
+            --  Avoid crash caused by previous errors
+
+            elsif No (Etype (Id)) and then Serious_Errors_Detected /= 0 then
+               null;
+
             --  We need to avoid incorrectly marking enumeration literals as
             --  non-visible when a visible use-all-type clause is in effect.
 
@@ -3058,9 +3226,11 @@ package body Sem_Ch7 is
 
       if not In_Private_Part (P) then
          return;
-      else
-         Set_In_Private_Part (P, False);
       end if;
+
+      --  Reset the flag now
+
+      Set_In_Private_Part (P, False);
 
       --  Make private entities invisible and exchange full and private
       --  declarations for private types. Id is now the first private entity
@@ -3330,12 +3500,12 @@ package body Sem_Ch7 is
       --  Body required if library package with pragma Elaborate_Body
 
       elsif Has_Pragma_Elaborate_Body (Pack_Id) then
-         Error_Msg_N ("info: & requires body (Elaborate_Body)?Y?", Pack_Id);
+         Error_Msg_N ("info: & requires body (Elaborate_Body)?.y?", Pack_Id);
 
       --  Body required if subprogram
 
       elsif Is_Subprogram_Or_Generic_Subprogram (Pack_Id) then
-         Error_Msg_N ("info: & requires body (subprogram case)?Y?", Pack_Id);
+         Error_Msg_N ("info: & requires body (subprogram case)?.y?", Pack_Id);
 
       --  Body required if generic parent has Elaborate_Body
 
@@ -3348,7 +3518,7 @@ package body Sem_Ch7 is
          begin
             if Has_Pragma_Elaborate_Body (G_P) then
                Error_Msg_N
-                 ("info: & requires body (generic parent Elaborate_Body)?Y?",
+                 ("info: & requires body (generic parent Elaborate_Body)?.y?",
                   Pack_Id);
             end if;
          end;
@@ -3366,7 +3536,7 @@ package body Sem_Ch7 is
                        (Node (First_Elmt (Abstract_States (Pack_Id))))
       then
          Error_Msg_N
-           ("info: & requires body (non-null abstract state aspect)?Y?",
+           ("info: & requires body (non-null abstract state aspect)?.y?",
             Pack_Id);
       end if;
 
@@ -3377,7 +3547,8 @@ package body Sem_Ch7 is
          if Requires_Completion_In_Body (E, Pack_Id) then
             Error_Msg_Node_2 := E;
             Error_Msg_NE
-              ("info: & requires body (& requires completion)?Y?", E, Pack_Id);
+              ("info: & requires body (& requires completion)?.y?", E,
+               Pack_Id);
          end if;
 
          Next_Entity (E);

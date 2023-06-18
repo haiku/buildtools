@@ -1,6 +1,6 @@
 /* Definitions of target machine for GNU compiler.
    Renesas H8/300 (generic)
-   Copyright (C) 1992-2021 Free Software Foundation, Inc.
+   Copyright (C) 1992-2023 Free Software Foundation, Inc.
    Contributed by Steve Chamberlain (sac@cygnus.com),
    Jim Wilson (wilson@cygnus.com), and Doug Evans (dje@cygnus.com).
 
@@ -25,7 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 
 extern int cpu_type;
 
-/* Various globals defined in h8300.c.  */
+/* Various globals defined in h8300.cc.  */
 
 extern const char *h8_push_op, *h8_pop_op, *h8_mov_op;
 extern const char * const *h8_reg_names;
@@ -282,6 +282,8 @@ extern const char * const *h8_reg_names;
 
 enum reg_class {
   NO_REGS, COUNTER_REGS, SOURCE_REGS, DESTINATION_REGS,
+  NOT_R0_REGS, NOT_R1_REGS, NOT_R2_REGS, NOT_R3_REGS,
+  NOT_R4_REGS, NOT_R5_REGS, NOT_R6_REGS, NOT_SP_REGS,
   GENERAL_REGS, MAC_REGS, ALL_REGS, LIM_REG_CLASSES
 };
 
@@ -291,6 +293,8 @@ enum reg_class {
 
 #define REG_CLASS_NAMES \
 { "NO_REGS", "COUNTER_REGS", "SOURCE_REGS", "DESTINATION_REGS", \
+  "NOT_R0_REGS", "NOT_R1_REGS", "NOT_R2_REGS", "NOT_R3_REGS", \
+  "NOT_R4_REGS", "NOT_R5_REGS", "NOT_R6_REGS", "NOT_SP_REGS", \
   "GENERAL_REGS", "MAC_REGS", "ALL_REGS", "LIM_REGS" }
 
 /* Define which registers fit in which classes.
@@ -302,6 +306,14 @@ enum reg_class {
    {0x010},		/* COUNTER_REGS */	\
    {0x020},		/* SOURCE_REGS */	\
    {0x040},		/* DESTINATION_REGS */	\
+   {0x0fe},		/* NOT_R0_REGS */	\
+   {0x0fd},		/* NOT_R1_REGS */	\
+   {0x0fb},		/* NOT_R2_REGS */	\
+   {0x0f7},		/* NOT_R3_REGS */	\
+   {0x0ef},		/* NOT_R4_REGS */	\
+   {0x0df},		/* NOT_R5_REGS */	\
+   {0x0bf},		/* NOT_R6_REGS */	\
+   {0x07f},		/* NOT_SP_REGS */	\
    {0xeff},		/* GENERAL_REGS */	\
    {0x100},		/* MAC_REGS */		\
    {0xfff},		/* ALL_REGS	*/	\
@@ -447,7 +459,7 @@ struct cum_arg
    They give nonzero only if REGNO is a hard reg of the suitable class
    or a pseudo reg currently allocated to a suitable hard reg.
    Since they use reg_renumber, they are safe only once reg_renumber
-   has been allocated, which happens in reginfo.c during register
+   has been allocated, which happens in reginfo.cc during register
    allocation.  */
 
 #define REGNO_OK_FOR_INDEX_P(regno) 0
@@ -564,17 +576,10 @@ struct cum_arg
 
 #define BRANCH_COST(speed_p, predictable_p) 0
 
-/* Tell final.c how to eliminate redundant test instructions.  */
+/* Tell final.cc how to eliminate redundant test instructions.  */
 
 /* Here we define machine-dependent flags and fields in cc_status
    (see `conditions.h').  No extra ones are needed for the h8300.  */
-
-/* Store in cc_status the expressions
-   that the condition codes will describe
-   after execution of an instruction whose pattern is EXP.
-   Do not alter them if the instruction would not alter the cc's.  */
-
-#define NOTICE_UPDATE_CC(EXP, INSN) notice_update_cc (EXP, INSN)
 
 /* The add insns don't set overflow in a usable way.  */
 #define CC_OVERFLOW_UNUSABLE 01000

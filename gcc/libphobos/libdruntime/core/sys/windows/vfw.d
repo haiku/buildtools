@@ -4,12 +4,11 @@
  * written in the D programming language
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_vfw.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_vfw.d)
  */
 
 module core.sys.windows.vfw;
 version (Windows):
-@system:
 
 version (ANSI) {} else version = Unicode;
 pragma(lib, "vfw32");

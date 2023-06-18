@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -49,6 +49,7 @@ package Sem_Prag is
       Pragma_Contract_Cases               => True,
       Pragma_Convention                   => True,
       Pragma_CPU                          => True,
+      Pragma_CUDA_Device                  => True,
       Pragma_CUDA_Global                  => True,
       Pragma_Default_Initial_Condition    => True,
       Pragma_Default_Storage_Pool         => True,
@@ -63,6 +64,7 @@ package Sem_Prag is
       Pragma_Favor_Top_Level              => True,
       Pragma_Ghost                        => True,
       Pragma_Global                       => True,
+      Pragma_GNAT_Annotate                => True,
       Pragma_Import                       => True,
       Pragma_Independent                  => True,
       Pragma_Independent_Components       => True,
@@ -115,7 +117,6 @@ package Sem_Prag is
       Pragma_Type_Invariant               => True,
       Pragma_Unchecked_Union              => True,
       Pragma_Universal_Aliasing           => True,
-      Pragma_Universal_Data               => True,
       Pragma_Unmodified                   => True,
       Pragma_Unreferenced                 => True,
       Pragma_Unreferenced_Objects         => True,
@@ -134,6 +135,7 @@ package Sem_Prag is
       Pragma_Assert_And_Cut            => True,
       Pragma_Assume                    => True,
       Pragma_Check                     => True,
+      Pragma_Compile_Time_Error        => True,
       Pragma_Contract_Cases            => True,
       Pragma_Default_Initial_Condition => True,
       Pragma_Initial_Condition         => True,
@@ -148,10 +150,14 @@ package Sem_Prag is
       Pragma_Precondition              => True,
       Pragma_Predicate                 => True,
       Pragma_Refined_Post              => True,
+      Pragma_Subprogram_Variant        => True,
       Pragma_Test_Case                 => True,
       Pragma_Type_Invariant            => True,
       Pragma_Type_Invariant_Class      => True,
       others                           => False);
+
+   --  Should to following constant arrays be renamed to better suit their
+   --  use as a predicate (e.g. Is_Pragma_*) ???
 
    --  The following table lists all the implementation-defined pragmas that
    --  should apply to the anonymous object produced by the analysis of a
@@ -196,6 +202,32 @@ package Sem_Prag is
       Pragma_Unreferenced                  => False,
       Pragma_Warnings                      => False,
       others                               => True);
+
+   --  The following table lists all pragmas which are relevant to the analysis
+   --  of subprogram bodies.
+
+   Pragma_Significant_To_Subprograms : constant array (Pragma_Id) of Boolean :=
+     (Pragma_Contract_Cases    => True,
+      Pragma_Depends           => True,
+      Pragma_Ghost             => True,
+      Pragma_Global            => True,
+      Pragma_Inline            => True,
+      Pragma_Inline_Always     => True,
+      Pragma_Post              => True,
+      Pragma_Post_Class        => True,
+      Pragma_Postcondition     => True,
+      Pragma_Pre               => True,
+      Pragma_Pre_Class         => True,
+      Pragma_Precondition      => True,
+      Pragma_Pure              => True,
+      Pragma_Pure_Function     => True,
+      Pragma_Refined_Depends   => True,
+      Pragma_Refined_Global    => True,
+      Pragma_Refined_Post      => True,
+      Pragma_Refined_State     => True,
+      Pragma_Volatile          => True,
+      Pragma_Volatile_Function => True,
+      others                   => False);
 
    -----------------
    -- Subprograms --
@@ -360,9 +392,9 @@ package Sem_Prag is
       Subp_Outputs : in out Elist_Id;
       Global_Seen  : out Boolean);
    --  Subsidiary to the analysis of pragmas Depends, Global, Refined_Depends
-   --  and Refined_Global. The routine is also used by GNATprove. Collect all
-   --  inputs and outputs of subprogram Subp_Id in lists Subp_Inputs (inputs)
-   --  and Subp_Outputs (outputs). The inputs and outputs are gathered from:
+   --  and Refined_Global. Collect all inputs and outputs of subprogram Subp_Id
+   --  in lists Subp_Inputs (inputs) and Subp_Outputs (outputs). The inputs and
+   --  outputs are gathered from:
    --    1) The formal parameters of the subprogram
    --    2) The generic formal parameters of the generic subprogram
    --    3) The current instance of a concurrent type
@@ -429,7 +461,7 @@ package Sem_Prag is
 
    function Get_Argument
      (Prag       : Node_Id;
-      Context_Id : Node_Id := Empty) return Node_Id;
+      Context_Id : Entity_Id := Empty) return Node_Id;
    --  Obtain the argument of pragma Prag depending on context and the nature
    --  of the pragma. The argument is extracted in the following manner:
    --

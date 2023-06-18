@@ -1,5 +1,5 @@
 /* Various declarations for language-independent diagnostics subroutines.
-   Copyright (C) 2000-2021 Free Software Foundation, Inc.
+   Copyright (C) 2000-2023 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@codesourcery.com>
 
 This file is part of GCC.
@@ -38,6 +38,20 @@ enum diagnostics_column_unit
   DIAGNOSTICS_COLUMN_UNIT_BYTE
 };
 
+/* An enum for controlling how to print non-ASCII characters/bytes when
+   a diagnostic suggests escaping the source code on output.  */
+
+enum diagnostics_escape_format
+{
+  /* Escape non-ASCII Unicode characters in the form <U+XXXX> and
+     non-UTF-8 bytes in the form <XX>.  */
+  DIAGNOSTICS_ESCAPE_FORMAT_UNICODE,
+
+  /* Escape non-ASCII bytes in the form <XX> (thus showing the underlying
+     encoding of non-ASCII Unicode characters).  */
+  DIAGNOSTICS_ESCAPE_FORMAT_BYTES
+};
+
 /* Enum for overriding the standard output format.  */
 
 enum diagnostics_output_format
@@ -45,8 +59,17 @@ enum diagnostics_output_format
   /* The default: textual output.  */
   DIAGNOSTICS_OUTPUT_FORMAT_TEXT,
 
-  /* JSON-based output.  */
-  DIAGNOSTICS_OUTPUT_FORMAT_JSON
+  /* JSON-based output, to stderr.  */
+  DIAGNOSTICS_OUTPUT_FORMAT_JSON_STDERR,
+
+  /* JSON-based output, to a file.  */
+  DIAGNOSTICS_OUTPUT_FORMAT_JSON_FILE,
+
+  /* SARIF-based output, to stderr.  */
+  DIAGNOSTICS_OUTPUT_FORMAT_SARIF_STDERR,
+
+  /* SARIF-based output, to a file.  */
+  DIAGNOSTICS_OUTPUT_FORMAT_SARIF_FILE
 };
 
 /* An enum for controlling how diagnostic_paths should be printed.  */
@@ -87,6 +110,11 @@ enum diagnostics_extra_output_kind
    list in diagnostic.def.  */
 struct diagnostic_info
 {
+  diagnostic_info ()
+    : message (), richloc (), metadata (), x_data (), kind (), option_index (),
+      m_iinfo ()
+  { }
+
   /* Text to be formatted.  */
   text_info message;
 
@@ -103,6 +131,18 @@ struct diagnostic_info
   diagnostic_t kind;
   /* Which OPT_* directly controls this diagnostic.  */
   int option_index;
+
+  /* Inlining context containing locations for each call site along
+     the inlining stack.  */
+  struct inlining_info
+  {
+    /* Locations along the inlining stack.  */
+    auto_vec<location_t, 8> m_ilocs;
+    /* The abstract origin of the location.  */
+    void *m_ao;
+    /* Set if every M_ILOCS element is in a system header.  */
+    bool m_allsyslocs;
+  } m_iinfo;
 };
 
 /* Each time a diagnostic's classification is changed with a pragma,
@@ -128,6 +168,8 @@ typedef void (*diagnostic_finalizer_fn) (diagnostic_context *,
 
 class edit_context;
 namespace json { class value; }
+class diagnostic_client_data_hooks;
+class logical_location;
 
 /* This data structure bundles altogether any information relevant to
    the context of a diagnostic message.  */
@@ -135,6 +177,9 @@ struct diagnostic_context
 {
   /* Where most of the diagnostic formatting work is done.  */
   pretty_printer *printer;
+
+  /* Cache of source code.  */
+  file_cache *m_file_cache;
 
   /* The number of times we have issued diagnostics.  */
   int diagnostic_count[DK_LAST_DIAGNOSTIC_KIND];
@@ -181,6 +226,9 @@ struct diagnostic_context
   /* True if we should print any CWE identifiers associated with
      diagnostics.  */
   bool show_cwe;
+
+  /* True if we should print any rules associated with diagnostics.  */
+  bool show_rules;
 
   /* How should diagnostic_path objects be printed.  */
   enum diagnostic_path_format path_format;
@@ -306,6 +354,9 @@ struct diagnostic_context
      source output.  */
   bool show_ruler_p;
 
+  /* True if -freport-bug option is used.  */
+  bool report_bug;
+
   /* Used to specify additional diagnostic output to be emitted after the
      rest of the diagnostic.  This is for implementing
      -fdiagnostics-parseable-fixits and GCC_EXTRA_DIAGNOSTIC_OUTPUT.  */
@@ -319,6 +370,10 @@ struct diagnostic_context
 
   /* The size of the tabstop for tab expansion.  */
   int tabstop;
+
+  /* How should non-ASCII/non-printable bytes be escaped when
+     a diagnostic suggests escaping the source code on output.  */
+  enum diagnostics_escape_format escape_format;
 
   /* If non-NULL, an edit_context to which fix-it hints should be
      applied, for generating patches.  */
@@ -343,9 +398,28 @@ struct diagnostic_context
 
   /* Callback for final cleanup.  */
   void (*final_cb) (diagnostic_context *context);
+
+  /* Callback to set the locations of call sites along the inlining
+     stack corresponding to a diagnostic location.  Needed to traverse
+     the BLOCK_SUPERCONTEXT() chain hanging off the LOCATION_BLOCK()
+     of a diagnostic's location.  */
+  void (*set_locations_cb)(diagnostic_context *, diagnostic_info *);
+
+  /* Optional callback for attempting to handle ICEs gracefully.  */
+  void (*ice_handler_cb) (diagnostic_context *context);
+
+  /* Include files that diagnostic_report_current_module has already listed the
+     include path for.  */
+  hash_set<location_t, false, location_hash> *includes_seen;
+
+  /* A bundle of hooks for providing data to the context about its client
+     e.g. version information, plugins, etc.
+     Used by SARIF output to give metadata about the client that's
+     producing diagnostics.  */
+  diagnostic_client_data_hooks *m_client_data_hooks;
 };
 
-static inline void
+inline void
 diagnostic_inhibit_notes (diagnostic_context * context)
 {
   context->inhibit_notes_p = true;
@@ -403,7 +477,7 @@ extern diagnostic_context *global_dc;
 /* Override the option index to be used for reporting a
    diagnostic.  */
 
-static inline void
+inline void
 diagnostic_override_option_index (diagnostic_info *info, int optidx)
 {
   info->option_index = optidx;
@@ -419,6 +493,25 @@ extern void diagnostic_show_locus (diagnostic_context *,
 				   rich_location *richloc,
 				   diagnostic_t diagnostic_kind);
 extern void diagnostic_show_any_path (diagnostic_context *, diagnostic_info *);
+
+/* Because we read source files a second time after the frontend did it the
+   first time, we need to know how the frontend handled things like character
+   set conversion and UTF-8 BOM stripping, in order to make everything
+   consistent.  This function needs to be called by each frontend that requires
+   non-default behavior, to inform the diagnostics infrastructure how input is
+   to be processed.  The default behavior is to do no conversion and not to
+   strip a UTF-8 BOM.
+
+   The callback should return the input charset to be used to convert the given
+   file's contents to UTF-8, or it should return NULL if no conversion is needed
+   for this file.  SHOULD_SKIP_BOM only applies in case no conversion was
+   performed, and if true, it will cause a UTF-8 BOM to be skipped at the
+   beginning of the file.  (In case a conversion was performed, the BOM is
+   rather skipped as part of the conversion process.)  */
+
+void diagnostic_initialize_input_context (diagnostic_context *context,
+					  diagnostic_input_charset_callback ccb,
+					  bool should_skip_bom);
 
 /* Force diagnostics controlled by OPTIDX to be kind KIND.  */
 extern diagnostic_t diagnostic_classify_diagnostic (diagnostic_context *,
@@ -456,7 +549,7 @@ int get_terminal_width (void);
 /* Return the location associated to this diagnostic. Parameter WHICH
    specifies which location. By default, expand the first one.  */
 
-static inline location_t
+inline location_t
 diagnostic_location (const diagnostic_info * diagnostic, int which = 0)
 {
   return diagnostic->message.get_location (which);
@@ -464,7 +557,7 @@ diagnostic_location (const diagnostic_info * diagnostic, int which = 0)
 
 /* Return the number of locations to be printed in DIAGNOSTIC.  */
 
-static inline unsigned int
+inline unsigned int
 diagnostic_num_locations (const diagnostic_info * diagnostic)
 {
   return diagnostic->message.m_richloc->get_num_locations ();
@@ -474,7 +567,7 @@ diagnostic_num_locations (const diagnostic_info * diagnostic)
    consistency.  Parameter WHICH specifies which location. By default,
    expand the first one.  */
 
-static inline expanded_location
+inline expanded_location
 diagnostic_expand_location (const diagnostic_info * diagnostic, int which = 0)
 {
   return diagnostic->richloc->get_expanded_location (which);
@@ -489,7 +582,7 @@ const int CARET_LINE_MARGIN = 10;
    caret line.  This is used to build a prefix and also to determine
    whether to print one or two caret lines.  */
 
-static inline bool
+inline bool
 diagnostic_same_line (const diagnostic_context *context,
 		       expanded_location s1, expanded_location s2)
 {
@@ -507,12 +600,23 @@ extern char *file_name_as_prefix (diagnostic_context *, const char *);
 extern char *build_message_string (const char *, ...) ATTRIBUTE_PRINTF_1;
 
 extern void diagnostic_output_format_init (diagnostic_context *,
+					   const char *base_file_name,
 					   enum diagnostics_output_format);
+extern void diagnostic_output_format_init_json_stderr (diagnostic_context *context);
+extern void diagnostic_output_format_init_json_file (diagnostic_context *context,
+						     const char *base_file_name);
+extern void diagnostic_output_format_init_sarif_stderr (diagnostic_context *context);
+extern void diagnostic_output_format_init_sarif_file (diagnostic_context *context,
+						      const char *base_file_name);
 
 /* Compute the number of digits in the decimal representation of an integer.  */
 extern int num_digits (int);
 
 extern json::value *json_from_expanded_location (diagnostic_context *context,
 						 location_t loc);
+
+extern bool warning_enabled_at (location_t, int);
+
+extern char *get_cwe_url (int cwe);
 
 #endif /* ! GCC_DIAGNOSTIC_H */

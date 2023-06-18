@@ -1,5 +1,5 @@
 /* Process source files and output type information.
-   Copyright (C) 2002-2021 Free Software Foundation, Inc.
+   Copyright (C) 2002-2023 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -55,7 +55,12 @@ struct fileloc
 extern const input_file** gt_files;
 extern size_t num_gt_files;
 
-/* A number of places use the name of this "gengtype.c" file for a
+/* Table of headers to be included in gtype-desc.cc that are generated
+   during the build.  These are identified as "./<filename>.h".  */
+extern const char **build_headers;
+extern size_t num_build_headers;
+
+/* A number of places use the name of this "gengtype.cc" file for a
    location for things that we can't rely on the source to define.  We
    also need to refer to the "system.h" file specifically.  These two
    pointers are initialized early in main.  */
@@ -72,7 +77,7 @@ input_file* input_file_by_name (const char* name);
 const char *get_file_srcdir_relative_path (const input_file *inpf);
 
 /* Get the name of an input file.  */
-static inline const char*
+inline const char*
 get_input_file_name (const input_file *inpf)
 {
   if (inpf)
@@ -89,7 +94,7 @@ get_input_file_name (const input_file *inpf)
    some GC roots may be missed, which is a much harder-to-debug problem.
   */
 
-static inline lang_bitmap
+inline lang_bitmap
 get_lang_bitmap (const input_file* inpf)
 {
   if (inpf == NULL)
@@ -99,7 +104,7 @@ get_lang_bitmap (const input_file* inpf)
 
 /* Set the bitmap returned by get_lang_bitmap.  The only legitimate
    callers of this function are read_input_list & read_state_*.  */
-static inline void
+inline void
 set_lang_bitmap (input_file* inpf, lang_bitmap n)
 {
   gcc_assert (inpf);
@@ -121,7 +126,7 @@ extern int lexer_toplevel_done;
 extern struct fileloc lexer_line;
 
 /* Various things, organized as linked lists, needed both in
-   gengtype.c & in gengtype-state.c files.  */
+   gengtype.cc & in gengtype-state.cc files.  */
 extern pair_p typedefs;
 extern type_p structures;
 extern pair_p variables;
@@ -149,6 +154,9 @@ enum typekind {
   TYPE_UNION,           /* Type for GTY-ed discriminated unions.  */
   TYPE_POINTER,         /* Pointer type to GTY-ed type.  */
   TYPE_ARRAY,           /* Array of GTY-ed types.  */
+  TYPE_CALLBACK,	/* A function pointer that needs relocation if
+			   the executable has been loaded at a different
+			   address.  */
   TYPE_LANG_STRUCT,     /* GCC front-end language specific structs.
                            Various languages may have homonymous but
                            different structs.  */
@@ -326,6 +334,9 @@ extern struct type string_type;
 extern struct type scalar_nonchar;
 extern struct type scalar_char;
 
+/* The one and only TYPE_CALLBACK.  */
+extern struct type callback_type;
+
 /* Test if a type is a union, either a plain one or a language
    specific one.  */
 #define UNION_P(x)					\
@@ -335,7 +346,7 @@ extern struct type scalar_char;
 
 /* Test if a type is a union or a structure, perhaps a language
    specific one.  */
-static inline bool
+inline bool
 union_or_struct_p (enum typekind kind)
 {
   return (kind == TYPE_UNION
@@ -344,14 +355,14 @@ union_or_struct_p (enum typekind kind)
 	  || kind == TYPE_USER_STRUCT);
 }
 
-static inline bool
+inline bool
 union_or_struct_p (const_type_p x)
 {
   return union_or_struct_p (x->kind);
 }
 
 /* Give the file location of a type, if any. */
-static inline struct fileloc* 
+inline struct fileloc* 
 type_fileloc (type_p t)
 {
   if (!t) 
@@ -408,7 +419,7 @@ extern const char *read_state_filename; /* (-r) program argument. */
 extern const char *write_state_filename; /* (-w) program argument. */
 
 /* Functions reading and writing the entire gengtype state, called from
-   main, and implemented in file gengtype-state.c.  */
+   main, and implemented in file gengtype-state.cc.  */
 void read_state (const char* path);
 /* Write the state, and update the state_number field in types.  */
 void write_state (const char* path);

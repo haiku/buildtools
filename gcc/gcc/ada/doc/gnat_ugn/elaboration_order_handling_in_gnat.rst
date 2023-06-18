@@ -93,7 +93,7 @@ Elaboration code may appear in two distinct contexts:
   [body] compilation unit, ignoring any other package [body] declarations in
   between.
 
-  ::
+  .. code-block:: ada
 
      with Server;
      package Client is
@@ -116,7 +116,7 @@ Elaboration code may appear in two distinct contexts:
   bounded by the region starting from the ``begin`` keyword of the package body
   and ending at the ``end`` keyword of the package body.
 
-  ::
+  .. code-block:: ada
 
      package body Client is
         procedure Proc is
@@ -142,7 +142,7 @@ executed is referred to as **elaboration order**.
 
 Within a single unit, elaboration code is executed in sequential order.
 
-  ::
+  .. code-block:: ada
 
      package body Client is
         Result : ... := Server.Func;
@@ -190,13 +190,13 @@ factors:
 
 A program may have several elaboration orders depending on its structure.
 
-  ::
+  .. code-block:: ada
 
      package Server is
         function Func (Index : Integer) return Integer;
      end Server;
 
-  ::
+  .. code-block:: ada
 
      package body Server is
         Results : array (1 .. 5) of Integer := (1, 2, 3, 4, 5);
@@ -207,14 +207,14 @@ A program may have several elaboration orders depending on its structure.
         end Func;
      end Server;
 
-  ::
+  .. code-block:: ada
 
      with Server;
      package Client is
         Val : constant Integer := Server.Func (3);
      end Client;
 
-  ::
+  .. code-block:: ada
 
      with Client;
      procedure Main is begin null; end Main;
@@ -265,7 +265,7 @@ respect to control and data flow.
 Checking the Elaboration Order
 ==============================
 
-To avoid placing the entire elaboration-order burden on the programmer, Ada 
+To avoid placing the entire elaboration-order burden on the programmer, Ada
 provides three lines of defense:
 
 * *Static semantics*
@@ -320,7 +320,7 @@ the desired elaboration order and avoiding ABE problems altogether.
   A library package which does not require a completing body does not suffer
   from ABE problems.
 
-  ::
+  .. code-block:: ada
 
      package Pack is
         generic
@@ -358,7 +358,7 @@ the desired elaboration order and avoiding ABE problems altogether.
   scenario can invoke a server target before the target body has been
   elaborated because the spec and body are effectively "glued" together.
 
-  ::
+  .. code-block:: ada
 
      package Server is
         pragma Elaborate_Body;
@@ -366,7 +366,7 @@ the desired elaboration order and avoiding ABE problems altogether.
         function Func return Integer;
      end Server;
 
-  ::
+  .. code-block:: ada
 
      package body Server is
         function Func return Integer is
@@ -375,7 +375,7 @@ the desired elaboration order and avoiding ABE problems altogether.
         end Func;
      end Server;
 
-  ::
+  .. code-block:: ada
 
      with Server;
      package Client is
@@ -425,13 +425,13 @@ depend on.
   be elaborated prior to the unit with the pragma. Note that other unrelated
   units may be elaborated in between the spec and the body.
 
-  ::
+  .. code-block:: ada
 
      package Server is
         function Func return Integer;
      end Server;
 
-  ::
+  .. code-block:: ada
 
      package body Server is
         function Func return Integer is
@@ -440,7 +440,7 @@ depend on.
         end Func;
      end Server;
 
-  ::
+  .. code-block:: ada
 
      with Server;
      pragma Elaborate (Server);
@@ -479,13 +479,13 @@ depend on.
   |withed| by the spec and body of the argument, recursively. Note that other
   unrelated units may be elaborated in between the spec and the body.
 
-  ::
+  .. code-block:: ada
 
      package Math is
         function Factorial (Val : Natural) return Natural;
      end Math;
 
-  ::
+  .. code-block:: ada
 
      package body Math is
         function Factorial (Val : Natural) return Natural is
@@ -494,7 +494,7 @@ depend on.
         end Factorial;
      end Math;
 
-  ::
+  .. code-block:: ada
 
      package Computer is
         type Operation_Kind is (None, Op_Factorial);
@@ -504,7 +504,7 @@ depend on.
            Op  : Operation_Kind) return Natural;
      end Computer;
 
-  ::
+  .. code-block:: ada
 
      with Math;
      package body Computer is
@@ -520,7 +520,7 @@ depend on.
         end Compute;
      end Computer;
 
-  ::
+  .. code-block:: ada
 
      with Computer;
      pragma Elaborate_All (Computer);
@@ -738,7 +738,7 @@ execution. The warnings can be suppressed selectively with ``pragma Warnings
 A *guaranteed ABE* arises when the body of a target is not elaborated early
 enough, and causes *all* scenarios that directly invoke the target to fail.
 
-  ::
+  .. code-block:: ada
 
      package body Guaranteed_ABE is
         function ABE return Integer;
@@ -765,7 +765,7 @@ the declaration of ``Val``. This invokes function ``ABE``, however the body of
 A *conditional ABE* arises when the body of a target is not elaborated early
 enough, and causes *some* scenarios that directly invoke the target to fail.
 
-  ::
+  .. code-block:: ada
 
       1. package body Conditional_ABE is
       2.    procedure Force_Body is null;
@@ -850,19 +850,19 @@ clauses, elaboration-control pragmas, or invocations in elaboration code.
 
 The following example exhibits an elaboration circularity.
 
-  ::
+  .. code-block:: ada
 
      with B; pragma Elaborate (B);
      package A is
      end A;
 
-  ::
+  .. code-block:: ada
 
      package B is
         procedure Force_Body;
      end B;
 
-  ::
+  .. code-block:: ada
 
      with C;
      package body B is
@@ -871,13 +871,13 @@ The following example exhibits an elaboration circularity.
         Elab : constant Integer := C.Func;
      end B;
 
-  ::
+  .. code-block:: ada
 
      package C is
         function Func return Integer;
      end C;
 
-  ::
+  .. code-block:: ada
 
      with A;
      package body C is
@@ -931,9 +931,9 @@ Resolving Elaboration Circularities
 ===================================
 
 The most desirable option from the point of view of long-term maintenance is to
-rearrange the program so that the elaboration problems are avoided. One useful 
-technique is to place the elaboration code into separate child packages. 
-Another is to move some of the initialization code to explicitly invoked 
+rearrange the program so that the elaboration problems are avoided. One useful
+technique is to place the elaboration code into separate child packages.
+Another is to move some of the initialization code to explicitly invoked
 subprograms, where the program controls the order of initialization explicitly.
 Although this is the most desirable option, it may be impractical and involve
 too much modification, especially in the case of complex legacy code.
@@ -990,8 +990,9 @@ following tactics to eliminate the circularity:
      change pragma Elaborate_All for unit "..." to Elaborate in unit "..."
 
   This tactic is always suggested with the pragma ``Elaborate_All`` elimination
-  tactic. It offers a different alernative of guaranteeing that the argument of
-  the pragma will still be elaborated prior to the unit containing the pragma.
+  tactic. It offers a different alternative of guaranteeing that the argument
+  of the pragma will still be elaborated prior to the unit containing the
+  pragma.
 
   The programmer should update the pragma as advised, and rebuild the program.
 
@@ -1281,7 +1282,7 @@ Summary of Procedures for Elaboration Control
 
 A programmer should first compile the program with the default options, using
 none of the binder or compiler switches. If the binder succeeds in finding an
-elaboration order, then apart from possible cases involing dispatching calls
+elaboration order, then apart from possible cases involving dispatching calls
 and access-to-subprogram types, the program is free of elaboration errors.
 
 If it is important for the program to be portable to compilers other than GNAT,

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -36,11 +36,17 @@ generic
 
    type Num is digits <>;
 
-   type Uns is mod <>;
-
    Maxpow : Positive;
 
-   Powten_Address : System.Address;
+   Powfive_Address : System.Address;
+
+   Powfive_100_Address : System.Address;
+
+   Powfive_200_Address : System.Address;
+
+   Powfive_300_Address : System.Address;
+
+   type Uns is mod <>;
 
 package System.Val_Real is
    pragma Preelaborate;

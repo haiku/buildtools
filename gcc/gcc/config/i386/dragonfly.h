@@ -1,5 +1,5 @@
 /* Definitions for Intel 386 running DragonFly with ELF format
-   Copyright (C) 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2014-2023 Free Software Foundation, Inc.
    Contributed by John Marino <gnugcc@marino.st>
 
 This file is part of GCC.
@@ -34,14 +34,14 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef  ASM_APP_OFF
 #define ASM_APP_OFF "#NO_APP\n"
 
-#undef  DBX_REGISTER_NUMBER
-#define DBX_REGISTER_NUMBER(n) \
-  (TARGET_64BIT ? dbx64_register_map[n] : svr4_dbx_register_map[n])
+#undef  DEBUGGER_REGNO
+#define DEBUGGER_REGNO(n) \
+  (TARGET_64BIT ? debugger64_register_map[n] : svr4_debugger_register_map[n])
 
 #undef  NO_PROFILE_COUNTERS
 #define NO_PROFILE_COUNTERS	1
 
-/* Tell final.c that we don't need a label passed to mcount.  */
+/* Tell final.cc that we don't need a label passed to mcount.  */
 
 #undef  MCOUNT_NAME
 #define MCOUNT_NAME ".mcount"
@@ -60,23 +60,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef  SUBTARGET_EXTRA_SPECS	/* i386.h bogusly defines it.  */
 #define SUBTARGET_EXTRA_SPECS \
   { "dfbsd_dynamic_linker", DFBSD_DYNAMIC_LINKER }
-
-/* A C statement to output to the stdio stream FILE an assembler
-   command to advance the location counter to a multiple of 1<<LOG
-   bytes if it is within MAX_SKIP bytes.
-
-   This is used to align code labels according to Intel recommendations.  */
-
-#ifdef HAVE_GAS_MAX_SKIP_P2ALIGN
-#undef  ASM_OUTPUT_MAX_SKIP_ALIGN
-#define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE, LOG, MAX_SKIP)			\
-  if ((LOG) != 0) {							\
-    if ((MAX_SKIP) == 0 || (MAX_SKIP) >= (1 << (LOG)) - 1)		\
-      fprintf ((FILE), "\t.p2align %d\n", (LOG));			\
-    else								\
-      fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP));	\
-  }
-#endif
 
 /* Don't default to pcc-struct-return, we want to retain compatibility with
    older gcc versions AND pcc-struct-return is nonreentrant.

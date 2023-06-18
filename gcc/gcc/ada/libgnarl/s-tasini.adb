@@ -6,7 +6,7 @@
 --                                                                          --
 --                                  B o d y                                 --
 --                                                                          --
---         Copyright (C) 1992-2020, Free Software Foundation, Inc.          --
+--         Copyright (C) 1992-2023, Free Software Foundation, Inc.          --
 --                                                                          --
 -- GNARL is free software; you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -126,6 +126,7 @@ package body System.Tasking.Initialization is
       if Self_ID /= null
         and then Self_ID.Deferral_Level = 0
         and then Self_ID.Pending_ATC_Level < Self_ID.ATC_Nesting_Level
+        and then not Self_ID.Aborting
       then
          return 1;
       else
@@ -420,7 +421,7 @@ package body System.Tasking.Initialization is
             when Terminated
                | Unactivated
             =>
-               pragma Assert (False);
+               pragma Assert (Standard.False);
                null;
 
             when Activating
@@ -535,7 +536,7 @@ package body System.Tasking.Initialization is
          C := C.Common.All_Tasks_Link;
       end loop;
 
-      pragma Assert (False);
+      pragma Assert (Standard.False);
    end Remove_From_All_Tasks_List;
 
    ---------------

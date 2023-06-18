@@ -1,5 +1,5 @@
 ;; GCC machine description for CRIS cpu cores.
-;; Copyright (C) 1998-2021 Free Software Foundation, Inc.
+;; Copyright (C) 1998-2023 Free Software Foundation, Inc.
 ;; Contributed by Axis Communications.
 
 ;; This file is part of GCC.
@@ -60,7 +60,6 @@
   [(CRIS_STATIC_CHAIN_REGNUM 7)
    (CRIS_REAL_FP_REGNUM 8)
    (CRIS_SP_REGNUM 14)
-   (CRIS_ACR_REGNUM 15)
    (CRIS_SRP_REGNUM 16)
    (CRIS_MOF_REGNUM 17)
    (CRIS_AP_REGNUM 18)
@@ -154,9 +153,20 @@
 	(not (match_test "dead_or_set_regno_p (insn, CRIS_SRP_REGNUM)")))
    (nil) (nil)])
 
+;; Enable choosing particular instructions.  The discriminator choice
+;; "v0" stands for "pre-v10", for brevity.
+(define_attr "cpu_variant" "default,v0,v10" (const_string "default"))
+
 (define_attr "enabled" "no,yes"
   (if_then_else
-   (eq_attr "cc_enabled" "normal")
+   (and
+    (eq_attr "cc_enabled" "normal")
+    (ior
+     (eq_attr "cpu_variant" "default")
+     (and (eq_attr "cpu_variant" "v10")
+	  (match_test "TARGET_HAS_MUL_INSNS"))
+     (and (eq_attr "cpu_variant" "v0")
+	  (not (match_test "TARGET_HAS_MUL_INSNS")))))
    (const_string "yes")
    (const_string "no")))
 
@@ -173,6 +183,10 @@
 
 (define_mode_iterator WD [SI HI])
 (define_mode_iterator BW [HI QI])
+
+; Another "BW" for use where an independent iteration is needed.
+(define_mode_iterator BW2 [HI QI])
+
 (define_mode_attr S [(SI "HI") (HI "QI")])
 (define_mode_attr s [(SI "hi") (HI "qi")])
 (define_mode_attr m [(SI ".d") (HI ".w") (QI ".b")])
@@ -579,13 +593,14 @@
 (define_insn "*movsi_internal<setcc><setnz><setnzvc>"
   [(set
     (match_operand:SI 0 "nonimmediate_operand"
-		      "=r,r, r,Q>,r,Q>,g,r,r,g,rQ>,x,  m,x")
+		      "=r,r, r,Q>,r,Q>,g,r,r,g,rQ>,x,  m,x, Q>,r,g")
     (match_operand:SI 1 "general_operand"
-		       "r,Q>,M,M, I,r, M,n,g,r,x,  rQ>,x,gi"))
+		       "r,Q>,M,M, I,r, M,n,g,r,x,  rQ>,x,gi,r, g,r"))
    (clobber (reg:CC CRIS_CC0_REGNUM))]
-    ;; Note that we prefer not to use the S alternative (if for some reason
-    ;; it competes with others) above, but g matches S.
-  ""
+  ;; Avoid matching insns we know must be reloaded.  Without one
+  ;; operand being a (pseudo-)register, reload chooses
+  ;; reload-registers suboptimally.
+  "REG_S_P (operands[0]) || REG_S_P (operands[1]) || operands[1] == const0_rtx"
 {
   /* Better to have c-switch here; it is worth it to optimize the size of
      move insns.  The alternative would be to try to find more constraint
@@ -597,6 +612,9 @@
     case 5:
     case 8:
     case 9:
+    case 14:
+    case 15:
+    case 16:
       return "move.d %1,%0";
 
     case 10:
@@ -634,9 +652,10 @@
       gcc_unreachable ();
     }
 }
-  [(set_attr "slottable" "yes,yes,yes,yes,yes,yes,no,no,no,no,yes,yes,no,no")
+  [(set_attr "cpu_variant" "*,*,*,*,*,v0,*,*,v0,v0,*,*,*,*,v10,v10,v10")
+   (set_attr "slottable" "yes,yes,yes,yes,yes,yes,no,no,no,no,yes,yes,no,no,yes,no,no")
    (set_attr "cc<cccc><ccnz><ccnzvc>"
-	     "*,*,none,none,*,none,none,*,*,none,none,none,none,none")])
+	     "*,*,none,none,*,none,none,*,*,none,none,none,none,none,none,*,none")])
 
 ;; FIXME: See movsi.
 
@@ -1311,7 +1330,7 @@
    && (INTVAL (operands[3]) == 2 || INTVAL (operands[3]) == 4)
    && (reload_in_progress || reload_completed)"
   "#"
-  ""
+  "&& 1"
   [(set (match_dup 0)
 	(plus:SI (ashift:SI (match_dup 2) (match_dup 3)) (match_dup 1)))]
   "operands[3] = operands[3] == const2_rtx ? const1_rtx : const2_rtx;")
@@ -1347,12 +1366,63 @@
 {
   rtx reg = operands[0];
   rtx_insn *i = next_nonnote_nondebug_insn_bb (curr_insn);
+  rtx x, src, dest;
 
   while (i != NULL_RTX && (!INSN_P (i) || DEBUG_INSN_P (i)))
     i = next_nonnote_nondebug_insn_bb (i);
 
-  if (i == NULL_RTX || reg_mentioned_p (reg, i) || BARRIER_P (i))
+  /* We don't want to strip the clobber if the next insn possibly uses the
+     zeroness of the result.  Preferably fail only if we see a compare insn
+     that looks eliminable and with the register "reg" compared.  With some
+     effort we could also check for an equality test (EQ, NE) in the post-split
+     user, just not for now.  */
+  if (i == NULL_RTX)
     FAIL;
+
+  x = single_set (i);
+
+  /* We explicitly need to bail on a BARRIER, but that's implied by a failing
+     single_set test.  */
+  if (x == NULL_RTX)
+    FAIL;
+
+  src = SET_SRC (x);
+  dest = SET_DEST (x);
+
+  /* Bail on (post-split) eliminable compares.  */
+  if (REG_P (dest) && REGNO (dest) == CRIS_CC0_REGNUM
+      && GET_CODE (src) == COMPARE)
+    {
+      rtx cop0 = XEXP (src, 0);
+
+      if (REG_P (cop0) && REGNO (cop0) == REGNO (reg)
+	  && XEXP (src, 1) == const0_rtx)
+	FAIL;
+    }
+
+  /* Bail out if we see a (pre-split) cbranch or cstore where the comparison
+     looks eliminable and uses the destination register in this addition.  We
+     don't need to look very deep: a single_set which is a parallel clobbers
+     something, and (one of) that something, is always CRIS_CC0_REGNUM here.
+     Also, the entities we're looking for are two-element parallels.  A
+     split-up cbranch or cstore doesn't clobber CRIS_CC0_REGNUM.  A cbranch has
+     if_then_else as its source with a comparison operator as the condition,
+     and a cstore has a source with the comparison operator directly.  That
+     also matches dstep, so look for pc as destination for the if_then_else.
+     We error on the safe side if we happen to catch other conditional entities
+     and FAIL, that just means the split won't happen.  */
+  if (GET_CODE (PATTERN (i)) == PARALLEL && XVECLEN (PATTERN (i), 0) == 2)
+    {
+      rtx cmp
+	= (GET_CODE (src) == IF_THEN_ELSE && dest == pc_rtx
+	   ? XEXP (src, 0)
+	   : (COMPARISON_P (src) ? src : NULL_RTX));
+      gcc_assert (cmp == NULL_RTX || COMPARISON_P (cmp));
+
+      if (cmp && REG_P (XEXP (cmp, 0)) && XEXP (cmp, 1) == const0_rtx
+	  && REGNO (XEXP (cmp, 0)) == REGNO (reg))
+	FAIL;
+    }
 })
 
 (define_insn "<u>mul<s><mode>3"
@@ -2817,6 +2887,52 @@
   operands[3] = gen_rtx_ZERO_EXTEND (SImode, op1);
   operands[4] = GEN_INT (trunc_int_for_mode (INTVAL (operands[1]), QImode));
 })
+
+;; Fix a decomposed szext: fuse it with the memory operand of the
+;; load.  This is typically the sign-extension part of a decomposed
+;; "indirect offset" address.
+(define_peephole2 ; lra_szext_decomposed
+  [(parallel
+    [(set (match_operand:BW 0 "register_operand")
+	  (match_operand:BW 1 "memory_operand"))
+     (clobber (reg:CC CRIS_CC0_REGNUM))])
+   (parallel
+    [(set (match_operand:SI 2 "register_operand") (szext:SI (match_dup 0)))
+     (clobber (reg:CC CRIS_CC0_REGNUM))])]
+  "REGNO (operands[0]) == REGNO (operands[2])
+   || peep2_reg_dead_p (2, operands[0])"
+  [(parallel
+    [(set (match_dup 2) (szext:SI (match_dup 1)))
+     (clobber (reg:CC CRIS_CC0_REGNUM))])])
+
+;; Re-compose a decomposed "indirect offset" address for a szext
+;; operation.  The non-clobbering "addi" is generated by LRA.
+;; This and lra_szext_decomposed is covered by cris/rld-legit1.c.
+(define_peephole2 ; lra_szext_decomposed_indirect_with_offset
+  [(parallel
+    [(set (match_operand:SI 0 "register_operand")
+	  (sign_extend:SI (mem:BW (match_operand:SI 1 "register_operand"))))
+     (clobber (reg:CC CRIS_CC0_REGNUM))])
+   (set (match_dup 0)
+	(plus:SI (match_dup 0) (match_operand:SI 2 "register_operand")))
+   (parallel
+    [(set (match_operand:SI 3 "register_operand")
+	  (szext:SI (mem:BW2 (match_dup 0))))
+     (clobber (reg:CC CRIS_CC0_REGNUM))])]
+  "(REGNO (operands[0]) == REGNO (operands[3])
+    || peep2_reg_dead_p (3, operands[0]))
+   && (REGNO (operands[0]) == REGNO (operands[1])
+       || peep2_reg_dead_p (3, operands[0]))"
+  [(parallel
+    [(set
+      (match_dup 3)
+      (szext:SI
+       (mem:BW2 (plus:SI (szext:SI (mem:BW (match_dup 1))) (match_dup 2)))))
+     (clobber (reg:CC CRIS_CC0_REGNUM))])])
+
+;; Add operations with similar or same decomposed addresses here, when
+;; encountered - but only when covered by mentioned test-cases for at
+;; least one of the cases generalized in the pattern.
 
 ;; Local variables:
 ;; mode:emacs-lisp

@@ -33,5 +33,5 @@ end program
 ! This lead to access to non exsitant memory in opencoarrays.
 ! In single image mode just checking for reduced number of
 ! descriptors is possible, i.e., execute always works.
-! { dg-final { scan-tree-dump-times "desc\\.\[0-9\]+" 8 "original" } }
+! { dg-final { scan-tree-dump-times "desc\\.\[0-9\]+" 12 "original" } }
 

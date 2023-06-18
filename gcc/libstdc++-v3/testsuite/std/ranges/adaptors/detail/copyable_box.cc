@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -101,9 +101,6 @@ test02()
   __box<A<false>> x1(std::in_place, 0, 0);
 }
 
-#if 0
-// On the 11 branch, the partial specialization of __box admits only copyable types
-// so this test doesn't apply.
 constexpr bool
 test03()
 {
@@ -145,4 +142,3 @@ test03()
   return true;
 }
 static_assert(test03());
-#endif

@@ -1,5 +1,5 @@
 ;; Code and mode itertator and attribute definitions for the ARM backend
-;; Copyright (C) 2010-2021 Free Software Foundation, Inc.
+;; Copyright (C) 2010-2023 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 ;;
 ;; This file is part of GCC.
@@ -231,6 +231,9 @@
 ;; Vector modes for 16-bit floating-point support.
 (define_mode_iterator VH [V8HF V4HF])
 
+;; Modes with 16-bit elements only.
+(define_mode_iterator V16 [V4HI V4HF V8HI V8HF])
+
 ;; 16-bit floating-point vector modes suitable for moving (includes BFmode).
 (define_mode_iterator VHFBF [V8HF V4HF V4BF V8BF])
 
@@ -269,6 +272,8 @@
 (define_mode_iterator MVE_2 [V16QI V8HI V4SI])
 (define_mode_iterator MVE_5 [V8HI V4SI])
 (define_mode_iterator MVE_6 [V8HI V4SI])
+(define_mode_iterator MVE_7 [V16BI V8BI V4BI V2QI])
+(define_mode_iterator MVE_7_HI [HI V16BI V8BI V4BI V2QI])
 
 ;;----------------------------------------------------------------------------
 ;; Code iterators
@@ -285,6 +290,9 @@
 
 ;; Comparisons for vc<cmp>
 (define_code_iterator COMPARISONS [eq gt ge le lt])
+;; Comparisons for MVE
+(define_code_iterator MVE_COMPARISONS [eq ge geu gt gtu le lt ne])
+(define_code_iterator MVE_FP_COMPARISONS [eq ge gt le lt ne])
 
 ;; A list of ...
 (define_code_iterator IOR_XOR [ior xor])
@@ -336,7 +344,13 @@
 (define_code_attr cmp_op [(eq "eq") (gt "gt") (ge "ge") (lt "lt") (le "le")
                           (gtu "gt") (geu "ge")])
 
+(define_code_attr mve_cmp_op [(eq "eq") (gt "gt") (ge "ge") (lt "lt") (le "le")
+                              (gtu "hi") (geu "cs") (ne "ne")])
+
 (define_code_attr cmp_type [(eq "i") (gt "s") (ge "s") (lt "s") (le "s")])
+
+(define_code_attr mve_cmp_type [(eq "i") (gt "s") (ge "s") (lt "s") (le "s")
+                                (gtu "u") (geu "u") (ne "i")])
 
 (define_code_attr vfml_op [(plus "a") (minus "s")])
 
@@ -351,8 +365,6 @@
 
 (define_int_iterator NEON_VCMP [UNSPEC_VCEQ UNSPEC_VCGT UNSPEC_VCGE
 				UNSPEC_VCLT UNSPEC_VCLE])
-
-(define_int_iterator NEON_VACMP [UNSPEC_VCAGE UNSPEC_VCAGT])
 
 (define_int_iterator NEON_VAGLTE [UNSPEC_VCAGE UNSPEC_VCAGT
 				  UNSPEC_VCALE UNSPEC_VCALT])
@@ -562,6 +574,8 @@
 ;; (Opposite) mode to convert to/from for vector-half mode conversions.
 (define_mode_attr VH_CVTTO [(V4HI "V4HF") (V4HF "V4HI")
 			    (V8HI "V8HF") (V8HF "V8HI")])
+(define_mode_attr VH_cvtto [(V4HI "v4hf") (V4HF "v4hi")
+			    (V8HI "v8hf") (V8HF "v8hi")])
 
 ;; Define element mode for each vector mode.
 (define_mode_attr V_elem [(V8QI "QI") (V16QI "QI")
@@ -711,6 +725,7 @@
 (define_mode_attr v_cmp_result [(V8QI "v8qi") (V16QI "v16qi")
 				(V4HI "v4hi") (V8HI  "v8hi")
 				(V2SI "v2si") (V4SI  "v4si")
+				(V4HF "v4hi") (V8HF  "v8hi")
 				(DI   "di")   (V2DI  "v2di")
 				(V2SF "v2si") (V4SF  "v4si")])
 
@@ -933,6 +948,13 @@
 			       (V8HF "u16") (V4SF "32")])
 (define_mode_attr earlyclobber_32 [(V16QI "=w") (V8HI "=w") (V4SI "=&w")
 						(V8HF "=w") (V4SF "=&w")])
+(define_mode_attr MVE_VPRED [(V16QI "V16BI") (V8HI "V8BI") (V4SI "V4BI")
+			     (V8HF "V8BI")   (V4SF "V4BI") (V2DI "V2QI")])
+(define_mode_attr MVE_vpred [(V16QI "v16bi") (V8HI "v8bi") (V4SI "v4bi")
+			     (V8HF "v8bi")   (V4SF "v4bi")
+			     (V16BI "v16bi") (V8BI "v8bi") (V4BI "v4bi")
+			     (V2QI "v2qi")])
+(define_mode_attr MVE_vctp [(V16BI "8") (V8BI "16") (V4BI "32") (V2QI "64")])
 
 ;;----------------------------------------------------------------------------
 ;; Code attributes
@@ -1131,6 +1153,13 @@
                               (UNSPEC_VRINTA "unconditional") (UNSPEC_VRINTM "unconditional")
                               (UNSPEC_VRINTR "nocond") (UNSPEC_VRINTX "nocond")])
 
+(define_int_attr nvrint_pattern [(UNSPEC_NVRINTZ "btrunc")
+				 (UNSPEC_NVRINTP "ceil")
+				 (UNSPEC_NVRINTA "round")
+				 (UNSPEC_NVRINTM "floor")
+				 (UNSPEC_NVRINTX "rint")
+				 (UNSPEC_NVRINTN "roundeven")])
+
 (define_int_attr nvrint_variant [(UNSPEC_NVRINTZ "z") (UNSPEC_NVRINTP "p")
                                 (UNSPEC_NVRINTA "a") (UNSPEC_NVRINTM "m")
                                 (UNSPEC_NVRINTX "x") (UNSPEC_NVRINTN "n")])
@@ -1273,19 +1302,17 @@
 		       (VMOVLBQ_U "u") (VCVTQ_FROM_F_S "s") (VCVTQ_FROM_F_U "u")
 		       (VCVTPQ_S "s") (VCVTPQ_U "u") (VCVTNQ_S "s")
 		       (VCVTNQ_U "u") (VCVTMQ_S "s") (VCVTMQ_U "u")
-		       (VCLZQ_U "u") (VCLZQ_S "s") (VREV32Q_U "u")
+		       (VREV32Q_U "u")
 		       (VREV32Q_S "s") (VADDLVQ_U "u") (VADDLVQ_S "s")
 		       (VCVTQ_N_TO_F_S "s") (VCVTQ_N_TO_F_U "u")
 		       (VCREATEQ_U "u") (VCREATEQ_S "s") (VSHRQ_N_S "s")
 		       (VSHRQ_N_U "u") (VCVTQ_N_FROM_F_S "s") (VSHLQ_U "u")
 		       (VCVTQ_N_FROM_F_U "u") (VADDLVQ_P_S "s") (VSHLQ_S "s")
-		       (VADDLVQ_P_U "u") (VCMPNEQ_U "u") (VCMPNEQ_S "s")
+		       (VADDLVQ_P_U "u")
 		       (VABDQ_M_S "s") (VABDQ_M_U "u") (VABDQ_S "s")
 		       (VABDQ_U "u") (VADDQ_N_S "s") (VADDQ_N_U "u")
 		       (VADDVQ_P_S "s")	(VADDVQ_P_U "u") (VBRSRQ_N_S "s")
-		       (VBRSRQ_N_U "u") (VCMPEQQ_S "s") (VCMPEQQ_U "u")
-		       (VCMPEQQ_N_S "s") (VCMPEQQ_N_U "u") (VCMPNEQ_N_S "s")
-		       (VCMPNEQ_N_U "u")
+		       (VBRSRQ_N_U "u")
 		       (VHADDQ_N_S "s") (VHADDQ_N_U "u") (VHADDQ_S "s")
 		       (VHADDQ_U "u") (VHSUBQ_N_S "s")	(VHSUBQ_N_U "u")
 		       (VHSUBQ_S "s") (VMAXQ_S "s") (VMAXQ_U "u") (VHSUBQ_U "u")
@@ -1437,11 +1464,6 @@
 		       (VADCIQ_M_S "s") (SQRSHRL_64 "64") (SQRSHRL_48 "48")
 		       (UQRSHLL_64 "64") (UQRSHLL_48 "48") (VSHLCQ_M_S "s")
 		       (VSHLCQ_M_U "u")])
-
-(define_int_attr mode1 [(VCTP8Q "8") (VCTP16Q "16") (VCTP32Q "32")
-			(VCTP64Q "64") (VCTP8Q_M "8") (VCTP16Q_M "16")
-			(VCTP32Q_M "32") (VCTP64Q_M "64")])
-
 ;; Both kinds of return insn.
 (define_code_iterator RETURNS [return simple_return])
 (define_code_attr return_str [(return "") (simple_return "simple_")])
@@ -1525,7 +1547,6 @@
 (define_int_iterator VREV16Q [VREV16Q_U VREV16Q_S])
 (define_int_iterator VCVTAQ [VCVTAQ_U VCVTAQ_S])
 (define_int_iterator VDUPQ_N [VDUPQ_N_U VDUPQ_N_S])
-(define_int_iterator VCLZQ [VCLZQ_U VCLZQ_S])
 (define_int_iterator VADDVQ [VADDVQ_U VADDVQ_S])
 (define_int_iterator VREV32Q [VREV32Q_U VREV32Q_S])
 (define_int_iterator VMOVLBQ [VMOVLBQ_S VMOVLBQ_U])
@@ -1534,23 +1555,17 @@
 (define_int_iterator VCVTNQ [VCVTNQ_S VCVTNQ_U])
 (define_int_iterator VCVTMQ [VCVTMQ_S VCVTMQ_U])
 (define_int_iterator VADDLVQ [VADDLVQ_U VADDLVQ_S])
-(define_int_iterator VCTPQ [VCTP8Q VCTP16Q VCTP32Q VCTP64Q])
-(define_int_iterator VCTPQ_M [VCTP8Q_M VCTP16Q_M VCTP32Q_M VCTP64Q_M])
 (define_int_iterator VCVTQ_N_TO_F [VCVTQ_N_TO_F_S VCVTQ_N_TO_F_U])
 (define_int_iterator VCREATEQ [VCREATEQ_U VCREATEQ_S])
 (define_int_iterator VSHRQ_N [VSHRQ_N_S VSHRQ_N_U])
 (define_int_iterator VCVTQ_N_FROM_F [VCVTQ_N_FROM_F_S VCVTQ_N_FROM_F_U])
 (define_int_iterator VADDLVQ_P [VADDLVQ_P_S VADDLVQ_P_U])
-(define_int_iterator VCMPNEQ [VCMPNEQ_U VCMPNEQ_S])
 (define_int_iterator VSHLQ [VSHLQ_S VSHLQ_U])
 (define_int_iterator VABDQ [VABDQ_S VABDQ_U])
 (define_int_iterator VADDQ_N [VADDQ_N_S VADDQ_N_U])
 (define_int_iterator VADDVAQ [VADDVAQ_S VADDVAQ_U])
 (define_int_iterator VADDVQ_P [VADDVQ_P_U VADDVQ_P_S])
 (define_int_iterator VBRSRQ_N [VBRSRQ_N_U VBRSRQ_N_S])
-(define_int_iterator VCMPEQQ [VCMPEQQ_U VCMPEQQ_S])
-(define_int_iterator VCMPEQQ_N [VCMPEQQ_N_S VCMPEQQ_N_U])
-(define_int_iterator VCMPNEQ_N [VCMPNEQ_N_U VCMPNEQ_N_S])
 (define_int_iterator VHADDQ [VHADDQ_S VHADDQ_U])
 (define_int_iterator VHADDQ_N [VHADDQ_N_U VHADDQ_N_S])
 (define_int_iterator VHSUBQ [VHSUBQ_S VHSUBQ_U])

@@ -1,6 +1,6 @@
 // Core algorithmic facilities -*- C++ -*-
 
-// Copyright (C) 2001-2021 Free Software Foundation, Inc.
+// Copyright (C) 2001-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -72,7 +72,10 @@
 #if __cplusplus >= 201103L
 # include <type_traits>
 #endif
-#if __cplusplus > 201703L
+#if __cplusplus >= 201402L
+# include <bit> // std::__bit_width
+#endif
+#if __cplusplus >= 202002L
 # include <compare>
 #endif
 
@@ -388,6 +391,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    }
 	  return __result;
 	}
+
+      template<typename _Tp, typename _Up>
+	static void
+	__assign_one(_Tp* __to, _Up* __from)
+	{ *__to = *__from; }
     };
 
 #if __cplusplus >= 201103L
@@ -408,27 +416,28 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    }
 	  return __result;
 	}
+
+      template<typename _Tp, typename _Up>
+	static void
+	__assign_one(_Tp* __to, _Up* __from)
+	{ *__to = std::move(*__from); }
     };
 #endif
 
   template<bool _IsMove>
     struct __copy_move<_IsMove, true, random_access_iterator_tag>
     {
-      template<typename _Tp>
+      template<typename _Tp, typename _Up>
 	_GLIBCXX20_CONSTEXPR
-	static _Tp*
-	__copy_m(const _Tp* __first, const _Tp* __last, _Tp* __result)
+	static _Up*
+	__copy_m(_Tp* __first, _Tp* __last, _Up* __result)
 	{
-#if __cplusplus >= 201103L
-	  using __assignable = conditional<_IsMove,
-					   is_move_assignable<_Tp>,
-					   is_copy_assignable<_Tp>>;
-	  // trivial types can have deleted assignment
-	  static_assert( __assignable::type::value, "type is not assignable" );
-#endif
 	  const ptrdiff_t _Num = __last - __first;
-	  if (_Num)
+	  if (__builtin_expect(_Num > 1, true))
 	    __builtin_memmove(__result, __first, sizeof(_Tp) * _Num);
+	  else if (_Num == 1)
+	    std::__copy_move<_IsMove, false, random_access_iterator_tag>::
+	      __assign_one(__result, __first);
 	  return __result + _Num;
 	}
     };
@@ -442,6 +451,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
 _GLIBCXX_END_NAMESPACE_CONTAINER
 
+#if _GLIBCXX_HOSTED
   // Helpers for streambuf iterators (either istream or ostream).
   // NB: avoid including <iosfwd>, relatively large.
   template<typename _CharT>
@@ -479,6 +489,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
 	istreambuf_iterator<_CharT, char_traits<_CharT> >,
 	istreambuf_iterator<_CharT, char_traits<_CharT> >,
 	_GLIBCXX_STD_C::_Deque_iterator<_CharT, _CharT&, _CharT*>);
+#endif // HOSTED
 
   template<bool _IsMove, typename _II, typename _OI>
     _GLIBCXX20_CONSTEXPR
@@ -574,6 +585,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
       return __result;
     }
 
+#if _GLIBCXX_HOSTED
   template<typename _CharT, typename _Size>
     typename __gnu_cxx::__enable_if<
       __is_char<_CharT>::__value, _CharT*>::__type
@@ -587,6 +599,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
     __copy_n_a(istreambuf_iterator<_CharT, char_traits<_CharT> >, _Size,
 	       _GLIBCXX_STD_C::_Deque_iterator<_CharT, _CharT&, _CharT*>,
 	       bool);
+#endif
 
   /**
    *  @brief Copies the range [first,last) into result.
@@ -613,7 +626,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
       // concept requirements
       __glibcxx_function_requires(_InputIteratorConcept<_II>)
       __glibcxx_function_requires(_OutputIteratorConcept<_OI,
-	    typename iterator_traits<_II>::value_type>)
+	    typename iterator_traits<_II>::reference>)
       __glibcxx_requires_can_increment_range(__first, __last, __result);
 
       return std::__copy_move_a<__is_move_iterator<_II>::__value>
@@ -646,7 +659,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
       // concept requirements
       __glibcxx_function_requires(_InputIteratorConcept<_II>)
       __glibcxx_function_requires(_OutputIteratorConcept<_OI,
-	    typename iterator_traits<_II>::value_type>)
+	    typename iterator_traits<_II>::value_type&&>)
       __glibcxx_requires_can_increment_range(__first, __last, __result);
 
       return std::__copy_move_a<true>(std::__miter_base(__first),
@@ -725,21 +738,17 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
   template<bool _IsMove>
     struct __copy_move_backward<_IsMove, true, random_access_iterator_tag>
     {
-      template<typename _Tp>
+      template<typename _Tp, typename _Up>
 	_GLIBCXX20_CONSTEXPR
-	static _Tp*
-	__copy_move_b(const _Tp* __first, const _Tp* __last, _Tp* __result)
+	static _Up*
+	__copy_move_b(_Tp* __first, _Tp* __last, _Up* __result)
 	{
-#if __cplusplus >= 201103L
-	  using __assignable = conditional<_IsMove,
-					   is_move_assignable<_Tp>,
-					   is_copy_assignable<_Tp>>;
-	  // trivial types can have deleted assignment
-	  static_assert( __assignable::type::value, "type is not assignable" );
-#endif
 	  const ptrdiff_t _Num = __last - __first;
-	  if (_Num)
+	  if (__builtin_expect(_Num > 1, true))
 	    __builtin_memmove(__result - _Num, __first, sizeof(_Tp) * _Num);
+	  else if (_Num == 1)
+	    std::__copy_move<_IsMove, false, random_access_iterator_tag>::
+	      __assign_one(__result - 1, __first);
 	  return __result - _Num;
 	}
     };
@@ -850,9 +859,8 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
       // concept requirements
       __glibcxx_function_requires(_BidirectionalIteratorConcept<_BI1>)
       __glibcxx_function_requires(_Mutable_BidirectionalIteratorConcept<_BI2>)
-      __glibcxx_function_requires(_ConvertibleConcept<
-	    typename iterator_traits<_BI1>::value_type,
-	    typename iterator_traits<_BI2>::value_type>)
+      __glibcxx_function_requires(_OutputIteratorConcept<_BI2,
+	    typename iterator_traits<_BI1>::reference>)
       __glibcxx_requires_can_decrement_range(__first, __last, __result);
 
       return std::__copy_move_backward_a<__is_move_iterator<_BI1>::__value>
@@ -886,9 +894,8 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
       // concept requirements
       __glibcxx_function_requires(_BidirectionalIteratorConcept<_BI1>)
       __glibcxx_function_requires(_Mutable_BidirectionalIteratorConcept<_BI2>)
-      __glibcxx_function_requires(_ConvertibleConcept<
-	    typename iterator_traits<_BI1>::value_type,
-	    typename iterator_traits<_BI2>::value_type>)
+      __glibcxx_function_requires(_OutputIteratorConcept<_BI2,
+	    typename iterator_traits<_BI1>::value_type&&>)
       __glibcxx_requires_can_decrement_range(__first, __last, __result);
 
       return std::__copy_move_backward_a<true>(std::__miter_base(__first),
@@ -958,6 +965,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
 	      const _GLIBCXX_STD_C::_Deque_iterator<_Tp, _Tp&, _Tp*>&,
 	      const _VTp&);
 
+  _GLIBCXX20_CONSTEXPR
   void
   __fill_a1(_GLIBCXX_STD_C::_Bit_iterator, _GLIBCXX_STD_C::_Bit_iterator,
 	    const bool&);
@@ -1014,27 +1022,27 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
   __size_to_integer(unsigned long long __n) { return __n; }
 
 #if defined(__GLIBCXX_TYPE_INT_N_0)
-  inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_0
+  __extension__ inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_0
   __size_to_integer(__GLIBCXX_TYPE_INT_N_0 __n) { return __n; }
-  inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_0
+  __extension__ inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_0
   __size_to_integer(unsigned __GLIBCXX_TYPE_INT_N_0 __n) { return __n; }
 #endif
 #if defined(__GLIBCXX_TYPE_INT_N_1)
-  inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_1
+  __extension__ inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_1
   __size_to_integer(__GLIBCXX_TYPE_INT_N_1 __n) { return __n; }
-  inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_1
+  __extension__ inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_1
   __size_to_integer(unsigned __GLIBCXX_TYPE_INT_N_1 __n) { return __n; }
 #endif
 #if defined(__GLIBCXX_TYPE_INT_N_2)
-  inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_2
+  __extension__ inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_2
   __size_to_integer(__GLIBCXX_TYPE_INT_N_2 __n) { return __n; }
-  inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_2
+  __extension__ inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_2
   __size_to_integer(unsigned __GLIBCXX_TYPE_INT_N_2 __n) { return __n; }
 #endif
 #if defined(__GLIBCXX_TYPE_INT_N_3)
-  inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_3
+  __extension__ inline _GLIBCXX_CONSTEXPR unsigned __GLIBCXX_TYPE_INT_N_3
   __size_to_integer(__GLIBCXX_TYPE_INT_N_3 __n) { return __n; }
-  inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_3
+  __extension__ inline _GLIBCXX_CONSTEXPR __GLIBCXX_TYPE_INT_N_3
   __size_to_integer(unsigned __GLIBCXX_TYPE_INT_N_3 __n) { return __n; }
 #endif
 
@@ -1045,7 +1053,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
   inline _GLIBCXX_CONSTEXPR long long
   __size_to_integer(long double __n) { return (long long)__n; }
 #if !defined(__STRICT_ANSI__) && defined(_GLIBCXX_USE_FLOAT128)
-  inline _GLIBCXX_CONSTEXPR long long
+  __extension__ inline _GLIBCXX_CONSTEXPR long long
   __size_to_integer(__float128 __n) { return (long long)__n; }
 #endif
 
@@ -1144,7 +1152,7 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
     fill_n(_OI __first, _Size __n, const _Tp& __value)
     {
       // concept requirements
-      __glibcxx_function_requires(_OutputIteratorConcept<_OI, _Tp>)
+      __glibcxx_function_requires(_OutputIteratorConcept<_OI, const _Tp&>)
 
       return std::__fill_n_a(__first, std::__size_to_integer(__n), __value,
 			       std::__iterator_category(__first));
@@ -1502,29 +1510,25 @@ _GLIBCXX_END_NAMESPACE_CONTAINER
 
   /// This is a helper function for the sort routines and for random.tcc.
   //  Precondition: __n > 0.
-  inline _GLIBCXX_CONSTEXPR int
-  __lg(int __n)
-  { return (int)sizeof(int) * __CHAR_BIT__  - 1 - __builtin_clz(__n); }
-
-  inline _GLIBCXX_CONSTEXPR unsigned
-  __lg(unsigned __n)
-  { return (int)sizeof(int) * __CHAR_BIT__  - 1 - __builtin_clz(__n); }
-
-  inline _GLIBCXX_CONSTEXPR long
-  __lg(long __n)
-  { return (int)sizeof(long) * __CHAR_BIT__ - 1 - __builtin_clzl(__n); }
-
-  inline _GLIBCXX_CONSTEXPR unsigned long
-  __lg(unsigned long __n)
-  { return (int)sizeof(long) * __CHAR_BIT__ - 1 - __builtin_clzl(__n); }
-
-  inline _GLIBCXX_CONSTEXPR long long
-  __lg(long long __n)
-  { return (int)sizeof(long long) * __CHAR_BIT__ - 1 - __builtin_clzll(__n); }
-
-  inline _GLIBCXX_CONSTEXPR unsigned long long
-  __lg(unsigned long long __n)
-  { return (int)sizeof(long long) * __CHAR_BIT__ - 1 - __builtin_clzll(__n); }
+  template<typename _Tp>
+    inline _GLIBCXX_CONSTEXPR _Tp
+    __lg(_Tp __n)
+    {
+#if __cplusplus >= 201402L
+      return std::__bit_width(make_unsigned_t<_Tp>(__n)) - 1;
+#else
+      // Use +__n so it promotes to at least int.
+      const int __sz = sizeof(+__n);
+      int __w = __sz * __CHAR_BIT__ - 1;
+      if (__sz == sizeof(long long))
+	__w -= __builtin_clzll(+__n);
+      else if (__sz == sizeof(long))
+	__w -= __builtin_clzl(+__n);
+      else if (__sz == sizeof(int))
+	__w -= __builtin_clz(+__n);
+      return __w;
+#endif
+    }
 
 _GLIBCXX_BEGIN_NAMESPACE_ALGO
 
@@ -1646,7 +1650,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
 
 #if __cplusplus > 201103L
 
-#define __cpp_lib_robust_nonmodifying_seq_ops 201304
+#define __cpp_lib_robust_nonmodifying_seq_ops 201304L
 
   /**
    *  @brief Tests a range for element-wise equality.
@@ -1827,11 +1831,10 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
       __glibcxx_requires_valid_range(__first1, __last1);
       __glibcxx_requires_valid_range(__first2, __last2);
 
-#if __cpp_lib_is_constant_evaluated
       using _Cat = decltype(__comp(*__first1, *__first2));
       static_assert(same_as<common_comparison_category_t<_Cat>, _Cat>);
 
-      if (!std::is_constant_evaluated())
+      if (!std::__is_constant_evaluated())
 	if constexpr (same_as<_Comp, __detail::_Synth3way>
 		      || same_as<_Comp, compare_three_way>)
 	  if constexpr (__is_byte_iter<_InputIter1>)
@@ -1848,7 +1851,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
 		  }
 		return __lencmp;
 	      }
-#endif // is_constant_evaluated
+
       while (__first1 != __last1)
 	{
 	  if (__first2 == __last2)
@@ -2125,6 +2128,26 @@ _GLIBCXX_END_NAMESPACE_ALGO
 	if (__pred(__first))
 	  ++__n;
       return __n;
+    }
+
+  template<typename _ForwardIterator, typename _Predicate>
+    _GLIBCXX20_CONSTEXPR
+    _ForwardIterator
+    __remove_if(_ForwardIterator __first, _ForwardIterator __last,
+		_Predicate __pred)
+    {
+      __first = std::__find_if(__first, __last, __pred);
+      if (__first == __last)
+	return __first;
+      _ForwardIterator __result = __first;
+      ++__first;
+      for (; __first != __last; ++__first)
+	if (!__pred(__first))
+	  {
+	    *__result = _GLIBCXX_MOVE(*__first);
+	    ++__result;
+	  }
+      return __result;
     }
 
 #if __cplusplus >= 201103L

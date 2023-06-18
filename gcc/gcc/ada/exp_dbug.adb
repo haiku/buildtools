@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1996-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -24,23 +24,27 @@
 ------------------------------------------------------------------------------
 
 with Alloc;
-with Atree;    use Atree;
-with Debug;    use Debug;
-with Einfo;    use Einfo;
-with Exp_Util; use Exp_Util;
-with Nlists;   use Nlists;
-with Nmake;    use Nmake;
-with Opt;      use Opt;
-with Output;   use Output;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Eval; use Sem_Eval;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
-with Stand;    use Stand;
-with Stringt;  use Stringt;
+with Atree;          use Atree;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Exp_Util;       use Exp_Util;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
+with Opt;            use Opt;
+with Output;         use Output;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Eval;       use Sem_Eval;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Stand;          use Stand;
+with Stringt;        use Stringt;
 with Table;
-with Tbuild;   use Tbuild;
-with Urealp;   use Urealp;
+with Tbuild;         use Tbuild;
+with Urealp;         use Urealp;
 
 package body Exp_Dbug is
 
@@ -168,7 +172,7 @@ package body Exp_Dbug is
    procedure Add_Real_To_Buffer (U : Ureal) is
    begin
       Add_Uint_To_Buffer (Norm_Num (U));
-      Add_Str_To_Name_Buffer ("_");
+      Add_Char_To_Name_Buffer ('_');
       Add_Uint_To_Buffer (Norm_Den (U));
    end Add_Real_To_Buffer;
 
@@ -286,6 +290,11 @@ package body Exp_Dbug is
    --------------------------------
 
    function Debug_Renaming_Declaration (N : Node_Id) return Node_Id is
+      pragma Assert
+        (Nkind (N) in N_Object_Renaming_Declaration
+                    | N_Package_Renaming_Declaration
+                    | N_Exception_Renaming_Declaration);
+
       Loc : constant Source_Ptr := Sloc (N);
       Ent : constant Node_Id    := Defining_Entity (N);
       Nam : constant Node_Id    := Name (N);
@@ -315,8 +324,11 @@ package body Exp_Dbug is
       --  output in one of these two forms. The result is prepended to the
       --  name stored in Name_Buffer.
 
-      function Scope_Contains (Sc : Node_Id; Ent : Entity_Id) return Boolean;
-      --  Return whether Ent belong to the Sc scope
+      function Scope_Contains
+        (Outer : Entity_Id;
+         Inner : Entity_Id)
+         return Boolean;
+      --  Return whether Inner belongs to the Outer scope
 
       ----------------------------
       -- Enable_If_Packed_Array --
@@ -344,8 +356,7 @@ package body Exp_Dbug is
 
          elsif Nkind (N) = N_Identifier
            and then Scope_Contains (Scope (Entity (N)), Ent)
-           and then (Ekind (Entity (N)) = E_Constant
-                      or else Ekind (Entity (N)) = E_In_Parameter)
+           and then Ekind (Entity (N)) in E_Constant | E_In_Parameter
          then
             Prepend_String_To_Buffer (Get_Name_String (Chars (Entity (N))));
 
@@ -361,12 +372,16 @@ package body Exp_Dbug is
       -- Scope_Contains --
       --------------------
 
-      function Scope_Contains (Sc : Node_Id; Ent : Entity_Id) return Boolean is
-         Cur : Node_Id := Scope (Ent);
+      function Scope_Contains
+        (Outer : Entity_Id;
+         Inner : Entity_Id)
+         return Boolean
+      is
+         Cur : Entity_Id := Scope (Inner);
 
       begin
          while Present (Cur) loop
-            if Cur = Sc then
+            if Cur = Outer then
                return True;
             end if;
 
@@ -399,14 +414,16 @@ package body Exp_Dbug is
             when N_Expanded_Name
                | N_Identifier
             =>
-               if not Present (Renamed_Object (Entity (Ren))) then
+               if No (Entity (Ren))
+                 or else No (Renamed_Entity_Or_Object (Entity (Ren)))
+               then
                   exit;
                end if;
 
                --  This is a renaming of a renaming: traverse until the final
                --  renaming to see if anything is packed along the way.
 
-               Ren := Renamed_Object (Entity (Ren));
+               Ren := Renamed_Entity_Or_Object (Entity (Ren));
 
             when N_Selected_Component =>
                declare
@@ -428,7 +445,7 @@ package body Exp_Dbug is
                     Enable
                       or else Is_Packed
                                 (Underlying_Type (Etype (Prefix (Ren))))
-                      or else (First_Bit /= No_Uint
+                      or else (Present (First_Bit)
                                 and then First_Bit /= Uint_0);
                end;
 
@@ -645,23 +662,22 @@ package body Exp_Dbug is
 
       Has_Suffix := True;
 
-      --  Fixed-point case: generate GNAT encodings when asked to
+      --  Generate GNAT encodings when asked to for fixed-point case
 
-      if Is_Fixed_Point_Type (E)
-        and then GNAT_Encodings = DWARF_GNAT_Encodings_All
+      if GNAT_Encodings = DWARF_GNAT_Encodings_All
+        and then Is_Fixed_Point_Type (E)
       then
          Get_External_Name (E, True, "XF_");
          Add_Real_To_Buffer (Delta_Value (E));
 
          if Small_Value (E) /= Delta_Value (E) then
-            Add_Str_To_Name_Buffer ("_");
+            Add_Char_To_Name_Buffer ('_');
             Add_Real_To_Buffer (Small_Value (E));
          end if;
 
-      --  Discrete case where bounds do not match size. Not necessary if we can
-      --  emit standard DWARF.
+      --  Likewise for discrete case where bounds do not match size
 
-      elsif GNAT_Encodings /= DWARF_GNAT_Encodings_Minimal
+      elsif GNAT_Encodings = DWARF_GNAT_Encodings_All
         and then Is_Discrete_Type (E)
         and then not Bounds_Match_Size (E)
       then
@@ -694,7 +710,7 @@ package body Exp_Dbug is
 
             if Lo_Encode or Hi_Encode then
                if Biased then
-                  Add_Str_To_Name_Buffer ("_");
+                  Add_Char_To_Name_Buffer ('_');
                else
                   if Lo_Encode then
                      if Hi_Encode then
@@ -1012,6 +1028,7 @@ package body Exp_Dbug is
       E := First_Entity (Wrapper);
       while Present (E) loop
          if Nkind (Parent (E)) = N_Object_Declaration
+           and then Present (Corresponding_Generic_Association (Parent (E)))
            and then Is_Elementary_Type (Etype (E))
          then
             Loc := Sloc (Expression (Parent (E)));
@@ -1519,7 +1536,7 @@ package body Exp_Dbug is
 
                begin
                   Set_Entity_Name (Var);
-                  Add_Str_To_Name_Buffer ("L");
+                  Add_Char_To_Name_Buffer ('L');
                   Set_Chars (Var, Name_Enter);
                end;
 
@@ -1528,7 +1545,7 @@ package body Exp_Dbug is
               and then Ekind (Scope (Homonym (Ent))) = E_Block
             then
                Set_Entity_Name (Ent);
-               Add_Str_To_Name_Buffer ("B");
+               Add_Char_To_Name_Buffer ('B');
                Set_Chars (Ent, Name_Enter);
             end if;
          end if;
@@ -1547,7 +1564,7 @@ package body Exp_Dbug is
       then
          Set_BNPE_Suffix (Ent);
 
-         --  Strip trailing n's and last trailing b as required. note that
+         --  Strip trailing n's and last trailing b as required. Note that
          --  we know there is at least one b, or no suffix would be generated.
 
          while Name_Buffer (Name_Len) = 'n' loop

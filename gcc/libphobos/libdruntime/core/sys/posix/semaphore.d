@@ -30,7 +30,6 @@ version (Posix):
 extern (C):
 nothrow:
 @nogc:
-@system:
 
 //
 // Required
@@ -99,7 +98,7 @@ else version (NetBSD)
 }
 else version (OpenBSD)
 {
-    struct __sem { }
+    struct __sem;
     alias sem_t = __sem*;
 
     enum SEM_FAILED = cast(sem_t*) null;
@@ -217,6 +216,7 @@ else version (CRuntime_Bionic)
 }
 else version (CRuntime_Musl)
 {
+    pragma(mangle, muslRedirTime64Mangle!("sem_timedwait", "__sem_timedwait_time64"))
     int sem_timedwait(sem_t*, const scope timespec*);
 }
 else version (CRuntime_UClibc)

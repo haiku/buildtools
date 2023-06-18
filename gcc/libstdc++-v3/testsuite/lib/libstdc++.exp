@@ -1,6 +1,6 @@
 # libstdc++ "tool init file" for DejaGNU
 
-# Copyright (C) 2001-2021 Free Software Foundation, Inc.
+# Copyright (C) 2001-2023 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -510,6 +510,15 @@ proc v3_target_compile { source dest type options } {
 	}
     }
 
+    # Small adjustment for MinGW hosts.
+    if { $dest == "/dev/null" && [ishost "*-*-mingw*"] } {
+	if { $type == "executable" } {
+	    set dest "x.exe"
+	} else {
+	    set dest "nul"
+	}
+    }
+
     lappend options "compiler=$cxx_final"
     lappend options "timeout=[timeout_value]"
 
@@ -654,7 +663,7 @@ proc v3-build_support { } {
 	# do not prevent compilation.
 	# Disable LTO so that ar/ranlib don't need the LTO plugin.
 	if { [v3_target_compile $srcdir/util/$f $object_file "object" \
-		  [list "incdir=$srcdir" "additional_flags=-w -fno-lto"]]
+		  [list "incdir=$srcdir" "additional_flags=-w -fno-lto -fno-freestanding"]]
 	     != "" } {
 	    error "could not compile $f"
 	}
@@ -693,7 +702,7 @@ proc v3-build_support { } {
 	    # Compile with "-w" so that warnings issued by the compiler
 	    # do not prevent compilation.
 	    if { [v3_target_compile $srcdir/util/$f $object_file "sharedlib" \
-	     [list "incdir=$srcdir" "additional_flags=-fno-inline -w -shared -fPIC -DPIC -std=gnu++98"]]
+	     [list "incdir=$srcdir" "additional_flags=-fno-inline -w -shared -fPIC -DPIC -std=gnu++98 -fno-freestanding"]]
 		 != "" } {
 		error "could not compile $f"
 	    }
@@ -974,13 +983,16 @@ proc v3_try_preprocess { name code flags } {
 }
 
 # Return 1 if COND evaluates to true in the preprocessor, 0 otherwise.
-# The <bits/c++config.h> config header is included.
-proc v3_check_preprocessor_condition { name cond } {
+# The <bits/c++config.h> config header is included, and INC, if given,
+# is pasted between it and the condition evaluation, so it can be used
+# for additional #include's.
+proc v3_check_preprocessor_condition { name cond { inc "" } } {
     global cxxflags
     global DEFAULT_CXXFLAGS
 
     set code "
 	#include <bits/c++config.h>
+	$inc
 	#if ! ($cond)
 	#error '$cond' is false
 	#endif
@@ -995,6 +1007,7 @@ proc check_v3_target_debug_mode { } {
     global cxxflags
     return [check_v3_target_prop_cached et_debug_mode {
 	set code "
+	#include <bits/c++config.h>
 	#if ! defined _GLIBCXX_DEBUG
 	# error no debug mode
 	#endif
@@ -1144,7 +1157,9 @@ proc check_effective_target_gthreads_timed { } {
 # Return 1 if either nanosleep or sleep is available, 0 otherwise.
 proc check_v3_target_sleep { } {
     return [check_v3_target_prop_cached et_sleep {
-	set cond "defined _GLIBCXX_USE_NANOSLEEP || defined _GLIBCXX_HAVE_SLEEP"
+	set cond "defined _GLIBCXX_USE_NANOSLEEP"
+	set cond "$cond || defined _GLIBCXX_USE_WIN32_SLEEP"
+	set cond "$cond || defined _GLIBCXX_HAVE_SLEEP"
 	return [v3_check_preprocessor_condition sleep $cond]
     }]
 }
@@ -1188,6 +1203,7 @@ proc check_v3_target_binary_io { } {
 proc check_v3_target_nprocs { } {
     return [check_v3_target_prop_cached et_nprocs {
 	set cond "defined _GLIBCXX_USE_GET_NPROCS"
+	set cond "$cond || defined _GLIBCXX_USE_GET_NPROCS_WIN32"
 	set cond "$cond || defined _GLIBCXX_USE_PTHREADS_NUM_PROCESSORS_NP"
 	set cond "$cond || defined _GLIBCXX_USE_SYSCTL_HW_NCPU"
 	set cond "$cond || defined _GLIBCXX_USE_SC_NPROCESSORS_ONLN"
@@ -1267,6 +1283,30 @@ proc check_v3_target_filesystem_ts { } {
     }]
 }
 
+# Return 1 if the libstdc++ filesystem create_symlinks implementation
+# is not an always-failing dummy.
+proc check_v3_target_fs_symlinks { } {
+    set inc "#include <testsuite_fs.h>"
+    set cond "!defined NO_SYMLINKS"
+    return [v3_check_preprocessor_condition fs_symlinks $cond $inc]
+}
+
+# Return 1 if the libstdc++ filesystem implementation of space is not an
+# always-failing dummy.
+proc check_v3_target_fs_space { } {
+    set inc "#include <testsuite_fs.h>"
+    set cond "!defined NO_SPACE"
+    return [v3_check_preprocessor_condition fs_space $cond $inc]
+}
+
+# Return 1 if the libstdc++ filesystem implementation of
+# last_write_time is not an always-failing dummy.
+proc check_v3_target_fs_last_write_time { } {
+    set inc "#include <testsuite_fs.h>"
+    set cond "!defined NO_LAST_WRITE_TIME"
+    return [v3_check_preprocessor_condition fs_last_write_time $cond $inc]
+}
+
 # Return 1 if the "cxx11" ABI is in use using the current flags, 0 otherwise.
 # Any flags provided by RUNTESTFLAGS or a target board will be used here.
 # Flags added in the test by dg-options or dg-add-options will not be used.
@@ -1335,6 +1375,49 @@ proc check_effective_target_net_ts_ip { } {
     return [check_v3_target_prop_cached et_net_ts_ip {
 	set cond "__has_include(<netinet/in.h>)"
 	return [v3_check_preprocessor_condition net_ts_ip $cond]
+    }]
+}
+
+# Return 1 if libstdc++ was built as --enable-libstdcxx-allocator=new
+proc check_effective_target_std_allocator_new { } {
+    return [check_v3_target_prop_cached et_std_alloc_new {
+	set cond "_GLIBCXX_USE_ALLOCATOR_NEW"
+	return [v3_check_preprocessor_condition std_alloc_new $cond]
+    }]
+}
+
+# Return 1 if libstdc++ was built as --enable-libstdcxx-backtrace
+proc check_effective_target_stacktrace { } {
+    return [check_v3_target_prop_cached et_stacktrace {
+	set cond "_GLIBCXX_HAVE_STACKTRACE && _GLIBCXX_HOSTED"
+	return [v3_check_preprocessor_condition stacktrace $cond]
+    }]
+}
+
+# Return 1 if RTTI is enabled by the current test flags.
+proc check_effective_target_rtti { } {
+    return [check_v3_target_prop_cached et_rtti {
+	set cond "__cpp_rtti"
+	return [v3_check_preprocessor_condition rtti $cond]
+    }]
+}
+
+# Return 1 if a hosted implementation is available (i.e. not freestanding).
+proc check_effective_target_hosted { } {
+    return [check_v3_target_prop_cached et_hosted {
+	set cond "_GLIBCXX_HOSTED"
+	return [v3_check_preprocessor_condition hosted $cond]
+    }]
+}
+
+# Return 1 if std::chrono::tzdb is supported.
+proc check_effective_target_tzdb { } {
+    if {![check_effective_target_cxx11_abi]} {
+	return 0
+    }
+    return [check_v3_target_prop_cached et_tzdb {
+	set cond "defined _GLIBCXX_ZONEINFO_DIR || _GLIBCXX_STATIC_TZDATA"
+	return [v3_check_preprocessor_condition tzdb $cond]
     }]
 }
 

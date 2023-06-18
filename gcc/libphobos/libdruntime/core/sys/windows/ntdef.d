@@ -5,11 +5,10 @@
  *
  * Authors: Stewart Gordon
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_ntdef.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_ntdef.d)
  */
 module core.sys.windows.ntdef;
 version (Windows):
-@system:
 
 import core.sys.windows.basetsd, core.sys.windows.subauth, core.sys.windows.windef, core.sys.windows.winnt;
 

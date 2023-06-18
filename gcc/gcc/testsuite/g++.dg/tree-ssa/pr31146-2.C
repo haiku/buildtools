@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O -fcheck-new -fno-tree-vrp -fdump-tree-forwprop1" } */
+/* { dg-options "-O -fcheck-new -fno-tree-vrp -fdump-tree-forwprop1 -fno-thread-jumps" } */
 
 #include <new>
 
@@ -21,4 +21,4 @@ double foo (void)
 }
 
 /* GCC 8 emits operator new () != NULL with -fcheck-new. */
-/* { dg-final { scan-tree-dump "Replaced .* != 0B. with .1" "forwprop1" } } */
+/* { dg-final { scan-tree-dump-times " != 0B\\)" 1 "forwprop1" } } */

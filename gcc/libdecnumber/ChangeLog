@@ -1,14 +1,39 @@
-2022-04-21  Release Manager
+2023-04-26  Release Manager
 
-	* GCC 11.3.0 released.
+	* GCC 13.1.0 released.
 
-2021-07-28  Release Manager
+2022-11-23  Marek Polacek  <polacek@redhat.com>
 
-	* GCC 11.2.0 released.
+	Revert:
+	2022-11-23  Marek Polacek  <polacek@redhat.com>
 
-2021-04-27  Release Manager
+	* configure.ac (--enable-host-shared): Don't set PICFLAG here.
+	(--enable-host-pie): New check.  Set PICFLAG after this check.
+	* configure: Regenerate.
 
-	* GCC 11.1.0 released.
+2022-11-23  Marek Polacek  <polacek@redhat.com>
+
+	* configure.ac (--enable-host-shared): Don't set PICFLAG here.
+	(--enable-host-pie): New check.  Set PICFLAG after this check.
+	* configure: Regenerate.
+
+2022-10-07  Martin Liska  <mliska@suse.cz>
+
+	* dpd/decimal64.c (decDigitsToDPD): Remove unused variable.
+
+2022-05-20  Christophe Lyon  <christophe.lyon@arm.com>
+
+	* configure: Regenerate.
+
+2021-10-22  Eric Gallager  <egallager@gcc.gnu.org>
+
+	PR other/102663
+	* Makefile.in: Add dummy install-dvi target.
+
+2021-05-03  H.J. Lu  <hjl.tools@gmail.com>
+
+	PR bootstrap/99703
+	* configure: Regenerated.
 
 2020-07-30  H.J. Lu  <hjl.tools@gmail.com>
 
@@ -614,7 +639,7 @@
 	decNumberDivideInteger, decNumberMax, decNumberMin,
 	decNumberMinus, decNumberPlus, decNumberMultiply,
 	decNumberNormalize, decNumberQuantize, decNumberRescale,
-	 decNumberRemainder, decNumberRemainderNear,
+	decNumberRemainder, decNumberRemainderNear,
 	decNumberSameQuantum, decNumberSquareRoot, decNumberSubtract,
 	decNumberToIntegralValue, decNumberCopy, decToString, decAddOp,
 	decDivideOp, decMultiplyOp, decQuantizeOp, decCompareOp,
@@ -627,7 +652,7 @@
 	decNumberDivideInteger, decNumberMax, decNumberMin,
 	decNumberMinus, decNumberMultiply, decNumberNormalize,
 	decNumberPlus, decNumberQuantize, decNumberRemainder,
-	 decNumberRemainderNear, decNumberRescale,
+	decNumberRemainderNear, decNumberRescale,
 	decNumberSameQuantum, decNumberSquareRoot, decNumberSubtract,
 	decNumberToIntegralValue, decNumberCopy): Likewise.
 	* decUtility.c (decDensePackCoeff, decDenseUnpackCoeff):
@@ -756,7 +781,7 @@
 	* decDPD.h: Likewise.
 	* decLibrary.c, decRound.c: Likewise.
 
-Copyright (C) 2005-2021 Free Software Foundation, Inc.
+Copyright (C) 2005-2023 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

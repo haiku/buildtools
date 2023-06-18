@@ -26,7 +26,6 @@ version (linux):
 extern (C):
 @nogc:
 nothrow:
-@system:
 
 
 private // helpers
@@ -152,6 +151,9 @@ version (CRuntime_Glibc)
     /* Determine CPU on which the calling thread is running */
     int sched_getcpu();
 }
+
+/* Reassociate the calling thread with namespace referred to by fd */
+int setns(int fd, int nstype);
 
 enum CLONE_FILES = 0x400;
 enum CLONE_FS = 0x200;

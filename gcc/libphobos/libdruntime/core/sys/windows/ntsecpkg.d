@@ -5,11 +5,10 @@
  *
  * Authors: Ellery Newcomer
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_ntsecpkg.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_ntsecpkg.d)
  */
 module core.sys.windows.ntsecpkg;
 version (Windows):
-@system:
 
 import core.sys.windows.windef, core.sys.windows.ntsecapi, core.sys.windows.security, core.sys.windows.ntdef, core.sys.windows.sspi;
 import core.sys.windows.basetyps : GUID;
@@ -444,4 +443,3 @@ alias NTSTATUS function(ULONG, PULONG,
  PSECPKG_FUNCTION_TABLE *, PULONG) SpLsaModeInitializeFn;
 alias NTSTATUS function(ULONG, PULONG,
  PSECPKG_USER_FUNCTION_TABLE *, PULONG) SpUserModeInitializeFn;
-

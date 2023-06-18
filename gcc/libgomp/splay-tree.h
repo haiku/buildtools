@@ -1,5 +1,5 @@
 /* A splay-tree datatype.
-   Copyright (C) 1998-2021 Free Software Foundation, Inc.
+   Copyright (C) 1998-2023 Free Software Foundation, Inc.
    Contributed by Mark Mitchell (mark@markmitchell.com).
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -78,8 +78,12 @@ typedef struct splay_tree_key_s *splay_tree_key;
     splay_tree_name (splay_tree_prefix, splay_tree_remove)
 # define splay_tree_foreach	\
     splay_tree_name (splay_tree_prefix, splay_tree_foreach)
+# define splay_tree_foreach_lazy \
+    splay_tree_name (splay_tree_prefix, splay_tree_foreach_lazy)
 # define splay_tree_callback	\
     splay_tree_name (splay_tree_prefix, splay_tree_callback)
+# define splay_tree_callback_stop	\
+    splay_tree_name (splay_tree_prefix, splay_tree_callback_stop)
 #endif
 
 #ifndef splay_tree_c
@@ -99,32 +103,36 @@ struct splay_tree_s {
 };
 
 typedef void (*splay_tree_callback) (splay_tree_key, void *);
+typedef int (*splay_tree_callback_stop) (splay_tree_key, void *);
 
 extern splay_tree_key splay_tree_lookup (splay_tree, splay_tree_key);
 extern void splay_tree_insert (splay_tree, splay_tree_node);
 extern void splay_tree_remove (splay_tree, splay_tree_key);
 extern void splay_tree_foreach (splay_tree, splay_tree_callback, void *);
+extern void splay_tree_foreach_lazy (splay_tree, splay_tree_callback_stop, void *);
 #else  /* splay_tree_c */
 #  ifdef splay_tree_prefix
 #    include "splay-tree.c"
-#    undef splay_tree_name_1
-#    undef splay_tree_name
-#    undef splay_tree_node_s
-#    undef splay_tree_s
-#    undef splay_tree_key_s
-#    undef splay_tree_node
-#    undef splay_tree
-#    undef splay_tree_key
-#    undef splay_compare
-#    undef splay_tree_lookup
-#    undef splay_tree_insert
-#    undef splay_tree_remove
-#    undef splay_tree_foreach
-#    undef splay_tree_callback
-#    undef splay_tree_c
 #  endif
+#  undef splay_tree_c
 #endif /* #ifndef splay_tree_c */
 
 #ifdef splay_tree_prefix
+#  undef splay_tree_name_1
+#  undef splay_tree_name
+#  undef splay_tree_node_s
+#  undef splay_tree_s
+#  undef splay_tree_key_s
+#  undef splay_tree_node
+#  undef splay_tree
+#  undef splay_tree_key
+#  undef splay_compare
+#  undef splay_tree_lookup
+#  undef splay_tree_insert
+#  undef splay_tree_remove
+#  undef splay_tree_foreach
+#  undef splay_tree_foreach_lazy
+#  undef splay_tree_callback
+#  undef splay_tree_callback_stop
 #  undef splay_tree_prefix
 #endif

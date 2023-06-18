@@ -1,6 +1,6 @@
 ## Makefile for the C++11 sources of the GNU C++ Standard library.
 ##
-## Copyright (C) 1997-2021 Free Software Foundation, Inc.
+## Copyright (C) 1997-2023 Free Software Foundation, Inc.
 ##
 ## This file is part of the libstdc++ version 3 distribution.
 ## Process this file with automake to produce Makefile.in.
@@ -51,6 +51,10 @@ else
 cxx11_abi_sources =
 endif
 
+sources_freestanding = \
+	limits.cc \
+	placeholders.cc
+
 sources = \
 	chrono.cc \
 	codecvt.cc \
@@ -65,9 +69,8 @@ sources = \
 	hash_c++0x.cc \
 	hashtable_c++0x.cc \
 	ios.cc \
-	limits.cc \
+	ios_errcat.cc \
 	mutex.cc \
-	placeholders.cc \
 	random.cc \
 	regex.cc  \
 	shared_ptr.cc \
@@ -117,7 +120,15 @@ endif
 
 vpath % $(top_srcdir)/src/c++11
 
-libc__11convenience_la_SOURCES = $(sources)  $(inst_sources)
+if !GLIBCXX_HOSTED
+libc__11convenience_la_SOURCES = $(sources_freestanding)
+else
+libc__11convenience_la_SOURCES = \
+	$(sources_freestanding) \
+	$(sources) \
+	$(inst_sources)
+endif
+
 
 # Use special rules for the hashtable.cc file so that all
 # the generated template functions are also instantiated.

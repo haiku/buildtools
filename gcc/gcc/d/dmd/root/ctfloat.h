@@ -1,13 +1,15 @@
 
-/* Copyright (C) 1999-2021 by The D Language Foundation, All Rights Reserved
- * http://www.digitalmars.com
+/* Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * written by Walter Bright
+ * https://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
- * http://www.boost.org/LICENSE_1_0.txt
+ * https://www.boost.org/LICENSE_1_0.txt
  * https://github.com/dlang/dmd/blob/master/src/dmd/root/ctfloat.h
  */
 
 #pragma once
 
+#include "dcompat.h"
 #include "longdouble.h"
 
 // Type used by the front-end for compile-time reals
@@ -16,9 +18,6 @@ typedef longdouble real_t;
 // Compile-time floating-point helper
 struct CTFloat
 {
-    static bool yl2x_supported;
-    static bool yl2xp1_supported;
-
     static void yl2x(const real_t *x, const real_t *y, real_t *res);
     static void yl2xp1(const real_t *x, const real_t *y, real_t *res);
 
@@ -52,8 +51,8 @@ struct CTFloat
     static bool isSNaN(real_t r);
     static bool isInfinity(real_t r);
 
-    static real_t parse(const char *literal, bool *isOutOfRange = NULL);
-    static int sprint(char *str, char fmt, real_t x);
+    static real_t parse(const char *literal, bool& isOutOfRange);
+    static int sprint(char *str, d_size_t size, char fmt, real_t x);
 
     static size_t hash(real_t a);
 
@@ -62,4 +61,6 @@ struct CTFloat
     static real_t one;
     static real_t minusone;
     static real_t half;
+
+    static void initialize();
 };

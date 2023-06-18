@@ -1,5 +1,5 @@
 /* Calculate (post)dominators header file.
-   Copyright (C) 2014-2021 Free Software Foundation, Inc.
+   Copyright (C) 2014-2023 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -35,7 +35,7 @@ enum dom_state
   DOM_OK		/* Everything is ok.  */
 };
 
-extern void calculate_dominance_info (enum cdi_direction);
+extern void calculate_dominance_info (enum cdi_direction, bool = true);
 extern void calculate_dominance_info_for_region (enum cdi_direction,
 						 vec<basic_block>);
 extern void free_dominance_info (function *, enum cdi_direction);
@@ -46,14 +46,14 @@ extern void free_dominance_info_for_region (function *,
 extern basic_block get_immediate_dominator (enum cdi_direction, basic_block);
 extern void set_immediate_dominator (enum cdi_direction, basic_block,
 				     basic_block);
-extern vec<basic_block> get_dominated_by (enum cdi_direction, basic_block);
-extern vec<basic_block> get_dominated_by_region (enum cdi_direction,
+extern auto_vec<basic_block> get_dominated_by (enum cdi_direction, basic_block);
+extern auto_vec<basic_block> get_dominated_by_region (enum cdi_direction,
 							 basic_block *,
 							 unsigned);
-extern vec<basic_block> get_dominated_to_depth (enum cdi_direction,
-							basic_block, int);
-extern vec<basic_block> get_all_dominated_blocks (enum cdi_direction,
-							  basic_block);
+extern auto_vec<basic_block> get_dominated_to_depth (enum cdi_direction,
+						     basic_block, int);
+extern auto_vec<basic_block> get_all_dominated_blocks (enum cdi_direction,
+						       basic_block);
 extern void redirect_immediate_dominators (enum cdi_direction, basic_block,
 					   basic_block);
 extern basic_block nearest_common_dominator (enum cdi_direction,
@@ -69,7 +69,7 @@ extern void verify_dominators (enum cdi_direction);
 /* Verify invariants of computed dominance information, if internal consistency
    checks are enabled.  */
 
-static inline void
+inline void
 checking_verify_dominators (cdi_direction dir)
 {
   if (flag_checking)
@@ -78,7 +78,7 @@ checking_verify_dominators (cdi_direction dir)
 
 basic_block recompute_dominator (enum cdi_direction, basic_block);
 extern void iterate_fix_dominators (enum cdi_direction,
-				    vec<basic_block> , bool);
+				    vec<basic_block> &, bool);
 extern void add_to_dominance_info (enum cdi_direction, basic_block);
 extern void delete_from_dominance_info (enum cdi_direction, basic_block);
 extern basic_block first_dom_son (enum cdi_direction, basic_block);

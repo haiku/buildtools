@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_ole2.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_ole2.d)
  */
 module core.sys.windows.ole2;
 version (Windows):
-@system:
 pragma(lib, "ole32");
 
 public import core.sys.windows.basetyps, core.sys.windows.objbase, core.sys.windows.oleauto, core.sys.windows.olectlid,

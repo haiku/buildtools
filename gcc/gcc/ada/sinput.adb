@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -26,12 +26,14 @@
 pragma Style_Checks (All_Checks);
 --  Subprograms not all in alpha order
 
-with Atree;    use Atree;
-with Debug;    use Debug;
-with Opt;      use Opt;
-with Output;   use Output;
-with Scans;    use Scans;
-with Widechar; use Widechar;
+with Atree;          use Atree;
+with Debug;          use Debug;
+with Opt;            use Opt;
+with Output;         use Output;
+with Scans;          use Scans;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Widechar;       use Widechar;
 
 with GNAT.Byte_Order_Mark; use GNAT.Byte_Order_Mark;
 
@@ -39,8 +41,8 @@ with System.Storage_Elements;
 with System.Memory;
 with System.WCh_Con; use System.WCh_Con;
 
-with Unchecked_Conversion;
-with Unchecked_Deallocation;
+with Ada.Unchecked_Conversion;
+with Ada.Unchecked_Deallocation;
 
 package body Sinput is
 
@@ -54,16 +56,16 @@ package body Sinput is
    --  used to construct improperly aliased pointer values.
 
    function To_Address is
-     new Unchecked_Conversion (Lines_Table_Ptr, Address);
+     new Ada.Unchecked_Conversion (Lines_Table_Ptr, Address);
 
    function To_Address is
-     new Unchecked_Conversion (Logical_Lines_Table_Ptr, Address);
+     new Ada.Unchecked_Conversion (Logical_Lines_Table_Ptr, Address);
 
    function To_Pointer is
-     new Unchecked_Conversion (Address, Lines_Table_Ptr);
+     new Ada.Unchecked_Conversion (Address, Lines_Table_Ptr);
 
    function To_Pointer is
-     new Unchecked_Conversion (Address, Logical_Lines_Table_Ptr);
+     new Ada.Unchecked_Conversion (Address, Logical_Lines_Table_Ptr);
 
    pragma Warnings (On);
 
@@ -317,17 +319,17 @@ package body Sinput is
    -- Clear_Source_File_Table --
    -----------------------------
 
-   procedure Free is new Unchecked_Deallocation
+   procedure Free is new Ada.Unchecked_Deallocation
      (Lines_Table_Type, Lines_Table_Ptr);
 
-   procedure Free is new Unchecked_Deallocation
+   procedure Free is new Ada.Unchecked_Deallocation
      (Logical_Lines_Table_Type, Logical_Lines_Table_Ptr);
 
    procedure Clear_Source_File_Table is
    begin
       for X in 1 .. Source_File.Last loop
          declare
-            S  : Source_File_Record renames Source_File.Table (X);
+            S : Source_File_Record renames Source_File.Table (X);
          begin
             if S.Instance = No_Instance_Id then
                Free_Source_Buffer (S.Source_Text);
@@ -376,12 +378,12 @@ package body Sinput is
       --  to first Unchecked_Convert to access-to-variable.
 
       function To_Source_Buffer_Ptr_Var is new
-        Unchecked_Conversion (Source_Buffer_Ptr, Source_Buffer_Ptr_Var);
+        Ada.Unchecked_Conversion (Source_Buffer_Ptr, Source_Buffer_Ptr_Var);
 
       Temp : Source_Buffer_Ptr_Var := To_Source_Buffer_Ptr_Var (Src);
 
       procedure Free_Ptr is new
-        Unchecked_Deallocation (Source_Buffer, Source_Buffer_Ptr_Var);
+        Ada.Unchecked_Deallocation (Source_Buffer, Source_Buffer_Ptr_Var);
    begin
       Free_Ptr (Temp);
       Src := null;
@@ -618,7 +620,6 @@ package body Sinput is
    -------------------------
 
    function Instantiation_Depth (S : Source_Ptr) return Nat is
-      Sind  : Source_File_Index;
       Sval  : Source_Ptr;
       Depth : Nat;
 
@@ -627,8 +628,7 @@ package body Sinput is
       Depth := 0;
 
       loop
-         Sind := Get_Source_File_Index (Sval);
-         Sval := Instantiation (Sind);
+         Sval := Instantiation_Location (Sval);
          exit when Sval = No_Location;
          Depth := Depth + 1;
       end loop;
@@ -920,7 +920,7 @@ package body Sinput is
       pragma Import (Ada, Dope);
       use System.Storage_Elements;
       for Dope'Address use Src + System.Address'Size / 8;
-      procedure Free is new Unchecked_Deallocation (Dope_Rec, Dope_Ptr);
+      procedure Free is new Ada.Unchecked_Deallocation (Dope_Rec, Dope_Ptr);
    begin
       Free (Dope);
    end Free_Dope;
@@ -931,7 +931,7 @@ package body Sinput is
 
    procedure Sloc_Range (N : Node_Id; Min, Max : out Source_Ptr) is
 
-      Indx : constant Source_File_Index :=  Get_Source_File_Index (Sloc (N));
+      Indx : constant Source_File_Index := Get_Source_File_Index (Sloc (N));
 
       function Process (N : Node_Id) return Traverse_Result;
       --  Process function for traversing the node tree
@@ -943,25 +943,22 @@ package body Sinput is
       -------------
 
       function Process (N : Node_Id) return Traverse_Result is
-         Orig : constant Node_Id := Original_Node (N);
+         Loc : constant Source_Ptr := Sloc (Original_Node (N));
 
       begin
          --  Skip nodes that may have been added during expansion and
          --  that originate in other units, such as code for contracts
          --  in subprogram bodies.
 
-         if Get_Source_File_Index (Sloc (Orig)) /= Indx then
+         if Get_Source_File_Index (Loc) /= Indx then
             return Skip;
          end if;
 
-         if Sloc (Orig) < Min then
-            if Sloc (Orig) > No_Location then
-               Min := Sloc (Orig);
-            end if;
-
-         elsif Sloc (Orig) > Max then
-            if Sloc (Orig) > No_Location then
-               Max := Sloc (Orig);
+         if Loc > No_Location then
+            if Loc < Min then
+               Min := Loc;
+            elsif Loc > Max then
+               Max := Loc;
             end if;
          end if;
 
@@ -972,7 +969,7 @@ package body Sinput is
 
    begin
       Min := Sloc (N);
-      Max := Sloc (N);
+      Max := Min;
       Traverse (N);
    end Sloc_Range;
 
@@ -1024,7 +1021,7 @@ package body Sinput is
             SI : constant Source_File_Index := Get_Source_File_Index (P);
 
          begin
-            Write_Name (Debug_Source_Name (SI));
+            Write_Name_For_Debug (Debug_Source_Name (SI));
             Write_Char (':');
             Write_Int (Int (Get_Logical_Line_Number (P)));
             Write_Char (':');

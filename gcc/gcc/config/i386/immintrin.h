@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2008-2023 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -43,6 +43,10 @@
 #include <avxintrin.h>
 
 #include <avxvnniintrin.h>
+
+#include <avxifmaintrin.h>
+
+#include <avxvnniint8intrin.h>
 
 #include <avx2intrin.h>
 
@@ -94,6 +98,12 @@
 
 #include <avx512vp2intersectvlintrin.h>
 
+#ifdef __SSE2__
+#include <avx512fp16intrin.h>
+
+#include <avx512fp16vlintrin.h>
+#endif
+
 #include <shaintrin.h>
 
 #include <fmaintrin.h>
@@ -108,9 +118,13 @@
 
 #include <vpclmulqdqintrin.h>
 
+#ifdef __SSE2__
 #include <avx512bf16vlintrin.h>
 
 #include <avx512bf16intrin.h>
+
+#include <avxneconvertintrin.h>
+#endif
 
 #include <amxtileintrin.h>
 
@@ -118,8 +132,12 @@
 
 #include <amxbf16intrin.h>
 
+#include <amxcomplexintrin.h>
+
 #include <prfchwintrin.h>
 
 #include <keylockerintrin.h>
+
+#include <amxfp16intrin.h>
 
 #endif /* _IMMINTRIN_H_INCLUDED */

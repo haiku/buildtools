@@ -1,30 +1,107 @@
-2022-04-21  Release Manager
+2023-04-26  Release Manager
 
-	* GCC 11.3.0 released.
+	* GCC 13.1.0 released.
 
-2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
+2022-11-14  Martin Liska  <mliska@suse.cz>
 
-	Backported from master:
-	2021-08-18  Iain Sandoe  <iain@sandoe.co.uk>
+	Revert:
+	2022-11-09  Martin Liska  <mliska@suse.cz>
+
+	* acx.m4: Do not wrap REPORT_BUGS_TO.
+
+2022-11-09  Martin Liska  <mliska@suse.cz>
+
+	* acx.m4: Do not wrap REPORT_BUGS_TO.
+
+2022-10-19  LIU Hao  <lh_mouse@126.com>
+
+	* gthr.m4 (GCC_AC_THREAD_HEADER): Add new case for `mcf` thread
+	model
+
+2022-08-31  Martin Liska  <mliska@suse.cz>
+
+	* mh-pa-hpux10: Removed.
+
+2022-08-01  Roger Sayle  <roger@nextmovesoftware.com>
+	    Arnaud Charlet  <charlet@adacore.com>
+
+	* acx.m4 (AC_PROG_GNAT): Update conftest.adb to include
+	features required of the host gnat compiler.
+
+2022-06-01  David Seifert  <soap@gentoo.org>
+
+	PR plugins/95648
+	* gcc-plugin.m4: Use libtool's $ac_cv_prog_OBJDUMP.
+
+2022-05-20  Christophe Lyon  <christophe.lyon@arm.com>
+
+	* dfp.m4: Add aarch64 support.
+
+2022-05-03  Christophe Lyon  <christophe.lyon@arm.com>
+
+	* dfp.m4: Add license header.
+
+2022-03-29  Chenghua Xu  <xuchenghua@loongson.cn>
+	    Lulu Cheng  <chenglulu@loongson.cn>
+
+	* picflag.m4: Default add build option '-fpic' for LoongArch.
+
+2021-12-21  Iain Buclaw  <ibuclaw@gdcproject.org>
+
+	PR d/103528
+	* acx.m4 (ACX_PROG_GDC): Add check whether D compiler works.
+
+2021-12-16  H.J. Lu  <hjl.tools@gmail.com>
+
+	Revert:
+	2021-12-16  H.J. Lu  <hjl.tools@gmail.com>
+
+	* gcc-plugin.m4 (GCC_PLUGIN_OPTION): New.
+
+2021-12-15  H.J. Lu  <hjl.tools@gmail.com>
+
+	* gcc-plugin.m4 (GCC_PLUGIN_OPTION): New.
+
+2021-12-15  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* gcc-plugin.m4: Save and process CXXFLAGS.
+
+2021-11-30  Iain Buclaw  <ibuclaw@gdcproject.org>
+
+	* acx.m4 (ACX_PROG_GDC): New m4 function.
+
+2021-09-19  Andrew Pinski  <apinski@marvell.com>
+
+	PR bootstrap/102389
+	* bootstrap-lto-lean.mk: Handle NM like RANLIB AND AR.
+	* bootstrap-lto.mk: Likewise.
+
+2021-08-18  Iain Sandoe  <iain@sandoe.co.uk>
 
 	* mh-darwin: Require a non-shared host configuration to
 	enable  mdynamic-no-pic where that is supported.
 
-2022-04-14  Iain Sandoe  <iain@sandoe.co.uk>
-
-	Backported from master:
-	2021-07-09  Iain Sandoe  <iain@sandoe.co.uk>
+2021-07-09  Iain Sandoe  <iain@sandoe.co.uk>
 
 	* mh-darwin: Make this specific to handling the
 	mdynamic-no-pic case.
 
-2021-07-28  Release Manager
+2021-06-14  Michael Forney  <mforney@mforney.org>
 
-	* GCC 11.2.0 released.
+	* gettext.m4 (AM_GNU_GETTEXT): Skip checks for the internal
+	symbols _nl_msg_cat_cntr, _nl_domain_bindings, and
+	_nl_expand_alias, if __GNU_GETTEXT_SUPPORTED_REVISION is defined.
+	Backport of gettext serial 68 patch.
 
-2021-04-27  Release Manager
+2021-05-18  Mike Frysinger  <vapier@gentoo.org>
 
-	* GCC 11.1.0 released.
+	* acinclude.m4 (CYG_AC_PATH_SIM, CYG_AC_PATH_DEVO): Delete.
+
+2021-05-03  H.J. Lu  <hjl.tools@gmail.com>
+
+	PR bootstrap/99703
+	* cet.m4 (GCC_CET_HOST_FLAGS): Check if host supports multi-byte
+	NOPs.
 
 2021-04-13  Martin Storsjö  <martin@martin.st>
 

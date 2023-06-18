@@ -19,7 +19,6 @@ import core.sys.posix.signal; // for sigset_t
 
 version (Posix):
 extern (C) nothrow @nogc:
-@system:
 
 version (RISCV32) version = RISCV_Any;
 version (RISCV64) version = RISCV_Any;
@@ -261,6 +260,10 @@ else version (OpenBSD)
     {
         enum _JBLEN = 64;
     }
+    else version (AArch64)
+    {
+        enum _JBLEN = 64;
+    }
     else version (PPC)
     {
         enum _JBLEN = 100;
@@ -359,6 +362,22 @@ else version (CRuntime_UClibc)
                 long __fp;
                 long __gp;
             }
+            int __fpc_csr;
+            version (MIPS_N64)
+                double[8] __fpregs;
+            else
+                double[6] __fpregs;
+        }
+    }
+    else version (MIPS64)
+    {
+        struct __jmp_buf
+        {
+            long __pc;
+            long __sp;
+            long[8] __regs;
+            long __fp;
+            long __gp;
             int __fpc_csr;
             version (MIPS_N64)
                 double[8] __fpregs;

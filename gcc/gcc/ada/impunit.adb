@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---           Copyright (C) 2000-2020, Free Software Foundation, Inc.        --
+--           Copyright (C) 2000-2023, Free Software Foundation, Inc.        --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,14 +23,14 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Errout;   use Errout;
-with Sinfo;    use Sinfo;
-with Fname.UF; use Fname.UF;
-with Lib;      use Lib;
-with Namet;    use Namet;
-with Opt;      use Opt;
-with Uname;    use Uname;
+with Errout;      use Errout;
+with Sinfo;       use Sinfo;
+with Sinfo.Nodes; use Sinfo.Nodes;
+with Fname.UF;    use Fname.UF;
+with Lib;         use Lib;
+with Namet;       use Namet;
+with Opt;         use Opt;
+with Uname;       use Uname;
 
 --  Note: this package body is used by GNAT Studio and GNATBench to supply a
 --  list of entries for help on available library routines.
@@ -241,6 +241,7 @@ package body Impunit is
     ("g-arrspl", F),  -- GNAT.Array_Split
     ("g-awk   ", F),  -- GNAT.AWK
     ("g-binenv", F),  -- GNAT.Bind_Environment
+    ("g-binsea", F),  -- GNAT.Binary_Search
     ("g-boubuf", F),  -- GNAT.Bounded_Buffers
     ("g-boumai", F),  -- GNAT.Bounded_Mailboxes
     ("g-brapre", F),  -- GNAT.Branch_Prediction
@@ -278,6 +279,7 @@ package body Impunit is
     ("g-exptty", F),  -- GNAT.Expect.TTY
     ("g-flocon", F),  -- GNAT.Float_Control
     ("g-forstr", F),  -- GNAT.Formatted_String
+    ("g-gfmafu", F),  -- GNAT.Generic_Fast_Math_Functions
     ("g-graphs", F),  -- GNAT.Graphs
     ("g-heasor", F),  -- GNAT.Heap_Sort
     ("g-hesora", F),  -- GNAT.Heap_Sort_A
@@ -603,27 +605,17 @@ package body Impunit is
    -- GNAT Defined Additions to Ada 2012 --
    ----------------------------------------
 
-    ("a-cfinve", F),  -- Ada.Containers.Formal_Indefinite_Vectors
     ("a-coboho", F),  -- Ada.Containers.Bounded_Holders
-    ("a-cofove", F),  -- Ada.Containers.Formal_Vectors
-    ("a-cofuma", F),  -- Ada.Containers.Functional_Maps
-    ("a-cofuse", F),  -- Ada.Containers.Functional_Sets
-    ("a-cofuve", F),  -- Ada.Containers.Functional_Vectors
-    ("a-cfdlli", F),  -- Ada.Containers.Formal_Doubly_Linked_Lists
-    ("a-cforse", F),  -- Ada.Containers.Formal_Ordered_Sets
-    ("a-cforma", F),  -- Ada.Containers.Formal_Ordered_Maps
-    ("a-cfhase", F),  -- Ada.Containers.Formal_Hashed_Sets
-    ("a-cfhama", F),  -- Ada.Containers.Formal_Hashed_Maps
     ("a-cvgpso", F)   -- Ada.Containers.Vectors.Generic_Parallel_Sorting from
    );                 -- GNATCOLL.OMP
 
    --------------------
-   -- Ada 202X Units --
+   -- Ada 2022 Units --
    --------------------
 
-   --  The following units should be used only in Ada 202X mode
+   --  The following units should be used only in Ada 2022 mode
 
-   Non_Imp_File_Names_2X : constant File_List := (
+   Non_Imp_File_Names_22 : constant File_List := (
     ("a-nubinu", T),  -- Ada.Numerics.Big_Numbers
     ("a-nbnbin", T),  -- Ada.Numerics.Big_Numbers.Big_Integers
     ("a-nbnbre", T),  -- Ada.Numerics.Big_Numbers.Big_Reals
@@ -632,16 +624,20 @@ package body Impunit is
     ("s-aotase", T),  -- System.Atomic_Operations.Test_And_Set
     ("s-atoope", T),  -- System.Atomic_Operations
     ("s-atopex", T),  -- System.Atomic_Operations.Exchange
-    ("a-stteou", T),  -- Ada.Strings.Text_Output
-    ("a-stouut", T),  -- Ada.Strings.Text_Output.Utils
-    ("a-stoubu", T),  -- Ada.Strings.Text_Output.Buffers
-    ("a-stoufi", T),  -- Ada.Strings.Text_Output.Files
-    ("a-stobfi", T),  -- Ada.Strings.Text_Output.Basic_Files
-    ("a-stobbu", T),  -- Ada.Strings.Text_Output.Bit_Buckets
-    ("a-stoufo", T),  -- Ada.Strings.Text_Output.Formatting
+    ("a-sttebu", T),  -- Ada.Strings.Text_Buffers
+    ("a-stbuun", T),  -- Ada.Strings.Text_Buffers.Unbounded
+    ("a-stbubo", T),  -- Ada.Strings.Text_Buffers.Bounded
     ("a-strsto", T),  -- Ada.Streams.Storage
     ("a-ststbo", T),  -- Ada.Streams.Storage.Bounded
-    ("a-ststun", T)   -- Ada.Streams.Storage.Unbounded
+    ("a-ststun", T),  -- Ada.Streams.Storage.Unbounded
+
+   ----------------------------------------
+   -- GNAT Defined Additions to Ada 2022 --
+   ----------------------------------------
+
+   ("a-stbufi", T),   -- Ada.Strings.Text_Buffers.Files
+   ("a-stbufo", T),   -- Ada.Strings.Text_Buffers.Formatting
+   ("a-stbuut", T)    -- Ada.Strings.Text_Buffers.Utils
    );
 
    -----------------------
@@ -767,11 +763,11 @@ package body Impunit is
          end if;
       end loop;
 
-      --  See if name is in 202X list
+      --  See if name is in 2022 list
 
-      for J in Non_Imp_File_Names_2X'Range loop
-         if Buffer (1 .. 8) = Non_Imp_File_Names_2X (J).Fname then
-            return Ada_202X_Unit;
+      for J in Non_Imp_File_Names_22'Range loop
+         if Buffer (1 .. 8) = Non_Imp_File_Names_22 (J).Fname then
+            return Ada_2022_Unit;
          end if;
       end loop;
 

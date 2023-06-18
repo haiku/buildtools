@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2014-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 2014-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,30 +23,34 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Debug;    use Debug;
-with Einfo;    use Einfo;
-with Elists;   use Elists;
-with Exp_Util; use Exp_Util;
-with Lib;      use Lib;
-with Namet;    use Namet;
-with Nlists;   use Nlists;
-with Nmake;    use Nmake;
+with Atree;          use Atree;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Exp_Util;       use Exp_Util;
+with Lib;            use Lib;
+with Namet;          use Namet;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
 with Opt;
-with Output;   use Output;
-with Rtsfind;  use Rtsfind;
-with Sem;      use Sem;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Ch8;  use Sem_Ch8;
-with Sem_Mech; use Sem_Mech;
-with Sem_Res;  use Sem_Res;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
-with Sinput;   use Sinput;
-with Snames;   use Snames;
-with Stand;    use Stand;
-with Tbuild;   use Tbuild;
-with Uintp;    use Uintp;
+with Output;         use Output;
+with Rtsfind;        use Rtsfind;
+with Sem;            use Sem;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Ch8;        use Sem_Ch8;
+with Sem_Mech;       use Sem_Mech;
+with Sem_Res;        use Sem_Res;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Sinput;         use Sinput;
+with Snames;         use Snames;
+with Stand;          use Stand;
+with Tbuild;         use Tbuild;
+with Uintp;          use Uintp;
 
 package body Exp_Unst is
 
@@ -187,7 +191,7 @@ package body Exp_Unst is
 
    begin
       Typ := Make_Temporary (Loc, 'S');
-      Set_Ekind (Typ, E_General_Access_Type);
+      Mutate_Ekind (Typ, E_General_Access_Type);
       Set_Etype (Typ, Typ);
       Set_Scope (Typ, Scop);
       Set_Directly_Designated_Type (Typ, Etype (E));
@@ -266,7 +270,9 @@ package body Exp_Unst is
    begin
       pragma Assert (Is_Subprogram (E));
 
-      if Subps_Index (E) = Uint_0 then
+      if Field_Is_Initial_Zero (E, F_Subps_Index)
+        or else Subps_Index (E) = Uint_0
+      then
          E := Ultimate_Alias (E);
 
          --  The body of a protected operation has a different name and
@@ -527,14 +533,17 @@ package body Exp_Unst is
                   --  Entity name case. Make sure that the entity is declared
                   --  in a subprogram. This may not be the case for a type in a
                   --  loop appearing in a precondition.
-                  --  Exclude explicitly  discriminants (that can appear
-                  --  in bounds of discriminated components).
+                  --  Exclude explicitly discriminants (that can appear
+                  --  in bounds of discriminated components) and enumeration
+                  --  literals.
 
                   if Is_Entity_Name (N) then
                      if Present (Entity (N))
                        and then not Is_Type (Entity (N))
                        and then Present (Enclosing_Subprogram (Entity (N)))
-                       and then Ekind (Entity (N)) /= E_Discriminant
+                       and then
+                         Ekind (Entity (N))
+                           not in E_Discriminant | E_Enumeration_Literal
                      then
                         Note_Uplevel_Ref
                           (E      => Entity (N),
@@ -847,7 +856,7 @@ package body Exp_Unst is
                      S : Entity_Id := E;
 
                   begin
-                     for J in reverse 1 .. L  - 1 loop
+                     for J in reverse 1 .. L - 1 loop
                         S := Enclosing_Subprogram (S);
                         Subps.Table (Subp_Index (S)).Reachable := True;
                      end loop;
@@ -876,9 +885,11 @@ package body Exp_Unst is
                      --  within Subp. Calls to Subp itself or to subprograms
                      --  outside the nested structure do not affect us.
 
-                     if Scope_Within (Ent, Subp)
-                       and then Is_Subprogram (Ent)
+                     if Is_Subprogram (Ent)
+                       and then not Is_Generic_Subprogram (Ent)
                        and then not Is_Imported (Ent)
+                       and then not Is_Intrinsic_Subprogram (Ent)
+                       and then Scope_Within (Ultimate_Alias (Ent), Subp)
                      then
                         Append_Unique_Call ((N, Current_Subprogram, Ent));
                      end if;
@@ -927,7 +938,7 @@ package body Exp_Unst is
                --  subprogram. As above, the called entity must be local and
                --  not imported.
 
-               when N_Handled_Sequence_Of_Statements =>
+               when N_Handled_Sequence_Of_Statements | N_Block_Statement =>
                   if Present (At_End_Proc (N))
                     and then Scope_Within (Entity (At_End_Proc (N)), Subp)
                     and then not Is_Imported (Entity (At_End_Proc (N)))
@@ -1172,6 +1183,15 @@ package body Exp_Unst is
                   --  Make new entry in subprogram table if not already made
 
                   Register_Subprogram (Ent, N);
+
+                  --  Record a call from an At_End_Proc
+
+                  if Present (At_End_Proc (N))
+                    and then Scope_Within (Entity (At_End_Proc (N)), Subp)
+                    and then not Is_Imported (Entity (At_End_Proc (N)))
+                  then
+                     Append_Unique_Call ((N, Ent, Entity (At_End_Proc (N))));
+                  end if;
 
                   --  We make a recursive call to scan the subprogram body, so
                   --  that we can save and restore Current_Subprogram.
@@ -1558,7 +1578,7 @@ package body Exp_Unst is
 
                   --  A subprogram instantiation does not have an explicit
                   --  body. If unused, we could remove the corresponding
-                  --  wrapper package and its body (TBD).
+                  --  wrapper package and its body.
 
                   if Present (STJ.Bod) then
                      Spec := Corresponding_Spec (STJ.Bod);
@@ -1744,7 +1764,7 @@ package body Exp_Unst is
 
                      procedure Add_Form_To_Spec (F : Entity_Id; S : Node_Id);
                      --  S is an N_Function/Procedure_Specification node, and F
-                     --  is the new entity to add to this subprogramn spec as
+                     --  is the new entity to add to this subprogram spec as
                      --  the last Extra_Formal.
 
                      ----------------------
@@ -1785,7 +1805,7 @@ package body Exp_Unst is
                      --  Decorate the new formal entity
 
                      Set_Scope                (Form, STJ.Ent);
-                     Set_Ekind                (Form, E_In_Parameter);
+                     Mutate_Ekind             (Form, E_In_Parameter);
                      Set_Etype                (Form, STJE.ARECnPT);
                      Set_Mechanism            (Form, By_Copy);
                      Set_Never_Set_In_Source  (Form, True);
@@ -2082,7 +2102,8 @@ package body Exp_Unst is
 
                                  --  Build and insert the assignment:
                                  --    ARECn.nam := nam'Address
-                                 --  or else 'Access for unconstrained array
+                                 --  or else 'Unchecked_Access for
+                                 --  unconstrained array.
 
                                  if Needs_Fat_Pointer (Ent) then
                                     Attr := Name_Unchecked_Access;
@@ -2195,7 +2216,7 @@ package body Exp_Unst is
 
          begin
             --  Ignore type references, these are implicit references that do
-            --  not need rewriting (e.g. the appearence in a conversion).
+            --  not need rewriting (e.g. the appearance in a conversion).
             --  Also ignore if no reference was specified or if the rewriting
             --  has already been done (this can happen if the N_Identifier
             --  occurs more than one time in the tree). Also ignore references
@@ -2204,7 +2225,7 @@ package body Exp_Unst is
 
             if No (UPJ.Ref)
               or else not Is_Entity_Name (UPJ.Ref)
-              or else not Present (Entity (UPJ.Ref))
+              or else No (Entity (UPJ.Ref))
               or else not Opt.Generate_C_Code
             then
                goto Continue;
@@ -2571,6 +2592,8 @@ package body Exp_Unst is
                  and then Is_Library_Level_Entity (Spec_Id)
                then
                   Unnest_Subprogram (Spec_Id, N);
+               else
+                  return Skip;
                end if;
             end;
 

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,24 +23,28 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Debug;    use Debug;
-with Einfo;    use Einfo;
-with Elists;   use Elists;
-with Errout;   use Errout;
-with Lib;      use Lib;
-with Namet;    use Namet;
-with Nlists;   use Nlists;
-with Opt;      use Opt;
-with Sem;      use Sem;
-with Sem_Attr; use Sem_Attr;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Dist; use Sem_Dist;
-with Sem_Eval; use Sem_Eval;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
-with Snames;   use Snames;
-with Stand;    use Stand;
+with Atree;          use Atree;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Errout;         use Errout;
+with Lib;            use Lib;
+with Namet;          use Namet;
+with Nlists;         use Nlists;
+with Opt;            use Opt;
+with Sem;            use Sem;
+with Sem_Attr;       use Sem_Attr;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Dist;       use Sem_Dist;
+with Sem_Eval;       use Sem_Eval;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Snames;         use Snames;
+with Stand;          use Stand;
 
 package body Sem_Cat is
 
@@ -275,7 +279,7 @@ package body Sem_Cat is
            and then Is_Preelaborated (Depended_Entity)
          then
             Error_Msg_NE
-              ("<<must use private with clause for preelaborated unit& ",
+              ("<<must use private with clause for preelaborated unit&",
                N, Depended_Entity);
 
          --  Subunit case
@@ -296,18 +300,16 @@ package body Sem_Cat is
          --  Add further explanation for Pure/Preelaborate common cases
 
          if Unit_Category = Pure then
-            Error_Msg_NE
-              ("\<<pure unit cannot depend on non-pure unit",
-               N, Depended_Entity);
+            Error_Msg_N
+              ("\<<pure unit cannot depend on non-pure unit", N);
 
          elsif Is_Preelaborated (Unit_Entity)
            and then not Is_Preelaborated (Depended_Entity)
            and then not Is_Pure (Depended_Entity)
          then
-            Error_Msg_NE
+            Error_Msg_N
               ("\<<preelaborated unit cannot depend on "
-               & "non-preelaborated unit",
-               N, Depended_Entity);
+               & "non-preelaborated unit", N);
          end if;
       end if;
    end Check_Categorization_Dependencies;
@@ -354,6 +356,14 @@ package body Sem_Cat is
          if Present (Expression (Component_Decl))
            and then Nkind (Expression (Component_Decl)) /= N_Null
            and then not Is_OK_Static_Expression (Expression (Component_Decl))
+
+           --  If we're in a predefined unit, we can put whatever we like in a
+           --  preelaborated package, and in fact in some cases it's necessary
+           --  to bend the rules. Ada.Containers.Bounded_Hashed_Maps contains
+           --  some code that would not be considered preelaborable in user
+           --  code, for example.
+
+           and then not In_Predefined_Unit (Component_Decl)
          then
             Error_Msg_Sloc := Sloc (Component_Decl);
             Error_Msg_F
@@ -422,12 +432,13 @@ package body Sem_Cat is
    -------------------------------
 
    function Has_Read_Write_Attributes (E : Entity_Id) return Boolean is
+      Real_Rep : Node_Id;
    begin
       return True
         and then Has_Stream_Attribute_Definition
-                   (E, TSS_Stream_Read,  At_Any_Place => True)
+                   (E, TSS_Stream_Read, Real_Rep, At_Any_Place => True)
         and then Has_Stream_Attribute_Definition
-                   (E, TSS_Stream_Write, At_Any_Place => True);
+                   (E, TSS_Stream_Write, Real_Rep, At_Any_Place => True);
    end Has_Read_Write_Attributes;
 
    -------------------------------------
@@ -437,17 +448,10 @@ package body Sem_Cat is
    function Has_Stream_Attribute_Definition
      (Typ          : Entity_Id;
       Nam          : TSS_Name_Type;
+      Real_Rep     : out Node_Id;
       At_Any_Place : Boolean := False) return Boolean
    is
       Rep_Item : Node_Id;
-
-      Real_Rep : Node_Id;
-      --  The stream operation may be specified by an attribute definition
-      --  clause in the source, or by an aspect that generates such an
-      --  attribute definition. For an aspect, the generated attribute
-      --  definition may be placed at the freeze point of the full view of
-      --  the type, but the aspect specification makes the operation visible
-      --  to a client wherever the partial view is visible.
 
    begin
       --  We start from the declaration node and then loop until the end of
@@ -456,6 +460,8 @@ package body Sem_Cat is
       --  visible (this is tested using the corresponding Entity, which is
       --  inserted by the expander at the point where the clause occurs),
       --  unless At_Any_Place is true.
+
+      Real_Rep := Empty;
 
       Rep_Item := First_Rep_Item (Typ);
       while Present (Rep_Item) loop
@@ -501,7 +507,7 @@ package body Sem_Cat is
         and then Present (Full_View (Typ))
       then
          return Has_Stream_Attribute_Definition
-            (Underlying_Type (Typ), Nam, At_Any_Place);
+                  (Underlying_Type (Typ), Nam, Real_Rep, At_Any_Place);
 
       --  Otherwise, if At_Any_Place is true, return True if the attribute is
       --  available at any place; if it is false, return True only if the
@@ -520,8 +526,8 @@ package body Sem_Cat is
    ----------------------------
 
    function In_Package_Declaration return Boolean is
-      Unit_Kind   : constant Node_Kind :=
-                      Nkind (Unit (Cunit (Current_Sem_Unit)));
+      Unit_Kind  : constant Node_Kind :=
+                     Nkind (Unit (Cunit (Current_Sem_Unit)));
 
    begin
       --  There are no restrictions on the body of an RCI or RT unit
@@ -691,56 +697,25 @@ package body Sem_Cat is
    -------------------------------------
 
    procedure Set_Categorization_From_Pragmas (N : Node_Id) is
-      P   : constant Node_Id := Parent (N);
-      S   : constant Entity_Id := Current_Scope;
+      P : constant Node_Id := Parent (N);
 
-      procedure Set_Parents (Visibility : Boolean);
-         --  If this is a child instance, the parents are not immediately
-         --  visible during analysis. Make them momentarily visible so that
-         --  the argument of the pragma can be resolved properly, and reset
-         --  afterwards.
+      procedure Make_Parents_Visible_And_Process_Pragmas (Par : Entity_Id);
+      --  Parents might not be immediately visible during analysis. Make
+      --  them momentarily visible so that the argument of the pragma can
+      --  be resolved properly, process pragmas and restore the previous
+      --  visibility.
 
-      -----------------
-      -- Set_Parents --
-      -----------------
+      procedure Process_Categorization_Pragmas;
+      --  Process categorization pragmas, if any
 
-      procedure Set_Parents (Visibility : Boolean) is
-         Par : Entity_Id;
-      begin
-         Par := Scope (S);
-         while Present (Par) and then Par /= Standard_Standard loop
-            Set_Is_Immediately_Visible (Par, Visibility);
-            Par := Scope (Par);
-         end loop;
-      end Set_Parents;
+      ------------------------------------
+      -- Process_Categorization_Pragmas --
+      ------------------------------------
 
-   --  Start of processing for Set_Categorization_From_Pragmas
-
-   begin
-      --  Deal with categorization pragmas in Pragmas of Compilation_Unit.
-      --  The purpose is to set categorization flags before analyzing the
-      --  unit itself, so as to diagnose violations of categorization as
-      --  we process each declaration, even though the pragma appears after
-      --  the unit. This processing is only needed if compilation unit pragmas
-      --  are present.
-      --  Note: This code may be incorrect in the unlikely case a child generic
-      --  unit is instantiated as a child of its (nongeneric) parent, so that
-      --  generic and instance are siblings.
-
-      if Nkind (P) /= N_Compilation_Unit
-         or else No (First (Pragmas_After (Aux_Decls_Node (P))))
-      then
-         return;
-      end if;
-
-      declare
+      procedure Process_Categorization_Pragmas is
          PN : Node_Id;
 
       begin
-         if Is_Child_Unit (S) and then Is_Generic_Instance (S) then
-            Set_Parents (True);
-         end if;
-
          PN := First (Pragmas_After (Aux_Decls_Node (P)));
          while Present (PN) loop
 
@@ -765,11 +740,49 @@ package body Sem_Cat is
 
             Next (PN);
          end loop;
+      end Process_Categorization_Pragmas;
 
-         if Is_Child_Unit (S) and then Is_Generic_Instance (S) then
-            Set_Parents (False);
+      ----------------------------------------------
+      -- Make_Parents_Visible_And_Process_Pragmas --
+      ----------------------------------------------
+
+      procedure Make_Parents_Visible_And_Process_Pragmas (Par : Entity_Id) is
+      begin
+         --  When we reached the Standard scope, then just process pragmas
+
+         if Par = Standard_Standard then
+            Process_Categorization_Pragmas;
+
+         --  Otherwise make the current scope momentarily visible, recurse
+         --  into its enclosing scope, and restore the visibility. This is
+         --  required for child units that are instances of generic parents.
+
+         else
+            declare
+               Save_Is_Immediately_Visible : constant Boolean :=
+                 Is_Immediately_Visible (Par);
+            begin
+               Set_Is_Immediately_Visible (Par);
+               Make_Parents_Visible_And_Process_Pragmas (Scope (Par));
+               Set_Is_Immediately_Visible (Par, Save_Is_Immediately_Visible);
+            end;
          end if;
-      end;
+      end Make_Parents_Visible_And_Process_Pragmas;
+
+   --  Start of processing for Set_Categorization_From_Pragmas
+
+   begin
+      --  Deal with categorization pragmas in Pragmas of Compilation_Unit.
+      --  The purpose is to set categorization flags before analyzing the
+      --  unit itself, so as to diagnose violations of categorization as
+      --  we process each declaration, even though the pragma appears after
+      --  the unit.
+
+      if Nkind (P) /= N_Compilation_Unit then
+         return;
+      end if;
+
+      Make_Parents_Visible_And_Process_Pragmas (Scope (Current_Scope));
    end Set_Categorization_From_Pragmas;
 
    -----------------------------------
@@ -790,7 +803,7 @@ package body Sem_Cat is
       end if;
 
       if not Is_Remote_Call_Interface (E) then
-         if Ekind (E) in Subprogram_Kind then
+         if Is_Subprogram (E) then
             Declaration := Unit_Declaration_Node (E);
 
             if Nkind (Declaration) in

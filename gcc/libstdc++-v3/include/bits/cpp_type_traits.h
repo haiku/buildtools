@@ -1,6 +1,6 @@
 // The  -*- C++ -*- type traits classes for internal use in libstdc++
 
-// Copyright (C) 2000-2021 Free Software Foundation, Inc.
+// Copyright (C) 2000-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -253,12 +253,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     };
 
 #define __INT_N(TYPE) 			\
+  __extension__				\
   template<>				\
     struct __is_integer<TYPE>		\
     {					\
       enum { __value = 1 };		\
       typedef __true_type __type;	\
     };					\
+  __extension__				\
   template<>				\
     struct __is_integer<unsigned TYPE>	\
     {					\
@@ -312,6 +314,51 @@ __INT_N(__GLIBCXX_TYPE_INT_N_3)
       enum { __value = 1 };
       typedef __true_type __type;
     };
+
+#ifdef __STDCPP_FLOAT16_T__
+  template<>
+    struct __is_floating<_Float16>
+    {
+      enum { __value = 1 };
+      typedef __true_type __type;
+    };
+#endif
+
+#ifdef __STDCPP_FLOAT32_T__
+  template<>
+    struct __is_floating<_Float32>
+    {
+      enum { __value = 1 };
+      typedef __true_type __type;
+    };
+#endif
+
+#ifdef __STDCPP_FLOAT64_T__
+  template<>
+    struct __is_floating<_Float64>
+    {
+      enum { __value = 1 };
+      typedef __true_type __type;
+    };
+#endif
+
+#ifdef __STDCPP_FLOAT128_T__
+  template<>
+    struct __is_floating<_Float128>
+    {
+      enum { __value = 1 };
+      typedef __true_type __type;
+    };
+#endif
+
+#ifdef __STDCPP_BFLOAT16_T__
+  template<>
+    struct __is_floating<__gnu_cxx::__bfloat16_t>
+    {
+      enum { __value = 1 };
+      typedef __true_type __type;
+    };
+#endif
 
   //
   // Pointer types

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -165,6 +165,11 @@ package Namet is
    --  Note that there is some circuitry (e.g. Osint.Write_Program_Name) that
    --  does a save/restore on Name_Len and Name_Buffer (1 .. Name_Len). This
    --  works in part because Name_Len is default-initialized to 0.
+
+   procedure Destroy_Global_Name_Buffer with Inline;
+   --  Overwrites Global_Name_Buffer with meaningless data. This can be used in
+   --  the transition away from Global_Name_Buffer, in order to detect cases
+   --  where we incorrectly rely on the global.
 
    -----------------------------
    -- Types for Namet Package --
@@ -422,11 +427,15 @@ package Namet is
    --  Write_Name writes the characters of the specified name using the
    --  standard output procedures in package Output. The name is written
    --  in encoded form (i.e. including Uhh, Whhh, Qx, _op as they appear in
-   --  the name table). If Id is Error_Name, or No_Name, no text is output.
+   --  the name table). If Id is Error_Name or No_Name, no text is output.
 
    procedure Write_Name_Decoded (Id : Valid_Name_Id);
    --  Like Write_Name, except that the name written is the decoded name, as
    --  described for Append_Decoded.
+
+   procedure Write_Name_For_Debug (Id : Name_Id; Quote : String := "");
+   --  Like Write_Name, except it tries to be robust in the presence of invalid
+   --  data, and valid names are surrounded by Quote.
 
    function Name_Entries_Count return Nat;
    --  Return current number of entries in the names table
@@ -442,7 +451,7 @@ package Namet is
    --  The following routines operate on Global_Name_Buffer. New code should
    --  use the routines above, and declare Bounded_Strings as local
    --  variables. Existing code can be improved incrementally by removing calls
-   --  to the following. ???If we eliminate all of these, we can remove
+   --  to the following. If we eliminate all of these, we can remove
    --  Global_Name_Buffer. But be sure to look at namet.h first.
 
    --  To see what these do, look at the bodies. They are all trivially defined
@@ -537,14 +546,8 @@ package Namet is
 
    procedure wn (Id : Name_Id);
    pragma Export (Ada, wn);
-   --  This routine is intended for debugging use only (i.e. it is intended to
-   --  be called from the debugger). It writes the characters of the specified
-   --  name using the standard output procedures in package Output, followed by
-   --  a new line. The name is written in encoded form (i.e. including Uhh,
-   --  Whhh, Qx, _op as they appear in the name table). If Id is Error_Name,
-   --  No_Name, or invalid an appropriate string is written (<Error_Name>,
-   --  <No_Name>, <invalid name>). Unlike Write_Name, this call does not affect
-   --  the contents of Name_Buffer or Name_Len.
+   --  Write Id to standard output, followed by a newline. Intended to be
+   --  called in the debugger.
 
 private
 
@@ -570,22 +573,17 @@ private
      Table_Name           => "Name_Chars");
 
    type Name_Entry is record
-      Name_Chars_Index : Int;
+      Name_Chars_Index : aliased Int;
       --  Starting location of characters in the Name_Chars table minus one
       --  (i.e. pointer to character just before first character). The reason
       --  for the bias of one is that indexes in Name_Buffer are one's origin,
       --  so this avoids unnecessary adds and subtracts of 1.
 
-      Name_Len : Short;
+      Name_Len : aliased Short;
       --  Length of this name in characters
 
-      Byte_Info : Byte;
+      Byte_Info : aliased Byte;
       --  Byte value associated with this name
-
-      Boolean1_Info : Boolean;
-      Boolean2_Info : Boolean;
-      Boolean3_Info : Boolean;
-      --  Boolean values associated with the name
 
       Name_Has_No_Encodings : Boolean;
       --  This flag is set True if the name entry is known not to contain any
@@ -593,10 +591,18 @@ private
       --  to Append_Decoded. A value of False means that it is not known
       --  whether the name contains any such encodings.
 
-      Hash_Link : Name_Id;
+      Boolean1_Info : Boolean;
+      Boolean2_Info : Boolean;
+      Boolean3_Info : Boolean;
+      --  Boolean values associated with the name
+
+      Spare : Boolean;
+      --  Four remaining bits in the current byte
+
+      Hash_Link : aliased Name_Id;
       --  Link to next entry in names table for same hash code
 
-      Int_Info : Int;
+      Int_Info : aliased Int;
       --  Int Value associated with this name
 
    end record;
@@ -605,10 +611,11 @@ private
       Name_Chars_Index      at  0 range 0 .. 31;
       Name_Len              at  4 range 0 .. 15;
       Byte_Info             at  6 range 0 .. 7;
-      Boolean1_Info         at  7 range 0 .. 0;
-      Boolean2_Info         at  7 range 1 .. 1;
-      Boolean3_Info         at  7 range 2 .. 2;
-      Name_Has_No_Encodings at  7 range 3 .. 7;
+      Name_Has_No_Encodings at  7 range 0 .. 0;
+      Boolean1_Info         at  7 range 1 .. 1;
+      Boolean2_Info         at  7 range 2 .. 2;
+      Boolean3_Info         at  7 range 3 .. 3;
+      Spare                 at  7 range 4 .. 7;
       Hash_Link             at  8 range 0 .. 31;
       Int_Info              at 12 range 0 .. 31;
    end record;

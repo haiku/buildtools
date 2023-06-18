@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 Free Software Foundation, Inc.
+// Copyright (C) 2018-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -19,7 +19,8 @@
 // { dg-require-effective-target cxx11_abi }
 
 #include <string>
-#include <memory_resource>
+
+std::pmr::string s = "polly";
 
 struct T : std::char_traits<char> { };
 
@@ -44,7 +45,6 @@ static_assert(std::is_same_v<std::pmr::u32string,
     std::basic_string<char32_t, std::char_traits<char32_t>,
 		      std::pmr::polymorphic_allocator<char32_t>>>);
 
-#ifdef _GLIBCXX_USE_WCHAR_T
 static_assert(std::is_same_v<std::pmr::basic_string<wchar_t>,
     std::basic_string<wchar_t, std::char_traits<wchar_t>,
 		      std::pmr::polymorphic_allocator<wchar_t>>>);
@@ -54,4 +54,3 @@ static_assert(std::is_same_v<std::pmr::basic_string<wchar_t, T>,
 static_assert(std::is_same_v<std::pmr::wstring,
     std::basic_string<wchar_t, std::char_traits<wchar_t>,
 		      std::pmr::polymorphic_allocator<wchar_t>>>);
-#endif

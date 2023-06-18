@@ -58,6 +58,15 @@ else
   GLIBCXX_IS_NATIVE=true
 fi
 
+# In the case that we're building without headers, we won't have <stdio.h>
+# available. In these cases, we have to instruct autotools to never include
+# <stdio.h> as a part of default headers.
+m4_version_prereq([2.70], [], [
+if test "x$with_headers" = "xno"; then
+  ac_includes_default=`echo "$ac_includes_default" | sed '/^#include <stdio.h>$/d'`
+fi
+])
+
 # Sets up automake.  Must come after AC_CANONICAL_SYSTEM.  Each of the
 # following is magically included in AUTOMAKE_OPTIONS in each Makefile.am.
 #  1.x:  minimum required version
@@ -90,7 +99,9 @@ AC_SYS_LARGEFILE
 GLIBCXX_CONFIGURE
 
 # Libtool setup.
-if test "x${with_newlib}" != "xyes" && test "x${with_avrlibc}" != "xyes"; then
+if test "x${with_newlib}" != "xyes" &&
+    test "x${with_avrlibc}" != "xyes" &&
+    test "x$with_headers" != "xno"; then
   AC_LIBTOOL_DLOPEN
 fi
 AM_PROG_LIBTOOL
@@ -153,7 +164,7 @@ GLIBCXX_ENABLE_THREADS
 GLIBCXX_ENABLE_ATOMIC_BUILTINS
 GLIBCXX_ENABLE_LOCK_POLICY
 GLIBCXX_ENABLE_DECIMAL_FLOAT
-GLIBCXX_ENABLE_INT128_FLOAT128
+GLIBCXX_ENABLE_FLOAT128
 if test "$enable_float128" = yes; then
   port_specific_symbol_files="$port_specific_symbol_files \$(top_srcdir)/config/abi/pre/float128.ver"
 fi
@@ -184,9 +195,6 @@ GLIBCXX_ENABLE_VTABLE_VERIFY([no])
 GLIBCXX_CHECK_STDIO_PROTO
 GLIBCXX_CHECK_MATH11_PROTO
 GLIBCXX_CHECK_UCHAR_H
-
-# For the streamoff typedef.
-GLIBCXX_CHECK_INT64_T
 
 # For LFS support.
 GLIBCXX_CHECK_LFS
@@ -276,6 +284,7 @@ if $GLIBCXX_IS_NATIVE; then
   AC_CHECK_FUNCS(__cxa_thread_atexit_impl __cxa_thread_atexit)
   AC_CHECK_FUNCS(aligned_alloc posix_memalign memalign _aligned_malloc)
   AC_CHECK_FUNCS(_wfopen)
+  AC_CHECK_FUNCS(secure_getenv)
 
   # C11 functions for C++17 library
   AC_CHECK_FUNCS(timespec_get)
@@ -353,7 +362,31 @@ else
 
     AC_DEFINE(HAVE_ICONV)
     AC_DEFINE(HAVE_MEMALIGN)
-  else
+
+    case "${target}" in
+      *-rtems*)
+        case "${target}" in
+          bfin* | lm32* | mips* | moxie* | or1k* | v850*)
+            ;;
+          *)
+            AC_DEFINE(HAVE_TLS)
+            ;;
+        esac
+        AC_DEFINE(HAVE_ALIGNED_ALLOC)
+        AC_DEFINE(HAVE_AT_QUICK_EXIT)
+        AC_DEFINE(HAVE_LINK)
+        AC_DEFINE(HAVE_QUICK_EXIT)
+        AC_DEFINE(HAVE_READLINK)
+        AC_DEFINE(HAVE_SETENV)
+        AC_DEFINE(HAVE_SLEEP)
+        AC_DEFINE(HAVE_SOCKATMARK)
+        AC_DEFINE(HAVE_STRERROR_L)
+        AC_DEFINE(HAVE_SYMLINK)
+        AC_DEFINE(HAVE_TRUNCATE)
+        AC_DEFINE(HAVE_USLEEP)
+        ;;
+    esac
+  elif test "x$with_headers" != "xno"; then
     GLIBCXX_CROSSCONFIG
   fi
 
@@ -391,8 +424,6 @@ fi
 GCC_CHECK_UNWIND_GETIPINFO
 
 GCC_LINUX_FUTEX([AC_DEFINE(HAVE_LINUX_FUTEX, 1, [Define if futex syscall is available.])])
-
-GCC_HEADER_STDINT(include/gstdint.h)
 
 GLIBCXX_ENABLE_SYMVERS([yes])
 AC_SUBST(libtool_VERSION)
@@ -470,6 +501,10 @@ GLIBCXX_CHECK_X86_RDRAND
 # Check if assembler supports rdseed opcode.
 GLIBCXX_CHECK_X86_RDSEED
 
+# Check for other random number APIs
+GLIBCXX_CHECK_GETENTROPY
+GLIBCXX_CHECK_ARC4RANDOM
+
 # This depends on GLIBCXX_ENABLE_SYMVERS and GLIBCXX_IS_NATIVE.
 GLIBCXX_CONFIGURE_TESTSUITE
 
@@ -480,6 +515,8 @@ GLIBCXX_CHECK_GTHREADS
 AC_CHECK_HEADERS([fcntl.h dirent.h sys/statvfs.h utime.h])
 GLIBCXX_ENABLE_FILESYSTEM_TS
 GLIBCXX_CHECK_FILESYSTEM_DEPS
+
+GLIBCXX_ENABLE_BACKTRACE
 
 # For Networking TS.
 AC_CHECK_HEADERS([fcntl.h sys/ioctl.h sys/socket.h sys/uio.h poll.h netdb.h arpa/inet.h netinet/in.h netinet/tcp.h])
@@ -494,6 +531,12 @@ GLIBCXX_CHECK_SIZE_T_MANGLING
 
 # Check which release added std::exception_ptr for the target
 GLIBCXX_CHECK_EXCEPTION_PTR_SYMVER
+
+# For libsupc++/eh_alloc.cc defaults.
+GLIBCXX_EMERGENCY_EH_ALLOC
+
+# For src/c++20/tzdb.cc defaults.
+GLIBCXX_ZONEINFO_DIR
 
 # Define documentation rules conditionally.
 
@@ -621,6 +664,7 @@ AC_CONFIG_FILES(Makefile)
 AC_CONFIG_FILES([scripts/testsuite_flags],[chmod +x scripts/testsuite_flags])
 AC_CONFIG_FILES([scripts/extract_symvers],[chmod +x scripts/extract_symvers])
 AC_CONFIG_FILES([doc/xsl/customization.xsl])
+AC_CONFIG_FILES([src/libbacktrace/backtrace-supported.h])
 
 # Multilibs need MULTISUBDIR defined correctly in certain makefiles so
 # that multilib installs will end up installed in the correct place.

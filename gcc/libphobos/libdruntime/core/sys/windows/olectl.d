@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_olectl.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_olectl.d)
  */
 module core.sys.windows.olectl;
 version (Windows):
-@system:
 
 // In conversion from MinGW, the following was deleted:
 //#define FONTSIZE(n) {n##0000, 0}

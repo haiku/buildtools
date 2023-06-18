@@ -73,7 +73,6 @@ do {								\
 do {								\
   if (__builtin_expect (_fex, 0))				\
     {								\
-      _fpcsr &= ~FP_EX_ALL;					\
       _fpcsr |= _fex;						\
       __asm__ volatile ("l.mtspr r0,%0,20" : : "r" (_fpcsr));	\
     }								\
@@ -85,7 +84,7 @@ do {								\
 
 #define __BYTE_ORDER __BIG_ENDIAN
 
-#define _FP_TININESS_AFTER_ROUNDING 1
+#define _FP_TININESS_AFTER_ROUNDING 0
 
 /* Define ALIASNAME as a strong alias for NAME.  */
 # define strong_alias(name, aliasname) _strong_alias(name, aliasname)

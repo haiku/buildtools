@@ -1,5 +1,5 @@
 ;;  Mips.md	     Machine Description for MIPS based processors
-;;  Copyright (C) 1989-2021 Free Software Foundation, Inc.
+;;  Copyright (C) 1989-2023 Free Software Foundation, Inc.
 ;;  Contributed by   A. Lichnewsky, lich@inria.inria.fr
 ;;  Changes by       Michael Meissner, meissner@osf.org
 ;;  64-bit r4000 support by Ian Lance Taylor, ian@cygnus.com, and
@@ -159,6 +159,7 @@
 
   ;; The `.insn' pseudo-op.
   UNSPEC_INSN_PSEUDO
+  UNSPEC_JRHB
 ])
 
 (define_constants
@@ -3165,6 +3166,15 @@
   [(set_attr "type" "clz")
    (set_attr "mode" "<MODE>")])
 
+
+(define_insn "*clo<mode>2"
+  [(set (match_operand:GPR 0 "register_operand" "=d")
+	(clz:GPR (not:GPR (match_operand:GPR 1 "register_operand" "d"))))]
+  "ISA_HAS_CLZ_CLO"
+  "<d>clo\t%0,%1"
+  [(set_attr "type" "clz")
+   (set_attr "mode" "<MODE>")])
+
 ;;
 ;;  ...................
 ;;
@@ -4459,6 +4469,16 @@
   [(set_attr "move_type" "store")
    (set_attr "mode" "<MODE>")])
 
+;; Unaligned direct access
+(define_expand "movmisalign<mode>"
+  [(set (match_operand:JOIN_MODE 0)
+	(match_operand:JOIN_MODE 1))]
+  "ISA_HAS_UNALIGNED_ACCESS"
+{
+  if (mips_legitimize_move (<MODE>mode, operands[0], operands[1]))
+    DONE;
+})
+
 ;; An instruction to calculate the high part of a 64-bit SYMBOL_ABSOLUTE.
 ;; The required value is:
 ;;
@@ -5647,7 +5667,7 @@
   "cache\t0x14,0(%$)"
   [(set_attr "can_delay" "no")])
 
-;; Block moves, see mips.c for more details.
+;; Block moves, see mips.cc for more details.
 ;; Argument 0 is the destination
 ;; Argument 1 is the source
 ;; Argument 2 is the length
@@ -5835,7 +5855,7 @@
 		     (match_operand:SI 2 "immediate_operand" "I")))]
   "TARGET_MIPS16"
   "#"
-  ""
+  "&& 1"
   [(set (match_dup 0) (match_dup 1))
    (set (match_dup 0) (lshiftrt:SI (match_dup 0) (match_dup 2)))]
   ""
@@ -5871,7 +5891,7 @@
 	(bswap:SI (match_operand:SI 1 "register_operand" "d")))]
   "ISA_HAS_WSBH && ISA_HAS_ROR"
   "#"
-  ""
+  "&& 1"
   [(set (match_dup 0) (unspec:SI [(match_dup 1)] UNSPEC_WSBH))
    (set (match_dup 0) (rotatert:SI (match_dup 0) (const_int 16)))]
   ""
@@ -5882,7 +5902,7 @@
 	(bswap:DI (match_operand:DI 1 "register_operand" "d")))]
   "TARGET_64BIT && ISA_HAS_WSBH"
   "#"
-  ""
+  "&& 1"
   [(set (match_dup 0) (unspec:DI [(match_dup 1)] UNSPEC_DSBH))
    (set (match_dup 0) (unspec:DI [(match_dup 0)] UNSPEC_DSHD))]
   ""
@@ -6659,6 +6679,20 @@
   }
   [(set_attr "type"	"jump")
    (set_attr "mode"	"none")])
+
+;; Insn to clear execution and instruction hazards while returning.
+;; However, it doesn't clear hazards created by the insn in its delay slot.
+;; Thus, explicitly place a nop in its delay slot.
+
+(define_insn "mips_hb_return_internal"
+  [(return)
+   (unspec_volatile [(match_operand 0 "pmode_register_operand" "")]
+		    UNSPEC_JRHB)]
+  ""
+  {
+    return "%(jr.hb\t$31%/%)";
+  }
+  [(set_attr "insn_count" "2")])
 
 ;; Normal return.
 

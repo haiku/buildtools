@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---            Copyright (C) 2015-2020, Free Software Foundation, Inc.       --
+--            Copyright (C) 2015-2023, Free Software Foundation, Inc.       --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -30,7 +30,7 @@
 ------------------------------------------------------------------------------
 
 private with System;
-private with Ada.Strings.Text_Output;
+private with Ada.Strings.Text_Buffers;
 
 generic
    type Element_Type (<>) is private;
@@ -70,7 +70,9 @@ package Ada.Containers.Bounded_Holders is
    --  System.Storage_Unit; e.g. creating Holders from 5-bit objects won't
    --  work.
 
-   type Holder is private;
+   type Holder is private
+     with Preelaborable_Initialization
+            => Element_Type'Preelaborable_Initialization;
 
    function "=" (Left, Right : Holder) return Boolean;
 
@@ -80,6 +82,12 @@ package Ada.Containers.Bounded_Holders is
    function Get (Container : Holder) return Element_Type;
 
    procedure Set (Container : in out Holder; New_Item  : Element_Type);
+
+   function Constant_Reference
+     (Container : aliased Holder) return not null access constant Element_Type;
+
+   function Reference
+     (Container : not null access Holder) return not null access Element_Type;
 
 private
 
@@ -100,7 +108,7 @@ private
    --  (default) alignment instead.
 
    procedure Put_Image
-     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Holder);
+     (S : in out Ada.Strings.Text_Buffers.Root_Buffer_Type'Class; V : Holder);
 
    type Element_Access is access all Element_Type;
    pragma Assert (Element_Access'Size = Standard'Address_Size,

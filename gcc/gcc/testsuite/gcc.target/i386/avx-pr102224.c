@@ -1,4 +1,4 @@
-/* PR tree-optimization/51581 */
+/* PR target/102224 */
 /* { dg-do run } */
 /* { dg-options "-O2 -mavx" } */
 /* { dg-require-effective-target avx } */

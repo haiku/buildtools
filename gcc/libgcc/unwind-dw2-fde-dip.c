@@ -1,4 +1,4 @@
-/* Copyright (C) 2001-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2001-2023 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>.
 
    This file is part of GCC.
@@ -101,15 +101,33 @@ static const fde * _Unwind_Find_registered_FDE (void *pc, struct dwarf_eh_bases 
 #define PT_GNU_EH_FRAME (PT_LOOS + 0x474e550)
 #endif
 
+#ifdef CRT_GET_RFIB_DATA
+#define NEED_DBASE_MEMBER 1
+#else
+#define NEED_DBASE_MEMBER 0
+#endif
+
 struct unw_eh_callback_data
 {
   _Unwind_Ptr pc;
-  void *tbase;
+#if NEED_DBASE_MEMBER
   void *dbase;
-  void *func;
-  const fde *ret;
+#endif
+  const struct unw_eh_frame_hdr *hdr;
   int check_cache;
 };
+
+/* Returns DATA->dbase if available, else NULL.  */
+static inline _Unwind_Ptr
+unw_eh_callback_data_dbase (const struct unw_eh_callback_data *data
+			    __attribute__ ((unused)))
+{
+#if NEED_DBASE_MEMBER
+  return (_Unwind_Ptr) data->dbase;
+#else
+  return 0;
+#endif
+}
 
 struct unw_eh_frame_hdr
 {
@@ -140,9 +158,11 @@ static struct frame_hdr_cache_element *frame_hdr_cache_head;
 /* Like base_of_encoded_value, but take the base from a struct
    unw_eh_callback_data instead of an _Unwind_Context.  */
 
-static _Unwind_Ptr
-base_from_cb_data (unsigned char encoding, struct unw_eh_callback_data *data)
+static inline _Unwind_Ptr
+base_from_cb_data (unsigned char encoding __attribute__ ((unused)),
+		   _Unwind_Ptr dbase __attribute__ ((unused)))
 {
+#if NEED_DBASE_MEMBER
   if (encoding == DW_EH_PE_omit)
     return 0;
 
@@ -154,12 +174,15 @@ base_from_cb_data (unsigned char encoding, struct unw_eh_callback_data *data)
       return 0;
 
     case DW_EH_PE_textrel:
-      return (_Unwind_Ptr) data->tbase;
+      return 0;
     case DW_EH_PE_datarel:
-      return (_Unwind_Ptr) data->dbase;
+      return dbase;
     default:
       gcc_unreachable ();
     }
+#else /* !NEED_DBASE_MEMBER */
+  return 0;
+#endif
 }
 
 static int
@@ -173,10 +196,6 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 #else
   _Unwind_Ptr load_base;
 #endif
-  const unsigned char *p;
-  const struct unw_eh_frame_hdr *hdr;
-  _Unwind_Ptr eh_frame;
-  struct object ob;
   _Unwind_Ptr pc_low = 0, pc_high = 0;
 
   struct ext_dl_phdr_info
@@ -324,10 +343,8 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
     return 0;
 
   /* Read .eh_frame_hdr header.  */
-  hdr = (const struct unw_eh_frame_hdr *)
+  data->hdr = (const struct unw_eh_frame_hdr *)
     __RELOC_POINTER (p_eh_frame_hdr->p_vaddr, load_base);
-  if (hdr->version != 1)
-    return 1;
 
 #ifdef CRT_GET_RFIB_DATA
 # if defined __i386__ || defined __nios2__
@@ -359,11 +376,41 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 # endif
 #endif
 
-  p = read_encoded_value_with_base (hdr->eh_frame_ptr_enc,
-				    base_from_cb_data (hdr->eh_frame_ptr_enc,
-						       data),
-				    (const unsigned char *) (hdr + 1),
-				    &eh_frame);
+  return 1;
+}
+
+/* Find the FDE for the program counter PC, in a previously located
+   PT_GNU_EH_FRAME data region.  *BASES is updated if an FDE to return is
+   found.  */
+
+static const fde *
+find_fde_tail (_Unwind_Ptr pc,
+	       const struct unw_eh_frame_hdr *hdr,
+	       _Unwind_Ptr dbase,
+	       struct dwarf_eh_bases *bases)
+{
+  const unsigned char *p = (const unsigned char *) (hdr + 1);
+  _Unwind_Ptr eh_frame;
+  struct object ob;
+
+  if (hdr->version != 1)
+    return NULL;
+
+  if (__builtin_expect (hdr->eh_frame_ptr_enc == (DW_EH_PE_sdata4
+						  | DW_EH_PE_pcrel), 1))
+    {
+      /* Specialized version of read_encoded_value_with_base, based on what
+	 BFD ld generates.  */
+      signed value __attribute__ ((mode (SI)));
+      memcpy (&value, p, sizeof (value));
+      p += sizeof (value);
+      dbase = value;		/* No adjustment because pcrel has base 0.  */
+    }
+  else
+    p = read_encoded_value_with_base (hdr->eh_frame_ptr_enc,
+				      base_from_cb_data (hdr->eh_frame_ptr_enc,
+							 dbase),
+				      p, &eh_frame);
 
   /* We require here specific table encoding to speed things up.
      Also, DW_EH_PE_datarel here means using PT_GNU_EH_FRAME start
@@ -373,13 +420,23 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
     {
       _Unwind_Ptr fde_count;
 
-      p = read_encoded_value_with_base (hdr->fde_count_enc,
-					base_from_cb_data (hdr->fde_count_enc,
-							   data),
-					p, &fde_count);
+      if (__builtin_expect (hdr->fde_count_enc == DW_EH_PE_udata4, 1))
+	{
+	  /* Specialized version of read_encoded_value_with_base, based on
+	     what BFD ld generates.  */
+	  unsigned value __attribute__ ((mode (SI)));
+	  memcpy (&value, p, sizeof (value));
+	  p += sizeof (value);
+	  fde_count = value;
+	}
+      else
+	p = read_encoded_value_with_base (hdr->fde_count_enc,
+					  base_from_cb_data (hdr->fde_count_enc,
+							     dbase),
+					  p, &fde_count);
       /* Shouldn't happen.  */
       if (fde_count == 0)
-	return 1;
+	return NULL;
       if ((((_Unwind_Ptr) p) & 3) == 0)
 	{
 	  struct fde_table {
@@ -394,9 +451,9 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 	  _Unwind_Ptr range;
 
 	  mid = fde_count - 1;
-	  if (data->pc < table[0].initial_loc + data_base)
-	    return 1;
-	  else if (data->pc < table[mid].initial_loc + data_base)
+	  if (pc < table[0].initial_loc + data_base)
+	    return NULL;
+	  else if (pc < table[mid].initial_loc + data_base)
 	    {
 	      lo = 0;
 	      hi = mid;
@@ -404,9 +461,9 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 	      while (lo < hi)
 		{
 		  mid = (lo + hi) / 2;
-		  if (data->pc < table[mid].initial_loc + data_base)
+		  if (pc < table[mid].initial_loc + data_base)
 		    hi = mid;
-		  else if (data->pc >= table[mid + 1].initial_loc + data_base)
+		  else if (pc >= table[mid + 1].initial_loc + data_base)
 		    lo = mid + 1;
 		  else
 		    break;
@@ -418,12 +475,35 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
 	  f = (fde *) (table[mid].fde + data_base);
 	  f_enc = get_fde_encoding (f);
 	  f_enc_size = size_of_encoded_value (f_enc);
-	  read_encoded_value_with_base (f_enc & 0x0f, 0,
-					&f->pc_begin[f_enc_size], &range);
-	  if (data->pc < table[mid].initial_loc + data_base + range)
-	    data->ret = f;
-	  data->func = (void *) (table[mid].initial_loc + data_base);
-	  return 1;
+
+	  /* BFD ld uses DW_EH_PE_sdata4 | DW_EH_PE_pcrel on non-FDPIC targets,
+	     so optimize for that.
+
+	     This optimization is not valid for FDPIC targets.  f_enc & 0x0f as
+	     passed to read_encoded_value_with_base masks away the base flags,
+	     but they are implicit for FDPIC.  */
+#ifndef __FDPIC__
+	  if (__builtin_expect (f_enc == (DW_EH_PE_sdata4 | DW_EH_PE_pcrel),
+				1))
+	    {
+	      signed value __attribute__ ((mode (SI)));
+	      memcpy (&value, &f->pc_begin[f_enc_size], sizeof (value));
+	      range = value;
+	    }
+	  else
+#endif
+	    read_encoded_value_with_base (f_enc & 0x0f, 0,
+					  &f->pc_begin[f_enc_size], &range);
+	  _Unwind_Ptr func = table[mid].initial_loc + data_base;
+	  if (pc < table[mid].initial_loc + data_base + range)
+	    {
+	      bases->tbase = NULL;
+	      bases->dbase = (void *) dbase;
+	      bases->func = (void *) func;
+	      return f;
+	    }
+	  else
+	    return NULL;
 	}
     }
 
@@ -431,23 +511,25 @@ _Unwind_IteratePhdrCallback (struct dl_phdr_info *info, size_t size, void *ptr)
      As soon as GLIBC will provide API so to notify that a library has been
      removed, we could cache this (and thus use search_object).  */
   ob.pc_begin = NULL;
-  ob.tbase = data->tbase;
-  ob.dbase = data->dbase;
+  ob.tbase = NULL;
+  ob.dbase = (void *) dbase;
   ob.u.single = (fde *) eh_frame;
   ob.s.i = 0;
   ob.s.b.mixed_encoding = 1;  /* Need to assume worst case.  */
-  data->ret = linear_search_fdes (&ob, (fde *) eh_frame, (void *) data->pc);
-  if (data->ret != NULL)
+  const fde *entry = linear_search_fdes (&ob, (fde *) eh_frame, (void *) pc);
+  if (entry != NULL)
     {
       _Unwind_Ptr func;
-      unsigned int encoding = get_fde_encoding (data->ret);
+      unsigned int encoding = get_fde_encoding (entry);
 
       read_encoded_value_with_base (encoding,
-				    base_from_cb_data (encoding, data),
-				    data->ret->pc_begin, &func);
-      data->func = (void *) func;
+				    base_from_cb_data (encoding, dbase),
+				    entry->pc_begin, &func);
+      bases->tbase = NULL;
+      bases->dbase = (void *) dbase;
+      bases->func = (void *) func;
     }
-  return 1;
+  return entry;
 }
 
 const fde *
@@ -460,23 +542,35 @@ _Unwind_Find_FDE (void *pc, struct dwarf_eh_bases *bases)
   if (ret != NULL)
     return ret;
 
+  /* Use DLFO_STRUCT_HAS_EH_DBASE as a proxy for the existence of a glibc-style
+     _dl_find_object function.  */
+#ifdef DLFO_STRUCT_HAS_EH_DBASE
+  {
+    struct dl_find_object dlfo;
+    if (_dl_find_object (pc, &dlfo) == 0 && dlfo.dlfo_eh_frame != NULL)
+      return find_fde_tail ((_Unwind_Ptr) pc, dlfo.dlfo_eh_frame,
+# if DLFO_STRUCT_HAS_EH_DBASE
+			    (_Unwind_Ptr) dlfo.dlfo_eh_dbase,
+# else
+			    0,
+# endif
+			    bases);
+    else
+      return NULL;
+    }
+#endif /* DLFO_STRUCT_HAS_EH_DBASE */
+
   data.pc = (_Unwind_Ptr) pc;
-  data.tbase = NULL;
+#if NEED_DBASE_MEMBER
   data.dbase = NULL;
-  data.func = NULL;
-  data.ret = NULL;
+#endif
   data.check_cache = 1;
 
-  if (dl_iterate_phdr (_Unwind_IteratePhdrCallback, &data) < 0)
+  if (dl_iterate_phdr (_Unwind_IteratePhdrCallback, &data) <= 0)
     return NULL;
 
-  if (data.ret)
-    {
-      bases->tbase = data.tbase;
-      bases->dbase = data.dbase;
-      bases->func = data.func;
-    }
-  return data.ret;
+  _Unwind_Ptr dbase = unw_eh_callback_data_dbase (&data);
+  return find_fde_tail ((_Unwind_Ptr) pc, data.hdr, dbase, bases);
 }
 
 #else

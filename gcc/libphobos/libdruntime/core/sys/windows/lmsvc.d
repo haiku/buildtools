@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_lmsvc.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_lmsvc.d)
  */
 module core.sys.windows.lmsvc;
 version (Windows):
-@system:
 
 // FIXME: Is this file deprecated? All of the functions are only for Win16.
 /**

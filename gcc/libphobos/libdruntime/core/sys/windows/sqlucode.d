@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_sqlucode.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_sqlucode.d)
  */
 module core.sys.windows.sqlucode;
 version (Windows):
-@system:
 
 version (ANSI) {} else version = Unicode;
 

@@ -1,6 +1,6 @@
 // Move, forward and identity for C++11 + swap -*- C++ -*-
 
-// Copyright (C) 2007-2021 Free Software Foundation, Inc.
+// Copyright (C) 2007-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -120,8 +120,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    */
   template<typename _Tp>
     _GLIBCXX_NODISCARD
-    constexpr typename
-    conditional<__move_if_noexcept_cond<_Tp>::value, const _Tp&, _Tp&&>::type
+    constexpr
+    __conditional_t<__move_if_noexcept_cond<_Tp>::value, const _Tp&, _Tp&&>
     move_if_noexcept(_Tp& __x) noexcept
     { return std::move(__x); }
 
@@ -130,7 +130,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if __cplusplus > 201402L
   // _GLIBCXX_RESOLVE_LIB_DEFECTS
   // 2296. std::addressof should be constexpr
-# define __cpp_lib_addressof_constexpr 201603
+# define __cpp_lib_addressof_constexpr 201603L
 #endif
   /**
    *  @brief Returns the actual address of the object or function

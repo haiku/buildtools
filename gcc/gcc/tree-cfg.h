@@ -1,5 +1,5 @@
 /* Data and Control Flow Analysis for Trees.
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2023 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -33,6 +33,7 @@ extern void init_empty_tree_cfg_for_function (struct function *);
 extern void init_empty_tree_cfg (void);
 extern void start_recording_case_labels (void);
 extern void end_recording_case_labels (void);
+extern tree get_cases_for_edge (edge, gswitch *);
 extern basic_block label_to_block (struct function *, tree);
 extern void cleanup_dead_labels (void);
 extern bool group_case_labels_stmt (gswitch *);
@@ -62,8 +63,8 @@ extern gphi *get_virtual_phi (basic_block);
 extern gimple *first_stmt (basic_block);
 extern gimple *last_stmt (basic_block);
 extern gimple *last_and_only_stmt (basic_block);
-extern void verify_gimple_in_seq (gimple_seq);
-extern void verify_gimple_in_cfg (struct function *, bool);
+extern bool verify_gimple_in_seq (gimple_seq, bool = true);
+extern bool verify_gimple_in_cfg (struct function *, bool, bool = true);
 extern tree gimple_block_label (basic_block);
 extern void add_phi_args_after_copy_bb (basic_block);
 extern void add_phi_args_after_copy (basic_block *, unsigned, edge);
@@ -95,12 +96,6 @@ extern bool gimple_purge_dead_eh_edges (basic_block);
 extern bool gimple_purge_all_dead_eh_edges (const_bitmap);
 extern bool gimple_purge_dead_abnormal_call_edges (basic_block);
 extern bool gimple_purge_all_dead_abnormal_call_edges (const_bitmap);
-extern tree gimplify_build3 (gimple_stmt_iterator *, enum tree_code,
-			     tree, tree, tree, tree);
-extern tree gimplify_build2 (gimple_stmt_iterator *, enum tree_code,
-			     tree, tree, tree);
-extern tree gimplify_build1 (gimple_stmt_iterator *, enum tree_code,
-			     tree, tree);
 extern void extract_true_false_edges_from_block (basic_block, edge *, edge *);
 extern tree find_case_label_for_value (const gswitch *switch_stmt, tree val);
 extern edge find_taken_edge_switch_expr (const gswitch *switch_stmt, tree val);
@@ -117,6 +112,7 @@ extern basic_block gimple_switch_label_bb (function *, gswitch *, unsigned);
 extern basic_block gimple_switch_default_bb (function *, gswitch *);
 extern edge gimple_switch_edge (function *, gswitch *, unsigned);
 extern edge gimple_switch_default_edge (function *, gswitch *);
+extern bool cond_only_block_p (basic_block);
 
 /* Return true if the LHS of a call should be removed.  */
 

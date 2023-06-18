@@ -1,5 +1,5 @@
 /* Data structure definitions for a generic GCC target.
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2023 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -70,7 +70,7 @@ union cumulative_args_t { void *p; };
 
 /* Types of memory operation understood by the "by_pieces" infrastructure.
    Used by the TARGET_USE_BY_PIECES_INFRASTRUCTURE_P target hook and
-   internally by the functions in expr.c.  */
+   internally by the functions in expr.cc.  */
 
 enum by_pieces_operation
 {
@@ -86,7 +86,7 @@ extern unsigned HOST_WIDE_INT by_pieces_ninsns (unsigned HOST_WIDE_INT,
 						unsigned int,
 						by_pieces_operation);
 
-/* An example implementation for ELF targets.  Defined in varasm.c  */
+/* An example implementation for ELF targets.  Defined in varasm.cc  */
 extern void elf_record_gcc_switches (const char *);
 
 /* Some places still assume that all pointer or address modes are the
@@ -143,7 +143,7 @@ class function_arg_info;
 /* This is defined in function-abi.h.  */
 class predefined_function_abi;
 
-/* These are defined in tree-vect-stmts.c.  */
+/* These are defined in tree-vect-stmts.cc.  */
 extern tree stmt_vectype (class _stmt_vec_info *);
 extern bool stmt_in_inner_loop_p (class vec_info *, class _stmt_vec_info *);
 
@@ -259,6 +259,8 @@ enum poly_value_estimate_kind
   POLY_VALUE_LIKELY
 };
 
+typedef void (*emit_support_tinfos_callback) (tree);
+
 extern bool verify_type_context (location_t, type_context_kind, const_tree,
 				 bool = false);
 
@@ -278,7 +280,7 @@ extern struct gcc_target targetm;
    runtime value is needed for correctness, since the function only
    provides a rough guess.  */
 
-static inline HOST_WIDE_INT
+inline HOST_WIDE_INT
 estimated_poly_value (poly_int64 x,
 		      poly_value_estimate_kind kind = POLY_VALUE_LIKELY)
 {
@@ -294,7 +296,7 @@ estimated_poly_value (poly_int64 x,
 #define CUMULATIVE_ARGS_MAGIC ((void *) &targetm.calls)
 #endif
 
-static inline CUMULATIVE_ARGS *
+inline CUMULATIVE_ARGS *
 get_cumulative_args (cumulative_args_t arg)
 {
 #if CHECKING_P
@@ -303,7 +305,7 @@ get_cumulative_args (cumulative_args_t arg)
   return (CUMULATIVE_ARGS *) arg.p;
 }
 
-static inline cumulative_args_t
+inline cumulative_args_t
 pack_cumulative_args (CUMULATIVE_ARGS *arg)
 {
   cumulative_args_t ret;

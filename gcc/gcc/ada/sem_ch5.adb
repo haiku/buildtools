@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,44 +23,50 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Aspects;  use Aspects;
-with Atree;    use Atree;
-with Checks;   use Checks;
-with Debug;    use Debug;
-with Einfo;    use Einfo;
-with Errout;   use Errout;
-with Expander; use Expander;
-with Exp_Ch6;  use Exp_Ch6;
-with Exp_Util; use Exp_Util;
-with Freeze;   use Freeze;
-with Ghost;    use Ghost;
-with Lib;      use Lib;
-with Lib.Xref; use Lib.Xref;
-with Namet;    use Namet;
-with Nlists;   use Nlists;
-with Nmake;    use Nmake;
-with Opt;      use Opt;
-with Sem;      use Sem;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Case; use Sem_Case;
-with Sem_Ch3;  use Sem_Ch3;
-with Sem_Ch6;  use Sem_Ch6;
-with Sem_Ch8;  use Sem_Ch8;
-with Sem_Dim;  use Sem_Dim;
-with Sem_Disp; use Sem_Disp;
-with Sem_Elab; use Sem_Elab;
-with Sem_Eval; use Sem_Eval;
-with Sem_Res;  use Sem_Res;
-with Sem_Type; use Sem_Type;
-with Sem_Util; use Sem_Util;
-with Sem_Warn; use Sem_Warn;
-with Snames;   use Snames;
-with Stand;    use Stand;
-with Sinfo;    use Sinfo;
-with Targparm; use Targparm;
-with Tbuild;   use Tbuild;
-with Ttypes;   use Ttypes;
-with Uintp;    use Uintp;
+with Aspects;        use Aspects;
+with Atree;          use Atree;
+with Checks;         use Checks;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Errout;         use Errout;
+with Expander;       use Expander;
+with Exp_Ch6;        use Exp_Ch6;
+with Exp_Tss;        use Exp_Tss;
+with Exp_Util;       use Exp_Util;
+with Freeze;         use Freeze;
+with Ghost;          use Ghost;
+with Lib;            use Lib;
+with Lib.Xref;       use Lib.Xref;
+with Namet;          use Namet;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
+with Opt;            use Opt;
+with Sem;            use Sem;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Case;       use Sem_Case;
+with Sem_Ch3;        use Sem_Ch3;
+with Sem_Ch6;        use Sem_Ch6;
+with Sem_Ch8;        use Sem_Ch8;
+with Sem_Dim;        use Sem_Dim;
+with Sem_Disp;       use Sem_Disp;
+with Sem_Elab;       use Sem_Elab;
+with Sem_Eval;       use Sem_Eval;
+with Sem_Res;        use Sem_Res;
+with Sem_Type;       use Sem_Type;
+with Sem_Util;       use Sem_Util;
+with Sem_Warn;       use Sem_Warn;
+with Snames;         use Snames;
+with Stand;          use Stand;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Targparm;       use Targparm;
+with Tbuild;         use Tbuild;
+with Ttypes;         use Ttypes;
+with Uintp;          use Uintp;
+with Warnsw;         use Warnsw;
 
 package body Sem_Ch5 is
 
@@ -137,7 +143,7 @@ package body Sem_Ch5 is
       --  If the right-hand side of an assignment statement is a build-in-place
       --  call we cannot build in place, so we insert a temp initialized with
       --  the call, and transform the assignment statement to copy the temp.
-      --  Transform_BIP_Assignment does the tranformation, and
+      --  Transform_BIP_Assignment does the transformation, and
       --  Should_Transform_BIP_Assignment determines whether we should.
       --  The same goes for qualified expressions and conversions whose
       --  operand is such a call.
@@ -301,7 +307,8 @@ package body Sem_Ch5 is
          --  get the actual subtype (needed for the unconstrained case). If the
          --  operand is the actual in an entry declaration, then within the
          --  accept statement it is replaced with a local renaming, which may
-         --  also have an actual subtype.
+         --  also have an actual subtype. Likewise for a return object that
+         --  lives on the secondary stack.
 
          if Is_Entity_Name (Opnd)
            and then (Ekind (Entity (Opnd)) in E_Out_Parameter
@@ -312,7 +319,8 @@ package body Sem_Ch5 is
                           and then Nkind (Parent (Entity (Opnd))) =
                                      N_Object_Renaming_Declaration
                           and then Nkind (Parent (Parent (Entity (Opnd)))) =
-                                     N_Accept_Statement))
+                                     N_Accept_Statement)
+                      or else Is_Secondary_Stack_Return_Object (Entity (Opnd)))
          then
             Opnd_Type := Get_Actual_Subtype (Opnd);
 
@@ -475,12 +483,11 @@ package body Sem_Ch5 is
       Mark_And_Set_Ghost_Assignment (N);
 
       if Has_Target_Names (N) then
+         pragma Assert (No (Current_Assignment));
          Current_Assignment := N;
          Expander_Mode_Save_And_Set (False);
          Save_Full_Analysis := Full_Analysis;
          Full_Analysis      := False;
-      else
-         Current_Assignment := Empty;
       end if;
 
       Analyze (Lhs);
@@ -678,6 +685,7 @@ package body Sem_Ch5 is
                Ent := Lhs;
                while Nkind (Ent) in N_Has_Entity
                  and then Present (Entity (Ent))
+                 and then Is_Object (Entity (Ent))
                  and then Present (Renamed_Object (Entity (Ent)))
                loop
                   Ent := Renamed_Object (Entity (Ent));
@@ -975,7 +983,91 @@ package body Sem_Ch5 is
       end if;
 
       if Is_Scalar_Type (T1) then
-         Apply_Scalar_Range_Check (Rhs, Etype (Lhs));
+         declare
+
+            function Omit_Range_Check_For_Streaming return Boolean;
+            --  Return True if this assignment statement is the expansion of
+            --  a Some_Scalar_Type'Read procedure call such that all conditions
+            --  of 13.3.2(35)'s "no check is made" rule are met.
+
+            ------------------------------------
+            -- Omit_Range_Check_For_Streaming --
+            ------------------------------------
+
+            function Omit_Range_Check_For_Streaming return Boolean is
+            begin
+               --  Have we got an implicitly generated assignment to a
+               --  component of a composite object? If not, return False.
+
+               if Comes_From_Source (N)
+                 or else Serious_Errors_Detected > 0
+                 or else Nkind (Lhs)
+                           not in N_Selected_Component | N_Indexed_Component
+               then
+                  return False;
+               end if;
+
+               declare
+                  Pref : constant Node_Id := Prefix (Lhs);
+               begin
+                  --  Are we in the implicitly-defined Read subprogram
+                  --  for a composite type, reading the value of a scalar
+                  --  component from the stream? If not, return False.
+
+                  if Nkind (Pref) /= N_Identifier
+                    or else not Is_TSS (Scope (Entity (Pref)), TSS_Stream_Read)
+                  then
+                     return False;
+                  end if;
+
+                  --  Return False if Default_Value or Default_Component_Value
+                  --  aspect applies.
+
+                  if Has_Default_Aspect (Etype (Lhs))
+                    or else Has_Default_Aspect (Etype (Pref))
+                  then
+                     return False;
+
+                  --  Are we assigning to a record component (as opposed to
+                  --  an array component)?
+
+                  elsif Nkind (Lhs) = N_Selected_Component then
+
+                     --  Are we assigning to a nondiscriminant component
+                     --  that lacks a default initial value expression?
+                     --  If so, return True.
+
+                     declare
+                        Comp_Id : constant Entity_Id :=
+                          Original_Record_Component
+                            (Entity (Selector_Name (Lhs)));
+                     begin
+                        if Ekind (Comp_Id) = E_Component
+                          and then Nkind (Parent (Comp_Id))
+                                     = N_Component_Declaration
+                          and then No (Expression (Parent (Comp_Id)))
+                        then
+                           return True;
+                        end if;
+                        return False;
+                     end;
+
+                  --  We are assigning to a component of an array
+                  --  (and we tested for both Default_Value and
+                  --  Default_Component_Value above), so return True.
+
+                  else
+                     pragma Assert (Nkind (Lhs) = N_Indexed_Component);
+                     return True;
+                  end if;
+               end;
+            end Omit_Range_Check_For_Streaming;
+
+         begin
+            if not Omit_Range_Check_For_Streaming then
+               Apply_Scalar_Range_Check (Rhs, Etype (Lhs));
+            end if;
+         end;
 
       --  For array types, verify that lengths match. If the right hand side
       --  is a function call that has been inlined, the assignment has been
@@ -1021,7 +1113,7 @@ package body Sem_Ch5 is
 
          --  Where the object is the same on both sides
 
-         and then Same_Object (Lhs, Original_Node (Rhs))
+         and then Same_Object (Lhs, Rhs)
 
          --  But exclude the case where the right side was an operation that
          --  got rewritten (e.g. JUNK + K, where K was known to be zero). We
@@ -1062,13 +1154,16 @@ package body Sem_Ch5 is
 
       Record_Elaboration_Scenario (N);
 
-      --  Set Referenced_As_LHS if appropriate. We only set this flag if the
-      --  assignment is a source assignment in the extended main source unit.
-      --  We are not interested in any reference information outside this
-      --  context, or in compiler generated assignment statements.
+      --  Set Referenced_As_LHS if appropriate. We are not interested in
+      --  compiler-generated assignment statements, nor in references outside
+      --  the extended main source unit. We check whether the Original_Node is
+      --  in the extended main source unit because in the case of a renaming of
+      --  a component of a packed array, the Lhs itself has a Sloc from the
+      --  place of the renaming.
 
       if Comes_From_Source (N)
-        and then In_Extended_Main_Source_Unit (Lhs)
+        and then (In_Extended_Main_Source_Unit (Lhs)
+          or else In_Extended_Main_Source_Unit (Original_Node (Lhs)))
       then
          Set_Referenced_Modified (Lhs, Out_Param => False);
       end if;
@@ -1108,24 +1203,22 @@ package body Sem_Ch5 is
                --  warnings when an assignment is rewritten as another
                --  assignment, and gets tied up with itself.
 
+               --  We also omit the warning if the RHS includes target names,
+               --  that is to say the Ada 2022 "@" that denotes an instance of
+               --  the LHS, which indicates that the current value is being
+               --  used. Note that this implicit reference to the entity on
+               --  the RHS is not treated as a source reference.
+
                --  There may have been a previous reference to a component of
                --  the variable, which in general removes the Last_Assignment
                --  field of the variable to indicate a relevant use of the
-               --  previous assignment. However, if the assignment is to a
-               --  subcomponent the reference may not have registered, because
-               --  it is not possible to determine whether the context is an
-               --  assignment. In those cases we generate a Deferred_Reference,
-               --  to be used at the end of compilation to generate the right
-               --  kind of reference, and we suppress a potential warning for
-               --  a useless assignment, which might be premature. This may
-               --  lose a warning in rare cases, but seems preferable to a
-               --  misleading warning.
+               --  previous assignment.
 
                if Warn_On_Modified_Unread
                  and then Is_Assignable (Ent)
                  and then Comes_From_Source (N)
                  and then In_Extended_Main_Source_Unit (Ent)
-                 and then not Has_Deferred_Reference (Ent)
+                 and then not Has_Target_Names (N)
                then
                   Warn_On_Useless_Assignment (Ent, N);
                end if;
@@ -1205,6 +1298,7 @@ package body Sem_Ch5 is
          if Has_Target_Names (N) then
             Expander_Mode_Restore;
             Full_Analysis := Save_Full_Analysis;
+            Current_Assignment := Empty;
          end if;
 
          pragma Assert (not Should_Transform_BIP_Assignment (Typ => T1));
@@ -1287,11 +1381,7 @@ package body Sem_Ch5 is
          --  Initialize unblocked exit count for statements of begin block
          --  plus one for each exception handler that is present.
 
-         Unblocked_Exit_Count := 1;
-
-         if Present (EH) then
-            Unblocked_Exit_Count := Unblocked_Exit_Count + List_Length (EH);
-         end if;
+         Unblocked_Exit_Count := 1 + List_Length (EH);
 
          --  If a label is present analyze it and mark it as referenced
 
@@ -1308,7 +1398,11 @@ package body Sem_Ch5 is
                Set_Identifier (N, Empty);
 
             else
-               Set_Ekind (Ent, E_Block);
+               if Ekind (Ent) = E_Label then
+                  Reinit_Field_To_Zero (Ent, F_Enclosing_Scope);
+               end if;
+
+               Mutate_Ekind (Ent, E_Block);
                Generate_Reference (Ent, N, ' ');
                Generate_Definition (Ent);
 
@@ -1397,6 +1491,9 @@ package body Sem_Ch5 is
       --  the case statement, and as a result it is not a good idea to output
       --  warning messages about unreachable code.
 
+      Is_General_Case_Statement : Boolean := False;
+      --  Set True (later) if type of case expression is not discrete
+
       procedure Non_Static_Choice_Error (Choice : Node_Id);
       --  Error routine invoked by the generic instantiation below when the
       --  case statement has a non static choice.
@@ -1438,6 +1535,12 @@ package body Sem_Ch5 is
          Ent     : Entity_Id;
 
       begin
+         if Is_General_Case_Statement then
+            return;
+            --  Processing deferred in this case; decls associated with
+            --  pattern match bindings don't exist yet.
+         end if;
+
          Unblocked_Exit_Count := Unblocked_Exit_Count + 1;
          Statements_Analyzed := True;
 
@@ -1456,7 +1559,7 @@ package body Sem_Ch5 is
          if Is_Entity_Name (Exp) then
             Ent := Entity (Exp);
 
-            if Is_Assignable (Ent) then
+            if Is_Object (Ent) then
                if List_Length (Choices) = 1
                  and then Nkind (First (Choices)) in N_Subexpr
                  and then Compile_Time_Known_Value (First (Choices))
@@ -1475,7 +1578,7 @@ package body Sem_Ch5 is
             end if;
          end if;
 
-         --  Case where expression is not an entity name of a variable
+         --  Case where expression is not an entity name of an object
 
          Analyze_Statements (Statements (Alternative));
       end Process_Statements;
@@ -1509,9 +1612,37 @@ package body Sem_Ch5 is
         and then Present (Full_View (Etype (Exp)))
         and then Is_Discrete_Type (Full_View (Etype (Exp)))
       then
-         Resolve (Exp, Etype (Exp));
+         Resolve (Exp);
          Exp_Type := Full_View (Etype (Exp));
 
+      --  For Ada, overloading might be ok because subsequently filtering
+      --  out non-discretes may resolve the ambiguity.
+      --  But GNAT extensions allow casing on non-discretes.
+
+      elsif Core_Extensions_Allowed and then Is_Overloaded (Exp) then
+
+         --  It would be nice if we could generate all the right error
+         --  messages by calling "Resolve (Exp, Any_Type);" in the
+         --  same way that they are generated a few lines below by the
+         --  call "Analyze_And_Resolve (Exp, Any_Discrete);".
+         --  Unfortunately, Any_Type and Any_Discrete are not treated
+         --  consistently (specifically, by Sem_Type.Covers), so that
+         --  doesn't work.
+
+         Error_Msg_N
+           ("selecting expression of general case statement is ambiguous",
+            Exp);
+         return;
+
+      --  Check for a GNAT-extension "general" case statement (i.e., one where
+      --  the type of the selecting expression is not discrete).
+
+      elsif Core_Extensions_Allowed
+         and then not Is_Discrete_Type (Etype (Exp))
+      then
+         Resolve (Exp, Etype (Exp));
+         Exp_Type := Etype (Exp);
+         Is_General_Case_Statement := True;
       else
          Analyze_And_Resolve (Exp, Any_Discrete);
          Exp_Type := Etype (Exp);
@@ -1543,6 +1674,13 @@ package body Sem_Ch5 is
          Error_Msg_N
            ("(Ada 83) case expression cannot be of a generic type", Exp);
          return;
+
+      elsif not Core_Extensions_Allowed
+        and then not Is_Discrete_Type (Exp_Type)
+      then
+         Error_Msg_N
+           ("expression in case statement must be of a discrete_Type", Exp);
+         return;
       end if;
 
       --  If the case expression is a formal object of mode in out, then treat
@@ -1563,6 +1701,21 @@ package body Sem_Ch5 is
 
       Analyze_Choices (Alternatives (N), Exp_Type);
       Check_Choices (N, Alternatives (N), Exp_Type, Others_Present);
+
+      if Is_General_Case_Statement then
+         --  Work normally done in Process_Statements was deferred; do that
+         --  deferred work now that Check_Choices has had a chance to create
+         --  any needed pattern-match-binding declarations.
+         declare
+            Alt : Node_Id := First (Alternatives (N));
+         begin
+            while Present (Alt) loop
+               Unblocked_Exit_Count := Unblocked_Exit_Count + 1;
+               Analyze_Statements (Statements (Alt));
+               Next (Alt);
+            end loop;
+         end;
+      end if;
 
       if Exp_Type = Universal_Integer and then not Others_Present then
          Error_Msg_N ("case on universal integer requires OTHERS choice", Exp);
@@ -1758,6 +1911,18 @@ package body Sem_Ch5 is
       raise Program_Error;
    end Analyze_Goto_Statement;
 
+   ---------------------------------
+   -- Analyze_Goto_When_Statement --
+   ---------------------------------
+
+   procedure Analyze_Goto_When_Statement (N : Node_Id) is
+   begin
+      --  Verify the condition is a Boolean expression
+
+      Analyze_And_Resolve (Condition (N), Any_Boolean);
+      Check_Unset_Reference (Condition (N));
+   end Analyze_Goto_When_Statement;
+
    --------------------------
    -- Analyze_If_Statement --
    --------------------------
@@ -1855,13 +2020,11 @@ package body Sem_Ch5 is
 
       --  Now to analyze the elsif parts if any are present
 
-      if Present (Elsif_Parts (N)) then
-         E := First (Elsif_Parts (N));
-         while Present (E) loop
-            Analyze_Cond_Then (E);
-            Next (E);
-         end loop;
-      end if;
+      E := First (Elsif_Parts (N));
+      while Present (E) loop
+         Analyze_Cond_Then (E);
+         Next (E);
+      end loop;
 
       if Present (Else_Statements (N)) then
          Analyze_Statements (Else_Statements (N));
@@ -1890,13 +2053,11 @@ package body Sem_Ch5 is
          if Is_True (Expr_Value (Condition (N))) then
             Remove_Warning_Messages (Else_Statements (N));
 
-            if Present (Elsif_Parts (N)) then
-               E := First (Elsif_Parts (N));
-               while Present (E) loop
-                  Remove_Warning_Messages (Then_Statements (E));
-                  Next (E);
-               end loop;
-            end if;
+            E := First (Elsif_Parts (N));
+            while Present (E) loop
+               Remove_Warning_Messages (Then_Statements (E));
+               Next (E);
+            end loop;
 
          else
             Remove_Warning_Messages (Then_Statements (N));
@@ -1948,16 +2109,20 @@ package body Sem_Ch5 is
    --  An implicit label declaration is generated in the innermost enclosing
    --  declarative part. This is done for labels, and block and loop names.
 
-   --  Note: any changes in this routine may need to be reflected in
-   --  Analyze_Label_Entity.
-
    procedure Analyze_Implicit_Label_Declaration (N : Node_Id) is
       Id : constant Node_Id := Defining_Identifier (N);
    begin
       Enter_Name          (Id);
-      Set_Ekind           (Id, E_Label);
+      Mutate_Ekind        (Id, E_Label);
       Set_Etype           (Id, Standard_Void_Type);
       Set_Enclosing_Scope (Id, Current_Scope);
+
+      --  A label declared within a Ghost region becomes Ghost (SPARK RM
+      --  6.9(2)).
+
+      if Ghost_Mode > None then
+         Set_Is_Ghost_Entity (Id);
+      end if;
    end Analyze_Implicit_Label_Declaration;
 
    ------------------------------
@@ -2011,9 +2176,11 @@ package body Sem_Ch5 is
       --  indicator, verify that the container type has an Iterate aspect that
       --  implements the reversible iterator interface.
 
-      procedure Check_Subtype_Indication (Comp_Type : Entity_Id);
+      procedure Check_Subtype_Definition (Comp_Type : Entity_Id);
       --  If a subtype indication is present, verify that it is consistent
       --  with the component type of the array or container name.
+      --  In Ada 2022, the subtype indication may be an access definition,
+      --  if the array or container has elements of an anonymous access type.
 
       function Get_Cursor_Type (Typ : Entity_Id) return Entity_Id;
       --  For containers with Iterator and related aspects, the cursor is
@@ -2030,38 +2197,59 @@ package body Sem_Ch5 is
             if Is_Array_Type (Typ)
               or else Is_Reversible_Iterator (Typ)
               or else
-                (Present (Find_Aspect (Typ, Aspect_Iterable))
+                (Has_Aspect (Typ, Aspect_Iterable)
                   and then
                     Present
                       (Get_Iterable_Type_Primitive (Typ, Name_Previous)))
             then
                null;
             else
-               Error_Msg_NE
-                 ("container type does not support reverse iteration", N, Typ);
+               Error_Msg_N
+                 ("container type does not support reverse iteration", N);
             end if;
          end if;
       end Check_Reverse_Iteration;
 
       -------------------------------
-      --  Check_Subtype_Indication --
+      --  Check_Subtype_Definition --
       -------------------------------
 
-      procedure Check_Subtype_Indication (Comp_Type : Entity_Id) is
+      procedure Check_Subtype_Definition (Comp_Type : Entity_Id) is
       begin
-         if Present (Subt)
-           and then (not Covers (Base_Type ((Bas)), Comp_Type)
-                      or else not Subtypes_Statically_Match (Bas, Comp_Type))
+         if No (Subt) then
+            return;
+         end if;
+
+         if Is_Anonymous_Access_Type (Entity (Subt)) then
+            if not Is_Anonymous_Access_Type (Comp_Type) then
+               Error_Msg_NE
+                 ("component type& is not an anonymous access",
+                  Subt, Comp_Type);
+
+            elsif not Conforming_Types
+                (Designated_Type (Entity (Subt)),
+                 Designated_Type (Comp_Type),
+                 Fully_Conformant)
+            then
+               Error_Msg_NE
+                 ("subtype indication does not match component type&",
+                  Subt, Comp_Type);
+            end if;
+
+         elsif not Covers (Base_Type (Bas), Comp_Type)
+           or else not Subtypes_Statically_Match (Bas, Comp_Type)
          then
             if Is_Array_Type (Typ) then
-               Error_Msg_N
-                 ("subtype indication does not match component type", Subt);
+               Error_Msg_NE
+                 ("subtype indication does not match component type&",
+                  Subt, Comp_Type);
             else
-               Error_Msg_N
-                 ("subtype indication does not match element type", Subt);
+               Error_Msg_NE
+                 ("subtype indication does not match element type&",
+                  Subt, Comp_Type);
             end if;
          end if;
-      end Check_Subtype_Indication;
+      end Check_Subtype_Definition;
 
       ---------------------
       -- Get_Cursor_Type --
@@ -2119,8 +2307,41 @@ package body Sem_Ch5 is
                           Defining_Identifier => S,
                           Subtype_Indication  => New_Copy_Tree (Subt));
             begin
+               Insert_Action (N, Decl);
+               Analyze (Decl);
+               Rewrite (Subt, New_Occurrence_Of (S, Sloc (Subt)));
+            end;
+
+         --  Ada 2022: the subtype definition may be for an anonymous
+         --  access type.
+
+         elsif Nkind (Subt) = N_Access_Definition then
+            declare
+               S    : constant Entity_Id := Make_Temporary (Sloc (Subt), 'S');
+               Decl : Node_Id;
+            begin
+               if Present (Subtype_Mark (Subt)) then
+                  Decl :=
+                    Make_Full_Type_Declaration (Loc,
+                      Defining_Identifier => S,
+                      Type_Definition     =>
+                        Make_Access_To_Object_Definition (Loc,
+                          All_Present        => True,
+                          Subtype_Indication =>
+                            New_Copy_Tree (Subtype_Mark (Subt))));
+
+               else
+                  Decl :=
+                    Make_Full_Type_Declaration (Loc,
+                      Defining_Identifier => S,
+                      Type_Definition     =>
+                        New_Copy_Tree
+                          (Access_To_Subprogram_Definition (Subt)));
+               end if;
+
                Insert_Before (Parent (Parent (N)), Decl);
                Analyze (Decl);
+               Freeze_Before (First (Statements (Parent (Parent (N)))), S);
                Rewrite (Subt, New_Occurrence_Of (S, Sloc (Subt)));
             end;
          else
@@ -2149,7 +2370,7 @@ package body Sem_Ch5 is
       --  Set the kind of the loop variable, which is not visible within the
       --  iterator name.
 
-      Set_Ekind (Def_Id, E_Variable);
+      Mutate_Ekind (Def_Id, E_Variable);
 
       --  Provide a link between the iterator variable and the container, for
       --  subsequent use in cross-reference and modification information.
@@ -2213,13 +2434,9 @@ package body Sem_Ch5 is
 
       if not Is_Entity_Name (Iter_Name)
 
-        --  When the context is a quantified expression, the renaming
-        --  declaration is delayed until the expansion phase if we are
-        --  doing expansion.
+        --  Do not perform this expansion in preanalysis
 
-        and then (Nkind (Parent (N)) /= N_Quantified_Expression
-                   or else (Operating_Mode = Check_Semantics
-                            and then not GNATprove_Mode))
+        and then Full_Analysis
 
         --  Do not perform this expansion when expansion is disabled, where the
         --  temporary may hide the transformation of a selected component into
@@ -2311,6 +2528,7 @@ package body Sem_Ch5 is
                 Subtype_Mark        => New_Occurrence_Of (Typ, Loc),
                 Name                =>
                   New_Copy_Tree (Iter_Name, New_Sloc => Loc));
+            Set_Comes_From_Iterator (Decl);
 
             Insert_Actions (Parent (Parent (N)), New_List (Decl));
             Rewrite (Name (N), New_Occurrence_Of (Id, Loc));
@@ -2360,7 +2578,7 @@ package body Sem_Ch5 is
          --  Domain of iteration is not overloaded
 
          else
-            Resolve (Iter_Name, Etype (Iter_Name));
+            Resolve (Iter_Name);
          end if;
 
          if not Of_Present (N) then
@@ -2400,7 +2618,7 @@ package body Sem_Ch5 is
                   & "component of a mutable object", N);
             end if;
 
-            Check_Subtype_Indication (Component_Type (Typ));
+            Check_Subtype_Definition (Component_Type (Typ));
 
          --  Here we have a missing Range attribute
 
@@ -2418,7 +2636,7 @@ package body Sem_Ch5 is
 
             --  Prevent cascaded errors
 
-            Set_Ekind (Def_Id, E_Loop_Parameter);
+            Mutate_Ekind (Def_Id, E_Loop_Parameter);
             Set_Etype (Def_Id, Etype (First_Index (Typ)));
          end if;
 
@@ -2430,7 +2648,7 @@ package body Sem_Ch5 is
       --  Iteration over a container
 
       else
-         Set_Ekind (Def_Id, E_Loop_Parameter);
+         Mutate_Ekind (Def_Id, E_Loop_Parameter);
          Error_Msg_Ada_2012_Feature ("container iterator", Sloc (N));
 
          --  OF present
@@ -2450,7 +2668,7 @@ package body Sem_Ch5 is
                   end if;
                end;
 
-               Check_Subtype_Indication (Etype (Def_Id));
+               Check_Subtype_Definition (Etype (Def_Id));
 
             --  For a predefined container, the type of the loop variable is
             --  the Iterator_Element aspect of the container type.
@@ -2477,13 +2695,13 @@ package body Sem_Ch5 is
                      Cursor_Type := Get_Cursor_Type (Typ);
                      pragma Assert (Present (Cursor_Type));
 
-                     Check_Subtype_Indication (Etype (Def_Id));
+                     Check_Subtype_Definition (Etype (Def_Id));
 
                      --  If the container has a variable indexing aspect, the
                      --  element is a variable and is modifiable in the loop.
 
                      if Has_Aspect (Typ, Aspect_Variable_Indexing) then
-                        Set_Ekind (Def_Id, E_Variable);
+                        Mutate_Ekind (Def_Id, E_Variable);
                      end if;
 
                      --  If the container is a constant, iterating over it
@@ -2531,9 +2749,21 @@ package body Sem_Ch5 is
                end;
             end if;
 
-         --  IN iterator, domain is a range, or a call to Iterate function
+         --  IN iterator, domain is a range, a call to Iterate function,
+         --  or an object/actual parameter of an iterator type.
 
          else
+            --  If the type of the name is class-wide and its root type is a
+            --  derived type, the primitive operations (First, Next, etc.) are
+            --  those inherited by its specific type. Calls to these primitives
+            --  will be dispatching.
+
+            if Is_Class_Wide_Type (Typ)
+              and then Is_Derived_Type (Etype (Typ))
+            then
+               Typ := Etype (Typ);
+            end if;
+
             --  For an iteration of the form IN, the name must denote an
             --  iterator, typically the result of a call to Iterate. Give a
             --  useful error message when the name is a container by itself.
@@ -2648,18 +2878,6 @@ package body Sem_Ch5 is
       Kill_Current_Values;
    end Analyze_Label;
 
-   --------------------------
-   -- Analyze_Label_Entity --
-   --------------------------
-
-   procedure Analyze_Label_Entity (E : Entity_Id) is
-   begin
-      Set_Ekind           (E, E_Label);
-      Set_Etype           (E, Standard_Void_Type);
-      Set_Enclosing_Scope (E, Current_Scope);
-      Set_Reachable       (E, True);
-   end Analyze_Label_Entity;
-
    ------------------------------------------
    -- Analyze_Loop_Parameter_Specification --
    ------------------------------------------
@@ -2676,8 +2894,8 @@ package body Sem_Ch5 is
       procedure Check_Predicate_Use (T : Entity_Id);
       --  Diagnose Attempt to iterate through non-static predicate. Note that
       --  a type with inherited predicates may have both static and dynamic
-      --  forms. In this case it is not sufficent to check the static predicate
-      --  function only, look for a dynamic predicate aspect as well.
+      --  forms. In this case it is not sufficient to check the static
+      --  predicate function only, look for a dynamic predicate aspect as well.
 
       procedure Process_Bounds (R : Node_Id);
       --  If the iteration is given by a range, create temporaries and
@@ -2804,6 +3022,10 @@ package body Sem_Ch5 is
                     N_Integer_Literal | N_Character_Literal
               or else Is_Entity_Name (Analyzed_Bound)
             then
+               Analyze_And_Resolve (Original_Bound, Typ);
+               return Original_Bound;
+
+            elsif Inside_Class_Condition_Preanalysis then
                Analyze_And_Resolve (Original_Bound, Typ);
                return Original_Bound;
             end if;
@@ -3040,7 +3262,7 @@ package body Sem_Ch5 is
                --  subsequent analysis of the condition in a quantified
                --  expression.
 
-               Set_Ekind (Id, E_Loop_Parameter);
+               Mutate_Ekind (Id, E_Loop_Parameter);
                return;
             end;
 
@@ -3103,7 +3325,7 @@ package body Sem_Ch5 is
          Make_Index (DS, N);
       end if;
 
-      Set_Ekind (Id, E_Loop_Parameter);
+      Mutate_Ekind (Id, E_Loop_Parameter);
 
       --  A quantified expression which appears in a pre- or post-condition may
       --  be analyzed multiple times. The analysis of the range creates several
@@ -3111,11 +3333,17 @@ package body Sem_Ch5 is
       --  or post-condition has been expanded. Update the type of the loop
       --  variable to reflect the proper itype at each stage of analysis.
 
+      --  Loop_Nod might not be present when we are preanalyzing a class-wide
+      --  pre/postcondition since preanalysis occurs in a place unrelated to
+      --  the actual code and the quantified expression may be the outermost
+      --  expression of the class-wide condition.
+
       if No (Etype (Id))
         or else Etype (Id) = Any_Type
         or else
           (Present (Etype (Id))
             and then Is_Itype (Etype (Id))
+            and then Present (Loop_Nod)
             and then Nkind (Parent (Loop_Nod)) = N_Expression_With_Actions
             and then Nkind (Original_Node (Parent (Loop_Nod))) =
                                                    N_Quantified_Expression)
@@ -3138,9 +3366,7 @@ package body Sem_Ch5 is
          declare
             Flist : constant List_Id := Freeze_Entity (Id, N);
          begin
-            if Is_Non_Empty_List (Flist) then
-               Insert_Actions (N, Flist);
-            end if;
+            Insert_Actions (N, Flist);
          end;
       end if;
 
@@ -3298,6 +3524,32 @@ package body Sem_Ch5 is
                        ("\loop executes zero times or raises "
                         & "Constraint_Error??", Bad_Bound);
                   end if;
+
+                  if Compile_Time_Compare (LLo, LHi, Assume_Valid => False)
+                    = GT
+                  then
+                     Error_Msg_N ("??constrained range is null",
+                       Constraint (DS));
+
+                     --  Additional constraints on modular types can be
+                     --  confusing, add more information.
+
+                     if Ekind (Etype (DS)) = E_Modular_Integer_Subtype then
+                        Error_Msg_Uint_1 := Intval (LLo);
+                        Error_Msg_Uint_2 := Intval (LHi);
+                        Error_Msg_NE ("\iterator has modular type &, " &
+                          "so the loop has bounds ^ ..^",
+                          Constraint (DS),
+                          Subtype_Mark (DS));
+                     end if;
+
+                     Set_Is_Null_Loop (Loop_Nod);
+                     Null_Range := True;
+
+                     --  Suppress other warnings about the body of the loop, as
+                     --  it will never execute.
+                     Set_Suppress_Loop_Warnings (Loop_Nod);
+                  end if;
                end;
             end if;
 
@@ -3409,6 +3661,7 @@ package body Sem_Ch5 is
          begin
             return
               Present (Def_Iter)
+                and then Present (Etype (Def_Iter))
                 and then Requires_Transient_Scope (Etype (Def_Iter));
          end Has_Sec_Stack_Default_Iterator;
 
@@ -3731,7 +3984,7 @@ package body Sem_Ch5 is
               and then Ekind (Homonym (Ent)) = E_Label
             then
                Set_Entity (Id, Ent);
-               Set_Ekind (Ent, E_Loop);
+               Mutate_Ekind (Ent, E_Loop);
             end if;
 
          else
@@ -3745,7 +3998,9 @@ package body Sem_Ch5 is
             --  parser for generic units.
 
             if Ekind (Ent) = E_Label then
-               Set_Ekind (Ent, E_Loop);
+               Reinit_Field_To_Zero (Ent, F_Enclosing_Scope);
+               Reinit_Field_To_Zero (Ent, F_Reachable);
+               Mutate_Ekind (Ent, E_Loop);
 
                if Nkind (Parent (Ent)) = N_Implicit_Label_Declaration then
                   Set_Label_Construct (Parent (Ent), N);
@@ -3783,6 +4038,12 @@ package body Sem_Ch5 is
       --    * The loop is using a parameter specification where the discrete
       --      range requires the secondary stack. In this case the loop is
       --      wrapped within a block in order to manage the secondary stack.
+
+      --  ??? This overlooks finalization: the loop may leave the secondary
+      --  stack untouched, but its iterator or discrete range may need
+      --  finalization, in which case the block is also required. Therefore
+      --  the criterion must be based on Sem_Util.Requires_Transient_Scope,
+      --  which happens to be what is currently implemented.
 
       if Present (Iter) then
          declare
@@ -3909,7 +4170,7 @@ package body Sem_Ch5 is
                if not Of_Present (I_Spec)
                  or else not Is_Variable (Name (I_Spec))
                then
-                  Set_Ekind (Id, E_Loop_Parameter);
+                  Mutate_Ekind (Id, E_Loop_Parameter);
                end if;
             end;
 
@@ -3984,11 +4245,67 @@ package body Sem_Ch5 is
    -------------------------
 
    procedure Analyze_Target_Name (N : Node_Id) is
+      procedure Report_Error;
+      --  Complain about illegal use of target_name and rewrite it into unknown
+      --  identifier.
+
+      ------------------
+      -- Report_Error --
+      ------------------
+
+      procedure Report_Error is
+      begin
+         Error_Msg_N
+           ("must appear in the right-hand side of an assignment statement",
+             N);
+         Rewrite (N, New_Occurrence_Of (Any_Id, Sloc (N)));
+      end Report_Error;
+
+   --  Start of processing for Analyze_Target_Name
+
    begin
       --  A target name has the type of the left-hand side of the enclosing
       --  assignment.
 
-      Set_Etype (N, Etype (Name (Current_Assignment)));
+      --  First, verify that the context is the right-hand side of an
+      --  assignment statement.
+
+      if No (Current_Assignment) then
+         Report_Error;
+         return;
+      end if;
+
+      declare
+         Current : Node_Id := N;
+         Context : Node_Id := Parent (N);
+      begin
+         while Present (Context) loop
+
+            --  Check if target_name appears in the expression of the enclosing
+            --  assignment.
+
+            if Nkind (Context) = N_Assignment_Statement then
+               if Current = Expression (Context) then
+                  pragma Assert (Context = Current_Assignment);
+                  Set_Etype (N, Etype (Name (Current_Assignment)));
+               else
+                  Report_Error;
+               end if;
+               return;
+
+            --  Prevent the search from going too far
+
+            elsif Is_Body_Or_Package_Declaration (Context) then
+               Report_Error;
+               return;
+            end if;
+
+            Current := Context;
+            Context := Parent (Context);
+         end loop;
+
+         Report_Error;
+      end;
    end Analyze_Target_Name;
 
    ------------------------
@@ -4060,7 +4377,9 @@ package body Sem_Ch5 is
 
       S := First (L);
       while Present (S) loop
-         if Nkind (S) = N_Label then
+         if Nkind (S) = N_Label
+           and then Ekind (Entity (Identifier (S))) = E_Label
+         then
             Set_Reachable (Entity (Identifier (S)), False);
          end if;
 
@@ -4073,150 +4392,220 @@ package body Sem_Ch5 is
    ----------------------------
 
    procedure Check_Unreachable_Code (N : Node_Id) is
+
+      function Is_Simple_Case (N : Node_Id) return Boolean;
+      --  N is the condition of an if statement. True if N is simple enough
+      --  that we should not set Unblocked_Exit_Count in the special case
+      --  below.
+
+      --------------------
+      -- Is_Simple_Case --
+      --------------------
+
+      function Is_Simple_Case (N : Node_Id) return Boolean is
+      begin
+         return
+            Is_Trivial_Boolean (N)
+           or else
+            (Comes_From_Source (N)
+               and then Is_Static_Expression (N)
+               and then Nkind (N) in N_Identifier | N_Expanded_Name
+               and then Ekind (Entity (N)) = E_Constant)
+           or else
+            (not In_Instance
+               and then Nkind (Original_Node (N)) = N_Op_Not
+               and then Is_Simple_Case (Right_Opnd (Original_Node (N))));
+      end Is_Simple_Case;
+
       Error_Node : Node_Id;
+      Nxt        : Node_Id;
       P          : Node_Id;
 
    begin
-      if Is_List_Member (N) and then Comes_From_Source (N) then
-         declare
-            Nxt : Node_Id;
+      if Comes_From_Source (N) then
+         Nxt := Original_Node (Next (N));
 
-         begin
-            Nxt := Original_Node (Next (N));
+         --  Skip past pragmas
 
-            --  Skip past pragmas
+         while Nkind (Nxt) = N_Pragma loop
+            Nxt := Original_Node (Next (Nxt));
+         end loop;
 
-            while Nkind (Nxt) = N_Pragma loop
-               Nxt := Original_Node (Next (Nxt));
-            end loop;
+         --  If a label follows us, then we never have dead code, since someone
+         --  could branch to the label, so we just ignore it.
 
-            --  If a label follows us, then we never have dead code, since
-            --  someone could branch to the label, so we just ignore it.
+         if Nkind (Nxt) = N_Label then
+            return;
 
-            if Nkind (Nxt) = N_Label then
-               return;
+         --  Otherwise see if we have a real statement following us
 
-            --  Otherwise see if we have a real statement following us
+         elsif Comes_From_Source (Nxt)
+           and then Is_Statement (Nxt)
+         then
+            --  Special very annoying exception. Ada RM 6.5(5) annoyingly
+            --  requires functions to have at least one return statement, so
+            --  don't complain about a simple return that follows a raise or a
+            --  call to procedure with No_Return.
 
-            elsif Present (Nxt)
-              and then Comes_From_Source (Nxt)
-              and then Is_Statement (Nxt)
+            if not (Present (Current_Subprogram)
+                    and then Ekind (Current_Subprogram) = E_Function
+                    and then (Nkind (N) in N_Raise_Statement
+                                or else
+                              (Nkind (N) = N_Procedure_Call_Statement
+                               and then Is_Entity_Name (Name (N))
+                               and then Present (Entity (Name (N)))
+                               and then No_Return (Entity (Name (N)))))
+                    and then Nkind (Nxt) = N_Simple_Return_Statement)
             then
-               --  Special very annoying exception. If we have a return that
-               --  follows a raise, then we allow it without a warning, since
-               --  the Ada RM annoyingly requires a useless return here.
+               --  The rather strange shenanigans with the warning message
+               --  here reflects the fact that Kill_Dead_Code is very good at
+               --  removing warnings in deleted code, and this is one warning
+               --  we would prefer NOT to have removed.
 
-               if Nkind (Original_Node (N)) /= N_Raise_Statement
-                 or else Nkind (Nxt) /= N_Simple_Return_Statement
-               then
-                  --  The rather strange shenanigans with the warning message
-                  --  here reflects the fact that Kill_Dead_Code is very good
-                  --  at removing warnings in deleted code, and this is one
-                  --  warning we would prefer NOT to have removed.
+               Error_Node := Nxt;
 
-                  Error_Node := Nxt;
+               --  If we have unreachable code, analyze and remove the
+               --  unreachable code, since it is useless and we don't want
+               --  to generate junk warnings.
 
-                  --  If we have unreachable code, analyze and remove the
-                  --  unreachable code, since it is useless and we don't
-                  --  want to generate junk warnings.
+               --  We skip this step if we are not in code generation mode.
 
-                  --  We skip this step if we are not in code generation mode
-                  --  or CodePeer mode.
+               --  This is the one case where we remove dead code in the
+               --  semantics as opposed to the expander, and we do not want
+               --  to remove code if we are not in code generation mode, since
+               --  this messes up the tree or loses useful information for
+               --  analysis tools such as CodePeer.
 
-                  --  This is the one case where we remove dead code in the
-                  --  semantics as opposed to the expander, and we do not want
-                  --  to remove code if we are not in code generation mode,
-                  --  since this messes up the tree or loses useful information
-                  --  for CodePeer.
+               --  Note that one might react by moving the whole circuit to
+               --  exp_ch5, but then we lose the warning in -gnatc mode.
 
-                  --  Note that one might react by moving the whole circuit to
-                  --  exp_ch5, but then we lose the warning in -gnatc mode.
-
-                  if Operating_Mode = Generate_Code
-                    and then not CodePeer_Mode
-                  then
-                     loop
-                        Nxt := Next (N);
-
+               if Operating_Mode = Generate_Code then
+                  loop
+                     declare
+                        Del : constant Node_Id := Next (N);
+                        --  Node to be possibly deleted
+                     begin
                         --  Quit deleting when we have nothing more to delete
                         --  or if we hit a label (since someone could transfer
                         --  control to a label, so we should not delete it).
 
-                        exit when No (Nxt) or else Nkind (Nxt) = N_Label;
+                        exit when No (Del) or else Nkind (Del) = N_Label;
 
                         --  Statement/declaration is to be deleted
 
-                        Analyze (Nxt);
-                        Remove (Nxt);
-                        Kill_Dead_Code (Nxt);
-                     end loop;
-                  end if;
+                        Analyze (Del);
+                        Kill_Dead_Code (Del);
+                        Remove (Del);
+                     end;
+                  end loop;
 
-                  Error_Msg
-                    ("??unreachable code!", Sloc (Error_Node), Error_Node);
+                  --  If this is a function, we add "raise Program_Error;",
+                  --  because otherwise, we will get incorrect warnings about
+                  --  falling off the end of the function.
+
+                  declare
+                     Subp : constant Entity_Id := Current_Subprogram;
+                  begin
+                     if Present (Subp) and then Ekind (Subp) = E_Function then
+                        Insert_After_And_Analyze (N,
+                          Make_Raise_Program_Error (Sloc (Error_Node),
+                            Reason => PE_Missing_Return));
+                     end if;
+                  end;
+
                end if;
 
-            --  If the unconditional transfer of control instruction is the
-            --  last statement of a sequence, then see if our parent is one of
-            --  the constructs for which we count unblocked exits, and if so,
-            --  adjust the count.
+               --  Suppress the warning in instances, because a statement can
+               --  be unreachable in some instances but not others.
 
-            else
-               P := Parent (N);
+               if not In_Instance then
+                  Error_Msg_N ("??unreachable code!", Error_Node);
+               end if;
+            end if;
 
-               --  Statements in THEN part or ELSE part of IF statement
+         --  If the unconditional transfer of control instruction is the
+         --  last statement of a sequence, then see if our parent is one of
+         --  the constructs for which we count unblocked exits, and if so,
+         --  adjust the count.
 
-               if Nkind (P) = N_If_Statement then
-                  null;
+         else
+            P := Parent (N);
 
-               --  Statements in ELSIF part of an IF statement
+            --  Statements in THEN part or ELSE part of IF statement
 
-               elsif Nkind (P) = N_Elsif_Part then
-                  P := Parent (P);
-                  pragma Assert (Nkind (P) = N_If_Statement);
+            if Nkind (P) = N_If_Statement then
+               null;
 
-               --  Statements in CASE statement alternative
+            --  Statements in ELSIF part of an IF statement
 
-               elsif Nkind (P) = N_Case_Statement_Alternative then
-                  P := Parent (P);
-                  pragma Assert (Nkind (P) = N_Case_Statement);
+            elsif Nkind (P) = N_Elsif_Part then
+               P := Parent (P);
+               pragma Assert (Nkind (P) = N_If_Statement);
 
-               --  Statements in body of block
+            --  Statements in CASE statement alternative
 
-               elsif Nkind (P) = N_Handled_Sequence_Of_Statements
-                 and then Nkind (Parent (P)) = N_Block_Statement
+            elsif Nkind (P) = N_Case_Statement_Alternative then
+               P := Parent (P);
+               pragma Assert (Nkind (P) = N_Case_Statement);
+
+            --  Statements in body of block
+
+            elsif Nkind (P) = N_Handled_Sequence_Of_Statements
+              and then Nkind (Parent (P)) = N_Block_Statement
+            then
+               --  The original loop is now placed inside a block statement
+               --  due to the expansion of attribute 'Loop_Entry. Return as
+               --  this is not a "real" block for the purposes of exit
+               --  counting.
+
+               if Nkind (N) = N_Loop_Statement
+                 and then Subject_To_Loop_Entry_Attributes (N)
                then
-                  --  The original loop is now placed inside a block statement
-                  --  due to the expansion of attribute 'Loop_Entry. Return as
-                  --  this is not a "real" block for the purposes of exit
-                  --  counting.
-
-                  if Nkind (N) = N_Loop_Statement
-                    and then Subject_To_Loop_Entry_Attributes (N)
-                  then
-                     return;
-                  end if;
-
-               --  Statements in exception handler in a block
-
-               elsif Nkind (P) = N_Exception_Handler
-                 and then Nkind (Parent (P)) = N_Handled_Sequence_Of_Statements
-                 and then Nkind (Parent (Parent (P))) = N_Block_Statement
-               then
-                  null;
-
-               --  None of these cases, so return
-
-               else
                   return;
                end if;
 
-               --  This was one of the cases we are looking for (i.e. the
-               --  parent construct was IF, CASE or block) so decrement count.
+            --  Statements in exception handler in a block
 
+            elsif Nkind (P) = N_Exception_Handler
+              and then Nkind (Parent (P)) = N_Handled_Sequence_Of_Statements
+              and then Nkind (Parent (Parent (P))) = N_Block_Statement
+            then
+               null;
+
+            --  None of these cases, so return
+
+            else
+               return;
+            end if;
+
+            --  This was one of the cases we are looking for (i.e. the parent
+            --  construct was IF, CASE or block). In most cases, we simply
+            --  decrement the count. However, if the parent is something like:
+            --
+            --     if cond then
+            --        raise ...; -- or some other jump
+            --     end if;
+            --
+            --  where cond is an expression that is known-true at compile time,
+            --  we can treat that as just the jump -- i.e. anything following
+            --  the if statement is unreachable. We don't do this for simple
+            --  cases like "if True" or "if Debug_Flag", because that causes
+            --  too many warnings.
+
+            if Nkind (P) = N_If_Statement
+              and then Present (Then_Statements (P))
+              and then No (Elsif_Parts (P))
+              and then No (Else_Statements (P))
+              and then Is_OK_Static_Expression (Condition (P))
+              and then Is_True (Expr_Value (Condition (P)))
+              and then not Is_Simple_Case (Condition (P))
+            then
+               pragma Assert (Unblocked_Exit_Count = 2);
+               Unblocked_Exit_Count := 0;
+            else
                Unblocked_Exit_Count := Unblocked_Exit_Count - 1;
             end if;
-         end;
+         end if;
       end if;
    end Check_Unreachable_Code;
 
@@ -4337,8 +4726,8 @@ package body Sem_Ch5 is
                         Error_Msg_N
                           ("ambiguous bounds in range of iteration", R_Copy);
                         Error_Msg_N ("\possible interpretations:", R_Copy);
-                        Error_Msg_NE ("\\} ", R_Copy, Found);
-                        Error_Msg_NE ("\\} ", R_Copy, It.Typ);
+                        Error_Msg_NE ("\\}", R_Copy, Found);
+                        Error_Msg_NE ("\\}", R_Copy, It.Typ);
                         exit;
                      end if;
                   end if;

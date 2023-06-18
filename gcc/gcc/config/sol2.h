@@ -1,6 +1,6 @@
 /* Operating system specific defines to be used when targeting GCC for any
    Solaris 2 system.
-   Copyright (C) 2002-2021 Free Software Foundation, Inc.
+   Copyright (C) 2002-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -161,7 +161,6 @@ along with GCC; see the file COPYING3.  If not see
 #undef LIB_SPEC
 #define LIB_SPEC \
   "%{!symbolic:\
-     %{pthreads|pthread:-lpthread} \
      %{p|pg:-ldl} -lc}"
 
 #ifndef CROSS_DIRECTORY_STRUCTURE
@@ -295,7 +294,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef  ENDFILE_SPEC
 #define ENDFILE_SPEC \
-  "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+  "%{Ofast|ffast-math|funsafe-math-optimizations:%{!shared:crtfastmath.o%s}} \
    %(endfile_arch) %(endfile_vtv) %(endfile_crtend) crtn.o%s"
 
 #undef LINK_ARCH32_SPEC_BASE
@@ -449,7 +448,7 @@ along with GCC; see the file COPYING3.  If not see
   "%{no-pie:} %{pie:%e-pie is not supported in this configuration} "
 #endif
 
-/* collect2.c can only parse GNU nm -n output.  Solaris nm needs -png to
+/* collect2.cc can only parse GNU nm -n output.  Solaris nm needs -png to
    produce the same format.  */
 #define NM_FLAGS "-png"
 
@@ -466,7 +465,7 @@ along with GCC; see the file COPYING3.  If not see
   { "fini",      0, 0, true,  false,  false, false, NULL, NULL }
 
 /* Solaris-specific #pragmas are implemented on top of attributes.  Hook in
-   the bits from config/sol2.c.  */
+   the bits from config/sol2.cc.  */
 #define SUBTARGET_INSERT_ATTRIBUTES solaris_insert_attributes
 #define SUBTARGET_ATTRIBUTE_TABLE SOLARIS_ATTRIBUTE_TABLE
 
@@ -498,11 +497,7 @@ along with GCC; see the file COPYING3.  If not see
 
 #define AS_NEEDS_DASH_FOR_PIPED_INPUT
 
-/* The Solaris assembler cannot grok .stabd directives.  */
-#undef NO_DBX_BNSYM_ENSYM
-#define NO_DBX_BNSYM_ENSYM 1
 #endif
-
 /* Solaris has an implementation of __enable_execute_stack.  */
 #define HAVE_ENABLE_EXECUTE_STACK
 

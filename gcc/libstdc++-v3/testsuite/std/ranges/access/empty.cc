@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 Free Software Foundation, Inc.
+// Copyright (C) 2019-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -21,6 +21,8 @@
 #include <ranges>
 #include <testsuite_hooks.h>
 #include <testsuite_iterators.h>
+
+static_assert(__gnu_test::is_customization_point_object(std::ranges::empty));
 
 using std::same_as;
 
@@ -118,6 +120,16 @@ test04()
 
   static_assert( ! noexcept(std::ranges::empty(E3{})) );
 }
+
+template<typename T>
+  concept has_empty = requires (T& t) { std::ranges::empty(t); };
+
+// If T is an array of unknown bound, ranges::empty(E) is ill-formed.
+static_assert( ! has_empty<int[]> );
+static_assert( ! has_empty<int(&)[]> );
+static_assert( ! has_empty<int[][2]> );
+struct Incomplete;
+static_assert( ! has_empty<Incomplete[]> );
 
 int
 main()

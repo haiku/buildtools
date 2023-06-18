@@ -315,25 +315,29 @@ The following is a typical example of use:
 .. code-block:: ada
 
   type List is private with
-      Iterable => (First        => First_Cursor,
-                   Next         => Advance,
-                   Has_Element  => Cursor_Has_Element,
-                  [Element      => Get_Element]);
+      Iterable => (First       => First_Cursor,
+                   Next        => Advance,
+                   Has_Element => Cursor_Has_Element
+                 [,Element     => Get_Element]
+                 [,Last        => Last_Cursor]
+                 [,Previous    => Retreat]);
 
-* The value denoted by ``First`` must denote a primitive operation of the
-  container type that returns a ``Cursor``, which must a be a type declared in
+* The values of ``First`` and ``Last`` are primitive operations of the
+  container type that return a ``Cursor``, which must be a type declared in
   the container package or visible from it. For example:
 
 .. code-block:: ada
 
   function First_Cursor (Cont : Container) return Cursor;
+  function Last_Cursor  (Cont : Container) return Cursor;
 
-* The value of ``Next`` is a primitive operation of the container type that takes
-  both a container and a cursor and yields a cursor. For example:
+* The values of ``Next`` and ``Previous`` are primitive operations of the container type that take
+  both a container and a cursor and yield a cursor. For example:
 
 .. code-block:: ada
 
   function Advance (Cont : Container; Position : Cursor) return Cursor;
+  function Retreat (Cont : Container; Position : Cursor) return Cursor;
 
 * The value of ``Has_Element`` is a primitive operation of the container type
   that takes both a container and a cursor and yields a boolean. For example:
@@ -397,6 +401,19 @@ This aspect is equivalent to :ref:`pragma No_Tagged_Streams<Pragma-No_Tagged_Str
 argument specifying a root tagged type (thus this aspect can only be
 applied to such a type).
 
+Aspect No_Task_Parts
+========================
+.. index:: No_Task_Parts
+
+Applies to a type. If True, requires that the type and any descendants
+do not have any task parts. The rules for this aspect are the same as
+for the language-defined No_Controlled_Parts aspect (see RM-H.4.1),
+replacing "controlled" with "task".
+
+If No_Task_Parts is True for a type T, then the compiler can optimize
+away certain tasking-related code that would otherwise be needed
+for T'Class, because descendants of T might contain tasks.
+
 Aspect Object_Size
 ==================
 .. index:: Object_Size
@@ -405,7 +422,7 @@ This aspect is equivalent to :ref:`attribute Object_Size<Attribute-Object_Size>`
 
 Aspect Obsolescent
 ==================
-.. index:: Obsolsecent
+.. index:: Obsolescent
 
 This aspect is equivalent to :ref:`pragma Obsolescent<Pragma_Obsolescent>`. Note that the
 evaluation of this aspect happens at the point of occurrence, it is not
@@ -548,12 +565,6 @@ Aspect Universal_Aliasing
 
 This boolean aspect is equivalent to :ref:`pragma Universal_Aliasing<Pragma-Universal_Aliasing>`.
 
-Aspect Universal_Data
-=====================
-.. index:: Universal_Data
-
-This aspect is equivalent to :ref:`pragma Universal_Data<Pragma-Universal_Data>`.
-
 Aspect Unmodified
 =================
 .. index:: Unmodified
@@ -566,7 +577,7 @@ Aspect Unreferenced
 
 This boolean aspect is equivalent to :ref:`pragma Unreferenced<Pragma-Unreferenced>`.
 
-When using the ``-gnat2020`` switch, this aspect is also supported on formal
+When using the ``-gnat2022`` switch, this aspect is also supported on formal
 parameters, which is in particular the only form possible for expression
 functions.
 

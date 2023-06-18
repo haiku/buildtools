@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *            Copyright (C) 2000-2020, Free Software Foundation, Inc.       *
+ *            Copyright (C) 2000-2023, Free Software Foundation, Inc.       *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -93,6 +93,7 @@ extern void (*Unlock_Task) (void);
 
 #if defined (_WIN64) && defined (__SEH__)
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 #define IS_BAD_PTR(ptr) (IsBadCodePtr((FARPROC)ptr))
@@ -316,6 +317,13 @@ __gnat_backtrace (void **array,
 #define PC_ADJUST -2
 #define USING_ARM_UNWINDING 1
 
+/*---------------------- ARM RTEMS ------------------------------------ -*/
+#elif (defined (__arm__) && defined (__rtems__))
+
+#define USE_GCC_UNWINDER
+#define PC_ADJUST -2
+#define USING_ARM_UNWINDING 1
+
 /*---------------------- PPC AIX/PPC Lynx 178/Older Darwin --------------*/
 #elif ((defined (_POWER) && defined (_AIX)) || \
        (defined (__powerpc__) && defined (__Lynx__) && !defined(__ELF__)) || \
@@ -370,11 +378,12 @@ extern void __runnit(); /* thread entry point.  */
 
 #define BASE_SKIP 1
 
-/*----------- PPC ELF (GNU/Linux & VxWorks & Lynx178e) -------------------*/
+/*----------- PPC ELF (GNU/Linux & VxWorks & Lynx178e & RTEMS ) ----------*/
 
 #elif (defined (_ARCH_PPC) && defined (__vxworks)) ||  \
   (defined (__powerpc__) && defined (__Lynx__) && defined(__ELF__)) || \
-  (defined (__linux__) && defined (__powerpc__))
+  (defined (__linux__) && defined (__powerpc__)) || \
+  (defined (__powerpc__) && defined (__rtems__))
 
 #if defined (_ARCH_PPC64) && !defined (__USING_SJLJ_EXCEPTIONS__)
 #define USE_GCC_UNWINDER
@@ -404,9 +413,9 @@ struct layout
 
 #define BASE_SKIP 1
 
-/*-------------------------- SPARC Solaris -----------------------------*/
+/*-------------------------- SPARC Solaris or RTEMS --------------------*/
 
-#elif defined (__sun__) && defined (__sparc__)
+#elif (defined (__sun__) || defined (__rtems__)) && defined (__sparc__)
 
 #define USE_GENERIC_UNWINDER
 
@@ -447,6 +456,7 @@ struct layout
 #elif defined (__i386__) || defined (__x86_64__)
 
 #if defined (__WIN32)
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define IS_BAD_PTR(ptr) (IsBadCodePtr((FARPROC)ptr))
 #elif defined (__sun__)
@@ -547,13 +557,16 @@ is_return_from(void *symbol_addr, void *ret_addr)
 
 #if defined (__aarch64__)
 #define PC_ADJUST -4
+#elif defined (__ARMEL__)
+#define PC_ADJUST -2
+#define USING_ARM_UNWINDING 1
 #else
 #error Unhandled QNX architecture.
 #endif
 
-/*------------------- aarch64-linux ----------------------------------*/
+/*------------------- aarch64-linux or aarch64-rtems -----------------*/
 
-#elif (defined (__aarch64__) && defined (__linux__))
+#elif (defined (__aarch64__) && (defined (__linux__) || defined (__rtems__)))
 
 #define USE_GCC_UNWINDER
 #define PC_ADJUST -4

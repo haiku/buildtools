@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2001-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 2001-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -28,7 +28,6 @@
 --  circularities, especially for back ends using Adabkend.
 
 with Debug;    use Debug;
-with Errout;   use Errout;
 with Lib;      use Lib;
 with Osint;    use Osint;
 with Opt;      use Opt;
@@ -112,7 +111,7 @@ package body Switch.C is
 
          when '3' =>
             if Standard_Long_Long_Integer_Size /= 64 then
-               Bad_Switch ("-gnato3 not implemented for this configuration");
+               Bad_Switch ("-gnato3 requires Long_Long_Integer'Size = 64");
             else
                return Eliminated;
             end if;
@@ -390,6 +389,9 @@ package body Switch.C is
                      elsif Underscore then
                         Set_Underscored_Debug_Flag (C);
                         Store_Compilation_Switch ("-gnatd_" & C);
+                        if Debug_Flag_Underscore_C then
+                           Enable_CUDA_Expansion := True;
+                        end if;
 
                      --  Normal flag
 
@@ -427,7 +429,7 @@ package body Switch.C is
                --  The reason for this prohibition is that the rewriting of
                --  Sloc values causes strange malfunctions in the tests of
                --  whether units belong to the main source. This is really a
-               --  bug, but too hard to fix for a marginal capability ???
+               --  bug, but too hard to fix for a marginal capability.
 
                --  The proper fix is to completely redo -gnatD processing so
                --  that the tree is not messed with, and instead a separate
@@ -451,7 +453,6 @@ package body Switch.C is
 
                Debug_Generated_Code := True;
                Xref_Active := False;
-               Set_Debug_Flag ('g');
 
             --  -gnate? (extended switches)
 
@@ -601,7 +602,8 @@ package body Switch.C is
                      Exception_Extra_Info := True;
                      Ptr := Ptr + 1;
 
-                  --  -gnatef (full source path for brief error messages)
+                  --  -gnatef (full source path for brief error messages and
+                  --  absolute paths for -fdiagnostics-format=json)
 
                   when 'f' =>
                      Store_Switch := False;
@@ -929,14 +931,7 @@ package body Switch.C is
                Ptr := Ptr + 1;
                C := Switch_Chars (Ptr);
 
-               if C in '1' .. '5'
-                 or else C = '8'
-                 or else C = '9'
-                 or else C = 'p'
-                 or else C = 'f'
-                 or else C = 'n'
-                 or else C = 'w'
-               then
+               if C in '1' .. '5' | '8' | 'p' | '9' | 'f' | 'n' | 'w' then
                   Identifier_Character_Set := C;
                   Ptr := Ptr + 1;
 
@@ -1293,7 +1288,7 @@ package body Switch.C is
 
                else
                   declare
-                     OK  : Boolean;
+                     OK : Boolean;
 
                   begin
                      Set_Validity_Check_Options
@@ -1331,7 +1326,7 @@ package body Switch.C is
                      Ptr := Ptr + 1;
                      C := Switch_Chars (Ptr);
 
-                     if Set_Dot_Warning_Switch (C) then
+                     if Set_Warning_Switch ('.', C) then
                         Store_Compilation_Switch ("-gnatw." & C);
                      else
                         Bad_Switch ("-gnatw." & Switch_Chars (Ptr .. Max));
@@ -1343,7 +1338,7 @@ package body Switch.C is
                      Ptr := Ptr + 1;
                      C := Switch_Chars (Ptr);
 
-                     if Set_Underscore_Warning_Switch (C) then
+                     if Set_Warning_Switch ('_', C) then
                         Store_Compilation_Switch ("-gnatw_" & C);
                      else
                         Bad_Switch ("-gnatw_" & Switch_Chars (Ptr .. Max));
@@ -1352,7 +1347,7 @@ package body Switch.C is
                   --  Normal case
 
                   else
-                     if Set_Warning_Switch (C) then
+                     if Set_Warning_Switch (Plain, C) then
                         Store_Compilation_Switch ("-gnatw" & C);
                      else
                         Bad_Switch ("-gnatw" & Switch_Chars (Ptr .. Max));
@@ -1395,13 +1390,21 @@ package body Switch.C is
                Ptr := Ptr + 1;
                Xref_Active := False;
 
-            --  -gnatX (language extensions)
+            --  -gnatX (core language extensions)
 
             when 'X' =>
                Ptr := Ptr + 1;
-               Extensions_Allowed   := True;
-               Ada_Version          := Ada_Version_Type'Last;
-               Ada_Version_Explicit := Ada_Version_Type'Last;
+
+               if Ptr <= Max and then Switch_Chars (Ptr) = '0' then
+                  --  -gnatX0 (all language extensions)
+
+                  Ptr := Ptr + 1;
+                  Ada_Version := Ada_With_All_Extensions;
+               else
+                  Ada_Version := Ada_With_Core_Extensions;
+               end if;
+
+               Ada_Version_Explicit := Ada_Version;
                Ada_Version_Pragma   := Empty;
 
             --  -gnaty (style checks)
@@ -1417,7 +1420,7 @@ package body Switch.C is
                   Store_Switch := False;
 
                   declare
-                     OK  : Boolean;
+                     OK : Boolean;
 
                   begin
                      Set_Style_Check_Options
@@ -1588,8 +1591,10 @@ package body Switch.C is
                elsif Switch_Chars (Ptr .. Ptr + 3) = "2012" then
                   Ada_Version := Ada_2012;
 
-               elsif Switch_Chars (Ptr .. Ptr + 3) = "2020" then
-                  Ada_Version := Ada_2020;
+               elsif Switch_Chars (Ptr .. Ptr + 3) = "2020"
+                 or else Switch_Chars (Ptr .. Ptr + 3) = "2022"
+               then
+                  Ada_Version := Ada_2022;
 
                else
                   Bad_Switch ("-gnat" & Switch_Chars (Ptr .. Ptr + 3));
@@ -1619,11 +1624,6 @@ package body Switch.C is
                   Store_Switch := False;
                   Ptr := Ptr + 1;
                end if;
-
-            --  We ignore '/' in switches, this is historical, still needed???
-
-            when '/' =>
-               Store_Switch := False;
 
             --  Anything else is an error (illegal switch character)
 

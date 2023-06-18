@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2016-2023 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -71,72 +71,23 @@ extern unsigned int gcn_local_sym_hash (const char *name);
 #define ASM_APP_ON  ""
 #define ASM_APP_OFF ""
 
-/* Avoid the default in ../../gcc.c, which adds "-pthread", which is not
+/* Avoid the default in ../../gcc.cc, which adds "-pthread", which is not
    supported for gcn.  */
 #define GOMP_SELF_SPECS ""
 
-#ifdef HAVE_GCN_XNACK_FIJI
-#define X_FIJI
-#else
-#define X_FIJI "!march=*:;march=fiji:;"
-#endif
-#ifdef HAVE_GCN_XNACK_GFX900
-#define X_900
-#else
-#define X_900 "march=gfx900:;"
-#endif
-#ifdef HAVE_GCN_XNACK_GFX906
-#define X_906
-#else
-#define X_906 "march=gfx906:;"
-#endif
-#ifdef HAVE_GCN_XNACK_GFX908
-#define X_908
-#else
-#define X_908 "march=gfx908:;"
-#endif
+#define NO_XNACK "!march=*:;march=fiji:;"
+#define NO_SRAM_ECC "!march=*:;march=fiji:;march=gfx900:;march=gfx906:;"
 
-/* These targets can't have SRAM-ECC, even if a broken assembler allows it.  */
-#define S_FIJI "!march=*:;march=fiji:;"
-#define S_900 "march=gfx900:;"
-#define S_906 "march=gfx906:;"
-#ifdef HAVE_GCN_SRAM_ECC_GFX908
-#define S_908
-#else
-#define S_908 "march=gfx908:;"
-#endif
-
-#ifdef HAVE_GCN_ASM_V3_SYNTAX
-#define SRAMOPT "!msram-ecc=off:-mattr=+sram-ecc;:-mattr=-sram-ecc"
-#endif
-#ifdef HAVE_GCN_ASM_V4_SYNTAX
 /* In HSACOv4 no attribute setting means the binary supports "any" hardware
    configuration.  The name of the attribute also changed.  */
 #define SRAMOPT "msram-ecc=on:-mattr=+sramecc;msram-ecc=off:-mattr=-sramecc"
-#endif
-#if !defined(SRAMOPT) && !defined(IN_LIBGCC2)
-#error "No assembler syntax configured"
-#endif
-
-#ifdef HAVE_GCN_ASM_V4_SYNTAX
-/* FIJI cards don't seem to support drivers new enough to allow HSACOv4.  */
-#define HSACO3_SELECT_OPT \
-    "%{!march=*|march=fiji:--amdhsa-code-object-version=3} "
-#else
-#define HSACO3_SELECT_OPT
-#endif
-
-/* These targets can't have SRAM-ECC, even if a broken assembler allows it.  */
-#define DRIVER_SELF_SPECS \
-  "%{march=fiji|march=gfx900|march=gfx906:%{!msram-ecc=*:-msram-ecc=off}}"
 
 /* Use LLVM assembler and linker options.  */
 #define ASM_SPEC  "-triple=amdgcn--amdhsa "  \
 		  "%:last_arg(%{march=*:-mcpu=%*}) " \
-		  HSACO3_SELECT_OPT \
-		  "%{" X_FIJI X_900 X_906 X_908 \
-		     "mxnack:-mattr=+xnack;:-mattr=-xnack} " \
-		  "%{" S_FIJI S_900 S_906 S_908 SRAMOPT "} " \
+		  "%{!march=*|march=fiji:--amdhsa-code-object-version=3} " \
+		  "%{" NO_XNACK "mxnack:-mattr=+xnack;:-mattr=-xnack} " \
+		  "%{" NO_SRAM_ECC SRAMOPT "} " \
 		  "-filetype=obj"
 #define LINK_SPEC "--pie --export-dynamic"
 #define LIB_SPEC  "-lc"
@@ -162,4 +113,4 @@ extern const char *last_arg_spec_function (int argc, const char **argv);
 #define DWARF2_DEBUGGING_INFO      1
 #define DWARF2_ASM_LINE_DEBUG_INFO 1
 #define EH_FRAME_THROUGH_COLLECT2  1
-#define DBX_REGISTER_NUMBER(REGNO) gcn_dwarf_register_number (REGNO)
+#define DEBUGGER_REGNO(REGNO) gcn_dwarf_register_number (REGNO)

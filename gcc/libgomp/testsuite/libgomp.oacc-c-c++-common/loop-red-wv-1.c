@@ -1,3 +1,9 @@
+/* { dg-additional-options "-fopt-info-note-omp" }
+   { dg-additional-options "--param=openacc-privatization=noisy" }
+   { dg-additional-options "-foffload=-fopt-info-note-omp" }
+   { dg-additional-options "-foffload=--param=openacc-privatization=noisy" }
+   for testing/documenting aspects of that functionality.  */
+
 #include <stdio.h>
 #include <openacc.h>
 #include <gomp-constants.h>
@@ -10,10 +16,18 @@ int main ()
   int t = 0, h = 0;
   int workersize, vectorsize;
   
-#pragma acc parallel num_workers(32) vector_length(32) copy(ondev) \
-	    copyout(workersize, vectorsize)
+#define NW 32
+#define VL 32
+#pragma acc parallel num_workers(NW) vector_length(VL) \
+	    copy(ondev)
+  /* { dg-note {variable 'ix' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-2 } */
   {
 #pragma acc loop worker vector reduction (+:t)
+    /* { dg-note {variable 'ix' in 'private' clause isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-1 } */
+    /* { dg-note {variable 'val' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-2 } */
+    /* { dg-note {variable 'g' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-3 } */
+    /* { dg-note {variable 'w' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-4 } */
+    /* { dg-note {variable 'v' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-5 } */
     for (unsigned ix = 0; ix < N; ix++)
       {
 	int val = ix;
@@ -30,9 +44,18 @@ int main ()
 	  }
 	t += val;
       }
-    workersize = __builtin_goacc_parlevel_size (GOMP_DIM_WORKER);
-    vectorsize = __builtin_goacc_parlevel_size (GOMP_DIM_VECTOR);
   }
+  workersize = NW;
+  vectorsize = VL;
+#ifdef ACC_DEVICE_TYPE_radeon
+  /* AMD GCN has an upper limit of 'num_workers(16)'.  */
+  if (workersize > 16)
+    workersize = 16;
+  /* AMD GCN uses the autovectorizer for the vector dimension: the use
+     of a function call in vector-partitioned code in this test is not
+     currently supported.  */
+  vectorsize = 1;
+#endif
 
   for (ix = 0; ix < N; ix++)
     {

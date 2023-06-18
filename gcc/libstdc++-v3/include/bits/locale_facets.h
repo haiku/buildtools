@@ -1,6 +1,6 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 1997-2021 Free Software Foundation, Inc.
+// Copyright (C) 1997-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -670,6 +670,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _CharT>
     locale::id ctype<_CharT>::id;
+
+  // Incomplete to provide a compile time diagnostics for common misuse
+  // of [locale.convenience] functions with basic_string as a character type.
+  template<typename _CharT, typename _Traits, typename _Alloc>
+    class ctype<basic_string<_CharT, _Traits, _Alloc> >;
 
   /**
    *  @brief  The ctype<char> specialization.

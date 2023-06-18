@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,7 +31,7 @@ with Types; use Types;
 
 package Sem_Res is
 
-   --  As described in Sem_Ch4, the type resolution proceeds in two phases.
+   --  As described in Sem_Type, the type resolution proceeds in two phases.
    --  The first phase is a bottom up pass that is achieved during the
    --  recursive traversal performed by the Analyze procedures. This phase
    --  determines unambiguous types, and collects sets of possible types
@@ -124,6 +124,9 @@ package Sem_Res is
    --  Find name of entry being called, and resolve prefix of name with its
    --  own type. For now we assume that the prefix cannot be overloaded and
    --  the name of the entry plays no role in the resolution.
+
+   procedure Resolve_Membership_Equality (N : Node_Id; Typ : Entity_Id);
+   --  Resolve the equality operator in an individual membership test
 
    function Valid_Conversion
      (N           : Node_Id;

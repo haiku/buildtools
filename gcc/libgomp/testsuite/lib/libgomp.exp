@@ -28,9 +28,11 @@ load_gcc_lib scanasm.exp
 load_gcc_lib scandump.exp
 load_gcc_lib scanlang.exp
 load_gcc_lib scanrtl.exp
+load_gcc_lib scansarif.exp
 load_gcc_lib scantree.exp
 load_gcc_lib scanltranstree.exp
 load_gcc_lib scanoffload.exp
+load_gcc_lib scanoffloadipa.exp
 load_gcc_lib scanoffloadtree.exp
 load_gcc_lib scanoffloadrtl.exp
 load_gcc_lib scanipa.exp
@@ -118,18 +120,6 @@ proc libgomp_init { args } {
     # Compute what needs to be put into LD_LIBRARY_PATH
     set always_ld_library_path ".:${blddir}/.libs"
 
-    # Add liboffloadmic build directory in LD_LIBRARY_PATH to support
-    # Intel MIC offloading testing.
-    global offload_plugins
-    if { [string match "*,intelmic,*" ",$offload_plugins,"] } {
-	append always_ld_library_path ":${blddir}/../liboffloadmic/.libs"
-	append always_ld_library_path ":${blddir}/../liboffloadmic/plugin/.libs"
-	# libstdc++ is required by liboffloadmic
-	append always_ld_library_path ":${blddir}/../libstdc++-v3/src/.libs"
-	# libgcc_s is required by libstdc++
-	append always_ld_library_path ":${blddir}/../libgcc"
-    }
-
     global offload_additional_lib_paths
     if { $offload_additional_lib_paths != "" } {
 	append always_ld_library_path "${offload_additional_lib_paths}"
@@ -189,28 +179,12 @@ proc libgomp_init { args } {
 		append always_ld_library_path ":${atomic_library_path}"
 	    }
 	}
-	global cuda_driver_include
-	global cuda_driver_lib
-	if { $cuda_driver_include != "" } {
-	    # Stop gfortran from freaking out:
-	    # Warning: Nonexistent include directory "[...]"
-	    if {[file exists $cuda_driver_include]} {
-		lappend ALWAYS_CFLAGS "additional_flags=-I$cuda_driver_include"
-	    }
-	}
-	if { $cuda_driver_lib != "" } {
-	    lappend ALWAYS_CFLAGS "additional_flags=-L$cuda_driver_lib"
-	    append always_ld_library_path ":$cuda_driver_lib"
-	}
-	global hsa_runtime_lib
-	if { $hsa_runtime_lib != "" } {
-	    append always_ld_library_path ":$hsa_runtime_lib"
-	}
     }
 
     # We use atomic operations in the testcases to validate results.
     if { ([istarget i?86-*-*] || [istarget x86_64-*-*])
-	 && [check_effective_target_ia32] } {
+	 && [check_effective_target_ia32]
+	 && ![check_effective_target_cas_char] } {
 	lappend ALWAYS_CFLAGS "additional_flags=-march=i486"
     }
 
@@ -328,9 +302,6 @@ proc offload_target_to_openacc_device_type { offload_target } {
 	disable {
 	    return "host"
 	}
-	*-intelmic* {
-	    return ""
-	}
 	nvptx* {
 	    return "nvidia"
 	}
@@ -354,13 +325,18 @@ proc libgomp_check_effective_target_offload_target { target_name } {
     # decides.  This is somewhat modelled after
     # 'gcc/testsuite/lib/target-supports.exp:check_configured_with'.
     set gcc_output [libgomp_target_compile "" "" "none" $options]
-    if [regexp "(?n)^OFFLOAD_TARGET_NAMES=(.*)" $gcc_output dummy offload_targets] {
-	verbose "compiling for offload targets: $offload_targets"
-	return [string match "*:$target_name*:*" ":$offload_targets:"]
+    if [regexp "(?n)^OFFLOAD_TARGET_NAMES=(.*)" $gcc_output dummy gcc_offload_targets] {
+	verbose "compiling for offload targets: $gcc_offload_targets"
+	return [string match "*:$target_name*:*" ":$gcc_offload_targets:"]
     }
 
     verbose "not compiling for $target_name offload target"
     return 0
+}
+
+# Return 1 if compiling for any offload target.
+proc check_effective_target_offload_target_any { } {
+    return [libgomp_check_effective_target_offload_target ""]
 }
 
 # Return 1 if compiling for offload target nvptx.
@@ -425,6 +401,18 @@ proc check_effective_target_offload_device_nvptx { } {
     } ]
 }
 
+# Return 1 if using a GCN offload device.
+proc check_effective_target_offload_device_gcn { } {
+    return [check_runtime_nocache offload_device_gcn {
+      #include <omp.h>
+      #include "testsuite/libgomp.c-c++-common/on_device_arch.h"
+      int main ()
+	{
+	  return !on_device_arch_gcn ();
+	}
+    } ]
+}
+
 # Return 1 if at least one Nvidia GPU is accessible.
 
 proc check_effective_target_openacc_nvidia_accel_present { } {
@@ -472,10 +460,60 @@ proc check_effective_target_openacc_radeon_accel_selected { } {
     if { ![check_effective_target_openacc_radeon_accel_present] } {
 	return 0;
     }
-    global offload_target
-    if { [string match "amdgcn*" $offload_target] } {
-        return 1;
-    }
-    return 0;
+    global openacc_device_type
+    return [string match "radeon" $openacc_device_type]
 }
 
+# Return 1 if cuda.h and -lcuda are available.
+
+proc check_effective_target_openacc_cuda { } {
+    return [check_no_compiler_messages openacc_cuda executable {
+#include <cuda.h>
+int main() {
+    CUdevice dev;
+    CUresult r = cuDeviceGet (&dev, 0);
+    if (r != CUDA_SUCCESS)
+	return 1;
+    return 0;
+} } "-lcuda" ]
+}
+
+# Return 1 if cublas_v2.h and -lcublas are available.
+
+proc check_effective_target_openacc_cublas { } {
+    return [check_no_compiler_messages openacc_cublas executable {
+#include <cuda.h>
+#include <cublas_v2.h>
+int main() {
+    cublasStatus_t s;
+    cublasHandle_t h;
+    CUdevice dev;
+    CUresult r = cuDeviceGet (&dev, 0);
+    if (r != CUDA_SUCCESS)
+	return 1;
+    s = cublasCreate (&h);
+    if (s != CUBLAS_STATUS_SUCCESS)
+	return 1;
+    return 0;
+} } "-lcuda -lcublas" ]
+}
+
+# Return 1 if cuda_runtime_api.h and -lcudart are available.
+
+proc check_effective_target_openacc_cudart { } {
+    return [check_no_compiler_messages openacc_cudart executable {
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+int main() {
+    cudaError_t e;
+    int devn;
+    CUdevice dev;
+    CUresult r = cuDeviceGet (&dev, 0);
+    if (r != CUDA_SUCCESS)
+	return 1;
+    e = cudaGetDevice (&devn);
+    if (e != cudaSuccess)
+	return 1;
+    return 0;
+} } "-lcuda -lcudart" ]
+}

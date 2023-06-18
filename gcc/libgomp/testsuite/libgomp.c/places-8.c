@@ -1,8 +1,10 @@
 /* { dg-set-target-env-var OMP_PLACES "sockets(1)" } */
-/* { dg-set-target-env-var OMP_DISPLAY_ENV "true" } */
+
+#include <omp.h>
 
 int
 main ()
 {
+  omp_display_env (0);
   return 0;
 }

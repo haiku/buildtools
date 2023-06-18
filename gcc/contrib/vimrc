@@ -11,7 +11,7 @@
 "   $ make vimrc
 " from GCC build folder.
 " 
-" Copyright (C) 2014 Free Software Foundation, Inc.
+" Copyright (C) 2014-2023 Free Software Foundation, Inc.
 "
 " This program is free software; you can redistribute it and/or modify
 " it under the terms of the GNU General Public License as published by
@@ -42,7 +42,7 @@ function! SetStyle()
   if &filetype == "gitcommit"
     setlocal textwidth=72
   else
-    setlocal textwidth=80
+    setlocal textwidth=79
   endif
   setlocal formatoptions-=ro formatoptions+=cqlt
   if index(l:c_exts, l:ext) != -1 || &filetype == "c" || &filetype == "cpp"

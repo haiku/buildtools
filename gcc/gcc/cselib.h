@@ -1,5 +1,5 @@
 /* Common subexpression elimination for GNU compiler.
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -83,6 +83,7 @@ extern void cselib_process_insn (rtx_insn *);
 extern bool fp_setter_insn (rtx_insn *);
 extern machine_mode cselib_reg_set_mode (const_rtx);
 extern int rtx_equal_for_cselib_1 (rtx, rtx, machine_mode, int);
+extern bool cselib_redundant_set_p (rtx);
 extern int references_value_p (const_rtx, int);
 extern rtx cselib_expand_value_rtx (rtx, bitmap, int);
 typedef rtx (*cselib_expand_callback)(rtx, bitmap, int, void *);
@@ -112,7 +113,7 @@ extern void dump_cselib_table (FILE *);
 /* Return the canonical value for VAL, following the equivalence chain
    towards the earliest (== lowest uid) equivalent value.  */
 
-static inline cselib_val *
+inline cselib_val *
 canonical_cselib_val (cselib_val *val)
 {
   cselib_val *canon;
@@ -130,7 +131,7 @@ canonical_cselib_val (cselib_val *val)
 /* Return nonzero if we can prove that X and Y contain the same value, taking
    our gathered information into account.  */
 
-static inline int
+inline int
 rtx_equal_for_cselib_p (rtx x, rtx y)
 {
   if (x == y)

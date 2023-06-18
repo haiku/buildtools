@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,16 +23,18 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;   use Atree;
-with Debug;   use Debug;
-with Sinfo;   use Sinfo;
-with Sinput;  use Sinput;
-with Output;  use Output;
+with Atree;          use Atree;
+with Debug;          use Debug;
+with Namet;          use Namet;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinput;         use Sinput;
+with Output;         use Output;
 
 package body Debug_A is
 
    Debug_A_Depth : Natural := 0;
-   --  Output for the debug A flag is preceded by a sequence of vertical bar
+   --  Output for the -gnatda switch is preceded by a sequence of vertical bar
    --  characters corresponding to the recursion depth of the actions being
    --  recorded (analysis, expansion, resolution and evaluation of nodes)
    --  This variable records the depth.
@@ -45,6 +47,12 @@ package body Debug_A is
    --  Current_Error_Node correctly. Note that if we have more than 200
    --  recursion levels, we just don't reset the right value on exit, which
    --  is not crucial, since this is only for debugging.
+
+   --  Note that Current_Error_Node must be maintained unconditionally (not
+   --  only when Debug_Flag_A is True), because we want to print a correct sloc
+   --  in bug boxes. Also, Current_Error_Node is not just used for printing bug
+   --  boxes. For example, an incorrect Current_Error_Node can cause some code
+   --  in Rtsfind to malfunction.
 
    -----------------------
    -- Local Subprograms --
@@ -59,7 +67,7 @@ package body Debug_A is
 
    procedure Debug_A_Entry (S : String; N : Node_Id) is
    begin
-      --  Output debugging information if -gnatda flag set
+      --  Output debugging information if -gnatda switch set
 
       if Debug_Flag_A then
          Debug_Output_Astring;
@@ -70,12 +78,23 @@ package body Debug_A is
          Write_Location (Sloc (N));
          Write_Str ("  ");
          Write_Str (Node_Kind'Image (Nkind (N)));
+
+         --  Print the Chars field, if appropriate
+
+         case Nkind (N) is
+            when N_Has_Chars =>
+               Write_Str (" """);
+               if Present (Chars (N)) then
+                  Write_Str (Get_Name_String (Chars (N)));
+               end if;
+               Write_Str ("""");
+            when others => null;
+         end case;
+
          Write_Eol;
       end if;
 
       --  Now push the new element
-
-      --  Why is this done unconditionally???
 
       Debug_A_Depth := Debug_A_Depth + 1;
 
@@ -103,8 +122,6 @@ package body Debug_A is
       --  We look down the stack to find something with a decent Sloc. (If
       --  we find nothing, just leave it unchanged which is not so terrible)
 
-      --  This seems nasty overhead for the normal case ???
-
       for J in reverse 1 .. Integer'Min (Max_Node_Ids, Debug_A_Depth) loop
          if Sloc (Node_Ids (J)) > No_Location then
             Current_Error_Node := Node_Ids (J);
@@ -112,7 +129,7 @@ package body Debug_A is
          end if;
       end loop;
 
-      --  Output debugging information if -gnatda flag set
+      --  Output debugging information if -gnatda switch set
 
       if Debug_Flag_A then
          Debug_Output_Astring;
@@ -129,20 +146,8 @@ package body Debug_A is
    --------------------------
 
    procedure Debug_Output_Astring is
-      Vbars : constant String := "|||||||||||||||||||||||||";
-      --  Should be constant, removed because of GNAT 1.78 bug ???
-
    begin
-      if Debug_A_Depth > Vbars'Length then
-         for I in Vbars'Length .. Debug_A_Depth loop
-            Write_Char ('|');
-         end loop;
-
-         Write_Str (Vbars);
-
-      else
-         Write_Str (Vbars (1 .. Debug_A_Depth));
-      end if;
+      Write_Str ((1 .. Debug_A_Depth => '|'));
    end Debug_Output_Astring;
 
 end Debug_A;

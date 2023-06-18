@@ -1,25 +1,200 @@
-2022-04-21  Release Manager
+2023-04-26  Release Manager
 
-	* GCC 11.3.0 released.
+	* GCC 13.1.0 released.
+
+2023-03-01  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/108910
+	* lto-common.cc (lto_fixup_prevailing_type): Don't add t to
+	TYPE_POINTER_TO or TYPE_REFERENCE_TO chain if it has
+	TYPE_ATTRIBUTES or is TYPE_REF_IS_RVALUE.
+
+2023-01-13  Richard Biener  <rguenther@suse.de>
+
+	* lto-lang.cc (lto_type_for_mode): Sync with
+	c_common_type_for_mode.
+
+2023-01-04  Jan Hubicka  <hubicka@ucw.cz>
+
+	* lto-partition.cc (may_need_named_section_p): Clones with no body
+	need no remaning.
+
+2022-12-29  Alexandre Oliva  <oliva@adacore.com>
+
+	* lto-partition.cc (lto_1_to_1_map): Drop NULL partition
+	mapping.
+
+2022-12-22  Richard Biener  <rguenther@suse.de>
+
+	* lto-common.cc (compare_tree_sccs_1): Compare DECL_NOT_FLEXARRAY.
+
+2022-12-21  Jan Hubicka  <hubicka@ucw.cz>
+
+	* lto-common.cc (lto_resolution_read): With incremental linking
+	and whole program ignore turn LDPR_PREVAILING_DEF_IRONLY to
+	LDPR_PREVAILING_DEF_IRONLY_EXP
+	* lto-lang.cc (lto_post_options): Do not clear flag_whole_program
+	for incremental link
+
+2022-11-25  Martin Liska  <mliska@suse.cz>
+
+	PR lto/107829
+	* lto.cc (materialize_cgraph): Call timevar_push before
+	  materialization starts.
+
+2022-10-29  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* lang.opt: Better separate 'LTO' vs. 'LTODump'.
+
+2022-10-28  Joseph Myers  <joseph@codesourcery.com>
+
+	* lto-common.cc (compare_tree_sccs_1): Compare
+	TYPE_NO_NAMED_ARGS_STDARG_P.
+
+2022-10-28  Martin Liska  <mliska@suse.cz>
+
+	* lto-dump.cc (dump_list): Remove trailing return.
+	(dump_symbol): Likewise.
+	(dump_body): Filter name based on mangled name.
+	(dump_tool_help): Use GIMPLE wording.
+	(lto_main): Update wording.
+
+2022-10-27  Martin Liska  <mliska@suse.cz>
+
+	PR lto/107418
+	* lto-dump.cc (lto_main): Do not load LTO stream for aliases.
+
+2022-09-15  Richard Biener  <rguenther@suse.de>
+
+	* lto-lang.cc (lto_build_c_type_nodes): Do not initialize
+	void_list_node.
+
+2022-08-22  Martin Liska  <mliska@suse.cz>
+
+	PR lto/106700
+	* lto.cc (wait_for_child): Ask if we are connected to jobserver.
+	(stream_out_partitions): Likewise.
+
+2022-08-10  Martin Liska  <mliska@suse.cz>
+
+	PR lto/106328
+	* lto.cc (wait_for_child): Decrement nruns once a process
+	finishes.
+	(stream_out_partitions): Use job server if active.
+	(do_whole_program_analysis): Likewise.
+
+2022-07-08  Martin Liska  <mliska@suse.cz>
+
+	* lto-dump.cc (lto_main): Exit in the function
+	as we don't want any LTO bytecode processing.
+
+2022-06-27  David Malcolm  <dmalcolm@redhat.com>
+
+	* lto-dump.cc: Add "final" and "override" to various vfunc
+	implementations, removing redundant "virtual" as appropriate.
+
+2022-05-16  Martin Liska  <mliska@suse.cz>
+
+	* lto-common.cc (lto_resolution_read): Use ARRAY_SIZE.
+	* lto-lang.cc (lto_init): Likewise.
+
+2022-03-23  Tobias Burnus  <tobias@codesourcery.com>
+
+	PR middle-end/104285
+	* lto-partition.cc (maybe_rewrite_identifier): Use get_identifier
+	for the returned string to be usable as hash key.
+	(validize_symbol_for_target): Hence, use return value directly.
+	(privatize_symbol_name_1): Track maybe_rewrite_identifier renames.
+	* lto.cc (offload_handle_link_vars): Move function up before ...
+	(do_whole_program_analysis): Call it after static renamings.
+	(lto_main): Move call after static renamings.
+
+2022-02-04  Richard Biener  <rguenther@suse.de>
+
+	PR middle-end/90348
+	PR middle-end/104092
+	* lto-common.cc (compare_tree_sccs_1): Compare CLOBBER_KIND.
 
 2022-02-02  Martin Liska  <mliska@suse.cz>
 
-	Backported from master:
-	2022-02-02  Martin Liska  <mliska@suse.cz>
-
 	PR lto/104333
-	* lto-common.c (read_cgraph_and_symbols): Move resolution
+	* lto-common.cc (read_cgraph_and_symbols): Move resolution
 	checking for number of files later and report a reasonable
 	error message.
-	* lto-object.c (lto_obj_file_open): Make error fatal.
+	* lto-object.cc (lto_obj_file_open): Make error fatal.
 
-2021-07-28  Release Manager
+2022-01-17  Martin Liska  <mliska@suse.cz>
 
-	* GCC 11.2.0 released.
+	* config-lang.in: Rename .c names to .cc.
+	* lang-specs.h: Likewise.
+	* lto-common.cc (gimple_register_canonical_type_1): Likewise.
+	* lto-common.h: Likewise.
+	* lto-dump.cc (lto_main): Likewise.
+	* lto-lang.cc (handle_fnspec_attribute): Likewise.
+	(lto_getdecls): Likewise.
+	(lto_init): Likewise.
+	* lto.cc (lto_main): Likewise.
+	* lto.h: Likewise.
 
-2021-04-27  Release Manager
+2022-01-17  Martin Liska  <mliska@suse.cz>
 
-	* GCC 11.1.0 released.
+	* common.c: Moved to...
+	* common.cc: ...here.
+	* lto-common.c: Moved to...
+	* lto-common.cc: ...here.
+	* lto-dump.c: Moved to...
+	* lto-dump.cc: ...here.
+	* lto-lang.c: Moved to...
+	* lto-lang.cc: ...here.
+	* lto-object.c: Moved to...
+	* lto-object.cc: ...here.
+	* lto-partition.c: Moved to...
+	* lto-partition.cc: ...here.
+	* lto-symtab.c: Moved to...
+	* lto-symtab.cc: ...here.
+	* lto.c: Moved to...
+	* lto.cc: ...here.
+
+2021-11-18  Jan Hubicka  <hubicka@ucw.cz>
+
+	* lto-partition.c (promote_symbol): Clear semantic_interposition flag.
+
+2021-11-06  Jan Hubicka  <hubicka@ucw.cz>
+
+	PR ipa/103070
+	PR ipa/103058
+	* lto-partition.c (must_not_rename): Update comment.
+	(promote_symbol): Set resolution to LDPR_PREVAILING_DEF_IRONLY.
+
+2021-10-22  Eric Gallager  <egallager@gcc.gnu.org>
+
+	PR other/102663
+	* Make-lang.in: Add dummy lto.install-dvi target.
+
+2021-09-27  Martin Liska  <mliska@suse.cz>
+
+	* lto-lang.c (lto_init_options_struct): Set also
+	x_flag_default_complex_method.
+
+2021-09-03  Jakub Jelinek  <jakub@redhat.com>
+
+	PR target/102024
+	* lto-common.c (compare_tree_sccs_1): Also compare
+	DECL_FIELD_CXX_ZERO_WIDTH_BIT_FIELD values.
+
+2021-09-02  liuhongt  <hongtao.liu@intel.com>
+
+	* lto-lang.c (lto_type_for_mode): Return float16_type_node
+	when mode == TYPE_MODE (float16_type_node).
+
+2021-05-31  Martin Liska  <mliska@suse.cz>
+
+	* lto-common.c (compare_tree_sccs_1): Compare
+	FUNCTION_DECL_DECL_TYPE.
+
+2021-05-24  Wang Liushuai  <wangliushuai@bytedance.com>
+
+	* lto-dump.c (get_size): Fix the NPD error about the thunk symbol.
 
 2021-04-15  Jan Hubicka  <hubicka@ucw.cz>
 
@@ -541,7 +716,7 @@
 2018-10-30  Michael Ploujnikov  <michael.ploujnikov@oracle.com>
 
 	* lto-partition.c (privatize_symbol_name_1): Use
-	  clone_function_name_numbered.
+	clone_function_name_numbered.
 
 2018-10-26  Jan Hubicka  <jh@suse.cz>
 
@@ -2008,7 +2183,7 @@
 	(lto_fixup_prevailing_decls): Handle fixing up CONSTRUCTOR values.
 
 2014-02-04  Jan Hubicka  <hubicka@ucw.cz>
-	    Markus Trippelsdorf
+	Markus Trippelsdorf
 
 	PR ipa/59469
 	* lto-symtab.c (lto_cgraph_replace_node, lto_varpool_replace_node):
@@ -3326,7 +3501,7 @@
 2010-10-03  Andi Kleen  <ak@linux.intel.com>
 
     	* lto.c (lto_file_finalize): Replace gcc_assert for missing section
-	  with fatal_error.
+	with fatal_error.
 
 2010-09-28  Jan Hubicka  <jh@suse.cz>
 
@@ -5813,10 +5988,10 @@
 2007-11-06  Alon Dayan  <alond@il.ibm.com>
 	    Kenneth Zadeck  <zadeck@naturalbridge.com>
 
-	 * lto-read.c (process_flags, lto_static_init_local):
-	 read flags of VAR_DECL and FUNCTION_DECL of size>1.
-	 change global array num_flags_for_code to flags_length_for_code.
-	 (set_line_info): Make decls work in USE_MAPPED_LOCATION mode.
+	* lto-read.c (process_flags, lto_static_init_local):
+	read flags of VAR_DECL and FUNCTION_DECL of size>1.
+	change global array num_flags_for_code to flags_length_for_code.
+	(set_line_info): Make decls work in USE_MAPPED_LOCATION mode.
 
 2007-11-05  Nathan Froyd  <froydnj@codesourcery.com>
 
@@ -6521,7 +6696,7 @@
 	* lto-tree.h: Likewise.
 	* lto-lang.c: Likewise.
 
-Copyright (C) 2006-2021 Free Software Foundation, Inc.
+Copyright (C) 2006-2023 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

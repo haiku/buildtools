@@ -19,7 +19,7 @@ import core.thread.threadbase;
 import core.thread.context;
 import core.thread.types;
 import core.atomic;
-import core.memory : GC;
+import core.memory : GC, pageSize;
 import core.time;
 import core.exception : onOutOfMemoryError;
 import core.internal.traits : externDFunc;
@@ -246,15 +246,6 @@ else
  */
 class Thread : ThreadBase
 {
-    //
-    // Main process thread
-    //
-    version (FreeBSD)
-    {
-        // set when suspend failed and should be retried, see Issue 13416
-        private shared bool m_suspendagain;
-    }
-
     //
     // Standard thread data
     //
@@ -719,7 +710,7 @@ class Thread : ThreadBase
                     // the effective maximum.
 
                     // maxupri
-                    result.PRIORITY_MIN = -clinfo[0];
+                    result.PRIORITY_MIN = -cast(int)(clinfo[0]);
                     // by definition
                     result.PRIORITY_DEFAULT = 0;
                 }
@@ -1049,7 +1040,7 @@ class Thread : ThreadBase
     }
 }
 
-private Thread toThread(ThreadBase t) @trusted nothrow @nogc pure
+private Thread toThread(return scope ThreadBase t) @trusted nothrow @nogc pure
 {
     return cast(Thread) cast(void*) t;
 }
@@ -1109,6 +1100,7 @@ unittest
     try
     {
         new Thread(
+        function()
         {
             throw new Exception( MSG );
         }).start().join();
@@ -1123,7 +1115,7 @@ unittest
 
 unittest
 {
-    // use >PAGESIZE to avoid stack overflow (e.g. in an syscall)
+    // use >pageSize to avoid stack overflow (e.g. in an syscall)
     auto thr = new Thread(function{}, 4096 + 1).start();
     thr.join();
 }
@@ -1209,6 +1201,18 @@ unittest
     thr.join();
 }
 
+// https://issues.dlang.org/show_bug.cgi?id=22124
+unittest
+{
+    Thread thread = new Thread({});
+    auto fun(Thread t, int x)
+    {
+        t.__ctor({x = 3;});
+        return t;
+    }
+    static assert(!__traits(compiles, () @nogc => fun(thread, 3) ));
+}
+
 unittest
 {
     import core.sync.semaphore;
@@ -1247,7 +1251,7 @@ version (CoreDdoc)
 {
     /**
      * Instruct the thread module, when initialized, to use a different set of
-     * signals besides SIGUSR1 and SIGUSR2 for suspension and resumption of threads.
+     * signals besides SIGRTMIN and SIGRTMIN + 1 for suspension and resumption of threads.
      * This function should be called at most once, prior to thread_init().
      * This function is Posix-only.
      */
@@ -1277,8 +1281,8 @@ else version (Posix)
 
 version (Posix)
 {
-    private __gshared int suspendSignalNumber = SIGUSR1;
-    private __gshared int resumeSignalNumber  = SIGUSR2;
+    private __gshared int suspendSignalNumber;
+    private __gshared int resumeSignalNumber;
 }
 
 private extern (D) ThreadBase attachThread(ThreadBase _thisThread) @nogc nothrow
@@ -1329,6 +1333,9 @@ private extern (D) ThreadBase attachThread(ThreadBase _thisThread) @nogc nothrow
  *       must be called after thread_attachThis:
  *
  *       extern (C) void rt_moduleTlsCtor();
+ *
+ * See_Also:
+ *     $(REF thread_detachThis, core,thread,threadbase)
  */
 extern(C) Thread thread_attachThis()
 {
@@ -1990,12 +1997,17 @@ extern (C) void thread_suspendAll() nothrow
         Thread.criticalRegionLock.lock_nothrow();
         scope (exit) Thread.criticalRegionLock.unlock_nothrow();
         size_t cnt;
+        bool suspendedSelf;
         Thread t = ThreadBase.sm_tbeg.toThread;
         while (t)
         {
             auto tn = t.next.toThread;
             if (suspend(t))
+            {
+                if (t is ThreadBase.getThis())
+                    suspendedSelf = true;
                 ++cnt;
+            }
             t = tn;
         }
 
@@ -2003,10 +2015,12 @@ extern (C) void thread_suspendAll() nothrow
         {}
         else version (Posix)
         {
-            // subtract own thread
+            // Subtract own thread if we called suspend() on ourselves.
+            // For example, suspendedSelf would be false if the current
+            // thread ran thread_detachThis().
             assert(cnt >= 1);
-            --cnt;
-        Lagain:
+            if (suspendedSelf)
+                --cnt;
             // wait for semaphore notifications
             for (; cnt; --cnt)
             {
@@ -2016,20 +2030,6 @@ extern (C) void thread_suspendAll() nothrow
                         onThreadError("Unable to wait for semaphore");
                     errno = 0;
                 }
-            }
-            version (FreeBSD)
-            {
-                // avoid deadlocks, see Issue 13416
-                t = ThreadBase.sm_tbeg.toThread;
-                while (t)
-                {
-                    auto tn = t.next;
-                    if (t.m_suspendagain && suspend(t))
-                        ++cnt;
-                    t = tn.toThread;
-                }
-                if (cnt)
-                    goto Lagain;
             }
         }
     }
@@ -2112,7 +2112,7 @@ private extern (D) void resume(ThreadBase _t) nothrow @nogc
  * garbage collector on startup and before any other thread routines
  * are called.
  */
-extern (C) void thread_init() @nogc
+extern (C) void thread_init() @nogc nothrow
 {
     // NOTE: If thread_init itself performs any allocations then the thread
     //       routines reserved for garbage collector use may be called while
@@ -2122,11 +2122,6 @@ extern (C) void thread_init() @nogc
 
     initLowlevelThreads();
     Thread.initLocks();
-
-    // The Android VM runtime intercepts SIGUSR1 and apparently doesn't allow
-    // its signal handler to run, so swap the two signals on Android, since
-    // thread_resumeHandler does nothing.
-    version (Android) thread_setGCSignals(SIGUSR2, SIGUSR1);
 
     version (Darwin)
     {
@@ -2143,6 +2138,25 @@ extern (C) void thread_init() @nogc
     }
     else version (Posix)
     {
+        version (OpenBSD)
+        {
+            // OpenBSD does not support SIGRTMIN or SIGRTMAX
+            // Use SIGUSR1 for SIGRTMIN, SIGUSR2 for SIGRTMIN + 1
+            // And use 32 for SIGRTMAX (32 is the max signal number on OpenBSD)
+            enum SIGRTMIN = SIGUSR1;
+            enum SIGRTMAX = 32;
+        }
+
+        if ( suspendSignalNumber == 0 )
+        {
+            suspendSignalNumber = SIGRTMIN;
+        }
+
+        if ( resumeSignalNumber == 0 )
+        {
+            resumeSignalNumber = SIGRTMIN + 1;
+            assert(resumeSignalNumber <= SIGRTMAX);
+        }
         int         status;
         sigaction_t suspend = void;
         sigaction_t resume = void;
@@ -2183,19 +2197,18 @@ extern (C) void thread_init() @nogc
         status = sem_init( &suspendCount, 0, 0 );
         assert( status == 0 );
     }
-    if (typeid(Thread).initializer.ptr)
-        _mainThreadStore[] = typeid(Thread).initializer[];
+    _mainThreadStore[] = __traits(initSymbol, Thread)[];
     Thread.sm_main = attachThread((cast(Thread)_mainThreadStore.ptr).__ctor());
 }
 
 private alias MainThreadStore = void[__traits(classInstanceSize, Thread)];
-package __gshared align(Thread.alignof) MainThreadStore _mainThreadStore;
+package __gshared align(__traits(classInstanceAlignment, Thread)) MainThreadStore _mainThreadStore;
 
 /**
  * Terminates the thread module. No other thread routine may be called
  * afterwards.
  */
-extern (C) void thread_term() @nogc
+extern (C) void thread_term() @nogc nothrow
 {
     thread_term_tpl!(Thread)(_mainThreadStore);
 }
@@ -2241,15 +2254,7 @@ version (Windows)
 
             void append( Throwable t )
             {
-                if ( obj.m_unhandled is null )
-                    obj.m_unhandled = t;
-                else
-                {
-                    Throwable last = obj.m_unhandled;
-                    while ( last.next !is null )
-                        last = last.next;
-                    last.next = t;
-                }
+                obj.m_unhandled = Throwable.chainTogether(obj.m_unhandled, t);
             }
 
             version (D_InlineAsm_X86)
@@ -2396,15 +2401,7 @@ else version (Posix)
 
             void append( Throwable t )
             {
-                if ( obj.m_unhandled is null )
-                    obj.m_unhandled = t;
-                else
-                {
-                    Throwable last = obj.m_unhandled;
-                    while ( last.next !is null )
-                        last = last.next;
-                    last.next = t;
-                }
+                obj.m_unhandled = Throwable.chainTogether(obj.m_unhandled, t);
             }
             try
             {
@@ -2484,7 +2481,6 @@ else version (Posix)
                 status = sigdelset( &sigres, resumeSignalNumber );
                 assert( status == 0 );
 
-                version (FreeBSD) obj.m_suspendagain = false;
                 status = sem_post( &suspendCount );
                 assert( status == 0 );
 
@@ -2495,19 +2491,6 @@ else version (Posix)
                     obj.m_curr.tstack = obj.m_curr.bstack;
                 }
             }
-
-            // avoid deadlocks on FreeBSD, see Issue 13416
-            version (FreeBSD)
-            {
-                auto obj = Thread.getThis();
-                if (THR_IN_CRITICAL(obj.m_addr))
-                {
-                    obj.m_suspendagain = true;
-                    if (sem_post(&suspendCount)) assert(0);
-                    return;
-                }
-            }
-
             callWithStackShell(&op);
         }
 
@@ -2520,29 +2503,6 @@ else version (Posix)
         do
         {
 
-        }
-
-        // HACK libthr internal (thr_private.h) macro, used to
-        // avoid deadlocks in signal handler, see Issue 13416
-        version (FreeBSD) bool THR_IN_CRITICAL(pthread_t p) nothrow @nogc
-        {
-            import core.sys.posix.config : c_long;
-            import core.sys.posix.sys.types : lwpid_t;
-
-            // If the begin of pthread would be changed in libthr (unlikely)
-            // we'll run into undefined behavior, compare with thr_private.h.
-            static struct pthread
-            {
-                c_long tid;
-                static struct umutex { lwpid_t owner; uint flags; uint[2] ceilings; uint[4] spare; }
-                umutex lock;
-                uint cycle;
-                int locklevel;
-                int critical_count;
-                // ...
-            }
-            auto priv = cast(pthread*)p;
-            return priv.locklevel > 0 || priv.critical_count > 0;
         }
     }
 }
@@ -2929,8 +2889,8 @@ private size_t adjustStackSize(size_t sz) nothrow @nogc
         }
     }
 
-    // stack size must be a multiple of PAGESIZE
-    sz = ((sz + PAGESIZE - 1) & ~(PAGESIZE - 1));
+    // stack size must be a multiple of pageSize
+    sz = ((sz + pageSize - 1) & ~(pageSize - 1));
 
     return sz;
 }

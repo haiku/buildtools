@@ -8,7 +8,7 @@
 int
 main (void)
 {
-  vector double a = {   1,  -4};
+  vector double a = {  1,  -4};
   vector double b = { -10,  40};
   vector double c = {  10, -40};
   a = vec_cpsgn (a, b);

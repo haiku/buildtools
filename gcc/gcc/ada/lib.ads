@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -39,14 +39,14 @@ package Lib is
    --  Type to hold list of indirect references to unit number table
 
    type Compiler_State_Type is (Parsing, Analyzing);
-   Compiler_State : Compiler_State_Type;
+   Compiler_State : Compiler_State_Type := Parsing;
    --  Indicates current state of compilation. This is used to implement the
    --  function In_Extended_Main_Source_Unit.
 
    Parsing_Main_Extended_Source : Boolean := False;
    --  Set True if we are currently parsing a file that is part of the main
    --  extended source (the main unit, its spec, or one of its subunits). This
-   --  flag to implement In_Extended_Main_Source_Unit.
+   --  is used to implement In_Extended_Main_Source_Unit.
 
    Analysing_Subunit_Of_Main : Boolean := False;
    --  Set to True when analyzing a subunit of the main source. When True, if
@@ -616,8 +616,7 @@ package Lib is
    --  WARNING: There is a matching C declaration of this subprogram in fe.h
 
    function In_Extended_Main_Code_Unit (Loc : Source_Ptr) return Boolean;
-   --  Same function as above, but argument is a source pointer rather
-   --  than a node.
+   --  Same as above, but for Source_Ptr
 
    function In_Extended_Main_Source_Unit
      (N : Node_Or_Entity_Id) return Boolean;
@@ -631,7 +630,13 @@ package Lib is
    --  and the parent unit spec if it is separate.
 
    function In_Extended_Main_Source_Unit (Loc : Source_Ptr) return Boolean;
-   --  Same function as above, but argument is a source pointer
+   --  Same as above, but for Source_Ptr
+
+   function ipu (N : Node_Or_Entity_Id) return Boolean;
+   --  Same as In_Predefined_Unit, but renamed so it can assist debugging.
+   --  Otherwise, there is a disambiguous name conflict in the two versions of
+   --  In_Predefined_Unit which makes it inconvient to set as a breakpoint
+   --  condition.
 
    function In_Predefined_Unit (N : Node_Or_Entity_Id) return Boolean;
    --  Returns True if the given node or entity appears within the source text
@@ -640,7 +645,7 @@ package Lib is
 
    function In_Predefined_Unit (S : Source_Ptr) return Boolean;
    pragma Inline (In_Predefined_Unit);
-   --  Same function as above but argument is a source pointer
+   --  Same as above, but for Source_Ptr
 
    function In_Internal_Unit (N : Node_Or_Entity_Id) return Boolean;
    function In_Internal_Unit (S : Source_Ptr) return Boolean;
@@ -741,13 +746,13 @@ package Lib is
    --  This procedure is called to register a pragma N for which a notes
    --  entry is required.
 
-   procedure Synchronize_Serial_Number;
+   procedure Synchronize_Serial_Number (SN : Nat);
    --  This function increments the Serial_Number field for the current unit
-   --  but does not return the incremented value. This is used when there
-   --  is a situation where one path of control increments a serial number
-   --  (using Increment_Serial_Number), and the other path does not and it is
-   --  important to keep the serial numbers synchronized in the two cases (e.g.
-   --  when the references in a package and a client must be kept consistent).
+   --  up to SN if it is initially lower and does nothing otherwise. This is
+   --  used in situations where one path of control increments serial numbers
+   --  and the other path does not and it is important to keep serial numbers
+   --  synchronized in the two cases (e.g. when the references in a package
+   --  and a client must be kept consistent).
 
    procedure Unlock;
    --  Unlock internal tables, in cases where the back end needs to modify them
@@ -926,7 +931,9 @@ private
    --  The following table records a mapping between a name and the entry in
    --  the units table whose Unit_Name is this name. It is used to speed up
    --  the Is_Loaded function, whose original implementation (linear search)
-   --  could account for 2% of the time spent in the front end. Note that, in
+   --  could account for 2% of the time spent in the front end. When the unit
+   --  is an instance of a generic, the unit might get duplicated in the unit
+   --  table - see Make_Instance_Unit for more information. Note that, in
    --  the case of source files containing multiple units, the units table may
    --  temporarily contain two entries with the same Unit_Name during parsing,
    --  which means that the mapping must be to the first entry in the table.

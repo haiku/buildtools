@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Free Software Foundation, Inc.
+// Copyright (C) 2021-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -43,6 +43,7 @@ test01()
   // Verify changes to views::drop.
   auto v5 = views::drop(x, 0ull);
 
-  // Verify changes to views::split.
-  auto v6 = views::split(x, 5u);
+  // Verify changes to views::lazy_split.
+  auto v6 = views::lazy_split(x, 5u);
+  auto v7 = views::split(x, 5u);
 }

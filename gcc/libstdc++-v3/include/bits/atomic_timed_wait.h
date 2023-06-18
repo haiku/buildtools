@@ -1,6 +1,6 @@
 // -*- C++ -*- header.
 
-// Copyright (C) 2020-2021 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -37,11 +37,9 @@
 #if __cpp_lib_atomic_wait
 #include <bits/functional_hash.h>
 #include <bits/this_thread_sleep.h>
-
-#include <chrono>
+#include <bits/chrono.h>
 
 #ifdef _GLIBCXX_HAVE_LINUX_FUTEX
-#include <exception> // std::terminate
 #include <sys/time.h>
 #endif
 

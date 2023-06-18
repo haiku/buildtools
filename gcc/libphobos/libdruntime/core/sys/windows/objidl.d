@@ -4,7 +4,7 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_objidl.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_objidl.d)
  */
 // TODO (Don):
 // # why is "alias IPSFactoryBuffer* LPPSFACTORYBUFFER;" in this file,
@@ -12,7 +12,6 @@
 // # do we need the proxies that are defined in this file?
 module core.sys.windows.objidl;
 version (Windows):
-@system:
 
 import core.sys.windows.unknwn;
 import core.sys.windows.objfwd;

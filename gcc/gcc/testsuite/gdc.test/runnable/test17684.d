@@ -1,3 +1,13 @@
+/*
+TEST_OUTPUT:
+---
+runnable/test17684.d(37): Deprecation: alias this for classes/interfaces is deprecated
+runnable/test17684.d(54): Deprecation: alias this for classes/interfaces is deprecated
+runnable/test17684.d(54): Deprecation: alias this for classes/interfaces is deprecated
+runnable/test17684.d(37): Deprecation: alias this for classes/interfaces is deprecated
+---
+*/
+
 struct StructField(T)
 {
     static T Field;
@@ -7,17 +17,17 @@ struct StructField(T)
 struct StructProperty(T)
 {
     static T Field;
-	
+
 	static @property T property()
 	{
-		return Field;	
+		return Field;
 	}
-	
+
 	static @property void property(T value)
 	{
-		Field = value;	
+		Field = value;
 	}
-	
+
     static alias property this;
 }
 
@@ -30,17 +40,17 @@ class ClassField(T)
 class ClassProperty(T)
 {
     static T Field;
-	
+
 	static @property T property()
 	{
-		return Field;	
+		return Field;
 	}
-	
+
 	static @property void property(T value)
 	{
-		Field = value;	
+		Field = value;
 	}
-	
+
     static alias property this;
 }
 
@@ -74,6 +84,20 @@ bool boolTest(T)()
     assert(t == boolValue);
     assert(boolValue == t);
 
+    t = true;                     // tests inferType
+    auto inferredValue = t;
+    assert(inferredValue == true);
+
+    t = true;                     // tests function argument
+    bool functionCall(bool test)
+    {
+        return test;
+    }
+    assert(t == functionCall(t));
+
+    t = true;                     // tests CastExp
+    assert(t == cast(bool)t);
+
     t = true;
     return t;                     // tests ReturnStatement
 }
@@ -96,6 +120,9 @@ int intTest(T)()
     assert(43 > t);
     assert(t <= 42);
     assert(42 >= t);
+
+    t = 42;                       // tests CastExp
+    assert(42 == cast(int)t);
 
     // These currently don't work for properties due to https://issues.dlang.org/show_bug.cgi?id=8006
     static if (!(typeid(T) is typeid(StructProperty!int)) && !(typeid(T) is typeid(ClassProperty!int)))

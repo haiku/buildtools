@@ -1,6 +1,6 @@
 // Internal macros for the simd implementation -*- C++ -*-
 
-// Copyright (C) 2020-2021 Free Software Foundation, Inc.
+// Copyright (C) 2020-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -173,6 +173,46 @@
 #else
 #define _GLIBCXX_SIMD_HAVE_AVX512BW 0
 #endif
+#ifdef __AVX512BITALG__
+#define _GLIBCXX_SIMD_HAVE_AVX512BITALG 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512BITALG 0
+#endif
+#ifdef __AVX512VBMI2__
+#define _GLIBCXX_SIMD_HAVE_AVX512VBMI2 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512VBMI2 0
+#endif
+#ifdef __AVX512VBMI__
+#define _GLIBCXX_SIMD_HAVE_AVX512VBMI 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512VBMI 0
+#endif
+#ifdef __AVX512IFMA__
+#define _GLIBCXX_SIMD_HAVE_AVX512IFMA 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512IFMA 0
+#endif
+#ifdef __AVX512CD__
+#define _GLIBCXX_SIMD_HAVE_AVX512CD 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512CD 0
+#endif
+#ifdef __AVX512VNNI__
+#define _GLIBCXX_SIMD_HAVE_AVX512VNNI 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512VNNI 0
+#endif
+#ifdef __AVX512VPOPCNTDQ__
+#define _GLIBCXX_SIMD_HAVE_AVX512VPOPCNTDQ 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512VPOPCNTDQ 0
+#endif
+#ifdef __AVX512VP2INTERSECT__
+#define _GLIBCXX_SIMD_HAVE_AVX512VP2INTERSECT 1
+#else
+#define _GLIBCXX_SIMD_HAVE_AVX512VP2INTERSECT 0
+#endif
 
 #if _GLIBCXX_SIMD_HAVE_SSE
 #define _GLIBCXX_SIMD_HAVE_SSE_ABI 1
@@ -214,9 +254,11 @@
 
 #ifdef __clang__
 #define _GLIBCXX_SIMD_NORMAL_MATH
+#define _GLIBCXX_SIMD_ALWAYS_INLINE_LAMBDA
 #else
 #define _GLIBCXX_SIMD_NORMAL_MATH                                              \
   [[__gnu__::__optimize__("finite-math-only,no-signed-zeros")]]
+#define _GLIBCXX_SIMD_ALWAYS_INLINE_LAMBDA __attribute__((__always_inline__))
 #endif
 #define _GLIBCXX_SIMD_NEVER_INLINE [[__gnu__::__noinline__]]
 #define _GLIBCXX_SIMD_INTRINSIC                                                \
@@ -225,7 +267,7 @@
 #define _GLIBCXX_SIMD_IS_UNLIKELY(__x) __builtin_expect(__x, 0)
 #define _GLIBCXX_SIMD_IS_LIKELY(__x) __builtin_expect(__x, 1)
 
-#if defined __STRICT_ANSI__ && __STRICT_ANSI__
+#if __STRICT_ANSI__ || defined __clang__
 #define _GLIBCXX_SIMD_CONSTEXPR
 #define _GLIBCXX_SIMD_USE_CONSTEXPR_API const
 #else
@@ -254,6 +296,8 @@
 #ifdef _GLIBCXX_SIMD_NO_ALWAYS_INLINE
 #undef _GLIBCXX_SIMD_ALWAYS_INLINE
 #define _GLIBCXX_SIMD_ALWAYS_INLINE inline
+#undef _GLIBCXX_SIMD_ALWAYS_INLINE_LAMBDA
+#define _GLIBCXX_SIMD_ALWAYS_INLINE_LAMBDA
 #undef _GLIBCXX_SIMD_INTRINSIC
 #define _GLIBCXX_SIMD_INTRINSIC inline
 #endif
@@ -276,7 +320,9 @@
 #endif
 
 // integer division not optimized
+#ifndef __clang__
 #define _GLIBCXX_SIMD_WORKAROUND_PR90993 1
+#endif
 
 // very bad codegen for extraction and concatenation of 128/256 "subregisters"
 // with sizeof(element type) < 8: https://godbolt.org/g/mqUsgM

@@ -1,5 +1,5 @@
 ;; Unspec defintions.
-;; Copyright (C) 2012-2021 Free Software Foundation, Inc.
+;; Copyright (C) 2012-2023 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 
 ;; This file is part of GCC.
@@ -159,6 +159,7 @@
   UNSPEC_VCDE		; Custom Datapath Extension instruction.
   UNSPEC_VCDEA		; Custom Datapath Extension instruction.
   UNSPEC_DLS		; Used for DLS (Do Loop Start), Armv8.1-M Mainline instruction
+  UNSPEC_PAC_NOP	; Represents PAC signing LR
 ])
 
 
@@ -254,6 +255,9 @@
 			; instruction.
   VUNSPEC_VLLDM		; Represent the lazy load multiple with vlldm
 			; instruction.
+  VUNSPEC_PACBTI_NOP	; Represents PAC signing LR + valid landing pad
+  VUNSPEC_AUT_NOP	; Represents PAC verifying LR
+  VUNSPEC_BTI_NOP	; Represent BTI
 ])
 
 ;; Enumerators for NEON unspecs.
@@ -270,6 +274,7 @@
   UNSPEC_AESE
   UNSPEC_AESIMC
   UNSPEC_AESMC
+  UNSPEC_AES_PROTECT
   UNSPEC_SHA1C
   UNSPEC_SHA1M
   UNSPEC_SHA1P
@@ -538,7 +543,6 @@
   VRNDAQ_F
   VREV64Q_F
   VDUPQ_N_F
-  VABSQ_F
   VREV32Q_F
   VCVTTQ_F32_F16
   VCVTBQ_F32_F16
@@ -557,12 +561,9 @@
   VQABSQ_S
   VDUPQ_N_U
   VDUPQ_N_S
-  VCLZQ_U
-  VCLZQ_S
   VCLSQ_S
   VADDVQ_S
   VADDVQ_U
-  VABSQ_S
   VREV32Q_U
   VREV32Q_S
   VMOVLTQ_U
@@ -578,10 +579,8 @@
   VCVTMQ_S
   VCVTMQ_U
   VADDLVQ_U
-  VCTP8Q
-  VCTP16Q
-  VCTP32Q
-  VCTP64Q
+  VCTP
+  VCTP_M
   VPNOT
   VCREATEQ_F
   VCVTQ_N_TO_F_S
@@ -596,8 +595,6 @@
   VCVTQ_N_FROM_F_U
   VADDLVQ_P_S
   VADDLVQ_P_U
-  VCMPNEQ_U
-  VCMPNEQ_S
   VSHLQ_S
   VSHLQ_U
   VABDQ_S
@@ -605,9 +602,6 @@
   VADDVAQ_S
   VADDVQ_P_S
   VBRSRQ_N_S
-  VCMPEQQ_S
-  VCMPEQQ_N_S
-  VCMPNEQ_N_S
   VHADDQ_S
   VHADDQ_N_S
   VHSUBQ_S
@@ -645,9 +639,6 @@
   VADDVAQ_U
   VADDVQ_P_U
   VBRSRQ_N_U
-  VCMPEQQ_U
-  VCMPEQQ_N_U
-  VCMPNEQ_N_U
   VHADDQ_U
   VHADDQ_N_U
   VHSUBQ_U
@@ -680,14 +671,6 @@
   VSHLQ_R_U
   VSUBQ_U
   VSUBQ_N_U
-  VCMPGEQ_N_S
-  VCMPGEQ_S
-  VCMPGTQ_N_S
-  VCMPGTQ_S
-  VCMPLEQ_N_S
-  VCMPLEQ_S
-  VCMPLTQ_N_S
-  VCMPLTQ_S
   VHCADDQ_ROT270_S
   VHCADDQ_ROT90_S
   VMAXAQ_S
@@ -702,26 +685,10 @@
   VQRDMULHQ_N_S
   VQRDMULHQ_S
   VQSHLUQ_N_S
-  VCMPCSQ_N_U
-  VCMPCSQ_U
-  VCMPHIQ_N_U
-  VCMPHIQ_U
   VABDQ_M_S
   VABDQ_M_U
   VABDQ_F
   VADDQ_N_F
-  VCMPEQQ_F
-  VCMPEQQ_N_F
-  VCMPGEQ_F
-  VCMPGEQ_N_F
-  VCMPGTQ_F
-  VCMPGTQ_N_F
-  VCMPLEQ_F
-  VCMPLEQ_N_F
-  VCMPLTQ_F
-  VCMPLTQ_N_F
-  VCMPNEQ_F
-  VCMPNEQ_N_F
   VMAXNMAQ_F
   VMAXNMAVQ_F
   VMAXNMQ_F
@@ -737,10 +704,6 @@
   VADDLVAQ_S
   VBICQ_N_U
   VBICQ_N_S
-  VCTP8Q_M
-  VCTP16Q_M
-  VCTP32Q_M
-  VCTP64Q_M
   VCVTBQ_F16_F32
   VCVTTQ_F16_F32
   VMLALDAVQ_U

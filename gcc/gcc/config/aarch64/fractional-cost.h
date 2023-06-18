@@ -1,5 +1,5 @@
 // Simple fixed-point representation of fractional costs
-// Copyright (C) 2021 Free Software Foundation, Inc.
+// Copyright (C) 2021-2023 Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -61,7 +61,7 @@ private:
   constexpr fractional_cost (uint64_t value, raw) : m_value (value) {}
 
   // A multiple of [1, 16] * 16.  This ensures that 1/N is representable
-  // for every every possible SVE element count N, or for any "X per cycle"
+  // for every possible SVE element count N, or for any "X per cycle"
   // value N in the range [1, 16].
   static const uint32_t SCALE = 11531520;
 

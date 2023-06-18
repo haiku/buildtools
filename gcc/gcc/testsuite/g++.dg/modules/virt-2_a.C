@@ -1,3 +1,6 @@
+// AAPCS overrides TARGET_CXX_KEY_METHOD_MAY_BE_INLINE,
+// in a way that invalidates this test.
+// { dg-skip-if "!TARGET_CXX_KEY_METHOD_MAY_BE_INLINE" { arm_eabi } } 
 // { dg-module-do run }
 // { dg-additional-options -fmodules-ts }
 export module foo;
@@ -22,6 +25,6 @@ export int Visit (Visitor *v)
 }
 
 // Emit here
-// { dg-final { scan-assembler {_ZTV7Visitor:} } }
-// { dg-final { scan-assembler {_ZTI7Visitor:} } }
-// { dg-final { scan-assembler {_ZTS7Visitor:} } }
+// { dg-final { scan-assembler {_ZTVW3foo7Visitor:} } }
+// { dg-final { scan-assembler {_ZTIW3foo7Visitor:} } }
+// { dg-final { scan-assembler {_ZTSW3foo7Visitor:} } }

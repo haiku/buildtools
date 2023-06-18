@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_tlhelp32.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_tlhelp32.d)
  */
 module core.sys.windows.tlhelp32;
 version (Windows):
-@system:
 pragma(lib, "kernel32");
 
 version (ANSI) {} else version = Unicode;

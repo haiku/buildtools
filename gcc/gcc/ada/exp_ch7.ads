@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -153,17 +153,6 @@ package Exp_Ch7 is
    --  triggered by an abort, E_Id denotes the defining identifier of a local
    --  exception occurrence, Raised_Id is the entity of a local boolean flag.
 
-   function CW_Or_Has_Controlled_Part (T : Entity_Id) return Boolean;
-   --  True if T is a class-wide type, or if it has controlled parts ("part"
-   --  means T or any of its subcomponents). Same as Needs_Finalization, except
-   --  when pragma Restrictions (No_Finalization) applies, in which case we
-   --  know that class-wide objects do not contain controlled parts.
-
-   function Has_New_Controlled_Component (E : Entity_Id) return Boolean;
-   --  E is a type entity. Give the same result as Has_Controlled_Component
-   --  except for tagged extensions where the result is True only if the
-   --  latest extension contains a controlled component.
-
    function Make_Adjust_Call
      (Obj_Ref   : Node_Id;
       Typ       : Entity_Id;
@@ -266,8 +255,8 @@ package Exp_Ch7 is
    procedure Expand_Cleanup_Actions (N : Node_Id);
    --  Expand the necessary stuff into a scope to enable finalization of local
    --  objects and deallocation of transient data when exiting the scope. N is
-   --  a "scope node" that is to say one of the following: N_Block_Statement,
-   --  N_Subprogram_Body, N_Task_Body, N_Entry_Body.
+   --  one of N_Block_Statement, N_Subprogram_Body, N_Task_Body, N_Entry_Body,
+   --  or N_Extended_Return_Statement.
 
    procedure Establish_Transient_Scope
      (N                : Node_Id;

@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_httpext.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_httpext.d)
  */
 module core.sys.windows.httpext;
 version (Windows):
-@system:
 
 /* Comment from MinGW
        httpext.h - Header for ISAPI extensions.

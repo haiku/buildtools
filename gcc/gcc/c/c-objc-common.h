@@ -1,5 +1,5 @@
 /* Language hooks common to C and ObjC front ends.
-   Copyright (C) 2004-2021 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
    Contributed by Ziemowit Laski  <zlaski@apple.com>
 
 This file is part of GCC.
@@ -22,7 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_C_OBJC_COMMON
 
 /* Lang hooks that are shared between C and ObjC are defined here.  Hooks
-   specific to C or ObjC go in c-lang.c and objc/objc-lang.c, respectively.  */
+   specific to C or ObjC go in c-lang.cc and objc/objc-lang.cc, respectively.  */
 
 #undef LANG_HOOKS_IDENTIFIER_SIZE
 #define LANG_HOOKS_IDENTIFIER_SIZE C_SIZEOF_STRUCT_LANG_IDENTIFIER
@@ -81,6 +81,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef LANG_HOOKS_SIMULATE_ENUM_DECL
 #define LANG_HOOKS_SIMULATE_ENUM_DECL c_simulate_enum_decl
+#undef LANG_HOOKS_SIMULATE_RECORD_DECL
+#define LANG_HOOKS_SIMULATE_RECORD_DECL c_simulate_record_decl
 #undef LANG_HOOKS_TYPE_FOR_MODE
 #define LANG_HOOKS_TYPE_FOR_MODE c_common_type_for_mode
 #undef LANG_HOOKS_TYPE_FOR_SIZE
@@ -121,5 +123,5 @@ along with GCC; see the file COPYING3.  If not see
 #define LANG_HOOKS_OMP_CLAUSE_ASSIGN_OP c_omp_clause_copy_ctor
 
 #undef LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P
-#define LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P c_vla_unspec_p
+#define LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P c_var_mod_p
 #endif /* GCC_C_OBJC_COMMON */

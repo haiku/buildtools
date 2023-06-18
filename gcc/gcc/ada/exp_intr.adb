@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,38 +23,44 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Checks;   use Checks;
-with Einfo;    use Einfo;
-with Elists;   use Elists;
-with Expander; use Expander;
-with Exp_Atag; use Exp_Atag;
-with Exp_Ch7;  use Exp_Ch7;
-with Exp_Ch11; use Exp_Ch11;
-with Exp_Code; use Exp_Code;
-with Exp_Fixd; use Exp_Fixd;
-with Exp_Util; use Exp_Util;
-with Freeze;   use Freeze;
-with Inline;   use Inline;
-with Nmake;    use Nmake;
-with Nlists;   use Nlists;
-with Opt;      use Opt;
-with Restrict; use Restrict;
-with Rident;   use Rident;
-with Rtsfind;  use Rtsfind;
-with Sem;      use Sem;
-with Sem_Aux;  use Sem_Aux;
-with Sem_Eval; use Sem_Eval;
-with Sem_Res;  use Sem_Res;
-with Sem_Type; use Sem_Type;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
-with Sinput;   use Sinput;
-with Snames;   use Snames;
-with Stand;    use Stand;
-with Tbuild;   use Tbuild;
-with Uintp;    use Uintp;
-with Urealp;   use Urealp;
+with Atree;          use Atree;
+with Aspects;        use Aspects;
+with Checks;         use Checks;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Errout;         use Errout;
+with Expander;       use Expander;
+with Exp_Atag;       use Exp_Atag;
+with Exp_Ch6;        use Exp_Ch6;
+with Exp_Ch7;        use Exp_Ch7;
+with Exp_Ch11;       use Exp_Ch11;
+with Exp_Code;       use Exp_Code;
+with Exp_Fixd;       use Exp_Fixd;
+with Exp_Util;       use Exp_Util;
+with Freeze;         use Freeze;
+with Inline;         use Inline;
+with Nmake;          use Nmake;
+with Nlists;         use Nlists;
+with Opt;            use Opt;
+with Restrict;       use Restrict;
+with Rident;         use Rident;
+with Rtsfind;        use Rtsfind;
+with Sem;            use Sem;
+with Sem_Aux;        use Sem_Aux;
+with Sem_Eval;       use Sem_Eval;
+with Sem_Res;        use Sem_Res;
+with Sem_Type;       use Sem_Type;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Sinput;         use Sinput;
+with Snames;         use Snames;
+with Stand;          use Stand;
+with Tbuild;         use Tbuild;
+with Uintp;          use Uintp;
 
 package body Exp_Intr is
 
@@ -65,9 +71,6 @@ package body Exp_Intr is
    procedure Expand_Binary_Operator_Call (N : Node_Id);
    --  Expand a call to an intrinsic arithmetic operator when the operand
    --  types or sizes are not identical.
-
-   procedure Expand_Is_Negative (N : Node_Id);
-   --  Expand a call to the intrinsic Is_Negative function
 
    procedure Expand_Dispatching_Constructor_Call (N : Node_Id);
    --  Expand a call to an instantiation of Generic_Dispatching_Constructor
@@ -277,6 +280,50 @@ package body Exp_Intr is
       Result_Typ : Entity_Id;
 
    begin
+      pragma Assert (Is_Class_Wide_Type (Etype (Entity (Name (N)))));
+
+      --  Report case where we know that the generated code is wrong; that
+      --  is a dispatching constructor call whose controlling type has tasks
+      --  but its root type does not have tasks. In such case the constructor
+      --  subprogram of the root type does not have extra formals but the
+      --  constructor of the derivation must have extra formals.
+
+      if not Global_No_Tasking
+        and then not No_Run_Time_Mode
+        and then Is_Build_In_Place_Function (Entity (Name (N)))
+        and then not Has_Task (Root_Type (Etype (Entity (Name (N)))))
+        and then not Has_Aspect (Root_Type (Etype (Entity (Name (N)))),
+                       Aspect_No_Task_Parts)
+      then
+         --  Case 1: Explicit tag reference (which allows static check)
+
+         if Nkind (Tag_Arg) = N_Identifier
+           and then Present (Entity (Tag_Arg))
+           and then Is_Tag (Entity (Tag_Arg))
+         then
+            if Has_Task (Related_Type (Entity (Tag_Arg))) then
+               Error_Msg_N ("unsupported dispatching constructor call", N);
+               Error_Msg_NE
+                 ("\work around this problem by defining task component "
+                  & "type& using access-to-task-type",
+                  N, Related_Type (Entity (Tag_Arg)));
+            end if;
+
+         --  Case 2: Dynamic tag which may fail at run time
+
+         else
+            Error_Msg_N
+              ("unsupported dispatching constructor call if the type "
+               & "of the built object has task components??", N);
+
+            Error_Msg_Sloc := Sloc (Root_Type (Etype (Entity (Name (N)))));
+            Error_Msg_NE
+              ("\work around this by adding ''with no_task_parts'' to "
+               & "the declaration of the root type& defined#???",
+               N, Root_Type (Etype (Entity (Name (N)))));
+         end if;
+      end if;
+
       --  Remove side effects from tag argument early, before rewriting
       --  the dispatching constructor call, as Remove_Side_Effects relies
       --  on Tag_Arg's Parent link properly attached to the tree (once the
@@ -325,7 +372,7 @@ package body Exp_Intr is
       Result_Typ := Class_Wide_Type (Etype (Act_Constr));
 
       --  Check that the accessibility level of the tag is no deeper than that
-      --  of the constructor function (unless CodePeer_Mode)
+      --  of the constructor function (unless CodePeer_Mode).
 
       if not CodePeer_Mode then
          Insert_Action (N,
@@ -335,7 +382,8 @@ package body Exp_Intr is
                  Left_Opnd  =>
                    Build_Get_Access_Level (Loc, New_Copy_Tree (Tag_Arg)),
                  Right_Opnd =>
-                   Make_Integer_Literal (Loc, Scope_Depth (Act_Constr))),
+                   Make_Integer_Literal
+                     (Loc, Scope_Depth_Default_0 (Act_Constr))),
 
              Then_Statements => New_List (
                Make_Raise_Statement (Loc,
@@ -521,7 +569,7 @@ package body Exp_Intr is
             if No (Choice_Parameter (P)) then
                E := Make_Temporary (Loc, 'E');
                Set_Choice_Parameter (P, E);
-               Set_Ekind (E, E_Variable);
+               Mutate_Ekind (E, E_Variable);
                Set_Etype (E, RTE (RE_Exception_Occurrence));
                Set_Scope (E, Current_Scope);
             end if;
@@ -636,9 +684,6 @@ package body Exp_Intr is
       then
          Expand_Import_Call (N);
 
-      elsif Nam = Name_Is_Negative then
-         Expand_Is_Negative (N);
-
       elsif Nam = Name_Rotate_Left then
          Expand_Shift (N, E, N_Op_Rotate_Left);
 
@@ -695,58 +740,6 @@ package body Exp_Intr is
          null;
       end if;
    end Expand_Intrinsic_Call;
-
-   ------------------------
-   -- Expand_Is_Negative --
-   ------------------------
-
-   procedure Expand_Is_Negative (N : Node_Id) is
-      Loc   : constant Source_Ptr := Sloc (N);
-      Opnd  : constant Node_Id    := Relocate_Node (First_Actual (N));
-
-   begin
-
-      --  We replace the function call by the following expression
-
-      --    if Opnd < 0.0 then
-      --       True
-      --    else
-      --       if Opnd > 0.0 then
-      --          False;
-      --       else
-      --          Float_Unsigned!(Float (Opnd)) /= 0
-      --       end if;
-      --    end if;
-
-      Rewrite (N,
-        Make_If_Expression (Loc,
-          Expressions => New_List (
-            Make_Op_Lt (Loc,
-              Left_Opnd  => Duplicate_Subexpr (Opnd),
-              Right_Opnd => Make_Real_Literal (Loc, Ureal_0)),
-
-            New_Occurrence_Of (Standard_True, Loc),
-
-            Make_If_Expression (Loc,
-             Expressions => New_List (
-               Make_Op_Gt (Loc,
-                 Left_Opnd  => Duplicate_Subexpr_No_Checks (Opnd),
-                 Right_Opnd => Make_Real_Literal (Loc, Ureal_0)),
-
-               New_Occurrence_Of (Standard_False, Loc),
-
-                Make_Op_Ne (Loc,
-                  Left_Opnd =>
-                    Unchecked_Convert_To
-                      (RTE (RE_Float_Unsigned),
-                       Convert_To
-                         (Standard_Float,
-                          Duplicate_Subexpr_No_Checks (Opnd))),
-                  Right_Opnd =>
-                    Make_Integer_Literal (Loc, 0)))))));
-
-      Analyze_And_Resolve (N, Standard_Boolean);
-   end Expand_Is_Negative;
 
    ------------------
    -- Expand_Shift --
@@ -1206,7 +1199,7 @@ package body Exp_Intr is
 
          else
             Set_Procedure_To_Call
-              (Free_Nod, Find_Prim_Op (Etype (Pool), Name_Deallocate));
+              (Free_Nod, Find_Storage_Op (Etype (Pool), Name_Deallocate));
          end if;
       end if;
 

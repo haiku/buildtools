@@ -6,7 +6,7 @@
  *                                                                          *
  *                          C Implementation File                           *
  *                                                                          *
- *            Copyright (C) 2014-2020, Free Software Foundation, Inc.       *
+ *            Copyright (C) 2014-2023, Free Software Foundation, Inc.       *
  *                                                                          *
  * GNAT is free software;  you can  redistribute it  and/or modify it under *
  * terms of the  GNU General Public License as published  by the Free Soft- *
@@ -70,6 +70,7 @@ int __gnat_rt_init_count = 0;
    and finalize properly the run-time. */
 
 #if defined (__MINGW32__)
+#define WIN32_LEAN_AND_MEAN
 #include "mingw32.h"
 #include <windows.h>
 
@@ -147,6 +148,19 @@ static void skip_quoted_string (const WCHAR **current_in,
 	}
       ci++;
     }
+
+  /* Handle the case in which a nul character was found instead of a closing
+     double quote. In that case consider all the backslashes as literal
+     characters. */
+  if (*ci == '\0')
+    {
+      for (int i=0; i<qbs_count; i++)
+        {
+          *co='\\';
+          co++;
+        }
+    }
+
   *current_in = ci;
   *current_out = co;
 }
@@ -205,7 +219,10 @@ static void skip_argument (const WCHAR **current_in,
 	  bs_count = 0;
 	  *co = *ci; co++;
 	}
-      ci++;
+      if (*ci != '\0')
+        {
+          ci++;
+        }
     }
 
   for (int i=0; i<bs_count; i++)

@@ -9,6 +9,15 @@
    variables" (only visible to members of the GitHub OpenACC organization).
 */
 
+/* { dg-additional-options "-fopt-info-note-omp" }
+   { dg-additional-options "--param=openacc-privatization=noisy" }
+   { dg-additional-options "-foffload=-fopt-info-note-omp" }
+   { dg-additional-options "-foffload=--param=openacc-privatization=noisy" }
+   for testing/documenting aspects of that functionality.  */
+
+/* { dg-additional-options "-Wopenacc-parallelism" } for testing/documenting
+   aspects of that functionality.  */
+
 
 #undef NDEBUG
 #include <assert.h>
@@ -37,6 +46,7 @@ static void t0_c(void)
 #pragma acc parallel \
   reduction(max:num_gangs_actual) \
   reduction(max:result)
+      /* { dg-note {variable 'var' declared in block isn't candidate for adjusting OpenACC privatization level: static} "" { target *-*-* } .-3 } */
       {
 	num_gangs_actual = 1 + __builtin_goacc_parlevel_id(GOMP_DIM_GANG);
 
@@ -63,6 +73,9 @@ static void t0_c(void)
 static const int t0_r_var_init = 61;
 
 #pragma acc routine gang
+/* { dg-bogus "warning: region is gang partitioned but does not contain gang partitioned code" "TODO 'atomic'" { xfail *-*-* } .+4 } */
+/* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "" { target *-*-* } .+3 } */
+/* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "" { target *-*-* } .+2 } */
 __attribute__((noinline))
 static int t0_r_r(void)
 {
@@ -123,10 +136,12 @@ static void t1_c(void)
     {
       int result = 0;
       int num_gangs_actual = -1;
+      /* { dg-bogus "warning: region is gang partitioned but does not contain gang partitioned code" "TODO 'atomic'" { xfail *-*-* } .+1 } */
 #pragma acc parallel \
   num_gangs(num_gangs_request) \
   reduction(max:num_gangs_actual) \
   reduction(max:result)
+      /* { dg-note {variable 'var' declared in block isn't candidate for adjusting OpenACC privatization level: static} "" { target *-*-* } .-4 } */
       {
 	num_gangs_actual = 1 + __builtin_goacc_parlevel_id(GOMP_DIM_GANG);
 
@@ -153,6 +168,9 @@ static void t1_c(void)
 static const int t1_r2_var_init = 166;
 
 #pragma acc routine gang
+/* { dg-bogus "warning: region is gang partitioned but does not contain gang partitioned code" "TODO 'atomic'" { xfail *-*-* } .+4 } */
+/* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "" { target *-*-* } .+3 } */
+/* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "" { target *-*-* } .+2 } */
 __attribute__((noinline))
 static int t1_r2_r(void)
 {
@@ -245,6 +263,9 @@ static void t1_r2(void)
 static const int t2_var_init_2 = -55;
 
 #pragma acc routine gang
+/* { dg-bogus "warning: region is gang partitioned but does not contain gang partitioned code" "TODO 'atomic'" { xfail *-*-* } .+4 } */
+/* { dg-warning "region is worker partitioned but does not contain worker partitioned code" "" { target *-*-* } .+3 } */
+/* { dg-warning "region is vector partitioned but does not contain vector partitioned code" "" { target *-*-* } .+2 } */
 __attribute__((noinline))
 static int t2_r(void)
 {
@@ -277,6 +298,10 @@ static void t2(void)
 
 #pragma acc data \
   copy(results_1, results_2, results_3)
+  /* { dg-note {variable 'num_gangs_request_1\.[0-9]+' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target { c && { ! __OPTIMIZE__ } } } .-2 } */
+  /* { dg-note {variable 'num_gangs_request_2\.[0-9]+' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target { c && { ! __OPTIMIZE__ } } } .-3 } */
+  /* { dg-note {variable 'num_gangs_request_3\.[0-9]+' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target { c && { ! __OPTIMIZE__ } } } .-4 } */
+  /* { dg-note {variable 'i' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-5 } */
   {
     for (int i = 0; i < i_limit; ++i)
       {
@@ -286,10 +311,13 @@ static void t2(void)
 	   itself, meaning that all 'i = 0' execution has finished (on the
 	   device) before 'i = 1' is started (on the device), etc.  */
 
+	/* { dg-bogus "warning: region is gang partitioned but does not contain gang partitioned code" "TODO 'atomic'" { xfail *-*-* } .+1 } */
 #pragma acc parallel \
   present(results_1) \
   num_gangs(num_gangs_request_1) \
   async(1)
+	/* { dg-note {variable 'var' declared in block isn't candidate for adjusting OpenACC privatization level: static} "" { target *-*-* } .-4 } */
+	/* { dg-note {variable 'tmp' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-5 } */
 	{
 	  static int var = var_init_1;
 
@@ -308,10 +336,13 @@ static void t2(void)
 	  results_2[i][__builtin_goacc_parlevel_id(GOMP_DIM_GANG)] += t2_r();
 	}
 
+	/* { dg-bogus "warning: region is gang partitioned but does not contain gang partitioned code" "TODO 'atomic'" { xfail *-*-* } .+1 } */
 #pragma acc parallel \
   present(results_3) \
   num_gangs(num_gangs_request_3) \
   async(3)
+	/* { dg-note {variable 'var' declared in block isn't candidate for adjusting OpenACC privatization level: static} "" { target *-*-* } .-4 } */
+	/* { dg-note {variable 'tmp' declared in block isn't candidate for adjusting OpenACC privatization level: not addressable} "" { target *-*-* } .-5 } */
 	{
 	  static int var = var_init_3;
 
@@ -432,6 +463,7 @@ static void pr84992_1(void)
   int n[1];
   n[0] = 3;
 #pragma acc parallel copy(n)
+  /* { dg-note {variable 'test' declared in block isn't candidate for adjusting OpenACC privatization level: static} "" { target *-*-* } .-1 } */
   {
     static const int test[] = {1,2,3,4};
     n[0] = test[n[0]];

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 2004-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 2004-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -36,7 +36,7 @@ with Ada.Iterator_Interfaces;
 with Ada.Containers.Helpers;
 private with Ada.Streams;
 private with Ada.Finalization;
-private with Ada.Strings.Text_Output;
+private with Ada.Strings.Text_Buffers;
 
 generic
    type Index_Type is range <>;
@@ -63,12 +63,11 @@ package Ada.Containers.Bounded_Vectors is
       Aggregate         => (Empty          => Empty,
                             Add_Unnamed    => Append,
                             New_Indexed    => New_Vector,
-                            Assign_Indexed => Replace_Element);
+                            Assign_Indexed => Replace_Element),
+      Preelaborable_Initialization
+                        => Element_Type'Preelaborable_Initialization;
 
-   pragma Preelaborable_Initialization (Vector);
-
-   type Cursor is private;
-   pragma Preelaborable_Initialization (Cursor);
+   type Cursor is private with Preelaborable_Initialization;
 
    Empty_Vector : constant Vector;
 
@@ -80,12 +79,14 @@ package Ada.Containers.Bounded_Vectors is
       Ada.Iterator_Interfaces (Cursor, Has_Element);
 
    function Empty (Capacity : Count_Type := 10) return Vector;
+   pragma Ada_2022 (Empty);
 
    overriding function "=" (Left, Right : Vector) return Boolean;
 
    function New_Vector (First, Last : Index_Type) return Vector
      with Pre => First = Index_Type'First;
-   --  Ada_2020 aggregate operation.
+   --  Ada 2022 aggregate operation.
+   pragma Ada_2022 (New_Vector);
 
    function To_Vector (Length : Count_Type) return Vector;
 
@@ -194,6 +195,7 @@ package Ada.Containers.Bounded_Vectors is
      (Container : in out Vector;
       Before    : Extended_Index;
       New_Item  : Vector);
+   pragma Ada_2022 (Insert_Vector);
 
    procedure Insert
      (Container : in out Vector;
@@ -205,6 +207,7 @@ package Ada.Containers.Bounded_Vectors is
      (Container : in out Vector;
       Before    : Cursor;
       New_Item  : Vector);
+   pragma Ada_2022 (Insert_Vector);
 
    procedure Insert
      (Container : in out Vector;
@@ -217,6 +220,7 @@ package Ada.Containers.Bounded_Vectors is
       Before    : Cursor;
       New_Item  : Vector;
       Position  : out Cursor);
+   pragma Ada_2022 (Insert_Vector);
 
    procedure Insert
      (Container : in out Vector;
@@ -258,6 +262,7 @@ package Ada.Containers.Bounded_Vectors is
    procedure Prepend_Vector
      (Container : in out Vector;
       New_Item  : Vector);
+   pragma Ada_2022 (Prepend_Vector);
 
    procedure Prepend
      (Container : in out Vector;
@@ -272,6 +277,7 @@ package Ada.Containers.Bounded_Vectors is
    procedure Append_Vector
      (Container : in out Vector;
       New_Item  : Vector);
+   pragma Ada_2022 (Append_Vector);
 
    procedure Append
      (Container : in out Vector;
@@ -426,7 +432,7 @@ private
    end record with Put_Image => Put_Image;
 
    procedure Put_Image
-     (S : in out Ada.Strings.Text_Output.Sink'Class; V : Vector);
+     (S : in out Ada.Strings.Text_Buffers.Root_Buffer_Type'Class; V : Vector);
 
    procedure Write
      (Stream    : not null access Root_Stream_Type'Class;
@@ -505,10 +511,10 @@ private
 
    for Reference_Type'Write use Write;
 
-   --  Three operations are used to optimize in the expansion of "for ... of"
-   --  loops: the Next(Cursor) procedure in the visible part, and the following
-   --  Pseudo_Reference and Get_Element_Access functions. See Exp_Ch5 for
-   --  details.
+   --  See Ada.Containers.Vectors for documentation on the following
+
+   procedure _Next (Position : in out Cursor) renames Next;
+   procedure _Previous (Position : in out Cursor) renames Previous;
 
    function Pseudo_Reference
      (Container : aliased Vector'Class) return Reference_Control_Type;

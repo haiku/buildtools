@@ -4,11 +4,10 @@
  * Translated from MinGW Windows headers
  *
  * License: $(LINK2 http://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source: $(DRUNTIMESRC src/core/sys/windows/_oleidl.d)
+ * Source: $(DRUNTIMESRC core/sys/windows/_oleidl.d)
  */
 module core.sys.windows.oleidl;
 version (Windows):
-@system:
 
 // DAC: This is defined in ocidl !!
 // what is it doing in here?

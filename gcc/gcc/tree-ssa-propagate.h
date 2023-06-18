@@ -1,6 +1,6 @@
 /* Data structures and function declarations for the SSA value propagation
    engine.
-   Copyright (C) 2004-2021 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -26,7 +26,7 @@ along with GCC; see the file COPYING3.  If not see
 
 /* If SIM_P is true, statement S will be simulated again.  */
 
-static inline void
+inline void
 prop_set_simulate_again (gimple *s, bool visit_p)
 {
   gimple_set_visited (s, visit_p);
@@ -34,7 +34,7 @@ prop_set_simulate_again (gimple *s, bool visit_p)
 
 /* Return true if statement T should be simulated again.  */
 
-static inline bool
+inline bool
 prop_simulate_again_p (gimple *s)
 {
   return gimple_visited_p (s);
@@ -63,10 +63,7 @@ enum ssa_prop_result {
 };
 
 
-extern bool valid_gimple_rhs_p (tree);
 extern void move_ssa_defining_stmt_for_defs (gimple *, gimple *);
-extern bool update_gimple_call (gimple_stmt_iterator *, tree, int, ...);
-extern bool update_call_from_tree (gimple_stmt_iterator *, tree);
 extern bool stmt_makes_single_store (gimple *);
 extern bool may_propagate_copy (tree, tree, bool = false);
 extern bool may_propagate_copy_into_stmt (gimple *, tree);

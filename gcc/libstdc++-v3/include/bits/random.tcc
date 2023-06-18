@@ -1,6 +1,6 @@
 // random number generation (out of line) -*- C++ -*-
 
-// Copyright (C) 2009-2021 Free Software Foundation, Inc.
+// Copyright (C) 2009-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -91,6 +91,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   } // namespace __detail
   /// @endcond
 
+#if ! __cpp_inline_variables
   template<typename _UIntType, _UIntType __a, _UIntType __c, _UIntType __m>
     constexpr _UIntType
     linear_congruential_engine<_UIntType, __a, __c, __m>::multiplier;
@@ -106,6 +107,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _UIntType, _UIntType __a, _UIntType __c, _UIntType __m>
     constexpr _UIntType
     linear_congruential_engine<_UIntType, __a, __c, __m>::default_seed;
+#endif
 
   /**
    * Seeds the LCR with integral value @p __s, adjusted so that the
@@ -186,7 +188,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __is;
     }
 
-
+#if ! __cpp_inline_variables
   template<typename _UIntType,
 	   size_t __w, size_t __n, size_t __m, size_t __r,
 	   _UIntType __a, size_t __u, _UIntType __d, size_t __s,
@@ -313,6 +315,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     constexpr _UIntType
     mersenne_twister_engine<_UIntType, __w, __n, __m, __r, __a, __u, __d,
 			    __s, __b, __t, __c, __l, __f>::default_seed;
+#endif
 
   template<typename _UIntType,
 	   size_t __w, size_t __n, size_t __m, size_t __r,
@@ -515,7 +518,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __is;
     }
 
-
+#if ! __cpp_inline_variables
   template<typename _UIntType, size_t __w, size_t __s, size_t __r>
     constexpr size_t
     subtract_with_carry_engine<_UIntType, __w, __s, __r>::word_size;
@@ -529,15 +532,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     subtract_with_carry_engine<_UIntType, __w, __s, __r>::long_lag;
 
   template<typename _UIntType, size_t __w, size_t __s, size_t __r>
-    constexpr _UIntType
+    constexpr uint_least32_t
     subtract_with_carry_engine<_UIntType, __w, __s, __r>::default_seed;
+#endif
 
   template<typename _UIntType, size_t __w, size_t __s, size_t __r>
     void
     subtract_with_carry_engine<_UIntType, __w, __s, __r>::
     seed(result_type __value)
     {
-      std::linear_congruential_engine<result_type, 40014u, 0u, 2147483563u>
+      std::linear_congruential_engine<uint_least32_t, 40014u, 0u, 2147483563u>
 	__lcg(__value == 0u ? default_seed : __value);
 
       const size_t __n = (__w + 31) / 32;
@@ -666,7 +670,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __is;
     }
 
-
+#if ! __cpp_inline_variables
   template<typename _RandomNumberEngine, size_t __p, size_t __r>
     constexpr size_t
     discard_block_engine<_RandomNumberEngine, __p, __r>::block_size;
@@ -674,6 +678,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _RandomNumberEngine, size_t __p, size_t __r>
     constexpr size_t
     discard_block_engine<_RandomNumberEngine, __p, __r>::used_block;
+#endif
 
   template<typename _RandomNumberEngine, size_t __p, size_t __r>
     typename discard_block_engine<_RandomNumberEngine,
@@ -799,10 +804,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __sum;
     }
 
-
+#if ! __cpp_inline_variables
   template<typename _RandomNumberEngine, size_t __k>
     constexpr size_t
     shuffle_order_engine<_RandomNumberEngine, __k>::table_size;
+#endif
 
   namespace __detail
   {
@@ -1901,15 +1907,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       if (__d1._M_param == __d2._M_param
 	  && __d1._M_saved_available == __d2._M_saved_available)
-	{
-	  if (__d1._M_saved_available
-	      && __d1._M_saved == __d2._M_saved)
-	    return true;
-	  else if(!__d1._M_saved_available)
-	    return true;
-	  else
-	    return false;
-	}
+	return __d1._M_saved_available ? __d1._M_saved == __d2._M_saved : true;
       else
 	return false;
     }
@@ -1955,7 +1953,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool __saved_avail;
       if (__is >> __mean >> __stddev >> __saved_avail)
 	{
-	  if (__saved_avail && (__is >> __x._M_saved))
+	  if (!__saved_avail || (__is >> __x._M_saved))
 	    {
 	      __x._M_saved_available = __saved_avail;
 	      __x.param(param_type(__mean, __stddev));

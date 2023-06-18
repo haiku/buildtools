@@ -40,7 +40,8 @@ void foo_compiles() {}
     static assert(!__traits(compiles, delete p));
 
     int[int] aa;
-    static assert(!__traits(compiles, aa[0]));
+    static assert( __traits(compiles, aa[0]));
+    static assert(!__traits(compiles, (aa[0] = 10)));
 
     int[] a;
     static assert(!__traits(compiles, a.length = 1));
@@ -52,7 +53,7 @@ void foo_compiles() {}
 }
 
 /******************************************/
-// 12630
+// https://issues.dlang.org/show_bug.cgi?id=12630
 
 void test12630() @nogc
 {
@@ -86,7 +87,7 @@ void test12630() @nogc
 }
 
 /******************************************/
-// 12642
+// https://issues.dlang.org/show_bug.cgi?id=12642
 
 static if (is(__vector(ulong[2])))
 {
@@ -99,7 +100,7 @@ static if (is(__vector(ulong[2])))
 }
 
 /******************************************/
-// 13550
+// https://issues.dlang.org/show_bug.cgi?id=13550
 
 auto foo13550() @nogc
 {
@@ -108,4 +109,13 @@ auto foo13550() @nogc
         return new int[2];
     }
     return &bar;
+}
+
+// https://issues.dlang.org/show_bug.cgi?id=19285
+
+void f(bool cond, string s) @nogc {
+    auto inner() { return s; }
+    alias Unused1 = typeof(inner); // OK
+    alias Unused2 = typeof(&inner); // (Does not) INFERS GC (anymore)
+    enum Unused3 = __traits(compiles , &inner);
 }

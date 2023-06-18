@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (C) 2020 Free Software Foundation, Inc.
+# Copyright (C) 2020-2023 Free Software Foundation, Inc.
 #
 # This file is part of GCC.
 #
@@ -78,4 +78,4 @@ else
     tee="cat"
 fi
 
-git $cmd | $tee | git gcc-mklog $GCC_MKLOG_ARGS -c "$COMMIT_MSG_FILE"
+git $cmd | $tee | git gcc-mklog -c "$COMMIT_MSG_FILE"

@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,28 +23,32 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
-with Atree;    use Atree;
-with Csets;    use Csets;
-with Debug;    use Debug;
-with Einfo;    use Einfo;
-with Elists;   use Elists;
-with Layout;   use Layout;
-with Namet;    use Namet;
-with Nlists;   use Nlists;
-with Nmake;    use Nmake;
-with Opt;      use Opt;
-with Output;   use Output;
-with Set_Targ; use Set_Targ;
-with Targparm; use Targparm;
-with Tbuild;   use Tbuild;
-with Ttypes;   use Ttypes;
-with Sem_Mech; use Sem_Mech;
-with Sem_Util; use Sem_Util;
-with Sinfo;    use Sinfo;
-with Snames;   use Snames;
-with Stand;    use Stand;
-with Uintp;    use Uintp;
-with Urealp;   use Urealp;
+with Atree;          use Atree;
+with Csets;          use Csets;
+with Debug;          use Debug;
+with Einfo;          use Einfo;
+with Einfo.Entities; use Einfo.Entities;
+with Einfo.Utils;    use Einfo.Utils;
+with Elists;         use Elists;
+with Layout;         use Layout;
+with Namet;          use Namet;
+with Nlists;         use Nlists;
+with Nmake;          use Nmake;
+with Opt;            use Opt;
+with Output;         use Output;
+with Set_Targ;       use Set_Targ;
+with Targparm;       use Targparm;
+with Tbuild;         use Tbuild;
+with Ttypes;         use Ttypes;
+with Sem_Mech;       use Sem_Mech;
+with Sem_Util;       use Sem_Util;
+with Sinfo;          use Sinfo;
+with Sinfo.Nodes;    use Sinfo.Nodes;
+with Sinfo.Utils;    use Sinfo.Utils;
+with Snames;         use Snames;
+with Stand;          use Stand;
+with Uintp;          use Uintp;
+with Urealp;         use Urealp;
 
 package body CStand is
 
@@ -129,12 +133,12 @@ package body CStand is
    --  Returns an identifier node with the same name as the defining identifier
    --  corresponding to the given Standard_Entity_Type value.
 
-   procedure Make_Component
+   procedure Make_Aliased_Component
      (Rec : Entity_Id;
       Typ : Entity_Id;
       Nam : String);
-   --  Build a record component with the given type and name, and append to
-   --  the list of components of Rec.
+   --  Build an aliased record component with the given type and name,
+   --  and append to the list of components of Rec.
 
    function Make_Formal (Typ : Entity_Id; Nam : String) return Entity_Id;
    --  Construct entity for subprogram formal with given name and type
@@ -145,8 +149,7 @@ package body CStand is
    function New_Operator (Op : Name_Id; Typ : Entity_Id) return Entity_Id;
    --  Build entity for standard operator with given name and type
 
-   function New_Standard_Entity
-     (New_Node_Kind : Node_Kind := N_Defining_Identifier) return Entity_Id;
+   function New_Standard_Entity return Entity_Id;
    --  Builds a new entity for Standard
 
    function New_Standard_Entity (Nam : String) return Entity_Id;
@@ -199,9 +202,9 @@ package body CStand is
         Make_Floating_Point_Definition (Stloc,
           Digits_Expression => Make_Integer (UI_From_Int (Digs))));
 
-      Set_Ekind                      (E, E_Floating_Point_Type);
+      Mutate_Ekind                   (E, E_Floating_Point_Type);
       Set_Etype                      (E, E);
-      Init_Digits_Value              (E, Digs);
+      Set_Digits_Value               (E, UI_From_Int (Digs));
       Set_Float_Rep                  (E, Rep);
       Init_Size                      (E, Siz);
       Set_Elem_Alignment             (E, Align);
@@ -243,7 +246,7 @@ package body CStand is
           Low_Bound  => Make_Integer (Lbound),
           High_Bound => Make_Integer (Ubound)));
 
-      Set_Ekind                      (E, E_Signed_Integer_Type);
+      Mutate_Ekind                   (E, E_Signed_Integer_Type);
       Set_Etype                      (E, E);
       Init_Size                      (E, Siz);
       Set_Elem_Alignment             (E);
@@ -268,7 +271,7 @@ package body CStand is
    begin
       Set_Defining_Identifier (Decl, Uns);
 
-      Set_Ekind                      (Uns, E_Modular_Integer_Type);
+      Mutate_Ekind                   (Uns, E_Modular_Integer_Type);
       Set_Scope                      (Uns, Standard_Standard);
       Set_Etype                      (Uns, Uns);
       Init_Size                      (Uns, Siz);
@@ -463,7 +466,7 @@ package body CStand is
 
       procedure Build_Exception (S : Standard_Entity_Type) is
       begin
-         Set_Ekind     (Standard_Entity (S), E_Exception);
+         Mutate_Ekind  (Standard_Entity (S), E_Exception);
          Set_Etype     (Standard_Entity (S), Standard_Exception_Type);
          Set_Is_Public (Standard_Entity (S), True);
 
@@ -574,6 +577,8 @@ package body CStand is
          Set_Has_Pragma_Pack (String_Type, True);
       end Pack_String_Type;
 
+      Char_Size : constant Unat := UI_From_Int (Standard_Character_Size);
+
    --  Start of processing for Create_Standard
 
    begin
@@ -603,7 +608,7 @@ package body CStand is
       Set_Defining_Unit_Name (Pspec, Standard_Standard);
       Set_Visible_Declarations (Pspec, Decl_S);
 
-      Set_Ekind (Standard_Standard, E_Package);
+      Mutate_Ekind (Standard_Standard, E_Package);
       Set_Is_Pure (Standard_Standard);
       Set_Is_Compilation_Unit (Standard_Standard);
 
@@ -645,24 +650,24 @@ package body CStand is
       Append (Standard_True, Literals (Tdef_Node));
       Set_Type_Definition (Parent (Standard_Boolean), Tdef_Node);
 
-      Set_Ekind          (Standard_Boolean, E_Enumeration_Type);
+      Mutate_Ekind       (Standard_Boolean, E_Enumeration_Type);
       Set_First_Literal  (Standard_Boolean, Standard_False);
       Set_Etype          (Standard_Boolean, Standard_Boolean);
-      Init_Esize         (Standard_Boolean, Standard_Character_Size);
-      Init_RM_Size       (Standard_Boolean, 1);
+      Set_Esize          (Standard_Boolean, Char_Size);
+      Set_RM_Size        (Standard_Boolean, Uint_1);
       Set_Elem_Alignment (Standard_Boolean);
 
       Set_Is_Unsigned_Type           (Standard_Boolean);
       Set_Size_Known_At_Compile_Time (Standard_Boolean);
       Set_Has_Pragma_Ordered         (Standard_Boolean);
 
-      Set_Ekind           (Standard_True, E_Enumeration_Literal);
+      Mutate_Ekind        (Standard_True, E_Enumeration_Literal);
       Set_Etype           (Standard_True, Standard_Boolean);
       Set_Enumeration_Pos (Standard_True, Uint_1);
       Set_Enumeration_Rep (Standard_True, Uint_1);
       Set_Is_Known_Valid  (Standard_True, True);
 
-      Set_Ekind           (Standard_False, E_Enumeration_Literal);
+      Mutate_Ekind        (Standard_False, E_Enumeration_Literal);
       Set_Etype           (Standard_False, Standard_Boolean);
       Set_Enumeration_Pos (Standard_False, Uint_0);
       Set_Enumeration_Rep (Standard_False, Uint_0);
@@ -751,10 +756,10 @@ package body CStand is
       Tdef_Node := New_Node (N_Enumeration_Type_Definition, Stloc);
       Set_Type_Definition (Parent (Standard_Character), Tdef_Node);
 
-      Set_Ekind          (Standard_Character, E_Enumeration_Type);
+      Mutate_Ekind       (Standard_Character, E_Enumeration_Type);
       Set_Etype          (Standard_Character, Standard_Character);
-      Init_Esize         (Standard_Character, Standard_Character_Size);
-      Init_RM_Size       (Standard_Character, 8);
+      Set_Esize          (Standard_Character, Char_Size);
+      Set_RM_Size        (Standard_Character, Uint_8);
       Set_Elem_Alignment (Standard_Character);
 
       Set_Has_Pragma_Ordered         (Standard_Character);
@@ -782,7 +787,7 @@ package body CStand is
       B_Node := New_Node (N_Character_Literal, Stloc);
       Set_Is_Static_Expression (B_Node);
       Set_Chars                (B_Node, No_Name);
-      Set_Char_Literal_Value   (B_Node, UI_From_Int (16#FF#));
+      Set_Char_Literal_Value   (B_Node, UI_From_CC (16#FF#));
       Set_Entity               (B_Node, Empty);
       Set_Etype                (B_Node, Standard_Character);
       Set_High_Bound (R_Node, B_Node);
@@ -798,7 +803,7 @@ package body CStand is
       Tdef_Node := New_Node (N_Enumeration_Type_Definition, Stloc);
       Set_Type_Definition (Parent (Standard_Wide_Character), Tdef_Node);
 
-      Set_Ekind      (Standard_Wide_Character, E_Enumeration_Type);
+      Mutate_Ekind   (Standard_Wide_Character, E_Enumeration_Type);
       Set_Etype      (Standard_Wide_Character, Standard_Wide_Character);
       Init_Size      (Standard_Wide_Character, Standard_Wide_Character_Size);
 
@@ -817,7 +822,7 @@ package body CStand is
 
       B_Node := New_Node (N_Character_Literal, Stloc);
       Set_Is_Static_Expression (B_Node);
-      Set_Chars                (B_Node, No_Name);    --  ???
+      Set_Chars                (B_Node, No_Name);
       Set_Char_Literal_Value   (B_Node, Uint_0);
       Set_Entity               (B_Node, Empty);
       Set_Etype                (B_Node, Standard_Wide_Character);
@@ -827,8 +832,8 @@ package body CStand is
 
       B_Node := New_Node (N_Character_Literal, Stloc);
       Set_Is_Static_Expression (B_Node);
-      Set_Chars                (B_Node, No_Name);    --  ???
-      Set_Char_Literal_Value   (B_Node, UI_From_Int (16#FFFF#));
+      Set_Chars                (B_Node, No_Name);
+      Set_Char_Literal_Value   (B_Node, UI_From_CC (16#FFFF#));
       Set_Entity               (B_Node, Empty);
       Set_Etype                (B_Node, Standard_Wide_Character);
       Set_High_Bound           (R_Node, B_Node);
@@ -844,7 +849,7 @@ package body CStand is
       Tdef_Node := New_Node (N_Enumeration_Type_Definition, Stloc);
       Set_Type_Definition (Parent (Standard_Wide_Wide_Character), Tdef_Node);
 
-      Set_Ekind (Standard_Wide_Wide_Character, E_Enumeration_Type);
+      Mutate_Ekind (Standard_Wide_Wide_Character, E_Enumeration_Type);
       Set_Etype (Standard_Wide_Wide_Character,
                  Standard_Wide_Wide_Character);
       Init_Size (Standard_Wide_Wide_Character,
@@ -866,7 +871,7 @@ package body CStand is
 
       B_Node := New_Node (N_Character_Literal, Stloc);
       Set_Is_Static_Expression (B_Node);
-      Set_Chars                (B_Node, No_Name);    --  ???
+      Set_Chars                (B_Node, No_Name);
       Set_Char_Literal_Value   (B_Node, Uint_0);
       Set_Entity               (B_Node, Empty);
       Set_Etype                (B_Node, Standard_Wide_Wide_Character);
@@ -876,8 +881,8 @@ package body CStand is
 
       B_Node := New_Node (N_Character_Literal, Stloc);
       Set_Is_Static_Expression (B_Node);
-      Set_Chars                (B_Node, No_Name);    --  ???
-      Set_Char_Literal_Value   (B_Node, UI_From_Int (16#7FFF_FFFF#));
+      Set_Chars                (B_Node, No_Name);
+      Set_Char_Literal_Value   (B_Node, UI_From_CC (16#7FFF_FFFF#));
       Set_Entity               (B_Node, Empty);
       Set_Etype                (B_Node, Standard_Wide_Wide_Character);
       Set_High_Bound           (R_Node, B_Node);
@@ -904,17 +909,17 @@ package body CStand is
       Append (Identifier_For (S_Positive), Subtype_Marks (Tdef_Node));
       Set_Type_Definition (Parent (Standard_String), Tdef_Node);
 
-      Set_Ekind           (Standard_String, E_Array_Type);
+      Mutate_Ekind        (Standard_String, E_Array_Type);
       Set_Etype           (Standard_String, Standard_String);
       Set_Component_Type  (Standard_String, Standard_Character);
       Set_Component_Size  (Standard_String, Uint_8);
-      Init_Size_Align     (Standard_String);
+      Reinit_Size_Align   (Standard_String);
       Set_Alignment       (Standard_String, Uint_1);
       Pack_String_Type    (Standard_String);
 
-      --  On targets where a storage unit is larger than a byte (such as AAMP),
-      --  pragma Pack has a real effect on the representation of type String,
-      --  and the type must be marked as having a nonstandard representation.
+      --  On targets where a storage unit is larger than a byte, pragma Pack
+      --  has a real effect on the representation of type String, and the type
+      --  must be marked as having a nonstandard representation.
 
       if System_Storage_Unit > Uint_8 then
          Set_Has_Non_Standard_Rep (Standard_String);
@@ -948,11 +953,11 @@ package body CStand is
       Append (Identifier_For (S_Positive), Subtype_Marks (Tdef_Node));
       Set_Type_Definition (Parent (Standard_Wide_String), Tdef_Node);
 
-      Set_Ekind           (Standard_Wide_String, E_Array_Type);
+      Mutate_Ekind        (Standard_Wide_String, E_Array_Type);
       Set_Etype           (Standard_Wide_String, Standard_Wide_String);
       Set_Component_Type  (Standard_Wide_String, Standard_Wide_Character);
       Set_Component_Size  (Standard_Wide_String, Uint_16);
-      Init_Size_Align     (Standard_Wide_String);
+      Reinit_Size_Align   (Standard_Wide_String);
       Pack_String_Type    (Standard_Wide_String);
 
       --  Set index type of Wide_String
@@ -983,13 +988,13 @@ package body CStand is
       Append (Identifier_For (S_Positive), Subtype_Marks (Tdef_Node));
       Set_Type_Definition (Parent (Standard_Wide_Wide_String), Tdef_Node);
 
-      Set_Ekind            (Standard_Wide_Wide_String, E_Array_Type);
+      Mutate_Ekind         (Standard_Wide_Wide_String, E_Array_Type);
       Set_Etype            (Standard_Wide_Wide_String,
                             Standard_Wide_Wide_String);
       Set_Component_Type   (Standard_Wide_Wide_String,
                             Standard_Wide_Wide_Character);
       Set_Component_Size   (Standard_Wide_Wide_String, Uint_32);
-      Init_Size_Align      (Standard_Wide_Wide_String);
+      Reinit_Size_Align    (Standard_Wide_Wide_String);
       Set_Is_Ada_2005_Only (Standard_Wide_Wide_String);
       Pack_String_Type     (Standard_Wide_Wide_String);
 
@@ -1005,10 +1010,10 @@ package body CStand is
 
       --  Setup entity for Natural
 
-      Set_Ekind          (Standard_Natural, E_Signed_Integer_Subtype);
-      Set_Etype          (Standard_Natural, Base_Type (Standard_Integer));
-      Init_Esize         (Standard_Natural, Standard_Integer_Size);
-      Init_RM_Size       (Standard_Natural, Standard_Integer_Size - 1);
+      Mutate_Ekind (Standard_Natural, E_Signed_Integer_Subtype);
+      Set_Etype (Standard_Natural, Base_Type (Standard_Integer));
+      Set_Esize (Standard_Natural, UI_From_Int (Standard_Integer_Size));
+      Set_RM_Size  (Standard_Natural, UI_From_Int (Standard_Integer_Size - 1));
       Set_Elem_Alignment (Standard_Natural);
       Set_Size_Known_At_Compile_Time
                          (Standard_Natural);
@@ -1020,10 +1025,11 @@ package body CStand is
 
       --  Setup entity for Positive
 
-      Set_Ekind          (Standard_Positive, E_Signed_Integer_Subtype);
-      Set_Etype          (Standard_Positive, Base_Type (Standard_Integer));
-      Init_Esize         (Standard_Positive, Standard_Integer_Size);
-      Init_RM_Size       (Standard_Positive, Standard_Integer_Size - 1);
+      Mutate_Ekind (Standard_Positive, E_Signed_Integer_Subtype);
+      Set_Etype (Standard_Positive, Base_Type (Standard_Integer));
+      Set_Esize  (Standard_Positive, UI_From_Int (Standard_Integer_Size));
+      Set_RM_Size
+        (Standard_Positive, UI_From_Int (Standard_Integer_Size - 1));
       Set_Elem_Alignment (Standard_Positive);
 
       Set_Size_Known_At_Compile_Time (Standard_Positive);
@@ -1043,7 +1049,7 @@ package body CStand is
       Set_Specification (Decl, Pspec);
 
       Set_Defining_Unit_Name (Pspec, Standard_Entity (S_ASCII));
-      Set_Ekind (Standard_Entity (S_ASCII), E_Package);
+      Mutate_Ekind (Standard_Entity (S_ASCII), E_Package);
       Set_Visible_Declarations (Pspec, Decl_A);
 
       --  Create control character definitions in package ASCII. Note that
@@ -1063,7 +1069,7 @@ package body CStand is
 
          begin
             Set_Sloc                   (A_Char, Staloc);
-            Set_Ekind                  (A_Char, E_Constant);
+            Mutate_Ekind               (A_Char, E_Constant);
             Set_Never_Set_In_Source    (A_Char, True);
             Set_Is_True_Constant       (A_Char, True);
             Set_Etype                  (A_Char, Standard_Character);
@@ -1082,7 +1088,7 @@ package body CStand is
             Set_Is_Static_Expression (Expr_Decl);
             Set_Chars                (Expr_Decl, No_Name);
             Set_Etype                (Expr_Decl, Standard_Character);
-            Set_Char_Literal_Value   (Expr_Decl, UI_From_Int (Int (Ccode)));
+            Set_Char_Literal_Value   (Expr_Decl, UI_From_CC (Ccode));
          end;
 
          Append (Decl, Decl_A);
@@ -1105,7 +1111,7 @@ package body CStand is
       --  Create semantic phase entities
 
       Standard_Void_Type := New_Standard_Entity ("_void_type");
-      Set_Ekind       (Standard_Void_Type, E_Void);
+      pragma Assert (Ekind (Standard_Void_Type) = E_Void); -- it's the default
       Set_Etype       (Standard_Void_Type, Standard_Void_Type);
       Set_Scope       (Standard_Void_Type, Standard_Standard);
 
@@ -1118,7 +1124,7 @@ package body CStand is
       --  type name that is reasonable, but does not overlap any Ada name.
 
       Standard_A_String := New_Standard_Entity ("access_string");
-      Set_Ekind      (Standard_A_String, E_Access_Type);
+      Mutate_Ekind   (Standard_A_String, E_Access_Type);
       Set_Scope      (Standard_A_String, Standard_Standard);
       Set_Etype      (Standard_A_String, Standard_A_String);
 
@@ -1128,13 +1134,13 @@ package body CStand is
          Init_Size   (Standard_A_String, System_Address_Size * 2);
       end if;
 
-      Init_Alignment (Standard_A_String);
+      pragma Assert (not Known_Alignment (Standard_A_String));
 
       Set_Directly_Designated_Type
                      (Standard_A_String, Standard_String);
 
       Standard_A_Char := New_Standard_Entity ("access_character");
-      Set_Ekind          (Standard_A_Char, E_Access_Type);
+      Mutate_Ekind       (Standard_A_Char, E_Access_Type);
       Set_Scope          (Standard_A_Char, Standard_Standard);
       Set_Etype          (Standard_A_Char, Standard_A_String);
       Init_Size          (Standard_A_Char, System_Address_Size);
@@ -1149,17 +1155,17 @@ package body CStand is
 
       Standard_Debug_Renaming_Type := New_Standard_Entity ("_renaming_type");
 
-      Set_Ekind (Standard_Debug_Renaming_Type, E_Signed_Integer_Subtype);
+      Mutate_Ekind (Standard_Debug_Renaming_Type, E_Signed_Integer_Subtype);
       Set_Scope (Standard_Debug_Renaming_Type, Standard_Standard);
       Set_Etype (Standard_Debug_Renaming_Type, Base_Type (Standard_Integer));
-      Init_Esize          (Standard_Debug_Renaming_Type, 0);
-      Init_RM_Size        (Standard_Debug_Renaming_Type, 0);
+      Set_Esize (Standard_Debug_Renaming_Type, Uint_0);
+      Set_RM_Size (Standard_Debug_Renaming_Type, Uint_0);
       Set_Size_Known_At_Compile_Time (Standard_Debug_Renaming_Type);
-      Set_Integer_Bounds  (Standard_Debug_Renaming_Type,
-        Typ => Base_Type  (Standard_Debug_Renaming_Type),
+      Set_Integer_Bounds (Standard_Debug_Renaming_Type,
+        Typ => Base_Type (Standard_Debug_Renaming_Type),
         Lb  => Uint_1,
         Hb  => Uint_0);
-      Set_Is_Constrained  (Standard_Debug_Renaming_Type);
+      Set_Is_Constrained (Standard_Debug_Renaming_Type);
       Set_Has_Size_Clause (Standard_Debug_Renaming_Type);
 
       --  Note on type names. The type names for the following special types
@@ -1179,74 +1185,66 @@ package body CStand is
       Build_Signed_Integer_Type (Any_Type, Standard_Integer_Size);
 
       Any_Id := New_Standard_Entity ("any id");
-      Set_Ekind             (Any_Id, E_Variable);
+      Mutate_Ekind          (Any_Id, E_Variable);
       Set_Scope             (Any_Id, Standard_Standard);
       Set_Etype             (Any_Id, Any_Type);
-      Init_Esize            (Any_Id);
-      Init_Alignment        (Any_Id);
-
-      Any_Access := New_Standard_Entity ("an access type");
-      Set_Ekind             (Any_Access, E_Access_Type);
-      Set_Scope             (Any_Access, Standard_Standard);
-      Set_Etype             (Any_Access, Any_Access);
-      Init_Size             (Any_Access, System_Address_Size);
-      Set_Elem_Alignment    (Any_Access);
-      Set_Directly_Designated_Type
-                            (Any_Access, Any_Type);
+      pragma Assert (not Known_Esize (Any_Id));
+      pragma Assert (not Known_Alignment (Any_Id));
 
       Any_Character := New_Standard_Entity ("a character type");
-      Set_Ekind             (Any_Character, E_Enumeration_Type);
+      Mutate_Ekind          (Any_Character, E_Enumeration_Type);
       Set_Scope             (Any_Character, Standard_Standard);
       Set_Etype             (Any_Character, Any_Character);
       Set_Is_Unsigned_Type  (Any_Character);
       Set_Is_Character_Type (Any_Character);
-      Init_Esize            (Any_Character, Standard_Character_Size);
-      Init_RM_Size          (Any_Character, 8);
+      Set_Esize             (Any_Character, Char_Size);
+      Set_RM_Size           (Any_Character, Uint_8);
       Set_Elem_Alignment    (Any_Character);
       Set_Scalar_Range      (Any_Character, Scalar_Range (Standard_Character));
 
       Any_Array := New_Standard_Entity ("an array type");
-      Set_Ekind             (Any_Array, E_Array_Type);
+      Mutate_Ekind          (Any_Array, E_Array_Type);
       Set_Scope             (Any_Array, Standard_Standard);
       Set_Etype             (Any_Array, Any_Array);
       Set_Component_Type    (Any_Array, Any_Character);
-      Init_Size_Align       (Any_Array);
+      Reinit_Size_Align     (Any_Array);
       Make_Dummy_Index      (Any_Array);
 
       Any_Boolean := New_Standard_Entity ("a boolean type");
-      Set_Ekind             (Any_Boolean, E_Enumeration_Type);
+      Mutate_Ekind          (Any_Boolean, E_Enumeration_Type);
       Set_Scope             (Any_Boolean, Standard_Standard);
       Set_Etype             (Any_Boolean, Standard_Boolean);
-      Init_Esize            (Any_Boolean, Standard_Character_Size);
-      Init_RM_Size          (Any_Boolean, 1);
+      Set_Esize             (Any_Boolean, Char_Size);
+      Set_RM_Size           (Any_Boolean, Uint_1);
       Set_Elem_Alignment    (Any_Boolean);
       Set_Is_Unsigned_Type  (Any_Boolean);
       Set_Scalar_Range      (Any_Boolean, Scalar_Range (Standard_Boolean));
 
       Any_Composite := New_Standard_Entity ("a composite type");
-      Set_Ekind             (Any_Composite, E_Array_Type);
+      Mutate_Ekind          (Any_Composite, E_Array_Type);
       Set_Scope             (Any_Composite, Standard_Standard);
       Set_Etype             (Any_Composite, Any_Composite);
-      Set_Component_Size    (Any_Composite, Uint_0);
       Set_Component_Type    (Any_Composite, Standard_Integer);
-      Init_Size_Align       (Any_Composite);
+      Reinit_Size_Align     (Any_Composite);
+
+      pragma Assert (not Known_Component_Size (Any_Composite));
 
       Any_Discrete := New_Standard_Entity ("a discrete type");
-      Set_Ekind             (Any_Discrete, E_Signed_Integer_Type);
+      Mutate_Ekind          (Any_Discrete, E_Signed_Integer_Type);
       Set_Scope             (Any_Discrete, Standard_Standard);
       Set_Etype             (Any_Discrete, Any_Discrete);
       Init_Size             (Any_Discrete, Standard_Integer_Size);
       Set_Elem_Alignment    (Any_Discrete);
 
       Any_Fixed := New_Standard_Entity ("a fixed-point type");
-      Set_Ekind             (Any_Fixed, E_Ordinary_Fixed_Point_Type);
+      Mutate_Ekind          (Any_Fixed, E_Ordinary_Fixed_Point_Type);
       Set_Scope             (Any_Fixed, Standard_Standard);
       Set_Etype             (Any_Fixed, Any_Fixed);
       Init_Size             (Any_Fixed, Standard_Integer_Size);
       Set_Elem_Alignment    (Any_Fixed);
 
       Any_Integer := New_Standard_Entity ("an integer type");
-      Set_Ekind            (Any_Integer, E_Signed_Integer_Type);
+      Mutate_Ekind         (Any_Integer, E_Signed_Integer_Type);
       Set_Scope            (Any_Integer, Standard_Standard);
       Set_Etype            (Any_Integer, Standard_Long_Long_Long_Integer);
       Init_Size            (Any_Integer, Standard_Long_Long_Long_Integer_Size);
@@ -1259,7 +1257,7 @@ package body CStand is
          Hb  => Intval (High_Bound (Scalar_Range (Standard_Integer))));
 
       Any_Modular := New_Standard_Entity ("a modular type");
-      Set_Ekind            (Any_Modular, E_Modular_Integer_Type);
+      Mutate_Ekind         (Any_Modular, E_Modular_Integer_Type);
       Set_Scope            (Any_Modular, Standard_Standard);
       Set_Etype            (Any_Modular, Standard_Long_Long_Long_Integer);
       Init_Size            (Any_Modular, Standard_Long_Long_Long_Integer_Size);
@@ -1267,14 +1265,14 @@ package body CStand is
       Set_Is_Unsigned_Type (Any_Modular);
 
       Any_Numeric := New_Standard_Entity ("a numeric type");
-      Set_Ekind            (Any_Numeric, E_Signed_Integer_Type);
+      Mutate_Ekind         (Any_Numeric, E_Signed_Integer_Type);
       Set_Scope            (Any_Numeric, Standard_Standard);
       Set_Etype            (Any_Numeric, Standard_Long_Long_Long_Integer);
       Init_Size            (Any_Numeric, Standard_Long_Long_Long_Integer_Size);
       Set_Elem_Alignment   (Any_Numeric);
 
       Any_Real := New_Standard_Entity ("a real type");
-      Set_Ekind             (Any_Real, E_Floating_Point_Type);
+      Mutate_Ekind          (Any_Real, E_Floating_Point_Type);
       Set_Scope             (Any_Real, Standard_Standard);
       Set_Etype             (Any_Real, Standard_Long_Long_Float);
       Init_Size             (Any_Real,
@@ -1282,18 +1280,18 @@ package body CStand is
       Set_Elem_Alignment    (Any_Real);
 
       Any_Scalar := New_Standard_Entity ("a scalar type");
-      Set_Ekind             (Any_Scalar, E_Signed_Integer_Type);
+      Mutate_Ekind          (Any_Scalar, E_Signed_Integer_Type);
       Set_Scope             (Any_Scalar, Standard_Standard);
       Set_Etype             (Any_Scalar, Any_Scalar);
       Init_Size             (Any_Scalar, Standard_Integer_Size);
       Set_Elem_Alignment    (Any_Scalar);
 
       Any_String := New_Standard_Entity ("a string type");
-      Set_Ekind             (Any_String, E_Array_Type);
+      Mutate_Ekind          (Any_String, E_Array_Type);
       Set_Scope             (Any_String, Standard_Standard);
       Set_Etype             (Any_String, Any_String);
       Set_Component_Type    (Any_String, Any_Character);
-      Init_Size_Align       (Any_String);
+      Reinit_Size_Align     (Any_String);
       Make_Dummy_Index      (Any_String);
 
       Raise_Type := New_Standard_Entity ("raise type");
@@ -1401,13 +1399,23 @@ package body CStand is
       Universal_Fixed := New_Standard_Entity ("universal_fixed");
       Decl := New_Node (N_Full_Type_Declaration, Stloc);
       Set_Defining_Identifier (Decl, Universal_Fixed);
-      Set_Ekind            (Universal_Fixed, E_Ordinary_Fixed_Point_Type);
+      Mutate_Ekind         (Universal_Fixed, E_Ordinary_Fixed_Point_Type);
       Set_Etype            (Universal_Fixed, Universal_Fixed);
       Set_Scope            (Universal_Fixed, Standard_Standard);
       Init_Size            (Universal_Fixed, Standard_Long_Long_Integer_Size);
       Set_Elem_Alignment   (Universal_Fixed);
       Set_Size_Known_At_Compile_Time
                            (Universal_Fixed);
+
+      Universal_Access := New_Standard_Entity ("universal_access");
+      Decl := New_Node (N_Full_Type_Declaration, Stloc);
+      Set_Defining_Identifier (Decl, Universal_Access);
+      Mutate_Ekind                 (Universal_Access, E_Access_Type);
+      Set_Etype                    (Universal_Access, Universal_Access);
+      Set_Scope                    (Universal_Access, Standard_Standard);
+      Init_Size                    (Universal_Access, System_Address_Size);
+      Set_Elem_Alignment           (Universal_Access);
+      Set_Directly_Designated_Type (Universal_Access, Any_Type);
 
       --  Create type declaration for Duration, using a 64-bit size. The
       --  delta and size values depend on the mode set in system.ads.
@@ -1446,7 +1454,7 @@ package body CStand is
 
          Set_Type_Definition (Parent (Standard_Duration), Tdef_Node);
 
-         Set_Ekind (Standard_Duration, E_Ordinary_Fixed_Point_Type);
+         Mutate_Ekind (Standard_Duration, E_Ordinary_Fixed_Point_Type);
          Set_Etype (Standard_Duration, Standard_Duration);
 
          if Duration_32_Bits_On_Target then
@@ -1491,38 +1499,41 @@ package body CStand is
       --  known by the run-time. Components of the record are documented in
       --  the declaration in System.Standard_Library.
 
-      Standard_Exception_Type := New_Standard_Entity ("exception");
-      Set_Ekind       (Standard_Exception_Type, E_Record_Type);
-      Set_Etype       (Standard_Exception_Type, Standard_Exception_Type);
-      Set_Scope       (Standard_Exception_Type, Standard_Standard);
-      Set_Stored_Constraint
-                      (Standard_Exception_Type, No_Elist);
-      Init_Size_Align (Standard_Exception_Type);
-      Set_Size_Known_At_Compile_Time
-                      (Standard_Exception_Type, True);
-
-      Make_Component
-        (Standard_Exception_Type, Standard_Boolean,   "Not_Handled_By_Others");
-      Make_Component
-        (Standard_Exception_Type, Standard_Character, "Lang");
-      Make_Component
-        (Standard_Exception_Type, Standard_Natural,   "Name_Length");
-      Make_Component
-        (Standard_Exception_Type, Standard_A_Char,    "Full_Name");
-      Make_Component
-        (Standard_Exception_Type, Standard_A_Char,    "HTable_Ptr");
-      Make_Component
-        (Standard_Exception_Type, Standard_A_Char,    "Foreign_Data");
-      Make_Component
-        (Standard_Exception_Type, Standard_A_Char,    "Raise_Hook");
-
-      --  Build tree for record declaration, for use by the back-end
-
-      declare
-         Comp_List : List_Id;
-         Comp      : Entity_Id;
+      Build_Exception_Type : declare
+         Comp_List      : List_Id;
+         Comp           : Entity_Id;
 
       begin
+         Standard_Exception_Type := New_Standard_Entity ("exception");
+         Mutate_Ekind    (Standard_Exception_Type, E_Record_Type);
+         Set_Etype       (Standard_Exception_Type, Standard_Exception_Type);
+         Set_Scope       (Standard_Exception_Type, Standard_Standard);
+         Set_Stored_Constraint
+                         (Standard_Exception_Type, No_Elist);
+         Set_Size_Known_At_Compile_Time
+                         (Standard_Exception_Type, True);
+
+         pragma Assert (not Known_RM_Size (Standard_Exception_Type));
+
+         Make_Aliased_Component (Standard_Exception_Type, Standard_Boolean,
+                         "Not_Handled_By_Others");
+         Make_Aliased_Component (Standard_Exception_Type, Standard_Character,
+                         "Lang");
+         Make_Aliased_Component (Standard_Exception_Type, Standard_Natural,
+                         "Name_Length");
+         Make_Aliased_Component (Standard_Exception_Type, Standard_Address,
+                         "Full_Name");
+         Make_Aliased_Component (Standard_Exception_Type, Standard_A_Char,
+                         "HTable_Ptr");
+         Make_Aliased_Component (Standard_Exception_Type, Standard_Address,
+                         "Foreign_Data");
+         Make_Aliased_Component (Standard_Exception_Type, Standard_A_Char,
+                         "Raise_Hook");
+
+         Layout_Type (Standard_Exception_Type);
+
+         --  Build tree for record declaration, for use by the back-end
+
          Comp      := First_Entity (Standard_Exception_Type);
          Comp_List := New_List;
          while Present (Comp) loop
@@ -1531,9 +1542,9 @@ package body CStand is
                 Defining_Identifier => Comp,
                 Component_Definition =>
                   Make_Component_Definition (Stloc,
-                    Aliased_Present    => False,
-                    Subtype_Indication => New_Occurrence_Of (Etype (Comp),
-                                                             Stloc))),
+                    Aliased_Present    => True,
+                    Subtype_Indication =>
+                      New_Occurrence_Of (Etype (Comp), Stloc))),
               Comp_List);
 
             Next_Entity (Comp);
@@ -1543,15 +1554,13 @@ package body CStand is
            Defining_Identifier => Standard_Exception_Type,
            Type_Definition =>
              Make_Record_Definition (Stloc,
-               End_Label => Empty,
+               End_Label      => Empty,
                Component_List =>
                  Make_Component_List (Stloc,
                    Component_Items => Comp_List)));
-      end;
 
-      Append (Decl, Decl_S);
-
-      Layout_Type (Standard_Exception_Type);
+         Append (Decl, Decl_S);
+      end Build_Exception_Type;
 
       --  Create declarations of standard exceptions
 
@@ -1572,7 +1581,7 @@ package body CStand is
          Decl := New_Node (N_Exception_Renaming_Declaration, Stloc);
          E_Id := Standard_Entity (S_Numeric_Error);
 
-         Set_Ekind          (E_Id, E_Exception);
+         Mutate_Ekind       (E_Id, E_Exception);
          Set_Etype          (E_Id, Standard_Exception_Type);
          Set_Is_Public      (E_Id);
          Set_Renamed_Entity (E_Id, Standard_Entity (S_Constraint_Error));
@@ -1590,7 +1599,7 @@ package body CStand is
 
       Abort_Signal := New_Standard_Entity;
       Set_Chars     (Abort_Signal, Name_uAbort_Signal);
-      Set_Ekind     (Abort_Signal, E_Exception);
+      Mutate_Ekind  (Abort_Signal, E_Exception);
       Set_Etype     (Abort_Signal, Standard_Exception_Type);
       Set_Scope     (Abort_Signal, Standard_Standard);
       Set_Is_Public (Abort_Signal, True);
@@ -1605,24 +1614,24 @@ package body CStand is
 
       Standard_Op_Rotate_Left := New_Standard_Entity;
       Set_Chars (Standard_Op_Rotate_Left, Name_Rotate_Left);
-      Set_Ekind (Standard_Op_Rotate_Left, E_Operator);
+      Mutate_Ekind (Standard_Op_Rotate_Left, E_Operator);
 
       Standard_Op_Rotate_Right := New_Standard_Entity;
       Set_Chars (Standard_Op_Rotate_Right, Name_Rotate_Right);
-      Set_Ekind (Standard_Op_Rotate_Right, E_Operator);
+      Mutate_Ekind (Standard_Op_Rotate_Right, E_Operator);
 
       Standard_Op_Shift_Left := New_Standard_Entity;
       Set_Chars (Standard_Op_Shift_Left, Name_Shift_Left);
-      Set_Ekind (Standard_Op_Shift_Left, E_Operator);
+      Mutate_Ekind (Standard_Op_Shift_Left, E_Operator);
 
       Standard_Op_Shift_Right := New_Standard_Entity;
       Set_Chars (Standard_Op_Shift_Right, Name_Shift_Right);
-      Set_Ekind (Standard_Op_Shift_Right, E_Operator);
+      Mutate_Ekind (Standard_Op_Shift_Right, E_Operator);
 
       Standard_Op_Shift_Right_Arithmetic := New_Standard_Entity;
       Set_Chars (Standard_Op_Shift_Right_Arithmetic,
                                           Name_Shift_Right_Arithmetic);
-      Set_Ekind (Standard_Op_Shift_Right_Arithmetic,
+      Mutate_Ekind (Standard_Op_Shift_Right_Arithmetic,
                                           E_Operator);
 
       --  Create standard operator declarations
@@ -1677,7 +1686,7 @@ package body CStand is
       New_Ent : constant Entity_Id := New_Copy (E);
 
    begin
-      Set_Ekind            (E, K);
+      Mutate_Ekind         (E, K);
       Set_Is_Constrained   (E, True);
       Set_Is_First_Subtype (E, True);
       Set_Etype            (E, New_Ent);
@@ -1707,11 +1716,11 @@ package body CStand is
       return Ident_Node;
    end Identifier_For;
 
-   --------------------
-   -- Make_Component --
-   --------------------
+   ----------------------------
+   -- Make_Aliased_Component --
+   ----------------------------
 
-   procedure Make_Component
+   procedure Make_Aliased_Component
      (Rec : Entity_Id;
       Typ : Entity_Id;
       Nam : String)
@@ -1719,13 +1728,15 @@ package body CStand is
       Id : constant Entity_Id := New_Standard_Entity (Nam);
 
    begin
-      Set_Ekind                     (Id, E_Component);
+      Mutate_Ekind                  (Id, E_Component);
       Set_Etype                     (Id, Typ);
       Set_Scope                     (Id, Rec);
-      Init_Component_Location       (Id);
+      Reinit_Component_Location     (Id);
       Set_Original_Record_Component (Id, Id);
+      Set_Is_Aliased                (Id);
+      Set_Is_Independent            (Id);
       Append_Entity (Id, Rec);
-   end Make_Component;
+   end Make_Aliased_Component;
 
    -----------------
    -- Make_Formal --
@@ -1735,7 +1746,7 @@ package body CStand is
       Formal : constant Entity_Id := New_Standard_Entity (Nam);
 
    begin
-      Set_Ekind     (Formal, E_In_Parameter);
+      Mutate_Ekind  (Formal, E_In_Parameter);
       Set_Mechanism (Formal, Default_Mechanism);
       Set_Scope     (Formal, Standard_Standard);
       Set_Etype     (Formal, Typ);
@@ -1765,7 +1776,7 @@ package body CStand is
 
    begin
       Set_Is_Pure    (Ident_Node, True);
-      Set_Ekind      (Ident_Node, E_Operator);
+      Mutate_Ekind   (Ident_Node, E_Operator);
       Set_Etype      (Ident_Node, Typ);
       Set_Scope      (Ident_Node, Standard_Standard);
       Set_Homonym    (Ident_Node, Get_Name_Entity_Id (Op));
@@ -1784,10 +1795,9 @@ package body CStand is
    -- New_Standard_Entity --
    -------------------------
 
-   function New_Standard_Entity
-     (New_Node_Kind : Node_Kind := N_Defining_Identifier) return Entity_Id
+   function New_Standard_Entity return Entity_Id
    is
-      E : constant Entity_Id := New_Entity (New_Node_Kind, Stloc);
+      E : constant Entity_Id := New_Entity (N_Defining_Identifier, Stloc);
 
    begin
       --  All standard entities are Pure and Public

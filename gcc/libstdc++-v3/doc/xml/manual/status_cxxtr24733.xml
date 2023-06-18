@@ -5,18 +5,20 @@
 <info><title>C++ TR 24733</title>
   <keywordset>
     <keyword>TR 24733</keyword>
+    <keyword>decimal floating-point</keyword>
   </keywordset>
 </info>
 
 <para>
 This table is based on the table of contents of
-ISO/IEC TR 24733 Date: 2009-08-28
-Extension for the programming language C++ to support
-decimal floating-point arithmetic
+ISO/IEC TR 24733:2011,
+"Extensions for the programming language C++ to support
+decimal floating-point arithmetic".
 </para>
 
 <para>
-This page describes the TR 24733 support in the GCC 11 release series.
+This page describes the TR 24733 support in mainline GCC, not in any
+particular release.
 </para>
 
 <!-- Status is Yes or No, Broken/Partial-->

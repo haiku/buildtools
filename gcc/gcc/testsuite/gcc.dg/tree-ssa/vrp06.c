@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -fdisable-tree-evrp -fdump-tree-vrp1" } */
+/* { dg-options "-O2 -fdisable-tree-evrp -fdump-tree-vrp1 -fno-thread-jumps" } */
 
 int baz (void);
 
@@ -30,4 +30,4 @@ foo (int i, int j, int a)
 
 /* { dg-final { scan-tree-dump-times "Folding predicate \[i|j\]_\[0-9\]+.*0 to 0" 1 "vrp1" } } */
 /* { dg-final { scan-tree-dump-times "Folding predicate \[i|j\]_\[0-9\]+.*0 to 1" 1 "vrp1" } } */
-/* { dg-final { scan-tree-dump-times "Folding predicate i_\[0-9]+.*j_\[0-9\]+.* to 0" 1 "vrp1" } } */
+/* { dg-final { scan-tree-dump-times "Folding predicate i_\[0-9]+.*j_\[0-9\]+.* to 0" 1 "vrp1" { xfail *-*-* } } } */

@@ -32,7 +32,6 @@ version (Posix):
 extern (C):
 nothrow:
 @nogc:
-@system:
 
 //
 // Required
@@ -58,27 +57,36 @@ int sched_setparam(pid_t, const scope sched_param*);
 int sched_setscheduler(pid_t, int, const scope sched_param*);
 */
 
-version (CRuntime_Glibc)
+version (linux)
 {
-    struct sched_param
+    version (CRuntime_Musl)
     {
-        int sched_priority;
+        struct sched_param
+        {
+            int sched_priority;
+            int __reserved1;
+            static if (muslRedirTime64)
+                c_long[2] __reserved2;
+            else
+                timespec[2] __reserved2;
+            int __reserved3;
+        }
+    }
+    else
+    {
+        struct sched_param
+        {
+            int sched_priority;
+        }
     }
 
     enum SCHED_OTHER    = 0;
     enum SCHED_FIFO     = 1;
     enum SCHED_RR       = 2;
     //SCHED_SPORADIC (SS|TSP)
-}
-else version (CRuntime_Musl)
-{
-    struct sched_param {
-        int sched_priority;
-        int sched_ss_low_priority;
-        timespec sched_ss_repl_period;
-        timespec sched_ss_init_budget;
-        int sched_ss_max_repl;
-    }
+    enum SCHED_BATCH    = 3;
+    enum SCHED_IDLE     = 5;
+    enum SCHED_RESET_ON_FORK = 0x40000000;
 }
 else version (Darwin)
 {
@@ -86,8 +94,6 @@ else version (Darwin)
     enum SCHED_FIFO     = 4;
     enum SCHED_RR       = 2;
     //SCHED_SPORADIC (SS|TSP)
-
-    private enum __SCHED_PARAM_SIZE__ = 4;
 
     struct sched_param
     {
@@ -155,33 +161,6 @@ else version (Solaris)
     enum SCHED_FSS = 5;
     enum SCHED_FX = 6;
     enum _SCHED_NEXT = 7;
-}
-else version (CRuntime_Bionic)
-{
-    struct sched_param
-    {
-        int sched_priority;
-    }
-
-    enum SCHED_NORMAL   = 0;
-    enum SCHED_OTHER    = 0;
-    enum SCHED_FIFO     = 1;
-    enum SCHED_RR       = 2;
-}
-else version (CRuntime_UClibc)
-{
-    struct sched_param
-    {
-        int sched_priority;
-    }
-
-    enum SCHED_OTHER    = 0;
-    enum SCHED_FIFO     = 1;
-    enum SCHED_RR       = 2;
-    enum SCHED_BATCH    = 3;
-    enum SCHED_IDLE     = 5;
-
-    enum SCHED_RESET_ON_FORK    = 0x40000000;
 }
 else
 {
@@ -306,6 +285,7 @@ else version (CRuntime_Musl)
 {
     int sched_get_priority_max(int);
     int sched_get_priority_min(int);
+    pragma(mangle, muslRedirTime64Mangle!("sched_rr_get_interval", "__sched_rr_get_interval_time64"))
     int sched_rr_get_interval(pid_t, timespec*);
 }
 else version (CRuntime_UClibc)

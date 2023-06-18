@@ -19,6 +19,8 @@ import core.thread.threadgroup;
 import core.thread.types;
 import core.thread.context;
 
+import core.memory : pageSize;
+
 ///////////////////////////////////////////////////////////////////////////////
 // Fiber Platform Detection
 ///////////////////////////////////////////////////////////////////////////////
@@ -600,7 +602,7 @@ class Fiber
         version (X86_64)
             // libunwind on macOS 11 now requires more stack space than 16k, so
             // default to a larger stack size. This is only applied to X86 as
-            // the PAGESIZE is still 4k, however on AArch64 it is 16k.
+            // the pageSize is still 4k, however on AArch64 it is 16k.
             enum defaultStackPages = 8;
         else
             enum defaultStackPages = 4;
@@ -623,8 +625,8 @@ class Fiber
      * In:
      *  fn must not be null.
      */
-    this( void function() fn, size_t sz = PAGESIZE * defaultStackPages,
-          size_t guardPageSize = PAGESIZE ) nothrow
+    this( void function() fn, size_t sz = pageSize * defaultStackPages,
+          size_t guardPageSize = pageSize ) nothrow
     in
     {
         assert( fn );
@@ -651,16 +653,11 @@ class Fiber
      * In:
      *  dg must not be null.
      */
-    this( void delegate() dg, size_t sz = PAGESIZE * defaultStackPages,
-          size_t guardPageSize = PAGESIZE ) nothrow
-    in
-    {
-        assert( dg );
-    }
-    do
+    this( void delegate() dg, size_t sz = pageSize * defaultStackPages,
+          size_t guardPageSize = pageSize ) nothrow
     {
         allocStack( sz, guardPageSize );
-        reset( dg );
+        reset( cast(void delegate() const) dg );
     }
 
 
@@ -967,9 +964,9 @@ private:
     }
     do
     {
-        // adjust alloc size to a multiple of PAGESIZE
-        sz += PAGESIZE - 1;
-        sz -= sz % PAGESIZE;
+        // adjust alloc size to a multiple of pageSize
+        sz += pageSize - 1;
+        sz -= sz % pageSize;
 
         // NOTE: This instance of Thread.Context is dynamic so Fiber objects
         //       can be collected by the GC so long as no user level references
@@ -1043,10 +1040,14 @@ private:
                 // Allocate more for the memory guard
                 sz += guardPageSize;
 
+                int mmap_flags = MAP_PRIVATE | MAP_ANON;
+                version (OpenBSD)
+                    mmap_flags |= MAP_STACK;
+
                 m_pmem = mmap( null,
                                sz,
                                PROT_READ | PROT_WRITE,
-                               MAP_PRIVATE | MAP_ANON,
+                               mmap_flags,
                                -1,
                                0 );
                 if ( m_pmem == MAP_FAILED )
@@ -1710,7 +1711,7 @@ unittest {
     assert( composed.state == Fiber.State.TERM );
 }
 
-version (unittest)
+version (CoreUnittest)
 {
     class TestFiber : Fiber
     {
@@ -1894,7 +1895,7 @@ unittest
 
     try
     {
-        (new Fiber({
+        (new Fiber(function() {
             throw new Exception( MSG );
         })).call();
         assert( false, "Expected rethrown exception." );

@@ -1,7 +1,7 @@
 // { dg-options "-std=gnu++20" }
 // { dg-do compile { target c++20 } }
 
-// Copyright (C) 2017-2021 Free Software Foundation, Inc.
+// Copyright (C) 2017-2023 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -61,9 +61,7 @@ template<typename CT>
 #endif
 
 static_assert( test_move<std::char_traits<char>>() );
-#ifdef _GLIBCXX_USE_WCHAR_T
 static_assert( test_move<std::char_traits<wchar_t>>() );
-#endif
 #ifdef _GLIBCXX_USE_CHAR8_T
 static_assert( test_move<std::char_traits<char8_t>>() );
 #endif

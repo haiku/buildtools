@@ -1,5 +1,5 @@
 /* Header file for gimple ranger SSA cache.
-   Copyright (C) 2017-2021 Free Software Foundation, Inc.
+   Copyright (C) 2017-2023 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>.
 
 This file is part of GCC.
@@ -22,23 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_SSA_RANGE_CACHE_H
 
 #include "gimple-range-gori.h" 
-
-// Class used to track non-null references of an SSA name.  A vector
-// of bitmaps indexed by SSA name is maintained.  When indexed by
-// basic block, an on-bit indicates there is a non-null dereference
-// for that SSA in that block.
-
-class non_null_ref
-{
-public:
-  non_null_ref ();
-  ~non_null_ref ();
-  bool non_null_deref_p (tree name, basic_block bb);
-private:
-  vec <bitmap> m_nn;
-  void process_name (tree name);
-  bitmap_obstack m_bitmaps;
-};
+#include "gimple-range-infer.h"
 
 // This class manages a vector of pointers to ssa_block ranges.  It
 // provides the basis for the "range on entry" cache for all
@@ -50,9 +34,9 @@ public:
   block_range_cache ();
   ~block_range_cache ();
 
-  bool set_bb_range (tree name, const basic_block bb, const irange &r);
-  bool get_bb_range (irange &r, tree name, const basic_block bb);
-  bool bb_range_p (tree name, const basic_block bb);
+  bool set_bb_range (tree name, const_basic_block bb, const vrange &v);
+  bool get_bb_range (vrange &v, tree name, const_basic_block bb);
+  bool bb_range_p (tree name, const_basic_block bb);
 
   void dump (FILE *f);
   void dump (FILE *f, basic_block bb, bool print_varying = true);
@@ -60,7 +44,7 @@ private:
   vec<class ssa_block_ranges *> m_ssa_ranges;
   ssa_block_ranges &get_block_ranges (tree name);
   ssa_block_ranges *query_block_ranges (tree name);
-  irange_allocator *m_irange_allocator;
+  class vrange_allocator *m_range_allocator;
   bitmap_obstack m_bitmaps;
 };
 
@@ -73,61 +57,65 @@ class ssa_global_cache
 public:
   ssa_global_cache ();
   ~ssa_global_cache ();
-  bool get_global_range (irange &r, tree name) const;
-  bool set_global_range (tree name, const irange &r);
+  bool get_global_range (vrange &r, tree name) const;
+  bool set_global_range (tree name, const vrange &r);
   void clear_global_range (tree name);
   void clear ();
   void dump (FILE *f = stderr);
 private:
-  vec<irange *> m_tab;
-  class irange_allocator *m_irange_allocator;
+  vec<vrange *> m_tab;
+  vrange_allocator *m_range_allocator;
 };
 
 // This class provides all the caches a global ranger may need, and makes 
 // them available for gori-computes to query so outgoing edges can be
 // properly calculated.
 
-class ranger_cache : public gori_compute
+class ranger_cache : public range_query
 {
 public:
-  ranger_cache (class gimple_ranger &q);
+  ranger_cache (int not_executable_flag, bool use_imm_uses);
   ~ranger_cache ();
 
-  virtual void ssa_range_in_bb (irange &r, tree name, basic_block bb);
-  bool block_range (irange &r, basic_block bb, tree name, bool calc = true);
+  bool range_of_expr (vrange &r, tree name, gimple *stmt) final override;
+  bool range_on_edge (vrange &r, edge e, tree expr) final override;
+  bool block_range (vrange &r, basic_block bb, tree name, bool calc = true);
 
-  bool get_global_range (irange &r, tree name) const;
-  bool get_non_stale_global_range (irange &r, tree name);
-  void set_global_range (tree name, const irange &r);
-  void register_dependency (tree name, tree dep);
+  bool get_global_range (vrange &r, tree name) const;
+  bool get_global_range (vrange &r, tree name, bool &current_p);
+  void set_global_range (tree name, const vrange &r);
 
-  non_null_ref m_non_null;
+  void propagate_updated_value (tree name, basic_block bb);
 
-  void dump (FILE *f, bool dump_gori = true);
-  void dump (FILE *f, basic_block bb);
+  void register_inferred_value (const vrange &r, tree name, basic_block bb);
+  void apply_inferred_ranges (gimple *s);
+  gori_compute m_gori;
+  infer_range_manager m_exit;
+
+  void dump_bb (FILE *f, basic_block bb);
+  virtual void dump (FILE *f) override;
 private:
   ssa_global_cache m_globals;
   block_range_cache m_on_entry;
   class temporal_cache *m_temporal;
-  void add_to_update (basic_block bb);
   void fill_block_cache (tree name, basic_block bb, basic_block def_bb);
   void propagate_cache (tree name);
 
-  void propagate_updated_value (tree name, basic_block bb);
+  enum rfd_mode
+    {
+      RFD_NONE,		// Only look at current block cache.
+      RFD_READ_ONLY,	// Scan DOM tree, do not write to cache.
+      RFD_FILL		// Scan DOM tree, updating important nodes.
+    };
+  bool range_from_dom (vrange &r, tree name, basic_block bb, enum rfd_mode);
+  void resolve_dom (vrange &r, tree name, basic_block bb);
+  void range_of_def (vrange &r, tree name, basic_block bb = NULL);
+  void entry_range (vrange &r, tree expr, basic_block bb, enum rfd_mode);
+  void exit_range (vrange &r, tree expr, basic_block bb, enum rfd_mode);
+  bool edge_range (vrange &r, edge e, tree name, enum rfd_mode);
 
-  bitmap m_propfail;
   vec<basic_block> m_workback;
-  vec<basic_block> m_update_list;
-
-  // Iterative "poor value" calculations.
-  struct update_record
-  {
-    basic_block bb;	// Block which value needs to be calculated in.
-    tree calc;		// SSA_NAME which needs its value calculated.
-  };
-  bool push_poor_value (basic_block bb, tree name);
-  vec<update_record> m_poor_value_list;
-  class gimple_ranger &query;
+  class update_list *m_update;
 };
 
 #endif // GCC_SSA_RANGE_CACHE_H

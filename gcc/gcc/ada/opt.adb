@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2020, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -23,28 +23,9 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
+with Csets;          use Csets;
+
 package body Opt is
-
-   -------------------------
-   -- Back_End_Exceptions --
-   -------------------------
-
-   function Back_End_Exceptions return Boolean is
-   begin
-      return
-        Exception_Mechanism = Back_End_SJLJ
-          or else
-        Exception_Mechanism = Back_End_ZCX;
-   end Back_End_Exceptions;
-
-   -------------------------
-   -- Front_End_Exceptions --
-   -------------------------
-
-   function Front_End_Exceptions return Boolean is
-   begin
-      return Exception_Mechanism = Front_End_SJLJ;
-   end Front_End_Exceptions;
 
    --------------------
    -- SJLJ_Exceptions --
@@ -52,10 +33,7 @@ package body Opt is
 
    function SJLJ_Exceptions return Boolean is
    begin
-      return
-        Exception_Mechanism = Back_End_SJLJ
-          or else
-        Exception_Mechanism = Front_End_SJLJ;
+      return Exception_Mechanism = Back_End_SJLJ;
    end SJLJ_Exceptions;
 
    --------------------
@@ -84,7 +62,6 @@ package body Opt is
       Default_SSO_Config                    := Default_SSO;
       Dynamic_Elaboration_Checks_Config     := Dynamic_Elaboration_Checks;
       Exception_Locations_Suppressed_Config := Exception_Locations_Suppressed;
-      Extensions_Allowed_Config             := Extensions_Allowed;
       External_Name_Exp_Casing_Config       := External_Name_Exp_Casing;
       External_Name_Imp_Casing_Config       := External_Name_Imp_Casing;
       Fast_Math_Config                      := Fast_Math;
@@ -123,7 +100,6 @@ package body Opt is
       Default_SSO                    := Save.Default_SSO;
       Dynamic_Elaboration_Checks     := Save.Dynamic_Elaboration_Checks;
       Exception_Locations_Suppressed := Save.Exception_Locations_Suppressed;
-      Extensions_Allowed             := Save.Extensions_Allowed;
       External_Name_Exp_Casing       := Save.External_Name_Exp_Casing;
       External_Name_Imp_Casing       := Save.External_Name_Imp_Casing;
       Fast_Math                      := Save.Fast_Math;
@@ -165,7 +141,6 @@ package body Opt is
          Default_SSO                    => Default_SSO,
          Dynamic_Elaboration_Checks     => Dynamic_Elaboration_Checks,
          Exception_Locations_Suppressed => Exception_Locations_Suppressed,
-         Extensions_Allowed             => Extensions_Allowed,
          External_Name_Exp_Casing       => External_Name_Exp_Casing,
          External_Name_Imp_Casing       => External_Name_Imp_Casing,
          Fast_Math                      => Fast_Math,
@@ -204,7 +179,6 @@ package body Opt is
          Ada_Version_Pragma          := Empty;
          Default_SSO                 := ' ';
          Dynamic_Elaboration_Checks  := False;
-         Extensions_Allowed          := True;
          External_Name_Exp_Casing    := As_Is;
          External_Name_Imp_Casing    := Lowercase;
          No_Component_Reordering     := False;
@@ -214,6 +188,7 @@ package body Opt is
          Prefix_Exception_Messages   := True;
          Uneval_Old                  := 'E';
          Use_VADS_Size               := False;
+         Identifier_Char ('[')       := False;
 
          --  Note: we do not need to worry about Warnings_As_Errors_Count since
          --  we do not expect to get any warnings from compiling such a unit.
@@ -263,7 +238,6 @@ package body Opt is
          Check_Policy_List           := Check_Policy_List_Config;
          Default_SSO                 := Default_SSO_Config;
          Dynamic_Elaboration_Checks  := Dynamic_Elaboration_Checks_Config;
-         Extensions_Allowed          := Extensions_Allowed_Config;
          External_Name_Exp_Casing    := External_Name_Exp_Casing_Config;
          External_Name_Imp_Casing    := External_Name_Imp_Casing_Config;
          Fast_Math                   := Fast_Math_Config;

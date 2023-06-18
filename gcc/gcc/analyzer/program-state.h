@@ -1,5 +1,5 @@
 /* Classes for representing the state of interest at a given path of analysis.
-   Copyright (C) 2019-2021 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -57,6 +57,8 @@ public:
 
   engine *get_engine () const { return m_engine; }
   region_model_manager *get_model_manager () const;
+
+  bool get_sm_idx_by_name (const char *name, unsigned *out) const;
 
 private:
   /* The state machines.  */
@@ -143,6 +145,7 @@ public:
 		       state_machine::state_t state,
 		       const svalue *origin,
 		       const extrinsic_state &ext_state);
+  void clear_any_state (const svalue *sval);
 
   void set_global_state (state_machine::state_t state);
   state_machine::state_t get_global_state () const;
@@ -169,6 +172,14 @@ public:
   static const svalue *
   canonicalize_svalue (const svalue *sval, const extrinsic_state &ext_state);
 
+  bool replay_call_summary (call_summary_replay &r,
+			    const sm_state_map &summary);
+
+  bool can_merge_with_p (const sm_state_map &other,
+			 const state_machine &sm,
+			 const extrinsic_state &ext_state,
+			 sm_state_map **out) const;
+
 private:
   const state_machine &m_sm;
   map_t m_map;
@@ -192,11 +203,7 @@ public:
   program_state (const extrinsic_state &ext_state);
   program_state (const program_state &other);
   program_state& operator= (const program_state &other);
-
-#if __cplusplus >= 201103
   program_state (program_state &&other);
-#endif
-
   ~program_state ();
 
   hashval_t hash () const;
@@ -220,6 +227,17 @@ public:
   void push_frame (const extrinsic_state &ext_state, function *fun);
   function * get_current_function () const;
 
+  void push_call (exploded_graph &eg,
+		  exploded_node *enode,
+		  const gcall *call_stmt,
+		  uncertainty_t *uncertainty);
+
+  void returning_call (exploded_graph &eg,
+		       exploded_node *enode,
+		       const gcall *call_stmt,
+		       uncertainty_t *uncertainty);
+
+
   bool on_edge (exploded_graph &eg,
 		exploded_node *enode,
 		const superedge *succ,
@@ -233,7 +251,7 @@ public:
   tree get_representative_tree (const svalue *sval) const;
 
   bool can_purge_p (const extrinsic_state &ext_state,
-		    const svalue *sval)
+		    const svalue *sval) const
   {
     /* Don't purge vars that have non-purgeable sm state, to avoid
        generating false "leak" complaints.  */
@@ -248,7 +266,11 @@ public:
     return true;
   }
 
+  bool can_purge_base_region_p (const extrinsic_state &ext_state,
+				const region *base_reg) const;
+
   bool can_merge_with_p (const program_state &other,
+			 const extrinsic_state &ext_state,
 			 const program_point &point,
 			 program_state *out) const;
 
@@ -259,6 +281,13 @@ public:
 			    const svalue *extra_sval,
 			    const extrinsic_state &ext_state,
 			    region_model_context *ctxt);
+
+  bool replay_call_summary (call_summary_replay &r,
+			    const program_state &summary);
+
+  void impl_call_analyzer_dump_state (const gcall *call,
+				      const extrinsic_state &ext_state,
+				      region_model_context *ctxt);
 
   /* TODO: lose the pointer here (const-correctness issues?).  */
   region_model *m_region_model;

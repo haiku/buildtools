@@ -1,5 +1,5 @@
 ;; Machine description for AArch64 SVE.
-;; Copyright (C) 2009-2021 Free Software Foundation, Inc.
+;; Copyright (C) 2009-2023 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 ;;
 ;; This file is part of GCC.
@@ -1287,7 +1287,7 @@
 ;; -------------------------------------------------------------------------
 
 ;; Predicated load and extend, with 8 elements per 128-bit block.
-(define_insn_and_rewrite "@aarch64_load_<ANY_EXTEND:optab><SVE_HSDI:mode><SVE_PARTIAL_I:mode>"
+(define_insn_and_rewrite "@aarch64_load<SVE_PRED_LOAD:pred_load>_<ANY_EXTEND:optab><SVE_HSDI:mode><SVE_PARTIAL_I:mode>"
   [(set (match_operand:SVE_HSDI 0 "register_operand" "=w")
 	(unspec:SVE_HSDI
 	  [(match_operand:<SVE_HSDI:VPRED> 3 "general_operand" "UplDnm")
@@ -1295,7 +1295,7 @@
 	     (unspec:SVE_PARTIAL_I
 	       [(match_operand:<SVE_PARTIAL_I:VPRED> 2 "register_operand" "Upl")
 		(match_operand:SVE_PARTIAL_I 1 "memory_operand" "m")]
-	       UNSPEC_LD1_SVE))]
+	       SVE_PRED_LOAD))]
 	  UNSPEC_PRED_X))]
   "TARGET_SVE && (~<SVE_HSDI:narrower_mask> & <SVE_PARTIAL_I:self_mask>) == 0"
   "ld1<ANY_EXTEND:s><SVE_PARTIAL_I:Vesize>\t%0.<SVE_HSDI:Vctype>, %2/z, %1"
@@ -2533,14 +2533,34 @@
 )
 
 ;; Duplicate an Advanced SIMD vector to fill an SVE vector (LE version).
-(define_insn "@aarch64_vec_duplicate_vq<mode>_le"
-  [(set (match_operand:SVE_FULL 0 "register_operand" "=w")
+
+(define_insn_and_split "@aarch64_vec_duplicate_vq<mode>_le"
+  [(set (match_operand:SVE_FULL 0 "register_operand" "=w, w")
 	(vec_duplicate:SVE_FULL
-	  (match_operand:<V128> 1 "register_operand" "w")))]
+	  (match_operand:<V128> 1 "aarch64_sve_dup_ld1rq_operand" "w, UtQ")))
+   (clobber (match_scratch:VNx16BI 2 "=X, Upl"))]
   "TARGET_SVE && !BYTES_BIG_ENDIAN"
   {
-    operands[1] = gen_rtx_REG (<MODE>mode, REGNO (operands[1]));
-    return "dup\t%0.q, %1.q[0]";
+    switch (which_alternative)
+      {
+	case 0:
+	  operands[1] = gen_rtx_REG (<MODE>mode, REGNO (operands[1]));
+	  return "dup\t%0.q, %1.q[0]";
+	case 1:
+	  return "#";
+	default:
+	  gcc_unreachable ();
+      }
+  }
+  "&& MEM_P (operands[1])"
+  [(const_int 0)]
+  {
+    if (GET_CODE (operands[2]) == SCRATCH)
+      operands[2] = gen_reg_rtx (VNx16BImode);
+    emit_move_insn (operands[2], CONSTM1_RTX (VNx16BImode));
+    rtx gp = gen_lowpart (<VPRED>mode, operands[2]);
+    emit_insn (gen_aarch64_sve_ld1rq<mode> (operands[0], operands[1], gp));
+    DONE;
   }
 )
 
@@ -6287,8 +6307,8 @@
 ;; -------------------------------------------------------------------------
 
 ;; Unpredicated fmax/fmin (the libm functions).  The optabs for the
-;; smin/smax rtx codes are handled in the generic section above.
-(define_expand "<maxmin_uns><mode>3"
+;; smax/smin rtx codes are handled in the generic section above.
+(define_expand "<fmaxmin><mode>3"
   [(set (match_operand:SVE_FULL_F 0 "register_operand")
 	(unspec:SVE_FULL_F
 	  [(match_dup 3)
@@ -6300,6 +6320,23 @@
   {
     operands[3] = aarch64_ptrue_reg (<VPRED>mode);
   }
+)
+
+;; Predicated fmax/fmin (the libm functions).  The optabs for the
+;; smax/smin rtx codes are handled in the generic section above.
+(define_expand "cond_<fmaxmin><mode>"
+  [(set (match_operand:SVE_FULL_F 0 "register_operand")
+	(unspec:SVE_FULL_F
+	  [(match_operand:<VPRED> 1 "register_operand")
+	   (unspec:SVE_FULL_F
+	     [(match_dup 1)
+	      (const_int SVE_RELAXED_GP)
+	      (match_operand:SVE_FULL_F 2 "register_operand")
+	      (match_operand:SVE_FULL_F 3 "aarch64_sve_float_maxmin_operand")]
+	     SVE_COND_FP_MAXMIN_PUBLIC)
+	   (match_operand:SVE_FULL_F 4 "aarch64_simd_reg_or_zero")]
+	  UNSPEC_SEL))]
+  "TARGET_SVE"
 )
 
 ;; Predicated floating-point maximum/minimum.
@@ -6870,7 +6907,7 @@
   [(set_attr "movprfx" "*,yes")]
 )
 
-(define_insn "@aarch64_<sur>dot_prod<vsi2qi>"
+(define_insn "@<sur>dot_prod<vsi2qi>"
   [(set (match_operand:VNx4SI_ONLY 0 "register_operand" "=w, ?&w")
         (plus:VNx4SI_ONLY
 	  (unspec:VNx4SI_ONLY
@@ -8126,6 +8163,160 @@
 	  UNSPEC_COND_FCMUO))]
 )
 
+;; Similar to *fcm<cmp_op><mode>_and_combine, but for BIC rather than AND.
+;; In this case, we still need a separate NOT/BIC operation, but predicating
+;; the comparison on the BIC operand removes the need for a PTRUE.
+(define_insn_and_split "*fcm<cmp_op><mode>_bic_combine"
+  [(set (match_operand:<VPRED> 0 "register_operand" "=Upa")
+	(and:<VPRED>
+	  (and:<VPRED>
+	    (not:<VPRED>
+	      (unspec:<VPRED>
+	        [(match_operand:<VPRED> 1)
+	         (const_int SVE_KNOWN_PTRUE)
+	         (match_operand:SVE_FULL_F 2 "register_operand" "w")
+	         (match_operand:SVE_FULL_F 3 "aarch64_simd_reg_or_zero" "wDz")]
+	        SVE_COND_FP_CMP_I0))
+	    (match_operand:<VPRED> 4 "register_operand" "Upa"))
+	  (match_dup:<VPRED> 1)))
+   (clobber (match_scratch:<VPRED> 5 "=&Upl"))]
+  "TARGET_SVE"
+  "#"
+  "&& 1"
+  [(set (match_dup 5)
+	(unspec:<VPRED>
+	  [(match_dup 4)
+	   (const_int SVE_MAYBE_NOT_PTRUE)
+	   (match_dup 2)
+	   (match_dup 3)]
+	  SVE_COND_FP_CMP_I0))
+   (set (match_dup 0)
+	(and:<VPRED>
+	  (not:<VPRED>
+	    (match_dup 5))
+	  (match_dup 4)))]
+{
+  if (can_create_pseudo_p ())
+    operands[5] = gen_reg_rtx (<VPRED>mode);
+}
+)
+
+;; Make sure that we expand to a nor when the operand 4 of
+;; *fcm<cmp_op><mode>_bic_combine is a not.
+(define_insn_and_split "*fcm<cmp_op><mode>_nor_combine"
+  [(set (match_operand:<VPRED> 0 "register_operand" "=Upa")
+	(and:<VPRED>
+	  (and:<VPRED>
+	    (not:<VPRED>
+	      (unspec:<VPRED>
+	        [(match_operand:<VPRED> 1)
+	         (const_int SVE_KNOWN_PTRUE)
+	         (match_operand:SVE_FULL_F 2 "register_operand" "w")
+	         (match_operand:SVE_FULL_F 3 "aarch64_simd_reg_or_zero" "wDz")]
+	        SVE_COND_FP_CMP_I0))
+	    (not:<VPRED>
+	      (match_operand:<VPRED> 4 "register_operand" "Upa")))
+	  (match_dup:<VPRED> 1)))
+   (clobber (match_scratch:<VPRED> 5 "=&Upl"))]
+  "TARGET_SVE"
+  "#"
+  "&& 1"
+  [(set (match_dup 5)
+	(unspec:<VPRED>
+	  [(match_dup 1)
+	   (const_int SVE_KNOWN_PTRUE)
+	   (match_dup 2)
+	   (match_dup 3)]
+	  SVE_COND_FP_CMP_I0))
+   (set (match_dup 0)
+	(and:<VPRED>
+	  (and:<VPRED>
+	    (not:<VPRED>
+	      (match_dup 5))
+	    (not:<VPRED>
+	      (match_dup 4)))
+	  (match_dup 1)))]
+{
+  if (can_create_pseudo_p ())
+    operands[5] = gen_reg_rtx (<VPRED>mode);
+}
+)
+
+(define_insn_and_split "*fcmuo<mode>_bic_combine"
+  [(set (match_operand:<VPRED> 0 "register_operand" "=Upa")
+	(and:<VPRED>
+	  (and:<VPRED>
+	    (not:<VPRED>
+	      (unspec:<VPRED>
+	        [(match_operand:<VPRED> 1)
+	         (const_int SVE_KNOWN_PTRUE)
+	         (match_operand:SVE_FULL_F 2 "register_operand" "w")
+	         (match_operand:SVE_FULL_F 3 "register_operand" "w")]
+	        UNSPEC_COND_FCMUO))
+	    (match_operand:<VPRED> 4 "register_operand" "Upa"))
+	  (match_dup:<VPRED> 1)))
+   (clobber (match_scratch:<VPRED> 5 "=&Upl"))]
+  "TARGET_SVE"
+  "#"
+  "&& 1"
+  [(set (match_dup 5)
+	(unspec:<VPRED>
+	  [(match_dup 4)
+	   (const_int SVE_MAYBE_NOT_PTRUE)
+	   (match_dup 2)
+	   (match_dup 3)]
+	  UNSPEC_COND_FCMUO))
+   (set (match_dup 0)
+	(and:<VPRED>
+	  (not:<VPRED>
+	    (match_dup 5))
+	  (match_dup 4)))]
+{
+  if (can_create_pseudo_p ())
+    operands[5] = gen_reg_rtx (<VPRED>mode);
+}
+)
+
+;; Same for unordered comparisons.
+(define_insn_and_split "*fcmuo<mode>_nor_combine"
+  [(set (match_operand:<VPRED> 0 "register_operand" "=Upa")
+	(and:<VPRED>
+	  (and:<VPRED>
+	    (not:<VPRED>
+	      (unspec:<VPRED>
+	        [(match_operand:<VPRED> 1)
+	         (const_int SVE_KNOWN_PTRUE)
+	         (match_operand:SVE_FULL_F 2 "register_operand" "w")
+	         (match_operand:SVE_FULL_F 3 "register_operand" "w")]
+	        UNSPEC_COND_FCMUO))
+	    (not:<VPRED>
+	      (match_operand:<VPRED> 4 "register_operand" "Upa")))
+	  (match_dup:<VPRED> 1)))
+   (clobber (match_scratch:<VPRED> 5 "=&Upl"))]
+  "TARGET_SVE"
+  "#"
+  "&& 1"
+  [(set (match_dup 5)
+	(unspec:<VPRED>
+	  [(match_dup 1)
+	   (const_int SVE_KNOWN_PTRUE)
+	   (match_dup 2)
+	   (match_dup 3)]
+	  UNSPEC_COND_FCMUO))
+   (set (match_dup 0)
+	(and:<VPRED>
+	  (and:<VPRED>
+	    (not:<VPRED>
+	      (match_dup 5))
+	    (not:<VPRED>
+	      (match_dup 4)))
+	  (match_dup 1)))]
+{
+  if (can_create_pseudo_p ())
+    operands[5] = gen_reg_rtx (<VPRED>mode);
+}
+)
+
 ;; -------------------------------------------------------------------------
 ;; ---- [FP] Absolute comparisons
 ;; -------------------------------------------------------------------------
@@ -8392,6 +8583,17 @@
   "TARGET_SVE"
   {
     operands[2] = aarch64_ptrue_reg (<VPRED>mode);
+  }
+)
+
+(define_expand "reduc_<fmaxmin>_scal_<mode>"
+  [(match_operand:<VEL> 0 "register_operand")
+   (unspec:<VEL> [(match_operand:SVE_FULL_F 1 "register_operand")]
+		 FMAXMINNMV)]
+  "TARGET_SVE"
+  {
+    emit_insn (gen_reduc_<optab>_scal_<mode> (operands[0], operands[1]));
+    DONE;
   }
 )
 
@@ -9430,45 +9632,41 @@
 (define_insn "*aarch64_brk<brk_op>_cc"
   [(set (reg:CC_NZC CC_REGNUM)
 	(unspec:CC_NZC
-	  [(match_operand:VNx16BI 1 "register_operand" "Upa, Upa")
+	  [(match_operand:VNx16BI 1 "register_operand" "Upa")
 	   (match_dup 1)
 	   (match_operand:SI 4 "aarch64_sve_ptrue_flag")
 	   (unspec:VNx16BI
 	     [(match_dup 1)
-	      (match_operand:VNx16BI 2 "register_operand" "Upa, Upa")
-	      (match_operand:VNx16BI 3 "aarch64_simd_reg_or_zero" "Dz, 0")]
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "aarch64_simd_imm_zero")]
 	     SVE_BRK_UNARY)]
 	  UNSPEC_PTEST))
-   (set (match_operand:VNx16BI 0 "register_operand" "=Upa, Upa")
+   (set (match_operand:VNx16BI 0 "register_operand" "=Upa")
 	(unspec:VNx16BI
 	  [(match_dup 1)
 	   (match_dup 2)
 	   (match_dup 3)]
 	  SVE_BRK_UNARY))]
   "TARGET_SVE"
-  "@
-   brk<brk_op>s\t%0.b, %1/z, %2.b
-   brk<brk_op>s\t%0.b, %1/m, %2.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b"
 )
 
 ;; Same, but with only the flags result being interesting.
 (define_insn "*aarch64_brk<brk_op>_ptest"
   [(set (reg:CC_NZC CC_REGNUM)
 	(unspec:CC_NZC
-	  [(match_operand:VNx16BI 1 "register_operand" "Upa, Upa")
+	  [(match_operand:VNx16BI 1 "register_operand" "Upa")
 	   (match_dup 1)
 	   (match_operand:SI 4 "aarch64_sve_ptrue_flag")
 	   (unspec:VNx16BI
 	     [(match_dup 1)
-	      (match_operand:VNx16BI 2 "register_operand" "Upa, Upa")
-	      (match_operand:VNx16BI 3 "aarch64_simd_reg_or_zero" "Dz, 0")]
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "aarch64_simd_imm_zero")]
 	     SVE_BRK_UNARY)]
 	  UNSPEC_PTEST))
-   (clobber (match_scratch:VNx16BI 0 "=Upa, Upa"))]
+   (clobber (match_scratch:VNx16BI 0 "=Upa"))]
   "TARGET_SVE"
-  "@
-   brk<brk_op>s\t%0.b, %1/z, %2.b
-   brk<brk_op>s\t%0.b, %1/m, %2.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b"
 )
 
 ;; -------------------------------------------------------------------------
@@ -9495,7 +9693,61 @@
   "brk<brk_op>\t%0.b, %1/z, %2.b, %<brk_reg_opno>.b"
 )
 
-;; Same, but also producing a flags result.
+;; BRKN, producing both a predicate and a flags result.  Unlike other
+;; flag-setting instructions, these flags are always set wrt a ptrue.
+(define_insn_and_rewrite "*aarch64_brkn_cc"
+  [(set (reg:CC_NZC CC_REGNUM)
+	(unspec:CC_NZC
+	  [(match_operand:VNx16BI 4)
+	   (match_operand:VNx16BI 5)
+	   (const_int SVE_KNOWN_PTRUE)
+	   (unspec:VNx16BI
+	     [(match_operand:VNx16BI 1 "register_operand" "Upa")
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "register_operand" "0")]
+	     UNSPEC_BRKN)]
+	  UNSPEC_PTEST))
+   (set (match_operand:VNx16BI 0 "register_operand" "=Upa")
+	(unspec:VNx16BI
+	  [(match_dup 1)
+	   (match_dup 2)
+	   (match_dup 3)]
+	  UNSPEC_BRKN))]
+  "TARGET_SVE"
+  "brkns\t%0.b, %1/z, %2.b, %0.b"
+  "&& (operands[4] != CONST0_RTX (VNx16BImode)
+       || operands[5] != CONST0_RTX (VNx16BImode))"
+  {
+    operands[4] = CONST0_RTX (VNx16BImode);
+    operands[5] = CONST0_RTX (VNx16BImode);
+  }
+)
+
+;; Same, but with only the flags result being interesting.
+(define_insn_and_rewrite "*aarch64_brkn_ptest"
+  [(set (reg:CC_NZC CC_REGNUM)
+	(unspec:CC_NZC
+	  [(match_operand:VNx16BI 4)
+	   (match_operand:VNx16BI 5)
+	   (const_int SVE_KNOWN_PTRUE)
+	   (unspec:VNx16BI
+	     [(match_operand:VNx16BI 1 "register_operand" "Upa")
+	      (match_operand:VNx16BI 2 "register_operand" "Upa")
+	      (match_operand:VNx16BI 3 "register_operand" "0")]
+	     UNSPEC_BRKN)]
+	  UNSPEC_PTEST))
+   (clobber (match_scratch:VNx16BI 0 "=Upa"))]
+  "TARGET_SVE"
+  "brkns\t%0.b, %1/z, %2.b, %0.b"
+  "&& (operands[4] != CONST0_RTX (VNx16BImode)
+       || operands[5] != CONST0_RTX (VNx16BImode))"
+  {
+    operands[4] = CONST0_RTX (VNx16BImode);
+    operands[5] = CONST0_RTX (VNx16BImode);
+  }
+)
+
+;; BRKPA and BRKPB, producing both a predicate and a flags result.
 (define_insn "*aarch64_brk<brk_op>_cc"
   [(set (reg:CC_NZC CC_REGNUM)
 	(unspec:CC_NZC
@@ -9505,17 +9757,17 @@
 	   (unspec:VNx16BI
 	     [(match_dup 1)
 	      (match_operand:VNx16BI 2 "register_operand" "Upa")
-	      (match_operand:VNx16BI 3 "register_operand" "<brk_reg_con>")]
-	     SVE_BRK_BINARY)]
+	      (match_operand:VNx16BI 3 "register_operand" "Upa")]
+	     SVE_BRKP)]
 	  UNSPEC_PTEST))
    (set (match_operand:VNx16BI 0 "register_operand" "=Upa")
 	(unspec:VNx16BI
 	  [(match_dup 1)
 	   (match_dup 2)
 	   (match_dup 3)]
-	  SVE_BRK_BINARY))]
+	  SVE_BRKP))]
   "TARGET_SVE"
-  "brk<brk_op>s\t%0.b, %1/z, %2.b, %<brk_reg_opno>.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b, %3.b"
 )
 
 ;; Same, but with only the flags result being interesting.
@@ -9528,12 +9780,12 @@
 	   (unspec:VNx16BI
 	     [(match_dup 1)
 	      (match_operand:VNx16BI 2 "register_operand" "Upa")
-	      (match_operand:VNx16BI 3 "register_operand" "<brk_reg_con>")]
-	     SVE_BRK_BINARY)]
+	      (match_operand:VNx16BI 3 "register_operand" "Upa")]
+	     SVE_BRKP)]
 	  UNSPEC_PTEST))
    (clobber (match_scratch:VNx16BI 0 "=Upa"))]
   "TARGET_SVE"
-  "brk<brk_op>s\t%0.b, %1/z, %2.b, %<brk_reg_opno>.b"
+  "brk<brk_op>s\t%0.b, %1/z, %2.b, %3.b"
 )
 
 ;; -------------------------------------------------------------------------
