@@ -1,5 +1,5 @@
 /* ldmisc.h -
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -21,7 +21,7 @@
 #ifndef LDMISC_H
 #define LDMISC_H
 
-extern void vfinfo (FILE *fp, const char *fmt, va_list arg, bfd_boolean is_warning);
+extern void vfinfo (FILE *fp, const char *fmt, va_list arg, bool is_warning);
 extern void einfo (const char *, ...);
 extern void minfo (const char *, ...);
 extern void info_msg (const char *, ...);
@@ -38,7 +38,8 @@ do { if (!(x)) info_assert(__FILE__,__LINE__); } while (0)
 #define FAIL() \
 do { info_assert(__FILE__,__LINE__); } while (0)
 
-extern void print_space (void);
+extern void print_spaces (int);
+#define print_space() print_spaces (1)
 extern void print_nl (void);
 
 #endif

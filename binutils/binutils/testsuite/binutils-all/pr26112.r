@@ -1,13 +1,15 @@
 Contents of the .debug_macro section:
 
-  Offset:                      0x0
+  Offset:                      (0x)?0
   Version:                     5
   Offset size:                 4
-  Offset into .debug_line:     0x0
+  Offset into .debug_line:     (0x)?0
 
  DW_MACRO_start_file - lineno: 0 filenum: 1
- DW_MACRO_define_strx lineno : 1 macro : FOO bar
+ DW_MACRO_define_strx lineno : 1 macro : -
  DW_MACRO_end_file
+ DW_MACRO_define_strx lineno : 0 macro : /home/tstellar/llvm-project/clang-build
+ DW_MACRO_define_strx lineno : 0 macro : FOO bar
  DW_MACRO_define_strx lineno : 0 macro : __llvm__ 1
  DW_MACRO_define_strx lineno : 0 macro : __clang__ 1
  DW_MACRO_define_strx lineno : 0 macro : __clang_major__ 11
@@ -346,5 +348,3 @@ Contents of the .debug_macro section:
  DW_MACRO_define_strx lineno : 0 macro : __STDC__ 1
  DW_MACRO_define_strx lineno : 0 macro : __STDC_HOSTED__ 1
  DW_MACRO_define_strx lineno : 0 macro : __STDC_VERSION__ 201710L
- DW_MACRO_define_strx lineno : 0 macro : __STDC_UTF_16__ 1
- DW_MACRO_define_strx lineno : 0 macro : __STDC_UTF_32__ 1

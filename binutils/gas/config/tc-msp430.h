@@ -1,5 +1,5 @@
 /* This file is tc-msp430.h
-   Copyright (C) 2002-2021 Free Software Foundation, Inc.
+   Copyright (C) 2002-2023 Free Software Foundation, Inc.
 
    Contributed by Dmitry Diky <diwil@mail.ru>
 
@@ -127,7 +127,7 @@ extern int msp430_enable_relax;
 extern int msp430_enable_polys;
 
 #define tc_fix_adjustable(FIX) msp430_fix_adjustable (FIX)
-extern bfd_boolean             msp430_fix_adjustable (struct fix *);
+extern bool msp430_fix_adjustable (struct fix *);
 
 /* Allow hexadecimal numbers with 'h' suffix.  Note that if the number
    starts with a letter it will be interpreted as a symbol name not a
@@ -135,8 +135,8 @@ extern bfd_boolean             msp430_fix_adjustable (struct fix *);
    is A5A5h...  */
 #define NUMBERS_WITH_SUFFIX 1
 
-#define md_end msp430_md_end
-extern void    msp430_md_end (void);
+#define md_finish msp430_md_finish
+extern void    msp430_md_finish (void);
 
 /* Do not allow call frame debug info optimization as otherwise we could
    generate the DWARF directives without the relocs necessary to patch
@@ -146,7 +146,7 @@ extern void    msp430_md_end (void);
 /* The difference between same-section symbols may be affected by linker
    relaxation, so do not resolve such expressions in the assembler.  */
 #define md_allow_local_subtract(l,r,s) msp430_allow_local_subtract (l, r, s)
-extern bfd_boolean msp430_allow_local_subtract (expressionS *, expressionS *, segT);
+extern bool msp430_allow_local_subtract (expressionS *, expressionS *, segT);
 
 #define RELOC_EXPANSION_POSSIBLE
 #define MAX_RELOC_EXPANSION 2

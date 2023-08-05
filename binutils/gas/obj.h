@@ -1,7 +1,7 @@
 /* obj.h - defines the object dependent hooks for all object
    format backends.
 
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -37,12 +37,15 @@ void obj_symbol_to_chars (char **where, symbolS * symbolP);
 
 extern const pseudo_typeS obj_pseudo_table[];
 
+struct ecoff_extr;
+
 struct format_ops {
   int flavor;
   unsigned dfl_leading_underscore : 1;
   unsigned emit_section_symbols : 1;
   void (*begin) (void);
-  void (*app_file) (const char *, int);
+  void (*end) (void);
+  void (*app_file) (const char *);
   void (*frob_symbol) (symbolS *, int *);
   void (*frob_file) (void);
   void (*frob_file_before_adjust) (void);

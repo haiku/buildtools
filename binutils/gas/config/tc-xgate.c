@@ -1,5 +1,5 @@
 /* tc-xgate.c -- Assembler code for Freescale XGATE
-   Copyright (C) 2010-2021 Free Software Foundation, Inc.
+   Copyright (C) 2010-2023 Free Software Foundation, Inc.
    Contributed by Sean Keys <skeys@ipdatasys.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -196,7 +196,7 @@ size_t md_longopts_size = sizeof (md_longopts);
 const char *
 md_atof (int type, char *litP, int *sizeP)
 {
-  return ieee_md_atof (type, litP, sizeP, TRUE);
+  return ieee_md_atof (type, litP, sizeP, true);
 }
 
 int
@@ -660,7 +660,7 @@ md_apply_fix (fixS * fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
 
   /* We don't actually support subtracting a symbol.  */
   if (fixP->fx_subsy != (symbolS *) NULL)
-    as_bad_where (fixP->fx_file, fixP->fx_line, _("Expression too complex."));
+    as_bad_subtract (fixP);
 
   where = fixP->fx_frag->fr_literal + fixP->fx_where;
   opcode = bfd_getl16 (where);
@@ -893,6 +893,8 @@ xgate_parse_exp (char *s, expressionS * op)
   expression (op);
   if (op->X_op == O_absent)
     as_bad (_("missing operand"));
+  else
+    resolve_register (op);
   return input_line_pointer;
 }
 
@@ -1292,24 +1294,24 @@ xgate_parse_operand (struct xgate_opcode *opcode,
 	    {
 	      if (((opcode->name[strlen (opcode->name) - 1] == 'l')
 		   && autoHiLo) || operand.mod == MOD_LOAD_LOW)
-		fix_new_exp (frag_now, where, 2, &operand.exp, FALSE,
+		fix_new_exp (frag_now, where, 2, &operand.exp, false,
 			     BFD_RELOC_XGATE_24);
 	      else if (((opcode->name[strlen (opcode->name) - 1]) == 'h'
 			&& autoHiLo) || operand.mod == MOD_LOAD_HIGH )
-		fix_new_exp (frag_now, where, 2, &operand.exp, FALSE,
+		fix_new_exp (frag_now, where, 2, &operand.exp, false,
 			     BFD_RELOC_XGATE_IMM8_HI);
 	      else
 		as_bad (_("you must use a hi/lo directive or 16-bit macro "
 			  "to load a 16-bit value."));
 	    }
 	  else if (*op_constraint == '5')
-	    fix_new_exp (frag_now, where, 2, &operand.exp, FALSE,
+	    fix_new_exp (frag_now, where, 2, &operand.exp, false,
 			 BFD_RELOC_XGATE_IMM5);
 	  else if (*op_constraint == '4')
-	    fix_new_exp (frag_now, where, 2, &operand.exp, FALSE,
+	    fix_new_exp (frag_now, where, 2, &operand.exp, false,
 			 BFD_RELOC_XGATE_IMM4);
 	  else if (*op_constraint == '3')
-	    fix_new_exp (frag_now, where, 2, &operand.exp, FALSE,
+	    fix_new_exp (frag_now, where, 2, &operand.exp, false,
 			 BFD_RELOC_XGATE_IMM3);
 	  else
 	    as_bad (_(":unknown relocation constraint size"));
@@ -1335,10 +1337,10 @@ xgate_parse_operand (struct xgate_opcode *opcode,
       if (operand.exp.X_op != O_register)
 	{
 	  if (*op_constraint == '9')
-	    fix_new_exp (frag_now, where, 2, &operand.exp, TRUE,
+	    fix_new_exp (frag_now, where, 2, &operand.exp, true,
 			 BFD_RELOC_XGATE_PCREL_9);
 	  else if (*op_constraint == 'a')
-	    fix_new_exp (frag_now, where, 2, &operand.exp, TRUE,
+	    fix_new_exp (frag_now, where, 2, &operand.exp, true,
 			 BFD_RELOC_XGATE_PCREL_10);
 	}
       else

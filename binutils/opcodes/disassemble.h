@@ -1,6 +1,6 @@
 /* Header only used inside opcodes library for disassemble.
 
-   Copyright (C) 2017-2021 Free Software Foundation, Inc.
+   Copyright (C) 2017-2023 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -93,17 +93,19 @@ extern int print_insn_v850		(bfd_vma, disassemble_info *);
 extern int print_insn_vax		(bfd_vma, disassemble_info *);
 extern int print_insn_visium		(bfd_vma, disassemble_info *);
 extern int print_insn_wasm32		(bfd_vma, disassemble_info *);
-extern int print_insn_xc16x		(bfd_vma, disassemble_info *);
 extern int print_insn_xgate             (bfd_vma, disassemble_info *);
 extern int print_insn_xstormy16		(bfd_vma, disassemble_info *);
 extern int print_insn_xtensa		(bfd_vma, disassemble_info *);
 extern int print_insn_z80		(bfd_vma, disassemble_info *);
 extern int print_insn_z8001		(bfd_vma, disassemble_info *);
 extern int print_insn_z8002		(bfd_vma, disassemble_info *);
+extern int print_insn_loongarch		(bfd_vma, disassemble_info *);
 
 extern disassembler_ftype csky_get_disassembler (bfd *);
 extern disassembler_ftype rl78_get_disassembler (bfd *);
 extern disassembler_ftype riscv_get_disassembler (bfd *);
+
+extern void disassemble_free_riscv (disassemble_info *);
 
 extern void ATTRIBUTE_NORETURN opcodes_assert (const char *, int);
 

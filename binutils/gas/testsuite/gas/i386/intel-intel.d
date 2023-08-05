@@ -46,28 +46,28 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	23 90 90 90 90 90 +	and    edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	24 90 +	and    al,0x90
 [ 	]*[a-f0-9]+:	25 90 90 90 90 +	and    eax,0x90909090
-[ 	]*[a-f0-9]+:	27 +	daa *
+[ 	]*[a-f0-9]+:	27 +	daa
 [ 	]*[a-f0-9]+:	28 90 90 90 90 90 +	sub    BYTE PTR \[eax-0x6f6f6f70\],dl
 [ 	]*[a-f0-9]+:	29 90 90 90 90 90 +	sub    DWORD PTR \[eax-0x6f6f6f70\],edx
 [ 	]*[a-f0-9]+:	2a 90 90 90 90 90 +	sub    dl,BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	2b 90 90 90 90 90 +	sub    edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	2c 90 +	sub    al,0x90
 [ 	]*[a-f0-9]+:	2d 90 90 90 90 +	sub    eax,0x90909090
-[ 	]*[a-f0-9]+:	2f +	das *
+[ 	]*[a-f0-9]+:	2f +	das
 [ 	]*[a-f0-9]+:	30 90 90 90 90 90 +	xor    BYTE PTR \[eax-0x6f6f6f70\],dl
 [ 	]*[a-f0-9]+:	31 90 90 90 90 90 +	xor    DWORD PTR \[eax-0x6f6f6f70\],edx
 [ 	]*[a-f0-9]+:	32 90 90 90 90 90 +	xor    dl,BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	33 90 90 90 90 90 +	xor    edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	34 90 +	xor    al,0x90
 [ 	]*[a-f0-9]+:	35 90 90 90 90 +	xor    eax,0x90909090
-[ 	]*[a-f0-9]+:	37 +	aaa *
+[ 	]*[a-f0-9]+:	37 +	aaa
 [ 	]*[a-f0-9]+:	38 90 90 90 90 90 +	cmp    BYTE PTR \[eax-0x6f6f6f70\],dl
 [ 	]*[a-f0-9]+:	39 90 90 90 90 90 +	cmp    DWORD PTR \[eax-0x6f6f6f70\],edx
 [ 	]*[a-f0-9]+:	3a 90 90 90 90 90 +	cmp    dl,BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	3b 90 90 90 90 90 +	cmp    edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	3c 90 +	cmp    al,0x90
 [ 	]*[a-f0-9]+:	3d 90 90 90 90 +	cmp    eax,0x90909090
-[ 	]*[a-f0-9]+:	3f +	aas *
+[ 	]*[a-f0-9]+:	3f +	aas
 [ 	]*[a-f0-9]+:	40 +	inc    eax
 [ 	]*[a-f0-9]+:	41 +	inc    ecx
 [ 	]*[a-f0-9]+:	42 +	inc    edx
@@ -100,8 +100,8 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	5d +	pop    ebp
 [ 	]*[a-f0-9]+:	5e +	pop    esi
 [ 	]*[a-f0-9]+:	5f +	pop    edi
-[ 	]*[a-f0-9]+:	60 +	pusha *
-[ 	]*[a-f0-9]+:	61 +	popa *
+[ 	]*[a-f0-9]+:	60 +	pusha
+[ 	]*[a-f0-9]+:	61 +	popa
 [ 	]*[a-f0-9]+:	62 90 90 90 90 90 +	bound  edx,QWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	63 90 90 90 90 90 +	arpl   WORD PTR \[eax-0x6f6f6f70\],dx
 [ 	]*[a-f0-9]+:	68 90 90 90 90 +	push   0x90909090
@@ -151,14 +151,14 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	95 +	xchg   ebp,eax
 [ 	]*[a-f0-9]+:	96 +	xchg   esi,eax
 [ 	]*[a-f0-9]+:	97 +	xchg   edi,eax
-[ 	]*[a-f0-9]+:	98 +	cwde *
-[ 	]*[a-f0-9]+:	99 +	cdq *
+[ 	]*[a-f0-9]+:	98 +	cwde
+[ 	]*[a-f0-9]+:	99 +	cdq
 [ 	]*[a-f0-9]+:	9a 90 90 90 90 90 90 	call   0x9090:0x90909090
 [ 	]*[a-f0-9]+:	9b +	fwait
-[ 	]*[a-f0-9]+:	9c +	pushf *
-[ 	]*[a-f0-9]+:	9d +	popf *
-[ 	]*[a-f0-9]+:	9e +	sahf *
-[ 	]*[a-f0-9]+:	9f +	lahf *
+[ 	]*[a-f0-9]+:	9c +	pushf
+[ 	]*[a-f0-9]+:	9d +	popf
+[ 	]*[a-f0-9]+:	9e +	sahf
+[ 	]*[a-f0-9]+:	9f +	lahf
 [ 	]*[a-f0-9]+:	a0 90 90 90 90 +	mov    al,ds:0x90909090
 [ 	]*[a-f0-9]+:	a1 90 90 90 90 +	mov    eax,ds:0x90909090
 [ 	]*[a-f0-9]+:	a2 90 90 90 90 +	mov    ds:0x90909090,al
@@ -194,21 +194,21 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	c0 90 90 90 90 90 90 	rcl    BYTE PTR \[eax-0x6f6f6f70\],0x90
 [ 	]*[a-f0-9]+:	c1 90 90 90 90 90 90 	rcl    DWORD PTR \[eax-0x6f6f6f70\],0x90
 [ 	]*[a-f0-9]+:	c2 90 90 +	ret    0x9090
-[ 	]*[a-f0-9]+:	c3 +	ret *
+[ 	]*[a-f0-9]+:	c3 +	ret
 [ 	]*[a-f0-9]+:	c4 90 90 90 90 90 +	les    edx,FWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	c5 90 90 90 90 90 +	lds    edx,FWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	c6 80 90 90 90 90 90 	mov    BYTE PTR \[eax-0x6f6f6f70\],0x90
 [ 	]*[a-f0-9]+:	c7 80 90 90 90 90 90 90 90 90 	mov    DWORD PTR \[eax-0x6f6f6f70\],0x90909090
 [ 	]*[a-f0-9]+:	c8 90 90 90 +	enter  0x9090,0x90
-[ 	]*[a-f0-9]+:	c9 +	leave *
+[ 	]*[a-f0-9]+:	c9 +	leave
 [ 	]*[a-f0-9]+:	ca 90 90 +	retf   0x9090
-[ 	]*[a-f0-9]+:	cb +	retf *
+[ 	]*[a-f0-9]+:	cb +	retf
 [ 	]*[a-f0-9]+:	ca 90 90 +	retf   0x9090
-[ 	]*[a-f0-9]+:	cb +	retf *
-[ 	]*[a-f0-9]+:	cc +	int3 *
+[ 	]*[a-f0-9]+:	cb +	retf
+[ 	]*[a-f0-9]+:	cc +	int3
 [ 	]*[a-f0-9]+:	cd 90 +	int    0x90
-[ 	]*[a-f0-9]+:	ce +	into *
-[ 	]*[a-f0-9]+:	cf +	iret *
+[ 	]*[a-f0-9]+:	ce +	into
+[ 	]*[a-f0-9]+:	cf +	iret
 [ 	]*[a-f0-9]+:	d0 90 90 90 90 90 +	rcl    BYTE PTR \[eax-0x6f6f6f70\],1
 [ 	]*[a-f0-9]+:	d1 90 90 90 90 90 +	rcl    DWORD PTR \[eax-0x6f6f6f70\],1
 [ 	]*[a-f0-9]+:	d2 90 90 90 90 90 +	rcl    BYTE PTR \[eax-0x6f6f6f70\],cl
@@ -232,43 +232,43 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	e5 90 +	in     eax,0x90
 [ 	]*[a-f0-9]+:	e6 90 +	out    0x90,al
 [ 	]*[a-f0-9]+:	e7 90 +	out    0x90,eax
-[ 	]*[a-f0-9]+:	e8 90 90 90 90 +	call   90909373 <barn\+0x90908831>
-[ 	]*[a-f0-9]+:	e9 90 90 90 90 +	jmp    90909378 <barn\+0x90908836>
+[ 	]*[a-f0-9]+:	e8 90 90 90 90 +	call   90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	e9 90 90 90 90 +	jmp    90909... <barn\+0x90908...>
 [ 	]*[a-f0-9]+:	ea 90 90 90 90 90 90 	jmp    0x9090:0x90909090
 [ 	]*[a-f0-9]+:	eb 90 +	jmp    281 <foo\+0x281>
 [ 	]*[a-f0-9]+:	ec +	in     al,dx
 [ 	]*[a-f0-9]+:	ed +	in     eax,dx
 [ 	]*[a-f0-9]+:	ee +	out    dx,al
 [ 	]*[a-f0-9]+:	ef +	out    dx,eax
-[ 	]*[a-f0-9]+:	f4 +	hlt *
-[ 	]*[a-f0-9]+:	f5 +	cmc *
+[ 	]*[a-f0-9]+:	f4 +	hlt
+[ 	]*[a-f0-9]+:	f5 +	cmc
 [ 	]*[a-f0-9]+:	f6 90 90 90 90 90 +	not    BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	f7 90 90 90 90 90 +	not    DWORD PTR \[eax-0x6f6f6f70\]
-[ 	]*[a-f0-9]+:	f8 +	clc *
-[ 	]*[a-f0-9]+:	f9 +	stc *
-[ 	]*[a-f0-9]+:	fa +	cli *
-[ 	]*[a-f0-9]+:	fb +	sti *
-[ 	]*[a-f0-9]+:	fc +	cld *
-[ 	]*[a-f0-9]+:	fd +	std *
+[ 	]*[a-f0-9]+:	f8 +	clc
+[ 	]*[a-f0-9]+:	f9 +	stc
+[ 	]*[a-f0-9]+:	fa +	cli
+[ 	]*[a-f0-9]+:	fb +	sti
+[ 	]*[a-f0-9]+:	fc +	cld
+[ 	]*[a-f0-9]+:	fd +	std
 [ 	]*[a-f0-9]+:	ff 90 90 90 90 90 +	call   DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 00 90 90 90 90 90 	lldt   WORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 01 90 90 90 90 90 	lgdtd  \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 02 90 90 90 90 90 	lar    edx,WORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 03 90 90 90 90 90 	lsl    edx,WORD PTR \[eax-0x6f6f6f70\]
-[ 	]*[a-f0-9]+:	0f 06 +	clts *
-[ 	]*[a-f0-9]+:	0f 08 +	invd *
-[ 	]*[a-f0-9]+:	0f 09 +	wbinvd *
-[ 	]*[a-f0-9]+:	0f 0b +	ud2 *
+[ 	]*[a-f0-9]+:	0f 06 +	clts
+[ 	]*[a-f0-9]+:	0f 08 +	invd
+[ 	]*[a-f0-9]+:	0f 09 +	wbinvd
+[ 	]*[a-f0-9]+:	0f 0b +	ud2
 [ 	]*[a-f0-9]+:	0f 20 d0 +	mov    eax,cr2
 [ 	]*[a-f0-9]+:	0f 21 d0 +	mov    eax,dr2
 [ 	]*[a-f0-9]+:	0f 22 d0 +	mov    cr2,eax
 [ 	]*[a-f0-9]+:	0f 23 d0 +	mov    dr2,eax
 [ 	]*[a-f0-9]+:	0f 24 d0 +	mov    eax,tr2
 [ 	]*[a-f0-9]+:	0f 26 d0 +	mov    tr2,eax
-[ 	]*[a-f0-9]+:	0f 30 +	wrmsr *
-[ 	]*[a-f0-9]+:	0f 31 +	rdtsc *
-[ 	]*[a-f0-9]+:	0f 32 +	rdmsr *
-[ 	]*[a-f0-9]+:	0f 33 +	rdpmc *
+[ 	]*[a-f0-9]+:	0f 30 +	wrmsr
+[ 	]*[a-f0-9]+:	0f 31 +	rdtsc
+[ 	]*[a-f0-9]+:	0f 32 +	rdmsr
+[ 	]*[a-f0-9]+:	0f 33 +	rdpmc
 [ 	]*[a-f0-9]+:	0f 40 90 90 90 90 90 	cmovo  edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 41 90 90 90 90 90 	cmovno edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 42 90 90 90 90 90 	cmovb  edx,DWORD PTR \[eax-0x6f6f6f70\]
@@ -305,25 +305,25 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	0f 74 90 90 90 90 90 	pcmpeqb mm2,QWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 75 90 90 90 90 90 	pcmpeqw mm2,QWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 76 90 90 90 90 90 	pcmpeqd mm2,QWORD PTR \[eax-0x6f6f6f70\]
-[ 	]*[a-f0-9]+:	0f 77 +	emms *
+[ 	]*[a-f0-9]+:	0f 77 +	emms
 [ 	]*[a-f0-9]+:	0f 7e 90 90 90 90 90 	movd   DWORD PTR \[eax-0x6f6f6f70\],mm2
 [ 	]*[a-f0-9]+:	0f 7f 90 90 90 90 90 	movq   QWORD PTR \[eax-0x6f6f6f70\],mm2
-[ 	]*[a-f0-9]+:	0f 80 90 90 90 90 +	jo     909094e6 <barn\+0x909089a4>
-[ 	]*[a-f0-9]+:	0f 81 90 90 90 90 +	jno    909094ec <barn\+0x909089aa>
-[ 	]*[a-f0-9]+:	0f 82 90 90 90 90 +	jb     909094f2 <barn\+0x909089b0>
-[ 	]*[a-f0-9]+:	0f 83 90 90 90 90 +	jae    909094f8 <barn\+0x909089b6>
-[ 	]*[a-f0-9]+:	0f 84 90 90 90 90 +	je     909094fe <barn\+0x909089bc>
-[ 	]*[a-f0-9]+:	0f 85 90 90 90 90 +	jne    90909504 <barn\+0x909089c2>
-[ 	]*[a-f0-9]+:	0f 86 90 90 90 90 +	jbe    9090950a <barn\+0x909089c8>
-[ 	]*[a-f0-9]+:	0f 87 90 90 90 90 +	ja     90909510 <barn\+0x909089ce>
-[ 	]*[a-f0-9]+:	0f 88 90 90 90 90 +	js     90909516 <barn\+0x909089d4>
-[ 	]*[a-f0-9]+:	0f 89 90 90 90 90 +	jns    9090951c <barn\+0x909089da>
-[ 	]*[a-f0-9]+:	0f 8a 90 90 90 90 +	jp     90909522 <barn\+0x909089e0>
-[ 	]*[a-f0-9]+:	0f 8b 90 90 90 90 +	jnp    90909528 <barn\+0x909089e6>
-[ 	]*[a-f0-9]+:	0f 8c 90 90 90 90 +	jl     9090952e <barn\+0x909089ec>
-[ 	]*[a-f0-9]+:	0f 8d 90 90 90 90 +	jge    90909534 <barn\+0x909089f2>
-[ 	]*[a-f0-9]+:	0f 8e 90 90 90 90 +	jle    9090953a <barn\+0x909089f8>
-[ 	]*[a-f0-9]+:	0f 8f 90 90 90 90 +	jg     90909540 <barn\+0x909089fe>
+[ 	]*[a-f0-9]+:	0f 80 90 90 90 90 +	jo     90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 81 90 90 90 90 +	jno    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 82 90 90 90 90 +	jb     90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 83 90 90 90 90 +	jae    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 84 90 90 90 90 +	je     90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 85 90 90 90 90 +	jne    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 86 90 90 90 90 +	jbe    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 87 90 90 90 90 +	ja     90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 88 90 90 90 90 +	js     90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 89 90 90 90 90 +	jns    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 8a 90 90 90 90 +	jp     90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 8b 90 90 90 90 +	jnp    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 8c 90 90 90 90 +	jl     90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 8d 90 90 90 90 +	jge    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 8e 90 90 90 90 +	jle    90909... <barn\+0x90908...>
+[ 	]*[a-f0-9]+:	0f 8f 90 90 90 90 +	jg     90909... <barn\+0x90908...>
 [ 	]*[a-f0-9]+:	0f 90 80 90 90 90 90 	seto   BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 91 80 90 90 90 90 	setno  BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f 92 80 90 90 90 90 	setb   BYTE PTR \[eax-0x6f6f6f70\]
@@ -342,13 +342,13 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	0f 9f 80 90 90 90 90 	setg   BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f a0 +	push   fs
 [ 	]*[a-f0-9]+:	0f a1 +	pop    fs
-[ 	]*[a-f0-9]+:	0f a2 +	cpuid *
+[ 	]*[a-f0-9]+:	0f a2 +	cpuid
 [ 	]*[a-f0-9]+:	0f a3 90 90 90 90 90 	bt     DWORD PTR \[eax-0x6f6f6f70\],edx
 [ 	]*[a-f0-9]+:	0f a4 90 90 90 90 90 90 	shld   DWORD PTR \[eax-0x6f6f6f70\],edx,0x90
 [ 	]*[a-f0-9]+:	0f a5 90 90 90 90 90 	shld   DWORD PTR \[eax-0x6f6f6f70\],edx,cl
 [ 	]*[a-f0-9]+:	0f a8 +	push   gs
 [ 	]*[a-f0-9]+:	0f a9 +	pop    gs
-[ 	]*[a-f0-9]+:	0f aa +	rsm *
+[ 	]*[a-f0-9]+:	0f aa +	rsm
 [ 	]*[a-f0-9]+:	0f ab 90 90 90 90 90 	bts    DWORD PTR \[eax-0x6f6f6f70\],edx
 [ 	]*[a-f0-9]+:	0f ac 90 90 90 90 90 90 	shrd   DWORD PTR \[eax-0x6f6f6f70\],edx,0x90
 [ 	]*[a-f0-9]+:	0f ad 90 90 90 90 90 	shrd   DWORD PTR \[eax-0x6f6f6f70\],edx,cl
@@ -361,7 +361,7 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	0f b5 90 90 90 90 90 	lgs    edx,FWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f b6 90 90 90 90 90 	movzx  edx,BYTE PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f b7 90 90 90 90 90 	movzx  edx,WORD PTR \[eax-0x6f6f6f70\]
-[ 	]*[a-f0-9]+:	0f 0b +	ud2 *
+[ 	]*[a-f0-9]+:	0f 0b +	ud2
 [ 	]*[a-f0-9]+:	0f bb 90 90 90 90 90 	btc    DWORD PTR \[eax-0x6f6f6f70\],edx
 [ 	]*[a-f0-9]+:	0f bc 90 90 90 90 90 	bsf    edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	0f bd 90 90 90 90 90 	bsr    edx,DWORD PTR \[eax-0x6f6f6f70\]
@@ -469,8 +469,8 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	66 5d +	pop    bp
 [ 	]*[a-f0-9]+:	66 5e +	pop    si
 [ 	]*[a-f0-9]+:	66 5f +	pop    di
-[ 	]*[a-f0-9]+:	66 60 +	pushaw *
-[ 	]*[a-f0-9]+:	66 61 +	popaw *
+[ 	]*[a-f0-9]+:	66 60 +	pushaw
+[ 	]*[a-f0-9]+:	66 61 +	popaw
 [ 	]*[a-f0-9]+:	66 62 90 90 90 90 90 	bound  dx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	66 68 90 90 +	pushw  0x9090
 [ 	]*[a-f0-9]+:	66 69 90 90 90 90 90 90 90 	imul   dx,WORD PTR \[eax-0x6f6f6f70\],0x9090
@@ -494,11 +494,11 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	66 95 +	xchg   bp,ax
 [ 	]*[a-f0-9]+:	66 96 +	xchg   si,ax
 [ 	]*[a-f0-9]+:	66 97 +	xchg   di,ax
-[ 	]*[a-f0-9]+:	66 98 +	cbw *
-[ 	]*[a-f0-9]+:	66 99 +	cwd *
+[ 	]*[a-f0-9]+:	66 98 +	cbw
+[ 	]*[a-f0-9]+:	66 99 +	cwd
 [ 	]*[a-f0-9]+:	66 9a 90 90 90 90 +	call   0x9090:0x9090
-[ 	]*[a-f0-9]+:	66 9c +	pushfw *
-[ 	]*[a-f0-9]+:	66 9d +	popfw *
+[ 	]*[a-f0-9]+:	66 9c +	pushfw
+[ 	]*[a-f0-9]+:	66 9d +	popfw
 [ 	]*[a-f0-9]+:	66 a1 90 90 90 90 +	mov    ax,ds:0x90909090
 [ 	]*[a-f0-9]+:	66 a3 90 90 90 90 +	mov    ds:0x90909090,ax
 [ 	]*[a-f0-9]+:	66 a5 +	movs   WORD PTR es:\[edi\],WORD PTR ds:\[esi\]
@@ -517,22 +517,22 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	66 bf 90 90 +	mov    di,0x9090
 [ 	]*[a-f0-9]+:	66 c1 90 90 90 90 90 90 	rcl    WORD PTR \[eax-0x6f6f6f70\],0x90
 [ 	]*[a-f0-9]+:	66 c2 90 90 +	retw   0x9090
-[ 	]*[a-f0-9]+:	66 c3 +	retw *
+[ 	]*[a-f0-9]+:	66 c3 +	retw
 [ 	]*[a-f0-9]+:	66 c4 90 90 90 90 90 	les    dx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	66 c5 90 90 90 90 90 	lds    dx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	66 c7 80 90 90 90 90 90 90 	mov    WORD PTR \[eax-0x6f6f6f70\],0x9090
 [ 	]*[a-f0-9]+:	66 c8 90 90 90 +	enterw 0x9090,0x90
-[ 	]*[a-f0-9]+:	66 c9 +	leavew *
+[ 	]*[a-f0-9]+:	66 c9 +	leavew
 [ 	]*[a-f0-9]+:	66 ca 90 90 +	retfw  0x9090
-[ 	]*[a-f0-9]+:	66 cb +	retfw *
+[ 	]*[a-f0-9]+:	66 cb +	retfw
 [ 	]*[a-f0-9]+:	66 ca 90 90 +	retfw  0x9090
-[ 	]*[a-f0-9]+:	66 cb +	retfw *
-[ 	]*[a-f0-9]+:	66 cf +	iretw *
+[ 	]*[a-f0-9]+:	66 cb +	retfw
+[ 	]*[a-f0-9]+:	66 cf +	iretw
 [ 	]*[a-f0-9]+:	66 d1 90 90 90 90 90 	rcl    WORD PTR \[eax-0x6f6f6f70\],1
 [ 	]*[a-f0-9]+:	66 d3 90 90 90 90 90 	rcl    WORD PTR \[eax-0x6f6f6f70\],cl
 [ 	]*[a-f0-9]+:	66 e5 90 +	in     ax,0x90
 [ 	]*[a-f0-9]+:	66 e7 90 +	out    0x90,ax
-[ 	]*[a-f0-9]+:	66 e8 8f 90 +	callw  9922 <barn\+0x8de0>
+[ 	]*[a-f0-9]+:	66 e8 8f 90 +	callw  9... <barn\+0x8...>
 [ 	]*[a-f0-9]+:	66 ea 90 90 90 90 +	jmp    0x9090:0x9090
 [ 	]*[a-f0-9]+:	66 ed +	in     ax,dx
 [ 	]*[a-f0-9]+:	66 ef +	out    dx,ax
@@ -580,10 +580,10 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	66 0f c1 90 90 90 90 90 	xadd   WORD PTR \[eax-0x6f6f6f70\],dx
 
 [a-f0-9]+ <gs_foo>:
-[ 	]*[a-f0-9]+:	c3 +	ret *
+[ 	]*[a-f0-9]+:	c3 +	ret
 
 [a-f0-9]+ <short_foo>:
-[ 	]*[a-f0-9]+:	c3 +	ret *
+[ 	]*[a-f0-9]+:	c3 +	ret
 
 [a-f0-9]+ <bar>:
 [ 	]*[a-f0-9]+:	e8 f9 ff ff ff +	call   9d9 <gs_foo>
@@ -607,7 +607,7 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	0e +	push   cs
 [ 	]*[a-f0-9]+:	8b 04 5d 00 00 00 00 	mov    eax,DWORD PTR \[ebx\*2\+0x0\]
 [ 	]*[a-f0-9]+:	10 14 85 90 90 90 90 	adc    BYTE PTR \[eax\*4-0x6f6f6f70\],dl
-[ 	]*[a-f0-9]+:	2f +	das *
+[ 	]*[a-f0-9]+:	2f +	das
 [ 	]*[a-f0-9]+:	ea 90 90 90 90 90 90 	jmp    0x9090:0x90909090
 [ 	]*[a-f0-9]+:	66 a5 +	movs   WORD PTR es:\[edi\],WORD PTR ds:\[esi\]
 [ 	]*[a-f0-9]+:	70 90 +	jo     9be <foo\+0x9be>
@@ -699,6 +699,14 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	0f 4b 90 90 90 90 90 	cmovnp edx,DWORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	66 0f 4a 90 90 90 90 90 	cmovp  dx,WORD PTR \[eax-0x6f6f6f70\]
 [ 	]*[a-f0-9]+:	66 0f 4b 90 90 90 90 90 	cmovnp dx,WORD PTR \[eax-0x6f6f6f70\]
+[ 	]*[a-f0-9]+:	0f 02 c0 +	lar    eax,eax
+[ 	]*[a-f0-9]+:	66 0f 02 c0 +	lar    ax,ax
+[ 	]*[a-f0-9]+:	0f 02 00 +	lar    eax,WORD PTR \[eax\]
+[ 	]*[a-f0-9]+:	66 0f 02 00 +	lar    ax,WORD PTR \[eax\]
+[ 	]*[a-f0-9]+:	0f 03 c0 +	lsl    eax,eax
+[ 	]*[a-f0-9]+:	66 0f 03 c0 +	lsl    ax,ax
+[ 	]*[a-f0-9]+:	0f 03 00 +	lsl    eax,WORD PTR \[eax\]
+[ 	]*[a-f0-9]+:	66 0f 03 00 +	lsl    ax,WORD PTR \[eax\]
 [ 	]*[a-f0-9]+:	8b 04 04 +	mov    eax,DWORD PTR \[esp\+eax\*1\]
 [ 	]*[a-f0-9]+:	8b 04 20 +	mov    eax,DWORD PTR \[eax\+eiz\*1\]
 [ 	]*[a-f0-9]+:	c4 e2 69 92 04 08 +	vgatherdps xmm0,DWORD PTR \[eax\+xmm1\*1\],xmm2

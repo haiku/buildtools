@@ -1,5 +1,5 @@
 /* tc-mcore.c -- Assemble code for M*Core
-   Copyright (C) 1999-2021 Free Software Foundation, Inc.
+   Copyright (C) 1999-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -361,7 +361,7 @@ mcore_s_section (int ignore)
   while (*ilp != 0 && ISSPACE (*ilp))
     ++ ilp;
 
-  if (strncmp (ilp, ".line", 5) == 0
+  if (startswith (ilp, ".line")
       && (ISSPACE (ilp[5]) || *ilp == '\n' || *ilp == '\r'))
     ;
   else
@@ -852,7 +852,7 @@ md_assemble (char * str)
   char * op_start;
   char * op_end;
   mcore_opcode_info * opcode;
-  char * output;
+  char * output = NULL;
   int nlen = 0;
   unsigned short inst;
   unsigned reg;
@@ -1596,8 +1596,11 @@ md_assemble (char * str)
   if (strcmp (op_end, opcode->name) && strcmp (op_end, ""))
     as_warn (_("ignoring operands: %s "), op_end);
 
-  output[0] = INST_BYTE0 (inst);
-  output[1] = INST_BYTE1 (inst);
+  if (output != NULL)
+    {
+      output[0] = INST_BYTE0 (inst);
+      output[1] = INST_BYTE1 (inst);
+    }
 
 #ifdef OBJ_ELF
   dwarf2_emit_insn (2);
@@ -1612,7 +1615,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
 }
 
 void
-md_mcore_end (void)
+mcore_md_finish (void)
 {
   dump_literals (0);
   subseg_set (text_section, 0);
@@ -2229,7 +2232,7 @@ mcore_force_relocation (fixS * fix)
 /* Return true if the fix can be handled by GAS, false if it must
    be passed through to the linker.  */
 
-bfd_boolean
+bool
 mcore_fix_adjustable (fixS * fixP)
 {
   /* We need the symbol name for the VTABLE entries.  */

@@ -1,5 +1,5 @@
 /* ldlang.h - linker command language support
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -65,7 +65,7 @@ typedef struct memory_region_struct
   union lang_statement_union *last_os;
   flagword flags;
   flagword not_flags;
-  bfd_boolean had_full_message;
+  bool had_full_message;
 } lang_memory_region_type;
 
 enum statement_enum
@@ -76,6 +76,7 @@ enum statement_enum
   lang_fill_statement_enum,
   lang_group_statement_enum,
   lang_input_section_enum,
+  lang_input_matcher_enum,
   lang_input_statement_enum,
   lang_insert_statement_enum,
   lang_output_section_statement_enum,
@@ -121,7 +122,10 @@ enum section_type
   first_overlay_section,
   overlay_section,
   noload_section,
-  noalloc_section
+  noalloc_section,
+  type_section,
+  readonly_section,
+  typed_readonly_section
 };
 
 /* This structure holds a list of program headers describing
@@ -131,7 +135,7 @@ typedef struct lang_output_section_phdr_list
 {
   struct lang_output_section_phdr_list *next;
   const char *name;
-  bfd_boolean used;
+  bool used;
 } lang_output_section_phdr_list;
 
 typedef struct lang_output_section_statement_struct
@@ -158,10 +162,14 @@ typedef struct lang_output_section_statement_struct
 
   lang_output_section_phdr_list *phdrs;
 
+  /* Used by ELF SHF_LINK_ORDER sorting.  */
+  void *data;
+
   unsigned int block_value;
   int constraint;
   flagword flags;
   enum section_type sectype;
+  etree_type *sectype_value;
   unsigned int processed_vma : 1;
   unsigned int processed_lma : 1;
   unsigned int all_input_readonly : 1;
@@ -298,6 +306,8 @@ typedef struct lang_input_statement_struct
      Usually the same as filename, but for a file spec'd with
      -l this is the -l switch itself rather than the filename.  */
   const char *local_sym_name;
+  /* Name to use when sorting.  */
+  const char *sort_key;
   /* Extra search path. Used to find a file relative to the
      directory of the current linker script.  */
   const char *extra_search_path;
@@ -323,7 +333,16 @@ typedef struct
 {
   lang_statement_header_type header;
   asection *section;
+  void *pattern;
 } lang_input_section_type;
+
+typedef struct
+{
+  lang_statement_header_type header;
+  asection *section;
+  void *pattern;
+  lang_input_statement_type *input_stmt;
+} lang_input_matcher_type;
 
 struct map_symbol_def {
   struct bfd_link_hash_entry *entry;
@@ -339,7 +358,7 @@ typedef struct input_section_userdata_struct
   unsigned long map_symbol_def_count;
 } input_section_userdata_type;
 
-static inline bfd_boolean
+static inline bool
 bfd_input_just_syms (const bfd *abfd)
 {
   lang_input_statement_type *is = bfd_usrdata (abfd);
@@ -349,22 +368,22 @@ bfd_input_just_syms (const bfd *abfd)
 typedef struct lang_wild_statement_struct lang_wild_statement_type;
 
 typedef void (*callback_t) (lang_wild_statement_type *, struct wildcard_list *,
-			    asection *, struct flag_info *,
-			    lang_input_statement_type *, void *);
+			    asection *, lang_input_statement_type *, void *);
 
 typedef void (*walk_wild_section_handler_t) (lang_wild_statement_type *,
 					     lang_input_statement_type *,
 					     callback_t callback,
 					     void *data);
 
-typedef bfd_boolean (*lang_match_sec_type_func) (bfd *, const asection *,
-						 bfd *, const asection *);
+typedef bool (*lang_match_sec_type_func) (bfd *, const asection *,
+					  bfd *, const asection *);
 
 /* Binary search tree structure to efficiently sort sections by
    name.  */
 typedef struct lang_section_bst
 {
   asection *section;
+  void *pattern;
   struct lang_section_bst *left;
   struct lang_section_bst *right;
 } lang_section_bst_type;
@@ -373,15 +392,15 @@ struct lang_wild_statement_struct
 {
   lang_statement_header_type header;
   const char *filename;
-  bfd_boolean filenames_sorted;
+  bool filenames_sorted;
+  bool any_specs_sorted;
   struct wildcard_list *section_list;
-  bfd_boolean keep_sections;
+  bool keep_sections;
   lang_statement_list_type children;
   struct name_list *exclude_name_list;
+  lang_statement_list_type matching_sections;
 
-  walk_wild_section_handler_t walk_wild_section_handler;
-  struct wildcard_list *handler_data[4];
-  lang_section_bst_type *tree;
+  lang_section_bst_type *tree, **rightmost;
   struct flag_info *section_flag_list;
 };
 
@@ -417,7 +436,7 @@ typedef struct
 {
   lang_statement_header_type header;
   const char *where;
-  bfd_boolean is_before;
+  bool is_before;
 } lang_insert_statement_type;
 
 typedef union lang_statement_union
@@ -429,6 +448,7 @@ typedef union lang_statement_union
   lang_fill_statement_type fill_statement;
   lang_group_statement_type group_statement;
   lang_input_section_type input_section;
+  lang_input_matcher_type input_matcher;
   lang_input_statement_type input_statement;
   lang_insert_statement_type insert_statement;
   lang_output_section_statement_type output_section_statement;
@@ -447,8 +467,8 @@ struct lang_phdr
   struct lang_phdr *next;
   const char *name;
   unsigned long type;
-  bfd_boolean filehdr;
-  bfd_boolean phdrs;
+  bool filehdr;
+  bool phdrs;
   etree_type *at;
   etree_type *flags;
 };
@@ -468,7 +488,7 @@ struct lang_nocrossrefs
 {
   struct lang_nocrossrefs *next;
   lang_nocrossref_type *list;
-  bfd_boolean onlyfirst;
+  bool onlyfirst;
 };
 
 /* This structure is used to hold a list of input section names which
@@ -506,13 +526,15 @@ extern const char *output_target;
 extern lang_output_section_statement_type *abs_output_section;
 extern lang_statement_list_type lang_os_list;
 extern struct lang_input_statement_flags input_flags;
-extern bfd_boolean lang_has_input_file;
+extern bool lang_has_input_file;
+extern lang_statement_list_type statement_list;
 extern lang_statement_list_type *stat_ptr;
-extern bfd_boolean delete_output_file_on_failure;
+extern bool delete_output_file_on_failure;
+extern bool enable_linker_version;
 
 extern struct bfd_sym_chain entry_symbol;
 extern const char *entry_section;
-extern bfd_boolean entry_from_cmdline;
+extern bool entry_from_cmdline;
 extern lang_statement_list_type file_chain;
 extern lang_statement_list_type input_file_chain;
 
@@ -528,7 +550,7 @@ extern void lang_init
 extern void lang_finish
   (void);
 extern lang_memory_region_type * lang_memory_region_lookup
-  (const char * const, bfd_boolean);
+  (const char * const, bool);
 extern void lang_memory_region_alias
   (const char *, const char *);
 extern void lang_map
@@ -539,23 +561,23 @@ extern void lang_add_output
   (const char *, int from_script);
 extern lang_output_section_statement_type *lang_enter_output_section_statement
   (const char *, etree_type *, enum section_type, etree_type *, etree_type *,
-   etree_type *, int, int);
+   etree_type *, etree_type *, int, int);
 extern void lang_final
   (void);
 extern void lang_relax_sections
-  (bfd_boolean);
+  (bool);
 extern void lang_process
   (void);
 extern void lang_section_start
   (const char *, union etree_union *, const segment_type *);
 extern void lang_add_entry
-  (const char *, bfd_boolean);
+  (const char *, bool);
 extern void lang_default_entry
   (const char *);
 extern void lang_add_target
   (const char *);
 extern void lang_add_wild
-  (struct wildcard_spec *, struct wildcard_list *, bfd_boolean);
+  (struct wildcard_spec *, struct wildcard_list *, bool);
 extern void lang_add_map
   (const char *);
 extern void lang_add_fill
@@ -567,7 +589,7 @@ extern void lang_add_attribute
 extern void lang_startup
   (const char *);
 extern void lang_float
-  (bfd_boolean);
+  (bool);
 extern void lang_leave_output_section_statement
   (fill_type *, const char *, lang_output_section_phdr_list *,
    const char *);
@@ -612,7 +634,7 @@ extern lang_output_section_statement_type *lang_output_section_statement_lookup
 extern lang_output_section_statement_type *next_matching_output_section_statement
   (lang_output_section_statement_type *, int);
 extern void ldlang_add_undef
-  (const char *const, bfd_boolean);
+  (const char *const, bool);
 extern void ldlang_add_require_defined
   (const char *const);
 extern void lang_add_output_format
@@ -624,7 +646,9 @@ extern void push_stat_ptr
 extern void pop_stat_ptr
   (void);
 extern void lang_add_data
-  (int type, union etree_union *);
+  (int, union etree_union *);
+extern void lang_add_string
+  (const char *);
 extern void lang_add_reloc
   (bfd_reloc_code_real_type, reloc_howto_type *, asection *, const char *,
    union etree_union *);
@@ -641,9 +665,9 @@ extern void lang_clear_os_map
 extern void dprint_statement
   (lang_statement_union_type *, int);
 extern void lang_size_sections
-  (bfd_boolean *, bfd_boolean);
+  (bool *, bool);
 extern void one_lang_size_sections_pass
-  (bfd_boolean *, bfd_boolean);
+  (bool *, bool);
 extern void lang_add_insert
   (const char *, int);
 extern void lang_enter_group
@@ -651,10 +675,10 @@ extern void lang_enter_group
 extern void lang_leave_group
   (void);
 extern void lang_add_section
-  (lang_statement_list_type *, asection *,
+  (lang_statement_list_type *, asection *, struct wildcard_list *,
    struct flag_info *, lang_output_section_statement_type *);
 extern void lang_new_phdr
-  (const char *, etree_type *, bfd_boolean, bfd_boolean, etree_type *,
+  (const char *, etree_type *, bool, bool, etree_type *,
    etree_type *);
 extern void lang_add_nocrossref
   (lang_nocrossref_type *);
@@ -671,7 +695,7 @@ extern void lang_leave_overlay
    lang_output_section_phdr_list *, const char *);
 
 extern struct bfd_elf_version_expr *lang_new_vers_pattern
-  (struct bfd_elf_version_expr *, const char *, const char *, bfd_boolean);
+  (struct bfd_elf_version_expr *, const char *, const char *, bool);
 extern struct bfd_elf_version_tree *lang_new_vers_node
   (struct bfd_elf_version_expr *, struct bfd_elf_version_expr *);
 extern struct bfd_elf_version_deps *lang_add_vers_depend
@@ -687,7 +711,7 @@ extern void lang_add_unique
 extern const char *lang_get_output_target
   (void);
 extern void add_excluded_libs (const char *);
-extern bfd_boolean load_symbols
+extern bool load_symbols
   (lang_input_statement_type *, lang_statement_list_type *);
 
 struct elf_sym_strtab;
@@ -698,9 +722,9 @@ extern void ldlang_ctf_new_dynsym
   (int symidx, struct elf_internal_sym *);
 extern void ldlang_write_ctf_late
   (void);
-extern bfd_boolean
+extern bool
 ldlang_override_segment_assignment
-  (struct bfd_link_info *, bfd *, asection *, asection *, bfd_boolean);
+  (struct bfd_link_info *, bfd *, asection *, asection *, bool);
 
 extern void
 lang_ld_feature (char *);
@@ -711,7 +735,9 @@ lang_print_memory_usage (void);
 extern void
 lang_add_gc_name (const char *);
 
-extern bfd_boolean
-print_one_symbol (struct bfd_link_hash_entry *hash_entry, void *ptr);
+extern bool
+print_one_symbol (struct bfd_link_hash_entry *, void *);
 
+extern void lang_add_version_string
+  (void);
 #endif

@@ -1,5 +1,5 @@
 /* symbols.c -symbol table-
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -26,9 +26,7 @@
 #include "subsegs.h"
 #include "write.h"
 
-#ifdef HAVE_LIMITS_H
 #include <limits.h>
-#endif
 #ifndef CHAR_BIT
 #define CHAR_BIT 8
 #endif
@@ -63,8 +61,10 @@ struct symbol_flags
   /* Whether the symbol can be re-defined.  */
   unsigned int volatil : 1;
 
-  /* Whether the symbol is a forward reference.  */
+  /* Whether the symbol is a forward reference, and whether such has
+     been determined.  */
   unsigned int forward_ref : 1;
+  unsigned int forward_resolved : 1;
 
   /* This is set if the symbol is defined in an MRI common section.
      We handle such sections as single common symbols, so symbols
@@ -80,6 +80,14 @@ struct symbol_flags
      before.  It is cleared as soon as any direct reference to the
      symbol is present.  */
   unsigned int weakrefd : 1;
+
+  /* Whether the symbol has been marked to be removed by a .symver
+     directive.  */
+  unsigned int removed : 1;
+
+  /* Set when a warning about the symbol containing multibyte characters
+     is generated.  */
+  unsigned int multibyte_warned : 1;
 };
 
 /* A pointer in the symbol may point to either a complete symbol
@@ -196,7 +204,7 @@ static void *
 symbol_entry_find (htab_t table, const char *name)
 {
   hashval_t hash = htab_hash_string (name);
-  symbol_entry_t needle = { { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+  symbol_entry_t needle = { { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
 			      hash, name, 0, 0, 0 } };
   return htab_find_with_hash (table, &needle, hash);
 }
@@ -234,18 +242,80 @@ struct xsymbol dot_symbol_x;
 #endif
 
 struct obstack notes;
+
+/* Utility functions to allocate and duplicate memory on the notes
+   obstack, each like the corresponding function without "notes_"
+   prefix.  All of these exit on an allocation failure.  */
+
+void *
+notes_alloc (size_t size)
+{
+  return obstack_alloc (&notes, size);
+}
+
+void *
+notes_calloc (size_t n, size_t size)
+{
+  size_t amt;
+  void *ret;
+  if (gas_mul_overflow (n, size, &amt))
+    {
+      obstack_alloc_failed_handler ();
+      abort ();
+    }
+  ret = notes_alloc (amt);
+  memset (ret, 0, amt);
+  return ret;
+}
+
+void *
+notes_memdup (const void *src, size_t copy_size, size_t alloc_size)
+{
+  void *ret = obstack_alloc (&notes, alloc_size);
+  memcpy (ret, src, copy_size);
+  if (alloc_size > copy_size)
+    memset ((char *) ret + copy_size, 0, alloc_size - copy_size);
+  return ret;
+}
+
+char *
+notes_strdup (const char *str)
+{
+  size_t len = strlen (str) + 1;
+  return notes_memdup (str, len, len);
+}
+
+char *
+notes_concat (const char *first, ...)
+{
+  va_list args;
+  const char *str;
+
+  va_start (args, first);
+  for (str = first; str; str = va_arg (args, const char *))
+    {
+      size_t size = strlen (str);
+      obstack_grow (&notes, str, size);
+    }
+  va_end (args);
+  obstack_1grow (&notes, 0);
+  return obstack_finish (&notes);
+}
+
+/* Use with caution!  Frees PTR and all more recently allocated memory
+   on the notes obstack.  */
+
+void
+notes_free (void *ptr)
+{
+  obstack_free (&notes, ptr);
+}
+
 #ifdef TE_PE
 /* The name of an external symbol which is
    used to make weak PE symbol names unique.  */
 const char * an_external_name;
 #endif
-
-static const char *save_symbol_name (const char *);
-static void fb_label_init (void);
-static long dollar_label_instance (long);
-static long fb_label_instance (long);
-
-static void print_binary (FILE *, const char *, expressionS *);
 
 /* Return a pointer to a new symbol.  Die if we can't make a new
    symbol.  Fill in the symbol's values.  Add symbol to end of symbol
@@ -273,13 +343,10 @@ symbol_new (const char *name, segT segment, fragS *frag, valueT valu)
 static const char *
 save_symbol_name (const char *name)
 {
-  size_t name_length;
   char *ret;
 
   gas_assert (name != NULL);
-  name_length = strlen (name) + 1;	/* +1 for \0.  */
-  obstack_grow (&notes, name, name_length);
-  ret = (char *) obstack_finish (&notes);
+  ret = notes_strdup (name);
 
 #ifdef tc_canonicalize_symbol_name
   ret = tc_canonicalize_symbol_name (ret);
@@ -307,7 +374,21 @@ symbol_init (symbolS *symbolP, const char *name, asection *sec,
   symbolP->bsym->name = name;
   symbolP->bsym->section = sec;
 
+  if (multibyte_handling == multibyte_warn_syms
+      && ! symbolP->flags.local_symbol
+      && sec != undefined_section
+      && ! symbolP->flags.multibyte_warned
+      && scan_for_multibyte_characters ((const unsigned char *) name,
+					(const unsigned char *) name + strlen (name),
+					false /* Do not warn.  */))
+    {
+      as_warn (_("symbol '%s' contains multibyte characters"), name);
+      symbolP->flags.multibyte_warned = 1;
+    }
+
   S_SET_VALUE (symbolP, valu);
+  if (sec == reg_section)
+    symbolP->x->value.X_op = O_register;
 
   symbol_clear_list_pointers (symbolP);
 
@@ -330,7 +411,7 @@ symbol_create (const char *name, segT segment, fragS *frag, valueT valu)
   preserved_copy_of_name = save_symbol_name (name);
 
   size = sizeof (symbolS) + sizeof (struct xsymbol);
-  symbolP = (symbolS *) obstack_alloc (&notes, size);
+  symbolP = notes_alloc (size);
 
   /* symbol must be born in some fixed state.  This seems as good as any.  */
   memset (symbolP, 0, size);
@@ -364,7 +445,7 @@ local_symbol_make (const char *name, segT section, fragS *frag, valueT val)
 
   name_copy = save_symbol_name (name);
 
-  ret = (struct local_symbol *) obstack_alloc (&notes, sizeof *ret);
+  ret = notes_alloc (sizeof *ret);
   ret->flags = flags;
   ret->hash = 0;
   ret->name = name_copy;
@@ -390,7 +471,7 @@ local_symbol_convert (void *sym)
 
   ++local_symbol_conversion_count;
 
-  xtra = (struct xsymbol *) obstack_alloc (&notes, sizeof (*xtra));
+  xtra = notes_alloc (sizeof (*xtra));
   memset (xtra, 0, sizeof (*xtra));
   val = ent->lsy.value;
   ent->sy.x = xtra;
@@ -704,8 +785,7 @@ symbol_clone (symbolS *orgsymP, int replace)
     orgsymP = local_symbol_convert (orgsymP);
   bsymorg = orgsymP->bsym;
 
-  newsymP = (symbolS *) obstack_alloc (&notes, (sizeof (symbolS)
-						+ sizeof (struct xsymbol)));
+  newsymP = notes_alloc (sizeof (symbolS) + sizeof (struct xsymbol));
   *newsymP = *orgsymP;
   newsymP->x = (struct xsymbol *) (newsymP + 1);
   *newsymP->x = *orgsymP->x;
@@ -766,7 +846,9 @@ symbol_clone (symbolS *orgsymP, int replace)
 symbolS *
 symbol_clone_if_forward_ref (symbolS *symbolP, int is_forward)
 {
-  if (symbolP && !symbolP->flags.local_symbol)
+  if (symbolP
+      && !symbolP->flags.local_symbol
+      && !symbolP->flags.forward_resolved)
     {
       symbolS *orig_add_symbol = symbolP->x->value.X_add_symbol;
       symbolS *orig_op_symbol = symbolP->x->value.X_op_symbol;
@@ -819,6 +901,7 @@ symbol_clone_if_forward_ref (symbolS *symbolP, int is_forward)
 
       symbolP->x->value.X_add_symbol = add_symbol;
       symbolP->x->value.X_op_symbol = op_symbol;
+      symbolP->flags.forward_resolved = 1;
     }
 
   return symbolP;
@@ -1327,6 +1410,45 @@ resolve_symbol_value (symbolS *symp)
 	  BAD_CASE (op);
 	  break;
 
+	case O_md1:
+	case O_md2:
+	case O_md3:
+	case O_md4:
+	case O_md5:
+	case O_md6:
+	case O_md7:
+	case O_md8:
+	case O_md9:
+	case O_md10:
+	case O_md11:
+	case O_md12:
+	case O_md13:
+	case O_md14:
+	case O_md15:
+	case O_md16:
+	case O_md17:
+	case O_md18:
+	case O_md19:
+	case O_md20:
+	case O_md21:
+	case O_md22:
+	case O_md23:
+	case O_md24:
+	case O_md25:
+	case O_md26:
+	case O_md27:
+	case O_md28:
+	case O_md29:
+	case O_md30:
+	case O_md31:
+	case O_md32:
+#ifdef md_resolve_symbol
+	  resolved = md_resolve_symbol (symp, &final_val, &final_seg);
+	  if (resolved)
+	    break;
+#endif
+	  goto exit_dont_set_value;
+
 	case O_absent:
 	  final_val = 0;
 	  /* Fall through.  */
@@ -1348,6 +1470,7 @@ resolve_symbol_value (symbolS *symp)
 
 	case O_symbol:
 	case O_symbol_rva:
+	case O_secidx:
 	  left = resolve_symbol_value (add_symbol);
 	  seg_left = S_GET_SEGMENT (add_symbol);
 	  if (finalize_syms)
@@ -1382,7 +1505,17 @@ resolve_symbol_value (symbolS *symp)
 	      && add_symbol->flags.resolving)
 	    break;
 
-	  if (finalize_syms && final_val == 0)
+	  if (finalize_syms && final_val == 0
+#ifdef OBJ_XCOFF
+	      /* Avoid changing symp's "within" when dealing with
+		 AIX debug symbols. For some storage classes, "within"
+	         have a special meaning.
+		 C_DWARF should behave like on Linux, thus this check
+		 isn't done to be closer.  */
+	      && ((symbol_get_bfdsym (symp)->flags & BSF_DEBUGGING) == 0
+		  || (S_GET_STORAGE_CLASS (symp) == C_DWARF))
+#endif
+	      )
 	    {
 	      if (add_symbol->flags.local_symbol)
 		add_symbol = local_symbol_convert (add_symbol);
@@ -1418,6 +1551,13 @@ resolve_symbol_value (symbolS *symp)
 	      final_val += symp->frag->fr_address + left;
 	      resolved = symbol_resolved_p (add_symbol);
 	      symp->flags.resolving = 0;
+
+	      if (op == O_secidx && seg_left != undefined_section)
+		{
+		  final_val = 0;
+		  break;
+		}
+
 	      goto exit_dont_set_value;
 	    }
 	  else
@@ -1687,7 +1827,7 @@ resolve_local_symbol (void **slot, void *arg ATTRIBUTE_UNUSED)
 void
 resolve_local_symbol_values (void)
 {
-  htab_traverse (sy_hash, resolve_local_symbol, NULL);
+  htab_traverse_noresize (sy_hash, resolve_local_symbol, NULL);
 }
 
 /* Obtain the current value of a symbol without changing any
@@ -1776,16 +1916,17 @@ snapshot_symbol (symbolS **symbolPP, valueT *valueP, segT *segP, fragS **fragPP)
    the instance number, keep a list of defined symbols separate from the real
    symbol table, and we treat these buggers as a sparse array.  */
 
-static long *dollar_labels;
-static long *dollar_label_instances;
+typedef unsigned int dollar_ent;
+static dollar_ent *dollar_labels;
+static dollar_ent *dollar_label_instances;
 static char *dollar_label_defines;
 static size_t dollar_label_count;
 static size_t dollar_label_max;
 
 int
-dollar_label_defined (long label)
+dollar_label_defined (unsigned int label)
 {
-  long *i;
+  dollar_ent *i;
 
   know ((dollar_labels != NULL) || (dollar_label_count == 0));
 
@@ -1797,10 +1938,10 @@ dollar_label_defined (long label)
   return 0;
 }
 
-static long
-dollar_label_instance (long label)
+static unsigned int
+dollar_label_instance (unsigned int label)
 {
-  long *i;
+  dollar_ent *i;
 
   know ((dollar_labels != NULL) || (dollar_label_count == 0));
 
@@ -1823,9 +1964,9 @@ dollar_label_clear (void)
 #define DOLLAR_LABEL_BUMP_BY 10
 
 void
-define_dollar_label (long label)
+define_dollar_label (unsigned int label)
 {
-  long *i;
+  dollar_ent *i;
 
   for (i = dollar_labels; i < dollar_labels + dollar_label_count; ++i)
     if (*i == label)
@@ -1839,8 +1980,8 @@ define_dollar_label (long label)
 
   if (dollar_labels == NULL)
     {
-      dollar_labels = XNEWVEC (long, DOLLAR_LABEL_BUMP_BY);
-      dollar_label_instances = XNEWVEC (long, DOLLAR_LABEL_BUMP_BY);
+      dollar_labels = XNEWVEC (dollar_ent, DOLLAR_LABEL_BUMP_BY);
+      dollar_label_instances = XNEWVEC (dollar_ent, DOLLAR_LABEL_BUMP_BY);
       dollar_label_defines = XNEWVEC (char, DOLLAR_LABEL_BUMP_BY);
       dollar_label_max = DOLLAR_LABEL_BUMP_BY;
       dollar_label_count = 0;
@@ -1848,9 +1989,11 @@ define_dollar_label (long label)
   else if (dollar_label_count == dollar_label_max)
     {
       dollar_label_max += DOLLAR_LABEL_BUMP_BY;
-      dollar_labels = XRESIZEVEC (long, dollar_labels, dollar_label_max);
-      dollar_label_instances = XRESIZEVEC (long, dollar_label_instances,
-					  dollar_label_max);
+      dollar_labels = XRESIZEVEC (dollar_ent, dollar_labels,
+				  dollar_label_max);
+      dollar_label_instances = XRESIZEVEC (dollar_ent,
+					   dollar_label_instances,
+					   dollar_label_max);
       dollar_label_defines = XRESIZEVEC (char, dollar_label_defines,
 					 dollar_label_max);
     }				/* if we needed to grow  */
@@ -1870,50 +2013,22 @@ define_dollar_label (long label)
    symbol. The first "4:" is "L4^A1" - the m numbers begin at 1.
 
    fb labels get the same treatment, except that ^B is used in place
-   of ^A.  */
+   of ^A.
 
-char *				/* Return local label name.  */
-dollar_label_name (long n,	/* we just saw "n$:" : n a number.  */
-		   int augend	/* 0 for current instance, 1 for new instance.  */)
+   AUGEND is 0 for current instance, 1 for new instance.  */
+
+char *
+dollar_label_name (unsigned int n, unsigned int augend)
 {
-  long i;
   /* Returned to caller, then copied.  Used for created names ("4f").  */
   static char symbol_name_build[24];
-  char *p;
-  char *q;
-  char symbol_name_temporary[20];	/* Build up a number, BACKWARDS.  */
+  char *p = symbol_name_build;
 
-  know (n >= 0);
-  know (augend == 0 || augend == 1);
-  p = symbol_name_build;
 #ifdef LOCAL_LABEL_PREFIX
   *p++ = LOCAL_LABEL_PREFIX;
 #endif
-  *p++ = 'L';
-
-  /* Next code just does sprintf( {}, "%d", n);  */
-  /* Label number.  */
-  q = symbol_name_temporary;
-  for (*q++ = 0, i = n; i; ++q)
-    {
-      *q = i % 10 + '0';
-      i /= 10;
-    }
-  while ((*p = *--q) != '\0')
-    ++p;
-
-  *p++ = DOLLAR_LABEL_CHAR;		/* ^A  */
-
-  /* Instance number.  */
-  q = symbol_name_temporary;
-  for (*q++ = 0, i = dollar_label_instance (n) + augend; i; ++q)
-    {
-      *q = i % 10 + '0';
-      i /= 10;
-    }
-  while ((*p++ = *--q) != '\0');
-
-  /* The label, as a '\0' ended string, starts at symbol_name_build.  */
+  sprintf (p, "L%u%c%u",
+	   n, DOLLAR_LABEL_CHAR, dollar_label_instance (n) + augend);
   return symbol_name_build;
 }
 
@@ -1936,11 +2051,12 @@ dollar_label_name (long n,	/* we just saw "n$:" : n a number.  */
 
 #define FB_LABEL_SPECIAL (10)
 
-static long fb_low_counter[FB_LABEL_SPECIAL];
-static long *fb_labels;
-static long *fb_label_instances;
-static long fb_label_count;
-static long fb_label_max;
+typedef unsigned int fb_ent;
+static fb_ent fb_low_counter[FB_LABEL_SPECIAL];
+static fb_ent *fb_labels;
+static fb_ent *fb_label_instances;
+static size_t fb_label_count;
+static size_t fb_label_max;
 
 /* This must be more than FB_LABEL_SPECIAL.  */
 #define FB_LABEL_BUMP_BY (FB_LABEL_SPECIAL + 6)
@@ -1954,11 +2070,11 @@ fb_label_init (void)
 /* Add one to the instance number of this fb label.  */
 
 void
-fb_label_instance_inc (long label)
+fb_label_instance_inc (unsigned int label)
 {
-  long *i;
+  fb_ent *i;
 
-  if ((unsigned long) label < FB_LABEL_SPECIAL)
+  if (label < FB_LABEL_SPECIAL)
     {
       ++fb_low_counter[label];
       return;
@@ -1981,8 +2097,8 @@ fb_label_instance_inc (long label)
 
   if (fb_labels == NULL)
     {
-      fb_labels = XNEWVEC (long, FB_LABEL_BUMP_BY);
-      fb_label_instances = XNEWVEC (long, FB_LABEL_BUMP_BY);
+      fb_labels = XNEWVEC (fb_ent, FB_LABEL_BUMP_BY);
+      fb_label_instances = XNEWVEC (fb_ent, FB_LABEL_BUMP_BY);
       fb_label_max = FB_LABEL_BUMP_BY;
       fb_label_count = FB_LABEL_SPECIAL;
 
@@ -1990,8 +2106,9 @@ fb_label_instance_inc (long label)
   else if (fb_label_count == fb_label_max)
     {
       fb_label_max += FB_LABEL_BUMP_BY;
-      fb_labels = XRESIZEVEC (long, fb_labels, fb_label_max);
-      fb_label_instances = XRESIZEVEC (long, fb_label_instances, fb_label_max);
+      fb_labels = XRESIZEVEC (fb_ent, fb_labels, fb_label_max);
+      fb_label_instances = XRESIZEVEC (fb_ent, fb_label_instances,
+				       fb_label_max);
     }				/* if we needed to grow  */
 
   fb_labels[fb_label_count] = label;
@@ -1999,15 +2116,13 @@ fb_label_instance_inc (long label)
   ++fb_label_count;
 }
 
-static long
-fb_label_instance (long label)
+static unsigned int
+fb_label_instance (unsigned int label)
 {
-  long *i;
+  fb_ent *i;
 
-  if ((unsigned long) label < FB_LABEL_SPECIAL)
-    {
-      return (fb_low_counter[label]);
-    }
+  if (label < FB_LABEL_SPECIAL)
+    return (fb_low_counter[label]);
 
   if (fb_labels != NULL)
     {
@@ -2015,10 +2130,8 @@ fb_label_instance (long label)
 	   i < fb_labels + fb_label_count; ++i)
 	{
 	  if (*i == label)
-	    {
-	      return (fb_label_instances[i - fb_labels]);
-	    }			/* if we find it  */
-	}			/* for each existing label  */
+	    return (fb_label_instances[i - fb_labels]);
+	}
     }
 
   /* We didn't find the label, so this must be a reference to the
@@ -2035,55 +2148,29 @@ fb_label_instance (long label)
    symbol. The first "4:" is "L4^B1" - the m numbers begin at 1.
 
    dollar labels get the same treatment, except that ^A is used in
-   place of ^B.  */
+   place of ^B.
 
-char *				/* Return local label name.  */
-fb_label_name (long n,	/* We just saw "n:", "nf" or "nb" : n a number.  */
-	       long augend	/* 0 for nb, 1 for n:, nf.  */)
+   AUGEND is 0 for nb, 1 for n:, nf.  */
+
+char *
+fb_label_name (unsigned int n, unsigned int augend)
 {
-  long i;
   /* Returned to caller, then copied.  Used for created names ("4f").  */
   static char symbol_name_build[24];
-  char *p;
-  char *q;
-  char symbol_name_temporary[20];	/* Build up a number, BACKWARDS.  */
+  char *p = symbol_name_build;
 
-  know (n >= 0);
 #ifdef TC_MMIX
-  know ((unsigned long) augend <= 2 /* See mmix_fb_label.  */);
+  know (augend <= 2 /* See mmix_fb_label.  */);
 #else
-  know ((unsigned long) augend <= 1);
+  know (augend <= 1);
 #endif
-  p = symbol_name_build;
+
 #ifdef LOCAL_LABEL_PREFIX
   *p++ = LOCAL_LABEL_PREFIX;
 #endif
-  *p++ = 'L';
-
-  /* Next code just does sprintf( {}, "%d", n);  */
-  /* Label number.  */
-  q = symbol_name_temporary;
-  for (*q++ = 0, i = n; i; ++q)
-    {
-      *q = i % 10 + '0';
-      i /= 10;
-    }
-  while ((*p = *--q) != '\0')
-    ++p;
-
-  *p++ = LOCAL_LABEL_CHAR;		/* ^B  */
-
-  /* Instance number.  */
-  q = symbol_name_temporary;
-  for (*q++ = 0, i = fb_label_instance (n) + augend; i; ++q)
-    {
-      *q = i % 10 + '0';
-      i /= 10;
-    }
-  while ((*p++ = *--q) != '\0');
-
-  /* The label, as a '\0' ended string, starts at symbol_name_build.  */
-  return (symbol_name_build);
+  sprintf (p, "L%u%c%u",
+	   n, LOCAL_LABEL_CHAR, fb_label_instance (n) + augend);
+  return symbol_name_build;
 }
 
 /* Decode name that may have been generated by foo_label_name() above.
@@ -2123,7 +2210,7 @@ decode_local_label_name (char *s)
     instance_number = (10 * instance_number) + *p - '0';
 
   message_format = _("\"%d\" (instance number %d of a %s label)");
-  symbol_decode = (char *) obstack_alloc (&notes, strlen (message_format) + 30);
+  symbol_decode = notes_alloc (strlen (message_format) + 30);
   sprintf (symbol_decode, message_format, label_number, instance_number, type);
 
   return symbol_decode;
@@ -2132,7 +2219,7 @@ decode_local_label_name (char *s)
 /* Get the value of a symbol.  */
 
 valueT
-S_GET_VALUE (symbolS *s)
+S_GET_VALUE_WHERE (symbolS *s, const char * file, unsigned int line)
 {
   if (s->flags.local_symbol)
     return resolve_symbol_value (s);
@@ -2151,10 +2238,24 @@ S_GET_VALUE (symbolS *s)
       if (! s->flags.resolved
 	  || s->x->value.X_op != O_symbol
 	  || (S_IS_DEFINED (s) && ! S_IS_COMMON (s)))
-	as_bad (_("attempt to get value of unresolved symbol `%s'"),
-		S_GET_NAME (s));
+	{
+	  if (strcmp (S_GET_NAME (s), FAKE_LABEL_NAME) == 0)
+	    as_bad_where (file, line, _("expression is too complex to be resolved or converted into relocations"));
+	  else if (file != NULL)
+	    as_bad_where (file, line, _("attempt to get value of unresolved symbol `%s'"),
+			  S_GET_NAME (s));
+	  else
+	    as_bad (_("attempt to get value of unresolved symbol `%s'"),
+		    S_GET_NAME (s));
+	}
     }
   return (valueT) s->x->value.X_add_number;
+}
+
+valueT
+S_GET_VALUE (symbolS *s)
+{
+  return S_GET_VALUE_WHERE (s, NULL, 0);
 }
 
 /* Set the value of a symbol.  */
@@ -2294,7 +2395,7 @@ S_FORCE_RELOC (symbolS *s, int strict)
 	       || (EXTERN_FORCE_RELOC
 		   && (s->bsym->flags & BSF_GLOBAL) != 0)))
 	  || (s->bsym->flags & BSF_GNU_INDIRECT_FUNCTION) != 0)
-	return TRUE;
+	return true;
       sec = s->bsym->section;
     }
   return bfd_is_und_section (sec) || bfd_is_com_section (sec);
@@ -2364,7 +2465,7 @@ S_CAN_BE_REDEFINED (const symbolS *s)
     return (((struct local_symbol *) s)->frag
 	    == &predefined_address_frag);
   /* Permit register names to be redefined.  */
-  return s->bsym->section == reg_section;
+  return s->x->value.X_op == O_register;
 }
 
 int
@@ -2415,7 +2516,21 @@ S_SET_SEGMENT (symbolS *s, segT seg)
 	abort ();
     }
   else
-    s->bsym->section = seg;
+    {
+      if (multibyte_handling == multibyte_warn_syms
+	  && ! s->flags.local_symbol
+	  && seg != undefined_section
+	  && ! s->flags.multibyte_warned
+	  && scan_for_multibyte_characters ((const unsigned char *) s->name,
+					    (const unsigned char *) s->name + strlen (s->name),
+					    false))
+	{
+	  as_warn (_("symbol '%s' contains multibyte characters"), s->name);
+	  s->flags.multibyte_warned = 1;
+	}
+
+      s->bsym->section = seg;
+    }
 }
 
 void
@@ -2799,6 +2914,26 @@ symbol_written_p (symbolS *s)
   return s->flags.written;
 }
 
+/* Mark a symbol as to be removed.  */
+
+void
+symbol_mark_removed (symbolS *s)
+{
+  if (s->flags.local_symbol)
+    return;
+  s->flags.removed = 1;
+}
+
+/* Return whether a symbol has been marked to be removed.  */
+
+int
+symbol_removed_p (symbolS *s)
+{
+  if (s->flags.local_symbol)
+    return 0;
+  return s->flags.removed;
+}
+
 /* Mark a symbol has having been resolved.  */
 
 void
@@ -2983,6 +3118,12 @@ symbol_begin (void)
 }
 
 void
+symbol_end (void)
+{
+  htab_delete (sy_hash);
+}
+
+void
 dot_symbol_init (void)
 {
   dot_symbol.name = ".";
@@ -3007,9 +3148,7 @@ print_symbol_value_1 (FILE *file, symbolS *sym)
   const char *name = S_GET_NAME (sym);
   if (!name || !name[0])
     name = "(unnamed)";
-  fprintf (file, "sym ");
-  fprintf_vma (file, (bfd_vma) ((bfd_hostptr_t) sym));
-  fprintf (file, " %s", name);
+  fprintf (file, "sym %p %s", sym, name);
 
   if (sym->flags.local_symbol)
     {
@@ -3017,10 +3156,7 @@ print_symbol_value_1 (FILE *file, symbolS *sym)
 
       if (locsym->frag != &zero_address_frag
 	  && locsym->frag != NULL)
-	{
-	  fprintf (file, " frag ");
-	  fprintf_vma (file, (bfd_vma) ((bfd_hostptr_t) locsym->frag));
-	}
+	fprintf (file, " frag %p", locsym->frag);
       if (locsym->flags.resolved)
 	fprintf (file, " resolved");
       fprintf (file, " local");
@@ -3028,10 +3164,7 @@ print_symbol_value_1 (FILE *file, symbolS *sym)
   else
     {
       if (sym->frag != &zero_address_frag)
-	{
-	  fprintf (file, " frag ");
-	  fprintf_vma (file, (bfd_vma) ((bfd_hostptr_t) sym->frag));
-	}
+	fprintf (file, " frag %p", sym->frag);
       if (sym->flags.written)
 	fprintf (file, " written");
       if (sym->flags.resolved)
@@ -3105,9 +3238,7 @@ print_binary (FILE *file, const char *name, expressionS *exp)
 void
 print_expr_1 (FILE *file, expressionS *exp)
 {
-  fprintf (file, "expr ");
-  fprintf_vma (file, (bfd_vma) ((bfd_hostptr_t) exp));
-  fprintf (file, " ");
+  fprintf (file, "expr %p ", exp);
   switch (exp->X_op)
     {
     case O_illegal:
@@ -3117,7 +3248,7 @@ print_expr_1 (FILE *file, expressionS *exp)
       fprintf (file, "absent");
       break;
     case O_constant:
-      fprintf (file, "constant %lx", (unsigned long) exp->X_add_number);
+      fprintf (file, "constant %" PRIx64, (uint64_t) exp->X_add_number);
       break;
     case O_symbol:
       indent_level++;
@@ -3126,8 +3257,8 @@ print_expr_1 (FILE *file, expressionS *exp)
       fprintf (file, ">");
     maybe_print_addnum:
       if (exp->X_add_number)
-	fprintf (file, "\n%*s%lx", indent_level * 4, "",
-		 (unsigned long) exp->X_add_number);
+	fprintf (file, "\n%*s%" PRIx64, indent_level * 4, "",
+		 (uint64_t) exp->X_add_number);
       indent_level--;
       break;
     case O_register:

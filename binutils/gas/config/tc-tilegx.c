@@ -1,5 +1,5 @@
 /* tc-tilegx.c -- Assemble for a Tile-Gx chip.
-   Copyright (C) 2011-2021 Free Software Foundation, Inc.
+   Copyright (C) 2011-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -789,16 +789,16 @@ emit_tilegx_instruction (tilegx_bundle_bits bits,
 static void
 check_illegal_reg_writes (void)
 {
-  BFD_HOST_U_64_BIT all_regs_written = 0;
+  uint64_t all_regs_written = 0;
   int j;
 
   for (j = 0; j < current_bundle_index; j++)
     {
       const struct tilegx_instruction *instr = &current_bundle[j];
       int k;
-      BFD_HOST_U_64_BIT regs =
-	((BFD_HOST_U_64_BIT)1) << instr->opcode->implicitly_written_register;
-      BFD_HOST_U_64_BIT conflict;
+      uint64_t regs =
+	(uint64_t) 1 << instr->opcode->implicitly_written_register;
+      uint64_t conflict;
 
       for (k = 0; k < instr->opcode->num_operands; k++)
 	{
@@ -808,12 +808,12 @@ check_illegal_reg_writes (void)
 	  if (operand->is_dest_reg)
 	    {
 	      int regno = instr->operand_values[k].X_add_number;
-	      BFD_HOST_U_64_BIT mask = ((BFD_HOST_U_64_BIT)1) << regno;
+	      uint64_t mask = (uint64_t) 1 << regno;
 
-	      if ((mask & (  (((BFD_HOST_U_64_BIT)1) << TREG_IDN1)
-			     | (((BFD_HOST_U_64_BIT)1) << TREG_UDN1)
-			     | (((BFD_HOST_U_64_BIT)1) << TREG_UDN2)
-			     | (((BFD_HOST_U_64_BIT)1) << TREG_UDN3))) != 0
+	      if ((mask & (  ((uint64_t) 1 << TREG_IDN1)
+			   | ((uint64_t) 1 << TREG_UDN1)
+			   | ((uint64_t) 1 << TREG_UDN2)
+			   | ((uint64_t) 1 << TREG_UDN3))) != 0
 		  && !allow_suspicious_bundles)
 		{
 		  as_bad (_("Writes to register '%s' are not allowed."),
@@ -825,7 +825,7 @@ check_illegal_reg_writes (void)
 	}
 
       /* Writing to the zero register doesn't count.  */
-      regs &= ~(((BFD_HOST_U_64_BIT)1) << TREG_ZERO);
+      regs &= ~((uint64_t) 1 << TREG_ZERO);
 
       conflict = all_regs_written & regs;
       if (conflict != 0 && !allow_suspicious_bundles)
@@ -891,7 +891,7 @@ tilegx_flush_bundle (void)
 	  /* Make sure all instructions can be bundled with other
 	     instructions.  */
 	  const struct tilegx_opcode *cannot_bundle = NULL;
-	  bfd_boolean seen_non_nop = FALSE;
+	  bool seen_non_nop = false;
 
 	  for (j = 0; j < current_bundle_index; j++)
 	    {
@@ -902,7 +902,7 @@ tilegx_flush_bundle (void)
 	      else if (op->mnemonic != TILEGX_OPC_NOP
 		       && op->mnemonic != TILEGX_OPC_INFO
 		       && op->mnemonic != TILEGX_OPC_INFOL)
-		seen_non_nop = TRUE;
+		seen_non_nop = true;
 	    }
 
 	  if (cannot_bundle != NULL && seen_non_nop)
@@ -1476,7 +1476,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
   if (fixP->fx_subsy != (symbolS *) NULL)
     {
       /* We can't actually support subtracting a symbol.  */
-      as_bad_where (fixP->fx_file, fixP->fx_line, _("expression too complex"));
+      as_bad_subtract (fixP);
     }
 
   /* Correct relocation types for pc-relativeness.  */

@@ -8,12 +8,10 @@ main (int argc, char *argv[])
   ctf_dict_t *fp;
   ctf_archive_t *ctf;
   ctf_dict_t *dyn;
-  ctf_next_t *i = NULL;
   ctf_id_t type;
   ctf_id_t newtype;
-  const char *memb;
   ctf_membinfo_t mi;
-  const char *membs[] = { "bar", "baz", NULL };
+  const char *membs[] = { "bar", "baz", "foo", NULL };
   const char **walk;
   int err;
 
@@ -47,7 +45,7 @@ main (int argc, char *argv[])
   for (walk = membs; *walk != NULL; walk++)
     {
       if (ctf_member_info (dyn, newtype, *walk, &mi) < 0)
-        goto lookup_err;
+	goto lookup_err;
       printf ("Looked up %s, type %lx, offset %lx\n", *walk, (long) mi.ctm_type, mi.ctm_offset);
     }
 

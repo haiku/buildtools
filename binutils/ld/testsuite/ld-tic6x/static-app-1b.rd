@@ -29,7 +29,7 @@ Program Headers:
   LOAD           0x001000 0x00008000 0x00008000 0x001b8 0x001b8 RW  0x1000
   LOAD           0x002000 0x10000000 0x10000000 0x000f4 0x000f8 RWE 0x1000
   DYNAMIC        0x001128 0x00008128 0x00008128 0x00090 0x00090 RW  0x4
-  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x20000 RWE 0x8
+  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x20000 RW  0x8
 
  Section to Segment mapping:
   Segment Sections\.\.\.
@@ -70,10 +70,10 @@ Relocation section '\.rela\.neardata' at offset 0x10f8 contains 4 entries:
 Symbol table '\.dynsym' contains 9 entries:
    Num:    Value  Size Type    Bind   Vis      Ndx Name
      0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND 
-     1: 10000000     0 SECTION LOCAL  DEFAULT    7 
-     2: 100000c0     0 SECTION LOCAL  DEFAULT    8 
-     3: 100000e0     0 SECTION LOCAL  DEFAULT    9 
-     4: 100000f4     0 SECTION LOCAL  DEFAULT   10 
+     1: 10000000     0 SECTION LOCAL  DEFAULT    7.*
+     2: 100000c0     0 SECTION LOCAL  DEFAULT    8.*
+     3: 100000e0     0 SECTION LOCAL  DEFAULT    9.*
+     4: 100000f4     0 SECTION LOCAL  DEFAULT   10.*
      5: 100000f4     4 OBJECT  LOCAL  DEFAULT   10 c
      6: 100000e8     4 OBJECT  GLOBAL DEFAULT    9 b
      7: 00000000     0 NOTYPE  WEAK   DEFAULT  UND g1
@@ -82,17 +82,17 @@ Symbol table '\.dynsym' contains 9 entries:
 Symbol table '\.symtab' contains 28 entries:
    Num:    Value  Size Type    Bind   Vis      Ndx Name
      0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND 
-     1: 00008000     0 SECTION LOCAL  DEFAULT    1 
-     2: 00008038     0 SECTION LOCAL  DEFAULT    2 
-     3: 000080c8     0 SECTION LOCAL  DEFAULT    3 
-     4: 000080d4     0 SECTION LOCAL  DEFAULT    4 
-     5: 000080f8     0 SECTION LOCAL  DEFAULT    5 
-     6: 00008128     0 SECTION LOCAL  DEFAULT    6 
-     7: 10000000     0 SECTION LOCAL  DEFAULT    7 
-     8: 100000c0     0 SECTION LOCAL  DEFAULT    8 
-     9: 100000e0     0 SECTION LOCAL  DEFAULT    9 
-    10: 100000f4     0 SECTION LOCAL  DEFAULT   10 
-    11: 00000000     0 SECTION LOCAL  DEFAULT   11 
+     1: 00008000     0 SECTION LOCAL  DEFAULT    1.*
+     2: 00008038     0 SECTION LOCAL  DEFAULT    2.*
+     3: 000080c8     0 SECTION LOCAL  DEFAULT    3.*
+     4: 000080d4     0 SECTION LOCAL  DEFAULT    4.*
+     5: 000080f8     0 SECTION LOCAL  DEFAULT    5.*
+     6: 00008128     0 SECTION LOCAL  DEFAULT    6.*
+     7: 10000000     0 SECTION LOCAL  DEFAULT    7.*
+     8: 100000c0     0 SECTION LOCAL  DEFAULT    8.*
+     9: 100000e0     0 SECTION LOCAL  DEFAULT    9.*
+    10: 100000f4     0 SECTION LOCAL  DEFAULT   10.*
+    11: 00000000     0 SECTION LOCAL  DEFAULT   11.*
     12: 00000000     0 FILE    LOCAL  DEFAULT  ABS .*shlib-1\.o
     13: 10000000     0 FUNC    LOCAL  HIDDEN     7 sub1
     14: 00000000     0 FILE    LOCAL  DEFAULT  ABS .*shlib-app-1\.o

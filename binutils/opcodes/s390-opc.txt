@@ -1,5 +1,5 @@
 #  S/390 opcodes list. Use s390-mkopc to convert it into the opcode table.
-#  Copyright (C) 2000-2021 Free Software Foundation, Inc.
+#  Copyright (C) 2000-2023 Free Software Foundation, Inc.
 #  Contributed by Martin Schwidefsky (schwidefsky@de.ibm.com).
 5a a RX_RRRD "add" g5 esa,zarch
 6a ad RX_FRRD "add normalized (long)" g5 esa,zarch
@@ -1851,8 +1851,8 @@ e30000000038 agh RXY_RRRD "add halfword to 64 bit value" arch12 zarch
 e30000000047 bic RXY_URRD "branch indirect on condition" arch12 zarch
 e3f000000047 bi RXY_0RRD "unconditional indirect branch" arch12 zarch
 e30000000047 bi*8 RXY_0RRD "branch indirect on condition" arch12 zarch
-b9ec mgrk RRF_R0RR2 "multiply 64x64reg -> 128" arch12 zarch
-e30000000084 mg RXY_RRRD "multiply 64x64mem -> 128" arch12 zarch
+b9ec mgrk RRF_R0RER "multiply 64x64reg -> 128" arch12 zarch
+e30000000084 mg RXY_RERRD "multiply 64x64mem -> 128" arch12 zarch
 e3000000003c mgh RXY_RRRD "multiply halfword 64x16mem -> 64" arch12 zarch
 b9fd msrkc RRF_R0RR2 "multiply single 32x32 -> 32" arch12 zarch
 b9ed msgrkc RRF_R0RR2 "multiply single 64x64 -> 64" arch12 zarch
@@ -2016,3 +2016,33 @@ e60000000052 vcvbg VRR_RV0UU "vector convert to binary 64 bit" arch13 zarch optp
 # Message Security Assist Extension 9
 
 b93a kdsa RRE_RR "compute digital signature authentication" arch13 zarch
+
+
+# arch14 instructions
+
+e60000000074 vschp VRR_VVV0U0U " " arch14 zarch
+e60000002074 vschsp VRR_VVV0U0 " " arch14 zarch
+e60000003074 vschdp VRR_VVV0U0 " " arch14 zarch
+e60000004074 vschxp VRR_VVV0U0 " " arch14 zarch
+e6000000007c vscshp VRR_VVV " " arch14 zarch
+e6000000007d vcsph VRR_VVV0U0 " " arch14 zarch
+e60000000051 vclzdp VRR_VV0U2 " " arch14 zarch
+e60000000070 vpkzr VRI_VVV0UU2 " " arch14 zarch
+e60000000072 vsrpr VRI_VVV0UU2 " " arch14 zarch
+e60000000054 vupkzh VRR_VV0U2 " " arch14 zarch
+e6000000005c vupkzl VRR_VV0U2 " " arch14 zarch
+
+b93b nnpa RRE_00 " " arch14 zarch
+e60000000056 vclfnh VRR_VV0UU2 " " arch14 zarch
+e6000000005e vclfnl VRR_VV0UU2 " " arch14 zarch
+e60000000075 vcrnf VRR_VVV0UU " " arch14 zarch
+e6000000005d vcfn VRR_VV0UU2 " " arch14 zarch
+e60000000055 vcnf VRR_VV0UU2 " " arch14 zarch
+
+b98B rdp RRF_RURR2 " " arch14 zarch optparm
+
+eb0000000071 lpswey SIY_RD " " arch14 zarch
+b200 lbear S_RD " " arch14 zarch
+b201 stbear S_RD " " arch14 zarch
+
+b28f qpaci S_RD " " arch14 zarch

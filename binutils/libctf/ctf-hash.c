@@ -1,5 +1,5 @@
 /* Interface to hashtable implementations.
-   Copyright (C) 2006-2021 Free Software Foundation, Inc.
+   Copyright (C) 2006-2023 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -138,15 +138,6 @@ ctf_hash_eq_type_id_key (const void *a, const void *b)
 
   return (key_a->ctii_input_num == key_b->ctii_input_num)
     && (key_a->ctii_type == key_b->ctii_type);
-}
-
-/* Hash and eq functions for the dynset.  Most of these can just use the
-   underlying hashtab functions directly.   */
-
-int
-ctf_dynset_eq_string (const void *a, const void *b)
-{
-  return !strcmp((const char *) a, (const char *) b);
 }
 
 /* The dynhash, used for hashes whose size is not known at creation time. */
@@ -670,6 +661,12 @@ ctf_dynset_lookup (ctf_dynset_t *hp, const void *key)
   if (slot)
     return internal_to_key (*slot);
   return NULL;
+}
+
+size_t
+ctf_dynset_elements (ctf_dynset_t *hp)
+{
+  return htab_elements ((struct htab *) hp);
 }
 
 /* TRUE/FALSE return.  */

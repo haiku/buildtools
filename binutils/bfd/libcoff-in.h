@@ -1,5 +1,5 @@
 /* BFD COFF object file private structure.
-   Copyright (C) 1990-2021 Free Software Foundation, Inc.
+   Copyright (C) 1990-2023 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -24,6 +24,7 @@
 
 #include "bfdlink.h"
 #include "coff-bfd.h"
+#include "hashtab.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,21 +80,34 @@ typedef struct coff_tdata
   /* The unswapped external symbols.  May be NULL.  Read by
      _bfd_coff_get_external_symbols.  */
   void * external_syms;
-  /* If this is TRUE, the external_syms may not be freed.  */
-  bfd_boolean keep_syms;
 
   /* The string table.  May be NULL.  Read by
      _bfd_coff_read_string_table.  */
   char *strings;
   /* The length of the strings table.  For error checking.  */
   bfd_size_type strings_len;
+
+  /* Set if long section names are supported.  A writable copy of the COFF
+     backend flag _bfd_coff_long_section_names.  */
+  bool long_section_names;
+
+  /* If this is TRUE, the external_syms may not be freed.  */
+  bool keep_syms;
   /* If this is TRUE, the strings may not be freed.  */
-  bfd_boolean keep_strings;
+  bool keep_strings;
   /* If this is TRUE, the strings have been written out already.  */
-  bfd_boolean strings_written;
+  bool strings_written;
+
+  /* Is this a GO32 coff file?  */
+  bool go32;
 
   /* Is this a PE format coff file?  */
-  int pe;
+  bool pe;
+
+  /* Copy of some of the f_flags bits in the COFF filehdr structure,
+     used by ARM code.  */
+  flagword flags;
+
   /* Used by the COFF backend linker.  */
   struct coff_link_hash_entry **sym_hashes;
 
@@ -111,18 +125,18 @@ typedef struct coff_tdata
   /* The timestamp from the COFF file header.  */
   long timestamp;
 
-  /* Copy of some of the f_flags bits in the COFF filehdr structure,
-     used by ARM code.  */
-  flagword flags;
-
-  /* Is this a GO32 coff file?  */
-  bfd_boolean go32;
-
   /* A stub (extra data prepended before the COFF image) and its size.
      Used by coff-go32-exe, it contains executable data that loads the
      COFF object into memory.  */
   char * stub;
   bfd_size_type stub_size;
+
+  /* Hash table containing sections by target index.  */
+  htab_t section_by_target_index;
+
+  /* Hash table containing sections by index.  */
+  htab_t section_by_index;
+
 } coff_data_type;
 
 /* Tdata for pe image files.  */
@@ -137,13 +151,13 @@ typedef struct pe_tdata
   /* The timestamp to insert into the output file.
      If the timestamp is -1 then the current time is used.  */
   int timestamp;
-  bfd_boolean (*in_reloc_p) (bfd *, reloc_howto_type *);
+  bool (*in_reloc_p) (bfd *, reloc_howto_type *);
   flagword real_flags;
 
   /* Build-id info.  */
   struct
   {
-    bfd_boolean (*after_write_object_contents) (bfd *);
+    bool (*after_write_object_contents) (bfd *);
     const char *style;
     asection *sec;
   } build_id;
@@ -159,10 +173,10 @@ struct xcoff_tdata
   coff_data_type coff;
 
   /* TRUE if this is an XCOFF64 file. */
-  bfd_boolean xcoff64;
+  bool xcoff64;
 
   /* TRUE if a large a.out header should be generated.  */
-  bfd_boolean full_aouthdr;
+  bool full_aouthdr;
 
   /* TOC value.  */
   bfd_vma toc;
@@ -276,6 +290,9 @@ struct coff_link_hash_table
   struct bfd_link_hash_table root;
   /* A pointer to information used to link stabs in sections.  */
   struct stab_info stab_info;
+  /* Hash table that maps undecorated names to their respective
+   * decorated coff_link_hash_entry as found in fixup_stdcalls  */
+  struct bfd_hash_table decoration_hash;
 };
 
 struct coff_reloc_cookie
@@ -300,14 +317,24 @@ struct coff_reloc_cookie
 #define coff_link_hash_traverse(table, func, info)			\
   (bfd_link_hash_traverse						\
    (&(table)->root,							\
-    (bfd_boolean (*) (struct bfd_link_hash_entry *, void *)) (func), \
+    (bool (*) (struct bfd_link_hash_entry *, void *)) (func),		\
     (info)))
 
 /* Get the COFF linker hash table from a link_info structure.  */
 
 #define coff_hash_table(p) ((struct coff_link_hash_table *) ((p)->hash))
 
+struct decoration_hash_entry
+{
+  struct bfd_hash_entry root;
+  struct bfd_link_hash_entry *decorated_link;
+};
+
 /* Functions in coffgen.c.  */
+extern void coff_object_cleanup
+  (bfd *);
+extern bfd_cleanup coff_real_object_p
+  (bfd *, unsigned, struct internal_filehdr *, struct internal_aouthdr *);
 extern bfd_cleanup coff_object_p
   (bfd *);
 extern struct bfd_section *coff_section_from_bfd_index
@@ -318,26 +345,26 @@ extern long coff_canonicalize_symtab
   (bfd *, asymbol **);
 extern int coff_count_linenumbers
   (bfd *);
-extern bfd_boolean coff_renumber_symbols
+extern bool coff_renumber_symbols
   (bfd *, int *);
 extern void coff_mangle_symbols
   (bfd *);
-extern bfd_boolean coff_write_symbols
+extern bool coff_write_symbols
   (bfd *);
-extern bfd_boolean coff_write_alien_symbol
-  (bfd *, asymbol *, struct internal_syment *, union internal_auxent *,
-   bfd_vma *, bfd_size_type *, asection **, bfd_size_type *);
-extern bfd_boolean coff_write_linenumbers
+extern bool coff_write_alien_symbol
+  (bfd *, asymbol *, struct internal_syment *, bfd_vma *,
+   struct bfd_strtab_hash *, bool, asection **, bfd_size_type *);
+extern bool coff_write_linenumbers
   (bfd *);
 extern alent *coff_get_lineno
   (bfd *, asymbol *);
 extern asymbol *coff_section_symbol
   (bfd *, char *);
-extern bfd_boolean _bfd_coff_get_external_symbols
+extern bool _bfd_coff_get_external_symbols
   (bfd *);
 extern const char *_bfd_coff_read_string_table
   (bfd *);
-extern bfd_boolean _bfd_coff_free_symbols
+extern bool _bfd_coff_free_symbols
   (bfd *);
 extern struct coff_ptr_struct *coff_get_normalized_symtab
   (bfd *);
@@ -351,32 +378,34 @@ extern void coff_get_symbol_info
   (bfd *, asymbol *, symbol_info *ret);
 #define coff_get_symbol_version_string \
   _bfd_nosymbols_get_symbol_version_string
-extern bfd_boolean _bfd_coff_is_local_label_name
+extern bool _bfd_coff_is_local_label_name
   (bfd *, const char *);
 extern asymbol *coff_bfd_make_debug_symbol
-  (bfd *, void *, unsigned long);
-extern bfd_boolean coff_find_nearest_line
+  (bfd *);
+extern bool coff_find_nearest_line
   (bfd *, asymbol **, asection *, bfd_vma,
    const char **, const char **, unsigned int *, unsigned int *);
+#define coff_find_nearest_line_with_alt \
+  _bfd_nosymbols_find_nearest_line_with_alt
 #define coff_find_line _bfd_nosymbols_find_line
 struct dwarf_debug_section;
-extern bfd_boolean coff_find_nearest_line_with_names
+extern bool coff_find_nearest_line_with_names
   (bfd *, asymbol **, asection *, bfd_vma, const char **, const char **,
    unsigned int *, const struct dwarf_debug_section *);
-extern bfd_boolean coff_find_inliner_info
+extern bool coff_find_inliner_info
   (bfd *, const char **, const char **, unsigned int *);
 extern int coff_sizeof_headers
   (bfd *, struct bfd_link_info *);
-extern bfd_boolean bfd_coff_reloc16_relax_section
-  (bfd *, asection *, struct bfd_link_info *, bfd_boolean *);
+extern bool bfd_coff_reloc16_relax_section
+  (bfd *, asection *, struct bfd_link_info *, bool *);
 extern bfd_byte *bfd_coff_reloc16_get_relocated_section_contents
   (bfd *, struct bfd_link_info *, struct bfd_link_order *,
-   bfd_byte *, bfd_boolean, asymbol **);
+   bfd_byte *, bool, asymbol **);
 extern bfd_vma bfd_coff_reloc16_get_value
   (arelent *, struct bfd_link_info *, asection *);
 extern void bfd_perform_slip
   (bfd *, unsigned int, asection *, bfd_vma);
-extern bfd_boolean _bfd_coff_close_and_cleanup
+extern bool _bfd_coff_free_cached_info
   (bfd *);
 
 /* Functions and types in cofflink.c.  */
@@ -476,11 +505,11 @@ struct coff_final_link_info
   /* Output BFD.  */
   bfd *output_bfd;
   /* Used to indicate failure in traversal routine.  */
-  bfd_boolean failed;
+  bool failed;
   /* If doing "task linking" set only during the time when we want the
      global symbol writer to convert the storage class of defined global
      symbols from global to static. */
-  bfd_boolean global_to_static;
+  bool global_to_static;
   /* Hash table for long symbol names.  */
   struct bfd_strtab_hash *strtab;
   /* When doing a relocatable link, an array of information kept for
@@ -552,9 +581,11 @@ struct coff_section_alignment_entry
   unsigned int alignment_power;
 };
 
+extern struct bfd_hash_entry *_decoration_hash_newfunc
+  (struct bfd_hash_entry *, struct bfd_hash_table *, const char *);
 extern struct bfd_hash_entry *_bfd_coff_link_hash_newfunc
   (struct bfd_hash_entry *, struct bfd_hash_table *, const char *);
-extern bfd_boolean _bfd_coff_link_hash_table_init
+extern bool _bfd_coff_link_hash_table_init
   (struct coff_link_hash_table *, bfd *,
    struct bfd_hash_entry *(*) (struct bfd_hash_entry *,
 			       struct bfd_hash_table *,
@@ -564,30 +595,30 @@ extern struct bfd_link_hash_table *_bfd_coff_link_hash_table_create
   (bfd *);
 extern const char *_bfd_coff_internal_syment_name
   (bfd *, const struct internal_syment *, char *);
-extern bfd_boolean _bfd_coff_section_already_linked
+extern bool _bfd_coff_section_already_linked
   (bfd *, asection *, struct bfd_link_info *);
-extern bfd_boolean _bfd_coff_link_add_symbols
+extern bool _bfd_coff_link_add_symbols
   (bfd *, struct bfd_link_info *);
-extern bfd_boolean _bfd_coff_final_link
+extern bool _bfd_coff_final_link
   (bfd *, struct bfd_link_info *);
 extern struct internal_reloc *_bfd_coff_read_internal_relocs
-  (bfd *, asection *, bfd_boolean, bfd_byte *, bfd_boolean,
+  (bfd *, asection *, bool, bfd_byte *, bool,
    struct internal_reloc *);
-extern bfd_boolean _bfd_coff_generic_relocate_section
+extern bool _bfd_coff_generic_relocate_section
   (bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *,
    struct internal_reloc *, struct internal_syment *, asection **);
 extern struct bfd_hash_entry *_bfd_coff_debug_merge_hash_newfunc
   (struct bfd_hash_entry *, struct bfd_hash_table *, const char *);
-extern bfd_boolean _bfd_coff_write_global_sym
+extern bool _bfd_coff_write_global_sym
   (struct bfd_hash_entry *, void *);
-extern bfd_boolean _bfd_coff_write_task_globals
+extern bool _bfd_coff_write_task_globals
   (struct coff_link_hash_entry *, void *);
-extern bfd_boolean _bfd_coff_link_input_bfd
+extern bool _bfd_coff_link_input_bfd
   (struct coff_final_link_info *, bfd *);
-extern bfd_boolean _bfd_coff_reloc_link_order
+extern bool _bfd_coff_reloc_link_order
   (bfd *, struct coff_final_link_info *, asection *,
    struct bfd_link_order *);
-extern bfd_boolean bfd_coff_gc_sections
+extern bool bfd_coff_gc_sections
   (bfd *, struct bfd_link_info *);
 extern const char *bfd_coff_group_name
   (bfd *, const asection *);
@@ -607,12 +638,12 @@ extern long _bfd_xcoff_canonicalize_dynamic_reloc
   (bfd *, arelent **, asymbol **);
 extern struct bfd_link_hash_table *_bfd_xcoff_bfd_link_hash_table_create
   (bfd *);
-extern bfd_boolean _bfd_xcoff_bfd_link_add_symbols
+extern bool _bfd_xcoff_bfd_link_add_symbols
   (bfd *, struct bfd_link_info *);
-extern bfd_boolean _bfd_xcoff_bfd_final_link
+extern bool _bfd_xcoff_bfd_final_link
   (bfd *, struct bfd_link_info *);
-extern bfd_boolean _bfd_xcoff_define_common_symbol
+extern bool _bfd_xcoff_define_common_symbol
   (bfd *, struct bfd_link_info *, struct bfd_link_hash_entry *);
-extern bfd_boolean _bfd_ppc_xcoff_relocate_section
+extern bool _bfd_ppc_xcoff_relocate_section
   (bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *,
    struct internal_reloc *, struct internal_syment *, asection **);

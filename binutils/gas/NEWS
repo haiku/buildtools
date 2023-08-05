@@ -1,5 +1,143 @@
 -*- text -*-
 
+Changes in 2.41:
+
+* Add support for Intel FRED instructions.
+
+* Add support for Intel LKGS instructions.
+
+* Add support for Intel AMX-COMPLEX instructions.
+
+* Add SME2 support to the AArch64 port.
+
+* A new .insn directive is recognized by x86 gas.
+
+* Add support for LoongArch LSX instructions.
+
+* Add support for LoongArch LASX instructions.
+
+* Add support for LoongArch LVZ instructions.
+
+* Add support for LoongArch LBT instructions.
+
+* Initial LoongArch support for linker relaxation has been added.
+
+* Deprecate the LoongArch register aliases $v0, $v1, $x, $fv0 and $fv1.
+
+Changes in 2.40:
+
+* Add support for Intel RAO-INT instructions.
+
+* Add support for Intel AVX-NE-CONVERT instructions.
+
+* Add support for Intel MSRLIST instructions.
+
+* Add support for Intel WRMSRNS instructions.
+
+* Add support for Intel CMPccXADD instructions.
+
+* Add support for Intel AVX-VNNI-INT8 instructions.
+
+* Add support for Intel AVX-IFMA instructions.
+
+* Add support for Intel PREFETCHI instructions.
+
+* Add support for Intel AMX-FP16 instructions.
+
+* gas now supports --compress-debug-sections=zstd to compress
+  debug sections with zstd.
+
+* Add --enable-default-compressed-debug-sections-algorithm={zlib,zstd}
+  that selects the default compression algorithm
+  for --enable-compressed-debug-sections.
+
+* Add support for various T-Head extensions (XTheadBa, XTheadBb, XTheadBs,
+  XTheadCmo, XTheadCondMov, XTheadFMemIdx, XTheadFmv, XTheadInt, XTheadMemIdx,
+  XTheadMemPair, XTheadMac, and XTheadSync) from version 2.0 of the T-Head
+  ISA manual, which are implemented in the Allwinner D1.
+
+* Add support for the RISC-V Zawrs extension, version 1.0-rc4.
+
+* Add support for Cortex-X1C for Arm.
+
+* New command line option --gsframe to generate SFrame unwind information
+  on x86_64 and aarch64 targets.
+
+Changes in 2.39:
+
+* Remove (rudimentary) support for the x86-64 sub-architectures Intel L1OM and
+  Intel K1OM.
+
+* Add support for the RISC-V Zicbop, Zicbom, and Zicboz extensions, version
+  1.0-fd39d01.
+
+* Add support for the RISC-V Zfh extension, version 1.0.
+
+* Add support for the Zhinx extension, version 1.0.0-rc.
+
+* Add support for the RISC-V H extension.
+
+* Add support for the RISC-V Zfhmin extension, version 1.0, and Zhinxmin
+  extension, version 1.0.0-rc.
+
+Changes in 2.38:
+
+* Add support for AArch64 system registers that were missing in previous
+  releases.
+
+* Add support for the LoongArch instruction set.
+
+* Add a command-line option, -muse-unaligned-vector-move, for x86 target
+  to encode aligned vector move as unaligned vector move.
+
+* Add support for Cortex-R52+ for Arm.
+
+* Add support for Cortex-A510, Cortex-A710, Cortex-X2 for AArch64.
+
+* Add support for Cortex-A710 for Arm.
+
+* Add support for Scalable Matrix Extension (SME) for AArch64.
+
+* The --multibyte-handling=[allow|warn|warn-sym-only] option tells the
+  assembler what to when it encoutners multibyte characters in the input.  The
+  default is to allow them.  Setting the option to "warn" will generate a
+  warning message whenever any multibyte character is encountered.  Using the
+  option to "warn-sym-only" will make the assembler generate a warning whenever a
+  symbol is defined containing multibyte characters.  (References to undefined
+  symbols will not generate warnings).
+
+* Outputs of .ds.x directive and .tfloat directive with hex input from
+  x86 assembler have been reduced from 12 bytes to 10 bytes to match the
+  output of .tfloat directive.
+
+* Add support for 'armv8.8-a', 'armv9-a', 'armv9.1-a', 'armv9.2-a' and
+  'armv9.3-a' for -march in AArch64 GAS.
+
+* Add support for 'armv8.7-a', 'armv8.8-a', 'armv9-a', 'armv9.1-a',
+  'armv9.2-a' and 'armv9.3-a' for -march in Arm GAS.
+
+* Add support for Intel AVX512_FP16 instructions.
+
+* Add support for the RISC-V scalar crypto extension, version 1.0.0.
+
+* Add support for the RISC-V vector extension, version 1.0.
+
+* Add support for the Z{f,d,q}inx extensions, version 1.0.0-rc.
+
+* Add support for the RISC-V svinval extension, version 1.0.
+
+* Add support for the RISC-V hypervisor extension, as defined by Privileged
+  Specification 1.12.
+
+Changes in 2.37:
+
+* arm-symbianelf support removed.
+
+* Add support for Realm Management Extension (RME) for AArch64.
+
+* Add support for the Zba, Zbb, Zbc, and Zbs subsets of the RISC-V
+  bit manipulation extension, version 0.93.
+
 Changes in 2.36:
 
 * Add support for Intel AVX VNNI instructions.
@@ -56,6 +194,8 @@ Changes in 2.36:
   SHF_GNU_RETAIN specifies that the section should not be garbage
   collected by the linker.  It requires the GNU or FreeBSD ELF OSABIs.
 
+* Add support for the RISC-V Zihintpause extension.
+
 Changes in 2.35:
 
 * X86 NaCl target support is removed.
@@ -74,6 +214,11 @@ Changes in 2.35:
   version 5 .debug_line sections.
 
 * Add -mbig-obj support to i386 MingW targets.
+
+* Add support for the -mriscv-isa-version argument, to select the version of
+  the RISC-V ISA specification used when assembling.
+
+* Remove support for the RISC-V privileged specification, version 1.9.
 
 Changes in 2.34:
 
@@ -168,6 +313,8 @@ Changes in 2.31:
 
 * Add support for .nops directive.  It is currently supported only for
   x86 targets.
+
+* Add support for the .insn directive on RISC-V targets.
 
 Changes in 2.30:
 
@@ -889,7 +1036,7 @@ Changes in 1.93.01:
   of new CPUs and formats, lots of bugs fixed.
 
 
-Copyright (C) 2012-2021 Free Software Foundation, Inc.
+Copyright (C) 2012-2023 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

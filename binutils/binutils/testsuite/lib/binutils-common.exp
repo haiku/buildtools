@@ -1,4 +1,4 @@
-# Copyright (C) 1993-2021 Free Software Foundation, Inc.
+# Copyright (C) 1993-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -50,23 +50,24 @@ proc is_elf_format {} {
 	 && ![istarget *-*-rtems*]
 	 && ![istarget *-*-solaris2*]
 	 && ![istarget *-*-sysv4*]
-	 && ![istarget *-*-unixware*]
 	 && ![istarget *-*-wasm32*]
 	 && ![istarget avr-*-*]
 	 && ![istarget hppa*64*-*-hpux*]
+	 && ![istarget i?86-*-beos*]
 	 && ![istarget ia64-*-hpux*] } {
 	return 0
     }
 
-    if { [istarget *-*-linux*ecoff*]
-	 || [istarget *-*-rtemscoff*] } {
+    if { [istarget i?86-*-beospe*] } {
 	return 0
     }
 
-    if { ![istarget *-*-netbsdelf*]
-	 && (   [istarget vax-*-netbsd*]
-	     || [istarget ns32k-*-netbsd*]) } {
-    	return 0
+    if { [istarget *-*-linux*ecoff*] } {
+	return 0
+    }
+
+    if { [istarget *-*-netbsdaout*] } {
+	return 0
     }
 
     if {    [istarget arm-*-openbsd*]
@@ -85,8 +86,7 @@ proc is_aout_format {} {
 	 || [istarget *-*-bsd*]
 	 || [istarget *-*-msdos*]
 	 || [istarget ns32k-*-*]
-	 || [istarget pdp11-*-*]
-	 || [istarget vax-*-netbsd] } {
+	 || [istarget pdp11-*-*] } {
 	return 1
     }
     return 0
@@ -105,9 +105,23 @@ proc is_pecoff_format args {
 	 || [istarget $m_os-cygwin*]
 	 || [istarget $m_os-interix*]
 	 || [istarget $m_os-mingw*]
-	 || [istarget $m_os-netbsdpe*]
 	 || [istarget $m_os-pe*]
 	 || [istarget $m_os-winnt*] } {
+	return 1
+    }
+    return 0
+}
+
+# True if the object format is known to COFF or PE (but not ECOFF or XCOFF)
+#
+proc is_coff_format {} {
+    if { [is_pecoff_format]
+	 || [istarget *-*-coff*]
+	 || [istarget *-*-go32*]
+	 || [istarget *-*-msdosdjgpp*]
+	 || [istarget tic4x-*-*]
+	 || [istarget tic54x-*-*]
+	 || [istarget z8k-*-*] } {
 	return 1
     }
     return 0
@@ -182,6 +196,18 @@ proc is_rela { binary_file } {
     return 1
 }
 
+# Return the file name suffix required for executables, if any.
+#
+proc exeext {} {
+    if { [istarget *-*-cygwin*]
+	 || [istarget *-*-mingw*]
+	 || [istarget *-*-msdos*]
+	 || [istarget *-*-*vms*] } {
+	return ".exe"
+    }
+    return ""
+}
+
 # True if the target matches TARGET, specified as a TCL procedure if
 # in square brackets or as machine triplet otherwise.
 #
@@ -213,7 +239,6 @@ proc supports_gnu_osabi {} {
 	 || [istarget *-*-linux*]
 	 || [istarget *-*-nacl*]
 	 || ( [istarget *-*-*bsd*] && ![istarget arm*-*-netbsd*] )
-	 || [istarget *-*-symbianelf]
 	 || [istarget *-*-lynxos]
 	 || ( [istarget *-*-nto*] && ![istarget arm*-*-*] )
 	 || [istarget *-*-irix*]
@@ -222,7 +247,7 @@ proc supports_gnu_osabi {} {
 	return 1
     }
     if { [istarget "wasm32*-*-*"] } {
-        return 1
+	return 1
     }
     if { ![istarget "*-*-elf*"] } {
 	return 0
@@ -389,7 +414,7 @@ proc supports_noinit_section {} {
     #
     # arc-*-* is not included here, since it only supports .noinit with the
     # non-default arcv2elf emulation.
-    if {[istarget "arm-*-*"]
+    if { ([istarget "arm-*-*"] && ![istarget "arm*-linux-*"])
 	  || [istarget "avr-*-*"]
 	  || [istarget "msp430-*-*"]
 	  || [istarget "pru-*-*"] } {
@@ -408,11 +433,23 @@ proc supports_persistent_section {} {
 
     # Targets that set HAVE_PERSISTENT=yes in their emulparams script utilizing
     # elf.sc, or explicitly define a .persistent section in their linker script.
-    if { [istarget "arm-*-*"]
+    if { ([istarget "arm-*-*"] && ![istarget "arm*-linux-*"])
 	  || [istarget "msp430-*-*"] } {
 	return 1;
     }
     return 0;
+}
+
+# Whether a target support DT_RELR sections.
+proc supports_dt_relr {} {
+    if { ([istarget x86_64-*-*]
+	  || [istarget i?86-*-*]
+	  || [istarget powerpc64*-*-*])
+	 && ([istarget *-*-linux*]
+	     || [istarget *-*-gnu*]) } {
+	return 1
+    }
+    return 0
 }
 
 # Compare two files line-by-line.  FILE_1 is the actual output and FILE_2
@@ -603,16 +640,35 @@ proc regexp_diff { file_1 file_2 args } {
 # ld: warning: /lib64/ld-linux-x86-64.so.2: unsupported GNU_PROPERTY_TYPE (5) type : 0xc0010001
 proc prune_warnings_extra { text } {
     global experimental
-    # Warnings are only pruned from non-experimental code (ie code not
-    # on a release branch).  For experimental code we want the warnings
+
+    # Property warnings are only pruned from non-experimental code (ie code
+    # not on a release branch).  For experimental code we want the warnings
     # as they indicate that the sources need to be updated to recognise
     # the new properties.
     if { "$experimental" == "false" } {
 	# The "\\1" is to try to preserve a "\n" but only if necessary.
 	regsub -all "(^|\n)(\[^\n\]*: warning:\[^\n\]*unsupported GNU_PROPERTY_TYPE\[^\n\]*\n?)+" $text "\\1" text
     }
+
     # PR binutils/23898: It is OK to have gaps in build notes.
     regsub -all "(^|\n)(\[^\n\]*: Warning: Gap in build notes detected from\[^\n\]*\n?)+" $text "\\1" text
+
+    # Many tests use assembler source files without a .note.GNU-stack section.
+    # So ignore warnings about it being missing.
+    regsub -all "(^|\n)(\[^\n\]*: warning:\[^\n\]*missing \\.note\\.GNU-stack section\[^\n\]*\n?)+" $text "\\1" text
+    regsub -all "(^|\n)(\[^\n\]*: NOTE: This behaviour is deprecated\[^\n\]*\n?)+" $text "\\1" text
+
+    # Ignore warnings about RWX segments.
+    regsub -all "(^|\n)(\[^\n\]*: warning:\[^\n\]*has a LOAD segment with RWX permissions\[^\n\]*\n?)+" $text "\\1" text
+    regsub -all "(^|\n)(\[^\n\]*: warning:\[^\n\]*has a TLS segment with execute permission\[^\n\]*\n?)+" $text "\\1" text
+
+    # Configuring with --enable-warn-execstack=yes will generate warnings if
+    # -z execstack is used.
+    regsub -all "(^|\n)(\[^\n\]*: warning: enabling an executable stack because of -z execstack command line option\[^\n\]*\n?)+" $text "\\1" text
+
+    # Ignore LTO warnings triggered by configuring with --enable-pgo-build=lto.
+    regsub -all "(^|\n)(\[^\n\]*lto-wrapper: warning: using serial compilation of \[0-9\]+ LTRANS jobs\[^\n\]*\n?)+" $text "\\1" text
+
     return $text
 }
 
@@ -644,6 +700,22 @@ if ![string length [info proc prune_warnings]] {
 	set text [prune_warnings_extra $text]
 	return $text
     }
+}
+
+# prune_dump_output OUTPUT
+#
+# Clean up the output from system specific or unwanted characters.
+# This allows to simplify the regexp inside dump tests.
+proc prune_dump_output { output } {
+    if [ishost "*-*-mingw*"] {
+	# Prune DOS drive letter from an absolute path if it appears
+	# at the beginning of a line.
+	regsub -all {(^|\n)[[:alpha:]]:(/|\\)} $output "\\1\\2" output
+    }
+
+    # Prune last end of line.
+    regsub "\n$" $output "" output
+    return $output
 }
 
 # run_dump_test FILE (optional:) EXTRA_OPTIONS
@@ -839,10 +911,12 @@ if ![string length [info proc prune_warnings]] {
 # regexps in FILE.d.
 #
 proc run_dump_test { name {extra_options {}} } {
-    global ADDR2LINE ADDR2LINEFLAGS AS ASFLAGS CC CFLAGS ELFEDIT ELFEDITFLAGS
-    global LD LDFLAGS NM NMFLAGS OBJCOPY OBJCOPYFLAGS OBJDUMP OBJDUMPFLAGS
-    global READELF READELFFLAGS STRIP STRIPFLAGS
+    global ADDR2LINE ADDR2LINEFLAGS AS ASFLAGS CC_FOR_TARGET CFLAGS_FOR_TARGET
+    global ELFEDIT ELFEDITFLAGS LD LDFLAGS NM NMFLAGS OBJCOPY OBJCOPYFLAGS
+    global OBJDUMP OBJDUMPFLAGS READELF READELFFLAGS STRIP STRIPFLAGS
+    global SIZE SIZEFLAGS
     global copyfile env runtests srcdir subdir verbose
+    global DT_RELR_LDFLAGS NO_DT_RELR_LDFLAGS
 
     if [string match "*/*" $name] {
 	set file $name
@@ -967,8 +1041,8 @@ proc run_dump_test { name {extra_options {}} } {
 	    }
 	    default {
 		if { !$in_extra
-                     && [string length $opts($opt_name)]
-                     && $opt_name != "as" } {
+		     && [string length $opts($opt_name)]
+		     && $opt_name != "as" } {
 		    perror "option $opt_name multiply set in $file.d"
 		    unresolved $subdir/$name
 		    return
@@ -992,13 +1066,13 @@ proc run_dump_test { name {extra_options {}} } {
 	    error {
 		append opts($opt_name) $opt_val
 	    }
-            as {
-                if { $in_extra } {
-                    set as_additional_flags [concat $as_additional_flags $opt_val]
-                } else {
-                    lappend opts(as) $opt_val
-                }
-            }
+	    as {
+		if { $in_extra } {
+		    set as_additional_flags [concat $as_additional_flags $opt_val]
+		} else {
+		    lappend opts(as) $opt_val
+		}
+	    }
 	    default {
 		set opts($opt_name) [concat $opts($opt_name) $opt_val]
 	    }
@@ -1007,20 +1081,20 @@ proc run_dump_test { name {extra_options {}} } {
 
     # Ensure there is something in $opts(as) for the foreach loop below.
     if { [llength $opts(as)] == 0 } {
-        set opts(as) [list " "]
+	set opts(as) [list " "]
     }
     foreach x $opts(as) {
-        if { [string length $x] && [string length $as_additional_flags] } {
-            append x " "
-        }
-        append x $as_additional_flags
-        regsub {\[big_or_little_endian\]} $x \
-            [big_or_little_endian] x
-        lappend as_final_flags $x
+	if { [string length $x] && [string length $as_additional_flags] } {
+	    append x " "
+	}
+	append x $as_additional_flags
+	regsub {\[big_or_little_endian\]} $x \
+	    [big_or_little_endian] x
+	lappend as_final_flags $x
     }
 
     regsub {\[big_or_little_endian\]} $opts(ld) \
-        [big_or_little_endian] opts(ld)
+	[big_or_little_endian] opts(ld)
 
     if { $opts(name) == "" } {
 	set testname "$subdir/$name"
@@ -1147,7 +1221,7 @@ proc run_dump_test { name {extra_options {}} } {
 	    # ofile is never absolute, so this always works to protect sfile
 	    # from later absolutization.
 	    set sfile "./[file rootname $ofile].s"
-	    set cmd "$CC $CFLAGS -S $opts(cc) -o $sfile $cfile"
+	    set cmd "$CC_FOR_TARGET $CFLAGS_FOR_TARGET -S $opts(cc) -o $sfile $cfile"
 	    send_log "$cmd\n"
 	    set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
 	    remote_upload host "dump.tmp"
@@ -1160,7 +1234,7 @@ proc run_dump_test { name {extra_options {}} } {
 	    regsub "\n$" $comp_output "" comp_output
 	    if { $cmdret != 0} {
 		send_log "compilation of $cfile failed, exit status $cmdret with <$comp_output>"
-                # Should this be 'unresolved', or is that too silent?
+		# Should this be 'unresolved', or is that too silent?
 		fail $testname
 		return 0
 	    }
@@ -1198,334 +1272,334 @@ proc run_dump_test { name {extra_options {}} } {
     }
 
     foreach as_flags $as_final_flags {
-        # Assemble each file.
-        set objfiles {}
-        for { set i 0 } { $i < [llength $sourcefiles] } { incr i } {
-            set sourcefile [lindex $sourcefiles $i]
-            set sourceasflags [lindex $asflags $i]
-            set run_objcopy_objects 0
+	# Assemble each file.
+	set objfiles {}
+	for { set i 0 } { $i < [llength $sourcefiles] } { incr i } {
+	    set sourcefile [lindex $sourcefiles $i]
+	    set sourceasflags [lindex $asflags $i]
+	    set run_objcopy_objects 0
 
-            if { [string match "*RUN_OBJCOPY*" $sourceasflags] } {
-                set run_objcopy_objects 1
-            }
-            regsub "RUN_OBJCOPY" $sourceasflags "" sourceasflags
+	    if { [string match "*RUN_OBJCOPY*" $sourceasflags] } {
+		set run_objcopy_objects 1
+	    }
+	    regsub "RUN_OBJCOPY" $sourceasflags "" sourceasflags
 
-            set objfile [lindex $objfile_names $i]
-            catch "exec rm -f $objfile" exec_output
-            lappend objfiles $objfile
+	    set objfile [lindex $objfile_names $i]
+	    catch "exec rm -f $objfile" exec_output
+	    lappend objfiles $objfile
 
-            if { $as_flags == "binary" } {
-                while {[file type $sourcefile] eq "link"} {
-                    set newfile [file readlink $sourcefile]
-                    if {[string index $newfile 0] ne "/"} {
-                        set newfile [file dirname $sourcefile]/$newfile
-                    }
-                    set sourcefile $newfile
-                }
-                set newfile [remote_download host $sourcefile $objfile]
-                set cmdret 0
-                if { $newfile == "" } {
-                    set cmdret 1
-                }
-            } else {
-                if { [istarget "hppa*-*-*"] \
-                         && ![istarget "*-*-linux*"] \
-                         && ![istarget "*-*-netbsd*" ] } {
-                    set cmd "sed -e 's/^\[	 \]*\.comm \\(\[^,\]*\\),\\(.*\\)/\\1 .comm \\2/' < $sourcefile > tmpdir/asm.s"
-                    send_log "$cmd\n"
-                    set cmdret [remote_exec host [concat sh -c [list "$cmd"]]]
-                    set cmdret [lindex $cmdret 0]
-                    if { $cmdret != 0 } {
-                        perror "sed failure"
-                        unresolved $testname
-                        continue
-                    }
-                    set sourcefile tmpdir/asm.s
-                }
-                set cmd "$AS $ASFLAGS $as_flags $sourceasflags -o $objfile $sourcefile"
+	    if { $as_flags == "binary" } {
+		while {[file type $sourcefile] eq "link"} {
+		    set newfile [file readlink $sourcefile]
+		    if {[string index $newfile 0] ne "/"} {
+			set newfile [file dirname $sourcefile]/$newfile
+		    }
+		    set sourcefile $newfile
+		}
+		set newfile [remote_download host $sourcefile $objfile]
+		set cmdret 0
+		if { $newfile == "" } {
+		    set cmdret 1
+		}
+	    } else {
+		if { [istarget "hppa*-*-*"] \
+			 && ![istarget "*-*-linux*"] \
+			 && ![istarget "*-*-netbsd*" ] } {
+		    set cmd "sed -e 's/^\[	 \]*\.comm \\(\[^,\]*\\),\\(.*\\)/\\1 .comm \\2/' < $sourcefile > tmpdir/asm.s"
+		    send_log "$cmd\n"
+		    set cmdret [remote_exec host [concat sh -c [list "$cmd"]]]
+		    set cmdret [lindex $cmdret 0]
+		    if { $cmdret != 0 } {
+			perror "sed failure"
+			unresolved $testname
+			continue
+		    }
+		    set sourcefile tmpdir/asm.s
+		}
+		set cmd "$AS $ASFLAGS $as_flags $sourceasflags -o $objfile $sourcefile"
 
-                send_log "$cmd\n"
-                set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
-                remote_upload host "dump.tmp"
-                set comp_output [prune_warnings [file_contents "dump.tmp"]]
-                remote_file host delete "dump.tmp"
-                remote_file build delete "dump.tmp"
-                set cmdret [lindex $cmdret 0]
-            }
-            if { $cmdret == 0 && $run_objcopy_objects } {
-                set cmd "$OBJCOPY $opts(objcopy_objects) $objfile"
+		send_log "$cmd\n"
+		set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
+		remote_upload host "dump.tmp"
+		set comp_output [prune_warnings [file_contents "dump.tmp"]]
+		remote_file host delete "dump.tmp"
+		remote_file build delete "dump.tmp"
+		set cmdret [lindex $cmdret 0]
+	    }
+	    if { $cmdret == 0 && $run_objcopy_objects } {
+		set cmd "$OBJCOPY $opts(objcopy_objects) $objfile"
 
-                send_log "$cmd\n"
-                set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] \
-                                "" "/dev/null" "dump.tmp"]
-                remote_upload host "dump.tmp"
-                append comp_output [prune_warnings [file_contents "dump.tmp"]]
-                remote_file host delete "dump.tmp"
-                remote_file build delete "dump.tmp"
-                set cmdret [lindex $cmdret 0]
-            }
-        }
+		send_log "$cmd\n"
+		set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] \
+				"" "/dev/null" "dump.tmp"]
+		remote_upload host "dump.tmp"
+		append comp_output [prune_warnings [file_contents "dump.tmp"]]
+		remote_file host delete "dump.tmp"
+		remote_file build delete "dump.tmp"
+		set cmdret [lindex $cmdret 0]
+	    }
+	}
 
-        # Perhaps link the file(s).
-        if { $cmdret == 0 && $run_ld } {
-            set objfile "tmpdir/dump"
-            catch "exec rm -f $objfile" exec_output
+	# Perhaps link the file(s).
+	if { $cmdret == 0 && $run_ld } {
+	    set objfile "tmpdir/dump"
+	    catch "exec rm -f $objfile" exec_output
 
-            set ld_extra_opt ""
-            global ld
-            set ld "$LD"
+	    set ld_extra_opt ""
+	    global ld
+	    set ld "$LD"
 	    if [check_relro_support] {
 		set ld_extra_opt "-z norelro"
 	    }
 
-            # Add -L$srcdir/$subdir so that the linker command can use
-            # linker scripts in the source directory.
-            set cmd "$LD $ld_extra_opt $LDFLAGS -L$srcdir/$subdir \
+	    # Add -L$srcdir/$subdir so that the linker command can use
+	    # linker scripts in the source directory.
+	    set cmd "$LD $ld_extra_opt $LDFLAGS -L$srcdir/$subdir \
 		   $opts(ld) -o $objfile $objfiles $opts(ld_after_inputfiles)"
 
-            # If needed then check for, or add a -Map option.
-            set mapfile ""
-            if { $opts(map) != "" } then {
-                if { [regexp -- "-Map=(\[^ \]+)" $cmd all mapfile] } then {
-                    # Found existing mapfile option
-                    verbose -log "Existing mapfile '$mapfile' found"
-                } else {
-                    # No mapfile option.
-                    set mapfile "tmpdir/dump.map"
-                    verbose -log "Adding mapfile '$mapfile'"
-                    set cmd "$cmd -Map=$mapfile"
-                }
-            }
+	    # If needed then check for, or add a -Map option.
+	    set mapfile ""
+	    if { $opts(map) != "" } then {
+		if { [regexp -- "-Map=(\[^ \]+)" $cmd all mapfile] } then {
+		    # Found existing mapfile option
+		    verbose -log "Existing mapfile '$mapfile' found"
+		} else {
+		    # No mapfile option.
+		    set mapfile "tmpdir/dump.map"
+		    verbose -log "Adding mapfile '$mapfile'"
+		    set cmd "$cmd -Map=$mapfile"
+		}
+	    }
 
-            send_log "$cmd\n"
-            set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
-            remote_upload host "dump.tmp"
-            append comp_output [file_contents "dump.tmp"]
-            remote_file host delete "dump.tmp"
-            remote_file build delete "dump.tmp"
-            set cmdret [lindex $cmdret 0]
+	    send_log "$cmd\n"
+	    set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
+	    remote_upload host "dump.tmp"
+	    append comp_output [prune_warnings [file_contents "dump.tmp"]]
+	    remote_file host delete "dump.tmp"
+	    remote_file build delete "dump.tmp"
+	    set cmdret [lindex $cmdret 0]
 
-            if { $cmdret == 0 && $run_objcopy } {
-                set infile $objfile
-                set objfile "tmpdir/dump1"
-                remote_file host delete $objfile
+	    if { $cmdret == 0 && $run_objcopy } {
+		set infile $objfile
+		set objfile "tmpdir/dump1"
+		remote_file host delete $objfile
 
-                # Note that we don't use OBJCOPYFLAGS here; any flags must be
-                # explicitly specified.
-                set cmd "$OBJCOPY $opts(objcopy_linked_file) $infile $objfile"
+		# Note that we don't use OBJCOPYFLAGS here; any flags must be
+		# explicitly specified.
+		set cmd "$OBJCOPY $opts(objcopy_linked_file) $infile $objfile"
 
-                send_log "$cmd\n"
-                set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
-                remote_upload host "dump.tmp"
-                append comp_output [file_contents "dump.tmp"]
-                remote_file host delete "dump.tmp"
-                remote_file build delete "dump.tmp"
-                set cmdret [lindex $cmdret 0]
-            }
-        } else {
-            set objfile [lindex $objfiles 0]
-        }
+		send_log "$cmd\n"
+		set cmdret [remote_exec host [concat sh -c [list "$cmd 2>&1"]] "" "/dev/null" "dump.tmp"]
+		remote_upload host "dump.tmp"
+		append comp_output [prune_warnings [file_contents "dump.tmp"]]
+		remote_file host delete "dump.tmp"
+		remote_file build delete "dump.tmp"
+		set cmdret [lindex $cmdret 0]
+	    }
+	} else {
+	    set objfile [lindex $objfiles 0]
+	}
 
-        if { $cmdret == 0 && $opts(PROG) != "" } {
-            set destopt ${copyfile}.o
-            switch -- $opts(PROG) {
-                ar		{ set program ar }
-                elfedit	{
-                    set program elfedit
-                    set destopt ""
-                }
-                nm		{ set program nm }
-                objcopy	{ set program objcopy }
-                ranlib	{ set program ranlib }
-                strings	{ set program strings }
-                strip	{
-                    set program strip
-                    set destopt "-o $destopt"
-                }
-                default	{
-                    perror "unrecognized PROG option $opts(PROG) in $file.d"
-                    unresolved $testname
-                    continue
-                }
-            }
+	if { $cmdret == 0 && $opts(PROG) != "" } {
+	    set destopt ${copyfile}.o
+	    switch -- $opts(PROG) {
+		ar	{ set program ar }
+		elfedit	{
+		    set program elfedit
+		    set destopt ""
+		}
+		nm	{ set program nm }
+		objcopy	{ set program objcopy }
+		ranlib	{ set program ranlib }
+		strings	{ set program strings }
+		strip	{
+		    set program strip
+		    set destopt "-o $destopt"
+		}
+		default	{
+		    perror "unrecognized PROG option $opts(PROG) in $file.d"
+		    unresolved $testname
+		    continue
+		}
+	    }
 
-            set progopts1 $opts($program)
-            eval set progopts \$[string toupper $program]FLAGS
-            eval set binary \$[string toupper $program]
+	    set progopts1 $opts($program)
+	    eval set progopts \$[string toupper $program]FLAGS
+	    eval set binary \$[string toupper $program]
 
-            if { ![is_remote host] && [which $binary] == 0 } {
-                untested $testname
-                continue
-            }
+	    if { ![is_remote host] && [which $binary] == 0 } {
+		untested $testname
+		continue
+	    }
 
-            verbose "running $binary $progopts $progopts1" 3
-            set cmd "$binary $progopts $progopts1 $objfile $destopt"
+	    verbose "running $binary $progopts $progopts1" 3
+	    set cmd "$binary $progopts $progopts1 $objfile $destopt"
 
-            # Ensure consistent sorting of symbols
-            if {[info exists env(LC_ALL)]} {
-                set old_lc_all $env(LC_ALL)
-            }
-            set env(LC_ALL) "C"
-            send_log "$cmd\n"
-            set cmdret [remote_exec host [concat sh -c [list "$cmd 2>dump.tmp"]] "" "/dev/null"]
-            set cmdret [lindex $cmdret 0]
-            remote_upload host "dump.tmp"
-            append comp_output [prune_warnings [file_contents "dump.tmp"]]
-            remote_file host delete "dump.tmp"
-            remote_file build delete "dump.tmp"
-            if {[info exists old_lc_all]} {
-                set env(LC_ALL) $old_lc_all
-            } else {
-                unset env(LC_ALL)
-            }
-            if { $destopt != "" } {
-                set objfile ${copyfile}.o
-            }
-        }
+	    # Ensure consistent sorting of symbols
+	    if {[info exists env(LC_ALL)]} {
+		set old_lc_all $env(LC_ALL)
+	    }
+	    set env(LC_ALL) "C"
+	    send_log "$cmd\n"
+	    set cmdret [remote_exec host [concat sh -c [list "$cmd 2>dump.tmp"]] "" "/dev/null"]
+	    set cmdret [lindex $cmdret 0]
+	    remote_upload host "dump.tmp"
+	    append comp_output [prune_warnings [file_contents "dump.tmp"]]
+	    remote_file host delete "dump.tmp"
+	    remote_file build delete "dump.tmp"
+	    if {[info exists old_lc_all]} {
+		set env(LC_ALL) $old_lc_all
+	    } else {
+		unset env(LC_ALL)
+	    }
+	    if { $destopt != "" } {
+		set objfile ${copyfile}.o
+	    }
+	}
 
-        set want_out(source) ""
-        set want_out(terminal) 0
-        if { $err_warn } {
-            if { $opts(error) != "" || $opts(error_output) != "" } {
-                set want_out(terminal) 1
-            }
+	set want_out(source) ""
+	set want_out(terminal) 0
+	if { $err_warn } {
+	    if { $opts(error) != "" || $opts(error_output) != "" } {
+		set want_out(terminal) 1
+	    }
 
-            if { $opts(error) != "" || $opts(warning) != "" } {
-                set want_out(source) "regex"
-                if { $opts(error) != "" } {
-                    set want_out(regex) $opts(error)
-                } else {
-                    set want_out(regex) $opts(warning)
-                }
-            } else {
-                set want_out(source) "file"
-                if { $opts(error_output) != "" } {
-                    set want_out(file) $opts(error_output)
-                } else {
-                    set want_out(file) $opts(warning_output)
-                }
-            }
-        }
+	    if { $opts(error) != "" || $opts(warning) != "" } {
+		set want_out(source) "regex"
+		if { $opts(error) != "" } {
+		    set want_out(regex) $opts(error)
+		} else {
+		    set want_out(regex) $opts(warning)
+		}
+	    } else {
+		set want_out(source) "file"
+		if { $opts(error_output) != "" } {
+		    set want_out(file) $opts(error_output)
+		} else {
+		    set want_out(file) $opts(warning_output)
+		}
+	    }
+	}
 
-        regsub "\n$" $comp_output "" comp_output
-        if { $cmdret != 0 || $comp_output != "" || $want_out(source) != "" } {
-            set exitstat "succeeded"
-            if { $cmdret != 0 } { set exitstat "failed" }
+	set comp_output [prune_dump_output $comp_output]
+	if { $cmdret != 0 || $comp_output != "" || $want_out(source) != "" } {
+	    set exitstat "succeeded"
+	    if { $cmdret != 0 } { set exitstat "failed" }
 
-            if { $want_out(source) == "regex" } {
-                verbose -log "$exitstat with: <$comp_output>, expected: <$want_out(regex)>"
-            } elseif { $want_out(source) == "file" } {
-                verbose -log "$exitstat with: <$comp_output>, expected in file $want_out(file)"
-                set_file_contents "tmpdir/ld.messages" "$comp_output"
-            } else {
-                verbose -log "$exitstat with: <$comp_output>, no expected output"
-            }
+	    if { $want_out(source) == "regex" } {
+		verbose -log "$exitstat with: <$comp_output>, expected: <$want_out(regex)>"
+	    } elseif { $want_out(source) == "file" } {
+		verbose -log "$exitstat with: <$comp_output>, expected in file $want_out(file)"
+		set_file_contents "tmpdir/ld.messages" "$comp_output"
+	    } else {
+		verbose -log "$exitstat with: <$comp_output>, no expected output"
+	    }
 
-            if { (($want_out(source) == "") == ($comp_output == "")) \
-                     && (($cmdret == 0) == ($want_out(terminal) == 0)) \
-                     && ((($want_out(source) == "regex") \
-                              && [regexp -- $want_out(regex) $comp_output]) \
-                             || (($want_out(source) == "file") \
-                                     && (![regexp_diff "tmpdir/ld.messages" "$srcdir/$subdir/$want_out(file)"]))) } {
-                # We have the expected output.
-                if { $want_out(terminal) || $dumpprogram == "" } {
-                    pass $testname
-                    continue
-                }
-            } else {
-                fail $testname
-                continue
-            }
-        }
+	    if { (($want_out(source) == "") == ($comp_output == "")) \
+		     && (($cmdret == 0) == ($want_out(terminal) == 0)) \
+		     && ((($want_out(source) == "regex") \
+			      && [regexp -- $want_out(regex) $comp_output]) \
+			     || (($want_out(source) == "file") \
+				     && (![regexp_diff "tmpdir/ld.messages" "$srcdir/$subdir/$want_out(file)"]))) } {
+		# We have the expected output.
+		if { $want_out(terminal) || $dumpprogram == "" } {
+		    pass $testname
+		    continue
+		}
+	    } else {
+		fail $testname
+		continue
+	    }
+	}
 
-        # We must not have expected failure if we get here.
-        if { $opts(error) != "" } {
-            fail $testname
-            continue
-        }
+	# We must not have expected failure if we get here.
+	if { $want_out(terminal) } {
+	    fail $testname
+	    continue
+	}
 
-        if { $opts(map) != "" } then {
-            # Check the map file matches.
-            set map_pattern_file $srcdir/$subdir/$opts(map)
-            verbose -log "Compare '$mapfile' against '$map_pattern_file'"
-            if { [regexp_diff $mapfile $map_pattern_file] } then {
-                fail "$testname (map file check)"
-            } else {
-                pass "$testname (map file check)"
-            }
+	if { $opts(map) != "" } then {
+	    # Check the map file matches.
+	    set map_pattern_file $srcdir/$subdir/$opts(map)
+	    verbose -log "Compare '$mapfile' against '$map_pattern_file'"
+	    if { [regexp_diff $mapfile $map_pattern_file] } then {
+		fail "$testname (map file check)"
+	    } else {
+		pass "$testname (map file check)"
+	    }
 
-            if { $dumpprogram == "" } then {
-                continue
-            }
-        }
+	    if { $dumpprogram == "" } then {
+		continue
+	    }
+	}
 
-        set progopts1 $opts($dumpprogram)
-        eval set progopts \$[string toupper $dumpprogram]FLAGS
-        eval set binary \$[string toupper $dumpprogram]
+	set progopts1 $opts($dumpprogram)
+	eval set progopts \$[string toupper $dumpprogram]FLAGS
+	eval set binary \$[string toupper $dumpprogram]
 
-        if { ![is_remote host] && [which $binary] == 0 } {
-            untested $testname
-            continue
-        }
+	if { ![is_remote host] && [which $binary] == 0 } {
+	    untested $testname
+	    continue
+	}
 
-        # For objdump of gas output, automatically translate standard section names
-        set sect_names ""
-        if { !$run_ld && $dumpprogram == "objdump" \
-                 && $opts(section_subst) != "no" \
-                 && ![string match "*-b binary*" $progopts1] } {
-            set sect_names [get_standard_section_names]
-            if { $sect_names != ""} {
-                regsub -- "\\.text" $progopts1 "[lindex $sect_names 0]" progopts1
-                regsub -- "\\.data" $progopts1 "[lindex $sect_names 1]" progopts1
-                regsub -- "\\.bss"  $progopts1 "[lindex $sect_names 2]" progopts1
-            }
-        }
+	# For objdump of gas output, automatically translate standard section names
+	set sect_names ""
+	if { !$run_ld && $dumpprogram == "objdump" \
+		 && $opts(section_subst) != "no" \
+		 && ![string match "*-b binary*" $progopts1] } {
+	    set sect_names [get_standard_section_names]
+	    if { $sect_names != ""} {
+		regsub -- "\\.text" $progopts1 "[lindex $sect_names 0]" progopts1
+		regsub -- "\\.data" $progopts1 "[lindex $sect_names 1]" progopts1
+		regsub -- "\\.bss"  $progopts1 "[lindex $sect_names 2]" progopts1
+	    }
+	}
 
-        if { $progopts1 == "" } { set $progopts1 "-r" }
-        verbose "running $binary $progopts $progopts1" 3
+	if { $progopts1 == "" } { set $progopts1 "-r" }
+	verbose "running $binary $progopts $progopts1" 3
 
-        set cmd "$binary $progopts $progopts1 $objfile > $dumpfile"
+	set cmd "$binary $progopts $progopts1 $objfile > $dumpfile"
 
-        # Ensure consistent sorting of symbols
-        if {[info exists env(LC_ALL)]} {
-            set old_lc_all $env(LC_ALL)
-        }
-        set env(LC_ALL) "C"
-        send_log "$cmd\n"
-        set cmdret [remote_exec host [concat sh -c [list "$cmd 2>dump.tmp"]] "" "/dev/null"]
-        set cmdret [lindex $cmdret 0]
-        remote_upload host "dump.tmp"
-        set comp_output [prune_warnings [file_contents "dump.tmp"]]
-        remote_file host delete "dump.tmp"
-        remote_file build delete "dump.tmp"
-        if {[info exists old_lc_all]} {
-            set env(LC_ALL) $old_lc_all
-        } else {
-            unset env(LC_ALL)
-        }
-        if { $cmdret != 0 || $comp_output != "" } {
-            send_log "exited abnormally with $cmdret, output:$comp_output\n"
-            fail $testname
-            continue
-        }
+	# Ensure consistent sorting of symbols
+	if {[info exists env(LC_ALL)]} {
+	    set old_lc_all $env(LC_ALL)
+	}
+	set env(LC_ALL) "C"
+	send_log "$cmd\n"
+	set cmdret [remote_exec host [concat sh -c [list "$cmd 2>dump.tmp"]] "" "/dev/null"]
+	set cmdret [lindex $cmdret 0]
+	remote_upload host "dump.tmp"
+	set comp_output [prune_warnings [file_contents "dump.tmp"]]
+	remote_file host delete "dump.tmp"
+	remote_file build delete "dump.tmp"
+	if {[info exists old_lc_all]} {
+	    set env(LC_ALL) $old_lc_all
+	} else {
+	    unset env(LC_ALL)
+	}
+	if { $cmdret != 0 || $comp_output != "" } {
+	    send_log "exited abnormally with $cmdret, output:$comp_output\n"
+	    fail $testname
+	    continue
+	}
 
-        if { $verbose > 2 } then { verbose "output is [file_contents $dumpfile]" 3 }
+	if { $verbose > 2 } then { verbose "output is [file_contents $dumpfile]" 3 }
 
-        # Create the substition list for objdump output.
-        set regexp_subst ""
-        if { $sect_names != "" } {
-            set regexp_subst [list "\\\\?\\.text" [lindex $sect_names 0] \
-                                  "\\\\?\\.data" [lindex $sect_names 1] \
-                                  "\\\\?\\.bss" [lindex $sect_names 2] ]
-        }
+	# Create the substition list for objdump output.
+	set regexp_subst ""
+	if { $sect_names != "" } {
+	    set regexp_subst [list "\\\\?\\.text" [lindex $sect_names 0] \
+				  "\\\\?\\.data" [lindex $sect_names 1] \
+				  "\\\\?\\.bss" [lindex $sect_names 2] ]
+	}
 
-        if { [regexp_diff $dumpfile "${dfile}" $regexp_subst] } then {
-            fail $testname
-            if { $verbose == 2 } then { verbose "output is [file_contents $dumpfile]" 2 }
-            continue
-        }
+	if { [regexp_diff $dumpfile "${dfile}" $regexp_subst] } then {
+	    fail $testname
+	    if { $verbose == 2 } then { verbose "output is [file_contents $dumpfile]" 2 }
+	    continue
+	}
 
-        pass $testname
+	pass $testname
     }
 }
 

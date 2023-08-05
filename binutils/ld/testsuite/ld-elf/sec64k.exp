@@ -1,5 +1,5 @@
 # Expect script for tests for >64k sections
-#   Copyright (C) 2002-2021 Free Software Foundation, Inc.
+#   Copyright (C) 2002-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -135,7 +135,7 @@ if { ![istarget "m32r-*-*"] } then {
 	puts $ofd "#as: -ez80-adl"
     }
     puts $ofd "#ld: -r"
-    puts $ofd "#readelf: -W -Ss"
+    puts $ofd "#readelf: -W -wN -Ss"
     puts $ofd "There are 680.. section headers.*:"
     puts $ofd "#..."
     puts $ofd "  \\\[ 0\\\] .* 680\[0-9\]\[0-9\]\[ \]+0\[ \]+0"
@@ -170,12 +170,13 @@ if [catch { set ofd [open "tmpdir/$test2.d" w] } x] {
 
 # too big for avr, d10v and msp
 # lack of fancy orphan section handling causes overlap on fr30 and iq2000
-# lm32 complains about relocations in read-only sections
+# bfin and lm32 complain about relocations in read-only sections
 if { ![istarget "d10v-*-*"]
      && ![istarget "avr-*-*"]
      && ![istarget "msp*-*-*"]
      && ![istarget "fr30-*-*"] 
      && ![istarget "iq2000-*-*"]
+     && ![istarget "bfin-*-linux*"]
      && ![istarget "lm32-*-linux*"]
      && ![istarget "pru-*-*"] } {
     foreach sfile $sfiles { puts $ofd "#source: $sfile" }
@@ -190,7 +191,7 @@ if { ![istarget "d10v-*-*"]
     if { [istarget "z80-*-*"] } then {
 	puts $ofd "#as: -ez80-adl"
     }
-    puts $ofd "#readelf: -W -Ss"
+    puts $ofd "#readelf: -W -wN -Ss"
     puts $ofd "There are 660.. section headers.*:"
     puts $ofd "#..."
     puts $ofd "  \\\[ 0\\\] .* 660..\[ \]+0\[ \]+0"
@@ -199,7 +200,7 @@ if { ![istarget "d10v-*-*"]
     puts $ofd "  \\\[65280\\\] \\.foo\\.\[0-9\]+ .*"
     puts $ofd "#..."
     if { [is_elf_unused_section_symbols ] } {
-	puts $ofd " 660..: \[0-9a-f\]+\[ \]+0\[ \]+SECTION\[ \]+LOCAL\[ \]+DEFAULT\[ \]+660.. "
+	puts $ofd " 660..: \[0-9a-f\]+\[ \]+0\[ \]+SECTION\[ \]+LOCAL\[ \]+DEFAULT\[ \]+660...*"
 	puts $ofd "#..."
 	puts $ofd " 660..: \[0-9a-f\]+\[ \]+0\[ \]+NOTYPE\[ \]+LOCAL\[ \]+DEFAULT\[ \]+\[0-9\] bar_1$"
 	puts $ofd "#..."

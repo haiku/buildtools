@@ -2,7 +2,7 @@
 
 # discard_locals_test.sh -- test that local symbols are discarded.
 
-# Copyright (C) 2009-2021 Free Software Foundation, Inc.
+# Copyright (C) 2009-2023 Free Software Foundation, Inc.
 # Written by Doug Kwan <dougkwan@google.com>
 
 # This file is part of gold.
@@ -32,7 +32,7 @@ check_discarded()
     file=$1
     sym=$2
 
-    found=`egrep $sym $file`
+    found=`$EGREP $sym $file`
     if test -n "$found"; then
 	echo "These local symbols are not discarded in $file:"
 	echo "$found"
@@ -45,7 +45,7 @@ check_non_discarded()
     file=$1
     sym=$2
 
-    found=`egrep $sym $file`
+    found=`$EGREP $sym $file`
     if test -z "$found"; then
 	echo "This local symbol is discarded in $file:"
 	echo "$2"

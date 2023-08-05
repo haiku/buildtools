@@ -1,5 +1,5 @@
 /* CGEN generic disassembler support code.
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2023 Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -39,7 +39,10 @@ static void		 add_insn_to_hash_chain (CGEN_INSN_LIST *,
 static int
 count_decodable_bits (const CGEN_INSN *insn)
 {
-  unsigned mask = CGEN_INSN_BASE_MASK (insn);
+  CGEN_INSN_LGUINT mask = CGEN_INSN_BASE_MASK (insn);
+#if GCC_VERSION >= 3004
+  return __builtin_popcount (mask);
+#else
   int bits = 0;
   unsigned m;
 
@@ -49,6 +52,7 @@ count_decodable_bits (const CGEN_INSN *insn)
 	++bits;
     }
   return bits;
+#endif
 }
 
 /* Add an instruction to the hash chain.  */
@@ -149,8 +153,9 @@ hash_insn_list (CGEN_CPU_DESC cd,
   for (ilist = insns; ilist != NULL; ilist = ilist->next, ++ hentbuf)
     {
       unsigned int hash;
-      char buf[4];
+      char buf[8];
       unsigned long value;
+      size_t size;
 
       if (! (* cd->dis_hash_p) (ilist->insn))
 	continue;
@@ -159,10 +164,9 @@ hash_insn_list (CGEN_CPU_DESC cd,
 	 to hash on, so set both up.  */
 
       value = CGEN_INSN_BASE_VALUE (ilist->insn);
-      bfd_put_bits((bfd_vma) value,
-		   buf,
-		   CGEN_INSN_MASK_BITSIZE (ilist->insn),
-		   big_p);
+      size = CGEN_INSN_MASK_BITSIZE (ilist->insn);
+      OPCODES_ASSERT (size <= sizeof (buf) * 8);
+      bfd_put_bits ((bfd_vma) value, buf, size, big_p);
       hash = (* cd->dis_hash) (buf, value);
       add_insn_to_hash_chain (hentbuf, ilist->insn, htable, hash);
     }

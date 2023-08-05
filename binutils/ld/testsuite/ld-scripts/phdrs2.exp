@@ -1,5 +1,5 @@
 # Test PHDRS with empty sections in a linker script.
-# Copyright (C) 2005-2021 Free Software Foundation, Inc.
+# Copyright (C) 2005-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -20,7 +20,6 @@
 
 # PHDRS2 is only meaningful for ELF.
 if { !([istarget *-*-sysv4*]
-       || [istarget *-*-unixware*]
        || [istarget *-*-elf*]
        || [istarget *-*-eabi*]
        || [istarget hppa*64*-*-hpux*]
@@ -43,7 +42,7 @@ if { [istarget spu*-*-*] } {
 }
 
 if ![ld_assemble $as $srcdir/$subdir/phdrs2.s tmpdir/phdrs2.o] {
-    unresolved $testname
+    unsupported $testname
     return
 }
 
@@ -54,11 +53,6 @@ set ldopt "$ldopt -T $srcdir/$subdir/phdrs2.t tmpdir/phdrs2.o"
 if ![ld_link $ld tmpdir/phdrs2 $ldopt] {
     fail $testname
 } else {
-    if {![is_remote host] && [which $objdump] == 0} {
-	unresolved $testname
-	return
-    }
-
     set exec_output [run_host_cmd "$objdump" "--private-headers tmpdir/phdrs2"]
     set exec_output [prune_warnings $exec_output]
     verbose -log $exec_output

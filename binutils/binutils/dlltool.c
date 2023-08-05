@@ -1,5 +1,5 @@
 /* dlltool.c -- tool to generate stuff for PE style DLLs
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
+   Copyright (C) 1995-2023 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -348,14 +348,15 @@ typedef struct iheadt
 static iheadtype *import_list = NULL;
 static char *as_name = NULL;
 static char * as_flags = "";
-static char *tmp_prefix;
+static char *tmp_prefix = NULL;
 static int no_idata4;
 static int no_idata5;
 static char *exp_name;
 static char *imp_name;
 static char *delayimp_name;
 static char *identify_imp_name;
-static bfd_boolean identify_strict;
+static bool identify_strict;
+static bool deterministic = DEFAULT_AR_DETERMINISTIC;
 
 /* Types used to implement a linked list of dllnames associated
    with the specified import lib. Used by the identify_* code.
@@ -376,14 +377,14 @@ typedef struct dll_name_list_t
 /* Types used to pass data to iterator functions.  */
 typedef struct symname_search_data_t
 {
-  const char * symname;
-  bfd_boolean  found;
+  const char *symname;
+  bool found;
 } symname_search_data_type;
 
 typedef struct identify_data_t
 {
-   dll_name_list_type * list;
-   bfd_boolean          ms_style_implib;
+   dll_name_list_type *list;
+   bool ms_style_implib;
 } identify_data_type;
 
 
@@ -403,23 +404,23 @@ static int dontdeltemps = 0;
 
 /* TRUE if we should export all symbols.  Otherwise, we only export
    symbols listed in .drectve sections or in the def file.  */
-static bfd_boolean export_all_symbols;
+static bool export_all_symbols;
 
 /* TRUE if we should exclude the symbols in DEFAULT_EXCLUDES when
    exporting all symbols.  */
-static bfd_boolean do_default_excludes = TRUE;
+static bool do_default_excludes = true;
 
-static bfd_boolean use_nul_prefixed_import_tables = FALSE;
+static bool use_nul_prefixed_import_tables = false;
 
 /* Default symbols to exclude when exporting all the symbols.  */
 static const char *default_excludes = "DllMain@12,DllEntryPoint@0,impure_ptr";
 
 /* TRUE if we should add __imp_<SYMBOL> to import libraries for backward
    compatibility to old Cygwin releases.  */
-static bfd_boolean create_compat_implib;
+static bool create_compat_implib;
 
 /* TRUE if we have to write PE+ import libraries.  */
-static bfd_boolean create_for_pep;
+static bool create_for_pep;
 
 static char *def_file;
 
@@ -439,6 +440,11 @@ static const char *mname = "arm";
 
 #ifdef DLLTOOL_DEFAULT_ARM_WINCE
 static const char *mname = "arm-wince";
+#endif
+
+#ifdef DLLTOOL_DEFAULT_AARCH64
+/* arm64 rather than aarch64 to match llvm-dlltool */
+static const char *mname = "arm64";
 #endif
 
 #ifdef DLLTOOL_DEFAULT_I386
@@ -559,6 +565,14 @@ static const unsigned char mcore_le_jtab[] =
   0x00, 0x00, 0x00, 0x00 /* <address>      */
 };
 
+static const unsigned char aarch64_jtab[] =
+{
+  0x10, 0x00, 0x00, 0x90, /* adrp x16, 0        */
+  0x10, 0x02, 0x00, 0x91, /* add x16, x16, #0x0 */
+  0x10, 0x02, 0x40, 0xf9, /* ldr x16, [x16]     */
+  0x00, 0x02, 0x1f, 0xd6  /* br x16             */
+};
+
 static const char i386_trampoline[] =
   "\tpushl %%ecx\n"
   "\tpushl %%edx\n"
@@ -569,20 +583,48 @@ static const char i386_trampoline[] =
   "\tpopl %%ecx\n"
   "\tjmp *%%eax\n";
 
+/* Save integer arg regs in parameter space reserved by our caller
+   above the return address.  Allocate space for six fp arg regs plus
+   parameter space possibly used by __delayLoadHelper2 plus alignment.
+   We enter with the stack offset from 16-byte alignment by the return
+   address, so allocate 96 + 32 + 8 = 136 bytes.  Note that only the
+   first four xmm regs are used to pass fp args, but the first six
+   vector ymm (zmm too?) are used to pass vector args.  We are
+   assuming that volatile vector regs are not modified inside
+   __delayLoadHelper2.  However, it is known that at least xmm0 and
+   xmm1 are trashed in some versions of Microsoft dlls, and if xmm4 or
+   xmm5 are also used then that would trash the lower bits of ymm4 and
+   ymm5.  If it turns out that vector insns with a vex prefix are used
+   then we'll need to save ymm0-5 here but that can't be done without
+   first testing cpuid and xcr0.  */
 static const char i386_x64_trampoline[] =
-  "\tpushq %%rcx\n"
-  "\tpushq %%rdx\n"
-  "\tpushq %%r8\n"
-  "\tpushq %%r9\n"
-  "\tsubq  $40, %%rsp\n"
-  "\tmovq  %%rax, %%rdx\n"
-  "\tleaq  __DELAY_IMPORT_DESCRIPTOR_%s(%%rip), %%rcx\n"
+  "\tsubq $136, %%rsp\n"
+  "\t.seh_stackalloc 136\n"
+  "\t.seh_endprologue\n"
+  "\tmovq %%rcx, 136+8(%%rsp)\n"
+  "\tmovq %%rdx, 136+16(%%rsp)\n"
+  "\tmovq %%r8, 136+24(%%rsp)\n"
+  "\tmovq %%r9, 136+32(%%rsp)\n"
+  "\tmovaps %%xmm0, 32(%%rsp)\n"
+  "\tmovaps %%xmm1, 48(%%rsp)\n"
+  "\tmovaps %%xmm2, 64(%%rsp)\n"
+  "\tmovaps %%xmm3, 80(%%rsp)\n"
+  "\tmovaps %%xmm4, 96(%%rsp)\n"
+  "\tmovaps %%xmm5, 112(%%rsp)\n"
+  "\tmovq %%rax, %%rdx\n"
+  "\tleaq __DELAY_IMPORT_DESCRIPTOR_%s(%%rip), %%rcx\n"
   "\tcall __delayLoadHelper2\n"
-  "\taddq  $40, %%rsp\n"
-  "\tpopq %%r9\n"
-  "\tpopq %%r8\n"
-  "\tpopq %%rdx\n"
-  "\tpopq %%rcx\n"
+  "\tmovq 136+8(%%rsp), %%rcx\n"
+  "\tmovq 136+16(%%rsp), %%rdx\n"
+  "\tmovq 136+24(%%rsp), %%r8\n"
+  "\tmovq 136+32(%%rsp), %%r9\n"
+  "\tmovaps 32(%%rsp), %%xmm0\n"
+  "\tmovaps 48(%%rsp), %%xmm1\n"
+  "\tmovaps 64(%%rsp), %%xmm2\n"
+  "\tmovaps 80(%%rsp), %%xmm3\n"
+  "\tmovaps 96(%%rsp), %%xmm4\n"
+  "\tmovaps 112(%%rsp), %%xmm5\n"
+  "\taddq $136, %%rsp\n"
   "\tjmp *%%rax\n";
 
 struct mac
@@ -609,6 +651,7 @@ struct mac
   int how_dljtab_roff1; /* Offset for the ind 32 reloc into idata 5.  */
   int how_dljtab_roff2; /* Offset for the ind 32 reloc into idata 5.  */
   int how_dljtab_roff3; /* Offset for the ind 32 reloc into idata 5.  */
+  bool how_seh;
   const char *trampoline;
 };
 
@@ -622,7 +665,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "-mapcs-32",
     "pe-arm-little", bfd_arch_arm,
     arm_jtab, sizeof (arm_jtab), 8,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
   {
@@ -631,7 +674,7 @@ mtable[] =
     "jmp *", ".global", ".space", ".align\t2",".align\t4", "",
     "pe-i386",bfd_arch_i386,
     i386_jtab, sizeof (i386_jtab), 2,
-    i386_dljtab, sizeof (i386_dljtab), 2, 7, 12, i386_trampoline
+    i386_dljtab, sizeof (i386_dljtab), 2, 7, 12, false, i386_trampoline
   }
   ,
   {
@@ -641,7 +684,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "-mthumb-interwork",
     "pe-arm-little", bfd_arch_arm,
     thumb_jtab, sizeof (thumb_jtab), 12,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
 #define MARM_INTERWORK 3
@@ -651,7 +694,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "-mthumb-interwork",
     "pe-arm-little", bfd_arch_arm,
     arm_interwork_jtab, sizeof (arm_interwork_jtab), 12,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
   {
@@ -661,7 +704,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "",
     "pe-mcore-big", bfd_arch_mcore,
     mcore_be_jtab, sizeof (mcore_be_jtab), 8,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
   {
@@ -671,7 +714,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "-EL",
     "pe-mcore-little", bfd_arch_mcore,
     mcore_le_jtab, sizeof (mcore_le_jtab), 8,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
   {
@@ -681,7 +724,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "",
     "elf32-mcore-big", bfd_arch_mcore,
     mcore_be_jtab, sizeof (mcore_be_jtab), 8,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
   {
@@ -691,7 +734,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "-EL",
     "elf32-mcore-little", bfd_arch_mcore,
     mcore_le_jtab, sizeof (mcore_le_jtab), 8,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
   {
@@ -701,7 +744,7 @@ mtable[] =
     ".global", ".space", ".align\t2",".align\t4", "-mapcs-32",
     "pe-arm-wince-little", bfd_arch_arm,
     arm_jtab, sizeof (arm_jtab), 8,
-    0, 0, 0, 0, 0, 0
+    0, 0, 0, 0, 0, false, 0
   }
   ,
   {
@@ -710,10 +753,19 @@ mtable[] =
     "jmp *", ".global", ".space", ".align\t2",".align\t4", "",
     "pe-x86-64",bfd_arch_i386,
     i386_jtab, sizeof (i386_jtab), 2,
-    i386_x64_dljtab, sizeof (i386_x64_dljtab), 2, 9, 14, i386_x64_trampoline
+    i386_x64_dljtab, sizeof (i386_x64_dljtab), 2, 9, 14, true, i386_x64_trampoline
   }
   ,
-  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+  {
+#define MAARCH64 10
+    "arm64", ".byte", ".short", ".long", ".asciz", "//",
+    "bl ", ".global", ".space", ".balign\t2", ".balign\t4", "",
+    "pe-aarch64-little", bfd_arch_aarch64,
+    aarch64_jtab, sizeof (aarch64_jtab), 0,
+    0, 0, 0, 0, 0, false, 0
+  }
+  ,
+  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 };
 
 typedef struct dlist
@@ -759,7 +811,7 @@ static void run (const char *, char *);
 static void scan_drectve_symbols (bfd *);
 static void scan_filtered_symbols (bfd *, void *, long, unsigned int);
 static void add_excludes (const char *);
-static bfd_boolean match_exclude (const char *);
+static bool match_exclude (const char *);
 static void set_default_excludes (void);
 static long filter_symbols (bfd *, void *, long, unsigned int);
 static void scan_all_symbols (bfd *);
@@ -790,7 +842,7 @@ static void identify_dll_for_implib (void);
 static void identify_search_archive
   (bfd *, void (*) (bfd *, bfd *, void *),  void *);
 static void identify_search_member (bfd *, bfd *, void *);
-static bfd_boolean identify_process_section_p (asection *, bfd_boolean);
+static bool identify_process_section_p (asection *, bool);
 static void identify_search_section (bfd *, asection *, void *);
 static void identify_member_contains_symname (bfd *, bfd  *, void *);
 
@@ -860,6 +912,7 @@ rvaafter (int mach)
     case MMCORE_ELF:
     case MMCORE_ELF_LE:
     case MARM_WINCE:
+    case MAARCH64:
       break;
     default:
       /* xgettext:c-format */
@@ -884,6 +937,7 @@ rvabefore (int mach)
     case MMCORE_ELF:
     case MMCORE_ELF_LE:
     case MARM_WINCE:
+    case MAARCH64:
       return ".rva\t";
     default:
       /* xgettext:c-format */
@@ -906,6 +960,7 @@ asm_prefix (int mach, const char *name)
     case MMCORE_ELF:
     case MMCORE_ELF_LE:
     case MARM_WINCE:
+    case MAARCH64:
       break;
     case M386:
     case MX86:
@@ -947,6 +1002,7 @@ asm_prefix (int mach, const char *name)
 #define HOW_JTAB_ROFF2		(delay ? mtable[machine].how_dljtab_roff2 : 0)
 #define HOW_JTAB_ROFF3		(delay ? mtable[machine].how_dljtab_roff3 : 0)
 #define ASM_SWITCHES		mtable[machine].how_default_as_switches
+#define HOW_SEH			mtable[machine].how_seh
 
 static char **oav;
 
@@ -986,13 +1042,11 @@ static int d_nforwards = 0;	/* Number of forwarded exports.  */
 static int d_is_dll;
 static int d_is_exe;
 
-int
+void
 yyerror (const char * err ATTRIBUTE_UNUSED)
 {
   /* xgettext:c-format */
   non_fatal (_("Syntax error in def file %s:%d"), def_file, linenumber);
-
-  return 0;
 }
 
 void
@@ -1266,8 +1320,8 @@ run (const char *what, char *args)
   int pid, wait_status;
   int i;
   const char **argv;
-  char *errmsg_fmt, *errmsg_arg;
-  char *temp_base = choose_temp_base ();
+  char *errmsg_fmt = NULL, *errmsg_arg = NULL;
+  char *temp_base = make_temp_file ("");
 
   inform (_("run: %s %s"), what, args);
 
@@ -1363,7 +1417,7 @@ scan_drectve_symbols (bfd *abfd)
   while (p < e)
     {
       if (p[0] == '-'
-	  && CONST_STRNEQ (p, "-export:"))
+	  && startswith (p, "-export:"))
 	{
 	  char * name;
 	  char * c;
@@ -1395,7 +1449,7 @@ scan_drectve_symbols (bfd *abfd)
 	      char *tag_start = ++p;
 	      while (p < e && *p != ' ' && *p != '-')
 		p++;
-	      if (CONST_STRNEQ (tag_start, "data"))
+	      if (startswith (tag_start, "data"))
 		flags &= ~BSF_FUNCTION;
 	    }
 
@@ -1441,7 +1495,7 @@ scan_filtered_symbols (bfd *abfd, void *minisyms, long symcount,
       asymbol *sym;
       const char *symbol_name;
 
-      sym = bfd_minisymbol_to_symbol (abfd, FALSE, from, store);
+      sym = bfd_minisymbol_to_symbol (abfd, false, from, store);
       if (sym == NULL)
 	bfd_fatal (bfd_get_filename (abfd));
 
@@ -1500,15 +1554,15 @@ add_excludes (const char *new_excludes)
 
 /* See if STRING is on the list of symbols to exclude.  */
 
-static bfd_boolean
+static bool
 match_exclude (const char *string)
 {
   struct string_list *excl_item;
 
   for (excl_item = excludes; excl_item; excl_item = excl_item->next)
     if (strcmp (string, excl_item->string) == 0)
-      return TRUE;
-  return FALSE;
+      return true;
+  return false;
 }
 
 /* Add the default list of symbols to exclude.  */
@@ -1540,7 +1594,7 @@ filter_symbols (bfd *abfd, void *minisyms, long symcount, unsigned int size)
       int keep = 0;
       asymbol *sym;
 
-      sym = bfd_minisymbol_to_symbol (abfd, FALSE, (const void *) from, store);
+      sym = bfd_minisymbol_to_symbol (abfd, false, (const void *) from, store);
       if (sym == NULL)
 	bfd_fatal (bfd_get_filename (abfd));
 
@@ -1585,7 +1639,7 @@ scan_all_symbols (bfd *abfd)
       return;
     }
 
-  symcount = bfd_read_minisymbols (abfd, FALSE, &minisyms, &size);
+  symcount = bfd_read_minisymbols (abfd, false, &minisyms, &size);
   if (symcount < 0)
     bfd_fatal (bfd_get_filename (abfd));
 
@@ -2471,6 +2525,8 @@ make_one_lib_file (export_type *exp, int i, int delay)
 	case TEXT:
 	  if (! exp->data)
 	    {
+	      unsigned int rpp_len;
+
 	      si->size = HOW_JTAB_SIZE;
 	      si->data = xmalloc (HOW_JTAB_SIZE);
 	      memcpy (si->data, HOW_JTAB, HOW_JTAB_SIZE);
@@ -2478,7 +2534,12 @@ make_one_lib_file (export_type *exp, int i, int delay)
 	      /* Add the reloc into idata$5.  */
 	      rel = xmalloc (sizeof (arelent));
 
-	      rpp = xmalloc (sizeof (arelent *) * (delay ? 4 : 2));
+	      rpp_len = delay ? 4 : 2;
+
+	      if (machine == MAARCH64)
+		rpp_len++;
+
+	      rpp = xmalloc (sizeof (arelent *) * rpp_len);
 	      rpp[0] = rel;
 	      rpp[1] = 0;
 
@@ -2504,6 +2565,22 @@ make_one_lib_file (export_type *exp, int i, int delay)
 						      BFD_RELOC_32_PCREL);
 		  rel->sym_ptr_ptr = iname_pp;
 		}
+	      else if (machine == MAARCH64)
+		{
+		  arelent *rel_add;
+
+		  rel->howto = bfd_reloc_type_lookup (abfd, BFD_RELOC_AARCH64_ADR_HI21_NC_PCREL);
+		  rel->sym_ptr_ptr = secdata[IDATA5].sympp;
+
+		  rel_add = xmalloc (sizeof (arelent));
+		  rel_add->address = 4;
+		  rel_add->howto = bfd_reloc_type_lookup (abfd, BFD_RELOC_AARCH64_ADD_LO12);
+		  rel_add->sym_ptr_ptr = secdata[IDATA5].sympp;
+		  rel_add->addend = 0;
+
+		  rpp[rpp_len - 2] = rel_add;
+		  rpp[rpp_len - 1] = 0;
+		}
 	      else
 		{
 		  rel->howto = bfd_reloc_type_lookup (abfd, BFD_RELOC_32);
@@ -2524,7 +2601,7 @@ make_one_lib_file (export_type *exp, int i, int delay)
 	        }
 
 	      sec->orelocation = rpp;
-	      sec->reloc_count = delay ? 3 : 1;
+	      sec->reloc_count = rpp_len - 1;
 	    }
 	  break;
 
@@ -2789,8 +2866,12 @@ make_delay_head (void)
   fprintf (f, "%s Import trampoline\n", ASM_C);
   fprintf (f, "\t.section\t.text\n");
   fprintf(f,"\t%s\t%s\n", ASM_GLOBAL, head_label);
+  if (HOW_SEH)
+    fprintf (f, "\t.seh_proc\t%s\n", head_label);
   fprintf (f, "%s:\n", head_label);
   fprintf (f, mtable[machine].trampoline, imp_name_lab);
+  if (HOW_SEH)
+    fprintf (f, "\t.seh_endproc\n");
 
   /* Output the delay import descriptor */
   fprintf (f, "\n%s DELAY_IMPORT_DESCRIPTOR\n", ASM_C);
@@ -2935,6 +3016,9 @@ gen_lib_file (int delay)
   bfd_set_format (outarch, bfd_archive);
   outarch->has_armap = 1;
   outarch->is_thin_archive = 0;
+
+  if (deterministic)
+    outarch->flags |= BFD_DETERMINISTIC_OUTPUT;
 
   /* Work out a reasonable size of things to put onto one line.  */
   if (delay)
@@ -3187,7 +3271,7 @@ identify_member_contains_symname (bfd  * abfd,
                    search_data->symname,
                    strlen (search_data->symname)) == 0)
 	{
-	  search_data->found = TRUE;
+	  search_data->found = true;
 	  break;
 	}
     }
@@ -3221,11 +3305,11 @@ identify_dll_for_implib (void)
 
   /* Initialize identify_data.  */
   identify_data.list = dll_name_list_create ();
-  identify_data.ms_style_implib = FALSE;
+  identify_data.ms_style_implib = false;
 
   /* Initialize search_data.  */
   search_data.symname = "__NULL_IMPORT_DESCRIPTOR";
-  search_data.found = FALSE;
+  search_data.found = false;
 
   if (bfd_init () != BFD_INIT_MAGIC)
     fatal (_("fatal error: libbfd ABI mismatch"));
@@ -3249,7 +3333,7 @@ identify_dll_for_implib (void)
 			   identify_member_contains_symname,
 			   (void *)(& search_data));
   if (search_data.found)
-    identify_data.ms_style_implib = TRUE;
+    identify_data.ms_style_implib = true;
 
   /* Rewind the bfd.  */
   if (! bfd_close (abfd))
@@ -3364,8 +3448,8 @@ identify_search_member (bfd  *abfd,
    By default, this is .idata$7 (.idata$6 if the import library is
    ms-style).  */
 
-static bfd_boolean
-identify_process_section_p (asection * section, bfd_boolean ms_style_implib)
+static bool
+identify_process_section_p (asection * section, bool ms_style_implib)
 {
   static const char * SECTION_NAME = ".idata$7";
   static const char * MS_SECTION_NAME = ".idata$6";
@@ -3374,8 +3458,8 @@ identify_process_section_p (asection * section, bfd_boolean ms_style_implib)
     (ms_style_implib ? MS_SECTION_NAME : SECTION_NAME);
 
   if (strcmp (section_name, section->name) == 0)
-    return TRUE;
-  return FALSE;
+    return true;
+  return false;
 }
 
 /* If *section has contents and its name is .idata$7 (.idata$6 if
@@ -3388,7 +3472,7 @@ identify_search_section (bfd * abfd, asection * section, void * obj)
   bfd_byte *data = 0;
   bfd_size_type datasize;
   identify_data_type * identify_data = (identify_data_type *)obj;
-  bfd_boolean ms_style = identify_data->ms_style_implib;
+  bool ms_style = identify_data->ms_style_implib;
 
   if ((section->flags & SEC_HAS_CONTENTS) == 0)
     return;
@@ -3664,10 +3748,20 @@ usage (FILE *file, int status)
   fprintf (file, _("Usage %s <option(s)> <object-file(s)>\n"), program_name);
   /* xgetext:c-format */
   fprintf (file, _("   -m --machine <machine>    Create as DLL for <machine>.  [default: %s]\n"), mname);
-  fprintf (file, _("        possible <machine>: arm[_interwork], i386, mcore[-elf]{-le|-be}, thumb\n"));
+  fprintf (file, _("        possible <machine>: arm[_interwork], arm64, i386, mcore[-elf]{-le|-be}, thumb\n"));
   fprintf (file, _("   -e --output-exp <outname> Generate an export file.\n"));
   fprintf (file, _("   -l --output-lib <outname> Generate an interface library.\n"));
   fprintf (file, _("   -y --output-delaylib <outname> Create a delay-import library.\n"));
+  fprintf (file, _("      --deterministic-libraries\n"));
+  if (DEFAULT_AR_DETERMINISTIC)
+    fprintf (file, _("                             Use zero for timestamps and uids/gids in output libraries (default)\n"));
+  else
+    fprintf (file, _("                             Use zero for timestamps and uids/gids in output libraries\n"));
+  fprintf (file, _("      --non-deterministic-libraries\n"));
+  if (DEFAULT_AR_DETERMINISTIC)
+    fprintf (file, _("                             Use actual timestamps and uids/gids in output libraries\n"));
+  else
+    fprintf (file, _("                             Use actual timestamps and uids/gids in output libraries (default)\n"));
   fprintf (file, _("   -a --add-indirect         Add dll indirects to export file.\n"));
   fprintf (file, _("   -D --dllname <name>       Name of input dll to put into interface lib.\n"));
   fprintf (file, _("   -d --input-def <deffile>  Name of .def file to be read in.\n"));
@@ -3708,55 +3802,61 @@ usage (FILE *file, int status)
   exit (status);
 }
 
-#define OPTION_EXPORT_ALL_SYMS		150
-#define OPTION_NO_EXPORT_ALL_SYMS	(OPTION_EXPORT_ALL_SYMS + 1)
-#define OPTION_EXCLUDE_SYMS		(OPTION_NO_EXPORT_ALL_SYMS + 1)
-#define OPTION_NO_DEFAULT_EXCLUDES	(OPTION_EXCLUDE_SYMS + 1)
-#define OPTION_ADD_STDCALL_UNDERSCORE	(OPTION_NO_DEFAULT_EXCLUDES + 1)
-#define OPTION_USE_NUL_PREFIXED_IMPORT_TABLES \
-  (OPTION_ADD_STDCALL_UNDERSCORE + 1)
-#define OPTION_IDENTIFY_STRICT		(OPTION_USE_NUL_PREFIXED_IMPORT_TABLES + 1)
-#define OPTION_NO_LEADING_UNDERSCORE	(OPTION_IDENTIFY_STRICT + 1)
-#define OPTION_LEADING_UNDERSCORE	(OPTION_NO_LEADING_UNDERSCORE + 1)
+/* 150 isn't special; it's just an arbitrary non-ASCII char value.  */
+enum command_line_switch
+{
+  OPTION_EXPORT_ALL_SYMS = 150,
+  OPTION_NO_EXPORT_ALL_SYMS,
+  OPTION_EXCLUDE_SYMS,
+  OPTION_NO_DEFAULT_EXCLUDES,
+  OPTION_ADD_STDCALL_UNDERSCORE,
+  OPTION_USE_NUL_PREFIXED_IMPORT_TABLES,
+  OPTION_IDENTIFY_STRICT,
+  OPTION_NO_LEADING_UNDERSCORE,
+  OPTION_LEADING_UNDERSCORE,
+  OPTION_DETERMINISTIC_LIBRARIES,
+  OPTION_NON_DETERMINISTIC_LIBRARIES
+};
 
 static const struct option long_options[] =
 {
-  {"no-delete", no_argument, NULL, 'n'},
-  {"dllname", required_argument, NULL, 'D'},
-  {"no-idata4", no_argument, NULL, 'x'},
-  {"no-idata5", no_argument, NULL, 'c'},
-  {"use-nul-prefixed-import-tables", no_argument, NULL,
-   OPTION_USE_NUL_PREFIXED_IMPORT_TABLES},
-  {"output-exp", required_argument, NULL, 'e'},
-  {"output-def", required_argument, NULL, 'z'},
-  {"export-all-symbols", no_argument, NULL, OPTION_EXPORT_ALL_SYMS},
-  {"no-export-all-symbols", no_argument, NULL, OPTION_NO_EXPORT_ALL_SYMS},
-  {"exclude-symbols", required_argument, NULL, OPTION_EXCLUDE_SYMS},
-  {"no-default-excludes", no_argument, NULL, OPTION_NO_DEFAULT_EXCLUDES},
-  {"output-lib", required_argument, NULL, 'l'},
-  {"def", required_argument, NULL, 'd'}, /* for compatibility with older versions */
-  {"input-def", required_argument, NULL, 'd'},
-  {"add-underscore", no_argument, NULL, 'U'},
-  {"add-stdcall-underscore", no_argument, NULL, OPTION_ADD_STDCALL_UNDERSCORE},
-  {"no-leading-underscore", no_argument, NULL, OPTION_NO_LEADING_UNDERSCORE},
-  {"leading-underscore", no_argument, NULL, OPTION_LEADING_UNDERSCORE},
-  {"kill-at", no_argument, NULL, 'k'},
-  {"add-stdcall-alias", no_argument, NULL, 'A'},
-  {"ext-prefix-alias", required_argument, NULL, 'p'},
-  {"identify", required_argument, NULL, 'I'},
-  {"identify-strict", no_argument, NULL, OPTION_IDENTIFY_STRICT},
-  {"verbose", no_argument, NULL, 'v'},
-  {"version", no_argument, NULL, 'V'},
-  {"help", no_argument, NULL, 'h'},
-  {"machine", required_argument, NULL, 'm'},
   {"add-indirect", no_argument, NULL, 'a'},
-  {"base-file", required_argument, NULL, 'b'},
+  {"add-stdcall-alias", no_argument, NULL, 'A'},
+  {"add-stdcall-underscore", no_argument, NULL, OPTION_ADD_STDCALL_UNDERSCORE},
+  {"add-underscore", no_argument, NULL, 'U'},
   {"as", required_argument, NULL, 'S'},
   {"as-flags", required_argument, NULL, 'f'},
-  {"mcore-elf", required_argument, NULL, 'M'},
+  {"base-file", required_argument, NULL, 'b'},
   {"compat-implib", no_argument, NULL, 'C'},
-  {"temp-prefix", required_argument, NULL, 't'},
+  {"def", required_argument, NULL, 'd'},     /* For compatibility with older versions.  */
+  {"deterministic-libraries", no_argument, NULL, OPTION_DETERMINISTIC_LIBRARIES},
+  {"dllname", required_argument, NULL, 'D'},
+  {"exclude-symbols", required_argument, NULL, OPTION_EXCLUDE_SYMS},
+  {"export-all-symbols", no_argument, NULL, OPTION_EXPORT_ALL_SYMS},
+  {"ext-prefix-alias", required_argument, NULL, 'p'},
+  {"help", no_argument, NULL, 'h'},
+  {"identify", required_argument, NULL, 'I'},
+  {"identify-strict", no_argument, NULL, OPTION_IDENTIFY_STRICT},
+  {"input-def", required_argument, NULL, 'd'},
+  {"kill-at", no_argument, NULL, 'k'},
+  {"leading-underscore", no_argument, NULL, OPTION_LEADING_UNDERSCORE},
+  {"machine", required_argument, NULL, 'm'},
+  {"mcore-elf", required_argument, NULL, 'M'},
+  {"no-default-excludes", no_argument, NULL, OPTION_NO_DEFAULT_EXCLUDES},
+  {"no-delete", no_argument, NULL, 'n'},
+  {"no-export-all-symbols", no_argument, NULL, OPTION_NO_EXPORT_ALL_SYMS},
+  {"no-idata4", no_argument, NULL, 'x'},
+  {"no-idata5", no_argument, NULL, 'c'},
+  {"no-leading-underscore", no_argument, NULL, OPTION_NO_LEADING_UNDERSCORE},
+  {"non-deterministic-libraries", no_argument, NULL, OPTION_NON_DETERMINISTIC_LIBRARIES},
+  {"output-def", required_argument, NULL, 'z'},
   {"output-delaylib", required_argument, NULL, 'y'},
+  {"output-exp", required_argument, NULL, 'e'},
+  {"output-lib", required_argument, NULL, 'l'},
+  {"temp-prefix", required_argument, NULL, 't'},
+  {"use-nul-prefixed-import-tables", no_argument, NULL, OPTION_USE_NUL_PREFIXED_IMPORT_TABLES},
+  {"verbose", no_argument, NULL, 'v'},
+  {"version", no_argument, NULL, 'V'},
   {NULL,0,NULL,0}
 };
 
@@ -3771,12 +3871,10 @@ main (int ac, char **av)
   program_name = av[0];
   oav = av;
 
-#if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
+#ifdef HAVE_LC_MESSAGES
   setlocale (LC_MESSAGES, "");
 #endif
-#if defined (HAVE_SETLOCALE)
   setlocale (LC_CTYPE, "");
-#endif
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
 
@@ -3795,19 +3893,19 @@ main (int ac, char **av)
       switch (c)
 	{
 	case OPTION_EXPORT_ALL_SYMS:
-	  export_all_symbols = TRUE;
+	  export_all_symbols = true;
 	  break;
 	case OPTION_NO_EXPORT_ALL_SYMS:
-	  export_all_symbols = FALSE;
+	  export_all_symbols = false;
 	  break;
 	case OPTION_EXCLUDE_SYMS:
 	  add_excludes (optarg);
 	  break;
 	case OPTION_NO_DEFAULT_EXCLUDES:
-	  do_default_excludes = FALSE;
+	  do_default_excludes = false;
 	  break;
 	case OPTION_USE_NUL_PREFIXED_IMPORT_TABLES:
-	  use_nul_prefixed_import_tables = TRUE;
+	  use_nul_prefixed_import_tables = true;
 	  break;
 	case OPTION_ADD_STDCALL_UNDERSCORE:
 	  add_stdcall_underscore = 1;
@@ -3920,14 +4018,17 @@ main (int ac, char **av)
 	case 'y':
 	  delayimp_name = optarg;
 	  break;
+	case OPTION_DETERMINISTIC_LIBRARIES:
+	  deterministic = true;
+	  break;
+	case OPTION_NON_DETERMINISTIC_LIBRARIES:
+	  deterministic = false;
+	  break;
 	default:
 	  usage (stderr, 1);
 	  break;
 	}
     }
-
-  if (!tmp_prefix)
-    tmp_prefix = prefix_encode ("d", getpid ());
 
   for (i = 0; mtable[i].type; i++)
     if (strcmp (mtable[i].type, mname) == 0)
@@ -3940,7 +4041,8 @@ main (int ac, char **av)
   machine = i;
 
   /* Check if we generated PE+.  */
-  create_for_pep = strcmp (mname, "i386:x86-64") == 0;
+  create_for_pep = strcmp (mname, "i386:x86-64") == 0 ||
+		   strcmp (mname, "arm64") == 0;
 
   {
     /* Check the default underscore */
@@ -3949,7 +4051,7 @@ main (int ac, char **av)
       bfd_get_target_info (mtable[machine].how_bfd_target, NULL,
                            NULL, &u, NULL);
     if (u != -1)
-      leading_underscore = (u != 0 ? TRUE : FALSE);
+      leading_underscore = u != 0;
   }
 
   if (!dll_name && exp_name)
@@ -3972,7 +4074,7 @@ main (int ac, char **av)
      symbols in the .drectve section.  The default excludes are meant
      to avoid exporting DLL entry point and Cygwin32 impure_ptr.  */
   if (! export_all_symbols)
-    do_default_excludes = FALSE;
+    do_default_excludes = false;
 
   if (do_default_excludes)
     set_default_excludes ();
@@ -3986,6 +4088,24 @@ main (int ac, char **av)
 	firstarg = av[optind];
       scan_obj_file (av[optind]);
       optind++;
+    }
+
+  if (tmp_prefix == NULL)
+    {
+      /* If possible use a deterministic prefix.  */
+      if (imp_name || delayimp_name)
+        {
+          const char *input = imp_name ? imp_name : delayimp_name;
+          tmp_prefix = xmalloc (strlen (input) + 2);
+          sprintf (tmp_prefix, "%s_", input);
+          for (i = 0; tmp_prefix[i]; i++)
+            if (!ISALNUM (tmp_prefix[i]))
+              tmp_prefix[i] = '_';
+        }
+      else
+        {
+          tmp_prefix = prefix_encode ("d", getpid ());
+        }
     }
 
   mangle_defs ();

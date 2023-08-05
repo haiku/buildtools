@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+#   Copyright (C) 1991-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -56,10 +56,10 @@ gld${EMULATION_NAME}_before_parse (void)
 #ifndef TARGET_			/* I.e., if not generic.  */
   ldfile_set_output_arch ("`echo ${ARCH}`", bfd_arch_unknown);
 #endif /* not TARGET_ */
-  input_flags.dynamic = ${DYNAMIC_LINK-TRUE};
-  config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo TRUE ; else echo FALSE ; fi`;
-  config.separate_code = `if test "x${SEPARATE_CODE}" = xyes ; then echo TRUE ; else echo FALSE ; fi`;
-  link_info.check_relocs_after_open_input = TRUE;
+  input_flags.dynamic = ${DYNAMIC_LINK-true};
+  config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo true ; else echo false ; fi`;
+  config.separate_code = `if test "x${SEPARATE_CODE}" = xyes ; then echo true ; else echo false ; fi`;
+  link_info.check_relocs_after_open_input = true;
 EOF
 if test -n "$COMMONPAGESIZE"; then
 fragment <<EOF
@@ -67,6 +67,10 @@ fragment <<EOF
 EOF
 fi
 fragment <<EOF
+  link_info.separate_code = DEFAULT_LD_Z_SEPARATE_CODE;
+  link_info.warn_execstack = DEFAULT_LD_WARN_EXECSTACK;
+  link_info.no_warn_rwx_segments = ! DEFAULT_LD_WARN_RWX_SEGMENTS;
+  link_info.default_execstack = DEFAULT_LD_EXECSTACK;
 }
 
 static void
@@ -149,11 +153,11 @@ struct hook_stub_info
 
 /* Traverse the linker tree to find the spot where the stub goes.  */
 
-static bfd_boolean
+static bool
 hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
 {
   lang_statement_union_type *l;
-  bfd_boolean ret;
+  bool ret;
 
   for (; (l = *lp) != NULL; lp = &l->header.next)
     {
@@ -191,7 +195,7 @@ hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
 		 after its associated input section.  */
 	      *(info->add.tail) = l->header.next;
 	      l->header.next = info->add.head;
-	      return TRUE;
+	      return true;
 	    }
 	  break;
 
@@ -212,7 +216,7 @@ hook_in_stub (struct hook_stub_info *info, lang_statement_union_type **lp)
 	  break;
 	}
     }
-  return FALSE;
+  return false;
 }
 
 
@@ -246,7 +250,7 @@ elf32_arm_add_stub_section (const char * stub_sec_name,
 
   info.input_section = after_input_section;
   lang_list_init (&info.add);
-  lang_add_section (&info.add, stub_sec, NULL, os);
+  lang_add_section (&info.add, stub_sec, NULL, NULL, os);
 
   if (info.add.head == NULL)
     goto err_ret;
@@ -284,7 +288,7 @@ gldarm_layout_sections_again (void)
   /* If we have changed sizes of the stub sections, then we need
      to recalculate all the section offsets.  This may mean we need to
      add even more stubs.  */
-  ldelf_map_segments (TRUE);
+  ldelf_map_segments (true);
   need_laying_out = -1;
 }
 
@@ -457,17 +461,17 @@ gld${EMULATION_NAME}_finish (void)
   if (params.thumb_entry_symbol)
     {
       h = bfd_link_hash_lookup (link_info.hash, params.thumb_entry_symbol,
-				FALSE, FALSE, TRUE);
+				false, false, true);
     }
   else
     {
       struct elf_link_hash_entry * eh;
 
-      if (!entry_symbol.name)
+      if (!entry_symbol.name || !is_elf_hash_table (link_info.hash))
 	return;
 
       h = bfd_link_hash_lookup (link_info.hash, entry_symbol.name,
-				FALSE, FALSE, TRUE);
+				false, false, true);
       eh = (struct elf_link_hash_entry *)h;
       if (!h || ARM_GET_SYM_BRANCH_TYPE (eh->target_internal)
 		!= ST_BRANCH_TO_THUMB)
@@ -493,10 +497,7 @@ gld${EMULATION_NAME}_finish (void)
 
       /* Now convert this value into a string and store it in entry_symbol
 	 where the lang_finish() function will pick it up.  */
-      buffer[0] = '0';
-      buffer[1] = 'x';
-
-      sprintf_vma (buffer + 2, val);
+      sprintf (buffer, "0x%" PRIx64, (uint64_t) val);
 
       if (params.thumb_entry_symbol != NULL && entry_symbol.name != NULL
 	  && entry_from_cmdline)

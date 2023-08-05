@@ -1,5 +1,5 @@
 /* tc-fr30.h -- Header file for tc-fr30.c.
-   Copyright (C) 1998-2021 Free Software Foundation, Inc.
+   Copyright (C) 1998-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -44,7 +44,7 @@
 
 #define tc_fix_adjustable(FIX) fr30_fix_adjustable (FIX)
 struct fix;
-extern bfd_boolean fr30_fix_adjustable (struct fix *);
+extern bool fr30_fix_adjustable (struct fix *);
 
 #define tc_gen_reloc gas_cgen_tc_gen_reloc
 

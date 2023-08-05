@@ -1,7 +1,7 @@
 # This shell script emits C code -*- C -*-
 # to keep track of the machine type of Z80 object files
 # It does some substitutions.
-#   Copyright (C) 2005-2021 Free Software Foundation, Inc.
+#   Copyright (C) 2005-2023 Free Software Foundation, Inc.
 # This file is part of the GNU Binutils.
 #
 # This program is free software; you can redistribute it and/or modify
@@ -46,7 +46,7 @@ z80_after_open (void)
   for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
     {
       const bfd_arch_info_type *info;
-      info = bfd_arch_get_compatible (link_info.output_bfd, abfd, FALSE);
+      info = bfd_arch_get_compatible (link_info.output_bfd, abfd, false);
       if (info == NULL)
 	einfo (_("%F%P: %pB: Instruction sets of object files incompatible\n"),
 	       abfd);

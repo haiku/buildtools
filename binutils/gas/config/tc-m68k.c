@@ -1,5 +1,5 @@
 /* tc-m68k.c -- Assemble for the m68k family
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -107,25 +107,9 @@ static int m68k_rel32_from_cmdline;
    displacement.  */
 static enum m68k_size m68k_index_width_default = SIZE_LONG;
 
-/* We want to warn if any text labels are misaligned.  In order to get
-   the right line number, we need to record the line number for each
-   label.  */
-struct label_line
-{
-  struct label_line *next;
-  symbolS *label;
-  const char *file;
-  unsigned int line;
-  int text;
-};
-
-/* The list of labels.  */
-
-static struct label_line *labels;
-
 /* The current label.  */
 
-static struct label_line *current_label;
+static struct m68k_tc_sy *current_label;
 
 /* Pointer to list holding the opcodes sorted by name.  */
 static struct m68k_opcode const ** m68k_sorted_opcodes;
@@ -1839,7 +1823,7 @@ m68k_ip (char *instring)
 		case 'B':	/* FOO */
 		  if (opP->mode != ABSL
 		      || (flag_long_jumps
-			  && strncmp (instring, "jbsr", 4) == 0))
+			  && startswith (instring, "jbsr")))
 		    losing++;
 		  break;
 
@@ -2039,8 +2023,8 @@ m68k_ip (char *instring)
 			   || TRUNC (opP->disp.exp.X_add_number) - 1 > 7)
 		    losing++;
 		  else if (! m68k_quick
-			   && (strncmp (instring, "add", 3) == 0
-			       || strncmp (instring, "sub", 3) == 0)
+			   && (startswith (instring, "add")
+			       || startswith (instring, "sub"))
 			   && instring[3] != 'q')
 		    losing++;
 		  break;
@@ -4697,14 +4681,11 @@ md_begin (void)
 void
 m68k_frob_label (symbolS *sym)
 {
-  struct label_line *n;
+  struct m68k_tc_sy *n;
 
-  n = XNEW (struct label_line);
-  n->next = labels;
-  n->label = sym;
+  n = symbol_get_tc (sym);
   n->file = as_where (&n->line);
   n->text = 0;
-  labels = n;
   current_label = n;
 
   dwarf2_emit_label (sym);
@@ -4733,19 +4714,13 @@ m68k_frob_symbol (symbolS *sym)
     }
   else if ((S_GET_VALUE (sym) & 1) != 0)
     {
-      struct label_line *l;
+      struct m68k_tc_sy *l;
+      l = symbol_get_tc (sym);
 
-      for (l = labels; l != NULL; l = l->next)
-	{
-	  if (l->label == sym)
-	    {
-	      if (l->text)
-		as_warn_where (l->file, l->line,
-			       _("text label `%s' aligned to odd boundary"),
-			       S_GET_NAME (sym));
-	      break;
-	    }
-	}
+      if (l->text)
+        as_warn_where (l->file, l->line,
+		       _("text label `%s' aligned to odd boundary"),
+		       S_GET_NAME (sym));
     }
 }
 
@@ -4790,7 +4765,7 @@ m68k_mri_mode_change (int on)
 const char *
 md_atof (int type, char *litP, int *sizeP)
 {
-  return ieee_md_atof (type, litP, sizeP, TRUE);
+  return ieee_md_atof (type, litP, sizeP, true);
 }
 
 void
@@ -7482,9 +7457,9 @@ md_parse_option (int c, const char *arg)
 #endif
       /* Intentional fall-through.  */
     case 'm':
-      if (!strncmp (arg, "arch=", 5))
+      if (startswith (arg, "arch="))
 	m68k_set_arch (arg + 5, 1, 0);
-      else if (!strncmp (arg, "cpu=", 4))
+      else if (startswith (arg, "cpu="))
 	m68k_set_cpu (arg + 4, 1, 0);
       else if (m68k_set_extension (arg, 0, 1))
 	;
@@ -7861,7 +7836,7 @@ m68k_elf_suffix (char **str_p, expressionS *exp_p)
   *str2 = '\0';
   len = str2 - ident;
 
-  if (strncmp (ident, "TLSLDO", 6) == 0
+  if (startswith (ident, "TLSLDO")
       && len == 6)
     {
       /* Now check for identifier@suffix+constant.  */

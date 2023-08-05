@@ -1,5 +1,5 @@
 /* a.out object file format
-   Copyright (C) 1989-2021 Free Software Foundation, Inc.
+   Copyright (C) 1989-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -210,9 +210,9 @@ obj_aout_type (int ignore ATTRIBUTE_UNUSED)
       if (*input_line_pointer == '@')
 	{
 	  ++input_line_pointer;
-	  if (strncmp (input_line_pointer, "object", 6) == 0)
+	  if (startswith (input_line_pointer, "object"))
 	    S_SET_OTHER (sym, 1);
-	  else if (strncmp (input_line_pointer, "function", 8) == 0)
+	  else if (startswith (input_line_pointer, "function"))
 	    S_SET_OTHER (sym, 2);
 	}
     }
@@ -297,6 +297,7 @@ const struct format_ops aout_format_ops =
   1,	/* dfl_leading_underscore.  */
   0,	/* emit_section_symbols.  */
   0,	/* begin.  */
+  0,	/* end.  */
   0,	/* app_file.  */
   obj_aout_frob_symbol,
   0,	/* frob_file.  */

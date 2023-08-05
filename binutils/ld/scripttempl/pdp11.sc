@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2021 Free Software Foundation, Inc.
+# Copyright (C) 2014-2023 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -9,7 +9,7 @@ test -z "${LITTLE_OUTPUT_FORMAT}" && LITTLE_OUTPUT_FORMAT=${OUTPUT_FORMAT}
 test -z "${ALIGNMENT}" && ALIGNMENT="2"
 
 cat <<EOF
-/* Copyright (C) 2014-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2023 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -35,7 +35,7 @@ SECTIONS
     ${RELOCATING+__etext = .;}
     ${PAD_TEXT+${RELOCATING+. = ${DATA_ALIGNMENT};}}
   }
-  ${RELOCATING+. = ${DATA_ALIGNMENT};}
+  ${RELOCATING+. = ${DATA_SEG_ADDR};}
   .data :
   {
     *(.data)

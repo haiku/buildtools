@@ -1,4 +1,4 @@
-#   Copyright (C) 1993-2021 Free Software Foundation, Inc.
+#   Copyright (C) 1993-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -44,9 +44,7 @@ if {![binutils_assemble $srcdir/$subdir/bintest.s tmpdir/bintest.o]} then {
 
     # This test does not work correctly on ECOFF targets, because ECOFF
     # stores most symbols twice, which messes up the nm output.
-    setup_xfail "alpha*-*-osf*"
-    setup_xfail "mips*-*-ultrix*" "mips*-*-ecoff*" "mips*-*-irix4*"
-    setup_xfail "mips*-*-riscos*" "mips*-*-sysv3*"
+    setup_xfail "alpha*-*-*ecoff" "alpha*-*-osf*"
 
     # This test does not work correctly on XCOFF targets, because XCOFF
     # does not enter static symbols in the symbol table.
@@ -104,9 +102,7 @@ if {![binutils_assemble $srcdir/$subdir/bintest.s tmpdir/bintest.o]} then {
 
     # This test does not work correctly on ECOFF targets, because ECOFF
     # stores most symbols twice, which messes up the nm output.
-    setup_xfail "alpha*-*-osf*"
-    setup_xfail "mips*-*-ultrix*" "mips*-*-ecoff*" "mips*-*-irix4*"
-    setup_xfail "mips*-*-riscos*" "mips*-*-sysv3*"
+    setup_xfail "alpha*-*-*ecoff" "alpha*-*-osf*"
 
     # This test does not work correctly on XCOFF targets, because XCOFF
     # does not enter static symbols in the symbol table.
@@ -181,12 +177,6 @@ if {![binutils_assemble $srcdir/$subdir/$nm_1_src tmpdir/nm-1.o]} then {
 	set tempfile tmpdir/nm-1.o
     }
 
-    # This test does not work correctly on ECOFF targets, because ECOFF
-    # stores most symbols twice, which messes up the nm output.
-    setup_xfail "alpha*-*-osf*"
-    setup_xfail "mips*-*-ultrix*" "mips*-*-ecoff*" "mips*-*-irix4*"
-    setup_xfail "mips*-*-riscos*" "mips*-*-sysv3*"
-
     set got [binutils_run $NM "$NMFLAGS --size-sort $tempfile"]
 
     set want "0*4 T text_symbol3.*0*8 T text_symbol2.*0*c T text_symbol1"
@@ -256,8 +246,6 @@ if [is_elf_format] {
     # Test nm --line-numbers on DWARF-4 debug info.    
     set testname "nm --line-numbers on DWARF-4 debug info"
 
-    # The RISCV target does not (currently) support .uleb128.
-    setup_xfail "riscv*-*-*"
     # The SH targets complain that the pseudo-ops used to construct
     # the DWARF data are misaligned.
     setup_xfail "sh*-*-*"
@@ -304,7 +292,7 @@ if [is_elf_format] {
     
     # The following targets are known to not support ifuncs.
     setup_xfail "alpha*-*-*"
-    setup_xfail "arm*-elf" "arm*-*-nto*" "arm*-*-netbsdelf*"
+    setup_xfail "arm*-elf" "arm*-*-nto*" "arm*-*-netbsd*"
     setup_xfail "*-*-hpux*"
     setup_xfail "mips*-*-*" "tx39*-*-*"
     setup_xfail "msp430*-*-*"
@@ -340,7 +328,37 @@ if [is_elf_format] {
 	}
     }
 
-    
+    set testname "nm --no-weak"
+    if {![binutils_assemble $srcdir/$subdir/no-weak.s tmpdir/no-weak.o]} then {
+	fail "$testname (assembly)"
+    } else {
+	if [is_remote host] {
+	    set tmpfile [remote_download host tmpdir/no-weak.o]
+	} else {
+	    set tmpfile tmpdir/no-weak.o
+	}
+
+	set got [binutils_run $NM "$NMFLAGS --no-weak $tmpfile"]
+
+	if [regexp "weak_with_default_value" $got] then {
+	    fail "$testname (weak symbol with default value)"
+	} else {
+	    pass "$testname (weak symbol with default value)"
+	}
+
+	if [regexp "weak_without_default_value" $got] then {
+	    fail "$testname (weak symbol without default value)"
+	} else {
+	    pass "$testname (weak symbol without default value)"
+	}
+
+	# FIXME: We should re run this test without the --no-weak option
+	# and verify that the expected symbol names *are* shown...
+
+	if { $verbose < 1 } {
+	    remote_file host delete "tmpdir/no0weak.o"
+	}
+    }    
 }
 
 # There are certainly other tests that could be run.

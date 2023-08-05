@@ -1,5 +1,5 @@
 /* Interface to byteswapping functions.
-   Copyright (C) 2006-2021 Free Software Foundation, Inc.
+   Copyright (C) 2006-2023 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -73,18 +73,20 @@ bswap_64 (uint64_t v)
 /* Swap the endianness of something.  */
 
 #define swap_thing(x)							\
-  do {									\
-    _Static_assert (sizeof (x) == 1 || (sizeof (x) % 2 == 0		\
-					&& sizeof (x) <= 8),		\
-		    "Invalid size, update endianness code");		\
-    switch (sizeof (x)) {						\
-    case 2: x = bswap_16 (x); break;					\
-    case 4: x = bswap_32 (x); break;					\
-    case 8: x = bswap_64 (x); break;					\
-    case 1: /* Nothing needs doing */					\
-      break;								\
+  do									\
+    {									\
+      _Static_assert (sizeof (x) == 1 || (sizeof (x) % 2 == 0		\
+					  && sizeof (x) <= 8),		\
+		      "Invalid size, update endianness code");		\
+      switch (sizeof (x)) {						\
+      case 2: x = bswap_16 (x); break;					\
+      case 4: x = bswap_32 (x); break;					\
+      case 8: x = bswap_64 (x); break;					\
+      case 1: /* Nothing needs doing */					\
+	break;								\
+      }									\
     }									\
-  } while (0);
+  while (0);
 
 
 #endif /* !defined(_CTF_SWAP_H) */

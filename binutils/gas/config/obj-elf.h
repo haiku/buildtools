@@ -1,5 +1,5 @@
 /* ELF object file format.
-   Copyright (C) 1992-2021 Free Software Foundation, Inc.
+   Copyright (C) 1992-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -33,7 +33,6 @@
 #define OUTPUT_FLAVOR bfd_target_elf_flavour
 #endif
 
-#define BYTES_IN_WORD 4		/* for now */
 #include "bfd/elf-bfd.h"
 
 #include "targ-cpu.h"
@@ -114,15 +113,15 @@ struct elf_section_match
 
 #define OBJ_SYMFIELD_TYPE struct elf_obj_sy
 
-#ifndef FALSE
-#define FALSE 0
-#define TRUE  !FALSE
-#endif
-
 #ifndef obj_begin
 #define obj_begin() elf_begin ()
 #endif
 extern void elf_begin (void);
+
+#ifndef obj_end
+#define obj_end() elf_end ()
+#endif
+extern void elf_end (void);
 
 #ifndef LOCAL_LABEL_PREFIX
 #define LOCAL_LABEL_PREFIX '.'
@@ -185,7 +184,7 @@ extern void elf_frob_file_after_relocs (void);
 #ifndef obj_app_file
 #define obj_app_file elf_file_symbol
 #endif
-extern void elf_file_symbol (const char *, int);
+extern void elf_file_symbol (const char *);
 
 extern void obj_elf_section_change_hook (void);
 
@@ -194,6 +193,7 @@ extern const char * obj_elf_section_name (void);
 extern void obj_elf_previous (int);
 extern void obj_elf_version (int);
 extern void obj_elf_common (int);
+extern void obj_elf_bss (int);
 extern void obj_elf_data (int);
 extern void obj_elf_text (int);
 extern void obj_elf_change_section
@@ -203,7 +203,7 @@ extern void obj_elf_vtable_inherit (int);
 extern void obj_elf_vtable_entry (int);
 extern struct fix * obj_elf_get_vtable_inherit (void);
 extern struct fix * obj_elf_get_vtable_entry (void);
-extern bfd_boolean obj_elf_seen_attribute
+extern bool obj_elf_seen_attribute
   (int, unsigned int);
 extern int obj_elf_vendor_attribute (int);
 
@@ -275,6 +275,11 @@ extern void obj_elf_init_stab_section (segT);
 extern void elf_frob_symbol (symbolS *, int *);
 #ifndef obj_frob_symbol
 #define obj_frob_symbol(symp, punt) elf_frob_symbol (symp, &punt)
+#endif
+
+extern void elf_fixup_removed_symbol (symbolS **);
+#ifndef obj_fixup_removed_symbol
+#define obj_fixup_removed_symbol(sympp) elf_fixup_removed_symbol (sympp)
 #endif
 
 extern void elf_pop_insert (void);

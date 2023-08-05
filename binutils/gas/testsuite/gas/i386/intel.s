@@ -205,8 +205,8 @@ foo:
  rcl    dword ptr 0x90909090[eax]
  rcl    byte ptr 0x90909090[eax], cl
  rcl    dword ptr 0x90909090[eax], cl
- aam    0xffffff90
- aad    0xffffff90
+ aam    0x90
+ aad    0x90
  xlat   byte ptr ds:[ebx]
  fcom   dword ptr 0x90909090[eax]
  fst    dword ptr 0x90909090[eax]
@@ -698,6 +698,16 @@ fidivr  dword ptr [ebx]
  cmovpo edx, 0x90909090[eax]
  cmovpe  dx, 0x90909090[eax]
  cmovpo dx, 0x90909090[eax]
+
+	lar	eax, eax
+	lar	ax, ax
+	lar	eax, word ptr [eax]
+	lar	ax, word ptr [eax]
+
+	lsl	eax, eax
+	lsl	ax, ax
+	lsl	eax, word ptr [eax]
+	lsl	ax, word ptr [eax]
 
  # Check base/index swapping
 	.allow_index_reg

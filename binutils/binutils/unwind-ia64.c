@@ -1,5 +1,5 @@
 /* unwind-ia64.c -- utility routines to dump IA-64 unwind info for readelf.
-   Copyright (C) 2000-2021 Free Software Foundation, Inc.
+   Copyright (C) 2000-2023 Free Software Foundation, Inc.
 
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
@@ -155,6 +155,10 @@ unw_print_xyreg (char *cp, unsigned int x, unsigned int ytreg)
 
     case 2: /* br */
       sprintf (cp, "b%u", (ytreg & 0x1f));
+      break;
+
+    default:
+      strcpy (cp, "invalid");
       break;
     }
 }

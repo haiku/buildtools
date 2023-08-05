@@ -1,5 +1,5 @@
 /* tc-m32c.h -- Header file for tc-m32c.c.
-   Copyright (C) 2004-2021 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -44,7 +44,7 @@ extern void m32c_start_line_hook (void);
 extern void m32c_apply_fix (struct fix *, valueT *, segT);
 
 #define tc_fix_adjustable(fixP) m32c_fix_adjustable (fixP)
-extern bfd_boolean m32c_fix_adjustable (struct fix *);
+extern bool m32c_fix_adjustable (struct fix *);
 
 /* When relaxing, we need to emit various relocs we otherwise wouldn't.  */
 #define TC_FORCE_RELOCATION(fix) m32c_force_relocation (fix)

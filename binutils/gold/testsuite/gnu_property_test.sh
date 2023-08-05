@@ -2,7 +2,7 @@
 
 # gnu_property_test.sh -- test .note.gnu.property section.
 
-# Copyright (C) 2018-2021 Free Software Foundation, Inc.
+# Copyright (C) 2018-2023 Free Software Foundation, Inc.
 # Written by Cary Coutant <ccoutant@gmail.com>.
 
 # This file is part of gold.
@@ -55,16 +55,16 @@ check_count()
 
 check_alignment ()
 {
-    if egrep -q "Class:[ \t]+ELF64" "$1"
+    if $EGREP -q "Class:[ \t]+ELF64" "$1"
     then
 	align=8
     else
 	align=4
     fi
-    if ! egrep -q ".note.gnu.property[ \t]+NOTE.*$align$" "$1"
+    if ! $EGREP -q ".note.gnu.property[ \t]+NOTE.*$align$" "$1"
     then
 	echo "Wrong .note.gnu.property alignment in $1:"
-	egrep ".note.gnu.property[ \t]+NOTE.*$align" "$1"
+	$EGREP ".note.gnu.property[ \t]+NOTE.*$align" "$1"
 	exit 1
     fi
 }

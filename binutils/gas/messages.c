@@ -1,5 +1,5 @@
 /* messages.c - error reporter -
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
    This file is part of GAS, the GNU Assembler.
 
    GAS is free software; you can redistribute it and/or modify
@@ -18,6 +18,7 @@
    02110-1301, USA.  */
 
 #include "as.h"
+#include <limits.h>
 #include <signal.h>
 
 /* If the system doesn't provide strsignal, we get it defined in
@@ -119,7 +120,7 @@ as_show_where (void)
   const char *file;
   unsigned int line;
 
-  file = as_where (&line);
+  file = as_where_top (&line);
   identify (file);
   if (file)
     {
@@ -128,6 +129,23 @@ as_show_where (void)
       else
 	fprintf (stderr, "%s: ", file);
     }
+}
+
+/* Send to stderr a string as information, with location data passed in.
+   Note that for now this is not intended for general use.  */
+
+void
+as_info_where (const char *file, unsigned int line, unsigned int indent,
+	       const char *format, ...)
+{
+  va_list args;
+  char buffer[2000];
+
+  va_start (args, format);
+  vsnprintf (buffer, sizeof (buffer), format, args);
+  va_end (args);
+  fprintf (stderr, "%s:%u: %*s%s%s\n",
+	   file, line, (int)indent, "", _("Info: "), buffer);
 }
 
 /* Send to stderr a string as a warning, and locate warning
@@ -146,6 +164,7 @@ as_tsktsk (const char *format, ...)
   vfprintf (stderr, format, args);
   va_end (args);
   (void) putc ('\n', stderr);
+  as_report_context ();
 }
 
 /* The common portion of as_warn and as_warn_where.  */
@@ -153,10 +172,15 @@ as_tsktsk (const char *format, ...)
 static void
 as_warn_internal (const char *file, unsigned int line, char *buffer)
 {
+  bool context = false;
+
   ++warning_count;
 
   if (file == NULL)
-    file = as_where (&line);
+    {
+      file = as_where_top (&line);
+      context = true;
+    }
 
   identify (file);
   if (file)
@@ -168,6 +192,10 @@ as_warn_internal (const char *file, unsigned int line, char *buffer)
     }
   else
     fprintf (stderr, "%s%s\n", _("Warning: "), buffer);
+
+  if (context)
+    as_report_context ();
+
 #ifndef NO_LISTING
   listing_warning (buffer);
 #endif
@@ -194,7 +222,7 @@ as_warn (const char *format, ...)
     }
 }
 
-/* Like as_bad but the file name and line number are passed in.
+/* Like as_warn but the file name and line number are passed in.
    Unfortunately, we have to repeat the function in order to handle
    the varargs correctly and portably.  */
 
@@ -218,10 +246,15 @@ as_warn_where (const char *file, unsigned int line, const char *format, ...)
 static void
 as_bad_internal (const char *file, unsigned int line, char *buffer)
 {
+  bool context = false;
+
   ++error_count;
 
   if (file == NULL)
-    file = as_where (&line);
+    {
+      file = as_where_top (&line);
+      context = true;
+    }
 
   identify (file);
   if (file)
@@ -233,6 +266,10 @@ as_bad_internal (const char *file, unsigned int line, char *buffer)
     }
   else
     fprintf (stderr, "%s%s\n", _("Error: "), buffer);
+
+  if (context)
+    as_report_context ();
+
 #ifndef NO_LISTING
   listing_error (buffer);
 #endif
@@ -290,6 +327,7 @@ as_fatal (const char *format, ...)
   vfprintf (stderr, format, args);
   (void) putc ('\n', stderr);
   va_end (args);
+  as_report_context ();
   /* Delete the output file, if it exists.  This will prevent make from
      thinking that a file was created and hence does not need rebuilding.  */
   if (out_file_name != NULL)
@@ -312,6 +350,7 @@ as_abort (const char *file, int line, const char *fn)
     fprintf (stderr, _("Internal error in %s at %s:%d.\n"), fn, file, line);
   else
     fprintf (stderr, _("Internal error at %s:%d.\n"), file, line);
+  as_report_context ();
 
   fprintf (stderr, _("Please report this bug.\n"));
 
@@ -356,22 +395,6 @@ signal_init (void)
 
 /* Support routines.  */
 
-void
-sprint_value (char *buf, valueT val)
-{
-  if (sizeof (val) <= sizeof (long))
-    {
-      sprintf (buf, "%ld", (long) val);
-      return;
-    }
-  if (sizeof (val) <= sizeof (bfd_vma))
-    {
-      sprintf_vma (buf, val);
-      return;
-    }
-  abort ();
-}
-
 #define HEX_MAX_THRESHOLD	1024
 #define HEX_MIN_THRESHOLD	-(HEX_MAX_THRESHOLD)
 
@@ -382,7 +405,7 @@ as_internal_value_out_of_range (const char *prefix,
 				offsetT max,
 				const char *file,
 				unsigned line,
-				int bad)
+				bool bad)
 {
   const char * err;
 
@@ -397,51 +420,44 @@ as_internal_value_out_of_range (const char *prefix,
 	abort ();
 
       /* xgettext:c-format  */
-      err = _("%s out of domain (%" BFD_VMA_FMT "d is not a multiple of %" \
-	      BFD_VMA_FMT "d)");
+      err = _("%s out of domain (%" PRId64
+	      " is not a multiple of %" PRId64 ")");
+
       if (bad)
-	as_bad_where (file, line, err, prefix, val, right);
+	as_bad_where (file, line, err, prefix, (int64_t) val, (int64_t) right);
       else
-	as_warn_where (file, line, err, prefix, val, right);
-      return;
+	as_warn_where (file, line, err, prefix, (int64_t) val, (int64_t) right);
     }
-
-  if (   val < HEX_MAX_THRESHOLD
-      && min < HEX_MAX_THRESHOLD
-      && max < HEX_MAX_THRESHOLD
-      && val > HEX_MIN_THRESHOLD
-      && min > HEX_MIN_THRESHOLD
-      && max > HEX_MIN_THRESHOLD)
+  else if (   val < HEX_MAX_THRESHOLD
+	   && min < HEX_MAX_THRESHOLD
+	   && max < HEX_MAX_THRESHOLD
+	   && val > HEX_MIN_THRESHOLD
+	   && min > HEX_MIN_THRESHOLD
+	   && max > HEX_MIN_THRESHOLD)
     {
-      /* xgettext:c-format  */
-      err = _("%s out of range (%" BFD_VMA_FMT "d is not between %" \
-	      BFD_VMA_FMT "d and %" BFD_VMA_FMT "d)");
+      /* xgettext:c-format.  */
+      err = _("%s out of range (%" PRId64
+	      " is not between %" PRId64 " and %" PRId64 ")");
 
       if (bad)
-	as_bad_where (file, line, err, prefix, val, min, max);
+	as_bad_where (file, line, err, prefix,
+		      (int64_t) val, (int64_t) min, (int64_t) max);
       else
-	as_warn_where (file, line, err, prefix, val, min, max);
+	as_warn_where (file, line, err, prefix,
+		       (int64_t) val, (int64_t) min, (int64_t) max);
     }
   else
     {
-      char val_buf [sizeof (val) * 3 + 2];
-      char min_buf [sizeof (val) * 3 + 2];
-      char max_buf [sizeof (val) * 3 + 2];
-
-      if (sizeof (val) > sizeof (bfd_vma))
-	abort ();
-
-      sprintf_vma (val_buf, (bfd_vma) val);
-      sprintf_vma (min_buf, (bfd_vma) min);
-      sprintf_vma (max_buf, (bfd_vma) max);
-
       /* xgettext:c-format.  */
-      err = _("%s out of range (0x%s is not between 0x%s and 0x%s)");
+      err = _("%s out of range (0x%" PRIx64
+	      " is not between 0x%" PRIx64 " and 0x%" PRIx64 ")");
 
       if (bad)
-	as_bad_where (file, line, err, prefix, val_buf, min_buf, max_buf);
+	as_bad_where (file, line, err, prefix,
+		      (int64_t) val, (int64_t) min, (int64_t) max);
       else
-	as_warn_where (file, line, err, prefix, val_buf, min_buf, max_buf);
+	as_warn_where (file, line, err, prefix,
+		       (int64_t) val, (int64_t) min, (int64_t) max);
     }
 }
 
@@ -453,7 +469,7 @@ as_warn_value_out_of_range (const char *prefix,
 			   const char *file,
 			   unsigned line)
 {
-  as_internal_value_out_of_range (prefix, value, min, max, file, line, 0);
+  as_internal_value_out_of_range (prefix, value, min, max, file, line, false);
 }
 
 void
@@ -464,5 +480,5 @@ as_bad_value_out_of_range (const char *prefix,
 			   const char *file,
 			   unsigned line)
 {
-  as_internal_value_out_of_range (prefix, value, min, max, file, line, 1);
+  as_internal_value_out_of_range (prefix, value, min, max, file, line, true);
 }

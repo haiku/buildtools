@@ -1,5 +1,5 @@
 /* tc-xstormy16.h -- Header file for tc-xstormy16.c.
-   Copyright (C) 2000-2021 Free Software Foundation, Inc.
+   Copyright (C) 2000-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -43,7 +43,7 @@
 #define md_apply_fix xstormy16_md_apply_fix
 
 #define tc_fix_adjustable(FIX) xstormy16_fix_adjustable (FIX)
-extern bfd_boolean xstormy16_fix_adjustable (struct fix *);
+extern bool xstormy16_fix_adjustable (struct fix *);
 
 #define TC_FORCE_RELOCATION(fix) xstormy16_force_relocation (fix)
 extern int xstormy16_force_relocation (struct fix *);

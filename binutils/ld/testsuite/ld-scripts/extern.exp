@@ -1,6 +1,6 @@
 # Test EXTERN in a linker script.
 # By Nathan Sidwell, CodeSourcery LLC
-#   Copyright (C) 2007-2021 Free Software Foundation, Inc.
+#   Copyright (C) 2007-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -22,7 +22,7 @@
 set testname "EXTERN"
 
 if ![ld_assemble $as $srcdir/$subdir/extern.s tmpdir/extern.o] {
-    unresolved $testname
+    unsupported $testname
     return
 }
 

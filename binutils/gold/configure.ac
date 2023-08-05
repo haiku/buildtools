@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl
-dnl   Copyright (C) 2006-2021 Free Software Foundation, Inc.
+dnl   Copyright (C) 2006-2023 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ AC_CONFIG_SRCDIR(gold.cc)
 AC_CANONICAL_TARGET
 
 AM_INIT_AUTOMAKE([no-dist parallel-tests])
+AM_SILENT_RULES([yes])
 
 AM_CONFIG_HEADER(config.h:config.in)
 
@@ -565,8 +566,10 @@ else
   AC_LIBOBJ(mremap)
 fi
 
-# Link in zlib if we can.  This allows us to write compressed sections.
+# Link in zlib/zstd if we can.  This allows us to write compressed sections.
 AM_ZLIB
+AC_ZSTD
+AM_CONDITIONAL(HAVE_ZSTD, test "$pkg_cv_ZSTD_LIBS" != "")
 
 AC_ARG_ENABLE([threads],
 [[  --enable-threads[=ARG]  multi-threaded linking [ARG={auto,yes,no}]]],
@@ -589,6 +592,32 @@ if test "$threads" = "yes"; then
 	    [Define to do multi-threaded linking])
 fi
 AM_CONDITIONAL(THREADS, test "$threads" = "yes")
+
+# Used to validate --package-metadata= input. Disabled by default.
+AC_ARG_ENABLE([jansson],
+  [AS_HELP_STRING([--enable-jansson],
+    [enable jansson [default=no]])],
+  [enable_jansson=$enableval],
+  [enable_jansson="no"])
+
+if test "x$enable_jansson" != "xno"; then
+  PKG_PROG_PKG_CONFIG
+  AS_IF([test -n "$PKG_CONFIG"],
+    [
+      PKG_CHECK_MODULES(JANSSON, [jansson],
+	[
+	  AC_DEFINE(HAVE_JANSSON, 1, [The jansson library is to be used])
+	  AC_SUBST([JANSSON_CFLAGS])
+	  AC_SUBST([JANSSON_LIBS])
+	],
+	[
+	  AC_MSG_ERROR([Cannot find jansson library])
+	])
+    ],
+    [
+      AC_MSG_ERROR([Cannot find pkg-config])
+    ])
+fi
 
 dnl We have to check these in C, not C++, because autoconf generates
 dnl tests which have no type information, and current glibc provides
@@ -636,7 +665,7 @@ case "$ac_cv_search_dlopen" in
 esac
 AC_SUBST(DLOPEN_LIBS)
 
-AC_CHECK_FUNCS(mallinfo posix_fallocate fallocate readv sysconf times mkdtemp)
+AC_CHECK_FUNCS(mallinfo mallinfo2 posix_fallocate fallocate readv sysconf times mkdtemp)
 AC_CHECK_DECLS([basename, ffs, asprintf, vasprintf, snprintf, vsnprintf, strverscmp, strndup, memmem])
 
 # Use of ::std::tr1::unordered_map::rehash causes undefined symbols

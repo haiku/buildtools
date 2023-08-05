@@ -1,5 +1,5 @@
 /* symbols.h -
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -35,6 +35,13 @@ extern int symbol_table_frozen;
    default.  */
 extern int symbols_case_sensitive;
 
+extern void *notes_alloc (size_t);
+extern void *notes_calloc (size_t, size_t);
+extern void *notes_memdup (const void *, size_t, size_t);
+extern char *notes_strdup (const char *);
+extern char *notes_concat (const char *, ...);
+extern void notes_free (void *);
+
 char * symbol_relc_make_expr  (expressionS *);
 char * symbol_relc_make_sym   (symbolS *);
 char * symbol_relc_make_value (offsetT);
@@ -60,6 +67,7 @@ symbolS *symbol_temp_make (void);
 symbolS *colon (const char *sym_name);
 void local_colon (int n);
 void symbol_begin (void);
+void symbol_end (void);
 void dot_symbol_init (void);
 void symbol_print_statistics (FILE *);
 void symbol_table_insert (symbolS * symbolP);
@@ -72,18 +80,19 @@ void print_expr (expressionS *);
 void print_expr_1 (FILE *, expressionS *);
 void print_symbol_value_1 (FILE *, symbolS *);
 
-int dollar_label_defined (long l);
+int dollar_label_defined (unsigned int);
 void dollar_label_clear (void);
-void define_dollar_label (long l);
-char *dollar_label_name (long l, int augend);
+void define_dollar_label (unsigned int);
+char *dollar_label_name (unsigned int, unsigned int);
 
-void fb_label_instance_inc (long label);
-char *fb_label_name (long n, long augend);
+void fb_label_instance_inc (unsigned int);
+char *fb_label_name (unsigned int, unsigned int);
 
 extern void copy_symbol_attributes (symbolS *, symbolS *);
 
 /* Get and set the values of symbols.  These used to be macros.  */
 extern valueT S_GET_VALUE (symbolS *);
+extern valueT S_GET_VALUE_WHERE (symbolS *, const char *, unsigned int);
 extern void S_SET_VALUE (symbolS *, valueT);
 
 extern int S_IS_FUNCTION (symbolS *);
@@ -193,6 +202,8 @@ extern int symbol_mri_common_p (symbolS *);
 extern void symbol_mark_written (symbolS *);
 extern void symbol_clear_written (symbolS *);
 extern int symbol_written_p (symbolS *);
+extern void symbol_mark_removed (symbolS *);
+extern int symbol_removed_p (symbolS *);
 extern void symbol_mark_resolved (symbolS *);
 extern int symbol_resolved_p (symbolS *);
 extern int symbol_section_p (symbolS *);

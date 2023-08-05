@@ -23,7 +23,7 @@ Key to Flags:
 #...
 
 Elf file type is DYN \(Shared object file\)
-Entry point 0x10000080
+Entry point 0x[0-9a-f]+
 There are 4 program headers, starting at offset 52
 
 Program Headers:
@@ -31,7 +31,7 @@ Program Headers:
   LOAD           0x001000 0x00008000 0x00008000 0x001fc 0x001fc RW  0x1000
   LOAD           0x002000 0x10000000 0x10000000 0x00130 0x00134 RWE 0x1000
   DYNAMIC        0x001154 0x00008154 0x00008154 0x000a8 0x000a8 RW  0x4
-  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x20000 RWE 0x8
+  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x20000 RW  0x8
 
  Section to Segment mapping:
   Segment Sections\.\.\.
@@ -78,11 +78,11 @@ Relocation section '\.rela\.plt' at offset 0x2000 contains 2 entries:
 Symbol table '\.dynsym' contains 12 entries:
    Num:    Value  Size Type    Bind   Vis      Ndx Name
      0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND 
-     1: 10000020     0 SECTION LOCAL  DEFAULT    8 
-     2: 10000080     0 SECTION LOCAL  DEFAULT    9 
-     3: 10000100     0 SECTION LOCAL  DEFAULT   10 
-     4: 10000128     0 SECTION LOCAL  DEFAULT   11 
-     5: 10000130     0 SECTION LOCAL  DEFAULT   12 
+     1: 10000020     0 SECTION LOCAL  DEFAULT    8.*
+     2: 10000080     0 SECTION LOCAL  DEFAULT    9.*
+     3: 10000100     0 SECTION LOCAL  DEFAULT   10.*
+     4: 10000128     0 SECTION LOCAL  DEFAULT   11.*
+     5: 10000130     0 SECTION LOCAL  DEFAULT   12.*
      6: 00000000     0 NOTYPE  WEAK   DEFAULT  UND b
      7: 00000000     0 NOTYPE  WEAK   DEFAULT  UND g1
      8: 1000012c     4 OBJECT  GLOBAL DEFAULT   11 g2
@@ -93,19 +93,19 @@ Symbol table '\.dynsym' contains 12 entries:
 Symbol table '\.symtab' contains 27 entries:
    Num:    Value  Size Type    Bind   Vis      Ndx Name
      0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND 
-     1: 00008000     0 SECTION LOCAL  DEFAULT    1 
-     2: 00008044     0 SECTION LOCAL  DEFAULT    2 
-     3: 00008104     0 SECTION LOCAL  DEFAULT    3 
-     4: 00008118     0 SECTION LOCAL  DEFAULT    4 
-     5: 0000813c     0 SECTION LOCAL  DEFAULT    5 
-     6: 00008154     0 SECTION LOCAL  DEFAULT    6 
-     7: 10000000     0 SECTION LOCAL  DEFAULT    7 
-     8: 10000020     0 SECTION LOCAL  DEFAULT    8 
-     9: 10000080     0 SECTION LOCAL  DEFAULT    9 
-    10: 10000100     0 SECTION LOCAL  DEFAULT   10 
-    11: 10000128     0 SECTION LOCAL  DEFAULT   11 
-    12: 10000130     0 SECTION LOCAL  DEFAULT   12 
-    13: 00000000     0 SECTION LOCAL  DEFAULT   13 
+     1: 00008000     0 SECTION LOCAL  DEFAULT    1.*
+     2: 00008044     0 SECTION LOCAL  DEFAULT    2.*
+     3: 00008104     0 SECTION LOCAL  DEFAULT    3.*
+     4: 00008118     0 SECTION LOCAL  DEFAULT    4.*
+     5: 0000813c     0 SECTION LOCAL  DEFAULT    5.*
+     6: 00008154     0 SECTION LOCAL  DEFAULT    6.*
+     7: 10000000     0 SECTION LOCAL  DEFAULT    7.*
+     8: 10000020     0 SECTION LOCAL  DEFAULT    8.*
+     9: 10000080     0 SECTION LOCAL  DEFAULT    9.*
+    10: 10000100     0 SECTION LOCAL  DEFAULT   10.*
+    11: 10000128     0 SECTION LOCAL  DEFAULT   11.*
+    12: 10000130     0 SECTION LOCAL  DEFAULT   12.*
+    13: 00000000     0 SECTION LOCAL  DEFAULT   13.*
     14: 00000000     0 FILE    LOCAL  DEFAULT  ABS .*shlib-1\.o
     15: 10000080     0 FUNC    LOCAL  HIDDEN     9 sub1
     16: 00000000     0 FILE    LOCAL  DEFAULT  ABS 

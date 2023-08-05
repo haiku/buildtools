@@ -1,5 +1,5 @@
 /* output-file.c -  Deal with the output file
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -19,6 +19,9 @@
    02110-1301, USA.  */
 
 #include "as.h"
+#include "subsegs.h"
+#include "sb.h"
+#include "macro.h"
 #include "output-file.h"
 
 #ifndef TARGET_MACH
@@ -49,24 +52,73 @@ output_file_create (const char *name)
     stdoutput->flags |= BFD_TRADITIONAL_FORMAT;
 }
 
-void
-output_file_close (const char *filename)
+static void
+stash_frchain_obs (asection *sec)
 {
-  bfd_boolean res;
+  segment_info_type *info = seg_info (sec);
+  if (info)
+    {
+      struct frchain *frchp;
+      for (frchp = info->frchainP; frchp; frchp = frchp->frch_next)
+	obstack_ptr_grow (&notes, &frchp->frch_obstack);
+      info->frchainP = NULL;
+    }
+}
 
-  if (stdoutput == NULL)
+void
+output_file_close (void)
+{
+  bool res;
+  bfd *obfd = stdoutput;
+  struct obstack **obs;
+  asection *sec;
+  const char *filename;
+
+  if (obfd == NULL)
     return;
-
-  /* Close the bfd.  */
-  if (!flag_always_generate_output && had_errors ())
-    res = bfd_cache_close_all ();
-  else
-    res = bfd_close (stdoutput);
 
   /* Prevent an infinite loop - if the close failed we will call as_fatal
      which will call xexit() which may call this function again...  */
   stdoutput = NULL;
 
-  if (! res)
+  /* We can't free obstacks attached to the output bfd sections before
+     closing the output bfd since data in those obstacks may need to
+     be accessed, but we can't access anything in the output bfd after
+     it is closed..  */
+  for (sec = obfd->sections; sec; sec = sec->next)
+    stash_frchain_obs (sec);
+  stash_frchain_obs (reg_section);
+  stash_frchain_obs (expr_section);
+  stash_frchain_obs (bfd_abs_section_ptr);
+  stash_frchain_obs (bfd_und_section_ptr);
+  obstack_ptr_grow (&notes, NULL);
+  obs = obstack_finish (&notes);
+
+  /* Close the bfd.  */
+  if (!flag_always_generate_output && had_errors ())
+    res = bfd_close_all_done (obfd);
+  else
+    res = bfd_close (obfd);
+  now_seg = NULL;
+  now_subseg = 0;
+
+  filename = out_file_name;
+  out_file_name = NULL;
+  if (!keep_it && filename)
+    unlink_if_ordinary (filename);
+
+#ifdef md_end
+  md_end ();
+#endif
+#ifdef obj_end
+  obj_end ();
+#endif
+  macro_end ();
+  expr_end ();
+  read_end ();
+  symbol_end ();
+  subsegs_end (obs);
+
+  if (!res)
     as_fatal ("%s: %s", filename, bfd_errmsg (bfd_get_error ()));
 }

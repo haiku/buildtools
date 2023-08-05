@@ -1,5 +1,5 @@
 /* ldlex.h -
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -54,6 +54,7 @@ enum option_values
   OPTION_OFORMAT,
   OPTION_RELAX,
   OPTION_NO_RELAX,
+  OPTION_NO_SYMBOLIC,
   OPTION_RETAIN_SYMBOLS_FILE,
   OPTION_RPATH,
   OPTION_RPATH_LINK,
@@ -87,6 +88,7 @@ enum option_values
   OPTION_WARN_CONSTRUCTORS,
   OPTION_WARN_FATAL,
   OPTION_NO_WARN_FATAL,
+  OPTION_NO_WARNINGS,
   OPTION_WARN_MULTIPLE_GP,
   OPTION_WARN_ONCE,
   OPTION_WARN_SECTION_ALIGN,
@@ -119,6 +121,7 @@ enum option_values
 #if SUPPORT_ERROR_HANDLING_SCRIPT
   OPTION_ERROR_HANDLING_SCRIPT,
 #endif
+  OPTION_UNDEFINED_VERSION,
   OPTION_NO_UNDEFINED_VERSION,
   OPTION_DEFAULT_SYMVER,
   OPTION_DEFAULT_IMPORTED_SYMVER,
@@ -132,12 +135,14 @@ enum option_values
   OPTION_ACCEPT_UNKNOWN_INPUT_ARCH,
   OPTION_NO_ACCEPT_UNKNOWN_INPUT_ARCH,
   OPTION_PIE,
+  OPTION_NO_PIE,
   OPTION_UNRESOLVED_SYMBOLS,
   OPTION_WARN_UNRESOLVED_SYMBOLS,
   OPTION_ERROR_UNRESOLVED_SYMBOLS,
   OPTION_WARN_TEXTREL,
   OPTION_WARN_ALTERNATE_EM,
   OPTION_REDUCE_MEMORY_OVERHEADS,
+  OPTION_MAX_CACHE_SIZE,
 #if BFD_SUPPORTS_PLUGINS
   OPTION_PLUGIN,
   OPTION_PLUGIN_OPT,
@@ -155,16 +160,27 @@ enum option_values
   OPTION_FORCE_GROUP_ALLOCATION,
   OPTION_PRINT_MAP_DISCARDED,
   OPTION_NO_PRINT_MAP_DISCARDED,
+  OPTION_PRINT_MAP_LOCALS,
+  OPTION_NO_PRINT_MAP_LOCALS,
   OPTION_NON_CONTIGUOUS_REGIONS,
   OPTION_NON_CONTIGUOUS_REGIONS_WARNINGS,
   OPTION_DEPENDENCY_FILE,
   OPTION_CTF_VARIABLES,
   OPTION_NO_CTF_VARIABLES,
   OPTION_CTF_SHARE_TYPES,
+  OPTION_WARN_EXECSTACK,
+  OPTION_NO_WARN_EXECSTACK,
+  OPTION_WARN_RWX_SEGMENTS,
+  OPTION_NO_WARN_RWX_SEGMENTS,
+  OPTION_ENABLE_LINKER_VERSION,
+  OPTION_DISABLE_LINKER_VERSION,
+  OPTION_REMAP_INPUTS,
+  OPTION_REMAP_INPUTS_FILE,
 };
 
 /* The initial parser states.  */
-typedef enum input_enum {
+typedef enum input_enum
+{
   input_selected,		/* We've set the initial state.  */
   input_script,
   input_mri_script,
@@ -187,10 +203,10 @@ extern void ldlex_inputlist (void);
 extern void ldlex_mri_script (void);
 extern void ldlex_version_script (void);
 extern void ldlex_version_file (void);
-extern void ldlex_defsym (void);
 extern void ldlex_expression (void);
-extern void ldlex_both (void);
+extern void ldlex_wild (void);
 extern void ldlex_popstate (void);
+extern void ldlex_backup (void);
 extern const char* ldlex_filename (void);
 
 /* In lexsup.c.  */

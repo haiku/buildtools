@@ -1,5 +1,5 @@
 /* BFD COFF interfaces used outside of BFD.
-   Copyright (C) 1990-2021 Free Software Foundation, Inc.
+   Copyright (C) 1990-2023 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -27,7 +27,7 @@
 
 /* Return the COFF syment for a symbol.  */
 
-bfd_boolean
+bool
 bfd_coff_get_syment (bfd *abfd,
 		     asymbol *symbol,
 		     struct internal_syment *psyment)
@@ -39,23 +39,27 @@ bfd_coff_get_syment (bfd *abfd,
       || ! csym->native->is_sym)
     {
       bfd_set_error (bfd_error_invalid_operation);
-      return FALSE;
+      return false;
     }
 
   *psyment = csym->native->u.syment;
 
   if (csym->native->fix_value)
-    psyment->n_value = psyment->n_value -
-      (bfd_hostptr_t) obj_raw_syments (abfd);
+    {
+      psyment->n_value =
+	((psyment->n_value - (uintptr_t) obj_raw_syments (abfd))
+	 / sizeof (combined_entry_type));
+      csym->native->fix_value = 0;
+    }
 
   /* FIXME: We should handle fix_line here.  */
 
-  return TRUE;
+  return true;
 }
 
 /* Return the COFF auxent for a symbol.  */
 
-bfd_boolean
+bool
 bfd_coff_get_auxent (bfd *abfd,
 		     asymbol *symbol,
 		     int indx,
@@ -72,7 +76,7 @@ bfd_coff_get_auxent (bfd *abfd,
       || indx >= csym->native->u.syment.n_numaux)
     {
       bfd_set_error (bfd_error_invalid_operation);
-      return FALSE;
+      return false;
     }
 
   ent = csym->native + indx + 1;
@@ -81,19 +85,28 @@ bfd_coff_get_auxent (bfd *abfd,
   *pauxent = ent->u.auxent;
 
   if (ent->fix_tag)
-    pauxent->x_sym.x_tagndx.l =
-      ((combined_entry_type *) pauxent->x_sym.x_tagndx.p
-       - obj_raw_syments (abfd));
+    {
+      pauxent->x_sym.x_tagndx.u32 =
+	((combined_entry_type *) pauxent->x_sym.x_tagndx.p
+	 - obj_raw_syments (abfd));
+      ent->fix_tag = 0;
+    }
 
   if (ent->fix_end)
-    pauxent->x_sym.x_fcnary.x_fcn.x_endndx.l =
-      ((combined_entry_type *) pauxent->x_sym.x_fcnary.x_fcn.x_endndx.p
-       - obj_raw_syments (abfd));
+    {
+      pauxent->x_sym.x_fcnary.x_fcn.x_endndx.u32 =
+	((combined_entry_type *) pauxent->x_sym.x_fcnary.x_fcn.x_endndx.p
+	 - obj_raw_syments (abfd));
+      ent->fix_end = 0;
+    }
 
   if (ent->fix_scnlen)
-    pauxent->x_csect.x_scnlen.l =
-      ((combined_entry_type *) pauxent->x_csect.x_scnlen.p
-       - obj_raw_syments (abfd));
+    {
+      pauxent->x_csect.x_scnlen.u64 =
+	((combined_entry_type *) pauxent->x_csect.x_scnlen.p
+	 - obj_raw_syments (abfd));
+      ent->fix_scnlen = 0;
+    }
 
-  return TRUE;
+  return true;
 }

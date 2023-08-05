@@ -1,5 +1,5 @@
 /* tc-mmix.c -- Assembler for Don Knuth's MMIX.
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -623,6 +623,8 @@ get_putget_operands (struct mmix_opcode *insn, char *operands,
 
   regno = get_spec_regno (sregp);
   *sregend = c;
+
+  resolve_register (expp_reg);
 
   /* Let the caller issue errors; we've made sure the operands are
      invalid.  */
@@ -2287,7 +2289,7 @@ md_atof (int type, char *litP, int *sizeP)
      The testsuite wants it, and it's customary.
      We'll deal with the real problems when they come; we share the
      problem with most other ports.  */
-  return ieee_md_atof (type, litP, sizeP, TRUE);
+  return ieee_md_atof (type, litP, sizeP, true);
 }
 
 /* Convert variable-sized frags into one or more fixups.  */
@@ -3171,7 +3173,7 @@ mmix_handle_mmixal (void)
     }
   else if (s[0] == 'G'
 	   && s[1] == 'R'
-	   && strncmp (s, "GREG", 4) == 0
+	   && startswith (s, "GREG")
 	   && (ISSPACE (s[4]) || is_end_of_line[(unsigned char) s[4]]))
     {
       input_line_pointer = s + 4;
@@ -3368,7 +3370,7 @@ mmix_md_relax_frag (segT seg, fragS *fragP, long stretch)
 {
   switch (fragP->fr_subtype)
     {
-      /* Growth for this type has been handled by mmix_md_end and
+      /* Growth for this type has been handled by mmix_md_finish and
 	 correctly estimated, so there's nothing more to do here.  */
     case STATE_GREG_DEF:
       return 0;
@@ -3490,7 +3492,7 @@ mmix_md_relax_frag (segT seg, fragS *fragP, long stretch)
 /* Various things we punt until all input is seen.  */
 
 void
-mmix_md_end (void)
+mmix_md_finish (void)
 {
   fragS *fragP;
   symbolS *mainsym;
@@ -3742,8 +3744,7 @@ mmix_frob_file (void)
       /* This case isn't doable in general anyway, methinks.  */
       if (fixP->fx_subsy != NULL)
 	{
-	  as_bad_where (fixP->fx_file, fixP->fx_line,
-			_("GREG expression too complicated"));
+	  as_bad_subtract (fixP);
 	  continue;
 	}
 

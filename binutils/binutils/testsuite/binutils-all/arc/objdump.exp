@@ -1,4 +1,4 @@
-#   Copyright (C) 2016-2021 Free Software Foundation, Inc.
+#   Copyright (C) 2016-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@ proc check_assembly { testname objfile expected { disas_flags "" } } {
 	fail $testname
 	return
     }
-    set got [binutils_run $OBJDUMP "$OBJDUMPFLAGS --disassemble $disas_flags \
+    set got [binutils_run $OBJDUMP "$OBJDUMPFLAGS --disassemble --disassembler-color=off $disas_flags \
 	$objfile"]
 
     if [regexp $expected $got] then {

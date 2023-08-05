@@ -100,18 +100,18 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	a3 11 22 33 44 55 66 77 88 	movabs %eax,0x8877665544332211
 [ 	]*[a-f0-9]+:	48 a1 11 22 33 44 55 66 77 88 	movabs 0x8877665544332211,%rax
 [ 	]*[a-f0-9]+:	48 a3 11 22 33 44 55 66 77 88 	movabs %rax,0x8877665544332211
-[ 	]*[a-f0-9]+:	48 99                	cqto   
-[ 	]*[a-f0-9]+:	48 98                	cltq   
+[ 	]*[a-f0-9]+:	48 99                	cqto
+[ 	]*[a-f0-9]+:	48 98                	cltq
 [ 	]*[a-f0-9]+:	48 63 c0             	movslq %eax,%rax
 [ 	]*[a-f0-9]+:	48 0f bf c0          	movswq %ax,%rax
 [ 	]*[a-f0-9]+:	48 0f be c0          	movsbq %al,%rax
-[ 	]*[a-f0-9]+:	cb                   	lret *
+[ 	]*[a-f0-9]+:	cb                   	lret
 [ 	]*[a-f0-9]+:	ca 10 00             	lret   \$0x10
-[ 	]*[a-f0-9]+:	66 cb                	lretw *
+[ 	]*[a-f0-9]+:	66 cb                	lretw
 [ 	]*[a-f0-9]+:	66 ca 02 00          	lretw  \$0x2
-[ 	]*[a-f0-9]+:	cb                   	lret *
+[ 	]*[a-f0-9]+:	cb                   	lret
 [ 	]*[a-f0-9]+:	ca 04 00             	lret   \$0x4
-[ 	]*[a-f0-9]+:	48 cb                	lretq *
+[ 	]*[a-f0-9]+:	48 cb                	lretq
 [ 	]*[a-f0-9]+:	48 ca 08 00          	lretq  \$0x8
 
 [0-9a-f]+ <bar>:
@@ -258,4 +258,72 @@ Disassembly of section .text:
 [ 	]*[a-f0-9]+:	48 0f c3 00          	movnti %rax,\(%rax\)
 [ 	]*[a-f0-9]+:	8b 04 25 00 00 00 00 	mov    0x0,%eax
 [ 	]*[a-f0-9]+:	48 89 0c 25 00 00 00 00 	mov    %rcx,0x0
+[ 	]*[a-f0-9]+:	66 0f 02 d2          	lar    %dx,%dx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	66 0f 02 12          	lar    \(%rdx\),%dx
+[ 	]*[a-f0-9]+:	0f 02 12             	lar    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 02 12             	lar    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 00 d2             	lldt   %dx
+[ 	]*[a-f0-9]+:	0f 00 d2             	lldt   %dx
+[ 	]*[a-f0-9]+:	0f 00 d2             	lldt   %dx
+[ 	]*[a-f0-9]+:	0f 00 12             	lldt   \(%rdx\)
+[ 	]*[a-f0-9]+:	66 0f 03 d2          	lsl    %dx,%dx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	66 0f 03 12          	lsl    \(%rdx\),%dx
+[ 	]*[a-f0-9]+:	0f 03 12             	lsl    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 03 12             	lsl    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 00 da             	ltr    %dx
+[ 	]*[a-f0-9]+:	0f 00 da             	ltr    %dx
+[ 	]*[a-f0-9]+:	0f 00 da             	ltr    %dx
+[ 	]*[a-f0-9]+:	0f 00 1a             	ltr    \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 e2             	verr   %dx
+[ 	]*[a-f0-9]+:	0f 00 e2             	verr   %dx
+[ 	]*[a-f0-9]+:	0f 00 e2             	verr   %dx
+[ 	]*[a-f0-9]+:	0f 00 22             	verr   \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 ea             	verw   %dx
+[ 	]*[a-f0-9]+:	0f 00 ea             	verw   %dx
+[ 	]*[a-f0-9]+:	0f 00 ea             	verw   %dx
+[ 	]*[a-f0-9]+:	0f 00 2a             	verw   \(%rdx\)
+[ 	]*[a-f0-9]+:	66 0f 02 d2          	lar    %dx,%dx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 02 d2             	lar    %edx,%edx
+[ 	]*[a-f0-9]+:	66 0f 02 12          	lar    \(%rdx\),%dx
+[ 	]*[a-f0-9]+:	0f 02 12             	lar    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 02 12             	lar    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 00 d2             	lldt   %dx
+[ 	]*[a-f0-9]+:	0f 00 d2             	lldt   %dx
+[ 	]*[a-f0-9]+:	0f 00 d2             	lldt   %dx
+[ 	]*[a-f0-9]+:	0f 00 12             	lldt   \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 12             	lldt   \(%rdx\)
+[ 	]*[a-f0-9]+:	66 0f 03 d2          	lsl    %dx,%dx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	0f 03 d2             	lsl    %edx,%edx
+[ 	]*[a-f0-9]+:	66 0f 03 12          	lsl    \(%rdx\),%dx
+[ 	]*[a-f0-9]+:	0f 03 12             	lsl    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 03 12             	lsl    \(%rdx\),%edx
+[ 	]*[a-f0-9]+:	0f 00 da             	ltr    %dx
+[ 	]*[a-f0-9]+:	0f 00 da             	ltr    %dx
+[ 	]*[a-f0-9]+:	0f 00 da             	ltr    %dx
+[ 	]*[a-f0-9]+:	0f 00 1a             	ltr    \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 1a             	ltr    \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 e2             	verr   %dx
+[ 	]*[a-f0-9]+:	0f 00 e2             	verr   %dx
+[ 	]*[a-f0-9]+:	0f 00 e2             	verr   %dx
+[ 	]*[a-f0-9]+:	0f 00 22             	verr   \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 22             	verr   \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 ea             	verw   %dx
+[ 	]*[a-f0-9]+:	0f 00 ea             	verw   %dx
+[ 	]*[a-f0-9]+:	0f 00 ea             	verw   %dx
+[ 	]*[a-f0-9]+:	0f 00 2a             	verw   \(%rdx\)
+[ 	]*[a-f0-9]+:	0f 00 2a             	verw   \(%rdx\)
 #pass

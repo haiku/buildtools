@@ -1,5 +1,5 @@
 /* Linker file opening and searching.
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -34,12 +34,13 @@
 #include "ldemul.h"
 #include "libiberty.h"
 #include "filenames.h"
+#include <fnmatch.h>
 #if BFD_SUPPORTS_PLUGINS
 #include "plugin-api.h"
 #include "plugin.h"
 #endif /* BFD_SUPPORTS_PLUGINS */
 
-bfd_boolean ldfile_assumed_script = FALSE;
+bool ldfile_assumed_script = false;
 const char *ldfile_output_machine_name = "";
 unsigned long ldfile_output_machine;
 enum bfd_architecture ldfile_output_architecture;
@@ -65,22 +66,231 @@ static search_dirs_type **search_tail_ptr = &search_head;
 static search_arch_type *search_arch_head;
 static search_arch_type **search_arch_tail_ptr = &search_arch_head;
 
+typedef struct input_remap
+{
+  const char *          pattern;  /* Pattern to match input files.  */
+  const char *          renamed;  /* Filename to use if the pattern matches.  */
+  struct input_remap *  next;     /* Link in a chain of these structures.  */
+} input_remap;
+
+static struct input_remap * input_remaps = NULL;
+
+void
+ldfile_add_remap (const char * pattern, const char * renamed)
+{
+  struct input_remap * new_entry;
+
+  new_entry = xmalloc (sizeof * new_entry);
+  new_entry->pattern = xstrdup (pattern);
+  new_entry->next = NULL;
+
+  /* Look for special filenames that mean that the input file should be ignored.  */
+  if (strcmp (renamed, "/dev/null") == 0
+      || strcmp (renamed, "NUL") == 0)
+    new_entry->renamed = NULL;
+  else
+    /* FIXME: Should we add sanity checking of the 'renamed' string ?  */
+    new_entry->renamed = xstrdup (renamed);
+
+  /* It would be easier to add this new node at the start of the chain,
+     but users expect that remapping will occur in the order in which
+     they occur on the command line, and in the remapping files.  */
+  if (input_remaps == NULL)
+    {
+      input_remaps = new_entry;
+    }
+  else
+    {
+      struct input_remap * i;
+
+      for (i = input_remaps; i->next != NULL; i = i->next)
+	;
+      i->next = new_entry;
+    }
+}
+
+void
+ldfile_remap_input_free (void)
+{
+  while (input_remaps != NULL)
+    {
+      struct input_remap * i = input_remaps;
+
+      input_remaps = i->next;
+      free ((void *) i->pattern);
+      free ((void *) i->renamed);
+      free (i);
+    }
+}
+
+bool
+ldfile_add_remap_file (const char * file)
+{
+  FILE * f;
+
+  f = fopen (file, FOPEN_RT);
+  if (f == NULL)
+    return false;
+
+  size_t linelen = 256;
+  char * line = xmalloc (linelen);
+
+  do
+    {
+      char * p = line;
+      char * q;
+
+      /* Normally this would use getline(3), but we need to be portable.  */
+      while ((q = fgets (p, linelen - (p - line), f)) != NULL
+	     && strlen (q) == linelen - (p - line) - 1
+	     && line[linelen - 2] != '\n')
+	{
+	  line = xrealloc (line, 2 * linelen);
+	  p = line + linelen - 1;
+	  linelen += linelen;
+	}
+
+      if (q == NULL && p == line)
+	break;
+
+      p = strchr (line, '\n');
+      if (p)
+	*p = '\0';
+
+      /* Because the file format does not know any form of quoting we
+	 can search forward for the next '#' character and if found
+	 make it terminating the line.  */
+      p = strchr (line, '#');
+      if (p)
+	*p = '\0';
+
+      /* Remove leading whitespace.  NUL is no whitespace character.  */
+      p = line;
+      while (*p == ' ' || *p == '\f' || *p == '\r' || *p == '\t' || *p == '\v')
+	++p;
+
+      /* If the line is blank it is ignored.  */
+      if (*p == '\0')
+	continue;
+
+      char * pattern = p;
+
+      /* Advance past the pattern.  We accept whitespace or '=' as an
+	 end-of-pattern marker.  */
+      while (*p && *p != '=' && *p != ' ' && *p != '\t' && *p != '\f'
+	     && *p != '\r' && *p != '\v')
+	++p;
+
+      if (*p == '\0')
+	{
+	  einfo ("%F%P: malformed remap file entry: %s\n", line);
+	  continue;
+	}
+
+      * p++ = '\0';
+
+      /* Skip whitespace again.  */
+      while (*p == ' ' || *p == '\f' || *p == '\r' || *p == '\t' || *p == '\v')
+	++p;
+
+      if (*p == '\0')
+	{
+	  einfo ("%F%P: malformed remap file entry: %s\n", line);
+	  continue;
+	}
+
+      char * renamed = p;
+
+      /* Advance past the rename entry.  */
+      while (*p && *p != '=' && *p != ' ' && *p != '\t' && *p != '\f'
+	     && *p != '\r' && *p != '\v')
+	++p;
+      /* And terminate it.  */
+      *p = '\0';
+
+      ldfile_add_remap (pattern, renamed);
+    }
+  while (! feof (f));
+
+  free (line);
+  fclose (f);
+
+  return true;
+}
+
+const char *
+ldfile_possibly_remap_input (const char * filename)
+{
+  struct input_remap * i;
+
+  if (filename == NULL)
+    return NULL;
+
+  for (i = input_remaps; i != NULL; i = i->next)
+    {
+      if (fnmatch (i->pattern, filename, 0) == 0)
+	{
+	  if (verbose)
+	    {
+	      if (strpbrk ((i->pattern), "?*[") != NULL)
+		{
+		  if (i->renamed)
+		    info_msg (_("remap input file '%s' to '%s' based upon pattern '%s'\n"),
+			      filename, i->renamed, i->pattern);
+		  else
+		    info_msg (_("remove input file '%s' based upon pattern '%s'\n"),
+			      filename, i->pattern);
+		}
+	      else
+		{
+		  if (i->renamed)
+		    info_msg (_("remap input file '%s' to '%s'\n"),
+			      filename, i->renamed);
+		  else
+		    info_msg (_("remove input file '%s'\n"),
+			      filename);
+		}
+	    }
+
+	  return i->renamed;
+	}
+    }
+	 
+  return filename;
+}
+
+void
+ldfile_print_input_remaps (void)
+{
+  if (input_remaps == NULL)
+    return;
+
+  minfo (_("\nInput File Remapping\n\n"));
+
+  struct input_remap * i;
+
+  for (i = input_remaps; i != NULL; i = i->next)
+    minfo (_("  Pattern: %s\tMaps To: %s\n"), i->pattern,
+	   i->renamed ? i->renamed : _("<discard>"));
+}
+
+
 /* Test whether a pathname, after canonicalization, is the same or a
    sub-directory of the sysroot directory.  */
 
-static bfd_boolean
+static bool
 is_sysrooted_pathname (const char *name)
 {
   char *realname;
   int len;
-  bfd_boolean result;
+  bool result;
 
   if (ld_canon_sysroot == NULL)
-    return FALSE;
+    return false;
 
   realname = lrealpath (name);
   len = strlen (realname);
-  result = FALSE;
+  result = false;
   if (len > ld_canon_sysroot_len
       && IS_DIR_SEPARATOR (realname[ld_canon_sysroot_len]))
     {
@@ -96,7 +306,7 @@ is_sysrooted_pathname (const char *name)
    Makes a copy of NAME using xmalloc().  */
 
 void
-ldfile_add_library_path (const char *name, bfd_boolean cmdline)
+ldfile_add_library_path (const char *name, bool cmdline)
 {
   search_dirs_type *new_dirs;
 
@@ -113,7 +323,7 @@ ldfile_add_library_path (const char *name, bfd_boolean cmdline)
      now.  */
   if (name[0] == '=')
     new_dirs->name = concat (ld_sysroot, name + 1, (const char *) NULL);
-  else if (CONST_STRNEQ (name, "$SYSROOT"))
+  else if (startswith (name, "$SYSROOT"))
     new_dirs->name = concat (ld_sysroot, name + strlen ("$SYSROOT"), (const char *) NULL);
   else
     new_dirs->name = xstrdup (name);
@@ -121,7 +331,7 @@ ldfile_add_library_path (const char *name, bfd_boolean cmdline)
 
 /* Try to open a BFD for a lang_input_statement.  */
 
-bfd_boolean
+bool
 ldfile_try_open_bfd (const char *attempt,
 		     lang_input_statement_type *entry)
 {
@@ -139,10 +349,14 @@ ldfile_try_open_bfd (const char *attempt,
     {
       if (bfd_get_error () == bfd_error_invalid_target)
 	einfo (_("%F%P: invalid BFD target `%s'\n"), entry->target);
-      return FALSE;
+      return false;
     }
 
-  track_dependency_files (attempt);
+  /* PR 30568: Do not track lto generated temporary object files.  */
+#if BFD_SUPPORTS_PLUGINS
+  if (!entry->flags.lto_output)
+#endif
+    track_dependency_files (attempt);
 
   /* Linker needs to decompress sections.  */
   entry->the_bfd->flags |= BFD_DECOMPRESS;
@@ -162,8 +376,8 @@ ldfile_try_open_bfd (const char *attempt,
      a dynamic object.
 
      In the code below, it's OK to exit early if the check fails,
-     closing the checked BFD and returning FALSE, but if the BFD
-     checks out compatible, do not exit early returning TRUE, or
+     closing the checked BFD and returning false, but if the BFD
+     checks out compatible, do not exit early returning true, or
      the plugins will not get a chance to claim the file.  */
 
   if (entry->flags.search_dirs || !entry->flags.dynamic)
@@ -191,9 +405,9 @@ ldfile_try_open_bfd (const char *attempt,
 		  /* Try to interpret the file as a linker script.  */
 		  ldfile_open_command_file (attempt);
 
-		  ldfile_assumed_script = TRUE;
+		  ldfile_assumed_script = true;
 		  parser_input = input_selected;
-		  ldlex_both ();
+		  ldlex_script ();
 		  token = INPUT_SCRIPT;
 		  while (token != 0)
 		    {
@@ -258,7 +472,7 @@ ldfile_try_open_bfd (const char *attempt,
 		      token = yylex ();
 		    }
 		  ldlex_popstate ();
-		  ldfile_assumed_script = FALSE;
+		  ldfile_assumed_script = false;
 		  fclose (yyin);
 		  yyin = NULL;
 		  if (skip)
@@ -269,7 +483,7 @@ ldfile_try_open_bfd (const char *attempt,
 			       attempt, entry->local_sym_name);
 		      bfd_close (entry->the_bfd);
 		      entry->the_bfd = NULL;
-		      return FALSE;
+		      return false;
 		    }
 		}
 	      goto success;
@@ -281,7 +495,7 @@ ldfile_try_open_bfd (const char *attempt,
 		     attempt);
 	      bfd_close (entry->the_bfd);
 	      entry->the_bfd = NULL;
-	      return FALSE;
+	      return false;
 	    }
 
 	  if (entry->flags.search_dirs
@@ -299,7 +513,7 @@ ldfile_try_open_bfd (const char *attempt,
 		       attempt, entry->local_sym_name);
 	      bfd_close (entry->the_bfd);
 	      entry->the_bfd = NULL;
-	      return FALSE;
+	      return false;
 	    }
 	}
     }
@@ -322,13 +536,13 @@ ldfile_try_open_bfd (const char *attempt,
 
   /* It opened OK, the format checked out, and the plugins have had
      their chance to claim it, so this is success.  */
-  return TRUE;
+  return true;
 }
 
 /* Search for and open the file specified by ENTRY.  If it is an
    archive, use ARCH, LIB and SUFFIX to modify the file name.  */
 
-bfd_boolean
+bool
 ldfile_open_file_search (const char *arch,
 			 lang_input_statement_type *entry,
 			 const char *lib,
@@ -347,15 +561,15 @@ ldfile_open_file_search (const char *arch,
 	  if (ldfile_try_open_bfd (name, entry))
 	    {
 	      entry->filename = name;
-	      return TRUE;
+	      return true;
 	    }
 	  free (name);
 	}
       else if (ldfile_try_open_bfd (entry->filename, entry))
-	return TRUE;
+	return true;
 
       if (IS_ABSOLUTE_PATH (entry->filename))
-	return FALSE;
+	return false;
     }
 
   for (search = search_head; search != NULL; search = search->next)
@@ -365,7 +579,7 @@ ldfile_open_file_search (const char *arch,
       if (entry->flags.dynamic && !bfd_link_relocatable (&link_info))
 	{
 	  if (ldemul_open_dynamic_archive (arch, search, entry))
-	    return TRUE;
+	    return true;
 	}
 
       if (entry->flags.maybe_archive && !entry->flags.full_name_provided)
@@ -378,13 +592,13 @@ ldfile_open_file_search (const char *arch,
       if (ldfile_try_open_bfd (string, entry))
 	{
 	  entry->filename = string;
-	  return TRUE;
+	  return true;
 	}
 
       free (string);
     }
 
-  return FALSE;
+  return false;
 }
 
 /* Open the input file specified by ENTRY.
@@ -409,13 +623,13 @@ ldfile_open_file (lang_input_statement_type *entry)
       else
 	einfo (_("%P: cannot find %s: %E\n"), entry->local_sym_name);
 
-      entry->flags.missing_file = TRUE;
-      input_flags.missing_file = TRUE;
+      entry->flags.missing_file = true;
+      input_flags.missing_file = true;
     }
   else
     {
       search_arch_type *arch;
-      bfd_boolean found = FALSE;
+      bool found = false;
 
       /* If extra_search_path is set, entry->filename is a relative path.
 	 Search the directory of the current linker script before searching
@@ -427,7 +641,7 @@ ldfile_open_file (lang_input_statement_type *entry)
 	  if (ldfile_try_open_bfd (path, entry))
 	    {
 	      entry->filename = path;
-	      entry->flags.search_dirs = FALSE;
+	      entry->flags.search_dirs = false;
 	      return;
 	    }
 
@@ -453,7 +667,7 @@ ldfile_open_file (lang_input_statement_type *entry)
       /* If we have found the file, we don't need to search directories
 	 again.  */
       if (found)
-	entry->flags.search_dirs = FALSE;
+	entry->flags.search_dirs = false;
       else
 	{
 	  if (entry->flags.sysrooted
@@ -491,11 +705,11 @@ ldfile_open_file (lang_input_statement_type *entry)
 		}
 	      else /* We ignore the return status of the script
 		      and always print the error message.  */
-		einfo (_("%P: cannot find %s\n"), entry->local_sym_name);
+		einfo (_("%P: cannot find %s: %E\n"), entry->local_sym_name);
 	    }
 #endif
 	  else
-	    einfo (_("%P: cannot find %s\n"), entry->local_sym_name);
+	    einfo (_("%P: cannot find %s: %E\n"), entry->local_sym_name);
 
 	  /* PR 25747: Be kind to users who forgot to add the
 	     "lib" prefix to their library when it was created.  */
@@ -513,8 +727,8 @@ ldfile_open_file (lang_input_statement_type *entry)
 		}
 	    }
 
-	  entry->flags.missing_file = TRUE;
-	  input_flags.missing_file = TRUE;
+	  entry->flags.missing_file = true;
+	  input_flags.missing_file = true;
 	}
     }
 }
@@ -522,7 +736,7 @@ ldfile_open_file (lang_input_statement_type *entry)
 /* Try to open NAME.  */
 
 static FILE *
-try_open (const char *name, bfd_boolean *sysrooted)
+try_open (const char *name, bool *sysrooted)
 {
   FILE *result;
 
@@ -544,12 +758,12 @@ try_open (const char *name, bfd_boolean *sysrooted)
 
 /* Return TRUE iff directory DIR contains an "ldscripts" subdirectory.  */
 
-static bfd_boolean
+static bool
 check_for_scripts_dir (char *dir)
 {
   char *buf;
   struct stat s;
-  bfd_boolean res;
+  bool res;
 
   buf = concat (dir, "/ldscripts", (const char *) NULL);
   res = stat (buf, &s) == 0 && S_ISDIR (s.st_mode);
@@ -604,8 +818,8 @@ find_scripts_dir (void)
 
 static FILE *
 ldfile_find_command_file (const char *name,
-			  bfd_boolean default_only,
-			  bfd_boolean *sysrooted)
+			  bool default_only,
+			  bool *sysrooted)
 {
   search_dirs_type *search;
   FILE *result = NULL;
@@ -627,7 +841,7 @@ ldfile_find_command_file (const char *name,
 	{
 	  search_dirs_type **save_tail_ptr = search_tail_ptr;
 	  search_tail_ptr = &script_search;
-	  ldfile_add_library_path (script_dir, TRUE);
+	  ldfile_add_library_path (script_dir, true);
 	  search_tail_ptr = save_tail_ptr;
 	}
     }
@@ -673,7 +887,7 @@ static void
 ldfile_open_command_file_1 (const char *name, enum script_open_style open_how)
 {
   FILE *ldlex_input_stack;
-  bfd_boolean sysrooted;
+  bool sysrooted;
   static struct script_name_list *processed_scripts = NULL;
   struct script_name_list *script;
   size_t len;

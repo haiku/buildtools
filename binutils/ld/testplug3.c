@@ -1,6 +1,6 @@
 /* Test plugin for the GNU linker.  Check non-object IR file and calling
    release_input_file from onclaim_file.
-   Copyright (C) 2015-2021 Free Software Foundation, Inc.
+   Copyright (C) 2015-2023 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -41,7 +41,7 @@ typedef struct claim_file
 {
   struct claim_file *next;
   struct ld_plugin_input_file file;
-  bfd_boolean claimed;
+  bool claimed;
   struct ld_plugin_symbol *symbols;
   int n_syms_allocated;
   int n_syms_used;
@@ -82,6 +82,7 @@ static const tag_name_t tag_names[] =
   ADDENTRY(LDPT_LINKER_OUTPUT),
   ADDENTRY(LDPT_OPTION),
   ADDENTRY(LDPT_REGISTER_CLAIM_FILE_HOOK),
+  ADDENTRY(LDPT_REGISTER_CLAIM_FILE_HOOK_V2),
   ADDENTRY(LDPT_REGISTER_ALL_SYMBOLS_READ_HOOK),
   ADDENTRY(LDPT_REGISTER_CLEANUP_HOOK),
   ADDENTRY(LDPT_ADD_SYMBOLS),
@@ -100,6 +101,7 @@ static const tag_name_t tag_names[] =
 
 /* Function pointers to cache hooks passed at onload time.  */
 static ld_plugin_register_claim_file tv_register_claim_file = 0;
+static ld_plugin_register_claim_file_v2 tv_register_claim_file_v2 = 0;
 static ld_plugin_register_all_symbols_read tv_register_all_symbols_read = 0;
 static ld_plugin_register_cleanup tv_register_cleanup = 0;
 static ld_plugin_add_symbols tv_add_symbols = 0;
@@ -122,10 +124,10 @@ static enum ld_plugin_status onload_ret = LDPS_OK;
 static enum ld_plugin_status claim_file_ret = LDPS_OK;
 static enum ld_plugin_status all_symbols_read_ret = LDPS_OK;
 static enum ld_plugin_status cleanup_ret = LDPS_OK;
-static bfd_boolean register_claimfile_hook = TRUE;
-static bfd_boolean register_allsymbolsread_hook = FALSE;
-static bfd_boolean register_cleanup_hook = FALSE;
-static bfd_boolean dumpresolutions = FALSE;
+static bool register_claimfile_hook = true;
+static bool register_allsymbolsread_hook = false;
+static bool register_cleanup_hook = false;
+static bool dumpresolutions = false;
 
 /* The master list of all claimable/claimed files.  */
 static claim_file_t *claimfiles_list = NULL;
@@ -305,7 +307,7 @@ set_ret_val (const char *whichval, enum ld_plugin_status retval)
 
 /* Records hooks which should be registered.  */
 static enum ld_plugin_status
-set_register_hook (const char *whichhook, bfd_boolean yesno)
+set_register_hook (const char *whichhook, bool yesno)
 {
   if (!strcmp ("claimfile", whichhook))
     register_claimfile_hook = yesno;
@@ -327,9 +329,9 @@ parse_option (const char *opt)
   else if (!strncmp ("pass", opt, 4))
     return set_ret_val (opt + 4, LDPS_OK);
   else if (!strncmp ("register", opt, 8))
-    return set_register_hook (opt + 8, TRUE);
+    return set_register_hook (opt + 8, true);
   else if (!strncmp ("noregister", opt, 10))
-    return set_register_hook (opt + 10, FALSE);
+    return set_register_hook (opt + 10, false);
   else if (!strncmp ("claim:", opt, 6))
     return record_claim_file (opt + 6, 0);
   else if (!strncmp ("sym:", opt, 4))
@@ -341,7 +343,7 @@ parse_option (const char *opt)
   else if (!strncmp ("dir:", opt, 4))
     return record_add_file (opt + 4, ADD_DIR);
   else if (!strcmp ("dumpresolutions", opt))
-    dumpresolutions = TRUE;
+    dumpresolutions = true;
   else
     return LDPS_ERR;
   return LDPS_OK;
@@ -370,6 +372,9 @@ parse_tv_tag (struct ld_plugin_tv *tv)
 	break;
       case LDPT_REGISTER_CLAIM_FILE_HOOK:
 	SETVAR(tv_register_claim_file);
+	break;
+      case LDPT_REGISTER_CLAIM_FILE_HOOK_V2:
+	SETVAR(tv_register_claim_file_v2);
 	break;
       case LDPT_REGISTER_ALL_SYMBOLS_READ_HOOK:
 	SETVAR(tv_register_all_symbols_read);
@@ -497,7 +502,7 @@ onclaim_file (const struct ld_plugin_input_file *file, int *claimed)
   size_t len = strlen (file->name);
   char *name = xstrdup (file->name);
   char *p = name + len;
-  bfd_boolean islib;
+  bool islib;
 
   /* Only match the file name without the directory part.  */
   islib = *p == 'a' && *(p - 1) == '.';
@@ -532,7 +537,7 @@ onclaim_file (const struct ld_plugin_input_file *file, int *claimed)
       TV_MESSAGE (LDPL_INFO, "Claimed: %s [@%ld/%ld]", file->name,
 		  (long)file->offset, (long)file->filesize);
 
-      claimfile->claimed = TRUE;
+      claimfile->claimed = true;
       claimfile->file = *file;
       if (claimfile->n_syms_used && !tv_add_symbols)
 	claim_file_ret = LDPS_ERR;

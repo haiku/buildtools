@@ -1,5 +1,5 @@
 # Test address printed by --print-map
-# Copyright (C) 2002-2021 Free Software Foundation, Inc.
+# Copyright (C) 2002-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -22,13 +22,19 @@ set testname "map addresses"
 
 # The source file doesn't matter.  Pinch one from the sizeof test.
 if {![ld_assemble $as $srcdir/$subdir/sizeof.s tmpdir/map-address.o]} {
-    unresolved $testname
+    unsupported $testname
     return
+}
+
+if { [is_pecoff_format] } then {
+    set IMAGE_BASE "--image-base 0"
+} else {
+    set IMAGE_BASE ""
 }
 
 if {![ld_link $ld tmpdir/map-address \
 	 "$LDFLAGS -T $srcdir/$subdir/map-address.t \
-	  tmpdir/map-address.o \
+	  $IMAGE_BASE tmpdir/map-address.o \
 	  -Map tmpdir/map-address.map"]} {
     fail $testname
     return
@@ -51,7 +57,7 @@ set testname "map to directory"
 
 if {![ld_link $ld tmpdir/map-address \
 	 "$LDFLAGS -T $srcdir/$subdir/map-address.t \
-	  tmpdir/map-address.o \
+	  $IMAGE_BASE tmpdir/map-address.o \
 	  -Map tmpdir --output fred"]} {
     fail $testname
     return
@@ -74,7 +80,7 @@ set testname "map to % directory"
 
 if {![ld_link $ld tmpdir/map-address \
 	 "$LDFLAGS -T $srcdir/$subdir/map-address.t \
-	  tmpdir/map-address.o \
+	  $IMAGE_BASE tmpdir/map-address.o \
 	  -Map=tmpdir/% --output fred"]} {
     fail $testname
     return
@@ -97,7 +103,7 @@ set testname "map to %.foo directory"
 
 if {![ld_link $ld tmpdir/map-address \
 	 "$LDFLAGS -T $srcdir/$subdir/map-address.t \
-	  tmpdir/map-address.o \
+	  $IMAGE_BASE tmpdir/map-address.o \
 	  -Map=tmpdir/%.foo --output fred"]} {
     fail $testname
     return
@@ -113,4 +119,31 @@ if {[regexp_diff \
     fail $testname
 } else {
     pass $testname
+}
+
+if { [is_elf_format] } {
+    set testname "map with locals"
+
+    if {![ld_link $ld tmpdir/map-address \
+	      "$LDFLAGS -T $srcdir/$subdir/map-address.t \
+	      $IMAGE_BASE tmpdir/map-address.o \
+	      -Map=tmpdir/map-locals.map --print-map-locals"]} {
+	fail $testname
+	return
+    }
+
+    if [is_remote host] then {
+	remote_upload host "tmpdir/map-locals.map"
+    }
+
+    # Some ELF targets do not preserve their local symbols.
+    setup_xfail "d30v-*-*" "dlx-*-*" "pj-*-*" "s12z-*-*" "xgate-*-*"
+    
+    if {[regexp_diff \
+	     "tmpdir/map-locals.map" \
+	     "$srcdir/$subdir/map-locals.d"]} {
+	fail $testname
+    } else {
+	pass $testname
+    }
 }

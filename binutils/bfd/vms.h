@@ -1,5 +1,5 @@
 /* vms.h -- Header file for VMS (Alpha and Vax) support.
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2023 Free Software Foundation, Inc.
 
    Main header file.
 
@@ -110,7 +110,7 @@ extern void _bfd_hexdump   (int, unsigned char *, int, int);
 #define vms_debug2(X)
 #endif
 
-extern char * vms_get_module_name (const char *, bfd_boolean);
+extern char * vms_get_module_name (const char *, bool);
 extern unsigned char *get_vms_time_string (unsigned char *);
 extern time_t vms_time_to_time_t (unsigned int hi, unsigned int lo);
 extern time_t vms_rawtime_to_time_t (unsigned char *);

@@ -1,5 +1,5 @@
 /* tc-crx.c -- Assembler code for the CRX CPU core.
-   Copyright (C) 2004-2021 Free Software Foundation, Inc.
+   Copyright (C) 2004-2023 Free Software Foundation, Inc.
 
    Contributed by Tomer Levi, NSC, Israel.
    Originally written for GAS 2.12 by Tomer Levi, NSC, Israel.
@@ -23,7 +23,7 @@
    MA 02110-1301, USA.  */
 
 #include "as.h"
-#include "bfd_stdint.h"
+#include <stdint.h>
 #include "safe-ctype.h"
 #include "dwarf2dbg.h"
 #include "opcode/crx.h"
@@ -43,7 +43,6 @@
 
 /* Utility macros for string comparison.  */
 #define streq(a, b)           (strcmp (a, b) == 0)
-#define strneq(a, b, c)       (strncmp (a, b, c) == 0)
 
 /* Assign a number NUM, shifted by SHIFT bytes, into a location
    pointed by index BYTE of array 'output_opcode'.  */
@@ -318,14 +317,10 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
       else
 	{
 	  /* We only resolve difference expressions in the same section.  */
-	  as_bad_where (fixP->fx_file, fixP->fx_line,
-			_("can't resolve `%s' {%s section} - `%s' {%s section}"),
-			fixP->fx_addsy ? S_GET_NAME (fixP->fx_addsy) : "0",
-			segment_name (fixP->fx_addsy
-				      ? S_GET_SEGMENT (fixP->fx_addsy)
-				      : absolute_section),
-			S_GET_NAME (fixP->fx_subsy),
-			segment_name (S_GET_SEGMENT (fixP->fx_addsy)));
+	  as_bad_subtract (fixP);
+	  free (reloc->sym_ptr_ptr);
+	  free (reloc);
+	  return NULL;
 	}
     }
 

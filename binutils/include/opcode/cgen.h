@@ -1,6 +1,6 @@
 /* Header file for targets using CGEN: Cpu tools GENerator.
 
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2023 Free Software Foundation, Inc.
 
    This file is part of GDB, the GNU debugger, and the GNU Binutils.
 
@@ -24,8 +24,7 @@
 #include "symcat.h"
 #include "cgen/bitset.h"
 
-/* ??? IWBN to replace bfd in the name.  */
-#include "bfd_stdint.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -915,7 +914,7 @@ typedef struct
      Each insn's value is stored with the insn.
      The first step in recognizing an insn for disassembly is
      (opcode & mask) == value.  */
-  CGEN_INSN_INT mask;
+  CGEN_INSN_LGUINT mask;
 #define CGEN_IFMT_MASK(ifmt) ((ifmt)->mask)
 
   /* Instruction fields.

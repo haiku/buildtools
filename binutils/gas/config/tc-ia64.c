@@ -1,5 +1,5 @@
 /* tc-ia64.c -- Assembler for the HP/Intel IA-64 architecture.
-   Copyright (C) 1998-2021 Free Software Foundation, Inc.
+   Copyright (C) 1998-2023 Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -51,10 +51,7 @@
 #include "elf/ia64.h"
 #include "bfdver.h"
 #include <time.h>
-
-#ifdef HAVE_LIMITS_H
 #include <limits.h>
-#endif
 
 #define NELEMS(a)	((int) (sizeof (a)/sizeof ((a)[0])))
 
@@ -164,7 +161,7 @@ struct label_fix
 {
   struct label_fix *next;
   struct symbol *sym;
-  bfd_boolean dw2_mark_labels;
+  bool dw2_mark_labels;
 };
 
 #ifdef TE_VMS
@@ -309,6 +306,7 @@ static struct
     slot[NUM_SLOTS];
 
     segT last_text_seg;
+    subsegT last_text_subseg;
 
     struct dynreg
       {
@@ -947,7 +945,7 @@ ia64_flush_insns (void)
   segT saved_seg;
   subsegT saved_subseg;
   unw_rec_list *ptr;
-  bfd_boolean mark;
+  bool mark;
 
   if (!md.last_text_seg)
     return;
@@ -955,14 +953,14 @@ ia64_flush_insns (void)
   saved_seg = now_seg;
   saved_subseg = now_subseg;
 
-  subseg_set (md.last_text_seg, 0);
+  subseg_set (md.last_text_seg, md.last_text_subseg);
 
   while (md.num_slots_in_use > 0)
     emit_one_bundle ();		/* force out queued instructions */
 
   /* In case there are labels following the last instruction, resolve
      those now.  */
-  mark = FALSE;
+  mark = false;
   for (lfix = CURR_SLOT.label_fixups; lfix; lfix = lfix->next)
     {
       symbol_set_value_now (lfix->sym);
@@ -1762,7 +1760,6 @@ static unw_rec_list *
 output_prologue (void)
 {
   unw_rec_list *ptr = alloc_record (prologue);
-  memset (&ptr->r.record.r.mask, 0, sizeof (ptr->r.record.r.mask));
   return ptr;
 }
 
@@ -1770,7 +1767,6 @@ static unw_rec_list *
 output_prologue_gr (unsigned int saved_mask, unsigned int reg)
 {
   unw_rec_list *ptr = alloc_record (prologue_gr);
-  memset (&ptr->r.record.r.mask, 0, sizeof (ptr->r.record.r.mask));
   ptr->r.record.r.grmask = saved_mask;
   ptr->r.record.r.grsave = reg;
   return ptr;
@@ -3560,7 +3556,7 @@ start_unwind_section (const segT text_seg, int sec_index)
 
   sec_text_name = segment_name (text_seg);
   text_name = sec_text_name;
-  if (strncmp (text_name, "_info", 5) == 0)
+  if (startswith (text_name, "_info"))
     {
       as_bad (_("Illegal section name `%s' (causes unwind section name clash)"),
 	      text_name);
@@ -3573,8 +3569,7 @@ start_unwind_section (const segT text_seg, int sec_index)
   /* Build the unwind section name by appending the (possibly stripped)
      text section name to the unwind prefix.  */
   suffix = text_name;
-  if (strncmp (text_name, ".gnu.linkonce.t.",
-	       sizeof (".gnu.linkonce.t.") - 1) == 0)
+  if (startswith (text_name, ".gnu.linkonce.t."))
     {
       prefix = special_linkonce_name [sec_index - SPECIAL_SECTION_UNWIND];
       suffix += sizeof (".gnu.linkonce.t.") - 1;
@@ -4414,7 +4409,7 @@ dot_endp (int dummy ATTRIBUTE_UNUSED)
     {
       symbolS *proc_end;
 
-      subseg_set (md.last_text_seg, 0);
+      subseg_set (md.last_text_seg, md.last_text_subseg);
       proc_end = expr_build_dot ();
 
       start_unwind_section (saved_seg, SPECIAL_SECTION_UNWIND);
@@ -4668,14 +4663,9 @@ dot_rot (int type)
 	}
 
       if (!*drpp)
-	{
-	  *drpp = XOBNEW (&notes, struct dynreg);
-	  memset (*drpp, 0, sizeof (*dr));
-	}
+	*drpp = notes_calloc (1, sizeof (**drpp));
 
-      name = XOBNEWVEC (&notes, char, len + 1);
-      memcpy (name, start, len);
-      name[len] = '\0';
+      name = notes_memdup (start, len, len + 1);
 
       dr = *drpp;
       dr->name = name;
@@ -4687,7 +4677,6 @@ dot_rot (int type)
       if (str_hash_insert (md.dynreg_hash, name, dr, 0) != NULL)
 	{
 	  as_bad (_("Attempt to redefine register set `%s'"), name);
-	  obstack_free (&notes, name);
 	  goto err;
 	}
 
@@ -4777,20 +4766,12 @@ cross_section (int ref, void (*builder) (int), int ua)
   char *start, *end;
   int saved_auto_align;
   unsigned int section_count;
-  char *name;
-  char c;
+  const char *name;
 
-  SKIP_WHITESPACE ();
   start = input_line_pointer;
-  c = get_symbol_name (&name);
-  if (input_line_pointer == start)
-    {
-      as_bad (_("Missing section name"));
-      ignore_rest_of_line ();
-      return;
-    }
-  * input_line_pointer = c;
-  SKIP_WHITESPACE_AFTER_NAME ();
+  name = obj_elf_section_name ();
+  if (name == NULL)
+    return;
   end = input_line_pointer;
   if (*input_line_pointer != ',')
     {
@@ -5020,7 +5001,7 @@ dot_pred_rel (int type)
 	    type = 'c';
 	  else if (strcmp (form, "imply") == 0)
 	    type = 'i';
-	  obstack_free (&notes, form);
+	  notes_free (form);
 	}
       else if (*input_line_pointer == '@')
 	{
@@ -6006,6 +5987,7 @@ parse_operand (expressionS *e, int more)
   e->X_op = O_absent;
   SKIP_WHITESPACE ();
   expression (e);
+  resolve_register (e);
   sep = *input_line_pointer;
   if (more && (sep == ',' || sep == more))
     ++input_line_pointer;
@@ -6520,7 +6502,7 @@ emit_one_bundle (void)
   int n, i, j, first, curr, last_slot;
   bfd_vma t0 = 0, t1 = 0;
   struct label_fix *lfix;
-  bfd_boolean mark_label;
+  bool mark_label;
   struct insn_fix *ifix;
   char mnemonic[16];
   fixS *fix;
@@ -6847,7 +6829,7 @@ emit_one_bundle (void)
 	continue;		/* Try next slot.  */
 
       /* Now is a good time to fix up the labels for this insn.  */
-      mark_label = FALSE;
+      mark_label = false;
       for (lfix = md.slot[curr].label_fixups; lfix; lfix = lfix->next)
 	{
 	  S_SET_VALUE (lfix->sym, frag_now_fix () - 16);
@@ -6891,8 +6873,23 @@ emit_one_bundle (void)
 
       for (j = 0; j < md.slot[curr].num_fixups; ++j)
 	{
+	  unsigned long where;
+
 	  ifix = md.slot[curr].fixup + j;
-	  fix = fix_new_exp (frag_now, frag_now_fix () - 16 + i, 8,
+	  where = frag_now_fix () - 16 + i;
+#ifdef TE_HPUX
+	  /* Relocations for instructions specify the slot in the
+	     bottom two bits of r_offset.  The IA64 HP-UX linker
+	     expects PCREL60B relocations to specify slot 2 of an
+	     instruction.  gas generates PCREL60B against slot 1.  */
+	  if (ifix->code == BFD_RELOC_IA64_PCREL60B)
+	    {
+	      know (i == 1);
+	      ++where;
+	    }
+#endif
+
+	  fix = fix_new_exp (frag_now, where, 8,
 			     &ifix->expr, ifix->is_pcrel, ifix->code);
 	  fix->tc_fix_data.opnd = ifix->opnd;
 	  fix->fx_file = md.slot[curr].src_file;
@@ -7004,7 +7001,7 @@ md_parse_option (int c, const char *arg)
 	  md.flags |= EF_IA_64_BE;
 	  default_big_endian = 1;
 	}
-      else if (strncmp (arg, "unwind-check=", 13) == 0)
+      else if (startswith (arg, "unwind-check="))
 	{
 	  arg += 13;
 	  if (strcmp (arg, "warning") == 0)
@@ -7014,7 +7011,7 @@ md_parse_option (int c, const char *arg)
 	  else
 	    return 0;
 	}
-      else if (strncmp (arg, "hint.b=", 7) == 0)
+      else if (startswith (arg, "hint.b="))
 	{
 	  arg += 7;
 	  if (strcmp (arg, "ok") == 0)
@@ -7026,7 +7023,7 @@ md_parse_option (int c, const char *arg)
 	  else
 	    return 0;
 	}
-      else if (strncmp (arg, "tune=", 5) == 0)
+      else if (startswith (arg, "tune="))
 	{
 	  arg += 5;
 	  if (strcmp (arg, "itanium1") == 0)
@@ -7074,7 +7071,7 @@ md_parse_option (int c, const char *arg)
 			exit:	branch out from the current context (default)
 			labels:	all labels in context may be branch targets
        */
-      if (strncmp (arg, "indirect=", 9) != 0)
+      if (!startswith (arg, "indirect="))
         return 0;
       break;
 
@@ -7564,7 +7561,7 @@ ia64_target_format (void)
 }
 
 void
-ia64_end_of_source (void)
+ia64_md_finish (void)
 {
   /* terminate insn group upon reaching end of file:  */
   insn_group_break (1, 0, 0);
@@ -7755,7 +7752,7 @@ ia64_frob_label (struct symbol *sym)
       fix = XOBNEW (&notes, struct label_fix);
       fix->sym = sym;
       fix->next = CURR_SLOT.tag_fixups;
-      fix->dw2_mark_labels = FALSE;
+      fix->dw2_mark_labels = false;
       CURR_SLOT.tag_fixups = fix;
 
       return;
@@ -7764,6 +7761,7 @@ ia64_frob_label (struct symbol *sym)
   if (bfd_section_flags (now_seg) & SEC_CODE)
     {
       md.last_text_seg = now_seg;
+      md.last_text_subseg = now_subseg;
       fix = XOBNEW (&notes, struct label_fix);
       fix->sym = sym;
       fix->next = CURR_SLOT.label_fixups;
@@ -8106,7 +8104,7 @@ static int
 is_taken_branch (struct ia64_opcode *idesc)
 {
   return ((is_conditional_branch (idesc) && CURR_SLOT.qp_regno == 0)
-	  || strncmp (idesc->name, "br.ia", 5) == 0);
+	  || startswith (idesc->name, "br.ia"));
 }
 
 /* Return whether the given opcode is an interruption or rfi.  If there's any
@@ -9498,7 +9496,7 @@ dep->name, idesc->name, (rsrc_write?"write":"read"), note)
       /* FIXME we can identify some individual RSE written resources, but RSE
 	 read resources have not yet been completely identified, so for now
 	 treat RSE as a single resource */
-      if (strncmp (idesc->name, "mov", 3) == 0)
+      if (startswith (idesc->name, "mov"))
 	{
 	  if (rsrc_write)
 	    {
@@ -9864,8 +9862,8 @@ note_register_values (struct ia64_opcode *idesc)
     }
   /* After a call, all register values are undefined, except those marked
      as "safe".  */
-  else if (strncmp (idesc->name, "br.call", 6) == 0
-	   || strncmp (idesc->name, "brl.call", 7) == 0)
+  else if (startswith (idesc->name, "br.call")
+	   || startswith (idesc->name, "brl.call"))
     {
       /* FIXME keep GR values which are marked as "safe_across_calls"  */
       clear_register_values ();
@@ -9957,11 +9955,8 @@ note_register_values (struct ia64_opcode *idesc)
 	  gr_values[regno].value = CURR_SLOT.opnd[1].X_add_number;
 	  gr_values[regno].path = md.path;
 	  if (md.debug_dv)
-	    {
-	      fprintf (stderr, "  Know gr%d = ", regno);
-	      fprintf_vma (stderr, gr_values[regno].value);
-	      fputs ("\n", stderr);
-	    }
+	    fprintf (stderr, "  Know gr%d = %" PRIx64 "\n",
+		     regno, gr_values[regno].value);
 	}
     }
   /* Look for dep.z imm insns.  */
@@ -9981,11 +9976,8 @@ note_register_values (struct ia64_opcode *idesc)
 	  gr_values[regno].value = value;
 	  gr_values[regno].path = md.path;
 	  if (md.debug_dv)
-	    {
-	      fprintf (stderr, "  Know gr%d = ", regno);
-	      fprintf_vma (stderr, gr_values[regno].value);
-	      fputs ("\n", stderr);
-	    }
+	    fprintf (stderr, "  Know gr%d = %" PRIx64 "\n",
+		     regno, gr_values[regno].value);
 	}
     }
   else
@@ -10199,12 +10191,9 @@ print_dependency (const char *action, int depind)
       if (regdeps[depind].specific && regdeps[depind].index >= 0)
 	fprintf (stderr, " (%d)", regdeps[depind].index);
       if (regdeps[depind].mem_offset.hint)
-	{
-	  fputs (" ", stderr);
-	  fprintf_vma (stderr, regdeps[depind].mem_offset.base);
-	  fputs ("+", stderr);
-	  fprintf_vma (stderr, regdeps[depind].mem_offset.offset);
-	}
+	fprintf (stderr, " %" PRIx64 "+%" PRIx64,
+		 regdeps[depind].mem_offset.base,
+		 regdeps[depind].mem_offset.offset);
       fprintf (stderr, "\n");
     }
 }
@@ -10851,6 +10840,7 @@ md_assemble (char *str)
     insn_group_break (1, 0, 0);
 
   md.last_text_seg = now_seg;
+  md.last_text_subseg = now_subseg;
 
  done:
   input_line_pointer = saved_input_line_pointer;
@@ -11777,9 +11767,7 @@ dot_alias (int section)
     }
 
   /* Make a copy of name string.  */
-  len = strlen (name) + 1;
-  obstack_grow (&notes, name, len);
-  name = obstack_finish (&notes);
+  name = notes_strdup (name);
 
   if (section)
     {
@@ -11802,8 +11790,7 @@ dot_alias (int section)
       if (strcmp (h->name, name))
 	as_bad (_("`%s' is already the alias of %s `%s'"),
 		alias, kind, h->name);
-      obstack_free (&notes, name);
-      obstack_free (&notes, alias);
+      notes_free (alias);
       goto out;
     }
 
@@ -11813,12 +11800,11 @@ dot_alias (int section)
     {
       if (strcmp (a, alias))
 	as_bad (_("%s `%s' already has an alias `%s'"), kind, name, a);
-      obstack_free (&notes, name);
-      obstack_free (&notes, alias);
+      notes_free (alias);
       goto out;
     }
 
-  h = XNEW (struct alias);
+  h = notes_alloc (sizeof (*h));
   h->file = as_where (&h->line);
   h->name = name;
 
@@ -11843,7 +11829,7 @@ do_alias (void **slot, void *arg ATTRIBUTE_UNUSED)
       /* Uses .alias extensively to alias CRTL functions to same with
 	 decc$ prefix. Sometimes function gets optimized away and a
 	 warning results, which should be suppressed.  */
-      if (strncmp (tuple->key, "decc$", 5) != 0)
+      if (!startswith (tuple->key, "decc$"))
 #endif
 	as_warn_where (h->file, h->line,
 		       _("symbol `%s' aliased to `%s' is not used"),
@@ -11859,7 +11845,7 @@ do_alias (void **slot, void *arg ATTRIBUTE_UNUSED)
 void
 ia64_adjust_symtab (void)
 {
-  htab_traverse (alias_hash, do_alias, NULL);
+  htab_traverse_noresize (alias_hash, do_alias, NULL);
 }
 
 /* It renames the original section name to its alias.  */
@@ -11884,7 +11870,7 @@ do_secalias (void **slot, void *arg ATTRIBUTE_UNUSED)
 void
 ia64_frob_file (void)
 {
-  htab_traverse (secalias_hash, do_secalias, NULL);
+  htab_traverse_noresize (secalias_hash, do_secalias, NULL);
 }
 
 #ifdef TE_VMS

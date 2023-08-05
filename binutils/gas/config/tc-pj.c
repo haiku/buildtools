@@ -1,5 +1,5 @@
 /* tc-pj.c -- Assemble code for Pico Java
-   Copyright (C) 1999-2021 Free Software Foundation, Inc.
+   Copyright (C) 1999-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -58,7 +58,7 @@ const char EXP_CHARS[] = "eE";
 void
 md_operand (expressionS *op)
 {
-  if (strncmp (input_line_pointer, "%hi16", 5) == 0)
+  if (startswith (input_line_pointer, "%hi16"))
     {
       if (pending_reloc)
 	as_bad (_("confusing relocation expressions"));
@@ -67,7 +67,7 @@ md_operand (expressionS *op)
       expression (op);
     }
 
-  if (strncmp (input_line_pointer, "%lo16", 5) == 0)
+  if (startswith (input_line_pointer, "%lo16"))
     {
       if (pending_reloc)
 	as_bad (_("confusing relocation expressions"));
@@ -404,6 +404,7 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
       break;
 
     case BFD_RELOC_PJ_CODE_DIR32:
+    case BFD_RELOC_PJ_CODE_REL32:
       *buf++ = val >> 24;
       *buf++ = val >> 16;
       *buf++ = val >> 8;
@@ -439,10 +440,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
 	  *buf++ = val >> 8;
 	}
       break;
-
-    case BFD_RELOC_PJ_CODE_REL32:
-      fixP->fx_done = 0;
-      return;
 
     default:
       abort ();
