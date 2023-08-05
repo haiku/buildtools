@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2021 Free Software Foundation, Inc.
+# Copyright (C) 2012-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -71,6 +71,9 @@ if { [is_elf_format] } then {
     }
     if {[istarget "csky*-*-*"]} {
 	set target_machine -csky
+    }
+    if {[istarget "loongarch*-*-*"]} then {
+	set dump_opts {{as -mno-relax}}
     }
     if {[istarget "m32r*-*-*"]} then {
 	set target_machine -m32r
@@ -178,12 +181,13 @@ if { [is_elf_format] } then {
 	rl78-*-* { }
 	riscv*-*-* { }
 	rx-*-* { }
+	loongarch*-*-* { }
 	default {
 	    # The next test can fail if the target does not convert fixups
 	    # against ordinary symbols into relocations against section symbols.
 	    # This is usually revealed by the error message:
 	    #  symbol `sym' required but not present
-	    setup_xfail "m681*-*-*" "m68hc*-*-*" "xgate-*-*" "vax-*-*"
+	    setup_xfail "m681*-*-*" "m68hc*-*-*" "xgate-*-*" "vax-*-*" "avr-*-*"
 	    run_dump_test redef
 	    run_dump_test equ-reloc
 	}
@@ -273,7 +277,10 @@ if { [is_elf_format] } then {
     run_dump_test "section25"
     run_dump_test "section26"
     run_dump_test "section27"
+    run_dump_test "section28"
+    run_dump_test "section29"
     run_dump_test "sh-link-zero"
+    run_dump_test "size"
     run_dump_test "dwarf2-1" $dump_opts
     run_dump_test "dwarf2-2" $dump_opts
     run_dump_test "dwarf2-3" $dump_opts
@@ -294,18 +301,42 @@ if { [is_elf_format] } then {
     run_dump_test "dwarf2-18" $dump_opts
     run_dump_test "dwarf2-19" $dump_opts
     run_dump_test "dwarf2-20" $dump_opts
+    run_dump_test "dwarf2-21" $dump_opts
     run_dump_test "dwarf-5-file0" $dump_opts
+    run_dump_test "dwarf-5-file0-2" $dump_opts
+    run_dump_test "dwarf-5-file0-3" $dump_opts
+    run_dump_test "dwarf-5-dir0" $dump_opts
+    run_dump_test "dwarf-5-loc0" $dump_opts
     run_dump_test "dwarf-4-cu" $dump_opts
     run_dump_test "dwarf-5-cu" $dump_opts
     run_dump_test "dwarf-5-nop-for-line-table" $dump_opts
+    run_dump_test "dwarf-5-irp" $dump_opts
+    run_dump_test "dwarf-5-macro" $dump_opts
+    run_dump_test "dwarf-5-macro-include" $dump_opts
+    run_dump_test "dwarf-3-func" $dump_opts
+    run_dump_test "dwarf-5-func" $dump_opts
+    run_dump_test "dwarf-5-func-global" $dump_opts
+    run_dump_test "dwarf-5-func-local" $dump_opts
+
+    # Exclude targets defining ONLY_STANDARD_ESCAPES. It's not clear how these
+    # are supposed to reference macro arguments in double-quoted strings.
+    if { ![istarget "avr-*-*"]
+	 && ![istarget "cris*-*-*"]
+	 && ![istarget "msp430-*-*"]
+	 && ![istarget "z80-*-*"] } then {
+	run_list_test line
+    }
+
     run_dump_test "pr25917"
     run_dump_test "bss"
     run_dump_test "bad-bss"
     run_dump_test "bad-section-flag"
     run_dump_test "bad-size"
     run_dump_test "bad-group"
+    run_dump_test "pr27355"
 
     run_dump_test "syms"
+    run_dump_test "startof"
 
     run_dump_test "missing-build-notes"
     
@@ -314,8 +345,16 @@ if { [is_elf_format] } then {
 
     # hpux has a non-standard common directive.
     if { ![istarget "*-*-hpux*"] } then {
-	run_dump_test "common3a"
-	run_dump_test "common3b"
+	switch -glob $target_triplet {
+	    ia64-*-* {
+		run_dump_test "common3a" { { as "--defsym lcomm_align=1" } }
+		run_dump_test "common3b" { { as "--defsym lcomm_align=1" } }
+	    }
+	    default {
+		run_dump_test "common3a"
+		run_dump_test "common3b"
+	    }
+	}
 	run_dump_test "common4a"
 	run_dump_test "common4b"
 	run_dump_test "common5a"

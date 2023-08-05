@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2021 Free Software Foundation, Inc.
+# Copyright (C) 2012-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -70,6 +70,7 @@ run_dump_test app2
 run_dump_test app3
 remote_download host "$srcdir/$subdir/app4b.s"
 run_dump_test app4
+run_dump_test app5
 
 run_list_test badarg ""
 
@@ -81,6 +82,7 @@ switch -glob $target_triplet {
     rl78-*-* { }
     rx-*-* { }
     vax-*-* { }
+    bpf-*-* { }
     default { run_list_test dot "-alm" }
 }
 run_list_test end ""

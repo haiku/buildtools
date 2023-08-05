@@ -1,5 +1,5 @@
 # Expect script for ld-version tests
-#   Copyright (C) 1997-2021 Free Software Foundation, Inc.
+#   Copyright (C) 1997-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -27,13 +27,16 @@ if { ![check_compiler_available] } {
     return
 }
 
+# Skip targets where -shared is not supported
+if { ![check_shared_lib_support] } {
+    return
+}
+
 # This test can only be run on a couple of ELF platforms.
 # Square bracket expressions seem to confuse istarget.
 # This is similar to the test that is used in ld-shared, BTW.
 if { ![istarget hppa*64*-*-hpux*]
      && ![istarget hppa*-*-linux*]
-     && ![istarget i?86-*-sysv4*]
-     && ![istarget i?86-*-unixware]
      && ![istarget i?86-*-elf*]
      && ![istarget i?86-*-linux*]
      && ![istarget i?86-*-gnu*]
@@ -73,9 +76,9 @@ if { [istarget mips*-*-*] && ! [at_least_gcc_version 4 3] } then {
     # Unfortunately, the gcc argument is -fpic and the cc argument is
     # -KPIC.  We have to try both.
     set picflag "-fpic"
-    send_log "$CC $picflag\n"
-    verbose "$CC $picflag"
-    catch "exec $CC $picflag" exec_output
+    send_log "$CC_FOR_TARGET $picflag\n"
+    verbose "$CC_FOR_TARGET $picflag"
+    catch "exec $CC_FOR_TARGET $picflag" exec_output
     send_log "$exec_output\n"
     verbose "--" "$exec_output"
     if { [string match "*illegal option*" $exec_output]
@@ -105,11 +108,11 @@ proc test_ar { test lib object expect } {
     set exec_output [prune_warnings $exec_output]
     if ![string match "" $exec_output] {
 	verbose -log "$exec_output"
-	unresolved "$test"
+	fail "$test"
 	return
     }
 
-    set cmd "$nm --print-armap $tmpdir/$lib | grep \\\ in\\\  | egrep VERS\\\|bar\\\|foo | grep -v ^\\\\. | sort > $tmpdir/nm.out"
+    set cmd "$nm --print-armap $tmpdir/$lib | sed -n -e /^\\\\./d -e \"/^VERS.* in /p\" -e \"/bar.* in /p\" -e \"/foo.* in /p\" | sort > $tmpdir/nm.out"
     verbose -log $cmd
     catch "exec $cmd" exec_output
     if [string match "" $exec_output] then {
@@ -486,19 +489,18 @@ proc build_binary { shared pic test source libname other mapfile verexp versymex
     global as
     global as_options
     global objdump
-    global CC
-    global CFLAGS
+    global CC_FOR_TARGET
     global script
     global NOSANITIZE_CFLAGS
     global NOLTO_CFLAGS
 
-    if ![ld_compile "$CC -S $pic $CFLAGS $NOSANITIZE_CFLAGS $NOLTO_CFLAGS" $srcdir/$subdir/$source $tmpdir/$libname.s]     {
-	unresolved "$test"
+    if ![ld_compile "$CC_FOR_TARGET -S $pic $NOSANITIZE_CFLAGS $NOLTO_CFLAGS" $srcdir/$subdir/$source $tmpdir/$libname.s]     {
+	unsupported "$test"
 	return
     }
 
     if ![ld_assemble $as "$as_options $tmpdir/$libname.s" $tmpdir/$libname.o ]     {
-	unresolved "$test"
+	unsupported "$test"
 	return
     }
 
@@ -578,8 +580,7 @@ proc test_ldfail { test flag source execname other mapfile whyfail } {
     global as
     global as_options
     global objdump
-    global CC
-    global CFLAGS
+    global CC_FOR_TARGET
     global script
 
     if [string match "" $other] then {
@@ -588,13 +589,13 @@ proc test_ldfail { test flag source execname other mapfile whyfail } {
 	set other_lib $tmpdir/$other
     }
 
-    if ![ld_compile "$CC -S $flag $CFLAGS" $srcdir/$subdir/$source $tmpdir/$execname.s]     {
-	unresolved "$test"
+    if ![ld_compile "$CC_FOR_TARGET -S $flag" $srcdir/$subdir/$source $tmpdir/$execname.s]     {
+	unsupported "$test"
 	return
     }
 
     if ![ld_assemble $as "$as_options $tmpdir/$execname.s" $tmpdir/$execname.o ]     {
-	unresolved "$test"
+	unsupported "$test"
 	return
     }
 
@@ -606,7 +607,7 @@ proc test_ldfail { test flag source execname other mapfile whyfail } {
 	set script_arg "-Wl,$script $srcdir/$subdir/$mapfile"
     }
 
-    if {![ld_link $CC $tmpdir/$execname "$tmpdir/$execname.o $other_lib $script_arg"]}     {
+    if {![ld_link $CC_FOR_TARGET $tmpdir/$execname "$tmpdir/$execname.o $other_lib $script_arg"]}     {
 	pass "$test"
 	return
     }
@@ -618,12 +619,11 @@ proc test_asfail { test flag source execname whyfail } {
     global subdir
     global tmpdir
     global as
-    global CC
-    global CFLAGS
+    global CC_FOR_TARGET
     global NOLTO_CFLAGS
 
-    if ![ld_compile "$CC -S $flag $CFLAGS $NOLTO_CFLAGS" $srcdir/$subdir/$source $tmpdir/$execname.s]     {
-	unresolved "$test"
+    if ![ld_compile "$CC_FOR_TARGET -S $flag $NOLTO_CFLAGS" $srcdir/$subdir/$source $tmpdir/$execname.s]     {
+	unsupported "$test"
 	return
     }
 
@@ -688,8 +688,7 @@ proc build_exec { test source execname flags solibname verexp versymexp symexp }
     global as
     global as_options
     global objdump
-    global CC
-    global CFLAGS
+    global CC_FOR_TARGET
     global NOSANITIZE_CFLAGS
     global NOLTO_CFLAGS
 
@@ -697,7 +696,7 @@ proc build_exec { test source execname flags solibname verexp versymexp symexp }
     set script --version-script
 
     # Disable LTO for these tests.
-    set cc_cmd "$CC -S $CFLAGS"
+    set cc_cmd "$CC_FOR_TARGET -S"
     if {[check_lto_available]} {
 	append cc_cmd " -fno-lto"
     }
@@ -706,12 +705,12 @@ proc build_exec { test source execname flags solibname verexp versymexp symexp }
     append cc_cmd " $NOSANITIZE_CFLAGS $NOLTO_CFLAGS"
 
     if ![ld_compile $cc_cmd $srcdir/$subdir/$source $tmpdir/$execname.s]     {
-	unresolved "$test"
+	unsupported "$test"
 	return
     }
 
     if ![ld_assemble $as "$as_options $tmpdir/$execname.s" $tmpdir/$execname.o ]     {
-	unresolved "$test"
+	unsupported "$test"
 	return
     }
 
@@ -721,7 +720,7 @@ proc build_exec { test source execname flags solibname verexp versymexp symexp }
 	set solibname_lib $tmpdir/$solibname
     }
 
-    if {![ld_link $CC $tmpdir/$execname "$flags $tmpdir/$execname.o $solibname_lib"]}     {
+    if {![ld_link $CC_FOR_TARGET $tmpdir/$execname "$flags $tmpdir/$execname.o $solibname_lib"]}     {
 	fail "$test"
 	return
     }
@@ -802,13 +801,13 @@ build_exec "vers3" vers3.c vers3 "-Wl,--no-as-needed" vers1.so vers3.ver vers3.d
 
 # This test fails on MIPS.  On the MIPS we must put foo in the dynamic
 # symbol table, which the test does not expect.
-setup_xfail "mips*-*-*"
+setup_xfail "mips*-*-irix*"
 build_exec "vers4" vers4.c vers4 "" "" "" "" vers4.sym
 
 build_exec "vers4a" vers4.c vers4a "-Wl,-export-dynamic" "" vers4a.ver vers4a.dsym vers4a.sym
 
 # Verify that --no-export-dynamic undoes the effect of --export-dynamic.
-setup_xfail "mips*-*-*"
+setup_xfail "mips*-*-irix*"
 build_exec "vers4b" vers4.c vers4b "-Wl,-export-dynamic -Wl,--no-export-dynamic" "" "" "" vers4.sym
 
 

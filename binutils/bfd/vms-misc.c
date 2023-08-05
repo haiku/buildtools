@@ -1,6 +1,6 @@
 /* vms-misc.c -- BFD back-end for VMS/VAX (openVMS/VAX) and
    EVAX (openVMS/Alpha) files.
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2023 Free Software Foundation, Inc.
 
    Miscellaneous functions.
 
@@ -434,9 +434,9 @@ static int
 vms_convert_to_var_1 (char *filename, int type)
 {
   if (type != DECC$K_FILE)
-    return FALSE;
+    return false;
   vms_convert_to_var (filename);
-  return TRUE;
+  return true;
 }
 
 /* Convert the file to variable record length format. This is done
@@ -447,8 +447,8 @@ int
 _bfd_vms_convert_to_var_unix_filename (const char *unix_filename)
 {
   if (decc$to_vms (unix_filename, &vms_convert_to_var_1, 0, 1) != 1)
-    return FALSE;
-  return TRUE;
+    return false;
+  return true;
 }
 #endif /* VMS */
 
@@ -492,7 +492,7 @@ get_vms_time_string (unsigned char *tbuf)
    The result has to be free().  */
 
 char *
-vms_get_module_name (const char *filename, bfd_boolean upcase)
+vms_get_module_name (const char *filename, bool upcase)
 {
   char *fname, *fptr;
   const char *fout;

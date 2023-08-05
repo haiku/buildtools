@@ -1,5 +1,5 @@
 /* Support for memory-mapped windows into a BFD.
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
+   Copyright (C) 1995-2023 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -47,15 +47,47 @@ static int debug_windows;
    though.  */
 
 /*
-INTERNAL_DEFINITION
-
-.struct _bfd_window_internal {
+INTERNAL
+.typedef struct _bfd_window_internal
+.{
 .  struct _bfd_window_internal *next;
 .  void *data;
 .  bfd_size_type size;
 .  int refcount : 31;		{* should be enough...  *}
 .  unsigned mapped : 1;		{* 1 = mmap, 0 = malloc *}
-.};
+.}
+.bfd_window_internal;
+.
+
+EXTERNAL
+.struct _bfd_window_internal;
+.
+.typedef struct _bfd_window
+.{
+.  {* What the user asked for.  *}
+.  void *data;
+.  bfd_size_type size;
+.  {* The actual window used by BFD.  Small user-requested read-only
+.     regions sharing a page may share a single window into the object
+.     file.  Read-write versions shouldn't until I've fixed things to
+.     keep track of which portions have been claimed by the
+.     application; don't want to give the same region back when the
+.     application wants two writable copies!  *}
+.  struct _bfd_window_internal *i;
+.}
+.bfd_window;
+.
+*/
+
+/*
+FUNCTION
+	bfd_init_window
+
+SYNOPSIS
+	void bfd_init_window (bfd_window *);
+
+DESCRIPTION
+	Initialise mmap window.
 */
 
 void
@@ -65,6 +97,17 @@ bfd_init_window (bfd_window *windowp)
   windowp->i = 0;
   windowp->size = 0;
 }
+
+/*
+FUNCTION
+	bfd_free_window
+
+SYNOPSIS
+	void bfd_free_window (bfd_window *);
+
+DESCRIPTION
+	Finalise mmap window struct.
+*/
 
 void
 bfd_free_window (bfd_window *windowp)
@@ -102,15 +145,26 @@ bfd_free_window (bfd_window *windowp)
   free (i);
 }
 
-static int ok_to_map = 1;
+/*
+FUNCTION
+	bfd_get_file_window
 
-bfd_boolean
+SYNOPSIS
+	bool bfd_get_file_window
+	  (bfd *, file_ptr, bfd_size_type, bfd_window *, bool {*writable*});
+
+DESCRIPTION
+	mmap from a bfd's iostream.
+*/
+
+bool
 bfd_get_file_window (bfd *abfd,
 		     file_ptr offset,
 		     bfd_size_type size,
 		     bfd_window *windowp,
-		     bfd_boolean writable)
+		     bool writable)
 {
+  static int ok_to_map = 1;
   static size_t pagesize;
   bfd_window_internal *i = windowp->i;
   bfd_size_type size_to_alloc = size;
@@ -131,7 +185,7 @@ bfd_get_file_window (bfd *abfd,
     {
       i = bfd_zmalloc (sizeof (bfd_window_internal));
       if (i == NULL)
-	return FALSE;
+	return false;
       i->data = NULL;
     }
 #ifdef HAVE_MMAP
@@ -199,7 +253,7 @@ bfd_get_file_window (bfd *abfd,
       i->mapped = 1;
       i->refcount = 1;
       windowp->i = i;
-      return TRUE;
+      return true;
     }
   else if (debug_windows)
     {
@@ -231,7 +285,7 @@ bfd_get_file_window (bfd *abfd,
       if (size_to_alloc == 0)
 	{
 	  windowp->i = i;
-	  return TRUE;
+	  return true;
 	}
       goto free_and_fail;
     }
@@ -254,12 +308,12 @@ bfd_get_file_window (bfd *abfd,
   windowp->data = i->data;
   windowp->size = i->size;
   windowp->i = i;
-  return TRUE;
+  return true;
 
  free_and_fail:
   /* We have a bfd_window_internal, but an error occurred.  Free it. */
   free (i);
-  return FALSE;
+  return false;
 }
 
 #endif /* USE_MMAP */

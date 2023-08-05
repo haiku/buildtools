@@ -1,5 +1,5 @@
 /* od-xcoff.c -- dump information about an xcoff object file.
-   Copyright (C) 2011-2021 Free Software Foundation, Inc.
+   Copyright (C) 2011-2023 Free Software Foundation, Inc.
    Written by Tristan Gingold, Adacore.
 
    This file is part of GNU Binutils.
@@ -300,7 +300,7 @@ static const struct xlat_table rtype_xlat[] =
     RTYPE_ENTRY (NEG),
     RTYPE_ENTRY (REL),
     RTYPE_ENTRY (TOC),
-    RTYPE_ENTRY (RTB),
+    RTYPE_ENTRY (TRL),
     RTYPE_ENTRY (GL),
     RTYPE_ENTRY (TCL),
     RTYPE_ENTRY (BA),
@@ -308,7 +308,6 @@ static const struct xlat_table rtype_xlat[] =
     RTYPE_ENTRY (RL),
     RTYPE_ENTRY (RLA),
     RTYPE_ENTRY (REF),
-    RTYPE_ENTRY (TRL),
     RTYPE_ENTRY (TRLA),
     RTYPE_ENTRY (RRTBI),
     RTYPE_ENTRY (RRTBA),
@@ -839,13 +838,13 @@ dump_xcoff32_symbols (bfd *abfd, struct xcoff_dump *data)
                 {
                   /* Function aux entry  (Do not translate).  */
                   printf ("  exptr: %08x fsize: %08x lnnoptr: %08x endndx: %u\n",
-                          (unsigned)bfd_h_get_32 (abfd, aux->x_sym.x_tagndx),
+                          (unsigned)bfd_h_get_32 (abfd, aux->x_fcn.x_exptr),
                           (unsigned)bfd_h_get_32
-                            (abfd, aux->x_sym.x_misc.x_fsize),
+                            (abfd, aux->x_fcn.x_fsize),
                           (unsigned)bfd_h_get_32
-                            (abfd, aux->x_sym.x_fcnary.x_fcn.x_lnnoptr),
+                            (abfd, aux->x_fcn.x_lnnoptr),
                           (unsigned)bfd_h_get_32
-                            (abfd, aux->x_sym.x_fcnary.x_fcn.x_endndx));
+                            (abfd, aux->x_fcn.x_endndx));
                 }
               else if (j == 1 || (j == 0 && s->sym.numaux == 1))
                 {
@@ -900,7 +899,7 @@ dump_xcoff32_symbols (bfd *abfd, struct xcoff_dump *data)
             case C_FCN:
               printf ("  lnno: %u\n",
                       (unsigned)bfd_h_get_16
-                      (abfd, aux->x_sym.x_misc.x_lnsz.x_lnno));
+                      (abfd, aux->x_sym.x_lnno));
               break;
             default:
               /* Do not translate - generic field name.  */
@@ -1687,42 +1686,42 @@ dump_dumpx_core (bfd *abfd, struct external_core_dumpx *hdr)
       printf ("  entries:    %u\n",
 	      (unsigned) bfd_h_get_16 (abfd, hdr->c_entries));
 #ifdef BFD64
-      printf ("  fdsinfox:   offset: 0x%08" BFD_VMA_FMT "x\n",
+      printf ("  fdsinfox:   offset: 0x%08" PRIx64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_fdsinfox));
-      printf ("  loader:     offset: 0x%08" BFD_VMA_FMT "x, "
-	      "size: 0x%" BFD_VMA_FMT"x\n",
+      printf ("  loader:     offset: 0x%08" PRIx64 ", "
+	      "size: 0x%" PRIx64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_loader),
 	      bfd_h_get_64 (abfd, hdr->c_lsize));
-      printf ("  thr:        offset: 0x%08" BFD_VMA_FMT "x, nbr: %u\n",
+      printf ("  thr:        offset: 0x%08" PRIx64 ", nbr: %u\n",
 	      bfd_h_get_64 (abfd, hdr->c_thr),
 	      (unsigned) bfd_h_get_32 (abfd, hdr->c_n_thr));
-      printf ("  segregions: offset: 0x%08" BFD_VMA_FMT "x, "
-	      "nbr: %" BFD_VMA_FMT "u\n",
+      printf ("  segregions: offset: 0x%08" PRIx64 ", "
+	      "nbr: %" PRIu64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_segregion),
 	      bfd_h_get_64 (abfd, hdr->c_segs));
-      printf ("  stack:      offset: 0x%08" BFD_VMA_FMT "x, "
-	      "org: 0x%" BFD_VMA_FMT"x, "
-	      "size: 0x%" BFD_VMA_FMT"x\n",
+      printf ("  stack:      offset: 0x%08" PRIx64 ", "
+	      "org: 0x%" PRIx64 ", "
+	      "size: 0x%" PRIx64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_stack),
 	      bfd_h_get_64 (abfd, hdr->c_stackorg),
 	      bfd_h_get_64 (abfd, hdr->c_size));
-      printf ("  data:       offset: 0x%08" BFD_VMA_FMT "x, "
-	      "org: 0x%" BFD_VMA_FMT"x, "
-	      "size: 0x%" BFD_VMA_FMT"x\n",
+      printf ("  data:       offset: 0x%08" PRIx64 ", "
+	      "org: 0x%" PRIx64 ", "
+	      "size: 0x%" PRIx64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_data),
 	      bfd_h_get_64 (abfd, hdr->c_dataorg),
 	      bfd_h_get_64 (abfd, hdr->c_datasize));
-      printf ("  sdata:         org: 0x%" BFD_VMA_FMT"x, "
-	      "size: 0x%" BFD_VMA_FMT"x\n",
+      printf ("  sdata:         org: 0x%" PRIx64 ", "
+	      "size: 0x%" PRIx64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_sdorg),
 	      bfd_h_get_64 (abfd, hdr->c_sdsize));
-      printf ("  vmmregions: offset: 0x%" BFD_VMA_FMT"x, "
-	      "num: 0x%" BFD_VMA_FMT"x\n",
+      printf ("  vmmregions: offset: 0x%" PRIx64 ", "
+	      "num: 0x%" PRIx64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_vmm),
 	      bfd_h_get_64 (abfd, hdr->c_vmmregions));
       printf ("  impl:       0x%08x\n",
 	      (unsigned) bfd_h_get_32 (abfd, hdr->c_impl));
-      printf ("  cprs:       0x%" BFD_VMA_FMT "x\n",
+      printf ("  cprs:       0x%" PRIx64 "\n",
 	      bfd_h_get_64 (abfd, hdr->c_cprs));
 #endif
     }

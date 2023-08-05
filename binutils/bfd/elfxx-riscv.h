@@ -1,5 +1,5 @@
 /* RISC-V ELF specific backend routines.
-   Copyright (C) 2011-2021 Free Software Foundation, Inc.
+   Copyright (C) 2011-2023 Free Software Foundation, Inc.
 
    Contributed by Andrew Waterman (andrew@sifive.com).
    Based on MIPS target.
@@ -23,6 +23,20 @@
 #include "elf/common.h"
 #include "elf/internal.h"
 #include "opcode/riscv.h"
+#include "cpu-riscv.h"
+
+#define RISCV_UNKNOWN_VERSION -1
+
+struct riscv_elf_params
+{
+  /* Whether to relax code sequences to GP-relative addressing.  */
+  bool relax_gp;
+};
+
+extern void riscv_elf32_set_options (struct bfd_link_info *,
+				     struct riscv_elf_params *);
+extern void riscv_elf64_set_options (struct bfd_link_info *,
+				     struct riscv_elf_params *);
 
 extern reloc_howto_type *
 riscv_reloc_name_lookup (bfd *, const char *);
@@ -48,6 +62,7 @@ typedef struct
 {
   riscv_subset_t *head;
   riscv_subset_t *tail;
+  const char *arch_str;
 } riscv_subset_list_t;
 
 extern void
@@ -58,7 +73,7 @@ riscv_add_subset (riscv_subset_list_t *,
 		  const char *,
 		  int, int);
 
-extern bfd_boolean
+extern bool
 riscv_lookup_subset (const riscv_subset_list_t *,
 		     const char *,
 		     riscv_subset_t **);
@@ -69,17 +84,13 @@ typedef struct
   void (*error_handler) (const char *,
 			 ...) ATTRIBUTE_PRINTF_1;
   unsigned *xlen;
-  void (*get_default_version) (const char *,
-			       int *,
-			       int *);
+  enum riscv_spec_class *isa_spec;
+  bool check_unknown_prefixed_ext;
 } riscv_parse_subset_t;
 
-extern bfd_boolean
+extern bool
 riscv_parse_subset (riscv_parse_subset_t *,
 		    const char *);
-
-extern const char *
-riscv_supported_std_ext (void);
 
 extern void
 riscv_release_subset_list (riscv_subset_list_t *);
@@ -90,32 +101,25 @@ riscv_arch_str (unsigned, const riscv_subset_list_t *);
 extern size_t
 riscv_estimate_digit (unsigned);
 
-/* ISA extension name class. E.g. "zbb" corresponds to RV_ISA_CLASS_Z,
-   "xargs" corresponds to RV_ISA_CLASS_X, etc.  */
-
-typedef enum riscv_isa_ext_class
-{
-  RV_ISA_CLASS_S,
-  RV_ISA_CLASS_H,
-  RV_ISA_CLASS_Z,
-  RV_ISA_CLASS_X,
-  RV_ISA_CLASS_UNKNOWN
-} riscv_isa_ext_class_t;
-
-riscv_isa_ext_class_t
-riscv_get_prefix_class (const char *);
-
-extern int
-riscv_get_priv_spec_class (const char *, enum riscv_priv_spec_class *);
-
-extern int
-riscv_get_priv_spec_class_from_numbers (unsigned int,
-					unsigned int,
-					unsigned int,
-					enum riscv_priv_spec_class *);
-
-extern const char *
-riscv_get_priv_spec_name (enum riscv_priv_spec_class);
-
 extern int
 riscv_compare_subsets (const char *, const char *);
+
+extern riscv_subset_list_t *
+riscv_copy_subset_list (riscv_subset_list_t *);
+
+extern bool
+riscv_update_subset (riscv_parse_subset_t *, const char *);
+
+extern bool
+riscv_subset_supports (riscv_parse_subset_t *, const char *);
+
+extern bool
+riscv_multi_subset_supports (riscv_parse_subset_t *, enum riscv_insn_class);
+
+extern const char *
+riscv_multi_subset_supports_ext (riscv_parse_subset_t *, enum riscv_insn_class);
+
+extern void
+bfd_elf32_riscv_set_data_segment_info (struct bfd_link_info *, int *);
+extern void
+bfd_elf64_riscv_set_data_segment_info (struct bfd_link_info *, int *);

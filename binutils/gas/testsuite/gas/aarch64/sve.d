@@ -7205,36 +7205,66 @@ Disassembly of section .*:
 [^:]+:	0479e400 	dech	x0, pow2, mul #10
 [^:]+:	047fe400 	dech	x0, pow2, mul #16
 [^:]+:	047fe400 	dech	x0, pow2, mul #16
-[^:]+:	256d8000 	decp	z0.h, p0
-[^:]+:	256d8000 	decp	z0.h, p0
-[^:]+:	256d8001 	decp	z1.h, p0
-[^:]+:	256d8001 	decp	z1.h, p0
-[^:]+:	256d801f 	decp	z31.h, p0
-[^:]+:	256d801f 	decp	z31.h, p0
-[^:]+:	256d8040 	decp	z0.h, p2
-[^:]+:	256d8040 	decp	z0.h, p2
-[^:]+:	256d81e0 	decp	z0.h, p15
-[^:]+:	256d81e0 	decp	z0.h, p15
-[^:]+:	25ad8000 	decp	z0.s, p0
-[^:]+:	25ad8000 	decp	z0.s, p0
-[^:]+:	25ad8001 	decp	z1.s, p0
-[^:]+:	25ad8001 	decp	z1.s, p0
-[^:]+:	25ad801f 	decp	z31.s, p0
-[^:]+:	25ad801f 	decp	z31.s, p0
-[^:]+:	25ad8040 	decp	z0.s, p2
-[^:]+:	25ad8040 	decp	z0.s, p2
-[^:]+:	25ad81e0 	decp	z0.s, p15
-[^:]+:	25ad81e0 	decp	z0.s, p15
-[^:]+:	25ed8000 	decp	z0.d, p0
-[^:]+:	25ed8000 	decp	z0.d, p0
-[^:]+:	25ed8001 	decp	z1.d, p0
-[^:]+:	25ed8001 	decp	z1.d, p0
-[^:]+:	25ed801f 	decp	z31.d, p0
-[^:]+:	25ed801f 	decp	z31.d, p0
-[^:]+:	25ed8040 	decp	z0.d, p2
-[^:]+:	25ed8040 	decp	z0.d, p2
-[^:]+:	25ed81e0 	decp	z0.d, p15
-[^:]+:	25ed81e0 	decp	z0.d, p15
+[^:]+:	256d8000 	decp	z0.h, p0.h
+[^:]+:	256d8000 	decp	z0.h, p0.h
+[^:]+:	256d8001 	decp	z1.h, p0.h
+[^:]+:	256d8001 	decp	z1.h, p0.h
+[^:]+:	256d801f 	decp	z31.h, p0.h
+[^:]+:	256d801f 	decp	z31.h, p0.h
+[^:]+:	256d8040 	decp	z0.h, p2.h
+[^:]+:	256d8040 	decp	z0.h, p2.h
+[^:]+:	256d81e0 	decp	z0.h, p15.h
+[^:]+:	256d81e0 	decp	z0.h, p15.h
+[^:]+:	25ad8000 	decp	z0.s, p0.s
+[^:]+:	25ad8000 	decp	z0.s, p0.s
+[^:]+:	25ad8001 	decp	z1.s, p0.s
+[^:]+:	25ad8001 	decp	z1.s, p0.s
+[^:]+:	25ad801f 	decp	z31.s, p0.s
+[^:]+:	25ad801f 	decp	z31.s, p0.s
+[^:]+:	25ad8040 	decp	z0.s, p2.s
+[^:]+:	25ad8040 	decp	z0.s, p2.s
+[^:]+:	25ad81e0 	decp	z0.s, p15.s
+[^:]+:	25ad81e0 	decp	z0.s, p15.s
+[^:]+:	25ed8000 	decp	z0.d, p0.d
+[^:]+:	25ed8000 	decp	z0.d, p0.d
+[^:]+:	25ed8001 	decp	z1.d, p0.d
+[^:]+:	25ed8001 	decp	z1.d, p0.d
+[^:]+:	25ed801f 	decp	z31.d, p0.d
+[^:]+:	25ed801f 	decp	z31.d, p0.d
+[^:]+:	25ed8040 	decp	z0.d, p2.d
+[^:]+:	25ed8040 	decp	z0.d, p2.d
+[^:]+:	25ed81e0 	decp	z0.d, p15.d
+[^:]+:	25ed81e0 	decp	z0.d, p15.d
+[^:]+:	256d8000 	decp	z0.h, p0.h
+[^:]+:	256d8000 	decp	z0.h, p0.h
+[^:]+:	256d8001 	decp	z1.h, p0.h
+[^:]+:	256d8001 	decp	z1.h, p0.h
+[^:]+:	256d801f 	decp	z31.h, p0.h
+[^:]+:	256d801f 	decp	z31.h, p0.h
+[^:]+:	256d8040 	decp	z0.h, p2.h
+[^:]+:	256d8040 	decp	z0.h, p2.h
+[^:]+:	256d81e0 	decp	z0.h, p15.h
+[^:]+:	256d81e0 	decp	z0.h, p15.h
+[^:]+:	25ad8000 	decp	z0.s, p0.s
+[^:]+:	25ad8000 	decp	z0.s, p0.s
+[^:]+:	25ad8001 	decp	z1.s, p0.s
+[^:]+:	25ad8001 	decp	z1.s, p0.s
+[^:]+:	25ad801f 	decp	z31.s, p0.s
+[^:]+:	25ad801f 	decp	z31.s, p0.s
+[^:]+:	25ad8040 	decp	z0.s, p2.s
+[^:]+:	25ad8040 	decp	z0.s, p2.s
+[^:]+:	25ad81e0 	decp	z0.s, p15.s
+[^:]+:	25ad81e0 	decp	z0.s, p15.s
+[^:]+:	25ed8000 	decp	z0.d, p0.d
+[^:]+:	25ed8000 	decp	z0.d, p0.d
+[^:]+:	25ed8001 	decp	z1.d, p0.d
+[^:]+:	25ed8001 	decp	z1.d, p0.d
+[^:]+:	25ed801f 	decp	z31.d, p0.d
+[^:]+:	25ed801f 	decp	z31.d, p0.d
+[^:]+:	25ed8040 	decp	z0.d, p2.d
+[^:]+:	25ed8040 	decp	z0.d, p2.d
+[^:]+:	25ed81e0 	decp	z0.d, p15.d
+[^:]+:	25ed81e0 	decp	z0.d, p15.d
 [^:]+:	252d8800 	decp	x0, p0.b
 [^:]+:	252d8800 	decp	x0, p0.b
 [^:]+:	252d8801 	decp	x1, p0.b
@@ -13031,36 +13061,66 @@ Disassembly of section .*:
 [^:]+:	0479e000 	inch	x0, pow2, mul #10
 [^:]+:	047fe000 	inch	x0, pow2, mul #16
 [^:]+:	047fe000 	inch	x0, pow2, mul #16
-[^:]+:	256c8000 	incp	z0.h, p0
-[^:]+:	256c8000 	incp	z0.h, p0
-[^:]+:	256c8001 	incp	z1.h, p0
-[^:]+:	256c8001 	incp	z1.h, p0
-[^:]+:	256c801f 	incp	z31.h, p0
-[^:]+:	256c801f 	incp	z31.h, p0
-[^:]+:	256c8040 	incp	z0.h, p2
-[^:]+:	256c8040 	incp	z0.h, p2
-[^:]+:	256c81e0 	incp	z0.h, p15
-[^:]+:	256c81e0 	incp	z0.h, p15
-[^:]+:	25ac8000 	incp	z0.s, p0
-[^:]+:	25ac8000 	incp	z0.s, p0
-[^:]+:	25ac8001 	incp	z1.s, p0
-[^:]+:	25ac8001 	incp	z1.s, p0
-[^:]+:	25ac801f 	incp	z31.s, p0
-[^:]+:	25ac801f 	incp	z31.s, p0
-[^:]+:	25ac8040 	incp	z0.s, p2
-[^:]+:	25ac8040 	incp	z0.s, p2
-[^:]+:	25ac81e0 	incp	z0.s, p15
-[^:]+:	25ac81e0 	incp	z0.s, p15
-[^:]+:	25ec8000 	incp	z0.d, p0
-[^:]+:	25ec8000 	incp	z0.d, p0
-[^:]+:	25ec8001 	incp	z1.d, p0
-[^:]+:	25ec8001 	incp	z1.d, p0
-[^:]+:	25ec801f 	incp	z31.d, p0
-[^:]+:	25ec801f 	incp	z31.d, p0
-[^:]+:	25ec8040 	incp	z0.d, p2
-[^:]+:	25ec8040 	incp	z0.d, p2
-[^:]+:	25ec81e0 	incp	z0.d, p15
-[^:]+:	25ec81e0 	incp	z0.d, p15
+[^:]+:	256c8000 	incp	z0.h, p0.h
+[^:]+:	256c8000 	incp	z0.h, p0.h
+[^:]+:	256c8001 	incp	z1.h, p0.h
+[^:]+:	256c8001 	incp	z1.h, p0.h
+[^:]+:	256c801f 	incp	z31.h, p0.h
+[^:]+:	256c801f 	incp	z31.h, p0.h
+[^:]+:	256c8040 	incp	z0.h, p2.h
+[^:]+:	256c8040 	incp	z0.h, p2.h
+[^:]+:	256c81e0 	incp	z0.h, p15.h
+[^:]+:	256c81e0 	incp	z0.h, p15.h
+[^:]+:	25ac8000 	incp	z0.s, p0.s
+[^:]+:	25ac8000 	incp	z0.s, p0.s
+[^:]+:	25ac8001 	incp	z1.s, p0.s
+[^:]+:	25ac8001 	incp	z1.s, p0.s
+[^:]+:	25ac801f 	incp	z31.s, p0.s
+[^:]+:	25ac801f 	incp	z31.s, p0.s
+[^:]+:	25ac8040 	incp	z0.s, p2.s
+[^:]+:	25ac8040 	incp	z0.s, p2.s
+[^:]+:	25ac81e0 	incp	z0.s, p15.s
+[^:]+:	25ac81e0 	incp	z0.s, p15.s
+[^:]+:	25ec8000 	incp	z0.d, p0.d
+[^:]+:	25ec8000 	incp	z0.d, p0.d
+[^:]+:	25ec8001 	incp	z1.d, p0.d
+[^:]+:	25ec8001 	incp	z1.d, p0.d
+[^:]+:	25ec801f 	incp	z31.d, p0.d
+[^:]+:	25ec801f 	incp	z31.d, p0.d
+[^:]+:	25ec8040 	incp	z0.d, p2.d
+[^:]+:	25ec8040 	incp	z0.d, p2.d
+[^:]+:	25ec81e0 	incp	z0.d, p15.d
+[^:]+:	25ec81e0 	incp	z0.d, p15.d
+[^:]+:	256c8000 	incp	z0.h, p0.h
+[^:]+:	256c8000 	incp	z0.h, p0.h
+[^:]+:	256c8001 	incp	z1.h, p0.h
+[^:]+:	256c8001 	incp	z1.h, p0.h
+[^:]+:	256c801f 	incp	z31.h, p0.h
+[^:]+:	256c801f 	incp	z31.h, p0.h
+[^:]+:	256c8040 	incp	z0.h, p2.h
+[^:]+:	256c8040 	incp	z0.h, p2.h
+[^:]+:	256c81e0 	incp	z0.h, p15.h
+[^:]+:	256c81e0 	incp	z0.h, p15.h
+[^:]+:	25ac8000 	incp	z0.s, p0.s
+[^:]+:	25ac8000 	incp	z0.s, p0.s
+[^:]+:	25ac8001 	incp	z1.s, p0.s
+[^:]+:	25ac8001 	incp	z1.s, p0.s
+[^:]+:	25ac801f 	incp	z31.s, p0.s
+[^:]+:	25ac801f 	incp	z31.s, p0.s
+[^:]+:	25ac8040 	incp	z0.s, p2.s
+[^:]+:	25ac8040 	incp	z0.s, p2.s
+[^:]+:	25ac81e0 	incp	z0.s, p15.s
+[^:]+:	25ac81e0 	incp	z0.s, p15.s
+[^:]+:	25ec8000 	incp	z0.d, p0.d
+[^:]+:	25ec8000 	incp	z0.d, p0.d
+[^:]+:	25ec8001 	incp	z1.d, p0.d
+[^:]+:	25ec8001 	incp	z1.d, p0.d
+[^:]+:	25ec801f 	incp	z31.d, p0.d
+[^:]+:	25ec801f 	incp	z31.d, p0.d
+[^:]+:	25ec8040 	incp	z0.d, p2.d
+[^:]+:	25ec8040 	incp	z0.d, p2.d
+[^:]+:	25ec81e0 	incp	z0.d, p15.d
+[^:]+:	25ec81e0 	incp	z0.d, p15.d
 [^:]+:	252c8800 	incp	x0, p0.b
 [^:]+:	252c8800 	incp	x0, p0.b
 [^:]+:	252c8801 	incp	x1, p0.b
@@ -17426,359 +17486,359 @@ Disassembly of section .*:
 [^:]+:	c531c000 	ld1w	{z0.d}, p0/z, \[z0.d, #68\]
 [^:]+:	c53fc000 	ld1w	{z0.d}, p0/z, \[z0.d, #124\]
 [^:]+:	c53fc000 	ld1w	{z0.d}, p0/z, \[z0.d, #124\]
-[^:]+:	a420c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c001 	ld2b	{z1.b, z2.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c001 	ld2b	{z1.b, z2.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c001 	ld2b	{z1.b, z2.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c001 	ld2b	{z1.b, z2.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c001 	ld2b	{z1.b, z2.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c01f 	ld2b	{z31.b, z0.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c01f 	ld2b	{z31.b, z0.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c01f 	ld2b	{z31.b, z0.b}, p0/z, \[x0, x0\]
-[^:]+:	a420c800 	ld2b	{z0.b, z1.b}, p2/z, \[x0, x0\]
-[^:]+:	a420c800 	ld2b	{z0.b, z1.b}, p2/z, \[x0, x0\]
-[^:]+:	a420c800 	ld2b	{z0.b, z1.b}, p2/z, \[x0, x0\]
-[^:]+:	a420c800 	ld2b	{z0.b, z1.b}, p2/z, \[x0, x0\]
-[^:]+:	a420c800 	ld2b	{z0.b, z1.b}, p2/z, \[x0, x0\]
-[^:]+:	a420dc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0, x0\]
-[^:]+:	a420dc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0, x0\]
-[^:]+:	a420dc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0, x0\]
-[^:]+:	a420dc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0, x0\]
-[^:]+:	a420dc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0, x0\]
-[^:]+:	a420c060 	ld2b	{z0.b, z1.b}, p0/z, \[x3, x0\]
-[^:]+:	a420c060 	ld2b	{z0.b, z1.b}, p0/z, \[x3, x0\]
-[^:]+:	a420c060 	ld2b	{z0.b, z1.b}, p0/z, \[x3, x0\]
-[^:]+:	a420c060 	ld2b	{z0.b, z1.b}, p0/z, \[x3, x0\]
-[^:]+:	a420c060 	ld2b	{z0.b, z1.b}, p0/z, \[x3, x0\]
-[^:]+:	a420c3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp, x0\]
-[^:]+:	a420c3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp, x0\]
-[^:]+:	a420c3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp, x0\]
-[^:]+:	a420c3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp, x0\]
-[^:]+:	a420c3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp, x0\]
-[^:]+:	a424c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x4\]
-[^:]+:	a424c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x4\]
-[^:]+:	a424c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x4\]
-[^:]+:	a424c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x4\]
-[^:]+:	a424c000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x4\]
-[^:]+:	a43ec000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x30\]
-[^:]+:	a43ec000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x30\]
-[^:]+:	a43ec000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x30\]
-[^:]+:	a43ec000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x30\]
-[^:]+:	a43ec000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, x30\]
-[^:]+:	a420e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a420e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a420e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a420e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a420e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a420e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a420e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a420e001 	ld2b	{z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a420e001 	ld2b	{z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a420e001 	ld2b	{z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a420e001 	ld2b	{z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a420e001 	ld2b	{z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a420e001 	ld2b	{z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a420e001 	ld2b	{z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a420e01f 	ld2b	{z31.b, z0.b}, p0/z, \[x0\]
-[^:]+:	a420e01f 	ld2b	{z31.b, z0.b}, p0/z, \[x0\]
-[^:]+:	a420e01f 	ld2b	{z31.b, z0.b}, p0/z, \[x0\]
-[^:]+:	a420e01f 	ld2b	{z31.b, z0.b}, p0/z, \[x0\]
-[^:]+:	a420e800 	ld2b	{z0.b, z1.b}, p2/z, \[x0\]
-[^:]+:	a420e800 	ld2b	{z0.b, z1.b}, p2/z, \[x0\]
-[^:]+:	a420e800 	ld2b	{z0.b, z1.b}, p2/z, \[x0\]
-[^:]+:	a420e800 	ld2b	{z0.b, z1.b}, p2/z, \[x0\]
-[^:]+:	a420e800 	ld2b	{z0.b, z1.b}, p2/z, \[x0\]
-[^:]+:	a420e800 	ld2b	{z0.b, z1.b}, p2/z, \[x0\]
-[^:]+:	a420e800 	ld2b	{z0.b, z1.b}, p2/z, \[x0\]
-[^:]+:	a420fc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0\]
-[^:]+:	a420fc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0\]
-[^:]+:	a420fc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0\]
-[^:]+:	a420fc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0\]
-[^:]+:	a420fc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0\]
-[^:]+:	a420fc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0\]
-[^:]+:	a420fc00 	ld2b	{z0.b, z1.b}, p7/z, \[x0\]
-[^:]+:	a420e060 	ld2b	{z0.b, z1.b}, p0/z, \[x3\]
-[^:]+:	a420e060 	ld2b	{z0.b, z1.b}, p0/z, \[x3\]
-[^:]+:	a420e060 	ld2b	{z0.b, z1.b}, p0/z, \[x3\]
-[^:]+:	a420e060 	ld2b	{z0.b, z1.b}, p0/z, \[x3\]
-[^:]+:	a420e060 	ld2b	{z0.b, z1.b}, p0/z, \[x3\]
-[^:]+:	a420e060 	ld2b	{z0.b, z1.b}, p0/z, \[x3\]
-[^:]+:	a420e060 	ld2b	{z0.b, z1.b}, p0/z, \[x3\]
-[^:]+:	a420e3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp\]
-[^:]+:	a420e3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp\]
-[^:]+:	a420e3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp\]
-[^:]+:	a420e3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp\]
-[^:]+:	a420e3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp\]
-[^:]+:	a420e3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp\]
-[^:]+:	a420e3e0 	ld2b	{z0.b, z1.b}, p0/z, \[sp\]
-[^:]+:	a427e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a427e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a427e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a428e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a428e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a428e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a429e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a429e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a429e000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a42fe000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a42fe000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a42fe000 	ld2b	{z0.b, z1.b}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a5a0c000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c001 	ld2d	{z1.d, z2.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c001 	ld2d	{z1.d, z2.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c001 	ld2d	{z1.d, z2.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c01f 	ld2d	{z31.d, z0.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c01f 	ld2d	{z31.d, z0.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c800 	ld2d	{z0.d, z1.d}, p2/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c800 	ld2d	{z0.d, z1.d}, p2/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c800 	ld2d	{z0.d, z1.d}, p2/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0dc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0dc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0dc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0, x0, lsl #3\]
-[^:]+:	a5a0c060 	ld2d	{z0.d, z1.d}, p0/z, \[x3, x0, lsl #3\]
-[^:]+:	a5a0c060 	ld2d	{z0.d, z1.d}, p0/z, \[x3, x0, lsl #3\]
-[^:]+:	a5a0c060 	ld2d	{z0.d, z1.d}, p0/z, \[x3, x0, lsl #3\]
-[^:]+:	a5a0c3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp, x0, lsl #3\]
-[^:]+:	a5a0c3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp, x0, lsl #3\]
-[^:]+:	a5a0c3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp, x0, lsl #3\]
-[^:]+:	a5a4c000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x4, lsl #3\]
-[^:]+:	a5a4c000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x4, lsl #3\]
-[^:]+:	a5a4c000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x4, lsl #3\]
-[^:]+:	a5bec000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x30, lsl #3\]
-[^:]+:	a5bec000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x30, lsl #3\]
-[^:]+:	a5bec000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, x30, lsl #3\]
-[^:]+:	a5a0e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5a0e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5a0e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5a0e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5a0e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5a0e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5a0e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5a0e001 	ld2d	{z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5a0e001 	ld2d	{z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5a0e001 	ld2d	{z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5a0e001 	ld2d	{z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5a0e001 	ld2d	{z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5a0e001 	ld2d	{z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5a0e001 	ld2d	{z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5a0e01f 	ld2d	{z31.d, z0.d}, p0/z, \[x0\]
-[^:]+:	a5a0e01f 	ld2d	{z31.d, z0.d}, p0/z, \[x0\]
-[^:]+:	a5a0e01f 	ld2d	{z31.d, z0.d}, p0/z, \[x0\]
-[^:]+:	a5a0e01f 	ld2d	{z31.d, z0.d}, p0/z, \[x0\]
-[^:]+:	a5a0e800 	ld2d	{z0.d, z1.d}, p2/z, \[x0\]
-[^:]+:	a5a0e800 	ld2d	{z0.d, z1.d}, p2/z, \[x0\]
-[^:]+:	a5a0e800 	ld2d	{z0.d, z1.d}, p2/z, \[x0\]
-[^:]+:	a5a0e800 	ld2d	{z0.d, z1.d}, p2/z, \[x0\]
-[^:]+:	a5a0e800 	ld2d	{z0.d, z1.d}, p2/z, \[x0\]
-[^:]+:	a5a0e800 	ld2d	{z0.d, z1.d}, p2/z, \[x0\]
-[^:]+:	a5a0e800 	ld2d	{z0.d, z1.d}, p2/z, \[x0\]
-[^:]+:	a5a0fc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0\]
-[^:]+:	a5a0fc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0\]
-[^:]+:	a5a0fc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0\]
-[^:]+:	a5a0fc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0\]
-[^:]+:	a5a0fc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0\]
-[^:]+:	a5a0fc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0\]
-[^:]+:	a5a0fc00 	ld2d	{z0.d, z1.d}, p7/z, \[x0\]
-[^:]+:	a5a0e060 	ld2d	{z0.d, z1.d}, p0/z, \[x3\]
-[^:]+:	a5a0e060 	ld2d	{z0.d, z1.d}, p0/z, \[x3\]
-[^:]+:	a5a0e060 	ld2d	{z0.d, z1.d}, p0/z, \[x3\]
-[^:]+:	a5a0e060 	ld2d	{z0.d, z1.d}, p0/z, \[x3\]
-[^:]+:	a5a0e060 	ld2d	{z0.d, z1.d}, p0/z, \[x3\]
-[^:]+:	a5a0e060 	ld2d	{z0.d, z1.d}, p0/z, \[x3\]
-[^:]+:	a5a0e060 	ld2d	{z0.d, z1.d}, p0/z, \[x3\]
-[^:]+:	a5a0e3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp\]
-[^:]+:	a5a0e3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp\]
-[^:]+:	a5a0e3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp\]
-[^:]+:	a5a0e3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp\]
-[^:]+:	a5a0e3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp\]
-[^:]+:	a5a0e3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp\]
-[^:]+:	a5a0e3e0 	ld2d	{z0.d, z1.d}, p0/z, \[sp\]
-[^:]+:	a5a7e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a5a7e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a5a7e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a5a8e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a5a8e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a5a8e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a5a9e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a5a9e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a5a9e000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a5afe000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a5afe000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a5afe000 	ld2d	{z0.d, z1.d}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a4a0c000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c001 	ld2h	{z1.h, z2.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c001 	ld2h	{z1.h, z2.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c001 	ld2h	{z1.h, z2.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c01f 	ld2h	{z31.h, z0.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c01f 	ld2h	{z31.h, z0.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c800 	ld2h	{z0.h, z1.h}, p2/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c800 	ld2h	{z0.h, z1.h}, p2/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c800 	ld2h	{z0.h, z1.h}, p2/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0dc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0dc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0dc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0, x0, lsl #1\]
-[^:]+:	a4a0c060 	ld2h	{z0.h, z1.h}, p0/z, \[x3, x0, lsl #1\]
-[^:]+:	a4a0c060 	ld2h	{z0.h, z1.h}, p0/z, \[x3, x0, lsl #1\]
-[^:]+:	a4a0c060 	ld2h	{z0.h, z1.h}, p0/z, \[x3, x0, lsl #1\]
-[^:]+:	a4a0c3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp, x0, lsl #1\]
-[^:]+:	a4a0c3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp, x0, lsl #1\]
-[^:]+:	a4a0c3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp, x0, lsl #1\]
-[^:]+:	a4a4c000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x4, lsl #1\]
-[^:]+:	a4a4c000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x4, lsl #1\]
-[^:]+:	a4a4c000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x4, lsl #1\]
-[^:]+:	a4bec000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x30, lsl #1\]
-[^:]+:	a4bec000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x30, lsl #1\]
-[^:]+:	a4bec000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, x30, lsl #1\]
-[^:]+:	a4a0e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4a0e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4a0e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4a0e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4a0e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4a0e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4a0e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4a0e001 	ld2h	{z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4a0e001 	ld2h	{z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4a0e001 	ld2h	{z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4a0e001 	ld2h	{z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4a0e001 	ld2h	{z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4a0e001 	ld2h	{z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4a0e001 	ld2h	{z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4a0e01f 	ld2h	{z31.h, z0.h}, p0/z, \[x0\]
-[^:]+:	a4a0e01f 	ld2h	{z31.h, z0.h}, p0/z, \[x0\]
-[^:]+:	a4a0e01f 	ld2h	{z31.h, z0.h}, p0/z, \[x0\]
-[^:]+:	a4a0e01f 	ld2h	{z31.h, z0.h}, p0/z, \[x0\]
-[^:]+:	a4a0e800 	ld2h	{z0.h, z1.h}, p2/z, \[x0\]
-[^:]+:	a4a0e800 	ld2h	{z0.h, z1.h}, p2/z, \[x0\]
-[^:]+:	a4a0e800 	ld2h	{z0.h, z1.h}, p2/z, \[x0\]
-[^:]+:	a4a0e800 	ld2h	{z0.h, z1.h}, p2/z, \[x0\]
-[^:]+:	a4a0e800 	ld2h	{z0.h, z1.h}, p2/z, \[x0\]
-[^:]+:	a4a0e800 	ld2h	{z0.h, z1.h}, p2/z, \[x0\]
-[^:]+:	a4a0e800 	ld2h	{z0.h, z1.h}, p2/z, \[x0\]
-[^:]+:	a4a0fc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0\]
-[^:]+:	a4a0fc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0\]
-[^:]+:	a4a0fc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0\]
-[^:]+:	a4a0fc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0\]
-[^:]+:	a4a0fc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0\]
-[^:]+:	a4a0fc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0\]
-[^:]+:	a4a0fc00 	ld2h	{z0.h, z1.h}, p7/z, \[x0\]
-[^:]+:	a4a0e060 	ld2h	{z0.h, z1.h}, p0/z, \[x3\]
-[^:]+:	a4a0e060 	ld2h	{z0.h, z1.h}, p0/z, \[x3\]
-[^:]+:	a4a0e060 	ld2h	{z0.h, z1.h}, p0/z, \[x3\]
-[^:]+:	a4a0e060 	ld2h	{z0.h, z1.h}, p0/z, \[x3\]
-[^:]+:	a4a0e060 	ld2h	{z0.h, z1.h}, p0/z, \[x3\]
-[^:]+:	a4a0e060 	ld2h	{z0.h, z1.h}, p0/z, \[x3\]
-[^:]+:	a4a0e060 	ld2h	{z0.h, z1.h}, p0/z, \[x3\]
-[^:]+:	a4a0e3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp\]
-[^:]+:	a4a0e3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp\]
-[^:]+:	a4a0e3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp\]
-[^:]+:	a4a0e3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp\]
-[^:]+:	a4a0e3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp\]
-[^:]+:	a4a0e3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp\]
-[^:]+:	a4a0e3e0 	ld2h	{z0.h, z1.h}, p0/z, \[sp\]
-[^:]+:	a4a7e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a4a7e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a4a7e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a4a8e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a4a8e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a4a8e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a4a9e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a4a9e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a4a9e000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a4afe000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a4afe000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a4afe000 	ld2h	{z0.h, z1.h}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a520c000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c001 	ld2w	{z1.s, z2.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c001 	ld2w	{z1.s, z2.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c001 	ld2w	{z1.s, z2.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c01f 	ld2w	{z31.s, z0.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c01f 	ld2w	{z31.s, z0.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c800 	ld2w	{z0.s, z1.s}, p2/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c800 	ld2w	{z0.s, z1.s}, p2/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c800 	ld2w	{z0.s, z1.s}, p2/z, \[x0, x0, lsl #2\]
-[^:]+:	a520dc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0, x0, lsl #2\]
-[^:]+:	a520dc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0, x0, lsl #2\]
-[^:]+:	a520dc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0, x0, lsl #2\]
-[^:]+:	a520c060 	ld2w	{z0.s, z1.s}, p0/z, \[x3, x0, lsl #2\]
-[^:]+:	a520c060 	ld2w	{z0.s, z1.s}, p0/z, \[x3, x0, lsl #2\]
-[^:]+:	a520c060 	ld2w	{z0.s, z1.s}, p0/z, \[x3, x0, lsl #2\]
-[^:]+:	a520c3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp, x0, lsl #2\]
-[^:]+:	a520c3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp, x0, lsl #2\]
-[^:]+:	a520c3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp, x0, lsl #2\]
-[^:]+:	a524c000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x4, lsl #2\]
-[^:]+:	a524c000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x4, lsl #2\]
-[^:]+:	a524c000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x4, lsl #2\]
-[^:]+:	a53ec000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x30, lsl #2\]
-[^:]+:	a53ec000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x30, lsl #2\]
-[^:]+:	a53ec000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, x30, lsl #2\]
-[^:]+:	a520e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a520e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a520e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a520e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a520e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a520e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a520e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a520e001 	ld2w	{z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a520e001 	ld2w	{z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a520e001 	ld2w	{z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a520e001 	ld2w	{z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a520e001 	ld2w	{z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a520e001 	ld2w	{z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a520e001 	ld2w	{z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a520e01f 	ld2w	{z31.s, z0.s}, p0/z, \[x0\]
-[^:]+:	a520e01f 	ld2w	{z31.s, z0.s}, p0/z, \[x0\]
-[^:]+:	a520e01f 	ld2w	{z31.s, z0.s}, p0/z, \[x0\]
-[^:]+:	a520e01f 	ld2w	{z31.s, z0.s}, p0/z, \[x0\]
-[^:]+:	a520e800 	ld2w	{z0.s, z1.s}, p2/z, \[x0\]
-[^:]+:	a520e800 	ld2w	{z0.s, z1.s}, p2/z, \[x0\]
-[^:]+:	a520e800 	ld2w	{z0.s, z1.s}, p2/z, \[x0\]
-[^:]+:	a520e800 	ld2w	{z0.s, z1.s}, p2/z, \[x0\]
-[^:]+:	a520e800 	ld2w	{z0.s, z1.s}, p2/z, \[x0\]
-[^:]+:	a520e800 	ld2w	{z0.s, z1.s}, p2/z, \[x0\]
-[^:]+:	a520e800 	ld2w	{z0.s, z1.s}, p2/z, \[x0\]
-[^:]+:	a520fc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0\]
-[^:]+:	a520fc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0\]
-[^:]+:	a520fc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0\]
-[^:]+:	a520fc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0\]
-[^:]+:	a520fc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0\]
-[^:]+:	a520fc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0\]
-[^:]+:	a520fc00 	ld2w	{z0.s, z1.s}, p7/z, \[x0\]
-[^:]+:	a520e060 	ld2w	{z0.s, z1.s}, p0/z, \[x3\]
-[^:]+:	a520e060 	ld2w	{z0.s, z1.s}, p0/z, \[x3\]
-[^:]+:	a520e060 	ld2w	{z0.s, z1.s}, p0/z, \[x3\]
-[^:]+:	a520e060 	ld2w	{z0.s, z1.s}, p0/z, \[x3\]
-[^:]+:	a520e060 	ld2w	{z0.s, z1.s}, p0/z, \[x3\]
-[^:]+:	a520e060 	ld2w	{z0.s, z1.s}, p0/z, \[x3\]
-[^:]+:	a520e060 	ld2w	{z0.s, z1.s}, p0/z, \[x3\]
-[^:]+:	a520e3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp\]
-[^:]+:	a520e3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp\]
-[^:]+:	a520e3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp\]
-[^:]+:	a520e3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp\]
-[^:]+:	a520e3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp\]
-[^:]+:	a520e3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp\]
-[^:]+:	a520e3e0 	ld2w	{z0.s, z1.s}, p0/z, \[sp\]
-[^:]+:	a527e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a527e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a527e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #14, mul vl\]
-[^:]+:	a528e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a528e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a528e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-16, mul vl\]
-[^:]+:	a529e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a529e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a529e000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-14, mul vl\]
-[^:]+:	a52fe000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a52fe000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-2, mul vl\]
-[^:]+:	a52fe000 	ld2w	{z0.s, z1.s}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a420c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c001 	ld2b	{z1.b-z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c001 	ld2b	{z1.b-z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c001 	ld2b	{z1.b-z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c001 	ld2b	{z1.b-z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c001 	ld2b	{z1.b-z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c01f 	ld2b	{z31.b-z0.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c01f 	ld2b	{z31.b-z0.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c01f 	ld2b	{z31.b-z0.b}, p0/z, \[x0, x0\]
+[^:]+:	a420c800 	ld2b	{z0.b-z1.b}, p2/z, \[x0, x0\]
+[^:]+:	a420c800 	ld2b	{z0.b-z1.b}, p2/z, \[x0, x0\]
+[^:]+:	a420c800 	ld2b	{z0.b-z1.b}, p2/z, \[x0, x0\]
+[^:]+:	a420c800 	ld2b	{z0.b-z1.b}, p2/z, \[x0, x0\]
+[^:]+:	a420c800 	ld2b	{z0.b-z1.b}, p2/z, \[x0, x0\]
+[^:]+:	a420dc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0, x0\]
+[^:]+:	a420dc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0, x0\]
+[^:]+:	a420dc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0, x0\]
+[^:]+:	a420dc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0, x0\]
+[^:]+:	a420dc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0, x0\]
+[^:]+:	a420c060 	ld2b	{z0.b-z1.b}, p0/z, \[x3, x0\]
+[^:]+:	a420c060 	ld2b	{z0.b-z1.b}, p0/z, \[x3, x0\]
+[^:]+:	a420c060 	ld2b	{z0.b-z1.b}, p0/z, \[x3, x0\]
+[^:]+:	a420c060 	ld2b	{z0.b-z1.b}, p0/z, \[x3, x0\]
+[^:]+:	a420c060 	ld2b	{z0.b-z1.b}, p0/z, \[x3, x0\]
+[^:]+:	a420c3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp, x0\]
+[^:]+:	a420c3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp, x0\]
+[^:]+:	a420c3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp, x0\]
+[^:]+:	a420c3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp, x0\]
+[^:]+:	a420c3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp, x0\]
+[^:]+:	a424c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x4\]
+[^:]+:	a424c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x4\]
+[^:]+:	a424c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x4\]
+[^:]+:	a424c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x4\]
+[^:]+:	a424c000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x4\]
+[^:]+:	a43ec000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x30\]
+[^:]+:	a43ec000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x30\]
+[^:]+:	a43ec000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x30\]
+[^:]+:	a43ec000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x30\]
+[^:]+:	a43ec000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, x30\]
+[^:]+:	a420e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a420e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a420e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a420e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a420e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a420e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a420e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a420e001 	ld2b	{z1.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a420e001 	ld2b	{z1.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a420e001 	ld2b	{z1.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a420e001 	ld2b	{z1.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a420e001 	ld2b	{z1.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a420e001 	ld2b	{z1.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a420e001 	ld2b	{z1.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a420e01f 	ld2b	{z31.b-z0.b}, p0/z, \[x0\]
+[^:]+:	a420e01f 	ld2b	{z31.b-z0.b}, p0/z, \[x0\]
+[^:]+:	a420e01f 	ld2b	{z31.b-z0.b}, p0/z, \[x0\]
+[^:]+:	a420e01f 	ld2b	{z31.b-z0.b}, p0/z, \[x0\]
+[^:]+:	a420e800 	ld2b	{z0.b-z1.b}, p2/z, \[x0\]
+[^:]+:	a420e800 	ld2b	{z0.b-z1.b}, p2/z, \[x0\]
+[^:]+:	a420e800 	ld2b	{z0.b-z1.b}, p2/z, \[x0\]
+[^:]+:	a420e800 	ld2b	{z0.b-z1.b}, p2/z, \[x0\]
+[^:]+:	a420e800 	ld2b	{z0.b-z1.b}, p2/z, \[x0\]
+[^:]+:	a420e800 	ld2b	{z0.b-z1.b}, p2/z, \[x0\]
+[^:]+:	a420e800 	ld2b	{z0.b-z1.b}, p2/z, \[x0\]
+[^:]+:	a420fc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0\]
+[^:]+:	a420fc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0\]
+[^:]+:	a420fc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0\]
+[^:]+:	a420fc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0\]
+[^:]+:	a420fc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0\]
+[^:]+:	a420fc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0\]
+[^:]+:	a420fc00 	ld2b	{z0.b-z1.b}, p7/z, \[x0\]
+[^:]+:	a420e060 	ld2b	{z0.b-z1.b}, p0/z, \[x3\]
+[^:]+:	a420e060 	ld2b	{z0.b-z1.b}, p0/z, \[x3\]
+[^:]+:	a420e060 	ld2b	{z0.b-z1.b}, p0/z, \[x3\]
+[^:]+:	a420e060 	ld2b	{z0.b-z1.b}, p0/z, \[x3\]
+[^:]+:	a420e060 	ld2b	{z0.b-z1.b}, p0/z, \[x3\]
+[^:]+:	a420e060 	ld2b	{z0.b-z1.b}, p0/z, \[x3\]
+[^:]+:	a420e060 	ld2b	{z0.b-z1.b}, p0/z, \[x3\]
+[^:]+:	a420e3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp\]
+[^:]+:	a420e3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp\]
+[^:]+:	a420e3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp\]
+[^:]+:	a420e3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp\]
+[^:]+:	a420e3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp\]
+[^:]+:	a420e3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp\]
+[^:]+:	a420e3e0 	ld2b	{z0.b-z1.b}, p0/z, \[sp\]
+[^:]+:	a427e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a427e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a427e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a428e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a428e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a428e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a429e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a429e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a429e000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a42fe000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a42fe000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a42fe000 	ld2b	{z0.b-z1.b}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a5a0c000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c001 	ld2d	{z1.d-z2.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c001 	ld2d	{z1.d-z2.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c001 	ld2d	{z1.d-z2.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c01f 	ld2d	{z31.d-z0.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c01f 	ld2d	{z31.d-z0.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c800 	ld2d	{z0.d-z1.d}, p2/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c800 	ld2d	{z0.d-z1.d}, p2/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c800 	ld2d	{z0.d-z1.d}, p2/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0dc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0dc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0dc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0, x0, lsl #3\]
+[^:]+:	a5a0c060 	ld2d	{z0.d-z1.d}, p0/z, \[x3, x0, lsl #3\]
+[^:]+:	a5a0c060 	ld2d	{z0.d-z1.d}, p0/z, \[x3, x0, lsl #3\]
+[^:]+:	a5a0c060 	ld2d	{z0.d-z1.d}, p0/z, \[x3, x0, lsl #3\]
+[^:]+:	a5a0c3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp, x0, lsl #3\]
+[^:]+:	a5a0c3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp, x0, lsl #3\]
+[^:]+:	a5a0c3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp, x0, lsl #3\]
+[^:]+:	a5a4c000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x4, lsl #3\]
+[^:]+:	a5a4c000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x4, lsl #3\]
+[^:]+:	a5a4c000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x4, lsl #3\]
+[^:]+:	a5bec000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x30, lsl #3\]
+[^:]+:	a5bec000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x30, lsl #3\]
+[^:]+:	a5bec000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, x30, lsl #3\]
+[^:]+:	a5a0e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5a0e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5a0e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5a0e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5a0e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5a0e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5a0e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5a0e001 	ld2d	{z1.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5a0e001 	ld2d	{z1.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5a0e001 	ld2d	{z1.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5a0e001 	ld2d	{z1.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5a0e001 	ld2d	{z1.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5a0e001 	ld2d	{z1.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5a0e001 	ld2d	{z1.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5a0e01f 	ld2d	{z31.d-z0.d}, p0/z, \[x0\]
+[^:]+:	a5a0e01f 	ld2d	{z31.d-z0.d}, p0/z, \[x0\]
+[^:]+:	a5a0e01f 	ld2d	{z31.d-z0.d}, p0/z, \[x0\]
+[^:]+:	a5a0e01f 	ld2d	{z31.d-z0.d}, p0/z, \[x0\]
+[^:]+:	a5a0e800 	ld2d	{z0.d-z1.d}, p2/z, \[x0\]
+[^:]+:	a5a0e800 	ld2d	{z0.d-z1.d}, p2/z, \[x0\]
+[^:]+:	a5a0e800 	ld2d	{z0.d-z1.d}, p2/z, \[x0\]
+[^:]+:	a5a0e800 	ld2d	{z0.d-z1.d}, p2/z, \[x0\]
+[^:]+:	a5a0e800 	ld2d	{z0.d-z1.d}, p2/z, \[x0\]
+[^:]+:	a5a0e800 	ld2d	{z0.d-z1.d}, p2/z, \[x0\]
+[^:]+:	a5a0e800 	ld2d	{z0.d-z1.d}, p2/z, \[x0\]
+[^:]+:	a5a0fc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0\]
+[^:]+:	a5a0fc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0\]
+[^:]+:	a5a0fc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0\]
+[^:]+:	a5a0fc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0\]
+[^:]+:	a5a0fc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0\]
+[^:]+:	a5a0fc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0\]
+[^:]+:	a5a0fc00 	ld2d	{z0.d-z1.d}, p7/z, \[x0\]
+[^:]+:	a5a0e060 	ld2d	{z0.d-z1.d}, p0/z, \[x3\]
+[^:]+:	a5a0e060 	ld2d	{z0.d-z1.d}, p0/z, \[x3\]
+[^:]+:	a5a0e060 	ld2d	{z0.d-z1.d}, p0/z, \[x3\]
+[^:]+:	a5a0e060 	ld2d	{z0.d-z1.d}, p0/z, \[x3\]
+[^:]+:	a5a0e060 	ld2d	{z0.d-z1.d}, p0/z, \[x3\]
+[^:]+:	a5a0e060 	ld2d	{z0.d-z1.d}, p0/z, \[x3\]
+[^:]+:	a5a0e060 	ld2d	{z0.d-z1.d}, p0/z, \[x3\]
+[^:]+:	a5a0e3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp\]
+[^:]+:	a5a0e3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp\]
+[^:]+:	a5a0e3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp\]
+[^:]+:	a5a0e3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp\]
+[^:]+:	a5a0e3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp\]
+[^:]+:	a5a0e3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp\]
+[^:]+:	a5a0e3e0 	ld2d	{z0.d-z1.d}, p0/z, \[sp\]
+[^:]+:	a5a7e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a5a7e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a5a7e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a5a8e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a5a8e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a5a8e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a5a9e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a5a9e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a5a9e000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a5afe000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a5afe000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a5afe000 	ld2d	{z0.d-z1.d}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a4a0c000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c001 	ld2h	{z1.h-z2.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c001 	ld2h	{z1.h-z2.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c001 	ld2h	{z1.h-z2.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c01f 	ld2h	{z31.h-z0.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c01f 	ld2h	{z31.h-z0.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c800 	ld2h	{z0.h-z1.h}, p2/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c800 	ld2h	{z0.h-z1.h}, p2/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c800 	ld2h	{z0.h-z1.h}, p2/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0dc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0dc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0dc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0, x0, lsl #1\]
+[^:]+:	a4a0c060 	ld2h	{z0.h-z1.h}, p0/z, \[x3, x0, lsl #1\]
+[^:]+:	a4a0c060 	ld2h	{z0.h-z1.h}, p0/z, \[x3, x0, lsl #1\]
+[^:]+:	a4a0c060 	ld2h	{z0.h-z1.h}, p0/z, \[x3, x0, lsl #1\]
+[^:]+:	a4a0c3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp, x0, lsl #1\]
+[^:]+:	a4a0c3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp, x0, lsl #1\]
+[^:]+:	a4a0c3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp, x0, lsl #1\]
+[^:]+:	a4a4c000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x4, lsl #1\]
+[^:]+:	a4a4c000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x4, lsl #1\]
+[^:]+:	a4a4c000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x4, lsl #1\]
+[^:]+:	a4bec000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x30, lsl #1\]
+[^:]+:	a4bec000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x30, lsl #1\]
+[^:]+:	a4bec000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, x30, lsl #1\]
+[^:]+:	a4a0e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4a0e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4a0e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4a0e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4a0e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4a0e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4a0e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4a0e001 	ld2h	{z1.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4a0e001 	ld2h	{z1.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4a0e001 	ld2h	{z1.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4a0e001 	ld2h	{z1.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4a0e001 	ld2h	{z1.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4a0e001 	ld2h	{z1.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4a0e001 	ld2h	{z1.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4a0e01f 	ld2h	{z31.h-z0.h}, p0/z, \[x0\]
+[^:]+:	a4a0e01f 	ld2h	{z31.h-z0.h}, p0/z, \[x0\]
+[^:]+:	a4a0e01f 	ld2h	{z31.h-z0.h}, p0/z, \[x0\]
+[^:]+:	a4a0e01f 	ld2h	{z31.h-z0.h}, p0/z, \[x0\]
+[^:]+:	a4a0e800 	ld2h	{z0.h-z1.h}, p2/z, \[x0\]
+[^:]+:	a4a0e800 	ld2h	{z0.h-z1.h}, p2/z, \[x0\]
+[^:]+:	a4a0e800 	ld2h	{z0.h-z1.h}, p2/z, \[x0\]
+[^:]+:	a4a0e800 	ld2h	{z0.h-z1.h}, p2/z, \[x0\]
+[^:]+:	a4a0e800 	ld2h	{z0.h-z1.h}, p2/z, \[x0\]
+[^:]+:	a4a0e800 	ld2h	{z0.h-z1.h}, p2/z, \[x0\]
+[^:]+:	a4a0e800 	ld2h	{z0.h-z1.h}, p2/z, \[x0\]
+[^:]+:	a4a0fc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0\]
+[^:]+:	a4a0fc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0\]
+[^:]+:	a4a0fc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0\]
+[^:]+:	a4a0fc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0\]
+[^:]+:	a4a0fc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0\]
+[^:]+:	a4a0fc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0\]
+[^:]+:	a4a0fc00 	ld2h	{z0.h-z1.h}, p7/z, \[x0\]
+[^:]+:	a4a0e060 	ld2h	{z0.h-z1.h}, p0/z, \[x3\]
+[^:]+:	a4a0e060 	ld2h	{z0.h-z1.h}, p0/z, \[x3\]
+[^:]+:	a4a0e060 	ld2h	{z0.h-z1.h}, p0/z, \[x3\]
+[^:]+:	a4a0e060 	ld2h	{z0.h-z1.h}, p0/z, \[x3\]
+[^:]+:	a4a0e060 	ld2h	{z0.h-z1.h}, p0/z, \[x3\]
+[^:]+:	a4a0e060 	ld2h	{z0.h-z1.h}, p0/z, \[x3\]
+[^:]+:	a4a0e060 	ld2h	{z0.h-z1.h}, p0/z, \[x3\]
+[^:]+:	a4a0e3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp\]
+[^:]+:	a4a0e3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp\]
+[^:]+:	a4a0e3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp\]
+[^:]+:	a4a0e3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp\]
+[^:]+:	a4a0e3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp\]
+[^:]+:	a4a0e3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp\]
+[^:]+:	a4a0e3e0 	ld2h	{z0.h-z1.h}, p0/z, \[sp\]
+[^:]+:	a4a7e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a4a7e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a4a7e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a4a8e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a4a8e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a4a8e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a4a9e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a4a9e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a4a9e000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a4afe000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a4afe000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a4afe000 	ld2h	{z0.h-z1.h}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a520c000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c001 	ld2w	{z1.s-z2.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c001 	ld2w	{z1.s-z2.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c001 	ld2w	{z1.s-z2.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c01f 	ld2w	{z31.s-z0.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c01f 	ld2w	{z31.s-z0.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c800 	ld2w	{z0.s-z1.s}, p2/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c800 	ld2w	{z0.s-z1.s}, p2/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c800 	ld2w	{z0.s-z1.s}, p2/z, \[x0, x0, lsl #2\]
+[^:]+:	a520dc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0, x0, lsl #2\]
+[^:]+:	a520dc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0, x0, lsl #2\]
+[^:]+:	a520dc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0, x0, lsl #2\]
+[^:]+:	a520c060 	ld2w	{z0.s-z1.s}, p0/z, \[x3, x0, lsl #2\]
+[^:]+:	a520c060 	ld2w	{z0.s-z1.s}, p0/z, \[x3, x0, lsl #2\]
+[^:]+:	a520c060 	ld2w	{z0.s-z1.s}, p0/z, \[x3, x0, lsl #2\]
+[^:]+:	a520c3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp, x0, lsl #2\]
+[^:]+:	a520c3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp, x0, lsl #2\]
+[^:]+:	a520c3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp, x0, lsl #2\]
+[^:]+:	a524c000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x4, lsl #2\]
+[^:]+:	a524c000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x4, lsl #2\]
+[^:]+:	a524c000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x4, lsl #2\]
+[^:]+:	a53ec000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x30, lsl #2\]
+[^:]+:	a53ec000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x30, lsl #2\]
+[^:]+:	a53ec000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, x30, lsl #2\]
+[^:]+:	a520e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a520e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a520e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a520e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a520e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a520e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a520e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a520e001 	ld2w	{z1.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a520e001 	ld2w	{z1.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a520e001 	ld2w	{z1.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a520e001 	ld2w	{z1.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a520e001 	ld2w	{z1.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a520e001 	ld2w	{z1.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a520e001 	ld2w	{z1.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a520e01f 	ld2w	{z31.s-z0.s}, p0/z, \[x0\]
+[^:]+:	a520e01f 	ld2w	{z31.s-z0.s}, p0/z, \[x0\]
+[^:]+:	a520e01f 	ld2w	{z31.s-z0.s}, p0/z, \[x0\]
+[^:]+:	a520e01f 	ld2w	{z31.s-z0.s}, p0/z, \[x0\]
+[^:]+:	a520e800 	ld2w	{z0.s-z1.s}, p2/z, \[x0\]
+[^:]+:	a520e800 	ld2w	{z0.s-z1.s}, p2/z, \[x0\]
+[^:]+:	a520e800 	ld2w	{z0.s-z1.s}, p2/z, \[x0\]
+[^:]+:	a520e800 	ld2w	{z0.s-z1.s}, p2/z, \[x0\]
+[^:]+:	a520e800 	ld2w	{z0.s-z1.s}, p2/z, \[x0\]
+[^:]+:	a520e800 	ld2w	{z0.s-z1.s}, p2/z, \[x0\]
+[^:]+:	a520e800 	ld2w	{z0.s-z1.s}, p2/z, \[x0\]
+[^:]+:	a520fc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0\]
+[^:]+:	a520fc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0\]
+[^:]+:	a520fc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0\]
+[^:]+:	a520fc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0\]
+[^:]+:	a520fc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0\]
+[^:]+:	a520fc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0\]
+[^:]+:	a520fc00 	ld2w	{z0.s-z1.s}, p7/z, \[x0\]
+[^:]+:	a520e060 	ld2w	{z0.s-z1.s}, p0/z, \[x3\]
+[^:]+:	a520e060 	ld2w	{z0.s-z1.s}, p0/z, \[x3\]
+[^:]+:	a520e060 	ld2w	{z0.s-z1.s}, p0/z, \[x3\]
+[^:]+:	a520e060 	ld2w	{z0.s-z1.s}, p0/z, \[x3\]
+[^:]+:	a520e060 	ld2w	{z0.s-z1.s}, p0/z, \[x3\]
+[^:]+:	a520e060 	ld2w	{z0.s-z1.s}, p0/z, \[x3\]
+[^:]+:	a520e060 	ld2w	{z0.s-z1.s}, p0/z, \[x3\]
+[^:]+:	a520e3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp\]
+[^:]+:	a520e3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp\]
+[^:]+:	a520e3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp\]
+[^:]+:	a520e3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp\]
+[^:]+:	a520e3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp\]
+[^:]+:	a520e3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp\]
+[^:]+:	a520e3e0 	ld2w	{z0.s-z1.s}, p0/z, \[sp\]
+[^:]+:	a527e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a527e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a527e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #14, mul vl\]
+[^:]+:	a528e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a528e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a528e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-16, mul vl\]
+[^:]+:	a529e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a529e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a529e000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-14, mul vl\]
+[^:]+:	a52fe000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a52fe000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-2, mul vl\]
+[^:]+:	a52fe000 	ld2w	{z0.s-z1.s}, p0/z, \[x0, #-2, mul vl\]
 [^:]+:	a440c000 	ld3b	{z0.b-z2.b}, p0/z, \[x0, x0\]
 [^:]+:	a440c000 	ld3b	{z0.b-z2.b}, p0/z, \[x0, x0\]
 [^:]+:	a440c000 	ld3b	{z0.b-z2.b}, p0/z, \[x0, x0\]
@@ -17789,9 +17849,9 @@ Disassembly of section .*:
 [^:]+:	a440c001 	ld3b	{z1.b-z3.b}, p0/z, \[x0, x0\]
 [^:]+:	a440c001 	ld3b	{z1.b-z3.b}, p0/z, \[x0, x0\]
 [^:]+:	a440c001 	ld3b	{z1.b-z3.b}, p0/z, \[x0, x0\]
-[^:]+:	a440c01f 	ld3b	{z31.b, z0.b, z1.b}, p0/z, \[x0, x0\]
-[^:]+:	a440c01f 	ld3b	{z31.b, z0.b, z1.b}, p0/z, \[x0, x0\]
-[^:]+:	a440c01f 	ld3b	{z31.b, z0.b, z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a440c01f 	ld3b	{z31.b-z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a440c01f 	ld3b	{z31.b-z1.b}, p0/z, \[x0, x0\]
+[^:]+:	a440c01f 	ld3b	{z31.b-z1.b}, p0/z, \[x0, x0\]
 [^:]+:	a440c800 	ld3b	{z0.b-z2.b}, p2/z, \[x0, x0\]
 [^:]+:	a440c800 	ld3b	{z0.b-z2.b}, p2/z, \[x0, x0\]
 [^:]+:	a440c800 	ld3b	{z0.b-z2.b}, p2/z, \[x0, x0\]
@@ -17836,10 +17896,10 @@ Disassembly of section .*:
 [^:]+:	a440e001 	ld3b	{z1.b-z3.b}, p0/z, \[x0\]
 [^:]+:	a440e001 	ld3b	{z1.b-z3.b}, p0/z, \[x0\]
 [^:]+:	a440e001 	ld3b	{z1.b-z3.b}, p0/z, \[x0\]
-[^:]+:	a440e01f 	ld3b	{z31.b, z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a440e01f 	ld3b	{z31.b, z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a440e01f 	ld3b	{z31.b, z0.b, z1.b}, p0/z, \[x0\]
-[^:]+:	a440e01f 	ld3b	{z31.b, z0.b, z1.b}, p0/z, \[x0\]
+[^:]+:	a440e01f 	ld3b	{z31.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a440e01f 	ld3b	{z31.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a440e01f 	ld3b	{z31.b-z1.b}, p0/z, \[x0\]
+[^:]+:	a440e01f 	ld3b	{z31.b-z1.b}, p0/z, \[x0\]
 [^:]+:	a440e800 	ld3b	{z0.b-z2.b}, p2/z, \[x0\]
 [^:]+:	a440e800 	ld3b	{z0.b-z2.b}, p2/z, \[x0\]
 [^:]+:	a440e800 	ld3b	{z0.b-z2.b}, p2/z, \[x0\]
@@ -17886,8 +17946,8 @@ Disassembly of section .*:
 [^:]+:	a5c0c001 	ld3d	{z1.d-z3.d}, p0/z, \[x0, x0, lsl #3\]
 [^:]+:	a5c0c001 	ld3d	{z1.d-z3.d}, p0/z, \[x0, x0, lsl #3\]
 [^:]+:	a5c0c001 	ld3d	{z1.d-z3.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5c0c01f 	ld3d	{z31.d, z0.d, z1.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5c0c01f 	ld3d	{z31.d, z0.d, z1.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5c0c01f 	ld3d	{z31.d-z1.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5c0c01f 	ld3d	{z31.d-z1.d}, p0/z, \[x0, x0, lsl #3\]
 [^:]+:	a5c0c800 	ld3d	{z0.d-z2.d}, p2/z, \[x0, x0, lsl #3\]
 [^:]+:	a5c0c800 	ld3d	{z0.d-z2.d}, p2/z, \[x0, x0, lsl #3\]
 [^:]+:	a5c0c800 	ld3d	{z0.d-z2.d}, p2/z, \[x0, x0, lsl #3\]
@@ -17920,10 +17980,10 @@ Disassembly of section .*:
 [^:]+:	a5c0e001 	ld3d	{z1.d-z3.d}, p0/z, \[x0\]
 [^:]+:	a5c0e001 	ld3d	{z1.d-z3.d}, p0/z, \[x0\]
 [^:]+:	a5c0e001 	ld3d	{z1.d-z3.d}, p0/z, \[x0\]
-[^:]+:	a5c0e01f 	ld3d	{z31.d, z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5c0e01f 	ld3d	{z31.d, z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5c0e01f 	ld3d	{z31.d, z0.d, z1.d}, p0/z, \[x0\]
-[^:]+:	a5c0e01f 	ld3d	{z31.d, z0.d, z1.d}, p0/z, \[x0\]
+[^:]+:	a5c0e01f 	ld3d	{z31.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5c0e01f 	ld3d	{z31.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5c0e01f 	ld3d	{z31.d-z1.d}, p0/z, \[x0\]
+[^:]+:	a5c0e01f 	ld3d	{z31.d-z1.d}, p0/z, \[x0\]
 [^:]+:	a5c0e800 	ld3d	{z0.d-z2.d}, p2/z, \[x0\]
 [^:]+:	a5c0e800 	ld3d	{z0.d-z2.d}, p2/z, \[x0\]
 [^:]+:	a5c0e800 	ld3d	{z0.d-z2.d}, p2/z, \[x0\]
@@ -17970,8 +18030,8 @@ Disassembly of section .*:
 [^:]+:	a4c0c001 	ld3h	{z1.h-z3.h}, p0/z, \[x0, x0, lsl #1\]
 [^:]+:	a4c0c001 	ld3h	{z1.h-z3.h}, p0/z, \[x0, x0, lsl #1\]
 [^:]+:	a4c0c001 	ld3h	{z1.h-z3.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4c0c01f 	ld3h	{z31.h, z0.h, z1.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4c0c01f 	ld3h	{z31.h, z0.h, z1.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4c0c01f 	ld3h	{z31.h-z1.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4c0c01f 	ld3h	{z31.h-z1.h}, p0/z, \[x0, x0, lsl #1\]
 [^:]+:	a4c0c800 	ld3h	{z0.h-z2.h}, p2/z, \[x0, x0, lsl #1\]
 [^:]+:	a4c0c800 	ld3h	{z0.h-z2.h}, p2/z, \[x0, x0, lsl #1\]
 [^:]+:	a4c0c800 	ld3h	{z0.h-z2.h}, p2/z, \[x0, x0, lsl #1\]
@@ -18004,10 +18064,10 @@ Disassembly of section .*:
 [^:]+:	a4c0e001 	ld3h	{z1.h-z3.h}, p0/z, \[x0\]
 [^:]+:	a4c0e001 	ld3h	{z1.h-z3.h}, p0/z, \[x0\]
 [^:]+:	a4c0e001 	ld3h	{z1.h-z3.h}, p0/z, \[x0\]
-[^:]+:	a4c0e01f 	ld3h	{z31.h, z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4c0e01f 	ld3h	{z31.h, z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4c0e01f 	ld3h	{z31.h, z0.h, z1.h}, p0/z, \[x0\]
-[^:]+:	a4c0e01f 	ld3h	{z31.h, z0.h, z1.h}, p0/z, \[x0\]
+[^:]+:	a4c0e01f 	ld3h	{z31.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4c0e01f 	ld3h	{z31.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4c0e01f 	ld3h	{z31.h-z1.h}, p0/z, \[x0\]
+[^:]+:	a4c0e01f 	ld3h	{z31.h-z1.h}, p0/z, \[x0\]
 [^:]+:	a4c0e800 	ld3h	{z0.h-z2.h}, p2/z, \[x0\]
 [^:]+:	a4c0e800 	ld3h	{z0.h-z2.h}, p2/z, \[x0\]
 [^:]+:	a4c0e800 	ld3h	{z0.h-z2.h}, p2/z, \[x0\]
@@ -18054,8 +18114,8 @@ Disassembly of section .*:
 [^:]+:	a540c001 	ld3w	{z1.s-z3.s}, p0/z, \[x0, x0, lsl #2\]
 [^:]+:	a540c001 	ld3w	{z1.s-z3.s}, p0/z, \[x0, x0, lsl #2\]
 [^:]+:	a540c001 	ld3w	{z1.s-z3.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a540c01f 	ld3w	{z31.s, z0.s, z1.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a540c01f 	ld3w	{z31.s, z0.s, z1.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a540c01f 	ld3w	{z31.s-z1.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a540c01f 	ld3w	{z31.s-z1.s}, p0/z, \[x0, x0, lsl #2\]
 [^:]+:	a540c800 	ld3w	{z0.s-z2.s}, p2/z, \[x0, x0, lsl #2\]
 [^:]+:	a540c800 	ld3w	{z0.s-z2.s}, p2/z, \[x0, x0, lsl #2\]
 [^:]+:	a540c800 	ld3w	{z0.s-z2.s}, p2/z, \[x0, x0, lsl #2\]
@@ -18088,10 +18148,10 @@ Disassembly of section .*:
 [^:]+:	a540e001 	ld3w	{z1.s-z3.s}, p0/z, \[x0\]
 [^:]+:	a540e001 	ld3w	{z1.s-z3.s}, p0/z, \[x0\]
 [^:]+:	a540e001 	ld3w	{z1.s-z3.s}, p0/z, \[x0\]
-[^:]+:	a540e01f 	ld3w	{z31.s, z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a540e01f 	ld3w	{z31.s, z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a540e01f 	ld3w	{z31.s, z0.s, z1.s}, p0/z, \[x0\]
-[^:]+:	a540e01f 	ld3w	{z31.s, z0.s, z1.s}, p0/z, \[x0\]
+[^:]+:	a540e01f 	ld3w	{z31.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a540e01f 	ld3w	{z31.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a540e01f 	ld3w	{z31.s-z1.s}, p0/z, \[x0\]
+[^:]+:	a540e01f 	ld3w	{z31.s-z1.s}, p0/z, \[x0\]
 [^:]+:	a540e800 	ld3w	{z0.s-z2.s}, p2/z, \[x0\]
 [^:]+:	a540e800 	ld3w	{z0.s-z2.s}, p2/z, \[x0\]
 [^:]+:	a540e800 	ld3w	{z0.s-z2.s}, p2/z, \[x0\]
@@ -18142,9 +18202,9 @@ Disassembly of section .*:
 [^:]+:	a460c001 	ld4b	{z1.b-z4.b}, p0/z, \[x0, x0\]
 [^:]+:	a460c001 	ld4b	{z1.b-z4.b}, p0/z, \[x0, x0\]
 [^:]+:	a460c001 	ld4b	{z1.b-z4.b}, p0/z, \[x0, x0\]
-[^:]+:	a460c01f 	ld4b	{z31.b, z0.b, z1.b, z2.b}, p0/z, \[x0, x0\]
-[^:]+:	a460c01f 	ld4b	{z31.b, z0.b, z1.b, z2.b}, p0/z, \[x0, x0\]
-[^:]+:	a460c01f 	ld4b	{z31.b, z0.b, z1.b, z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a460c01f 	ld4b	{z31.b-z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a460c01f 	ld4b	{z31.b-z2.b}, p0/z, \[x0, x0\]
+[^:]+:	a460c01f 	ld4b	{z31.b-z2.b}, p0/z, \[x0, x0\]
 [^:]+:	a460c800 	ld4b	{z0.b-z3.b}, p2/z, \[x0, x0\]
 [^:]+:	a460c800 	ld4b	{z0.b-z3.b}, p2/z, \[x0, x0\]
 [^:]+:	a460c800 	ld4b	{z0.b-z3.b}, p2/z, \[x0, x0\]
@@ -18189,10 +18249,10 @@ Disassembly of section .*:
 [^:]+:	a460e001 	ld4b	{z1.b-z4.b}, p0/z, \[x0\]
 [^:]+:	a460e001 	ld4b	{z1.b-z4.b}, p0/z, \[x0\]
 [^:]+:	a460e001 	ld4b	{z1.b-z4.b}, p0/z, \[x0\]
-[^:]+:	a460e01f 	ld4b	{z31.b, z0.b, z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a460e01f 	ld4b	{z31.b, z0.b, z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a460e01f 	ld4b	{z31.b, z0.b, z1.b, z2.b}, p0/z, \[x0\]
-[^:]+:	a460e01f 	ld4b	{z31.b, z0.b, z1.b, z2.b}, p0/z, \[x0\]
+[^:]+:	a460e01f 	ld4b	{z31.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a460e01f 	ld4b	{z31.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a460e01f 	ld4b	{z31.b-z2.b}, p0/z, \[x0\]
+[^:]+:	a460e01f 	ld4b	{z31.b-z2.b}, p0/z, \[x0\]
 [^:]+:	a460e800 	ld4b	{z0.b-z3.b}, p2/z, \[x0\]
 [^:]+:	a460e800 	ld4b	{z0.b-z3.b}, p2/z, \[x0\]
 [^:]+:	a460e800 	ld4b	{z0.b-z3.b}, p2/z, \[x0\]
@@ -18239,8 +18299,8 @@ Disassembly of section .*:
 [^:]+:	a5e0c001 	ld4d	{z1.d-z4.d}, p0/z, \[x0, x0, lsl #3\]
 [^:]+:	a5e0c001 	ld4d	{z1.d-z4.d}, p0/z, \[x0, x0, lsl #3\]
 [^:]+:	a5e0c001 	ld4d	{z1.d-z4.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5e0c01f 	ld4d	{z31.d, z0.d, z1.d, z2.d}, p0/z, \[x0, x0, lsl #3\]
-[^:]+:	a5e0c01f 	ld4d	{z31.d, z0.d, z1.d, z2.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5e0c01f 	ld4d	{z31.d-z2.d}, p0/z, \[x0, x0, lsl #3\]
+[^:]+:	a5e0c01f 	ld4d	{z31.d-z2.d}, p0/z, \[x0, x0, lsl #3\]
 [^:]+:	a5e0c800 	ld4d	{z0.d-z3.d}, p2/z, \[x0, x0, lsl #3\]
 [^:]+:	a5e0c800 	ld4d	{z0.d-z3.d}, p2/z, \[x0, x0, lsl #3\]
 [^:]+:	a5e0c800 	ld4d	{z0.d-z3.d}, p2/z, \[x0, x0, lsl #3\]
@@ -18273,10 +18333,10 @@ Disassembly of section .*:
 [^:]+:	a5e0e001 	ld4d	{z1.d-z4.d}, p0/z, \[x0\]
 [^:]+:	a5e0e001 	ld4d	{z1.d-z4.d}, p0/z, \[x0\]
 [^:]+:	a5e0e001 	ld4d	{z1.d-z4.d}, p0/z, \[x0\]
-[^:]+:	a5e0e01f 	ld4d	{z31.d, z0.d, z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5e0e01f 	ld4d	{z31.d, z0.d, z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5e0e01f 	ld4d	{z31.d, z0.d, z1.d, z2.d}, p0/z, \[x0\]
-[^:]+:	a5e0e01f 	ld4d	{z31.d, z0.d, z1.d, z2.d}, p0/z, \[x0\]
+[^:]+:	a5e0e01f 	ld4d	{z31.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5e0e01f 	ld4d	{z31.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5e0e01f 	ld4d	{z31.d-z2.d}, p0/z, \[x0\]
+[^:]+:	a5e0e01f 	ld4d	{z31.d-z2.d}, p0/z, \[x0\]
 [^:]+:	a5e0e800 	ld4d	{z0.d-z3.d}, p2/z, \[x0\]
 [^:]+:	a5e0e800 	ld4d	{z0.d-z3.d}, p2/z, \[x0\]
 [^:]+:	a5e0e800 	ld4d	{z0.d-z3.d}, p2/z, \[x0\]
@@ -18323,8 +18383,8 @@ Disassembly of section .*:
 [^:]+:	a4e0c001 	ld4h	{z1.h-z4.h}, p0/z, \[x0, x0, lsl #1\]
 [^:]+:	a4e0c001 	ld4h	{z1.h-z4.h}, p0/z, \[x0, x0, lsl #1\]
 [^:]+:	a4e0c001 	ld4h	{z1.h-z4.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4e0c01f 	ld4h	{z31.h, z0.h, z1.h, z2.h}, p0/z, \[x0, x0, lsl #1\]
-[^:]+:	a4e0c01f 	ld4h	{z31.h, z0.h, z1.h, z2.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4e0c01f 	ld4h	{z31.h-z2.h}, p0/z, \[x0, x0, lsl #1\]
+[^:]+:	a4e0c01f 	ld4h	{z31.h-z2.h}, p0/z, \[x0, x0, lsl #1\]
 [^:]+:	a4e0c800 	ld4h	{z0.h-z3.h}, p2/z, \[x0, x0, lsl #1\]
 [^:]+:	a4e0c800 	ld4h	{z0.h-z3.h}, p2/z, \[x0, x0, lsl #1\]
 [^:]+:	a4e0c800 	ld4h	{z0.h-z3.h}, p2/z, \[x0, x0, lsl #1\]
@@ -18357,10 +18417,10 @@ Disassembly of section .*:
 [^:]+:	a4e0e001 	ld4h	{z1.h-z4.h}, p0/z, \[x0\]
 [^:]+:	a4e0e001 	ld4h	{z1.h-z4.h}, p0/z, \[x0\]
 [^:]+:	a4e0e001 	ld4h	{z1.h-z4.h}, p0/z, \[x0\]
-[^:]+:	a4e0e01f 	ld4h	{z31.h, z0.h, z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4e0e01f 	ld4h	{z31.h, z0.h, z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4e0e01f 	ld4h	{z31.h, z0.h, z1.h, z2.h}, p0/z, \[x0\]
-[^:]+:	a4e0e01f 	ld4h	{z31.h, z0.h, z1.h, z2.h}, p0/z, \[x0\]
+[^:]+:	a4e0e01f 	ld4h	{z31.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4e0e01f 	ld4h	{z31.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4e0e01f 	ld4h	{z31.h-z2.h}, p0/z, \[x0\]
+[^:]+:	a4e0e01f 	ld4h	{z31.h-z2.h}, p0/z, \[x0\]
 [^:]+:	a4e0e800 	ld4h	{z0.h-z3.h}, p2/z, \[x0\]
 [^:]+:	a4e0e800 	ld4h	{z0.h-z3.h}, p2/z, \[x0\]
 [^:]+:	a4e0e800 	ld4h	{z0.h-z3.h}, p2/z, \[x0\]
@@ -18407,8 +18467,8 @@ Disassembly of section .*:
 [^:]+:	a560c001 	ld4w	{z1.s-z4.s}, p0/z, \[x0, x0, lsl #2\]
 [^:]+:	a560c001 	ld4w	{z1.s-z4.s}, p0/z, \[x0, x0, lsl #2\]
 [^:]+:	a560c001 	ld4w	{z1.s-z4.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a560c01f 	ld4w	{z31.s, z0.s, z1.s, z2.s}, p0/z, \[x0, x0, lsl #2\]
-[^:]+:	a560c01f 	ld4w	{z31.s, z0.s, z1.s, z2.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a560c01f 	ld4w	{z31.s-z2.s}, p0/z, \[x0, x0, lsl #2\]
+[^:]+:	a560c01f 	ld4w	{z31.s-z2.s}, p0/z, \[x0, x0, lsl #2\]
 [^:]+:	a560c800 	ld4w	{z0.s-z3.s}, p2/z, \[x0, x0, lsl #2\]
 [^:]+:	a560c800 	ld4w	{z0.s-z3.s}, p2/z, \[x0, x0, lsl #2\]
 [^:]+:	a560c800 	ld4w	{z0.s-z3.s}, p2/z, \[x0, x0, lsl #2\]
@@ -18441,10 +18501,10 @@ Disassembly of section .*:
 [^:]+:	a560e001 	ld4w	{z1.s-z4.s}, p0/z, \[x0\]
 [^:]+:	a560e001 	ld4w	{z1.s-z4.s}, p0/z, \[x0\]
 [^:]+:	a560e001 	ld4w	{z1.s-z4.s}, p0/z, \[x0\]
-[^:]+:	a560e01f 	ld4w	{z31.s, z0.s, z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a560e01f 	ld4w	{z31.s, z0.s, z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a560e01f 	ld4w	{z31.s, z0.s, z1.s, z2.s}, p0/z, \[x0\]
-[^:]+:	a560e01f 	ld4w	{z31.s, z0.s, z1.s, z2.s}, p0/z, \[x0\]
+[^:]+:	a560e01f 	ld4w	{z31.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a560e01f 	ld4w	{z31.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a560e01f 	ld4w	{z31.s-z2.s}, p0/z, \[x0\]
+[^:]+:	a560e01f 	ld4w	{z31.s-z2.s}, p0/z, \[x0\]
 [^:]+:	a560e800 	ld4w	{z0.s-z3.s}, p2/z, \[x0\]
 [^:]+:	a560e800 	ld4w	{z0.s-z3.s}, p2/z, \[x0\]
 [^:]+:	a560e800 	ld4w	{z0.s-z3.s}, p2/z, \[x0\]
@@ -28800,36 +28860,66 @@ Disassembly of section .*:
 [^:]+:	0469f800 	sqdech	x0, w0, pow2, mul #10
 [^:]+:	046ff800 	sqdech	x0, w0, pow2, mul #16
 [^:]+:	046ff800 	sqdech	x0, w0, pow2, mul #16
-[^:]+:	256a8000 	sqdecp	z0.h, p0
-[^:]+:	256a8000 	sqdecp	z0.h, p0
-[^:]+:	256a8001 	sqdecp	z1.h, p0
-[^:]+:	256a8001 	sqdecp	z1.h, p0
-[^:]+:	256a801f 	sqdecp	z31.h, p0
-[^:]+:	256a801f 	sqdecp	z31.h, p0
-[^:]+:	256a8040 	sqdecp	z0.h, p2
-[^:]+:	256a8040 	sqdecp	z0.h, p2
-[^:]+:	256a81e0 	sqdecp	z0.h, p15
-[^:]+:	256a81e0 	sqdecp	z0.h, p15
-[^:]+:	25aa8000 	sqdecp	z0.s, p0
-[^:]+:	25aa8000 	sqdecp	z0.s, p0
-[^:]+:	25aa8001 	sqdecp	z1.s, p0
-[^:]+:	25aa8001 	sqdecp	z1.s, p0
-[^:]+:	25aa801f 	sqdecp	z31.s, p0
-[^:]+:	25aa801f 	sqdecp	z31.s, p0
-[^:]+:	25aa8040 	sqdecp	z0.s, p2
-[^:]+:	25aa8040 	sqdecp	z0.s, p2
-[^:]+:	25aa81e0 	sqdecp	z0.s, p15
-[^:]+:	25aa81e0 	sqdecp	z0.s, p15
-[^:]+:	25ea8000 	sqdecp	z0.d, p0
-[^:]+:	25ea8000 	sqdecp	z0.d, p0
-[^:]+:	25ea8001 	sqdecp	z1.d, p0
-[^:]+:	25ea8001 	sqdecp	z1.d, p0
-[^:]+:	25ea801f 	sqdecp	z31.d, p0
-[^:]+:	25ea801f 	sqdecp	z31.d, p0
-[^:]+:	25ea8040 	sqdecp	z0.d, p2
-[^:]+:	25ea8040 	sqdecp	z0.d, p2
-[^:]+:	25ea81e0 	sqdecp	z0.d, p15
-[^:]+:	25ea81e0 	sqdecp	z0.d, p15
+[^:]+:	256a8000 	sqdecp	z0.h, p0.h
+[^:]+:	256a8000 	sqdecp	z0.h, p0.h
+[^:]+:	256a8001 	sqdecp	z1.h, p0.h
+[^:]+:	256a8001 	sqdecp	z1.h, p0.h
+[^:]+:	256a801f 	sqdecp	z31.h, p0.h
+[^:]+:	256a801f 	sqdecp	z31.h, p0.h
+[^:]+:	256a8040 	sqdecp	z0.h, p2.h
+[^:]+:	256a8040 	sqdecp	z0.h, p2.h
+[^:]+:	256a81e0 	sqdecp	z0.h, p15.h
+[^:]+:	256a81e0 	sqdecp	z0.h, p15.h
+[^:]+:	25aa8000 	sqdecp	z0.s, p0.s
+[^:]+:	25aa8000 	sqdecp	z0.s, p0.s
+[^:]+:	25aa8001 	sqdecp	z1.s, p0.s
+[^:]+:	25aa8001 	sqdecp	z1.s, p0.s
+[^:]+:	25aa801f 	sqdecp	z31.s, p0.s
+[^:]+:	25aa801f 	sqdecp	z31.s, p0.s
+[^:]+:	25aa8040 	sqdecp	z0.s, p2.s
+[^:]+:	25aa8040 	sqdecp	z0.s, p2.s
+[^:]+:	25aa81e0 	sqdecp	z0.s, p15.s
+[^:]+:	25aa81e0 	sqdecp	z0.s, p15.s
+[^:]+:	25ea8000 	sqdecp	z0.d, p0.d
+[^:]+:	25ea8000 	sqdecp	z0.d, p0.d
+[^:]+:	25ea8001 	sqdecp	z1.d, p0.d
+[^:]+:	25ea8001 	sqdecp	z1.d, p0.d
+[^:]+:	25ea801f 	sqdecp	z31.d, p0.d
+[^:]+:	25ea801f 	sqdecp	z31.d, p0.d
+[^:]+:	25ea8040 	sqdecp	z0.d, p2.d
+[^:]+:	25ea8040 	sqdecp	z0.d, p2.d
+[^:]+:	25ea81e0 	sqdecp	z0.d, p15.d
+[^:]+:	25ea81e0 	sqdecp	z0.d, p15.d
+[^:]+:	256a8000 	sqdecp	z0.h, p0.h
+[^:]+:	256a8000 	sqdecp	z0.h, p0.h
+[^:]+:	256a8001 	sqdecp	z1.h, p0.h
+[^:]+:	256a8001 	sqdecp	z1.h, p0.h
+[^:]+:	256a801f 	sqdecp	z31.h, p0.h
+[^:]+:	256a801f 	sqdecp	z31.h, p0.h
+[^:]+:	256a8040 	sqdecp	z0.h, p2.h
+[^:]+:	256a8040 	sqdecp	z0.h, p2.h
+[^:]+:	256a81e0 	sqdecp	z0.h, p15.h
+[^:]+:	256a81e0 	sqdecp	z0.h, p15.h
+[^:]+:	25aa8000 	sqdecp	z0.s, p0.s
+[^:]+:	25aa8000 	sqdecp	z0.s, p0.s
+[^:]+:	25aa8001 	sqdecp	z1.s, p0.s
+[^:]+:	25aa8001 	sqdecp	z1.s, p0.s
+[^:]+:	25aa801f 	sqdecp	z31.s, p0.s
+[^:]+:	25aa801f 	sqdecp	z31.s, p0.s
+[^:]+:	25aa8040 	sqdecp	z0.s, p2.s
+[^:]+:	25aa8040 	sqdecp	z0.s, p2.s
+[^:]+:	25aa81e0 	sqdecp	z0.s, p15.s
+[^:]+:	25aa81e0 	sqdecp	z0.s, p15.s
+[^:]+:	25ea8000 	sqdecp	z0.d, p0.d
+[^:]+:	25ea8000 	sqdecp	z0.d, p0.d
+[^:]+:	25ea8001 	sqdecp	z1.d, p0.d
+[^:]+:	25ea8001 	sqdecp	z1.d, p0.d
+[^:]+:	25ea801f 	sqdecp	z31.d, p0.d
+[^:]+:	25ea801f 	sqdecp	z31.d, p0.d
+[^:]+:	25ea8040 	sqdecp	z0.d, p2.d
+[^:]+:	25ea8040 	sqdecp	z0.d, p2.d
+[^:]+:	25ea81e0 	sqdecp	z0.d, p15.d
+[^:]+:	25ea81e0 	sqdecp	z0.d, p15.d
 [^:]+:	252a8c00 	sqdecp	x0, p0.b
 [^:]+:	252a8c00 	sqdecp	x0, p0.b
 [^:]+:	252a8c01 	sqdecp	x1, p0.b
@@ -30151,36 +30241,66 @@ Disassembly of section .*:
 [^:]+:	0469f000 	sqinch	x0, w0, pow2, mul #10
 [^:]+:	046ff000 	sqinch	x0, w0, pow2, mul #16
 [^:]+:	046ff000 	sqinch	x0, w0, pow2, mul #16
-[^:]+:	25688000 	sqincp	z0.h, p0
-[^:]+:	25688000 	sqincp	z0.h, p0
-[^:]+:	25688001 	sqincp	z1.h, p0
-[^:]+:	25688001 	sqincp	z1.h, p0
-[^:]+:	2568801f 	sqincp	z31.h, p0
-[^:]+:	2568801f 	sqincp	z31.h, p0
-[^:]+:	25688040 	sqincp	z0.h, p2
-[^:]+:	25688040 	sqincp	z0.h, p2
-[^:]+:	256881e0 	sqincp	z0.h, p15
-[^:]+:	256881e0 	sqincp	z0.h, p15
-[^:]+:	25a88000 	sqincp	z0.s, p0
-[^:]+:	25a88000 	sqincp	z0.s, p0
-[^:]+:	25a88001 	sqincp	z1.s, p0
-[^:]+:	25a88001 	sqincp	z1.s, p0
-[^:]+:	25a8801f 	sqincp	z31.s, p0
-[^:]+:	25a8801f 	sqincp	z31.s, p0
-[^:]+:	25a88040 	sqincp	z0.s, p2
-[^:]+:	25a88040 	sqincp	z0.s, p2
-[^:]+:	25a881e0 	sqincp	z0.s, p15
-[^:]+:	25a881e0 	sqincp	z0.s, p15
-[^:]+:	25e88000 	sqincp	z0.d, p0
-[^:]+:	25e88000 	sqincp	z0.d, p0
-[^:]+:	25e88001 	sqincp	z1.d, p0
-[^:]+:	25e88001 	sqincp	z1.d, p0
-[^:]+:	25e8801f 	sqincp	z31.d, p0
-[^:]+:	25e8801f 	sqincp	z31.d, p0
-[^:]+:	25e88040 	sqincp	z0.d, p2
-[^:]+:	25e88040 	sqincp	z0.d, p2
-[^:]+:	25e881e0 	sqincp	z0.d, p15
-[^:]+:	25e881e0 	sqincp	z0.d, p15
+[^:]+:	25688000 	sqincp	z0.h, p0.h
+[^:]+:	25688000 	sqincp	z0.h, p0.h
+[^:]+:	25688001 	sqincp	z1.h, p0.h
+[^:]+:	25688001 	sqincp	z1.h, p0.h
+[^:]+:	2568801f 	sqincp	z31.h, p0.h
+[^:]+:	2568801f 	sqincp	z31.h, p0.h
+[^:]+:	25688040 	sqincp	z0.h, p2.h
+[^:]+:	25688040 	sqincp	z0.h, p2.h
+[^:]+:	256881e0 	sqincp	z0.h, p15.h
+[^:]+:	256881e0 	sqincp	z0.h, p15.h
+[^:]+:	25a88000 	sqincp	z0.s, p0.s
+[^:]+:	25a88000 	sqincp	z0.s, p0.s
+[^:]+:	25a88001 	sqincp	z1.s, p0.s
+[^:]+:	25a88001 	sqincp	z1.s, p0.s
+[^:]+:	25a8801f 	sqincp	z31.s, p0.s
+[^:]+:	25a8801f 	sqincp	z31.s, p0.s
+[^:]+:	25a88040 	sqincp	z0.s, p2.s
+[^:]+:	25a88040 	sqincp	z0.s, p2.s
+[^:]+:	25a881e0 	sqincp	z0.s, p15.s
+[^:]+:	25a881e0 	sqincp	z0.s, p15.s
+[^:]+:	25e88000 	sqincp	z0.d, p0.d
+[^:]+:	25e88000 	sqincp	z0.d, p0.d
+[^:]+:	25e88001 	sqincp	z1.d, p0.d
+[^:]+:	25e88001 	sqincp	z1.d, p0.d
+[^:]+:	25e8801f 	sqincp	z31.d, p0.d
+[^:]+:	25e8801f 	sqincp	z31.d, p0.d
+[^:]+:	25e88040 	sqincp	z0.d, p2.d
+[^:]+:	25e88040 	sqincp	z0.d, p2.d
+[^:]+:	25e881e0 	sqincp	z0.d, p15.d
+[^:]+:	25e881e0 	sqincp	z0.d, p15.d
+[^:]+:	25688000 	sqincp	z0.h, p0.h
+[^:]+:	25688000 	sqincp	z0.h, p0.h
+[^:]+:	25688001 	sqincp	z1.h, p0.h
+[^:]+:	25688001 	sqincp	z1.h, p0.h
+[^:]+:	2568801f 	sqincp	z31.h, p0.h
+[^:]+:	2568801f 	sqincp	z31.h, p0.h
+[^:]+:	25688040 	sqincp	z0.h, p2.h
+[^:]+:	25688040 	sqincp	z0.h, p2.h
+[^:]+:	256881e0 	sqincp	z0.h, p15.h
+[^:]+:	256881e0 	sqincp	z0.h, p15.h
+[^:]+:	25a88000 	sqincp	z0.s, p0.s
+[^:]+:	25a88000 	sqincp	z0.s, p0.s
+[^:]+:	25a88001 	sqincp	z1.s, p0.s
+[^:]+:	25a88001 	sqincp	z1.s, p0.s
+[^:]+:	25a8801f 	sqincp	z31.s, p0.s
+[^:]+:	25a8801f 	sqincp	z31.s, p0.s
+[^:]+:	25a88040 	sqincp	z0.s, p2.s
+[^:]+:	25a88040 	sqincp	z0.s, p2.s
+[^:]+:	25a881e0 	sqincp	z0.s, p15.s
+[^:]+:	25a881e0 	sqincp	z0.s, p15.s
+[^:]+:	25e88000 	sqincp	z0.d, p0.d
+[^:]+:	25e88000 	sqincp	z0.d, p0.d
+[^:]+:	25e88001 	sqincp	z1.d, p0.d
+[^:]+:	25e88001 	sqincp	z1.d, p0.d
+[^:]+:	25e8801f 	sqincp	z31.d, p0.d
+[^:]+:	25e8801f 	sqincp	z31.d, p0.d
+[^:]+:	25e88040 	sqincp	z0.d, p2.d
+[^:]+:	25e88040 	sqincp	z0.d, p2.d
+[^:]+:	25e881e0 	sqincp	z0.d, p15.d
+[^:]+:	25e881e0 	sqincp	z0.d, p15.d
 [^:]+:	25288c00 	sqincp	x0, p0.b
 [^:]+:	25288c00 	sqincp	x0, p0.b
 [^:]+:	25288c01 	sqincp	x1, p0.b
@@ -32484,359 +32604,359 @@ Disassembly of section .*:
 [^:]+:	e569e000 	st1w	{z0.d}, p0, \[x0, #-7, mul vl\]
 [^:]+:	e56fe000 	st1w	{z0.d}, p0, \[x0, #-1, mul vl\]
 [^:]+:	e56fe000 	st1w	{z0.d}, p0, \[x0, #-1, mul vl\]
-[^:]+:	e4206000 	st2b	{z0.b, z1.b}, p0, \[x0, x0\]
-[^:]+:	e4206000 	st2b	{z0.b, z1.b}, p0, \[x0, x0\]
-[^:]+:	e4206000 	st2b	{z0.b, z1.b}, p0, \[x0, x0\]
-[^:]+:	e4206000 	st2b	{z0.b, z1.b}, p0, \[x0, x0\]
-[^:]+:	e4206000 	st2b	{z0.b, z1.b}, p0, \[x0, x0\]
-[^:]+:	e4206001 	st2b	{z1.b, z2.b}, p0, \[x0, x0\]
-[^:]+:	e4206001 	st2b	{z1.b, z2.b}, p0, \[x0, x0\]
-[^:]+:	e4206001 	st2b	{z1.b, z2.b}, p0, \[x0, x0\]
-[^:]+:	e4206001 	st2b	{z1.b, z2.b}, p0, \[x0, x0\]
-[^:]+:	e4206001 	st2b	{z1.b, z2.b}, p0, \[x0, x0\]
-[^:]+:	e420601f 	st2b	{z31.b, z0.b}, p0, \[x0, x0\]
-[^:]+:	e420601f 	st2b	{z31.b, z0.b}, p0, \[x0, x0\]
-[^:]+:	e420601f 	st2b	{z31.b, z0.b}, p0, \[x0, x0\]
-[^:]+:	e4206800 	st2b	{z0.b, z1.b}, p2, \[x0, x0\]
-[^:]+:	e4206800 	st2b	{z0.b, z1.b}, p2, \[x0, x0\]
-[^:]+:	e4206800 	st2b	{z0.b, z1.b}, p2, \[x0, x0\]
-[^:]+:	e4206800 	st2b	{z0.b, z1.b}, p2, \[x0, x0\]
-[^:]+:	e4206800 	st2b	{z0.b, z1.b}, p2, \[x0, x0\]
-[^:]+:	e4207c00 	st2b	{z0.b, z1.b}, p7, \[x0, x0\]
-[^:]+:	e4207c00 	st2b	{z0.b, z1.b}, p7, \[x0, x0\]
-[^:]+:	e4207c00 	st2b	{z0.b, z1.b}, p7, \[x0, x0\]
-[^:]+:	e4207c00 	st2b	{z0.b, z1.b}, p7, \[x0, x0\]
-[^:]+:	e4207c00 	st2b	{z0.b, z1.b}, p7, \[x0, x0\]
-[^:]+:	e4206060 	st2b	{z0.b, z1.b}, p0, \[x3, x0\]
-[^:]+:	e4206060 	st2b	{z0.b, z1.b}, p0, \[x3, x0\]
-[^:]+:	e4206060 	st2b	{z0.b, z1.b}, p0, \[x3, x0\]
-[^:]+:	e4206060 	st2b	{z0.b, z1.b}, p0, \[x3, x0\]
-[^:]+:	e4206060 	st2b	{z0.b, z1.b}, p0, \[x3, x0\]
-[^:]+:	e42063e0 	st2b	{z0.b, z1.b}, p0, \[sp, x0\]
-[^:]+:	e42063e0 	st2b	{z0.b, z1.b}, p0, \[sp, x0\]
-[^:]+:	e42063e0 	st2b	{z0.b, z1.b}, p0, \[sp, x0\]
-[^:]+:	e42063e0 	st2b	{z0.b, z1.b}, p0, \[sp, x0\]
-[^:]+:	e42063e0 	st2b	{z0.b, z1.b}, p0, \[sp, x0\]
-[^:]+:	e4246000 	st2b	{z0.b, z1.b}, p0, \[x0, x4\]
-[^:]+:	e4246000 	st2b	{z0.b, z1.b}, p0, \[x0, x4\]
-[^:]+:	e4246000 	st2b	{z0.b, z1.b}, p0, \[x0, x4\]
-[^:]+:	e4246000 	st2b	{z0.b, z1.b}, p0, \[x0, x4\]
-[^:]+:	e4246000 	st2b	{z0.b, z1.b}, p0, \[x0, x4\]
-[^:]+:	e43e6000 	st2b	{z0.b, z1.b}, p0, \[x0, x30\]
-[^:]+:	e43e6000 	st2b	{z0.b, z1.b}, p0, \[x0, x30\]
-[^:]+:	e43e6000 	st2b	{z0.b, z1.b}, p0, \[x0, x30\]
-[^:]+:	e43e6000 	st2b	{z0.b, z1.b}, p0, \[x0, x30\]
-[^:]+:	e43e6000 	st2b	{z0.b, z1.b}, p0, \[x0, x30\]
-[^:]+:	e430e000 	st2b	{z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e430e000 	st2b	{z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e430e000 	st2b	{z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e430e000 	st2b	{z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e430e000 	st2b	{z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e430e000 	st2b	{z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e430e000 	st2b	{z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e430e001 	st2b	{z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e430e001 	st2b	{z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e430e001 	st2b	{z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e430e001 	st2b	{z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e430e001 	st2b	{z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e430e001 	st2b	{z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e430e001 	st2b	{z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e430e01f 	st2b	{z31.b, z0.b}, p0, \[x0\]
-[^:]+:	e430e01f 	st2b	{z31.b, z0.b}, p0, \[x0\]
-[^:]+:	e430e01f 	st2b	{z31.b, z0.b}, p0, \[x0\]
-[^:]+:	e430e01f 	st2b	{z31.b, z0.b}, p0, \[x0\]
-[^:]+:	e430e800 	st2b	{z0.b, z1.b}, p2, \[x0\]
-[^:]+:	e430e800 	st2b	{z0.b, z1.b}, p2, \[x0\]
-[^:]+:	e430e800 	st2b	{z0.b, z1.b}, p2, \[x0\]
-[^:]+:	e430e800 	st2b	{z0.b, z1.b}, p2, \[x0\]
-[^:]+:	e430e800 	st2b	{z0.b, z1.b}, p2, \[x0\]
-[^:]+:	e430e800 	st2b	{z0.b, z1.b}, p2, \[x0\]
-[^:]+:	e430e800 	st2b	{z0.b, z1.b}, p2, \[x0\]
-[^:]+:	e430fc00 	st2b	{z0.b, z1.b}, p7, \[x0\]
-[^:]+:	e430fc00 	st2b	{z0.b, z1.b}, p7, \[x0\]
-[^:]+:	e430fc00 	st2b	{z0.b, z1.b}, p7, \[x0\]
-[^:]+:	e430fc00 	st2b	{z0.b, z1.b}, p7, \[x0\]
-[^:]+:	e430fc00 	st2b	{z0.b, z1.b}, p7, \[x0\]
-[^:]+:	e430fc00 	st2b	{z0.b, z1.b}, p7, \[x0\]
-[^:]+:	e430fc00 	st2b	{z0.b, z1.b}, p7, \[x0\]
-[^:]+:	e430e060 	st2b	{z0.b, z1.b}, p0, \[x3\]
-[^:]+:	e430e060 	st2b	{z0.b, z1.b}, p0, \[x3\]
-[^:]+:	e430e060 	st2b	{z0.b, z1.b}, p0, \[x3\]
-[^:]+:	e430e060 	st2b	{z0.b, z1.b}, p0, \[x3\]
-[^:]+:	e430e060 	st2b	{z0.b, z1.b}, p0, \[x3\]
-[^:]+:	e430e060 	st2b	{z0.b, z1.b}, p0, \[x3\]
-[^:]+:	e430e060 	st2b	{z0.b, z1.b}, p0, \[x3\]
-[^:]+:	e430e3e0 	st2b	{z0.b, z1.b}, p0, \[sp\]
-[^:]+:	e430e3e0 	st2b	{z0.b, z1.b}, p0, \[sp\]
-[^:]+:	e430e3e0 	st2b	{z0.b, z1.b}, p0, \[sp\]
-[^:]+:	e430e3e0 	st2b	{z0.b, z1.b}, p0, \[sp\]
-[^:]+:	e430e3e0 	st2b	{z0.b, z1.b}, p0, \[sp\]
-[^:]+:	e430e3e0 	st2b	{z0.b, z1.b}, p0, \[sp\]
-[^:]+:	e430e3e0 	st2b	{z0.b, z1.b}, p0, \[sp\]
-[^:]+:	e437e000 	st2b	{z0.b, z1.b}, p0, \[x0, #14, mul vl\]
-[^:]+:	e437e000 	st2b	{z0.b, z1.b}, p0, \[x0, #14, mul vl\]
-[^:]+:	e437e000 	st2b	{z0.b, z1.b}, p0, \[x0, #14, mul vl\]
-[^:]+:	e438e000 	st2b	{z0.b, z1.b}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e438e000 	st2b	{z0.b, z1.b}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e438e000 	st2b	{z0.b, z1.b}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e439e000 	st2b	{z0.b, z1.b}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e439e000 	st2b	{z0.b, z1.b}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e439e000 	st2b	{z0.b, z1.b}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e43fe000 	st2b	{z0.b, z1.b}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e43fe000 	st2b	{z0.b, z1.b}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e43fe000 	st2b	{z0.b, z1.b}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e5a06000 	st2d	{z0.d, z1.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a06000 	st2d	{z0.d, z1.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a06000 	st2d	{z0.d, z1.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a06001 	st2d	{z1.d, z2.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a06001 	st2d	{z1.d, z2.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a06001 	st2d	{z1.d, z2.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a0601f 	st2d	{z31.d, z0.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a0601f 	st2d	{z31.d, z0.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5a06800 	st2d	{z0.d, z1.d}, p2, \[x0, x0, lsl #3\]
-[^:]+:	e5a06800 	st2d	{z0.d, z1.d}, p2, \[x0, x0, lsl #3\]
-[^:]+:	e5a06800 	st2d	{z0.d, z1.d}, p2, \[x0, x0, lsl #3\]
-[^:]+:	e5a07c00 	st2d	{z0.d, z1.d}, p7, \[x0, x0, lsl #3\]
-[^:]+:	e5a07c00 	st2d	{z0.d, z1.d}, p7, \[x0, x0, lsl #3\]
-[^:]+:	e5a07c00 	st2d	{z0.d, z1.d}, p7, \[x0, x0, lsl #3\]
-[^:]+:	e5a06060 	st2d	{z0.d, z1.d}, p0, \[x3, x0, lsl #3\]
-[^:]+:	e5a06060 	st2d	{z0.d, z1.d}, p0, \[x3, x0, lsl #3\]
-[^:]+:	e5a06060 	st2d	{z0.d, z1.d}, p0, \[x3, x0, lsl #3\]
-[^:]+:	e5a063e0 	st2d	{z0.d, z1.d}, p0, \[sp, x0, lsl #3\]
-[^:]+:	e5a063e0 	st2d	{z0.d, z1.d}, p0, \[sp, x0, lsl #3\]
-[^:]+:	e5a063e0 	st2d	{z0.d, z1.d}, p0, \[sp, x0, lsl #3\]
-[^:]+:	e5a46000 	st2d	{z0.d, z1.d}, p0, \[x0, x4, lsl #3\]
-[^:]+:	e5a46000 	st2d	{z0.d, z1.d}, p0, \[x0, x4, lsl #3\]
-[^:]+:	e5a46000 	st2d	{z0.d, z1.d}, p0, \[x0, x4, lsl #3\]
-[^:]+:	e5be6000 	st2d	{z0.d, z1.d}, p0, \[x0, x30, lsl #3\]
-[^:]+:	e5be6000 	st2d	{z0.d, z1.d}, p0, \[x0, x30, lsl #3\]
-[^:]+:	e5be6000 	st2d	{z0.d, z1.d}, p0, \[x0, x30, lsl #3\]
-[^:]+:	e5b0e000 	st2d	{z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5b0e000 	st2d	{z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5b0e000 	st2d	{z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5b0e000 	st2d	{z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5b0e000 	st2d	{z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5b0e000 	st2d	{z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5b0e000 	st2d	{z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5b0e001 	st2d	{z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5b0e001 	st2d	{z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5b0e001 	st2d	{z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5b0e001 	st2d	{z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5b0e001 	st2d	{z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5b0e001 	st2d	{z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5b0e001 	st2d	{z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5b0e01f 	st2d	{z31.d, z0.d}, p0, \[x0\]
-[^:]+:	e5b0e01f 	st2d	{z31.d, z0.d}, p0, \[x0\]
-[^:]+:	e5b0e01f 	st2d	{z31.d, z0.d}, p0, \[x0\]
-[^:]+:	e5b0e01f 	st2d	{z31.d, z0.d}, p0, \[x0\]
-[^:]+:	e5b0e800 	st2d	{z0.d, z1.d}, p2, \[x0\]
-[^:]+:	e5b0e800 	st2d	{z0.d, z1.d}, p2, \[x0\]
-[^:]+:	e5b0e800 	st2d	{z0.d, z1.d}, p2, \[x0\]
-[^:]+:	e5b0e800 	st2d	{z0.d, z1.d}, p2, \[x0\]
-[^:]+:	e5b0e800 	st2d	{z0.d, z1.d}, p2, \[x0\]
-[^:]+:	e5b0e800 	st2d	{z0.d, z1.d}, p2, \[x0\]
-[^:]+:	e5b0e800 	st2d	{z0.d, z1.d}, p2, \[x0\]
-[^:]+:	e5b0fc00 	st2d	{z0.d, z1.d}, p7, \[x0\]
-[^:]+:	e5b0fc00 	st2d	{z0.d, z1.d}, p7, \[x0\]
-[^:]+:	e5b0fc00 	st2d	{z0.d, z1.d}, p7, \[x0\]
-[^:]+:	e5b0fc00 	st2d	{z0.d, z1.d}, p7, \[x0\]
-[^:]+:	e5b0fc00 	st2d	{z0.d, z1.d}, p7, \[x0\]
-[^:]+:	e5b0fc00 	st2d	{z0.d, z1.d}, p7, \[x0\]
-[^:]+:	e5b0fc00 	st2d	{z0.d, z1.d}, p7, \[x0\]
-[^:]+:	e5b0e060 	st2d	{z0.d, z1.d}, p0, \[x3\]
-[^:]+:	e5b0e060 	st2d	{z0.d, z1.d}, p0, \[x3\]
-[^:]+:	e5b0e060 	st2d	{z0.d, z1.d}, p0, \[x3\]
-[^:]+:	e5b0e060 	st2d	{z0.d, z1.d}, p0, \[x3\]
-[^:]+:	e5b0e060 	st2d	{z0.d, z1.d}, p0, \[x3\]
-[^:]+:	e5b0e060 	st2d	{z0.d, z1.d}, p0, \[x3\]
-[^:]+:	e5b0e060 	st2d	{z0.d, z1.d}, p0, \[x3\]
-[^:]+:	e5b0e3e0 	st2d	{z0.d, z1.d}, p0, \[sp\]
-[^:]+:	e5b0e3e0 	st2d	{z0.d, z1.d}, p0, \[sp\]
-[^:]+:	e5b0e3e0 	st2d	{z0.d, z1.d}, p0, \[sp\]
-[^:]+:	e5b0e3e0 	st2d	{z0.d, z1.d}, p0, \[sp\]
-[^:]+:	e5b0e3e0 	st2d	{z0.d, z1.d}, p0, \[sp\]
-[^:]+:	e5b0e3e0 	st2d	{z0.d, z1.d}, p0, \[sp\]
-[^:]+:	e5b0e3e0 	st2d	{z0.d, z1.d}, p0, \[sp\]
-[^:]+:	e5b7e000 	st2d	{z0.d, z1.d}, p0, \[x0, #14, mul vl\]
-[^:]+:	e5b7e000 	st2d	{z0.d, z1.d}, p0, \[x0, #14, mul vl\]
-[^:]+:	e5b7e000 	st2d	{z0.d, z1.d}, p0, \[x0, #14, mul vl\]
-[^:]+:	e5b8e000 	st2d	{z0.d, z1.d}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e5b8e000 	st2d	{z0.d, z1.d}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e5b8e000 	st2d	{z0.d, z1.d}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e5b9e000 	st2d	{z0.d, z1.d}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e5b9e000 	st2d	{z0.d, z1.d}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e5b9e000 	st2d	{z0.d, z1.d}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e5bfe000 	st2d	{z0.d, z1.d}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e5bfe000 	st2d	{z0.d, z1.d}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e5bfe000 	st2d	{z0.d, z1.d}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e4a06000 	st2h	{z0.h, z1.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a06000 	st2h	{z0.h, z1.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a06000 	st2h	{z0.h, z1.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a06001 	st2h	{z1.h, z2.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a06001 	st2h	{z1.h, z2.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a06001 	st2h	{z1.h, z2.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a0601f 	st2h	{z31.h, z0.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a0601f 	st2h	{z31.h, z0.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4a06800 	st2h	{z0.h, z1.h}, p2, \[x0, x0, lsl #1\]
-[^:]+:	e4a06800 	st2h	{z0.h, z1.h}, p2, \[x0, x0, lsl #1\]
-[^:]+:	e4a06800 	st2h	{z0.h, z1.h}, p2, \[x0, x0, lsl #1\]
-[^:]+:	e4a07c00 	st2h	{z0.h, z1.h}, p7, \[x0, x0, lsl #1\]
-[^:]+:	e4a07c00 	st2h	{z0.h, z1.h}, p7, \[x0, x0, lsl #1\]
-[^:]+:	e4a07c00 	st2h	{z0.h, z1.h}, p7, \[x0, x0, lsl #1\]
-[^:]+:	e4a06060 	st2h	{z0.h, z1.h}, p0, \[x3, x0, lsl #1\]
-[^:]+:	e4a06060 	st2h	{z0.h, z1.h}, p0, \[x3, x0, lsl #1\]
-[^:]+:	e4a06060 	st2h	{z0.h, z1.h}, p0, \[x3, x0, lsl #1\]
-[^:]+:	e4a063e0 	st2h	{z0.h, z1.h}, p0, \[sp, x0, lsl #1\]
-[^:]+:	e4a063e0 	st2h	{z0.h, z1.h}, p0, \[sp, x0, lsl #1\]
-[^:]+:	e4a063e0 	st2h	{z0.h, z1.h}, p0, \[sp, x0, lsl #1\]
-[^:]+:	e4a46000 	st2h	{z0.h, z1.h}, p0, \[x0, x4, lsl #1\]
-[^:]+:	e4a46000 	st2h	{z0.h, z1.h}, p0, \[x0, x4, lsl #1\]
-[^:]+:	e4a46000 	st2h	{z0.h, z1.h}, p0, \[x0, x4, lsl #1\]
-[^:]+:	e4be6000 	st2h	{z0.h, z1.h}, p0, \[x0, x30, lsl #1\]
-[^:]+:	e4be6000 	st2h	{z0.h, z1.h}, p0, \[x0, x30, lsl #1\]
-[^:]+:	e4be6000 	st2h	{z0.h, z1.h}, p0, \[x0, x30, lsl #1\]
-[^:]+:	e4b0e000 	st2h	{z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4b0e000 	st2h	{z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4b0e000 	st2h	{z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4b0e000 	st2h	{z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4b0e000 	st2h	{z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4b0e000 	st2h	{z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4b0e000 	st2h	{z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4b0e001 	st2h	{z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4b0e001 	st2h	{z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4b0e001 	st2h	{z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4b0e001 	st2h	{z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4b0e001 	st2h	{z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4b0e001 	st2h	{z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4b0e001 	st2h	{z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4b0e01f 	st2h	{z31.h, z0.h}, p0, \[x0\]
-[^:]+:	e4b0e01f 	st2h	{z31.h, z0.h}, p0, \[x0\]
-[^:]+:	e4b0e01f 	st2h	{z31.h, z0.h}, p0, \[x0\]
-[^:]+:	e4b0e01f 	st2h	{z31.h, z0.h}, p0, \[x0\]
-[^:]+:	e4b0e800 	st2h	{z0.h, z1.h}, p2, \[x0\]
-[^:]+:	e4b0e800 	st2h	{z0.h, z1.h}, p2, \[x0\]
-[^:]+:	e4b0e800 	st2h	{z0.h, z1.h}, p2, \[x0\]
-[^:]+:	e4b0e800 	st2h	{z0.h, z1.h}, p2, \[x0\]
-[^:]+:	e4b0e800 	st2h	{z0.h, z1.h}, p2, \[x0\]
-[^:]+:	e4b0e800 	st2h	{z0.h, z1.h}, p2, \[x0\]
-[^:]+:	e4b0e800 	st2h	{z0.h, z1.h}, p2, \[x0\]
-[^:]+:	e4b0fc00 	st2h	{z0.h, z1.h}, p7, \[x0\]
-[^:]+:	e4b0fc00 	st2h	{z0.h, z1.h}, p7, \[x0\]
-[^:]+:	e4b0fc00 	st2h	{z0.h, z1.h}, p7, \[x0\]
-[^:]+:	e4b0fc00 	st2h	{z0.h, z1.h}, p7, \[x0\]
-[^:]+:	e4b0fc00 	st2h	{z0.h, z1.h}, p7, \[x0\]
-[^:]+:	e4b0fc00 	st2h	{z0.h, z1.h}, p7, \[x0\]
-[^:]+:	e4b0fc00 	st2h	{z0.h, z1.h}, p7, \[x0\]
-[^:]+:	e4b0e060 	st2h	{z0.h, z1.h}, p0, \[x3\]
-[^:]+:	e4b0e060 	st2h	{z0.h, z1.h}, p0, \[x3\]
-[^:]+:	e4b0e060 	st2h	{z0.h, z1.h}, p0, \[x3\]
-[^:]+:	e4b0e060 	st2h	{z0.h, z1.h}, p0, \[x3\]
-[^:]+:	e4b0e060 	st2h	{z0.h, z1.h}, p0, \[x3\]
-[^:]+:	e4b0e060 	st2h	{z0.h, z1.h}, p0, \[x3\]
-[^:]+:	e4b0e060 	st2h	{z0.h, z1.h}, p0, \[x3\]
-[^:]+:	e4b0e3e0 	st2h	{z0.h, z1.h}, p0, \[sp\]
-[^:]+:	e4b0e3e0 	st2h	{z0.h, z1.h}, p0, \[sp\]
-[^:]+:	e4b0e3e0 	st2h	{z0.h, z1.h}, p0, \[sp\]
-[^:]+:	e4b0e3e0 	st2h	{z0.h, z1.h}, p0, \[sp\]
-[^:]+:	e4b0e3e0 	st2h	{z0.h, z1.h}, p0, \[sp\]
-[^:]+:	e4b0e3e0 	st2h	{z0.h, z1.h}, p0, \[sp\]
-[^:]+:	e4b0e3e0 	st2h	{z0.h, z1.h}, p0, \[sp\]
-[^:]+:	e4b7e000 	st2h	{z0.h, z1.h}, p0, \[x0, #14, mul vl\]
-[^:]+:	e4b7e000 	st2h	{z0.h, z1.h}, p0, \[x0, #14, mul vl\]
-[^:]+:	e4b7e000 	st2h	{z0.h, z1.h}, p0, \[x0, #14, mul vl\]
-[^:]+:	e4b8e000 	st2h	{z0.h, z1.h}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e4b8e000 	st2h	{z0.h, z1.h}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e4b8e000 	st2h	{z0.h, z1.h}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e4b9e000 	st2h	{z0.h, z1.h}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e4b9e000 	st2h	{z0.h, z1.h}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e4b9e000 	st2h	{z0.h, z1.h}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e4bfe000 	st2h	{z0.h, z1.h}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e4bfe000 	st2h	{z0.h, z1.h}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e4bfe000 	st2h	{z0.h, z1.h}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e5206000 	st2w	{z0.s, z1.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e5206000 	st2w	{z0.s, z1.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e5206000 	st2w	{z0.s, z1.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e5206001 	st2w	{z1.s, z2.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e5206001 	st2w	{z1.s, z2.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e5206001 	st2w	{z1.s, z2.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e520601f 	st2w	{z31.s, z0.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e520601f 	st2w	{z31.s, z0.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e5206800 	st2w	{z0.s, z1.s}, p2, \[x0, x0, lsl #2\]
-[^:]+:	e5206800 	st2w	{z0.s, z1.s}, p2, \[x0, x0, lsl #2\]
-[^:]+:	e5206800 	st2w	{z0.s, z1.s}, p2, \[x0, x0, lsl #2\]
-[^:]+:	e5207c00 	st2w	{z0.s, z1.s}, p7, \[x0, x0, lsl #2\]
-[^:]+:	e5207c00 	st2w	{z0.s, z1.s}, p7, \[x0, x0, lsl #2\]
-[^:]+:	e5207c00 	st2w	{z0.s, z1.s}, p7, \[x0, x0, lsl #2\]
-[^:]+:	e5206060 	st2w	{z0.s, z1.s}, p0, \[x3, x0, lsl #2\]
-[^:]+:	e5206060 	st2w	{z0.s, z1.s}, p0, \[x3, x0, lsl #2\]
-[^:]+:	e5206060 	st2w	{z0.s, z1.s}, p0, \[x3, x0, lsl #2\]
-[^:]+:	e52063e0 	st2w	{z0.s, z1.s}, p0, \[sp, x0, lsl #2\]
-[^:]+:	e52063e0 	st2w	{z0.s, z1.s}, p0, \[sp, x0, lsl #2\]
-[^:]+:	e52063e0 	st2w	{z0.s, z1.s}, p0, \[sp, x0, lsl #2\]
-[^:]+:	e5246000 	st2w	{z0.s, z1.s}, p0, \[x0, x4, lsl #2\]
-[^:]+:	e5246000 	st2w	{z0.s, z1.s}, p0, \[x0, x4, lsl #2\]
-[^:]+:	e5246000 	st2w	{z0.s, z1.s}, p0, \[x0, x4, lsl #2\]
-[^:]+:	e53e6000 	st2w	{z0.s, z1.s}, p0, \[x0, x30, lsl #2\]
-[^:]+:	e53e6000 	st2w	{z0.s, z1.s}, p0, \[x0, x30, lsl #2\]
-[^:]+:	e53e6000 	st2w	{z0.s, z1.s}, p0, \[x0, x30, lsl #2\]
-[^:]+:	e530e000 	st2w	{z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e530e000 	st2w	{z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e530e000 	st2w	{z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e530e000 	st2w	{z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e530e000 	st2w	{z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e530e000 	st2w	{z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e530e000 	st2w	{z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e530e001 	st2w	{z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e530e001 	st2w	{z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e530e001 	st2w	{z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e530e001 	st2w	{z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e530e001 	st2w	{z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e530e001 	st2w	{z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e530e001 	st2w	{z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e530e01f 	st2w	{z31.s, z0.s}, p0, \[x0\]
-[^:]+:	e530e01f 	st2w	{z31.s, z0.s}, p0, \[x0\]
-[^:]+:	e530e01f 	st2w	{z31.s, z0.s}, p0, \[x0\]
-[^:]+:	e530e01f 	st2w	{z31.s, z0.s}, p0, \[x0\]
-[^:]+:	e530e800 	st2w	{z0.s, z1.s}, p2, \[x0\]
-[^:]+:	e530e800 	st2w	{z0.s, z1.s}, p2, \[x0\]
-[^:]+:	e530e800 	st2w	{z0.s, z1.s}, p2, \[x0\]
-[^:]+:	e530e800 	st2w	{z0.s, z1.s}, p2, \[x0\]
-[^:]+:	e530e800 	st2w	{z0.s, z1.s}, p2, \[x0\]
-[^:]+:	e530e800 	st2w	{z0.s, z1.s}, p2, \[x0\]
-[^:]+:	e530e800 	st2w	{z0.s, z1.s}, p2, \[x0\]
-[^:]+:	e530fc00 	st2w	{z0.s, z1.s}, p7, \[x0\]
-[^:]+:	e530fc00 	st2w	{z0.s, z1.s}, p7, \[x0\]
-[^:]+:	e530fc00 	st2w	{z0.s, z1.s}, p7, \[x0\]
-[^:]+:	e530fc00 	st2w	{z0.s, z1.s}, p7, \[x0\]
-[^:]+:	e530fc00 	st2w	{z0.s, z1.s}, p7, \[x0\]
-[^:]+:	e530fc00 	st2w	{z0.s, z1.s}, p7, \[x0\]
-[^:]+:	e530fc00 	st2w	{z0.s, z1.s}, p7, \[x0\]
-[^:]+:	e530e060 	st2w	{z0.s, z1.s}, p0, \[x3\]
-[^:]+:	e530e060 	st2w	{z0.s, z1.s}, p0, \[x3\]
-[^:]+:	e530e060 	st2w	{z0.s, z1.s}, p0, \[x3\]
-[^:]+:	e530e060 	st2w	{z0.s, z1.s}, p0, \[x3\]
-[^:]+:	e530e060 	st2w	{z0.s, z1.s}, p0, \[x3\]
-[^:]+:	e530e060 	st2w	{z0.s, z1.s}, p0, \[x3\]
-[^:]+:	e530e060 	st2w	{z0.s, z1.s}, p0, \[x3\]
-[^:]+:	e530e3e0 	st2w	{z0.s, z1.s}, p0, \[sp\]
-[^:]+:	e530e3e0 	st2w	{z0.s, z1.s}, p0, \[sp\]
-[^:]+:	e530e3e0 	st2w	{z0.s, z1.s}, p0, \[sp\]
-[^:]+:	e530e3e0 	st2w	{z0.s, z1.s}, p0, \[sp\]
-[^:]+:	e530e3e0 	st2w	{z0.s, z1.s}, p0, \[sp\]
-[^:]+:	e530e3e0 	st2w	{z0.s, z1.s}, p0, \[sp\]
-[^:]+:	e530e3e0 	st2w	{z0.s, z1.s}, p0, \[sp\]
-[^:]+:	e537e000 	st2w	{z0.s, z1.s}, p0, \[x0, #14, mul vl\]
-[^:]+:	e537e000 	st2w	{z0.s, z1.s}, p0, \[x0, #14, mul vl\]
-[^:]+:	e537e000 	st2w	{z0.s, z1.s}, p0, \[x0, #14, mul vl\]
-[^:]+:	e538e000 	st2w	{z0.s, z1.s}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e538e000 	st2w	{z0.s, z1.s}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e538e000 	st2w	{z0.s, z1.s}, p0, \[x0, #-16, mul vl\]
-[^:]+:	e539e000 	st2w	{z0.s, z1.s}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e539e000 	st2w	{z0.s, z1.s}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e539e000 	st2w	{z0.s, z1.s}, p0, \[x0, #-14, mul vl\]
-[^:]+:	e53fe000 	st2w	{z0.s, z1.s}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e53fe000 	st2w	{z0.s, z1.s}, p0, \[x0, #-2, mul vl\]
-[^:]+:	e53fe000 	st2w	{z0.s, z1.s}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e4206000 	st2b	{z0.b-z1.b}, p0, \[x0, x0\]
+[^:]+:	e4206000 	st2b	{z0.b-z1.b}, p0, \[x0, x0\]
+[^:]+:	e4206000 	st2b	{z0.b-z1.b}, p0, \[x0, x0\]
+[^:]+:	e4206000 	st2b	{z0.b-z1.b}, p0, \[x0, x0\]
+[^:]+:	e4206000 	st2b	{z0.b-z1.b}, p0, \[x0, x0\]
+[^:]+:	e4206001 	st2b	{z1.b-z2.b}, p0, \[x0, x0\]
+[^:]+:	e4206001 	st2b	{z1.b-z2.b}, p0, \[x0, x0\]
+[^:]+:	e4206001 	st2b	{z1.b-z2.b}, p0, \[x0, x0\]
+[^:]+:	e4206001 	st2b	{z1.b-z2.b}, p0, \[x0, x0\]
+[^:]+:	e4206001 	st2b	{z1.b-z2.b}, p0, \[x0, x0\]
+[^:]+:	e420601f 	st2b	{z31.b-z0.b}, p0, \[x0, x0\]
+[^:]+:	e420601f 	st2b	{z31.b-z0.b}, p0, \[x0, x0\]
+[^:]+:	e420601f 	st2b	{z31.b-z0.b}, p0, \[x0, x0\]
+[^:]+:	e4206800 	st2b	{z0.b-z1.b}, p2, \[x0, x0\]
+[^:]+:	e4206800 	st2b	{z0.b-z1.b}, p2, \[x0, x0\]
+[^:]+:	e4206800 	st2b	{z0.b-z1.b}, p2, \[x0, x0\]
+[^:]+:	e4206800 	st2b	{z0.b-z1.b}, p2, \[x0, x0\]
+[^:]+:	e4206800 	st2b	{z0.b-z1.b}, p2, \[x0, x0\]
+[^:]+:	e4207c00 	st2b	{z0.b-z1.b}, p7, \[x0, x0\]
+[^:]+:	e4207c00 	st2b	{z0.b-z1.b}, p7, \[x0, x0\]
+[^:]+:	e4207c00 	st2b	{z0.b-z1.b}, p7, \[x0, x0\]
+[^:]+:	e4207c00 	st2b	{z0.b-z1.b}, p7, \[x0, x0\]
+[^:]+:	e4207c00 	st2b	{z0.b-z1.b}, p7, \[x0, x0\]
+[^:]+:	e4206060 	st2b	{z0.b-z1.b}, p0, \[x3, x0\]
+[^:]+:	e4206060 	st2b	{z0.b-z1.b}, p0, \[x3, x0\]
+[^:]+:	e4206060 	st2b	{z0.b-z1.b}, p0, \[x3, x0\]
+[^:]+:	e4206060 	st2b	{z0.b-z1.b}, p0, \[x3, x0\]
+[^:]+:	e4206060 	st2b	{z0.b-z1.b}, p0, \[x3, x0\]
+[^:]+:	e42063e0 	st2b	{z0.b-z1.b}, p0, \[sp, x0\]
+[^:]+:	e42063e0 	st2b	{z0.b-z1.b}, p0, \[sp, x0\]
+[^:]+:	e42063e0 	st2b	{z0.b-z1.b}, p0, \[sp, x0\]
+[^:]+:	e42063e0 	st2b	{z0.b-z1.b}, p0, \[sp, x0\]
+[^:]+:	e42063e0 	st2b	{z0.b-z1.b}, p0, \[sp, x0\]
+[^:]+:	e4246000 	st2b	{z0.b-z1.b}, p0, \[x0, x4\]
+[^:]+:	e4246000 	st2b	{z0.b-z1.b}, p0, \[x0, x4\]
+[^:]+:	e4246000 	st2b	{z0.b-z1.b}, p0, \[x0, x4\]
+[^:]+:	e4246000 	st2b	{z0.b-z1.b}, p0, \[x0, x4\]
+[^:]+:	e4246000 	st2b	{z0.b-z1.b}, p0, \[x0, x4\]
+[^:]+:	e43e6000 	st2b	{z0.b-z1.b}, p0, \[x0, x30\]
+[^:]+:	e43e6000 	st2b	{z0.b-z1.b}, p0, \[x0, x30\]
+[^:]+:	e43e6000 	st2b	{z0.b-z1.b}, p0, \[x0, x30\]
+[^:]+:	e43e6000 	st2b	{z0.b-z1.b}, p0, \[x0, x30\]
+[^:]+:	e43e6000 	st2b	{z0.b-z1.b}, p0, \[x0, x30\]
+[^:]+:	e430e000 	st2b	{z0.b-z1.b}, p0, \[x0\]
+[^:]+:	e430e000 	st2b	{z0.b-z1.b}, p0, \[x0\]
+[^:]+:	e430e000 	st2b	{z0.b-z1.b}, p0, \[x0\]
+[^:]+:	e430e000 	st2b	{z0.b-z1.b}, p0, \[x0\]
+[^:]+:	e430e000 	st2b	{z0.b-z1.b}, p0, \[x0\]
+[^:]+:	e430e000 	st2b	{z0.b-z1.b}, p0, \[x0\]
+[^:]+:	e430e000 	st2b	{z0.b-z1.b}, p0, \[x0\]
+[^:]+:	e430e001 	st2b	{z1.b-z2.b}, p0, \[x0\]
+[^:]+:	e430e001 	st2b	{z1.b-z2.b}, p0, \[x0\]
+[^:]+:	e430e001 	st2b	{z1.b-z2.b}, p0, \[x0\]
+[^:]+:	e430e001 	st2b	{z1.b-z2.b}, p0, \[x0\]
+[^:]+:	e430e001 	st2b	{z1.b-z2.b}, p0, \[x0\]
+[^:]+:	e430e001 	st2b	{z1.b-z2.b}, p0, \[x0\]
+[^:]+:	e430e001 	st2b	{z1.b-z2.b}, p0, \[x0\]
+[^:]+:	e430e01f 	st2b	{z31.b-z0.b}, p0, \[x0\]
+[^:]+:	e430e01f 	st2b	{z31.b-z0.b}, p0, \[x0\]
+[^:]+:	e430e01f 	st2b	{z31.b-z0.b}, p0, \[x0\]
+[^:]+:	e430e01f 	st2b	{z31.b-z0.b}, p0, \[x0\]
+[^:]+:	e430e800 	st2b	{z0.b-z1.b}, p2, \[x0\]
+[^:]+:	e430e800 	st2b	{z0.b-z1.b}, p2, \[x0\]
+[^:]+:	e430e800 	st2b	{z0.b-z1.b}, p2, \[x0\]
+[^:]+:	e430e800 	st2b	{z0.b-z1.b}, p2, \[x0\]
+[^:]+:	e430e800 	st2b	{z0.b-z1.b}, p2, \[x0\]
+[^:]+:	e430e800 	st2b	{z0.b-z1.b}, p2, \[x0\]
+[^:]+:	e430e800 	st2b	{z0.b-z1.b}, p2, \[x0\]
+[^:]+:	e430fc00 	st2b	{z0.b-z1.b}, p7, \[x0\]
+[^:]+:	e430fc00 	st2b	{z0.b-z1.b}, p7, \[x0\]
+[^:]+:	e430fc00 	st2b	{z0.b-z1.b}, p7, \[x0\]
+[^:]+:	e430fc00 	st2b	{z0.b-z1.b}, p7, \[x0\]
+[^:]+:	e430fc00 	st2b	{z0.b-z1.b}, p7, \[x0\]
+[^:]+:	e430fc00 	st2b	{z0.b-z1.b}, p7, \[x0\]
+[^:]+:	e430fc00 	st2b	{z0.b-z1.b}, p7, \[x0\]
+[^:]+:	e430e060 	st2b	{z0.b-z1.b}, p0, \[x3\]
+[^:]+:	e430e060 	st2b	{z0.b-z1.b}, p0, \[x3\]
+[^:]+:	e430e060 	st2b	{z0.b-z1.b}, p0, \[x3\]
+[^:]+:	e430e060 	st2b	{z0.b-z1.b}, p0, \[x3\]
+[^:]+:	e430e060 	st2b	{z0.b-z1.b}, p0, \[x3\]
+[^:]+:	e430e060 	st2b	{z0.b-z1.b}, p0, \[x3\]
+[^:]+:	e430e060 	st2b	{z0.b-z1.b}, p0, \[x3\]
+[^:]+:	e430e3e0 	st2b	{z0.b-z1.b}, p0, \[sp\]
+[^:]+:	e430e3e0 	st2b	{z0.b-z1.b}, p0, \[sp\]
+[^:]+:	e430e3e0 	st2b	{z0.b-z1.b}, p0, \[sp\]
+[^:]+:	e430e3e0 	st2b	{z0.b-z1.b}, p0, \[sp\]
+[^:]+:	e430e3e0 	st2b	{z0.b-z1.b}, p0, \[sp\]
+[^:]+:	e430e3e0 	st2b	{z0.b-z1.b}, p0, \[sp\]
+[^:]+:	e430e3e0 	st2b	{z0.b-z1.b}, p0, \[sp\]
+[^:]+:	e437e000 	st2b	{z0.b-z1.b}, p0, \[x0, #14, mul vl\]
+[^:]+:	e437e000 	st2b	{z0.b-z1.b}, p0, \[x0, #14, mul vl\]
+[^:]+:	e437e000 	st2b	{z0.b-z1.b}, p0, \[x0, #14, mul vl\]
+[^:]+:	e438e000 	st2b	{z0.b-z1.b}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e438e000 	st2b	{z0.b-z1.b}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e438e000 	st2b	{z0.b-z1.b}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e439e000 	st2b	{z0.b-z1.b}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e439e000 	st2b	{z0.b-z1.b}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e439e000 	st2b	{z0.b-z1.b}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e43fe000 	st2b	{z0.b-z1.b}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e43fe000 	st2b	{z0.b-z1.b}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e43fe000 	st2b	{z0.b-z1.b}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e5a06000 	st2d	{z0.d-z1.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a06000 	st2d	{z0.d-z1.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a06000 	st2d	{z0.d-z1.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a06001 	st2d	{z1.d-z2.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a06001 	st2d	{z1.d-z2.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a06001 	st2d	{z1.d-z2.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a0601f 	st2d	{z31.d-z0.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a0601f 	st2d	{z31.d-z0.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5a06800 	st2d	{z0.d-z1.d}, p2, \[x0, x0, lsl #3\]
+[^:]+:	e5a06800 	st2d	{z0.d-z1.d}, p2, \[x0, x0, lsl #3\]
+[^:]+:	e5a06800 	st2d	{z0.d-z1.d}, p2, \[x0, x0, lsl #3\]
+[^:]+:	e5a07c00 	st2d	{z0.d-z1.d}, p7, \[x0, x0, lsl #3\]
+[^:]+:	e5a07c00 	st2d	{z0.d-z1.d}, p7, \[x0, x0, lsl #3\]
+[^:]+:	e5a07c00 	st2d	{z0.d-z1.d}, p7, \[x0, x0, lsl #3\]
+[^:]+:	e5a06060 	st2d	{z0.d-z1.d}, p0, \[x3, x0, lsl #3\]
+[^:]+:	e5a06060 	st2d	{z0.d-z1.d}, p0, \[x3, x0, lsl #3\]
+[^:]+:	e5a06060 	st2d	{z0.d-z1.d}, p0, \[x3, x0, lsl #3\]
+[^:]+:	e5a063e0 	st2d	{z0.d-z1.d}, p0, \[sp, x0, lsl #3\]
+[^:]+:	e5a063e0 	st2d	{z0.d-z1.d}, p0, \[sp, x0, lsl #3\]
+[^:]+:	e5a063e0 	st2d	{z0.d-z1.d}, p0, \[sp, x0, lsl #3\]
+[^:]+:	e5a46000 	st2d	{z0.d-z1.d}, p0, \[x0, x4, lsl #3\]
+[^:]+:	e5a46000 	st2d	{z0.d-z1.d}, p0, \[x0, x4, lsl #3\]
+[^:]+:	e5a46000 	st2d	{z0.d-z1.d}, p0, \[x0, x4, lsl #3\]
+[^:]+:	e5be6000 	st2d	{z0.d-z1.d}, p0, \[x0, x30, lsl #3\]
+[^:]+:	e5be6000 	st2d	{z0.d-z1.d}, p0, \[x0, x30, lsl #3\]
+[^:]+:	e5be6000 	st2d	{z0.d-z1.d}, p0, \[x0, x30, lsl #3\]
+[^:]+:	e5b0e000 	st2d	{z0.d-z1.d}, p0, \[x0\]
+[^:]+:	e5b0e000 	st2d	{z0.d-z1.d}, p0, \[x0\]
+[^:]+:	e5b0e000 	st2d	{z0.d-z1.d}, p0, \[x0\]
+[^:]+:	e5b0e000 	st2d	{z0.d-z1.d}, p0, \[x0\]
+[^:]+:	e5b0e000 	st2d	{z0.d-z1.d}, p0, \[x0\]
+[^:]+:	e5b0e000 	st2d	{z0.d-z1.d}, p0, \[x0\]
+[^:]+:	e5b0e000 	st2d	{z0.d-z1.d}, p0, \[x0\]
+[^:]+:	e5b0e001 	st2d	{z1.d-z2.d}, p0, \[x0\]
+[^:]+:	e5b0e001 	st2d	{z1.d-z2.d}, p0, \[x0\]
+[^:]+:	e5b0e001 	st2d	{z1.d-z2.d}, p0, \[x0\]
+[^:]+:	e5b0e001 	st2d	{z1.d-z2.d}, p0, \[x0\]
+[^:]+:	e5b0e001 	st2d	{z1.d-z2.d}, p0, \[x0\]
+[^:]+:	e5b0e001 	st2d	{z1.d-z2.d}, p0, \[x0\]
+[^:]+:	e5b0e001 	st2d	{z1.d-z2.d}, p0, \[x0\]
+[^:]+:	e5b0e01f 	st2d	{z31.d-z0.d}, p0, \[x0\]
+[^:]+:	e5b0e01f 	st2d	{z31.d-z0.d}, p0, \[x0\]
+[^:]+:	e5b0e01f 	st2d	{z31.d-z0.d}, p0, \[x0\]
+[^:]+:	e5b0e01f 	st2d	{z31.d-z0.d}, p0, \[x0\]
+[^:]+:	e5b0e800 	st2d	{z0.d-z1.d}, p2, \[x0\]
+[^:]+:	e5b0e800 	st2d	{z0.d-z1.d}, p2, \[x0\]
+[^:]+:	e5b0e800 	st2d	{z0.d-z1.d}, p2, \[x0\]
+[^:]+:	e5b0e800 	st2d	{z0.d-z1.d}, p2, \[x0\]
+[^:]+:	e5b0e800 	st2d	{z0.d-z1.d}, p2, \[x0\]
+[^:]+:	e5b0e800 	st2d	{z0.d-z1.d}, p2, \[x0\]
+[^:]+:	e5b0e800 	st2d	{z0.d-z1.d}, p2, \[x0\]
+[^:]+:	e5b0fc00 	st2d	{z0.d-z1.d}, p7, \[x0\]
+[^:]+:	e5b0fc00 	st2d	{z0.d-z1.d}, p7, \[x0\]
+[^:]+:	e5b0fc00 	st2d	{z0.d-z1.d}, p7, \[x0\]
+[^:]+:	e5b0fc00 	st2d	{z0.d-z1.d}, p7, \[x0\]
+[^:]+:	e5b0fc00 	st2d	{z0.d-z1.d}, p7, \[x0\]
+[^:]+:	e5b0fc00 	st2d	{z0.d-z1.d}, p7, \[x0\]
+[^:]+:	e5b0fc00 	st2d	{z0.d-z1.d}, p7, \[x0\]
+[^:]+:	e5b0e060 	st2d	{z0.d-z1.d}, p0, \[x3\]
+[^:]+:	e5b0e060 	st2d	{z0.d-z1.d}, p0, \[x3\]
+[^:]+:	e5b0e060 	st2d	{z0.d-z1.d}, p0, \[x3\]
+[^:]+:	e5b0e060 	st2d	{z0.d-z1.d}, p0, \[x3\]
+[^:]+:	e5b0e060 	st2d	{z0.d-z1.d}, p0, \[x3\]
+[^:]+:	e5b0e060 	st2d	{z0.d-z1.d}, p0, \[x3\]
+[^:]+:	e5b0e060 	st2d	{z0.d-z1.d}, p0, \[x3\]
+[^:]+:	e5b0e3e0 	st2d	{z0.d-z1.d}, p0, \[sp\]
+[^:]+:	e5b0e3e0 	st2d	{z0.d-z1.d}, p0, \[sp\]
+[^:]+:	e5b0e3e0 	st2d	{z0.d-z1.d}, p0, \[sp\]
+[^:]+:	e5b0e3e0 	st2d	{z0.d-z1.d}, p0, \[sp\]
+[^:]+:	e5b0e3e0 	st2d	{z0.d-z1.d}, p0, \[sp\]
+[^:]+:	e5b0e3e0 	st2d	{z0.d-z1.d}, p0, \[sp\]
+[^:]+:	e5b0e3e0 	st2d	{z0.d-z1.d}, p0, \[sp\]
+[^:]+:	e5b7e000 	st2d	{z0.d-z1.d}, p0, \[x0, #14, mul vl\]
+[^:]+:	e5b7e000 	st2d	{z0.d-z1.d}, p0, \[x0, #14, mul vl\]
+[^:]+:	e5b7e000 	st2d	{z0.d-z1.d}, p0, \[x0, #14, mul vl\]
+[^:]+:	e5b8e000 	st2d	{z0.d-z1.d}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e5b8e000 	st2d	{z0.d-z1.d}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e5b8e000 	st2d	{z0.d-z1.d}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e5b9e000 	st2d	{z0.d-z1.d}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e5b9e000 	st2d	{z0.d-z1.d}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e5b9e000 	st2d	{z0.d-z1.d}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e5bfe000 	st2d	{z0.d-z1.d}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e5bfe000 	st2d	{z0.d-z1.d}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e5bfe000 	st2d	{z0.d-z1.d}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e4a06000 	st2h	{z0.h-z1.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a06000 	st2h	{z0.h-z1.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a06000 	st2h	{z0.h-z1.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a06001 	st2h	{z1.h-z2.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a06001 	st2h	{z1.h-z2.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a06001 	st2h	{z1.h-z2.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a0601f 	st2h	{z31.h-z0.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a0601f 	st2h	{z31.h-z0.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4a06800 	st2h	{z0.h-z1.h}, p2, \[x0, x0, lsl #1\]
+[^:]+:	e4a06800 	st2h	{z0.h-z1.h}, p2, \[x0, x0, lsl #1\]
+[^:]+:	e4a06800 	st2h	{z0.h-z1.h}, p2, \[x0, x0, lsl #1\]
+[^:]+:	e4a07c00 	st2h	{z0.h-z1.h}, p7, \[x0, x0, lsl #1\]
+[^:]+:	e4a07c00 	st2h	{z0.h-z1.h}, p7, \[x0, x0, lsl #1\]
+[^:]+:	e4a07c00 	st2h	{z0.h-z1.h}, p7, \[x0, x0, lsl #1\]
+[^:]+:	e4a06060 	st2h	{z0.h-z1.h}, p0, \[x3, x0, lsl #1\]
+[^:]+:	e4a06060 	st2h	{z0.h-z1.h}, p0, \[x3, x0, lsl #1\]
+[^:]+:	e4a06060 	st2h	{z0.h-z1.h}, p0, \[x3, x0, lsl #1\]
+[^:]+:	e4a063e0 	st2h	{z0.h-z1.h}, p0, \[sp, x0, lsl #1\]
+[^:]+:	e4a063e0 	st2h	{z0.h-z1.h}, p0, \[sp, x0, lsl #1\]
+[^:]+:	e4a063e0 	st2h	{z0.h-z1.h}, p0, \[sp, x0, lsl #1\]
+[^:]+:	e4a46000 	st2h	{z0.h-z1.h}, p0, \[x0, x4, lsl #1\]
+[^:]+:	e4a46000 	st2h	{z0.h-z1.h}, p0, \[x0, x4, lsl #1\]
+[^:]+:	e4a46000 	st2h	{z0.h-z1.h}, p0, \[x0, x4, lsl #1\]
+[^:]+:	e4be6000 	st2h	{z0.h-z1.h}, p0, \[x0, x30, lsl #1\]
+[^:]+:	e4be6000 	st2h	{z0.h-z1.h}, p0, \[x0, x30, lsl #1\]
+[^:]+:	e4be6000 	st2h	{z0.h-z1.h}, p0, \[x0, x30, lsl #1\]
+[^:]+:	e4b0e000 	st2h	{z0.h-z1.h}, p0, \[x0\]
+[^:]+:	e4b0e000 	st2h	{z0.h-z1.h}, p0, \[x0\]
+[^:]+:	e4b0e000 	st2h	{z0.h-z1.h}, p0, \[x0\]
+[^:]+:	e4b0e000 	st2h	{z0.h-z1.h}, p0, \[x0\]
+[^:]+:	e4b0e000 	st2h	{z0.h-z1.h}, p0, \[x0\]
+[^:]+:	e4b0e000 	st2h	{z0.h-z1.h}, p0, \[x0\]
+[^:]+:	e4b0e000 	st2h	{z0.h-z1.h}, p0, \[x0\]
+[^:]+:	e4b0e001 	st2h	{z1.h-z2.h}, p0, \[x0\]
+[^:]+:	e4b0e001 	st2h	{z1.h-z2.h}, p0, \[x0\]
+[^:]+:	e4b0e001 	st2h	{z1.h-z2.h}, p0, \[x0\]
+[^:]+:	e4b0e001 	st2h	{z1.h-z2.h}, p0, \[x0\]
+[^:]+:	e4b0e001 	st2h	{z1.h-z2.h}, p0, \[x0\]
+[^:]+:	e4b0e001 	st2h	{z1.h-z2.h}, p0, \[x0\]
+[^:]+:	e4b0e001 	st2h	{z1.h-z2.h}, p0, \[x0\]
+[^:]+:	e4b0e01f 	st2h	{z31.h-z0.h}, p0, \[x0\]
+[^:]+:	e4b0e01f 	st2h	{z31.h-z0.h}, p0, \[x0\]
+[^:]+:	e4b0e01f 	st2h	{z31.h-z0.h}, p0, \[x0\]
+[^:]+:	e4b0e01f 	st2h	{z31.h-z0.h}, p0, \[x0\]
+[^:]+:	e4b0e800 	st2h	{z0.h-z1.h}, p2, \[x0\]
+[^:]+:	e4b0e800 	st2h	{z0.h-z1.h}, p2, \[x0\]
+[^:]+:	e4b0e800 	st2h	{z0.h-z1.h}, p2, \[x0\]
+[^:]+:	e4b0e800 	st2h	{z0.h-z1.h}, p2, \[x0\]
+[^:]+:	e4b0e800 	st2h	{z0.h-z1.h}, p2, \[x0\]
+[^:]+:	e4b0e800 	st2h	{z0.h-z1.h}, p2, \[x0\]
+[^:]+:	e4b0e800 	st2h	{z0.h-z1.h}, p2, \[x0\]
+[^:]+:	e4b0fc00 	st2h	{z0.h-z1.h}, p7, \[x0\]
+[^:]+:	e4b0fc00 	st2h	{z0.h-z1.h}, p7, \[x0\]
+[^:]+:	e4b0fc00 	st2h	{z0.h-z1.h}, p7, \[x0\]
+[^:]+:	e4b0fc00 	st2h	{z0.h-z1.h}, p7, \[x0\]
+[^:]+:	e4b0fc00 	st2h	{z0.h-z1.h}, p7, \[x0\]
+[^:]+:	e4b0fc00 	st2h	{z0.h-z1.h}, p7, \[x0\]
+[^:]+:	e4b0fc00 	st2h	{z0.h-z1.h}, p7, \[x0\]
+[^:]+:	e4b0e060 	st2h	{z0.h-z1.h}, p0, \[x3\]
+[^:]+:	e4b0e060 	st2h	{z0.h-z1.h}, p0, \[x3\]
+[^:]+:	e4b0e060 	st2h	{z0.h-z1.h}, p0, \[x3\]
+[^:]+:	e4b0e060 	st2h	{z0.h-z1.h}, p0, \[x3\]
+[^:]+:	e4b0e060 	st2h	{z0.h-z1.h}, p0, \[x3\]
+[^:]+:	e4b0e060 	st2h	{z0.h-z1.h}, p0, \[x3\]
+[^:]+:	e4b0e060 	st2h	{z0.h-z1.h}, p0, \[x3\]
+[^:]+:	e4b0e3e0 	st2h	{z0.h-z1.h}, p0, \[sp\]
+[^:]+:	e4b0e3e0 	st2h	{z0.h-z1.h}, p0, \[sp\]
+[^:]+:	e4b0e3e0 	st2h	{z0.h-z1.h}, p0, \[sp\]
+[^:]+:	e4b0e3e0 	st2h	{z0.h-z1.h}, p0, \[sp\]
+[^:]+:	e4b0e3e0 	st2h	{z0.h-z1.h}, p0, \[sp\]
+[^:]+:	e4b0e3e0 	st2h	{z0.h-z1.h}, p0, \[sp\]
+[^:]+:	e4b0e3e0 	st2h	{z0.h-z1.h}, p0, \[sp\]
+[^:]+:	e4b7e000 	st2h	{z0.h-z1.h}, p0, \[x0, #14, mul vl\]
+[^:]+:	e4b7e000 	st2h	{z0.h-z1.h}, p0, \[x0, #14, mul vl\]
+[^:]+:	e4b7e000 	st2h	{z0.h-z1.h}, p0, \[x0, #14, mul vl\]
+[^:]+:	e4b8e000 	st2h	{z0.h-z1.h}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e4b8e000 	st2h	{z0.h-z1.h}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e4b8e000 	st2h	{z0.h-z1.h}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e4b9e000 	st2h	{z0.h-z1.h}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e4b9e000 	st2h	{z0.h-z1.h}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e4b9e000 	st2h	{z0.h-z1.h}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e4bfe000 	st2h	{z0.h-z1.h}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e4bfe000 	st2h	{z0.h-z1.h}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e4bfe000 	st2h	{z0.h-z1.h}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e5206000 	st2w	{z0.s-z1.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e5206000 	st2w	{z0.s-z1.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e5206000 	st2w	{z0.s-z1.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e5206001 	st2w	{z1.s-z2.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e5206001 	st2w	{z1.s-z2.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e5206001 	st2w	{z1.s-z2.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e520601f 	st2w	{z31.s-z0.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e520601f 	st2w	{z31.s-z0.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e5206800 	st2w	{z0.s-z1.s}, p2, \[x0, x0, lsl #2\]
+[^:]+:	e5206800 	st2w	{z0.s-z1.s}, p2, \[x0, x0, lsl #2\]
+[^:]+:	e5206800 	st2w	{z0.s-z1.s}, p2, \[x0, x0, lsl #2\]
+[^:]+:	e5207c00 	st2w	{z0.s-z1.s}, p7, \[x0, x0, lsl #2\]
+[^:]+:	e5207c00 	st2w	{z0.s-z1.s}, p7, \[x0, x0, lsl #2\]
+[^:]+:	e5207c00 	st2w	{z0.s-z1.s}, p7, \[x0, x0, lsl #2\]
+[^:]+:	e5206060 	st2w	{z0.s-z1.s}, p0, \[x3, x0, lsl #2\]
+[^:]+:	e5206060 	st2w	{z0.s-z1.s}, p0, \[x3, x0, lsl #2\]
+[^:]+:	e5206060 	st2w	{z0.s-z1.s}, p0, \[x3, x0, lsl #2\]
+[^:]+:	e52063e0 	st2w	{z0.s-z1.s}, p0, \[sp, x0, lsl #2\]
+[^:]+:	e52063e0 	st2w	{z0.s-z1.s}, p0, \[sp, x0, lsl #2\]
+[^:]+:	e52063e0 	st2w	{z0.s-z1.s}, p0, \[sp, x0, lsl #2\]
+[^:]+:	e5246000 	st2w	{z0.s-z1.s}, p0, \[x0, x4, lsl #2\]
+[^:]+:	e5246000 	st2w	{z0.s-z1.s}, p0, \[x0, x4, lsl #2\]
+[^:]+:	e5246000 	st2w	{z0.s-z1.s}, p0, \[x0, x4, lsl #2\]
+[^:]+:	e53e6000 	st2w	{z0.s-z1.s}, p0, \[x0, x30, lsl #2\]
+[^:]+:	e53e6000 	st2w	{z0.s-z1.s}, p0, \[x0, x30, lsl #2\]
+[^:]+:	e53e6000 	st2w	{z0.s-z1.s}, p0, \[x0, x30, lsl #2\]
+[^:]+:	e530e000 	st2w	{z0.s-z1.s}, p0, \[x0\]
+[^:]+:	e530e000 	st2w	{z0.s-z1.s}, p0, \[x0\]
+[^:]+:	e530e000 	st2w	{z0.s-z1.s}, p0, \[x0\]
+[^:]+:	e530e000 	st2w	{z0.s-z1.s}, p0, \[x0\]
+[^:]+:	e530e000 	st2w	{z0.s-z1.s}, p0, \[x0\]
+[^:]+:	e530e000 	st2w	{z0.s-z1.s}, p0, \[x0\]
+[^:]+:	e530e000 	st2w	{z0.s-z1.s}, p0, \[x0\]
+[^:]+:	e530e001 	st2w	{z1.s-z2.s}, p0, \[x0\]
+[^:]+:	e530e001 	st2w	{z1.s-z2.s}, p0, \[x0\]
+[^:]+:	e530e001 	st2w	{z1.s-z2.s}, p0, \[x0\]
+[^:]+:	e530e001 	st2w	{z1.s-z2.s}, p0, \[x0\]
+[^:]+:	e530e001 	st2w	{z1.s-z2.s}, p0, \[x0\]
+[^:]+:	e530e001 	st2w	{z1.s-z2.s}, p0, \[x0\]
+[^:]+:	e530e001 	st2w	{z1.s-z2.s}, p0, \[x0\]
+[^:]+:	e530e01f 	st2w	{z31.s-z0.s}, p0, \[x0\]
+[^:]+:	e530e01f 	st2w	{z31.s-z0.s}, p0, \[x0\]
+[^:]+:	e530e01f 	st2w	{z31.s-z0.s}, p0, \[x0\]
+[^:]+:	e530e01f 	st2w	{z31.s-z0.s}, p0, \[x0\]
+[^:]+:	e530e800 	st2w	{z0.s-z1.s}, p2, \[x0\]
+[^:]+:	e530e800 	st2w	{z0.s-z1.s}, p2, \[x0\]
+[^:]+:	e530e800 	st2w	{z0.s-z1.s}, p2, \[x0\]
+[^:]+:	e530e800 	st2w	{z0.s-z1.s}, p2, \[x0\]
+[^:]+:	e530e800 	st2w	{z0.s-z1.s}, p2, \[x0\]
+[^:]+:	e530e800 	st2w	{z0.s-z1.s}, p2, \[x0\]
+[^:]+:	e530e800 	st2w	{z0.s-z1.s}, p2, \[x0\]
+[^:]+:	e530fc00 	st2w	{z0.s-z1.s}, p7, \[x0\]
+[^:]+:	e530fc00 	st2w	{z0.s-z1.s}, p7, \[x0\]
+[^:]+:	e530fc00 	st2w	{z0.s-z1.s}, p7, \[x0\]
+[^:]+:	e530fc00 	st2w	{z0.s-z1.s}, p7, \[x0\]
+[^:]+:	e530fc00 	st2w	{z0.s-z1.s}, p7, \[x0\]
+[^:]+:	e530fc00 	st2w	{z0.s-z1.s}, p7, \[x0\]
+[^:]+:	e530fc00 	st2w	{z0.s-z1.s}, p7, \[x0\]
+[^:]+:	e530e060 	st2w	{z0.s-z1.s}, p0, \[x3\]
+[^:]+:	e530e060 	st2w	{z0.s-z1.s}, p0, \[x3\]
+[^:]+:	e530e060 	st2w	{z0.s-z1.s}, p0, \[x3\]
+[^:]+:	e530e060 	st2w	{z0.s-z1.s}, p0, \[x3\]
+[^:]+:	e530e060 	st2w	{z0.s-z1.s}, p0, \[x3\]
+[^:]+:	e530e060 	st2w	{z0.s-z1.s}, p0, \[x3\]
+[^:]+:	e530e060 	st2w	{z0.s-z1.s}, p0, \[x3\]
+[^:]+:	e530e3e0 	st2w	{z0.s-z1.s}, p0, \[sp\]
+[^:]+:	e530e3e0 	st2w	{z0.s-z1.s}, p0, \[sp\]
+[^:]+:	e530e3e0 	st2w	{z0.s-z1.s}, p0, \[sp\]
+[^:]+:	e530e3e0 	st2w	{z0.s-z1.s}, p0, \[sp\]
+[^:]+:	e530e3e0 	st2w	{z0.s-z1.s}, p0, \[sp\]
+[^:]+:	e530e3e0 	st2w	{z0.s-z1.s}, p0, \[sp\]
+[^:]+:	e530e3e0 	st2w	{z0.s-z1.s}, p0, \[sp\]
+[^:]+:	e537e000 	st2w	{z0.s-z1.s}, p0, \[x0, #14, mul vl\]
+[^:]+:	e537e000 	st2w	{z0.s-z1.s}, p0, \[x0, #14, mul vl\]
+[^:]+:	e537e000 	st2w	{z0.s-z1.s}, p0, \[x0, #14, mul vl\]
+[^:]+:	e538e000 	st2w	{z0.s-z1.s}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e538e000 	st2w	{z0.s-z1.s}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e538e000 	st2w	{z0.s-z1.s}, p0, \[x0, #-16, mul vl\]
+[^:]+:	e539e000 	st2w	{z0.s-z1.s}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e539e000 	st2w	{z0.s-z1.s}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e539e000 	st2w	{z0.s-z1.s}, p0, \[x0, #-14, mul vl\]
+[^:]+:	e53fe000 	st2w	{z0.s-z1.s}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e53fe000 	st2w	{z0.s-z1.s}, p0, \[x0, #-2, mul vl\]
+[^:]+:	e53fe000 	st2w	{z0.s-z1.s}, p0, \[x0, #-2, mul vl\]
 [^:]+:	e4406000 	st3b	{z0.b-z2.b}, p0, \[x0, x0\]
 [^:]+:	e4406000 	st3b	{z0.b-z2.b}, p0, \[x0, x0\]
 [^:]+:	e4406000 	st3b	{z0.b-z2.b}, p0, \[x0, x0\]
@@ -32847,9 +32967,9 @@ Disassembly of section .*:
 [^:]+:	e4406001 	st3b	{z1.b-z3.b}, p0, \[x0, x0\]
 [^:]+:	e4406001 	st3b	{z1.b-z3.b}, p0, \[x0, x0\]
 [^:]+:	e4406001 	st3b	{z1.b-z3.b}, p0, \[x0, x0\]
-[^:]+:	e440601f 	st3b	{z31.b, z0.b, z1.b}, p0, \[x0, x0\]
-[^:]+:	e440601f 	st3b	{z31.b, z0.b, z1.b}, p0, \[x0, x0\]
-[^:]+:	e440601f 	st3b	{z31.b, z0.b, z1.b}, p0, \[x0, x0\]
+[^:]+:	e440601f 	st3b	{z31.b-z1.b}, p0, \[x0, x0\]
+[^:]+:	e440601f 	st3b	{z31.b-z1.b}, p0, \[x0, x0\]
+[^:]+:	e440601f 	st3b	{z31.b-z1.b}, p0, \[x0, x0\]
 [^:]+:	e4406800 	st3b	{z0.b-z2.b}, p2, \[x0, x0\]
 [^:]+:	e4406800 	st3b	{z0.b-z2.b}, p2, \[x0, x0\]
 [^:]+:	e4406800 	st3b	{z0.b-z2.b}, p2, \[x0, x0\]
@@ -32894,10 +33014,10 @@ Disassembly of section .*:
 [^:]+:	e450e001 	st3b	{z1.b-z3.b}, p0, \[x0\]
 [^:]+:	e450e001 	st3b	{z1.b-z3.b}, p0, \[x0\]
 [^:]+:	e450e001 	st3b	{z1.b-z3.b}, p0, \[x0\]
-[^:]+:	e450e01f 	st3b	{z31.b, z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e450e01f 	st3b	{z31.b, z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e450e01f 	st3b	{z31.b, z0.b, z1.b}, p0, \[x0\]
-[^:]+:	e450e01f 	st3b	{z31.b, z0.b, z1.b}, p0, \[x0\]
+[^:]+:	e450e01f 	st3b	{z31.b-z1.b}, p0, \[x0\]
+[^:]+:	e450e01f 	st3b	{z31.b-z1.b}, p0, \[x0\]
+[^:]+:	e450e01f 	st3b	{z31.b-z1.b}, p0, \[x0\]
+[^:]+:	e450e01f 	st3b	{z31.b-z1.b}, p0, \[x0\]
 [^:]+:	e450e800 	st3b	{z0.b-z2.b}, p2, \[x0\]
 [^:]+:	e450e800 	st3b	{z0.b-z2.b}, p2, \[x0\]
 [^:]+:	e450e800 	st3b	{z0.b-z2.b}, p2, \[x0\]
@@ -32944,8 +33064,8 @@ Disassembly of section .*:
 [^:]+:	e5c06001 	st3d	{z1.d-z3.d}, p0, \[x0, x0, lsl #3\]
 [^:]+:	e5c06001 	st3d	{z1.d-z3.d}, p0, \[x0, x0, lsl #3\]
 [^:]+:	e5c06001 	st3d	{z1.d-z3.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5c0601f 	st3d	{z31.d, z0.d, z1.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5c0601f 	st3d	{z31.d, z0.d, z1.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5c0601f 	st3d	{z31.d-z1.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5c0601f 	st3d	{z31.d-z1.d}, p0, \[x0, x0, lsl #3\]
 [^:]+:	e5c06800 	st3d	{z0.d-z2.d}, p2, \[x0, x0, lsl #3\]
 [^:]+:	e5c06800 	st3d	{z0.d-z2.d}, p2, \[x0, x0, lsl #3\]
 [^:]+:	e5c06800 	st3d	{z0.d-z2.d}, p2, \[x0, x0, lsl #3\]
@@ -32978,10 +33098,10 @@ Disassembly of section .*:
 [^:]+:	e5d0e001 	st3d	{z1.d-z3.d}, p0, \[x0\]
 [^:]+:	e5d0e001 	st3d	{z1.d-z3.d}, p0, \[x0\]
 [^:]+:	e5d0e001 	st3d	{z1.d-z3.d}, p0, \[x0\]
-[^:]+:	e5d0e01f 	st3d	{z31.d, z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5d0e01f 	st3d	{z31.d, z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5d0e01f 	st3d	{z31.d, z0.d, z1.d}, p0, \[x0\]
-[^:]+:	e5d0e01f 	st3d	{z31.d, z0.d, z1.d}, p0, \[x0\]
+[^:]+:	e5d0e01f 	st3d	{z31.d-z1.d}, p0, \[x0\]
+[^:]+:	e5d0e01f 	st3d	{z31.d-z1.d}, p0, \[x0\]
+[^:]+:	e5d0e01f 	st3d	{z31.d-z1.d}, p0, \[x0\]
+[^:]+:	e5d0e01f 	st3d	{z31.d-z1.d}, p0, \[x0\]
 [^:]+:	e5d0e800 	st3d	{z0.d-z2.d}, p2, \[x0\]
 [^:]+:	e5d0e800 	st3d	{z0.d-z2.d}, p2, \[x0\]
 [^:]+:	e5d0e800 	st3d	{z0.d-z2.d}, p2, \[x0\]
@@ -33028,8 +33148,8 @@ Disassembly of section .*:
 [^:]+:	e4c06001 	st3h	{z1.h-z3.h}, p0, \[x0, x0, lsl #1\]
 [^:]+:	e4c06001 	st3h	{z1.h-z3.h}, p0, \[x0, x0, lsl #1\]
 [^:]+:	e4c06001 	st3h	{z1.h-z3.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4c0601f 	st3h	{z31.h, z0.h, z1.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4c0601f 	st3h	{z31.h, z0.h, z1.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4c0601f 	st3h	{z31.h-z1.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4c0601f 	st3h	{z31.h-z1.h}, p0, \[x0, x0, lsl #1\]
 [^:]+:	e4c06800 	st3h	{z0.h-z2.h}, p2, \[x0, x0, lsl #1\]
 [^:]+:	e4c06800 	st3h	{z0.h-z2.h}, p2, \[x0, x0, lsl #1\]
 [^:]+:	e4c06800 	st3h	{z0.h-z2.h}, p2, \[x0, x0, lsl #1\]
@@ -33062,10 +33182,10 @@ Disassembly of section .*:
 [^:]+:	e4d0e001 	st3h	{z1.h-z3.h}, p0, \[x0\]
 [^:]+:	e4d0e001 	st3h	{z1.h-z3.h}, p0, \[x0\]
 [^:]+:	e4d0e001 	st3h	{z1.h-z3.h}, p0, \[x0\]
-[^:]+:	e4d0e01f 	st3h	{z31.h, z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4d0e01f 	st3h	{z31.h, z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4d0e01f 	st3h	{z31.h, z0.h, z1.h}, p0, \[x0\]
-[^:]+:	e4d0e01f 	st3h	{z31.h, z0.h, z1.h}, p0, \[x0\]
+[^:]+:	e4d0e01f 	st3h	{z31.h-z1.h}, p0, \[x0\]
+[^:]+:	e4d0e01f 	st3h	{z31.h-z1.h}, p0, \[x0\]
+[^:]+:	e4d0e01f 	st3h	{z31.h-z1.h}, p0, \[x0\]
+[^:]+:	e4d0e01f 	st3h	{z31.h-z1.h}, p0, \[x0\]
 [^:]+:	e4d0e800 	st3h	{z0.h-z2.h}, p2, \[x0\]
 [^:]+:	e4d0e800 	st3h	{z0.h-z2.h}, p2, \[x0\]
 [^:]+:	e4d0e800 	st3h	{z0.h-z2.h}, p2, \[x0\]
@@ -33112,8 +33232,8 @@ Disassembly of section .*:
 [^:]+:	e5406001 	st3w	{z1.s-z3.s}, p0, \[x0, x0, lsl #2\]
 [^:]+:	e5406001 	st3w	{z1.s-z3.s}, p0, \[x0, x0, lsl #2\]
 [^:]+:	e5406001 	st3w	{z1.s-z3.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e540601f 	st3w	{z31.s, z0.s, z1.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e540601f 	st3w	{z31.s, z0.s, z1.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e540601f 	st3w	{z31.s-z1.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e540601f 	st3w	{z31.s-z1.s}, p0, \[x0, x0, lsl #2\]
 [^:]+:	e5406800 	st3w	{z0.s-z2.s}, p2, \[x0, x0, lsl #2\]
 [^:]+:	e5406800 	st3w	{z0.s-z2.s}, p2, \[x0, x0, lsl #2\]
 [^:]+:	e5406800 	st3w	{z0.s-z2.s}, p2, \[x0, x0, lsl #2\]
@@ -33146,10 +33266,10 @@ Disassembly of section .*:
 [^:]+:	e550e001 	st3w	{z1.s-z3.s}, p0, \[x0\]
 [^:]+:	e550e001 	st3w	{z1.s-z3.s}, p0, \[x0\]
 [^:]+:	e550e001 	st3w	{z1.s-z3.s}, p0, \[x0\]
-[^:]+:	e550e01f 	st3w	{z31.s, z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e550e01f 	st3w	{z31.s, z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e550e01f 	st3w	{z31.s, z0.s, z1.s}, p0, \[x0\]
-[^:]+:	e550e01f 	st3w	{z31.s, z0.s, z1.s}, p0, \[x0\]
+[^:]+:	e550e01f 	st3w	{z31.s-z1.s}, p0, \[x0\]
+[^:]+:	e550e01f 	st3w	{z31.s-z1.s}, p0, \[x0\]
+[^:]+:	e550e01f 	st3w	{z31.s-z1.s}, p0, \[x0\]
+[^:]+:	e550e01f 	st3w	{z31.s-z1.s}, p0, \[x0\]
 [^:]+:	e550e800 	st3w	{z0.s-z2.s}, p2, \[x0\]
 [^:]+:	e550e800 	st3w	{z0.s-z2.s}, p2, \[x0\]
 [^:]+:	e550e800 	st3w	{z0.s-z2.s}, p2, \[x0\]
@@ -33200,9 +33320,9 @@ Disassembly of section .*:
 [^:]+:	e4606001 	st4b	{z1.b-z4.b}, p0, \[x0, x0\]
 [^:]+:	e4606001 	st4b	{z1.b-z4.b}, p0, \[x0, x0\]
 [^:]+:	e4606001 	st4b	{z1.b-z4.b}, p0, \[x0, x0\]
-[^:]+:	e460601f 	st4b	{z31.b, z0.b, z1.b, z2.b}, p0, \[x0, x0\]
-[^:]+:	e460601f 	st4b	{z31.b, z0.b, z1.b, z2.b}, p0, \[x0, x0\]
-[^:]+:	e460601f 	st4b	{z31.b, z0.b, z1.b, z2.b}, p0, \[x0, x0\]
+[^:]+:	e460601f 	st4b	{z31.b-z2.b}, p0, \[x0, x0\]
+[^:]+:	e460601f 	st4b	{z31.b-z2.b}, p0, \[x0, x0\]
+[^:]+:	e460601f 	st4b	{z31.b-z2.b}, p0, \[x0, x0\]
 [^:]+:	e4606800 	st4b	{z0.b-z3.b}, p2, \[x0, x0\]
 [^:]+:	e4606800 	st4b	{z0.b-z3.b}, p2, \[x0, x0\]
 [^:]+:	e4606800 	st4b	{z0.b-z3.b}, p2, \[x0, x0\]
@@ -33247,10 +33367,10 @@ Disassembly of section .*:
 [^:]+:	e470e001 	st4b	{z1.b-z4.b}, p0, \[x0\]
 [^:]+:	e470e001 	st4b	{z1.b-z4.b}, p0, \[x0\]
 [^:]+:	e470e001 	st4b	{z1.b-z4.b}, p0, \[x0\]
-[^:]+:	e470e01f 	st4b	{z31.b, z0.b, z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e470e01f 	st4b	{z31.b, z0.b, z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e470e01f 	st4b	{z31.b, z0.b, z1.b, z2.b}, p0, \[x0\]
-[^:]+:	e470e01f 	st4b	{z31.b, z0.b, z1.b, z2.b}, p0, \[x0\]
+[^:]+:	e470e01f 	st4b	{z31.b-z2.b}, p0, \[x0\]
+[^:]+:	e470e01f 	st4b	{z31.b-z2.b}, p0, \[x0\]
+[^:]+:	e470e01f 	st4b	{z31.b-z2.b}, p0, \[x0\]
+[^:]+:	e470e01f 	st4b	{z31.b-z2.b}, p0, \[x0\]
 [^:]+:	e470e800 	st4b	{z0.b-z3.b}, p2, \[x0\]
 [^:]+:	e470e800 	st4b	{z0.b-z3.b}, p2, \[x0\]
 [^:]+:	e470e800 	st4b	{z0.b-z3.b}, p2, \[x0\]
@@ -33297,8 +33417,8 @@ Disassembly of section .*:
 [^:]+:	e5e06001 	st4d	{z1.d-z4.d}, p0, \[x0, x0, lsl #3\]
 [^:]+:	e5e06001 	st4d	{z1.d-z4.d}, p0, \[x0, x0, lsl #3\]
 [^:]+:	e5e06001 	st4d	{z1.d-z4.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5e0601f 	st4d	{z31.d, z0.d, z1.d, z2.d}, p0, \[x0, x0, lsl #3\]
-[^:]+:	e5e0601f 	st4d	{z31.d, z0.d, z1.d, z2.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5e0601f 	st4d	{z31.d-z2.d}, p0, \[x0, x0, lsl #3\]
+[^:]+:	e5e0601f 	st4d	{z31.d-z2.d}, p0, \[x0, x0, lsl #3\]
 [^:]+:	e5e06800 	st4d	{z0.d-z3.d}, p2, \[x0, x0, lsl #3\]
 [^:]+:	e5e06800 	st4d	{z0.d-z3.d}, p2, \[x0, x0, lsl #3\]
 [^:]+:	e5e06800 	st4d	{z0.d-z3.d}, p2, \[x0, x0, lsl #3\]
@@ -33331,10 +33451,10 @@ Disassembly of section .*:
 [^:]+:	e5f0e001 	st4d	{z1.d-z4.d}, p0, \[x0\]
 [^:]+:	e5f0e001 	st4d	{z1.d-z4.d}, p0, \[x0\]
 [^:]+:	e5f0e001 	st4d	{z1.d-z4.d}, p0, \[x0\]
-[^:]+:	e5f0e01f 	st4d	{z31.d, z0.d, z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5f0e01f 	st4d	{z31.d, z0.d, z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5f0e01f 	st4d	{z31.d, z0.d, z1.d, z2.d}, p0, \[x0\]
-[^:]+:	e5f0e01f 	st4d	{z31.d, z0.d, z1.d, z2.d}, p0, \[x0\]
+[^:]+:	e5f0e01f 	st4d	{z31.d-z2.d}, p0, \[x0\]
+[^:]+:	e5f0e01f 	st4d	{z31.d-z2.d}, p0, \[x0\]
+[^:]+:	e5f0e01f 	st4d	{z31.d-z2.d}, p0, \[x0\]
+[^:]+:	e5f0e01f 	st4d	{z31.d-z2.d}, p0, \[x0\]
 [^:]+:	e5f0e800 	st4d	{z0.d-z3.d}, p2, \[x0\]
 [^:]+:	e5f0e800 	st4d	{z0.d-z3.d}, p2, \[x0\]
 [^:]+:	e5f0e800 	st4d	{z0.d-z3.d}, p2, \[x0\]
@@ -33381,8 +33501,8 @@ Disassembly of section .*:
 [^:]+:	e4e06001 	st4h	{z1.h-z4.h}, p0, \[x0, x0, lsl #1\]
 [^:]+:	e4e06001 	st4h	{z1.h-z4.h}, p0, \[x0, x0, lsl #1\]
 [^:]+:	e4e06001 	st4h	{z1.h-z4.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4e0601f 	st4h	{z31.h, z0.h, z1.h, z2.h}, p0, \[x0, x0, lsl #1\]
-[^:]+:	e4e0601f 	st4h	{z31.h, z0.h, z1.h, z2.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4e0601f 	st4h	{z31.h-z2.h}, p0, \[x0, x0, lsl #1\]
+[^:]+:	e4e0601f 	st4h	{z31.h-z2.h}, p0, \[x0, x0, lsl #1\]
 [^:]+:	e4e06800 	st4h	{z0.h-z3.h}, p2, \[x0, x0, lsl #1\]
 [^:]+:	e4e06800 	st4h	{z0.h-z3.h}, p2, \[x0, x0, lsl #1\]
 [^:]+:	e4e06800 	st4h	{z0.h-z3.h}, p2, \[x0, x0, lsl #1\]
@@ -33415,10 +33535,10 @@ Disassembly of section .*:
 [^:]+:	e4f0e001 	st4h	{z1.h-z4.h}, p0, \[x0\]
 [^:]+:	e4f0e001 	st4h	{z1.h-z4.h}, p0, \[x0\]
 [^:]+:	e4f0e001 	st4h	{z1.h-z4.h}, p0, \[x0\]
-[^:]+:	e4f0e01f 	st4h	{z31.h, z0.h, z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4f0e01f 	st4h	{z31.h, z0.h, z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4f0e01f 	st4h	{z31.h, z0.h, z1.h, z2.h}, p0, \[x0\]
-[^:]+:	e4f0e01f 	st4h	{z31.h, z0.h, z1.h, z2.h}, p0, \[x0\]
+[^:]+:	e4f0e01f 	st4h	{z31.h-z2.h}, p0, \[x0\]
+[^:]+:	e4f0e01f 	st4h	{z31.h-z2.h}, p0, \[x0\]
+[^:]+:	e4f0e01f 	st4h	{z31.h-z2.h}, p0, \[x0\]
+[^:]+:	e4f0e01f 	st4h	{z31.h-z2.h}, p0, \[x0\]
 [^:]+:	e4f0e800 	st4h	{z0.h-z3.h}, p2, \[x0\]
 [^:]+:	e4f0e800 	st4h	{z0.h-z3.h}, p2, \[x0\]
 [^:]+:	e4f0e800 	st4h	{z0.h-z3.h}, p2, \[x0\]
@@ -33465,8 +33585,8 @@ Disassembly of section .*:
 [^:]+:	e5606001 	st4w	{z1.s-z4.s}, p0, \[x0, x0, lsl #2\]
 [^:]+:	e5606001 	st4w	{z1.s-z4.s}, p0, \[x0, x0, lsl #2\]
 [^:]+:	e5606001 	st4w	{z1.s-z4.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e560601f 	st4w	{z31.s, z0.s, z1.s, z2.s}, p0, \[x0, x0, lsl #2\]
-[^:]+:	e560601f 	st4w	{z31.s, z0.s, z1.s, z2.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e560601f 	st4w	{z31.s-z2.s}, p0, \[x0, x0, lsl #2\]
+[^:]+:	e560601f 	st4w	{z31.s-z2.s}, p0, \[x0, x0, lsl #2\]
 [^:]+:	e5606800 	st4w	{z0.s-z3.s}, p2, \[x0, x0, lsl #2\]
 [^:]+:	e5606800 	st4w	{z0.s-z3.s}, p2, \[x0, x0, lsl #2\]
 [^:]+:	e5606800 	st4w	{z0.s-z3.s}, p2, \[x0, x0, lsl #2\]
@@ -33499,10 +33619,10 @@ Disassembly of section .*:
 [^:]+:	e570e001 	st4w	{z1.s-z4.s}, p0, \[x0\]
 [^:]+:	e570e001 	st4w	{z1.s-z4.s}, p0, \[x0\]
 [^:]+:	e570e001 	st4w	{z1.s-z4.s}, p0, \[x0\]
-[^:]+:	e570e01f 	st4w	{z31.s, z0.s, z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e570e01f 	st4w	{z31.s, z0.s, z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e570e01f 	st4w	{z31.s, z0.s, z1.s, z2.s}, p0, \[x0\]
-[^:]+:	e570e01f 	st4w	{z31.s, z0.s, z1.s, z2.s}, p0, \[x0\]
+[^:]+:	e570e01f 	st4w	{z31.s-z2.s}, p0, \[x0\]
+[^:]+:	e570e01f 	st4w	{z31.s-z2.s}, p0, \[x0\]
+[^:]+:	e570e01f 	st4w	{z31.s-z2.s}, p0, \[x0\]
+[^:]+:	e570e01f 	st4w	{z31.s-z2.s}, p0, \[x0\]
 [^:]+:	e570e800 	st4w	{z0.s-z3.s}, p2, \[x0\]
 [^:]+:	e570e800 	st4w	{z0.s-z3.s}, p2, \[x0\]
 [^:]+:	e570e800 	st4w	{z0.s-z3.s}, p2, \[x0\]
@@ -36646,36 +36766,66 @@ Disassembly of section .*:
 [^:]+:	0479fc00 	uqdech	x0, pow2, mul #10
 [^:]+:	047ffc00 	uqdech	x0, pow2, mul #16
 [^:]+:	047ffc00 	uqdech	x0, pow2, mul #16
-[^:]+:	256b8000 	uqdecp	z0.h, p0
-[^:]+:	256b8000 	uqdecp	z0.h, p0
-[^:]+:	256b8001 	uqdecp	z1.h, p0
-[^:]+:	256b8001 	uqdecp	z1.h, p0
-[^:]+:	256b801f 	uqdecp	z31.h, p0
-[^:]+:	256b801f 	uqdecp	z31.h, p0
-[^:]+:	256b8040 	uqdecp	z0.h, p2
-[^:]+:	256b8040 	uqdecp	z0.h, p2
-[^:]+:	256b81e0 	uqdecp	z0.h, p15
-[^:]+:	256b81e0 	uqdecp	z0.h, p15
-[^:]+:	25ab8000 	uqdecp	z0.s, p0
-[^:]+:	25ab8000 	uqdecp	z0.s, p0
-[^:]+:	25ab8001 	uqdecp	z1.s, p0
-[^:]+:	25ab8001 	uqdecp	z1.s, p0
-[^:]+:	25ab801f 	uqdecp	z31.s, p0
-[^:]+:	25ab801f 	uqdecp	z31.s, p0
-[^:]+:	25ab8040 	uqdecp	z0.s, p2
-[^:]+:	25ab8040 	uqdecp	z0.s, p2
-[^:]+:	25ab81e0 	uqdecp	z0.s, p15
-[^:]+:	25ab81e0 	uqdecp	z0.s, p15
-[^:]+:	25eb8000 	uqdecp	z0.d, p0
-[^:]+:	25eb8000 	uqdecp	z0.d, p0
-[^:]+:	25eb8001 	uqdecp	z1.d, p0
-[^:]+:	25eb8001 	uqdecp	z1.d, p0
-[^:]+:	25eb801f 	uqdecp	z31.d, p0
-[^:]+:	25eb801f 	uqdecp	z31.d, p0
-[^:]+:	25eb8040 	uqdecp	z0.d, p2
-[^:]+:	25eb8040 	uqdecp	z0.d, p2
-[^:]+:	25eb81e0 	uqdecp	z0.d, p15
-[^:]+:	25eb81e0 	uqdecp	z0.d, p15
+[^:]+:	256b8000 	uqdecp	z0.h, p0.h
+[^:]+:	256b8000 	uqdecp	z0.h, p0.h
+[^:]+:	256b8001 	uqdecp	z1.h, p0.h
+[^:]+:	256b8001 	uqdecp	z1.h, p0.h
+[^:]+:	256b801f 	uqdecp	z31.h, p0.h
+[^:]+:	256b801f 	uqdecp	z31.h, p0.h
+[^:]+:	256b8040 	uqdecp	z0.h, p2.h
+[^:]+:	256b8040 	uqdecp	z0.h, p2.h
+[^:]+:	256b81e0 	uqdecp	z0.h, p15.h
+[^:]+:	256b81e0 	uqdecp	z0.h, p15.h
+[^:]+:	25ab8000 	uqdecp	z0.s, p0.s
+[^:]+:	25ab8000 	uqdecp	z0.s, p0.s
+[^:]+:	25ab8001 	uqdecp	z1.s, p0.s
+[^:]+:	25ab8001 	uqdecp	z1.s, p0.s
+[^:]+:	25ab801f 	uqdecp	z31.s, p0.s
+[^:]+:	25ab801f 	uqdecp	z31.s, p0.s
+[^:]+:	25ab8040 	uqdecp	z0.s, p2.s
+[^:]+:	25ab8040 	uqdecp	z0.s, p2.s
+[^:]+:	25ab81e0 	uqdecp	z0.s, p15.s
+[^:]+:	25ab81e0 	uqdecp	z0.s, p15.s
+[^:]+:	25eb8000 	uqdecp	z0.d, p0.d
+[^:]+:	25eb8000 	uqdecp	z0.d, p0.d
+[^:]+:	25eb8001 	uqdecp	z1.d, p0.d
+[^:]+:	25eb8001 	uqdecp	z1.d, p0.d
+[^:]+:	25eb801f 	uqdecp	z31.d, p0.d
+[^:]+:	25eb801f 	uqdecp	z31.d, p0.d
+[^:]+:	25eb8040 	uqdecp	z0.d, p2.d
+[^:]+:	25eb8040 	uqdecp	z0.d, p2.d
+[^:]+:	25eb81e0 	uqdecp	z0.d, p15.d
+[^:]+:	25eb81e0 	uqdecp	z0.d, p15.d
+[^:]+:	256b8000 	uqdecp	z0.h, p0.h
+[^:]+:	256b8000 	uqdecp	z0.h, p0.h
+[^:]+:	256b8001 	uqdecp	z1.h, p0.h
+[^:]+:	256b8001 	uqdecp	z1.h, p0.h
+[^:]+:	256b801f 	uqdecp	z31.h, p0.h
+[^:]+:	256b801f 	uqdecp	z31.h, p0.h
+[^:]+:	256b8040 	uqdecp	z0.h, p2.h
+[^:]+:	256b8040 	uqdecp	z0.h, p2.h
+[^:]+:	256b81e0 	uqdecp	z0.h, p15.h
+[^:]+:	256b81e0 	uqdecp	z0.h, p15.h
+[^:]+:	25ab8000 	uqdecp	z0.s, p0.s
+[^:]+:	25ab8000 	uqdecp	z0.s, p0.s
+[^:]+:	25ab8001 	uqdecp	z1.s, p0.s
+[^:]+:	25ab8001 	uqdecp	z1.s, p0.s
+[^:]+:	25ab801f 	uqdecp	z31.s, p0.s
+[^:]+:	25ab801f 	uqdecp	z31.s, p0.s
+[^:]+:	25ab8040 	uqdecp	z0.s, p2.s
+[^:]+:	25ab8040 	uqdecp	z0.s, p2.s
+[^:]+:	25ab81e0 	uqdecp	z0.s, p15.s
+[^:]+:	25ab81e0 	uqdecp	z0.s, p15.s
+[^:]+:	25eb8000 	uqdecp	z0.d, p0.d
+[^:]+:	25eb8000 	uqdecp	z0.d, p0.d
+[^:]+:	25eb8001 	uqdecp	z1.d, p0.d
+[^:]+:	25eb8001 	uqdecp	z1.d, p0.d
+[^:]+:	25eb801f 	uqdecp	z31.d, p0.d
+[^:]+:	25eb801f 	uqdecp	z31.d, p0.d
+[^:]+:	25eb8040 	uqdecp	z0.d, p2.d
+[^:]+:	25eb8040 	uqdecp	z0.d, p2.d
+[^:]+:	25eb81e0 	uqdecp	z0.d, p15.d
+[^:]+:	25eb81e0 	uqdecp	z0.d, p15.d
 [^:]+:	252b8800 	uqdecp	w0, p0.b
 [^:]+:	252b8800 	uqdecp	w0, p0.b
 [^:]+:	252b8801 	uqdecp	w1, p0.b
@@ -37977,36 +38127,66 @@ Disassembly of section .*:
 [^:]+:	0479f400 	uqinch	x0, pow2, mul #10
 [^:]+:	047ff400 	uqinch	x0, pow2, mul #16
 [^:]+:	047ff400 	uqinch	x0, pow2, mul #16
-[^:]+:	25698000 	uqincp	z0.h, p0
-[^:]+:	25698000 	uqincp	z0.h, p0
-[^:]+:	25698001 	uqincp	z1.h, p0
-[^:]+:	25698001 	uqincp	z1.h, p0
-[^:]+:	2569801f 	uqincp	z31.h, p0
-[^:]+:	2569801f 	uqincp	z31.h, p0
-[^:]+:	25698040 	uqincp	z0.h, p2
-[^:]+:	25698040 	uqincp	z0.h, p2
-[^:]+:	256981e0 	uqincp	z0.h, p15
-[^:]+:	256981e0 	uqincp	z0.h, p15
-[^:]+:	25a98000 	uqincp	z0.s, p0
-[^:]+:	25a98000 	uqincp	z0.s, p0
-[^:]+:	25a98001 	uqincp	z1.s, p0
-[^:]+:	25a98001 	uqincp	z1.s, p0
-[^:]+:	25a9801f 	uqincp	z31.s, p0
-[^:]+:	25a9801f 	uqincp	z31.s, p0
-[^:]+:	25a98040 	uqincp	z0.s, p2
-[^:]+:	25a98040 	uqincp	z0.s, p2
-[^:]+:	25a981e0 	uqincp	z0.s, p15
-[^:]+:	25a981e0 	uqincp	z0.s, p15
-[^:]+:	25e98000 	uqincp	z0.d, p0
-[^:]+:	25e98000 	uqincp	z0.d, p0
-[^:]+:	25e98001 	uqincp	z1.d, p0
-[^:]+:	25e98001 	uqincp	z1.d, p0
-[^:]+:	25e9801f 	uqincp	z31.d, p0
-[^:]+:	25e9801f 	uqincp	z31.d, p0
-[^:]+:	25e98040 	uqincp	z0.d, p2
-[^:]+:	25e98040 	uqincp	z0.d, p2
-[^:]+:	25e981e0 	uqincp	z0.d, p15
-[^:]+:	25e981e0 	uqincp	z0.d, p15
+[^:]+:	25698000 	uqincp	z0.h, p0.h
+[^:]+:	25698000 	uqincp	z0.h, p0.h
+[^:]+:	25698001 	uqincp	z1.h, p0.h
+[^:]+:	25698001 	uqincp	z1.h, p0.h
+[^:]+:	2569801f 	uqincp	z31.h, p0.h
+[^:]+:	2569801f 	uqincp	z31.h, p0.h
+[^:]+:	25698040 	uqincp	z0.h, p2.h
+[^:]+:	25698040 	uqincp	z0.h, p2.h
+[^:]+:	256981e0 	uqincp	z0.h, p15.h
+[^:]+:	256981e0 	uqincp	z0.h, p15.h
+[^:]+:	25a98000 	uqincp	z0.s, p0.s
+[^:]+:	25a98000 	uqincp	z0.s, p0.s
+[^:]+:	25a98001 	uqincp	z1.s, p0.s
+[^:]+:	25a98001 	uqincp	z1.s, p0.s
+[^:]+:	25a9801f 	uqincp	z31.s, p0.s
+[^:]+:	25a9801f 	uqincp	z31.s, p0.s
+[^:]+:	25a98040 	uqincp	z0.s, p2.s
+[^:]+:	25a98040 	uqincp	z0.s, p2.s
+[^:]+:	25a981e0 	uqincp	z0.s, p15.s
+[^:]+:	25a981e0 	uqincp	z0.s, p15.s
+[^:]+:	25e98000 	uqincp	z0.d, p0.d
+[^:]+:	25e98000 	uqincp	z0.d, p0.d
+[^:]+:	25e98001 	uqincp	z1.d, p0.d
+[^:]+:	25e98001 	uqincp	z1.d, p0.d
+[^:]+:	25e9801f 	uqincp	z31.d, p0.d
+[^:]+:	25e9801f 	uqincp	z31.d, p0.d
+[^:]+:	25e98040 	uqincp	z0.d, p2.d
+[^:]+:	25e98040 	uqincp	z0.d, p2.d
+[^:]+:	25e981e0 	uqincp	z0.d, p15.d
+[^:]+:	25e981e0 	uqincp	z0.d, p15.d
+[^:]+:	25698000 	uqincp	z0.h, p0.h
+[^:]+:	25698000 	uqincp	z0.h, p0.h
+[^:]+:	25698001 	uqincp	z1.h, p0.h
+[^:]+:	25698001 	uqincp	z1.h, p0.h
+[^:]+:	2569801f 	uqincp	z31.h, p0.h
+[^:]+:	2569801f 	uqincp	z31.h, p0.h
+[^:]+:	25698040 	uqincp	z0.h, p2.h
+[^:]+:	25698040 	uqincp	z0.h, p2.h
+[^:]+:	256981e0 	uqincp	z0.h, p15.h
+[^:]+:	256981e0 	uqincp	z0.h, p15.h
+[^:]+:	25a98000 	uqincp	z0.s, p0.s
+[^:]+:	25a98000 	uqincp	z0.s, p0.s
+[^:]+:	25a98001 	uqincp	z1.s, p0.s
+[^:]+:	25a98001 	uqincp	z1.s, p0.s
+[^:]+:	25a9801f 	uqincp	z31.s, p0.s
+[^:]+:	25a9801f 	uqincp	z31.s, p0.s
+[^:]+:	25a98040 	uqincp	z0.s, p2.s
+[^:]+:	25a98040 	uqincp	z0.s, p2.s
+[^:]+:	25a981e0 	uqincp	z0.s, p15.s
+[^:]+:	25a981e0 	uqincp	z0.s, p15.s
+[^:]+:	25e98000 	uqincp	z0.d, p0.d
+[^:]+:	25e98000 	uqincp	z0.d, p0.d
+[^:]+:	25e98001 	uqincp	z1.d, p0.d
+[^:]+:	25e98001 	uqincp	z1.d, p0.d
+[^:]+:	25e9801f 	uqincp	z31.d, p0.d
+[^:]+:	25e9801f 	uqincp	z31.d, p0.d
+[^:]+:	25e98040 	uqincp	z0.d, p2.d
+[^:]+:	25e98040 	uqincp	z0.d, p2.d
+[^:]+:	25e981e0 	uqincp	z0.d, p15.d
+[^:]+:	25e981e0 	uqincp	z0.d, p15.d
 [^:]+:	25298800 	uqincp	w0, p0.b
 [^:]+:	25298800 	uqincp	w0, p0.b
 [^:]+:	25298801 	uqincp	w1, p0.b

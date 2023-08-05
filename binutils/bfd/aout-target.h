@@ -1,5 +1,5 @@
 /* Define a target vector and some small routines for a variant of a.out.
-   Copyright (C) 1990-2021 Free Software Foundation, Inc.
+   Copyright (C) 1990-2023 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -193,7 +193,7 @@ MY (object_p) (bfd *abfd)
 
 #ifndef MY_mkobject
 
-static bfd_boolean
+static bool
 MY (mkobject) (bfd *abfd)
 {
   return NAME (aout, mkobject (abfd));
@@ -210,7 +210,7 @@ MY (mkobject) (bfd *abfd)
    section contents, and copy_private_bfd_data is not called until
    after the section contents have been set.  */
 
-static bfd_boolean
+static bool
 MY_bfd_copy_private_section_data (bfd *ibfd,
 				  asection *isec ATTRIBUTE_UNUSED,
 				  bfd *obfd,
@@ -219,7 +219,7 @@ MY_bfd_copy_private_section_data (bfd *ibfd,
   if (bfd_get_flavour (ibfd) == bfd_target_aout_flavour
       && bfd_get_flavour (obfd) == bfd_target_aout_flavour)
     obj_aout_subformat (obfd) = obj_aout_subformat (ibfd);
-  return TRUE;
+  return true;
 }
 
 #endif
@@ -230,7 +230,7 @@ MY_bfd_copy_private_section_data (bfd *ibfd,
 
 #ifndef MY_write_object_contents
 
-static bfd_boolean
+static bool
 MY (write_object_contents) (bfd *abfd)
 {
   struct external_exec exec_bytes;
@@ -240,14 +240,14 @@ MY (write_object_contents) (bfd *abfd)
 
   WRITE_HEADERS (abfd, execp);
 
-  return TRUE;
+  return true;
 }
 #define MY_write_object_contents MY (write_object_contents)
 #endif
 
 #ifndef MY_set_sizes
 
-static bfd_boolean
+static bool
 MY (set_sizes) (bfd *abfd)
 {
   adata(abfd).page_size = TARGET_PAGE_SIZE;
@@ -260,7 +260,7 @@ MY (set_sizes) (bfd *abfd)
 #endif
 
   adata(abfd).exec_bytes_size = EXEC_BYTES_SIZE;
-  return TRUE;
+  return true;
 }
 #define MY_set_sizes MY (set_sizes)
 #endif
@@ -345,7 +345,7 @@ MY_final_link_callback (bfd *abfd,
 /* Final link routine.  We need to use a call back to get the correct
    offsets in the output file.  */
 
-static bfd_boolean
+static bool
 MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 {
   return NAME (aout, final_link) (abfd, info, MY_final_link_callback);
@@ -475,6 +475,9 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #ifndef MY_find_nearest_line
 #define MY_find_nearest_line NAME (aout, find_nearest_line)
 #endif
+#ifndef MY_find_nearest_line_with_alt
+#define MY_find_nearest_line_with_alt _bfd_nosymbols_find_nearest_line_with_alt
+#endif
 #ifndef MY_find_line
 #define MY_find_line _bfd_nosymbols_find_line
 #endif
@@ -595,18 +598,7 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 
 #ifndef MY_close_and_cleanup
-
-/* Handle closing of a BFD including the resource-releasing parts.  */
-
-static bfd_boolean
-MY_close_and_cleanup (bfd *abfd)
-{
-  if (!MY_bfd_free_cached_info (abfd))
-    return FALSE;
-
-  return _bfd_generic_close_and_cleanup (abfd);
-}
-
+#define MY_close_and_cleanup _bfd_generic_close_and_cleanup
 #endif
 
 #ifndef MY_get_dynamic_symtab_upper_bound

@@ -1,5 +1,5 @@
 /* Declarations for C-SKY opcode table
-   Copyright (C) 2007-2021 Free Software Foundation, Inc.
+   Copyright (C) 2007-2023 Free Software Foundation, Inc.
    Contributed by C-SKY Microsystems and Mentor Graphics.
 
    This file is part of the GNU opcodes library.
@@ -271,8 +271,8 @@ struct csky_opcode
   /* Encodings for 32-bit opcodes.  */
   struct csky_opcode_info op32[OP_TABLE_NUM];
   /* Instruction set flag.  */
-  BFD_HOST_U_64_BIT isa_flag16;
-  BFD_HOST_U_64_BIT isa_flag32;
+  uint64_t isa_flag16;
+  uint64_t isa_flag32;
   /* Whether this insn needs relocation, 0: no, !=0: yes.  */
   signed int reloc16;
   signed int reloc32;
@@ -280,7 +280,7 @@ struct csky_opcode
   signed int relax;
   /* Worker function to call when this instruction needs special assembler
      handling.  */
-  bfd_boolean (*work)(void);
+  bool (*work) (void);
 };
 
 /* The following are the opcodes used in relax/fix process.  */

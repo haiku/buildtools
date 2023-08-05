@@ -1,5 +1,5 @@
 /* ldmisc.c
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
    Written by Steve Chamberlain of Cygnus Support.
 
    This file is part of the GNU Binutils.
@@ -47,11 +47,12 @@
  %H like %C but in addition emit section+offset
  %P print program name
  %V hex bfd_vma
- %W hex bfd_vma with 0x with no leading zeros taking up 8 spaces
+ %W hex bfd_vma with 0x with no leading zeros taking up 10 spaces
  %X no object output, fail return
  %d integer, like printf
  %ld long, like printf
  %lu unsigned long, like printf
+ %lx unsigned long, like printf
  %p native (host) void* pointer, like printf
  %pA section name from a section
  %pB filename from a bfd
@@ -63,12 +64,13 @@
  %s arbitrary string, like printf
  %u integer, like printf
  %v hex bfd_vma, no leading zeros
+ %x integer, like printf
 */
 
 void
-vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
+vfinfo (FILE *fp, const char *fmt, va_list ap, bool is_warning)
 {
-  bfd_boolean fatal = FALSE;
+  bool fatal = false;
   const char *scan;
   int arg_type;
   unsigned int arg_count = 0;
@@ -95,6 +97,9 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
       } type;
   } args[9];
 
+  if (is_warning && config.no_warnings)
+    return;
+  
   for (arg_no = 0; arg_no < sizeof (args) / sizeof (args[0]); arg_no++)
     args[arg_no].type = Bad;
 
@@ -149,11 +154,12 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 
 	    case 'd':
 	    case 'u':
+	    case 'x':
 	      arg_type = Int;
 	      break;
 
 	    case 'l':
-	      if (*scan == 'd' || *scan == 'u')
+	      if (*scan == 'd' || *scan == 'u' || *scan == 'x')
 		{
 		  ++scan;
 		  arg_type = Long;
@@ -235,63 +241,48 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 
 	    case 'X':
 	      /* no object output, fail return */
-	      config.make_executable = FALSE;
+	      config.make_executable = false;
 	      break;
 
 	    case 'V':
 	      /* hex bfd_vma */
 	      {
-		bfd_vma value = args[arg_no].v;
+		char buf[32];
+		bfd_vma value;
+
+		value = args[arg_no].v;
 		++arg_count;
-		fprintf_vma (fp, value);
+		bfd_sprintf_vma (link_info.output_bfd, buf, value);
+		fprintf (fp, "%s", buf);
 	      }
 	      break;
 
 	    case 'v':
 	      /* hex bfd_vma, no leading zeros */
 	      {
-		char buf[100];
-		char *p = buf;
-		bfd_vma value = args[arg_no].v;
+		uint64_t value = args[arg_no].v;
 		++arg_count;
-		sprintf_vma (p, value);
-		while (*p == '0')
-		  p++;
-		if (!*p)
-		  p--;
-		fputs (p, fp);
+		fprintf (fp, "%" PRIx64, value);
 	      }
 	      break;
 
 	    case 'W':
 	      /* hex bfd_vma with 0x with no leading zeroes taking up
-		 8 spaces.  */
+		 10 spaces (including the 0x).  */
 	      {
-		char buf[100];
-		bfd_vma value;
-		char *p;
-		int len;
+		char buf[32];
+		uint64_t value;
 
 		value = args[arg_no].v;
 		++arg_count;
-		sprintf_vma (buf, value);
-		for (p = buf; *p == '0'; ++p)
-		  ;
-		if (*p == '\0')
-		  --p;
-		len = strlen (p);
-		while (len < 8)
-		  {
-		    putc (' ', fp);
-		    ++len;
-		  }
-		fprintf (fp, "0x%s", p);
+		sprintf (buf, "0x%" PRIx64, value);
+		fprintf (fp, "%10s", buf);
 	      }
 	      break;
 
 	    case 'F':
 	      /* Error is fatal.  */
-	      fatal = TRUE;
+	      fatal = true;
 	      break;
 
 	    case 'P':
@@ -321,8 +312,8 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 		const char *filename;
 		const char *functionname;
 		unsigned int linenumber;
-		bfd_boolean discard_last;
-		bfd_boolean done;
+		bool discard_last;
+		bool done;
 		bfd_error_type last_bfd_error = bfd_get_error ();
 
 		abfd = args[arg_no].reladdr.abfd;
@@ -346,7 +337,7 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 		   We do not always have a line number available so if
 		   we cannot find them we print out the section name and
 		   offset instead.  */
-		discard_last = TRUE;
+		discard_last = true;
 		if (abfd != NULL
 		    && bfd_find_nearest_line (abfd, section, asymbols, offset,
 					      &filename, &functionname,
@@ -383,7 +374,7 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 			    free (last_function);
 			    last_function = xstrdup (functionname);
 			  }
-			discard_last = FALSE;
+			discard_last = false;
 		      }
 		    else
 		      lfinfo (fp, "%pB:", abfd);
@@ -397,12 +388,12 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 		    else if (filename != NULL && linenumber != 0)
 		      fprintf (fp, "%u%s", linenumber, done ? "" : ":");
 		    else
-		      done = FALSE;
+		      done = false;
 		  }
 		else
 		  {
 		    lfinfo (fp, "%pB:", abfd);
-		    done = FALSE;
+		    done = false;
 		  }
 		if (!done)
 		  lfinfo (fp, "(%pA+0x%v)", section, offset);
@@ -556,6 +547,12 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 	      ++arg_count;
 	      break;
 
+	    case 'x':
+	      /* unsigned integer, like printf */
+	      fprintf (fp, "%x", args[arg_no].i);
+	      ++arg_count;
+	      break;
+
 	    case 'l':
 	      if (*fmt == 'd')
 		{
@@ -571,6 +568,13 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
 		  ++fmt;
 		  break;
 		}
+	      else if (*fmt == 'x')
+		{
+		  fprintf (fp, "%lx", args[arg_no].l);
+		  ++arg_count;
+		  ++fmt;
+		  break;
+		}
 	      /* Fallthru */
 
 	    default:
@@ -581,7 +585,7 @@ vfinfo (FILE *fp, const char *fmt, va_list ap, bfd_boolean is_warning)
     }
 
   if (is_warning && config.fatal_warnings)
-    config.make_executable = FALSE;
+    config.make_executable = false;
 
   if (fatal)
     xexit (1);
@@ -598,7 +602,7 @@ info_msg (const char *fmt, ...)
   va_list arg;
 
   va_start (arg, fmt);
-  vfinfo (stdout, fmt, arg, FALSE);
+  vfinfo (stdout, fmt, arg, false);
   va_end (arg);
 }
 
@@ -611,7 +615,7 @@ einfo (const char *fmt, ...)
 
   fflush (stdout);
   va_start (arg, fmt);
-  vfinfo (stderr, fmt, arg, TRUE);
+  vfinfo (stderr, fmt, arg, true);
   va_end (arg);
   fflush (stderr);
 }
@@ -647,7 +651,7 @@ minfo (const char *fmt, ...)
 	  asneeded_list_tail = &m->next;
 	}
       else
-	vfinfo (config.map_file, fmt, arg, FALSE);
+	vfinfo (config.map_file, fmt, arg, false);
       va_end (arg);
     }
 }
@@ -658,16 +662,16 @@ lfinfo (FILE *file, const char *fmt, ...)
   va_list arg;
 
   va_start (arg, fmt);
-  vfinfo (file, fmt, arg, FALSE);
+  vfinfo (file, fmt, arg, false);
   va_end (arg);
 }
 
 /* Functions to print the link map.  */
 
 void
-print_space (void)
+print_spaces (int count)
 {
-  fprintf (config.map_file, " ");
+  fprintf (config.map_file, "%*s", count, "");
 }
 
 void

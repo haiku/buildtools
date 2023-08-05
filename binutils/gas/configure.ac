@@ -3,7 +3,7 @@ dnl
 dnl And be careful when changing it!  If you must add tests with square
 dnl brackets, be sure changequote invocations surround it.
 dnl
-dnl   Copyright (C) 2012-2021 Free Software Foundation, Inc.
+dnl   Copyright (C) 2012-2023 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -29,9 +29,9 @@ dnl we specify this explicitly, automake-1.7 will assume that ylwrap is in
 dnl gas/ instead of gas/../.
 AC_CONFIG_AUX_DIR(..)
 AC_CANONICAL_TARGET
-AC_ISC_POSIX
 
 AM_INIT_AUTOMAKE
+AM_SILENT_RULES([yes])
 
 AC_PROG_CC
 AC_GNU_SOURCE
@@ -74,6 +74,15 @@ AC_ARG_ENABLE(compressed_debug_sections,
   ,yes, | ,all, | *,gas,*) ac_default_compressed_debug_sections=yes ;;
   ,no, | ,none,)  ac_default_compressed_debug_sections=no ;;
   *)   ac_default_compressed_debug_sections=unset ;;
+esac])dnl
+
+# Select default compression algorithm.
+ac_default_compressed_debug_sections_algorithm=COMPRESS_DEBUG_GABI_ZLIB
+AC_ARG_ENABLE(default_compressed_debug_sections_algorithm,
+	      AS_HELP_STRING([--enable-default-compressed-debug-sections-algorithm={zlib,zstd}],
+	      [Default compression algorithm for --enable-compressed-debug-sections.]),
+[case "${enableval}" in
+   zstd) ac_default_compressed_debug_sections_algorithm=COMPRESS_DEBUG_ZSTD ;;
 esac])dnl
 
 # PR gas/19520
@@ -237,8 +246,7 @@ for this_target in $target $canon_targets ; do
     generic_target=${cpu_type}-${target_vendor}-${target_os}
     case ${generic_target} in
       i386-*-msdosdjgpp* \
-      | i386-*-go32* \
-      | i386-go32-rtems*)
+      | i386-*-go32*)
 	AC_DEFINE(STRICTCOFF, 1, [Using strict COFF?])
 	;;
 
@@ -384,15 +392,15 @@ changequote([,])dnl
 	esac
 	# Decide which ABI to target by default.
 	case ${target} in
+	  mips64*-openbsd* | mips64*-linux-gnuabi64)
+	    mips_default_abi=N64_ABI
+	    ;;
 	  mips64*-linux* | mips-sgi-irix6* | mips64*-freebsd* \
 	  | mips64*-kfreebsd*-gnu | mips64*-ps2-elf*)
 	    mips_default_abi=N32_ABI
 	    ;;
 	  mips*-linux* | mips*-freebsd* | mips*-kfreebsd*-gnu)
 	    mips_default_abi=O32_ABI
-	    ;;
-	  mips64*-openbsd*)
-	    mips_default_abi=N64_ABI
 	    ;;
 	  *)
 	    mips_default_abi=NO_ABI
@@ -411,7 +419,7 @@ changequote([,])dnl
 
     # Do we need the opcodes library?
     case ${cpu_type} in
-      vax | tic30)
+      vax | tic30 | i386 | arm)
 	;;
 
       *)
@@ -429,7 +437,7 @@ changequote([,])dnl
     case ${cpu_type} in
 
       bfin)
-	for f in bfin-parse.o bfin-lex-wrapper.o; do
+	for f in config/bfin-parse.o config/bfin-lex-wrapper.o; do
 	  case " $extra_objects " in
 	    *" $f "*) ;;
 	    *) extra_objects="$extra_objects $f" ;;
@@ -447,6 +455,19 @@ changequote([,])dnl
 	using_cgen=yes
 	;;
 
+      loongarch)
+	for f in config/loongarch-parse.o config/loongarch-lex-wrapper.o; do
+	  case " $extra_objects " in
+	    *" $f "*) ;;
+	    *) extra_objects="$extra_objects $f" ;;
+	  esac
+	done
+        # --target=loongarch[32|64]-*-*.  */
+        if test $this_target = $target ; then
+          AC_DEFINE_UNQUOTED(DEFAULT_ARCH, "${arch}", [Default architecture.])
+        fi
+	;;
+
       m32c)
 	using_cgen=yes
 	;;
@@ -454,7 +475,7 @@ changequote([,])dnl
 	using_cgen=yes
 	;;
       m68k)
-	f=m68k-parse.o
+	f=config/m68k-parse.o
 	case " $extra_objects " in
 	  *" $f "*) ;;
 	  *) extra_objects="$extra_objects $f" ;;
@@ -604,7 +625,7 @@ changequote([,])dnl
         fi
         AC_MSG_RESULT($with_isa_spec)
 
-        # --with-priv-spec=[1.9|1.9.1|1.10|1.11].
+        # --with-priv-spec=[1.9.1|1.10|1.11|1.12].
         AC_MSG_CHECKING(for default configuration of --with-priv-spec)
         if test "x${with_priv_spec}" != x; then
           AC_DEFINE_UNQUOTED(DEFAULT_RISCV_PRIV_SPEC, "$with_priv_spec",
@@ -614,7 +635,7 @@ changequote([,])dnl
         ;;
 
       rl78)
-	f=rl78-parse.o
+	f=config/rl78-parse.o
 	case " $extra_objects " in
 	  *" $f "*) ;;
 	  *) extra_objects="$extra_objects $f" ;;
@@ -622,7 +643,7 @@ changequote([,])dnl
 	;;
 
       rx)
-	f=rx-parse.o
+	f=config/rx-parse.o
 	case " $extra_objects " in
 	  *" $f "*) ;;
 	  *) extra_objects="$extra_objects $f" ;;
@@ -630,10 +651,6 @@ changequote([,])dnl
 	;;
 
       xstormy16)
-	using_cgen=yes
-	;;
-
-      xc16x)
 	using_cgen=yes
 	;;
 
@@ -728,14 +745,7 @@ AC_DEFINE_UNQUOTED(DEFAULT_X86_USED_NOTE,
    properties by default.])
 
 if test ${ac_default_generate_riscv_attr} = unset; then
-    case ${target_os} in
-      elf)
-	ac_default_generate_riscv_attr=1
-	;;
-      *)
-	ac_default_generate_riscv_attr=0
-	;;
-  esac
+  ac_default_generate_riscv_attr=1
 fi
 
 AC_DEFINE_UNQUOTED(DEFAULT_RISCV_ATTR,
@@ -752,6 +762,9 @@ AC_DEFINE_UNQUOTED(DEFAULT_MIPS_FIX_LOONGSON3_LLSC,
 if test x$ac_default_compressed_debug_sections = xyes ; then
   AC_DEFINE(DEFAULT_FLAG_COMPRESS_DEBUG, 1, [Define if you want compressed debug sections by default.])
 fi
+
+AC_DEFINE_UNQUOTED(DEFAULT_COMPRESSED_DEBUG_ALGORITHM, $ac_default_compressed_debug_sections_algorithm,
+		   [Default compression algorithm for --enable-compressed-debug-sections.])
 
 # Turn on all targets if possible
 if test ${all_targets} = "yes"; then
@@ -941,8 +954,7 @@ AM_MAINTAINER_MODE
 AM_CONDITIONAL(GENINSRC_NEVER, false)
 AC_EXEEXT
 
-AC_CHECK_HEADERS(string.h stdlib.h memory.h strings.h unistd.h errno.h sys/types.h limits.h locale.h time.h sys/stat.h)
-ACX_HEADER_STRING
+AC_CHECK_HEADERS(memory.h sys/stat.h sys/types.h unistd.h)
 
 # Put this here so that autoconf's "cross-compiling" message doesn't confuse
 # people who are not cross-compiling but are compiling cross-assemblers.
@@ -955,14 +967,6 @@ else
 fi
 AC_MSG_RESULT($cross_gas)
 
-dnl ansidecl.h will deal with const
-dnl AC_C_CONST
-AC_FUNC_ALLOCA
-AC_C_INLINE
-
-# VMS doesn't have unlink.
-AC_CHECK_FUNCS(unlink remove, break)
-AC_CHECK_FUNCS(sbrk setlocale)
 AC_CHECK_FUNCS(strsignal)
 
 AM_LC_MESSAGES
@@ -987,28 +991,12 @@ gas_test_headers="
 #ifdef HAVE_MEMORY_H
 #include <memory.h>
 #endif
-#ifdef HAVE_STRING_H
 #include <string.h>
-#else
-#ifdef HAVE_STRINGS_H
-#include <strings.h>
-#endif
-#endif
-#ifdef HAVE_STDLIB_H
 #include <stdlib.h>
-#endif
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
 "
-
-# Does errno.h declare errno, or do we have to add a separate declaration
-# for it?
-GAS_CHECK_DECL_NEEDED(errno, f, int f, [
-#ifdef HAVE_ERRNO_H
-#include <errno.h>
-#endif
-])
 
 AC_MSG_CHECKING(for a known getopt prototype in unistd.h)
 AC_CACHE_VAL(gas_cv_decl_getopt_unistd_h,
@@ -1022,17 +1010,14 @@ fi
 
 GAS_CHECK_DECL_NEEDED(environ, f, char **f, $gas_test_headers)
 GAS_CHECK_DECL_NEEDED(ffs, f, int (*f)(int), $gas_test_headers)
-GAS_CHECK_DECL_NEEDED(free, f, void (*f)(), $gas_test_headers)
-GAS_CHECK_DECL_NEEDED(malloc, f, char *(*f)(), $gas_test_headers)
-GAS_CHECK_DECL_NEEDED(sbrk, f, char *(*f)(), $gas_test_headers)
-GAS_CHECK_DECL_NEEDED(strstr, f, char *(*f)(), $gas_test_headers)
 
-AC_CHECK_DECLS([free, getenv, malloc, mempcpy, realloc, stpcpy, strstr, vsnprintf, asprintf])
+AC_CHECK_DECLS([asprintf, mempcpy, stpcpy])
 
 BFD_BINARY_FOPEN
 
-# Link in zlib if we can.  This allows us to write compressed debug sections.
+# Link in zlib/zstd if we can.  This allows us to write compressed debug sections.
 AM_ZLIB
+AC_ZSTD
 
 # Support for VMS timestamps via cross compile
 
@@ -1060,7 +1045,7 @@ dnl the build directory which include the right .h file.  Make sure
 dnl the old symlinks don't exist, so that a reconfigure in an existing
 dnl directory behaves reasonably.
 
-AC_CONFIG_FILES(Makefile doc/Makefile po/Makefile.in:po/Make-in)
+AC_CONFIG_FILES(Makefile po/Makefile.in:po/Make-in)
 AC_CONFIG_COMMANDS([default],
 [rm -f targ-cpu.c targ-cpu.h obj-format.h obj-format.c targ-env.h atof-targ.c itbl-cpu.h
  echo '#include "tc-'"${target_cpu_type}"'.h"' > targ-cpu.h
@@ -1076,3 +1061,5 @@ AC_CONFIG_COMMANDS([default],
  te_file=${te_file}])
 
 AC_OUTPUT
+
+GNU_MAKE_JOBSERVER

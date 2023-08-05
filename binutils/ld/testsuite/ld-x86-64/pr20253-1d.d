@@ -1,6 +1,6 @@
 #source: pr20253-1.s
 #as: --64
-#ld: -pie -melf_x86_64 --hash-style=sysv -z max-page-size=0x200000 -z noseparate-code
+#ld: -pie -melf_x86_64 --hash-style=sysv -z max-page-size=0x200000 -z noseparate-code $NO_DT_RELR_LDFLAGS
 #objdump: -dw
 
 .*: +file format .*
@@ -9,10 +9,10 @@
 Disassembly of section .text:
 
 0+1c8 <foo>:
- +[a-f0-9]+:	c3                   	ret *
+ +[a-f0-9]+:	c3                   	ret
 
 0+1c9 <bar>:
- +[a-f0-9]+:	c3                   	ret *
+ +[a-f0-9]+:	c3                   	ret
 
 0+1ca <_start>:
  +[a-f0-9]+:	ff 15 28 01 20 00    	call   \*0x200128\(%rip\)        # 2002f8 <_DYNAMIC\+0x100>

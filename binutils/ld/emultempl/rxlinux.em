@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2020-2021 Free Software Foundation, Inc.
+#   Copyright (C) 2020-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -32,9 +32,9 @@ fragment <<EOF
 static void
 rx_linux_create_output_section_statements (void)
 {
-  extern void bfd_elf32_rx_set_target_flags (bfd_boolean, bfd_boolean);
+  extern void bfd_elf32_rx_set_target_flags (bool, bool);
 
-  bfd_elf32_rx_set_target_flags (FALSE, FALSE);
+  bfd_elf32_rx_set_target_flags (false, false);
 }
 
 EOF

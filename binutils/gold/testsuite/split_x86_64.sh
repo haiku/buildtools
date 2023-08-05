@@ -2,7 +2,7 @@
 
 # split_x86_64.sh -- test -fstack-split for x86_64
 
-# Copyright (C) 2009-2021 Free Software Foundation, Inc.
+# Copyright (C) 2009-2023 Free Software Foundation, Inc.
 # Written by Ian Lance Taylor <iant@google.com>.
 
 # This file is part of gold.
@@ -24,7 +24,7 @@
 
 match()
 {
-  if ! egrep "$1" "$2" >/dev/null 2>&1; then
+  if ! $EGREP "$1" "$2" >/dev/null 2>&1; then
     echo 1>&2 "could not find '$1' in $2"
     exit 1
   fi
@@ -32,7 +32,7 @@ match()
 
 nomatch()
 {
-  if egrep "$1" "$2" >/dev/null 2>&1; then
+  if $EGREP "$1" "$2" >/dev/null 2>&1; then
     echo 1>&2 "found unexpected '$1' in $2"
     exit 1
   fi

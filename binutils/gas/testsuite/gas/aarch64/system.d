@@ -1,4 +1,6 @@
 #objdump: -dr
+# This test is only valid on ELF based ports.
+#notarget: *-*-*coff *-*-pe *-*-wince *-*-*aout* *-*-netbsd
 
 .*:     file format .*
 
@@ -12,6 +14,7 @@ Disassembly of section \.text:
 .*:	d503207f 	wfi
 .*:	d503209f 	sev
 .*:	d50320bf 	sevl
+.*:	d50322df 	clearbhb
 .*:	d503201f 	nop
 .*:	d503203f 	yield
 .*:	d503205f 	wfe
@@ -34,7 +37,7 @@ Disassembly of section \.text:
 .*:	d503227f 	hint	#0x13
 .*:	d503229f 	(hint	#0x14|csdb)
 .*:	d50322bf 	hint	#0x15
-.*:	d50322df 	hint	#0x16
+.*:	d50322df 	(hint	#0x16|clearbhb)
 .*:	d50322ff 	hint	#0x17
 .*:	d503231f 	(hint	#0x18|paciaz)
 .*:	d503233f 	(hint	#0x19|paciasp)
@@ -329,43 +332,27 @@ Disassembly of section \.text:
 .*:	f9800c77 	prfm	#0x17, \[x3, #24\]
 .*:	d8000018 	prfm	#0x18, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bf8 	prfm	#0x18, \[sp, x15\]
-.*:	f8be58f8 	prfm	#0x18, \[x7, w30, uxtw #3\]
 .*:	f9800c78 	prfm	#0x18, \[x3, #24\]
 .*:	d8000019 	prfm	#0x19, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bf9 	prfm	#0x19, \[sp, x15\]
-.*:	f8be58f9 	prfm	#0x19, \[x7, w30, uxtw #3\]
 .*:	f9800c79 	prfm	#0x19, \[x3, #24\]
 .*:	d800001a 	prfm	#0x1a, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bfa 	prfm	#0x1a, \[sp, x15\]
-.*:	f8be58fa 	prfm	#0x1a, \[x7, w30, uxtw #3\]
 .*:	f9800c7a 	prfm	#0x1a, \[x3, #24\]
 .*:	d800001b 	prfm	#0x1b, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bfb 	prfm	#0x1b, \[sp, x15\]
-.*:	f8be58fb 	prfm	#0x1b, \[x7, w30, uxtw #3\]
 .*:	f9800c7b 	prfm	#0x1b, \[x3, #24\]
 .*:	d800001c 	prfm	#0x1c, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bfc 	prfm	#0x1c, \[sp, x15\]
-.*:	f8be58fc 	prfm	#0x1c, \[x7, w30, uxtw #3\]
 .*:	f9800c7c 	prfm	#0x1c, \[x3, #24\]
 .*:	d800001d 	prfm	#0x1d, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bfd 	prfm	#0x1d, \[sp, x15\]
-.*:	f8be58fd 	prfm	#0x1d, \[x7, w30, uxtw #3\]
 .*:	f9800c7d 	prfm	#0x1d, \[x3, #24\]
 .*:	d800001e 	prfm	#0x1e, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bfe 	prfm	#0x1e, \[sp, x15\]
-.*:	f8be58fe 	prfm	#0x1e, \[x7, w30, uxtw #3\]
 .*:	f9800c7e 	prfm	#0x1e, \[x3, #24\]
 .*:	d800001f 	prfm	#0x1f, 0 <LABEL1>
 .*: R_AARCH64_(P32_|)LD_PREL_LO19	LABEL1
-.*:	f8af6bff 	prfm	#0x1f, \[sp, x15\]
-.*:	f8be58ff 	prfm	#0x1f, \[x7, w30, uxtw #3\]
 .*:	f9800c7f 	prfm	#0x1f, \[x3, #24\]
 .*:	f9800c60 	prfm	pldl1keep, \[x3, #24\]
 .*:	f9800c61 	prfm	pldl1strm, \[x3, #24\]
@@ -385,3 +372,5 @@ Disassembly of section \.text:
 .*:	f9800c73 	prfm	pstl2strm, \[x3, #24\]
 .*:	f9800c74 	prfm	pstl3keep, \[x3, #24\]
 .*:	f9800c75 	prfm	pstl3strm, \[x3, #24\]
+.*:	f8a04817 	prfm	#0x17, \[x0, w0, uxtw\]
+.*:	f8a04818 	rprfm	pldkeep, x0, \[x0\]

@@ -1,5 +1,109 @@
 -*- text -*-
 
+Changes in 2.41:
+
+* The linker now accepts a command line option of --remap-inputs
+  <PATTERN>=<FILE> to relace any input file that matches <PATTERN> with
+  <FILE>.  In addition the option --remap-inputs-file=<FILE> can be used to
+  specify a file containing any number of these remapping directives.
+
+* The linker command line option --print-map-locals can be used to include
+  local symbols in a linker map.  (ELF targets only).
+
+* For most ELF based targets, if the --enable-linker-version option is used
+  then the version of the linker will be inserted as a string into the .comment
+  section.
+
+* The linker script syntax has a new command for output sections: ASCIZ "string"
+  This will insert a zero-terminated string at the current location.
+
+* Add command-line option, -z nosectionheader, to omit ELF section
+  header.
+
+Changes in 2.40:
+
+* The linker has a new command line option to suppress the generation of any
+  warning or error messages.  This can be useful when there is a need to create
+  a known non-working binary.  The option is -w or --no-warnings.
+
+* ld now supports zstd compressed debug sections.  The new option
+  --compress-debug-sections=zstd compresses debug sections with zstd.
+
+* Add --enable-default-compressed-debug-sections-algorithm={zlib,zstd}
+  that selects the default compression algorithm
+  for --enable-compressed-debug-sections.
+
+* Remove support for -z bndplt (MPX prefix instructions).
+
+Changes in 2.39:
+
+* The ELF linker will now generate a warning message if the stack is made
+  executable.  By default this warning is not issued if the user has
+  specifically requested an executable stack via the "-z execstack"
+  command line option, but the warning can be forced via the new
+  "--warn-execstack" option.  Alternatively all warnings about creating
+  an executable stack can be suppressed via the "--no-warn-execstack"
+  option.
+
+  In addition the ELF linker will also warn if it creates a memory resident
+  segment with all three of the Read, Write and eXecute permissions set, or
+  if it creates a thread local data segment with the eXecute permission set.
+  These warnings can be disabled via --no-warn-rwx-segments option and
+  re-enabled via the --warn-rwx-segments option.
+
+  New configure options can also control these new features:
+  
+  --enable-warn-execstack=no
+     will disable the warnings about creating an executable stack.
+     
+  --enable-warn-execstack=yes
+     will make --warn-execstack enabled by default.
+     
+  --enable-warn-rwx-segments=no
+     will make --no-warn-rwx-segments enabled by default.
+     
+  --enable-default-execstack=no
+     will stop the creation of an executable stack simply because an input file
+     is missing a .note.GNU-stack section, even on architectures where this
+     behaviour is the default.
+
+* TYPE=<type> is now supported in an output section description to set the
+  section type value.
+
+* Remove (rudimentary) support for the x86-64 sub-architectures Intel L1OM and
+  Intel K1OM.
+
+* The ELF linker now supports a new --package-metadata option that allows
+  embedding a JSON payload in accordance to the Package Metadata specification.
+  If support for libjansson is enabled at build time, the linker will use it to
+  validate the input. This can be enabled with --enable-jansson.
+  For more details, see: https://systemd.io/ELF_PACKAGE_METADATA/
+
+Changes in 2.38:
+
+* Add -z pack-relative-relocs/-z no pack-relative-relocs to x86 ELF
+  linker to pack relative relocations in the DT_RELR section.
+
+* Add support for the LoongArch architecture.
+
+* Add -z indirect-extern-access/-z noindirect-extern-access to x86 ELF
+  linker to control canonical function pointers and copy relocation.
+
+* Add --max-cache-size=SIZE to set the the maximum cache size to SIZE
+  bytes.
+
+Changes in 2.37:
+
+* arm-symbianelf support removed.
+
+* Add -z report-relative-reloc to x86 ELF linker to report dynamic
+  relative relocations.
+
+* Add -z start-stop-gc to disable special treatment of __start_*/__stop_*
+  references when --gc-sections.
+
+* Add -Bno-symbolic to cancel -Bsymbolic and -Bsymbolic-functions.
+
 Changes in 2.36:
 
 * Add libdep plugin, for linking dependencies of static libraries that
@@ -862,7 +966,7 @@ Changes in version 2.1:
   other utilities should work on Risc/Ultrix and Irix.
 
 
-Copyright (C) 2012-2021 Free Software Foundation, Inc.
+Copyright (C) 2012-2023 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

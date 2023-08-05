@@ -1,5 +1,5 @@
 /* BFD back-end for Zilog Z80 COFF binaries.
-   Copyright (C) 2005-2021 Free Software Foundation, Inc.
+   Copyright (C) 2005-2023 Free Software Foundation, Inc.
    Contributed by Arnold Metselaar <arnold_m@operamail.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -45,197 +45,197 @@ static bfd_howto_type howto_table[] =
   BFD_HOWTO (BFD_RELOC_32,
      R_IMM32,		/* type */
      0,			/* rightshift */
-     2,			/* size (0 = byte, 1 = short, 2 = long) */
+     4,			/* size */
      32,		/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_bitfield, /* complain_on_overflow */
      0,			/* special_function */
      "r_imm32",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0xffffffff,	/* src_mask */
      0xffffffff,	/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_24,
      R_IMM24,		/* type */
      0,			/* rightshift */
-     1,			/* size (0 = byte, 1 = short, 2 = long) */
+     3,			/* size */
      24,		/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_bitfield, /* complain_on_overflow */
      0,			/* special_function */
      "r_imm24",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0x00ffffff,	/* src_mask */
      0x00ffffff,	/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_16,
      R_IMM16,		/* type */
      0,			/* rightshift */
-     1,			/* size (0 = byte, 1 = short, 2 = long) */
+     2,			/* size */
      16,		/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_bitfield, /* complain_on_overflow */
      0,			/* special_function */
      "r_imm16",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0x0000ffff,	/* src_mask */
      0x0000ffff,	/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_8,
      R_IMM8,		/* type */
      0,			/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     1,			/* size */
      8,			/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_bitfield, /* complain_on_overflow */
      0,			/* special_function */
      "r_imm8",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0x000000ff,	/* src_mask */
      0x000000ff,	/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_8_PCREL,
      R_JR,		/* type */
      0,			/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     1,			/* size */
      8,			/* bitsize */
-     TRUE,		/* pc_relative */
+     true,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_signed, /* complain_on_overflow */
      0,			/* special_function */
      "r_jr",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xFF,		/* dst_mask */
-     TRUE),		/* pcrel_offset */
+     true),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_DISP8,
      R_OFF8,		/* type */
      0,			/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     1,			/* size */
      8,			/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_signed, /* complain_on_overflow */
      0,			/* special_function */
      "r_off8",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xff,		/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_BYTE0,
      R_BYTE0,		/* type */
      0,			/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     1,			/* size */
      8,			/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_dont, /* complain_on_overflow */
      0,			/* special_function */
      "r_byte0",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xff,		/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_BYTE1,
      R_BYTE1,		/* type */
      8,			/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     1,			/* size */
      8,			/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_dont, /* complain_on_overflow */
      0,			/* special_function */
      "r_byte1",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xff,		/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_BYTE2,
      R_BYTE2,		/* type */
      16,		/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     1,			/* size */
      8,			/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_dont, /* complain_on_overflow */
      0,			/* special_function */
      "r_byte2",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xff,		/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_BYTE3,
      R_BYTE3,		/* type */
      24,		/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     1,			/* size */
      8,			/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_dont, /* complain_on_overflow */
      0,			/* special_function */
      "r_byte3",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xff,		/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_WORD0,
      R_WORD0,		/* type */
      0,			/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     2,			/* size */
      16,		/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_dont, /* complain_on_overflow */
      0,			/* special_function */
      "r_word0",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xffff,		/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_WORD1,
      R_WORD1,		/* type */
      16,		/* rightshift */
-     0,			/* size (0 = byte, 1 = short, 2 = long) */
+     2,			/* size */
      16,		/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_dont, /* complain_on_overflow */
      0,			/* special_function */
      "r_word1",		/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0,			/* src_mask */
      0xffff,		/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 
   BFD_HOWTO (BFD_RELOC_Z80_16_BE,
      R_IMM16BE,		/* type */
      0,			/* rightshift */
-     1,			/* size (0 = byte, 1 = short, 2 = long) */
+     2,			/* size */
      16,		/* bitsize */
-     FALSE,		/* pc_relative */
+     false,		/* pc_relative */
      0,			/* bitpos */
      complain_overflow_bitfield, /* complain_on_overflow */
      0,			/* special_function */
      "r_imm16be",	/* name */
-     FALSE,		/* partial_inplace */
+     false,		/* partial_inplace */
      0x0000ffff,	/* src_mask */
      0x0000ffff,	/* dst_mask */
-     FALSE),		/* pcrel_offset */
+     false),		/* pcrel_offset */
 };
 
 #define NUM_HOWTOS ARRAY_SIZE (howto_table)
@@ -314,145 +314,174 @@ reloc_processing (arelent *relent,
   relent->address = reloc->r_vaddr;
   rtype2howto (relent, reloc);
 
-  if (reloc->r_symndx > 0)
+  if (reloc->r_symndx == -1 || symbols == NULL)
+    relent->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
+  else if (reloc->r_symndx >= 0 && reloc->r_symndx < obj_conv_table_size (abfd))
     relent->sym_ptr_ptr = symbols + obj_convert (abfd)[reloc->r_symndx];
   else
-    relent->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
-
+    {
+      _bfd_error_handler
+	/* xgettext:c-format */
+	(_("%pB: warning: illegal symbol index %ld in relocs"),
+	 abfd, reloc->r_symndx);
+      relent->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
+    }
   relent->addend = reloc->r_offset;
   relent->address -= section->vma;
 }
 
-static void
+static bool
 extra_case (bfd *in_abfd,
 	    struct bfd_link_info *link_info,
 	    struct bfd_link_order *link_order,
 	    arelent *reloc,
 	    bfd_byte *data,
-	    unsigned int *src_ptr,
-	    unsigned int *dst_ptr)
+	    size_t *src_ptr,
+	    size_t *dst_ptr)
 {
   asection * input_section = link_order->u.indirect.section;
-  int val = bfd_coff_reloc16_get_value (reloc, link_info, input_section);
+  bfd_size_type end = bfd_get_section_limit_octets (in_abfd, input_section);
+  bfd_size_type reloc_size = bfd_get_reloc_size (reloc->howto);
 
+  if (*src_ptr > end
+      || reloc_size > end - *src_ptr)
+    {
+      link_info->callbacks->einfo
+	/* xgettext:c-format */
+	(_("%X%P: %pB(%pA): relocation \"%pR\" goes out of range\n"),
+	 in_abfd, input_section, reloc);
+      return false;
+    }
+
+  int val = bfd_coff_reloc16_get_value (reloc, link_info, input_section);
   switch (reloc->howto->type)
     {
     case R_OFF8:
       if (reloc->howto->partial_inplace)
-        val += (signed char)(bfd_get_8 ( in_abfd, data+*src_ptr)
-                             & reloc->howto->src_mask);
-      if (val>127 || val<-128) /* Test for overflow.  */
-	  (*link_info->callbacks->reloc_overflow)
+	val += (signed char) (bfd_get_8 (in_abfd, data + *src_ptr)
+			      & reloc->howto->src_mask);
+      if (val > 127 || val < -128)
+	{
+	  link_info->callbacks->reloc_overflow
 	    (link_info, NULL, bfd_asymbol_name (*reloc->sym_ptr_ptr),
 	     reloc->howto->name, reloc->addend, input_section->owner,
 	     input_section, reloc->address);
+	  return false;
+	}
 
-	bfd_put_8 (in_abfd, val, data + *dst_ptr);
-	(*dst_ptr) += 1;
-	(*src_ptr) += 1;
+      bfd_put_8 (in_abfd, val, data + *dst_ptr);
+      *dst_ptr += 1;
+      *src_ptr += 1;
       break;
 
     case R_BYTE3:
       bfd_put_8 (in_abfd, val >> 24, data + *dst_ptr);
-      (*dst_ptr) += 1;
-      (*src_ptr) += 1;
+      *dst_ptr += 1;
+      *src_ptr += 1;
       break;
 
     case R_BYTE2:
       bfd_put_8 (in_abfd, val >> 16, data + *dst_ptr);
-      (*dst_ptr) += 1;
-      (*src_ptr) += 1;
+      *dst_ptr += 1;
+      *src_ptr += 1;
       break;
 
     case R_BYTE1:
       bfd_put_8 (in_abfd, val >> 8, data + *dst_ptr);
-      (*dst_ptr) += 1;
-      (*src_ptr) += 1;
+      *dst_ptr += 1;
+      *src_ptr += 1;
       break;
 
     case R_IMM8:
       if (reloc->howto->partial_inplace)
-        val += bfd_get_8 ( in_abfd, data+*src_ptr) & reloc->howto->src_mask;
+	val += bfd_get_8 (in_abfd, data + *src_ptr) & reloc->howto->src_mask;
       /* Fall through.  */
     case R_BYTE0:
       bfd_put_8 (in_abfd, val, data + *dst_ptr);
-      (*dst_ptr) += 1;
-      (*src_ptr) += 1;
+      *dst_ptr += 1;
+      *src_ptr += 1;
       break;
 
     case R_WORD1:
       bfd_put_16 (in_abfd, val >> 16, data + *dst_ptr);
-      (*dst_ptr) += 2;
-      (*src_ptr) += 2;
+      *dst_ptr += 2;
+      *src_ptr += 2;
       break;
 
     case R_IMM16:
       if (reloc->howto->partial_inplace)
-        val += bfd_get_16 ( in_abfd, data+*src_ptr) & reloc->howto->src_mask;
+	val += bfd_get_16 (in_abfd, data + *src_ptr) & reloc->howto->src_mask;
       /* Fall through.  */
     case R_WORD0:
       bfd_put_16 (in_abfd, val, data + *dst_ptr);
-      (*dst_ptr) += 2;
-      (*src_ptr) += 2;
+      *dst_ptr += 2;
+      *src_ptr += 2;
       break;
 
     case R_IMM24:
       if (reloc->howto->partial_inplace)
-        val += (bfd_get_16 ( in_abfd, data+*src_ptr)
-            + (bfd_get_8 ( in_abfd, data+*src_ptr+2) << 16))
-            & reloc->howto->src_mask;
-      bfd_put_16 (in_abfd, val, data + *dst_ptr);
-      bfd_put_8 (in_abfd, val >> 16, data + *dst_ptr+2);
-      (*dst_ptr) += 3;
-      (*src_ptr) += 3;
+	val += (bfd_get_24 (in_abfd, data + *src_ptr)
+		& reloc->howto->src_mask);
+      bfd_put_24 (in_abfd, val, data + *dst_ptr);
+      *dst_ptr += 3;
+      *src_ptr += 3;
       break;
 
     case R_IMM32:
       if (reloc->howto->partial_inplace)
-        val += bfd_get_32 ( in_abfd, data+*src_ptr) & reloc->howto->src_mask;
+	val += bfd_get_32 (in_abfd, data + *src_ptr) & reloc->howto->src_mask;
       bfd_put_32 (in_abfd, val, data + *dst_ptr);
-      (*dst_ptr) += 4;
-      (*src_ptr) += 4;
+      *dst_ptr += 4;
+      *src_ptr += 4;
       break;
 
     case R_JR:
       {
-        if (reloc->howto->partial_inplace)
-          val += (signed char)(bfd_get_8 ( in_abfd, data+*src_ptr) 
-                               & reloc->howto->src_mask);
+	if (reloc->howto->partial_inplace)
+	  val += (signed char) (bfd_get_8 (in_abfd, data + *src_ptr)
+				& reloc->howto->src_mask);
 	bfd_vma dot = (*dst_ptr
 		       + input_section->output_offset
 		       + input_section->output_section->vma);
-	int gap = val - dot;
+	bfd_signed_vma gap = val - dot;
 	if (gap >= 128 || gap < -128)
-	  (*link_info->callbacks->reloc_overflow)
-	    (link_info, NULL, bfd_asymbol_name (*reloc->sym_ptr_ptr),
-	     reloc->howto->name, reloc->addend, input_section->owner,
-	     input_section, reloc->address);
+	  {
+	    link_info->callbacks->reloc_overflow
+	      (link_info, NULL, bfd_asymbol_name (*reloc->sym_ptr_ptr),
+	       reloc->howto->name, reloc->addend, input_section->owner,
+	       input_section, reloc->address);
+	    return false;
+	  }
 
 	bfd_put_8 (in_abfd, gap, data + *dst_ptr);
-	(*dst_ptr)++;
-	(*src_ptr)++;
+	*dst_ptr += 1;
+	*src_ptr += 1;
 	break;
       }
 
     case R_IMM16BE:
       if (reloc->howto->partial_inplace)
-	val += (bfd_get_8 ( in_abfd, data+*src_ptr+0) * 0x100 +
-		bfd_get_8 ( in_abfd, data+*src_ptr+1)) & reloc->howto->src_mask;
+	val += ((bfd_get_8 (in_abfd, data + *src_ptr + 0) * 0x100
+		 + bfd_get_8 (in_abfd, data + *src_ptr + 1))
+		& reloc->howto->src_mask);
       
-      bfd_put_8 (in_abfd, val >> 8, data + *dst_ptr+0);
-      bfd_put_8 (in_abfd, val, data + *dst_ptr+1);
-      (*dst_ptr) += 2;
-      (*src_ptr) += 2;
+      bfd_put_8 (in_abfd, val >> 8, data + *dst_ptr + 0);
+      bfd_put_8 (in_abfd, val, data + *dst_ptr + 1);
+      *dst_ptr += 2;
+      *src_ptr += 2;
       break;
 
     default:
-      abort ();
+      link_info->callbacks->einfo
+	/* xgettext:c-format */
+	(_("%X%P: %pB(%pA): relocation \"%pR\" is not supported\n"),
+	 in_abfd, input_section, reloc);
+      return false;
     }
+  return true;
 }
 
-static int
+static bool
 z80_is_local_label_name (bfd *        abfd ATTRIBUTE_UNUSED,
                          const char * name)
 {

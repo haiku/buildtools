@@ -1,7 +1,7 @@
 #as:
 #source: enum.c
 #source: enum-2.c
-#objdump: --ctf=.ctf
+#objdump: --ctf
 #ld: -shared
 #name: Conflicting Enums
 
@@ -14,7 +14,7 @@ Contents of CTF section .ctf:
     Version: 4 \(CTF_VERSION_3\)
 #...
   Types:
-
+#...
   Strings:
 #...
 CTF archive member: .*enum.*\.c:

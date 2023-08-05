@@ -1,5 +1,5 @@
 /* Mach-O object file format
-   Copyright (C) 2009-2021 Free Software Foundation, Inc.
+   Copyright (C) 2009-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -141,7 +141,7 @@ obj_mach_o_get_section_names (char *seg, char *sec,
   /* Zero-length segment and section names are allowed.  */
   /* Parse segment name.  */
   memset (seg, 0, segl);
-  if (collect_16char_name (seg, "segment", 1))
+  if (collect_16char_name (seg, _("segment"), 1))
     {
       ignore_rest_of_line ();
       return 0;
@@ -150,7 +150,7 @@ obj_mach_o_get_section_names (char *seg, char *sec,
 
   /* Parse section name, which can be empty.  */
   memset (sec, 0, secl);
-  collect_16char_name (sec, "section", 0);
+  collect_16char_name (sec, _("section"), 0);
   return 1;
 }
 
@@ -1907,8 +1907,8 @@ obj_mach_o_is_frame_section (segT sec)
 {
   int l;
   l = strlen (segment_name (sec));
-  if ((l == 9 && strncmp (".eh_frame", segment_name (sec), 9) == 0)
-       || (l == 12 && strncmp (".debug_frame", segment_name (sec), 12) == 0))
+  if ((l == 9 && startswith (segment_name (sec), ".eh_frame"))
+       || (l == 12 && startswith (segment_name (sec), ".debug_frame")))
     return 1;
   return 0;
 }

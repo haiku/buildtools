@@ -1,5 +1,5 @@
 /* tc-mn10200.c -- Assembler code for the Matsushita 10200
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -172,7 +172,7 @@ reg_name_search (const struct reg_name *regs,
   	Input_line_pointer->(next non-blank) char after operand, or is in
   	its original state.  */
 
-static bfd_boolean
+static bool
 data_register_name (expressionS *expressionP)
 {
   int reg_number;
@@ -198,12 +198,12 @@ data_register_name (expressionS *expressionP)
       expressionP->X_add_symbol = NULL;
       expressionP->X_op_symbol = NULL;
 
-      return TRUE;
+      return true;
     }
 
   /* Reset the line as if we had not done anything.  */
   input_line_pointer = start;
-  return FALSE;
+  return false;
 }
 
 /* Summary of register_name().
@@ -216,7 +216,7 @@ data_register_name (expressionS *expressionP)
   	Input_line_pointer->(next non-blank) char after operand, or is in
   	its original state.  */
 
-static bfd_boolean
+static bool
 address_register_name (expressionS *expressionP)
 {
   int reg_number;
@@ -242,12 +242,12 @@ address_register_name (expressionS *expressionP)
       expressionP->X_add_symbol = NULL;
       expressionP->X_op_symbol = NULL;
 
-      return TRUE;
+      return true;
     }
 
   /* Reset the line as if we had not done anything.  */
   input_line_pointer = start;
-  return FALSE;
+  return false;
 }
 
 /* Summary of register_name().
@@ -260,7 +260,7 @@ address_register_name (expressionS *expressionP)
   	Input_line_pointer->(next non-blank) char after operand, or is in
   	its original state.  */
 
-static bfd_boolean
+static bool
 other_register_name (expressionS *expressionP)
 {
   int reg_number;
@@ -286,12 +286,12 @@ other_register_name (expressionS *expressionP)
       expressionP->X_add_symbol = NULL;
       expressionP->X_op_symbol = NULL;
 
-      return TRUE;
+      return true;
     }
 
   /* Reset the line as if we had not done anything.  */
   input_line_pointer = start;
-  return FALSE;
+  return false;
 }
 
 void
@@ -317,7 +317,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
 const char *
 md_atof (int type, char *litp, int *sizep)
 {
-  return ieee_md_atof (type, litp, sizep, FALSE);
+  return ieee_md_atof (type, litp, sizep, false);
 }
 
 void
@@ -762,14 +762,7 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 	/* FIXME: We should try more ways to resolve difference expressions
 	   here.  At least this is better than silently ignoring the
 	   subtrahend.  */
-	as_bad_where (fixp->fx_file, fixp->fx_line,
-		      _("can't resolve `%s' {%s section} - `%s' {%s section}"),
-		      fixp->fx_addsy ? S_GET_NAME (fixp->fx_addsy) : "0",
-		      segment_name (fixp->fx_addsy
-				    ? S_GET_SEGMENT (fixp->fx_addsy)
-				    : absolute_section),
-		      S_GET_NAME (fixp->fx_subsy),
-		      segment_name (S_GET_SEGMENT (fixp->fx_addsy)));
+	as_bad_subtract (fixp);
     }
 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);
@@ -1032,6 +1025,7 @@ md_assemble (char *str)
 	  else
 	    {
 	      expression (&ex);
+	      resolve_register (&ex);
 	    }
 
 	  switch (ex.X_op)

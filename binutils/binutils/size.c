@@ -1,5 +1,5 @@
 /* size.c -- report size of various sections of an executable file.
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -92,11 +92,12 @@ usage (FILE *stream, int status)
   -A|-B|-G  --format={sysv|berkeley|gnu}  Select output style (default is %s)\n\
   -o|-d|-x  --radix={8|10|16}         Display numbers in octal, decimal or hex\n\
   -t        --totals                  Display the total sizes (Berkeley only)\n\
+  -f                                  Ignored.\n\
             --common                  Display total size for *COM* syms\n\
             --target=<bfdname>        Set the binary file format\n\
             @<file>                   Read options from <file>\n\
-  -h        --help                    Display this information\n\
-  -v        --version                 Display the program's version\n\
+  -h|-H|-?  --help                    Display this information\n\
+  -v|-V     --version                 Display the program's version\n\
 \n"),
 #if BSD_DEFAULT
   "berkeley"
@@ -134,12 +135,10 @@ main (int argc, char **argv)
   int temp;
   int c;
 
-#if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
+#ifdef HAVE_LC_MESSAGES
   setlocale (LC_MESSAGES, "");
 #endif
-#if defined (HAVE_SETLOCALE)
   setlocale (LC_CTYPE, "");
-#endif
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
 
@@ -339,7 +338,6 @@ display_bfd (bfd *abfd)
     {
       bfd_nonfatal (bfd_get_filename (abfd));
       list_matching_formats (matching);
-      free (matching);
       return_code = 3;
       return;
     }
@@ -362,10 +360,7 @@ display_bfd (bfd *abfd)
   bfd_nonfatal (bfd_get_filename (abfd));
 
   if (bfd_get_error () == bfd_error_file_ambiguously_recognized)
-    {
-      list_matching_formats (matching);
-      free (matching);
-    }
+    list_matching_formats (matching);
 
   return_code = 3;
 }
@@ -446,10 +441,9 @@ size_number (bfd_size_type num)
 {
   char buffer[40];
 
-  sprintf (buffer,
-	   (radix == decimal ? "%" BFD_VMA_FMT "u" :
-	   ((radix == octal) ? "0%" BFD_VMA_FMT "o" : "0x%" BFD_VMA_FMT "x")),
-	   num);
+  sprintf (buffer, (radix == decimal ? "%" PRIu64
+		    : radix == octal ? "0%" PRIo64 : "0x%" PRIx64),
+	   (uint64_t) num);
 
   return strlen (buffer);
 }
@@ -459,10 +453,9 @@ rprint_number (int width, bfd_size_type num)
 {
   char buffer[40];
 
-  sprintf (buffer,
-	   (radix == decimal ? "%" BFD_VMA_FMT "u" :
-	   ((radix == octal) ? "0%" BFD_VMA_FMT "o" : "0x%" BFD_VMA_FMT "x")),
-	   num);
+  sprintf (buffer, (radix == decimal ? "%" PRIu64
+		    : radix == octal ? "0%" PRIo64 : "0x%" PRIx64),
+	   (uint64_t) num);
 
   printf ("%*s", width, buffer);
 }

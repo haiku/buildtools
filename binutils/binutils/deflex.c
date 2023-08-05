@@ -569,7 +569,7 @@ char *yytext;
 #define YY_NO_INPUT 1
 #line 4 "deflex.l"
 
-/* Copyright (C) 1995-2021 Free Software Foundation, Inc.
+/* Copyright (C) 1995-2023 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -1022,83 +1022,81 @@ case 29:
 YY_RULE_SETUP
 #line 71 "deflex.l"
 {
-		yylval.id = xstrdup (yytext+1);
-		yylval.id[yyleng-2] = 0;
+		yylval.id = xmemdup (yytext + 1, yyleng - 2, yyleng - 1);
 		return ID;
 		}
 	YY_BREAK
 case 30:
 /* rule 30 can match eol */
 YY_RULE_SETUP
-#line 77 "deflex.l"
+#line 76 "deflex.l"
 {
-		yylval.id = xstrdup (yytext+1);
-		yylval.id[yyleng-2] = 0;
+		yylval.id = xmemdup (yytext + 1, yyleng - 2, yyleng - 1);
 		return ID;
 		}
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 82 "deflex.l"
+#line 80 "deflex.l"
 { }
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 83 "deflex.l"
+#line 81 "deflex.l"
 { }
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 84 "deflex.l"
+#line 82 "deflex.l"
 { }
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 85 "deflex.l"
+#line 83 "deflex.l"
 { }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 86 "deflex.l"
+#line 84 "deflex.l"
 { }
 	YY_BREAK
 case 36:
 /* rule 36 can match eol */
 YY_RULE_SETUP
-#line 87 "deflex.l"
+#line 85 "deflex.l"
 { linenumber ++ ;}
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 88 "deflex.l"
+#line 86 "deflex.l"
 { return EQUAL;}
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 89 "deflex.l"
+#line 87 "deflex.l"
 { return '=';}
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 90 "deflex.l"
+#line 88 "deflex.l"
 { return '.';}
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 91 "deflex.l"
+#line 89 "deflex.l"
 { return '@';}
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 92 "deflex.l"
+#line 90 "deflex.l"
 { return ',';}
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 93 "deflex.l"
+#line 91 "deflex.l"
 ECHO;
 	YY_BREAK
-#line 1101 "deflex.c"
+#line 1099 "deflex.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2066,6 +2064,6 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 93 "deflex.l"
+#line 91 "deflex.l"
 
 

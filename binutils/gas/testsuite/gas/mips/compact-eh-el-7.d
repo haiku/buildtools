@@ -2,17 +2,18 @@
 #name: Compact EH EL #7 with personality id and fallback FDE
 #source: compact-eh-7.s
 #as: -EL -mno-pdr
+#notarget: mips64*-*-openbsd* mips64*-*-*-gnuabi64
 
 .*:     file format.*
 
 
 RELOCATION RECORDS FOR \[.eh_frame\]:
-OFFSET   TYPE              VALUE 
+OFFSET +TYPE +VALUE
 0000001c R_MIPS_PC32       .text.*
 
 
 RELOCATION RECORDS FOR \[.eh_frame_entry\]:
-OFFSET   TYPE              VALUE 
+OFFSET +TYPE +VALUE
 00000000 R_MIPS_PC32       .text.*
 00000004 R_MIPS_PC32       .eh_frame.*
 

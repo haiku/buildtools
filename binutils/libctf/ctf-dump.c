@@ -1,5 +1,5 @@
 /* Textual dumping of CTF data.
-   Copyright (C) 2019-2021 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -100,6 +100,7 @@ ctf_dump_format_type (ctf_dict_t *fp, ctf_id_t id, int flag)
       ctf_encoding_t ep;
       ctf_arinfo_t ar;
       int kind, unsliced_kind;
+      ssize_t size, align;
       const char *nonroot_leader = "";
       const char *nonroot_trailer = "";
       const char *idstr = "";
@@ -142,9 +143,12 @@ ctf_dump_format_type (ctf_dict_t *fp, ctf_id_t id, int flag)
       unsliced_kind = ctf_type_kind_unsliced (fp, id);
       kind = ctf_type_kind (fp, id);
 
-      if (ctf_type_encoding (fp, id, &ep) == 0)
+      /* Report encodings of everything with an encoding other than enums:
+	 base-type enums cannot have a nonzero cte_offset or cte_bits value.
+	 (Slices of them can, but they are of kind CTF_K_SLICE.)  */
+      if (unsliced_kind != CTF_K_ENUM && ctf_type_encoding (fp, id, &ep) == 0)
 	{
-	  if (ep.cte_bits != ctf_type_size (fp, id) * CHAR_BIT
+	  if ((ssize_t) ep.cte_bits != ctf_type_size (fp, id) * CHAR_BIT
 	      && flag & CTF_FT_BITFIELD)
 	    {
 	      if (asprintf (&bit, ":%i", ep.cte_bits) < 0)
@@ -154,7 +158,7 @@ ctf_dump_format_type (ctf_dict_t *fp, ctf_id_t id, int flag)
 	      bit = NULL;
 	    }
 
-	  if (ep.cte_bits != ctf_type_size (fp, id) * CHAR_BIT
+	  if ((ssize_t) ep.cte_bits != ctf_type_size (fp, id) * CHAR_BIT
 	      || ep.cte_offset != 0)
 	    {
 	      const char *slice = "";
@@ -177,10 +181,10 @@ ctf_dump_format_type (ctf_dict_t *fp, ctf_id_t id, int flag)
 	  bit = NULL;
 	}
 
-      if (kind != CTF_K_FUNCTION && kind != CTF_K_FORWARD)
+      size = ctf_type_size (fp, id);
+      if (kind != CTF_K_FUNCTION && size >= 0)
 	{
-	  if (asprintf (&bit, " (size 0x%lx)",
-			(unsigned long) ctf_type_size (fp, id)) < 0)
+	  if (asprintf (&bit, " (size 0x%lx)", (unsigned long int) size) < 0)
 	    goto oom;
 
 	  str = str_append (str, bit);
@@ -188,10 +192,11 @@ ctf_dump_format_type (ctf_dict_t *fp, ctf_id_t id, int flag)
 	  bit = NULL;
 	}
 
-      if (kind != CTF_K_FORWARD)
+      align = ctf_type_align (fp, id);
+      if (align >= 0)
 	{
 	  if (asprintf (&bit, " (aligned at 0x%lx)",
-			(unsigned long) ctf_type_align (fp, id)) < 0)
+			(unsigned long int) align) < 0)
 	    goto oom;
 
 	  str = str_append (str, bit);
@@ -220,7 +225,8 @@ ctf_dump_format_type (ctf_dict_t *fp, ctf_id_t id, int flag)
 	new_id = ctf_type_reference (fp, id);
       if (new_id != CTF_ERR)
 	str = str_append (str, " -> ");
-    } while (new_id != CTF_ERR);
+    }
+  while (new_id != CTF_ERR);
 
   if (ctf_errno (fp) != ECTF_NOTREF)
     {
@@ -558,7 +564,6 @@ ctf_dump_type (ctf_id_t id, int flag, void *arg)
 {
   char *str;
   char *indent;
-  int err = 0;
   ctf_dump_state_t *state = arg;
   ctf_dump_membstate_t membstate = { &str, state->cds_fp, NULL };
 
@@ -613,9 +618,8 @@ ctf_dump_type (ctf_id_t id, int flag, void *arg)
 
 	  if (asprintf (&bit, "%s: %i\n", enumerand, value) < 0)
 	    {
-	      err = ENOMEM;
 	      ctf_next_destroy (it);
-	      goto err;
+	      goto oom;
 	    }
 	  str = str_append (str, bit);
 	  free (bit);
@@ -642,7 +646,15 @@ ctf_dump_type (ctf_id_t id, int flag, void *arg)
  err:
   free (indent);
   free (str);
-  return ctf_set_errno (state->cds_fp, err);
+
+  /* Swallow the error: don't cause an error in one type to abort all
+     type dumping.  */
+  return 0;
+
+ oom:
+  free (indent);
+  free (str);
+  return ctf_set_errno (state->cds_fp, ENOMEM);
 }
 
 /* Dump the string table into the cds_items.  */

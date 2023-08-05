@@ -69,7 +69,7 @@ test -z "$ENTRY" && ENTRY=start
 test -z "${BIG_OUTPUT_FORMAT}" && BIG_OUTPUT_FORMAT=${OUTPUT_FORMAT}
 test -z "${LITTLE_OUTPUT_FORMAT}" && LITTLE_OUTPUT_FORMAT=${OUTPUT_FORMAT}
 # If we request a big endian toolchain, give a big endian linker
-test "${ARC_ENDIAN}" == "big" && OUTPUT_FORMAT=${BIG_OUTPUT_FORMAT}
+test "${ARC_ENDIAN}" = "big" && OUTPUT_FORMAT=${BIG_OUTPUT_FORMAT}
 if [ -z "$MACHINE" ]; then OUTPUT_ARCH=${ARCH}; else OUTPUT_ARCH=${ARCH}:${MACHINE}; fi
 test -z "${ELFSIZE}" && ELFSIZE=32
 test -z "${ALIGNMENT}" && ALIGNMENT="${ELFSIZE} / 8"
@@ -409,20 +409,8 @@ test -n "${RELOCATING}" && cat <<EOF
   }
 EOF
 
-cat <<EOF
-  /* Stabs debugging sections.  */
-  .stab          0 : { *(.stab) }
-  .stabstr       0 : { *(.stabstr) }
-  .stab.excl     0 : { *(.stab.excl) }
-  .stab.exclstr  0 : { *(.stab.exclstr) }
-  .stab.index    0 : { *(.stab.index) }
-  .stab.indexstr 0 : { *(.stab.indexstr) }
-
-  .comment       0 : { *(.comment) }
-  .note.gnu.build-id : { *(.note.gnu.build-id) }
-EOF
-
-. $srcdir/scripttempl/DWARF.sc
+source_sh $srcdir/scripttempl/misc-sections.sc
+source_sh $srcdir/scripttempl/DWARF.sc
 
 cat <<EOF
   /* ARC Extension Sections */

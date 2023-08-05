@@ -2,7 +2,7 @@
 
 # x86_64_overflow_pc32.sh -- a test case for overflow checking.
 
-# Copyright (C) 2016-2021 Free Software Foundation, Inc.
+# Copyright (C) 2016-2023 Free Software Foundation, Inc.
 # Written by Cary Coutant <ccoutant@gmail.com>.
 
 # This file is part of gold.
@@ -37,6 +37,6 @@ check()
 
 # We don't know how the compiler might order these variables, so we
 # can't test for the actual offset from .data, hence the regexp.
-check x86_64_overflow_pc32.err "function bar: error: relocation overflow"
+check x86_64_overflow_pc32.err "function bar:(.*): error: relocation overflow"
 
 exit 0

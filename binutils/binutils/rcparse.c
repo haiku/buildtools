@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.5.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
    Inc.
 
    This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -34,6 +34,10 @@
 /* C LALR(1) parser skeleton written by Richard Stallman, by
    simplifying the original so-called "semantic" parser.  */
 
+/* DO NOT RELY ON FEATURES THAT ARE NOT DOCUMENTED in the manual,
+   especially those whose name start with YY_ or yy_.  They are
+   private implementation details that can be changed or removed.  */
+
 /* All symbols defined below should begin with yy or YY, to avoid
    infringing on user name space.  This should be done even for local
    variables, as they might otherwise be expanded by user macros.
@@ -41,14 +45,11 @@
    define necessary library symbols; they are noted "INFRINGES ON
    USER NAME SPACE" below.  */
 
-/* Undocumented macros, especially those whose name start with YY_,
-   are private implementation details.  Do not rely on them.  */
+/* Identify Bison output, and Bison version.  */
+#define YYBISON 30802
 
-/* Identify Bison output.  */
-#define YYBISON 1
-
-/* Bison version.  */
-#define YYBISON_VERSION "3.5"
+/* Bison version string.  */
+#define YYBISON_VERSION "3.8.2"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -68,7 +69,7 @@
 /* First part of user prologue.  */
 #line 1 "rcparse.y"
  /* rcparse.y -- parser for Windows rc files
-   Copyright (C) 1997-2021 Free Software Foundation, Inc.
+   Copyright (C) 1997-2023 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
    Extended by Kai Tietz, Onevision.
 
@@ -132,7 +133,7 @@ static unichar null_unichar;
 static const rc_res_id res_null_text = { 1, {{0, &null_unichar}}};
 
 
-#line 136 "rcparse.c"
+#line 137 "rcparse.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -155,14 +156,6 @@ static const rc_res_id res_null_text = { 1, {{0, &null_unichar}}};
 #  endif
 # endif
 
-/* Enabling verbose error messages.  */
-#ifdef YYERROR_VERBOSE
-# undef YYERROR_VERBOSE
-# define YYERROR_VERBOSE 1
-#else
-# define YYERROR_VERBOSE 0
-#endif
-
 /* Use api.header.include to #include this header
    instead of duplicating it here.  */
 #ifndef YY_YY_RCPARSE_H_INCLUDED
@@ -175,111 +168,120 @@ static const rc_res_id res_null_text = { 1, {{0, &null_unichar}}};
 extern int yydebug;
 #endif
 
-/* Token type.  */
+/* Token kinds.  */
 #ifndef YYTOKENTYPE
 # define YYTOKENTYPE
   enum yytokentype
   {
-    BEG = 258,
-    END = 259,
-    ACCELERATORS = 260,
-    VIRTKEY = 261,
-    ASCII = 262,
-    NOINVERT = 263,
-    SHIFT = 264,
-    CONTROL = 265,
-    ALT = 266,
-    BITMAP = 267,
-    CURSOR = 268,
-    DIALOG = 269,
-    DIALOGEX = 270,
-    EXSTYLE = 271,
-    CAPTION = 272,
-    CLASS = 273,
-    STYLE = 274,
-    AUTO3STATE = 275,
-    AUTOCHECKBOX = 276,
-    AUTORADIOBUTTON = 277,
-    CHECKBOX = 278,
-    COMBOBOX = 279,
-    CTEXT = 280,
-    DEFPUSHBUTTON = 281,
-    EDITTEXT = 282,
-    GROUPBOX = 283,
-    LISTBOX = 284,
-    LTEXT = 285,
-    PUSHBOX = 286,
-    PUSHBUTTON = 287,
-    RADIOBUTTON = 288,
-    RTEXT = 289,
-    SCROLLBAR = 290,
-    STATE3 = 291,
-    USERBUTTON = 292,
-    BEDIT = 293,
-    HEDIT = 294,
-    IEDIT = 295,
-    FONT = 296,
-    ICON = 297,
-    ANICURSOR = 298,
-    ANIICON = 299,
-    DLGINCLUDE = 300,
-    DLGINIT = 301,
-    FONTDIR = 302,
-    HTML = 303,
-    MANIFEST = 304,
-    PLUGPLAY = 305,
-    VXD = 306,
-    TOOLBAR = 307,
-    BUTTON = 308,
-    LANGUAGE = 309,
-    CHARACTERISTICS = 310,
-    VERSIONK = 311,
-    MENU = 312,
-    MENUEX = 313,
-    MENUITEM = 314,
-    SEPARATOR = 315,
-    POPUP = 316,
-    CHECKED = 317,
-    GRAYED = 318,
-    HELP = 319,
-    INACTIVE = 320,
-    OWNERDRAW = 321,
-    MENUBARBREAK = 322,
-    MENUBREAK = 323,
-    MESSAGETABLE = 324,
-    RCDATA = 325,
-    STRINGTABLE = 326,
-    VERSIONINFO = 327,
-    FILEVERSION = 328,
-    PRODUCTVERSION = 329,
-    FILEFLAGSMASK = 330,
-    FILEFLAGS = 331,
-    FILEOS = 332,
-    FILETYPE = 333,
-    FILESUBTYPE = 334,
-    BLOCKSTRINGFILEINFO = 335,
-    BLOCKVARFILEINFO = 336,
-    VALUE = 337,
-    BLOCK = 338,
-    MOVEABLE = 339,
-    FIXED = 340,
-    PURE = 341,
-    IMPURE = 342,
-    PRELOAD = 343,
-    LOADONCALL = 344,
-    DISCARDABLE = 345,
-    NOT = 346,
-    QUOTEDUNISTRING = 347,
-    QUOTEDSTRING = 348,
-    STRING = 349,
-    NUMBER = 350,
-    SIZEDUNISTRING = 351,
-    SIZEDSTRING = 352,
-    IGNORED_TOKEN = 353,
-    NEG = 354
+    YYEMPTY = -2,
+    YYEOF = 0,                     /* "end of file"  */
+    YYerror = 256,                 /* error  */
+    YYUNDEF = 257,                 /* "invalid token"  */
+    BEG = 258,                     /* BEG  */
+    END = 259,                     /* END  */
+    ACCELERATORS = 260,            /* ACCELERATORS  */
+    VIRTKEY = 261,                 /* VIRTKEY  */
+    ASCII = 262,                   /* ASCII  */
+    NOINVERT = 263,                /* NOINVERT  */
+    SHIFT = 264,                   /* SHIFT  */
+    CONTROL = 265,                 /* CONTROL  */
+    ALT = 266,                     /* ALT  */
+    BITMAP = 267,                  /* BITMAP  */
+    CURSOR = 268,                  /* CURSOR  */
+    DIALOG = 269,                  /* DIALOG  */
+    DIALOGEX = 270,                /* DIALOGEX  */
+    EXSTYLE = 271,                 /* EXSTYLE  */
+    CAPTION = 272,                 /* CAPTION  */
+    CLASS = 273,                   /* CLASS  */
+    STYLE = 274,                   /* STYLE  */
+    AUTO3STATE = 275,              /* AUTO3STATE  */
+    AUTOCHECKBOX = 276,            /* AUTOCHECKBOX  */
+    AUTORADIOBUTTON = 277,         /* AUTORADIOBUTTON  */
+    CHECKBOX = 278,                /* CHECKBOX  */
+    COMBOBOX = 279,                /* COMBOBOX  */
+    CTEXT = 280,                   /* CTEXT  */
+    DEFPUSHBUTTON = 281,           /* DEFPUSHBUTTON  */
+    EDITTEXT = 282,                /* EDITTEXT  */
+    GROUPBOX = 283,                /* GROUPBOX  */
+    LISTBOX = 284,                 /* LISTBOX  */
+    LTEXT = 285,                   /* LTEXT  */
+    PUSHBOX = 286,                 /* PUSHBOX  */
+    PUSHBUTTON = 287,              /* PUSHBUTTON  */
+    RADIOBUTTON = 288,             /* RADIOBUTTON  */
+    RTEXT = 289,                   /* RTEXT  */
+    SCROLLBAR = 290,               /* SCROLLBAR  */
+    STATE3 = 291,                  /* STATE3  */
+    USERBUTTON = 292,              /* USERBUTTON  */
+    BEDIT = 293,                   /* BEDIT  */
+    HEDIT = 294,                   /* HEDIT  */
+    IEDIT = 295,                   /* IEDIT  */
+    FONT = 296,                    /* FONT  */
+    ICON = 297,                    /* ICON  */
+    ANICURSOR = 298,               /* ANICURSOR  */
+    ANIICON = 299,                 /* ANIICON  */
+    DLGINCLUDE = 300,              /* DLGINCLUDE  */
+    DLGINIT = 301,                 /* DLGINIT  */
+    FONTDIR = 302,                 /* FONTDIR  */
+    HTML = 303,                    /* HTML  */
+    MANIFEST = 304,                /* MANIFEST  */
+    PLUGPLAY = 305,                /* PLUGPLAY  */
+    VXD = 306,                     /* VXD  */
+    TOOLBAR = 307,                 /* TOOLBAR  */
+    BUTTON = 308,                  /* BUTTON  */
+    LANGUAGE = 309,                /* LANGUAGE  */
+    CHARACTERISTICS = 310,         /* CHARACTERISTICS  */
+    VERSIONK = 311,                /* VERSIONK  */
+    MENU = 312,                    /* MENU  */
+    MENUEX = 313,                  /* MENUEX  */
+    MENUITEM = 314,                /* MENUITEM  */
+    SEPARATOR = 315,               /* SEPARATOR  */
+    POPUP = 316,                   /* POPUP  */
+    CHECKED = 317,                 /* CHECKED  */
+    GRAYED = 318,                  /* GRAYED  */
+    HELP = 319,                    /* HELP  */
+    INACTIVE = 320,                /* INACTIVE  */
+    OWNERDRAW = 321,               /* OWNERDRAW  */
+    MENUBARBREAK = 322,            /* MENUBARBREAK  */
+    MENUBREAK = 323,               /* MENUBREAK  */
+    MESSAGETABLE = 324,            /* MESSAGETABLE  */
+    RCDATA = 325,                  /* RCDATA  */
+    STRINGTABLE = 326,             /* STRINGTABLE  */
+    VERSIONINFO = 327,             /* VERSIONINFO  */
+    FILEVERSION = 328,             /* FILEVERSION  */
+    PRODUCTVERSION = 329,          /* PRODUCTVERSION  */
+    FILEFLAGSMASK = 330,           /* FILEFLAGSMASK  */
+    FILEFLAGS = 331,               /* FILEFLAGS  */
+    FILEOS = 332,                  /* FILEOS  */
+    FILETYPE = 333,                /* FILETYPE  */
+    FILESUBTYPE = 334,             /* FILESUBTYPE  */
+    BLOCKSTRINGFILEINFO = 335,     /* BLOCKSTRINGFILEINFO  */
+    BLOCKVARFILEINFO = 336,        /* BLOCKVARFILEINFO  */
+    VALUE = 337,                   /* VALUE  */
+    BLOCK = 338,                   /* BLOCK  */
+    MOVEABLE = 339,                /* MOVEABLE  */
+    FIXED = 340,                   /* FIXED  */
+    PURE = 341,                    /* PURE  */
+    IMPURE = 342,                  /* IMPURE  */
+    PRELOAD = 343,                 /* PRELOAD  */
+    LOADONCALL = 344,              /* LOADONCALL  */
+    DISCARDABLE = 345,             /* DISCARDABLE  */
+    NOT = 346,                     /* NOT  */
+    QUOTEDUNISTRING = 347,         /* QUOTEDUNISTRING  */
+    QUOTEDSTRING = 348,            /* QUOTEDSTRING  */
+    STRING = 349,                  /* STRING  */
+    NUMBER = 350,                  /* NUMBER  */
+    SIZEDUNISTRING = 351,          /* SIZEDUNISTRING  */
+    SIZEDSTRING = 352,             /* SIZEDSTRING  */
+    IGNORED_TOKEN = 353,           /* IGNORED_TOKEN  */
+    NEG = 354                      /* NEG  */
   };
+  typedef enum yytokentype yytoken_kind_t;
 #endif
-/* Tokens.  */
+/* Token kinds.  */
+#define YYEMPTY -2
+#define YYEOF 0
+#define YYerror 256
+#define YYUNDEF 257
 #define BEG 258
 #define END 259
 #define ACCELERATORS 260
@@ -428,7 +430,7 @@ union YYSTYPE
     const unichar *s;
   } suni;
 
-#line 432 "rcparse.c"
+#line 434 "rcparse.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -439,9 +441,233 @@ typedef union YYSTYPE YYSTYPE;
 
 extern YYSTYPE yylval;
 
+
 int yyparse (void);
 
+
 #endif /* !YY_YY_RCPARSE_H_INCLUDED  */
+/* Symbol kind.  */
+enum yysymbol_kind_t
+{
+  YYSYMBOL_YYEMPTY = -2,
+  YYSYMBOL_YYEOF = 0,                      /* "end of file"  */
+  YYSYMBOL_YYerror = 1,                    /* error  */
+  YYSYMBOL_YYUNDEF = 2,                    /* "invalid token"  */
+  YYSYMBOL_BEG = 3,                        /* BEG  */
+  YYSYMBOL_END = 4,                        /* END  */
+  YYSYMBOL_ACCELERATORS = 5,               /* ACCELERATORS  */
+  YYSYMBOL_VIRTKEY = 6,                    /* VIRTKEY  */
+  YYSYMBOL_ASCII = 7,                      /* ASCII  */
+  YYSYMBOL_NOINVERT = 8,                   /* NOINVERT  */
+  YYSYMBOL_SHIFT = 9,                      /* SHIFT  */
+  YYSYMBOL_CONTROL = 10,                   /* CONTROL  */
+  YYSYMBOL_ALT = 11,                       /* ALT  */
+  YYSYMBOL_BITMAP = 12,                    /* BITMAP  */
+  YYSYMBOL_CURSOR = 13,                    /* CURSOR  */
+  YYSYMBOL_DIALOG = 14,                    /* DIALOG  */
+  YYSYMBOL_DIALOGEX = 15,                  /* DIALOGEX  */
+  YYSYMBOL_EXSTYLE = 16,                   /* EXSTYLE  */
+  YYSYMBOL_CAPTION = 17,                   /* CAPTION  */
+  YYSYMBOL_CLASS = 18,                     /* CLASS  */
+  YYSYMBOL_STYLE = 19,                     /* STYLE  */
+  YYSYMBOL_AUTO3STATE = 20,                /* AUTO3STATE  */
+  YYSYMBOL_AUTOCHECKBOX = 21,              /* AUTOCHECKBOX  */
+  YYSYMBOL_AUTORADIOBUTTON = 22,           /* AUTORADIOBUTTON  */
+  YYSYMBOL_CHECKBOX = 23,                  /* CHECKBOX  */
+  YYSYMBOL_COMBOBOX = 24,                  /* COMBOBOX  */
+  YYSYMBOL_CTEXT = 25,                     /* CTEXT  */
+  YYSYMBOL_DEFPUSHBUTTON = 26,             /* DEFPUSHBUTTON  */
+  YYSYMBOL_EDITTEXT = 27,                  /* EDITTEXT  */
+  YYSYMBOL_GROUPBOX = 28,                  /* GROUPBOX  */
+  YYSYMBOL_LISTBOX = 29,                   /* LISTBOX  */
+  YYSYMBOL_LTEXT = 30,                     /* LTEXT  */
+  YYSYMBOL_PUSHBOX = 31,                   /* PUSHBOX  */
+  YYSYMBOL_PUSHBUTTON = 32,                /* PUSHBUTTON  */
+  YYSYMBOL_RADIOBUTTON = 33,               /* RADIOBUTTON  */
+  YYSYMBOL_RTEXT = 34,                     /* RTEXT  */
+  YYSYMBOL_SCROLLBAR = 35,                 /* SCROLLBAR  */
+  YYSYMBOL_STATE3 = 36,                    /* STATE3  */
+  YYSYMBOL_USERBUTTON = 37,                /* USERBUTTON  */
+  YYSYMBOL_BEDIT = 38,                     /* BEDIT  */
+  YYSYMBOL_HEDIT = 39,                     /* HEDIT  */
+  YYSYMBOL_IEDIT = 40,                     /* IEDIT  */
+  YYSYMBOL_FONT = 41,                      /* FONT  */
+  YYSYMBOL_ICON = 42,                      /* ICON  */
+  YYSYMBOL_ANICURSOR = 43,                 /* ANICURSOR  */
+  YYSYMBOL_ANIICON = 44,                   /* ANIICON  */
+  YYSYMBOL_DLGINCLUDE = 45,                /* DLGINCLUDE  */
+  YYSYMBOL_DLGINIT = 46,                   /* DLGINIT  */
+  YYSYMBOL_FONTDIR = 47,                   /* FONTDIR  */
+  YYSYMBOL_HTML = 48,                      /* HTML  */
+  YYSYMBOL_MANIFEST = 49,                  /* MANIFEST  */
+  YYSYMBOL_PLUGPLAY = 50,                  /* PLUGPLAY  */
+  YYSYMBOL_VXD = 51,                       /* VXD  */
+  YYSYMBOL_TOOLBAR = 52,                   /* TOOLBAR  */
+  YYSYMBOL_BUTTON = 53,                    /* BUTTON  */
+  YYSYMBOL_LANGUAGE = 54,                  /* LANGUAGE  */
+  YYSYMBOL_CHARACTERISTICS = 55,           /* CHARACTERISTICS  */
+  YYSYMBOL_VERSIONK = 56,                  /* VERSIONK  */
+  YYSYMBOL_MENU = 57,                      /* MENU  */
+  YYSYMBOL_MENUEX = 58,                    /* MENUEX  */
+  YYSYMBOL_MENUITEM = 59,                  /* MENUITEM  */
+  YYSYMBOL_SEPARATOR = 60,                 /* SEPARATOR  */
+  YYSYMBOL_POPUP = 61,                     /* POPUP  */
+  YYSYMBOL_CHECKED = 62,                   /* CHECKED  */
+  YYSYMBOL_GRAYED = 63,                    /* GRAYED  */
+  YYSYMBOL_HELP = 64,                      /* HELP  */
+  YYSYMBOL_INACTIVE = 65,                  /* INACTIVE  */
+  YYSYMBOL_OWNERDRAW = 66,                 /* OWNERDRAW  */
+  YYSYMBOL_MENUBARBREAK = 67,              /* MENUBARBREAK  */
+  YYSYMBOL_MENUBREAK = 68,                 /* MENUBREAK  */
+  YYSYMBOL_MESSAGETABLE = 69,              /* MESSAGETABLE  */
+  YYSYMBOL_RCDATA = 70,                    /* RCDATA  */
+  YYSYMBOL_STRINGTABLE = 71,               /* STRINGTABLE  */
+  YYSYMBOL_VERSIONINFO = 72,               /* VERSIONINFO  */
+  YYSYMBOL_FILEVERSION = 73,               /* FILEVERSION  */
+  YYSYMBOL_PRODUCTVERSION = 74,            /* PRODUCTVERSION  */
+  YYSYMBOL_FILEFLAGSMASK = 75,             /* FILEFLAGSMASK  */
+  YYSYMBOL_FILEFLAGS = 76,                 /* FILEFLAGS  */
+  YYSYMBOL_FILEOS = 77,                    /* FILEOS  */
+  YYSYMBOL_FILETYPE = 78,                  /* FILETYPE  */
+  YYSYMBOL_FILESUBTYPE = 79,               /* FILESUBTYPE  */
+  YYSYMBOL_BLOCKSTRINGFILEINFO = 80,       /* BLOCKSTRINGFILEINFO  */
+  YYSYMBOL_BLOCKVARFILEINFO = 81,          /* BLOCKVARFILEINFO  */
+  YYSYMBOL_VALUE = 82,                     /* VALUE  */
+  YYSYMBOL_BLOCK = 83,                     /* BLOCK  */
+  YYSYMBOL_MOVEABLE = 84,                  /* MOVEABLE  */
+  YYSYMBOL_FIXED = 85,                     /* FIXED  */
+  YYSYMBOL_PURE = 86,                      /* PURE  */
+  YYSYMBOL_IMPURE = 87,                    /* IMPURE  */
+  YYSYMBOL_PRELOAD = 88,                   /* PRELOAD  */
+  YYSYMBOL_LOADONCALL = 89,                /* LOADONCALL  */
+  YYSYMBOL_DISCARDABLE = 90,               /* DISCARDABLE  */
+  YYSYMBOL_NOT = 91,                       /* NOT  */
+  YYSYMBOL_QUOTEDUNISTRING = 92,           /* QUOTEDUNISTRING  */
+  YYSYMBOL_QUOTEDSTRING = 93,              /* QUOTEDSTRING  */
+  YYSYMBOL_STRING = 94,                    /* STRING  */
+  YYSYMBOL_NUMBER = 95,                    /* NUMBER  */
+  YYSYMBOL_SIZEDUNISTRING = 96,            /* SIZEDUNISTRING  */
+  YYSYMBOL_SIZEDSTRING = 97,               /* SIZEDSTRING  */
+  YYSYMBOL_IGNORED_TOKEN = 98,             /* IGNORED_TOKEN  */
+  YYSYMBOL_99_ = 99,                       /* '|'  */
+  YYSYMBOL_100_ = 100,                     /* '^'  */
+  YYSYMBOL_101_ = 101,                     /* '&'  */
+  YYSYMBOL_102_ = 102,                     /* '+'  */
+  YYSYMBOL_103_ = 103,                     /* '-'  */
+  YYSYMBOL_104_ = 104,                     /* '*'  */
+  YYSYMBOL_105_ = 105,                     /* '/'  */
+  YYSYMBOL_106_ = 106,                     /* '%'  */
+  YYSYMBOL_107_ = 107,                     /* '~'  */
+  YYSYMBOL_NEG = 108,                      /* NEG  */
+  YYSYMBOL_109_ = 109,                     /* ','  */
+  YYSYMBOL_110_ = 110,                     /* '='  */
+  YYSYMBOL_111_ = 111,                     /* '('  */
+  YYSYMBOL_112_ = 112,                     /* ')'  */
+  YYSYMBOL_YYACCEPT = 113,                 /* $accept  */
+  YYSYMBOL_input = 114,                    /* input  */
+  YYSYMBOL_accelerator = 115,              /* accelerator  */
+  YYSYMBOL_acc_entries = 116,              /* acc_entries  */
+  YYSYMBOL_acc_entry = 117,                /* acc_entry  */
+  YYSYMBOL_acc_event = 118,                /* acc_event  */
+  YYSYMBOL_acc_options = 119,              /* acc_options  */
+  YYSYMBOL_acc_option = 120,               /* acc_option  */
+  YYSYMBOL_bitmap = 121,                   /* bitmap  */
+  YYSYMBOL_cursor = 122,                   /* cursor  */
+  YYSYMBOL_dialog = 123,                   /* dialog  */
+  YYSYMBOL_124_1 = 124,                    /* $@1  */
+  YYSYMBOL_125_2 = 125,                    /* $@2  */
+  YYSYMBOL_126_3 = 126,                    /* $@3  */
+  YYSYMBOL_exstyle = 127,                  /* exstyle  */
+  YYSYMBOL_styles = 128,                   /* styles  */
+  YYSYMBOL_controls = 129,                 /* controls  */
+  YYSYMBOL_control = 130,                  /* control  */
+  YYSYMBOL_131_4 = 131,                    /* $@4  */
+  YYSYMBOL_132_5 = 132,                    /* $@5  */
+  YYSYMBOL_133_6 = 133,                    /* $@6  */
+  YYSYMBOL_134_7 = 134,                    /* $@7  */
+  YYSYMBOL_135_8 = 135,                    /* $@8  */
+  YYSYMBOL_136_9 = 136,                    /* $@9  */
+  YYSYMBOL_137_10 = 137,                   /* $@10  */
+  YYSYMBOL_138_11 = 138,                   /* $@11  */
+  YYSYMBOL_139_12 = 139,                   /* $@12  */
+  YYSYMBOL_140_13 = 140,                   /* $@13  */
+  YYSYMBOL_141_14 = 141,                   /* $@14  */
+  YYSYMBOL_142_15 = 142,                   /* $@15  */
+  YYSYMBOL_143_16 = 143,                   /* $@16  */
+  YYSYMBOL_144_17 = 144,                   /* $@17  */
+  YYSYMBOL_145_18 = 145,                   /* $@18  */
+  YYSYMBOL_146_19 = 146,                   /* $@19  */
+  YYSYMBOL_147_20 = 147,                   /* $@20  */
+  YYSYMBOL_148_21 = 148,                   /* $@21  */
+  YYSYMBOL_149_22 = 149,                   /* $@22  */
+  YYSYMBOL_150_23 = 150,                   /* $@23  */
+  YYSYMBOL_151_24 = 151,                   /* $@24  */
+  YYSYMBOL_control_params = 152,           /* control_params  */
+  YYSYMBOL_cresid = 153,                   /* cresid  */
+  YYSYMBOL_optresidc = 154,                /* optresidc  */
+  YYSYMBOL_resid = 155,                    /* resid  */
+  YYSYMBOL_opt_control_data = 156,         /* opt_control_data  */
+  YYSYMBOL_control_styleexpr = 157,        /* control_styleexpr  */
+  YYSYMBOL_158_25 = 158,                   /* $@25  */
+  YYSYMBOL_icon_styleexpr = 159,           /* icon_styleexpr  */
+  YYSYMBOL_160_26 = 160,                   /* $@26  */
+  YYSYMBOL_control_params_styleexpr = 161, /* control_params_styleexpr  */
+  YYSYMBOL_162_27 = 162,                   /* $@27  */
+  YYSYMBOL_font = 163,                     /* font  */
+  YYSYMBOL_icon = 164,                     /* icon  */
+  YYSYMBOL_language = 165,                 /* language  */
+  YYSYMBOL_menu = 166,                     /* menu  */
+  YYSYMBOL_menuitems = 167,                /* menuitems  */
+  YYSYMBOL_menuitem = 168,                 /* menuitem  */
+  YYSYMBOL_menuitem_flags = 169,           /* menuitem_flags  */
+  YYSYMBOL_menuitem_flag = 170,            /* menuitem_flag  */
+  YYSYMBOL_menuex = 171,                   /* menuex  */
+  YYSYMBOL_menuexitems = 172,              /* menuexitems  */
+  YYSYMBOL_menuexitem = 173,               /* menuexitem  */
+  YYSYMBOL_messagetable = 174,             /* messagetable  */
+  YYSYMBOL_optrcdata_data = 175,           /* optrcdata_data  */
+  YYSYMBOL_176_28 = 176,                   /* $@28  */
+  YYSYMBOL_optrcdata_data_int = 177,       /* optrcdata_data_int  */
+  YYSYMBOL_rcdata_data = 178,              /* rcdata_data  */
+  YYSYMBOL_stringtable = 179,              /* stringtable  */
+  YYSYMBOL_180_29 = 180,                   /* $@29  */
+  YYSYMBOL_string_data = 181,              /* string_data  */
+  YYSYMBOL_rcdata_id = 182,                /* rcdata_id  */
+  YYSYMBOL_user = 183,                     /* user  */
+  YYSYMBOL_toolbar = 184,                  /* toolbar  */
+  YYSYMBOL_toolbar_data = 185,             /* toolbar_data  */
+  YYSYMBOL_versioninfo = 186,              /* versioninfo  */
+  YYSYMBOL_fixedverinfo = 187,             /* fixedverinfo  */
+  YYSYMBOL_verblocks = 188,                /* verblocks  */
+  YYSYMBOL_verstringtables = 189,          /* verstringtables  */
+  YYSYMBOL_vervals = 190,                  /* vervals  */
+  YYSYMBOL_vertrans = 191,                 /* vertrans  */
+  YYSYMBOL_id = 192,                       /* id  */
+  YYSYMBOL_resname = 193,                  /* resname  */
+  YYSYMBOL_resref = 194,                   /* resref  */
+  YYSYMBOL_suboptions = 195,               /* suboptions  */
+  YYSYMBOL_memflags_move_discard = 196,    /* memflags_move_discard  */
+  YYSYMBOL_memflags_move = 197,            /* memflags_move  */
+  YYSYMBOL_memflag = 198,                  /* memflag  */
+  YYSYMBOL_file_name = 199,                /* file_name  */
+  YYSYMBOL_res_unicode_string_concat = 200, /* res_unicode_string_concat  */
+  YYSYMBOL_res_unicode_string = 201,       /* res_unicode_string  */
+  YYSYMBOL_res_unicode_sizedstring = 202,  /* res_unicode_sizedstring  */
+  YYSYMBOL_res_unicode_sizedstring_concat = 203, /* res_unicode_sizedstring_concat  */
+  YYSYMBOL_sizedstring = 204,              /* sizedstring  */
+  YYSYMBOL_sizedunistring = 205,           /* sizedunistring  */
+  YYSYMBOL_styleexpr = 206,                /* styleexpr  */
+  YYSYMBOL_parennumber = 207,              /* parennumber  */
+  YYSYMBOL_optcnumexpr = 208,              /* optcnumexpr  */
+  YYSYMBOL_cnumexpr = 209,                 /* cnumexpr  */
+  YYSYMBOL_numexpr = 210,                  /* numexpr  */
+  YYSYMBOL_sizednumexpr = 211,             /* sizednumexpr  */
+  YYSYMBOL_cposnumexpr = 212,              /* cposnumexpr  */
+  YYSYMBOL_posnumexpr = 213,               /* posnumexpr  */
+  YYSYMBOL_sizedposnumexpr = 214           /* sizedposnumexpr  */
+};
+typedef enum yysymbol_kind_t yysymbol_kind_t;
+
 
 
 
@@ -480,6 +706,18 @@ typedef __INT_LEAST16_TYPE__ yytype_int16;
 typedef int_least16_t yytype_int16;
 #else
 typedef short yytype_int16;
+#endif
+
+/* Work around bug in HP-UX 11.23, which defines these macros
+   incorrectly for preprocessor constants.  This workaround can likely
+   be removed in 2023, as HPE has promised support for HP-UX 11.23
+   (aka HP-UX 11i v2) only through the end of 2022; see Table 2 of
+   <https://h20195.www2.hpe.com/V2/getpdf.aspx/4AA4-7673ENW.pdf>.  */
+#ifdef __hpux
+# undef UINT_LEAST8_MAX
+# undef UINT_LEAST16_MAX
+# define UINT_LEAST8_MAX 255
+# define UINT_LEAST16_MAX 65535
 #endif
 
 #if defined __UINT_LEAST8_MAX__ && __UINT_LEAST8_MAX__ <= __INT_MAX__
@@ -541,6 +779,7 @@ typedef int yytype_uint16;
 
 #define YYSIZEOF(X) YY_CAST (YYPTRDIFF_T, sizeof (X))
 
+
 /* Stored state numbers (used for stacks). */
 typedef yytype_int16 yy_state_t;
 
@@ -558,6 +797,7 @@ typedef int yy_state_fast_t;
 #  define YY_(Msgid) Msgid
 # endif
 #endif
+
 
 #ifndef YY_ATTRIBUTE_PURE
 # if defined __GNUC__ && 2 < __GNUC__ + (96 <= __GNUC_MINOR__)
@@ -577,17 +817,23 @@ typedef int yy_state_fast_t;
 
 /* Suppress unused-variable warnings by "using" E.  */
 #if ! defined lint || defined __GNUC__
-# define YYUSE(E) ((void) (E))
+# define YY_USE(E) ((void) (E))
 #else
-# define YYUSE(E) /* empty */
+# define YY_USE(E) /* empty */
 #endif
 
-#if defined __GNUC__ && ! defined __ICC && 407 <= __GNUC__ * 100 + __GNUC_MINOR__
 /* Suppress an incorrect diagnostic about yylval being uninitialized.  */
-# define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                            \
+#if defined __GNUC__ && ! defined __ICC && 406 <= __GNUC__ * 100 + __GNUC_MINOR__
+# if __GNUC__ * 100 + __GNUC_MINOR__ < 407
+#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
+    _Pragma ("GCC diagnostic push")                                     \
+    _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")
+# else
+#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
     _Pragma ("GCC diagnostic push")                                     \
     _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")              \
     _Pragma ("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
+# endif
 # define YY_IGNORE_MAYBE_UNINITIALIZED_END      \
     _Pragma ("GCC diagnostic pop")
 #else
@@ -616,7 +862,7 @@ typedef int yy_state_fast_t;
 
 #define YY_ASSERT(E) ((void) (0 && (E)))
 
-#if ! defined yyoverflow || YYERROR_VERBOSE
+#if !defined yyoverflow
 
 /* The parser invokes alloca or malloc; define the necessary symbols.  */
 
@@ -681,8 +927,7 @@ void free (void *); /* INFRINGES ON USER NAME SPACE */
 #   endif
 #  endif
 # endif
-#endif /* ! defined yyoverflow || YYERROR_VERBOSE */
-
+#endif /* !defined yyoverflow */
 
 #if (! defined yyoverflow \
      && (! defined __cplusplus \
@@ -758,14 +1003,16 @@ union yyalloc
 /* YYNSTATES -- Number of states.  */
 #define YYNSTATES  522
 
-#define YYUNDEFTOK  2
+/* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   354
 
 
 /* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
    as returned by yylex, with out-of-bounds checking.  */
-#define YYTRANSLATE(YYX)                                                \
-  (0 <= (YYX) && (YYX) <= YYMAXUTOK ? yytranslate[YYX] : YYUNDEFTOK)
+#define YYTRANSLATE(YYX)                                \
+  (0 <= (YYX) && (YYX) <= YYMAXUTOK                     \
+   ? YY_CAST (yysymbol_kind_t, yytranslate[YYX])        \
+   : YYSYMBOL_YYUNDEF)
 
 /* YYTRANSLATE[TOKEN-NUM] -- Symbol number corresponding to TOKEN-NUM
    as returned by yylex.  */
@@ -810,7 +1057,7 @@ static const yytype_int8 yytranslate[] =
 };
 
 #if YYDEBUG
-  /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
+/* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
        0,   178,   178,   180,   181,   182,   183,   184,   185,   186,
@@ -844,71 +1091,65 @@ static const yytype_int16 yyrline[] =
 };
 #endif
 
-#if YYDEBUG || YYERROR_VERBOSE || 0
+/** Accessing symbol of state STATE.  */
+#define YY_ACCESSING_SYMBOL(State) YY_CAST (yysymbol_kind_t, yystos[State])
+
+#if YYDEBUG || 0
+/* The user-facing name of the symbol whose (internal) number is
+   YYSYMBOL.  No bounds checking.  */
+static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
+
 /* YYTNAME[SYMBOL-NUM] -- String name of the symbol SYMBOL-NUM.
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "$end", "error", "$undefined", "BEG", "END", "ACCELERATORS", "VIRTKEY",
-  "ASCII", "NOINVERT", "SHIFT", "CONTROL", "ALT", "BITMAP", "CURSOR",
-  "DIALOG", "DIALOGEX", "EXSTYLE", "CAPTION", "CLASS", "STYLE",
-  "AUTO3STATE", "AUTOCHECKBOX", "AUTORADIOBUTTON", "CHECKBOX", "COMBOBOX",
-  "CTEXT", "DEFPUSHBUTTON", "EDITTEXT", "GROUPBOX", "LISTBOX", "LTEXT",
-  "PUSHBOX", "PUSHBUTTON", "RADIOBUTTON", "RTEXT", "SCROLLBAR", "STATE3",
-  "USERBUTTON", "BEDIT", "HEDIT", "IEDIT", "FONT", "ICON", "ANICURSOR",
-  "ANIICON", "DLGINCLUDE", "DLGINIT", "FONTDIR", "HTML", "MANIFEST",
-  "PLUGPLAY", "VXD", "TOOLBAR", "BUTTON", "LANGUAGE", "CHARACTERISTICS",
-  "VERSIONK", "MENU", "MENUEX", "MENUITEM", "SEPARATOR", "POPUP",
-  "CHECKED", "GRAYED", "HELP", "INACTIVE", "OWNERDRAW", "MENUBARBREAK",
-  "MENUBREAK", "MESSAGETABLE", "RCDATA", "STRINGTABLE", "VERSIONINFO",
-  "FILEVERSION", "PRODUCTVERSION", "FILEFLAGSMASK", "FILEFLAGS", "FILEOS",
-  "FILETYPE", "FILESUBTYPE", "BLOCKSTRINGFILEINFO", "BLOCKVARFILEINFO",
-  "VALUE", "BLOCK", "MOVEABLE", "FIXED", "PURE", "IMPURE", "PRELOAD",
-  "LOADONCALL", "DISCARDABLE", "NOT", "QUOTEDUNISTRING", "QUOTEDSTRING",
-  "STRING", "NUMBER", "SIZEDUNISTRING", "SIZEDSTRING", "IGNORED_TOKEN",
-  "'|'", "'^'", "'&'", "'+'", "'-'", "'*'", "'/'", "'%'", "'~'", "NEG",
-  "','", "'='", "'('", "')'", "$accept", "input", "accelerator",
-  "acc_entries", "acc_entry", "acc_event", "acc_options", "acc_option",
-  "bitmap", "cursor", "dialog", "$@1", "$@2", "$@3", "exstyle", "styles",
-  "controls", "control", "$@4", "$@5", "$@6", "$@7", "$@8", "$@9", "$@10",
-  "$@11", "$@12", "$@13", "$@14", "$@15", "$@16", "$@17", "$@18", "$@19",
-  "$@20", "$@21", "$@22", "$@23", "$@24", "control_params", "cresid",
-  "optresidc", "resid", "opt_control_data", "control_styleexpr", "$@25",
-  "icon_styleexpr", "$@26", "control_params_styleexpr", "$@27", "font",
-  "icon", "language", "menu", "menuitems", "menuitem", "menuitem_flags",
-  "menuitem_flag", "menuex", "menuexitems", "menuexitem", "messagetable",
-  "optrcdata_data", "$@28", "optrcdata_data_int", "rcdata_data",
-  "stringtable", "$@29", "string_data", "rcdata_id", "user", "toolbar",
-  "toolbar_data", "versioninfo", "fixedverinfo", "verblocks",
-  "verstringtables", "vervals", "vertrans", "id", "resname", "resref",
-  "suboptions", "memflags_move_discard", "memflags_move", "memflag",
-  "file_name", "res_unicode_string_concat", "res_unicode_string",
+  "\"end of file\"", "error", "\"invalid token\"", "BEG", "END",
+  "ACCELERATORS", "VIRTKEY", "ASCII", "NOINVERT", "SHIFT", "CONTROL",
+  "ALT", "BITMAP", "CURSOR", "DIALOG", "DIALOGEX", "EXSTYLE", "CAPTION",
+  "CLASS", "STYLE", "AUTO3STATE", "AUTOCHECKBOX", "AUTORADIOBUTTON",
+  "CHECKBOX", "COMBOBOX", "CTEXT", "DEFPUSHBUTTON", "EDITTEXT", "GROUPBOX",
+  "LISTBOX", "LTEXT", "PUSHBOX", "PUSHBUTTON", "RADIOBUTTON", "RTEXT",
+  "SCROLLBAR", "STATE3", "USERBUTTON", "BEDIT", "HEDIT", "IEDIT", "FONT",
+  "ICON", "ANICURSOR", "ANIICON", "DLGINCLUDE", "DLGINIT", "FONTDIR",
+  "HTML", "MANIFEST", "PLUGPLAY", "VXD", "TOOLBAR", "BUTTON", "LANGUAGE",
+  "CHARACTERISTICS", "VERSIONK", "MENU", "MENUEX", "MENUITEM", "SEPARATOR",
+  "POPUP", "CHECKED", "GRAYED", "HELP", "INACTIVE", "OWNERDRAW",
+  "MENUBARBREAK", "MENUBREAK", "MESSAGETABLE", "RCDATA", "STRINGTABLE",
+  "VERSIONINFO", "FILEVERSION", "PRODUCTVERSION", "FILEFLAGSMASK",
+  "FILEFLAGS", "FILEOS", "FILETYPE", "FILESUBTYPE", "BLOCKSTRINGFILEINFO",
+  "BLOCKVARFILEINFO", "VALUE", "BLOCK", "MOVEABLE", "FIXED", "PURE",
+  "IMPURE", "PRELOAD", "LOADONCALL", "DISCARDABLE", "NOT",
+  "QUOTEDUNISTRING", "QUOTEDSTRING", "STRING", "NUMBER", "SIZEDUNISTRING",
+  "SIZEDSTRING", "IGNORED_TOKEN", "'|'", "'^'", "'&'", "'+'", "'-'", "'*'",
+  "'/'", "'%'", "'~'", "NEG", "','", "'='", "'('", "')'", "$accept",
+  "input", "accelerator", "acc_entries", "acc_entry", "acc_event",
+  "acc_options", "acc_option", "bitmap", "cursor", "dialog", "$@1", "$@2",
+  "$@3", "exstyle", "styles", "controls", "control", "$@4", "$@5", "$@6",
+  "$@7", "$@8", "$@9", "$@10", "$@11", "$@12", "$@13", "$@14", "$@15",
+  "$@16", "$@17", "$@18", "$@19", "$@20", "$@21", "$@22", "$@23", "$@24",
+  "control_params", "cresid", "optresidc", "resid", "opt_control_data",
+  "control_styleexpr", "$@25", "icon_styleexpr", "$@26",
+  "control_params_styleexpr", "$@27", "font", "icon", "language", "menu",
+  "menuitems", "menuitem", "menuitem_flags", "menuitem_flag", "menuex",
+  "menuexitems", "menuexitem", "messagetable", "optrcdata_data", "$@28",
+  "optrcdata_data_int", "rcdata_data", "stringtable", "$@29",
+  "string_data", "rcdata_id", "user", "toolbar", "toolbar_data",
+  "versioninfo", "fixedverinfo", "verblocks", "verstringtables", "vervals",
+  "vertrans", "id", "resname", "resref", "suboptions",
+  "memflags_move_discard", "memflags_move", "memflag", "file_name",
+  "res_unicode_string_concat", "res_unicode_string",
   "res_unicode_sizedstring", "res_unicode_sizedstring_concat",
   "sizedstring", "sizedunistring", "styleexpr", "parennumber",
   "optcnumexpr", "cnumexpr", "numexpr", "sizednumexpr", "cposnumexpr",
   "posnumexpr", "sizedposnumexpr", YY_NULLPTR
 };
-#endif
 
-# ifdef YYPRINT
-/* YYTOKNUM[NUM] -- (External) token number corresponding to the
-   (internal) symbol number NUM (which must be that of a token).  */
-static const yytype_int16 yytoknum[] =
+static const char *
+yysymbol_name (yysymbol_kind_t yysymbol)
 {
-       0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
-     265,   266,   267,   268,   269,   270,   271,   272,   273,   274,
-     275,   276,   277,   278,   279,   280,   281,   282,   283,   284,
-     285,   286,   287,   288,   289,   290,   291,   292,   293,   294,
-     295,   296,   297,   298,   299,   300,   301,   302,   303,   304,
-     305,   306,   307,   308,   309,   310,   311,   312,   313,   314,
-     315,   316,   317,   318,   319,   320,   321,   322,   323,   324,
-     325,   326,   327,   328,   329,   330,   331,   332,   333,   334,
-     335,   336,   337,   338,   339,   340,   341,   342,   343,   344,
-     345,   346,   347,   348,   349,   350,   351,   352,   353,   124,
-      94,    38,    43,    45,    42,    47,    37,   126,   354,    44,
-      61,    40,    41
-};
-# endif
+  return yytname[yysymbol];
+}
+#endif
 
 #define YYPACT_NINF (-328)
 
@@ -920,8 +1161,8 @@ static const yytype_int16 yytoknum[] =
 #define yytable_value_is_error(Yyn) \
   0
 
-  /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
-     STATE-NUM.  */
+/* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
+   STATE-NUM.  */
 static const yytype_int16 yypact[] =
 {
     -328,    74,  -328,   302,  -328,  -328,  -328,  -328,  -328,  -328,
@@ -979,9 +1220,9 @@ static const yytype_int16 yypact[] =
      -52,  -328
 };
 
-  /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
-     Performed when YYTABLE does not specify something else to do.  Zero
-     means the default is an error.  */
+/* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
+   Performed when YYTABLE does not specify something else to do.  Zero
+   means the default is an error.  */
 static const yytype_int16 yydefact[] =
 {
        2,     0,     1,     0,   214,   234,   235,   210,   268,    17,
@@ -1039,7 +1280,7 @@ static const yytype_int16 yydefact[] =
      250,   107
 };
 
-  /* YYPGOTO[NTERM-NUM].  */
+/* YYPGOTO[NTERM-NUM].  */
 static const yytype_int16 yypgoto[] =
 {
     -328,  -328,  -328,  -328,  -328,  -328,  -328,  -225,  -328,  -328,
@@ -1055,10 +1296,10 @@ static const yytype_int16 yypgoto[] =
       20,  -328
 };
 
-  /* YYDEFGOTO[NTERM-NUM].  */
+/* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int16 yydefgoto[] =
 {
-      -1,     1,    12,   160,   182,   183,   263,   264,    13,    14,
+       0,     1,    12,   160,   182,   183,   263,   264,    13,    14,
       15,   265,   266,   292,   140,   290,   322,   369,   416,   417,
      418,   437,   419,   387,   422,   423,   390,   425,   438,   439,
      392,   427,   428,   429,   430,   431,   398,   433,   519,   420,
@@ -1071,9 +1312,9 @@ static const yytype_int16 yydefgoto[] =
      382,    30
 };
 
-  /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
-     positive, shift that token.  If negative, reduce the rule whose
-     number is the opposite.  If YYTABLE_NINF, syntax error.  */
+/* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
+   positive, shift that token.  If negative, reduce the rule whose
+   number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int16 yytable[] =
 {
       35,   370,    62,   197,   283,    75,    28,   320,   202,   298,
@@ -1252,8 +1493,8 @@ static const yytype_int16 yycheck[] =
        9,    10,    11
 };
 
-  /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
-     symbol of state STATE-NUM.  */
+/* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
+   state STATE-NUM.  */
 static const yytype_uint8 yystos[] =
 {
        0,   114,     0,    54,    71,    92,    93,    94,    95,    98,
@@ -1311,7 +1552,7 @@ static const yytype_uint8 yystos[] =
      206,   208
 };
 
-  /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
+/* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_uint8 yyr1[] =
 {
        0,   113,   114,   114,   114,   114,   114,   114,   114,   114,
@@ -1344,7 +1585,7 @@ static const yytype_uint8 yyr1[] =
      214,   214,   214,   214,   214,   214,   214,   214,   214
 };
 
-  /* YYR2[YYN] -- Number of symbols on the right hand side of rule YYN.  */
+/* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
        0,     2,     0,     2,     2,     2,     2,     2,     2,     2,
@@ -1378,14 +1619,15 @@ static const yytype_int8 yyr2[] =
 };
 
 
+enum { YYENOMEM = -2 };
+
 #define yyerrok         (yyerrstatus = 0)
 #define yyclearin       (yychar = YYEMPTY)
-#define YYEMPTY         (-2)
-#define YYEOF           0
 
 #define YYACCEPT        goto yyacceptlab
 #define YYABORT         goto yyabortlab
 #define YYERROR         goto yyerrorlab
+#define YYNOMEM         goto yyexhaustedlab
 
 
 #define YYRECOVERING()  (!!yyerrstatus)
@@ -1407,10 +1649,9 @@ static const yytype_int8 yyr2[] =
       }                                                           \
   while (0)
 
-/* Error token number */
-#define YYTERROR        1
-#define YYERRCODE       256
-
+/* Backward compatibility with an undocumented macro.
+   Use YYerror or YYUNDEF. */
+#define YYERRCODE YYUNDEF
 
 
 /* Enable debugging if requested.  */
@@ -1427,19 +1668,16 @@ do {                                            \
     YYFPRINTF Args;                             \
 } while (0)
 
-/* This macro is provided for backward compatibility. */
-#ifndef YY_LOCATION_PRINT
-# define YY_LOCATION_PRINT(File, Loc) ((void) 0)
-#endif
 
 
-# define YY_SYMBOL_PRINT(Title, Type, Value, Location)                    \
+
+# define YY_SYMBOL_PRINT(Title, Kind, Value, Location)                    \
 do {                                                                      \
   if (yydebug)                                                            \
     {                                                                     \
       YYFPRINTF (stderr, "%s ", Title);                                   \
       yy_symbol_print (stderr,                                            \
-                  Type, Value); \
+                  Kind, Value); \
       YYFPRINTF (stderr, "\n");                                           \
     }                                                                     \
 } while (0)
@@ -1450,18 +1688,15 @@ do {                                                                      \
 `-----------------------------------*/
 
 static void
-yy_symbol_value_print (FILE *yyo, int yytype, YYSTYPE const * const yyvaluep)
+yy_symbol_value_print (FILE *yyo,
+                       yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep)
 {
   FILE *yyoutput = yyo;
-  YYUSE (yyoutput);
+  YY_USE (yyoutput);
   if (!yyvaluep)
     return;
-# ifdef YYPRINT
-  if (yytype < YYNTOKENS)
-    YYPRINT (yyo, yytoknum[yytype], *yyvaluep);
-# endif
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
-  YYUSE (yytype);
+  YY_USE (yykind);
   YY_IGNORE_MAYBE_UNINITIALIZED_END
 }
 
@@ -1471,12 +1706,13 @@ yy_symbol_value_print (FILE *yyo, int yytype, YYSTYPE const * const yyvaluep)
 `---------------------------*/
 
 static void
-yy_symbol_print (FILE *yyo, int yytype, YYSTYPE const * const yyvaluep)
+yy_symbol_print (FILE *yyo,
+                 yysymbol_kind_t yykind, YYSTYPE const * const yyvaluep)
 {
   YYFPRINTF (yyo, "%s %s (",
-             yytype < YYNTOKENS ? "token" : "nterm", yytname[yytype]);
+             yykind < YYNTOKENS ? "token" : "nterm", yysymbol_name (yykind));
 
-  yy_symbol_value_print (yyo, yytype, yyvaluep);
+  yy_symbol_value_print (yyo, yykind, yyvaluep);
   YYFPRINTF (yyo, ")");
 }
 
@@ -1509,7 +1745,8 @@ do {                                                            \
 `------------------------------------------------*/
 
 static void
-yy_reduce_print (yy_state_t *yyssp, YYSTYPE *yyvsp, int yyrule)
+yy_reduce_print (yy_state_t *yyssp, YYSTYPE *yyvsp,
+                 int yyrule)
 {
   int yylno = yyrline[yyrule];
   int yynrhs = yyr2[yyrule];
@@ -1521,9 +1758,8 @@ yy_reduce_print (yy_state_t *yyssp, YYSTYPE *yyvsp, int yyrule)
     {
       YYFPRINTF (stderr, "   $%d = ", yyi + 1);
       yy_symbol_print (stderr,
-                       yystos[yyssp[yyi + 1 - yynrhs]],
-                       &yyvsp[(yyi + 1) - (yynrhs)]
-                                              );
+                       YY_ACCESSING_SYMBOL (+yyssp[yyi + 1 - yynrhs]),
+                       &yyvsp[(yyi + 1) - (yynrhs)]);
       YYFPRINTF (stderr, "\n");
     }
 }
@@ -1538,8 +1774,8 @@ do {                                    \
    multiple parsers can coexist.  */
 int yydebug;
 #else /* !YYDEBUG */
-# define YYDPRINTF(Args)
-# define YY_SYMBOL_PRINT(Title, Type, Value, Location)
+# define YYDPRINTF(Args) ((void) 0)
+# define YY_SYMBOL_PRINT(Title, Kind, Value, Location)
 # define YY_STACK_PRINT(Bottom, Top)
 # define YY_REDUCE_PRINT(Rule)
 #endif /* !YYDEBUG */
@@ -1562,265 +1798,38 @@ int yydebug;
 #endif
 
 
-#if YYERROR_VERBOSE
 
-# ifndef yystrlen
-#  if defined __GLIBC__ && defined _STRING_H
-#   define yystrlen(S) (YY_CAST (YYPTRDIFF_T, strlen (S)))
-#  else
-/* Return the length of YYSTR.  */
-static YYPTRDIFF_T
-yystrlen (const char *yystr)
-{
-  YYPTRDIFF_T yylen;
-  for (yylen = 0; yystr[yylen]; yylen++)
-    continue;
-  return yylen;
-}
-#  endif
-# endif
 
-# ifndef yystpcpy
-#  if defined __GLIBC__ && defined _STRING_H && defined _GNU_SOURCE
-#   define yystpcpy stpcpy
-#  else
-/* Copy YYSRC to YYDEST, returning the address of the terminating '\0' in
-   YYDEST.  */
-static char *
-yystpcpy (char *yydest, const char *yysrc)
-{
-  char *yyd = yydest;
-  const char *yys = yysrc;
 
-  while ((*yyd++ = *yys++) != '\0')
-    continue;
-
-  return yyd - 1;
-}
-#  endif
-# endif
-
-# ifndef yytnamerr
-/* Copy to YYRES the contents of YYSTR after stripping away unnecessary
-   quotes and backslashes, so that it's suitable for yyerror.  The
-   heuristic is that double-quoting is unnecessary unless the string
-   contains an apostrophe, a comma, or backslash (other than
-   backslash-backslash).  YYSTR is taken from yytname.  If YYRES is
-   null, do not copy; instead, return the length of what the result
-   would have been.  */
-static YYPTRDIFF_T
-yytnamerr (char *yyres, const char *yystr)
-{
-  if (*yystr == '"')
-    {
-      YYPTRDIFF_T yyn = 0;
-      char const *yyp = yystr;
-
-      for (;;)
-        switch (*++yyp)
-          {
-          case '\'':
-          case ',':
-            goto do_not_strip_quotes;
-
-          case '\\':
-            if (*++yyp != '\\')
-              goto do_not_strip_quotes;
-            else
-              goto append;
-
-          append:
-          default:
-            if (yyres)
-              yyres[yyn] = *yyp;
-            yyn++;
-            break;
-
-          case '"':
-            if (yyres)
-              yyres[yyn] = '\0';
-            return yyn;
-          }
-    do_not_strip_quotes: ;
-    }
-
-  if (yyres)
-    return yystpcpy (yyres, yystr) - yyres;
-  else
-    return yystrlen (yystr);
-}
-# endif
-
-/* Copy into *YYMSG, which is of size *YYMSG_ALLOC, an error message
-   about the unexpected token YYTOKEN for the state stack whose top is
-   YYSSP.
-
-   Return 0 if *YYMSG was successfully written.  Return 1 if *YYMSG is
-   not large enough to hold the message.  In that case, also set
-   *YYMSG_ALLOC to the required number of bytes.  Return 2 if the
-   required number of bytes is too large to store.  */
-static int
-yysyntax_error (YYPTRDIFF_T *yymsg_alloc, char **yymsg,
-                yy_state_t *yyssp, int yytoken)
-{
-  enum { YYERROR_VERBOSE_ARGS_MAXIMUM = 5 };
-  /* Internationalized format string. */
-  const char *yyformat = YY_NULLPTR;
-  /* Arguments of yyformat: reported tokens (one for the "unexpected",
-     one per "expected"). */
-  char const *yyarg[YYERROR_VERBOSE_ARGS_MAXIMUM];
-  /* Actual size of YYARG. */
-  int yycount = 0;
-  /* Cumulated lengths of YYARG.  */
-  YYPTRDIFF_T yysize = 0;
-
-  /* There are many possibilities here to consider:
-     - If this state is a consistent state with a default action, then
-       the only way this function was invoked is if the default action
-       is an error action.  In that case, don't check for expected
-       tokens because there are none.
-     - The only way there can be no lookahead present (in yychar) is if
-       this state is a consistent state with a default action.  Thus,
-       detecting the absence of a lookahead is sufficient to determine
-       that there is no unexpected or expected token to report.  In that
-       case, just report a simple "syntax error".
-     - Don't assume there isn't a lookahead just because this state is a
-       consistent state with a default action.  There might have been a
-       previous inconsistent state, consistent state with a non-default
-       action, or user semantic action that manipulated yychar.
-     - Of course, the expected token list depends on states to have
-       correct lookahead information, and it depends on the parser not
-       to perform extra reductions after fetching a lookahead from the
-       scanner and before detecting a syntax error.  Thus, state merging
-       (from LALR or IELR) and default reductions corrupt the expected
-       token list.  However, the list is correct for canonical LR with
-       one exception: it will still contain any token that will not be
-       accepted due to an error action in a later state.
-  */
-  if (yytoken != YYEMPTY)
-    {
-      int yyn = yypact[*yyssp];
-      YYPTRDIFF_T yysize0 = yytnamerr (YY_NULLPTR, yytname[yytoken]);
-      yysize = yysize0;
-      yyarg[yycount++] = yytname[yytoken];
-      if (!yypact_value_is_default (yyn))
-        {
-          /* Start YYX at -YYN if negative to avoid negative indexes in
-             YYCHECK.  In other words, skip the first -YYN actions for
-             this state because they are default actions.  */
-          int yyxbegin = yyn < 0 ? -yyn : 0;
-          /* Stay within bounds of both yycheck and yytname.  */
-          int yychecklim = YYLAST - yyn + 1;
-          int yyxend = yychecklim < YYNTOKENS ? yychecklim : YYNTOKENS;
-          int yyx;
-
-          for (yyx = yyxbegin; yyx < yyxend; ++yyx)
-            if (yycheck[yyx + yyn] == yyx && yyx != YYTERROR
-                && !yytable_value_is_error (yytable[yyx + yyn]))
-              {
-                if (yycount == YYERROR_VERBOSE_ARGS_MAXIMUM)
-                  {
-                    yycount = 1;
-                    yysize = yysize0;
-                    break;
-                  }
-                yyarg[yycount++] = yytname[yyx];
-                {
-                  YYPTRDIFF_T yysize1
-                    = yysize + yytnamerr (YY_NULLPTR, yytname[yyx]);
-                  if (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM)
-                    yysize = yysize1;
-                  else
-                    return 2;
-                }
-              }
-        }
-    }
-
-  switch (yycount)
-    {
-# define YYCASE_(N, S)                      \
-      case N:                               \
-        yyformat = S;                       \
-      break
-    default: /* Avoid compiler warnings. */
-      YYCASE_(0, YY_("syntax error"));
-      YYCASE_(1, YY_("syntax error, unexpected %s"));
-      YYCASE_(2, YY_("syntax error, unexpected %s, expecting %s"));
-      YYCASE_(3, YY_("syntax error, unexpected %s, expecting %s or %s"));
-      YYCASE_(4, YY_("syntax error, unexpected %s, expecting %s or %s or %s"));
-      YYCASE_(5, YY_("syntax error, unexpected %s, expecting %s or %s or %s or %s"));
-# undef YYCASE_
-    }
-
-  {
-    /* Don't count the "%s"s in the final size, but reserve room for
-       the terminator.  */
-    YYPTRDIFF_T yysize1 = yysize + (yystrlen (yyformat) - 2 * yycount) + 1;
-    if (yysize <= yysize1 && yysize1 <= YYSTACK_ALLOC_MAXIMUM)
-      yysize = yysize1;
-    else
-      return 2;
-  }
-
-  if (*yymsg_alloc < yysize)
-    {
-      *yymsg_alloc = 2 * yysize;
-      if (! (yysize <= *yymsg_alloc
-             && *yymsg_alloc <= YYSTACK_ALLOC_MAXIMUM))
-        *yymsg_alloc = YYSTACK_ALLOC_MAXIMUM;
-      return 1;
-    }
-
-  /* Avoid sprintf, as that infringes on the user's name space.
-     Don't have undefined behavior even if the translation
-     produced a string with the wrong number of "%s"s.  */
-  {
-    char *yyp = *yymsg;
-    int yyi = 0;
-    while ((*yyp = *yyformat) != '\0')
-      if (*yyp == '%' && yyformat[1] == 's' && yyi < yycount)
-        {
-          yyp += yytnamerr (yyp, yyarg[yyi++]);
-          yyformat += 2;
-        }
-      else
-        {
-          ++yyp;
-          ++yyformat;
-        }
-  }
-  return 0;
-}
-#endif /* YYERROR_VERBOSE */
 
 /*-----------------------------------------------.
 | Release the memory associated to this symbol.  |
 `-----------------------------------------------*/
 
 static void
-yydestruct (const char *yymsg, int yytype, YYSTYPE *yyvaluep)
+yydestruct (const char *yymsg,
+            yysymbol_kind_t yykind, YYSTYPE *yyvaluep)
 {
-  YYUSE (yyvaluep);
+  YY_USE (yyvaluep);
   if (!yymsg)
     yymsg = "Deleting";
-  YY_SYMBOL_PRINT (yymsg, yytype, yyvaluep, yylocationp);
+  YY_SYMBOL_PRINT (yymsg, yykind, yyvaluep, yylocationp);
 
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
-  YYUSE (yytype);
+  YY_USE (yykind);
   YY_IGNORE_MAYBE_UNINITIALIZED_END
 }
 
 
-
-
-/* The lookahead symbol.  */
+/* Lookahead token kind.  */
 int yychar;
 
 /* The semantic value of the lookahead symbol.  */
 YYSTYPE yylval;
 /* Number of syntax errors so far.  */
 int yynerrs;
+
+
 
 
 /*----------.
@@ -1830,43 +1839,36 @@ int yynerrs;
 int
 yyparse (void)
 {
-    yy_state_fast_t yystate;
+    yy_state_fast_t yystate = 0;
     /* Number of tokens to shift before error messages enabled.  */
-    int yyerrstatus;
+    int yyerrstatus = 0;
 
-    /* The stacks and their tools:
-       'yyss': related to states.
-       'yyvs': related to semantic values.
-
-       Refer to the stacks through separate pointers, to allow yyoverflow
+    /* Refer to the stacks through separate pointers, to allow yyoverflow
        to reallocate them elsewhere.  */
 
-    /* The state stack.  */
+    /* Their size.  */
+    YYPTRDIFF_T yystacksize = YYINITDEPTH;
+
+    /* The state stack: array, bottom, top.  */
     yy_state_t yyssa[YYINITDEPTH];
-    yy_state_t *yyss;
-    yy_state_t *yyssp;
+    yy_state_t *yyss = yyssa;
+    yy_state_t *yyssp = yyss;
 
-    /* The semantic value stack.  */
+    /* The semantic value stack: array, bottom, top.  */
     YYSTYPE yyvsa[YYINITDEPTH];
-    YYSTYPE *yyvs;
-    YYSTYPE *yyvsp;
-
-    YYPTRDIFF_T yystacksize;
+    YYSTYPE *yyvs = yyvsa;
+    YYSTYPE *yyvsp = yyvs;
 
   int yyn;
+  /* The return value of yyparse.  */
   int yyresult;
-  /* Lookahead token as an internal (translated) token number.  */
-  int yytoken = 0;
+  /* Lookahead symbol kind.  */
+  yysymbol_kind_t yytoken = YYSYMBOL_YYEMPTY;
   /* The variables used to return semantic value and location from the
      action routines.  */
   YYSTYPE yyval;
 
-#if YYERROR_VERBOSE
-  /* Buffer for error messages, and its allocated size.  */
-  char yymsgbuf[128];
-  char *yymsg = yymsgbuf;
-  YYPTRDIFF_T yymsg_alloc = sizeof yymsgbuf;
-#endif
+
 
 #define YYPOPSTACK(N)   (yyvsp -= (N), yyssp -= (N))
 
@@ -1874,16 +1876,10 @@ yyparse (void)
      Keep to zero when no symbol should be popped.  */
   int yylen = 0;
 
-  yyssp = yyss = yyssa;
-  yyvsp = yyvs = yyvsa;
-  yystacksize = YYINITDEPTH;
-
   YYDPRINTF ((stderr, "Starting parse\n"));
 
-  yystate = 0;
-  yyerrstatus = 0;
-  yynerrs = 0;
   yychar = YYEMPTY; /* Cause a token to be read.  */
+
   goto yysetstate;
 
 
@@ -1905,10 +1901,11 @@ yysetstate:
   YY_IGNORE_USELESS_CAST_BEGIN
   *yyssp = YY_CAST (yy_state_t, yystate);
   YY_IGNORE_USELESS_CAST_END
+  YY_STACK_PRINT (yyss, yyssp);
 
   if (yyss + yystacksize - 1 <= yyssp)
 #if !defined yyoverflow && !defined YYSTACK_RELOCATE
-    goto yyexhaustedlab;
+    YYNOMEM;
 #else
     {
       /* Get the current used size of the three stacks, in elements.  */
@@ -1936,7 +1933,7 @@ yysetstate:
 # else /* defined YYSTACK_RELOCATE */
       /* Extend the stack our own way.  */
       if (YYMAXDEPTH <= yystacksize)
-        goto yyexhaustedlab;
+        YYNOMEM;
       yystacksize *= 2;
       if (YYMAXDEPTH < yystacksize)
         yystacksize = YYMAXDEPTH;
@@ -1947,10 +1944,10 @@ yysetstate:
           YY_CAST (union yyalloc *,
                    YYSTACK_ALLOC (YY_CAST (YYSIZE_T, YYSTACK_BYTES (yystacksize))));
         if (! yyptr)
-          goto yyexhaustedlab;
+          YYNOMEM;
         YYSTACK_RELOCATE (yyss_alloc, yyss);
         YYSTACK_RELOCATE (yyvs_alloc, yyvs);
-# undef YYSTACK_RELOCATE
+#  undef YYSTACK_RELOCATE
         if (yyss1 != yyssa)
           YYSTACK_FREE (yyss1);
       }
@@ -1968,6 +1965,7 @@ yysetstate:
         YYABORT;
     }
 #endif /* !defined yyoverflow && !defined YYSTACK_RELOCATE */
+
 
   if (yystate == YYFINAL)
     YYACCEPT;
@@ -1989,17 +1987,28 @@ yybackup:
 
   /* Not known => get a lookahead token if don't already have one.  */
 
-  /* YYCHAR is either YYEMPTY or YYEOF or a valid lookahead symbol.  */
+  /* YYCHAR is either empty, or end-of-input, or a valid lookahead.  */
   if (yychar == YYEMPTY)
     {
-      YYDPRINTF ((stderr, "Reading a token: "));
+      YYDPRINTF ((stderr, "Reading a token\n"));
       yychar = yylex ();
     }
 
   if (yychar <= YYEOF)
     {
-      yychar = yytoken = YYEOF;
+      yychar = YYEOF;
+      yytoken = YYSYMBOL_YYEOF;
       YYDPRINTF ((stderr, "Now at end of input.\n"));
+    }
+  else if (yychar == YYerror)
+    {
+      /* The scanner already issued an error message, process directly
+         to error recovery.  But do not keep the error token as
+         lookahead, it is too special and may lead us to an endless
+         loop in error recovery. */
+      yychar = YYUNDEF;
+      yytoken = YYSYMBOL_YYerror;
+      goto yyerrlab1;
     }
   else
     {
@@ -2069,7 +2078,7 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 18:
+  case 18: /* accelerator: id ACCELERATORS suboptions BEG acc_entries END  */
 #line 201 "rcparse.y"
           {
 	    define_accelerator ((yyvsp[-5].id), &(yyvsp[-3].res_info), (yyvsp[-1].pacc));
@@ -2077,18 +2086,18 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 2081 "rcparse.c"
+#line 2090 "rcparse.c"
     break;
 
-  case 19:
+  case 19: /* acc_entries: %empty  */
 #line 211 "rcparse.y"
           {
 	    (yyval.pacc) = NULL;
 	  }
-#line 2089 "rcparse.c"
+#line 2098 "rcparse.c"
     break;
 
-  case 20:
+  case 20: /* acc_entries: acc_entries acc_entry  */
 #line 215 "rcparse.y"
           {
 	    rc_accelerator *a;
@@ -2107,19 +2116,19 @@ yyreduce:
 		(yyval.pacc) = (yyvsp[-1].pacc);
 	      }
 	  }
-#line 2111 "rcparse.c"
+#line 2120 "rcparse.c"
     break;
 
-  case 21:
+  case 21: /* acc_entry: acc_event cposnumexpr  */
 #line 236 "rcparse.y"
           {
 	    (yyval.acc) = (yyvsp[-1].acc);
 	    (yyval.acc).id = (yyvsp[0].il);
 	  }
-#line 2120 "rcparse.c"
+#line 2129 "rcparse.c"
     break;
 
-  case 22:
+  case 22: /* acc_entry: acc_event cposnumexpr ',' acc_options  */
 #line 241 "rcparse.y"
           {
 	    (yyval.acc) = (yyvsp[-3].acc);
@@ -2129,10 +2138,10 @@ yyreduce:
 		&& ((yyval.acc).flags & (ACC_SHIFT | ACC_CONTROL)) != 0)
 	      rcparse_warning (_("inappropriate modifiers for non-VIRTKEY"));
 	  }
-#line 2133 "rcparse.c"
+#line 2142 "rcparse.c"
     break;
 
-  case 23:
+  case 23: /* acc_event: QUOTEDSTRING  */
 #line 253 "rcparse.y"
           {
 	    const char *s = (yyvsp[0].s);
@@ -2153,10 +2162,10 @@ yyreduce:
 	    if (s[1] != '\0')
 	      rcparse_warning (_("accelerator should only be one character"));
 	  }
-#line 2157 "rcparse.c"
+#line 2166 "rcparse.c"
     break;
 
-  case 24:
+  case 24: /* acc_event: posnumexpr  */
 #line 273 "rcparse.y"
           {
 	    (yyval.acc).next = NULL;
@@ -2164,83 +2173,83 @@ yyreduce:
 	    (yyval.acc).id = 0;
 	    (yyval.acc).key = (yyvsp[0].il);
 	  }
-#line 2168 "rcparse.c"
+#line 2177 "rcparse.c"
     break;
 
-  case 25:
+  case 25: /* acc_options: acc_option  */
 #line 283 "rcparse.y"
           {
 	    (yyval.is) = (yyvsp[0].is);
 	  }
-#line 2176 "rcparse.c"
+#line 2185 "rcparse.c"
     break;
 
-  case 26:
+  case 26: /* acc_options: acc_options ',' acc_option  */
 #line 287 "rcparse.y"
           {
 	    (yyval.is) = (yyvsp[-2].is) | (yyvsp[0].is);
 	  }
-#line 2184 "rcparse.c"
+#line 2193 "rcparse.c"
     break;
 
-  case 27:
+  case 27: /* acc_options: acc_options acc_option  */
 #line 292 "rcparse.y"
           {
 	    (yyval.is) = (yyvsp[-1].is) | (yyvsp[0].is);
 	  }
-#line 2192 "rcparse.c"
+#line 2201 "rcparse.c"
     break;
 
-  case 28:
+  case 28: /* acc_option: VIRTKEY  */
 #line 299 "rcparse.y"
           {
 	    (yyval.is) = ACC_VIRTKEY;
 	  }
-#line 2200 "rcparse.c"
+#line 2209 "rcparse.c"
     break;
 
-  case 29:
+  case 29: /* acc_option: ASCII  */
 #line 303 "rcparse.y"
           {
 	    /* This is just the absence of VIRTKEY.  */
 	    (yyval.is) = 0;
 	  }
-#line 2209 "rcparse.c"
+#line 2218 "rcparse.c"
     break;
 
-  case 30:
+  case 30: /* acc_option: NOINVERT  */
 #line 308 "rcparse.y"
           {
 	    (yyval.is) = ACC_NOINVERT;
 	  }
-#line 2217 "rcparse.c"
+#line 2226 "rcparse.c"
     break;
 
-  case 31:
+  case 31: /* acc_option: SHIFT  */
 #line 312 "rcparse.y"
           {
 	    (yyval.is) = ACC_SHIFT;
 	  }
-#line 2225 "rcparse.c"
+#line 2234 "rcparse.c"
     break;
 
-  case 32:
+  case 32: /* acc_option: CONTROL  */
 #line 316 "rcparse.y"
           {
 	    (yyval.is) = ACC_CONTROL;
 	  }
-#line 2233 "rcparse.c"
+#line 2242 "rcparse.c"
     break;
 
-  case 33:
+  case 33: /* acc_option: ALT  */
 #line 320 "rcparse.y"
           {
 	    (yyval.is) = ACC_ALT;
 	  }
-#line 2241 "rcparse.c"
+#line 2250 "rcparse.c"
     break;
 
-  case 34:
+  case 34: /* bitmap: id BITMAP memflags_move file_name  */
 #line 329 "rcparse.y"
           {
 	    define_bitmap ((yyvsp[-3].id), &(yyvsp[-1].res_info), (yyvsp[0].s));
@@ -2248,10 +2257,10 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 2252 "rcparse.c"
+#line 2261 "rcparse.c"
     break;
 
-  case 35:
+  case 35: /* cursor: id CURSOR memflags_move_discard file_name  */
 #line 341 "rcparse.y"
           {
 	    define_cursor ((yyvsp[-3].id), &(yyvsp[-1].res_info), (yyvsp[0].s));
@@ -2259,10 +2268,10 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 2263 "rcparse.c"
+#line 2272 "rcparse.c"
     break;
 
-  case 36:
+  case 36: /* $@1: %empty  */
 #line 354 "rcparse.y"
             {
 	      memset (&dialog, 0, sizeof dialog);
@@ -2280,10 +2289,10 @@ yyreduce:
 	      sub_res_info = (yyvsp[-5].res_info);
 	      style = 0;
 	    }
-#line 2284 "rcparse.c"
+#line 2293 "rcparse.c"
     break;
 
-  case 37:
+  case 37: /* dialog: id DIALOG memflags_move exstyle posnumexpr cnumexpr cnumexpr cnumexpr $@1 styles BEG controls END  */
 #line 371 "rcparse.y"
           {
 	    define_dialog ((yyvsp[-12].id), &sub_res_info, &dialog);
@@ -2291,10 +2300,10 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 2295 "rcparse.c"
+#line 2304 "rcparse.c"
     break;
 
-  case 38:
+  case 38: /* $@2: %empty  */
 #line 379 "rcparse.y"
             {
 	      memset (&dialog, 0, sizeof dialog);
@@ -2314,10 +2323,10 @@ yyreduce:
 	      sub_res_info = (yyvsp[-5].res_info);
 	      style = 0;
 	    }
-#line 2318 "rcparse.c"
+#line 2327 "rcparse.c"
     break;
 
-  case 39:
+  case 39: /* dialog: id DIALOGEX memflags_move exstyle posnumexpr cnumexpr cnumexpr cnumexpr $@2 styles BEG controls END  */
 #line 398 "rcparse.y"
           {
 	    define_dialog ((yyvsp[-12].id), &sub_res_info, &dialog);
@@ -2325,10 +2334,10 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 2329 "rcparse.c"
+#line 2338 "rcparse.c"
     break;
 
-  case 40:
+  case 40: /* $@3: %empty  */
 #line 406 "rcparse.y"
             {
 	      memset (&dialog, 0, sizeof dialog);
@@ -2349,10 +2358,10 @@ yyreduce:
 	      sub_res_info = (yyvsp[-6].res_info);
 	      style = 0;
 	    }
-#line 2353 "rcparse.c"
+#line 2362 "rcparse.c"
     break;
 
-  case 41:
+  case 41: /* dialog: id DIALOGEX memflags_move exstyle posnumexpr cnumexpr cnumexpr cnumexpr cnumexpr $@3 styles BEG controls END  */
 #line 426 "rcparse.y"
           {
 	    define_dialog ((yyvsp[-13].id), &sub_res_info, &dialog);
@@ -2360,68 +2369,68 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 2364 "rcparse.c"
+#line 2373 "rcparse.c"
     break;
 
-  case 42:
+  case 42: /* exstyle: %empty  */
 #line 436 "rcparse.y"
           {
 	    (yyval.il) = 0;
 	  }
-#line 2372 "rcparse.c"
+#line 2381 "rcparse.c"
     break;
 
-  case 43:
+  case 43: /* exstyle: EXSTYLE '=' numexpr  */
 #line 440 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[0].il);
 	  }
-#line 2380 "rcparse.c"
+#line 2389 "rcparse.c"
     break;
 
-  case 45:
+  case 45: /* styles: styles CAPTION res_unicode_string_concat  */
 #line 448 "rcparse.y"
           {
 	    dialog.style |= WS_CAPTION;
 	    style |= WS_CAPTION;
 	    dialog.caption = (yyvsp[0].uni);
 	  }
-#line 2390 "rcparse.c"
+#line 2399 "rcparse.c"
     break;
 
-  case 46:
+  case 46: /* styles: styles CLASS id  */
 #line 454 "rcparse.y"
           {
 	    dialog.class = (yyvsp[0].id);
 	  }
-#line 2398 "rcparse.c"
+#line 2407 "rcparse.c"
     break;
 
-  case 47:
+  case 47: /* styles: styles STYLE styleexpr  */
 #line 459 "rcparse.y"
           {
 	    dialog.style = style;
 	  }
-#line 2406 "rcparse.c"
+#line 2415 "rcparse.c"
     break;
 
-  case 48:
+  case 48: /* styles: styles EXSTYLE numexpr  */
 #line 463 "rcparse.y"
           {
 	    dialog.exstyle = (yyvsp[0].il);
 	  }
-#line 2414 "rcparse.c"
+#line 2423 "rcparse.c"
     break;
 
-  case 49:
+  case 49: /* styles: styles CLASS res_unicode_string_concat  */
 #line 467 "rcparse.y"
           {
 	    res_unistring_to_id (& dialog.class, (yyvsp[0].uni));
 	  }
-#line 2422 "rcparse.c"
+#line 2431 "rcparse.c"
     break;
 
-  case 50:
+  case 50: /* styles: styles FONT numexpr ',' res_unicode_string_concat  */
 #line 471 "rcparse.y"
           {
 	    dialog.style |= DS_SETFONT;
@@ -2435,10 +2444,10 @@ yyreduce:
 		dialog.ex->charset = 1;
 	      }
 	  }
-#line 2439 "rcparse.c"
+#line 2448 "rcparse.c"
     break;
 
-  case 51:
+  case 51: /* styles: styles FONT numexpr ',' res_unicode_string_concat cnumexpr  */
 #line 484 "rcparse.y"
           {
 	    dialog.style |= DS_SETFONT;
@@ -2454,10 +2463,10 @@ yyreduce:
 		dialog.ex->charset = 1;
 	      }
 	  }
-#line 2458 "rcparse.c"
+#line 2467 "rcparse.c"
     break;
 
-  case 52:
+  case 52: /* styles: styles FONT numexpr ',' res_unicode_string_concat cnumexpr cnumexpr  */
 #line 499 "rcparse.y"
           {
 	    dialog.style |= DS_SETFONT;
@@ -2473,10 +2482,10 @@ yyreduce:
 		dialog.ex->charset = 1;
 	      }
 	  }
-#line 2477 "rcparse.c"
+#line 2486 "rcparse.c"
     break;
 
-  case 53:
+  case 53: /* styles: styles FONT numexpr ',' res_unicode_string_concat cnumexpr cnumexpr cnumexpr  */
 #line 514 "rcparse.y"
           {
 	    dialog.style |= DS_SETFONT;
@@ -2492,42 +2501,42 @@ yyreduce:
 		dialog.ex->charset = (yyvsp[0].il);
 	      }
 	  }
-#line 2496 "rcparse.c"
+#line 2505 "rcparse.c"
     break;
 
-  case 54:
+  case 54: /* styles: styles MENU id  */
 #line 529 "rcparse.y"
           {
 	    dialog.menu = (yyvsp[0].id);
 	  }
-#line 2504 "rcparse.c"
+#line 2513 "rcparse.c"
     break;
 
-  case 55:
+  case 55: /* styles: styles CHARACTERISTICS numexpr  */
 #line 533 "rcparse.y"
           {
 	    sub_res_info.characteristics = (yyvsp[0].il);
 	  }
-#line 2512 "rcparse.c"
+#line 2521 "rcparse.c"
     break;
 
-  case 56:
+  case 56: /* styles: styles LANGUAGE numexpr cnumexpr  */
 #line 537 "rcparse.y"
           {
 	    sub_res_info.language = (yyvsp[-1].il) | ((yyvsp[0].il) << SUBLANG_SHIFT);
 	  }
-#line 2520 "rcparse.c"
+#line 2529 "rcparse.c"
     break;
 
-  case 57:
+  case 57: /* styles: styles VERSIONK numexpr  */
 #line 541 "rcparse.y"
           {
 	    sub_res_info.version = (yyvsp[0].il);
 	  }
-#line 2528 "rcparse.c"
+#line 2537 "rcparse.c"
     break;
 
-  case 59:
+  case 59: /* controls: controls control  */
 #line 549 "rcparse.y"
           {
 	    rc_dialog_control **pp;
@@ -2536,10 +2545,10 @@ yyreduce:
 	      ;
 	    *pp = (yyvsp[0].dialog_control);
 	  }
-#line 2540 "rcparse.c"
+#line 2549 "rcparse.c"
     break;
 
-  case 60:
+  case 60: /* $@4: %empty  */
 #line 560 "rcparse.y"
             {
 	      default_style = BS_AUTO3STATE | WS_TABSTOP;
@@ -2548,18 +2557,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2552 "rcparse.c"
+#line 2561 "rcparse.c"
     break;
 
-  case 61:
+  case 61: /* control: AUTO3STATE optresidc $@4 control_params  */
 #line 568 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2560 "rcparse.c"
+#line 2569 "rcparse.c"
     break;
 
-  case 62:
+  case 62: /* $@5: %empty  */
 #line 572 "rcparse.y"
             {
 	      default_style = BS_AUTOCHECKBOX | WS_TABSTOP;
@@ -2568,18 +2577,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2572 "rcparse.c"
+#line 2581 "rcparse.c"
     break;
 
-  case 63:
+  case 63: /* control: AUTOCHECKBOX optresidc $@5 control_params  */
 #line 580 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2580 "rcparse.c"
+#line 2589 "rcparse.c"
     break;
 
-  case 64:
+  case 64: /* $@6: %empty  */
 #line 584 "rcparse.y"
             {
 	      default_style = BS_AUTORADIOBUTTON | WS_TABSTOP;
@@ -2588,18 +2597,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2592 "rcparse.c"
+#line 2601 "rcparse.c"
     break;
 
-  case 65:
+  case 65: /* control: AUTORADIOBUTTON optresidc $@6 control_params  */
 #line 592 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2600 "rcparse.c"
+#line 2609 "rcparse.c"
     break;
 
-  case 66:
+  case 66: /* $@7: %empty  */
 #line 596 "rcparse.y"
             {
 	      default_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
@@ -2608,10 +2617,10 @@ yyreduce:
 	      class.u.id = CTL_EDIT;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2612 "rcparse.c"
+#line 2621 "rcparse.c"
     break;
 
-  case 67:
+  case 67: /* control: BEDIT optresidc $@7 control_params  */
 #line 604 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
@@ -2619,10 +2628,10 @@ yyreduce:
 	      rcparse_warning (_("BEDIT requires DIALOGEX"));
 	    res_string_to_id (&(yyval.dialog_control)->class, "BEDIT");
 	  }
-#line 2623 "rcparse.c"
+#line 2632 "rcparse.c"
     break;
 
-  case 68:
+  case 68: /* $@8: %empty  */
 #line 611 "rcparse.y"
             {
 	      default_style = BS_CHECKBOX | WS_TABSTOP;
@@ -2631,18 +2640,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2635 "rcparse.c"
+#line 2644 "rcparse.c"
     break;
 
-  case 69:
+  case 69: /* control: CHECKBOX optresidc $@8 control_params  */
 #line 619 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2643 "rcparse.c"
+#line 2652 "rcparse.c"
     break;
 
-  case 70:
+  case 70: /* $@9: %empty  */
 #line 623 "rcparse.y"
             {
 	      /* This is as per MSDN documentation.  With some (???)
@@ -2653,18 +2662,18 @@ yyreduce:
 	      class.u.id = CTL_COMBOBOX;
 	      res_text_field = res_null_text;
 	    }
-#line 2657 "rcparse.c"
+#line 2666 "rcparse.c"
     break;
 
-  case 71:
+  case 71: /* control: COMBOBOX $@9 control_params  */
 #line 633 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2665 "rcparse.c"
+#line 2674 "rcparse.c"
     break;
 
-  case 72:
+  case 72: /* control: CONTROL optresidc numexpr cresid control_styleexpr cnumexpr cnumexpr cnumexpr cnumexpr optcnumexpr opt_control_data  */
 #line 638 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_control ((yyvsp[-9].id), (yyvsp[-8].il), (yyvsp[-5].il), (yyvsp[-4].il), (yyvsp[-3].il), (yyvsp[-2].il), (yyvsp[-7].id), style, (yyvsp[-1].il));
@@ -2675,10 +2684,10 @@ yyreduce:
 		(yyval.dialog_control)->data = (yyvsp[0].rcdata_item);
 	      }
 	  }
-#line 2679 "rcparse.c"
+#line 2688 "rcparse.c"
     break;
 
-  case 73:
+  case 73: /* control: CONTROL optresidc numexpr cresid control_styleexpr cnumexpr cnumexpr cnumexpr cnumexpr cnumexpr cnumexpr opt_control_data  */
 #line 649 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_control ((yyvsp[-10].id), (yyvsp[-9].il), (yyvsp[-6].il), (yyvsp[-5].il), (yyvsp[-4].il), (yyvsp[-3].il), (yyvsp[-8].id), style, (yyvsp[-2].il));
@@ -2687,10 +2696,10 @@ yyreduce:
 	    (yyval.dialog_control)->help = (yyvsp[-1].il);
 	    (yyval.dialog_control)->data = (yyvsp[0].rcdata_item);
 	  }
-#line 2691 "rcparse.c"
+#line 2700 "rcparse.c"
     break;
 
-  case 74:
+  case 74: /* $@10: %empty  */
 #line 657 "rcparse.y"
             {
 	      default_style = SS_CENTER | WS_GROUP;
@@ -2699,18 +2708,18 @@ yyreduce:
 	      class.u.id = CTL_STATIC;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2703 "rcparse.c"
+#line 2712 "rcparse.c"
     break;
 
-  case 75:
+  case 75: /* control: CTEXT optresidc $@10 control_params  */
 #line 665 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2711 "rcparse.c"
+#line 2720 "rcparse.c"
     break;
 
-  case 76:
+  case 76: /* $@11: %empty  */
 #line 669 "rcparse.y"
             {
 	      default_style = BS_DEFPUSHBUTTON | WS_TABSTOP;
@@ -2719,18 +2728,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2723 "rcparse.c"
+#line 2732 "rcparse.c"
     break;
 
-  case 77:
+  case 77: /* control: DEFPUSHBUTTON optresidc $@11 control_params  */
 #line 677 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2731 "rcparse.c"
+#line 2740 "rcparse.c"
     break;
 
-  case 78:
+  case 78: /* $@12: %empty  */
 #line 681 "rcparse.y"
             {
 	      default_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
@@ -2739,18 +2748,18 @@ yyreduce:
 	      class.u.id = CTL_EDIT;
 	      res_text_field = res_null_text;
 	    }
-#line 2743 "rcparse.c"
+#line 2752 "rcparse.c"
     break;
 
-  case 79:
+  case 79: /* control: EDITTEXT $@12 control_params  */
 #line 689 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2751 "rcparse.c"
+#line 2760 "rcparse.c"
     break;
 
-  case 80:
+  case 80: /* $@13: %empty  */
 #line 693 "rcparse.y"
             {
 	      default_style = BS_GROUPBOX;
@@ -2759,18 +2768,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2763 "rcparse.c"
+#line 2772 "rcparse.c"
     break;
 
-  case 81:
+  case 81: /* control: GROUPBOX optresidc $@13 control_params  */
 #line 701 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2771 "rcparse.c"
+#line 2780 "rcparse.c"
     break;
 
-  case 82:
+  case 82: /* $@14: %empty  */
 #line 705 "rcparse.y"
             {
 	      default_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
@@ -2779,10 +2788,10 @@ yyreduce:
 	      class.u.id = CTL_EDIT;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2783 "rcparse.c"
+#line 2792 "rcparse.c"
     break;
 
-  case 83:
+  case 83: /* control: HEDIT optresidc $@14 control_params  */
 #line 713 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
@@ -2790,46 +2799,46 @@ yyreduce:
 	      rcparse_warning (_("IEDIT requires DIALOGEX"));
 	    res_string_to_id (&(yyval.dialog_control)->class, "HEDIT");
 	  }
-#line 2794 "rcparse.c"
+#line 2803 "rcparse.c"
     break;
 
-  case 84:
+  case 84: /* control: ICON resref numexpr cnumexpr cnumexpr opt_control_data  */
 #line 720 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_icon_control ((yyvsp[-4].id), (yyvsp[-3].il), (yyvsp[-2].il), (yyvsp[-1].il), 0, 0, 0, (yyvsp[0].rcdata_item),
 				      dialog.ex);
           }
-#line 2803 "rcparse.c"
+#line 2812 "rcparse.c"
     break;
 
-  case 85:
+  case 85: /* control: ICON resref numexpr cnumexpr cnumexpr cnumexpr cnumexpr opt_control_data  */
 #line 726 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_icon_control ((yyvsp[-6].id), (yyvsp[-5].il), (yyvsp[-4].il), (yyvsp[-3].il), 0, 0, 0, (yyvsp[0].rcdata_item),
 				      dialog.ex);
           }
-#line 2812 "rcparse.c"
+#line 2821 "rcparse.c"
     break;
 
-  case 86:
+  case 86: /* control: ICON resref numexpr cnumexpr cnumexpr cnumexpr cnumexpr icon_styleexpr optcnumexpr opt_control_data  */
 #line 732 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_icon_control ((yyvsp[-8].id), (yyvsp[-7].il), (yyvsp[-6].il), (yyvsp[-5].il), style, (yyvsp[-1].il), 0, (yyvsp[0].rcdata_item),
 				      dialog.ex);
           }
-#line 2821 "rcparse.c"
+#line 2830 "rcparse.c"
     break;
 
-  case 87:
+  case 87: /* control: ICON resref numexpr cnumexpr cnumexpr cnumexpr cnumexpr icon_styleexpr cnumexpr cnumexpr opt_control_data  */
 #line 738 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_icon_control ((yyvsp[-9].id), (yyvsp[-8].il), (yyvsp[-7].il), (yyvsp[-6].il), style, (yyvsp[-2].il), (yyvsp[-1].il), (yyvsp[0].rcdata_item),
 				      dialog.ex);
           }
-#line 2830 "rcparse.c"
+#line 2839 "rcparse.c"
     break;
 
-  case 88:
+  case 88: /* $@15: %empty  */
 #line 743 "rcparse.y"
             {
 	      default_style = ES_LEFT | WS_BORDER | WS_TABSTOP;
@@ -2838,10 +2847,10 @@ yyreduce:
 	      class.u.id = CTL_EDIT;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2842 "rcparse.c"
+#line 2851 "rcparse.c"
     break;
 
-  case 89:
+  case 89: /* control: IEDIT optresidc $@15 control_params  */
 #line 751 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
@@ -2849,10 +2858,10 @@ yyreduce:
 	      rcparse_warning (_("IEDIT requires DIALOGEX"));
 	    res_string_to_id (&(yyval.dialog_control)->class, "IEDIT");
 	  }
-#line 2853 "rcparse.c"
+#line 2862 "rcparse.c"
     break;
 
-  case 90:
+  case 90: /* $@16: %empty  */
 #line 758 "rcparse.y"
             {
 	      default_style = LBS_NOTIFY | WS_BORDER;
@@ -2861,18 +2870,18 @@ yyreduce:
 	      class.u.id = CTL_LISTBOX;
 	      res_text_field = res_null_text;
 	    }
-#line 2865 "rcparse.c"
+#line 2874 "rcparse.c"
     break;
 
-  case 91:
+  case 91: /* control: LISTBOX $@16 control_params  */
 #line 766 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2873 "rcparse.c"
+#line 2882 "rcparse.c"
     break;
 
-  case 92:
+  case 92: /* $@17: %empty  */
 #line 770 "rcparse.y"
             {
 	      default_style = SS_LEFT | WS_GROUP;
@@ -2881,18 +2890,18 @@ yyreduce:
 	      class.u.id = CTL_STATIC;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2885 "rcparse.c"
+#line 2894 "rcparse.c"
     break;
 
-  case 93:
+  case 93: /* control: LTEXT optresidc $@17 control_params  */
 #line 778 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2893 "rcparse.c"
+#line 2902 "rcparse.c"
     break;
 
-  case 94:
+  case 94: /* $@18: %empty  */
 #line 782 "rcparse.y"
             {
 	      default_style = BS_PUSHBOX | WS_TABSTOP;
@@ -2900,18 +2909,18 @@ yyreduce:
 	      class.named = 0;
 	      class.u.id = CTL_BUTTON;
 	    }
-#line 2904 "rcparse.c"
+#line 2913 "rcparse.c"
     break;
 
-  case 95:
+  case 95: /* control: PUSHBOX optresidc $@18 control_params  */
 #line 789 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2912 "rcparse.c"
+#line 2921 "rcparse.c"
     break;
 
-  case 96:
+  case 96: /* $@19: %empty  */
 #line 793 "rcparse.y"
             {
 	      default_style = BS_PUSHBUTTON | WS_TABSTOP;
@@ -2920,18 +2929,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2924 "rcparse.c"
+#line 2933 "rcparse.c"
     break;
 
-  case 97:
+  case 97: /* control: PUSHBUTTON optresidc $@19 control_params  */
 #line 801 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2932 "rcparse.c"
+#line 2941 "rcparse.c"
     break;
 
-  case 98:
+  case 98: /* $@20: %empty  */
 #line 805 "rcparse.y"
             {
 	      default_style = BS_RADIOBUTTON | WS_TABSTOP;
@@ -2940,18 +2949,18 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2944 "rcparse.c"
+#line 2953 "rcparse.c"
     break;
 
-  case 99:
+  case 99: /* control: RADIOBUTTON optresidc $@20 control_params  */
 #line 813 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2952 "rcparse.c"
+#line 2961 "rcparse.c"
     break;
 
-  case 100:
+  case 100: /* $@21: %empty  */
 #line 817 "rcparse.y"
             {
 	      default_style = SS_RIGHT | WS_GROUP;
@@ -2960,18 +2969,18 @@ yyreduce:
 	      class.u.id = CTL_STATIC;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 2964 "rcparse.c"
+#line 2973 "rcparse.c"
     break;
 
-  case 101:
+  case 101: /* control: RTEXT optresidc $@21 control_params  */
 #line 825 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2972 "rcparse.c"
+#line 2981 "rcparse.c"
     break;
 
-  case 102:
+  case 102: /* $@22: %empty  */
 #line 829 "rcparse.y"
             {
 	      default_style = SBS_HORZ;
@@ -2980,18 +2989,18 @@ yyreduce:
 	      class.u.id = CTL_SCROLLBAR;
 	      res_text_field = res_null_text;
 	    }
-#line 2984 "rcparse.c"
+#line 2993 "rcparse.c"
     break;
 
-  case 103:
+  case 103: /* control: SCROLLBAR $@22 control_params  */
 #line 837 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 2992 "rcparse.c"
+#line 3001 "rcparse.c"
     break;
 
-  case 104:
+  case 104: /* $@23: %empty  */
 #line 841 "rcparse.y"
             {
 	      default_style = BS_3STATE | WS_TABSTOP;
@@ -3000,24 +3009,24 @@ yyreduce:
 	      class.u.id = CTL_BUTTON;
 	      res_text_field = (yyvsp[0].id);
 	    }
-#line 3004 "rcparse.c"
+#line 3013 "rcparse.c"
     break;
 
-  case 105:
+  case 105: /* control: STATE3 optresidc $@23 control_params  */
 #line 849 "rcparse.y"
           {
 	    (yyval.dialog_control) = (yyvsp[0].dialog_control);
 	  }
-#line 3012 "rcparse.c"
+#line 3021 "rcparse.c"
     break;
 
-  case 106:
+  case 106: /* $@24: %empty  */
 #line 854 "rcparse.y"
             { style = WS_CHILD | WS_VISIBLE; }
-#line 3018 "rcparse.c"
+#line 3027 "rcparse.c"
     break;
 
-  case 107:
+  case 107: /* control: USERBUTTON resref numexpr ',' numexpr ',' numexpr ',' numexpr ',' numexpr ',' $@24 styleexpr optcnumexpr  */
 #line 856 "rcparse.y"
           {
 	    rc_res_id cid;
@@ -3026,10 +3035,10 @@ yyreduce:
 	    (yyval.dialog_control) = define_control ((yyvsp[-13].id), (yyvsp[-12].il), (yyvsp[-10].il), (yyvsp[-8].il), (yyvsp[-6].il), (yyvsp[-4].il), cid,
 				 style, (yyvsp[0].il));
 	  }
-#line 3030 "rcparse.c"
+#line 3039 "rcparse.c"
     break;
 
-  case 108:
+  case 108: /* control_params: numexpr cnumexpr cnumexpr cnumexpr cnumexpr opt_control_data  */
 #line 874 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_control (res_text_field, (yyvsp[-5].il), (yyvsp[-4].il), (yyvsp[-3].il), (yyvsp[-2].il), (yyvsp[-1].il), class,
@@ -3041,10 +3050,10 @@ yyreduce:
 		(yyval.dialog_control)->data = (yyvsp[0].rcdata_item);
 	      }
 	  }
-#line 3045 "rcparse.c"
+#line 3054 "rcparse.c"
     break;
 
-  case 109:
+  case 109: /* control_params: numexpr cnumexpr cnumexpr cnumexpr cnumexpr control_params_styleexpr optcnumexpr opt_control_data  */
 #line 886 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_control (res_text_field, (yyvsp[-7].il), (yyvsp[-6].il), (yyvsp[-5].il), (yyvsp[-4].il), (yyvsp[-3].il), class, style, (yyvsp[-1].il));
@@ -3055,10 +3064,10 @@ yyreduce:
 		(yyval.dialog_control)->data = (yyvsp[0].rcdata_item);
 	      }
 	  }
-#line 3059 "rcparse.c"
+#line 3068 "rcparse.c"
     break;
 
-  case 110:
+  case 110: /* control_params: numexpr cnumexpr cnumexpr cnumexpr cnumexpr control_params_styleexpr cnumexpr cnumexpr opt_control_data  */
 #line 897 "rcparse.y"
           {
 	    (yyval.dialog_control) = define_control (res_text_field, (yyvsp[-8].il), (yyvsp[-7].il), (yyvsp[-6].il), (yyvsp[-5].il), (yyvsp[-4].il), class, style, (yyvsp[-2].il));
@@ -3067,10 +3076,10 @@ yyreduce:
 	    (yyval.dialog_control)->help = (yyvsp[-1].il);
 	    (yyval.dialog_control)->data = (yyvsp[0].rcdata_item);
 	  }
-#line 3071 "rcparse.c"
+#line 3080 "rcparse.c"
     break;
 
-  case 111:
+  case 111: /* cresid: ',' resid  */
 #line 908 "rcparse.y"
           {
 	    if ((yyvsp[0].id).named)
@@ -3078,77 +3087,77 @@ yyreduce:
 	    else
 	      (yyval.id)=(yyvsp[0].id);
 	  }
-#line 3082 "rcparse.c"
+#line 3091 "rcparse.c"
     break;
 
-  case 112:
+  case 112: /* optresidc: %empty  */
 #line 918 "rcparse.y"
           {
 	    res_string_to_id (&(yyval.id), "");
 	  }
-#line 3090 "rcparse.c"
+#line 3099 "rcparse.c"
     break;
 
-  case 113:
+  case 113: /* optresidc: resid ','  */
 #line 921 "rcparse.y"
                     { (yyval.id)=(yyvsp[-1].id); }
-#line 3096 "rcparse.c"
+#line 3105 "rcparse.c"
     break;
 
-  case 114:
+  case 114: /* resid: posnumexpr  */
 #line 926 "rcparse.y"
           {
 	    (yyval.id).named = 0;
 	    (yyval.id).u.id = (yyvsp[0].il);
 	  }
-#line 3105 "rcparse.c"
+#line 3114 "rcparse.c"
     break;
 
-  case 115:
+  case 115: /* resid: res_unicode_string_concat  */
 #line 931 "rcparse.y"
           {
 	    (yyval.id).named = 1;
 	    (yyval.id).u.n.name = (yyvsp[0].uni);
 	    (yyval.id).u.n.length = unichar_len ((yyvsp[0].uni));
 	  }
-#line 3115 "rcparse.c"
+#line 3124 "rcparse.c"
     break;
 
-  case 116:
+  case 116: /* opt_control_data: %empty  */
 #line 940 "rcparse.y"
           {
 	    (yyval.rcdata_item) = NULL;
 	  }
-#line 3123 "rcparse.c"
+#line 3132 "rcparse.c"
     break;
 
-  case 117:
+  case 117: /* opt_control_data: BEG optrcdata_data END  */
 #line 944 "rcparse.y"
           {
 	    (yyval.rcdata_item) = (yyvsp[-1].rcdata).first;
 	  }
-#line 3131 "rcparse.c"
+#line 3140 "rcparse.c"
     break;
 
-  case 118:
+  case 118: /* $@25: %empty  */
 #line 953 "rcparse.y"
           { style = WS_CHILD | WS_VISIBLE; }
-#line 3137 "rcparse.c"
+#line 3146 "rcparse.c"
     break;
 
-  case 120:
+  case 120: /* $@26: %empty  */
 #line 959 "rcparse.y"
           { style = SS_ICON | WS_CHILD | WS_VISIBLE; }
-#line 3143 "rcparse.c"
+#line 3152 "rcparse.c"
     break;
 
-  case 122:
+  case 122: /* $@27: %empty  */
 #line 965 "rcparse.y"
           { style = base_style | WS_CHILD | WS_VISIBLE; }
-#line 3149 "rcparse.c"
+#line 3158 "rcparse.c"
     break;
 
-  case 124:
+  case 124: /* font: id FONT memflags_move_discard file_name  */
 #line 973 "rcparse.y"
           {
 	    define_font ((yyvsp[-3].id), &(yyvsp[-1].res_info), (yyvsp[0].s));
@@ -3156,10 +3165,10 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3160 "rcparse.c"
+#line 3169 "rcparse.c"
     break;
 
-  case 125:
+  case 125: /* icon: id ICON memflags_move_discard file_name  */
 #line 985 "rcparse.y"
           {
 	    define_icon ((yyvsp[-3].id), &(yyvsp[-1].res_info), (yyvsp[0].s));
@@ -3167,18 +3176,18 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3171 "rcparse.c"
+#line 3180 "rcparse.c"
     break;
 
-  case 126:
+  case 126: /* language: LANGUAGE numexpr cnumexpr  */
 #line 998 "rcparse.y"
           {
 	    language = (yyvsp[-1].il) | ((yyvsp[0].il) << SUBLANG_SHIFT);
 	  }
-#line 3179 "rcparse.c"
+#line 3188 "rcparse.c"
     break;
 
-  case 127:
+  case 127: /* menu: id MENU suboptions BEG menuitems END  */
 #line 1007 "rcparse.y"
           {
 	    define_menu ((yyvsp[-5].id), &(yyvsp[-3].res_info), (yyvsp[-1].menuitem));
@@ -3186,18 +3195,18 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3190 "rcparse.c"
+#line 3199 "rcparse.c"
     break;
 
-  case 128:
+  case 128: /* menuitems: %empty  */
 #line 1017 "rcparse.y"
           {
 	    (yyval.menuitem) = NULL;
 	  }
-#line 3198 "rcparse.c"
+#line 3207 "rcparse.c"
     break;
 
-  case 129:
+  case 129: /* menuitems: menuitems menuitem  */
 #line 1021 "rcparse.y"
           {
 	    if ((yyvsp[-1].menuitem) == NULL)
@@ -3212,122 +3221,122 @@ yyreduce:
 		(yyval.menuitem) = (yyvsp[-1].menuitem);
 	      }
 	  }
-#line 3216 "rcparse.c"
+#line 3225 "rcparse.c"
     break;
 
-  case 130:
+  case 130: /* menuitem: MENUITEM res_unicode_string_concat cnumexpr menuitem_flags  */
 #line 1038 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-2].uni), (yyvsp[-1].il), (yyvsp[0].is), 0, 0, NULL);
 	  }
-#line 3224 "rcparse.c"
+#line 3233 "rcparse.c"
     break;
 
-  case 131:
+  case 131: /* menuitem: MENUITEM SEPARATOR  */
 #line 1042 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem (NULL, 0, 0, 0, 0, NULL);
 	  }
-#line 3232 "rcparse.c"
+#line 3241 "rcparse.c"
     break;
 
-  case 132:
+  case 132: /* menuitem: POPUP res_unicode_string_concat menuitem_flags BEG menuitems END  */
 #line 1046 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-4].uni), 0, (yyvsp[-3].is), 0, 0, (yyvsp[-1].menuitem));
 	  }
-#line 3240 "rcparse.c"
+#line 3249 "rcparse.c"
     break;
 
-  case 133:
+  case 133: /* menuitem_flags: %empty  */
 #line 1053 "rcparse.y"
           {
 	    (yyval.is) = 0;
 	  }
-#line 3248 "rcparse.c"
+#line 3257 "rcparse.c"
     break;
 
-  case 134:
+  case 134: /* menuitem_flags: menuitem_flags ',' menuitem_flag  */
 #line 1057 "rcparse.y"
           {
 	    (yyval.is) = (yyvsp[-2].is) | (yyvsp[0].is);
 	  }
-#line 3256 "rcparse.c"
+#line 3265 "rcparse.c"
     break;
 
-  case 135:
+  case 135: /* menuitem_flags: menuitem_flags menuitem_flag  */
 #line 1061 "rcparse.y"
           {
 	    (yyval.is) = (yyvsp[-1].is) | (yyvsp[0].is);
 	  }
-#line 3264 "rcparse.c"
+#line 3273 "rcparse.c"
     break;
 
-  case 136:
+  case 136: /* menuitem_flag: CHECKED  */
 #line 1068 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_CHECKED;
 	  }
-#line 3272 "rcparse.c"
+#line 3281 "rcparse.c"
     break;
 
-  case 137:
+  case 137: /* menuitem_flag: GRAYED  */
 #line 1072 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_GRAYED;
 	  }
-#line 3280 "rcparse.c"
+#line 3289 "rcparse.c"
     break;
 
-  case 138:
+  case 138: /* menuitem_flag: HELP  */
 #line 1076 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_HELP;
 	  }
-#line 3288 "rcparse.c"
+#line 3297 "rcparse.c"
     break;
 
-  case 139:
+  case 139: /* menuitem_flag: INACTIVE  */
 #line 1080 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_INACTIVE;
 	  }
-#line 3296 "rcparse.c"
+#line 3305 "rcparse.c"
     break;
 
-  case 140:
+  case 140: /* menuitem_flag: MENUBARBREAK  */
 #line 1084 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_MENUBARBREAK;
 	  }
-#line 3304 "rcparse.c"
+#line 3313 "rcparse.c"
     break;
 
-  case 141:
+  case 141: /* menuitem_flag: MENUBREAK  */
 #line 1088 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_MENUBREAK;
 	  }
-#line 3312 "rcparse.c"
+#line 3321 "rcparse.c"
     break;
 
-  case 142:
+  case 142: /* menuitem_flag: BITMAP  */
 #line 1092 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_BITMAP;
 	  }
-#line 3320 "rcparse.c"
+#line 3329 "rcparse.c"
     break;
 
-  case 143:
+  case 143: /* menuitem_flag: OWNERDRAW  */
 #line 1096 "rcparse.y"
           {
 	    (yyval.is) = MENUITEM_OWNERDRAW;
 	  }
-#line 3328 "rcparse.c"
+#line 3337 "rcparse.c"
     break;
 
-  case 144:
+  case 144: /* menuex: id MENUEX suboptions BEG menuexitems END  */
 #line 1105 "rcparse.y"
           {
 	    define_menu ((yyvsp[-5].id), &(yyvsp[-3].res_info), (yyvsp[-1].menuitem));
@@ -3335,18 +3344,18 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3339 "rcparse.c"
+#line 3348 "rcparse.c"
     break;
 
-  case 145:
+  case 145: /* menuexitems: %empty  */
 #line 1115 "rcparse.y"
           {
 	    (yyval.menuitem) = NULL;
 	  }
-#line 3347 "rcparse.c"
+#line 3356 "rcparse.c"
     break;
 
-  case 146:
+  case 146: /* menuexitems: menuexitems menuexitem  */
 #line 1119 "rcparse.y"
           {
 	    if ((yyvsp[-1].menuitem) == NULL)
@@ -3361,74 +3370,74 @@ yyreduce:
 		(yyval.menuitem) = (yyvsp[-1].menuitem);
 	      }
 	  }
-#line 3365 "rcparse.c"
+#line 3374 "rcparse.c"
     break;
 
-  case 147:
+  case 147: /* menuexitem: MENUITEM res_unicode_string_concat  */
 #line 1136 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[0].uni), 0, 0, 0, 0, NULL);
 	  }
-#line 3373 "rcparse.c"
+#line 3382 "rcparse.c"
     break;
 
-  case 148:
+  case 148: /* menuexitem: MENUITEM res_unicode_string_concat cnumexpr  */
 #line 1140 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-1].uni), (yyvsp[0].il), 0, 0, 0, NULL);
 	  }
-#line 3381 "rcparse.c"
+#line 3390 "rcparse.c"
     break;
 
-  case 149:
+  case 149: /* menuexitem: MENUITEM res_unicode_string_concat cnumexpr cnumexpr optcnumexpr  */
 #line 1144 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-3].uni), (yyvsp[-2].il), (yyvsp[-1].il), (yyvsp[0].il), 0, NULL);
 	  }
-#line 3389 "rcparse.c"
+#line 3398 "rcparse.c"
     break;
 
-  case 150:
+  case 150: /* menuexitem: MENUITEM SEPARATOR  */
 #line 1148 "rcparse.y"
           {
  	    (yyval.menuitem) = define_menuitem (NULL, 0, 0, 0, 0, NULL);
  	  }
-#line 3397 "rcparse.c"
+#line 3406 "rcparse.c"
     break;
 
-  case 151:
+  case 151: /* menuexitem: POPUP res_unicode_string_concat BEG menuexitems END  */
 #line 1152 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-3].uni), 0, 0, 0, 0, (yyvsp[-1].menuitem));
 	  }
-#line 3405 "rcparse.c"
+#line 3414 "rcparse.c"
     break;
 
-  case 152:
+  case 152: /* menuexitem: POPUP res_unicode_string_concat cnumexpr BEG menuexitems END  */
 #line 1156 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-4].uni), (yyvsp[-3].il), 0, 0, 0, (yyvsp[-1].menuitem));
 	  }
-#line 3413 "rcparse.c"
+#line 3422 "rcparse.c"
     break;
 
-  case 153:
+  case 153: /* menuexitem: POPUP res_unicode_string_concat cnumexpr cnumexpr BEG menuexitems END  */
 #line 1160 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-5].uni), (yyvsp[-4].il), (yyvsp[-3].il), 0, 0, (yyvsp[-1].menuitem));
 	  }
-#line 3421 "rcparse.c"
+#line 3430 "rcparse.c"
     break;
 
-  case 154:
+  case 154: /* menuexitem: POPUP res_unicode_string_concat cnumexpr cnumexpr cnumexpr optcnumexpr BEG menuexitems END  */
 #line 1165 "rcparse.y"
           {
 	    (yyval.menuitem) = define_menuitem ((yyvsp[-7].uni), (yyvsp[-6].il), (yyvsp[-5].il), (yyvsp[-4].il), (yyvsp[-3].il), (yyvsp[-1].menuitem));
 	  }
-#line 3429 "rcparse.c"
+#line 3438 "rcparse.c"
     break;
 
-  case 155:
+  case 155: /* messagetable: id MESSAGETABLE memflags_move file_name  */
 #line 1174 "rcparse.y"
           {
 	    define_messagetable ((yyvsp[-3].id), &(yyvsp[-1].res_info), (yyvsp[0].s));
@@ -3436,44 +3445,44 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3440 "rcparse.c"
+#line 3449 "rcparse.c"
     break;
 
-  case 156:
+  case 156: /* $@28: %empty  */
 #line 1186 "rcparse.y"
           {
 	    rcparse_rcdata ();
 	  }
-#line 3448 "rcparse.c"
+#line 3457 "rcparse.c"
     break;
 
-  case 157:
+  case 157: /* optrcdata_data: $@28 optrcdata_data_int  */
 #line 1190 "rcparse.y"
           {
 	    rcparse_normal ();
 	    (yyval.rcdata) = (yyvsp[0].rcdata);
 	  }
-#line 3457 "rcparse.c"
+#line 3466 "rcparse.c"
     break;
 
-  case 158:
+  case 158: /* optrcdata_data_int: %empty  */
 #line 1198 "rcparse.y"
           {
 	    (yyval.rcdata).first = NULL;
 	    (yyval.rcdata).last = NULL;
 	  }
-#line 3466 "rcparse.c"
+#line 3475 "rcparse.c"
     break;
 
-  case 159:
+  case 159: /* optrcdata_data_int: rcdata_data  */
 #line 1203 "rcparse.y"
           {
 	    (yyval.rcdata) = (yyvsp[0].rcdata);
 	  }
-#line 3474 "rcparse.c"
+#line 3483 "rcparse.c"
     break;
 
-  case 160:
+  case 160: /* rcdata_data: sizedstring  */
 #line 1210 "rcparse.y"
           {
 	    rc_rcdata_item *ri;
@@ -3482,10 +3491,10 @@ yyreduce:
 	    (yyval.rcdata).first = ri;
 	    (yyval.rcdata).last = ri;
 	  }
-#line 3486 "rcparse.c"
+#line 3495 "rcparse.c"
     break;
 
-  case 161:
+  case 161: /* rcdata_data: sizedunistring  */
 #line 1218 "rcparse.y"
           {
 	    rc_rcdata_item *ri;
@@ -3494,10 +3503,10 @@ yyreduce:
 	    (yyval.rcdata).first = ri;
 	    (yyval.rcdata).last = ri;
 	  }
-#line 3498 "rcparse.c"
+#line 3507 "rcparse.c"
     break;
 
-  case 162:
+  case 162: /* rcdata_data: sizednumexpr  */
 #line 1226 "rcparse.y"
           {
 	    rc_rcdata_item *ri;
@@ -3506,10 +3515,10 @@ yyreduce:
 	    (yyval.rcdata).first = ri;
 	    (yyval.rcdata).last = ri;
 	  }
-#line 3510 "rcparse.c"
+#line 3519 "rcparse.c"
     break;
 
-  case 163:
+  case 163: /* rcdata_data: rcdata_data ',' sizedstring  */
 #line 1234 "rcparse.y"
           {
 	    rc_rcdata_item *ri;
@@ -3519,10 +3528,10 @@ yyreduce:
 	    (yyvsp[-2].rcdata).last->next = ri;
 	    (yyval.rcdata).last = ri;
 	  }
-#line 3523 "rcparse.c"
+#line 3532 "rcparse.c"
     break;
 
-  case 164:
+  case 164: /* rcdata_data: rcdata_data ',' sizedunistring  */
 #line 1243 "rcparse.y"
           {
 	    rc_rcdata_item *ri;
@@ -3532,10 +3541,10 @@ yyreduce:
 	    (yyvsp[-2].rcdata).last->next = ri;
 	    (yyval.rcdata).last = ri;
 	  }
-#line 3536 "rcparse.c"
+#line 3545 "rcparse.c"
     break;
 
-  case 165:
+  case 165: /* rcdata_data: rcdata_data ',' sizednumexpr  */
 #line 1252 "rcparse.y"
           {
 	    rc_rcdata_item *ri;
@@ -3545,146 +3554,146 @@ yyreduce:
 	    (yyvsp[-2].rcdata).last->next = ri;
 	    (yyval.rcdata).last = ri;
 	  }
-#line 3549 "rcparse.c"
+#line 3558 "rcparse.c"
     break;
 
-  case 166:
+  case 166: /* rcdata_data: rcdata_data ','  */
 #line 1261 "rcparse.y"
           {
 	    (yyval.rcdata)=(yyvsp[-1].rcdata);
 	  }
-#line 3557 "rcparse.c"
+#line 3566 "rcparse.c"
     break;
 
-  case 167:
+  case 167: /* $@29: %empty  */
 #line 1270 "rcparse.y"
             { sub_res_info = (yyvsp[-1].res_info); rcparse_rcdata (); }
-#line 3563 "rcparse.c"
+#line 3572 "rcparse.c"
     break;
 
-  case 168:
+  case 168: /* stringtable: STRINGTABLE suboptions BEG $@29 string_data END  */
 #line 1271 "rcparse.y"
                             { rcparse_normal (); }
-#line 3569 "rcparse.c"
+#line 3578 "rcparse.c"
     break;
 
-  case 170:
+  case 170: /* string_data: string_data numexpr res_unicode_sizedstring_concat  */
 #line 1277 "rcparse.y"
           {
 	    define_stringtable (&sub_res_info, (yyvsp[-1].il), (yyvsp[0].suni).s, (yyvsp[0].suni).length);
 	    rcparse_discard_strings ();
 	  }
-#line 3578 "rcparse.c"
+#line 3587 "rcparse.c"
     break;
 
-  case 171:
+  case 171: /* string_data: string_data numexpr ',' res_unicode_sizedstring_concat  */
 #line 1282 "rcparse.y"
           {
 	    define_stringtable (&sub_res_info, (yyvsp[-2].il), (yyvsp[0].suni).s, (yyvsp[0].suni).length);
 	    rcparse_discard_strings ();
 	  }
-#line 3587 "rcparse.c"
+#line 3596 "rcparse.c"
     break;
 
-  case 172:
+  case 172: /* string_data: string_data error  */
 #line 1287 "rcparse.y"
           {
 	    rcparse_warning (_("invalid stringtable resource."));
 	    abort ();
 	  }
-#line 3596 "rcparse.c"
+#line 3605 "rcparse.c"
     break;
 
-  case 173:
+  case 173: /* rcdata_id: id  */
 #line 1295 "rcparse.y"
           {
 	    (yyval.id)=(yyvsp[0].id);
 	  }
-#line 3604 "rcparse.c"
+#line 3613 "rcparse.c"
     break;
 
-  case 174:
+  case 174: /* rcdata_id: HTML  */
 #line 1299 "rcparse.y"
         {
 	  (yyval.id).named = 0;
 	  (yyval.id).u.id = 23;
 	}
-#line 3613 "rcparse.c"
+#line 3622 "rcparse.c"
     break;
 
-  case 175:
+  case 175: /* rcdata_id: RCDATA  */
 #line 1304 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_RCDATA;
         }
-#line 3622 "rcparse.c"
+#line 3631 "rcparse.c"
     break;
 
-  case 176:
+  case 176: /* rcdata_id: MANIFEST  */
 #line 1309 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_MANIFEST;
         }
-#line 3631 "rcparse.c"
+#line 3640 "rcparse.c"
     break;
 
-  case 177:
+  case 177: /* rcdata_id: PLUGPLAY  */
 #line 1314 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_PLUGPLAY;
         }
-#line 3640 "rcparse.c"
+#line 3649 "rcparse.c"
     break;
 
-  case 178:
+  case 178: /* rcdata_id: VXD  */
 #line 1319 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_VXD;
         }
-#line 3649 "rcparse.c"
+#line 3658 "rcparse.c"
     break;
 
-  case 179:
+  case 179: /* rcdata_id: DLGINCLUDE  */
 #line 1324 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_DLGINCLUDE;
         }
-#line 3658 "rcparse.c"
+#line 3667 "rcparse.c"
     break;
 
-  case 180:
+  case 180: /* rcdata_id: DLGINIT  */
 #line 1329 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_DLGINIT;
         }
-#line 3667 "rcparse.c"
+#line 3676 "rcparse.c"
     break;
 
-  case 181:
+  case 181: /* rcdata_id: ANICURSOR  */
 #line 1334 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_ANICURSOR;
         }
-#line 3676 "rcparse.c"
+#line 3685 "rcparse.c"
     break;
 
-  case 182:
+  case 182: /* rcdata_id: ANIICON  */
 #line 1339 "rcparse.y"
         {
           (yyval.id).named = 0;
           (yyval.id).u.id = RT_ANIICON;
         }
-#line 3685 "rcparse.c"
+#line 3694 "rcparse.c"
     break;
 
-  case 183:
+  case 183: /* user: id rcdata_id suboptions BEG optrcdata_data END  */
 #line 1350 "rcparse.y"
           {
 	    define_user_data ((yyvsp[-5].id), (yyvsp[-4].id), &(yyvsp[-3].res_info), (yyvsp[-1].rcdata).first);
@@ -3692,10 +3701,10 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3696 "rcparse.c"
+#line 3705 "rcparse.c"
     break;
 
-  case 184:
+  case 184: /* user: id rcdata_id suboptions file_name  */
 #line 1357 "rcparse.y"
           {
 	    define_user_file ((yyvsp[-3].id), (yyvsp[-2].id), &(yyvsp[-1].res_info), (yyvsp[0].s));
@@ -3703,24 +3712,24 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3707 "rcparse.c"
+#line 3716 "rcparse.c"
     break;
 
-  case 185:
+  case 185: /* toolbar: id TOOLBAR suboptions numexpr cnumexpr BEG toolbar_data END  */
 #line 1367 "rcparse.y"
         {
 	  define_toolbar ((yyvsp[-7].id), &(yyvsp[-5].res_info), (yyvsp[-4].il), (yyvsp[-3].il), (yyvsp[-1].toobar_item));
 	}
-#line 3715 "rcparse.c"
+#line 3724 "rcparse.c"
     break;
 
-  case 186:
+  case 186: /* toolbar_data: %empty  */
 #line 1372 "rcparse.y"
                           { (yyval.toobar_item)= NULL; }
-#line 3721 "rcparse.c"
+#line 3730 "rcparse.c"
     break;
 
-  case 187:
+  case 187: /* toolbar_data: toolbar_data BUTTON id  */
 #line 1374 "rcparse.y"
         {
 	  rc_toolbar_item *c,*n;
@@ -3740,10 +3749,10 @@ yyreduce:
 	  else
 	    (yyval.toobar_item) = (yyvsp[-2].toobar_item);
 	}
-#line 3744 "rcparse.c"
+#line 3753 "rcparse.c"
     break;
 
-  case 188:
+  case 188: /* toolbar_data: toolbar_data SEPARATOR  */
 #line 1393 "rcparse.y"
         {
 	  rc_toolbar_item *c,*n;
@@ -3764,10 +3773,10 @@ yyreduce:
 	  else
 	    (yyval.toobar_item) = (yyvsp[-1].toobar_item);
 	}
-#line 3768 "rcparse.c"
+#line 3777 "rcparse.c"
     break;
 
-  case 189:
+  case 189: /* versioninfo: id VERSIONINFO fixedverinfo BEG verblocks END  */
 #line 1418 "rcparse.y"
           {
 	    define_versioninfo ((yyvsp[-5].id), language, (yyvsp[-3].fixver), (yyvsp[-1].verinfo));
@@ -3775,217 +3784,217 @@ yyreduce:
 	      YYERROR;
 	    rcparse_discard_strings ();
 	  }
-#line 3779 "rcparse.c"
+#line 3788 "rcparse.c"
     break;
 
-  case 190:
+  case 190: /* fixedverinfo: %empty  */
 #line 1428 "rcparse.y"
           {
 	    (yyval.fixver) = ((rc_fixed_versioninfo *)
 		  res_alloc (sizeof (rc_fixed_versioninfo)));
 	    memset ((yyval.fixver), 0, sizeof (rc_fixed_versioninfo));
 	  }
-#line 3789 "rcparse.c"
+#line 3798 "rcparse.c"
     break;
 
-  case 191:
+  case 191: /* fixedverinfo: fixedverinfo FILEVERSION numexpr optcnumexpr optcnumexpr optcnumexpr  */
 #line 1435 "rcparse.y"
           {
 	    (yyvsp[-5].fixver)->file_version_ms = ((yyvsp[-3].il) << 16) | ((yyvsp[-2].il) & 0xffff);
 	    (yyvsp[-5].fixver)->file_version_ls = ((yyvsp[-1].il) << 16) | ((yyvsp[0].il) & 0xffff);
 	    (yyval.fixver) = (yyvsp[-5].fixver);
 	  }
-#line 3799 "rcparse.c"
+#line 3808 "rcparse.c"
     break;
 
-  case 192:
+  case 192: /* fixedverinfo: fixedverinfo PRODUCTVERSION numexpr optcnumexpr optcnumexpr optcnumexpr  */
 #line 1442 "rcparse.y"
           {
 	    (yyvsp[-5].fixver)->product_version_ms = ((yyvsp[-3].il) << 16) | ((yyvsp[-2].il) & 0xffff);
 	    (yyvsp[-5].fixver)->product_version_ls = ((yyvsp[-1].il) << 16) | ((yyvsp[0].il) & 0xffff);
 	    (yyval.fixver) = (yyvsp[-5].fixver);
 	  }
-#line 3809 "rcparse.c"
+#line 3818 "rcparse.c"
     break;
 
-  case 193:
+  case 193: /* fixedverinfo: fixedverinfo FILEFLAGSMASK numexpr  */
 #line 1448 "rcparse.y"
           {
 	    (yyvsp[-2].fixver)->file_flags_mask = (yyvsp[0].il);
 	    (yyval.fixver) = (yyvsp[-2].fixver);
 	  }
-#line 3818 "rcparse.c"
+#line 3827 "rcparse.c"
     break;
 
-  case 194:
+  case 194: /* fixedverinfo: fixedverinfo FILEFLAGS numexpr  */
 #line 1453 "rcparse.y"
           {
 	    (yyvsp[-2].fixver)->file_flags = (yyvsp[0].il);
 	    (yyval.fixver) = (yyvsp[-2].fixver);
 	  }
-#line 3827 "rcparse.c"
+#line 3836 "rcparse.c"
     break;
 
-  case 195:
+  case 195: /* fixedverinfo: fixedverinfo FILEOS numexpr  */
 #line 1458 "rcparse.y"
           {
 	    (yyvsp[-2].fixver)->file_os = (yyvsp[0].il);
 	    (yyval.fixver) = (yyvsp[-2].fixver);
 	  }
-#line 3836 "rcparse.c"
+#line 3845 "rcparse.c"
     break;
 
-  case 196:
+  case 196: /* fixedverinfo: fixedverinfo FILETYPE numexpr  */
 #line 1463 "rcparse.y"
           {
 	    (yyvsp[-2].fixver)->file_type = (yyvsp[0].il);
 	    (yyval.fixver) = (yyvsp[-2].fixver);
 	  }
-#line 3845 "rcparse.c"
+#line 3854 "rcparse.c"
     break;
 
-  case 197:
+  case 197: /* fixedverinfo: fixedverinfo FILESUBTYPE numexpr  */
 #line 1468 "rcparse.y"
           {
 	    (yyvsp[-2].fixver)->file_subtype = (yyvsp[0].il);
 	    (yyval.fixver) = (yyvsp[-2].fixver);
 	  }
-#line 3854 "rcparse.c"
+#line 3863 "rcparse.c"
     break;
 
-  case 198:
+  case 198: /* verblocks: %empty  */
 #line 1482 "rcparse.y"
           {
 	    (yyval.verinfo) = NULL;
 	  }
-#line 3862 "rcparse.c"
+#line 3871 "rcparse.c"
     break;
 
-  case 199:
+  case 199: /* verblocks: verblocks BLOCKSTRINGFILEINFO BEG verstringtables END  */
 #line 1486 "rcparse.y"
           {
 	    (yyval.verinfo) = append_ver_stringfileinfo ((yyvsp[-4].verinfo), (yyvsp[-1].verstringtable));
 	  }
-#line 3870 "rcparse.c"
+#line 3879 "rcparse.c"
     break;
 
-  case 200:
+  case 200: /* verblocks: verblocks BLOCKVARFILEINFO BEG VALUE res_unicode_string_concat vertrans END  */
 #line 1490 "rcparse.y"
           {
 	    (yyval.verinfo) = append_ver_varfileinfo ((yyvsp[-6].verinfo), (yyvsp[-2].uni), (yyvsp[-1].vervar));
 	  }
-#line 3878 "rcparse.c"
+#line 3887 "rcparse.c"
     break;
 
-  case 201:
+  case 201: /* verstringtables: %empty  */
 #line 1497 "rcparse.y"
           {
 	    (yyval.verstringtable) = NULL;
 	  }
-#line 3886 "rcparse.c"
+#line 3895 "rcparse.c"
     break;
 
-  case 202:
+  case 202: /* verstringtables: verstringtables BLOCK BEG vervals END  */
 #line 1501 "rcparse.y"
           {
 	    (yyval.verstringtable) = append_ver_stringtable ((yyvsp[-4].verstringtable), (yyvsp[-3].s), (yyvsp[-1].verstring));
 	  }
-#line 3894 "rcparse.c"
+#line 3903 "rcparse.c"
     break;
 
-  case 203:
+  case 203: /* vervals: %empty  */
 #line 1508 "rcparse.y"
           {
 	    (yyval.verstring) = NULL;
 	  }
-#line 3902 "rcparse.c"
+#line 3911 "rcparse.c"
     break;
 
-  case 204:
+  case 204: /* vervals: vervals VALUE res_unicode_string_concat ',' res_unicode_string_concat  */
 #line 1512 "rcparse.y"
           {
 	    (yyval.verstring) = append_verval ((yyvsp[-4].verstring), (yyvsp[-2].uni), (yyvsp[0].uni));
 	  }
-#line 3910 "rcparse.c"
+#line 3919 "rcparse.c"
     break;
 
-  case 205:
+  case 205: /* vertrans: %empty  */
 #line 1519 "rcparse.y"
           {
 	    (yyval.vervar) = NULL;
 	  }
-#line 3918 "rcparse.c"
+#line 3927 "rcparse.c"
     break;
 
-  case 206:
+  case 206: /* vertrans: vertrans cnumexpr cnumexpr  */
 #line 1523 "rcparse.y"
           {
 	    (yyval.vervar) = append_vertrans ((yyvsp[-2].vervar), (yyvsp[-1].il), (yyvsp[0].il));
 	  }
-#line 3926 "rcparse.c"
+#line 3935 "rcparse.c"
     break;
 
-  case 207:
+  case 207: /* id: posnumexpr  */
 #line 1532 "rcparse.y"
           {
 	    (yyval.id).named = 0;
 	    (yyval.id).u.id = (yyvsp[0].il);
 	  }
-#line 3935 "rcparse.c"
+#line 3944 "rcparse.c"
     break;
 
-  case 208:
+  case 208: /* id: resname  */
 #line 1537 "rcparse.y"
           {
 	    res_unistring_to_id (&(yyval.id), (yyvsp[0].uni));
 	  }
-#line 3943 "rcparse.c"
+#line 3952 "rcparse.c"
     break;
 
-  case 209:
+  case 209: /* resname: res_unicode_string  */
 #line 1546 "rcparse.y"
           {
 	    (yyval.uni) = (yyvsp[0].uni);
 	  }
-#line 3951 "rcparse.c"
+#line 3960 "rcparse.c"
     break;
 
-  case 210:
+  case 210: /* resname: STRING  */
 #line 1550 "rcparse.y"
           {
 	    unichar *h = NULL;
 	    unicode_from_ascii ((rc_uint_type *) NULL, &h, (yyvsp[0].s));
 	    (yyval.uni) = h;
 	  }
-#line 3961 "rcparse.c"
+#line 3970 "rcparse.c"
     break;
 
-  case 211:
+  case 211: /* resref: posnumexpr ','  */
 #line 1560 "rcparse.y"
           {
 	    (yyval.id).named = 0;
 	    (yyval.id).u.id = (yyvsp[-1].il);
 	  }
-#line 3970 "rcparse.c"
+#line 3979 "rcparse.c"
     break;
 
-  case 212:
+  case 212: /* resref: resname  */
 #line 1565 "rcparse.y"
           {
 	    res_unistring_to_id (&(yyval.id), (yyvsp[0].uni));
 	  }
-#line 3978 "rcparse.c"
+#line 3987 "rcparse.c"
     break;
 
-  case 213:
+  case 213: /* resref: resname ','  */
 #line 1569 "rcparse.y"
           {
 	    res_unistring_to_id (&(yyval.id), (yyvsp[-1].uni));
 	  }
-#line 3986 "rcparse.c"
+#line 3995 "rcparse.c"
     break;
 
-  case 214:
+  case 214: /* suboptions: %empty  */
 #line 1579 "rcparse.y"
           {
 	    memset (&(yyval.res_info), 0, sizeof (rc_res_res_info));
@@ -3993,174 +4002,174 @@ yyreduce:
 	    /* FIXME: Is this the right default?  */
 	    (yyval.res_info).memflags = MEMFLAG_MOVEABLE | MEMFLAG_PURE | MEMFLAG_DISCARDABLE;
 	  }
-#line 3997 "rcparse.c"
+#line 4006 "rcparse.c"
     break;
 
-  case 215:
+  case 215: /* suboptions: suboptions memflag  */
 #line 1586 "rcparse.y"
           {
 	    (yyval.res_info) = (yyvsp[-1].res_info);
 	    (yyval.res_info).memflags |= (yyvsp[0].memflags).on;
 	    (yyval.res_info).memflags &=~ (yyvsp[0].memflags).off;
 	  }
-#line 4007 "rcparse.c"
+#line 4016 "rcparse.c"
     break;
 
-  case 216:
+  case 216: /* suboptions: suboptions CHARACTERISTICS numexpr  */
 #line 1592 "rcparse.y"
           {
 	    (yyval.res_info) = (yyvsp[-2].res_info);
 	    (yyval.res_info).characteristics = (yyvsp[0].il);
 	  }
-#line 4016 "rcparse.c"
+#line 4025 "rcparse.c"
     break;
 
-  case 217:
+  case 217: /* suboptions: suboptions LANGUAGE numexpr cnumexpr  */
 #line 1597 "rcparse.y"
           {
 	    (yyval.res_info) = (yyvsp[-3].res_info);
 	    (yyval.res_info).language = (yyvsp[-1].il) | ((yyvsp[0].il) << SUBLANG_SHIFT);
 	  }
-#line 4025 "rcparse.c"
+#line 4034 "rcparse.c"
     break;
 
-  case 218:
+  case 218: /* suboptions: suboptions VERSIONK numexpr  */
 #line 1602 "rcparse.y"
           {
 	    (yyval.res_info) = (yyvsp[-2].res_info);
 	    (yyval.res_info).version = (yyvsp[0].il);
 	  }
-#line 4034 "rcparse.c"
+#line 4043 "rcparse.c"
     break;
 
-  case 219:
+  case 219: /* memflags_move_discard: %empty  */
 #line 1612 "rcparse.y"
           {
 	    memset (&(yyval.res_info), 0, sizeof (rc_res_res_info));
 	    (yyval.res_info).language = language;
 	    (yyval.res_info).memflags = MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE;
 	  }
-#line 4044 "rcparse.c"
+#line 4053 "rcparse.c"
     break;
 
-  case 220:
+  case 220: /* memflags_move_discard: memflags_move_discard memflag  */
 #line 1618 "rcparse.y"
           {
 	    (yyval.res_info) = (yyvsp[-1].res_info);
 	    (yyval.res_info).memflags |= (yyvsp[0].memflags).on;
 	    (yyval.res_info).memflags &=~ (yyvsp[0].memflags).off;
 	  }
-#line 4054 "rcparse.c"
+#line 4063 "rcparse.c"
     break;
 
-  case 221:
+  case 221: /* memflags_move: %empty  */
 #line 1629 "rcparse.y"
           {
 	    memset (&(yyval.res_info), 0, sizeof (rc_res_res_info));
 	    (yyval.res_info).language = language;
 	    (yyval.res_info).memflags = MEMFLAG_MOVEABLE | MEMFLAG_PURE | MEMFLAG_DISCARDABLE;
 	  }
-#line 4064 "rcparse.c"
+#line 4073 "rcparse.c"
     break;
 
-  case 222:
+  case 222: /* memflags_move: memflags_move memflag  */
 #line 1635 "rcparse.y"
           {
 	    (yyval.res_info) = (yyvsp[-1].res_info);
 	    (yyval.res_info).memflags |= (yyvsp[0].memflags).on;
 	    (yyval.res_info).memflags &=~ (yyvsp[0].memflags).off;
 	  }
-#line 4074 "rcparse.c"
+#line 4083 "rcparse.c"
     break;
 
-  case 223:
+  case 223: /* memflag: MOVEABLE  */
 #line 1647 "rcparse.y"
           {
 	    (yyval.memflags).on = MEMFLAG_MOVEABLE;
 	    (yyval.memflags).off = 0;
 	  }
-#line 4083 "rcparse.c"
+#line 4092 "rcparse.c"
     break;
 
-  case 224:
+  case 224: /* memflag: FIXED  */
 #line 1652 "rcparse.y"
           {
 	    (yyval.memflags).on = 0;
 	    (yyval.memflags).off = MEMFLAG_MOVEABLE;
 	  }
-#line 4092 "rcparse.c"
+#line 4101 "rcparse.c"
     break;
 
-  case 225:
+  case 225: /* memflag: PURE  */
 #line 1657 "rcparse.y"
           {
 	    (yyval.memflags).on = MEMFLAG_PURE;
 	    (yyval.memflags).off = 0;
 	  }
-#line 4101 "rcparse.c"
+#line 4110 "rcparse.c"
     break;
 
-  case 226:
+  case 226: /* memflag: IMPURE  */
 #line 1662 "rcparse.y"
           {
 	    (yyval.memflags).on = 0;
 	    (yyval.memflags).off = MEMFLAG_PURE;
 	  }
-#line 4110 "rcparse.c"
+#line 4119 "rcparse.c"
     break;
 
-  case 227:
+  case 227: /* memflag: PRELOAD  */
 #line 1667 "rcparse.y"
           {
 	    (yyval.memflags).on = MEMFLAG_PRELOAD;
 	    (yyval.memflags).off = 0;
 	  }
-#line 4119 "rcparse.c"
+#line 4128 "rcparse.c"
     break;
 
-  case 228:
+  case 228: /* memflag: LOADONCALL  */
 #line 1672 "rcparse.y"
           {
 	    (yyval.memflags).on = 0;
 	    (yyval.memflags).off = MEMFLAG_PRELOAD;
 	  }
-#line 4128 "rcparse.c"
+#line 4137 "rcparse.c"
     break;
 
-  case 229:
+  case 229: /* memflag: DISCARDABLE  */
 #line 1677 "rcparse.y"
           {
 	    (yyval.memflags).on = MEMFLAG_DISCARDABLE;
 	    (yyval.memflags).off = 0;
 	  }
-#line 4137 "rcparse.c"
+#line 4146 "rcparse.c"
     break;
 
-  case 230:
+  case 230: /* file_name: QUOTEDSTRING  */
 #line 1687 "rcparse.y"
           {
 	    (yyval.s) = (yyvsp[0].s);
 	  }
-#line 4145 "rcparse.c"
+#line 4154 "rcparse.c"
     break;
 
-  case 231:
+  case 231: /* file_name: STRING  */
 #line 1691 "rcparse.y"
           {
 	    (yyval.s) = (yyvsp[0].s);
 	  }
-#line 4153 "rcparse.c"
+#line 4162 "rcparse.c"
     break;
 
-  case 232:
+  case 232: /* res_unicode_string_concat: res_unicode_string  */
 #line 1699 "rcparse.y"
           {
 	    (yyval.uni) = (yyvsp[0].uni);
 	  }
-#line 4161 "rcparse.c"
+#line 4170 "rcparse.c"
     break;
 
-  case 233:
+  case 233: /* res_unicode_string_concat: res_unicode_string_concat res_unicode_string  */
 #line 1704 "rcparse.y"
           {
 	    rc_uint_type l1 = unichar_len ((yyvsp[-1].uni));
@@ -4173,36 +4182,36 @@ yyreduce:
 	    h[l1 + l2] = 0;
 	    (yyval.uni) = h;
 	  }
-#line 4177 "rcparse.c"
+#line 4186 "rcparse.c"
     break;
 
-  case 234:
+  case 234: /* res_unicode_string: QUOTEDUNISTRING  */
 #line 1719 "rcparse.y"
           {
 	    (yyval.uni) = unichar_dup ((yyvsp[0].uni));
 	  }
-#line 4185 "rcparse.c"
+#line 4194 "rcparse.c"
     break;
 
-  case 235:
+  case 235: /* res_unicode_string: QUOTEDSTRING  */
 #line 1723 "rcparse.y"
           {
 	    unichar *h = NULL;
 	    unicode_from_ascii ((rc_uint_type *) NULL, &h, (yyvsp[0].s));
 	    (yyval.uni) = h;
 	  }
-#line 4195 "rcparse.c"
+#line 4204 "rcparse.c"
     break;
 
-  case 236:
+  case 236: /* res_unicode_sizedstring: sizedunistring  */
 #line 1732 "rcparse.y"
           {
 	    (yyval.suni) = (yyvsp[0].suni);
 	  }
-#line 4203 "rcparse.c"
+#line 4212 "rcparse.c"
     break;
 
-  case 237:
+  case 237: /* res_unicode_sizedstring: sizedstring  */
 #line 1736 "rcparse.y"
           {
 	    unichar *h = NULL;
@@ -4211,18 +4220,18 @@ yyreduce:
 	    (yyval.suni).s = h;
 	    (yyval.suni).length = l;
 	  }
-#line 4215 "rcparse.c"
+#line 4224 "rcparse.c"
     break;
 
-  case 238:
+  case 238: /* res_unicode_sizedstring_concat: res_unicode_sizedstring  */
 #line 1748 "rcparse.y"
           {
 	    (yyval.suni) = (yyvsp[0].suni);
 	  }
-#line 4223 "rcparse.c"
+#line 4232 "rcparse.c"
     break;
 
-  case 239:
+  case 239: /* res_unicode_sizedstring_concat: res_unicode_sizedstring_concat res_unicode_sizedstring  */
 #line 1753 "rcparse.y"
           {
 	    rc_uint_type l1 = (yyvsp[-1].suni).length;
@@ -4236,18 +4245,18 @@ yyreduce:
 	    (yyval.suni).length = l1 + l2;
 	    (yyval.suni).s = h;
 	  }
-#line 4240 "rcparse.c"
+#line 4249 "rcparse.c"
     break;
 
-  case 240:
+  case 240: /* sizedstring: SIZEDSTRING  */
 #line 1769 "rcparse.y"
           {
 	    (yyval.ss) = (yyvsp[0].ss);
 	  }
-#line 4248 "rcparse.c"
+#line 4257 "rcparse.c"
     break;
 
-  case 241:
+  case 241: /* sizedstring: sizedstring SIZEDSTRING  */
 #line 1773 "rcparse.y"
           {
 	    rc_uint_type l = (yyvsp[-1].ss).length + (yyvsp[0].ss).length;
@@ -4257,18 +4266,18 @@ yyreduce:
 	    (yyval.ss).s = h;
 	    (yyval.ss).length = l;
 	  }
-#line 4261 "rcparse.c"
+#line 4270 "rcparse.c"
     break;
 
-  case 242:
+  case 242: /* sizedunistring: SIZEDUNISTRING  */
 #line 1785 "rcparse.y"
           {
 	    (yyval.suni) = (yyvsp[0].suni);
 	  }
-#line 4269 "rcparse.c"
+#line 4278 "rcparse.c"
     break;
 
-  case 243:
+  case 243: /* sizedunistring: sizedunistring SIZEDUNISTRING  */
 #line 1789 "rcparse.y"
           {
 	    rc_uint_type l = (yyvsp[-1].suni).length + (yyvsp[0].suni).length;
@@ -4278,311 +4287,311 @@ yyreduce:
 	    (yyval.suni).s = h;
 	    (yyval.suni).length = l;
 	  }
-#line 4282 "rcparse.c"
+#line 4291 "rcparse.c"
     break;
 
-  case 244:
+  case 244: /* styleexpr: parennumber  */
 #line 1811 "rcparse.y"
           {
 	    style |= (yyvsp[0].il);
 	  }
-#line 4290 "rcparse.c"
+#line 4299 "rcparse.c"
     break;
 
-  case 245:
+  case 245: /* styleexpr: NOT parennumber  */
 #line 1815 "rcparse.y"
           {
 	    style &=~ (yyvsp[0].il);
 	  }
-#line 4298 "rcparse.c"
+#line 4307 "rcparse.c"
     break;
 
-  case 246:
+  case 246: /* styleexpr: styleexpr '|' parennumber  */
 #line 1819 "rcparse.y"
           {
 	    style |= (yyvsp[0].il);
 	  }
-#line 4306 "rcparse.c"
+#line 4315 "rcparse.c"
     break;
 
-  case 247:
+  case 247: /* styleexpr: styleexpr '|' NOT parennumber  */
 #line 1823 "rcparse.y"
           {
 	    style &=~ (yyvsp[0].il);
 	  }
-#line 4314 "rcparse.c"
+#line 4323 "rcparse.c"
     break;
 
-  case 248:
+  case 248: /* parennumber: NUMBER  */
 #line 1830 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[0].i).val;
 	  }
-#line 4322 "rcparse.c"
+#line 4331 "rcparse.c"
     break;
 
-  case 249:
+  case 249: /* parennumber: '(' numexpr ')'  */
 #line 1834 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[-1].il);
 	  }
-#line 4330 "rcparse.c"
+#line 4339 "rcparse.c"
     break;
 
-  case 250:
+  case 250: /* optcnumexpr: %empty  */
 #line 1843 "rcparse.y"
           {
 	    (yyval.il) = 0;
 	  }
-#line 4338 "rcparse.c"
+#line 4347 "rcparse.c"
     break;
 
-  case 251:
+  case 251: /* optcnumexpr: cnumexpr  */
 #line 1847 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[0].il);
 	  }
-#line 4346 "rcparse.c"
+#line 4355 "rcparse.c"
     break;
 
-  case 252:
+  case 252: /* cnumexpr: ',' numexpr  */
 #line 1856 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[0].il);
 	  }
-#line 4354 "rcparse.c"
+#line 4363 "rcparse.c"
     break;
 
-  case 253:
+  case 253: /* numexpr: sizednumexpr  */
 #line 1865 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[0].i).val;
 	  }
-#line 4362 "rcparse.c"
+#line 4371 "rcparse.c"
     break;
 
-  case 254:
+  case 254: /* sizednumexpr: NUMBER  */
 #line 1874 "rcparse.y"
           {
 	    (yyval.i) = (yyvsp[0].i);
 	  }
-#line 4370 "rcparse.c"
+#line 4379 "rcparse.c"
     break;
 
-  case 255:
+  case 255: /* sizednumexpr: '(' sizednumexpr ')'  */
 #line 1878 "rcparse.y"
           {
 	    (yyval.i) = (yyvsp[-1].i);
 	  }
-#line 4378 "rcparse.c"
+#line 4387 "rcparse.c"
     break;
 
-  case 256:
+  case 256: /* sizednumexpr: '~' sizednumexpr  */
 #line 1882 "rcparse.y"
           {
 	    (yyval.i).val = ~ (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[0].i).dword;
 	  }
-#line 4387 "rcparse.c"
+#line 4396 "rcparse.c"
     break;
 
-  case 257:
+  case 257: /* sizednumexpr: '-' sizednumexpr  */
 #line 1887 "rcparse.y"
           {
 	    (yyval.i).val = - (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[0].i).dword;
 	  }
-#line 4396 "rcparse.c"
+#line 4405 "rcparse.c"
     break;
 
-  case 258:
+  case 258: /* sizednumexpr: sizednumexpr '*' sizednumexpr  */
 #line 1892 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val * (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4405 "rcparse.c"
+#line 4414 "rcparse.c"
     break;
 
-  case 259:
+  case 259: /* sizednumexpr: sizednumexpr '/' sizednumexpr  */
 #line 1897 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val / ((yyvsp[0].i).val ? (yyvsp[0].i).val : 1);
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4414 "rcparse.c"
+#line 4423 "rcparse.c"
     break;
 
-  case 260:
+  case 260: /* sizednumexpr: sizednumexpr '%' sizednumexpr  */
 #line 1902 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val % ((yyvsp[0].i).val ? (yyvsp[0].i).val : 1);
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4423 "rcparse.c"
+#line 4432 "rcparse.c"
     break;
 
-  case 261:
+  case 261: /* sizednumexpr: sizednumexpr '+' sizednumexpr  */
 #line 1907 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val + (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4432 "rcparse.c"
+#line 4441 "rcparse.c"
     break;
 
-  case 262:
+  case 262: /* sizednumexpr: sizednumexpr '-' sizednumexpr  */
 #line 1912 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val - (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4441 "rcparse.c"
+#line 4450 "rcparse.c"
     break;
 
-  case 263:
+  case 263: /* sizednumexpr: sizednumexpr '&' sizednumexpr  */
 #line 1917 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val & (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4450 "rcparse.c"
+#line 4459 "rcparse.c"
     break;
 
-  case 264:
+  case 264: /* sizednumexpr: sizednumexpr '^' sizednumexpr  */
 #line 1922 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val ^ (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4459 "rcparse.c"
+#line 4468 "rcparse.c"
     break;
 
-  case 265:
+  case 265: /* sizednumexpr: sizednumexpr '|' sizednumexpr  */
 #line 1927 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val | (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4468 "rcparse.c"
+#line 4477 "rcparse.c"
     break;
 
-  case 266:
+  case 266: /* cposnumexpr: ',' posnumexpr  */
 #line 1938 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[0].il);
 	  }
-#line 4476 "rcparse.c"
+#line 4485 "rcparse.c"
     break;
 
-  case 267:
+  case 267: /* posnumexpr: sizedposnumexpr  */
 #line 1947 "rcparse.y"
           {
 	    (yyval.il) = (yyvsp[0].i).val;
 	  }
-#line 4484 "rcparse.c"
+#line 4493 "rcparse.c"
     break;
 
-  case 268:
+  case 268: /* sizedposnumexpr: NUMBER  */
 #line 1958 "rcparse.y"
           {
 	    (yyval.i) = (yyvsp[0].i);
 	  }
-#line 4492 "rcparse.c"
+#line 4501 "rcparse.c"
     break;
 
-  case 269:
+  case 269: /* sizedposnumexpr: '(' sizednumexpr ')'  */
 #line 1962 "rcparse.y"
           {
 	    (yyval.i) = (yyvsp[-1].i);
 	  }
-#line 4500 "rcparse.c"
+#line 4509 "rcparse.c"
     break;
 
-  case 270:
+  case 270: /* sizedposnumexpr: '~' sizednumexpr  */
 #line 1966 "rcparse.y"
           {
 	    (yyval.i).val = ~ (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[0].i).dword;
 	  }
-#line 4509 "rcparse.c"
+#line 4518 "rcparse.c"
     break;
 
-  case 271:
+  case 271: /* sizedposnumexpr: sizedposnumexpr '*' sizednumexpr  */
 #line 1971 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val * (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4518 "rcparse.c"
+#line 4527 "rcparse.c"
     break;
 
-  case 272:
+  case 272: /* sizedposnumexpr: sizedposnumexpr '/' sizednumexpr  */
 #line 1976 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val / ((yyvsp[0].i).val ? (yyvsp[0].i).val : 1);
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4527 "rcparse.c"
+#line 4536 "rcparse.c"
     break;
 
-  case 273:
+  case 273: /* sizedposnumexpr: sizedposnumexpr '%' sizednumexpr  */
 #line 1981 "rcparse.y"
           {
 	    /* PR 17512: file: 89105a25.  */
 	    (yyval.i).val = (yyvsp[-2].i).val % ((yyvsp[0].i).val ? (yyvsp[0].i).val : 1);
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4537 "rcparse.c"
+#line 4546 "rcparse.c"
     break;
 
-  case 274:
+  case 274: /* sizedposnumexpr: sizedposnumexpr '+' sizednumexpr  */
 #line 1987 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val + (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4546 "rcparse.c"
+#line 4555 "rcparse.c"
     break;
 
-  case 275:
+  case 275: /* sizedposnumexpr: sizedposnumexpr '-' sizednumexpr  */
 #line 1992 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val - (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4555 "rcparse.c"
+#line 4564 "rcparse.c"
     break;
 
-  case 276:
+  case 276: /* sizedposnumexpr: sizedposnumexpr '&' sizednumexpr  */
 #line 1997 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val & (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4564 "rcparse.c"
+#line 4573 "rcparse.c"
     break;
 
-  case 277:
+  case 277: /* sizedposnumexpr: sizedposnumexpr '^' sizednumexpr  */
 #line 2002 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val ^ (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4573 "rcparse.c"
+#line 4582 "rcparse.c"
     break;
 
-  case 278:
+  case 278: /* sizedposnumexpr: sizedposnumexpr '|' sizednumexpr  */
 #line 2007 "rcparse.y"
           {
 	    (yyval.i).val = (yyvsp[-2].i).val | (yyvsp[0].i).val;
 	    (yyval.i).dword = (yyvsp[-2].i).dword || (yyvsp[0].i).dword;
 	  }
-#line 4582 "rcparse.c"
+#line 4591 "rcparse.c"
     break;
 
 
-#line 4586 "rcparse.c"
+#line 4595 "rcparse.c"
 
       default: break;
     }
@@ -4597,11 +4606,10 @@ yyreduce:
      case of YYERROR or YYBACKUP, subsequent parser actions might lead
      to an incorrect destructor call or verbose syntax error message
      before the lookahead is translated.  */
-  YY_SYMBOL_PRINT ("-> $$ =", yyr1[yyn], &yyval, &yyloc);
+  YY_SYMBOL_PRINT ("-> $$ =", YY_CAST (yysymbol_kind_t, yyr1[yyn]), &yyval, &yyloc);
 
   YYPOPSTACK (yylen);
   yylen = 0;
-  YY_STACK_PRINT (yyss, yyssp);
 
   *++yyvsp = yyval;
 
@@ -4625,49 +4633,13 @@ yyreduce:
 yyerrlab:
   /* Make sure we have latest lookahead translation.  See comments at
      user semantic actions for why this is necessary.  */
-  yytoken = yychar == YYEMPTY ? YYEMPTY : YYTRANSLATE (yychar);
-
+  yytoken = yychar == YYEMPTY ? YYSYMBOL_YYEMPTY : YYTRANSLATE (yychar);
   /* If not already recovering from an error, report this error.  */
   if (!yyerrstatus)
     {
       ++yynerrs;
-#if ! YYERROR_VERBOSE
       yyerror (YY_("syntax error"));
-#else
-# define YYSYNTAX_ERROR yysyntax_error (&yymsg_alloc, &yymsg, \
-                                        yyssp, yytoken)
-      {
-        char const *yymsgp = YY_("syntax error");
-        int yysyntax_error_status;
-        yysyntax_error_status = YYSYNTAX_ERROR;
-        if (yysyntax_error_status == 0)
-          yymsgp = yymsg;
-        else if (yysyntax_error_status == 1)
-          {
-            if (yymsg != yymsgbuf)
-              YYSTACK_FREE (yymsg);
-            yymsg = YY_CAST (char *, YYSTACK_ALLOC (YY_CAST (YYSIZE_T, yymsg_alloc)));
-            if (!yymsg)
-              {
-                yymsg = yymsgbuf;
-                yymsg_alloc = sizeof yymsgbuf;
-                yysyntax_error_status = 2;
-              }
-            else
-              {
-                yysyntax_error_status = YYSYNTAX_ERROR;
-                yymsgp = yymsg;
-              }
-          }
-        yyerror (yymsgp);
-        if (yysyntax_error_status == 2)
-          goto yyexhaustedlab;
-      }
-# undef YYSYNTAX_ERROR
-#endif
     }
-
-
 
   if (yyerrstatus == 3)
     {
@@ -4701,6 +4673,7 @@ yyerrorlab:
      label yyerrorlab therefore never appears in user code.  */
   if (0)
     YYERROR;
+  ++yynerrs;
 
   /* Do not reclaim the symbols of the rule whose action triggered
      this YYERROR.  */
@@ -4717,13 +4690,14 @@ yyerrorlab:
 yyerrlab1:
   yyerrstatus = 3;      /* Each real token shifted decrements this.  */
 
+  /* Pop stack until we find a state that shifts the error token.  */
   for (;;)
     {
       yyn = yypact[yystate];
       if (!yypact_value_is_default (yyn))
         {
-          yyn += YYTERROR;
-          if (0 <= yyn && yyn <= YYLAST && yycheck[yyn] == YYTERROR)
+          yyn += YYSYMBOL_YYerror;
+          if (0 <= yyn && yyn <= YYLAST && yycheck[yyn] == YYSYMBOL_YYerror)
             {
               yyn = yytable[yyn];
               if (0 < yyn)
@@ -4737,7 +4711,7 @@ yyerrlab1:
 
 
       yydestruct ("Error: popping",
-                  yystos[yystate], yyvsp);
+                  YY_ACCESSING_SYMBOL (yystate), yyvsp);
       YYPOPSTACK (1);
       yystate = *yyssp;
       YY_STACK_PRINT (yyss, yyssp);
@@ -4749,7 +4723,7 @@ yyerrlab1:
 
 
   /* Shift the error token.  */
-  YY_SYMBOL_PRINT ("Shifting", yystos[yyn], yyvsp, yylsp);
+  YY_SYMBOL_PRINT ("Shifting", YY_ACCESSING_SYMBOL (yyn), yyvsp, yylsp);
 
   yystate = yyn;
   goto yynewstate;
@@ -4760,7 +4734,7 @@ yyerrlab1:
 `-------------------------------------*/
 yyacceptlab:
   yyresult = 0;
-  goto yyreturn;
+  goto yyreturnlab;
 
 
 /*-----------------------------------.
@@ -4768,24 +4742,22 @@ yyacceptlab:
 `-----------------------------------*/
 yyabortlab:
   yyresult = 1;
-  goto yyreturn;
+  goto yyreturnlab;
 
 
-#if !defined yyoverflow || YYERROR_VERBOSE
-/*-------------------------------------------------.
-| yyexhaustedlab -- memory exhaustion comes here.  |
-`-------------------------------------------------*/
+/*-----------------------------------------------------------.
+| yyexhaustedlab -- YYNOMEM (memory exhaustion) comes here.  |
+`-----------------------------------------------------------*/
 yyexhaustedlab:
   yyerror (YY_("memory exhausted"));
   yyresult = 2;
-  /* Fall through.  */
-#endif
+  goto yyreturnlab;
 
 
-/*-----------------------------------------------------.
-| yyreturn -- parsing is finished, return the result.  |
-`-----------------------------------------------------*/
-yyreturn:
+/*----------------------------------------------------------.
+| yyreturnlab -- parsing is finished, clean up and return.  |
+`----------------------------------------------------------*/
+yyreturnlab:
   if (yychar != YYEMPTY)
     {
       /* Make sure we have latest lookahead translation.  See comments at
@@ -4801,19 +4773,17 @@ yyreturn:
   while (yyssp != yyss)
     {
       yydestruct ("Cleanup: popping",
-                  yystos[*yyssp], yyvsp);
+                  YY_ACCESSING_SYMBOL (+*yyssp), yyvsp);
       YYPOPSTACK (1);
     }
 #ifndef yyoverflow
   if (yyss != yyssa)
     YYSTACK_FREE (yyss);
 #endif
-#if YYERROR_VERBOSE
-  if (yymsg != yymsgbuf)
-    YYSTACK_FREE (yymsg);
-#endif
+
   return yyresult;
 }
+
 #line 2013 "rcparse.y"
 
 

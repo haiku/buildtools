@@ -1,5 +1,5 @@
 # Expect script for simple PE tests that require the just-built binutils only.
-#   Copyright (C) 2004-2021 Free Software Foundation, Inc.
+#   Copyright (C) 2004-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -35,6 +35,8 @@ if {[istarget i*86-*-cygwin*]
       set pe_tests {
 	{".secrel32" "--disable-reloc-section" "" "" {secrel1.s secrel2.s}
 	 {{objdump -s secrel_64.d}} "secrel.x"}
+	{".secidx" "--disable-reloc-section" "" "" {secidx1.s secidx2.s}
+	 {{objdump -s secidx_64.d}} "secidx.x"}
 	{"Empty export table" "" "" "" "exports.s"
 	 {{objdump -p exports64.d}} "exports.dll"}
 	{"TLS directory entry" "" "" "" "tlssec.s"
@@ -43,6 +45,17 @@ if {[istarget i*86-*-cygwin*]
     } elseif {[istarget i*86-*-cygwin*] } {
       set pe_tests {
 	{".secrel32" "--disable-auto-import --disable-reloc-section" "" "" {secrel1.s secrel2.s}
+	 {{objdump -s secrel.d}} "secrel.x"}
+	{".secidx" "--disable-auto-import --disable-reloc-section" "" "" {secidx1.s secidx2.s}
+	 {{objdump -s secidx.d}} "secidx.x"}
+	{"Empty export table" "" "" "" "exports.s"
+	 {{objdump -p exports.d}} "exports.dll"}
+	{"TLS directory entry" "" "" "" "tlssec.s"
+	 {{objdump -p tlssec32.d}} "tlssec.dll"}
+      }
+    } elseif {[istarget arm-wince-pe] } {
+      set pe_tests {
+	{".secrel32" "--disable-reloc-section" "" "" {secrel1.s secrel2.s}
 	 {{objdump -s secrel.d}} "secrel.x"}
 	{"Empty export table" "" "" "" "exports.s"
 	 {{objdump -p exports.d}} "exports.dll"}
@@ -53,11 +66,28 @@ if {[istarget i*86-*-cygwin*]
       set pe_tests {
 	{".secrel32" "--disable-reloc-section" "" "" {secrel1.s secrel2.s}
 	 {{objdump -s secrel.d}} "secrel.x"}
+	{".secidx" "--disable-reloc-section" "" "" {secidx1.s secidx2.s}
+	 {{objdump -s secidx.d}} "secidx.x"}
 	{"Empty export table" "" "" "" "exports.s"
 	 {{objdump -p exports.d}} "exports.dll"}
 	{"TLS directory entry" "" "" "" "tlssec.s"
 	 {{objdump -p tlssec32.d}} "tlssec.dll"}
       }
+    }
+
+    run_ld_link_tests $pe_tests
+}
+
+if {[istarget "aarch64-*-pe*"] || [istarget "aarch64-*-mingw*"]} {
+    run_dump_test "pe-aarch64"
+
+    set pe_tests {
+      {"aarch64" "--image-base 0x1000" "" "" {aarch64a.s aarch64b.s}
+	{{objdump -dr aarch64.d}} "aarch64.x"}
+      {".secrel32" "--disable-reloc-section" "" "" {secrel1.s secrel2.s}
+	{{objdump -s secrel_64.d}} "secrel.x"}
+      {".secidx" "--disable-reloc-section" "" "" {secidx1.s secidx2.s}
+	{{objdump -s secidx_aarch64.d}} "secidx.x"}
     }
 
     run_ld_link_tests $pe_tests
@@ -76,9 +106,12 @@ run_dump_test "longsecn-5"
 run_dump_test "orphan"
 run_dump_test "orphan_nu"
 
+run_dump_test "reloc"
+
 run_dump_test "weakdef-1"
 
 run_dump_test "pr19803"
+run_dump_test "pr26659-weak-undef-sym"
 set pr19803_dll {
     {   "PR 19803: not exporting swept symbols"
 	"-shared --out-implib dx.dll --gc-sections"
@@ -106,3 +139,8 @@ set foreign_sym_test {
 # MCore rearranges symbol order.
 setup_xfail mcore-*-pe
 run_ld_link_tests $foreign_sym_test
+
+run_dump_test "exclude-symbols-embedded-i386"
+run_dump_test "exclude-symbols-embedded-x86_64"
+run_dump_test "exclude-symbols-def-i386"
+run_dump_test "exclude-symbols-def-x86_64"

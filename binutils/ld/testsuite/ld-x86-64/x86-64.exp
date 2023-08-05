@@ -1,5 +1,5 @@
 # Expect script for ld-x86_64 tests
-#   Copyright (C) 2002-2021 Free Software Foundation, Inc.
+#   Copyright (C) 2002-2023 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -45,28 +45,6 @@ set x86_64tests {
     {"basic PLT generation"
      "-melf_x86_64 tmpdir/libpltlib.so" "" "--64" {plt.s}
      {{objdump -drj.plt plt.pd}} "plt"}
-    {"TLS -fpic -shared transitions"
-     "-shared -melf_x86_64 --no-ld-generated-unwind-info \
-      -z noseparate-code -z max-page-size=0x200000 --hash-style=sysv" ""
-     "--64" {tlspic1.s tlspic2.s}
-     {{readelf -WSsrl tlspic.rd} {objdump -drj.text\ -Mintel64 tlspic.dd}
-      {objdump -sj.got tlspic.sd} {objdump -sj.tdata tlspic.td}}
-      "libtlspic.so"}
-    {"TLS -fpic -shared transitions with r15 as GOT base"
-     "-shared -melf_x86_64 --no-ld-generated-unwind-info \
-      -z noseparate-code -z max-page-size=0x200000 --hash-style=sysv" ""
-     "--64 -mrelax-relocations=yes"
-     {tlspic3.s tlspic2.s}
-     {{readelf -WSsrl tlspic2.rd} {objdump -drj.text\ -Mintel64 tlspic2.dd}
-      {objdump -sj.got tlspic2.sd} {objdump -sj.tdata tlspic2.td}}
-      "libtlspic2.so"}
-    {"TLS descriptor -fpic -shared transitions"
-     "-shared -melf_x86_64 --no-ld-generated-unwind-info \
-      -z noseparate-code -z max-page-size=0x200000 --hash-style=sysv" ""
-     "--64" {tlsdesc.s tlspic2.s}
-     {{readelf -WSsrld tlsdesc.rd} {objdump -drj.text tlsdesc.dd}
-      {objdump "-s -j.got -j.got.plt" tlsdesc.sd} {objdump -sj.tdata tlsdesc.td}
-      {objdump -drj.plt tlsdesc.pd}} "libtlsdesc.so"}
     {"Helper shared library" "-shared -melf_x86_64" ""
      "--64" {tlslib.s} {} "libtlslib.so"}
     {"TLS -fpic and -fno-pic exec transitions"
@@ -199,7 +177,7 @@ set x86_64tests {
     {"PR ld/17709 (1)" "-melf_x86_64 -shared" ""
      "--64" {pr17709a.s} {} "libpr17709.so"}
     {"PR ld/17709 (2)" "-melf_x86_64 tmpdir/libpr17709.so" ""
-     "--64" {pr17709b.s} {{readelf -rW pr17709.rd}} "pr17709"}
+     "--64" {pr17709b.s} {{ld "pr17709.err"}} "pr17709"}
     {"Build pr19827a.o" "" ""
      "--64" { pr19827a.S }}
     {"Build pr19827b.so" "-melf_x86_64 -shared" ""
@@ -221,9 +199,67 @@ set x86_64tests {
      "-melf_x86_64 -pie -z notext tmpdir/pr20550a.o tmpdir/pr20550b.so"
      ""
      "--64" { dummy.s } {} "pr20550"}
+    {"Build pr27587"
+     "-melf_x86_64 -e main"
+     "" ""
+     { pr27587a.obj.bz2 pr27587b.obj.bz2 }
+     {{ld "pr27587.err"}} "pr27587"}
+    {"Build pr27590.o"
+     "-r -melf_x86_64"
+     "" ""
+     { pr27590a.obj.bz2 pr27590b.obj.bz2 }
+     {{readelf -SW pr27590.rd}} "pr27590.o"}
+    {"Build textrel-1.so" "-melf_x86_64 -shared" ""
+     "--64" { textrel-1a.s } {} "textrel-1.so"}
+    {"Build textrel-1" "-no-pie -melf_x86_64 -z nocopyreloc --warn-textrel"
+     "tmpdir/textrel-1.so"
+     "--64" { textrel-1b.s } {{ld "textrel-1.err"}} "textrel-1"}
 }
 
 run_ld_link_tests $x86_64tests
+
+run_ld_link_tests [list \
+    [list \
+	"TLS -fpic -shared transitions" \
+	"-shared -melf_x86_64 --no-ld-generated-unwind-info \
+	 -z noseparate-code -z max-page-size=0x200000 --hash-style=sysv \
+	 $NO_DT_RELR_LDFLAGS" \
+	"" "--64" \
+	{tlspic1.s tlspic2.s} \
+	{{readelf -WSsrl tlspic.rd} \
+	 {objdump {-drj.text -Mintel64} tlspic.dd} \
+	 {objdump -sj.got tlspic.sd} \
+	 {objdump -sj.tdata tlspic.td}} \
+	"libtlspic.so" \
+    ] \
+    [list \
+	"TLS -fpic -shared transitions with r15 as GOT base" \
+	"-shared -melf_x86_64 --no-ld-generated-unwind-info \
+	 -z noseparate-code -z max-page-size=0x200000 --hash-style=sysv \
+	 $NO_DT_RELR_LDFLAGS" \
+	 "" "--64 -mrelax-relocations=yes" \
+	{tlspic3.s tlspic2.s} \
+	{{readelf -WSsrl tlspic2.rd} \
+	 {objdump {-drj.text -Mintel64} tlspic2.dd} \
+	 {objdump -sj.got tlspic2.sd} \
+	 {objdump -sj.tdata tlspic2.td}} \
+	"libtlspic2.so" \
+    ] \
+    [list \
+	"TLS descriptor -fpic -shared transitions" \
+	"-shared -melf_x86_64 --no-ld-generated-unwind-info \
+	 -z noseparate-code -z max-page-size=0x200000 --hash-style=sysv \
+	 $NO_DT_RELR_LDFLAGS" \
+	"" "--64" \
+	{tlsdesc.s tlspic2.s} \
+	{{readelf -WSsrld tlsdesc.rd} \
+	 {objdump -drj.text tlsdesc.dd} \
+	 {objdump {-s -j.got -j.got.plt} tlsdesc.sd} \
+	 {objdump -sj.tdata tlsdesc.td} \
+	 {objdump -drj.plt tlsdesc.pd}} \
+	 "libtlsdesc.so" \
+    ] \
+]
 
 set test_name "Mixed x86_64 and i386 input test 1"
 set test mixed1
@@ -246,11 +282,11 @@ if { ![ld_link $ld tmpdir/$test "-m$emul tmpdir/${test}a.o tmpdir/${test}b.o"] }
 }
 
 run_dump_test "abs"
-run_dump_test "abs-k1om"
-run_dump_test "abs-l1om"
 run_dump_test "apic"
 run_dump_test "pcrel8"
 run_dump_test "pcrel16"
+run_dump_test "pcrel16-2"
+run_dump_test "rela"
 run_dump_test "tlsgd2"
 run_dump_test "tlsgd3"
 run_dump_test "tlsgd12"
@@ -264,11 +300,7 @@ run_dump_test "hidden4"
 run_dump_test "hidden5"
 run_dump_test "protected1"
 run_dump_test "protected2"
-run_dump_test "protected2-k1om"
-run_dump_test "protected2-l1om"
 run_dump_test "protected3"
-run_dump_test "protected3-k1om"
-run_dump_test "protected3-l1om"
 run_dump_test "protected4"
 run_dump_test "protected5"
 run_dump_test "protected6a"
@@ -462,6 +494,22 @@ run_dump_test "property-x86-isa3"
 run_dump_test "property-x86-isa3-x32"
 run_dump_test "property-x86-isa4"
 run_dump_test "property-x86-isa4-x32"
+run_dump_test "code16"
+run_dump_test "pr27491-1a"
+run_dump_test "pr27491-1b"
+run_dump_test "pr27491-1c"
+run_dump_test "pr27491-2"
+run_dump_test "pr27491-3"
+run_dump_test "pr27491-4"
+run_dump_test "dt-relr-1a"
+run_dump_test "dt-relr-1a-x32"
+run_dump_test "dt-relr-1b"
+run_dump_test "dt-relr-1b-x32"
+
+if { ![skip_sframe_tests] } {
+    run_dump_test "sframe-simple-1"
+    run_dump_test "sframe-plt-1"
+}
 
 if ![istarget "x86_64-*-linux*"] {
     return
@@ -509,6 +557,7 @@ run_dump_test "ilp32-8"
 run_dump_test "ilp32-9"
 run_dump_test "ilp32-10"
 run_dump_test "ilp32-11"
+run_dump_test "ilp32-12"
 run_dump_test "ia32-1"
 run_dump_test "ia32-2"
 run_dump_test "ia32-3"
@@ -677,6 +726,9 @@ run_dump_test "pr26939"
 run_dump_test "pr26939-x32"
 run_dump_test "pr27016a"
 run_dump_test "pr27016b"
+run_dump_test "report-reloc-1"
+run_dump_test "report-reloc-1-x32"
+run_dump_test "pr29820"
 
 proc undefined_weak {cflags ldflags} {
     set testname "Undefined weak symbol"
@@ -1305,6 +1357,95 @@ if { [isnative] && [check_compiler_available] } {
 	     {readelf -rW pr22842b.rd}} \
 	    "pr22842" \
 	] \
+	[list \
+	    "Build libprotected-func-1.so" \
+	    "-shared" \
+	    "-fPIC -Wa,-mx86-used-note=yes" \
+	    { protected-func-1a.s } \
+	    {} \
+	    "libprotected-func-1.so" \
+	] \
+	[list \
+	    "Build libprotected-func-2a.so" \
+	    "-shared" \
+	    "-fPIC -Wa,-mx86-used-note=yes" \
+	    { protected-func-2a.S } \
+	    {{readelf -n indirect-extern-access.rd}}  \
+	    "libprotected-func-2a.so" \
+	] \
+	[list \
+	    "Build libprotected-func-2b.so" \
+	    "-shared -z indirect-extern-access" \
+	    "-fPIC -Wa,-mx86-used-note=yes" \
+	    { protected-func-2c.c } \
+	    {{readelf -n indirect-extern-access.rd}}  \
+	    "libprotected-func-2b.so" \
+	] \
+	[list \
+	    "Build protected-func-2 without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-func-2b.so" \
+	    "$NOPIE_CFLAGS -Wa,-mx86-used-note=yes" \
+	    { protected-func-1b.c } \
+	    {{error_output "pr28875-func.err"}} \
+	    "protected-func-2" \
+	] \
+	[list \
+	    "Build libprotected-func-2c.so" \
+	    "-shared" \
+	    "-fPIC -Wa,-mx86-used-note=yes" \
+	    { protected-func-2c.c } \
+	    {}  \
+	    "libprotected-func-2c.so" \
+	] \
+	[list \
+	    "Build protected-func-2a without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-func-2c.so" \
+	    "$NOPIE_CFLAGS -Wa,-mx86-used-note=yes" \
+	    { protected-func-1b.c } \
+	    {{error_output "pr28875-func.err"}} \
+	    "protected-func-2a" \
+	] \
+	[list \
+	    "Build libprotected-data-1a.so" \
+	    "-shared -z noindirect-extern-access" \
+	    "-fPIC -Wa,-mx86-used-note=yes" \
+	    { protected-data-1a.c } \
+	    {} \
+	    "libprotected-data-1a.so" \
+	] \
+	[list \
+	    "Build libprotected-data-1b.so" \
+	    "-shared -z indirect-extern-access" \
+	    "-fPIC -Wa,-mx86-used-note=yes" \
+	    { protected-data-1a.c } \
+	    {} \
+	    "libprotected-data-1b.so" \
+	] \
+	[list \
+	    "Build protected-data-1 without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-data-1b.so" \
+	    "$NOPIE_CFLAGS -Wa,-mx86-used-note=yes" \
+	    { protected-data-1b.c } \
+	    {{error_output "pr28875-data.err"}} \
+	    "protected-data-1" \
+	] \
+	[list \
+	    "Build libprotected-data-2a.so" \
+	    "-shared" \
+	    "-fPIC -Wa,-mx86-used-note=yes \
+	     -DUSE_GNU_PROPERTY_1_NEEDED_INDIRECT_EXTERN_ACCESS" \
+	    { protected-data-2a.S } \
+	    {{readelf -n indirect-extern-access.rd}}  \
+	    "libprotected-data-2a.so" \
+	] \
+	[list \
+	    "Build libprotected-data-2b.so" \
+	    "-shared -z indirect-extern-access" \
+	    "-fPIC -Wa,-mx86-used-note=yes" \
+	    { protected-data-2a.S } \
+	    {{readelf -n indirect-extern-access.rd}}  \
+	    "libprotected-data-2b.so" \
+	] \
     ]
 
     if  {[istarget "x86_64-*-linux*-gnux32"]} {
@@ -1351,6 +1492,14 @@ if { [isnative] && [check_compiler_available] } {
 		"-Wa,-mx86-used-note=yes" \
 		{ pr25416-5d.s } \
 	    ] \
+	    [list \
+		"Build pr21997-1b" \
+		"$NOPIE_LDFLAGS -Wl,--no-as-needed,-z,notext tmpdir/pr21997-1.so" \
+		"$NOPIE_CFLAGS -Wa,-mx86-used-note=yes" \
+		{ pr21997-1c.c } \
+		{{error_output "pr21997-1b.err"}} \
+		"pr21997-1b" \
+	    ] \
 	]
 
 	run_ld_link_exec_tests [list \
@@ -1360,15 +1509,6 @@ if { [isnative] && [check_compiler_available] } {
 		"-Wa,-mx86-used-note=yes" \
 		{ pr22001-1c.c } \
 		"pr22001-1b" \
-		"pass.out" \
-		"$NOPIE_CFLAGS" \
-	    ] \
-	    [list \
-		"Run pr21997-1b" \
-		"$NOPIE_LDFLAGS -Wl,--no-as-needed,-z,notext tmpdir/pr21997-1.so" \
-		"-Wa,-mx86-used-note=yes" \
-		{ pr21997-1c.c } \
-		"pr21997-1b" \
 		"pass.out" \
 		"$NOPIE_CFLAGS" \
 	    ] \
@@ -1583,69 +1723,6 @@ if { [isnative] && [check_compiler_available] } {
 	    "property-3-static" "pass.out" \
 	] \
 	[list \
-	    "Run property 3" \
-	    "" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {pass.c property-stack.S property-x86-1.S} \
-	    "property-3" "pass.out" \
-	] \
-	[list \
-	    "Run property 3 (PIE)" \
-	    "-pie" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {pass.c property-x86-1.S property-stack.S} \
-	    "property-3-pie" "pass.out" "-fPIE" \
-	] \
-	[list \
-	    "Run property 3 (static)" \
-	    "-static" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {property-x86-1.S pass.c property-stack.S} \
-	    "property-3-static" "pass.out" \
-	] \
-	[list \
-	    "Run property 4" \
-	    "" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {pass.c property-stack.S property-x86-1.S property-x86-2.S} \
-	    "property-4" "pass.out" \
-	] \
-	[list \
-	    "Run property 4 (PIE)" \
-	    "-pie" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {pass.c property-x86-2.S property-x86-1.S property-stack.S} \
-	    "property-4-pie" "pass.out" "-fPIE" \
-	] \
-	[list \
-	    "Run property 4 (static)" \
-	    "-static" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {property-x86-2.S property-x86-1.S pass.c property-stack.S} \
-	    "property-4-static" "pass.out" \
-	] \
-	[list \
-	    "Run property 5" \
-	    "-Wl,-z,stack-size=0x900000" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {pass.c property-stack.S property-x86-1.S property-x86-2.S} \
-	    "property-5" "pass.out" \
-	] \
-	[list \
-	    "Run property 5 (PIE)" \
-	    "-pie -Wl,-z,stack-size=0x900000" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {pass.c property-x86-2.S property-x86-1.S property-stack.S} \
-	    "property-5-pie" "pass.out" "-fPIE" \
-	] \
-	[list \
-	    "Run property 5 (static)" \
-	    "-static -Wl,-z,stack-size=0x900000" \
-	    "-Wa,-mx86-used-note=yes" \
-	    {property-x86-2.S property-x86-1.S pass.c property-stack.S} \
-	    "property-5-static" "pass.out" \
-	] \
-	[list \
 	    "Run pr22001-1a (PIC 1)" \
 	    "$NOPIE_LDFLAGS -Wl,-z,nocopyreloc,--no-as-needed tmpdir/pr22001-1.so" \
 	    "-Wa,-mx86-used-note=yes" \
@@ -1777,6 +1854,105 @@ if { [isnative] && [check_compiler_available] } {
 	    "pr23997" \
 	    "pass.out" \
 	] \
+	[list \
+	    "Run protected-func-1 with PIE" \
+	    "-Wl,--no-as-needed -pie tmpdir/libprotected-func-1.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-func-1b.c } \
+	    "protected-func-1b" \
+	    "pass.out" \
+	    "-fPIE" \
+	] \
+	[list \
+	    "Run protected-func-2a without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-func-2a.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-func-2b.S } \
+	    "protected-func-2a" \
+	    "pass.out" \
+	    "$NOPIE_CFLAGS" \
+	] \
+	[list \
+	    "Run protected-func-2b with PIE" \
+	    "-Wl,--no-as-needed -pie tmpdir/libprotected-func-2a.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-func-2b.S } \
+	    "protected-func-2b" \
+	    "pass.out" \
+	    "-fPIE" \
+	] \
+	[list \
+	    "Run protected-func-2c without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-func-2b.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-func-2b.S } \
+	    "protected-func-2c" \
+	    "pass.out" \
+	    "$NOPIE_CFLAGS" \
+	] \
+	[list \
+	    "Run protected-func-2d with PIE" \
+	    "-Wl,--no-as-needed -pie tmpdir/libprotected-func-2b.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-func-2b.S } \
+	    "protected-func-2d" \
+	    "pass.out" \
+	    "-fPIE" \
+	] \
+	[list \
+	    "Run protected-func-3a without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-func-2a.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-func-3.c } \
+	    "protected-func-3a" \
+	    "pass.out" \
+	    "$NOPIE_CFLAGS" \
+	] \
+	[list \
+	    "Run protected-func-3b with PIE" \
+	    "-Wl,--no-as-needed -pie tmpdir/libprotected-func-2a.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-func-3.c } \
+	    "protected-func-2b" \
+	    "pass.out" \
+	    "-fPIE" \
+	] \
+	[list \
+	    "Run protected-data-2a without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-data-2a.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-data-2b.S } \
+	    "protected-data-2a" \
+	    "pass.out" \
+	    "$NOPIE_CFLAGS" \
+	] \
+	[list \
+	    "Run protected-data-2b with PIE" \
+	    "-Wl,--no-as-needed -pie tmpdir/libprotected-data-2a.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-data-2b.S } \
+	    "protected-data-2b" \
+	    "pass.out" \
+	    "-fPIE" \
+	] \
+	[list \
+	    "Run protected-data-2c without PIE" \
+	    "$NOPIE_LDFLAGS -Wl,--no-as-needed tmpdir/libprotected-data-2b.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-data-2b.S } \
+	    "protected-data-2c" \
+	    "pass.out" \
+	    "$NOPIE_CFLAGS" \
+	] \
+	[list \
+	    "Run protected-data-2d with PIE" \
+	    "-Wl,--no-as-needed -pie tmpdir/libprotected-data-2b.so" \
+	    "-Wa,-mx86-used-note=yes" \
+	    { protected-data-2b.S } \
+	    "protected-data-2d" \
+	    "pass.out" \
+	    "-fPIE" \
+	] \
     ]
 
     # Run-time tests which require working ifunc attribute support.
@@ -1826,142 +2002,15 @@ if { [isnative] && [check_compiler_available] } {
 	]
     }
 
-    if { [istarget "x86_64-*-linux*"] \
-	 && ![istarget "x86_64-*-linux*-gnux32"]} {
-
-	run_cc_link_tests [list \
-	    [list \
-		"Build plt-main with -z bndplt" \
-		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z bndplt \
-		 -z noseparate-code -z max-page-size=0x200000" \
-		"-Wa,-mx86-used-note=yes $NOCF_PROTECTION_CFLAGS" \
-		{ plt-main5.c } \
-		{{objdump {-drw} plt-main-bnd.dd}} \
-		"plt-main-bnd" \
-	    ] \
-	    [list \
-		"Build plt-main with PIE and -z bndplt" \
-		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z bndplt -pie \
-		 -z noseparate-code -z max-page-size=0x200000" \
-		"-fPIC -Wa,-mx86-used-note=yes $NOCF_PROTECTION_CFLAGS" \
-		{ plt-main5.c } \
-		{{objdump {-drw} plt-main-bnd.dd}} \
-		"plt-main-pie-bnd" \
-	    ] \
-	    [list \
-		"Build plt-main with -z bndplt -z now" \
-		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z bndplt -z now \
-		 -z noseparate-code -z max-page-size=0x200000" \
-		"-Wa,-mx86-used-note=yes $NOCF_PROTECTION_CFLAGS" \
-		{ plt-main5.c } \
-		{{readelf {-SW} plt-main-bnd-now.rd} {objdump {-drw} plt-main-bnd.dd}} \
-		"plt-main-bnd-now" \
-	    ] \
-	    [list \
-		"Build plt-main with PIE and -z bndplt -z now" \
-		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z bndplt -z now -pie \
-		 -z noseparate-code -z max-page-size=0x200000" \
-		"-fPIC -Wa,-mx86-used-note=yes $NOCF_PROTECTION_CFLAGS" \
-		{ plt-main5.c } \
-		{{readelf {-SW} plt-main-bnd-now.rd} {objdump {-drw} plt-main-bnd.dd}} \
-		"plt-main-pie-bnd-now" \
-	    ] \
-	]
-
-	run_ld_link_exec_tests [list \
-	    [list \
-		"Run plt-main with -z bndplt" \
-		"-Wl,--no-as-needed,-z,bndplt tmpdir/plt-main1.o \
-		 tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so" \
-		"-Wa,-mx86-used-note=yes" \
-		{ plt-main5.c } \
-		"plt-main-bnd" \
-		"plt-main.out" \
-	    ] \
-	    [list \
-		"Run plt-main with PIE and -z bndplt" \
-		"-Wl,--no-as-needed,-z,bndplt -pie tmpdir/plt-main1.o \
-		 tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so" \
-		"-Wa,-mx86-used-note=yes" \
-		{ plt-main5.c } \
-		"plt-main-pie-bnd" \
-		"plt-main.out" \
-		"-fPIC" \
-	    ] \
-	    [list \
-		"Run plt-main with -z bndplt -z now" \
-		"-Wl,--no-as-needed,-z,bndplt,-z,now tmpdir/plt-main1.o \
-		 tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so" \
-		"-Wa,-mx86-used-note=yes" \
-		{ plt-main5.c } \
-		"plt-main-bnd-now" \
-		"plt-main.out" \
-	    ] \
-	    [list \
-		"Run plt-main with PIE and -z bndplt -z now" \
-		"-Wl,--no-as-needed,-z,bndplt,-z,now -pie tmpdir/plt-main1.o \
-		 tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so" \
-		"-Wa,-mx86-used-note=yes" \
-		{ plt-main5.c } \
-		"plt-main-pie-bnd-now" \
-		"plt-main.out" \
-		"-fPIC" \
-	    ] \
-	    [list \
-		"Run pr20800" \
-		"-Wl,-z,now -pie" \
-		"-Wa,-mx86-used-note=yes" \
-		{ pr20800a.S pr20800b.S } \
-		"pr20800" \
-		"pass.out" \
-	    ] \
-	]
-	if { [check_ifunc_attribute_available] } {
-	    run_ld_link_exec_tests [list \
-		[list \
-		    "Run pr21481a" \
-		    "$NOPIE_LDFLAGS -Wl,-z,bndplt" \
-		    "-Wa,-mx86-used-note=yes" \
-		    { pr21481a.c pr21481b.S } \
-		    "pr21481a" \
-		    "pass.out" \
-		     "$NOPIE_CFLAGS" \
-		] \
-		[list \
-		    "Run pr21481b" \
-		    "$NOPIE_LDFLAGS -Wl,-z,bndplt,-z,now" \
-		    "-Wa,-mx86-used-note=yes" \
-		    { pr21481a.c pr21481b.S } \
-		    "pr21481b" \
-		    "pass.out" \
-		    "$NOPIE_CFLAGS" \
-		] \
-	    ]
-	}
-    }
-
     if { [istarget "x86_64-*-linux*"] } {
-	if { [istarget "x86_64-*-linux*-gnux32"] } {
-	    set pltdump {{objdump {-drw} plt-main-ibt-x32.dd}}
-	    set pltsecdump {{readelf {-SW} plt-main-ibt-now.rd} {objdump {-drw} plt-main-ibt-x32.dd}}
-	} else {
-	    set pltdump {{objdump {-drw} plt-main-ibt.dd}}
-	    set pltsecdump {{readelf {-SW} plt-main-ibt-now.rd} {objdump {-drw} plt-main-ibt.dd}}
-	}
+	set pltdump {{objdump {-drw} plt-main-ibt.dd}}
+	set pltsecdump {{readelf {-SW} plt-main-ibt-now.rd} {objdump {-drw} plt-main-ibt.dd}}
 	run_cc_link_tests [list \
 	    [list \
 		"Build plt-main with -z ibtplt" \
 		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z ibtplt \
-		 -z noseparate-code -z max-page-size=0x200000" \
+		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -Wl,-z,ibtplt \
+		 -Wl,-z,noseparate-code,-z,max-page-size=0x200000" \
 		"-Wa,-mx86-used-note=yes" \
 		{ plt-main5.c } \
 		$pltdump \
@@ -1970,8 +2019,9 @@ if { [isnative] && [check_compiler_available] } {
 	    [list \
 		"Build plt-main with PIE and -z ibtplt" \
 		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z ibtplt -pie \
-		 -z noseparate-code -z max-page-size=0x200000" \
+		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -pie \
+		 -Wl,-z,ibtplt,-z,noseparate-code \
+		 -Wl,-z,max-page-size=0x200000" \
 		"-fPIC -Wa,-mx86-used-note=yes" \
 		{ plt-main5.c } \
 		$pltdump \
@@ -1980,8 +2030,8 @@ if { [isnative] && [check_compiler_available] } {
 	    [list \
 		"Build plt-main with -z ibtplt -z now" \
 		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z ibtplt -z now \
-		 -z noseparate-code -z max-page-size=0x200000" \
+		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -Wl,-z,ibtplt \
+		 -Wl,-z,now,-z,noseparate-code,-z,max-page-size=0x200000" \
 		"-Wa,-mx86-used-note=yes" \
 		{ plt-main5.c } \
 		$pltsecdump \
@@ -1990,8 +2040,9 @@ if { [isnative] && [check_compiler_available] } {
 	    [list \
 		"Build plt-main with PIE and -z ibtplt -z now" \
 		"tmpdir/plt-main1.o tmpdir/plt-main2.o tmpdir/plt-main3.o \
-		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -z ibtplt -z now -pie \
-		 -z noseparate-code -z max-page-size=0x200000" \
+		 tmpdir/plt-main4.o tmpdir/libplt-lib.so -pie \
+		 -Wl,-z,ibtplt,-z,now,-z,noseparate-code \
+		 -Wl,-z,max-page-size=0x200000" \
 		"-fPIC -Wa,-mx86-used-note=yes" \
 		{ plt-main5.c } \
 		$pltsecdump \
@@ -1999,8 +2050,8 @@ if { [isnative] && [check_compiler_available] } {
 	    ] \
 	    [list \
 		"Build libibtplt-lib.so with -z ibtplt" \
-		"-shared -z ibtplt \
-		 -z noseparate-code -z max-page-size=0x200000" \
+		"-shared -Wl,-z,ibtplt,-z,noseparate-code \
+		 -Wl,-z,max-page-size=0x200000" \
 		"-fPIC -Wa,-mx86-used-note=yes" \
 		{ plt-main1.c plt-main2.c plt-main3.c plt-main4.c} \
 		$pltdump \
@@ -2008,8 +2059,8 @@ if { [isnative] && [check_compiler_available] } {
 	    ] \
 	    [list \
 		"Build libibtplt--now-lib.so with -z ibtplt -z now" \
-		"-shared -z ibtplt -z now \
-		 -z noseparate-code -z max-page-size=0x200000" \
+		"-shared -Wl,-z,ibtplt,-z,now,-z,noseparate-code \
+		 -Wl,-z,max-page-size=0x200000" \
 		"-fPIC -Wa,-mx86-used-note=yes" \
 		{ plt-main1.c plt-main2.c plt-main3.c plt-main4.c} \
 		$pltdump \
@@ -2147,8 +2198,8 @@ run_ld_link_tests [list \
     ] \
 ]
 
-# Linux only tests
-if { "$LD_CLASS" == "64bit" } then {
+# Linux only tests.  Disabled due to large memory requirement.
+if { "x$LD_CLASS" == "64bit" } then {
     # This test needs 64-bit linker.
     run_dump_test "pr17618"
 }
@@ -2156,14 +2207,8 @@ run_dump_test "pltgot-1"
 run_dump_test "pltgot-2"
 run_dump_test "pr20830a"
 run_dump_test "pr20830b"
-run_dump_test "pr21038a"
-run_dump_test "pr21038b"
-run_dump_test "pr21038c"
 run_dump_test "pr20830a-now"
 run_dump_test "pr20830b-now"
-run_dump_test "pr21038a-now"
-run_dump_test "pr21038b-now"
-run_dump_test "pr21038c-now"
 run_dump_test "ibt-plt-1"
 run_dump_test "ibt-plt-1-x32"
 run_dump_test "ibt-plt-2a"

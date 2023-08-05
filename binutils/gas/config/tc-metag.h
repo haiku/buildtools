@@ -1,5 +1,5 @@
 /* tc-metag.h -- Header file for tc-metag.c.
-   Copyright (C) 2013-2021 Free Software Foundation, Inc.
+   Copyright (C) 2013-2023 Free Software Foundation, Inc.
    Contributed by Imagination Technologies Ltd.
 
    This file is part of GAS, the GNU Assembler.
@@ -42,7 +42,7 @@
 #define MD_APPLY_SYM_VALUE(FIX) 0
 
 #define tc_fix_adjustable(FIX) metag_fix_adjustable (FIX)
-extern bfd_boolean metag_fix_adjustable (struct fix *);
+extern bool metag_fix_adjustable (struct fix *);
 
 #define TC_FORCE_RELOCATION(fix) metag_force_relocation (fix)
 extern int metag_force_relocation (struct fix *);

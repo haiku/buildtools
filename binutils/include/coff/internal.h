@@ -1,7 +1,7 @@
 /* Internal format of COFF object file data structures, for GNU BFD.
    This file is part of BFD, the Binary File Descriptor library.
 
-   Copyright (C) 1999-2021 Free Software Foundation, Inc.
+   Copyright (C) 1999-2023 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -263,8 +263,13 @@ struct internal_aouthdr
   short o_algndata;		/* max alignment for data	*/
   short o_modtype;		/* Module type field, 1R,RE,RO	*/
   short o_cputype;		/* Encoded CPU type		*/
-  bfd_vma o_maxstack;	/* max stack size allowed.	*/
-  bfd_vma o_maxdata;	/* max data size allowed.	*/
+  bfd_vma o_maxstack;		/* max stack size allowed.	*/
+  bfd_vma o_maxdata;		/* max data size allowed.	*/
+  char o_flags;			/* Flags and TLS alignment	*/
+  short o_sntdata;		/* section number for tdata	*/
+  short o_sntbss;		/* section number for tbss	*/
+  short o_x64flags;		/* XCOFF64 flags		*/
+
 
   /* ECOFF stuff */
   bfd_vma bss_start;		/* Base of bss section.		*/
@@ -343,6 +348,7 @@ struct internal_aouthdr
 #define C_BINCL         108	/* Marks beginning of include file */
 #define C_EINCL         109	/* Marks ending of include file */
 #define C_AIX_WEAKEXT   111	/* AIX definition of C_WEAKEXT.  */
+#define C_DWARF         112	/* DWARF symbol  */
 
 #define C_NULL_VALUE	0x00de1e00    /* Value for a C_NULL deleted entry.  */
 
@@ -402,7 +408,7 @@ struct internal_scnhdr
   bfd_vma s_lnnoptr;		/* file ptr to line numbers	*/
   unsigned long s_nreloc;	/* number of relocation entries	*/
   unsigned long s_nlnno;	/* number of line number entries*/
-  long s_flags;			/* flags			*/
+  unsigned long s_flags;	/* flags			*/
   unsigned char s_page;         /* TI COFF load page            */
 };
 
@@ -463,8 +469,8 @@ struct internal_syment
     char _n_name[SYMNMLEN] ATTRIBUTE_NONSTRING;	/* old COFF version	*/
     struct
     {
-      bfd_hostptr_t _n_zeroes;	/* new == 0			*/
-      bfd_hostptr_t _n_offset;	/* offset into string table	*/
+      uintptr_t _n_zeroes;	/* new == 0			*/
+      uintptr_t _n_offset;	/* offset into string table	*/
     }      _n_n;
     char *_n_nptr[2];		/* allows for overlaying	*/
   }     _n;
@@ -530,78 +536,92 @@ struct internal_syment
 #define DECREF(x) \
   ((((x) >> N_TSHIFT) & ~ N_BTMASK) | ((x) & N_BTMASK))
 
+/* Visibility flag, in XCOFF n_type.  */
+#define SYM_V_INTERNAL		0x1000
+#define SYM_V_HIDDEN		0x2000
+#define SYM_V_PROTECTED 	0x3000
+#define SYM_V_EXPORTED		0x4000
+#define SYM_V_MASK		0xF000
+
 union internal_auxent
 {
   struct
   {
-
     union
     {
-      long l;			/* str, un, or enum tag indx */
+      uint32_t u32;		/* str, un, or enum tag indx */
       struct coff_ptr_struct *p;
-    }     x_tagndx;
+    } x_tagndx;
 
     union
     {
       struct
       {
-	unsigned short x_lnno;	/* declaration line number */
-	unsigned short x_size;	/* str/union/array size */
-      }      x_lnsz;
-      long x_fsize;		/* size of function */
-    }     x_misc;
+	uint16_t x_lnno;	/* declaration line number */
+	uint16_t x_size;	/* str/union/array size */
+      } x_lnsz;
+      uint32_t x_fsize;		/* size of function */
+    } x_misc;
 
     union
     {
       struct
       {				/* if ISFCN, tag, or .bb */
-	bfd_signed_vma x_lnnoptr;		/* ptr to fcn line # */
+	uint64_t x_lnnoptr;	/* ptr to fcn line # */
 	union
 	{			/* entry ndx past block end */
-	  long l;
+	  uint32_t u32;
 	  struct coff_ptr_struct *p;
-	}     x_endndx;
-      }      x_fcn;
+	} x_endndx;
+      } x_fcn;
 
       struct
       {				/* if ISARY, up to 4 dimen. */
-	unsigned short x_dimen[DIMNUM];
-      }      x_ary;
-    }     x_fcnary;
+	uint16_t x_dimen[DIMNUM];
+      } x_ary;
+    } x_fcnary;
 
-    unsigned short x_tvndx;	/* tv index */
-  }      x_sym;
+    uint16_t x_tvndx;		/* tv index */
+  } x_sym;
 
-  union
+  struct
   {
-    /* PR 17754: We use to FILNMLEN for the size of the x_fname
-       array, but that cause problems as PE targets use a larger
-       value.  We cannot use their definition of EFILNMLEN as this
-       header can be used without including any PE headers.  */
-    char x_fname[20];
-    struct
+    union
     {
-      long x_zeroes;
-      long x_offset;
-    }      x_n;
-  }     x_file;
+      /* PR 17754: We used to use FILNMLEN for the size of the x_fname
+	 array, but that causes problems as PE targets use a larger
+	 value.  We cannot use their definition of E_FILNMLEN as this
+	 header can be used without including any PE headers.  */
+      char x_fname[20];
+      struct
+      {
+	/* PR 28630: We use uintptr_t because these fields may be
+	   used to hold pointers.  We assume that this type is at least
+	   32 bits.  */
+	uintptr_t x_zeroes;
+	uintptr_t x_offset;
+      } x_n;
+    } x_n;
+
+    uint8_t x_ftype;
+  } x_file;
 
   struct
   {
-    long x_scnlen;		/* section length */
-    unsigned short x_nreloc;	/* # relocation entries */
-    unsigned short x_nlinno;	/* # line numbers */
-    unsigned long x_checksum;	/* section COMDAT checksum for PE */
-    unsigned short x_associated; /* COMDAT associated section index for PE */
-    unsigned char x_comdat;	/* COMDAT selection number for PE */
-  }      x_scn;
+    uint32_t x_scnlen;		/* section length */
+    uint16_t x_nreloc;		/* # relocation entries */
+    uint16_t x_nlinno;		/* # line numbers */
+    uint32_t x_checksum;	/* section COMDAT checksum for PE */
+    uint16_t x_associated;	/* COMDAT associated section index for PE */
+    uint8_t x_comdat;		/* COMDAT selection number for PE */
+  } x_scn;
 
   struct
   {
-    long x_tvfill;		/* tv fill value */
-    unsigned short x_tvlen;	/* length of .tv */
-    unsigned short x_tvran[2];	/* tv range */
-  }      x_tv;			/* info about .tv section (in auxent of symbol .tv)) */
+    uint32_t x_tvfill;		/* tv fill value */
+    uint16_t x_tvlen;		/* length of .tv */
+    uint16_t x_tvran[2];	/* tv range */
+  } x_tv;			/* info about .tv section (in auxent of symbol .tv)) */
 
   /******************************************
    * RS/6000-specific auxent - last auxent for every external symbol
@@ -610,18 +630,18 @@ union internal_auxent
   {
     union
       {				/* csect length or enclosing csect */
-	bfd_signed_vma l;
+	uint64_t u64;
 	struct coff_ptr_struct *p;
       } x_scnlen;
-    long x_parmhash;		/* parm type hash index */
-    unsigned short x_snhash;	/* sect num with parm hash */
-    unsigned char x_smtyp;	/* symbol align and type */
+    uint32_t x_parmhash;	/* parm type hash index */
+    uint16_t x_snhash;		/* sect num with parm hash */
+    uint8_t x_smtyp;		/* symbol align and type */
     /* 0-4 - Log 2 of alignment */
     /* 5-7 - symbol type */
-    unsigned char x_smclas;	/* storage mapping class */
-    long x_stab;		/* dbx stab info index */
-    unsigned short x_snstab;	/* sect num with dbx stab */
-  }      x_csect;		/* csect definition information */
+    uint8_t x_smclas;		/* storage mapping class */
+    uint32_t x_stab;		/* dbx stab info index */
+    uint16_t x_snstab;		/* sect num with dbx stab */
+  } x_csect;			/* csect definition information */
 
 /* x_smtyp values:  */
 
@@ -654,6 +674,12 @@ union internal_auxent
 /* 		14	??? */
 #define	XMC_TC0	15		/* Read-write TOC anchor */
 #define XMC_TD	16		/* Read-write data in TOC */
+
+  struct
+  {
+    uint64_t x_scnlen;		/* Section length */
+    uint64_t x_nreloc;		/* Number of relocation entries */
+  } x_sect;
 };
 
 /********************** RELOCATION DIRECTIVES **********************/
@@ -668,146 +694,20 @@ struct internal_reloc
   unsigned long r_offset;	/* Used by Alpha ECOFF, SPARC, others */
 };
 
-/* X86-64 relocations.  */
-#define R_AMD64_ABS 		 0 /* Reference is absolute, no relocation is necessary.  */
-#define R_AMD64_DIR64		 1 /* 64-bit address (VA).  */
-#define R_AMD64_DIR32		 2 /* 32-bit address (VA) R_DIR32.  */
-#define R_AMD64_IMAGEBASE	 3 /* 32-bit absolute ref w/o base R_IMAGEBASE.  */
-#define R_AMD64_PCRLONG		 4 /* 32-bit relative address from byte following reloc R_PCRLONG.  */
-#define R_AMD64_PCRLONG_1	 5 /* 32-bit relative address from byte distance 1 from reloc.  */
-#define R_AMD64_PCRLONG_2	 6 /* 32-bit relative address from byte distance 2 from reloc.  */
-#define R_AMD64_PCRLONG_3	 7 /* 32-bit relative address from byte distance 3 from reloc.  */
-#define R_AMD64_PCRLONG_4	 8 /* 32-bit relative address from byte distance 4 from reloc.  */
-#define R_AMD64_PCRLONG_5	 9 /* 32-bit relative address from byte distance 5 from reloc.  */
-#define R_AMD64_SECTION		10 /* Section index.  */
-#define R_AMD64_SECREL		11 /* 32 bit offset from base of section containing target R_SECREL.  */
-#define R_AMD64_SECREL7		12 /* 7 bit unsigned offset from base of section containing target.  */
-#define R_AMD64_TOKEN		13 /* 32 bit metadata token.  */
-#define R_AMD64_PCRQUAD		14 /* Pseude PC64 relocation - Note: not specified by MS/AMD but need for gas pc-relative 64bit wide relocation generated by ELF.  */
-
-/* i386 Relocations.  */
-
-#define R_DIR16 	 1
-#define R_REL24          5
-#define R_DIR32 	 6
-#define R_IMAGEBASE	 7
-#define R_SECREL32	11
-#define R_RELBYTE	15
-#define R_RELWORD	16
-#define R_RELLONG	17
-#define R_PCRBYTE	18
-#define R_PCRWORD	19
-#define R_PCRLONG	20
-#define R_PCR24         21
-#define R_IPRSHORT	24
-#define R_IPRLONG	26
-#define R_GETSEG	29
-#define R_GETPA 	30
-#define R_TAGWORD	31
-#define R_JUMPTARG	32	/* strange 29k 00xx00xx reloc */
-#define R_PARTLS16      32
-#define R_PARTMS8       33
-
-#define R_PCR16L       128
-#define R_PCR26L       129
-#define R_VRT16        130
-#define R_HVRT16       131
-#define R_LVRT16       132
-#define R_VRT32        133
-
-
-/* This reloc identifies mov.b instructions with a 16bit absolute
-   address.  The linker tries to turn insns with this reloc into
-   an absolute 8-bit address.  */
-#define R_MOV16B1    	0x41
-
-/* This reloc identifies mov.b instructions which had a 16bit
-   absolute address which have been shortened into a 8-bit
-   absolute address.  */
-#define R_MOV16B2 	0x42
-
-/* This reloc identifies jmp insns with a 16bit target address;
-   the linker tries to turn these insns into bra insns with
-   an 8bit pc-relative target.  */
-#define R_JMP1     	0x43
-
-/* This reloc identifies a bra with an 8-bit pc-relative
-   target that was formerly a jmp insn with a 16bit target.  */
-#define R_JMP2 		0x44
-
-/* ??? */
-#define R_RELLONG_NEG  	0x45
-
-/* This reloc identifies jmp insns with a 24bit target address;
-   the linker tries to turn these insns into bra insns with
-   an 8bit pc-relative target.  */
-#define R_JMPL1     	0x46
-
-/* This reloc identifies a bra with an 8-bit pc-relative
-   target that was formerly a jmp insn with a 24bit target.  */
-#define R_JMPL2		0x47
-
-/* This reloc identifies mov.b instructions with a 24bit absolute
-   address.  The linker tries to turn insns with this reloc into
-   an absolute 8-bit address.  */
-
-#define R_MOV24B1    	0x48
-
-/* This reloc identifies mov.b instructions which had a 24bit
-   absolute address which have been shortened into a 8-bit
-   absolute address.  */
-#define R_MOV24B2 	0x49
-
-/* An h8300 memory indirect jump/call.  Forces the address of the jump/call
-   target into the function vector (in page zero), and the address of the
-   vector entry to be placed in the jump/call instruction.  */
-#define R_MEM_INDIRECT	0x4a
-
-/* This reloc identifies a 16bit pc-relative branch target which was
-   shortened into an 8bit pc-relative branch target.  */
-#define R_PCRWORD_B	0x4b
-
-/* This reloc identifies mov.[wl] instructions with a 32/24 bit
-   absolute address; the linker may turn this into a mov.[wl]
-   insn with a 16bit absolute address.  */
-#define R_MOVL1    	0x4c
-
-/* This reloc identifies mov.[wl] insns which formerly had
-   a 32/24bit absolute address and now have a 16bit absolute address.  */
-#define R_MOVL2 	0x4d
-
-/* This reloc identifies a bCC:8 which will have it's condition
-   inverted and its target redirected to the target of the branch
-   in the following insn.  */
-#define R_BCC_INV	0x4e
-
-/* This reloc identifies a jmp instruction that has been deleted.  */
-#define R_JMP_DEL	0x4f
-
-/* Z8k modes */
-#define R_IMM16   0x01		/* 16 bit abs */
-#define R_JR	  0x02		/* jr  8 bit disp */
-#define R_IMM4L   0x23		/* low nibble */
-#define R_IMM8    0x22		/* 8 bit abs */
-#define R_IMM32   R_RELLONG	/* 32 bit abs */
-#define R_CALL    R_DA		/* Absolute address which could be a callr */
-#define R_JP	  R_DA		/* Absolute address which could be a jp */
-#define R_REL16   0x04		/* 16 bit PC rel */
-#define R_CALLR	  0x05		/* callr 12 bit disp */
-#define R_SEG     0x10		/* set if in segmented mode */
-#define R_IMM4H   0x24		/* high nibble */
-#define R_DISP7   0x25          /* djnz displacement */
-
-/* Z80 modes */
-#define R_OFF8    0x32		/* 8 bit signed abs, for (i[xy]+d) */
-#define R_IMM24   0x33          /* 24 bit abs */
-#define R_IMM16BE 0x3A          /* 16 bit abs, big endian */
-/* R_JR, R_IMM8, R_IMM16, R_IMM32 - as for Z8k */
-#define R_BYTE0  0x34		/* first (lowest) 8 bits of multibyte value */
-#define R_BYTE1  0x35		/* second 8 bits of multibyte value */
-#define R_BYTE2  0x36		/* third 8 bits of multibyte value */
-#define R_BYTE3  0x37		/* fourth (highest) 8 bits of multibyte value */
-#define R_WORD0  0x38		/* lowest 16 bits of 32 or 24 bit value */
-#define R_WORD1  0x39		/* highest 16 bits of 32 or 24 bit value */
+#define IMAGE_REL_BASED_ABSOLUTE		0
+#define IMAGE_REL_BASED_HIGH			1
+#define IMAGE_REL_BASED_LOW			2
+#define IMAGE_REL_BASED_HIGHLOW			3
+#define IMAGE_REL_BASED_HIGHADJ			4
+#define IMAGE_REL_BASED_MIPS_JMPADDR		5
+#define IMAGE_REL_BASED_ARM_MOV32		5
+#define IMAGE_REL_BASED_RISCV_HIGH20		5
+#define IMAGE_REL_BASED_THUMB_MOV32		7
+#define IMAGE_REL_BASED_RISCV_LOW12I		7
+#define IMAGE_REL_BASED_RISCV_LOW12S		8
+#define IMAGE_REL_BASED_LOONGARCH32_MARK_LA	8
+#define IMAGE_REL_BASED_LOONGARCH64_MARK_LA	8
+#define IMAGE_REL_BASED_MIPS_JMPADDR16		9
+#define IMAGE_REL_BASED_DIR64			10
 
 #endif /* GNU_COFF_INTERNAL_H */

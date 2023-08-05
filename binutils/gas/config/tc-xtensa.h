@@ -1,5 +1,5 @@
 /* tc-xtensa.h -- Header file for tc-xtensa.c.
-   Copyright (C) 2003-2021 Free Software Foundation, Inc.
+   Copyright (C) 2003-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -28,7 +28,7 @@ struct fix;
 #endif
 
 #include "xtensa-isa.h"
-#include "xtensa-config.h"
+#include "xtensa-dynconfig.h"
 
 #define TARGET_BYTES_BIG_ENDIAN 0
 
@@ -329,16 +329,16 @@ extern void xtensa_frag_init (fragS *);
 extern int xtensa_force_relocation (struct fix *);
 extern int xtensa_validate_fix_sub (struct fix *);
 extern void xtensa_frob_label (struct symbol *);
-extern void xtensa_end (void);
+extern void xtensa_md_finish (void);
 extern void xtensa_post_relax_hook (void);
 extern void xtensa_file_arch_init (bfd *);
 extern void xtensa_flush_pending_output (void);
-extern bfd_boolean xtensa_fix_adjustable (struct fix *);
+extern bool xtensa_fix_adjustable (struct fix *);
 extern void xtensa_symbol_new_hook (symbolS *);
 extern long xtensa_relax_frag (fragS *, long, int *);
 extern void xtensa_elf_section_change_hook (void);
 extern int xtensa_unrecognized_line (int);
-extern bfd_boolean xtensa_check_inside_bundle (void);
+extern bool xtensa_check_inside_bundle (void);
 extern void xtensa_handle_align (fragS *);
 extern char *xtensa_section_rename (const char *);
 
@@ -372,7 +372,7 @@ extern void xtensa_init (int, char **);
 #define tc_symbol_new_hook(sym)		xtensa_symbol_new_hook (sym)
 #define md_do_align(a,b,c,d,e)		xtensa_flush_pending_output ()
 #define md_elf_section_change_hook	xtensa_elf_section_change_hook
-#define md_end				xtensa_end
+#define md_finish			xtensa_md_finish
 #define md_flush_pending_output()	xtensa_flush_pending_output ()
 #define md_operand(x)
 #define TEXT_SECTION_NAME		xtensa_section_rename (".text")
@@ -474,7 +474,7 @@ resource_table *new_resource_table
    opcode_funcUnit_use_unit_func, opcode_funcUnit_use_stage_func);
 void resize_resource_table (resource_table *, int);
 void clear_resource_table (resource_table *);
-bfd_boolean resources_available (resource_table *, xtensa_opcode, int);
+bool resources_available (resource_table *, xtensa_opcode, int);
 void reserve_resources (resource_table *, xtensa_opcode, int);
 void release_resources (resource_table *, xtensa_opcode, int);
 

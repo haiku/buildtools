@@ -1,5 +1,5 @@
 /* xSYM symbol-file support for BFD.
-   Copyright (C) 1999-2021 Free Software Foundation, Inc.
+   Copyright (C) 1999-2023 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -21,7 +21,6 @@
 /* xSYM is the debugging format used by CodeWarrior on Mac OS classic.  */
 
 #include "sysdep.h"
-#include "alloca-conf.h"
 #include "xsym.h"
 #include "bfd.h"
 #include "libbfd.h"
@@ -33,6 +32,7 @@
 #define bfd_sym_bfd_is_target_special_symbol	    _bfd_bool_bfd_asymbol_false
 #define bfd_sym_get_lineno			    _bfd_nosymbols_get_lineno
 #define bfd_sym_find_nearest_line		    _bfd_nosymbols_find_nearest_line
+#define bfd_sym_find_nearest_line_with_alt	    _bfd_nosymbols_find_nearest_line_with_alt
 #define bfd_sym_find_line			    _bfd_nosymbols_find_line
 #define bfd_sym_find_inliner_info		    _bfd_nosymbols_find_inliner_info
 #define bfd_sym_get_symbol_version_string	    _bfd_nosymbols_get_symbol_version_string
@@ -100,7 +100,7 @@ compute_offset (unsigned long first_page,
   return (page_number * page_size) + page_offset;
 }
 
-bfd_boolean
+bool
 bfd_sym_mkobject (bfd *abfd ATTRIBUTE_UNUSED)
 {
   return 1;
@@ -115,7 +115,7 @@ bfd_sym_print_symbol (bfd *abfd ATTRIBUTE_UNUSED,
   return;
 }
 
-bfd_boolean
+bool
 bfd_sym_valid (bfd *abfd)
 {
   if (abfd == NULL || abfd->xvec == NULL)
@@ -131,7 +131,7 @@ bfd_sym_read_name_table (bfd *abfd, bfd_sym_header_block *dshb)
   size_t table_offset = dshb->dshb_nte.dti_first_page * dshb->dshb_page_size;
 
   if (bfd_seek (abfd, table_offset, SEEK_SET) != 0)
-    return FALSE;
+    return false;
   return _bfd_alloc_and_read (abfd, table_size, table_size);
 }
 

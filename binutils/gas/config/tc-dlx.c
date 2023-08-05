@@ -1,5 +1,5 @@
 /* tc-dlx.c -- Assemble for the DLX
-   Copyright (C) 2002-2021 Free Software Foundation, Inc.
+   Copyright (C) 2002-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -592,14 +592,14 @@ parse_operand (char *s, expressionS *operandp)
   the_insn.HI = the_insn.LO = 0;
 
   /* Search for %hi and %lo, make a mark and skip it.  */
-  if (strncmp (s, "%hi", 3) == 0)
+  if (startswith (s, "%hi"))
     {
       s += 3;
       the_insn.HI = 1;
     }
   else
     {
-      if (strncmp (s, "%lo", 3) == 0)
+      if (startswith (s, "%lo"))
 	{
 	  s += 3;
 	  the_insn.LO = 1;
@@ -632,6 +632,7 @@ parse_operand (char *s, expressionS *operandp)
       /* Normal operand parsing.  */
       input_line_pointer = s;
       (void) expression (operandp);
+      resolve_register (operandp);
     }
 
   new_pos = input_line_pointer;
@@ -968,7 +969,7 @@ md_assemble (char *str)
 const char *
 md_atof (int type, char *litP, int *sizeP)
 {
-  return ieee_md_atof (type, litP, sizeP, TRUE);
+  return ieee_md_atof (type, litP, sizeP, true);
 }
 
 /* Write out big-endian.  */
@@ -978,7 +979,7 @@ md_number_to_chars (char *buf, valueT val, int n)
   number_to_chars_bigendian (buf, val, n);
 }
 
-bfd_boolean
+bool
 md_dlx_fix_adjustable (fixS *fixP)
 {
   /* We need the symbol name for the VTABLE entries.  */

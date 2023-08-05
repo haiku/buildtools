@@ -3,7 +3,7 @@
 # pr26936.sh -- Tests for relocations in debug sections against linkonce
 # and comdat sections.
 
-# Copyright (C) 2020-2021 Free Software Foundation, Inc.
+# Copyright (C) 2020-2023 Free Software Foundation, Inc.
 
 # This file is part of gold.
 
@@ -26,7 +26,7 @@ set -e
 
 check()
 {
-    number_of_occurrence=`egrep "$2" ./$1 -o| wc -l`
+    number_of_occurrence=`$EGREP "$2" ./$1 -o| wc -l`
     if [ $number_of_occurrence != $3 ]
     then
 	echo "$1: \"$2\" $3: Failed"

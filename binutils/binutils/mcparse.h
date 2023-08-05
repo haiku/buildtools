@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.5.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2019 Free Software Foundation,
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018-2021 Free Software Foundation,
    Inc.
 
    This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -31,8 +31,9 @@
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
 
-/* Undocumented macros, especially those whose name start with YY_,
-   are private implementation details.  Do not rely on them.  */
+/* DO NOT RELY ON FEATURES THAT ARE NOT DOCUMENTED in the manual,
+   especially those whose name start with YY_ or yy_.  They are
+   private implementation details that can be changed or removed.  */
 
 #ifndef YY_YY_MCPARSE_H_INCLUDED
 # define YY_YY_MCPARSE_H_INCLUDED
@@ -44,32 +45,41 @@
 extern int yydebug;
 #endif
 
-/* Token type.  */
+/* Token kinds.  */
 #ifndef YYTOKENTYPE
 # define YYTOKENTYPE
   enum yytokentype
   {
-    NL = 258,
-    MCIDENT = 259,
-    MCFILENAME = 260,
-    MCLINE = 261,
-    MCCOMMENT = 262,
-    MCTOKEN = 263,
-    MCENDLINE = 264,
-    MCLANGUAGENAMES = 265,
-    MCFACILITYNAMES = 266,
-    MCSEVERITYNAMES = 267,
-    MCOUTPUTBASE = 268,
-    MCMESSAGEIDTYPEDEF = 269,
-    MCLANGUAGE = 270,
-    MCMESSAGEID = 271,
-    MCSEVERITY = 272,
-    MCFACILITY = 273,
-    MCSYMBOLICNAME = 274,
-    MCNUMBER = 275
+    YYEMPTY = -2,
+    YYEOF = 0,                     /* "end of file"  */
+    YYerror = 256,                 /* error  */
+    YYUNDEF = 257,                 /* "invalid token"  */
+    NL = 258,                      /* NL  */
+    MCIDENT = 259,                 /* MCIDENT  */
+    MCFILENAME = 260,              /* MCFILENAME  */
+    MCLINE = 261,                  /* MCLINE  */
+    MCCOMMENT = 262,               /* MCCOMMENT  */
+    MCTOKEN = 263,                 /* MCTOKEN  */
+    MCENDLINE = 264,               /* MCENDLINE  */
+    MCLANGUAGENAMES = 265,         /* MCLANGUAGENAMES  */
+    MCFACILITYNAMES = 266,         /* MCFACILITYNAMES  */
+    MCSEVERITYNAMES = 267,         /* MCSEVERITYNAMES  */
+    MCOUTPUTBASE = 268,            /* MCOUTPUTBASE  */
+    MCMESSAGEIDTYPEDEF = 269,      /* MCMESSAGEIDTYPEDEF  */
+    MCLANGUAGE = 270,              /* MCLANGUAGE  */
+    MCMESSAGEID = 271,             /* MCMESSAGEID  */
+    MCSEVERITY = 272,              /* MCSEVERITY  */
+    MCFACILITY = 273,              /* MCFACILITY  */
+    MCSYMBOLICNAME = 274,          /* MCSYMBOLICNAME  */
+    MCNUMBER = 275                 /* MCNUMBER  */
   };
+  typedef enum yytokentype yytoken_kind_t;
 #endif
-/* Tokens.  */
+/* Token kinds.  */
+#define YYEMPTY -2
+#define YYEOF 0
+#define YYerror 256
+#define YYUNDEF 257
 #define NL 258
 #define MCIDENT 259
 #define MCFILENAME 260
@@ -100,7 +110,7 @@ union YYSTYPE
   const mc_keyword *tok;
   mc_node *nod;
 
-#line 104 "mcparse.h"
+#line 114 "mcparse.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -111,6 +121,8 @@ typedef union YYSTYPE YYSTYPE;
 
 extern YYSTYPE yylval;
 
+
 int yyparse (void);
+
 
 #endif /* !YY_YY_MCPARSE_H_INCLUDED  */

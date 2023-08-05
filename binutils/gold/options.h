@@ -1,6 +1,6 @@
 // options.h -- handle command line options for gold  -*- C++ -*-
 
-// Copyright (C) 2006-2021 Free Software Foundation, Inc.
+// Copyright (C) 2006-2023 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -611,7 +611,7 @@ class Search_directory
   // We need a default constructor because we put this in a
   // std::vector.
   Search_directory()
-    : name_(NULL), put_in_sysroot_(false), is_in_sysroot_(false)
+    : name_(), put_in_sysroot_(false), is_in_sysroot_(false)
   { }
 
   // This is the usual constructor.
@@ -747,11 +747,20 @@ class General_options
   DEFINE_bool(Bshareable, options::ONE_DASH, '\0', false,
 	      N_("Generate shared library (alias for -G/-shared)"), NULL);
 
-  DEFINE_bool(Bsymbolic, options::ONE_DASH, '\0', false,
-	      N_("Bind defined symbols locally"), NULL);
+  DEFINE_special (Bno_symbolic, options::ONE_DASH, '\0',
+		  N_ ("Don't bind default visibility defined symbols locally "
+		      "for -shared (default)"),
+		  NULL);
 
-  DEFINE_bool(Bsymbolic_functions, options::ONE_DASH, '\0', false,
-	      N_("Bind defined function symbols locally"), NULL);
+  DEFINE_special (Bsymbolic_functions, options::ONE_DASH, '\0',
+		  N_ ("Bind default visibility defined function symbols "
+		      "locally for -shared"),
+		  NULL);
+
+  DEFINE_special (
+      Bsymbolic, options::ONE_DASH, '\0',
+      N_ ("Bind default visibility defined symbols locally for -shared"),
+      NULL);
 
   // c
 
@@ -761,8 +770,8 @@ class General_options
 
   DEFINE_enum(compress_debug_sections, options::TWO_DASHES, '\0', "none",
 	      N_("Compress .debug_* sections in the output file"),
-	      ("[none,zlib,zlib-gnu,zlib-gabi]"), false,
-	      {"none", "zlib", "zlib-gnu", "zlib-gabi"});
+	      ("[none,zlib,zlib-gnu,zlib-gabi,zstd]"), false,
+	      {"none", "zlib", "zlib-gnu", "zlib-gabi", "zstd"});
 
   DEFINE_bool(copy_dt_needed_entries, options::TWO_DASHES, '\0', false,
 	      N_("Not supported"),
@@ -837,6 +846,10 @@ class General_options
   DEFINE_enable(new_dtags, options::EXACTLY_TWO_DASHES, '\0', true,
 		N_("Enable use of DT_RUNPATH"),
 		N_("Disable use of DT_RUNPATH"));
+
+  DEFINE_enable(linker_version, options::EXACTLY_TWO_DASHES, '\0', false,
+		N_("Put the linker version string into the .comment section"),
+		N_("Put the linker version string into the .note.gnu.gold-version section"));
 
   DEFINE_bool(enum_size_warning, options::TWO_DASHES, '\0', true, NULL,
 	      N_("(ARM only) Do not warn about objects with incompatible "
@@ -1092,6 +1105,10 @@ class General_options
 
   DEFINE_bool(p, options::ONE_DASH, 'p', false,
 	      N_("Ignored for ARM compatibility"), NULL);
+
+  DEFINE_optional_string(package_metadata, options::TWO_DASHES, '\0', NULL,
+			 N_("Generate package metadata note"),
+			 N_("[=JSON]"));
 
   DEFINE_bool(pie, options::ONE_DASH, '\0', false,
 	      N_("Create a position independent executable"),
@@ -1447,9 +1464,6 @@ class General_options
 
   // The -z options.
 
-  DEFINE_bool(bndplt, options::DASH_Z, '\0', false,
-	      N_("(x86-64 only) Generate a BND PLT for Intel MPX"),
-	      N_("Generate a regular PLT"));
   DEFINE_bool(combreloc, options::DASH_Z, '\0', true,
 	      N_("Sort dynamic relocs"),
 	      N_("Do not sort dynamic relocs"));
@@ -1740,6 +1754,21 @@ class General_options
   endianness() const
   { return this->endianness_; }
 
+  enum Bsymbolic_kind
+  {
+    BSYMBOLIC_NONE,
+    BSYMBOLIC_FUNCTIONS,
+    BSYMBOLIC_ALL,
+  };
+
+  bool
+  Bsymbolic() const
+  { return this->bsymbolic_ == BSYMBOLIC_ALL; }
+
+  bool
+  Bsymbolic_functions() const
+  { return this->bsymbolic_ == BSYMBOLIC_FUNCTIONS; }
+
   bool
   discard_all() const
   { return this->discard_locals_ == DISCARD_ALL; }
@@ -1873,6 +1902,8 @@ class General_options
   void
   copy_from_posdep_options(const Position_dependent_options&);
 
+  // Whether we bind default visibility defined symbols locally for -shared.
+  Bsymbolic_kind bsymbolic_;
   // Whether we printed version information.
   bool printed_version_;
   // Whether to mark the stack as executable.

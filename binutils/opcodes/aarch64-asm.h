@@ -1,5 +1,5 @@
 /* aarch64-asm.h -- Header file for aarch64-asm.c and aarch64-asm-2.c.
-   Copyright (C) 2012-2021 Free Software Foundation, Inc.
+   Copyright (C) 2012-2023 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of the GNU opcodes library.
@@ -30,17 +30,16 @@ const aarch64_opcode* aarch64_find_real_opcode (const aarch64_opcode *);
 
 /* Switch-table-based high-level operand inserter.  */
 
-bfd_boolean aarch64_insert_operand (const aarch64_operand *,
-				    const aarch64_opnd_info *, aarch64_insn *,
-				    const aarch64_inst *,
-				    aarch64_operand_error *);
+bool aarch64_insert_operand (const aarch64_operand *,
+			     const aarch64_opnd_info *, aarch64_insn *,
+			     const aarch64_inst *, aarch64_operand_error *);
 
 /* Operand inserters.  */
 
 #define AARCH64_DECL_OPD_INSERTER(x)	\
-  bfd_boolean aarch64_##x (const aarch64_operand *, const aarch64_opnd_info *, \
-			   aarch64_insn *, const aarch64_inst *, \
-			   aarch64_operand_error *)
+  bool aarch64_##x (const aarch64_operand *, const aarch64_opnd_info *, \
+		    aarch64_insn *, const aarch64_inst *,		\
+		    aarch64_operand_error *)
 
 AARCH64_DECL_OPD_INSERTER (ins_none);
 AARCH64_DECL_OPD_INSERTER (ins_regno);
@@ -88,6 +87,7 @@ AARCH64_DECL_OPD_INSERTER (ins_sve_addr_zz_lsl);
 AARCH64_DECL_OPD_INSERTER (ins_sve_addr_zz_sxtw);
 AARCH64_DECL_OPD_INSERTER (ins_sve_addr_zz_uxtw);
 AARCH64_DECL_OPD_INSERTER (ins_sve_aimm);
+AARCH64_DECL_OPD_INSERTER (ins_sve_aligned_reglist);
 AARCH64_DECL_OPD_INSERTER (ins_sve_asimm);
 AARCH64_DECL_OPD_INSERTER (ins_sve_float_half_one);
 AARCH64_DECL_OPD_INSERTER (ins_sve_float_half_two);
@@ -96,11 +96,22 @@ AARCH64_DECL_OPD_INSERTER (ins_sve_index);
 AARCH64_DECL_OPD_INSERTER (ins_sve_limm_mov);
 AARCH64_DECL_OPD_INSERTER (ins_sve_quad_index);
 AARCH64_DECL_OPD_INSERTER (ins_sve_reglist);
+AARCH64_DECL_OPD_INSERTER (ins_sve_strided_reglist);
 AARCH64_DECL_OPD_INSERTER (ins_sve_scale);
 AARCH64_DECL_OPD_INSERTER (ins_sve_shlimm);
 AARCH64_DECL_OPD_INSERTER (ins_sve_shrimm);
+AARCH64_DECL_OPD_INSERTER (ins_sme_za_hv_tiles);
+AARCH64_DECL_OPD_INSERTER (ins_sme_za_hv_tiles_range);
+AARCH64_DECL_OPD_INSERTER (ins_sme_za_list);
+AARCH64_DECL_OPD_INSERTER (ins_sme_za_array);
+AARCH64_DECL_OPD_INSERTER (ins_sme_addr_ri_u4xvl);
+AARCH64_DECL_OPD_INSERTER (ins_sme_sm_za);
+AARCH64_DECL_OPD_INSERTER (ins_sme_pred_reg_with_index);
 AARCH64_DECL_OPD_INSERTER (ins_imm_rotate1);
 AARCH64_DECL_OPD_INSERTER (ins_imm_rotate2);
+AARCH64_DECL_OPD_INSERTER (ins_x0_to_x30);
+AARCH64_DECL_OPD_INSERTER (ins_simple_index);
+AARCH64_DECL_OPD_INSERTER (ins_plain_shrimm);
 
 #undef AARCH64_DECL_OPD_INSERTER
 

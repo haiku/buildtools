@@ -1,5 +1,5 @@
 /* This file is tc-sh.h
-   Copyright (C) 1993-2021 Free Software Foundation, Inc.
+   Copyright (C) 1993-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -130,8 +130,6 @@ extern void sh_frob_file (void);
 #ifdef OBJ_COFF
 /* COFF specific definitions.  */
 
-#define COFF_MAGIC (!target_big_endian ? SH_ARCH_MAGIC_LITTLE : SH_ARCH_MAGIC_BIG)
-
 #define tc_coff_symbol_emit_hook(a) ; /* Not used.  */
 
 #define TC_KEEP_FX_OFFSET 1
@@ -140,9 +138,9 @@ extern void sh_frob_file (void);
 
 /* We align most sections to a 16 byte boundary.  */
 #define SUB_SEGMENT_ALIGN(SEG, FRCHAIN)			\
-  (strncmp (SEG_NAME (SEG), ".stabstr", 8) == 0		\
+  (startswith (SEG_NAME (SEG), ".stabstr")		\
    ? 0							\
-   : ((strncmp (SEG_NAME (SEG), ".stab", 5) == 0	\
+   : ((startswith (SEG_NAME (SEG), ".stab")	\
        || strcmp (SEG_NAME (SEG), ".ctors") == 0	\
        || strcmp (SEG_NAME (SEG), ".dtors") == 0)	\
       ? 2						\
@@ -185,7 +183,7 @@ extern void sh_elf_final_processing (void);
 #define TC_RELOC_GLOBAL_OFFSET_TABLE BFD_RELOC_SH_GOTPC
 
 #define tc_fix_adjustable(FIX) sh_fix_adjustable(FIX)
-extern bfd_boolean sh_fix_adjustable (struct fix *);
+extern bool sh_fix_adjustable (struct fix *);
 
 /* Values passed to md_apply_fix don't include symbol values.  */
 #define MD_APPLY_SYM_VALUE(FIX) 0

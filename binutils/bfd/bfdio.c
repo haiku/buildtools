@@ -1,6 +1,6 @@
 /* Low-level I/O routines for BFDs.
 
-   Copyright (C) 1990-2021 Free Software Foundation, Inc.
+   Copyright (C) 1990-2023 Free Software Foundation, Inc.
 
    Written by Cygnus Support.
 
@@ -28,6 +28,7 @@
 #include "aout/ar.h"
 #if defined (_WIN32)
 #include <windows.h>
+#include <locale.h>
 #endif
 
 #ifndef S_IXUSR
@@ -116,55 +117,69 @@ _bfd_real_fopen (const char *filename, const char *modes)
     }
 
 #elif defined (_WIN32)
-  size_t filelen;
+  /* PR 25713: Handle extra long path names possibly containing '..' and '.'.  */
+   wchar_t **     lpFilePart = {NULL};
+   const wchar_t  prefix[] = L"\\\\?\\";
+   const size_t   partPathLen = strlen (filename) + 1;
+#ifdef __MINGW32__
+#if !HAVE_DECL____LC_CODEPAGE_FUNC
+/* This prototype was added to locale.h in version 9.0 of MinGW-w64.  */
+   _CRTIMP unsigned int __cdecl ___lc_codepage_func (void);
+#endif
+   const unsigned int cp = ___lc_codepage_func ();
+#else
+   const unsigned int cp = CP_UTF8;
+#endif
 
-  /* PR 25713: Handle extra long path names.
-     For relative paths, convert them to absolute, in case that version is too long.  */
-  if (! IS_ABSOLUTE_PATH (filename) && (strstr (filename, ".o") != NULL))
-    {
-      char cwd[1024];
+   /* Converting the partial path from ascii to unicode.
+      1) Get the length: Calling with lpWideCharStr set to null returns the length.
+      2) Convert the string: Calling with cbMultiByte set to -1 includes the terminating null.  */
+   size_t         partPathWSize = MultiByteToWideChar (cp, 0, filename, -1, NULL, 0);
+   wchar_t *      partPath = calloc (partPathWSize, sizeof(wchar_t));
+   size_t         ix;
 
-      getcwd (cwd, sizeof (cwd));
-      filelen = strlen (cwd) + 1;
-      strncat (cwd, "\\", sizeof (cwd) - filelen);
-      ++ filelen;
-      strncat (cwd, filename, sizeof (cwd) - filelen);
+   MultiByteToWideChar (cp, 0, filename, -1, partPath, partPathWSize);
 
-      filename = cwd;
-    }
+   /* Convert any UNIX style path separators into the DOS i.e. backslash separator.  */
+   for (ix = 0; ix < partPathLen; ix++)
+     if (IS_UNIX_DIR_SEPARATOR(filename[ix]))
+       partPath[ix] = '\\';
 
-  filelen = strlen (filename) + 1;
+   /* Getting the full path from the provided partial path.
+      1) Get the length.
+      2) Resolve the path.  */
+   long       fullPathWSize = GetFullPathNameW (partPath, 0, NULL, lpFilePart);
+   wchar_t *  fullPath = calloc (fullPathWSize + sizeof(prefix) + 1, sizeof(wchar_t));
 
-  if (filelen > MAX_PATH - 1)
-    {
-      FILE * file;
-      char * fullpath;
-      int    i;
+   wcscpy (fullPath, prefix);
 
-      fullpath = (char *) malloc (filelen + 8);
+   int        prefixLen = sizeof(prefix) / sizeof(wchar_t);
 
-      /* Add a Microsoft recommended prefix that
-	 will allow the extra-long path to work.  */
-      strcpy (fullpath, "\\\\?\\");
-      strcat (fullpath, filename);
+   /* Do not add a prefix to the null device.  */
+   if (stricmp (filename, "nul") == 0)
+    prefixLen = 1;
 
-      /* Convert any UNIX style path separators into the DOS form.  */
-      for (i = 0; fullpath[i]; i++)
-        {
-          if (IS_UNIX_DIR_SEPARATOR (fullpath[i]))
-	    fullpath[i] = '\\';
-        }
+   wchar_t *  fullPathOffset = fullPath + prefixLen - 1;
 
-      file = close_on_exec (fopen (fullpath, modes));
-      free (fullpath);
-      return file;
-    }
+   GetFullPathNameW (partPath, fullPathWSize, fullPathOffset, lpFilePart);
+   free (partPath);
+
+   /* It is non-standard for modes to exceed 16 characters.  */
+   wchar_t    modesW[16];
+
+   MultiByteToWideChar (cp, 0, modes, -1, modesW, sizeof(modesW));
+
+   FILE *     file = _wfopen (fullPath, modesW);
+   free (fullPath);
+
+   return close_on_exec (file);
 
 #elif defined (HAVE_FOPEN64)
   return close_on_exec (fopen64 (filename, modes));
-#endif
 
+#else
   return close_on_exec (fopen (filename, modes));
+#endif
 }
 
 /*
@@ -210,11 +225,21 @@ DESCRIPTION
 .};
 
 .extern const struct bfd_iovec _bfd_memory_iovec;
-
+.
 */
 
 
-/* Return value is amount read.  */
+/*
+FUNCTION
+	bfd_bread
+
+SYNOPSIS
+	bfd_size_type bfd_bread (void *, bfd_size_type, bfd *);
+
+DESCRIPTION
+	Attempt to read SIZE bytes from ABFD's iostream to PTR.
+	Return the amount read.
+*/
 
 bfd_size_type
 bfd_bread (void *ptr, bfd_size_type size, bfd *abfd)
@@ -231,9 +256,11 @@ bfd_bread (void *ptr, bfd_size_type size, bfd *abfd)
     }
   offset += abfd->origin;
 
-  /* If this is an archive element, don't read past the end of
+  /* If this is a non-thin archive element, don't read past the end of
      this element.  */
-  if (element_bfd->arelt_data != NULL)
+  if (element_bfd->arelt_data != NULL
+      && element_bfd->my_archive != NULL
+      && !bfd_is_thin_archive (element_bfd->my_archive))
     {
       bfd_size_type maxbytes = arelt_size (element_bfd);
 
@@ -258,6 +285,18 @@ bfd_bread (void *ptr, bfd_size_type size, bfd *abfd)
 
   return nread;
 }
+
+/*
+FUNCTION
+	bfd_bwrite
+
+SYNOPSIS
+	bfd_size_type bfd_bwrite (const void *, bfd_size_type, bfd *);
+
+DESCRIPTION
+	Attempt to write SIZE bytes to ABFD's iostream from PTR.
+	Return the amount written.
+*/
 
 bfd_size_type
 bfd_bwrite (const void *ptr, bfd_size_type size, bfd *abfd)
@@ -287,6 +326,17 @@ bfd_bwrite (const void *ptr, bfd_size_type size, bfd *abfd)
   return nwrote;
 }
 
+/*
+FUNCTION
+	bfd_tell
+
+SYNOPSIS
+	file_ptr bfd_tell (bfd *);
+
+DESCRIPTION
+	Return ABFD's iostream file position.
+*/
+
 file_ptr
 bfd_tell (bfd *abfd)
 {
@@ -309,6 +359,17 @@ bfd_tell (bfd *abfd)
   return ptr - offset;
 }
 
+/*
+FUNCTION
+	bfd_flush
+
+SYNOPSIS
+	int bfd_flush (bfd *);
+
+DESCRIPTION
+	Flush ABFD's iostream pending IO.
+*/
+
 int
 bfd_flush (bfd *abfd)
 {
@@ -322,8 +383,18 @@ bfd_flush (bfd *abfd)
   return abfd->iovec->bflush (abfd);
 }
 
-/* Returns 0 for success, negative value for failure (in which case
-   bfd_get_error can retrieve the error code).  */
+/*
+FUNCTION
+	bfd_stat
+
+SYNOPSIS
+	int bfd_stat (bfd *, struct stat *);
+
+DESCRIPTION
+	Call fstat on ABFD's iostream.  Return 0 on success, and a
+	negative value on failure.
+*/
+
 int
 bfd_stat (bfd *abfd, struct stat *statbuf)
 {
@@ -345,8 +416,17 @@ bfd_stat (bfd *abfd, struct stat *statbuf)
   return result;
 }
 
-/* Returns 0 for success, nonzero for failure (in which case bfd_get_error
-   can retrieve the error code).  */
+/*
+FUNCTION
+	bfd_seek
+
+SYNOPSIS
+	int bfd_seek (bfd *, file_ptr, int);
+
+DESCRIPTION
+	Call fseek on ABFD's iostream.  Return 0 on success, and a
+	negative value on failure.
+*/
 
 int
 bfd_seek (bfd *abfd, file_ptr position, int direction)
@@ -375,10 +455,6 @@ bfd_seek (bfd *abfd, file_ptr position, int direction)
 
   if (direction != SEEK_CUR)
     position += offset;
-
-  if ((direction == SEEK_CUR && position == 0)
-      || (direction == SEEK_SET && (ufile_ptr) position == abfd->where))
-    return 0;
 
   result = abfd->iovec->bseek (abfd, position, direction);
   if (result != 0)
@@ -507,6 +583,7 @@ ufile_ptr
 bfd_get_file_size (bfd *abfd)
 {
   ufile_ptr file_size, archive_size = (ufile_ptr) -1;
+  unsigned int compression_p2 = 0;
 
   if (abfd->my_archive != NULL
       && !bfd_is_thin_archive (abfd->my_archive))
@@ -515,17 +592,17 @@ bfd_get_file_size (bfd *abfd)
       if (adata != NULL)
 	{
 	  archive_size = adata->parsed_size;
-	  /* If the archive is compressed we can't compare against
-	     file size.  */
+	  /* If the archive is compressed, assume an element won't
+	     expand more than eight times file size.  */
 	  if (adata->arch_header != NULL
 	      && memcmp (((struct ar_hdr *) adata->arch_header)->ar_fmag,
 			 "Z\012", 2) == 0)
-	    return archive_size;
+	    compression_p2 = 3;
 	  abfd = abfd->my_archive;
 	}
     }
 
-  file_size = bfd_get_size (abfd);
+  file_size = bfd_get_size (abfd) << compression_p2;
   if (archive_size < file_size)
     return archive_size;
   return file_size;

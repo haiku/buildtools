@@ -1,6 +1,6 @@
 // fileread.cc -- read files for gold
 
-// Copyright (C) 2006-2021 Free Software Foundation, Inc.
+// Copyright (C) 2006-2023 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -385,6 +385,12 @@ File_read::do_read(off_t start, section_size_type size, void* p)
   ssize_t bytes;
   if (this->whole_file_view_ != NULL)
     {
+      // See PR 23765 for an example of a testcase that triggers this error.
+      if (((ssize_t) start) < 0)
+	gold_fatal(_("%s: read failed, starting offset (%#llx) less than zero"),
+		   this->filename().c_str(),
+		   static_cast<long long>(start));
+	
       bytes = this->size_ - start;
       if (static_cast<section_size_type>(bytes) >= size)
 	{

@@ -1,6 +1,6 @@
 // mips.cc -- mips target support for gold.
 
-// Copyright (C) 2011-2021 Free Software Foundation, Inc.
+// Copyright (C) 2011-2023 Free Software Foundation, Inc.
 // Written by Sasa Stankovic <sasa.stankovic@imgtec.com>
 //        and Aleksandar Simeonov <aleksandar.simeonov@rt-rk.com>.
 // This file contains borrowed and adapted code from bfd/elfxx-mips.c.
@@ -9826,7 +9826,7 @@ Target_mips<size, big_endian>::do_finalize_sections(Layout* layout,
   const Reloc_section* rel_plt = (this->plt_ == NULL
                                   ? NULL : this->plt_->rel_plt());
   layout->add_target_dynamic_tags(true, this->got_, rel_plt,
-                                  this->rel_dyn_, true, false);
+				  this->rel_dyn_, true, false, false);
 
   Output_data_dynamic* const odyn = layout->dynamic_data();
   if (odyn != NULL

@@ -2,7 +2,7 @@
    This does not include symbol information, found in sym.h and
    symconst.h.
 
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2023 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -299,7 +299,10 @@ struct ecoff_debug_info
      all pointers to arrays, not single structures.  They will be NULL
      if there are no instances of the relevant structure.  These
      fields are also used by the assembler to output ECOFF debugging
-     information.  */
+     information.  If alloc_syments is true then the pointers are to
+     objalloc memory, or into a single malloc'd buffer, or otherwise
+     should not be freed.  */
+  bool alloc_syments;
   unsigned char *line;
   void *external_dnr;	/* struct dnr_ext */
   void *external_pdr;	/* struct pdr_ext */
@@ -407,7 +410,7 @@ struct ecoff_debug_swap
   /* Function to read symbol data and set up pointers in
      ecoff_debug_info structure.  The section argument is used for
      ELF, not straight ECOFF.  */
-  bfd_boolean (*read_debug_info) (bfd *, asection *, struct ecoff_debug_info *);
+  bool (*read_debug_info) (bfd *, asection *, struct ecoff_debug_info *);
 };
 
 #endif /* ! defined (ECOFF_H) */

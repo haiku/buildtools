@@ -2,7 +2,7 @@
 
 # ver_test_pr16504.sh -- test that undef gets correct version with LTO.
 
-# Copyright (C) 2018-2021 Free Software Foundation, Inc.
+# Copyright (C) 2018-2023 Free Software Foundation, Inc.
 # Written by Cary Coutant <ccoutant@gmail.com>.
 
 # This file is part of gold.
@@ -24,7 +24,7 @@
 
 check()
 {
-    if ! egrep -q "$2" "$1"
+    if ! $EGREP -q "$2" "$1"
     then
 	echo "Did not find expected symbol in $1:"
 	echo "   $2"

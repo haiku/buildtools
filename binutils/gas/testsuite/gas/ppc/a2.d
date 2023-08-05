@@ -58,10 +58,10 @@ Disassembly of section \.text:
 .*: R_PPC(|64)_ADDR14	foo_abs
 .*:	(40 e5 00 02|02 00 e5 40) 	blea\+   cr1,0 <start>
 .*: R_PPC(|64)_ADDR14	foo_abs
-.*:	(4c 86 0c 20|20 0c 86 4c) 	bcctr   4,4\*cr1\+eq,1
+.*:	(4c 86 0c 20|20 0c 86 4c) 	bnectr  cr1,1
 .*:	(4c c6 04 20|20 04 c6 4c) 	bnectr- cr1
 .*:	(4c e6 04 20|20 04 e6 4c) 	bnectr\+ cr1
-.*:	(4c 86 0c 21|21 0c 86 4c) 	bcctrl  4,4\*cr1\+eq,1
+.*:	(4c 86 0c 21|21 0c 86 4c) 	bnectrl cr1,1
 .*:	(4c c6 04 21|21 04 c6 4c) 	bnectrl- cr1
 .*:	(4c e6 04 21|21 04 e6 4c) 	bnectrl\+ cr1
 .*:	(40 8a 00 01|01 00 8a 40) 	bnel    cr2,c0 <start\+0xc0>
@@ -76,10 +76,10 @@ Disassembly of section \.text:
 .*: R_PPC(|64)_ADDR14	foo_abs
 .*:	(40 e5 00 03|03 00 e5 40) 	blela\+  cr1,0 <start>
 .*: R_PPC(|64)_ADDR14	foo_abs
-.*:	(4c 86 08 20|20 08 86 4c) 	bclr    4,4\*cr1\+eq,1
+.*:	(4c 86 08 20|20 08 86 4c) 	bnelr   cr1,1
 .*:	(4c c6 00 20|20 00 c6 4c) 	bnelr-  cr1
 .*:	(4c e6 00 20|20 00 e6 4c) 	bnelr\+  cr1
-.*:	(4c 86 08 21|21 08 86 4c) 	bclrl   4,4\*cr1\+eq,1
+.*:	(4c 86 08 21|21 08 86 4c) 	bnelrl  cr1,1
 .*:	(4c c6 00 21|21 00 c6 4c) 	bnelrl- cr1
 .*:	(4c e6 00 21|21 00 e6 4c) 	bnelrl\+ cr1
 .*:	(48 00 00 00|00 00 00 48) 	b       f0 <start\+0xf0>
@@ -274,7 +274,7 @@ Disassembly of section \.text:
 .*:	(7d 40 07 8c|8c 07 40 7d) 	ici     10
 .*:	(7d 4b 63 2d|2d 63 4b 7d) 	icswx\.  r10,r11,r12
 .*:	(7d 4b 63 2c|2c 63 4b 7d) 	icswx   r10,r11,r12
-.*:	(7d 4b 65 de|de 65 4b 7d) 	isel    r10,r11,r12,23
+.*:	(7d 4b 65 de|de 65 4b 7d) 	isel    r10,r11,r12,4\*cr5\+so
 .*:	(4c 00 01 2c|2c 01 00 4c) 	isync
 .*:	(7d 4b 60 be|be 60 4b 7d) 	lbepx   r10,r11,r12
 .*:	(89 4b ff ef|ef ff 4b 89) 	lbz     r10,-17\(r11\)

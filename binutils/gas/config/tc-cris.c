@@ -1,5 +1,5 @@
 /* tc-cris.c -- Assembler code for the CRIS CPU core.
-   Copyright (C) 2000-2021 Free Software Foundation, Inc.
+   Copyright (C) 2000-2023 Free Software Foundation, Inc.
 
    Contributed by Axis Communications AB, Lund, Sweden.
    Originally written for GAS 1.38.1 by Mikael Asker.
@@ -166,23 +166,23 @@ static htab_t op_hash = NULL;
    we default to no underscore and required register-prefixes.  The
    difference is in the default values.  */
 #ifdef TE_LINUX
-#define DEFAULT_CRIS_AXIS_LINUX_GNU TRUE
+#define DEFAULT_CRIS_AXIS_LINUX_GNU true
 #else
-#define DEFAULT_CRIS_AXIS_LINUX_GNU FALSE
+#define DEFAULT_CRIS_AXIS_LINUX_GNU false
 #endif
 
 /* Whether we demand that registers have a `$' prefix.  Default here.  */
-static bfd_boolean demand_register_prefix = DEFAULT_CRIS_AXIS_LINUX_GNU;
+static bool demand_register_prefix = DEFAULT_CRIS_AXIS_LINUX_GNU;
 
 /* Whether global user symbols have a leading underscore.  Default here.  */
-static bfd_boolean symbols_have_leading_underscore
+static bool symbols_have_leading_underscore
   = !DEFAULT_CRIS_AXIS_LINUX_GNU;
 
 /* Whether or not we allow PIC, and expand to PIC-friendly constructs.  */
-static bfd_boolean pic = FALSE;
+static bool pic = false;
 
 /* Whether or not we allow TLS suffixes.  For the moment, we always do.  */
-static const bfd_boolean tls = TRUE;
+static const bool tls = true;
 
 /* If we're configured for "cris", default to allow all v0..v10
    instructions and register names.  */
@@ -548,11 +548,11 @@ cris_relax_frag (segT seg ATTRIBUTE_UNUSED, fragS *fragP,
       if (fragP->fr_symbol == NULL
 	  || S_GET_SEGMENT (fragP->fr_symbol) != absolute_section)
 	as_fatal (_("internal inconsistency problem in %s: fr_symbol %lx"),
-		  __FUNCTION__, (long) fragP->fr_symbol);
+		  __func__, (long) fragP->fr_symbol);
       symbolP = fragP->fr_symbol;
       if (symbol_resolved_p (symbolP))
 	as_fatal (_("internal inconsistency problem in %s: resolved symbol"),
-		  __FUNCTION__);
+		  __func__);
       aim = S_GET_VALUE (symbolP);
       break;
 
@@ -562,7 +562,7 @@ cris_relax_frag (segT seg ATTRIBUTE_UNUSED, fragS *fragP,
 
     default:
       as_fatal (_("internal inconsistency problem in %s: fr_subtype %d"),
-		  __FUNCTION__, fragP->fr_subtype);
+		  __func__, fragP->fr_subtype);
     }
 
   /* The rest is stolen from relax_frag.  There's no obvious way to
@@ -962,7 +962,7 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT sec ATTRIBUTE_UNUSED,
     case ENCODE_RELAX (STATE_BASE_PLUS_DISP_PREFIX, STATE_BYTE):
       if (symbolP == NULL)
 	as_fatal (_("internal inconsistency in %s: bdapq no symbol"),
-		    __FUNCTION__);
+		    __func__);
       opcodep[0] = S_GET_VALUE (symbolP);
       var_part_size = 0;
       break;
@@ -975,7 +975,7 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, segT sec ATTRIBUTE_UNUSED,
       opcodep[1] |= BDAP_INCR_HIGH;
       if (symbolP == NULL)
 	as_fatal (_("internal inconsistency in %s: bdap.w with no symbol"),
-		  __FUNCTION__);
+		  __func__);
       md_number_to_chars (var_partp, S_GET_VALUE (symbolP), 2);
       var_part_size = 2;
       break;
@@ -3491,14 +3491,14 @@ cris_get_reloc_suffix (char **cPP, bfd_reloc_code_real_type *relocp,
     const char *const suffix;
     unsigned int len;
     bfd_reloc_code_real_type reloc;
-    bfd_boolean pic_p;
-    bfd_boolean tls_p;
+    bool pic_p;
+    bool tls_p;
   } pic_suffixes[] =
     {
 #undef PICMAP
-#define PICMAP(s, r) {s, sizeof (s) - 1, r, TRUE, FALSE}
-#define PICTLSMAP(s, r) {s, sizeof (s) - 1, r, TRUE, TRUE}
-#define TLSMAP(s, r) {s, sizeof (s) - 1, r, FALSE, TRUE}
+#define PICMAP(s, r) {s, sizeof (s) - 1, r, true, false}
+#define PICTLSMAP(s, r) {s, sizeof (s) - 1, r, true, true}
+#define TLSMAP(s, r) {s, sizeof (s) - 1, r, false, true}
       /* Keep this in order with longest unambiguous prefix first.  */
       PICMAP ("GOTPLT16", BFD_RELOC_CRIS_16_GOTPLT),
       PICMAP ("GOTPLT", BFD_RELOC_CRIS_32_GOTPLT),
@@ -3811,23 +3811,23 @@ md_parse_option (int arg, const char *argp ATTRIBUTE_UNUSED)
       break;
 
     case OPTION_NO_US:
-      demand_register_prefix = TRUE;
+      demand_register_prefix = true;
 
       if (OUTPUT_FLAVOR == bfd_target_aout_flavour)
 	as_bad (_("--no-underscore is invalid with a.out format"));
       else
-	symbols_have_leading_underscore = FALSE;
+	symbols_have_leading_underscore = false;
       break;
 
     case OPTION_US:
-      demand_register_prefix = FALSE;
-      symbols_have_leading_underscore = TRUE;
+      demand_register_prefix = false;
+      symbols_have_leading_underscore = true;
       break;
 
     case OPTION_PIC:
       if (OUTPUT_FLAVOR != bfd_target_elf_flavour)
 	as_bad (_("--pic is invalid for this object format"));
-      pic = TRUE;
+      pic = true;
       if (cris_arch != arch_crisv32)
 	md_long_jump_size = cris_any_v0_v10_long_jump_size_pic;
       else
@@ -4050,8 +4050,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg)
 
   /* We can't actually support subtracting a symbol.  */
   if (fixP->fx_subsy != (symbolS *) NULL)
-    as_bad_where (fixP->fx_file, fixP->fx_line,
-		  _("expression too complex"));
+    as_bad_subtract (fixP);
 
   /* This operand-type is scaled.  */
   if (fixP->fx_r_type == BFD_RELOC_CRIS_LAPCQ_OFFSET)
@@ -4133,7 +4132,7 @@ tc_cris_check_adjusted_broken_word (offsetT new_offset, struct broken_word *brok
 static void
 cris_force_reg_prefix (void)
 {
-  demand_register_prefix = TRUE;
+  demand_register_prefix = true;
 }
 
 /* Do not demand a leading REGISTER_PREFIX_CHAR for all registers.  */
@@ -4141,7 +4140,7 @@ cris_force_reg_prefix (void)
 static void
 cris_relax_reg_prefix (void)
 {
-  demand_register_prefix = FALSE;
+  demand_register_prefix = false;
 }
 
 /* Adjust for having a leading '_' on all user symbols.  */
@@ -4238,13 +4237,13 @@ s_cris_dtpoff (int bytes)
 
   if (bytes != 4)
     as_fatal (_("internal inconsistency problem: %s called for %d bytes"),
-	      __FUNCTION__, bytes);
+	      __func__, bytes);
 
   expression (&ex);
 
   p = frag_more (bytes);
   md_number_to_chars (p, 0, bytes);
-  fix_new_exp (frag_now, p - frag_now->fr_literal, bytes, &ex, FALSE,
+  fix_new_exp (frag_now, p - frag_now->fr_literal, bytes, &ex, false,
 	       BFD_RELOC_CRIS_32_DTPREL);
 
   demand_empty_rest_of_line ();

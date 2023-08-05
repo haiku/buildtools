@@ -1,5 +1,5 @@
 /* Defs for interface to demanglers.
-   Copyright (C) 1992-2021 Free Software Foundation, Inc.
+   Copyright (C) 1992-2023 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public License
@@ -408,6 +408,9 @@ enum demangle_component_type
      number which involves neither modifying the mangled string nor
      allocating a new copy of the literal in memory.  */
   DEMANGLE_COMPONENT_LITERAL_NEG,
+  /* A vendor's builtin expression.  The left subtree holds the
+     expression's name, and the right subtree is a argument list.  */
+  DEMANGLE_COMPONENT_VENDOR_EXPR,
   /* A libgcj compiled resource.  The left subtree is the name of the
      resource.  */
   DEMANGLE_COMPONENT_JAVA_RESOURCE,
@@ -446,7 +449,25 @@ enum demangle_component_type
   /* A cloned function.  */
   DEMANGLE_COMPONENT_CLONE,
   DEMANGLE_COMPONENT_NOEXCEPT,
-  DEMANGLE_COMPONENT_THROW_SPEC
+  DEMANGLE_COMPONENT_THROW_SPEC,
+
+  DEMANGLE_COMPONENT_STRUCTURED_BINDING,
+
+  DEMANGLE_COMPONENT_MODULE_NAME,
+  DEMANGLE_COMPONENT_MODULE_PARTITION,
+  DEMANGLE_COMPONENT_MODULE_ENTITY,
+  DEMANGLE_COMPONENT_MODULE_INIT,
+
+  DEMANGLE_COMPONENT_TEMPLATE_HEAD,
+  DEMANGLE_COMPONENT_TEMPLATE_TYPE_PARM,
+  DEMANGLE_COMPONENT_TEMPLATE_NON_TYPE_PARM,
+  DEMANGLE_COMPONENT_TEMPLATE_TEMPLATE_PARM,
+  DEMANGLE_COMPONENT_TEMPLATE_PACK_PARM,
+
+  /* A builtin type with argument.  This holds the builtin type
+     information.  */
+  DEMANGLE_COMPONENT_EXTENDED_BUILTIN_TYPE
+
 };
 
 /* Types which are only used internally.  */
@@ -532,6 +553,15 @@ struct demangle_component
       /* Builtin type.  */
       const struct demangle_builtin_type_info *type;
     } s_builtin;
+
+    /* For DEMANGLE_COMPONENT_EXTENDED_BUILTIN_TYPE.  */
+    struct
+    {
+      /* Builtin type.  */
+      const struct demangle_builtin_type_info *type;
+      short arg;
+      char suffix;
+    } s_extended_builtin;
 
     /* For DEMANGLE_COMPONENT_SUB_STD.  */
     struct

@@ -1,5 +1,5 @@
 /* tc-alpha.c - Processor-specific code for the DEC Alpha AXP CPU.
-   Copyright (C) 1989-2021 Free Software Foundation, Inc.
+   Copyright (C) 1989-2023 Free Software Foundation, Inc.
    Contributed by Carnegie Mellon University, 1993.
    Written by Alessandro Forin, based on earlier gas-1.38 target CPU files.
    Modified by Ken Raeburn for gas-2.x and ECOFF support.
@@ -594,8 +594,7 @@ get_alpha_reloc_tag (long sequence)
     {
       size_t len = strlen (buffer);
 
-      info = (struct alpha_reloc_tag *)
-          xcalloc (sizeof (struct alpha_reloc_tag) + len, 1);
+      info = notes_calloc (sizeof (struct alpha_reloc_tag) + len, 1);
 
       info->segment = now_seg;
       info->sequence = sequence;
@@ -988,6 +987,7 @@ tokenize_arguments (char *str,
 
 	    /* First try for parenthesized register ...  */
 	    expression (tok);
+	    resolve_register (tok);
 	    if (*input_line_pointer == ')' && tok->X_op == O_register)
 	      {
 		tok->X_op = (saw_comma ? O_cpregister : O_pregister);
@@ -1010,6 +1010,8 @@ tokenize_arguments (char *str,
 	  expression (tok);
 	  if (tok->X_op == O_illegal || tok->X_op == O_absent)
 	    goto err;
+
+	  resolve_register (tok);
 
 	  saw_comma = 0;
 	  saw_arg = 1;
@@ -1973,7 +1975,7 @@ insert_operand (unsigned insn,
 		const char *file,
 		unsigned line)
 {
-  if (operand->bits != 32 && !(operand->flags & AXP_OPERAND_NOOVERFLOW))
+  if (!(operand->flags & AXP_OPERAND_NOOVERFLOW))
     {
       offsetT min, max;
 
@@ -4030,7 +4032,7 @@ s_alpha_coff_wrapper (int which)
    unless the compiler has done it for us.  */
 
 void
-alpha_elf_md_end (void)
+alpha_elf_md_finish (void)
 {
   struct alpha_elf_frame_data *p;
 
@@ -4229,7 +4231,7 @@ s_alpha_section_word (char *str, size_t len)
   int no = 0;
   flagword flag = 0;
 
-  if (len == 5 && strncmp (str, "NO", 2) == 0)
+  if (len == 5 && startswith (str, "NO"))
     {
       no = 1;
       str += 2;
@@ -4238,30 +4240,30 @@ s_alpha_section_word (char *str, size_t len)
 
   if (len == 3)
     {
-      if (strncmp (str, "PIC", 3) == 0)
+      if (startswith (str, "PIC"))
 	flag = EGPS__V_PIC;
-      else if (strncmp (str, "LIB", 3) == 0)
+      else if (startswith (str, "LIB"))
 	flag = EGPS__V_LIB;
-      else if (strncmp (str, "OVR", 3) == 0)
+      else if (startswith (str, "OVR"))
 	flag = EGPS__V_OVR;
-      else if (strncmp (str, "REL", 3) == 0)
+      else if (startswith (str, "REL"))
 	flag = EGPS__V_REL;
-      else if (strncmp (str, "GBL", 3) == 0)
+      else if (startswith (str, "GBL"))
 	flag = EGPS__V_GBL;
-      else if (strncmp (str, "SHR", 3) == 0)
+      else if (startswith (str, "SHR"))
 	flag = EGPS__V_SHR;
-      else if (strncmp (str, "EXE", 3) == 0)
+      else if (startswith (str, "EXE"))
 	flag = EGPS__V_EXE;
-      else if (strncmp (str, "WRT", 3) == 0)
+      else if (startswith (str, "WRT"))
 	flag = EGPS__V_WRT;
-      else if (strncmp (str, "VEC", 3) == 0)
+      else if (startswith (str, "VEC"))
 	flag = EGPS__V_VEC;
-      else if (strncmp (str, "MOD", 3) == 0)
+      else if (startswith (str, "MOD"))
 	{
 	  flag = no ? EGPS__V_NOMOD : EGPS__V_NOMOD << EGPS__V_NO_SHIFT;
 	  no = 0;
 	}
-      else if (strncmp (str, "COM", 3) == 0)
+      else if (startswith (str, "COM"))
 	flag = EGPS__V_COM;
     }
 
@@ -4544,13 +4546,13 @@ s_alpha_pdesc (int ignore ATTRIBUTE_UNUSED)
   SKIP_WHITESPACE ();
   name_end = get_symbol_name (&name);
 
-  if (strncmp (name, "stack", 5) == 0)
+  if (startswith (name, "stack"))
     alpha_evax_proc->pdsckind = PDSC_S_K_KIND_FP_STACK;
 
-  else if (strncmp (name, "reg", 3) == 0)
+  else if (startswith (name, "reg"))
     alpha_evax_proc->pdsckind = PDSC_S_K_KIND_FP_REGISTER;
 
-  else if (strncmp (name, "null", 4) == 0)
+  else if (startswith (name, "null"))
     alpha_evax_proc->pdsckind = PDSC_S_K_KIND_NULL;
 
   else
@@ -5434,10 +5436,12 @@ md_begin (void)
 
       if ((slash = strchr (name, '/')) != NULL)
 	{
-	  char *p = XNEWVEC (char, strlen (name));
+	  size_t len = strlen (name);
+	  char *p = notes_alloc (len);
+	  size_t len1 = slash - name;
 
-	  memcpy (p, name, slash - name);
-	  strcpy (p + (slash - name), slash + 1);
+	  memcpy (p, name, len1);
+	  memcpy (p + len1, slash + 1, len - len1);
 
 	  (void) str_hash_insert (alpha_opcode_hash, p, &alpha_opcodes[i], 0);
 	  /* Ignore failures -- the opcode table does duplicate some
@@ -5584,7 +5588,7 @@ md_atof (int type, char *litP, int *sizeP)
       return vax_md_atof (type, litP, sizeP);
 
     default:
-      return ieee_md_atof (type, litP, sizeP, FALSE);
+      return ieee_md_atof (type, litP, sizeP, false);
     }
 }
 

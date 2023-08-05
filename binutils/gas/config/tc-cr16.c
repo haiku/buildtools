@@ -1,5 +1,5 @@
 /* tc-cr16.c -- Assembler code for the CR16 CPU core.
-   Copyright (C) 2007-2021 Free Software Foundation, Inc.
+   Copyright (C) 2007-2023 Free Software Foundation, Inc.
 
    Contributed by M R Swami Reddy <MR.Swami.Reddy@nsc.com>
 
@@ -26,9 +26,7 @@
 #include "opcode/cr16.h"
 #include "elf/cr16.h"
 
-#ifdef HAVE_LIMITS_H
 #include <limits.h>
-#endif
 #ifndef CHAR_BIT
 #define CHAR_BIT 8
 #endif
@@ -575,14 +573,10 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
       else
 	{
 	  /* We only resolve difference expressions in the same section.  */
-	  as_bad_where (fixP->fx_file, fixP->fx_line,
-			_("can't resolve `%s' {%s section} - `%s' {%s section}"),
-			fixP->fx_addsy ? S_GET_NAME (fixP->fx_addsy) : "0",
-			segment_name (fixP->fx_addsy
-				      ? S_GET_SEGMENT (fixP->fx_addsy)
-				      : absolute_section),
-			S_GET_NAME (fixP->fx_subsy),
-			segment_name (S_GET_SEGMENT (fixP->fx_addsy)));
+	  as_bad_subtract (fixP);
+	  free (reloc->sym_ptr_ptr);
+	  free (reloc);
+	  return NULL;
 	}
     }
 #ifdef OBJ_ELF
@@ -905,34 +899,34 @@ process_label_constant (char *str, ins * cr16_ins)
       cr16_ins->rtype = BFD_RELOC_NONE;
       relocatable = 1;
 
-      if (strneq (input_line_pointer, "@c", 2))
+      if (startswith (input_line_pointer, "@c"))
 	symbol_with_at = 1;
 
-      if (strneq (input_line_pointer, "@l", 2)
-	  || strneq (input_line_pointer, ":l", 2))
+      if (startswith (input_line_pointer, "@l")
+	  || startswith (input_line_pointer, ":l"))
 	symbol_with_l = 1;
 
-      if (strneq (input_line_pointer, "@m", 2)
-	  || strneq (input_line_pointer, ":m", 2))
+      if (startswith (input_line_pointer, "@m")
+	  || startswith (input_line_pointer, ":m"))
 	symbol_with_m = 1;
 
-      if (strneq (input_line_pointer, "@s", 2)
-	  || strneq (input_line_pointer, ":s", 2))
+      if (startswith (input_line_pointer, "@s")
+	  || startswith (input_line_pointer, ":s"))
 	symbol_with_s = 1;
 
-      if (strneq (input_line_pointer, "@cGOT", 5)
-	  || strneq (input_line_pointer, "@cgot", 5))
+      if (startswith (input_line_pointer, "@cGOT")
+	  || startswith (input_line_pointer, "@cgot"))
 	{
 	  if (GOT_symbol == NULL)
 	    GOT_symbol = symbol_find_or_make (GLOBAL_OFFSET_TABLE_NAME);
 
 	  symbol_with_at_gotc = 1;
 	}
-      else if (strneq (input_line_pointer, "@GOT", 4)
-	       || strneq (input_line_pointer, "@got", 4))
+      else if (startswith (input_line_pointer, "@GOT")
+	       || startswith (input_line_pointer, "@got"))
 	{
-	  if ((strneq (input_line_pointer, "+", 1))
-	      || (strneq (input_line_pointer, "-", 1)))
+	  if ((startswith (input_line_pointer, "+"))
+	      || (startswith (input_line_pointer, "-")))
 	    as_warn (_("GOT bad expression with %s."), input_line_pointer);
 
 	  if (GOT_symbol == NULL)

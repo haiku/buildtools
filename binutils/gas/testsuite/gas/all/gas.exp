@@ -1,4 +1,4 @@
-# Copyright (C) 2012-2021 Free Software Foundation, Inc.
+# Copyright (C) 2012-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -45,7 +45,12 @@ if { [istarget hppa*-*-*] || [istarget *c54x*-*-*] || [istarget mep*-*-*]} then 
 # No floating point support in assembly code for CRIS and Z80.
 if { ![istarget cris-*-*] && ![istarget crisv32-*-*] 
      && ![istarget z80-*-*] } then {
-    gas_test "float.s" ""   "" "simple FP constants"
+    if { [istarget tic4x-*-*] } then {
+	set as_opt ""
+    } else {
+	set as_opt "--defsym hasnan=1"
+    }
+    gas_test "float.s" $as_opt "" "simple FP constants"
 }
 
 # This test is meaningless for the PA; the difference of two undefined
@@ -62,10 +67,13 @@ if {    ![istarget alpha*-*-*vms*]
      && ![istarget ft32-*-*]
      && ![istarget hppa*-*-*]
      && ![istarget microblaze-*-*]
+     && ![istarget loongarch*-*-*]
      && ![istarget mn10300-*-*]
      && ![istarget msp430*-*-*]
+     && ![istarget powerpc*-*-aix*]
      && ![istarget riscv*-*-*]
      && ![istarget rl78-*-*]
+     && ![istarget rs6000*-*-aix*]
      && ![istarget rx-*-*] } then {
     gas_test_error "diff1.s" "" "difference of two undefined symbols"
 }
@@ -97,7 +105,7 @@ if { [istarget "pdp11-*-*"] } then {
     run_dump_test eqv-dot
 }
 
-if { ![istarget "bfin-*-*"] } then {
+if { ![istarget "bfin-*-*"] && ![istarget "bpf-*-*"]  } then {
     gas_test "assign-ok.s" "" "" "== assignment support"
 }
 gas_test_error "assign-bad.s" "" "== assignment for symbol already set"
@@ -157,10 +165,12 @@ switch -glob $target_triplet {
 	# These targets fail redef2 because they disallow redefined
 	# symbols on relocs.
 	setup_xfail "m68hc1*-*-*" "m6811-*-*" "m6812-*-*" "rl78-*-*"
-	setup_xfail "riscv*-*-*" "rx-*-*" "vax*-*-*" "xgate*-*-*" "z8k-*-*"
+	setup_xfail "loongarch*-*-*" "riscv*-*-*" "rx-*-*" "vax*-*-*" "xgate*-*-*" "z8k-*-*"
+	setup_xfail "avr-*-*"
 	run_dump_test redef2
 	setup_xfail "m68hc1*-*-*" "m6811-*-*" "m6812-*-*" "rl78-*-*"
-	setup_xfail "riscv*-*-*" "rx-*-*" "vax*-*-*" "xgate*-*-*" "z8k-*-*"
+	setup_xfail "loongarch*-*-*" "riscv*-*-*" "rx-*-*" "vax*-*-*" "xgate*-*-*" "z8k-*-*"
+	setup_xfail "avr-*-*"
 	# rs6000-aix disallows redefinition via .comm.
 	if [is_xcoff_format] {
 	    setup_xfail *-*-*
@@ -268,10 +278,8 @@ if {    ![istarget *c30*-*-*]
      && ![istarget ft32-*-*]
      && ![istarget h8300*-*-*]
      && ![istarget hppa*-*-*] } then {
-    # The vax fails because VMS can apparently actually handle this
-    # case in relocs, so gas doesn't handle it itself.
     # msp430, mn10[23]00 and riscv emit two relocs to handle the difference of two symbols.
-    setup_xfail "am3*-*-*" "mn10200-*-*" "mn10300*-*-*" "msp430*-*-*" "riscv*-*-*" "vax*-*-vms*"
+    setup_xfail "am3*-*-*" "loongarch*-*-*" "mn10200-*-*" "mn10300*-*-*" "msp430*-*-*" "riscv*-*-*"
     do_930509a
 }
 
@@ -313,11 +321,9 @@ switch -glob $target_triplet {
 # We omit the ARM toolchains because they define locals to
 #  start with '.', which eliminates .eos, .text etc from the output.
 # Omit c54x, since .tag and .def mean something different on that target
-if {   ([istarget *-*-coff*] && ![istarget arm*-*-coff] && ![istarget *c4x*-*-coff] && ![istarget *c54x*-*-coff]) \
+if {   ([istarget *-*-coff*] && ![istarget *c4x*-*-coff] && ![istarget *c54x*-*-coff]) \
      ||([istarget *-*-pe*] && ![istarget arm*-*-pe*]) \
      || [istarget i*86-*-aix*] \
-     || [istarget i*86-*-sco*] \
-     || [istarget i*86-*-isc*] \
      || [istarget i*86-*-go32*] \
      || [istarget i*86-*-cygwin*] \
      || [istarget x86_64-*-mingw*] \
@@ -370,13 +376,35 @@ switch -glob $target_triplet {
     }
 }
 
+# Various targets use too custom handling to be able to sensibly create
+# common expecations for this test.  Also .equ works differently on some
+# targets.
+if {    ![istarget avr-*-*]
+     && ![istarget bfin-*-*]
+     && ![istarget cris*-*-*]
+     && ![istarget dlx-*-*]
+     && ![istarget hppa*-*-*]
+     && ![istarget m68k-*-*]
+     && ![istarget nios2-*-*]
+     && ![istarget pj-*-*]
+     && ![istarget sh*-*-*]
+     && ![istarget *c4x-*-*]
+     && ![istarget *c54x-*-*]
+     && ![istarget *c6x-*-*]
+     && ![istarget z80-*-*] } then {
+    # Some further targets' custom handling fails to recognize the overflows.
+    setup_xfail "crx-*-*" "h8300-*-*" "mcore-*-*" "mn10200-*-*" "mn10300-*-*" "msp430-*-*" "ns32k-*-*"
+    run_list_test "overflow"
+}
+
 if {  ([istarget "i*86-*-*pe*"] && ![istarget "i*86-*-openbsd*"]) \
     || [istarget "i*86-*-cygwin*"] \
     || [istarget "i*86-*-mingw32*"] } {
   gas_test "fastcall.s" ""   "" "fastcall labels"
 }
 
-if { ![istarget "bfin-*-*"] && ![istarget "nds32*-*-*"] } then {
+if { ![istarget "bfin-*-*"] && ![istarget "nds32*-*-*"] \
+    && ![istarget "bpf-*-*"] } then {
     run_dump_test assign
 }
 run_dump_test sleb128
@@ -398,12 +426,12 @@ if { ![istarget "tic4x*-*-*"] && ![istarget "tic54x*-*-*"] && ![istarget "hppa*-
     run_dump_test relax
 }
 
-# powerpc and s390 allow a string argument to .byte
-if { ![istarget "powerpc*-*-*"] && ![istarget "rs6000*-*-*"] && ![istarget "s390*-*-*"] } {
-    run_dump_test byte
-}
-
 run_dump_test quad
+
+# ~ isn't an operator on PDP-11
+if { ![istarget "pdp11-*-*"] } {
+    run_dump_test quad2
+}
 
 # poor little PDP-11 can't handle 16-byte values
 if { ![istarget "pdp11-*-*"] } {
@@ -434,6 +462,15 @@ if [is_elf_format] {
 }
 
 run_dump_test quoted-sym-names
+
+# Targets where # is not a line comment character don't transform
+# "# <line> <file>" into .linefile (PR gas/29120).
+setup_xfail "tic30-*-*"
+run_list_test cond-2 "-al"
+setup_xfail "tic30-*-*"
+run_list_test linefile ""
+
+run_list_test macro "-alm"
 
 run_list_test pr20312
 
@@ -474,3 +511,7 @@ gas_test "pr23938.s" "" "" ".xstabs"
 
 run_dump_test "nop"
 run_dump_test "asciz"
+run_dump_test "pr27384"
+run_dump_test "pr27381"
+run_dump_test "multibyte1"
+run_dump_test "multibyte2"

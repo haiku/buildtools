@@ -1,4 +1,4 @@
-# Copyright (C) 2002-2021 Free Software Foundation, Inc.
+# Copyright (C) 2002-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,8 +28,9 @@ if {[which curl] == 0} {
     return
 }
 
-if { ![is_elf_format] } {
+if { ![is_elf_format] || ![isnative] } {
     unsupported "$test (unsupported target)"
+    return
 }
 
 if { [which $OBJDUMP] == 0} {
@@ -43,8 +44,8 @@ if { [which $OBJDUMP] == 0} {
 }
 
 # Compile testprog.c, move the debuginfo to a separate file and add .gnu_debuglink.
-if { [target_compile $srcdir/$subdir/testprog.c tmpdir/testprog executable debug] != ""} {
-    fail "$test (compilation failed)"
+if { [target_compile $srcdir/$subdir/testprog.c tmpdir/testprog executable "debug additional_flags=-Wl,--build-id"] != ""} {
+    unsupported "$test (compilation failed)"
     return
 }
 
@@ -93,8 +94,8 @@ file delete -force $db
 # To check this we attempt to follow a broken debuglink. If configured
 # with debuginfod the output will contain the debuginfod URLs that were
 # queried (these queries fail since the server is not yet running).
-set conf_objdump [binutils_run $OBJDUMP "-WK tmpdir/testprog"]
-set conf_readelf [binutils_run $READELF "-wK tmpdir/testprog"]
+set conf_objdump [binutils_run $OBJDUMP "-Wk tmpdir/testprog"]
+set conf_readelf [binutils_run $READELF "-wk tmpdir/testprog"]
 
 # Find an unused port
 set port 7999
@@ -160,10 +161,10 @@ proc test_fetch_debuglink { prog progargs } {
 
     set got [binutils_run $prog "$progargs tmpdir/testprog"]
 
-    if { [regexp ".*Found separate debug info file.*Contents\[^\n\]*loaded from\[^\n\]*$cache.*" $got] } {
+    if { [regexp ".*Found separate debug info file.*Contents\[^\n\]*loaded from\[^\n\]*" $got] } {
        pass "$test ($prog debuglink)"
     } else {
-       fail "$test ($prog debuglink)"
+       fail "$test ($prog did not find debuglink to cache $cache)"
     }
 }
 
@@ -179,20 +180,32 @@ proc test_fetch_debugaltlink { prog progargs } {
     if { [regexp ".*Found separate debug info file\[^\n\]*$cache/$buildid" $got] } {
         pass "$test ($prog debugaltlink)"
     } else {
-        fail "$test ($prog debugaltlink)"
+        fail "$test ($prog could not load debugaltlink)"
     }
 }
 
 if { [regexp ".*DEBUGINFOD.*" $conf_objdump] } {
-    test_fetch_debuglink $OBJDUMP "-W"
-    test_fetch_debugaltlink $OBJDUMP "-WK"
+    test_fetch_debuglink $OBJDUMP "-W -WD"
+    test_fetch_debugaltlink $OBJDUMP "-Wk"
+
+    set test "disabling debuginfod access"
+    setup_xfail *-*-*
+    test_fetch_debuglink $OBJDUMP "-W -WE"
+    set test "debuginfod"
+
 } else {
     untested "$test (objdump not configured with debuginfod)"
 }
 
 if { [regexp ".*DEBUGINFOD.*" $conf_readelf] } {
     test_fetch_debuglink $READELF "-w"
-    test_fetch_debugaltlink $READELF "-wK"
+    test_fetch_debugaltlink $READELF "-wk"
+
+    set test "disabling debuginfod access"
+    setup_xfail *-*-*
+    test_fetch_debuglink $READELF "-w -wE"
+    set test "debuginfod"
+
 } else {
     untested "$test (readelf not configured with debuginfod)"
 }

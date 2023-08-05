@@ -1,6 +1,6 @@
 // object.cc -- support for an object file for linking in gold
 
-// Copyright (C) 2006-2021 Free Software Foundation, Inc.
+// Copyright (C) 2006-2023 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -427,7 +427,7 @@ Sized_relobj<size, big_endian>::do_for_all_local_got_entries(
   unsigned int nsyms = this->local_symbol_count();
   for (unsigned int i = 0; i < nsyms; i++)
     {
-      Local_got_entry_key key(i, 0);
+      Local_got_entry_key key(i);
       Local_got_offsets::const_iterator p = this->local_got_offsets_.find(key);
       if (p != this->local_got_offsets_.end())
 	{
@@ -3199,7 +3199,7 @@ Input_objects::add_object(Object* obj)
 {
   // Print the filename if the -t/--trace option is selected.
   if (parameters->options().trace())
-    gold_info("%s", obj->name().c_str());
+    gold_trace("%s", obj->name().c_str());
 
   if (!obj->is_dynamic())
     this->relobj_list_.push_back(static_cast<Relobj*>(obj));
@@ -3358,7 +3358,7 @@ Relocate_info<size, big_endian>::location(size_t, off_t offset) const
       if (info.enclosing_symbol_type == elfcpp::STT_FUNC)
 	ret += _("function ");
       ret += info.enclosing_symbol_name;
-      return ret;
+      ret += ":";
     }
 
   ret += "(";

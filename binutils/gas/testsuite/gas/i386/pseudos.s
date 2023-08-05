@@ -20,6 +20,7 @@ _start:
 	{vex} {disp8} vmovaps 128(%eax),%xmm2
 	{vex} {disp32} vmovaps 128(%eax),%xmm2
 	{evex} {disp8} vmovaps 128(%eax),%xmm2
+	{evex} {disp16} vmovaps 128(%bx),%xmm2
 	{evex} {disp32} vmovaps 128(%eax),%xmm2
 
 	mov %ecx, %eax
@@ -122,6 +123,34 @@ _start:
 	{load} xor (%edi), %eax
 	{store} xor %eax, (%edi)
 	{store} xor (%edi), %eax
+
+	.irp m, mov, adc, add, and, cmp, or, sbb, sub, test, xor
+	\m	$0x12, %al
+	\m	$0x345, %eax
+	{load} \m $0x12, %al		# bogus for MOV
+	{load} \m $0x345, %eax		# bogus for MOV
+	{store} \m $0x12, %al
+	{store} \m $0x345, %eax
+	.endr
+
+	.irp m, inc, dec, push, pop, bswap
+	\m	%ecx
+	{load} \m %ecx			# bogus for POP
+	{store} \m %ecx			# bogus for PUSH
+	.endr
+
+	xchg	%ecx, %esi
+	xchg	%esi, %ecx
+	{load} xchg %ecx, %esi
+	{store} xchg %ecx, %esi
+
+	xchg	%eax, %esi
+	{load} xchg %eax, %esi
+	{store} xchg %eax, %esi
+
+	xchg	%ecx, %eax
+	{load} xchg %ecx, %eax
+	{store} xchg %ecx, %eax
 
 	fadd %st, %st
 	{load} fadd %st, %st
@@ -337,6 +366,7 @@ _start:
 	{vex} {disp8} vmovaps xmm2,XMMWORD PTR [eax+128]
 	{vex} {disp32} vmovaps xmm2,XMMWORD PTR [eax+128]
 	{evex} {disp8} vmovaps xmm2,XMMWORD PTR [eax+128]
+	{evex} {disp16} vmovaps xmm2,XMMWORD PTR [bx+128]
 	{evex} {disp32} vmovaps xmm2,XMMWORD PTR [eax+128]
 
 	mov eax,ecx
@@ -373,3 +403,8 @@ _start:
 	mov al, BYTE PTR [bp]
 	{disp8} mov al, BYTE PTR [bp]
 	{disp16} mov al, BYTE PTR [bp]
+
+	{disp32} jmp .
+	.code16
+	{disp16} jmp .
+	.byte -1, -1

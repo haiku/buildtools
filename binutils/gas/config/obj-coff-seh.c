@@ -1,5 +1,5 @@
 /* seh pdata/xdata coff object file format
-   Copyright (C) 2009-2021 Free Software Foundation, Inc.
+   Copyright (C) 2009-2023 Free Software Foundation, Inc.
 
    This file is part of GAS.
 
@@ -64,7 +64,7 @@ get_pxdata_name (segT seg, const char *base_name)
   else
     name = dollar;
 
-  sname = concat (base_name, name, NULL);
+  sname = notes_concat (base_name, name, NULL);
 
   return sname;
 }
@@ -75,8 +75,7 @@ alloc_pxdata_item (segT seg, int subseg, char *name)
 {
   struct seh_seg_list *r;
 
-  r = (struct seh_seg_list *)
-    xmalloc (sizeof (struct seh_seg_list) + strlen (name));
+  r = notes_alloc (sizeof (struct seh_seg_list) + strlen (name));
   r->seg = seg;
   r->subseg = subseg;
   r->seg_name = name;
@@ -145,7 +144,7 @@ seh_hash_find_or_make (segT cseg, const char *base_name)
       seh_hash_insert (item->seg_name, item);
     }
   else
-    free (name);
+    notes_free (name);
 
   return item;
 }
@@ -582,12 +581,31 @@ obj_coff_seh_pushreg (int what ATTRIBUTE_UNUSED)
 static void
 obj_coff_seh_pushframe (int what ATTRIBUTE_UNUSED)
 {
+  int code = 0;
+  
   if (!verify_context_and_target (".seh_pushframe", seh_kind_x64)
       || !seh_validate_seg (".seh_pushframe"))
     return;
+  
+  SKIP_WHITESPACE();
+  
+  if (is_name_beginner (*input_line_pointer))
+    {
+      char* identifier;
+
+      get_symbol_name (&identifier);
+      if (strcmp (identifier, "code") != 0)
+	{
+	  as_bad(_("invalid argument \"%s\" for .seh_pushframe. Expected \"code\" or nothing"),
+		 identifier);
+	  return;
+	}
+      code = 1;
+    }
+  
   demand_empty_rest_of_line ();
 
-  seh_x64_make_prologue_element (UWOP_PUSH_MACHFRAME, 0, 0);
+  seh_x64_make_prologue_element (UWOP_PUSH_MACHFRAME, code, 0);
 }
 
 /* Add a register save-unwind token to current context.  */

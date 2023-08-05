@@ -1,5 +1,5 @@
 /* CTF format description.
-   Copyright (C) 2019-2021 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -89,13 +89,13 @@ extern "C"
    entries and reorder them accordingly (dropping the indexes in the process).
 
    Variable records (as distinct from data objects) provide a modicum of support
-   for non-ELF systems, mapping a variable name to a CTF type ID.  The variable
-   names are sorted into ASCIIbetical order, permitting binary searching.  We do
-   not define how the consumer maps these variable names to addresses or
+   for non-ELF systems, mapping a variable or function name to a CTF type ID.
+   The names are sorted into ASCIIbetical order, permitting binary searching.
+   We do not define how the consumer maps these variable names to addresses or
    anything else, or indeed what these names represent: they might be names
    looked up at runtime via dlsym() or names extracted at runtime by a debugger
    or anything else the consumer likes.  Variable records with identically-
-   named entries in the data object section are removed.
+   named entries in the data object or function index section are removed.
 
    The data types section is a list of variable size records that represent each
    type, in order by their ID.  The types themselves form a directed graph,
@@ -358,9 +358,9 @@ union
    c.ctt_info = CTF_TYPE_INFO(kind, vlen);
    c.ctt_name = CTF_TYPE_NAME(stid, offset);  */
 
-# define CTF_V1_INFO_KIND(info)		(((info) & 0xf800) >> 11)
-# define CTF_V1_INFO_ISROOT(info)	(((info) & 0x0400) >> 10)
-# define CTF_V1_INFO_VLEN(info)		(((info) & CTF_MAX_VLEN_V1))
+#define CTF_V1_INFO_KIND(info)		(((info) & 0xf800) >> 11)
+#define CTF_V1_INFO_ISROOT(info)	(((info) & 0x0400) >> 10)
+#define CTF_V1_INFO_VLEN(info)		(((info) & CTF_MAX_VLEN_V1))
 
 #define CTF_V2_INFO_KIND(info)		(((info) & 0xfc000000) >> 26)
 #define CTF_V2_INFO_ISROOT(info)	(((info) & 0x2000000) >> 25)
@@ -368,7 +368,7 @@ union
 
 #define CTF_NAME_STID(name)		((name) >> 31)
 #define CTF_NAME_OFFSET(name)		((name) & CTF_MAX_NAME)
-#define CTF_SET_STID(name, stid)	((name) | (stid) << 31)
+#define CTF_SET_STID(name, stid)	((name) | ((unsigned int) stid) << 31)
 
 /* V2 only. */
 #define CTF_TYPE_INFO(kind, isroot, vlen) \
@@ -387,10 +387,10 @@ union
 #define CTF_V2_TYPE_TO_INDEX(id)	((id) & CTF_MAX_PTYPE)
 #define CTF_V2_INDEX_TO_TYPE(id, child) ((child) ? ((id) | (CTF_MAX_PTYPE+1)) : (id))
 
-# define CTF_V1_TYPE_ISPARENT(fp, id)	((id) <= CTF_MAX_PTYPE_V1)
-# define CTF_V1_TYPE_ISCHILD(fp, id)	((id) > CTF_MAX_PTYPE_V1)
-# define CTF_V1_TYPE_TO_INDEX(id)	((id) & CTF_MAX_PTYPE_V1)
-# define CTF_V1_INDEX_TO_TYPE(id, child) ((child) ? ((id) | (CTF_MAX_PTYPE_V1+1)) : (id))
+#define CTF_V1_TYPE_ISPARENT(fp, id)	((id) <= CTF_MAX_PTYPE_V1)
+#define CTF_V1_TYPE_ISCHILD(fp, id)	((id) > CTF_MAX_PTYPE_V1)
+#define CTF_V1_TYPE_TO_INDEX(id)	((id) & CTF_MAX_PTYPE_V1)
+#define CTF_V1_INDEX_TO_TYPE(id, child) ((child) ? ((id) | (CTF_MAX_PTYPE_V1+1)) : (id))
 
 /* Valid for both V1 and V2. */
 #define CTF_TYPE_LSIZE(cttp) \
@@ -405,7 +405,8 @@ union
    CTF_INFO_VLEN() will extract the number of elements in the list, and
    the type of each element is shown in the comments below. */
 
-#define CTF_K_UNKNOWN	0	/* Unknown type (used for padding).  */
+#define CTF_K_UNKNOWN	0	/* Unknown type (used for padding and
+				   unrepresentable types).  */
 #define CTF_K_INTEGER	1	/* Variant data is CTF_INT_DATA (see below).  */
 #define CTF_K_FLOAT	2	/* Variant data is CTF_FP_DATA (see below).  */
 #define CTF_K_POINTER	3	/* ctt_type is referenced type.  */
@@ -598,13 +599,13 @@ struct ctf_archive
   /* Offset of the name table.  */
   uint64_t ctfa_names;
 
-  /* Offset of the CTF table.  Each element starts with a size (a uint64_t
-     in network byte order) then a ctf_dict_t of that size.  */
+  /* Offset of the CTF table.  Each element starts with a size (a little-
+     endian uint64_t) then a ctf_dict_t of that size.  */
   uint64_t ctfa_ctfs;
 };
 
-/* An array of ctfa_nnamed of this structure lies at
-   ctf_archive[ctf_archive->ctfa_modents] and gives the ctfa_ctfs or
+/* An array of ctfa_ndicts of this structure lies at
+   ctf_archive[sizeof(struct ctf_archive)] and gives the ctfa_ctfs or
    ctfa_names-relative offsets of each name or ctf_dict_t.  */
 
 typedef struct ctf_archive_modent

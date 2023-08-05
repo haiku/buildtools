@@ -1,5 +1,5 @@
 /* Coff file dumper.
-   Copyright (C) 1994-2021 Free Software Foundation, Inc.
+   Copyright (C) 1994-2023 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -26,7 +26,7 @@
 
 #include "sysdep.h"
 #include "bfd.h"
-#include "bfd_stdint.h"
+#include <stdint.h>
 #include "libiberty.h"
 #include "bucomm.h"
 
@@ -366,8 +366,7 @@ dump_coff_scope (struct coff_scope *p)
   if (p)
     {
       tab (1);
-      printf ("%s %" BFD_VMA_FMT "x ",
-	      _("List of blocks "), (bfd_vma) (uintptr_t) p);
+      printf ("%s %p ", _("List of blocks "), p);
 
       if (p->sec)
 	printf( "  %s %x..%x",  p->sec->name,p->offset, p->offset + p->size -1);
@@ -488,12 +487,10 @@ main (int ac, char **av)
       { NULL, no_argument, 0, 0 }
     };
 
-#if defined (HAVE_SETLOCALE) && defined (HAVE_LC_MESSAGES)
+#ifdef HAVE_LC_MESSAGES
   setlocale (LC_MESSAGES, "");
 #endif
-#if defined (HAVE_SETLOCALE)
   setlocale (LC_CTYPE, "");
-#endif
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
 
@@ -543,10 +540,7 @@ main (int ac, char **av)
       bfd_nonfatal (input_file);
 
       if (bfd_get_error () == bfd_error_file_ambiguously_recognized)
-	{
-	  list_matching_formats (matching);
-	  free (matching);
-	}
+	list_matching_formats (matching);
       exit (1);
     }
 

@@ -1,5 +1,5 @@
 /* Opening CTF files with BFD.
-   Copyright (C) 2019-2021 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -98,6 +98,8 @@ ctf_bfdopen_ctfsect (struct bfd *abfd _libctf_unused_,
   const char *bfderrstr = NULL;
   char *strtab_alloc = NULL;
   int symsect_endianness = -1;
+
+  libctf_init_debug();
 
 #ifdef HAVE_BFD_ELF
   ctf_sect_t symsect, strsect;

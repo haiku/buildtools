@@ -1,5 +1,5 @@
 /* ECOFF object file format.
-   Copyright (C) 1993-2021 Free Software Foundation, Inc.
+   Copyright (C) 1993-2023 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
    This file was put together by Ian Lance Taylor <ian@cygnus.com>.
 
@@ -151,6 +151,7 @@ ecoff_frob_file (void)
   ecoff_build_debug (hdr, &buf, debug_swap);
 
   /* Finish up the ecoff_tdata structure.  */
+  ecoff_data (stdoutput)->debug_info.alloc_syments = true;
   set = buf;
 #define SET(ptr, count, type, size) \
   if (hdr->count == 0) \
@@ -189,7 +190,7 @@ obj_ecoff_set_ext (symbolS *sym, EXTR *ext)
   know (bfd_asymbol_flavour (symbol_get_bfdsym (sym))
 	== bfd_target_ecoff_flavour);
   esym = ecoffsymbol (symbol_get_bfdsym (sym));
-  esym->local = FALSE;
+  esym->local = false;
   esym->native = xmalloc (debug_swap->external_ext_size);
   (*debug_swap->swap_ext_out) (stdoutput, ext, esym->native);
 }
@@ -290,6 +291,7 @@ const struct format_ops ecoff_format_ops =
      the single-format definition (0) would be in order.  */
   1,	/* emit_section_symbols.  */
   0,	/* begin.  */
+  0,	/* end.  */
   ecoff_new_file,
   obj_ecoff_frob_symbol,
   ecoff_frob_file,

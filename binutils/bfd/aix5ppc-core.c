@@ -1,5 +1,5 @@
 /* IBM RS/6000 "XCOFF" back-end for BFD.
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2023 Free Software Foundation, Inc.
    Written by Tom Rix
    Contributed by Red Hat Inc.
 
@@ -24,7 +24,7 @@
 #include "bfd.h"
 
 bfd_cleanup xcoff64_core_p (bfd *);
-bfd_boolean xcoff64_core_file_matches_executable_p (bfd *, bfd *);
+bool xcoff64_core_file_matches_executable_p (bfd *, bfd *);
 char *xcoff64_core_file_failing_command (bfd *);
 int xcoff64_core_file_failing_signal (bfd *);
 
@@ -142,6 +142,27 @@ xcoff64_core_p (bfd *abfd)
   sec->filepos = 0;
   sec->contents = (bfd_byte *)&new_core_hdr->c_flt.r64;
 
+  if (core.c_extctx)
+    {
+      /* vmx section.  */
+      flags = SEC_HAS_CONTENTS;
+      sec = bfd_make_section_anyway_with_flags (abfd, ".aix-vmx", flags);
+      if (sec == NULL)
+	return NULL;
+      sec->size = 560;
+      sec->vma = 0;
+      sec->filepos = core.c_extctx;
+
+      /* vmx section.  */
+      flags = SEC_HAS_CONTENTS;
+      sec = bfd_make_section_anyway_with_flags (abfd, ".aix-vsx", flags);
+      if (sec == NULL)
+	return NULL;
+      sec->size = 256;
+      sec->vma = 0;
+      sec->filepos = core.c_extctx + 584;
+    }
+
   /* .ldinfo section.
      To actually find out how long this section is in this particular
      core dump would require going down the whole list of struct
@@ -238,14 +259,14 @@ xcoff64_core_p (bfd *abfd)
 
 /* Return `TRUE' if given core is from the given executable.  */
 
-bfd_boolean
+bool
 xcoff64_core_file_matches_executable_p (bfd *core_bfd, bfd *exec_bfd)
 {
   struct core_dumpxx core;
   char *path, *s;
   size_t alloc;
   const char *str1, *str2;
-  bfd_boolean return_value = FALSE;
+  bool return_value = false;
 
   /* Get the header.  */
   if (bfd_seek (core_bfd, 0, SEEK_SET) != 0)
@@ -295,7 +316,7 @@ xcoff64_core_file_matches_executable_p (bfd *core_bfd, bfd *exec_bfd)
   str2 = str2 != NULL ? str2 + 1 : bfd_get_filename (exec_bfd);
 
   if (strcmp (str1, str2) == 0)
-    return_value = TRUE;
+    return_value = true;
 
  xcoff64_core_file_matches_executable_p_end_1:
   free (path);
@@ -335,7 +356,7 @@ xcoff64_core_p (bfd *abfd ATTRIBUTE_UNUSED)
   return 0;
 }
 
-bfd_boolean
+bool
 xcoff64_core_file_matches_executable_p (bfd *core_bfd, bfd *exec_bfd)
 {
   return generic_core_file_matches_executable_p (core_bfd, exec_bfd);

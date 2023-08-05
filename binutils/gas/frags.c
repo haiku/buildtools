@@ -1,5 +1,5 @@
 /* frags.c - manage frags -
-   Copyright (C) 1987-2021 Free Software Foundation, Inc.
+   Copyright (C) 1987-2023 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -166,7 +166,8 @@ frag_new (size_t old_frags_var_max_size
 
   /* Fix up old frag's fr_fix.  */
   frag_now->fr_fix = frag_now_fix_octets ();
-  gas_assert (frag_now->fr_fix >= old_frags_var_max_size);
+  gas_assert (frag_now->fr_fix >= old_frags_var_max_size
+	      || now_seg == absolute_section);
   frag_now->fr_fix -= old_frags_var_max_size;
   /* Make sure its type is valid.  */
   gas_assert (frag_now->fr_type != 0);
@@ -367,7 +368,7 @@ frag_align_pattern (int alignment, const char *fill_pattern,
 # ifndef HANDLE_ALIGN
 #  define MAX_MEM_FOR_RS_ALIGN_CODE  1
 # else
-#  define MAX_MEM_FOR_RS_ALIGN_CODE  ((1 << alignment) - 1)
+#  define MAX_MEM_FOR_RS_ALIGN_CODE  (((size_t) 1 << alignment) - 1)
 # endif
 #endif
 
@@ -419,7 +420,7 @@ frag_append_1_char (int datum)
    their start addresses.  Set OFFSET to the difference in address
    not already accounted for in the frag FR_ADDRESS.  */
 
-bfd_boolean
+bool
 frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, offsetT *offset)
 {
   const fragS *frag;
@@ -431,7 +432,7 @@ frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, offsetT *offset)
   if (frag1 == frag2)
     {
       *offset = off;
-      return TRUE;
+      return true;
     }
 
   /* Maybe frag2 is after frag1.  */
@@ -445,7 +446,7 @@ frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, offsetT *offset)
       if (frag == frag2)
 	{
 	  *offset = off;
-	  return TRUE;
+	  return true;
 	}
     }
 
@@ -461,11 +462,11 @@ frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, offsetT *offset)
       if (frag == frag1)
 	{
 	  *offset = off;
-	  return TRUE;
+	  return true;
 	}
     }
 
-  return FALSE;
+  return false;
 }
 
 /* Return TRUE if FRAG2 follows FRAG1 with a fixed relationship
@@ -473,7 +474,7 @@ frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, offsetT *offset)
    the difference in address not already accounted for in the frag
    FR_ADDRESS.  */
 
-bfd_boolean
+bool
 frag_offset_ignore_align_p (const fragS *frag1, const fragS *frag2,
 			    offsetT *offset)
 {
@@ -486,7 +487,7 @@ frag_offset_ignore_align_p (const fragS *frag1, const fragS *frag2,
   if (frag1 == frag2)
     {
       *offset = off;
-      return TRUE;
+      return true;
     }
 
   frag = frag1;
@@ -503,11 +504,11 @@ frag_offset_ignore_align_p (const fragS *frag1, const fragS *frag2,
       if (frag == frag2)
 	{
 	  *offset = off;
-	  return TRUE;
+	  return true;
 	}
     }
 
-  return FALSE;
+  return false;
 }
 
 /* Return TRUE if we can determine whether FRAG2 OFF2 appears after
@@ -525,13 +526,13 @@ frag_offset_ignore_align_p (const fragS *frag1, const fragS *frag2,
    reachable from frag1 following the fr_next links, rather than the
    other way round.  */
 
-bfd_boolean
+bool
 frag_gtoffset_p (valueT off2, const fragS *frag2,
 		 valueT off1, const fragS *frag1, offsetT *offset)
 {
   /* Insanity check.  */
   if (frag2 == frag1 || off1 > frag1->fr_fix)
-    return FALSE;
+    return false;
 
   /* If the first symbol offset is at the end of the first frag and
      the second symbol offset at the beginning of the second frag then
@@ -551,16 +552,16 @@ frag_gtoffset_p (valueT off2, const fragS *frag2,
       if (frag == frag2)
 	{
 	  if (delta == 0)
-	    return FALSE;
+	    return false;
 	  break;
 	}
       /* If we run off the end of the frag chain then we have a case
 	 where frag2 is not after frag1, ie. an O_gt expression not
 	 created for .loc view.  */
       if (frag == NULL)
-	return FALSE;
+	return false;
     }
 
   *offset = (off2 - off1 - delta) * OCTETS_PER_BYTE;
-  return TRUE;
+  return true;
 }

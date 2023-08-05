@@ -1,5 +1,5 @@
 /* Disassembler code for Renesas RX.
-   Copyright (C) 2008-2021 Free Software Foundation, Inc.
+   Copyright (C) 2008-2023 Free Software Foundation, Inc.
    Contributed by Red Hat.
    Written by DJ Delorie.
 
@@ -221,7 +221,7 @@ print_insn_rx (bfd_vma addr, disassemble_info * dis)
   const char * s;
   struct private priv;
 
-  dis->private_data = (PTR) &priv;
+  dis->private_data = &priv;
   rx_data.pc = addr;
   rx_data.dis = dis;
 

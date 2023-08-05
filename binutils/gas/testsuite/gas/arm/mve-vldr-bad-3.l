@@ -23,12 +23,18 @@
 [^:]*:31: Warning: instruction is UNPREDICTABLE with SP operand
 [^:]*:32: Warning: instruction is UNPREDICTABLE with SP operand
 [^:]*:33: Warning: instruction is UNPREDICTABLE with PC operand
-[^:]*:34: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:34: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:34: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:34: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:34: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:34: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:34: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:34: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:34: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:34: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:34: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:34: *Info: macro .*
 [^:]*:35: Error: bad element type for instruction -- `vldrb.16 q0,\[r0\]'
 [^:]*:36: Error: bad element type for instruction -- `vldrb.f16 q0,\[r0\]'
 [^:]*:37: Error: bad element type for instruction -- `vldrb.p16 q0,\[r0\]'
@@ -68,12 +74,18 @@
 [^:]*:71: Warning: instruction is UNPREDICTABLE with SP operand
 [^:]*:72: Warning: instruction is UNPREDICTABLE with SP operand
 [^:]*:73: Warning: instruction is UNPREDICTABLE with PC operand
-[^:]*:74: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:74: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:74: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:74: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:74: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:74: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:74: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:74: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:74: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:74: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:74: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:74: *Info: macro .*
 [^:]*:75: Error: bad element type for instruction -- `vldrh.8 q0,\[r0\]'
 [^:]*:76: Error: bad element type for instruction -- `vldrh.u8 q0,\[r0\]'
 [^:]*:77: Error: bad element type for instruction -- `vldrh.s8 q0,\[r0\]'
@@ -103,12 +115,18 @@
 [^:]*:101: Error: immediate must be a multiple of 4 in the range of \+/-\[0,508\] -- `vldrw.32 q0,\[r0\],#-516'
 [^:]*:102: Warning: instruction is UNPREDICTABLE with SP operand
 [^:]*:103: Warning: instruction is UNPREDICTABLE with PC operand
-[^:]*:104: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:104: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:104: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:104: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:104: Warning: instruction is UNPREDICTABLE in an IT block
-[^:]*:104: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:104: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:104: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:104: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:104: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:104: *Info: macro .*
+[^:]*:4: Warning: instruction is UNPREDICTABLE in an IT block
+[^:]*:104: *Info: macro .*
 [^:]*:105: Error: bad element type for instruction -- `vldrw.8 q0,\[r0\]'
 [^:]*:106: Error: bad element type for instruction -- `vldrw.u8 q0,\[r0\]'
 [^:]*:107: Error: bad element type for instruction -- `vldrw.s8 q0,\[r0\]'
@@ -133,37 +151,37 @@
 [^:]*:134: Error: syntax error -- `vldrweq.32 q0,\[r0\]'
 [^:]*:135: Error: vector predicated instruction should be in VPT/VPST block -- `vldrwt.32 q0,\[r0\]'
 [^:]*:137: Error: instruction missing MVE vector predication code -- `vldrw.32 q0,\[r0\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.16 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.32 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.64 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.f16 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.f32 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.f64 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.p16 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.p32 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.p64 q0,\[r2,q3\]'
-[^:]*:140: Error: bad element type for instruction -- `vldrb.s8 q0,\[r2,q3\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.8 q0,\[r2,q3,uxtw#1\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.32 q0,\[r2,q3,uxtw#1\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.64 q0,\[r2,q3,uxtw#1\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.f32 q0,\[r2,q3,uxtw#1\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.f64 q0,\[r2,q3,uxtw#1\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.p32 q0,\[r2,q3,uxtw#1\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.p64 q0,\[r2,q3,uxtw#1\]'
-[^:]*:143: Error: bad element type for instruction -- `vldrh.s16 q0,\[r2,q3,uxtw#1\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.8 q0,\[r2,q3,uxtw#2\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.16 q0,\[r2,q3,uxtw#2\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.64 q0,\[r2,q3,uxtw#2\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.f16 q0,\[r2,q3,uxtw#2\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.f64 q0,\[r2,q3,uxtw#2\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.p16 q0,\[r2,q3,uxtw#2\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.p64 q0,\[r2,q3,uxtw#2\]'
-[^:]*:146: Error: bad element type for instruction -- `vldrw.s32 q0,\[r2,q3,uxtw#2\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.8 q0,\[r2,q3,uxtw#3\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.16 q0,\[r2,q3,uxtw#3\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.32 q0,\[r2,q3,uxtw#3\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.f16 q0,\[r2,q3,uxtw#3\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.f32 q0,\[r2,q3,uxtw#3\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.p16 q0,\[r2,q3,uxtw#3\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.p32 q0,\[r2,q3,uxtw#3\]'
-[^:]*:149: Error: bad element type for instruction -- `vldrd.s64 q0,\[r2,q3,uxtw#3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.16 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.32 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.64 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.f16 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.f32 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.f64 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.p16 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.p32 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.p64 q0,\[r2,q3\]'
+[^:]*:139: Error: bad element type for instruction -- `vldrb.s8 q0,\[r2,q3\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.8 q0,\[r2,q3,uxtw#1\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.32 q0,\[r2,q3,uxtw#1\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.64 q0,\[r2,q3,uxtw#1\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.f32 q0,\[r2,q3,uxtw#1\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.f64 q0,\[r2,q3,uxtw#1\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.p32 q0,\[r2,q3,uxtw#1\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.p64 q0,\[r2,q3,uxtw#1\]'
+[^:]*:142: Error: bad element type for instruction -- `vldrh.s16 q0,\[r2,q3,uxtw#1\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.8 q0,\[r2,q3,uxtw#2\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.16 q0,\[r2,q3,uxtw#2\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.64 q0,\[r2,q3,uxtw#2\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.f16 q0,\[r2,q3,uxtw#2\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.f64 q0,\[r2,q3,uxtw#2\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.p16 q0,\[r2,q3,uxtw#2\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.p64 q0,\[r2,q3,uxtw#2\]'
+[^:]*:145: Error: bad element type for instruction -- `vldrw.s32 q0,\[r2,q3,uxtw#2\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.8 q0,\[r2,q3,uxtw#3\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.16 q0,\[r2,q3,uxtw#3\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.32 q0,\[r2,q3,uxtw#3\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.f16 q0,\[r2,q3,uxtw#3\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.f32 q0,\[r2,q3,uxtw#3\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.p16 q0,\[r2,q3,uxtw#3\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.p32 q0,\[r2,q3,uxtw#3\]'
+[^:]*:148: Error: bad element type for instruction -- `vldrd.s64 q0,\[r2,q3,uxtw#3\]'
