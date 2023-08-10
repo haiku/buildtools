@@ -5358,19 +5358,19 @@ standard_sse_constant_opcode (rtx_insn *insn, rtx *operands)
       if (GET_MODE_SIZE (mode) == 64)
 	{
 	  gcc_assert (TARGET_AVX512F);
-	  return "vpcmpeqd \t %t0, %t0, %t0";
+	  return "vpcmpeqd\t%t0, %t0, %t0";
 	}
       else if (GET_MODE_SIZE (mode) == 32)
 	{
 	  gcc_assert (TARGET_AVX);
-	  return "vpcmpeqd \t %x0, %x0, %x0";
+	  return "vpcmpeqd\t%x0, %x0, %x0";
 	}
       gcc_unreachable ();
     }
   else if (vector_all_ones_zero_extend_quarter_operand (x, mode))
     {
       gcc_assert (TARGET_AVX512F);
-      return "vpcmpeqd \t %x0, %x0, %x0";
+      return "vpcmpeqd\t%x0, %x0, %x0";
     }
 
   gcc_unreachable ();
@@ -18537,8 +18537,10 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	      tree itype = GET_MODE_INNER (TYPE_MODE (type)) == E_SFmode
 		? intSI_type_node : intDI_type_node;
 	      type = get_same_sized_vectype (itype, type);
-	      arg2 = gimple_build (&stmts, VIEW_CONVERT_EXPR, type, arg2);
 	    }
+	  else
+	    type = signed_type_for (type);
+	  arg2 = gimple_build (&stmts, VIEW_CONVERT_EXPR, type, arg2);
 	  tree zero_vec = build_zero_cst (type);
 	  tree cmp_type = truth_type_for (type);
 	  tree cmp = gimple_build (&stmts, LT_EXPR, cmp_type, arg2, zero_vec);
@@ -21158,24 +21160,10 @@ ix86_rtx_costs (rtx x, machine_mode mode, int outer_code_i, int opno,
     case UNSPEC:
       if (XINT (x, 1) == UNSPEC_TP)
 	*total = 0;
-      else if (XINT (x, 1) == UNSPEC_VTERNLOG)
+      else if (XINT(x, 1) == UNSPEC_VTERNLOG)
 	{
 	  *total = cost->sse_op;
 	  return true;
-	}
-      else if (XINT (x, 1) == UNSPEC_PTEST)
-	{
-	  *total = cost->sse_op;
-	  if (XVECLEN (x, 0) == 2
-	      && GET_CODE (XVECEXP (x, 0, 0)) == AND)
-	    {
-	      rtx andop = XVECEXP (x, 0, 0);
-	      *total += rtx_cost (XEXP (andop, 0), GET_MODE (andop),
-				  AND, opno, speed)
-			+ rtx_cost (XEXP (andop, 1), GET_MODE (andop),
-				    AND, opno, speed);
-	      return true;
-	    }
 	}
       return false;
 
@@ -22450,6 +22438,35 @@ x86_emit_floatuns (rtx operands[2])
 
   emit_label (donelab);
 }
+
+/* Return the diagnostic message string if conversion from FROMTYPE to
+   TOTYPE is not allowed, NULL otherwise.
+   Currently it's used to warn for silent implicit conversion between __bf16
+   and short, since __bfloat16 is refined as real __bf16 instead of short
+   since GCC13.  */
+
+static const char *
+ix86_invalid_conversion (const_tree fromtype, const_tree totype)
+{
+  if (element_mode (fromtype) != element_mode (totype)
+      && (TARGET_AVX512BF16 || TARGET_AVXNECONVERT))
+    {
+      /* Warn for silent implicit conversion where user may expect
+	 a bitcast.  */
+      if ((TYPE_MODE (fromtype) == BFmode
+	   && TYPE_MODE (totype) == HImode)
+	  || (TYPE_MODE (totype) == BFmode
+	      && TYPE_MODE (fromtype) == HImode))
+	warning (0, "%<__bfloat16%> is redefined from typedef %<short%> "
+		"to real %<__bf16%> since GCC V13, be careful of "
+		 "implicit conversion between %<__bf16%> and %<short%>; "
+		 "a explicit bitcast may be needed here");
+    }
+
+  /* Conversion allowed.  */
+  return NULL;
+}
+
 
 /* Target hook for scalar_mode_supported_p.  */
 static bool
@@ -24710,6 +24727,9 @@ ix86_run_selftests (void)
 #  undef TARGET_MERGE_DECL_ATTRIBUTES
 #  define TARGET_MERGE_DECL_ATTRIBUTES merge_dllimport_decl_attributes
 #endif
+
+#undef TARGET_INVALID_CONVERSION
+#define TARGET_INVALID_CONVERSION ix86_invalid_conversion
 
 #undef TARGET_COMP_TYPE_ATTRIBUTES
 #define TARGET_COMP_TYPE_ATTRIBUTES ix86_comp_type_attributes

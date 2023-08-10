@@ -1120,6 +1120,11 @@ gfc_compare_expr (gfc_expr *op1, gfc_expr *op2, gfc_intrinsic_op op)
 	    || (op1->value.logical && !op2->value.logical));
       break;
 
+    case BT_COMPLEX:
+      gcc_assert (op == INTRINSIC_EQ);
+      rc = mpc_cmp (op1->value.complex, op2->value.complex);
+      break;
+
     default:
       gfc_internal_error ("gfc_compare_expr(): Bad basic type");
     }
@@ -1662,6 +1667,12 @@ eval_intrinsic (gfc_intrinsic_op op,
     case INTRINSIC_POWER:
       if (!gfc_numeric_ts (&op1->ts) || !gfc_numeric_ts (&op2->ts))
 	goto runtime;
+
+      /* Do not perform conversions if operands are not conformable as
+	 required for the binary intrinsic operators (F2018:10.1.5).
+	 Defer to a possibly overloading user-defined operator.  */
+      if (!gfc_op_rank_conformable (op1, op2))
+	    goto runtime;
 
       /* Insert any necessary type conversions to make the operands
 	 compatible.  */
