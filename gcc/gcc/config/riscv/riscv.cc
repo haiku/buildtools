@@ -6857,10 +6857,9 @@ riscv_asan_shadow_offset (void)
 {
   /* We only have libsanitizer support for RV64 at present.
 
-     This number must match kRiscv*_ShadowOffset* in the file
-     libsanitizer/asan/asan_mapping.h which is currently 1<<29 for rv64,
-     even though 1<<36 makes more sense.  */
-  return TARGET_64BIT ? (HOST_WIDE_INT_1 << 29) : 0;
+     This number must match ASAN_SHADOW_OFFSET_CONST in the file
+     libsanitizer/asan/asan_mapping.h.  */
+  return TARGET_64BIT ? HOST_WIDE_INT_UC (0xd55550000) : 0;
 }
 
 /* Implement TARGET_MANGLE_TYPE.  */
@@ -7141,6 +7140,55 @@ riscv_zero_call_used_regs (HARD_REG_SET need_zeroed_hardregs)
 
   return zeroed_hardregs | default_zero_call_used_regs (need_zeroed_hardregs
 							& ~zeroed_hardregs);
+}
+
+/* Given memory reference MEM, expand code to compute the aligned
+   memory address, shift and mask values and store them into
+   *ALIGNED_MEM, *SHIFT, *MASK and *NOT_MASK.  */
+
+void
+riscv_subword_address (rtx mem, rtx *aligned_mem, rtx *shift, rtx *mask,
+		       rtx *not_mask)
+{
+  /* Align the memory address to a word.  */
+  rtx addr = force_reg (Pmode, XEXP (mem, 0));
+
+  rtx addr_mask = gen_int_mode (-4, Pmode);
+
+  rtx aligned_addr = gen_reg_rtx (Pmode);
+  emit_move_insn (aligned_addr,  gen_rtx_AND (Pmode, addr, addr_mask));
+
+  *aligned_mem = change_address (mem, SImode, aligned_addr);
+
+  /* Calculate the shift amount.  */
+  emit_move_insn (*shift, gen_rtx_AND (SImode, gen_lowpart (SImode, addr),
+				       gen_int_mode (3, SImode)));
+  emit_move_insn (*shift, gen_rtx_ASHIFT (SImode, *shift,
+					  gen_int_mode (3, SImode)));
+
+  /* Calculate the mask.  */
+  int unshifted_mask = GET_MODE_MASK (GET_MODE (mem));
+
+  emit_move_insn (*mask, gen_int_mode (unshifted_mask, SImode));
+
+  emit_move_insn (*mask, gen_rtx_ASHIFT (SImode, *mask,
+					 gen_lowpart (QImode, *shift)));
+
+  emit_move_insn (*not_mask, gen_rtx_NOT (SImode, *mask));
+}
+
+/* Leftshift a subword within an SImode register.  */
+
+void
+riscv_lshift_subword (machine_mode mode, rtx value, rtx shift,
+		      rtx *shifted_value)
+{
+  rtx value_reg = gen_reg_rtx (SImode);
+  emit_move_insn (value_reg, simplify_gen_subreg (SImode, value,
+						  mode, 0));
+
+  emit_move_insn (*shifted_value, gen_rtx_ASHIFT (SImode, value_reg,
+						  gen_lowpart (QImode, shift)));
 }
 
 /* Initialize the GCC target structure.  */

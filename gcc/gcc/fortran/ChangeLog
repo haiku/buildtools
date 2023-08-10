@@ -1,3 +1,114 @@
+2023-07-27  Release Manager
+
+	* GCC 13.2.0 released.
+
+2023-07-18  Harald Anlauf  <anlauf@gmx.de>
+
+	Backported from master:
+	2023-07-17  Harald Anlauf  <anlauf@gmx.de>
+
+	PR fortran/95947
+	PR fortran/110658
+	* trans-expr.cc (gfc_conv_procedure_call): For intrinsic procedures
+	whose result characteristics depends on the first argument and which
+	can be of type character, the character length will not be deferred.
+
+2023-07-14  Harald Anlauf  <anlauf@gmx.de>
+
+	Backported from master:
+	2023-07-11  Harald Anlauf  <anlauf@gmx.de>
+
+	PR fortran/110288
+	* symbol.cc (gfc_copy_formal_args_intr): When deriving the formal
+	argument attributes from the actual ones for intrinsic procedure
+	calls, take special care of CHARACTER arguments that we do not
+	wrongly treat them formally as deferred-length.
+
+2023-07-08  Harald Anlauf  <anlauf@gmx.de>
+
+	Backported from master:
+	2023-07-08  Harald Anlauf  <anlauf@gmx.de>
+
+	PR fortran/110585
+	* arith.cc (gfc_compare_expr): Handle equality comparison of constant
+	complex gfc_expr arguments.
+
+2023-06-29  Harald Anlauf  <anlauf@gmx.de>
+
+	Backported from master:
+	2023-06-13  Harald Anlauf  <anlauf@gmx.de>
+		    Mikael Morin  <mikael@gcc.gnu.org>
+
+	PR fortran/86277
+	* trans-array.cc (gfc_trans_allocate_array_storage): When passing a
+	zero-sized array with fixed (= non-dynamic) size, allocate temporary
+	by the caller, not by the callee.
+
+2023-06-09  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2023-06-09  Jakub Jelinek  <jakub@redhat.com>
+
+	PR fortran/96024
+	* primary.cc (gfc_convert_to_structure_constructor): Only do
+	constant string ctor length verification and truncation/padding
+	if constant length has INTEGER type.
+
+2023-06-03  Steve Kargl  <kargl@gcc.gnu.org>
+
+	Backported from master:
+	2023-06-02  Steve Kargl  <kargl@gcc.gnu.org>
+
+	PR fortran/100607
+	* resolve.cc (resolve_select_rank): Remove duplicate error.
+	(resolve_fl_var_and_proc): Prevent NULL pointer dereference and
+	suppress error message for temporary.
+
+2023-05-18  Harald Anlauf  <anlauf@gmx.de>
+
+	Backported from master:
+	2023-05-15  Harald Anlauf  <anlauf@gmx.de>
+
+	PR fortran/109846
+	* expr.cc (gfc_check_vardef_context): Check appropriate pointer
+	attribute for CLASS vs. non-CLASS function result in variable
+	definition context.
+
+2023-05-18  Harald Anlauf  <anlauf@gmx.de>
+
+	Backported from master:
+	2023-05-05  Harald Anlauf  <anlauf@gmx.de>
+
+	PR fortran/109641
+	* arith.cc (eval_intrinsic): Check conformability of ranks of operands
+	for intrinsic binary operators before performing type conversions.
+	* gfortran.h (gfc_op_rank_conformable): Add prototype.
+	* resolve.cc (resolve_operator): Check conformability of ranks of
+	operands for intrinsic binary operators before performing type
+	conversions.
+	(gfc_op_rank_conformable): New helper function to compare ranks of
+	operands of binary operator.
+
+2023-05-05  Julian Brown  <julian@codesourcery.com>
+
+	Backported from master:
+	2023-05-04  Julian Brown  <julian@codesourcery.com>
+
+	PR fortran/109622
+	* openmp.cc (resolve_omp_clauses): Add diagnostic for
+	non-pointer/non-allocatable attach/detach.
+	* trans-openmp.cc (gfc_trans_omp_clauses): Remove dereference for
+	pointer-to-scalar derived type component attach/detach.  Fix
+	attach/detach handling for descriptors.
+
+2023-05-05  Julian Brown  <julian@codesourcery.com>
+
+	Backported from master:
+	2023-04-28  Julian Brown  <julian@codesourcery.com>
+
+	PR fortran/109622
+	* trans-openmp.cc (gfc_trans_omp_clauses): Attach/detach clause fixes.
+
 2023-04-26  Release Manager
 
 	* GCC 13.1.0 released.

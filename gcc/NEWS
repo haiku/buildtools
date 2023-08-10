@@ -8,17 +8,20 @@ see ONEWS.
 http://gcc.gnu.org/gcc-13/index.html
                              GCC 13 Release Series
 
-   April 26, 2023
+   July 27, 2023
 
-   The GCC developers are pleased to announce the release of GCC 13.1.
+   The GCC developers are pleased to announce the release of GCC 13.2.
 
-   This release is a major release, containing new features (as well as
-   many other improvements) relative to GCC 12.x.
+   This release is a bug-fix release, containing fixes for regressions in
+   GCC 13.1 relative to previous releases of GCC.
 
 Release History
 
+   GCC 13.2
+          July 27, 2023 ([1]changes, [2]documentation)
+
    GCC 13.1
-          April 26, 2023 ([1]changes, [2]documentation)
+          April 26, 2023 ([3]changes, [4]documentation)
 
 References and Acknowledgements
 
@@ -26,51 +29,53 @@ References and Acknowledgements
    supports several other languages aside from C, it now stands for the
    GNU Compiler Collection.
 
-   A list of [3]successful builds is updated as new information becomes
+   A list of [5]successful builds is updated as new information becomes
    available.
 
    The GCC developers would like to thank the numerous people that have
    contributed new features, improvements, bug fixes, and other changes as
-   well as test results to GCC. This [4]amazing group of volunteers is
+   well as test results to GCC. This [6]amazing group of volunteers is
    what makes GCC successful.
 
-   For additional information about GCC please refer to the [5]GCC project
-   web site or contact the [6]GCC development mailing list.
+   For additional information about GCC please refer to the [7]GCC project
+   web site or contact the [8]GCC development mailing list.
 
-   To obtain GCC please use [7]our mirror sites or [8]our version control
+   To obtain GCC please use [9]our mirror sites or [10]our version control
    system.
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [9]GCC manuals. If that fails, the
-    [10]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [11]GCC manuals. If that fails, the
+    [12]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [11]gcc@gcc.gnu.org. All of [12]our lists have public
+    list at [13]gcc@gcc.gnu.org. All of [14]our lists have public
     archives.
 
-   Copyright (C) [13]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [15]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [14]maintained by the GCC team. Last modified
-   2023-04-26.
+   These pages are [16]maintained by the GCC team. Last modified
+   2023-07-27.
 
 References
 
    1. http://gcc.gnu.org/gcc-13/changes.html
-   2. http://gcc.gnu.org/onlinedocs/13.1.0/
-   3. http://gcc.gnu.org/gcc-13/buildstat.html
-   4. http://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Contributors.html
-   5. http://gcc.gnu.org/index.html
-   6. mailto:gcc@gcc.gnu.org
-   7. http://gcc.gnu.org/mirrors.html
-   8. http://gcc.gnu.org/git.html
-   9. https://gcc.gnu.org/onlinedocs/
-  10. mailto:gcc-help@gcc.gnu.org
-  11. mailto:gcc@gcc.gnu.org
-  12. https://gcc.gnu.org/lists.html
-  13. https://www.fsf.org/
-  14. https://gcc.gnu.org/about.html
+   2. http://gcc.gnu.org/onlinedocs/13.2.0/
+   3. http://gcc.gnu.org/gcc-13/changes.html
+   4. http://gcc.gnu.org/onlinedocs/13.1.0/
+   5. http://gcc.gnu.org/gcc-13/buildstat.html
+   6. http://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Contributors.html
+   7. http://gcc.gnu.org/index.html
+   8. mailto:gcc@gcc.gnu.org
+   9. http://gcc.gnu.org/mirrors.html
+  10. http://gcc.gnu.org/git.html
+  11. https://gcc.gnu.org/onlinedocs/
+  12. mailto:gcc-help@gcc.gnu.org
+  13. mailto:gcc@gcc.gnu.org
+  14. https://gcc.gnu.org/lists.html
+  15. https://www.fsf.org/
+  16. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-13/changes.html
                              GCC 13 Release Series
@@ -104,10 +109,19 @@ Caveats
        -mcpu=iwmmxt, has been deprecated and will be removed in a future
        release. This includes support for the [6]iWMMXt built-in
        functions.
+     * For C++, construction of the global iostream objects std::cout,
+       std::cin, etc. is now done inside the standard library, instead of
+       in every source file that includes the <iostream> header. This
+       change improves the start-up performance of C++ programs, but it
+       means that code compiled with GCC 13.1 will crash if the correct
+       version of libstdc++.so is not used at runtime. See the
+       [7]documentation about using the right libstdc++.so at runtime.
+       Future GCC releases will mitigate the problem so that the program
+       cannot be run at all with an older libstdc++.so.
 
 General Improvements
 
-     * [7]OpenMP
+     * [8]OpenMP
           + Reverse offload is now supported with AMD GCN and nvptx
             devices. Additionally, the requires handling has been improved
             and all clauses are now accepted. If a requirement cannot be
@@ -138,7 +152,7 @@ General Improvements
           + The _ALL suffix to the device-scope environment variables
             added in Technical Report (TR11) is already handled.
           + For user defined allocators requesting high bandwidth or large
-            capacity memspaces or interleaved partitioning, the [8]memkind
+            capacity memspaces or interleaved partitioning, the [9]memkind
             library is used, if available at run time.
      * AddressSanitizer defaults to detect_stack_use_after_return=1 on
        GNU/Linux targets. For compatibility, it can be disabled with env
@@ -152,11 +166,11 @@ General Improvements
      * -Ofast, -ffast-math and -funsafe-math-optimizations will no longer
        add startup code to alter the floating-point environment when
        producing a shared object with -shared.
-     * GCC can now emit its diagnostics using [9]SARIF. This is a
+     * GCC can now emit its diagnostics using [10]SARIF. This is a
        JSON-based format suited for capturing the results of static
-       analysis tools (like GCC's [10]-fanalyzer), but it can also be used
+       analysis tools (like GCC's [11]-fanalyzer), but it can also be used
        to capture other GCC warnings and errors in a machine-readable
-       format. Specifically, the [11]-fdiagnostics-format= option has been
+       format. Specifically, the [12]-fdiagnostics-format= option has been
        extended to support these new values:
           + -fdiagnostics-format=sarif-stderr
           + -fdiagnostics-format=sarif-file
@@ -165,6 +179,9 @@ General Improvements
           + -fdiagnostics-format=json-file
        where the json-prefixed variants refer to GCC's own JSON diagnostic
        format.
+     * Support for profiling and test coverage in freestanding
+       environments has been added, see also [13]Profiling and Test
+       Coverage in Freestanding Environments.
 
 New Languages and Language specific improvements
 
@@ -183,56 +200,56 @@ New Languages and Language specific improvements
   C family
 
      * New warnings:
-          + [12]-Wxor-used-as-pow warns about uses of ^, the exclusive or
+          + [14]-Wxor-used-as-pow warns about uses of ^, the exclusive or
             operator, where it appears the user meant exponentiation
-            ([13]PR90885)
+            ([15]PR90885)
      * Three new function attributes for documenting int arguments that
        are file descriptors:
-          + [14]__attribute__((fd_arg(N)))
-          + [15]__attribute__((fd_arg_read(N)))
-          + [16]__attribute__((fd_arg_write(N)))
-       These are used by [17]-fanalyzer to detect misuses of file
+          + [16]__attribute__((fd_arg(N)))
+          + [17]__attribute__((fd_arg_read(N)))
+          + [18]__attribute__((fd_arg_write(N)))
+       These are used by [19]-fanalyzer to detect misuses of file
        descriptors.
-     * A new statement attribute for C++23 [18]P1774R8 Portable
+     * A new statement attribute for C++23 [20]P1774R8 Portable
        assumptions support also in C or older C++:
-       [19]__attribute__((assume(EXPR)));
+       [21]__attribute__((assume(EXPR)));
      * GCC can now control when to treat the trailing array of a structure
        as a flexible array member for the purpose of accessing the
        elements of such an array. By default, all trailing arrays in
        aggregates are treated as flexible array members. Use the new
-       command-line option [20]-fstrict-flex-arrays to control which array
+       command-line option [22]-fstrict-flex-arrays to control which array
        members are treated as flexible arrays.
 
   C
 
      * Several C23 features have been implemented:
-          + [21]N3042, Introduce the nullptr constant
-          + [22]N2963, Enhanced Enumerations (fixed underlying types)
-          + [23]N2975, Relax requirements for variadic parameter lists
-          + [24]N3007, Type inference for object definitions (auto)
-          + [25]N3018, The constexpr specifier for object definitions
-          + [26]N3038, Introduce storage-class specifiers for compound
+          + [23]N3042, Introduce the nullptr constant
+          + [24]N2963, Enhanced Enumerations (fixed underlying types)
+          + [25]N2975, Relax requirements for variadic parameter lists
+          + [26]N3007, Type inference for object definitions (auto)
+          + [27]N3018, The constexpr specifier for object definitions
+          + [28]N3038, Introduce storage-class specifiers for compound
             literals
           + typeof (previously supported as an extension) and
             typeof_unqual
           + New keywords alignas, alignof, bool, false, static_assert,
             thread_local, true
-          + [27]N2764, The noreturn attribute
+          + [29]N2764, The noreturn attribute
           + Support for empty initializer braces
           + __STDC_VERSION_*_H__ header version macros
           + Removal of ATOMIC_VAR_INIT
           + unreachable macro in <stddef.h>
           + Removal of trigraphs
           + Removal of unprototyped functions
-          + printf and scanf format checking with [28]-Wformat for %wN and
+          + printf and scanf format checking with [30]-Wformat for %wN and
             %wfN format length modifiers
-          + [29]N2836, Identifier Syntax using Unicode Standard Annex 31
+          + [31]N2836, Identifier Syntax using Unicode Standard Annex 31
      * In addition to those C23 features, existing features adopted in C23
        have been adjusted to follow C23 requirements and are not diagnosed
        with -std=c2x -Wpedantic.
      * New warnings:
-          + [30]-Wenum-int-mismatch warns about mismatches between an
-            enumerated type and an integer type ([31]PR105131)
+          + [32]-Wenum-int-mismatch warns about mismatches between an
+            enumerated type and an integer type ([33]PR105131)
 
   C++
 
@@ -249,39 +266,39 @@ New Languages and Language specific improvements
        are supported those are evaluated in float precision.
        -fexcess-precision=fast restores previous behavior.
      * Several C++23 features have been implemented:
-          + [32]P2324R1, Labels at the end of compound statements
-            ([33]PR103539)
-          + [34]P2255R2, A type trait to detect reference binding to
-            temporary ([35]PR104477)
-          + [36]P2327R1, De-deprecating volatile compound operations
-          + [37]P2437R1, Support for #warning ([38]PR106646)
-          + [39]P2290R3, Delimited escape sequences ([40]PR106645)
-          + [41]P2071R2, Named universal character escapes ([42]PR106648)
-          + [43]P2513R3, char8_t Compatibility and Portability Fix
-            ([44]PR106656)
-          + [45]P1169R4, static operator() ([46]PR106651)
-          + [47]P2266R3, Simpler implicit move ([48]PR101165)
-          + [49]P2468R2, The Equality Operator You Are Looking For
-            ([50]PR106644)
-          + [51]P2362R3, Remove non-encodable
+          + [34]P2324R1, Labels at the end of compound statements
+            ([35]PR103539)
+          + [36]P2255R2, A type trait to detect reference binding to
+            temporary ([37]PR104477)
+          + [38]P2327R1, De-deprecating volatile compound operations
+          + [39]P2437R1, Support for #warning ([40]PR106646)
+          + [41]P2290R3, Delimited escape sequences ([42]PR106645)
+          + [43]P2071R2, Named universal character escapes ([44]PR106648)
+          + [45]P2513R3, char8_t Compatibility and Portability Fix
+            ([46]PR106656)
+          + [47]P1169R4, static operator() ([48]PR106651)
+          + [49]P2266R3, Simpler implicit move ([50]PR101165)
+          + [51]P2468R2, The Equality Operator You Are Looking For
+            ([52]PR106644)
+          + [53]P2362R3, Remove non-encodable
             wide character literals and multicharacter wide character lite
-            rals ([52]PR106647)
-          + [53]P2448R2, Relaxing some constexpr restrictions
-            ([54]PR106649)
-          + [55]P1467R9, Extended floating-point types and standard names
-            ([56]PR106652)
-          + [57]P1774R8, Portable assumptions ([58]PR106654)
-          + [59]P2295R6, Support for
-            UTF-8 as a portable source file encoding ([60]PR106655)
-          + [61]P2589R1, static operator[] ([62]PR107684)
+            rals ([54]PR106647)
+          + [55]P2448R2, Relaxing some constexpr restrictions
+            ([56]PR106649)
+          + [57]P1467R9, Extended floating-point types and standard names
+            ([58]PR106652)
+          + [59]P1774R8, Portable assumptions ([60]PR106654)
+          + [61]P2295R6, Support for
+            UTF-8 as a portable source file encoding ([62]PR106655)
+          + [63]P2589R1, static operator[] ([64]PR107684)
      * New warnings:
-          + [63]-Wself-move warns when a value is moved to itself with
-            std::move ([64]PR81159)
-          + [65]-Wdangling-reference warns when a reference is bound to a
-            temporary whose lifetime has ended ([66]PR106393)
-     * The [67]-Wpessimizing-move and [68]-Wredundant-move warnings have
+          + [65]-Wself-move warns when a value is moved to itself with
+            std::move ([66]PR81159)
+          + [67]-Wdangling-reference warns when a reference is bound to a
+            temporary whose lifetime has ended ([68]PR106393)
+     * The [69]-Wpessimizing-move and [70]-Wredundant-move warnings have
        been extended to warn in more contexts.
-     * The [69]-nostdlib++ option has been added, to enable linking with
+     * The [71]-nostdlib++ option has been added, to enable linking with
        g++ without implicitly linking in the C++ standard library.
 
     Runtime Library (libstdc++)
@@ -295,7 +312,15 @@ New Languages and Language specific improvements
             views::zip_transform, views::adjacent,
             views::adjacent_transform views::pairwise, views::slide,
             views::chunk, views::chunk_by, views::repeat, views::chunk_by,
-            views::cartesian_product, views::as_rvalue.
+            views::cartesian_product, views::as_rvalue, views::enumerate,
+            views::as_const.
+          + Additions to the <algorithm> header: ranges::contains,
+            ranges::contains_subrange, ranges::iota, ranges::find_last,
+            ranges::find_last_if, ranges::find_last_if_not,
+            ranges::fold_left, ranges::fold_left_first,
+            ranges::fold_right, ranges::fold_right_last,
+            ranges::fold_left_with_iter,
+            ranges::fold_left_first_with_iter.
           + Monadic operations for std::expected.
           + Constexpr std::bitset, std::to_chars and std::from_chars.
           + Library support for extended floating-point types.
@@ -303,6 +328,17 @@ New Languages and Language specific improvements
        Fundamentals Technical Specification.
      * Support for the <experimental/synchronized_value> header from v2 of
        the Concurrency Technical Specification.
+     * Support for many previously unavailable features in freestanding
+       mode, thanks to Arsen Arsenović. For example, std::tuple is now
+       available for freestanding compilation. The freestanding subset
+       contains all the components made freestanding by [72]P1642, but
+       libstdc++ adds more components to the freestanding subset, such as
+       std::array and std::string_view. Additionally, libstdc++ now
+       respects the -ffreestanding compiler option and so it is not
+       necessary to build a separate freestanding installation of
+       libstdc++. Compiling with -ffreestanding will restrict the
+       available features to the freestanding subset, even if libstdc++
+       was built as a full, hosted implementation.
 
   Fortran
 
@@ -321,7 +357,7 @@ New Languages and Language specific improvements
        support for the ISO/IEC 10514-1, PIM2, PIM3, PIM4 dialects together
        with a complete set of ISO/IEC 10514-1 and PIM libraries.
      * The <* noreturn *> attribute is supported with the -Wreturn-type
-       [70]option.
+       [73]option.
 
 New Targets and Target Specific Improvements
 
@@ -352,10 +388,10 @@ New Targets and Target Specific Improvements
 
   AMD Radeon (GCN)
 
-     * Support for the Instinct MI200 series devices ([71] gfx90a) has
+     * Support for the Instinct MI200 series devices ([74] gfx90a) has
        been added.
      * SIMD vectorization support has been improved; this and
-       stack-handling changes [72]require newlib 4.3.0 (or newer).
+       stack-handling changes [75]require newlib 4.3.0 (or newer).
 
   arm
 
@@ -410,6 +446,9 @@ New Targets and Target Specific Improvements
        -march=emeraldrapids. Emerald Rapids is based on Sapphire Rapids.
      * GCC now supports the Intel CPU named Granite Rapids through
        -march=graniterapids. The switch enables the AMX-FP16, PREFETCHI
+       ISA extensions.
+     * GCC now supports the Intel CPU named Granite Rapids D through
+       -march=graniterapids-d. The switch enables the AMX-FP16, PREFETCHI
        and AMX-COMPLEX ISA extensions.
      * GCC now supports AMD CPUs based on the znver4 core via
        -march=znver4. The switch makes GCC consider using 512 bit vectors
@@ -425,7 +464,7 @@ New Targets and Target Specific Improvements
             time.
           + The new command-line option -mdirect-extern-access can be used
             to prevent accessing external symbols through GOT.
-          + The new variable attribute [73]model has been added.
+          + The new variable attribute [76]model has been added.
      * Built-in functions
           + The rint and copysign mathematical builtins (and their float
             variants) are now implemented as inline LoongArch intrinsics.
@@ -443,16 +482,16 @@ New Targets and Target Specific Improvements
 
   NVPTX
 
-     * The default value for the [74]-march option can be now changed when
-       [75]building GCC using the [76]--with-arch= configure option. GCC's
+     * The default value for the [77]-march option can be now changed when
+       [78]building GCC using the [79]--with-arch= configure option. GCC's
        target libraries are then build both with sm_30 and the specified
        target architecture. If not specified, GCC defaults to sm_30.
 
   RISC-V
 
-     * Support for vector intrinsics as specified in [77]version 0.11 of
+     * Support for vector intrinsics as specified in [80]version 0.11 of
        the RISC-V vector intrinsic specification, thanks Ju-Zhe Zhong from
-       [78]RiVAI for contributing most of implementation.
+       [81]RiVAI for contributing most of implementation.
      * Support for the following standard extensions has been added:
           + Zawrs
           + Zbkb
@@ -498,72 +537,79 @@ Operating Systems
 Improvements to Static Analyzer
 
      * The analyzer has gained 20 new warnings:
-          + [79]-Wanalyzer-allocation-size
-          + [80]-Wanalyzer-deref-before-check
-          + [81]-Wanalyzer-exposure-through-uninit-copy
+          + [82]-Wanalyzer-allocation-size
+          + [83]-Wanalyzer-deref-before-check
+          + [84]-Wanalyzer-exposure-through-uninit-copy
           + Seven new warnings relating to misuse of file descriptors:
-               o [82]-Wanalyzer-fd-access-mode-mismatch
-               o [83]-Wanalyzer-fd-double-close
-               o [84]-Wanalyzer-fd-leak
-               o [85]-Wanalyzer-fd-phase-mismatch (e.g. calling accept on
+               o [85]-Wanalyzer-fd-access-mode-mismatch
+               o [86]-Wanalyzer-fd-double-close
+               o [87]-Wanalyzer-fd-leak
+               o [88]-Wanalyzer-fd-phase-mismatch (e.g. calling accept on
                  a socket before calling listen on it)
-               o [86]-Wanalyzer-fd-type-mismatch (e.g. using a stream
+               o [89]-Wanalyzer-fd-type-mismatch (e.g. using a stream
                  socket operation on a datagram socket)
-               o [87]-Wanalyzer-fd-use-after-close
-               o [88]-Wanalyzer-fd-use-without-check
+               o [90]-Wanalyzer-fd-use-after-close
+               o [91]-Wanalyzer-fd-use-without-check
             along with special-casing handling of the behavior of open,
             close, creat, dup, dup2, dup3, pipe, pipe2, read, and write.
-          + [89]-Wanalyzer-imprecise-fp-arithmetic
-          + [90]-Wanalyzer-infinite-recursion
-          + [91]-Wanalyzer-jump-through-null
-          + [92]-Wanalyzer-out-of-bounds
-          + [93]-Wanalyzer-putenv-of-auto-var
-          + [94]-Wanalyzer-tainted-assertion
+          + [92]-Wanalyzer-imprecise-fp-arithmetic
+          + [93]-Wanalyzer-infinite-recursion
+          + [94]-Wanalyzer-jump-through-null
+          + [95]-Wanalyzer-out-of-bounds
+          + [96]-Wanalyzer-putenv-of-auto-var
+          + [97]-Wanalyzer-tainted-assertion
           + Four new warnings for misuses of <stdarg.h>:
-               o [95]-Wanalyzer-va-list-leak for complaining about missing
+               o [98]-Wanalyzer-va-list-leak for complaining about missing
                  va_end after a va_start or va_copy
-               o [96]-Wanalyzer-va-list-use-after-va-end for complaining
+               o [99]-Wanalyzer-va-list-use-after-va-end for complaining
                  about va_arg or va_copy used on a va_list that's had
                  va_end called on it
-               o [97]-Wanalyzer-va-arg-type-mismatch for type-checking of
+               o [100]-Wanalyzer-va-arg-type-mismatch for type-checking of
                  va_arg usage in interprocedural execution paths against
                  the types of the parameters that were actually passed to
                  the variadic call
-               o [98]-Wanalyzer-va-list-exhausted for complaining in
+               o [101]-Wanalyzer-va-list-exhausted for complaining in
                  interprocedural execution paths if va_arg is used too
                  many times on a va_list
        along with numerous other improvements.
 
 Improvements for plugin authors
 
-     * GCC diagnostics can now be [99]associated with rules such as from
+     * GCC diagnostics can now be [102]associated with rules such as from
        coding standards documents, or specifications. Such rules have a
        code name and can have a URL, which GCC can print in text form or
-       capture in its [100]SARIF output when emitting diagnostics.
+       capture in its [103]SARIF output when emitting diagnostics.
 
 Other significant improvements
 
 GCC 13.1
 
-   This is the [101]list of problem reports (PRs) from GCC's bug tracking
+   This is the [104]list of problem reports (PRs) from GCC's bug tracking
    system that are known to be fixed in the 13.1 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
+GCC 13.2
+
+   This is the [105]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 13.2 release. This list might
    not be complete (that is, it is possible that some PRs that have been
    fixed are not listed here).
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [102]GCC manuals. If that fails, the
-    [103]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [106]GCC manuals. If that fails, the
+    [107]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [104]gcc@gcc.gnu.org. All of [105]our lists have public
+    list at [108]gcc@gcc.gnu.org. All of [109]our lists have public
     archives.
 
-   Copyright (C) [106]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [110]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [107]maintained by the GCC team. Last modified
-   2023-04-26.
+   These pages are [111]maintained by the GCC team. Last modified
+   2023-07-27.
 
 References
 
@@ -573,125 +619,132 @@ References
    4. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Warray-bounds
    5. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html
    6. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/ARM-iWMMXt-Built-in-Functions.html
-   7. https://gcc.gnu.org/projects/gomp/
-   8. http://memkind.github.io/memkind/
-   9. https://sarifweb.azurewebsites.net/
-  10. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html
-  11. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Diagnostic-Message-Formatting-Options.html#index-fdiagnostics-format
-  12. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wxor-used-as-pow
-  13. https://gcc.gnu.org/PR90885
-  14. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Common-Function-Attributes.html#index-fd_005farg-function-attribute
-  15. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Common-Function-Attributes.html#index-fd_005farg_005fread-function-attribute
-  16. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Common-Function-Attributes.html#index-fd_005farg_005fwrite-function-attribute
-  17. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html
-  18. https://wg21.link/p1774r8
-  19. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Statement-Attributes.html#index-assume-statement-attribute
-  20. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wstrict-flex-arrays
-  21. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3042.htm
-  22. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2963.htm
-  23. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2975.pdf
-  24. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3007.htm
-  25. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3018.htm
-  26. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3038.htm
-  27. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2764.pdf
-  28. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wformat
-  29. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2836.pdf
-  30. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wenum-int-mismatch
-  31. https://gcc.gnu.org/PR105131
-  32. https://wg21.link/p2324
-  33. https://gcc.gnu.org/PR103539
-  34. https://wg21.link/p2255
-  35. https://gcc.gnu.org/PR104477
-  36. https://wg21.link/p2327
-  37. https://wg21.link/p2437
-  38. https://gcc.gnu.org/PR106646
-  39. https://wg21.link/p2290
-  40. https://gcc.gnu.org/PR106645
-  41. https://wg21.link/p2071
-  42. https://gcc.gnu.org/PR106648
-  43. https://wg21.link/p2513
-  44. https://gcc.gnu.org/PR106656
-  45. https://wg21.link/p1169r4
-  46. https://gcc.gnu.org/PR106651
-  47. https://wg21.link/p2266r3
-  48. https://gcc.gnu.org/PR101165
-  49. https://wg21.link/p2468r2
-  50. https://gcc.gnu.org/PR106644
-  51. https://wg21.link/p2362r3
-  52. https://gcc.gnu.org/PR106647
-  53. https://wg21.link/p2448r2
-  54. https://gcc.gnu.org/PR106649
-  55. https://wg21.link/p1467r9
-  56. https://gcc.gnu.org/PR106652
-  57. https://wg21.link/p1774r8
-  58. https://gcc.gnu.org/PR106654
-  59. https://wg21.link/p2295r6
-  60. https://gcc.gnu.org/PR106655
-  61. https://wg21.link/p2589r1
-  62. https://gcc.gnu.org/PR107684
-  63. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wself-move
-  64. https://gcc.gnu.org/PR81159
-  65. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/C_002b_002b-Dialect-Options.html#index-Wdangling-reference
-  66. https://gcc.gnu.org/PR106393
-  67. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/C_002b_002b-Dialect-Options.html#index-Wpessimizing-move
-  68. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/C_002b_002b-Dialect-Options.html#index-Wredundant-move
-  69. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Link_Options.html#index-nostdlib_002b_002b
-  70. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gm2/Compiler-options.html
-  71. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/AMD-GCN-Options.html
-  72. https://gcc.gnu.org/install/specific.html#amdgcn-x-amdhsa
-  73. https://gcc.gnu.org/onlinedocs/gcc/LoongArch-Variable-Attributes.html#LoongArch-Variable-Attributes
-  74. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Nvidia-PTX-Options.html
-  75. https://gcc.gnu.org/install/
-  76. https://gcc.gnu.org/install/specific.html#nvptx-x-none
-  77. https://github.com/riscv-non-isa/rvv-intrinsic-doc/tree/v0.11.x
-  78. https://rivai-ic.com.cn/
-  79. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-allocation-size
-  80. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-deref-before-check
-  81. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-exposure-through-uninit-copy
-  82. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-access-mode-mismatch
-  83. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-double-close
-  84. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-leak
-  85. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-phase-mismatch
-  86. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-type-mismatch
-  87. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-use-after-close
-  88. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-use-without-check
-  89. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-imprecise-fp-arithmetic
-  90. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-infinite-recursion
-  91. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-jump-through-null
-  92. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-out-of-bounds
-  93. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-putenv-of-auto-var
-  94. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-tainted-assertion
-  95. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-list-leak
-  96. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-list-use-after-va-end
-  97. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-arg-type-mismatch
-  98. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-list-exhausted
-  99. https://gcc.gnu.org/git/?p=gcc.git;a=commitdiff;h=0b14f590e3e9d95b8211b77d992589d5ab4c25f0
- 100. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Diagnostic-Message-Formatting-Options.html#index-fdiagnostics-format
- 101. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=13.0
- 102. https://gcc.gnu.org/onlinedocs/
- 103. mailto:gcc-help@gcc.gnu.org
- 104. mailto:gcc@gcc.gnu.org
- 105. https://gcc.gnu.org/lists.html
- 106. https://www.fsf.org/
- 107. https://gcc.gnu.org/about.html
+   7. https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dynamic_or_shared.html#manual.intro.using.linkage.dynamic
+   8. https://gcc.gnu.org/projects/gomp/
+   9. http://memkind.github.io/memkind/
+  10. https://sarifweb.azurewebsites.net/
+  11. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html
+  12. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Diagnostic-Message-Formatting-Options.html#index-fdiagnostics-format
+  13. https://gcc.gnu.org/onlinedocs/gcc/Freestanding-Environments.html
+  14. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wxor-used-as-pow
+  15. https://gcc.gnu.org/PR90885
+  16. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Common-Function-Attributes.html#index-fd_005farg-function-attribute
+  17. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Common-Function-Attributes.html#index-fd_005farg_005fread-function-attribute
+  18. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Common-Function-Attributes.html#index-fd_005farg_005fwrite-function-attribute
+  19. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html
+  20. https://wg21.link/p1774r8
+  21. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Statement-Attributes.html#index-assume-statement-attribute
+  22. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wstrict-flex-arrays
+  23. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3042.htm
+  24. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2963.htm
+  25. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2975.pdf
+  26. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3007.htm
+  27. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3018.htm
+  28. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n3038.htm
+  29. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2764.pdf
+  30. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wformat
+  31. https://www.open-std.org/jtc1/sc22/wg14/www/docs/n2836.pdf
+  32. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wenum-int-mismatch
+  33. https://gcc.gnu.org/PR105131
+  34. https://wg21.link/p2324
+  35. https://gcc.gnu.org/PR103539
+  36. https://wg21.link/p2255
+  37. https://gcc.gnu.org/PR104477
+  38. https://wg21.link/p2327
+  39. https://wg21.link/p2437
+  40. https://gcc.gnu.org/PR106646
+  41. https://wg21.link/p2290
+  42. https://gcc.gnu.org/PR106645
+  43. https://wg21.link/p2071
+  44. https://gcc.gnu.org/PR106648
+  45. https://wg21.link/p2513
+  46. https://gcc.gnu.org/PR106656
+  47. https://wg21.link/p1169r4
+  48. https://gcc.gnu.org/PR106651
+  49. https://wg21.link/p2266r3
+  50. https://gcc.gnu.org/PR101165
+  51. https://wg21.link/p2468r2
+  52. https://gcc.gnu.org/PR106644
+  53. https://wg21.link/p2362r3
+  54. https://gcc.gnu.org/PR106647
+  55. https://wg21.link/p2448r2
+  56. https://gcc.gnu.org/PR106649
+  57. https://wg21.link/p1467r9
+  58. https://gcc.gnu.org/PR106652
+  59. https://wg21.link/p1774r8
+  60. https://gcc.gnu.org/PR106654
+  61. https://wg21.link/p2295r6
+  62. https://gcc.gnu.org/PR106655
+  63. https://wg21.link/p2589r1
+  64. https://gcc.gnu.org/PR107684
+  65. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Warning-Options.html#index-Wself-move
+  66. https://gcc.gnu.org/PR81159
+  67. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/C_002b_002b-Dialect-Options.html#index-Wdangling-reference
+  68. https://gcc.gnu.org/PR106393
+  69. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/C_002b_002b-Dialect-Options.html#index-Wpessimizing-move
+  70. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/C_002b_002b-Dialect-Options.html#index-Wredundant-move
+  71. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Link_Options.html#index-nostdlib_002b_002b
+  72. https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p1642r11.html
+  73. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gm2/Compiler-options.html
+  74. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/AMD-GCN-Options.html
+  75. https://gcc.gnu.org/install/specific.html#amdgcn-x-amdhsa
+  76. https://gcc.gnu.org/onlinedocs/gcc/LoongArch-Variable-Attributes.html#LoongArch-Variable-Attributes
+  77. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Nvidia-PTX-Options.html
+  78. https://gcc.gnu.org/install/
+  79. https://gcc.gnu.org/install/specific.html#nvptx-x-none
+  80. https://github.com/riscv-non-isa/rvv-intrinsic-doc/tree/v0.11.x
+  81. https://rivai-ic.com.cn/
+  82. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-allocation-size
+  83. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-deref-before-check
+  84. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-exposure-through-uninit-copy
+  85. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-access-mode-mismatch
+  86. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-double-close
+  87. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-leak
+  88. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-phase-mismatch
+  89. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-type-mismatch
+  90. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-use-after-close
+  91. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-fd-use-without-check
+  92. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-imprecise-fp-arithmetic
+  93. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-infinite-recursion
+  94. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-jump-through-null
+  95. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-out-of-bounds
+  96. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-putenv-of-auto-var
+  97. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-tainted-assertion
+  98. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-list-leak
+  99. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-list-use-after-va-end
+ 100. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-arg-type-mismatch
+ 101. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Static-Analyzer-Options.html#index-Wanalyzer-va-list-exhausted
+ 102. https://gcc.gnu.org/git/?p=gcc.git;a=commitdiff;h=0b14f590e3e9d95b8211b77d992589d5ab4c25f0
+ 103. https://gcc.gnu.org/onlinedocs/gcc-13.1.0/gcc/Diagnostic-Message-Formatting-Options.html#index-fdiagnostics-format
+ 104. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=13.0
+ 105. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=13.2
+ 106. https://gcc.gnu.org/onlinedocs/
+ 107. mailto:gcc-help@gcc.gnu.org
+ 108. mailto:gcc@gcc.gnu.org
+ 109. https://gcc.gnu.org/lists.html
+ 110. https://www.fsf.org/
+ 111. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-12/index.html
                              GCC 12 Release Series
 
-   Aug 19, 2022
+   May 8, 2023
 
-   The GCC developers are pleased to announce the release of GCC 12.2.
+   The GCC developers are pleased to announce the release of GCC 12.3.
 
    This release is a bug-fix release, containing fixes for regressions in
-   GCC 12.1 relative to previous releases of GCC.
+   GCC 12.2 relative to previous releases of GCC.
 
 Release History
 
+   GCC 12.3
+          May 8, 2023 ([1]changes, [2]documentation)
+
    GCC 12.2
-          Aug 19, 2022 ([1]changes, [2]documentation)
+          Aug 19, 2022 ([3]changes, [4]documentation)
 
    GCC 12.1
-          May 6, 2022 ([3]changes, [4]documentation)
+          May 6, 2022 ([5]changes, [6]documentation)
 
 References and Acknowledgements
 
@@ -699,53 +752,55 @@ References and Acknowledgements
    supports several other languages aside from C, it now stands for the
    GNU Compiler Collection.
 
-   A list of [5]successful builds is updated as new information becomes
+   A list of [7]successful builds is updated as new information becomes
    available.
 
    The GCC developers would like to thank the numerous people that have
    contributed new features, improvements, bug fixes, and other changes as
-   well as test results to GCC. This [6]amazing group of volunteers is
+   well as test results to GCC. This [8]amazing group of volunteers is
    what makes GCC successful.
 
-   For additional information about GCC please refer to the [7]GCC project
-   web site or contact the [8]GCC development mailing list.
+   For additional information about GCC please refer to the [9]GCC project
+   web site or contact the [10]GCC development mailing list.
 
-   To obtain GCC please use [9]our mirror sites or [10]our version control
-   system.
+   To obtain GCC please use [11]our mirror sites or [12]our version
+   control system.
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [11]GCC manuals. If that fails, the
-    [12]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [13]GCC manuals. If that fails, the
+    [14]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [13]gcc@gcc.gnu.org. All of [14]our lists have public
+    list at [15]gcc@gcc.gnu.org. All of [16]our lists have public
     archives.
 
-   Copyright (C) [15]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [17]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [16]maintained by the GCC team. Last modified
-   2022-10-26.
+   These pages are [18]maintained by the GCC team. Last modified
+   2023-05-08.
 
 References
 
    1. http://gcc.gnu.org/gcc-12/changes.html
-   2. http://gcc.gnu.org/onlinedocs/12.2.0/
+   2. http://gcc.gnu.org/onlinedocs/12.3.0/
    3. http://gcc.gnu.org/gcc-12/changes.html
-   4. http://gcc.gnu.org/onlinedocs/12.1.0/
-   5. http://gcc.gnu.org/gcc-12/buildstat.html
-   6. http://gcc.gnu.org/onlinedocs/gcc-12.1.0/gcc/Contributors.html
-   7. http://gcc.gnu.org/index.html
-   8. mailto:gcc@gcc.gnu.org
-   9. http://gcc.gnu.org/mirrors.html
-  10. http://gcc.gnu.org/git.html
-  11. https://gcc.gnu.org/onlinedocs/
-  12. mailto:gcc-help@gcc.gnu.org
-  13. mailto:gcc@gcc.gnu.org
-  14. https://gcc.gnu.org/lists.html
-  15. https://www.fsf.org/
-  16. https://gcc.gnu.org/about.html
+   4. http://gcc.gnu.org/onlinedocs/12.2.0/
+   5. http://gcc.gnu.org/gcc-12/changes.html
+   6. http://gcc.gnu.org/onlinedocs/12.1.0/
+   7. http://gcc.gnu.org/gcc-12/buildstat.html
+   8. http://gcc.gnu.org/onlinedocs/gcc-12.1.0/gcc/Contributors.html
+   9. http://gcc.gnu.org/index.html
+  10. mailto:gcc@gcc.gnu.org
+  11. http://gcc.gnu.org/mirrors.html
+  12. http://gcc.gnu.org/git.html
+  13. https://gcc.gnu.org/onlinedocs/
+  14. mailto:gcc-help@gcc.gnu.org
+  15. mailto:gcc@gcc.gnu.org
+  16. https://gcc.gnu.org/lists.html
+  17. https://www.fsf.org/
+  18. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-12/changes.html
                              GCC 12 Release Series
@@ -1482,9 +1537,6 @@ GCC 12.2
 
 GCC 12.3
 
-   Note: GCC 12.3 has not been released yet, so this section is a
-   work-in-progress.
-
   Target Specific Changes
 
   x86-64
@@ -1498,20 +1550,30 @@ GCC 12.3
    not be complete (that is, it is possible that some PRs that have been
    fixed are not listed here).
 
+GCC 12.4
+
+   Note: GCC 12.4 has not been released yet, so this section is a
+   work-in-progress.
+
+   This is the [142]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 12.4 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
 
     For questions related to the use of GCC, please consult these web
-    pages and the [142]GCC manuals. If that fails, the
-    [143]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [143]GCC manuals. If that fails, the
+    [144]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [144]gcc@gcc.gnu.org. All of [145]our lists have public
+    list at [145]gcc@gcc.gnu.org. All of [146]our lists have public
     archives.
 
-   Copyright (C) [146]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [147]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [147]maintained by the GCC team. Last modified
-   2023-03-24.
+   These pages are [148]maintained by the GCC team. Last modified
+   2023-05-08.
 
 References
 
@@ -1656,33 +1718,37 @@ References
  139. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=12.0
  140. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=12.2
  141. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=12.3
- 142. https://gcc.gnu.org/onlinedocs/
- 143. mailto:gcc-help@gcc.gnu.org
- 144. mailto:gcc@gcc.gnu.org
- 145. https://gcc.gnu.org/lists.html
- 146. https://www.fsf.org/
- 147. https://gcc.gnu.org/about.html
+ 142. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=12.4
+ 143. https://gcc.gnu.org/onlinedocs/
+ 144. mailto:gcc-help@gcc.gnu.org
+ 145. mailto:gcc@gcc.gnu.org
+ 146. https://gcc.gnu.org/lists.html
+ 147. https://www.fsf.org/
+ 148. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-11/index.html
                              GCC 11 Release Series
 
-   April 21, 2022
+   May 29, 2023
 
-   The GCC developers are pleased to announce the release of GCC 11.3.
+   The GCC developers are pleased to announce the release of GCC 11.4.
 
    This release is a bug-fix release, containing fixes for regressions in
-   GCC 11.2 relative to previous releases of GCC.
+   GCC 11.3 relative to previous releases of GCC.
 
 Release History
 
+   GCC 11.4
+          May 29, 2023 ([1]changes, [2]documentation)
+
    GCC 11.3
-          April 21, 2022 ([1]changes, [2]documentation)
+          April 21, 2022 ([3]changes, [4]documentation)
 
    GCC 11.2
-          July 28, 2021 ([3]changes, [4]documentation)
+          July 28, 2021 ([5]changes, [6]documentation)
 
    GCC 11.1
-          April 27, 2021 ([5]changes, [6]documentation)
+          April 27, 2021 ([7]changes, [8]documentation)
 
 References and Acknowledgements
 
@@ -1690,55 +1756,57 @@ References and Acknowledgements
    supports several other languages aside from C, it now stands for the
    GNU Compiler Collection.
 
-   A list of [7]successful builds is updated as new information becomes
+   A list of [9]successful builds is updated as new information becomes
    available.
 
    The GCC developers would like to thank the numerous people that have
    contributed new features, improvements, bug fixes, and other changes as
-   well as test results to GCC. This [8]amazing group of volunteers is
+   well as test results to GCC. This [10]amazing group of volunteers is
    what makes GCC successful.
 
-   For additional information about GCC please refer to the [9]GCC project
-   web site or contact the [10]GCC development mailing list.
+   For additional information about GCC please refer to the [11]GCC
+   project web site or contact the [12]GCC development mailing list.
 
-   To obtain GCC please use [11]our mirror sites or [12]our version
+   To obtain GCC please use [13]our mirror sites or [14]our version
    control system.
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [13]GCC manuals. If that fails, the
-    [14]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [15]GCC manuals. If that fails, the
+    [16]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [15]gcc@gcc.gnu.org. All of [16]our lists have public
+    list at [17]gcc@gcc.gnu.org. All of [18]our lists have public
     archives.
 
-   Copyright (C) [17]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [19]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [18]maintained by the GCC team. Last modified
-   2022-10-26.
+   These pages are [20]maintained by the GCC team. Last modified
+   2023-05-29.
 
 References
 
    1. http://gcc.gnu.org/gcc-11/changes.html
-   2. http://gcc.gnu.org/onlinedocs/11.3.0/
+   2. http://gcc.gnu.org/onlinedocs/11.4.0/
    3. http://gcc.gnu.org/gcc-11/changes.html
-   4. http://gcc.gnu.org/onlinedocs/11.2.0/
+   4. http://gcc.gnu.org/onlinedocs/11.3.0/
    5. http://gcc.gnu.org/gcc-11/changes.html
-   6. http://gcc.gnu.org/onlinedocs/11.1.0/
-   7. http://gcc.gnu.org/gcc-11/buildstat.html
-   8. http://gcc.gnu.org/onlinedocs/gcc-11.1.0/gcc/Contributors.html
-   9. http://gcc.gnu.org/index.html
-  10. mailto:gcc@gcc.gnu.org
-  11. http://gcc.gnu.org/mirrors.html
-  12. http://gcc.gnu.org/git.html
-  13. https://gcc.gnu.org/onlinedocs/
-  14. mailto:gcc-help@gcc.gnu.org
-  15. mailto:gcc@gcc.gnu.org
-  16. https://gcc.gnu.org/lists.html
-  17. https://www.fsf.org/
-  18. https://gcc.gnu.org/about.html
+   6. http://gcc.gnu.org/onlinedocs/11.2.0/
+   7. http://gcc.gnu.org/gcc-11/changes.html
+   8. http://gcc.gnu.org/onlinedocs/11.1.0/
+   9. http://gcc.gnu.org/gcc-11/buildstat.html
+  10. http://gcc.gnu.org/onlinedocs/gcc-11.1.0/gcc/Contributors.html
+  11. http://gcc.gnu.org/index.html
+  12. mailto:gcc@gcc.gnu.org
+  13. http://gcc.gnu.org/mirrors.html
+  14. http://gcc.gnu.org/git.html
+  15. https://gcc.gnu.org/onlinedocs/
+  16. mailto:gcc-help@gcc.gnu.org
+  17. mailto:gcc@gcc.gnu.org
+  18. https://gcc.gnu.org/lists.html
+  19. https://www.fsf.org/
+  20. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-11/changes.html
                              GCC 11 Release Series
@@ -2439,6 +2507,13 @@ GCC 11.3
    not be complete (that is, it is possible that some PRs that have been
    fixed are not listed here).
 
+GCC 11.4
+
+   This is the [70]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 11.4 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
   Target Specific Changes
 
     x86-64
@@ -2455,18 +2530,18 @@ GCC 11.3
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [70]GCC manuals. If that fails, the
-    [71]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [71]GCC manuals. If that fails, the
+    [72]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [72]gcc@gcc.gnu.org. All of [73]our lists have public
+    list at [73]gcc@gcc.gnu.org. All of [74]our lists have public
     archives.
 
-   Copyright (C) [74]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [75]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [75]maintained by the GCC team. Last modified
-   2023-02-02.
+   These pages are [76]maintained by the GCC team. Last modified
+   2023-05-29.
 
 References
 
@@ -2539,37 +2614,43 @@ References
   67. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=11.0
   68. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=11.2
   69. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=11.3
-  70. https://gcc.gnu.org/onlinedocs/
-  71. mailto:gcc-help@gcc.gnu.org
-  72. mailto:gcc@gcc.gnu.org
-  73. https://gcc.gnu.org/lists.html
-  74. https://www.fsf.org/
-  75. https://gcc.gnu.org/about.html
+  70. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=11.4
+  71. https://gcc.gnu.org/onlinedocs/
+  72. mailto:gcc-help@gcc.gnu.org
+  73. mailto:gcc@gcc.gnu.org
+  74. https://gcc.gnu.org/lists.html
+  75. https://www.fsf.org/
+  76. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-10/index.html
                              GCC 10 Release Series
 
-   June 28, 2022
+   (This release series is no longer supported.)
+
+   July, 7, 2023
 
    The [1]GNU project and the GCC developers are pleased to announce the
-   release of GCC 10.4.
+   release of GCC 10.5.
 
    This release is a bug-fix release, containing fixes for regressions in
-   GCC 10.3 relative to previous releases of GCC.
+   GCC 10.4 relative to previous releases of GCC.
 
 Release History
 
+   GCC 10.5
+          July 7, 2023 ([2]changes, [3]documentation)
+
    GCC 10.4
-          June 28, 2022 ([2]changes, [3]documentation)
+          June 28, 2022 ([4]changes, [5]documentation)
 
    GCC 10.3
-          April 8, 2021 ([4]changes, [5]documentation)
+          April 8, 2021 ([6]changes, [7]documentation)
 
    GCC 10.2
-          July 23, 2020 ([6]changes, [7]documentation)
+          July 23, 2020 ([8]changes, [9]documentation)
 
    GCC 10.1
-          May 7, 2020 ([8]changes, [9]documentation)
+          May 7, 2020 ([10]changes, [11]documentation)
 
 References and Acknowledgements
 
@@ -2577,58 +2658,60 @@ References and Acknowledgements
    supports several other languages aside from C, it now stands for the
    GNU Compiler Collection.
 
-   A list of [10]successful builds is updated as new information becomes
+   A list of [12]successful builds is updated as new information becomes
    available.
 
    The GCC developers would like to thank the numerous people that have
    contributed new features, improvements, bug fixes, and other changes as
-   well as test results to GCC. This [11]amazing group of volunteers is
+   well as test results to GCC. This [13]amazing group of volunteers is
    what makes GCC successful.
 
-   For additional information about GCC please refer to the [12]GCC
-   project web site or contact the [13]GCC development mailing list.
+   For additional information about GCC please refer to the [14]GCC
+   project web site or contact the [15]GCC development mailing list.
 
-   To obtain GCC please use [14]our mirror sites or [15]our version
+   To obtain GCC please use [16]our mirror sites or [17]our version
    control system.
 
 
     For questions related to the use of GCC, please consult these web
-    pages and the [16]GCC manuals. If that fails, the
-    [17]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [18]GCC manuals. If that fails, the
+    [19]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [18]gcc@gcc.gnu.org. All of [19]our lists have public
+    list at [20]gcc@gcc.gnu.org. All of [21]our lists have public
     archives.
 
-   Copyright (C) [20]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [22]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [21]maintained by the GCC team. Last modified
-   2022-10-26.
+   These pages are [23]maintained by the GCC team. Last modified
+   2023-07-07.
 
 References
 
    1. http://www.gnu.org/
    2. http://gcc.gnu.org/gcc-10/changes.html
-   3. http://gcc.gnu.org/onlinedocs/10.4.0/
+   3. http://gcc.gnu.org/onlinedocs/10.5.0/
    4. http://gcc.gnu.org/gcc-10/changes.html
-   5. http://gcc.gnu.org/onlinedocs/10.3.0/
+   5. http://gcc.gnu.org/onlinedocs/10.4.0/
    6. http://gcc.gnu.org/gcc-10/changes.html
-   7. http://gcc.gnu.org/onlinedocs/10.2.0/
+   7. http://gcc.gnu.org/onlinedocs/10.3.0/
    8. http://gcc.gnu.org/gcc-10/changes.html
-   9. http://gcc.gnu.org/onlinedocs/10.1.0/
-  10. http://gcc.gnu.org/gcc-10/buildstat.html
-  11. http://gcc.gnu.org/onlinedocs/gcc-10.1.0/gcc/Contributors.html
-  12. http://gcc.gnu.org/index.html
-  13. mailto:gcc@gcc.gnu.org
-  14. http://gcc.gnu.org/mirrors.html
-  15. http://gcc.gnu.org/git.html
-  16. https://gcc.gnu.org/onlinedocs/
-  17. mailto:gcc-help@gcc.gnu.org
-  18. mailto:gcc@gcc.gnu.org
-  19. https://gcc.gnu.org/lists.html
-  20. https://www.fsf.org/
-  21. https://gcc.gnu.org/about.html
+   9. http://gcc.gnu.org/onlinedocs/10.2.0/
+  10. http://gcc.gnu.org/gcc-10/changes.html
+  11. http://gcc.gnu.org/onlinedocs/10.1.0/
+  12. http://gcc.gnu.org/gcc-10/buildstat.html
+  13. http://gcc.gnu.org/onlinedocs/gcc-10.1.0/gcc/Contributors.html
+  14. http://gcc.gnu.org/index.html
+  15. mailto:gcc@gcc.gnu.org
+  16. http://gcc.gnu.org/mirrors.html
+  17. http://gcc.gnu.org/git.html
+  18. https://gcc.gnu.org/onlinedocs/
+  19. mailto:gcc-help@gcc.gnu.org
+  20. mailto:gcc@gcc.gnu.org
+  21. https://gcc.gnu.org/lists.html
+  22. https://www.fsf.org/
+  23. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-10/changes.html
                              GCC 10 Release Series
@@ -3369,20 +3452,27 @@ GCC 10.4
        MMX no longer changes how they are passed nor returned. This ABI
        change is now diagnosed with -Wpsabi.
 
+GCC 10.5
+
+   This is the [61]list of problem reports (PRs) from GCC's bug tracking
+   system that are known to be fixed in the 10.5 release. This list might
+   not be complete (that is, it is possible that some PRs that have been
+   fixed are not listed here).
+
 
     For questions related to the use of GCC, please consult these web
-    pages and the [61]GCC manuals. If that fails, the
-    [62]gcc-help@gcc.gnu.org mailing list might help. Comments on these
+    pages and the [62]GCC manuals. If that fails, the
+    [63]gcc-help@gcc.gnu.org mailing list might help. Comments on these
     web pages and the development of GCC are welcome on our developer
-    list at [63]gcc@gcc.gnu.org. All of [64]our lists have public
+    list at [64]gcc@gcc.gnu.org. All of [65]our lists have public
     archives.
 
-   Copyright (C) [65]Free Software Foundation, Inc. Verbatim copying and
+   Copyright (C) [66]Free Software Foundation, Inc. Verbatim copying and
    distribution of this entire article is permitted in any medium,
    provided this notice is preserved.
 
-   These pages are [66]maintained by the GCC team. Last modified
-   2023-03-11.
+   These pages are [67]maintained by the GCC team. Last modified
+   2023-07-07.
 
 References
 
@@ -3446,12 +3536,13 @@ References
   58. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=10.2
   59. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=10.3
   60. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=10.4
-  61. https://gcc.gnu.org/onlinedocs/
-  62. mailto:gcc-help@gcc.gnu.org
-  63. mailto:gcc@gcc.gnu.org
-  64. https://gcc.gnu.org/lists.html
-  65. https://www.fsf.org/
-  66. https://gcc.gnu.org/about.html
+  61. https://gcc.gnu.org/bugzilla/buglist.cgi?bug_status=RESOLVED&resolution=FIXED&target_milestone=10.5
+  62. https://gcc.gnu.org/onlinedocs/
+  63. mailto:gcc-help@gcc.gnu.org
+  64. mailto:gcc@gcc.gnu.org
+  65. https://gcc.gnu.org/lists.html
+  66. https://www.fsf.org/
+  67. https://gcc.gnu.org/about.html
 ======================================================================
 http://gcc.gnu.org/gcc-9/index.html
                               GCC 9 Release Series

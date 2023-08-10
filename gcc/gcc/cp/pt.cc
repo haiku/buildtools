@@ -6780,7 +6780,8 @@ convert_nontype_argument_function (tree type, tree expr,
     }
 
   linkage = decl_linkage (fn_no_ptr);
-  if (cxx_dialect >= cxx11 ? linkage == lk_none : linkage != lk_external)
+  if ((cxx_dialect < cxx11 && linkage != lk_external)
+      || (cxx_dialect < cxx17 && linkage == lk_none))
     {
       if (complain & tf_error)
 	{
@@ -7178,7 +7179,7 @@ invalid_tparm_referent_p (tree type, tree expr, tsubst_flags_t complain)
 	   * a string literal (5.13.5),
 	   * the result of a typeid expression (8.2.8), or
 	   * a predefined __func__ variable (11.4.1).  */
-	else if (DECL_ARTIFICIAL (decl))
+	else if (VAR_P (decl) && DECL_ARTIFICIAL (decl))
 	  {
 	    if (complain & tf_error)
 	      error ("the address of %qD is not a valid template argument",
@@ -7876,7 +7877,8 @@ coerce_template_args_for_ttp (tree templ, tree arglist,
   else if (current_template_parms)
     {
       /* This is an argument of the current template, so we haven't set
-	 DECL_CONTEXT yet.  */
+	 DECL_CONTEXT yet.  We can also get here when level-lowering a
+	 bound ttp. */
       tree relevant_template_parms;
 
       /* Parameter levels that are greater than the level of the given
@@ -9924,16 +9926,27 @@ lookup_template_class (tree d1, tree arglist, tree in_decl, tree context,
 	 template.  */
 
       /* Shortcut looking up the current class scope again.  */
-      if (current_class_type)
-	if (tree ti = CLASSTYPE_TEMPLATE_INFO (current_class_type))
+      for (tree cur = current_nonlambda_class_type ();
+	   cur != NULL_TREE;
+	   cur = get_containing_scope (cur))
+	{
+	  if (!CLASS_TYPE_P (cur))
+	    continue;
+
+	  tree ti = CLASSTYPE_TEMPLATE_INFO (cur);
+	  if (!ti || arg_depth > TMPL_ARGS_DEPTH (TI_ARGS (ti)))
+	    break;
+
 	  if (gen_tmpl == most_general_template (TI_TEMPLATE (ti))
 	      && comp_template_args (arglist, TI_ARGS (ti)))
-	    return current_class_type;
+	    return cur;
+	}
 
       /* Calculate the BOUND_ARGS.  These will be the args that are
 	 actually tsubst'd into the definition to create the
 	 instantiation.  */
-      arglist = coerce_template_parms (parmlist, arglist, gen_tmpl, complain);
+      if (PRIMARY_TEMPLATE_P (gen_tmpl))
+	arglist = coerce_template_parms (parmlist, arglist, gen_tmpl, complain);
 
       if (arglist == error_mark_node)
 	/* We were unable to bind the arguments.  */
@@ -14630,7 +14643,7 @@ tsubst_function_decl (tree t, tree args, tsubst_flags_t complain,
 
 static tree
 tsubst_template_decl (tree t, tree args, tsubst_flags_t complain,
-		      tree lambda_fntype)
+		      tree lambda_fntype, tree lambda_tparms)
 {
   /* We can get here when processing a member function template,
      member class template, or template template parameter.  */
@@ -14720,8 +14733,10 @@ tsubst_template_decl (tree t, tree args, tsubst_flags_t complain,
   auto tparm_guard = make_temp_override (current_template_parms);
   DECL_TEMPLATE_PARMS (r)
     = current_template_parms
-    = tsubst_template_parms (DECL_TEMPLATE_PARMS (t), args,
-			     complain);
+    = (lambda_tparms
+       ? lambda_tparms
+       : tsubst_template_parms (DECL_TEMPLATE_PARMS (t), args,
+				complain));
 
   bool class_p = false;
   tree inner = decl;
@@ -14889,7 +14904,9 @@ tsubst_decl (tree t, tree args, tsubst_flags_t complain)
   switch (TREE_CODE (t))
     {
     case TEMPLATE_DECL:
-      r = tsubst_template_decl (t, args, complain, /*lambda*/NULL_TREE);
+      r = tsubst_template_decl (t, args, complain,
+				/*lambda_fntype=*/NULL_TREE,
+				/*lambda_tparms=*/NULL_TREE);
       break;
 
     case FUNCTION_DECL:
@@ -20132,12 +20149,24 @@ tsubst_lambda_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 		  ? DECL_TI_TEMPLATE (oldfn)
 		  : NULL_TREE);
 
-  tree fntype = static_fn_type (oldfn);
+  tree tparms = NULL_TREE;
   if (oldtmpl)
-    ++processing_template_decl;
+    tparms = tsubst_template_parms (DECL_TEMPLATE_PARMS (oldtmpl), args, complain);
+
+  tree fntype = static_fn_type (oldfn);
+
+  tree saved_ctp = current_template_parms;
+  if (oldtmpl)
+    {
+      ++processing_template_decl;
+      current_template_parms = tparms;
+    }
   fntype = tsubst (fntype, args, complain, in_decl);
   if (oldtmpl)
-    --processing_template_decl;
+    {
+      current_template_parms = saved_ctp;
+      --processing_template_decl;
+    }
 
   if (fntype == error_mark_node)
     r = error_mark_node;
@@ -20153,7 +20182,8 @@ tsubst_lambda_expr (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 				 type_memfn_quals (fntype),
 				 type_memfn_rqual (fntype));
       tree inst = (oldtmpl
-		   ? tsubst_template_decl (oldtmpl, args, complain, fntype)
+		   ? tsubst_template_decl (oldtmpl, args, complain,
+					   fntype, tparms)
 		   : tsubst_function_decl (oldfn, args, complain, fntype));
       if (inst == error_mark_node)
 	{
@@ -26813,20 +26843,7 @@ instantiate_body (tree pattern, tree args, tree d, bool nested_p)
   if (current_function_decl)
     save_omp_privatization_clauses (omp_privatization_save);
 
-  bool push_to_top
-    = !(current_function_decl
-	&& !LAMBDA_FUNCTION_P (d)
-	&& decl_function_context (d) == current_function_decl);
-
-  if (push_to_top)
-    push_to_top_level ();
-  else
-    {
-      gcc_assert (!processing_template_decl);
-      push_function_context ();
-      cp_unevaluated_operand = 0;
-      c_inhibit_evaluation_warnings = 0;
-    }
+  bool push_to_top = maybe_push_to_top_level (d);
 
   mark_template_arguments_used (pattern, args);
 
@@ -26940,10 +26957,7 @@ instantiate_body (tree pattern, tree args, tree d, bool nested_p)
   if (!nested_p)
     TI_PENDING_TEMPLATE_FLAG (DECL_TEMPLATE_INFO (d)) = 0;
 
-  if (push_to_top)
-    pop_from_top_level ();
-  else
-    pop_function_context ();
+  maybe_pop_from_top_level (push_to_top);
 
   if (current_function_decl)
     restore_omp_privatization_clauses (omp_privatization_save);
