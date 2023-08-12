@@ -426,7 +426,9 @@ aarch64*-*-fuchsia*)
 	;;
 aarch64*-*-haiku*)
 	tmake_file="${tmake_file} ${cpu_type}/t-aarch64"
+	tmake_file="${tmake_file} ${cpu_type}/t-lse t-slibgcc-libgcc"
 	tmake_file="${tmake_file} ${cpu_type}/t-softfp t-softfp"
+	tmake_file="${tmake_file} t-dfprules"
 	md_unwind_header=aarch64/haiku-unwind.h
 	;;
 aarch64*-*-linux*)
