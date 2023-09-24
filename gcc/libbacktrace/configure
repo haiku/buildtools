@@ -13331,6 +13331,11 @@ else
   have_dl_iterate_phdr=no
 fi
 rm -f conftest*
+    # On Haiku, this function only exists when linking against libbsd. This
+    # may be enabled in the future, but for now, disable support.
+    case "${host}" in
+      *-*-haiku*) have_dl_iterate_phdr=no ;;
+    esac
 
   else
     ac_fn_c_check_func "$LINENO" "dl_iterate_phdr" "ac_cv_func_dl_iterate_phdr"
