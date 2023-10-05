@@ -59,6 +59,7 @@ Boston, MA 02111-1307, USA.  */
 #undef CC1PLUS_SPEC
 #define CC1PLUS_SPEC "%{!Wctor-dtor-privacy:-Wno-ctor-dtor-privacy}"
 
+#undef SUBTARGET_OVERRIDE_OPTIONS
 #define SUBTARGET_OVERRIDE_OPTIONS			\
   do {							\
     haiku_override_options ();			\

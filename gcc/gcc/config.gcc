@@ -3010,7 +3010,7 @@ powerpc-*-eabi*)
 	;;
 powerpc-*-haiku*)
 	tmake_file="${tmake_file} rs6000/t-fprules rs6000/t-ppcos rs6000/t-ppccomm t-haiku"
-	tm_file="${tm_file} elfos.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku.h haiku-stdint.h"
+	tm_file="${tm_file} elfos.h gnu-user.h freebsd-spec.h rs6000/sysv4.h haiku.h rs6000/haiku.h haiku-stdint.h"
 	extra_options="${extra_options} rs6000/sysv4.opt"
 	;;
 powerpc-*-rtems*)
