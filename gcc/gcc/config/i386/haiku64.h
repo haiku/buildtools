@@ -75,35 +75,6 @@ Boston, MA 02111-1307, USA.  */
 #define ASM_OUTPUT_ALIGNED_BSS(FILE, DECL, NAME, SIZE, ALIGN) \
   x86_output_aligned_bss (FILE, DECL, NAME, SIZE, ALIGN)
 
-/* This is used to align code labels according to Intel recommendations.  */
-
-#ifdef HAVE_GAS_MAX_SKIP_P2ALIGN
-#define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE,LOG,MAX_SKIP)			\
-  do {									\
-    if ((LOG) != 0) {							\
-      if ((MAX_SKIP) == 0) fprintf ((FILE), "\t.p2align %d\n", (LOG));	\
-      else {								\
-        fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP));	\
-        /* Make sure that we have at least 8 byte alignment if > 8 byte	\
-           alignment is preferred.  */					\
-        if ((LOG) > 3							\
-            && (1 << (LOG)) > ((MAX_SKIP) + 1)				\
-            && (MAX_SKIP) >= 7)						\
-          fputs ("\t.p2align 3\n", (FILE));				\
-      }									\
-    }									\
-  } while (0)
-#undef  ASM_OUTPUT_MAX_SKIP_PAD
-#define ASM_OUTPUT_MAX_SKIP_PAD(FILE, LOG, MAX_SKIP)			\
-  if ((LOG) != 0)							\
-    {									\
-      if ((MAX_SKIP) == 0)						\
-        fprintf ((FILE), "\t.p2align %d\n", (LOG));			\
-      else								\
-        fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP));	\
-    }
-#endif
-
 
 /* Output assembler code to FILE to call the profiler.  */
 #define NO_PROFILE_COUNTERS 1
