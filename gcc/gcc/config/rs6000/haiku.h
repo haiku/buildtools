@@ -69,5 +69,5 @@ Boston, MA 02111-1307, USA.  */
 	rs6000_isa_flags |= OPTION_MASK_MINIMAL_TOC;                   \
 	TARGET_NO_FP_IN_TOC = 1;                                       \
 	haiku_override_options ();                                     \
-   }
+   }                                                               \
  while (0)
