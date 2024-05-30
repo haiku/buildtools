@@ -1,5 +1,5 @@
 /* Process declarations and variables for C++ compiler.
-   Copyright (C) 1988-2023 Free Software Foundation, Inc.
+   Copyright (C) 1988-2024 Free Software Foundation, Inc.
    Hacked by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -169,7 +169,9 @@ typedef hash_map<unsigned/*Priority*/, tree/*List*/,
    one for init.  The fini table is only ever used when !cxa_atexit.  */
 static GTY(()) priority_map_t *static_init_fini_fns[2];
 
-/* Nonzero if we're done parsing and into end-of-file activities.  */
+/* Nonzero if we're done parsing and into end-of-file activities.
+   2 if all templates have been instantiated.
+   3 if we're done with front-end processing.  */
 
 int at_eof;
 
@@ -427,14 +429,8 @@ grok_array_decl (location_t loc, tree array_expr, tree index_exp,
 	  return build_min_nt_loc (loc, ARRAY_REF, array_expr, index_exp,
 				   NULL_TREE, NULL_TREE);
 	}
-      array_expr = build_non_dependent_expr (array_expr);
-      if (index_exp)
-	index_exp = build_non_dependent_expr (index_exp);
-      else
-	{
-	  orig_index_exp_list = make_tree_vector_copy (*index_exp_list);
-	  make_args_non_dependent (*index_exp_list);
-	}
+      if (!index_exp)
+	orig_index_exp_list = make_tree_vector_copy (*index_exp_list);
     }
 
   type = TREE_TYPE (array_expr);
@@ -459,7 +455,10 @@ grok_array_decl (location_t loc, tree array_expr, tree index_exp,
 	{
 	  expr = build_op_subscript (loc, array_expr, index_exp_list,
 				     &overload, complain & tf_decltype);
-	  if (expr == error_mark_node)
+	  if (expr == error_mark_node
+	      /* Don't do the backward compatibility fallback in a SFINAE
+		 context.   */
+	      && (complain & tf_error))
 	    {
 	      tree idx = build_x_compound_expr_from_vec (*index_exp_list, NULL,
 							 tf_none);
@@ -510,6 +509,11 @@ grok_array_decl (location_t loc, tree array_expr, tree index_exp,
 
       if (index_exp == NULL_TREE)
 	{
+	  if (!(complain & tf_error))
+	    /* Don't do the backward compatibility fallback in a SFINAE
+	       context.  */
+	    return error_mark_node;
+
 	  if ((*index_exp_list)->is_empty ())
 	    {
 	      error_at (loc, "built-in subscript operator without expression "
@@ -561,8 +565,9 @@ grok_array_decl (location_t loc, tree array_expr, tree index_exp,
 	swapped = true, array_expr = p2, index_exp = i1;
       else
 	{
-	  error_at (loc, "invalid types %<%T[%T]%> for array subscript",
-		    type, TREE_TYPE (index_exp));
+	  if (complain & tf_error)
+	    error_at (loc, "invalid types %<%T[%T]%> for array subscript",
+		      type, TREE_TYPE (index_exp));
 	  return error_mark_node;
 	}
 
@@ -609,6 +614,43 @@ grok_array_decl (location_t loc, tree array_expr, tree index_exp,
       return build_min_non_dep (ARRAY_REF, expr, orig_array_expr,
 				orig_index_exp, NULL_TREE, NULL_TREE);
     }
+  return expr;
+}
+
+/* Build an OMP_ARRAY_SECTION expression, handling usage in template
+   definitions, etc.  */
+
+tree
+grok_omp_array_section (location_t loc, tree array_expr, tree index,
+			tree length)
+{
+  tree orig_array_expr = array_expr;
+  tree orig_index = index;
+  tree orig_length = length;
+
+  if (error_operand_p (array_expr)
+      || error_operand_p (index)
+      || error_operand_p (length))
+    return error_mark_node;
+
+  if (processing_template_decl
+      && (type_dependent_expression_p (array_expr)
+	  || type_dependent_expression_p (index)
+	  || type_dependent_expression_p (length)))
+    return build_min_nt_loc (loc, OMP_ARRAY_SECTION, array_expr, index, length);
+
+  index = fold_non_dependent_expr (index);
+  length = fold_non_dependent_expr (length);
+
+  /* NOTE: We can pass through invalidly-typed index/length fields
+     here (e.g. if the user tries to use a floating-point index/length).
+     This is diagnosed later in semantics.cc:handle_omp_array_sections_1.  */
+
+  tree expr = build_omp_array_section (loc, array_expr, index, length);
+
+  if (processing_template_decl)
+    expr = build_min_non_dep (OMP_ARRAY_SECTION, expr, orig_array_expr,
+			      orig_index, orig_length);
   return expr;
 }
 
@@ -829,8 +871,8 @@ check_classfn (tree ctype, tree function, tree template_parms)
       tree c2 = get_constraints (fndecl);
 
       /* While finding a match, same types and params are not enough
-	 if the function is versioned.  Also check version ("target")
-	 attributes.  */
+	 if the function is versioned.  Also check for different target
+	 specific attributes.  */
       if (same_type_p (TREE_TYPE (TREE_TYPE (function)),
 		       TREE_TYPE (TREE_TYPE (fndecl)))
 	  && compparms (p1, p2)
@@ -853,14 +895,10 @@ check_classfn (tree ctype, tree function, tree template_parms)
 	 is replaced with the specialization chosen by deduction from the
 	 friend declaration or discarded if deduction fails."
 
-	 So ask check_explicit_specialization to find a matching template.  */
+	 So tell check_explicit_specialization to look for a match.  */
       SET_DECL_IMPLICIT_INSTANTIATION (function);
-      tree spec = check_explicit_specialization (DECL_NAME (function),
-						 function, /* tcount */0,
-						 /* friend flag */4,
-						 /* attrlist */NULL_TREE);
-      if (spec != error_mark_node)
-	matched = spec;
+      DECL_TEMPLATE_INFO (function) = build_template_info (fns, NULL_TREE);
+      matched = function;
     }
 
   if (!matched)
@@ -909,10 +947,10 @@ note_vague_linkage_fn (tree decl)
   vec_safe_push (deferred_fns, decl);
 }
 
-/* As above, but for variable template instantiations.  */
+/* As above, but for variables.  */
 
 void
-note_variable_template_instantiation (tree decl)
+note_vague_linkage_variable (tree decl)
 {
   vec_safe_push (pending_statics, decl);
 }
@@ -1608,6 +1646,50 @@ cp_check_const_attributes (tree attributes)
     }
 }
 
+/* Copies hot or cold attributes to a function FN if present on the
+   encapsulating class, struct, or union TYPE.  */
+
+void
+maybe_propagate_warmth_attributes (tree fn, tree type)
+{
+  if (fn == NULL_TREE || type == NULL_TREE
+      || !(TREE_CODE (type) == RECORD_TYPE
+	   || TREE_CODE (type) == UNION_TYPE))
+    return;
+
+  tree has_cold_attr = lookup_attribute ("cold", TYPE_ATTRIBUTES (type));
+  tree has_hot_attr = lookup_attribute ("hot", TYPE_ATTRIBUTES (type));
+
+  if (has_cold_attr || has_hot_attr)
+    {
+      /* Transparently ignore the new warmth attribute if it
+	 conflicts with a present function attribute.  Otherwise
+	 decl_attribute would still honour the present attribute,
+	 but producing an undesired warning in the process.  */
+
+      if (has_cold_attr)
+	{
+	  if (lookup_attribute ("hot", DECL_ATTRIBUTES (fn)) == NULL)
+	    {
+	      tree cold_cons
+		= tree_cons (get_identifier ("cold"), NULL, NULL);
+
+	      decl_attributes (&fn, cold_cons, 0);
+	    }
+	}
+      else if (has_hot_attr)
+	{
+	  if (lookup_attribute ("cold", DECL_ATTRIBUTES (fn)) == NULL)
+	    {
+	      tree hot_cons
+		= tree_cons (get_identifier ("hot"), NULL, NULL);
+
+	      decl_attributes (&fn, hot_cons, 0);
+	    }
+	}
+    }
+}
+
 /* Return the last pushed declaration for the symbol DECL or NULL
    when no such declaration exists.  */
 
@@ -1719,6 +1801,12 @@ cplus_decl_attributes (tree *decl, tree attributes, int flags)
 		attributes
 		  = tree_cons (get_identifier ("omp declare target nohost"),
 			       NULL_TREE, attributes);
+	      if (last.indirect
+		  && !lookup_attribute ("omp declare target indirect",
+					attributes))
+		attributes
+		  = tree_cons (get_identifier ("omp declare target indirect"),
+			       NULL_TREE, attributes);
 	    }
 	}
     }
@@ -1742,16 +1830,34 @@ cplus_decl_attributes (tree *decl, tree attributes, int flags)
 	    {
 	      tree name = get_attribute_name (*pa);
 	      if (is_attribute_p ("directive", name)
-		  || is_attribute_p ("sequence", name))
+		  || is_attribute_p ("sequence", name)
+		  || is_attribute_p ("decl", name))
 		{
-		  if (!diagnosed)
+		  const char *p = NULL;
+		  if (TREE_VALUE (*pa) == NULL_TREE)
+		    p = IDENTIFIER_POINTER (name);
+		  for (tree a = TREE_VALUE (*pa); a; a = TREE_CHAIN (a))
 		    {
-		      error ("%<omp::%E%> not allowed to be specified in this "
-			     "context", name);
+		      tree d = TREE_VALUE (a);
+		      gcc_assert (TREE_CODE (d) == DEFERRED_PARSE);
+		      if (TREE_PUBLIC (d)
+			  && (VAR_P (*decl)
+			      || TREE_CODE (*decl) == FUNCTION_DECL)
+			  && cp_maybe_parse_omp_decl (*decl, d))
+			continue;
+		      p = TREE_PUBLIC (d) ? "decl" : "directive";
+		    }
+		  if (p && !diagnosed)
+		    {
+		      error ("%<omp::%s%> not allowed to be specified in "
+			     "this context", p);
 		      diagnosed = true;
 		    }
-		  *pa = TREE_CHAIN (*pa);
-		  continue;
+		  if (p)
+		    {
+		      *pa = TREE_CHAIN (*pa);
+		      continue;
+		    }
 		}
 	    }
 	  pa = &TREE_CHAIN (*pa);
@@ -2586,7 +2692,10 @@ min_vis_expr_r (tree *tp, int */*walk_subtrees*/, void *data)
   int *vis_p = (int *)data;
   int tpvis = VISIBILITY_DEFAULT;
 
-  switch (TREE_CODE (*tp))
+  tree t = *tp;
+  if (TREE_CODE (t) == PTRMEM_CST)
+    t = PTRMEM_CST_MEMBER (t);
+  switch (TREE_CODE (t))
     {
     case CAST_EXPR:
     case IMPLICIT_CONV_EXPR:
@@ -2597,15 +2706,31 @@ min_vis_expr_r (tree *tp, int */*walk_subtrees*/, void *data)
     case NEW_EXPR:
     case CONSTRUCTOR:
     case LAMBDA_EXPR:
-      tpvis = type_visibility (TREE_TYPE (*tp));
+      tpvis = type_visibility (TREE_TYPE (t));
       break;
 
+    case TEMPLATE_DECL:
+      if (DECL_ALIAS_TEMPLATE_P (t))
+	/* FIXME: We don't maintain TREE_PUBLIC / DECL_VISIBILITY for
+	   alias templates so we can't trust it here (PR107906).  */
+	break;
+      t = DECL_TEMPLATE_RESULT (t);
+      /* Fall through.  */
     case VAR_DECL:
     case FUNCTION_DECL:
-      if (! TREE_PUBLIC (*tp))
+      if (decl_constant_var_p (t))
+	/* The ODR allows definitions in different TUs to refer to distinct
+	   constant variables with internal or no linkage, so such a reference
+	   shouldn't affect visibility (PR110323).  FIXME but only if the
+	   lvalue-rvalue conversion is applied.  */;
+      else if (! TREE_PUBLIC (t))
 	tpvis = VISIBILITY_ANON;
       else
-	tpvis = DECL_VISIBILITY (*tp);
+	tpvis = DECL_VISIBILITY (t);
+      break;
+
+    case FIELD_DECL:
+      tpvis = type_visibility (DECL_CONTEXT (t));
       break;
 
     default:
@@ -3240,7 +3365,9 @@ import_export_decl (tree decl)
 
      * implicit instantiations of function templates
 
-     * inline function
+     * inline functions
+
+     * inline variables
 
      * implicit instantiations of static data members of class
        templates
@@ -3263,6 +3390,7 @@ import_export_decl (tree decl)
 		|| DECL_DECLARED_INLINE_P (decl));
   else
     gcc_assert (DECL_IMPLICIT_INSTANTIATION (decl)
+		|| DECL_INLINE_VAR_P (decl)
 		|| DECL_VTABLE_OR_VTT_P (decl)
 		|| DECL_TINFO_P (decl));
   /* Check that a definition of DECL is available in this translation
@@ -3275,6 +3403,10 @@ import_export_decl (tree decl)
      unit.  */
   import_p = false;
 
+  /* FIXME: Since https://github.com/itanium-cxx-abi/cxx-abi/pull/171,
+     the ABI specifies that classes attached to named modules should
+     have their vtables uniquely emitted in the object for the module
+     unit in which it is defined.  And similarly for RTTI structures.  */
   if (VAR_P (decl) && DECL_VTABLE_OR_VTT_P (decl))
     {
       class_type = DECL_CONTEXT (decl);
@@ -3391,7 +3523,7 @@ import_export_decl (tree decl)
 	   this entity as undefined in this translation unit.  */
 	import_p = true;
     }
-  else if (DECL_FUNCTION_MEMBER_P (decl))
+  else if (TREE_CODE (decl) == FUNCTION_DECL && DECL_FUNCTION_MEMBER_P (decl))
     {
       if (!DECL_DECLARED_INLINE_P (decl))
 	{
@@ -3436,6 +3568,9 @@ import_export_decl (tree decl)
     }
 
   DECL_INTERFACE_KNOWN (decl) = 1;
+
+  if (DECL_CLONED_FUNCTION_P (decl))
+    maybe_optimize_cdtor (decl);
 }
 
 /* Return an expression that performs the destruction of DECL, which
@@ -3777,6 +3912,7 @@ get_tls_wrapper_fn (tree var)
       TREE_PUBLIC (fn) = TREE_PUBLIC (var);
       DECL_ARTIFICIAL (fn) = true;
       DECL_IGNORED_P (fn) = 1;
+      DECL_CONTEXT (fn) = DECL_CONTEXT (var);
       /* The wrapper is inline and emitted everywhere var is used.  */
       DECL_DECLARED_INLINE_P (fn) = true;
       if (TREE_PUBLIC (var))
@@ -4568,8 +4704,19 @@ no_linkage_error (tree decl)
       bool d = false;
       auto_diagnostic_group grp;
       if (cxx_dialect >= cxx11)
-	d = permerror (DECL_SOURCE_LOCATION (decl), "%q#D, declared using "
-		       "unnamed type, is used but never defined", decl);
+	{
+	  /* If t is declared in a module CMI, then decl could actually
+	     be defined in a different TU, so don't warn since C++20.  */
+	  tree relaxed = no_linkage_check (t, /*relaxed_p=*/true);
+	  if (relaxed != NULL_TREE)
+	    d = permerror (DECL_SOURCE_LOCATION (decl),
+			   "%q#D, declared using an unnamed type, "
+			   "is used but never defined", decl);
+	  else if (cxx_dialect < cxx20)
+	    d = pedwarn (DECL_SOURCE_LOCATION (decl), OPT_Wc__20_extensions,
+			 "%q#D, declared using an unnamed type, "
+			 "is used but not defined", decl);
+	}
       else if (DECL_EXTERN_C_P (decl))
 	/* Allow this; it's pretty common in C.  */;
       else if (VAR_P (decl))
@@ -4588,13 +4735,31 @@ no_linkage_error (tree decl)
 	inform (DECL_SOURCE_LOCATION (TYPE_NAME (t)), "%q#D does not refer "
 		"to the unqualified type, so it is not used for linkage",
 		TYPE_NAME (t));
+      /* Suppress warning from check_global_declaration if needed.  */
+      if (d)
+	suppress_warning (decl, OPT_Wunused);
     }
   else if (cxx_dialect >= cxx11)
     {
       if (VAR_P (decl) || !DECL_PURE_VIRTUAL_P (decl))
-	permerror (DECL_SOURCE_LOCATION (decl),
-		   "%q#D, declared using local type "
-		   "%qT, is used but never defined", decl, t);
+	{
+	  /* Similarly for local types in a function with vague linkage or
+	     defined in a module CMI, then decl could actually be defined
+	     in a different TU, so don't warn since C++20.  */
+	  bool d = false;
+	  tree relaxed = no_linkage_check (t, /*relaxed_p=*/true);
+	  if (relaxed != NULL_TREE)
+	    d = permerror (DECL_SOURCE_LOCATION (decl),
+			   "%q#D, declared using local type "
+			   "%qT, is used but never defined", decl, t);
+	  else if (cxx_dialect < cxx20)
+	    d = pedwarn (DECL_SOURCE_LOCATION (decl), OPT_Wc__20_extensions,
+			 "%q#D, declared using local type "
+			 "%qT, is used but not defined here", decl, t);
+	  /* Suppress warning from check_global_declaration if needed.  */
+	  if (d)
+	    suppress_warning (decl, OPT_Wunused);
+	}
     }
   else if (VAR_P (decl))
     warning_at (DECL_SOURCE_LOCATION (decl), 0, "type %qT with no linkage "
@@ -4920,6 +5085,7 @@ c_parse_final_cleanups (void)
   tree decl;
 
   locus_at_end_of_parsing = input_location;
+  /* We're done parsing.  */
   at_eof = 1;
 
   /* Bad parse errors.  Just forget about it.  */
@@ -5185,6 +5351,9 @@ c_parse_final_cleanups (void)
 	reconsider = true;
     }
 
+  /* All templates have been instantiated.  */
+  at_eof = 2;
+
   void *module_cookie = finish_module_processing (parse_in);
 
   lower_var_init ();
@@ -5202,10 +5371,11 @@ c_parse_final_cleanups (void)
 	     #pragma interface, etc.) we decided not to emit the
 	     definition here.  */
 	  && !DECL_INITIAL (decl)
-	  /* A defaulted fn in a header module can be synthesized on
-	     demand later.  (In non-header modules we should have
-	     synthesized it above.)  */
-	  && !(DECL_DEFAULTED_FN (decl) && header_module_p ())
+	  /* A defaulted fn or TLS wrapper in a header module can be
+	     synthesized on demand later.  (In non-header modules we
+	     should have synthesized it above.)  */
+	  && !(header_module_p ()
+	       && (DECL_DEFAULTED_FN (decl) || decl_tls_wrapper_p (decl)))
 	  /* Don't complain if the template was defined.  */
 	  && !(DECL_TEMPLATE_INSTANTIATION (decl)
 	       && DECL_INITIAL (DECL_TEMPLATE_RESULT
@@ -5227,7 +5397,11 @@ c_parse_final_cleanups (void)
   if (static_init_fini_fns[true])
     for (auto iter : *static_init_fini_fns[true])
       iter.second = nreverse (iter.second);
-  
+
+  /* Now we've instantiated all templates.  Now we can escalate the functions
+     we squirreled away earlier.  */
+  process_and_check_pending_immediate_escalating_fns ();
+
   /* Then, do the Objective-C stuff.  This is where all the
      Objective-C module stuff gets generated (symtab,
      class/protocol/selector lists etc).  This must be done after C++
@@ -5309,7 +5483,7 @@ c_parse_final_cleanups (void)
   timevar_start (TV_PHASE_PARSING);
 
   /* Indicate that we're done with front end processing.  */
-  at_eof = 2;
+  at_eof = 3;
 }
 
 /* Perform any post compilation-proper cleanups for the C++ front-end.
@@ -5368,18 +5542,13 @@ build_offset_ref_call_from_tree (tree fn, vec<tree, va_gc> **args,
       orig_args = make_tree_vector_copy (*args);
 
       /* Transform the arguments and add the implicit "this"
-	 parameter.  That must be done before the FN is transformed
-	 because we depend on the form of FN.  */
-      make_args_non_dependent (*args);
-      object = build_non_dependent_expr (object);
+	 parameter.  */
       if (TREE_CODE (TREE_TYPE (fn)) == METHOD_TYPE)
 	{
 	  if (TREE_CODE (fn) == DOTSTAR_EXPR)
 	    object = cp_build_addr_expr (object, complain);
 	  vec_safe_insert (*args, 0, object);
 	}
-      /* Now that the arguments are done, transform FN.  */
-      fn = build_non_dependent_expr (fn);
     }
 
   /* A qualified name corresponding to a bound pointer-to-member is
@@ -5553,7 +5722,7 @@ cp_handle_deprecated_or_unavailable (tree decl, tsubst_flags_t complain)
   if (cxx_dialect >= cxx11
       && DECL_P (decl)
       && DECL_ARTIFICIAL (decl)
-      && DECL_NONSTATIC_MEMBER_FUNCTION_P (decl)
+      && DECL_IOBJ_MEMBER_FUNCTION_P (decl)
       && copy_fn_p (decl))
     {
       /* Don't warn if the flag was disabled around the class definition
@@ -5786,7 +5955,7 @@ mark_used (tree decl, tsubst_flags_t complain /* = tf_warning_or_error */)
 	  && DECL_OMP_DECLARE_REDUCTION_P (decl)))
     maybe_instantiate_decl (decl);
 
-  if (processing_template_decl || in_template_function ())
+  if (processing_template_decl || in_template_context)
     return true;
 
   /* Check this too in case we're within instantiate_non_dependent_expr.  */

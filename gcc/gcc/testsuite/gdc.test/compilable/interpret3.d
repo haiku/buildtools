@@ -2326,7 +2326,7 @@ struct Bug10840
     Data10840* _data;
 }
 
-bool bug10840(int n)
+enum bug10840 = (int n)
 {
     Bug10840 stack;
     if (n == 1)
@@ -2336,7 +2336,7 @@ bool bug10840(int n)
     }
     // Wrong-code for ?:
     return stack._data ? false : true;
-}
+};
 
 static assert(bug10840(0));
 static assert(!is(typeof(Compileable!(bug10840(1)))));
@@ -5910,13 +5910,13 @@ struct Bug7527
     char[] data;
 }
 
-int bug7527()
+enum bug7527 = ()
 {
     auto app = Bug7527();
 
     app.data.ptr[0 .. 1] = "x";
     return 1;
-}
+};
 
 static assert(!is(typeof(compiles!(bug7527()))));
 
@@ -7208,7 +7208,7 @@ struct S13630(T)
 {
     T[3] arr;
 
-    this(A...)(auto ref in A args)
+    this(A...)(const auto ref A args)
     {
         auto p = arr.ptr;
 
@@ -7238,7 +7238,7 @@ struct Matrix13827(T, uint N)
         T[N] flat;
     }
 
-    this(A...)(auto ref in A args)
+    this(A...)(const auto ref A args)
     {
         uint k;
 

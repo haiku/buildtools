@@ -15,7 +15,7 @@
  * - $(LINK2 https://github.com/ldc-developers/ldc, LDC repository)
  * - $(LINK2 https://github.com/D-Programming-GDC/gcc, GDC repository)
  *
- * Copyright:   Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2024 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 https://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
  * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/target.d, _target.d)
@@ -25,7 +25,7 @@
 
 module dmd.target;
 
-import dmd.globals : Param;
+import dmd.globals : Param, CHECKENABLE;
 
 enum CPU : ubyte
 {
@@ -110,8 +110,8 @@ extern (C++) struct Target
 
     /// Architecture name
     const(char)[] architectureName;
-    CPU cpu = CPU.baseline; // CPU instruction set to target
-    bool is64bit;           // generate 64 bit code for x86_64; true by default for 64 bit dmd
+    CPU cpu;                // CPU instruction set to target
+    bool isX86_64;          // generate 64 bit code for x86_64; true by default for 64 bit dmd
     bool isLP64;            // pointers are 64 bits
 
     // Environmental
@@ -119,7 +119,7 @@ extern (C++) struct Target
     const(char)[] lib_ext;    /// extension for static library files
     const(char)[] dll_ext;    /// extension for dynamic library files
     bool run_noext;           /// allow -run sources without extensions
-    bool omfobj = false;      // for Win32: write OMF object files instead of MsCoff
+    bool omfobj;              // for Win32: write OMF object files instead of MsCoff
     /**
      * Values representing all properties for floating point types
      */
@@ -159,7 +159,7 @@ extern (C++) struct Target
      * This can be used to restore the state set by `_init` to its original
      * state.
      */
-    void deinitialize()
+    void deinitialize() @safe
     {
         this = this.init;
     }
@@ -203,7 +203,7 @@ extern (C++) struct Target
      *      2   vector element type is not supported
      *      3   vector size is not supported
      */
-    extern (C++) int isVectorTypeSupported(int sz, Type type);
+    extern (C++) int isVectorTypeSupported(int sz, Type type) @safe;
 
     /**
      * Checks whether the target supports the given operation for vectors.
@@ -221,7 +221,7 @@ extern (C++) struct Target
      * Returns:
      *      `LINK` to use for `extern(System)`
      */
-    extern (C++) LINK systemLinkage();
+    extern (C++) LINK systemLinkage() @safe;
 
     /**
      * Describes how an argument type is passed to a function on target.
@@ -270,7 +270,7 @@ extern (C++) struct Target
      *  tf = type of function being called
      * Returns: `true` if the callee invokes destructors for arguments.
      */
-    extern (C++) bool isCalleeDestroyingArgs(TypeFunction tf);
+    extern (C++) bool isCalleeDestroyingArgs(TypeFunction tf) @safe;
 
     /**
      * Returns true if the implementation for object monitors is always defined
@@ -288,7 +288,7 @@ extern (C++) struct Target
      * Returns:
      *      `false` if the target does not support `pragma(linkerDirective)`.
      */
-    extern (C++) bool supportsLinkerDirective() const;
+    extern (C++) bool supportsLinkerDirective() const @safe;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

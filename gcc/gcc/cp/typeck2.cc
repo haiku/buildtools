@@ -1,6 +1,6 @@
 /* Report error messages, build initializers, and perform
    some front-end optimizations for C++ compiler.
-   Copyright (C) 1987-2023 Free Software Foundation, Inc.
+   Copyright (C) 1987-2024 Free Software Foundation, Inc.
    Hacked by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -350,16 +350,15 @@ cxx_incomplete_type_diagnostic (location_t loc, const_tree value,
     bad_member:
       {
 	tree member = TREE_OPERAND (value, 1);
-	if (is_overloaded_fn (member))
-	  member = get_first_fn (member);
-
-	if (DECL_FUNCTION_MEMBER_P (member)
-	    && ! flag_ms_extensions)
+	if (is_overloaded_fn (member) && !flag_ms_extensions)
 	  {
 	    gcc_rich_location richloc (loc);
 	    /* If "member" has no arguments (other than "this"), then
 	       add a fix-it hint.  */
-	    if (type_num_arguments (TREE_TYPE (member)) == 1)
+	    member = MAYBE_BASELINK_FUNCTIONS (member);
+	    if (TREE_CODE (member) == FUNCTION_DECL
+		&& DECL_OBJECT_MEMBER_FUNCTION_P (member)
+		&& type_num_arguments (TREE_TYPE (member)) == 1)
 	      richloc.add_fixit_insert_after ("()");
 	    complained = emit_diagnostic (diag_kind, &richloc, 0,
 			     "invalid use of member function %qD "
@@ -465,6 +464,25 @@ maybe_push_temp_cleanup (tree sub, vec<tree,va_gc> **flags)
       add_stmt (tx);
       vec_safe_push (*flags, flag);
     }
+}
+
+/* F is something added to a cleanup flags vec by maybe_push_temp_cleanup or
+   build_vec_init.  Return the code to disable the cleanup it controls.  */
+
+tree
+build_disable_temp_cleanup (tree f)
+{
+  tree d = f;
+  tree i = boolean_false_node;
+  if (TREE_CODE (f) == TREE_LIST)
+    {
+      /* To disable a build_vec_init cleanup, set
+	 iterator = maxindex.  */
+      d = TREE_PURPOSE (f);
+      i = TREE_VALUE (f);
+      ggc_free (f);
+    }
+  return build2 (MODIFY_EXPR, TREE_TYPE (d), d, i);
 }
 
 /* The recursive part of split_nonconstant_init.  DEST is an lvalue
@@ -738,20 +756,7 @@ split_nonconstant_init (tree dest, tree init)
 	init = NULL_TREE;
 
       for (tree f : flags)
-	{
-	  /* See maybe_push_temp_cleanup.  */
-	  tree d = f;
-	  tree i = boolean_false_node;
-	  if (TREE_CODE (f) == TREE_LIST)
-	    {
-	      /* To disable a build_vec_init cleanup, set
-		 iterator = maxindex.  */
-	      d = TREE_PURPOSE (f);
-	      i = TREE_VALUE (f);
-	      ggc_free (f);
-	    }
-	  add_stmt (build2 (MODIFY_EXPR, TREE_TYPE (d), d, i));
-	}
+	add_stmt (build_disable_temp_cleanup (f));
       release_tree_vector (flags);
 
       code = pop_stmt_list (code);
@@ -864,23 +869,45 @@ store_init_value (tree decl, tree init, vec<tree, va_gc>** cleanups, int flags)
       bool const_init;
       tree oldval = value;
       if (DECL_DECLARED_CONSTEXPR_P (decl)
+	  || DECL_DECLARED_CONSTINIT_P (decl)
 	  || (DECL_IN_AGGR_P (decl)
 	      && DECL_INITIALIZED_IN_CLASS_P (decl)))
 	{
 	  value = fold_non_dependent_expr (value, tf_warning_or_error,
 					   /*manifestly_const_eval=*/true,
 					   decl);
+	  if (value == error_mark_node)
+	    ;
 	  /* Diagnose a non-constant initializer for constexpr variable or
 	     non-inline in-class-initialized static data member.  */
-	  if (!require_constant_expression (value))
-	    value = error_mark_node;
-	  else if (processing_template_decl)
-	    /* In a template we might not have done the necessary
-	       transformations to make value actually constant,
-	       e.g. extend_ref_init_temps.  */
-	    value = maybe_constant_init (value, decl, true);
+	  else if (!is_constant_expression (value))
+	    {
+	      /* Maybe we want to give this message for constexpr variables as
+		 well, but that will mean a lot of testsuite adjustment.  */
+	      if (DECL_DECLARED_CONSTINIT_P (decl))
+	      error_at (location_of (decl),
+			"%<constinit%> variable %qD does not have a "
+			"constant initializer", decl);
+	      require_constant_expression (value);
+	      value = error_mark_node;
+	    }
 	  else
-	    value = cxx_constant_init (value, decl);
+	    {
+	      value = maybe_constant_init (value, decl, true);
+
+	      /* In a template we might not have done the necessary
+		 transformations to make value actually constant,
+		 e.g. extend_ref_init_temps.  */
+	      if (!processing_template_decl
+		  && !TREE_CONSTANT (value))
+		{
+		  if (DECL_DECLARED_CONSTINIT_P (decl))
+		  error_at (location_of (decl),
+			    "%<constinit%> variable %qD does not have a "
+			    "constant initializer", decl);
+		  value = cxx_constant_init (value, decl);
+		}
+	    }
 	}
       else
 	value = fold_non_dependent_init (value, tf_warning_or_error,
@@ -893,22 +920,7 @@ store_init_value (tree decl, tree init, vec<tree, va_gc>** cleanups, int flags)
       if (!TYPE_REF_P (type))
 	TREE_CONSTANT (decl) = const_init && decl_maybe_constant_var_p (decl);
       if (!const_init)
-	{
-	  /* [dcl.constinit]/2 "If a variable declared with the constinit
-	     specifier has dynamic initialization, the program is
-	     ill-formed."  */
-	  if (DECL_DECLARED_CONSTINIT_P (decl))
-	    {
-	      error_at (location_of (decl),
-			"%<constinit%> variable %qD does not have a constant "
-			"initializer", decl);
-	      if (require_constant_expression (value))
-		cxx_constant_init (value, decl);
-	      value = error_mark_node;
-	    }
-	  else
-	    value = oldval;
-	}
+	value = oldval;
     }
   /* Don't fold initializers of automatic variables in constexpr functions,
      that might fold away something that needs to be diagnosed at constexpr
@@ -925,7 +937,7 @@ store_init_value (tree decl, tree init, vec<tree, va_gc>** cleanups, int flags)
      here it should have been digested into an actual value for the type.  */
   gcc_checking_assert (TREE_CODE (value) != CONSTRUCTOR
 		       || processing_template_decl
-		       || TREE_CODE (type) == VECTOR_TYPE
+		       || VECTOR_TYPE_P (type)
 		       || !TREE_HAS_CONSTRUCTOR (value));
 
   /* If the initializer is not a constant, fill in DECL_INITIAL with
@@ -992,7 +1004,7 @@ check_narrowing (tree type, tree init, tsubst_flags_t complain,
     return ok;
 
   if (CP_INTEGRAL_TYPE_P (type)
-      && TREE_CODE (ftype) == REAL_TYPE)
+      && SCALAR_FLOAT_TYPE_P (ftype))
     ok = false;
   else if (INTEGRAL_OR_ENUMERATION_TYPE_P (ftype)
 	   && CP_INTEGRAL_TYPE_P (type))
@@ -1010,8 +1022,8 @@ check_narrowing (tree type, tree init, tsubst_flags_t complain,
     }
   /* [dcl.init.list]#7.2: "from long double to double or float, or from
       double to float".  */
-  else if (TREE_CODE (ftype) == REAL_TYPE
-	   && TREE_CODE (type) == REAL_TYPE)
+  else if (SCALAR_FLOAT_TYPE_P (ftype)
+	   && SCALAR_FLOAT_TYPE_P (type))
     {
       if ((extended_float_type_p (ftype) || extended_float_type_p (type))
 	  ? /* "from a floating-point type T to another floating-point type
@@ -1048,7 +1060,7 @@ check_narrowing (tree type, tree init, tsubst_flags_t complain,
 	}
     }
   else if (INTEGRAL_OR_ENUMERATION_TYPE_P (ftype)
-	   && TREE_CODE (type) == REAL_TYPE)
+	   && SCALAR_FLOAT_TYPE_P (type))
     {
       ok = false;
       if (TREE_CODE (init) == INTEGER_CST)
@@ -1102,14 +1114,11 @@ check_narrowing (tree type, tree init, tsubst_flags_t complain,
       else if (complain & tf_error)
 	{
 	  int savederrorcount = errorcount;
-	  global_dc->pedantic_errors = 1;
-	  auto s = make_temp_override (global_dc->dc_warn_system_headers, true);
-	  pedwarn (loc, OPT_Wnarrowing,
-		   "narrowing conversion of %qE from %qH to %qI",
-		   init, ftype, type);
+	  permerror_opt (loc, OPT_Wnarrowing,
+			 "narrowing conversion of %qE from %qH to %qI",
+			 init, ftype, type);
 	  if (errorcount == savederrorcount)
 	    ok = true;
-	  global_dc->pedantic_errors = flag_pedantic_errors;
 	}
     }
 
@@ -1396,41 +1405,6 @@ digest_init_flags (tree type, tree init, int flags, tsubst_flags_t complain)
   return digest_init_r (type, init, 0, flags, complain);
 }
 
-/* Return true if SUBOB initializes the same object as FULL_EXPR.
-   For instance:
-
-     A a = A{};		      // initializer
-     A a = (A{});	      // initializer
-     A a = (1, A{});	      // initializer
-     A a = true ? A{} : A{};  // initializer
-     auto x = A{}.x;	      // temporary materialization
-     auto x = foo(A{});	      // temporary materialization
-
-   FULL_EXPR is the whole expression, SUBOB is its TARGET_EXPR subobject.  */
-
-static bool
-potential_prvalue_result_of (tree subob, tree full_expr)
-{
-  if (subob == full_expr)
-    return true;
-  else if (TREE_CODE (full_expr) == TARGET_EXPR)
-    {
-      tree init = TARGET_EXPR_INITIAL (full_expr);
-      if (TREE_CODE (init) == COND_EXPR)
-	return (potential_prvalue_result_of (subob, TREE_OPERAND (init, 1))
-		|| potential_prvalue_result_of (subob, TREE_OPERAND (init, 2)));
-      else if (TREE_CODE (init) == COMPOUND_EXPR)
-	return potential_prvalue_result_of (subob, TREE_OPERAND (init, 1));
-      /* ??? I don't know if this can be hit.  */
-      else if (TREE_CODE (init) == PAREN_EXPR)
-	{
-	  gcc_checking_assert (false);
-	  return potential_prvalue_result_of (subob, TREE_OPERAND (init, 0));
-	}
-    }
-  return false;
-}
-
 /* Callback to replace PLACEHOLDER_EXPRs in a TARGET_EXPR (which isn't used
    in the context of guaranteed copy elision).  */
 
@@ -1438,11 +1412,13 @@ static tree
 replace_placeholders_for_class_temp_r (tree *tp, int *, void *data)
 {
   tree t = *tp;
-  tree full_expr = *static_cast<tree *>(data);
+  auto pset = static_cast<hash_set<tree> *>(data);
 
   /* We're looking for a TARGET_EXPR nested in the whole expression.  */
   if (TREE_CODE (t) == TARGET_EXPR
-      && !potential_prvalue_result_of (t, full_expr))
+      /* That serves as temporary materialization, not an initializer.  */
+      && !TARGET_EXPR_ELIDING_P (t)
+      && !pset->add (t))
     {
       tree init = TARGET_EXPR_INITIAL (t);
       while (TREE_CODE (init) == COMPOUND_EXPR)
@@ -1457,6 +1433,16 @@ replace_placeholders_for_class_temp_r (tree *tp, int *, void *data)
 	  gcc_checking_assert (!find_placeholders (init));
 	}
     }
+  /* TARGET_EXPRs initializing function arguments are not marked as eliding,
+     even though gimplify_arg drops them on the floor.  Don't go replacing
+     placeholders in them.  */
+  else if (TREE_CODE (t) == CALL_EXPR || TREE_CODE (t) == AGGR_INIT_EXPR)
+    for (int i = 0; i < call_expr_nargs (t); ++i)
+      {
+	tree arg = get_nth_callarg (t, i);
+	if (TREE_CODE (arg) == TARGET_EXPR && !TARGET_EXPR_ELIDING_P (arg))
+	  pset->add (arg);
+      }
 
   return NULL_TREE;
 }
@@ -1504,8 +1490,8 @@ digest_nsdmi_init (tree decl, tree init, tsubst_flags_t complain)
      temporary materialization does not occur when initializing an object
      from a prvalue of the same type, therefore we must not replace the
      placeholder with a temporary object so that it can be elided.  */
-  cp_walk_tree (&init, replace_placeholders_for_class_temp_r, &init,
-		nullptr);
+  hash_set<tree> pset;
+  cp_walk_tree (&init, replace_placeholders_for_class_temp_r, &pset, nullptr);
 
   return init;
 }
@@ -1675,7 +1661,6 @@ process_init_constructor_array (tree type, tree init, int nested, int flags,
 	if (next)
 	  {
 	    if (next != error_mark_node
-		&& ! seen_error () // Improves error-recovery on anew5.C.
 		&& (initializer_constant_valid_p (next, TREE_TYPE (next))
 		    != null_pointer_node))
 	      {
@@ -1866,7 +1851,8 @@ process_init_constructor_record (tree type, tree init, int nested, int flags,
 	     to zero.  */
 	  if ((complain & tf_warning)
 	      && !cp_unevaluated_operand
-	      && !EMPTY_CONSTRUCTOR_P (init))
+	      && !EMPTY_CONSTRUCTOR_P (init)
+	      && !is_really_empty_class (fldtype, /*ignore_vptr*/false))
 	    warning (OPT_Wmissing_field_initializers,
 		     "missing initializer for member %qD", field);
 
@@ -2210,7 +2196,6 @@ build_x_arrow (location_t loc, tree expr, tsubst_flags_t complain)
 	  TREE_TYPE (expr) = ttype;
 	  return expr;
 	}
-      expr = build_non_dependent_expr (expr);
     }
 
   if (MAYBE_CLASS_TYPE_P (type))
@@ -2375,7 +2360,11 @@ build_m_component_ref (tree datum, tree component, tsubst_flags_t complain)
       /* Build an expression for "object + offset" where offset is the
 	 value stored in the pointer-to-data-member.  */
       ptype = build_pointer_type (type);
-      datum = fold_build_pointer_plus (fold_convert (ptype, datum), component);
+      datum = convert (ptype, datum);
+      if (!processing_template_decl)
+	datum = build2 (POINTER_PLUS_EXPR, ptype,
+			datum, convert_to_ptrofftype (component));
+      datum = cp_fully_fold (datum);
       datum = cp_build_fold_indirect_ref (datum);
       if (datum == error_mark_node)
 	return error_mark_node;

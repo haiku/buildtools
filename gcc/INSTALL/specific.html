@@ -3,7 +3,7 @@
 <!-- Created by GNU Texinfo 6.8, https://www.gnu.org/software/texinfo/ -->
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<!-- Copyright (C) 1988-2023 Free Software Foundation, Inc.
+<!-- Copyright (C) 1988-2024 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -99,7 +99,6 @@ information have to.
 </p>
 <ul>
 <li> <a href="#aarch64-x-x">aarch64*-*-*</a>
-</li><li> <a href="#alpha-x-x">alpha*-*-*</a>
 </li><li> <a href="#amdgcn-x-amdhsa">amdgcn-*-amdhsa</a>
 </li><li> <a href="#amd64-x-solaris2">amd64-*-solaris2*</a>
 </li><li> <a href="#arc-x-elf32">arc-*-elf32</a>
@@ -114,7 +113,6 @@ information have to.
 </li><li> <a href="#x-x-freebsd">*-*-freebsd*</a>
 </li><li> <a href="#h8300-hms">h8300-hms</a>
 </li><li> <a href="#hppa-hp-hpux">hppa*-hp-hpux*</a>
-</li><li> <a href="#hppa-hp-hpux10">hppa*-hp-hpux10</a>
 </li><li> <a href="#hppa-hp-hpux11">hppa*-hp-hpux11</a>
 </li><li> <a href="#x-x-linux-gnu">*-*-linux-gnu</a>
 </li><li> <a href="#ix86-x-linux">i?86-*-linux*</a>
@@ -222,12 +220,6 @@ protections by default.  This mechanism is turned off by default if neither
 of the options are given at configure time.
 </p>
 <hr />
-<span id="alpha-x-x"></span><span id="alpha*-*-*"></span><h3 class="heading">alpha*-*-*</h3>
-<p>This section contains general configuration information for all
-Alpha-based platforms using ELF.  In addition to reading this
-section, please read all other sections that match your target.
-</p>
-<hr />
 <span id="amd64-x-solaris2"></span><span id="amd64-*-solaris2*"></span><h3 class="heading">amd64-*-solaris2*</h3>
 <p>This is a synonym for &lsquo;<samp>x86_64-*-solaris2*</samp>&rsquo;.
 </p>
@@ -235,19 +227,29 @@ section, please read all other sections that match your target.
 <span id="amdgcn-x-amdhsa"></span><span id="amdgcn-*-amdhsa"></span><h3 class="heading">amdgcn-*-amdhsa</h3>
 <p>AMD GCN GPU target.
 </p>
-<p>Instead of GNU Binutils, you will need to install LLVM 13.0.1, or later, and copy
+<p>Instead of GNU Binutils, you will need to install LLVM 15, or later, and copy
 <samp>bin/llvm-mc</samp> to <samp>amdgcn-amdhsa/bin/as</samp>,
 <samp>bin/lld</samp> to <samp>amdgcn-amdhsa/bin/ld</samp>,
 <samp>bin/llvm-nm</samp> to <samp>amdgcn-amdhsa/bin/nm</samp>, and
 <samp>bin/llvm-ar</samp> to both <samp>bin/amdgcn-amdhsa-ar</samp> and
-<samp>bin/amdgcn-amdhsa-ranlib</samp>.
+<samp>bin/amdgcn-amdhsa-ranlib</samp>.  Note that LLVM 13.0.1 or LLVM 14 can be used
+by specifying a <code>--with-multilib-list=</code> that does not list <code>gfx1100</code>
+and <code>gfx1103</code>.
 </p>
-<p>Use Newlib (4.3.0 or newer).
+<p>Use Newlib (4.3.0 or newer; 4.4.0 contains some improvements and git commit
+7dd4eb1db (2025-03-25, post-4.4.0) fixes device console output for GFX10 and
+GFX11 devices).
 </p>
 <p>To run the binaries, install the HSA Runtime from the
-<a href="https://rocm.github.io">ROCm Platform</a>, and use
+<a href="https://rocm.docs.amd.com/">ROCm Platform</a>, and use
 <samp>libexec/gcc/amdhsa-amdhsa/<var>version</var>/gcn-run</samp> to launch them
 on the GPU.
+</p>
+<p>To enable support for GCN3 Fiji devices (gfx803), GCC has to be configured with
+<samp>--with-arch=<code>fiji</code></samp> or
+<samp>--with-multilib-list=<code>fiji</code>,...</samp>.  Note that support for Fiji
+devices has been removed in ROCm 4.0 and support in LLVM was deprecated and has
+been removed in LLVM 18.
 </p>
 <hr />
 <span id="arc-x-elf32"></span><span id="arc-*-elf32"></span><h3 class="heading">arc-*-elf32</h3>
@@ -327,14 +329,6 @@ This configuration is intended for embedded systems.
 </p>
 <hr />
 <span id="x-x-freebsd"></span><span id="g_t*-*-freebsd*"></span><h3 class="heading">*-*-freebsd*</h3>
-<p>In order to better utilize FreeBSD base system functionality and match
-the configuration of the system compiler, GCC 4.5 and above as well as
-GCC 4.4 past 2010-06-20 leverage SSP support in libc (which is present
-on FreeBSD 7 or later) and the use of <code>__cxa_atexit</code> by default
-(on FreeBSD 6 or later).  The use of <code>dl_iterate_phdr</code> inside
-<samp>libgcc_s.so.1</samp> and boehm-gc (on FreeBSD 7 or later) is enabled
-by GCC 4.5 and above.
-</p>
 <p>We support FreeBSD using the ELF file format with DWARF 2 debugging
 for all CPU architectures.  There are
 no known issues with mixing object files and libraries with different
@@ -373,29 +367,12 @@ longer a multiple of 2 bytes.
 </p>
 <hr />
 <span id="hppa-hp-hpux"></span><span id="hppa*-hp-hpux*"></span><h3 class="heading">hppa*-hp-hpux*</h3>
-<p>Support for HP-UX version 9 and older was discontinued in GCC 3.4.
-</p>
-<p>We require using gas/binutils on all hppa platforms.  Version 2.19 or
+<p>We require using gas on all hppa platforms.  Version 2.19 or
 later is recommended.
 </p>
 <p>It may be helpful to configure GCC with the
 <a href="./configure.html#with-gnu-as"><samp>--with-gnu-as</samp></a> and
 <samp>--with-as=&hellip;</samp> options to ensure that GCC can find GAS.
-</p>
-<p>The HP assembler should not be used with GCC.  It is rarely tested and may
-not work.  It shouldn&rsquo;t be used with any languages other than C due to its
-many limitations.
-</p>
-<p>Specifically, <samp>-g</samp> does not work (HP-UX uses a peculiar debugging
-format which GCC does not know about).  It also inserts timestamps
-into each object file it creates, causing the 3-stage comparison test to
-fail during a bootstrap.  You should be able to continue by saying
-&lsquo;<samp>make all-host all-target</samp>&rsquo; after getting the failure from &lsquo;<samp>make</samp>&rsquo;.
-</p>
-<p>Various GCC features are not supported.  For example, it does not support weak
-symbols or alias definitions.  As a result, explicit template instantiations
-are required when using C++.  This makes it difficult if not impossible to
-build many C++ applications.
 </p>
 <p>There are two default scheduling models for instructions.  These are
 PROCESSOR_7100LC and PROCESSOR_8000.  They are selected from the pa-risc
@@ -422,22 +399,7 @@ a list of the predefines used with each standard.
 <p>More specific information to &lsquo;<samp>hppa*-hp-hpux*</samp>&rsquo; targets follows.
 </p>
 <hr />
-<span id="hppa-hp-hpux10"></span><span id="hppa*-hp-hpux10"></span><h3 class="heading">hppa*-hp-hpux10</h3>
-<p>For hpux10.20, we <em>highly</em> recommend you pick up the latest sed patch
-<code>PHCO_19798</code> from HP.
-</p>
-<p>The C++ ABI has changed incompatibly in GCC 4.0.  COMDAT subspaces are
-used for one-only code and data.  This resolves many of the previous
-problems in using C++ on this target.  However, the ABI is not compatible
-with the one implemented under HP-UX 11 using secondary definitions.
-</p>
-<hr />
 <span id="hppa-hp-hpux11"></span><span id="hppa*-hp-hpux11"></span><h3 class="heading">hppa*-hp-hpux11</h3>
-<p>GCC 3.0 and up support HP-UX 11.  GCC 2.95.x is not supported and cannot
-be used to compile GCC 3.0 and up.
-</p>
-<p>The libffi library haven&rsquo;t been ported to 64-bit HP-UX&nbsp;and doesn&rsquo;t build.
-</p>
 <p>Refer to <a href="binaries.html">binaries</a> for information about obtaining
 precompiled GCC binaries for HP-UX.  Precompiled binaries must be obtained
 to build the Ada language as it cannot be bootstrapped using C.  Ada is
@@ -515,9 +477,7 @@ options, including program core dumps.  Binutils 2.14 corrects a
 problem on the 64-bit port resulting from HP&rsquo;s non-standard use of
 the .init and .fini sections for array initializers and finalizers.
 </p>
-<p>Although the HP and GNU linkers are both supported for the
-&lsquo;<samp>hppa64-hp-hpux11*</samp>&rsquo; target, it is strongly recommended that the
-HP linker be used for link editing on this target.
+<p>Only the HP linker is supported for the &lsquo;<samp>hppa64-hp-hpux11*</samp>&rsquo; target.
 </p>
 <p>At this time, the GNU linker does not support the creation of long
 branch stubs.  As a result, it cannot successfully link binaries
@@ -782,8 +742,7 @@ with a small set of possible suffixes to identify their default ABI type:
 
 </dd>
 <dt><span><code>loongarch64-linux-gnu</code></span></dt>
-<dd><p>Same as <code>loongarch64-linux-gnuf64</code>, but may be used with
-<samp>--with-abi=*</samp> to configure the default ABI type.
+<dd><p>Same as <code>loongarch64-linux-gnuf64</code> for legacy support.
 </p></dd>
 </dl>
 
@@ -914,7 +873,7 @@ in a minimal run-time environment by default.
 <p>Nvidia PTX target.
 </p>
 <p>Instead of GNU binutils, you will need to install
-<a href="https://github.com/MentorEmbedded/nvptx-tools/">nvptx-tools</a>.
+<a href="https://github.com/SourceryTools/nvptx-tools">nvptx-tools</a>.
 Tell GCC where to find it:
 <samp>--with-build-time-tools=[install-nvptx-tools]/nvptx-none/bin</samp>.
 </p>

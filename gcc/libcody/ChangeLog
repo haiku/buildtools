@@ -1,10 +1,14 @@
-2023-07-27  Release Manager
+2024-05-07  Release Manager
 
-	* GCC 13.2.0 released.
+	* GCC 14.1.0 released.
 
-2023-04-26  Release Manager
+2023-06-15  Marek Polacek  <polacek@redhat.com>
 
-	* GCC 13.1.0 released.
+	* Makefile.in: Pass LD_PICFLAG to LDFLAGS.
+	* configure.ac (--enable-host-shared): Don't set PICFLAG here.
+	(--enable-host-pie): New check.  Set PICFLAG and LD_PICFLAG after this
+	check.
+	* configure: Regenerate.
 
 2022-11-23  Marek Polacek  <polacek@redhat.com>
 
@@ -214,7 +218,7 @@
 	* tests/jouster: New.
 
 
-Copyright (C) 2020-2023 Free Software Foundation, Inc.
+Copyright (C) 2020-2024 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

@@ -1,4 +1,4 @@
-# Copyright (C) 2002-2023 Free Software Foundation, Inc.
+# Copyright (C) 2002-2024 Free Software Foundation, Inc.
 #
 # This file is part of GCC.
 #
@@ -21,5 +21,9 @@ linux.o: $(srcdir)/config/linux.cc
 	  $(POSTCOMPILE)
 
 linux-d.o: $(srcdir)/config/linux-d.cc
+	  $(COMPILE) $<
+	  $(POSTCOMPILE)
+
+linux-rust.o: $(srcdir)/config/linux-rust.cc
 	  $(COMPILE) $<
 	  $(POSTCOMPILE)

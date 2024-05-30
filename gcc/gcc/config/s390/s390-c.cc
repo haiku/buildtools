@@ -1,6 +1,6 @@
 /* Language specific subroutines used for code generation on IBM S/390
    and zSeries
-   Copyright (C) 2015-2023 Free Software Foundation, Inc.
+   Copyright (C) 2015-2024 Free Software Foundation, Inc.
 
    Contributed by Andreas Krebbel (Andreas.Krebbel@de.ibm.com).
 
@@ -409,6 +409,7 @@ s390_cpu_cpp_builtins (cpp_reader *pfile)
     cpp_define (pfile, "__LONG_DOUBLE_128__");
   cl_target_option_save (&opts, &global_options, &global_options_set);
   s390_cpu_cpp_builtins_internal (pfile, &opts, NULL);
+  cpp_define (pfile, "__GCC_ASM_FLAG_OUTPUTS__");
 }
 
 #if S390_USE_TARGET_ATTRIBUTE
@@ -497,11 +498,11 @@ s390_expand_overloaded_builtin (location_t loc,
 	/* Build a vector type with the alignment of the source
 	   location in order to enable correct alignment hints to be
 	   generated for vl.  */
-	tree mem_type = build_aligned_type (return_type,
-					    TYPE_ALIGN (TREE_TYPE (TREE_TYPE ((*arglist)[1]))));
+	unsigned align = TYPE_ALIGN (TREE_TYPE (TREE_TYPE ((*arglist)[1])));
+	tree mem_type = build_aligned_type (return_type, align);
 	return build2 (MEM_REF, mem_type,
 		       fold_build_pointer_plus ((*arglist)[1], (*arglist)[0]),
-		       build_int_cst (TREE_TYPE ((*arglist)[1]), 0));
+		       build_int_cst (ptr_type_node, 0));
       }
     case S390_OVERLOADED_BUILTIN_s390_vec_xst:
     case S390_OVERLOADED_BUILTIN_s390_vec_xstd2:
@@ -510,11 +511,13 @@ s390_expand_overloaded_builtin (location_t loc,
 	/* Build a vector type with the alignment of the target
 	   location in order to enable correct alignment hints to be
 	   generated for vst.  */
-	tree mem_type = build_aligned_type (TREE_TYPE((*arglist)[0]),
-					    TYPE_ALIGN (TREE_TYPE (TREE_TYPE ((*arglist)[2]))));
+	unsigned align = TYPE_ALIGN (TREE_TYPE (TREE_TYPE ((*arglist)[2])));
+	tree mem_type = build_aligned_type (TREE_TYPE ((*arglist)[0]), align);
 	return build2 (MODIFY_EXPR, mem_type,
-		       build1 (INDIRECT_REF, mem_type,
-			       fold_build_pointer_plus ((*arglist)[2], (*arglist)[1])),
+		       build2 (MEM_REF, mem_type,
+			       fold_build_pointer_plus ((*arglist)[2],
+							(*arglist)[1]),
+			       build_int_cst (ptr_type_node, 0)),
 		       (*arglist)[0]);
       }
     case S390_OVERLOADED_BUILTIN_s390_vec_load_pair:
@@ -781,7 +784,10 @@ s390_fn_types_compatible (enum s390_builtin_ov_type_index typeindex,
       tree in_arg = (*arglist)[i];
       tree in_type = TREE_TYPE (in_arg);
 
-      if (TREE_CODE (b_arg_type) == VECTOR_TYPE)
+      if (in_type == error_mark_node)
+	goto mismatch;
+
+      if (VECTOR_TYPE_P (b_arg_type))
 	{
 	  /* Vector types have to match precisely.  */
 	  if (b_arg_type != in_type
@@ -854,7 +860,7 @@ s390_vec_n_elem (tree fndecl)
   tree b_arg_chain;
   int n_elem = -1;
 
-  if (TREE_CODE (TREE_TYPE (TREE_TYPE (fndecl))) == VECTOR_TYPE)
+  if (VECTOR_TYPE_P (TREE_TYPE (TREE_TYPE (fndecl))))
     n_elem = TYPE_VECTOR_SUBPARTS (TREE_TYPE (TREE_TYPE ((fndecl))));
 
   for (b_arg_chain = TYPE_ARG_TYPES (TREE_TYPE (fndecl));

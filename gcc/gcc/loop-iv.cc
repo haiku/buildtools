@@ -1,5 +1,5 @@
 /* Rtl-level induction variable analysis.
-   Copyright (C) 2004-2023 Free Software Foundation, Inc.
+   Copyright (C) 2004-2024 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -637,7 +637,7 @@ get_biv_step_1 (df_ref def, scalar_int_mode outer_mode, rtx reg,
 {
   rtx set, rhs, op0 = NULL_RTX, op1 = NULL_RTX;
   rtx next, nextr;
-  enum rtx_code code;
+  enum rtx_code code, prev_code = UNKNOWN;
   rtx_insn *insn = DF_REF_INSN (def);
   df_ref next_def;
   enum iv_grd_result res;
@@ -697,6 +697,27 @@ get_biv_step_1 (df_ref def, scalar_int_mode outer_mode, rtx reg,
 	return false;
 
       op0 = XEXP (rhs, 0);
+
+      /* rv64 wraps SImode arithmetic inside an extension to DImode.
+	 This matches the actual hardware semantics.  So peek inside
+	 the extension and see if we have simple arithmetic that we
+	 can analyze.  */
+      if (GET_CODE (op0) == PLUS)
+	{
+	  rhs = op0;
+	  op0 = XEXP (rhs, 0);
+	  op1 = XEXP (rhs, 1);
+
+	  if (CONSTANT_P (op0))
+	    std::swap (op0, op1);
+
+	  if (!simple_reg_p (op0) || !CONSTANT_P (op1))
+	    return false;
+
+	  prev_code = code;
+	  code = PLUS;
+	}
+
       if (!simple_reg_p (op0))
 	return false;
 
@@ -769,6 +790,11 @@ get_biv_step_1 (df_ref def, scalar_int_mode outer_mode, rtx reg,
       else
 	*outer_step = simplify_gen_binary (code, outer_mode,
 					   *outer_step, op1);
+
+      if (prev_code == SIGN_EXTEND)
+	*extend = IV_SIGN_EXTEND;
+      else if (prev_code == ZERO_EXTEND)
+	*extend = IV_ZERO_EXTEND;
       break;
 
     case SIGN_EXTEND:
@@ -1551,7 +1577,7 @@ implies_p (rtx a, rtx b)
       && CONST_INT_P (XEXP (opb0, 1))
       /* Avoid overflows.  */
       && ((unsigned HOST_WIDE_INT) INTVAL (XEXP (opb0, 1))
-	  != ((unsigned HOST_WIDE_INT)1
+	  != (HOST_WIDE_INT_1U
 	      << (HOST_BITS_PER_WIDE_INT - 1)) - 1)
       && INTVAL (XEXP (opb0, 1)) + 1 == -INTVAL (op1))
     return rtx_equal_p (op0, XEXP (opb0, 0));

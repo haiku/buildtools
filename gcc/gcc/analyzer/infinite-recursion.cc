@@ -1,5 +1,5 @@
 /* Detection of infinite recursion.
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   Copyright (C) 2022-2024 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -31,7 +31,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic-core.h"
 #include "diagnostic-event-id.h"
 #include "diagnostic-path.h"
-#include "diagnostic-metadata.h"
 #include "function.h"
 #include "pretty-print.h"
 #include "sbitmap.h"
@@ -63,6 +62,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "make-unique.h"
 #include "analyzer/checker-path.h"
 #include "analyzer/feasible-graph.h"
+#include "diagnostic-format-sarif.h"
 
 /* A subclass of pending_diagnostic for complaining about suspected
    infinite recursion.  */
@@ -95,13 +95,11 @@ public:
     return OPT_Wanalyzer_infinite_recursion;
   }
 
-  bool emit (rich_location *rich_loc) final override
+  bool emit (diagnostic_emission_context &ctxt) final override
   {
     /* "CWE-674: Uncontrolled Recursion".  */
-    diagnostic_metadata m;
-    m.add_cwe (674);
-    return warning_meta (rich_loc, m, get_controlling_option (),
-			 "infinite recursion");
+    ctxt.add_cwe (674);
+    return ctxt.warn ("infinite recursion");
   }
 
   label_text describe_final_event (const evdesc::final_event &ev) final override
@@ -237,6 +235,18 @@ public:
     /* We shouldn't get here; if we do, reject the diagnostic.  */
     gcc_unreachable ();
     return false;
+  }
+
+  void maybe_add_sarif_properties (sarif_object &result_obj)
+    const final override
+  {
+    sarif_property_bag &props = result_obj.get_or_create_properties ();
+#define PROPERTY_PREFIX "gcc/analyzer/infinite_recursion_diagnostic/"
+    props.set_integer (PROPERTY_PREFIX "prev_entry_enode",
+		       m_prev_entry_enode->m_index);
+    props.set_integer (PROPERTY_PREFIX "new_entry_enode",
+		       m_new_entry_enode->m_index);
+#undef PROPERTY_PREFIX
   }
 
 private:
@@ -625,8 +635,12 @@ exploded_graph::detect_infinite_recursion (exploded_node *enode)
   const supernode *caller_snode = call_string.get_top_of_stack ().m_caller;
   const supernode *snode = enode->get_supernode ();
   gcc_assert (caller_snode->m_returning_call);
+  pending_location ploc (enode,
+			 snode,
+			 caller_snode->m_returning_call,
+			 nullptr);
   get_diagnostic_manager ().add_diagnostic
-    (enode, snode, caller_snode->m_returning_call, NULL,
+    (ploc,
      make_unique<infinite_recursion_diagnostic> (prev_entry_enode,
 						 enode,
 						 fndecl));

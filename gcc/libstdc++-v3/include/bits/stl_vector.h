@@ -1,6 +1,6 @@
 // Vector implementation -*- C++ -*-
 
-// Copyright (C) 2001-2023 Free Software Foundation, Inc.
+// Copyright (C) 2001-2024 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -64,7 +64,6 @@
 #endif
 #if __cplusplus >= 202002L
 # include <compare>
-#define __cpp_lib_constexpr_vector 201907L
 #endif
 
 #include <debug/assertions.h>
@@ -136,6 +135,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	_GLIBCXX20_CONSTEXPR
 	_Vector_impl() _GLIBCXX_NOEXCEPT_IF(
 	    is_nothrow_default_constructible<_Tp_alloc_type>::value)
+#if __cpp_lib_concepts
+	requires is_default_constructible_v<_Tp_alloc_type>
+#endif
 	: _Tp_alloc_type()
 	{ }
 
@@ -388,6 +390,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       }
 
     protected:
+
       _GLIBCXX20_CONSTEXPR
       void
       _M_create_storage(size_t __n)
@@ -1073,8 +1076,10 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       _GLIBCXX_NODISCARD _GLIBCXX20_CONSTEXPR
       size_type
       capacity() const _GLIBCXX_NOEXCEPT
-      { return size_type(this->_M_impl._M_end_of_storage
-			 - this->_M_impl._M_start); }
+      {
+	return size_type(this->_M_impl._M_end_of_storage
+			   - this->_M_impl._M_start);
+      }
 
       /**
        *  Returns true if the %vector is empty.  (Thus begin() would
@@ -1170,7 +1175,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  is first checked that it is in the range of the vector.  The
        *  function throws out_of_range if the check fails.
        */
-      _GLIBCXX20_CONSTEXPR
+      _GLIBCXX_NODISCARD _GLIBCXX20_CONSTEXPR
       reference
       at(size_type __n)
       {
@@ -1189,7 +1194,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  is first checked that it is in the range of the vector.  The
        *  function throws out_of_range if the check fails.
        */
-      _GLIBCXX20_CONSTEXPR
+      _GLIBCXX_NODISCARD _GLIBCXX20_CONSTEXPR
       const_reference
       at(size_type __n) const
       {
@@ -1286,7 +1291,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	    _GLIBCXX_ASAN_ANNOTATE_GREW(1);
 	  }
 	else
-	  _M_realloc_insert(end(), __x);
+	  _M_realloc_append(__x);
       }
 
 #if __cplusplus >= 201103L
@@ -1820,6 +1825,9 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
       void
       _M_realloc_insert(iterator __position, const value_type& __x);
+
+      void
+      _M_realloc_append(const value_type& __x);
 #else
       // A value_type object constructed with _Alloc_traits::construct()
       // and destroyed with _Alloc_traits::destroy().
@@ -1868,6 +1876,11 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	_GLIBCXX20_CONSTEXPR
 	void
 	_M_realloc_insert(iterator __position, _Args&&... __args);
+
+      template<typename... _Args>
+	_GLIBCXX20_CONSTEXPR
+	void
+	_M_realloc_append(_Args&&... __args);
 
       // Either move-construct at the end, or forward to _M_insert_aux.
       _GLIBCXX20_CONSTEXPR
@@ -2032,7 +2045,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
    *  and if corresponding elements compare equal.
   */
   template<typename _Tp, typename _Alloc>
-    _GLIBCXX20_CONSTEXPR
+    _GLIBCXX_NODISCARD _GLIBCXX20_CONSTEXPR
     inline bool
     operator==(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
     { return (__x.size() == __y.size()
@@ -2051,7 +2064,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
    *  `<` and `>=` etc.
   */
   template<typename _Tp, typename _Alloc>
-    _GLIBCXX20_CONSTEXPR
+    [[nodiscard]] _GLIBCXX20_CONSTEXPR
     inline __detail::__synth3way_t<_Tp>
     operator<=>(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
     {
@@ -2072,32 +2085,32 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
    *  See std::lexicographical_compare() for how the determination is made.
   */
   template<typename _Tp, typename _Alloc>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
     { return std::lexicographical_compare(__x.begin(), __x.end(),
 					  __y.begin(), __y.end()); }
 
   /// Based on operator==
   template<typename _Tp, typename _Alloc>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator!=(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
     { return !(__x == __y); }
 
   /// Based on operator<
   template<typename _Tp, typename _Alloc>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
     { return __y < __x; }
 
   /// Based on operator<
   template<typename _Tp, typename _Alloc>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<=(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
     { return !(__y < __x); }
 
   /// Based on operator<
   template<typename _Tp, typename _Alloc>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>=(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
     { return !(__x < __y); }
 #endif // three-way comparison

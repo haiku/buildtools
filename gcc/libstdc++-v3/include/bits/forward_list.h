@@ -1,6 +1,6 @@
 // <forward_list.h> -*- C++ -*-
 
-// Copyright (C) 2008-2023 Free Software Foundation, Inc.
+// Copyright (C) 2008-2024 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -1180,8 +1180,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       /// @}
 
     private:
-#if __cplusplus > 201703L
-# define __cpp_lib_list_remove_return_type 201806L
+#ifdef __glibcxx_list_remove_return_type // C++20 && HOSTED
       using __remove_return_type = size_type;
 # define _GLIBCXX_FWDLIST_REMOVE_RETURN_TYPE_TAG \
       __attribute__((__abi_tag__("__cxx20")))

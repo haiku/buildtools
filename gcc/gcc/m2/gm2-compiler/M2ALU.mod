@@ -1,6 +1,6 @@
 (* M2ALU.mod gcc implementation of the M2ALU module.
 
-Copyright (C) 2001-2023 Free Software Foundation, Inc.
+Copyright (C) 2001-2024 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -40,7 +40,7 @@ FROM M2Debug IMPORT Assert ;
 FROM Storage IMPORT ALLOCATE ;
 FROM StringConvert IMPORT ostoi, bstoi, stoi, hstoi ;
 FROM M2GCCDeclare IMPORT GetTypeMin, GetTypeMax, CompletelyResolved, DeclareConstant ;
-FROM M2GenGCC IMPORT DoCopyString, StringToChar ;
+FROM M2GenGCC IMPORT PrepareCopyString, StringToChar ;
 FROM M2Bitset IMPORT Bitset ;
 FROM SymbolConversion IMPORT Mod2Gcc, GccKnowsAbout ;
 FROM M2Printf IMPORT printf0, printf2 ;
@@ -2119,18 +2119,18 @@ VAR
    result: BOOLEAN ;
    res   : INTEGER ;
 BEGIN
-   v1 := Pop() ;
-   v2 := Pop() ;
-   IF (v1^.type=set) AND (v2^.type=set)
+   v1 := Pop () ;
+   v2 := Pop () ;
+   IF (v1^.type = set) AND (v2^.type = set)
    THEN
-      result := NOT IsSuperset(tokenno, v2, v1)
-   ELSIF (v1^.type=set) OR (v2^.type=set)
+      result := NOT IsSuperset (tokenno, v2, v1)
+   ELSIF (v1^.type = set) OR (v2^.type = set)
    THEN
       MetaErrorT0 (tokenno, 'cannot perform a comparison between a number and a set') ;
       result := FALSE
    ELSE
-      res := CompareTrees(v2^.numberValue, v1^.numberValue) ;
-      IF res=-1
+      res := CompareTrees (v2^.numberValue, v1^.numberValue) ;
+      IF res = -1
       THEN
          result := TRUE
       ELSE
@@ -2138,9 +2138,9 @@ BEGIN
       END ;
       (* result := (CompareTrees(v2^.numberValue, v1^.numberValue)=-1) *)
    END ;
-   Dispose(v1) ;
-   Dispose(v2) ;
-   RETURN( result )
+   Dispose (v1) ;
+   Dispose (v2) ;
+   RETURN result
 END Less ;
 
 
@@ -2922,10 +2922,20 @@ END AddField ;
    ElementsSolved - returns TRUE if all ranges in the set have been solved.
 *)
 
-PROCEDURE ElementsSolved (r: listOfRange) : BOOLEAN ;
+PROCEDURE ElementsSolved (tokenno: CARDINAL; r: listOfRange) : BOOLEAN ;
 BEGIN
    WHILE r#NIL DO
       WITH r^ DO
+         IF NOT IsConst (low)
+         THEN
+            MetaErrorT1 (tokenno, 'a constant set can only contain constant set elements, {%1Ead} is not a constant',
+                         low)
+         END ;
+         IF (high # low) AND (NOT IsConst (high))
+         THEN
+            MetaErrorT1 (tokenno, 'a constant set can only contain constant set elements, {%1Ead} is not a constant',
+                         high)
+         END ;
          IF NOT (IsSolvedGCC(low) AND IsSolvedGCC(high))
          THEN
             RETURN( FALSE )
@@ -3088,7 +3098,7 @@ END CombineElements ;
 
 PROCEDURE EvalSetValues (tokenno: CARDINAL; r: listOfRange) : BOOLEAN ;
 BEGIN
-   IF ElementsSolved(r)
+   IF ElementsSolved (tokenno, r)
    THEN
       SortElements(tokenno, r) ;
       CombineElements(tokenno, r) ;
@@ -4528,8 +4538,13 @@ BEGIN
    IF IsConstString(init) AND IsArray(SkipType(GetType(field))) AND
       (SkipTypeAndSubrange(GetType(GetType(field)))=Char)
    THEN
-      DoCopyString(tokenno, nBytes, initT, GetType(field), init) ;
-      RETURN( initT )
+      IF NOT PrepareCopyString (tokenno, nBytes, initT, init, GetType (field))
+      THEN
+         MetaErrorT2 (tokenno,
+                      'string constant {%1Ea} is too large to be assigned to the {%2d} {%2a}',
+                      init, field)
+      END ;
+      RETURN initT
    ELSE
       RETURN( ConvertConstantAndCheck(TokenToLocation(tokenno), Mod2Gcc(GetType(field)), Mod2Gcc(init)) )
    END
@@ -4695,7 +4710,7 @@ BEGIN
    PushIntegerTree(BuildNumberOfArrayElements(location, Mod2Gcc(arrayType))) ;
    IF IsConstString(el)
    THEN
-      PushCard(GetStringLength(el))
+      PushCard(GetStringLength(tokenno, el))
    ELSIF IsConst(el) AND (SkipType(GetType(el))=Char) AND IsValueSolved(el)
    THEN
       PushCard(1)
@@ -4750,7 +4765,7 @@ BEGIN
    THEN
       isChar := FALSE ;
       s := InitStringCharStar(KeyToCharStar(GetString(el))) ;
-      l := GetStringLength(el)
+      l := GetStringLength(tokenno, el)
    ELSIF IsConst(el) AND (SkipType(GetType(el))=Char) AND IsValueSolved(el)
    THEN
       isChar := TRUE
@@ -4900,7 +4915,7 @@ BEGIN
       offset := totalLength ;
       IF IsConstString (element)
       THEN
-         INC (totalLength, GetStringLength (element)) ;
+         INC (totalLength, GetStringLength (tokenno, element)) ;
          IF totalLength > arrayIndex
          THEN
             key := GetString (element) ;

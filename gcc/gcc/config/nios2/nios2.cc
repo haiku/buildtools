@@ -1,5 +1,5 @@
 /* Target machine subroutines for Altera Nios II.
-   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+   Copyright (C) 2012-2024 Free Software Foundation, Inc.
    Contributed by Jonah Graham (jgraham@altera.com), 
    Will Reece (wreece@altera.com), and Jeff DaSilva (jdasilva@altera.com).
    Contributed by Mentor Graphics, Inc.
@@ -2141,8 +2141,9 @@ nios2_valid_addr_expr_p (rtx base, rtx offset, bool strict_p)
 
 /* Implement TARGET_LEGITIMATE_ADDRESS_P.  */
 static bool
-nios2_legitimate_address_p (machine_mode mode ATTRIBUTE_UNUSED,
-			    rtx operand, bool strict_p)
+nios2_legitimate_address_p (machine_mode mode ATTRIBUTE_UNUSED, rtx operand,
+			    bool strict_p,
+			    code_helper = ERROR_MARK)
 {
   switch (GET_CODE (operand))
     {
@@ -3524,7 +3525,8 @@ nios2_setup_incoming_varargs (cumulative_args_t cum_v,
 
   cfun->machine->uses_anonymous_args = 1;
   local_cum = *cum;
-  if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl)))
+  if (!TYPE_NO_NAMED_ARGS_STDARG_P (TREE_TYPE (current_function_decl))
+      || arg.type != NULL_TREE)
     nios2_function_arg_advance (local_cum_v, arg);
 
   regs_to_push = NUM_ARG_REGS - local_cum.regs_used;

@@ -1,6 +1,6 @@
 // Allocator traits -*- C++ -*-
 
-// Copyright (C) 2011-2023 Free Software Foundation, Inc.
+// Copyright (C) 2011-2024 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -38,6 +38,9 @@
 # if _GLIBCXX_HOSTED
 #  include <bits/allocator.h>
 # endif
+# if __cpp_exceptions
+#  include <bits/stl_iterator.h> // __make_move_if_noexcept_iterator
+# endif
 #endif
 
 namespace std _GLIBCXX_VISIBILITY(default)
@@ -45,8 +48,6 @@ namespace std _GLIBCXX_VISIBILITY(default)
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #if __cplusplus >= 201103L
-#define __cpp_lib_allocator_traits_is_always_equal 201411L
-
   /// @cond undocumented
   struct __allocator_traits_base
   {
@@ -418,11 +419,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     };
 
 #if _GLIBCXX_HOSTED
-
-#if __cplusplus > 201703L
-# define __cpp_lib_constexpr_dynamic_alloc 201907L
-#endif
-
   /// Partial specialization for std::allocator.
   template<typename _Tp>
     struct allocator_traits<allocator<_Tp>>
@@ -493,7 +489,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       */
       [[__nodiscard__,__gnu__::__always_inline__]]
       static _GLIBCXX20_CONSTEXPR pointer
-      allocate(allocator_type& __a, size_type __n, const_void_pointer __hint)
+      allocate(allocator_type& __a, size_type __n,
+	       [[maybe_unused]] const_void_pointer __hint)
       {
 #if __cplusplus <= 201703L
 	return __a.allocate(__n, __hint);

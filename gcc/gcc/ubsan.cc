@@ -1,5 +1,5 @@
 /* UndefinedBehaviorSanitizer, undefined behavior detector.
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2024 Free Software Foundation, Inc.
    Contributed by Marek Polacek <polacek@redhat.com>
 
 This file is part of GCC.
@@ -49,6 +49,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "gimple-fold.h"
 #include "varasm.h"
+#include "realmpfr.h"
+#include "target.h"
+#include "langhooks.h"
 
 /* Map from a tree to a VAR_DECL tree.  */
 
@@ -124,6 +127,22 @@ tree
 ubsan_encode_value (tree t, enum ubsan_encode_value_phase phase)
 {
   tree type = TREE_TYPE (t);
+  if (TREE_CODE (type) == BITINT_TYPE)
+    {
+      if (TYPE_PRECISION (type) <= POINTER_SIZE)
+	{
+	  type = pointer_sized_int_node;
+	  t = fold_build1 (NOP_EXPR, type, t);
+	}
+      else
+	{
+	  if (TYPE_PRECISION (type) > MAX_FIXED_MODE_SIZE)
+	    return build_zero_cst (pointer_sized_int_node);
+	  type = build_nonstandard_integer_type (MAX_FIXED_MODE_SIZE,
+	  					 TYPE_UNSIGNED (type));
+	  t = fold_build1 (NOP_EXPR, type, t);
+	}
+    }
   scalar_mode mode = SCALAR_TYPE_MODE (type);
   const unsigned int bitsize = GET_MODE_BITSIZE (mode);
   if (bitsize <= POINTER_SIZE)
@@ -327,7 +346,7 @@ ubsan_source_location (location_t loc)
 static unsigned short
 get_ubsan_type_info_for_type (tree type)
 {
-  if (TREE_CODE (type) == REAL_TYPE)
+  if (SCALAR_FLOAT_TYPE_P (type))
     return tree_to_uhwi (TYPE_SIZE (type));
   else if (INTEGRAL_TYPE_P (type))
     {
@@ -354,14 +373,27 @@ ubsan_type_descriptor (tree type, enum ubsan_print_style pstyle)
 {
   /* See through any typedefs.  */
   type = TYPE_MAIN_VARIANT (type);
+  tree type3 = type;
+  if (pstyle == UBSAN_PRINT_FORCE_INT)
+    {
+      /* Temporary hack for -fsanitize=shift with _BitInt(129) and more.
+	 libubsan crashes if it is not TK_Integer type.  */
+      if (TREE_CODE (type) == BITINT_TYPE
+	  && TYPE_PRECISION (type) > MAX_FIXED_MODE_SIZE)
+	type3 = build_qualified_type (type, TYPE_QUAL_CONST);
+      if (type3 == type)
+	pstyle = UBSAN_PRINT_NORMAL;
+    }
 
-  tree decl = decl_for_type_lookup (type);
+  tree decl = decl_for_type_lookup (type3);
   /* It is possible that some of the earlier created DECLs were found
      unused, in that case they weren't emitted and varpool_node::get
      returns NULL node on them.  But now we really need them.  Thus,
      renew them here.  */
   if (decl != NULL_TREE && varpool_node::get (decl))
-    return build_fold_addr_expr (decl);
+    {
+      return build_fold_addr_expr (decl);
+    }
 
   tree dtype = ubsan_get_type_descriptor_type ();
   tree type2 = type;
@@ -369,6 +401,7 @@ ubsan_type_descriptor (tree type, enum ubsan_print_style pstyle)
   pretty_printer pretty_name;
   unsigned char deref_depth = 0;
   unsigned short tkind, tinfo;
+  char tname_bitint[sizeof ("unsigned _BitInt(2147483647)")];
 
   /* Get the name of the type, or the name of the pointer type.  */
   if (pstyle == UBSAN_PRINT_POINTER)
@@ -402,8 +435,18 @@ ubsan_type_descriptor (tree type, enum ubsan_print_style pstyle)
     }
 
   if (tname == NULL)
-    /* We weren't able to determine the type name.  */
-    tname = "<unknown>";
+    {
+      if (TREE_CODE (type2) == BITINT_TYPE)
+	{
+	  snprintf (tname_bitint, sizeof (tname_bitint),
+	  	    "%s_BitInt(%d)", TYPE_UNSIGNED (type2) ? "unsigned " : "",
+		    TYPE_PRECISION (type2));
+	  tname = tname_bitint;
+	}
+      else
+	/* We weren't able to determine the type name.  */
+	tname = "<unknown>";
+    }
 
   pp_quote (&pretty_name);
 
@@ -471,6 +514,12 @@ ubsan_type_descriptor (tree type, enum ubsan_print_style pstyle)
     case INTEGER_TYPE:
       tkind = 0x0000;
       break;
+    case BITINT_TYPE:
+      if (TYPE_PRECISION (eltype) <= MAX_FIXED_MODE_SIZE)
+	tkind = 0x0000;
+      else
+	tkind = 0xffff;
+      break;
     case REAL_TYPE:
       /* FIXME: libubsan right now only supports float, double and
 	 long double type formats.  */
@@ -485,7 +534,15 @@ ubsan_type_descriptor (tree type, enum ubsan_print_style pstyle)
       tkind = 0xffff;
       break;
     }
-  tinfo = get_ubsan_type_info_for_type (eltype);
+  tinfo = tkind == 0xffff ? 0 : get_ubsan_type_info_for_type (eltype);
+
+  if (pstyle == UBSAN_PRINT_FORCE_INT)
+    {
+      tkind = 0x0000;
+      tree t = build_nonstandard_integer_type (MAX_FIXED_MODE_SIZE,
+					       TYPE_UNSIGNED (eltype));
+      tinfo = get_ubsan_type_info_for_type (t);
+    }
 
   /* Create a new VAR_DECL of type descriptor.  */
   const char *tmp = pp_formatted_text (&pretty_name);
@@ -521,7 +578,7 @@ ubsan_type_descriptor (tree type, enum ubsan_print_style pstyle)
   varpool_node::finalize_decl (decl);
 
   /* Save the VAR_DECL into the hash table.  */
-  decl_for_type_insert (type, decl);
+  decl_for_type_insert (type3, decl);
 
   return build_fold_addr_expr (decl);
 }
@@ -801,6 +858,13 @@ ubsan_expand_null_ifn (gimple_stmt_iterator *gsip)
 	}
     }
   check_null = sanitize_flags_p (SANITIZE_NULL);
+  if (check_null && POINTER_TYPE_P (TREE_TYPE (ptr)))
+    {
+      addr_space_t as = TYPE_ADDR_SPACE (TREE_TYPE (TREE_TYPE (ptr)));
+      if (!ADDR_SPACE_GENERIC_P (as)
+	  && targetm.addr_space.zero_address_valid (as))
+	check_null = false;
+    }
 
   if (check_align == NULL_TREE && !check_null)
     {
@@ -1390,8 +1454,15 @@ instrument_mem_ref (tree mem, tree base, gimple_stmt_iterator *iter,
       if (align <= 1)
 	align = 0;
     }
-  if (align == 0 && !sanitize_flags_p (SANITIZE_NULL))
-    return;
+  if (align == 0)
+    {
+      if (!sanitize_flags_p (SANITIZE_NULL))
+	return;
+      addr_space_t as = TYPE_ADDR_SPACE (TREE_TYPE (base));
+      if (!ADDR_SPACE_GENERIC_P (as)
+	  && targetm.addr_space.zero_address_valid (as))
+	return;
+    }
   tree t = TREE_OPERAND (base, 0);
   if (!POINTER_TYPE_P (TREE_TYPE (t)))
     return;
@@ -1401,7 +1472,7 @@ instrument_mem_ref (tree mem, tree base, gimple_stmt_iterator *iter,
   tree alignt = build_int_cst (pointer_sized_int_node, align);
   gcall *g = gimple_build_call_internal (IFN_UBSAN_NULL, 3, t, kind, alignt);
   gimple_set_location (g, gimple_location (gsi_stmt (*iter)));
-  gsi_insert_before (iter, g, GSI_SAME_STMT);
+  gsi_safe_insert_before (iter, g);
 }
 
 /* Perform the pointer instrumentation.  */
@@ -1428,7 +1499,7 @@ instrument_pointer_overflow (gimple_stmt_iterator *gsi, tree ptr, tree off)
     return;
   gcall *g = gimple_build_call_internal (IFN_UBSAN_PTR, 2, ptr, off);
   gimple_set_location (g, gimple_location (gsi_stmt (*gsi)));
-  gsi_insert_before (gsi, g, GSI_SAME_STMT);
+  gsi_safe_insert_before (gsi, g);
 }
 
 /* Instrument pointer arithmetics if any.  */
@@ -1520,10 +1591,11 @@ maybe_instrument_pointer_overflow (gimple_stmt_iterator *gsi, tree t)
       else
 	t = fold_convert (sizetype, moff);
     }
-  t = force_gimple_operand_gsi (gsi, t, true, NULL_TREE, true,
-				GSI_SAME_STMT);
-  base_addr = force_gimple_operand_gsi (gsi, base_addr, true, NULL_TREE, true,
-					GSI_SAME_STMT);
+  gimple_seq seq, this_seq;
+  t = force_gimple_operand (t, &seq, true, NULL_TREE);
+  base_addr = force_gimple_operand (base_addr, &this_seq, true, NULL_TREE);
+  gimple_seq_add_seq_without_update (&seq, this_seq);
+  gsi_safe_insert_seq_before (gsi, seq);
   instrument_pointer_overflow (gsi, base_addr, t);
 }
 
@@ -1603,8 +1675,9 @@ instrument_si_overflow (gimple_stmt_iterator gsi)
      Also punt on bit-fields.  */
   if (!INTEGRAL_TYPE_P (lhsinner)
       || TYPE_OVERFLOW_WRAPS (lhsinner)
-      || maybe_ne (GET_MODE_BITSIZE (TYPE_MODE (lhsinner)),
-		   TYPE_PRECISION (lhsinner)))
+      || (TREE_CODE (lhsinner) != BITINT_TYPE
+	  && maybe_ne (GET_MODE_BITSIZE (TYPE_MODE (lhsinner)),
+		       TYPE_PRECISION (lhsinner))))
     return;
 
   switch (code)
@@ -1877,16 +1950,15 @@ ubsan_instrument_float_cast (location_t loc, tree type, tree expr)
       /* For _Decimal128 up to 34 decimal digits, - sign,
 	 dot, e, exponent.  */
       char buf[64];
-      mpfr_t m;
       int p = REAL_MODE_FORMAT (mode)->p;
       REAL_VALUE_TYPE maxval, minval;
 
       /* Use mpfr_snprintf rounding to compute the smallest
 	 representable decimal number greater or equal than
 	 1 << (prec - !uns_p).  */
-      mpfr_init2 (m, prec + 2);
+      auto_mpfr m (prec + 2);
       mpfr_set_ui_2exp (m, 1, prec - !uns_p, MPFR_RNDN);
-      mpfr_snprintf (buf, sizeof buf, "%.*RUe", p - 1, m);
+      mpfr_snprintf (buf, sizeof buf, "%.*RUe", p - 1, (mpfr_srcptr) m);
       decimal_real_from_string (&maxval, buf);
       max = build_real (expr_type, maxval);
 
@@ -1900,11 +1972,10 @@ ubsan_instrument_float_cast (location_t loc, tree type, tree expr)
 	     (-1 << (prec - 1)) - 1.  */
 	  mpfr_set_si_2exp (m, -1, prec - 1, MPFR_RNDN);
 	  mpfr_sub_ui (m, m, 1, MPFR_RNDN);
-	  mpfr_snprintf (buf, sizeof buf, "%.*RDe", p - 1, m);
+	  mpfr_snprintf (buf, sizeof buf, "%.*RDe", p - 1, (mpfr_srcptr) m);
 	  decimal_real_from_string (&minval, buf);
 	  min = build_real (expr_type, minval);
 	}
-      mpfr_clear (m);
     }
   else
     return NULL_TREE;
@@ -1979,7 +2050,7 @@ instrument_nonnull_arg (gimple_stmt_iterator *gsi)
 	    {
 	      g = gimple_build_assign (make_ssa_name (TREE_TYPE (arg)), arg);
 	      gimple_set_location (g, loc[0]);
-	      gsi_insert_before (gsi, g, GSI_SAME_STMT);
+	      gsi_safe_insert_before (gsi, g);
 	      arg = gimple_assign_lhs (g);
 	    }
 
@@ -2012,7 +2083,7 @@ instrument_nonnull_arg (gimple_stmt_iterator *gsi)
 	      g = gimple_build_call (fn, 1, data);
 	    }
 	  gimple_set_location (g, loc[0]);
-	  gsi_insert_before (gsi, g, GSI_SAME_STMT);
+	  gsi_safe_insert_before (gsi, g);
 	  ubsan_create_edge (g);
 	}
       *gsi = gsi_for_stmt (stmt);
@@ -2068,7 +2139,7 @@ instrument_nonnull_return (gimple_stmt_iterator *gsi)
 	  g = gimple_build_call (fn, 2, data, data2);
 	}
       gimple_set_location (g, loc[0]);
-      gsi_insert_before (gsi, g, GSI_SAME_STMT);
+      gsi_safe_insert_before (gsi, g);
       ubsan_create_edge (g);
       *gsi = gsi_for_stmt (stmt);
     }
@@ -2175,6 +2246,7 @@ instrument_object_size (gimple_stmt_iterator *gsi, tree t, bool is_lhs)
   tree sizet;
   tree base_addr = base;
   gimple *bos_stmt = NULL;
+  gimple_seq seq = NULL;
   if (decl_p)
     base_addr = build1 (ADDR_EXPR,
 			build_pointer_type (TREE_TYPE (base)), base);
@@ -2188,19 +2260,12 @@ instrument_object_size (gimple_stmt_iterator *gsi, tree t, bool is_lhs)
       sizet = builtin_decl_explicit (BUILT_IN_DYNAMIC_OBJECT_SIZE);
       sizet = build_call_expr_loc (loc, sizet, 2, base_addr,
 				   integer_zero_node);
-      sizet = force_gimple_operand_gsi (gsi, sizet, false, NULL_TREE, true,
-					GSI_SAME_STMT);
+      sizet = force_gimple_operand (sizet, &seq, false, NULL_TREE);
       /* If the call above didn't end up being an integer constant, go one
 	 statement back and get the __builtin_object_size stmt.  Save it,
 	 we might need it later.  */
       if (SSA_VAR_P (sizet))
-	{
-	  gsi_prev (gsi);
-	  bos_stmt = gsi_stmt (*gsi);
-
-	  /* Move on to where we were.  */
-	  gsi_next (gsi);
-	}
+	bos_stmt = gsi_stmt (gsi_last (seq));
     }
   else
     return;
@@ -2242,21 +2307,24 @@ instrument_object_size (gimple_stmt_iterator *gsi, tree t, bool is_lhs)
       && !TREE_ADDRESSABLE (base))
     mark_addressable (base);
 
+  /* We have to emit the check.  */
+  gimple_seq this_seq;
+  t = force_gimple_operand (t, &this_seq, true, NULL_TREE);
+  gimple_seq_add_seq_without_update (&seq, this_seq);
+  ptr = force_gimple_operand (ptr, &this_seq, true, NULL_TREE);
+  gimple_seq_add_seq_without_update (&seq, this_seq);
+  gsi_safe_insert_seq_before (gsi, seq);
+
   if (bos_stmt
       && gimple_call_builtin_p (bos_stmt, BUILT_IN_DYNAMIC_OBJECT_SIZE))
     ubsan_create_edge (bos_stmt);
 
-  /* We have to emit the check.  */
-  t = force_gimple_operand_gsi (gsi, t, true, NULL_TREE, true,
-				GSI_SAME_STMT);
-  ptr = force_gimple_operand_gsi (gsi, ptr, true, NULL_TREE, true,
-				  GSI_SAME_STMT);
   tree ckind = build_int_cst (unsigned_char_type_node,
 			      is_lhs ? UBSAN_STORE_OF : UBSAN_LOAD_OF);
   gimple *g = gimple_build_call_internal (IFN_UBSAN_OBJECT_SIZE, 4,
 					 ptr, t, sizet, ckind);
   gimple_set_location (g, loc);
-  gsi_insert_before (gsi, g, GSI_SAME_STMT);
+  gsi_safe_insert_before (gsi, g);
 }
 
 /* Instrument values passed to builtin functions.  */

@@ -1,3 +1,5 @@
+/* Since this uses dg-additional-sources, need to specify `dg-do run` instead of the default. */
+/* { dg-do run } */
 /* { dg-require-effective-target vect_simd_clones } */
 /* { dg-additional-options "-fopenmp-simd" } */
 /* { dg-additional-options "-mavx" { target avx_runtime } } */
@@ -65,6 +67,7 @@ main ()
   check_vect ();
   fn3 ();
   fn1 ();
+#pragma GCC novector
   for (i = 0; i < N; i++)
     if (a[i] != i * 2 + 23 + (i % 37) + (i & 63)
 	|| b[i] != 17 + (i % 37)
@@ -72,6 +75,7 @@ main ()
       abort ();
   fn3 ();
   fn2 ();
+#pragma GCC novector
   for (i = 0; i < N; i++)
     if (a[i] != i * 2 + 23 + (i % 37) + (i & 63)
 	|| b[i] != 17 + (i % 37)

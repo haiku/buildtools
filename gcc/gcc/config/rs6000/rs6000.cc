@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /* Subroutines used for code generation on IBM RS/6000.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2024 Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 
    This file is part of GCC.
@@ -72,6 +72,8 @@
 #include "context.h"
 #include "tree-pass.h"
 #include "symbol-summary.h"
+#include "sreal.h"
+#include "ipa-cp.h"
 #include "ipa-prop.h"
 #include "ipa-fnsummary.h"
 #include "except.h"
@@ -1109,12 +1111,13 @@ struct processor_costs ppca2_cost = {
 static tree (*rs6000_veclib_handler) (combined_fn, tree, tree);
 
 
-static bool rs6000_debug_legitimate_address_p (machine_mode, rtx, bool);
+static bool rs6000_debug_legitimate_address_p (machine_mode, rtx, bool,
+					       code_helper = ERROR_MARK);
 static tree rs6000_handle_longcall_attribute (tree *, tree, tree, int, bool *);
 static tree rs6000_handle_altivec_attribute (tree *, tree, tree, int, bool *);
 static tree rs6000_handle_struct_attribute (tree *, tree, tree, int, bool *);
 static tree rs6000_builtin_vectorized_libmass (combined_fn, tree, tree);
-static void rs6000_emit_set_long_const (rtx, HOST_WIDE_INT);
+static void rs6000_emit_set_long_const (rtx, HOST_WIDE_INT, int * = nullptr);
 static int rs6000_memory_move_cost (machine_mode, reg_class_t, bool);
 static bool rs6000_debug_rtx_costs (rtx, machine_mode, int, int, int *, bool);
 static int rs6000_debug_address_cost (rtx, machine_mode, addr_space_t,
@@ -1254,7 +1257,7 @@ static const char alt_reg_names[][8] =
 
 /* Table of valid machine attributes.  */
 
-static const struct attribute_spec rs6000_attribute_table[] =
+static const attribute_spec rs6000_gnu_attributes[] =
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
        affects_type_identity, handler, exclude } */
@@ -1271,7 +1274,16 @@ static const struct attribute_spec rs6000_attribute_table[] =
 #ifdef SUBTARGET_ATTRIBUTE_TABLE
   SUBTARGET_ATTRIBUTE_TABLE,
 #endif
-  { NULL,        0, 0, false, false, false, false, NULL, NULL }
+};
+
+static const scoped_attribute_specs rs6000_gnu_attribute_table =
+{
+  "gnu", { rs6000_gnu_attributes }
+};
+
+static const scoped_attribute_specs *const rs6000_attribute_table[] =
+{
+  &rs6000_gnu_attribute_table
 };
 
 #ifndef TARGET_PROFILE_KERNEL
@@ -1760,6 +1772,10 @@ static const struct attribute_spec rs6000_attribute_table[] =
 
 #undef TARGET_UPDATE_IPA_FN_TARGET_INFO
 #define TARGET_UPDATE_IPA_FN_TARGET_INFO rs6000_update_ipa_fn_target_info
+
+#undef TARGET_CONST_ANCHOR
+#define TARGET_CONST_ANCHOR 0x8000
+
 
 
 /* Processor table.  */
@@ -1899,7 +1915,7 @@ rs6000_hard_regno_mode_ok_uncached (int regno, machine_mode mode)
 	  if(GET_MODE_SIZE (mode) == UNITS_PER_FP_WORD)
 	    return 1;
 
-	  if (TARGET_P8_VECTOR && (mode == SImode))
+	  if (TARGET_POPCNTD && mode == SImode)
 	    return 1;
 
 	  if (TARGET_P9_VECTOR && (mode == QImode || mode == HImode))
@@ -3373,7 +3389,8 @@ darwin_rs6000_override_options (void)
 static rtx_insn *
 rs6000_md_asm_adjust (vec<rtx> & /*outputs*/, vec<rtx> & /*inputs*/,
 		      vec<machine_mode> & /*input_modes*/,
-		      vec<const char *> & /*constraints*/, vec<rtx> &clobbers,
+		      vec<const char *> & /*constraints*/,
+		      vec<rtx> &/*uses*/, vec<rtx> &clobbers,
 		      HARD_REG_SET &clobbered_regs, location_t /*loc*/)
 {
   clobbers.safe_push (gen_rtx_REG (SImode, CA_REGNO));
@@ -3790,11 +3807,10 @@ rs6000_option_override_internal (bool global_init_p)
 		 "-mmultiple");
     }
 
-  /* If little-endian, default to -mstrict-align on older processors.
-     Testing for direct_move matches power8 and later.  */
+  /* If little-endian, default to -mstrict-align on older processors.  */
   if (!BYTES_BIG_ENDIAN
       && !(processor_target_table[tune_index].target_enable
-	   & OPTION_MASK_DIRECT_MOVE))
+	   & OPTION_MASK_POWER8))
     rs6000_isa_flags |= ~rs6000_isa_flags_explicit & OPTION_MASK_STRICT_ALIGN;
 
   /* Add some warnings for VSX.  */
@@ -3836,8 +3852,7 @@ rs6000_option_override_internal (bool global_init_p)
       && (rs6000_isa_flags_explicit & (OPTION_MASK_SOFT_FLOAT
 				       | OPTION_MASK_ALTIVEC
 				       | OPTION_MASK_VSX)) != 0)
-    rs6000_isa_flags &= ~((OPTION_MASK_P8_VECTOR | OPTION_MASK_CRYPTO
-			   | OPTION_MASK_DIRECT_MOVE)
+    rs6000_isa_flags &= ~((OPTION_MASK_P8_VECTOR | OPTION_MASK_CRYPTO)
 		         & ~rs6000_isa_flags_explicit);
 
   if (TARGET_DEBUG_REG || TARGET_DEBUG_TARGET)
@@ -3849,8 +3864,8 @@ rs6000_option_override_internal (bool global_init_p)
     dwarf_offset_size = POINTER_SIZE_UNITS;
 #endif
 
-  /* Handle explicit -mno-{altivec,vsx,power8-vector,power9-vector} and turn
-     off all of the options that depend on those flags.  */
+  /* Handle explicit -mno-{altivec,vsx} and turn off all of
+     the options that depend on those flags.  */
   ignore_masks = rs6000_disable_incompatible_switches ();
 
   /* For the newer switches (vsx, dfp, etc.) set some of the older options,
@@ -3881,7 +3896,7 @@ rs6000_option_override_internal (bool global_init_p)
       else
 	rs6000_isa_flags |= ISA_3_0_MASKS_SERVER;
     }
-  else if (TARGET_P8_VECTOR || TARGET_DIRECT_MOVE || TARGET_CRYPTO)
+  else if (TARGET_P8_VECTOR || TARGET_POWER8 || TARGET_CRYPTO)
     rs6000_isa_flags |= (ISA_2_7_MASKS_SERVER & ~ignore_masks);
   else if (TARGET_VSX)
     rs6000_isa_flags |= (ISA_2_6_MASKS_SERVER & ~ignore_masks);
@@ -3922,39 +3937,11 @@ rs6000_option_override_internal (bool global_init_p)
       rs6000_isa_flags &= ~OPTION_MASK_FPRND;
     }
 
-  if (TARGET_DIRECT_MOVE && !TARGET_VSX)
-    {
-      if (rs6000_isa_flags_explicit & OPTION_MASK_DIRECT_MOVE)
-	error ("%qs requires %qs", "-mdirect-move", "-mvsx");
-      rs6000_isa_flags &= ~OPTION_MASK_DIRECT_MOVE;
-    }
-
   if (TARGET_P8_VECTOR && !TARGET_ALTIVEC)
-    {
-      if (rs6000_isa_flags_explicit & OPTION_MASK_P8_VECTOR)
-	error ("%qs requires %qs", "-mpower8-vector", "-maltivec");
-      rs6000_isa_flags &= ~OPTION_MASK_P8_VECTOR;
-    }
+    rs6000_isa_flags &= ~OPTION_MASK_P8_VECTOR;
 
   if (TARGET_P8_VECTOR && !TARGET_VSX)
-    {
-      if ((rs6000_isa_flags_explicit & OPTION_MASK_P8_VECTOR)
-	  && (rs6000_isa_flags_explicit & OPTION_MASK_VSX))
-	error ("%qs requires %qs", "-mpower8-vector", "-mvsx");
-      else if ((rs6000_isa_flags_explicit & OPTION_MASK_P8_VECTOR) == 0)
-	{
-	  rs6000_isa_flags &= ~OPTION_MASK_P8_VECTOR;
-	  if (rs6000_isa_flags_explicit & OPTION_MASK_VSX)
-	    rs6000_isa_flags_explicit |= OPTION_MASK_P8_VECTOR;
-	}
-      else
-	{
-	  /* OPTION_MASK_P8_VECTOR is explicit, and OPTION_MASK_VSX is
-	     not explicit.  */
-	  rs6000_isa_flags |= OPTION_MASK_VSX;
-	  rs6000_isa_flags_explicit |= OPTION_MASK_VSX;
-	}
-    }
+    rs6000_isa_flags &= ~OPTION_MASK_P8_VECTOR;
 
   if (TARGET_DFP && !TARGET_HARD_FLOAT)
     {
@@ -4041,28 +4028,7 @@ rs6000_option_override_internal (bool global_init_p)
 
   /* ISA 3.0 vector instructions include ISA 2.07.  */
   if (TARGET_P9_VECTOR && !TARGET_P8_VECTOR)
-    {
-      /* We prefer to not mention undocumented options in
-	 error messages.  However, if users have managed to select
-	 power9-vector without selecting power8-vector, they
-	 already know about undocumented flags.  */
-      if ((rs6000_isa_flags_explicit & OPTION_MASK_P9_VECTOR) &&
-	  (rs6000_isa_flags_explicit & OPTION_MASK_P8_VECTOR))
-	error ("%qs requires %qs", "-mpower9-vector", "-mpower8-vector");
-      else if ((rs6000_isa_flags_explicit & OPTION_MASK_P9_VECTOR) == 0)
-	{
-	  rs6000_isa_flags &= ~OPTION_MASK_P9_VECTOR;
-	  if (rs6000_isa_flags_explicit & OPTION_MASK_P8_VECTOR)
-	    rs6000_isa_flags_explicit |= OPTION_MASK_P9_VECTOR;
-	}
-      else
-	{
-	  /* OPTION_MASK_P9_VECTOR is explicit and
-	     OPTION_MASK_P8_VECTOR is not explicit.  */
-	  rs6000_isa_flags |= OPTION_MASK_P8_VECTOR;
-	  rs6000_isa_flags_explicit |= OPTION_MASK_P8_VECTOR;
-	}
-    }
+    rs6000_isa_flags &= ~OPTION_MASK_P9_VECTOR;
 
   /* Set -mallow-movmisalign to explicitly on if we have full ISA 2.07
      support. If we only have ISA 2.06 support, and the user did not specify
@@ -6049,21 +6015,9 @@ num_insns_constant_gpr (HOST_WIDE_INT value)
 
   else if (TARGET_POWERPC64)
     {
-      HOST_WIDE_INT low = sext_hwi (value, 32);
-      HOST_WIDE_INT high = value >> 31;
-
-      if (high == 0 || high == -1)
-	return 2;
-
-      high >>= 1;
-
-      if (low == 0 || low == high)
-	return num_insns_constant_gpr (high) + 1;
-      else if (high == 0)
-	return num_insns_constant_gpr (low) + 1;
-      else
-	return (num_insns_constant_gpr (high)
-		+ num_insns_constant_gpr (low) + 1);
+      int num_insns = 0;
+      rs6000_emit_set_long_const (nullptr, value, &num_insns);
+      return num_insns;
     }
 
   else
@@ -6635,6 +6589,36 @@ xxspltib_constant_p (rtx op,
     *num_insns_ptr = 2;
 
   *constant_ptr = (int) value;
+  return true;
+}
+
+/* Return true if OP mode is V2DI and can be synthesized with ISA 2.07
+   instructions vupkhsw and vspltisw.
+
+   Return the constant that is being split via CONSTANT_PTR.  */
+
+bool
+vspltisw_vupkhsw_constant_p (rtx op, machine_mode mode, int *constant_ptr)
+{
+  HOST_WIDE_INT value;
+  rtx elt;
+
+  if (!TARGET_P8_VECTOR)
+    return false;
+
+  if (mode != V2DImode)
+    return false;
+
+  if (!const_vec_duplicate_p (op, &elt))
+    return false;
+
+  value = INTVAL (elt);
+  if (value == 0 || value == 1
+      || !EASY_VECTOR_15 (value))
+    return false;
+
+  if (constant_ptr)
+    *constant_ptr = (int) value;
   return true;
 }
 
@@ -7660,12 +7644,11 @@ rs6000_expand_vector_extract (rtx target, rtx vec, rtx elt)
     {
       unsigned int ele_size = GET_MODE_SIZE (inner_mode);
       rtx num_ele_m1 = GEN_INT (GET_MODE_NUNITS (mode) - 1);
-      rtx new_addr = gen_reg_rtx (Pmode);
 
       elt = gen_rtx_AND (Pmode, elt, num_ele_m1);
       if (ele_size > 1)
 	elt = gen_rtx_MULT (Pmode, elt, GEN_INT (ele_size));
-      new_addr = gen_rtx_PLUS (Pmode, XEXP (mem, 0), elt);
+      rtx new_addr = gen_rtx_PLUS (Pmode, XEXP (mem, 0), elt);
       new_addr = change_address (mem, inner_mode, new_addr);
       emit_move_insn (target, new_addr);
     }
@@ -8059,7 +8042,7 @@ rs6000_data_alignment (tree type, unsigned int align, enum data_align how)
 {
   if (how != align_opt)
     {
-      if (TREE_CODE (type) == VECTOR_TYPE && align < 128)
+      if (VECTOR_TYPE_P (type) && align < 128)
 	align = 128;
     }
 
@@ -9850,12 +9833,19 @@ use_toc_relative_ref (rtx sym, machine_mode mode)
    because adjacent memory cells are accessed by adding word-sized offsets
    during assembly output.  */
 static bool
-rs6000_legitimate_address_p (machine_mode mode, rtx x, bool reg_ok_strict)
+rs6000_legitimate_address_p (machine_mode mode, rtx x, bool reg_ok_strict,
+			     code_helper ch = ERROR_MARK)
 {
   bool reg_offset_p = reg_offset_addressing_ok_p (mode);
   bool quad_offset_p = mode_supports_dq_form (mode);
 
   if (TARGET_ELF && RS6000_SYMBOL_REF_TLS_P (x))
+    return 0;
+
+  /* lxvl and stxvl doesn't support any addressing modes with PLUS.  */
+  if (ch.is_internal_fn ()
+      && (ch == IFN_LEN_LOAD || ch == IFN_LEN_STORE)
+      && GET_CODE (x) == PLUS)
     return 0;
 
   /* Handle unaligned altivec lvx/stvx type addresses.  */
@@ -9953,10 +9943,10 @@ rs6000_legitimate_address_p (machine_mode mode, rtx x, bool reg_ok_strict)
 
 /* Debug version of rs6000_legitimate_address_p.  */
 static bool
-rs6000_debug_legitimate_address_p (machine_mode mode, rtx x,
-				   bool reg_ok_strict)
+rs6000_debug_legitimate_address_p (machine_mode mode, rtx x, bool reg_ok_strict,
+				   code_helper ch)
 {
-  bool ret = rs6000_legitimate_address_p (mode, x, reg_ok_strict);
+  bool ret = rs6000_legitimate_address_p (mode, x, reg_ok_strict, ch);
   fprintf (stderr,
 	   "\nrs6000_legitimate_address_p: return = %s, mode = %s, "
 	   "strict = %d, reload = %s, code = %s\n",
@@ -10160,9 +10150,13 @@ rs6000_conditional_register_usage (void)
     for (i = 32; i < 64; i++)
       fixed_regs[i] = call_used_regs[i] = 1;
 
+  /* For non PC-relative code, GPR2 is unavailable for register allocation.  */
+  if (FIXED_R2 && !rs6000_pcrel_p ())
+    fixed_regs[2] = 1;
+
   /* The TOC register is not killed across calls in a way that is
      visible to the compiler.  */
-  if (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2)
+  if (fixed_regs[2] && (DEFAULT_ABI == ABI_AIX || DEFAULT_ABI == ABI_ELFv2))
     call_used_regs[2] = 0;
 
   if (DEFAULT_ABI == ABI_V4 && flag_pic == 2)
@@ -10258,148 +10252,405 @@ rs6000_emit_set_const (rtx dest, rtx source)
   return true;
 }
 
+/* Check if C can be rotated to a negative value which 'lis' instruction is
+   able to load: 1..1xx0..0.  If so, set *ROT to the number by which C is
+   rotated, and return true.  Return false otherwise.  */
+
+static bool
+can_be_rotated_to_negative_lis (HOST_WIDE_INT c, int *rot)
+{
+  /* case a. 1..1xxx0..01..1: up to 15 x's, at least 16 0's.  */
+  int leading_ones = clz_hwi (~c);
+  int tailing_ones = ctz_hwi (~c);
+  int middle_zeros = ctz_hwi (c >> tailing_ones);
+  if (middle_zeros >= 16 && leading_ones + tailing_ones >= 33)
+    {
+      *rot = HOST_BITS_PER_WIDE_INT - tailing_ones;
+      return true;
+    }
+
+  /* case b. xx0..01..1xx: some of 15 x's (and some of 16 0's) are
+     rotated over the highest bit.  */
+  int pos_one = clz_hwi ((c << 16) >> 16);
+  middle_zeros = ctz_hwi (c >> (HOST_BITS_PER_WIDE_INT - pos_one));
+  int middle_ones = clz_hwi (~(c << pos_one));
+  if (middle_zeros >= 16 && middle_ones >= 33)
+    {
+      *rot = pos_one;
+      return true;
+    }
+
+  return false;
+}
+
+/* Check if value C can be built by 2 instructions: one is 'li or lis',
+   another is rotldi.
+
+   If so, *SHIFT is set to the shift operand of rotldi(rldicl), and *MASK
+   is set to the mask operand of rotldi(rldicl), and return true.
+   Return false otherwise.  */
+
+static bool
+can_be_built_by_li_lis_and_rotldi (HOST_WIDE_INT c, int *shift,
+				   HOST_WIDE_INT *mask)
+{
+  /* If C or ~C contains at least 49 successive zeros, then C can be rotated
+     to/from a positive or negative value that 'li' is able to load.  */
+  int n;
+  if (can_be_rotated_to_lowbits (c, 15, &n)
+      || can_be_rotated_to_lowbits (~c, 15, &n)
+      || can_be_rotated_to_negative_lis (c, &n))
+    {
+      *mask = HOST_WIDE_INT_M1;
+      *shift = HOST_BITS_PER_WIDE_INT - n;
+      return true;
+    }
+
+  return false;
+}
+
+/* Check if value C can be built by 2 instructions: one is 'li or lis',
+   another is rldicl.
+
+   If so, *SHIFT is set to the shift operand of rldicl, and *MASK is set to
+   the mask operand of rldicl, and return true.
+   Return false otherwise.  */
+
+static bool
+can_be_built_by_li_lis_and_rldicl (HOST_WIDE_INT c, int *shift,
+				   HOST_WIDE_INT *mask)
+{
+  /* Leading zeros may be cleaned by rldicl with a mask.  Change leading zeros
+     to ones and then recheck it.  */
+  int lz = clz_hwi (c);
+
+  /* If lz == 0, the left shift is undefined.  */
+  if (!lz)
+    return false;
+
+  HOST_WIDE_INT unmask_c
+    = c | (HOST_WIDE_INT_M1U << (HOST_BITS_PER_WIDE_INT - lz));
+  int n;
+  if (can_be_rotated_to_lowbits (~unmask_c, 15, &n)
+      || can_be_rotated_to_negative_lis (unmask_c, &n))
+    {
+      *mask = HOST_WIDE_INT_M1U >> lz;
+      *shift = n == 0 ? 0 : HOST_BITS_PER_WIDE_INT - n;
+      return true;
+    }
+
+  return false;
+}
+
+/* Check if value C can be built by 2 instructions: one is 'li or lis',
+   another is rldicr.
+
+   If so, *SHIFT is set to the shift operand of rldicr, and *MASK is set to
+   the mask operand of rldicr, and return true.
+   Return false otherwise.  */
+
+static bool
+can_be_built_by_li_lis_and_rldicr (HOST_WIDE_INT c, int *shift,
+				   HOST_WIDE_INT *mask)
+{
+  /* Tailing zeros may be cleaned by rldicr with a mask.  Change tailing zeros
+     to ones and then recheck it.  */
+  int tz = ctz_hwi (c);
+
+  /* If tz == HOST_BITS_PER_WIDE_INT, the left shift is undefined.  */
+  if (tz >= HOST_BITS_PER_WIDE_INT)
+    return false;
+
+  HOST_WIDE_INT unmask_c = c | ((HOST_WIDE_INT_1U << tz) - 1);
+  int n;
+  if (can_be_rotated_to_lowbits (~unmask_c, 15, &n)
+      || can_be_rotated_to_negative_lis (unmask_c, &n))
+    {
+      *mask = HOST_WIDE_INT_M1U << tz;
+      *shift = HOST_BITS_PER_WIDE_INT - n;
+      return true;
+    }
+
+  return false;
+}
+
+/* Check if value C can be built by 2 instructions: one is 'li', another is
+   rldic.
+
+   If so, *SHIFT is set to the 'shift' operand of rldic; and *MASK is set
+   to the mask value about the 'mb' operand of rldic; and return true.
+   Return false otherwise.  */
+
+static bool
+can_be_built_by_li_and_rldic (HOST_WIDE_INT c, int *shift, HOST_WIDE_INT *mask)
+{
+  /* There are 49 successive ones in the negative value of 'li'.  */
+  int ones = 49;
+
+  /* 1..1xx1..1: negative value of li --> 0..01..1xx0..0:
+     right bits are shifted as 0's, and left 1's(and x's) are cleaned.  */
+  int tz = ctz_hwi (c);
+  int lz = clz_hwi (c);
+
+  /* If lz == HOST_BITS_PER_WIDE_INT, the left shift is undefined.  */
+  if (lz >= HOST_BITS_PER_WIDE_INT)
+    return false;
+
+  int middle_ones = clz_hwi (~(c << lz));
+  if (tz + lz + middle_ones >= ones
+      && (tz - lz) < HOST_BITS_PER_WIDE_INT
+      && tz < HOST_BITS_PER_WIDE_INT)
+    {
+      *mask = ((1LL << (HOST_BITS_PER_WIDE_INT - tz - lz)) - 1LL) << tz;
+      *shift = tz;
+      return true;
+    }
+
+  /* 1..1xx1..1 --> 1..1xx0..01..1: some 1's(following x's) are cleaned. */
+  int leading_ones = clz_hwi (~c);
+  int tailing_ones = ctz_hwi (~c);
+  int middle_zeros = ctz_hwi (c >> tailing_ones);
+  if (leading_ones + tailing_ones + middle_zeros >= ones
+      && middle_zeros < HOST_BITS_PER_WIDE_INT)
+    {
+      *mask = ~(((1ULL << middle_zeros) - 1ULL) << tailing_ones);
+      *shift = tailing_ones + middle_zeros;
+      return true;
+    }
+
+  /* xx1..1xx: --> xx0..01..1xx: some 1's(following x's) are cleaned. */
+  /* Get the position for the first bit of successive 1.
+     The 24th bit would be in successive 0 or 1.  */
+  HOST_WIDE_INT low_mask = (HOST_WIDE_INT_1U << 24) - HOST_WIDE_INT_1U;
+  int pos_first_1 = ((c & (low_mask + 1)) == 0)
+		      ? clz_hwi (c & low_mask)
+		      : HOST_BITS_PER_WIDE_INT - ctz_hwi (~(c | low_mask));
+
+  /* Make sure the left and right shifts are defined.  */
+  if (!IN_RANGE (pos_first_1, 1, HOST_BITS_PER_WIDE_INT-1))
+    return false;
+
+  middle_ones = clz_hwi (~c << pos_first_1);
+  middle_zeros = ctz_hwi (c >> (HOST_BITS_PER_WIDE_INT - pos_first_1));
+  if (pos_first_1 < HOST_BITS_PER_WIDE_INT
+      && middle_ones + middle_zeros < HOST_BITS_PER_WIDE_INT
+      && middle_ones + middle_zeros >= ones)
+    {
+      *mask = ~(((1ULL << middle_zeros) - 1LL)
+		<< (HOST_BITS_PER_WIDE_INT - pos_first_1));
+      *shift = HOST_BITS_PER_WIDE_INT - pos_first_1 + middle_zeros;
+      return true;
+    }
+
+  return false;
+}
+
 /* Subroutine of rs6000_emit_set_const, handling PowerPC64 DImode.
    Output insns to set DEST equal to the constant C as a series of
-   lis, ori and shl instructions.  */
+   lis, ori and shl instructions.  If NUM_INSNS is not NULL, then
+   only increase *NUM_INSNS as the number of insns, and do not emit
+   any insns.  */
 
 static void
-rs6000_emit_set_long_const (rtx dest, HOST_WIDE_INT c)
+rs6000_emit_set_long_const (rtx dest, HOST_WIDE_INT c, int *num_insns)
 {
-  rtx temp;
   HOST_WIDE_INT ud1, ud2, ud3, ud4;
 
   ud1 = c & 0xffff;
-  c = c >> 16;
-  ud2 = c & 0xffff;
-  c = c >> 16;
-  ud3 = c & 0xffff;
-  c = c >> 16;
-  ud4 = c & 0xffff;
+  ud2 = (c >> 16) & 0xffff;
+  ud3 = (c >> 32) & 0xffff;
+  ud4 = (c >> 48) & 0xffff;
+
+  /* This lambda is used to emit one insn or just increase the insn count.
+     When counting the insn number, no need to emit the insn.  */
+  auto count_or_emit_insn = [&num_insns] (rtx dest_or_insn, rtx src = nullptr) {
+    if (num_insns)
+      {
+	(*num_insns)++;
+	return;
+      }
+
+    if (src)
+      emit_move_insn (dest_or_insn, src);
+    else
+      emit_insn (dest_or_insn);
+  };
+
+  if (TARGET_PREFIXED && SIGNED_INTEGER_34BIT_P (c))
+    {
+      /* li/lis/pli */
+      count_or_emit_insn (dest, GEN_INT (c));
+      return;
+    }
 
   if ((ud4 == 0xffff && ud3 == 0xffff && ud2 == 0xffff && (ud1 & 0x8000))
-      || (ud4 == 0 && ud3 == 0 && ud2 == 0 && ! (ud1 & 0x8000)))
-    emit_move_insn (dest, GEN_INT (sext_hwi (ud1, 16)));
-
-  else if ((ud4 == 0xffff && ud3 == 0xffff && (ud2 & 0x8000))
-	   || (ud4 == 0 && ud3 == 0 && ! (ud2 & 0x8000)))
+      || (ud4 == 0 && ud3 == 0 && ud2 == 0 && !(ud1 & 0x8000)))
     {
-      temp = !can_create_pseudo_p () ? dest : gen_reg_rtx (DImode);
-
-      emit_move_insn (ud1 != 0 ? temp : dest,
-		      GEN_INT (sext_hwi (ud2 << 16, 32)));
-      if (ud1 != 0)
-	emit_move_insn (dest, gen_rtx_IOR (DImode, temp, GEN_INT (ud1)));
+      /* li */
+      count_or_emit_insn (dest, GEN_INT (sext_hwi (ud1, 16)));
+      return;
     }
-  else if (ud4 == 0xffff && ud3 == 0xffff && (ud1 & 0x8000))
+
+  rtx temp
+    = (num_insns || !can_create_pseudo_p ()) ? dest : gen_reg_rtx (DImode);
+
+  if ((ud4 == 0xffff && ud3 == 0xffff && (ud2 & 0x8000))
+      || (ud4 == 0 && ud3 == 0 && !(ud2 & 0x8000)))
+    {
+      /* lis[; ori] */
+      count_or_emit_insn (ud1 != 0 ? temp : dest,
+			  GEN_INT (sext_hwi (ud2 << 16, 32)));
+      if (ud1 != 0)
+	count_or_emit_insn (dest, gen_rtx_IOR (DImode, temp, GEN_INT (ud1)));
+      return;
+    }
+
+  if (ud4 == 0xffff && ud3 == 0xffff && !(ud2 & 0x8000) && ud1 == 0)
+    {
+      /* lis; xoris */
+      count_or_emit_insn (temp, GEN_INT (sext_hwi ((ud2 | 0x8000) << 16, 32)));
+      count_or_emit_insn (dest,
+			  gen_rtx_XOR (DImode, temp, GEN_INT (0x80000000)));
+      return;
+    }
+
+  if (ud4 == 0xffff && ud3 == 0xffff && (ud1 & 0x8000))
     {
       /* li; xoris */
-      temp = !can_create_pseudo_p () ? dest : gen_reg_rtx (DImode);
-      emit_move_insn (temp, GEN_INT (sext_hwi (ud1, 16)));
-      emit_move_insn (dest, gen_rtx_XOR (DImode, temp,
-					 GEN_INT ((ud2 ^ 0xffff) << 16)));
+      count_or_emit_insn (temp, GEN_INT (sext_hwi (ud1, 16)));
+      count_or_emit_insn (dest, gen_rtx_XOR (DImode, temp,
+					     GEN_INT ((ud2 ^ 0xffff) << 16)));
+      return;
     }
-  else if (ud3 == 0 && ud4 == 0)
+
+  int shift;
+  HOST_WIDE_INT mask;
+  if (can_be_built_by_li_lis_and_rotldi (c, &shift, &mask)
+      || can_be_built_by_li_lis_and_rldicl (c, &shift, &mask)
+      || can_be_built_by_li_lis_and_rldicr (c, &shift, &mask)
+      || can_be_built_by_li_and_rldic (c, &shift, &mask))
     {
-      temp = !can_create_pseudo_p () ? dest : gen_reg_rtx (DImode);
+      /* li/lis; rldicX */
+      unsigned HOST_WIDE_INT imm = (c | ~mask);
+      imm = (imm >> shift) | (imm << (HOST_BITS_PER_WIDE_INT - shift));
 
-      gcc_assert (ud2 & 0x8000);
+      count_or_emit_insn (temp, GEN_INT (imm));
+      if (shift != 0)
+	temp = gen_rtx_ROTATE (DImode, temp, GEN_INT (shift));
+      if (mask != HOST_WIDE_INT_M1)
+	temp = gen_rtx_AND (DImode, temp, GEN_INT (mask));
+      count_or_emit_insn (dest, temp);
 
-      if (ud1 == 0)
-	{
-	  /* lis; rldicl */
-	  emit_move_insn (temp, GEN_INT (sext_hwi (ud2 << 16, 32)));
-	  emit_move_insn (dest,
-			  gen_rtx_AND (DImode, temp, GEN_INT (0xffffffff)));
-	}
-      else if (!(ud1 & 0x8000))
+      return;
+    }
+
+  if (ud3 == 0 && ud4 == 0)
+    {
+      gcc_assert ((ud2 & 0x8000) && ud1 != 0);
+      if (!(ud1 & 0x8000))
 	{
 	  /* li; oris */
-	  emit_move_insn (temp, GEN_INT (ud1));
-	  emit_move_insn (dest,
-			  gen_rtx_IOR (DImode, temp, GEN_INT (ud2 << 16)));
+	  count_or_emit_insn (temp, GEN_INT (ud1));
+	  count_or_emit_insn (dest,
+			      gen_rtx_IOR (DImode, temp, GEN_INT (ud2 << 16)));
+	  return;
 	}
-      else
-	{
-	  /* lis; ori; rldicl */
-	  emit_move_insn (temp, GEN_INT (sext_hwi (ud2 << 16, 32)));
-	  emit_move_insn (temp, gen_rtx_IOR (DImode, temp, GEN_INT (ud1)));
-	  emit_move_insn (dest,
-			  gen_rtx_AND (DImode, temp, GEN_INT (0xffffffff)));
-	}
-    }
-  else if (ud1 == ud3 && ud2 == ud4)
-    {
-      temp = !can_create_pseudo_p () ? dest : gen_reg_rtx (DImode);
-      HOST_WIDE_INT num = (ud2 << 16) | ud1;
-      rs6000_emit_set_long_const (temp, sext_hwi (num, 32));
-      rtx one = gen_rtx_AND (DImode, temp, GEN_INT (0xffffffff));
-      rtx two = gen_rtx_ASHIFT (DImode, temp, GEN_INT (32));
-      emit_move_insn (dest, gen_rtx_IOR (DImode, one, two));
-    }
-  else if ((ud4 == 0xffff && (ud3 & 0x8000))
-	   || (ud4 == 0 && ! (ud3 & 0x8000)))
-    {
-      temp = !can_create_pseudo_p () ? dest : gen_reg_rtx (DImode);
 
-      emit_move_insn (temp, GEN_INT (sext_hwi (ud3 << 16, 32)));
-      if (ud2 != 0)
-	emit_move_insn (temp, gen_rtx_IOR (DImode, temp, GEN_INT (ud2)));
-      emit_move_insn (ud1 != 0 ? temp : dest,
-		      gen_rtx_ASHIFT (DImode, temp, GEN_INT (16)));
-      if (ud1 != 0)
-	emit_move_insn (dest, gen_rtx_IOR (DImode, temp, GEN_INT (ud1)));
+      /* lis; ori; rldicl */
+      count_or_emit_insn (temp, GEN_INT (sext_hwi (ud2 << 16, 32)));
+      count_or_emit_insn (temp, gen_rtx_IOR (DImode, temp, GEN_INT (ud1)));
+      count_or_emit_insn (dest,
+			  gen_rtx_AND (DImode, temp, GEN_INT (0xffffffff)));
+      return;
     }
-  else if (TARGET_PREFIXED)
+
+  if (ud1 == ud3 && ud2 == ud4)
+    {
+      /* load low 32bits first, e.g. "lis; ori", then "rldimi".  */
+      HOST_WIDE_INT num = (ud2 << 16) | ud1;
+      rs6000_emit_set_long_const (temp, sext_hwi (num, 32), num_insns);
+
+      rtx rldimi = gen_rotldi3_insert_3 (dest, temp, GEN_INT (32), temp,
+					 GEN_INT (0xffffffff));
+      count_or_emit_insn (rldimi);
+      return;
+    }
+
+  if ((ud4 == 0xffff && (ud3 & 0x8000)) || (ud4 == 0 && !(ud3 & 0x8000)))
+    {
+      /* li; [ori;] rldicl [;oir].  */
+      count_or_emit_insn (temp, GEN_INT (sext_hwi (ud3 << 16, 32)));
+      if (ud2 != 0)
+	count_or_emit_insn (temp, gen_rtx_IOR (DImode, temp, GEN_INT (ud2)));
+      count_or_emit_insn (ud1 != 0 ? temp : dest,
+			  gen_rtx_ASHIFT (DImode, temp, GEN_INT (16)));
+      if (ud1 != 0)
+	count_or_emit_insn (dest, gen_rtx_IOR (DImode, temp, GEN_INT (ud1)));
+      return;
+    }
+
+  if (TARGET_PREFIXED)
     {
       if (can_create_pseudo_p ())
 	{
-	  /* pli A,L + pli B,H + rldimi A,B,32,0.  */
-	  temp = gen_reg_rtx (DImode);
-	  rtx temp1 = gen_reg_rtx (DImode);
-	  emit_move_insn (temp, GEN_INT ((ud4 << 16) | ud3));
-	  emit_move_insn (temp1, GEN_INT ((ud2 << 16) | ud1));
-
-	  emit_insn (gen_rotldi3_insert_3 (dest, temp, GEN_INT (32), temp1,
-					   GEN_INT (0xffffffff)));
+	  /* pli A,L; pli B,H; rldimi A,B,32,0.  */
+	  rtx temp1 = num_insns ? nullptr : gen_reg_rtx (DImode);
+	  count_or_emit_insn (temp, GEN_INT ((ud4 << 16) | ud3));
+	  count_or_emit_insn (temp1, GEN_INT ((ud2 << 16) | ud1));
+	  rtx rldimi = gen_rotldi3_insert_3 (dest, temp, GEN_INT (32), temp1,
+					     GEN_INT (0xffffffff));
+	  count_or_emit_insn (rldimi);
+	  return;
 	}
-      else
-	{
-	  /* pli A,H + sldi A,32 + paddi A,A,L.  */
-	  emit_move_insn (dest, GEN_INT ((ud4 << 16) | ud3));
 
-	  emit_move_insn (dest, gen_rtx_ASHIFT (DImode, dest, GEN_INT (32)));
+      /* pli A,H; sldi A,32; paddi A,A,L.  */
+      count_or_emit_insn (dest, GEN_INT ((ud4 << 16) | ud3));
+      count_or_emit_insn (dest, gen_rtx_ASHIFT (DImode, dest, GEN_INT (32)));
 
-	  bool can_use_paddi = REGNO (dest) != FIRST_GPR_REGNO;
-
-	  /* Use paddi for the low 32 bits.  */
-	  if (ud2 != 0 && ud1 != 0 && can_use_paddi)
-	    emit_move_insn (dest, gen_rtx_PLUS (DImode, dest,
+      bool can_use_paddi = dest ? REGNO (dest) != FIRST_GPR_REGNO : false;
+      /* Use paddi for the low 32 bits.  */
+      if (ud2 != 0 && ud1 != 0 && can_use_paddi)
+	count_or_emit_insn (dest, gen_rtx_PLUS (DImode, dest,
 						GEN_INT ((ud2 << 16) | ud1)));
-
-	  /* Use oris, ori for low 32 bits.  */
-	  if (ud2 != 0 && (ud1 == 0 || !can_use_paddi))
-	    emit_move_insn (dest,
+      /* Use oris, ori for low 32 bits.  */
+      if (ud2 != 0 && (ud1 == 0 || !can_use_paddi))
+	count_or_emit_insn (dest,
 			    gen_rtx_IOR (DImode, dest, GEN_INT (ud2 << 16)));
-	  if (ud1 != 0 && (ud2 == 0 || !can_use_paddi))
-	    emit_move_insn (dest, gen_rtx_IOR (DImode, dest, GEN_INT (ud1)));
-	}
+      if (ud1 != 0 && (ud2 == 0 || !can_use_paddi))
+	count_or_emit_insn (dest, gen_rtx_IOR (DImode, dest, GEN_INT (ud1)));
+      return;
     }
-  else
+
+  if (can_create_pseudo_p ())
     {
-      temp = !can_create_pseudo_p () ? dest : gen_reg_rtx (DImode);
+      /* lis HIGH,UD4 ; ori HIGH,UD3 ;
+	 lis LOW,UD2 ; ori LOW,UD1 ; rldimi LOW,HIGH,32,0.  */
+      rtx high = num_insns ? nullptr : gen_reg_rtx (DImode);
+      rtx low = num_insns ? nullptr : gen_reg_rtx (DImode);
+      HOST_WIDE_INT num = (ud2 << 16) | ud1;
+      rs6000_emit_set_long_const (low, sext_hwi (num, 32), num_insns);
+      num = (ud4 << 16) | ud3;
+      rs6000_emit_set_long_const (high, sext_hwi (num, 32), num_insns);
 
-      emit_move_insn (temp, GEN_INT (sext_hwi (ud4 << 16, 32)));
-      if (ud3 != 0)
-	emit_move_insn (temp, gen_rtx_IOR (DImode, temp, GEN_INT (ud3)));
-
-      emit_move_insn (ud2 != 0 || ud1 != 0 ? temp : dest,
-		      gen_rtx_ASHIFT (DImode, temp, GEN_INT (32)));
-      if (ud2 != 0)
-	emit_move_insn (ud1 != 0 ? temp : dest,
-			gen_rtx_IOR (DImode, temp, GEN_INT (ud2 << 16)));
-      if (ud1 != 0)
-	emit_move_insn (dest, gen_rtx_IOR (DImode, temp, GEN_INT (ud1)));
+      rtx rldimi = gen_rotldi3_insert_3 (dest, high, GEN_INT (32), low,
+					 GEN_INT (0xffffffff));
+      count_or_emit_insn (rldimi);
+      return;
     }
+
+  /* lis DEST,UD4 ; ori DEST,UD3 ; rotl DEST,32 ;
+     oris DEST,UD2 ; ori DEST,UD1.  */
+  count_or_emit_insn (dest, GEN_INT (sext_hwi (ud4 << 16, 32)));
+  if (ud3 != 0)
+    count_or_emit_insn (dest, gen_rtx_IOR (DImode, dest, GEN_INT (ud3)));
+
+  count_or_emit_insn (dest, gen_rtx_ASHIFT (DImode, dest, GEN_INT (32)));
+  if (ud2 != 0)
+    count_or_emit_insn (dest, gen_rtx_IOR (DImode, dest, GEN_INT (ud2 << 16)));
+  if (ud1 != 0)
+    count_or_emit_insn (dest, gen_rtx_IOR (DImode, dest, GEN_INT (ud1)));
+
+  return;
 }
 
 /* Helper for the following.  Get rid of [r+r] memory refs
@@ -15200,6 +15451,18 @@ rs6000_generate_compare (rtx cmp, machine_mode mode)
 	    emit_insn (gen_stack_protect_testdi (compare_result, op0, op1b));
 	  else
 	    emit_insn (gen_stack_protect_testsi (compare_result, op0, op1b));
+	}
+      else if (mode == V16QImode)
+	{
+	  gcc_assert (code == EQ || code == NE);
+
+	  rtx result_vector = gen_reg_rtx (V16QImode);
+	  rtx cc_bit = gen_reg_rtx (SImode);
+	  emit_insn (gen_altivec_vcmpequb_p (result_vector, op0, op1));
+	  emit_insn (gen_cr6_test_for_lt (cc_bit));
+	  emit_insn (gen_rtx_SET (compare_result,
+				  gen_rtx_COMPARE (comp_mode, cc_bit,
+						   const1_rtx)));
 	}
       else
 	emit_insn (gen_rtx_SET (compare_result,
@@ -20383,8 +20646,7 @@ static void
 rs6000_set_default_type_attributes (tree type)
 {
   if (rs6000_default_long_calls
-      && (TREE_CODE (type) == FUNCTION_TYPE
-	  || TREE_CODE (type) == METHOD_TYPE))
+      && FUNC_OR_METHOD_TYPE_P (type))
     TYPE_ATTRIBUTES (type) = tree_cons (get_identifier ("longcall"),
 					NULL_TREE,
 					TYPE_ATTRIBUTES (type));
@@ -20626,7 +20888,7 @@ rs6000_elf_in_small_data_p (const_tree decl)
   if (TREE_CODE (decl) == FUNCTION_DECL)
     return false;
 
-  if (TREE_CODE (decl) == VAR_DECL && DECL_SECTION_NAME (decl))
+  if (VAR_P (decl) && DECL_SECTION_NAME (decl))
     {
       const char *section = DECL_SECTION_NAME (decl);
       if (compare_section_name (section, ".sdata")
@@ -21046,6 +21308,7 @@ rs6000_elf_declare_function_name (FILE *file, const char *name, tree decl)
       ASM_DECLARE_RESULT (file, DECL_RESULT (decl));
       rs6000_output_function_entry (file, name);
       fputs (":\n", file);
+      assemble_function_label_final ();
       return;
     }
 
@@ -21108,7 +21371,7 @@ rs6000_elf_declare_function_name (FILE *file, const char *name, tree decl)
       fputs ("\t.long 0\n", file);
       fprintf (file, "\t.previous\n");
     }
-  ASM_OUTPUT_LABEL (file, name);
+  ASM_OUTPUT_FUNCTION_LABEL (file, name, decl);
 }
 
 static void rs6000_elf_file_end (void) ATTRIBUTE_UNUSED;
@@ -21350,7 +21613,7 @@ rs6000_xcoff_asm_named_section (const char *name, unsigned int flags,
 }
 
 #define IN_NAMED_SECTION(DECL) \
-  ((TREE_CODE (DECL) == FUNCTION_DECL || TREE_CODE (DECL) == VAR_DECL) \
+  ((TREE_CODE (DECL) == FUNCTION_DECL || VAR_P (DECL)) \
    && DECL_SECTION_NAME (DECL) != NULL)
 
 static section *
@@ -21681,7 +21944,7 @@ rs6000_xcoff_declare_function_name (FILE *file, const char *name, tree decl)
   assemble_name (file, buffer);
   fputs (TARGET_32BIT ? "\n" : ",3\n", file);
 
-  ASM_OUTPUT_LABEL (file, buffer);
+  ASM_OUTPUT_FUNCTION_LABEL (file, buffer, decl);
 
   symtab_node::get (decl)->call_for_symbol_and_aliases (rs6000_declare_alias,
 							&data, true);
@@ -21841,7 +22104,7 @@ rs6000_xcoff_encode_section_info (tree decl, rtx rtl, int first)
 
   flags = SYMBOL_REF_FLAGS (symbol);
 
-  if (TREE_CODE (decl) == VAR_DECL && DECL_THREAD_LOCAL_P (decl))
+  if (VAR_P (decl) && DECL_THREAD_LOCAL_P (decl))
     flags &= ~SYMBOL_FLAG_HAS_BLOCK_INFO;
 
   SYMBOL_REF_FLAGS (symbol) = flags;
@@ -22102,7 +22365,9 @@ rs6000_rtx_costs (rtx x, machine_mode mode, int outer_code,
 	    *total = rs6000_cost->divsi;
 	}
       /* Add in shift and subtract for MOD unless we have a mod instruction. */
-      if (!TARGET_MODULO && (code == MOD || code == UMOD))
+      if ((!TARGET_MODULO
+	   || (RS6000_DISABLE_SCALAR_MODULO && SCALAR_INT_MODE_P (mode)))
+	 && (code == MOD || code == UMOD))
 	*total += COSTS_N_INSNS (2);
       return false;
 
@@ -23375,10 +23640,10 @@ altivec_expand_vec_perm_const (rtx target, rtx op0, rtx op1,
 		      && GET_MODE (XEXP (op0, 0)) != V8HImode)))
 	    continue;
 
-          /* For little-endian, the two input operands must be swapped
-             (or swapped back) to ensure proper right-to-left numbering
-             from 0 to 2N-1.  */
-	  if (swapped ^ !BYTES_BIG_ENDIAN
+	  /* For little-endian, the two input operands must be swapped
+	     (or swapped back) to ensure proper right-to-left numbering
+	     from 0 to 2N-1.  */
+	  if (swapped == BYTES_BIG_ENDIAN
 	      && icode != CODE_FOR_vsx_xxpermdi_v16qi)
 	    std::swap (op0, op1);
 	  if (imode != V16QImode)
@@ -23722,7 +23987,7 @@ rs6000_function_value (const_tree valtype,
   /* VSX is a superset of Altivec and adds V2DImode/V2DFmode.  Since the same
      return register is used in both cases, and we won't see V2DImode/V2DFmode
      for pure altivec, combine the two cases.  */
-  else if ((TREE_CODE (valtype) == VECTOR_TYPE || VECTOR_ALIGNMENT_P (mode))
+  else if ((VECTOR_TYPE_P (valtype) || VECTOR_ALIGNMENT_P (mode))
 	   && TARGET_ALTIVEC && TARGET_ALTIVEC_ABI
 	   && ALTIVEC_OR_VSX_VECTOR_MODE (mode))
     regno = ALTIVEC_ARG_RETURN;
@@ -24102,10 +24367,11 @@ invalid_arg_for_unprototyped_fn (const_tree typelist, const_tree funcdecl, const
 {
   return (!rs6000_darwin64_abi
 	  && typelist == 0
-          && TREE_CODE (TREE_TYPE (val)) == VECTOR_TYPE
+	  && VECTOR_TYPE_P (TREE_TYPE (val))
           && (funcdecl == NULL_TREE
               || (TREE_CODE (funcdecl) == FUNCTION_DECL
-                  && DECL_BUILT_IN_CLASS (funcdecl) != BUILT_IN_MD)))
+                  && DECL_BUILT_IN_CLASS (funcdecl) != BUILT_IN_MD
+                  && !fndecl_built_in_p (funcdecl, BUILT_IN_CLASSIFY_TYPE))))
 	  ? N_("AltiVec argument passed to unprototyped function")
 	  : NULL;
 }
@@ -24154,7 +24420,7 @@ static struct rs6000_opt_mask const rs6000_opt_masks[] =
 								false, true  },
   { "cmpb",			OPTION_MASK_CMPB,		false, true  },
   { "crypto",			OPTION_MASK_CRYPTO,		false, true  },
-  { "direct-move",		OPTION_MASK_DIRECT_MOVE,	false, true  },
+  { "direct-move",		0,				false, true  },
   { "dlmzb",			OPTION_MASK_DLMZB,		false, true  },
   { "efficient-unaligned-vsx",	OPTION_MASK_EFFICIENT_UNALIGNED_VSX,
 								false, true  },
@@ -24873,12 +25139,6 @@ rs6000_print_isa_options (FILE *file, int indent, const char *string,
    2.07, and 3.0 options that relate to the vector unit (-mdirect-move,
    -mupper-regs-df, etc.).
 
-   If the user used -mno-power8-vector, we need to turn off all of the implicit
-   ISA 2.07 and 3.0 options that relate to the vector unit.
-
-   If the user used -mno-power9-vector, we need to turn off all of the implicit
-   ISA 3.0 options that relate to the vector unit.
-
    This function does not handle explicit options such as the user specifying
    -mdirect-move.  These are handled in rs6000_option_override_internal, and
    the appropriate error is given if needed.
@@ -24897,8 +25157,6 @@ rs6000_disable_incompatible_switches (void)
     const HOST_WIDE_INT dep_flags;	/* flags that depend on this option.  */
     const char *const name;		/* name of the switch.  */
   } flags[] = {
-    { OPTION_MASK_P9_VECTOR,	OTHER_P9_VECTOR_MASKS,	"power9-vector"	},
-    { OPTION_MASK_P8_VECTOR,	OTHER_P8_VECTOR_MASKS,	"power8-vector"	},
     { OPTION_MASK_VSX,		OTHER_VSX_VECTOR_MASKS,	"vsx"		},
     { OPTION_MASK_ALTIVEC,	OTHER_ALTIVEC_MASKS,	"altivec"	},
   };
@@ -25410,15 +25668,21 @@ rs6000_need_ipa_fn_target_info (const_tree decl,
 static bool
 rs6000_update_ipa_fn_target_info (unsigned int &info, const gimple *stmt)
 {
+#ifndef HAVE_AS_POWER10_HTM
   /* Assume inline asm can use any instruction features.  */
   if (gimple_code (stmt) == GIMPLE_ASM)
     {
-      /* Should set any bits we concerned, for now OPTION_MASK_HTM is
-	 the only bit we care about.  */
-      info |= RS6000_FN_TARGET_INFO_HTM;
+      const char *asm_str = gimple_asm_string (as_a<const gasm *> (stmt));
+      /* Ignore empty inline asm string.  */
+      if (strlen (asm_str) > 0)
+	/* Should set any bits we concerned, for now OPTION_MASK_HTM is
+	   the only bit we care about.  */
+	info |= RS6000_FN_TARGET_INFO_HTM;
       return false;
     }
-  else if (gimple_code (stmt) == GIMPLE_CALL)
+#endif
+
+  if (gimple_code (stmt) == GIMPLE_CALL)
     {
       tree fndecl = gimple_call_fndecl (stmt);
       if (fndecl && fndecl_built_in_p (fndecl, BUILT_IN_MD))
@@ -25446,49 +25710,44 @@ rs6000_can_inline_p (tree caller, tree callee)
   tree caller_tree = DECL_FUNCTION_SPECIFIC_TARGET (caller);
   tree callee_tree = DECL_FUNCTION_SPECIFIC_TARGET (callee);
 
-  /* If the callee has no option attributes, then it is ok to inline.  */
+  /* If the caller/callee has option attributes, then use them.
+     Otherwise, use the command line options.  */
   if (!callee_tree)
-    ret = true;
+    callee_tree = target_option_default_node;
+  if (!caller_tree)
+    caller_tree = target_option_default_node;
 
-  else
+  struct cl_target_option *callee_opts = TREE_TARGET_OPTION (callee_tree);
+  struct cl_target_option *caller_opts = TREE_TARGET_OPTION (caller_tree);
+
+  HOST_WIDE_INT callee_isa = callee_opts->x_rs6000_isa_flags;
+  HOST_WIDE_INT caller_isa = caller_opts->x_rs6000_isa_flags;
+  HOST_WIDE_INT explicit_isa = callee_opts->x_rs6000_isa_flags_explicit;
+
+  cgraph_node *callee_node = cgraph_node::get (callee);
+  if (ipa_fn_summaries && ipa_fn_summaries->get (callee_node) != NULL)
     {
-      HOST_WIDE_INT caller_isa;
-      struct cl_target_option *callee_opts = TREE_TARGET_OPTION (callee_tree);
-      HOST_WIDE_INT callee_isa = callee_opts->x_rs6000_isa_flags;
-      HOST_WIDE_INT explicit_isa = callee_opts->x_rs6000_isa_flags_explicit;
-
-      /* If the caller has option attributes, then use them.
-	 Otherwise, use the command line options.  */
-      if (caller_tree)
-	caller_isa = TREE_TARGET_OPTION (caller_tree)->x_rs6000_isa_flags;
-      else
-	caller_isa = rs6000_isa_flags;
-
-      cgraph_node *callee_node = cgraph_node::get (callee);
-      if (ipa_fn_summaries && ipa_fn_summaries->get (callee_node) != NULL)
+      unsigned int info = ipa_fn_summaries->get (callee_node)->target_info;
+      if ((info & RS6000_FN_TARGET_INFO_HTM) == 0)
 	{
-	  unsigned int info = ipa_fn_summaries->get (callee_node)->target_info;
-	  if ((info & RS6000_FN_TARGET_INFO_HTM) == 0)
-	    {
-	      callee_isa &= ~OPTION_MASK_HTM;
-	      explicit_isa &= ~OPTION_MASK_HTM;
-	    }
+	  callee_isa &= ~OPTION_MASK_HTM;
+	  explicit_isa &= ~OPTION_MASK_HTM;
 	}
-
-      /* Ignore -mpower8-fusion and -mpower10-fusion options for inlining
-	 purposes.  */
-      callee_isa &= ~(OPTION_MASK_P8_FUSION | OPTION_MASK_P10_FUSION);
-      explicit_isa &= ~(OPTION_MASK_P8_FUSION | OPTION_MASK_P10_FUSION);
-
-      /* The callee's options must be a subset of the caller's options, i.e.
-	 a vsx function may inline an altivec function, but a no-vsx function
-	 must not inline a vsx function.  However, for those options that the
-	 callee has explicitly enabled or disabled, then we must enforce that
-	 the callee's and caller's options match exactly; see PR70010.  */
-      if (((caller_isa & callee_isa) == callee_isa)
-	  && (caller_isa & explicit_isa) == (callee_isa & explicit_isa))
-	ret = true;
     }
+
+  /* Ignore -mpower8-fusion and -mpower10-fusion options for inlining
+     purposes.  */
+  callee_isa &= ~(OPTION_MASK_P8_FUSION | OPTION_MASK_P10_FUSION);
+  explicit_isa &= ~(OPTION_MASK_P8_FUSION | OPTION_MASK_P10_FUSION);
+
+  /* The callee's options must be a subset of the caller's options, i.e.
+     a vsx function may inline an altivec function, but a no-vsx function
+     must not inline a vsx function.  However, for those options that the
+     callee has explicitly enabled or disabled, then we must enforce that
+     the callee's and caller's options match exactly; see PR70010.  */
+  if (((caller_isa & callee_isa) == callee_isa)
+      && (caller_isa & explicit_isa) == (callee_isa & explicit_isa))
+    ret = true;
 
   if (TARGET_DEBUG_TARGET)
     fprintf (stderr, "rs6000_can_inline_p:, caller %s, callee %s, %s inline\n",

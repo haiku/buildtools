@@ -1,6 +1,6 @@
 // Wrapper of C-language FILE struct -*- C++ -*-
 
-// Copyright (C) 2000-2023 Free Software Foundation, Inc.
+// Copyright (C) 2000-2024 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -26,6 +26,7 @@
 // ISO C++ 14882: 27.8  File-based streams
 //
 
+#include <bits/largefile-config.h>
 #include <bits/basic_file.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -64,6 +65,11 @@
 #endif
 
 #include <limits> // For <off_t>::max() and min() and <streamsize>::max()
+
+#if _GLIBCXX_USE__GET_OSFHANDLE
+# include <stdint.h> // For intptr_t
+# include <io.h>     // For _get_osfhandle
+#endif
 
 namespace
 {
@@ -251,11 +257,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     const char* __c_mode = fopen_mode(__mode);
     if (__c_mode && !this->is_open())
       {
-#ifdef _GLIBCXX_USE_LFS
-	if ((_M_cfile = fopen64(__name, __c_mode)))
-#else
 	if ((_M_cfile = fopen(__name, __c_mode)))
-#endif
 	  {
 	    _M_cfile_created = true;
 	    __ret = this;
@@ -389,8 +391,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 # else
       return ftell(__f->file());
 # endif
-#elif defined(_GLIBCXX_USE_LFS)
-      return lseek64(__f->fd(), 0, (int)ios_base::cur);
 #else
       return lseek(__f->fd(), 0, (int)ios_base::cur);
 #endif
@@ -417,11 +417,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  return -1;
       }
     return __way == ios_base::beg ? __off : std::get_file_offset(this);
-#elif defined(_GLIBCXX_USE_LFS)
-    return lseek64(this->fd(), __off, __way);
 #else
-    if (__off > numeric_limits<off_t>::max()
-	  || __off < numeric_limits<off_t>::min())
+    if _GLIBCXX17_CONSTEXPR (sizeof(streamoff) > sizeof(off_t))
+      if (__off > numeric_limits<off_t>::max()
+	    || __off < numeric_limits<off_t>::min())
       return -1L;
     return lseek(this->fd(), __off, __way);
 #endif
@@ -455,22 +454,28 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #if defined(_GLIBCXX_HAVE_S_ISREG) || defined(_GLIBCXX_HAVE_S_IFREG)
     // Regular files.
-#ifdef _GLIBCXX_USE_LFS
-    struct stat64 __buffer;
-    const int __err = fstat64(this->fd(), &__buffer);
+    struct stat __buffer;
+    const int __err = fstat(this->fd(), &__buffer);
     if (!__err && _GLIBCXX_ISREG(__buffer.st_mode))
       {
 	const streamoff __off = __buffer.st_size - std::get_file_offset(this);
 	return std::min(__off, streamoff(numeric_limits<streamsize>::max()));
       }
-#else
-    struct stat __buffer;
-    const int __err = fstat(this->fd(), &__buffer);
-    if (!__err && _GLIBCXX_ISREG(__buffer.st_mode))
-      return __buffer.st_size - std::get_file_offset(this);
-#endif
 #endif
     return 0;
+  }
+
+  __basic_file<char>::native_handle_type
+  __basic_file<char>::native_handle() const noexcept
+  {
+#ifdef _GLIBCXX_USE_STDIO_PURE
+    return _M_cfile;
+#elif _GLIBCXX_USE__GET_OSFHANDLE
+    const intptr_t handle = _M_cfile ? _get_osfhandle(fileno(_M_cfile)) : -1;
+    return reinterpret_cast<native_handle_type>(handle);
+#else
+    return fileno(_M_cfile);
+#endif
   }
 
 _GLIBCXX_END_NAMESPACE_VERSION

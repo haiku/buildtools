@@ -1,7 +1,9 @@
-/* { dg-do compile { target { lp64 && powerpc_p9vector_ok } } } */
-/* { dg-options "-mdejagnu-cpu=power9 -O2 -ftree-vectorize -fno-vect-cost-model -fno-unroll-loops -fno-trapping-math" } */
+/* { dg-do compile { target { lp64 && powerpc_vsx_ok } } } */
+/* { dg-options "-mdejagnu-cpu=power9 -mvsx -O2 -ftree-vectorize -fno-vect-cost-model -fno-unroll-loops -fno-trapping-math" } */
 
 /* { dg-additional-options "--param=vect-partial-vector-usage=2" } */
+
+/* { dg-additional-options "-mno-strict-align" { target opt_mstrict_align } } */
 
 /* Test for fully with length, the loop body uses vector access with length,
    there should not be any epilogues.  */

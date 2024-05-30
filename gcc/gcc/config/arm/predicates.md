@@ -1,5 +1,5 @@
 ;; Predicate definitions for ARM and Thumb
-;; Copyright (C) 2004-2023 Free Software Foundation, Inc.
+;; Copyright (C) 2004-2024 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 
 ;; This file is part of GCC.
@@ -903,3 +903,7 @@
 (define_special_predicate "aligned_operand"
   (ior (not (match_code "mem"))
        (match_test "MEM_ALIGN (op) >= GET_MODE_ALIGNMENT (mode)")))
+
+;; A special predicate that doesn't match a particular mode.
+(define_special_predicate "arm_any_register_operand"
+  (match_code "reg"))

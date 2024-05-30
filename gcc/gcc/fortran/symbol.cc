@@ -1,5 +1,5 @@
 /* Maintain binary trees of symbols.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2024 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -291,6 +291,19 @@ bool
 gfc_set_default_type (gfc_symbol *sym, int error_flag, gfc_namespace *ns)
 {
   gfc_typespec *ts;
+  gfc_expr *e;
+
+  /* Check to see if a function selector of unknown type can be resolved.  */
+  if (sym->assoc
+      && (e = sym->assoc->target)
+      && e->expr_type == EXPR_FUNCTION)
+    {
+      if (e->ts.type == BT_UNKNOWN)
+	gfc_resolve_expr (e);
+      sym->ts = e->ts;
+      if (sym->ts.type != BT_UNKNOWN)
+	return true;
+    }
 
   if (sym->ts.type != BT_UNKNOWN)
     gfc_internal_error ("gfc_set_default_type(): symbol already has a type");
@@ -2402,6 +2415,67 @@ bad:
 }
 
 
+/* Find all derived types in the uppermost namespace that have a component
+   a component called name and stash them in the assoc field of an
+   associate name variable.
+   This is used to infer the derived type of an associate name, whose selector
+   is a sibling derived type function that has not yet been parsed. Either
+   the derived type is use associated in both contained and sibling procedures
+   or it appears in the uppermost namespace.  */
+
+static int cts = 0;
+static void
+find_derived_types (gfc_symbol *sym, gfc_symtree *st, const char *name,
+		    bool contained, bool stash)
+{
+  if (st->n.sym && st->n.sym->attr.flavor == FL_DERIVED
+      && !st->n.sym->attr.is_class
+      && ((contained && st->n.sym->attr.use_assoc) || !contained)
+      && gfc_find_component (st->n.sym, name, true, true, NULL))
+    {
+      /* Do the stashing, if required.  */
+      cts++;
+      if (stash)
+	{
+	  if (sym->assoc->derived_types)
+	    st->n.sym->dt_next = sym->assoc->derived_types;
+	  sym->assoc->derived_types = st->n.sym;
+	}
+    }
+
+  if (st->left)
+    find_derived_types (sym, st->left, name, contained, stash);
+
+  if (st->right)
+    find_derived_types (sym, st->right, name, contained, stash);
+}
+
+int
+gfc_find_derived_types (gfc_symbol *sym, gfc_namespace *ns,
+			const char *name, bool stash)
+{
+  gfc_namespace *encompassing = NULL;
+  gcc_assert (sym->assoc);
+
+  cts = 0;
+  while (ns->parent)
+    {
+      if (!ns->parent->parent && ns->proc_name
+	  && (ns->proc_name->attr.function || ns->proc_name->attr.subroutine))
+	encompassing = ns;
+      ns = ns->parent;
+    }
+
+  /* Search the top level namespace first.  */
+  find_derived_types (sym, ns->sym_root, name, false, stash);
+
+  /* Then the encompassing namespace.  */
+  if (encompassing && encompassing != ns)
+    find_derived_types (sym, encompassing->sym_root, name, true, stash);
+
+  return cts;
+}
+
 /* Find the component with the given name in the union type symbol.
    If ref is not NULL it will be set to the chain of components through which
    the component can actually be accessed. This is necessary for unions because
@@ -2948,7 +3022,7 @@ gfc_new_symtree (gfc_symtree **root, const char *name)
 
 /* Delete a symbol from the tree.  Does not free the symbol itself!  */
 
-void
+static void
 gfc_delete_symtree (gfc_symtree **root, const char *name)
 {
   gfc_symtree st, *st0;
@@ -2963,10 +3037,8 @@ gfc_delete_symtree (gfc_symtree **root, const char *name)
   else
     p = name;
 
-  st0 = gfc_find_symtree (*root, p);
-
   st.name = gfc_get_string ("%s", p);
-  gfc_delete_bbt (root, &st, compare_symtree);
+  st0 = (gfc_symtree *) gfc_delete_bbt (root, &st, compare_symtree);
 
   free (st0);
 }
@@ -3107,13 +3179,14 @@ gfc_free_symbol (gfc_symbol *&sym)
 }
 
 
-/* Decrease the reference counter and free memory when we reach zero.  */
+/* Decrease the reference counter and free memory when we reach zero.
+   Returns true if the symbol has been freed, false otherwise.  */
 
-void
+bool
 gfc_release_symbol (gfc_symbol *&sym)
 {
   if (sym == NULL)
-    return;
+    return false;
 
   if (sym->formal_ns != NULL && sym->refs == 2 && sym->formal_ns != sym->ns
       && (!sym->attr.entry || !sym->module))
@@ -3127,10 +3200,11 @@ gfc_release_symbol (gfc_symbol *&sym)
 
   sym->refs--;
   if (sym->refs > 0)
-    return;
+    return false;
 
   gcc_assert (sym->refs == 0);
   gfc_free_symbol (sym);
+  return true;
 }
 
 
@@ -3214,9 +3288,9 @@ gfc_find_symtree_in_proc (const char* name, gfc_namespace* ns)
 
 /* Search for a symtree starting in the current namespace, resorting to
    any parent namespaces if requested by a nonzero parent_flag.
-   Returns nonzero if the name is ambiguous.  */
+   Returns true if the name is ambiguous.  */
 
-int
+bool
 gfc_find_sym_tree (const char *name, gfc_namespace *ns, int parent_flag,
 		   gfc_symtree **result)
 {
@@ -3238,10 +3312,10 @@ gfc_find_sym_tree (const char *name, gfc_namespace *ns, int parent_flag,
 	  if (st->ambiguous && !st->n.sym->attr.generic)
 	    {
 	      ambiguous_symbol (name, st);
-	      return 1;
+	      return true;
 	    }
 
-	  return 0;
+	  return false;
 	}
 
       if (!parent_flag)
@@ -3270,12 +3344,12 @@ gfc_find_sym_tree (const char *name, gfc_namespace *ns, int parent_flag,
 	    }
 	}
       *result = st;
-      return 0;
+      return false;
     }
 
   *result = NULL;
 
-  return 0;
+  return false;
 }
 
 
@@ -3651,6 +3725,29 @@ gfc_drop_last_undo_checkpoint (void)
 }
 
 
+/* Remove the reference to the symbol SYM in the symbol tree held by NS
+   and free SYM if the last reference to it has been removed.
+   Returns whether the symbol has been freed.  */
+
+static bool
+delete_symbol_from_ns (gfc_symbol *sym, gfc_namespace *ns)
+{
+  if (ns == nullptr)
+    return false;
+
+  /* The derived type is saved in the symtree with the first
+     letter capitalized; the all lower-case version to the
+     derived type contains its associated generic function.  */
+  const char *sym_name = gfc_fl_struct (sym->attr.flavor)
+			 ? gfc_dt_upper_string (sym->name)
+			 : sym->name;
+
+  gfc_delete_symtree (&ns->sym_root, sym_name);
+
+  return gfc_release_symbol (sym);
+}
+
+
 /* Undoes all the changes made to symbols since the previous checkpoint.
    This subroutine is made simpler due to the fact that attributes are
    never removed once added.  */
@@ -3661,7 +3758,7 @@ gfc_restore_last_undo_checkpoint (void)
   gfc_symbol *p;
   unsigned i;
 
-  FOR_EACH_VEC_ELT (latest_undo_chgset->syms, i, p)
+  FOR_EACH_VEC_ELT_REVERSE (latest_undo_chgset->syms, i, p)
     {
       /* Symbol in a common block was new. Or was old and just put in common */
       if (p->common_block
@@ -3705,15 +3802,23 @@ gfc_restore_last_undo_checkpoint (void)
 	}
       if (p->gfc_new)
 	{
-	  /* The derived type is saved in the symtree with the first
-	     letter capitalized; the all lower-case version to the
-	     derived type contains its associated generic function.  */
-	  if (gfc_fl_struct (p->attr.flavor))
-	    gfc_delete_symtree (&p->ns->sym_root,gfc_dt_upper_string (p->name));
-          else
-	    gfc_delete_symtree (&p->ns->sym_root, p->name);
+	  bool freed = delete_symbol_from_ns (p, p->ns);
 
-	  gfc_release_symbol (p);
+	  /* If the symbol is a procedure (function or subroutine), remove
+	     it from the procedure body namespace as well as from the outer
+	     namespace.  */
+	  if (!freed
+	      && p->formal_ns != p->ns)
+	    freed = delete_symbol_from_ns (p, p->formal_ns);
+
+	  /* If the formal_ns field has not been set yet, the previous
+	     conditional does nothing.  In that case, we can assume that
+	     gfc_current_ns is the procedure body namespace, and remove the
+	     symbol from there.  */
+	  if (!freed
+	      && gfc_current_ns != p->ns
+	      && gfc_current_ns != p->formal_ns)
+	    freed = delete_symbol_from_ns (p, gfc_current_ns);
 	}
       else
 	restore_old_symbol (p);
@@ -5141,6 +5246,33 @@ gfc_type_is_extension_of (gfc_symbol *t1, gfc_symbol *t2)
   return gfc_compare_derived_types (t1, t2);
 }
 
+/* Check if parameterized derived type t2 is an instance of pdt template t1
+
+   gfc_symbol *t1 -> pdt template to verify t2 against.
+   gfc_symbol *t2 -> pdt instance to be verified.
+
+   In decl.cc, gfc_get_pdt_instance, a pdt instance is given a 3 character
+   prefix "Pdt", followed by an underscore list of the kind parameters,
+   up to a maximum of 8 kind parameters.  To verify if a PDT Type corresponds
+   to the template, this functions extracts t2's derive_type name,
+   and compares it to the derive_type name of t1 for compatibility.
+
+   For example:
+
+   t2->name = Pdtf_2_2; extract out the 'f' and compare with t1->name.  */
+
+bool
+gfc_pdt_is_instance_of (gfc_symbol *t1, gfc_symbol *t2)
+{
+  if ( !t1->attr.pdt_template || !t2->attr.pdt_type )
+    return false;
+
+  /* Limit comparison to length of t1->name to ignore new kind params.  */
+  if ( !(strncmp (&(t2->name[3]), t1->name, strlen (t1->name)) == 0) )
+    return false;
+
+  return true;
+}
 
 /* Check if two typespecs are type compatible (F03:5.1.1.2):
    If ts1 is nonpolymorphic, ts2 must be the same type.
@@ -5275,4 +5407,62 @@ gfc_sym_get_dummy_args (gfc_symbol *sym)
     dummies = sym->ts.interface->formal;
 
   return dummies;
+}
+
+
+/* Given a procedure, returns the associated namespace.
+   The resulting NS should match the condition NS->PROC_NAME == SYM.  */
+
+gfc_namespace *
+gfc_get_procedure_ns (gfc_symbol *sym)
+{
+  if (sym->formal_ns
+      && sym->formal_ns->proc_name == sym)
+    return sym->formal_ns;
+
+  /* The above should have worked in most cases.  If it hasn't, try some other
+     heuristics, eventually returning SYM->NS.  */
+  if (gfc_current_ns->proc_name == sym)
+    return gfc_current_ns;
+
+  /* For contained procedures, the symbol's NS field is the
+     hosting namespace, not the procedure namespace.  */
+  if (sym->attr.flavor == FL_PROCEDURE && sym->attr.contained)
+    for (gfc_namespace *ns = sym->ns->contained; ns; ns = ns->sibling)
+      if (ns->proc_name == sym)
+	return ns;
+
+  if (sym->formal)
+    for (gfc_formal_arglist *f = sym->formal; f != nullptr; f = f->next)
+      if (f->sym)
+	{
+	  gfc_namespace *ns = f->sym->ns;
+	  if (ns && ns->proc_name == sym)
+	    return ns;
+	}
+
+  return sym->ns;
+}
+
+
+/* Given a symbol, returns the namespace in which the symbol is specified.
+   In most cases, it is the namespace hosting the symbol.  This is the case
+   for variables.  For functions, however, it is the function namespace
+   itself.  This specification namespace is used to check conformance of
+   array spec bound expressions.  */
+
+gfc_namespace *
+gfc_get_spec_ns (gfc_symbol *sym)
+{
+  if (sym->attr.flavor == FL_PROCEDURE
+      && sym->attr.function)
+    {
+      if (sym->result == sym)
+	return gfc_get_procedure_ns (sym);
+      /* Generic and intrinsic functions can have a null result.  */
+      else if (sym->result != nullptr)
+	return sym->result->ns;
+    }
+
+  return sym->ns;
 }

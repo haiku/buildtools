@@ -1,5 +1,5 @@
 /* Implementation of Fortran 2003 Polymorphism.
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2024 Free Software Foundation, Inc.
    Contributed by Paul Richard Thomas <pault@gcc.gnu.org>
    and Janus Weil <janus@gcc.gnu.org>
 
@@ -647,6 +647,10 @@ gfc_build_class_symbol (gfc_typespec *ts, symbol_attribute *attr,
 
   gcc_assert (as);
 
+  /* We cannot build the class container now.  */
+  if (attr->class_ok && (!ts->u.derived || !ts->u.derived->components))
+    return false;
+
   /* Class container has already been built with same name.  */
   if (attr->class_ok
       && ts->u.derived->components->attr.dimension >= attr->dimension
@@ -808,6 +812,56 @@ gfc_build_class_symbol (gfc_typespec *ts, symbol_attribute *attr,
   (*as) = NULL;
   free (name);
   return true;
+}
+
+
+/* Change class, using gfc_build_class_symbol. This is needed for associate
+   names, when rank changes or a derived type is produced by resolution.  */
+
+void
+gfc_change_class (gfc_typespec *ts, symbol_attribute *sym_attr,
+		  gfc_array_spec *sym_as, int rank, int corank)
+{
+  symbol_attribute attr;
+  gfc_component *c;
+  gfc_array_spec *as = NULL;
+  gfc_symbol *der = ts->u.derived;
+
+  ts->type = BT_CLASS;
+  attr = *sym_attr;
+  attr.class_ok = 0;
+  attr.associate_var = 1;
+  attr.class_pointer = 1;
+  attr.allocatable = 0;
+  attr.pointer = 1;
+  attr.dimension = rank ? 1 : 0;
+  if (rank)
+    {
+      if (sym_as)
+	as = gfc_copy_array_spec (sym_as);
+      else
+	{
+	  as = gfc_get_array_spec ();
+	  as->rank = rank;
+	  as->type = AS_DEFERRED;
+	  as->corank = corank;
+	}
+    }
+  if (as && as->corank != 0)
+    attr.codimension = 1;
+
+  if (!gfc_build_class_symbol (ts, &attr, &as))
+    gcc_unreachable ();
+
+  gfc_set_sym_referenced (ts->u.derived);
+
+  /* Make sure the _vptr is set.  */
+  c = gfc_find_component (ts->u.derived, "_vptr", true, true, NULL);
+  if (c->ts.u.derived == NULL)
+    c->ts.u.derived = gfc_find_derived_vtab (der);
+  /* _vptr now has the _vtab in it, change it to the _vtype.  */
+  if (c->ts.u.derived->attr.vtab)
+    c->ts.u.derived = c->ts.u.derived->ts.u.derived;
 }
 
 
@@ -1631,7 +1685,7 @@ finalizer_insert_packed_call (gfc_code *block, gfc_finalizer *fini,
 
 
 /* Generate the finalization/polymorphic freeing wrapper subroutine for the
-   derived type "derived". The function first calls the approriate FINAL
+   derived type "derived". The function first calls the appropriate FINAL
    subroutine, then it DEALLOCATEs (finalizes/frees) the allocatable
    components (but not the inherited ones). Last, it calls the wrapper
    subroutine of the parent. The generated wrapper procedure takes as argument

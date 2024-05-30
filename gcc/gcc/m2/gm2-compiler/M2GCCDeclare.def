@@ -1,6 +1,6 @@
 (* M2GCCDeclare.def declares Modula-2 types to GCC.
 
-Copyright (C) 2001-2023 Free Software Foundation, Inc.
+Copyright (C) 2001-2024 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -32,18 +32,6 @@ DEFINITION MODULE M2GCCDeclare ;
 
 FROM SYSTEM IMPORT WORD ;
 FROM m2tree IMPORT Tree ;
-EXPORT QUALIFIED FoldConstants,
-                 DeclareConstant, TryDeclareConstant,
-                 DeclareConstructor, TryDeclareConstructor,
-                 DeclareLocalVariables, PromoteToString, DeclareLocalVariable,
-                 InitDeclarations, StartDeclareScope, EndDeclareScope,
-                 DeclareModuleVariables, IsProcedureGccNested,
-                 DeclareProcedure, PoisonSymbols, DeclareParameters,
-                 CompletelyResolved, MarkExported, PrintSym,
-                 ConstantKnownAndUsed,
-                 PutToBeSolvedByQuads,
-                 GetTypeMin, GetTypeMax,
-                 WalkAction, IsAction ;
 
 TYPE
    WalkAction = PROCEDURE (WORD) ;
@@ -174,6 +162,17 @@ PROCEDURE PromoteToString (tokenno: CARDINAL; sym: CARDINAL) : Tree ;
 
 
 (*
+   PromoteToCString - declare, sym, and then promote it to a string.
+                      Note that if sym is a single character we do
+                          *not* record it as a string
+                          but as a char however we always
+                          return a string constant.
+*)
+
+PROCEDURE PromoteToCString (tokenno: CARDINAL; sym: CARDINAL) : Tree ;
+
+
+(*
    CompletelyResolved - returns TRUE if a symbol has been completely resolved
                         and is not partially declared (such as a record,
                         array or procedure type).
@@ -222,6 +221,27 @@ PROCEDURE GetTypeMax (type: CARDINAL) : CARDINAL ;
 *)
 
 PROCEDURE PrintSym (sym: CARDINAL) ;
+
+
+(*
+   IncludeDumpSymbol - include sym into the watch list and all syms dependants.
+*)
+
+PROCEDURE IncludeDumpSymbol (sym: CARDINAL) ;
+
+
+(*
+   DumpFilteredResolver - dumps the gimple or tree representation of all watched symbols.
+*)
+
+PROCEDURE DumpFilteredResolver ;
+
+
+(*
+   DumpFilteredDefinitive - dumps the gimple or tree representation of all watched symbols.
+*)
+
+PROCEDURE DumpFilteredDefinitive ;
 
 
 (*

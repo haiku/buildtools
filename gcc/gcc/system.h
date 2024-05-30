@@ -1,6 +1,6 @@
 /* Get common system includes and various definitions and declarations based
    on autoconf macros.
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2024 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -194,27 +194,8 @@ extern int fprintf_unlocked (FILE *, const char *, ...);
 #undef fread_unlocked
 #undef fwrite_unlocked
 
-/* Include <string> before "safe-ctype.h" to avoid GCC poisoning
-   the ctype macros through safe-ctype.h */
-
-#ifdef __cplusplus
-#ifdef INCLUDE_STRING
-# include <string>
-#endif
-#endif
-
-/* There are an extraordinary number of issues with <ctype.h>.
-   The last straw is that it varies with the locale.  Use libiberty's
-   replacement instead.  */
-#include "safe-ctype.h"
-
-#include <sys/types.h>
-
-#include <errno.h>
-
-#if !defined (errno) && defined (HAVE_DECL_ERRNO) && !HAVE_DECL_ERRNO
-extern int errno;
-#endif
+/* Include C++ standard headers before "safe-ctype.h" to avoid GCC
+   poisoning the ctype macros through safe-ctype.h */
 
 #ifdef __cplusplus
 #if defined (INCLUDE_ALGORITHM) || !defined (HAVE_SWAP_IN_UTILITY)
@@ -228,6 +209,9 @@ extern int errno;
 #endif
 #ifdef INCLUDE_SET
 # include <set>
+#endif
+#ifdef INCLUDE_STRING
+# include <string>
 #endif
 #ifdef INCLUDE_VECTOR
 # include <vector>
@@ -243,6 +227,19 @@ extern int errno;
 # include <new>
 # include <utility>
 # include <type_traits>
+#endif
+
+/* There are an extraordinary number of issues with <ctype.h>.
+   The last straw is that it varies with the locale.  Use libiberty's
+   replacement instead.  */
+#include "safe-ctype.h"
+
+#include <sys/types.h>
+
+#include <errno.h>
+
+#if !defined (errno) && defined (HAVE_DECL_ERRNO) && !HAVE_DECL_ERRNO
+extern int errno;
 #endif
 
 /* Some of glibc's string inlines cause warnings.  Plus we'd rather
@@ -701,6 +698,28 @@ extern int vsnprintf (char *, size_t, const char *, va_list);
 /* Do not introduce a gmp.h dependency on the build system.  */
 #ifndef GENERATOR_FILE
 #include <gmp.h>
+
+class auto_mpz
+{
+public:
+  auto_mpz () { mpz_init (m_mpz); }
+  ~auto_mpz () { mpz_clear (m_mpz); }
+
+  operator mpz_t& () { return m_mpz; }
+  mpz_ptr operator-> () { return m_mpz; }
+
+  auto_mpz (const auto_mpz &) = delete;
+  auto_mpz &operator= (const auto_mpz &) = delete;
+
+#if GCC_VERSION < 4008 || GCC_VERSION >= 5000
+  /* GCC 4.8 and 4.9 don't support this, only fixed in PR62101 for 5.0.  */
+  friend void mpz_clear (auto_mpz&) = delete;
+  friend void mpz_init (auto_mpz&) = delete;
+#endif
+
+private:
+  mpz_t m_mpz;
+};
 #endif
 
 /* Get libiberty declarations.  */
@@ -759,10 +778,6 @@ extern int vsnprintf (char *, size_t, const char *, va_list);
 #if defined(HAVE_MALLINFO) || defined(HAVE_MALLINFO2)
 #include <malloc.h>
 #endif
-#endif
-
-#ifdef INCLUDE_PTHREAD_H
-#include <pthread.h>
 #endif
 
 #ifdef INCLUDE_ISL
@@ -886,12 +901,6 @@ extern void fancy_abort (const char *, int, const char *)
 
 /* Some compilers do not allow the use of unsigned char in bitfields.  */
 #define BOOL_BITFIELD unsigned int
-
-/* GCC older than 4.4 have broken C++ value initialization handling, see
-   PR11309, PR30111, PR33916, PR82939 and PR84405 for more details.  */
-#if GCC_VERSION > 0 && GCC_VERSION < 4004 && !defined(__clang__)
-# define BROKEN_VALUE_INITIALIZATION
-#endif
 
 /* As the last action in this file, we poison the identifiers that
    shouldn't be used.  Note, luckily gcc-3.0's token-based integrated
@@ -1205,28 +1214,11 @@ helper_const_non_const_cast (const char *p)
 #endif
 
 #ifdef ENABLE_VALGRIND_ANNOTATIONS
-# ifdef HAVE_VALGRIND_MEMCHECK_H
-#  include <valgrind/memcheck.h>
-# elif defined HAVE_MEMCHECK_H
-#  include <memcheck.h>
-# else
-#  include <valgrind.h>
-# endif
-/* Compatibility macros to let valgrind 3.1 work.  */
-# ifndef VALGRIND_MAKE_MEM_NOACCESS
-#  define VALGRIND_MAKE_MEM_NOACCESS VALGRIND_MAKE_NOACCESS
-# endif
-# ifndef VALGRIND_MAKE_MEM_DEFINED
-#  define VALGRIND_MAKE_MEM_DEFINED VALGRIND_MAKE_READABLE
-# endif
-# ifndef VALGRIND_MAKE_MEM_UNDEFINED
-#  define VALGRIND_MAKE_MEM_UNDEFINED VALGRIND_MAKE_WRITABLE
-# endif
+#include <valgrind/memcheck.h>
 #else
-/* Avoid #ifdef:s when we can help it.  */
+/* VALGRIND_DISCARD unregisters the given block handle,
+   but our code misuses it for discarding annotations.  */
 #define VALGRIND_DISCARD(x)
-#define VALGRIND_MALLOCLIKE_BLOCK(w,x,y,z)
-#define VALGRIND_FREELIKE_BLOCK(x,y)
 #endif
 
 /* Macros to temporarily ignore some warnings.  */
@@ -1308,6 +1300,12 @@ void gcc_stablesort_r (void *, size_t, size_t, sort_r_cmp_fn *, void *data);
 #ifdef __cplusplus
 #undef NULL
 #define NULL nullptr
+#endif
+
+/* Workaround clang on PowerPC which has vec_step as reserved keyword
+   rather than function-like macro defined in <altivec.h>.  See PR114369.  */
+#if defined(__clang__) && defined(__powerpc__)
+#define vec_step vec_step_
 #endif
 
 /* Return true if STR string starts with PREFIX.  */

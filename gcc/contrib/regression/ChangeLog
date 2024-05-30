@@ -1,10 +1,19 @@
-2023-07-27  Release Manager
+2024-05-07  Release Manager
 
-	* GCC 13.2.0 released.
+	* GCC 14.1.0 released.
 
-2023-04-26  Release Manager
+2023-11-23  Hans-Peter Nilsson  <hp@axis.com>
 
-	* GCC 13.1.0 released.
+	* btest-gcc.sh (--handle-xpass-as-fail): New option.
+
+2023-11-23  Hans-Peter Nilsson  <hp@axis.com>
+
+	* btest-gcc.sh (Option handling): Break out shifts from each
+	option alternative.
+
+2023-11-23  Hans-Peter Nilsson  <hp@axis.com>
+
+	* btest-gcc.sh (Option handling): Handle multiple options.
 
 2023-02-16  Hans-Peter Nilsson  <hp@axis.com>
 

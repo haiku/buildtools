@@ -1,6 +1,6 @@
 // RB tree implementation -*- C++ -*-
 
-// Copyright (C) 2001-2023 Free Software Foundation, Inc.
+// Copyright (C) 2001-2024 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -75,10 +75,6 @@
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-#if __cplusplus > 201103L
-# define __cpp_lib_generic_associative_lookup 201304L
-#endif
 
   // Red-black tree class, designed for use in implementing STL
   // associative containers (set, multiset, map, and multimap). The
@@ -1435,7 +1431,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_move_assign(_Rb_tree&, false_type);
 #endif
 
-#if __cplusplus > 201402L
+#if __glibcxx_node_extract // >= C++17
     public:
       /// Re-insert an extracted node.
       insert_return_type
@@ -1453,7 +1449,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      {
 		__ret.position
 		  = _M_insert_node(__res.first, __res.second, __nh._M_ptr);
-		__nh._M_ptr = nullptr;
+		__nh.release();
 		__ret.inserted = true;
 	      }
 	    else
@@ -1481,7 +1477,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      __ret = _M_insert_node(__res.first, __res.second, __nh._M_ptr);
 	    else
 	      __ret = _M_insert_equal_lower_node(__nh._M_ptr);
-	    __nh._M_ptr = nullptr;
+	    __nh.release();
 	  }
 	return __ret;
       }
@@ -1500,7 +1496,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    if (__res.second)
 	      {
 		__ret = _M_insert_node(__res.first, __res.second, __nh._M_ptr);
-		__nh._M_ptr = nullptr;
+		__nh.release();
 	      }
 	    else
 	      __ret = iterator(__res.first);
@@ -1523,7 +1519,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      __ret = _M_insert_node(__res.first, __res.second, __nh._M_ptr);
 	    else
 	      __ret = _M_insert_equal_lower_node(__nh._M_ptr);
-	    __nh._M_ptr = nullptr;
+	    __nh.release();
 	  }
 	return __ret;
       }
@@ -1554,7 +1550,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  = _Rb_tree<_Key, _Val, _KeyOfValue, _Compare2, _Alloc>;
 
       template<typename, typename>
-	friend class _Rb_tree_merge_helper;
+	friend struct _Rb_tree_merge_helper;
 
       /// Merge from a compatible container into one with unique keys.
       template<typename _Compare2>
@@ -1599,7 +1595,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		}
 	    }
 	}
-#endif // C++17
+#endif // C++17 node_extract
 
       friend bool
       operator==(const _Rb_tree& __x, const _Rb_tree& __y)

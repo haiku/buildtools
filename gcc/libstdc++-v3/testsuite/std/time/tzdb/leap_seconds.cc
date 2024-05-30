@@ -1,4 +1,3 @@
-// { dg-options "-std=gnu++20" }
 // { dg-do run { target c++20 } }
 // { dg-require-effective-target tzdb }
 // { dg-require-effective-target cxx11_abi }
@@ -22,7 +21,7 @@ void
 test_load_leapseconds()
 {
   std::ofstream("leapseconds") << R"(
-# These are all the real leap seconds as of 2022:
+# These are all the real leap seconds as of 2024:
 Leap	1972	Jun	30	23:59:60	+	S
 Leap	1972	Dec	31	23:59:60	+	S
 Leap	1973	Dec	31	23:59:60	+	S

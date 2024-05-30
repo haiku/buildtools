@@ -59,10 +59,8 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include <time.h>
 #endif
 
-/* Define FALSE if one hasn't already been defined.  */
-
-#if !defined(FALSE)
-#define FALSE (1 == 0)
+#ifdef HAVE_FCNTL_H
+#include <fcntl.h>
 #endif
 
 /* Define a generic NULL if one hasn't already been defined.  */
@@ -214,7 +212,7 @@ EXPORT(signbit) (double r)
      sizeof(double).  */
   return signbit (r);
 #else
-  return FALSE;
+  return false;
 #endif
 }
 
@@ -227,7 +225,7 @@ EXPORT(signbitl) (long double r)
      sizeof(double).  */
   return signbitl (r);
 #else
-  return FALSE;
+  return false;
 #endif
 }
 
@@ -240,7 +238,7 @@ EXPORT(signbitf) (float r)
      sizeof(double).  */
   return signbitf (r);
 #else
-  return FALSE;
+  return false;
 #endif
 }
 
@@ -253,7 +251,7 @@ EXPORT(isfinite) (double x)
 #if defined(FP_NAN) && defined(FP_INFINITE)
   return (fpclassify (x) != FP_NAN && fpclassify (x) != FP_INFINITE);
 #else
-  return FALSE;
+  return false;
 #endif
 }
 
@@ -266,7 +264,7 @@ EXPORT(isfinitel) (long double x)
 #if defined(FP_NAN) && defined(FP_INFINITE)
   return (fpclassify (x) != FP_NAN && fpclassify (x) != FP_INFINITE);
 #else
-  return FALSE;
+  return false;
 #endif
 }
 
@@ -279,9 +277,81 @@ EXPORT(isfinitef) (float x)
 #if defined(FP_NAN) && defined(FP_INFINITE)
   return (fpclassify (x) != FP_NAN && fpclassify (x) != FP_INFINITE);
 #else
-  return FALSE;
+  return false;
 #endif
 }
+
+/* isnan - provide non builtin alternative to the gcc builtin isnan.
+   Returns 1 if x is a NaN otherwise return 0.  */
+
+extern "C" int
+EXPORT(isnan) (double x)
+{
+#if defined(FP_NAN)
+  return fpclassify (x) == FP_NAN;
+#else
+  return x != x;
+#endif
+}
+
+/* isnanf - provide non builtin alternative to the gcc builtin isnanf.
+   Returns 1 if x is a NaN otherwise return 0.  */
+
+extern "C" int
+EXPORT(isnanf) (float x)
+{
+#if defined(FP_NAN)
+  return fpclassify (x) == FP_NAN;
+#else
+  return x != x;
+#endif
+}
+
+/* isnanl - provide non builtin alternative to the gcc builtin isnanl.
+   Returns 1 if x is a NaN otherwise return 0.  */
+
+extern "C" int
+EXPORT(isnanl) (long double x)
+{
+#if defined(FP_NAN)
+  return fpclassify (x) == FP_NAN;
+#else
+  return x != x;
+#endif
+}
+
+/* SeekSet return the system libc SEEK_SET value.  */
+
+extern "C" int
+EXPORT(SeekSet) (void)
+{
+  return SEEK_SET;
+}
+
+/* SeekEnd return the system libc SEEK_END value.  */
+
+extern "C" int
+EXPORT(SeekEnd) (void)
+{
+  return SEEK_END;
+}
+
+/* ReadOnly return the system value of O_RDONLY.  */
+
+extern "C" int
+EXPORT(ReadOnly) (void)
+{
+  return O_RDONLY;
+}
+
+/* WriteOnly return the system value of O_WRONLY.  */
+
+extern "C" int
+EXPORT(WriteOnly) (void)
+{
+  return O_WRONLY;
+}
+
 
 /* GNU Modula-2 linking hooks.  */
 

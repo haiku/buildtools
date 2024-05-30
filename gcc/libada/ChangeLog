@@ -1,10 +1,10 @@
-2023-07-27  Release Manager
+2024-05-07  Release Manager
 
-	* GCC 13.2.0 released.
+	* GCC 14.1.0 released.
 
-2023-04-26  Release Manager
+2023-08-07  John Ericson  <git@JohnEricson.me>
 
-	* GCC 13.1.0 released.
+	* configure: Regenerate.
 
 2022-08-25  Martin Liska  <mliska@suse.cz>
 
@@ -466,7 +466,7 @@
 
 	* New directory, new ChangeLog.
 
-Copyright (C) 2003-2023 Free Software Foundation, Inc.
+Copyright (C) 2003-2024 Free Software Foundation, Inc.
 
 This ChangeLog is free software; the Free Software Foundation gives
 unlimited permission to copy, distribute, and modify it.

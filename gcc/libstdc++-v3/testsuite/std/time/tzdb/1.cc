@@ -1,4 +1,3 @@
-// { dg-options "-std=gnu++20" }
 // { dg-do run { target c++20 } }
 // { dg-require-effective-target cxx11_abi }
 
@@ -46,6 +45,18 @@ test_locate()
   VERIFY( tz == db.locate_zone("Etc/GMT+0") );
 
   VERIFY( db.locate_zone(db.current_zone()->name()) == db.current_zone() );
+}
+
+void
+test_all_zones()
+{
+  const tzdb& db = get_tzdb();
+
+  for (const auto& zone : db.zones)
+    VERIFY( locate_zone(zone.name())->name() == zone.name() );
+
+  for (const auto& link : db.links)
+    VERIFY( locate_zone(link.name()) == locate_zone(link.target()) );
 }
 
 int main()

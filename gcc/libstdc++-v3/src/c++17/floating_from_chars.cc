@@ -1,6 +1,6 @@
 // std::from_chars implementation for floating-point types -*- C++ -*-
 
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2024 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -593,6 +593,69 @@ namespace
     return buf.c_str();
   }
 
+  // RAII type to change and restore the locale.
+  struct auto_locale
+  {
+#if _GLIBCXX_HAVE_USELOCALE
+    // When we have uselocale we can change the current thread's locale.
+    const locale_t loc;
+    locale_t orig;
+
+    auto_locale()
+    : loc(::newlocale(LC_ALL_MASK, "C", (locale_t)0))
+    {
+      if (loc)
+	orig = ::uselocale(loc);
+      else
+	ec = errc{errno};
+    }
+
+    ~auto_locale()
+    {
+      if (loc)
+	{
+	  ::uselocale(orig);
+	  ::freelocale(loc);
+	}
+    }
+#else
+    // Otherwise, we can't change the locale and so strtod can't be used.
+    auto_locale() = delete;
+#endif
+
+    explicit operator bool() const noexcept { return ec == errc{}; }
+
+    errc ec{};
+
+    auto_locale(const auto_locale&) = delete;
+    auto_locale& operator=(const auto_locale&) = delete;
+  };
+
+  // RAII type to change and restore the floating-point environment.
+  struct auto_ferounding
+  {
+#if _GLIBCXX_USE_C99_FENV_TR1 && defined(FE_TONEAREST)
+    const int rounding = std::fegetround();
+
+    auto_ferounding()
+    {
+      if (rounding != FE_TONEAREST)
+	std::fesetround(FE_TONEAREST);
+    }
+
+    ~auto_ferounding()
+    {
+      if (rounding != FE_TONEAREST)
+	std::fesetround(rounding);
+    }
+#else
+    auto_ferounding() = default;
+#endif
+
+    auto_ferounding(const auto_ferounding&) = delete;
+    auto_ferounding& operator=(const auto_ferounding&) = delete;
+  };
+
   // Convert the NTBS `str` to a floating-point value of type `T`.
   // If `str` cannot be converted, `value` is unchanged and `0` is returned.
   // Otherwise, let N be the number of characters consumed from `str`.
@@ -603,16 +666,11 @@ namespace
   ptrdiff_t
   from_chars_impl(const char* str, T& value, errc& ec) noexcept
   {
-    if (locale_t loc = ::newlocale(LC_ALL_MASK, "C", (locale_t)0)) [[likely]]
+    auto_locale loc;
+
+    if (loc)
       {
-	locale_t orig = ::uselocale(loc);
-
-#if _GLIBCXX_USE_C99_FENV_TR1 && defined(FE_TONEAREST)
-	const int rounding = std::fegetround();
-	if (rounding != FE_TONEAREST)
-	  std::fesetround(FE_TONEAREST);
-#endif
-
+	auto_ferounding rounding;
 	const int save_errno = errno;
 	errno = 0;
 	char* endptr;
@@ -643,14 +701,6 @@ namespace
 #endif
 	const int conv_errno = std::__exchange(errno, save_errno);
 
-#if _GLIBCXX_USE_C99_FENV_TR1 && defined(FE_TONEAREST)
-	if (rounding != FE_TONEAREST)
-	  std::fesetround(rounding);
-#endif
-
-	::uselocale(orig);
-	::freelocale(loc);
-
 	const ptrdiff_t n = endptr - str;
 	if (conv_errno == ERANGE) [[unlikely]]
 	  {
@@ -671,8 +721,8 @@ namespace
 	  }
 	return n;
       }
-    else if (errno == ENOMEM)
-      ec = errc::not_enough_memory;
+    else
+      ec = loc.ec;
 
     return 0;
   }

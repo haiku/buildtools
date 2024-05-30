@@ -1,5 +1,5 @@
 ;; Unspec defintions.
-;; Copyright (C) 2012-2023 Free Software Foundation, Inc.
+;; Copyright (C) 2012-2024 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 
 ;; This file is part of GCC.
@@ -221,8 +221,10 @@
   VUNSPEC_SC		; Represent a store-register-exclusive.
   VUNSPEC_LAX		; Represent a load-register-acquire-exclusive.
   VUNSPEC_SLX		; Represent a store-register-release-exclusive.
-  VUNSPEC_LDA		; Represent a store-register-acquire.
+  VUNSPEC_LDA		; Represent a load-register-acquire.
+  VUNSPEC_LDR		; Represent a load-register-relaxed.
   VUNSPEC_STL		; Represent a store-register-release.
+  VUNSPEC_STR		; Represent a store-register-relaxed.
   VUNSPEC_GET_FPSCR	; Represent fetch of FPSCR content.
   VUNSPEC_SET_FPSCR	; Represent assign of FPSCR content.
   VUNSPEC_SET_FPSCR_NZCVQC	; Represent assign of FPSCR_nzcvqc content.
@@ -340,6 +342,10 @@
   UNSPEC_VHSUB_S
   UNSPEC_VHSUB_U
   UNSPEC_VLD1
+  UNSPEC_VLD1X3A
+  UNSPEC_VLD1X3B
+  UNSPEC_VLD1X4A
+  UNSPEC_VLD1X4B
   UNSPEC_VLD1_LANE
   UNSPEC_VLD2
   UNSPEC_VLD2_DUP
@@ -457,6 +463,10 @@
   UNSPEC_VRSRA_U_N
   UNSPEC_VSRI
   UNSPEC_VST1
+  UNSPEC_VST1X3A
+  UNSPEC_VST1X3B
+  UNSPEC_VST1X4A
+  UNSPEC_VST1X4B
   UNSPEC_VST1_LANE
   UNSPEC_VST2
   UNSPEC_VST2_LANE
@@ -707,7 +717,6 @@
   VCVTBQ_F16_F32
   VCVTTQ_F16_F32
   VMLALDAVQ_U
-  VMLALDAVXQ_U
   VMLALDAVXQ_S
   VMLALDAVQ_S
   VMLSLDAVQ_S
@@ -924,7 +933,6 @@
   VSHRNBQ_N_S
   VRSHRNBQ_N_S
   VRSHRNBQ_N_U
-  VMLALDAVXQ_P_U
   VMLALDAVXQ_P_S
   VQMOVNTQ_M_U
   VQMOVNTQ_M_S
@@ -933,7 +941,6 @@
   VQSHRNTQ_N_U
   VQSHRNTQ_N_S
   VMLALDAVAXQ_S
-  VMLALDAVAXQ_U
   VSHRNTQ_N_S
   VSHRNTQ_N_U
   VCVTBQ_M_F16_F32
@@ -995,8 +1002,7 @@
   VMAXQ_M_U
   VQRDMLAHQ_M_N_U
   VCADDQ_ROT270_M_F
-  VCADDQ_ROT270_M_U
-  VCADDQ_ROT270_M_S
+  VCADDQ_ROT270_M
   VQRSHLQ_M_S
   VMULQ_M_F
   VRHADDQ_M_U
@@ -1050,8 +1056,7 @@
   VSLIQ_M_N_S
   VQSHLQ_M_U
   VQSHLQ_M_S
-  VCADDQ_ROT90_M_U
-  VCADDQ_ROT90_M_S
+  VCADDQ_ROT90_M
   VORNQ_M_U
   VORNQ_M_S
   VQSHLQ_M_N_S
@@ -1255,4 +1260,5 @@
   SQRSHRL_64
   SQRSHRL_48
   VSHLCQ_M_
+  REINTERPRET
 ])

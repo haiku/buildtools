@@ -1,6 +1,6 @@
 /* m2statement.cc provides an interface to GCC statement trees.
 
-Copyright (C) 2012-2023 Free Software Foundation, Inc.
+Copyright (C) 2012-2024 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius@glam.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -36,6 +36,7 @@ along with GNU Modula-2; see the file COPYING3.  If not see
 #include "m2treelib.h"
 #include "m2type.h"
 #include "m2convert.h"
+#include "m2pp.h"
 
 static GTY (()) tree param_list = NULL_TREE; /* Ready for the next time we
                                                 call/define a function.  */
@@ -102,11 +103,15 @@ m2statement_BuildEndFunctionCode (location_t location, tree fndecl, bool nested)
   m2block_finishFunctionCode (fndecl);
   m2statement_SetEndLocation (location);
 
+  m2pp_dump_gimple (M2PP_DUMP_PRE_GENERICIZE, fndecl);
   gm2_genericize (fndecl);
   if (nested)
     (void)cgraph_node::get_create (fndecl);
   else
-    cgraph_node::finalize_function (fndecl, false);
+    {
+      m2pp_dump_gimple (M2PP_DUMP_POST_GENERICIZE, fndecl);
+      cgraph_node::finalize_function (fndecl, false);
+    }
 
   m2block_popFunctionScope ();
 
@@ -174,7 +179,9 @@ m2statement_BuildAssignmentTree (location_t location, tree des, tree expr)
             m2convert_BuildConvert (location, TREE_TYPE (des), expr, false));
     }
 
-  TREE_SIDE_EFFECTS (result) = 1;
+  TREE_SIDE_EFFECTS (result) = true;
+  TREE_USED (des) = true;
+  TREE_USED (expr) = true;
   add_stmt (location, result);
   return des;
 }
@@ -195,7 +202,7 @@ m2statement_BuildGoto (location_t location, char *name)
   tree label = m2block_getLabel (location, name);
 
   m2assert_AssertLocation (location);
-  TREE_USED (label) = 1;
+  TREE_USED (label) = true;
   add_stmt (location, build1 (GOTO_EXPR, void_type_node, label));
 }
 
@@ -218,6 +225,7 @@ m2statement_BuildParam (location_t location, tree param)
 {
   m2assert_AssertLocation (location);
 
+  TREE_USED (param) = true;
   if (TREE_CODE (param) == FUNCTION_DECL)
     param = m2expr_BuildAddr (location, param, false);
 
@@ -349,6 +357,20 @@ m2statement_BuildIndirectProcedureCallTree (location_t location,
     }
 }
 
+
+/* BuildBuiltinCallTree calls the builtin procedure.  */
+
+tree
+m2statement_BuildBuiltinCallTree (location_t location, tree func)
+{
+  TREE_USED (func) = true;
+  TREE_SIDE_EFFECTS (func) = true;
+  param_list
+    = NULL_TREE; /* Ready for the next time we call a procedure.  */
+  return func;
+}
+
+
 /* BuildFunctValue - generates code for value :=
    last_function(foobar); */
 
@@ -361,12 +383,14 @@ m2statement_BuildFunctValue (location_t location, tree value)
   m2assert_AssertLocation (location);
   ASSERT_CONDITION (
       last_function
-      != NULL_TREE); /* No value available, possible used before.  */
+      != NULL_TREE);  /* No value available, possible used before.  */
 
   TREE_SIDE_EFFECTS (assign) = true;
   TREE_USED (assign) = true;
+  TREE_USED (value) = true;
   last_function = NULL_TREE;
   return assign;
+  // return m2statement_BuildAssignmentTree (location, value, assign);
 }
 
 /* BuildCall2 - builds a tree representing: function (arg1, arg2).  */

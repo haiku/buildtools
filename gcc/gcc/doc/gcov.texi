@@ -1,10 +1,10 @@
-@c Copyright (C) 1996-2023 Free Software Foundation, Inc.
+@c Copyright (C) 1996-2024 Free Software Foundation, Inc.
 @c This is part of the GCC manual.
 @c For copying conditions, see the file gcc.texi.
 
 @ignore
 @c man begin COPYRIGHT
-Copyright @copyright{} 1996-2023 Free Software Foundation, Inc.
+Copyright @copyright{} 1996-2024 Free Software Foundation, Inc.
 
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3 or
@@ -124,6 +124,7 @@ gcov [@option{-v}|@option{--version}] [@option{-h}|@option{--help}]
      [@option{-a}|@option{--all-blocks}]
      [@option{-b}|@option{--branch-probabilities}]
      [@option{-c}|@option{--branch-counts}]
+     [@option{-g}|@option{--conditions}]
      [@option{-d}|@option{--display-progress}]
      [@option{-f}|@option{--function-summaries}]
      [@option{-j}|@option{--json-format}]
@@ -169,6 +170,14 @@ be shown, unless the @option{-u} option is given.
 Write branch frequencies as the number of branches taken, rather than
 the percentage of branches taken.
 
+@item -g
+@itemx --conditions
+Write condition coverage to the output file, and write condition summary info
+to the standard output.  This option allows you to see if the conditions in
+your program at least once had an independent effect on the outcome of the
+boolean expression (modified condition/decision coverage).  This requires you
+to compile the source with @option{-fcondition-coverage}.
+
 @item -d
 @itemx --display-progress
 Display the progress on the standard output.
@@ -195,7 +204,7 @@ Structure of the JSON is following:
 @{
   "current_working_directory": "foo/bar",
   "data_file": "a.out",
-  "format_version": "1",
+  "format_version": "2",
   "gcc_version": "11.1.1 20210510"
   "files": ["$file"]
 @}
@@ -213,6 +222,12 @@ a compilation unit was compiled
 
 @item
 @var{format_version}: semantic version of the format
+
+Changes in version @emph{2}:
+@itemize @bullet
+@item
+@var{calls}: information about function calls is added
+@end itemize
 
 @item
 @var{gcc_version}: version of the GCC compiler
@@ -291,18 +306,24 @@ Each @var{line} has the following form:
 
 @smallexample
 @{
+  "block_ids": ["$block_id"],
   "branches": ["$branch"],
+  "calls": ["$call"],
   "count": 2,
+  "conditions": ["$condition"],
   "line_number": 15,
   "unexecuted_block": false,
   "function_name": "foo",
 @}
 @end smallexample
 
-Branches are present only with @var{-b} option.
+Branches and calls are present only with @var{-b} option.
 Fields of the @var{line} element have following semantics:
 
 @itemize @bullet
+@item
+@var{block_ids}: IDs of basic blocks that belong to the line
+
 @item
 @var{count}: number of executions of the line
 
@@ -323,7 +344,9 @@ Each @var{branch} has the following form:
 @smallexample
 @{
   "count": 11,
+  "destination_block_id": 17,
   "fallthrough": true,
+  "source_block_id": 13,
   "throw": false
 @}
 @end smallexample
@@ -339,6 +362,64 @@ Fields of the @var{branch} element have following semantics:
 
 @item
 @var{throw}: true when the branch is an exceptional branch
+
+@item
+@var{isource_block_id}: ID of the basic block where this branch happens
+
+@item
+@var{destination_block_id}: ID of the basic block this branch jumps to
+@end itemize
+
+Each @var{call} has the following form:
+
+@smallexample
+@{
+  "destination_block_id": 1,
+  "returned": 11,
+  "source_block_id": 13
+@}
+@end smallexample
+
+Fields of the @var{call} element have following semantics:
+
+@itemize @bullet
+@item
+@var{returned}: number of times a function call returned (call count is equal
+to @var{line::count})
+
+@item
+@var{isource_block_id}: ID of the basic block where this call happens
+
+@item
+@var{destination_block_id}: ID of the basic block this calls continues after return
+@end itemize
+
+Each @var{condition} has the following form:
+
+@smallexample
+@{
+  "count": 4,
+  "covered": 2,
+  "not_covered_false": [],
+  "not_covered_true": [0, 1],
+@}
+
+@end smallexample
+
+Fields of the @var{condition} element have following semantics:
+
+@itemize @bullet
+@item
+@var{count}: number of condition outcomes in this expression
+
+@item
+@var{covered}: number of covered condition outcomes in this expression
+
+@item
+@var{not_covered_true}: terms, by index, not seen as true in this expression
+
+@item
+@var{not_covered_false}: terms, by index, not seen as false in this expression
 @end itemize
 
 @item -H

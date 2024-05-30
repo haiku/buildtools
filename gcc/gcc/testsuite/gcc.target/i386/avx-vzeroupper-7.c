@@ -12,5 +12,4 @@ foo ()
   _mm256_zeroupper ();
 }
 
-/* { dg-final { scan-assembler-times "avx_vzeroupper" 1 { target ia32 } } } */
-/* { dg-final { scan-assembler-times "avx_vzeroupper" 2 { target { ! ia32 } } } } */
+/* { dg-final { scan-assembler-times "avx_vzeroupper" 1 } } */

@@ -1,5 +1,5 @@
 /* Tracking equivalence classes and constraints at a point on an execution path.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2024 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -54,7 +54,7 @@ along with GCC; see the file COPYING3.  If not see
 
 namespace ana {
 
-static tristate
+tristate
 compare_constants (tree lhs_const, enum tree_code op, tree rhs_const)
 {
   tree comparison
@@ -124,10 +124,12 @@ bound::ensure_closed (enum bound_kind bound_kind)
 	 For example, convert 3 < x into 4 <= x,
 	 and convert x < 5 into x <= 4.  */
       gcc_assert (CONSTANT_CLASS_P (m_constant));
+      gcc_assert (INTEGRAL_TYPE_P (TREE_TYPE (m_constant)));
       m_constant = fold_build2 (bound_kind == BK_UPPER ? MINUS_EXPR : PLUS_EXPR,
 				TREE_TYPE (m_constant),
 				m_constant, integer_one_node);
       gcc_assert (CONSTANT_CLASS_P (m_constant));
+      gcc_assert (INTEGRAL_TYPE_P (TREE_TYPE (m_constant)));
       m_closed = true;
     }
 }
@@ -306,6 +308,10 @@ range::above_upper_bound (tree rhs_const) const
 bool
 range::add_bound (bound b, enum bound_kind bound_kind)
 {
+  /* Bail out on floating point constants.  */
+  if (!INTEGRAL_TYPE_P (TREE_TYPE (b.m_constant)))
+    return true;
+
   b.ensure_closed (bound_kind);
 
   switch (bound_kind)
@@ -2218,6 +2224,137 @@ constraint_manager::get_equiv_class_by_svalue (const svalue *sval,
   return false;
 }
 
+/* Tries to find a svalue inside another svalue.  */
+
+class sval_finder : public visitor
+{
+public:
+  sval_finder (const svalue *query) : m_query (query), m_found (false)
+  {
+  }
+
+  bool found_query_p ()
+  {
+    return m_found;
+  }
+
+  void visit_region_svalue (const region_svalue *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_constant_svalue (const constant_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_unknown_svalue (const unknown_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_poisoned_svalue (const poisoned_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_setjmp_svalue (const setjmp_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_initial_svalue (const initial_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_unaryop_svalue (const unaryop_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_binop_svalue (const binop_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_sub_svalue (const sub_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_repeated_svalue (const repeated_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_bits_within_svalue (const bits_within_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_unmergeable_svalue (const unmergeable_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_placeholder_svalue (const placeholder_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_widening_svalue (const widening_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_compound_svalue (const compound_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_conjured_svalue (const conjured_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_asm_output_svalue (const asm_output_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+  void visit_const_fn_result_svalue (const const_fn_result_svalue  *sval)
+  {
+    m_found |= m_query == sval;
+  }
+
+private:
+  const svalue *m_query;
+  bool m_found;
+};
+
+/* Returns true if SVAL is constrained.  */
+
+bool
+constraint_manager::sval_constrained_p (const svalue *sval) const
+{
+  int i;
+  equiv_class *ec;
+  sval_finder finder (sval);
+  FOR_EACH_VEC_ELT (m_equiv_classes, i, ec)
+    {
+      int j;
+      const svalue *iv;
+      FOR_EACH_VEC_ELT (ec->m_vars, j, iv)
+	{
+	  iv->accept (&finder);
+	  if (finder.found_query_p ())
+	    return true;
+	}
+    }
+  return false;
+}
+
 /* Ensure that SVAL has an equivalence class within this constraint_manager;
    return the ID of the class.  */
 
@@ -3237,8 +3374,8 @@ namespace selftest {
 static void
 test_range ()
 {
-  tree int_0 = build_int_cst (integer_type_node, 0);
-  tree int_1 = build_int_cst (integer_type_node, 1);
+  tree int_0 = integer_zero_node;
+  tree int_1 = integer_one_node;
   tree int_2 = build_int_cst (integer_type_node, 2);
   tree int_5 = build_int_cst (integer_type_node, 5);
 
@@ -3282,7 +3419,7 @@ static void
 test_constraint_conditions ()
 {
   tree int_42 = build_int_cst (integer_type_node, 42);
-  tree int_0 = build_int_cst (integer_type_node, 0);
+  tree int_0 = integer_zero_node;
 
   tree x = build_global_decl ("x", integer_type_node);
   tree y = build_global_decl ("y", integer_type_node);
@@ -3737,7 +3874,7 @@ test_transitivity ()
 static void
 test_constant_comparisons ()
 {
-  tree int_1 = build_int_cst (integer_type_node, 1);
+  tree int_1 = integer_one_node;
   tree int_3 = build_int_cst (integer_type_node, 3);
   tree int_4 = build_int_cst (integer_type_node, 4);
   tree int_5 = build_int_cst (integer_type_node, 5);
@@ -3921,7 +4058,7 @@ static void
 test_constraint_impl ()
 {
   tree int_42 = build_int_cst (integer_type_node, 42);
-  tree int_0 = build_int_cst (integer_type_node, 0);
+  tree int_0 = integer_zero_node;
 
   tree x = build_global_decl ("x", integer_type_node);
   tree y = build_global_decl ("y", integer_type_node);
@@ -4083,7 +4220,7 @@ test_many_constants ()
 static void
 test_purging (void)
 {
-  tree int_0 = build_int_cst (integer_type_node, 0);
+  tree int_0 = integer_zero_node;
   tree a = build_global_decl ("a", integer_type_node);
   tree b = build_global_decl ("b", integer_type_node);
 
@@ -4517,7 +4654,7 @@ test_bits (void)
 {
   region_model_manager mgr;
 
-  tree int_0 = build_int_cst (integer_type_node, 0);
+  tree int_0 = integer_zero_node;
   tree int_0x80 = build_int_cst (integer_type_node, 0x80);
   tree int_0xff = build_int_cst (integer_type_node, 0xff);
   tree x = build_global_decl ("x", integer_type_node);

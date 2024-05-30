@@ -4,7 +4,7 @@
    Note that "normal" builtins (generic math functions, etc.) are handled
    in rs6000.c.
 
-   Copyright (C) 2002-2023 Free Software Foundation, Inc.
+   Copyright (C) 2002-2024 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -165,7 +165,7 @@ rs6000_builtin_is_supported (enum rs6000_gen_builtins fncode)
     case ENB_P7_64:
       return TARGET_POPCNTD && TARGET_POWERPC64;
     case ENB_P8:
-      return TARGET_DIRECT_MOVE;
+      return TARGET_POWER8;
     case ENB_P8V:
       return TARGET_P8_VECTOR;
     case ENB_P9:
@@ -1574,6 +1574,8 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
       gimple_set_location (g, gimple_location (stmt));
       gsi_replace (gsi, g, true);
       return true;
+    /* fold into MIN_EXPR when fast-math is set.  */
+    case RS6000_BIF_XSMINDP:
     /* flavors of vec_min.  */
     case RS6000_BIF_XVMINDP:
     case RS6000_BIF_XVMINSP:
@@ -1600,6 +1602,8 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
       gimple_set_location (g, gimple_location (stmt));
       gsi_replace (gsi, g, true);
       return true;
+    /* fold into MAX_EXPR when fast-math is set.  */
+    case RS6000_BIF_XSMAXDP:
     /* flavors of vec_max.  */
     case RS6000_BIF_XVMAXDP:
     case RS6000_BIF_XVMAXSP:
@@ -1896,7 +1900,7 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	tree lhs_type = TREE_TYPE (lhs);
 	/* In GIMPLE the type of the MEM_REF specifies the alignment.  The
 	  required alignment (power) is 4 bytes regardless of data type.  */
-	tree align_ltype = build_aligned_type (lhs_type, 4);
+	tree align_ltype = build_aligned_type (lhs_type, 32);
 	/* POINTER_PLUS_EXPR wants the offset to be of type 'sizetype'.  Create
 	   the tree using the value from arg0.  The resulting type will match
 	   the type of arg1.  */
@@ -1940,7 +1944,7 @@ rs6000_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	tree arg2_type = ptr_type_node;
 	/* In GIMPLE the type of the MEM_REF specifies the alignment.  The
 	   required alignment (power) is 4 bytes regardless of data type.  */
-	tree align_stype = build_aligned_type (arg0_type, 4);
+	tree align_stype = build_aligned_type (arg0_type, 32);
 	/* POINTER_PLUS_EXPR wants the offset to be of type 'sizetype'.  Create
 	   the tree using the value from arg1.  */
 	gimple_seq stmts = NULL;
@@ -3326,17 +3330,26 @@ rs6000_expand_builtin (tree exp, rtx target, rtx /* subtarget */,
       case CODE_FOR_fmakf4_odd:
 	icode = CODE_FOR_fmatf4_odd;
 	break;
-      case CODE_FOR_xsxexpqp_kf:
-	icode = CODE_FOR_xsxexpqp_tf;
+      case CODE_FOR_xsxexpqp_kf_di:
+	icode = CODE_FOR_xsxexpqp_tf_di;
 	break;
-      case CODE_FOR_xsxsigqp_kf:
-	icode = CODE_FOR_xsxsigqp_tf;
+      case CODE_FOR_xsxexpqp_kf_v2di:
+	icode = CODE_FOR_xsxexpqp_tf_v2di;
+	break;
+      case CODE_FOR_xsxsigqp_kf_ti:
+	icode = CODE_FOR_xsxsigqp_tf_ti;
+	break;
+      case CODE_FOR_xsxsigqp_kf_v1ti:
+	icode = CODE_FOR_xsxsigqp_tf_v1ti;
 	break;
       case CODE_FOR_xststdcnegqp_kf:
 	icode = CODE_FOR_xststdcnegqp_tf;
 	break;
-      case CODE_FOR_xsiexpqp_kf:
-	icode = CODE_FOR_xsiexpqp_tf;
+      case CODE_FOR_xsiexpqp_kf_di:
+	icode = CODE_FOR_xsiexpqp_tf_di;
+	break;
+      case CODE_FOR_xsiexpqp_kf_v2di:
+	icode = CODE_FOR_xsiexpqp_tf_v2di;
 	break;
       case CODE_FOR_xsiexpqpf_kf:
 	icode = CODE_FOR_xsiexpqpf_tf;

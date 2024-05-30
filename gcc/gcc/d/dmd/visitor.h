@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 2013-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 2013-2024 by The D Language Foundation, All Rights Reserved
  * https://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
  * https://www.boost.org/LICENSE_1_0.txt
@@ -17,7 +17,7 @@ class ErrorStatement;
 class PeelStatement;
 class ExpStatement;
 class DtorExpStatement;
-class CompileStatement;
+class MixinStatement;
 class CompoundStatement;
 class CompoundDeclarationStatement;
 class UnrolledLoopStatement;
@@ -110,7 +110,7 @@ class AnonDeclaration;
 class PragmaDeclaration;
 class ConditionalDeclaration;
 class StaticIfDeclaration;
-class CompileDeclaration;
+class MixinDeclaration;
 class StaticForeachDeclaration;
 class UserAttributeDeclaration;
 class ForwardingAttribDeclaration;
@@ -126,6 +126,7 @@ class WithScopeSymbol;
 class ArrayScopeSymbol;
 class Nspace;
 class AliasAssign;
+class CAsmDeclaration;
 
 class AggregateDeclaration;
 class StructDeclaration;
@@ -176,6 +177,7 @@ class NewDeclaration;
 
 class Initializer;
 class VoidInitializer;
+class DefaultInitializer;
 class ErrorInitializer;
 class StructInitializer;
 class ArrayInitializer;
@@ -194,6 +196,7 @@ class ThisExp;
 class SuperExp;
 class NullExp;
 class StringExp;
+class InterpExp;
 class TupleExp;
 class ArrayLiteralExp;
 class AssocArrayLiteralExp;
@@ -268,6 +271,7 @@ class UshrAssignExp;
 class CatAssignExp;
 class CatElemAssignExp;
 class CatDcharAssignExp;
+class LoweredAssignExp;
 class AddExp;
 class MinExp;
 class CatExp;
@@ -336,6 +340,7 @@ public:
     virtual void visit(DebugSymbol *s) { visit((Dsymbol *)s); }
     virtual void visit(VersionSymbol *s) { visit((Dsymbol *)s); }
     virtual void visit(AliasAssign *s) { visit((Dsymbol *)s); }
+    virtual void visit(CAsmDeclaration *s) { visit((Dsymbol *)s); }
 
     // ScopeDsymbols
     virtual void visit(Package *s) { visit((ScopeDsymbol *)s); }
@@ -365,7 +370,7 @@ public:
     virtual void visit(SharedStaticDtorDeclaration *s) { visit((StaticDtorDeclaration *)s); }
 
     // AttribDeclarations
-    virtual void visit(CompileDeclaration *s) { visit((AttribDeclaration *)s); }
+    virtual void visit(MixinDeclaration *s) { visit((AttribDeclaration *)s); }
     virtual void visit(UserAttributeDeclaration *s) { visit((AttribDeclaration *)s); }
     virtual void visit(LinkDeclaration *s) { visit((AttribDeclaration *)s); }
     virtual void visit(AnonDeclaration *s) { visit((AttribDeclaration *)s); }
@@ -396,7 +401,7 @@ public:
     virtual void visit(ReturnStatement *s) { visit((Statement *)s); }
     virtual void visit(LabelStatement *s) { visit((Statement *)s); }
     virtual void visit(StaticAssertStatement *s) { visit((Statement *)s); }
-    virtual void visit(CompileStatement *s) { visit((Statement *)s); }
+    virtual void visit(MixinStatement *s) { visit((Statement *)s); }
     virtual void visit(WhileStatement *s) { visit((Statement *)s); }
     virtual void visit(ForStatement *s) { visit((Statement *)s); }
     virtual void visit(DoStatement *s) { visit((Statement *)s); }
@@ -478,6 +483,7 @@ public:
     virtual void visit(TypeidExp *e) { visit((Expression *)e); }
     virtual void visit(TraitsExp *e) { visit((Expression *)e); }
     virtual void visit(StringExp *e) { visit((Expression *)e); }
+    virtual void visit(InterpExp *e) { visit((Expression *)e); }
     virtual void visit(NewExp *e) { visit((Expression *)e); }
     virtual void visit(AssocArrayLiteralExp *e) { visit((Expression *)e); }
     virtual void visit(ArrayLiteralExp *e) { visit((Expression *)e); }
@@ -590,6 +596,7 @@ public:
     virtual void visit(StructInitializer *i) { visit((Initializer *)i); }
     virtual void visit(ArrayInitializer *i) { visit((Initializer *)i); }
     virtual void visit(VoidInitializer *i) { visit((Initializer *)i); }
+    virtual void visit(DefaultInitializer *i) { visit((Initializer *)i); }
     virtual void visit(CInitializer *i) { visit((Initializer *)i); }
 };
 
@@ -659,6 +666,7 @@ public:
     virtual void visit(ClassReferenceExp *e) { visit((Expression *)e); }
     virtual void visit(VoidInitExp *e) { visit((Expression *)e); }
     virtual void visit(ThrownExceptionExp *e) { visit((Expression *)e); }
+    virtual void visit(LoweredAssignExp *e) { visit((AssignExp *)e); }
 };
 
 class StoppableVisitor : public Visitor

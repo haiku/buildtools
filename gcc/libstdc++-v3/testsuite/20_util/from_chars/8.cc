@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2024 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,9 +15,9 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++2b" }
 // { dg-do run { target c++23 } }
 // { dg-add-options ieee }
+// { dg-additional-options "-DSKIP_LONG_DOUBLE" { target aarch64-*-vxworks* } }
 
 #include <charconv>
 #include <string>
@@ -286,7 +286,7 @@ test_max_mantissa()
 
   if (Float_limits::is_iec559 && Float_limits::digits < UInt_limits::digits)
   {
-#ifdef _GLIBCXX_USE_C99_MATH_TR1
+#ifdef _GLIBCXX_USE_C99_MATH_FUNCS
     std::printf("Testing %d-bit float, using %zu-bit integer\n",
 	Float_limits::digits + (int)std::log2(Float_limits::max_exponent) + 1,
 	sizeof(UIntT) * __CHAR_BIT__);
@@ -344,7 +344,7 @@ test06()
 #if defined(__STDCPP_FLOAT64_T__) && defined(_GLIBCXX_DOUBLE_IS_IEEE_BINARY64)
   test_max_mantissa<std::float64_t, unsigned long long>();
 #endif
-#if defined(__GLIBCXX_TYPE_INT_N_0) \
+#if defined(__GLIBCXX_TYPE_INT_N_0) && !defined SKIP_LONG_DOUBLE \
     && defined(__STDCPP_FLOAT128_T__) && defined(_GLIBCXX_LDOUBLE_IS_IEEE_BINARY128)
   test_max_mantissa<std::float128_t, unsigned __GLIBCXX_TYPE_INT_N_0>();
 #endif
