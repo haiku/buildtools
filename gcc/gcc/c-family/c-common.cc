@@ -3806,12 +3806,13 @@ c_common_get_alias_set (tree t)
   if (!TYPE_P (t))
     return -1;
 
-  /* Unlike char, char8_t doesn't alias. */
-  if (flag_char8_t && t == char8_type_node)
+  /* Unlike char, char8_t doesn't alias in C++.  (In C, char8_t is not
+     a distinct type.)  */
+  if (flag_char8_t && t == char8_type_node && c_dialect_cxx ())
     return -1;
 
   /* The C standard guarantees that any object may be accessed via an
-     lvalue that has narrow character type (except char8_t).  */
+     lvalue that has narrow character type.  */
   if (t == char_type_node
       || t == signed_char_type_node
       || t == unsigned_char_type_node)
@@ -5702,6 +5703,7 @@ check_function_sentinel (const_tree fntype, int nargs, tree *argarray)
       sentinel = fold_for_warn (argarray[nargs - 1 - pos]);
       if ((!POINTER_TYPE_P (TREE_TYPE (sentinel))
 	   || !integer_zerop (sentinel))
+	  && TREE_CODE (TREE_TYPE (sentinel)) != NULLPTR_TYPE
 	  /* Although __null (in C++) is only an integer we allow it
 	     nevertheless, as we are guaranteed that it's exactly
 	     as wide as a pointer, and we don't want to force
@@ -8543,6 +8545,7 @@ convert_vector_to_array_for_subscript (location_t loc,
   if (gnu_vector_type_p (TREE_TYPE (*vecp)))
     {
       tree type = TREE_TYPE (*vecp);
+      tree newitype;
 
       ret = !lvalue_p (*vecp);
 
@@ -8557,8 +8560,12 @@ convert_vector_to_array_for_subscript (location_t loc,
 	 for function parameters.  */
       c_common_mark_addressable_vec (*vecp);
 
+      /* Make sure qualifiers are copied from the vector type to the new element
+	 of the array type.  */
+      newitype = build_qualified_type (TREE_TYPE (type), TYPE_QUALS (type));
+
       *vecp = build1 (VIEW_CONVERT_EXPR,
-		      build_array_type_nelts (TREE_TYPE (type),
+		      build_array_type_nelts (newitype,
 					      TYPE_VECTOR_SUBPARTS (type)),
 		      *vecp);
     }

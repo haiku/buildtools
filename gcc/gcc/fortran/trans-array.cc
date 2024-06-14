@@ -3962,7 +3962,10 @@ gfc_conv_array_ref (gfc_se * se, gfc_array_ref * ar, gfc_expr *expr,
     }
 
   decl = se->expr;
-  if (IS_CLASS_ARRAY (sym) && sym->attr.dummy && ar->as->type != AS_DEFERRED)
+  if (UNLIMITED_POLY(sym)
+      && IS_CLASS_ARRAY (sym)
+      && sym->attr.dummy
+      && ar->as->type != AS_DEFERRED)
     decl = sym->backend_decl;
 
   cst_offset = offset = gfc_index_zero_node;
@@ -7323,6 +7326,17 @@ gfc_get_dataptr_offset (stmtblock_t *block, tree parm, tree desc, tree offset,
 
   /* Set the target data pointer.  */
   offset = gfc_build_addr_expr (gfc_array_dataptr_type (desc), tmp);
+
+  /* Check for optional dummy argument being present.  Arguments of BIND(C)
+     procedures are excepted here since they are handled differently.  */
+  if (expr->expr_type == EXPR_VARIABLE
+      && expr->symtree->n.sym->attr.dummy
+      && expr->symtree->n.sym->attr.optional
+      && !is_CFI_desc (NULL, expr))
+    offset = build3_loc (input_location, COND_EXPR, TREE_TYPE (offset),
+			 gfc_conv_expr_present (expr->symtree->n.sym), offset,
+			 fold_convert (TREE_TYPE (offset), gfc_index_zero_node));
+
   gfc_conv_descriptor_data_set (block, parm, offset);
 }
 
@@ -9200,6 +9214,12 @@ structure_alloc_comps (gfc_symbol * der_type, tree decl, tree dest,
       gfc_add_expr_to_block (&fnblock, tmp);
     }
 
+  /* Still having a descriptor array of rank == 0 here, indicates an
+     allocatable coarrays.  Dereference it correctly.  */
+  if (GFC_DESCRIPTOR_TYPE_P (decl_type))
+    {
+      decl = build_fold_indirect_ref (gfc_conv_array_data (decl));
+    }
   /* Otherwise, act on the components or recursively call self to
      act on a chain of components.  */
   for (c = der_type->components; c; c = c->next)
@@ -11278,6 +11298,15 @@ gfc_trans_deferred_array (gfc_symbol * sym, gfc_wrapped_block * block)
     {
       gfc_conv_string_length (sym->ts.u.cl, NULL, &init);
       gfc_trans_vla_type_sizes (sym, &init);
+
+      /* Presence check of optional deferred-length character dummy.  */
+      if (sym->ts.deferred && sym->attr.dummy && sym->attr.optional)
+	{
+	  tmp = gfc_finish_block (&init);
+	  tmp = build3_v (COND_EXPR, gfc_conv_expr_present (sym),
+			  tmp, build_empty_stmt (input_location));
+	  gfc_add_expr_to_block (&init, tmp);
+	}
     }
 
   /* Dummy, use associated and result variables don't need anything special.  */
@@ -11387,7 +11416,11 @@ gfc_trans_deferred_array (gfc_symbol * sym, gfc_wrapped_block * block)
     {
       int rank;
       rank = sym->as ? sym->as->rank : 0;
-      tmp = gfc_deallocate_alloc_comp (sym->ts.u.derived, descriptor, rank);
+      tmp = gfc_deallocate_alloc_comp (sym->ts.u.derived, descriptor, rank,
+				       (sym->attr.codimension
+					&& flag_coarray == GFC_FCOARRAY_LIB)
+				       ? GFC_STRUCTURE_CAF_MODE_IN_COARRAY
+				       : 0);
       gfc_add_expr_to_block (&cleanup, tmp);
     }
 
@@ -11401,9 +11434,11 @@ gfc_trans_deferred_array (gfc_symbol * sym, gfc_wrapped_block * block)
 					NULL_TREE, NULL_TREE, true, e,
 					sym->attr.codimension
 					? GFC_CAF_COARRAY_DEREGISTER
-					: GFC_CAF_COARRAY_NOCOARRAY);
+					: GFC_CAF_COARRAY_NOCOARRAY,
+					gfc_finish_block (&cleanup));
       if (e)
 	gfc_free_expr (e);
+      gfc_init_block (&cleanup);
       gfc_add_expr_to_block (&cleanup, tmp);
     }
 

@@ -982,8 +982,8 @@ resolve_common_vars (gfc_common_head *common_block, bool named_common)
 
       /* gfc_add_in_common may have been called before, but the reported errors
 	 have been ignored to continue parsing.
-	 We do the checks again here.  */
-      if (!csym->attr.use_assoc)
+	 We do the checks again here, unless the symbol is USE associated.  */
+      if (!csym->attr.use_assoc && !csym->attr.used_in_submodule)
 	{
 	  gfc_add_in_common (&csym->attr, csym->name, &common_block->where);
 	  gfc_notify_std (GFC_STD_F2018_OBS, "COMMON block at %L",
@@ -1950,12 +1950,20 @@ resolve_procedure_expression (gfc_expr* expr)
       || (sym->attr.function && sym->result == sym))
     return true;
 
-  /* A non-RECURSIVE procedure that is used as procedure expression within its
+   /* A non-RECURSIVE procedure that is used as procedure expression within its
      own body is in danger of being called recursively.  */
   if (is_illegal_recursion (sym, gfc_current_ns))
-    gfc_warning (0, "Non-RECURSIVE procedure %qs at %L is possibly calling"
-		 " itself recursively.  Declare it RECURSIVE or use"
-		 " %<-frecursive%>", sym->name, &expr->where);
+    {
+      if (sym->attr.use_assoc && expr->symtree->name[0] == '@')
+	gfc_warning (0, "Non-RECURSIVE procedure %qs from module %qs is "
+		     " possibly calling itself recursively in procedure %qs. "
+		     " Declare it RECURSIVE or use %<-frecursive%>",
+		     sym->name, sym->module, gfc_current_ns->proc_name->name);
+      else
+	gfc_warning (0, "Non-RECURSIVE procedure %qs at %L is possibly calling"
+		     " itself recursively.  Declare it RECURSIVE or use"
+		     " %<-frecursive%>", sym->name, &expr->where);
+    }
 
   return true;
 }
@@ -5526,7 +5534,9 @@ gfc_resolve_ref (gfc_expr *expr)
 	case REF_INQUIRY:
 	  /* Implement requirement in note 9.7 of F2018 that the result of the
 	     LEN inquiry be a scalar.  */
-	  if (ref->u.i == INQUIRY_LEN && array_ref && expr->ts.deferred)
+	  if (ref->u.i == INQUIRY_LEN && array_ref
+	      && ((expr->ts.type == BT_CHARACTER && !expr->ts.u.cl->length)
+		  || expr->ts.type == BT_INTEGER))
 	    {
 	      array_ref->u.ar.type = AR_ELEMENT;
 	      expr->rank = 0;
@@ -6622,6 +6632,13 @@ resolve_typebound_static (gfc_expr* e, gfc_symtree** target,
       if (st)
 	*target = st;
     }
+
+  if (is_illegal_recursion ((*target)->n.sym, gfc_current_ns)
+      && !e->value.compcall.tbp->deferred)
+    gfc_warning (0, "Non-RECURSIVE procedure %qs at %L is possibly calling"
+		 " itself recursively.  Declare it RECURSIVE or use"
+		 " %<-frecursive%>", (*target)->n.sym->name, &e->where);
+
   return true;
 }
 
@@ -16073,7 +16090,8 @@ resolve_symbol (gfc_symbol *sym)
 
       if (((as->type == AS_ASSUMED_SIZE && !as->cp_was_assumed)
 	   || as->type == AS_ASSUMED_SHAPE)
-	  && !sym->attr.dummy && !sym->attr.select_type_temporary)
+	  && !sym->attr.dummy && !sym->attr.select_type_temporary
+	  && !sym->attr.associate_var)
 	{
 	  if (as->type == AS_ASSUMED_SIZE)
 	    gfc_error ("Assumed size array at %L must be a dummy argument",
@@ -16682,15 +16700,6 @@ resolve_symbol (gfc_symbol *sym)
 
   if (sym->param_list)
     resolve_pdt (sym);
-
-  if (!sym->attr.referenced
-      && (sym->ts.type == BT_CLASS || sym->ts.type == BT_DERIVED))
-    {
-      gfc_expr *final_expr = gfc_lval_expr_from_sym (sym);
-      if (gfc_is_finalizable (final_expr->ts.u.derived, NULL))
-	gfc_set_sym_referenced (sym);
-      gfc_free_expr (final_expr);
-    }
 }
 
 
@@ -17917,7 +17926,10 @@ resolve_types (gfc_namespace *ns)
 
   for (n = ns->contained; n; n = n->sibling)
     {
-      if (gfc_pure (ns->proc_name) && !gfc_pure (n->proc_name))
+      /* Exclude final wrappers with the test for the artificial attribute.  */
+      if (gfc_pure (ns->proc_name)
+	  && !gfc_pure (n->proc_name)
+	  && !n->proc_name->attr.artificial)
 	gfc_error ("Contained procedure %qs at %L of a PURE procedure must "
 		   "also be PURE", n->proc_name->name,
 		   &n->proc_name->declared_at);

@@ -4113,7 +4113,7 @@ package Einfo is
 --    Protected_Subprogram
 --       Defined in functions and procedures. Set for the pair of subprograms
 --       which emulate the runtime semantics of a protected subprogram. Denotes
---       the entity of the origial protected subprogram.
+--       the entity of the original protected subprogram.
 
 --    Protection_Object
 --       Applies to protected entries, entry families and subprograms. Denotes
@@ -4519,11 +4519,11 @@ package Einfo is
 --    Status_Flag_Or_Transient_Decl
 --       Defined in constant, loop, and variable entities. Applies to objects
 --       that require special treatment by the finalization machinery, such as
---       extended return results, IF and CASE expression results, and objects
+--       extended return objects, conditional expression results, and objects
 --       inside N_Expression_With_Actions nodes. The attribute contains the
---       entity of a flag which specifies particular behavior over a region of
---       code or the declaration of a "hook" object.
---       In which case is it a flag, or a hook object???
+--       entity of a flag which specifies a particular behavior over a region
+--       of the extended return for the return objects, or the declaration of a
+--       hook object for conditional expressions and N_Expression_With_Actions.
 
 --    Storage_Size_Variable [implementation base type only]
 --       Defined in access types and task type entities. This flag is set

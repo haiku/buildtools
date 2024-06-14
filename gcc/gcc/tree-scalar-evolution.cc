@@ -3282,7 +3282,8 @@ simple_iv_with_niters (class loop *wrto_loop, class loop *use_loop,
 
   type = TREE_TYPE (iv->base);
   e = TREE_OPERAND (iv->base, 0);
-  if (TREE_CODE (e) != PLUS_EXPR
+  if (!tree_nop_conversion_p (type, TREE_TYPE (e))
+      || TREE_CODE (e) != PLUS_EXPR
       || TREE_CODE (TREE_OPERAND (e, 1)) != INTEGER_CST
       || !tree_int_cst_equal (iv->step,
 			      fold_convert (type, TREE_OPERAND (e, 1))))
@@ -3523,6 +3524,7 @@ analyze_and_compute_bitwise_induction_effect (class loop* loop,
   if (!gimple_bitwise_induction_p (phidef, &match_op[0], NULL)
       || TREE_CODE (match_op[2]) != SSA_NAME
       || !(header_phi = dyn_cast <gphi *> (SSA_NAME_DEF_STMT (match_op[2])))
+      || gimple_bb (header_phi) != loop->header
       || gimple_phi_num_args (header_phi) != 2)
     return NULL_TREE;
 

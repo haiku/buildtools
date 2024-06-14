@@ -290,6 +290,17 @@ avr_to_int_mode (rtx x)
     : simplify_gen_subreg (int_mode_for_mode (mode).require (), x, mode, 0);
 }
 
+
+/* Return true if hard register REG supports the ADIW and SBIW instructions.  */
+
+bool
+avr_adiw_reg_p (rtx reg)
+{
+  return (AVR_HAVE_ADIW
+	  && test_hard_reg_class (ADDW_REGS, reg));
+}
+
+
 namespace {
 
 static const pass_data avr_pass_data_recompute_notes =
@@ -644,9 +655,11 @@ avr_optimize_casesi (rtx_insn *insns[5], rtx *xop)
   emit_insn (gen_add (reg, reg, gen_int_mode (-low_idx, mode)));
   rtx op0 = reg; rtx op1 = gen_int_mode (num_idx, mode);
   rtx labelref = copy_rtx (xop[4]);
-  emit_jump_insn (gen_cbranch (gen_rtx_fmt_ee (GTU, VOIDmode, op0, op1),
-                               op0, op1,
-                               labelref));
+  rtx xbranch = gen_cbranch (gen_rtx_fmt_ee (GTU, VOIDmode, op0, op1),
+			     op0, op1, labelref);
+  rtx_insn *cbranch = emit_jump_insn (xbranch);
+  JUMP_LABEL (cbranch) = xop[4];
+  ++LABEL_NUSES (xop[4]);
 
   seq1 = get_insns();
   last1 = get_last_insn();
@@ -1094,6 +1107,16 @@ avr_option_override (void)
     {
       flag_omit_frame_pointer = 0;
     }
+
+  /* Disable flag_delete_null_pointer_checks if zero is a valid address. */
+  if (targetm.addr_space.zero_address_valid (ADDR_SPACE_GENERIC))
+    flag_delete_null_pointer_checks = 0;
+
+  /* PR ipa/92606: Inter-procedural analysis optimizes data across
+     address-spaces and PROGMEM.  As of v14, the PROGMEM part is
+     still not fixed (and there is still no target hook as proposed
+     in PR92932).  Just disable respective bogus optimization.  */
+  flag_ipa_icf_variables = 0;
 
   if (flag_pic == 1)
     warning (OPT_fpic, "%<-fpic%> is not supported");
@@ -3316,11 +3339,20 @@ avr_print_operand (FILE *file, rtx x, int code)
     }
   else if (CONST_DOUBLE_P (x))
     {
-      long val;
-      if (GET_MODE (x) != SFmode)
-        fatal_insn ("internal compiler error.  Unknown mode:", x);
-      REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (x), val);
-      fprintf (file, "0x%lx", val);
+      if (GET_MODE (x) == SFmode)
+	{
+	  long val;
+	  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (x), val);
+	  fprintf (file, "0x%lx", val);
+	}
+      else if (GET_MODE (x) == DFmode)
+	{
+	  long l[2];
+	  REAL_VALUE_TO_TARGET_DOUBLE (*CONST_DOUBLE_REAL_VALUE (x), l);
+	  fprintf (file, "0x%lx%08lx", l[1] & 0xffffffff, l[0] & 0xffffffff);
+	}
+      else
+	fatal_insn ("internal compiler error.  Unknown mode:", x);
     }
   else if (GET_CODE (x) == CONST_STRING)
     fputs (XSTR (x, 0), file);
@@ -6264,7 +6296,7 @@ avr_out_compare (rtx_insn *insn, rtx *xop, int *plen)
       /* Word registers >= R24 can use SBIW/ADIW with 0..63.  */
 
       if (i == 0
-          && test_hard_reg_class (ADDW_REGS, reg8))
+	  && avr_adiw_reg_p (reg8))
         {
           int val16 = trunc_int_for_mode (INTVAL (xval), HImode);
 
@@ -8172,7 +8204,7 @@ avr_out_plus_1 (rtx *xop, int *plen, enum rtx_code code, int *pcc,
       if (!started
           && i % 2 == 0
           && i + 2 <= n_bytes
-          && test_hard_reg_class (ADDW_REGS, reg8))
+	  && avr_adiw_reg_p (reg8))
         {
           rtx xval16 = simplify_gen_subreg (HImode, xval, imode, i);
           unsigned int val16 = UINTVAL (xval16) & GET_MODE_MASK (HImode);
@@ -8664,7 +8696,7 @@ avr_out_plus_set_ZN (rtx *xop, int *plen)
     }
 
   if (n_bytes == 2
-      && test_hard_reg_class (ADDW_REGS, xreg)
+      && avr_adiw_reg_p (xreg)
       && IN_RANGE (INTVAL (xval), 1, 63))
     {
       // Add 16-bit value in [1..63] to a w register.
@@ -8691,7 +8723,7 @@ avr_out_plus_set_ZN (rtx *xop, int *plen)
 
       if (i == 0
 	  && n_bytes >= 2
-	  && test_hard_reg_class (ADDW_REGS, op[0]))
+	  && avr_adiw_reg_p (op[0]))
 	{
 	  op[1] = simplify_gen_subreg (HImode, xval, mode, 0);
 	  if (IN_RANGE (INTVAL (op[1]), 0, 63))
@@ -10230,6 +10262,10 @@ avr_handle_addr_attribute (tree *node, tree name, tree args,
 			   int flags ATTRIBUTE_UNUSED, bool *no_add)
 {
   bool io_p = startswith (IDENTIFIER_POINTER (name), "io");
+  HOST_WIDE_INT io_start = avr_arch->sfr_offset;
+  HOST_WIDE_INT io_end = strcmp (IDENTIFIER_POINTER (name), "io_low") == 0
+    ? io_start + 0x1f
+    : io_start + 0x3f;
   location_t loc = DECL_SOURCE_LOCATION (*node);
 
   if (!VAR_P (*node))
@@ -10253,12 +10289,10 @@ avr_handle_addr_attribute (tree *node, tree name, tree args,
 	}
       else if (io_p
 	       && (!tree_fits_shwi_p (arg)
-		   || !(strcmp (IDENTIFIER_POINTER (name), "io_low") == 0
-			? low_io_address_operand : io_address_operand)
-			 (GEN_INT (TREE_INT_CST_LOW (arg)), QImode)))
+		   || ! IN_RANGE (TREE_INT_CST_LOW (arg), io_start, io_end)))
 	{
-	  warning_at (loc, OPT_Wattributes, "%qE attribute address "
-		      "out of range", name);
+	  warning_at (loc, OPT_Wattributes, "%qE attribute address out of range"
+		      " 0x%x%s0x%x", name, (int) io_start, "...", (int) io_end);
 	  *no_add = true;
 	}
       else
@@ -10284,6 +10318,12 @@ avr_handle_addr_attribute (tree *node, tree name, tree args,
     warning_at (loc, OPT_Wattributes, "%qE attribute on non-volatile variable",
 		name);
 
+  // Optimizers must not draw any conclusions from "static int addr;" etc.
+  // because the contents of `addr' are not given by its initializer but
+  // by the contents at the address as specified by the attribute.
+  if (VAR_P (*node) && ! *no_add)
+    TREE_THIS_VOLATILE (*node) = 1;
+
   return NULL_TREE;
 }
 
@@ -10301,7 +10341,6 @@ avr_eval_addr_attrib (rtx x)
 	  attr = lookup_attribute ("io", DECL_ATTRIBUTES (decl));
           if (!attr || !TREE_VALUE (attr))
             attr = lookup_attribute ("io_low", DECL_ATTRIBUTES (decl));
-	  gcc_assert (attr);
 	}
       if (!attr || !TREE_VALUE (attr))
 	attr = lookup_attribute ("address", DECL_ATTRIBUTES (decl));
@@ -10378,6 +10417,16 @@ avr_addr_space_diagnose_usage (addr_space_t as, location_t loc)
   (void) avr_addr_space_supported_p (as, loc);
 }
 
+/* Implement `TARGET_ADDR_SPACE_ZERO_ADDRESS_VALID. Zero is a valid
+   address in all address spaces. Even in ADDR_SPACE_FLASH1 etc..,
+   a zero address is valid and means 0x<RAMPZ val>0000, where RAMPZ is
+   set to the appropriate segment value. */
+
+static bool
+avr_addr_space_zero_address_valid (addr_space_t)
+{
+  return true;
+}
 
 /* Look if DECL shall be placed in program memory space by
    means of attribute `progmem' or some address-space qualifier.
@@ -10548,6 +10597,17 @@ avr_pgm_check_var_decl (tree node)
 static void
 avr_insert_attributes (tree node, tree *attributes)
 {
+  if (VAR_P (node)
+      && ! TREE_STATIC (node)
+      && ! DECL_EXTERNAL (node))
+    {
+      const char *names[] = { "io", "io_low", "address", NULL };
+      for (const char **p = names; *p; ++p)
+	if (lookup_attribute (*p, *attributes))
+	  error ("variable %q+D with attribute %qs must be located in "
+		 "static storage", node, *p);
+    }
+
   avr_pgm_check_var_decl (node);
 
   if (TARGET_MAIN_IS_OS_TASK
@@ -10608,37 +10668,11 @@ avr_insert_attributes (tree node, tree *attributes)
 /* Track need of __do_clear_bss.  */
 
 void
-avr_asm_output_aligned_decl_common (FILE * stream,
-                                    tree decl,
-                                    const char *name,
-                                    unsigned HOST_WIDE_INT size,
-                                    unsigned int align, bool local_p)
+avr_asm_output_aligned_decl_common (FILE *stream, tree /* decl */,
+				    const char *name,
+				    unsigned HOST_WIDE_INT size,
+				    unsigned int align, bool local_p)
 {
-  rtx mem = decl == NULL_TREE ? NULL_RTX : DECL_RTL (decl);
-  rtx symbol;
-
-  if (mem != NULL_RTX && MEM_P (mem)
-      && SYMBOL_REF_P ((symbol = XEXP (mem, 0)))
-      && (SYMBOL_REF_FLAGS (symbol) & (SYMBOL_FLAG_IO | SYMBOL_FLAG_ADDRESS)))
-    {
-      if (!local_p)
-	{
-	  fprintf (stream, "\t.globl\t");
-	  assemble_name (stream, name);
-	  fprintf (stream, "\n");
-	}
-      if (SYMBOL_REF_FLAGS (symbol) & SYMBOL_FLAG_ADDRESS)
-	{
-	  assemble_name (stream, name);
-	  fprintf (stream, " = %ld\n",
-		   (long) INTVAL (avr_eval_addr_attrib (symbol)));
-	}
-      else if (local_p)
-	error_at (DECL_SOURCE_LOCATION (decl),
-		  "static IO declaration for %q+D needs an address", decl);
-      return;
-    }
-
   /* __gnu_lto_slim is just a marker for the linker injected by toplev.cc.
      There is no need to trigger __do_clear_bss code for them.  */
 
@@ -10651,6 +10685,9 @@ avr_asm_output_aligned_decl_common (FILE * stream,
     ASM_OUTPUT_ALIGNED_COMMON (stream, name, size, align);
 }
 
+
+/* Implement `ASM_OUTPUT_ALIGNED_BSS'.  */
+
 void
 avr_asm_asm_output_aligned_bss (FILE *file, tree decl, const char *name,
 				unsigned HOST_WIDE_INT size, int align,
@@ -10658,20 +10695,10 @@ avr_asm_asm_output_aligned_bss (FILE *file, tree decl, const char *name,
 				  (FILE *, tree, const char *,
 				   unsigned HOST_WIDE_INT, int))
 {
-  rtx mem = decl == NULL_TREE ? NULL_RTX : DECL_RTL (decl);
-  rtx symbol;
+  if (!startswith (name, "__gnu_lto"))
+    avr_need_clear_bss_p = true;
 
-  if (mem != NULL_RTX && MEM_P (mem)
-      && SYMBOL_REF_P ((symbol = XEXP (mem, 0)))
-      && (SYMBOL_REF_FLAGS (symbol) & (SYMBOL_FLAG_IO | SYMBOL_FLAG_ADDRESS)))
-    {
-      if (!(SYMBOL_REF_FLAGS (symbol) & SYMBOL_FLAG_ADDRESS))
-	error_at (DECL_SOURCE_LOCATION (decl),
-		  "IO definition for %q+D needs an address", decl);
-      avr_asm_output_aligned_decl_common (file, decl, name, size, align, false);
-    }
-  else
-    default_func (file, decl, name, size, align);
+  default_func (file, decl, name, size, align);
 }
 
 
@@ -10710,6 +10737,58 @@ avr_output_progmem_section_asm_op (const char *data)
 }
 
 
+/* A noswitch section callback to output symbol definitions for
+   attributes "io", "io_low" and "address".  */
+
+static bool
+avr_output_addr_attrib (tree decl, const char *name,
+			unsigned HOST_WIDE_INT /* size */,
+			unsigned HOST_WIDE_INT /* align */)
+{
+  gcc_assert (DECL_RTL_SET_P (decl));
+
+  FILE *stream = asm_out_file;
+  bool local_p = ! DECL_WEAK (decl) && ! TREE_PUBLIC (decl);
+  rtx symbol, mem = DECL_RTL (decl);
+
+  if (mem != NULL_RTX && MEM_P (mem)
+      && SYMBOL_REF_P ((symbol = XEXP (mem, 0)))
+      && (SYMBOL_REF_FLAGS (symbol) & (SYMBOL_FLAG_IO | SYMBOL_FLAG_ADDRESS)))
+    {
+      if (! local_p)
+	{
+	  fprintf (stream, "\t%s\t", DECL_WEAK (decl) ? ".weak" : ".globl");
+	  assemble_name (stream, name);
+	  fprintf (stream, "\n");
+	}
+
+      if (SYMBOL_REF_FLAGS (symbol) & SYMBOL_FLAG_ADDRESS)
+	{
+	  assemble_name (stream, name);
+	  fprintf (stream, " = %ld\n",
+		   (long) INTVAL (avr_eval_addr_attrib (symbol)));
+	}
+      else if (local_p)
+	{
+	  const char *names[] = { "io", "io_low", "address", NULL };
+	  for (const char **p = names; *p; ++p)
+	    if (lookup_attribute (*p, DECL_ATTRIBUTES (decl)))
+	      {
+		error ("static attribute %qs declaration for %q+D needs an "
+		       "address", *p, decl);
+		break;
+	      }
+	}
+
+      return true;
+    }
+
+  gcc_unreachable();
+
+  return false;
+}
+
+
 /* Implement `TARGET_ASM_INIT_SECTIONS'.  */
 
 static void
@@ -10725,6 +10804,7 @@ avr_asm_init_sections (void)
     readonly_data_section->unnamed.callback = avr_output_data_section_asm_op;
   data_section->unnamed.callback = avr_output_data_section_asm_op;
   bss_section->unnamed.callback = avr_output_bss_section_asm_op;
+  tls_comm_section->noswitch.callback = avr_output_addr_attrib;
 }
 
 
@@ -10734,7 +10814,12 @@ avr_asm_init_sections (void)
 static void
 avr_asm_named_section (const char *name, unsigned int flags, tree decl)
 {
-  if (flags & AVR_SECTION_PROGMEM)
+  if (flags & AVR_SECTION_PROGMEM
+      // Only use section .progmem*.data if there is no attribute section.
+      && ! (decl
+	    && DECL_SECTION_NAME (decl)
+	    && symtab_node::get (decl)
+	    && ! symtab_node::get (decl)->implicit_section))
     {
       addr_space_t as = (flags & AVR_SECTION_PROGMEM) / SECTION_MACH_DEP;
       const char *old_prefix = ".rodata";
@@ -10803,6 +10888,7 @@ avr_section_type_flags (tree decl, const char *name, int reloc)
       flags |= as * SECTION_MACH_DEP;
       flags &= ~SECTION_WRITE;
       flags &= ~SECTION_BSS;
+      flags &= ~SECTION_NOTYPE;
     }
 
   return flags;
@@ -10901,15 +10987,17 @@ avr_encode_section_info (tree decl, rtx rtl, int new_decl_p)
 
       tree io_low_attr = lookup_attribute ("io_low", attr);
       tree io_attr = lookup_attribute ("io", attr);
+      tree address_attr = lookup_attribute ("address", attr);
 
       if (io_low_attr
 	  && TREE_VALUE (io_low_attr) && TREE_VALUE (TREE_VALUE (io_low_attr)))
-	addr_attr = io_attr;
+	addr_attr = io_low_attr;
       else if (io_attr
 	       && TREE_VALUE (io_attr) && TREE_VALUE (TREE_VALUE (io_attr)))
 	addr_attr = io_attr;
       else
-	addr_attr = lookup_attribute ("address", attr);
+	addr_attr = address_attr;
+
       if (io_low_attr
 	  || (io_attr && addr_attr
               && low_io_address_operand
@@ -10924,6 +11012,36 @@ avr_encode_section_info (tree decl, rtx rtl, int new_decl_p)
 	 don't use the exact value for constant propagation.  */
       if (addr_attr && !DECL_EXTERNAL (decl))
 	SYMBOL_REF_FLAGS (sym) |= SYMBOL_FLAG_ADDRESS;
+
+      if (io_attr || io_low_attr || address_attr)
+	{
+	  if (DECL_INITIAL (decl))
+	    {
+	      /* Initializers are not yet parsed in TARGET_INSERT_ATTRIBUTES,
+		 hence deny initializers now.  The values of symbols with an
+		 address attribute are determined by the attribute, not by
+		 some initializer.  */
+
+	      error ("variable %q+D with attribute %qs must not have an "
+		     "initializer", decl,
+		     io_low_attr ? "io_low" : io_attr ? "io" : "address");
+	    }
+	  else
+	    {
+	      /* PR112952: The only way to output a variable declaration in a
+		 custom manner is by means of a noswitch section callback.
+		 There are only three noswitch sections: comm_section,
+		 lcomm_section and tls_comm_section.  And there is no way to
+		 wire a custom noswitch section to a decl.  As lcomm_section
+		 is bypassed with -fdata-sections -fno-common, there is no
+		 other way than making use of tls_comm_section.  As we are
+		 using that section anyway, also use it in the public case.  */
+
+	      DECL_COMMON (decl) = 1;
+	      set_decl_section_name (decl, (const char*) nullptr);
+	      set_decl_tls_model (decl, (tls_model) 2);
+	    }
+	}
     }
 
   if (AVR_TINY
@@ -13047,7 +13165,6 @@ avr_conditional_register_usage (void)
           reg_alloc_order[i] = tiny_reg_alloc_order[i];
         }
 
-      CLEAR_HARD_REG_SET (reg_class_contents[(int) ADDW_REGS]);
       CLEAR_HARD_REG_SET (reg_class_contents[(int) NO_LD_REGS]);
     }
 }
@@ -13778,7 +13895,7 @@ avr_out_cpymem (rtx_insn *insn ATTRIBUTE_UNUSED, rtx *op, int *plen)
 {
   addr_space_t as = (addr_space_t) INTVAL (op[0]);
   machine_mode loop_mode = GET_MODE (op[1]);
-  bool sbiw_p = test_hard_reg_class (ADDW_REGS, op[1]);
+  bool sbiw_p = avr_adiw_reg_p (op[1]);
   rtx xop[3];
 
   if (plen)
@@ -15118,6 +15235,9 @@ avr_float_lib_compare_returns_bool (machine_mode mode, enum rtx_code)
 
 #undef  TARGET_ADDR_SPACE_DIAGNOSE_USAGE
 #define TARGET_ADDR_SPACE_DIAGNOSE_USAGE avr_addr_space_diagnose_usage
+
+#undef  TARGET_ADDR_SPACE_ZERO_ADDRESS_VALID
+#define TARGET_ADDR_SPACE_ZERO_ADDRESS_VALID avr_addr_space_zero_address_valid
 
 #undef  TARGET_MODE_DEPENDENT_ADDRESS_P
 #define TARGET_MODE_DEPENDENT_ADDRESS_P avr_mode_dependent_address_p

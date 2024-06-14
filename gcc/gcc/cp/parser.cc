@@ -2748,7 +2748,7 @@ static tree cp_parser_objc_struct_declaration
 /* Utility Routines */
 
 static cp_expr cp_parser_lookup_name
-  (cp_parser *, tree, enum tag_types, bool, bool, bool, tree *, location_t);
+  (cp_parser *, tree, enum tag_types, int, bool, bool, tree *, location_t);
 static tree cp_parser_lookup_name_simple
   (cp_parser *, tree, location_t);
 static tree cp_parser_maybe_treat_template_as_class
@@ -18739,7 +18739,7 @@ cp_parser_template_name (cp_parser* parser,
   /* Look up the name.  */
   decl = cp_parser_lookup_name (parser, identifier,
 				tag_type,
-				/*is_template=*/true,
+				/*is_template=*/1 + template_keyword_p,
 				/*is_namespace=*/false,
 				check_dependency_p,
 				/*ambiguous_decls=*/NULL,
@@ -23333,6 +23333,19 @@ cp_parser_direct_declarator (cp_parser* parser,
 
 	      /* Consume the `)'.  */
 	      parens.require_close (parser);
+
+	      /* For code like
+		  int x(auto(42));
+		  A a(auto(i), 42);
+		 we have synthesized an implicit template parameter and marked
+		 what we thought was a function as an implicit function template.
+		 But now, having seen the whole parameter list, we know it's not
+		 a function declaration, so undo that.  */
+	      if (cp_parser_error_occurred (parser)
+		  && parser->fully_implicit_function_template_p
+		  /* Don't do this for the inner ().  */
+		  && parser->default_arg_ok_p)
+		abort_fully_implicit_template (parser);
 
 	      /* If all went well, parse the cv-qualifier-seq,
 		 ref-qualifier and the exception-specification.  */
@@ -30939,7 +30952,7 @@ cp_parser_type_requirement (cp_parser *parser)
   cp_parser_global_scope_opt (parser, /*current_scope_valid_p=*/false);
   cp_parser_nested_name_specifier_opt (parser,
                                        /*typename_keyword_p=*/true,
-                                       /*check_dependency_p=*/false,
+				       /*check_dependency_p=*/true,
                                        /*type_p=*/true,
                                        /*is_declaration=*/false);
 
@@ -30949,7 +30962,7 @@ cp_parser_type_requirement (cp_parser *parser)
       cp_lexer_consume_token (parser->lexer);
       type = cp_parser_template_id (parser,
                                     /*template_keyword_p=*/true,
-                                    /*check_dependency=*/false,
+				    /*check_dependency_p=*/true,
                                     /*tag_type=*/none_type,
                                     /*is_declaration=*/false);
       type = make_typename_type (parser->scope, type, typename_type,
@@ -31128,7 +31141,7 @@ prefer_type_arg (tag_types tag_type)
    refer to types are ignored.
 
    If IS_TEMPLATE is TRUE, bindings that do not refer to templates are
-   ignored.
+   ignored.  If IS_TEMPLATE IS 2, the 'template' keyword was specified.
 
    If IS_NAMESPACE is TRUE, bindings that do not refer to namespaces
    are ignored.
@@ -31143,7 +31156,7 @@ prefer_type_arg (tag_types tag_type)
 static cp_expr
 cp_parser_lookup_name (cp_parser *parser, tree name,
 		       enum tag_types tag_type,
-		       bool is_template,
+		       int is_template,
 		       bool is_namespace,
 		       bool check_dependency,
 		       tree *ambiguous_decls,
@@ -31327,7 +31340,14 @@ cp_parser_lookup_name (cp_parser *parser, tree name,
       else
 	decl = NULL_TREE;
 
-      if (!decl)
+      /* If we didn't find a member and have dependent bases, the member lookup
+	 is now dependent.  */
+      if (!dep && !decl && any_dependent_bases_p (object_type))
+	dep = true;
+
+      if (dep && is_template == 2)
+	/* The template keyword specifies a dependent template.  */;
+      else if (!decl)
 	/* Look it up in the enclosing context.  DR 141: When looking for a
 	   template-name after -> or ., only consider class templates.  */
 	decl = lookup_name (name, is_namespace ? LOOK_want::NAMESPACE
@@ -31355,8 +31375,7 @@ cp_parser_lookup_name (cp_parser *parser, tree name,
 
       /* If we know we're looking for a type (e.g. A in p->A::x),
 	 mock up a typename.  */
-      if (!decl && object_type && tag_type != none_type
-	  && dependentish_scope_p (object_type))
+      if (!decl && dep && tag_type != none_type)
 	{
 	  tree type = build_typename_type (object_type, name, name,
 					   typename_type);
@@ -49122,7 +49141,7 @@ cp_parser_pragma_unroll (cp_parser *parser, cp_token *pragma_tok)
   location_t location = cp_lexer_peek_token (parser->lexer)->location;
   tree expr = cp_parser_constant_expression (parser);
   unsigned short unroll;
-  expr = maybe_constant_value (expr);
+  expr = fold_non_dependent_expr (expr);
   HOST_WIDE_INT lunroll = 0;
   if (!INTEGRAL_TYPE_P (TREE_TYPE (expr))
       || TREE_CODE (expr) != INTEGER_CST

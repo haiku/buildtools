@@ -4956,9 +4956,11 @@ package body Sem_Ch3 is
             Apply_Length_Check (E, T);
          end if;
 
-      --  When possible, build the default subtype
+      --  When possible, and not a deferred constant, build the default subtype
 
-      elsif Build_Default_Subtype_OK (T) then
+      elsif Build_Default_Subtype_OK (T)
+        and then (not Constant_Present (N) or else Present (E))
+      then
          if No (E) then
             Act_T := Build_Default_Subtype (T, N);
          else
@@ -4971,6 +4973,7 @@ package body Sem_Ch3 is
          end if;
 
          Rewrite (Object_Definition (N), New_Occurrence_Of (Act_T, Loc));
+         Freeze_Before (N, Act_T);
 
       elsif Nkind (E) = N_Function_Call
         and then Constant_Present (N)
@@ -5958,17 +5961,10 @@ package body Sem_Ch3 is
       --  If this is a subtype declaration for an actual in an instance,
       --  inherit static and dynamic predicates if any.
 
-      --  If declaration has no aspect specifications, inherit predicate
-      --  info as well. Unclear how to handle the case of both specified
-      --  and inherited predicates ??? Other inherited aspects, such as
-      --  invariants, should be OK, but the combination with later pragmas
-      --  may also require special merging.
-
       if Has_Predicates (T)
         and then Present (Predicate_Function (T))
-        and then
-          ((In_Instance and then not Comes_From_Source (N))
-             or else No (Aspect_Specifications (N)))
+        and then In_Instance
+        and then not Comes_From_Source (N)
       then
          --  Inherit Subprograms_For_Type from the full view, if present
 
@@ -18422,19 +18418,21 @@ package body Sem_Ch3 is
             Analyze (Subtype_Mark (Obj_Def));
 
             declare
-               Base_T : constant Entity_Id := Entity (Subtype_Mark (Obj_Def));
-               Decl   : constant Node_Id :=
+               Base_T  : constant Entity_Id := Entity (Subtype_Mark (Obj_Def));
+               New_Def : constant Node_Id   := New_Copy_Tree (Obj_Def);
+               Decl    : constant Node_Id   :=
                  Make_Subtype_Declaration (Sloc (P),
                    Defining_Identifier => T,
-                   Subtype_Indication  => Relocate_Node (Obj_Def));
+                   Subtype_Indication  => New_Def);
+
             begin
                Set_Etype  (T, Base_T);
                Mutate_Ekind  (T, Subtype_Kind (Ekind (Base_T)));
-               Set_Parent (T, Obj_Def);
+               Set_Parent (T, Decl);
+               Set_Scope (T, Current_Scope);
 
                if Ekind (T) = E_Array_Subtype then
-                  Set_First_Index (T, First_Index (Base_T));
-                  Set_Is_Constrained (T);
+                  Constrain_Array (T, New_Def, Related_Nod, T, 'P');
 
                elsif Ekind (T) = E_Record_Subtype then
                   Set_First_Entity (T, First_Entity (Base_T));

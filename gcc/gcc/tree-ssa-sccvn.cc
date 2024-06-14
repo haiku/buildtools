@@ -432,7 +432,7 @@ static void init_vn_nary_op_from_pieces (vn_nary_op_t, unsigned int,
 					 enum tree_code, tree, tree *);
 static tree vn_lookup_simplify_result (gimple_match_op *);
 static vn_reference_t vn_reference_lookup_or_insert_for_pieces
-	  (tree, alias_set_type, alias_set_type, tree,
+	  (tree, alias_set_type, alias_set_type, poly_int64, poly_int64, tree,
 	   vec<vn_reference_op_s, va_heap>, tree);
 
 /* Return whether there is value numbering information for a given SSA name.  */
@@ -742,6 +742,8 @@ vn_reference_compute_hash (const vn_reference_t vr1)
 	    vn_reference_op_compute_hash (vro, hstate);
 	}
     }
+  /* Do not hash vr1->offset or vr1->max_size, we want to get collisions
+     to be able to identify compatible results.  */
   result = hstate.end ();
   /* ??? We would ICE later if we hash instead of adding that in. */
   if (vr1->vuse)
@@ -765,6 +767,16 @@ vn_reference_eq (const_vn_reference_t const vr1, const_vn_reference_t const vr2)
   /* The VOP needs to be the same.  */
   if (vr1->vuse != vr2->vuse)
     return false;
+
+  /* The offset/max_size used for the ao_ref during lookup has to be
+     the same.  */
+  if (maybe_ne (vr1->offset, vr2->offset)
+      || maybe_ne (vr1->max_size, vr2->max_size))
+    {
+      /* But nothing known in the prevailing entry is OK to be used.  */
+      if (maybe_ne (vr1->offset, 0) || known_size_p (vr1->max_size))
+	return false;
+    }
 
   /* If the operands are the same we are done.  */
   if (vr1->operands == vr2->operands)
@@ -1909,6 +1921,7 @@ vn_walk_cb_data::finish (alias_set_type set, alias_set_type base_set, tree val)
   vec<vn_reference_op_s> &operands
     = saved_operands.exists () ? saved_operands : vr->operands;
   return vn_reference_lookup_or_insert_for_pieces (last_vuse, set, base_set,
+						   vr->offset, vr->max_size,
 						   vr->type, operands, val);
 }
 
@@ -2352,6 +2365,8 @@ static vn_reference_t
 vn_reference_lookup_or_insert_for_pieces (tree vuse,
 					  alias_set_type set,
 					  alias_set_type base_set,
+					  poly_int64 offset,
+					  poly_int64 max_size,
 					  tree type,
 					  vec<vn_reference_op_s,
 					        va_heap> operands,
@@ -2365,15 +2380,18 @@ vn_reference_lookup_or_insert_for_pieces (tree vuse,
   vr1.type = type;
   vr1.set = set;
   vr1.base_set = base_set;
+  vr1.offset = offset;
+  vr1.max_size = max_size;
   vr1.hashcode = vn_reference_compute_hash (&vr1);
   if (vn_reference_lookup_1 (&vr1, &result))
     return result;
+
   if (TREE_CODE (value) == SSA_NAME)
     value_id = VN_INFO (value)->value_id;
   else
     value_id = get_or_alloc_constant_value_id (value);
-  return vn_reference_insert_pieces (vuse, set, base_set, type,
-				     operands.copy (), value, value_id);
+  return vn_reference_insert_pieces (vuse, set, base_set, offset, max_size,
+				     type, operands.copy (), value, value_id);
 }
 
 /* Return a value-number for RCODE OPS... either by looking up an existing
@@ -3557,6 +3575,8 @@ vn_reference_lookup_3 (ao_ref *ref, tree vuse, void *data_,
 	    return (void *)-1;
 	}
       *ref = r;
+      vr->offset = r.offset;
+      vr->max_size = r.max_size;
 
       /* Do not update last seen VUSE after translating.  */
       data->last_vuse_ptr = NULL;
@@ -3745,6 +3765,8 @@ vn_reference_lookup_3 (ao_ref *ref, tree vuse, void *data_,
       if (maybe_ne (ref->size, r.size))
 	return (void *)-1;
       *ref = r;
+      vr->offset = r.offset;
+      vr->max_size = r.max_size;
 
       /* Do not update last seen VUSE after translating.  */
       data->last_vuse_ptr = NULL;
@@ -3809,6 +3831,10 @@ vn_reference_lookup_pieces (tree vuse, alias_set_type set,
   vr1.type = type;
   vr1.set = set;
   vr1.base_set = base_set;
+  /* We can pretend there's no extra info fed in since the ao_refs offset
+     and max_size are computed only from the VN reference ops.  */
+  vr1.offset = 0;
+  vr1.max_size = -1;
   vr1.hashcode = vn_reference_compute_hash (&vr1);
   if ((cst = fully_constant_vn_reference_p (&vr1)))
     return cst;
@@ -3935,6 +3961,8 @@ vn_reference_lookup (tree op, tree vuse, vn_lookup_kind kind,
   ao_ref_init (&op_ref, op);
   vr1.set = ao_ref_alias_set (&op_ref);
   vr1.base_set = ao_ref_base_alias_set (&op_ref);
+  vr1.offset = 0;
+  vr1.max_size = -1;
   vr1.hashcode = vn_reference_compute_hash (&vr1);
   if (mask == NULL_TREE)
     if (tree cst = fully_constant_vn_reference_p (&vr1))
@@ -3957,7 +3985,13 @@ vn_reference_lookup (tree op, tree vuse, vn_lookup_kind kind,
       if (!valueized_anything
 	  || !ao_ref_init_from_vn_reference (&r, vr1.set, vr1.base_set,
 					     vr1.type, ops_for_ref))
-	ao_ref_init (&r, op);
+	{
+	  ao_ref_init (&r, op);
+	  /* Record the extra info we're getting from the full ref.  */
+	  ao_ref_base (&r);
+	  vr1.offset = r.offset;
+	  vr1.max_size = r.max_size;
+	}
       vn_walk_cb_data data (&vr1, r.ref ? NULL_TREE : op,
 			    last_vuse_ptr, kind, tbaa_p, mask,
 			    redundant_store_removal_p);
@@ -4013,6 +4047,8 @@ vn_reference_lookup_call (gcall *call, vn_reference_t *vnresult,
   vr->punned = false;
   vr->set = 0;
   vr->base_set = 0;
+  vr->offset = 0;
+  vr->max_size = -1;
   vr->hashcode = vn_reference_compute_hash (vr);
   vn_reference_lookup_1 (vr, vnresult);
 }
@@ -4076,6 +4112,10 @@ vn_reference_insert (tree op, tree result, tree vuse, tree vdef)
   ao_ref_init (&op_ref, op);
   vr1->set = ao_ref_alias_set (&op_ref);
   vr1->base_set = ao_ref_base_alias_set (&op_ref);
+  /* Specifically use an unknown extent here, we're not doing any lookup
+     and assume the caller didn't either (or it went VARYING).  */
+  vr1->offset = 0;
+  vr1->max_size = -1;
   vr1->hashcode = vn_reference_compute_hash (vr1);
   vr1->result = TREE_CODE (result) == SSA_NAME ? SSA_VAL (result) : result;
   vr1->result_vdef = vdef;
@@ -4118,7 +4158,8 @@ vn_reference_insert (tree op, tree result, tree vuse, tree vdef)
 
 vn_reference_t
 vn_reference_insert_pieces (tree vuse, alias_set_type set,
-			    alias_set_type base_set, tree type,
+			    alias_set_type base_set,
+			    poly_int64 offset, poly_int64 max_size, tree type,
 			    vec<vn_reference_op_s> operands,
 			    tree result, unsigned int value_id)
 
@@ -4135,6 +4176,8 @@ vn_reference_insert_pieces (tree vuse, alias_set_type set,
   vr1->punned = false;
   vr1->set = set;
   vr1->base_set = base_set;
+  vr1->offset = offset;
+  vr1->max_size = max_size;
   vr1->hashcode = vn_reference_compute_hash (vr1);
   if (result && TREE_CODE (result) == SSA_NAME)
     result = SSA_VAL (result);
@@ -5652,6 +5695,8 @@ visit_reference_op_call (tree lhs, gcall *stmt)
       vr2->type = vr1.type;
       vr2->punned = vr1.punned;
       vr2->set = vr1.set;
+      vr2->offset = vr1.offset;
+      vr2->max_size = vr1.max_size;
       vr2->base_set = vr1.base_set;
       vr2->hashcode = vr1.hashcode;
       vr2->result = lhs;
@@ -7319,7 +7364,8 @@ eliminate_dom_walker::before_dom_children (basic_block b)
 	      || virtual_operand_p (arg))
 	    continue;
 	  tree sprime = eliminate_avail (b, arg);
-	  if (sprime && may_propagate_copy (arg, sprime))
+	  if (sprime && may_propagate_copy (arg, sprime,
+					    !(e->flags & EDGE_ABNORMAL)))
 	    propagate_value (use_p, sprime);
 	}
 
@@ -7489,12 +7535,13 @@ eliminate_with_rpo_vn (bitmap inserted_exprs)
 
 static unsigned
 do_rpo_vn_1 (function *fn, edge entry, bitmap exit_bbs,
-	     bool iterate, bool eliminate, vn_lookup_kind kind);
+	     bool iterate, bool eliminate, bool skip_entry_phis,
+	     vn_lookup_kind kind);
 
 void
 run_rpo_vn (vn_lookup_kind kind)
 {
-  do_rpo_vn_1 (cfun, NULL, NULL, true, false, kind);
+  do_rpo_vn_1 (cfun, NULL, NULL, true, false, false, kind);
 
   /* ???  Prune requirement of these.  */
   constant_to_value_id = new hash_table<vn_constant_hasher> (23);
@@ -8112,7 +8159,7 @@ process_bb (rpo_elim &avail, basic_block bb,
 					    arg);
 	  if (sprime
 	      && sprime != arg
-	      && may_propagate_copy (arg, sprime))
+	      && may_propagate_copy (arg, sprime, !(e->flags & EDGE_ABNORMAL)))
 	    propagate_value (use_p, sprime);
 	}
 
@@ -8191,11 +8238,13 @@ do_unwind (unwind_state *to, rpo_elim &avail)
 /* Do VN on a SEME region specified by ENTRY and EXIT_BBS in FN.
    If ITERATE is true then treat backedges optimistically as not
    executed and iterate.  If ELIMINATE is true then perform
-   elimination, otherwise leave that to the caller.  */
+   elimination, otherwise leave that to the caller.  If SKIP_ENTRY_PHIS
+   is true then force PHI nodes in ENTRY->dest to VARYING.  */
 
 static unsigned
 do_rpo_vn_1 (function *fn, edge entry, bitmap exit_bbs,
-	     bool iterate, bool eliminate, vn_lookup_kind kind)
+	     bool iterate, bool eliminate, bool skip_entry_phis,
+	     vn_lookup_kind kind)
 {
   unsigned todo = 0;
   default_vn_walk_kind = kind;
@@ -8236,10 +8285,10 @@ do_rpo_vn_1 (function *fn, edge entry, bitmap exit_bbs,
     if (e != entry
 	&& !(e->flags & EDGE_DFS_BACK))
       break;
-  bool skip_entry_phis = e != NULL;
-  if (skip_entry_phis && dump_file && (dump_flags & TDF_DETAILS))
+  if (e != NULL && dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "Region does not contain all edges into "
 	     "the entry block, skipping its PHIs.\n");
+  skip_entry_phis |= e != NULL;
 
   int *bb_to_rpo = XNEWVEC (int, last_basic_block_for_fn (fn));
   for (int i = 0; i < n; ++i)
@@ -8617,14 +8666,17 @@ do_rpo_vn_1 (function *fn, edge entry, bitmap exit_bbs,
    If ITERATE is true then treat backedges optimistically as not
    executed and iterate.  If ELIMINATE is true then perform
    elimination, otherwise leave that to the caller.
+   If SKIP_ENTRY_PHIS is true then force PHI nodes in ENTRY->dest to VARYING.
    KIND specifies the amount of work done for handling memory operations.  */
 
 unsigned
 do_rpo_vn (function *fn, edge entry, bitmap exit_bbs,
-	   bool iterate, bool eliminate, vn_lookup_kind kind)
+	   bool iterate, bool eliminate, bool skip_entry_phis,
+	   vn_lookup_kind kind)
 {
   auto_timevar tv (TV_TREE_RPO_VN);
-  unsigned todo = do_rpo_vn_1 (fn, entry, exit_bbs, iterate, eliminate, kind);
+  unsigned todo = do_rpo_vn_1 (fn, entry, exit_bbs, iterate, eliminate,
+			       skip_entry_phis, kind);
   free_rpo_vn ();
   return todo;
 }
@@ -8680,7 +8732,7 @@ pass_fre::execute (function *fun)
   if (iterate_p)
     loop_optimizer_init (AVOID_CFG_MODIFICATIONS);
 
-  todo = do_rpo_vn_1 (fun, NULL, NULL, iterate_p, true, VN_WALKREWRITE);
+  todo = do_rpo_vn_1 (fun, NULL, NULL, iterate_p, true, false, VN_WALKREWRITE);
   free_rpo_vn ();
 
   if (iterate_p)

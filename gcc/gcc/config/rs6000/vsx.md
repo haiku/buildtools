@@ -4551,8 +4551,8 @@
   rtx op1 = operands[1];
   if (MEM_P (op1))
     operands[1] = rs6000_force_indexed_or_indirect_mem (op1);
-  else if (!REG_P (op1))
-    op1 = force_reg (<VSX_D:VEC_base>mode, op1);
+  else
+    operands[1] = force_reg (<VSX_D:VEC_base>mode, op1);
 })
 
 (define_insn "vsx_splat_<mode>_reg"
@@ -6555,7 +6555,7 @@
 		      (match_operand:QI 4 "u8bit_cint_operand" "n")]
 		     UNSPEC_XXEVAL))]
    "TARGET_POWER10"
-   "xxeval %0,%1,%2,%3,%4"
+   "xxeval %x0,%x1,%x2,%x3,%4"
    [(set_attr "type" "vecperm")
     (set_attr "prefixed" "yes")])
 

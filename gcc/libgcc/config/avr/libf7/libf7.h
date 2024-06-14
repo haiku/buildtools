@@ -29,6 +29,7 @@
 
 #define F7_MANT_BYTES 7
 #define F7_MANT_BITS (8 * F7_MANT_BYTES)
+#define F7_SIZEOF (1 + F7_MANT_BYTES + 2)
 
 /*  Using the following GCC features:
     --  Unnamed structs / unions (GNU-C)
@@ -600,6 +601,7 @@ extern void f7_sin (f7_t*, const f7_t*);
 extern void f7_cos (f7_t*, const f7_t*);
 extern void f7_tan (f7_t*, const f7_t*);
 extern void f7_atan (f7_t*, const f7_t*);
+extern void f7_atan2 (f7_t*, const f7_t*, const f7_t*);
 extern void f7_asin (f7_t*, const f7_t*);
 extern void f7_acos (f7_t*, const f7_t*);
 extern void f7_tanh (f7_t*, const f7_t*);
@@ -611,7 +613,6 @@ extern void f7_exp10 (f7_t*, const f7_t*);
 extern void f7_pow10 (f7_t*, const f7_t*);
 
 // Just prototypes, not implemented yet.
-extern void f7_atan2 (f7_t*, const f7_t*, const f7_t*);
 extern long f7_lrint (const f7_t*);
 extern long f7_lround (const f7_t*);
 

@@ -1752,6 +1752,14 @@ gfc_compare_interfaces (gfc_symbol *s1, gfc_symbol *s2, const char *name2,
       return false;
     }
 
+  if (s2->attr.subroutine && s1->attr.flavor == FL_VARIABLE)
+    {
+      if (errmsg != NULL)
+	snprintf (errmsg, err_len, "subroutine proc pointer '%s' passed "
+		  "to dummy variable '%s'", name2, s1->name);
+      return false;
+    }
+
   /* Do strict checks on all characteristics
      (for dummy procedures and procedure pointer assignments).  */
   if (!generic_flag && strict_flag)
@@ -2388,10 +2396,20 @@ compare_parameter (gfc_symbol *formal, gfc_expr *actual,
     {
       gfc_symbol *act_sym = actual->symtree->n.sym;
 
-      if (formal->attr.flavor != FL_PROCEDURE)
+      if (formal->attr.flavor != FL_PROCEDURE && !act_sym->ts.interface)
 	{
 	  if (where)
 	    gfc_error ("Invalid procedure argument at %L", &actual->where);
+	  return false;
+	}
+      else if (act_sym->ts.interface
+	       && !gfc_compare_interfaces (formal, act_sym->ts.interface,
+					   act_sym->name, 0, 1, err,
+					   sizeof(err),NULL, NULL))
+	{
+	  if (where)
+	    gfc_error_opt (0, "Interface mismatch in dummy procedure %qs at %L:"
+			   " %s", formal->name, &actual->where, err);
 	  return false;
 	}
 
@@ -3259,6 +3277,36 @@ gfc_compare_actual_formal (gfc_actual_arglist **ap, gfc_formal_arglist *formal,
 	  && a->expr->ts.type != BT_ASSUMED)
 	gfc_find_vtab (&a->expr->ts);
 
+      /* Interp J3/22-146:
+	 "If the context of the reference to NULL is an <actual argument>
+	 corresponding to an <assumed-rank> dummy argument, MOLD shall be
+	 present."  */
+      if (a->expr->expr_type == EXPR_NULL
+	  && a->expr->ts.type == BT_UNKNOWN
+	  && f->sym->as
+	  && f->sym->as->type == AS_ASSUMED_RANK)
+	{
+	  gfc_error ("Intrinsic %<NULL()%> without %<MOLD%> argument at %L "
+		     "passed to assumed-rank dummy %qs",
+		     &a->expr->where, f->sym->name);
+	  ok = false;
+	  goto match;
+	}
+
+      if (a->expr->expr_type == EXPR_NULL
+	  && a->expr->ts.type == BT_UNKNOWN
+	  && f->sym->ts.type == BT_CHARACTER
+	  && !f->sym->ts.deferred
+	  && f->sym->ts.u.cl
+	  && f->sym->ts.u.cl->length == NULL)
+	{
+	  gfc_error ("Intrinsic %<NULL()%> without %<MOLD%> argument at %L "
+		     "passed to assumed-length dummy %qs",
+		     &a->expr->where, f->sym->name);
+	  ok = false;
+	  goto match;
+	}
+
       if (a->expr->expr_type == EXPR_NULL
 	  && ((f->sym->ts.type != BT_CLASS && !f->sym->attr.pointer
 	       && (f->sym->attr.allocatable || !f->sym->attr.optional
@@ -3360,6 +3408,10 @@ gfc_compare_actual_formal (gfc_actual_arglist **ap, gfc_formal_arglist *formal,
 	}
 
       if (f->sym->ts.type == BT_CLASS)
+	goto skip_size_check;
+
+      /* Skip size check for NULL() actual without MOLD argument.  */
+      if (a->expr->expr_type == EXPR_NULL && a->expr->ts.type == BT_UNKNOWN)
 	goto skip_size_check;
 
       actual_size = get_expr_storage_size (a->expr);

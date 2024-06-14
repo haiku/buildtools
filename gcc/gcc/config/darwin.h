@@ -366,7 +366,9 @@ extern GTY(()) int darwin_ms_struct;
     %{e*} %{r} \
     %{o*}%{!o:-o a.out} \
     %{!r:%{!nostdlib:%{!nostartfiles:%S}}} \
-    %{L*} %(link_libgcc) %o \
+    %{L*} %(link_libgcc) \
+    %{!r:%{!nostdlib:%{!nodefaultlibs: " DARWIN_WEAK_CRTS "}}} \
+    %o \
     %{!r:%{!nostdlib:%{!nodefaultlibs:\
       %{fprofile-arcs|fprofile-generate*|coverage:-lgcov} \
       %{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1): \
@@ -380,15 +382,15 @@ extern GTY(()) int darwin_ms_struct;
       %(link_ssp) \
       %:version-compare(>< 10.6 10.7 mmacosx-version-min= -ld10-uwfef) \
       %(link_gcc_c_sequence) \
-      %{!nodefaultexport:%{dylib|dynamiclib|bundle: \
-	%:version-compare(>= 10.11 asm_macosx_version_min= -U) \
-	%:version-compare(>= 10.11 asm_macosx_version_min= ___emutls_get_address) \
-	%:version-compare(>= 10.11 asm_macosx_version_min= -exported_symbol) \
-	%:version-compare(>= 10.11 asm_macosx_version_min= ___emutls_get_address) \
-	%:version-compare(>= 10.11 asm_macosx_version_min= -U) \
-	%:version-compare(>= 10.11 asm_macosx_version_min= ___emutls_register_common) \
-	%:version-compare(>= 10.11 asm_macosx_version_min= -exported_symbol) \
-	%:version-compare(>= 10.11 asm_macosx_version_min= ___emutls_register_common) \
+      %{!nodefaultexport: \
+	%{%:version-compare(>= 10.11 asm_macosx_version_min= -U): \
+	   ___emutls_get_address -exported_symbol ___emutls_get_address \
+	  -U ___emutls_register_common \
+	  -exported_symbol ___emutls_register_common \
+	  -U ___gcc_nested_func_ptr_created \
+	  -exported_symbol ___gcc_nested_func_ptr_created \
+	  -U ___gcc_nested_func_ptr_deleted \
+	  -exported_symbol ___gcc_nested_func_ptr_deleted \
       }} \
     }}}\
     %{!r:%{!nostdlib:%{!nostartfiles:%E}}} %{T*} %{F*} "\
@@ -508,16 +510,21 @@ extern GTY(()) int darwin_ms_struct;
 #undef REAL_LIBGCC_SPEC
 #define REAL_LIBGCC_SPEC \
 "%{static-libgcc|static:						  \
-    %:version-compare(!> 10.6 mmacosx-version-min= -lgcc_eh)		  \
-    %:version-compare(>= 10.6 mmacosx-version-min= -lemutls_w);		  \
+    %:version-compare(!> 10.6 mmacosx-version-min= -lgcc_eh);		  \
    shared-libgcc|fexceptions|fobjc-exceptions|fgnu-runtime:		  \
     %:version-compare(!> 10.11 mmacosx-version-min= -lgcc_s.1.1)	  \
-    %:version-compare(>= 10.11 mmacosx-version-min= -lemutls_w)		  \
     %:version-compare(!> 10.3.9 mmacosx-version-min= -lgcc_eh)		  \
     %:version-compare(>< 10.3.9 10.5 mmacosx-version-min= -lgcc_s.10.4)   \
-    %:version-compare(>< 10.5 10.6 mmacosx-version-min= -lgcc_s.10.5);	  \
-   : -lemutls_w								  \
+    %:version-compare(>< 10.5 10.6 mmacosx-version-min= -lgcc_s.10.5)	  \
   } -lgcc "
+
+#define DARWIN_WEAK_CRTS \
+"%{static-libgcc|static:						  \
+   %:version-compare(>= 10.6 mmacosx-version-min= -lemutls_w) ; \
+   shared-libgcc|fexceptions|fobjc-exceptions|fgnu-runtime: \
+     %:version-compare(>= 10.11 mmacosx-version-min= -lemutls_w) ; \
+   : -lemutls_w \
+  }"
 
 /* We specify crt0.o as -lcrt0.o so that ld will search the library path.  */
 
@@ -823,7 +830,9 @@ int darwin_label_is_anonymous_local_objc_name (const char *name);
        else if (xname[0] == '+' || xname[0] == '-')			     \
          fprintf (FILE, "\"%s\"", xname);				     \
        else if (darwin_label_is_anonymous_local_objc_name (xname))	     \
-         fprintf (FILE, "L%s", xname);					     \
+	fprintf (FILE, "%c%s", flag_next_runtime ? 'L' : 'l', xname);	     \
+       else if (strncmp (xname, "__anon_cfstring", 15) == 0)		     \
+	fprintf (FILE, "L%s", xname);					     \
        else if (xname[0] != '"' && name_needs_quotes (xname))		     \
 	 asm_fprintf (FILE, "\"%U%s\"", xname);				     \
        else								     \
@@ -1082,7 +1091,7 @@ enum machopic_addr_class {
 
 #undef ASM_PREFERRED_EH_DATA_FORMAT
 #define ASM_PREFERRED_EH_DATA_FORMAT(CODE,GLOBAL)  \
-  (((CODE) == 2 && (GLOBAL) == 1) \
+  (((CODE) == 2 && (GLOBAL) == 1) || ((CODE) == 0 && (GLOBAL) == 1) \
    ? (DW_EH_PE_pcrel | DW_EH_PE_indirect | DW_EH_PE_sdata4) : \
      ((CODE) == 1 || (GLOBAL) == 0) ? DW_EH_PE_pcrel : DW_EH_PE_absptr)
 

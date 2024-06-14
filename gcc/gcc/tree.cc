@@ -5660,7 +5660,8 @@ build_qualified_type (tree type, int type_quals MEM_STAT_DECL)
   return t;
 }
 
-/* Create a variant of type T with alignment ALIGN.  */
+/* Create a variant of type T with alignment ALIGN which
+   is measured in bits.  */
 
 tree
 build_aligned_type (tree type, unsigned int align)
@@ -10181,6 +10182,8 @@ build_opaque_vector_type (tree innertype, poly_int64 nunits)
   TYPE_NEXT_VARIANT (cand) = TYPE_NEXT_VARIANT (t);
   TYPE_NEXT_VARIANT (t) = cand;
   TYPE_MAIN_VARIANT (cand) = TYPE_MAIN_VARIANT (t);
+  /* Type variants have no alias set defined.  */
+  TYPE_ALIAS_SET (cand) = -1;
   return cand;
 }
 

@@ -55,7 +55,7 @@ Introduction
 This manual documents the internals of the GNU compilers, including how
 to port them to new targets and some information about how to write
 front ends for new languages.  It corresponds to the compilers (GCC)
-version 13.2.0.  The use of the GNU compilers is documented in a
+version 13.3.0.  The use of the GNU compilers is documented in a
 separate manual.  *Note Introduction: (gcc)Top.
 
  This manual is mainly a reference manual rather than a tutorial.  It
@@ -11064,7 +11064,7 @@ kinds of expressions:
      vector.  For example { 0, 1 } could be seen as two patterns with
      one element each or one pattern with two elements (BASE0 and
      BASE1).  The canonical encoding is always the one with the fewest
-     patterns or (if both encodings have the same number of petterns)
+     patterns or (if both encodings have the same number of patterns)
      the one with the fewest encoded elements.
 
      'vector_cst_encoding_nelts (V)' gives the total number of encoded
@@ -17966,7 +17966,7 @@ The simplest RTL expressions are those that represent constant values.
      vector.  For example { 0, 1 } could be seen as two patterns with
      one element each or one pattern with two elements (BASE0 and
      BASE1).  The canonical encoding is always the one with the fewest
-     patterns or (if both encodings have the same number of petterns)
+     patterns or (if both encodings have the same number of patterns)
      the one with the fewest encoded elements.
 
      'const_vector_encoding_nelts (V)' gives the total number of encoded

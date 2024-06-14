@@ -194,27 +194,8 @@ extern int fprintf_unlocked (FILE *, const char *, ...);
 #undef fread_unlocked
 #undef fwrite_unlocked
 
-/* Include <string> before "safe-ctype.h" to avoid GCC poisoning
-   the ctype macros through safe-ctype.h */
-
-#ifdef __cplusplus
-#ifdef INCLUDE_STRING
-# include <string>
-#endif
-#endif
-
-/* There are an extraordinary number of issues with <ctype.h>.
-   The last straw is that it varies with the locale.  Use libiberty's
-   replacement instead.  */
-#include "safe-ctype.h"
-
-#include <sys/types.h>
-
-#include <errno.h>
-
-#if !defined (errno) && defined (HAVE_DECL_ERRNO) && !HAVE_DECL_ERRNO
-extern int errno;
-#endif
+/* Include C++ standard headers before "safe-ctype.h" to avoid GCC
+   poisoning the ctype macros through safe-ctype.h */
 
 #ifdef __cplusplus
 #if defined (INCLUDE_ALGORITHM) || !defined (HAVE_SWAP_IN_UTILITY)
@@ -228,6 +209,9 @@ extern int errno;
 #endif
 #ifdef INCLUDE_SET
 # include <set>
+#endif
+#ifdef INCLUDE_STRING
+# include <string>
 #endif
 #ifdef INCLUDE_VECTOR
 # include <vector>
@@ -243,6 +227,19 @@ extern int errno;
 # include <new>
 # include <utility>
 # include <type_traits>
+#endif
+
+/* There are an extraordinary number of issues with <ctype.h>.
+   The last straw is that it varies with the locale.  Use libiberty's
+   replacement instead.  */
+#include "safe-ctype.h"
+
+#include <sys/types.h>
+
+#include <errno.h>
+
+#if !defined (errno) && defined (HAVE_DECL_ERRNO) && !HAVE_DECL_ERRNO
+extern int errno;
 #endif
 
 /* Some of glibc's string inlines cause warnings.  Plus we'd rather
@@ -1308,6 +1305,12 @@ void gcc_stablesort_r (void *, size_t, size_t, sort_r_cmp_fn *, void *data);
 #ifdef __cplusplus
 #undef NULL
 #define NULL nullptr
+#endif
+
+/* Workaround clang on PowerPC which has vec_step as reserved keyword
+   rather than function-like macro defined in <altivec.h>.  See PR114369.  */
+#if defined(__clang__) && defined(__powerpc__)
+#define vec_step vec_step_
 #endif
 
 /* Return true if STR string starts with PREFIX.  */

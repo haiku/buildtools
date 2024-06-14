@@ -1,3 +1,83 @@
+2024-05-21  Release Manager
+
+	* GCC 13.3.0 released.
+
+2024-04-22  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libfortran/114304
+	PR libfortran/105473
+	* io/list_read.c (eat_separator): Add logic to handle spaces
+	preceding a comma or semicolon such that that a 'null' read
+	occurs without error at the end of comma or semicolon
+	terminated input lines. Add check and error message for ';'.
+	Accept tab as alternative to space.
+	(list_formatted_read_scalar): Treat comma as a decimal point
+	when specified by the decimal mode on the first item.
+
+2024-03-11  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	Backported from master:
+	2024-03-11  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libfortran/105437
+	PR libfortran/114304
+	* io/list_read.c (eat_separator): Remove check for decimal
+	point mode and semicolon used as a seprator. Removes
+	the regression.
+
+2024-03-08  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	Backported from master:
+	2024-02-17  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libfortran/105473
+	* io/list_read.c (eat_separator): Reject comma as a
+	separator when it is being used as a decimal point.
+	(parse_real): Reject a '.' when it should be a comma.
+	(read_real): Likewise.
+	* io/read.c (read_f): Add more checks for ',' and '.'
+	conditions.
+
+2024-02-13  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	Backported from master:
+	2024-02-12  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	* io/transfer.c (formatted_transfer_scalar_write): Adjust
+	bytes_used and pos variable for stream access.
+
+2024-02-13  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	Backported from master:
+	2024-02-03  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	PR libfortran/111022
+	* io/format.c (get_fnode): Update initialization of fnode.
+	(parse_format_list): Initialization.
+	* io/format.h (struct fnode): Added the new 'pushed' component.
+	* io/write.c (select_buffer): Whitespace.
+	(write_real): Whitespace.
+	(write_real_w0): Adjust logic for the d == 0 condition.
+	* io/write_float.def (determine_precision): Whitespace.
+	(build_float_string): Calculate width of ..E0 exponents and
+	adjust logic accordingly.
+	(build_infnan_string): Whitespace.
+	(CALCULATE_EXP): Whitespace.
+	(quadmath_snprintf): Whitespace.
+	(determine_en_precision): Whitespace.
+
+2024-02-11  Francois-Xavier Coudert  <fxcoudert@gcc.gnu.org>
+
+	PR libfortran/110651
+	* libgfortran.spec.in: Remove duplicate libraries.
+
+2024-01-13  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	Backported from master:
+	2024-01-07  Jerry DeLisle  <jvdelisle@gcc.gnu.org>
+
+	* io/write.c (namelist_write): If internal_unit precede with space.
+
 2023-07-27  Release Manager
 
 	* GCC 13.2.0 released.

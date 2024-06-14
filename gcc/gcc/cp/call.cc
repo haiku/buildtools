@@ -2017,7 +2017,6 @@ reference_binding (tree rto, tree rfrom, tree expr, bool c_cast_p, int flags,
 	    if (!new_second)
 	      return NULL;
 	    conv = merge_conversion_sequences (t, new_second);
-	    gcc_assert (maybe_valid_p || conv->bad_p);
 	    return conv;
 	  }
     }
@@ -6731,7 +6730,9 @@ op_is_ordered (tree_code code)
 
 /* Subroutine of build_new_op: Add to CANDIDATES all candidates for the
    operator indicated by CODE/CODE2.  This function calls itself recursively to
-   handle C++20 rewritten comparison operator candidates.
+   handle C++20 rewritten comparison operator candidates.  Returns NULL_TREE
+   upon success, and error_mark_node if something went wrong that prevented
+   us from performing overload resolution (e.g. ambiguous member name lookup).
 
    LOOKUPS, if non-NULL, is the set of pertinent namespace-scope operator
    overloads to consider.  This parameter is used when instantiating a
@@ -6908,11 +6909,16 @@ add_operator_candidates (z_candidate **candidates,
 
       if (rewrite_code)
 	{
+	  tree r;
 	  flags |= LOOKUP_REWRITTEN;
 	  if (rewrite_code != code)
-	    /* Add rewritten candidates in same order.  */
-	    add_operator_candidates (candidates, rewrite_code, ERROR_MARK,
-				     arglist, lookups, flags, complain);
+	    {
+	      /* Add rewritten candidates in same order.  */
+	      r = add_operator_candidates (candidates, rewrite_code, ERROR_MARK,
+					   arglist, lookups, flags, complain);
+	      if (r == error_mark_node)
+		return error_mark_node;
+	    }
 
 	  z_candidate *save_cand = *candidates;
 
@@ -6921,8 +6927,10 @@ add_operator_candidates (z_candidate **candidates,
 	  vec<tree,va_gc> *revlist = make_tree_vector ();
 	  revlist->quick_push ((*arglist)[1]);
 	  revlist->quick_push ((*arglist)[0]);
-	  add_operator_candidates (candidates, rewrite_code, ERROR_MARK,
-				   revlist, lookups, flags, complain);
+	  r = add_operator_candidates (candidates, rewrite_code, ERROR_MARK,
+				       revlist, lookups, flags, complain);
+	  if (r == error_mark_node)
+	    return error_mark_node;
 
 	  /* Release the vec if we didn't add a candidate that uses it.  */
 	  for (z_candidate *c = *candidates; c != save_cand; c = c->next)
@@ -8623,7 +8631,15 @@ convert_like_internal (conversion *convs, tree expr, tree fn, int argnum,
       break;
     };
 
-  expr = convert_like (next_conversion (convs), expr, fn, argnum,
+  conversion *nc = next_conversion (convs);
+  if (convs->kind == ck_ref_bind && nc->kind == ck_qual
+      && !convs->need_temporary_p)
+    /* direct_reference_binding might have inserted a ck_qual under
+       this ck_ref_bind for the benefit of conversion sequence ranking.
+       Don't actually perform that conversion.  */
+    nc = next_conversion (nc);
+
+  expr = convert_like (nc, expr, fn, argnum,
 		       convs->kind == ck_ref_bind
 		       ? issue_conversion_warnings : false,
 		       c_cast_p, /*nested_p=*/true, complain & ~tf_no_cleanup);
@@ -8700,19 +8716,6 @@ convert_like_internal (conversion *convs, tree expr, tree fn, int argnum,
     case ck_ref_bind:
       {
 	tree ref_type = totype;
-
-	/* direct_reference_binding might have inserted a ck_qual under
-	   this ck_ref_bind for the benefit of conversion sequence ranking.
-	   Ignore the conversion; we'll create our own below.  */
-	if (next_conversion (convs)->kind == ck_qual
-	    && !convs->need_temporary_p)
-	  {
-	    gcc_assert (same_type_p (TREE_TYPE (expr),
-				     next_conversion (convs)->type));
-	    /* Strip the cast created by the ck_qual; cp_build_addr_expr
-	       below expects an lvalue.  */
-	    STRIP_NOPS (expr);
-	  }
 
 	if (convs->bad_p && !next_conversion (convs)->bad_p)
 	  {
