@@ -2111,6 +2111,7 @@ struct GTY(()) language_function {
 
   BOOL_BITFIELD invalid_constexpr : 1;
   BOOL_BITFIELD throwing_cleanup : 1;
+  BOOL_BITFIELD backward_goto : 1;
 
   hash_table<named_label_hash> *x_named_labels;
 
@@ -3219,7 +3220,7 @@ struct GTY(()) lang_decl {
 #define DECL_CONV_FN_TYPE(FN) \
   TREE_TYPE ((gcc_checking_assert (DECL_CONV_FN_P (FN)), DECL_NAME (FN)))
 
-/* Nonzero if NODE, a static data member, was declared in its class as an
+/* Nonzero if NODE, a templated variable, was declared as an
    array of unknown bound.  */
 #define VAR_HAD_UNKNOWN_BOUND(NODE)			\
   (DECL_LANG_SPECIFIC (VAR_DECL_CHECK (NODE))		\
@@ -6888,6 +6889,7 @@ extern tree lookup_enumerator			(tree, tree);
 extern bool start_preparsed_function		(tree, tree, int);
 extern bool start_function			(cp_decl_specifier_seq *,
 						 const cp_declarator *, tree);
+extern tree maybe_prepare_return_this		(tree);
 extern void maybe_return_this			(void);
 extern tree begin_function_body			(void);
 extern void finish_function_body		(tree);
@@ -7044,7 +7046,7 @@ extern tree begin_eh_spec_block			(void);
 extern void finish_eh_spec_block		(tree, tree);
 extern tree build_eh_type_type			(tree);
 extern tree cp_protect_cleanup_actions		(void);
-extern void maybe_splice_retval_cleanup		(tree);
+extern void maybe_splice_retval_cleanup		(tree, bool);
 extern tree maybe_set_retval_sentinel		(void);
 
 extern tree template_parms_to_args		(tree);

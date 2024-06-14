@@ -2199,6 +2199,15 @@ gfc_match_varspec (gfc_expr *primary, int equiv_flag, bool sub_flag,
       match mm;
       old_loc = gfc_current_locus;
       mm = gfc_match_name (name);
+
+      /* Check to see if this has a default type.  */
+      if (sym->ts.type == BT_UNKNOWN && tgt_expr == NULL
+	  && gfc_get_default_type (sym->name, sym->ns)->type != BT_UNKNOWN)
+	{
+	  gfc_set_default_type (sym, 0, sym->ns);
+	  primary->ts = sym->ts;
+	}
+
       if (mm == MATCH_YES && is_inquiry_ref (name, &tmp))
 	inquiry = true;
       gfc_current_locus = old_loc;
@@ -2653,7 +2662,35 @@ gfc_variable_attr (gfc_expr *expr, gfc_typespec *ts)
   if (pointer || attr.proc_pointer)
     target = 1;
 
+  /* F2018:11.1.3.3: Other attributes of associate names
+     "The associating entity does not have the ALLOCATABLE or POINTER
+     attributes; it has the TARGET attribute if and only if the selector is
+     a variable and has either the TARGET or POINTER attribute."  */
+  if (sym->attr.associate_var && sym->assoc && sym->assoc->target)
+    {
+      if (sym->assoc->target->expr_type == EXPR_VARIABLE)
+	{
+	  symbol_attribute tgt_attr;
+	  tgt_attr = gfc_expr_attr (sym->assoc->target);
+	  target = (tgt_attr.pointer || tgt_attr.target);
+	}
+      else
+	target = 0;
+    }
+
   if (ts != NULL && expr->ts.type == BT_UNKNOWN)
+    *ts = sym->ts;
+
+  /* Catch left-overs from match_actual_arg, where an actual argument of a
+     procedure is given a temporary ts.type == BT_PROCEDURE.  The fixup is
+     needed for structure constructors in DATA statements, where a pointer
+     is associated with a data target, and the argument has not been fully
+     resolved yet.  Components references are dealt with further below.  */
+  if (ts != NULL
+      && expr->ts.type == BT_PROCEDURE
+      && expr->ref == NULL
+      && attr.flavor != FL_PROCEDURE
+      && attr.target)
     *ts = sym->ts;
 
   has_inquiry_part = false;

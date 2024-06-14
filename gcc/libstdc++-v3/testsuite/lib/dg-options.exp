@@ -133,6 +133,15 @@ proc dg-require-thread-fence { args } {
     return
 }
 
+proc dg-require-atomic-cmpxchg-word { args } {
+    if { ![ check_v3_target_atomic_cmpxchg_word ] } {
+	upvar dg-do-what dg-do-what
+	set dg-do-what [list [lindex ${dg-do-what} 0] "N" "P"]
+	return
+    }
+    return
+}
+
 proc dg-require-atomic-builtins { args } {
     if { ![ check_v3_target_atomic_builtins ] } {
 	upvar dg-do-what dg-do-what
@@ -269,8 +278,10 @@ proc dg-require-target-fs-lwt { args } {
 }
 
 proc add_options_for_no_pch { flags } {
+    # Remove any inclusion of bits/stdc++.h from the options.
+    regsub -all -- "-include bits/stdc...h" $flags "" flags
     # This forces any generated and possibly included PCH to be invalid.
-    return "-D__GLIBCXX__=99999999"
+    return "$flags -D__GLIBCXX__=99999999"
 }
 
 # Add to FLAGS all the target-specific flags needed for networking.
@@ -303,7 +314,7 @@ proc atomic_link_flags { paths } {
       if { [file exists "${gccpath}/libatomic/.libs/libatomic.a"]
            || [file exists "${gccpath}/libatomic/.libs/libatomic.${shlib_ext}"] } {
           append flags " -B${gccpath}/libatomic/ "
-          append flags " -L${gccpath}/libatomic/.libs"
+          append flags " -B${gccpath}/libatomic/.libs"
           append ld_library_path ":${gccpath}/libatomic/.libs"
       }
     } else {

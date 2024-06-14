@@ -3716,6 +3716,7 @@ gfc_expr* gfc_find_stat_co (gfc_expr *);
 gfc_expr* gfc_build_intrinsic_call (gfc_namespace *, gfc_isym_id, const char*,
 				    locus, unsigned, ...);
 bool gfc_check_vardef_context (gfc_expr*, bool, bool, bool, const char*);
+gfc_expr* gfc_pdt_find_component_copy_initializer (gfc_symbol *, const char *);
 
 
 /* st.cc */
@@ -3850,6 +3851,8 @@ void gfc_module_done_2 (void);
 void gfc_dump_module (const char *, int);
 bool gfc_check_symbol_access (gfc_symbol *);
 void gfc_free_use_stmts (gfc_use_list *);
+void gfc_save_module_list ();
+void gfc_restore_old_module_list ();
 const char *gfc_dt_lower_string (const char *);
 const char *gfc_dt_upper_string (const char *);
 
@@ -3951,6 +3954,9 @@ bool gfc_may_be_finalized (gfc_typespec);
 #define IS_POINTER(sym) \
 	(sym->ts.type == BT_CLASS && sym->attr.class_ok && CLASS_DATA (sym) \
 	 ? CLASS_DATA (sym)->attr.class_pointer : sym->attr.pointer)
+#define IS_PROC_POINTER(sym) \
+	(sym->ts.type == BT_CLASS && sym->attr.class_ok && CLASS_DATA (sym) \
+	 ? CLASS_DATA (sym)->attr.proc_pointer : sym->attr.proc_pointer)
 
 /* frontend-passes.cc */
 

@@ -1791,7 +1791,7 @@ gfc_get_nodesc_array_type (tree etype, gfc_array_spec * as, gfc_packed packed,
 	  TYPE_LANG_SPECIFIC (type) = TYPE_LANG_SPECIFIC (TREE_TYPE (type));
 	}
 
-      return type;
+      goto array_type_done;
     }
 
   if (known_stride)
@@ -1809,10 +1809,6 @@ gfc_get_nodesc_array_type (tree etype, gfc_array_spec * as, gfc_packed packed,
   TREE_TYPE (type) = etype;
 
   layout_type (type);
-
-  mpz_clear (offset);
-  mpz_clear (stride);
-  mpz_clear (delta);
 
   /* Represent packed arrays as multi-dimensional if they have rank >
      1 and with proper bounds, instead of flat arrays.  This makes for
@@ -1844,6 +1840,12 @@ gfc_get_nodesc_array_type (tree etype, gfc_array_spec * as, gfc_packed packed,
       GFC_ARRAY_TYPE_P (type) = 1;
       TYPE_LANG_SPECIFIC (type) = TYPE_LANG_SPECIFIC (TREE_TYPE (type));
     }
+
+array_type_done:
+  mpz_clear (offset);
+  mpz_clear (stride);
+  mpz_clear (delta);
+
   return type;
 }
 
@@ -2324,8 +2326,8 @@ gfc_sym_type (gfc_symbol * sym, bool is_bind_c)
   else
     byref = 0;
 
-  restricted = !sym->attr.target && !sym->attr.pointer
-               && !sym->attr.proc_pointer && !sym->attr.cray_pointee;
+  restricted = (!sym->attr.target && !IS_POINTER (sym)
+		&& !IS_PROC_POINTER (sym) && !sym->attr.cray_pointee);
   if (!restricted)
     type = gfc_nonrestricted_type (type);
 
@@ -2381,11 +2383,10 @@ gfc_sym_type (gfc_symbol * sym, bool is_bind_c)
 	  || (sym->ns->proc_name && sym->ns->proc_name->attr.entry_master))
 	type = build_pointer_type (type);
       else
-	{
-	  type = build_reference_type (type);
-	  if (restricted)
-	    type = build_qualified_type (type, TYPE_QUAL_RESTRICT);
-	}
+	type = build_reference_type (type);
+
+      if (restricted)
+	type = build_qualified_type (type, TYPE_QUAL_RESTRICT);
     }
 
   return (type);

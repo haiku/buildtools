@@ -1666,8 +1666,9 @@ phi_translate_1 (bitmap_set_t dest,
 		if (!newoperands.exists ())
 		  newoperands = operands.copy ();
 		newref = vn_reference_insert_pieces (newvuse, ref->set,
-						     ref->base_set, ref->type,
-						     newoperands,
+						     ref->base_set,
+						     ref->offset, ref->max_size,
+						     ref->type, newoperands,
 						     result, new_val_id);
 		newoperands = vNULL;
 	      }
@@ -4181,8 +4182,10 @@ compute_avail (function *fun)
 		      /* TBAA behavior is an obvious part so make sure
 		         that the hashtable one covers this as well
 			 by adjusting the ref alias set and its base.  */
-		      if (ref->set == set
-			  || alias_set_subset_of (set, ref->set))
+		      if ((ref->set == set
+			   || alias_set_subset_of (set, ref->set))
+			  && (ref->base_set == base_set
+			      || alias_set_subset_of (base_set, ref->base_set)))
 			;
 		      else if (ref1->opcode != ref2->opcode
 			       || (ref1->opcode != MEM_REF
@@ -4194,16 +4197,19 @@ compute_avail (function *fun)
 			  operands.release ();
 			  continue;
 			}
-		      else if (alias_set_subset_of (ref->set, set))
+		      else if (ref->set == set
+			       || alias_set_subset_of (ref->set, set))
 			{
+			  tree reft = reference_alias_ptr_type (rhs1);
 			  ref->set = set;
+			  ref->base_set = set;
 			  if (ref1->opcode == MEM_REF)
 			    ref1->op0
-			      = wide_int_to_tree (TREE_TYPE (ref2->op0),
+			      = wide_int_to_tree (reft,
 						  wi::to_wide (ref1->op0));
 			  else
 			    ref1->op2
-			      = wide_int_to_tree (TREE_TYPE (ref2->op2),
+			      = wide_int_to_tree (reft,
 						  wi::to_wide (ref1->op2));
 			}
 		      else
@@ -4218,6 +4224,20 @@ compute_avail (function *fun)
 			    ref1->op2
 			      = wide_int_to_tree (ptr_type_node,
 						  wi::to_wide (ref1->op2));
+			}
+		      /* We also need to make sure that the access path
+			 ends in an access of the same size as otherwise
+			 we might assume an access may not trap while in
+			 fact it might.  That's independent of whether
+			 TBAA is in effect.  */
+		      if (TYPE_SIZE (ref1->type) != TYPE_SIZE (ref2->type)
+			  && (! TYPE_SIZE (ref1->type)
+			      || ! TYPE_SIZE (ref2->type)
+			      || ! operand_equal_p (TYPE_SIZE (ref1->type),
+						    TYPE_SIZE (ref2->type))))
+			{
+			  operands.release ();
+			  continue;
 			}
 		      operands.release ();
 

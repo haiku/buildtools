@@ -1,3 +1,603 @@
+2024-05-21  Release Manager
+
+	* GCC 13.3.0 released.
+
+2024-03-13  Marc Poulhiès  <poulhies@adacore.com>
+
+	* sem_ch13.adb (Check_Aspect_At_Freeze_Point): fix format string,
+	use existing local Ident.
+
+2024-03-13  Marc Poulhiès  <poulhies@adacore.com>
+
+	* sem_ch13.adb (Analyze_One_Aspect): Call Record_Rep_Item.
+	(Check_Aspect_At_Freeze_Point): Check the aspect is specified on
+	non-array type only...
+	(Analyze_One_Aspect): ... instead of doing it too early here.
+	* sem_aggr.adb (Resolve_Container_Aggregate): Do nothing in case
+	the parameters failed to resolve.
+
+2024-03-13  Marc Poulhiès  <poulhies@adacore.com>
+
+	* sem_ch13.adb (Analyze_One_Aspect): Mark Aggregate aspect as
+	needing delayed resolution and reject the aspect on non-array
+	type.
+
+2024-03-07  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/113979
+	* exp_ch4.adb (Expand_N_Allocator): In the subtype indication case,
+	remove call to Apply_Predicate_Check.
+
+2024-02-26  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/113893
+	* exp_ch7.adb (Build_Anonymous_Master): Do not build the master
+	for a local designated type.
+	* exp_util.adb (Build_Allocate_Deallocate_Proc): Force Needs_Fin
+	to false if no finalization master is attached to an access type
+	and assert that it is anonymous in this case.
+	* sem_res.adb (Resolve_Allocator): Mention that the object might
+	not be finalized at all in the warning given when the type is an
+	anonymous access-to-controlled type.
+
+2024-02-03  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_attr.adb (Expand_N_Attribute_Reference): Revert older change.
+
+2024-02-03  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_attr.adb (Expand_N_Attribute_Reference): Revert latest change.
+
+2024-01-09  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/112781
+	* exp_ch6.ads (Is_Build_In_Place_Function): Adjust description.
+	* exp_ch6.adb (Is_True_Build_In_Place_Function_Call): Delete.
+	(Is_Function_Call_With_BIP_Formals): New predicate.
+	(Is_Build_In_Place_Function_Call): Restore original semantics.
+	(Expand_Call_Helper): Adjust conditions guarding the calls to
+	Add_Dummy_Build_In_Place_Actuals to above renaming.
+	(Expand_N_Extended_Return_Statement): Adjust to above renaming.
+	(Expand_Simple_Function_Return): Likewise.  Move the assertion
+	to after the transformation into an extended return statement.
+	(Make_Build_In_Place_Call_In_Allocator): Remove unreachable code.
+	(Make_Build_In_Place_Call_In_Assignment): Likewise.
+
+2024-01-09  Javier Miranda  <miranda@adacore.com>
+
+	* einfo-utils.adb (Underlying_Type): Protect recursion call
+	against non-available attribute Etype.
+	* einfo.ads (Protected_Subprogram): Fix typo in documentation.
+	* exp_ch3.adb (BIP_Function_Call_Id): New subprogram.
+	(Expand_N_Object_Declaration): Improve code that evaluates if the
+	object is initialized with a BIP function call.
+	* exp_ch6.adb (Is_True_Build_In_Place_Function_Call): New
+	subprogram.
+	(Add_Task_Actuals_To_Build_In_Place_Call): Add dummy actuals if
+	the function does not require the BIP task actuals but it is a
+	dispatching operation that inherited them.
+	(Build_In_Place_Formal): Improve code to avoid never-ending loop
+	if the BIP formal is not found.
+	(Add_Dummy_Build_In_Place_Actuals): New subprogram.
+	(Expand_Call_Helper): Add calls to
+	Add_Dummy_Build_In_Place_Actuals.
+	(Expand_N_Extended_Return_Statement): Adjust assertion.
+	(Expand_Simple_Function_Return): Adjust assertion.
+	(Make_Build_In_Place_Call_In_Allocator): No action needed if the
+	called function inherited the BIP extra formals but it is not a
+	true BIP function.
+	(Make_Build_In_Place_Call_In_Assignment): Ditto.
+	* exp_intr.adb (Expand_Dispatching_Constructor_Call): Remove code
+	reporting unsupported case (since this patch adds support for it).
+	* sem_ch6.adb (Analyze_Subprogram_Body_Helper): Adding assertion
+	to ensure matching of BIP formals when setting the
+	Protected_Formal field of a protected subprogram to reference the
+	corresponding extra formal of the subprogram that implements it.
+	(Might_Need_BIP_Task_Actuals): New subprogram.
+	(Create_Extra_Formals): Improve code adding inherited extra
+	formals.
+
+2024-01-09  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/112781
+	* sem_ch12.adb (Instantiate_Type): Use Etype instead of Base_Type
+	consistently to retrieve the ancestor for a derived type.
+	* sem_ch4.adb (Analyze_Explicit_Dereference): Test Is_Access_Type
+	consistently before accessing Designated_Type.
+
+2024-01-09  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/utils2.cc (build_binary_op) <EQ_EXPR>: Relax
+	assertion for regular pointer types.
+
+2023-12-20  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch3.adb (Analyze_Subtype_Declaration): Remove a short-circuit
+	for subtypes without aspects when it comes to predicates.
+	* sem_util.adb (Inherit_Predicate_Flags): Deal with private subtypes
+	whose full view is an Itype.
+
+2023-12-04  Steve Baird  <baird@adacore.com>
+
+	* exp_attr.adb (Expand_N_Attribute_Reference): In the case of a
+	Reduce attribute reference, fix bugs in initializing Accum_Typ.
+	The previous version was incorrect in the case where E1 refers to
+	the first of multiple possible overload resolution candidates and
+	that candidate does not turn out to be the right one. The previous
+	version also had code to compute Accum_Typ via a different method
+	if the initial computation turned out to yield a universal numeric
+	type. Delete that initial computation and use the second method in
+	all cases.
+
+2023-11-16  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/decl.cc (gnat_to_gnu_subprog_type): Also create a
+	TYPE_DECL for the return type built for the CI/CO mechanism.
+
+2023-10-10  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/111434
+	* sem_ch10.adb (Replace): New procedure to replace an entity with
+	another on the homonym chain.
+	(Install_Limited_With_Clause): Rename Non_Lim_View to Typ for the
+	sake of consistency.  Call Replace to do the replacements and split
+	the code into the regular and the special cases.  Add debuggging
+	output controlled by -gnatdi.
+	(Install_With_Clause): Print the Parent_With and Implicit_With flags
+	in the debugging output controlled by -gnatdi.
+	(Remove_Limited_With_Unit.Restore_Chain_For_Shadow (Shadow)): Rewrite
+	using a direct replacement of E4 by E2.   Call Replace to do the
+	replacements.  Add debuggging output controlled by -gnatdi.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch7.adb (Build_Finalizer.Process_Declarations): Remove call
+	to Is_Simple_Protected_Type as redundant.
+	(Build_Finalizer.Process_Object_Declaration): Do not retrieve the
+	corresponding record type for simple protected objects. Make the
+	flow of control more explicit in their specific processing.
+	* exp_util.adb (Requires_Cleanup_Actions): Return false for simple
+	protected objects present in library-level package bodies for the
+	sake of consistency with Build_Finalizer and remove call to
+	Is_Simple_Protected_Type as redundant.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* einfo.ads (Status_Flag_Or_Transient_Decl): Remove ??? comment.
+	* exp_ch6.adb (Expand_N_Extended_Return_Statement): Extend the
+	handling of finalizable return objects to the non-BIP case.
+	* exp_ch7.adb (Build_Finalizer.Process_Declarations): Adjust the
+	comment accordingly.
+	* exp_util.adb (Requires_Cleanup_Actions): Likewise.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/utils.cc (finish_record_type): Round the size in
+	the padding case as well.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* inline.adb (Expand_Inlined_Call): In the case of a function call
+	that returns an unconstrained type and initializes an object, set
+	the No_Initialization flag on the new declaration of the object.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_aggr.adb (Convert_To_Assignments): In the case of a
+	component association, call Is_Container_Aggregate on the parent's
+	parent.
+	(Expand_Array_Aggregate): Likewise.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_res.adb (Resolve_Call): When the target is an entity, do not
+	freeze it if the current scope is the inner wrapper function built
+	for an expression function with a Post or Refined_Post aspect.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch6.adb (Expand_Ctrl_Function_Call): Also do nothing for the
+	expression of a delta aggregate.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_util.adb (Initialized_By_Aliased_BIP_Func_Call): Make the name
+	matching more robust.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/trans.cc (gnat_to_gnu): Really test Storage_Pool on
+	the simple return statement.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* freeze.adb (Freeze_Enumeration_Type): Give an error on a type with
+	both representation clause and too large size.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_util.adb (Make_Invariant_Call): Convert the expression to
+	the type of the formal parameter if need be.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/trans.cc (gnat_to_gnu): Restrict previous change to
+	the case where the simple return statement has got no storage pool.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_aggr.adb (Is_Two_Dim_Packed_Array): Return true only if the
+	component type of the array is scalar.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_util.ads (Wrong_Type): Add Multiple parameter defaulting to
+	False and document it.
+	* sem_util.adb (Wrong_Type): Do not return early if an error has
+	already been posted on Expr and Multiple is True.
+	* sem_ch4.adb (Analyze_One_Call): Pass All_Errors_Mode as the
+	actual parameter for Multiple to Wrong_Type.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch13.adb (Replace_Type_References_Generic.Visible_Component):
+	In the case of private discriminated types, explicitly check that we
+	have a private declaration before examining its discriminant part.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_util.ads (Validated_View): Document enhanced behavior.
+	* sem_util.adb (Validated_View): Return the nonlimited view, if any,
+	of types coming from a limited with.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch13.adb (Replace_Type_References_Generic.Visible_Component):
+	In the case of private discriminated types, return a discriminant
+	only if it is listed in the discriminant part of the declaration.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_util.adb (Has_Inferable_Discriminants): In the case of a
+	component with a per-object constraint, also return true if the
+	enclosing object is not of an unchecked union type.
+	In the default case, remove a useless call to Base_Type.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/trans.cc (Subprogram_Body_to_gnu): Add guard to the
+	code turning the type of the RESULT_DECL into a reference type.
+	(maybe_make_gnu_thunk): Use a more precise guard in the same case.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/decl.cc (gnat_to_gnu_entity) <E_Variable>: Restrict
+	the special handling of temporaries created for return values and
+	subject to a renaming to the top level.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* gcc-interface/decl.cc (gnat_to_gnu_entity) <E_Variable>: Tweak.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch3.adb (Make_Allocator_For_Return): Rewrite the logic that
+	determines the type used for the allocation and add assertions.
+	* exp_util.adb (Has_Tag_Of_Type): Also return true for extension
+	aggregates.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch3.adb (Make_Allocator_For_Return): Deal again specifically
+	with an aggregate returned through an object of a class-wide type.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch4.adb (Analyze_Call): Adjust the test to detect the presence
+	of an incomplete view of a type on a function call.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_type.adb (Disambiguate): Fix pasto in the implementation of
+	the RM 8.4(10) clause for operators.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch13.adb (Analyze_Aspect_Specifications): Add missing items
+	in the list of aspects handled by means of Insert_Pragma.
+	<Aspect_Linker_Section>: Remove obsolete code.  Do not delay the
+	processing of the aspect if the entity is already frozen.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* contracts.adb (Contract_Error): New exception.
+	(Add_Contract_Item): Raise Contract_Error instead of Program_Error.
+	(Add_Generic_Contract_Pragma): Deal with Contract_Error.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* contracts.adb (Analyze_Entry_Or_Subprogram_Body_Contract): For a
+	subprogram body that has no contracts and does not come from source,
+	make sure that contracts on its corresponding spec are analyzed, if
+	any, before expanding them.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_aggr.adb (Build_Array_Aggr_Code.Get_Assoc_Expr): Duplicate the
+	expression here instead of...
+	(Build_Array_Aggr_Code): ...here.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* freeze.adb (Check_Large_Modular_Array): Fix head comment, use
+	Standard_Long_Long_Integer_Size directly and generate a reference
+	just before the raise statement if the Etype of the object is an
+	itype declared in an open scope.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch7.adb (Find_Enclosing_Transient_Scope): Return the index in
+	the scope table instead of the scope's entity.
+	(Establish_Transient_Scope): If an enclosing scope already exists,
+	do not set the Uses_Sec_Stack flag on it if the node to be wrapped
+	is a return statement which requires secondary stack management.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_res.adb (Resolve_Call): Restrict previous change to calls that
+	return on the same stack as the enclosing function.  Tidy up.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_util.adb (Build_DIC_Procedure_Body.Add_Own_DIC): When inside
+	a generic unit, preanalyze the expression directly.
+	(Build_Invariant_Procedure_Body.Add_Own_Invariants): Likewise.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* freeze.adb (Wrap_Imported_Subprogram): Use Copy_Subprogram_Spec in
+	both cases to copy the spec of the subprogram.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch7.adb (Establish_Transient_Scope.Find_Transient_Context):
+	Bail out for a simple return statement only if the transient scope
+	and the function both require secondary stack management, or else
+	if the function is a thunk.
+	* sem_res.adb (Resolve_Call): Do not create a transient scope when
+	the call is the expression of a simple return statement.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch6.adb (Expand_Simple_Function_Return): Call Insert_Actions
+	consistently when rewriting the expression.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_util.adb (Is_Finalizable_Transient.Is_Indexed_Container):
+	New predicate to detect a temporary created to hold the result of
+	a constant indexing on a container.
+	(Is_Finalizable_Transient.Is_Iterated_Container): Adjust a couple
+	of obsolete comments.
+	(Is_Finalizable_Transient): Return False if Is_Indexed_Container
+	returns True on the object.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_res.adb (Has_Applicable_User_Defined_Literal): Make it clear
+	that the predicate also checks the node itself.
+	(Try_User_Defined_Literal): Move current implementation to...
+	Deal only with literals, named numbers and conditional expressions
+	whose dependent expressions are literals or named numbers.
+	(Try_User_Defined_Literal_For_Operator): ...this.  Remove multiple
+	return False statements and put a single one at the end.
+	(Resolve): Call Try_User_Defined_Literal instead of directly
+	Has_Applicable_User_Defined_Literal for all nodes.  Call
+	Try_User_Defined_Literal_For_Operator for operator nodes.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch5.adb (Expand_N_Case_Statement): Do not remove the statement
+	if it is the node to be wrapped by a transient scope.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_prag.adb (Process_Compile_Time_Warning_Or_Error): Do not defer
+	anything to the back-end when the main unit is generic.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_res.adb (Try_User_Defined_Literal): Restrict previous change
+	to non-leaf nodes.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_res.adb (Try_User_Defined_Literal): For arithmetic operators,
+	also accept operands whose type is covered by the resolution type.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch4.adb (Expand_N_In): Deal specifically with a null operand.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch6.adb (Expand_Simple_Function_Return): Deal with a rewriting
+	of the simple return during the adjustment of its expression.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch4.adb (Expand_N_Case_Expression): Distribute simple return
+	statements enclosing the conditional expression into the dependent
+	expressions in almost all cases.
+	(Expand_N_If_Expression): Likewise.
+	(Process_Transient_In_Expression): Adjust to the above distribution.
+	* exp_ch6.adb (Expand_Ctrl_Function_Call): Deal with calls in the
+	dependent expressions of a conditional expression.
+	* sem_ch6.adb (Analyze_Function_Return): Deal with the rewriting of
+	a simple return statement during the resolution of its expression.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch4.ads (Unresolved_Operator): New procedure.
+	* sem_ch4.adb (Has_Possible_Literal_Aspects): Rename into...
+	(Has_Possible_User_Defined_Literal): ...this.  Tidy up.
+	(Operator_Check): Accept again unresolved operators if they have a
+	possible user-defined literal as operand.  Factor out the handling
+	of the general error message into...
+	(Unresolved_Operator): ...this new procedure.
+	* sem_res.adb (Resolve): Be prepared for unresolved operators on
+	entry in Ada 2022 or later.  If they are still unresolved on exit,
+	call Unresolved_Operator to give the error message.
+	(Try_User_Defined_Literal): Tidy up.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch12.adb (Copy_Generic_Node): Test the original node kind
+	for the sake of consistency.  For identifiers and other entity
+	names and operators, accept an expanded name as associated node.
+	Replace "or" with "or else" in condtion and fix its formatting.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch12.adb (Instantiate_Package_Body): Set the ghost mode to
+	that of the instance only after loading the generic's parent.
+	(Instantiate_Subprogram_Body): Likewise.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_attr.adb (Is_Thin_Pointer_To_Unc_Array): New predicate.
+	(Resolve_Attribute): Apply the static matching legality rule to an
+	Unrestricted_Access attribute applied to an aliased prefix if the
+	type is a thin pointer.  Call Is_Thin_Pointer_To_Unc_Array for the
+	aliasing legality rule as well.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* checks.adb (Selected_Range_Checks): Add guards to protect calls
+	to Expr_Value on bounds.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch3.adb (Find_Type_Of_Object): Copy the object definition when
+	building the subtype declaration in the case of a spec expression.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch13.adb (Build_Predicate_Functions): If the current scope
+	is not that of the type, push this scope and pop it at the end.
+	* sem_util.ads (Current_Scope_No_Loops_No_Blocks): Delete.
+	* sem_util.adb (Current_Scope_No_Loops_No_Blocks): Likewise.
+	(Set_Public_Status): Call again Current_Scope.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch13.adb (Build_Predicate_Function_Declaration): Adjust the
+	commentary to the current implementation.
+	* sem_util.ads (Current_Scope_No_Loops): Move around.
+	(Current_Scope_No_Loops_No_Blocks): New declaration.
+	(Add_Block_Identifier): Fix formatting.
+	* sem_util.adb (Add_Block_Identifier): Likewise.
+	(Current_Scope_No_Loops_No_Blocks): New function.
+	(Set_Public_Status): Call Current_Scope_No_Loops_No_Blocks instead
+	of Current_Scope to get the current scope.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch3.adb (Build_Record_Init_Proc.Build_Assignment): Do not
+	manually generate a predicate check.  Call Unqualify before doing
+	pattern matching on the expression.
+	* sem_ch3.adb (Analyze_Object_Declaration): Also freeze the actual
+	subtype when it is built in the definite case.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* frontend.adb (Frontend): Merge two conditional blocks and adjust.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch7.adb (Expand_N_Package_Body): Call Defining_Entity to get
+	the entity of the body.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch3.adb (Make_Controlling_Function_Wrappers): Create the body
+	as the expanded body of an expression function.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch3.adb (Freeze_Type): Do not associate the Finalize_Address
+	routine for a class-wide type if restriction No_Dispatching_Calls
+	is in effect.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* freeze.adb (Wrap_Imported_Subprogram): Use Copy_Subprogram_Spec
+	to copy the spec from the subprogram to the generated subprogram
+	body.
+	(Freeze_Entity): Do not wrap imported subprograms inside generics.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_ch4.adb (Expand_N_Expression_With_Actions.Process_Action): Do
+	not look into nested blocks.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch3.adb (Find_Type_Of_Object): In a spec expression, also set
+	the Scope of the type, and call Constrain_Array for array subtypes.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_attr.adb (Expand_N_Attribute_Reference) <Attribute_Reduce>:
+	Use the canonical accumulator type as the type of the accumulator
+	in the prefixed case.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* freeze.adb (Freeze_Expression): When the freezing is to be done
+	outside the current scope, skip any scope that is an internal loop.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* exp_imgv.adb (Rewrite_Object_Image): If the prefix is a component
+	that depends on a discriminant, create an actual subtype for it.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch13.adb: Add with and use clauses for Expander.
+	(Resolve_Aspect_Expressions) <Aspect_Predicate>: Emulate a
+	bona-fide preanalysis setup before calling
+	Resolve_Aspect_Expression.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_res.adb (Has_Applicable_User_Defined_Literal): Apply the
+	same processing for derived untagged types as for tagged types.
+	* sem_util.ads (Corresponding_Primitive_Op): Adjust description.
+	* sem_util.adb (Corresponding_Primitive_Op): Handle untagged
+	types.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* sem_ch7.adb (Hide_Public_Entities): Use the same condition for
+	subprogram bodies without specification as for those with one.
+
+2023-09-27  Eric Botcazou  <ebotcazou@adacore.com>
+
+	* repinfo.ads (JSON output format): Document special case of
+	Present member of a Variant object.
+	* repinfo.adb (List_Structural_Record_Layout): Change the type of
+	Ext_Level parameter to Integer. Restrict the first recursion with
+	increasing levels to the fixed part and implement a second
+	recursion with decreasing levels for the variant part. Deal with
+	an extension of a type with unknown discriminants.
+
+2023-09-26  Eric Botcazou  <ebotcazou@adacore.com>
+
+	PR ada/110488
+	* sem_ch3.adb (Analyze_Object_Declaration): Do not build a default
+	subtype for a deferred constant in the definite case too.
+
 2023-07-27  Release Manager
 
 	* GCC 13.2.0 released.

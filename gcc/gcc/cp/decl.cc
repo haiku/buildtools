@@ -3768,6 +3768,8 @@ check_goto (tree decl)
       return;
     }
 
+  cp_function_chain->backward_goto = true;
+
   bool saw_catch = false, complained = false;
   int identified = 0;
   tree bad;
@@ -8214,7 +8216,6 @@ void
 cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 		tree asmspec_tree, int flags)
 {
-  tree type;
   vec<tree, va_gc> *cleanups = NULL;
   const char *asmspec = NULL;
   int was_readonly = 0;
@@ -8234,7 +8235,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
   /* Parameters are handled by store_parm_decls, not cp_finish_decl.  */
   gcc_assert (TREE_CODE (decl) != PARM_DECL);
 
-  type = TREE_TYPE (decl);
+  tree type = TREE_TYPE (decl);
   if (type == error_mark_node)
     return;
 
@@ -8424,7 +8425,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	  if (decl_maybe_constant_var_p (decl)
 	      /* FIXME setting TREE_CONSTANT on refs breaks the back end.  */
 	      && !TYPE_REF_P (type))
-	    TREE_CONSTANT (decl) = 1;
+	    TREE_CONSTANT (decl) = true;
 	}
       /* This is handled mostly by gimplify.cc, but we have to deal with
 	 not warning about int x = x; as it is a GCC extension to turn off
@@ -8435,6 +8436,14 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	  && !warning_enabled_at (DECL_SOURCE_LOCATION (decl), OPT_Winit_self))
 	suppress_warning (decl, OPT_Winit_self);
     }
+  else if (VAR_P (decl)
+	   && COMPLETE_TYPE_P (type)
+	   && !TYPE_REF_P (type)
+	   && !dependent_type_p (type)
+	   && is_really_empty_class (type, /*ignore_vptr*/false))
+    /* We have no initializer but there's nothing to initialize anyway.
+       Treat DECL as constant due to c++/109876.  */
+    TREE_CONSTANT (decl) = true;
 
   if (flag_openmp
       && TREE_CODE (decl) == FUNCTION_DECL
@@ -17819,16 +17828,31 @@ store_parm_decls (tree current_function_parms)
 }
 
 
+/* Mark CDTOR's implicit THIS argument for returning, if required by
+   the ABI..  Return the decl for THIS, if it is to be returned, and
+   NULL otherwise.  */
+
+tree
+maybe_prepare_return_this (tree cdtor)
+{
+  if (targetm.cxx.cdtor_returns_this ())
+    if (tree val = DECL_ARGUMENTS (cdtor))
+      {
+	suppress_warning (val, OPT_Wuse_after_free);
+	return val;
+      }
+
+  return NULL_TREE;
+}
+
 /* Set the return value of the [cd]tor if the ABI wants that.  */
 
 void
-maybe_return_this (void)
+maybe_return_this ()
 {
-  if (targetm.cxx.cdtor_returns_this ())
+  if (tree val = maybe_prepare_return_this (current_function_decl))
     {
       /* Return the address of the object.  */
-      tree val = DECL_ARGUMENTS (current_function_decl);
-      suppress_warning (val, OPT_Wuse_after_free);
       val = fold_convert (TREE_TYPE (DECL_RESULT (current_function_decl)), val);
       val = build2 (MODIFY_EXPR, TREE_TYPE (val),
 		    DECL_RESULT (current_function_decl), val);

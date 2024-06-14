@@ -1,5 +1,6 @@
 // { dg-options "-std=gnu++20" }
 // { dg-do run { target c++20 } }
+// { dg-timeout-factor 2 }
 
 #include <chrono>
 #include <sstream>
@@ -71,6 +72,10 @@ test_format()
   s = std::format("{:%t} {:%t%M}", -2h, -123s);
   VERIFY( s == "\t \t-02" );
 
+  // Locale-specific formats:
+  s = std::format(std::locale::classic(), "{:%r %OH:%OM:%OS}", 123456ms);
+  VERIFY( s == "12:02:03 AM 00:02:03" );
+
   std::string_view specs = "aAbBcCdDeFgGhHIjmMpqQrRSTuUVwWxXyYzZ";
   std::string_view my_specs = "HIjMpqQrRSTX";
   for (char c : specs)
@@ -78,7 +83,8 @@ test_format()
     char fmt[] = { '{', ':', '%', c, '}' };
     try
     {
-      (void) std::vformat(std::string_view(fmt, 5), std::make_format_args(1s));
+      auto s = 1s;
+      (void) std::vformat(std::string_view(fmt, 5), std::make_format_args(s));
       // The call above should throw for any conversion-spec not in my_specs:
       VERIFY(my_specs.find(c) != my_specs.npos);
     }
@@ -91,6 +97,10 @@ test_format()
 		    "required by the chrono-specs") != s.npos);
     }
   }
+
+  std::chrono::duration<float, std::milli> d{0.5};
+  s = std::format("{}", d);
+  VERIFY( s == "0.5ms" );
 }
 
 int main()

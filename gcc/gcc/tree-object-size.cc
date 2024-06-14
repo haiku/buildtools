@@ -773,21 +773,33 @@ alloc_object_size (const gcall *call, int object_size_type)
         arg2 = TREE_INT_CST_LOW (TREE_VALUE (TREE_CHAIN (p)))-1;
     }
   else if (gimple_call_builtin_p (call, BUILT_IN_NORMAL)
-	   && callfn && ALLOCA_FUNCTION_CODE_P (DECL_FUNCTION_CODE (callfn)))
-  arg1 = 0;
+	   && callfn
+	   && ALLOCA_FUNCTION_CODE_P (DECL_FUNCTION_CODE (callfn)))
+    arg1 = 0;
 
   /* Non-const arguments are OK here, let the caller handle constness.  */
-  if (arg1 < 0 || arg1 >= (int) gimple_call_num_args (call)
-      || arg2 >= (int) gimple_call_num_args (call))
+  if (arg1 < 0
+      || (unsigned) arg1 >= gimple_call_num_args (call)
+      || (arg2 >= 0 && (unsigned) arg2 >= gimple_call_num_args (call)))
     return size_unknown (object_size_type);
 
+  tree targ1 = gimple_call_arg (call, arg1);
+  if (!INTEGRAL_TYPE_P (TREE_TYPE (targ1))
+      || TYPE_PRECISION (TREE_TYPE (targ1)) > TYPE_PRECISION (sizetype))
+    return size_unknown (object_size_type);
+  targ1 = fold_convert (sizetype, targ1);
   tree bytes = NULL_TREE;
   if (arg2 >= 0)
-    bytes = size_binop (MULT_EXPR,
-	fold_convert (sizetype, gimple_call_arg (call, arg1)),
-	fold_convert (sizetype, gimple_call_arg (call, arg2)));
-  else if (arg1 >= 0)
-    bytes = fold_convert (sizetype, gimple_call_arg (call, arg1));
+    {
+      tree targ2 = gimple_call_arg (call, arg2);
+      if (!INTEGRAL_TYPE_P (TREE_TYPE (targ2))
+	  || TYPE_PRECISION (TREE_TYPE (targ2)) > TYPE_PRECISION (sizetype))
+	return size_unknown (object_size_type);
+      targ2 = fold_convert (sizetype, targ2);
+      bytes = size_binop (MULT_EXPR, targ1, targ2);
+    }
+  else
+    bytes = targ1;
 
   return bytes ? bytes : size_unknown (object_size_type);
 }
@@ -1164,10 +1176,12 @@ compute_builtin_object_size (tree ptr, int object_size_type,
 	  osi.tos = NULL;
 	}
 
-      /* First pass: walk UD chains, compute object sizes that
-	 can be computed.  osi.reexamine bitmap at the end will
-	 contain what variables were found in dependency cycles
-	 and therefore need to be reexamined.  */
+      /* First pass: walk UD chains, compute object sizes that can be computed.
+	 osi.reexamine bitmap at the end will contain versions of SSA_NAMES
+	 that need to be reexamined.  For both static and dynamic size
+	 computation, reexamination is for propagation across dependency loops.
+	 The dynamic case has the additional use case where the computed
+	 expression needs to be gimplified.  */
       osi.pass = 0;
       osi.changed = false;
       collect_object_sizes_for (&osi, ptr);
@@ -1798,11 +1812,16 @@ collect_object_sizes_for (struct object_size_info *osi, tree var)
       gcc_unreachable ();
     }
 
-  if (! reexamine || object_sizes_unknown_p (object_size_type, varno))
+  /* Dynamic sizes use placeholder temps to return an answer, so it is always
+     safe to set COMPUTED for them.  */
+  if ((object_size_type & OST_DYNAMIC)
+      || !reexamine || object_sizes_unknown_p (object_size_type, varno))
     {
       bitmap_set_bit (computed[object_size_type], varno);
       if (!(object_size_type & OST_DYNAMIC))
 	bitmap_clear_bit (osi->reexamine, varno);
+      else if (reexamine)
+	bitmap_set_bit (osi->reexamine, varno);
     }
   else
     {

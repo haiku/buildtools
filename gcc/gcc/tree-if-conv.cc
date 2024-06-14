@@ -3330,6 +3330,7 @@ get_bitfield_rep (gassign *stmt, bool write, tree *bitpos,
 			: gimple_assign_rhs1 (stmt);
 
   tree field_decl = TREE_OPERAND (comp_ref, 1);
+  tree ref_offset = component_ref_field_offset (comp_ref);
   tree rep_decl = DECL_BIT_FIELD_REPRESENTATIVE (field_decl);
 
   /* Bail out if the representative is not a suitable type for a scalar
@@ -3343,6 +3344,15 @@ get_bitfield_rep (gassign *stmt, bool write, tree *bitpos,
     = TYPE_PRECISION (TREE_TYPE (gimple_assign_lhs (stmt)));
   if (compare_tree_int (DECL_SIZE (field_decl), bf_prec) != 0)
     return NULL_TREE;
+
+  if (TREE_CODE (DECL_FIELD_OFFSET (rep_decl)) != INTEGER_CST
+      || TREE_CODE (ref_offset) != INTEGER_CST)
+    {
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	fprintf (dump_file, "\t Bitfield NOT OK to lower,"
+			    " offset is non-constant.\n");
+      return NULL_TREE;
+    }
 
   if (struct_expr)
     *struct_expr = TREE_OPERAND (comp_ref, 0);
@@ -3364,7 +3374,7 @@ get_bitfield_rep (gassign *stmt, bool write, tree *bitpos,
 	 the structure and the container from the number of bits from the start
 	 of the structure and the actual bitfield member. */
       tree bf_pos = fold_build2 (MULT_EXPR, bitsizetype,
-				 DECL_FIELD_OFFSET (field_decl),
+				 ref_offset,
 				 build_int_cst (bitsizetype, BITS_PER_UNIT));
       bf_pos = fold_build2 (PLUS_EXPR, bitsizetype, bf_pos,
 			    DECL_FIELD_BIT_OFFSET (field_decl));
@@ -3687,21 +3697,21 @@ tree_if_conversion (class loop *loop, vec<gimple *> *preds)
       combine_blocks (loop);
     }
 
-  /* Perform local CSE, this esp. helps the vectorizer analysis if loads
-     and stores are involved.  CSE only the loop body, not the entry
-     PHIs, those are to be kept in sync with the non-if-converted copy.
-     ???  We'll still keep dead stores though.  */
-  exit_bbs = BITMAP_ALLOC (NULL);
-  bitmap_set_bit (exit_bbs, single_exit (loop)->dest->index);
-  bitmap_set_bit (exit_bbs, loop->latch->index);
-
   std::pair <tree, tree> *name_pair;
   unsigned ssa_names_idx;
   FOR_EACH_VEC_ELT (redundant_ssa_names, ssa_names_idx, name_pair)
     replace_uses_by (name_pair->first, name_pair->second);
   redundant_ssa_names.release ();
 
-  todo |= do_rpo_vn (cfun, loop_preheader_edge (loop), exit_bbs);
+  /* Perform local CSE, this esp. helps the vectorizer analysis if loads
+     and stores are involved.  CSE only the loop body, not the entry
+     PHIs, those are to be kept in sync with the non-if-converted copy.
+     ???  We'll still keep dead stores though.  */
+  exit_bbs = BITMAP_ALLOC (NULL);
+  for (edge exit : get_loop_exit_edges (loop))
+    bitmap_set_bit (exit_bbs, exit->dest->index);
+  todo |= do_rpo_vn (cfun, loop_preheader_edge (loop), exit_bbs,
+		     false, true, true);
 
   /* Delete dead predicate computations.  */
   ifcvt_local_dce (loop);

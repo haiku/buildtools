@@ -774,6 +774,12 @@ vect_get_and_check_slp_defs (vec_info *vinfo, unsigned char swap,
 			 (*oprnds_info)[i+1]->def_stmts[stmt_num]);
 	      std::swap ((*oprnds_info)[i]->ops[stmt_num],
 			 (*oprnds_info)[i+1]->ops[stmt_num]);
+	      /* After swapping some operands we lost track whether an
+		 operand has any pattern defs so be conservative here.  */
+	      if ((*oprnds_info)[i]->any_pattern
+		  || (*oprnds_info)[i+1]->any_pattern)
+		(*oprnds_info)[i]->any_pattern
+		  = (*oprnds_info)[i+1]->any_pattern = true;
 	      swapped = true;
 	      continue;
 	    }
@@ -1774,10 +1780,8 @@ vect_build_slp_tree_2 (vec_info *vinfo, slp_tree node,
   if (STMT_VINFO_GROUPED_ACCESS (stmt_info)
       && DR_IS_READ (STMT_VINFO_DATA_REF (stmt_info)))
     {
-      if (gcall *stmt = dyn_cast <gcall *> (stmt_info->stmt))
-	gcc_assert (gimple_call_internal_p (stmt, IFN_MASK_LOAD)
-		    || gimple_call_internal_p (stmt, IFN_GATHER_LOAD)
-		    || gimple_call_internal_p (stmt, IFN_MASK_GATHER_LOAD));
+      if (STMT_VINFO_GATHER_SCATTER_P (stmt_info))
+	gcc_assert (DR_IS_READ (STMT_VINFO_DATA_REF (stmt_info)));
       else
 	{
 	  *max_nunits = this_max_nunits;
@@ -1793,15 +1797,37 @@ vect_build_slp_tree_2 (vec_info *vinfo, slp_tree node,
 	  load_permutation.create (group_size);
 	  stmt_vec_info first_stmt_info
 	    = DR_GROUP_FIRST_ELEMENT (SLP_TREE_SCALAR_STMTS (node)[0]);
+	  bool any_permute = false;
 	  FOR_EACH_VEC_ELT (SLP_TREE_SCALAR_STMTS (node), j, load_info)
 	    {
 	      int load_place = vect_get_place_in_interleaving_chain
 		  (load_info, first_stmt_info);
 	      gcc_assert (load_place != -1);
-	      load_permutation.safe_push (load_place);
+	      any_permute |= load_place != j;
+	      load_permutation.quick_push (load_place);
 	    }
-	  SLP_TREE_LOAD_PERMUTATION (node) = load_permutation;
-	  return node;
+
+	  if (gcall *stmt = dyn_cast <gcall *> (stmt_info->stmt))
+	    {
+	      gcc_assert (gimple_call_internal_p (stmt, IFN_MASK_LOAD)
+			  || gimple_call_internal_p (stmt, IFN_GATHER_LOAD)
+			  || gimple_call_internal_p (stmt, IFN_MASK_GATHER_LOAD));
+	      load_permutation.release ();
+	      /* We cannot handle permuted masked loads, see PR114375.  */
+	      if (any_permute
+		  || (STMT_VINFO_GROUPED_ACCESS (stmt_info)
+		      && DR_GROUP_SIZE (first_stmt_info) != group_size)
+		  || STMT_VINFO_STRIDED_P (stmt_info))
+		{
+		  matches[0] = false;
+		  return NULL;
+		}
+	    }
+	  else
+	    {
+	      SLP_TREE_LOAD_PERMUTATION (node) = load_permutation;
+	      return node;
+	    }
 	}
     }
   else if (gimple_assign_single_p (stmt_info->stmt)
@@ -3478,6 +3504,10 @@ vect_analyze_slp (vec_info *vinfo, unsigned max_tree_size)
       for (unsigned i = 0; i < bb_vinfo->roots.length (); ++i)
 	{
 	  vect_location = bb_vinfo->roots[i].roots[0]->stmt;
+	  /* Apply patterns.  */
+	  for (unsigned j = 0; j < bb_vinfo->roots[i].stmts.length (); ++j)
+	    bb_vinfo->roots[i].stmts[j]
+	      = vect_stmt_to_vectorize (bb_vinfo->roots[i].stmts[j]);
 	  if (vect_build_slp_instance (bb_vinfo, bb_vinfo->roots[i].kind,
 				       bb_vinfo->roots[i].stmts,
 				       bb_vinfo->roots[i].roots,
@@ -4122,7 +4152,8 @@ vect_optimize_slp_pass::is_cfg_latch_edge (graph_edge *ud)
 {
   slp_tree use = m_vertices[ud->src].node;
   slp_tree def = m_vertices[ud->dest].node;
-  if (SLP_TREE_DEF_TYPE (use) != vect_internal_def
+  if ((SLP_TREE_DEF_TYPE (use) != vect_internal_def
+       || SLP_TREE_CODE (use) == VEC_PERM_EXPR)
       || SLP_TREE_DEF_TYPE (def) != vect_internal_def)
     return false;
 
@@ -8563,7 +8594,8 @@ vectorizable_slp_permutation_1 (vec_info *vinfo, gimple_stmt_iterator *gsi,
     {
       /* Calculate every element of every permute mask vector explicitly,
 	 instead of relying on the pattern described above.  */
-      if (!nunits.is_constant (&npatterns))
+      if (!nunits.is_constant (&npatterns)
+	  || !TYPE_VECTOR_SUBPARTS (op_vectype).is_constant ())
 	return -1;
       nelts_per_pattern = ncopies = 1;
       if (loop_vec_info linfo = dyn_cast <loop_vec_info> (vinfo))
@@ -8777,12 +8809,6 @@ vect_schedule_slp_node (vec_info *vinfo,
   int i;
   slp_tree child;
 
-  /* For existing vectors there's nothing to do.  */
-  if (SLP_TREE_VEC_DEFS (node).exists ())
-    return;
-
-  gcc_assert (SLP_TREE_VEC_STMTS (node).is_empty ());
-
   /* Vectorize externals and constants.  */
   if (SLP_TREE_DEF_TYPE (node) == vect_constant_def
       || SLP_TREE_DEF_TYPE (node) == vect_external_def)
@@ -8793,9 +8819,17 @@ vect_schedule_slp_node (vec_info *vinfo,
       if (!SLP_TREE_VECTYPE (node))
 	return;
 
-      vect_create_constant_vectors (vinfo, node);
+      /* There are two reasons vector defs might already exist.  The first
+	 is that we are vectorizing an existing vector def.  The second is
+	 when performing BB vectorization shared constant/external nodes
+	 are not split apart during partitioning so during the code-gen
+	 DFS walk we can end up visiting them twice.  */
+      if (! SLP_TREE_VEC_DEFS (node).exists ())
+	vect_create_constant_vectors (vinfo, node);
       return;
     }
+
+  gcc_assert (SLP_TREE_VEC_DEFS (node).is_empty ());
 
   stmt_vec_info stmt_info = SLP_TREE_REPRESENTATIVE (node);
 
@@ -8833,6 +8867,16 @@ vect_schedule_slp_node (vec_info *vinfo,
       /* Emit other stmts after the children vectorized defs which is
 	 earliest possible.  */
       gimple *last_stmt = NULL;
+      if (auto loop_vinfo = dyn_cast <loop_vec_info> (vinfo))
+	if (LOOP_VINFO_FULLY_MASKED_P (loop_vinfo)
+	    || LOOP_VINFO_FULLY_WITH_LENGTH_P (loop_vinfo))
+	  {
+	    /* But avoid scheduling internal defs outside of the loop when
+	       we might have only implicitly tracked loop mask/len defs.  */
+	    gimple_stmt_iterator si
+	      = gsi_after_labels (LOOP_VINFO_LOOP (loop_vinfo)->header);
+	    last_stmt = gsi_stmt (si);
+	  }
       bool seen_vector_def = false;
       FOR_EACH_VEC_ELT (SLP_TREE_CHILDREN (node), i, child)
 	if (SLP_TREE_DEF_TYPE (child) == vect_internal_def)

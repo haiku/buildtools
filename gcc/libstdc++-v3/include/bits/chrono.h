@@ -276,8 +276,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	if constexpr (is_same_v<_ToDur, duration<_Rep, _Period>>)
 	  return __d;
 	else
+	  {
 #endif
-	{
 	  using __to_period = typename _ToDur::period;
 	  using __to_rep = typename _ToDur::rep;
 	  using __cf = ratio_divide<_Period, __to_period>;
@@ -285,7 +285,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  using __dc = __duration_cast_impl<_ToDur, __cf, __cr,
 					    __cf::num == 1, __cf::den == 1>;
 	  return __dc::__cast(__d);
-	}
+#if __cpp_inline_variables && __cpp_if_constexpr
+	  }
+#endif
       }
 
     /** Trait indicating whether to treat a type as a floating-point type.
@@ -505,26 +507,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{ return numeric_limits<_Rep>::lowest(); }
       };
 
-    /// @cond undocumented
-
-    template<typename _Tp>
-      struct __is_ratio
-      : std::false_type
-      { };
-
-    template<intmax_t _Num, intmax_t _Den>
-      struct __is_ratio<ratio<_Num, _Den>>
-      : std::true_type
-      { };
-
-    /// @endcond
-
     template<typename _Rep, typename _Period>
       class duration
       {
-	static_assert(!__is_duration<_Rep>::value, "rep cannot be a duration");
+	static_assert(!__is_duration<_Rep>::value,
+		      "rep cannot be a std::chrono::duration");
 	static_assert(__is_ratio<_Period>::value,
-		      "period must be a specialization of ratio");
+		      "period must be a specialization of std::ratio");
 	static_assert(_Period::num > 0, "period must be positive");
 
 	template<typename _Rep2>
@@ -1466,14 +1455,14 @@ _GLIBCXX_END_INLINE_ABI_NAMESPACE(_V2)
 #if __cplusplus > 201703L
       template<typename _Dur>
 	static
-	chrono::file_time<_Dur>
+	chrono::file_time<common_type_t<_Dur, chrono::seconds>>
 	from_sys(const chrono::sys_time<_Dur>& __t) noexcept
 	{ return _S_from_sys(__t); }
 
       // For internal use only
       template<typename _Dur>
 	static
-	chrono::sys_time<_Dur>
+	chrono::sys_time<common_type_t<_Dur, chrono::seconds>>
 	to_sys(const chrono::file_time<_Dur>& __t) noexcept
 	{ return _S_to_sys(__t); }
 #endif // C++20
@@ -1490,20 +1479,22 @@ _GLIBCXX_END_INLINE_ABI_NAMESPACE(_V2)
       // For internal use only
       template<typename _Dur>
 	static
-	chrono::time_point<__file_clock, _Dur>
+	chrono::time_point<__file_clock, common_type_t<_Dur, chrono::seconds>>
 	_S_from_sys(const chrono::time_point<__sys_clock, _Dur>& __t) noexcept
 	{
-	  using __file_time = chrono::time_point<__file_clock, _Dur>;
+	  using _CDur = common_type_t<_Dur, chrono::seconds>;
+	  using __file_time = chrono::time_point<__file_clock, _CDur>;
 	  return __file_time{__t.time_since_epoch()} - _S_epoch_diff;
 	}
 
       // For internal use only
       template<typename _Dur>
 	static
-	chrono::time_point<__sys_clock, _Dur>
+	chrono::time_point<__sys_clock, common_type_t<_Dur, chrono::seconds>>
 	_S_to_sys(const chrono::time_point<__file_clock, _Dur>& __t) noexcept
 	{
-	  using __sys_time = chrono::time_point<__sys_clock, _Dur>;
+	  using _CDur = common_type_t<_Dur, chrono::seconds>;
+	  using __sys_time = chrono::time_point<__sys_clock, _CDur>;
 	  return __sys_time{__t.time_since_epoch()} + _S_epoch_diff;
 	}
     };

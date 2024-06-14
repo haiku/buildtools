@@ -1,3 +1,52 @@
+2024-05-21  Release Manager
+
+	* GCC 13.3.0 released.
+
+2024-04-21  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2024-04-05  Jakub Jelinek  <jakub@redhat.com>
+
+	PR c++/114572
+	* testsuite/libgomp.c++/pr114572.C: New test.
+
+2024-03-02  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2024-01-10  Jakub Jelinek  <jakub@redhat.com>
+
+	PR libgomp/113192
+	* configure.ac (FLOCK): Use $libgomp_abs_srcdir/testsuite/flock
+	instead of \$(abs_top_srcdir)/testsuite/flock.
+	* configure: Regenerated.
+
+2024-03-02  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2024-01-09  Jakub Jelinek  <jakub@redhat.com>
+
+	PR libgomp/113192
+	* configure.ac (FLOCK): Use \$(abs_top_srcdir)/testsuite/flock
+	rather than $srcdir/testsuite/flock.
+	* configure: Regenerated.
+
+2023-12-05  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2023-09-19  Jakub Jelinek  <jakub@redhat.com>
+
+	PR libgomp/111413
+	* env.c (initialize_env): Don't dereference environ if it is NULL.
+	Reindent.
+
+2023-08-24  Tobias Burnus  <tobias@codesourcery.com>
+
+	Backported from master:
+	2023-08-19  Tobias Burnus  <tobias@codesourcery.com>
+
+	PR middle-end/111017
+	* testsuite/libgomp.c-c++-common/non-rect-loop-1.c: New test.
+
 2023-07-27  Release Manager
 
 	* GCC 13.2.0 released.

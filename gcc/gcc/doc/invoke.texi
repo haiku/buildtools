@@ -864,7 +864,7 @@ Objective-C and Objective-C++ Dialects}.
 -mn_flash=@var{size}  -mno-interrupts
 -mmain-is-OS_task  -mrelax  -mrmw  -mstrict-X  -mtiny-stack
 -mfract-convert-truncate
--mshort-calls  -nodevicelib  -nodevicespecs
+-mshort-calls  -mskip-bug  -nodevicelib  -nodevicespecs
 -Waddr-space-convert  -Wmisspelled-isr}
 
 @emph{Blackfin Options}
@@ -1030,7 +1030,7 @@ Objective-C and Objective-C++ Dialects}.
 -mmax-inline-memcpy-size=@var{n}
 -mexplicit-relocs -mno-explicit-relocs
 -mdirect-extern-access -mno-direct-extern-access
--mcmodel=@var{code-model}}
+-mcmodel=@var{code-model} -mrelax -mpass-mrelax-to-as}
 
 @emph{M32R/D Options}
 @gccoptlist{-m32r2  -m32rx  -m32r
@@ -16102,6 +16102,13 @@ crossing a loop backedge when comparing to
 Maximum number of nested calls to search for control dependencies
 during uninitialized variable analysis.
 
+@item uninit-max-chain-len
+Maximum number of predicates anded for each predicate ored in the normalized
+predicate chain.
+
+@item uninit-max-num-chains
+Maximum number of predicates ored in the normalized predicate chain.
+
 @item sched-autopref-queue-depth
 Hardware autoprefetcher scheduler model control flag.
 Number of lookahead cycles the model looks into; at '
@@ -20323,7 +20330,7 @@ performance of the code.  Permissible values for this option are:
 @samp{cortex-a75.cortex-a55}, @samp{cortex-a76.cortex-a55},
 @samp{cortex-r82}, @samp{cortex-x1}, @samp{cortex-x1c}, @samp{cortex-x2},
 @samp{cortex-x3}, @samp{cortex-a510}, @samp{cortex-a710}, @samp{cortex-a715},
-@samp{ampere1}, @samp{ampere1a}, and @samp{native}.
+@samp{ampere1}, @samp{ampere1a}, @samp{cobalt-100} and @samp{native}.
 
 The values @samp{cortex-a57.cortex-a53}, @samp{cortex-a72.cortex-a53},
 @samp{cortex-a73.cortex-a35}, @samp{cortex-a73.cortex-a53},
@@ -22730,12 +22737,22 @@ These options are defined for AVR implementations:
 @table @gcctabopt
 @opindex mmcu
 @item -mmcu=@var{mcu}
-Specify Atmel AVR instruction set architectures (ISA) or MCU type.
+Specify the AVR instruction set architecture (ISA) or device type.
+The default for this option is@tie{}@code{avr2}.
 
-The default for this option is@tie{}@samp{avr2}.
+The following AVR devices and ISAs are supported.
+@emph{Note:} A complete device support consists of
+startup code @code{crt@var{mcu}.o}, a device header @code{avr/io*.h},
+a device library @code{lib@var{mcu}.a} and a
+@uref{https://gcc.gnu.org/wiki/avr-gcc#spec-files,device-specs} file
+@code{specs-@var{mcu}}. Only the latter is provided by the compiler
+according the supported @code{@var{mcu}}s below.  The rest is supported
+by @w{@uref{https://www.nongnu.org/avr-libc/,AVR-LibC}}, or by means of
+@uref{https://gcc.gnu.org/wiki/avr-gcc#atpack,@code{atpack}} files
+from the hardware manufacturer.
 
-GCC supports the following AVR devices and ISAs:
-
+@c Auto-generated.  Re-build when new devices are added to avr-mcus.def
+@c by running "make avr-mcus" in $builddir/gcc.
 @include avr-mmcu.texi
 
 @opindex mabsdata
@@ -22808,11 +22825,6 @@ Do not save registers in @code{main}.  The effect is the same like
 attaching attribute @ref{AVR Function Attributes,,@code{OS_task}}
 to @code{main}. It is activated per default if optimization is on.
 
-@opindex mn-flash
-@item -mn-flash=@var{num}
-Assume that the flash memory has a size of 
-@var{num} times 64@tie{}KiB.
-
 @opindex mno-interrupts
 @item -mno-interrupts
 Generated code is not compatible with hardware interrupts.
@@ -22833,35 +22845,6 @@ differ from instructions in the assembler code.
 
 Relaxing must be turned on if linker stubs are needed, see the
 section on @code{EIND} and linker stubs below.
-
-@opindex mrmw
-@item -mrmw
-Assume that the device supports the Read-Modify-Write
-instructions @code{XCH}, @code{LAC}, @code{LAS} and @code{LAT}.
-
-@opindex mshort-calls
-@item -mshort-calls
-
-Assume that @code{RJMP} and @code{RCALL} can target the whole
-program memory.
-
-This option is used internally for multilib selection.  It is
-not an optimization option, and you don't need to set it by hand.
-
-@opindex msp8
-@item -msp8
-Treat the stack pointer register as an 8-bit register,
-i.e.@: assume the high byte of the stack pointer is zero.
-In general, you don't need to set this option by hand.
-
-This option is used internally by the compiler to select and
-build multilibs for architectures @code{avr2} and @code{avr25}.
-These architectures mix devices with and without @code{SPH}.
-For any setting other than @option{-mmcu=avr2} or @option{-mmcu=avr25}
-the compiler driver adds or removes this option from the compiler
-proper's command line, because the compiler then knows if the device
-or architecture has an 8-bit stack pointer and thus no @code{SPH}
-register or not.
 
 @opindex mstrict-X
 @item -mstrict-X
@@ -23161,6 +23144,9 @@ If @var{device} is not a device but only a core architecture like
 @item __AVR_XMEGA__
 The device / architecture belongs to the XMEGA family of devices.
 
+@item __AVR_HAVE_ADIW__
+The device has the @code{ADIW} and @code{SBIW} instructions.
+
 @item __AVR_HAVE_ELPM__
 The device has the @code{ELPM} instruction.
 
@@ -23168,13 +23154,13 @@ The device has the @code{ELPM} instruction.
 The device has the @code{ELPM R@var{n},Z} and @code{ELPM
 R@var{n},Z+} instructions.
 
-@item __AVR_HAVE_MOVW__
-The device has the @code{MOVW} instruction to perform 16-bit
-register-register moves.
-
 @item __AVR_HAVE_LPMX__
 The device has the @code{LPM R@var{n},Z} and
 @code{LPM R@var{n},Z+} instructions.
+
+@item __AVR_HAVE_MOVW__
+The device has the @code{MOVW} instruction to perform 16-bit
+register-register moves.
 
 @item __AVR_HAVE_MUL__
 The device has a hardware multiplier. 
@@ -23286,6 +23272,51 @@ and is defined to @code{2} or @code{3}.
 @itemx __WITH_LIBF7_MATH_SYMBOLS__
 Reflects the @code{--with-libf7=@{libgcc|math|math-symbols@}}
 @w{@uref{https://gcc.gnu.org/install/configure.html#avr,configure option}}.
+
+@end table
+
+@subsubsection AVR Internal Options
+The following options are used internally by the compiler and to communicate
+between device specs files and the compiler proper. You don't need to set these
+options by hand, in particular they are not optimization options.
+Using these options in the wrong way may lead to sub-optimal or wrong code.
+They are documented for completeness, and in order to get a better
+understanding of
+@w{@uref{https://gcc.gnu.org/wiki/avr-gcc#spec-files,device specs}}
+files.
+
+@table @gcctabopt
+
+@opindex mn-flash
+@item -mn-flash=@var{num}
+Assume that the flash memory has a size of @var{num} times 64@tie{}KiB.
+This determines which @code{__flash@var{N}} address spaces are available.
+
+@opindex mrmw
+@item -mrmw
+Assume that the device supports the Read-Modify-Write
+instructions @code{XCH}, @code{LAC}, @code{LAS} and @code{LAT}.
+
+@opindex mshort-calls
+@item -mshort-calls
+
+Assume that @code{RJMP} and @code{RCALL} can target the whole
+program memory. This option is used for multilib generation and selection
+for the devices from architecture @code{avrxmega3}.
+
+@opindex mskip-bug
+@item -mskip-bug
+
+Generate code without skips (@code{CPSE}, @code{SBRS},
+@code{SBRC}, @code{SBIS}, @code{SBIC}) over 32-bit instructions.
+
+@opindex msp8
+@item -msp8
+Treat the stack pointer register as an 8-bit register,
+i.e.@: assume the high byte of the stack pointer is zero.
+This option is used by the compiler to select and
+build multilibs for architectures @code{avr2} and @code{avr25}.
+These architectures mix devices with and without @code{SPH}.
 
 @end table
 
@@ -25799,12 +25830,11 @@ The default code model is @code{normal}.
 @itemx -mno-explicit-relocs
 Use or do not use assembler relocation operators when dealing with symbolic
 addresses.  The alternative is to use assembler macros instead, which may
-limit optimization.  The default value for the option is determined during
-GCC build-time by detecting corresponding assembler support:
-@code{-mexplicit-relocs} if said support is present,
-@code{-mno-explicit-relocs} otherwise.  This option is mostly useful for
-debugging, or interoperation with assemblers different from the build-time
-one.
+limit instruction scheduling but allow linker relaxation.  The default
+value for the option is determined with the assembler capability detected
+during GCC build-time and the setting of @code{-mrelax}:
+@code{-mexplicit-relocs} if the assembler supports relocation operators
+but @code{-mrelax} is not enabled, @code{-mno-explicit-relocs} otherwise.
 
 @opindex mdirect-extern-access
 @item -mdirect-extern-access
@@ -25819,6 +25849,28 @@ environments where no dynamic link is performed, like firmwares, OS
 kernels, executables linked with @option{-static} or @option{-static-pie}.
 @option{-mdirect-extern-access} is not compatible with @option{-fPIC} or
 @option{-fpic}.
+
+@item -mrelax
+@itemx -mno-relax
+Take (do not take) advantage of linker relaxations.  If
+@option{-mpass-mrelax-to-as} is enabled, this option is also passed to
+the assembler.  The default is determined during GCC build-time by
+detecting corresponding assembler support:
+@option{-mrelax} if the assembler supports both the @option{-mrelax}
+option and the conditional branch relaxation (it's required or the
+@code{.align} directives and conditional branch instructions in the
+assembly code outputted by GCC may be rejected by the assembler because
+of a relocation overflow), @option{-mno-relax} otherwise.
+
+@item -mpass-mrelax-to-as
+@itemx -mno-pass-mrelax-to-as
+Pass (do not pass) the @option{-mrelax} or @option{-mno-relax} option
+to the assembler.  The default is determined during GCC build-time by
+detecting corresponding assembler support:
+@option{-mpass-mrelax-to-as} if the assembler supports the
+@option{-mrelax} option, @option{-mno-pass-mrelax-to-as} otherwise.
+This option is mostly useful for debugging, or interoperation with
+assemblers different from the build-time one.
 @end table
 
 @node M32C Options
@@ -32397,8 +32449,8 @@ SSSE3, SSE4.1, SSE4.2, POPCNT, AES, PREFETCHW, PCLMUL, RDRND, XSAVE, XSAVEC,
 XSAVES, XSAVEOPT, FSGSBASE, PTWRITE, RDPID, SGX, GFNI-SSE, CLWB, MOVDIRI,
 MOVDIR64B, CLDEMOTE, WAITPKG, ADCX, AVX, AVX2, BMI, BMI2, F16C, FMA, LZCNT,
 PCONFIG, PKU, VAES, VPCLMULQDQ, SERIALIZE, HRESET, KL, WIDEKL, AVX-VNNI,
-AVXIFMA, AVXVNNIINT8, AVXNECONVERT, CMPCCXADD, ENQCMD, UINTR and RAOINT
-instruction set support.
+AVXIFMA, AVXVNNIINT8, AVXNECONVERT, CMPCCXADD, ENQCMD and UINTR instruction set
+support.
 
 @item knl
 Intel Knight's Landing CPU with 64-bit extensions, MOVBE, MMX, SSE, SSE2, SSE3,

@@ -1800,13 +1800,18 @@ cxx_bind_parameters_in_call (const constexpr_ctx *ctx, tree t, tree fun,
 	  x = build_address (x);
 	}
       if (TREE_ADDRESSABLE (type))
-	/* Undo convert_for_arg_passing work here.  */
-	x = convert_from_reference (x);
-      /* Normally we would strip a TARGET_EXPR in an initialization context
-	 such as this, but here we do the elision differently: we keep the
-	 TARGET_EXPR, and use its CONSTRUCTOR as the value of the parm.  */
-      arg = cxx_eval_constant_expression (ctx, x, vc_prvalue,
-					  non_constant_p, overflow_p);
+	{
+	  /* Undo convert_for_arg_passing work here.  */
+	  x = convert_from_reference (x);
+	  arg = cxx_eval_constant_expression (ctx, x, vc_glvalue,
+					      non_constant_p, overflow_p);
+	}
+      else
+	/* Normally we would strip a TARGET_EXPR in an initialization context
+	   such as this, but here we do the elision differently: we keep the
+	   TARGET_EXPR, and use its CONSTRUCTOR as the value of the parm.  */
+	arg = cxx_eval_constant_expression (ctx, x, vc_prvalue,
+					    non_constant_p, overflow_p);
       /* Don't VERIFY_CONSTANT here.  */
       if (*non_constant_p && ctx->quiet)
 	break;
@@ -1818,7 +1823,16 @@ cxx_bind_parameters_in_call (const constexpr_ctx *ctx, tree t, tree fun,
 	{
 	  /* Make sure the binding has the same type as the parm.  But
 	     only for constant args.  */
-	  if (!TYPE_REF_P (type))
+	  if (TREE_ADDRESSABLE (type))
+	    {
+	      if (!same_type_p (type, TREE_TYPE (arg)))
+		{
+		  arg = build_fold_addr_expr (arg);
+		  arg = cp_fold_convert (build_reference_type (type), arg);
+		  arg = convert_from_reference (arg);
+		}
+	    }
+	  else if (!TYPE_REF_P (type))
 	    arg = adjust_temp_type (type, arg);
 	  if (!TREE_CONSTANT (arg))
 	    *non_constant_args = true;
@@ -4187,7 +4201,8 @@ cxx_eval_array_reference (const constexpr_ctx *ctx, tree t,
   if (!lval
       && TREE_CODE (ary) == VIEW_CONVERT_EXPR
       && VECTOR_TYPE_P (TREE_TYPE (TREE_OPERAND (ary, 0)))
-      && TREE_TYPE (t) == TREE_TYPE (TREE_TYPE (TREE_OPERAND (ary, 0))))
+      && (TYPE_MAIN_VARIANT (TREE_TYPE (t))
+	  == TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (TREE_OPERAND (ary, 0))))))
     ary = TREE_OPERAND (ary, 0);
 
   tree oldidx = TREE_OPERAND (t, 1);
@@ -4258,6 +4273,9 @@ cxx_eval_array_reference (const constexpr_ctx *ctx, tree t,
 
   /* Not found.  */
 
+  if (is_really_empty_class (elem_type, /*ignore_vptr*/false))
+    return build_constructor (elem_type, NULL);
+
   if (TREE_CODE (ary) == CONSTRUCTOR
       && CONSTRUCTOR_NO_CLEARING (ary))
     {
@@ -4275,9 +4293,7 @@ cxx_eval_array_reference (const constexpr_ctx *ctx, tree t,
      directly for non-aggregates to avoid creating a garbage CONSTRUCTOR.  */
   tree val;
   constexpr_ctx new_ctx;
-  if (is_really_empty_class (elem_type, /*ignore_vptr*/false))
-    return build_constructor (elem_type, NULL);
-  else if (CP_AGGREGATE_TYPE_P (elem_type))
+  if (CP_AGGREGATE_TYPE_P (elem_type))
     {
       tree empty_ctor = build_constructor (init_list_type_node, NULL);
       val = digest_init (elem_type, empty_ctor, tf_warning_or_error);
@@ -5040,9 +5056,9 @@ cxx_eval_bare_aggregate (const constexpr_ctx *ctx, tree t,
   FOR_EACH_CONSTRUCTOR_ELT (v, i, index, value)
     {
       tree orig_value = value;
-      /* Like in cxx_eval_store_expression, omit entries for empty fields.  */
-      bool no_slot = TREE_CODE (type) == RECORD_TYPE && is_empty_field (index);
       init_subob_ctx (ctx, new_ctx, index, value);
+      /* Like in cxx_eval_store_expression, omit entries for empty fields.  */
+      bool no_slot = new_ctx.ctor == NULL_TREE;
       int pos_hint = -1;
       if (new_ctx.ctor != ctx->ctor && !no_slot)
 	{
@@ -5206,7 +5222,8 @@ cxx_eval_vec_init_1 (const constexpr_ctx *ctx, tree atype, tree init,
       bool reuse = false;
       constexpr_ctx new_ctx;
       init_subob_ctx (ctx, new_ctx, idx, pre_init ? init : elttype);
-      if (new_ctx.ctor != ctx->ctor)
+      bool no_slot = new_ctx.ctor == NULL_TREE;
+      if (new_ctx.ctor != ctx->ctor && !no_slot)
 	{
 	  if (zeroed_out)
 	    CONSTRUCTOR_NO_CLEARING (new_ctx.ctor) = false;
@@ -5251,7 +5268,14 @@ cxx_eval_vec_init_1 (const constexpr_ctx *ctx, tree atype, tree init,
 	}
       if (*non_constant_p)
 	break;
-      if (new_ctx.ctor != ctx->ctor)
+      if (no_slot)
+	{
+	  /* This is an initializer for an empty subobject; now that we've
+	     checked that it's constant, we can ignore it.  */
+	  gcc_checking_assert (i == 0);
+	  break;
+	}
+      else if (new_ctx.ctor != ctx->ctor)
 	{
 	  /* We appended this element above; update the value.  */
 	  gcc_assert ((*p)->last().index == idx);
@@ -5446,6 +5470,19 @@ cxx_fold_indirect_ref_1 (const constexpr_ctx *ctx, location_t loc, tree type,
 		  return ret;
 	      }
 	  }
+
+      /* Handle conversion to an empty base class, which is represented with a
+	 NOP_EXPR.  Do this before spelunking into the non-empty subobjects,
+	 which is likely to be a waste of time (109678).  */
+      if (is_empty_class (type)
+	  && CLASS_TYPE_P (optype)
+	  && DERIVED_FROM_P (type, optype))
+	{
+	  if (empty_base)
+	    *empty_base = true;
+	  return op;
+	}
+
       for (tree field = TYPE_FIELDS (optype);
 	   field; field = DECL_CHAIN (field))
 	if (TREE_CODE (field) == FIELD_DECL
@@ -5468,15 +5505,6 @@ cxx_fold_indirect_ref_1 (const constexpr_ctx *ctx, location_t loc, tree type,
 		  return ret;
 	      }
 	  }
-      /* Also handle conversion to an empty base class, which
-	 is represented with a NOP_EXPR.  */
-      if (is_empty_class (type)
-	  && CLASS_TYPE_P (optype)
-	  && DERIVED_FROM_P (type, optype))
-	{
-	  *empty_base = true;
-	  return op;
-	}
     }
 
   return NULL_TREE;
@@ -5519,6 +5547,9 @@ cxx_fold_indirect_ref (const constexpr_ctx *ctx, location_t loc, tree type,
      more folding opportunities.  */
   auto canonicalize_obj_off = [] (tree& obj, tree& off) {
     while (TREE_CODE (obj) == COMPONENT_REF
+	   /* We need to preserve union member accesses so that we can
+	      later properly diagnose accessing the wrong member.  */
+	   && TREE_CODE (TREE_TYPE (TREE_OPERAND (obj, 0))) == RECORD_TYPE
 	   && (tree_int_cst_sign_bit (off) || integer_zerop (off)))
       {
 	tree field = TREE_OPERAND (obj, 1);
@@ -6285,6 +6316,7 @@ cxx_eval_store_expression (const constexpr_ctx *ctx, tree t,
      object.  Make a note of this fact by marking the CONSTRUCTOR
      TREE_READONLY.  */
   if (TREE_CODE (t) == INIT_EXPR
+      && !empty_base
       && TREE_CODE (*valp) == CONSTRUCTOR
       && TYPE_READONLY (type))
     {
@@ -6708,6 +6740,16 @@ cxx_eval_switch_expr (const constexpr_ctx *ctx, tree t,
   cond = cxx_eval_constant_expression (ctx, cond, vc_prvalue,
 				       non_constant_p, overflow_p);
   VERIFY_CONSTANT (cond);
+  if (TREE_CODE (cond) != INTEGER_CST)
+    {
+      /* If the condition doesn't reduce to an INTEGER_CST it isn't a usable
+	 switch condition even if it's constant enough for other things
+	 (c++/113545).  */
+      gcc_checking_assert (ctx->quiet);
+      *non_constant_p = true;
+      return t;
+    }
+
   *jump_target = cond;
 
   tree body
@@ -7077,9 +7119,19 @@ cxx_eval_constant_expression (const constexpr_ctx *ctx, tree t,
 
     case PARM_DECL:
       if (lval && !TYPE_REF_P (TREE_TYPE (t)))
-	/* glvalue use.  */;
+	{
+	  /* glvalue use.  */
+	  if (TREE_ADDRESSABLE (TREE_TYPE (t)))
+	    if (tree v = ctx->global->get_value (t))
+	      r = v;
+	}
       else if (tree v = ctx->global->get_value (r))
-	r = v;
+	{
+	  r = v;
+	  if (TREE_ADDRESSABLE (TREE_TYPE (t)))
+	    r = cxx_eval_constant_expression (ctx, r, vc_prvalue,
+					      non_constant_p, overflow_p);
+	}
       else if (lval)
 	/* Defer in case this is only used for its type.  */;
       else if (COMPLETE_TYPE_P (TREE_TYPE (t))
@@ -9067,8 +9119,9 @@ potential_constant_expression_1 (tree t, bool want_rval, bool strict, bool now,
       if (now && want_rval)
 	{
 	  tree type = TREE_TYPE (t);
-	  if ((processing_template_decl && !COMPLETE_TYPE_P (type))
-	      || dependent_type_p (type)
+	  if (dependent_type_p (type)
+	      || !COMPLETE_TYPE_P (processing_template_decl
+				   ? type : complete_type (type))
 	      || is_really_empty_class (type, /*ignore_vptr*/false))
 	    /* An empty class has no data to read.  */
 	    return true;
@@ -9194,7 +9247,12 @@ potential_constant_expression_1 (tree t, bool want_rval, bool strict, bool now,
 	  }
 	else if (fun)
           {
-	    if (RECUR (fun, FUNCTION_POINTER_TYPE_P (fun) ? rval : any))
+	    if (TREE_TYPE (fun)
+		&& FUNCTION_POINTER_TYPE_P (TREE_TYPE (fun)))
+	      want_rval = rval;
+	    else
+	      want_rval = any;
+	    if (RECUR (fun, want_rval))
 	      /* Might end up being a constant function pointer.  But it
 		 could also be a function object with constexpr op(), so
 		 we pass 'any' so that the underlying VAR_DECL is deemed
@@ -9269,7 +9327,7 @@ potential_constant_expression_1 (tree t, bool want_rval, bool strict, bool now,
 	  return RECUR (DECL_VALUE_EXPR (t), rval);
 	}
       if (want_rval
-	  && !var_in_maybe_constexpr_fn (t)
+	  && (now || !var_in_maybe_constexpr_fn (t))
 	  && !type_dependent_expression_p (t)
 	  && !decl_maybe_constant_var_p (t)
 	  && (strict
@@ -9383,7 +9441,7 @@ potential_constant_expression_1 (tree t, bool want_rval, bool strict, bool now,
         STRIP_NOPS (x);
         if (is_this_parameter (x) && !is_capture_proxy (x))
 	  {
-	    if (!var_in_maybe_constexpr_fn (x))
+	    if (now || !var_in_maybe_constexpr_fn (x))
 	      {
 		if (flags & tf_error)
 		  constexpr_error (loc, fundef_p, "use of %<this%> in a "

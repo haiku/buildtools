@@ -81,9 +81,7 @@
 #define __cpp_lib_integral_constant_callable 201304L
 #define __cpp_lib_is_final 201402L
 #define __cpp_lib_make_reverse_iterator 201402L
-#ifndef _GLIBCXX_DEBUG // PR libstdc++/70303
-# define __cpp_lib_null_iterators 201304L
-#endif
+#define __cpp_lib_null_iterators 201304L
 #define __cpp_lib_robust_nonmodifying_seq_ops 201304L
 #define __cpp_lib_transformation_trait_aliases 201304L
 #define __cpp_lib_transparent_operators 201510L
@@ -294,7 +292,8 @@
 #endif
 #define __cpp_lib_constexpr_vector 201907L
 #define __cpp_lib_erase_if 202002L
-#define __cpp_lib_format 202106L
+#define __cpp_lib_format 202110L
+#define __cpp_lib_format_uchar 202311L
 #define __cpp_lib_generic_unordered_lookup 201811L
 #ifdef _GLIBCXX_HAS_GTHREADS
 # define __cpp_lib_jthread 201911L

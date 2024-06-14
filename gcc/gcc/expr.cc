@@ -351,8 +351,16 @@ convert_mode_scalar (rtx to, rtx from, int unsignedp)
 		      && REAL_MODE_FORMAT (from_mode) == &ieee_half_format));
 
       if (GET_MODE_PRECISION (from_mode) == GET_MODE_PRECISION (to_mode))
-	/* Conversion between decimal float and binary float, same size.  */
-	tab = DECIMAL_FLOAT_MODE_P (from_mode) ? trunc_optab : sext_optab;
+	{
+	  if (REAL_MODE_FORMAT (to_mode) == &arm_bfloat_half_format
+	      && REAL_MODE_FORMAT (from_mode) == &ieee_half_format)
+	    /* libgcc implements just __trunchfbf2, not __extendhfbf2.  */
+	    tab = trunc_optab;
+	  else
+	    /* Conversion between decimal float and binary float, same
+	       size.  */
+	    tab = DECIMAL_FLOAT_MODE_P (from_mode) ? trunc_optab : sext_optab;
+	}
       else if (GET_MODE_PRECISION (from_mode) < GET_MODE_PRECISION (to_mode))
 	tab = sext_optab;
       else
@@ -5084,6 +5092,7 @@ emit_push_insn (rtx x, machine_mode mode, tree type, rtx size,
 	  /* If source is a constant VAR_DECL with a simple constructor,
              store the constructor to the stack instead of moving it.  */
 	  const_tree decl;
+	  HOST_WIDE_INT sz;
 	  if (partial == 0
 	      && MEM_P (xinner)
 	      && SYMBOL_REF_P (XEXP (xinner, 0))
@@ -5091,9 +5100,11 @@ emit_push_insn (rtx x, machine_mode mode, tree type, rtx size,
 	      && VAR_P (decl)
 	      && TREE_READONLY (decl)
 	      && !TREE_SIDE_EFFECTS (decl)
-	      && immediate_const_ctor_p (DECL_INITIAL (decl), 2))
-	    store_constructor (DECL_INITIAL (decl), target, 0,
-			       int_expr_size (DECL_INITIAL (decl)), false);
+	      && immediate_const_ctor_p (DECL_INITIAL (decl), 2)
+	      && (sz = int_expr_size (DECL_INITIAL (decl))) > 0
+	      && CONST_INT_P (size)
+	      && INTVAL (size) == sz)
+	    store_constructor (DECL_INITIAL (decl), target, 0, sz, false);
 	  else
 	    emit_block_move (target, xinner, size, BLOCK_OP_CALL_PARM);
 	}

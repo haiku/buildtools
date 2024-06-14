@@ -686,7 +686,8 @@ proc check_effective_target_keeps_null_pointer_checks { } {
     if [target_info exists keeps_null_pointer_checks] {
       return 1
     }
-    if { [istarget msp430-*-*] } {
+    if { [istarget msp430-*-*]
+         || [istarget avr-*-*] } {
 	return 1;   
     }
     return 0
@@ -1347,13 +1348,20 @@ proc check_effective_target_aarch64_tlsle32 { } {
 # emitted, 0 otherwise.
 
 proc check_effective_target_shared { } {
+    # Darwin's linker defaults to error on undefined (which makes it look as
+    # if we do not support shared) but we can tell it to allow the symbols used
+    # here to be undefined.
+    set extra_flags ""
+    if { [istarget *-*-darwin\[912\]*] } {
+      set extra_flags "-Wl,-U,_foo,-U,_bar,-U,__Z3foov"
+    }
     # Note that M68K has a multilib that supports -fpic but not
     # -fPIC, so we need to check both.  We test with a program that
     # requires GOT references.
     return [check_no_compiler_messages shared executable {
 	extern int foo (void); extern int bar;
 	int baz (void) { return foo () + bar; }
-    } "-shared -fpic"]
+    } "-shared -fpic $extra_flags"]
 }
 
 # Return 1 if -pie, -fpie and -fPIE are supported, 0 otherwise.
@@ -9632,6 +9640,7 @@ proc check_effective_target_avx512fp16 { } {
 	void foo (void)
 	{
 	  asm volatile ("vmovw %edi, %xmm0");
+	  asm volatile ("vfcmulcph %xmm1, %xmm2, %xmm3{%k1}");
 	}
     } "-O2 -mavx512fp16" ]
 }
@@ -12258,6 +12267,46 @@ proc check_effective_target_o_flag_in_section { } {
 	    return 1
 	} else {
 	    verbose "check_effective_target_o_flag_in_section testfile compilation failed" 2
+	    return 0
+	}
+    }]
+}
+
+# Return 1 if the given assembler supports hardware transactional memory
+# instructions with machine type Power10, 0 otherwise.  Cache the result.
+
+proc check_effective_target_powerpc_as_p10_htm { } {
+    global tool
+    global GCC_UNDER_TEST
+
+    # Need auto-host.h to check linker support.
+    if { ![file exists ../../auto-host.h ] } {
+	return 0
+    }
+
+    return [check_cached_effective_target powerpc_as_p10_htm {
+
+	set src pie[pid].c
+	set obj pie[pid].o
+
+	set f [open $src "w"]
+	puts $f "#include \"../../auto-host.h\""
+	puts $f "#if HAVE_AS_POWER10_HTM == 0"
+	puts $f "# error Assembler does not support htm insns with power10."
+	puts $f "#endif"
+	close $f
+
+	verbose "check_effective_target_powerpc_as_p10_htm compiling testfile $src" 2
+	set lines [${tool}_target_compile $src $obj object ""]
+
+	file delete $src
+	file delete $obj
+
+	if [string match "" $lines] then {
+	    verbose "check_effective_target_powerpc_as_p10_htm testfile compilation passed" 2
+	    return 1
+	} else {
+	    verbose "check_effective_target_powerpc_as_p10_htm testfile compilation failed" 2
 	    return 0
 	}
     }]
