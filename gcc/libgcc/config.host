@@ -1221,7 +1221,7 @@ powerpc*-*-freebsd*)
 	esac
 	;;
 powerpc-*-haiku*)
-	tmake_file="$tmake_file rs6000/t-ppccomm rs6000/t-savresfpgr rs6000/t-crtstuff rs6000/t-crtstuff-pic t-fdpbit"
+	tmake_file="$tmake_file rs6000/t-ppccomm rs6000/t-savresfgpr rs6000/t-crtstuff rs6000/t-crtstuff-pic t-fdpbit"
 	;;
 powerpc-*-netbsd*)
 	tmake_file="$tmake_file rs6000/t-netbsd rs6000/t-crtstuff"
