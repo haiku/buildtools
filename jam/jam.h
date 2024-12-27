@@ -429,7 +429,8 @@
 # endif
 # endif 
 
-# ifdef __sparc__
+# if defined( __sparc__ ) || \\
+#    defined( __sparc64__)
 # if !defined( OS_SUNOS )
 # define OSPLAT "OSPLAT=SPARC"
 # endif
@@ -441,7 +442,8 @@
 # endif
 # endif
 
-# ifdef __arm__
+# if defined( __arm__ ) || \
+     defined(__aarch64__)
 # define OSPLAT "OSPLAT=ARM"
 # endif
 
@@ -453,6 +455,10 @@
 
 # ifdef __s390__
 # define OSPLAT "OSPLAT=390"
+# endif
+
+# ifdef __riscv
+# define OSPLAT "OSPLAT=RISCV"
 # endif
 
 # ifndef OSPLAT
