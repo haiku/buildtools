@@ -429,8 +429,8 @@
 # endif
 # endif 
 
-# if defined( __sparc__ ) || \\
-#    defined( __sparc64__)
+# if defined( __sparc__ ) || \
+     defined( __sparc64__)
 # if !defined( OS_SUNOS )
 # define OSPLAT "OSPLAT=SPARC"
 # endif
