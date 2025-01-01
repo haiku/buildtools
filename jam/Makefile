@@ -1,7 +1,7 @@
 # Makefile for jam
 
 CC = cc
-CFLAGS = -O
+CFLAGS = -O -DOPT_HEADER_CACHE_EXT -DOPT_JAMFILE_CACHE_EXT -DOPT_JAM_TARGETS_VARIABLE_EXT
 EXENAME = ./jam0
 TARGET = -o $(EXENAME)
 HOST_SYSTEM=$(shell uname)
@@ -64,7 +64,8 @@ SOURCES = \
 	filent.c fileos2.c fileunix.c filevms.c glob.c hash.c \
 	headers.c jam.c jambase.c jamgram.c lists.c make.c make1.c \
 	newstr.c option.c parse.c pathunix.c pathvms.c regexp.c \
-	rules.c scan.c search.c timestamp.c variable.c
+	rules.c scan.c search.c timestamp.c variable.c \
+	jcache.c hcache.c
 
 all: $(EXENAME)
 	LINKLIBS=$(LINKLIBS) $(EXENAME)
