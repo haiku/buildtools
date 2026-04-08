@@ -64,7 +64,9 @@ static int priority = B_LOW_PRIORITY;
 #define LIBRARY_PATH_ENV "LIBRARY_PATH"
 #endif
 
+#if 0
 extern char *make_temp_file PROTO ((char *));
+#endif
 
 /* On certain systems, we have code that works by scanning the object file
    directly.  But this code uses system-specific header files and library

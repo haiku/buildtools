@@ -87,7 +87,7 @@ $(srcdir)/cp/parse.c: $(srcdir)/cp/parse.y
 	    $$cp_srcdir/parse.c
 
 # Create the compiler driver for g++.
-GXX_OBJS = gcc.o g++spec.o intl.o prefix.o version.o 
+GXX_OBJS = gcc.o g++spec.o intl.o prefix.o version.o
 g++$(exeext): $(GXX_OBJS) $(EXTRA_GCC_OBJS) $(LIBDEPS)
 	$(CC) $(ALL_CFLAGS) $(LDFLAGS) -o $@ \
 	  $(GXX_OBJS) $(EXTRA_GCC_OBJS) $(LIBS)
@@ -97,9 +97,9 @@ g++-cross$(exeext): g++$(exeext)
 	-rm -f g++-cross$(exeext)
 	cp g++$(exeext) g++-cross$(exeext)
 
-cxxmain.o: $(srcdir)/../libiberty/cplus-dem.c $(DEMANGLE_H)
+cxxmain.o: $(srcdir)/../libiberty-legacy/cplus-dem.c $(DEMANGLE_H)
 	rm -f cxxmain.c
-	$(LN_S) $(srcdir)/../libiberty/cplus-dem.c cxxmain.c
+	$(LN_S) $(srcdir)/../libiberty-legacy/cplus-dem.c cxxmain.c
 	$(CC) -c -DMAIN $(ALL_CFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 	  -DVERSION=\"$(version)\" cxxmain.c
 
@@ -179,7 +179,7 @@ cplib2.txt: $(CXX_LIB2SRCS) $(CXX_EXTRA_HEADERS) cplib2.ready
 	*) \
 	  echo "" > cplib2.new;; \
 	esac
-	mv -f cplib2.new cplib2.txt 
+	mv -f cplib2.new cplib2.txt
 
 # Or if it would be different.
 # Don't try to do write if `.' is not writable;
