@@ -9,6 +9,16 @@
 #ifndef __HWINT_H__
 #define __HWINT_H__
 
+/* override predefined macros on modern compilers */
+#ifdef __INTPTR_TYPE__
+#define HOST_WIDE_INT __INTPTR_TYPE__
+#ifdef __LP64__
+#undef HOST_BITS_PER_LONG
+#define HOST_BITS_PER_LONG 64
+#define HOST_BITS_PER_WIDE_INT HOST_BITS_PER_LONG
+#endif
+#endif
+
 /* Only do all of this if both of these macros are defined, otherwise
    they'll evaluate to zero, which is not what you want. */
 #if defined (HOST_BITS_PER_LONG) && defined (HOST_BITS_PER_INT)
