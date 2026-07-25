@@ -55,7 +55,7 @@ Boston, MA 02111-1307, USA.  */
 /* If ELF is the default format, we should not use /lib/elf.  */
 
 #undef	LINK_SPEC
-#define LINK_SPEC "-m elf32ppchaiku %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
+#define LINK_SPEC "--secure-plt -m elf32ppchaiku %{!r:-shared} %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}}"
 
 /* override options from sysv4.h */
 #undef SUBTARGET_OVERRIDE_OPTIONS
@@ -65,7 +65,7 @@ Boston, MA 02111-1307, USA.  */
 	rs6000_current_abi = ABI_V4;                                   \
 	rs6000_sdata = SDATA_DATA;                                     \
 	rs6000_sdata_name = "data";                                    \
-	/*secure_plt = true;*/                                         \
+	secure_plt = true;                                             \
 	rs6000_isa_flags |= OPTION_MASK_MINIMAL_TOC;                   \
 	TARGET_NO_FP_IN_TOC = 1;                                       \
 	haiku_override_options ();                                     \
