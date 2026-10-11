@@ -1,5 +1,5 @@
 /* SSA name expresssons routines
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -58,8 +58,10 @@ struct GTY(()) ptr_info_def
 
 /* Sets the value range to SSA.  */
 extern bool set_range_info (tree, const vrange &);
-extern void set_nonzero_bits (tree, const wide_int_ref &);
+extern void set_nonzero_bits (tree, const wide_int &);
+extern void set_bitmask (tree, const wide_int &value, const wide_int &mask);
 extern wide_int get_nonzero_bits (const_tree);
+extern wide_int get_known_nonzero_bits (const_tree);
 extern bool ssa_name_has_boolean_range (tree);
 extern void init_ssanames (struct function *, int);
 extern void fini_ssanames (struct function *);
@@ -78,9 +80,10 @@ extern struct ptr_info_def *get_ptr_info (tree);
 extern void set_ptr_nonnull (tree);
 
 extern tree copy_ssa_name_fn (struct function *, tree, gimple *);
-extern void duplicate_ssa_name_ptr_info (tree, struct ptr_info_def *);
 extern tree duplicate_ssa_name_fn (struct function *, tree, gimple *);
+extern void duplicate_ssa_name_ptr_info (tree, struct ptr_info_def *);
 extern void duplicate_ssa_name_range_info (tree dest, tree src);
+extern void maybe_duplicate_ssa_info_at_copy (tree dest, tree src);
 extern void reset_flow_sensitive_info (tree);
 extern void reset_flow_sensitive_info_in_bb (basic_block);
 extern void release_defs (gimple *);
@@ -136,5 +139,26 @@ make_temp_ssa_name (tree type, gimple *stmt, const char *name)
   return ssa_name;
 }
 
+/* A class which is used to save/restore the flow sensitive information.  */
+class flow_sensitive_info_storage
+{
+public:
+  void save (tree);
+  void save_and_clear (tree);
+  void restore (tree);
+  void clear_storage ();
+private:
+  /* 0 means there is nothing saved.
+     1 means non pointer is saved.
+     -1 means a pointer type is saved.
+     -2 means a pointer type is saved but no information was saved. */
+  int state = 0;
+  /* The range info for non pointers */
+  vrange_storage *range_info = nullptr;
+  /* Flow sensitive pointer information. */
+  unsigned int align = 0;
+  unsigned int misalign = 0;
+  bool null = true;
+};
 
 #endif /* GCC_TREE_SSANAMES_H */

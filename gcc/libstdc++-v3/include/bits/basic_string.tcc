@@ -1,6 +1,6 @@
 // Components for manipulating sequences of characters -*- C++ -*-
 
-// Copyright (C) 1997-2023 Free Software Foundation, Inc.
+// Copyright (C) 1997-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -39,7 +39,12 @@
 #ifndef _BASIC_STRING_TCC
 #define _BASIC_STRING_TCC 1
 
+#ifdef _GLIBCXX_SYSHDR
 #pragma GCC system_header
+#endif
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wc++11-extensions"
 
 #include <bits/cxxabi_forced.h>
 
@@ -205,7 +210,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		_M_data(__another);
 		_M_capacity(__capacity);
 	      }
-	    traits_type::assign(_M_data()[__len++], *__beg);
+	    traits_type::assign(_M_data()[__len++],
+				static_cast<_CharT>(*__beg));
 	    ++__beg;
 	  }
 
@@ -269,6 +275,31 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	this->_S_assign(_M_data(), __n, __c);
 
       _M_set_length(__n);
+    }
+
+  // Length of string constructed is easier to propagate inter-procedurally
+  // than difference between iterators.
+  template<typename _CharT, typename _Traits, typename _Alloc>
+    template<bool _Terminated>
+    _GLIBCXX20_CONSTEXPR 
+    void
+    basic_string<_CharT, _Traits, _Alloc>::
+    _M_construct(const _CharT* __str, size_type __n)
+    {
+      if (__n > size_type(_S_local_capacity))
+	{
+	  _M_data(_M_create(__n, size_type(0)));
+	  _M_capacity(__n);
+	}
+      else
+	_M_init_local_buf();
+
+      if (__n || _Terminated)
+	this->_S_copy(_M_data(), __str, __n + _Terminated);
+
+      _M_length(__n);
+      if (!_Terminated)
+	traits_type::assign(_M_data()[__n], _CharT());
     }
 
   template<typename _CharT, typename _Traits, typename _Alloc>
@@ -566,48 +597,56 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __n;
     }
 
-#if __cplusplus > 202002L
+#ifdef __glibcxx_string_resize_and_overwrite // C++ >= 23
   template<typename _CharT, typename _Traits, typename _Alloc>
   template<typename _Operation>
+    [[__gnu__::__always_inline__]]
     constexpr void
     basic_string<_CharT, _Traits, _Alloc>::
-    resize_and_overwrite(const size_type __n, _Operation __op)
-    {
-      const size_type __capacity = capacity();
-      _CharT* __p;
-      if (__n > __capacity)
-	{
-	  auto __new_capacity = __n; // Must not allow _M_create to modify __n.
-	  __p = _M_create(__new_capacity, __capacity);
-	  this->_S_copy(__p, _M_data(), length()); // exclude trailing null
-#if __cpp_lib_is_constant_evaluated
-	  if (std::is_constant_evaluated())
-	    traits_type::assign(__p + length(), __n - length(), _CharT());
+    __resize_and_overwrite(const size_type __n, _Operation __op)
+    { resize_and_overwrite<_Operation&>(__n, __op); }
 #endif
-	  _M_dispose();
-	  _M_data(__p);
-	  _M_capacity(__new_capacity);
-	}
-      else
-	__p = _M_data();
+
+#if __cplusplus >= 201103L
+  template<typename _CharT, typename _Traits, typename _Alloc>
+  template<typename _Operation>
+    _GLIBCXX20_CONSTEXPR void
+    basic_string<_CharT, _Traits, _Alloc>::
+#ifdef __glibcxx_string_resize_and_overwrite // C++ >= 23
+    resize_and_overwrite(const size_type __n, _Operation __op)
+#else
+    __resize_and_overwrite(const size_type __n, _Operation __op)
+#endif
+    {
+      reserve(__n);
+      _CharT* const __p = _M_data();
+#if __cpp_lib_is_constant_evaluated
+      if (std::__is_constant_evaluated() && __n > size())
+	traits_type::assign(__p + size(), __n - size(), _CharT());
+#endif
       struct _Terminator {
-	constexpr ~_Terminator() { _M_this->_M_set_length(_M_r); }
+	_GLIBCXX20_CONSTEXPR ~_Terminator() { _M_this->_M_set_length(_M_r); }
 	basic_string* _M_this;
 	size_type _M_r;
       };
-      _Terminator __term{this};
-      auto __r = std::move(__op)(auto(__p), auto(__n));
+      _Terminator __term{this, 0};
+      auto __r = std::move(__op)(__p + 0, __n + 0);
+#ifdef __cpp_lib_concepts
       static_assert(ranges::__detail::__is_integer_like<decltype(__r)>);
-      _GLIBCXX_DEBUG_ASSERT(__r >= 0 && __r <= __n);
+#else
+      static_assert(__gnu_cxx::__is_integer_nonstrict<decltype(__r)>::__value,
+		    "resize_and_overwrite operation must return an integer");
+#endif
+      _GLIBCXX_DEBUG_ASSERT(__r >= 0 && size_type(__r) <= __n);
       __term._M_r = size_type(__r);
       if (__term._M_r > __n)
 	__builtin_unreachable();
     }
-#endif // C++23
+#endif // C++11
 
 #endif  // _GLIBCXX_USE_CXX11_ABI
    
-#if __cpp_lib_constexpr_string >= 201907L
+#if __glibcxx_constexpr_string >= 201907L
 # define _GLIBCXX_STRING_CONSTEXPR constexpr
 #else
 # define _GLIBCXX_STRING_CONSTEXPR
@@ -1023,4 +1062,5 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
+#pragma GCC diagnostic pop
 #endif

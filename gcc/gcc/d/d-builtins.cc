@@ -1,5 +1,5 @@
 /* d-builtins.cc -- GCC builtins support for D.
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
+   Copyright (C) 2006-2025 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -97,12 +97,15 @@ build_frontend_type (tree type)
 	{
 	  /* Check for char * first.  Needs to be done for chars/string.  */
 	  if (TYPE_MAIN_VARIANT (TREE_TYPE (type)) == char_type_node)
-	    return Type::tchar->addMod (dtype->mod)->pointerTo ()->addMod (mod);
+	    {
+	      dtype = dmd::addMod (Type::tchar, dtype->mod);
+	      return dmd::addMod (dmd::pointerTo (dtype), mod);
+	    }
 
 	  if (dtype->ty == TY::Tfunction)
-	    return (TypePointer::create (dtype))->addMod (mod);
+	    return dmd::addMod (TypePointer::create (dtype), mod);
 
-	  return dtype->pointerTo ()->addMod (mod);
+	  return dmd::addMod (dmd::pointerTo (dtype), mod);
 	}
       break;
 
@@ -113,7 +116,7 @@ build_frontend_type (tree type)
 	  /* Want to assign ctype directly so that the REFERENCE_TYPE code
 	     can be turned into as an `inout' argument.  Can't use pointerTo(),
 	     because the returned Type is shared.  */
-	  dtype = (TypePointer::create (dtype))->addMod (mod);
+	  dtype = dmd::addMod (TypePointer::create (dtype), mod);
 	  dtype->ctype = type;
 	  builtin_converted_decls.safe_push (builtin_data (dtype, type));
 	  return dtype;
@@ -122,7 +125,7 @@ build_frontend_type (tree type)
 
     case BOOLEAN_TYPE:
       /* Should be no need for size checking.  */
-      return Type::tbool->addMod (mod);
+      return dmd::addMod (Type::tbool, mod);
 
     case INTEGER_TYPE:
     {
@@ -136,11 +139,11 @@ build_frontend_type (tree type)
 	  dtype = Type::basic[i];
 
 	  /* Search for type matching size and signedness.  */
-	  if (unsignedp != dtype->isunsigned ()
-	      || size != dtype->size ())
+	  if (unsignedp != dtype->isUnsigned ()
+	      || size != dmd::size (dtype))
 	    continue;
 
-	  return dtype->addMod (mod);
+	  return dmd::addMod (dtype, mod);
 	}
       break;
     }
@@ -154,10 +157,10 @@ build_frontend_type (tree type)
 	  dtype = Type::basic[i];
 
 	  /* Search for type matching size.  */
-	  if (dtype->size () != size)
+	  if (dmd::size (dtype) != size)
 	    continue;
 
-	  return dtype->addMod (mod);
+	  return dmd::addMod (dtype, mod);
 	}
       break;
     }
@@ -171,16 +174,16 @@ build_frontend_type (tree type)
 	  dtype = Type::basic[i];
 
 	  /* Search for type matching size.  */
-	  if (dtype->size () != size)
+	  if (dmd::size (dtype) != size)
 	    continue;
 
-	  return dtype->addMod (mod);
+	  return dmd::addMod (dtype, mod);
 	}
       break;
     }
 
     case VOID_TYPE:
-      return Type::tvoid->addMod (mod);
+      return dmd::addMod (Type::tvoid, mod);
 
     case ARRAY_TYPE:
       dtype = build_frontend_type (TREE_TYPE (type));
@@ -194,7 +197,8 @@ build_frontend_type (tree type)
 	  length = size_binop (PLUS_EXPR, size_one_node,
 			       convert (sizetype, length));
 
-	  dtype = dtype->sarrayOf (TREE_INT_CST_LOW (length))->addMod (mod);
+	  dtype = dmd::sarrayOf (dtype, TREE_INT_CST_LOW (length));
+	  dtype = dmd::addMod (dtype, mod);
 	  builtin_converted_decls.safe_push (builtin_data (dtype, type));
 	  return dtype;
 	}
@@ -210,11 +214,11 @@ build_frontend_type (tree type)
       if (!dtype)
 	break;
 
-      dtype = dtype->sarrayOf (nunits)->addMod (mod);
-      if (target.isVectorTypeSupported (dtype->size (), dtype->nextOf ()))
+      dtype = dmd::addMod (dmd::sarrayOf (dtype, nunits), mod);
+      if (target.isVectorTypeSupported (dmd::size (dtype), dtype->nextOf ()))
 	break;
 
-      dtype = (TypeVector::create (dtype))->addMod (mod);
+      dtype = dmd::addMod (TypeVector::create (dtype), mod);
       builtin_converted_decls.safe_push (builtin_data (dtype, type));
       return dtype;
     }
@@ -238,9 +242,9 @@ build_frontend_type (tree type)
       sdecl->alignsize = TYPE_ALIGN_UNIT (type);
       sdecl->alignment.setDefault ();
       sdecl->sizeok = Sizeok::done;
-      sdecl->type = (TypeStruct::create (sdecl))->addMod (mod);
+      sdecl->type = dmd::addMod (TypeStruct::create (sdecl), mod);
       sdecl->type->ctype = type;
-      sdecl->type->merge2 ();
+      dmd::merge2 (sdecl->type);
 
       /* Add both named and anonymous fields as members of the struct.
 	 Anonymous fields still need a name in D, so call them "__pad%u".  */
@@ -275,7 +279,7 @@ build_frontend_type (tree type)
 						       NULL);
 	  vd->parent = sdecl;
 	  vd->offset = tree_to_uhwi (byte_position (field));
-	  vd->semanticRun = PASS::semanticdone;
+	  vd->semanticRun (PASS::semanticdone);
 	  vd->csym = field;
 	  sdecl->members->push (vd);
 	  sdecl->fields.push (vd);
@@ -322,7 +326,8 @@ build_frontend_type (tree type)
 		  return NULL;
 		}
 
-	      args->push (Parameter::create (sc, targ, NULL, NULL, NULL));
+	      args->push (Parameter::create (Loc (), sc, targ,
+					     NULL, NULL, NULL));
 	    }
 
 	  /* GCC generic and placeholder built-ins are marked as variadic, yet
@@ -330,7 +335,7 @@ build_frontend_type (tree type)
 	  if (args->length != 0 || varargs_p == VARARGnone)
 	    {
 	      dtype = TypeFunction::create (args, dtype, varargs_p, LINK::c);
-	      return dtype->addMod (mod);
+	      return dmd::addMod (dtype, mod);
 	    }
 	}
       break;
@@ -517,6 +522,7 @@ d_init_versions (void)
   targetdm.d_cpu_versions ();
   targetdm.d_os_versions ();
 
+  VersionCondition::addPredefinedGlobalIdent ("CppRuntime_GNU");
   VersionCondition::addPredefinedGlobalIdent ("CppRuntime_Gcc");
 }
 
@@ -566,8 +572,8 @@ d_build_builtins_module (Module *m)
       tf->trust = !DECL_ASSEMBLER_NAME_SET_P (decl) ? TRUST::safe
 	: TREE_NOTHROW (decl) ? TRUST::trusted
 	: TRUST::system;
-      tf->isnothrow (true);
-      tf->isnogc (true);
+      tf->isNothrow (true);
+      tf->isNogc (true);
 
       FuncDeclaration *func
 	= FuncDeclaration::create (Loc (), Loc (),
@@ -686,10 +692,10 @@ strip_type_modifiers (Type *type)
   if (type->ty == TY::Tpointer)
     {
       Type *tnext = strip_type_modifiers (type->nextOf ());
-      return tnext->pointerTo ();
+      return dmd::pointerTo (tnext);
     }
 
-  return type->castMod (0);
+  return dmd::castMod (type, 0);
 }
 
 /* Returns true if types T1 and T2 representing return types or types of
@@ -706,11 +712,11 @@ matches_builtin_type (Type *t1, Type *t2)
 
   if (((tb1->isTypePointer () && tb2->isTypePointer ())
        || (tb1->isTypeVector () && tb2->isTypeVector ()))
-      && tb1->implicitConvTo (tb2) != MATCH::nomatch)
+      && dmd::implicitConvTo (tb1, tb2) != MATCH::nomatch)
     return true;
 
-  if (tb1->isintegral () == tb2->isintegral ()
-      && tb1->size () == tb2->size ())
+  if (tb1->isIntegral () == tb2->isIntegral ()
+      && dmd::size (tb1) == dmd::size (tb2))
     return true;
 
   return false;
@@ -723,7 +729,7 @@ static bool
 covariant_with_builtin_type_p (Type *t1, Type *t2)
 {
   /* Check whether the declared function matches the built-in.  */
-  if (same_type_p (t1, t2) || t1->covariant (t2) == Covariant::yes)
+  if (same_type_p (t1, t2) || dmd::covariant (t1, t2) == Covariant::yes)
     return true;
 
   /* May not be covariant because of D attributes applied on t1.
@@ -733,7 +739,7 @@ covariant_with_builtin_type_p (Type *t1, Type *t2)
 
   /* Check for obvious reasons why types may be distinct.  */
   if (tf1 == NULL || tf2 == NULL
-      || tf1->isref () != tf2->isref ()
+      || tf1->isRef () != tf2->isRef ()
       || tf1->parameterList.varargs != tf2->parameterList.varargs
       || tf1->parameterList.length () != tf2->parameterList.length ())
     return false;
@@ -771,7 +777,7 @@ maybe_set_builtin_1 (Dsymbol *d)
   if (ad != NULL)
     {
       /* Recursively search through attribute decls.  */
-      Dsymbols *decls = ad->include (NULL);
+      Dsymbols *decls = dmd::include (ad, NULL);
       if (decls && decls->length)
 	{
 	  for (size_t i = 0; i < decls->length; i++)

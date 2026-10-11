@@ -1,5 +1,5 @@
 # configure.ac -- Backtrace configure script.
-# Copyright (C) 2012-2023 Free Software Foundation, Inc.
+# Copyright (C) 2012-2025 Free Software Foundation, Inc.
 
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -84,6 +84,8 @@ AM_CONDITIONAL(HAVE_DWZ, test "$DWZ" != "")
 LT_INIT
 AM_PROG_LIBTOOL
 
+AM_CONDITIONAL([ENABLE_DARWIN_AT_RPATH], [test x$enable_darwin_at_rpath = xyes])
+
 AC_SYS_LARGEFILE
 
 backtrace_supported=yes
@@ -142,7 +144,9 @@ AC_SUBST(EXTRA_FLAGS)
 
 ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings -Wstrict-prototypes \
 			  -Wmissing-prototypes -Wold-style-definition \
-			  -Wmissing-format-attribute -Wcast-qual],
+			  -Wmissing-format-attribute -Wcast-qual \
+			  -Wno-attributes -Wno-unknown-attributes \
+			  -Wpointer-arith],
 			  [WARN_FLAGS])
 
 AC_ARG_ENABLE([werror],
@@ -171,11 +175,16 @@ else
   fi
 fi
 
+# Enable --enable-host-pie.
+AC_ARG_ENABLE(host-pie,
+[AS_HELP_STRING([--enable-host-pie],
+                [build host code as PIE])],
+[PIC_FLAG=-fPIE], [PIC_FLAG=])
 # Enable --enable-host-shared.
 AC_ARG_ENABLE(host-shared,
 [AS_HELP_STRING([--enable-host-shared],
 		[build host code as shared libraries])],
-[PIC_FLAG=-fPIC], [PIC_FLAG=])
+[PIC_FLAG=-fPIC])
 AC_SUBST(PIC_FLAG)
 
 # Enable Intel CET on Intel CET enabled host if jit is enabled.
@@ -195,6 +204,16 @@ AC_CACHE_CHECK([__sync extensions],
 [if test -n "${with_target_subdir}"; then
    case "${host}" in
    hppa*-*-hpux*) libbacktrace_cv_sys_sync=no ;;
+   arm*-*-eabi*)
+     # Older versions of the Arm architecture lack the necessary instructions
+     # for these constructs, so check whether we can use them.
+     AC_LINK_IFELSE(
+       [AC_LANG_PROGRAM([int i;],
+                        [__sync_bool_compare_and_swap (&i, i, i);
+                         __sync_lock_test_and_set (&i, 1);
+                         __sync_lock_release (&i);])],
+       [libbacktrace_cv_sys_sync=yes],
+       [libbacktrace_cv_sys_sync=no]);;
    *) libbacktrace_cv_sys_sync=yes ;;
    esac
  else
@@ -377,6 +396,12 @@ if test "$have_loadquery" = "yes"; then
   AC_DEFINE(HAVE_LOADQUERY, 1, [Define if AIX loadquery is available.])
 fi
 
+AC_CHECK_HEADERS(windows.h)
+AC_CHECK_HEADERS(tlhelp32.h, [], [],
+[#ifdef HAVE_WINDOWS_H
+#  include <windows.h>
+#endif])
+
 # Check for the fcntl function.
 if test -n "${with_target_subdir}"; then
    case "${host}" in
@@ -406,6 +431,9 @@ fi
 if test "$have_getexecname" = "yes"; then
   AC_DEFINE(HAVE_GETEXECNAME, 1, [Define if getexecname is available.])
 fi
+
+# Check for _pgmptr variable, contains the executable filename on windows
+AC_CHECK_DECLS([_pgmptr])
 
 # Check for sysctl definitions.
 
@@ -495,16 +523,27 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM(,)],
 LDFLAGS=$LDFLAGS_hold])
 AM_CONDITIONAL(HAVE_BUILDID, test "$libbacktrace_cv_ld_buildid" = yes)
 
-dnl Test whether the linker supports the --compress-debug-sections option.
-AC_CACHE_CHECK([whether --compress-debug-sections is supported],
-[libgo_cv_ld_compress],
+dnl Test whether the linker supports the --compress-debug-sections=zlib-gnu
+dnl option.
+AC_CACHE_CHECK([whether --compress-debug-sections=zlib-gnu is supported],
+[libgo_cv_ld_compress_zlib_gnu],
 [LDFLAGS_hold=$LDFLAGS
 LDFLAGS="$LDFLAGS -Wl,--compress-debug-sections=zlib-gnu"
 AC_LINK_IFELSE([AC_LANG_PROGRAM(,)],
-[libgo_cv_ld_compress=yes],
-[libgo_cv_ld_compress=no])
+[libgo_cv_ld_compress_zlib_gnu=yes],
+[libgo_cv_ld_compress_zlib_gnu=no])
 LDFLAGS=$LDFLAGS_hold])
-AM_CONDITIONAL(HAVE_COMPRESSED_DEBUG, test "$libgo_cv_ld_compress" = yes)
+AM_CONDITIONAL(HAVE_COMPRESSED_DEBUG_ZLIB_GNU, test "$libgo_cv_ld_compress_zlib_gnu" = yes)
+
+AC_CACHE_CHECK([whether --compress-debug-sections=zlib-gabi is supported],
+[libgo_cv_ld_compress_zlib_gabi],
+[LDFLAGS_hold=$LDFLAGS
+LDFLAGS="$LDFLAGS -Wl,--compress-debug-sections=zlib-gabi"
+AC_LINK_IFELSE([AC_LANG_PROGRAM(,)],
+[libgo_cv_ld_compress_zlib_gabi=yes],
+[libgo_cv_ld_compress_zlib_gabi=no])
+LDFLAGS=$LDFLAGS_hold])
+AM_CONDITIONAL(HAVE_COMPRESSED_DEBUG_ZLIB_GABI, test "$libgo_cv_ld_compress_zlib_gabi" = yes)
 
 AC_CHECK_LIB([zstd], [ZSTD_compress],
     [AC_DEFINE(HAVE_ZSTD, 1, [Define if -lzstd is available.])])

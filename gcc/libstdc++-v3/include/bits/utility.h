@@ -1,6 +1,6 @@
 // Utilities used throughout the library -*- C++ -*-
 
-// Copyright (C) 2004-2023 Free Software Foundation, Inc.
+// Copyright (C) 2004-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -33,7 +33,9 @@
 #ifndef _GLIBCXX_UTILITY_H
 #define _GLIBCXX_UTILITY_H 1
 
+#ifdef _GLIBCXX_SYSHDR
 #pragma GCC system_header
+#endif
 
 #if __cplusplus >= 201103L
 
@@ -123,17 +125,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
       return __n;
     }
+#endif // C++14
 
 // The standard says this macro and alias template should be in <tuple> but we
 // define them here, to be available in <array>, <utility> and <ranges> too.
 // _GLIBCXX_RESOLVE_LIB_DEFECTS
 // 3378. tuple_size_v/tuple_element_t should be available when
 //       tuple_size/tuple_element are
-#define __cpp_lib_tuple_element_t 201402L
-
+#ifdef __glibcxx_tuple_element_t // C++ >= 14
   template<size_t __i, typename _Tp>
     using tuple_element_t = typename tuple_element<__i, _Tp>::type;
-#endif // C++14
+#endif
 
   // Stores a tuple of indices.  Used by tuple and pair, and by bind() to
   // extract the elements in a tuple.
@@ -155,9 +157,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
     };
 
-#if __cplusplus >= 201402L
-
-#define __cpp_lib_integer_sequence 201304L
+#ifdef __glibcxx_integer_sequence // C++ >= 14
 
   /// Class template integer_sequence
   template<typename _Tp, _Tp... _Idx>
@@ -176,7 +176,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if __has_builtin(__make_integer_seq)
       = __make_integer_seq<integer_sequence, _Tp, _Num>;
 #else
-      = integer_sequence<_Tp, __integer_pack(_Tp(_Num))...>;
+      = integer_sequence<_Tp, __integer_pack(_Num)...>;
 #endif
 
   /// Alias template index_sequence
@@ -190,6 +190,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   /// Alias template index_sequence_for
   template<typename... _Types>
     using index_sequence_for = make_index_sequence<sizeof...(_Types)>;
+#endif // __glibcxx_integer_sequence
 
 #if __cplusplus >= 201703L
 
@@ -221,12 +222,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Tp>
     inline constexpr bool __is_in_place_type_v<in_place_type_t<_Tp>> = true;
 
-  template<typename _Tp>
-    using __is_in_place_type = bool_constant<__is_in_place_type_v<_Tp>>;
+  template<typename>
+    inline constexpr bool __is_in_place_index_v = false;
+
+  template<size_t _Nm>
+    inline constexpr bool __is_in_place_index_v<in_place_index_t<_Nm>> = true;
 
 #endif // C++17
-#endif // C++14
 
+#if _GLIBCXX_USE_BUILTIN_TRAIT(__type_pack_element)
+  template<size_t _Np, typename... _Types>
+    struct _Nth_type
+    { using type = __type_pack_element<_Np, _Types...>; };
+#else
   template<size_t _Np, typename... _Types>
     struct _Nth_type
     { };
@@ -261,9 +269,51 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     struct _Nth_type<1, _Tp0, _Tp1, _Tp2, _Rest...>
     { using type = _Tp1; };
 #endif
+#endif
 
-#if __cplusplus > 202002L
-#define __cpp_lib_ranges_zip 202110L // for <tuple> and <utility>
+#if __glibcxx_ranges
+  namespace ranges::__detail
+  {
+    template<typename _Range>
+      inline constexpr bool __is_subrange = false;
+  } // namespace __detail
+#endif
+
+  // A class (and instance) which can be used in 'tie' when an element
+  // of a tuple is not required.
+  struct _Swallow_assign
+  {
+    template<class _Tp>
+      constexpr const _Swallow_assign&
+      operator=(const _Tp&) const noexcept
+      { return *this; }
+  };
+
+  // _GLIBCXX_RESOLVE_LIB_DEFECTS
+  // 2773. Making std::ignore constexpr
+  /** Used with `std::tie` to ignore an element of a tuple
+   *
+   * When using `std::tie` to assign the elements of a tuple to variables,
+   * unwanted elements can be ignored by using `std::ignore`. For example:
+   *
+   * ```
+   * int x, y;
+   * std::tie(x, std::ignore, y) = std::make_tuple(1, 2, 3);
+   * ```
+   *
+   * This assignment will perform `x=1; std::ignore=2; y=3;` which results
+   * in the second element being ignored.
+   *
+   * @since C++11
+   */
+  _GLIBCXX17_INLINE constexpr _Swallow_assign ignore{};
+
+#if __glibcxx_flat_map || __glibcxx_flat_set // >= C++23
+  struct sorted_unique_t { explicit sorted_unique_t() = default; };
+  inline constexpr sorted_unique_t sorted_unique{};
+
+  struct sorted_equivalent_t { explicit sorted_equivalent_t() = default; };
+  inline constexpr sorted_equivalent_t sorted_equivalent{};
 #endif
 
 _GLIBCXX_END_NAMESPACE_VERSION

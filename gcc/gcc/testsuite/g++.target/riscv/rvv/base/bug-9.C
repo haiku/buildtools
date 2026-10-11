@@ -1,7 +1,8 @@
-/* { dg-do run { target { { {riscv_vector} && {rv64} } } } } */
+/* { dg-do run } */
 /* { dg-options "-O2" } */
+/* { dg-require-effective-target rv64 } */
+/* { dg-require-effective-target riscv_v } */
 
-#include<cstdalign>
 #include<cmath>
 #include<cstddef>
 #include<cstdint>

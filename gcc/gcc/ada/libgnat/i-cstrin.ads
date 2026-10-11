@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1993-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1993-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- This specification is derived from the Ada Reference Manual for use with --
 -- GNAT. The copyright notice above, and the license provisions that follow --
@@ -33,21 +33,27 @@
 --                                                                          --
 ------------------------------------------------------------------------------
 
+--  This package declares types and subprograms that allow the allocation,
+--  reference, update and deallocation of C-style strings, as defined by
+--  ARM B.3.1.
+
 --  Preconditions in this unit are meant for analysis only, not for run-time
 --  checking, so that the expected exceptions are raised. This is enforced by
 --  setting the corresponding assertion policy to Ignore. These preconditions
---  protect from Dereference_Error and Update_Error, but not from
---  Storage_Error.
+--  protect from Constraint_Error, Dereference_Error and Update_Error, but not
+--  from Storage_Error.
 
 pragma Assertion_Policy (Pre => Ignore);
 
 package Interfaces.C.Strings with
   SPARK_Mode     => On,
   Abstract_State => (C_Memory),
-  Initializes    => (C_Memory)
+  Initializes    => (C_Memory),
+  Always_Terminates
 is
    pragma Preelaborate;
 
+   --  Definitions for C character arrays
    type char_array_access is access all char_array;
    for char_array_access'Size use System.Parameters.ptr_bits;
 
@@ -62,30 +68,38 @@ is
    type chars_ptr_array is array (size_t range <>) of aliased chars_ptr;
 
    Null_Ptr : constant chars_ptr;
+   --  Null value for private type chars_ptr
 
    function To_Chars_Ptr
      (Item      : char_array_access;
       Nul_Check : Boolean := False) return chars_ptr
    with
-     SPARK_Mode => Off;
+     SPARK_Mode => Off;  --  To_Chars_Ptr'Result is aliased with Item
+   --  Extract raw chars_ptr from char_array access type
 
    function New_Char_Array (Chars : char_array) return chars_ptr with
      Volatile_Function,
      Post   => New_Char_Array'Result /= Null_Ptr,
      Global => (Input => C_Memory);
+   --  Copy the contents of Chars into a newly allocated chars_ptr
 
    function New_String (Str : String) return chars_ptr with
      Volatile_Function,
      Post   => New_String'Result /= Null_Ptr,
      Global => (Input => C_Memory);
+   --  Copy the contents of Str into a newly allocated chars_ptr
 
    procedure Free (Item : in out chars_ptr) with
      SPARK_Mode => Off;
    --  When deallocation is prohibited (eg: cert runtimes) this routine
-   --  will raise Program_Error
+   --  will raise Program_Error.
 
    Dereference_Error : exception;
+   --  This exception is raised when a subprogram of this unit tries to
+   --  dereference a chars_ptr with the value Null_Ptr.
 
+   --  The Value functions copy the contents of a chars_ptr object
+   --  into a char_array/String.
    function Value (Item : chars_ptr) return char_array with
      Pre    => Item /= Null_Ptr,
      Global => (Input => C_Memory);
@@ -94,7 +108,7 @@ is
      (Item   : chars_ptr;
       Length : size_t) return char_array
    with
-     Pre    => Item /= Null_Ptr,
+     Pre    => Item /= Null_Ptr and then Length /= 0,
      Global => (Input => C_Memory);
 
    function Value (Item : chars_ptr) return String with
@@ -105,13 +119,17 @@ is
      (Item   : chars_ptr;
       Length : size_t) return String
    with
-     Pre    => Item /= Null_Ptr,
+     Pre    => Item /= Null_Ptr and then Length /= 0,
      Global => (Input => C_Memory);
 
    function Strlen (Item : chars_ptr) return size_t with
      Pre    => Item /= Null_Ptr,
      Global => (Input => C_Memory);
+   --  Return the length of a string contained in a chars_ptr
 
+   --  Update the contents of a chars_ptr with a char_array/String. If the
+   --  update exceeds the original length of the chars_ptr the Update_Error
+   --  exception is raised.
    procedure Update
      (Item   : chars_ptr;
       Offset : size_t;
@@ -120,10 +138,9 @@ is
    with
      Pre    =>
        Item /= Null_Ptr
-         and then
-      (if Check then
-         Strlen (Item) <= size_t'Last - Offset
-           and then Strlen (Item) + Offset <= Chars'Length),
+         and then (Chars'First /= 0 or else Chars'Last /= size_t'Last)
+         and then Chars'Length <= size_t'Last - Offset
+         and then Chars'Length + Offset <= Strlen (Item),
      Global => (In_Out => C_Memory);
 
    procedure Update
@@ -134,10 +151,8 @@ is
    with
      Pre    =>
        Item /= Null_Ptr
-         and then
-      (if Check then
-         Strlen (Item) <= size_t'Last - Offset
-           and then Strlen (Item) + Offset <= Str'Length),
+         and then Str'Length <= size_t'Last - Offset
+         and then Str'Length + Offset <= Strlen (Item),
      Global => (In_Out => C_Memory);
 
    Update_Error : exception;

@@ -30,6 +30,7 @@ else version (WatchOS)
 version (ARM)     version = ARM_Any;
 version (AArch64) version = ARM_Any;
 version (HPPA)    version = HPPA_Any;
+version (HPPA64)  version = HPPA_Any;
 version (MIPS32)  version = MIPS_Any;
 version (MIPS64)  version = MIPS_Any;
 version (PPC)     version = PPC_Any;
@@ -317,6 +318,7 @@ version (linux)
             SO_RCVLOWAT     = 0x1004,
             SO_RCVTIMEO     = 0x1006,
             SO_REUSEADDR    = 0x0004,
+            SO_REUSEPORT    = 0x0200,
             SO_SNDBUF       = 0x1001,
             SO_SNDLOWAT     = 0x1003,
             SO_SNDTIMEO     = 0x1005,
@@ -351,6 +353,7 @@ version (linux)
             SO_RCVLOWAT     = 0x1004,
             SO_RCVTIMEO     = 0x1006,
             SO_REUSEADDR    = 0x0004,
+            SO_REUSEPORT    = 0x0200,
             SO_SNDBUF       = 0x1001,
             SO_SNDLOWAT     = 0x1003,
             SO_SNDTIMEO     = 0x1005,
@@ -385,6 +388,7 @@ version (linux)
             SO_RCVLOWAT     = 16,
             SO_RCVTIMEO     = 18,
             SO_REUSEADDR    = 2,
+            SO_REUSEPORT    = 15,
             SO_SNDBUF       = 7,
             SO_SNDLOWAT     = 17,
             SO_SNDTIMEO     = 19,
@@ -454,6 +458,7 @@ version (linux)
             SO_RCVLOWAT     = 18,
             SO_RCVTIMEO     = 20,
             SO_REUSEADDR    = 2,
+            SO_REUSEPORT    = 15,
             SO_SNDBUF       = 7,
             SO_SNDLOWAT     = 19,
             SO_SNDTIMEO     = 21,
@@ -488,6 +493,7 @@ version (linux)
             SO_RCVLOWAT     = 18,
             SO_RCVTIMEO     = 20,
             SO_REUSEADDR    = 2,
+            SO_REUSEPORT    = 0x0200, //FIXME: the rest appear to be wrong
             SO_SNDBUF       = 7,
             SO_SNDLOWAT     = 19,
             SO_SNDTIMEO     = 21,
@@ -522,6 +528,42 @@ version (linux)
             SO_RCVLOWAT     = 18,
             SO_RCVTIMEO     = 20,
             SO_REUSEADDR    = 2,
+            SO_REUSEPORT    = 15,
+            SO_SNDBUF       = 7,
+            SO_SNDLOWAT     = 19,
+            SO_SNDTIMEO     = 21,
+            SO_TYPE         = 3
+        }
+    }
+    else version (LoongArch64)
+    {
+        enum
+        {
+            SOCK_DGRAM      = 2,
+            SOCK_SEQPACKET  = 5,
+            SOCK_STREAM     = 1
+        }
+
+        enum
+        {
+            SOL_SOCKET      = 1
+        }
+
+        enum
+        {
+            SO_ACCEPTCONN   = 30,
+            SO_BROADCAST    = 6,
+            SO_DEBUG        = 1,
+            SO_DONTROUTE    = 5,
+            SO_ERROR        = 4,
+            SO_KEEPALIVE    = 9,
+            SO_LINGER       = 13,
+            SO_OOBINLINE    = 10,
+            SO_RCVBUF       = 8,
+            SO_RCVLOWAT     = 18,
+            SO_RCVTIMEO     = 20,
+            SO_REUSEADDR    = 2,
+            SO_REUSEPORT    = 15,
             SO_SNDBUF       = 7,
             SO_SNDLOWAT     = 19,
             SO_SNDTIMEO     = 21,
@@ -1513,6 +1555,7 @@ else version (Solaris)
         SO_RCVLOWAT     = 0x1004,
         SO_RCVTIMEO     = 0x1006,
         SO_REUSEADDR    = 0x0004,
+        SO_REUSEPORT    = 0x100e,
         SO_SNDBUF       = 0x1001,
         SO_SNDLOWAT     = 0x1003,
         SO_SNDTIMEO     = 0x1005,

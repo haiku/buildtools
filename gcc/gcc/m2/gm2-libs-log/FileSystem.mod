@@ -1,6 +1,6 @@
 (* FileSystem.mod provides a PIM [234] FileSystem module.
 
-Copyright (C) 2004-2023 Free Software Foundation, Inc.
+Copyright (C) 2004-2025 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -28,9 +28,12 @@ IMPLEMENTATION MODULE FileSystem ;
 
 FROM M2RTS IMPORT InstallTerminationProcedure ;
 FROM Storage IMPORT ALLOCATE ;
-FROM SYSTEM IMPORT WORD, BYTE, ADDRESS, ADR ;
-IMPORT FIO, SFIO, libc, wrapc ;
-FROM DynamicStrings IMPORT String, InitString, ConCat, ConCatChar, KillString, string ;
+FROM SYSTEM IMPORT ADR, COFF_T ;
+IMPORT SFIO, libc, wrapc, StrLib ;
+
+FROM DynamicStrings IMPORT InitString, ConCat, ConCatChar,
+                           KillString, string, Dup ;
+
 FROM FormatStrings IMPORT Sprintf2 ;
 
 CONST
@@ -415,7 +418,7 @@ END Again ;
 
 PROCEDURE doModeChange (VAR f: File; mode: Flag) ;
 VAR
-   r: INTEGER ;
+   r: COFF_T ;
 BEGIN
    WITH f DO
       IF NOT (mode IN flags)
@@ -441,7 +444,7 @@ BEGIN
          END ;
          INCL (flags, opened) ;
          r := libc.lseek (fio,
-                          VAL (LONGINT, lowpos) + VAL (LONGINT, highpos) * VAL (LONGINT, MAX (CARDINAL)),
+                          VAL (COFF_T, lowpos) + VAL (COFF_T, highpos) * VAL (COFF_T, MAX (CARDINAL)),
                           SEEK_SET)
       END
    END
@@ -514,11 +517,11 @@ END Reset ;
 
 PROCEDURE SetPos (VAR f: File; high, low: CARDINAL) ;
 VAR
-   r: INTEGER ;
+   r: COFF_T ;
 BEGIN
    WITH f DO
-      r := libc.lseek(fio, VAL(LONGCARD, low) +
-                      (VAL(LONGCARD, MAX(CARDINAL)) * VAL(LONGCARD, high)),
+      r := libc.lseek(fio, VAL(COFF_T, low) +
+                      (VAL(COFF_T, MAX(CARDINAL)) * VAL(COFF_T, high)),
                       SEEK_SET) ;
       highpos := high ;
       lowpos := low ;
@@ -592,6 +595,37 @@ PROCEDURE FileNameChar (ch: CHAR) : CHAR ;
 BEGIN
    RETURN ch
 END FileNameChar ;
+
+
+(*
+   GetFileName - return a new string containing the name of the file.
+                 The string should be killed by the caller.
+*)
+
+PROCEDURE GetFileName (file: File) : String ;
+BEGIN
+   RETURN Dup (file.name)
+END GetFileName ;
+
+
+(*
+   WriteString - writes contents to file.  The nul char
+                 will terminate the contents string otherwise
+                 all characters 0..HIGH (contents) are written.
+*)
+
+PROCEDURE WriteString (file: File; contents: ARRAY OF CHAR) ;
+VAR
+   ch     : CHAR ;
+   i, high: CARDINAL ;
+BEGIN
+   i := 0 ;
+   high := StrLib.StrLen (contents) ;
+   WHILE i <= high DO
+      WriteChar (file, contents[i]) ;
+      INC (i)
+   END
+END WriteString ;
 
 
 (*

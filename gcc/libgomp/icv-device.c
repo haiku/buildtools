@@ -1,4 +1,4 @@
-/* Copyright (C) 2005-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2005-2025 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -27,12 +27,16 @@
    expected to replace.  */
 
 #include "libgomp.h"
+#include <limits.h>
 
 void
 omp_set_default_device (int device_num)
 {
-  struct gomp_task_icv *icv = gomp_icv (true);
-  icv->default_device_var = device_num;
+  if (device_num != GOMP_DEVICE_DEFAULT_OMP_61)
+    {
+      struct gomp_task_icv *icv = gomp_icv (true);
+      icv->default_device_var = device_num;
+    }
 }
 
 ialias (omp_set_default_device)
@@ -41,6 +45,9 @@ int
 omp_get_default_device (void)
 {
   struct gomp_task_icv *icv = gomp_icv (false);
+  if (icv->default_device_var == INT_MIN)
+    /* This implies OMP_TARGET_OFFLOAD=mandatory.  */
+    gomp_init_targets_once ();
   return icv->default_device_var;
 }
 

@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for IBM RS/6000.
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2025 Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 
    This file is part of GCC.
@@ -32,6 +32,7 @@ extern void init_cumulative_args (CUMULATIVE_ARGS *, tree, rtx, int, int, int,
 
 extern int easy_altivec_constant (rtx, machine_mode);
 extern bool xxspltib_constant_p (rtx, machine_mode, int *, int *);
+extern bool vspltisw_vupkhsw_constant_p (rtx, machine_mode, int * = nullptr);
 extern int vspltis_shifted (rtx);
 extern HOST_WIDE_INT const_vector_elt_as_int (rtx, unsigned int);
 extern bool macho_lo_sum_memory_operand (rtx, machine_mode);
@@ -125,7 +126,6 @@ extern void rs6000_emit_dot_insn (rtx dst, rtx src, int dot, rtx ccreg);
 extern bool rs6000_emit_set_const (rtx, rtx);
 extern bool rs6000_emit_cmove (rtx, rtx, rtx, rtx);
 extern bool rs6000_emit_int_cmove (rtx, rtx, rtx, rtx);
-extern int rs6000_emit_vector_cond_expr (rtx, rtx, rtx, rtx, rtx, rtx);
 extern void rs6000_emit_minmax (rtx, enum rtx_code, rtx, rtx);
 extern void rs6000_expand_atomic_compare_and_swap (rtx op[]);
 extern rtx swap_endian_selector_for_mode (machine_mode mode);
@@ -266,7 +266,8 @@ extern unsigned int rs6000_special_round_type_align (tree, unsigned int,
 						     unsigned int);
 extern unsigned int darwin_rs6000_special_round_type_align (tree, unsigned int,
 							    unsigned int);
-extern tree altivec_resolve_overloaded_builtin (location_t, tree, void *);
+extern tree altivec_resolve_overloaded_builtin (location_t, tree, void *,
+						bool = true);
 extern rtx rs6000_libcall_value (machine_mode);
 extern rtx rs6000_va_arg (tree, tree);
 extern int function_ok_for_sibcall (tree);
@@ -334,6 +335,8 @@ extern unsigned char rs6000_class_max_nregs[][LIM_REG_CLASSES];
 extern unsigned char rs6000_hard_regno_nregs[][FIRST_PSEUDO_REGISTER];
 
 extern bool rs6000_linux_float_exceptions_rounding_supported_p (void);
+extern unsigned rs6000_linux_libm_function_max_error (unsigned, machine_mode,
+						      bool);
 
 /* Pass management.  */
 namespace gcc { class context; }

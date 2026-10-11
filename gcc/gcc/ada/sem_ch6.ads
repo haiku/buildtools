@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -51,6 +51,10 @@ package Sem_Ch6 is
    --  and body declarations. Returns the defining entity for the
    --  specification N.
 
+   procedure Analyze_SPARK_Subprogram_Specification (N : Node_Id);
+   --  Check SPARK legality rules that require that the specification has been
+   --  analyzed already.
+
    function Can_Override_Operator (Subp : Entity_Id) return Boolean;
    --  Returns true if Subp can override a predefined operator
 
@@ -60,9 +64,8 @@ package Sem_Ch6 is
    --  respective counterparts.
 
    procedure Check_Delayed_Subprogram (Designator : Entity_Id);
-   --  Designator can be a E_Subprogram_Type, E_Procedure or E_Function. If a
-   --  type in its profile depends on a private type without a full
-   --  declaration, indicate that the subprogram or type is delayed.
+   --  Designator can be a E_Subprogram_Type, E_Procedure or E_Function. Set
+   --  Has_Delayed_Freeze on Designator if its freezing needs to be delayed.
 
    procedure Check_Discriminant_Conformance
      (N        : Node_Id;
@@ -281,9 +284,6 @@ package Sem_Ch6 is
    --  is done only in some cases where the actual subtype cannot change
    --  during execution of the subprogram. By setting the actual subtype
    --  once, we avoid recomputing it unnecessarily.
-
-   procedure Set_Formal_Mode (Formal_Id : Entity_Id);
-   --  Set proper Ekind to reflect formal mode (in, out, in out)
 
    function Subtype_Conformant
      (New_Id                   : Entity_Id;

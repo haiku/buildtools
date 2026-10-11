@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -81,8 +81,13 @@ package Opt is
    --  so that tests like Ada_Version >= Ada_95 are legitimate and useful.
    --  Think twice before using "="; Ada_Version >= Ada_2012 is more likely
    --  what you want, because it will apply to future versions of the language.
+   --
    --  Note that Ada_With_All_Extensions should always be last since it should
-   --  always be a superset of the other Ada versions.
+   --  always be a superset of the other Ada versions. Likewise, the
+   --  penultimate one should be Ada_With_Core_Extensions.
+   --
+   --  Use the ..._Extensions_Allowed functions below instead of referring
+   --  directly to Ada_With_..._Extensions.
 
    --  WARNING: There is a matching C declaration of this type in fe.h
 
@@ -100,6 +105,16 @@ package Opt is
 
    --  WARNING: There is a matching C declaration of this variable in fe.h
 
+   function All_Extensions_Allowed return Boolean is
+     (Ada_Version = Ada_With_All_Extensions);
+   --  True if GNAT specific language extensions are allowed. See GNAT RM for
+   --  details.
+
+   function Core_Extensions_Allowed return Boolean is
+     (Ada_Version >= Ada_With_Core_Extensions);
+   --  True if some but not all GNAT specific language extensions are allowed.
+   --  See GNAT RM for details.
+
    Ada_Version_Pragma : Node_Id := Empty;
    --  Reflects the Ada_xxx pragma that resulted in setting Ada_Version. Used
    --  to specialize error messages complaining about the Ada version in use.
@@ -112,7 +127,7 @@ package Opt is
    --  remains set to Ada_Version_Default). This is used in the rare cases
    --  (notably pragma Obsolescent) where we want the explicit version set.
 
-   Ada_Version_Runtime : Ada_Version_Type := Ada_With_All_Extensions;
+   Ada_Version_Runtime : constant Ada_Version_Type := Ada_With_All_Extensions;
    --  GNAT
    --  Ada version used to compile the runtime. Used to set Ada_Version (but
    --  not Ada_Version_Explicit) when compiling predefined or internal units.
@@ -194,16 +209,6 @@ package Opt is
    --  Unchecked_Conversion instantiations require checking based on annotated
    --  values.
 
-   Back_End_Handles_Limited_Types : Boolean;
-   --  This flag is set True if the back end can properly handle limited or
-   --  other by reference types, and avoid copies. If this flag is False, then
-   --  the front end does special expansion for if/case expressions to make
-   --  sure that no copy occurs. If the flag is True, then the expansion for
-   --  if and case expressions relies on the back end properly handling things.
-   --  Currently the default is False for all cases (set in gnat1drv). The
-   --  default can be modified using -gnatd.L (sets the flag True). This is
-   --  used to test the possibility of having the backend handle this.
-
    Back_End_Inlining : Boolean := False;
    --  GNAT
    --  Set True to activate inlining by back-end expansion. This is the normal
@@ -256,7 +261,9 @@ package Opt is
    --  (switch -B)
 
    CCG_Mode : Boolean := False;
-   --  Set to True when running as CCG (either via -gnatceg or via -emit-c)
+   --  GNAT, GNATBIND
+   --  Set to True when running as CCG (implicitly, via -emit-c, or -G for the
+   --  binder)
 
    Check_Aliasing_Of_Parameters : Boolean := False;
    --  GNAT
@@ -594,16 +601,6 @@ package Opt is
    --  Set to True to convert nonbinary modular additions into code
    --  that relies on the front-end expansion of operator Mod.
 
-   function All_Extensions_Allowed return Boolean is
-     (Ada_Version = Ada_With_All_Extensions);
-   --  True if GNAT specific language extensions are allowed. See GNAT RM for
-   --  details.
-
-   function Core_Extensions_Allowed return Boolean is
-     (Ada_Version >= Ada_With_Core_Extensions);
-   --  True if some but not all GNAT specific language extensions are allowed.
-   --  See GNAT RM for details.
-
    type External_Casing_Type is (
      As_Is,       -- External names cased as they appear in the Ada source
      Uppercase,   -- External names forced to all uppercase letters
@@ -704,10 +701,10 @@ package Opt is
    --  GNAT
    --  True if generating assembly instead of an object file, via the -S switch
 
-   Generate_C_Code : Boolean := False;
-   --  GNAT, GNATBIND
+   Generate_C_Header : Boolean := False;
+   --  GNAT
    --  If True, the Cprint circuitry to generate C code output is activated.
-   --  Set True by use of -gnateg or -gnatd.V for GNAT, and -G for GNATBIND.
+   --  Set True by use of -gnateg for GNAT.
 
    Generate_CodePeer_Messages : Boolean := False;
    --  GNAT
@@ -820,10 +817,6 @@ package Opt is
    --  If set True, then a Size attribute clause on an array is allowed to
    --  cause implicit packing instead of generating an error message. Set by
    --  use of pragma Implicit_Packing.
-
-   Include_Subprogram_In_Messages : Boolean := False;
-   --  GNAT
-   --  Set True to include the enclosing subprogram in compiler messages.
 
    Init_Or_Norm_Scalars : Boolean := False;
    --  GNAT, GNATBIND
@@ -1063,19 +1056,6 @@ package Opt is
    --  GNATMAKE
    --  Set to True if minimal recompilation mode requested
 
-   Minimize_Expression_With_Actions : Boolean := False;
-   --  GNAT
-   --  If True, minimize the use of N_Expression_With_Actions node.
-   --  This can be used in particular on some back-ends where this node is
-   --  difficult to support.
-
-   Modify_Tree_For_C : Boolean := False;
-   --  GNAT
-   --  If this switch is set True (currently it is set only by -gnatd.V), then
-   --  certain meaning-preserving transformations are applied to the tree to
-   --  make it easier to interface with back ends that implement C semantics.
-   --  There is a section in Sinfo which describes the transformations made.
-
    Multiple_Unit_Index : Nat := 0;
    --  GNAT
    --  This is set non-zero if the current unit is being compiled in multiple
@@ -1117,6 +1097,10 @@ package Opt is
    --  GNAT, GNATBIND
    --  This flag is set True if a No_Run_Time pragma is encountered. See spec
    --  of Rtsfind for a full description of handling of this pragma.
+
+   Interrupts_System_By_Default : Boolean := False;
+   --  GNATBIND
+   --  Set True if pragma Interrupts_System_By_Default is seen.
 
    No_Split_Units : Boolean := False;
    --  GPRBUILD
@@ -1337,6 +1321,11 @@ package Opt is
    --  GNATPREP
    --  Set to True if -C switch used.
 
+   Reverse_Bit_Order_Threshold : Int := -1;
+   --  GNAT
+   --  Set to the threshold from which the RM 13.5.1(13.3/2) clause applies,
+   --  or -1 if the size of the largest machine scalar is to be used.
+
    RTS_Lib_Path_Name : String_Ptr := null;
    RTS_Src_Path_Name : String_Ptr := null;
    --  GNAT
@@ -1350,6 +1339,19 @@ package Opt is
    Run_Path_Option : Boolean := True;
    --  GNATMAKE, GNATLINK
    --  Set to False when no run_path_option should be issued to the linker
+
+   SARIF_File : Boolean := False;
+   --  GNAT
+   --  Output error and warning messages in SARIF format. Set to true when the
+   --  backend option "-fdiagnostics-format=sarif-file" is found on the
+   --  command line. The SARIF file is written to the file named:
+   --  <source_file>.gnat.sarif
+
+   SARIF_Output : Boolean := False;
+   --  GNAT
+   --  Output error and warning messages in SARIF format. Set to true when the
+   --  backend option "-fdiagnostics-format=sarif-stderr" is found on the
+   --  command line.
 
    Search_Directory_Present : Boolean := False;
    --  GNAT
@@ -1538,12 +1540,6 @@ package Opt is
    --  Tolerate time stamp and other consistency errors. If this flag is set to
    --  True (-t), then inconsistencies result in warnings rather than errors.
 
-   Transform_Function_Array : Boolean := False;
-   --  GNAT
-   --  If this switch is set True, then functions returning constrained arrays
-   --  are transformed into a procedure with an out parameter, and all calls
-   --  are updated accordingly.
-
    Treat_Categorization_Errors_As_Warnings : Boolean := False;
    --  Normally categorization errors are true illegalities. If this switch
    --  is set, then such errors result in warning messages rather than error
@@ -1670,6 +1666,11 @@ package Opt is
    --  ignored (except for legality checks), unless we are in GNATprove_Mode,
    --  which requires pragma Warnings to be stored for the formal verification
    --  backend.
+
+   Info_Suppressed : Boolean := False;
+   --  GNAT
+   --  Controls whether informational messages are suppressed. Set True by
+   --  -gnatis. If True, informational messages will not be printed.
 
    Wide_Character_Encoding_Method : WC_Encoding_Method := WCEM_Brackets;
    --  GNAT, GNATBIND

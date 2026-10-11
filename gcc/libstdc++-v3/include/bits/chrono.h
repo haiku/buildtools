@@ -1,6 +1,6 @@
 // chrono::duration and chrono::time_point -*- C++ -*-
 
-// Copyright (C) 2008-2023 Free Software Foundation, Inc.
+// Copyright (C) 2008-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,25 +30,31 @@
 #ifndef _GLIBCXX_CHRONO_H
 #define _GLIBCXX_CHRONO_H 1
 
+#ifdef _GLIBCXX_SYSHDR
 #pragma GCC system_header
+#endif
 
 #if __cplusplus >= 201103L
 
 #include <ratio>
 #include <type_traits>
 #include <limits>
-#include <ctime>
+#if _GLIBCXX_HOSTED
+# include <ctime>
+#endif
 #include <bits/parse_numbers.h> // for literals support.
 #if __cplusplus >= 202002L
 # include <concepts>
 # include <compare>
 #endif
 
+#include <bits/version.h>
+
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L && _GLIBCXX_HOSTED
   namespace filesystem { struct __file_clock; };
 #endif
 
@@ -370,9 +376,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { };
 #endif // C++20
 
-#if __cplusplus >= 201703L
-# define __cpp_lib_chrono 201611L
-
+#if __cplusplus >= 201703L // C++ >= 17
     /** Convert a `duration` to type `ToDur` and round down.
      *
      * If the duration cannot be represented exactly in the result type,
@@ -466,7 +470,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     // Make chrono::ceil<D> also usable as chrono::__detail::ceil<D>.
     namespace __detail { using chrono::ceil; }
 
-#else // ! C++17
+#else // ! __glibcxx_chrono
 
     // We want to use ceil even when compiling for earlier standards versions.
     // C++11 only allows a single statement in a constexpr function, so we
@@ -488,7 +492,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  return __detail::__ceil_impl(chrono::duration_cast<_ToDur>(__d), __d);
 	}
     }
-#endif // C++17
+#endif // __glibcxx_chrono
 
     /// duration_values
     template<typename _Rep>
@@ -873,7 +877,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     /// @}
 
     /// @cond undocumented
-#ifdef _GLIBCXX_USE_C99_STDINT_TR1
+#ifdef _GLIBCXX_USE_C99_STDINT
 # define _GLIBCXX_CHRONO_INT64_T int64_t
 #elif defined __INT64_TYPE__
 # define _GLIBCXX_CHRONO_INT64_T __INT64_TYPE__
@@ -1196,6 +1200,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     /// @}
     /// @} group chrono
 
+#if _GLIBCXX_HOSTED
     // Clocks.
 
     // Why nanosecond resolution as the default?
@@ -1239,6 +1244,7 @@ _GLIBCXX_BEGIN_INLINE_ABI_NAMESPACE(_V2)
       now() noexcept;
 
       // Map to C API
+      [[__gnu__::__always_inline__]]
       static std::time_t
       to_time_t(const time_point& __t) noexcept
       {
@@ -1246,6 +1252,7 @@ _GLIBCXX_BEGIN_INLINE_ABI_NAMESPACE(_V2)
 			   (__t.time_since_epoch()).count());
       }
 
+      [[__gnu__::__always_inline__]]
       static time_point
       from_time_t(std::time_t __t) noexcept
       {
@@ -1310,11 +1317,18 @@ _GLIBCXX_END_INLINE_ABI_NAMESPACE(_V2)
     template<> inline constexpr bool is_clock_v<file_clock> = true;
     /// @}
 #endif // C++20
+#elif __cplusplus >= 202002L
+    // Define a fake clock like chrono::local_t so that sys_time etc.
+    // can be used for freestanding.
+    struct __sys_t;
+    template<typename _Duration>
+      using sys_time = time_point<__sys_t, _Duration>;
+    using sys_seconds = sys_time<seconds>;
+    using sys_days = sys_time<days>;
+#endif // _GLIBCXX_HOSTED
   } // namespace chrono
 
-#if __cplusplus >= 201402L
-#define __cpp_lib_chrono_udls 201304L
-
+#ifdef __glibcxx_chrono_udls // C++ >= 14
   inline namespace literals
   {
   /** ISO C++ 2014  namespace for suffixes for duration literals.
@@ -1435,9 +1449,9 @@ _GLIBCXX_END_INLINE_ABI_NAMESPACE(_V2)
   {
     using namespace literals::chrono_literals;
   } // namespace chrono
-#endif // C++14
+#endif // __glibcxx_chrono_udls
 
-#if __cplusplus >= 201703L
+#if __cplusplus >= 201703L && _GLIBCXX_HOSTED
   namespace filesystem
   {
     struct __file_clock
@@ -1499,7 +1513,7 @@ _GLIBCXX_END_INLINE_ABI_NAMESPACE(_V2)
 	}
     };
   } // namespace filesystem
-#endif // C++17
+#endif // C++17 && HOSTED
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std

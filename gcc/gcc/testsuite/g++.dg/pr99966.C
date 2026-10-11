@@ -1,6 +1,7 @@
 // { dg-do compile }
 // { dg-require-effective-target c++17 }
 // { dg-options "-O2 -fdump-tree-vrp1" }
+// { dg-skip-if "requires hosted libstdc++ for cassert" { ! hostedlib } }
 
 // Test we can remove a range bound after the assert.
 
@@ -20,4 +21,4 @@ uint64_t f(std::vector<uint64_t>& data, size_t start, size_t end){
     return total;
 }
 
-/* { dg-final { scan-tree-dump-not "throw" "vrp1"} } */
+/* { dg-final { scan-tree-dump-not "throw" "vrp1" { xfail hppa*64*-*-* } } } */

@@ -10,6 +10,8 @@ module rt.aApplyR;
 
 import core.internal.utf;
 
+debug (apply) import core.stdc.stdio : printf;
+
 /**********************************************/
 /* 1 argument versions */
 
@@ -34,10 +36,10 @@ Params:
 Returns:
     non-zero when the loop was exited through a `break`
 */
-extern (C) int _aApplyRcd1(in char[] aa, dg_t dg)
+extern (C) int _aApplyRcd1(scope const(char)[] aa, dg_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRcd1(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRcd1(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d;
 
@@ -107,10 +109,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRwd1(in wchar[] aa, dg_t dg)
+extern (C) int _aApplyRwd1(scope const(wchar)[] aa, dg_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRwd1(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRwd1(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d;
 
@@ -170,10 +172,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRcw1(in char[] aa, dg_t dg)
+extern (C) int _aApplyRcw1(scope const(char)[] aa, dg_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRcw1(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRcw1(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d;
         wchar w;
@@ -256,10 +258,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRwc1(in wchar[] aa, dg_t dg)
+extern (C) int _aApplyRwc1(scope const(wchar)[] aa, dg_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRwc1(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRwc1(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d;
         char c;
@@ -340,10 +342,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRdc1(in dchar[] aa, dg_t dg)
+extern (C) int _aApplyRdc1(scope const(dchar)[] aa, dg_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRdc1(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRdc1(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0;)
     {   dchar d = aa[--i];
         char c;
@@ -418,10 +420,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRdw1(in dchar[] aa, dg_t dg)
+extern (C) int _aApplyRdw1(scope const(dchar)[] aa, dg_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRdw1(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRdw1(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d = aa[--i];
         wchar w;
@@ -502,12 +504,12 @@ extern (D) alias dg2_t = int delegate(void* i, void* c);
 /**
 Variants of _aApplyRXXX that include a loop index.
 */
-extern (C) int _aApplyRcd2(in char[] aa, dg2_t dg)
+extern (C) int _aApplyRcd2(scope const(char)[] aa, dg2_t dg)
 {   int result;
     size_t i;
     size_t len = aa.length;
 
-    debug(apply) printf("_aApplyRcd2(), len = %d\n", len);
+    debug(apply) printf("_aApplyRcd2(), len = %zd\n", len);
     for (i = len; i != 0; )
     {   dchar d;
 
@@ -578,10 +580,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRwd2(in wchar[] aa, dg2_t dg)
+extern (C) int _aApplyRwd2(scope const(wchar)[] aa, dg2_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRwd2(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRwd2(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d;
 
@@ -643,10 +645,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRcw2(in char[] aa, dg2_t dg)
+extern (C) int _aApplyRcw2(scope const(char)[] aa, dg2_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRcw2(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRcw2(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d;
         wchar w;
@@ -731,10 +733,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRwc2(in wchar[] aa, dg2_t dg)
+extern (C) int _aApplyRwc2(scope const(wchar)[] aa, dg2_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRwc2(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRwc2(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d;
         char c;
@@ -817,10 +819,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRdc2(in dchar[] aa, dg2_t dg)
+extern (C) int _aApplyRdc2(scope const(dchar)[] aa, dg2_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRdc2(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRdc2(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d = aa[--i];
         char c;
@@ -896,10 +898,10 @@ unittest
 }
 
 /// ditto
-extern (C) int _aApplyRdw2(in dchar[] aa, dg2_t dg)
+extern (C) int _aApplyRdw2(scope const(dchar)[] aa, dg2_t dg)
 {   int result;
 
-    debug(apply) printf("_aApplyRdw2(), len = %d\n", aa.length);
+    debug(apply) printf("_aApplyRdw2(), len = %zd\n", aa.length);
     for (size_t i = aa.length; i != 0; )
     {   dchar d = aa[--i];
         wchar w;

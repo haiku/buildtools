@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -20,7 +20,6 @@
 #define RUST_AST_RESOLVE_STRUCT_EXPR_FIELD
 
 #include "rust-ast-resolve-base.h"
-#include "rust-ast-full.h"
 
 namespace Rust {
 namespace Resolver {
@@ -32,7 +31,7 @@ class ResolveStructExprField : public ResolverBase
   using Rust::Resolver::ResolverBase::visit;
 
 public:
-  static void go (AST::StructExprField *field, const CanonicalPath &prefix,
+  static void go (AST::StructExprField &field, const CanonicalPath &prefix,
 		  const CanonicalPath &canonical_prefix);
 
   void visit (AST::StructExprFieldIdentifierValue &field) override;

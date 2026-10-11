@@ -1,4 +1,4 @@
-/* Copyright (C) 1988-2023 Free Software Foundation, Inc.
+/* Copyright (C) 1988-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -189,6 +189,7 @@ class general_scalar_chain : public scalar_chain
  private:
   void convert_insn (rtx_insn *insn) final override;
   int vector_const_cost (rtx exp);
+  rtx convert_rotate (enum rtx_code, rtx op0, rtx op1, rtx_insn *insn);
 };
 
 class timode_scalar_chain : public scalar_chain

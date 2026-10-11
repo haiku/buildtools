@@ -1,5 +1,5 @@
 /* d-convert.cc -- Data type conversion routines.
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
+   Copyright (C) 2006-2025 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -257,7 +257,7 @@ convert (tree type, tree expr)
     return fold_convert (type, expr);
   if (TREE_CODE (TREE_TYPE (expr)) == ERROR_MARK)
     return error_mark_node;
-  if (TREE_CODE (TREE_TYPE (expr)) == VOID_TYPE)
+  if (VOID_TYPE_P (TREE_TYPE (expr)))
     {
       error ("void value not ignored as it ought to be");
       return error_mark_node;
@@ -270,8 +270,7 @@ convert (tree type, tree expr)
 
     case INTEGER_TYPE:
     case ENUMERAL_TYPE:
-      if (TREE_CODE (etype) == POINTER_TYPE
-	  || TREE_CODE (etype) == REFERENCE_TYPE)
+      if (POINTER_TYPE_P (etype))
 	{
 	  if (integer_zerop (e))
 	    return build_int_cst (type, 0);
@@ -300,7 +299,7 @@ convert (tree type, tree expr)
       return fold (convert_to_real (type, e));
 
     case COMPLEX_TYPE:
-      if (TREE_CODE (etype) == REAL_TYPE && TYPE_IMAGINARY_FLOAT (etype))
+      if (SCALAR_FLOAT_TYPE_P (etype) && TYPE_IMAGINARY_FLOAT (etype))
 	return fold_build2 (COMPLEX_EXPR, type,
 			    build_zero_cst (TREE_TYPE (type)),
 			    convert (TREE_TYPE (type), expr));
@@ -385,7 +384,7 @@ convert_expr (tree exp, Type *etype, Type *totype)
     case TY::Tstruct:
       if (tbtype->ty == TY::Tstruct)
 	{
-	  if (totype->size () == etype->size ())
+	  if (dmd::size (totype) == dmd::size (etype))
 	    {
 	      /* Allowed to cast to structs with same type size.  */
 	      result = build_vconvert (build_ctype (totype), exp);
@@ -468,10 +467,10 @@ convert_expr (tree exp, Type *etype, Type *totype)
       else if (tbtype->ty == TY::Tarray)
 	{
 	  dinteger_t dim = ebtype->isTypeSArray ()->dim->toInteger ();
-	  dinteger_t esize = ebtype->nextOf ()->size ();
-	  dinteger_t tsize = tbtype->nextOf ()->size ();
+	  dinteger_t esize = dmd::size (ebtype->nextOf ());
+	  dinteger_t tsize = dmd::size (tbtype->nextOf ());
 
-	  tree ptrtype = build_ctype (tbtype->nextOf ()->pointerTo ());
+	  tree ptrtype = build_ctype (dmd::pointerTo (tbtype->nextOf ()));
 
 	  if (esize != tsize)
 	    {
@@ -499,10 +498,11 @@ convert_expr (tree exp, Type *etype, Type *totype)
 	{
 	  /* And allows casting a static array to any struct type too.
 	     Type sizes should have already been checked by the frontend.  */
-	  gcc_assert (totype->size () == etype->size ());
+	  gcc_assert (dmd::size (totype) == dmd::size (etype));
 	  result = build_vconvert (build_ctype (totype), exp);
 	}
-      else if (tbtype->ty == TY::Tvector && tbtype->size () == ebtype->size ())
+      else if (tbtype->ty == TY::Tvector
+	       && dmd::size (tbtype) == dmd::size (ebtype))
 	{
 	  /* Allow casting from array to vector as if its an unaligned load.  */
 	  tree type = build_ctype (totype);
@@ -527,8 +527,8 @@ convert_expr (tree exp, Type *etype, Type *totype)
       else if (tbtype->ty == TY::Tarray)
 	{
 	  /* Assume tvoid->size() == 1.  */
-	  dinteger_t fsize = ebtype->nextOf ()->toBasetype ()->size ();
-	  dinteger_t tsize = tbtype->nextOf ()->toBasetype ()->size ();
+	  dinteger_t fsize = dmd::size (ebtype->nextOf ()->toBasetype ());
+	  dinteger_t tsize = dmd::size (tbtype->nextOf ()->toBasetype ());
 
 	  if (fsize != tsize)
 	    {
@@ -595,7 +595,7 @@ convert_expr (tree exp, Type *etype, Type *totype)
     case TY::Tvector:
       if (tbtype->ty == TY::Tsarray)
 	{
-	  if (tbtype->size () == ebtype->size ())
+	  if (dmd::size (tbtype) == dmd::size (ebtype))
 	    return build_vconvert (build_ctype (totype), exp);
 	}
       break;
@@ -603,8 +603,8 @@ convert_expr (tree exp, Type *etype, Type *totype)
     default:
       /* All casts between imaginary and non-imaginary result in 0.0,
 	 except for casts between complex and imaginary types.  */
-      if (!ebtype->iscomplex () && !tbtype->iscomplex ()
-	  && (ebtype->isimaginary () != tbtype->isimaginary ()))
+      if (!ebtype->isComplex () && !tbtype->isComplex ()
+	  && (ebtype->isImaginary () != tbtype->isImaginary ()))
 	{
 	  warning (OPT_Wcast_result,
 		   "cast from %qs to %qs will produce zero result",
@@ -663,7 +663,7 @@ convert_for_rvalue (tree expr, Type *etype, Type *totype)
       && ebtype->ty == TY::Tsarray
       && tbtype->nextOf ()->ty == ebtype->nextOf ()->ty
       && INDIRECT_REF_P (expr)
-      && CONVERT_EXPR_CODE_P (TREE_CODE (TREE_OPERAND (expr, 0)))
+      && CONVERT_EXPR_P (TREE_OPERAND (expr, 0))
       && TREE_CODE (TREE_OPERAND (TREE_OPERAND (expr, 0), 0)) == ADDR_EXPR)
     {
       /* If expression is a vector that was casted to an array either by
@@ -688,7 +688,7 @@ convert_for_rvalue (tree expr, Type *etype, Type *totype)
 	      CONSTRUCTOR_APPEND_ELT (elms, index, value);
 	    }
 
-	  return build_constructor (build_ctype (totype), elms);
+	  return build_padded_constructor (build_ctype (totype), elms);
 	}
     }
 
@@ -728,12 +728,12 @@ check_valist_conversion (Expression *expr, Type *totype, bool in_assignment)
   if (VarExp *ve = expr->isVarExp ())
     {
       decl = ve->var;
-      type = ve->var->type->nextOf ()->pointerTo ();
+      type = dmd::pointerTo (ve->var->type->nextOf ());
     }
   else if (SymOffExp *se = expr->isSymOffExp ())
     {
       decl = se->var;
-      type = se->var->type->nextOf ()->pointerTo ()->pointerTo ();
+      type = dmd::pointerTo (dmd::pointerTo (se->var->type->nextOf ()));
     }
 
   /* Should not be called unless is_valist_parameter_type also matched.  */
@@ -741,7 +741,7 @@ check_valist_conversion (Expression *expr, Type *totype, bool in_assignment)
 	      && valist_array_p (decl->type));
 
   /* OK if conversion between types is allowed.  */
-  if (type->implicitConvTo (totype) != MATCH::nomatch)
+  if (dmd::implicitConvTo (type, totype) != MATCH::nomatch)
     return;
 
   if (in_assignment)
@@ -788,7 +788,7 @@ convert_for_assignment (Expression *expr, Type *totype, bool literalp)
 	  TypeSArray *sa_type = tbtype->isTypeSArray ();
 	  uinteger_t count = sa_type->dim->toUInteger ();
 
-	  tree ctor = build_constructor (build_ctype (totype), NULL);
+	  tree ctor = build_padded_constructor (build_ctype (totype), NULL);
 	  if (count)
 	    {
 	      vec <constructor_elt, va_gc> *ce = NULL;
@@ -814,7 +814,7 @@ convert_for_assignment (Expression *expr, Type *totype, bool literalp)
 
   /* D Front end uses IntegerExp(0) to mean zero-init an array or structure.  */
   if ((tbtype->ty == TY::Tsarray || tbtype->ty == TY::Tstruct)
-      && ebtype->isintegral ())
+      && ebtype->isIntegral ())
     {
       tree ret = build_expr (expr, false, literalp);
       gcc_assert (integer_zerop (ret));
@@ -958,7 +958,7 @@ d_array_convert (Expression *exp)
 
   if (tb->ty == TY::Tsarray)
     {
-      Type *totype = tb->nextOf ()->arrayOf ();
+      Type *totype = dmd::arrayOf (tb->nextOf ());
       return convert_expr (build_expr (exp), exp->type, totype);
     }
 
@@ -987,7 +987,7 @@ d_array_convert (Type *etype, Expression *exp)
 	  expr = compound_expr (modify_expr (var, expr), var);
 	}
 
-      return d_array_value (build_ctype (exp->type->arrayOf ()),
+      return d_array_value (build_ctype (dmd::arrayOf (exp->type)),
 			    size_int (1), build_address (expr));
     }
   else

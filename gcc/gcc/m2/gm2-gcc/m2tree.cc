@@ -1,6 +1,6 @@
 /* m2tree.cc provides a simple interface to GCC tree queries and skips.
 
-Copyright (C) 2012-2023 Free Software Foundation, Inc.
+Copyright (C) 2012-2025 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius@glam.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -29,7 +29,7 @@ along with GNU Modula-2; see the file COPYING3.  If not see
 bool
 m2tree_is_var (tree var)
 {
-  return TREE_CODE (var) == VAR_DECL;
+  return VAR_P (var);
 }
 
 bool

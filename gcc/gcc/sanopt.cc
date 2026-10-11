@@ -1,5 +1,5 @@
 /* Optimize and expand sanitizer functions.
-   Copyright (C) 2014-2023 Free Software Foundation, Inc.
+   Copyright (C) 2014-2025 Free Software Foundation, Inc.
    Contributed by Marek Polacek <polacek@redhat.com>
 
 This file is part of GCC.
@@ -1012,8 +1012,7 @@ sanitize_asan_mark_unpoison (void)
   /* 2) Propagate the information to all reachable blocks.  */
   while (!bitmap_empty_p (worklist))
     {
-      unsigned i = bitmap_first_set_bit (worklist);
-      bitmap_clear_bit (worklist, i);
+      unsigned i = bitmap_clear_first_set_bit (worklist);
       basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);
       gcc_assert (bb);
 
@@ -1109,8 +1108,7 @@ sanitize_asan_mark_poison (void)
   /* 2) Propagate the information to all definitions blocks.  */
   while (!bitmap_empty_p (worklist))
     {
-      unsigned i = bitmap_first_set_bit (worklist);
-      bitmap_clear_bit (worklist, i);
+      unsigned i = bitmap_clear_first_set_bit (worklist);
       basic_block bb = BASIC_BLOCK_FOR_FN (cfun, i);
       gcc_assert (bb);
 
@@ -1321,6 +1319,10 @@ pass_sanopt::execute (function *fun)
 	      contains_asan_mark = true;
 	  }
     }
+
+  if (asan_num_accesses || contains_asan_mark || asan_sanitize_stack_p ()
+      || hwasan_sanitize_stack_p ())
+    asan_maybe_insert_dynamic_shadow_at_function_entry (fun);
 
   if (contains_asan_mark)
     {

@@ -1,7 +1,7 @@
 /* Test C23 variadic functions with no named parameters, or last named
    parameter with a declaration not allowed in C17.  Execution tests.  */
 /* { dg-do run } */
-/* { dg-options "-std=c2x -pedantic-errors" } */
+/* { dg-options "-std=c23 -pedantic-errors" } */
 
 #include <stdarg.h>
 
@@ -29,7 +29,7 @@ struct s
 g (...)
 {
   va_list ap;
-  va_start (ap, random ! ignored, ignored ** text);
+  va_start (ap, random ! ignored, ignored ** text);	/* { dg-warning "'va_start' macro used with additional arguments other than identifier of the last named argument" } */
   for (int i = 0; i < 10; i++)
     if (va_arg (ap, double) != i)
       abort ();

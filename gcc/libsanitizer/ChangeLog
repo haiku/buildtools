@@ -1,6 +1,240 @@
-2024-05-21  Release Manager
+2026-06-12  Release Manager
 
-	* GCC 13.3.0 released.
+	* GCC 15.3.0 released.
+
+2026-05-03  Marian Buschsieweke  <maribu@users.noreply.github.com>
+
+	Backported from master:
+	2026-04-21  Marian Buschsieweke  <maribu@users.noreply.github.com>
+
+	PR sanitizer/124248
+	* sanitizer_common/sanitizer_platform_limits_posix.cpp (struct_sock_fprog_sz):
+	Make available on non-glibc Linux systems.
+
+2026-04-30  Jakub Jelinek  <jakub@redhat.com>
+
+	Backported from master:
+	2026-04-29  Jakub Jelinek  <jakub@redhat.com>
+
+	* sanitizer_common/sanitizer_platform_limits_posix.cpp: Cherry picked
+	from LLVM commit 3dc4fd6dd41100f051a63642f449b16324389c96.
+
+2025-08-08  Release Manager
+
+	* GCC 15.2.0 released.
+
+2025-05-02  Florian Weimer  <fweimer@redhat.com>
+	    Tom Stellard  <tstellar@redhat.com>
+
+	* sanitizer_common/sanitizer_common_interceptors_ioctl.inc: Cherry
+	picked from LLVM commit 59978b21ad9c65276ee8e14f26759691b8a65763.
+	* sanitizer_common/sanitizer_platform_limits_posix.cpp: Likewise.
+	* sanitizer_common/sanitizer_platform_limits_posix.h: Likewise.
+
+2025-04-25  Release Manager
+
+	* GCC 15.1.0 released.
+
+2025-01-06  Stefan Schulze Frielinghaus  <stefansf@gcc.gnu.org>
+
+	PR sanitizer/117725
+	* sanitizer_common/sanitizer_common_interceptors.inc: Cherry
+	picked from LLVM commit 65a2eb0b1589590ae78cc1e5f05cd004b3b3bec5.
+
+2025-01-06  Vitaly Buka  <vitalybuka@google.com>
+	    Stefan Schulze Frielinghaus  <stefansf@linux.ibm.com>
+
+	PR sanitizer/117725
+	* asan/asan_interceptors.cpp: Cherry picked from LLVM commit
+	6dec33834d1fd89f16e271dde9607c1de9554144.
+	* sanitizer_common/sanitizer_common_interceptors.inc: Ditto.
+
+2025-01-06  Stefan Schulze Frielinghaus  <stefansf@gcc.gnu.org>
+
+	PR sanitizer/117725
+	* interception/interception.h: Cherry picked from LLVM commit
+	ce44640fe29550461120d22b0358e6cac4aed822.
+	* sanitizer_common/sanitizer_internal_defs.h: Ditto.
+
+2025-01-06  Stefan Schulze Frielinghaus  <stefansf@gcc.gnu.org>
+
+	PR sanitizer/117725
+	* asan/asan_interceptors.cpp: Cherry picked LLVM commit
+	9a156f6b2b0c892d8713ba907f07f027b24953d8.
+	* asan/asan_interceptors.h: Ditto.
+	* asan/asan_interceptors_memintrinsics.h: Ditto.
+	* sanitizer_common/sanitizer_common_interceptors.inc: Ditto.
+	* sanitizer_common/sanitizer_common_interceptors_memintrinsics.inc:
+	Ditto.
+	* sanitizer_common/sanitizer_platform_limits_posix.h: Ditto.
+	* tsan/tsan_interceptors_posix.cpp: Ditto.
+
+2024-11-25  Jakub Jelinek  <jakub@redhat.com>
+
+	PR sanitizer/117732
+	* asan/Makefile.am (AM_CXXFLAGS): Remove -pedantic.  Formatting fix.
+	(asan_files): Formatting fix.
+	* hwasan/Makefile.am (AM_CXXFLAGS): Remove -pedantic.  Formatting fix.
+	* interception/Makefile.am (AM_CXXFLAGS): Likewise.
+	(interception_files): Formatting fix.
+	* libbacktrace/Makefile.am: Update copyright years.
+	* lsan/Makefile.am (AM_CXXFLAGS): Remove -pedantic.  Formatting fix.
+	* sanitizer_common/Makefile.am (AM_CXXFLAGS): Likewise.
+	(libsanitizer_common_la_DEPENDENCIES): Formatting fix.
+	* tsan/Makefile.am (AM_CXXFLAGS): Remove -pedantic.  Formatting fix.
+	* ubsan/Makefile.am (AM_CXXFLAGS): Likewise.
+	* asan/Makefile.in: Regenerate.
+	* hwasan/Makefile.in: Regenerate.
+	* interception/Makefile.in: Regenerate.
+	* libbacktrace/Makefile.in: Regenerate.
+	* lsan/Makefile.in: Regenerate.
+	* sanitizer_common/Makefile.in: Regenerate.
+	* tsan/Makefile.in: Regenerate.
+	* ubsan/Makefile.in: Regenerate.
+
+2024-11-22  Andrew Pinski  <quic_apinski@quicinc.com>
+
+	PR sanitizer/117731
+	* asan/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* asan/Makefile.in: Regenerate.
+	* hwasan/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* hwasan/Makefile.in: Regenerate.
+	* interception/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* interception/Makefile.in: Regenerate.
+	* libbacktrace/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* libbacktrace/Makefile.in (AM_CXXFLAGS): Regenerate.
+	* lsan/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* lsan/Makefile.in: Regenerate.
+	* sanitizer_common/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* sanitizer_common/Makefile.in: Regenerate.
+	* tsan/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* tsan/Makefile.in: Regenerate.
+	* ubsan/Makefile.am (AM_CXXFLAGS): Replace gnu++14 with gnu++17.
+	* ubsan/Makefile.in: Regenerate.
+
+2024-09-05  Jakub Jelinek  <jakub@redhat.com>
+
+	* sanitizer_common/sanitizer_asm.h: Cherry-pick llvm-project revision
+	1c792d24e0a228ad49cc004a1c26bbd7cd87f030.
+	* interception/interception.h: Likewise.
+
+2024-02-16  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR sanitizer/113785
+	* asan/asan_interceptors.cpp: Cherry-pick llvm-project revision
+	8c2033719a843a1880427a5e8caa5563248bce78.
+
+2024-02-06  chenguoqi  <chenguoqi@loongson.cn>
+
+	* configure.tgt: Enable tsan and lsan for loongarch64.
+	* tsan/Makefile.am (EXTRA_libtsan_la_SOURCES): Add
+	tsan_rtl_loongarch64.S.
+	* tsan/Makefile.in: Regenerate.
+
+2024-01-19  Daniel Cederman  <cederman@gaisler.com>
+
+	* sanitizer_common/Makefile.am (DEFS): Add @AS_SYM_ASSIGN_DEFS@.
+	* sanitizer_common/Makefile.in: Regenerate.
+
+2024-01-17  YunQiang Su  <yunqiang.su@cipunited.com>
+
+	* interception/interception.h (substitution_##func_name):
+	Use macro C_ASM_TAIL_CALL.
+	* sanitizer_common/sanitizer_asm.h: Define C_ASM_TAIL_CALL
+	for MIPS with help of t9.
+
+2024-01-02  Andreas Schwab  <schwab@suse.de>
+
+	* configure.tgt (riscv64-*-linux*): Enable LSan and TSan.
+
+2023-11-28  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* LOCAL_PATCHES: Update.
+
+2023-11-28  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR sanitizer/112563
+	* sanitizer_common/sanitizer_redefine_builtins.h: Check
+	HAVE_AS_SYM_ASSIGN.
+
+2023-11-28  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	PR sanitizer/112563
+	* configure.ac (libsanitizer_cv_as_sym_assign): Check for
+	assembler symbol assignment support.
+	* configure: Regenerate.
+	* asan/Makefile.am (DEFS): Add @AS_SYM_ASSIGN_DEFS@.
+	* Makefile.in, asan/Makefile.in, hwasan/Makefile.in,
+	interception/Makefile.in, libbacktrace/Makefile.in,
+	lsan/Makefile.in, sanitizer_common/Makefile.in, tsan/Makefile.in,
+	ubsan/Makefile.in: Regenerate.
+
+2023-11-21  Jakub Jelinek  <jakub@redhat.com>
+
+	PR sanitizer/112562
+	* sanitizer_common/sanitizer_asm.h: Cherry-pick llvm-project revision
+	a855a16a02e76a0f4192c038bb64f3773947a2f7.
+	* interception/interception.h: Likewise.
+
+2023-11-18  Francois-Xavier Coudert  <fxcoudert@gcc.gnu.org>
+
+	* asan/asan_mac.cpp: Protect Apple blocks behind the
+	MISSING_BLOCKS_SUPPORT macro.
+
+2023-11-15  Jakub Jelinek  <jakub@redhat.com>
+
+	* LOCAL_PATCHES: Update revisions.
+
+2023-11-15  Jakub Jelinek  <jakub@redhat.com>
+
+	* ubsan/ubsan_handlers_cxx.h (FunctionTypeMismatchData): Forward
+	declare.
+	(__ubsan_handle_function_type_mismatch_v1,
+	__ubsan_handle_function_type_mismatch_v1_abort): Declare.
+	* ubsan/ubsan_handlers_cxx.cpp (handleFunctionTypeMismatch,
+	__ubsan_handle_function_type_mismatch_v1,
+	__ubsan_handle_function_type_mismatch_v1_abort): New functions readded
+	for backwards compatibility from older ubsan.
+	* ubsan/ubsan_interface.inc (__ubsan_handle_function_type_mismatch_v1,
+	__ubsan_handle_function_type_mismatch_v1_abort): Readd.
+
+2023-10-22  Iain Sandoe  <iain@sandoe.co.uk>
+
+	* asan/Makefile.am: Handle Darwin rpaths.
+	* asan/Makefile.in: Regenerate.
+	* configure: Regenerate.
+	* hwasan/Makefile.am: Handle Darwin rpaths.
+	* hwasan/Makefile.in: Regenerate.
+	* lsan/Makefile.am: Handle Darwin rpaths.
+	* lsan/Makefile.in: Regenerate.
+	* tsan/Makefile.am: Handle Darwin rpaths.
+	* tsan/Makefile.in: Regenerate.
+	* ubsan/Makefile.am: Handle Darwin rpaths.
+	* ubsan/Makefile.in: Regenerate.
+
+2023-08-07  Nick Alcock  <nick.alcock@oracle.com>
+
+	* configure: Regenerate.
+
+2023-08-07  Alexander von Gluck IV  <kallisti5@unixzen.com>
+
+	* configure: Regenerate.
+
+2023-08-07  Nick Alcock  <nick.alcock@oracle.com>
+
+	* configure: Regenerate.
+
+2023-08-07  Nick Alcock  <nick.alcock@oracle.com>
+
+	* configure: Regenerate.
+
+2023-08-07  H.J. Lu  <hjl.tools@gmail.com>
+
+	* configure: Regenerate.
+
+2023-08-07  H.J. Lu  <hjl.tools@gmail.com>
+
+	* configure: Regenerate.
 
 2023-08-07  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
 
@@ -8,18 +242,21 @@
 	sanitizer_common/sanitizer_unwind_linux_libcdep.cpp: Cherry-pick
 	llvm-project revision 679c076ae446af81eba81ce9b94203a273d4b88a.
 
-2023-07-27  Release Manager
+2023-04-30  Martin Liska  <mliska@suse.cz>
 
-	* GCC 13.2.0 released.
+	PR sanitizer/109674
+	* hwasan/Makefile.am: Depend on liblsan.
+	* hwasan/Makefile.in: Re-generate.
 
-2023-04-26  Release Manager
+2023-04-30  Martin Liska  <mliska@suse.cz>
 
-	* GCC 13.1.0 released.
+	* LOCAL_PATCHES: Update revision.
+
+2023-04-26  Martin Liska  <mliska@suse.cz>
+
+	* LOCAL_PATCHES: Change revision.
 
 2023-04-18  Iain Sandoe  <iain@sandoe.co.uk>
-
-	Backported from master:
-	2023-04-18  Iain Sandoe  <iain@sandoe.co.uk>
 
 	* configure.tgt: Unsupport Darwin22+ until a mechanism can be found
 	to locate dyld in the shared cache.

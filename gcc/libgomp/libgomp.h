@@ -1,4 +1,4 @@
-/* Copyright (C) 2005-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2005-2025 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
    This file is part of the GNU Offloading and Multi Processing Library
@@ -43,7 +43,14 @@
 
 #include "config.h"
 #include <stdint.h>
+
+/* Include omp.h by parts.  */
+#include "omp-lock.h"
+#define _LIBGOMP_OMP_LOCK_DEFINED 1
+#include "omp.h.in"
+
 #include "libgomp-plugin.h"
+
 #include "gomp-constants.h"
 
 #ifdef HAVE_PTHREAD_H
@@ -114,9 +121,6 @@ extern void gomp_aligned_free (void *);
 #ifdef __AMDGCN__
 #include "libgomp-gcn.h"
 /* The arena is initialized in config/gcn/team.c.  */
-#define TEAM_ARENA_START 16  /* LDS offset of free pointer.  */
-#define TEAM_ARENA_FREE  24  /* LDS offset of free pointer.  */
-#define TEAM_ARENA_END   32  /* LDS offset of end pointer.  */
 
 static inline void * __attribute__((malloc))
 team_malloc (size_t size)
@@ -1130,10 +1134,7 @@ extern void gomp_init_targets_once (void);
 extern int gomp_get_num_devices (void);
 extern bool gomp_target_task_fn (void *);
 extern void gomp_target_rev (uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
-			     int,
-			     void (*) (void *, const void *, size_t, void *),
-			     void (*) (void *, const void *, size_t, void *),
-			     void *);
+			     int, struct goacc_asyncqueue *);
 
 /* Splay tree definitions.  */
 typedef struct splay_tree_node_s *splay_tree_node;
@@ -1169,6 +1170,8 @@ struct target_mem_desc;
 /* Special value for refcount - tgt_offset contains target address of the
    artificial pointer to "omp declare target link" object.  */
 #define REFCOUNT_LINK     (REFCOUNT_SPECIAL | 1)
+/* Special value for refcount - created through acc_map_data.  */
+#define REFCOUNT_ACC_MAP_DATA (REFCOUNT_SPECIAL | 2)
 
 /* Special value for refcount - structure element sibling list items.
    All such key refounts have REFCOUNT_STRUCTELEM bits set, with _FLAG_FIRST
@@ -1275,6 +1278,30 @@ reverse_splay_compare (reverse_splay_tree_key x, reverse_splay_tree_key y)
 }
 
 #define splay_tree_prefix reverse
+#define splay_tree_static
+#include "splay-tree.h"
+
+/* Indirect target function splay-tree handling.  */
+
+struct indirect_splay_tree_key_s {
+  uint64_t host_addr, target_addr;
+};
+
+typedef struct indirect_splay_tree_node_s *indirect_splay_tree_node;
+typedef struct indirect_splay_tree_s *indirect_splay_tree;
+typedef struct indirect_splay_tree_key_s *indirect_splay_tree_key;
+
+static inline int
+indirect_splay_compare (indirect_splay_tree_key x, indirect_splay_tree_key y)
+{
+  if (x->host_addr < y->host_addr)
+    return -1;
+  if (x->host_addr > y->host_addr)
+    return 1;
+  return 0;
+}
+
+#define splay_tree_prefix indirect
 #include "splay-tree.h"
 
 struct target_mem_desc {
@@ -1367,6 +1394,7 @@ struct gomp_device_descr
 
   /* The name of the device.  */
   const char *name;
+  const char *uid;
 
   /* Capabilities of device (supports OpenACC, OpenMP).  */
   unsigned int capabilities;
@@ -1379,6 +1407,7 @@ struct gomp_device_descr
 
   /* Function handlers.  */
   __typeof (GOMP_OFFLOAD_get_name) *get_name_func;
+  __typeof (GOMP_OFFLOAD_get_uid) *get_uid_func;
   __typeof (GOMP_OFFLOAD_get_caps) *get_caps_func;
   __typeof (GOMP_OFFLOAD_get_type) *get_type_func;
   __typeof (GOMP_OFFLOAD_get_num_devices) *get_num_devices_func;
@@ -1391,10 +1420,17 @@ struct gomp_device_descr
   __typeof (GOMP_OFFLOAD_free) *free_func;
   __typeof (GOMP_OFFLOAD_dev2host) *dev2host_func;
   __typeof (GOMP_OFFLOAD_host2dev) *host2dev_func;
+  __typeof (GOMP_OFFLOAD_memcpy2d) *memcpy2d_func;
+  __typeof (GOMP_OFFLOAD_memcpy3d) *memcpy3d_func;
   __typeof (GOMP_OFFLOAD_dev2dev) *dev2dev_func;
   __typeof (GOMP_OFFLOAD_can_run) *can_run_func;
   __typeof (GOMP_OFFLOAD_run) *run_func;
   __typeof (GOMP_OFFLOAD_async_run) *async_run_func;
+  __typeof (GOMP_OFFLOAD_interop) *interop_func;
+  __typeof (GOMP_OFFLOAD_get_interop_int) *get_interop_int_func;
+  __typeof (GOMP_OFFLOAD_get_interop_ptr) *get_interop_ptr_func;
+  __typeof (GOMP_OFFLOAD_get_interop_str) *get_interop_str_func;
+  __typeof (GOMP_OFFLOAD_get_interop_type_desc) *get_interop_type_desc_func;
 
   /* Splay tree containing information about mapped memory regions.  */
   struct splay_tree_s mem_map;
@@ -1432,10 +1468,10 @@ extern void gomp_copy_dev2host (struct gomp_device_descr *,
 				struct goacc_asyncqueue *, void *, const void *,
 				size_t);
 extern uintptr_t gomp_map_val (struct target_mem_desc *, void **, size_t);
-extern void gomp_attach_pointer (struct gomp_device_descr *,
+extern bool gomp_attach_pointer (struct gomp_device_descr *,
 				 struct goacc_asyncqueue *, splay_tree,
 				 splay_tree_key, uintptr_t, size_t,
-				 struct gomp_coalesce_buf *, bool);
+				 struct gomp_coalesce_buf *, bool, bool);
 extern void gomp_detach_pointer (struct gomp_device_descr *,
 				 struct goacc_asyncqueue *, splay_tree_key,
 				 uintptr_t, bool, struct gomp_coalesce_buf *);
@@ -1476,11 +1512,6 @@ gomp_work_share_init_done (void)
 
 /* Now that we're back to default visibility, include the globals.  */
 #include "libgomp_g.h"
-
-/* Include omp.h by parts.  */
-#include "omp-lock.h"
-#define _LIBGOMP_OMP_LOCK_DEFINED 1
-#include "omp.h.in"
 
 #if !defined (HAVE_ATTRIBUTE_VISIBILITY) \
     || !defined (HAVE_ATTRIBUTE_ALIAS) \

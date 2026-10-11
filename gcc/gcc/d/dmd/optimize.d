@@ -1,12 +1,12 @@
 /**
  * Perform constant folding.
  *
- * Copyright:   Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 https://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/optimize.d, _optimize.d)
+ * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/compiler/src/dmd/optimize.d, _optimize.d)
  * Documentation:  https://dlang.org/phobos/dmd_optimize.html
- * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/optimize.d
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/compiler/src/dmd/optimize.d
  */
 
 module dmd.optimize;
@@ -16,6 +16,7 @@ import core.stdc.stdio;
 import dmd.astenums;
 import dmd.constfold;
 import dmd.ctfeexpr;
+import dmd.dcast;
 import dmd.dclass;
 import dmd.declaration;
 import dmd.dsymbol;
@@ -24,6 +25,7 @@ import dmd.errors;
 import dmd.expression;
 import dmd.expressionsem;
 import dmd.globals;
+import dmd.hdrgen;
 import dmd.init;
 import dmd.location;
 import dmd.mtype;
@@ -31,6 +33,7 @@ import dmd.printast;
 import dmd.root.ctfloat;
 import dmd.sideeffect;
 import dmd.tokens;
+import dmd.typesem;
 import dmd.visitor;
 
 /*************************************
@@ -81,7 +84,7 @@ Expression expandVar(int result, VarDeclaration v)
     {
         Type tb = v.type.toBasetype();
         if (v.storage_class & STC.manifest ||
-            tb.isscalar() ||
+            tb.isScalar() ||
             ((result & WANTexpand) && (tb.ty != Tsarray && tb.ty != Tstruct)))
         {
             if (v._init)
@@ -90,7 +93,7 @@ Expression expandVar(int result, VarDeclaration v)
                 {
                     if (v.storage_class & STC.manifest)
                     {
-                        v.error("recursive initialization of constant");
+                        .error(v.loc, "%s `%s` recursive initialization of constant", v.kind, v.toPrettyChars);
                         return errorReturn();
                     }
                     return nullReturn();
@@ -100,14 +103,14 @@ Expression expandVar(int result, VarDeclaration v)
                 {
                     if (v.storage_class & STC.manifest)
                     {
-                        v.error("enum cannot be initialized with `%s`", v._init.toChars());
+                        .error(v.loc, "%s `%s` enum cannot be initialized with `%s`", v.kind, v.toPrettyChars, dmd.hdrgen.toChars(v._init));
                         return errorReturn();
                     }
                     return nullReturn();
                 }
                 if (ei.op == EXP.construct || ei.op == EXP.blit)
                 {
-                    AssignExp ae = cast(AssignExp)ei;
+                    auto ae = cast(AssignExp)ei;
                     ei = ae.e2;
                     if (ei.isConst() == 1)
                     {
@@ -180,31 +183,29 @@ private Expression fromConstInitializer(int result, Expression e1)
 {
     //printf("fromConstInitializer(result = %x, %s)\n", result, e1.toChars());
     //static int xx; if (xx++ == 10) assert(0);
+    auto ve = e1.isVarExp();
+    if (!ve)
+        return e1;
+
     Expression e = e1;
-    if (auto ve = e1.isVarExp())
+    VarDeclaration v = ve.var.isVarDeclaration();
+    e = expandVar(result, v);
+    if (!e)
+        return e1;
+
+    // If it is a comma expression involving a declaration, we mustn't
+    // perform a copy -- we'd get two declarations of the same variable.
+    // See https://issues.dlang.org/show_bug.cgi?id=4465.
+    if (e.op == EXP.comma && e.isCommaExp().e1.isDeclarationExp())
+        e = e1;
+    else if (e.type != e1.type && e1.type && e1.type.ty != Tident)
     {
-        VarDeclaration v = ve.var.isVarDeclaration();
-        e = expandVar(result, v);
-        if (e)
-        {
-            // If it is a comma expression involving a declaration, we mustn't
-            // perform a copy -- we'd get two declarations of the same variable.
-            // See bugzilla 4465.
-            if (e.op == EXP.comma && e.isCommaExp().e1.isDeclarationExp())
-                e = e1;
-            else if (e.type != e1.type && e1.type && e1.type.ty != Tident)
-            {
-                // Type 'paint' operation
-                e = e.copy();
-                e.type = e1.type;
-            }
-            e.loc = e1.loc;
-        }
-        else
-        {
-            e = e1;
-        }
+        // Type 'paint' operation
+        e = e.copy();
+        e.type = e1.type;
     }
+    e.loc = e1.loc;
+
     return e;
 }
 
@@ -270,12 +271,12 @@ package void setLengthVarIfKnown(VarDeclaration lengthVar, Type type)
  * Returns:
  *      Constant folded version of `e`
  */
-Expression Expression_optimize(Expression e, int result, bool keepLvalue)
+Expression optimize(Expression e, int result, bool keepLvalue = false)
 {
-    //printf("Expression_optimize() e: %s result: %d keepLvalue %d\n", e.toChars(), result, keepLvalue);
+    //printf("optimize() e: %s result: %d keepLvalue %d\n", e.toChars(), result, keepLvalue);
     Expression ret = e;
 
-    void error()
+    void errorReturn()
     {
         ret = ErrorExp.get();
     }
@@ -286,7 +287,7 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
     {
         if (!e)
             return false;
-        Expression ex = Expression_optimize(e, flags, keepLvalue);
+        Expression ex = optimize(e, flags, keepLvalue);
         if (ex.op == EXP.error)
         {
             ret = ex; // store error result
@@ -369,10 +370,10 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
 
     void visitStructLiteral(StructLiteralExp e)
     {
-        if (e.stageflags & stageOptimize)
+        if (e.stageflags & StructLiteralExp.StageFlags.optimize)
             return;
-        int old = e.stageflags;
-        e.stageflags |= stageOptimize;
+        const old = e.stageflags;
+        e.stageflags |= StructLiteralExp.StageFlags.optimize;
         if (e.elements)
         {
             foreach (ref ex; (*e.elements)[])
@@ -571,8 +572,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
 
                     if (index < 0 || index > dim)
                     {
-                        e.error("array index %lld is out of bounds `[0..%lld]`", index, dim);
-                        return error();
+                        error(e.loc, "array index %lld is out of bounds `[0..%lld]`", index, dim);
+                        return errorReturn();
                     }
 
                     import core.checkedint : mulu;
@@ -580,8 +581,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                     const offset = mulu(index, ts.nextOf().size(e.loc), overflow); // offset = index*size
                     if (overflow)
                     {
-                        e.error("array offset overflow");
-                        return error();
+                        error(e.loc, "array offset overflow");
+                        return errorReturn();
                     }
 
                     Expression ex = new AddrExp(ae1.loc, ae1);  // &a[i]
@@ -589,7 +590,7 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
 
                     Expression add = new AddExp(ae.loc, ex, new IntegerExp(ae.e2.loc, offset, ae.e2.type));
                     add.type = e.type;
-                    ret = Expression_optimize(add, result, keepLvalue);
+                    ret = optimize(add, result, keepLvalue);
                     return;
                 }
             }
@@ -610,8 +611,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                          */
                         if (!((dim == 0 || dim == index) && ve.var.isCsymbol()))
                         {
-                            e.error("array index %lld is out of bounds `[0..%lld]`", index, dim);
-                            return error();
+                            error(e.loc, "array index %lld is out of bounds `[0..%lld]`", index, dim);
+                            return errorReturn();
                         }
                     }
 
@@ -620,8 +621,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                     const offset = mulu(index, ts.nextOf().size(e.loc), overflow);
                     if (overflow)
                     {
-                        e.error("array offset overflow");
-                        return error();
+                        error(e.loc, "array offset overflow");
+                        return errorReturn();
                     }
 
                     ret = new SymOffExp(e.loc, ve.var, offset);
@@ -645,8 +646,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                          */
                         if (!((dim == 0 || dim == index) && ve.var.isCsymbol()))
                         {
-                            e.error("array index %lld is out of bounds `[0..%lld]`", index, dim);
-                            return error();
+                            error(e.loc, "array index %lld is out of bounds `[0..%lld]`", index, dim);
+                            return errorReturn();
                         }
                     }
 
@@ -655,8 +656,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                     const offset = mulu(index, ts.nextOf().size(e.loc), overflow); // index*elementsize
                     if (overflow)
                     {
-                        e.error("array offset overflow");
-                        return error();
+                        error(e.loc, "array offset overflow");
+                        return errorReturn();
                     }
 
                     auto pe = new AddrExp(e.loc, ve);
@@ -750,6 +751,7 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
 
     void visitNew(NewExp e)
     {
+        expOptimize(e.placement, WANTvalue);
         expOptimize(e.thisexp, WANTvalue);
         // Optimize parameters
         if (e.arguments)
@@ -769,11 +771,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
             return;
         if (e.arguments)
         {
-            Type t1 = e.e1.type.toBasetype();
-            if (auto td = t1.isTypeDelegate())
-                t1 = td.next;
             // t1 can apparently be void for __ArrayDtor(T) calls
-            if (auto tf = t1.isTypeFunction())
+            if (auto tf = e.calledFunctionType())
             {
                 foreach (i, ref arg; (*e.arguments)[])
                 {
@@ -811,7 +810,7 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
             const esz  = e.type.nextOf().size(e.loc);
             const e1sz = e.e1.type.toBasetype().nextOf().size(e.e1.loc);
             if (esz == SIZE_INVALID || e1sz == SIZE_INVALID)
-                return error();
+                return errorReturn();
 
             if (e1sz == esz)
             {
@@ -858,13 +857,13 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
             ClassDeclaration cdfrom = e.e1.type.isClassHandle();
             ClassDeclaration cdto = e.type.isClassHandle();
             if (cdfrom.errors || cdto.errors)
-                return error();
+                return errorReturn();
             if (cdto == ClassDeclaration.object && !cdfrom.isInterfaceDeclaration())
                 return returnE_e1();    // can always convert a class to Object
             // Need to determine correct offset before optimizing away the cast.
             // https://issues.dlang.org/show_bug.cgi?id=16980
             if (cdfrom.size(e.loc) == SIZE_INVALID)
-                return error();
+                return errorReturn();
             assert(cdfrom.sizeok == Sizeok.done);
             assert(cdto.sizeok == Sizeok.done || !cdto.isBaseOf(cdfrom, null));
             int offset;
@@ -889,7 +888,7 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                     const e1sz = e.e1.type.size(e.e1.loc);
                     if (esz == SIZE_INVALID ||
                         e1sz == SIZE_INVALID)
-                        return error();
+                        return errorReturn();
 
                     if (esz == e1sz)
                         return returnE_e1();
@@ -922,11 +921,19 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                 sz *= 8;
                 if (i2 < 0 || i2 >= sz)
                 {
-                    e.error("shift assign by %lld is outside the range `0..%llu`", i2, cast(ulong)sz - 1);
-                    return error();
+                    error(e.loc, "shift assign by %lld is outside the range `0..%llu`", i2, cast(ulong)sz - 1);
+                    return errorReturn();
                 }
             }
         }
+    }
+
+    void visitCatAssign(CatAssignExp e)
+    {
+        if (auto lowering = e.lowering)
+            optimize(lowering, result, keepLvalue);
+        else
+            visitBinAssign(e);
     }
 
     void visitBin(BinExp e)
@@ -996,7 +1003,7 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
         }
     }
 
-    extern (D) void shift_optimize(BinExp e, UnionExp function(const ref Loc, Type, Expression, Expression) shift)
+    extern (D) void shift_optimize(BinExp e, UnionExp function(Loc, Type, Expression, Expression) shift)
     {
         if (binOptimize(e, result))
             return;
@@ -1008,8 +1015,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
             sz *= 8;
             if (i2 < 0 || i2 >= sz)
             {
-                e.error("shift by %lld is outside the range `0..%llu`", i2, cast(ulong)sz - 1);
-                return error();
+                error(e.loc, "shift by %lld is outside the range `0..%llu`", i2, cast(ulong)sz - 1);
+                return errorReturn();
             }
             if (e.e1.isConst() == 1)
                 ret = (*shift)(e.loc, e.type, e.e1, e.e2).copy();
@@ -1063,16 +1070,16 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
         if (binOptimize(e, result))
             return;
         // All negative integral powers are illegal.
-        if (e.e1.type.isintegral() && (e.e2.op == EXP.int64) && cast(sinteger_t)e.e2.toInteger() < 0)
+        if (e.e1.type.isIntegral() && (e.e2.op == EXP.int64) && cast(sinteger_t)e.e2.toInteger() < 0)
         {
-            e.error("cannot raise `%s` to a negative integer power. Did you mean `(cast(real)%s)^^%s` ?", e.e1.type.toBasetype().toChars(), e.e1.toChars(), e.e2.toChars());
-            return error();
+            error(e.loc, "cannot raise `%s` to a negative integer power. Did you mean `(cast(real)%s)^^%s` ?", e.e1.type.toBasetype().toChars(), e.e1.toChars(), e.e2.toChars());
+            return errorReturn();
         }
         // If e2 *could* have been an integer, make it one.
         if (e.e2.op == EXP.float64 && e.e2.toReal() == real_t(cast(sinteger_t)e.e2.toReal()))
         {
             // This only applies to floating point, or positive integral powers.
-            if (e.e1.type.isfloating() || cast(sinteger_t)e.e2.toInteger() >= 0)
+            if (e.e1.type.isFloating() || cast(sinteger_t)e.e2.toInteger() >= 0)
                 e.e2 = new IntegerExp(e.loc, e.e2.toInteger(), Type.tint64);
         }
         if (e.e1.isConst() == 1 && e.e2.isConst() == 1)
@@ -1230,18 +1237,21 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
         if (expOptimize(e.e1, WANTvalue))
             return;
         const oror = e.op == EXP.orOr;
+        void returnE_e1()
+        {
+            ret = e.e1;
+            if (!e.e1.type.equals(e.type))
+            {
+                ret = new CastExp(e.loc, ret, e.type);
+                ret.type = e.type;
+                ret = optimize(ret, result, false);
+            }
+        }
         if (e.e1.toBool().hasValue(oror))
         {
-            // Replace with (e1, oror)
-            ret = IntegerExp.createBool(oror);
-            ret = Expression.combine(e.e1, ret);
-            if (e.type.toBasetype().ty == Tvoid)
-            {
-                ret = new CastExp(e.loc, ret, Type.tvoid);
-                ret.type = e.type;
-            }
-            ret = Expression_optimize(ret, result, false);
-            return;
+            // e_true || e2 -> e_true
+            // e_false && e2 -> e_false
+            return returnE_e1();
         }
         expOptimize(e.e2, WANTvalue);
         if (e.e1.isConst())
@@ -1255,6 +1265,7 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
             }
             else if (e1Opt.hasValue(!oror))
             {
+
                 if (e.type.toBasetype().ty == Tvoid)
                     ret = e.e2;
                 else
@@ -1262,6 +1273,29 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
                     ret = new CastExp(e.loc, e.e2, e.type);
                     ret.type = e.type;
                 }
+            }
+        }
+        else if (e.e2.isConst())
+        {
+            const e2Opt = e.e2.toBool();
+            if (e2Opt.hasValue(oror))
+            {
+                // e1 || true -> (e1, true)
+                // e1 && false -> (e1, false)
+                ret = IntegerExp.createBool(oror);
+                ret = Expression.combine(e.e1, ret);
+                if (e.type.toBasetype().ty == Tvoid)
+                {
+                    ret = new CastExp(e.loc, ret, Type.tvoid);
+                    ret.type = e.type;
+                }
+                ret = optimize(ret, result, false);
+            }
+            else if (e2Opt.hasValue(!oror))
+            {
+                // e1 || false -> e1
+                // e1 && true -> e1
+                return returnE_e1();
             }
         }
     }
@@ -1283,19 +1317,25 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
         //printf("CatExp::optimize(%d) %s\n", result, e.toChars());
         if (binOptimize(e, result))
             return;
-        if (auto ce1 = e.e1.isCatExp())
-        {
-            // https://issues.dlang.org/show_bug.cgi?id=12798
-            // optimize ((expr ~ str1) ~ str2)
-            scope CatExp cex = new CatExp(e.loc, ce1.e2, e.e2);
-            cex.type = e.type;
-            Expression ex = Expression_optimize(cex, result, false);
-            if (ex != cex)
+
+        if (e.type == Type.tstring)
+            if (auto ce1 = e.e1.isCatExp())
             {
-                e.e1 = ce1.e1;
-                e.e2 = ex;
+                // https://issues.dlang.org/show_bug.cgi?id=12798
+                // optimize ((expr ~ str1) ~ str2)
+                // https://issues.dlang.org/show_bug.cgi?id=24078
+                // This optimization is only valid if `expr` is a string.
+                // Otherwise it leads to:
+                // `["c"] ~ "a" ~ "b"` becoming `["c"] ~ "ab"`
+                scope CatExp cex = new CatExp(e.loc, ce1.e2, e.e2);
+                cex.type = e.type;
+                Expression ex = optimize(cex, result, false);
+                if (ex != cex)
+                {
+                    e.e1 = ce1.e1;
+                    e.e2 = ex;
+                }
             }
-        }
         // optimize "str"[] -> "str"
         if (auto se1 = e.e1.isSliceExp())
         {
@@ -1318,9 +1358,9 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
             return;
         const opt = e.econd.toBool();
         if (opt.hasValue(true))
-            ret = Expression_optimize(e.e1, result, keepLvalue);
+            ret = optimize(e.e1, result, keepLvalue);
         else if (opt.hasValue(false))
-            ret = Expression_optimize(e.e2, result, keepLvalue);
+            ret = optimize(e.e2, result, keepLvalue);
         else
         {
             expOptimize(e.e1, result, keepLvalue);
@@ -1334,8 +1374,8 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
     {
         if (b++ == global.recursionLimit)
         {
-            e.error("infinite loop while optimizing expression");
-            fatal();
+            error(e.loc, "infinite loop while optimizing expression");
+            return ErrorExp.get();
         }
 
         auto ex = ret;
@@ -1387,9 +1427,9 @@ Expression Expression_optimize(Expression e, int result, bool keepLvalue)
             case EXP.leftShiftAssign:
             case EXP.rightShiftAssign:
             case EXP.unsignedRightShiftAssign:
+            case EXP.concatenateDcharAssign: visitBinAssign(ex.isBinAssignExp()); break;
             case EXP.concatenateElemAssign:
-            case EXP.concatenateDcharAssign:
-            case EXP.concatenateAssign: visitBinAssign(ex.isBinAssignExp()); break;
+            case EXP.concatenateAssign:      visitCatAssign(cast(CatAssignExp) ex); break;
 
             case EXP.minusMinus:
             case EXP.plusPlus:

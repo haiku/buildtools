@@ -1,5 +1,5 @@
 /* UndefinedBehaviorSanitizer, undefined behavior detector.
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Free Software Foundation, Inc.
    Contributed by Marek Polacek <polacek@redhat.com>
 
 This file is part of GCC.
@@ -57,7 +57,7 @@ ubsan_instrument_division (location_t loc, tree op0, tree op1)
       && sanitize_flags_p (SANITIZE_DIVIDE))
     t = fold_build2 (EQ_EXPR, boolean_type_node,
 		     op1, build_int_cst (type, 0));
-  else if (TREE_CODE (type) == REAL_TYPE
+  else if (SCALAR_FLOAT_TYPE_P (type)
 	   && sanitize_flags_p (SANITIZE_FLOAT_DIVIDE))
     {
       t = fold_build2 (EQ_EXPR, boolean_type_node,
@@ -176,8 +176,19 @@ ubsan_instrument_shift (location_t loc, enum tree_code code,
   op0 = unshare_expr (op0);
   op1 = unshare_expr (op1);
 
-  t = fold_convert_loc (loc, op1_utype, op1);
-  t = fold_build2 (GT_EXPR, boolean_type_node, t, uprecm1);
+  if (code == LROTATE_EXPR || code == RROTATE_EXPR)
+    {
+      /* For rotates just check for negative op1.  */
+      if (TYPE_UNSIGNED (type1))
+	return NULL_TREE;
+      t = fold_build2 (LT_EXPR, boolean_type_node, op1,
+		       build_int_cst (type1, 0));
+    }
+  else
+    {
+      t = fold_convert_loc (loc, op1_utype, op1);
+      t = fold_build2 (GT_EXPR, boolean_type_node, t, uprecm1);
+    }
 
   /* If this is not a signed operation, don't perform overflow checks.
      Also punt on bit-fields.  */
@@ -256,8 +267,34 @@ ubsan_instrument_shift (location_t loc, enum tree_code code,
     tt = build_call_expr_loc (loc, builtin_decl_explicit (BUILT_IN_TRAP), 0);
   else
     {
-      tree data = ubsan_create_data ("__ubsan_shift_data", 1, &loc,
-				     ubsan_type_descriptor (type0),
+      if (TREE_CODE (type1) == BITINT_TYPE
+	  && TYPE_PRECISION (type1) > MAX_FIXED_MODE_SIZE)
+	{
+	  /* Workaround for missing _BitInt support in libsanitizer.
+	     Instead of crashing in the library, pretend values above
+	     maximum value of normal integral type or below minimum value
+	     of that type are those extremes.  */
+	  tree type2 = build_nonstandard_integer_type (MAX_FIXED_MODE_SIZE,
+						       TYPE_UNSIGNED (type1));
+	  tree op2 = op1;
+	  if (!TYPE_UNSIGNED (type1))
+	    {
+	      op2 = fold_build2 (LT_EXPR, boolean_type_node, unshare_expr (op1),
+				 fold_convert (type1, TYPE_MIN_VALUE (type2)));
+	      op2 = fold_build3 (COND_EXPR, type2, op2, TYPE_MIN_VALUE (type2),
+				 fold_convert (type2, unshare_expr (op1)));
+	    }
+	  else
+	    op2 = fold_convert (type2, op1);
+	  tree op3
+	    = fold_build2 (GT_EXPR, boolean_type_node, unshare_expr (op1),
+			   fold_convert (type1, TYPE_MAX_VALUE (type2)));
+	  op1 = fold_build3 (COND_EXPR, type2, op3, TYPE_MAX_VALUE (type2),
+			     op2);
+	  type1 = type2;
+	}
+      tree utd0 = ubsan_type_descriptor (type0, UBSAN_PRINT_FORCE_INT);
+      tree data = ubsan_create_data ("__ubsan_shift_data", 1, &loc, utd0,
 				     ubsan_type_descriptor (type1), NULL_TREE,
 				     NULL_TREE);
       data = build_fold_addr_expr_loc (loc, data);
@@ -350,6 +387,40 @@ ubsan_instrument_return (location_t loc)
   return build_call_expr_loc (loc, t, 1, build_fold_addr_expr_loc (loc, data));
 }
 
+/* Get the tree that represented the number of counted_by, i.e, the maximum
+   number of the elements of the object that the call to .ACCESS_WITH_SIZE
+   points to, this number will be the bound of the corresponding array.  */
+static tree
+get_bound_from_access_with_size (tree call)
+{
+  if (!is_access_with_size_p (call))
+    return NULL_TREE;
+
+  tree ref_to_size = CALL_EXPR_ARG (call, 1);
+  unsigned int class_of_size = TREE_INT_CST_LOW (CALL_EXPR_ARG (call, 2));
+  tree type = TREE_TYPE (CALL_EXPR_ARG (call, 3));
+  tree size = fold_build2 (MEM_REF, type, unshare_expr (ref_to_size),
+			   build_int_cst (ptr_type_node, 0));
+  /* If size is negative value, treat it as zero.  */
+  if (!TYPE_UNSIGNED (type))
+  {
+    tree cond = fold_build2 (LT_EXPR, boolean_type_node,
+			     unshare_expr (size), build_zero_cst (type));
+    size = fold_build3 (COND_EXPR, type, cond,
+			build_zero_cst (type), size);
+  }
+
+  /* Only when class_of_size is 1, i.e, the number of the elements of
+     the object type, return the size.  */
+  if (class_of_size != 1)
+    return NULL_TREE;
+  else
+    size = fold_convert (sizetype, size);
+
+  return size;
+}
+
+
 /* Instrument array bounds for ARRAY_REFs.  We create special builtin,
    that gets expanded in the sanopt pass, and make an array dimension
    of it.  ARRAY is the array, *INDEX is an index to the array.
@@ -375,13 +446,21 @@ ubsan_instrument_bounds (location_t loc, tree array, tree *index,
 	  && COMPLETE_TYPE_P (type)
 	  && integer_zerop (TYPE_SIZE (type)))
 	bound = build_int_cst (TREE_TYPE (TYPE_MIN_VALUE (domain)), -1);
+      else if (INDIRECT_REF_P (array)
+	       && is_access_with_size_p ((TREE_OPERAND (array, 0))))
+	{
+	  bound = get_bound_from_access_with_size ((TREE_OPERAND (array, 0)));
+	  bound = fold_build2 (MINUS_EXPR, TREE_TYPE (bound),
+			       bound,
+			       build_int_cst (TREE_TYPE (bound), 1));
+	}
       else
 	return NULL_TREE;
     }
 
   bound = fold_build2 (PLUS_EXPR, TREE_TYPE (bound), bound,
 		       build_int_cst (TREE_TYPE (bound),
-		       1 + ignore_off_by_one));
+				      1 + ignore_off_by_one));
 
   /* Detect flexible array members and suchlike, unless
      -fsanitize=bounds-strict.  */
@@ -468,8 +547,16 @@ ubsan_instrument_bounds (location_t loc, tree array, tree *index,
     return NULL_TREE;
 
   *index = save_expr (*index);
-  /* Create a "(T *) 0" tree node to describe the array type.  */
-  tree zero_with_type = build_int_cst (build_pointer_type (type), 0);
+  /* If TYPE is a VLA, use 1 instead of 0 as the first argument and
+     use just the addend to TYPE_MAX_VALUE (domain) as the third argument
+     temporarily, so that gimplification can use TYPE_MAX_VALUE (domain)
+     after gimplify_type_sizes.  See PR120052.  */
+  bool is_vla = (TYPE_MAX_VALUE (domain)
+		 && TREE_CODE (TYPE_MAX_VALUE (domain)) != INTEGER_CST);
+  if (is_vla)
+    bound = build_int_cst (TREE_TYPE (bound), 1 + ignore_off_by_one);
+  /* Create a "(T *) 0" (or 1) tree node to describe the array type.  */
+  tree zero_with_type = build_int_cst (build_pointer_type (type), is_vla);
   return build_call_expr_internal_loc (loc, IFN_UBSAN_BOUNDS,
 				       void_type_node, 3, zero_with_type,
 				       *index, bound);
@@ -505,12 +592,8 @@ ubsan_maybe_instrument_array_ref (tree *expr_p, bool ignore_off_by_one)
       tree e = ubsan_instrument_bounds (EXPR_LOCATION (*expr_p), op0, &op1,
 					ignore_off_by_one);
       if (e != NULL_TREE)
-	{
-	  tree t = copy_node (*expr_p);
-	  TREE_OPERAND (t, 1) = build2 (COMPOUND_EXPR, TREE_TYPE (op1),
-					e, op1);
-	  *expr_p = t;
-	}
+	TREE_OPERAND (*expr_p, 1) = build2 (COMPOUND_EXPR, TREE_TYPE (op1),
+					    e, op1);
     }
 }
 
@@ -600,7 +683,7 @@ ubsan_maybe_instrument_reference (tree *stmt_p)
 						 UBSAN_REF_BINDING);
   if (op)
     {
-      if (TREE_CODE (stmt) == NOP_EXPR) 
+      if (TREE_CODE (stmt) == NOP_EXPR)
 	TREE_OPERAND (stmt, 0) = op;
       else
 	*stmt_p = op;

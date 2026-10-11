@@ -1,6 +1,6 @@
 // -*- C++ -*- C forwarding header.
 
-// Copyright (C) 1997-2023 Free Software Foundation, Inc.
+// Copyright (C) 1997-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -36,20 +36,31 @@
 // ISO C++ 14882: 26.5  C library
 //
 
+#ifndef _GLIBCXX_CMATH
+#define _GLIBCXX_CMATH 1
+
+#ifdef _GLIBCXX_SYSHDR
 #pragma GCC system_header
+#endif
 
 #include <bits/requires_hosted.h>
 
 #include <bits/c++config.h>
 #include <bits/cpp_type_traits.h>
 #include <ext/type_traits.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic" // include_next
 #define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
 #include_next <math.h>
 #undef _GLIBCXX_INCLUDE_NEXT_C_HEADERS
+#pragma GCC diagnostic pop
+
 #include <bits/std_abs.h>
 
-#ifndef _GLIBCXX_CMATH
-#define _GLIBCXX_CMATH 1
+#define __glibcxx_want_hypot
+#define __glibcxx_want_interpolate
+#include <bits/version.h>
 
 // Get rid of those macros defined in <math.h> in lieu of real functions.
 #undef div
@@ -1767,7 +1778,206 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #if __cplusplus >= 201103L
 
-#ifdef _GLIBCXX_USE_C99_MATH_TR1
+#undef acosf
+#undef acosl
+#undef asinf
+#undef asinl
+#undef atanf
+#undef atanl
+#undef atan2f
+#undef atan2l
+#undef ceilf
+#undef ceill
+#undef cosf
+#undef cosl
+#undef coshf
+#undef coshl
+#undef expf
+#undef expl
+#undef fabsf
+#undef fabsl
+#undef floorf
+#undef floorl
+#undef fmodf
+#undef fmodl
+#undef frexpf
+#undef frexpl
+#undef ldexpf
+#undef ldexpl
+#undef logf
+#undef logl
+#undef log10f
+#undef log10l
+#undef modff
+#undef modfl
+#undef powf
+#undef powl
+#undef sinf
+#undef sinl
+#undef sinhf
+#undef sinhl
+#undef sqrtf
+#undef sqrtl
+#undef tanf
+#undef tanl
+#undef tanhf
+#undef tanhl
+
+#ifdef _GLIBCXX_HAVE_ACOSF
+  using ::acosf;
+#endif
+#ifdef _GLIBCXX_HAVE_ACOSL
+  using ::acosl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_ASINF
+  using ::asinf;
+#endif
+#ifdef _GLIBCXX_HAVE_ASINL
+  using ::asinl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_ATANF
+  using ::atanf;
+#endif
+#ifdef _GLIBCXX_HAVE_ATANL
+  using ::atanl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_ATAN2F
+  using ::atan2f;
+#endif
+#ifdef _GLIBCXX_HAVE_ATAN2L
+  using ::atan2l;
+#endif
+
+#ifdef _GLIBCXX_HAVE_CEILF
+  using ::ceilf;
+#endif
+#ifdef _GLIBCXX_HAVE_CEILL
+  using ::ceill;
+#endif
+
+#ifdef _GLIBCXX_HAVE_COSF
+  using ::cosf;
+#endif
+#ifdef _GLIBCXX_HAVE_COSL
+  using ::cosl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_COSHF
+  using ::coshf;
+#endif
+#ifdef _GLIBCXX_HAVE_COSHL
+  using ::coshl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_EXPF
+  using ::expf;
+#endif
+#ifdef _GLIBCXX_HAVE_EXPL
+  using ::expl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_FABSF
+  using ::fabsf;
+#endif
+#ifdef _GLIBCXX_HAVE_FABSL
+  using ::fabsl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_FLOORF
+  using ::floorf;
+#endif
+#ifdef _GLIBCXX_HAVE_FLOORL
+  using ::floorl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_FMODF
+  using ::fmodf;
+#endif
+#ifdef _GLIBCXX_HAVE_FMODL
+  using ::fmodl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_FREXPF
+  using ::frexpf;
+#endif
+#ifdef _GLIBCXX_HAVE_FREXPL
+  using ::frexpl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_LDEXPF
+  using ::ldexpf;
+#endif
+#ifdef _GLIBCXX_HAVE_LDEXPL
+  using ::ldexpl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_LOGF
+  using ::logf;
+#endif
+#ifdef _GLIBCXX_HAVE_LOGL
+  using ::logl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_LOG10F
+  using ::log10f;
+#endif
+#ifdef _GLIBCXX_HAVE_LOG10L
+  using ::log10l;
+#endif
+
+#ifdef _GLIBCXX_HAVE_MODFF
+  using ::modff;
+#endif
+#ifdef _GLIBCXX_HAVE_MODFL
+  using ::modfl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_POWF
+  using ::powf;
+#endif
+#ifdef _GLIBCXX_HAVE_POWL
+  using ::powl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_SINF
+  using ::sinf;
+#endif
+#ifdef _GLIBCXX_HAVE_SINL
+  using ::sinl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_SINHF
+  using ::sinhf;
+#endif
+#ifdef _GLIBCXX_HAVE_SINHL
+  using ::sinhl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_SQRTF
+  using ::sqrtf;
+#endif
+#ifdef _GLIBCXX_HAVE_SQRTL
+  using ::sqrtl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_TANF
+  using ::tanf;
+#endif
+#ifdef _GLIBCXX_HAVE_TANL
+  using ::tanl;
+#endif
+
+#ifdef _GLIBCXX_HAVE_TANHF
+  using ::tanhf;
+#endif
+#ifdef _GLIBCXX_HAVE_TANHL
+  using ::tanhl;
+#endif
+
+#ifdef _GLIBCXX_USE_C99_MATH_FUNCS
 
 #undef acosh
 #undef acoshf
@@ -1877,9 +2087,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #undef truncf
 #undef truncl
 
+#ifdef _GLIBCXX_HAVE_C99_FLT_EVAL_TYPES
   // types
   using ::double_t;
   using ::float_t;
+#endif
 
   // functions
   using ::acosh;
@@ -2626,7 +2838,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   constexpr int
   ilogb(_Float16 __x)
-  { return _Float16(__builtin_ilogbf(__x)); }
+  { return __builtin_ilogbf(__x); }
 
   constexpr _Float16
   lgamma(_Float16 __x)
@@ -2634,11 +2846,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   constexpr long long
   llrint(_Float16 __x)
-  { return _Float16(__builtin_llrintf(__x)); }
+  { return __builtin_llrintf(__x); }
 
   constexpr long long
   llround(_Float16 __x)
-  { return _Float16(__builtin_llroundf(__x)); }
+  { return __builtin_llroundf(__x); }
 
   constexpr _Float16
   log1p(_Float16 __x)
@@ -2655,11 +2867,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   constexpr long
   lrint(_Float16 __x)
-  { return _Float16(__builtin_lrintf(__x)); }
+  { return __builtin_lrintf(__x); }
 
   constexpr long
   lround(_Float16 __x)
-  { return _Float16(__builtin_lroundf(__x)); }
+  { return __builtin_lroundf(__x); }
 
   constexpr _Float16
   nearbyint(_Float16 __x)
@@ -2668,8 +2880,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   constexpr _Float16
   nextafter(_Float16 __x, _Float16 __y)
   {
-    if (std::__is_constant_evaluated())
-      return __builtin_nextafterf16(__x, __y);
+#if __cpp_if_consteval >= 202106L
+    // Can't use if (std::__is_constant_evaluated()) here, as it
+    // doesn't guarantee optimizing the body away at -O0 and
+    // nothing defines nextafterf16.
+    if consteval { return __builtin_nextafterf16(__x, __y); }
+#endif
 #ifdef __INT16_TYPE__
     using __float16_int_type = __INT16_TYPE__;
 #else
@@ -3344,7 +3560,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   constexpr int
   ilogb(__gnu_cxx::__bfloat16_t __x)
-  { return __gnu_cxx::__bfloat16_t(__builtin_ilogbf(__x)); }
+  { return __builtin_ilogbf(__x); }
 
   constexpr __gnu_cxx::__bfloat16_t
   lgamma(__gnu_cxx::__bfloat16_t __x)
@@ -3352,11 +3568,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   constexpr long long
   llrint(__gnu_cxx::__bfloat16_t __x)
-  { return __gnu_cxx::__bfloat16_t(__builtin_llrintf(__x)); }
+  { return __builtin_llrintf(__x); }
 
   constexpr long long
   llround(__gnu_cxx::__bfloat16_t __x)
-  { return __gnu_cxx::__bfloat16_t(__builtin_llroundf(__x)); }
+  { return __builtin_llroundf(__x); }
 
   constexpr __gnu_cxx::__bfloat16_t
   log1p(__gnu_cxx::__bfloat16_t __x)
@@ -3373,11 +3589,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   constexpr long
   lrint(__gnu_cxx::__bfloat16_t __x)
-  { return __gnu_cxx::__bfloat16_t(__builtin_lrintf(__x)); }
+  { return __builtin_lrintf(__x); }
 
   constexpr long
   lround(__gnu_cxx::__bfloat16_t __x)
-  { return __gnu_cxx::__bfloat16_t(__builtin_lroundf(__x)); }
+  { return __builtin_lroundf(__x); }
 
   constexpr __gnu_cxx::__bfloat16_t
   nearbyint(__gnu_cxx::__bfloat16_t __x)
@@ -3386,8 +3602,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   constexpr __gnu_cxx::__bfloat16_t
   nextafter(__gnu_cxx::__bfloat16_t __x, __gnu_cxx::__bfloat16_t __y)
   {
-    if (std::__is_constant_evaluated())
-      return __builtin_nextafterf16b(__x, __y);
+#if __cpp_if_consteval >= 202106L
+    // Can't use if (std::__is_constant_evaluated()) here, as it
+    // doesn't guarantee optimizing the body away at -O0 and
+    // nothing defines nextafterf16b.
+    if consteval { return __builtin_nextafterf16b(__x, __y); }
+#endif
 #ifdef __INT16_TYPE__
     using __bfloat16_int_type = __INT16_TYPE__;
 #else
@@ -3539,14 +3759,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 #endif
 
-#endif // _GLIBCXX_USE_C99_MATH_TR1
+#endif // _GLIBCXX_USE_C99_MATH_FUNCS
 #endif // C++11
 
-#if __cplusplus >= 201703L
-
+#ifdef __cpp_lib_hypot // C++ >= 17 && HOSTED
   // [c.math.hypot3], three-dimensional hypotenuse
-#define __cpp_lib_hypot 201603L
-
   template<typename _Tp>
     inline _Tp
     __hypot3(_Tp __x, _Tp __y, _Tp __z)
@@ -3575,10 +3792,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   { return std::__hypot3<long double>(__x, __y, __z); }
 
   template<typename _Tp, typename _Up, typename _Vp>
-    __gnu_cxx::__promoted_t<_Tp, _Up, _Vp>
+    typename __gnu_cxx::__promote_3<_Tp, _Up, _Vp>::__type
     hypot(_Tp __x, _Up __y, _Vp __z)
     {
-      using __type = __gnu_cxx::__promoted_t<_Tp, _Up, _Vp>;
+      using __type = typename __gnu_cxx::__promote_3<_Tp, _Up, _Vp>::__type;
       return std::__hypot3<__type>(__x, __y, __z);
     }
 
@@ -3614,12 +3831,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   { return std::__hypot3<__gnu_cxx::__bfloat16_t>(__x, __y, __z); }
 #endif
 
-#endif // C++17
+#endif // __cpp_lib_hypot
 
-#if __cplusplus >= 202002L
+#ifdef __cpp_lib_interpolate // C++ >= 20
   // linear interpolation
-# define __cpp_lib_interpolate 201902L
-
   template<typename _Fp>
     constexpr _Fp
     __lerp(_Fp __a, _Fp __b, _Fp __t) noexcept
@@ -3689,8 +3904,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   lerp(__gnu_cxx::__bfloat16_t __x, __gnu_cxx::__bfloat16_t __y, __gnu_cxx::__bfloat16_t __z) noexcept
   { return std::__lerp<__gnu_cxx::__bfloat16_t>(__x, __y, __z); }
 #endif
-
-#endif // C++20
+#endif // __cpp_lib_interpolate
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

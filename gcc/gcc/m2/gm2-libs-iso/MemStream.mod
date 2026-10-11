@@ -1,6 +1,6 @@
 (* MemStream.mod provide a memory stream channel.
 
-Copyright (C) 2015-2023 Free Software Foundation, Inc.
+Copyright (C) 2015-2025 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -45,7 +45,7 @@ FROM RTgenif IMPORT GenDevIF, InitGenDevIF ;
 FROM FIO IMPORT File ;
 FROM IOConsts IMPORT ReadResults ;
 FROM ChanConsts IMPORT readFlag, writeFlag ;
-FROM SYSTEM IMPORT ADDRESS, ADR ;
+FROM SYSTEM IMPORT ADR ;
 FROM ASCII IMPORT nl, nul ;
 FROM Storage IMPORT ALLOCATE, DEALLOCATE, REALLOCATE ;
 FROM libc IMPORT printf ;
@@ -694,7 +694,10 @@ END handlefree ;
 
 PROCEDURE Close (VAR cid: ChanId) ;
 BEGIN
-   printf ("Close called\n");
+   IF Debugging
+   THEN
+      printf ("Close called\n")
+   END ;
    IF IsMem(cid)
    THEN
       UnMakeChan(did, cid) ;

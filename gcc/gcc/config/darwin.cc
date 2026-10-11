@@ -1,5 +1,5 @@
 /* Functions for generic Darwin as target machine for GNU C compiler.
-   Copyright (C) 1989-2023 Free Software Foundation, Inc.
+   Copyright (C) 1989-2025 Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
 This file is part of GCC.
@@ -89,7 +89,7 @@ along with GCC; see the file COPYING3.  If not see
 typedef struct GTY(()) cdtor_record {
   rtx symbol;
   int priority;		/* [con/de]structor priority */
-  int position;		/* original position */
+  unsigned position;	/* original position */
 } cdtor_record;
 
 static GTY(()) vec<cdtor_record, va_gc> *ctors = NULL;
@@ -269,6 +269,45 @@ name_needs_quotes (const char *name)
 	  && c != '.' && c != '$' && c != '_' )
       return 1;
   return 0;
+}
+
+DEBUG_FUNCTION void
+dump_machopic_symref_flags (FILE *dump, rtx sym_ref)
+{
+  unsigned long flags = SYMBOL_REF_FLAGS (sym_ref);
+
+  fprintf (dump, "flags: %08lx %c%c%c%c%c%c%c",
+	   flags,
+	   (MACHO_SYMBOL_STATIC_P (sym_ref) ? 's' : '-'),
+	   (MACHO_SYMBOL_INDIRECTION_P (sym_ref) ? 'I' : '-'),
+	   (MACHO_SYMBOL_LINKER_VIS_P (sym_ref) ? 'l' : '-'),
+	   (MACHO_SYMBOL_HIDDEN_VIS_P (sym_ref) ? 'h' : '-'),
+	   (MACHO_SYMBOL_DEFINED_P (sym_ref) ? 'd' : '-'),
+	   (MACHO_SYMBOL_MUST_INDIRECT_P (sym_ref) ? 'i' : '-'),
+	   (MACHO_SYMBOL_VARIABLE_P (sym_ref) ? 'v' : '-'));
+
+#if (DARWIN_X86)
+  fprintf (dump, "%c%c%c%c",
+	 (SYMBOL_REF_STUBVAR_P (sym_ref) ? 'S' : '-'),
+	 (SYMBOL_REF_DLLEXPORT_P (sym_ref) ? 'X' : '-'),
+	 (SYMBOL_REF_DLLIMPORT_P (sym_ref) ? 'I' : '-'),
+	 (SYMBOL_REF_FAR_ADDR_P (sym_ref) ? 'F' : '-'));
+#endif
+
+  fprintf (dump, "%c%c%c%03u%c%c%c\n",
+	   (SYMBOL_REF_ANCHOR_P (sym_ref) ? 'a' : '-'),
+	   (SYMBOL_REF_HAS_BLOCK_INFO_P (sym_ref) ? 'b' : '-'),
+	   (SYMBOL_REF_EXTERNAL_P (sym_ref) ? 'e' : '-'),
+	   (unsigned)SYMBOL_REF_TLS_MODEL (sym_ref),
+	   (SYMBOL_REF_SMALL_P (sym_ref) ? 'm' : '-'),
+	   (SYMBOL_REF_LOCAL_P (sym_ref) ? 'l' : '-'),
+	   (SYMBOL_REF_FUNCTION_P (sym_ref) ? 'f' : '-'));
+}
+
+DEBUG_FUNCTION void
+debug_machopic_symref_flags (rtx sym_ref)
+{
+  dump_machopic_symref_flags (stderr, sym_ref);
 }
 
 /* Return true if SYM_REF can be used without an indirection.  */
@@ -1428,7 +1467,7 @@ static tree
 is_objc_metadata (tree decl)
 {
   if (DECL_P (decl)
-      && (TREE_CODE (decl) == VAR_DECL || TREE_CODE (decl) == CONST_DECL)
+      && (VAR_P (decl) || TREE_CODE (decl) == CONST_DECL)
       && DECL_ATTRIBUTES (decl))
     {
       tree meta = lookup_attribute ("OBJC2META", DECL_ATTRIBUTES (decl));
@@ -2364,7 +2403,7 @@ darwin_asm_declare_object_name (FILE *file,
 #ifdef DEBUG_DARWIN_MEM_ALLOCATORS
 fprintf (file, "# dadon: %s %s (%llu, %u) local %d weak %d"
 	       " stat %d com %d pub %d t-const %d t-ro %d init %lx\n",
-	xname, (TREE_CODE (decl) == VAR_DECL?"var":"const"),
+	xname, TREE_CODE (decl) == VAR_DECL ? "var" : "const",
 	(unsigned long long)size, DECL_ALIGN (decl), local_def,
 	DECL_WEAK (decl), TREE_STATIC (decl), DECL_COMMON (decl),
 	TREE_PUBLIC (decl), TREE_CONSTANT (decl), TREE_READONLY (decl),
@@ -2602,7 +2641,7 @@ darwin_emit_common (FILE *fp, const char *name,
   fputs ("\t.comm\t", fp);
   assemble_name (fp, name);
   fprintf (fp, "," HOST_WIDE_INT_PRINT_UNSIGNED,
-	   emit_aligned_common?size:rounded);
+	   emit_aligned_common ? size : rounded);
   if (l2align && emit_aligned_common)
     fprintf (fp, ",%u", l2align);
   fputs ("\n", fp);
@@ -3376,7 +3415,6 @@ darwin_override_options (void)
 		  global_options.x_flag_objc_abi);
     }
 
-
   if (!OPTION_SET_P (dwarf_version))
     {
       /* External toolchains based on LLVM or clang 7+ have support for
@@ -3582,7 +3620,7 @@ darwin_patch_builtin (enum built_in_function fncode)
 void
 darwin_patch_builtins (void)
 {
-  if (LONG_DOUBLE_TYPE_SIZE != 128)
+  if (TYPE_PRECISION (long_double_type_node) != 128)
     return;
 
 #define PATCH_BUILTIN(fncode) darwin_patch_builtin (fncode);

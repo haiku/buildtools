@@ -1,5 +1,5 @@
 /* Language-dependent hooks for C++.
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2025 Free Software Foundation, Inc.
    Contributed by Alexandre Oliva  <aoliva@redhat.com>
 
 This file is part of GCC.
@@ -113,12 +113,19 @@ struct lang_hooks lang_hooks = LANG_HOOKS_INITIALIZER;
 /* The following function does something real, but only in Objective-C++.  */
 
 tree
-objcp_tsubst_copy_and_build (tree /*t*/,
-			     tree /*args*/,
-			     tsubst_flags_t /*complain*/,
-			     tree /*in_decl*/)
+objcp_tsubst_expr (tree /*t*/, tree /*args*/, tsubst_flags_t /*complain*/,
+		   tree /*in_decl*/)
 {
   return NULL_TREE;
+}
+
+/* Implement c-family hook to add language-specific features
+   for __has_{feature,extension}.  */
+
+void
+c_family_register_lang_features ()
+{
+  cp_register_features ();
 }
 
 static const char *
@@ -204,7 +211,7 @@ fold_cplus_constants (const_tree c)
   for (i = 0; i < vec_len; ++i)
     {
       tree elem = TREE_VEC_ELT (elems, i);
-      TREE_VEC_ELT (folded_elems, i) =  
+      TREE_VEC_ELT (folded_elems, i) =
 	(elem && !TYPE_P (elem)) ? cplus_expand_constant (elem) : elem;
 
     }

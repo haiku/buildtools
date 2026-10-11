@@ -1,5 +1,5 @@
 /* Declarations for -*- C++ -*- name lookup routines.
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
 This file is part of GCC.
@@ -213,7 +213,8 @@ enum scope_kind {
 			explicit specialization is introduced by
 			"template <>", this scope is always empty.  */
   sk_transaction,    /* A synchronized or atomic statement.  */
-  sk_omp	     /* An OpenMP structured block.  */
+  sk_omp,	     /* An OpenMP structured block.  */
+  sk_count	     /* Number of scope_kind enumerations.  */
 };
 
 struct GTY(()) cp_class_binding {
@@ -292,11 +293,11 @@ struct GTY(()) cp_binding_level {
       only valid if KIND == SK_TEMPLATE_PARMS.  */
   BOOL_BITFIELD explicit_spec_p : 1;
 
-  /* true means make a BLOCK for this level regardless of all else.  */
+  /* True means make a BLOCK for this level regardless of all else.  */
   unsigned keep : 1;
 
   /* Nonzero if this level can safely have additional
-      cleanup-needing variables added to it.  */
+     cleanup-needing variables added to it.  */
   unsigned more_cleanups_ok : 1;
   unsigned have_cleanups : 1;
 
@@ -308,9 +309,13 @@ struct GTY(()) cp_binding_level {
   unsigned defining_class_p : 1;
 
   /* True for SK_FUNCTION_PARMS of a requires-expression.  */
-  unsigned requires_expression: 1;
+  unsigned requires_expression : 1;
 
-  /* 22 bits left to fill a 32-bit word.  */
+  /* True for artificial blocks which should be ignored when finding
+     parent scope.  */
+  unsigned artificial : 1;
+
+  /* 21 bits left to fill a 32-bit word.  */
 };
 
 /* The binding level currently in effect.  */
@@ -357,9 +362,9 @@ extern void poplevel_class (void);
    don't accidentally mix integers.  */
 enum class LOOK_where
 {
-  BLOCK = 1 << 0,  /* Consider block scopes.  */ 
-  CLASS = 1 << 1,  /* Consider class scopes.  */ 
-  NAMESPACE = 1 << 2,  /* Consider namespace scopes.  */ 
+  BLOCK = 1 << 0,  /* Consider block scopes.  */
+  CLASS = 1 << 1,  /* Consider class scopes.  */
+  NAMESPACE = 1 << 2,  /* Consider namespace scopes.  */
 
   ALL = BLOCK | CLASS | NAMESPACE,
   BLOCK_NAMESPACE = BLOCK | NAMESPACE,
@@ -380,8 +385,11 @@ enum class LOOK_want
   TYPE = 1 << 1,  /* We only want TYPE_DECLS.  */
   NAMESPACE = 1 << 2,  /* We only want NAMESPACE_DECLS.  */
 
-  HIDDEN_FRIEND = 1 << 3, /* See hidden friends.  */
+  HIDDEN_FRIEND = 1 << 3,  /* See hidden friends.  */
   HIDDEN_LAMBDA = 1 << 4,  /* See lambda-ignored entities.  */
+
+  ANY_REACHABLE = 1 << 5,  /* Include reachable module declarations not
+			      normally visible to name lookup.  */
 
   TYPE_NAMESPACE = TYPE | NAMESPACE,  /* Either NAMESPACE or TYPE.  */
 };
@@ -436,7 +444,7 @@ extern tree cp_namespace_decls (tree);
 extern void set_decl_namespace (tree, tree, bool);
 extern void push_decl_namespace (tree);
 extern void pop_decl_namespace (void);
-extern void do_namespace_alias (tree, tree);
+extern void do_namespace_alias (location_t, tree, tree);
 extern tree do_class_using_decl (tree, tree);
 extern tree lookup_arg_dependent (tree, tree, vec<tree, va_gc> *);
 extern tree search_anon_aggr (tree, tree, bool = false);
@@ -449,6 +457,7 @@ extern void resort_type_member_vec (void *, void *,
 extern vec<tree, va_gc> *set_class_bindings (tree, int extra = 0);
 extern void insert_late_enum_def_bindings (tree, tree);
 extern tree innermost_non_namespace_value (tree);
+extern bool decl_in_scope_p (tree);
 extern cxx_binding *outer_binding (tree, cxx_binding *, bool);
 extern void cp_emit_debug_info_for_using (tree, tree);
 
@@ -478,7 +487,7 @@ extern tree lookup_class_binding (tree ctx, tree name);
 extern bool import_module_binding (tree ctx, tree name, unsigned mod,
 				   unsigned snum);
 extern bool set_module_binding (tree ctx, tree name, unsigned mod,
-				int mod_glob_flag,
+				bool global_p, bool partition_p,
 				tree value, tree type, tree visible);
 extern void add_module_namespace_decl (tree ns, tree decl);
 
@@ -489,6 +498,7 @@ enum WMB_Flags
   WMB_Export = 1 << 1,
   WMB_Using = 1 << 2,
   WMB_Hidden = 1 << 3,
+  WMB_Purview = 1 << 4,
 };
 
 extern unsigned walk_module_binding (tree binding, bitmap partitions,

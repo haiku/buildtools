@@ -1,5 +1,5 @@
 /* Interprocedural Identical Code Folding pass
-   Copyright (C) 2014-2023 Free Software Foundation, Inc.
+   Copyright (C) 2014-2025 Free Software Foundation, Inc.
 
    Contributed by Jan Hubicka <hubicka@ucw.cz> and Martin Liska <mliska@suse.cz>
 
@@ -46,6 +46,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "symbol-summary.h"
 #include "ipa-icf-gimple.h"
 #include "sreal.h"
+#include "ipa-cp.h"
 #include "ipa-prop.h"
 
 namespace ipa_icf_gimple {
@@ -458,7 +459,9 @@ func_checker::compare_asm_inputs_outputs (tree t1, tree t2,
 	return false;
 
       if (!compare_operand (TREE_VALUE (t1), TREE_VALUE (t2),
-			    get_operand_access_type (map, t1)))
+			    get_operand_access_type (map, t1))
+	  || !types_compatible_p (TREE_TYPE (TREE_VALUE (t1)),
+				  TREE_TYPE (TREE_VALUE (t2))))
 	return return_false ();
 
       tree p1 = TREE_PURPOSE (t1);
@@ -542,6 +545,10 @@ func_checker::compare_loops (basic_block bb1, basic_block bb2)
     return return_false_with_msg ("unroll");
   if (!compare_variable_decl (l1->simduid, l2->simduid))
     return return_false_with_msg ("simduid");
+  if ((l1->any_upper_bound != l2->any_upper_bound)
+      || (l1->any_upper_bound
+	  && (l1->nb_iterations_upper_bound != l2->nb_iterations_upper_bound)))
+    return return_false_with_msg ("nb_iterations_upper_bound");
 
   return true;
 }
@@ -701,29 +708,41 @@ func_checker::compare_gimple_call (gcall *s1, gcall *s2)
       || gimple_call_from_thunk_p (s1) != gimple_call_from_thunk_p (s2)
       || gimple_call_from_new_or_delete (s1) != gimple_call_from_new_or_delete (s2)
       || gimple_call_va_arg_pack_p (s1) != gimple_call_va_arg_pack_p (s2)
-      || gimple_call_alloca_for_var_p (s1) != gimple_call_alloca_for_var_p (s2))
+      || gimple_call_alloca_for_var_p (s1) != gimple_call_alloca_for_var_p (s2)
+      || gimple_call_must_tail_p (s1) != gimple_call_must_tail_p (s2))
     return false;
 
-  if (gimple_call_internal_p (s1)
-      && gimple_call_internal_fn (s1) != gimple_call_internal_fn (s2))
-    return false;
-
-  tree fntype1 = gimple_call_fntype (s1);
-  tree fntype2 = gimple_call_fntype (s2);
-
-  /* For direct calls we verify that types are compatible so if we matched
-     callees, callers must match, too.  For indirect calls however verify
-     function type.  */
-  if (!gimple_call_fndecl (s1))
+  unsigned check_arg_types_from = 0;
+  if (gimple_call_internal_p (s1))
     {
-      if ((fntype1 && !fntype2)
-	  || (!fntype1 && fntype2)
-	  || (fntype1 && !types_compatible_p (fntype1, fntype2)))
-	return return_false_with_msg ("call function types are not compatible");
+      if (gimple_call_internal_fn (s1) != gimple_call_internal_fn (s2))
+	return false;
     }
+  else
+    {
+      tree fntype1 = gimple_call_fntype (s1);
+      tree fntype2 = gimple_call_fntype (s2);
+      if (!types_compatible_p (fntype1, fntype2))
+	return return_false_with_msg ("call function types are not compatible");
 
-  if (fntype1 && fntype2 && comp_type_attributes (fntype1, fntype2) != 1)
-    return return_false_with_msg ("different fntype attributes");
+      if (comp_type_attributes (fntype1, fntype2) != 1)
+	return return_false_with_msg ("different fntype attributes");
+
+      check_arg_types_from = gimple_call_num_args (s1);
+      if (!prototype_p (fntype1) || !prototype_p (fntype2))
+	check_arg_types_from = 0;
+      else if (stdarg_p (fntype1))
+	{
+	  check_arg_types_from = list_length (TYPE_ARG_TYPES (fntype1));
+	  if (stdarg_p (fntype2))
+	    {
+	      unsigned n = list_length (TYPE_ARG_TYPES (fntype2));
+	      check_arg_types_from = MIN (check_arg_types_from, n);
+	    }
+	}
+      else if (stdarg_p (fntype2))
+	check_arg_types_from = list_length (TYPE_ARG_TYPES (fntype2));
+    }
 
   tree chain1 = gimple_call_chain (s1);
   tree chain2 = gimple_call_chain (s2);
@@ -741,6 +760,10 @@ func_checker::compare_gimple_call (gcall *s1, gcall *s2)
 
       if (!compare_operand (t1, t2, get_operand_access_type (&map, t1)))
 	return return_false_with_msg ("GIMPLE call operands are different");
+      if (i >= check_arg_types_from
+	  && !types_compatible_p (TREE_TYPE (t1), TREE_TYPE (t2)))
+	return return_false_with_msg ("GIMPLE call operand types are "
+				      "different");
     }
 
   /* Return value checking.  */
@@ -981,7 +1004,7 @@ func_checker::compare_gimple_asm (const gasm *g1, const gasm *g2)
   if (gimple_asm_volatile_p (g1) != gimple_asm_volatile_p (g2))
     return false;
 
-  if (gimple_asm_input_p (g1) != gimple_asm_input_p (g2))
+  if (gimple_asm_basic_p (g1) != gimple_asm_basic_p (g2))
     return false;
 
   if (gimple_asm_inline_p (g1) != gimple_asm_inline_p (g2))

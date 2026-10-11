@@ -1,4 +1,10 @@
 // { dg-options "-w" }
+
+#![feature(intrinsics)]
+
+#[lang = "sized"]
+pub trait Sized {}
+
 mod intrinsics {
     extern "rust-intrinsic" {
         #[rustc_const_stable(feature = "const_ptr_offset", since = "1.61.0")]

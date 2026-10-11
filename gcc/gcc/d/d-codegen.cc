@@ -1,5 +1,5 @@
 /* d-codegen.cc --  Code generation and routines for manipulation of GCC trees.
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
+   Copyright (C) 2006-2025 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -43,22 +43,31 @@ along with GCC; see the file COPYING3.  If not see
 #include "d-tree.h"
 
 
-/* Return the GCC location for the D frontend location LOC.  */
+/* Return the GCC location for the D frontend source location LOC.  */
 
 location_t
-make_location_t (const Loc &loc)
+make_location_t (const SourceLoc &loc)
 {
   location_t gcc_location = input_location;
 
-  if (loc.filename)
+  if (loc.filename.length != 0)
     {
-      linemap_add (line_table, LC_ENTER, 0, loc.filename, loc.linnum);
-      linemap_line_start (line_table, loc.linnum, 0);
-      gcc_location = linemap_position_for_column (line_table, loc.charnum);
+      linemap_add (line_table, LC_ENTER, 0, loc.filename.ptr, loc.line);
+      linemap_line_start (line_table, loc.line, 0);
+      gcc_location = linemap_position_for_column (line_table, loc.column);
       linemap_add (line_table, LC_LEAVE, 0, NULL, 0);
     }
 
   return gcc_location;
+}
+
+/* Likewise, but converts LOC from a compact opaque location.  */
+
+location_t
+make_location_t (const Loc loc)
+{
+  const SourceLoc sloc = loc.toSourceLoc ();
+  return make_location_t (sloc);
 }
 
 /* Return the DECL_CONTEXT for symbol DSYM.  */
@@ -150,14 +159,14 @@ declaration_type (Declaration *decl)
       TypeFunction *tf = TypeFunction::create (NULL, decl->type,
 					       VARARGnone, LINK::d);
       TypeDelegate *t = TypeDelegate::create (tf);
-      return build_ctype (t->merge2 ());
+      return build_ctype (dmd::merge2 (t));
     }
 
   /* Static array va_list have array->pointer conversions applied.  */
   if (decl->isParameter () && valist_array_p (decl->type))
     {
-      Type *valist = decl->type->nextOf ()->pointerTo ();
-      valist = valist->castMod (decl->type->mod);
+      Type *valist = dmd::pointerTo (decl->type->nextOf ());
+      valist = dmd::castMod (valist, decl->type->mod);
       return build_ctype (valist);
     }
 
@@ -200,14 +209,14 @@ parameter_type (Parameter *arg)
       TypeFunction *tf = TypeFunction::create (NULL, arg->type,
 					       VARARGnone, LINK::d);
       TypeDelegate *t = TypeDelegate::create (tf);
-      return build_ctype (t->merge2 ());
+      return build_ctype (dmd::merge2 (t));
     }
 
   /* Static array va_list have array->pointer conversions applied.  */
   if (valist_array_p (arg->type))
     {
-      Type *valist = arg->type->nextOf ()->pointerTo ();
-      valist = valist->castMod (arg->type->mod);
+      Type *valist = dmd::pointerTo (arg->type->nextOf ());
+      valist = dmd::castMod (valist, arg->type->mod);
       return build_ctype (valist);
     }
 
@@ -246,15 +255,15 @@ build_integer_cst (dinteger_t value, tree type)
 tree
 build_float_cst (const real_t &value, Type *totype)
 {
-  real_t new_value;
+  real_value new_value;
   TypeBasic *tb = totype->isTypeBasic ();
 
   gcc_assert (tb != NULL);
 
   tree type_node = build_ctype (tb);
-  real_convert (&new_value.rv (), TYPE_MODE (type_node), &value.rv ());
+  real_convert (&new_value, TYPE_MODE (type_node), &value.rv ());
 
-  return build_real (type_node, new_value.rv ());
+  return build_real (type_node, new_value);
 }
 
 /* Returns the .length component from the D dynamic array EXP.  */
@@ -308,7 +317,7 @@ d_array_value (tree type, tree len, tree data)
   CONSTRUCTOR_APPEND_ELT (ce, len_field, len);
   CONSTRUCTOR_APPEND_ELT (ce, ptr_field, data);
 
-  return build_constructor (type, ce);
+  return build_padded_constructor (type, ce);
 }
 
 /* Returns value representing the array length of expression EXP.
@@ -631,6 +640,37 @@ force_target_expr (tree exp)
   return build_target_expr (decl, exp);
 }
 
+/* Determine whether expression EXP can have a copy of its value elided.  */
+
+static bool
+can_elide_copy_p (Expression *exp)
+{
+  /* Explicit `__rvalue(exp)'.  */
+  if (exp->rvalue ())
+    return true;
+
+  /* Look for variable expression.  */
+  Expression *last = exp;
+  while (CommaExp *ce = last->isCommaExp ())
+    last = ce->e2;
+
+  if (VarExp *ve = last->isVarExp ())
+    {
+      if (VarDeclaration *vd = ve->var->isVarDeclaration ())
+	{
+	  /* Variable is an implicit copy of an lvalue.  */
+	  if (vd->storage_class & STCrvalue)
+	    return true;
+
+	  /* The destructor is going to run on the variable.  */
+	  if (vd->isArgDtorVar ())
+	    return true;
+	}
+    }
+
+  return false;
+}
+
 /* Returns the address of the expression EXP.  */
 
 tree
@@ -664,6 +704,11 @@ build_address (tree exp)
   /* Can't take the address of a manifest constant, instead use its value.  */
   if (TREE_CODE (exp) == CONST_DECL)
     exp = DECL_INITIAL (exp);
+
+  /* Type `noreturn' has no storage, return `null' for the expression.  */
+  if (DECL_P (exp) && TREE_CODE (exp) != FIELD_DECL
+      && TYPE_MAIN_VARIANT (TREE_TYPE (exp)) == noreturn_type_node)
+    return compound_expr (init, null_pointer_node);
 
   /* Some expression lowering may request an address of a compile-time constant,
      or other non-lvalue expression.  Make sure it is assigned to a location we
@@ -704,8 +749,12 @@ d_mark_addressable (tree exp, bool complain)
 {
   switch (TREE_CODE (exp))
     {
-    case ADDR_EXPR:
     case COMPONENT_REF:
+      if (complain && DECL_BIT_FIELD (TREE_OPERAND (exp, 1)))
+	error ("cannot take address of bit-field %qD", TREE_OPERAND (exp, 1));
+
+      /* Fall through.  */
+    case ADDR_EXPR:
     case ARRAY_REF:
     case REALPART_EXPR:
     case IMAGPART_EXPR:
@@ -858,7 +907,10 @@ build_memset_call (tree ptr, tree num)
     {
       tree cst = build_zero_cst (valtype);
       if (TREE_CODE (cst) == CONSTRUCTOR)
-	return build_memcpy_call (ptr, build_address (cst), num);
+	{
+	  CONSTRUCTOR_ZERO_PADDING_BITS (cst) = 1;
+	  return build_memcpy_call (ptr, build_address (cst), num);
+	}
 
       return modify_expr (build_deref (ptr), cst);
     }
@@ -904,7 +956,7 @@ identity_compare_p (StructDeclaration *sd)
 	  if (offset != vd->offset)
 	    return false;
 
-	  offset += vd->type->size ();
+	  offset += dmd::size (vd->type);
 	}
     }
 
@@ -972,15 +1024,15 @@ lower_struct_comparison (tree_code code, StructDeclaration *sd,
 	  /* Compare inner data structures.  */
 	  tcmp = lower_struct_comparison (code, ts->sym, t1ref, t2ref);
 	}
-      else if (type->ty != TY::Tvector && type->isintegral ())
+      else if (type->ty != TY::Tvector && type->isIntegral ())
 	{
 	  /* Integer comparison, no special handling required.  */
 	  tcmp = build_boolop (code, t1ref, t2ref);
 	}
-      else if (type->ty != TY::Tvector && type->isfloating ())
+      else if (type->ty != TY::Tvector && type->isFloating ())
 	{
 	  /* Floating-point comparison, don't compare padding in type.  */
-	  if (!type->iscomplex ())
+	  if (!type->isComplex ())
 	    tcmp = build_float_identity (code, t1ref, t2ref);
 	  else
 	    {
@@ -1090,7 +1142,7 @@ build_array_struct_comparison (tree_code code, StructDeclaration *sd,
   add_stmt (build_assign (INIT_EXPR, result, init));
 
   /* Cast pointer-to-array to pointer-to-struct.  */
-  tree ptrtype = build_ctype (sd->type->pointerTo ());
+  tree ptrtype = build_ctype (dmd::pointerTo (sd->type));
   tree lentype = TREE_TYPE (length);
 
   push_binding_level (level_block);
@@ -1165,7 +1217,7 @@ build_struct_literal (tree type, vec <constructor_elt, va_gc> *init)
 {
   /* If the initializer was empty, use default zero initialization.  */
   if (vec_safe_is_empty (init))
-    return build_constructor (type, NULL);
+    return build_padded_constructor (type, NULL);
 
   /* Struct literals can be seen for special enums representing `_Complex',
      make sure to reinterpret the literal as the correct type.  */
@@ -1266,11 +1318,22 @@ build_struct_literal (tree type, vec <constructor_elt, va_gc> *init)
   /* Ensure that we have consumed all values.  */
   gcc_assert (vec_safe_is_empty (init) || ANON_AGGR_TYPE_P (type));
 
-  tree ctor = build_constructor (type, ve);
+  tree ctor = build_padded_constructor (type, ve);
 
   if (constant_p)
     TREE_CONSTANT (ctor) = 1;
 
+  return ctor;
+}
+
+/* Return a new zero padded CONSTRUCTOR node whose type is TYPE and values are
+   in the vec pointed to by VALS.  */
+
+tree
+build_padded_constructor (tree type, vec<constructor_elt, va_gc> *vals)
+{
+  tree ctor = build_constructor (type, vals);
+  CONSTRUCTOR_ZERO_PADDING_BITS (ctor) = 1;
   return ctor;
 }
 
@@ -1600,14 +1663,14 @@ underlying_complex_expr (tree type, tree expr)
   /* Build a constructor from the real and imaginary parts.  */
   if (COMPLEX_FLOAT_TYPE_P (TREE_TYPE (expr)) &&
       (!INDIRECT_REF_P (expr)
-       || !CONVERT_EXPR_CODE_P (TREE_CODE (TREE_OPERAND (expr, 0)))))
+       || !CONVERT_EXPR_P (TREE_OPERAND (expr, 0))))
     {
       vec <constructor_elt, va_gc> *ve = NULL;
       CONSTRUCTOR_APPEND_ELT (ve, TYPE_FIELDS (type),
                     real_part (expr));
       CONSTRUCTOR_APPEND_ELT (ve, TREE_CHAIN (TYPE_FIELDS (type)),
                     imaginary_part (expr));
-      return build_constructor (type, ve);
+      return build_padded_constructor (type, ve);
     }
 
   /* Replace type in the reinterpret cast with a cast to the record type.  */
@@ -1812,7 +1875,7 @@ build_array_from_val (Type *type, tree val)
   for (size_t i = 0; i < dims; i++)
     CONSTRUCTOR_APPEND_ELT (elms, size_int (i), val);
 
-  return build_constructor (build_ctype (type), elms);
+  return build_padded_constructor (build_ctype (type), elms);
 }
 
 /* Build a static array of type TYPE from an array of EXPS.
@@ -1846,7 +1909,7 @@ build_array_from_exprs (Type *type, Expressions *exps, bool const_p)
     init = build_memset_call (var);
 
   /* Initialize the temporary.  */
-  tree assign = modify_expr (var, build_constructor (satype, elms));
+  tree assign = modify_expr (var, build_padded_constructor (satype, elms));
   return compound_expr (compound_expr (init, assign), var);
 }
 
@@ -1860,7 +1923,7 @@ void_okay_p (tree t)
 
   if (VOID_TYPE_P (TREE_TYPE (type)))
     {
-      tree totype = build_ctype (Type::tuns8->pointerTo ());
+      tree totype = build_ctype (dmd::pointerTo (Type::tuns8));
       return fold_convert (totype, t);
     }
 
@@ -1873,8 +1936,10 @@ void_okay_p (tree t)
 static tree
 build_filename_from_loc (const Loc &loc)
 {
-  const char *filename = loc.filename
-    ? loc.filename : d_function_chain->module->srcfile.toChars ();
+  const char *filename = loc.filename ();
+
+  if (filename == NULL)
+    filename = d_function_chain->module->srcfile.toChars ();
 
   unsigned length = strlen (filename);
   tree str = build_string (length, filename);
@@ -1891,20 +1956,20 @@ tree
 build_assert_call (const Loc &loc, libcall_fn libcall, tree msg)
 {
   tree file;
-  tree line = size_int (loc.linnum);
+  tree line = size_int (loc.linnum ());
 
   switch (libcall)
     {
     case LIBCALL_ASSERT_MSG:
     case LIBCALL_UNITTEST_MSG:
       /* File location is passed as a D string.  */
-      if (loc.filename)
+      if (const char *filename = loc.filename ())
 	{
-	  unsigned len = strlen (loc.filename);
-	  tree str = build_string (len, loc.filename);
+	  unsigned len = strlen (filename);
+	  tree str = build_string (len, filename);
 	  TREE_TYPE (str) = make_array_type (Type::tchar, len);
 
-	  file = d_array_value (build_ctype (Type::tchar->arrayOf ()),
+	  file = d_array_value (build_ctype (dmd::arrayOf (Type::tchar)),
 				size_int (len), build_address (str));
 	}
       else
@@ -1940,7 +2005,7 @@ build_array_bounds_call (const Loc &loc)
     {
       return build_libcall (LIBCALL_ARRAYBOUNDSP, Type::tvoid, 2,
 			    build_filename_from_loc (loc),
-			    size_int (loc.linnum));
+			    size_int (loc.linnum ()));
     }
 }
 
@@ -1969,7 +2034,8 @@ build_bounds_index_condition (IndexExp *ie, tree index, tree length)
     {
       boundserr = build_libcall (LIBCALL_ARRAYBOUNDS_INDEXP, Type::tvoid, 4,
 				 build_filename_from_loc (ie->e2->loc),
-				 size_int (ie->e2->loc.linnum), index, length);
+				 size_int (ie->e2->loc.linnum ()),
+				 index, length);
     }
 
   return build_condition (TREE_TYPE (index), condition, boundserr, index);
@@ -1987,14 +2053,14 @@ build_bounds_slice_condition (SliceExp *se, tree lower, tree upper, tree length)
       tree condition = NULL_TREE;
 
       /* Enforces that `upper <= length`.  */
-      if (!se->upperIsInBounds && length != NULL_TREE)
+      if (!se->upperIsInBounds () && length != NULL_TREE)
 	condition = fold_build2 (GT_EXPR, d_bool_type, upper, length);
       else
 	length = integer_zero_node;
 
       /* Enforces that `lower <= upper`.  No need to check `lower <= length` as
 	 we've already ensured that `upper <= length`.  */
-      if (!se->lowerIsLessThanUpper)
+      if (!se->lowerIsLessThanUpper ())
 	{
 	  tree lwr_cond = fold_build2 (GT_EXPR, d_bool_type, lower, upper);
 
@@ -2018,7 +2084,7 @@ build_bounds_slice_condition (SliceExp *se, tree lower, tree upper, tree length)
 	      boundserr = build_libcall (LIBCALL_ARRAYBOUNDS_SLICEP,
 					 Type::tvoid, 5,
 					 build_filename_from_loc (se->loc),
-					 size_int (se->loc.linnum),
+					 size_int (se->loc.linnum ()),
 					 lower, upper, length);
 	    }
 
@@ -2098,6 +2164,60 @@ get_function_type (Type *t)
   else if (t->ty == TY::Tdelegate)
     tf = t->isTypeDelegate ()->next->isTypeFunction ();
   return tf;
+}
+
+/* Returns TRUE if calling the function FUNC, or calling a function or delegate
+   object of type TYPE is be free of side effects.  */
+
+bool
+call_side_effect_free_p (FuncDeclaration *func, Type *type)
+{
+  gcc_assert (func != NULL || type != NULL);
+
+  if (func != NULL)
+    {
+      /* Constructor and invariant calls can't be `pure'.  */
+      if (func->isCtorDeclaration () || func->isInvariantDeclaration ())
+	return false;
+
+      /* Must be a `nothrow' function.  */
+      TypeFunction *tf = func->type->toTypeFunction ();
+      if (!tf->isNothrow ())
+	return false;
+
+      /* Return type can't be `void' or `noreturn', as that implies all work is
+	 done via side effects.  */
+      if (tf->next->ty == TY::Tvoid || tf->next->ty == TY::Tnoreturn)
+	return false;
+
+      /* Only consider it as `pure' if it can't modify its arguments.  */
+      if (dmd::isPure (func) == PURE::const_)
+	return true;
+    }
+
+  if (type != NULL)
+    {
+      TypeFunction *tf = get_function_type (type);
+
+      /* Must be a `nothrow` function type.  */
+      if (tf == NULL || !tf->isNothrow ())
+	return false;
+
+      /* Return type can't be `void' or `noreturn', as that implies all work is
+	 done via side effects.  */
+      if (tf->next->ty == TY::Tvoid || tf->next->ty == TY::Tnoreturn)
+	return false;
+
+      /* Delegates that can modify its context can't be `pure'.  */
+      if (type->isTypeDelegate () && tf->isMutable ())
+	return false;
+
+      /* Only consider it as `pure' if it can't modify its arguments.  */
+      if (tf->purity == PURE::const_)
+	return true;
+    }
+
+  return false;
 }
 
 /* Returns TRUE if CALLEE is a plain nested function outside the scope of
@@ -2204,7 +2324,7 @@ d_build_call (TypeFunction *tf, tree callable, tree object,
 	  if (empty_aggregate_p (TREE_TYPE (targ)) && !TREE_ADDRESSABLE (targ)
 	      && TREE_CODE (targ) != CONSTRUCTOR)
 	    {
-	      tree t = build_constructor (TREE_TYPE (targ), NULL);
+	      tree t = build_padded_constructor (TREE_TYPE (targ), NULL);
 	      targ = build2 (COMPOUND_EXPR, TREE_TYPE (t), targ, t);
 	    }
 
@@ -2223,8 +2343,10 @@ d_build_call (TypeFunction *tf, tree callable, tree object,
 		 - The ABI of the function expects the callee to destroy its
 		 arguments; when the caller is handles destruction, then `targ'
 		 has already been made into a temporary. */
-	      if (arg->op == EXP::structLiteral || (!sd->postblit && !sd->dtor)
-		  || target.isCalleeDestroyingArgs (tf))
+	      if (!can_elide_copy_p (arg)
+		  && (arg->op == EXP::structLiteral
+		      || (!sd->postblit && !sd->dtor)
+		      || target.isCalleeDestroyingArgs (tf)))
 		targ = force_target_expr (targ);
 
 	      targ = convert (build_reference_type (TREE_TYPE (targ)),
@@ -2241,7 +2363,7 @@ d_build_call (TypeFunction *tf, tree callable, tree object,
 
 	  /* Type `noreturn` is a terminator, as no other arguments can possibly
 	     be evaluated after it.  */
-	  if (TREE_TYPE (targ) == noreturn_type_node)
+	  if (TYPE_MAIN_VARIANT (TREE_TYPE (targ)) == noreturn_type_node)
 	    noreturn_call = true;
 
 	  vec_safe_push (args, targ);
@@ -2261,7 +2383,12 @@ d_build_call (TypeFunction *tf, tree callable, tree object,
       unsigned int ix;
 
       FOR_EACH_VEC_SAFE_ELT (args, ix, arg)
-	saved_args = compound_expr (saved_args, arg);
+	{
+	  saved_args = compound_expr (saved_args, arg);
+
+	  if (TYPE_MAIN_VARIANT (TREE_TYPE (arg)) == noreturn_type_node)
+	    break;
+	}
 
       /* Add a stub result type for the expression.  */
       tree result = build_zero_cst (TREE_TYPE (ctype));
@@ -2514,7 +2641,7 @@ get_frame_for_symbol (Dsymbol *sym)
 		  framefields = DECL_CHAIN (framefields);
 		}
 
-	      frame_ref = build_address (build_constructor (type, ve));
+	      frame_ref = build_address (build_padded_constructor (type, ve));
 	    }
 	}
 
@@ -2669,8 +2796,8 @@ build_frame_type (tree ffi, FuncDeclaration *fd)
      of the calling function non-locally.  So we add all parameters with nested
      refs to the function frame, this should also mean overriding methods will
      have the same frame layout when inheriting a contract.  */
-  if ((global.params.useIn == CHECKENABLEon && fd->frequire)
-      || (global.params.useOut == CHECKENABLEon && fd->fensure))
+  if ((global.params.useIn == CHECKENABLEon && fd->frequire ())
+      || (global.params.useOut == CHECKENABLEon && fd->fensure ()))
     {
       if (fd->parameters)
 	{
@@ -2857,8 +2984,8 @@ get_frameinfo (FuncDeclaration *fd)
       /* This can shift due to templates being expanded that access alias
          symbols, give it a decent error for now.  */
       if (requiresClosure != fd->requiresClosure
-	  && (fd->nrvo_var || global.params.betterC))
-	fd->checkClosure ();
+	  && (fd->nrvo_var || !global.params.useGC))
+	dmd::checkClosure (fd);
 
       /* Set-up a closure frame, this will be allocated on the heap.  */
       FRAMEINFO_CREATES_FRAME (ffi) = 1;
@@ -2880,8 +3007,8 @@ get_frameinfo (FuncDeclaration *fd)
 
       /* In checkNestedReference, references from contracts are not added to the
 	 closureVars array, so assume all parameters referenced.  */
-      if ((global.params.useIn == CHECKENABLEon && fd->frequire)
-	  || (global.params.useOut == CHECKENABLEon && fd->fensure))
+      if ((global.params.useIn == CHECKENABLEon && fd->frequire ())
+	  || (global.params.useOut == CHECKENABLEon && fd->fensure ()))
 	FRAMEINFO_CREATES_FRAME (ffi) = 1;
 
       /* If however `fd` is nested (deeply) in a function that creates a

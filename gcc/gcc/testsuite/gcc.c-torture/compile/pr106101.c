@@ -1,4 +1,5 @@
 /* { dg-do compile } */
+/* { dg-additional-options "-std=gnu17" } */
 
 extern char *globerr;
 char **ftpglob();
@@ -24,10 +25,9 @@ static const int yycheck[] =
 };
 
 
-int yyparse (void)
+int yyparse (char **yyvsp, char *yyvsp1)
 {
     int yystate = 0;
-    int *yyvsp = 0;
 
   int yyn;
   int yyresult;
@@ -39,22 +39,22 @@ yyreduce:
     {
   case 72: {
 
-  if (strncmp( yyvsp[0], "~", 1) == 0) {
+  if (__builtin_strncmp( yyvsp[0], "~", 1) == 0) {
    *(char **)&(yyval) = *ftpglob(yyvsp[0]);
    if (globerr != 0) {
     yyval = 0;
    }
-   free(yyvsp[0]);
+   __builtin_free(yyvsp[0]);
   }
  }
     break;
     }
 
-  *++yyvsp = yyval;
+  *++yyvsp1 = yyval;
 
   {
-    const int yyi = yypgoto[0] + *yyvsp;
-    yystate = (yycheck[yyi] == *yyvsp ? 0 : 0);
+    const int yyi = yypgoto[0] + *yyvsp1;
+    yystate = (yycheck[yyi] == *yyvsp1 ? 0 : 0);
   }
 
   return yyresult;

@@ -1,4 +1,3 @@
-/* { dg-require-effective-target alloca } */
 /* { dg-additional-options "-fno-ipa-modref" } */
 
 #include <stdlib.h>
@@ -240,8 +239,8 @@ void test_16 (void)
   __analyzer_eval (strlen (msg) == 11); /* { dg-warning "TRUE" } */
 
   /* Out-of-bounds.  */
-  __analyzer_eval (msg[100] == 'e'); /* { dg-warning "UNKNOWN" } */
-  // TODO: some kind of warning for the out-of-bounds access
+  __analyzer_eval (msg[100] == 'e'); /* { dg-warning "UNKNOWN" "eval result" } */
+  /* { dg-warning "buffer over-read" "out-of-bounds" { target *-*-* } .-1 } */
 }
 
 static const char *__attribute__((noinline))
@@ -722,7 +721,7 @@ void test_29c (int len)
   __analyzer_eval (q->x == 107024); /* { dg-warning "TRUE" } */
   __analyzer_eval (q->y == 107025); /* { dg-warning "TRUE" } */
 
-  __analyzer_eval (p[10].x == 0); /* { dg-warning "use of uninitialized value '\\*p\\\[10\\\].x'" } */
+  __analyzer_eval (p[10].x == 0); /* { dg-warning "use of uninitialized value '\\*p\\\[10\\\].x'" "" { xfail { ! alloca } } } */
 }
 
 void test_30 (void *ptr)

@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -132,7 +132,7 @@ ReachabilityVisitor::visit (HIR::StructStruct &struct_item)
     {
       for (auto &field : struct_item.get_fields ())
 	if (field.get_visibility ().is_public ())
-	  ctx.update_reachability (field.get_field_type ()->get_mappings (),
+	  ctx.update_reachability (field.get_field_type ().get_mappings (),
 				   struct_reach);
     }
 

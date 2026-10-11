@@ -104,7 +104,7 @@ T emplace(T, Args...)(T chunk, auto ref Args args)
 
     // Initialize the object in its pre-ctor state
     const initializer = __traits(initSymbol, T);
-    (() @trusted { (cast(void*) chunk)[0 .. initializer.length] = initializer[]; })();
+    () @trusted { (cast(void*) chunk)[0 .. initializer.length] = cast(void[]) initializer[]; }();
 
     static if (isInnerClass!T)
     {
@@ -364,7 +364,7 @@ T* emplace(T, Args...)(void[] chunk, auto ref Args args)
     assert(u1.a == "hello");
 }
 
-@system unittest // bugzilla 15772
+@system unittest // https://issues.dlang.org/show_bug.cgi?id=15772
 {
     abstract class Foo {}
     class Bar: Foo {}
@@ -1570,7 +1570,11 @@ template forward(args...)
             alias fwd = arg;
         // (r)value
         else
-            @property auto fwd(){ pragma(inline, true); return move(arg); }
+            @property auto fwd()
+            {
+                version (DigitalMars) { /* @@BUG 23890@@ */ } else pragma(inline, true);
+                return move(arg);
+            }
     }
 
     alias Result = AliasSeq!();
@@ -1695,7 +1699,7 @@ template forward(args...)
         {
             x_ = forward!x;
         }
-        this()(auto const ref X x)
+        this()(auto ref const X x)
         {
             x_ = forward!x;
         }
@@ -2322,7 +2326,7 @@ pure nothrow @nogc @system unittest
     assert(val == 1);
 }
 
-// issue 18913
+// https://issues.dlang.org/show_bug.cgi?id=18913
 @safe unittest
 {
     static struct NoCopy
@@ -2344,7 +2348,7 @@ pure nothrow @nogc @system unittest
 
 debug(PRINTF)
 {
-    import core.stdc.stdio;
+    import core.stdc.stdio : printf;
 }
 
 /// Implementation of `_d_delstruct` and `_d_delstructTrace`
@@ -2454,7 +2458,7 @@ template _d_delstructImpl(T)
     assert(outerDtors == 1);
 }
 
-// issue 25552
+// https://issues.dlang.org/show_bug.cgi?id=25552
 pure nothrow @system unittest
 {
     int i;
@@ -2478,7 +2482,7 @@ pure nothrow @system unittest
     assert(i == 2);
 }
 
-// issue 25552
+// https://issues.dlang.org/show_bug.cgi?id=25552
 @safe unittest
 {
     int i;
@@ -2527,7 +2531,7 @@ pure nothrow @system unittest
     assert(i == 6);
 }
 
-// issue 25552
+// https://issues.dlang.org/show_bug.cgi?id=25552
 @safe unittest
 {
     int i;
@@ -2679,7 +2683,7 @@ T _d_newThrowable(T)() @trusted
     debug(PRINTF) printf(" p = %p\n", p);
 
     // initialize it
-    p[0 .. init.length] = init[];
+    p[0 .. init.length] = cast(void[]) init[];
 
     import core.internal.traits : hasIndirections;
     if (hasIndirections!T)
@@ -2727,15 +2731,19 @@ if (is(T == class))
 {
     import core.internal.traits : hasIndirections;
     import core.exception : onOutOfMemoryError;
-    import core.memory : GC, pureMalloc;
+    import core.memory : pureMalloc;
+    import core.memory : GC;
 
     alias BlkAttr = GC.BlkAttr;
 
     auto init = __traits(initSymbol, T);
     void* p;
 
-    static if (__traits(getLinkage, T) == "Windows")
+    static if (__traits(isCOMClass, T))
     {
+        // If this is a COM class we allocate it using malloc.
+        // This allows the reference counting to outlive the reference known about by the GC.
+
         p = pureMalloc(init.length);
         if (!p)
             onOutOfMemoryError();
@@ -2771,10 +2779,64 @@ if (is(T == class))
     }
 
     // initialize it
-    p[0 .. init.length] = init[];
+    p[0 .. init.length] = cast(void[]) init[];
 
     debug(PRINTF) printf("initialization done\n");
     return cast(T) p;
+}
+
+/**
+ * TraceGC wrapper around $(REF _d_newclassT, core,lifetime).
+ */
+T _d_newclassTTrace(T)(string file = __FILE__, int line = __LINE__, string funcname = __FUNCTION__) @trusted
+{
+    version (D_TypeInfo)
+    {
+        import core.internal.array.utils : TraceHook, gcStatsPure, accumulatePure;
+        mixin(TraceHook!(T.stringof, "_d_newclassT"));
+
+        return _d_newclassT!T();
+    }
+    else
+        assert(0, "Cannot create new class if compiling without support for runtime type information!");
+}
+
+/**
+ * Allocate an initialized non-array item.
+ *
+ * This is an optimization to avoid things needed for arrays like the __arrayPad(size).
+ * Used to allocate struct instances on the heap.
+ *
+ * ---
+ * struct Sz {int x = 0;}
+ * struct Si {int x = 3;}
+ *
+ * void main()
+ * {
+ *     new Sz(); // uses zero-initialization
+ *     new Si(); // uses Si.init
+ * }
+ * ---
+ *
+ * Returns:
+ *     newly allocated item
+ */
+T* _d_newitemT(T)() @trusted
+{
+    import core.internal.lifetime : emplaceInitializer;
+    import core.internal.traits : hasIndirections;
+    import core.memory : GC;
+
+    auto flags = !hasIndirections!T ? GC.BlkAttr.NO_SCAN : GC.BlkAttr.NONE;
+    immutable itemSize = T.sizeof;
+    if (TypeInfoSize!T)
+        flags |= GC.BlkAttr.FINALIZE;
+
+    auto p = GC.malloc(itemSize, flags, typeid(T));
+
+    emplaceInitializer(*(cast(T*) p));
+
+    return cast(T*) p;
 }
 
 // Test allocation
@@ -2805,15 +2867,149 @@ if (is(T == class))
     }
 }
 
-T _d_newclassTTrace(T)(string file, int line, string funcname) @trusted
+// Test allocation
+@safe unittest
 {
-    version (D_TypeInfo)
-    {
-        import core.internal.array.utils: TraceHook, gcStatsPure, accumulatePure;
-        mixin(TraceHook!(T.stringof, "_d_newclassT"));
+    struct S { }
+    S* s = _d_newitemT!S();
 
-        return _d_newclassT!T();
+    assert(s !is null);
+}
+
+// Test initializers
+@safe unittest
+{
+    {
+        // zero-initialization
+        struct S { int x, y; }
+        S* s = _d_newitemT!S();
+
+        assert(s.x == 0);
+        assert(s.y == 0);
     }
-    else
-        assert(0, "Cannot create new class if compiling without support for runtime type information!");
+    {
+        // S.init
+        struct S { int x = 2, y = 3; }
+        S* s = _d_newitemT!S();
+
+        assert(s.x == 2);
+        assert(s.y == 3);
+    }
+}
+
+// Test GC attributes
+version (CoreUnittest)
+{
+    struct S1
+    {
+        int x = 5;
+    }
+    struct S2
+    {
+        int x;
+        this(int x) { this.x = x; }
+    }
+    struct S3
+    {
+        int[4] x;
+        this(int x) { this.x[] = x; }
+    }
+    struct S4
+    {
+        int *x;
+    }
+
+}
+@system unittest
+{
+    import core.memory : GC;
+
+    auto s1 = new S1;
+    assert(s1.x == 5);
+    assert(GC.getAttr(s1) == GC.BlkAttr.NO_SCAN);
+
+    auto s2 = new S2(3);
+    assert(s2.x == 3);
+    assert(GC.getAttr(s2) == GC.BlkAttr.NO_SCAN);
+
+    auto s3 = new S3(1);
+    assert(s3.x == [1, 1, 1, 1]);
+    assert(GC.getAttr(s3) == GC.BlkAttr.NO_SCAN);
+    debug(SENTINEL) {} else
+        assert(GC.sizeOf(s3) == 16);
+
+    auto s4 = new S4;
+    assert(s4.x == null);
+    assert(GC.getAttr(s4) == 0);
+}
+
+// Test struct finalizers exception handling
+debug(SENTINEL) {} else
+@system unittest
+{
+    import core.memory : GC;
+
+    bool test(E)()
+    {
+        import core.exception;
+        static struct S1
+        {
+            E exc;
+            ~this() { throw exc; }
+        }
+
+        bool caught = false;
+        S1* s = new S1(new E("test onFinalizeError"));
+        try
+        {
+            GC.runFinalizers((cast(char*)(typeid(S1).xdtor))[0 .. 1]);
+        }
+        catch (FinalizeError err)
+        {
+            caught = true;
+        }
+        catch (E)
+        {
+        }
+        GC.free(s);
+        return caught;
+    }
+
+    assert(test!Exception);
+    import core.exception : InvalidMemoryOperationError;
+    assert(!test!InvalidMemoryOperationError);
+}
+
+version (D_ProfileGC)
+{
+    /**
+    * TraceGC wrapper around $(REF _d_newitemT, core,lifetime).
+    */
+    T* _d_newitemTTrace(T)(string file = __FILE__, int line = __LINE__, string funcname = __FUNCTION__) @trusted
+    {
+        version (D_TypeInfo)
+        {
+            static if (is(T == struct))
+            {
+                // prime the TypeInfo name, we don't want that affecting the allocated bytes
+                // Issue https://github.com/dlang/dmd/issues/20832
+                static string typeName(TypeInfo_Struct ti) nothrow @trusted => ti.name;
+                auto tnPure = cast(string function(TypeInfo_Struct ti) nothrow pure @trusted)&typeName;
+                cast(void)tnPure(typeid(T));
+            }
+
+            import core.internal.array.utils : TraceHook, gcStatsPure, accumulatePure;
+            mixin(TraceHook!(T.stringof, "_d_newitemT"));
+
+            return _d_newitemT!T();
+        }
+        else
+            assert(0, "Cannot create new `struct` if compiling without support for runtime type information!");
+    }
+}
+
+template TypeInfoSize(T)
+{
+    import core.internal.traits : hasElaborateDestructor;
+    enum TypeInfoSize = (is (T == struct) && hasElaborateDestructor!T) ? size_t.sizeof : 0;
 }

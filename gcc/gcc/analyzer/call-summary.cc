@@ -18,11 +18,12 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#define INCLUDE_MEMORY
+#define INCLUDE_VECTOR
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
 #include "tree-dfa.h"
+#include "diagnostic-core.h"
 #include "diagnostic.h"
 #include "tree-diagnostic.h"
 #include "analyzer/analyzer.h"
@@ -144,12 +145,8 @@ call_summary::dump (const extrinsic_state &ext_state,
 		    FILE *fp,
 		    bool simple) const
 {
-  pretty_printer pp;
-  pp_format_decoder (&pp) = default_tree_printer;
-  pp_show_color (&pp) = pp_show_color (global_dc->printer);
-  pp.buffer->stream = fp;
+  tree_dump_pretty_printer pp (fp);
   dump_to_pp (ext_state, &pp, simple);
-  pp_flush (&pp);
 }
 
 /* Dump a multiline representation of this object to stderr.  */
@@ -167,7 +164,7 @@ call_summary::dump (const extrinsic_state &ext_state, bool simple) const
    arguments at the caller. */
 
 call_summary_replay::call_summary_replay (const call_details &cd,
-					  function *called_fn,
+					  const function &called_fn,
 					  call_summary *summary,
 					  const extrinsic_state &ext_state)
 : m_cd (cd),
@@ -177,7 +174,7 @@ call_summary_replay::call_summary_replay (const call_details &cd,
   region_model_manager *mgr = cd.get_manager ();
 
   // populate params based on args
-  tree fndecl = called_fn->decl;
+  tree fndecl = called_fn.decl;
 
   /* Get a frame_region for use with respect to the summary.
      This will be a top-level frame, since that's what's in
@@ -196,7 +193,7 @@ call_summary_replay::call_summary_replay (const call_details &cd,
 	break;
       const svalue *caller_arg_sval = cd.get_arg_svalue (idx);
       tree parm_lval = iter_parm;
-      if (tree parm_default_ssa = ssa_default_def (called_fn, iter_parm))
+      if (tree parm_default_ssa = get_ssa_default_def (called_fn, iter_parm))
 	parm_lval = parm_default_ssa;
       const region *summary_parm_reg
 	= summary_frame->get_region_for_local (mgr, parm_lval, cd.get_ctxt ());
@@ -595,6 +592,7 @@ call_summary_replay::convert_region_from_summary_1 (const region *summary_reg)
     case RK_STRING:
     case RK_ERRNO:
     case RK_UNKNOWN:
+    case RK_PRIVATE:
       /* We can reuse these regions directly.  */
       return summary_reg;
 
@@ -721,15 +719,12 @@ call_summary_replay::convert_region_from_summary_1 (const region *summary_reg)
       break;
     case RK_CAST:
       {
-	const cast_region *summary_cast_reg
-	  = as_a <const cast_region *> (summary_reg);
-	const region *summary_original_reg
-	  = summary_cast_reg->get_original_region ();
-	const region *caller_original_reg
-	  = convert_region_from_summary (summary_original_reg);
-	if (!caller_original_reg)
+	const region *summary_parent_reg = summary_reg->get_parent_region ();
+	const region *caller_parent_reg
+	  = convert_region_from_summary (summary_parent_reg);
+	if (!caller_parent_reg)
 	  return NULL;
-	return mgr->get_cast_region (caller_original_reg,
+	return mgr->get_cast_region (caller_parent_reg,
 				     summary_reg->get_type ());
       }
       break;
@@ -885,12 +880,8 @@ call_summary_replay::dump_to_pp (pretty_printer *pp, bool simple) const
 void
 call_summary_replay::dump (FILE *fp, bool simple) const
 {
-  pretty_printer pp;
-  pp_format_decoder (&pp) = default_tree_printer;
-  pp_show_color (&pp) = pp_show_color (global_dc->printer);
-  pp.buffer->stream = fp;
+  tree_dump_pretty_printer pp (fp);
   dump_to_pp (&pp, simple);
-  pp_flush (&pp);
 }
 
 /* Dump a multiline representation of this object to stderr.  */

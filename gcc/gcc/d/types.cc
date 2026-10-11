@@ -1,5 +1,5 @@
 /* types.cc -- Lower D frontend types to GCC trees.
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
+   Copyright (C) 2006-2025 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -33,7 +33,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 #include "tm.h"
 #include "function.h"
-#include "toplev.h"
 #include "target.h"
 #include "stringpool.h"
 #include "stor-layout.h"
@@ -49,8 +48,8 @@ along with GCC; see the file COPYING3.  If not see
 static tree
 d_signed_or_unsigned_type (int unsignedp, tree type)
 {
-  if (TYPE_UNSIGNED (type) == (unsigned) unsignedp)
-    return type;
+  if (VECTOR_TYPE_P (type) || !ANY_INTEGRAL_TYPE_P (type))
+    return signed_or_unsigned_type_for (unsignedp, type);
 
   if (TYPE_PRECISION (type) == TYPE_PRECISION (d_cent_type))
     return unsignedp ? d_ucent_type : d_cent_type;
@@ -144,7 +143,7 @@ same_type_p (Type *t1, Type *t2)
     return true;
 
   /* Types are mutably the same type.  */
-  if (tb1->ty == tb2->ty && tb1->equivalent (tb2))
+  if (tb1->ty == tb2->ty && dmd::equivalent (tb1, tb2))
     return true;
 
   return false;
@@ -325,6 +324,10 @@ insert_aggregate_bitfield (tree type, tree bitfield, size_t width,
   DECL_BIT_FIELD (bitfield) = 1;
   DECL_BIT_FIELD_TYPE (bitfield) = TREE_TYPE (bitfield);
 
+  DECL_NONADDRESSABLE_P (bitfield) = 1;
+  if (DECL_NAME (bitfield) == NULL_TREE)
+    DECL_PADDING_P (bitfield) = 1;
+
   TYPE_FIELDS (type) = chainon (TYPE_FIELDS (type), bitfield);
 }
 
@@ -481,7 +484,7 @@ layout_aggregate_members (Dsymbols *members, tree context, bool inherited_p)
       AttribDeclaration *attrib = sym->isAttribDeclaration ();
       if (attrib != NULL)
 	{
-	  Dsymbols *decls = attrib->include (NULL);
+	  Dsymbols *decls = dmd::include (attrib, NULL);
 	  if (decls != NULL)
 	    {
 	      fields += layout_aggregate_members (decls, context, inherited_p);
@@ -590,7 +593,12 @@ finish_aggregate_mode (tree type)
 	return;
     }
 
-  compute_record_mode (type);
+  /* Force mode of non-trivially copyable structs to be BLKmode, preventing it
+     from being returned in a register.  */
+  if (TREE_ADDRESSABLE (type))
+    SET_TYPE_MODE (type, BLKmode);
+  else
+    compute_record_mode (type);
 
   /* Propagate computed mode to all variants of this aggregate type.  */
   for (tree t = TYPE_MAIN_VARIANT (type); t; t = TYPE_NEXT_VARIANT (t))
@@ -672,7 +680,11 @@ finish_aggregate_type (unsigned structsize, unsigned alignsize, tree type)
 	  continue;
 	}
 
-      layout_decl (field, 0);
+      /* Layout the field decl using its known alignment.  */
+      unsigned int known_align =
+	least_bit_hwi (tree_to_uhwi (DECL_FIELD_BIT_OFFSET (field)));
+
+      layout_decl (field, known_align);
 
       /* Give bit-field its proper type after layout_decl.  */
       if (DECL_BIT_FIELD (field))
@@ -700,22 +712,19 @@ finish_aggregate_type (unsigned structsize, unsigned alignsize, tree type)
       if (t == type)
 	continue;
 
+      TYPE_NAME (t) = TYPE_NAME (type);
       TYPE_FIELDS (t) = TYPE_FIELDS (type);
       TYPE_LANG_SPECIFIC (t) = TYPE_LANG_SPECIFIC (type);
       TYPE_SIZE (t) = TYPE_SIZE (type);
       TYPE_SIZE_UNIT (t) = TYPE_SIZE_UNIT (type);
-      TYPE_PACKED (type) = TYPE_PACKED (type);
+      TYPE_PACKED (t) = TYPE_PACKED (type);
       SET_TYPE_ALIGN (t, TYPE_ALIGN (type));
       TYPE_USER_ALIGN (t) = TYPE_USER_ALIGN (type);
+      TREE_ADDRESSABLE (t) = TREE_ADDRESSABLE (type);
     }
 
-  /* Finish debugging output for this type.  */
-  rest_of_type_compilation (type, TYPE_FILE_SCOPE_P (type));
+  /* Complete any other forward-referenced fields of this aggregate type.  */
   finish_incomplete_fields (type);
-
-  /* Finish processing of TYPE_DECL.  */
-  rest_of_decl_compilation (TYPE_NAME (type),
-			    DECL_FILE_SCOPE_P (TYPE_NAME (type)), 0);
 }
 
 /* Returns true if the class or struct type TYPE has already been layed out by
@@ -892,7 +901,7 @@ public:
 
   void visit (TypeSArray *t) final override
   {
-    if (t->dim->isConst () && t->dim->type->isintegral ())
+    if (t->dim->isConst () && t->dim->type->isIntegral ())
       {
 	uinteger_t size = t->dim->toUInteger ();
 	t->ctype = make_array_type (t->next, size);
@@ -961,7 +970,7 @@ public:
 
 	/* Type `noreturn` is a terminator, as no other arguments can possibly
 	   be evaluated after it.  */
-	if (type == noreturn_type_node)
+	if (TYPE_MAIN_VARIANT (type) == noreturn_type_node)
 	  break;
 
 	fnparams = chainon (fnparams, build_tree_list (0, type));
@@ -975,7 +984,7 @@ public:
     if (t->next != NULL)
       {
 	fntype = build_ctype (t->next);
-	if (t->isref ())
+	if (t->isRef ())
 	  fntype = build_reference_type (fntype);
       }
     else
@@ -987,7 +996,7 @@ public:
     d_keep (t->ctype);
 
     /* Qualify function types that have the type `noreturn` as volatile.  */
-    if (fntype == noreturn_type_node)
+    if (TYPE_MAIN_VARIANT (fntype) == noreturn_type_node)
       t->ctype = build_qualified_type (t->ctype, TYPE_QUAL_VOLATILE);
 
     /* Handle any special support for calling conventions.  */
@@ -1176,22 +1185,39 @@ public:
     /* Finish the enumeration type.  */
     if (TREE_CODE (t->ctype) == ENUMERAL_TYPE)
       {
-	TYPE_MIN_VALUE (t->ctype) = TYPE_MIN_VALUE (basetype);
-	TYPE_MAX_VALUE (t->ctype) = TYPE_MAX_VALUE (basetype);
-	TYPE_UNSIGNED (t->ctype) = TYPE_UNSIGNED (basetype);
-	SET_TYPE_ALIGN (t->ctype, TYPE_ALIGN (basetype));
-	TYPE_SIZE (t->ctype) = NULL_TREE;
-	TYPE_PRECISION (t->ctype) = t->size (t->sym->loc) * 8;
+	tree type = TYPE_MAIN_VARIANT (t->ctype);
 
-	layout_type (t->ctype);
+	if (type == t->ctype)
+	  {
+	    TYPE_MIN_VALUE (type) = TYPE_MIN_VALUE (basetype);
+	    TYPE_MAX_VALUE (type) = TYPE_MAX_VALUE (basetype);
+	    TYPE_UNSIGNED (type) = TYPE_UNSIGNED (basetype);
+	    SET_TYPE_ALIGN (type, TYPE_ALIGN (basetype));
+	    TYPE_SIZE (type) = NULL_TREE;
+	    TYPE_PRECISION (type) = dmd::size (t, t->sym->loc) * 8;
 
-	/* Finish debugging output for this type.  */
-	rest_of_type_compilation (t->ctype, TYPE_FILE_SCOPE_P (t->ctype));
+	    layout_type (type);
+	  }
+
+	/* Fix up all forward-referenced variants of this enum type.  */
+	for (tree variant = TYPE_NEXT_VARIANT (type); variant;
+	     variant = TYPE_NEXT_VARIANT (variant))
+	  {
+	    TYPE_VALUES (variant) = TYPE_VALUES (type);
+	    TYPE_LANG_SPECIFIC (variant) = TYPE_LANG_SPECIFIC (type);
+	    TYPE_MIN_VALUE (variant) = TYPE_MIN_VALUE (type);
+	    TYPE_MAX_VALUE (variant) = TYPE_MAX_VALUE (type);
+	    TYPE_UNSIGNED (variant) = TYPE_UNSIGNED (type);
+	    TYPE_SIZE (variant) = TYPE_SIZE (type);
+	    TYPE_SIZE_UNIT (variant) = TYPE_SIZE_UNIT (type);
+	    SET_TYPE_MODE (variant, TYPE_MODE (type));
+	    TYPE_PRECISION (variant) = TYPE_PRECISION (type);
+	    SET_TYPE_ALIGN (variant, TYPE_ALIGN (type));
+	    TYPE_USER_ALIGN (variant) = TYPE_USER_ALIGN (type);
+	  }
+
+	/* Complete forward-referenced fields of this enum type.  */
 	finish_incomplete_fields (t->ctype);
-
-	/* Finish processing of TYPE_DECL.  */
-	rest_of_decl_compilation (TYPE_NAME (t->ctype),
-				  DECL_FILE_SCOPE_P (TYPE_NAME (t->ctype)), 0);
       }
   }
 
@@ -1214,6 +1240,12 @@ public:
     TYPE_LANG_SPECIFIC (t->ctype) = build_lang_type (t);
     TYPE_CXX_ODR_P (t->ctype) = 1;
 
+    /* For structs with a user defined postblit, copy constructor, or a
+       destructor, also set TREE_ADDRESSABLE on the type and all variants.
+       This will make the struct be passed around by reference.  */
+    if (!t->sym->isPOD ())
+      TREE_ADDRESSABLE (t->ctype) = 1;
+
     if (t->sym->members)
       {
 	/* Must set up the overall size and alignment before determining
@@ -1234,18 +1266,6 @@ public:
       {
 	build_type_decl (t->ctype, t->sym);
 	apply_user_attributes (t->sym, t->ctype);
-      }
-
-    /* For structs with a user defined postblit, copy constructor, or a
-       destructor, also set TREE_ADDRESSABLE on the type and all variants.
-       This will make the struct be passed around by reference.  */
-    if (!t->sym->isPOD ())
-      {
-	for (tree tv = t->ctype; tv != NULL_TREE; tv = TYPE_NEXT_VARIANT (tv))
-	  {
-	    TREE_ADDRESSABLE (tv) = 1;
-	    SET_TYPE_MODE (tv, BLKmode);
-	  }
       }
   }
 
@@ -1278,7 +1298,8 @@ public:
     build_type_decl (basetype, t->sym);
     set_visibility_for_decl (basetype, t->sym);
     apply_user_attributes (t->sym, basetype);
-    finish_aggregate_type (t->sym->structsize, t->sym->alignsize, basetype);
+    /* The underlying record type of classes are packed.  */
+    finish_aggregate_type (t->sym->structsize, 1, basetype);
 
     /* Classes only live in memory, so always set the TREE_ADDRESSABLE bit.  */
     for (tree tv = basetype; tv != NULL_TREE; tv = TYPE_NEXT_VARIANT (tv))
@@ -1334,7 +1355,7 @@ build_ctype (Type *t)
 	t->accept (&v);
       else
 	{
-	  Type *tb = t->castMod (0);
+	  Type *tb = dmd::castMod (t, 0);
 	  if (!tb->ctype)
 	    tb->accept (&v);
 	  t->ctype = insert_type_modifiers (tb->ctype, t->mod);

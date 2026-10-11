@@ -1,5 +1,5 @@
 /* "Supergraph" classes that combine CFGs and callgraph into one digraph.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -111,14 +111,14 @@ public:
   supergraph (logger *logger);
   ~supergraph ();
 
-  supernode *get_node_for_function_entry (function *fun) const
+  supernode *get_node_for_function_entry (const function &fun) const
   {
-    return get_node_for_block (ENTRY_BLOCK_PTR_FOR_FN (fun));
+    return get_node_for_block (ENTRY_BLOCK_PTR_FOR_FN (&fun));
   }
 
-  supernode *get_node_for_function_exit (function *fun) const
+  supernode *get_node_for_function_exit (const function &fun) const
   {
-    return get_node_for_block (EXIT_BLOCK_PTR_FOR_FN (fun));
+    return get_node_for_block (EXIT_BLOCK_PTR_FOR_FN (&fun));
   }
 
   supernode *get_node_for_block (basic_block bb) const
@@ -168,7 +168,7 @@ public:
   void dump_dot_to_file (FILE *fp, const dump_args_t &) const;
   void dump_dot (const char *path, const dump_args_t &) const;
 
-  json::object *to_json () const;
+  std::unique_ptr<json::object> to_json () const;
 
   int num_nodes () const { return m_nodes.length (); }
   int num_edges () const { return m_edges.length (); }
@@ -255,7 +255,7 @@ class supernode : public dnode<supergraph_traits>
   void dump_dot (graphviz_out *gv, const dump_args_t &args) const override;
   void dump_dot_id (pretty_printer *pp) const;
 
-  json::object *to_json () const;
+  std::unique_ptr<json::object> to_json () const;
 
   location_t get_start_location () const;
   location_t get_end_location () const;
@@ -297,6 +297,8 @@ class supernode : public dnode<supergraph_traits>
 
   unsigned int get_stmt_index (const gimple *stmt) const;
 
+  tree get_label () const;
+
   function * const m_fun; // alternatively could be stored as runs of indices within the supergraph
   const basic_block m_bb;
   gcall * const m_returning_call; // for handling the result of a returned call
@@ -321,7 +323,7 @@ class superedge : public dedge<supergraph_traits>
   virtual void dump_label_to_pp (pretty_printer *pp,
 				 bool user_facing) const = 0;
 
-  json::object *to_json () const;
+  std::unique_ptr<json::object> to_json () const;
 
   enum edge_kind get_kind () const { return m_kind; }
 
@@ -529,6 +531,8 @@ class cfg_superedge : public superedge
 
   size_t get_phi_arg_idx () const;
   tree get_phi_arg (const gphi *phi) const;
+
+  location_t get_goto_locus () const { return m_cfg_edge->goto_locus; }
 
  private:
   const ::edge m_cfg_edge;

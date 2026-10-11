@@ -1,6 +1,6 @@
 (* P1SymBuild.mod pass 1 symbol creation.
 
-Copyright (C) 2001-2023 Free Software Foundation, Inc.
+Copyright (C) 2001-2025 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -26,10 +26,13 @@ FROM ASCII IMPORT nul ;
 FROM NameKey IMPORT Name, WriteKey, MakeKey, KeyToCharStar, NulName ;
 FROM M2Debug IMPORT Assert, WriteDebug ;
 FROM M2LexBuf IMPORT GetFileName, GetTokenNo, UnknownTokenNo ;
-FROM M2MetaError IMPORT MetaErrorString2, MetaError0, MetaError1, MetaError2, MetaErrorT1, MetaErrorT2 ;
+
+FROM M2MetaError IMPORT MetaErrorString2, MetaError0, MetaError1,
+                        MetaError2, MetaErrorT0, MetaErrorT1, MetaErrorT2 ;
+
 FROM DynamicStrings IMPORT String, Slice, InitString, KillString, EqualCharStar, RIndex, Mark, ConCat ;
 FROM M2Printf IMPORT printf0, printf1, printf2 ;
-FROM M2Options IMPORT Iso ;
+FROM M2Options IMPORT Iso, GetEnableForward ;
 
 FROM M2Reserved IMPORT ImportTok, ExportTok, QualifiedTok, UnQualifiedTok,
                        NulTok, VarTok, ArrayTok, BuiltinTok, InlineTok ;
@@ -69,8 +72,6 @@ FROM SymbolTable IMPORT NulSym,
                         PutDoesNeedExportList, PutDoesNotNeedExportList,
                         DoesNotNeedExportList,
                         MakeProcedure,
-                        PutFunction, PutParam, PutVarParam,
-                        GetNthParam,
                         IsProcedure, IsConstString,
                         MakePointer, PutPointer,
                         MakeRecord, PutFieldRecord,
@@ -78,10 +79,12 @@ FROM SymbolTable IMPORT NulSym,
                         MakeSubscript, PutSubscript,
                         PutArray, GetType, IsArray,
                         IsProcType, MakeProcType,
-                        PutProcTypeVarParam, PutProcTypeParam,
                         PutProcedureBuiltin, PutProcedureInline,
                         GetSymName,
                         ResolveImports, PutDeclared,
+                        ProcedureKind,
+                        PutProcedureDeclaredTok, GetProcedureDeclaredTok,
+                        PutProcedureDefined, GetProcedureDefined,
                         MakeError, MakeErrorS,
                         DisplayTrees ;
 
@@ -102,42 +105,6 @@ CONST
 
 VAR
    importStatementCount: CARDINAL ;
-
-
-(*
-   CheckFileName - checks to see that the module name matches the file name.
-*)
-
-(*
-PROCEDURE CheckFileName (tok: CARDINAL; name: Name; ModuleType: ARRAY OF CHAR) ;
-VAR
-   ext,
-   basename: INTEGER ;
-   s,
-   FileName: String ;
-BEGIN
-   FileName := GetFileName() ;
-   basename := RIndex(FileName, '/', 0) ;
-   IF basename=-1
-   THEN
-      basename := 0
-   END ;
-   ext := RIndex(FileName, '.', 0) ;
-   IF ext=-1
-   THEN
-      ext := 0
-   END ;
-   FileName := Slice(FileName, basename, ext) ;
-   IF EqualCharStar(FileName, KeyToCharStar(name))
-   THEN
-      FileName := KillString(FileName)
-   ELSE
-      s := ConCat (InitString (ModuleType),
-                   Mark (InitString (" module name {%1Ea} is inconsistant with the filename {%F{%2a}}"))) ;
-      MetaErrorString2 (s, MakeError (tok, name), MakeErrorS (tok, FileName))
-   END
-END CheckFileName ;
-*)
 
 
 (*
@@ -223,7 +190,7 @@ BEGIN
    END ;
    IF NameStart#NameEnd
    THEN
-      MetaError1 ('inconsistant definition module name {%1Wa}', MakeError (start, NameStart))
+      MetaError1 ('inconsistent definition module name {%1Wa}', MakeError (start, NameStart))
    END ;
    LeaveBlock
 END P1EndBuildDefinitionModule ;
@@ -297,7 +264,7 @@ BEGIN
    IF NameStart#NameEnd
    THEN
       MetaErrorT1 (end,
-                   'inconsistant implementation module name {%1Wa}', MakeError (start, NameStart))
+                   'inconsistent implementation module name {%1Wa}', MakeError (start, NameStart))
    END ;
    LeaveBlock
 END P1EndBuildImplementationModule ;
@@ -377,7 +344,7 @@ BEGIN
    IF NameStart#NameEnd
    THEN
       MetaErrorT1 (end,
-                   'inconsistant program module name {%1Wa}', MakeError (start, NameStart))
+                   'inconsistent program module name {%1Wa}', MakeError (start, NameStart))
    END ;
    LeaveBlock
 END P1EndBuildProgramModule ;
@@ -442,7 +409,7 @@ BEGIN
    IF NameStart#NameEnd
    THEN
       MetaErrorT1 (end,
-                   'inconsistant inner module name {%1Wa}', MakeError (start, NameStart))
+                   'inconsistent inner module name {%1Wa}', MakeError (start, NameStart))
    END ;
    LeaveBlock
 END EndBuildInnerModule ;
@@ -931,14 +898,20 @@ BEGIN
    ProcSym := RequestSym (tokno, name) ;
    IF IsUnknown (ProcSym)
    THEN
-      (*
-         May have been compiled in DEF or IMP module, remember that IMP maybe
-         compiled before corresponding DEF module.
-      *)
+      (* A procedure may be created in a definition or implementation module, remember
+         that an implementation module maybe compiled before the corresponding
+         definition module.
+
+         The procedure can also be created during a forward declaration.
+         We record the forward declaration as the token of creation and adjust this
+         later when we see the proper procedure declaration.  Likwwise when the forward
+         keyword is seen we assign the procedure forward token location.  *)
       ProcSym := MakeProcedure (tokno, name)
    ELSIF IsProcedure (ProcSym)
    THEN
-      (* declared in the other module, we record declaration here as well *)
+      (* Declared in the other module or it could have been declared by a forward decl,
+         we overwrite the declaration to tokno.  The forward location is assigned in
+         EndBuildForward.  *)
       PutDeclared (tokno, ProcSym)
    ELSE
       MetaError1 ('expecting a procedure name and symbol {%1Ea} has been declared as a {%1d}', ProcSym) ;
@@ -957,10 +930,21 @@ BEGIN
          PutProcedureBuiltin (ProcSym, builtin)
       END
    END ;
-   PushT (ProcSym) ;
+   PushTtok (ProcSym, tokno) ;
    StartScope (ProcSym) ;
-   IF NOT CompilingDefinitionModule ()
+   IF CompilingDefinitionModule ()
    THEN
+      IF GetProcedureDefined (ProcSym, DefProcedure)
+      THEN
+         MetaErrorT1 (GetProcedureDeclaredTok (ProcSym, DefProcedure),
+                      'first declaration of procedure {%1Ea} in the definition module', ProcSym) ;
+         MetaErrorT1 (tokno,
+                      'duplicate declaration of procedure {%1Ea} in the definition module', ProcSym)
+      ELSE
+         PutProcedureDeclaredTok (ProcSym, DefProcedure, tokno) ;
+         PutProcedureDefined (ProcSym, DefProcedure)
+      END
+   ELSE
       EnterBlock (name)
    END
 END StartBuildProcedure ;
@@ -990,15 +974,16 @@ END StartBuildProcedure ;
 
 PROCEDURE EndBuildProcedure ;
 VAR
+   tok,
    start, end: CARDINAL ;
    ProcSym   : CARDINAL ;
    NameEnd,
    NameStart : Name ;
 BEGIN
    PopTtok(NameEnd, end) ;
-   PopT(ProcSym) ;
+   PopTtok(ProcSym, tok) ;
    PopTtok(NameStart, start) ;
-   IF NameEnd#NameStart
+   IF NameEnd # NameStart
    THEN
       IF end # UnknownTokenNo
       THEN
@@ -1014,9 +999,64 @@ BEGIN
       END
    END ;
    EndScope ;
+   IF GetProcedureDefined (ProcSym, ProperProcedure)
+   THEN
+      MetaErrorT1 (GetProcedureDeclaredTok (ProcSym, ProperProcedure),
+                   'first proper declaration of procedure {%1Ea}', ProcSym) ;
+      MetaErrorT1 (tok, 'procedure {%1Ea} has already been declared', ProcSym)
+   ELSE
+      PutProcedureDeclaredTok (ProcSym, ProperProcedure, tok) ;
+      PutProcedureDefined (ProcSym, ProperProcedure)
+   END ;
    Assert (NOT CompilingDefinitionModule()) ;
    LeaveBlock
 END EndBuildProcedure ;
+
+
+(*
+   EndBuildForward - Ends building a forward procedure declaration.
+
+                     The Stack:
+
+                     (This procedure is not defined in definition module)
+
+                     Entry                 Exit
+
+              Ptr ->
+                     +------------+
+                     | ProcSym    |
+                     |------------|
+                     | NameStart  |
+                     |------------|
+                                           Empty
+*)
+
+PROCEDURE EndBuildForward (forwardPos: CARDINAL) ;
+VAR
+   ProcSym: CARDINAL ;
+   tok    : CARDINAL ;
+BEGIN
+   ProcSym := OperandT (1) ;
+   tok := OperandTok (1) ;
+   IF NOT GetEnableForward ()
+   THEN
+      MetaErrorT0 (forwardPos,
+                   'forward declaration has not been enabled, use -fiso or -fenable-forward to enable forward procedure declarations')
+   END ;
+   IF GetProcedureDefined (ProcSym, ForwardProcedure)
+   THEN
+      MetaErrorT1 (GetProcedureDeclaredTok (ProcSym, ForwardProcedure),
+                   'first forward declaration of {%1Ea}', ProcSym) ;
+      MetaErrorT1 (tok, 'forward declaration of procedure {%1Ea} has already occurred', ProcSym)
+   ELSE
+      PutProcedureDeclaredTok (ProcSym, ForwardProcedure, tok) ;
+      PutProcedureDefined (ProcSym, ForwardProcedure)
+   END ;
+   PopN (2) ;
+   EndScope ;
+   Assert (NOT CompilingDefinitionModule ()) ;
+   LeaveBlock
+END EndBuildForward ;
 
 
 (*

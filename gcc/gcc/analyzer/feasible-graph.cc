@@ -1,5 +1,5 @@
 /* A graph for exploring trees of feasible paths through the egraph.
-   Copyright (C) 2021-2023 Free Software Foundation, Inc.
+   Copyright (C) 2021-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -19,7 +19,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#define INCLUDE_MEMORY
+#define INCLUDE_VECTOR
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
@@ -202,16 +202,15 @@ feasible_graph::add_node (const exploded_node *enode,
 }
 
 /* Add an infeasible_node to this graph and an infeasible_edge connecting
-   to it from SRC_FNODE, capturing a failure of RC along EEDGE.
-   Takes ownership of RC.  */
+   to it from SRC_FNODE, capturing a failure of RC along EEDGE.  */
 
 void
 feasible_graph::add_feasibility_problem (feasible_node *src_fnode,
 					 const exploded_edge *eedge,
-					 rejected_constraint *rc)
+					 std::unique_ptr<rejected_constraint> rc)
 {
   infeasible_node *dst_fnode
-    = new infeasible_node (eedge->m_dest, m_nodes.length (), rc);
+    = new infeasible_node (eedge->m_dest, m_nodes.length (), std::move (rc));
   digraph<fg_traits>::add_node (dst_fnode);
   add_edge (new infeasible_edge (src_fnode, dst_fnode, eedge));
   m_num_infeasible++;
@@ -301,7 +300,7 @@ feasible_graph::dump_feasible_path (const feasible_node &dst_fnode,
   FILE *fp = fopen (filename, "w");
   pretty_printer pp;
   pp_format_decoder (&pp) = default_tree_printer;
-  pp.buffer->stream = fp;
+  pp.set_output_stream (fp);
   dump_feasible_path (dst_fnode, &pp);
   pp_flush (&pp);
   fclose (fp);

@@ -1,5 +1,5 @@
 /* Search for references that a functions loads or stores.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -66,7 +66,7 @@ struct GTY(()) modref_summary
 
   modref_summary ();
   ~modref_summary ();
-  void dump (FILE *);
+  void dump (FILE *) const;
   bool useful_p (int ecf_flags, bool check_flags = true);
   void finalize (tree);
 };
@@ -75,6 +75,7 @@ modref_summary *get_modref_function_summary (cgraph_node *func);
 modref_summary *get_modref_function_summary (gcall *call, bool *interposed);
 void ipa_modref_cc_finalize ();
 void ipa_merge_modref_summary_after_inlining (cgraph_edge *e);
+bool ipa_modref_callee_reads_no_memory_p (gcall *call);
 
 /* All flags that are implied by the ECF_CONST functions.  */
 static const int implicit_const_eaf_flags

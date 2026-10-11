@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -541,11 +541,6 @@ package Sinput is
 
    --  WARNING: There is a matching C declaration of this subprogram in fe.h
 
-   function Get_Logical_Line_Number_Img
-     (P : Source_Ptr) return String;
-   --  Same as above function, but returns the line number as a string of
-   --  decimal digits, with no leading space. Destroys Name_Buffer.
-
    function Get_Physical_Line_Number
      (P : Source_Ptr) return Physical_Line_Number;
    --  The line number of the specified source position is obtained by
@@ -711,6 +706,15 @@ package Sinput is
    --  reloaded. It is intended for tools that parse several times sources,
    --  to avoid memory leaks.
 
+   type C_Array is record
+      Pointer : aliased access constant Character;
+      Length  : aliased Integer;
+   end record;
+   --  WARNING: There is a matching C declaration of this type in fe.h
+
+   function C_Source_Buffer (S : SFI) return C_Array;
+   --  WARNING: There is a matching C declaration of this subprogram in fe.h
+
 private
    pragma Inline (File_Name);
    pragma Inline (Full_File_Name);
@@ -809,7 +813,7 @@ private
       --  The following fields are for internal use only (i.e. only in the
       --  body of Sinput or its children, with no direct access by clients).
 
-      Sloc_Adjust : Source_Ptr;
+      Sloc_Adjust : Source_Ptr'Base; -- can be (very) negative
       --  A value to be added to Sloc values for this file to reference the
       --  corresponding lines table. This is zero for the non-instantiation
       --  case, and set so that the addition references the ultimate template

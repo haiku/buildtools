@@ -1,5 +1,5 @@
 /* Loop unrolling.
-   Copyright (C) 2002-2023 Free Software Foundation, Inc.
+   Copyright (C) 2002-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -372,7 +372,8 @@ decide_unroll_constant_iterations (class loop *loop, int flags)
     nunroll = targetm.loop_unroll_adjust (nunroll, loop);
 
   /* Skip big loops.  */
-  if (nunroll <= 1)
+  if (nunroll <= 1
+      && !(loop->unroll > 1 && loop->unroll < USHRT_MAX))
     {
       if (dump_file)
 	fprintf (dump_file, ";; Not considering loop, is too big\n");
@@ -409,7 +410,7 @@ decide_unroll_constant_iterations (class loop *loop, int flags)
       return;
     }
 
-  /* Check whether the loop rolls enough to consider.  
+  /* Check whether the loop rolls enough to consider.
      Consult also loop bounds and profile; in the case the loop has more
      than one exit it may well loop less than determined maximal number
      of iterations.  */
@@ -487,6 +488,8 @@ unroll_loop_constant_iterations (class loop *loop)
   bool exit_at_end = loop_exit_at_end_p (loop);
   struct opt_info *opt_info = NULL;
   bool ok;
+  bool flat = maybe_flat_loop_profile (loop);
+  profile_count orig_exit_count = desc->out_edge->count ();
 
   niter = desc->niter;
 
@@ -603,8 +606,14 @@ unroll_loop_constant_iterations (class loop *loop)
   ok = duplicate_loop_body_to_header_edge (
     loop, loop_latch_edge (loop), max_unroll, wont_exit, desc->out_edge,
     &remove_edges,
-    DLTHE_FLAG_UPDATE_FREQ | (opt_info ? DLTHE_RECORD_COPY_NUMBER : 0));
+    DLTHE_FLAG_UPDATE_FREQ | (opt_info ? DLTHE_RECORD_COPY_NUMBER : 0)
+    | (flat ? DLTHE_FLAG_FLAT_PROFILE : 0));
   gcc_assert (ok);
+
+  edge exit = update_loop_exit_probability_scale_dom_bbs
+	  (loop, desc->out_edge, orig_exit_count);
+  if (exit)
+    update_br_prob_note (exit->src);
 
   if (opt_info)
     {
@@ -1177,7 +1186,7 @@ decide_unroll_stupid (class loop *loop, int flags)
     }
 
   /* Do not unroll loops with branches inside -- it increases number
-     of mispredicts. 
+     of mispredicts.
      TODO: this heuristic needs tunning; call inside the loop body
      is also relatively good reason to not unroll.  */
   if (num_loop_branches (loop) > 1)
@@ -1847,7 +1856,7 @@ insert_var_expansion_initialization (struct var_to_expand *ve,
   rtx var, zero_init;
   unsigned i;
   machine_mode mode = GET_MODE (ve->reg);
-  bool honor_signed_zero_p = HONOR_SIGNED_ZEROS (mode);
+  bool has_signed_zero_p = MODE_HAS_SIGNED_ZEROS (mode);
 
   if (ve->var_expansions.length () == 0)
     return;
@@ -1861,7 +1870,7 @@ insert_var_expansion_initialization (struct var_to_expand *ve,
     case MINUS:
       FOR_EACH_VEC_ELT (ve->var_expansions, i, var)
         {
-	  if (honor_signed_zero_p)
+	  if (has_signed_zero_p)
 	    zero_init = simplify_gen_unary (NEG, mode, CONST0_RTX (mode), mode);
 	  else
 	    zero_init = CONST0_RTX (mode);

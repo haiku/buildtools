@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -1414,7 +1414,7 @@ procedure Gnatls is
          First := 3;
          loop
             while First <= Name_Len
-              and then (Name_Buffer (First) = Path_Separator)
+              and then Name_Buffer (First) = Path_Separator
             loop
                First := First + 1;
             end loop;
@@ -1573,7 +1573,6 @@ procedure Gnatls is
          Last  : Natural;
 
       begin
-
          if Is_Absolute_Path (Path) then
             if Is_Directory (Path) then
                return new String'(Path);
@@ -1673,9 +1672,13 @@ procedure Gnatls is
       end if;
 
       if Lib_Path /= null then
-         Osint.Fail ("RTS path not valid: missing adainclude directory");
+         Osint.Fail
+           ("RTS path """ & Name
+            & """ not valid: missing adainclude directory");
       elsif Src_Path /= null then
-         Osint.Fail ("RTS path not valid: missing adalib directory");
+         Osint.Fail
+           ("RTS path """ & Name
+            & """ not valid: missing adalib directory");
       end if;
 
       --  Try to find the RTS on the project path. First setup the project path
@@ -1710,7 +1713,8 @@ procedure Gnatls is
       end if;
 
       Osint.Fail
-        ("RTS path not valid: missing adainclude and adalib directories");
+        ("RTS path """ & Name
+          & """ not valid: missing adainclude and adalib directories");
    end Search_RTS;
 
    -------------------
@@ -2170,7 +2174,7 @@ begin
             First := Prj_Path'First;
             loop
                while First <= Prj_Path'Last
-                 and then (Prj_Path (First) = Path_Separator)
+                 and then Prj_Path (First) = Path_Separator
                loop
                   First := First + 1;
                end loop;

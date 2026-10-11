@@ -1,9 +1,9 @@
-/* { dg-do compile } */
+/* { dg-do compile { target { ! riscv_abi_e } } } */
 /* { dg-options "-march=rv32gc_xtheadbs" { target { rv32 } } } */
 /* { dg-options "-march=rv64gc_xtheadbs" { target { rv64 } } } */
 
 #ifndef __riscv_xtheadbs
-#error Feature macro not defined
+#error "Feature macro not defined"
 #endif
 
 int

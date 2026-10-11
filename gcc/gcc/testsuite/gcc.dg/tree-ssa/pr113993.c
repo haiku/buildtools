@@ -194,6 +194,48 @@ flt32x (_Float32x f1, _Float32x f2, _Float32x f3, _Float32x f4, _Float32x f5,
 }
 #endif
 
+void
+ldbl (long double f1, long double f2, long double f3, long double f4, long double f5,
+      long double f6, long double f7, long double f8, long double f9, long double f10)
+{
+  if (!(f1 >= -1.0L && f1 <= 1.0L)) __builtin_unreachable ();
+  __builtin_acosl (f1);
+  __builtin_asinl (f1);
+  if (!(f2 >= 1.0L && f2 <= __builtin_infl ())) __builtin_unreachable ();
+  __builtin_acoshl (f2);
+  if (!(f3 > -1.0L && f3 < 1.0L)) __builtin_unreachable ();
+  __builtin_atanhl (f3);
+  if (!(f4 > 0.0L && f4 < __builtin_infl ())) __builtin_unreachable ();
+  __builtin_logl (f4);
+  __builtin_log2l (f4);
+  __builtin_log10l (f4);
+  if (!(f5 > -1.0L && f5 < __builtin_infl ())) __builtin_unreachable ();
+  __builtin_log1pl (f5);
+  if (!(f6 >= 0.0L && f6 < __builtin_infl ())) __builtin_unreachable ();
+  __builtin_sqrtl (f6);
+#if __LDBL_MAX_EXP__ == 16384
+  if (!(f7 > -11357.0L && f7 < 11357.0L)) __builtin_unreachable ();
+  __builtin_coshl (f7);
+  __builtin_sinhl (f7);
+  if (!(f8 > -__builtin_infl () && f8 < 11356.0L)) __builtin_unreachable ();
+  __builtin_expl (f8);
+  if (!(f9 > -__builtin_infl () && f9 < 16384.0L)) __builtin_unreachable ();
+  __builtin_exp2l (f9);
+  if (!(f10 > -__builtin_infl () && f10 < 4932.0L)) __builtin_unreachable ();
+  __builtin_exp10l (f10);
+#elif __LDBL_MANT_DIG__ == __FLT64_MANT_DIG__ && __LDBL_MAX_EXP__ == __FLT64_MAX_EXP__
+  if (!(f7 > -710.0L && f7 < 710.0L)) __builtin_unreachable ();
+  __builtin_coshl (f7);
+  __builtin_sinhl (f7);
+  if (!(f8 > -__builtin_infl () && f8 < 709.0L)) __builtin_unreachable ();
+  __builtin_expl (f8);
+  if (!(f9 > -__builtin_infl () && f9 < 1024.0L)) __builtin_unreachable ();
+  __builtin_exp2l (f9);
+  if (!(f10 > -__builtin_infl () && f10 < 308.0L)) __builtin_unreachable ();
+  __builtin_exp10l (f10);
+#endif
+}
+
 #ifdef __FLT128_MANT_DIG__
 void
 flt128 (_Float128 f1, _Float128 f2, _Float128 f3, _Float128 f4, _Float128 f5,

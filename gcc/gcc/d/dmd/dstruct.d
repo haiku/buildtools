@@ -3,15 +3,17 @@
  *
  * Specification: $(LINK2 https://dlang.org/spec/struct.html, Structs, Unions)
  *
- * Copyright:   Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 https://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/dstruct.d, _dstruct.d)
+ * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/compiler/src/dmd/dstruct.d, _dstruct.d)
  * Documentation:  https://dlang.org/phobos/dmd_dstruct.html
- * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/dstruct.d
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/compiler/src/dmd/dstruct.d
  */
 
 module dmd.dstruct;
+
+import core.stdc.stdio;
 
 import dmd.aggregate;
 import dmd.arraytypes;
@@ -21,11 +23,12 @@ import dmd.declaration;
 import dmd.dmodule;
 import dmd.dscope;
 import dmd.dsymbol;
-import dmd.dsymbolsem;
+import dmd.dsymbolsem : search, setFieldOffset;
 import dmd.dtemplate;
 import dmd.errors;
 import dmd.expression;
 import dmd.func;
+import dmd.funcsem;
 import dmd.globals;
 import dmd.id;
 import dmd.identifier;
@@ -34,7 +37,7 @@ import dmd.mtype;
 import dmd.opover;
 import dmd.target;
 import dmd.tokens;
-import dmd.typesem;
+import dmd.typesem : isZeroInit, merge, size, hasPointers;
 import dmd.typinf;
 import dmd.visitor;
 
@@ -46,7 +49,7 @@ import dmd.visitor;
  * Returns:
  *   FuncDeclaration of `toString()` if found, `null` if not
  */
-extern (C++) FuncDeclaration search_toString(StructDeclaration sd)
+FuncDeclaration search_toString(StructDeclaration sd)
 {
     Dsymbol s = search_function(sd, Id.tostring);
     FuncDeclaration fd = s ? s.isFuncDeclaration() : null;
@@ -61,125 +64,6 @@ extern (C++) FuncDeclaration search_toString(StructDeclaration sd)
         fd = fd.overloadExactMatch(tftostring);
     }
     return fd;
-}
-
-/***************************************
- * Request additional semantic analysis for TypeInfo generation.
- * Params:
- *      sc = context
- *      t = type that TypeInfo is being generated for
- */
-extern (C++) void semanticTypeInfo(Scope* sc, Type t)
-{
-    if (sc)
-    {
-        if (sc.intypeof)
-            return;
-        if (sc.flags & (SCOPE.ctfe | SCOPE.compile | SCOPE.ctfeBlock))
-            return;
-    }
-
-    if (!t)
-        return;
-
-    void visitVector(TypeVector t)
-    {
-        semanticTypeInfo(sc, t.basetype);
-    }
-
-    void visitAArray(TypeAArray t)
-    {
-        semanticTypeInfo(sc, t.index);
-        semanticTypeInfo(sc, t.next);
-    }
-
-    void visitStruct(TypeStruct t)
-    {
-        //printf("semanticTypeInfo.visit(TypeStruct = %s)\n", t.toChars());
-        StructDeclaration sd = t.sym;
-
-        /* Step 1: create TypeInfoDeclaration
-         */
-        if (!sc) // inline may request TypeInfo.
-        {
-            Scope scx;
-            scx._module = sd.getModule();
-            getTypeInfoType(sd.loc, t, &scx);
-            sd.requestTypeInfo = true;
-        }
-        else if (!sc.minst)
-        {
-            // don't yet have to generate TypeInfo instance if
-            // the typeid(T) expression exists in speculative scope.
-        }
-        else
-        {
-            getTypeInfoType(sd.loc, t, sc);
-            sd.requestTypeInfo = true;
-
-            // https://issues.dlang.org/show_bug.cgi?id=15149
-            // if the typeid operand type comes from a
-            // result of auto function, it may be yet speculative.
-            // unSpeculative(sc, sd);
-        }
-
-        /* Step 2: If the TypeInfo generation requires sd.semantic3, run it later.
-         * This should be done even if typeid(T) exists in speculative scope.
-         * Because it may appear later in non-speculative scope.
-         */
-        if (!sd.members)
-            return; // opaque struct
-        if (!sd.xeq && !sd.xcmp && !sd.postblit && !sd.tidtor && !sd.xhash && !search_toString(sd))
-            return; // none of TypeInfo-specific members
-
-        // If the struct is in a non-root module, run semantic3 to get
-        // correct symbols for the member function.
-        if (sd.semanticRun >= PASS.semantic3)
-        {
-            // semantic3 is already done
-        }
-        else if (TemplateInstance ti = sd.isInstantiated())
-        {
-            if (ti.minst && !ti.minst.isRoot())
-                Module.addDeferredSemantic3(sd);
-        }
-        else
-        {
-            if (sd.inNonRoot())
-            {
-                //printf("deferred sem3 for TypeInfo - sd = %s, inNonRoot = %d\n", sd.toChars(), sd.inNonRoot());
-                Module.addDeferredSemantic3(sd);
-            }
-        }
-    }
-
-    void visitTuple(TypeTuple t)
-    {
-        if (t.arguments)
-        {
-            foreach (arg; *t.arguments)
-            {
-                semanticTypeInfo(sc, arg.type);
-            }
-        }
-    }
-
-    /* Note structural similarity of this Type walker to that in isSpeculativeType()
-     */
-
-    Type tb = t.toBasetype();
-    switch (tb.ty)
-    {
-        case Tvector:   visitVector(tb.isTypeVector()); break;
-        case Taarray:   visitAArray(tb.isTypeAArray()); break;
-        case Tstruct:   visitStruct(tb.isTypeStruct()); break;
-        case Ttuple:    visitTuple (tb.isTypeTuple());  break;
-
-        case Tclass:
-        case Tenum:     break;
-
-        default:        semanticTypeInfo(sc, tb.nextOf()); break;
-    }
 }
 
 enum StructFlags : int
@@ -217,9 +101,10 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         bool hasIdentityEquals;     // true if has identity opEquals
         bool hasNoFields;           // has no fields
         bool hasCopyCtor;           // copy constructor
+        bool hasMoveCtor;           // move constructor
         bool hasPointerField;       // members with indirections
         bool hasVoidInitPointers;   // void-initialized unsafe fields
-        bool hasSystemFields;      // @system members
+        bool hasUnsafeBitpatterns;  // @system members, pointers, bool
         bool hasFieldWithInvariant; // invariants
         bool computedTypeProperties;// the above 3 fields are computed
         // Even if struct is defined as non-root symbol, some built-in operations
@@ -231,9 +116,10 @@ extern (C++) class StructDeclaration : AggregateDeclaration
     import dmd.common.bitfields : generateBitFields;
     mixin(generateBitFields!(BitFields, ushort));
 
-    extern (D) this(const ref Loc loc, Identifier id, bool inObject)
+    extern (D) this(Loc loc, Identifier id, bool inObject)
     {
         super(loc, id);
+        this.dsym = DSYM.structDeclaration;
         zeroInit = false; // assume false until we do semantic processing
         ispod = ThreeState.none;
         // For forward references
@@ -246,7 +132,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         }
     }
 
-    static StructDeclaration create(const ref Loc loc, Identifier id, bool inObject)
+    static StructDeclaration create(Loc loc, Identifier id, bool inObject)
     {
         return new StructDeclaration(loc, id, inObject);
     }
@@ -258,23 +144,6 @@ extern (C++) class StructDeclaration : AggregateDeclaration
               : new StructDeclaration(loc, ident, false);
         ScopeDsymbol.syntaxCopy(sd);
         return sd;
-    }
-
-    override final Dsymbol search(const ref Loc loc, Identifier ident, int flags = SearchLocalsOnly)
-    {
-        //printf("%s.StructDeclaration::search('%s', flags = x%x)\n", toChars(), ident.toChars(), flags);
-        if (_scope && !symtab)
-            dsymbolSemantic(this, _scope);
-
-        if (!members || !symtab) // opaque or semantic() is not yet called
-        {
-            // .stringof is always defined (but may be hidden by some other symbol)
-            if(ident != Id.stringof && !(flags & IgnoreErrors) && semanticRun < PASS.semanticdone)
-                error("is forward referenced when looking for `%s`", ident.toChars());
-            return null;
-        }
-
-        return ScopeDsymbol.search(loc, ident, flags);
     }
 
     override const(char)* kind() const
@@ -303,12 +172,13 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         for (size_t i = 0; i < members.length; i++)
         {
             Dsymbol s = (*members)[i];
-            s.setFieldOffset(this, fieldState, isunion);
-        }
-        if (type.ty == Terror)
-        {
-            errors = true;
-            return;
+            s.setFieldOffset(this, &fieldState, isunion);
+            if (type.ty == Terror)
+            {
+                errorSupplemental(s.loc, "error on member `%s`", s.toPrettyChars);
+                errors = true;
+                return;
+            }
         }
 
         if (structsize == 0)
@@ -333,11 +203,6 @@ extern (C++) class StructDeclaration : AggregateDeclaration
                          */
                         structsize = 4;
                     }
-                    else if (target.c.bitFieldStyle == TargetC.BitFieldStyle.DM)
-                    {
-                        structsize = 0;
-                        alignsize = 0;
-                    }
                     else
                         structsize = 0;
                     break;
@@ -354,7 +219,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
 
         sizeok = Sizeok.done;
 
-        //printf("-StructDeclaration::finalizeSize() %s, fields.length = %d, structsize = %d\n", toChars(), fields.length, structsize);
+        //printf("-StructDeclaration::finalizeSize() %s, fields.length = %d, structsize = %d\n", toChars(), cast(int)fields.length, cast(int)structsize);
 
         if (errors)
             return;
@@ -368,18 +233,24 @@ extern (C++) class StructDeclaration : AggregateDeclaration
 
         // Determine if struct is all zeros or not
         zeroInit = true;
+        auto lastOffset = -1;
         foreach (vd; fields)
         {
+            // First skip zero sized fields
+            if (vd.type.size(vd.loc) == 0)
+                continue;
+
+            // only consider first sized member of an (anonymous) union
+            if (vd.overlapped && vd.offset == lastOffset)
+                continue;
+            lastOffset = vd.offset;
+
             if (vd._init)
             {
                 if (vd._init.isVoidInitializer())
                     /* Treat as 0 for the purposes of putting the initializer
                      * in the BSS segment, or doing a mass set to 0
                      */
-                    continue;
-
-                // Zero size fields are zero initialized
-                if (vd.type.size(vd.loc) == 0)
                     continue;
 
                 // Examine init to see if it is all 0s.
@@ -409,13 +280,16 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         foreach (vd; fields)
         {
             if (vd.storage_class & STC.ref_ || vd.hasPointers())
+            {
                 hasPointerField = true;
+                hasUnsafeBitpatterns = true;
+            }
 
             if (vd._init && vd._init.isVoidInitializer() && vd.type.hasPointers())
                 hasVoidInitPointers = true;
 
-            if (vd.storage_class & STC.system || vd.type.hasSystemFields())
-                hasSystemFields = true;
+            if (vd.storage_class & STC.system || vd.type.hasUnsafeBitpatterns())
+                hasUnsafeBitpatterns = true;
 
             if (!vd._init && vd.type.hasVoidInitPointers())
                 hasVoidInitPointers = true;
@@ -446,9 +320,22 @@ extern (C++) class StructDeclaration : AggregateDeclaration
         if (ispod != ThreeState.none)
             return (ispod == ThreeState.yes);
 
-        ispod = ThreeState.yes;
+        import dmd.clone;
 
-        if (enclosing || postblit || dtor || hasCopyCtor)
+        bool hasCpCtorLocal;
+        bool hasMoveCtorLocal;
+        bool needCopyCtor;
+        bool needMoveCtor;
+        needCopyOrMoveCtor(this, hasCpCtorLocal, hasMoveCtorLocal, needCopyCtor, needMoveCtor);
+
+        if (enclosing                      || // is nested
+            search(this, loc, Id.postblit) || // has postblit
+            search(this, loc, Id.dtor)     || // has destructor
+            /* This is commented out because otherwise buildkite vibe.d:
+               `canCAS!Task` fails to compile
+             */
+            //hasMoveCtorLocal               || // has move constructor
+            hasCpCtorLocal)                   // has copy constructor
         {
             ispod = ThreeState.no;
             return false;
@@ -464,12 +351,9 @@ extern (C++) class StructDeclaration : AggregateDeclaration
                 return false;
             }
 
-            Type tv = v.type.baseElemOf();
-            if (tv.ty == Tstruct)
+            if (auto ts = v.type.baseElemOf().isTypeStruct())
             {
-                TypeStruct ts = cast(TypeStruct)tv;
-                StructDeclaration sd = ts.sym;
-                if (!sd.isPOD())
+                if (!ts.sym.isPOD())
                 {
                     ispod = ThreeState.no;
                     return false;
@@ -477,7 +361,8 @@ extern (C++) class StructDeclaration : AggregateDeclaration
             }
         }
 
-        return (ispod == ThreeState.yes);
+        ispod = ThreeState.yes;
+        return true;
     }
 
     /***************************************
@@ -488,11 +373,6 @@ extern (C++) class StructDeclaration : AggregateDeclaration
     final bool hasCopyConstruction()
     {
         return postblit || hasCopyCtor;
-    }
-
-    override final inout(StructDeclaration) isStructDeclaration() inout @nogc nothrow pure @safe
-    {
-        return this;
     }
 
     override void accept(Visitor v)
@@ -567,7 +447,7 @@ extern (C++) class StructDeclaration : AggregateDeclaration
  * Returns:
  *      true if it's all binary 0
  */
-private bool _isZeroInit(Expression exp)
+bool _isZeroInit(Expression exp)
 {
     switch (exp.op)
     {
@@ -575,20 +455,22 @@ private bool _isZeroInit(Expression exp)
             return exp.toInteger() == 0;
 
         case EXP.null_:
-        case EXP.false_:
             return true;
 
         case EXP.structLiteral:
         {
-            auto sle = cast(StructLiteralExp) exp;
+            auto sle = exp.isStructLiteralExp();
+            if (sle.sd.isNested())
+                return false;
+            const isCstruct = sle.sd.isCsymbol();  // C structs are default initialized to all zeros
             foreach (i; 0 .. sle.sd.fields.length)
             {
                 auto field = sle.sd.fields[i];
                 if (field.type.size(field.loc))
                 {
-                    auto e = (*sle.elements)[i];
+                    auto e = sle.elements && i < sle.elements.length ? (*sle.elements)[i] : null;
                     if (e ? !_isZeroInit(e)
-                          : !field.type.isZeroInit(field.loc))
+                          : !isCstruct && !field.type.isZeroInit(field.loc))
                         return false;
                 }
             }
@@ -617,14 +499,14 @@ private bool _isZeroInit(Expression exp)
 
         case EXP.string_:
         {
-            StringExp se = cast(StringExp)exp;
+            auto se = cast(StringExp)exp;
 
             if (se.type.toBasetype().ty == Tarray) // if initializing a dynamic array
                 return se.len == 0;
 
             foreach (i; 0 .. se.len)
             {
-                if (se.getCodeUnit(i))
+                if (se.getIndex(i) != 0)
                     return false;
             }
             return true;
@@ -654,9 +536,10 @@ private bool _isZeroInit(Expression exp)
  */
 extern (C++) final class UnionDeclaration : StructDeclaration
 {
-    extern (D) this(const ref Loc loc, Identifier id)
+    extern (D) this(Loc loc, Identifier id)
     {
         super(loc, id, false);
+        this.dsym = DSYM.unionDeclaration;
     }
 
     override UnionDeclaration syntaxCopy(Dsymbol s)
@@ -670,11 +553,6 @@ extern (C++) final class UnionDeclaration : StructDeclaration
     override const(char)* kind() const
     {
         return "union";
-    }
-
-    override inout(UnionDeclaration) isUnionDeclaration() inout
-    {
-        return this;
     }
 
     override void accept(Visitor v)

@@ -461,9 +461,13 @@ sources = \
 # vpath % $(top_srcdir)/src/experimental
 libstdc__exp_la_SOURCES = $(sources)
 libstdc__exp_la_LIBADD = \
+	$(top_builddir)/src/c++23/libc++23convenience.la \
+	$(top_builddir)/src/c++26/libc++26convenience.la \
 	$(filesystem_lib) $(backtrace_lib)
 
 libstdc__exp_la_DEPENDENCIES = \
+	$(top_builddir)/src/c++23/libc++23convenience.la \
+	$(top_builddir)/src/c++26/libc++26convenience.la \
 	$(filesystem_lib) $(backtrace_lib)
 
 
@@ -712,8 +716,6 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-@ENABLE_BACKTRACE_FALSE@install-exec-local:
-@ENABLE_BACKTRACE_FALSE@uninstall-local:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-toolexeclibLTLIBRARIES \
@@ -742,7 +744,7 @@ install-dvi: install-dvi-am
 
 install-dvi-am:
 
-install-exec-am: install-exec-local install-toolexeclibLTLIBRARIES
+install-exec-am: install-toolexeclibLTLIBRARIES
 
 install-html: install-html-am
 
@@ -781,7 +783,7 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-local uninstall-toolexeclibLTLIBRARIES
+uninstall-am: uninstall-toolexeclibLTLIBRARIES
 
 .MAKE: install-am install-strip
 
@@ -791,24 +793,17 @@ uninstall-am: uninstall-local uninstall-toolexeclibLTLIBRARIES
 	distclean-libtool distclean-tags dvi dvi-am html html-am info \
 	info-am install install-am install-data install-data-am \
 	install-dvi install-dvi-am install-exec install-exec-am \
-	install-exec-local install-html install-html-am install-info \
-	install-info-am install-man install-pdf install-pdf-am \
-	install-ps install-ps-am install-strip \
-	install-toolexeclibLTLIBRARIES installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-am uninstall-local uninstall-toolexeclibLTLIBRARIES
+	install-html install-html-am install-info install-info-am \
+	install-man install-pdf install-pdf-am install-ps \
+	install-ps-am install-strip install-toolexeclibLTLIBRARIES \
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-am \
+	uninstall-toolexeclibLTLIBRARIES
 
 .PRECIOUS: Makefile
 
-
-@ENABLE_BACKTRACE_TRUE@install-exec-local:
-@ENABLE_BACKTRACE_TRUE@	-cd '$(DESTDIR)$(toolexeclibdir)' && \
-@ENABLE_BACKTRACE_TRUE@	$(LN_S) libstdc++exp.a libstdc++_libbacktrace.a
-@ENABLE_BACKTRACE_TRUE@uninstall-local:
-@ENABLE_BACKTRACE_TRUE@	-cd '$(DESTDIR)$(toolexeclibdir)' && \
-@ENABLE_BACKTRACE_TRUE@	rm -f libstdc++_libbacktrace.a
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

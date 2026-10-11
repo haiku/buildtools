@@ -1,7 +1,6 @@
-/* { dg-do run { target { riscv_vector } } } */
+/* { dg-do run { target { riscv_v } } } */
 /* { dg-options "-O2" } */
 
-#include<cstdalign>
 #include<cmath>
 #include<cstddef>
 #include<cstdint>
@@ -375,7 +374,7 @@ vuint16m1_t var_8 = __riscv_vor_vv_u16m1_tumu(var_1, var_43, var_44, var_45, 1);
 vfloat32m2_t var_12 = __riscv_vfdiv_vv_f32m2_tumu(var_1, var_16, var_16, var_18, 1);
 // 4.841275101341818e-29, 4.841275101341818e-29, 4.841275101341818e-29, 4.841275101341818e-29, 4.841275101341818e-29
 
-vint8mf2_t var_19 = __riscv_vaadd_vv_i8mf2_tumu(var_1, var_20, var_21, var_22, 1);
+vint8mf2_t var_19 = __riscv_vaadd_vv_i8mf2_tumu(var_1, var_20, var_21, var_22, 0, 1);
 // -108, 37, -34
 
 __riscv_vse8_v_i8mf2(var_66, var_6, 1);

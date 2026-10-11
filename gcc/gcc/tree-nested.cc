@@ -1,5 +1,5 @@
 /* Nested function decomposition for GIMPLE.
-   Copyright (C) 2004-2023 Free Software Foundation, Inc.
+   Copyright (C) 2004-2025 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -46,6 +46,7 @@
 #include "tree-nested.h"
 #include "symbol-summary.h"
 #include "symtab-thunks.h"
+#include "attribs.h"
 
 /* Summary of nested functions.  */
 static function_summary <nested_function_info *>
@@ -611,6 +612,14 @@ get_trampoline_type (struct nesting_info *info)
   if (trampoline_type)
     return trampoline_type;
 
+  /* When trampolines are created off-stack then the only thing we need in the
+     local frame is a single pointer.  */
+  if (flag_trampoline_impl == TRAMPOLINE_IMPL_HEAP)
+    {
+      trampoline_type = build_pointer_type (void_type_node);
+      return trampoline_type;
+    }
+
   align = TRAMPOLINE_ALIGNMENT;
   size = TRAMPOLINE_SIZE;
 
@@ -774,8 +783,8 @@ get_nl_goto_field (struct nesting_info *info)
       else
 	type = lang_hooks.types.type_for_mode (Pmode, 1);
 
-      scalar_int_mode mode
-	= as_a <scalar_int_mode> (STACK_SAVEAREA_MODE (SAVE_NONLOCAL));
+      fixed_size_mode mode
+	= as_a <fixed_size_mode> (STACK_SAVEAREA_MODE (SAVE_NONLOCAL));
       size = GET_MODE_SIZE (mode);
       size = size / GET_MODE_SIZE (Pmode);
       size = size + 1;
@@ -899,7 +908,11 @@ walk_all_functions (walk_stmt_fn callback_stmt, walk_tree_fn callback_op,
    add a VIEW_CONVERT_EXPR to each such operand for each call to the nested
    function.  The former is not practical.  The latter would still require
    detecting this case to know when to add the conversions.  So, for now at
-   least, we don't inline such an enclosing function.
+   least, we don't inline such an enclosing function.  A similar issue
+   applies if the nested function has a variably modified return type, and
+   is not inlined, but the enclosing function is inlined and so the type of
+   the return slot as used in the enclosing function is remapped, so also
+   avoid inlining in that case.
 
    We have to do that check recursively, so here return indicating whether
    FNDECL has such a nested function.  ORIG_FN is the function we were
@@ -920,6 +933,9 @@ check_for_nested_with_variably_modified (tree fndecl, tree orig_fndecl)
   for (cgn = first_nested_function (cgn); cgn;
        cgn = next_nested_function (cgn))
     {
+      if (variably_modified_type_p (TREE_TYPE (TREE_TYPE (cgn->decl)),
+				    orig_fndecl))
+	return true;
       for (arg = DECL_ARGUMENTS (cgn->decl); arg; arg = DECL_CHAIN (arg))
 	if (variably_modified_type_p (TREE_TYPE (arg), orig_fndecl))
 	  return true;
@@ -958,7 +974,13 @@ create_nesting_tree (struct cgraph_node *cgn)
   /* See discussion at check_for_nested_with_variably_modified for a
      discussion of why this has to be here.  */
   if (check_for_nested_with_variably_modified (info->context, info->context))
-    DECL_UNINLINABLE (info->context) = true;
+    {
+      DECL_UNINLINABLE (info->context) = true;
+      tree attrs = DECL_ATTRIBUTES (info->context);
+      if (lookup_attribute ("noclone", attrs) == NULL)
+	DECL_ATTRIBUTES (info->context)
+	  = tree_cons (get_identifier ("noclone"), NULL, attrs);
+    }
 
   return info;
 }
@@ -1329,7 +1351,7 @@ convert_nonlocal_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	      pdecl = &TREE_OPERAND (OMP_CLAUSE_DECL (clause), 0);
 	      if (TREE_CODE (*pdecl) == POINTER_PLUS_EXPR)
 		pdecl = &TREE_OPERAND (*pdecl, 0);
-	      if (TREE_CODE (*pdecl) == INDIRECT_REF
+	      if (INDIRECT_REF_P (*pdecl)
 		  || TREE_CODE (*pdecl) == ADDR_EXPR)
 		pdecl = &TREE_OPERAND (*pdecl, 0);
 	    }
@@ -1384,6 +1406,7 @@ convert_nonlocal_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	  /* FALLTHRU */
 	case OMP_CLAUSE_FINAL:
 	case OMP_CLAUSE_IF:
+	case OMP_CLAUSE_SELF:
 	case OMP_CLAUSE_NUM_THREADS:
 	case OMP_CLAUSE_DEPEND:
 	case OMP_CLAUSE_DOACROSS:
@@ -1632,7 +1655,7 @@ note_nonlocal_vla_type (struct nesting_info *info, tree type)
     type = DECL_ORIGINAL_TYPE (TYPE_NAME (type));
 
   while (POINTER_TYPE_P (type)
-	 || TREE_CODE (type) == VECTOR_TYPE
+	 || VECTOR_TYPE_P (type)
 	 || TREE_CODE (type) == FUNCTION_TYPE
 	 || TREE_CODE (type) == METHOD_TYPE)
     type = TREE_TYPE (type);
@@ -1813,6 +1836,7 @@ convert_nonlocal_reference_stmt (gimple_stmt_iterator *gsi, bool *handled_ops_p,
       break;
 
     case GIMPLE_OMP_SECTION:
+    case GIMPLE_OMP_STRUCTURED_BLOCK:
     case GIMPLE_OMP_MASTER:
     case GIMPLE_OMP_MASKED:
     case GIMPLE_OMP_ORDERED:
@@ -2102,7 +2126,7 @@ convert_local_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	      pdecl = &TREE_OPERAND (OMP_CLAUSE_DECL (clause), 0);
 	      if (TREE_CODE (*pdecl) == POINTER_PLUS_EXPR)
 		pdecl = &TREE_OPERAND (*pdecl, 0);
-	      if (TREE_CODE (*pdecl) == INDIRECT_REF
+	      if (INDIRECT_REF_P (*pdecl)
 		  || TREE_CODE (*pdecl) == ADDR_EXPR)
 		pdecl = &TREE_OPERAND (*pdecl, 0);
 	    }
@@ -2161,6 +2185,7 @@ convert_local_omp_clauses (tree *pclauses, struct walk_stmt_info *wi)
 	  /* FALLTHRU */
 	case OMP_CLAUSE_FINAL:
 	case OMP_CLAUSE_IF:
+	case OMP_CLAUSE_SELF:
 	case OMP_CLAUSE_NUM_THREADS:
 	case OMP_CLAUSE_DEPEND:
 	case OMP_CLAUSE_DOACROSS:
@@ -2545,6 +2570,7 @@ convert_local_reference_stmt (gimple_stmt_iterator *gsi, bool *handled_ops_p,
       break;
 
     case GIMPLE_OMP_SECTION:
+    case GIMPLE_OMP_STRUCTURED_BLOCK:
     case GIMPLE_OMP_MASTER:
     case GIMPLE_OMP_MASKED:
     case GIMPLE_OMP_ORDERED:
@@ -2668,6 +2694,7 @@ convert_nl_goto_reference (gimple_stmt_iterator *gsi, bool *handled_ops_p,
     {
       new_label = create_artificial_label (UNKNOWN_LOCATION);
       DECL_NONLOCAL (new_label) = 1;
+      DECL_CONTEXT (new_label) = target_context;
       *slot = new_label;
     }
   else
@@ -2793,17 +2820,27 @@ convert_tramp_reference_op (tree *tp, int *walk_subtrees, void *data)
 
       /* Compute the address of the field holding the trampoline.  */
       x = get_frame_field (info, target_context, x, &wi->gsi);
-      x = build_addr (x);
-      x = gsi_gimplify_val (info, x, &wi->gsi);
 
-      /* Do machine-specific ugliness.  Normally this will involve
-	 computing extra alignment, but it can really be anything.  */
-      if (descr)
-	builtin = builtin_decl_implicit (BUILT_IN_ADJUST_DESCRIPTOR);
+      /* APB: We don't need to do the adjustment calls when using off-stack
+	 trampolines, any such adjustment will be done when the off-stack
+	 trampoline is created.  */
+      if (!descr && flag_trampoline_impl == TRAMPOLINE_IMPL_HEAP)
+	x = gsi_gimplify_val (info, x, &wi->gsi);
       else
-	builtin = builtin_decl_implicit (BUILT_IN_ADJUST_TRAMPOLINE);
-      call = gimple_build_call (builtin, 1, x);
-      x = init_tmp_var_with_call (info, &wi->gsi, call);
+	{
+	  x = build_addr (x);
+
+	  x = gsi_gimplify_val (info, x, &wi->gsi);
+
+	  /* Do machine-specific ugliness.  Normally this will involve
+	     computing extra alignment, but it can really be anything.  */
+	  if (descr)
+	    builtin = builtin_decl_implicit (BUILT_IN_ADJUST_DESCRIPTOR);
+	  else
+	    builtin = builtin_decl_implicit (BUILT_IN_ADJUST_TRAMPOLINE);
+	  call = gimple_build_call (builtin, 1, x);
+	  x = init_tmp_var_with_call (info, &wi->gsi, call);
+	}
 
       /* Cast back to the proper function type.  */
       x = build1 (NOP_EXPR, TREE_TYPE (t), x);
@@ -2884,9 +2921,11 @@ convert_tramp_reference_stmt (gimple_stmt_iterator *gsi, bool *handled_ops_p,
 	      continue;
 	    decl = i ? get_chain_decl (info) : info->frame_decl;
 	    /* Don't add CHAIN.* or FRAME.* twice.  */
-	    for (c = gimple_omp_taskreg_clauses (stmt);
-		 c;
-		 c = OMP_CLAUSE_CHAIN (c))
+	    if (gimple_code (stmt) == GIMPLE_OMP_TARGET)
+	      c = gimple_omp_target_clauses (stmt);
+	    else
+	      c = gimple_omp_taskreg_clauses (stmt);
+	    for (; c; c = OMP_CLAUSE_CHAIN (c))
 	      if ((OMP_CLAUSE_CODE (c) == OMP_CLAUSE_FIRSTPRIVATE
 		   || OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED)
 		  && OMP_CLAUSE_DECL (c) == decl)
@@ -3055,6 +3094,7 @@ convert_gimple_call (gimple_stmt_iterator *gsi, bool *handled_ops_p,
       /* FALLTHRU */
     case GIMPLE_OMP_SECTIONS:
     case GIMPLE_OMP_SECTION:
+    case GIMPLE_OMP_STRUCTURED_BLOCK:
     case GIMPLE_OMP_SINGLE:
     case GIMPLE_OMP_SCOPE:
     case GIMPLE_OMP_MASTER:
@@ -3239,8 +3279,8 @@ remap_vla_decls (tree block, struct nesting_info *root)
 	val = DECL_VALUE_EXPR (var);
 	type = TREE_TYPE (var);
 
-	if (!(TREE_CODE (val) == INDIRECT_REF
-	      && TREE_CODE (TREE_OPERAND (val, 0)) == VAR_DECL
+	if (! (INDIRECT_REF_P (val)
+	      && VAR_P (TREE_OPERAND (val, 0))
 	      && variably_modified_type_p (type, NULL)))
 	  continue;
 
@@ -3266,8 +3306,8 @@ remap_vla_decls (tree block, struct nesting_info *root)
 	val = DECL_VALUE_EXPR (var);
 	type = TREE_TYPE (var);
 
-	if (!(TREE_CODE (val) == INDIRECT_REF
-	      && TREE_CODE (TREE_OPERAND (val, 0)) == VAR_DECL
+	if (! (INDIRECT_REF_P (val)
+	      && VAR_P (TREE_OPERAND (val, 0))
 	      && variably_modified_type_p (type, NULL)))
 	  continue;
 
@@ -3328,7 +3368,7 @@ fixup_vla_decls (tree block)
       {
 	tree val = DECL_VALUE_EXPR (var);
 
-	if (!(TREE_CODE (val) == INDIRECT_REF
+	if (! (INDIRECT_REF_P (val)
 	      && VAR_P (TREE_OPERAND (val, 0))
 	      && DECL_HAS_VALUE_EXPR_P (TREE_OPERAND (val, 0))))
 	  continue;
@@ -3382,6 +3422,7 @@ build_init_call_stmt (struct nesting_info *info, tree decl, tree field,
 static void
 finalize_nesting_tree_1 (struct nesting_info *root)
 {
+  gimple_seq cleanup_list = NULL;
   gimple_seq stmt_list = NULL;
   gimple *stmt;
   tree context = root->context;
@@ -3513,9 +3554,48 @@ finalize_nesting_tree_1 (struct nesting_info *root)
 	  if (!field)
 	    continue;
 
-	  x = builtin_decl_implicit (BUILT_IN_INIT_TRAMPOLINE);
-	  stmt = build_init_call_stmt (root, i->context, field, x);
-	  gimple_seq_add_stmt (&stmt_list, stmt);
+	  if (flag_trampoline_impl == TRAMPOLINE_IMPL_HEAP)
+	    {
+	      /* We pass a whole bunch of arguments to the builtin function that
+		 creates the off-stack trampoline, these are
+		 1. The nested function chain value (that must be passed to the
+		 nested function so it can find the function arguments).
+		 2. A pointer to the nested function implementation,
+		 3. The address in the local stack frame where we should write
+		 the address of the trampoline.
+
+		 When this code was originally written I just kind of threw
+		 everything at the builtin, figuring I'd work out what was
+		 actually needed later, I think, the stack pointer could
+		 certainly be dropped, arguments #2 and #4 are based off the
+		 stack pointer anyway, so #1 doesn't seem to add much value.  */
+	      tree arg1, arg2, arg3;
+
+	      gcc_assert (DECL_STATIC_CHAIN (i->context));
+	      arg1 = build_addr (root->frame_decl);
+	      arg2 = build_addr (i->context);
+
+	      x = build3 (COMPONENT_REF, TREE_TYPE (field),
+			  root->frame_decl, field, NULL_TREE);
+	      arg3 = build_addr (x);
+
+	      x = builtin_decl_explicit (BUILT_IN_GCC_NESTED_PTR_CREATED);
+	      stmt = gimple_build_call (x, 3, arg1, arg2, arg3);
+	      gimple_seq_add_stmt (&stmt_list, stmt);
+
+	      /* This call to delete the nested function trampoline is added to
+		 the cleanup list, and called when we exit the current scope.  */
+	      x = builtin_decl_explicit (BUILT_IN_GCC_NESTED_PTR_DELETED);
+	      stmt = gimple_build_call (x, 0);
+	      gimple_seq_add_stmt (&cleanup_list, stmt);
+	    }
+	  else
+	    {
+	      /* Original code to initialise the on stack trampoline.  */
+	      x = builtin_decl_implicit (BUILT_IN_INIT_TRAMPOLINE);
+	      stmt = build_init_call_stmt (root, i->context, field, x);
+	      gimple_seq_add_stmt (&stmt_list, stmt);
+	    }
 	}
     }
 
@@ -3540,11 +3620,40 @@ finalize_nesting_tree_1 (struct nesting_info *root)
   /* If we created initialization statements, insert them.  */
   if (stmt_list)
     {
-      gbind *bind;
-      annotate_all_with_location (stmt_list, DECL_SOURCE_LOCATION (context));
-      bind = gimple_seq_first_stmt_as_a_bind (gimple_body (context));
-      gimple_seq_add_seq (&stmt_list, gimple_bind_body (bind));
-      gimple_bind_set_body (bind, stmt_list);
+      if (flag_trampoline_impl == TRAMPOLINE_IMPL_HEAP)
+	{
+	  /* Handle off-stack trampolines.  */
+	  gbind *bind;
+	  annotate_all_with_location (stmt_list, DECL_SOURCE_LOCATION (context));
+	  annotate_all_with_location (cleanup_list, DECL_SOURCE_LOCATION (context));
+	  bind = gimple_seq_first_stmt_as_a_bind (gimple_body (context));
+	  gimple_seq_add_seq (&stmt_list, gimple_bind_body (bind));
+
+	  gimple_seq xxx_list = NULL;
+
+	  if (cleanup_list != NULL)
+	    {
+	      /* Maybe we shouldn't be creating this try/finally if -fno-exceptions is
+		 in use.  If this is the case, then maybe we should, instead, be
+		 inserting the cleanup code onto every path out of this function?  Not
+		 yet figured out how we would do this.  */
+	      gtry *t = gimple_build_try (stmt_list, cleanup_list, GIMPLE_TRY_FINALLY);
+	      gimple_seq_add_stmt (&xxx_list, t);
+	    }
+	  else
+	    xxx_list = stmt_list;
+
+	  gimple_bind_set_body (bind, xxx_list);
+	}
+      else
+	{
+	  /* The traditional, on stack trampolines.  */
+	  gbind *bind;
+	  annotate_all_with_location (stmt_list, DECL_SOURCE_LOCATION (context));
+	  bind = gimple_seq_first_stmt_as_a_bind (gimple_body (context));
+	  gimple_seq_add_seq (&stmt_list, gimple_bind_body (bind));
+	  gimple_bind_set_body (bind, stmt_list);
+	}
     }
 
   /* If a chain_decl was created, then it needs to be registered with

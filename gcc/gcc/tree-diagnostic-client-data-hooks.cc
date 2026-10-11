@@ -1,6 +1,6 @@
 /* Implementation of diagnostic_client_data_hooks for the compilers
-   (e.g. with knowledge of "tree" and lang_hooks).
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   (e.g. with knowledge of "tree", lang_hooks, and timevars).
+   Copyright (C) 2022-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -27,8 +27,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "diagnostic.h"
 #include "tree-logical-location.h"
 #include "diagnostic-client-data-hooks.h"
+#include "diagnostic-format-sarif.h"
 #include "langhooks.h"
 #include "plugin.h"
+#include "timevar.h"
+#include "make-unique.h"
 
 /* Concrete class for supplying a diagnostic_context with information
    about a specific plugin within the client, when the client is the
@@ -111,7 +114,7 @@ private:
 };
 
 /* Subclass of diagnostic_client_data_hooks for use by compilers proper
-   i.e. with knowledge of "tree", access to langhooks, etc.  */
+   i.e. with knowledge of "tree", access to langhooks, timevars etc.  */
 
 class compiler_data_hooks : public diagnostic_client_data_hooks
 {
@@ -135,6 +138,26 @@ public:
     return lang_hooks.get_sarif_source_language (filename);
   }
 
+  void
+  add_sarif_invocation_properties (sarif_object &invocation_obj)
+    const final override
+  {
+    if (g_timer)
+      if (auto timereport_val = g_timer->make_json ())
+	{
+	  sarif_property_bag &bag_obj
+	    = invocation_obj.get_or_create_properties ();
+	  bag_obj.set ("gcc/timeReport", std::move (timereport_val));
+
+	  /* If the user requested SARIF output, then assume they want the
+	     time report data in the SARIF output, and *not* later emitted on
+	     stderr.
+	     Implement this by cleaning up the global timer instance now.  */
+	  delete g_timer;
+	  g_timer = NULL;
+	}
+  }
+
 private:
   compiler_version_info m_version_info;
   current_fndecl_logical_location m_current_fndecl_logical_loc;
@@ -143,8 +166,8 @@ private:
 /* Create a compiler_data_hooks (so that the class can be local
    to this file).  */
 
-diagnostic_client_data_hooks *
+std::unique_ptr<diagnostic_client_data_hooks>
 make_compiler_data_hooks ()
 {
-  return new compiler_data_hooks ();
+  return ::make_unique<compiler_data_hooks> ();
 }

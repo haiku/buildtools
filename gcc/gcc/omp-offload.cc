@@ -1,7 +1,7 @@
 /* Bits of OpenMP and OpenACC handling that is specific to device offloading
    and a lowering pass for OpenACC device directives.
 
-   Copyright (C) 2005-2023 Free Software Foundation, Inc.
+   Copyright (C) 2005-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -86,7 +86,7 @@ struct oacc_loop
 };
 
 /* Holds offload tables with decls.  */
-vec<tree, va_gc> *offload_funcs, *offload_vars;
+vec<tree, va_gc> *offload_funcs, *offload_vars, *offload_ind_funcs;
 
 /* Return level at which oacc routine may spawn a partitioned loop, or
    -1 if it is not a routine (i.e. is an offload fn).  */
@@ -261,7 +261,8 @@ omp_discover_declare_target_tgt_fn_r (tree *tp, int *walk_subtrees, void *data)
 			       DECL_ATTRIBUTES (decl)))
 	return NULL_TREE;
 
-      if (!DECL_EXTERNAL (decl) && DECL_SAVED_TREE (decl))
+      if (DECL_SAVED_TREE (decl)
+	  && (!DECL_EXTERNAL (decl) || DECL_DECLARED_INLINE_P (decl)))
 	((vec<tree> *) data)->safe_push (decl);
       DECL_ATTRIBUTES (decl) = tree_cons (id, NULL_TREE,
 					  DECL_ATTRIBUTES (decl));
@@ -351,6 +352,9 @@ omp_discover_implicit_declare_target (void)
     if (DECL_SAVED_TREE (node->decl))
       {
 	struct cgraph_node *cgn;
+	if (lookup_attribute ("omp declare target indirect",
+			      DECL_ATTRIBUTES (node->decl)))
+	  vec_safe_push (offload_ind_funcs, node->decl);
         if (omp_declare_target_fn_p (node->decl))
 	  worklist.safe_push (node->decl);
 	else if (DECL_STRUCT_FUNCTION (node->decl)
@@ -397,49 +401,66 @@ omp_finish_file (void)
 {
   unsigned num_funcs = vec_safe_length (offload_funcs);
   unsigned num_vars = vec_safe_length (offload_vars);
+  unsigned num_ind_funcs = vec_safe_length (offload_ind_funcs);
 
-  if (num_funcs == 0 && num_vars == 0)
+  if (num_funcs == 0 && num_vars == 0 && num_ind_funcs == 0)
     return;
 
   if (targetm_common.have_named_sections)
     {
-      vec<constructor_elt, va_gc> *v_f, *v_v;
+      vec<constructor_elt, va_gc> *v_f, *v_v, *v_if;
       vec_alloc (v_f, num_funcs);
       vec_alloc (v_v, num_vars * 2);
+      vec_alloc (v_if, num_ind_funcs);
 
       add_decls_addresses_to_decl_constructor (offload_funcs, v_f);
       add_decls_addresses_to_decl_constructor (offload_vars, v_v);
+      add_decls_addresses_to_decl_constructor (offload_ind_funcs, v_if);
 
       tree vars_decl_type = build_array_type_nelts (pointer_sized_int_node,
 						    vec_safe_length (v_v));
       tree funcs_decl_type = build_array_type_nelts (pointer_sized_int_node,
 						     num_funcs);
+      tree ind_funcs_decl_type = build_array_type_nelts (pointer_sized_int_node,
+							 num_ind_funcs);
+
       SET_TYPE_ALIGN (vars_decl_type, TYPE_ALIGN (pointer_sized_int_node));
       SET_TYPE_ALIGN (funcs_decl_type, TYPE_ALIGN (pointer_sized_int_node));
+      SET_TYPE_ALIGN (ind_funcs_decl_type, TYPE_ALIGN (pointer_sized_int_node));
       tree ctor_v = build_constructor (vars_decl_type, v_v);
       tree ctor_f = build_constructor (funcs_decl_type, v_f);
-      TREE_CONSTANT (ctor_v) = TREE_CONSTANT (ctor_f) = 1;
-      TREE_STATIC (ctor_v) = TREE_STATIC (ctor_f) = 1;
+      tree ctor_if = build_constructor (ind_funcs_decl_type, v_if);
+      TREE_CONSTANT (ctor_v) = TREE_CONSTANT (ctor_f) = TREE_CONSTANT (ctor_if) = 1;
+      TREE_STATIC (ctor_v) = TREE_STATIC (ctor_f) = TREE_STATIC (ctor_if) = 1;
       tree funcs_decl = build_decl (UNKNOWN_LOCATION, VAR_DECL,
 				    get_identifier (".offload_func_table"),
 				    funcs_decl_type);
       tree vars_decl = build_decl (UNKNOWN_LOCATION, VAR_DECL,
 				   get_identifier (".offload_var_table"),
 				   vars_decl_type);
-      TREE_STATIC (funcs_decl) = TREE_STATIC (vars_decl) = 1;
+      tree ind_funcs_decl = build_decl (UNKNOWN_LOCATION, VAR_DECL,
+					get_identifier (".offload_ind_func_table"),
+					ind_funcs_decl_type);
+      TREE_STATIC (funcs_decl) = TREE_STATIC (ind_funcs_decl) = 1;
+      TREE_STATIC (vars_decl) = 1;
       /* Do not align tables more than TYPE_ALIGN (pointer_sized_int_node),
 	 otherwise a joint table in a binary will contain padding between
 	 tables from multiple object files.  */
-      DECL_USER_ALIGN (funcs_decl) = DECL_USER_ALIGN (vars_decl) = 1;
+      DECL_USER_ALIGN (funcs_decl) = DECL_USER_ALIGN (ind_funcs_decl) = 1;
+      DECL_USER_ALIGN (vars_decl) = 1;
       SET_DECL_ALIGN (funcs_decl, TYPE_ALIGN (funcs_decl_type));
       SET_DECL_ALIGN (vars_decl, TYPE_ALIGN (vars_decl_type));
+      SET_DECL_ALIGN (ind_funcs_decl, TYPE_ALIGN (ind_funcs_decl_type));
       DECL_INITIAL (funcs_decl) = ctor_f;
       DECL_INITIAL (vars_decl) = ctor_v;
+      DECL_INITIAL (ind_funcs_decl) = ctor_if;
       set_decl_section_name (funcs_decl, OFFLOAD_FUNC_TABLE_SECTION_NAME);
       set_decl_section_name (vars_decl, OFFLOAD_VAR_TABLE_SECTION_NAME);
-
+      set_decl_section_name (ind_funcs_decl,
+			     OFFLOAD_IND_FUNC_TABLE_SECTION_NAME);
       varpool_node::finalize_decl (vars_decl);
       varpool_node::finalize_decl (funcs_decl);
+      varpool_node::finalize_decl (ind_funcs_decl);
     }
   else
     {
@@ -470,6 +491,15 @@ omp_finish_file (void)
 	  else
 #endif
 	    targetm.record_offload_symbol (it);
+	}
+      for (unsigned i = 0; i < num_ind_funcs; i++)
+	{
+	  tree it = (*offload_ind_funcs)[i];
+	  /* See also add_decls_addresses_to_decl_constructor
+	     and output_offload_tables in lto-cgraph.cc.  */
+	  if (!in_lto_p && !symtab_node::get (it))
+	    continue;
+	  targetm.record_offload_symbol (it);
 	}
     }
 }
@@ -749,7 +779,7 @@ oacc_xform_loop (gcall *call)
 
 /* Transform a GOACC_TILE call.  Determines the element loop span for
    the specified loop of the nest.  This is 1 if we're not tiling.
-   
+
    GOACC_TILE (collapse_count, loop_no, tile_arg, gwv_tile, gwv_element);  */
 
 static void
@@ -1393,7 +1423,7 @@ oacc_loop_process (oacc_loop *loop, int fn_level)
       tree e_mask_arg = build_int_cst (unsigned_type_node, loop->e_mask);
       tree chunk_arg = loop->chunk_size;
       gcall *call;
-      
+
       for (ix = 0; loop->ifns.iterate (ix, &call); ix++)
 	{
 	  switch (gimple_call_internal_fn (call))
@@ -1472,7 +1502,7 @@ oacc_loop_fixed_partitions (oacc_loop *loop, unsigned outer_mask)
       bool auto_par = (loop->flags & OLF_AUTO) != 0;
       bool seq_par = (loop->flags & OLF_SEQ) != 0;
       bool tiling = (loop->flags & OLF_TILE) != 0;
-      
+
       this_mask = ((loop->flags >> OLF_DIM_BASE)
 		   & (GOMP_DIM_MASK (GOMP_DIM_MAX) - 1));
 
@@ -1627,7 +1657,7 @@ oacc_loop_auto_partitions (oacc_loop *loop, unsigned outer_mask,
       /* Find the first outermost available partition. */
       while (this_mask <= outer_mask)
 	this_mask <<= 1;
-      
+
       /* Grab two axes if tiling, and we've not assigned anything  */
       if (tiling && !(loop->mask | loop->e_mask))
 	this_mask |= this_mask << 1;
@@ -1888,7 +1918,7 @@ oacc_rewrite_var_decl (tree *tp, int *walk_subtrees, void *data)
       *base = *new_decl;
       info->modified = true;
     }
-  else if (TREE_CODE (*tp) == VAR_DECL)
+  else if (VAR_P (*tp))
     {
       tree *new_decl = info->adjusted_vars->get (*tp);
       if (new_decl)
@@ -2161,7 +2191,7 @@ execute_oacc_device_lower ()
 	    oacc_xform_tile (call);
 	    rescan = true;
 	    break;
-	    
+
 	  case IFN_GOACC_LOOP:
 	    oacc_xform_loop (call);
 	    rescan = true;
@@ -2588,6 +2618,76 @@ find_simtpriv_var_op (tree *tp, int *walk_subtrees, void *)
   return NULL_TREE;
 }
 
+/* Helper function for execute_omp_device_lower, invoked via walk_gimple_op.
+   Resolve any OMP_TARGET_DEVICE_MATCHES and OMP_NEXT_VARIANT exprs to
+   constants.  */
+static tree
+resolve_omp_variant_cookies (tree *tp, int *walk_subtrees,
+			     void *data ATTRIBUTE_UNUSED)
+{
+  if (TREE_CODE (*tp) == OMP_TARGET_DEVICE_MATCHES)
+    {
+      *tp = resolve_omp_target_device_matches (*tp);
+      *walk_subtrees = 0;
+      return NULL_TREE;
+    }
+
+  if (TREE_CODE (*tp) != OMP_NEXT_VARIANT)
+    return NULL_TREE;
+  tree index = OMP_NEXT_VARIANT_INDEX (*tp);
+  tree state = OMP_NEXT_VARIANT_STATE (*tp);
+
+  /* State is a triplet of (result-vector, construct_context, selector_vec).
+     If result-vector has already been computed, just use it.  Otherwise we
+     must resolve the variant and fill in that part of the state object.
+     All OMP_NEXT_VARIANT exprs for the same variant construct are supposed
+     to share the same state object, but if something bad happens and we end
+     up with copies, that is OK, it will just cause the result-vector to be
+     computed multiple times.  */
+  tree result_vector = TREE_PURPOSE (state);
+  if (!result_vector)
+    {
+      tree construct_context = TREE_VALUE (state);
+      tree selectors = TREE_CHAIN (state);
+
+      vec<struct omp_variant> candidates
+	= omp_resolve_variant_construct (construct_context, selectors);
+      int n = TREE_VEC_LENGTH (selectors);
+      TREE_PURPOSE (state) = result_vector = make_tree_vec (n + 1);
+      /* The result vector maps the index of each element of the original
+	 selectors vector onto the index of the next element of the filtered/
+	 sorted candidates vector.  Since some of the original variants may
+	 have been discarded as non-matching in candidates, initialize the
+	 whole array to zero so that we have a placeholder "next" value for
+	 those elements.  Hopefully dead code elimination will take care of
+	 subsequently discarding the unreachable cases in the already-generated
+	 switch statement.  */
+      for (int i = 1; i <= n; i++)
+	TREE_VEC_ELT (result_vector, i) = integer_zero_node;
+      /* Element 0 is the case label of the first variant in the sorted
+	 list.  */
+      if (dump_file)
+	fprintf (dump_file, "Computing case map for variant directive\n");
+      int j = 0;
+      for (unsigned int i = 0; i < candidates.length(); i++)
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "  %d -> case %d\n",
+		     j, (int) tree_to_shwi (candidates[i].alternative));
+	  TREE_VEC_ELT (result_vector, j) = candidates[i].alternative;
+	  j = (int) tree_to_shwi (candidates[i].alternative);
+	}
+    }
+
+  /* Now just grab the value out of the precomputed array.  */
+  gcc_assert (TREE_CODE (index) == INTEGER_CST);
+  int indexval = (int) tree_to_shwi (index);
+  *tp = TREE_VEC_ELT (result_vector, indexval);
+  *walk_subtrees = 0;
+  return NULL_TREE;
+}
+
+
 /* Cleanup uses of SIMT placeholder internal functions: on non-SIMT targets,
    VF is 1 and LANE is 0; on SIMT targets, VF is folded to a constant, and
    LANE is kept to be expanded to RTL later on.  Also cleanup all other SIMT
@@ -2601,8 +2701,22 @@ execute_omp_device_lower ()
   bool regimplify = false;
   basic_block bb;
   gimple_stmt_iterator gsi;
-  bool calls_declare_variant_alt
-    = cgraph_node::get (cfun->decl)->calls_declare_variant_alt;
+#ifdef ACCEL_COMPILER
+  bool omp_redirect_indirect_calls = vec_safe_length (offload_ind_funcs) > 0;
+  tree map_ptr_fn
+    = builtin_decl_explicit (BUILT_IN_GOMP_TARGET_MAP_INDIRECT_PTR);
+#endif
+
+  /* Handle expansion of magic cookies for variant constructs first.  */
+  if (cgraph_node::get (cfun->decl)->has_omp_variant_constructs)
+    FOR_EACH_BB_FN (bb, cfun)
+      {
+	for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	  walk_gimple_op (gsi_stmt (gsi), resolve_omp_variant_cookies, NULL);
+	for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
+	  walk_gimple_op (gsi_stmt (gsi), resolve_omp_variant_cookies, NULL);
+      }
+
   FOR_EACH_BB_FN (bb, cfun)
     for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
       {
@@ -2611,16 +2725,33 @@ execute_omp_device_lower ()
 	  continue;
 	if (!gimple_call_internal_p (stmt))
 	  {
-	    if (calls_declare_variant_alt)
-	      if (tree fndecl = gimple_call_fndecl (stmt))
-		{
-		  tree new_fndecl = omp_resolve_declare_variant (fndecl);
-		  if (new_fndecl != fndecl)
-		    {
-		      gimple_call_set_fndecl (stmt, new_fndecl);
-		      update_stmt (stmt);
-		    }
-		}
+#ifdef ACCEL_COMPILER
+	    if (omp_redirect_indirect_calls
+		&& gimple_call_fndecl (stmt) == NULL_TREE)
+	      {
+		gcall *orig_call = dyn_cast <gcall *> (stmt);
+		tree call_fn = gimple_call_fn (stmt);
+		tree fn_ty = TREE_TYPE (call_fn);
+
+		if (TREE_CODE (call_fn) == OBJ_TYPE_REF)
+		  {
+		    tree obj_ref = create_tmp_reg (TREE_TYPE (call_fn),
+						   ".ind_fn_objref");
+		    gimple *gassign = gimple_build_assign (obj_ref, call_fn);
+		    gsi_insert_before  (&gsi, gassign, GSI_SAME_STMT);
+		    call_fn = obj_ref;
+		  }
+		tree mapped_fn = create_tmp_reg (fn_ty, ".ind_fn");
+		gimple *gcall =
+		    gimple_build_call (map_ptr_fn, 1, call_fn);
+		gimple_set_location (gcall, gimple_location (stmt));
+		gimple_call_set_lhs (gcall, mapped_fn);
+		gsi_insert_before (&gsi, gcall, GSI_SAME_STMT);
+
+		gimple_call_set_fn (orig_call, mapped_fn);
+		update_stmt (orig_call);
+	      }
+#endif
 	    continue;
 	  }
 	tree lhs = gimple_call_lhs (stmt), rhs = NULL_TREE;
@@ -2692,6 +2823,9 @@ execute_omp_device_lower ()
 	  case IFN_GOMP_SIMT_VF:
 	    rhs = build_int_cst (type, vf);
 	    break;
+	  case IFN_GOMP_MAX_VF:
+	    rhs = build_int_cst (type, omp_max_vf (false));
+	    break;
 	  case IFN_GOMP_SIMT_ORDERED_PRED:
 	    rhs = vf == 1 ? integer_zero_node : NULL_TREE;
 	    if (rhs || !lhs)
@@ -2757,9 +2891,15 @@ public:
   /* opt_pass methods: */
   bool gate (function *fun) final override
     {
+      cgraph_node *node = cgraph_node::get (fun->decl);
+#ifdef ACCEL_COMPILER
+      bool offload_ind_funcs_p = vec_safe_length (offload_ind_funcs) > 0;
+#else
+      bool offload_ind_funcs_p = false;
+#endif
       return (!(fun->curr_properties & PROP_gimple_lomp_dev)
 	      || (flag_openmp
-		  && cgraph_node::get (fun->decl)->calls_declare_variant_alt));
+		  && (node->has_omp_variant_constructs || offload_ind_funcs_p)));
     }
   unsigned int execute (function *) final override
     {
@@ -2817,8 +2957,9 @@ public:
 /* Callback for walk_gimple_stmt used to scan for link var operands.  */
 
 static tree
-find_link_var_op (tree *tp, int *walk_subtrees, void *)
+process_link_var_op (tree *tp, int *walk_subtrees, void *data)
 {
+  struct walk_stmt_info *wi = (struct walk_stmt_info *) data;
   tree t = *tp;
 
   if (VAR_P (t)
@@ -2826,8 +2967,9 @@ find_link_var_op (tree *tp, int *walk_subtrees, void *)
       && is_global_var (t)
       && lookup_attribute ("omp declare target link", DECL_ATTRIBUTES (t)))
     {
+      wi->info = *tp = unshare_expr (DECL_VALUE_EXPR (t));
       *walk_subtrees = 0;
-      return t;
+      return NULL_TREE;
     }
 
   return NULL_TREE;
@@ -2857,7 +2999,10 @@ pass_omp_target_link::execute (function *fun)
 	      gimple_call_set_arg (gsi_stmt (gsi), 1, null_pointer_node);
 	      update_stmt (gsi_stmt (gsi));
 	    }
-	  if (walk_gimple_stmt (&gsi, NULL, find_link_var_op, NULL))
+	  struct walk_stmt_info wi;
+	  memset (&wi, 0, sizeof (wi));
+	  walk_gimple_stmt (&gsi, NULL, process_link_var_op, &wi);
+	  if (wi.info)
 	    gimple_regimplify_operands (gsi_stmt (gsi), &gsi);
 	}
     }

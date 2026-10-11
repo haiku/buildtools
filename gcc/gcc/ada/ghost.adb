@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2014-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 2014-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -31,7 +31,6 @@ with Einfo.Entities; use Einfo.Entities;
 with Einfo.Utils;    use Einfo.Utils;
 with Elists;         use Elists;
 with Errout;         use Errout;
-with Namet;          use Namet;
 with Nlists;         use Nlists;
 with Nmake;          use Nmake;
 with Sem;            use Sem;
@@ -101,11 +100,6 @@ package body Ghost is
    --  mode Mode. Mark all formals parameters when N denotes a subprogram or a
    --  body.
 
-   function Name_To_Ghost_Mode (Mode : Name_Id) return Ghost_Mode_Type;
-   pragma Inline (Name_To_Ghost_Mode);
-   --  Convert a Ghost mode denoted by name Mode into its respective enumerated
-   --  value.
-
    procedure Record_Ignored_Ghost_Node (N : Node_Or_Entity_Id);
    --  Save ignored Ghost node or entity N in table Ignored_Ghost_Nodes for
    --  later elimination.
@@ -127,7 +121,7 @@ package body Ghost is
          null;
 
       --  The Ghost policy in effect at the point of declaration and at the
-      --  point of completion must match (SPARK RM 6.9(14)).
+      --  point of completion must match (SPARK RM 6.9(16)).
 
       elsif Is_Checked_Ghost_Entity (Prev_Id)
         and then Policy = Name_Ignore
@@ -179,9 +173,9 @@ package body Ghost is
          --
          --    * Be subject to pragma Ghost
 
-         function Is_OK_Pragma (Prag : Node_Id) return Boolean;
+         function Is_OK_Pragma (Prag : Node_Id; Id : Entity_Id) return Boolean;
          --  Determine whether node Prag is a suitable context for a reference
-         --  to a Ghost entity. To qualify as such, Prag must either
+         --  to a Ghost entity Id. To qualify as such, Prag must either
          --
          --    * Be an assertion expression pragma
          --
@@ -324,9 +318,11 @@ package body Ghost is
          -- Is_OK_Pragma --
          ------------------
 
-         function Is_OK_Pragma (Prag : Node_Id) return Boolean is
+         function Is_OK_Pragma (Prag : Node_Id; Id : Entity_Id) return Boolean
+         is
             procedure Check_Policies (Prag_Nam : Name_Id);
-            --  Verify that the Ghost policy in effect is the same as the
+            --  Verify that the Ghost policy in effect at the point of the
+            --  declaration of Ghost entity Id (if present) is the same as the
             --  assertion policy for pragma name Prag_Nam. Emit an error if
             --  this is not the case.
 
@@ -336,14 +332,16 @@ package body Ghost is
 
             procedure Check_Policies (Prag_Nam : Name_Id) is
                AP : constant Name_Id := Check_Kind (Prag_Nam);
-               GP : constant Name_Id := Policy_In_Effect (Name_Ghost);
 
             begin
-               --  If the Ghost policy in effect at the point of a Ghost entity
-               --  reference is Ignore, then the assertion policy of the pragma
-               --  must be Ignore (SPARK RM 6.9(18)).
+               --  If the Ghost policy in effect at the point of the
+               --  declaration of Ghost entity Id is Ignore, then the assertion
+               --  policy of the pragma must be Ignore (SPARK RM 6.9(20)).
 
-               if GP = Name_Ignore and then AP /= Name_Ignore then
+               if Present (Id)
+                 and then not Is_Checked_Ghost_Entity (Id)
+                 and then AP /= Name_Ignore
+               then
                   Error_Msg_N
                     ("incompatible ghost policies in effect",
                      Ghost_Ref);
@@ -394,7 +392,7 @@ package body Ghost is
                  and then Prag_Id /= Pragma_Predicate
                then
                   --  Ensure that the assertion policy and the Ghost policy are
-                  --  compatible (SPARK RM 6.9(18)).
+                  --  compatible (SPARK RM 6.9(20)).
 
                   Check_Policies (Prag_Nam);
                   return True;
@@ -490,13 +488,15 @@ package body Ghost is
                --  A reference to a Ghost entity can appear within an aspect
                --  specification (SPARK RM 6.9(10)). The precise checking will
                --  occur when analyzing the corresponding pragma. We make an
-               --  exception for predicate aspects that only allow referencing
-               --  a Ghost entity when the corresponding type declaration is
-               --  Ghost (SPARK RM 6.9(11)).
+               --  exception for predicate aspects other than Ghost_Predicate
+               --  that only allow referencing a Ghost entity when the
+               --  corresponding type declaration is Ghost (SPARK RM 6.9(11)).
 
                elsif Nkind (Par) = N_Aspect_Specification
-                 and then not Same_Aspect
-                                (Get_Aspect_Id (Par), Aspect_Predicate)
+                 and then
+                   (Get_Aspect_Id (Par) = Aspect_Ghost_Predicate
+                     or else not Same_Aspect
+                                   (Get_Aspect_Id (Par), Aspect_Predicate))
                then
                   return True;
 
@@ -539,7 +539,7 @@ package body Ghost is
                elsif Is_OK_Declaration (Par) then
                   return True;
 
-               elsif Is_OK_Pragma (Par) then
+               elsif Is_OK_Pragma (Par, Ghost_Id) then
                   return True;
 
                elsif Is_OK_Statement (Par) then
@@ -580,7 +580,7 @@ package body Ghost is
 
       begin
          --  The Ghost policy in effect a the point of declaration and at the
-         --  point of use must match (SPARK RM 6.9(13)).
+         --  point of use must match (SPARK RM 6.9(15)).
 
          if Is_Checked_Ghost_Entity (Id)
            and then Policy = Name_Ignore
@@ -659,7 +659,9 @@ package body Ghost is
       --  declaration and at the point of use match.
 
       if Is_OK_Ghost_Context (Ghost_Ref) then
-         Check_Ghost_Policy (Ghost_Id, Ghost_Ref);
+         if Present (Ghost_Id) then
+            Check_Ghost_Policy (Ghost_Id, Ghost_Ref);
+         end if;
 
       --  Otherwise the Ghost entity appears in a non-Ghost context and affects
       --  its behavior or value (SPARK RM 6.9(10,11)).
@@ -677,6 +679,7 @@ package body Ghost is
                Ghost_Ref);
             Error_Msg_N
               ("\either make the type ghost "
+               & "or use a Ghost_Predicate "
                & "or use a type invariant on a private type", Ghost_Ref);
          end if;
       end if;
@@ -860,7 +863,7 @@ package body Ghost is
             --  When a tagged type is either non-Ghost or checked Ghost and
             --  one of its primitives overrides an inherited operation, the
             --  overridden operation of the ancestor type must be ignored Ghost
-            --  if the primitive is ignored Ghost (SPARK RM 6.9(17)).
+            --  if the primitive is ignored Ghost (SPARK RM 6.9(19)).
 
             if Is_Ignored_Ghost_Entity (Subp) then
 
@@ -901,7 +904,7 @@ package body Ghost is
             --  When a tagged type is either non-Ghost or checked Ghost and
             --  one of its primitives overrides an inherited operation, the
             --  the primitive of the tagged type must be ignored Ghost if the
-            --  overridden operation is ignored Ghost (SPARK RM 6.9(17)).
+            --  overridden operation is ignored Ghost (SPARK RM 6.9(19)).
 
             elsif Is_Ignored_Ghost_Entity (Over_Subp) then
 
@@ -951,7 +954,7 @@ package body Ghost is
    procedure Check_Ghost_Primitive (Prim : Entity_Id; Typ : Entity_Id) is
    begin
       --  The Ghost policy in effect at the point of declaration of a primitive
-      --  operation and a tagged type must match (SPARK RM 6.9(16)).
+      --  operation and a tagged type must match (SPARK RM 6.9(18)).
 
       if Is_Tagged_Type (Typ) then
          if Is_Checked_Ghost_Entity (Prim)
@@ -1002,7 +1005,7 @@ package body Ghost is
          if Is_Ghost_Entity (Constit_Id) then
 
             --  The Ghost policy in effect at the point of abstract state
-            --  declaration and constituent must match (SPARK RM 6.9(15)).
+            --  declaration and constituent must match (SPARK RM 6.9(17)).
 
             if Is_Checked_Ghost_Entity (State_Id)
               and then Is_Ignored_Ghost_Entity (Constit_Id)
@@ -1051,7 +1054,9 @@ package body Ghost is
       Full_Typ : Entity_Id;
 
    begin
-      if Is_Ghost_Entity (Typ) then
+      if Is_Ghost_Entity (Typ)
+        and then Comes_From_Source (Typ)
+      then
          Conc_Typ := Empty;
          Full_Typ := Typ;
 
@@ -1059,11 +1064,13 @@ package body Ghost is
             Conc_Typ := Anonymous_Object (Typ);
             Full_Typ := Conc_Typ;
 
-         elsif Is_Concurrent_Type (Typ) then
+         elsif Has_Protected (Typ)
+           or else Has_Task (Typ)
+         then
             Conc_Typ := Typ;
          end if;
 
-         --  A Ghost type cannot be concurrent (SPARK RM 6.9(19)). Verify this
+         --  A Ghost type cannot be concurrent (SPARK RM 6.9(21)). Verify this
          --  legality rule first to give a finer-grained diagnostic.
 
          if Present (Conc_Typ) then
@@ -1197,6 +1204,16 @@ package body Ghost is
 
       return False;
    end Is_Ghost_Assignment;
+
+   ----------------------------------
+   -- Is_Ghost_Attribute_Reference --
+   ----------------------------------
+
+   function Is_Ghost_Attribute_Reference (N : Node_Id) return Boolean is
+   begin
+      return Nkind (N) = N_Attribute_Reference
+        and then Attribute_Name (N) = Name_Initialized;
+   end Is_Ghost_Attribute_Reference;
 
    --------------------------
    -- Is_Ghost_Declaration --
@@ -1544,7 +1561,7 @@ package body Ghost is
       end if;
 
       --  The Ghost policy in effect at the point of declaration and at the
-      --  point of completion must match (SPARK RM 6.9(14)).
+      --  point of completion must match (SPARK RM 6.9(16)).
 
       Check_Ghost_Completion
         (Prev_Id  => Spec_Id,
@@ -1591,7 +1608,7 @@ package body Ghost is
       end if;
 
       --  The Ghost policy in effect at the point of declaration and at the
-      --  point of completion must match (SPARK RM 6.9(14)).
+      --  point of completion must match (SPARK RM 6.9(16)).
 
       Check_Ghost_Completion
         (Prev_Id  => Prev_Id,
@@ -1725,13 +1742,17 @@ package body Ghost is
       elsif Ghost_Mode = Ignore then
          Policy := Name_Ignore;
 
-      --  Inherit the "ghostness" of the generic unit
+      --  Inherit the "ghostness" of the generic unit, but the current Ghost
+      --  policy is the relevant one for the instantiation.
 
-      elsif Is_Checked_Ghost_Entity (Gen_Id) then
-         Policy := Name_Check;
+      elsif Is_Checked_Ghost_Entity (Gen_Id)
+        or else Is_Ignored_Ghost_Entity (Gen_Id)
+      then
+         Policy := Policy_In_Effect (Name_Ghost);
 
-      elsif Is_Ignored_Ghost_Entity (Gen_Id) then
-         Policy := Name_Ignore;
+         if Policy = No_Name then
+            Policy := Name_Ignore;
+         end if;
       end if;
 
       --  Mark the instantiation as Ghost
@@ -1877,9 +1898,22 @@ package body Ghost is
       --  a Ghost entity.
 
       if Is_Checked_Ghost_Entity (Id) then
-         Set_Is_Checked_Ghost_Pragma (N);
+         Mark_Ghost_Pragma (N, Check);
 
       elsif Is_Ignored_Ghost_Entity (Id) then
+         Mark_Ghost_Pragma (N, Ignore);
+      end if;
+   end Mark_Ghost_Pragma;
+
+   procedure Mark_Ghost_Pragma
+     (N    : Node_Id;
+      Mode : Ghost_Mode_Type)
+   is
+   begin
+      if Mode = Check then
+         Set_Is_Checked_Ghost_Pragma (N);
+
+      else
          Set_Is_Ignored_Ghost_Pragma (N);
          Set_Is_Ignored_Ghost_Node (N);
          Record_Ignored_Ghost_Node (N);
@@ -2007,9 +2041,6 @@ package body Ghost is
 
             Rewrite (N, Make_Null_Statement (Sloc (N)));
 
-            --  Eliminate any aspects hanging off the ignored Ghost node
-
-            Remove_Aspects (N);
          end if;
       end Remove_Ignored_Ghost_Node;
 

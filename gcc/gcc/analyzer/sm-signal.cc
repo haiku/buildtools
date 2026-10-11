@@ -1,7 +1,7 @@
 /* An experimental state machine, for tracking bad calls from within
    signal handlers.
 
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -21,7 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#define INCLUDE_MEMORY
+#define INCLUDE_VECTOR
 #include "system.h"
 #include "coretypes.h"
 #include "make-unique.h"
@@ -31,8 +31,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple.h"
 #include "options.h"
 #include "bitmap.h"
+#include "diagnostic-core.h"
 #include "diagnostic-path.h"
-#include "diagnostic-metadata.h"
 #include "analyzer/analyzer.h"
 #include "diagnostic-event-id.h"
 #include "analyzer/analyzer-logging.h"
@@ -73,7 +73,7 @@ public:
 
   bool inherited_state_p () const final override { return false; }
 
-  bool on_stmt (sm_context *sm_ctxt,
+  bool  on_stmt (sm_context &sm_ctxt,
 		const supernode *node,
 		const gimple *stmt) const final override;
 
@@ -114,15 +114,13 @@ public:
     return OPT_Wanalyzer_unsafe_call_within_signal_handler;
   }
 
-  bool emit (rich_location *rich_loc) final override
+  bool emit (diagnostic_emission_context &ctxt) final override
   {
     auto_diagnostic_group d;
-    diagnostic_metadata m;
     /* CWE-479: Signal Handler Use of a Non-reentrant Function.  */
-    m.add_cwe (479);
-    if (warning_meta (rich_loc, m, get_controlling_option (),
-		      "call to %qD from within signal handler",
-		      m_unsafe_fndecl))
+    ctxt.add_cwe (479);
+    if (ctxt.warn ("call to %qD from within signal handler",
+		   m_unsafe_fndecl))
       {
 	/* If we know a possible alternative function, add a note
 	   suggesting the replacement.  */
@@ -143,23 +141,31 @@ public:
     return false;
   }
 
-  label_text describe_state_change (const evdesc::state_change &change)
-    final override
+  bool
+  describe_state_change (pretty_printer &pp,
+			 const evdesc::state_change &change) final override
   {
     if (change.is_global_p ()
 	&& change.m_new_state == m_sm.m_in_signal_handler)
       {
-	function *handler = change.m_event.get_dest_function ();
-	return change.formatted_print ("registering %qD as signal handler",
-				       handler->decl);
+	const function *handler = change.m_event.get_dest_function ();
+	gcc_assert (handler);
+	pp_printf (&pp,
+		   "registering %qD as signal handler",
+		   handler->decl);
+	return true;
       }
-    return label_text ();
+    return false;
   }
 
-  label_text describe_final_event (const evdesc::final_event &ev) final override
+  bool
+  describe_final_event (pretty_printer &pp,
+			const evdesc::final_event &) final override
   {
-    return ev.formatted_print ("call to %qD from within signal handler",
-			       m_unsafe_fndecl);
+    pp_printf (&pp,
+	       "call to %qD from within signal handler",
+	       m_unsafe_fndecl);
+    return true;
   }
 
 private:
@@ -185,10 +191,10 @@ private:
 /* signal_state_machine's ctor.  */
 
 signal_state_machine::signal_state_machine (logger *logger)
-: state_machine ("signal", logger)
+: state_machine ("signal", logger),
+  m_in_signal_handler (add_state ("in_signal_handler")),
+  m_stop (add_state ("stop"))
 {
-  m_in_signal_handler = add_state ("in_signal_handler");
-  m_stop = add_state ("stop");
 }
 
 /* Update MODEL for edges that simulate HANDLER_FUN being called as
@@ -196,7 +202,7 @@ signal_state_machine::signal_state_machine (logger *logger)
 
 static void
 update_model_for_signal_handler (region_model *model,
-				 function *handler_fun)
+				 const function &handler_fun)
 {
   gcc_assert (model);
   /* Purge all state within MODEL.  */
@@ -214,18 +220,14 @@ public:
     pp_string (pp, "signal delivered");
   }
 
-  json::object *to_json () const
-  {
-    json::object *custom_obj = new json::object ();
-    return custom_obj;
-  }
-
   bool update_model (region_model *model,
 		     const exploded_edge *eedge,
 		     region_model_context *) const final override
   {
     gcc_assert (eedge);
-    update_model_for_signal_handler (model, eedge->m_dest->get_function ());
+    gcc_assert (eedge->m_dest->get_function ());
+    update_model_for_signal_handler (model,
+				     *eedge->m_dest->get_function ());
     return true;
   }
 
@@ -266,11 +268,11 @@ public:
     program_point entering_handler
       = program_point::from_function_entry (*ext_state.get_model_manager (),
 					    eg->get_supergraph (),
-					    handler_fun);
+					    *handler_fun);
 
     program_state state_entering_handler (ext_state);
     update_model_for_signal_handler (state_entering_handler.m_region_model,
-				     handler_fun);
+				     *handler_fun);
     state_entering_handler.m_checker_states[sm_idx]->set_global_state
       (m_sm.m_in_signal_handler);
 
@@ -279,6 +281,7 @@ public:
 						       src_enode);
     if (dst_enode)
       eg->add_edge (src_enode, dst_enode, NULL, /*state_change (),*/
+		    true, /* assume does work  */
 		    make_unique<signal_delivery_edge_info_t> ());
   }
 
@@ -319,22 +322,29 @@ static bool
 signal_unsafe_p (tree fndecl)
 {
   function_set fs = get_async_signal_unsafe_fns ();
-  return fs.contains_decl_p (fndecl);
+  if (fs.contains_decl_p (fndecl))
+    return true;
+  if (is_std_function_p (fndecl)
+      && fs.contains_name_p (IDENTIFIER_POINTER (DECL_NAME (fndecl))))
+    return true;
+
+  return false;
 }
 
 /* Implementation of state_machine::on_stmt vfunc for signal_state_machine.  */
 
 bool
-signal_state_machine::on_stmt (sm_context *sm_ctxt,
+signal_state_machine::on_stmt (sm_context &sm_ctxt,
 			       const supernode *node,
 			       const gimple *stmt) const
 {
-  const state_t global_state = sm_ctxt->get_global_state ();
+  const state_t global_state = sm_ctxt.get_global_state ();
   if (global_state == m_start)
     {
       if (const gcall *call = dyn_cast <const gcall *> (stmt))
-	if (tree callee_fndecl = sm_ctxt->get_fndecl_for_call (call))
-	  if (is_named_call_p (callee_fndecl, "signal", call, 2))
+	if (tree callee_fndecl = sm_ctxt.get_fndecl_for_call (call))
+	  if (is_named_call_p (callee_fndecl, "signal", call, 2)
+	      || is_std_named_call_p (callee_fndecl, "signal", call, 2))
 	    {
 	      tree handler = gimple_call_arg (call, 1);
 	      if (TREE_CODE (handler) == ADDR_EXPR
@@ -342,19 +352,19 @@ signal_state_machine::on_stmt (sm_context *sm_ctxt,
 		{
 		  tree fndecl = TREE_OPERAND (handler, 0);
 		  register_signal_handler rsh (*this, fndecl);
-		  sm_ctxt->on_custom_transition (&rsh);
+		  sm_ctxt.on_custom_transition (&rsh);
 		}
 	    }
     }
   else if (global_state == m_in_signal_handler)
     {
       if (const gcall *call = dyn_cast <const gcall *> (stmt))
-	if (tree callee_fndecl = sm_ctxt->get_fndecl_for_call (call))
+	if (tree callee_fndecl = sm_ctxt.get_fndecl_for_call (call))
 	  if (signal_unsafe_p (callee_fndecl))
-	    if (sm_ctxt->get_global_state () == m_in_signal_handler)
-	      sm_ctxt->warn (node, stmt, NULL_TREE,
-			     make_unique<signal_unsafe_call>
-			       (*this, call, callee_fndecl));
+	    if (sm_ctxt.get_global_state () == m_in_signal_handler)
+	      sm_ctxt.warn (node, stmt, NULL_TREE,
+			    make_unique<signal_unsafe_call>
+			     (*this, call, callee_fndecl));
     }
 
   return false;

@@ -1,6 +1,6 @@
 /* Definitions of the pointer_query and related classes.
 
-   Copyright (C) 2020-2023 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -74,7 +74,12 @@ get_offset_range (tree x, gimple *stmt, offset_int r[2], range_query *rvals)
     x = TREE_OPERAND (x, 0);
 
   tree type = TREE_TYPE (x);
-  if (!INTEGRAL_TYPE_P (type) && !POINTER_TYPE_P (type))
+  if ((!INTEGRAL_TYPE_P (type)
+       /* ???  We get along without caring about overflow by using
+	  offset_int, but that falls apart when indexes are bigger
+	  than pointer differences.  */
+       || TYPE_PRECISION (type) > TYPE_PRECISION (ptrdiff_type_node))
+      && !POINTER_TYPE_P (type))
     return false;
 
    if (TREE_CODE (x) != INTEGER_CST
@@ -238,7 +243,7 @@ gimple_call_return_array (gimple *stmt, offset_int offrng[2], bool *past_end,
 	  offrng[1] = aref.sizrng[1] - 1;
 	else
 	  offrng[1] = HOST_WIDE_INT_M1U;
-	
+
 	offrng[0] = 0;
 	return gimple_call_arg (stmt, 0);
       }
@@ -316,15 +321,16 @@ get_size_range (range_query *query, tree exp, gimple *stmt, tree range[2],
 
   if (integral)
     {
-      value_range vr;
+      int_range_max vr;
+      tree tmin, tmax;
 
       query->range_of_expr (vr, exp, stmt);
 
       if (vr.undefined_p ())
 	vr.set_varying (TREE_TYPE (exp));
-      range_type = vr.kind ();
-      min = wi::to_wide (vr.min ());
-      max = wi::to_wide (vr.max ());
+      range_type = get_legacy_range (vr, tmin, tmax);
+      min = wi::to_wide (tmin);
+      max = wi::to_wide (tmax);
     }
   else
     range_type = VR_VARYING;
@@ -332,7 +338,7 @@ get_size_range (range_query *query, tree exp, gimple *stmt, tree range[2],
   if (range_type == VR_VARYING)
     {
       if (integral)
-	{	
+	{
 	  /* Use the full range of the type of the expression when
 	     no value range information is available.  */
 	  range[0] = TYPE_MIN_VALUE (exptype);
@@ -2586,6 +2592,17 @@ array_elt_at_offset (tree artype, HOST_WIDE_INT off,
 tree
 build_printable_array_type (tree eltype, unsigned HOST_WIDE_INT nelts)
 {
+  /* Cannot build an array type of functions or methods without
+     an error diagnostic.  */
+  if (FUNC_OR_METHOD_TYPE_P (eltype))
+    {
+      tree arrtype = make_node (ARRAY_TYPE);
+      TREE_TYPE (arrtype) = eltype;
+      TYPE_SIZE (arrtype) = bitsize_zero_node;
+      TYPE_SIZE_UNIT (arrtype) = size_zero_node;
+      return arrtype;
+    }
+
   if (TYPE_SIZE_UNIT (eltype)
       && TREE_CODE (TYPE_SIZE_UNIT (eltype)) == INTEGER_CST
       && !integer_zerop (TYPE_SIZE_UNIT (eltype))

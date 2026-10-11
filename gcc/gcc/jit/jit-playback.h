@@ -1,5 +1,5 @@
 /* Internals of libgccjit: classes for playing back recorded API calls.
-   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+   Copyright (C) 2013-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -21,25 +21,36 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef JIT_PLAYBACK_H
 #define JIT_PLAYBACK_H
 
+#include <string>
 #include <utility> // for std::pair
+#include <vector>
 
 #include "timevar.h"
 #include "varasm.h"
 
 #include "jit-recording.h"
 
-struct diagnostic_context;
+class diagnostic_context;
 struct diagnostic_info;
 
 namespace gcc {
 
 namespace jit {
 
+const char* fn_attribute_to_string (gcc_jit_fn_attribute attr);
+const char* variable_attribute_to_string (gcc_jit_variable_attribute attr);
+
 /**********************************************************************
  Playback.
  **********************************************************************/
 
 namespace playback {
+
+void
+set_variable_string_attribute (
+  const std::vector<std::pair<gcc_jit_variable_attribute,
+			      std::string>> &attributes,
+  tree decl);
 
 /* playback::context is an abstract base class.
 
@@ -65,6 +76,9 @@ public:
 
   type *
   get_type (enum gcc_jit_types type);
+
+  void
+  set_output_ident (const char* ident);
 
   type *
   new_array_type (location *loc,
@@ -104,14 +118,24 @@ public:
 		const char *name,
 		const auto_vec<param *> *params,
 		int is_variadic,
-		enum built_in_function builtin_id);
+		enum built_in_function builtin_id,
+		const std::vector<gcc_jit_fn_attribute> &attributes,
+		const std::vector<std::pair<gcc_jit_fn_attribute,
+					    std::string>> &string_attributes,
+		const std::vector<std::pair<gcc_jit_fn_attribute,
+					    std::vector<int>>>
+					    &int_array_attributes,
+		bool is_target_builtin);
 
   lvalue *
   new_global (location *loc,
 	      enum gcc_jit_global_kind kind,
 	      type *type,
 	      const char *name,
-	      enum global_var_flags flags);
+	      enum global_var_flags flags,
+	      const std::vector<std::pair<gcc_jit_variable_attribute,
+					  std::string>> &attributes,
+	      bool readonly);
 
   lvalue *
   new_global_initialized (location *loc,
@@ -121,7 +145,12 @@ public:
                           size_t initializer_num_elem,
                           const void *initializer,
 			  const char *name,
-			  enum global_var_flags flags);
+			  enum global_var_flags flags,
+			  const std::vector<std::pair<
+					    gcc_jit_variable_attribute,
+					    std::string>>
+					    &attributes,
+			  bool readonly);
 
   rvalue *
   new_ctor (location *log,
@@ -140,12 +169,24 @@ public:
 			 HOST_TYPE value);
 
   rvalue *
+  new_sizeof (type *type);
+
+  rvalue *
+  new_alignof (type *type);
+
+  rvalue *
   new_string_literal (const char *value);
 
   rvalue *
   new_rvalue_from_vector (location *loc,
 			  type *type,
 			  const auto_vec<rvalue *> &elements);
+
+  rvalue *
+  new_rvalue_vector_perm (location *loc,
+			  rvalue* elements1,
+			  rvalue* elements2,
+			  rvalue* mask);
 
   rvalue *
   new_unary_op (location *loc,
@@ -190,6 +231,15 @@ public:
   new_array_access (location *loc,
 		    rvalue *ptr,
 		    rvalue *index);
+
+  rvalue *
+  convert_vector (location *loc,
+		  rvalue *vector,
+		  type *type);
+  lvalue *
+  new_vector_access (location *loc,
+		     rvalue *vector,
+		     rvalue *index);
 
   void
   set_str_option (enum gcc_jit_str_option opt,
@@ -247,8 +297,8 @@ public:
   get_first_error () const;
 
   void
-  add_diagnostic (struct diagnostic_context *context,
-		  struct diagnostic_info *diagnostic);
+  add_diagnostic (const char *text,
+		  const diagnostic_info &diagnostic);
 
   void
   set_tree_location (tree t, location *loc);
@@ -306,7 +356,10 @@ private:
                    enum gcc_jit_global_kind kind,
                    type *type,
 		   const char *name,
-		   enum global_var_flags flags);
+		   enum global_var_flags flags,
+		   const std::vector<std::pair<gcc_jit_variable_attribute,
+					       std::string>> &attributes,
+		   bool readonly);
   lvalue *
   global_finalize_lvalue (tree inner);
 
@@ -446,6 +499,11 @@ public:
     return new type (build_qualified_type (m_inner, TYPE_QUAL_VOLATILE));
   }
 
+  type *get_restrict () const
+  {
+    return new type (build_qualified_type (m_inner, TYPE_QUAL_RESTRICT));
+  }
+
   type *get_aligned (size_t alignment_in_bytes) const;
   type *get_vector (size_t num_units) const;
 
@@ -495,7 +553,9 @@ public:
   lvalue *
   new_local (location *loc,
 	     type *type,
-	     const char *name);
+	     const char *name,
+	     const std::vector<std::pair<gcc_jit_variable_attribute,
+					 std::string>> &attributes);
 
   block*
   new_block (const char *name);
@@ -812,5 +872,7 @@ extern playback::context *active_playback_ctxt;
 } // namespace gcc::jit
 
 } // namespace gcc
+
+extern hash_map<nofree_string_hash, tree> target_builtins;
 
 #endif /* JIT_PLAYBACK_H */

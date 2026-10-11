@@ -1,5 +1,5 @@
 /* Array bounds checking.
-   Copyright (C) 2005-2023 Free Software Foundation, Inc.
+   Copyright (C) 2005-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -38,18 +38,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "domwalk.h"
 #include "tree-cfg.h"
 #include "attribs.h"
+#include "tree-pass.h"
+#include "gimple-range.h"
 
-array_bounds_checker::array_bounds_checker (struct function *func,
-					    range_query *qry)
-  : fun (func), m_ptr_qry (qry)
+// Always use the current range query for the bounds checker.
+array_bounds_checker::array_bounds_checker (struct function *func)
+  : fun (func), m_ptr_qry (get_range_query (func))
 {
   /* No-op.  */
 }
 
-const value_range *
-array_bounds_checker::get_value_range (const_tree op, gimple *stmt)
+void
+array_bounds_checker::get_value_range (irange &r, const_tree op, gimple *stmt)
 {
-  return m_ptr_qry.rvals->get_value_range (op, stmt);
+  if (m_ptr_qry.rvals->range_of_expr (r, const_cast<tree> (op), stmt))
+    return;
+  r.set_varying (TREE_TYPE (op));
 }
 
 /* Try to determine the DECL that REF refers to.  Return the DECL or
@@ -260,10 +264,11 @@ static bool
 check_out_of_bounds_and_warn (location_t location, tree ref,
 			      tree low_sub_org, tree low_sub, tree up_sub,
 			      tree up_bound, tree up_bound_p1,
-			      const value_range *vr,
+			      const irange *vr,
 			      bool ignore_off_by_one, bool for_array_bound,
 			      bool *out_of_bound)
 {
+  tree min, max;
   tree low_bound = array_ref_low_bound (ref);
   tree artype = TREE_TYPE (TREE_OPERAND (ref, 0));
 
@@ -282,7 +287,7 @@ check_out_of_bounds_and_warn (location_t location, tree ref,
 
   if (warned)
     ; /* Do nothing.  */
-  else if (vr && vr->kind () == VR_ANTI_RANGE)
+  else if (get_legacy_range (*vr, min, max) == VR_ANTI_RANGE)
     {
       if (up_bound
 	  && TREE_CODE (up_sub) == INTEGER_CST
@@ -370,20 +375,22 @@ array_bounds_checker::check_array_ref (location_t location, tree ref,
   tree up_sub = low_sub_org;
   tree low_sub = low_sub_org;
 
-  const value_range *vr = NULL;
+  int_range_max vr;
   if (TREE_CODE (low_sub_org) == SSA_NAME)
     {
-      vr = get_value_range (low_sub_org, stmt);
-      if (!vr->undefined_p () && !vr->varying_p ())
+      get_value_range (vr, low_sub_org, stmt);
+      if (!vr.undefined_p () && !vr.varying_p ())
 	{
-	  low_sub = vr->kind () == VR_RANGE ? vr->max () : vr->min ();
-	  up_sub = vr->kind () == VR_RANGE ? vr->min () : vr->max ();
+	  tree min, max;
+	  value_range_kind kind = get_legacy_range (vr, min, max);
+	  low_sub = kind == VR_RANGE ? max : min;
+	  up_sub = kind == VR_RANGE ? min : max;
 	}
     }
 
   warned = check_out_of_bounds_and_warn (location, ref,
 					 low_sub_org, low_sub, up_sub,
-					 up_bound, up_bound_p1, vr,
+					 up_bound, up_bound_p1, &vr,
 					 ignore_off_by_one, warn_array_bounds,
 					 &out_of_bound);
 
@@ -504,7 +511,7 @@ array_bounds_checker::check_mem_ref (location_t location, tree ref,
 	  minbound = aref.sizrng[0];
 	}
     }
-			
+
   /* The range of the byte offset into the reference.  Adjusted below.  */
   offset_int offrange[2] = { aref.offrng[0], aref.offrng[1] };
 
@@ -794,7 +801,7 @@ array_bounds_checker::check_array_bounds (tree *tp, int *walk_subtree,
   else
     location = gimple_location (wi->stmt);
 
-  *walk_subtree = TRUE;
+  *walk_subtree = true;
 
   bool warned = false;
   array_bounds_checker *checker = (array_bounds_checker *) wi->info;
@@ -833,11 +840,7 @@ class check_array_bounds_dom_walker : public dom_walker
 {
 public:
   check_array_bounds_dom_walker (array_bounds_checker *checker)
-    : dom_walker (CDI_DOMINATORS,
-		  /* Discover non-executable edges, preserving EDGE_EXECUTABLE
-		     flags, so that we can merge in information on
-		     non-executable edges from vrp_folder .  */
-		  REACHABLE_BLOCKS_PRESERVING_FLAGS),
+    : dom_walker (CDI_DOMINATORS, REACHABLE_BLOCKS),
     checker (checker) { }
   ~check_array_bounds_dom_walker () {}
 
@@ -882,4 +885,53 @@ array_bounds_checker::check ()
 {
   check_array_bounds_dom_walker w (this);
   w.walk (ENTRY_BLOCK_PTR_FOR_FN (fun));
+}
+
+const pass_data pass_data_array_bounds =
+{
+  GIMPLE_PASS, /* type */
+  "bounds", /* name */
+  OPTGROUP_NONE, /* optinfo_flags */
+  TV_TREE_ARRAY_BOUNDS, /* tv_id */
+  PROP_ssa, /* properties_required */
+  0, /* properties_provided */
+  0, /* properties_destroyed */
+  0, /* todo_flags_start */
+  ( 0 ),  /* No TODOs */
+};
+
+class pass_array_bounds : public gimple_opt_pass
+{
+public:
+  pass_array_bounds (gcc::context *ctxt, const pass_data &data_)
+    : gimple_opt_pass (data_, ctxt), data (data_)
+    { }
+
+  /* opt_pass methods: */
+  opt_pass * clone () final override
+    { return new pass_array_bounds (m_ctxt, data); }
+  bool gate (function *) final override
+    {
+      // Gate on the VRP pass to preserve previous behavior.
+      return flag_tree_vrp && (warn_array_bounds || warn_strict_flex_arrays);
+    }
+  unsigned int execute (function *fun) final override
+    {
+      calculate_dominance_info (CDI_DOMINATORS);
+      // Enable ranger as the current range query.
+      enable_ranger (fun, false);
+      array_bounds_checker array_checker (fun);
+      array_checker.check ();
+      disable_ranger (fun);
+      return 0;
+    }
+
+ private:
+  const pass_data &data;
+}; // class pass_array_bounds
+
+gimple_opt_pass *
+make_pass_array_bounds (gcc::context *ctxt)
+{
+  return new pass_array_bounds (ctxt, pass_data_array_bounds);
 }

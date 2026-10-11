@@ -1,4 +1,4 @@
-// Copyright (C) 2021-2023 Free Software Foundation, Inc.
+// Copyright (C) 2021-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -44,10 +44,8 @@ public:
   {
     std::set<HirId> live_symbols = Analysis::MarkLive::Analysis (crate);
     ScanDeadcode sdc (live_symbols);
-    for (auto it = crate.items.begin (); it != crate.items.end (); it++)
-      {
-	it->get ()->accept_vis (sdc);
-      }
+    for (auto &it : crate.get_items ())
+      it.get ()->accept_vis (sdc);
   };
 
   void visit (HIR::Function &function) override
@@ -55,22 +53,23 @@ public:
     HirId hirId = function.get_mappings ().get_hirid ();
     if (should_warn (hirId) && !function.get_visibility ().is_public ())
       {
-	if (mappings->is_impl_item (hirId))
+	if (mappings.is_impl_item (hirId))
 	  {
-	    HIR::ImplBlock *implBlock
-	      = mappings->lookup_associated_impl (hirId);
+	    HIR::ImplBlock *implBlock = mappings.lookup_associated_impl (hirId);
 	    if (!implBlock->has_trait_ref ())
 	      {
-		rust_warning_at (function.get_locus (), 0,
-				 "associated function is never used: %<%s%>",
-				 function.get_function_name ().c_str ());
+		rust_warning_at (
+		  function.get_function_name ().get_locus (), 0,
+		  "associated function is never used: %qs",
+		  function.get_function_name ().as_string ().c_str ());
 	      }
 	  }
 	else
 	  {
-	    rust_warning_at (function.get_locus (), 0,
-			     "function is never used: %<%s%>",
-			     function.get_function_name ().c_str ());
+	    rust_warning_at (
+	      function.get_function_name ().get_locus (), 0,
+	      "function is never used: %qs",
+	      function.get_function_name ().as_string ().c_str ());
 	  }
       }
   }
@@ -80,11 +79,12 @@ public:
     HirId hirId = stct.get_mappings ().get_hirid ();
     if (should_warn (hirId) && !stct.get_visibility ().is_public ())
       {
-	bool name_starts_underscore = stct.get_identifier ().at (0) == '_';
+	bool name_starts_underscore
+	  = stct.get_identifier ().as_string ().at (0) == '_';
 	if (!name_starts_underscore)
 	  rust_warning_at (stct.get_locus (), 0,
-			   "struct is never constructed: %<%s%>",
-			   stct.get_identifier ().c_str ());
+			   "struct is never constructed: %qs",
+			   stct.get_identifier ().as_string ().c_str ());
       }
     else
       {
@@ -93,11 +93,12 @@ public:
 	  {
 	    HirId field_hir_id = field.get_mappings ().get_hirid ();
 	    if (should_warn (field_hir_id)
-		&& !field.get_visibility ().is_public ())
+		&& !field.get_visibility ().is_public ()
+		&& field.get_field_name ().as_string ().at (0) != '_')
 	      {
 		rust_warning_at (field.get_locus (), 0,
-				 "field is never read: %<%s%>",
-				 field.get_field_name ().c_str ());
+				 "field is never read: %qs",
+				 field.get_field_name ().as_string ().c_str ());
 	      }
 	  }
       }
@@ -110,8 +111,8 @@ public:
     if (should_warn (hirId) && !stct.get_visibility ().is_public ())
       {
 	rust_warning_at (stct.get_locus (), 0,
-			 "struct is never constructed: %<%s%>",
-			 stct.get_identifier ().c_str ());
+			 "struct is never constructed: %qs",
+			 stct.get_identifier ().as_string ().c_str ());
       }
   }
 
@@ -135,7 +136,7 @@ public:
 private:
   std::set<HirId> live_symbols;
   Resolver::Resolver *resolver;
-  Analysis::Mappings *mappings;
+  Analysis::Mappings &mappings;
 
   ScanDeadcode (std::set<HirId> &live_symbols)
     : live_symbols (live_symbols), resolver (Resolver::Resolver::get ()),

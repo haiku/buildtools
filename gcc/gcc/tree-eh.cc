@@ -1,5 +1,5 @@
 /* Exception handling semantics and decomposition for trees.
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -76,7 +76,8 @@ add_stmt_to_eh_lp_fn (struct function *ifun, gimple *t, int num)
   if (!get_eh_throw_stmt_table (ifun))
     set_eh_throw_stmt_table (ifun, hash_map<gimple *, int>::create_ggc (31));
 
-  gcc_assert (!get_eh_throw_stmt_table (ifun)->put (t, num));
+  bool existed = get_eh_throw_stmt_table (ifun)->put (t, num);
+  gcc_assert (!existed);
 }
 
 /* Add statement T in the current function (cfun) to EH landing pad NUM.  */
@@ -950,7 +951,7 @@ static inline geh_else *
 get_eh_else (gimple_seq finally)
 {
   gimple *x = gimple_seq_first_stmt (finally);
-  if (gimple_code (x) == GIMPLE_EH_ELSE)
+  if (x && gimple_code (x) == GIMPLE_EH_ELSE)
     {
       gcc_assert (gimple_seq_singleton_p (finally));
       return as_a <geh_else *> (x);
@@ -1024,8 +1025,9 @@ honor_protect_cleanup_actions (struct leh_state *outer_state,
 	 terminate before we get to it, so strip it away before adding the
 	 MUST_NOT_THROW filter.  */
       gimple_stmt_iterator gsi = gsi_start (finally);
-      gimple *x = gsi_stmt (gsi);
-      if (gimple_code (x) == GIMPLE_TRY
+      gimple *x = !gsi_end_p (gsi) ? gsi_stmt (gsi) : NULL;
+      if (x
+	  && gimple_code (x) == GIMPLE_TRY
 	  && gimple_try_kind (x) == GIMPLE_TRY_CATCH
 	  && gimple_try_catch_is_cleanup (x))
 	{
@@ -2274,8 +2276,8 @@ make_eh_dispatch_edges (geh_dispatch *stmt)
 /* Create the single EH edge from STMT to its nearest landing pad,
    if there is such a landing pad within the current function.  */
 
-void
-make_eh_edges (gimple *stmt)
+edge
+make_eh_edge (gimple *stmt)
 {
   basic_block src, dst;
   eh_landing_pad lp;
@@ -2283,14 +2285,14 @@ make_eh_edges (gimple *stmt)
 
   lp_nr = lookup_stmt_eh_lp (stmt);
   if (lp_nr <= 0)
-    return;
+    return NULL;
 
   lp = get_eh_landing_pad_from_number (lp_nr);
   gcc_assert (lp != NULL);
 
   src = gimple_bb (stmt);
   dst = label_to_block (cfun, lp->post_landing_pad);
-  make_edge (src, dst, EDGE_EH);
+  return make_edge (src, dst, EDGE_EH);
 }
 
 /* Do the work in redirecting EDGE_IN to NEW_BB within the EH region tree;
@@ -2319,7 +2321,7 @@ redirect_eh_edge_1 (edge edge_in, basic_block new_bb, bool change_region)
   gcc_assert (old_lp_nr > 0);
   old_lp = get_eh_landing_pad_from_number (old_lp_nr);
 
-  throw_stmt = last_stmt (edge_in->src);
+  throw_stmt = *gsi_last_bb (edge_in->src);
   gcc_checking_assert (lookup_stmt_eh_lp (throw_stmt) == old_lp_nr);
 
   new_label = gimple_block_label (new_bb);
@@ -2490,6 +2492,9 @@ operation_could_trap_helper_p (enum tree_code op,
     case GT_EXPR:
     case GE_EXPR:
     case LTGT_EXPR:
+    /* MIN/MAX similar as LT/LE/GT/GE. */
+    case MIN_EXPR:
+    case MAX_EXPR:
       /* Some floating point comparisons may trap.  */
       return honor_nans;
 
@@ -2528,6 +2533,8 @@ operation_could_trap_helper_p (enum tree_code op,
 
     case COMPLEX_EXPR:
     case CONSTRUCTOR:
+    case VEC_DUPLICATE_EXPR:
+    case PAREN_EXPR:
       /* Constructing an object cannot trap.  */
       return false;
 
@@ -2639,6 +2646,27 @@ range_in_array_bounds_p (tree ref)
   return true;
 }
 
+/* Return true iff a BIT_FIELD_REF <(TYPE)???, SIZE, OFFSET> would access a bit
+   range that is known to be in bounds for TYPE.  */
+
+bool
+access_in_bounds_of_type_p (tree type, poly_uint64 size, poly_uint64 offset)
+{
+  tree type_size_tree;
+  poly_uint64 type_size_max, min = offset, wid = size, max;
+
+  type_size_tree = TYPE_SIZE (type);
+  if (!type_size_tree || !poly_int_tree_p (type_size_tree, &type_size_max))
+    return false;
+
+  max = min + wid;
+  if (maybe_lt (max, min)
+      || maybe_lt (type_size_max, max))
+    return false;
+
+  return true;
+}
+
 /* Return true if EXPR can trap, as in dereferencing an invalid pointer
    location or floating point arithmetic.  C.f. the rtl version, may_trap_p.
    This routine expects only GIMPLE lhs or rhs input.  */
@@ -2681,10 +2709,17 @@ tree_could_trap_p (tree expr)
  restart:
   switch (code)
     {
+    case BIT_FIELD_REF:
+      if (DECL_P (TREE_OPERAND (expr, 0))
+	  && !access_in_bounds_of_type_p (TREE_TYPE (TREE_OPERAND (expr, 0)),
+					  bit_field_size (expr),
+					  bit_field_offset (expr)))
+	return true;
+      /* Fall through.  */
+
     case COMPONENT_REF:
     case REALPART_EXPR:
     case IMAGPART_EXPR:
-    case BIT_FIELD_REF:
     case VIEW_CONVERT_EXPR:
     case WITH_SIZE_EXPR:
       expr = TREE_OPERAND (expr, 0);
@@ -2728,11 +2763,16 @@ tree_could_trap_p (tree expr)
 	  if (TREE_CODE (base) == STRING_CST)
 	    return maybe_le (TREE_STRING_LENGTH (base), off);
 	  tree size = DECL_SIZE_UNIT (base);
+	  tree refsz = TYPE_SIZE_UNIT (TREE_TYPE (expr));
 	  if (size == NULL_TREE
+	      || refsz == NULL_TREE
 	      || !poly_int_tree_p (size)
-	      || maybe_le (wi::to_poly_offset (size), off))
+	      || !poly_int_tree_p (refsz)
+	      || maybe_le (wi::to_poly_offset (size), off)
+	      || maybe_gt (off + wi::to_poly_offset (refsz),
+			   wi::to_poly_offset (size)))
 	    return true;
-	  /* Now we are sure the first byte of the access is inside
+	  /* Now we are sure the whole base of the access is inside
 	     the object.  */
 	  return false;
 	}
@@ -3379,8 +3419,22 @@ lower_resx (basic_block bb, gresx *stmt,
 	      lab = gimple_block_label (new_bb);
 	      gsi2 = gsi_start_bb (new_bb);
 
+	      /* Handle failure fns that expect either no arguments or the
+		 exception pointer.  */
 	      fn = dst_r->u.must_not_throw.failure_decl;
-	      x = gimple_build_call (fn, 0);
+	      if (TYPE_ARG_TYPES (TREE_TYPE (fn)) != void_list_node)
+		{
+		  tree epfn = builtin_decl_implicit (BUILT_IN_EH_POINTER);
+		  src_nr = build_int_cst (integer_type_node, src_r->index);
+		  x = gimple_build_call (epfn, 1, src_nr);
+		  tree var = create_tmp_var (ptr_type_node);
+		  var = make_ssa_name (var, x);
+		  gimple_call_set_lhs (x, var);
+		  gsi_insert_after (&gsi2, x, GSI_CONTINUE_LINKING);
+		  x = gimple_build_call (fn, 1, var);
+		}
+	      else
+		x = gimple_build_call (fn, 0);
 	      gimple_set_location (x, dst_r->u.must_not_throw.failure_loc);
 	      gsi_insert_after (&gsi2, x, GSI_CONTINUE_LINKING);
 
@@ -3515,11 +3569,9 @@ pass_lower_resx::execute (function *fun)
 
   FOR_EACH_BB_FN (bb, fun)
     {
-      gimple *last = last_stmt (bb);
-      if (last && is_gimple_resx (last))
+      if (gresx *last = safe_dyn_cast <gresx *> (*gsi_last_bb (bb)))
 	{
-	  dominance_invalidated |=
-	    lower_resx (bb, as_a <gresx *> (last), &mnt_map);
+	  dominance_invalidated |= lower_resx (bb, last, &mnt_map);
 	  any_rewritten = true;
 	}
     }
@@ -3718,6 +3770,18 @@ sink_clobbers (basic_block bb,
     }
   if (first_sunk)
     {
+      /* If there isn't a single predecessor but no virtual PHI node
+	 create one and arrange for virtual operands to be renamed as
+	 we cannot be sure all incoming edges will updated from sinking
+	 something.  */
+      if (!vphi && !single_pred_p (succbb))
+	{
+	  vphi = create_phi_node (gimple_vop (cfun), succbb);
+	  FOR_EACH_EDGE (e, ei, succbb->preds)
+	    add_phi_arg (vphi, gimple_vop (cfun), e, UNKNOWN_LOCATION);
+	  mark_virtual_operands_for_renaming (cfun);
+	  todo |= TODO_update_ssa_only_virtuals;
+	}
       /* Adjust virtual operands if we sunk across a virtual PHI.  */
       if (vphi)
 	{
@@ -3737,20 +3801,12 @@ sink_clobbers (basic_block bb,
 		   gimple_vuse (last_sunk));
 	  SET_USE (gimple_vuse_op (last_sunk), phi_def);
 	}
-      /* If there isn't a single predecessor but no virtual PHI node
-         arrange for virtual operands to be renamed.  */
-      else if (!single_pred_p (succbb)
-	       && TREE_CODE (gimple_vuse (last_sunk)) == SSA_NAME)
-	{
-	  mark_virtual_operand_for_renaming (gimple_vuse (last_sunk));
-	  todo |= TODO_update_ssa_only_virtuals;
-	}
     }
 
   return todo;
 }
 
-/* At the end of inlining, we can lower EH_DISPATCH.  Return true when 
+/* At the end of inlining, we can lower EH_DISPATCH.  Return true when
    we have found some duplicate labels and removed some edges.  */
 
 static bool
@@ -3799,10 +3855,10 @@ lower_eh_dispatch (basic_block src, geh_dispatch *stmt)
 	      }
 	    do
 	      {
-		/* Filter out duplicate labels that arise when this handler 
-		   is shadowed by an earlier one.  When no labels are 
-		   attached to the handler anymore, we remove 
-		   the corresponding edge and then we delete unreachable 
+		/* Filter out duplicate labels that arise when this handler
+		   is shadowed by an earlier one.  When no labels are
+		   attached to the handler anymore, we remove
+		   the corresponding edge and then we delete unreachable
 		   blocks at the end of this pass.  */
 		if (! seen_values.contains (TREE_VALUE (flt_node)))
 		  {
@@ -3944,7 +4000,7 @@ pass_lower_eh_dispatch::execute (function *fun)
 
   FOR_EACH_BB_FN (bb, fun)
     {
-      gimple *last = last_stmt (bb);
+      gimple *last = *gsi_last_bb (bb);
       if (last == NULL)
 	continue;
       if (gimple_code (last) == GIMPLE_EH_DISPATCH)
@@ -3979,7 +4035,7 @@ pass_lower_eh_dispatch::execute (function *fun)
       for (int i = 0; i < rpo_n; ++i)
 	{
 	  bb = BASIC_BLOCK_FOR_FN (fun, rpo[i]);
-	  gimple *last = last_stmt (bb);
+	  gimple *last = *gsi_last_bb (bb);
 	  if (last
 	      && gimple_code (last) == GIMPLE_RESX
 	      && !stmt_can_throw_external (fun, last))
@@ -4010,7 +4066,7 @@ make_pass_lower_eh_dispatch (gcc::context *ctxt)
 
 /* Walk statements, see what regions and, optionally, landing pads
    are really referenced.
-   
+
    Returns in R_REACHABLEP an sbitmap with bits set for reachable regions,
    and in LP_REACHABLE an sbitmap with bits set for reachable landing pads.
 
@@ -4705,7 +4761,7 @@ cleanup_empty_eh (eh_landing_pad lp)
       for (ei = ei_start (bb->preds); (e = ei_safe_edge (ei)); )
 	if (e->flags & EDGE_EH)
 	  {
-	    gimple *stmt = last_stmt (e->src);
+	    gimple *stmt = *gsi_last_bb (e->src);
 	    remove_stmt_from_eh_lp (stmt);
 	    remove_edge (e);
 	  }
@@ -4721,7 +4777,7 @@ cleanup_empty_eh (eh_landing_pad lp)
       for (ei = ei_start (bb->preds); (e = ei_safe_edge (ei)); )
 	if (e->flags & EDGE_EH)
 	  {
-	    gimple *stmt = last_stmt (e->src);
+	    gimple *stmt = *gsi_last_bb (e->src);
 	    remove_stmt_from_eh_lp (stmt);
 	    add_stmt_to_eh_lp (stmt, new_lp_nr);
 	    remove_edge (e);
@@ -4906,7 +4962,7 @@ make_pass_cleanup_eh (gcc::context *ctxt)
 #endif
 
 /* Verify that BB containing STMT as the last statement, has precisely the
-   edge that make_eh_edges would create.  */
+   edge that make_eh_edge would create.  */
 
 DEBUG_FUNCTION bool
 verify_eh_edges (gimple *stmt)

@@ -10,11 +10,13 @@
 module core.internal.array.utils;
 
 import core.internal.traits : Parameters;
+import core.memory : GC;
+
+alias BlkAttr = GC.BlkAttr;
 
 auto gcStatsPure() nothrow pure
 {
     import core.memory : GC;
-
     auto impureBypass = cast(GC.Stats function() pure nothrow)&GC.stats;
     return impureBypass();
 }
@@ -51,18 +53,6 @@ version (D_ProfileGC)
             string name = } ~ "`" ~ Type ~ "`;" ~ q{
 
             // FIXME: use rt.tracegc.accumulator when it is accessable in the future.
-            version (tracegc)
-        } ~ "{\n" ~ q{
-                import core.stdc.stdio;
-
-                printf("%sTrace file = '%.*s' line = %d function = '%.*s' type = %.*s\n",
-                } ~ "\"" ~ Hook ~ "\".ptr," ~ q{
-                    file.length, file.ptr,
-                    line,
-                    funcname.length, funcname.ptr,
-                    name.length, name.ptr
-                );
-            } ~ "}\n" ~ q{
             ulong currentlyAllocated = gcStatsPure().allocatedInCurrentThread;
 
             scope(exit)
@@ -97,7 +87,7 @@ version (D_ProfileGC)
      *  purity, and throwabilty checks. To prevent breaking existing code, this function template
      *  is temporarily declared `@trusted pure` until the implementation can be brought up to modern D expectations.
     */
-    auto _d_HookTraceImpl(T, alias Hook, string errorMessage)(string file, int line, string funcname, Parameters!Hook parameters) @trusted pure
+    auto _d_HookTraceImpl(T, alias Hook, string errorMessage)(Parameters!Hook parameters, string file = __FILE__, int line = __LINE__, string funcname = __FUNCTION__) @trusted pure
     {
         version (D_TypeInfo)
         {
@@ -135,4 +125,34 @@ template isPostblitNoThrow(T) {
         enum isPostblitNoThrow = isNoThrow!(T.init.__xpostblit);
     else
         enum isPostblitNoThrow = true;
+}
+
+/**
+ * Allocate a memory block with appendable capabilities for array usage.
+ *
+ * Params:
+ *  arrSize = size of the allocated array in bytes
+ * Returns:
+ *  `void[]` matching requested size on success, `null` on failure.
+ */
+void[] __arrayAlloc(T)(size_t arrSize) @trusted
+{
+    import core.lifetime : TypeInfoSize;
+    import core.internal.traits : hasIndirections;
+
+    enum typeInfoSize = TypeInfoSize!T;
+    BlkAttr attr = BlkAttr.APPENDABLE;
+
+    /* `extern(C++)` classes don't have a classinfo pointer in their vtable,
+     * so the GC can't finalize them.
+     */
+    static if (typeInfoSize)
+        attr |= BlkAttr.FINALIZE;
+    static if (!hasIndirections!T)
+        attr |= BlkAttr.NO_SCAN;
+
+    auto ptr = GC.malloc(arrSize, attr, typeid(T));
+    if (ptr)
+        return ptr[0 .. arrSize];
+    return null;
 }

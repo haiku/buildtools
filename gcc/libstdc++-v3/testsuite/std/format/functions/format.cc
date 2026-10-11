@@ -1,4 +1,4 @@
-// { dg-options "-std=gnu++20" }
+// { dg-options "-fexec-charset=UTF-8" }
 // { dg-do run { target c++20 } }
 // { dg-add-options no_pch }
 
@@ -7,6 +7,8 @@
 #ifndef __cpp_lib_format
 # error "Feature test macro for std::format is missing in <format>"
 #elif __cpp_lib_format < 202110L
+# error "Feature test macro for std::format has wrong value in <format>"
+#elif __cplusplus > 202302L && __cpp_lib_format < 202311L
 # error "Feature test macro for std::format has wrong value in <format>"
 #endif
 
@@ -21,6 +23,8 @@
 #ifndef __cpp_lib_format
 # error "Feature test macro for std::format is missing in <version>"
 #elif __cpp_lib_format < 202110L
+# error "Feature test macro for std::format has wrong value in <version>"
+#elif __cplusplus > 202302L && __cpp_lib_format < 202311L
 # error "Feature test macro for std::format has wrong value in <version>"
 #endif
 
@@ -98,6 +102,18 @@ test_std_examples()
     VERIFY(s5 == "   120");
     string s6 = format("{:6}", true);
     VERIFY(s6 == "true  ");
+    string s7 = format("{:*<6.3}", "123456");
+    VERIFY( s7 == "123***" );
+    string s8 = format("{:02}", 1234);
+    VERIFY( s8 == "1234" );
+    string s9 = format("{:*<}", "12");
+    VERIFY( s9 == "12" );
+    string sA = format("{:*<6}", "12345678");
+    VERIFY( sA == "12345678" );
+    string sB = format("{:🤡^6}", "x");
+    VERIFY( sB == "🤡🤡x🤡🤡🤡" );
+    string sC = format("{:*^6}", "🤡🤡🤡");
+    VERIFY( sC == "🤡🤡🤡" );
   }
 
   // sign
@@ -145,6 +161,11 @@ test_std_examples()
 
     // Restore
     std::locale::global(std::locale::classic());
+
+    string s5 = format("{}", -100); // PR libstdc++/114325
+    VERIFY(s5 == "-100");
+    string s6 = format("{:d} {:d}", -123, 999);
+    VERIFY(s6 == "-123 999");
   }
 }
 
@@ -238,6 +259,16 @@ test_locale()
   double nan = std::numeric_limits<double>::quiet_NaN();
   s = std::format(eloc, "{0:Le} {0:Lf} {0:Lg}", -nan);
   VERIFY( s == "-nan -nan -nan" );
+
+  // PR libstdc++/120548 format confuses a negative sign for a thousands digit
+  s = std::format(bloc, "{:L}", -123.45);
+  VERIFY( s == "-123.45" );
+  s = std::format(bloc, "{:-L}", -876543.21);
+  VERIFY( s == "-876,543.21" );
+  s = std::format(bloc, "{:+L}", 333.22);
+  VERIFY( s == "+333.22" );
+  s = std::format(bloc, "{: L}", 999.44);
+  VERIFY( s == " 999.44" );
 
   // Restore
   std::locale::global(cloc);
@@ -349,6 +380,18 @@ test_wchar()
   // P2909R4 Fix formatting of code units as integers (Dude, where’s my char?)
   s = std::format(L"{:d} {:d}", wchar_t(-1), char(-1));
   VERIFY( s.find('-') == std::wstring::npos );
+
+  auto ws = std::format(L"{:L}", 0.5);
+  VERIFY( ws == L"0.5" );
+  // The default C locale.
+  std::locale cloc = std::locale::classic();
+  // PR libstdc++/119671 use-after-free formatting floating-point to wstring
+  ws = std::format(cloc, L"{:L}", 0.5);
+  VERIFY( ws == L"0.5" );
+  // A locale with no name, but with the same facets as the C locale.
+  std::locale locx(cloc, &std::use_facet<std::ctype<char>>(cloc));
+  ws = std::format(locx, L"{:L}", 0.5);
+  VERIFY( ws == L"0.5" );
 }
 
 void
@@ -412,38 +455,6 @@ test_p1652r1() // printf corner cases in std::format
   VERIFY( s == "3.31" );
 }
 
-template<typename T>
-bool format_float()
-{
-    auto s = std::format("{:#} != {:<+7.3f}", (T)-0.0, (T)0.5);
-    return s == "-0. != +0.500 ";
-}
-
-#if __cplusplus > 202002L
-template<typename T>
-concept formattable = std::formattable<T, char>;
-#else
-template<typename T>
-concept formattable = requires (T t, char* p) { std::to_chars(p, p, t); };
-#endif
-
-void
-test_float128()
-{
-#ifdef __SIZEOF_FLOAT128__
-  if constexpr (formattable<__float128>)
-    VERIFY( format_float<__float128>() );
-  else
-    std::puts("Cannot format __float128 on this target");
-#endif
-#if __FLT128_DIG__
-  if constexpr (formattable<_Float128>)
-    VERIFY( format_float<_Float128>() );
-  else
-    std::puts("Cannot format _Float128 on this target");
-#endif
-}
-
 void
 test_pointer()
 {
@@ -473,7 +484,7 @@ test_pointer()
   s = std::format("{:20} {:20p}", p, pc);
   VERIFY( s == (str_int + ' ' + str_int) );
 
-#if __cplusplus > 202302L || ! defined __STRICT_ANSI__
+#if __cpp_lib_format >= 202304L
   // P2510R3 Formatting pointers
   s = std::format("{:06} {:07P} {:08p}", (void*)0, (const void*)0, nullptr);
   VERIFY( s == "0x0000 0X00000 0x000000" );
@@ -507,6 +518,64 @@ test_bool()
   VERIFY( s == "0 0x1 0X0" );
 }
 
+void
+test_unicode()
+{
+  // Similar to sC example in test_std_examples, but not from the standard.
+  // Verify that the character "🤡" has estimated field width 2,
+  // rather than estimated field width equal to strlen("🤡"), which would be 4,
+  // or just width 1 for single character.
+  std::string sC = std::format("{:*<3}", "🤡");
+  VERIFY( sC == "🤡*" );
+  std::wstring wsC = std::format(L"{:*<3}", L"🤡");
+  VERIFY( wsC == L"🤡*" );
+  wsC = std::format(L"{:*<3}", L'🤡');
+  VERIFY( wsC == L"🤡*" );
+
+  // Verify that "£" has estimated field width 1, not strlen("£") == 2.
+  std::string sL = std::format("{:*<3}", "£");
+  VERIFY( sL == "£**" );
+
+  // Verify that precision is measured in field width units (column positions)
+  // not bytes. The result should contain complete Unicode characters, not be
+  // truncated in the middle of a multibyte UTF-8 sequence. The string "£" has
+  // field width 1 despite being 2 bytes, and the string "🤡" has field width 2
+  // and so cannot be formatted into a replacement field using .1 precision.
+  std::string sP = std::format("{:1.1} {:*<1.1}", "£", "🤡");
+  VERIFY( sP == "£ *" );
+  sP = std::format("{:*<2.1} {:*<2.1}", "£", "🤡");
+  VERIFY( sP == "£* **" );
+
+  // Verify field width handling for extended grapheme clusters,
+  // and that a cluster gets output as a single item, not truncated.
+  std::string sG = std::format("{:*>2.1}", "\u006f\u0302\u0323!");
+  VERIFY( sG == "*\u006f\u0302\u0323" );
+
+  // Examples from P1868R2
+  // https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2020/p1868r2.html
+  const char* inputs[][2] = {
+    {"\x41",         "    \u0041"},
+    {"\xC3\x81",     "    \u00c1"},
+    {"\x41\xCC\x81", "    \u0041\u0301"},
+    {"\xc4\xb2", "    \u0132"},
+    {"\xce\x94", "    \u0394"},
+    {"\xd0\xa9", "    \u0429"},
+    {"\xd7\x90", "    \u05D0"},
+    {"\xd8\xb4", "    \u0634"},
+    {"\xe3\x80\x89", "   \u3009"},
+    {"\xe7\x95\x8c", "   \u754C"},
+    {"\xf0\x9f\xa6\x84", "   \U0001F984"},
+    {"\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9\xe2\x80\x8d"
+     "\xf0\x9f\x91\xa7\xe2\x80\x8d\xf0\x9f\x91\xa6",
+     "   \U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466" }
+  };
+  for (auto& input : inputs)
+  {
+    std::string sA = std::format("{:>5}", input[0]);
+    VERIFY( sA == input[1] );
+  }
+}
+
 int main()
 {
   test_no_args();
@@ -519,7 +588,7 @@ int main()
   test_wchar();
   test_minmax();
   test_p1652r1();
-  test_float128();
   test_pointer();
   test_bool();
+  test_unicode();
 }

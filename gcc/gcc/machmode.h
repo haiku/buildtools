@@ -1,5 +1,5 @@
 /* Machine mode definitions for GCC; included by rtl.h and tree.h.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,15 +22,15 @@ along with GCC; see the file COPYING3.  If not see
 
 typedef opt_mode<machine_mode> opt_machine_mode;
 
-extern CONST_MODE_SIZE poly_uint16_pod mode_size[NUM_MACHINE_MODES];
-extern CONST_MODE_PRECISION poly_uint16_pod mode_precision[NUM_MACHINE_MODES];
-extern const unsigned char mode_inner[NUM_MACHINE_MODES];
-extern CONST_MODE_NUNITS poly_uint16_pod mode_nunits[NUM_MACHINE_MODES];
+extern CONST_MODE_SIZE poly_uint16 mode_size[NUM_MACHINE_MODES];
+extern CONST_MODE_PRECISION poly_uint16 mode_precision[NUM_MACHINE_MODES];
+extern const unsigned short mode_inner[NUM_MACHINE_MODES];
+extern CONST_MODE_NUNITS poly_uint16 mode_nunits[NUM_MACHINE_MODES];
 extern CONST_MODE_UNIT_SIZE unsigned char mode_unit_size[NUM_MACHINE_MODES];
 extern const unsigned short mode_unit_precision[NUM_MACHINE_MODES];
-extern const unsigned char mode_next[NUM_MACHINE_MODES];
-extern const unsigned char mode_wider[NUM_MACHINE_MODES];
-extern const unsigned char mode_2xwider[NUM_MACHINE_MODES];
+extern const unsigned short mode_next[NUM_MACHINE_MODES];
+extern const unsigned short mode_wider[NUM_MACHINE_MODES];
+extern const unsigned short mode_2xwider[NUM_MACHINE_MODES];
 
 template<typename T>
 struct mode_traits
@@ -242,6 +242,21 @@ extern const unsigned char mode_class[NUM_MACHINE_MODES];
    || CLASS == MODE_ACCUM                      \
    || CLASS == MODE_UACCUM)
 
+/* The MACHINE_MODE_BITSIZE should be exactly aligned with the type of the
+   machine_mode array in the machmode.h and genmodes.cc.  For example as below.
+   +------------------------+-------+
+   | MACHINE_MODE_BITSIZE   |    16 |
+   +------------------------+-------+
+   | mode_inter[]           | short |
+   | mode_next[]            | short |
+   | mode_wider[]           | short |
+   | mode_2xwider[]         | short |
+   | mode_complex[]         | short |
+   | class_narrowest_mode[] | short |
+   +------------------------+-------+
+   */
+#define MACHINE_MODE_BITSIZE 16
+
 /* An optional T (i.e. a T or nothing), where T is some form of mode class.  */
 template<typename T>
 class opt_mode
@@ -253,6 +268,8 @@ public:
   ALWAYS_INLINE CONSTEXPR opt_mode (const T &m) : m_mode (m) {}
   template<typename U>
   ALWAYS_INLINE CONSTEXPR opt_mode (const U &m) : m_mode (T (m)) {}
+  template<typename U>
+  ALWAYS_INLINE CONSTEXPR opt_mode (const opt_mode<U> &);
   ALWAYS_INLINE CONSTEXPR opt_mode (from_int m) : m_mode (machine_mode (m)) {}
 
   machine_mode else_void () const;
@@ -269,6 +286,14 @@ public:
 private:
   machine_mode m_mode;
 };
+
+template<typename T>
+template<typename U>
+ALWAYS_INLINE CONSTEXPR
+opt_mode<T>::opt_mode (const opt_mode<U> &m)
+  : m_mode (m.exists () ? T (m.require ()) : E_VOIDmode)
+{
+}
 
 /* If the object contains a T, return its enum value, otherwise return
    E_VOIDmode.  */
@@ -797,7 +822,7 @@ GET_MODE_2XWIDER_MODE (const T &m)
 }
 
 /* Get the complex mode from the component mode.  */
-extern const unsigned char mode_complex[NUM_MACHINE_MODES];
+extern const unsigned short mode_complex[NUM_MACHINE_MODES];
 #define GET_MODE_COMPLEX_MODE(MODE) ((machine_mode) mode_complex[MODE])
 
 /* Represents a machine mode that must have a fixed size.  The main
@@ -890,15 +915,15 @@ decimal_float_mode_for_size (unsigned int size)
     (mode_for_size (size, MODE_DECIMAL_FLOAT, 0));
 }
 
-extern machine_mode smallest_mode_for_size (poly_uint64, enum mode_class);
+extern opt_machine_mode smallest_mode_for_size (poly_uint64, enum mode_class);
 
-/* Find the narrowest integer mode that contains at least SIZE bits.
-   Such a mode must exist.  */
+/* Find the narrowest integer mode that contains at least SIZE bits,
+   if such a mode exists.  */
 
-inline scalar_int_mode
+inline opt_scalar_int_mode
 smallest_int_mode_for_size (poly_uint64 size)
 {
-  return as_a <scalar_int_mode> (smallest_mode_for_size (size, MODE_INT));
+  return dyn_cast <scalar_int_mode> (smallest_mode_for_size (size, MODE_INT));
 }
 
 extern opt_scalar_int_mode int_mode_for_mode (machine_mode);
@@ -933,7 +958,8 @@ private:
 
 /* Find the best mode to use to access a bit field.  */
 
-extern bool get_best_mode (int, int, poly_uint64, poly_uint64, unsigned int,
+extern bool get_best_mode (HOST_WIDE_INT, HOST_WIDE_INT,
+			   poly_uint64, poly_uint64, unsigned int,
 			   unsigned HOST_WIDE_INT, bool, scalar_int_mode *);
 
 /* Determine alignment, 1<=result<=BIGGEST_ALIGNMENT.  */
@@ -946,7 +972,7 @@ extern unsigned get_mode_alignment (machine_mode);
 
 /* For each class, get the narrowest mode in that class.  */
 
-extern const unsigned char class_narrowest_mode[MAX_MODE_CLASS];
+extern const unsigned short class_narrowest_mode[MAX_MODE_CLASS];
 #define GET_CLASS_NARROWEST_MODE(CLASS) \
   ((machine_mode) class_narrowest_mode[CLASS])
 

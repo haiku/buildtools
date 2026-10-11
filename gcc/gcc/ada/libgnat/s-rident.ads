@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 S p e c                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -30,8 +30,9 @@
 ------------------------------------------------------------------------------
 
 --  This package defines the set of restriction identifiers. It is a generic
---  package that is instantiated by the compiler/binder in package Rident, and
---  is instantiated in package System.Restrictions for use at run-time.
+--  package that is instantiated by the compiler/binder in package ``Rident``,
+--  and is instantiated in package ``System.Restrictions`` for use at
+--  run-time.
 
 --  The reason that we make this a generic package is so that in the case of
 --  the instantiation in Rident for use at compile time and bind time, we can
@@ -449,7 +450,6 @@ package System.Rident is
                            No_Asynchronous_Control         => True,
                            No_Dynamic_Attachment           => True,
                            No_Dynamic_CPU_Assignment       => True,
-                           No_Dynamic_Priorities           => True,
                            No_Local_Protected_Objects      => True,
                            No_Protected_Type_Allocators    => True,
                            No_Requeue_Statements           => True,

@@ -1,6 +1,6 @@
 // random number generation -*- C++ -*-
 
-// Copyright (C) 2009-2023 Free Software Foundation, Inc.
+// Copyright (C) 2009-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -64,6 +64,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Implementation-space details.
   namespace __detail
   {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wc++17-extensions"
+
     template<typename _UIntType, size_t __w,
 	     bool = __w < static_cast<size_t>
 			  (std::numeric_limits<_UIntType>::digits)>
@@ -102,6 +105,108 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     template<int __s>
       struct _Select_uint_least_t<__s, 1>
       { __extension__ using type = unsigned __int128; };
+#elif __has_builtin(__builtin_add_overflow) \
+    && __has_builtin(__builtin_sub_overflow) \
+    && defined __UINT64_TYPE__
+    template<int __s>
+      struct _Select_uint_least_t<__s, 1>
+      {
+	// This is NOT a general-purpose 128-bit integer type.
+	// It only supports (type(a) * x + c) % m as needed by __mod.
+	struct type
+	{
+	  explicit
+	  type(uint64_t __a) noexcept : _M_lo(__a), _M_hi(0) { }
+
+	  // pre: __l._M_hi == 0
+	  friend type
+	  operator*(type __l, uint64_t __x) noexcept
+	  {
+	    // Split 64-bit values __l._M_lo and __x into high and low 32-bit
+	    // limbs and multiply those individually.
+	    // l * x = (l0 + l1) * (x0 + x1) = l0x0 + l0x1 + l1x0 + l1x1
+
+	    constexpr uint64_t __mask = 0xffffffff;
+	    uint64_t __ll[2] = { __l._M_lo >> 32, __l._M_lo & __mask };
+	    uint64_t __xx[2] = { __x >> 32, __x & __mask };
+	    uint64_t __l0x0 = __ll[0] * __xx[0];
+	    uint64_t __l0x1 = __ll[0] * __xx[1];
+	    uint64_t __l1x0 = __ll[1] * __xx[0];
+	    uint64_t __l1x1 = __ll[1] * __xx[1];
+	    // These bits are the low half of __l._M_hi
+	    // and the high half of __l._M_lo.
+	    uint64_t __mid
+	      = (__l0x1 & __mask) + (__l1x0 & __mask) + (__l1x1 >> 32);
+	    __l._M_hi = __l0x0 + (__l0x1 >> 32) + (__l1x0 >> 32) + (__mid >> 32);
+	    __l._M_lo = (__mid << 32) + (__l1x1 & __mask);
+	    return __l;
+	  }
+
+	  friend type
+	  operator+(type __l, uint64_t __c) noexcept
+	  {
+	    __l._M_hi += __builtin_add_overflow(__l._M_lo, __c, &__l._M_lo);
+	    return __l;
+	  }
+
+	  friend type
+	  operator%(type __l, uint64_t __m) noexcept
+	  {
+	    if (__builtin_expect(__l._M_hi == 0, 0))
+	      {
+		__l._M_lo %= __m;
+		return __l;
+	      }
+
+	    int __shift = __builtin_clzll(__m) + 64
+			    - __builtin_clzll(__l._M_hi);
+	    type __x(0);
+	    if (__shift >= 64)
+	      {
+		__x._M_hi = __m << (__shift - 64);
+		__x._M_lo = 0;
+	      }
+	    else
+	      {
+		__x._M_hi = __m >> (64 - __shift);
+		__x._M_lo = __m << __shift;
+	      }
+
+	    while (__l._M_hi != 0 || __l._M_lo >= __m)
+	      {
+		if (__x <= __l)
+		  {
+		    __l._M_hi -= __x._M_hi;
+		    __l._M_hi -= __builtin_sub_overflow(__l._M_lo, __x._M_lo,
+							&__l._M_lo);
+		  }
+		__x._M_lo = (__x._M_lo >> 1) | (__x._M_hi << 63);
+		__x._M_hi >>= 1;
+	      }
+	    return __l;
+	  }
+
+	  // pre: __l._M_hi == 0
+	  explicit operator uint64_t() const noexcept
+	  { return _M_lo; }
+
+	  friend bool operator<(const type& __l, const type& __r) noexcept
+	  {
+	    if (__l._M_hi < __r._M_hi)
+	      return true;
+	    else if (__l._M_hi == __r._M_hi)
+	      return __l._M_lo < __r._M_lo;
+	    else
+	      return false;
+	  }
+
+	  friend bool operator<=(const type& __l, const type& __r) noexcept
+	  { return !(__r < __l); }
+
+	  uint64_t _M_lo;
+	  uint64_t _M_hi;
+	};
+      };
 #endif
 
     // Assume a != 0, a < m, c < m, x < m.
@@ -149,14 +254,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       inline _Tp
       __mod(_Tp __x)
       {
-	if _GLIBCXX17_CONSTEXPR (__a == 0)
+	if constexpr (__a == 0)
 	  return __c;
-	else
-	  {
-	    // _Mod must not be instantiated with a == 0
-	    constexpr _Tp __a1 = __a ? __a : 1;
-	    return _Mod<_Tp, __m, __a1, __c>::__calc(__x);
-	  }
+	else // N.B. _Mod must not be instantiated with a == 0
+	  return _Mod<_Tp, __m, __a, __c>::__calc(__x);
       }
 
     /*
@@ -216,6 +317,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__not_<is_convertible<_Sseq, _Res>>
       >;
 
+#pragma GCC diagnostic pop
   } // namespace __detail
   /// @endcond
 
@@ -246,7 +348,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * A random number generator that produces pseudorandom numbers via
    * linear function:
    * @f[
-   *     x_{i+1}\leftarrow(ax_{i} + c) \bmod m 
+   *     x_{i+1}\leftarrow(ax_{i} + c) \bmod m
    * @f]
    *
    * The template parameter @p _UIntType must be an unsigned integral type
@@ -460,7 +562,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * This algorithm was originally invented by Makoto Matsumoto and
    * Takuji Nishimura.
    *
-   * @tparam __w  Word size, the number of bits in each element of 
+   * @tparam __w  Word size, the number of bits in each element of
    *              the state vector.
    * @tparam __n  The degree of recursion.
    * @tparam __m  The period parameter.
@@ -698,7 +800,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * A discrete random number generator that produces pseudorandom
    * numbers using:
    * @f[
-   *     x_{i}\leftarrow(x_{i - s} - x_{i - r} - carry_{i-1}) \bmod m 
+   *     x_{i}\leftarrow(x_{i - s} - x_{i - r} - carry_{i-1}) \bmod m
    * @f]
    *
    * The size of the state is @f$r@f$
@@ -2006,7 +2108,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * The formula for the normal probability density function is
    * @f[
    *     p(x|\mu,\sigma) = \frac{1}{\sigma \sqrt{2 \pi}}
-   *            e^{- \frac{{x - \mu}^ {2}}{2 \sigma ^ {2}} } 
+   *            e^{- \frac{{x - \mu}^ {2}}{2 \sigma ^ {2}} }
    * @f]
    *
    * @headerfile random
@@ -2233,7 +2335,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * The formula for the normal probability mass function is
    * @f[
    *     p(x|m,s) = \frac{1}{sx\sqrt{2\pi}}
-   *                \exp{-\frac{(\ln{x} - m)^2}{2s^2}} 
+   *                \exp{-\frac{(\ln{x} - m)^2}{2s^2}}
    * @f]
    *
    * @headerfile random
@@ -2458,7 +2560,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * The formula for the gamma probability density function is:
    * @f[
    *     p(x|\alpha,\beta) = \frac{1}{\beta\Gamma(\alpha)}
-   *                         (x/\beta)^{\alpha - 1} e^{-x/\beta} 
+   *                         (x/\beta)^{\alpha - 1} e^{-x/\beta}
    * @f]
    *
    * @headerfile random
@@ -3145,7 +3247,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @f[
    *     p(x|m,n) = \frac{\Gamma((m+n)/2)}{\Gamma(m/2)\Gamma(n/2)}
    *                (\frac{m}{n})^{m/2} x^{(m/2)-1}
-   *                (1 + \frac{mx}{n})^{-(m+n)/2} 
+   *                (1 + \frac{mx}{n})^{-(m+n)/2}
    * @f]
    *
    * @headerfile random
@@ -3384,7 +3486,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * The formula for the normal probability mass function is:
    * @f[
    *     p(x|n) = \frac{1}{\sqrt(n\pi)} \frac{\Gamma((n+1)/2)}{\Gamma(n/2)}
-   *              (1 + \frac{x^2}{n}) ^{-(n+1)/2} 
+   *              (1 + \frac{x^2}{n}) ^{-(n+1)/2}
    * @f]
    *
    * @headerfile random
@@ -3503,7 +3605,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
         {
 	  typedef typename std::gamma_distribution<result_type>::param_type
 	    param_type;
-	
+
 	  const result_type __g = _M_gd(__urng, param_type(__p.n() / 2, 2));
 	  return _M_nd(__urng) * std::sqrt(__p.n() / __g);
         }
@@ -3901,7 +4003,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	double _M_p;
 
 	double _M_q;
-#if _GLIBCXX_USE_C99_MATH_TR1
+#if _GLIBCXX_USE_C99_MATH_FUNCS
 	double _M_d1, _M_d2, _M_s1, _M_s2, _M_c,
 	       _M_a1, _M_a123, _M_s, _M_lf, _M_lp1p;
 #endif
@@ -4015,7 +4117,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	friend bool
         operator==(const binomial_distribution& __d1,
 		   const binomial_distribution& __d2)
-#ifdef _GLIBCXX_USE_C99_MATH_TR1
+#ifdef _GLIBCXX_USE_C99_MATH_FUNCS
 	{ return __d1._M_param == __d2._M_param && __d1._M_nd == __d2._M_nd; }
 #else
         { return __d1._M_param == __d2._M_param; }
@@ -4068,7 +4170,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       param_type _M_param;
 
-      // NB: Unused when _GLIBCXX_USE_C99_MATH_TR1 is undefined.
+      // NB: Unused when _GLIBCXX_USE_C99_MATH_FUNCS is undefined.
       std::normal_distribution<double> _M_nd;
     };
 
@@ -4595,7 +4697,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	double _M_mean;
 
 	double _M_lm_thr;
-#if _GLIBCXX_USE_C99_MATH_TR1
+#if _GLIBCXX_USE_C99_MATH_FUNCS
 	double _M_lfm, _M_sm, _M_d, _M_scx, _M_1cx, _M_c2b, _M_cb;
 #endif
       };
@@ -4700,7 +4802,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       friend bool
       operator==(const poisson_distribution& __d1,
 		 const poisson_distribution& __d2)
-#ifdef _GLIBCXX_USE_C99_MATH_TR1
+#ifdef _GLIBCXX_USE_C99_MATH_FUNCS
       { return __d1._M_param == __d2._M_param && __d1._M_nd == __d2._M_nd; }
 #else
       { return __d1._M_param == __d2._M_param; }
@@ -4746,7 +4848,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       param_type _M_param;
 
-      // NB: Unused when _GLIBCXX_USE_C99_MATH_TR1 is undefined.
+      // NB: Unused when _GLIBCXX_USE_C99_MATH_FUNCS is undefined.
       std::normal_distribution<double> _M_nd;
     };
 
@@ -4995,7 +5097,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * The formula for the normal probability density function is:
    * @f[
    *     p(x|\alpha,\beta) = \frac{\alpha}{\beta} (\frac{x}{\beta})^{\alpha-1}
-   *                         \exp{(-(\frac{x}{\beta})^\alpha)} 
+   *                         \exp{(-(\frac{x}{\beta})^\alpha)}
    * @f]
    *
    * @headerfile random
@@ -5212,7 +5314,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * The formula for the normal probability mass function is
    * @f[
    *     p(x|a,b) = \frac{1}{b}
-   *                \exp( \frac{a-x}{b} - \exp(\frac{a-x}{b})) 
+   *                \exp( \frac{a-x}{b} - \exp(\frac{a-x}{b}))
    * @f]
    *
    * @headerfile random
@@ -5946,7 +6048,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #if __cpp_impl_three_way_comparison < 201907L
   /**
-    * @brief Return true if two piecewise constant distributions have 
+    * @brief Return true if two piecewise constant distributions have
     *        different parameters.
    */
   template<typename _RealType>

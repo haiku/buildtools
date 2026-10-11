@@ -1,5 +1,5 @@
 /* Support for GCC plugin mechanism.
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
    APIs described in doc/plugin.texi.  */
 
 #include "config.h"
+#define INCLUDE_DLFCN_H
 #include "system.h"
 #include "coretypes.h"
 #include "options.h"
@@ -190,10 +191,10 @@ add_new_plugin (const char* plugin_name)
 #if defined(__MINGW32__)
       static const char plugin_ext[] = ".dll";
 #elif defined(__APPLE__)
-      /* Mac OS has two types of libraries: dynamic libraries (.dylib) and
+      /* macOS has two types of libraries: dynamic libraries (.dylib) and
          plugins (.bundle). Both can be used with dlopen()/dlsym() but the
          former cannot be linked at build time (i.e., with the -lfoo linker
-         option). A GCC plugin is therefore probably a Mac OS plugin but their
+         option). A GCC plugin is therefore probably a macOS plugin but their
          use seems to be quite rare and the .bundle extension is more of a
          recommendation rather than the rule. This raises the questions of how
          well they are supported by tools (e.g., libtool). So to avoid
@@ -276,7 +277,7 @@ parse_plugin_arg_opt (const char *arg)
         }
       else if (*ptr == '=')
         {
-	  if (!key_parsed) 
+	  if (!key_parsed)
 	    {
 	      key_len = len;
 	      len = 0;
@@ -714,7 +715,7 @@ try_init_one_plugin (struct plugin_name_args *plugin)
   /* Check the plugin license.  */
   if (dlsym (dl_handle, str_license) == NULL)
     fatal_error (input_location,
-		 "plugin %s is not licensed under a GPL-compatible license"
+		 "plugin %s is not licensed under a GPL-compatible license:"
 		 " %s", plugin->full_name, dlerror ());
 
   PTR_UNION_AS_VOID_PTR (plugin_init_union)

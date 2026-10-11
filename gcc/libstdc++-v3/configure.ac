@@ -45,7 +45,7 @@ if test "$build" != "$host"; then
       *-*-darwin*,*-*-darwin*)
 	hostos=`echo $host | sed 's/.*-darwin/darwin/'`
 	targetos=`echo $target | sed 's/.*-darwin/darwin/'`
-	if test $hostos = $targetos -o $targetos = darwin ; then
+	if test $hostos = $targetos || test $targetos = darwin ; then
 	  GLIBCXX_IS_NATIVE=true
 	fi
 	;;
@@ -108,7 +108,7 @@ AM_PROG_LIBTOOL
 ACX_LT_HOST_FLAGS
 AC_SUBST(enable_shared)
 AC_SUBST(enable_static)
-
+AM_CONDITIONAL([ENABLE_DARWIN_AT_RPATH], [test x$enable_darwin_at_rpath = xyes])
 os_is_darwin=no
 case ${host_os} in
   darwin*) os_is_darwin=yes ;;
@@ -356,6 +356,7 @@ else
     AC_DEFINE(HAVE_FLOORF)
     AC_DEFINE(HAVE_FMODF)
     AC_DEFINE(HAVE_FREXPF)
+    AC_DEFINE(HAVE_HYPOTF)
     AC_DEFINE(HAVE_LDEXPF)
     AC_DEFINE(HAVE_LOG10F)
     AC_DEFINE(HAVE_LOGF)
@@ -367,7 +368,23 @@ else
     AC_DEFINE(HAVE_TANF)
     AC_DEFINE(HAVE_TANHF)
 
-    AC_DEFINE(HAVE_ICONV)
+dnl # Support for the long version of some math libraries depends on
+dnl # architecture and newlib version.  So test for their availability
+dnl # rather than hardcoding that information.
+    GLIBCXX_CHECK_MATH_DECLS([
+      acosl asinl atan2l atanl ceill coshl cosl expl fabsl floorl fmodl
+      frexpl hypotl ldexpl log10l logl modfl powl sinhl sinl sqrtl
+      tanhl tanl])
+
+    # Support for iconv in newlib is configurable.
+    AC_TRY_COMPILE([#include <newlib.h>], [
+      #ifndef _ICONV_ENABLED
+      #error
+      #endif], [ac_newlib_iconv_enabled=yes], [ac_newlib_iconv_enabled=no])
+    if test "$ac_newlib_iconv_enabled" = yes; then
+      AC_DEFINE(HAVE_ICONV)
+    fi
+
     AC_DEFINE(HAVE_MEMALIGN)
 
     case "${target}" in
@@ -382,6 +399,8 @@ else
         AC_DEFINE(HAVE_ALIGNED_ALLOC)
         AC_DEFINE(HAVE_AT_QUICK_EXIT)
         AC_DEFINE(HAVE_LINK)
+        AC_DEFINE(HAVE_SYS_STAT_H)
+        AC_DEFINE(HAVE_SYS_TYPES_H)
         AC_DEFINE(HAVE_QUICK_EXIT)
         AC_DEFINE(HAVE_READLINK)
         AC_DEFINE(HAVE_SETENV)
@@ -389,8 +408,24 @@ else
         AC_DEFINE(HAVE_SOCKATMARK)
         AC_DEFINE(HAVE_STRERROR_L)
         AC_DEFINE(HAVE_SYMLINK)
+        AC_DEFINE(HAVE_S_ISREG)
         AC_DEFINE(HAVE_TRUNCATE)
+        AC_DEFINE(HAVE_UNISTD_H)
+        AC_DEFINE(HAVE_UNLINKAT)
         AC_DEFINE(HAVE_USLEEP)
+        AC_DEFINE(_GLIBCXX_USE_CHMOD)
+        AC_DEFINE(_GLIBCXX_USE_MKDIR)
+        AC_DEFINE(_GLIBCXX_USE_CHDIR)
+        AC_DEFINE(_GLIBCXX_USE_GETCWD)
+        AC_DEFINE(_GLIBCXX_USE_UTIME)
+        AC_DEFINE(HAVE_USLEEP)
+
+        # These functions are defined in librtemscpu.  We don't use
+        # -qrtems during configure, so we don't link that in, and fail
+        # to find them.
+        glibcxx_cv_chdir=yes
+        glibcxx_cv_chmod=yes
+        glibcxx_cv_mkdir=yes
         ;;
     esac
   elif test "x$with_headers" != "xno"; then
@@ -530,7 +565,10 @@ AC_CHECK_HEADERS([fcntl.h sys/ioctl.h sys/socket.h sys/uio.h poll.h netdb.h arpa
 AC_CHECK_DECL(F_GETFL,,,[#include <fcntl.h>])
 AC_CHECK_DECL(F_SETFL,,,[#include <fcntl.h>])
 if test "$ac_cv_have_decl_F_GETFL$ac_cv_have_decl_F_SETFL" = yesyes ; then
-  AC_CHECK_DECL(O_NONBLOCK,,,[#include <fcntl.h>])
+  AC_CHECK_DECL(O_NONBLOCK,
+    AC_DEFINE(HAVE_O_NONBLOCK,1,[Define if O_NONBLOCK is defined in <fcntl.h>]),
+    [],
+    [#include <fcntl.h>])
 fi
 
 # For Transactional Memory TS
@@ -545,11 +583,20 @@ GLIBCXX_EMERGENCY_EH_ALLOC
 # For src/c++20/tzdb.cc defaults.
 GLIBCXX_ZONEINFO_DIR
 
+# For std::chrono formatters to use tm::tm_zone
+GLIBCXX_STRUCT_TM_TM_ZONE
+
 # For src/c++11/shared_ptr.cc alignment.
 GLIBCXX_CHECK_ALIGNAS_CACHELINE
 
 # For using init_priority in ios_init.cc
 GLIBCXX_CHECK_INIT_PRIORITY
+
+# For __basic_file::native_handle()
+GLIBCXX_CHECK_FILEBUF_NATIVE_HANDLES
+
+# For std::text_encoding
+GLIBCXX_CHECK_TEXT_ENCODING
 
 # Define documentation rules conditionally.
 

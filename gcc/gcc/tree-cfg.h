@@ -1,5 +1,5 @@
 /* Data and Control Flow Analysis for Trees.
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2025 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -45,7 +45,7 @@ extern void clear_special_calls (void);
 extern edge find_taken_edge (basic_block, tree);
 extern void gimple_debug_bb (basic_block);
 extern basic_block gimple_debug_bb_n (int);
-extern void gimple_debug_cfg (int);
+extern void gimple_debug_cfg (dump_flags_t);
 extern void gimple_dump_cfg (FILE *, dump_flags_t);
 extern void dump_cfg_stats (FILE *);
 extern void debug_cfg_stats (void);
@@ -61,7 +61,7 @@ extern bool assert_unreachable_fallthru_edge_p (edge);
 extern void delete_tree_cfg_annotations (function *);
 extern gphi *get_virtual_phi (basic_block);
 extern gimple *first_stmt (basic_block);
-extern gimple *last_stmt (basic_block);
+extern gimple *last_nondebug_stmt (basic_block);
 extern gimple *last_and_only_stmt (basic_block);
 extern bool verify_gimple_in_seq (gimple_seq, bool = true);
 extern bool verify_gimple_in_cfg (struct function *, bool, bool = true);
@@ -69,8 +69,8 @@ extern tree gimple_block_label (basic_block);
 extern void add_phi_args_after_copy_bb (basic_block);
 extern void add_phi_args_after_copy (basic_block *, unsigned, edge);
 extern basic_block split_edge_bb_loc (edge);
-extern bool gimple_duplicate_sese_region (edge, edge, basic_block *, unsigned,
-					basic_block *, bool);
+extern bool gimple_duplicate_seme_region (edge, edge, basic_block *, unsigned,
+					  basic_block *, bool);
 extern bool gimple_duplicate_sese_tail (edge, edge, basic_block *, unsigned,
 				      basic_block *);
 extern void gather_blocks_in_sese_region (basic_block entry, basic_block exit,
@@ -113,6 +113,7 @@ extern basic_block gimple_switch_default_bb (function *, gswitch *);
 extern edge gimple_switch_edge (function *, gswitch *, unsigned);
 extern edge gimple_switch_default_edge (function *, gswitch *);
 extern bool cond_only_block_p (basic_block);
+extern void copy_phi_arg_into_existing_phi (edge, edge);
 
 /* Return true if the LHS of a call should be removed.  */
 

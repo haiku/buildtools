@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # Generate Intel taken branches Linux perf event script for autofdo profiling.
 
-# Copyright (C) 2016-2023 Free Software Foundation, Inc.
+# Copyright (C) 2016-2025 Free Software Foundation, Inc.
 #
 # GCC is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free
@@ -15,7 +15,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with GCC; see the file COPYING3.  If not see
-# <http://www.gnu.org/licenses/>.  */
+# <http://www.gnu.org/licenses/>.
 
 # Run it with perf record -b -e EVENT program ...
 # The Linux Kernel needs to support the PMU of the current CPU, and
@@ -32,8 +32,9 @@ import json
 import argparse
 import collections
 import os
+import fnmatch
 
-baseurl = "https://download.01.org/perfmon"
+baseurl = "https://raw.githubusercontent.com/intel/perfmon/main"
 
 target_events = ('BR_INST_RETIRED.NEAR_TAKEN',
                  'BR_INST_EXEC.TAKEN',
@@ -74,7 +75,7 @@ def get_cpustr():
 def find_event(eventurl, model):
     print("Downloading", eventurl, file = sys.stderr)
     u = urllib.request.urlopen(eventurl)
-    events = json.loads(u.read())
+    events = json.loads(u.read())["Events"]
     u.close()
 
     found = 0
@@ -102,7 +103,7 @@ found = 0
 cpufound = 0
 for j in u:
     n = j.rstrip().decode().split(',')
-    if len(n) >= 4 and (args.all or n[0] == cpu) and n[3] == "core":
+    if len(n) >= 4 and (args.all or fnmatch.fnmatch(cpu, n[0])) and n[3] == "core":
         components = n[0].split("-")
         model = components[2]
         model = int(model, 16)
@@ -111,7 +112,7 @@ for j in u:
 u.close()
 
 if args.script:
-    print('''#!/bin/sh
+    print(r'''#!/bin/sh
 # Profile workload for gcc profile feedback (autofdo) using Linux perf.
 # Auto generated. To regenerate for new CPUs run
 # contrib/gen_autofdo_event.py --script --all in gcc source
@@ -151,22 +152,26 @@ case `grep -E -q "^cpu family\s*: 6" /proc/cpuinfo &&
     for event, mod in eventmap.items():
         for m in mod[:-1]:
             print("model*:\ %s|\\" % m)
-        print('model*:\ %s) E="%s$FLAGS" ;;' % (mod[-1], event))
-    print('''*)
+        print(r'model*:\ %s) E="%s$FLAGS" ;;' % (mod[-1], event))
+    print(r'''*)
+        if perf list br_inst_retired | grep -q br_inst_retired.near_taken ; then
+            E=br_inst_retired.near_taken:p
+        else
 echo >&2 "Unknown CPU. Run contrib/gen_autofdo_event.py --all --script to update script."
-	exit 1 ;;''')
-    print("esac")
-    print("set -x")
-    print('if ! perf record -e $E -b "$@" ; then')
-    print('  # PEBS may not actually be working even if the processor supports it')
-    print('  # (e.g., in a virtual machine). Trying to run without /p.')
-    print('  set +x')
-    print('  echo >&2 "Retrying without /p."')
-    print('  E="$(echo "${E}" | sed -e \'s/\/p/\//\')"')
-    print('  set -x')
-    print('  exec perf record -e $E -b "$@"')
-    print(' set +x')
-    print('fi')
+	  exit 1
+        fi ;;''')
+    print(r"esac")
+    print(r"set -x")
+    print(r'if ! perf record -e $E -b "$@" ; then')
+    print(r'  # PEBS may not actually be working even if the processor supports it')
+    print(r'  # (e.g., in a virtual machine). Trying to run without /p.')
+    print(r'  set +x')
+    print(r'  echo >&2 "Retrying without /p."')
+    print(r'  E="$(echo "${E}" | sed -e \'s/\/p/\//\ -e s/:p//)"')
+    print(r'  set -x')
+    print(r'  exec perf record -e $E -b "$@"')
+    print(r' set +x')
+    print(r'fi')
 
 if cpufound == 0 and not args.all:
     sys.exit('CPU %s not found' % cpu)

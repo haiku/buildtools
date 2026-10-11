@@ -1,5 +1,5 @@
 /* Interprocedural constant propagation
-   Copyright (C) 2005-2023 Free Software Foundation, Inc.
+   Copyright (C) 2005-2025 Free Software Foundation, Inc.
 
    Contributed by Razya Ladelsky <RAZYA@il.ibm.com> and Martin Jambor
    <mjambor@suse.cz>
@@ -109,6 +109,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-expr.h"
 #include "gimple.h"
 #include "predict.h"
+#include "sreal.h"
 #include "alloc-pool.h"
 #include "tree-pass.h"
 #include "cgraph.h"
@@ -118,6 +119,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-fold.h"
 #include "symbol-summary.h"
 #include "tree-vrp.h"
+#include "ipa-cp.h"
 #include "ipa-prop.h"
 #include "tree-pretty-print.h"
 #include "tree-inline.h"
@@ -128,266 +130,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "attribs.h"
 #include "dbgcnt.h"
 #include "symtab-clones.h"
+#include "gimple-range.h"
 
-template <typename valtype> class ipcp_value;
-
-/* Describes a particular source for an IPA-CP value.  */
-
-template <typename valtype>
-struct ipcp_value_source
-{
-public:
-  /* Aggregate offset of the source, negative if the source is scalar value of
-     the argument itself.  */
-  HOST_WIDE_INT offset;
-  /* The incoming edge that brought the value.  */
-  cgraph_edge *cs;
-  /* If the jump function that resulted into his value was a pass-through or an
-     ancestor, this is the ipcp_value of the caller from which the described
-     value has been derived.  Otherwise it is NULL.  */
-  ipcp_value<valtype> *val;
-  /* Next pointer in a linked list of sources of a value.  */
-  ipcp_value_source *next;
-  /* If the jump function that resulted into his value was a pass-through or an
-     ancestor, this is the index of the parameter of the caller the jump
-     function references.  */
-  int index;
-};
-
-/* Common ancestor for all ipcp_value instantiations.  */
-
-class ipcp_value_base
-{
-public:
-  /* Time benefit and that specializing the function for this value would bring
-     about in this function alone.  */
-  sreal local_time_benefit;
-  /* Time benefit that specializing the function for this value can bring about
-     in it's callees.  */
-  sreal prop_time_benefit;
-  /* Size cost that specializing the function for this value would bring about
-     in this function alone.  */
-  int local_size_cost;
-  /* Size cost that specializing the function for this value can bring about in
-     it's callees.  */
-  int prop_size_cost;
-
-  ipcp_value_base ()
-    : local_time_benefit (0), prop_time_benefit (0),
-      local_size_cost (0), prop_size_cost (0) {}
-};
-
-/* Describes one particular value stored in struct ipcp_lattice.  */
-
-template <typename valtype>
-class ipcp_value : public ipcp_value_base
-{
-public:
-  /* The actual value for the given parameter.  */
-  valtype value;
-  /* The list of sources from which this value originates.  */
-  ipcp_value_source <valtype> *sources = nullptr;
-  /* Next pointers in a linked list of all values in a lattice.  */
-  ipcp_value *next = nullptr;
-  /* Next pointers in a linked list of values in a strongly connected component
-     of values. */
-  ipcp_value *scc_next = nullptr;
-  /* Next pointers in a linked list of SCCs of values sorted topologically
-     according their sources.  */
-  ipcp_value  *topo_next = nullptr;
-  /* A specialized node created for this value, NULL if none has been (so far)
-     created.  */
-  cgraph_node *spec_node = nullptr;
-  /* Depth first search number and low link for topological sorting of
-     values.  */
-  int dfs = 0;
-  int low_link = 0;
-  /* SCC number to identify values which recursively feed into each other.
-     Values in the same SCC have the same SCC number.  */
-  int scc_no = 0;
-  /* Non zero if the value is generated from another value in the same lattice
-     for a self-recursive call, the actual number is how many times the
-     operation has been performed.  In the unlikely event of the value being
-     present in two chains fo self-recursive value generation chains, it is the
-     maximum.  */
-  unsigned self_recursion_generated_level = 0;
-  /* True if this value is currently on the topo-sort stack.  */
-  bool on_stack = false;
-
-  void add_source (cgraph_edge *cs, ipcp_value *src_val, int src_idx,
-		   HOST_WIDE_INT offset);
-
-  /* Return true if both THIS value and O feed into each other.  */
-
-  bool same_scc (const ipcp_value<valtype> *o)
-  {
-    return o->scc_no == scc_no;
-  }
-
-/* Return true, if a this value has been generated for a self-recursive call as
-   a result of an arithmetic pass-through jump-function acting on a value in
-   the same lattice function.  */
-
-  bool self_recursion_generated_p ()
-  {
-    return self_recursion_generated_level > 0;
-  }
-};
-
-/* Lattice describing potential values of a formal parameter of a function, or
-   a part of an aggregate.  TOP is represented by a lattice with zero values
-   and with contains_variable and bottom flags cleared.  BOTTOM is represented
-   by a lattice with the bottom flag set.  In that case, values and
-   contains_variable flag should be disregarded.  */
-
-template <typename valtype>
-struct ipcp_lattice
-{
-public:
-  /* The list of known values and types in this lattice.  Note that values are
-     not deallocated if a lattice is set to bottom because there may be value
-     sources referencing them.  */
-  ipcp_value<valtype> *values;
-  /* Number of known values and types in this lattice.  */
-  int values_count;
-  /* The lattice contains a variable component (in addition to values).  */
-  bool contains_variable;
-  /* The value of the lattice is bottom (i.e. variable and unusable for any
-     propagation).  */
-  bool bottom;
-
-  inline bool is_single_const ();
-  inline bool set_to_bottom ();
-  inline bool set_contains_variable ();
-  bool add_value (valtype newval, cgraph_edge *cs,
-		  ipcp_value<valtype> *src_val = NULL,
-		  int src_idx = 0, HOST_WIDE_INT offset = -1,
-		  ipcp_value<valtype> **val_p = NULL,
-		  unsigned same_lat_gen_level = 0);
-  void print (FILE * f, bool dump_sources, bool dump_benefits);
-};
-
-/* Lattice of tree values with an offset to describe a part of an
-   aggregate.  */
-
-struct ipcp_agg_lattice : public ipcp_lattice<tree>
-{
-public:
-  /* Offset that is being described by this lattice. */
-  HOST_WIDE_INT offset;
-  /* Size so that we don't have to re-compute it every time we traverse the
-     list.  Must correspond to TYPE_SIZE of all lat values.  */
-  HOST_WIDE_INT size;
-  /* Next element of the linked list.  */
-  struct ipcp_agg_lattice *next;
-};
-
-/* Lattice of known bits, only capable of holding one value.
-   Bitwise constant propagation propagates which bits of a
-   value are constant.
-   For eg:
-   int f(int x)
-   {
-     return some_op (x);
-   }
-
-   int f1(int y)
-   {
-     if (cond)
-      return f (y & 0xff);
-     else
-      return f (y & 0xf);
-   }
-
-   In the above case, the param 'x' will always have all
-   the bits (except the bits in lsb) set to 0.
-   Hence the mask of 'x' would be 0xff. The mask
-   reflects that the bits in lsb are unknown.
-   The actual propagated value is given by m_value & ~m_mask.  */
-
-class ipcp_bits_lattice
-{
-public:
-  bool bottom_p () const { return m_lattice_val == IPA_BITS_VARYING; }
-  bool top_p () const { return m_lattice_val == IPA_BITS_UNDEFINED; }
-  bool constant_p () const { return m_lattice_val == IPA_BITS_CONSTANT; }
-  bool set_to_bottom ();
-  bool set_to_constant (widest_int, widest_int);
-  bool known_nonzero_p () const;
-
-  widest_int get_value () const { return m_value; }
-  widest_int get_mask () const { return m_mask; }
-
-  bool meet_with (ipcp_bits_lattice& other, unsigned, signop,
-		  enum tree_code, tree, bool);
-
-  bool meet_with (widest_int, widest_int, unsigned);
-
-  void print (FILE *);
-
-private:
-  enum { IPA_BITS_UNDEFINED, IPA_BITS_CONSTANT, IPA_BITS_VARYING } m_lattice_val;
-
-  /* Similar to ccp_lattice_t, mask represents which bits of value are constant.
-     If a bit in mask is set to 0, then the corresponding bit in
-     value is known to be constant.  */
-  widest_int m_value, m_mask;
-
-  bool meet_with_1 (widest_int, widest_int, unsigned, bool);
-  void get_value_and_mask (tree, widest_int *, widest_int *);
-};
-
-/* Lattice of value ranges.  */
-
-class ipcp_vr_lattice
-{
-public:
-  value_range m_vr;
-
-  inline bool bottom_p () const;
-  inline bool top_p () const;
-  inline bool set_to_bottom ();
-  bool meet_with (const value_range *p_vr);
-  bool meet_with (const ipcp_vr_lattice &other);
-  void init () { gcc_assert (m_vr.undefined_p ()); }
-  void print (FILE * f);
-
-private:
-  bool meet_with_1 (const value_range *other_vr);
-};
-
-/* Structure containing lattices for a parameter itself and for pieces of
-   aggregates that are passed in the parameter or by a reference in a parameter
-   plus some other useful flags.  */
-
-class ipcp_param_lattices
-{
-public:
-  /* Lattice describing the value of the parameter itself.  */
-  ipcp_lattice<tree> itself;
-  /* Lattice describing the polymorphic contexts of a parameter.  */
-  ipcp_lattice<ipa_polymorphic_call_context> ctxlat;
-  /* Lattices describing aggregate parts.  */
-  ipcp_agg_lattice *aggs;
-  /* Lattice describing known bits.  */
-  ipcp_bits_lattice bits_lattice;
-  /* Lattice describing value range.  */
-  ipcp_vr_lattice m_value_range;
-  /* Number of aggregate lattices */
-  int aggs_count;
-  /* True if aggregate data were passed by reference (as opposed to by
-     value).  */
-  bool aggs_by_ref;
-  /* All aggregate lattices contain a variable component (in addition to
-     values).  */
-  bool aggs_contain_variable;
-  /* The value of all aggregate lattices is bottom (i.e. variable and unusable
-     for any propagation).  */
-  bool aggs_bottom;
-
-  /* There is a virtual call based on this parameter.  */
-  bool virt_call;
-};
 
 /* Allocation pools for values and their sources in ipa-cp.  */
 
@@ -421,7 +165,6 @@ ipa_get_parm_lattices (class ipa_node_params *info, int i)
 {
   gcc_assert (i >= 0 && i < ipa_get_param_count (info));
   gcc_checking_assert (!info->ipcp_orig_node);
-  gcc_checking_assert (info->lattices);
   return &(info->lattices[i]);
 }
 
@@ -468,30 +211,30 @@ values_equal_for_ipcp_p (tree x, tree y)
 
   if (TREE_CODE (x) == ADDR_EXPR
       && TREE_CODE (y) == ADDR_EXPR
-      && TREE_CODE (TREE_OPERAND (x, 0)) == CONST_DECL
-      && TREE_CODE (TREE_OPERAND (y, 0)) == CONST_DECL)
-    return operand_equal_p (DECL_INITIAL (TREE_OPERAND (x, 0)),
-			    DECL_INITIAL (TREE_OPERAND (y, 0)), 0);
+      && (TREE_CODE (TREE_OPERAND (x, 0)) == CONST_DECL
+	  || (TREE_CODE (TREE_OPERAND (x, 0)) == VAR_DECL
+	      && DECL_IN_CONSTANT_POOL (TREE_OPERAND (x, 0))))
+      && (TREE_CODE (TREE_OPERAND (y, 0)) == CONST_DECL
+	  || (TREE_CODE (TREE_OPERAND (y, 0)) == VAR_DECL
+	      && DECL_IN_CONSTANT_POOL (TREE_OPERAND (y, 0)))))
+    return TREE_OPERAND (x, 0) == TREE_OPERAND (y, 0)
+	   || operand_equal_p (DECL_INITIAL (TREE_OPERAND (x, 0)),
+			       DECL_INITIAL (TREE_OPERAND (y, 0)), 0);
   else
     return operand_equal_p (x, y, 0);
 }
 
-/* Print V which is extracted from a value in a lattice to F.  */
+/* Print V which is extracted from a value in a lattice to F.  This overloaded
+   function is used to print tree constants.  */
 
 static void
 print_ipcp_constant_value (FILE * f, tree v)
 {
-  if (TREE_CODE (v) == ADDR_EXPR
-      && TREE_CODE (TREE_OPERAND (v, 0)) == CONST_DECL)
-    {
-      fprintf (f, "& ");
-      print_generic_expr (f, DECL_INITIAL (TREE_OPERAND (v, 0)));
-    }
-  else
-    print_generic_expr (f, v);
+  ipa_print_constant_value (f, v);
 }
 
-/* Print V which is extracted from a value in a lattice to F.  */
+/* Print V which is extracted from a value in a lattice to F.  This overloaded
+   function is used to print constant polymorphic call contexts.  */
 
 static void
 print_ipcp_constant_value (FILE * f, ipa_polymorphic_call_context v)
@@ -549,7 +292,7 @@ ipcp_lattice<valtype>::print (FILE * f, bool dump_sources, bool dump_benefits)
 	  else
 	    fprintf (f, " [scc: %i, from:", val->scc_no);
 	  for (s = val->sources; s; s = s->next)
-	    fprintf (f, " %i(%f)", s->cs->caller->order,
+	    fprintf (f, " %i(%f)", s->cs->caller->get_uid (),
 		     s->cs->sreal_frequency ().to_double ());
 	  fprintf (f, "]");
 	}
@@ -564,6 +307,35 @@ ipcp_lattice<valtype>::print (FILE * f, bool dump_sources, bool dump_benefits)
     fprintf (f, "\n");
 }
 
+/* Print VALUE to F in a form which in usual cases does not take thousands of
+   characters. */
+
+static void
+ipcp_print_widest_int (FILE *f, const widest_int &value)
+{
+  if (value == -1)
+    fprintf (f, "-1");
+  else if (wi::arshift (value, 128) == -1)
+    {
+      char buf[35], *p = buf + 2;
+      widest_int v = wi::zext (value, 128);
+      size_t len;
+      print_hex (v, buf);
+      len = strlen (p);
+      if (len == 32)
+	{
+	  fprintf (f, "0xf..f");
+	  while (*p == 'f')
+	    ++p;
+	}
+      else
+	fprintf (f, "0xf..f%0*d", (int) (32 - len), 0);
+      fputs (p, f);
+    }
+  else
+    print_hex (value, f);
+}
+
 void
 ipcp_bits_lattice::print (FILE *f)
 {
@@ -573,8 +345,10 @@ ipcp_bits_lattice::print (FILE *f)
     fprintf (f, "         Bits unusable (BOTTOM)\n");
   else
     {
-      fprintf (f, "         Bits: value = "); print_hex (get_value (), f);
-      fprintf (f, ", mask = "); print_hex (get_mask (), f);
+      fprintf (f, "         Bits: value = ");
+      ipcp_print_widest_int (f, get_value ());
+      fprintf (f, ", mask = ");
+      ipcp_print_widest_int (f, get_mask ());
       fprintf (f, "\n");
     }
 }
@@ -584,7 +358,7 @@ ipcp_bits_lattice::print (FILE *f)
 void
 ipcp_vr_lattice::print (FILE * f)
 {
-  dump_value_range (f, &m_vr);
+  m_vr.dump (f);
 }
 
 /* Print all ipcp_lattices of all functions to F.  */
@@ -1015,33 +789,40 @@ set_agg_lats_contain_variable (class ipcp_param_lattices *plats)
 bool
 ipcp_vr_lattice::meet_with (const ipcp_vr_lattice &other)
 {
-  return meet_with_1 (&other.m_vr);
+  return meet_with_1 (other.m_vr);
 }
 
-/* Meet the current value of the lattice with value range described by VR
-   lattice.  */
+/* Meet the current value of the lattice with the range described by
+   P_VR.  */
 
 bool
-ipcp_vr_lattice::meet_with (const value_range *p_vr)
+ipcp_vr_lattice::meet_with (const vrange &p_vr)
 {
   return meet_with_1 (p_vr);
 }
 
-/* Meet the current value of the lattice with value range described by
-   OTHER_VR lattice.  Return TRUE if anything changed.  */
+/* Meet the current value of the lattice with the range described by
+   OTHER_VR.  Return TRUE if anything changed.  */
 
 bool
-ipcp_vr_lattice::meet_with_1 (const value_range *other_vr)
+ipcp_vr_lattice::meet_with_1 (const vrange &other_vr)
 {
   if (bottom_p ())
     return false;
 
-  if (other_vr->varying_p ())
+  if (other_vr.varying_p ())
     return set_to_bottom ();
 
-  value_range save (m_vr);
-  m_vr.union_ (*other_vr);
-  return m_vr != save;
+  bool res;
+  if (flag_checking)
+    {
+      value_range save (m_vr);
+      res = m_vr.union_ (other_vr);
+      gcc_assert (res == (m_vr != save));
+    }
+  else
+    res = m_vr.union_ (other_vr);
+  return res;
 }
 
 /* Return true if value range information in the lattice is yet unknown.  */
@@ -1069,12 +850,15 @@ ipcp_vr_lattice::set_to_bottom ()
 {
   if (m_vr.varying_p ())
     return false;
-  /* ?? We create all sorts of VARYING ranges for floats, structures,
-     and other types which we cannot handle as ranges.  We should
-     probably avoid handling them throughout the pass, but it's easier
-     to create a sensible VARYING here and let the lattice
-     propagate.  */
-  m_vr.set_varying (integer_type_node);
+
+  /* Setting an unsupported type here forces the temporary to default
+     to unsupported_range, which can handle VARYING/DEFINED ranges,
+     but nothing else (union, intersect, etc).  This allows us to set
+     bottoms on any ranges, and is safe as all users of the lattice
+     check for bottom first.  */
+  m_vr.set_type (void_type_node);
+  m_vr.set_varying (void_type_node);
+
   return true;
 }
 
@@ -1149,11 +933,13 @@ ipcp_bits_lattice::meet_with_1 (widest_int value, widest_int mask,
   m_mask = (m_mask | mask) | (m_value ^ value);
   if (drop_all_ones)
     m_mask |= m_value;
-  m_value &= ~m_mask;
 
+  widest_int cap_mask = wi::shifted_mask <widest_int> (0, precision, true);
+  m_mask |= cap_mask;
   if (wi::sext (m_mask, precision) == -1)
     return set_to_bottom ();
 
+  m_value &= ~m_mask;
   return m_mask != old_mask;
 }
 
@@ -1229,6 +1015,8 @@ ipcp_bits_lattice::meet_with (ipcp_bits_lattice& other, unsigned precision,
 	  adjusted_mask |= adjusted_value;
 	  adjusted_value &= ~adjusted_mask;
 	}
+      widest_int cap_mask = wi::shifted_mask <widest_int> (0, precision, true);
+      adjusted_mask |= cap_mask;
       if (wi::sext (adjusted_mask, precision) == -1)
 	return set_to_bottom ();
       return set_to_constant (adjusted_value, adjusted_mask);
@@ -1251,6 +1039,8 @@ ipa_argagg_value_list::dump (FILE *f)
       print_generic_expr (f, av.value);
       if (av.by_ref)
 	fprintf (f, "(by_ref)");
+      if (av.killed)
+	fprintf (f, "(killed)");
       comma = true;
     }
   fprintf (f, "\n");
@@ -1417,6 +1207,8 @@ ipa_argagg_value_list::push_adjusted_values (unsigned src_index,
 	  new_av.unit_offset = av->unit_offset - unit_delta;
 	  new_av.index = dest_index;
 	  new_av.by_ref = av->by_ref;
+	  gcc_assert (!av->killed);
+	  new_av.killed = false;
 
 	  /* Quick check that the offsets we push are indeed increasing.  */
 	  gcc_assert (first
@@ -1453,6 +1245,7 @@ push_agg_values_from_plats (ipcp_param_lattices *plats, int dest_index,
 	iav.unit_offset = aglat->offset / BITS_PER_UNIT - unit_delta;
 	iav.index = dest_index;
 	iav.by_ref = plats->aggs_by_ref;
+	iav.killed = false;
 
 	gcc_assert (first
 		    || iav.unit_offset > prev_unit_offset);
@@ -1575,10 +1368,14 @@ initialize_node_lattices (struct cgraph_node *node)
       int caller_count = 0;
       node->call_for_symbol_thunks_and_aliases (count_callers, &caller_count,
 						true);
-      gcc_checking_assert (caller_count > 0);
       if (caller_count == 1)
 	node->call_for_symbol_thunks_and_aliases (set_single_call_flag,
 						  NULL, true);
+      else if (caller_count == 0)
+	{
+	  gcc_checking_assert (!opt_for_fn (node->decl, flag_toplevel_reorder));
+	  variable = true;
+	}
     }
   else
     {
@@ -1645,6 +1442,7 @@ initialize_node_lattices (struct cgraph_node *node)
   for (i = 0; i < ipa_get_param_count (info); i++)
     {
       ipcp_param_lattices *plats = ipa_get_parm_lattices (info, i);
+      tree type = ipa_get_type (info, i);
       if (disable
 	  || !ipa_get_type (info, i)
 	  || (pre_modified && (surviving_params.length () <= (unsigned) i
@@ -1654,12 +1452,12 @@ initialize_node_lattices (struct cgraph_node *node)
 	  plats->ctxlat.set_to_bottom ();
 	  set_agg_lats_to_bottom (plats);
 	  plats->bits_lattice.set_to_bottom ();
-	  plats->m_value_range.m_vr = value_range ();
+	  plats->m_value_range.init (type);
 	  plats->m_value_range.set_to_bottom ();
 	}
       else
 	{
-	  plats->m_value_range.init ();
+	  plats->m_value_range.init (type);
 	  if (variable)
 	    set_all_contains_variable (plats);
 	}
@@ -1675,26 +1473,31 @@ initialize_node_lattices (struct cgraph_node *node)
       }
 }
 
-/* Return true if VALUE can be safely IPA-CP propagated to a parameter of type
-   PARAM_TYPE.  */
+/* Return VALUE if it is NULL_TREE or if it can be directly safely IPA-CP
+   propagated to a parameter of type PARAM_TYPE, or return a fold-converted
+   VALUE to PARAM_TYPE if that is possible.  Return NULL_TREE otherwise.  */
 
-static bool
+tree
 ipacp_value_safe_for_type (tree param_type, tree value)
 {
+  if (!value)
+    return NULL_TREE;
   tree val_type = TREE_TYPE (value);
   if (param_type == val_type
-      || useless_type_conversion_p (param_type, val_type)
-      || fold_convertible_p (param_type, value))
-    return true;
+      || useless_type_conversion_p (param_type, val_type))
+    return value;
+  if (fold_convertible_p (param_type, value))
+    return fold_convert (param_type, value);
   else
-    return false;
+    return NULL_TREE;
 }
 
-/* Return the result of a (possibly arithmetic) operation on the constant
-   value INPUT.  OPERAND is 2nd operand for binary operation.  RES_TYPE is
-   the type of the parameter to which the result is passed.  Return
-   NULL_TREE if that cannot be determined or be considered an
-   interprocedural invariant.  */
+/* Return the result of a (possibly arithmetic) operation determined by OPCODE
+   on the constant value INPUT.  OPERAND is 2nd operand for binary operation
+   and is required for binary operations.  RES_TYPE, required when opcode is
+   not NOP_EXPR, is the type in which any operation is to be performed.  Return
+   NULL_TREE if that cannot be determined or be considered an interprocedural
+   invariant.  */
 
 static tree
 ipa_get_jf_arith_result (enum tree_code opcode, tree input, tree operand,
@@ -1715,16 +1518,6 @@ ipa_get_jf_arith_result (enum tree_code opcode, tree input, tree operand,
 	return NULL_TREE;
     }
 
-  if (!res_type)
-    {
-      if (TREE_CODE_CLASS (opcode) == tcc_comparison)
-	res_type = boolean_type_node;
-      else if (expr_type_first_operand_type_p (opcode))
-	res_type = TREE_TYPE (input);
-      else
-	return NULL_TREE;
-    }
-
   if (TREE_CODE_CLASS (opcode) == tcc_unary)
     res = fold_unary (opcode, res_type, input);
   else
@@ -1734,21 +1527,6 @@ ipa_get_jf_arith_result (enum tree_code opcode, tree input, tree operand,
     return NULL_TREE;
 
   return res;
-}
-
-/* Return the result of a (possibly arithmetic) pass through jump function
-   JFUNC on the constant value INPUT.  RES_TYPE is the type of the parameter
-   to which the result is passed.  Return NULL_TREE if that cannot be
-   determined or be considered an interprocedural invariant.  */
-
-static tree
-ipa_get_jf_pass_through_result (struct ipa_jump_func *jfunc, tree input,
-				tree res_type)
-{
-  return ipa_get_jf_arith_result (ipa_get_jf_pass_through_operation (jfunc),
-				  input,
-				  ipa_get_jf_pass_through_operand (jfunc),
-				  res_type);
 }
 
 /* Return the result of an ancestor jump function JFUNC on the constant value
@@ -1805,7 +1583,7 @@ ipa_value_from_jfunc (class ipa_node_params *info, struct ipa_jump_func *jfunc,
 	{
 	  ipcp_lattice<tree> *lat;
 
-	  if (!info->lattices
+	  if (info->lattices.is_empty ()
 	      || idx >= ipa_get_param_count (info))
 	    return NULL_TREE;
 	  lat = ipa_get_scalar_lat (info, idx);
@@ -1818,7 +1596,17 @@ ipa_value_from_jfunc (class ipa_node_params *info, struct ipa_jump_func *jfunc,
 	return NULL_TREE;
 
       if (jfunc->type == IPA_JF_PASS_THROUGH)
-	return ipa_get_jf_pass_through_result (jfunc, input, parm_type);
+	{
+	  if (!parm_type)
+	    return NULL_TREE;
+	  enum tree_code opcode = ipa_get_jf_pass_through_operation (jfunc);
+	  tree op2 = ipa_get_jf_pass_through_operand (jfunc);
+	  tree op_type
+	    = (opcode == NOP_EXPR) ? NULL_TREE
+	    : ipa_get_jf_pass_through_op_type (jfunc);
+	  tree cstval = ipa_get_jf_arith_result (opcode, input, op2, op_type);
+	  return ipacp_value_safe_for_type (parm_type, cstval);
+	}
       else
 	return ipa_get_jf_ancestor_result (jfunc, input);
     }
@@ -1868,7 +1656,7 @@ ipa_context_from_jfunc (ipa_node_params *info, cgraph_edge *cs, int csidx,
 	}
       else
 	{
-	  if (!info->lattices
+	  if (info->lattices.is_empty ()
 	      || srcidx >= ipa_get_param_count (info))
 	    return ctx;
 	  ipcp_lattice<ipa_polymorphic_call_context> *lat;
@@ -1892,82 +1680,152 @@ ipa_context_from_jfunc (ipa_node_params *info, cgraph_edge *cs, int csidx,
 
 /* Emulate effects of unary OPERATION and/or conversion from SRC_TYPE to
    DST_TYPE on value range in SRC_VR and store it to DST_VR.  Return true if
-   the result is a range or an anti-range.  */
+   the result is a range that is not VARYING nor UNDEFINED.  */
 
-static bool
-ipa_vr_operation_and_type_effects (value_range *dst_vr,
-				   value_range *src_vr,
+bool
+ipa_vr_operation_and_type_effects (vrange &dst_vr,
+				   const vrange &src_vr,
 				   enum tree_code operation,
 				   tree dst_type, tree src_type)
 {
-  range_fold_unary_expr (dst_vr, operation, dst_type, src_vr, src_type);
-  if (dst_vr->varying_p () || dst_vr->undefined_p ())
+  if (!ipa_vr_supported_type_p (dst_type)
+      || !ipa_vr_supported_type_p (src_type))
     return false;
-  return true;
+
+  range_op_handler handler (operation);
+  if (!handler)
+    return false;
+
+  value_range varying (dst_type);
+  varying.set_varying (dst_type);
+
+  return (handler.operand_check_p (dst_type, src_type, dst_type)
+	  && handler.fold_range (dst_vr, dst_type, src_vr, varying)
+	  && !dst_vr.varying_p ()
+	  && !dst_vr.undefined_p ());
 }
 
-/* Determine value_range of JFUNC given that INFO describes the caller node or
+/* Same as above, but the SRC_VR argument is an IPA_VR which must
+   first be extracted onto a vrange.  */
+
+bool
+ipa_vr_operation_and_type_effects (vrange &dst_vr,
+				   const ipa_vr &src_vr,
+				   enum tree_code operation,
+				   tree dst_type, tree src_type)
+{
+  value_range tmp;
+  src_vr.get_vrange (tmp);
+  return ipa_vr_operation_and_type_effects (dst_vr, tmp, operation,
+					    dst_type, src_type);
+}
+
+/* Given a PASS_THROUGH jump function JFUNC that takes as its source SRC_VR of
+   SRC_TYPE and the result needs to be DST_TYPE, if any value range information
+   can be deduced at all, intersect VR with it.  CONTEXT_NODE is the call graph
+   node representing the function for which optimization flags should be
+   evaluated.  */
+
+static void
+ipa_vr_intersect_with_arith_jfunc (vrange &vr,
+				   ipa_jump_func *jfunc,
+				   cgraph_node *context_node,
+				   const value_range &src_vr,
+				   tree src_type,
+				   tree dst_type)
+{
+  if (src_vr.undefined_p () || src_vr.varying_p ())
+    return;
+
+  enum tree_code operation = ipa_get_jf_pass_through_operation (jfunc);
+  if (TREE_CODE_CLASS (operation) == tcc_unary)
+    {
+      value_range op_res;
+      const value_range *inter_vr;
+      if (operation != NOP_EXPR)
+	{
+	  tree operation_type = ipa_get_jf_pass_through_op_type (jfunc);
+	  op_res.set_varying (operation_type);
+	  if (!ipa_vr_operation_and_type_effects (op_res, src_vr, operation,
+						  operation_type, src_type))
+	    return;
+	  if (src_type == dst_type)
+	    {
+	      vr.intersect (op_res);
+	      return;
+	    }
+	  inter_vr = &op_res;
+	  src_type = operation_type;
+	}
+      else
+	inter_vr = &src_vr;
+
+      value_range tmp_res (dst_type);
+      if (ipa_vr_operation_and_type_effects (tmp_res, *inter_vr, NOP_EXPR,
+					     dst_type, src_type))
+	vr.intersect (tmp_res);
+      return;
+    }
+
+  tree operand = ipa_get_jf_pass_through_operand (jfunc);
+  range_op_handler handler (operation);
+  if (!handler)
+    return;
+  value_range op_vr (TREE_TYPE (operand));
+  ipa_get_range_from_ip_invariant (op_vr, operand, context_node);
+
+  tree operation_type = ipa_get_jf_pass_through_op_type (jfunc);
+  value_range op_res (operation_type);
+  if (!ipa_vr_supported_type_p (operation_type)
+      || !handler.operand_check_p (operation_type, src_type, op_vr.type ())
+      || !handler.fold_range (op_res, operation_type, src_vr, op_vr))
+    return;
+
+  value_range tmp_res (dst_type);
+  if (ipa_vr_operation_and_type_effects (tmp_res, op_res, NOP_EXPR, dst_type,
+					 operation_type))
+      vr.intersect (tmp_res);
+}
+
+/* Determine range of JFUNC given that INFO describes the caller node or
    the one it is inlined to, CS is the call graph edge corresponding to JFUNC
    and PARM_TYPE of the parameter.  */
 
-value_range
-ipa_value_range_from_jfunc (ipa_node_params *info, cgraph_edge *cs,
+void
+ipa_value_range_from_jfunc (vrange &vr,
+			    ipa_node_params *info, cgraph_edge *cs,
 			    ipa_jump_func *jfunc, tree parm_type)
 {
-  value_range vr;
-  if (jfunc->m_vr)
-    ipa_vr_operation_and_type_effects (&vr,
-				       jfunc->m_vr,
+  vr.set_varying (parm_type);
+
+  if (jfunc->m_vr && jfunc->m_vr->known_p ())
+    ipa_vr_operation_and_type_effects (vr,
+				       *jfunc->m_vr,
 				       NOP_EXPR, parm_type,
 				       jfunc->m_vr->type ());
   if (vr.singleton_p ())
-    return vr;
+    return;
+
   if (jfunc->type == IPA_JF_PASS_THROUGH)
     {
-      int idx;
       ipcp_transformation *sum
 	= ipcp_get_transformation_summary (cs->caller->inlined_to
 					   ? cs->caller->inlined_to
 					   : cs->caller);
       if (!sum || !sum->m_vr)
-	return vr;
+	return;
 
-      idx = ipa_get_jf_pass_through_formal_id (jfunc);
+      int idx = ipa_get_jf_pass_through_formal_id (jfunc);
 
-      if (!(*sum->m_vr)[idx].known)
-	return vr;
-      tree vr_type = ipa_get_type (info, idx);
-      value_range srcvr (wide_int_to_tree (vr_type, (*sum->m_vr)[idx].min),
-			 wide_int_to_tree (vr_type, (*sum->m_vr)[idx].max),
-			 (*sum->m_vr)[idx].type);
+      if (!(*sum->m_vr)[idx].known_p ())
+	return;
+      tree src_type = ipa_get_type (info, idx);
+      value_range srcvr;
+      (*sum->m_vr)[idx].get_vrange (srcvr);
 
-      enum tree_code operation = ipa_get_jf_pass_through_operation (jfunc);
-
-      if (TREE_CODE_CLASS (operation) == tcc_unary)
-	{
-	  value_range res;
-
-	  if (ipa_vr_operation_and_type_effects (&res,
-						 &srcvr,
-						 operation, parm_type,
-						 vr_type))
-	    vr.intersect (res);
-	}
-      else
-	{
-	  value_range op_res, res;
-	  tree op = ipa_get_jf_pass_through_operand (jfunc);
-	  value_range op_vr (op, op);
-
-	  range_fold_binary_expr (&op_res, operation, vr_type, &srcvr, &op_vr);
-	  if (ipa_vr_operation_and_type_effects (&res,
-						 &op_res,
-						 NOP_EXPR, parm_type,
-						 vr_type))
-	    vr.intersect (res);
-	}
+      ipa_vr_intersect_with_arith_jfunc (vr, jfunc, cs->caller, srcvr, src_type,
+					 parm_type);
     }
-  return vr;
 }
 
 /* Determine whether ITEM, jump function for an aggregate part, evaluates to a
@@ -2007,7 +1865,7 @@ ipa_agg_value_from_jfunc (ipa_node_params *info, cgraph_node *node,
 				 item->value.load_agg.by_ref);
 	}
     }
-  else if (info->lattices)
+  else if (!info->lattices.is_empty ())
     {
       class ipcp_param_lattices *src_plats
 	= ipa_get_parm_lattices (info, src_idx);
@@ -2056,10 +1914,11 @@ ipa_agg_value_from_jfunc (ipa_node_params *info, cgraph_node *node,
 	return NULL_TREE;
     }
 
-  return ipa_get_jf_arith_result (item->value.pass_through.operation,
-				  value,
-				  item->value.pass_through.operand,
-				  item->type);
+  tree cstval = ipa_get_jf_arith_result (item->value.pass_through.operation,
+					 value,
+					 item->value.pass_through.operand,
+					 item->value.pass_through.op_type);
+  return ipacp_value_safe_for_type (item->type, cstval);
 }
 
 /* Process all items in AGG_JFUNC relative to caller (or the node the original
@@ -2086,6 +1945,7 @@ ipa_push_agg_values_from_jfunc (ipa_node_params *info, cgraph_node *node,
       iav.unit_offset = item.offset / BITS_PER_UNIT;
       iav.index = dst_index;
       iav.by_ref = agg_jfunc->by_ref;
+      iav.killed = 0;
 
       gcc_assert (first
 		  || iav.unit_offset > prev_unit_offset);
@@ -2248,7 +2108,7 @@ ipcp_lattice<valtype>::add_value (valtype newval, cgraph_edge *cs,
 	return false;
       }
 
-  if (!same_lat_gen_level && values_count == opt_for_fn (cs->caller->decl,
+  if (!same_lat_gen_level && values_count >= opt_for_fn (cs->callee->decl,
 						param_ipa_cp_value_list_size))
     {
       /* We can only free sources, not the values themselves, because sources
@@ -2287,15 +2147,15 @@ ipcp_lattice<valtype>::add_value (valtype newval, cgraph_edge *cs,
 /* A helper function that returns result of operation specified by OPCODE on
    the value of SRC_VAL.  If non-NULL, OPND1_TYPE is expected type for the
    value of SRC_VAL.  If the operation is binary, OPND2 is a constant value
-   acting as its second operand.  If non-NULL, RES_TYPE is expected type of
-   the result.  */
+   acting as its second operand.  OP_TYPE is the type in which the operation is
+   performed.  */
 
 static tree
 get_val_across_arith_op (enum tree_code opcode,
 			 tree opnd1_type,
 			 tree opnd2,
 			 ipcp_value<tree> *src_val,
-			 tree res_type)
+			 tree op_type)
 {
   tree opnd1 = src_val->value;
 
@@ -2304,17 +2164,19 @@ get_val_across_arith_op (enum tree_code opcode,
       && !useless_type_conversion_p (opnd1_type, TREE_TYPE (opnd1)))
     return NULL_TREE;
 
-  return ipa_get_jf_arith_result (opcode, opnd1, opnd2, res_type);
+  return ipa_get_jf_arith_result (opcode, opnd1, opnd2, op_type);
 }
 
 /* Propagate values through an arithmetic transformation described by a jump
    function associated with edge CS, taking values from SRC_LAT and putting
-   them into DEST_LAT.  OPND1_TYPE is expected type for the values in SRC_LAT.
-   OPND2 is a constant value if transformation is a binary operation.
-   SRC_OFFSET specifies offset in an aggregate if SRC_LAT describes lattice of
-   a part of the aggregate.  SRC_IDX is the index of the source parameter.
-   RES_TYPE is the value type of result being propagated into.  Return true if
-   DEST_LAT changed.  */
+   them into DEST_LAT.  OPND1_TYPE, if non-NULL, is the expected type for the
+   values in SRC_LAT.  OPND2 is a constant value if transformation is a binary
+   operation.  SRC_OFFSET specifies offset in an aggregate if SRC_LAT describes
+   lattice of a part of an aggregate, otherwise it should be -1.  SRC_IDX is
+   the index of the source parameter.  OP_TYPE is the type in which the
+   operation is performed and can be NULL when OPCODE is NOP_EXPR.  RES_TYPE is
+   the value type of result being propagated into.  Return true if DEST_LAT
+   changed.  */
 
 static bool
 propagate_vals_across_arith_jfunc (cgraph_edge *cs,
@@ -2325,6 +2187,7 @@ propagate_vals_across_arith_jfunc (cgraph_edge *cs,
 				   ipcp_lattice<tree> *dest_lat,
 				   HOST_WIDE_INT src_offset,
 				   int src_idx,
+				   tree op_type,
 				   tree res_type)
 {
   ipcp_value<tree> *src_val;
@@ -2380,9 +2243,9 @@ propagate_vals_across_arith_jfunc (cgraph_edge *cs,
 	  for (int j = 1; j < max_recursive_depth; j++)
 	    {
 	      tree cstval = get_val_across_arith_op (opcode, opnd1_type, opnd2,
-						     src_val, res_type);
-	      if (!cstval
-		  || !ipacp_value_safe_for_type (res_type, cstval))
+						     src_val, op_type);
+	      cstval = ipacp_value_safe_for_type (res_type, cstval);
+	      if (!cstval)
 		break;
 
 	      ret |= dest_lat->add_value (cstval, cs, src_val, src_idx,
@@ -2405,9 +2268,9 @@ propagate_vals_across_arith_jfunc (cgraph_edge *cs,
 	  }
 
 	tree cstval = get_val_across_arith_op (opcode, opnd1_type, opnd2,
-					       src_val, res_type);
-	if (cstval
-	    && ipacp_value_safe_for_type (res_type, cstval))
+					       src_val, op_type);
+	cstval = ipacp_value_safe_for_type (res_type, cstval);
+	if (cstval)
 	  ret |= dest_lat->add_value (cstval, cs, src_val, src_idx,
 				      src_offset);
 	else
@@ -2428,11 +2291,14 @@ propagate_vals_across_pass_through (cgraph_edge *cs, ipa_jump_func *jfunc,
 				    ipcp_lattice<tree> *dest_lat, int src_idx,
 				    tree parm_type)
 {
-  return propagate_vals_across_arith_jfunc (cs,
-				ipa_get_jf_pass_through_operation (jfunc),
-				NULL_TREE,
+  gcc_checking_assert (parm_type);
+  enum tree_code opcode = ipa_get_jf_pass_through_operation (jfunc);
+  tree op_type = (opcode == NOP_EXPR) ? NULL_TREE
+    : ipa_get_jf_pass_through_op_type (jfunc);
+  return propagate_vals_across_arith_jfunc (cs, opcode, NULL_TREE,
 				ipa_get_jf_pass_through_operand (jfunc),
-				src_lat, dest_lat, -1, src_idx, parm_type);
+				src_lat, dest_lat, -1, src_idx, op_type,
+				parm_type);
 }
 
 /* Propagate values through an ancestor jump function JFUNC associated with
@@ -2455,8 +2321,8 @@ propagate_vals_across_ancestor (struct cgraph_edge *cs,
   for (src_val = src_lat->values; src_val; src_val = src_val->next)
     {
       tree t = ipa_get_jf_ancestor_result (jfunc, src_val->value);
-
-      if (t && ipacp_value_safe_for_type (param_type, t))
+      t = ipacp_value_safe_for_type (param_type, t);
+      if (t)
 	ret |= dest_lat->add_value (t, cs, src_val, src_idx);
       else
 	ret |= dest_lat->set_contains_variable ();
@@ -2481,7 +2347,8 @@ propagate_scalar_across_jump_function (struct cgraph_edge *cs,
   if (jfunc->type == IPA_JF_CONST)
     {
       tree val = ipa_get_jf_constant (jfunc);
-      if (ipacp_value_safe_for_type (param_type, val))
+      val = ipacp_value_safe_for_type (param_type, val);
+      if (val)
 	return dest_lat->add_value (val, cs, NULL, 0);
       else
 	return dest_lat->set_contains_variable ();
@@ -2644,14 +2511,12 @@ propagate_bits_across_jump_function (cgraph_edge *cs, int idx,
       return dest_lattice->set_to_bottom ();
     }
 
-  unsigned precision = TYPE_PRECISION (parm_type);
-  signop sgn = TYPE_SIGN (parm_type);
-
   if (jfunc->type == IPA_JF_PASS_THROUGH
       || jfunc->type == IPA_JF_ANCESTOR)
     {
       ipa_node_params *caller_info = ipa_node_params_sum->get (cs->caller);
       tree operand = NULL_TREE;
+      tree op_type = NULL_TREE;
       enum tree_code code;
       unsigned src_idx;
       bool keep_null = false;
@@ -2661,7 +2526,10 @@ propagate_bits_across_jump_function (cgraph_edge *cs, int idx,
 	  code = ipa_get_jf_pass_through_operation (jfunc);
 	  src_idx = ipa_get_jf_pass_through_formal_id (jfunc);
 	  if (code != NOP_EXPR)
-	    operand = ipa_get_jf_pass_through_operand (jfunc);
+	    {
+	      operand = ipa_get_jf_pass_through_operand (jfunc);
+	      op_type = ipa_get_jf_pass_through_op_type (jfunc);
+	    }
 	}
       else
 	{
@@ -2688,6 +2556,11 @@ propagate_bits_across_jump_function (cgraph_edge *cs, int idx,
 
       if (!src_lats->bits_lattice.bottom_p ())
 	{
+	  if (!op_type)
+	    op_type = ipa_get_type (caller_info, src_idx);
+
+	  unsigned precision = TYPE_PRECISION (op_type);
+	  signop sgn = TYPE_SIGN (op_type);
 	  bool drop_all_ones
 	    = keep_null && !src_lats->bits_lattice.known_nonzero_p ();
 
@@ -2696,11 +2569,22 @@ propagate_bits_across_jump_function (cgraph_edge *cs, int idx,
 	}
     }
 
-  if (jfunc->bits)
-    return dest_lattice->meet_with (jfunc->bits->value, jfunc->bits->mask,
-				    precision);
-  else
-    return dest_lattice->set_to_bottom ();
+  value_range vr (parm_type);
+  if (jfunc->m_vr)
+    {
+      jfunc->m_vr->get_vrange (vr);
+      if (!vr.undefined_p () && !vr.varying_p ())
+	{
+	  irange_bitmask bm = vr.get_bitmask ();
+	  widest_int mask
+	    = widest_int::from (bm.mask (), TYPE_SIGN (parm_type));
+	  widest_int value
+	    = widest_int::from (bm.value (), TYPE_SIGN (parm_type));
+	  return dest_lattice->meet_with (value, mask,
+					  TYPE_PRECISION (parm_type));
+	}
+    }
+  return dest_lattice->set_to_bottom ();
 }
 
 /* Propagate value range across jump function JFUNC that is associated with
@@ -2718,13 +2602,18 @@ propagate_vr_across_jump_function (cgraph_edge *cs, ipa_jump_func *jfunc,
     return false;
 
   if (!param_type
-      || (!INTEGRAL_TYPE_P (param_type)
-	  && !POINTER_TYPE_P (param_type)))
+      || !ipa_vr_supported_type_p (param_type))
     return dest_lat->set_to_bottom ();
+
+  value_range vr (param_type);
+  vr.set_varying (param_type);
+  if (jfunc->m_vr)
+    ipa_vr_operation_and_type_effects (vr, *jfunc->m_vr, NOP_EXPR,
+				       param_type,
+				       jfunc->m_vr->type ());
 
   if (jfunc->type == IPA_JF_PASS_THROUGH)
     {
-      enum tree_code operation = ipa_get_jf_pass_through_operation (jfunc);
       ipa_node_params *caller_info = ipa_node_params_sum->get (cs->caller);
       int src_idx = ipa_get_jf_pass_through_formal_id (jfunc);
       class ipcp_param_lattices *src_lats
@@ -2734,62 +2623,15 @@ propagate_vr_across_jump_function (cgraph_edge *cs, ipa_jump_func *jfunc,
       if (src_lats->m_value_range.bottom_p ())
 	return dest_lat->set_to_bottom ();
 
-      value_range vr;
-      if (TREE_CODE_CLASS (operation) == tcc_unary)
-	ipa_vr_operation_and_type_effects (&vr,
-					   &src_lats->m_value_range.m_vr,
-					   operation, param_type,
-					   operand_type);
-      /* A crude way to prevent unbounded number of value range updates
-	 in SCC components.  We should allow limited number of updates within
-	 SCC, too.  */
-      else if (!ipa_edge_within_scc (cs))
-	{
-	  tree op = ipa_get_jf_pass_through_operand (jfunc);
-	  value_range op_vr (op, op);
-	  value_range op_res,res;
-
-	  range_fold_binary_expr (&op_res, operation, operand_type,
-				  &src_lats->m_value_range.m_vr, &op_vr);
-	  ipa_vr_operation_and_type_effects (&vr,
-					     &op_res,
-					     NOP_EXPR, param_type,
-					     operand_type);
-	}
-      if (!vr.undefined_p () && !vr.varying_p ())
-	{
-	  if (jfunc->m_vr)
-	    {
-	      value_range jvr;
-	      if (ipa_vr_operation_and_type_effects (&jvr, jfunc->m_vr,
-						     NOP_EXPR,
-						     param_type,
-						     jfunc->m_vr->type ()))
-		vr.intersect (jvr);
-	    }
-	  return dest_lat->meet_with (&vr);
-	}
-    }
-  else if (jfunc->type == IPA_JF_CONST)
-    {
-      tree val = ipa_get_jf_constant (jfunc);
-      if (TREE_CODE (val) == INTEGER_CST)
-	{
-	  val = fold_convert (param_type, val);
-	  if (TREE_OVERFLOW_P (val))
-	    val = drop_tree_overflow (val);
-
-	  value_range tmpvr (val, val);
-	  return dest_lat->meet_with (&tmpvr);
-	}
+      if (ipa_get_jf_pass_through_operation (jfunc) == NOP_EXPR
+	  || !ipa_edge_within_scc (cs))
+	ipa_vr_intersect_with_arith_jfunc (vr, jfunc, cs->caller,
+					   src_lats->m_value_range.m_vr,
+					   operand_type, param_type);
     }
 
-  value_range vr;
-  if (jfunc->m_vr
-      && ipa_vr_operation_and_type_effects (&vr, jfunc->m_vr, NOP_EXPR,
-					    param_type,
-					    jfunc->m_vr->type ()))
-    return dest_lat->meet_with (&vr);
+  if (!vr.undefined_p () && !vr.varying_p ())
+    return dest_lat->meet_with (vr);
   else
     return dest_lat->set_to_bottom ();
 }
@@ -2869,7 +2711,6 @@ merge_agg_lats_step (class ipcp_param_lattices *dest_plats,
 	return false;
       dest_plats->aggs_count++;
       new_al = ipcp_agg_lattice_pool.allocate ();
-      memset (new_al, 0, sizeof (*new_al));
 
       new_al->offset = offset;
       new_al->size = val_size;
@@ -3039,6 +2880,7 @@ propagate_aggregate_lattice (struct cgraph_edge *cs,
 					   src_lat, aglat,
 					   src_offset,
 					   src_idx,
+					   item->value.pass_through.op_type,
 					   item->type);
 
   if (src_lat->contains_variable)
@@ -3910,6 +3752,7 @@ estimate_local_effects (struct cgraph_node *node)
 	      avals.m_known_aggs[j].unit_offset = unit_offset;
 	      avals.m_known_aggs[j].index = index;
 	      avals.m_known_aggs[j].by_ref = plats->aggs_by_ref;
+	      avals.m_known_aggs[j].killed = false;
 
 	      perform_estimation_of_a_value (node, &avals,
 					     removable_params_cost, 0, val);
@@ -4226,8 +4069,7 @@ ipcp_propagate_stage (class ipa_topo_info *topo)
         determine_versionability (node, info);
 
 	unsigned nlattices = ipa_get_param_count (info);
-	void *chunk = XCNEWVEC (class ipcp_param_lattices, nlattices);
-	info->lattices = new (chunk) ipcp_param_lattices[nlattices];
+	info->lattices.safe_grow_cleared (nlattices, true);
 	initialize_node_lattices (node);
       }
     ipa_size_summary *s = ipa_size_summaries->get (node);
@@ -4808,7 +4650,8 @@ adjust_clone_incoming_counts (cgraph_node *node,
 	cs->count = cs->count.combine_with_ipa_count (sum);
       }
     else if (!desc->processed_edges->contains (cs)
-	     && cs->caller->clone_of == desc->orig)
+	     && cs->caller->clone_of == desc->orig
+	     && cs->count.compatible_p (desc->count))
       {
 	cs->count += desc->count;
 	if (dump_file)
@@ -5475,11 +5318,30 @@ self_recursive_pass_through_p (cgraph_edge *cs, ipa_jump_func *jfunc, int i,
 			       bool simple = true)
 {
   enum availability availability;
-  if (cs->caller == cs->callee->function_symbol (&availability)
+  if (jfunc->type == IPA_JF_PASS_THROUGH
+      && cs->caller == cs->callee->function_symbol (&availability)
       && availability > AVAIL_INTERPOSABLE
-      && jfunc->type == IPA_JF_PASS_THROUGH
       && (!simple || ipa_get_jf_pass_through_operation (jfunc) == NOP_EXPR)
       && ipa_get_jf_pass_through_formal_id (jfunc) == i
+      && ipa_node_params_sum->get (cs->caller)
+      && !ipa_node_params_sum->get (cs->caller)->ipcp_orig_node)
+    return true;
+  return false;
+}
+
+/* Return true if JFUNC, which describes the i-th parameter of call CS, is an
+   ancestor function with zero offset to itself when the cgraph_node involved
+   is not an IPA-CP clone.  */
+
+static bool
+self_recursive_ancestor_p (cgraph_edge *cs, ipa_jump_func *jfunc, int i)
+{
+  enum availability availability;
+  if (jfunc->type == IPA_JF_ANCESTOR
+      && cs->caller == cs->callee->function_symbol (&availability)
+      && availability > AVAIL_INTERPOSABLE
+      && ipa_get_jf_ancestor_offset (jfunc) == 0
+      && ipa_get_jf_ancestor_formal_id (jfunc) == i
       && ipa_node_params_sum->get (cs->caller)
       && !ipa_node_params_sum->get (cs->caller)->ipcp_orig_node)
     return true;
@@ -5563,12 +5425,17 @@ find_more_scalar_values_for_callers_subset (struct cgraph_node *node,
 	  if (self_recursive_pass_through_p (cs, jump_func, i, false))
 	    {
 	      gcc_assert (newval);
-	      t = ipa_get_jf_arith_result (
-				ipa_get_jf_pass_through_operation (jump_func),
-				newval,
+	      enum tree_code opcode
+		= ipa_get_jf_pass_through_operation (jump_func);
+	      tree op_type = (opcode == NOP_EXPR) ? NULL_TREE
+		: ipa_get_jf_pass_through_op_type (jump_func);
+	      t = ipa_get_jf_arith_result (opcode, newval,
 				ipa_get_jf_pass_through_operand (jump_func),
-				type);
+				op_type);
+	      t = ipacp_value_safe_for_type (type, t);
 	    }
+	  else if (self_recursive_ancestor_p (cs, jump_func, i))
+	    continue;
 	  else
 	    t = ipa_value_from_jfunc (ipa_node_params_sum->get (cs->caller),
 				      jump_func, type);
@@ -5734,7 +5601,8 @@ push_agg_values_for_index_from_edge (struct cgraph_edge *cs, int index,
 	      && !src_plats->aggs_bottom
 	      && (agg_jf_preserved || !src_plats->aggs_by_ref))
 	    {
-	      if (interim && self_recursive_pass_through_p (cs, jfunc, index))
+	      if (interim && (self_recursive_pass_through_p (cs, jfunc, index)
+			      || self_recursive_ancestor_p (cs, jfunc, index)))
 		{
 		  interim->push_adjusted_values (src_idx, index, unit_delta,
 						 res);
@@ -5772,10 +5640,13 @@ push_agg_values_for_index_from_edge (struct cgraph_edge *cs, int index,
 	  && self_recursive_agg_pass_through_p (cs, &agg_jf, index, false)
 	  && (srcvalue = interim->get_value(index,
 					    agg_jf.offset / BITS_PER_UNIT)))
-	value = ipa_get_jf_arith_result (agg_jf.value.pass_through.operation,
-					 srcvalue,
-					 agg_jf.value.pass_through.operand,
-					 agg_jf.type);
+	{
+	  value = ipa_get_jf_arith_result (agg_jf.value.pass_through.operation,
+					   srcvalue,
+					   agg_jf.value.pass_through.operand,
+					   agg_jf.value.pass_through.op_type);
+	  value = ipacp_value_safe_for_type (agg_jf.type, value);
+	}
       else
 	value = ipa_agg_value_from_jfunc (caller_info, cs->caller,
 					  &agg_jf);
@@ -5786,6 +5657,7 @@ push_agg_values_for_index_from_edge (struct cgraph_edge *cs, int index,
 	  iav.unit_offset = agg_jf.offset / BITS_PER_UNIT;
 	  iav.index = index;
 	  iav.by_ref = jfunc->agg.by_ref;
+	  iav.killed = false;
 
 	  gcc_assert (first
 		      || iav.unit_offset > prev_unit_offset);
@@ -6180,6 +6052,23 @@ decide_about_value (struct cgraph_node *node, int index, HOST_WIDE_INT offset,
   return true;
 }
 
+/* Like irange::contains_p(), but convert VAL to the range of R if
+   necessary.  */
+
+static inline bool
+ipa_range_contains_p (const vrange &r, tree val)
+{
+  if (r.undefined_p ())
+    return false;
+
+  tree type = r.type ();
+  if (!wi::fits_to_tree_p (wi::to_wide (val), type))
+    return false;
+
+  val = fold_convert (type, val);
+  return r.contains_p (val);
+}
+
 /* Decide whether and what specialized clones of NODE should be created.  */
 
 static bool
@@ -6217,11 +6106,11 @@ decide_whether_version_node (struct cgraph_node *node)
 	    {
 	      /* If some values generated for self-recursive calls with
 		 arithmetic jump functions fall outside of the known
-		 value_range for the parameter, we can skip them.  VR interface
-		 supports this only for integers now.  */
+		 range for the parameter, we can skip them.  */
 	      if (TREE_CODE (val->value) == INTEGER_CST
 		  && !plats->m_value_range.bottom_p ()
-		  && !plats->m_value_range.m_vr.contains_p (val->value))
+		  && !ipa_range_contains_p (plats->m_value_range.m_vr,
+					    val->value))
 		{
 		  /* This can happen also if a constant present in the source
 		     code falls outside of the range of parameter's type, so we
@@ -6444,89 +6333,8 @@ ipcp_decision_stage (class ipa_topo_info *topo)
     }
 }
 
-/* Look up all the bits information that we have discovered and copy it over
-   to the transformation summary.  */
-
-static void
-ipcp_store_bits_results (void)
-{
-  cgraph_node *node;
-
-  FOR_EACH_FUNCTION_WITH_GIMPLE_BODY (node)
-    {
-      ipa_node_params *info = ipa_node_params_sum->get (node);
-      bool dumped_sth = false;
-      bool found_useful_result = false;
-
-      if (!opt_for_fn (node->decl, flag_ipa_bit_cp) || !info)
-	{
-	  if (dump_file)
-	    fprintf (dump_file, "Not considering %s for ipa bitwise propagation "
-				"; -fipa-bit-cp: disabled.\n",
-				node->dump_name ());
-	  continue;
-	}
-
-      if (info->ipcp_orig_node)
-	info = ipa_node_params_sum->get (info->ipcp_orig_node);
-      if (!info->lattices)
-	/* Newly expanded artificial thunks do not have lattices.  */
-	continue;
-
-      unsigned count = ipa_get_param_count (info);
-      for (unsigned i = 0; i < count; i++)
-	{
-	  ipcp_param_lattices *plats = ipa_get_parm_lattices (info, i);
-	  if (plats->bits_lattice.constant_p ())
-	    {
-	      found_useful_result = true;
-	      break;
-	    }
-	}
-
-      if (!found_useful_result)
-	continue;
-
-      ipcp_transformation_initialize ();
-      ipcp_transformation *ts = ipcp_transformation_sum->get_create (node);
-      vec_safe_reserve_exact (ts->bits, count);
-
-      for (unsigned i = 0; i < count; i++)
-	{
-	  ipcp_param_lattices *plats = ipa_get_parm_lattices (info, i);
-	  ipa_bits *jfbits;
-
-	  if (plats->bits_lattice.constant_p ())
-	    {
-	      jfbits
-		= ipa_get_ipa_bits_for_value (plats->bits_lattice.get_value (),
-					      plats->bits_lattice.get_mask ());
-	      if (!dbg_cnt (ipa_cp_bits))
-		jfbits = NULL;
-	    }
-	  else
-	    jfbits = NULL;
-
-	  ts->bits->quick_push (jfbits);
-	  if (!dump_file || !jfbits)
-	    continue;
-	  if (!dumped_sth)
-	    {
-	      fprintf (dump_file, "Propagated bits info for function %s:\n",
-		       node->dump_name ());
-	      dumped_sth = true;
-	    }
-	  fprintf (dump_file, " param %i: value = ", i);
-	  print_hex (jfbits->value, dump_file);
-	  fprintf (dump_file, ", mask = ");
-	  print_hex (jfbits->mask, dump_file);
-	  fprintf (dump_file, "\n");
-	}
-    }
-}
-
-/* Look up all VR information that we have discovered and copy it over
-   to the transformation summary.  */
+/* Look up all VR and bits information that we have discovered and copy it
+   over to the transformation summary.  */
 
 static void
 ipcp_store_vr_results (void)
@@ -6536,7 +6344,10 @@ ipcp_store_vr_results (void)
   FOR_EACH_FUNCTION_WITH_GIMPLE_BODY (node)
     {
       ipa_node_params *info = ipa_node_params_sum->get (node);
+      bool dumped_sth = false;
       bool found_useful_result = false;
+      bool do_vr = true;
+      bool do_bits = true;
 
       if (!info || !opt_for_fn (node->decl, flag_ipa_vrp))
 	{
@@ -6544,12 +6355,22 @@ ipcp_store_vr_results (void)
 	    fprintf (dump_file, "Not considering %s for VR discovery "
 		     "and propagate; -fipa-ipa-vrp: disabled.\n",
 		     node->dump_name ());
-	  continue;
+	  do_vr = false;
 	}
+      if (!info || !opt_for_fn (node->decl, flag_ipa_bit_cp))
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Not considering %s for ipa bitwise "
+				"propagation ; -fipa-bit-cp: disabled.\n",
+				node->dump_name ());
+	  do_bits = false;
+	}
+      if (!do_bits && !do_vr)
+	continue;
 
       if (info->ipcp_orig_node)
 	info = ipa_node_params_sum->get (info->ipcp_orig_node);
-      if (!info->lattices)
+      if (info->lattices.is_empty ())
 	/* Newly expanded artificial thunks do not have lattices.  */
 	continue;
 
@@ -6557,8 +6378,14 @@ ipcp_store_vr_results (void)
       for (unsigned i = 0; i < count; i++)
 	{
 	  ipcp_param_lattices *plats = ipa_get_parm_lattices (info, i);
-	  if (!plats->m_value_range.bottom_p ()
+	  if (do_vr
+	      && !plats->m_value_range.bottom_p ()
 	      && !plats->m_value_range.top_p ())
+	    {
+	      found_useful_result = true;
+	      break;
+	    }
+	  if (do_bits && plats->bits_lattice.constant_p ())
 	    {
 	      found_useful_result = true;
 	      break;
@@ -6574,24 +6401,83 @@ ipcp_store_vr_results (void)
       for (unsigned i = 0; i < count; i++)
 	{
 	  ipcp_param_lattices *plats = ipa_get_parm_lattices (info, i);
-	  ipa_vr vr;
+	  ipcp_bits_lattice *bits = NULL;
 
-	  if (!plats->m_value_range.bottom_p ()
+	  if (do_bits
+	      && plats->bits_lattice.constant_p ()
+	      && dbg_cnt (ipa_cp_bits))
+	    bits = &plats->bits_lattice;
+
+	  if (do_vr
+	      && !plats->m_value_range.bottom_p ()
 	      && !plats->m_value_range.top_p ()
 	      && dbg_cnt (ipa_cp_vr))
 	    {
-	      vr.known = true;
-	      vr.type = plats->m_value_range.m_vr.kind ();
-	      vr.min = wi::to_wide (plats->m_value_range.m_vr.min ());
-	      vr.max = wi::to_wide (plats->m_value_range.m_vr.max ());
+	      if (bits)
+		{
+		  value_range tmp = plats->m_value_range.m_vr;
+		  tree type = ipa_get_type (info, i);
+		  irange_bitmask bm (wide_int::from (bits->get_value (),
+						     TYPE_PRECISION (type),
+						     TYPE_SIGN (type)),
+				     wide_int::from (bits->get_mask (),
+						     TYPE_PRECISION (type),
+						     TYPE_SIGN (type)));
+		  tmp.update_bitmask (bm);
+		  // Reflecting the bitmask on the ranges can sometime
+		  // produce an UNDEFINED value if the the bitmask update
+		  // was previously deferred.  See PR 120048.
+		  if (tmp.undefined_p ())
+		    tmp.set_varying (type);
+		  ipa_vr vr (tmp);
+		  ts->m_vr->quick_push (vr);
+		}
+	      else
+		{
+		  ipa_vr vr (plats->m_value_range.m_vr);
+		  ts->m_vr->quick_push (vr);
+		}
+	    }
+	  else if (bits)
+	    {
+	      tree type = ipa_get_type (info, i);
+	      value_range tmp;
+	      tmp.set_varying (type);
+	      irange_bitmask bm (wide_int::from (bits->get_value (),
+						 TYPE_PRECISION (type),
+						 TYPE_SIGN (type)),
+				 wide_int::from (bits->get_mask (),
+						 TYPE_PRECISION (type),
+						 TYPE_SIGN (type)));
+	      tmp.update_bitmask (bm);
+	      // Reflecting the bitmask on the ranges can sometime
+	      // produce an UNDEFINED value if the the bitmask update
+	      // was previously deferred.  See PR 120048.
+	      if (tmp.undefined_p ())
+		tmp.set_varying (type);
+	      ipa_vr vr (tmp);
+	      ts->m_vr->quick_push (vr);
 	    }
 	  else
 	    {
-	      vr.known = false;
-	      vr.type = VR_VARYING;
-	      vr.min = vr.max = wi::zero (INT_TYPE_SIZE);
+	      ipa_vr vr;
+	      ts->m_vr->quick_push (vr);
 	    }
-	  ts->m_vr->quick_push (vr);
+
+	  if (!dump_file || !bits)
+	    continue;
+
+	  if (!dumped_sth)
+	    {
+	      fprintf (dump_file, "Propagated bits info for function %s:\n",
+		       node->dump_name ());
+	      dumped_sth = true;
+	    }
+	  fprintf (dump_file, " param %i: value = ", i);
+	  ipcp_print_widest_int (dump_file, bits->get_value ());
+	  fprintf (dump_file, ", mask = ");
+	  ipcp_print_widest_int (dump_file, bits->get_mask ());
+	  fprintf (dump_file, "\n");
 	}
     }
 }
@@ -6624,9 +6510,7 @@ ipcp_driver (void)
   ipcp_propagate_stage (&topo);
   /* Decide what constant propagation and cloning should be performed.  */
   ipcp_decision_stage (&topo);
-  /* Store results of bits propagation.  */
-  ipcp_store_bits_results ();
-  /* Store results of value range propagation.  */
+  /* Store results of value range and bits propagation.  */
   ipcp_store_vr_results ();
 
   /* Free all IPCP structures.  */
@@ -6720,4 +6604,80 @@ ipa_cp_cc_finalize (void)
   overall_size = 0;
   orig_overall_size = 0;
   ipcp_free_transformation_sum ();
+}
+
+/* Given PARAM which must be a parameter of function FNDECL described by THIS,
+   return its index in the DECL_ARGUMENTS chain, using a pre-computed
+   DECL_UID-sorted vector if available (which is pre-computed only if there are
+   many parameters).  Can return -1 if param is static chain not represented
+   among DECL_ARGUMENTS. */
+
+int
+ipcp_transformation::get_param_index (const_tree fndecl, const_tree param) const
+{
+  gcc_assert (TREE_CODE (param) == PARM_DECL);
+  if (m_uid_to_idx)
+    {
+      unsigned puid = DECL_UID (param);
+      const ipa_uid_to_idx_map_elt *res
+	= std::lower_bound (m_uid_to_idx->begin(), m_uid_to_idx->end (), puid,
+			    [] (const ipa_uid_to_idx_map_elt &elt, unsigned uid)
+			    {
+			      return elt.uid < uid;
+			    });
+      if (res == m_uid_to_idx->end ()
+	  || res->uid != puid)
+	{
+	  gcc_assert (DECL_STATIC_CHAIN (fndecl));
+	  return -1;
+	}
+      return res->index;
+    }
+
+  unsigned index = 0;
+  for (tree p = DECL_ARGUMENTS (fndecl); p; p = DECL_CHAIN (p), index++)
+    if (p == param)
+      return (int) index;
+
+  gcc_assert (DECL_STATIC_CHAIN (fndecl));
+  return -1;
+}
+
+/* Helper function to qsort a vector of ipa_uid_to_idx_map_elt elements
+   according to the uid.  */
+
+static int
+compare_uids (const void *a, const void *b)
+{
+  const ipa_uid_to_idx_map_elt *e1 = (const ipa_uid_to_idx_map_elt *) a;
+  const ipa_uid_to_idx_map_elt *e2 = (const ipa_uid_to_idx_map_elt *) b;
+  if (e1->uid < e2->uid)
+    return -1;
+  if (e1->uid > e2->uid)
+    return 1;
+  gcc_unreachable ();
+}
+
+/* Assuming THIS describes FNDECL and it has sufficiently many parameters to
+   justify the overhead, create a DECL_UID-sorted vector to speed up mapping
+   from parameters to their indices in DECL_ARGUMENTS chain.  */
+
+void
+ipcp_transformation::maybe_create_parm_idx_map (tree fndecl)
+{
+  int c = count_formal_params (fndecl);
+  if (c < 32)
+    return;
+
+  m_uid_to_idx = NULL;
+  vec_safe_reserve (m_uid_to_idx, c, true);
+  unsigned index = 0;
+  for (tree p = DECL_ARGUMENTS (fndecl); p; p = DECL_CHAIN (p), index++)
+    {
+      ipa_uid_to_idx_map_elt elt;
+      elt.uid = DECL_UID (p);
+      elt.index = index;
+      m_uid_to_idx->quick_push (elt);
+    }
+  m_uid_to_idx->qsort (compare_uids);
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2023 Free Software Foundation, Inc.
+// Copyright (C) 2023-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,8 +15,8 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++2b" }
 // { dg-do link { target c++23 } }
+// { dg-require-cmath "" }
 
 #include <stdfloat>
 #include <cmath>
@@ -119,7 +119,7 @@ main()
   test_functions<std::float64_t>();
 #endif
 #if defined(__STDCPP_FLOAT128_T__) \
-    && (defined(_GLIBCXX_DOUBLE_IS_IEEE_BINARY128) \
+    && (defined(_GLIBCXX_LDOUBLE_IS_IEEE_BINARY128) \
 	|| defined(_GLIBCXX_HAVE_FLOAT128_MATH))
   test_functions<std::float128_t>();
 #endif

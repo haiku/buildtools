@@ -5,11 +5,11 @@
 
 /*
 ** f1:
-**	vsetivli\tzero,4,e32,m1,tu,ma
+**  ...
 **	vle32\.v\tv[0-9]+,0\([a-x0-9]+\)
 **	vle32\.v\tv[0-9]+,0\([a-x0-9]+\)
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
 **	vse32\.v\tv[0-9]+,0\([a-x0-9]+\)
 **	ret
 */
@@ -24,12 +24,12 @@ void f1 (void * in, void *out)
 
 /*
 ** f2:
-**	vsetvli\t[a-x0-9]+,zero,e8,mf4,ta,ma
+**  ...
 **	vlm.v\tv[0-9]+,0\([a-x0-9]+\)
-**	vsetivli\tzero,4,e32,m1,ta,ma
+**  ...
 **	vle32.v\tv[0-9]+,0\([a-x0-9]+\),v0.t
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
-**	vneg\.v\tv[1-9][0-9]?,\s*v[0-9]+,\s*v0.t
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0,\s*v0.t
 **	vse32.v\tv[0-9]+,0\([a-x0-9]+\)
 **	ret
 */
@@ -46,13 +46,13 @@ void f2 (void * in, void *out)
 
 /*
 ** f3:
-**	vsetvli\t[a-x0-9]+,zero,e8,mf4,ta,ma
+**  ...
 **	vlm.v\tv[0-9]+,0\([a-x0-9]+\)
-**	vsetivli\tzero,4,e32,m1,tu,mu
+**  ...
 **	vle32\.v\tv[0-9]+,0\([a-x0-9]+\)
 **	vle32.v\tv[0-9]+,0\([a-x0-9]+\),v0.t
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
-**	vneg\.v\tv[1-9][0-9]?,\s*v[0-9]+,\s*v0.t
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0,\s*v0.t
 **	vse32.v\tv[0-9]+,0\([a-x0-9]+\)
 **	ret
 */
@@ -69,11 +69,11 @@ void f3 (void * in, void *out)
 
 /*
 ** f4:
-**	vsetivli\tzero,4,e8,mf8,tu,ma
+**  ...
 **	vle8\.v\tv[0-9]+,0\([a-x0-9]+\)
 **	vle8\.v\tv[0-9]+,0\([a-x0-9]+\)
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
 **	vse8\.v\tv[0-9]+,0\([a-x0-9]+\)
 **	ret
 */
@@ -88,12 +88,12 @@ void f4 (void * in, void *out)
 
 /*
 ** f5:
-**	vsetvli\t[a-x0-9]+,zero,e8,mf8,ta,ma
+**  ...
 **	vlm.v\tv[0-9]+,0\([a-x0-9]+\)
-**	vsetivli\tzero,4,e8,mf8,ta,ma
+**  ...
 **	vle8.v\tv[0-9]+,0\([a-x0-9]+\),v0.t
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
-**	vneg\.v\tv[1-9][0-9]?,\s*v[0-9]+,\s*v0.t
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0,\s*v0.t
 **	vse8.v\tv[0-9]+,0\([a-x0-9]+\)
 **	ret
 */
@@ -110,13 +110,13 @@ void f5 (void * in, void *out)
 
 /*
 ** f6:
-**	vsetvli\t[a-x0-9]+,zero,e8,mf8,ta,ma
+**  ...
 **	vlm.v\tv[0-9]+,0\([a-x0-9]+\)
-**	vsetivli\tzero,4,e8,mf8,tu,mu
+**  ...
 **	vle8\.v\tv[0-9]+,0\([a-x0-9]+\)
 **	vle8.v\tv[0-9]+,0\([a-x0-9]+\),v0.t
-**	vneg\.v\tv[0-9]+,\s*v[0-9]+
-**	vneg\.v\tv[1-9][0-9]?,\s*v[0-9]+,\s*v0.t
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0
+**	vrsub\.vi\tv[0-9]+,\s*v[0-9]+,\s*0,\s*v0.t
 **	vse8.v\tv[0-9]+,0\([a-x0-9]+\)
 **	ret
 */

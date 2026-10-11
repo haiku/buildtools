@@ -1,4 +1,4 @@
-// Copyright (C) 2021-2023 Free Software Foundation, Inc.
+// Copyright (C) 2021-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -36,7 +36,7 @@ public:
 protected:
   MarkLiveBase () : mappings (Analysis::Mappings::get ()) {}
 
-  Analysis::Mappings *mappings;
+  Analysis::Mappings &mappings;
 };
 
 } // namespace Analysis

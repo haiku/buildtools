@@ -1,6 +1,6 @@
 // -*- C++ -*- forwarding header.
 
-// Copyright (C) 1997-2023 Free Software Foundation, Inc.
+// Copyright (C) 1997-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -39,7 +39,9 @@
 #ifndef _GLIBCXX_CSTDDEF
 #define _GLIBCXX_CSTDDEF 1
 
+#ifdef _GLIBCXX_SYSHDR
 #pragma GCC system_header
+#endif
 
 #undef __need_wchar_t
 #undef __need_ptrdiff_t
@@ -48,6 +50,12 @@
 #undef __need_wint_t
 #include <bits/c++config.h>
 #include <stddef.h>
+
+#define __glibcxx_want_byte
+#include <bits/version.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic" // __int128
 
 extern "C++"
 {
@@ -59,12 +67,10 @@ namespace std
 }
 #endif // C++11
 
-#if __cplusplus >= 201703L
+#ifdef __cpp_lib_byte // C++ >= 17
 namespace std
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
-#define __cpp_lib_byte 201603L
-
   /// std::byte
   enum class byte : unsigned char {};
 
@@ -185,7 +191,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
-#endif // C++17
+#endif // __cpp_lib_byte
 } // extern "C++"
+
+#pragma GCC diagnostic pop
 
 #endif // _GLIBCXX_CSTDDEF

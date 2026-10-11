@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * https://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -65,7 +65,7 @@ enum
     STMTerror,
     STMTpeel,
     STMTexp, STMTdtorExp,
-    STMTcompile,
+    STMTmixin,
     STMTcompound, STMTcompoundDeclaration, STMTcompoundAsm,
     STMTunrolledLoop,
     STMTscope,
@@ -113,53 +113,46 @@ public:
 
     virtual Statement *syntaxCopy();
 
-    const char *toChars() const override final;
-
-    void error(const char *format, ...);
-    void warning(const char *format, ...);
-    void deprecation(const char *format, ...);
     virtual Statement *getRelatedLabeled() { return this; }
     virtual bool hasBreak() const;
     virtual bool hasContinue() const;
-    bool usesEH();
-    bool comeFrom();
     bool hasCode();
     virtual Statement *last();
 
-    virtual ReturnStatement *endsWithReturnStatement() { return NULL; }
+    virtual ReturnStatement *endsWithReturnStatement() { return nullptr; }
 
-    ErrorStatement       *isErrorStatement()       { return stmt == STMTerror       ? (ErrorStatement*)this       : NULL; }
-    ScopeStatement       *isScopeStatement()       { return stmt == STMTscope       ? (ScopeStatement*)this       : NULL; }
-    ExpStatement         *isExpStatement()         { return stmt == STMTexp         ? (ExpStatement*)this         : NULL; }
-    CompoundStatement    *isCompoundStatement()    { return stmt == STMTcompound    ? (CompoundStatement*)this    : NULL; }
-    ReturnStatement      *isReturnStatement()      { return stmt == STMTreturn      ? (ReturnStatement*)this      : NULL; }
-    IfStatement          *isIfStatement()          { return stmt == STMTif          ? (IfStatement*)this          : NULL; }
-    ConditionalStatement *isConditionalStatement() { return stmt == STMTconditional ? (ConditionalStatement*)this : NULL; }
-    StaticForeachStatement *isStaticForeachStatement() { return stmt == STMTstaticForeach ? (StaticForeachStatement*)this : NULL; }
-    CaseStatement        *isCaseStatement()        { return stmt == STMTcase        ? (CaseStatement*)this        : NULL; }
-    DefaultStatement     *isDefaultStatement()     { return stmt == STMTdefault     ? (DefaultStatement*)this     : NULL; }
-    LabelStatement       *isLabelStatement()       { return stmt == STMTlabel       ? (LabelStatement*)this       : NULL; }
-    GotoDefaultStatement *isGotoDefaultStatement() { return stmt == STMTgotoDefault ? (GotoDefaultStatement*)this : NULL; }
-    GotoCaseStatement    *isGotoCaseStatement()    { return stmt == STMTgotoCase    ? (GotoCaseStatement*)this    : NULL; }
-    BreakStatement       *isBreakStatement()       { return stmt == STMTbreak       ? (BreakStatement*)this       : NULL; }
-    DtorExpStatement     *isDtorExpStatement()     { return stmt == STMTdtorExp     ? (DtorExpStatement*)this     : NULL; }
-    CompileStatement     *isCompileStatement()     { return stmt == STMTcompile     ? (CompileStatement*)this     : NULL; }
-    ForwardingStatement  *isForwardingStatement()  { return stmt == STMTforwarding  ? (ForwardingStatement*)this  : NULL; }
-    DoStatement          *isDoStatement()          { return stmt == STMTdo          ? (DoStatement*)this          : NULL; }
-    ForStatement         *isForStatement()         { return stmt == STMTfor         ? (ForStatement*)this         : NULL; }
-    ForeachStatement     *isForeachStatement()     { return stmt == STMTforeach     ? (ForeachStatement*)this     : NULL; }
-    SwitchStatement      *isSwitchStatement()      { return stmt == STMTswitch      ? (SwitchStatement*)this      : NULL; }
-    ContinueStatement    *isContinueStatement()    { return stmt == STMTcontinue    ? (ContinueStatement*)this    : NULL; }
-    WithStatement        *isWithStatement()        { return stmt == STMTwith        ? (WithStatement*)this        : NULL; }
-    TryCatchStatement    *isTryCatchStatement()    { return stmt == STMTtryCatch    ? (TryCatchStatement*)this    : NULL; }
-    ThrowStatement       *isThrowStatement()       { return stmt == STMTthrow       ? (ThrowStatement*)this       : NULL; }
-    DebugStatement       *isDebugStatement()       { return stmt == STMTdebug       ? (DebugStatement*)this       : NULL; }
-    TryFinallyStatement  *isTryFinallyStatement()  { return stmt == STMTtryFinally  ? (TryFinallyStatement*)this  : NULL; }
-    ScopeGuardStatement  *isScopeGuardStatement()  { return stmt == STMTscopeGuard  ? (ScopeGuardStatement*)this  : NULL; }
-    SwitchErrorStatement  *isSwitchErrorStatement()  { return stmt == STMTswitchError  ? (SwitchErrorStatement*)this  : NULL; }
-    UnrolledLoopStatement *isUnrolledLoopStatement() { return stmt == STMTunrolledLoop ? (UnrolledLoopStatement*)this : NULL; }
-    ForeachRangeStatement *isForeachRangeStatement() { return stmt == STMTforeachRange ? (ForeachRangeStatement*)this : NULL; }
-    CompoundDeclarationStatement *isCompoundDeclarationStatement() { return stmt == STMTcompoundDeclaration ? (CompoundDeclarationStatement*)this : NULL; }
+    ErrorStatement       *isErrorStatement()       { return stmt == STMTerror       ? (ErrorStatement*)this       : nullptr; }
+    ScopeStatement       *isScopeStatement()       { return stmt == STMTscope       ? (ScopeStatement*)this       : nullptr; }
+    ExpStatement         *isExpStatement()         { return stmt == STMTexp         ? (ExpStatement*)this         : nullptr; }
+    CompoundStatement    *isCompoundStatement()    { return stmt == STMTcompound    ? (CompoundStatement*)this    : nullptr; }
+    ReturnStatement      *isReturnStatement()      { return stmt == STMTreturn      ? (ReturnStatement*)this      : nullptr; }
+    IfStatement          *isIfStatement()          { return stmt == STMTif          ? (IfStatement*)this          : nullptr; }
+    ConditionalStatement *isConditionalStatement() { return stmt == STMTconditional ? (ConditionalStatement*)this : nullptr; }
+    StaticForeachStatement *isStaticForeachStatement() { return stmt == STMTstaticForeach ? (StaticForeachStatement*)this : nullptr; }
+    CaseStatement        *isCaseStatement()        { return stmt == STMTcase        ? (CaseStatement*)this        : nullptr; }
+    DefaultStatement     *isDefaultStatement()     { return stmt == STMTdefault     ? (DefaultStatement*)this     : nullptr; }
+    LabelStatement       *isLabelStatement()       { return stmt == STMTlabel       ? (LabelStatement*)this       : nullptr; }
+    GotoDefaultStatement *isGotoDefaultStatement() { return stmt == STMTgotoDefault ? (GotoDefaultStatement*)this : nullptr; }
+    GotoCaseStatement    *isGotoCaseStatement()    { return stmt == STMTgotoCase    ? (GotoCaseStatement*)this    : nullptr; }
+    BreakStatement       *isBreakStatement()       { return stmt == STMTbreak       ? (BreakStatement*)this       : nullptr; }
+    DtorExpStatement     *isDtorExpStatement()     { return stmt == STMTdtorExp     ? (DtorExpStatement*)this     : nullptr; }
+    MixinStatement       *isMixinStatement()       { return stmt == STMTmixin       ? (MixinStatement*)this       : nullptr; }
+    ForwardingStatement  *isForwardingStatement()  { return stmt == STMTforwarding  ? (ForwardingStatement*)this  : nullptr; }
+    DoStatement          *isDoStatement()          { return stmt == STMTdo          ? (DoStatement*)this          : nullptr; }
+    ForStatement         *isForStatement()         { return stmt == STMTfor         ? (ForStatement*)this         : nullptr; }
+    ForeachStatement     *isForeachStatement()     { return stmt == STMTforeach     ? (ForeachStatement*)this     : nullptr; }
+    SwitchStatement      *isSwitchStatement()      { return stmt == STMTswitch      ? (SwitchStatement*)this      : nullptr; }
+    ContinueStatement    *isContinueStatement()    { return stmt == STMTcontinue    ? (ContinueStatement*)this    : nullptr; }
+    WithStatement        *isWithStatement()        { return stmt == STMTwith        ? (WithStatement*)this        : nullptr; }
+    TryCatchStatement    *isTryCatchStatement()    { return stmt == STMTtryCatch    ? (TryCatchStatement*)this    : nullptr; }
+    ThrowStatement       *isThrowStatement()       { return stmt == STMTthrow       ? (ThrowStatement*)this       : nullptr; }
+    DebugStatement       *isDebugStatement()       { return stmt == STMTdebug       ? (DebugStatement*)this       : nullptr; }
+    TryFinallyStatement  *isTryFinallyStatement()  { return stmt == STMTtryFinally  ? (TryFinallyStatement*)this  : nullptr; }
+    ScopeGuardStatement  *isScopeGuardStatement()  { return stmt == STMTscopeGuard  ? (ScopeGuardStatement*)this  : nullptr; }
+    SwitchErrorStatement  *isSwitchErrorStatement()  { return stmt == STMTswitchError  ? (SwitchErrorStatement*)this  : nullptr; }
+    UnrolledLoopStatement *isUnrolledLoopStatement() { return stmt == STMTunrolledLoop ? (UnrolledLoopStatement*)this : nullptr; }
+    ForeachRangeStatement *isForeachRangeStatement() { return stmt == STMTforeachRange ? (ForeachRangeStatement*)this : nullptr; }
+    CompoundDeclarationStatement *isCompoundDeclarationStatement() { return stmt == STMTcompoundDeclaration ? (CompoundDeclarationStatement*)this : nullptr; }
 
     void accept(Visitor *v) override { v->visit(this); }
 };
@@ -188,7 +181,7 @@ class ExpStatement : public Statement
 public:
     Expression *exp;
 
-    static ExpStatement *create(const Loc &loc, Expression *exp);
+    static ExpStatement *create(Loc loc, Expression *exp);
     ExpStatement *syntaxCopy() override;
 
     void accept(Visitor *v) override { v->visit(this); }
@@ -206,12 +199,12 @@ public:
     void accept(Visitor *v) override { v->visit(this); }
 };
 
-class CompileStatement final : public Statement
+class MixinStatement final : public Statement
 {
 public:
     Expressions *exps;
 
-    CompileStatement *syntaxCopy() override;
+    MixinStatement *syntaxCopy() override;
     void accept(Visitor *v) override { v->visit(this); }
 };
 
@@ -220,7 +213,7 @@ class CompoundStatement : public Statement
 public:
     Statements *statements;
 
-    static CompoundStatement *create(const Loc &loc, Statement *s1, Statement *s2);
+    static CompoundStatement *create(Loc loc, Statement *s1, Statement *s2);
     CompoundStatement *syntaxCopy() override;
     ReturnStatement *endsWithReturnStatement() override final;
     Statement *last() override final;
@@ -353,7 +346,7 @@ class ForeachRangeStatement final : public Statement
 {
 public:
     TOK op;                     // TOKforeach or TOKforeach_reverse
-    Parameter *prm;             // loop index variable
+    Parameter *param;             // loop index variable
     Expression *lwr;
     Expression *upr;
     Statement *_body;
@@ -371,7 +364,7 @@ public:
 class IfStatement final : public Statement
 {
 public:
-    Parameter *prm;
+    Parameter *param;
     Expression *condition;
     Statement *ifbody;
     Statement *elsebody;
@@ -431,17 +424,19 @@ public:
 class SwitchStatement final : public Statement
 {
 public:
+    Parameter *param;
     Expression *condition;
     Statement *_body;
     d_bool isFinal;
+    Loc endloc;
 
+    d_bool hasDefault;             // true if default statement
+    d_bool hasVars;                // true if has variable case values
     DefaultStatement *sdefault;
     Statement *tryBody;            // set to TryCatchStatement or TryFinallyStatement if in _body portion
     TryFinallyStatement *tf;
     GotoCaseStatements gotoCases;  // array of unresolved GotoCaseStatement's
     CaseStatements *cases;         // array of CaseStatement's
-    int hasNoDefault;           // !=0 if no default statement
-    int hasVars;                // !=0 if has variable case values
     VarDeclaration *lastVar;
 
     SwitchStatement *syntaxCopy() override;
@@ -618,7 +613,7 @@ public:
     Statement *tryBody;   // set to enclosing TryCatchStatement or TryFinallyStatement if in _body portion
     d_bool bodyFallsThru;   // true if _body falls through to finally
 
-    static TryFinallyStatement *create(const Loc &loc, Statement *body, Statement *finalbody);
+    static TryFinallyStatement *create(Loc loc, Statement *body, Statement *finalbody);
     TryFinallyStatement *syntaxCopy() override;
     bool hasBreak() const override;
     bool hasContinue() const override;
@@ -699,18 +694,28 @@ public:
 
     d_bool deleted;           // set if rewritten to return in foreach delegate
     d_bool iasm;              // set if used by inline assembler
+    d_bool duplicated;        // set if multiply defined, to avoid duplicate error messages
 
     static LabelDsymbol *create(Identifier *ident);
     LabelDsymbol *isLabel() override;
     void accept(Visitor *v) override { v->visit(this); }
 };
 
-Statement* asmSemantic(AsmStatement *s, Scope *sc);
+namespace dmd
+{
+    // in statementsem.d
+    Statement* statementSemantic(Statement *s, Scope *sc);
+    // in iasm.d
+    Statement* asmSemantic(AsmStatement *s, Scope *sc);
+    // in iasmgcc.d
+    Statement *gccAsmSemantic(GccAsmStatement *s, Scope *sc);
+}
 
 class AsmStatement : public Statement
 {
 public:
     Token *tokens;
+    d_bool caseSensitive;  // for register names
 
     AsmStatement *syntaxCopy() override;
     void accept(Visitor *v) override { v->visit(this); }
@@ -719,7 +724,7 @@ public:
 class InlineAsmStatement final : public AsmStatement
 {
 public:
-    code *asmcode;
+    void *asmcode;
     unsigned asmalign;          // alignment of this statement
     unsigned regs;              // mask of registers modified (must match regm_t in back end)
     d_bool refparam;              // true if function parameter is referenced

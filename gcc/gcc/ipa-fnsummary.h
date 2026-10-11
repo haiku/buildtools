@@ -1,5 +1,5 @@
 /* IPA function body analysis.
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
    Contributed by Jan Hubicka
 
 This file is part of GCC.
@@ -45,7 +45,7 @@ enum ipa_hints_vals {
      it.  Set by simple_edge_hints in ipa-inline-analysis.cc.  */
   INLINE_HINT_declared_inline = 32,
   /* Programs are usually still organized for non-LTO compilation and thus
-     if functions are in different modules, inlining may not be so important. 
+     if functions are in different modules, inlining may not be so important.
      Set by simple_edge_hints in ipa-inline-analysis.cc.   */
   INLINE_HINT_cross_module = 64,
   /* We know that the callee is hot by profile.  */
@@ -85,7 +85,7 @@ public:
   sreal time;
 };
 
-/* Summary about function and stack frame sizes.  We keep this info 
+/* Summary about function and stack frame sizes.  We keep this info
    for inline clones and also for WPA streaming. For this reason this is not
    part of ipa_fn_summary which exists only for offline functions.  */
 class ipa_size_summary
@@ -126,8 +126,8 @@ public:
   ipa_fn_summary ()
     : min_size (0),
       inlinable (false), single_caller (false),
-      fp_expressions (false), target_info (0),
-      estimated_stack_size (false),
+      fp_expressions (false), safe_to_inline_to_always_inline (0),
+      target_info (0), estimated_stack_size (false),
       time (0), conds (NULL),
       size_time_table (), call_size_time_table (vNULL),
       loop_iterations (NULL), loop_strides (NULL),
@@ -165,6 +165,8 @@ public:
   unsigned int single_caller : 1;
   /* True if function contains any floating point expressions.  */
   unsigned int fp_expressions : 1;
+  /* Cache for analysis of can_early_inline_edge_p.  */
+  unsigned int safe_to_inline_to_always_inline : 2;
   /* Like fp_expressions field above, but it's to hold some target specific
      information, such as some target specific isa flags.  Note that for
      offloading target compilers, this field isn't streamed.  */

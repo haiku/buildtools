@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -22,24 +22,48 @@
 namespace Rust {
 namespace Resolver {
 
-SubstMapper::SubstMapper (HirId ref, HIR::GenericArgs *generics, Location locus)
-  : resolved (new TyTy::ErrorType (ref)), generics (generics), locus (locus)
+SubstMapper::SubstMapper (HirId ref, HIR::GenericArgs *generics,
+			  const std::vector<TyTy::Region> &regions,
+			  location_t locus)
+  : resolved (new TyTy::ErrorType (ref)), generics (generics),
+    regions (regions), locus (locus)
 {}
 
 TyTy::BaseType *
-SubstMapper::Resolve (TyTy::BaseType *base, Location locus,
-		      HIR::GenericArgs *generics)
+SubstMapper::Resolve (TyTy::BaseType *base, location_t locus,
+		      HIR::GenericArgs *generics,
+		      const std::vector<TyTy::Region> &regions)
 {
-  SubstMapper mapper (base->get_ref (), generics, locus);
+  if (!valid_type (base))
+    {
+      rich_location r (line_table, locus);
+      r.add_fixit_remove (generics->get_locus ());
+      rust_error_at (r, ErrorCode::E0109,
+		     "generic arguments are not allowed for this type");
+      return base;
+    }
+
+  SubstMapper mapper (base->get_ref (), generics, regions, locus);
   base->accept_vis (mapper);
   rust_assert (mapper.resolved != nullptr);
   return mapper.resolved;
 }
 
 TyTy::BaseType *
-SubstMapper::InferSubst (TyTy::BaseType *base, Location locus)
+SubstMapper::InferSubst (TyTy::BaseType *base, location_t locus)
 {
-  return SubstMapper::Resolve (base, locus, nullptr);
+  return SubstMapper::Resolve (base, locus, nullptr, {});
+}
+
+bool
+SubstMapper::valid_type (TyTy::BaseType *base)
+{
+  bool is_fn = base->is<TyTy::FnType> ();
+  bool is_adt = base->is<TyTy::ADTType> ();
+  bool is_placeholder = base->is<TyTy::PlaceholderType> ();
+  bool is_projection = base->is<TyTy::ProjectionType> ();
+
+  return is_fn || is_adt || is_placeholder || is_projection;
 }
 
 bool
@@ -61,7 +85,7 @@ SubstMapper::visit (TyTy::FnType &type)
   else
     {
       TyTy::SubstitutionArgumentMappings mappings
-	= type.get_mappings_from_generic_args (*generics);
+	= type.get_mappings_from_generic_args (*generics, regions);
       if (mappings.is_error ())
 	return;
 
@@ -85,7 +109,7 @@ SubstMapper::visit (TyTy::ADTType &type)
   else
     {
       TyTy::SubstitutionArgumentMappings mappings
-	= type.get_mappings_from_generic_args (*generics);
+	= type.get_mappings_from_generic_args (*generics, regions);
       if (mappings.is_error ())
 	return;
 
@@ -99,8 +123,13 @@ SubstMapper::visit (TyTy::ADTType &type)
 void
 SubstMapper::visit (TyTy::PlaceholderType &type)
 {
-  rust_assert (type.can_resolve ());
-  resolved = SubstMapper::Resolve (type.resolve (), locus, generics);
+  if (!type.can_resolve ())
+    {
+      resolved = &type;
+      return;
+    }
+
+  resolved = SubstMapper::Resolve (type.resolve (), locus, generics, regions);
 }
 
 void
@@ -116,7 +145,7 @@ SubstMapper::visit (TyTy::ProjectionType &type)
   else
     {
       TyTy::SubstitutionArgumentMappings mappings
-	= type.get_mappings_from_generic_args (*generics);
+	= type.get_mappings_from_generic_args (*generics, regions);
       if (mappings.is_error ())
 	return;
 
@@ -188,8 +217,10 @@ SubstMapperInternal::visit (TyTy::FnType &type)
 {
   TyTy::SubstitutionArgumentMappings adjusted
     = type.adjust_mappings_for_this (mappings);
-  if (adjusted.is_error ())
+  if (adjusted.is_error () && !mappings.trait_item_mode ())
     return;
+  if (adjusted.is_error () && mappings.trait_item_mode ())
+    adjusted = mappings;
 
   TyTy::BaseType *concrete = type.handle_substitions (adjusted);
   if (concrete != nullptr)
@@ -201,8 +232,10 @@ SubstMapperInternal::visit (TyTy::ADTType &type)
 {
   TyTy::SubstitutionArgumentMappings adjusted
     = type.adjust_mappings_for_this (mappings);
-  if (adjusted.is_error ())
+  if (adjusted.is_error () && !mappings.trait_item_mode ())
     return;
+  if (adjusted.is_error () && mappings.trait_item_mode ())
+    adjusted = mappings;
 
   TyTy::BaseType *concrete = type.handle_substitions (adjusted);
   if (concrete != nullptr)
@@ -337,6 +370,11 @@ void
 SubstMapperInternal::visit (TyTy::DynamicObjectType &type)
 {
   resolved = type.clone ();
+}
+void
+SubstMapperInternal::visit (TyTy::OpaqueType &type)
+{
+  resolved = type.handle_substitions (mappings);
 }
 
 // SubstMapperFromExisting

@@ -1,6 +1,6 @@
 /* Loop autoparallelization.
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
-   Contributed by Sebastian Pop <pop@cri.ensmp.fr> 
+   Copyright (C) 2006-2025 Free Software Foundation, Inc.
+   Contributed by Sebastian Pop <pop@cri.ensmp.fr>
    Zdenek Dvorak <dvorakz@suse.cz> and Razya Ladelsky <razya@il.ibm.com>.
 
 This file is part of GCC.
@@ -81,8 +81,8 @@ along with GCC; see the file COPYING3.  If not see
    -- if there are several parallelizable loops in a function, it may be
       possible to generate the threads just once (using synchronization to
       ensure that cross-loop dependences are obeyed).
-   -- handling of common reduction patterns for outer loops.  
-    
+   -- handling of common reduction patterns for outer loops.
+
    More info can also be found at http://gcc.gnu.org/wiki/AutoParInGCC  */
 /*
   Reduction handling:
@@ -895,7 +895,7 @@ parloops_force_simple_reduction (loop_vec_info loop_info, stmt_vec_info phi_info
 struct reduction_info
 {
   gimple *reduc_stmt;		/* reduction statement.  */
-  gimple *reduc_phi;		/* The phi node defining the reduction.  */
+  tree reduc_phi_name;		/* The result of the phi node defining the reduction.  */
   enum tree_code reduction_code;/* code for the reduction operation.  */
   unsigned reduc_version;	/* SSA_NAME_VERSION of original reduc_phi
 				   result.  */
@@ -910,6 +910,12 @@ struct reduction_info
 				   will be passed to the atomic operation.  Represents
 				   the local result each thread computed for the reduction
 				   operation.  */
+
+  gphi *
+  reduc_phi () const
+  {
+    return as_a<gphi *> (SSA_NAME_DEF_STMT (reduc_phi_name));
+  }
 };
 
 /* Reduction info hashtable helpers.  */
@@ -925,7 +931,7 @@ struct reduction_hasher : free_ptr_hash <reduction_info>
 inline bool
 reduction_hasher::equal (const reduction_info *a, const reduction_info *b)
 {
-  return (a->reduc_phi == b->reduc_phi);
+  return (a->reduc_phi_name == b->reduc_phi_name);
 }
 
 inline hashval_t
@@ -942,17 +948,17 @@ reduction_phi (reduction_info_table_type *reduction_list, gimple *phi)
 {
   struct reduction_info tmpred, *red;
 
-  if (reduction_list->is_empty () || phi == NULL)
+  if (reduction_list->is_empty () || phi == NULL || !is_a <gphi *> (phi))
     return NULL;
 
   if (gimple_uid (phi) == (unsigned int)-1
       || gimple_uid (phi) == 0)
     return NULL;
 
-  tmpred.reduc_phi = phi;
+  tmpred.reduc_phi_name = gimple_phi_result (phi);
   tmpred.reduc_version = gimple_uid (phi);
   red = reduction_list->find (&tmpred);
-  gcc_assert (red == NULL || red->reduc_phi == phi);
+  gcc_assert (red == NULL || red->reduc_phi () == phi);
 
   return red;
 }
@@ -1294,7 +1300,7 @@ initialize_reductions (reduction_info **slot, class loop *loop)
      from the preheader with the reduction initialization value.  */
 
   /* Initialize the reduction.  */
-  type = TREE_TYPE (PHI_RESULT (reduc->reduc_phi));
+  type = TREE_TYPE (reduc->reduc_phi_name);
   init = omp_reduction_init_op (gimple_location (reduc->reduc_stmt),
 				reduc->reduction_code, type);
   reduc->init = init;
@@ -1308,11 +1314,11 @@ initialize_reductions (reduction_info **slot, class loop *loop)
      computing is done.  */
 
   e = loop_preheader_edge (loop);
-  arg = PHI_ARG_DEF_FROM_EDGE (reduc->reduc_phi, e);
+  const auto phi = reduc->reduc_phi ();
+  arg = PHI_ARG_DEF_FROM_EDGE (phi, e);
   /* Create new variable to hold the initial value.  */
 
-  SET_USE (PHI_ARG_DEF_PTR_FROM_EDGE
-	   (reduc->reduc_phi, loop_preheader_edge (loop)), init);
+  SET_USE (PHI_ARG_DEF_PTR_FROM_EDGE (phi, loop_preheader_edge (loop)), init);
   reduc->initial_value = arg;
   return 1;
 }
@@ -1795,7 +1801,7 @@ create_call_for_reduction_1 (reduction_info **slot, struct clsn_data *clsn_data)
 {
   struct reduction_info *const reduc = *slot;
   gimple_stmt_iterator gsi;
-  tree type = TREE_TYPE (PHI_RESULT (reduc->reduc_phi));
+  tree type = TREE_TYPE (reduc->reduc_phi_name);
   tree load_struct;
   basic_block bb;
   basic_block new_bb;
@@ -2203,6 +2209,11 @@ create_loop_fn (location_t loc)
   DECL_CONTEXT (t) = decl;
   TREE_USED (t) = 1;
   DECL_ARGUMENTS (decl) = t;
+  DECL_FUNCTION_SPECIFIC_TARGET (decl)
+    = DECL_FUNCTION_SPECIFIC_TARGET (act_cfun->decl);
+  DECL_FUNCTION_SPECIFIC_OPTIMIZATION (decl)
+    = DECL_FUNCTION_SPECIFIC_OPTIMIZATION (act_cfun->decl);
+
 
   allocate_struct_function (decl, false);
 
@@ -2354,7 +2365,7 @@ transform_to_exit_first_loop_alt (class loop *loop,
   basic_block latch = loop->latch;
   edge exit = single_dom_exit (loop);
   basic_block exit_block = exit->dest;
-  gcond *cond_stmt = as_a <gcond *> (last_stmt (exit->src));
+  gcond *cond_stmt = as_a <gcond *> (*gsi_last_bb (exit->src));
   tree control = gimple_cond_lhs (cond_stmt);
   edge e;
 
@@ -2419,8 +2430,9 @@ transform_to_exit_first_loop_alt (class loop *loop,
       if (red)
 	{
 	  /* Register the new reduction phi.  */
-	  red->reduc_phi = nphi;
-	  gimple_set_uid (red->reduc_phi, red->reduc_version);
+	  red->reduc_phi_name = res_c;
+	  gcc_checking_assert (red->reduc_phi () == nphi);
+	  gimple_set_uid (nphi, red->reduc_version);
 	}
     }
   gcc_assert (gsi_end_p (gsi) && !v->iterate (i, &vm));
@@ -2510,7 +2522,7 @@ try_transform_to_exit_first_loop_alt (class loop *loop,
   /* Check whether the latch contains the loop iv increment.  */
   edge back = single_succ_edge (loop->latch);
   edge exit = single_dom_exit (loop);
-  gcond *cond_stmt = as_a <gcond *> (last_stmt (exit->src));
+  gcond *cond_stmt = as_a <gcond *> (*gsi_last_bb (exit->src));
   tree control = gimple_cond_lhs (cond_stmt);
   gphi *phi = as_a <gphi *> (SSA_NAME_DEF_STMT (control));
   tree inc_res = gimple_phi_arg_def (phi, back->dest_idx);
@@ -2526,14 +2538,15 @@ try_transform_to_exit_first_loop_alt (class loop *loop,
   tree nit_type = TREE_TYPE (nit);
 
   /* Figure out whether nit + 1 overflows.  */
-  if (TREE_CODE (nit) == INTEGER_CST)
+  if (poly_int_tree_p (nit))
     {
       if (!tree_int_cst_equal (nit, TYPE_MAX_VALUE (nit_type)))
 	{
 	  alt_bound = fold_build2_loc (UNKNOWN_LOCATION, PLUS_EXPR, nit_type,
 				       nit, build_one_cst (nit_type));
 
-	  gcc_assert (TREE_CODE (alt_bound) == INTEGER_CST);
+	  gcc_assert (TREE_CODE (alt_bound) == INTEGER_CST
+		      || TREE_CODE (alt_bound) == POLY_INT_CST);
 	  transform_to_exit_first_loop_alt (loop, reduction_list, alt_bound);
 	  return true;
 	}
@@ -2632,7 +2645,7 @@ transform_to_exit_first_loop (class loop *loop,
   orig_header = single_succ (loop->header);
   hpred = single_succ_edge (loop->header);
 
-  cond_stmt = as_a <gcond *> (last_stmt (exit->src));
+  cond_stmt = as_a <gcond *> (*gsi_last_bb (exit->src));
   control = gimple_cond_lhs (cond_stmt);
   gcc_assert (gimple_cond_rhs (cond_stmt) == nit);
 
@@ -2645,6 +2658,8 @@ transform_to_exit_first_loop (class loop *loop,
       phi = gsi.phi ();
       res = PHI_RESULT (phi);
       t = copy_ssa_name (res, phi);
+      if (auto red = reduction_phi (reduction_list, phi))
+	red->reduc_phi_name = t;
       SET_PHI_RESULT (phi, t);
       nphi = create_phi_node (res, orig_header);
       add_phi_arg (nphi, t, hpred, UNKNOWN_LOCATION);
@@ -2712,7 +2727,7 @@ transform_to_exit_first_loop (class loop *loop,
   /* Initialize the control variable to number of iterations
      according to the rhs of the exit condition.  */
   gimple_stmt_iterator gsi = gsi_after_labels (ex_bb);
-  cond_nit = as_a <gcond *> (last_stmt (exit->src));
+  cond_nit = as_a <gcond *> (*gsi_last_bb (exit->src));
   nit_1 =  gimple_cond_rhs (cond_nit);
   nit_1 = force_gimple_operand_gsi (&gsi,
 				  fold_convert (TREE_TYPE (control_name), nit_1),
@@ -2797,7 +2812,7 @@ create_parallel_loop (class loop *loop, tree loop_fn, tree data,
 
   /* Extract data for GIMPLE_OMP_FOR.  */
   gcc_assert (loop->header == single_dom_exit (loop)->src);
-  cond_stmt = as_a <gcond *> (last_stmt (loop->header));
+  cond_stmt = as_a <gcond *> (*gsi_last_bb (loop->header));
 
   cvar = gimple_cond_lhs (cond_stmt);
   cvar_base = SSA_NAME_VAR (cvar);
@@ -3031,12 +3046,12 @@ gen_parallel_loop (class loop *loop,
 
   /* We should compute a better number-of-iterations value for outer loops.
      That is, if we have
- 
+
     for (i = 0; i < n; ++i)
       for (j = 0; j < m; ++j)
         ...
 
-    we should compute nit = n * m, not nit = n.  
+    we should compute nit = n * m, not nit = n.
     Also may_be_zero handling would need to be adjusted.  */
 
   type = TREE_TYPE (niter->niter);
@@ -3168,7 +3183,7 @@ gen_parallel_loop (class loop *loop,
 
   /* Create the parallel constructs.  */
   loc = UNKNOWN_LOCATION;
-  cond_stmt = last_stmt (loop->header);
+  cond_stmt = last_nondebug_stmt (loop->header);
   if (cond_stmt)
     loc = gimple_location (cond_stmt);
   create_parallel_loop (loop, create_loop_fn (loc), arg_struct, new_arg_struct,
@@ -3195,7 +3210,7 @@ loop_has_vector_phi_nodes (class loop *loop ATTRIBUTE_UNUSED)
 
   for (i = 0; i < loop->num_nodes; i++)
     for (gsi = gsi_start_phis (bbs[i]); !gsi_end_p (gsi); gsi_next (&gsi))
-      if (TREE_CODE (TREE_TYPE (PHI_RESULT (gsi.phi ()))) == VECTOR_TYPE)
+      if (VECTOR_TYPE_P (TREE_TYPE (PHI_RESULT (gsi.phi ()))))
 	goto end;
 
   res = false;
@@ -3257,8 +3272,9 @@ build_new_reduction (reduction_info_table_type *reduction_list,
   new_reduction = XCNEW (struct reduction_info);
 
   new_reduction->reduc_stmt = reduc_stmt;
-  new_reduction->reduc_phi = phi;
-  new_reduction->reduc_version = SSA_NAME_VERSION (gimple_phi_result (phi));
+  const auto phi_name = gimple_phi_result (phi);
+  new_reduction->reduc_phi_name = phi_name;
+  new_reduction->reduc_version = SSA_NAME_VERSION (phi_name);
   new_reduction->reduction_code = reduction_code;
   slot = reduction_list->find_slot (new_reduction, INSERT);
   *slot = new_reduction;
@@ -3270,7 +3286,7 @@ int
 set_reduc_phi_uids (reduction_info **slot, void *data ATTRIBUTE_UNUSED)
 {
   struct reduction_info *const red = *slot;
-  gimple_set_uid (red->reduc_phi, red->reduc_version);
+  gimple_set_uid (red->reduc_phi (), red->reduc_version);
   return 1;
 }
 
@@ -3298,7 +3314,7 @@ gather_scalar_reductions (loop_p loop, reduction_info_table_type *reduction_list
 
   vec_info_shared shared;
   vect_loop_form_info info;
-  if (!vect_analyze_loop_form (loop, &info))
+  if (!vect_analyze_loop_form (loop, NULL, &info))
     goto gather_done;
 
   simple_loop_info = vect_create_loop_vinfo (loop, &shared, &info);
@@ -3340,7 +3356,7 @@ gather_scalar_reductions (loop_p loop, reduction_info_table_type *reduction_list
     {
       vec_info_shared shared;
       vect_loop_form_info info;
-      if (vect_analyze_loop_form (loop->inner, &info))
+      if (vect_analyze_loop_form (loop->inner, NULL, &info))
 	{
 	  simple_loop_info
 	    = vect_create_loop_vinfo (loop->inner, &shared, &info);
@@ -3553,7 +3569,7 @@ try_create_reduction_list (loop_p loop,
 	  if (dump_file && (dump_flags & TDF_DETAILS))
 	    {
 	      fprintf (dump_file, "reduction phi is  ");
-	      print_gimple_stmt (dump_file, red->reduc_phi, 0);
+	      print_gimple_stmt (dump_file, red->reduc_phi (), 0);
 	      fprintf (dump_file, "reduction stmt is  ");
 	      print_gimple_stmt (dump_file, red->reduc_stmt, 0);
 	    }
@@ -4141,7 +4157,10 @@ parallelize_loops (bool oacc_kernels_p)
      which local variables will escape.  Reset the points-to solution
      for ESCAPED.  */
   if (changed)
-    pt_solution_reset (&cfun->gimple_df->escaped);
+    {
+      pt_solution_reset (&cfun->gimple_df->escaped);
+      pt_solution_reset (&cfun->gimple_df->escaped_return);
+    }
 
   return changed;
 }

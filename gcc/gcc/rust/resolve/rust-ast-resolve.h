@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -20,7 +20,6 @@
 #define RUST_AST_RESOLVE_H
 
 #include "rust-name-resolver.h"
-#include "rust-ast-full.h"
 #include "rust-hir-map.h"
 
 namespace Rust {
@@ -41,7 +40,7 @@ private:
   NameResolution ();
 
   Resolver *resolver;
-  Analysis::Mappings *mappings;
+  Analysis::Mappings &mappings;
 };
 
 } // namespace Resolver

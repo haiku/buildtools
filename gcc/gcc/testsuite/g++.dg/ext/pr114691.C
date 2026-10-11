@@ -8,7 +8,7 @@ int foo (int);
 void
 bar (int x)
 {
-  #pragma GCC ivdep
+  #pragma GCC novector
   while (int y = foo (x))	// { dg-bogus "ignoring loop annotation" }
     qux (y);
 }
@@ -16,7 +16,7 @@ bar (int x)
 void
 baz (int x)
 {
-  #pragma GCC ivdep
+  #pragma GCC novector
   for (; int y = foo (x); )	// { dg-bogus "ignoring loop annotation" }
     qux (y);
 }

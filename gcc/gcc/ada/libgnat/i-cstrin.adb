@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -43,6 +43,7 @@ is
    --  since arbitrary addresses can be converted, and it is quite likely that
    --  this type will in fact be used for aliasing values of other types.
 
+   --  Convert between chars_ptr and a C pointer
    function To_chars_ptr is
       new Ada.Unchecked_Conversion (System.Parameters.C_Address, chars_ptr);
 
@@ -73,9 +74,12 @@ is
 
    function Memory_Alloc (Size : size_t) return chars_ptr;
    pragma Import (C, Memory_Alloc, System.Parameters.C_Malloc_Linkname);
+   --  Allocate a chunk of memory on the heap
 
    procedure Memory_Free (Address : chars_ptr);
    pragma Import (C, Memory_Free, "__gnat_free");
+   --  Deallocate a previously allocated chunk of memory from the heap. On
+   --  runtimes that do not allow deallocation this is a no-op.
 
    ---------
    -- "+" --
@@ -92,12 +96,10 @@ is
 
    procedure Free (Item : in out chars_ptr) is
    begin
-      if Item = Null_Ptr then
-         return;
+      if Item /= Null_Ptr then
+         Memory_Free (Item);
+         Item := Null_Ptr;
       end if;
-
-      Memory_Free (Item);
-      Item := Null_Ptr;
    end Free;
 
    --------------------
@@ -187,6 +189,8 @@ is
 
    function Position_Of_Nul (Into : char_array) return size_t is
    begin
+      pragma Annotate (Gnatcheck, Exempt_On, "Improper_Returns",
+                       "early returns for performance");
       for J in Into'Range loop
          if Into (J) = nul then
             return J;
@@ -194,6 +198,8 @@ is
       end loop;
 
       return Into'Last + 1;
+
+      pragma Annotate (Gnatcheck, Exempt_Off, "Improper_Returns");
    end Position_Of_Nul;
 
    ------------
@@ -226,6 +232,8 @@ is
       Nul_Check : Boolean := False) return chars_ptr
    is
    begin
+      pragma Annotate (Gnatcheck, Exempt_On, "Improper_Returns",
+                       "early returns for performance");
       if Item = null then
          return Null_Ptr;
       elsif Nul_Check
@@ -235,6 +243,8 @@ is
       else
          return To_chars_ptr (Item (Item'First)'Address);
       end if;
+
+      pragma Annotate (Gnatcheck, Exempt_Off, "Improper_Returns");
    end To_Chars_Ptr;
 
    ------------
@@ -302,6 +312,8 @@ is
       Length : size_t) return char_array
    is
    begin
+      pragma Annotate (Gnatcheck, Exempt_On, "Improper_Returns",
+                       "early returns for performance");
       if Item = Null_Ptr then
          raise Dereference_Error;
       end if;
@@ -328,6 +340,8 @@ is
 
          return Result;
       end;
+
+      pragma Annotate (Gnatcheck, Exempt_Off, "Improper_Returns");
    end Value;
 
    function Value (Item : chars_ptr) return String is
@@ -336,9 +350,13 @@ is
    end Value;
 
    function Value (Item : chars_ptr; Length : size_t) return String is
-      Result : char_array (0 .. Length);
+      Result : String (1 .. Natural (Length));
+      C : char;
 
    begin
+      pragma Annotate (Gnatcheck, Exempt_On, "Improper_Returns",
+                       "early returns for performance");
+
       --  As per AI-00177, this is equivalent to:
 
       --    To_Ada (Value (Item, Length) & nul);
@@ -347,16 +365,19 @@ is
          raise Dereference_Error;
       end if;
 
-      for J in 0 .. Length - 1 loop
-         Result (J) := Peek (Item + J);
+      for J in Result'Range loop
+         C := Peek (Item + size_t (J - 1));
 
-         if Result (J) = nul then
-            return To_Ada (Result (0 .. J));
+         if C = nul then
+            return Result (1 .. J - 1);
+         else
+            Result (J) := To_Ada (C);
          end if;
       end loop;
 
-      Result (Length) := nul;
-      return To_Ada (Result);
+      return Result;
+
+      pragma Annotate (Gnatcheck, Exempt_Off, "Improper_Returns");
    end Value;
 
 end Interfaces.C.Strings;

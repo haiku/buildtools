@@ -40,17 +40,10 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include <sys/ioctl.h>
 #include <stdio.h>
 
-#if !defined(TRUE)
-#   define TRUE (1==1)
-#endif
-#if !defined(FALSE)
-#   define FALSE (1==0)
-#endif
-
 #include <stdlib.h>
 
 static int fd;
-static int initialized = FALSE;
+static bool initialized = false;
 
 
 void

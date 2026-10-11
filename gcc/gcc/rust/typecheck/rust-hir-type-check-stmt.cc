@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -17,33 +17,26 @@
 // <http://www.gnu.org/licenses/>.
 
 #include "rust-hir-type-check-stmt.h"
-#include "rust-hir-full.h"
 #include "rust-hir-type-check-type.h"
 #include "rust-hir-type-check-expr.h"
-#include "rust-hir-type-check-enumitem.h"
 #include "rust-hir-type-check-implitem.h"
 #include "rust-hir-type-check-item.h"
 #include "rust-hir-type-check-pattern.h"
+#include "rust-type-util.h"
 
 namespace Rust {
 namespace Resolver {
 
 TyTy::BaseType *
-TypeCheckStmt::Resolve (HIR::Stmt *stmt)
+TypeCheckStmt::Resolve (HIR::Stmt &stmt)
 {
   TypeCheckStmt resolver;
-  stmt->accept_vis (resolver);
+  stmt.accept_vis (resolver);
   return resolver.infered;
 }
 
 void
-TypeCheckStmt::visit (HIR::ExprStmtWithBlock &stmt)
-{
-  infered = TypeCheckExpr::Resolve (stmt.get_expr ());
-}
-
-void
-TypeCheckStmt::visit (HIR::ExprStmtWithoutBlock &stmt)
+TypeCheckStmt::visit (HIR::ExprStmt &stmt)
 {
   infered = TypeCheckExpr::Resolve (stmt.get_expr ());
 }
@@ -51,7 +44,7 @@ TypeCheckStmt::visit (HIR::ExprStmtWithoutBlock &stmt)
 void
 TypeCheckStmt::visit (HIR::EmptyStmt &stmt)
 {
-  infered = TyTy::TupleType::get_unit_type (stmt.get_mappings ().get_hirid ());
+  infered = TyTy::TupleType::get_unit_type ();
 }
 
 void
@@ -59,7 +52,7 @@ TypeCheckStmt::visit (HIR::ExternBlock &extern_block)
 {
   for (auto &item : extern_block.get_extern_items ())
     {
-      TypeCheckTopLevelExternItem::Resolve (item.get (), extern_block);
+      TypeCheckTopLevelExternItem::Resolve (*item, extern_block);
     }
 }
 
@@ -71,8 +64,8 @@ TypeCheckStmt::visit (HIR::ConstantItem &constant)
 
   infered = coercion_site (
     constant.get_mappings ().get_hirid (),
-    TyTy::TyWithLocation (type, constant.get_type ()->get_locus ()),
-    TyTy::TyWithLocation (expr_type, constant.get_expr ()->get_locus ()),
+    TyTy::TyWithLocation (type, constant.get_type ().get_locus ()),
+    TyTy::TyWithLocation (expr_type, constant.get_expr ().get_locus ()),
     constant.get_locus ());
   context->insert_type (constant.get_mappings (), infered);
 }
@@ -80,28 +73,28 @@ TypeCheckStmt::visit (HIR::ConstantItem &constant)
 void
 TypeCheckStmt::visit (HIR::LetStmt &stmt)
 {
-  infered = TyTy::TupleType::get_unit_type (stmt.get_mappings ().get_hirid ());
+  infered = TyTy::TupleType::get_unit_type ();
 
-  HIR::Pattern &stmt_pattern = *stmt.get_pattern ();
+  auto &stmt_pattern = stmt.get_pattern ();
   TyTy::BaseType *init_expr_ty = nullptr;
-  Location init_expr_locus;
+  location_t init_expr_locus = UNKNOWN_LOCATION;
   if (stmt.has_init_expr ())
     {
-      init_expr_locus = stmt.get_init_expr ()->get_locus ();
+      init_expr_locus = stmt.get_init_expr ().get_locus ();
       init_expr_ty = TypeCheckExpr::Resolve (stmt.get_init_expr ());
       if (init_expr_ty->get_kind () == TyTy::TypeKind::ERROR)
 	return;
 
       init_expr_ty->append_reference (
-	stmt_pattern.get_pattern_mappings ().get_hirid ());
+	stmt_pattern.get_mappings ().get_hirid ());
     }
 
   TyTy::BaseType *specified_ty = nullptr;
-  Location specified_ty_locus;
+  location_t specified_ty_locus;
   if (stmt.has_type ())
     {
       specified_ty = TypeCheckType::Resolve (stmt.get_type ());
-      specified_ty_locus = stmt.get_type ()->get_locus ();
+      specified_ty_locus = stmt.get_type ().get_locus ();
     }
 
   // let x:i32 = 123;
@@ -111,28 +104,29 @@ TypeCheckStmt::visit (HIR::LetStmt &stmt)
 		     TyTy::TyWithLocation (specified_ty, specified_ty_locus),
 		     TyTy::TyWithLocation (init_expr_ty, init_expr_locus),
 		     stmt.get_locus ());
-      TypeCheckPattern::Resolve (&stmt_pattern, specified_ty);
+      TypeCheckPattern::Resolve (stmt_pattern, specified_ty);
     }
   else
     {
       // let x:i32;
       if (specified_ty != nullptr)
 	{
-	  TypeCheckPattern::Resolve (&stmt_pattern, specified_ty);
+	  TypeCheckPattern::Resolve (stmt_pattern, specified_ty);
 	}
       // let x = 123;
       else if (init_expr_ty != nullptr)
 	{
-	  TypeCheckPattern::Resolve (&stmt_pattern, init_expr_ty);
+	  TypeCheckPattern::Resolve (stmt_pattern, init_expr_ty);
 	}
       // let x;
       else
 	{
-	  TypeCheckPattern::Resolve (
-	    &stmt_pattern,
-	    new TyTy::InferType (
-	      stmt_pattern.get_pattern_mappings ().get_hirid (),
-	      TyTy::InferType::InferTypeKind::GENERAL, stmt.get_locus ()));
+	  auto infer
+	    = new TyTy::InferType (stmt_pattern.get_mappings ().get_hirid (),
+				   TyTy::InferType::InferTypeKind::GENERAL,
+				   TyTy::InferType::TypeHint::Default (),
+				   stmt.get_locus ());
+	  TypeCheckPattern::Resolve (stmt_pattern, infer);
 	}
     }
 }
@@ -140,12 +134,12 @@ TypeCheckStmt::visit (HIR::LetStmt &stmt)
 void
 TypeCheckStmt::visit (HIR::TypePath &path)
 {
-  infered = TypeCheckType::Resolve (&path);
+  infered = TypeCheckType::Resolve (path);
 }
 void
 TypeCheckStmt::visit (HIR::QualifiedPathInType &path)
 {
-  infered = TypeCheckType::Resolve (&path);
+  infered = TypeCheckType::Resolve (path);
 }
 
 void

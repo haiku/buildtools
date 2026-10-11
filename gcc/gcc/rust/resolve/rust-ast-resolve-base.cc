@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -20,6 +20,7 @@
 #include "rust-ast-resolve-expr.h"
 #include "rust-ast-resolve-path.h"
 #include "rust-item.h"
+#include "rust-path.h"
 
 namespace Rust {
 namespace Resolver {
@@ -30,7 +31,7 @@ ResolverBase::resolve_visibility (const AST::Visibility &vis)
   if (vis.has_path ())
     {
       auto path = vis.get_path ();
-      ResolvePath::go (&path);
+      ResolvePath::go (path);
 
       // Do we need to lookup something here?
       // Is it just about resolving the names correctly so we can look them up
@@ -104,6 +105,10 @@ ResolverBase::visit (AST::LiteralExpr &)
 
 void
 ResolverBase::visit (AST::AttrInputLiteral &)
+{}
+
+void
+ResolverBase::visit (AST::AttrInputMacro &)
 {}
 
 void
@@ -263,6 +268,10 @@ ResolverBase::visit (AST::RangeToInclExpr &)
 {}
 
 void
+ResolverBase::visit (AST::BoxExpr &)
+{}
+
+void
 ResolverBase::visit (AST::ReturnExpr &)
 {}
 
@@ -295,27 +304,11 @@ ResolverBase::visit (AST::IfExprConseqElse &)
 {}
 
 void
-ResolverBase::visit (AST::IfExprConseqIf &)
-{}
-
-void
-ResolverBase::visit (AST::IfExprConseqIfLet &)
-{}
-
-void
 ResolverBase::visit (AST::IfLetExpr &)
 {}
 
 void
 ResolverBase::visit (AST::IfLetExprConseqElse &)
-{}
-
-void
-ResolverBase::visit (AST::IfLetExprConseqIf &)
-{}
-
-void
-ResolverBase::visit (AST::IfLetExprConseqIfLet &)
 {}
 
 void
@@ -331,6 +324,10 @@ ResolverBase::visit (AST::AsyncBlockExpr &)
 {}
 
 void
+ResolverBase::visit (AST::InlineAsm &)
+{}
+
+void
 ResolverBase::visit (AST::TypeParam &)
 {}
 
@@ -340,10 +337,6 @@ ResolverBase::visit (AST::LifetimeWhereClauseItem &)
 
 void
 ResolverBase::visit (AST::TypeBoundWhereClauseItem &)
-{}
-
-void
-ResolverBase::visit (AST::Method &)
 {}
 
 void
@@ -419,14 +412,6 @@ ResolverBase::visit (AST::StaticItem &)
 {}
 
 void
-ResolverBase::visit (AST::TraitItemFunc &)
-{}
-
-void
-ResolverBase::visit (AST::TraitItemMethod &)
-{}
-
-void
 ResolverBase::visit (AST::TraitItemConst &)
 {}
 
@@ -447,11 +432,11 @@ ResolverBase::visit (AST::TraitImpl &)
 {}
 
 void
-ResolverBase::visit (AST::ExternalStaticItem &)
+ResolverBase::visit (AST::ExternalTypeItem &)
 {}
 
 void
-ResolverBase::visit (AST::ExternalFunctionItem &)
+ResolverBase::visit (AST::ExternalStaticItem &)
 {}
 
 void
@@ -512,6 +497,10 @@ ResolverBase::visit (AST::IdentifierPattern &)
 
 void
 ResolverBase::visit (AST::WildcardPattern &)
+{}
+
+void
+ResolverBase::visit (AST::RestPattern &)
 {}
 
 void
@@ -595,11 +584,7 @@ ResolverBase::visit (AST::LetStmt &)
 {}
 
 void
-ResolverBase::visit (AST::ExprStmtWithoutBlock &)
-{}
-
-void
-ResolverBase::visit (AST::ExprStmtWithBlock &)
+ResolverBase::visit (AST::ExprStmt &)
 {}
 
 void
@@ -656,6 +641,22 @@ ResolverBase::visit (AST::InferredType &)
 
 void
 ResolverBase::visit (AST::BareFunctionType &)
+{}
+
+void
+ResolverBase::visit (AST::SelfParam &)
+{}
+
+void
+ResolverBase::visit (AST::VariadicParam &)
+{}
+
+void
+ResolverBase::visit (AST::FunctionParam &)
+{}
+
+void
+ResolverBase::visit (AST::FormatArgs &fmt)
 {}
 
 } // namespace Resolver

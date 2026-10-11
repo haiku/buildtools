@@ -1,4 +1,4 @@
-// Copyright (C) 2017-2023 Free Software Foundation, Inc.
+// Copyright (C) 2017-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -84,15 +84,17 @@
 #define n (
 #endif
 #define o (
-#if __cplusplus >= 201103L
+#if __cplusplus >= 201103L || defined(_GLIBCXX_PARALLEL)
 // <random> defines member functions called p()
+// (and <tr1/random> defines them too, which is included by Parallel Mode).
 #else
 #define p (
 #endif
 #define q (
 #define r (
-#if __cplusplus >= 201103L
+#if __cplusplus >= 201103L || defined(_GLIBCXX_PARALLEL)
 // <random> defines member functions called s() and t()
+// (and <tr1/random> defines them too, which is included by Parallel Mode).
 // <chrono> and <string> define operator ""s in C++14
 #else
 #define s (
@@ -136,10 +138,17 @@
 // <charconv> defines to_chars_result::ptr and to_chars_result::ec
 #define ec (
 #define ptr (
+// <map> and <unordered_map> define try_emplace
+#define try_emplace (
+#endif
+
+#if __cplusplus < 202002L
+#define ranges (
 #endif
 
 // These clash with newlib so don't use them.
 # define __lockable		cannot be used as an identifier
+# define __null_sentinel	cannot be used as an identifier
 # define __packed		cannot be used as an identifier
 # define __unused		cannot be used as an identifier
 # define __used			cannot be used as an identifier
@@ -239,6 +248,8 @@
 #undef r
 #undef x
 #undef y
+// <sys/poll.h> defines pollfd_ext::u on AIX 7.3
+#undef u
 // <sys/var.h> defines vario::v
 #undef v
 // <sys/timer.h> defines trb::func and cputime_tmr::func
@@ -271,16 +282,24 @@
 // <sys/ucontext.h> defines fpreg_t::d and fpreg_t::f
 #undef d
 #undef f
+// <asm/types.h> defines __vector128::u
+#undef u
 #endif
 
 #if defined (__linux__) && defined (__sparc__)
 #undef y
 #endif
 
+#if defined (__linux__) && defined (__ia64__)
+// <bits/sigcontext.h> defines __ia64_fpreg::u
+// <sys/ucontext.h> defines __ia64_fpreg_mcontext::u
+#undef u
+#endif
+
 #if defined (__linux__) || defined (__gnu_hurd__)
 #if __has_include(<features.h>)
 #include <features.h>
-#if __GLIBC__ == 2 && __GLIBC_MINOR__ < 19
+#if __GLIBC__ == 2 && (__GLIBC_MINOR__ < 19 || __GLIBC_MINOR__ == 43)
 // Glibc defines this prior to 2.19
 #undef __unused
 #endif
@@ -370,6 +389,13 @@
 #undef x
 // <math.h> defines _complex::x and _complex::y
 #undef y
+#endif
+
+#if defined __GLIBC_PREREQ && defined _FORTIFY_SOURCE
+# if ! __GLIBC_PREREQ(2,41)
+// https://sourceware.org/bugzilla/show_bug.cgi?id=32052
+#  undef sz
+# endif
 #endif
 
 #include <bits/stdc++.h>

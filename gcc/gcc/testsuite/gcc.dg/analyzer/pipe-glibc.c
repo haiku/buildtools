@@ -1,3 +1,6 @@
+/* { dg-skip-if "" { "avr-*-*" } } */
+/* { dg-require-fork "" } */
+
 /* Example of pipe usage from glibc manual.  */
 
 #include <sys/types.h>

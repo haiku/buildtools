@@ -17,7 +17,7 @@ extern "C" int printf (const char *, ...);
 struct X
 {
   X(bool throws) : i(-42), throws_(throws) { ++c; DEBUG; }
-  X(const X& x): i(x.i), throws_(x.throws_) { ++c; DEBUG; }
+  X(const X& x); // not defined
   ~X() THROWS
   {
     i = ++d; DEBUG;

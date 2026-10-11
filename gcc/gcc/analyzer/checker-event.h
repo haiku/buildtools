@@ -1,5 +1,5 @@
 /* Subclasses of diagnostic_event for analyzer diagnostics.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -23,21 +23,9 @@ along with GCC; see the file COPYING3.  If not see
 
 #include "tree-logical-location.h"
 #include "analyzer/program-state.h"
+#include "analyzer/event-loc-info.h"
 
 namespace ana {
-
-/* A bundle of location information for a checker_event.  */
-
-struct event_loc_info
-{
-  event_loc_info (location_t loc, tree fndecl, int depth)
-  : m_loc (loc), m_fndecl (fndecl), m_depth (depth)
-  {}
-
-  location_t m_loc;
-  tree m_fndecl;
-  int m_depth;
-};
 
 /* An enum for discriminating between the concrete subclasses of
    checker_event.  */
@@ -103,7 +91,6 @@ public:
   /* Implementation of diagnostic_event.  */
 
   location_t get_location () const final override { return m_loc; }
-  tree get_fndecl () const final override { return m_effective_fndecl; }
   int get_stack_depth () const final override { return m_effective_depth; }
   const logical_location *get_logical_location () const final override
   {
@@ -113,8 +100,17 @@ public:
       return NULL;
   }
   meaning get_meaning () const override;
+  bool connect_to_next_event_p () const override { return false; }
+  diagnostic_thread_id_t get_thread_id () const final override
+  {
+    return 0;
+  }
+
+  void
+  maybe_add_sarif_properties (sarif_object &thread_flow_loc_obj) const override;
 
   /* Additional functionality.  */
+  tree get_fndecl () const { return m_effective_fndecl; }
 
   int get_original_stack_depth () const { return m_original_depth; }
 
@@ -171,7 +167,7 @@ public:
     free (m_desc);
   }
 
-  label_text get_desc (bool) const final override;
+  void print_desc (pretty_printer &) const final override;
 
 private:
   char *m_desc;
@@ -205,7 +201,7 @@ public:
     free (m_desc);
   }
 
-  label_text get_desc (bool) const final override;
+  void print_desc (pretty_printer &) const final override;
 
 private:
   char *m_desc;
@@ -220,7 +216,7 @@ public:
   statement_event (const gimple *stmt, tree fndecl, int depth,
 		   const program_state &dst_state);
 
-  label_text get_desc (bool) const final override;
+  void print_desc (pretty_printer &) const final override;
 
   const gimple * const m_stmt;
   const program_state m_dst_state;
@@ -261,7 +257,7 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
 
 private:
   enum memory_space m_mem_space;
@@ -282,7 +278,7 @@ public:
     gcc_assert (m_capacity);
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
 
 private:
   tree m_capacity;
@@ -301,7 +297,7 @@ public:
     m_capacity (capacity)
   {}
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
 
 private:
   tree m_capacity;
@@ -320,7 +316,7 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
 
 private:
   const region *m_reg;
@@ -339,7 +335,7 @@ public:
 
   function_entry_event (const program_point &dst_point);
 
-  label_text get_desc (bool can_colorize) const override;
+  void print_desc (pretty_printer &pp) const override;
   meaning get_meaning () const override;
 
   bool is_function_entry_p () const final override { return true; }
@@ -360,10 +356,10 @@ public:
 		      const program_state &dst_state,
 		      const exploded_node *enode);
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
   meaning get_meaning () const override;
 
-  function *get_dest_function () const
+  const function *get_dest_function () const
   {
     return m_dst_state.get_current_function ();
   }
@@ -387,9 +383,12 @@ public:
 class superedge_event : public checker_event
 {
 public:
+  void maybe_add_sarif_properties (sarif_object &thread_flow_loc_obj)
+    const override;
+
   /* Mark this edge event as being either an interprocedural call or
      return in which VAR is in STATE, and that this is critical to the
-     diagnostic (so that get_desc can attempt to get a better description
+     diagnostic (so that print_desc can attempt to get a better description
      from any pending_diagnostic).  */
   void record_critical_state (tree var, state_machine::state_t state)
   {
@@ -440,11 +439,13 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const override;
+  bool connect_to_next_event_p () const final override { return true; }
 
- private:
+protected:
   label_text maybe_describe_condition (bool can_colorize) const;
 
+private:
   static label_text maybe_describe_condition (bool can_colorize,
 					      tree lhs,
 					      enum tree_code op,
@@ -464,9 +465,9 @@ public:
   {
   }
 
-  label_text get_desc (bool /*can_colorize*/) const final override
+  void print_desc (pretty_printer &pp) const final override
   {
-    return label_text::borrow ("...to here");
+    pp_string (&pp, "...to here");
   }
 };
 
@@ -478,7 +479,7 @@ public:
   call_event (const exploded_edge &eedge,
 	      const event_loc_info &loc_info);
 
-  label_text get_desc (bool can_colorize) const override;
+  void print_desc (pretty_printer &pp) const override;
   meaning get_meaning () const override;
 
   bool is_call_p () const final override;
@@ -499,7 +500,7 @@ public:
   return_event (const exploded_edge &eedge,
 		const event_loc_info &loc_info);
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
   meaning get_meaning () const override;
 
   bool is_return_p () const final override;
@@ -521,8 +522,9 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
   meaning get_meaning () const override;
+  bool connect_to_next_event_p () const final override { return true; }
 
  private:
   bool m_edge_sense;
@@ -539,9 +541,9 @@ public:
   {
   }
 
-  label_text get_desc (bool /*can_colorize*/) const final override
+  void print_desc (pretty_printer &pp) const final override
   {
-    return label_text::borrow ("...to here");
+    pp_string (&pp, "...to here");
   }
 };
 
@@ -566,7 +568,7 @@ public:
     gcc_assert (LOCATION_BLOCK (loc) == NULL);
   }
 
-  label_text get_desc (bool /*can_colorize*/) const final override;
+  void print_desc (pretty_printer &) const final override;
   meaning get_meaning () const override;
 
 private:
@@ -587,7 +589,7 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
 
   void prepare_for_emission (checker_path *path,
 			     pending_diagnostic *pd,
@@ -636,7 +638,7 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
 };
 
 /* A concrete event subclass for rewinding from a longjmp to a setjmp,
@@ -653,7 +655,7 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
 
   void prepare_for_emission (checker_path *path,
 			     pending_diagnostic *pd,
@@ -681,7 +683,7 @@ public:
   {
   }
 
-  label_text get_desc (bool can_colorize) const final override;
+  void print_desc (pretty_printer &pp) const final override;
   meaning get_meaning () const override;
 
   const exploded_node *get_exploded_node () const { return m_enode; }

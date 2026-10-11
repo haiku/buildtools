@@ -1,15 +1,16 @@
-// { dg-options "-std=gnu++23" }
 // { dg-do run { target c++23 } }
+// { dg-add-options no_pch }
 
 #include <ranges>
-#include <algorithm>
-#include <string>
-#include <testsuite_hooks.h>
-#include <testsuite_iterators.h>
 
 #if __cpp_lib_ranges_join_with != 202202L
 # error "Feature-test macro __cpp_lib_ranges_join_with has wrong value in <ranges>"
 #endif
+
+#include <algorithm>
+#include <string>
+#include <testsuite_hooks.h>
+#include <testsuite_iterators.h>
 
 namespace ranges = std::ranges;
 namespace views = std::views;
@@ -93,6 +94,13 @@ test04()
   return true;
 }
 
+void
+test05()
+{
+  // PR libstdc++/119962 - __maybe_present_t misses initialization
+  constexpr decltype(views::join_with(views::single(views::single(0)), 0).begin()) it;
+}
+
 int
 main()
 {
@@ -104,4 +112,5 @@ main()
 #else
   VERIFY(test04());
 #endif
+  test05();
 }

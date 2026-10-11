@@ -1,4 +1,4 @@
-// Copyright (C) 2021-2023 Free Software Foundation, Inc.
+// Copyright (C) 2021-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -20,7 +20,6 @@
 #define RUST_HIR_TRAIT_REF_H
 
 #include "rust-hir-full.h"
-#include "rust-hir-type-check-util.h"
 #include "rust-tyty-visitor.h"
 
 namespace Rust {
@@ -43,7 +42,7 @@ public:
   TraitItemReference (std::string identifier, bool optional, TraitItemType type,
 		      HIR::TraitItem *hir_trait_item, TyTy::BaseType *self,
 		      std::vector<TyTy::SubstitutionParamMapping> substitutions,
-		      Location locus);
+		      location_t locus);
 
   TraitItemReference (TraitItemReference const &other);
 
@@ -52,7 +51,7 @@ public:
   static TraitItemReference error ()
   {
     return TraitItemReference ("", false, ERROR, nullptr, nullptr, {},
-			       Location ());
+			       UNDEF_LOCATION);
   }
 
   static TraitItemReference &error_node ()
@@ -89,7 +88,7 @@ public:
 
   HIR::TraitItem *get_hir_trait_item () const;
 
-  Location get_locus () const;
+  location_t get_locus () const;
 
   const Analysis::NodeMapping get_mappings () const;
 
@@ -131,7 +130,7 @@ private:
   TraitItemType type;
   HIR::TraitItem *hir_trait_item;
   std::vector<TyTy::SubstitutionParamMapping> inherited_substitutions;
-  Location locus;
+  location_t locus;
 
   TyTy::BaseType
     *self; // this is the implict Self TypeParam required for methods
@@ -145,7 +144,7 @@ class TraitReference
 public:
   TraitReference (const HIR::Trait *hir_trait_ref,
 		  std::vector<TraitItemReference> item_refs,
-		  std::vector<const TraitReference *> super_traits,
+		  std::vector<TyTy::TypeBoundPredicate> super_traits,
 		  std::vector<TyTy::SubstitutionParamMapping> substs);
 
   TraitReference (TraitReference const &other);
@@ -168,7 +167,7 @@ public:
     return trait_error_node;
   }
 
-  Location get_locus () const;
+  location_t get_locus () const;
 
   std::string get_name () const;
 
@@ -197,7 +196,8 @@ public:
 			      const TraitItemReference **ref) const;
 
   bool lookup_trait_item (const std::string &ident,
-			  const TraitItemReference **ref) const;
+			  const TraitItemReference **ref,
+			  bool lookup_supers = true) const;
 
   const TraitItemReference *
   lookup_trait_item (const std::string &ident,
@@ -218,9 +218,9 @@ public:
 
   bool is_equal (const TraitReference &other) const;
 
-  const std::vector<const TraitReference *> get_super_traits () const;
+  std::vector<TyTy::TypeBoundPredicate> get_super_traits () const;
 
-  bool is_object_safe (bool emit_error, Location locus) const;
+  bool is_object_safe (bool emit_error, location_t locus) const;
 
   bool trait_has_generics () const;
 
@@ -231,32 +231,38 @@ public:
 private:
   const HIR::Trait *hir_trait_ref;
   std::vector<TraitItemReference> item_refs;
-  std::vector<const TraitReference *> super_traits;
+  std::vector<TyTy::TypeBoundPredicate> super_traits;
   std::vector<TyTy::SubstitutionParamMapping> trait_substs;
 };
 
 class AssociatedImplTrait
 {
 public:
-  AssociatedImplTrait (TraitReference *trait, HIR::ImplBlock *impl,
+  AssociatedImplTrait (TraitReference *trait,
+		       TyTy::TypeBoundPredicate predicate, HIR::ImplBlock *impl,
 		       TyTy::BaseType *self,
 		       Resolver::TypeCheckContext *context);
 
-  TraitReference *get_trait ();
+  TyTy::TypeBoundPredicate &get_predicate ();
 
   HIR::ImplBlock *get_impl_block ();
+
+  location_t get_locus () const;
 
   TyTy::BaseType *get_self ();
   const TyTy::BaseType *get_self () const;
 
-  TyTy::BaseType *
-  setup_associated_types (const TyTy::BaseType *self,
-			  const TyTy::TypeBoundPredicate &bound);
+  void setup_raw_associated_types ();
+
+  TyTy::BaseType *setup_associated_types (
+    const TyTy::BaseType *self, const TyTy::TypeBoundPredicate &bound,
+    TyTy::SubstitutionArgumentMappings *args = nullptr, bool infer = true);
 
   void reset_associated_types ();
 
 private:
   TraitReference *trait;
+  TyTy::TypeBoundPredicate predicate;
   HIR::ImplBlock *impl;
   TyTy::BaseType *self;
   Resolver::TypeCheckContext *context;

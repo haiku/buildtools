@@ -1,6 +1,6 @@
 // <memory_resource> implementation -*- C++ -*-
 
-// Copyright (C) 2018-2023 Free Software Foundation, Inc.
+// Copyright (C) 2018-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -27,9 +27,9 @@
 #include <atomic>
 #include <bit>				// has_single_bit, bit_ceil, bit_width
 #include <new>
+#include <bits/move.h>			// std::__exchange
 #if ATOMIC_POINTER_LOCK_FREE != 2
 # include <bits/std_mutex.h>	// std::mutex, std::lock_guard
-# include <bits/move.h>		// std::__exchange
 #endif
 
 #if __has_cpp_attribute(clang::require_constant_initialization)
@@ -94,10 +94,31 @@ namespace pmr
 
     __constinit constant_init<newdel_res_t> newdel_res{};
     __constinit constant_init<null_res_t> null_res{};
-#if ATOMIC_POINTER_LOCK_FREE == 2
+
+#ifndef _GLIBCXX_HAS_GTHREADS
+# define _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
+    // Single-threaded, no need for synchronization
+    struct atomic_mem_res
+    {
+      constexpr
+      atomic_mem_res(memory_resource* r) : val(r) { }
+
+      memory_resource* val;
+
+      memory_resource* load(std::memory_order) const
+      {
+	return val;
+      }
+
+      memory_resource* exchange(memory_resource* r, std::memory_order)
+      {
+	return std::__exchange(val, r);
+      }
+    };
+#elif ATOMIC_POINTER_LOCK_FREE == 2
     using atomic_mem_res = atomic<memory_resource*>;
 # define _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
-#elif defined(_GLIBCXX_HAS_GTHREADS)
+#else
     // Can't use pointer-width atomics, define a type using a mutex instead:
     struct atomic_mem_res
     {
@@ -123,32 +144,15 @@ namespace pmr
 	return std::__exchange(val, r);
       }
     };
-#else
-# define _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
-    // Single-threaded, no need for synchronization
-    struct atomic_mem_res
-    {
-      constexpr
-      atomic_mem_res(memory_resource* r) : val(r) { }
-
-      memory_resource* val;
-
-      memory_resource* load(std::memory_order) const
-      {
-	return val;
-      }
-
-      memory_resource* exchange(memory_resource* r, std::memory_order)
-      {
-	return std::__exchange(val, r);
-      }
-    };
-#endif // ATOMIC_POINTER_LOCK_FREE == 2
+#endif
 
 #ifdef _GLIBCXX_ATOMIC_MEM_RES_CAN_BE_CONSTANT_INITIALIZED
     __constinit constant_init<atomic_mem_res> default_res{&newdel_res.obj};
 #else
-# include "default_resource.h"
+# pragma GCC diagnostic ignored "-Wprio-ctor-dtor"
+    struct {
+      atomic_mem_res obj = &newdel_res.obj;
+    } default_res __attribute__ ((init_priority (100)));
 #endif
   } // namespace
 
@@ -178,8 +182,8 @@ namespace pmr
   // versions will not use this symbol.
   monotonic_buffer_resource::~monotonic_buffer_resource() { release(); }
 
-  namespace {
-
+namespace
+{
   // aligned_size<N> stores the size and alignment of a memory allocation.
   // The size must be a multiple of N, leaving the low log2(N) bits free
   // to store the base-2 logarithm of the alignment.
@@ -217,7 +221,7 @@ namespace pmr
     return (n + alignment - 1) & ~(alignment - 1);
   }
 
-  } // namespace
+} // namespace
 
   // Memory allocated by the upstream resource is managed in a linked list
   // of _Chunk objects. A _Chunk object recording the size and alignment of
@@ -303,8 +307,8 @@ namespace pmr
 
   // Helper types for synchronized_pool_resource & unsynchronized_pool_resource
 
-  namespace {
-
+namespace
+{
   // Simple bitset with runtime size.
   // Tracks which blocks in a pool chunk are used/unused.
   struct bitset
@@ -587,7 +591,8 @@ namespace pmr
     // The minimum size of a big block.
     // All big_block allocations will be a multiple of this value.
     // Use bit_ceil to get a power of two even for e.g. 20-bit size_t.
-    static constexpr size_t min = __bit_ceil(numeric_limits<size_t>::digits);
+    static constexpr size_t min
+      = __bit_ceil((unsigned)numeric_limits<size_t>::digits);
 
     constexpr
     big_block(size_t bytes, size_t alignment)
@@ -631,7 +636,7 @@ namespace pmr
 
   static_assert(sizeof(big_block) == (2 * sizeof(void*)));
 
-  } // namespace
+} // namespace
 
   // A pool that serves blocks of a particular size.
   // Each pool manages a number of chunks.
@@ -863,7 +868,16 @@ namespace pmr
     using big_block::big_block;
   };
 
-  namespace {
+namespace
+{
+  // N.B. it is important that we don't skip any power of two sizes if there
+  // is a non-power of two size between them, e.g. must not have pool sizes
+  // of 24 and 40 without having a pool size of 32. Otherwise an allocation
+  // of 32 bytes with alignment 16 would choose the 40-byte pool which is not
+  // correctly aligned for 16-byte alignment. It would be OK (but suboptimal)
+  // to have no pool of size 32 if we have pool sizes of 16 and 64 and no
+  // non-power of two sizes between those, because the example of (32, 16)
+  // would choose the 64-byte pool, which would be correctly aligned.
 
   constexpr size_t pool_sizes[] = {
       8, 16, 24,
@@ -978,7 +992,7 @@ namespace pmr
   using exclusive_lock = lock_guard<shared_mutex>;
 #endif
 
-  } // namespace
+} // namespace
 
   __pool_resource::
   __pool_resource(const pool_options& opts, memory_resource* upstream)
@@ -1070,12 +1084,33 @@ namespace pmr
     return p;
   }
 
+  // Determine the appropriate allocation size, rounding up to a multiple
+  // of the alignment if needed.
+  static inline size_t
+  choose_block_size(size_t bytes, size_t alignment)
+  {
+    if (bytes == 0) [[unlikely]]
+      return alignment;
+
+    // Use bit_ceil in case alignment is invalid (i.e. not a power of two).
+    size_t mask = std::__bit_ceil(alignment) - 1;
+    // Round up to a multiple of alignment.
+    size_t block_size = (bytes + mask) & ~mask;
+
+    if (block_size >= bytes) [[likely]]
+      return block_size;
+
+    // Wrapped around to zero, bytes must have been impossibly large.
+    return numeric_limits<size_t>::max();
+  }
+
+
 #ifdef _GLIBCXX_HAS_GTHREADS
   // synchronized_pool_resource members.
 
   /* Notes on implementation and thread safety:
    *
-   * Each synchronized_pool_resource manages an linked list of N+1 _TPools
+   * Each synchronized_pool_resource manages a linked list of N+1 _TPools
    * objects, where N is the number of threads using the pool resource.
    * Each _TPools object has its own set of pools, with their own chunks.
    * The first element of the list, _M_tpools[0], can be used by any thread.
@@ -1242,7 +1277,7 @@ namespace pmr
   synchronized_pool_resource::
   do_allocate(size_t bytes, size_t alignment)
   {
-    const auto block_size = std::max(bytes, alignment);
+    const auto block_size = choose_block_size(bytes, alignment);
     const pool_options opts = _M_impl._M_opts;
     if (block_size <= opts.largest_required_pool_block)
       {
@@ -1289,7 +1324,7 @@ namespace pmr
   synchronized_pool_resource::
   do_deallocate(void* p, size_t bytes, size_t alignment)
   {
-    size_t block_size = std::max(bytes, alignment);
+    size_t block_size = choose_block_size(bytes, alignment);
     if (block_size <= _M_impl._M_opts.largest_required_pool_block)
       {
 	const ptrdiff_t index = pool_index(block_size, _M_impl._M_npools);
@@ -1448,7 +1483,7 @@ namespace pmr
   void*
   unsynchronized_pool_resource::do_allocate(size_t bytes, size_t alignment)
   {
-    const auto block_size = std::max(bytes, alignment);
+    const auto block_size = choose_block_size(bytes, alignment);
     if (block_size <= _M_impl._M_opts.largest_required_pool_block)
       {
 	// Recreate pools if release() has been called:
@@ -1465,7 +1500,7 @@ namespace pmr
   unsynchronized_pool_resource::
   do_deallocate(void* p, size_t bytes, size_t alignment)
   {
-    size_t block_size = std::max(bytes, alignment);
+    size_t block_size = choose_block_size(bytes, alignment);
     if (block_size <= _M_impl._M_opts.largest_required_pool_block)
       {
 	if (auto pool = _M_find_pool(block_size))

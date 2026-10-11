@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -284,7 +284,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define LDBL_SNAN	(__builtin_nansl (""))
 #endif
 
-#endif /* C2X */
+#endif /* C23 */
 
 #if (defined __STDC_WANT_IEC_60559_BFP_EXT__ \
      || defined __STDC_WANT_IEC_60559_EXT__)
@@ -324,7 +324,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 #undef FLT16_SNAN
 #define FLT16_SNAN	(__builtin_nansf16 (""))
-#endif /* C2X */
+#endif /* C23 */
 #endif /* __FLT16_MANT_DIG__.  */
 
 #ifdef __FLT32_MANT_DIG__
@@ -353,7 +353,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 #undef FLT32_SNAN
 #define FLT32_SNAN	(__builtin_nansf32 (""))
-#endif /* C2X */
+#endif /* C23 */
 #endif /* __FLT32_MANT_DIG__.  */
 
 #ifdef __FLT64_MANT_DIG__
@@ -382,7 +382,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 #undef FLT64_SNAN
 #define FLT64_SNAN	(__builtin_nansf64 (""))
-#endif /* C2X */
+#endif /* C23 */
 #endif /* __FLT64_MANT_DIG__.  */
 
 #ifdef __FLT128_MANT_DIG__
@@ -411,7 +411,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 #undef FLT128_SNAN
 #define FLT128_SNAN	(__builtin_nansf128 (""))
-#endif /* C2X */
+#endif /* C23 */
 #endif /* __FLT128_MANT_DIG__.  */
 
 #ifdef __FLT32X_MANT_DIG__
@@ -440,7 +440,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 #undef FLT32X_SNAN
 #define FLT32X_SNAN	(__builtin_nansf32x (""))
-#endif /* C2X */
+#endif /* C23 */
 #endif /* __FLT32X_MANT_DIG__.  */
 
 #ifdef __FLT64X_MANT_DIG__
@@ -469,7 +469,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 #undef FLT64X_SNAN
 #define FLT64X_SNAN	(__builtin_nansf64x (""))
-#endif /* C2X */
+#endif /* C23 */
 #endif /* __FLT64X_MANT_DIG__.  */
 
 #ifdef __FLT128X_MANT_DIG__
@@ -498,7 +498,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 #undef FLT128X_SNAN
 #define FLT128X_SNAN	(__builtin_nansf128x (""))
-#endif /* C2X */
+#endif /* C23 */
 #endif /* __FLT128X_MANT_DIG__.  */
 
 #endif /* __STDC_WANT_IEC_60559_TYPES_EXT__.  */
@@ -507,7 +507,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #if (defined __STDC_WANT_DEC_FP__ \
      || defined __STDC_WANT_IEC_60559_DFP_EXT__ \
      || (defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L))
-/* C2X; formerly Technical Report 24732, extension for decimal
+/* C23; formerly Technical Report 24732, extension for decimal
    floating-point arithmetic: Characteristic of decimal floating types
    <float.h>, and TS 18661-2.  */
 
@@ -565,9 +565,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
          -1  indeterminate
          0  evaluate all operations and constants just to the range and
             precision of the type
-         1  evaluate operations and constants of type _Decimal32 
-	    and _Decimal64 to the range and precision of the _Decimal64 
-            type, evaluate _Decimal128 operations and constants to the 
+         1  evaluate operations and constants of type _Decimal32
+	    and _Decimal64 to the range and precision of the _Decimal64
+            type, evaluate _Decimal128 operations and constants to the
 	    range and precision of the _Decimal128 type;
 	 2  evaluate all operations and constants to the range and
 	    precision of the _Decimal128 type.  */
@@ -575,7 +575,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #undef DEC_EVAL_METHOD
 #define DEC_EVAL_METHOD	__DEC_EVAL_METHOD__
 
-#endif /* __STDC_WANT_DEC_FP__ || __STDC_WANT_IEC_60559_DFP_EXT__ || C2X.  */
+#endif /* __STDC_WANT_DEC_FP__ || __STDC_WANT_IEC_60559_DFP_EXT__ || C23.  */
 
 #ifdef __STDC_WANT_DEC_FP__
 
@@ -600,7 +600,24 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define DEC64_TRUE_MIN       __DEC64_SUBNORMAL_MIN__
 #define DEC128_TRUE_MIN      __DEC128_SUBNORMAL_MIN__
 
-#endif /* __STDC_WANT_IEC_60559_DFP_EXT__ || C2X.  */
+#endif /* __STDC_WANT_IEC_60559_DFP_EXT__ || C23.  */
+
+#ifdef __STDC_WANT_IEC_60559_TYPES_EXT__
+#undef DEC64X_MANT_DIG
+#define DEC64X_MANT_DIG	__DEC64X_MANT_DIG__
+#undef DEC64X_MIN_EXP
+#define DEC64X_MIN_EXP	__DEC64X_MIN_EXP__
+#undef DEC64X_MAX_EXP
+#define DEC64X_MAX_EXP	__DEC64X_MAX_EXP__
+#undef DEC64X_MAX
+#define DEC64X_MAX   __DEC64X_MAX__
+#undef DEC64X_EPSILON
+#define DEC64X_EPSILON	__DEC64X_EPSILON__
+#undef DEC64X_MIN
+#define DEC64X_MIN	__DEC64X_MIN__
+#undef DEC64X_TRUE_MIN
+#define DEC64X_TRUE_MIN      __DEC64X_SUBNORMAL_MIN__
+#endif /* __STDC_WANT_IEC_60559_TYPES_EXT__ */
 
 #if defined __STDC_VERSION__ && __STDC_VERSION__ > 201710L
 
@@ -619,8 +636,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define DEC64_SNAN	(__builtin_nansd64 (""))
 #undef DEC128_SNAN
 #define DEC128_SNAN	(__builtin_nansd128 (""))
+#ifdef __STDC_WANT_IEC_60559_TYPES_EXT__
+#undef DEC64X_SNAN
+#define DEC64X_SNAN	(__builtin_nansd64x (""))
+#endif /* __STDC_WANT_IEC_60559_TYPES_EXT__ */
 
-#endif /* C2X */
+#endif /* C23 */
 
 #endif /* __DEC32_MANT_DIG__ */
 

@@ -1,15 +1,16 @@
-// { dg-options "-std=gnu++23" }
 // { dg-do run { target c++23 } }
+// { dg-add-options no_pch }
 
 #include <ranges>
-#include <algorithm>
-#include <memory>
-#include <testsuite_hooks.h>
-#include <testsuite_iterators.h>
 
 #if __cpp_lib_ranges_enumerate != 202302L
 # error "Feature-test macro __cpp_lib_ranges_enumerate has wrong value in <ranges>"
 #endif
+
+#include <algorithm>
+#include <memory>
+#include <testsuite_hooks.h>
+#include <testsuite_iterators.h>
 
 namespace ranges = std::ranges;
 namespace views = std::views;
@@ -88,6 +89,17 @@ test02()
 	}
       VERIFY( v.begin() + j == v.end() );
     }
+}
+
+void
+test_lwg3912()
+{
+  int x[] = {1, 2, 3};
+  test_input_range<int> rx (x);
+  auto v = rx | views::enumerate;
+  auto iter = std::ranges::begin(v);
+  // LWG 3912. enumerate_view::iterator::operator- should be noexcept
+  static_assert( noexcept(iter - iter) );
 }
 
 int

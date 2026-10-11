@@ -1,5 +1,5 @@
 /* SSA operands management for trees.
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -30,7 +30,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "stmt.h"
 #include "print-tree.h"
 #include "dumpfile.h"
-#include "value-query.h"
 
 
 /* This file contains the code required to manage the operands cache of the
@@ -810,6 +809,10 @@ operands_scanner::get_expr_operands (tree *expr_p, int flags)
 	add_stmt_operand (expr_p, flags);
       return;
 
+    case OMP_NEXT_VARIANT:
+    case OMP_TARGET_DEVICE_MATCHES:
+      return;
+
     case DEBUG_EXPR_DECL:
       gcc_assert (gimple_debug_bind_p (stmt));
       return;
@@ -1146,8 +1149,6 @@ update_stmt_operands (struct function *fn, gimple *stmt)
   gcc_assert (gimple_modified_p (stmt));
   operands_scanner (fn, stmt).build_ssa_operands ();
   gimple_set_modified (stmt, false);
-  // Inform the active range query an update has happened.
-  get_range_query (fn)->update_stmt (stmt);
 
   timevar_pop (TV_TREE_OPS);
 }

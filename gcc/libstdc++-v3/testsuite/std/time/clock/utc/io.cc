@@ -1,4 +1,3 @@
-// { dg-options "-std=gnu++20" }
 // { dg-do run { target c++20 } }
 // { dg-timeout-factor 2 }
 
@@ -117,10 +116,63 @@ test_format()
   // PR libstdc++/113500
   s = std::format("{}", leap + 100ms + 2.5s);
   VERIFY( s == "2017-01-01 00:00:01.600");
+
+  std::chrono::utc_seconds t0{};
+  s = std::format("{:%Z %z %Ez %Oz}", t0);
+  VERIFY( s == "UTC +0000 +00:00 +00:00" );
+
+  s = std::format("{}", t0);
+  VERIFY( s == "1970-01-01 00:00:00" );
+}
+
+void
+test_parse()
+{
+  using namespace std::chrono;
+  const sys_seconds expected = sys_days(2023y/August/9) + 20h + 44min + 3s;
+  utc_seconds tp;
+
+  minutes offset;
+  std::string abbrev;
+  std::istringstream is("23 2210 21:44:3 +1 BST#");
+  VERIFY( is >> parse("%y %j0 %4H:%5M:%6S %Oz %Z", tp, abbrev, offset) );
+  VERIFY( ! is.eof() );
+  VERIFY( tp == clock_cast<utc_clock>(expected) );
+  VERIFY( abbrev == "BST" );
+  VERIFY( offset == 60min );
+
+  tp = {};
+  is.clear();
+  is.str("20230809214403  0100  BST:");
+  VERIFY( is >> parse("%Y%m%d%H%M%S %z %Z:", tp) );
+  VERIFY( ! is.eof() );
+  VERIFY( tp == clock_cast<utc_clock>(expected) );
+
+  is.clear();
+  is.str("2023-W32-3 20:44:03");
+  VERIFY( is >> parse("%G-W%V-%u %T", tp) );
+  VERIFY( ! is.eof() );
+  VERIFY( tp == clock_cast<utc_clock>(expected) );
+
+  // Test round trip
+  std::stringstream ss;
+  ss << clock_cast<utc_clock>(expected) << " 0012 UTC";
+  VERIFY( ss >> parse("%F %T %z %Z", tp, abbrev, offset) );
+  VERIFY( ss.eof() );
+  VERIFY( (tp + offset) == clock_cast<utc_clock>(expected) );
+  VERIFY( abbrev == "UTC" );
+  VERIFY( offset == 12min );
+
+  ss.str("");
+  ss.clear();
+  ss << utc_seconds{};
+  VERIFY( ss >> parse("%F %T", tp) );
+  VERIFY( tp.time_since_epoch() == 0s );
 }
 
 int main()
 {
   test_ostream();
   test_format();
+  test_parse();
 }

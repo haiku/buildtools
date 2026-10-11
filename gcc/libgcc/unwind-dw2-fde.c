@@ -1,5 +1,5 @@
 /* Subroutines needed for unwinding stack frames for exception handling.  */
-/* Copyright (C) 1997-2023 Free Software Foundation, Inc.
+/* Copyright (C) 1997-2025 Free Software Foundation, Inc.
    Contributed by Jason Merrill <jason@cygnus.com>.
 
 This file is part of GCC.
@@ -501,7 +501,7 @@ fde_mixed_encoding_extract (struct object *ob, _Unwind_Ptr *target,
 typedef void (*fde_extractor_t) (struct object *, _Unwind_Ptr *, const fde **,
 				 int);
 
-// Data is is sorted using radix sort if possible, using an temporary
+// Data is sorted using radix sort if possible, using an temporary
 // auxiliary data structure of the same size as the input. When running
 // out of memory do in-place heap sort.
 

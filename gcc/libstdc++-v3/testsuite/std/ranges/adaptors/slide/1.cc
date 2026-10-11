@@ -1,15 +1,16 @@
-// { dg-options "-std=gnu++23" }
 // { dg-do run { target c++23 } }
+// { dg-add-options no_pch }
 
 #include <ranges>
-#include <algorithm>
-#include <utility>
-#include <testsuite_hooks.h>
-#include <testsuite_iterators.h>
 
 #if __cpp_lib_ranges_slide != 202202L
 # error "Feature-test macro __cpp_lib_ranges_slide has wrong value in <ranges>"
 #endif
+
+#include <algorithm>
+#include <utility>
+#include <testsuite_hooks.h>
+#include <testsuite_iterators.h>
 
 namespace ranges = std::ranges;
 namespace views = std::views;
@@ -48,6 +49,9 @@ test01()
       VERIFY( &v3[i][1] == &y[i] + 1 );
       VERIFY( &v3[i][2] == &y[i] + 2 );
     }
+
+  // LWG 3848 - slide_view etc missing base accessor
+  v3.base();
 
   const auto v5 = y | views::slide(5);
   VERIFY( ranges::size(v5) == 1 );

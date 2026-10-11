@@ -1,6 +1,6 @@
 // Debugging iterator implementation (out of line) -*- C++ -*-
 
-// Copyright (C) 2003-2023 Free Software Foundation, Inc.
+// Copyright (C) 2003-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -250,14 +250,32 @@ namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
+#if __cplusplus < 201103L
   template<typename _Ite, typename _Seq>
     _Ite
     __niter_base(const ::__gnu_debug::_Safe_iterator<_Ite, _Seq,
 		 std::random_access_iterator_tag>& __it)
     { return __it.base(); }
 
+  template<typename _Ite, typename _Cont, typename _DbgSeq>
+    _Ite
+    __niter_base(const ::__gnu_debug::_Safe_iterator<
+		 ::__gnu_cxx::__normal_iterator<_Ite, _Cont>, _DbgSeq,
+		 std::random_access_iterator_tag>& __it)
+    { return __it.base().base(); }
+#else
+  template<typename _Ite, typename _Seq>
+    _GLIBCXX20_CONSTEXPR
+    decltype(std::__niter_base(std::declval<_Ite>()))
+    __niter_base(const ::__gnu_debug::_Safe_iterator<_Ite, _Seq,
+		 std::random_access_iterator_tag>& __it)
+    noexcept(std::is_nothrow_copy_constructible<_Ite>::value)
+    { return std::__niter_base(__it.base()); }
+#endif
+
   template<bool _IsMove,
 	   typename _Ite, typename _Seq, typename _Cat, typename _OI>
+    _GLIBCXX20_CONSTEXPR
     _OI
     __copy_move_a(
       const ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>& __first,
@@ -277,6 +295,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<bool _IsMove,
 	   typename _II, typename _Ite, typename _Seq, typename _Cat>
+    _GLIBCXX20_CONSTEXPR
     __gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>
     __copy_move_a(_II __first, _II __last,
       const ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>& __result)
@@ -297,6 +316,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<bool _IsMove,
 	   typename _IIte, typename _ISeq, typename _ICat,
 	   typename _OIte, typename _OSeq, typename _OCat>
+    _GLIBCXX20_CONSTEXPR
     ::__gnu_debug::_Safe_iterator<_OIte, _OSeq, _OCat>
     __copy_move_a(
       const ::__gnu_debug::_Safe_iterator<_IIte, _ISeq, _ICat>& __first,
@@ -325,6 +345,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<bool _IsMove,
 	   typename _Ite, typename _Seq, typename _Cat, typename _OI>
+    _GLIBCXX20_CONSTEXPR
     _OI
     __copy_move_backward_a(
 		const ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>& __first,
@@ -344,6 +365,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<bool _IsMove,
 	   typename _II, typename _Ite, typename _Seq, typename _Cat>
+    _GLIBCXX20_CONSTEXPR
     __gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>
     __copy_move_backward_a(_II __first, _II __last,
 	const ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>& __result)
@@ -365,6 +387,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<bool _IsMove,
 	   typename _IIte, typename _ISeq, typename _ICat,
 	   typename _OIte, typename _OSeq, typename _OCat>
+    _GLIBCXX20_CONSTEXPR
     ::__gnu_debug::_Safe_iterator<_OIte, _OSeq, _OCat>
     __copy_move_backward_a(
 	const ::__gnu_debug::_Safe_iterator<_IIte, _ISeq, _ICat>& __first,
@@ -392,6 +415,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Ite, typename _Seq, typename _Cat, typename _Tp>
+    _GLIBCXX20_CONSTEXPR
     void
     __fill_a(const ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>& __first,
 	     const ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>& __last,
@@ -408,6 +432,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Ite, typename _Seq, typename _Cat, typename _Size,
 	   typename _Tp>
+    _GLIBCXX20_CONSTEXPR
     ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>
     __fill_n_a(const ::__gnu_debug::_Safe_iterator<_Ite, _Seq, _Cat>& __first,
 	       _Size __n, const _Tp& __value,
@@ -430,6 +455,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _II1, typename _Seq1, typename _Cat1, typename _II2>
+    _GLIBCXX20_CONSTEXPR
     bool
     __equal_aux(
 	const ::__gnu_debug::_Safe_iterator<_II1, _Seq1, _Cat1>& __first1,
@@ -447,6 +473,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _II1, typename _II2, typename _Seq2, typename _Cat2>
+    _GLIBCXX20_CONSTEXPR
     bool
     __equal_aux(_II1 __first1, _II1 __last1,
 	const ::__gnu_debug::_Safe_iterator<_II2, _Seq2, _Cat2>& __first2)
@@ -464,6 +491,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _II1, typename _Seq1, typename _Cat1,
 	   typename _II2, typename _Seq2, typename _Cat2>
+    _GLIBCXX20_CONSTEXPR
     bool
     __equal_aux(
 	const ::__gnu_debug::_Safe_iterator<_II1, _Seq1, _Cat1>& __first1,
@@ -488,6 +516,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Ite1, typename _Seq1, typename _Cat1,
 	   typename _II2>
+    _GLIBCXX20_CONSTEXPR
     bool
     __lexicographical_compare_aux(
 	const ::__gnu_debug::_Safe_iterator<_Ite1, _Seq1, _Cat1>& __first1,
@@ -508,6 +537,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _II1,
 	   typename _Ite2, typename _Seq2, typename _Cat2>
+    _GLIBCXX20_CONSTEXPR
     bool
     __lexicographical_compare_aux(
 	_II1 __first1, _II1 __last1,
@@ -528,6 +558,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Ite1, typename _Seq1, typename _Cat1,
 	   typename _Ite2, typename _Seq2, typename _Cat2>
+    _GLIBCXX20_CONSTEXPR
     bool
     __lexicographical_compare_aux(
 	const ::__gnu_debug::_Safe_iterator<_Ite1, _Seq1, _Cat1>& __first1,

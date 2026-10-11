@@ -1,5 +1,5 @@
 /* "Supergraph" classes that combine CFGs and callgraph into one digraph.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -19,7 +19,6 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#define INCLUDE_MEMORY
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
@@ -54,6 +53,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-cfg.h"
 #include "analyzer/supergraph.h"
 #include "analyzer/analyzer-logging.h"
+#include "make-unique.h"
 
 #if ENABLE_ANALYZER
 
@@ -201,14 +201,14 @@ supergraph::supergraph (logger *logger)
 	          // maybe call is via a function pointer
 	          if (gcall *call = dyn_cast<gcall *> (stmt))
 	          {
-	            cgraph_edge *edge 
+	            cgraph_edge *edge
 		      = cgraph_node::get (fun->decl)->get_edge (stmt);
 	            if (!edge || !edge->callee)
 	            {
 	              supernode *old_node_for_stmts = node_for_stmts;
 	              node_for_stmts = add_node (fun, bb, call, NULL);
 
-	              superedge *sedge 
+	              superedge *sedge
 	                = new callgraph_superedge (old_node_for_stmts,
 	                  			   node_for_stmts,
 	                  			   SUPEREDGE_INTRAPROCEDURAL_CALL,
@@ -364,6 +364,7 @@ supergraph::dump_dot_to_pp (pretty_printer *pp,
     FOR_EACH_FUNCTION_WITH_GIMPLE_BODY (node)
     {
       function *fun = node->get_fun ();
+      gcc_assert (fun);
       const char *funcname = function_name (fun);
       gv.println ("subgraph \"cluster_%s\" {",
 		  funcname);
@@ -409,9 +410,9 @@ supergraph::dump_dot_to_pp (pretty_printer *pp,
 
       /* Add an invisible edge from ENTRY to EXIT, to improve the graph layout.  */
       pp_string (pp, "\t");
-      get_node_for_function_entry (fun)->dump_dot_id (pp);
+      get_node_for_function_entry (*fun)->dump_dot_id (pp);
       pp_string (pp, ":s -> ");
-      get_node_for_function_exit (fun)->dump_dot_id (pp);
+      get_node_for_function_exit (*fun)->dump_dot_id (pp);
       pp_string (pp, ":n [style=\"invis\",constraint=true];\n");
 
       /* Terminate per-function "subgraph" */
@@ -436,16 +437,15 @@ supergraph::dump_dot_to_pp (pretty_printer *pp,
 void
 supergraph::dump_dot_to_file (FILE *fp, const dump_args_t &dump_args) const
 {
-  pretty_printer *pp = global_dc->printer->clone ();
-  pp_show_color (pp) = 0;
+  std::unique_ptr<pretty_printer> pp (global_dc->clone_printer ());
+  pp_show_color (pp.get ()) = 0;
   /* %qE in logs for SSA_NAMEs should show the ssa names, rather than
      trying to prettify things by showing the underlying var.  */
-  pp_format_decoder (pp) = default_tree_printer;
+  pp_format_decoder (pp.get ()) = default_tree_printer;
 
-  pp->buffer->stream = fp;
-  dump_dot_to_pp (pp, dump_args);
-  pp_flush (pp);
-  delete pp;
+  pp->set_output_stream (fp);
+  dump_dot_to_pp (pp.get (), dump_args);
+  pp_flush (pp.get ());
 }
 
 /* Dump this graph in .dot format to PATH, using DUMP_ARGS.  */
@@ -462,29 +462,29 @@ supergraph::dump_dot (const char *path, const dump_args_t &dump_args) const
    {"nodes" : [objs for snodes],
     "edges" : [objs for sedges]}.  */
 
-json::object *
+std::unique_ptr<json::object>
 supergraph::to_json () const
 {
-  json::object *sgraph_obj = new json::object ();
+  auto sgraph_obj = ::make_unique<json::object> ();
 
   /* Nodes.  */
   {
-    json::array *nodes_arr = new json::array ();
+    auto nodes_arr = ::make_unique<json::array> ();
     unsigned i;
     supernode *n;
     FOR_EACH_VEC_ELT (m_nodes, i, n)
       nodes_arr->append (n->to_json ());
-    sgraph_obj->set ("nodes", nodes_arr);
+    sgraph_obj->set ("nodes", std::move (nodes_arr));
   }
 
   /* Edges.  */
   {
-    json::array *edges_arr = new json::array ();
+    auto edges_arr = ::make_unique<json::array> ();
     unsigned i;
     superedge *n;
     FOR_EACH_VEC_ELT (m_edges, i, n)
       edges_arr->append (n->to_json ());
-    sgraph_obj->set ("edges", edges_arr);
+    sgraph_obj->set ("edges", std::move (edges_arr));
   }
 
   return sgraph_obj;
@@ -717,28 +717,27 @@ supernode::dump_dot_id (pretty_printer *pp) const
     "phis": [str],
     "stmts" : [str]}.  */
 
-json::object *
+std::unique_ptr<json::object>
 supernode::to_json () const
 {
-  json::object *snode_obj = new json::object ();
+  auto snode_obj = ::make_unique<json::object> ();
 
-  snode_obj->set ("idx", new json::integer_number (m_index));
-  snode_obj->set ("bb_idx", new json::integer_number (m_bb->index));
+  snode_obj->set_integer ("idx", m_index);
+  snode_obj->set_integer ("bb_idx", m_bb->index);
   if (function *fun = get_function ())
-    snode_obj->set ("fun", new json::string (function_name (fun)));
+    snode_obj->set_string ("fun", function_name (fun));
 
   if (m_returning_call)
     {
       pretty_printer pp;
       pp_format_decoder (&pp) = default_tree_printer;
       pp_gimple_stmt_1 (&pp, m_returning_call, 0, (dump_flags_t)0);
-      snode_obj->set ("returning_call",
-		      new json::string (pp_formatted_text (&pp)));
+      snode_obj->set_string ("returning_call", pp_formatted_text (&pp));
     }
 
   /* Phi nodes.  */
   {
-    json::array *phi_arr = new json::array ();
+    auto phi_arr = ::make_unique<json::array> ();
     for (gphi_iterator gpi = const_cast<supernode *> (this)->start_phis ();
 	 !gsi_end_p (gpi); gsi_next (&gpi))
       {
@@ -746,14 +745,14 @@ supernode::to_json () const
 	pretty_printer pp;
 	pp_format_decoder (&pp) = default_tree_printer;
 	pp_gimple_stmt_1 (&pp, stmt, 0, (dump_flags_t)0);
-	phi_arr->append (new json::string (pp_formatted_text (&pp)));
+	phi_arr->append_string (pp_formatted_text (&pp));
       }
-    snode_obj->set ("phis", phi_arr);
+    snode_obj->set ("phis", std::move (phi_arr));
   }
 
   /* Statements.  */
   {
-    json::array *stmt_arr = new json::array ();
+    auto stmt_arr = ::make_unique<json::array> ();
     int i;
     gimple *stmt;
     FOR_EACH_VEC_ELT (m_stmts, i, stmt)
@@ -761,9 +760,9 @@ supernode::to_json () const
 	pretty_printer pp;
 	pp_format_decoder (&pp) = default_tree_printer;
 	pp_gimple_stmt_1 (&pp, stmt, 0, (dump_flags_t)0);
-	stmt_arr->append (new json::string (pp_formatted_text (&pp)));
+	stmt_arr->append_string (pp_formatted_text (&pp));
       }
-    snode_obj->set ("stmts", stmt_arr);
+    snode_obj->set ("stmts", std::move (stmt_arr));
   }
 
   return snode_obj;
@@ -794,6 +793,13 @@ supernode::get_start_location () const
   if (return_p ())
     return m_fun->function_end_locus;
 
+  /* We have no locations for stmts.  If we have a single out-edge that's
+     a CFG edge, the goto_locus of that edge is a better location for this
+     than UNKNOWN_LOCATION.  */
+  if (m_succs.length () == 1)
+    if (const cfg_superedge *cfg_sedge = m_succs[0]->dyn_cast_cfg_superedge ())
+      return cfg_sedge->get_goto_locus ();
+
   return UNKNOWN_LOCATION;
 }
 
@@ -817,6 +823,12 @@ supernode::get_end_location () const
   if (return_p ())
     return m_fun->function_end_locus;
 
+  /* If we have a single out-edge that's a CFG edge, use the goto_locus of
+     that edge.  */
+  if (m_succs.length () == 1)
+    if (const cfg_superedge *cfg_sedge = m_succs[0]->dyn_cast_cfg_superedge ())
+      return cfg_sedge->get_goto_locus ();
+
   return UNKNOWN_LOCATION;
 }
 
@@ -831,6 +843,19 @@ supernode::get_stmt_index (const gimple *stmt) const
     if (iter_stmt == stmt)
       return i;
   gcc_unreachable ();
+}
+
+/* Get any label_decl for this supernode, or NULL_TREE if there isn't one.  */
+
+tree
+supernode::get_label () const
+{
+  if (m_stmts.length () == 0)
+    return NULL_TREE;
+  const glabel *label_stmt = dyn_cast<const glabel *> (m_stmts[0]);
+  if (!label_stmt)
+    return NULL_TREE;
+  return gimple_label_label (label_stmt);
 }
 
 /* Get a string for PK.  */
@@ -872,13 +897,9 @@ superedge::dump (pretty_printer *pp) const
 DEBUG_FUNCTION void
 superedge::dump () const
 {
-  pretty_printer pp;
-  pp_format_decoder (&pp) = default_tree_printer;
-  pp_show_color (&pp) = pp_show_color (global_dc->printer);
-  pp.buffer->stream = stderr;
+  tree_dump_pretty_printer pp (stderr);
   dump (&pp);
   pp_newline (&pp);
-  pp_flush (&pp);
 }
 
 /* Implementation of dedge::dump_dot for superedges.
@@ -959,19 +980,19 @@ superedge::dump_dot (graphviz_out *gv, const dump_args_t &) const
     "dst_idx": int, the index of the destination supernode,
     "desc"   : str.  */
 
-json::object *
+std::unique_ptr<json::object>
 superedge::to_json () const
 {
-  json::object *sedge_obj = new json::object ();
-  sedge_obj->set ("kind", new json::string (edge_kind_to_string (m_kind)));
-  sedge_obj->set ("src_idx", new json::integer_number (m_src->m_index));
-  sedge_obj->set ("dst_idx", new json::integer_number (m_dest->m_index));
+  auto sedge_obj = ::make_unique<json::object> ();
+  sedge_obj->set_string ("kind", edge_kind_to_string (m_kind));
+  sedge_obj->set_integer ("src_idx", m_src->m_index);
+  sedge_obj->set_integer ("dst_idx", m_dest->m_index);
 
   {
     pretty_printer pp;
     pp_format_decoder (&pp) = default_tree_printer;
     dump_label_to_pp (&pp, false);
-    sedge_obj->set ("desc", new json::string (pp_formatted_text (&pp)));
+    sedge_obj->set_string ("desc", pp_formatted_text (&pp));
   }
 
   return sedge_obj;
@@ -1053,6 +1074,9 @@ cfg_superedge::dump_label_to_pp (pretty_printer *pp,
 #undef DEF_EDGE_FLAG
       pp_string (pp, ")");
     }
+
+  if (m_cfg_edge->goto_locus > BUILTINS_LOCATION)
+    pp_string (pp, " (has goto_locus)");
 
   /* Otherwise, no label.  */
 }
@@ -1242,7 +1266,7 @@ callgraph_superedge::get_call_stmt () const
 {
   if (m_cedge)
     return m_cedge->call_stmt;
-  
+
   return m_src->get_final_call ();
 }
 

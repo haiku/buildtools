@@ -1,5 +1,5 @@
 ;; ARM VFP instruction patterns
-;; Copyright (C) 2003-2023 Free Software Foundation, Inc.
+;; Copyright (C) 2003-2025 Free Software Foundation, Inc.
 ;; Written by CodeSourcery.
 ;;
 ;; This file is part of GCC.
@@ -367,7 +367,7 @@
     case 8:
       return \"vmov%?\\t%Q0, %R0, %P1\\t%@ int\";
     case 9:
-      if (TARGET_VFP_SINGLE || TARGET_HAVE_MVE)
+      if (TARGET_VFP_SINGLE && !TARGET_HAVE_MVE)
 	return \"vmov%?.f32\\t%0, %1\\t%@ int\;vmov%?.f32\\t%p0, %p1\\t%@ int\";
       else
 	return \"vmov%?.f64\\t%P0, %P1\\t%@ int\";
@@ -385,7 +385,7 @@
 			       (symbol_ref "arm_count_output_move_double_insns (operands) * 4")
                               (eq_attr "alternative" "9")
                                (if_then_else
-                                 (match_test "TARGET_VFP_SINGLE")
+                                 (match_test "TARGET_VFP_SINGLE && !TARGET_HAVE_MVE")
                                  (const_int 8)
                                  (const_int 4))]
                               (const_int 4)))
@@ -424,12 +424,12 @@
     case 6: /* S register from immediate.  */
       return \"vmov.f16\\t%0, %1\t%@ __<fporbf>\";
     case 7: /* S register from memory.  */
-      if (TARGET_HAVE_MVE)
+      if (!auto_inc_p (XEXP (operands[1], 0)))
 	return \"vldr.16\\t%0, %1\";
       else
 	return \"vld1.16\\t{%z0}, %A1\";
     case 8: /* Memory from S register.  */
-      if (TARGET_HAVE_MVE)
+      if (!auto_inc_p (XEXP (operands[0], 0)))
 	return \"vstr.16\\t%1, %0\";
       else
 	return \"vst1.16\\t{%z1}, %A0\";
@@ -744,7 +744,7 @@
       case 6: case 7: case 9:
 	return output_move_double (operands, true, NULL);
       case 8:
-	if (TARGET_VFP_SINGLE)
+	if (TARGET_VFP_SINGLE && !TARGET_HAVE_MVE)
 	  return \"vmov%?.f32\\t%0, %1\;vmov%?.f32\\t%p0, %p1\";
 	else
 	  return \"vmov%?.f64\\t%P0, %P1\";
@@ -758,7 +758,7 @@
    (set (attr "length") (cond [(eq_attr "alternative" "6,7,9") (const_int 8)
 			       (eq_attr "alternative" "8")
 				(if_then_else
-				 (match_test "TARGET_VFP_SINGLE")
+				 (match_test "TARGET_VFP_SINGLE && !TARGET_HAVE_MVE")
 				 (const_int 8)
 				 (const_int 4))]
 			      (const_int 4)))

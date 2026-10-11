@@ -1,5 +1,5 @@
 # Expect driver script for GCC Regression Tests
-# Copyright (C) 2023 Free Software Foundation, Inc.
+# Copyright (C) 2023-2025 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,6 +22,9 @@ if $tracelevel then {
     strace $tracelevel
 }
 
+set OLD_TORTURE_OPTIONS $TORTURE_OPTIONS
+set TORTURE_OPTIONS "{ { -g } { -g -O2 } { -g -fdebug-builtins } }"
+
 # load support procs
 load_lib gm2-torture.exp
 
@@ -35,3 +38,5 @@ foreach testcase [lsort [glob -nocomplain $srcdir/$subdir/*.mod]] {
 
     gm2-torture-fail $testcase
 }
+
+set TORTURE_OPTIONS $OLD_TORTURE_OPTIONS

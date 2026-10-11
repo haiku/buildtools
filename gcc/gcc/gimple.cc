@@ -1,6 +1,6 @@
 /* Gimple IR support functions.
 
-   Copyright (C) 2007-2023 Free Software Foundation, Inc.
+   Copyright (C) 2007-2025 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com>
 
 This file is part of GCC.
@@ -51,12 +51,36 @@ along with GCC; see the file COPYING3.  If not see
 #include "ipa-modref.h"
 #include "dbgcnt.h"
 
-/* All the tuples have their operand vector (if present) at the very bottom
-   of the structure.  Therefore, the offset required to find the
-   operands vector the size of the structure minus the size of the 1
-   element tree array at the end (see gimple_ops).  */
+/* All the tuples have their operand vector (if present) at the very bottom of
+   the structure.  Therefore, the offset required to find the operands vector is
+   the size of the structure minus the size of the 1-element tree array at the
+   end (see gimple_ops).  An adjustment may be required if there is tail
+   padding, as may happen on a host (e.g. sparc) where a pointer has 4-byte
+   alignment while a uint64_t has 8-byte alignment.
+
+   Unfortunately, we can't use offsetof to do this computation 100%
+   straightforwardly, because these structs use inheritance and so are not
+   standard layout types.  However, the fact that they are not standard layout
+   types also means that tail padding will be reused in inheritance, which makes
+   it possible to check for the problematic case with the following logic
+   instead.  If tail padding is detected, the offset should be decreased
+   accordingly.  */
+
+template<typename G>
+static constexpr size_t
+get_tail_padding_adjustment ()
+{
+  struct padding_check : G
+  {
+    tree t;
+  };
+  return sizeof (padding_check) == sizeof (G) ? sizeof (tree) : 0;
+}
+
 #define DEFGSSTRUCT(SYM, STRUCT, HAS_TREE_OP) \
-	(HAS_TREE_OP ? sizeof (struct STRUCT) - sizeof (tree) : 0),
+  (HAS_TREE_OP \
+   ? sizeof (STRUCT) - sizeof (tree) - get_tail_padding_adjustment<STRUCT> () \
+   : 0),
 EXPORTED_CONST size_t gimple_ops_offset_[] = {
 #include "gsstruct.def"
 };
@@ -399,6 +423,10 @@ gimple_build_call_from_tree (tree t, tree fnptrtype)
     gimple_call_set_from_thunk (call, CALL_FROM_THUNK_P (t));
   gimple_call_set_va_arg_pack (call, CALL_EXPR_VA_ARG_PACK (t));
   gimple_call_set_nothrow (call, TREE_NOTHROW (t));
+  if (fndecl)
+    gimple_call_set_expected_throw (call,
+				    flags_from_decl_or_type (fndecl)
+				    & ECF_XTHROW);
   gimple_call_set_by_descriptor (call, CALL_EXPR_BY_DESCRIPTOR (t));
   copy_warning (call, t);
 
@@ -415,7 +443,7 @@ gimple_build_call_from_tree (tree t, tree fnptrtype)
 	  tree fntype = TREE_TYPE (fnptrtype);
 
 	  if (lookup_attribute ("nocf_check", TYPE_ATTRIBUTES (fntype)))
-	    gimple_call_set_nocf_check (call, TRUE);
+	    gimple_call_set_nocf_check (call, true);
 	}
     }
 
@@ -470,6 +498,9 @@ gimple_build_assign_1 (tree lhs, enum tree_code subcode, tree op1,
         gimple_build_with_ops_stat (GIMPLE_ASSIGN, (unsigned)subcode, num_ops
 				    PASS_MEM_STAT));
   gimple_assign_set_lhs (p, lhs);
+  /* For COND_EXPR, op1 should not be a comparison. */
+  if (op1 && subcode == COND_EXPR)
+    gcc_assert (!COMPARISON_CLASS_P  (op1));
   gimple_assign_set_rhs1 (p, op1);
   if (op2)
     {
@@ -1038,6 +1069,21 @@ gimple_build_omp_section (gimple_seq body)
 }
 
 
+/* Build a GIMPLE_OMP_STRUCTURED_BLOCK statement.
+
+   BODY is the structured block sequence.  */
+
+gimple *
+gimple_build_omp_structured_block (gimple_seq body)
+{
+  gimple *p = gimple_alloc (GIMPLE_OMP_STRUCTURED_BLOCK, 0);
+  if (body)
+    gimple_omp_set_body (p, body);
+
+  return p;
+}
+
+
 /* Build a GIMPLE_OMP_MASTER statement.
 
    BODY is the sequence of statements to be executed by just the master.  */
@@ -1216,6 +1262,34 @@ gimple_build_omp_scope (gimple_seq body, tree clauses)
   return p;
 }
 
+/* Build a GIMPLE_OMP_DISPATCH statement.
+
+   BODY is the target function call to be dispatched.
+   CLAUSES are any of the OMP dispatch construct's clauses.  */
+
+gimple *
+gimple_build_omp_dispatch (gimple_seq body, tree clauses)
+{
+  gimple *p = gimple_alloc (GIMPLE_OMP_DISPATCH, 0);
+  gimple_omp_dispatch_set_clauses (p, clauses);
+  if (body)
+    gimple_omp_set_body (p, body);
+
+  return p;
+}
+
+/* Build a GIMPLE_OMP_INTEROP statement.
+
+   CLAUSES are any of the OMP interop construct's clauses.  */
+
+gimple *
+gimple_build_omp_interop (tree clauses)
+{
+  gimple *p = gimple_alloc (GIMPLE_OMP_INTEROP, 0);
+  gimple_omp_interop_set_clauses (p, clauses);
+
+  return p;
+}
 
 /* Build a GIMPLE_OMP_TARGET statement.
 
@@ -1535,6 +1609,8 @@ gimple_call_flags (const gimple *stmt)
 
   if (stmt->subcode & GF_CALL_NOTHROW)
     flags |= ECF_NOTHROW;
+  if (stmt->subcode & GF_CALL_XTHROW)
+    flags |= ECF_XTHROW;
 
   if (stmt->subcode & GF_CALL_BY_DESCRIPTOR)
     flags |= ECF_BY_DESCRIPTOR;
@@ -1575,12 +1651,22 @@ gimple_call_fnspec (const gcall *stmt)
       && DECL_IS_OPERATOR_DELETE_P (fndecl)
       && DECL_IS_REPLACEABLE_OPERATOR (fndecl)
       && gimple_call_from_new_or_delete (stmt))
-    return ". o ";
+    {
+      if (flag_assume_sane_operators_new_delete)
+	return ".co ";
+      else
+	return ". o ";
+    }
   /* Similarly operator new can be treated as malloc.  */
   if (fndecl
       && DECL_IS_REPLACEABLE_OPERATOR_NEW_P (fndecl)
       && gimple_call_from_new_or_delete (stmt))
-    return "m ";
+    {
+      if (flag_assume_sane_operators_new_delete)
+	return "mC";
+      else
+	return "m ";
+    }
   return "";
 }
 
@@ -1787,6 +1873,26 @@ gimple_assign_unary_nop_p (gimple *gs)
           && (TYPE_MODE (TREE_TYPE (gimple_assign_lhs (gs)))
               == TYPE_MODE (TREE_TYPE (gimple_assign_rhs1 (gs)))));
 }
+
+/* Return true if GS is an assignment that loads from its rhs1.  */
+
+bool
+gimple_assign_load_p (const gimple *gs)
+{
+  tree rhs;
+  if (!gimple_assign_single_p (gs))
+    return false;
+  rhs = gimple_assign_rhs1 (gs);
+  if (TREE_CODE (rhs) == WITH_SIZE_EXPR)
+    return true;
+  if (handled_component_p (rhs))
+    rhs = TREE_OPERAND (rhs, 0);
+  return (handled_component_p (rhs)
+	  || DECL_P (rhs)
+	  || TREE_CODE (rhs) == MEM_REF
+	  || TREE_CODE (rhs) == TARGET_MEM_REF);
+}
+
 
 /* Set BB to be the basic block holding G.  */
 
@@ -2107,6 +2213,16 @@ gimple_copy (gimple *stmt)
 	  gimple_omp_scope_set_clauses (copy, t);
 	  goto copy_omp_body;
 
+	case GIMPLE_OMP_DISPATCH:
+	  t = unshare_expr (gimple_omp_dispatch_clauses (stmt));
+	  gimple_omp_dispatch_set_clauses (copy, t);
+	  goto copy_omp_body;
+
+	case GIMPLE_OMP_INTEROP:
+	  t = unshare_expr (gimple_omp_interop_clauses (stmt));
+	  gimple_omp_interop_set_clauses (copy, t);
+	  break;
+
 	case GIMPLE_OMP_TARGET:
 	  {
 	    gomp_target *omp_target_stmt = as_a <gomp_target *> (stmt);
@@ -2128,6 +2244,7 @@ gimple_copy (gimple *stmt)
 
 	case GIMPLE_OMP_SECTION:
 	case GIMPLE_OMP_MASTER:
+	case GIMPLE_OMP_STRUCTURED_BLOCK:
 	copy_omp_body:
 	  new_seq = gimple_seq_copy (gimple_omp_body (stmt));
 	  gimple_omp_set_body (copy, new_seq);
@@ -2401,7 +2518,9 @@ get_gimple_rhs_num_ops (enum tree_code code)
       || (SYM) == OBJ_TYPE_REF						    \
       || (SYM) == ADDR_EXPR						    \
       || (SYM) == WITH_SIZE_EXPR					    \
-      || (SYM) == SSA_NAME) ? GIMPLE_SINGLE_RHS				    \
+      || (SYM) == SSA_NAME						    \
+      || (SYM) == OMP_NEXT_VARIANT					    \
+      || (SYM) == OMP_TARGET_DEVICE_MATCHES) ? GIMPLE_SINGLE_RHS	    \
    : GIMPLE_INVALID_RHS),
 #define END_OF_BASE_TREE_CODES (unsigned char) GIMPLE_INVALID_RHS,
 
@@ -2902,7 +3021,7 @@ gimple_asm_clobbers_memory_p (const gasm *stmt)
     }
 
   /* Non-empty basic ASM implicitly clobbers memory.  */
-  if (gimple_asm_input_p (stmt) && strlen (gimple_asm_string (stmt)) != 0)
+  if (gimple_asm_basic_p (stmt) && strlen (gimple_asm_string (stmt)) != 0)
     return true;
 
   return false;
@@ -2946,6 +3065,8 @@ nonfreeing_call_p (gimple *call)
 	case BUILT_IN_TM_FREE:
 	case BUILT_IN_REALLOC:
 	case BUILT_IN_STACK_RESTORE:
+	case BUILT_IN_GOMP_FREE:
+	case BUILT_IN_GOMP_REALLOC:
 	  return false;
 	default:
 	  return true;
@@ -2989,7 +3110,7 @@ nonbarrier_call_p (gimple *call)
 }
 
 /* Callback for walk_stmt_load_store_ops.
- 
+
    Return TRUE if OP will dereference the tree stored in DATA, FALSE
    otherwise.
 
@@ -3041,10 +3162,17 @@ infer_nonnull_range_by_dereference (gimple *stmt, tree op)
 }
 
 /* Return true if OP can be inferred to be a non-NULL after STMT
-   executes by using attributes.  */
+   executes by using attributes.  If OP2 is non-NULL and nonnull_if_nonzero
+   is the only attribute implying OP being non-NULL and the corresponding
+   argument isn't non-zero INTEGER_CST, set *OP2 to the corresponding
+   argument and return true (in that case returning true doesn't mean
+   OP can be unconditionally inferred to be non-NULL, but conditionally).  */
 bool
-infer_nonnull_range_by_attribute (gimple *stmt, tree op)
+infer_nonnull_range_by_attribute (gimple *stmt, tree op, tree *op2)
 {
+  if (op2)
+    *op2 = NULL_TREE;
+
   /* We can only assume that a pointer dereference will yield
      non-NULL if -fdelete-null-pointer-checks is enabled.  */
   if (!flag_delete_null_pointer_checks
@@ -3061,9 +3189,10 @@ infer_nonnull_range_by_attribute (gimple *stmt, tree op)
 	  attrs = lookup_attribute ("nonnull", attrs);
 
 	  /* If "nonnull" wasn't specified, we know nothing about
-	     the argument.  */
+	     the argument, unless "nonnull_if_nonzero" attribute is
+	     present.  */
 	  if (attrs == NULL_TREE)
-	    return false;
+	    break;
 
 	  /* If "nonnull" applies to all the arguments, then ARG
 	     is non-null if it's in the argument list.  */
@@ -3088,6 +3217,37 @@ infer_nonnull_range_by_attribute (gimple *stmt, tree op)
 		  if (operand_equal_p (op, arg, 0))
 		    return true;
 		}
+	    }
+	}
+
+      for (attrs = TYPE_ATTRIBUTES (fntype);
+	   (attrs = lookup_attribute ("nonnull_if_nonzero", attrs));
+	   attrs = TREE_CHAIN (attrs))
+	{
+	  tree args = TREE_VALUE (attrs);
+	  unsigned int idx = TREE_INT_CST_LOW (TREE_VALUE (args)) - 1;
+	  unsigned int idx2
+	    = TREE_INT_CST_LOW (TREE_VALUE (TREE_CHAIN (args))) - 1;
+	  if (idx < gimple_call_num_args (stmt)
+	      && idx2 < gimple_call_num_args (stmt)
+	      && operand_equal_p (op, gimple_call_arg (stmt, idx), 0))
+	    {
+	      tree arg2 = gimple_call_arg (stmt, idx2);
+	      if (!INTEGRAL_TYPE_P (TREE_TYPE (arg2)))
+		return false;
+	      if (integer_nonzerop (arg2))
+		return true;
+	      if (integer_zerop (arg2))
+		return false;
+	      if (op2)
+		{
+		  /* This case is meant for ubsan instrumentation.
+		     The caller can check at runtime if *OP2 is
+		     non-zero and OP is null.  */
+		  *op2 = arg2;
+		  return true;
+		}
+	      return tree_expr_nonzero_p (arg2);
 	    }
 	}
     }
@@ -3167,7 +3327,7 @@ preprocess_case_label_vec_for_gimple (vec<tree> &labels,
       tree elt = labels[i];
       tree low = CASE_LOW (elt);
       tree high = CASE_HIGH (elt);
-      bool remove_element = FALSE;
+      bool remove_element = false;
 
       if (low)
 	{
@@ -3191,7 +3351,7 @@ preprocess_case_label_vec_for_gimple (vec<tree> &labels,
 		 into a simple (one-value) case.  */
 	      int cmp = tree_int_cst_compare (high, low);
 	      if (cmp < 0)
-		remove_element = TRUE;
+		remove_element = true;
 	      else if (cmp == 0)
 		high = NULL_TREE;
 	    }
@@ -3203,7 +3363,7 @@ preprocess_case_label_vec_for_gimple (vec<tree> &labels,
 		   && tree_int_cst_compare (low, min_value) < 0)
 		  || (TREE_CODE (max_value) == INTEGER_CST
 		      && tree_int_cst_compare (low, max_value) > 0))
-		remove_element = TRUE;
+		remove_element = true;
 	      else
 		low = fold_convert (index_type, low);
 	    }
@@ -3214,7 +3374,7 @@ preprocess_case_label_vec_for_gimple (vec<tree> &labels,
 		   && tree_int_cst_compare (high, min_value) < 0)
 		  || (TREE_CODE (max_value) == INTEGER_CST
 		      && tree_int_cst_compare (low, max_value) > 0))
-		remove_element = TRUE;
+		remove_element = true;
 	      else
 		{
 		  /* If the lower bound is less than the index type's
@@ -3249,7 +3409,7 @@ preprocess_case_label_vec_for_gimple (vec<tree> &labels,
 	     is NULL, we do not remove the default case (it would
 	     be completely lost).  */
 	  if (default_casep)
-	    remove_element = TRUE;
+	    remove_element = true;
 	}
 
       if (remove_element)

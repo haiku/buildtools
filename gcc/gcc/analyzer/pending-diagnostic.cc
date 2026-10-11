@@ -1,5 +1,5 @@
 /* Classes for analyzer diagnostics.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -19,7 +19,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#define INCLUDE_MEMORY
+#define INCLUDE_VECTOR
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
@@ -82,36 +82,49 @@ interesting_t::dump_to_pp (pretty_printer *pp, bool simple) const
   pp_string (pp, "]}");
 }
 
-/* Generate a label_text by printing FMT.
+/* class diagnostic_emission_context.  */
 
-   Use a clone of the global_dc for formatting callbacks.
+/* Get the pending_diagnostic being emitted.  */
 
-   Use this evdesc::event_desc's m_colorize flag to control colorization
-   (so that e.g. we can disable it for JSON output).  */
-
-label_text
-evdesc::event_desc::formatted_print (const char *fmt, ...) const
+const pending_diagnostic &
+diagnostic_emission_context::get_pending_diagnostic () const
 {
-  pretty_printer *pp = global_dc->printer->clone ();
+  return *m_sd.m_d.get ();
+}
 
-  pp_show_color (pp) = m_colorize;
+/* Emit a warning, using the rich_location, metadata, and the
+   pending_diagnostic's option.  */
 
-  text_info ti;
-  rich_location rich_loc (line_table, UNKNOWN_LOCATION);
+bool
+diagnostic_emission_context::warn (const char *gmsgid, ...)
+{
+  const pending_diagnostic &pd = get_pending_diagnostic ();
+  auto_diagnostic_group d;
   va_list ap;
-  va_start (ap, fmt);
-  ti.format_spec = _(fmt);
-  ti.args_ptr = &ap;
-  ti.err_no = 0;
-  ti.x_data = NULL;
-  ti.m_richloc = &rich_loc;
-  pp_format (pp, &ti);
-  pp_output_formatted_text (pp);
+  va_start (ap, gmsgid);
+  const bool result = emit_diagnostic_valist_meta (DK_WARNING,
+						   &m_rich_loc, &m_metadata,
+						   pd.get_controlling_option (),
+						   gmsgid, &ap);
   va_end (ap);
-
-  label_text result = label_text::take (xstrdup (pp_formatted_text (pp)));
-  delete pp;
   return result;
+}
+
+/* Emit a note, using the rich_location and metadata (and the
+   pending_diagnostic's option).  */
+
+void
+diagnostic_emission_context::inform (const char *gmsgid, ...)
+{
+  const pending_diagnostic &pd = get_pending_diagnostic ();
+  auto_diagnostic_group d;
+  va_list ap;
+  va_start (ap, gmsgid);
+  emit_diagnostic_valist_meta (DK_NOTE,
+			       &m_rich_loc, &m_metadata,
+			       pd.get_controlling_option (),
+			       gmsgid, &ap);
+  va_end (ap);
 }
 
 /* Return true if T1 and T2 are "the same" for the purposes of
@@ -229,15 +242,13 @@ pending_diagnostic::add_region_creation_events (const region *reg,
 void
 pending_diagnostic::add_final_event (const state_machine *sm,
 				     const exploded_node *enode,
-				     const gimple *stmt,
+				     const event_loc_info &loc_info,
 				     tree var, state_machine::state_t state,
 				     checker_path *emission_path)
 {
   emission_path->add_event
     (make_unique<warning_event>
-     (event_loc_info (get_stmt_location (stmt, enode->get_function ()),
-		      enode->get_function ()->decl,
-		      enode->get_stack_depth ()),
+     (loc_info,
       enode,
       sm, var, state));
 }

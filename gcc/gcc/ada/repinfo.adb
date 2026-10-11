@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1999-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1999-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -375,9 +375,9 @@ package body Repinfo is
 
             if Esize (Ent) = RM_Size (Ent) then
                if List_Representation_Info_To_JSON then
+                  Write_Line (",");
                   Write_Str ("  ""Size"": ");
                   Write_Val (Esize (Ent));
-                  Write_Line (",");
                else
                   Write_Str ("for ");
                   List_Name (Ent);
@@ -390,13 +390,13 @@ package body Repinfo is
 
             else
                if List_Representation_Info_To_JSON then
+                  Write_Line (",");
                   Write_Str ("  ""Object_Size"": ");
                   Write_Val (Esize (Ent));
-                  Write_Line (",");
 
+                  Write_Line (",");
                   Write_Str ("  ""Value_Size"": ");
                   Write_Val (RM_Size (Ent));
-                  Write_Line (",");
 
                else
                   Write_Str ("for ");
@@ -417,6 +417,7 @@ package body Repinfo is
 
       if Known_Alignment (Ent) then
          if List_Representation_Info_To_JSON then
+            Write_Line (",");
             Write_Str ("  ""Alignment"": ");
             Write_Val (Alignment (Ent));
          else
@@ -428,14 +429,14 @@ package body Repinfo is
          end if;
 
       --  Alignment is not always set for task, protected, and class-wide
-      --  types. Representation aspects are not computed for types in a
-      --  generic unit.
+      --  types, or when doing semantic analysis only. Representation aspects
+      --  are not computed for types in a generic unit.
 
       else
-         pragma Assert
-           (Is_Concurrent_Type (Ent) or else
-              Is_Class_Wide_Type (Ent) or else
-              Sem_Util.In_Generic_Scope (Ent));
+         pragma Assert (not Expander_Active
+           or else Is_Concurrent_Type (Ent)
+           or else Is_Class_Wide_Type (Ent)
+           or else Sem_Util.In_Generic_Scope (Ent));
       end if;
    end List_Common_Type_Info;
 
@@ -448,34 +449,7 @@ package body Repinfo is
       Bytes_Big_Endian : Boolean;
       In_Subprogram    : Boolean := False)
    is
-      Body_E : Entity_Id;
-      E      : Entity_Id;
-
-      function Find_Declaration (E : Entity_Id) return Node_Id;
-      --  Utility to retrieve declaration node for entity in the
-      --  case of package bodies and subprograms.
-
-      ----------------------
-      -- Find_Declaration --
-      ----------------------
-
-      function Find_Declaration (E : Entity_Id) return Node_Id is
-         Decl : Node_Id;
-
-      begin
-         Decl := Parent (E);
-         while Present (Decl)
-           and then Nkind (Decl) /= N_Package_Body
-           and then Nkind (Decl) /= N_Subprogram_Declaration
-           and then Nkind (Decl) /= N_Subprogram_Body
-         loop
-            Decl := Parent (Decl);
-         end loop;
-
-         return Decl;
-      end Find_Declaration;
-
-   --  Start of processing for List_Entities
+      E : Entity_Id;
 
    begin
       --  List entity if we have one, and it is not a renaming declaration.
@@ -500,12 +474,13 @@ package body Repinfo is
 
          E := First_Entity (Ent);
          while Present (E) loop
-            --  We list entities that come from source (excluding private or
-            --  incomplete types or deferred constants, for which we will list
-            --  the information for the full view). If requested, we also list
-            --  relevant entities that have been generated when processing the
-            --  original entities coming from source. But if debug flag A is
-            --  set, then all entities are listed.
+            --  We list entities that come from source (except for incomplete,
+            --  private and generic types, as well as deferred constants, for
+            --  which we list the information for the full view). If requested
+            --  by the -gnatR4 switch, we also list relevant entities that have
+            --  been created when processing the original entities coming from
+            --  source. If debug switch -gnatdA is specified, then all entities
+            --  are listed.
 
             if ((Comes_From_Source (E)
                    or else (Ekind (E) = E_Block
@@ -513,9 +488,10 @@ package body Repinfo is
                             Nkind (Parent (E)) = N_Implicit_Label_Declaration
                               and then
                             Comes_From_Source (Label_Construct (Parent (E)))))
-              and then not Is_Incomplete_Or_Private_Type (E)
-              and then not (Ekind (E) = E_Constant
-                              and then Present (Full_View (E))))
+                 and then not Is_Incomplete_Or_Private_Type (E)
+                 and then not Is_Generic_Type (E)
+                 and then not (Ekind (E) = E_Constant
+                                and then Present (Full_View (E))))
               or else (List_Representation_Info = 4
                          and then Relevant_Entities.Get (E))
               or else Debug_Flag_AA
@@ -539,7 +515,11 @@ package body Repinfo is
 
                elsif Is_Record_Type (E) then
                   if List_Representation_Info >= 1 then
-                     List_Record_Info (E, Bytes_Big_Endian);
+                     if Is_Private_Type (E) then
+                        List_Record_Info (Full_View (E), Bytes_Big_Endian);
+                     else
+                        List_Record_Info (E, Bytes_Big_Endian);
+                     end if;
 
                      --  Recurse into entities local to a record type
 
@@ -600,34 +580,6 @@ package body Repinfo is
 
             Next_Entity (E);
          end loop;
-
-         --  For a package body, the entities of the visible subprograms are
-         --  declared in the corresponding spec. Iterate over its entities in
-         --  order to handle properly the subprogram bodies. Skip bodies in
-         --  subunits, which are listed independently.
-
-         if Ekind (Ent) = E_Package_Body
-           and then Present (Corresponding_Spec (Find_Declaration (Ent)))
-         then
-            E := First_Entity (Corresponding_Spec (Find_Declaration (Ent)));
-            while Present (E) loop
-               if Is_Subprogram (E)
-                 and then
-                   Nkind (Find_Declaration (E)) = N_Subprogram_Declaration
-               then
-                  Body_E := Corresponding_Body (Find_Declaration (E));
-
-                  if Present (Body_E)
-                    and then
-                      Nkind (Parent (Find_Declaration (Body_E))) /= N_Subunit
-                  then
-                     List_Entities (Body_E, Bytes_Big_Endian);
-                  end if;
-               end if;
-
-               Next_Entity (E);
-            end loop;
-         end if;
       end if;
    end List_Entities;
 
@@ -725,7 +677,7 @@ package body Repinfo is
                         Print_Expr (Node.Op2);
                         Write_Str (" else ");
                         Print_Expr (Node.Op3);
-                        Write_Str (" end)");
+                        Write_Str (")");
                      end if;
 
                   when Plus_Expr =>
@@ -864,7 +816,7 @@ package body Repinfo is
       pragma Assert (List_Representation_Info_To_JSON);
       Write_Str ("  ""location"": """);
       Write_Location (Sloc (Ent));
-      Write_Line (""",");
+      Write_Str ("""");
    end List_Location;
 
    ---------------
@@ -926,6 +878,7 @@ package body Repinfo is
          List_Name (Ent);
          Write_Line (""",");
          List_Location (Ent);
+         Write_Line (",");
 
          Write_Str ("  ""Size"": ");
          Write_Val (Esize (Ent));
@@ -1091,7 +1044,7 @@ package body Repinfo is
                      goto Continue;
                   end if;
 
-                  UI_Image (Spos);
+                  UI_Image (Spos, Format => Decimal);
                else
                   --  If the record is not packed, then we know that all fields
                   --  whose position is not specified have starting normalized
@@ -1167,7 +1120,7 @@ package body Repinfo is
                Spos := Spos + 1;
             end if;
 
-            UI_Image (Spos);
+            UI_Image (Spos, Format => Decimal);
             Spaces (Max_Spos_Length - UI_Image_Length);
             Write_Str (UI_Image_Buffer (1 .. UI_Image_Length));
 
@@ -1482,6 +1435,12 @@ package body Repinfo is
 
                   else
                      Parent_Type := Base_Type (Parent_Type);
+
+                     if Is_Private_Type (Parent_Type) then
+                        Parent_Type := Full_View (Parent_Type);
+                        pragma Assert (Present (Parent_Type));
+                     end if;
+
                      if not In_Extended_Main_Source_Unit (Parent_Type) then
                         raise Not_In_Extended_Main;
                      end if;
@@ -1910,6 +1869,7 @@ package body Repinfo is
          List_Name (Ent);
          Write_Line (""",");
          List_Location (Ent);
+         Write_Line (",");
 
          Write_Str ("  ""Convention"": """);
       else

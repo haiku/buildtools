@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2025 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    Namelist input contributed by Paul Thomas
    F2003 I/O support contributed by Jerry DeLisle
@@ -63,10 +63,6 @@ typedef unsigned char uchar;
 /* Maximum repeat count.  Less than ten times the maximum signed int32.  */
 
 #define MAX_REPEAT 200000000
-
-
-#define MSGLEN 100
-
 
 /* Wrappers for calling the current worker functions.  */
 
@@ -467,7 +463,7 @@ eat_separator (st_parameter_dt *dtp)
 
   dtp->u.p.comma_flag = 0;
   c = next_char (dtp);
-  if (c == ' '  || c == '\t')
+  if (c == ' ' || c == '\t')
     {
       eat_spaces (dtp);
       c = next_char (dtp);
@@ -651,7 +647,7 @@ nml_bad_return (st_parameter_dt *dtp, char c)
 static int
 convert_integer (st_parameter_dt *dtp, int length, int negative)
 {
-  char c, *buffer, message[MSGLEN];
+  char c, *buffer, message[IOMSG_LEN];
   int m;
   GFC_UINTEGER_LARGEST v, max, max10;
   GFC_INTEGER_LARGEST value;
@@ -701,8 +697,8 @@ convert_integer (st_parameter_dt *dtp, int length, int negative)
 
       if (dtp->u.p.repeat_count == 0)
 	{
-	  snprintf (message, MSGLEN, "Zero repeat count in item %d of list input",
-		   dtp->u.p.item_count);
+	  snprintf (message, IOMSG_LEN, "Zero repeat count in item %d of list "
+		    "input", dtp->u.p.item_count);
 
 	  generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
 	  m = 1;
@@ -714,10 +710,10 @@ convert_integer (st_parameter_dt *dtp, int length, int negative)
 
  overflow:
   if (length == -1)
-    snprintf (message, MSGLEN, "Repeat count overflow in item %d of list input",
-	     dtp->u.p.item_count);
+    snprintf (message, IOMSG_LEN, "Repeat count overflow in item %d of list "
+	      "input", dtp->u.p.item_count);
   else
-    snprintf (message, MSGLEN, "Integer overflow while reading item %d",
+    snprintf (message, IOMSG_LEN, "Integer overflow while reading item %d",
 	     dtp->u.p.item_count);
 
   free_saved (dtp);
@@ -726,6 +722,86 @@ convert_integer (st_parameter_dt *dtp, int length, int negative)
   return 1;
 }
 
+/* Same as above, but for unsigneds, where overflow checks are only
+   preformed with -pedantic, except on the repeat count.  */
+
+static int
+convert_unsigned (st_parameter_dt *dtp, int length, int negative)
+{
+  char c, *buffer, message[IOMSG_LEN];
+  GFC_UINTEGER_LARGEST v, value, max, v_old;
+  int m;
+
+  if (compile_options.pedantic && negative)
+    goto overflow;
+
+  buffer = dtp->u.p.saved_string;
+  max = length == -1 ? MAX_REPEAT : us_max (length);
+
+  v = 0;
+  for (;;)
+    {
+      c = *buffer++;
+      if (c == '\0')
+	break;
+      c -= '0';
+      v_old = v;
+      v = v * 10 + c;
+
+      if (length == -1 && v > max)
+	goto overflow;
+      else if (compile_options.pedantic && v < v_old)
+	goto overflow;
+    }
+
+  m = 0;
+
+  if (length != -1)
+    {
+      if (negative)
+	value = -v;
+      else
+	value = v;
+
+      if (compile_options.pedantic && value > max)
+	goto overflow;
+      else
+	value = value & max;
+
+      set_unsigned (dtp->u.p.value, value, length);
+    }
+  else
+    {
+      dtp->u.p.repeat_count = v;
+
+      if (dtp->u.p.repeat_count == 0)
+	{
+	  snprintf (message, IOMSG_LEN, "Zero repeat count in item %d of list input",
+		   dtp->u.p.item_count);
+
+	  generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
+	  m = 1;
+	}
+    }
+  free_saved (dtp);
+  return m;
+
+ overflow:
+  if (length== -1)
+    snprintf (message, IOMSG_LEN, "Repeat count overflow in item %d of list input",
+	      dtp->u.p.item_count);
+  else if (negative)
+    snprintf (message, IOMSG_LEN, "Negative sign for unsigned integer "
+	      "in item %d of list input", dtp->u.p.item_count);
+  else
+    snprintf (message, IOMSG_LEN, "Unsigned integer overflow while reading "
+	      "item %d of list input", dtp->u.p.item_count);
+
+  free_saved (dtp);
+  generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
+
+  return 1;
+}
 
 /* Parse a repeat count for logical and complex values which cannot
    begin with a digit.  Returns nonzero if we are done, zero if we
@@ -734,7 +810,7 @@ convert_integer (st_parameter_dt *dtp, int length, int negative)
 static int
 parse_repeat (st_parameter_dt *dtp)
 {
-  char message[MSGLEN];
+  char message[IOMSG_LEN];
   int c, repeat;
 
   if ((c = next_char (dtp)) == EOF)
@@ -765,7 +841,7 @@ parse_repeat (st_parameter_dt *dtp)
 
 	  if (repeat > MAX_REPEAT)
 	    {
-	      snprintf (message, MSGLEN,
+	      snprintf (message, IOMSG_LEN,
 		       "Repeat count overflow in item %d of list input",
 		       dtp->u.p.item_count);
 
@@ -778,7 +854,7 @@ parse_repeat (st_parameter_dt *dtp)
 	case '*':
 	  if (repeat == 0)
 	    {
-	      snprintf (message, MSGLEN,
+	      snprintf (message, IOMSG_LEN,
 		       "Zero repeat count in item %d of list input",
 		       dtp->u.p.item_count);
 
@@ -808,7 +884,7 @@ parse_repeat (st_parameter_dt *dtp)
     }
   else
     eat_line (dtp);
-  snprintf (message, MSGLEN, "Bad repeat count in item %d of list input",
+  snprintf (message, IOMSG_LEN, "Bad repeat count in item %d of list input",
 	   dtp->u.p.item_count);
   generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
   return 1;
@@ -835,12 +911,13 @@ l_push_char (st_parameter_dt *dtp, char c)
 static void
 read_logical (st_parameter_dt *dtp, int length)
 {
-  char message[MSGLEN];
+  char message[IOMSG_LEN];
   int c, i, v;
 
   if (parse_repeat (dtp))
     return;
 
+next:
   c = safe_tolower (next_char (dtp));
   l_push_char (dtp, c);
   switch (c)
@@ -885,6 +962,9 @@ read_logical (st_parameter_dt *dtp, int length)
     case '!':
       if (!dtp->u.p.namelist_mode)
         goto bad_logical;
+      eat_line (dtp);
+      eat_spaces (dtp);
+      goto next;
 
     CASE_SEPARATORS:
     case EOF:
@@ -919,6 +999,14 @@ read_logical (st_parameter_dt *dtp, int length)
   for(i = 0; i < 63; i++)
     {
       c = next_char (dtp);
+      if (c == '(')
+	{
+	  l_push_char (dtp, c);
+	  dtp->u.p.nml_read_error = 1;
+	  dtp->u.p.line_buffer_enabled = 1;
+	  dtp->u.p.line_buffer_pos = 0;
+	  return;
+	}
       if (is_separator(c))
 	{
 	  /* All done if this is not a namelist read.  */
@@ -964,7 +1052,7 @@ read_logical (st_parameter_dt *dtp, int length)
     }
   else if (c != '\n')
     eat_line (dtp);
-  snprintf (message, MSGLEN, "Bad logical value while reading item %d",
+  snprintf (message, IOMSG_LEN, "Bad logical value while reading item %d",
 	      dtp->u.p.item_count);
   free_line (dtp);
   generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
@@ -986,13 +1074,13 @@ read_logical (st_parameter_dt *dtp, int length)
    used for repeat counts.  */
 
 static void
-read_integer (st_parameter_dt *dtp, int length)
+read_integer (st_parameter_dt *dtp, int length, bt type)
 {
-  char message[MSGLEN];
+  char message[IOMSG_LEN];
   int c, negative;
-
   negative = 0;
 
+next:
   c = next_char (dtp);
   switch (c)
     {
@@ -1008,6 +1096,9 @@ read_integer (st_parameter_dt *dtp, int length)
     case '!':
       if (!dtp->u.p.namelist_mode)
         goto bad_integer;
+      eat_line (dtp);
+      eat_spaces (dtp);
+      goto next;
 
     CASE_SEPARATORS:		/* Single null.  */
       unget_char (dtp, c);
@@ -1051,8 +1142,11 @@ read_integer (st_parameter_dt *dtp, int length)
     }
 
  repeat:
-  if (convert_integer (dtp, -1, 0))
-    return;
+  if (type == BT_INTEGER)
+    {
+      if (convert_integer (dtp, -1, 0))
+	return;
+    }
 
   /* Get the real integer.  */
 
@@ -1073,6 +1167,9 @@ read_integer (st_parameter_dt *dtp, int length)
       return;
 
     case '-':
+      if (compile_options.pedantic && type == BT_UNSIGNED)
+	goto bad_integer;
+
       negative = 1;
       /* Fall through...  */
 
@@ -1123,8 +1220,13 @@ read_integer (st_parameter_dt *dtp, int length)
   else if (c != '\n')
     eat_line (dtp);
 
-  snprintf (message, MSGLEN, "Bad integer for item %d in list input",
+  if (type == BT_INTEGER)
+    snprintf (message, IOMSG_LEN, "Bad integer for item %d in list input",
 	      dtp->u.p.item_count);
+  else
+    snprintf (message, IOMSG_LEN, "Bad unsigned for item %d in list input",
+	      dtp->u.p.item_count);
+
   free_line (dtp);
   generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
 
@@ -1135,29 +1237,45 @@ read_integer (st_parameter_dt *dtp, int length)
   eat_separator (dtp);
 
   push_char (dtp, '\0');
-  if (convert_integer (dtp, length, negative))
+  if (type == BT_INTEGER)
     {
-       free_saved (dtp);
-       return;
+      if (convert_integer (dtp, length, negative))
+	{
+	  free_saved (dtp);
+	  return;
+	}
+    }
+  else
+    {
+      if (convert_unsigned (dtp, length, negative))
+	{
+	  free_saved (dtp);
+	  return;
+	}
     }
 
   free_saved (dtp);
-  dtp->u.p.saved_type = BT_INTEGER;
+  dtp->u.p.saved_type = type;
 }
-
 
 /* Read a character variable.  */
 
 static void
 read_character (st_parameter_dt *dtp, int length __attribute__ ((unused)))
 {
-  char quote, message[MSGLEN];
+  char quote, message[IOMSG_LEN];
   int c;
 
   quote = ' ';			/* Space means no quote character.  */
 
+next:
   if ((c = next_char (dtp)) == EOF)
     goto eof;
+  if (c == ';')
+    {
+      push_char (dtp, c);
+      goto get_string;
+    }
   switch (c)
     {
     CASE_DIGITS:
@@ -1175,6 +1293,15 @@ read_character (st_parameter_dt *dtp, int length __attribute__ ((unused)))
       quote = c;
       goto get_string;
 
+    case '!':
+      if (dtp->u.p.namelist_mode)
+	{
+	  eat_line (dtp);
+	  eat_spaces (dtp);
+	  goto next;
+	}
+      /* Fall through...  */
+
     default:
       if (dtp->u.p.namelist_mode)
 	{
@@ -1190,6 +1317,13 @@ read_character (st_parameter_dt *dtp, int length __attribute__ ((unused)))
   for (;;)
     {
       c = next_char (dtp);
+
+      if (c == ';')
+	{
+	  push_char (dtp, c);
+	  goto get_string;
+	}
+
       switch (c)
 	{
 	CASE_DIGITS:
@@ -1219,6 +1353,13 @@ read_character (st_parameter_dt *dtp, int length __attribute__ ((unused)))
 
   if ((c = next_char (dtp)) == EOF)
     goto eof;
+
+  if (c == ';')
+    {
+      push_char (dtp, c);
+      goto get_string;
+    }
+
   switch (c)
     {
     CASE_SEPARATORS:
@@ -1242,6 +1383,13 @@ read_character (st_parameter_dt *dtp, int length __attribute__ ((unused)))
     {
       if ((c = next_char (dtp)) == EOF)
 	goto done_eof;
+
+      if (c == ';')
+	{
+	  push_char (dtp, c);
+	  continue;
+	}
+
       switch (c)
 	{
 	case '"':
@@ -1297,7 +1445,7 @@ read_character (st_parameter_dt *dtp, int length __attribute__ ((unused)))
   else
     {
       free_saved (dtp);
-      snprintf (message, MSGLEN, "Invalid string input in item %d",
+      snprintf (message, IOMSG_LEN, "Invalid string input in item %d",
 		  dtp->u.p.item_count);
       generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
     }
@@ -1317,7 +1465,7 @@ read_character (st_parameter_dt *dtp, int length __attribute__ ((unused)))
 static int
 parse_real (st_parameter_dt *dtp, void *buffer, int length)
 {
-  char message[MSGLEN];
+  char message[IOMSG_LEN];
   int c, m, seen_dp;
 
   if ((c = next_char (dtp)) == EOF)
@@ -1532,7 +1680,7 @@ parse_real (st_parameter_dt *dtp, void *buffer, int length)
   else if (c != '\n')
     eat_line (dtp);
 
-  snprintf (message, MSGLEN, "Bad complex floating point "
+  snprintf (message, IOMSG_LEN, "Bad complex floating point "
 	    "number for item %d", dtp->u.p.item_count);
   free_line (dtp);
   generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
@@ -1547,12 +1695,13 @@ parse_real (st_parameter_dt *dtp, void *buffer, int length)
 static void
 read_complex (st_parameter_dt *dtp, void *dest, int kind, size_t size)
 {
-  char message[MSGLEN];
+  char message[IOMSG_LEN];
   int c;
 
   if (parse_repeat (dtp))
     return;
 
+next:
   c = next_char (dtp);
   switch (c)
     {
@@ -1562,6 +1711,9 @@ read_complex (st_parameter_dt *dtp, void *dest, int kind, size_t size)
     case '!':
       if (!dtp->u.p.namelist_mode)
 	goto bad_complex;
+      eat_line (dtp);
+      eat_spaces (dtp);
+      goto next;
 
     CASE_SEPARATORS:
     case EOF:
@@ -1644,7 +1796,7 @@ eol_4:
   else if (c != '\n')
     eat_line (dtp);
 
-  snprintf (message, MSGLEN, "Bad complex value in item %d of list input",
+  snprintf (message, IOMSG_LEN, "Bad complex value in item %d of list input",
 	      dtp->u.p.item_count);
   free_line (dtp);
   generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
@@ -1656,13 +1808,14 @@ eol_4:
 static void
 read_real (st_parameter_dt *dtp, void *dest, int length)
 {
-  char message[MSGLEN];
+  char message[IOMSG_LEN];
   int c;
   int seen_dp;
   int is_inf;
 
   seen_dp = 0;
 
+next:
   c = next_char (dtp);
   if (dtp->u.p.current_unit->decimal_status == DECIMAL_COMMA)
     {
@@ -1694,6 +1847,9 @@ read_real (st_parameter_dt *dtp, void *dest, int length)
     case '!':
       if (!dtp->u.p.namelist_mode)
 	goto bad_real;
+      eat_line (dtp);
+      eat_spaces (dtp);
+      goto next;
 
     CASE_SEPARATORS:
       unget_char (dtp, c);		/* Single null.  */
@@ -2070,7 +2226,7 @@ read_real (st_parameter_dt *dtp, void *dest, int length)
   else if (c != '\n')
     eat_line (dtp);
 
-  snprintf (message, MSGLEN, "Bad real number in item %d of list input",
+  snprintf (message, IOMSG_LEN, "Bad real number in item %d of list input",
 	      dtp->u.p.item_count);
   free_line (dtp);
   generate_error (&dtp->common, LIBERROR_READ_VALUE, message);
@@ -2083,11 +2239,11 @@ read_real (st_parameter_dt *dtp, void *dest, int length)
 static int
 check_type (st_parameter_dt *dtp, bt type, int kind)
 {
-  char message[MSGLEN];
+  char message[IOMSG_LEN];
 
   if (dtp->u.p.saved_type != BT_UNKNOWN && dtp->u.p.saved_type != type)
     {
-      snprintf (message, MSGLEN, "Read type %s where %s was expected for item %d",
+      snprintf (message, IOMSG_LEN, "Read type %s where %s was expected for item %d",
 		  type_name (dtp->u.p.saved_type), type_name (type),
 		  dtp->u.p.item_count);
       free_line (dtp);
@@ -2101,7 +2257,7 @@ check_type (st_parameter_dt *dtp, bt type, int kind)
   if ((type != BT_COMPLEX && dtp->u.p.saved_length != kind)
       || (type == BT_COMPLEX && dtp->u.p.saved_length != kind*2))
     {
-      snprintf (message, MSGLEN,
+      snprintf (message, IOMSG_LEN,
 		  "Read kind %d %s where kind %d is required for item %d",
 		  type == BT_COMPLEX ? dtp->u.p.saved_length / 2
 				     : dtp->u.p.saved_length,
@@ -2171,6 +2327,8 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
 	}
       if (c == ',' && dtp->u.p.current_unit->decimal_status == DECIMAL_COMMA)
 	c = '.';
+      if (c == ';' && dtp->u.p.current_unit->decimal_status == DECIMAL_POINT)
+	unget_char (dtp, c);
       else if (is_separator (c))
 	{
 	  /* Found a null value.  */
@@ -2220,7 +2378,8 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
   switch (type)
     {
     case BT_INTEGER:
-      read_integer (dtp, kind);
+    case BT_UNSIGNED:
+      read_integer (dtp, kind, type);
       break;
     case BT_LOGICAL:
       read_logical (dtp, kind);
@@ -2242,14 +2401,14 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
       break;
     case BT_CLASS:
       {
-	  int unit = dtp->u.p.current_unit->unit_number;
+	  GFC_INTEGER_4 unit = dtp->u.p.current_unit->unit_number;
 	  char iotype[] = "LISTDIRECTED";
           gfc_charlen_type iotype_len = 12;
-	  char tmp_iomsg[IOMSG_LEN] = "";
+	  char tmp_iomsg[IOMSG_LEN];
 	  char *child_iomsg;
 	  gfc_charlen_type child_iomsg_len;
-	  int noiostat;
-	  int *child_iostat = NULL;
+	  GFC_INTEGER_4 noiostat;
+	  GFC_INTEGER_4 *child_iostat = NULL;
 	  gfc_full_array_i4 vlist;
 
 	  GFC_DESCRIPTOR_DATA(&vlist) = NULL;
@@ -2257,10 +2416,10 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
 
 	  /* Set iostat, intent(out).  */
 	  noiostat = 0;
-	  child_iostat = (dtp->common.flags & IOPARM_HAS_IOSTAT) ?
-			  dtp->common.iostat : &noiostat;
+	  child_iostat = ((dtp->common.flags & IOPARM_HAS_IOSTAT)
+			  ? dtp->common.iostat : &noiostat);
 
-	  /* Set iomsge, intent(inout).  */
+	  /* Set iomsg, intent(inout).  */
 	  if (dtp->common.flags & IOPARM_HAS_IOMSG)
 	    {
 	      child_iomsg = dtp->common.iomsg;
@@ -2279,6 +2438,19 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
 			      iotype_len, child_iomsg_len);
 	  dtp->u.p.child_saved_iostat = *child_iostat;
 	  dtp->u.p.current_unit->child_dtio--;
+
+	  if ((dtp->u.p.child_saved_iostat != 0) &&
+	      !(dtp->common.flags & IOPARM_HAS_IOMSG) &&
+	      !(dtp->common.flags & IOPARM_HAS_IOSTAT))
+	    {
+	      char message[IOMSG_LEN + 1];
+	      child_iomsg_len = string_len_trim (IOMSG_LEN, child_iomsg);
+	      free_line (dtp);
+	      fstrcpy (message, child_iomsg_len, child_iomsg, child_iomsg_len);
+	      message[child_iomsg_len] = '\0';
+	      generate_error (&dtp->common, dtp->u.p.child_saved_iostat,
+			      message);
+	    }
       }
       break;
     default:
@@ -2301,6 +2473,7 @@ list_formatted_read_scalar (st_parameter_dt *dtp, bt type, void *p,
       break;
 
     case BT_INTEGER:
+    case BT_UNSIGNED:
     case BT_LOGICAL:
       memcpy (p, dtp->u.p.value, size);
       break;
@@ -2407,6 +2580,7 @@ finish_list_read (st_parameter_dt *dtp)
       return;
     }
 
+  /* Only perform the following cleanup on external files or the stdin file.  */
   if (!is_internal_unit (dtp))
     {
       int c;
@@ -2414,22 +2588,31 @@ finish_list_read (st_parameter_dt *dtp)
       /* Set the next_char and push_char worker functions.  */
       set_workers (dtp);
 
+      /* Make sure there were no errors from a DTIO child read.  */
       if (likely (dtp->u.p.child_saved_iostat == LIBERROR_OK))
 	{
+	  /* Peek ahead to see where we are in the parent read.  */
 	  c = next_char (dtp);
-	  if (c == EOF)
+	  unget_char (dtp, c);
+
+	  /* If the last read used DTIO, handle end conditions differently.  */
+	  if ((dtp->common.flags & IOPARM_DT_HAS_UDTIO) != 0)
 	    {
-	      free_line (dtp);
-	      hit_eof (dtp);
-	      return;
+	      if ((c == EOF) || (c == ' '))
+		return;
+	    }
+	  else
+	    {
+	      if (c == EOF)
+		{
+		  hit_eof (dtp);
+		  return;
+		}
 	    }
 	  if (c != '\n')
 	    eat_line (dtp);
 	}
     }
-
-  free_line (dtp);
-
 }
 
 /*			NAMELIST INPUT
@@ -3011,7 +3194,8 @@ nml_read_obj (st_parameter_dt *dtp, namelist_info *nl, index_type offset,
           switch (nl->type)
 	  {
 	  case BT_INTEGER:
-	    read_integer (dtp, len);
+	  case BT_UNSIGNED:
+	    read_integer (dtp, len, nl->type);
             break;
 
 	  case BT_LOGICAL:
@@ -3040,27 +3224,27 @@ nml_read_obj (st_parameter_dt *dtp, namelist_info *nl, index_type offset,
 	    /* If this object has a User Defined procedure, call it.  */
 	    if (nl->dtio_sub != NULL)
 	      {
-		int unit = dtp->u.p.current_unit->unit_number;
+		GFC_INTEGER_4 unit = dtp->u.p.current_unit->unit_number;
 		char iotype[] = "NAMELIST";
 		gfc_charlen_type iotype_len = 8;
 		char tmp_iomsg[IOMSG_LEN] = "";
 		char *child_iomsg;
 		gfc_charlen_type child_iomsg_len;
-		int noiostat;
-		int *child_iostat = NULL;
+		GFC_INTEGER_4 noiostat;
+		GFC_INTEGER_4 *child_iostat = NULL;
 		gfc_full_array_i4 vlist;
 		formatted_dtio dtio_ptr = (formatted_dtio)nl->dtio_sub;
 
 		GFC_DESCRIPTOR_DATA(&vlist) = NULL;
 		GFC_DIMENSION_SET(vlist.dim[0],1, 0, 0);
-		
+
 		list_obj.vptr = nl->vtable;
 		list_obj.len = 0;
 
 		/* Set iostat, intent(out).  */
 		noiostat = 0;
-		child_iostat = (dtp->common.flags & IOPARM_HAS_IOSTAT) ?
-				dtp->common.iostat : &noiostat;
+		child_iostat = ((dtp->common.flags & IOPARM_HAS_IOSTAT)
+				? dtp->common.iostat : &noiostat);
 
 		/* Set iomsg, intent(inout).  */
 		if (dtp->common.flags & IOPARM_HAS_IOMSG)
@@ -3081,6 +3265,20 @@ nml_read_obj (st_parameter_dt *dtp, namelist_info *nl, index_type offset,
 			  iotype_len, child_iomsg_len);
 		dtp->u.p.child_saved_iostat = *child_iostat;
 		dtp->u.p.current_unit->child_dtio--;
+
+		if ((dtp->u.p.child_saved_iostat != 0) &&
+		    !(dtp->common.flags & IOPARM_HAS_IOMSG) &&
+		    !(dtp->common.flags & IOPARM_HAS_IOSTAT))
+		  {
+		    char message[IOMSG_LEN + 1];
+		    child_iomsg_len = string_len_trim (IOMSG_LEN, child_iomsg);
+		    fstrcpy (message, child_iomsg_len, child_iomsg, child_iomsg_len);
+		    message[child_iomsg_len] = '\0';
+		    generate_error (&dtp->common, dtp->u.p.child_saved_iostat,
+				    message);
+		    goto nml_err_ret;
+		  }
+
 		goto incr_idx;
 	      }
 
@@ -3649,8 +3847,12 @@ find_nml_name:
   if (dtp->u.p.nml_read_error)
     goto find_nml_name;
 
-  /* A trailing space is required, we give a little latitude here, 10.9.1.  */
+  /* A trailing space is required, we allow a comma with std=gnu.  */
   c = next_char (dtp);
+  if ((c == ',' && !(compile_options.allow_std & GFC_STD_GNU)) || c == ';')
+    generate_error (&dtp->common, LIBERROR_READ_VALUE,
+		    "Non blank after namelist name not allowed");
+
   if (!is_separator(c) && c != '!')
     {
       unget_char (dtp, c);

@@ -1,4 +1,3 @@
-// { dg-options "-std=gnu++23" }
 // { dg-do run { target c++23 } }
 
 #include <ranges>
@@ -9,6 +8,23 @@
 
 namespace ranges = std::ranges;
 namespace views = std::views;
+
+template<typename T>
+concept can_zip_transform = requires (T t) {
+  views::zip_transform(std::forward<T>(t));
+};
+
+static_assert(!can_zip_transform<int>);
+
+struct NonMovable {
+  NonMovable(NonMovable&&) = delete;
+};
+
+static_assert(!can_zip_transform<NonMovable>);
+static_assert(!can_zip_transform<NonMovable&>);
+
+static_assert(!can_zip_transform<void(*)()>);
+static_assert(can_zip_transform<int(&(*)())[3]>);
 
 constexpr bool
 test01()
@@ -46,6 +62,10 @@ test01()
 				 std::array{3, 4, 8, 0});
   VERIFY( ranges::size(z3) == 3 );
   VERIFY( ranges::equal(z3, (int[]){3, 6, 9}) );
+
+  auto z4 = views::zip_transform([] () { return 1; });
+  VERIFY( ranges::size(z4) == 0 );
+  static_assert( std::same_as<ranges::range_value_t<decltype(z4)>, int> );
 
   return true;
 }
@@ -99,10 +119,24 @@ test03()
   return true;
 }
 
+void
+test04()
+{
+  extern int x[5];
+  struct move_only {
+    move_only() { }
+    move_only(move_only&&) { }
+    int operator()(int i, int j) const { return i + j; }
+  };
+  // P2494R2 Relaxing range adaptors to allow for move only types
+  static_assert( requires { views::zip_transform(move_only{}, x, x); } );
+}
+
 int
 main()
 {
   static_assert(test01());
   static_assert(test02());
   static_assert(test03());
+  test04();
 }

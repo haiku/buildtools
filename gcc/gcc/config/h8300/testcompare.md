@@ -4,7 +4,7 @@
 
 ;; (define_insn_and_split "*tst_extzv_1_n"
 ;;   [(set (cc0)
-;; 	(compare (zero_extract:SI (match_operand:QI 0 "general_operand_src" "r,U,mn>")
+;; 	(compare (zero_extract:SI (match_operand:QI 0 "general_operand_src" "r,rU,mn>")
 ;; 				  (const_int 1)
 ;; 				  (match_operand 1 "const_int_operand" "n,n,n"))
 ;; 		 (const_int 0)))
@@ -171,13 +171,25 @@
    (set_attr "length_table" "*,add")])
 
 ;; Convert a memory comparison to a move if there is a scratch register.
-
+;; This is preferred over the next as we can proactively avoid the
+;; comparison.
 (define_peephole2
   [(match_scratch:QHSI 1 "r")
    (set (reg:CC CC_REG)
 	(compare (match_operand:QHSI 0 "memory_operand" "")
 		 (const_int 0)))]
-  ""
+  "!mode_dependent_address_p (XEXP (operands[0], 0), MEM_ADDR_SPACE (operands[0]))"
+  [(parallel [(set (reg:CCZN CC_REG) (compare:CCZN (match_dup 0) (const_int 0)))
+	      (set (match_dup 1) (match_dup 0))])])
+
+;; Similarly, but used when the memory reference is an autoinc address
+;; mode.
+(define_peephole2
+  [(match_scratch:QHSI 1 "r")
+   (set (reg:CC CC_REG)
+	(compare (match_operand:QHSI 0 "memory_operand" "")
+		 (const_int 0)))]
+  "mode_dependent_address_p (XEXP (operands[0], 0), MEM_ADDR_SPACE (operands[0]))"
   [(parallel [(set (match_dup 1) (match_dup 0)) (clobber (reg:CC CC_REG))])
    (set (reg:CC CC_REG) (compare:CC (match_dup 1) (const_int 0)))])
 

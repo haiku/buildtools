@@ -1,6 +1,6 @@
 /* Declarations for variables relating to reading the source file.
    Used by parsers, lexical analyzers, and error message routines.
-   Copyright (C) 1993-2023 Free Software Foundation, Inc.
+   Copyright (C) 1993-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,6 +22,8 @@ along with GCC; see the file COPYING3.  If not see
 #define GCC_INPUT_H
 
 #include "line-map.h"
+
+class file_cache;
 
 extern GTY(()) class line_maps *line_table;
 extern GTY(()) class line_maps *saved_line_table;
@@ -67,7 +69,8 @@ extern expanded_location expand_location (location_t);
 class cpp_char_column_policy;
 
 extern int
-location_compute_display_column (expanded_location exploc,
+location_compute_display_column (file_cache &fc,
+				 expanded_location exploc,
 				 const cpp_char_column_policy &policy);
 
 /* A class capturing the bounds of a buffer, to allow for run-time
@@ -113,11 +116,8 @@ class char_span
   size_t m_n_elts;
 };
 
-extern char_span location_get_source_line (const char *file_path, int line);
-extern char *get_source_text_between (location_t, location_t);
-extern char_span get_source_file_content (const char *file_path);
-
-extern bool location_missing_trailing_newline (const char *file_path);
+extern char *
+get_source_text_between (file_cache &, location_t, location_t);
 
 /* Forward decl of slot within file_cache, so that the definition doesn't
    need to be in this header.  */
@@ -138,6 +138,9 @@ class file_cache
   file_cache ();
   ~file_cache ();
 
+  void dump (FILE *out, int indent) const;
+  void DEBUG_FUNCTION dump () const;
+
   file_cache_slot *lookup_or_add_file (const char *file_path);
   void forcibly_evict_file (const char *file_path);
 
@@ -150,15 +153,25 @@ class file_cache
   void initialize_input_context (diagnostic_input_charset_callback ccb,
 				 bool should_skip_bom);
 
+  char_span get_source_file_content (const char *file_path);
+  char_span get_source_line (const char *file_path, int line);
+  bool missing_trailing_newline_p (const char *file_path);
+
+  void add_buffered_content (const char *file_path,
+			     const char *buffer,
+			     size_t sz);
+
+  void tune (size_t num_file_slots, size_t lines);
+
  private:
   file_cache_slot *evicted_cache_tab_entry (unsigned *highest_use_count);
   file_cache_slot *add_file (const char *file_path);
   file_cache_slot *lookup_file (const char *file_path);
 
  private:
-  static const size_t num_file_slots = 16;
+  size_t m_num_file_slots;
   file_cache_slot *m_file_slots;
-  input_context in_context;
+  input_context m_input_context;
 };
 
 extern expanded_location
@@ -250,10 +263,6 @@ extern location_t make_location (location_t caret, source_range src_range);
 void dump_line_table_statistics (void);
 
 void dump_location_info (FILE *stream);
-
-void diagnostics_file_cache_fini (void);
-
-void diagnostics_file_cache_forcibly_evict_file (const char *file_path);
 
 class GTY(()) string_concat
 {

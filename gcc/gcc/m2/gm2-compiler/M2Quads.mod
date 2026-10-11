@@ -1,6 +1,6 @@
 (* M2Quads.mod generates quadruples.
 
-Copyright (C) 2001-2023 Free Software Foundation, Inc.
+Copyright (C) 2001-2025 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -27,6 +27,7 @@ FROM M2Debug IMPORT Assert, WriteDebug ;
 FROM NameKey IMPORT Name, NulName, MakeKey, GetKey, makekey, KeyToCharStar, WriteKey ;
 FROM FormatStrings IMPORT Sprintf0, Sprintf1, Sprintf2, Sprintf3 ;
 FROM M2DebugStack IMPORT DebugStack ;
+FROM StrLib IMPORT StrLen ;
 FROM M2Scaffold IMPORT DeclareScaffold, mainFunction, initFunction,
                        finiFunction, linkFunction, PopulateCtorArray,
                        ForeachModuleCallInit, ForeachModuleCallFinish ;
@@ -36,9 +37,11 @@ FROM M2MetaError IMPORT MetaError0, MetaError1, MetaError2, MetaError3,
                         MetaErrorT0, MetaErrorT1, MetaErrorT2,
                         MetaErrorsT1, MetaErrorsT2, MetaErrorT3,
                         MetaErrorStringT0, MetaErrorStringT1,
+                        MetaErrorStringT2,
                         MetaErrorString1, MetaErrorString2,
                         MetaErrorN1, MetaErrorN2,
-                        MetaErrorNT0, MetaErrorNT1, MetaErrorNT2 ;
+                        MetaErrorNT0, MetaErrorNT1, MetaErrorNT2,
+                        MetaErrorDecl ;
 
 FROM DynamicStrings IMPORT String, string, InitString, KillString,
                            ConCat, InitStringCharStar, Dup, Mark,
@@ -47,23 +50,26 @@ FROM DynamicStrings IMPORT String, string, InitString, KillString,
                            InitStringCharDB, MultDB, DupDB, SliceDB ;
 
 FROM SymbolTable IMPORT ModeOfAddr, GetMode, PutMode, GetSymName, IsUnknown,
-                        MakeTemporary,
+                        MakeTemporary, ProcedureKind,
                         MakeTemporaryFromExpression,
                         MakeTemporaryFromExpressions,
-                        MakeConstLit, MakeConstLitString,
-                        MakeConstString, MakeConstant,
-                        Make2Tuple,
+                        MakeConstLit,
+                        MakeConstString, MakeConstant, MakeConstVar,
+                        MakeConstStringM2nul, MakeConstStringCnul,
+                        Make2Tuple, IsTuple,
                         RequestSym, MakePointer, PutPointer,
                         SkipType,
 			GetDType, GetSType, GetLType,
                         GetScope, GetCurrentScope,
                         GetSubrange, SkipTypeAndSubrange,
                         GetModule, GetMainModule,
+                        GetModuleScope, GetCurrentModuleScope,
                         GetCurrentModule, GetFileModule, GetLocalSym,
                         GetStringLength, GetString,
                         GetArraySubscript, GetDimension,
                         GetParam,
-                        GetNth, GetNthParam,
+                        GetNth, GetNthParamAny,
+                        GetNthParamAnyClosest,
                         GetFirstUsed, GetDeclaredMod,
                         GetQuads, GetReadQuads, GetWriteQuads,
                         GetWriteLimitQuads, GetReadLimitQuads,
@@ -71,8 +77,7 @@ FROM SymbolTable IMPORT ModeOfAddr, GetMode, PutMode, GetSymName, IsUnknown,
                         GetModuleQuads, GetProcedureQuads,
                         GetModuleCtors,
                         MakeProcedure,
-                        MakeConstStringCnul, MakeConstStringM2nul,
-                        PutConstString,
+                        PutConstStringKnown,
                         PutModuleStartQuad, PutModuleEndQuad,
                         PutModuleFinallyStartQuad, PutModuleFinallyEndQuad,
                         PutProcedureStartQuad, PutProcedureEndQuad,
@@ -85,15 +90,16 @@ FROM SymbolTable IMPORT ModeOfAddr, GetMode, PutMode, GetSymName, IsUnknown,
                         PutPriority, GetPriority,
                         PutProcedureBegin, PutProcedureEnd,
                         PutVarConst, IsVarConst,
+                        PutConstLitInternal,
                         PutVarHeap,
-                        IsVarParam, IsProcedure, IsPointer, IsParameter,
-                        IsUnboundedParam, IsEnumeration, IsDefinitionForC,
+                        IsVarParamAny, IsProcedure, IsPointer, IsParameter,
+                        IsUnboundedParamAny, IsEnumeration, IsDefinitionForC,
                         IsVarAParam, IsVarient, IsLegal,
-                        UsesVarArgs, UsesOptArg,
+                        UsesVarArgs, UsesOptArgAny,
                         GetOptArgInit,
-                        IsReturnOptional,
+                        IsReturnOptionalAny,
                         NoOfElements,
-                        NoOfParam,
+                        NoOfParamAny,
                         StartScope, EndScope,
                         IsGnuAsm, IsGnuAsmVolatile,
                         MakeRegInterface, PutRegInterface,
@@ -110,13 +116,14 @@ FROM SymbolTable IMPORT ModeOfAddr, GetMode, PutMode, GetSymName, IsUnknown,
                         PutConstructor, PutConstructorFrom,
                         PutDeclared,
                         MakeComponentRecord, MakeComponentRef,
-                        IsSubscript, IsComponent,
-                        IsTemporary,
+                        IsSubscript, IsComponent, IsConstStringKnown,
+                        IsTemporary, IsHiddenType,
                         IsAModula2Type,
                         PutLeftValueFrontBackType,
                         PushSize, PushValue, PopValue,
                         GetVariableAtAddress, IsVariableAtAddress,
                         MakeError, UnknownReported,
+                        IsProcedureBuiltinAvailable,
                         IsError,
                         IsInnerModule,
                         IsImportStatement, IsImport, GetImportModule, GetImportDeclared,
@@ -128,9 +135,14 @@ FROM SymbolTable IMPORT ModeOfAddr, GetMode, PutMode, GetSymName, IsUnknown,
                         GetUnboundedAddressOffset,
                         GetUnboundedHighOffset,
                         PutVarArrayRef,
+                        PutProcedureDefined,
+                        PutProcedureParametersDefined,
+                        GetVarDeclFullTok,
 
                         ForeachFieldEnumerationDo, ForeachLocalSymDo,
                         GetExported, PutImported, GetSym, GetLibName,
+                        GetTypeMode,
+                        IsVarConditional, PutVarConditional,
                         IsUnused,
                         NulSym ;
 
@@ -144,7 +156,7 @@ FROM M2Comp IMPORT CompilingImplementationModule,
                    CompilingProgramModule ;
 
 FROM M2LexBuf IMPORT currenttoken, UnknownTokenNo, BuiltinTokenNo,
-                     GetToken, MakeVirtualTok,
+                     GetToken, MakeVirtualTok, MakeVirtual2Tok,
                      GetFileName, TokenToLineNo, GetTokenName,
                      GetTokenNo, GetLineNo, GetPreviousTokenLineNo, PrintTokenNo ;
 
@@ -157,7 +169,8 @@ FROM M2Error IMPORT Error,
                     ErrorStringAt, ErrorStringAt2, ErrorStringsAt2,
                     WarnStringAt, WarnStringAt2, WarnStringsAt2 ;
 
-FROM M2Printf IMPORT printf0, printf1, printf2, printf3, printf4 ;
+FROM M2Printf IMPORT fprintf0, fprintf1, fprintf2, fprintf3, fprintf4,
+                     printf0, printf1, printf2, printf3, printf4 ;
 
 FROM M2Reserved IMPORT PlusTok, MinusTok, TimesTok, DivTok, ModTok,
                        DivideTok, RemTok,
@@ -213,10 +226,14 @@ FROM M2Options IMPORT NilChecking,
                       GenerateLineDebug, Exceptions,
                       Profiling, Coding, Optimizing,
                       UninitVariableChecking,
+                      StrictTypeAssignment,
                       ScaffoldDynamic, ScaffoldStatic, cflag,
                       ScaffoldMain, SharedFlag, WholeProgram,
-                      GetRuntimeModuleOverride ;
+                      GetDumpDir, GetM2DumpFilter,
+                      GetRuntimeModuleOverride, GetDebugTraceQuad,
+                      GetDumpQuad ;
 
+FROM M2LangDump IMPORT CreateDumpQuad, CloseDumpQuad, GetDumpFile ;
 FROM M2Pass IMPORT IsPassCodeGeneration, IsNoPass ;
 
 FROM M2StackAddress IMPORT StackOfAddress, InitStackAddress, KillStackAddress,
@@ -227,7 +244,8 @@ FROM M2StackWord IMPORT StackOfWord, InitStackWord, KillStackWord,
                         PushWord, PopWord, PeepWord, RemoveTop,
                         IsEmptyWord, NoOfItemsInStackWord ;
 
-FROM Indexing IMPORT Index, InitIndex, GetIndice, PutIndice, InBounds, HighIndice, IncludeIndiceIntoIndex ;
+FROM Indexing IMPORT Index, InitIndex, GetIndice, PutIndice, InBounds, HighIndice,
+                     IncludeIndiceIntoIndex, InitIndexTuned ;
 
 FROM M2Range IMPORT InitAssignmentRangeCheck,
                     InitReturnRangeCheck,
@@ -241,8 +259,10 @@ FROM M2Range IMPORT InitAssignmentRangeCheck,
                     InitRotateCheck,
                     InitShiftCheck,
                     InitTypesAssignmentCheck,
+                    InitTypesIndrXCheck,
                     InitTypesExpressionCheck,
                     InitTypesParameterCheck,
+                    InitTypesReturnTypeCheck,
                     InitForLoopBeginRangeCheck,
                     InitForLoopToRangeCheck,
                     InitForLoopEndRangeCheck,
@@ -253,19 +273,20 @@ FROM M2Range IMPORT InitAssignmentRangeCheck,
                     InitWholeZeroDivisionCheck,
                     InitWholeZeroRemainderCheck,
                     InitParameterRangeCheck,
+                    PutRangeForIncrement,
                     WriteRangeCheck ;
 
 FROM M2CaseList IMPORT PushCase, PopCase, AddRange, BeginCaseList, EndCaseList, ElseCase ;
 FROM PCSymBuild IMPORT SkipConst ;
 FROM m2builtins IMPORT GetBuiltinTypeInfoType ;
+FROM M2LangDump IMPORT IsDumpRequired ;
 
-IMPORT M2Error ;
+IMPORT M2Error, FIO, SFIO, DynamicStrings, StdIO ;
 
 
 CONST
    DebugStackOn = TRUE ;
    DebugVarients = FALSE ;
-   BreakAtQuad = 53 ;
    DebugTokPos = FALSE ;
 
 TYPE
@@ -282,6 +303,7 @@ TYPE
                              Dimension : CARDINAL ;
                              ReadWrite : CARDINAL ;
                              name      : CARDINAL ;
+                             RangeDep  : CARDINAL ;
                              Annotation: String ;
                              tokenno   : CARDINAL ;
                           END ;
@@ -296,6 +318,9 @@ TYPE
                              LineNo             : CARDINAL ;     (* Line No of source text.         *)
                              TokenNo            : CARDINAL ;     (* Token No of source text.        *)
                              NoOfTimesReferenced: CARDINAL ;     (* No of times quad is referenced. *)
+                             ConstExpr,                          (* Must backend resolve this at    *)
+                                                                 (* compile time?  *)
+                             CheckType,
                              CheckOverflow      : BOOLEAN ;      (* should backend check overflow   *)
                              op1pos,
                              op2pos,
@@ -332,7 +357,8 @@ VAR
    TryStack,
    CatchStack,
    ExceptStack,
-   ConstStack,
+   ConstExprStack,
+   ConstParamStack,
    AutoStack,
    RepeatStack,
    WhileStack,
@@ -357,6 +383,7 @@ VAR
    LogicalXorTok,                     (* Internal _LXOR token.                   *)
    LogicalDifferenceTok : Name ;      (* Internal _LDIFF token.                  *)
    InConstExpression,
+   InConstParameters,
    IsAutoOn,                          (* Should parser automatically push        *)
                                       (* idents?                                 *)
    MustNotCheckBounds   : BOOLEAN ;
@@ -372,6 +399,7 @@ VAR
                                       (* in order.                               *)
    NoOfQuads            : CARDINAL ;  (* Number of used quadruples.              *)
    Head                 : CARDINAL ;  (* Head of the list of quadruples.         *)
+   BreakQuad            : CARDINAL ;  (* Stop when BreakQuad is created.         *)
 
 
 (*
@@ -838,6 +866,101 @@ END IsFinallyEnd ;
 
 
 (*
+   IsBecomes - return TRUE if QuadNo is a BecomesOp.
+*)
+
+PROCEDURE IsBecomes (QuadNo: CARDINAL) : BOOLEAN ;
+BEGIN
+   RETURN IsQuadA (QuadNo, BecomesOp)
+END IsBecomes ;
+
+
+(*
+   IsDummy - return TRUE if QuadNo is a DummyOp.
+*)
+
+PROCEDURE IsDummy (QuadNo: CARDINAL) : BOOLEAN ;
+BEGIN
+   RETURN IsQuadA (QuadNo, DummyOp)
+END IsDummy ;
+
+
+(*
+   IsQuadConstExpr - returns TRUE if QuadNo is part of a constant expression.
+*)
+
+PROCEDURE IsQuadConstExpr (QuadNo: CARDINAL) : BOOLEAN ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (QuadNo) ;
+   RETURN f^.ConstExpr
+END IsQuadConstExpr ;
+
+
+(*
+   SetQuadConstExpr - sets the constexpr field to value.
+*)
+
+PROCEDURE SetQuadConstExpr (QuadNo: CARDINAL; value: BOOLEAN) ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (QuadNo) ;
+   f^.ConstExpr := value
+END SetQuadConstExpr ;
+
+
+(*
+   GetQuadDest - returns the jump destination associated with quad.
+*)
+
+PROCEDURE GetQuadDest (QuadNo: CARDINAL) : CARDINAL ;
+BEGIN
+   RETURN GetQuadOp3 (QuadNo)
+END GetQuadDest ;
+
+
+(*
+   GetQuadOp1 - returns the 1st operand associated with quad.
+*)
+
+PROCEDURE GetQuadOp1 (QuadNo: CARDINAL) : CARDINAL ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (QuadNo) ;
+   RETURN f^.Operand1
+END GetQuadOp1 ;
+
+
+(*
+   GetQuadOp2 - returns the 2nd operand associated with quad.
+*)
+
+PROCEDURE GetQuadOp2 (QuadNo: CARDINAL) : CARDINAL ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (QuadNo) ;
+   RETURN f^.Operand2
+END GetQuadOp2 ;
+
+
+(*
+   GetQuadOp3 - returns the 3rd operand associated with quad.
+*)
+
+PROCEDURE GetQuadOp3 (QuadNo: CARDINAL) : CARDINAL ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (QuadNo) ;
+   RETURN f^.Operand3
+END GetQuadOp3 ;
+
+
+(*
    IsInitialisingConst - returns TRUE if the quadruple is setting
                          a const (op1) with a value.
 *)
@@ -848,8 +971,34 @@ VAR
    op1, op2, op3: CARDINAL ;
 BEGIN
    GetQuad (QuadNo, op, op1, op2, op3) ;
+   RETURN OpUsesOp1 (op) AND IsConst (op1)
+END IsInitialisingConst ;
+
+
+(*
+   IsConstQuad - return TRUE if the quadruple is marked as a constexpr.
+*)
+
+PROCEDURE IsConstQuad (quad: CARDINAL) : BOOLEAN ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (quad) ;
+   RETURN f^.ConstExpr
+END IsConstQuad ;
+
+
+(*
+   OpUsesOp1 - return TRUE if op allows op1.
+*)
+
+PROCEDURE OpUsesOp1 (op: QuadOperator) : BOOLEAN ;
+BEGIN
    CASE op OF
 
+   StringConvertCnulOp,
+   StringConvertM2nulOp,
+   StringLengthOp,
    InclOp,
    ExclOp,
    UnboundedOp,
@@ -883,12 +1032,27 @@ BEGIN
    XIndrOp,
    IndrXOp,
    SaveExceptionOp,
-   RestoreExceptionOp:  RETURN( IsConst(op1) )
+   RestoreExceptionOp:  RETURN TRUE
 
    ELSE
-      RETURN( FALSE )
+      RETURN FALSE
    END
-END IsInitialisingConst ;
+END OpUsesOp1 ;
+
+
+(*
+   IsConditionalBooleanQuad - return TRUE if operand 1 is a boolean result.
+*)
+
+PROCEDURE IsConditionalBooleanQuad (quad: CARDINAL) : BOOLEAN ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (quad) ;
+   RETURN OpUsesOp1 (f^.Operator) AND
+          (IsVar (f^.Operand1) OR IsConst (f^.Operand1)) AND
+          IsVarConditional (f^.Operand1)
+END IsConditionalBooleanQuad ;
 
 
 (*
@@ -1165,7 +1329,7 @@ PROCEDURE GetQuadOtok (QuadNo: CARDINAL;
                        VAR tok: CARDINAL;
                        VAR Op: QuadOperator;
                        VAR Oper1, Oper2, Oper3: CARDINAL;
-                       VAR overflowChecking: BOOLEAN ;
+                       VAR overflowChecking, constExpr: BOOLEAN ;
                        VAR Op1Pos, Op2Pos, Op3Pos: CARDINAL) ;
 VAR
    f: QuadFrame ;
@@ -1181,7 +1345,8 @@ BEGIN
       Op2Pos := op2pos ;
       Op3Pos := op3pos ;
       tok := TokenNo ;
-      overflowChecking := CheckOverflow
+      overflowChecking := CheckOverflow ;
+      constExpr := ConstExpr
    END
 END GetQuadOtok ;
 
@@ -1195,15 +1360,11 @@ PROCEDURE PutQuadOtok (QuadNo: CARDINAL;
                        tok: CARDINAL;
                        Op: QuadOperator;
                        Oper1, Oper2, Oper3: CARDINAL;
-                       overflowChecking: BOOLEAN ;
+                       overflowChecking, constExpr: BOOLEAN ;
                        Op1Pos, Op2Pos, Op3Pos: CARDINAL) ;
 VAR
    f: QuadFrame ;
 BEGIN
-   IF QuadNo = BreakAtQuad
-   THEN
-      stop
-   END ;
    IF QuadrupleGeneration
    THEN
       EraseQuad (QuadNo) ;
@@ -1218,7 +1379,8 @@ BEGIN
          op1pos        := Op1Pos ;
          op2pos        := Op2Pos ;
          op3pos        := Op3Pos ;
-         TokenNo       := tok
+         TokenNo       := tok ;
+         ConstExpr     := constExpr
       END
    END
 END PutQuadOtok ;
@@ -1244,7 +1406,9 @@ BEGIN
    IfGreEquOp : ManipulateReference(QuadNo, Oper3) ;
                 CheckAddVariableRead(Oper1, FALSE, QuadNo) ;
                 CheckAddVariableRead(Oper2, FALSE, QuadNo) |
-
+   LastForIteratorOp: CheckAddVariableWrite (Oper1, FALSE, QuadNo) ;
+                      CheckAddTuple2Read (Oper2, FALSE, QuadNo) ;
+                      CheckAddVariableRead (Oper3, FALSE, QuadNo) |
    TryOp,
    RetryOp,
    GotoOp     : ManipulateReference(QuadNo, Oper3) |
@@ -1277,8 +1441,8 @@ BEGIN
 
    ParamOp           : CheckAddVariableRead(Oper2, FALSE, QuadNo) ;
                        CheckAddVariableRead(Oper3, FALSE, QuadNo) ;
-                       IF (Oper1>0) AND (Oper1<=NoOfParam(Oper2)) AND
-                          IsVarParam(Oper2, Oper1)
+                       IF (Oper1>0) AND (Oper1<=NoOfParamAny(Oper2)) AND
+                          IsVarParamAny (Oper2, Oper1)
                        THEN
                           (* _may_ also write to a var parameter, although we dont know *)
                           CheckAddVariableWrite(Oper3, TRUE, QuadNo)
@@ -1326,9 +1490,6 @@ BEGIN
 END AddQuadInformation ;
 
 
-PROCEDURE stop ; BEGIN END stop ;
-
-
 (*
    PutQuadO - alters a quadruple QuadNo with Op, Oper1, Oper2, Oper3, and
               sets a boolean to determinine whether overflow should be checked.
@@ -1338,13 +1499,22 @@ PROCEDURE PutQuadO (QuadNo: CARDINAL;
                     Op: QuadOperator;
                     Oper1, Oper2, Oper3: CARDINAL;
                     overflow: BOOLEAN) ;
+BEGIN
+   PutQuadOType (QuadNo, Op, Oper1, Oper2, Oper3, overflow, TRUE)
+END PutQuadO ;
+
+
+(*
+   PutQuadOType -
+*)
+
+PROCEDURE PutQuadOType (QuadNo: CARDINAL;
+                        Op: QuadOperator;
+                        Oper1, Oper2, Oper3: CARDINAL;
+                        overflow, checktype: BOOLEAN) ;
 VAR
    f: QuadFrame ;
 BEGIN
-   IF QuadNo = BreakAtQuad
-   THEN
-      stop
-   END ;
    IF QuadrupleGeneration
    THEN
       EraseQuad (QuadNo) ;
@@ -1355,10 +1525,12 @@ BEGIN
          Operand1      := Oper1 ;
          Operand2      := Oper2 ;
          Operand3      := Oper3 ;
-         CheckOverflow := overflow
+         CheckOverflow := overflow ;
+         CheckType     := checktype ;
+         ConstExpr     := FALSE ;  (* IsInConstExpression () *)
       END
    END
-END PutQuadO ;
+END PutQuadOType ;
 
 
 (*
@@ -1371,6 +1543,37 @@ PROCEDURE PutQuad (QuadNo: CARDINAL;
 BEGIN
    PutQuadO (QuadNo, Op, Oper1, Oper2, Oper3, TRUE)
 END PutQuad ;
+
+
+(*
+   GetQuadOTypetok - returns the fields associated with quadruple QuadNo.
+*)
+
+PROCEDURE GetQuadOTypetok (QuadNo: CARDINAL;
+                           VAR tok: CARDINAL;
+                           VAR Op: QuadOperator;
+                           VAR Oper1, Oper2, Oper3: CARDINAL;
+                           VAR overflowChecking, typeChecking, constExpr: BOOLEAN ;
+                           VAR Op1Pos, Op2Pos, Op3Pos: CARDINAL) ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   f := GetQF (QuadNo) ;
+   LastQuadNo := QuadNo ;
+   WITH f^ DO
+      Op := Operator ;
+      Oper1 := Operand1 ;
+      Oper2 := Operand2 ;
+      Oper3 := Operand3 ;
+      Op1Pos := op1pos ;
+      Op2Pos := op2pos ;
+      Op3Pos := op3pos ;
+      tok := TokenNo ;
+      overflowChecking := CheckOverflow ;
+      typeChecking := CheckType ;
+      constExpr := ConstExpr
+   END
+END GetQuadOTypetok ;
 
 
 (*
@@ -1424,8 +1627,8 @@ BEGIN
    KillLocalVarOp    : |
    ParamOp           : CheckRemoveVariableRead(Oper2, FALSE, QuadNo) ;
                        CheckRemoveVariableRead(Oper3, FALSE, QuadNo) ;
-                       IF (Oper1>0) AND (Oper1<=NoOfParam(Oper2)) AND
-                          IsVarParam(Oper2, Oper1)
+                       IF (Oper1>0) AND (Oper1<=NoOfParamAny(Oper2)) AND
+                          IsVarParamAny (Oper2, Oper1)
                        THEN
                           (* _may_ also write to a var parameter, although we dont know *)
                           CheckRemoveVariableWrite(Oper3, TRUE, QuadNo)
@@ -1478,6 +1681,7 @@ PROCEDURE EraseQuad (QuadNo: CARDINAL) ;
 VAR
    f: QuadFrame ;
 BEGIN
+   CheckBreak (QuadNo) ;
    f := GetQF(QuadNo) ;
    WITH f^ DO
       UndoReadWriteInfo(QuadNo, Operator, Operand1, Operand2, Operand3) ;
@@ -1488,7 +1692,8 @@ BEGIN
       Trash := 0 ;
       op1pos   := UnknownTokenNo ;
       op2pos   := UnknownTokenNo ;
-      op3pos   := UnknownTokenNo
+      op3pos   := UnknownTokenNo ;
+      ConstExpr := FALSE
    END
 END EraseQuad ;
 
@@ -1521,6 +1726,22 @@ BEGIN
    END
 END CheckRemoveVariableReadLeftValue ;
 *)
+
+
+(*
+   CheckAddTuple2Read - checks to see whether symbol tuple contains variables or
+                        parameters and if so it then adds them to the quadruple
+                        variable list.
+*)
+
+PROCEDURE CheckAddTuple2Read (tuple: CARDINAL; canDereference: BOOLEAN; Quad: CARDINAL) ;
+BEGIN
+   IF IsTuple (tuple)
+   THEN
+      CheckAddVariableRead (GetNth (tuple, 1), canDereference, Quad) ;
+      CheckAddVariableRead (GetNth (tuple, 2), canDereference, Quad)
+   END
+END CheckAddTuple2Read ;
 
 
 (*
@@ -1647,6 +1868,7 @@ VAR
    i   : CARDINAL ;
    f, g: QuadFrame ;
 BEGIN
+   CheckBreak (QuadNo) ;
    f := GetQF(QuadNo) ;
    WITH f^ DO
       AlterReference(Head, QuadNo, f^.Next) ;
@@ -1792,8 +2014,8 @@ END ManipulateReference ;
 
 
 (*
-   RemoveReference - remove the reference by quadruple, q, to wherever
-                     it was pointing to.
+   RemoveReference - remove the reference by quadruple q to wherever
+                     it was pointing.
 *)
 
 PROCEDURE RemoveReference (q: CARDINAL) ;
@@ -1803,6 +2025,7 @@ BEGIN
    f := GetQF(q) ;
    IF (f^.Operand3#0) AND (f^.Operand3<NextQuad)
    THEN
+      CheckBreak (f^.Operand3) ;
       g := GetQF(f^.Operand3) ;
       Assert(g^.NoOfTimesReferenced#0) ;
       DEC(g^.NoOfTimesReferenced)
@@ -2331,13 +2554,13 @@ PROCEDURE callRequestDependant (tokno: CARDINAL;
 BEGIN
    Assert (requestDep # NulSym) ;
    PushTtok (requestDep, tokno) ;
-   PushTF (Adr, Address) ;
-   PushTtok (MakeConstLitString (tokno, GetSymName (moduleSym)), tokno) ;
+   PushTFtok (Adr, Address, tokno) ;
+   PushTtok (MakeConstString (tokno, GetSymName (moduleSym)), tokno) ;
    PushT (1) ;
    BuildAdrFunction ;
 
-   PushTF (Adr, Address) ;
-   PushTtok (MakeConstLitString (tokno, GetLibName (moduleSym)), tokno) ;
+   PushTFtok (Adr, Address, tokno) ;
+   PushTtok (MakeConstString (tokno, GetLibName (moduleSym)), tokno) ;
    PushT (1) ;
    BuildAdrFunction ;
 
@@ -2346,13 +2569,13 @@ BEGIN
       PushTF (Nil, Address) ;
       PushTF (Nil, Address)
    ELSE
-      PushTF (Adr, Address) ;
-      PushTtok (MakeConstLitString (tokno, GetSymName (depModuleSym)), tokno) ;
+      PushTFtok (Adr, Address, tokno) ;
+      PushTtok (MakeConstString (tokno, GetSymName (depModuleSym)), tokno) ;
       PushT (1) ;
       BuildAdrFunction ;
 
-      PushTF (Adr, Address) ;
-      PushTtok (MakeConstLitString (tokno, GetLibName (depModuleSym)), tokno) ;
+      PushTFtok (Adr, Address, tokno) ;
+      PushTtok (MakeConstString (tokno, GetLibName (depModuleSym)), tokno) ;
       PushT (1) ;
       BuildAdrFunction
    END ;
@@ -2580,6 +2803,34 @@ END BuildM2MainFunction ;
 
 
 (*
+   DeferMakeConstStringCnul - return a C const string which will be nul terminated.
+*)
+
+PROCEDURE DeferMakeConstStringCnul (tok: CARDINAL; sym: CARDINAL) : CARDINAL ;
+VAR
+   const: CARDINAL ;
+BEGIN
+   const := MakeConstStringCnul (tok, NulName, FALSE) ;
+   GenQuadO (tok, StringConvertCnulOp, const, 0, sym, FALSE) ;
+   RETURN const
+END DeferMakeConstStringCnul ;
+
+
+(*
+   DeferMakeConstStringM2nul - return a const string which will be nul terminated.
+*)
+
+PROCEDURE DeferMakeConstStringM2nul (tok: CARDINAL; sym: CARDINAL) : CARDINAL ;
+VAR
+   const: CARDINAL ;
+BEGIN
+   const := MakeConstStringM2nul (tok, NulName, FALSE) ;
+   GenQuadO (tok, StringConvertM2nulOp, const, 0, sym, FALSE) ;
+   RETURN const
+END DeferMakeConstStringM2nul ;
+
+
+(*
    BuildStringAdrParam - push the address of a nul terminated string onto the quad stack.
 *)
 
@@ -2587,9 +2838,10 @@ PROCEDURE BuildStringAdrParam (tok: CARDINAL; name: Name);
 VAR
    str, m2strnul: CARDINAL ;
 BEGIN
-   PushTF (Adr, Address) ;
-   str := MakeConstLitString (tok, name) ;
-   m2strnul := MakeConstStringM2nul (tok, str) ;
+   PushTFtok (Adr, Address, tok) ;
+   str := MakeConstString (tok, name) ;
+   PutConstStringKnown (tok, str, name, FALSE, TRUE) ;
+   m2strnul := DeferMakeConstStringM2nul (tok, str) ;
    PushTtok (m2strnul, tok) ;
    PushT (1) ;
    BuildAdrFunction
@@ -2690,13 +2942,13 @@ BEGIN
             (* DeconstructModules (module_name, argc, argv, envp);  *)
             PushTtok (deconstructModules, tok) ;
 
-            PushTF(Adr, Address) ;
-            PushTtok (MakeConstLitString (tok, GetSymName (moduleSym)), tok) ;
+            PushTFtok (Adr, Address, tok) ;
+            PushTtok (MakeConstString (tok, GetSymName (moduleSym)), tok) ;
             PushT(1) ;
             BuildAdrFunction ;
 
-            PushTF(Adr, Address) ;
-            PushTtok (MakeConstLitString (tok, GetLibName (moduleSym)), tok) ;
+            PushTFtok (Adr, Address, tok) ;
+            PushTtok (MakeConstString (tok, GetLibName (moduleSym)), tok) ;
             PushT(1) ;
             BuildAdrFunction ;
 
@@ -2754,13 +3006,13 @@ BEGIN
             (* RegisterModule (module_name, init, fini, dependencies);  *)
             PushTtok (RegisterModule, tok) ;
 
-            PushTF (Adr, Address) ;
-            PushTtok (MakeConstLitString (tok, GetSymName (moduleSym)), tok) ;
+            PushTFtok (Adr, Address, tok) ;
+            PushTtok (MakeConstString (tok, GetSymName (moduleSym)), tok) ;
             PushT (1) ;
             BuildAdrFunction ;
 
-            PushTF (Adr, Address) ;
-            PushTtok (MakeConstLitString (tok, GetLibName (moduleSym)), tok) ;
+            PushTFtok (Adr, Address, tok) ;
+            PushTtok (MakeConstString (tok, GetLibName (moduleSym)), tok) ;
             PushT (1) ;
             BuildAdrFunction ;
 
@@ -3111,9 +3363,11 @@ BEGIN
             CASE Operator OF
 
             SubrangeLowOp :  Operand3 := CollectLow (Operand3) ;
-                             Operator := BecomesOp |
+                             Operator := BecomesOp ;
+                             ConstExpr := FALSE |
             SubrangeHighOp:  Operand3 := CollectHigh (Operand3) ;
-                             Operator := BecomesOp |
+                             Operator := BecomesOp ;
+                             ConstExpr := FALSE |
             OptParamOp    :  Operand3 := GetOptArgInit (Operand3) ;
                              Operator := ParamOp
 
@@ -3238,7 +3492,7 @@ BEGIN
       PushT (SkipType(type)) ;
       PushT (expr) ;
       PushT (2) ;          (* Two parameters *)
-      BuildConvertFunction ;
+      BuildConvertFunction (Convert, FALSE) ;
       PopT (expr)
    END ;
    RETURN( expr )
@@ -3260,7 +3514,6 @@ BEGIN
    THEN
       GenQuadOtok (tokno, BecomesOp, Des, NulSym, Exp, TRUE,
                    destok, UnknownTokenNo, exptok) ;
-      PutConstString (tokno, Des, GetString (Exp))
    ELSE
       IF GetMode(Des)=RightValue
       THEN
@@ -3290,8 +3543,11 @@ BEGIN
                       checkOverflow)
          END
       ELSE
-         GenQuadOtok (tokno, BecomesOp, Des, NulSym, Exp, TRUE,
-                      destok, UnknownTokenNo, exptok)
+         (* This might be inside a const expression.  *)
+         GenQuadOTypetok (tokno, BecomesOp,
+                          Des, NulSym, Exp,
+                          TRUE, TRUE,
+                          destok, UnknownTokenNo, exptok)
       END
    END
 END MoveWithMode ;
@@ -3575,23 +3831,26 @@ BEGIN
    THEN
       PopBool (t, f) ;
       PopTtok (Des, destok) ;
+      PutVarConditional (Des, TRUE) ;  (* Des will contain the result of a boolean relop.  *)
       (* Conditional Boolean Assignment.  *)
       BackPatch (t, NextQuad) ;
-      IF GetMode (Des) = RightValue
+      IF GetMode (Des) = LeftValue
       THEN
-         GenQuadO (becomesTokNo, BecomesOp, Des, NulSym, True, checkOverflow)
-      ELSE
          CheckPointerThroughNil (destok, Des) ;
-         GenQuadO (destok, XIndrOp, Des, Boolean, True, checkOverflow)
-      END ;
-      GenQuadO (destok, GotoOp, NulSym, NulSym, NextQuad+2, checkOverflow) ;
-      BackPatch (f, NextQuad) ;
-      IF GetMode (Des) = RightValue
-      THEN
-         GenQuadO (becomesTokNo, BecomesOp, Des, NulSym, False, checkOverflow)
+         GenQuadO (destok, XIndrOp, Des, Boolean, True, checkOverflow) ;
+         GenQuadO (destok, GotoOp, NulSym, NulSym, NextQuad+2, FALSE) ;
       ELSE
+         (* This might be inside a const expression.  *)
+         GenQuadO (becomesTokNo, BecomesOp, Des, NulSym, True, checkOverflow) ;
+         GenQuadO (destok, GotoOp, NulSym, NulSym, NextQuad+2, FALSE)
+      END ;
+      BackPatch (f, NextQuad) ;
+      IF GetMode (Des) = LeftValue
+      THEN
          CheckPointerThroughNil (destok, Des) ;
          GenQuadO (destok, XIndrOp, Des, Boolean, False, checkOverflow)
+      ELSE
+         GenQuadO (becomesTokNo, BecomesOp, Des, NulSym, False, checkOverflow)
       END
    ELSE
       PopTrwtok (Exp, r, exptok) ;
@@ -3605,7 +3864,6 @@ BEGIN
       PopTrwtok (Des, w, destok) ;
       MarkAsWrite (w) ;
       CheckCompatibleWithBecomes (Des, Exp, destok, exptok) ;
-      combinedtok := MakeVirtualTok (becomesTokNo, destok, exptok) ;
       IF DebugTokPos
       THEN
          MetaErrorT1 (becomesTokNo, 'becomestok {%1Oad}', Des) ;
@@ -3617,30 +3875,24 @@ BEGIN
       THEN
          MetaErrorT1 (combinedtok, 'combined {%1Oad}', Des)
       END ;
+      IF StrictTypeAssignment
+      THEN
+         BuildRange (InitTypesAssignmentCheck (combinedtok, Des, Exp))
+      END ;
       IF (GetSType (Des) # NulSym) AND (NOT IsSet (GetDType (Des)))
       THEN
          (* Tell code generator to test runtime values of assignment so ensure we
             catch overflow and underflow.  *)
-         BuildRange (InitAssignmentRangeCheck (combinedtok, Des, Exp))
+         BuildRange (InitAssignmentRangeCheck (combinedtok, Des, Exp, destok, exptok))
       END ;
       IF checkTypes
       THEN
          CheckBecomesMeta (Des, Exp, combinedtok, destok, exptok)
       END ;
       (* Simple assignment.  *)
-      MoveWithMode (becomesTokNo, Des, Exp, Array, destok, exptok, checkOverflow) ;
+      MoveWithMode (combinedtok, Des, Exp, Array, destok, exptok, checkOverflow) ;
       IF checkTypes
       THEN
-         (*
-         IF (CannotCheckTypeInPass3 (Des) OR CannotCheckTypeInPass3 (Exp))
-         THEN
-            (* We must do this after the assignment to allow the Designator to be
-               resolved (if it is a constant) before the type checking is done.  *)
-            (* Prompt post pass 3 to check the assignment once all types are resolved.  *)
-            BuildRange (InitTypesAssignmentCheck (combinedtok, Des, Exp))
-         END ;
-         *)
-         (* BuildRange (InitTypesAssignmentCheck (combinedtok, Des, Exp)) ; *)
          CheckAssignCompatible (Des, Exp, combinedtok, destok, exptok)
       END
    END ;
@@ -4023,16 +4275,19 @@ END BuildDoWhile ;
                    False exit is backpatched with q+1
 *)
 
-PROCEDURE BuildEndWhile ;
+PROCEDURE BuildEndWhile (reltokpos: INTEGER) ;
 VAR
+   tok  : CARDINAL ;
    While,
    t, f : CARDINAL ;
 BEGIN
-   PopBool(t, f) ;
-   Assert(t=0) ;
-   PopT(While) ;
-   GenQuad(GotoOp, NulSym, NulSym, While) ;
-   BackPatch(f, NextQuad)
+   tok := GetTokenNo () ;
+   tok := VAL (INTEGER, tok) + reltokpos ;
+   PopBool (t, f) ;
+   Assert (t=0) ;
+   PopT (While) ;
+   GenQuadO (tok, GotoOp, NulSym, NulSym, While, FALSE) ;
+   BackPatch (f, NextQuad)
 END BuildEndWhile ;
 
 
@@ -4268,11 +4523,16 @@ END BuildElsif2 ;
                                             |------------|
 *)
 
-PROCEDURE PushOne (tok: CARDINAL; type: CARDINAL; message: ARRAY OF CHAR) ;
+PROCEDURE PushOne (tok: CARDINAL; type: CARDINAL;
+                   message: ARRAY OF CHAR) ;
+VAR
+   const: CARDINAL ;
 BEGIN
    IF type = NulSym
    THEN
-      PushTF (MakeConstLit (tok, MakeKey('1'), NulSym), NulSym)
+      const := MakeConstLit (tok, MakeKey('1'), NulSym) ;
+      PutConstLitInternal (const, TRUE) ;
+      PushTFtok (const, NulSym, tok)
    ELSIF IsEnumeration (type)
    THEN
       IF NoOfElements (type) = 0
@@ -4282,14 +4542,16 @@ BEGIN
                            type) ;
          PushZero (tok, type)
       ELSE
-         PushTF (Convert, NulSym) ;
+         PushTFtok (Convert, NulSym, tok) ;
          PushT (type) ;
-         PushT (MakeConstLit (tok, MakeKey ('1'), ZType)) ;
+         PushTFtok (MakeConstLit (tok, MakeKey ('1'), ZType), ZType, tok) ;
          PushT (2) ;          (* Two parameters *)
-         BuildConvertFunction
+         BuildConvertFunction (Convert, TRUE)
       END
    ELSE
-      PushTF (MakeConstLit (tok, MakeKey ('1'), type), type)
+      const := MakeConstLit (tok, MakeKey ('1'), type) ;
+      PutConstLitInternal (const, TRUE) ;
+      PushTFtok (const, type, tok)
    END
 END PushOne ;
 
@@ -4319,7 +4581,7 @@ BEGIN
       PushTtok (type, tok) ;
       PushTtok (MakeConstLit (tok, MakeKey ('0'), ZType), tok) ;
       PushT (2) ;          (* Two parameters *)
-      BuildConvertFunction
+      BuildConvertFunction (Convert, TRUE)
    ELSE
       PushTFtok (MakeConstLit (tok, MakeKey ('0'), type), type, tok)
    END
@@ -4346,34 +4608,51 @@ END PushZero ;
 
 PROCEDURE BuildPseudoBy ;
 VAR
-   e, t, dotok: CARDINAL ;
+   expr, type, dotok: CARDINAL ;
 BEGIN
-   PopTFtok (e, t, dotok) ;  (* as there is no BY token this position is the DO at the end of the last expression.  *)
-   PushTFtok (e, t, dotok) ;
-   IF t=NulSym
+   (* As there is no BY token this position is the DO at the end of the last expression.  *)
+   PopTFtok (expr, type, dotok) ;
+   PushTFtok (expr, type, dotok) ;
+   IF type = NulSym
    THEN
-      t := GetSType (e)
+      (* type := ZType *)
+   ELSIF IsEnumeration (SkipType (type)) OR (SkipType (type) = Char)
+   THEN
+      (* Use type.  *)
+   ELSIF IsOrdinalType (SkipType (type))
+   THEN
+      type := ZType
    END ;
-   PushOne (dotok, t, 'the implied FOR loop increment will cause an overflow {%1ad}')
+   PushOne (dotok, type,
+            'the implied {%kFOR} loop increment will cause an overflow {%1ad}')
 END BuildPseudoBy ;
 
 
 (*
-   BuildForLoopToRangeCheck - builds the range check to ensure that the id
-                              does not exceed the limits of its type.
+   ForLoopLastIterator - calculate the last iterator value but avoid setting
+                         LastIterator twice if it is a constant (in the quads).
+                         In the ForLoopLastIteratorVariable case only one
+                         path will be chosen but at the time of quadruple
+                         generation we do not know the value of BySym.
 *)
 
-PROCEDURE BuildForLoopToRangeCheck ;
-VAR
-   d, dt,
-   e, et: CARDINAL ;
+PROCEDURE ForLoopLastIterator (LastIterator, e1, e2, BySym: CARDINAL ;
+                               e1tok, e2tok, bytok: CARDINAL) ;
 BEGIN
-   PopTF (e, et) ;
-   PopTF (d, dt) ;
-   BuildRange (InitForLoopToRangeCheck (d, e)) ;
-   PushTF (d, dt) ;
-   PushTF (e, et)
-END BuildForLoopToRangeCheck ;
+   IF NOT IsConst (BySym)
+   THEN
+      MetaErrorT1 (bytok,
+                   '{%E}the {%kFOR} loop {%kBY} expression must be constant, the expression {%1a} is variable',
+                   BySym) ;
+      MetaErrorDecl (BySym, TRUE)
+   ELSE
+      e1 := DereferenceLValue (e1tok, e1) ;
+      e2 := DereferenceLValue (e2tok, e2) ;
+      GenQuadOTypetok (bytok, LastForIteratorOp, LastIterator,
+                       Make2Tuple (e1, e2), BySym, FALSE, FALSE,
+                       bytok, MakeVirtual2Tok (e1tok, e2tok), bytok)
+   END
+END ForLoopLastIterator ;
 
 
 (*
@@ -4385,8 +4664,9 @@ END BuildForLoopToRangeCheck ;
                     Entry                   Exit
                     =====                   ====
 
-
-             Ptr ->                                           <- Ptr
+                                                               <- Ptr
+                                            +----------------+
+             Ptr ->                         | RangeId        |
                     +----------------+      |----------------|
                     | BySym | ByType |      | ForQuad        |
                     |----------------|      |----------------|
@@ -4399,6 +4679,8 @@ END BuildForLoopToRangeCheck ;
 
 
                     x := e1 ;
+                    Note that LASTVALUE is calculated during M2GenGCC
+                         after all the types have been resolved.
                     LASTVALUE := ((e2-e1) DIV BySym) * BySym + e1
                     IF BySym<0
                     THEN
@@ -4424,7 +4706,7 @@ END BuildForLoopToRangeCheck ;
                     Quadruples:
 
                     q     BecomesOp  IdentSym  _  e1
-                    q+    LastValue  := ((e1-e2) DIV by) * by + e1
+                    q+    LastForIteratorOp  LastValue  := ((e1-e2) DIV by) * by + e1
                     q+1   if >=      by        0  q+..2
                     q+2   GotoOp                  q+3
                     q+3   If >=      e1  e2       q+5
@@ -4451,12 +4733,13 @@ VAR
    e2tok,
    idtok,
    bytok     : CARDINAL ;
-   FinalValue,
+   LastIterator,
    exit1,
    IdSym,
    BySym,
    ByType,
    ForLoop,
+   RangeId,
    t, f      : CARDINAL ;
    etype,
    t1        : CARDINAL ;
@@ -4470,78 +4753,47 @@ BEGIN
    PopTtok (e1, e1tok) ;
    PopTtok (Id, idtok) ;
    IdSym := RequestSym (idtok, Id) ;
-   IF NOT IsExpressionCompatible (GetSType (e1), GetSType (e2))
-   THEN
-      MetaError2 ('incompatible types found in {%EkFOR} loop header, initial expression {%1tsad} and final expression {%2tsad}',
-                 e1, e2) ;
-      CheckExpressionCompatible (idtok, GetSType (e1), GetSType (e2))
-   END ;
-   IF NOT IsExpressionCompatible( GetSType (e1), ByType)
-   THEN
-      MetaError2 ('incompatible types found in {%EkFOR} loop header, initial expression {%1tsad} and {%kBY} {%2tsad}',
-                  e2, BySym) ;
-      CheckExpressionCompatible (e1tok, GetSType (e1), ByType)
-   ELSIF NOT IsExpressionCompatible (GetSType (e2), ByType)
-   THEN
-      MetaError2 ('incompatible types found in {%EkFOR} loop header, final expression {%1tsad} and {%kBY} {%2tsad}',
-                  e2, BySym) ;
-      CheckExpressionCompatible (e1tok, GetSType (e2), ByType)
-   END ;
-   BuildRange (InitForLoopBeginRangeCheck (IdSym, e1)) ;
+   RangeId := InitForLoopBeginRangeCheck (IdSym, idtok, e1, e1tok, e2, e2tok, BySym, bytok) ;
+   BuildRange (RangeId) ;
    PushTtok (IdSym, idtok) ;
    PushTtok (e1, e1tok) ;
    BuildAssignmentWithoutBounds (idtok, TRUE, TRUE) ;
 
    UseLineNote (l2) ;
-   FinalValue := MakeTemporary (e2tok,
-                                AreConstant (IsConst (e1) AND IsConst (e2) AND
-                                            IsConst (BySym))) ;
-   PutVar (FinalValue, GetSType (IdSym)) ;
+   LastIterator := MakeTemporary (e2tok,
+                                  AreConstant (IsConst (e1) AND IsConst (e2) AND
+                                               IsConst (BySym))) ;
+   PutVar (LastIterator, GetSType (IdSym)) ;
    etype := MixTypes (GetSType (e1), GetSType (e2), e2tok) ;
    e1 := doConvert (etype, e1) ;
    e2 := doConvert (etype, e2) ;
 
-   PushTF (FinalValue, GetSType(FinalValue)) ;
-   PushTFtok (e2, GetSType(e2), e2tok) ;  (* FinalValue := ((e1-e2) DIV By) * By + e1 *)
-   PushT (MinusTok) ;
-   PushTFtok (e1, GetSType(e1), e1tok) ;
-   doBuildBinaryOp (TRUE, FALSE) ;
-   PushT (DivideTok) ;
-   PushTFtok (BySym, ByType, bytok) ;
-   doBuildBinaryOp (FALSE, FALSE) ;
-   PushT (TimesTok) ;
-   PushTFtok (BySym, ByType, bytok) ;
-   doBuildBinaryOp (FALSE, FALSE) ;
-   PushT (ArithPlusTok) ;
-   PushTFtok (e1, GetSType (e1), e1tok) ;
-   doBuildBinaryOp (FALSE, FALSE) ;
-   BuildForLoopToRangeCheck ;
-   BuildAssignmentWithoutBounds (e1tok, FALSE, FALSE) ;
+   ForLoopLastIterator (LastIterator, e1, e2, BySym, e1tok, e2tok, bytok) ;
 
    (* q+1 if >=      by        0  q+..2 *)
    (* q+2 GotoOp                  q+3   *)
-   PushTFtok (BySym, ByType, bytok) ;  (* BuildRelOp  1st parameter *)
-   PushT (GreaterEqualTok) ;           (*             2nd parameter *)
-                                       (* 3rd parameter *)
+   PushTFtok (BySym, ByType, bytok) ;  (* BuildRelOp  1st parameter.  *)
+   PushT (GreaterEqualTok) ;           (*             2nd parameter.  *)
+                                       (* 3rd parameter.  *)
    PushZero (bytok, ByType) ;
 
-   BuildRelOp (e2tok) ;       (* choose final expression position.  *)
-   PopBool(t, f) ;
-   BackPatch(f, NextQuad) ;
+   BuildRelOp (e2tok) ;           (* Choose final expression position.  *)
+   PopBool (t, f) ;
+   BackPatch (f, NextQuad) ;
    (* q+3 If >=       e1  e2      q+5  *)
    (* q+4 GotoOp                  Exit *)
    PushTFtok (e1, GetSType (e1), e1tok) ;  (* BuildRelOp  1st parameter *)
    PushT (GreaterEqualTok) ;               (*             2nd parameter *)
    PushTFtok (e2, GetSType (e2), e2tok) ;  (*             3rd parameter *)
-   BuildRelOp (e2tok) ;           (* choose final expression position.  *)
+   BuildRelOp (e2tok) ;           (* Choose final expression position.  *)
    PopBool (t1, exit1) ;
    BackPatch (t1, NextQuad) ;
-   PushFor (Merge (PopFor(), exit1)) ;    (* merge exit1 *)
+   PushFor (Merge (PopFor (), exit1)) ;    (* Merge exit1.  *)
 
    GenQuad (GotoOp, NulSym, NulSym, 0) ;
    ForLoop := NextQuad-1 ;
 
-   (* ELSE *)
+   (* ELSE.  *)
 
    BackPatch (t, NextQuad) ;
    PushTFtok (e2, GetSType(e2), e2tok) ; (* BuildRelOp  1st parameter *)
@@ -4550,17 +4802,18 @@ BEGIN
    BuildRelOp (e2tok) ;
    PopBool (t1, exit1) ;
    BackPatch (t1, NextQuad) ;
-   PushFor (Merge (PopFor (), exit1)) ;       (* merge exit1 *)
+   PushFor (Merge (PopFor (), exit1)) ;       (* Merge exit1.  *)
 
-   BackPatch(ForLoop, NextQuad) ; (* fixes the start of the for loop *)
+   BackPatch(ForLoop, NextQuad) ; (* Fixes the start of the for loop.  *)
    ForLoop := NextQuad ;
 
-   (* and set up the stack *)
+   (* And set up the stack.  *)
 
    PushTFtok (IdSym, GetSym (IdSym), idtok) ;
    PushTFtok (BySym, ByType, bytok) ;
-   PushTFtok (FinalValue, GetSType (FinalValue), e2tok) ;
-   PushT (ForLoop)
+   PushTFtok (LastIterator, GetSType (LastIterator), e2tok) ;
+   PushT (ForLoop) ;
+   PushT (RangeId)
 END BuildForToByDo ;
 
 
@@ -4575,6 +4828,8 @@ END BuildForToByDo ;
 
          Ptr ->
                  +----------------+
+                 | RangeId        |
+                 |----------------|
                  | ForQuad        |
                  |----------------|
                  | LastValue      |
@@ -4589,6 +4844,7 @@ PROCEDURE BuildEndFor (endpostok: CARDINAL) ;
 VAR
    t, f,
    tsym,
+   RangeId,
    IncQuad,
    ForQuad: CARDINAL ;
    LastSym,
@@ -4598,6 +4854,7 @@ VAR
    IdSym,
    idtok  : CARDINAL ;
 BEGIN
+   PopT (RangeId) ;
    PopT (ForQuad) ;
    PopT (LastSym) ;
    PopTFtok (BySym, ByType, bytok) ;
@@ -4624,26 +4881,37 @@ BEGIN
       BuildRange (InitForLoopEndRangeCheck (tsym, BySym)) ;  (* --fixme-- pass endpostok.  *)
       IncQuad := NextQuad ;
       (* we have explicitly checked using the above and also
-         this addition can legally overflow if a cardinal type
+         this addition can legitimately overflow if a cardinal type
          is counting down.  The above test will generate a more
          precise error message, so we suppress overflow detection
          here.  *)
-      GenQuadO (bytok, AddOp, tsym, tsym, BySym, FALSE) ;
+      GenQuadOTypetok (bytok, AddOp, tsym, tsym, BySym, FALSE, FALSE,
+                       idtok, idtok, bytok) ;
       CheckPointerThroughNil (idtok, IdSym) ;
-      GenQuadO (idtok, XIndrOp, IdSym, GetSType (IdSym), tsym, FALSE)
+      GenQuadOtok (idtok, XIndrOp, IdSym, GetSType (IdSym),
+                   tsym, FALSE,
+                   idtok, idtok, idtok)
    ELSE
       BuildRange (InitForLoopEndRangeCheck (IdSym, BySym)) ;
       IncQuad := NextQuad ;
       (* we have explicitly checked using the above and also
-         this addition can legally overflow if a cardinal type
+         this addition can legitimately overflow if a cardinal type
          is counting down.  The above test will generate a more
          precise error message, so we suppress overflow detection
-         here.  *)
-      GenQuadO (idtok, AddOp, IdSym, IdSym, BySym, FALSE)
+         here.
+
+         This quadruple suppresses the generic binary op type
+         check (performed in M2GenGCC.mod) as there
+         will be a more informative/exhaustive check performed by the
+         InitForLoopBeginRangeCheck setup in BuildForToByDo and
+         performed by M2Range.mod.  *)
+      GenQuadOTypetok (idtok, AddOp, IdSym, IdSym, BySym, FALSE, FALSE,
+                       idtok, idtok, bytok)
    END ;
    GenQuadO (endpostok, GotoOp, NulSym, NulSym, ForQuad, FALSE) ;
    BackPatch (PopFor (), NextQuad) ;
-   AddForInfo (ForQuad, NextQuad-1, IncQuad, IdSym, idtok)
+   AddForInfo (ForQuad, NextQuad-1, IncQuad, IdSym, idtok) ;
+   PutRangeForIncrement (RangeId, IncQuad)
 END BuildEndFor ;
 
 
@@ -5151,9 +5419,9 @@ BEGIN
    END ;
    IF IsDefImp (GetScope (ProcSym)) AND IsDefinitionForC (GetScope (ProcSym))
    THEN
-      BuildRealFuncProcCall (tokno, FALSE, TRUE)
+      BuildRealFuncProcCall (tokno, FALSE, TRUE, FALSE)
    ELSE
-      BuildRealFuncProcCall (tokno, FALSE, FALSE)
+      BuildRealFuncProcCall (tokno, FALSE, FALSE, FALSE)
    END
 END BuildRealProcedureCall ;
 
@@ -5183,7 +5451,7 @@ END BuildRealProcedureCall ;
                             |----------------|
 *)
 
-PROCEDURE BuildRealFuncProcCall (tokno: CARDINAL; IsFunc, IsForC: BOOLEAN) ;
+PROCEDURE BuildRealFuncProcCall (tokno: CARDINAL; IsFunc, IsForC, ConstExpr: BOOLEAN) ;
 VAR
    AllocateProc,
    DeallocateProc,
@@ -5224,7 +5492,7 @@ BEGIN
       ParamConstant := FALSE
    ELSE
       Proc := ProcSym ;
-      ParamConstant := IsProcedureBuiltin (Proc) ;
+      ParamConstant := TRUE ;
       AllocateProc := GetSymName (Proc) = MakeKey('ALLOCATE') ;
       DeallocateProc := GetSymName (Proc) = MakeKey('DEALLOCATE')
    END ;
@@ -5241,7 +5509,7 @@ BEGIN
       IF GetSType (Proc) # NulSym
       THEN
          (* however it was declared as a procedure function *)
-         IF NOT IsReturnOptional (Proc)
+         IF NOT IsReturnOptionalAny (Proc)
          THEN
             MetaErrors1 ('function {%1a} is being called but its return value is ignored',
                          'function {%1Da} return a type {%1ta:of {%1ta}}',
@@ -5262,9 +5530,9 @@ BEGIN
    THEN
       GenQuad (ParamOp, 0, Proc, ProcSym)  (* Space for return value *)
    END ;
-   IF (NoOfParameters+1=NoOfParam(Proc)) AND UsesOptArg(Proc)
+   IF (NoOfParameters+1=NoOfParamAny(Proc)) AND UsesOptArgAny (Proc)
    THEN
-      GenQuad (OptParamOp, NoOfParam(Proc), Proc, Proc)
+      GenQuad (OptParamOp, NoOfParamAny (Proc), Proc, Proc)
    END ;
    i := NoOfParameters ;
    pi := 1 ;     (* stack index referencing stacked parameter, i *)
@@ -5299,13 +5567,18 @@ BEGIN
       INC (pi)
    END ;
    GenQuadO (proctok, CallOp, NulSym, NulSym, ProcSym, TRUE) ;
-   PopN (NoOfParameters+1) ; (* Destroy arguments and procedure call *)
+   PopN (NoOfParameters+1) ;  (* Destroy arguments and procedure call *)
    IF IsFunc
    THEN
-      (* ReturnVar - will have the type of the procedure *)
+      (* ReturnVar has the type of the procedure.  *)
       resulttok := MakeVirtualTok (proctok, proctok, paramtok) ;
-      ReturnVar := MakeTemporary (resulttok, AreConstant(ParamConstant)) ;
-      PutVar (ReturnVar, GetSType(Proc)) ;
+      IF ConstExpr AND (NOT IsProcedureBuiltinAvailable (Proc))
+      THEN
+         MetaError1('{%1d} {%1ad} cannot be used in a constant expression', Proc) ;
+         ParamConstant := FALSE
+      END ;
+      ReturnVar := MakeTemporary (resulttok, AreConstant (ParamConstant AND ConstExpr)) ;
+      PutVar (ReturnVar, GetSType (Proc)) ;
       GenQuadO (resulttok, FunctValueOp, ReturnVar, NulSym, Proc, TRUE) ;
       IF NOT ForcedFunc
       THEN
@@ -5348,6 +5621,7 @@ VAR
    proctok,
    paramtok    : CARDINAL ;
    n1, n2      : Name ;
+   ParamCheckId,
    Dim,
    Actual,
    FormalI,
@@ -5394,9 +5668,10 @@ BEGIN
    i := 1 ;
    pi := ParamTotal+1 ;   (* stack index referencing stacked parameter, i *)
    WHILE i<=ParamTotal DO
-      IF i<=NoOfParam(Proc)
+      IF i <= NoOfParamAny (Proc)
       THEN
-         FormalI := GetParam(Proc, i) ;
+         (* FormalI := GetParam(Proc, i) ;  *)
+         FormalI := GetNthParamAnyClosest (Proc, i, GetCurrentModule ()) ;
          IF CompilerDebugging
          THEN
             n1 := GetSymName(FormalI) ;
@@ -5411,42 +5686,46 @@ BEGIN
             s := InitString ('actual') ;
             WarnStringAt (s, paramtok)
          END ;
-
-         BuildRange(InitTypesParameterCheck(Proc, i, FormalI, Actual)) ;
+         ParamCheckId := InitTypesParameterCheck (paramtok, Proc, i, FormalI, Actual, 0) ;
+         BuildRange (ParamCheckId) ;
+         (* Store the ParamCheckId on the quad stack so that any dependant checks
+            can be cancelled if the type check above detects an error.  *)
+         PutRangeDep (pi, ParamCheckId) ;
          IF IsConst(Actual)
          THEN
-            IF IsVarParam(Proc, i)
+            IF IsVarParamAny (Proc, i)
             THEN
                FailParameter (paramtok,
                               'trying to pass a constant to a VAR parameter',
-                              Actual, FormalI, Proc, i)
+                              Actual, Proc, i)
             ELSIF IsConstString (Actual)
             THEN
-               IF (GetStringLength (Actual) = 0)   (* if = 0 then it maybe unknown at this time *)
+               IF (NOT IsConstStringKnown (Actual))
                THEN
-                  (* dont check this yet *)
+                  (* We dont check this yet, it is checked in M2GenGCC.mod:CodeParam
+                     after the string has been created.  *)
                ELSIF IsArray(GetDType(FormalI)) AND (GetSType(GetDType(FormalI))=Char)
                THEN
-                  (* allow string literals to be passed to ARRAY [0..n] OF CHAR *)
-               ELSIF (GetStringLength(Actual) = 1)   (* if = 1 then it maybe treated as a char *)
+                  (* Allow string literals to be passed to ARRAY [0..n] OF CHAR.  *)
+               ELSIF (GetStringLength(paramtok, Actual) = 1)   (* If = 1 then it maybe treated as a char.  *)
                THEN
-                  CheckParameter (paramtok, Actual, Dim, FormalI, Proc, i, NIL)
-               ELSIF NOT IsUnboundedParam(Proc, i)
+                  CheckParameter (paramtok, Actual, Dim, FormalI, Proc, i, NIL, ParamCheckId)
+               ELSIF NOT IsUnboundedParamAny (Proc, i)
                THEN
                   IF IsForC AND (GetSType(FormalI)=Address)
                   THEN
                      FailParameter (paramtok,
                                     'a string constant can either be passed to an ADDRESS parameter or an ARRAY OF CHAR',
-                                    Actual, FormalI, Proc, i)
+                                    Actual, Proc, i)
                   ELSE
                      FailParameter (paramtok,
                                     'cannot pass a string constant to a non unbounded array parameter',
-                                    Actual, FormalI, Proc, i)
+                                    Actual, Proc, i)
                   END
                END
             END
          ELSE
-            CheckParameter (paramtok, Actual, Dim, FormalI, Proc, i, NIL)
+            CheckParameter (paramtok, Actual, Dim, FormalI, Proc, i, NIL, ParamCheckId)
          END
       ELSE
          IF IsForC AND UsesVarArgs(Proc)
@@ -5463,9 +5742,9 @@ BEGIN
       THEN
          IF i<=ParamTotal
          THEN
-            printf0('; ')
+            printf0 ('; ')
          ELSE
-            printf0(' ) ; \n')
+            printf0 (' ) ; \n')
          END
       END
    END
@@ -5476,50 +5755,54 @@ END CheckProcedureParameters ;
    CheckProcTypeAndProcedure - checks the ProcType with the call.
 *)
 
-PROCEDURE CheckProcTypeAndProcedure (ProcType: CARDINAL; call: CARDINAL) ;
+PROCEDURE CheckProcTypeAndProcedure (tokno: CARDINAL; ProcType: CARDINAL;
+                                     call: CARDINAL; ParamCheckId: CARDINAL) ;
 VAR
    n1, n2          : Name ;
    i, n, t         : CARDINAL ;
    CheckedProcedure: CARDINAL ;
    e               : Error ;
 BEGIN
-   n := NoOfParam(ProcType) ;
    IF IsVar(call) OR IsTemporary(call) OR IsParameter(call)
    THEN
       CheckedProcedure := GetDType(call)
    ELSE
       CheckedProcedure := call
    END ;
-   IF n#NoOfParam(CheckedProcedure)
+   IF ProcType # CheckedProcedure
    THEN
-      e := NewError(GetDeclaredMod(ProcType)) ;
-      n1 := GetSymName(call) ;
-      n2 := GetSymName(ProcType) ;
-      ErrorFormat2(e, 'procedure (%a) is a parameter being passed as variable (%a) but they are declared with different number of parameters',
-                   n1, n2) ;
-      e := ChainError(GetDeclaredMod(call), e) ;
-      t := NoOfParam(CheckedProcedure) ;
-      IF n<2
+      n := NoOfParamAny (ProcType) ;
+      (* We need to check the formal parameters between the procedure and proc type.  *)
+      IF n # NoOfParamAny (CheckedProcedure)
       THEN
-         ErrorFormat3(e, 'procedure (%a) is being called incorrectly with (%d) parameter, declared with (%d)',
-                      n1, n, t)
-      ELSE
-         ErrorFormat3(e, 'procedure (%a) is being called incorrectly with (%d) parameters, declared with (%d)',
-                      n1, n, t)
-      END
-   ELSE
-      i := 1 ;
-      WHILE i<=n DO
-         IF IsVarParam(ProcType, i) # IsVarParam(CheckedProcedure, i)
+         e := NewError(GetDeclaredMod(ProcType)) ;
+         n1 := GetSymName(call) ;
+         n2 := GetSymName(ProcType) ;
+         ErrorFormat2(e, 'procedure (%a) is a parameter being passed as variable (%a) but they are declared with different number of parameters',
+                      n1, n2) ;
+         e := ChainError(GetDeclaredMod(call), e) ;
+         t := NoOfParamAny (CheckedProcedure) ;
+         IF n<2
          THEN
-            MetaError3('parameter {%3n} in {%1dD} causes a mismatch it was declared as a {%2d}', ProcType, GetNth(ProcType, i), i) ;
-            MetaError3('parameter {%3n} in {%1dD} causes a mismatch it was declared as a {%2d}', call, GetNth(call, i), i)
-         END ;
-         BuildRange(InitTypesParameterCheck(CheckedProcedure, i,
-                                            GetParam(CheckedProcedure, i),
-                                            GetParam(ProcType, i))) ;
-         (* CheckParameter(tokpos, GetParam(CheckedProcedure, i), 0, GetParam(ProcType, i), call, i, TypeList) ; *)
-         INC(i)
+            ErrorFormat3(e, 'procedure (%a) is being called incorrectly with (%d) parameter, declared with (%d)',
+                         n1, n, t)
+         ELSE
+            ErrorFormat3(e, 'procedure (%a) is being called incorrectly with (%d) parameters, declared with (%d)',
+                         n1, n, t)
+         END
+      ELSE
+         i := 1 ;
+         WHILE i<=n DO
+            IF IsVarParamAny (ProcType, i) # IsVarParamAny (CheckedProcedure, i)
+            THEN
+               MetaError3 ('parameter {%3n} in {%1dD} causes a mismatch it was declared as a {%2d}', ProcType, GetNth (ProcType, i), i) ;
+               MetaError3 ('parameter {%3n} in {%1dD} causes a mismatch it was declared as a {%2d}', call, GetNth (call, i), i)
+            END ;
+            BuildRange (InitTypesParameterCheck (tokno, CheckedProcedure, i,
+                                                 GetNthParamAnyClosest (CheckedProcedure, i, GetCurrentModule ()),
+                                                 GetParam (ProcType, i), ParamCheckId)) ;
+            INC(i)
+         END
       END
    END
 END CheckProcTypeAndProcedure ;
@@ -5542,7 +5825,7 @@ END IsReallyPointer ;
 
 
 (*
-   LegalUnboundedParam - returns TRUE if the parameter, Actual, can legally be
+   LegalUnboundedParam - returns TRUE if the parameter, Actual, can legitimately be
                          passed to ProcSym, i, the, Formal, parameter.
 *)
 
@@ -5576,7 +5859,7 @@ BEGIN
          ELSE
             FailParameter(tokpos,
                           'attempting to pass an array with the incorrect number dimenisons to an unbounded formal parameter of different dimensions',
-                          Actual, Formal, ProcSym, i) ;
+                          Actual, ProcSym, i) ;
             RETURN( FALSE )
          END
       END
@@ -5597,7 +5880,7 @@ BEGIN
             ELSE
                FailParameter(tokpos,
                              'attempting to pass an unbounded array with the incorrect number dimenisons to an unbounded formal parameter of different dimensions',
-                             Actual, Formal, ProcSym, i) ;
+                             Actual, ProcSym, i) ;
                RETURN( FALSE )
             END
          END
@@ -5613,7 +5896,7 @@ BEGIN
    ELSE
       FailParameter(tokpos,
                     'identifier with an incompatible type is being passed to this procedure',
-                    Actual, Formal, ProcSym, i) ;
+                    Actual, ProcSym, i) ;
       RETURN( FALSE )
    END
 END LegalUnboundedParam ;
@@ -5635,13 +5918,18 @@ END LegalUnboundedParam ;
 
 PROCEDURE CheckParameter (tokpos: CARDINAL;
                           Actual, Dimension, Formal, ProcSym: CARDINAL;
-                          i: CARDINAL; TypeList: List) ;
+                          i: CARDINAL; TypeList: List; ParamCheckId: CARDINAL) ;
 VAR
    NewList            : BOOLEAN ;
    ActualType, FormalType: CARDINAL ;
 BEGIN
+   IF IsConstString(Actual) AND (NOT IsConstStringKnown (Actual))
+   THEN
+      (* Cannot check if the string content is not yet known.  *)
+      RETURN
+   END ;
    FormalType := GetDType(Formal) ;
-   IF IsConstString(Actual) AND (GetStringLength(Actual) = 1)   (* if = 1 then it maybe treated as a char *)
+   IF IsConstString(Actual) AND (GetStringLength(tokpos, Actual) = 1)   (* if = 1 then it maybe treated as a char *)
    THEN
       ActualType := Char
    ELSIF Actual=Boolean
@@ -5669,7 +5957,7 @@ BEGIN
       THEN
          FailParameter(tokpos,
                        'expecting a procedure or procedure variable as a parameter',
-                       Actual, Formal, ProcSym, i) ;
+                       Actual, ProcSym, i) ;
          RETURN
       END ;
       IF IsProcedure(Actual) AND IsProcedureNested(Actual)
@@ -5683,19 +5971,19 @@ BEGIN
          THEN
             FailParameter(tokpos,
                           'the item being passed is a function whereas the formal procedure parameter is a procedure',
-                          Actual, Formal, ProcSym, i) ;
+                          Actual, ProcSym, i) ;
             RETURN
          ELSIF ((GetSType(ActualType)=NulSym) AND (GetSType(FormalType)#NulSym))
          THEN
             FailParameter(tokpos,
                           'the item being passed is a procedure whereas the formal procedure parameter is a function',
-                          Actual, Formal, ProcSym, i) ;
+                          Actual, ProcSym, i) ;
             RETURN
          ELSIF AssignmentRequiresWarning(GetSType(ActualType), GetSType(FormalType))
          THEN
             WarnParameter(tokpos,
                           'the return result of the procedure variable parameter may not be compatible on other targets with the return result of the item being passed',
-                          Actual, Formal, ProcSym, i) ;
+                          Actual, ProcSym, i) ;
             RETURN
          ELSIF IsGenericSystemType (GetSType(FormalType)) OR
                IsGenericSystemType (GetSType(ActualType)) OR
@@ -5705,28 +5993,28 @@ BEGIN
          ELSE
             FailParameter(tokpos,
                           'the return result of the procedure variable parameter is not compatible with the return result of the item being passed',
-                          Actual, Formal, ProcSym, i) ;
+                          Actual, ProcSym, i) ;
             RETURN
          END
       END ;
       (* now to check each parameter of the proc type *)
-      CheckProcTypeAndProcedure (FormalType, Actual)
+      CheckProcTypeAndProcedure (tokpos, FormalType, Actual, ParamCheckId)
    ELSIF (ActualType#FormalType) AND (ActualType#NulSym)
    THEN
       IF IsUnknown(FormalType)
       THEN
          FailParameter(tokpos,
                        'procedure parameter type is undeclared',
-                       Actual, Formal, ProcSym, i) ;
+                       Actual, ProcSym, i) ;
          RETURN
       END ;
-      IF IsUnbounded(ActualType) AND (NOT IsUnboundedParam(ProcSym, i))
+      IF IsUnbounded(ActualType) AND (NOT IsUnboundedParamAny (ProcSym, i))
       THEN
          FailParameter(tokpos,
                        'attempting to pass an unbounded array to a NON unbounded parameter',
-                       Actual, Formal, ProcSym, i) ;
+                       Actual, ProcSym, i) ;
          RETURN
-      ELSIF IsUnboundedParam(ProcSym, i)
+      ELSIF IsUnboundedParamAny (ProcSym, i)
       THEN
          IF NOT LegalUnboundedParam(tokpos, ProcSym, i, ActualType, Actual, Dimension, Formal)
          THEN
@@ -5738,7 +6026,7 @@ BEGIN
          THEN
             WarnParameter (tokpos,
                            'identifier being passed to this procedure may contain a possibly incompatible type when compiling for a different target',
-                           Actual, Formal, ProcSym, i)
+                           Actual, ProcSym, i)
          ELSIF IsGenericSystemType (FormalType) OR
                IsGenericSystemType (ActualType) OR
                IsAssignmentCompatible (ActualType, FormalType)
@@ -5748,7 +6036,7 @@ BEGIN
          ELSE
             FailParameter (tokpos,
                            'identifier with an incompatible type is being passed to this procedure',
-                           Actual, Formal, ProcSym, i)
+                           Actual, ProcSym, i)
          END
       END
    END ;
@@ -5774,7 +6062,8 @@ BEGIN
    s := NIL ;
    IF IsConstString(Sym)
    THEN
-      IF (GetStringLength(Sym) = 1)   (* if = 1 then it maybe treated as a char *)
+      (* If = 1 then it maybe treated as a char.  *)
+      IF IsConstStringKnown (Sym) AND (GetStringLength (GetDeclaredMod (Sym), Sym) = 1)
       THEN
          s := InitString('(constant string) or {%kCHAR}')
       ELSE
@@ -5839,8 +6128,7 @@ END DescribeType ;
                    The parameters are:
 
                    CurrentState  - string describing the current failing state.
-                   Given         - the token that the source code provided.
-                   Expecting     - token or identifier that was expected.
+                   Actual        - actual parameter.
                    ParameterNo   - parameter number that has failed.
                    ProcedureSym  - procedure symbol where parameter has failed.
 
@@ -5849,57 +6137,44 @@ END DescribeType ;
 
 PROCEDURE FailParameter (tokpos       : CARDINAL;
                          CurrentState : ARRAY OF CHAR;
-                         Given        : CARDINAL;
-                         Expecting    : CARDINAL;
+                         Actual       : CARDINAL;
                          ProcedureSym : CARDINAL;
                          ParameterNo  : CARDINAL) ;
 VAR
-   First,
-   ExpectType: CARDINAL ;
-   s, s1, s2 : String ;
+   FormalParam: CARDINAL ;
+   Msg        : String ;
 BEGIN
-   MetaError2 ('parameter mismatch between the {%2N} parameter of procedure {%1Ead}',
-               ProcedureSym, ParameterNo) ;
-   s := InitString ('{%kPROCEDURE} {%1Eau} (') ;
-   IF NoOfParam(ProcedureSym)>=ParameterNo
+   Msg := InitString ('parameter mismatch between the {%2N} parameter of procedure {%1Ead}, ') ;
+   Msg := ConCat (Msg, Mark (InitString (CurrentState))) ;
+   MetaErrorStringT2 (tokpos, Msg, ProcedureSym, ParameterNo) ;
+   IF NoOfParamAny (ProcedureSym) >= ParameterNo
    THEN
-      IF ParameterNo>1
+      FormalParam := GetNthParamAnyClosest (ProcedureSym, ParameterNo, GetCurrentModule ()) ;
+      IF IsUnboundedParamAny (ProcedureSym, ParameterNo)
       THEN
-         s := ConCat(s, Mark(InitString('.., ')))
-      END ;
-      IF IsVarParam(ProcedureSym, ParameterNo)
-      THEN
-         s := ConCat(s, Mark(InitString('{%kVAR} ')))
-      END ;
-
-      First := GetDeclaredMod(GetNthParam(ProcedureSym, ParameterNo)) ;
-      ExpectType := GetSType(Expecting) ;
-      IF IsUnboundedParam(ProcedureSym, ParameterNo)
-      THEN
-         s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Expecting)))) ;
-         s2 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(GetSType(ExpectType))))) ;
-         s := ConCat(s, Mark(Sprintf2(Mark(InitString('%s: {%%kARRAY} {%%kOF} %s')),
-                                      s1, s2)))
+         MetaErrorT2 (GetVarDeclFullTok (FormalParam), 'formal parameter {%1ad} has an open array type {%2tad}',
+                      FormalParam, GetSType (GetSType (FormalParam)))
       ELSE
-         s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Expecting)))) ;
-         s2 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(ExpectType)))) ;
-         s := ConCat(s, Mark(Sprintf2(Mark(InitString('%s: %s')), s1, s2)))
-      END ;
-      IF ParameterNo<NoOfParam(ProcedureSym)
-      THEN
-         s := ConCat(s, Mark(InitString('; ... ')))
+         MetaErrorT1 (GetVarDeclFullTok (FormalParam), 'formal parameter {%1ad} has type {%1tad}', FormalParam)
       END
    ELSE
-      First := GetDeclaredMod(ProcedureSym) ;
-      IF NoOfParam(ProcedureSym)>0
-      THEN
-         s := ConCat(s, Mark(InitString('..')))
-      END
+      MetaErrorT1 (GetDeclaredMod (ProcedureSym), 'procedure declaration', ProcedureSym)
    END ;
-   s := ConCat (s, Mark (InitString ('){%1Tau:% : {%1Tau}} ;'))) ;
-   MetaErrorStringT1 (First, Dup (s), ProcedureSym) ;
-   MetaErrorStringT1 (tokpos, s, ProcedureSym) ;
-   MetaError1 ('item being passed is {%1EDda} {%1Dad} of type {%1Dtsd}', Given)
+   IF GetLType (Actual) = NulSym
+   THEN
+      MetaError1 ('actual parameter being passed is {%1Eda} {%1ad}', Actual)
+   ELSE
+      IF IsVar (Actual)
+      THEN
+         MetaErrorT1 (GetVarDeclFullTok (Actual),
+                      'actual parameter variable being passed is {%1Eda} {%1ad} of an incompatible type {%1ts}',
+                      Actual)
+      ELSE
+         MetaErrorT1 (tokpos,
+                     'actual parameter being passed is {%1Eda} {%1ad} of an incompatible type {%1ts}',
+                      Actual)
+      END
+   END
 END FailParameter ;
 
 
@@ -5907,11 +6182,8 @@ END FailParameter ;
    WarnParameter - generates a warning message indicating that a parameter
                    use might cause problems on another target.
 
-                   The parameters are:
-
                    CurrentState  - string describing the current failing state.
-                   Given         - the token that the source code provided.
-                   Expecting     - token or identifier that was expected.
+                   Actual        - actual parameter.
                    ParameterNo   - parameter number that has failed.
                    ProcedureSym  - procedure symbol where parameter has failed.
 
@@ -5920,90 +6192,44 @@ END FailParameter ;
 
 PROCEDURE WarnParameter (tokpos       : CARDINAL;
                          CurrentState : ARRAY OF CHAR;
-                         Given        : CARDINAL;
-                         Expecting    : CARDINAL;
+                         Actual       : CARDINAL;
                          ProcedureSym : CARDINAL;
                          ParameterNo  : CARDINAL) ;
 VAR
-   First,
-   ExpectType,
-   ReturnType: CARDINAL ;
-   s, s1, s2 : String ;
+   FormalParam: CARDINAL ;
+   Msg        : String ;
 BEGIN
-   s := InitString('{%W}') ;
-   IF CompilingImplementationModule()
+   Msg := InitString ('{%W}parameter mismatch between the {%2N} parameter of procedure {%1ad}, ') ;
+   Msg := ConCat (Msg, Mark (InitString (CurrentState))) ;
+   MetaErrorStringT2 (tokpos, Msg, ProcedureSym, ParameterNo) ;
+   IF NoOfParamAny (ProcedureSym) >= ParameterNo
    THEN
-      s := ConCat(s, Sprintf0(Mark(InitString('warning issued while compiling the implementation module\n'))))
-   ELSIF CompilingProgramModule()
-   THEN
-      s := ConCat(s, Sprintf0(Mark(InitString('warning issued while compiling the program module\n'))))
-   END ;
-   s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(ProcedureSym)))) ;
-   s := ConCat(s, Mark(Sprintf2(Mark(InitString('problem in parameter %d, PROCEDURE %s (')),
-                                ParameterNo,
-                                s1))) ;
-   IF NoOfParam(ProcedureSym)>=ParameterNo
-   THEN
-      IF ParameterNo>1
+      FormalParam := GetNthParamAnyClosest (ProcedureSym, ParameterNo, GetCurrentModule ()) ;
+      IF IsUnboundedParamAny (ProcedureSym, ParameterNo)
       THEN
-         s := ConCat(s, Mark(InitString('.., ')))
-      END ;
-      IF IsVarParam(ProcedureSym, ParameterNo)
-      THEN
-         s := ConCat(s, Mark(InitString('{%kVAR} ')))
-      END ;
-
-      First := GetDeclaredMod(GetNthParam(ProcedureSym, ParameterNo)) ;
-      ExpectType := GetSType(Expecting) ;
-      IF IsUnboundedParam(ProcedureSym, ParameterNo)
-      THEN
-         s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Expecting)))) ;
-         s2 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(GetSType(ExpectType))))) ;
-         s := ConCat(s, Mark(Sprintf2(Mark(InitString('%s: {%%kARRAY} {%%kOF} %s')),
-                                      s1, s2)))
+         MetaErrorT2 (GetVarDeclFullTok (FormalParam), '{%W}formal parameter {%1ad} has an open array type {%2tad}',
+                      FormalParam, GetSType (GetSType (FormalParam)))
       ELSE
-         s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Expecting)))) ;
-         s2 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(ExpectType)))) ;
-         s := ConCat(s, Mark(Sprintf2(Mark(InitString('%s: %s')), s1, s2)))
-      END ;
-      IF ParameterNo<NoOfParam(ProcedureSym)
-      THEN
-         s := ConCat(s, Mark(InitString('; ... ')))
+         MetaErrorT1 (GetVarDeclFullTok (FormalParam), '{%W}formal parameter {%1ad} has type {%1tad}', FormalParam)
       END
    ELSE
-      First := GetDeclaredMod(ProcedureSym) ;
-      IF NoOfParam(ProcedureSym)>0
+      MetaErrorT1 (GetDeclaredMod (ProcedureSym), '{%W}procedure declaration', ProcedureSym)
+   END ;
+   IF GetLType (Actual) = NulSym
+   THEN
+      MetaError1 ('actual parameter being passed is {%1Wda} {%1ad}', Actual)
+   ELSE
+      IF IsVar (Actual)
       THEN
-         s := ConCat(s, Mark(InitString('..')))
+         MetaErrorT1 (GetVarDeclFullTok (Actual),
+                      'actual parameter variable being passed is {%1Wda} {%1ad} of type {%1ts}',
+                      Actual)
+      ELSE
+         MetaErrorT1 (tokpos,
+                     'actual parameter being passed is {%1Wda} {%1ad} of type {%1ts}',
+                      Actual)
       END
-   END ;
-   ReturnType := GetSType(ProcedureSym) ;
-   IF ReturnType=NulSym
-   THEN
-      s := ConCat(s, Sprintf0(Mark(InitString(') ;\n'))))
-   ELSE
-      s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(ReturnType)))) ;
-      s := ConCat(s, Mark(Sprintf1(Mark(InitString(') : %s ;\n')), s1)))
-   END ;
-   IF IsConstString(Given)
-   THEN
-      s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Given)))) ;
-      s := ConCat(s, Mark(Sprintf1(Mark(InitString("item being passed is '%s'")),
-                                   s1)))
-   ELSIF IsTemporary(Given)
-   THEN
-      s := ConCat(s, Mark(InitString("item being passed has type")))
-   ELSE
-      s1 := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Given)))) ;
-      s := ConCat(s, Mark(Sprintf1(Mark(InitString("item being passed is '%s'")),
-                                   s1)))
-   END ;
-   s1 := DescribeType(Given) ;
-   s2 := Mark(InitString(CurrentState)) ;
-   s := ConCat(s, Mark(Sprintf2(Mark(InitString(': %s\nparameter mismatch: %s')),
-                                s1, s2))) ;
-   MetaErrorStringT0 (tokpos, Dup (s)) ;
-   MetaErrorStringT0 (First, Dup (s))
+   END
 END WarnParameter ;
 
 
@@ -6043,21 +6269,24 @@ END ExpectVariable ;
    doIndrX - perform des = *exp with a conversion if necessary.
 *)
 
-PROCEDURE doIndrX (tok: CARDINAL;
-                   des, exp: CARDINAL) ;
+PROCEDURE doIndrX (tok: CARDINAL; des, exp: CARDINAL) ;
 VAR
    t: CARDINAL ;
 BEGIN
-   IF GetDType(des)=GetDType(exp)
+   IF GetDType (des) = GetDType (exp)
    THEN
       GenQuadOtok (tok, IndrXOp, des, GetSType (des), exp, TRUE,
                    tok, tok, tok)
    ELSE
+      IF StrictTypeAssignment
+      THEN
+         BuildRange (InitTypesIndrXCheck (tok, des, exp))
+      END ;
       t := MakeTemporary (tok, RightValue) ;
       PutVar (t, GetSType (exp)) ;
       GenQuadOtok (tok, IndrXOp, t, GetSType (exp), exp, TRUE,
                    tok, tok, tok) ;
-      GenQuadOtok (tok, BecomesOp, des, NulSym, doVal (GetSType(des), t), TRUE,
+      GenQuadOtok (tok, BecomesOp, des, NulSym, doVal (GetSType (des), t), TRUE,
                    tok, UnknownTokenNo, tok)
    END
 END doIndrX ;
@@ -6256,28 +6485,28 @@ BEGIN
 
    IF IsForC AND UsesVarArgs(Proc)
    THEN
-      IF NoOfParameters<NoOfParam(Proc)
+      IF NoOfParameters < NoOfParamAny (Proc)
       THEN
          s := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Proc)))) ;
-         np := NoOfParam(Proc) ;
+         np := NoOfParamAny (Proc) ;
          ErrorStringAt2(Sprintf3(Mark(InitString('attempting to pass (%d) parameters to procedure (%s) which was declared with varargs but contains at least (%d) parameters')),
                                  NoOfParameters, s, np),
                         tokpos, GetDeclaredMod(ProcSym))
       END
-   ELSIF UsesOptArg(Proc)
+   ELSIF UsesOptArgAny (Proc)
    THEN
-      IF NOT ((NoOfParameters=NoOfParam(Proc)) OR (NoOfParameters+1=NoOfParam(Proc)))
+      IF NOT ((NoOfParameters=NoOfParamAny (Proc)) OR (NoOfParameters+1=NoOfParamAny (Proc)))
       THEN
          s := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Proc)))) ;
-         np := NoOfParam(Proc) ;
+         np := NoOfParamAny (Proc) ;
          ErrorStringAt2(Sprintf3(Mark(InitString('attempting to pass (%d) parameters to procedure (%s) which was declared with an optarg with a maximum of (%d) parameters')),
                                  NoOfParameters, s, np),
                         tokpos, GetDeclaredMod(ProcSym))
       END
-   ELSIF NoOfParameters#NoOfParam(Proc)
+   ELSIF NoOfParameters#NoOfParamAny (Proc)
    THEN
       s := Mark(InitStringCharStar(KeyToCharStar(GetSymName(Proc)))) ;
-      np := NoOfParam(Proc) ;
+      np := NoOfParamAny (Proc) ;
       ErrorStringAt2(Sprintf3(Mark(InitString('attempting to pass (%d) parameters to procedure (%s) which was declared with (%d) parameters')),
                               NoOfParameters, s, np),
                      tokpos, GetDeclaredMod(ProcSym))
@@ -6288,7 +6517,7 @@ BEGIN
       f := PeepAddress(BoolStack, pi) ;
       rw := OperandMergeRW(pi) ;
       Assert(IsLegal(rw)) ;
-      IF i>NoOfParam(Proc)
+      IF i>NoOfParamAny (Proc)
       THEN
          IF IsForC AND UsesVarArgs(Proc)
          THEN
@@ -6299,13 +6528,13 @@ BEGIN
             ELSIF IsConstString (OperandT (pi))
             THEN
                f^.TrueExit := MakeLeftValue (OperandTok (pi),
-                                             MakeConstStringCnul (OperandTok (pi), OperandT (pi)), RightValue, Address) ;
+                                             DeferMakeConstStringCnul (OperandTok (pi), OperandT (pi)), RightValue, Address) ;
                MarkAsReadWrite(rw)
             ELSIF (GetSType(OperandT(pi))#NulSym) AND IsUnbounded(GetSType(OperandT(pi)))
             THEN
                MarkAsReadWrite(rw) ;
                (* pass the address field of an unbounded variable *)
-               PushTF(Adr, Address) ;
+               PushTFtok (Adr, Address, OperandTok (pi)) ;
                PushTFAD (f^.TrueExit, f^.FalseExit, f^.Unbounded, f^.Dimension) ;
                PushT(1) ;
                BuildAdrFunction ;
@@ -6325,35 +6554,35 @@ BEGIN
                          'attempting to pass too many parameters to procedure {%1a}, the {%2N} parameter does not exist',
                          Proc, i)
          END
-      ELSIF IsForC AND IsUnboundedParam(Proc, i) AND
+      ELSIF IsForC AND IsUnboundedParamAny (Proc, i) AND
             (GetSType(OperandT(pi))#NulSym) AND IsArray(GetDType(OperandT(pi)))
       THEN
          f^.TrueExit := MakeLeftValue(OperandTok(pi), OperandT(pi), RightValue, Address) ;
          MarkAsReadWrite(rw)
-      ELSIF IsForC AND IsUnboundedParam(Proc, i) AND
+      ELSIF IsForC AND IsUnboundedParamAny (Proc, i) AND
             (GetSType(OperandT(pi))#NulSym) AND IsUnbounded(GetDType(OperandT(pi)))
       THEN
          MarkAsReadWrite(rw) ;
          (* pass the address field of an unbounded variable *)
-         PushTF(Adr, Address) ;
+         PushTFtok (Adr, Address, OperandTok (pi)) ;
          PushTFAD (f^.TrueExit, f^.FalseExit, f^.Unbounded, f^.Dimension) ;
          PushT(1) ;
          BuildAdrFunction ;
          PopT(f^.TrueExit)
       ELSIF IsForC AND IsConstString(OperandT(pi)) AND
-                        (IsUnboundedParam(Proc, i) OR (GetDType(GetParam(Proc, i))=Address))
+                        (IsUnboundedParamAny (Proc, i) OR (GetDType(GetParam(Proc, i))=Address))
       THEN
          f^.TrueExit := MakeLeftValue (OperandTok (pi),
-                                       MakeConstStringCnul (OperandTok (pi), OperandT (pi)),
+                                       DeferMakeConstStringCnul (OperandTok (pi), OperandT (pi)),
                                        RightValue, Address) ;
          MarkAsReadWrite (rw)
-      ELSIF IsUnboundedParam(Proc, i)
+      ELSIF IsUnboundedParamAny (Proc, i)
       THEN
          (* always pass constant strings with a nul terminator, but leave the HIGH as before.  *)
          IF IsConstString (OperandT(pi))
          THEN
             (* this is a Modula-2 string which must be nul terminated.  *)
-            f^.TrueExit := MakeConstStringM2nul (OperandTok (pi), OperandT (pi))
+            f^.TrueExit := DeferMakeConstStringM2nul (OperandTok (pi), OperandT (pi))
          END ;
          t := MakeTemporary (OperandTok (pi), RightValue) ;
          UnboundedType := GetSType(GetParam(Proc, i)) ;
@@ -6365,7 +6594,7 @@ BEGIN
          ELSE
             ArraySym := OperandA(pi)
          END ;
-         IF IsVarParam(Proc, i)
+         IF IsVarParamAny (Proc, i)
          THEN
             MarkArrayWritten (OperandT (pi)) ;
             MarkArrayWritten (OperandA (pi)) ;
@@ -6376,14 +6605,14 @@ BEGIN
             AssignUnboundedNonVar (OperandTtok (pi), OperandT (pi), ArraySym, t, ParamType, OperandD (pi))
          END ;
          f^.TrueExit := t
-      ELSIF IsVarParam(Proc, i)
+      ELSIF IsVarParamAny (Proc, i)
       THEN
          (* must reference by address, but we contain the type of the referenced entity *)
          MarkArrayWritten(OperandT(pi)) ;
          MarkArrayWritten(OperandA(pi)) ;
          MarkAsReadWrite(rw) ;
          f^.TrueExit := MakeLeftValue(OperandTok(pi), OperandT(pi), LeftValue, GetSType(GetParam(Proc, i)))
-      ELSIF (NOT IsVarParam(Proc, i)) AND (GetMode(OperandT(pi))=LeftValue)
+      ELSIF (NOT IsVarParamAny (Proc, i)) AND (GetMode(OperandT(pi))=LeftValue)
       THEN
          (* must dereference LeftValue *)
          t := MakeTemporary (OperandTok (pi), RightValue) ;
@@ -6408,6 +6637,7 @@ END ManipulateParameters ;
 
 PROCEDURE CheckParameterOrdinals ;
 VAR
+   tokno     : CARDINAL ;
    Proc,
    ProcSym   : CARDINAL ;
    Actual,
@@ -6428,17 +6658,19 @@ BEGIN
    i := 1 ;
    pi := ParamTotal+1 ;   (* stack index referencing stacked parameter, i *)
    WHILE i<=ParamTotal DO
-      IF i<=NoOfParam(Proc)
+      IF i<=NoOfParamAny (Proc)
       THEN
          FormalI := GetParam (Proc, i) ;
          Actual := OperandT (pi) ;
+         tokno := OperandTok (pi) ;
          IF IsOrdinalType (GetLType (FormalI))
          THEN
             IF NOT IsSet (GetDType (FormalI))
             THEN
-               (* tell code generator to test runtime values of assignment so ensure we
-                  catch overflow and underflow *)
-               BuildRange (InitParameterRangeCheck (Proc, i, FormalI, Actual))
+               (* Tell the code generator to test the runtime values of the assignment
+                  so ensure we catch overflow and underflow.  *)
+               BuildRange (InitParameterRangeCheck (tokno, Proc, i, FormalI, Actual,
+                                                    OperandRangeDep (pi)))
             END
          END
       END ;
@@ -6608,7 +6840,7 @@ BEGIN
    THEN
       IF IsConstString (Sym)
       THEN
-         PushTtok (MakeLengthConst (tok, Sym), tok)
+         PushTtok (DeferMakeLengthConst (tok, Sym), tok)
       ELSE
          ArrayType := GetSType (Sym) ;
          IF IsUnbounded (ArrayType)
@@ -6628,19 +6860,19 @@ BEGIN
             PushTFtok (TSize, Cardinal, tok) ; (* TSIZE(ParamType)     *)
             PushTtok (ParamType, tok) ;
             PushT (1) ;                (* 1 parameter for TSIZE()      *)
-            BuildFunctionCall ;
+            BuildFunctionCall (FALSE) ;
             BuildBinaryOp
          ELSE
             (* SIZE(parameter) DIV TSIZE(ParamType)                    *)
             PushTFtok (TSize, Cardinal, tok) ;  (* TSIZE(ArrayType)    *)
             PushTtok (ArrayType, tok) ;
             PushT (1) ;                (* 1 parameter for TSIZE()      *)
-            BuildFunctionCall ;
+            BuildFunctionCall (TRUE) ;
             PushT (DivideTok) ;        (* Divide by                    *)
             PushTFtok (TSize, Cardinal, tok) ; (* TSIZE(ParamType)     *)
             PushTtok (ParamType, tok) ;
             PushT (1) ;                (* 1 parameter for TSIZE()      *)
-            BuildFunctionCall ;
+            BuildFunctionCall (TRUE) ;
             BuildBinaryOp
          END ;
          (* now convert from no of elements into HIGH by subtracting 1 *)
@@ -6738,15 +6970,15 @@ BEGIN
    PushTFtok (Field, GetSType (Field), tok) ;
    PushT (1) ;
    BuildDesignatorRecord (tok) ;
-   PushTFtok (Adr, Address, tok) ;   (* ADR(Sym)                     *)
+   PushTFtok (Adr, Address, tok) ;   (* ADR (Sym).  *)
    IF IsUnbounded (SymType) AND (dim = 0)
    THEN
       PushTFADtok (Sym, SymType, UnboundedSym, dim, tok)
    ELSE
       PushTFADtok (Sym, SymType, ArraySym, dim, tok)
    END ;
-   PushT (1) ;               (* 1 parameter for ADR()        *)
-   BuildFunctionCall ;
+   PushT (1) ;               (* 1 parameter for ADR().  *)
+   BuildFunctionCall (FALSE) ;
    BuildAssignmentWithoutBounds (tok, FALSE, TRUE) ;
 
    AssignHighFields (tok, Sym, ArraySym, UnboundedSym, ParamType, dim)
@@ -6800,19 +7032,19 @@ BEGIN
       BuildDisposeProcedure (tokno)
    ELSIF ProcSym = Inc
    THEN
-      BuildIncProcedure
+      BuildIncProcedure (tokno)
    ELSIF ProcSym = Dec
    THEN
-      BuildDecProcedure
+      BuildDecProcedure (tokno)
    ELSIF ProcSym = Incl
    THEN
-      BuildInclProcedure
+      BuildInclProcedure (tokno)
    ELSIF ProcSym = Excl
    THEN
-      BuildExclProcedure
+      BuildExclProcedure (tokno)
    ELSIF ProcSym = Throw
    THEN
-      BuildThrowProcedure
+      BuildThrowProcedure (tokno)
    ELSE
       InternalError  ('pseudo procedure not implemented yet')
    END
@@ -6863,14 +7095,12 @@ END GetItemPointedTo ;
                          |----------------|
 *)
 
-PROCEDURE BuildThrowProcedure ;
+PROCEDURE BuildThrowProcedure (functok: CARDINAL) ;
 VAR
-   functok  : CARDINAL ;
    op       : CARDINAL ;
    NoOfParam: CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
-   functok  := OperandTtok (NoOfParam + 1) ;
    IF NoOfParam = 1
    THEN
       op := OperandT (NoOfParam) ;
@@ -6961,7 +7191,7 @@ BEGIN
                                       (* x^             *)
             PushTtok (GetItemPointedTo (PtrSym), paramtok) ;
             PushT (1) ;               (* One parameter  *)
-            BuildFunctionCall ;
+            BuildFunctionCall (FALSE) ;
             PopT (SizeSym) ;
 
             PushTtok (ProcSym, combinedtok) ;  (* ALLOCATE       *)
@@ -7050,7 +7280,7 @@ BEGIN
                                       (* x^             *)
             PushTtok (GetItemPointedTo(PtrSym), paramtok) ;
             PushT (1) ;               (* One parameter  *)
-            BuildFunctionCall ;
+            BuildFunctionCall (FALSE) ;
             PopT (SizeSym) ;
 
             PushTtok (ProcSym, combinedtok) ;         (* DEALLOCATE     *)
@@ -7089,6 +7319,11 @@ VAR
 BEGIN
    dtype := GetDType(des) ;
    etype := GetDType(expr) ;
+   IF (etype = NulSym) AND IsPointer (GetTypeMode (des))
+   THEN
+      expr := ConvertToAddress (tokenpos, expr) ;
+      etype := Address
+   END ;
    IF WholeValueChecking AND (NOT MustNotCheckBounds)
    THEN
       IF tok=PlusTok
@@ -7102,21 +7337,21 @@ BEGIN
    IF IsExpressionCompatible (dtype, etype)
    THEN
       (* the easy case simulate a straightforward macro *)
-      PushTF (des, dtype) ;
+      PushTFtok (des, dtype, tokenpos) ;
       PushT (tok) ;
-      PushTF (expr, etype) ;
+      PushTFtok (expr, etype, tokenpos) ;
       doBuildBinaryOp (FALSE, TRUE)
    ELSE
       IF (IsOrdinalType (dtype) OR (dtype = Address) OR IsPointer (dtype)) AND
          (IsOrdinalType (etype) OR (etype = Address) OR IsPointer (etype))
       THEN
-         PushTF (des, dtype) ;
+         PushTFtok (des, dtype, tokenpos) ;
          PushT (tok) ;
-         PushTF (Convert, NulSym) ;
-         PushT (dtype) ;
-         PushT (expr) ;
+         PushTFtok (Convert, NulSym, tokenpos) ;
+         PushTtok (dtype, tokenpos) ;
+         PushTtok (expr, tokenpos) ;
          PushT (2) ;          (* Two parameters *)
-         BuildConvertFunction ;
+         BuildConvertFunction (Convert, FALSE) ;
          doBuildBinaryOp (FALSE, TRUE)
       ELSE
          IF tok=PlusTok
@@ -7161,9 +7396,8 @@ END CheckRangeIncDec ;
                        |----------------|
 *)
 
-PROCEDURE BuildIncProcedure ;
+PROCEDURE BuildIncProcedure (proctok: CARDINAL) ;
 VAR
-   proctok   : CARDINAL ;
    NoOfParam,
    dtype,
    OperandSym,
@@ -7171,25 +7405,25 @@ VAR
    TempSym   : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
-   proctok := OperandTtok (NoOfParam + 1) ;
    IF (NoOfParam = 1) OR (NoOfParam = 2)
    THEN
-      VarSym := OperandT (NoOfParam) ;  (* bottom/first parameter *)
+      VarSym := OperandT (NoOfParam) ;  (* Bottom/first parameter.  *)
       IF IsVar (VarSym)
       THEN
          dtype := GetDType (VarSym) ;
          IF NoOfParam = 2
          THEN
-            OperandSym := DereferenceLValue (OperandTok (1), OperandT (1))
+            OperandSym := DereferenceLValue (proctok, OperandT (1))
          ELSE
-            PushOne (proctok, dtype, 'the {%EkINC} will cause an overflow {%1ad}') ;
+            PushOne (proctok, dtype,
+                     'the {%EkINC} will cause an overflow {%1ad}') ;
 	    PopT (OperandSym)
          END ;
 
-         PushT (VarSym) ;
-         TempSym := DereferenceLValue (OperandTok (NoOfParam), VarSym) ;
-         CheckRangeIncDec (proctok, TempSym, OperandSym, PlusTok) ;  (* TempSym + OperandSym *)
-         BuildAssignmentWithoutBounds (proctok, FALSE, TRUE)   (* VarSym := TempSym + OperandSym *)
+         PushTtok (VarSym, proctok) ;
+         TempSym := DereferenceLValue (proctok, VarSym) ;
+         CheckRangeIncDec (proctok, TempSym, OperandSym, PlusTok) ;  (* TempSym + OperandSym.  *)
+         BuildAssignmentWithoutBounds (proctok, FALSE, TRUE)   (* VarSym := TempSym + OperandSym.  *)
       ELSE
          MetaErrorT1 (proctok,
                       'base procedure {%EkINC} expects a variable as a parameter but was given {%1Ed}',
@@ -7233,9 +7467,8 @@ END BuildIncProcedure ;
                        |----------------|
 *)
 
-PROCEDURE BuildDecProcedure ;
+PROCEDURE BuildDecProcedure (proctok: CARDINAL) ;
 VAR
-   proctok,
    NoOfParam,
    dtype,
    OperandSym,
@@ -7243,25 +7476,25 @@ VAR
    TempSym   : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
-   proctok := OperandTtok (NoOfParam + 1) ;
    IF (NoOfParam = 1) OR (NoOfParam = 2)
    THEN
-      VarSym := OperandT (NoOfParam) ;  (* bottom/first parameter *)
+      VarSym := OperandT (NoOfParam) ;  (* Bottom/first parameter.  *)
       IF IsVar (VarSym)
       THEN
          dtype := GetDType (VarSym) ;
          IF NoOfParam = 2
          THEN
-            OperandSym := DereferenceLValue (OperandTok (1), OperandT (1))
+            OperandSym := DereferenceLValue (proctok, OperandT (1))
          ELSE
-            PushOne (proctok, dtype, 'the {%EkDEC} will cause an overflow {%1ad}') ;
+            PushOne (proctok, dtype,
+                     'the {%EkDEC} will cause an overflow {%1ad}') ;
 	    PopT (OperandSym)
          END ;
 
-         PushT (VarSym) ;
+         PushTtok (VarSym, proctok) ;
          TempSym := DereferenceLValue (OperandTok (NoOfParam), VarSym) ;
-         CheckRangeIncDec (proctok, TempSym, OperandSym, MinusTok) ;  (* TempSym - OperandSym *)
-         BuildAssignmentWithoutBounds (proctok, FALSE, TRUE)   (* VarSym := TempSym - OperandSym *)
+         CheckRangeIncDec (proctok, TempSym, OperandSym, MinusTok) ;  (* TempSym - OperandSym.  *)
+         BuildAssignmentWithoutBounds (proctok, FALSE, TRUE)   (* VarSym := TempSym - OperandSym.  *)
       ELSE
          MetaErrorT1 (proctok,
                       'base procedure {%EkDEC} expects a variable as a parameter but was given {%1Ed}',
@@ -7325,9 +7558,8 @@ END DereferenceLValue ;
                         |----------------|
 *)
 
-PROCEDURE BuildInclProcedure ;
+PROCEDURE BuildInclProcedure (proctok: CARDINAL) ;
 VAR
-   proctok,
    optok     : CARDINAL ;
    NoOfParam,
    DerefSym,
@@ -7335,7 +7567,6 @@ VAR
    VarSym    : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
-   proctok := OperandTtok (NoOfParam + 1) ;
    IF NoOfParam = 2
    THEN
       VarSym := OperandT (2) ;
@@ -7391,9 +7622,8 @@ END BuildInclProcedure ;
                         |----------------|
 *)
 
-PROCEDURE BuildExclProcedure ;
+PROCEDURE BuildExclProcedure (proctok: CARDINAL) ;
 VAR
-   proctok,
    optok     : CARDINAL ;
    NoOfParam,
    DerefSym,
@@ -7401,7 +7631,6 @@ VAR
    VarSym    : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
-   proctok := OperandTtok (NoOfParam + 1) ;
    IF NoOfParam=2
    THEN
       VarSym := OperandT (2) ;
@@ -7459,7 +7688,6 @@ END BuildExclProcedure ;
 
 PROCEDURE CheckBuildFunction () : BOOLEAN ;
 VAR
-   n            : Name ;
    tokpos,
    TempSym,
    ProcSym, Type: CARDINAL ;
@@ -7473,17 +7701,10 @@ BEGIN
          PutVar(TempSym, GetSType(Type)) ;
          PushTFtok(TempSym, GetSType(Type), tokpos) ;
          PushTFtok(ProcSym, Type, tokpos) ;
-         IF NOT IsReturnOptional(Type)
+         IF NOT IsReturnOptionalAny (Type)
          THEN
-            IF IsTemporary(ProcSym)
-            THEN
-               ErrorFormat0 (NewError (tokpos),
-                             'function is being called but its return value is ignored')
-            ELSE
-               n := GetSymName (ProcSym) ;
-               ErrorFormat1 (NewError (tokpos),
-                            'function (%a) is being called but its return value is ignored', n)
-            END
+            MetaErrorT1 (tokpos,
+                         'function {%1Ea} is called but its return value is ignored', ProcSym)
          END ;
          RETURN TRUE
       END
@@ -7493,11 +7714,10 @@ BEGIN
       PutVar(TempSym, Type) ;
       PushTFtok(TempSym, Type, tokpos) ;
       PushTFtok(ProcSym, Type, tokpos) ;
-      IF NOT IsReturnOptional(ProcSym)
+      IF NOT IsReturnOptionalAny (ProcSym)
       THEN
-         n := GetSymName(ProcSym) ;
-         ErrorFormat1(NewError(tokpos),
-                      'function (%a) is being called but its return value is ignored', n)
+         MetaErrorT1 (tokpos,
+                      'function {%1Ea} is called but its return value is ignored', ProcSym)
       END ;
       RETURN TRUE
    END ;
@@ -7531,7 +7751,7 @@ END CheckBuildFunction ;
                        |----------------|         |------------|
 *)
 
-PROCEDURE BuildFunctionCall ;
+PROCEDURE BuildFunctionCall (ConstExpr: BOOLEAN) ;
 VAR
    paramtok,
    combinedtok,
@@ -7544,25 +7764,26 @@ BEGIN
    ProcSym := OperandT (NoOfParam + 1) ;
    ProcSym := SkipConst (ProcSym) ;
    PushT (NoOfParam) ;
-   (* Compile time stack restored to entry state *)
+   (* Compile time stack restored to entry state.  *)
    IF IsUnknown (ProcSym)
    THEN
       paramtok := OperandTtok (1) ;
-      combinedtok := MakeVirtualTok (functok, functok, paramtok) ;
+      combinedtok := MakeVirtual2Tok (functok, paramtok) ;
       MetaErrorT1 (functok, 'procedure function {%1Ea} is undefined', ProcSym) ;
       PopN (NoOfParam + 2) ;
-      PushT (MakeConstLit (combinedtok, MakeKey ('0'), NulSym))   (* fake return value to continue compiling *)
+      (* Fake return value to continue compiling.  *)
+      PushT (MakeConstLit (combinedtok, MakeKey ('0'), NulSym))
    ELSIF IsAModula2Type (ProcSym)
    THEN
       ManipulatePseudoCallParameters ;
-      BuildTypeCoercion
+      BuildTypeCoercion (ConstExpr)
    ELSIF IsPseudoSystemFunction (ProcSym) OR
          IsPseudoBaseFunction (ProcSym)
    THEN
       ManipulatePseudoCallParameters ;
-      BuildPseudoFunctionCall
+      BuildPseudoFunctionCall (ConstExpr)
    ELSE
-      BuildRealFunctionCall (functok)
+      BuildRealFunctionCall (functok, ConstExpr)
    END
 END BuildFunctionCall ;
 
@@ -7611,7 +7832,7 @@ BEGIN
    IF CompilerDebugging
    THEN
       printf2 ('procsym = %d  token = %d\n', ProcSym, functok) ;
-      (* ErrorStringAt (InitString ('constant function'), functok) *)
+      (* ErrorStringAt (InitString ('constant function'), functok).  *)
    END ;
    PushT (NoOfParam) ;
    IF (ProcSym # Convert) AND
@@ -7619,29 +7840,27 @@ BEGIN
        IsPseudoSystemFunctionConstExpression (ProcSym) OR
        (IsProcedure (ProcSym) AND IsProcedureBuiltin (ProcSym)))
    THEN
-      BuildFunctionCall
+      BuildFunctionCall (TRUE)
    ELSE
       IF IsAModula2Type (ProcSym)
       THEN
-         (* type conversion *)
+         (* Type conversion.  *)
          IF NoOfParam = 1
          THEN
             ConstExpression := OperandT (NoOfParam + 1) ;
             paramtok := OperandTtok (NoOfParam + 1) ;
             PopN (NoOfParam + 2) ;
-            (*
-               Build macro: CONVERT( ProcSym, ConstExpression )
-            *)
+            (* Build macro: CONVERT( ProcSym, ConstExpression ).  *)
             PushTFtok (Convert, NulSym, functok) ;
             PushTtok (ProcSym, functok) ;
             PushTtok (ConstExpression, paramtok) ;
-            PushT (2) ;          (* Two parameters *)
-            BuildConvertFunction
+            PushT (2) ;  (* Two parameters.  *)
+            BuildConvertFunction (Convert, TRUE)
          ELSE
             MetaErrorT0 (functok, '{%E}a constant type conversion can only have one argument')
          END
       ELSE
-         (* error issue message and fake return stack *)
+         (* Error issue message and fake return stack.  *)
          IF Iso
          THEN
             MetaErrorT0 (functok, 'the only functions permissible in a constant expression are: {%kCAP}, {%kCHR}, {%kCMPLX}, {%kFLOAT}, {%kHIGH}, {%kIM}, {%kLENGTH}, {%kMAX}, {%kMIN}, {%kODD}, {%kORD}, {%kRE}, {%kSIZE}, {%kTSIZE}, {%kTRUNC}, {%kVAL} and gcc builtins')
@@ -7656,7 +7875,7 @@ BEGIN
 	    combinedtok := functok
          END ;
          PopN (NoOfParam+2) ;
-         PushT (MakeConstLit (combinedtok, MakeKey('0'), NulSym))   (* fake return value to continue compiling *)
+         PushT (MakeConstLit (combinedtok, MakeKey('0'), NulSym))   (* Fake return value to continue compiling.  *)
       END
    END
 END BuildConstFunctionCall ;
@@ -7664,7 +7883,7 @@ END BuildConstFunctionCall ;
 
 (*
    BuildTypeCoercion - builds the type coersion.
-                       MODULA-2 allows types to be coersed with no runtime
+                       Modula-2 allows types to be coersed with no runtime
                        penility.
                        It insists that the TSIZE(t1)=TSIZE(t2) where
                        t2 variable := t2(variable of type t1).
@@ -7705,7 +7924,7 @@ END BuildConstFunctionCall ;
                        differ.
 *)
 
-PROCEDURE BuildTypeCoercion ;
+PROCEDURE BuildTypeCoercion (ConstExpr: BOOLEAN) ;
 VAR
    resulttok,
    proctok,
@@ -7727,18 +7946,24 @@ BEGIN
    THEN
       PopTrwtok (exp, r, exptok) ;
       MarkAsRead (r) ;
-      resulttok := MakeVirtualTok (proctok, proctok, exptok) ;
-      ReturnVar := MakeTemporary (resulttok, RightValue) ;
-      PutVar (ReturnVar, ProcSym) ;  (* Set ReturnVar's TYPE *)
-      PopN (1) ;   (* pop procedure.  *)
-      IF IsConst (exp) OR IsVar (exp)
+      resulttok := MakeVirtual2Tok (proctok, exptok) ;
+      PopN (1) ;   (* Pop procedure.  *)
+      IF ConstExprError (ProcSym, exp, exptok, ConstExpr)
       THEN
+         ReturnVar := MakeTemporary (resulttok, ImmediateValue) ;
+         PutVar (ReturnVar, ProcSym) ;  (* Set ReturnVar's TYPE.  *)
+      ELSIF IsConst (exp) OR IsVar (exp)
+      THEN
+         ReturnVar := MakeTemporary (resulttok, AreConstant (IsConst (exp))) ;
+         PutVar (ReturnVar, ProcSym) ;  (* Set ReturnVar's TYPE.  *)
          GenQuad (CoerceOp, ReturnVar, ProcSym, exp)
       ELSE
          MetaError2 ('trying to coerse {%1EMRad} which is not a variable or constant into {%2ad}',
                      exp, ProcSym) ;
          MetaError2 ('trying to coerse {%1ECad} which is not a variable or constant into {%2ad}',
-                     exp, ProcSym)
+                     exp, ProcSym) ;
+         ReturnVar := MakeTemporary (resulttok, RightValue) ;
+         PutVar (ReturnVar, ProcSym)   (* Set ReturnVar's TYPE.  *)
       END ;
       PushTFtok (ReturnVar, ProcSym, resulttok)
    ELSE
@@ -7772,7 +7997,7 @@ END BuildTypeCoercion ;
                            |----------------|         |------------|
 *)
 
-PROCEDURE BuildRealFunctionCall (tokno: CARDINAL) ;
+PROCEDURE BuildRealFunctionCall (tokno: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    NoOfParam,
    ProcSym  : CARDINAL ;
@@ -7783,14 +8008,14 @@ BEGIN
    ProcSym := SkipConst (ProcSym) ;
    IF IsVar(ProcSym)
    THEN
-      (* Procedure Variable ? *)
-      ProcSym := SkipType(OperandF(NoOfParam+2))
+      (* Procedure Variable therefore get its type to see if it is a FOR "C" call.  *)
+      ProcSym := SkipType (OperandF (NoOfParam+2))
    END ;
-   IF IsDefImp (GetScope (ProcSym)) AND IsDefinitionForC (GetScope(ProcSym))
+   IF IsDefImp (GetScope (ProcSym)) AND IsDefinitionForC (GetScope (ProcSym))
    THEN
-      BuildRealFuncProcCall (tokno, TRUE, TRUE)
+      BuildRealFuncProcCall (tokno, TRUE, TRUE, ConstExpr)
    ELSE
-      BuildRealFuncProcCall (tokno, TRUE, FALSE)
+      BuildRealFuncProcCall (tokno, TRUE, FALSE, ConstExpr)
    END
 END BuildRealFunctionCall ;
 
@@ -7821,7 +8046,7 @@ END BuildRealFunctionCall ;
 
 *)
 
-PROCEDURE BuildPseudoFunctionCall ;
+PROCEDURE BuildPseudoFunctionCall (ConstExpr: BOOLEAN) ;
 VAR
    NoOfParam,
    ProcSym  : CARDINAL ;
@@ -7830,13 +8055,13 @@ BEGIN
    ProcSym := OperandT (NoOfParam+1) ;
    ProcSym := SkipConst (ProcSym) ;
    PushT (NoOfParam) ;
-   (* Compile time stack restored to entry state *)
+   (* Compile time stack restored to entry state.  *)
    IF ProcSym = High
    THEN
       BuildHighFunction
    ELSIF ProcSym = LengthS
    THEN
-      BuildLengthFunction
+      BuildLengthFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Adr
    THEN
       BuildAdrFunction
@@ -7851,34 +8076,34 @@ BEGIN
       BuildTBitSizeFunction
    ELSIF ProcSym = Convert
    THEN
-      BuildConvertFunction
+      BuildConvertFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Odd
    THEN
-      BuildOddFunction
+      BuildOddFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Abs
    THEN
-      BuildAbsFunction
+      BuildAbsFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Cap
    THEN
-      BuildCapFunction
+      BuildCapFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Val
    THEN
-      BuildValFunction
+      BuildValFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Chr
    THEN
-      BuildChrFunction
+      BuildChrFunction (ProcSym, ConstExpr)
    ELSIF IsOrd (ProcSym)
    THEN
-      BuildOrdFunction (ProcSym)
+      BuildOrdFunction (ProcSym, ConstExpr)
    ELSIF IsInt (ProcSym)
    THEN
-      BuildIntFunction (ProcSym)
+      BuildIntFunction (ProcSym, ConstExpr)
    ELSIF IsTrunc (ProcSym)
    THEN
-      BuildTruncFunction (ProcSym)
+      BuildTruncFunction (ProcSym, ConstExpr)
    ELSIF IsFloat (ProcSym)
    THEN
-      BuildFloatFunction (ProcSym)
+      BuildFloatFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Min
    THEN
       BuildMinFunction
@@ -7887,16 +8112,16 @@ BEGIN
       BuildMaxFunction
    ELSIF ProcSym = AddAdr
    THEN
-      BuildAddAdrFunction
+      BuildAddAdrFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = SubAdr
    THEN
-      BuildSubAdrFunction
+      BuildSubAdrFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = DifAdr
    THEN
-      BuildDifAdrFunction
+      BuildDifAdrFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Cast
    THEN
-      BuildCastFunction
+      BuildCastFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Shift
    THEN
       BuildShiftFunction
@@ -7908,13 +8133,13 @@ BEGIN
       BuildMakeAdrFunction
    ELSIF ProcSym = Re
    THEN
-      BuildReFunction
+      BuildReFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Im
    THEN
-      BuildImFunction
+      BuildImFunction (ProcSym, ConstExpr)
    ELSIF ProcSym = Cmplx
    THEN
-      BuildCmplxFunction
+      BuildCmplxFunction (ProcSym, ConstExpr)
    ELSE
       InternalError  ('pseudo function not implemented yet')
    END
@@ -7947,11 +8172,13 @@ END BuildPseudoFunctionCall ;
                          |----------------|         |------------|
 *)
 
-PROCEDURE BuildAddAdrFunction ;
+PROCEDURE BuildAddAdrFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    combinedtok,
    functok,
+   vartok,
    optok      : CARDINAL ;
+   opa,
    ReturnVar,
    NoOfParam,
    OperandSym,
@@ -7962,17 +8189,26 @@ BEGIN
    IF NoOfParam=2
    THEN
       VarSym := OperandT (2) ;
+      vartok := OperandTok (2) ;
       OperandSym := OperandT (1) ;
       optok := OperandTok (1) ;
-      combinedtok := MakeVirtualTok (functok, functok, optok) ;
+      combinedtok := MakeVirtual2Tok (functok, optok) ;
       PopN (NoOfParam + 1) ;
-      IF IsVar (VarSym)
+      IF ConstExprError (ProcSym, VarSym, vartok, ConstExpr) OR
+         ConstExprError (ProcSym, OperandSym, optok, ConstExpr)
+      THEN
+         (* Fake return result.  *)
+         PushTFtok (MakeConstLit (combinedtok, MakeKey('0'), Address),
+                    Address, combinedtok)
+      ELSIF IsVar (VarSym)
       THEN
          IF IsReallyPointer (VarSym) OR (GetSType (VarSym) = Address)
          THEN
             ReturnVar := MakeTemporary (combinedtok, RightValue) ;
             PutVar (ReturnVar, Address) ;
-            GenQuad (AddOp, ReturnVar, VarSym, DereferenceLValue (optok, OperandSym)) ;
+            opa := ConvertToAddress (optok, DereferenceLValue (optok, OperandSym)) ;
+            GenQuadOtok (combinedtok, AddOp, ReturnVar, VarSym, opa, TRUE,
+                         combinedtok, combinedtok, combinedtok) ;
             PushTFtok (ReturnVar, Address, combinedtok)
          ELSE
             MetaErrorT1 (functok,
@@ -7985,9 +8221,10 @@ BEGIN
          PushTFtok (MakeConstLit (combinedtok, MakeKey('0'), Address), Address, combinedtok)
       END
    ELSE
-      MetaErrorT0 (functok, '{%E}SYSTEM procedure ADDADR expects 2 parameters') ;
-      PopN (NoOfParam + 1) ;
-      PushTFtok (MakeConstLit (functok, MakeKey ('0'), Address), Address, functok)
+      MetaErrorT0 (functok,
+                   '{%E}SYSTEM procedure {%EkADDADR} expects 2 parameters') ;
+      PopN (NoOfParam+1) ;
+      PushTFtok (MakeConstLit (functok, MakeKey('0'), Address), Address, functok)
    END
 END BuildAddAdrFunction ;
 
@@ -8018,7 +8255,7 @@ END BuildAddAdrFunction ;
                          |----------------|         |------------|
 *)
 
-PROCEDURE BuildSubAdrFunction ;
+PROCEDURE BuildSubAdrFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    functok,
    combinedtok,
@@ -8027,25 +8264,34 @@ VAR
    ReturnVar,
    NoOfParam,
    OperandSym,
+   opa,
    VarSym     : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    functok := OperandTtok (NoOfParam + 1) ;
-   OperandSym := OperandT (1) ;
-   optok := OperandTok (1) ;
    IF NoOfParam = 2
    THEN
+      optok := OperandTok (1) ;
+      OperandSym := OperandT (1) ;
       VarSym := OperandT (2) ;
       vartok := OperandTok (2) ;
       combinedtok := MakeVirtualTok (functok, functok, optok) ;
       PopN (NoOfParam + 1) ;
-      IF IsVar (VarSym)
+      IF ConstExprError (ProcSym, VarSym, vartok, ConstExpr) OR
+         ConstExprError (ProcSym, OperandSym, optok, ConstExpr)
+      THEN
+         (* Fake return result.  *)
+         PushTFtok (MakeConstLit (combinedtok, MakeKey('0'), Address),
+                    Address, combinedtok)
+      ELSIF IsVar (VarSym)
       THEN
          IF IsReallyPointer (VarSym) OR (GetSType (VarSym) = Address)
          THEN
             ReturnVar := MakeTemporary (combinedtok, RightValue) ;
             PutVar (ReturnVar, Address) ;
-            GenQuad (SubOp, ReturnVar, VarSym, DereferenceLValue (optok, OperandSym)) ;
+            opa := ConvertToAddress (optok, DereferenceLValue (optok, OperandSym)) ;
+            GenQuadOtok (combinedtok, SubOp, ReturnVar, VarSym, opa, TRUE,
+                         combinedtok, combinedtok, combinedtok) ;
             PushTFtok (ReturnVar, Address, combinedtok)
          ELSE
             MetaErrorT1 (functok,
@@ -8060,11 +8306,10 @@ BEGIN
          PushTFtok (MakeConstLit (combinedtok, MakeKey ('0'), Address), Address, combinedtok)
       END
    ELSE
-      combinedtok := MakeVirtualTok (functok, functok, optok) ;
       MetaErrorT0 (functok,
                    '{%E}SYSTEM procedure {%EkSUBADR} expects 2 parameters') ;
       PopN (NoOfParam+1) ;
-      PushTFtok (MakeConstLit (combinedtok, MakeKey('0'), Address), Address, combinedtok)
+      PushTFtok (MakeConstLit (functok, MakeKey('0'), Address), Address, functok)
    END
 END BuildSubAdrFunction ;
 
@@ -8096,7 +8341,7 @@ END BuildSubAdrFunction ;
                          |----------------|         |------------|
 *)
 
-PROCEDURE BuildDifAdrFunction ;
+PROCEDURE BuildDifAdrFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    functok,
    optok,
@@ -8105,19 +8350,31 @@ VAR
    TempVar,
    NoOfParam,
    OperandSym,
+   opa,
    VarSym     : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    functok := OperandTtok (NoOfParam + 1) ;
-   OperandSym := OperandT (1) ;
-   optok := OperandTok (1) ;
+   IF NoOfParam >= 1
+   THEN
+      OperandSym := OperandT (1) ;
+      optok := OperandTok (1)
+   ELSE
+      optok := functok
+   END ;
    IF NoOfParam = 2
    THEN
       VarSym := OperandT (2) ;
       vartok := OperandTok (2) ;
       combinedtok := MakeVirtualTok (functok, functok, optok) ;
       PopN (NoOfParam + 1) ;
-      IF IsVar (VarSym)
+      IF ConstExprError (ProcSym, VarSym, vartok, ConstExpr) OR
+         ConstExprError (ProcSym, OperandSym, optok, ConstExpr)
+      THEN
+         (* Fake return result.  *)
+         PushTFtok (MakeConstLit (combinedtok, MakeKey('0'), Integer),
+                    Integer, combinedtok)
+      ELSIF IsVar (VarSym)
       THEN
          IF IsReallyPointer (VarSym) OR (GetSType (VarSym) = Address)
          THEN
@@ -8125,7 +8382,9 @@ BEGIN
             THEN
                TempVar := MakeTemporary (vartok, RightValue) ;
                PutVar (TempVar, Address) ;
-               GenQuad (SubOp, TempVar, VarSym, DereferenceLValue (optok, OperandSym)) ;
+               opa := ConvertToAddress (optok, DereferenceLValue (optok, OperandSym)) ;
+               GenQuadOtok (combinedtok, SubOp, TempVar, VarSym, opa, TRUE,
+                            combinedtok, combinedtok, combinedtok) ;
                (*
                   Build macro: CONVERT( INTEGER, TempVar )
                *)
@@ -8133,7 +8392,7 @@ BEGIN
                PushTtok (Integer, functok) ;
                PushTtok (TempVar, vartok) ;
                PushT (2) ;          (* Two parameters *)
-               BuildConvertFunction
+               BuildConvertFunction (Convert, ConstExpr)
             ELSE
                MetaError1 ('the second parameter to {%EkDIFADR} {%1Ea} must be a variable of type ADDRESS or a {%EkPOINTER}, rather than a {%1Etsd}',
                            OperandSym) ;
@@ -8150,8 +8409,8 @@ BEGIN
          PushTFtok (MakeConstLit (combinedtok, MakeKey('0'), Integer), Integer, combinedtok)
       END
    ELSE
-      combinedtok := MakeVirtualTok (functok, functok, optok) ;
-      MetaErrorT0 (functok, '{%E}SYSTEM procedure {%EkDIFADR} expects 2 parameters') ;
+      combinedtok := MakeVirtual2Tok (functok, optok) ;
+      MetaErrorT0 (combinedtok, '{%E}SYSTEM procedure {%EkDIFADR} expects 2 parameters') ;
       PopN (NoOfParam+1) ;
       PushTFtok (MakeConstLit (combinedtok, MakeKey('0'), Integer), Integer, combinedtok)
    END
@@ -8217,7 +8476,7 @@ BEGIN
       THEN
          (* we cannot test for IsConst(Param) AND (GetSType(Param)=Char)  as the type might not be assigned yet *)
          MetaError1 ('base procedure {%EkHIGH} expects a variable or string constant as its parameter {%1d:rather than {%1d}} {%1asa}', Param)
-      ELSIF IsUnbounded(Type)
+      ELSIF (Type # NulSym) AND IsUnbounded(Type)
       THEN
          BuildHighFromUnbounded (combinedtok)
       ELSE
@@ -8266,6 +8525,7 @@ VAR
 BEGIN
    PopT (NoOfParam) ;
    ReturnVar := MakeTemporary (tok, ImmediateValue) ;
+   PutConst (ReturnVar, Cardinal) ;
    GenHigh (tok, ReturnVar, 1, OperandT (1)) ;
    PopN (NoOfParam+1) ;
    PushTtok (ReturnVar, tok)
@@ -8347,13 +8607,36 @@ END GetQualidentImport ;
 
 
 (*
-   MakeLengthConst - creates a constant which contains the length of string, sym.
+   ConstExprError - return TRUE if a constant expression is being built and Var is a variable.
 *)
 
-PROCEDURE MakeLengthConst (tok: CARDINAL; sym: CARDINAL) : CARDINAL ;
+PROCEDURE ConstExprError (Func, Var: CARDINAL; optok: CARDINAL; ConstExpr: BOOLEAN) : BOOLEAN ;
 BEGIN
-   RETURN MakeConstant (tok, GetStringLength (sym))
-END MakeLengthConst ;
+   IF ConstExpr AND IsVar (Var)
+   THEN
+      MetaErrorT2 (optok,
+                   'the procedure function {%1Ea} is being called from within a constant expression and therefore the parameter {%2a} must be a constant, seen a {%2da}',
+                   Func, Var) ;
+      RETURN TRUE
+   ELSE
+      RETURN FALSE
+   END
+END ConstExprError ;
+
+
+(*
+   DeferMakeLengthConst - creates a constant which contains the length of string, sym.
+*)
+
+PROCEDURE DeferMakeLengthConst (tok: CARDINAL; sym: CARDINAL) : CARDINAL ;
+VAR
+   const: CARDINAL ;
+BEGIN
+   const := MakeTemporary (tok, ImmediateValue) ;
+   PutVar (const, ZType) ;
+   GenQuadO (tok, StringLengthOp, const, 0, sym, FALSE) ;
+   RETURN const
+END DeferMakeLengthConst ;
 
 
 (*
@@ -8375,7 +8658,7 @@ END MakeLengthConst ;
 
 *)
 
-PROCEDURE BuildLengthFunction ;
+PROCEDURE BuildLengthFunction  (Function: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    combinedtok,
    paramtok,
@@ -8390,16 +8673,16 @@ BEGIN
    Param := OperandT (1) ;
    paramtok := OperandTok (1) ;
    functok := OperandTok (NoOfParam + 1) ;
-   (* Restore stack to origional form *)
+   (* Restore stack to origional form.  *)
    PushT (NoOfParam) ;
-   Type := GetSType (Param) ;  (* get the type from the symbol, not the stack *)
+   Type := GetSType (Param) ;  (* Get the type from the symbol, not the stack.  *)
    IF NoOfParam # 1
    THEN
       MetaErrorT1 (functok, 'base procedure {%1EkLENGTH} expects 1 parameter, seen {%1n} parameters', NoOfParam)
    END ;
    IF NoOfParam >= 1
    THEN
-      combinedtok := MakeVirtualTok (paramtok, functok, paramtok) ;
+      combinedtok := MakeVirtual2Tok (functok, paramtok) ;
       IF IsConst (Param) AND (GetSType (Param) = Char)
       THEN
          PopT (NoOfParam) ;
@@ -8409,7 +8692,7 @@ BEGIN
       ELSIF IsConstString (Param)
       THEN
          PopT (NoOfParam) ;
-         ReturnVar := MakeLengthConst (combinedtok, OperandT (1)) ;
+         ReturnVar := DeferMakeLengthConst (combinedtok, OperandT (1)) ;
          PopN (NoOfParam + 1) ;
          PushTtok (ReturnVar, combinedtok)
       ELSE
@@ -8417,22 +8700,28 @@ BEGIN
          IF (ProcSym # NulSym) AND IsProcedure (ProcSym)
          THEN
             PopT (NoOfParam) ;
-            IF IsConst (OperandT (1))
+            IF IsConst (Param)
             THEN
-               (* we can fold this in M2GenGCC.  *)
+               (* This can be folded in M2GenGCC.  *)
                ReturnVar := MakeTemporary (combinedtok, ImmediateValue) ;
                PutVar (ReturnVar, Cardinal) ;
-               GenQuad (StandardFunctionOp, ReturnVar, ProcSym, OperandT (1)) ;
+               GenQuad (StandardFunctionOp, ReturnVar, ProcSym, Param) ;
                PopN (NoOfParam + 1) ;
                PushTtok (ReturnVar, combinedtok)
+            ELSIF ConstExprError (Function, Param, paramtok, ConstExpr)
+            THEN
+               (* Fake a result as we have detected and reported an error.  *)
+               PopN (NoOfParam + 1) ;
+               ReturnVar := MakeConstLit (combinedtok, MakeKey ('1'), Cardinal) ;
+               PushTtok (ReturnVar, combinedtok)
             ELSE
-               (* no we must resolve this at runtime or in the GCC optimizer.  *)
+               (* We must resolve this at runtime or in the GCC optimizer.  *)
                PopTF (Param, Type);
 	       PopN (NoOfParam) ;
 	       PushTtok (ProcSym, functok) ;
                PushTFtok (Param, Type, paramtok) ;
 	       PushT (NoOfParam) ;
-	       BuildRealFunctionCall (functok)
+	       BuildRealFunctionCall (functok, FALSE)
             END
          ELSE
             PopT (NoOfParam) ;
@@ -8481,7 +8770,7 @@ END BuildLengthFunction ;
                       |----------------|
 *)
 
-PROCEDURE BuildOddFunction ;
+PROCEDURE BuildOddFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    combinedtok,
    optok,
@@ -8496,7 +8785,11 @@ BEGIN
       Var := OperandT (1) ;
       optok := OperandTok (1) ;
       combinedtok := MakeVirtualTok (functok, functok, optok) ;
-      IF IsVar(Var) OR IsConst(Var)
+      IF ConstExprError (ProcSym, Var, optok, ConstExpr)
+      THEN
+         (* Nothing to do.  *)
+         PushTtok (False, combinedtok)
+      ELSIF IsVar(Var) OR IsConst(Var)
       THEN
          PopN (NoOfParam + 1) ;
          (*
@@ -8580,13 +8873,12 @@ END BuildOddFunction ;
                       |----------------|
 *)
 
-PROCEDURE BuildAbsFunction ;
+PROCEDURE BuildAbsFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    vartok,
    functok,
    combinedtok: CARDINAL ;
    NoOfParam,
-   ProcSym,
    Res, Var : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
@@ -8595,12 +8887,16 @@ BEGIN
    THEN
       Var := OperandT (1) ;
       vartok := OperandTok (1) ;
+      PopN (NoOfParam + 1) ;
       combinedtok := MakeVirtualTok (functok, functok, vartok) ;
-      IF IsVar(Var) OR IsConst(Var)
+      IF ConstExprError (ProcSym, Var, vartok, ConstExpr)
       THEN
-         ProcSym := OperandT (NoOfParam + 1) ;
-         PopN (NoOfParam + 1) ;
-
+         (* Create fake result.  *)
+         Res := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+         PutVar (Res, GetSType (Var)) ;
+         PushTFtok (Res, GetSType (Var), combinedtok)
+      ELSIF IsVar(Var) OR IsConst(Var)
+      THEN
          Res := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
          PutVar (Res, GetSType (Var)) ;
 
@@ -8641,13 +8937,12 @@ END BuildAbsFunction ;
                       |----------------|         |-------------|
 *)
 
-PROCEDURE BuildCapFunction ;
+PROCEDURE BuildCapFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    optok,
    functok,
    combinedtok: CARDINAL ;
    NoOfParam,
-   ProcSym,
    Res, Var : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
@@ -8656,12 +8951,17 @@ BEGIN
    THEN
       Var := OperandT (1) ;
       optok := OperandTok (1) ;
-      IF IsVar (Var) OR IsConst (Var)
+      PopN (NoOfParam + 1) ;
+      IF ConstExprError (ProcSym, Var, optok, ConstExpr)
       THEN
-         ProcSym := OperandT (NoOfParam + 1) ;
-         PopN (NoOfParam + 1) ;
-
-         combinedtok := MakeVirtualTok (functok, functok, optok) ;
+         (* Create fake result.  *)
+         combinedtok := MakeVirtual2Tok (functok, optok) ;
+         Res := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+         PutVar (Res, Char) ;
+         PushTFtok (Res, Char, combinedtok)
+      ELSIF IsVar (Var) OR IsConst (Var)
+      THEN
+         combinedtok := MakeVirtual2Tok (functok, optok) ;
          Res := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
          PutVar (Res, Char) ;
          GenQuadO (combinedtok, StandardFunctionOp, Res, ProcSym, Var, FALSE) ;
@@ -8712,10 +9012,12 @@ END BuildCapFunction ;
                       |----------------|
 *)
 
-PROCEDURE BuildChrFunction ;
+PROCEDURE BuildChrFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    functok,
+   combinedtok,
    optok      : CARDINAL ;
+   ReturnVar,
    NoOfParam,
    Var        : CARDINAL ;
 BEGIN
@@ -8725,9 +9027,16 @@ BEGIN
    THEN
       Var := OperandT (1) ;
       optok := OperandTok (1) ;
-      IF IsVar (Var) OR IsConst (Var)
+      PopN (NoOfParam + 1) ;
+      IF ConstExprError (ProcSym, Var, optok, ConstExpr)
       THEN
-         PopN (NoOfParam + 1) ;
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtual2Tok (functok, optok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+         PutVar (ReturnVar, Char) ;
+         PushTFtok (ReturnVar, Char, combinedtok)
+      ELSIF IsVar (Var) OR IsConst (Var)
+      THEN
          (*
             Build macro: CONVERT( CHAR, Var )
          *)
@@ -8735,7 +9044,7 @@ BEGIN
          PushTtok (Char, functok) ;
          PushTtok (Var, optok) ;
          PushT (2) ;          (* Two parameters *)
-         BuildConvertFunction
+         BuildConvertFunction (Convert, ConstExpr)
       ELSE
          MetaErrorT1 (optok,
                       'the parameter to {%AkCHR} must be a variable or constant, seen {%1ad}',
@@ -8782,12 +9091,14 @@ END BuildChrFunction ;
                       |----------------|
 *)
 
-PROCEDURE BuildOrdFunction (Sym: CARDINAL) ;
+PROCEDURE BuildOrdFunction (Sym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
+   combinedtok,
    functok,
-   optok    : CARDINAL ;
+   optok      : CARDINAL ;
+   ReturnVar,
    NoOfParam,
-   Type, Var: CARDINAL ;
+   Type, Var  : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    functok := OperandTok (NoOfParam + 1) ;
@@ -8795,10 +9106,17 @@ BEGIN
    THEN
       Var := OperandT (1) ;
       optok := OperandTok (1) ;
-      IF IsVar (Var) OR IsConst (Var)
+      PopN (NoOfParam + 1) ;
+      IF ConstExprError (Sym, Var, optok, ConstExpr)
+      THEN
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtual2Tok (functok, optok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+         PutVar (ReturnVar, Cardinal) ;
+         PushTFtok (ReturnVar, Cardinal, combinedtok)
+      ELSIF IsVar (Var) OR IsConst (Var)
       THEN
          Type := GetSType (Sym) ;
-         PopN (NoOfParam + 1) ;
          (*
             Build macro: CONVERT( CARDINAL, Var )
          *)
@@ -8806,7 +9124,7 @@ BEGIN
          PushTtok (Type, optok) ;
          PushTtok (Var, optok) ;
          PushT (2) ;          (* Two parameters *)
-         BuildConvertFunction
+         BuildConvertFunction (Convert, ConstExpr)
       ELSE
          MetaErrorT2 (optok,
                       'the parameter to {%1Aa} must be a variable or constant, seen {%2ad}',
@@ -8853,11 +9171,12 @@ END BuildOrdFunction ;
                       |----------------|
 *)
 
-PROCEDURE BuildIntFunction (Sym: CARDINAL) ;
+PROCEDURE BuildIntFunction (Sym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    combinedtok,
    functok,
    optok      : CARDINAL ;
+   ReturnVar,
    NoOfParam,
    Type, Var  : CARDINAL ;
 BEGIN
@@ -8867,16 +9186,23 @@ BEGIN
    THEN
       Var := OperandT (1) ;
       optok := OperandTok (1) ;
-      IF IsVar (Var) OR IsConst (Var)
+      PopN (NoOfParam + 1) ;
+      IF ConstExprError (Sym, Var, optok, ConstExpr)
+      THEN
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtual2Tok (functok, optok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+         PutVar (ReturnVar, Integer) ;
+         PushTFtok (ReturnVar, Integer, combinedtok)
+      ELSIF IsVar (Var) OR IsConst (Var)
       THEN
          Type := GetSType (Sym) ;  (* return type of function *)
-         PopN (NoOfParam + 1) ;
          (* Build macro: CONVERT( CARDINAL, Var ).  *)
          PushTFtok (Convert, NulSym, functok) ;
          PushTtok (Type, functok) ;
          PushTtok (Var, optok) ;
          PushT (2) ;          (* Two parameters *)
-         BuildConvertFunction
+         BuildConvertFunction (Convert, ConstExpr)
       ELSE
          combinedtok := MakeVirtualTok (functok, optok, optok) ;
          MetaErrorT2 (optok,
@@ -9025,14 +9351,14 @@ BEGIN
       MarkAsRead (r) ;
       PopTtok (varSet, vartok) ;
       PopT (procSym) ;
-      combinedtok := MakeVirtualTok (functok, exptok, vartok) ;
+      combinedtok := MakeVirtualTok (functok, functok, exptok) ;
       IF (GetSType (varSet) # NulSym) AND IsSet (GetDType (varSet))
       THEN
          derefExp := DereferenceLValue (exptok, Exp) ;
          BuildRange (InitShiftCheck (varSet, derefExp)) ;
          returnVar := MakeTemporary (combinedtok, RightValue) ;
          PutVar (returnVar, GetSType (varSet)) ;
-         GenQuad (LogicalShiftOp, returnVar, varSet, derefExp) ;
+         GenQuadO (combinedtok, LogicalShiftOp, returnVar, varSet, derefExp, TRUE) ;
          PushTFtok (returnVar, GetSType (varSet), combinedtok)
       ELSE
          MetaErrorT1 (vartok,
@@ -9159,15 +9485,16 @@ END BuildRotateFunction ;
                       |----------------|
 *)
 
-PROCEDURE BuildValFunction ;
+PROCEDURE BuildValFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
-   functok  : CARDINAL ;
+   combinedtok,
+   functok    : CARDINAL ;
+   ReturnVar,
    NoOfParam,
-   ProcSym,
-   Exp, Type: CARDINAL ;
+   Exp, Type  : CARDINAL ;
    tok, r,
    typetok,
-   exptok   : CARDINAL ;
+   exptok     : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    functok := OperandTok (NoOfParam + 1) ;
@@ -9184,6 +9511,13 @@ BEGIN
                       'undeclared type found in builtin procedure function {%AkVAL} {%1ad}',
                       Type)
          (* non recoverable error.  *)
+      ELSIF ConstExprError (ProcSym, Exp, exptok, ConstExpr)
+      THEN
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtualTok (functok, functok, exptok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Exp))) ;
+         PutVar (ReturnVar, Type) ;
+         PushTFtok (ReturnVar, Type, combinedtok)
       ELSIF (IsSet (Type) OR IsEnumeration (Type) OR IsSubrange (Type) OR
              IsType (Type) OR IsPointer (Type) OR IsProcType (Type)) AND
              (IsVar (Exp) OR IsConst (Exp) OR IsProcedure (Exp))
@@ -9195,7 +9529,7 @@ BEGIN
          PushTtok (Type, typetok) ;
          PushTtok (Exp, exptok) ;
          PushT (2) ;          (* Two parameters *)
-         BuildConvertFunction
+         BuildConvertFunction (Convert, ConstExpr)
       ELSE
          (* not sensible to try and recover when we dont know the return type.  *)
          MetaErrorT0 (functok,
@@ -9244,16 +9578,15 @@ END BuildValFunction ;
                        |----------------|
 *)
 
-PROCEDURE BuildCastFunction ;
+PROCEDURE BuildCastFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    combinedtok,
+   exptok,
    typetok,
-   functok,
-   vartok     : CARDINAL ;
-   n          : Name ;
+   functok    : CARDINAL ;
    ReturnVar,
    NoOfParam,
-   Var, Type  : CARDINAL ;
+   Exp, Type  : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    functok := OperandTok (NoOfParam + 1) ;
@@ -9261,32 +9594,40 @@ BEGIN
    THEN
       Type := OperandT (2) ;
       typetok := OperandTok (2) ;
-      Var := OperandT (1) ;
-      vartok := OperandTok (1) ;
+      Exp := OperandT (1) ;
+      exptok := OperandTok (1) ;
       IF IsUnknown (Type)
       THEN
-         n := GetSymName (Type) ;
-         WriteFormat1 ('undeclared type found in CAST (%a)', n)
+         (* we cannot recover if we dont have a type.  *)
+         MetaErrorT1 (typetok, 'undeclared type {%1Aad} found in {%kCAST}', Type)
+         (* non recoverable error.  *)
+      ELSIF ConstExprError (ProcSym, Exp, exptok, ConstExpr)
+      THEN
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtualTok (functok, functok, exptok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Exp))) ;
+         PutVar (ReturnVar, Type) ;
+         PushTFtok (ReturnVar, Type, combinedtok)
       ELSIF IsSet (Type) OR IsEnumeration (Type) OR IsSubrange (Type) OR IsType (Type) OR
             IsPointer (Type) OR IsArray (Type) OR IsProcType (Type)
       THEN
-         IF IsConst (Var)
+         IF IsConst (Exp)
          THEN
             PopN (NoOfParam+1) ;
             (*
                Build macro: Type( Var )
             *)
             PushTFtok (Type, NulSym, typetok) ;
-            PushTtok (Var, vartok) ;
+            PushTtok (Exp, exptok) ;
             PushT (1) ;          (* one parameter *)
-            BuildTypeCoercion
-         ELSIF IsVar (Var) OR IsProcedure (Var)
+            BuildTypeCoercion (ConstExpr)
+         ELSIF IsVar (Exp) OR IsProcedure (Exp)
          THEN
             PopN (NoOfParam + 1) ;
-            combinedtok := MakeVirtualTok (functok, functok, vartok) ;
+            combinedtok := MakeVirtual2Tok (functok, exptok) ;
             ReturnVar := MakeTemporary (combinedtok, RightValue) ;
             PutVar (ReturnVar, Type) ;
-            GenQuadO (combinedtok, CastOp, ReturnVar, Type, Var, FALSE) ;
+            GenQuadO (combinedtok, CastOp, ReturnVar, Type, Exp, FALSE) ;
             PushTFtok (ReturnVar, Type, combinedtok)
          ELSE
             (* not sensible to try and recover when we dont know the return type.  *)
@@ -9343,7 +9684,7 @@ END BuildCastFunction ;
                           with a type Param1.
 *)
 
-PROCEDURE BuildConvertFunction ;
+PROCEDURE BuildConvertFunction (ProcSym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    combinedtok,
    functok,
@@ -9351,7 +9692,6 @@ VAR
    exptok     : CARDINAL ;
    t, r,
    Exp, Type,
-   ProcSym,
    NoOfParam,
    ReturnVar  : CARDINAL ;
 BEGIN
@@ -9373,6 +9713,13 @@ BEGIN
          (* we cannot recover if we dont have a type.  *)
          MetaErrorT1 (typetok, 'unknown {%1Ad} {%1ad} found in {%kCONVERT}', Exp)
          (* non recoverable error.  *)
+      ELSIF ConstExprError (ProcSym, Exp, exptok, ConstExpr)
+      THEN
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtualTok (functok, functok, exptok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Exp))) ;
+         PutVar (ReturnVar, Type) ;
+         PushTFtok (ReturnVar, Type, combinedtok)
       ELSIF (IsSet (Type) OR IsEnumeration (Type) OR IsSubrange (Type) OR
              IsType (Type) OR IsPointer (Type) OR IsProcType (Type) OR IsRecord (Type)) AND
             (IsVar (Exp) OR IsConst (Exp) OR IsProcedure (Exp))
@@ -9431,10 +9778,29 @@ END CheckBaseTypeValue ;
 
 
 (*
-   GetTypeMin - returns the minimium value of type.
+   GetTypeMin - returns the minimium value of type and generate an error
+                if this is unavailable.
 *)
 
 PROCEDURE GetTypeMin (tok: CARDINAL; func, type: CARDINAL) : CARDINAL ;
+VAR
+   min: CARDINAL ;
+BEGIN
+   min := GetTypeMinLower (tok, func, type) ;
+   IF min = NulSym
+   THEN
+      MetaErrorT1 (tok,
+                   'unable to obtain the {%AkMIN} value for type {%1ad}', type)
+   END ;
+   RETURN min
+END GetTypeMin ;
+
+
+(*
+   GetTypeMinLower - obtain the maximum value for type.
+*)
+
+PROCEDURE GetTypeMinLower (tok: CARDINAL; func, type: CARDINAL) : CARDINAL ;
 VAR
    min, max: CARDINAL ;
 BEGIN
@@ -9458,21 +9824,37 @@ BEGIN
       RETURN min
    ELSIF GetSType (type) = NulSym
    THEN
-      MetaErrorT1 (tok,
-                   'unable to obtain the {%AkMIN} value for type {%1ad}', type) ;
-      (* non recoverable error.  *)
-      InternalError ('MetaErrorT1 {%AkMIN} should call abort')
+      RETURN NulSym
    ELSE
       RETURN GetTypeMin (tok, func, GetSType (type))
    END
-END GetTypeMin ;
+END GetTypeMinLower ;
 
 
 (*
-   GetTypeMax - returns the maximum value of type.
+   GetTypeMax - returns the maximum value of type and generate an error
+                if this is unavailable.
 *)
 
 PROCEDURE GetTypeMax (tok: CARDINAL; func, type: CARDINAL) : CARDINAL ;
+VAR
+   max: CARDINAL ;
+BEGIN
+   max := GetTypeMaxLower (tok, func, type) ;
+   IF max = NulSym
+   THEN
+      MetaErrorT1 (tok,
+                   'unable to obtain the {%AkMAX} value for type {%1ad}', type)
+   END ;
+   RETURN max
+END GetTypeMax ;
+
+
+(*
+   GetTypeMaxLower - obtain the maximum value for type.
+*)
+
+PROCEDURE GetTypeMaxLower (tok: CARDINAL; func, type: CARDINAL) : CARDINAL ;
 VAR
    min, max: CARDINAL ;
 BEGIN
@@ -9496,14 +9878,11 @@ BEGIN
       RETURN max
    ELSIF GetSType (type) = NulSym
    THEN
-      MetaErrorT1 (tok,
-                   'unable to obtain the {%AkMAX} value for type {%1ad}', type) ;
-      (* non recoverable error.  *)
-      InternalError ('MetaErrorT1 {%AkMAX} should call abort')
+      RETURN NulSym
    ELSE
       RETURN GetTypeMax (tok, func, GetSType (type))
    END
-END GetTypeMax ;
+END GetTypeMaxLower ;
 
 
 (*
@@ -9661,14 +10040,16 @@ END BuildMaxFunction ;
                         |----------------|
 *)
 
-PROCEDURE BuildTruncFunction (Sym: CARDINAL) ;
+PROCEDURE BuildTruncFunction (Sym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
+   combinedtok,
    vartok,
-   functok  : CARDINAL ;
-   NoOfParam: CARDINAL ;
+   functok    : CARDINAL ;
+   NoOfParam  : CARDINAL ;
+   ReturnVar,
    ProcSym,
    Type,
-   Var      : CARDINAL ;
+   Var        : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    Assert (IsTrunc (OperandT (NoOfParam+1))) ;
@@ -9682,7 +10063,14 @@ BEGIN
          vartok := OperandTtok (1) ;
          Type := GetSType (Sym) ;
          PopN (NoOfParam + 1) ;    (* destroy arguments to this function *)
-         IF IsVar (Var) OR IsConst (Var)
+         IF ConstExprError (Sym, Var, vartok, ConstExpr)
+         THEN
+            (* Generate fake result.  *)
+            combinedtok := MakeVirtual2Tok (functok, vartok) ;
+            ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+            PutVar (ReturnVar, Type) ;
+            PushTFtok (ReturnVar, Type, combinedtok)
+         ELSIF IsVar (Var) OR IsConst (Var)
          THEN
             IF IsRealType (GetSType (Var))
             THEN
@@ -9691,15 +10079,15 @@ BEGIN
                PushTtok (Type, functok) ;
                PushTtok (Var, vartok) ;
                PushT (2) ;          (* two parameters *)
-               BuildConvertFunction
+               BuildConvertFunction (Convert, ConstExpr)
             ELSE
                MetaErrorT1 (functok,
-                            'argument to {%1E%ad} must be a float point type', Sym) ;
+                            'argument to {%1Ead} must be a float point type', Sym) ;
                PushTFtok (MakeConstLit (functok, MakeKey('0'), Type), Type, functok)
             END
          ELSE
             MetaErrorT2 (vartok,
-                         'argument to {%1E%ad} must be a variable or constant, seen {%2ad}',
+                         'argument to {%1Ead} must be a variable or constant, seen {%2ad}',
                          Sym, Var) ;
             PushTFtok (MakeConstLit (functok, MakeKey('0'), Type), Type, functok)
          END
@@ -9748,14 +10136,16 @@ END BuildTruncFunction ;
                         |----------------|
 *)
 
-PROCEDURE BuildFloatFunction (Sym: CARDINAL) ;
+PROCEDURE BuildFloatFunction (Sym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
+   combinedtok,
    vartok,
-   functok  : CARDINAL ;
-   NoOfParam: CARDINAL ;
+   functok    : CARDINAL ;
+   NoOfParam  : CARDINAL ;
+   ReturnVar,
    Type,
    Var,
-   ProcSym  : CARDINAL ;
+   ProcSym    : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    functok := OperandTtok (NoOfParam + 1) ;
@@ -9767,24 +10157,32 @@ BEGIN
       THEN
          Var := OperandT (1) ;
          vartok := OperandTtok (1) ;
-         IF IsVar (Var) OR IsConst (Var)
+         PopN (NoOfParam + 1) ;    (* destroy arguments to this function.  *)
+         IF ConstExprError (Sym, Var, vartok, ConstExpr)
          THEN
-            PopN (NoOfParam + 1) ;    (* destroy arguments to this function.  *)
+            (* Generate fake result.  *)
+            combinedtok := MakeVirtual2Tok (functok, vartok) ;
+            ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+            PutVar (ReturnVar, Type) ;
+            PushTFtok (ReturnVar, Type, combinedtok)
+         ELSIF IsVar (Var) OR IsConst (Var)
+         THEN
             (* build macro: CONVERT (REAL, Var).  *)
             PushTFtok (ProcSym, NulSym, functok) ;
             PushTtok (Type, functok) ;
             PushTtok (Var, vartok) ;
             PushT(2) ;          (* two parameters.  *)
-            BuildConvertFunction
+            BuildConvertFunction (ProcSym, ConstExpr)
          ELSE
             MetaErrorT1 (vartok,
-                         'argument to {%1E%ad} must be a variable or constant', ProcSym) ;
+                         'argument to {%1Ead} must be a variable or constant', ProcSym) ;
             PushTFtok (MakeConstLit (functok, MakeKey('0.0'), Type), Type, functok)
          END
       ELSE
          InternalError  ('CONVERT procedure not found for FLOAT substitution')
       END
    ELSE
+      PopN (NoOfParam + 1) ;    (* destroy arguments to this function.  *)
       MetaErrorT1 (functok,
                    'the builtin procedure function {%1Ead} only has one parameter',
                    Sym) ;
@@ -9819,7 +10217,7 @@ END BuildFloatFunction ;
                         |----------------|
 *)
 
-PROCEDURE BuildReFunction ;
+PROCEDURE BuildReFunction (Sym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    func,
    combinedtok,
@@ -9827,6 +10225,7 @@ VAR
    functok    : CARDINAL ;
    NoOfParam  : CARDINAL ;
    ReturnVar,
+   Type,
    Var        : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
@@ -9837,15 +10236,22 @@ BEGIN
       Var := OperandT (1) ;
       vartok := OperandTok (1) ;
       combinedtok := MakeVirtualTok (functok, functok, vartok) ;
-      IF IsVar(Var) OR IsConst(Var)
+      Type := ComplexToScalar (GetDType (Var)) ;
+      PopN (NoOfParam+1) ;  (* destroy arguments to this function *)
+      IF ConstExprError (Sym, Var, vartok, ConstExpr)
+      THEN
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtual2Tok (functok, vartok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+         PutVar (ReturnVar, Type) ;
+         PushTFtok (ReturnVar, Type, combinedtok)
+      ELSIF IsVar(Var) OR IsConst(Var)
       THEN
          ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
-         PutVar (ReturnVar, ComplexToScalar (GetSType (Var))) ;
+         PutVar (ReturnVar, Type) ;
          GenQuadO (combinedtok, StandardFunctionOp, ReturnVar, Re, Var, FALSE) ;
-         PopN (NoOfParam+1) ;  (* destroy arguments to this function *)
-         PushTFtok (ReturnVar, GetSType (ReturnVar), combinedtok)
+         PushTFtok (ReturnVar, Type, combinedtok)
       ELSE
-         PopN (NoOfParam+1) ;  (* destroy arguments to this function *)
          PushTFtok (MakeConstLit (combinedtok, MakeKey ('1.0'), RType), RType, combinedtok) ;
          MetaErrorT2 (vartok,
                       'the parameter to the builtin procedure function {%1Ead} must be a constant or a variable, seen {%2ad}',
@@ -9887,7 +10293,7 @@ END BuildReFunction ;
                         |----------------|
 *)
 
-PROCEDURE BuildImFunction ;
+PROCEDURE BuildImFunction (Sym: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
    func,
    combinedtok,
@@ -9895,6 +10301,7 @@ VAR
    functok    : CARDINAL ;
    NoOfParam  : CARDINAL ;
    ReturnVar,
+   Type,
    Var        : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
@@ -9904,16 +10311,23 @@ BEGIN
    THEN
       Var := OperandT (1) ;
       vartok := OperandTok (1) ;
+      Type := ComplexToScalar (GetDType (Var)) ;
       combinedtok := MakeVirtualTok (functok, functok, vartok) ;
-      IF IsVar(Var) OR IsConst(Var)
+      PopN (NoOfParam+1) ;  (* destroy arguments to this function *)
+      IF ConstExprError (Sym, Var, vartok, ConstExpr)
+      THEN
+         (* Generate fake result.  *)
+         combinedtok := MakeVirtual2Tok (functok, vartok) ;
+         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
+         PutVar (ReturnVar, Type) ;
+         PushTFtok (ReturnVar, Type, combinedtok)
+      ELSIF IsVar(Var) OR IsConst(Var)
       THEN
          ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (Var))) ;
-         PutVar (ReturnVar, ComplexToScalar (GetSType (Var))) ;
+         PutVar (ReturnVar, ComplexToScalar (GetDType (Var))) ;
          GenQuadO (combinedtok, StandardFunctionOp, ReturnVar, Im, Var, FALSE) ;
-         PopN (NoOfParam+1) ;  (* destroy arguments to this function *)
          PushTFtok (ReturnVar, GetSType (ReturnVar), combinedtok)
       ELSE
-         PopN (NoOfParam+1) ;  (* destroy arguments to this function *)
          PushTFtok (MakeConstLit (combinedtok, MakeKey ('1.0'), RType), RType, combinedtok) ;
          MetaErrorT2 (vartok,
                       'the parameter to the builtin procedure function {%1Ead} must be a constant or a variable, seen {%2ad}',
@@ -9955,34 +10369,53 @@ END BuildImFunction ;
                         |----------------|
 *)
 
-PROCEDURE BuildCmplxFunction ;
+PROCEDURE BuildCmplxFunction (func: CARDINAL; ConstExpr: BOOLEAN) ;
 VAR
+   failure    : BOOLEAN ;
    functok,
-   endtok,
+   rtok, ltok,
    combinedtok: CARDINAL ;
    NoOfParam  : CARDINAL ;
-   func,
+   type,
    ReturnVar,
    l, r       : CARDINAL ;
 BEGIN
    PopT (NoOfParam) ;
    functok := OperandTtok (NoOfParam + 1) ;
-   func := OperandT (NoOfParam + 1) ;
    IF NoOfParam = 2
    THEN
       l := OperandT (2) ;
+      ltok := OperandTtok (2) ;
       r := OperandT (1) ;
-      endtok := OperandTok (1) ;
-      combinedtok := MakeVirtualTok (functok, functok, endtok) ;
-      IF (IsVar(l) OR IsConst(l)) AND
-         (IsVar(r) OR IsConst(r))
+      rtok := OperandTtok (1) ;
+      combinedtok := MakeVirtual2Tok (functok, rtok) ;
+      PopN (NoOfParam+1) ;   (* Destroy arguments to this function.  *)
+      type := GetCmplxReturnType (GetDType (l), GetDType (r)) ;
+      ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (l) AND IsConst (r))) ;
+      PutVar (ReturnVar, type) ;
+      failure := FALSE ;
+      IF ConstExprError (func, l, ltok, ConstExpr)
+      THEN
+         (* ConstExprError has generated an error message we will fall through
+            and check the right operand.  *)
+         failure := TRUE
+      END ;
+      IF ConstExprError (func, r, rtok, ConstExpr)
+      THEN
+         (* Right operand is in error as a variable.  *)
+         failure := TRUE
+      END ;
+      IF failure
+      THEN
+         (* Generate a fake result if either operand was a variable (and we
+            are in a const expression).  *)
+         PushTFtok (ReturnVar, type, combinedtok)
+      ELSIF (IsVar (l) OR IsConst (l)) AND
+         (IsVar (r) OR IsConst (r))
       THEN
          CheckExpressionCompatible (combinedtok, GetSType(l), GetSType(r)) ;
-         ReturnVar := MakeTemporary (combinedtok, AreConstant (IsConst (l) AND IsConst (r))) ;
-         PutVar (ReturnVar, GetCmplxReturnType (GetDType (l), GetDType (r))) ;
          GenQuadO (combinedtok, StandardFunctionOp, ReturnVar, Cmplx, Make2Tuple (l, r), TRUE) ;
-         PopN (NoOfParam+1) ;   (* destroy arguments to this function *)
-         PushTFtok (ReturnVar, GetSType (ReturnVar), combinedtok)
+         PushTFtok (ReturnVar, type, combinedtok)
       ELSE
          IF IsVar (l) OR IsConst (l)
          THEN
@@ -9994,7 +10427,6 @@ BEGIN
                          'the builtin procedure {%1Ead} requires two parameters, both must be variables or constants but the first parameter is {%2d}',
                       func, l)
          END ;
-         PopN (NoOfParam+1) ;  (* destroy arguments to this function *)
          PushTFtok (MakeConstLit (combinedtok, MakeKey ('1.0'), CType), CType, combinedtok)
       END
    ELSE
@@ -10267,10 +10699,12 @@ BEGIN
       IF IsAModula2Type (OperandT (1))
       THEN
          ReturnVar := MakeTemporary (resulttok, ImmediateValue) ;
+         PutVar (ReturnVar, Cardinal) ;
          GenQuadO (resulttok, SizeOp, ReturnVar, NulSym, OperandT (1), FALSE)
       ELSIF IsVar (OperandT (1))
       THEN
          ReturnVar := MakeTemporary (resulttok, ImmediateValue) ;
+         PutVar (ReturnVar, Cardinal) ;
          GenQuadO (resulttok, SizeOp, ReturnVar, NulSym, GetSType (OperandT (1)), FALSE)
       ELSE
          MetaErrorT1 (resulttok,
@@ -10293,6 +10727,7 @@ BEGIN
          paramtok := OperandTtok (1) ;
          resulttok := MakeVirtualTok (functok, functok, paramtok) ;
          ReturnVar := MakeTemporary (resulttok, ImmediateValue) ;
+         PutVar (ReturnVar, Cardinal) ;
          GenQuadO (resulttok, SizeOp, ReturnVar, NulSym, Record, FALSE)
       ELSE
          resulttok := MakeVirtualTok (functok, functok, paramtok) ;
@@ -10454,7 +10889,7 @@ VAR
 BEGIN
    IF IsProcedure(BlockSym)
    THEN
-      ParamNo := NoOfParam(BlockSym)
+      ParamNo := NoOfParamAny (BlockSym)
    ELSE
       ParamNo := 0
    END ;
@@ -10604,6 +11039,11 @@ BEGIN
    GenQuad(ReturnOp, NulSym, NulSym, ProcSym) ;
    CheckFunctionReturn(ProcSym) ;
    CheckVariablesInBlock(ProcSym) ;
+   (* Call PutProcedureEndQuad so that any runtime procedure will be
+      seen as defined even if it not seen during pass 2 (which will also
+      call PutProcedureEndQuad).  *)
+   PutProcedureParametersDefined (ProcSym, ProperProcedure) ;
+   PutProcedureDefined (ProcSym, ProperProcedure) ;
    RemoveTop (CatchStack) ;
    RemoveTop (TryStack) ;
    PushT(ProcSym)
@@ -10855,9 +11295,38 @@ BEGIN
                    n1, n2)
    ELSE
       (* this checks the types are compatible, not the data contents.  *)
-      BuildRange (InitTypesAssignmentCheck (tokno, currentProc, actualVal))
+      BuildRange (InitTypesReturnTypeCheck (tokno, currentProc, actualVal))
    END
 END CheckReturnType ;
+
+
+(*
+   BuildReturnLower - check the return type and value to ensure type
+                      compatibility and no range overflow will occur.
+*)
+
+PROCEDURE BuildReturnLower (tokcombined, tokexpr: CARDINAL; e1, t1: CARDINAL) ;
+VAR
+   e2, t2: CARDINAL ;
+BEGIN
+   (* This will check that the type returned is compatible with
+      the formal return type of the procedure.  *)
+   CheckReturnType (tokcombined, CurrentProc, e1, t1) ;
+   (* Dereference LeftValue if necessary.  *)
+   IF GetMode (e1) = LeftValue
+   THEN
+      t2 := GetSType (CurrentProc) ;
+      e2 := MakeTemporary (tokexpr, RightValue) ;
+      PutVar(e2, t2) ;
+      CheckPointerThroughNil (tokexpr, e1) ;
+      doIndrX (tokexpr, e2, e1) ;
+      e1 := e2
+   END ;
+   (* Here we check the data contents to ensure no overflow.  *)
+   BuildRange (InitReturnRangeCheck (tokcombined, CurrentProc, e1)) ;
+   GenQuadOtok (tokcombined, ReturnValueOp, e1, NulSym, CurrentProc, FALSE,
+                tokcombined, UnknownTokenNo, GetDeclaredMod (CurrentProc))
+END BuildReturnLower ;
 
 
 (*
@@ -10879,7 +11348,6 @@ PROCEDURE BuildReturn (tokreturn: CARDINAL) ;
 VAR
    tokcombined,
    tokexpr    : CARDINAL ;
-   e2, t2,
    e1, t1,
    t, f,
    Des        : CARDINAL ;
@@ -10899,26 +11367,18 @@ BEGIN
    tokcombined := MakeVirtualTok (tokreturn, tokreturn, tokexpr) ;
    IF e1 # NulSym
    THEN
-      (* this will check that the type returned is compatible with
-         the formal return type of the procedure.  *)
-      CheckReturnType (tokcombined, CurrentProc, e1, t1) ;
-      (* dereference LeftValue if necessary *)
-      IF GetMode (e1) = LeftValue
+      (* Check we are in a procedure scope and that the procedure has a return type.  *)
+      IF CurrentProc = NulSym
       THEN
-         t2 := GetSType (CurrentProc) ;
-         e2 := MakeTemporary (tokexpr, RightValue) ;
-         PutVar(e2, t2) ;
-         CheckPointerThroughNil (tokexpr, e1) ;
-         doIndrX (tokexpr, e2, e1) ;
-	 (* here we check the data contents to ensure no overflow.  *)
-         BuildRange (InitReturnRangeCheck (tokcombined, CurrentProc, e2)) ;
-         GenQuadOtok (tokcombined, ReturnValueOp, e2, NulSym, CurrentProc, FALSE,
-                      tokcombined, UnknownTokenNo, GetDeclaredMod (CurrentProc))
+         MetaErrorT0 (tokcombined,
+                      '{%1E} attempting to return a value when not in a procedure scope')
+      ELSIF GetSType (CurrentProc) = NulSym
+      THEN
+         MetaErrorT1 (tokcombined,
+                      'attempting to return a value from procedure {%1Ea} which does not have a return type',
+                     CurrentProc)
       ELSE
-	 (* here we check the data contents to ensure no overflow.  *)
-         BuildRange (InitReturnRangeCheck (tokcombined, CurrentProc, e1)) ;
-         GenQuadOtok (tokcombined, ReturnValueOp, e1, NulSym, CurrentProc, FALSE,
-                      tokcombined, UnknownTokenNo, GetDeclaredMod (CurrentProc))
+         BuildReturnLower (tokcombined, tokexpr, e1, t1)
       END
    END ;
    GenQuadO (tokcombined, GotoOp, NulSym, NulSym, PopWord (ReturnStack), FALSE) ;
@@ -11021,16 +11481,33 @@ BEGIN
 END BuildDesignatorError ;
 
 
+(*
+   BuildDesignatorPointerError - removes the designator from the stack and replaces
+                                 it with an error symbol.
+*)
+
+PROCEDURE BuildDesignatorPointerError (type, rw: CARDINAL; tokpos: CARDINAL;
+                                       message: ARRAY OF CHAR) ;
+VAR
+   error: CARDINAL ;
+BEGIN
+   error := MakeError (tokpos, MakeKey (message)) ;
+   IF GetSType (type) # NulSym
+   THEN
+      type := GetSType (type)
+   END ;
+   PushTFrwtok (error, type, rw, tokpos)
+END BuildDesignatorPointerError ;
+
 
 (*
    BuildDesignatorArray - Builds the array referencing.
                           The purpose of this procedure is to work out
-                          whether the DesignatorArray is a static or
-                          dynamic array and to call the appropriate
+                          whether the DesignatorArray is a constant string or
+                          dynamic array/static array and to call the appropriate
                           BuildRoutine.
 
                           The Stack is expected to contain:
-
 
                           Entry                   Exit
                           =====                   ====
@@ -11044,6 +11521,41 @@ END BuildDesignatorError ;
 *)
 
 PROCEDURE BuildDesignatorArray ;
+BEGIN
+   IF IsConst (OperandT (2)) AND IsConstString (OperandT (2))
+   THEN
+      MetaErrorT1 (OperandTtok (2),
+                   '{%1Ead} is not an array, but a constant string.  Hint use a string constant created with an array constructor',
+                   OperandT (2)) ;
+      BuildDesignatorError ('bad array access')
+   ELSE
+      BuildDesignatorArrayStaticDynamic
+   END
+END BuildDesignatorArray ;
+
+
+(*
+   BuildDesignatorArrayStaticDynamic - Builds the array referencing.
+                                       The purpose of this procedure is to work out
+                                       whether the DesignatorArray is a static or
+                                       dynamic array and to call the appropriate
+                                       BuildRoutine.
+
+                                       The Stack is expected to contain:
+
+
+                                       Entry                   Exit
+                                       =====                   ====
+
+                                Ptr ->
+                                       +--------------+
+                                       | e            |                        <- Ptr
+                                       |--------------|        +------------+
+                                       | Sym  | Type  |        | S    | T   |
+                                       |--------------|        |------------|
+*)
+
+PROCEDURE BuildDesignatorArrayStaticDynamic ;
 VAR
    combinedTok,
    arrayTok,
@@ -11056,10 +11568,7 @@ BEGIN
    IF IsConst (OperandT (2))
    THEN
       type := GetDType (OperandT (2)) ;
-      IF type = NulSym
-      THEN
-         InternalError ('constant type should have been resolved')
-      ELSIF IsArray (type)
+      IF (type # NulSym) AND IsArray (type)
       THEN
          PopTtok (e, exprTok) ;
          PopTFDtok (Sym, Type, dim, arrayTok) ;
@@ -11077,7 +11586,7 @@ BEGIN
    IF (NOT IsVar (OperandT (2))) AND (NOT IsTemporary (OperandT (2)))
    THEN
       MetaErrorT1 (OperandTtok (2),
-                   'can only access arrays using variables or formal parameters not {%1Ead}',
+                   'can only access arrays using constants, variables or formal parameters not {%1Ead}',
                    OperandT (2)) ;
       BuildDesignatorError ('bad array access')
    END ;
@@ -11104,7 +11613,7 @@ BEGIN
                    Sym) ;
       BuildDesignatorError ('bad array access')
    END
-END BuildDesignatorArray ;
+END BuildDesignatorArrayStaticDynamic ;
 
 
 (*
@@ -11198,7 +11707,8 @@ BEGIN
       GenHigh (tok, tk, dim, arraySym) ;
       tl := MakeTemporary (tok, RightValue) ;
       PutVar (tl, Cardinal) ;
-      GenQuadO (tok, AddOp, tl, tk, MakeConstLit (tok, MakeKey ('1'), Cardinal), TRUE) ;
+      GenQuadOtok (tok, AddOp, tl, tk, MakeConstLit (tok, MakeKey ('1'), Cardinal), TRUE,
+                   tok, tok, tok) ;
       tj := calculateMultipicand (tok, arraySym, arrayType, dim) ;
       ti := MakeTemporary (tok, RightValue) ;
       PutVar (ti, Cardinal) ;
@@ -11206,6 +11716,29 @@ BEGIN
    END ;
    RETURN ti
 END calculateMultipicand ;
+
+
+(*
+   ConvertToAddress - convert sym to an address.
+*)
+
+PROCEDURE ConvertToAddress (tokpos: CARDINAL; sym: CARDINAL) : CARDINAL ;
+VAR
+   adr: CARDINAL ;
+BEGIN
+   IF GetSType (sym) = Address
+   THEN
+      RETURN sym
+   ELSE
+      PushTF (RequestSym (tokpos, MakeKey ('CONVERT')), NulSym) ;
+      PushT (Address) ;
+      PushTtok (sym, tokpos) ;
+      PushT(2) ;          (* Two parameters *)
+      BuildConvertFunction (Convert, FALSE) ;
+      PopT (adr) ;
+      RETURN adr
+   END
+END ConvertToAddress ;
 
 
 (*
@@ -11245,7 +11778,8 @@ VAR
    PtrToBase,
    Base,
    Dim, rw,
-   ti, tj, tk   : CARDINAL ;
+   ti, tj, tk,
+   tka          : CARDINAL ;
 BEGIN
    DisplayStack ;
    Sym  := OperandT (2) ;
@@ -11297,7 +11831,7 @@ BEGIN
    Assert (GetSType (Sym) = Type) ;
    ti := calculateMultipicand (indexTok, Sym, Type, Dim) ;
    idx := OperandT (1) ;
-   IF IsConst (idx)
+   IF IsConst (idx) AND IsConst (ti)
    THEN
       (* tj has no type since constant *)
       tj := MakeTemporary (indexTok, ImmediateValue) ;
@@ -11313,7 +11847,7 @@ BEGIN
          PushT (Cardinal) ;
          PushTtok (idx, indexTok) ;
          PushT(2) ;          (* Two parameters *)
-         BuildConvertFunction ;
+         BuildConvertFunction (Convert, FALSE) ;
          PopT (idx)
       END ;
       PutVar (tj, Cardinal) ;
@@ -11335,19 +11869,23 @@ BEGIN
    *)
    BackEndType := MakePointer (combinedTok, NulName) ;
    PutPointer (BackEndType, GetSType (Type)) ;
+   (* Create a temporary pointer for addition.  *)
+   tka := ConvertToAddress (combinedTok, tk) ;
 
    IF Dim = GetDimension (Type)
    THEN
       PutLeftValueFrontBackType (Adr, GetSType(Type), BackEndType) ;
 
-      GenQuad (AddOp, Adr, Base, tk) ;
+      GenQuadOtok (combinedTok, AddOp, Adr, Base, tka, FALSE,
+                   combinedTok, combinedTok, combinedTok) ;
       PopN (2) ;
       PushTFADrwtok (Adr, GetSType(Adr), ArraySym, Dim, rw, combinedTok)
    ELSE
       (* more to index *)
       PutLeftValueFrontBackType (Adr, Type, BackEndType) ;
 
-      GenQuad (AddOp, Adr, Base, tk) ;
+      GenQuadOtok (combinedTok, AddOp, Adr, Base, tka, FALSE,
+                   combinedTok, combinedTok, combinedTok) ;
       PopN (2) ;
       PushTFADrwtok (Adr, GetSType(Adr), ArraySym, Dim, rw, combinedTok)
    END
@@ -11384,13 +11922,13 @@ END DebugLocation ;
 PROCEDURE BuildDesignatorPointer (ptrtok: CARDINAL) ;
 VAR
    combinedtok,
-   exprtok    : CARDINAL ;
+   destok    : CARDINAL ;
    rw,
    Sym1, Type1,
    Sym2, Type2: CARDINAL ;
 BEGIN
-   PopTFrwtok (Sym1, Type1, rw, exprtok) ;
-   DebugLocation (exprtok, "expression") ;
+   PopTFrwtok (Sym1, Type1, rw, destok) ;
+   DebugLocation (destok, "des ptr expression") ;
 
    Type1 := SkipType (Type1) ;
    IF Type1 = NulSym
@@ -11399,33 +11937,44 @@ BEGIN
    ELSIF IsUnknown (Sym1)
    THEN
       MetaError1 ('{%1EMad} is undefined and therefore {%1ad}^ cannot be resolved', Sym1)
-   ELSIF IsPointer (Type1)
-   THEN
-      Type2 := GetSType (Type1) ;
-      Sym2 := MakeTemporary (ptrtok, LeftValue) ;
-      (*
-         Ok must reference by address
-         - but we contain the type of the referenced entity
-      *)
-      MarkAsRead (rw) ;
-      PutVarPointerCheck (Sym1, TRUE) ;
-      CheckPointerThroughNil (ptrtok, Sym1) ;
-      IF GetMode (Sym1) = LeftValue
-      THEN
-         rw := NulSym ;
-         PutLeftValueFrontBackType (Sym2, Type2, Type1) ;
-         GenQuadO (ptrtok, IndrXOp, Sym2, Type1, Sym1, FALSE)    (* Sym2 := *Sym1 *)
-      ELSE
-         PutLeftValueFrontBackType (Sym2, Type2, NulSym) ;
-         GenQuadO (ptrtok, BecomesOp, Sym2, NulSym, Sym1, FALSE) (* Sym2 :=  Sym1 *)
-      END ;
-      PutVarPointerCheck (Sym2, TRUE) ;       (* we should check this for *)
-                                     (* Sym2 later on (pointer via NIL)   *)
-      combinedtok := MakeVirtualTok (exprtok, exprtok, ptrtok) ;
-      PushTFrwtok (Sym2, Type2, rw, combinedtok) ;
-      DebugLocation (combinedtok, "pointer expression")
    ELSE
-      MetaError2 ('{%1ad} is not a pointer type but a {%2d}', Sym1, Type1)
+      combinedtok := MakeVirtual2Tok (destok, ptrtok) ;
+      IF IsPointer (Type1)
+      THEN
+         Type2 := GetSType (Type1) ;
+         Sym2 := MakeTemporary (ptrtok, LeftValue) ;
+         (*
+          Ok must reference by address
+          - but we contain the type of the referenced entity
+         *)
+         MarkAsRead (rw) ;
+         PutVarPointerCheck (Sym1, TRUE) ;
+         CheckPointerThroughNil (ptrtok, Sym1) ;
+         IF GetMode (Sym1) = LeftValue
+         THEN
+            rw := NulSym ;
+            PutLeftValueFrontBackType (Sym2, Type2, Type1) ;
+            GenQuadO (ptrtok, IndrXOp, Sym2, Type1, Sym1, FALSE)    (* Sym2 := *Sym1.  *)
+         ELSE
+            PutLeftValueFrontBackType (Sym2, Type2, NulSym) ;
+            GenQuadO (ptrtok, BecomesOp, Sym2, NulSym, Sym1, FALSE) (* Sym2 :=  Sym1.  *)
+         END ;
+         (* We should check this for Sym2 later on (pointer via NIL).   *)
+         PutVarPointerCheck (Sym2, TRUE) ;
+         PushTFrwtok (Sym2, Type2, rw, combinedtok) ;
+         DebugLocation (combinedtok, "pointer expression")
+      ELSIF IsHiddenType (Type1) AND (GetModuleScope (Type1) # GetCurrentModuleScope ())
+      THEN
+         MetaErrorT1 (ptrtok,
+                      '{%1Ead} is declared with an opaque type from a different module and cannot be dereferenced',
+                      Sym1) ;
+         MarkAsRead (rw) ;
+         BuildDesignatorPointerError (Type1, rw, combinedtok, 'bad opaque pointer dereference')
+      ELSE
+         MetaError2 ('{%1Ead} is not a pointer type but a {%2d}', Sym1, Type1) ;
+         MarkAsRead (rw) ;
+         BuildDesignatorPointerError (Type1, rw, combinedtok, 'bad pointer dereference')
+      END
    END
 END BuildDesignatorPointer ;
 
@@ -11453,31 +12002,34 @@ BEGIN
    PopTFtok (Sym, Type, tok) ;
    DebugLocation (tok, "expression") ;
    Type := SkipType (Type) ;
-
-   Ref := MakeTemporary (tok, LeftValue) ;
-   PutVar (Ref, Type) ;
-   IF GetMode (Sym) = LeftValue
-   THEN
-      (* Copy LeftValue.  *)
-      GenQuadO (tok, BecomesOp, Ref, NulSym, Sym, TRUE)
-   ELSE
-      (* Calculate the address of Sym.  *)
-      GenQuadO (tok, AddrOp, Ref, NulSym, Sym, TRUE)
-   END ;
-
-   PushWith (Sym, Type, Ref, tok) ;
-   DebugLocation (tok, "with ref") ;
    IF Type = NulSym
    THEN
-      MetaError1 ('{%1Ea} {%1d} has a no type, the {%kWITH} statement requires a variable or parameter of a {%kRECORD} type',
-                  Sym)
-   ELSIF NOT IsRecord(Type)
-   THEN
-      MetaError1 ('the {%kWITH} statement requires that {%1Ea} {%1d} be of a {%kRECORD} {%1tsa:type rather than {%1tsa}}',
-		   Sym)
+      MetaErrorT1 (tok,
+                   '{%1Aa} {%1d} has a no type, the {%kWITH} statement requires a variable or parameter of a {%kRECORD} type',
+                   Sym)
+   ELSE
+      Ref := MakeTemporary (tok, LeftValue) ;
+      PutVar (Ref, Type) ;
+      IF GetMode (Sym) = LeftValue
+      THEN
+         (* Copy LeftValue.  *)
+         GenQuadO (tok, BecomesOp, Ref, NulSym, Sym, TRUE)
+      ELSE
+         (* Calculate the address of Sym.  *)
+         GenQuadO (tok, AddrOp, Ref, NulSym, Sym, TRUE)
+      END ;
+
+      PushWith (Sym, Type, Ref, tok) ;
+      DebugLocation (tok, "with ref") ;
+      IF NOT IsRecord(Type)
+      THEN
+         MetaErrorT1 (tok,
+                      'the {%kWITH} statement requires that {%1Ea} {%1d} be of a {%kRECORD} {%1tsa:type rather than {%1tsa}}',
+                      Sym)
+      END ;
+      StartScope (Type)
    END ;
-   StartScope (Type)
- ; DisplayStack ;
+   DisplayStack ;
 END StartBuildWith ;
 
 
@@ -11653,11 +12205,12 @@ END BuildAccessWithField ;
                         Empty             +------------+
                                           | NulSym     |
                                           |------------|
+   tokpos is the position of the RETURN token.
 *)
 
-PROCEDURE BuildNulExpression ;
+PROCEDURE BuildNulExpression (tokpos: CARDINAL) ;
 BEGIN
-   PushT(NulSym)
+   PushTtok (NulSym, tokpos)
 END BuildNulExpression ;
 
 
@@ -11667,25 +12220,25 @@ END BuildNulExpression ;
                              it Pushes a Bitset type.
 *)
 
-PROCEDURE BuildTypeForConstructor ;
+PROCEDURE BuildTypeForConstructor (tokpos: CARDINAL) ;
 VAR
    c: ConstructorFrame ;
 BEGIN
    IF NoOfItemsInStackAddress(ConstructorStack)=0
    THEN
-      PushT(Bitset)
+      PushTtok (Bitset, tokpos)
    ELSE
       c := PeepAddress(ConstructorStack, 1) ;
       WITH c^ DO
-         IF IsArray(type) OR IsSet(type)
+         IF IsArray (type) OR IsSet (type)
          THEN
-            PushT(GetSType(type))
-         ELSIF IsRecord(type)
+            PushTtok (GetSType (type), tokpos)
+         ELSIF IsRecord (type)
          THEN
-            PushT(GetSType(GetNth(type, index)))
+            PushTtok (GetSType (GetNth (type, index)), tokpos)
          ELSE
-            MetaError1('{%1ad} is not a set, record or array type which is expected when constructing an aggregate entity',
-                       type)
+            MetaError1 ('{%1ad} is not a set, record or array type which is expected when constructing an aggregate entity',
+                        type)
          END
       END
    END
@@ -11706,9 +12259,9 @@ END BuildTypeForConstructor ;
                                         |--------------|
 *)
 
-PROCEDURE BuildSetStart ;
+PROCEDURE BuildSetStart (tokpos: CARDINAL) ;
 BEGIN
-   PushT(Bitset)
+   PushTtok (Bitset, tokpos)
 END BuildSetStart ;
 
 
@@ -11728,12 +12281,15 @@ END BuildSetStart ;
 
 PROCEDURE BuildSetEnd ;
 VAR
-   v, t: CARDINAL ;
+   valuepos, typepos,
+   combined,
+   value, type      : CARDINAL ;
 BEGIN
-   PopT(v) ;
-   PopT(t) ;
-   PushTF(v, t) ;
-   Assert(IsSet(t))
+   PopTtok (value, valuepos) ;
+   PopTtok (type, typepos) ;
+   combined := MakeVirtual2Tok (typepos, valuepos) ;
+   PushTFtok (value, type, combined) ;
+   Assert (IsSet (type))
 END BuildSetEnd ;
 
 
@@ -11750,52 +12306,53 @@ END BuildSetEnd ;
       	       	   | SetType   |     | SetType     |
                    |-----------|     |-------------|
 
+   tokpos points to the opening '{'.
 *)
 
-PROCEDURE BuildEmptySet ;
+PROCEDURE BuildEmptySet (tokpos: CARDINAL) ;
 VAR
-   n     : Name ;
-   Type  : CARDINAL ;
-   NulSet: CARDINAL ;
-   tok   : CARDINAL ;
+   n      : Name ;
+   typepos,
+   Type   : CARDINAL ;
+   NulSet : CARDINAL ;
 BEGIN
-   PopT(Type) ;  (* type of set we are building *)
-   tok := GetTokenNo () ;
-   IF (Type=NulSym) AND Pim
+   PopTtok (Type, typepos) ;  (* type of set we are building *)
+   IF (Type = NulSym) AND Pim
    THEN
       (* allowed generic {} in PIM Modula-2 *)
-   ELSIF IsUnknown(Type)
+      typepos := tokpos
+   ELSIF IsUnknown (Type)
    THEN
-      n := GetSymName(Type) ;
-      WriteFormat1('set type %a is undefined', n) ;
+      n := GetSymName (Type) ;
+      WriteFormat1 ('set type %a is undefined', n) ;
       Type := Bitset
-   ELSIF NOT IsSet(SkipType(Type))
+   ELSIF NOT IsSet (SkipType (Type))
    THEN
-      n := GetSymName(Type) ;
+      n := GetSymName (Type) ;
       WriteFormat1('expecting a set type %a', n) ;
       Type := Bitset
    ELSE
-      Type := SkipType(Type) ;
-      Assert((Type#NulSym))
+      Type := SkipType (Type) ;
+      Assert (Type # NulSym)
    END ;
-   NulSet := MakeTemporary(tok, ImmediateValue) ;
-   PutVar(NulSet, Type) ;
-   PutConstSet(NulSet) ;
+   NulSet := MakeTemporary (typepos, ImmediateValue) ;
+   PutVar (NulSet, Type) ;
+   PutConstSet (NulSet) ;
    IF CompilerDebugging
    THEN
-      n := GetSymName(Type) ;
-      printf1('set type = %a\n', n)
+      n := GetSymName (Type) ;
+      printf1 ('set type = %a\n', n)
    END ;
-   PushNulSet(Type) ;   (* onto the ALU stack  *)
-   PopValue(NulSet) ;   (* ALU -> symbol table *)
+   PushNulSet (Type) ;   (* onto the ALU stack  *)
+   PopValue (NulSet) ;   (* ALU -> symbol table *)
 
    (* and now construct the M2Quads stack as defined by the comments above *)
-   PushT(Type) ;
-   PushT(NulSet) ;
+   PushTtok (Type, typepos) ;
+   PushTtok (NulSet, typepos) ;
    IF CompilerDebugging
    THEN
-      n := GetSymName(Type) ;
-      printf2('Type = %a  (%d)  built empty set\n', n, Type) ;
+      n := GetSymName (Type) ;
+      printf2 ('Type = %a  (%d)  built empty set\n', n, Type) ;
       DisplayStack    (* Debugging info *)
    END
 END BuildEmptySet ;
@@ -11988,7 +12545,7 @@ BEGIN
    IF type = NulSym
    THEN
       MetaErrorT0 (tokcbrpos,
-                   '{%E}constructor requires a type before the opening {')
+                   '{%E}constructor requires a type before the opening %{')
    ELSE
       ChangeToConstructor (tok, type) ;
       PutConstructorFrom (constValue, type) ;
@@ -12025,10 +12582,11 @@ END SilentBuildConstructorStart ;
 
 PROCEDURE BuildConstructorStart (cbratokpos: CARDINAL) ;
 VAR
+   typepos,
    constValue,
    type      : CARDINAL ;
 BEGIN
-   PopT (type) ;   (* we ignore the type as we already have the constructor symbol from pass C *)
+   PopTtok (type, typepos) ;   (* we ignore the type as we already have the constructor symbol from pass C *)
    GetConstructorFromFifoQueue (constValue) ;
    IF type # GetSType (constValue)
    THEN
@@ -12052,25 +12610,33 @@ END BuildConstructorStart ;
                          +------------+        +------------+
                          | const      |        | const      |
                          |------------|        |------------|
+
+   startpos is the start of the constructor, either the typename or '{'
+   cbratokpos is the '}'.
 *)
 
-PROCEDURE BuildConstructorEnd (cbratokpos: CARDINAL) ;
+PROCEDURE BuildConstructorEnd (startpos, cbratokpos: CARDINAL) ;
 VAR
-   typetok,
    value, valtok: CARDINAL ;
 BEGIN
-   PopTtok (value, valtok) ;
-   IF IsBoolean (1)
+   IF DebugTokPos
    THEN
-      typetok := valtok
-   ELSE
-      typetok := OperandTtok (1)
+      WarnStringAt (InitString ('startpos'), startpos) ;
+      WarnStringAt (InitString ('cbratokpos'), cbratokpos)
    END ;
-   valtok := MakeVirtualTok (typetok, typetok, cbratokpos) ;
+   PopTtok (value, valtok) ;
+   IF DebugTokPos
+   THEN
+      WarnStringAt (InitString ('value valtok'), valtok)
+   END ;
+   valtok := MakeVirtual2Tok (startpos, cbratokpos) ;
    PutDeclared (valtok, value) ;
    PushTtok (value, valtok) ;   (* Use valtok as we now know it was a constructor.  *)
-   PopConstructor
-   (* ; ErrorStringAt (Mark (InitString ('aggregate constant')), valtok) *)
+   PopConstructor ;
+   IF DebugTokPos
+   THEN
+      WarnStringAt (InitString ('aggregate constant'), valtok)
+   END
 END BuildConstructorEnd ;
 
 
@@ -12149,7 +12715,7 @@ BEGIN
          PopT(e2) ;
          PopT(e1) ;
          PopT(const) ;
-         WriteFormat0('the constant must be an array constructor or a set constructor but not both') ;
+         WriteFormat0('the constant must be either an array constructor or a set constructor') ;
          PushT(const)
       END
    END
@@ -12158,6 +12724,14 @@ END BuildComponentValue ;
 
 (*
    RecordOp - Records the operator passed on the stack.
+              This is called when a boolean operator is found in an
+              expression.  It is called just after the lhs has been built
+              and pushed to the quad stack and prior to the rhs build.
+              It checks to see if AND OR or equality tests are required.
+              It will short circuit AND and OR expressions.  It also
+              converts a lhs to a boolean variable if an xor comparison
+              is about to be performed.
+
               Checks for AND operator or OR operator
               if either of these operators are found then BackPatching
               takes place.
@@ -12201,6 +12775,10 @@ BEGIN
       PopBool(t, f) ;
       BackPatch(f, NextQuad) ;
       PushBool(t, 0)
+   ELSIF IsBoolean (1) AND
+      ((Op = EqualTok) OR (Op = LessGreaterTok) OR (Op = HashTok) OR (Op = InTok))
+   THEN
+      ConvertBooleanToVariable (tokno, 1)
    END ;
    PushTtok(Op, tokno)
 END RecordOp ;
@@ -12316,7 +12894,7 @@ BEGIN
       PushT(type) ;
       PushT(sym) ;
       PushT(2) ;          (* Two parameters *)
-      BuildConvertFunction ;
+      BuildConvertFunction (Convert, FALSE) ;
       PopT(sym)
    END ;
    RETURN( sym )
@@ -12403,19 +12981,21 @@ BEGIN
    IF Operator = OrTok
    THEN
       CheckBooleanId ;
-      PopBool (t1, f1) ;
+      PopBooltok (t1, f1, rightpos) ;
       PopTtok (Operator, OperatorPos) ;
-      PopBool (t2, f2) ;
+      PopBooltok (t2, f2, leftpos) ;
       Assert (f2=0) ;
-      PushBool (Merge (t1, t2), f1)
+      OperatorPos := MakeVirtualTok (OperatorPos, leftpos, rightpos) ;
+      PushBooltok (Merge (t1, t2), f1, OperatorPos)
    ELSIF (Operator = AndTok) OR (Operator = AmbersandTok)
    THEN
       CheckBooleanId ;
-      PopBool (t1, f1) ;
+      PopBooltok (t1, f1, rightpos) ;
       PopTtok (Operator, OperatorPos) ;
-      PopBool (t2, f2) ;
+      PopBooltok (t2, f2, leftpos) ;
       Assert (t2=0) ;
-      PushBool (t1, Merge (f1, f2))
+      OperatorPos := MakeVirtualTok (OperatorPos, leftpos, rightpos) ;
+      PushBooltok (t1, Merge (f1, f2), OperatorPos)
    ELSE
       PopTFrwtok (right, righttype, rightrw, rightpos) ;
       PopTtok (Operator, OperatorPos) ;
@@ -12454,16 +13034,15 @@ BEGIN
       ELSE
          (* CheckForGenericNulSet(e1, e2, t1, t2) *)
       END ;
+      OldPos := OperatorPos ;
+      OperatorPos := MakeVirtualTok (OperatorPos, leftpos, rightpos) ;
       IF (Operator = PlusTok) AND IsConstString(left) AND IsConstString(right)
       THEN
-         (* handle special addition for constant strings *)
-         s := InitStringCharStar (KeyToCharStar (GetString (left))) ;
-         s := ConCat (s, Mark (InitStringCharStar (KeyToCharStar (GetString (right))))) ;
-         value := MakeConstLitString (OperatorPos, makekey (string (s))) ;
-         s := KillString (s)
+         value := MakeConstString (OperatorPos, NulName) ;
+         PutConstStringKnown (OperatorPos, value, NulName, FALSE, FALSE) ;
+         GenQuadOtok (OperatorPos, MakeOp (PlusTok), value, left, right, FALSE,
+                      OperatorPos, leftpos, rightpos)
       ELSE
-         OldPos := OperatorPos ;
-         OperatorPos := MakeVirtualTok (OperatorPos, leftpos, rightpos) ;
          IF checkTypes
          THEN
             BuildRange (InitTypesExpressionCheck (OperatorPos, left, right, FALSE, FALSE))
@@ -12593,7 +13172,7 @@ END AreConstant ;
 (*
    ConvertBooleanToVariable - converts a BoolStack(i) from a Boolean True|False
                               exit pair into a variable containing the value TRUE or
-                              FALSE. The parameter, i, is relative to the top
+                              FALSE.  The parameter i is relative to the top
                               of the stack.
 *)
 
@@ -12603,27 +13182,28 @@ VAR
    f  : BoolFrame ;
 BEGIN
    Assert (IsBoolean (i)) ;
-   (*
-      need to convert it to a variable containing the result.
-      Des will be a boolean type
-   *)
-   Des := MakeTemporary (tok, RightValue) ;
+   (* We need to convert the boolean top of stack into a variable or
+      constant boolean.  *)
+   Des := MakeTemporary (tok, AreConstant (IsInConstExpression ())) ;
    PutVar (Des, Boolean) ;
+   PutVarConditional (Des, TRUE) ;
    PushTtok (Des, tok) ;   (* we have just increased the stack so we must use i+1 *)
    f := PeepAddress (BoolStack, i+1) ;
    PushBool (f^.TrueExit, f^.FalseExit) ;
-   BuildAssignmentWithoutBounds (tok, FALSE, TRUE) ;  (* restored stack *)
+   BuildAssignmentWithoutBounds (tok, FALSE, TRUE) ;
+   (* Restored stack after the BuildAssign... above.  *)
    f := PeepAddress (BoolStack, i) ;
    WITH f^ DO
-      TrueExit := Des ;  (* alter Stack(i) to contain the variable *)
+      TrueExit := Des ;  (* Alter Stack(i) to contain the variable.  *)
       FalseExit := Boolean ;
-      BooleanOp := FALSE ; (* no longer a Boolean True|False pair    *)
+      BooleanOp := FALSE ; (* No longer a Boolean True|False pair.  *)
       Unbounded := NulSym ;
       Dimension := 0 ;
       ReadWrite := NulSym ;
       tokenno := tok ;
       Annotation := KillString (Annotation) ;
-      Annotation := InitString ('%1s(%1d)|%2s(%2d)||boolean var|type')
+      Annotation := InitString ('%1s(%1d)|%2s(%2d)||boolean var|type') ;
+      RangeDep := 0
    END
 END ConvertBooleanToVariable ;
 
@@ -12644,6 +13224,23 @@ END BuildBooleanVariable ;
 
 
 (*
+   DumpQuadSummary -
+*)
+
+PROCEDURE DumpQuadSummary (quad: CARDINAL) ;
+VAR
+   f: QuadFrame ;
+BEGIN
+   IF quad # 0
+   THEN
+      f := GetQF (quad) ;
+      printf2 ("%d  op3 = %d\n", quad, f^.Operand3)
+   END
+END DumpQuadSummary ;
+
+
+
+(*
    BuildRelOpFromBoolean - builds a relational operator sequence of quadruples
                            instead of using a temporary boolean variable.
                            This function can only be used when we perform
@@ -12659,10 +13256,11 @@ END BuildBooleanVariable ;
 
                            before
 
-                           q    if r1      op1     op2     t2
-                           q+1  Goto                       f2
-                           q+2  if r2      op3     op4     t1
-                           q+3  Goto                       f1
+                           q      if r1      op1     op2     t2
+                           q+1    Goto                       f2
+                           ...
+                           q+n    if r2      op3     op4     t1
+                           q+n+1  Goto                       f1
 
                            after (in case of =)
 
@@ -12675,12 +13273,14 @@ END BuildBooleanVariable ;
 
                            after (in case of #)
 
-                           q    if r1      op1     op2     q+2
-                           q+1  Goto                       q+4
-                           q+2  if r2      op3     op4     f
-                           q+3  Goto                       t
-                           q+4  if r2      op3     op4     t
-                           q+5  Goto                       f
+                           q      if r1      op1     op2     q+2
+                           q+1    Goto                       q+n+2
+                           q+2    ...
+                           ...    ...
+                           q+n    if r2      op3     op4     f
+                           q+n+1  Goto                       t
+                           q+n+2  if r2      op3     op4     t
+                           q+n+3  Goto                       f
 
                            The Stack is expected to contain:
 
@@ -12710,11 +13310,11 @@ BEGIN
    Assert (IsBoolean (1) AND IsBoolean (3)) ;
    IF OperandT (2) = EqualTok
    THEN
-      (* are the two boolean expressions the same? *)
+      (* Are the two boolean expressions the same?  *)
       PopBool (t1, f1) ;
       PopT (Tok) ;
       PopBool (t2, f2) ;
-      (* give the false exit a second chance *)
+      (* Give the false exit a second chance.  *)
       BackPatch (t2, t1) ;        (* q    if   _     _    q+2 *)
       BackPatch (f2, NextQuad) ;  (* q+1  if   _     _    q+4 *)
       Assert (NextQuad = f1+1) ;
@@ -12723,14 +13323,28 @@ BEGIN
          GenQuadO (tokpos, Operator, Operand1, Operand2, 0, FALSE)
       END ;
       GenQuadO (tokpos, GotoOp, NulSym, NulSym, 0, FALSE) ;
-      PushBool (Merge (NextQuad-1, t1), Merge (NextQuad-2, f1))
+      PushBooltok (Merge (NextQuad-1, t1), Merge (NextQuad-2, f1), tokpos)
    ELSIF (OperandT (2) = HashTok) OR (OperandT (2) = LessGreaterTok)
    THEN
-      (* are the two boolean expressions the different? *)
+      IF CompilerDebugging
+      THEN
+         printf0 ("BuildRelOpFromBoolean (NotEqualTok)\n") ;
+         DisplayStack
+      END ;
+      (* Are the two boolean expressions different?  *)
       PopBool (t1, f1) ;
       PopT (Tok) ;
       PopBool (t2, f2) ;
-      (* give the false exit a second chance *)
+      IF CompilerDebugging
+      THEN
+         printf2 ("t1 = %d, f1 = %d\n", t1, f1) ;
+         printf2 ("t2 = %d, f2 = %d\n", t2, f2) ;
+         DumpQuadSummary (t1) ;
+         DumpQuadSummary (f1) ;
+         DumpQuadSummary (t2) ;
+         DumpQuadSummary (f2) ;
+      END ;
+      (* Give the false exit a second chance.  *)
       BackPatch (t2, t1) ;        (* q    if   _     _    q+2 *)
       BackPatch (f2, NextQuad) ;  (* q+1  if   _     _    q+4 *)
       Assert (NextQuad = f1+1) ;
@@ -12739,7 +13353,7 @@ BEGIN
          GenQuadO (tokpos, Operator, Operand1, Operand2, 0, FALSE)
       END ;
       GenQuadO (tokpos, GotoOp, NulSym, NulSym, 0, FALSE) ;
-      PushBool (Merge (NextQuad-2, f1), Merge (NextQuad-1, t1))
+      PushBooltok (Merge (NextQuad-2, f1), Merge (NextQuad-1, t1), tokpos)
    ELSE
       MetaError0 ('only allowed to use the relation operators {%Ek=} {%Ek#} rather than {%Ek<} or {%Ek>} on {%EkBOOLEAN} expressions as these do not imply an ordinal value for {%kTRUE} or {%kFALSE}')
    END
@@ -12776,7 +13390,7 @@ BEGIN
       MetaErrorsT1 (tokpos,
                     '{%1EU} not expecting an array variable as an operand for either comparison or binary operation',
                     'it was declared as a {%1Dd}', sym)
-   ELSIF IsConstString(sym) AND (GetStringLength(sym)>1)
+   ELSIF IsConstString (sym) AND IsConstStringKnown (sym) AND (GetStringLength (tokpos, sym) > 1)
    THEN
       MetaErrorT1 (tokpos,
                    '{%1EU} not expecting a string constant as an operand for either comparison or binary operation',
@@ -12825,11 +13439,13 @@ BEGIN
    THEN
       DisplayStack    (* Debugging info *)
    END ;
-   IF IsBoolean (1) AND IsBoolean (3)
+   IF IsInConstExpression () AND IsBoolean (1) AND IsBoolean (3)
    THEN
       (*
          we allow # and = to be used with Boolean expressions.
-         we do not allow >  <  >=  <=  though
+         we do not allow >  <  >=  <=  though.  We only examine
+         this case if we are in a const expression as there will be
+         no dereferencing of operands.
       *)
       BuildRelOpFromBoolean (optokpos)
    ELSE
@@ -12891,7 +13507,7 @@ BEGIN
       GenQuadOtok (combinedTok, MakeOp (Op), left, right, 0, FALSE,
                    leftpos, rightpos, UnknownTokenNo) ;  (* True  Exit *)
       GenQuadO (combinedTok, GotoOp, NulSym, NulSym, 0, FALSE) ;  (* False Exit *)
-      PushBool (NextQuad-2, NextQuad-1)
+      PushBooltok (NextQuad-2, NextQuad-1, combinedTok)
    END
 END BuildRelOp ;
 
@@ -13037,13 +13653,15 @@ BEGIN
             TokenNo := GetTokenNo ()
          ELSE
             TokenNo := TokPos
+         END ;
+         IF GetDebugTraceQuad ()
+         THEN
+            printf0('generating: ') ;
+            DisplayQuad (NextQuad) ;
+            (* MetaErrorT1 (TokenNo, '{%1On}', NextQuad) *)
          END
       END ;
-      IF NextQuad=BreakAtQuad
-      THEN
-         stop
-      END ;
-      (* DisplayQuad(NextQuad) ; *)
+      CheckBreak (NextQuad) ;
       NewQuad (NextQuad)
    END
 END GenQuadOTrash ;
@@ -13082,6 +13700,22 @@ PROCEDURE GenQuadOtok (TokPos: CARDINAL;
                        Operation: QuadOperator;
                        Op1, Op2, Op3: CARDINAL; overflow: BOOLEAN;
                        Op1Pos, Op2Pos, Op3Pos: CARDINAL) ;
+BEGIN
+   GenQuadOTypetok (TokPos, Operation, Op1, Op2, Op3, overflow, TRUE,
+                    Op1Pos, Op2Pos, Op3Pos)
+END GenQuadOtok ;
+
+
+(*
+   GenQuadOTypetok - assigns the fields of the quadruple with
+                     the parameters.
+*)
+
+PROCEDURE GenQuadOTypetok (TokPos: CARDINAL;
+                           Operation: QuadOperator;
+                           Op1, Op2, Op3: CARDINAL;
+                           overflow, typecheck: BOOLEAN;
+                           Op1Pos, Op2Pos, Op3Pos: CARDINAL) ;
 VAR
    f: QuadFrame ;
 BEGIN
@@ -13093,7 +13727,7 @@ BEGIN
          f := GetQF (NextQuad-1) ;
          f^.Next := NextQuad
       END ;
-      PutQuadO (NextQuad, Operation, Op1, Op2, Op3, overflow) ;
+      PutQuadOType (NextQuad, Operation, Op1, Op2, Op3, overflow, typecheck) ;
       f := GetQF (NextQuad) ;
       WITH f^ DO
          Next := 0 ;
@@ -13106,35 +13740,139 @@ BEGIN
          END ;
          op1pos := Op1Pos ;
          op2pos := Op2Pos ;
-         op3pos := Op3Pos
+         op3pos := Op3Pos ;
+         IF GetDebugTraceQuad ()
+         THEN
+            printf0('generating: ') ;
+            DisplayQuad (NextQuad) ;
+            (* MetaErrorT1 (TokenNo, '{%1On}', NextQuad) *)
+         END
       END ;
-      IF NextQuad=BreakAtQuad
-      THEN
-         stop
-      END ;
-      (* DisplayQuad(NextQuad) ; *)
+      CheckBreak (NextQuad) ;
       NewQuad (NextQuad)
    END
-END GenQuadOtok ;
+END GenQuadOTypetok ;
 
 
 (*
-   DisplayQuadList - displays all quads.
+   DumpUntil - dump all quadruples until we seen the ending quadruple
+               with procsym in the third operand.
+               Return the quad number containing the match.
 *)
 
-PROCEDURE DisplayQuadList ;
+PROCEDURE DumpUntil (ending: QuadOperator;
+                     procsym: CARDINAL; quad: CARDINAL) : CARDINAL ;
 VAR
-   i: CARDINAL ;
-   f: QuadFrame ;
+   op           : QuadOperator ;
+   op1, op2, op3: CARDINAL ;
+   f            : QuadFrame ;
 BEGIN
-   printf0('Quadruples:\n') ;
+   fprintf0 (GetDumpFile (), '\n...\n\n');
+   REPEAT
+      GetQuad (quad, op, op1, op2, op3) ;
+      DisplayQuad (quad) ;
+      f := GetQF (quad) ;
+      quad := f^.Next
+   UNTIL (op = ending) AND (op3 = procsym) ;
+   RETURN quad
+END DumpUntil ;
+
+
+(*
+   GetCtorInit - return the init procedure for the module.
+*)
+
+PROCEDURE GetCtorInit (sym: CARDINAL) : CARDINAL ;
+VAR
+   ctor, init, fini, dep: CARDINAL ;
+BEGIN
+   GetModuleCtors (sym, ctor, init, fini, dep) ;
+   RETURN init
+END GetCtorInit ;
+
+
+(*
+   GetCtorFini - return the fini procedure for the module.
+*)
+
+PROCEDURE GetCtorFini (sym: CARDINAL) : CARDINAL ;
+VAR
+   ctor, init, fini, dep: CARDINAL ;
+BEGIN
+   GetModuleCtors (sym, ctor, init, fini, dep) ;
+   RETURN fini
+END GetCtorFini ;
+
+
+(*
+   DumpQuadrupleFilter -
+*)
+
+PROCEDURE DumpQuadrupleFilter ;
+VAR
+   f            : QuadFrame ;
+   i            : CARDINAL ;
+   op           : QuadOperator ;
+   op1, op2, op3: CARDINAL ;
+BEGIN
    i := Head ;
-   WHILE i#0 DO
-      DisplayQuad(i) ;
-      f := GetQF(i) ;
+   WHILE i # 0 DO
+      GetQuad (i, op, op1, op2, op3) ;
+      IF (op = ProcedureScopeOp) AND IsDumpRequired (op3, TRUE)
+      THEN
+         i := DumpUntil (KillLocalVarOp, op3, i)
+      ELSIF (op = InitStartOp) AND IsDumpRequired (GetCtorInit (op3), TRUE)
+      THEN
+         i := DumpUntil (InitEndOp, op3, i)
+      ELSIF (op = FinallyStartOp) AND IsDumpRequired (GetCtorFini (op3), TRUE)
+      THEN
+         i := DumpUntil (FinallyEndOp, op3, i)
+      ELSE
+         f := GetQF (i) ;
+         i := f^.Next
+      END
+   END
+END DumpQuadrupleFilter ;
+
+
+(*
+   DumpQuadrupleAll - dump all quadruples.
+*)
+
+PROCEDURE DumpQuadrupleAll ;
+VAR
+   f: QuadFrame ;
+   i: CARDINAL ;
+BEGIN
+   i := Head ;
+   WHILE i # 0 DO
+      DisplayQuad (i) ;
+      f := GetQF (i) ;
       i := f^.Next
    END
-END DisplayQuadList ;
+END DumpQuadrupleAll ;
+
+
+(*
+   DumpQuadruples - dump all quadruples providing the -fq, -fdump-lang-quad,
+                    -fdump-lang-quad= or -fdump-lang-all were issued to the
+                    command line.
+*)
+
+PROCEDURE DumpQuadruples (title: ARRAY OF CHAR) ;
+BEGIN
+   IF GetDumpQuad ()
+   THEN
+      CreateDumpQuad (title) ;
+      IF GetM2DumpFilter () = NIL
+      THEN
+         DumpQuadrupleAll
+      ELSE
+         DumpQuadrupleFilter
+      END ;
+      CloseDumpQuad
+   END
+END DumpQuadruples ;
 
 
 (*
@@ -13145,7 +13883,7 @@ PROCEDURE DisplayQuadRange (scope: CARDINAL; start, end: CARDINAL) ;
 VAR
    f: QuadFrame ;
 BEGIN
-   printf1 ('Quadruples for scope: %d\n', scope) ;
+   fprintf1 (GetDumpFile (), 'Quadruples for scope: %d\n', scope) ;
    WHILE (start <= end) AND (start # 0) DO
       DisplayQuad (start) ;
       f := GetQF (start) ;
@@ -13156,7 +13894,7 @@ END DisplayQuadRange ;
 
 (*
    BackPatch - Makes each of the quadruples on the list pointed to by
-               StartQuad, take quadruple Value as a target.
+               QuadNo take quadruple Value as a target.
 *)
 
 PROCEDURE BackPatch (QuadNo, Value: CARDINAL) ;
@@ -13277,7 +14015,7 @@ END ds ;
 PROCEDURE DisplayQuad (QuadNo: CARDINAL) ;
 BEGIN
    DSdbEnter ;
-   printf1('%4d  ', QuadNo) ; WriteQuad(QuadNo) ; printf0('\n') ;
+   fprintf1 (GetDumpFile (), '%4d  ', QuadNo) ; WriteQuad(QuadNo) ; fprintf0 (GetDumpFile (), '\n') ;
    DSdbExit
 END DisplayQuad ;
 
@@ -13290,19 +14028,19 @@ PROCEDURE DisplayProcedureAttributes (proc: CARDINAL) ;
 BEGIN
    IF IsCtor (proc)
    THEN
-      printf0 (" (ctor)")
+      fprintf0 (GetDumpFile (), " (ctor)")
    END ;
    IF IsPublic (proc)
    THEN
-      printf0 (" (public)")
+      fprintf0 (GetDumpFile (), " (public)")
    END ;
    IF IsExtern (proc)
    THEN
-      printf0 (" (extern)")
+      fprintf0 (GetDumpFile (), " (extern)")
    END ;
    IF IsMonoName (proc)
    THEN
-      printf0 (" (mononame)")
+      fprintf0 (GetDumpFile (), " (mononame)")
    END
 END DisplayProcedureAttributes ;
 
@@ -13321,11 +14059,22 @@ BEGIN
    f := GetQF(BufferQuad) ;
    WITH f^ DO
       WriteOperator(Operator) ;
-      printf1('  [%d]    ', NoOfTimesReferenced) ;
+      fprintf1 (GetDumpFile (), ' [%d]', NoOfTimesReferenced) ;
+      IF ConstExpr
+      THEN
+         fprintf0 (GetDumpFile (), ' const ')
+      ELSE
+         fprintf0 (GetDumpFile (), '       ')
+      END ;
       CASE Operator OF
 
+      LastForIteratorOp: WriteOperand(Operand1) ;
+                         fprintf0 (GetDumpFile (), '  ') ;
+                         WriteOperand(Operand2) ;
+                         fprintf0 (GetDumpFile (), '  ') ;
+                         WriteOperand(Operand3) |
       HighOp           : WriteOperand(Operand1) ;
-                         printf1('  %4d  ', Operand2) ;
+                         fprintf1 (GetDumpFile (), '  %4d  ', Operand2) ;
                          WriteOperand(Operand3) |
       InitAddressOp,
       SavePriorityOp,
@@ -13339,8 +14088,11 @@ BEGIN
       ReturnValueOp,
       FunctValueOp,
       NegateOp,
-      AddrOp            : WriteOperand(Operand1) ;
-                          printf0('  ') ;
+      AddrOp,
+      StringConvertCnulOp,
+      StringConvertM2nulOp,
+      StringLengthOp    : WriteOperand(Operand1) ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand3) |
       ElementSizeOp,
       IfInOp,
@@ -13351,22 +14103,22 @@ BEGIN
       IfGreOp,
       IfLessEquOp,
       IfGreEquOp        : WriteOperand(Operand1) ;
-                          printf0('  ') ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand2) ;
-                          printf1('  %4d', Operand3) |
+                          fprintf1 (GetDumpFile (), '  %4d', Operand3) |
 
       InlineOp,
       RetryOp,
       TryOp,
-      GotoOp            : printf1('%4d', Operand3) |
+      GotoOp            : fprintf1 (GetDumpFile (), '%4d', Operand3) |
 
       StatementNoteOp   : l := TokenToLineNo(Operand3, 0) ;
                           n := GetTokenName (Operand3) ;
-                          printf4('%a:%d:%a (tokenno %d)', Operand1, l, n, Operand3) |
-      LineNumberOp      : printf2('%a:%d', Operand1, Operand3) |
+                          fprintf4 (GetDumpFile (), '%a:%d:%a (tokenno %d)', Operand1, l, n, Operand3) |
+      LineNumberOp      : fprintf2 (GetDumpFile (), '%a:%d', Operand1, Operand3) |
 
       EndFileOp         : n1 := GetSymName(Operand3) ;
-                          printf1('%a', n1) |
+                          fprintf1 (GetDumpFile (), '%a', n1) |
 
       ThrowOp,
       ReturnOp,
@@ -13375,7 +14127,7 @@ BEGIN
 
       ProcedureScopeOp  : n1 := GetSymName(Operand2) ;
                           n2 := GetSymName(Operand3) ;
-                          printf3('  %4d  %a  %a', Operand1, n1, n2) ;
+                          fprintf4 (GetDumpFile (), '  %4d  %a  %a(%d)', Operand1, n1, n2, Operand3) ;
                           DisplayProcedureAttributes (Operand3) |
       NewLocalVarOp,
       FinallyStartOp,
@@ -13383,19 +14135,19 @@ BEGIN
       InitEndOp,
       InitStartOp       : n1 := GetSymName(Operand2) ;
                           n2 := GetSymName(Operand3) ;
-                          printf3('  %4d  %a  %a', Operand1, n1, n2) |
+                          fprintf3 (GetDumpFile (), '  %4d  %a  %a', Operand1, n1, n2) |
 
       ModuleScopeOp,
       StartModFileOp    : n1 := GetSymName(Operand3) ;
-                          printf4('%a:%d  %a(%d)', Operand2, Operand1, n1, Operand3) |
+                          fprintf4 (GetDumpFile (), '%a:%d  %a(%d)', Operand2, Operand1, n1, Operand3) |
 
       StartDefFileOp    : n1 := GetSymName(Operand3) ;
-                          printf2('  %4d  %a', Operand1, n1) |
+                          fprintf2 (GetDumpFile (), '  %4d  %a', Operand1, n1) |
 
       OptParamOp,
-      ParamOp           : printf1('%4d  ', Operand1) ;
+      ParamOp           : fprintf1 (GetDumpFile (), '%4d  ', Operand1) ;
                           WriteOperand(Operand2) ;
-                          printf0('  ') ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand3) |
       SizeOp,
       RecordFieldOp,
@@ -13423,9 +14175,9 @@ BEGIN
       DivFloorOp,
       ModTruncOp,
       DivTruncOp        : WriteOperand(Operand1) ;
-                          printf0('  ') ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand2) ;
-                          printf0('  ') ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand3) |
       DummyOp,
       CodeOnOp,
@@ -13435,23 +14187,23 @@ BEGIN
       OptimizeOnOp,
       OptimizeOffOp     : |
       BuiltinConstOp    : WriteOperand(Operand1) ;
-                          printf1('   %a', Operand3) |
+                          fprintf1 (GetDumpFile (), '   %a', Operand3) |
       BuiltinTypeInfoOp : WriteOperand(Operand1) ;
-                          printf1('   %a', Operand2) ;
-                          printf1('   %a', Operand3) |
+                          fprintf1 (GetDumpFile (), '   %a', Operand2) ;
+                          fprintf1 (GetDumpFile (), '   %a', Operand3) |
       StandardFunctionOp: WriteOperand(Operand1) ;
-                          printf0('  ') ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand2) ;
-                          printf0('  ') ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand3) |
       CatchBeginOp,
       CatchEndOp        : |
 
       RangeCheckOp,
-      ErrorOp           : WriteRangeCheck(Operand3) |
+      ErrorOp           : WriteRangeCheck (Operand3) |
       SaveExceptionOp,
       RestoreExceptionOp: WriteOperand(Operand1) ;
-                          printf0('  ') ;
+                          fprintf0 (GetDumpFile (), '  ') ;
                           WriteOperand(Operand3)
 
       ELSE
@@ -13469,91 +14221,97 @@ PROCEDURE WriteOperator (Operator: QuadOperator) ;
 BEGIN
    CASE Operator OF
 
-   ArithAddOp               : printf0('Arith +           ') |
-   InitAddressOp            : printf0('InitAddress       ') |
-   LogicalOrOp              : printf0('Or                ') |
-   LogicalAndOp             : printf0('And               ') |
-   LogicalXorOp             : printf0('Xor               ') |
-   LogicalDiffOp            : printf0('Ldiff             ') |
-   LogicalShiftOp           : printf0('Shift             ') |
-   LogicalRotateOp          : printf0('Rotate            ') |
-   BecomesOp                : printf0('Becomes           ') |
-   IndrXOp                  : printf0('IndrX             ') |
-   XIndrOp                  : printf0('XIndr             ') |
-   ArrayOp                  : printf0('Array             ') |
-   ElementSizeOp            : printf0('ElementSize       ') |
-   RecordFieldOp            : printf0('RecordField       ') |
-   AddrOp                   : printf0('Addr              ') |
-   SizeOp                   : printf0('Size              ') |
-   IfInOp                   : printf0('If IN             ') |
-   IfNotInOp                : printf0('If NOT IN         ') |
-   IfNotEquOp               : printf0('If <>             ') |
-   IfEquOp                  : printf0('If =              ') |
-   IfLessEquOp              : printf0('If <=             ') |
-   IfGreEquOp               : printf0('If >=             ') |
-   IfGreOp                  : printf0('If >              ') |
-   IfLessOp                 : printf0('If <              ') |
-   GotoOp                   : printf0('Goto              ') |
-   DummyOp                  : printf0('Dummy             ') |
-   ModuleScopeOp            : printf0('ModuleScopeOp     ') |
-   StartDefFileOp           : printf0('StartDefFile      ') |
-   StartModFileOp           : printf0('StartModFile      ') |
-   EndFileOp                : printf0('EndFileOp         ') |
-   InitStartOp              : printf0('InitStart         ') |
-   InitEndOp                : printf0('InitEnd           ') |
-   FinallyStartOp           : printf0('FinallyStart      ') |
-   FinallyEndOp             : printf0('FinallyEnd        ') |
-   RetryOp                  : printf0('Retry             ') |
-   TryOp                    : printf0('Try               ') |
-   ThrowOp                  : printf0('Throw             ') |
-   CatchBeginOp             : printf0('CatchBegin        ') |
-   CatchEndOp               : printf0('CatchEnd          ') |
-   AddOp                    : printf0('+                 ') |
-   SubOp                    : printf0('-                 ') |
-   DivM2Op                  : printf0('DIV M2            ') |
-   ModM2Op                  : printf0('MOD M2            ') |
-   DivCeilOp                : printf0('DIV ceil          ') |
-   ModCeilOp                : printf0('MOD ceil          ') |
-   DivFloorOp               : printf0('DIV floor         ') |
-   ModFloorOp               : printf0('MOD floor         ') |
-   DivTruncOp               : printf0('DIV trunc         ') |
-   ModTruncOp               : printf0('MOD trunc         ') |
-   MultOp                   : printf0('*                 ') |
-   NegateOp                 : printf0('Negate            ') |
-   InclOp                   : printf0('Incl              ') |
-   ExclOp                   : printf0('Excl              ') |
-   ReturnOp                 : printf0('Return            ') |
-   ReturnValueOp            : printf0('ReturnValue       ') |
-   FunctValueOp             : printf0('FunctValue        ') |
-   CallOp                   : printf0('Call              ') |
-   ParamOp                  : printf0('Param             ') |
-   OptParamOp               : printf0('OptParam          ') |
-   NewLocalVarOp            : printf0('NewLocalVar       ') |
-   KillLocalVarOp           : printf0('KillLocalVar      ') |
-   ProcedureScopeOp         : printf0('ProcedureScope    ') |
-   UnboundedOp              : printf0('Unbounded         ') |
-   CoerceOp                 : printf0('Coerce            ') |
-   ConvertOp                : printf0('Convert           ') |
-   CastOp                   : printf0('Cast              ') |
-   HighOp                   : printf0('High              ') |
-   CodeOnOp                 : printf0('CodeOn            ') |
-   CodeOffOp                : printf0('CodeOff           ') |
-   ProfileOnOp              : printf0('ProfileOn         ') |
-   ProfileOffOp             : printf0('ProfileOff        ') |
-   OptimizeOnOp             : printf0('OptimizeOn        ') |
-   OptimizeOffOp            : printf0('OptimizeOff       ') |
-   InlineOp                 : printf0('Inline            ') |
-   StatementNoteOp          : printf0('StatementNote     ') |
-   LineNumberOp             : printf0('LineNumber        ') |
-   BuiltinConstOp           : printf0('BuiltinConst      ') |
-   BuiltinTypeInfoOp        : printf0('BuiltinTypeInfo   ') |
-   StandardFunctionOp       : printf0('StandardFunction  ') |
-   SavePriorityOp           : printf0('SavePriority      ') |
-   RestorePriorityOp        : printf0('RestorePriority   ') |
-   RangeCheckOp             : printf0('RangeCheck        ') |
-   ErrorOp                  : printf0('Error             ') |
-   SaveExceptionOp          : printf0('SaveException     ') |
-   RestoreExceptionOp       : printf0('RestoreException  ')
+   ArithAddOp               : fprintf0 (GetDumpFile (), 'Arith +           ') |
+   InitAddressOp            : fprintf0 (GetDumpFile (), 'InitAddress       ') |
+   LastForIteratorOp        : fprintf0 (GetDumpFile (), 'LastForIterator   ') |
+   LogicalOrOp              : fprintf0 (GetDumpFile (), 'Or                ') |
+   LogicalAndOp             : fprintf0 (GetDumpFile (), 'And               ') |
+   LogicalXorOp             : fprintf0 (GetDumpFile (), 'Xor               ') |
+   LogicalDiffOp            : fprintf0 (GetDumpFile (), 'Ldiff             ') |
+   LogicalShiftOp           : fprintf0 (GetDumpFile (), 'Shift             ') |
+   LogicalRotateOp          : fprintf0 (GetDumpFile (), 'Rotate            ') |
+   BecomesOp                : fprintf0 (GetDumpFile (), 'Becomes           ') |
+   IndrXOp                  : fprintf0 (GetDumpFile (), 'IndrX             ') |
+   XIndrOp                  : fprintf0 (GetDumpFile (), 'XIndr             ') |
+   ArrayOp                  : fprintf0 (GetDumpFile (), 'Array             ') |
+   ElementSizeOp            : fprintf0 (GetDumpFile (), 'ElementSize       ') |
+   RecordFieldOp            : fprintf0 (GetDumpFile (), 'RecordField       ') |
+   AddrOp                   : fprintf0 (GetDumpFile (), 'Addr              ') |
+   SizeOp                   : fprintf0 (GetDumpFile (), 'Size              ') |
+   IfInOp                   : fprintf0 (GetDumpFile (), 'If IN             ') |
+   IfNotInOp                : fprintf0 (GetDumpFile (), 'If NOT IN         ') |
+   IfNotEquOp               : fprintf0 (GetDumpFile (), 'If <>             ') |
+   IfEquOp                  : fprintf0 (GetDumpFile (), 'If =              ') |
+   IfLessEquOp              : fprintf0 (GetDumpFile (), 'If <=             ') |
+   IfGreEquOp               : fprintf0 (GetDumpFile (), 'If >=             ') |
+   IfGreOp                  : fprintf0 (GetDumpFile (), 'If >              ') |
+   IfLessOp                 : fprintf0 (GetDumpFile (), 'If <              ') |
+   GotoOp                   : fprintf0 (GetDumpFile (), 'Goto              ') |
+   DummyOp                  : fprintf0 (GetDumpFile (), 'Dummy             ') |
+   ModuleScopeOp            : fprintf0 (GetDumpFile (), 'ModuleScopeOp     ') |
+   StartDefFileOp           : fprintf0 (GetDumpFile (), 'StartDefFile      ') |
+   StartModFileOp           : fprintf0 (GetDumpFile (), 'StartModFile      ') |
+   EndFileOp                : fprintf0 (GetDumpFile (), 'EndFileOp         ') |
+   InitStartOp              : fprintf0 (GetDumpFile (), 'InitStart         ') |
+   InitEndOp                : fprintf0 (GetDumpFile (), 'InitEnd           ') |
+   FinallyStartOp           : fprintf0 (GetDumpFile (), 'FinallyStart      ') |
+   FinallyEndOp             : fprintf0 (GetDumpFile (), 'FinallyEnd        ') |
+   RetryOp                  : fprintf0 (GetDumpFile (), 'Retry             ') |
+   TryOp                    : fprintf0 (GetDumpFile (), 'Try               ') |
+   ThrowOp                  : fprintf0 (GetDumpFile (), 'Throw             ') |
+   CatchBeginOp             : fprintf0 (GetDumpFile (), 'CatchBegin        ') |
+   CatchEndOp               : fprintf0 (GetDumpFile (), 'CatchEnd          ') |
+   AddOp                    : fprintf0 (GetDumpFile (), '+                 ') |
+   SubOp                    : fprintf0 (GetDumpFile (), '-                 ') |
+   DivM2Op                  : fprintf0 (GetDumpFile (), 'DIV M2            ') |
+   ModM2Op                  : fprintf0 (GetDumpFile (), 'MOD M2            ') |
+   DivCeilOp                : fprintf0 (GetDumpFile (), 'DIV ceil          ') |
+   ModCeilOp                : fprintf0 (GetDumpFile (), 'MOD ceil          ') |
+   DivFloorOp               : fprintf0 (GetDumpFile (), 'DIV floor         ') |
+   ModFloorOp               : fprintf0 (GetDumpFile (), 'MOD floor         ') |
+   DivTruncOp               : fprintf0 (GetDumpFile (), 'DIV trunc         ') |
+   ModTruncOp               : fprintf0 (GetDumpFile (), 'MOD trunc         ') |
+   MultOp                   : fprintf0 (GetDumpFile (), '*                 ') |
+   NegateOp                 : fprintf0 (GetDumpFile (), 'Negate            ') |
+   InclOp                   : fprintf0 (GetDumpFile (), 'Incl              ') |
+   ExclOp                   : fprintf0 (GetDumpFile (), 'Excl              ') |
+   ReturnOp                 : fprintf0 (GetDumpFile (), 'Return            ') |
+   ReturnValueOp            : fprintf0 (GetDumpFile (), 'ReturnValue       ') |
+   FunctValueOp             : fprintf0 (GetDumpFile (), 'FunctValue        ') |
+   CallOp                   : fprintf0 (GetDumpFile (), 'Call              ') |
+   ParamOp                  : fprintf0 (GetDumpFile (), 'Param             ') |
+   OptParamOp               : fprintf0 (GetDumpFile (), 'OptParam          ') |
+   NewLocalVarOp            : fprintf0 (GetDumpFile (), 'NewLocalVar       ') |
+   KillLocalVarOp           : fprintf0 (GetDumpFile (), 'KillLocalVar      ') |
+   ProcedureScopeOp         : fprintf0 (GetDumpFile (), 'ProcedureScope    ') |
+   UnboundedOp              : fprintf0 (GetDumpFile (), 'Unbounded         ') |
+   CoerceOp                 : fprintf0 (GetDumpFile (), 'Coerce            ') |
+   ConvertOp                : fprintf0 (GetDumpFile (), 'Convert           ') |
+   CastOp                   : fprintf0 (GetDumpFile (), 'Cast              ') |
+   HighOp                   : fprintf0 (GetDumpFile (), 'High              ') |
+   CodeOnOp                 : fprintf0 (GetDumpFile (), 'CodeOn            ') |
+   CodeOffOp                : fprintf0 (GetDumpFile (), 'CodeOff           ') |
+   ProfileOnOp              : fprintf0 (GetDumpFile (), 'ProfileOn         ') |
+   ProfileOffOp             : fprintf0 (GetDumpFile (), 'ProfileOff        ') |
+   OptimizeOnOp             : fprintf0 (GetDumpFile (), 'OptimizeOn        ') |
+   OptimizeOffOp            : fprintf0 (GetDumpFile (), 'OptimizeOff       ') |
+   InlineOp                 : fprintf0 (GetDumpFile (), 'Inline            ') |
+   StatementNoteOp          : fprintf0 (GetDumpFile (), 'StatementNote     ') |
+   LineNumberOp             : fprintf0 (GetDumpFile (), 'LineNumber        ') |
+   BuiltinConstOp           : fprintf0 (GetDumpFile (), 'BuiltinConst      ') |
+   BuiltinTypeInfoOp        : fprintf0 (GetDumpFile (), 'BuiltinTypeInfo   ') |
+   StandardFunctionOp       : fprintf0 (GetDumpFile (), 'StandardFunction  ') |
+   SavePriorityOp           : fprintf0 (GetDumpFile (), 'SavePriority      ') |
+   RestorePriorityOp        : fprintf0 (GetDumpFile (), 'RestorePriority   ') |
+   RangeCheckOp             : fprintf0 (GetDumpFile (), 'RangeCheck        ') |
+   ErrorOp                  : fprintf0 (GetDumpFile (), 'Error             ') |
+   SaveExceptionOp          : fprintf0 (GetDumpFile (), 'SaveException     ') |
+   RestoreExceptionOp       : fprintf0 (GetDumpFile (), 'RestoreException  ') |
+   StringConvertCnulOp      : fprintf0 (GetDumpFile (), 'StringConvertCnul ') |
+   StringConvertM2nulOp     : fprintf0 (GetDumpFile (), 'StringConvertM2nul') |
+   StringLengthOp           : fprintf0 (GetDumpFile (), 'StringLength      ') |
+   SubrangeHighOp           : fprintf0 (GetDumpFile (), 'SubrangeHigh      ') |
+   SubrangeLowOp            : fprintf0 (GetDumpFile (), 'SubrangeLow       ')
 
    ELSE
       InternalError ('operator not expected')
@@ -13571,15 +14329,15 @@ VAR
 BEGIN
    IF Sym = NulSym
    THEN
-      printf0 ('<nulsym>')
+      fprintf0 (GetDumpFile (), '<nulsym>')
    ELSE
       n := GetSymName (Sym) ;
-      printf1 ('%a', n) ;
+      fprintf1 (GetDumpFile (), '%a', n) ;
       IF IsVar (Sym) OR IsConst (Sym)
       THEN
-         printf0 ('[') ; WriteMode (GetMode (Sym)) ; printf0(']')
+         fprintf0 (GetDumpFile (), '[') ; WriteMode (GetMode (Sym)) ; fprintf0 (GetDumpFile (), ']')
       END ;
-      printf1 ('(%d)', Sym)
+      fprintf1 (GetDumpFile (), '(%d)', Sym)
    END
 END WriteOperand ;
 
@@ -13588,10 +14346,10 @@ PROCEDURE WriteMode (Mode: ModeOfAddr) ;
 BEGIN
    CASE Mode OF
 
-   ImmediateValue: printf0('i') |
-   NoValue       : printf0('n') |
-   RightValue    : printf0('r') |
-   LeftValue     : printf0('l')
+   ImmediateValue: fprintf0 (GetDumpFile (), 'i') |
+   NoValue       : fprintf0 (GetDumpFile (), 'n') |
+   RightValue    : fprintf0 (GetDumpFile (), 'r') |
+   LeftValue     : fprintf0 (GetDumpFile (), 'l')
 
    ELSE
       InternalError ('unrecognised mode')
@@ -13780,7 +14538,8 @@ BEGIN
       FalseExit := False ;
       BooleanOp := TRUE ;
       tokenno := tokno ;
-      Annotation := NIL
+      Annotation := NIL ;
+      RangeDep := 0
    END ;
    PushAddress (BoolStack, f) ;
    Annotate ('<q%1d>|<q%2d>||true quad|false quad')
@@ -13920,6 +14679,34 @@ BEGIN
    Assert (NOT IsBoolean (pos)) ;
    RETURN OperandTtok (pos)
 END OperandTok ;
+
+
+(*
+   OperandRangeDep - return the range dependant associated with the quad stack.
+*)
+
+PROCEDURE OperandRangeDep (pos: CARDINAL) : CARDINAL ;
+VAR
+   f: BoolFrame ;
+BEGIN
+   Assert (NOT IsBoolean (pos)) ;
+   f := PeepAddress (BoolStack, pos) ;
+   RETURN f^.RangeDep
+END OperandRangeDep ;
+
+
+(*
+   PutRangeDep - assigns the quad stack pos RangeDep to dep.
+*)
+
+PROCEDURE PutRangeDep (pos: CARDINAL; dep: CARDINAL) ;
+VAR
+   f: BoolFrame ;
+BEGIN
+   Assert (NOT IsBoolean (pos)) ;
+   f := PeepAddress (BoolStack, pos) ;
+   f^.RangeDep := dep
+END PutRangeDep ;
 
 
 (*
@@ -14796,6 +15583,22 @@ END PopTF ;
 
 
 (*
+   DupFrame - duplicate the top of stack and push the new frame.
+*)
+
+PROCEDURE DupFrame ;
+VAR
+   f, newf: BoolFrame ;
+BEGIN
+   f := PopAddress (BoolStack) ;
+   PushAddress (BoolStack, f) ;
+   newf := newBoolFrame () ;
+   newf^ := f^ ;
+   PushAddress (BoolStack, newf)
+END DupFrame ;
+
+
+(*
    newBoolFrame - creates a new BoolFrame with all fields initialised to their defaults.
 *)
 
@@ -15162,7 +15965,7 @@ END PopAuto ;
 
 PROCEDURE PushInConstExpression ;
 BEGIN
-   PushWord(ConstStack, InConstExpression) ;
+   PushWord(ConstExprStack, InConstExpression) ;
    InConstExpression := TRUE
 END PushInConstExpression ;
 
@@ -15173,7 +15976,7 @@ END PushInConstExpression ;
 
 PROCEDURE PopInConstExpression ;
 BEGIN
-   InConstExpression := PopWord(ConstStack)
+   InConstExpression := PopWord(ConstExprStack)
 END PopInConstExpression ;
 
 
@@ -15185,6 +15988,37 @@ PROCEDURE IsInConstExpression () : BOOLEAN ;
 BEGIN
    RETURN( InConstExpression )
 END IsInConstExpression ;
+
+
+(*
+   PushInConstParameters - push the InConstParameters flag and then set it to TRUE.
+*)
+
+PROCEDURE PushInConstParameters ;
+BEGIN
+   PushWord (ConstParamStack, InConstParameters) ;
+   InConstParameters := TRUE
+END PushInConstParameters ;
+
+
+(*
+   PopInConstParameters - restores the previous value of the InConstParameters.
+*)
+
+PROCEDURE PopInConstParameters ;
+BEGIN
+   InConstParameters := PopWord(ConstParamStack)
+END PopInConstParameters ;
+
+
+(*
+   IsInConstParameters - returns the value of the InConstParameters.
+*)
+
+PROCEDURE IsInConstParameters () : BOOLEAN ;
+BEGIN
+   RETURN( InConstParameters )
+END IsInConstParameters ;
 
 
 (*
@@ -15247,18 +16081,61 @@ END StressStack ;
 
 
 (*
+   gdbhook - a debugger convenience hook.
+*)
+
+PROCEDURE gdbhook ;
+END gdbhook ;
+
+
+(*
+   BreakWhenQuadCreated - to be called interactively by gdb.
+*)
+
+PROCEDURE BreakWhenQuadCreated (quad: CARDINAL) ;
+BEGIN
+   BreakQuad := quad
+END BreakWhenQuadCreated ;
+
+
+(*
+   CheckBreak - if quad = BreakQuad then call gdbhook.
+*)
+
+PROCEDURE CheckBreak (quad: CARDINAL) ;
+BEGIN
+   IF quad = BreakQuad
+   THEN
+      gdbhook
+   END
+END CheckBreak ;
+
+
+(*
    Init - initialize the M2Quads module, all the stacks, all the lists
           and the quads list.
 *)
 
 PROCEDURE Init ;
 BEGIN
+   BreakWhenQuadCreated (0) ;  (* Disable the intereactive quad watch.  *)
+   (* To examine the quad table when a quad is created run cc1gm2 from gdb
+      and set a break point on gdbhook.
+      (gdb) break gdbhook
+      (gdb) run
+      Now below interactively call BreakWhenQuadCreated with the quad
+      under investigation.  *)
+   gdbhook ;
+   (* Now is the time to interactively call gdb, for example:
+      (gdb) print BreakWhenQuadCreated (1234)
+      (gdb) cont
+      and you will arrive at gdbhook when this quad is created.  *)
    LogicalOrTok := MakeKey('_LOR') ;
    LogicalAndTok := MakeKey('_LAND') ;
    LogicalXorTok := MakeKey('_LXOR') ;
    LogicalDifferenceTok := MakeKey('_LDIFF') ;
    ArithPlusTok := MakeKey ('_ARITH_+') ;
-   QuadArray := InitIndex (1) ;
+   QuadArray := InitIndexTuned (1, 1024*1024 DIV 16, 16) ;
    FreeList := 1 ;
    NewQuad(NextQuad) ;
    Assert(NextQuad=1) ;
@@ -15275,7 +16152,8 @@ BEGIN
    CatchStack := InitStackWord() ;
    ExceptStack := InitStackWord() ;
    ConstructorStack := InitStackAddress() ;
-   ConstStack := InitStackWord() ;
+   ConstParamStack := InitStackWord () ;
+   ConstExprStack := InitStackWord () ;
    (* StressStack ; *)
    SuppressWith := FALSE ;
    Head := 1 ;
@@ -15290,10 +16168,11 @@ BEGIN
    AutoStack := InitStackWord() ;
    IsAutoOn := TRUE ;
    InConstExpression := FALSE ;
+   InConstParameters := FALSE ;
    FreeLineList := NIL ;
    InitList(VarientFields) ;
    VarientFieldNo := 0 ;
-   NoOfQuads := 0
+   NoOfQuads := 0 ;
 END Init ;
 
 

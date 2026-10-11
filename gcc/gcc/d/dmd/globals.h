@@ -1,6 +1,6 @@
 
 /* Compiler implementation of the D programming language
- * Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * written by Walter Bright
  * https://www.digitalmars.com
  * Distributed under the Boost Software License, Version 1.0.
@@ -13,6 +13,7 @@
 #include "root/dcompat.h"
 #include "root/ctfloat.h"
 #include "common/outbuffer.h"
+#include "common/charactertables.h"
 #include "root/filename.h"
 #include "compiler.h"
 
@@ -34,7 +35,8 @@ enum
 enum class MessageStyle : unsigned char
 {
     digitalmars, // file(line,column): message
-    gnu          // file:line:column: message
+    gnu,         // file:line:column: message
+    sarif        // JSON SARIF output, see https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html
 };
 
 // The state of array bounds checking
@@ -71,15 +73,33 @@ enum CppStdRevision
     CppStdRevisionCpp11 = 201103,
     CppStdRevisionCpp14 = 201402,
     CppStdRevisionCpp17 = 201703,
-    CppStdRevisionCpp20 = 202002
+    CppStdRevisionCpp20 = 202002,
+    CppStdRevisionCpp23 = 202302,
 };
 
 /// Trivalent boolean to represent the state of a `revert`able change
-enum class FeatureState : signed char
+enum class FeatureState : unsigned char
 {
-    default_ = -1, /// Not specified by the user
-    disabled = 0,  /// Specified as `-revert=`
-    enabled = 1    /// Specified as `-preview=`
+    default_ = 0,  /// Not specified by the user
+    disabled = 1,  /// Specified as `-revert=`
+    enabled  = 2,  /// Specified as `-preview=`
+};
+
+/// Different identifier tables specifiable by CLI
+enum class CLIIdentifierTable : unsigned char
+{
+    default_ = 0, /// Not specified by user
+    C99      = 1, /// Tables from C99 standard
+    C11      = 2, /// Tables from C11 standard
+    UAX31    = 3, /// Tables from the Unicode Standard Annex 31: UNICODE IDENTIFIERS AND SYNTAX
+    All      = 4, /// The least restrictive set of all other tables
+};
+
+/// Specifies the mode for error printing
+enum class ErrorPrintMode : unsigned char
+{
+    simpleError,        // Print errors without squiggles and carets
+    printErrorContext,  // Print errors with the error line and caret
 };
 
 struct Output
@@ -96,30 +116,69 @@ struct Output
     int bufferLines;    // number of lines written to the buffer
 };
 
+/// Command line state related to printing uasage about other switches
+struct Help
+{
+    d_bool manual;       // open browser on compiler manual
+    d_bool usage;        // print usage and exit
+    // print help of switch:
+    d_bool mcpu;         // -mcpu
+    d_bool transition;   // -transition
+    d_bool check;        // -check
+    d_bool checkAction;  // -checkaction
+    d_bool revert;       // -revert
+    d_bool preview;      // -preview
+    d_bool externStd;    // -extern-std
+    d_bool hc;           // -HC
+};
+
+struct Verbose
+{
+    d_bool verbose;           // verbose compile
+    d_bool showColumns;       // print character (column) numbers in diagnostics
+    d_bool tls;               // identify thread local variables
+    d_bool templates;         // collect and list statistics on template instantiations
+    // collect and list statistics on template instantiations origins.
+    // TODO: make this an enum when we want to list other kinds of instances
+    d_bool templatesListInstances;
+    d_bool gc;                 // identify gc usage
+    d_bool field;              // identify non-mutable field variables
+    d_bool complex = true;     // identify complex/imaginary type usage
+    d_bool vin;                // identify 'in' parameters
+    d_bool showGaggedErrors;   // print gagged errors anyway
+    d_bool logo;               // print compiler logo
+    d_bool color;              // use ANSI colors in console output
+    d_bool cov;                // generate code coverage data
+    ErrorPrintMode errorPrintMode; // enum for error printing mode
+    MessageStyle messageStyle; // style of file/line annotations on messages
+    unsigned errorLimit;
+    unsigned errorSupplementLimit; // Limit the number of supplemental messages for each error (0 means unlimited)
+    unsigned errorSupplementCount();
+};
+
+struct ImportPathInfo
+{
+    const char* path;
+
+    ImportPathInfo() : path(NULL) { }
+    ImportPathInfo(const char* p) : path(p) { }
+};
+
 // Put command line switches in here
 struct Param
 {
     d_bool obj;           // write object file
+    d_bool readStdin;     // read source file from stdin
     d_bool multiobj;      // break one object file into multiple ones
     d_bool trace;         // insert profiling hooks
     d_bool tracegc;       // instrument calls to 'new'
-    d_bool verbose;       // verbose compile
     d_bool vcg_ast;       // write-out codegen-ast
-    d_bool showColumns;   // print character (column) numbers in diagnostics
-    d_bool vtls;          // identify thread local variables
-    d_bool vtemplates;    // collect and list statistics on template instantiations
-    d_bool vtemplatesListInstances; // collect and list statistics on template instantiations origins
-    d_bool vgc;           // identify gc usage
-    d_bool vfield;        // identify non-mutable field variables
-    d_bool vcomplex;      // identify complex/imaginary type usage
-    d_bool vin;           // identify 'in' parameters
     Diagnostic useDeprecated;
     d_bool useUnitTests;  // generate unittest code
     d_bool useInline;     // inline expand functions
     d_bool release;       // build release version
     d_bool preservePaths; // true means don't strip path from source file
-    Diagnostic warnings;
-    d_bool color;         // use ANSI colors in console output
+    Diagnostic useWarnings;
     d_bool cov;           // generate code coverage data
     unsigned char covPercent;   // 0..100 code coverage percentage required
     d_bool ctfe_cov;      // generate coverage data for ctfe
@@ -127,37 +186,31 @@ struct Param
     d_bool useModuleInfo; // generate runtime module information
     d_bool useTypeInfo;   // generate runtime type information
     d_bool useExceptions; // support exception handling
+    d_bool useGC;         // support features that require the D runtime GC
     d_bool betterC;       // be a "better C" compiler; no dependency on D runtime
     d_bool addMain;       // add a default main() function
     d_bool allInst;       // generate code for all template instantiations
     d_bool bitfields;         // support C style bit fields
     CppStdRevision cplusplus;  // version of C++ name mangling to support
-    d_bool showGaggedErrors;  // print gagged errors anyway
-    d_bool printErrorContext;  // print errors with the error context (the error line in the source file)
-    d_bool manual;            // open browser on compiler manual
-    d_bool usage;             // print usage and exit
-    d_bool mcpuUsage;         // print help on -mcpu switch
-    d_bool transitionUsage;   // print help on -transition switch
-    d_bool checkUsage;        // print help on -check switch
-    d_bool checkActionUsage;  // print help on -checkaction switch
-    d_bool revertUsage;       // print help on -revert switch
-    d_bool previewUsage;      // print help on -preview switch
-    d_bool externStdUsage;    // print help on -extern-std switch
-    d_bool hcUsage;           // print help on -HC switch
-    d_bool logo;              // print logo;
+
+    Help help;
+    Verbose v;
 
     // Options for `-preview=/-revert=`
     FeatureState useDIP25;       // implement https://wiki.dlang.org/DIP25
     FeatureState useDIP1000;     // implement https://dlang.org/spec/memory-safe-d.html#scope-return-params
     d_bool ehnogc;                 // use @nogc exception handling
     d_bool useDIP1021;             // implement https://github.com/dlang/DIPs/blob/master/DIPs/accepted/DIP1021.md
-    d_bool fieldwise;              // do struct equality testing field-wise rather than by memcmp()
+    FeatureState fieldwise;      // do struct equality testing field-wise rather than by memcmp()
     d_bool fixAliasThis;           // if the current scope has an alias this, check it before searching upper scopes
     FeatureState rvalueRefParam; // allow rvalues to be arguments to ref parameters
                                  // https://dconf.org/2019/talks/alexandrescu.html
                                  // https://gist.github.com/andralex/e5405a5d773f07f73196c05f8339435a
                                  // https://digitalmars.com/d/archives/digitalmars/D/Binding_rvalues_to_ref_parameters_redux_325087.html
                                  // Implementation: https://github.com/dlang/dmd/pull/9817
+    FeatureState safer;          // safer by default (more @safe checks in unattributed code)
+                                 // https://github.com/WalterBright/documents/blob/38f0a846726b571f8108f6e63e5e217b91421c86/safer.md
+
     FeatureState noSharedAccess; // read/write access to shared memory objects
     d_bool previewIn;              // `in` means `[ref] scope const`, accepts rvalues
     d_bool inclusiveInContracts;   // 'in' contracts of overridden methods must be a superset of parent contract
@@ -179,13 +232,13 @@ struct Param
 
     CHECKACTION checkAction;       // action to take when bounds, asserts or switch defaults are violated
 
-    unsigned errorLimit;
-    unsigned errorSupplementLimit; // Limit the number of supplemental messages for each error (0 means unlimited)
+    CLIIdentifierTable dIdentifierTable;
+    CLIIdentifierTable cIdentifierTable;
 
     DString  argv0;    // program name
     Array<const char *> modFileAliasStrings; // array of char*'s of -I module filename alias strings
-    Array<const char *> *imppath;     // array of char*'s of where to look for import modules
-    Array<const char *> *fileImppath; // array of char*'s of where to look for file import modules
+    Array<ImportPathInfo> imppath;     // array of import path information of where to look for import modules
+    Array<const char *> fileImppath; // array of char*'s of where to look for file import modules
     DString objdir;    // .obj/.lib file output directory
     DString objname;   // .obj file output name
     DString libname;   // .lib file output name
@@ -199,19 +252,13 @@ struct Param
     Output mixinOut;          // write expanded mixins for debugging
     Output moduleDeps;        // Generate `.deps` module dependencies
 
-    unsigned debuglevel;   // debug level
-    Array<const char *> *debugids;     // debug identifiers
-
-    unsigned versionlevel; // version level
-    Array<const char *> *versionids;   // version identifiers
-
-
-    MessageStyle messageStyle;  // style of file/line annotations on messages
+    d_bool debugEnabled;   // -debug flag is passed
 
     d_bool run;           // run resulting executable
     Strings runargs;    // arguments for executable
 
     Array<const char *> cppswitches; // preprocessor switches
+    const char *cpp;                 // if not null, then this specifies the C preprocessor
 
     // Linker stuff
     Array<const char *> objfiles;
@@ -223,6 +270,10 @@ struct Param
     DString resfile;
     DString exefile;
     DString mapfile;
+    bool fullyQualifiedObjectFiles;
+    bool timeTrace;
+    uint32_t timeTraceGranularityUs;
+    const char* timeTraceFile;
 };
 
 struct structalign_t
@@ -252,19 +303,37 @@ const DString hdr_ext  = "di";       // for D 'header' import files
 const DString json_ext = "json";     // for JSON files
 const DString map_ext  = "map";      // for .map files
 
+struct CompileEnv
+{
+    uint32_t versionNumber;
+    DString date;
+    DString time;
+    DString vendor;
+    DString timestamp;
+    d_bool previewIn;
+    d_bool transitionIn;
+    d_bool ddocOutput;
+    d_bool masm;
+    IdentifierCharLookup cCharLookupTable;
+    IdentifierCharLookup dCharLookupTable;
+};
+
 struct Global
 {
     DString inifilename;
 
     const DString copyright;
     const DString written;
-    Array<const char *> *path;        // Array of char*'s which form the import lookup path
-    Array<const char *> *filePath;    // Array of char*'s which form the file import lookup path
+    Array<ImportPathInfo> path;        // Array of path informations which form the import lookup path
+    Array<const char *> importPaths;   // Array of char*'s which form the import lookup path without metadata
+    Array<const char *> filePath;      // Array of char*'s which form the file import lookup path
 
-    DString vendor;          // Compiler backend name
+    char datetime[26];       /// string returned by ctime()
+    CompileEnv compileEnv;
 
     Param params;
     unsigned errors;         // number of errors reported so far
+    unsigned deprecations;   // number of deprecations reported so far
     unsigned warnings;       // number of warnings reported so far
     unsigned gag;            // !=0 means gag reporting of errors & warnings
     unsigned gaggedErrors;   // number of errors reported while gagged
@@ -272,16 +341,17 @@ struct Global
 
     void* console;         // opaque pointer to console for controlling text attributes
 
-    Array<class Identifier*>* versionids; // command line versions and predefined versions
-    Array<class Identifier*>* debugids;   // command line debug versions and predefined versions
+    Array<class Identifier*> versionids; // command line versions and predefined versions
+    Array<class Identifier*> debugids;   // command line debug versions and predefined versions
 
     d_bool hasMainFunction;
     unsigned varSequenceNumber;
 
     FileManager* fileManager;
     ErrorSink* errorSink;       // where the error messages go
+    ErrorSink* errorSinkNull;   // where the error messages disappear
 
-    FileName (*preprocess)(FileName, const Loc&, bool&, OutBuffer&);
+    DArray<unsigned char> (*preprocess)(FileName, Loc, OutBuffer&);
 
     /* Start gagging. Return the current number of gagged errors
      */
@@ -299,6 +369,13 @@ struct Global
     void increaseErrorCount();
 
     void _init();
+
+    /**
+     * Indicate to stateful error sinks that no more errors can be produced.
+     * This is to support error sinks that collect information to produce a
+     * single (say) report.
+     */
+    void plugErrorSinks();
 
     /**
     Returns: the version as the number that would be returned for __VERSION__
@@ -338,35 +415,46 @@ typedef unsigned long long uinteger_t;
 #endif
 
 // file location
+struct SourceLoc
+{
+    DString filename;
+    uint32_t line;
+    uint32_t column;
+    uint32_t fileOffset;
+    DString fileContent;
+};
+
 struct Loc
 {
-    const char *filename; // either absolute or relative to cwd
-    unsigned linnum;
-    unsigned charnum;
+private:
 
+    unsigned int index;
+
+#if MARS && defined(__linux__) && defined(__i386__)
+    unsigned int dummy;
+#endif
+
+public:
     static void set(bool showColumns, MessageStyle messageStyle);
+    static Loc singleFilename(const char* const filename);
 
     static bool showColumns;
     static MessageStyle messageStyle;
 
     Loc()
     {
-        linnum = 0;
-        charnum = 0;
-        filename = NULL;
+        index = 0;
     }
 
-    Loc(const char *filename, unsigned linnum, unsigned charnum)
-    {
-        this->linnum = linnum;
-        this->charnum = charnum;
-        this->filename = filename;
-    }
+    uint32_t charnum() const;
+    uint32_t linnum() const;
+    const char *filename() const;
+    SourceLoc toSourceLoc() const;
 
     const char *toChars(
         bool showColumns = Loc::showColumns,
         MessageStyle messageStyle = Loc::messageStyle) const;
-    bool equals(const Loc& loc) const;
+    bool equals(Loc loc) const;
 };
 
 enum class LINK : uint8_t

@@ -1,5 +1,5 @@
 /* Passes for transactional memory support.
-   Copyright (C) 2008-2023 Free Software Foundation, Inc.
+   Copyright (C) 2008-2025 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>
    and Aldy Hernandez <aldyh@redhat.com>.
 
@@ -637,6 +637,9 @@ diagnose_tm_1 (gimple_stmt_iterator *gsi, bool *handled_ops_p,
     {
     case GIMPLE_CALL:
       {
+	if (gimple_call_internal_p (stmt))
+	  break;
+
 	tree fn = gimple_call_fn (stmt);
 
 	if ((d->summary_flags & DIAG_TM_OUTER) == 0
@@ -1062,7 +1065,7 @@ tm_log_delete (void)
 static bool
 transaction_invariant_address_p (const_tree mem, basic_block region_entry_block)
 {
-  if ((TREE_CODE (mem) == INDIRECT_REF || TREE_CODE (mem) == MEM_REF)
+  if ((INDIRECT_REF_P (mem) || TREE_CODE (mem) == MEM_REF)
       && TREE_CODE (TREE_OPERAND (mem, 0)) == SSA_NAME)
     {
       basic_block def_bb;
@@ -2057,7 +2060,7 @@ tm_region_init (struct tm_region *region)
       region = tm_region_init_1 (region, bb);
 
       /* Check for the last statement in the block beginning a new region.  */
-      g = last_stmt (bb);
+      g = last_nondebug_stmt (bb);
       old_region = region;
       if (g)
 	if (gtransaction *trans_stmt = dyn_cast <gtransaction *> (g))
@@ -2438,26 +2441,33 @@ expand_assign_tm (struct tm_region *region, gimple_stmt_iterator *gsi)
 	  gcall = gimple_build_assign (rtmp, rhs);
 	  gsi_insert_before (gsi, gcall, GSI_SAME_STMT);
 	}
+      else if (TREE_CODE (rhs) == CONSTRUCTOR
+	       && CONSTRUCTOR_NELTS (rhs) == 0)
+	{
+	  /* Don't take address of an empty CONSTRUCTOR, it might not
+	     work for C++ non-POD constructors at all and otherwise
+	     would be inefficient.  Use tm memset to clear lhs.  */
+	  gcc_assert (!load_p && store_p);
+	  rhs_addr = integer_zero_node;
+	}
       else
 	rhs_addr = gimplify_addr (gsi, rhs);
 
       // Choose the appropriate memory transfer function.
-      if (load_p && store_p)
-	{
-	  // ??? Figure out if there's any possible overlap between
-	  // the LHS and the RHS and if not, use MEMCPY.
-	  copy_fn = builtin_decl_explicit (BUILT_IN_TM_MEMMOVE);
-	}
+      if (store_p
+	  && TREE_CODE (rhs) == CONSTRUCTOR
+	  && CONSTRUCTOR_NELTS (rhs) == 0)
+	copy_fn = builtin_decl_explicit (BUILT_IN_TM_MEMSET);
+      else if (load_p && store_p)
+	// ??? Figure out if there's any possible overlap between
+	// the LHS and the RHS and if not, use MEMCPY.
+	copy_fn = builtin_decl_explicit (BUILT_IN_TM_MEMMOVE);
       else if (load_p)
-	{
-	  // Note that the store is non-transactional and cannot overlap.
-	  copy_fn = builtin_decl_explicit (BUILT_IN_TM_MEMCPY_RTWN);
-	}
+	// Note that the store is non-transactional and cannot overlap.
+	copy_fn = builtin_decl_explicit (BUILT_IN_TM_MEMCPY_RTWN);
       else
-	{
-	  // Note that the load is non-transactional and cannot overlap.
-	  copy_fn = builtin_decl_explicit (BUILT_IN_TM_MEMCPY_RNWT);
-	}
+	// Note that the load is non-transactional and cannot overlap.
+	copy_fn = builtin_decl_explicit (BUILT_IN_TM_MEMCPY_RNWT);
 
       gcall = gimple_build_call (copy_fn, 3, lhs_addr, rhs_addr,
 				 TYPE_SIZE_UNIT (TREE_TYPE (lhs)));
@@ -2669,7 +2679,7 @@ expand_block_tm (struct tm_region *region, basic_block bb)
    uninstrumented code path blocks in the list of basic blocks
    returned, false otherwise.  */
 
-static vec<basic_block> 
+static vec<basic_block>
 get_tm_region_blocks (basic_block entry_block,
 		      bitmap exit_blocks,
 		      bitmap irr_blocks,

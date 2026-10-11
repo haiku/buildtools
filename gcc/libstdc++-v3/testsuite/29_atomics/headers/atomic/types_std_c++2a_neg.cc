@@ -1,10 +1,9 @@
-// { dg-options "-std=gnu++2a" }
 // { dg-do compile { target c++20 } }
 // Disable PCH because <bits/stdc++.h> includes <stdatomic.h> which declares
 // memory_order in the global namespace.
 // { dg-add-options no_pch }
 
-// Copyright (C) 2019-2023 Free Software Foundation, Inc.
+// Copyright (C) 2019-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the

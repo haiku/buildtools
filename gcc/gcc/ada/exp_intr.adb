@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -99,15 +99,15 @@ package body Exp_Intr is
    --  N_Free_Statement and appropriate context.
 
    procedure Expand_To_Address (N : Node_Id);
+   --  Expand a call to corresponding function from System.Storage_Elements or
+   --  declared in an instance of System.Address_To_Access_Conversions.
+
+   procedure Expand_To_Integer (N : Node_Id);
+   --  Expand a call to corresponding function from System.Storage_Elements
+
    procedure Expand_To_Pointer (N : Node_Id);
    --  Expand a call to corresponding function, declared in an instance of
    --  System.Address_To_Access_Conversions.
-
-   procedure Expand_Source_Info (N : Node_Id; Nam : Name_Id);
-   --  Rewrite the node as the appropriate string literal or positive
-   --  constant. Nam is the name of one of the intrinsics declared in
-   --  GNAT.Source_Info; see g-souinf.ads for documentation of these
-   --  intrinsics.
 
    ---------------------
    -- Add_Source_Info --
@@ -663,6 +663,9 @@ package body Exp_Intr is
       elsif Nam = Name_To_Address then
          Expand_To_Address (N);
 
+      elsif Nam = Name_To_Integer then
+         Expand_To_Integer (N);
+
       elsif Nam = Name_To_Pointer then
          Expand_To_Pointer (N);
 
@@ -745,14 +748,9 @@ package body Exp_Intr is
          Rewrite (N, Snode);
          Set_Analyzed (N);
 
-         --  However, we do call the expander, so that the expansion for
-         --  rotates and shift_right_arithmetic happens if Modify_Tree_For_C
-         --  is set.
-
          if Expander_Active then
             Expand (N);
          end if;
-
       else
          --  If the context type is not the type of the operator, it is an
          --  inherited operator for a derived type. Wrap the node in a
@@ -1311,6 +1309,12 @@ package body Exp_Intr is
       Obj : Node_Id;
 
    begin
+      if Is_Modular_Integer_Type (Etype (Arg)) then
+         Rewrite (N, Unchecked_Convert_To (Etype (N), Arg));
+         Analyze (N);
+         return;
+      end if;
+
       Remove_Side_Effects (Arg);
 
       Obj := Make_Explicit_Dereference (Loc, Relocate_Node (Arg));
@@ -1328,6 +1332,18 @@ package body Exp_Intr is
 
       Analyze_And_Resolve (N, RTE (RE_Address));
    end Expand_To_Address;
+
+   -----------------------
+   -- Expand_To_Integer --
+   -----------------------
+
+   procedure Expand_To_Integer (N : Node_Id) is
+      Arg : constant Node_Id := First_Actual (N);
+
+   begin
+      Rewrite (N, Unchecked_Convert_To (Etype (N), Arg));
+      Analyze (N);
+   end Expand_To_Integer;
 
    -----------------------
    -- Expand_To_Pointer --

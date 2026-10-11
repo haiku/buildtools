@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -25,22 +25,31 @@
 #include "rust-tyty.h"
 
 namespace Rust {
+
+struct Error;
+
 namespace Resolver {
 
 class TypeCheckStructExpr : public TypeCheckBase
 {
 public:
-  static TyTy::BaseType *Resolve (HIR::StructExprStructFields *expr);
+  static TyTy::BaseType *Resolve (HIR::StructExprStructFields &expr);
+
+  // Helper for making any errors
+  static Error
+  make_missing_field_error (location_t locus,
+			    const std::vector<std::string> &missing_field_names,
+			    const std::string &struct_name);
 
 protected:
   void resolve (HIR::StructExprStructFields &struct_expr);
 
-  void visit (HIR::StructExprFieldIdentifierValue &field);
-  void visit (HIR::StructExprFieldIndexValue &field);
-  void visit (HIR::StructExprFieldIdentifier &field);
+  bool visit (HIR::StructExprFieldIdentifierValue &field);
+  bool visit (HIR::StructExprFieldIndexValue &field);
+  bool visit (HIR::StructExprFieldIdentifier &field);
 
 private:
-  TypeCheckStructExpr (HIR::Expr *e);
+  TypeCheckStructExpr (HIR::Expr &e);
 
   // result
   TyTy::BaseType *resolved;

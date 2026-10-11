@@ -1,5 +1,5 @@
 ;; Predicate definitions for Xtensa.
-;; Copyright (C) 2005-2023 Free Software Foundation, Inc.
+;; Copyright (C) 2005-2025 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -143,23 +143,40 @@
 (define_predicate "move_operand"
   (ior
      (ior (match_operand 0 "register_operand")
-	  (and (match_operand 0 "memory_operand")
-	       (match_test "!constantpool_mem_p (op)
-			    || GET_MODE_SIZE (mode) % UNITS_PER_WORD == 0")))
+	  (match_operand 0 "memory_operand"))
      (ior (and (match_code "const_int")
 	       (match_test "(GET_MODE_CLASS (mode) == MODE_INT
 			     && xtensa_simm12b (INTVAL (op)))
 			    || ! xtensa_split1_finished_p ()"))
 	  (and (match_code "const_int,const_double,const,symbol_ref,label_ref")
 	       (match_test "(TARGET_CONST16 || TARGET_AUTO_LITPOOLS)
-			    && CONSTANT_P (op)
-			    && GET_MODE_SIZE (mode) % UNITS_PER_WORD == 0")))))
+			    && CONSTANT_P (op)")))))
 
 ;; Accept the floating point constant 1 in the appropriate mode.
 (define_predicate "const_float_1_operand"
   (match_code "const_double")
 {
   return real_equal (CONST_DOUBLE_REAL_VALUE (op), &dconst1);
+})
+
+(define_predicate "fix_scaling_operand"
+  (match_code "const_double")
+{
+  REAL_VALUE_TYPE r = *CONST_DOUBLE_REAL_VALUE (op);
+  int exp = REAL_EXP (&r) - 1;
+
+  SET_REAL_EXP (&r, 1);
+  return real_equal (&r, &dconst1) && IN_RANGE (exp, 2, 15);
+})
+
+(define_predicate "float_scaling_operand"
+  (match_code "const_double")
+{
+  REAL_VALUE_TYPE r = *CONST_DOUBLE_REAL_VALUE (op);
+  int exp = REAL_EXP (&r) - 1;
+
+  SET_REAL_EXP (&r, 1);
+  return real_equal (&r, &dconst1) && IN_RANGE (-exp, 1, 15);
 })
 
 (define_predicate "fpmem_offset_operand"
@@ -191,11 +208,40 @@
 (define_predicate "logical_shift_operator"
   (match_code "ashift,lshiftrt"))
 
+(define_predicate "addsub_operator"
+  (match_code "plus,minus"))
+
 (define_predicate "xtensa_cstoresi_operator"
-  (match_code "eq,ne,gt,ge,lt,le"))
+  (match_code "eq,ne,gt,ge,lt,le,gtu,geu,ltu,leu"))
 
 (define_predicate "xtensa_shift_per_byte_operator"
   (match_code "ashift,ashiftrt,lshiftrt"))
+
+(define_predicate "xtensa_bit_join_operator"
+  (match_code "plus,ior"))
+
+(define_predicate "subreg_HQI_lowpart_operator"
+  (match_code "subreg")
+{
+  int ofs = SUBREG_BYTE (op), pos = 0;
+  switch (GET_MODE (op))
+    {
+    case QImode:
+      if (BYTES_BIG_ENDIAN)
+	pos = 3;
+      break;
+    case HImode:
+      if (BYTES_BIG_ENDIAN)
+	pos = 2;
+      break;
+    default:
+      return false;
+    }
+  return ofs == pos;
+})
+
+(define_predicate "xtensa_sminmax_operator"
+  (match_code "smin,smax"))
 
 (define_predicate "tls_symbol_operand"
   (and (match_code "symbol_ref")

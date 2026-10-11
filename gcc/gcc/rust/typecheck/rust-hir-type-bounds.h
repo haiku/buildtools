@@ -1,4 +1,4 @@
-// Copyright (C) 2021-2023 Free Software Foundation, Inc.
+// Copyright (C) 2021-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -38,7 +38,8 @@ public:
 private:
   void scan ();
   void assemble_sized_builtin ();
-  void assemble_builtin_candidate (Analysis::RustLangItem::ItemType item);
+  void add_trait_bound (HIR::Trait *trait);
+  void assemble_builtin_candidate (LangItem::Kind item);
 
 private:
   TypeBoundsProbe (const TyTy::BaseType *receiver);

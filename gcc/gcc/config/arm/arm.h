@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for ARM.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2025 Free Software Foundation, Inc.
    Contributed by Pieter `Tiggr' Schoenmakers (rcpieter@win.tue.nl)
    and Martin Simmons (@harleqn.co.uk).
    More major hacks by Richard Earnshaw (rearnsha@arm.com)
@@ -152,8 +152,8 @@ emission of floating point pcs attributes.  */
 #define TARGET_AAPCS_BASED \
     (arm_abi != ARM_ABI_APCS && arm_abi != ARM_ABI_ATPCS)
 
-#define TARGET_HARD_TP			(target_thread_pointer == TP_CP15)
 #define TARGET_SOFT_TP			(target_thread_pointer == TP_SOFT)
+#define TARGET_HARD_TP			!TARGET_SOFT_TP
 #define TARGET_GNU2_TLS			(target_tls_dialect == TLS_GNU2)
 
 /* Only 16-bit thumb code.  */
@@ -394,9 +394,11 @@ emission of floating point pcs attributes.  */
    TARGET_MODE_CHECK that also takes into account the selected CPU and
    architecture.  */
 #define OPTION_DEFAULT_SPECS \
-  {"arch", "%{!march=*:%{!mcpu=*:-march=%(VALUE)}}" }, \
-  {"cpu", "%{!march=*:%{!mcpu=*:-mcpu=%(VALUE)}}" }, \
-  {"tune", "%{!mcpu=*:%{!mtune=*:-mtune=%(VALUE)}}" }, \
+  {"arch", "%{!march=*|march=unset:"\
+      "%{!mcpu=*|mcpu=unset:%<march=* %<mcpu=* -march=%(VALUE)}}" }, \
+  {"tune", "%{!mcpu=*|mcpu=unset:%{!mtune=*:-mtune=%(VALUE)}}" }, \
+  {"cpu", "%{!march=*|march=unset:"\
+      "%{!mcpu=*|mcpu=unset:%<march=* %<mcpu=* -mcpu=%(VALUE)}}" }, \
   {"float", "%{!mfloat-abi=*:-mfloat-abi=%(VALUE)}" }, \
   {"fpu", "%{!mfpu=*:-mfpu=%(VALUE)}"}, \
   {"abi", "%{!mabi=*:-mabi=%(VALUE)}"}, \
@@ -1125,8 +1127,20 @@ extern const int arm_arch_cde_coproc_bits[];
   ((MODE) == TImode || (MODE) == EImode || (MODE) == OImode \
    || (MODE) == CImode || (MODE) == XImode)
 
-#define VALID_MVE_STRUCT_MODE(MODE) \
-  ((MODE) == TImode || (MODE) == OImode || (MODE) == XImode)
+#define VALID_MVE_STRUCT_MODE(MODE)			    \
+  ((MODE) == TImode					    \
+   || (MODE) == OImode					    \
+   || (MODE) == XImode					    \
+   || (MODE) == V2x16QImode				    \
+   || (MODE) == V2x8HImode				    \
+   || (MODE) == V2x4SImode				    \
+   || (MODE) == V2x8HFmode				    \
+   || (MODE) == V2x4SFmode				    \
+   || (MODE) == V4x16QImode				    \
+   || (MODE) == V4x8HImode				    \
+   || (MODE) == V4x4SImode				    \
+   || (MODE) == V4x8HFmode				    \
+   || (MODE) == V4x4SFmode)
 
 /* The conditions under which vector modes are supported for general
    arithmetic using Neon.  */
@@ -1424,7 +1438,7 @@ extern const char *fp_sysreg_names[NB_FP_SYSREGS];
    but prevents the compiler from extending the lifetime of these
    registers.  */
 #define TARGET_SMALL_REGISTER_CLASSES_FOR_MODE_P \
-  arm_small_register_classes_for_mode_p 
+  arm_small_register_classes_for_mode_p
 
 /* Must leave BASE_REGS reloads alone */
 #define THUMB_SECONDARY_INPUT_RELOAD_CLASS(CLASS, MODE, X)		\
@@ -1477,7 +1491,7 @@ extern const char *fp_sysreg_names[NB_FP_SYSREGS];
 
 /* Return the maximum number of consecutive registers
    needed to represent mode MODE in a register of class CLASS.
-   ARM regs are UNITS_PER_WORD bits.  
+   ARM regs are UNITS_PER_WORD bits.
    FIXME: Is this true for iWMMX?  */
 #define CLASS_MAX_NREGS(CLASS, MODE)  \
   (CLASS == VPR_REG)		      \
@@ -1645,14 +1659,14 @@ machine_function;
 #define ARM_Q_BIT_READ (arm_q_bit_access ())
 #define ARM_GE_BITS_READ (arm_ge_bits_access ())
 
-/* As in the machine_function, a global set of call-via labels, for code 
+/* As in the machine_function, a global set of call-via labels, for code
    that is in text_section.  */
 extern GTY(()) rtx thumb_call_via_label[14];
 
 /* The number of potential ways of assigning to a co-processor.  */
 #define ARM_NUM_COPROC_SLOTS 1
 
-/* Enumeration of procedure calling standard variants.  We don't really 
+/* Enumeration of procedure calling standard variants.  We don't really
    support all of these yet.  */
 enum arm_pcs
 {
@@ -2092,10 +2106,11 @@ enum arm_auto_incmodes
    for the index in the tablejump instruction.  */
 #define CASE_VECTOR_MODE Pmode
 
-#define CASE_VECTOR_PC_RELATIVE ((TARGET_THUMB2				\
-				  || (TARGET_THUMB1			\
-				      && (optimize_size || flag_pic)))	\
-				 && (!target_pure_code))
+#define CASE_VECTOR_PC_RELATIVE						\
+   (TARGET_ARM								\
+    || (!target_pure_code						\
+	&& (TARGET_THUMB2						\
+	    || (TARGET_THUMB1 && (optimize_size || flag_pic)))))
 
 
 #define CASE_VECTOR_SHORTEN_MODE(min, max, body)			\
@@ -2109,9 +2124,19 @@ enum arm_auto_incmodes
       : min >= -4096 && max < 4096					\
       ? (ADDR_DIFF_VEC_FLAGS (body).offset_unsigned = 0, HImode)	\
       : SImode)								\
-   : ((min < 0 || max >= 0x20000 || !TARGET_THUMB2) ? SImode		\
-      : (max >= 0x200) ? HImode						\
-      : QImode))
+   : (TARGET_THUMB2							\
+      ? ((min >= 0 && max < 0x200) ? QImode				\
+      : (min >= 0 && max < 0x20000) ? HImode				\
+      : SImode)								\
+   : ((min >= 0 && max < 1024)						\
+      ? (ADDR_DIFF_VEC_FLAGS (body).offset_unsigned = 1, QImode)	\
+      : (min >= -512 && max <= 508)					\
+      ? (ADDR_DIFF_VEC_FLAGS (body).offset_unsigned = 0, QImode)	\
+      :(min >= 0 && max < 262144)					\
+      ? (ADDR_DIFF_VEC_FLAGS (body).offset_unsigned = 1, HImode)	\
+      : (min >= -131072 && max <=131068)				\
+      ? (ADDR_DIFF_VEC_FLAGS (body).offset_unsigned = 0, HImode)	\
+      : SImode)))
 
 /* signed 'char' is most compatible, but RISC OS wants it unsigned.
    unsigned is probably best, but may break some code.  */
@@ -2232,12 +2257,16 @@ extern int making_const_table;
 
 #define SELECT_CC_MODE(OP, X, Y)  arm_select_cc_mode (OP, X, Y)
 
-#define REVERSIBLE_CC_MODE(MODE) 1
+/* Floating-point modes cannot be reversed unless we don't care about
+   NaNs.  */
+#define REVERSIBLE_CC_MODE(MODE)			\
+  (flag_finite_math_only				\
+   || !((MODE) == CCFPmode || (MODE) == CCFPEmode))
 
 #define REVERSE_CONDITION(CODE,MODE) \
   (((MODE) == CCFPmode || (MODE) == CCFPEmode) \
-   ? reverse_condition_maybe_unordered (code) \
-   : reverse_condition (code))
+   ? reverse_condition_maybe_unordered (CODE) \
+   : reverse_condition (CODE))
 
 #define CLZ_DEFINED_VALUE_AT_ZERO(MODE, VALUE) \
   ((VALUE) = GET_MODE_UNIT_BITSIZE (MODE), 2)
@@ -2291,8 +2320,14 @@ extern int making_const_table;
 	asm_fprintf (STREAM, "\tpop {%r}\n", REGNO);	\
     } while (0)
 
-#define ADDR_VEC_ALIGN(JUMPTABLE)	\
-  ((TARGET_THUMB && GET_MODE (PATTERN (JUMPTABLE)) == SImode) ? 2 : 0)
+/* If the switch table is in the code segment, additional alignment is
+   needed for Thumb SImode tables.  Otherwise, tables in RO data have
+   natural alignment.  */
+#define ADDR_VEC_ALIGN(TABLE)						\
+  (JUMP_TABLES_IN_TEXT_SECTION						\
+   ? ((TARGET_THUMB && GET_MODE (PATTERN (TABLE)) == SImode) ? 2 : 0)	\
+   : (exact_log2 (GET_MODE_ALIGNMENT (GET_MODE (PATTERN (TABLE)))	\
+		  / BITS_PER_UNIT)))
 
 /* Alignment for case labels comes from ADDR_VEC_ALIGN; avoid the
    default alignment from elfos.h.  */
@@ -2301,7 +2336,7 @@ extern int making_const_table;
 
 #define LABEL_ALIGN_AFTER_BARRIER(LABEL)                \
    (GET_CODE (PATTERN (prev_active_insn (LABEL))) == ADDR_DIFF_VEC \
-   ? 1 : 0)
+   ? (TARGET_ARM ? 2 : 1) : 0)
 
 #define ARM_DECLARE_FUNCTION_NAME(STREAM, NAME, DECL) 	\
   arm_declare_function_name ((STREAM), (NAME), (DECL));
@@ -2357,6 +2392,21 @@ extern int making_const_table;
     thumb2_final_prescan_insn (INSN);			\
   else if (TARGET_THUMB1)				\
     thumb1_final_prescan_insn (INSN)
+
+/* These defines are useful to refer to the value of the mve_unpredicated_insn
+   insn attribute.  Note that, because these use the get_attr_* function, these
+   will change recog_data if (INSN) isn't current_insn.  */
+#define MVE_VPT_PREDICABLE_INSN_P(INSN)					\
+  (recog_memoized (INSN) >= 0						\
+   && get_attr_mve_unpredicated_insn (INSN) != CODE_FOR_nothing)
+
+#define MVE_VPT_PREDICATED_INSN_P(INSN)					\
+  (MVE_VPT_PREDICABLE_INSN_P (INSN)					\
+   && recog_memoized (INSN) != get_attr_mve_unpredicated_insn (INSN))
+
+#define MVE_VPT_UNPREDICATED_INSN_P(INSN)				\
+  (MVE_VPT_PREDICABLE_INSN_P (INSN)					\
+   && recog_memoized (INSN) == get_attr_mve_unpredicated_insn (INSN))
 
 #define ARM_SIGN_EXTEND(x)  ((HOST_WIDE_INT)			\
   (HOST_BITS_PER_WIDE_INT <= 32 ? (unsigned HOST_WIDE_INT) (x)	\
@@ -2506,6 +2556,11 @@ const char *arm_be8_option (int argc, const char **argv);
 #define TARGET_MODE_SPECS						\
   " %{!marm:%{!mthumb:%:target_mode_check(%{march=*:arch %*;mcpu=*:cpu %*;:})}}"
 
+/* Cleanup any stray -march=/-mcpu= if either is followed by "unset".  */
+#define ARCH_CPU_CLEANUP_SPECS	\
+  " %{march=unset:%<march=*} "	\
+  " %{mcpu=unset:%<mcpu=*} "
+
 /* Generate a canonical string to represent the architecture selected.  */
 #define ARCH_CANONICAL_SPECS				\
   " -march=%:canon_arch(%{mcpu=*: cpu %*} "		\
@@ -2527,6 +2582,7 @@ const char *arm_be8_option (int argc, const char **argv);
    individual rules so that any option suppression (%<opt...)is
    completed before starting subsequent rules.  */
 #define DRIVER_SELF_SPECS			\
+  ARCH_CPU_CLEANUP_SPECS,			\
   MCPU_MTUNE_NATIVE_SPECS,			\
   TARGET_MODE_SPECS,				\
   MULTILIB_ARCH_CANONICAL_SPECS,		\

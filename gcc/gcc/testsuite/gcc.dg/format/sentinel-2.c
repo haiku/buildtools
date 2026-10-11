@@ -1,6 +1,6 @@
 /* PR c/114780 */
 /* { dg-do compile } */
-/* { dg-options "-std=c2x -Wformat" } */
+/* { dg-options "-std=c23 -Wformat" } */
 
 #include <stddef.h>
 

@@ -1,5 +1,5 @@
 /* Callgraph clones
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
    Contributed by Jan Hubicka
 
 This file is part of GCC.
@@ -78,11 +78,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-eh.h"
 #include "tree-cfg.h"
 #include "tree-inline.h"
+#include "attribs.h"
 #include "dumpfile.h"
 #include "gimple-pretty-print.h"
 #include "alloc-pool.h"
 #include "symbol-summary.h"
 #include "tree-vrp.h"
+#include "sreal.h"
+#include "ipa-cp.h"
 #include "ipa-prop.h"
 #include "ipa-fnsummary.h"
 #include "symtab-thunks.h"
@@ -105,7 +108,7 @@ cgraph_edge::clone (cgraph_node *n, gcall *call_stmt, unsigned stmt_uid,
       tree decl;
 
       if (call_stmt && (decl = gimple_call_fndecl (call_stmt))
-	  /* When the call is speculative, we need to resolve it 
+	  /* When the call is speculative, we need to resolve it
 	     via cgraph_resolve_speculation and not here.  */
 	  && !speculative)
 	{
@@ -145,7 +148,7 @@ cgraph_edge::clone (cgraph_node *n, gcall *call_stmt, unsigned stmt_uid,
 
   /* Update IPA profile.  Local profiles need no updating in original.  */
   if (update_original)
-    count = count.combine_with_ipa_count_within (count.ipa () 
+    count = count.combine_with_ipa_count_within (count.ipa ()
 						 - new_edge->count.ipa (),
 						 caller->count);
   symtab->call_edge_duplication_hooks (this, new_edge);
@@ -155,7 +158,7 @@ cgraph_edge::clone (cgraph_node *n, gcall *call_stmt, unsigned stmt_uid,
 /* Set flags of NEW_NODE and its decl.  NEW_NODE is a newly created private
    clone or its thunk.  */
 
-static void
+void
 set_new_clone_decl_and_node_flags (cgraph_node *new_node)
 {
   DECL_EXTERNAL (new_node->decl) = 0;
@@ -304,20 +307,28 @@ cgraph_node::expand_all_artificial_thunks ()
       e = e->next_caller;
 }
 
+/* Dump information about creation of a call graph node clone to the dump file
+   created by the -fdump-ipa-clones option.  ORIGINAL is the function being
+   cloned, CLONE is the new clone.  SUFFIX is a string that helps identify the
+   reason for cloning, often it is the suffix used by a particular IPA pass to
+   create unique function names.  SUFFIX can be NULL and in that case the
+   dumping will not take place, which must be the case only for helper clones
+   which will never be emitted to the output.  */
+
 void
 dump_callgraph_transformation (const cgraph_node *original,
 			       const cgraph_node *clone,
 			       const char *suffix)
 {
-  if (symtab->ipa_clones_dump_file)
+  if (suffix && symtab->ipa_clones_dump_file)
     {
       fprintf (symtab->ipa_clones_dump_file,
 	       "Callgraph clone;%s;%d;%s;%d;%d;%s;%d;%s;%d;%d;%s\n",
-	       original->asm_name (), original->order,
+	       original->asm_name (), original->get_uid (),
 	       DECL_SOURCE_FILE (original->decl),
 	       DECL_SOURCE_LINE (original->decl),
 	       DECL_SOURCE_COLUMN (original->decl), clone->asm_name (),
-	       clone->order, DECL_SOURCE_FILE (clone->decl),
+	       clone->get_uid (), DECL_SOURCE_FILE (clone->decl),
 	       DECL_SOURCE_LINE (clone->decl), DECL_SOURCE_COLUMN (clone->decl),
 	       suffix);
 
@@ -349,7 +360,7 @@ localize_profile (cgraph_node *n)
 
    When UPDATE_ORIGINAL is true, the counts are subtracted from the original
    function's profile to reflect the fact that part of execution is handled
-   by node.  
+   by node.
    When CALL_DUPLICATION_HOOK is true, the ipa passes are acknowledged about
    the new clone. Otherwise the caller is responsible for doing so later.
 
@@ -385,7 +396,7 @@ cgraph_node::create_clone (tree new_decl, profile_count prof_count,
   if (!new_inlined_to)
     prof_count = count.combine_with_ipa_count (prof_count);
   new_node->count = prof_count;
-  new_node->calls_declare_variant_alt = this->calls_declare_variant_alt;
+  new_node->has_omp_variant_constructs = this->has_omp_variant_constructs;
 
   /* Update IPA profile.  Local profiles need no updating in original.  */
   if (update_original)
@@ -398,6 +409,7 @@ cgraph_node::create_clone (tree new_decl, profile_count prof_count,
         count = count.combine_with_ipa_count (count.ipa () - prof_count.ipa ());
     }
   new_node->decl = new_decl;
+  new_node->order = order;
   new_node->register_symbol ();
   new_node->lto_file_data = lto_file_data;
   new_node->analyzed = analyzed;
@@ -435,9 +447,8 @@ cgraph_node::create_clone (tree new_decl, profile_count prof_count,
 	 version.  The only exception is when the edge was proved to
 	 be unreachable during the cloning procedure.  */
       if (!e->callee
-	  || !(fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE)
-	       || fndecl_built_in_p (e->callee->decl,
-				     BUILT_IN_UNREACHABLE_TRAP)))
+	  || !fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE,
+						  BUILT_IN_UNREACHABLE_TRAP))
         e->redirect_callee_duplicating_thunks (new_node);
     }
   new_node->expand_all_artificial_thunks ();
@@ -609,7 +620,7 @@ cgraph_node::create_virtual_clone (const vec<cgraph_edge *> &redirect_callers,
   DECL_STRUCT_FUNCTION (new_decl) = NULL;
   DECL_ARGUMENTS (new_decl) = NULL;
   DECL_INITIAL (new_decl) = NULL;
-  DECL_RESULT (new_decl) = NULL; 
+  DECL_RESULT (new_decl) = NULL;
   /* We cannot do DECL_RESULT (new_decl) = NULL; here because of LTO partitioning
      sometimes storing only clone decl instead of original.  */
 
@@ -668,7 +679,7 @@ cgraph_node::create_virtual_clone (const vec<cgraph_edge *> &redirect_callers,
 }
 
 /* callgraph node being removed from symbol table; see if its entry can be
-   replaced by other inline clone. 
+   replaced by other inline clone.
    INFO is clone info to attach to the new root.  */
 cgraph_node *
 cgraph_node::find_replacement (clone_info *info)
@@ -760,7 +771,7 @@ cgraph_node::find_replacement (clone_info *info)
 }
 
 /* Like cgraph_set_call_stmt but walk the clone tree and update all
-   clones sharing the same function body.  
+   clones sharing the same function body.
    When WHOLE_SPECULATIVE_EDGES is true, all three components of
    speculative edge gets updated.  Otherwise we update only direct
    call.  */
@@ -925,9 +936,9 @@ update_call_expr (cgraph_node *new_version)
    edges which should be redirected to point to
    NEW_VERSION.  ALL the callees edges of the node
    are cloned to the new version node.  Return the new
-   version node. 
+   version node.
 
-   If non-NULL BLOCK_TO_COPY determine what basic blocks 
+   If non-NULL BLOCK_TO_COPY determine what basic blocks
    was copied to prevent duplications of calls that are dead
    in the clone.  */
 
@@ -1049,7 +1060,17 @@ cgraph_node::create_version_clone_with_body
       location_t saved_loc = input_location;
       tree v = TREE_VALUE (target_attributes);
       input_location = DECL_SOURCE_LOCATION (new_decl);
-      bool r = targetm.target_option.valid_attribute_p (new_decl, NULL, v, 1);
+      bool r;
+      tree name_id = get_attribute_name (target_attributes);
+      const char *name_str = IDENTIFIER_POINTER (name_id);
+      if (strcmp (name_str, "target") == 0)
+	r = targetm.target_option.valid_attribute_p (new_decl, name_id, v, 1);
+      else if (strcmp (name_str, "target_version") == 0)
+	r = targetm.target_option.valid_version_attribute_p (new_decl, name_id,
+							     v, 1);
+      else
+	gcc_unreachable();
+
       input_location = saved_loc;
       if (!r)
 	return NULL;

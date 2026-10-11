@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -20,6 +20,7 @@
 #define RUST_TYTY_BOUNDS_H
 
 #include "rust-location.h"
+#include "rust-mapping-common.h"
 
 namespace Rust {
 
@@ -33,31 +34,6 @@ namespace TyTy {
 
 class BaseType;
 class TypeBoundPredicate;
-class TypeBoundPredicateItem
-{
-public:
-  TypeBoundPredicateItem (const TypeBoundPredicate *parent,
-			  const Resolver::TraitItemReference *trait_item_ref);
-
-  static TypeBoundPredicateItem error ();
-
-  bool is_error () const;
-
-  BaseType *get_tyty_for_receiver (const TyTy::BaseType *receiver);
-
-  const Resolver::TraitItemReference *get_raw_item () const;
-
-  bool needs_implementation () const;
-
-  const TypeBoundPredicate *get_parent () const;
-
-  Location get_locus () const;
-
-private:
-  const TypeBoundPredicate *parent;
-  const Resolver::TraitItemReference *trait_item_ref;
-};
-
 class TypeBoundsMappings
 {
 protected:
@@ -67,6 +43,8 @@ public:
   std::vector<TypeBoundPredicate> &get_specified_bounds ();
 
   const std::vector<TypeBoundPredicate> &get_specified_bounds () const;
+
+  TypeBoundPredicate lookup_predicate (DefId id);
 
   size_t num_specified_bounds () const;
 

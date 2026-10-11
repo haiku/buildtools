@@ -75,7 +75,7 @@
 
     <para>
       There is a license section in the FAQ regarding common <link linkend="faq.license">questions</link>. If you have more
-      questions, ask the FSF or the <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://gcc.gnu.org/lists.html">gcc mailing list</link>.
+      questions, ask the FSF or the <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://gcc.gnu.org/lists.html">gcc mailing list</link>.
     </para>
 
     <section xml:id="manual.intro.status.license.gpl" xreflabel="License GPL"><info><title>The Code: GPL</title></info>
@@ -1327,16 +1327,16 @@ requirements of the license of GCC.
   <?dbhtml filename="setup.html"?>
 
 
-   <para>To transform libstdc++ sources into installed include files
+   <para>Transforming libstdc++ sources into installed include files
    and properly built binaries useful for linking to other software is
-   a multi-step process. Steps include getting the sources,
-   configuring and building the sources, testing, and installation.
+   done as part of building GCC. Building libstdc++ separately from the
+   rest of GCC is not supported.
    </para>
 
-   <para>The general outline of commands is something like:
+   <para>The general outline of commands to build GCC is something like:
    </para>
 
-   <programlisting>
+<programlisting>
    <replaceable>get gcc sources</replaceable>
    <replaceable>extract into gccsrcdir</replaceable>
    mkdir <replaceable>gccbuilddir</replaceable>
@@ -1345,7 +1345,7 @@ requirements of the license of GCC.
    make
    make check
    make install
-   </programlisting>
+</programlisting>
 
    <para>
      Each step is described in more detail in the following sections.
@@ -1364,7 +1364,7 @@ requirements of the license of GCC.
   <?dbhtml filename="make.html"?>
 
    <para>If you have never done this before, you should read the basic
-      <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://gcc.gnu.org/install/">GCC Installation
+      <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://gcc.gnu.org/install/">GCC Installation
       Instructions</link> first.  Read <emphasis>all of them</emphasis>.
       <emphasis>Twice.</emphasis>
    </para>

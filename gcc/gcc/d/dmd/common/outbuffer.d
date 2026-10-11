@@ -1,12 +1,12 @@
 /**
  * An expandable buffer in which you can write text or binary data.
  *
- * Copyright: Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright: Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * Authors:   Walter Bright, https://www.digitalmars.com
  * License:   $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source:    $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/root/outbuffer.d, root/_outbuffer.d)
+ * Source:    $(LINK2 https://github.com/dlang/dmd/blob/master/compiler/src/dmd/common/outbuffer.d, root/_outbuffer.d)
  * Documentation: https://dlang.org/phobos/dmd_root_outbuffer.html
- * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/root/outbuffer.d
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/compiler/src/dmd/common/outbuffer.d
  */
 
 module dmd.common.outbuffer;
@@ -61,7 +61,7 @@ struct OutBuffer
     /**
     Construct given size.
     */
-    this(size_t initialSize) nothrow
+    this(size_t initialSize) nothrow @safe
     {
         reserve(initialSize);
     }
@@ -141,7 +141,7 @@ struct OutBuffer
     memory buffer. The config variables `notlinehead`, `doindent` etc. are
     not changed.
     */
-    extern (C++) void destroy() pure nothrow @trusted
+    extern (C++) void destroy() pure nothrow
     {
         dtor();
         fileMapping = null;
@@ -247,7 +247,7 @@ struct OutBuffer
     /**
      * Writes a 16 bit value, no reserve check.
      */
-    @trusted nothrow
+    nothrow @safe
     void write16n(int v)
     {
         auto x = cast(ushort) v;
@@ -281,7 +281,7 @@ struct OutBuffer
         write(&v, v.sizeof);
     }
 
-    /// NOT zero-terminated
+    /// Buffer will NOT be zero-terminated
     extern (C++) void writestring(const(char)* s) pure nothrow @system
     {
         if (!s)
@@ -302,14 +302,14 @@ struct OutBuffer
         write(s);
     }
 
-    /// NOT zero-terminated, followed by newline
+    /// Buffer will NOT be zero-terminated, followed by newline
     void writestringln(const(char)[] s) pure nothrow @safe
     {
         writestring(s);
         writenl();
     }
 
-    /** Write string to buffer, ensure it is zero terminated
+    /** Write C string AND null byte
      */
     void writeStringz(const(char)* s) pure nothrow @system
     {
@@ -367,8 +367,7 @@ struct OutBuffer
     }
 
     // Position buffer to accept the specified number of bytes at offset
-    @trusted
-    void position(size_t where, size_t nbytes) nothrow
+    void position(size_t where, size_t nbytes) nothrow @safe
     {
         if (where + nbytes > data.length)
         {
@@ -382,7 +381,7 @@ struct OutBuffer
     /**
      * Writes an 8 bit byte, no reserve check.
      */
-    extern (C++) @trusted nothrow
+    extern (C++) nothrow @safe
     void writeByten(int b)
     {
         this.data[offset++] = cast(ubyte) b;
@@ -527,7 +526,7 @@ struct OutBuffer
      * Returns:
      *  slice of the allocated space to be filled in
      */
-    extern (D) char[] allocate(size_t nbytes) pure nothrow
+    extern (D) char[] allocate(size_t nbytes) pure nothrow @safe
     {
         reserve(nbytes);
         offset += nbytes;
@@ -711,8 +710,14 @@ struct OutBuffer
         return cast(char*)data.ptr;
     }
 
+    // Peek at slice of data without taking ownership
+    extern (D) ubyte[] peekSlice() pure nothrow
+    {
+        return data[0 .. offset];
+    }
+
     // Append terminating null if necessary and take ownership of data
-    extern (C++) char* extractChars() pure nothrow
+    extern (C++) char* extractChars() pure nothrow @safe
     {
         if (!offset || data[offset - 1] != '\0')
             writeByte(0);
@@ -750,6 +755,25 @@ struct OutBuffer
     }
 
     /**
+     * Write an array as a string of hexadecimal digits
+     * Params:
+     *     data = bytes to write
+     *     upperCase = whether to upper case hex digits A-F
+     */
+    void writeHexString(scope const(ubyte)[] data, bool upperCase) pure nothrow @safe
+    {
+        auto slice = this.allocate(2 * data.length);
+        const a = upperCase ? 'A' : 'a';
+        foreach (i, c; data)
+        {
+            char hi = (c >> 4) & 0xF;
+            slice[i * 2] = cast(char)(hi < 10 ? hi + '0' : hi - 10 + a);
+            char lo = c & 0xF;
+            slice[i * 2 + 1] = cast(char)(lo < 10 ? lo + '0' : lo - 10 + a);
+        }
+    }
+
+    /**
     Destructively saves the contents of `this` to `filename`. As an
     optimization, if the file already has identical contents with the buffer,
     no copying is done. This is because on SSD drives reading is often much
@@ -761,10 +785,11 @@ struct OutBuffer
 
     Returns: `true` iff the operation succeeded.
     */
-    extern(D) bool moveToFile(const char* filename) @system
+    extern(D) bool moveToFile(const char[] filename) @system
     {
         bool result = true;
-        const bool identical = this[] == FileMapping!(const ubyte)(filename)[];
+        const filenameZ = (filename ~ "\0").ptr;
+        const bool identical = this[] == FileMapping!(const ubyte)(filenameZ)[];
 
         if (fileMapping && fileMapping.active)
         {
@@ -777,7 +802,7 @@ struct OutBuffer
             {
                 // Resize to fit to get rid of the slack bytes at the end
                 fileMapping.resize(offset);
-                result = fileMapping.moveToFile(filename);
+                result = fileMapping.moveToFile(filenameZ);
             }
             // Can't call destroy() here because the file mapping is already closed.
             data = null;
@@ -786,12 +811,12 @@ struct OutBuffer
         else
         {
             if (!identical)
-                writeFile(filename, this[]);
+                writeFile(filenameZ, this[]);
             destroy();
         }
 
         return identical
-            ? result && touchFile(filename)
+            ? result && touchFile(filenameZ)
             : result;
     }
 }
@@ -936,4 +961,12 @@ unittest
         assert(buf[] == "\r\nabc\r\n\r\n");
     else
         assert(buf[] == "\nabc\n\n");
+}
+
+unittest
+{
+    OutBuffer buf;
+    buf.writeHexString([0xAA, 0xBB], false);
+    buf.writeHexString([0xCC], true);
+    assert(buf[] == "aabbCC");
 }

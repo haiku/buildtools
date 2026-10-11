@@ -1,4 +1,4 @@
-/* Copyright (C) 2019-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2019-2025 Free Software Foundation, Inc.
 
    This file is part of LIBF7, which is part of GCC.
 
@@ -207,7 +207,6 @@ f7_t* f7_set_s32 (f7_t *cc, int32_t i32)
   cc->flags = flags;
   return cc;
 }
-ALIAS (f7_set_s32, f7_floatsidf)
 #endif // F7MOD_set_s32_
 
 
@@ -219,7 +218,6 @@ f7_t* f7_set_u32 (f7_t *cc, uint32_t u32)
   cc->expo = 31;
   return f7_normalize_asm (cc);
 }
-ALIAS (f7_set_u32, f7_floatunsidf)
 #endif // F7MOD_set_u32_
 
 
@@ -352,7 +350,7 @@ float f7_get_float (const f7_t *aa)
 
   return make_float (mant);
 }
-F7_PURE ALIAS (f7_get_float, f7_truncdfsf2)
+ALIAS (f7_get_float, f7_truncdfsf2)
 #endif // F7MOD_get_float_
 
 #define DBL_DIG_EXP   11
@@ -440,11 +438,21 @@ f7_double_t f7_get_double (const f7_t *aa)
 
   mant &= 0x00ffffffffffffff;
 
-  // FIXME: For subnormals, rounding is premature and should be
-  //	    done *after* the mantissa has been shifted into place
-  //	    (or the round value be shifted left accordingly).
-  // Round.
-  mant += 1u << (F7_MANT_BITS - (1 + DBL_DIG_MANT) - 1);
+  // PR115419: The least significant nibble tells how to round:
+  // Tie breaks are rounded to even (Banker's rounding).
+  uint8_t lsn = mant & 0xff;
+  lsn &= 0xf;
+  // The LSB of the outgoing double is at bit 3.
+  if (lsn & (1 << 3))
+    ++lsn;
+  if (lsn > (1 << 2))
+    {
+      // FIXME: For subnormals, rounding is premature and should be
+      //        done *after* the mantissa has been shifted into place
+      //        (or the round value be shifted left accordingly).
+      // Round.
+      mant += 1u << (F7_MANT_BITS - (1 + DBL_DIG_MANT) - 1);
+    }
 
   uint8_t dex;
   register uint64_t r18 __asm ("r18") = mant;
@@ -572,7 +580,7 @@ int32_t f7_get_s32 (const f7_t *aa)
   extern int32_t to_s32 (const f7_t*, uint8_t) F7ASM(f7_to_integer_asm);
   return to_s32 (aa, 0x1f);
 }
-F7_PURE ALIAS (f7_get_s32, f7_fixdfsi)
+ALIAS (f7_get_s32, f7_fixdfsi)
 #endif // F7MOD_get_s32_
 
 
@@ -583,7 +591,7 @@ F7_PURE ALIAS (f7_get_s32, f7_fixdfsi)
   extern int64_t to_s64 (const f7_t*, uint8_t) F7ASM(f7_to_integer_asm);
   return to_s64 (aa, 0x3f);
 }
-F7_PURE ALIAS (f7_get_s64, f7_fixdfdi)
+ALIAS (f7_get_s64, f7_fixdfdi)
 #endif // F7MOD_get_s64_
 
 #ifdef F7MOD_get_u16_
@@ -603,7 +611,7 @@ uint32_t f7_get_u32 (const f7_t *aa)
   extern uint32_t to_u32 (const f7_t*, uint8_t) F7ASM(f7_to_unsigned_asm);
   return to_u32 (aa, 0x1f);
 }
-F7_PURE ALIAS (f7_get_u32, f7_fixunsdfsi)
+ALIAS (f7_get_u32, f7_fixunsdfsi)
 #endif // F7MOD_get_u32_
 
 
@@ -614,7 +622,7 @@ uint64_t f7_get_u64 (const f7_t *aa)
   extern int64_t to_u64 (const f7_t*, uint8_t) F7ASM(f7_to_unsigned_asm);
   return to_u64 (aa, 0x3f);
 }
-F7_PURE ALIAS (f7_get_u64, f7_fixunsdfdi)
+ALIAS (f7_get_u64, f7_fixunsdfdi)
 #endif // F7MOD_get_u64_
 
 
@@ -916,6 +924,21 @@ void f7_sub (f7_t *cc, const f7_t *aa, const f7_t *bb)
   f7_addsub (cc, aa, bb, true);
 }
 #endif // F7MOD_sub_
+
+
+#ifdef F7MOD_fdim_
+F7_WEAK
+void f7_fdim (f7_t *cc, const f7_t *aa, const f7_t *bb)
+{
+  int8_t cmp = f7_cmp_unordered (aa, bb, true /*with_sign*/);
+  if (cmp == INT8_MIN)
+    return f7_set_nan (cc);
+  if (cmp < 0)
+    return f7_clr (cc);
+
+  f7_sub (cc, aa, bb);
+}
+#endif // F7MOD_fdim_
 
 
 #ifdef F7MOD_addsub_
@@ -1493,6 +1516,9 @@ void f7_horner (f7_t *cc, const f7_t *xx, uint8_t n_coeff, const f7_t *coeff,
 
   f7_copy_flash (yy, pcoeff);
 
+  if (yy->flags & F7_FLAG_plusx)
+    f7_Iadd (yy, xx);
+
   while (1)
     {
       --pcoeff;
@@ -1636,10 +1662,10 @@ void f7_exp (f7_t *cc, const f7_t *aa)
     return f7_set_nan (cc);
 
   /* The maximal exponent of 2 for a double is 1023, hence we may limit
-     to  |A| < 1023 * ln2 ~ 709.  We limit to  1024 ~ 1.99 * 2^9  */
+     to  |A| < 1023 * ln2 ~ 709.  We limit to  1024 = 2^10  */
 
   if (f7_class_inf (a_class)
-      || (f7_class_nonzero (a_class) && aa->expo >= 9))
+      || (f7_class_nonzero (a_class) && aa->expo >= 10))
     {
       if (f7_class_sign (a_class))
 	return f7_clr (cc);

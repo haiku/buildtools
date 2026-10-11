@@ -1,6 +1,6 @@
 # Pretty-printers for libstdc++.
 
-# Copyright (C) 2008-2023 Free Software Foundation, Inc.
+# Copyright (C) 2008-2025 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -133,7 +133,11 @@ def lookup_templ_spec(templ, *args):
     """
     Lookup template specialization templ<args...>.
     """
-    t = '{}<{}>'.format(templ, ', '.join([str(a) for a in args]))
+    # Similar to PR67440, str(a) might contain unexpected type qualifiers.
+    t = '{}<{}>'.format(templ, ', '.join([ \
+            a.tag if isinstance(a, gdb.Type) and a.tag \
+            else str(a) \
+        for a in args]))
     try:
         return gdb.lookup_type(t)
     except gdb.error as e:
@@ -218,6 +222,16 @@ def is_specialization_of(x, template_name):
 def strip_versioned_namespace(typename):
     global _versioned_namespace
     return typename.replace(_versioned_namespace, '')
+
+
+def strip_fundts_namespace(typ):
+    """Remove "fundamentals_vN" inline namespace from qualified type name."""
+    pattern = r'^std::experimental::fundamentals_v\d::'
+    repl = 'std::experimental::'
+    if sys.version_info[0] == 2:
+        return re.sub(pattern, repl, typ, 1)
+    else: # Technically this needs Python 3.1 but nobody should be using 3.0
+        return re.sub(pattern, repl, typ, count=1)
 
 
 def strip_inline_namespaces(type_str):
@@ -613,6 +627,9 @@ class StdBitReferencePrinter(printer_base):
 
     def to_string(self):
         if not self._val['_M_p']:
+            # PR libstdc++/115098 removed the reference default constructor
+            # that this case relates to. New code should never need this,
+            # but we still handle it for compatibility with old binaries.
             return 'invalid std::vector<bool>::reference'
         return bool(self._val['_M_p'].dereference() & (self._val['_M_mask']))
 
@@ -1352,8 +1369,7 @@ class StdExpAnyPrinter(SingleObjContainerPrinter):
 
     def __init__(self, typename, val):
         self._typename = strip_versioned_namespace(typename)
-        self._typename = re.sub(r'^std::experimental::fundamentals_v\d::',
-                                'std::experimental::', self._typename, 1)
+        self._typename = strip_fundts_namespace(self._typename)
         self._val = val
         self._contained_type = None
         contained_value = None
@@ -1446,10 +1462,8 @@ class StdExpOptionalPrinter(SingleObjContainerPrinter):
     """Print a std::optional or std::experimental::optional."""
 
     def __init__(self, typename, val):
-        typename = strip_versioned_namespace(typename)
-        self._typename = re.sub(
-            r'^std::(experimental::|)(fundamentals_v\d::|)(.*)',
-            r'std::\1\3', typename, 1)
+        self._typename = strip_versioned_namespace(typename)
+        self._typename = strip_fundts_namespace(self._typename)
         payload = val['_M_payload']
         if self._typename.startswith('std::experimental'):
             engaged = val['_M_engaged']
@@ -2306,6 +2320,38 @@ class StdLocalePrinter(printer_base):
                     mod = ' with "{}={}"'.format(cat, other)
         return 'std::locale = "{}"{}'.format(name, mod)
 
+class StdIntegralConstantPrinter(printer_base):
+    """Print a std::true_type or std::false_type."""
+
+    def __init__(self, typename, val):
+        self._val = val
+        self._typename = typename
+
+    def to_string(self):
+        value_type = self._val.type.template_argument(0)
+        value = self._val.type.template_argument(1)
+        if value_type.code == gdb.TYPE_CODE_BOOL:
+            if value:
+                return "std::true_type"
+            else:
+                return "std::false_type"
+        typename = strip_versioned_namespace(self._typename)
+        return "{}<{}, {}>".format(typename, value_type, value)
+
+class StdTextEncodingPrinter(printer_base):
+    """Print a std::text_encoding."""
+
+    def __init__(self, typename, val):
+        self._val = val
+        self._typename = typename
+
+    def to_string(self):
+        rep = self._val['_M_rep'].dereference()
+        if rep['_M_id'] == 1:
+            return self._val['_M_name']
+        if rep['_M_id'] == 2:
+            return 'unknown'
+        return rep['_M_name']
 
 # A "regular expression" printer which conforms to the
 # "SubPrettyPrinter" protocol from gdb.printing.
@@ -2788,6 +2834,7 @@ def build_libstdcxx_dictionary():
     # vector<bool>
     libstdcxx_printer.add_version('std::', 'locale', StdLocalePrinter)
 
+
     if hasattr(gdb.Value, 'dynamic_type'):
         libstdcxx_printer.add_version('std::', 'error_code',
                                       StdErrorCodePrinter)
@@ -2849,6 +2896,8 @@ def build_libstdcxx_dictionary():
                                   StdChronoDurationPrinter)
     libstdcxx_printer.add_version('std::chrono::', 'time_point',
                                   StdChronoTimePointPrinter)
+    libstdcxx_printer.add_version('std::', 'integral_constant',
+                                  StdIntegralConstantPrinter)
 
     # std::regex components
     libstdcxx_printer.add_version('std::__detail::', '_State',
@@ -2924,6 +2973,9 @@ def build_libstdcxx_dictionary():
     # libstdcxx_printer.add_version('std::chrono::(anonymous namespace)', 'Rule',
     #                              StdChronoTimeZoneRulePrinter)
 
+    # C++26 components
+    libstdcxx_printer.add_version('std::', 'text_encoding',
+                                  StdTextEncodingPrinter)
     # Extensions.
     libstdcxx_printer.add_version('__gnu_cxx::', 'slist', StdSlistPrinter)
 

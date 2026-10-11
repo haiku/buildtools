@@ -12,13 +12,15 @@
 // sanitizer_common/sanitizer_common_interceptors.inc
 //===----------------------------------------------------------------------===//
 
+#include "sanitizer_common/sanitizer_allocator_dlsym.h"
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_errno.h"
+#include "sanitizer_common/sanitizer_glibc_version.h"
+#include "sanitizer_common/sanitizer_internal_defs.h"
 #include "sanitizer_common/sanitizer_libc.h"
 #include "sanitizer_common/sanitizer_linux.h"
 #include "sanitizer_common/sanitizer_platform_limits_netbsd.h"
 #include "sanitizer_common/sanitizer_platform_limits_posix.h"
-#include "sanitizer_common/sanitizer_placement_new.h"
 #include "sanitizer_common/sanitizer_posix.h"
 #include "sanitizer_common/sanitizer_stacktrace.h"
 #include "sanitizer_common/sanitizer_tls_get_addr.h"
@@ -34,6 +36,9 @@
 #include <stdarg.h>
 
 using namespace __tsan;
+
+DECLARE_REAL(void *, memcpy, void *to, const void *from, SIZE_T size)
+DECLARE_REAL(void *, memset, void *block, int c, SIZE_T size)
 
 #if SANITIZER_FREEBSD || SANITIZER_APPLE
 #define stdout __stdoutp
@@ -76,6 +81,10 @@ struct ucontext_t {
 #define PTHREAD_ABI_BASE  "GLIBC_2.3.2"
 #elif defined(__aarch64__) || SANITIZER_PPC64V2
 #define PTHREAD_ABI_BASE  "GLIBC_2.17"
+#elif SANITIZER_LOONGARCH64
+#define PTHREAD_ABI_BASE  "GLIBC_2.36"
+#elif SANITIZER_RISCV64
+#  define PTHREAD_ABI_BASE "GLIBC_2.27"
 #endif
 
 extern "C" int pthread_attr_init(void *attr);
@@ -88,7 +97,7 @@ extern "C" int pthread_key_create(unsigned *key, void (*destructor)(void* v));
 extern "C" int pthread_setspecific(unsigned key, const void *v);
 DECLARE_REAL(int, pthread_mutexattr_gettype, void *, void *)
 DECLARE_REAL(int, fflush, __sanitizer_FILE *fp)
-DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, uptr size)
+DECLARE_REAL_AND_INTERCEPTOR(void *, malloc, usize size)
 DECLARE_REAL_AND_INTERCEPTOR(void, free, void *ptr)
 extern "C" int pthread_equal(void *t1, void *t2);
 extern "C" void *pthread_self();
@@ -126,6 +135,9 @@ const int SIGSYS = 12;
 const int SIGBUS = 7;
 const int SIGSYS = 31;
 #endif
+#if SANITIZER_HAS_SIGINFO
+const int SI_TIMER = -2;
+#endif
 void *const MAP_FAILED = (void*)-1;
 #if SANITIZER_NETBSD
 const int PTHREAD_BARRIER_SERIAL_THREAD = 1234567;
@@ -152,9 +164,6 @@ const int SIG_SETMASK = 3;
 const int SA_SIGINFO = 4;
 const int SIG_SETMASK = 2;
 #endif
-
-#define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED \
-  (!cur_thread_init()->is_inited)
 
 namespace __tsan {
 struct SignalDesc {
@@ -200,7 +209,7 @@ struct AtExitCtx {
 struct InterceptorContext {
   // The object is 64-byte aligned, because we want hot data to be located
   // in a single cache line if possible (it's accessed in every interceptor).
-  ALIGNED(64) LibIgnore libignore;
+  alignas(64) LibIgnore libignore;
   __sanitizer_sigaction sigactions[kSigCount];
 #if !SANITIZER_APPLE && !SANITIZER_NETBSD
   unsigned finalize_key;
@@ -212,7 +221,7 @@ struct InterceptorContext {
   InterceptorContext() : libignore(LINKER_INITIALIZED), atexit_mu(MutexTypeAtExit), AtExitStack() {}
 };
 
-static ALIGNED(64) char interceptor_placeholder[sizeof(InterceptorContext)];
+alignas(64) static char interceptor_placeholder[sizeof(InterceptorContext)];
 InterceptorContext *interceptor_ctx() {
   return reinterpret_cast<InterceptorContext*>(&interceptor_placeholder[0]);
 }
@@ -244,16 +253,31 @@ SANITIZER_WEAK_CXX_DEFAULT_IMPL void OnPotentiallyBlockingRegionBegin() {}
 SANITIZER_WEAK_CXX_DEFAULT_IMPL void OnPotentiallyBlockingRegionEnd() {}
 #endif
 
+// FIXME: Use for `in_symbolizer()` as well. As-is we can't use
+// `DlSymAllocator`, because it uses the primary allocator only. Symbolizer
+// requires support of the secondary allocator for larger blocks.
+struct DlsymAlloc : public DlSymAllocator<DlsymAlloc> {
+  static bool UseImpl() { return (ctx && !ctx->initialized); }
+};
+
 }  // namespace __tsan
 
 static ThreadSignalContext *SigCtx(ThreadState *thr) {
-  ThreadSignalContext *ctx = (ThreadSignalContext*)thr->signal_ctx;
+  // This function may be called reentrantly if it is interrupted by a signal
+  // handler. Use CAS to handle the race.
+  uptr ctx = atomic_load(&thr->signal_ctx, memory_order_relaxed);
   if (ctx == 0 && !thr->is_dead) {
-    ctx = (ThreadSignalContext*)MmapOrDie(sizeof(*ctx), "ThreadSignalContext");
-    MemoryResetRange(thr, (uptr)&SigCtx, (uptr)ctx, sizeof(*ctx));
-    thr->signal_ctx = ctx;
+    uptr pctx =
+        (uptr)MmapOrDie(sizeof(ThreadSignalContext), "ThreadSignalContext");
+    MemoryResetRange(thr, (uptr)&SigCtx, pctx, sizeof(ThreadSignalContext));
+    if (atomic_compare_exchange_strong(&thr->signal_ctx, &ctx, pctx,
+                                       memory_order_relaxed)) {
+      ctx = pctx;
+    } else {
+      UnmapOrDie((ThreadSignalContext *)pctx, sizeof(ThreadSignalContext));
+    }
   }
-  return ctx;
+  return (ThreadSignalContext *)ctx;
 }
 
 ScopedInterceptor::ScopedInterceptor(ThreadState *thr, const char *fname,
@@ -581,58 +605,27 @@ TSAN_INTERCEPTOR(int, sigsetjmp, void *env);
 #define sigsetjmp_symname sigsetjmp
 #endif
 
-#define TSAN_INTERCEPTOR_SETJMP_(x) __interceptor_ ## x
-#define TSAN_INTERCEPTOR_SETJMP__(x) TSAN_INTERCEPTOR_SETJMP_(x)
-#define TSAN_INTERCEPTOR_SETJMP TSAN_INTERCEPTOR_SETJMP__(setjmp_symname)
-#define TSAN_INTERCEPTOR_SIGSETJMP TSAN_INTERCEPTOR_SETJMP__(sigsetjmp_symname)
-
-#define TSAN_STRING_SETJMP SANITIZER_STRINGIFY(setjmp_symname)
-#define TSAN_STRING_SIGSETJMP SANITIZER_STRINGIFY(sigsetjmp_symname)
-
-// Not called.  Merely to satisfy TSAN_INTERCEPT().
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-int TSAN_INTERCEPTOR_SETJMP(void *env);
-extern "C" int TSAN_INTERCEPTOR_SETJMP(void *env) {
-  CHECK(0);
-  return 0;
-}
-
-// FIXME: any reason to have a separate declaration?
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-int __interceptor__setjmp(void *env);
-extern "C" int __interceptor__setjmp(void *env) {
-  CHECK(0);
-  return 0;
-}
-
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-int TSAN_INTERCEPTOR_SIGSETJMP(void *env);
-extern "C" int TSAN_INTERCEPTOR_SIGSETJMP(void *env) {
-  CHECK(0);
-  return 0;
-}
-
-#if !SANITIZER_NETBSD
-extern "C" SANITIZER_INTERFACE_ATTRIBUTE
-int __interceptor___sigsetjmp(void *env);
-extern "C" int __interceptor___sigsetjmp(void *env) {
-  CHECK(0);
-  return 0;
-}
-#endif
-
-extern "C" int setjmp_symname(void *env);
-extern "C" int _setjmp(void *env);
-extern "C" int sigsetjmp_symname(void *env);
-#if !SANITIZER_NETBSD
-extern "C" int __sigsetjmp(void *env);
-#endif
 DEFINE_REAL(int, setjmp_symname, void *env)
 DEFINE_REAL(int, _setjmp, void *env)
 DEFINE_REAL(int, sigsetjmp_symname, void *env)
 #if !SANITIZER_NETBSD
 DEFINE_REAL(int, __sigsetjmp, void *env)
 #endif
+
+// The real interceptor for setjmp is special, and implemented in pure asm. We
+// just need to initialize the REAL functions so that they can be used in asm.
+static void InitializeSetjmpInterceptors() {
+  // We can not use TSAN_INTERCEPT to get setjmp addr, because it does &setjmp and
+  // setjmp is not present in some versions of libc.
+  using __interception::InterceptFunction;
+  InterceptFunction(SANITIZER_STRINGIFY(setjmp_symname), (uptr*)&REAL(setjmp_symname), 0, 0);
+  InterceptFunction("_setjmp", (uptr*)&REAL(_setjmp), 0, 0);
+  InterceptFunction(SANITIZER_STRINGIFY(sigsetjmp_symname), (uptr*)&REAL(sigsetjmp_symname), 0,
+                    0);
+#if !SANITIZER_NETBSD
+  InterceptFunction("__sigsetjmp", (uptr*)&REAL(__sigsetjmp), 0, 0);
+#endif
+}
 #endif  // SANITIZER_APPLE
 
 #if SANITIZER_NETBSD
@@ -676,6 +669,8 @@ TSAN_INTERCEPTOR(void, _longjmp, uptr *env, int val) {
 TSAN_INTERCEPTOR(void*, malloc, uptr size) {
   if (in_symbolizer())
     return InternalAlloc(size);
+  if (DlsymAlloc::Use())
+    return DlsymAlloc::Allocate(size);
   void *p = 0;
   {
     SCOPED_INTERCEPTOR_RAW(malloc, size);
@@ -693,12 +688,14 @@ TSAN_INTERCEPTOR(void*, __libc_memalign, uptr align, uptr sz) {
   return user_memalign(thr, pc, align, sz);
 }
 
-TSAN_INTERCEPTOR(void*, calloc, uptr size, uptr n) {
+TSAN_INTERCEPTOR(void *, calloc, uptr n, uptr size) {
   if (in_symbolizer())
-    return InternalCalloc(size, n);
+    return InternalCalloc(n, size);
+  if (DlsymAlloc::Use())
+    return DlsymAlloc::Callocate(n, size);
   void *p = 0;
   {
-    SCOPED_INTERCEPTOR_RAW(calloc, size, n);
+    SCOPED_INTERCEPTOR_RAW(calloc, n, size);
     p = user_calloc(thr, pc, size, n);
   }
   invoke_malloc_hook(p, n * size);
@@ -708,6 +705,8 @@ TSAN_INTERCEPTOR(void*, calloc, uptr size, uptr n) {
 TSAN_INTERCEPTOR(void*, realloc, void *p, uptr size) {
   if (in_symbolizer())
     return InternalRealloc(p, size);
+  if (DlsymAlloc::Use() || DlsymAlloc::PointerIsMine(p))
+    return DlsymAlloc::Realloc(p, size);
   if (p)
     invoke_free_hook(p);
   {
@@ -718,13 +717,13 @@ TSAN_INTERCEPTOR(void*, realloc, void *p, uptr size) {
   return p;
 }
 
-TSAN_INTERCEPTOR(void*, reallocarray, void *p, uptr size, uptr n) {
+TSAN_INTERCEPTOR(void *, reallocarray, void *p, uptr n, uptr size) {
   if (in_symbolizer())
-    return InternalReallocArray(p, size, n);
+    return InternalReallocArray(p, n, size);
   if (p)
     invoke_free_hook(p);
   {
-    SCOPED_INTERCEPTOR_RAW(reallocarray, p, size, n);
+    SCOPED_INTERCEPTOR_RAW(reallocarray, p, n, size);
     p = user_reallocarray(thr, pc, p, size, n);
   }
   invoke_malloc_hook(p, size);
@@ -732,20 +731,24 @@ TSAN_INTERCEPTOR(void*, reallocarray, void *p, uptr size, uptr n) {
 }
 
 TSAN_INTERCEPTOR(void, free, void *p) {
-  if (p == 0)
+  if (UNLIKELY(!p))
     return;
   if (in_symbolizer())
     return InternalFree(p);
+  if (DlsymAlloc::PointerIsMine(p))
+    return DlsymAlloc::Free(p);
   invoke_free_hook(p);
   SCOPED_INTERCEPTOR_RAW(free, p);
   user_free(thr, pc, p);
 }
 
 TSAN_INTERCEPTOR(void, cfree, void *p) {
-  if (p == 0)
+  if (UNLIKELY(!p))
     return;
   if (in_symbolizer())
     return InternalFree(p);
+  if (DlsymAlloc::PointerIsMine(p))
+    return DlsymAlloc::Free(p);
   invoke_free_hook(p);
   SCOPED_INTERCEPTOR_RAW(cfree, p);
   user_free(thr, pc, p);
@@ -765,7 +768,7 @@ TSAN_INTERCEPTOR(char *, strcpy, char *dst, const char *src) {
   return REAL(strcpy)(dst, src);
 }
 
-TSAN_INTERCEPTOR(char*, strncpy, char *dst, char *src, uptr n) {
+TSAN_INTERCEPTOR(char*, strncpy, char *dst, char *src, usize n) {
   SCOPED_TSAN_INTERCEPTOR(strncpy, dst, src, n);
   uptr srclen = internal_strnlen(src, n);
   MemoryAccessRange(thr, pc, (uptr)dst, n, true);
@@ -813,10 +816,11 @@ static void *mmap_interceptor(ThreadState *thr, uptr pc, Mmap real_mmap,
   return res;
 }
 
-TSAN_INTERCEPTOR(int, munmap, void *addr, long_t sz) {
-  SCOPED_TSAN_INTERCEPTOR(munmap, addr, sz);
+template <class Munmap>
+static int munmap_interceptor(ThreadState *thr, uptr pc, Munmap real_munmap,
+                                void *addr, SIZE_T sz) {
   UnmapShadow(thr, (uptr)addr, sz);
-  int res = REAL(munmap)(addr, sz);
+  int res = real_munmap(addr, sz);
   return res;
 }
 
@@ -968,9 +972,10 @@ void DestroyThreadState() {
 }
 
 void PlatformCleanUpThreadState(ThreadState *thr) {
-  ThreadSignalContext *sctx = thr->signal_ctx;
+  ThreadSignalContext *sctx = (ThreadSignalContext *)atomic_load(
+      &thr->signal_ctx, memory_order_relaxed);
   if (sctx) {
-    thr->signal_ctx = 0;
+    atomic_store(&thr->signal_ctx, 0, memory_order_relaxed);
     UnmapOrDie(sctx, sizeof(*sctx));
   }
 }
@@ -1101,7 +1106,18 @@ TSAN_INTERCEPTOR(int, pthread_join, void *th, void **ret) {
   return res;
 }
 
-DEFINE_REAL_PTHREAD_FUNCTIONS
+// DEFINE_INTERNAL_PTHREAD_FUNCTIONS
+namespace __sanitizer {
+int internal_pthread_create(void *th, void *attr, void *(*callback)(void *),
+                            void *param) {
+  ScopedIgnoreInterceptors ignore;
+  return REAL(pthread_create)(th, attr, callback, param);
+}
+int internal_pthread_join(void *th, void **ret) {
+  ScopedIgnoreInterceptors ignore;
+  return REAL(pthread_join)(th, ret);
+}
+}  // namespace __sanitizer
 
 TSAN_INTERCEPTOR(int, pthread_detach, void *th) {
   SCOPED_INTERCEPTOR_RAW(pthread_detach, th);
@@ -1351,6 +1367,19 @@ TSAN_INTERCEPTOR(int, pthread_mutex_destroy, void *m) {
   return res;
 }
 
+TSAN_INTERCEPTOR(int, pthread_mutex_lock, void *m) {
+  SCOPED_TSAN_INTERCEPTOR(pthread_mutex_lock, m);
+  MutexPreLock(thr, pc, (uptr)m);
+  int res = BLOCK_REAL(pthread_mutex_lock)(m);
+  if (res == errno_EOWNERDEAD)
+    MutexRepair(thr, pc, (uptr)m);
+  if (res == 0 || res == errno_EOWNERDEAD)
+    MutexPostLock(thr, pc, (uptr)m);
+  if (res == errno_EINVAL)
+    MutexInvalidAccess(thr, pc, (uptr)m);
+  return res;
+}
+
 TSAN_INTERCEPTOR(int, pthread_mutex_trylock, void *m) {
   SCOPED_TSAN_INTERCEPTOR(pthread_mutex_trylock, m);
   int res = REAL(pthread_mutex_trylock)(m);
@@ -1370,6 +1399,59 @@ TSAN_INTERCEPTOR(int, pthread_mutex_timedlock, void *m, void *abstime) {
   }
   return res;
 }
+#endif
+
+TSAN_INTERCEPTOR(int, pthread_mutex_unlock, void *m) {
+  SCOPED_TSAN_INTERCEPTOR(pthread_mutex_unlock, m);
+  MutexUnlock(thr, pc, (uptr)m);
+  int res = REAL(pthread_mutex_unlock)(m);
+  if (res == errno_EINVAL)
+    MutexInvalidAccess(thr, pc, (uptr)m);
+  return res;
+}
+
+#if SANITIZER_LINUX
+TSAN_INTERCEPTOR(int, pthread_mutex_clocklock, void *m,
+                 __sanitizer_clockid_t clock, void *abstime) {
+  SCOPED_TSAN_INTERCEPTOR(pthread_mutex_clocklock, m, clock, abstime);
+  MutexPreLock(thr, pc, (uptr)m);
+  int res = BLOCK_REAL(pthread_mutex_clocklock)(m, clock, abstime);
+  if (res == errno_EOWNERDEAD)
+    MutexRepair(thr, pc, (uptr)m);
+  if (res == 0 || res == errno_EOWNERDEAD)
+    MutexPostLock(thr, pc, (uptr)m);
+  if (res == errno_EINVAL)
+    MutexInvalidAccess(thr, pc, (uptr)m);
+  return res;
+}
+#endif
+
+#if SANITIZER_GLIBC
+#  if !__GLIBC_PREREQ(2, 34)
+// glibc 2.34 applies a non-default version for the two functions. They are no
+// longer expected to be intercepted by programs.
+TSAN_INTERCEPTOR(int, __pthread_mutex_lock, void *m) {
+  SCOPED_TSAN_INTERCEPTOR(__pthread_mutex_lock, m);
+  MutexPreLock(thr, pc, (uptr)m);
+  int res = BLOCK_REAL(__pthread_mutex_lock)(m);
+  if (res == errno_EOWNERDEAD)
+    MutexRepair(thr, pc, (uptr)m);
+  if (res == 0 || res == errno_EOWNERDEAD)
+    MutexPostLock(thr, pc, (uptr)m);
+  if (res == errno_EINVAL)
+    MutexInvalidAccess(thr, pc, (uptr)m);
+  return res;
+}
+
+TSAN_INTERCEPTOR(int, __pthread_mutex_unlock, void *m) {
+  SCOPED_TSAN_INTERCEPTOR(__pthread_mutex_unlock, m);
+  MutexUnlock(thr, pc, (uptr)m);
+  int res = REAL(__pthread_mutex_unlock)(m);
+  if (res == errno_EINVAL)
+    MutexInvalidAccess(thr, pc, (uptr)m);
+  return res;
+}
+#  endif
 #endif
 
 #if !SANITIZER_APPLE
@@ -1394,7 +1476,7 @@ TSAN_INTERCEPTOR(int, pthread_spin_destroy, void *m) {
 TSAN_INTERCEPTOR(int, pthread_spin_lock, void *m) {
   SCOPED_TSAN_INTERCEPTOR(pthread_spin_lock, m);
   MutexPreLock(thr, pc, (uptr)m);
-  int res = REAL(pthread_spin_lock)(m);
+  int res = BLOCK_REAL(pthread_spin_lock)(m);
   if (res == 0) {
     MutexPostLock(thr, pc, (uptr)m);
   }
@@ -1469,7 +1551,7 @@ TSAN_INTERCEPTOR(int, pthread_rwlock_timedrdlock, void *m, void *abstime) {
 TSAN_INTERCEPTOR(int, pthread_rwlock_wrlock, void *m) {
   SCOPED_TSAN_INTERCEPTOR(pthread_rwlock_wrlock, m);
   MutexPreLock(thr, pc, (uptr)m);
-  int res = REAL(pthread_rwlock_wrlock)(m);
+  int res = BLOCK_REAL(pthread_rwlock_wrlock)(m);
   if (res == 0) {
     MutexPostLock(thr, pc, (uptr)m);
   }
@@ -1561,57 +1643,60 @@ TSAN_INTERCEPTOR(int, __fxstat, int version, int fd, void *buf) {
     FdAccess(thr, pc, fd);
   return REAL(__fxstat)(version, fd, buf);
 }
-#define TSAN_MAYBE_INTERCEPT___FXSTAT TSAN_INTERCEPT(__fxstat)
-#else
-#define TSAN_MAYBE_INTERCEPT___FXSTAT
-#endif
 
-TSAN_INTERCEPTOR(int, fstat, int fd, void *buf) {
-#if SANITIZER_GLIBC
-  SCOPED_TSAN_INTERCEPTOR(__fxstat, 0, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(__fxstat)(0, fd, buf);
-#else
-  SCOPED_TSAN_INTERCEPTOR(fstat, fd, buf);
-  if (fd > 0)
-    FdAccess(thr, pc, fd);
-  return REAL(fstat)(fd, buf);
-#endif
-}
-
-#if SANITIZER_GLIBC
 TSAN_INTERCEPTOR(int, __fxstat64, int version, int fd, void *buf) {
   SCOPED_TSAN_INTERCEPTOR(__fxstat64, version, fd, buf);
   if (fd > 0)
     FdAccess(thr, pc, fd);
   return REAL(__fxstat64)(version, fd, buf);
 }
-#define TSAN_MAYBE_INTERCEPT___FXSTAT64 TSAN_INTERCEPT(__fxstat64)
+#define TSAN_MAYBE_INTERCEPT___FXSTAT TSAN_INTERCEPT(__fxstat); TSAN_INTERCEPT(__fxstat64)
 #else
-#define TSAN_MAYBE_INTERCEPT___FXSTAT64
+#define TSAN_MAYBE_INTERCEPT___FXSTAT
 #endif
 
-#if SANITIZER_GLIBC
-TSAN_INTERCEPTOR(int, fstat64, int fd, void *buf) {
-  SCOPED_TSAN_INTERCEPTOR(__fxstat64, 0, fd, buf);
+#if !SANITIZER_GLIBC || __GLIBC_PREREQ(2, 33)
+TSAN_INTERCEPTOR(int, fstat, int fd, void *buf) {
+  SCOPED_TSAN_INTERCEPTOR(fstat, fd, buf);
   if (fd > 0)
     FdAccess(thr, pc, fd);
-  return REAL(__fxstat64)(0, fd, buf);
+  return REAL(fstat)(fd, buf);
 }
-#define TSAN_MAYBE_INTERCEPT_FSTAT64 TSAN_INTERCEPT(fstat64)
+#  define TSAN_MAYBE_INTERCEPT_FSTAT TSAN_INTERCEPT(fstat)
 #else
-#define TSAN_MAYBE_INTERCEPT_FSTAT64
+#  define TSAN_MAYBE_INTERCEPT_FSTAT
+#endif
+
+#if __GLIBC_PREREQ(2, 33)
+TSAN_INTERCEPTOR(int, fstat64, int fd, void *buf) {
+  SCOPED_TSAN_INTERCEPTOR(fstat64, fd, buf);
+  if (fd > 0)
+    FdAccess(thr, pc, fd);
+  return REAL(fstat64)(fd, buf);
+}
+#  define TSAN_MAYBE_INTERCEPT_FSTAT64 TSAN_INTERCEPT(fstat64)
+#else
+#  define TSAN_MAYBE_INTERCEPT_FSTAT64
 #endif
 
 TSAN_INTERCEPTOR(int, open, const char *name, int oflag, ...) {
-  va_list ap;
-  va_start(ap, oflag);
-  mode_t mode = va_arg(ap, int);
-  va_end(ap);
+  mode_t mode = 0;
+  if (OpenReadsVaArgs(oflag)) {
+    va_list ap;
+    va_start(ap, oflag);
+    mode = va_arg(ap, int);
+    va_end(ap);
+  }
+
   SCOPED_TSAN_INTERCEPTOR(open, name, oflag, mode);
   READ_STRING(thr, pc, name, 0);
-  int fd = REAL(open)(name, oflag, mode);
+
+  int fd;
+  if (OpenReadsVaArgs(oflag))
+    fd = REAL(open)(name, oflag, mode);
+  else
+    fd = REAL(open)(name, oflag);
+
   if (fd >= 0)
     FdFileCreate(thr, pc, fd);
   return fd;
@@ -1943,12 +2028,34 @@ TSAN_INTERCEPTOR(int, epoll_pwait, int epfd, void *ev, int cnt, int timeout,
   return res;
 }
 
-#define TSAN_MAYBE_INTERCEPT_EPOLL \
-    TSAN_INTERCEPT(epoll_create); \
-    TSAN_INTERCEPT(epoll_create1); \
-    TSAN_INTERCEPT(epoll_ctl); \
-    TSAN_INTERCEPT(epoll_wait); \
-    TSAN_INTERCEPT(epoll_pwait)
+TSAN_INTERCEPTOR(int, epoll_pwait2, int epfd, void *ev, int cnt, void *timeout,
+                 void *sigmask) {
+  SCOPED_INTERCEPTOR_RAW(epoll_pwait2, epfd, ev, cnt, timeout, sigmask);
+  // This function is new and may not be present in libc and/or kernel.
+  // Since we effectively add it to libc (as will be probed by the program
+  // using dlsym or a weak function pointer) we need to handle the case
+  // when it's not present in the actual libc.
+  if (!REAL(epoll_pwait2)) {
+    errno = errno_ENOSYS;
+    return -1;
+  }
+  if (MustIgnoreInterceptor(thr))
+    REAL(epoll_pwait2)(epfd, ev, cnt, timeout, sigmask);
+  if (epfd >= 0)
+    FdAccess(thr, pc, epfd);
+  int res = BLOCK_REAL(epoll_pwait2)(epfd, ev, cnt, timeout, sigmask);
+  if (res > 0 && epfd >= 0)
+    FdAcquire(thr, pc, epfd);
+  return res;
+}
+
+#  define TSAN_MAYBE_INTERCEPT_EPOLL \
+    TSAN_INTERCEPT(epoll_create);    \
+    TSAN_INTERCEPT(epoll_create1);   \
+    TSAN_INTERCEPT(epoll_ctl);       \
+    TSAN_INTERCEPT(epoll_wait);      \
+    TSAN_INTERCEPT(epoll_pwait);     \
+    TSAN_INTERCEPT(epoll_pwait2)
 #else
 #define TSAN_MAYBE_INTERCEPT_EPOLL
 #endif
@@ -2082,11 +2189,19 @@ void ProcessPendingSignalsImpl(ThreadState *thr) {
 
 }  // namespace __tsan
 
-static bool is_sync_signal(ThreadSignalContext *sctx, int sig) {
+static bool is_sync_signal(ThreadSignalContext *sctx, int sig,
+                           __sanitizer_siginfo *info) {
+  // If we are sending signal to ourselves, we must process it now.
+  if (sctx && sig == sctx->int_signal_send)
+    return true;
+#if SANITIZER_HAS_SIGINFO
+  // POSIX timers can be configured to send any kind of signal; however, it
+  // doesn't make any sense to consider a timer signal as synchronous!
+  if (info->si_code == SI_TIMER)
+    return false;
+#endif
   return sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGTRAP ||
-         sig == SIGABRT || sig == SIGFPE || sig == SIGPIPE || sig == SIGSYS ||
-         // If we are sending signal to ourselves, we must process it now.
-         (sctx && sig == sctx->int_signal_send);
+         sig == SIGABRT || sig == SIGFPE || sig == SIGPIPE || sig == SIGSYS;
 }
 
 void sighandler(int sig, __sanitizer_siginfo *info, void *ctx) {
@@ -2097,7 +2212,7 @@ void sighandler(int sig, __sanitizer_siginfo *info, void *ctx) {
     return;
   }
   // Don't mess with synchronous signals.
-  const bool sync = is_sync_signal(sctx, sig);
+  const bool sync = is_sync_signal(sctx, sig, info);
   if (sync ||
       // If we are in blocking function, we can safely process it now
       // (but check if we are in a recursive interceptor,
@@ -2328,11 +2443,6 @@ static int OnExit(ThreadState *thr) {
   return status;
 }
 
-struct TsanInterceptorContext {
-  ThreadState *thr;
-  const uptr pc;
-};
-
 #if !SANITIZER_APPLE
 static void HandleRecvmsg(ThreadState *thr, uptr pc,
     __sanitizer_msghdr *msg) {
@@ -2354,27 +2464,10 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
 #define SANITIZER_INTERCEPT_TLS_GET_OFFSET 1
 #undef SANITIZER_INTERCEPT_PTHREAD_SIGMASK
 
-#define COMMON_INTERCEPT_FUNCTION(name) INTERCEPT_FUNCTION(name)
 #define COMMON_INTERCEPT_FUNCTION_VER(name, ver)                          \
   INTERCEPT_FUNCTION_VER(name, ver)
 #define COMMON_INTERCEPT_FUNCTION_VER_UNVERSIONED_FALLBACK(name, ver) \
   (INTERCEPT_FUNCTION_VER(name, ver) || INTERCEPT_FUNCTION(name))
-
-#define COMMON_INTERCEPTOR_WRITE_RANGE(ctx, ptr, size)                    \
-  MemoryAccessRange(((TsanInterceptorContext *)ctx)->thr,                 \
-                    ((TsanInterceptorContext *)ctx)->pc, (uptr)ptr, size, \
-                    true)
-
-#define COMMON_INTERCEPTOR_READ_RANGE(ctx, ptr, size)                       \
-  MemoryAccessRange(((TsanInterceptorContext *) ctx)->thr,                  \
-                    ((TsanInterceptorContext *) ctx)->pc, (uptr) ptr, size, \
-                    false)
-
-#define COMMON_INTERCEPTOR_ENTER(ctx, func, ...) \
-  SCOPED_TSAN_INTERCEPTOR(func, __VA_ARGS__);    \
-  TsanInterceptorContext _ctx = {thr, pc};       \
-  ctx = (void *)&_ctx;                           \
-  (void)ctx;
 
 #define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, func, ...) \
   SCOPED_INTERCEPTOR_RAW(func, __VA_ARGS__);              \
@@ -2405,11 +2498,21 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
     res;                                          \
   })
 
+// Ignore interceptors in OnLibraryLoaded()/Unloaded().  These hooks use code
+// (ListOfModules::init, MemoryMappingLayout::DumpListOfModules) that make
+// intercepted calls, which can cause deadlockes with ReportRace() which also
+// uses this code.
 #define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, handle) \
-  libignore()->OnLibraryLoaded(filename)
+  ({                                                        \
+    ScopedIgnoreInterceptors ignore_interceptors;           \
+    libignore()->OnLibraryLoaded(filename);                 \
+  })
 
-#define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() \
-  libignore()->OnLibraryUnloaded()
+#define COMMON_INTERCEPTOR_LIBRARY_UNLOADED()     \
+  ({                                              \
+    ScopedIgnoreInterceptors ignore_interceptors; \
+    libignore()->OnLibraryUnloaded();             \
+  })
 
 #define COMMON_INTERCEPTOR_ACQUIRE(ctx, u) \
   Acquire(((TsanInterceptorContext *) ctx)->thr, pc, u)
@@ -2446,31 +2549,16 @@ static void HandleRecvmsg(ThreadState *thr, uptr pc,
 #define COMMON_INTERCEPTOR_ON_EXIT(ctx) \
   OnExit(((TsanInterceptorContext *) ctx)->thr)
 
-#define COMMON_INTERCEPTOR_MUTEX_PRE_LOCK(ctx, m) \
-  MutexPreLock(((TsanInterceptorContext *)ctx)->thr, \
-            ((TsanInterceptorContext *)ctx)->pc, (uptr)m)
-
-#define COMMON_INTERCEPTOR_MUTEX_POST_LOCK(ctx, m) \
-  MutexPostLock(((TsanInterceptorContext *)ctx)->thr, \
-            ((TsanInterceptorContext *)ctx)->pc, (uptr)m)
-
-#define COMMON_INTERCEPTOR_MUTEX_UNLOCK(ctx, m) \
-  MutexUnlock(((TsanInterceptorContext *)ctx)->thr, \
-            ((TsanInterceptorContext *)ctx)->pc, (uptr)m)
-
-#define COMMON_INTERCEPTOR_MUTEX_REPAIR(ctx, m) \
-  MutexRepair(((TsanInterceptorContext *)ctx)->thr, \
-            ((TsanInterceptorContext *)ctx)->pc, (uptr)m)
-
-#define COMMON_INTERCEPTOR_MUTEX_INVALID(ctx, m) \
-  MutexInvalidAccess(((TsanInterceptorContext *)ctx)->thr, \
-                     ((TsanInterceptorContext *)ctx)->pc, (uptr)m)
-
 #define COMMON_INTERCEPTOR_MMAP_IMPL(ctx, mmap, addr, sz, prot, flags, fd,  \
                                      off)                                   \
   do {                                                                      \
     return mmap_interceptor(thr, pc, REAL(mmap), addr, sz, prot, flags, fd, \
                             off);                                           \
+  } while (false)
+
+#define COMMON_INTERCEPTOR_MUNMAP_IMPL(ctx, addr, sz)           \
+  do {                                                          \
+    return munmap_interceptor(thr, pc, REAL(munmap), addr, sz); \
   } while (false)
 
 #if !SANITIZER_APPLE
@@ -2506,6 +2594,8 @@ static __sanitizer_sighandler_ptr signal_impl(int sig,
 #define SIGNAL_INTERCEPTOR_SIGNAL_IMPL(func, signo, handler) \
   { return (uptr)signal_impl(signo, (__sanitizer_sighandler_ptr)handler); }
 
+#define SIGNAL_INTERCEPTOR_ENTER() LazyInitialize(cur_thread_init())
+
 #include "sanitizer_common/sanitizer_signal_interceptors.inc"
 
 int sigaction_impl(int sig, const __sanitizer_sigaction *act,
@@ -2526,7 +2616,7 @@ int sigaction_impl(int sig, const __sanitizer_sigaction *act,
     // Copy act into sigactions[sig].
     // Can't use struct copy, because compiler can emit call to memcpy.
     // Can't use internal_memcpy, because it copies byte-by-byte,
-    // and signal handler reads the handler concurrently. It it can read
+    // and signal handler reads the handler concurrently. It can read
     // some bytes from old value and some bytes from new value.
     // Use volatile to prevent insertion of memcpy.
     sigactions[sig].handler =
@@ -2616,6 +2706,25 @@ static USED void syscall_fd_release(uptr pc, int fd) {
   FdRelease(thr, pc, fd);
 }
 
+static USED void sycall_blocking_start() {
+  DPrintf("sycall_blocking_start()\n");
+  ThreadState *thr = cur_thread();
+  EnterBlockingFunc(thr);
+  // When we are in a "blocking call", we process signals asynchronously
+  // (right when they arrive). In this context we do not expect to be
+  // executing any user/runtime code. The known interceptor sequence when
+  // this is not true is: pthread_join -> munmap(stack). It's fine
+  // to ignore munmap in this case -- we handle stack shadow separately.
+  thr->ignore_interceptors++;
+}
+
+static USED void sycall_blocking_end() {
+  DPrintf("sycall_blocking_end()\n");
+  ThreadState *thr = cur_thread();
+  thr->ignore_interceptors--;
+  atomic_store(&thr->in_blocking_func, 0, memory_order_relaxed);
+}
+
 static void syscall_pre_fork(uptr pc) { ForkBefore(cur_thread(), pc); }
 
 static void syscall_post_fork(uptr pc, int pid) {
@@ -2669,6 +2778,9 @@ static void syscall_post_fork(uptr pc, int pid) {
 
 #define COMMON_SYSCALL_POST_FORK(res) \
   syscall_post_fork(GET_CALLER_PC(), res)
+
+#define COMMON_SYSCALL_BLOCKING_START() sycall_blocking_start()
+#define COMMON_SYSCALL_BLOCKING_END() sycall_blocking_end()
 
 #include "sanitizer_common/sanitizer_common_syscalls.inc"
 #include "sanitizer_common/sanitizer_syscalls_netbsd.inc"
@@ -2762,7 +2874,9 @@ TSAN_INTERCEPTOR_NETBSD_ALIAS(int, cond_wait, void *c, void *m)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, cond_destroy, void *c)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, mutex_init, void *m, void *a)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, mutex_destroy, void *m)
+TSAN_INTERCEPTOR_NETBSD_ALIAS(int, mutex_lock, void *m)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, mutex_trylock, void *m)
+TSAN_INTERCEPTOR_NETBSD_ALIAS(int, mutex_unlock, void *m)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, rwlock_init, void *m, void *a)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, rwlock_destroy, void *m)
 TSAN_INTERCEPTOR_NETBSD_ALIAS(int, rwlock_rdlock, void *m)
@@ -2802,23 +2916,27 @@ void InitializeInterceptors() {
   REAL(memcpy) = internal_memcpy;
 #endif
 
+  __interception::DoesNotSupportStaticLinking();
+
   new(interceptor_ctx()) InterceptorContext();
 
+  // Interpose __tls_get_addr before the common interposers. This is needed
+  // because dlsym() may call malloc on failure which could result in other
+  // interposed functions being called that could eventually make use of TLS.
+#ifdef NEED_TLS_GET_ADDR
+#  if !SANITIZER_S390
+  TSAN_INTERCEPT(__tls_get_addr);
+#  else
+  TSAN_INTERCEPT(__tls_get_addr_internal);
+  TSAN_INTERCEPT(__tls_get_offset);
+#  endif
+#endif
   InitializeCommonInterceptors();
   InitializeSignalInterceptors();
   InitializeLibdispatchInterceptors();
 
 #if !SANITIZER_APPLE
-  // We can not use TSAN_INTERCEPT to get setjmp addr,
-  // because it does &setjmp and setjmp is not present in some versions of libc.
-  using __interception::InterceptFunction;
-  InterceptFunction(TSAN_STRING_SETJMP, (uptr*)&REAL(setjmp_symname), 0, 0);
-  InterceptFunction("_setjmp", (uptr*)&REAL(_setjmp), 0, 0);
-  InterceptFunction(TSAN_STRING_SIGSETJMP, (uptr*)&REAL(sigsetjmp_symname), 0,
-                    0);
-#if !SANITIZER_NETBSD
-  InterceptFunction("__sigsetjmp", (uptr*)&REAL(__sigsetjmp), 0, 0);
-#endif
+  InitializeSetjmpInterceptors();
 #endif
 
   TSAN_INTERCEPT(longjmp_symname);
@@ -2864,8 +2982,19 @@ void InitializeInterceptors() {
 
   TSAN_INTERCEPT(pthread_mutex_init);
   TSAN_INTERCEPT(pthread_mutex_destroy);
+  TSAN_INTERCEPT(pthread_mutex_lock);
   TSAN_INTERCEPT(pthread_mutex_trylock);
   TSAN_INTERCEPT(pthread_mutex_timedlock);
+  TSAN_INTERCEPT(pthread_mutex_unlock);
+#if SANITIZER_LINUX
+  TSAN_INTERCEPT(pthread_mutex_clocklock);
+#endif
+#if SANITIZER_GLIBC
+#  if !__GLIBC_PREREQ(2, 34)
+  TSAN_INTERCEPT(__pthread_mutex_lock);
+  TSAN_INTERCEPT(__pthread_mutex_unlock);
+#  endif
+#endif
 
   TSAN_INTERCEPT(pthread_spin_init);
   TSAN_INTERCEPT(pthread_spin_destroy);
@@ -2889,10 +3018,9 @@ void InitializeInterceptors() {
 
   TSAN_INTERCEPT(pthread_once);
 
-  TSAN_INTERCEPT(fstat);
   TSAN_MAYBE_INTERCEPT___FXSTAT;
+  TSAN_MAYBE_INTERCEPT_FSTAT;
   TSAN_MAYBE_INTERCEPT_FSTAT64;
-  TSAN_MAYBE_INTERCEPT___FXSTAT64;
   TSAN_INTERCEPT(open);
   TSAN_MAYBE_INTERCEPT_OPEN64;
   TSAN_INTERCEPT(creat);
@@ -2949,15 +3077,6 @@ void InitializeInterceptors() {
   TSAN_INTERCEPT(__cxa_atexit);
   TSAN_INTERCEPT(_exit);
 
-#ifdef NEED_TLS_GET_ADDR
-#if !SANITIZER_S390
-  TSAN_INTERCEPT(__tls_get_addr);
-#else
-  TSAN_INTERCEPT(__tls_get_addr_internal);
-  TSAN_INTERCEPT(__tls_get_offset);
-#endif
-#endif
-
   TSAN_MAYBE_INTERCEPT__LWP_EXIT;
   TSAN_MAYBE_INTERCEPT_THR_EXIT;
 
@@ -3010,7 +3129,9 @@ void InitializeInterceptors() {
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(cond_destroy);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(mutex_init);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(mutex_destroy);
+  TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(mutex_lock);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(mutex_trylock);
+  TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(mutex_unlock);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(rwlock_init);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(rwlock_destroy);
   TSAN_MAYBE_INTERCEPT_NETBSD_ALIAS(rwlock_rdlock);
@@ -3075,22 +3196,4 @@ SANITIZER_INTERFACE_ATTRIBUTE void __tsan_testonly_barrier_wait(
   }
 }
 
-void *__tsan_memcpy(void *dst, const void *src, uptr size) {
-  void *ctx;
-#if PLATFORM_HAS_DIFFERENT_MEMCPY_AND_MEMMOVE
-  COMMON_INTERCEPTOR_MEMCPY_IMPL(ctx, dst, src, size);
-#else
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
-#endif
-}
-
-void *__tsan_memset(void *dst, int c, uptr size) {
-  void *ctx;
-  COMMON_INTERCEPTOR_MEMSET_IMPL(ctx, dst, c, size);
-}
-
-void *__tsan_memmove(void *dst, const void *src, uptr size) {
-  void *ctx;
-  COMMON_INTERCEPTOR_MEMMOVE_IMPL(ctx, dst, src, size);
-}
-}
+}  // extern "C"

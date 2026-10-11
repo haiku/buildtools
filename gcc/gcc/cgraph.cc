@@ -1,5 +1,5 @@
 /* Callgraph handling code.
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
    Contributed by Jan Hubicka
 
 This file is part of GCC.
@@ -51,6 +51,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "ipa-utils.h"
 #include "symbol-summary.h"
 #include "tree-vrp.h"
+#include "sreal.h"
+#include "ipa-cp.h"
 #include "ipa-prop.h"
 #include "ipa-fnsummary.h"
 #include "cfgloop.h"
@@ -158,7 +160,7 @@ symtab_node::address_can_be_compared_p ()
      flag_merge_constants permits us to assume the same on readonly vars.  */
   if (is_a <varpool_node *> (this)
       && (DECL_IN_CONSTANT_POOL (decl)
-	  || (flag_merge_constants >= 2
+	  || ((flag_merge_constants >= 2 || DECL_MERGEABLE (decl))
 	      && TREE_READONLY (decl) && !TREE_THIS_VOLATILE (decl))))
     return false;
   return true;
@@ -288,7 +290,7 @@ cgraph_node *
 symbol_table::create_empty (void)
 {
   cgraph_count++;
-  return new (ggc_alloc<cgraph_node> ()) cgraph_node (cgraph_max_uid++);
+  return new (ggc_alloc<cgraph_node> ()) cgraph_node ();
 }
 
 /* Register HOOK to be called with DATA on each removed edge.  */
@@ -892,7 +894,8 @@ symbol_table::create_edge (cgraph_node *caller, cgraph_node *callee,
   edge->m_summary_id = -1;
   edges_count++;
 
-  gcc_assert (++edges_max_uid != 0);
+  ++edges_max_uid;
+  gcc_assert (edges_max_uid != 0);
   edge->m_uid = edges_max_uid;
   edge->aux = NULL;
   edge->caller = caller;
@@ -929,8 +932,6 @@ symbol_table::create_edge (cgraph_node *caller, cgraph_node *callee,
 				      caller->decl);
   else
     edge->in_polymorphic_cdtor = caller->thunk;
-  if (callee)
-    caller->calls_declare_variant_alt |= callee->declare_variant_alt;
 
   if (callee && symtab->state != LTO_STREAMING
       && edge->callee->comdat_local_p ())
@@ -1082,7 +1083,7 @@ cgraph_edge::remove (cgraph_edge *edge)
 
 /* Turn edge into speculative call calling N2. Update
    the profile so the direct call is taken COUNT times
-   with FREQUENCY.  
+   with FREQUENCY.
 
    At clone materialization time, the indirect call E will
    be expanded as:
@@ -1094,7 +1095,7 @@ cgraph_edge::remove (cgraph_edge *edge)
 
    At this time the function just creates the direct call,
    the reference representing the if conditional and attaches
-   them all to the original indirect call statement.  
+   them all to the original indirect call statement.
 
    speculative_id is used to link direct calls with their corresponding
    IPA_REF_ADDR references when representing speculative calls.
@@ -1554,8 +1555,8 @@ cgraph_edge::redirect_call_stmt_to_callee (cgraph_edge *e,
   else
     {
       if (flag_checking
-	  && !fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE)
-	  && !fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE_TRAP))
+	  && !fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE,
+						  BUILT_IN_UNREACHABLE_TRAP))
 	ipa_verify_edge_has_no_modifications (e);
       new_stmt = e->call_stmt;
       gimple_call_set_fndecl (new_stmt, e->callee->decl);
@@ -1639,11 +1640,23 @@ cgraph_update_edges_for_call_stmt_node (cgraph_node *node,
 
       if (e)
 	{
+	  /* If call was devirtualized during cloning, mark edge
+	     as resolved.  */
+	  if (e->speculative)
+	    {
+	      if (new_stmt && is_gimple_call (new_stmt))
+		{
+		  tree decl = gimple_call_fndecl (new_stmt);
+		  if (decl)
+		    e = cgraph_edge::resolve_speculation (e, decl);
+		}
+	      else
+		e = cgraph_edge::resolve_speculation (e, NULL);
+	    }
 	  /* Keep calls marked as dead dead.  */
 	  if (new_stmt && is_gimple_call (new_stmt) && e->callee
-	      && (fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE)
-		  || fndecl_built_in_p (e->callee->decl,
-					BUILT_IN_UNREACHABLE_TRAP)))
+	      && fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE,
+				    BUILT_IN_UNREACHABLE_TRAP))
 	    {
 	      cgraph_edge::set_call_stmt (node->get_edge (old_stmt),
 					  as_a <gcall *> (new_stmt));
@@ -1708,12 +1721,15 @@ cgraph_update_edges_for_call_stmt (gimple *old_stmt, tree old_decl,
   cgraph_node *node;
 
   gcc_checking_assert (orig);
+  gcc_assert (!orig->thunk);
   cgraph_update_edges_for_call_stmt_node (orig, old_stmt, old_decl, new_stmt);
   if (orig->clones)
     for (node = orig->clones; node != orig;)
       {
-	cgraph_update_edges_for_call_stmt_node (node, old_stmt, old_decl,
-						new_stmt);
+	/* Do not attempt to adjust bodies of yet unexpanded thunks.  */
+	if (!node->thunk)
+	  cgraph_update_edges_for_call_stmt_node (node, old_stmt, old_decl,
+						  new_stmt);
 	if (node->clones)
 	  node = node->clones;
 	else if (node->next_sibling_clone)
@@ -1876,7 +1892,7 @@ cgraph_node::remove (void)
   clone_info *info, saved_info;
   if (symtab->ipa_clones_dump_file && symtab->cloned_nodes.contains (this))
     fprintf (symtab->ipa_clones_dump_file,
-	     "Callgraph removal;%s;%d;%s;%d;%d\n", asm_name (), order,
+	     "Callgraph removal;%s;%d;%s;%d;%d\n", asm_name (), get_uid (),
 	     DECL_SOURCE_FILE (decl), DECL_SOURCE_LINE (decl),
 	     DECL_SOURCE_COLUMN (decl));
 
@@ -2241,7 +2257,7 @@ cgraph_node::dump (FILE *f)
       thunk_info::get (this)->dump (f);
     }
   else gcc_checking_assert (!thunk_info::get (this));
-  
+
   fprintf (f, "  Called by: ");
 
   profile_count sum = profile_count::zero ();
@@ -2308,7 +2324,7 @@ cgraph_node::dump (FILE *f)
 	  if (edge->indirect_info->agg_contents)
 	   fprintf (f, "loaded from %s %s at offset %i ",
 		    edge->indirect_info->member_ptr ? "member ptr" : "aggregate",
-		    edge->indirect_info->by_ref ? "passed by reference":"",
+		    edge->indirect_info->by_ref ? "passed by reference" : "",
 		    (int)edge->indirect_info->offset);
 	  if (edge->indirect_info->vptr_changed)
 	    fprintf (f, "(vptr maybe changed) ");
@@ -2433,7 +2449,9 @@ cgraph_node_cannot_be_local_p_1 (cgraph_node *node, void *)
 		&& !node->forced_by_abi
 		&& !node->used_from_object_file_p ()
 		&& !node->same_comdat_group)
-	       || !node->externally_visible));
+	       || !node->externally_visible)
+	   && !DECL_STATIC_CONSTRUCTOR (node->decl)
+	   && !DECL_STATIC_DESTRUCTOR (node->decl));
 }
 
 /* Return true if cgraph_node can be made local for API change.
@@ -2636,6 +2654,54 @@ cgraph_node::set_malloc_flag (bool malloc_p)
   return changed;
 }
 
+/* Worker to set malloc flag.  */
+static void
+add_detected_attribute_1 (cgraph_node *node, const char *attr, bool *changed)
+{
+  if (!lookup_attribute (attr, DECL_ATTRIBUTES (node->decl)))
+    {
+      DECL_ATTRIBUTES (node->decl) = tree_cons (get_identifier (attr),
+					 NULL_TREE, DECL_ATTRIBUTES (node->decl));
+      *changed = true;
+    }
+
+  ipa_ref *ref;
+  FOR_EACH_ALIAS (node, ref)
+    {
+      cgraph_node *alias = dyn_cast<cgraph_node *> (ref->referring);
+      if (alias->get_availability () > AVAIL_INTERPOSABLE)
+	add_detected_attribute_1 (alias, attr, changed);
+    }
+
+  for (cgraph_edge *e = node->callers; e; e = e->next_caller)
+    if (e->caller->thunk
+	&& (e->caller->get_availability () > AVAIL_INTERPOSABLE))
+      add_detected_attribute_1 (e->caller, attr, changed);
+}
+
+/* Add attribyte ATTR to function and its aliases.  */
+
+bool
+cgraph_node::add_detected_attribute (const char *attr)
+{
+  bool changed = false;
+
+  if (get_availability () > AVAIL_INTERPOSABLE)
+    add_detected_attribute_1 (this, attr, &changed);
+  else
+    {
+      ipa_ref *ref;
+
+      FOR_EACH_ALIAS (this, ref)
+	{
+	  cgraph_node *alias = dyn_cast<cgraph_node *> (ref->referring);
+	  if (alias->get_availability () > AVAIL_INTERPOSABLE)
+	    add_detected_attribute_1 (alias, attr, &changed);
+	}
+    }
+  return changed;
+}
+
 /* Worker to set noreturng flag.  */
 static void
 set_noreturn_flag_1 (cgraph_node *node, bool noreturn_p, bool *changed)
@@ -2796,7 +2862,7 @@ set_const_flag_1 (cgraph_node *node, bool set_const, bool looping,
 
    When setting the flag be careful about possible interposition and
    do not set the flag for functions that can be interposed and set pure
-   flag for functions that can bind to other definition. 
+   flag for functions that can bind to other definition.
 
    Return true if any change was done. */
 
@@ -2981,7 +3047,7 @@ cgraph_node::can_remove_if_no_direct_calls_p (bool will_inline)
 {
   struct ipa_ref *ref;
 
-  /* For local symbols or non-comdat group it is the same as 
+  /* For local symbols or non-comdat group it is the same as
      can_remove_if_no_direct_calls_p.  */
   if (!externally_visible || !same_comdat_group)
     {
@@ -3265,9 +3331,8 @@ cgraph_edge::verify_corresponds_to_fndecl (tree decl)
   /* Optimizers can redirect unreachable calls or calls triggering undefined
      behavior to __builtin_unreachable or __builtin_unreachable trap.  */
 
-  if (fndecl_built_in_p (callee->decl, BUILT_IN_NORMAL)
-      && (DECL_FUNCTION_CODE (callee->decl) == BUILT_IN_UNREACHABLE
-	  || DECL_FUNCTION_CODE (callee->decl) == BUILT_IN_UNREACHABLE_TRAP))
+  if (fndecl_built_in_p (callee->decl, BUILT_IN_UNREACHABLE,
+				       BUILT_IN_UNREACHABLE_TRAP))
     return false;
 
   if (callee->former_clone_of != node->decl
@@ -3607,9 +3672,8 @@ cgraph_node::verify_node (void)
 	  /* Optimized out calls are redirected to __builtin_unreachable.  */
 	  && (e->count.nonzero_p ()
 	      || ! e->callee->decl
-	      || !(fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE)
-		   || fndecl_built_in_p (e->callee->decl,
-					 BUILT_IN_UNREACHABLE_TRAP)))
+	      || !fndecl_built_in_p (e->callee->decl, BUILT_IN_UNREACHABLE,
+				     BUILT_IN_UNREACHABLE_TRAP))
 	  && count
 	      == ENTRY_BLOCK_PTR_FOR_FN (DECL_STRUCT_FUNCTION (decl))->count
 	  && (!e->count.ipa_p ()
@@ -3956,7 +4020,7 @@ cgraph_node::function_symbol (enum availability *availability,
 /* Walk the alias chain to return the function cgraph_node is alias of.
    Walk through non virtual thunks, too.  Thus we return either a function
    or a virtual thunk node.
-   When AVAILABILITY is non-NULL, get minimal availability in the chain. 
+   When AVAILABILITY is non-NULL, get minimal availability in the chain.
    When REF is non-NULL, assume that reference happens in symbol REF
    when determining the availability.  */
 
@@ -4048,7 +4112,7 @@ cgraph_node::get_untransformed_body ()
   return true;
 }
 
-/* Prepare function body.  When doing LTO, read cgraph_node's body from disk 
+/* Prepare function body.  When doing LTO, read cgraph_node's body from disk
    if it is not already present.  When some IPA transformations are scheduled,
    apply them.  */
 
@@ -4290,7 +4354,7 @@ test_symbol_table_test ()
       /* Verify that the node has order 0 on both iterations,
 	 and thus that nodes have predictable dump names in selftests.  */
       ASSERT_EQ (node->order, 0);
-      ASSERT_STREQ (node->dump_name (), "test_decl/0");
+      ASSERT_STREQ (node->dump_name (), "test_decl/1");
     }
 }
 

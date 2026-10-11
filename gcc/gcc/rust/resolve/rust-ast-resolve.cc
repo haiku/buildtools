@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -46,7 +46,7 @@ NameResolution::NameResolution ()
   : resolver (Resolver::get ()), mappings (Analysis::Mappings::get ())
 {
   // these are global
-  resolver->get_type_scope ().push (mappings->get_next_node_id ());
+  resolver->get_type_scope ().push (mappings.get_next_node_id ());
   resolver->insert_builtin_types (resolver->get_type_scope ().peek ());
   resolver->push_new_type_rib (resolver->get_type_scope ().peek ());
 }
@@ -62,10 +62,11 @@ void
 NameResolution::go (AST::Crate &crate)
 {
   // lookup current crate name
-  CrateNum cnum = mappings->get_current_crate ();
-  std::string crate_name;
-  bool ok = mappings->get_crate_name (cnum, crate_name);
-  rust_assert (ok);
+  CrateNum cnum = mappings.get_current_crate ();
+
+  // Clones the crate name instead of references due to gcc's possibly
+  // dangling references warnings
+  const auto crate_name = mappings.get_crate_name (cnum).value ();
 
   // setup the ribs
   NodeId scope_node_id = crate.get_node_id ();
@@ -74,7 +75,7 @@ NameResolution::go (AST::Crate &crate)
   resolver->get_label_scope ().push (scope_node_id);
   resolver->push_new_name_rib (resolver->get_name_scope ().peek ());
   resolver->push_new_type_rib (resolver->get_type_scope ().peek ());
-  resolver->push_new_label_rib (resolver->get_type_scope ().peek ());
+  resolver->push_new_label_rib (resolver->get_label_scope ().peek ());
 
   // get the root segment
   CanonicalPath crate_prefix
@@ -84,7 +85,7 @@ NameResolution::go (AST::Crate &crate)
   // setup a dummy crate node
   resolver->get_name_scope ().insert (
     CanonicalPath::new_seg (crate.get_node_id (), "__$$crate__"),
-    crate.get_node_id (), Location ());
+    crate.get_node_id (), UNDEF_LOCATION);
 
   // setup the root scope
   resolver->push_new_module_scope (scope_node_id);
@@ -92,9 +93,8 @@ NameResolution::go (AST::Crate &crate)
   // first gather the top-level namespace names then we drill down so this
   // allows for resolving forward declarations since an impl block might have
   // a Self type Foo which is defined after the impl block for example.
-  for (auto it = crate.items.begin (); it != crate.items.end (); it++)
-    ResolveTopLevel::go (it->get (), CanonicalPath::create_empty (),
-			 crate_prefix);
+  for (auto &item : crate.items)
+    ResolveTopLevel::go (*item, CanonicalPath::create_empty (), crate_prefix);
 
   // FIXME remove this
   if (saw_errors ())
@@ -104,8 +104,8 @@ NameResolution::go (AST::Crate &crate)
     }
 
   // next we can drill down into the items and their scopes
-  for (auto it = crate.items.begin (); it != crate.items.end (); it++)
-    ResolveItem::go (it->get (), CanonicalPath::create_empty (), crate_prefix);
+  for (auto &item : crate.items)
+    ResolveItem::go (*item, CanonicalPath::create_empty (), crate_prefix);
 
   // done
   resolver->pop_module_scope ();

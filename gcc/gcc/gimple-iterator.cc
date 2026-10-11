@@ -1,5 +1,5 @@
 /* Iterator routines for GIMPLE statements.
-   Copyright (C) 2007-2023 Free Software Foundation, Inc.
+   Copyright (C) 2007-2025 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez  <aldy@quesejoda.com>
 
 This file is part of GCC.
@@ -667,10 +667,11 @@ gsi_move_after (gimple_stmt_iterator *from, gimple_stmt_iterator *to)
 
 
 /* Move the statement at FROM so it comes right before the statement
-   at TO.  */
+   at TO using method M.  M defaults to GSI_SAME_STMT.  */
 
 void
-gsi_move_before (gimple_stmt_iterator *from, gimple_stmt_iterator *to)
+gsi_move_before (gimple_stmt_iterator *from, gimple_stmt_iterator *to,
+		 gsi_iterator_update m)
 {
   gimple *stmt = gsi_stmt (*from);
   gsi_remove (from, false);
@@ -678,7 +679,7 @@ gsi_move_before (gimple_stmt_iterator *from, gimple_stmt_iterator *to)
   /* For consistency with gsi_move_after, it might be better to have
      GSI_NEW_STMT here; however, that breaks several places that expect
      that TO does not change.  */
-  gsi_insert_before (to, stmt, GSI_SAME_STMT);
+  gsi_insert_before (to, stmt, m);
 }
 
 
@@ -993,7 +994,7 @@ edge_before_returns_twice_call (basic_block bb)
 	  gimple_phi_set_result (phi, new_lhs);
 	  gphi *new_phi = create_phi_node (lhs, other_edge->dest);
 	  add_phi_arg (new_phi, new_lhs, other_edge, UNKNOWN_LOCATION);
-	  add_phi_arg (new_phi, PHI_ARG_DEF_FROM_EDGE (phi, ad_edge),
+	  add_phi_arg (new_phi, gimple_phi_arg_def_from_edge (phi, ad_edge),
 		       e, gimple_phi_arg_location_from_edge (phi, ad_edge));
 	}
       e->flags = ad_edge->flags;
@@ -1029,7 +1030,7 @@ adjust_before_returns_twice_call (edge e, gimple *g)
 	  && gimple_code (SSA_NAME_DEF_STMT (s)) == GIMPLE_PHI
 	  && gimple_bb (SSA_NAME_DEF_STMT (s)) == e->dest)
 	{
-	  tree r = PHI_ARG_DEF_FROM_EDGE (SSA_NAME_DEF_STMT (s), e);
+	  tree r = gimple_phi_arg_def_from_edge (SSA_NAME_DEF_STMT (s), e);
 	  SET_USE (use_p, unshare_expr (r));
 	  m = true;
 	}

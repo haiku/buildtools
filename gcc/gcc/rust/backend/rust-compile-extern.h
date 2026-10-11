@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -21,6 +21,9 @@
 
 #include "rust-compile-base.h"
 #include "rust-compile-intrinsic.h"
+#include "rust-compile-type.h"
+#include "rust-diagnostics.h"
+#include "rust-hir-full-decls.h"
 
 namespace Rust {
 namespace Compile {
@@ -31,26 +34,20 @@ class CompileExternItem : public HIRCompileBase,
 public:
   static tree compile (HIR::ExternalItem *item, Context *ctx,
 		       TyTy::BaseType *concrete = nullptr,
-		       bool is_query_mode = false,
-		       Location ref_locus = Location ())
+		       location_t ref_locus = UNDEF_LOCATION)
   {
     CompileExternItem compiler (ctx, concrete, ref_locus);
     item->accept_vis (compiler);
-
-    if (is_query_mode && compiler.reference == error_mark_node)
-      rust_internal_error_at (ref_locus, "failed to compile extern item: %s",
-			      item->as_string ().c_str ());
-
     return compiler.reference;
   }
 
   void visit (HIR::ExternalStaticItem &item) override
   {
     // check if its already been compiled
-    Bvariable *lookup = ctx->get_backend ()->error_variable ();
+    Bvariable *lookup = Bvariable::error_variable ();
     if (ctx->lookup_var_decl (item.get_mappings ().get_hirid (), &lookup))
       {
-	reference = ctx->get_backend ()->var_expression (lookup, ref_locus);
+	reference = Backend::var_expression (lookup, ref_locus);
 	return;
       }
 
@@ -59,7 +56,7 @@ public:
 					      &resolved_type);
     rust_assert (ok);
 
-    std::string name = item.get_item_name ();
+    std::string name = item.get_item_name ().as_string ();
     // FIXME this is assuming C ABI
     std::string asm_name = name;
 
@@ -69,13 +66,12 @@ public:
     bool in_unique_section = false;
 
     Bvariable *static_global
-      = ctx->get_backend ()->global_variable (name, asm_name, type, is_external,
-					      is_hidden, in_unique_section,
-					      item.get_locus ());
+      = Backend::global_variable (name, asm_name, type, is_external, is_hidden,
+				  in_unique_section, item.get_locus ());
     ctx->insert_var_decl (item.get_mappings ().get_hirid (), static_global);
     ctx->push_var (static_global);
 
-    reference = ctx->get_backend ()->var_expression (static_global, ref_locus);
+    reference = Backend::var_expression (static_global, ref_locus);
   }
 
   void visit (HIR::ExternalFunctionItem &function) override
@@ -91,7 +87,7 @@ public:
 
     rust_assert (fntype_tyty->get_kind () == TyTy::TypeKind::FNDEF);
     TyTy::FnType *fntype = static_cast<TyTy::FnType *> (fntype_tyty);
-    if (fntype->has_subsititions_defined ())
+    if (fntype->has_substitutions_defined ())
       {
 	// we cant do anything for this only when it is used and a concrete type
 	// is given
@@ -114,11 +110,9 @@ public:
 	return;
       }
 
-    if (fntype->has_subsititions_defined ())
-      {
-	// override the Hir Lookups for the substituions in this context
-	fntype->override_context ();
-      }
+    if (fntype->has_substitutions_defined ())
+      // override the HIR lookups for the substitutions in this context
+      fntype->override_context ();
 
     if (fntype->get_abi () == ABI::INTRINSIC)
       {
@@ -129,24 +123,21 @@ public:
       }
 
     tree compiled_fn_type = TyTyResolveCompile::compile (ctx, fntype);
-    std::string ir_symbol_name = function.get_item_name ();
-    std::string asm_name = function.get_item_name ();
+    std::string ir_symbol_name = function.get_item_name ().as_string ();
+    std::string asm_name = function.get_item_name ().as_string ();
     if (fntype->get_abi () == ABI::RUST)
       {
 	// then we need to get the canonical path of it and mangle it
-	const Resolver::CanonicalPath *canonical_path = nullptr;
-	bool ok = ctx->get_mappings ()->lookup_canonical_path (
-	  function.get_mappings ().get_nodeid (), &canonical_path);
-	rust_assert (ok);
+	auto canonical_path = ctx->get_mappings ().lookup_canonical_path (
+	  function.get_mappings ().get_nodeid ());
 
 	ir_symbol_name = canonical_path->get () + fntype->subst_as_string ();
 	asm_name = ctx->mangle_item (fntype, *canonical_path);
       }
 
     const unsigned int flags = Backend::function_is_declaration;
-    tree fndecl
-      = ctx->get_backend ()->function (compiled_fn_type, ir_symbol_name,
-				       asm_name, flags, function.get_locus ());
+    tree fndecl = Backend::function (compiled_fn_type, ir_symbol_name, asm_name,
+				     flags, function.get_locus ());
     TREE_PUBLIC (fndecl) = 1;
     setup_abi_options (fndecl, fntype->get_abi ());
 
@@ -155,15 +146,21 @@ public:
     reference = address_expression (fndecl, ref_locus);
   }
 
+  void visit (HIR::ExternalTypeItem &type) override
+  {
+    rust_sorry_at (type.get_locus (), "extern types are not supported yet");
+  }
+
 private:
-  CompileExternItem (Context *ctx, TyTy::BaseType *concrete, Location ref_locus)
+  CompileExternItem (Context *ctx, TyTy::BaseType *concrete,
+		     location_t ref_locus)
     : HIRCompileBase (ctx), concrete (concrete), reference (error_mark_node),
       ref_locus (ref_locus)
   {}
 
   TyTy::BaseType *concrete;
   tree reference;
-  Location ref_locus;
+  location_t ref_locus;
 };
 
 } // namespace Compile

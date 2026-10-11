@@ -1,5 +1,5 @@
 /* Implementation of <stdarg.h> within analyzer.
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   Copyright (C) 2022-2025 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -19,7 +19,7 @@ along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
 #include "config.h"
-#define INCLUDE_MEMORY
+#define INCLUDE_VECTOR
 #include "system.h"
 #include "coretypes.h"
 #include "make-unique.h"
@@ -27,6 +27,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "function.h"
 #include "basic-block.h"
 #include "gimple.h"
+#include "diagnostic-core.h"
 #include "diagnostic-path.h"
 #include "analyzer/analyzer.h"
 #include "analyzer/analyzer-logging.h"
@@ -41,7 +42,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "analyzer/supergraph.h"
 #include "analyzer/diagnostic-manager.h"
 #include "analyzer/exploded-graph.h"
-#include "diagnostic-metadata.h"
 #include "analyzer/call-details.h"
 
 #if ENABLE_ANALYZER
@@ -207,7 +207,7 @@ public:
 
   bool inherited_state_p () const final override { return false; }
 
-  bool on_stmt (sm_context *sm_ctxt,
+  bool on_stmt (sm_context &sm_ctxt,
 		const supernode *node,
 		const gimple *stmt) const final override;
 
@@ -224,15 +224,15 @@ public:
   state_t m_ended;
 
 private:
-  void on_va_start (sm_context *sm_ctxt, const supernode *node,
+  void on_va_start (sm_context &sm_ctxt, const supernode *node,
 		    const gcall *call) const;
-  void on_va_copy (sm_context *sm_ctxt, const supernode *node,
+  void on_va_copy (sm_context &sm_ctxt, const supernode *node,
 		   const gcall *call) const;
-  void on_va_arg (sm_context *sm_ctxt, const supernode *node,
+  void on_va_arg (sm_context &sm_ctxt, const supernode *node,
 		  const gcall *call) const;
-  void on_va_end (sm_context *sm_ctxt, const supernode *node,
+  void on_va_end (sm_context &sm_ctxt, const supernode *node,
 		  const gcall *call) const;
-  void check_for_ended_va_list (sm_context *sm_ctxt,
+  void check_for_ended_va_list (sm_context &sm_ctxt,
 				const supernode *node,
 				const gcall *call,
 				const svalue *arg,
@@ -242,17 +242,17 @@ private:
 /* va_list_state_machine's ctor.  */
 
 va_list_state_machine::va_list_state_machine (logger *logger)
-: state_machine ("va_list", logger)
+: state_machine ("va_list", logger),
+  m_started (add_state ("started")),
+  m_ended (add_state ("ended"))
 {
-  m_started = add_state ("started");
-  m_ended = add_state ("ended");
 }
 
 /* Implementation of the various "va_*" functions for
    va_list_state_machine.  */
 
 bool
-va_list_state_machine::on_stmt (sm_context *sm_ctxt,
+va_list_state_machine::on_stmt (sm_context &sm_ctxt,
 				const supernode *node,
 				const gimple *stmt) const
 {
@@ -265,7 +265,7 @@ va_list_state_machine::on_stmt (sm_context *sm_ctxt,
 	  return false;
 	}
 
-      if (tree callee_fndecl = sm_ctxt->get_fndecl_for_call (call))
+      if (tree callee_fndecl = sm_ctxt.get_fndecl_for_call (call))
 	if (fndecl_built_in_p (callee_fndecl, BUILT_IN_NORMAL)
 	    && gimple_builtin_call_types_compatible_p (call, callee_fndecl))
 	  switch (DECL_UNCHECKED_FUNCTION_CODE (callee_fndecl))
@@ -293,13 +293,13 @@ va_list_state_machine::on_stmt (sm_context *sm_ctxt,
    IDX to CALL.  */
 
 static const svalue *
-get_stateful_arg (sm_context *sm_ctxt, const gcall *call, unsigned arg_idx)
+get_stateful_arg (sm_context &sm_ctxt, const gcall *call, unsigned arg_idx)
 {
   tree ap = gimple_call_arg (call, arg_idx);
   if (ap
       && POINTER_TYPE_P (TREE_TYPE (ap)))
     {
-      if (const program_state *new_state = sm_ctxt->get_new_program_state ())
+      if (const program_state *new_state = sm_ctxt.get_new_program_state ())
 	{
 	  const region_model *new_model = new_state->m_region_model;
 	  const svalue *ptr_sval = new_model->get_rvalue (ap, NULL);
@@ -326,12 +326,16 @@ public:
 	    && same_tree_p (m_ap_tree, other.m_ap_tree));
   }
 
-  label_text describe_state_change (const evdesc::state_change &change)
-    override
+  bool
+  describe_state_change (pretty_printer &pp,
+			 const evdesc::state_change &change) override
   {
     if (const char *fnname = maybe_get_fnname (change))
-      return change.formatted_print ("%qs called here", fnname);
-    return label_text ();
+      {
+	pp_printf (&pp, "%qs called here", fnname);
+	return true;
+      }
+    return false;
   }
 
   diagnostic_event::meaning
@@ -403,11 +407,9 @@ public:
 	    && 0 == strcmp (m_usage_fnname, other.m_usage_fnname));
   }
 
-  bool emit (rich_location *rich_loc) final override
+  bool emit (diagnostic_emission_context &ctxt) final override
   {
-    auto_diagnostic_group d;
-    return warning_at (rich_loc, get_controlling_option (),
-		       "%qs after %qs", m_usage_fnname, "va_end");
+    return ctxt.warn ("%qs after %qs", m_usage_fnname, "va_end");
   }
 
   const char *get_kind () const final override
@@ -415,38 +417,42 @@ public:
     return "va_list_use_after_va_end";
   }
 
-  label_text describe_state_change (const evdesc::state_change &change)
-    final override
+  bool
+  describe_state_change (pretty_printer &pp,
+			 const evdesc::state_change &change) final override
   {
     if (change.m_new_state == m_sm.m_ended)
       m_va_end_event = change.m_event_id;
-    return va_list_sm_diagnostic::describe_state_change (change);
+    return va_list_sm_diagnostic::describe_state_change (pp, change);
   }
 
-  label_text describe_final_event (const evdesc::final_event &ev) final override
+  bool
+  describe_final_event (pretty_printer &pp,
+			const evdesc::final_event &ev) final override
   {
     if (ev.m_expr)
       {
 	if (m_va_end_event.known_p ())
-	  return ev.formatted_print
-	    ("%qs on %qE after %qs at %@",
-	     m_usage_fnname, ev.m_expr, "va_end", &m_va_end_event);
+	  pp_printf (&pp,
+		     "%qs on %qE after %qs at %@",
+		     m_usage_fnname, ev.m_expr, "va_end", &m_va_end_event);
 	else
-	  return ev.formatted_print
-	    ("%qs on %qE after %qs",
-	     m_usage_fnname, ev.m_expr, "va_end");
+	  pp_printf (&pp,
+		     "%qs on %qE after %qs",
+		     m_usage_fnname, ev.m_expr, "va_end");
       }
     else
       {
 	if (m_va_end_event.known_p ())
-	  return ev.formatted_print
-	    ("%qs after %qs at %@",
-	     m_usage_fnname, "va_end", &m_va_end_event);
+	  pp_printf (&pp,
+		     "%qs after %qs at %@",
+		     m_usage_fnname, "va_end", &m_va_end_event);
 	else
-	  return ev.formatted_print
-	    ("%qs after %qs",
-	     m_usage_fnname, "va_end");
+	  pp_printf (&pp,
+		     "%qs after %qs",
+		     m_usage_fnname, "va_end");
       }
+    return true;
   }
 
 private:
@@ -478,50 +484,52 @@ public:
     return va_list_sm_diagnostic::subclass_equal_p (other);
   }
 
-  bool emit (rich_location *rich_loc) final override
+  bool emit (diagnostic_emission_context &ctxt) final override
   {
-    auto_diagnostic_group d;
-    return warning_at (rich_loc, get_controlling_option (),
-		       "missing call to %qs", "va_end");
+    return ctxt.warn ("missing call to %qs", "va_end");
   }
 
   const char *get_kind () const final override { return "va_list_leak"; }
 
-  label_text describe_state_change (const evdesc::state_change &change)
-    final override
+  bool
+  describe_state_change (pretty_printer &pp,
+			 const evdesc::state_change &change) final override
   {
     if (change.m_new_state == m_sm.m_started)
       {
 	m_start_event = change.m_event_id;
 	m_start_event_fnname = maybe_get_fnname (change);
       }
-    return va_list_sm_diagnostic::describe_state_change (change);
+    return va_list_sm_diagnostic::describe_state_change (pp, change);
   }
 
-  label_text describe_final_event (const evdesc::final_event &ev) final override
+  bool
+  describe_final_event (pretty_printer &pp,
+			const evdesc::final_event &ev) final override
   {
     if (ev.m_expr)
       {
 	if (m_start_event.known_p () && m_start_event_fnname)
-	  return ev.formatted_print
-	    ("missing call to %qs on %qE to match %qs at %@",
-	     "va_end", ev.m_expr, m_start_event_fnname, &m_start_event);
+	  pp_printf (&pp,
+		     "missing call to %qs on %qE to match %qs at %@",
+		     "va_end", ev.m_expr, m_start_event_fnname, &m_start_event);
 	else
-	  return ev.formatted_print
-	    ("missing call to %qs on %qE",
-	     "va_end", ev.m_expr);
+	  pp_printf (&pp,
+		     "missing call to %qs on %qE",
+		     "va_end", ev.m_expr);
       }
     else
       {
 	if (m_start_event.known_p () && m_start_event_fnname)
-	  return ev.formatted_print
-	    ("missing call to %qs to match %qs at %@",
-	     "va_end", m_start_event_fnname, &m_start_event);
+	  pp_printf (&pp,
+		     "missing call to %qs to match %qs at %@",
+		     "va_end", m_start_event_fnname, &m_start_event);
 	else
-	  return ev.formatted_print
-	    ("missing call to %qs",
-	     "va_end");
+	  pp_printf (&pp,
+		     "missing call to %qs",
+		     "va_end");
       }
+    return true;
   }
 
 private:
@@ -532,7 +540,7 @@ private:
 /* Update state machine for a "va_start" call.  */
 
 void
-va_list_state_machine::on_va_start (sm_context *sm_ctxt,
+va_list_state_machine::on_va_start (sm_context &sm_ctxt,
 				    const supernode *,
 				    const gcall *call) const
 {
@@ -540,24 +548,24 @@ va_list_state_machine::on_va_start (sm_context *sm_ctxt,
   if (arg)
     {
       /* Transition from start state to "started".  */
-      if (sm_ctxt->get_state (call, arg) == m_start)
-	sm_ctxt->set_next_state (call, arg, m_started);
+      if (sm_ctxt.get_state (call, arg) == m_start)
+	sm_ctxt.set_next_state (call, arg, m_started);
     }
 }
 
 /* Complain if ARG is in the "ended" state.  */
 
 void
-va_list_state_machine::check_for_ended_va_list (sm_context *sm_ctxt,
+va_list_state_machine::check_for_ended_va_list (sm_context &sm_ctxt,
 						const supernode *node,
 						const gcall *call,
 						const svalue *arg,
 						const char *usage_fnname) const
 {
-  if (sm_ctxt->get_state (call, arg) == m_ended)
-    sm_ctxt->warn (node, call, arg,
-		   make_unique<va_list_use_after_va_end>
-		     (*this, arg, NULL_TREE, usage_fnname));
+  if (sm_ctxt.get_state (call, arg) == m_ended)
+    sm_ctxt.warn (node, call, arg,
+		  make_unique<va_list_use_after_va_end>
+		    (*this, arg, NULL_TREE, usage_fnname));
 }
 
 /* Get the svalue with associated va_list_state_machine state for
@@ -565,11 +573,11 @@ va_list_state_machine::check_for_ended_va_list (sm_context *sm_ctxt,
    or NULL otherwise.  */
 
 static const svalue *
-get_stateful_va_copy_arg (sm_context *sm_ctxt,
+get_stateful_va_copy_arg (sm_context &sm_ctxt,
 			  const gcall *call,
 			  unsigned arg_idx)
 {
-  if (const program_state *new_state = sm_ctxt->get_new_program_state ())
+  if (const program_state *new_state = sm_ctxt.get_new_program_state ())
     {
       const region_model *new_model = new_state->m_region_model;
       const svalue *arg = get_va_copy_arg (new_model, NULL, call, arg_idx);
@@ -581,7 +589,7 @@ get_stateful_va_copy_arg (sm_context *sm_ctxt,
 /* Update state machine for a "va_copy" call.  */
 
 void
-va_list_state_machine::on_va_copy (sm_context *sm_ctxt,
+va_list_state_machine::on_va_copy (sm_context &sm_ctxt,
 				   const supernode *node,
 				   const gcall *call) const
 {
@@ -593,15 +601,15 @@ va_list_state_machine::on_va_copy (sm_context *sm_ctxt,
   if (dst_arg)
     {
       /* Transition from start state to "started".  */
-      if (sm_ctxt->get_state (call, dst_arg) == m_start)
-	sm_ctxt->set_next_state (call, dst_arg, m_started);
+      if (sm_ctxt.get_state (call, dst_arg) == m_start)
+	sm_ctxt.set_next_state (call, dst_arg, m_started);
     }
 }
 
 /* Update state machine for a "va_arg" call.  */
 
 void
-va_list_state_machine::on_va_arg (sm_context *sm_ctxt,
+va_list_state_machine::on_va_arg (sm_context &sm_ctxt,
 				  const supernode *node,
 				  const gcall *call) const
 {
@@ -613,17 +621,17 @@ va_list_state_machine::on_va_arg (sm_context *sm_ctxt,
 /* Update state machine for a "va_end" call.  */
 
 void
-va_list_state_machine::on_va_end (sm_context *sm_ctxt,
+va_list_state_machine::on_va_end (sm_context &sm_ctxt,
 				  const supernode *node,
 				  const gcall *call) const
 {
   const svalue *arg = get_stateful_arg (sm_ctxt, call, 0);
   if (arg)
     {
-      state_t s = sm_ctxt->get_state (call, arg);
+      state_t s = sm_ctxt.get_state (call, arg);
       /* Transition from "started" to "ended".  */
       if (s == m_started)
-	sm_ctxt->set_next_state (call, arg, m_ended);
+	sm_ctxt.set_next_state (call, arg, m_ended);
       else if (s == m_ended)
 	check_for_ended_va_list (sm_ctxt, node, call, arg, "va_end");
     }
@@ -635,7 +643,7 @@ va_list_state_machine::on_va_end (sm_context *sm_ctxt,
 std::unique_ptr<pending_diagnostic>
 va_list_state_machine::on_leak (tree var) const
 {
-  return make_unique<va_list_leak> (*this, NULL, var);
+  return make_unique<va_list_leak> (*this, nullptr, var);
 }
 
 } // anonymous namespace
@@ -786,15 +794,15 @@ public:
       {
       }
 
-      label_text get_desc (bool can_colorize) const override
+      void print_desc (pretty_printer &pp) const override
       {
-	return make_label_text_n
-	  (can_colorize, m_num_variadic_arguments,
-	   "calling %qE from %qE with %i variadic argument",
-	   "calling %qE from %qE with %i variadic arguments",
-	   get_callee_fndecl (),
-	   get_caller_fndecl (),
-	   m_num_variadic_arguments);
+	pp_printf_n (&pp,
+		     m_num_variadic_arguments,
+		     "calling %qE from %qE with %i variadic argument",
+		     "calling %qE from %qE with %i variadic arguments",
+		     get_callee_fndecl (),
+		     get_caller_fndecl (),
+		     m_num_variadic_arguments);
       }
     private:
       int m_num_variadic_arguments;
@@ -892,28 +900,29 @@ public:
     return OPT_Wanalyzer_va_arg_type_mismatch;
   }
 
-  bool emit (rich_location *rich_loc) final override
+  bool emit (diagnostic_emission_context &ctxt) final override
   {
-    auto_diagnostic_group d;
-    diagnostic_metadata m;
     /* "CWE-686: Function Call With Incorrect Argument Type".  */
-    m.add_cwe (686);
+    ctxt.add_cwe (686);
     bool warned
-      = warning_meta (rich_loc, m, get_controlling_option (),
-		      "%<va_arg%> expected %qT but received %qT"
-		      " for variadic argument %i of %qE",
-		      m_expected_type, m_actual_type,
-		      get_variadic_index_for_diagnostic (), m_va_list_tree);
+      = ctxt.warn ("%<va_arg%> expected %qT but received %qT"
+		   " for variadic argument %i of %qE",
+		   m_expected_type, m_actual_type,
+		   get_variadic_index_for_diagnostic (), m_va_list_tree);
     return warned;
   }
 
-  label_text describe_final_event (const evdesc::final_event &ev) final override
+  bool
+  describe_final_event (pretty_printer &pp,
+			const evdesc::final_event &) final override
   {
-    return ev.formatted_print ("%<va_arg%> expected %qT but received %qT"
-			       " for variadic argument %i of %qE",
-			       m_expected_type, m_actual_type,
-			       get_variadic_index_for_diagnostic (),
-			       m_va_list_tree);
+    pp_printf (&pp,
+	       "%<va_arg%> expected %qT but received %qT"
+	       " for variadic argument %i of %qE",
+	       m_expected_type, m_actual_type,
+	       get_variadic_index_for_diagnostic (),
+	       m_va_list_tree);
+    return true;
   }
 
 private:
@@ -942,22 +951,23 @@ public:
     return OPT_Wanalyzer_va_list_exhausted;
   }
 
-  bool emit (rich_location *rich_loc) final override
+  bool emit (diagnostic_emission_context &ctxt) final override
   {
-    auto_diagnostic_group d;
-    diagnostic_metadata m;
     /* CWE-685: Function Call With Incorrect Number of Arguments.  */
-    m.add_cwe (685);
-    bool warned = warning_meta (rich_loc, m, get_controlling_option (),
-				"%qE has no more arguments (%i consumed)",
-				m_va_list_tree, get_num_consumed ());
+    ctxt.add_cwe (685);
+    bool warned = ctxt.warn ("%qE has no more arguments (%i consumed)",
+			     m_va_list_tree, get_num_consumed ());
     return warned;
   }
 
-  label_text describe_final_event (const evdesc::final_event &ev) final override
+  bool
+  describe_final_event (pretty_printer &pp,
+			const evdesc::final_event &) final override
   {
-    return ev.formatted_print ("%qE has no more arguments (%i consumed)",
-			       m_va_list_tree, get_num_consumed ());
+    pp_printf (&pp,
+	       "%qE has no more arguments (%i consumed)",
+	       m_va_list_tree, get_num_consumed ());
+    return true;
   }
 };
 
@@ -1036,6 +1046,8 @@ kf_va_arg::impl_call_pre (const call_details &cd) const
 
   tree va_list_tree = get_va_list_diag_arg (cd.get_arg_tree (0));
   ap_sval = model->check_for_poison (ap_sval, va_list_tree, ap_reg, ctxt);
+
+  cd.set_any_lhs_with_defaults ();
 
   if (const region *impl_reg = ap_sval->maybe_get_region ())
     {

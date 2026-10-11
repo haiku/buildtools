@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -30,15 +30,15 @@ class ASTLowerStructExprField : public ASTLoweringBase
   using Rust::HIR::ASTLoweringBase::visit;
 
 public:
-  static HIR::StructExprField *translate (AST::StructExprField *field)
+  static HIR::StructExprField *translate (AST::StructExprField &field)
   {
     ASTLowerStructExprField compiler;
-    field->accept_vis (compiler);
+    field.accept_vis (compiler);
     rust_assert (compiler.translated != nullptr);
 
-    compiler.mappings->insert_hir_struct_field (compiler.translated);
-    compiler.mappings->insert_location (
-      compiler.translated->get_mappings ().get_hirid (), field->get_locus ());
+    compiler.mappings.insert_hir_struct_field (compiler.translated);
+    compiler.mappings.insert_location (
+      compiler.translated->get_mappings ().get_hirid (), field.get_locus ());
 
     return compiler.translated;
   }

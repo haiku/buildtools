@@ -1,4 +1,3 @@
-// { dg-options "-std=gnu++20" }
 // { dg-do run { target c++20 } }
 // { dg-require-effective-target tzdb }
 // { dg-require-effective-target cxx11_abi }
@@ -49,24 +48,26 @@ test_zurich()
   const time_zone* const zurich = locate_zone("Europe/Zurich");
 
   {
-    sys_days d = 1853y/July/16;
+    sys_days d = 1853y/July/16; // On this date ...
+    auto offset = 34min + 8s;   // ... local time is this far ahead of UTC,
+    auto t = d - offset;        // so LMT to BMT transition is at this time.
 
-    auto z = zoned_seconds(zurich, sys_seconds(d) - 1s);
+    auto z = zoned_seconds(zurich, t - 1s);
     auto info = z.get_info();
-    VERIFY( info.offset == (34min + 8s) );
+    VERIFY( info.offset == offset );
     VERIFY( info.abbrev == "LMT" );
 
-    z = zoned_seconds(zurich, d);
+    z = zoned_seconds(zurich, t);
     info = z.get_info();
     VERIFY( info.offset == (29min + 46s) );
     VERIFY( info.abbrev == "BMT" );
 
-    z = zoned_seconds(zurich, d + 1s);
+    z = zoned_seconds(zurich, t + 1s);
     info = z.get_info();
     VERIFY( info.offset == (29min + 46s) );
     VERIFY( info.abbrev == "BMT" );
 
-    auto z2 = zoned_time(zurich, d + 0.001s);
+    auto z2 = zoned_time(zurich, t + 0.001s);
     info = z2.get_info();
     VERIFY( info.offset == (29min + 46s) );
     VERIFY( info.abbrev == "BMT" );
@@ -74,13 +75,15 @@ test_zurich()
 
   {
     sys_days d = 1894y/June/1;
+    auto offset = 29min + 46s;
+    auto t = d - offset;
 
-    auto z = zoned_seconds(zurich, sys_seconds(d) - 1s);
+    auto z = zoned_seconds(zurich, t - 1s);
     auto info = z.get_info();
     VERIFY( info.offset == (29min + 46s) );
     VERIFY( info.abbrev == "BMT" );
 
-    z = zoned_seconds(zurich, d);
+    z = zoned_seconds(zurich, t);
     info = z.get_info();
     VERIFY( info.offset == 1h );
     VERIFY( info.abbrev == "CET" );

@@ -1,6 +1,6 @@
 // -*- C++ -*- header.
 
-// Copyright (C) 2008-2023 Free Software Foundation, Inc.
+// Copyright (C) 2008-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,11 +30,12 @@
 #ifndef _GLIBCXX_ATOMIC_BASE_H
 #define _GLIBCXX_ATOMIC_BASE_H 1
 
+#ifdef _GLIBCXX_SYSHDR
 #pragma GCC system_header
+#endif
 
 #include <bits/c++config.h>
 #include <new> // For placement new
-#include <stdint.h>
 #include <bits/atomic_lockfree_defines.h>
 #include <bits/move.h>
 
@@ -45,6 +46,8 @@
 #ifndef _GLIBCXX_ALWAYS_INLINE
 #define _GLIBCXX_ALWAYS_INLINE inline __attribute__((__always_inline__))
 #endif
+
+#include <bits/version.h>
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -76,7 +79,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   inline constexpr memory_order memory_order_acq_rel = memory_order::acq_rel;
   inline constexpr memory_order memory_order_seq_cst = memory_order::seq_cst;
 #else
-  typedef enum memory_order
+  enum memory_order : int
     {
       memory_order_relaxed,
       memory_order_consume,
@@ -84,7 +87,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       memory_order_release,
       memory_order_acq_rel,
       memory_order_seq_cst
-    } memory_order;
+    };
 #endif
 
   /// @cond undocumented
@@ -98,13 +101,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   /// @endcond
 
   constexpr memory_order
-  operator|(memory_order __m, __memory_order_modifier __mod)
+  operator|(memory_order __m, __memory_order_modifier __mod) noexcept
   {
     return memory_order(int(__m) | int(__mod));
   }
 
   constexpr memory_order
-  operator&(memory_order __m, __memory_order_modifier __mod)
+  operator&(memory_order __m, __memory_order_modifier __mod) noexcept
   {
     return memory_order(int(__m) & int(__mod));
   }
@@ -156,12 +159,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __ret;
     }
 
-#if __cplusplus >= 202002L
-# define __cpp_lib_atomic_value_initialization 201911L
-#endif
-
 /// @cond undocumented
-#if __cpp_lib_atomic_value_initialization
+#if __glibcxx_atomic_value_initialization
 # define _GLIBCXX20_INIT(I) = I
 #else
 # define _GLIBCXX20_INIT(I)
@@ -234,9 +233,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __atomic_test_and_set (&_M_i, int(__m));
     }
 
-#if __cplusplus > 201703L
-#define __cpp_lib_atomic_flag_test 201907L
-
+#ifdef __glibcxx_atomic_flag_test // C++ >= 20
     _GLIBCXX_ALWAYS_INLINE bool
     test(memory_order __m = memory_order_seq_cst) const noexcept
     {
@@ -252,8 +249,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __atomic_load(&_M_i, &__v, int(__m));
       return __v == __GCC_ATOMIC_TEST_AND_SET_TRUEVAL;
     }
+#endif
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait // C++ >= 20 && (linux_futex || gthread)
     _GLIBCXX_ALWAYS_INLINE void
     wait(bool __old,
 	memory_order __m = memory_order_seq_cst) const noexcept
@@ -278,8 +276,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { std::__atomic_notify_address(&_M_i, true); }
 
     // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
-#endif // C++20
+#endif // __glibcxx_atomic_wait
 
     _GLIBCXX_ALWAYS_INLINE void
     clear(memory_order __m = memory_order_seq_cst) noexcept
@@ -358,7 +355,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __atomic_base& operator=(const __atomic_base&) = delete;
       __atomic_base& operator=(const __atomic_base&) volatile = delete;
 
-      // Requires __int_type convertible to _M_i.
       constexpr __atomic_base(__int_type __i) noexcept : _M_i (__i) { }
 
       operator __int_type() const noexcept
@@ -605,7 +601,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				       __cmpexch_failure_order(__m));
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
       _GLIBCXX_ALWAYS_INLINE void
       wait(__int_type __old,
 	  memory_order __m = memory_order_seq_cst) const noexcept
@@ -627,7 +623,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { std::__atomic_notify_address(&_M_i, true); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
+#endif // __glibcxx_atomic_wait
 
       _GLIBCXX_ALWAYS_INLINE __int_type
       fetch_add(__int_type __i,
@@ -690,12 +686,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       __pointer_type 	_M_p _GLIBCXX20_INIT(nullptr);
 
-      // Factored out to facilitate explicit specialization.
-      constexpr ptrdiff_t
-      _M_type_size(ptrdiff_t __d) const { return __d * sizeof(_PTp); }
-
-      constexpr ptrdiff_t
-      _M_type_size(ptrdiff_t __d) const volatile { return __d * sizeof(_PTp); }
+      static constexpr ptrdiff_t
+      _S_type_size(ptrdiff_t __d)
+      { return __d * sizeof(_PTp); }
 
     public:
       __atomic_base() noexcept = default;
@@ -745,42 +738,42 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       __pointer_type
       operator++() noexcept
-      { return __atomic_add_fetch(&_M_p, _M_type_size(1),
+      { return __atomic_add_fetch(&_M_p, _S_type_size(1),
 				  int(memory_order_seq_cst)); }
 
       __pointer_type
       operator++() volatile noexcept
-      { return __atomic_add_fetch(&_M_p, _M_type_size(1),
+      { return __atomic_add_fetch(&_M_p, _S_type_size(1),
 				  int(memory_order_seq_cst)); }
 
       __pointer_type
       operator--() noexcept
-      { return __atomic_sub_fetch(&_M_p, _M_type_size(1),
+      { return __atomic_sub_fetch(&_M_p, _S_type_size(1),
 				  int(memory_order_seq_cst)); }
 
       __pointer_type
       operator--() volatile noexcept
-      { return __atomic_sub_fetch(&_M_p, _M_type_size(1),
+      { return __atomic_sub_fetch(&_M_p, _S_type_size(1),
 				  int(memory_order_seq_cst)); }
 
       __pointer_type
       operator+=(ptrdiff_t __d) noexcept
-      { return __atomic_add_fetch(&_M_p, _M_type_size(__d),
+      { return __atomic_add_fetch(&_M_p, _S_type_size(__d),
 				  int(memory_order_seq_cst)); }
 
       __pointer_type
       operator+=(ptrdiff_t __d) volatile noexcept
-      { return __atomic_add_fetch(&_M_p, _M_type_size(__d),
+      { return __atomic_add_fetch(&_M_p, _S_type_size(__d),
 				  int(memory_order_seq_cst)); }
 
       __pointer_type
       operator-=(ptrdiff_t __d) noexcept
-      { return __atomic_sub_fetch(&_M_p, _M_type_size(__d),
+      { return __atomic_sub_fetch(&_M_p, _S_type_size(__d),
 				  int(memory_order_seq_cst)); }
 
       __pointer_type
       operator-=(ptrdiff_t __d) volatile noexcept
-      { return __atomic_sub_fetch(&_M_p, _M_type_size(__d),
+      { return __atomic_sub_fetch(&_M_p, _S_type_size(__d),
 				  int(memory_order_seq_cst)); }
 
       bool
@@ -907,7 +900,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 					   int(__m1), int(__m2));
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
       _GLIBCXX_ALWAYS_INLINE void
       wait(__pointer_type __old,
 	   memory_order __m = memory_order_seq_cst) const noexcept
@@ -930,27 +923,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { std::__atomic_notify_address(&_M_p, true); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
+#endif // __glibcxx_atomic_wait
 
       _GLIBCXX_ALWAYS_INLINE __pointer_type
       fetch_add(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) noexcept
-      { return __atomic_fetch_add(&_M_p, _M_type_size(__d), int(__m)); }
+      { return __atomic_fetch_add(&_M_p, _S_type_size(__d), int(__m)); }
 
       _GLIBCXX_ALWAYS_INLINE __pointer_type
       fetch_add(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) volatile noexcept
-      { return __atomic_fetch_add(&_M_p, _M_type_size(__d), int(__m)); }
+      { return __atomic_fetch_add(&_M_p, _S_type_size(__d), int(__m)); }
 
       _GLIBCXX_ALWAYS_INLINE __pointer_type
       fetch_sub(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) noexcept
-      { return __atomic_fetch_sub(&_M_p, _M_type_size(__d), int(__m)); }
+      { return __atomic_fetch_sub(&_M_p, _S_type_size(__d), int(__m)); }
 
       _GLIBCXX_ALWAYS_INLINE __pointer_type
       fetch_sub(ptrdiff_t __d,
 		memory_order __m = memory_order_seq_cst) volatile noexcept
-      { return __atomic_fetch_sub(&_M_p, _M_type_size(__d), int(__m)); }
+      { return __atomic_fetch_sub(&_M_p, _S_type_size(__d), int(__m)); }
     };
 
   namespace __atomic_impl
@@ -971,13 +964,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
       }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wc++17-extensions"
+
     template<typename _Tp>
-      _GLIBCXX_ALWAYS_INLINE _Tp*
+      _GLIBCXX_ALWAYS_INLINE _GLIBCXX14_CONSTEXPR _Tp*
       __clear_padding(_Tp& __val) noexcept
       {
 	auto* __ptr = std::__addressof(__val);
 #if __has_builtin(__builtin_clear_padding)
-	if _GLIBCXX17_CONSTEXPR (__atomic_impl::__maybe_has_padding<_Tp>())
+	if constexpr (__atomic_impl::__maybe_has_padding<_Tp>())
 	  __builtin_clear_padding(__ptr);
 #endif
 	return __ptr;
@@ -987,7 +983,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     template<typename _Tp>
       using _Val = typename remove_volatile<_Tp>::type;
 
-    template<typename _Tp>
+    template<bool _AtomicRef = false, typename _Tp>
       _GLIBCXX_ALWAYS_INLINE bool
       __compare_exchange(_Tp& __val, _Val<_Tp>& __e, _Val<_Tp>& __i,
 			 bool __is_weak,
@@ -996,27 +992,79 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__glibcxx_assert(__is_valid_cmpexch_failure_order(__f));
 
 	using _Vp = _Val<_Tp>;
+	_Tp* const __pval = std::__addressof(__val);
 
-	if _GLIBCXX17_CONSTEXPR (__atomic_impl::__maybe_has_padding<_Vp>())
+	if constexpr (!__atomic_impl::__maybe_has_padding<_Vp>())
 	  {
-	    // We must not modify __e on success, so cannot clear its padding.
-	    // Copy into a buffer and clear that, then copy back on failure.
-	    alignas(_Vp) unsigned char __buf[sizeof(_Vp)];
-	    _Vp* __exp = ::new((void*)__buf) _Vp(__e);
-	    __atomic_impl::__clear_padding(*__exp);
-	    if (__atomic_compare_exchange(std::__addressof(__val), __exp,
-					  __atomic_impl::__clear_padding(__i),
+	    return __atomic_compare_exchange(__pval, std::__addressof(__e),
+					     std::__addressof(__i), __is_weak,
+					     int(__s), int(__f));
+	  }
+	else if constexpr (!_AtomicRef) // std::atomic<T>
+	  {
+	    // Clear padding of the value we want to set:
+	    _Vp* const __pi = __atomic_impl::__clear_padding(__i);
+	    // Only allowed to modify __e on failure, so make a copy:
+	    _Vp __exp = __e;
+	    // Clear padding of the expected value:
+	    _Vp* const __pexp = __atomic_impl::__clear_padding(__exp);
+
+	    // For std::atomic<T> we know that the contained value will already
+	    // have zeroed padding, so trivial memcmp semantics are OK.
+	    if (__atomic_compare_exchange(__pval, __pexp, __pi,
 					  __is_weak, int(__s), int(__f)))
 	      return true;
-	    __builtin_memcpy(std::__addressof(__e), __exp, sizeof(_Vp));
+	    // Value bits must be different, copy from __exp back to __e:
+	    __builtin_memcpy(std::__addressof(__e), __pexp, sizeof(_Vp));
 	    return false;
 	  }
-	else
-	  return __atomic_compare_exchange(std::__addressof(__val),
-					   std::__addressof(__e),
-					   std::__addressof(__i),
-					   __is_weak, int(__s), int(__f));
+	else // std::atomic_ref<T> where T has padding bits.
+	  {
+	    // Clear padding of the value we want to set:
+	    _Vp* const __pi = __atomic_impl::__clear_padding(__i);
+
+	    // Only allowed to modify __e on failure, so make a copy:
+	    _Vp __exp = __e;
+	    // Optimistically assume that a previous store had zeroed padding
+	    // so that zeroing it in the expected value will match first time.
+	    _Vp* const __pexp = __atomic_impl::__clear_padding(__exp);
+
+	    // compare_exchange is specified to compare value representations.
+	    // Need to check whether a failure is 'real' or just due to
+	    // differences in padding bits. This loop should run no more than
+	    // three times, because the worst case scenario is:
+	    // First CAS fails because the actual value has non-zero padding.
+	    // Second CAS fails because another thread stored the same value,
+	    // but now with padding cleared. Third CAS succeeds.
+	    // We will never need to loop a fourth time, because any value
+	    // written by another thread (whether via store, exchange or
+	    // compare_exchange) will have had its padding cleared.
+	    while (true)
+	      {
+		// Copy of the expected value so we can clear its padding.
+		_Vp __orig = __exp;
+
+		if (__atomic_compare_exchange(__pval, __pexp, __pi,
+					      __is_weak, int(__s), int(__f)))
+		  return true;
+
+		// Copy of the actual value so we can clear its padding.
+		_Vp __curr = __exp;
+
+		// Compare value representations (i.e. ignoring padding).
+		if (__builtin_memcmp(__atomic_impl::__clear_padding(__orig),
+				     __atomic_impl::__clear_padding(__curr),
+				     sizeof(_Vp)))
+		  {
+		    // Value representations compare unequal, real failure.
+		    __builtin_memcpy(std::__addressof(__e), __pexp,
+				     sizeof(_Vp));
+		    return false;
+		  }
+	      }
+	  }
       }
+#pragma GCC diagnostic pop
   } // namespace __atomic_impl
 
 #if __cplusplus > 201703L
@@ -1063,27 +1111,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return *__dest;
       }
 
-    template<typename _Tp>
+    template<bool _AtomicRef = false, typename _Tp>
       _GLIBCXX_ALWAYS_INLINE bool
       compare_exchange_weak(_Tp* __ptr, _Val<_Tp>& __expected,
 			    _Val<_Tp> __desired, memory_order __success,
 			    memory_order __failure) noexcept
       {
-	return __atomic_impl::__compare_exchange(*__ptr, __expected, __desired,
-						 true, __success, __failure);
+	return __atomic_impl::__compare_exchange<_AtomicRef>(
+		   *__ptr, __expected, __desired, true, __success, __failure);
       }
 
-    template<typename _Tp>
+    template<bool _AtomicRef = false, typename _Tp>
       _GLIBCXX_ALWAYS_INLINE bool
       compare_exchange_strong(_Tp* __ptr, _Val<_Tp>& __expected,
 			      _Val<_Tp> __desired, memory_order __success,
 			      memory_order __failure) noexcept
       {
-	return __atomic_impl::__compare_exchange(*__ptr, __expected, __desired,
-						 false, __success, __failure);
+	return __atomic_impl::__compare_exchange<_AtomicRef>(
+		   *__ptr, __expected, __desired, false, __success, __failure);
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
     template<typename _Tp>
       _GLIBCXX_ALWAYS_INLINE void
       wait(const _Tp* __ptr, _Val<_Tp> __old,
@@ -1108,7 +1156,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { std::__atomic_notify_address(__ptr, true); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
+#endif // __glibcxx_atomic_wait
 
     template<typename _Tp>
       _GLIBCXX_ALWAYS_INLINE _Tp
@@ -1161,53 +1209,89 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return __atomic_xor_fetch(__ptr, __i, __ATOMIC_SEQ_CST); }
 
     template<typename _Tp>
+      concept __atomic_fetch_addable
+	= requires (_Tp __t) { __atomic_fetch_add(&__t, __t, 0); };
+
+    template<typename _Tp>
       _Tp
       __fetch_add_flt(_Tp* __ptr, _Val<_Tp> __i, memory_order __m) noexcept
       {
-	_Val<_Tp> __oldval = load(__ptr, memory_order_relaxed);
-	_Val<_Tp> __newval = __oldval + __i;
-	while (!compare_exchange_weak(__ptr, __oldval, __newval, __m,
-				      memory_order_relaxed))
-	  __newval = __oldval + __i;
-	return __oldval;
+	if constexpr (__atomic_fetch_addable<_Tp>)
+	  return __atomic_fetch_add(__ptr, __i, int(__m));
+	else
+	  {
+	    _Val<_Tp> __oldval = load (__ptr, memory_order_relaxed);
+	    _Val<_Tp> __newval = __oldval + __i;
+	    while (!compare_exchange_weak (__ptr, __oldval, __newval, __m,
+					   memory_order_relaxed))
+	      __newval = __oldval + __i;
+	    return __oldval;
+	  }
       }
+
+    template<typename _Tp>
+      concept __atomic_fetch_subtractable
+	= requires (_Tp __t) { __atomic_fetch_sub(&__t, __t, 0); };
 
     template<typename _Tp>
       _Tp
       __fetch_sub_flt(_Tp* __ptr, _Val<_Tp> __i, memory_order __m) noexcept
       {
-	_Val<_Tp> __oldval = load(__ptr, memory_order_relaxed);
-	_Val<_Tp> __newval = __oldval - __i;
-	while (!compare_exchange_weak(__ptr, __oldval, __newval, __m,
-				      memory_order_relaxed))
-	  __newval = __oldval - __i;
-	return __oldval;
+	if constexpr (__atomic_fetch_subtractable<_Tp>)
+	  return __atomic_fetch_sub(__ptr, __i, int(__m));
+	else
+	  {
+	    _Val<_Tp> __oldval = load (__ptr, memory_order_relaxed);
+	    _Val<_Tp> __newval = __oldval - __i;
+	    while (!compare_exchange_weak (__ptr, __oldval, __newval, __m,
+					   memory_order_relaxed))
+	      __newval = __oldval - __i;
+	    return __oldval;
+	  }
       }
+
+    template<typename _Tp>
+      concept __atomic_add_fetchable
+	= requires (_Tp __t) { __atomic_add_fetch(&__t, __t, 0); };
 
     template<typename _Tp>
       _Tp
       __add_fetch_flt(_Tp* __ptr, _Val<_Tp> __i) noexcept
       {
-	_Val<_Tp> __oldval = load(__ptr, memory_order_relaxed);
-	_Val<_Tp> __newval = __oldval + __i;
-	while (!compare_exchange_weak(__ptr, __oldval, __newval,
-				      memory_order_seq_cst,
-				      memory_order_relaxed))
-	  __newval = __oldval + __i;
-	return __newval;
+	if constexpr (__atomic_add_fetchable<_Tp>)
+	  return __atomic_add_fetch(__ptr, __i, __ATOMIC_SEQ_CST);
+	else
+	  {
+	    _Val<_Tp> __oldval = load (__ptr, memory_order_relaxed);
+	    _Val<_Tp> __newval = __oldval + __i;
+	    while (!compare_exchange_weak (__ptr, __oldval, __newval,
+					   memory_order_seq_cst,
+					   memory_order_relaxed))
+	      __newval = __oldval + __i;
+	    return __newval;
+	  }
       }
+
+    template<typename _Tp>
+      concept __atomic_sub_fetchable
+	= requires (_Tp __t) { __atomic_sub_fetch(&__t, __t, 0); };
 
     template<typename _Tp>
       _Tp
       __sub_fetch_flt(_Tp* __ptr, _Val<_Tp> __i) noexcept
       {
-	_Val<_Tp> __oldval = load(__ptr, memory_order_relaxed);
-	_Val<_Tp> __newval = __oldval - __i;
-	while (!compare_exchange_weak(__ptr, __oldval, __newval,
-				      memory_order_seq_cst,
-				      memory_order_relaxed))
-	  __newval = __oldval - __i;
-	return __newval;
+	if constexpr (__atomic_sub_fetchable<_Tp>)
+	  return __atomic_sub_fetch(__ptr, __i, __ATOMIC_SEQ_CST);
+	else
+	  {
+	    _Val<_Tp> __oldval = load (__ptr, memory_order_relaxed);
+	    _Val<_Tp> __newval = __oldval - __i;
+	    while (!compare_exchange_weak (__ptr, __oldval, __newval,
+					   memory_order_seq_cst,
+					   memory_order_relaxed))
+	      __newval = __oldval - __i;
+	    return __newval;
+	  }
       }
   } // namespace __atomic_impl
 
@@ -1230,7 +1314,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       constexpr
       __atomic_float(_Fp __t) : _M_fp(__t)
-      { }
+      { 
+ 	if (!std::__is_constant_evaluated())
+	  __atomic_impl::__clear_padding(_M_fp);
+      }
 
       __atomic_float(const __atomic_float&) = delete;
       __atomic_float& operator=(const __atomic_float&) = delete;
@@ -1363,7 +1450,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				       __cmpexch_failure_order(__order));
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
       _GLIBCXX_ALWAYS_INLINE void
       wait(_Fp __old, memory_order __m = memory_order_seq_cst) const noexcept
       { __atomic_impl::wait(&_M_fp, __old, __m); }
@@ -1381,7 +1468,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { __atomic_impl::notify_all(&_M_fp); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
+#endif // __glibcxx_atomic_wait
 
       value_type
       fetch_add(value_type __i,
@@ -1425,7 +1512,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #undef _GLIBCXX20_INIT
 
   template<typename _Tp,
-	   bool = is_integral_v<_Tp>, bool = is_floating_point_v<_Tp>>
+           bool = is_integral_v<_Tp> && !is_same_v<_Tp, bool>,
+           bool = is_floating_point_v<_Tp>>
     struct __atomic_ref;
 
   // base class for non-integral, non-floating-point, non-pointer types
@@ -1452,7 +1540,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       explicit
       __atomic_ref(_Tp& __t) : _M_ptr(std::__addressof(__t))
-      { __glibcxx_assert(((uintptr_t)_M_ptr % required_alignment) == 0); }
+      {
+	__glibcxx_assert(((__UINTPTR_TYPE__)_M_ptr % required_alignment) == 0);
+      }
 
       __atomic_ref(const __atomic_ref&) noexcept = default;
 
@@ -1487,9 +1577,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			    memory_order __success,
 			    memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_weak(_M_ptr,
-						    __expected, __desired,
-						    __success, __failure);
+	return __atomic_impl::compare_exchange_weak<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
@@ -1497,9 +1586,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			    memory_order __success,
 			    memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_strong(_M_ptr,
-						      __expected, __desired,
-						      __success, __failure);
+	return __atomic_impl::compare_exchange_strong<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
@@ -1520,7 +1608,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				       __cmpexch_failure_order(__order));
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
       _GLIBCXX_ALWAYS_INLINE void
       wait(_Tp __old, memory_order __m = memory_order_seq_cst) const noexcept
       { __atomic_impl::wait(_M_ptr, __old, __m); }
@@ -1538,7 +1626,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { __atomic_impl::notify_all(_M_ptr); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
+#endif // __glibcxx_atomic_wait
 
     private:
       _Tp* _M_ptr;
@@ -1565,7 +1653,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       explicit
       __atomic_ref(_Tp& __t) : _M_ptr(&__t)
-      { __glibcxx_assert(((uintptr_t)_M_ptr % required_alignment) == 0); }
+      {
+	__glibcxx_assert(((__UINTPTR_TYPE__)_M_ptr % required_alignment) == 0);
+      }
 
       __atomic_ref(const __atomic_ref&) noexcept = default;
 
@@ -1602,9 +1692,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			    memory_order __success,
 			    memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_weak(_M_ptr,
-						    __expected, __desired,
-						    __success, __failure);
+	return __atomic_impl::compare_exchange_weak<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
@@ -1612,9 +1701,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			      memory_order __success,
 			      memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_strong(_M_ptr,
-						      __expected, __desired,
-						      __success, __failure);
+	return __atomic_impl::compare_exchange_strong<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
@@ -1635,7 +1723,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				       __cmpexch_failure_order(__order));
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
       _GLIBCXX_ALWAYS_INLINE void
       wait(_Tp __old, memory_order __m = memory_order_seq_cst) const noexcept
       { __atomic_impl::wait(_M_ptr, __old, __m); }
@@ -1653,7 +1741,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { __atomic_impl::notify_all(_M_ptr); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait 
+#endif // __glibcxx_atomic_wait
 
       value_type
       fetch_add(value_type __i,
@@ -1740,7 +1828,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       explicit
       __atomic_ref(_Fp& __t) : _M_ptr(&__t)
-      { __glibcxx_assert(((uintptr_t)_M_ptr % required_alignment) == 0); }
+      {
+	__glibcxx_assert(((__UINTPTR_TYPE__)_M_ptr % required_alignment) == 0);
+      }
 
       __atomic_ref(const __atomic_ref&) noexcept = default;
 
@@ -1777,19 +1867,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			    memory_order __success,
 			    memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_weak(_M_ptr,
-						    __expected, __desired,
-						    __success, __failure);
+	return __atomic_impl::compare_exchange_weak<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
       compare_exchange_strong(_Fp& __expected, _Fp __desired,
-			    memory_order __success,
-			    memory_order __failure) const noexcept
+			      memory_order __success,
+			      memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_strong(_M_ptr,
-						      __expected, __desired,
-						      __success, __failure);
+	return __atomic_impl::compare_exchange_strong<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
@@ -1810,7 +1898,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				       __cmpexch_failure_order(__order));
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
       _GLIBCXX_ALWAYS_INLINE void
       wait(_Fp __old, memory_order __m = memory_order_seq_cst) const noexcept
       { __atomic_impl::wait(_M_ptr, __old, __m); }
@@ -1828,7 +1916,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { __atomic_impl::notify_all(_M_ptr); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
+#endif // __glibcxx_atomic_wait
 
       value_type
       fetch_add(value_type __i,
@@ -1869,7 +1957,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       explicit
       __atomic_ref(_Tp*& __t) : _M_ptr(std::__addressof(__t))
-      { __glibcxx_assert(((uintptr_t)_M_ptr % required_alignment) == 0); }
+      {
+	__glibcxx_assert(((__UINTPTR_TYPE__)_M_ptr % required_alignment) == 0);
+      }
 
       __atomic_ref(const __atomic_ref&) noexcept = default;
 
@@ -1906,9 +1996,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			    memory_order __success,
 			    memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_weak(_M_ptr,
-						    __expected, __desired,
-						    __success, __failure);
+	return __atomic_impl::compare_exchange_weak<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
@@ -1916,9 +2005,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			    memory_order __success,
 			    memory_order __failure) const noexcept
       {
-	return __atomic_impl::compare_exchange_strong(_M_ptr,
-						      __expected, __desired,
-						      __success, __failure);
+	return __atomic_impl::compare_exchange_strong<true>(
+		 _M_ptr, __expected, __desired, __success, __failure);
       }
 
       bool
@@ -1939,7 +2027,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				       __cmpexch_failure_order(__order));
       }
 
-#if __cpp_lib_atomic_wait
+#if __glibcxx_atomic_wait
       _GLIBCXX_ALWAYS_INLINE void
       wait(_Tp* __old, memory_order __m = memory_order_seq_cst) const noexcept
       { __atomic_impl::wait(_M_ptr, __old, __m); }
@@ -1957,7 +2045,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { __atomic_impl::notify_all(_M_ptr); }
 
       // TODO add const volatile overload
-#endif // __cpp_lib_atomic_wait
+#endif // __glibcxx_atomic_wait
 
       _GLIBCXX_ALWAYS_INLINE value_type
       fetch_add(difference_type __d,

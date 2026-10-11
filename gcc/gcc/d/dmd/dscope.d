@@ -3,12 +3,12 @@
  *
  * Not to be confused with the `scope` storage class.
  *
- * Copyright:   Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 https://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/dscope.d, _dscope.d)
+ * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/compiler/src/dmd/dscope.d, _dscope.d)
  * Documentation:  https://dlang.org/phobos/dmd_dscope.html
- * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/dscope.d
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/compiler/src/dmd/dscope.d
  */
 
 module dmd.dscope;
@@ -24,15 +24,18 @@ import dmd.dclass;
 import dmd.declaration;
 import dmd.dmodule;
 import dmd.doc;
+import dmd.dstruct;
 import dmd.dsymbol;
 import dmd.dsymbolsem;
 import dmd.dtemplate;
 import dmd.expression;
 import dmd.errors;
+import dmd.errorsink;
 import dmd.func;
 import dmd.globals;
 import dmd.id;
 import dmd.identifier;
+import dmd.importc;
 import dmd.location;
 import dmd.common.outbuffer;
 import dmd.root.rmem;
@@ -43,35 +46,80 @@ import dmd.tokens;
 
 //version=LOGSEARCH;
 
-
-// List of flags that can be applied to this `Scope`
-enum SCOPE
+/// What kind of contract function we're in, if any
+enum Contract : ubyte
 {
-    ctor          = 0x0001,   /// constructor type
-    noaccesscheck = 0x0002,   /// don't do access checks
-    condition     = 0x0004,   /// inside static if/assert condition
-    debug_        = 0x0008,   /// inside debug conditional
-    constraint    = 0x0010,   /// inside template constraint
-    invariant_    = 0x0020,   /// inside invariant code
-    require       = 0x0040,   /// inside in contract code
-    ensure        = 0x0060,   /// inside out contract code
-    contract      = 0x0060,   /// [mask] we're inside contract code
-    ctfe          = 0x0080,   /// inside a ctfe-only expression
-    compile       = 0x0100,   /// inside __traits(compile)
-    ignoresymbolvisibility    = 0x0200,   /// ignore symbol visibility
-                                          /// https://issues.dlang.org/show_bug.cgi?id=15907
-    Cfile         = 0x0800,   /// C semantics apply
-    free          = 0x8000,   /// is on free list
-
-    fullinst      = 0x10000,  /// fully instantiate templates
-    ctfeBlock     = 0x20000,  /// inside a `if (__ctfe)` block
+    none = 0,
+    invariant_ = 1,
+    require = 2, // in contract
+    ensure = 3, // out contract
 }
 
-/// Flags that are carried along with a scope push()
-private enum PersistentFlags =
-    SCOPE.contract | SCOPE.debug_ | SCOPE.ctfe | SCOPE.compile | SCOPE.constraint |
-    SCOPE.noaccesscheck | SCOPE.ignoresymbolvisibility |
-    SCOPE.Cfile | SCOPE.ctfeBlock;
+private extern (D) struct BitFields
+{
+    bool ctor;              /// constructor type
+    bool noAccessCheck;     /// don't do access checks
+    bool condition;         /// inside static if/assert condition
+    bool debug_;            /// inside debug conditional
+    bool inTemplateConstraint; /// inside template constraint
+    Contract contract;
+    bool ctfe;              /// inside a ctfe-only expression
+    bool traitsCompiles;    /// inside __traits(compile)
+    /// ignore symbol visibility
+    /// https://issues.dlang.org/show_bug.cgi?id=15907
+    bool ignoresymbolvisibility;
+    bool inCfile;            /// C semantics apply
+    bool canFree;            /// is on free list
+    bool fullinst;          /// fully instantiate templates
+    bool ctfeBlock;         /// inside a `if (__ctfe)` block
+}
+
+/// State of -preview switches
+///
+/// By making them part of a Scope, we reduce reliance on dmd.globals,
+/// and can enable/disable them per module / edition.
+private struct Previews
+{
+    // Run `dmd -preview=h` for the meaning of these switches
+    private extern (D) static struct BitFields
+    {
+        bool bitfields;
+        bool dip1000;
+        bool dip1008;
+        bool dip1021;
+        bool dip25;
+        bool fieldwise;
+        bool fixAliasThis;
+        bool fixImmutableConv;
+        bool in_;
+        bool inclusiveInContracts;
+        bool noSharedAccess;
+        bool rvalueRefParam;
+        bool safer;
+        FeatureState systemVariables;
+    }
+
+    import dmd.common.bitfields : generateBitFields;
+    mixin(generateBitFields!(BitFields, ushort));
+
+    void setFromParams(ref Param params) @nogc nothrow pure @safe
+    {
+        this.bitfields = params.bitfields;
+        this.dip1000 = params.useDIP1000 == FeatureState.enabled;
+        this.dip1008 = params.ehnogc;
+        this.dip1021 = params.useDIP1021; //  == FeatureState.enabled;
+        this.dip25 = params.useDIP25 == FeatureState.enabled;
+        this.fixAliasThis = params.fixAliasThis;
+        this.fixImmutableConv = params.fixImmutableConv;
+        this.in_ = params.previewIn;
+        this.inclusiveInContracts = params.inclusiveInContracts;
+        this.noSharedAccess = params.noSharedAccess == FeatureState.enabled;
+        this.rvalueRefParam = params.rvalueRefParam == FeatureState.enabled;
+        this.safer = params.safer == FeatureState.enabled;
+        this.systemVariables = params.systemVariables;
+        this.fieldwise = params.fieldwise == FeatureState.enabled;
+    }
+}
 
 extern (C++) struct Scope
 {
@@ -83,10 +131,10 @@ extern (C++) struct Scope
     VarDeclaration varDecl;         /// variable we are in during semantic2
     Dsymbol parent;                 /// parent to use
     LabelStatement slabel;          /// enclosing labelled statement
-    SwitchStatement sw;             /// enclosing switch statement
+    SwitchStatement switchStatement;/// enclosing switch statement
     Statement tryBody;              /// enclosing _body of TryCatchStatement or TryFinallyStatement
-    TryFinallyStatement tf;         /// enclosing try finally statement
-    ScopeGuardStatement os;            /// enclosing scope(xxx) statement
+    TryFinallyStatement tryFinally; /// enclosing try finally statement
+    ScopeGuardStatement scopeGuard; /// enclosing scope(xxx) statement
     Statement sbreak;               /// enclosing statement that supports "break"
     Statement scontinue;            /// enclosing statement that supports "continue"
     ForeachStatement fes;           /// if nested function for ForeachStatement, this is it
@@ -94,8 +142,10 @@ extern (C++) struct Scope
     Dsymbol inunion;                /// != null if processing members of a union
     bool nofree;                    /// true if shouldn't free it
     bool inLoop;                    /// true if inside a loop (where constructor calls aren't allowed)
+    bool inDefaultArg;              /// true if inside a default argument (where __FILE__, etc are evaluated at the call site)
     int intypeof;                   /// in typeof(exp)
     VarDeclaration lastVar;         /// Previous symbol used to prevent goto-skips-init
+    ErrorSink eSink;                /// sink for error messages
 
     /* If  minst && !tinst, it's in definitely non-speculative scope (eg. module member scope).
      * If !minst && !tinst, it's in definitely speculative scope (eg. template constraint).
@@ -126,11 +176,14 @@ extern (C++) struct Scope
     Visibility visibility = Visibility(Visibility.Kind.public_);
     int explicitVisibility;         /// set if in an explicit visibility attribute
 
-    StorageClass stc;               /// storage class
+    STC stc;                        /// storage class
 
     DeprecatedDeclaration depdecl;  /// customized deprecation message
 
-    uint flags;
+    import dmd.common.bitfields : generateBitFields;
+    mixin(generateBitFields!(BitFields, ushort));
+
+    Previews previews;
 
     // user defined attributes
     UserAttributeDeclaration userAttribDecl;
@@ -141,6 +194,7 @@ extern (C++) struct Scope
 
     AliasDeclaration aliasAsg; /// if set, then aliasAsg is being assigned a new value,
                                /// do not set wasRead for it
+    StructDeclaration argStruct;    /// elimiate recursion when looking for rvalue construction
 
     extern (D) __gshared Scope* freelist;
 
@@ -151,14 +205,14 @@ extern (C++) struct Scope
             Scope* s = freelist;
             freelist = s.enclosing;
             //printf("freelist %p\n", s);
-            assert(s.flags & SCOPE.free);
-            s.flags &= ~SCOPE.free;
+            assert(s.canFree);
+            s.canFree = false;
             return s;
         }
         return new Scope();
     }
 
-    extern (D) static Scope* createGlobal(Module _module)
+    extern (D) static Scope* createGlobal(Module _module, ErrorSink eSink)
     {
         Scope* sc = Scope.alloc();
         *sc = Scope.init;
@@ -166,14 +220,18 @@ extern (C++) struct Scope
         sc.minst = _module;
         sc.scopesym = new ScopeDsymbol();
         sc.scopesym.symtab = new DsymbolTable();
+        sc.eSink = eSink;
+        assert(eSink);
         // Add top level package as member of this global scope
         Dsymbol m = _module;
         while (m.parent)
             m = m.parent;
         m.addMember(null, sc.scopesym);
         m.parent = null; // got changed by addMember()
+        sc.previews.setFromParams(global.params);
+
         if (_module.filetype == FileType.c)
-            sc.flags |= SCOPE.Cfile;
+            sc.inCfile = true;
         // Create the module scope underneath the global scope
         sc = sc.push(_module);
         sc.parent = _module;
@@ -195,13 +253,13 @@ extern (C++) struct Scope
     {
         Scope* s = copy();
         //printf("Scope::push(this = %p) new = %p\n", this, s);
-        assert(!(flags & SCOPE.free));
+        assert(!this.canFree);
         s.scopesym = null;
         s.enclosing = &this;
         debug
         {
             if (enclosing)
-                assert(!(enclosing.flags & SCOPE.free));
+                assert(!enclosing.canFree);
             if (s == enclosing)
             {
                 printf("this = %p, enclosing = %p, enclosing.enclosing = %p\n", s, &this, enclosing);
@@ -211,10 +269,34 @@ extern (C++) struct Scope
         s.slabel = null;
         s.nofree = false;
         s.ctorflow.fieldinit = ctorflow.fieldinit.arraydup;
-        s.flags = (flags & PersistentFlags);
+
+        // Only keep persistent flags
+        s.resetAllFlags();
+        s.contract = this.contract;
+        s.debug_ = this.debug_;
+        s.ctfe = this.ctfe;
+        s.traitsCompiles = this.traitsCompiles;
+        s.inTemplateConstraint = this.inTemplateConstraint;
+        s.noAccessCheck = this.noAccessCheck;
+        s.ignoresymbolvisibility = this.ignoresymbolvisibility;
+        s.inCfile = this.inCfile;
+        s.ctfeBlock = this.ctfeBlock;
+        s.previews = this.previews;
         s.lastdc = null;
         assert(&this != s);
         return s;
+    }
+
+    /// Copy flags from scope `other`
+    extern(D) void copyFlagsFrom(Scope* other) @safe
+    {
+        this.bitFields = other.bitFields;
+    }
+
+    /// Set all scope flags to their initial value
+    extern(D) void resetAllFlags() @safe
+    {
+        this.bitFields = 0;
     }
 
     extern (D) Scope* push(ScopeDsymbol ss)
@@ -239,7 +321,7 @@ extern (C++) struct Scope
                 this = this.init;
             enclosing = freelist;
             freelist = &this;
-            flags |= SCOPE.free;
+            this.canFree = true;
         }
         return enc;
     }
@@ -258,7 +340,8 @@ extern (C++) struct Scope
     extern (D) Scope* startCTFE()
     {
         Scope* sc = this.push();
-        sc.flags = this.flags | SCOPE.ctfe;
+        sc.copyFlagsFrom(&this);
+        sc.ctfe = true;
         version (none)
         {
             /* TODO: Currently this is not possible, because we need to
@@ -288,7 +371,7 @@ extern (C++) struct Scope
 
     extern (D) Scope* endCTFE()
     {
-        assert(flags & SCOPE.ctfe);
+        assert(this.ctfe);
         return pop();
     }
 
@@ -299,30 +382,29 @@ extern (C++) struct Scope
      *   loc = for error messages
      *   ctorflow = flow results to merge in
      */
-    extern (D) void merge(const ref Loc loc, const ref CtorFlow ctorflow)
+    extern (D) void merge(Loc loc, const ref CtorFlow ctorflow)
     {
         if (!mergeCallSuper(this.ctorflow.callSuper, ctorflow.callSuper))
             error(loc, "one path skips constructor");
 
         const fies = ctorflow.fieldinit;
-        if (this.ctorflow.fieldinit.length && fies.length)
+        if (!this.ctorflow.fieldinit.length || !fies.length)
+            return;
+        FuncDeclaration f = func;
+        if (fes)
+            f = fes.func;
+        auto ad = f.isMemberDecl();
+        assert(ad);
+        foreach (i, v; ad.fields)
         {
-            FuncDeclaration f = func;
-            if (fes)
-                f = fes.func;
-            auto ad = f.isMemberDecl();
-            assert(ad);
-            foreach (i, v; ad.fields)
+            bool mustInit = (v.storage_class & STC.nodefaultctor || v.type.needsNested());
+            auto fieldInit = &this.ctorflow.fieldinit[i];
+            const fiesCurrent = fies[i];
+            if (fieldInit.loc is Loc.init)
+                fieldInit.loc = fiesCurrent.loc;
+            if (!mergeFieldInit(this.ctorflow.fieldinit[i].csx, fiesCurrent.csx) && mustInit)
             {
-                bool mustInit = (v.storage_class & STC.nodefaultctor || v.type.needsNested());
-                auto fieldInit = &this.ctorflow.fieldinit[i];
-                const fiesCurrent = fies[i];
-                if (fieldInit.loc is Loc.init)
-                    fieldInit.loc = fiesCurrent.loc;
-                if (!mergeFieldInit(this.ctorflow.fieldinit[i].csx, fiesCurrent.csx) && mustInit)
-                {
-                    error(loc, "one path skips field `%s`", v.toChars());
-                }
+                error(loc, "one path skips field `%s`", v.toChars());
             }
         }
     }
@@ -334,13 +416,13 @@ extern (C++) struct Scope
      * Params:
      *  loc = location to use for error messages
      *  ident = name to look up
-     *  pscopesym = if supplied and name is found, set to scope that ident was found in
+     *  pscopesym = if supplied and name is found, set to scope that ident was found in, otherwise set to null
      *  flags = modify search based on flags
      *
      * Returns:
      *  symbol if found, null if not
      */
-    extern (C++) Dsymbol search(const ref Loc loc, Identifier ident, Dsymbol* pscopesym, int flags = IgnoreNone)
+    extern (C++) Dsymbol search(Loc loc, Identifier ident, out Dsymbol pscopesym, SearchOptFlags flags = SearchOpt.all)
     {
         version (LOGSEARCH)
         {
@@ -361,7 +443,7 @@ extern (C++) struct Scope
         }
 
         // This function is called only for unqualified lookup
-        assert(!(flags & (SearchLocalsOnly | SearchImportsOnly)));
+        assert(!(flags & (SearchOpt.localsOnly | SearchOpt.importsOnly)));
 
         /* If ident is "start at module scope", only look at module scope
          */
@@ -376,15 +458,14 @@ extern (C++) struct Scope
                 if (Dsymbol s = sc.scopesym.isModule())
                 {
                     //printMsg("\tfound", s);
-                    if (pscopesym)
-                        *pscopesym = sc.scopesym;
+                    pscopesym = sc.scopesym;
                     return s;
                 }
             }
             return null;
         }
 
-        Dsymbol checkAliasThis(AggregateDeclaration ad, Identifier ident, int flags, Expression* exp)
+        Dsymbol checkAliasThis(AggregateDeclaration ad, Identifier ident, SearchOptFlags flags, Expression* exp)
         {
             import dmd.mtype;
             if (!ad || !ad.aliasthis)
@@ -448,7 +529,7 @@ extern (C++) struct Scope
             return s;
         }
 
-        Dsymbol searchScopes(int flags)
+        Dsymbol searchScopes(SearchOptFlags flags)
         {
             for (Scope* sc = &this; sc; sc = sc.enclosing)
             {
@@ -458,13 +539,13 @@ extern (C++) struct Scope
                 //printf("\tlooking in scopesym '%s', kind = '%s', flags = x%x\n", sc.scopesym.toChars(), sc.scopesym.kind(), flags);
 
                 if (sc.scopesym.isModule())
-                    flags |= SearchUnqualifiedModule;        // tell Module.search() that SearchLocalsOnly is to be obeyed
-                else if (sc.flags & SCOPE.Cfile && sc.scopesym.isStructDeclaration())
+                    flags |= SearchOpt.unqualifiedModule;    // tell Module.search() that SearchOpt.localsOnly is to be obeyed
+                else if (sc.inCfile && sc.scopesym.isStructDeclaration())
                     continue;                                // C doesn't have struct scope
 
                 if (Dsymbol s = sc.scopesym.search(loc, ident, flags))
                 {
-                    if (flags & TagNameSpace)
+                    if (flags & SearchOpt.tagNameSpace)
                     {
                         // ImportC: if symbol is not a tag, look for it in tag table
                         if (!s.isScopeDsymbol())
@@ -475,28 +556,19 @@ extern (C++) struct Scope
                             s = *ps;
                         }
                     }
-                    if (!(flags & (SearchImportsOnly | IgnoreErrors)) &&
-                        ident == Id.length && sc.scopesym.isArrayScopeSymbol() &&
-                        sc.enclosing && sc.enclosing.search(loc, ident, null, flags))
-                    {
-                        warning(s.loc, "array `length` hides other `length` name in outer scope");
-                    }
                     //printMsg("\tfound local", s);
-                    if (pscopesym)
-                        *pscopesym = sc.scopesym;
+                    pscopesym = sc.scopesym;
                     return s;
                 }
 
             NotFound:
-                if (global.params.fixAliasThis)
+                if (sc.previews.fixAliasThis)
                 {
                     Expression exp = new ThisExp(loc);
-                    Dsymbol aliasSym = checkAliasThis(sc.scopesym.isAggregateDeclaration(), ident, flags, &exp);
-                    if (aliasSym)
+                    if (Dsymbol aliasSym = checkAliasThis(sc.scopesym.isAggregateDeclaration(), ident, flags, &exp))
                     {
                         //printf("found aliassym: %s\n", aliasSym.toChars());
-                        if (pscopesym)
-                            *pscopesym = new ExpressionDsymbol(exp);
+                        pscopesym = new ExpressionDsymbol(exp);
                         return aliasSym;
                     }
                 }
@@ -508,16 +580,16 @@ extern (C++) struct Scope
             return null;
         }
 
-        if (this.flags & SCOPE.ignoresymbolvisibility)
-            flags |= IgnoreSymbolVisibility;
+        if (this.ignoresymbolvisibility)
+            flags |= SearchOpt.ignoreVisibility;
 
         // First look in local scopes
-        Dsymbol s = searchScopes(flags | SearchLocalsOnly);
+        Dsymbol s = searchScopes(flags | SearchOpt.localsOnly);
         version (LOGSEARCH) if (s) printMsg("-Scope.search() found local", s);
         if (!s)
         {
             // Second look in imported modules
-            s = searchScopes(flags | SearchImportsOnly);
+            s = searchScopes(flags | SearchOpt.importsOnly);
             version (LOGSEARCH) if (s) printMsg("-Scope.search() found import", s);
         }
         return s;
@@ -550,8 +622,8 @@ extern (C++) struct Scope
                 return null;
             Scope* sc = &this;
             Module.clearCache();
-            Dsymbol scopesym = null;
-            Dsymbol s = sc.search(Loc.initial, id, &scopesym, IgnoreErrors);
+            Dsymbol scopesym;
+            Dsymbol s = sc.search(Loc.initial, id, scopesym, SearchOpt.ignoreErrors);
             if (!s)
                 return null;
 
@@ -575,9 +647,9 @@ extern (C++) struct Scope
             return s;
         }
 
-        Dsymbol scopesym = null;
+        Dsymbol scopesym;
         // search for exact name first
-        if (auto s = search(Loc.initial, ident, &scopesym, IgnoreErrors))
+        if (auto s = search(Loc.initial, ident, scopesym, SearchOpt.ignoreErrors))
             return s;
         return speller!scope_search_fp(ident.toString());
     }
@@ -614,7 +686,7 @@ extern (C++) struct Scope
      * Returns:
      *  innermost scope, null if none
      */
-    extern (D) Scope* inner() return
+    extern (D) Scope* inner() return @safe
     {
         for (Scope* sc = &this; sc; sc = sc.enclosing)
         {
@@ -655,7 +727,7 @@ extern (C++) struct Scope
         //printf("\t\tscopesym = %p\n", scopesym);
         if (!scopesym.symtab)
             scopesym.symtab = new DsymbolTable();
-        if (!(flags & SCOPE.Cfile))
+        if (!this.inCfile)
             return scopesym.symtabInsert(s);
 
         // ImportC insert
@@ -670,7 +742,7 @@ extern (C++) struct Scope
     /********************************************
      * Search enclosing scopes for ScopeDsymbol.
      */
-    extern (D) ScopeDsymbol getScopesym()
+    extern (D) ScopeDsymbol getScopesym() @safe
     {
         for (Scope* sc = &this; sc; sc = sc.enclosing)
         {
@@ -683,7 +755,7 @@ extern (C++) struct Scope
     /********************************************
      * Search enclosing scopes for ClassDeclaration.
      */
-    extern (D) ClassDeclaration getClassScope()
+    extern (D) ClassDeclaration getClassScope() @safe
     {
         for (Scope* sc = &this; sc; sc = sc.enclosing)
         {
@@ -698,7 +770,7 @@ extern (C++) struct Scope
     /********************************************
      * Search enclosing scopes for ClassDeclaration or StructDeclaration.
      */
-    extern (D) AggregateDeclaration getStructClassScope()
+    extern (D) AggregateDeclaration getStructClassScope() @safe
     {
         for (Scope* sc = &this; sc; sc = sc.enclosing)
         {
@@ -742,7 +814,7 @@ extern (C++) struct Scope
      * where it was declared. So mark the Scope as not
      * to be free'd.
      */
-    extern (D) void setNoFree()
+    extern (D) void setNoFree() @safe
     {
         //int i = 0;
         //printf("Scope::setNoFree(this = %p)\n", this);
@@ -750,7 +822,7 @@ extern (C++) struct Scope
         {
             //printf("\tsc = %p\n", sc);
             sc.nofree = true;
-            assert(!(flags & SCOPE.free));
+            assert(!this.canFree);
             //assert(sc != sc.enclosing);
             //assert(!sc.enclosing || sc != sc.enclosing.enclosing);
             //if (++i == 10)
@@ -811,6 +883,34 @@ extern (C++) struct Scope
      */
     extern (D) bool isFromSpeculativeSemanticContext() scope
     {
-        return this.intypeof || this.flags & SCOPE.compile;
+        return this.intypeof || this.traitsCompiles;
+    }
+
+
+    /**
+     * Returns: true if the code needs to go all the way through to code generation.
+     * This implies things like needing lowering to simpler forms.
+     */
+    extern (D) bool needsCodegen()
+    {
+        return !this.ctfe && !this.ctfeBlock && !this.traitsCompiles;
+    }
+
+    /// Returns: whether to raise DIP1000 warnings (FeatureStabe.default) or errors (FeatureState.enabled)
+    extern (D) FeatureState useDIP1000()
+    {
+        return (this.previews.dip1000 || hasEdition(Edition.v2024)) ? FeatureState.enabled : FeatureState.disabled;
+    }
+
+    /// Returns: whether to raise DIP25 warnings (FeatureStabe.default) or errors (FeatureState.enabled)
+    extern (D) FeatureState useDIP25()
+    {
+        return (this.previews.dip25 || hasEdition(Edition.v2024)) ? FeatureState.enabled : FeatureState.disabled;
+    }
+
+    /// Returns: whether this scope compiles with `edition` or later
+    extern (D) bool hasEdition(Edition edition)
+    {
+        return _module && _module.edition >= edition;
     }
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -28,7 +28,7 @@ namespace Resolver {
 class TypeCheckEnumItem : public TypeCheckBase
 {
 public:
-  static TyTy::VariantDef *Resolve (HIR::EnumItem *item,
+  static TyTy::VariantDef *Resolve (HIR::EnumItem &item,
 				    int64_t last_discriminant);
 
 protected:

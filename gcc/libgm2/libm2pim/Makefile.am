@@ -118,14 +118,20 @@ M2MODS = ASCII.mod IO.mod \
        Indexing.mod \
        LMathLib0.mod LegacyReal.mod \
        MemUtils.mod gdbif.mod \
-       GetOpt.mod OptLib.mod
+       GetOpt.mod OptLib.mod \
+       ARRAYOFCHAR.mod \
+       CHAR.mod \
+       StringFileSysOp.mod \
+       String.mod \
+       FileSysOp.mod
 
 # COROUTINES.mod has been removed as it is implemented in ../libm2iso.
 
 M2DEFS = Args.def   ASCII.def \
          Assertion.def  Break.def \
          Builtins.def  cbuiltin.def \
-         CmdArgs.def COROUTINES.def \
+         CmdArgs.def CFileSysOp.def \
+         COROUTINES.def \
          cxxabi.def  Debug.def \
          dtoa.def  DynamicStrings.def \
          Environment.def  errno.def \
@@ -153,7 +159,12 @@ M2DEFS = Args.def   ASCII.def \
          termios.def  TimeString.def \
          UnixArgs.def  wrapc.def  \
          GetOpt.def OptLib.def \
-         cgetopt.def
+         cgetopt.def \
+         ARRAYOFCHAR.def \
+         CHAR.def \
+         StringFileSysOp.def \
+         String.def \
+         FileSysOp.def
 
 libm2pim_la_SOURCES = $(M2MODS) \
                       UnixArgs.cc \
@@ -161,21 +172,30 @@ libm2pim_la_SOURCES = $(M2MODS) \
                       errno.cc dtoa.cc \
                       ldtoa.cc termios.cc \
                       SysExceptions.cc target.c \
-                      wrapc.cc cgetopt.cc
+                      wrapc.cc cgetopt.cc \
+                      CFileSysOp.cc
 
 libm2pimdir = libm2pim
 libm2pim_la_DEPENDENCIES = SYSTEM.def $(addsuffix .lo, $(basename $(libm2pim_la_SOURCES)))
-libm2pim_la_CFLAGS = -I. -I.. -I$(GM2_SRC)/gm2-libs -I$(GM2_SRC)/gm2-libs-iso -DBUILD_GM2_LIBS -I@srcdir@/../  -I@srcdir@/../libm2iso
+libm2pim_la_CFLAGS = \
+  -I. -I.. -I$(GM2_SRC)/gm2-libs -I$(GM2_SRC)/gm2-libs-iso \
+  -DBUILD_GM2_LIBS -I@srcdir@/../  -I@srcdir@/../libm2iso
+
 libm2pim_la_M2FLAGS = \
   -fm2-pathname=m2pim -I. -I$(GM2_SRC)/gm2-libs \
   -fm2-pathname=m2iso -I$(GM2_SRC)/gm2-libs-iso \
-  -fm2-g -g -Wcase-enum -Wreturn-type -fcase -fm2-prefix=m2pim
+  -fm2-g -g -Wcase-enum -Wreturn-type \
+  -fcase -fm2-prefix=m2pim
+
 if TARGET_DARWIN
 libm2pim_la_link_flags = -Wl,-undefined,dynamic_lookup
 else
 libm2pim_la_link_flags =
 endif
-libm2pim_la_LINK = $(LINK) -version-info $(libtool_VERSION) $(libm2pim_la_link_flags)
+if ENABLE_DARWIN_AT_RPATH
+libm2pim_la_link_flags += -nodefaultrpaths -Wl,-rpath,@loader_path/
+endif
+libm2pim_la_LINK = $(LINK) -version-info $(libtool_VERSION) $(libm2pim_la_link_flags) -lm
 BUILT_SOURCES = SYSTEM.def
 CLEANFILES = SYSTEM.def
 
@@ -189,10 +209,13 @@ SYSTEM.def: Makefile
              "$(GM2_FOR_TARGET)" $@
 
 .mod.lo: SYSTEM.def
-	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(GM2_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) $(LIBCFLAGS) $(libm2pim_la_M2FLAGS) $< -o $@
+	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+                   --mode=compile $(GM2_FOR_TARGET) \
+                   -c $(CFLAGS_FOR_TARGET) $(LIBCFLAGS) $(libm2pim_la_M2FLAGS) $< -o $@
 
 .cc.lo:
-	$(LIBTOOL) --tag=CXX --mode=compile $(CXX) -c -I$(srcdir) $(CXXFLAGS) $(LIBCFLAGS) $(libm2pim_la_CFLAGS) $< -o $@
+	$(LIBTOOL) --tag=CXX --mode=compile $(CXX) -c -I$(srcdir) \
+                   $(CXXFLAGS) $(LIBCFLAGS) $(libm2pim_la_CFLAGS) $< -o $@
 
 install-data-local: force
 	mkdir -p $(DESTDIR)$(inst_libdir)/$(M2LIBDIR)

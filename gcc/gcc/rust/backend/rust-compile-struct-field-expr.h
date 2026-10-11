@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -27,7 +27,7 @@ namespace Compile {
 class CompileStructExprField : private HIRCompileBase
 {
 public:
-  static tree Compile (HIR::StructExprField *field, Context *ctx);
+  static tree Compile (HIR::StructExprField &field, Context *ctx);
 
 protected:
   void visit (HIR::StructExprFieldIdentifierValue &field);

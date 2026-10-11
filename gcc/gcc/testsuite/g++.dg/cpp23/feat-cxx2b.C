@@ -1,4 +1,5 @@
 // { dg-options "-std=c++2b -I${srcdir}/g++.dg/cpp1y -I${srcdir}/g++.dg/cpp1y/testinc" }
+// { dg-skip-if "requires hosted libstdc++ for complex" { ! hostedlib } }
 
 //  C++98 features:
 
@@ -42,8 +43,8 @@
 
 #ifndef __cpp_range_based_for
 #  error "__cpp_range_based_for"
-#elif __cpp_range_based_for != 201603
-#  error "__cpp_range_based_for != 201603"
+#elif __cpp_range_based_for != 202211
+#  error "__cpp_range_based_for != 202211"
 #endif
 
 #ifndef __cpp_decltype
@@ -352,8 +353,8 @@
 
 #ifndef __cpp_deduction_guides
 #  error "__cpp_deduction_guides"
-#elif __cpp_deduction_guides != 201907
-#  error "__cpp_deduction_guides != 201907"
+#elif __cpp_deduction_guides != 202207
+#  error "__cpp_deduction_guides != 202207"
 #endif
 
 #ifndef __cpp_if_constexpr
@@ -480,8 +481,8 @@
 
 #ifndef __cpp_consteval
 #  error "__cpp_consteval"
-#elif __cpp_consteval != 201811
-#  error "__cpp_consteval != 201811"
+#elif __cpp_consteval != 202211L
+#  error "__cpp_consteval != 202211L"
 #endif
 
 #ifndef __cpp_concepts
@@ -576,6 +577,12 @@
 #  error "__cpp_implicit_move"
 #elif __cpp_implicit_move != 202207
 #  error "__cpp_implicit_move != 202207"
+#endif
+
+#ifndef __cpp_explicit_this_parameter
+#  error "__cpp_explicit_this_parameter"
+#elif __cpp_explicit_this_parameter != 202110
+#  error "__cpp_explicit_this_parameter != 202110"
 #endif
 
 #ifndef __cpp_auto_cast

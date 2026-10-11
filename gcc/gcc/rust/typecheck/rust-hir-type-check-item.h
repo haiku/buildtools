@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -20,6 +20,7 @@
 #define RUST_HIR_TYPE_CHECK_ITEM
 
 #include "rust-hir-type-check-base.h"
+#include "rust-hir-visitor.h"
 
 namespace Rust {
 namespace Resolver {
@@ -33,6 +34,10 @@ public:
 					  HIR::ImplItem &item);
 
   static TyTy::BaseType *ResolveImplBlockSelf (HIR::ImplBlock &impl_block);
+
+  static TyTy::BaseType *ResolveImplBlockSelfWithInference (
+    HIR::ImplBlock &impl, location_t locus,
+    TyTy::SubstitutionArgumentMappings *infer_arguments);
 
   void visit (HIR::Module &module) override;
   void visit (HIR::Function &function) override;
@@ -52,12 +57,14 @@ public:
   void visit (HIR::UseDeclaration &) override {}
 
 protected:
-  std::vector<TyTy::SubstitutionParamMapping>
+  std::pair<std::vector<TyTy::SubstitutionParamMapping>,
+	    TyTy::RegionConstraints>
   resolve_impl_block_substitutions (HIR::ImplBlock &impl_block,
 				    bool &failure_flag);
 
   void validate_trait_impl_block (
-    HIR::ImplBlock &impl_block, TyTy::BaseType *self,
+    TraitReference *trait_reference, HIR::ImplBlock &impl_block,
+    TyTy::BaseType *self,
     std::vector<TyTy::SubstitutionParamMapping> &substitutions);
 
   TyTy::BaseType *resolve_impl_item (HIR::ImplBlock &impl_block,

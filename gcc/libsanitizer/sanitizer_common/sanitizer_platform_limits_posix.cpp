@@ -18,6 +18,7 @@
 // depends on _FILE_OFFSET_BITS setting.
 // To get this "true" dirent definition, we undefine _FILE_OFFSET_BITS below.
 #undef _FILE_OFFSET_BITS
+#undef _TIME_BITS
 #endif
 
 // Must go after undef _FILE_OFFSET_BITS.
@@ -73,6 +74,7 @@
 #include <sys/vt.h>
 #include <linux/cdrom.h>
 #include <linux/fd.h>
+#include <linux/filter.h>
 #if SANITIZER_ANDROID
 #include <linux/fs.h>
 #endif
@@ -93,8 +95,9 @@
 #if SANITIZER_LINUX
 # include <utime.h>
 # include <sys/ptrace.h>
-#    if defined(__mips64) || defined(__aarch64__) || defined(__arm__) || \
-        defined(__hexagon__) || SANITIZER_RISCV64
+#    if defined(__mips64) || defined(__aarch64__) || defined(__arm__) ||       \
+        defined(__hexagon__) || defined(__loongarch__) || SANITIZER_RISCV64 || \
+        defined(__sparc__) || defined(__powerpc64__)
 #      include <asm/ptrace.h>
 #      ifdef __arm__
 typedef struct user_fpregs elf_fpregset_t;
@@ -116,15 +119,16 @@ typedef struct user_fpregs elf_fpregset_t;
 #if SANITIZER_LINUX
 #if SANITIZER_GLIBC
 #include <fstab.h>
-#include <net/if_ppp.h>
-#include <netax25/ax25.h>
-#include <netipx/ipx.h>
-#include <netrom/netrom.h>
-#include <obstack.h>
-#if HAVE_RPC_XDR_H
-# include <rpc/xdr.h>
-#endif
-#include <scsi/scsi.h>
+#      include <linux/filter.h>
+#      include <net/if_ppp.h>
+#      include <netax25/ax25.h>
+#      include <netipx/ipx.h>
+#      include <netrom/netrom.h>
+#      include <obstack.h>
+#      if HAVE_RPC_XDR_H
+#        include <rpc/xdr.h>
+#      endif
+#      include <scsi/scsi.h>
 #else
 #include <linux/if_ppp.h>
 #include <linux/kd.h>
@@ -144,16 +148,15 @@ typedef struct user_fpregs elf_fpregset_t;
 #if defined(__mips64)
 # include <sys/procfs.h>
 #endif
-#include <sys/user.h>
-#include <linux/if_eql.h>
-#include <linux/if_plip.h>
-#include <linux/lp.h>
-#include <linux/mroute.h>
-#include <linux/mroute6.h>
-#include <linux/scc.h>
-#include <linux/serial.h>
-#include <sys/msg.h>
-#include <sys/ipc.h>
+#      include <linux/if_eql.h>
+#      include <linux/if_plip.h>
+#      include <linux/lp.h>
+#      include <linux/mroute.h>
+#      include <linux/mroute6.h>
+#      include <linux/serial.h>
+#      include <sys/ipc.h>
+#      include <sys/msg.h>
+#      include <sys/user.h>
 #endif  // SANITIZER_ANDROID
 
 #include <link.h>
@@ -175,10 +178,6 @@ typedef struct user_fpregs elf_fpregset_t;
 #  include "sanitizer_internal_defs.h"
 #  include "sanitizer_platform_interceptors.h"
 #  include "sanitizer_platform_limits_posix.h"
-
-#if SANITIZER_INTERCEPT_CRYPT_R
-#include <crypt.h>
-#endif
 
 namespace __sanitizer {
   unsigned struct_utsname_sz = sizeof(struct utsname);
@@ -247,7 +246,23 @@ namespace __sanitizer {
   unsigned struct_sysinfo_sz = sizeof(struct sysinfo);
   unsigned __user_cap_header_struct_sz =
       sizeof(struct __user_cap_header_struct);
-  unsigned __user_cap_data_struct_sz = sizeof(struct __user_cap_data_struct);
+  unsigned __user_cap_data_struct_sz(void *hdrp) {
+    int u32s = 0;
+    if (hdrp) {
+      switch (((struct __user_cap_header_struct *)hdrp)->version) {
+      case _LINUX_CAPABILITY_VERSION_1:
+        u32s = _LINUX_CAPABILITY_U32S_1;
+        break;
+      case _LINUX_CAPABILITY_VERSION_2:
+        u32s = _LINUX_CAPABILITY_U32S_2;
+        break;
+      case _LINUX_CAPABILITY_VERSION_3:
+        u32s = _LINUX_CAPABILITY_U32S_3;
+        break;
+      }
+    }
+    return sizeof(struct __user_cap_data_struct) * u32s;
+  }
   unsigned struct_new_utsname_sz = sizeof(struct new_utsname);
   unsigned struct_old_utsname_sz = sizeof(struct old_utsname);
   unsigned struct_oldold_utsname_sz = sizeof(struct oldold_utsname);
@@ -260,7 +275,7 @@ namespace __sanitizer {
   unsigned struct_itimerspec_sz = sizeof(struct itimerspec);
 #endif // SANITIZER_LINUX
 
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
+#if SANITIZER_GLIBC
   // Use pre-computed size of struct ustat to avoid <sys/ustat.h> which
   // has been removed from glibc 2.28.
 #if defined(__aarch64__) || defined(__s390x__) || defined(__mips64) ||     \
@@ -281,11 +296,7 @@ namespace __sanitizer {
   unsigned struct_ustat_sz = SIZEOF_STRUCT_USTAT;
   unsigned struct_rlimit64_sz = sizeof(struct rlimit64);
   unsigned struct_statvfs64_sz = sizeof(struct statvfs64);
-#endif // SANITIZER_LINUX && !SANITIZER_ANDROID
-
-#if SANITIZER_INTERCEPT_CRYPT_R
-  unsigned struct_crypt_data_sz = sizeof(struct crypt_data);
-#endif
+#endif // SANITIZER_GLIBC
 
 #if SANITIZER_LINUX && !SANITIZER_ANDROID
   unsigned struct_timex_sz = sizeof(struct timex);
@@ -349,11 +360,12 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
   const int wordexp_wrde_dooffs = WRDE_DOOFFS;
 #  endif  // !SANITIZER_ANDROID
 
-#if SANITIZER_LINUX && !SANITIZER_ANDROID &&                               \
-    (defined(__i386) || defined(__x86_64) || defined(__mips64) ||          \
-     defined(__powerpc64__) || defined(__aarch64__) || defined(__arm__) || \
-     defined(__s390__) || SANITIZER_RISCV64)
-#if defined(__mips64) || defined(__powerpc64__) || defined(__arm__)
+#  if SANITIZER_LINUX && !SANITIZER_ANDROID &&                               \
+      (defined(__i386) || defined(__x86_64) || defined(__mips64) ||          \
+       defined(__powerpc64__) || defined(__aarch64__) || defined(__arm__) || \
+       defined(__s390__) || defined(__loongarch__) || SANITIZER_RISCV64 ||   \
+       defined(__sparc__))
+#    if defined(__mips64) || defined(__powerpc64__) || defined(__arm__)
   unsigned struct_user_regs_struct_sz = sizeof(struct pt_regs);
   unsigned struct_user_fpregs_struct_sz = sizeof(elf_fpregset_t);
 #elif SANITIZER_RISCV64
@@ -362,22 +374,28 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
 #elif defined(__aarch64__)
   unsigned struct_user_regs_struct_sz = sizeof(struct user_pt_regs);
   unsigned struct_user_fpregs_struct_sz = sizeof(struct user_fpsimd_state);
+#elif defined(__loongarch__)
+  unsigned struct_user_regs_struct_sz = sizeof(struct user_pt_regs);
+  unsigned struct_user_fpregs_struct_sz = sizeof(struct user_fp_state);
 #elif defined(__s390__)
   unsigned struct_user_regs_struct_sz = sizeof(struct _user_regs_struct);
   unsigned struct_user_fpregs_struct_sz = sizeof(struct _user_fpregs_struct);
-#else
+#    elif defined(__sparc__)
+  unsigned struct_user_regs_struct_sz = sizeof(struct sunos_regs);
+  unsigned struct_user_fpregs_struct_sz = sizeof(struct sunos_fp);
+#    else
   unsigned struct_user_regs_struct_sz = sizeof(struct user_regs_struct);
   unsigned struct_user_fpregs_struct_sz = sizeof(struct user_fpregs_struct);
-#endif // __mips64 || __powerpc64__ || __aarch64__
-#if defined(__x86_64) || defined(__mips64) || defined(__powerpc64__) || \
-    defined(__aarch64__) || defined(__arm__) || defined(__s390__) ||    \
-    SANITIZER_RISCV64
+#    endif  // __mips64 || __powerpc64__ || __aarch64__ || __loongarch__
+#    if defined(__x86_64) || defined(__mips64) || defined(__powerpc64__) || \
+        defined(__aarch64__) || defined(__arm__) || defined(__s390__) ||    \
+        defined(__loongarch__) || SANITIZER_RISCV64 || defined(__sparc__)
   unsigned struct_user_fpxregs_struct_sz = 0;
 #else
   unsigned struct_user_fpxregs_struct_sz = sizeof(struct user_fpxregs_struct);
 #endif // __x86_64 || __mips64 || __powerpc64__ || __aarch64__ || __arm__
-// || __s390__
-#ifdef __arm__
+  // || __s390__ || __loongarch__ || SANITIZER_RISCV64 || __sparc__
+#    ifdef __arm__
   unsigned struct_user_vfpregs_struct_sz = ARM_VFPREGS_SIZE;
 #else
   unsigned struct_user_vfpregs_struct_sz = 0;
@@ -467,9 +485,6 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
   unsigned struct_input_id_sz = sizeof(struct input_id);
   unsigned struct_mtpos_sz = sizeof(struct mtpos);
   unsigned struct_rtentry_sz = sizeof(struct rtentry);
-#if SANITIZER_GLIBC || SANITIZER_ANDROID
-  unsigned struct_termio_sz = sizeof(struct termio);
-#endif
   unsigned struct_vt_consize_sz = sizeof(struct vt_consize);
   unsigned struct_vt_sizes_sz = sizeof(struct vt_sizes);
   unsigned struct_vt_stat_sz = sizeof(struct vt_stat);
@@ -492,6 +507,7 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
   unsigned struct_seq_event_rec_sz = sizeof(struct seq_event_rec);
   unsigned struct_synth_info_sz = sizeof(struct synth_info);
   unsigned struct_vt_mode_sz = sizeof(struct vt_mode);
+  unsigned struct_sock_fprog_sz = sizeof(struct sock_fprog);
 #endif // SANITIZER_LINUX
 
 #if SANITIZER_GLIBC
@@ -508,8 +524,6 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
   unsigned struct_kbsentry_sz = sizeof(struct kbsentry);
   unsigned struct_mtconfiginfo_sz = sizeof(struct mtconfiginfo);
   unsigned struct_nr_parms_struct_sz = sizeof(struct nr_parms_struct);
-  unsigned struct_scc_modem_sz = sizeof(struct scc_modem);
-  unsigned struct_scc_stat_sz = sizeof(struct scc_stat);
   unsigned struct_serial_multiport_struct_sz
       = sizeof(struct serial_multiport_struct);
   unsigned struct_serial_struct_sz = sizeof(struct serial_struct);
@@ -519,9 +533,9 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
 
   unsigned struct_audio_buf_info_sz = sizeof(struct audio_buf_info);
   unsigned struct_ppp_stats_sz = sizeof(struct ppp_stats);
-#endif  // SANITIZER_GLIBC
+#  endif  // SANITIZER_GLIBC
 
-#if !SANITIZER_ANDROID && !SANITIZER_APPLE
+#  if !SANITIZER_ANDROID && !SANITIZER_APPLE
   unsigned struct_sioc_sg_req_sz = sizeof(struct sioc_sg_req);
   unsigned struct_sioc_vif_req_sz = sizeof(struct sioc_vif_req);
 #endif
@@ -746,13 +760,9 @@ unsigned struct_ElfW_Phdr_sz = sizeof(Elf_Phdr);
   unsigned IOCTL_SOUND_PCM_WRITE_FILTER = SOUND_PCM_WRITE_FILTER;
 #endif // SOUND_VERSION
   unsigned IOCTL_TCFLSH = TCFLSH;
-  unsigned IOCTL_TCGETA = TCGETA;
   unsigned IOCTL_TCGETS = TCGETS;
   unsigned IOCTL_TCSBRK = TCSBRK;
   unsigned IOCTL_TCSBRKP = TCSBRKP;
-  unsigned IOCTL_TCSETA = TCSETA;
-  unsigned IOCTL_TCSETAF = TCSETAF;
-  unsigned IOCTL_TCSETAW = TCSETAW;
   unsigned IOCTL_TCSETS = TCSETS;
   unsigned IOCTL_TCSETSF = TCSETSF;
   unsigned IOCTL_TCSETSW = TCSETSW;
@@ -1089,7 +1099,7 @@ CHECK_SIZE_AND_OFFSET(dirent, d_off);
 #endif
 CHECK_SIZE_AND_OFFSET(dirent, d_reclen);
 
-#if SANITIZER_LINUX && !SANITIZER_ANDROID
+#if SANITIZER_GLIBC
 COMPILER_CHECK(sizeof(__sanitizer_dirent64) <= sizeof(dirent64));
 CHECK_SIZE_AND_OFFSET(dirent64, d_ino);
 CHECK_SIZE_AND_OFFSET(dirent64, d_off);
@@ -1120,6 +1130,15 @@ CHECK_STRUCT_SIZE_AND_OFFSET(sigaction, sa_flags);
 #endif
 #if SANITIZER_LINUX && (!SANITIZER_ANDROID || !SANITIZER_MIPS32)
 CHECK_STRUCT_SIZE_AND_OFFSET(sigaction, sa_restorer);
+#endif
+
+#if SANITIZER_HAS_SIGINFO
+COMPILER_CHECK(alignof(siginfo_t) == alignof(__sanitizer_siginfo));
+using __sanitizer_siginfo_t = __sanitizer_siginfo;
+CHECK_TYPE_SIZE(siginfo_t);
+CHECK_SIZE_AND_OFFSET(siginfo_t, si_signo);
+CHECK_SIZE_AND_OFFSET(siginfo_t, si_errno);
+CHECK_SIZE_AND_OFFSET(siginfo_t, si_code);
 #endif
 
 #if SANITIZER_LINUX

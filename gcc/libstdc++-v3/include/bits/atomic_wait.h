@@ -1,6 +1,6 @@
 // -*- C++ -*- header.
 
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,10 +30,13 @@
 #ifndef _GLIBCXX_ATOMIC_WAIT_H
 #define _GLIBCXX_ATOMIC_WAIT_H 1
 
+#ifdef _GLIBCXX_SYSHDR
 #pragma GCC system_header
+#endif
 
-#include <bits/c++config.h>
-#if defined _GLIBCXX_HAS_GTHREADS || defined _GLIBCXX_HAVE_LINUX_FUTEX
+#include <bits/version.h>
+
+#if __glibcxx_atomic_wait
 #include <cstdint>
 #include <bits/functional_hash.h>
 #include <bits/gthr.h>
@@ -48,8 +51,6 @@
 #endif
 
 # include <bits/std_mutex.h>  // std::mutex, std::__condvar
-
-#define __cpp_lib_atomic_wait 201907L
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -187,7 +188,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool __atomic_compare(const _Tp& __a, const _Tp& __b)
       {
 	// TODO make this do the correct padding bit ignoring comparison
-	return __builtin_memcmp(&__a, &__b, sizeof(_Tp)) == 0;
+	return __builtin_memcmp(std::addressof(__a), std::addressof(__b),
+				sizeof(_Tp)) == 0;
       }
 
     struct __waiter_pool_base
@@ -251,9 +253,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       static __waiter_pool_base&
       _S_for(const void* __addr) noexcept
       {
-	constexpr uintptr_t __ct = 16;
+	constexpr __UINTPTR_TYPE__ __ct = 16;
 	static __waiter_pool_base __w[__ct];
-	auto __key = (uintptr_t(__addr) >> 2) % __ct;
+	auto __key = ((__UINTPTR_TYPE__)__addr >> 2) % __ct;
 	return __w[__key];
       }
     };
@@ -477,5 +479,5 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   }
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
-#endif // GTHREADS || LINUX_FUTEX
+#endif // __glibcxx_atomic_wait
 #endif // _GLIBCXX_ATOMIC_WAIT_H

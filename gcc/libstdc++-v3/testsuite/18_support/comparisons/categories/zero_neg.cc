@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,8 +15,8 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++2a -Wno-unused-result" }
-// { dg-do compile { target c++2a } }
+// { dg-options "-Wno-unused-result" }
+// { dg-do compile { target c++20 } }
 
 #include <compare>
 
@@ -52,3 +52,4 @@ test01()
 
 // { dg-prune-output "reinterpret_cast.* is not a constant expression" }
 // { dg-prune-output "cast from 'void.' is not allowed" }
+// { dg-prune-output "not a constant expression" }

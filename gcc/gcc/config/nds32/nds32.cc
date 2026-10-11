@@ -1,5 +1,5 @@
 /* Subroutines used for code generation of Andes NDS32 cpu for GNU compiler
-   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+   Copyright (C) 2012-2025 Free Software Foundation, Inc.
    Contributed by Andes Technology Corporation.
 
    This file is part of GCC.
@@ -288,7 +288,7 @@ static const int nds32_reg_alloc_order_for_speed[] =
 };
 
 /* Defining target-specific uses of __attribute__.  */
-static const struct attribute_spec nds32_attribute_table[] =
+TARGET_GNU_ATTRIBUTES (nds32_attribute_table,
 {
   /* Syntax: { name, min_len, max_len, decl_required, type_required,
 	       function_type_required, affects_type_identity, handler,
@@ -326,11 +326,8 @@ static const struct attribute_spec nds32_attribute_table[] =
 
   /* FOR BACKWARD COMPATIBILITY,
      this attribute also tells no prologue/epilogue.  */
-  { "no_prologue",  0,  0, false, false, false, false, NULL, NULL },
-
-  /* The last attribute spec is set to be NULL.  */
-  { NULL,           0,  0, false, false, false, false, NULL, NULL }
-};
+  { "no_prologue",  0,  0, false, false, false, false, NULL, NULL }
+});
 
 
 /* ------------------------------------------------------------------------ */
@@ -2566,7 +2563,8 @@ nds32_trampoline_init (rtx m_tramp, tree fndecl, rtx chain_value)
 /* Addressing Modes.  */
 
 static bool
-nds32_legitimate_address_p (machine_mode mode, rtx x, bool strict)
+nds32_legitimate_address_p (machine_mode mode, rtx x, bool strict,
+			    code_helper = ERROR_MARK)
 {
   if (TARGET_FPU_SINGLE || TARGET_FPU_DOUBLE)
     {
@@ -4203,8 +4201,8 @@ nds32_md_asm_adjust (vec<rtx> &outputs ATTRIBUTE_UNUSED,
 		     vec<rtx> &inputs ATTRIBUTE_UNUSED,
 		     vec<machine_mode> &input_modes ATTRIBUTE_UNUSED,
 		     vec<const char *> &constraints ATTRIBUTE_UNUSED,
-		     vec<rtx> &clobbers, HARD_REG_SET &clobbered_regs,
-		     location_t /*loc*/)
+		     vec<rtx> &/*uses*/, vec<rtx> &clobbers,
+		     HARD_REG_SET &clobbered_regs, location_t /*loc*/)
 {
   if (!flag_inline_asm_r15)
     {
@@ -5882,6 +5880,9 @@ nds32_use_blocks_for_constant_p (machine_mode mode,
 
 #undef  TARGET_HAVE_SPECULATION_SAFE_VALUE
 #define TARGET_HAVE_SPECULATION_SAFE_VALUE speculation_safe_value_not_needed
+
+#undef TARGET_DOCUMENTATION_NAME
+#define TARGET_DOCUMENTATION_NAME "NDS32"
 
 
 /* ------------------------------------------------------------------------ */

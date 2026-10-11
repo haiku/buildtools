@@ -1,6 +1,6 @@
 # Makefile.in
 
-# Copyright (C) 2005-2023 Free Software Foundation, Inc.
+# Copyright (C) 2005-2025 Free Software Foundation, Inc.
 #
 # This file is part of GCC.
 #
@@ -47,6 +47,7 @@ with_aix_soname = @with_aix_soname@
 solaris_ld_v2_maps = @solaris_ld_v2_maps@
 enable_execute_stack = @enable_execute_stack@
 unwind_header = @unwind_header@
+md_unwind_def_header = @md_unwind_def_header@
 md_unwind_header = @md_unwind_header@
 sfp_machine_header = @sfp_machine_header@
 thread_header = @thread_header@
@@ -86,6 +87,7 @@ CC = @CC@
 CFLAGS = @CFLAGS@
 RANLIB = @RANLIB@
 LN_S = @LN_S@
+WERROR = @WERROR@
 
 PWD_COMMAND = $${PWDCMD-pwd}
 
@@ -358,12 +360,15 @@ SHLIBUNWIND_INSTALL =
 
 
 # Create links to files specified in config.host.
-LIBGCC_LINKS = enable-execute-stack.c unwind.h md-unwind-support.h \
+LIBGCC_LINKS = enable-execute-stack.c \
+               unwind.h md-unwind-def.h md-unwind-support.h \
                sfp-machine.h gthr-default.h
 
 enable-execute-stack.c: $(srcdir)/$(enable_execute_stack)
 	-$(LN_S) $< $@
 unwind.h: $(srcdir)/$(unwind_header)
+	-$(LN_S) $< $@
+md-unwind-def.h: $(srcdir)/config/$(md_unwind_def_header)
 	-$(LN_S) $< $@
 md-unwind-support.h: $(srcdir)/config/$(md_unwind_header)
 	-$(LN_S) $< $@
@@ -430,6 +435,12 @@ endif
 
 LIB2ADD += enable-execute-stack.c
 
+# Control Flow Redundancy hardening out-of-line checker.
+LIB2ADD += $(srcdir)/hardcfr.c
+
+# Stack scrubbing infrastructure.
+@HAVE_STRUB_SUPPORT@LIB2ADD += $(srcdir)/strub.c
+
 # While emutls.c has nothing to do with EH, it is in LIB2ADDEH*
 # instead of LIB2ADD because that's the way to be sure on some targets
 # (e.g. *-*-darwin*) only one copy of it is linked.
@@ -446,7 +457,7 @@ lib2funcs = _muldi3 _negdi2 _lshrdi3 _ashldi3 _ashrdi3 _cmpdi2 _ucmpdi2	   \
 	    _paritysi2 _paritydi2 _powisf2 _powidf2 _powixf2 _powitf2	   \
 	    _mulhc3 _mulsc3 _muldc3 _mulxc3 _multc3 _divhc3 _divsc3	   \
 	    _divdc3 _divxc3 _divtc3 _bswapsi2 _bswapdi2 _clrsbsi2	   \
-	    _clrsbdi2
+	    _clrsbdi2 _mulbitint3
 
 # The floating-point conversion routines that involve a single-word integer.
 # XX stands for the integer mode.
@@ -466,7 +477,8 @@ endif
 # These might cause a divide overflow trap and so are compiled with
 # unwinder info.
 LIB2_DIVMOD_FUNCS = _divdi3 _moddi3 _divmoddi4 \
-		    _udivdi3 _umoddi3 _udivmoddi4 _udiv_w_sdiv
+		    _udivdi3 _umoddi3 _udivmoddi4 _udiv_w_sdiv \
+		    _divmodbitint4
 
 # Remove any objects from lib2funcs and LIB2_DIVMOD_FUNCS that are
 # defined as optimized assembly code in LIB1ASMFUNCS or as C code
@@ -1053,6 +1065,9 @@ crtoffloadend$(objext): $(srcdir)/offloadstuff.c
 
 crtoffloadtable$(objext): $(srcdir)/offloadstuff.c
 	$(crt_compile) $(CRTSTUFF_T_CFLAGS) -c $< -DCRT_TABLE
+
+crtoffloadtableS$(objext): $(srcdir)/offloadstuff.c
+	$(crt_compile) $(CRTSTUFF_T_CFLAGS_S) -c $< -DCRT_TABLE
 endif
 
 ifeq ($(enable_vtable_verify),yes)

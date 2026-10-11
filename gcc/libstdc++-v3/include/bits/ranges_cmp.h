@@ -1,6 +1,6 @@
 // Concept-constrained comparison implementations -*- C++ -*-
 
-// Copyright (C) 2019-2023 Free Software Foundation, Inc.
+// Copyright (C) 2019-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -55,14 +55,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     using is_transparent = __is_transparent;
   };
 
-#ifdef __cpp_lib_concepts
-// Define this here, included by all the headers that need to define it.
-#if __cplusplus > 202002L
-#define __cpp_lib_ranges 202202L
-#else
-#define __cpp_lib_ranges 202110L
-#endif
-
+#ifdef __glibcxx_ranges // C++ >= 20
 namespace ranges
 {
   namespace __detail
@@ -75,10 +68,11 @@ namespace ranges
 	= requires (_Tp&& __t, _Up&& __u) { { __t < __u } -> same_as<bool>; }
 	  && convertible_to<_Tp, const volatile void*>
 	  && convertible_to<_Up, const volatile void*>
-	  && (! requires(_Tp&& __t, _Up&& __u)
+	  && ! requires(_Tp&& __t, _Up&& __u)
 	      { operator<(std::forward<_Tp>(__t), std::forward<_Up>(__u)); }
-	      && ! requires(_Tp&& __t, _Up&& __u)
-	      { std::forward<_Tp>(__t).operator<(std::forward<_Up>(__u)); });
+	  && ! requires(_Tp&& __t, _Up&& __u)
+	      { std::forward<_Tp>(__t).operator<(std::forward<_Up>(__u)); }
+	  && std::__detail::__not_overloaded_spaceship<_Tp, _Up>;
   } // namespace __detail
 
   // [range.cmp] Concept-constrained comparisons
@@ -106,7 +100,7 @@ namespace ranges
       requires equality_comparable_with<_Tp, _Up>
       constexpr bool
       operator()(_Tp&& __t, _Up&& __u) const
-      noexcept(noexcept(std::declval<_Up>() == std::declval<_Tp>()))
+      noexcept(noexcept(std::declval<_Tp>() == std::declval<_Up>()))
       { return !equal_to{}(std::forward<_Tp>(__t), std::forward<_Up>(__u)); }
 
     using is_transparent = __is_transparent;
@@ -179,7 +173,7 @@ namespace ranges
   };
 
 } // namespace ranges
-#endif // library concepts
+#endif // __glibcxx_ranges
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 #endif // C++20

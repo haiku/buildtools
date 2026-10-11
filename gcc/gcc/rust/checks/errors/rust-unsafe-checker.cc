@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -21,6 +21,12 @@
 #include "rust-hir-expr.h"
 #include "rust-hir-stmt.h"
 #include "rust-hir-item.h"
+#include "rust-attribute-values.h"
+#include "rust-system.h"
+#include "rust-immutable-name-resolution-context.h"
+
+// for flag_name_resolution_2_0
+#include "options.h"
 
 namespace Rust {
 namespace HIR {
@@ -28,18 +34,18 @@ namespace HIR {
 UnsafeChecker::UnsafeChecker ()
   : context (*Resolver::TypeCheckContext::get ()),
     resolver (*Resolver::Resolver::get ()),
-    mappings (*Analysis::Mappings::get ())
+    mappings (Analysis::Mappings::get ())
 {}
 
 void
 UnsafeChecker::go (HIR::Crate &crate)
 {
-  for (auto &item : crate.items)
+  for (auto &item : crate.get_items ())
     item->accept_vis (*this);
 }
 
 static void
-check_static_mut (HIR::Item *maybe_static, Location locus)
+check_static_mut (HIR::Item *maybe_static, location_t locus)
 {
   if (maybe_static->get_hir_kind () == Node::BaseKind::VIS_ITEM)
     {
@@ -55,7 +61,7 @@ check_static_mut (HIR::Item *maybe_static, Location locus)
 }
 
 static void
-check_extern_static (HIR::ExternalItem *maybe_static, Location locus)
+check_extern_static (HIR::ExternalItem *maybe_static, location_t locus)
 {
   if (maybe_static->get_extern_kind () == ExternalItem::ExternKind::Static)
     rust_error_at (locus,
@@ -63,30 +69,26 @@ check_extern_static (HIR::ExternalItem *maybe_static, Location locus)
 }
 
 void
-UnsafeChecker::check_use_of_static (HirId node_id, Location locus)
+UnsafeChecker::check_use_of_static (HirId node_id, location_t locus)
 {
   if (unsafe_context.is_in_context ())
     return;
 
-  auto maybe_static_mut = mappings.lookup_hir_item (node_id);
+  if (auto maybe_static_mut = mappings.lookup_hir_item (node_id))
+    check_static_mut (*maybe_static_mut, locus);
 
-  HirId extern_block;
-  auto maybe_extern_static
-    = mappings.lookup_hir_extern_item (node_id, &extern_block);
-
-  if (maybe_static_mut)
-    check_static_mut (maybe_static_mut, locus);
-
-  if (maybe_extern_static)
-    check_extern_static (static_cast<ExternalItem *> (maybe_extern_static),
+  if (auto maybe_extern_static = mappings.lookup_hir_extern_item (node_id))
+    check_extern_static (static_cast<ExternalItem *> (
+			   maybe_extern_static->first),
 			 locus);
 }
 
 static void
-check_unsafe_call (HIR::Function *fn, Location locus, const std::string &kind)
+check_unsafe_call (HIR::Function *fn, location_t locus, const std::string &kind)
 {
   if (fn->get_qualifiers ().is_unsafe ())
-    rust_error_at (locus, "call to unsafe %s requires unsafe function or block",
+    rust_error_at (locus, ErrorCode::E0133,
+		   "call to unsafe %s requires unsafe function or block",
 		   kind.c_str ());
 }
 
@@ -136,7 +138,7 @@ is_safe_intrinsic (const std::string &fn_name)
 
 static void
 check_extern_call (HIR::ExternalItem *maybe_fn, HIR::ExternBlock *parent_block,
-		   Location locus)
+		   location_t locus)
 {
   // We have multiple operations to perform here
   //     1. Is the item an actual function we're calling
@@ -152,7 +154,7 @@ check_extern_call (HIR::ExternalItem *maybe_fn, HIR::ExternBlock *parent_block,
 
   // Some intrinsics are safe to call
   if (parent_block->get_abi () == Rust::ABI::INTRINSIC
-      && is_safe_intrinsic (maybe_fn->get_item_name ()))
+      && is_safe_intrinsic (maybe_fn->get_item_name ().as_string ()))
     return;
 
   rust_error_at (locus,
@@ -160,32 +162,31 @@ check_extern_call (HIR::ExternalItem *maybe_fn, HIR::ExternBlock *parent_block,
 }
 
 void
-UnsafeChecker::check_function_call (HirId node_id, Location locus)
+UnsafeChecker::check_function_call (HirId node_id, location_t locus)
 {
   if (unsafe_context.is_in_context ())
     return;
 
-  HirId parent_extern_block;
   auto maybe_fn = mappings.lookup_hir_item (node_id);
-  auto maybe_extern
-    = mappings.lookup_hir_extern_item (node_id, &parent_extern_block);
 
-  if (maybe_fn && maybe_fn->get_item_kind () == Item::ItemKind::Function)
-    check_unsafe_call (static_cast<Function *> (maybe_fn), locus, "function");
+  if (maybe_fn
+      && maybe_fn.value ()->get_item_kind () == Item::ItemKind::Function)
+    check_unsafe_call (static_cast<Function *> (*maybe_fn), locus, "function");
 
-  if (maybe_extern)
-    check_extern_call (static_cast<ExternalItem *> (maybe_extern),
-		       mappings.lookup_hir_extern_block (parent_extern_block),
+  if (auto maybe_extern = mappings.lookup_hir_extern_item (node_id))
+    check_extern_call (static_cast<ExternalItem *> (maybe_extern->first),
+		       *mappings.lookup_hir_extern_block (maybe_extern->second),
 		       locus);
 }
 
 static void
-check_target_attr (HIR::Function *fn, Location locus)
+check_target_attr (HIR::Function *fn, location_t locus)
 {
   if (std::any_of (fn->get_outer_attrs ().begin (),
 		   fn->get_outer_attrs ().end (),
 		   [] (const AST::Attribute &attr) {
-		     return attr.get_path ().as_string () == "target_feature";
+		     return attr.get_path ().as_string ()
+			    == Values::Attributes::TARGET_FEATURE;
 		   }))
     rust_error_at (locus,
 		   "call to function with %<#[target_feature]%> requires "
@@ -193,15 +194,16 @@ check_target_attr (HIR::Function *fn, Location locus)
 }
 
 void
-UnsafeChecker::check_function_attr (HirId node_id, Location locus)
+UnsafeChecker::check_function_attr (HirId node_id, location_t locus)
 {
   if (unsafe_context.is_in_context ())
     return;
 
   auto maybe_fn = mappings.lookup_hir_item (node_id);
 
-  if (maybe_fn && maybe_fn->get_item_kind () == Item::ItemKind::Function)
-    check_target_attr (static_cast<Function *> (maybe_fn), locus);
+  if (maybe_fn
+      && maybe_fn.value ()->get_item_kind () == Item::ItemKind::Function)
+    check_target_attr (static_cast<Function *> (*maybe_fn), locus);
 }
 
 void
@@ -217,14 +219,33 @@ UnsafeChecker::visit (PathInExpression &path)
 {
   NodeId ast_node_id = path.get_mappings ().get_nodeid ();
   NodeId ref_node_id;
-  HirId definition_id;
 
-  if (!resolver.lookup_resolved_name (ast_node_id, &ref_node_id))
-    return;
+  if (flag_name_resolution_2_0)
+    {
+      auto &nr_ctx
+	= Resolver2_0::ImmutableNameResolutionContext::get ().resolver ();
 
-  rust_assert (mappings.lookup_node_to_hir (ref_node_id, &definition_id));
+      auto resolved = nr_ctx.lookup (ast_node_id);
 
-  check_use_of_static (definition_id, path.get_locus ());
+      if (!resolved.has_value ())
+	return;
+
+      ref_node_id = resolved.value ();
+    }
+  else
+    {
+      if (!resolver.lookup_resolved_name (ast_node_id, &ref_node_id))
+	return;
+    }
+
+  if (auto definition_id = mappings.lookup_node_to_hir (ref_node_id))
+    {
+      check_use_of_static (*definition_id, path.get_locus ());
+    }
+  else
+    {
+      rust_unreachable ();
+    }
 }
 
 void
@@ -258,14 +279,14 @@ UnsafeChecker::visit (LiteralExpr &)
 void
 UnsafeChecker::visit (BorrowExpr &expr)
 {
-  expr.get_expr ()->accept_vis (*this);
+  expr.get_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (DereferenceExpr &expr)
 {
   TyTy::BaseType *to_deref_type;
-  auto to_deref = expr.get_expr ()->get_mappings ().get_hirid ();
+  auto to_deref = expr.get_expr ().get_mappings ().get_hirid ();
 
   rust_assert (context.lookup_type (to_deref, &to_deref_type));
 
@@ -278,60 +299,60 @@ UnsafeChecker::visit (DereferenceExpr &expr)
 void
 UnsafeChecker::visit (ErrorPropagationExpr &expr)
 {
-  expr.get_expr ()->accept_vis (*this);
+  expr.get_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (NegationExpr &expr)
 {
-  expr.get_expr ()->accept_vis (*this);
+  expr.get_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (ArithmeticOrLogicalExpr &expr)
 {
-  expr.get_lhs ()->accept_vis (*this);
-  expr.get_rhs ()->accept_vis (*this);
+  expr.get_lhs ().accept_vis (*this);
+  expr.get_rhs ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (ComparisonExpr &expr)
 {
-  expr.get_lhs ()->accept_vis (*this);
-  expr.get_rhs ()->accept_vis (*this);
+  expr.get_lhs ().accept_vis (*this);
+  expr.get_rhs ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (LazyBooleanExpr &expr)
 {
-  expr.get_lhs ()->accept_vis (*this);
-  expr.get_rhs ()->accept_vis (*this);
+  expr.get_lhs ().accept_vis (*this);
+  expr.get_rhs ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (TypeCastExpr &expr)
 {
-  expr.get_expr ()->accept_vis (*this);
+  expr.get_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (AssignmentExpr &expr)
 {
-  expr.get_lhs ()->accept_vis (*this);
-  expr.get_rhs ()->accept_vis (*this);
+  expr.get_lhs ().accept_vis (*this);
+  expr.get_rhs ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (CompoundAssignmentExpr &expr)
 {
-  expr.get_left_expr ()->accept_vis (*this);
-  expr.get_right_expr ()->accept_vis (*this);
+  expr.get_lhs ().accept_vis (*this);
+  expr.get_rhs ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (GroupedExpr &expr)
 {
-  expr.get_expr_in_parens ()->accept_vis (*this);
+  expr.get_expr_in_parens ().accept_vis (*this);
 }
 
 void
@@ -344,20 +365,20 @@ UnsafeChecker::visit (ArrayElemsValues &elems)
 void
 UnsafeChecker::visit (ArrayElemsCopied &elems)
 {
-  elems.get_elem_to_copy ()->accept_vis (*this);
+  elems.get_elem_to_copy ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (ArrayExpr &expr)
 {
-  expr.get_internal_elements ()->accept_vis (*this);
+  expr.get_internal_elements ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (ArrayIndexExpr &expr)
 {
-  expr.get_array_expr ()->accept_vis (*this);
-  expr.get_index_expr ()->accept_vis (*this);
+  expr.get_array_expr ().accept_vis (*this);
+  expr.get_index_expr ().accept_vis (*this);
 }
 
 void
@@ -370,7 +391,7 @@ UnsafeChecker::visit (TupleExpr &expr)
 void
 UnsafeChecker::visit (TupleIndexExpr &expr)
 {
-  expr.get_tuple_expr ()->accept_vis (*this);
+  expr.get_tuple_expr ().accept_vis (*this);
 }
 
 void
@@ -384,13 +405,13 @@ UnsafeChecker::visit (StructExprFieldIdentifier &)
 void
 UnsafeChecker::visit (StructExprFieldIdentifierValue &field)
 {
-  field.get_value ()->accept_vis (*this);
+  field.get_value ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (StructExprFieldIndexValue &field)
 {
-  field.get_value ()->accept_vis (*this);
+  field.get_value ().accept_vis (*this);
 }
 
 void
@@ -407,33 +428,51 @@ UnsafeChecker::visit (StructExprStructBase &)
 void
 UnsafeChecker::visit (CallExpr &expr)
 {
-  auto fn = expr.get_fnexpr ();
-  if (!fn)
+  if (!expr.has_fnexpr ())
     return;
 
-  NodeId ast_node_id = fn->get_mappings ().get_nodeid ();
+  NodeId ast_node_id = expr.get_fnexpr ().get_mappings ().get_nodeid ();
   NodeId ref_node_id;
-  HirId definition_id;
 
   // There are no unsafe types, and functions are defined in the name resolver.
   // If we can't find the name, then we're dealing with a type and should return
   // early.
-  if (!resolver.lookup_resolved_name (ast_node_id, &ref_node_id))
-    return;
+  if (flag_name_resolution_2_0)
+    {
+      auto &nr_ctx
+	= Resolver2_0::ImmutableNameResolutionContext::get ().resolver ();
 
-  rust_assert (mappings.lookup_node_to_hir (ref_node_id, &definition_id));
+      auto resolved = nr_ctx.lookup (ast_node_id);
 
-  // At this point we have the function's HIR Id. There are three checks we
-  // must perform:
-  //     1. The function is an unsafe one
-  //     2. The function is an extern one
-  //     3. The function is marked with a target_feature attribute
-  check_function_call (definition_id, expr.get_locus ());
-  check_function_attr (definition_id, expr.get_locus ());
+      if (!resolved.has_value ())
+	return;
 
-  if (expr.has_params ())
-    for (auto &arg : expr.get_arguments ())
-      arg->accept_vis (*this);
+      ref_node_id = resolved.value ();
+    }
+  else
+    {
+      if (!resolver.lookup_resolved_name (ast_node_id, &ref_node_id))
+	return;
+    }
+
+  if (auto definition_id = mappings.lookup_node_to_hir (ref_node_id))
+    {
+      // At this point we have the function's HIR Id. There are three checks we
+      // must perform:
+      //     1. The function is an unsafe one
+      //     2. The function is an extern one
+      //     3. The function is marked with a target_feature attribute
+      check_function_call (*definition_id, expr.get_locus ());
+      check_function_attr (*definition_id, expr.get_locus ());
+
+      if (expr.has_params ())
+	for (auto &arg : expr.get_arguments ())
+	  arg->accept_vis (*this);
+    }
+  else
+    {
+      rust_unreachable ();
+    }
 }
 
 void
@@ -443,14 +482,14 @@ UnsafeChecker::visit (MethodCallExpr &expr)
   context.lookup_type (expr.get_method_name ().get_mappings ().get_hirid (),
 		       &method_type);
 
-  auto fn = *static_cast<TyTy::FnType *> (method_type);
-  auto method = mappings.lookup_hir_implitem (fn.get_ref (), nullptr);
+  auto &fn = static_cast<TyTy::FnType &> (*method_type);
 
+  auto method = mappings.lookup_hir_implitem (fn.get_ref ());
   if (!unsafe_context.is_in_context () && method)
-    check_unsafe_call (static_cast<Function *> (method), expr.get_locus (),
-		       "method");
+    check_unsafe_call (static_cast<Function *> (method->first),
+		       expr.get_locus (), "method");
 
-  expr.get_receiver ()->accept_vis (*this);
+  expr.get_receiver ().accept_vis (*this);
 
   for (auto &arg : expr.get_arguments ())
     arg->accept_vis (*this);
@@ -459,14 +498,14 @@ UnsafeChecker::visit (MethodCallExpr &expr)
 void
 UnsafeChecker::visit (FieldAccessExpr &expr)
 {
-  expr.get_receiver_expr ()->accept_vis (*this);
+  expr.get_receiver_expr ().accept_vis (*this);
 
   if (unsafe_context.is_in_context ())
     return;
 
   TyTy::BaseType *receiver_ty;
   auto ok = context.lookup_type (
-    expr.get_receiver_expr ()->get_mappings ().get_hirid (), &receiver_ty);
+    expr.get_receiver_expr ().get_mappings ().get_hirid (), &receiver_ty);
   rust_assert (ok);
 
   if (receiver_ty->get_kind () == TyTy::TypeKind::ADT)
@@ -482,7 +521,7 @@ UnsafeChecker::visit (FieldAccessExpr &expr)
 void
 UnsafeChecker::visit (ClosureExpr &expr)
 {
-  expr.get_expr ()->accept_vis (*this);
+  expr.get_expr ().accept_vis (*this);
 }
 
 void
@@ -492,7 +531,7 @@ UnsafeChecker::visit (BlockExpr &expr)
     stmt->accept_vis (*this);
 
   if (expr.has_expr ())
-    expr.get_final_expr ()->accept_vis (*this);
+    expr.get_final_expr ().accept_vis (*this);
 }
 
 void
@@ -503,26 +542,26 @@ void
 UnsafeChecker::visit (BreakExpr &expr)
 {
   if (expr.has_break_expr ())
-    expr.get_expr ()->accept_vis (*this);
+    expr.get_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (RangeFromToExpr &expr)
 {
-  expr.get_from_expr ()->accept_vis (*this);
-  expr.get_to_expr ()->accept_vis (*this);
+  expr.get_from_expr ().accept_vis (*this);
+  expr.get_to_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (RangeFromExpr &expr)
 {
-  expr.get_from_expr ()->accept_vis (*this);
+  expr.get_from_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (RangeToExpr &expr)
 {
-  expr.get_to_expr ()->accept_vis (*this);
+  expr.get_to_expr ().accept_vis (*this);
 }
 
 void
@@ -532,21 +571,21 @@ UnsafeChecker::visit (RangeFullExpr &)
 void
 UnsafeChecker::visit (RangeFromToInclExpr &expr)
 {
-  expr.get_from_expr ()->accept_vis (*this);
-  expr.get_to_expr ()->accept_vis (*this);
+  expr.get_from_expr ().accept_vis (*this);
+  expr.get_to_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (RangeToInclExpr &expr)
 {
-  expr.get_to_expr ()->accept_vis (*this);
+  expr.get_to_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (ReturnExpr &expr)
 {
   if (expr.has_return_expr ())
-    expr.get_expr ()->accept_vis (*this);
+    expr.get_expr ().accept_vis (*this);
 }
 
 void
@@ -554,7 +593,7 @@ UnsafeChecker::visit (UnsafeBlockExpr &expr)
 {
   unsafe_context.enter (expr.get_mappings ().get_hirid ());
 
-  expr.get_block_expr ()->accept_vis (*this);
+  expr.get_block_expr ().accept_vis (*this);
 
   unsafe_context.exit ();
 }
@@ -562,101 +601,45 @@ UnsafeChecker::visit (UnsafeBlockExpr &expr)
 void
 UnsafeChecker::visit (LoopExpr &expr)
 {
-  expr.get_loop_block ()->accept_vis (*this);
+  expr.get_loop_block ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (WhileLoopExpr &expr)
 {
-  expr.get_predicate_expr ()->accept_vis (*this);
-  expr.get_loop_block ()->accept_vis (*this);
+  expr.get_predicate_expr ().accept_vis (*this);
+  expr.get_loop_block ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (WhileLetLoopExpr &expr)
 {
-  expr.get_cond ()->accept_vis (*this);
-  expr.get_loop_block ()->accept_vis (*this);
-}
-
-void
-UnsafeChecker::visit (ForLoopExpr &expr)
-{
-  expr.get_iterator_expr ()->accept_vis (*this);
-  expr.get_loop_block ()->accept_vis (*this);
+  expr.get_cond ().accept_vis (*this);
+  expr.get_loop_block ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (IfExpr &expr)
 {
-  expr.get_if_condition ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
+  expr.get_if_condition ().accept_vis (*this);
+  expr.get_if_block ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (IfExprConseqElse &expr)
 {
-  expr.get_if_condition ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
-  expr.get_else_block ()->accept_vis (*this);
-}
-
-void
-UnsafeChecker::visit (IfExprConseqIf &expr)
-{
-  expr.get_if_condition ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
-  expr.get_conseq_if_expr ()->accept_vis (*this);
-}
-
-void
-UnsafeChecker::visit (IfExprConseqIfLet &expr)
-{
-  expr.get_if_condition ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
-
-  // TODO: Visit conseq if let expression
-}
-
-void
-UnsafeChecker::visit (IfLetExpr &expr)
-{
-  expr.get_scrutinee_expr ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
-}
-
-void
-UnsafeChecker::visit (IfLetExprConseqElse &expr)
-{
-  expr.get_scrutinee_expr ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
-
-  // TODO: Visit else expression
-}
-
-void
-UnsafeChecker::visit (IfLetExprConseqIf &expr)
-{
-  expr.get_scrutinee_expr ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
-}
-
-void
-UnsafeChecker::visit (IfLetExprConseqIfLet &expr)
-{
-  expr.get_scrutinee_expr ()->accept_vis (*this);
-  expr.get_if_block ()->accept_vis (*this);
-
-  // TODO: Visit conseq if let expression
+  expr.get_if_condition ().accept_vis (*this);
+  expr.get_if_block ().accept_vis (*this);
+  expr.get_else_block ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (MatchExpr &expr)
 {
-  expr.get_scrutinee_expr ()->accept_vis (*this);
+  expr.get_scrutinee_expr ().accept_vis (*this);
 
   for (auto &match_arm : expr.get_match_cases ())
-    match_arm.get_expr ()->accept_vis (*this);
+    match_arm.get_expr ().accept_vis (*this);
 }
 
 void
@@ -669,6 +652,17 @@ void
 UnsafeChecker::visit (AsyncBlockExpr &)
 {
   // TODO: Visit block expression
+}
+
+void
+UnsafeChecker::visit (InlineAsm &expr)
+{
+  if (unsafe_context.is_in_context ())
+    return;
+
+  rust_error_at (
+    expr.get_locus (), ErrorCode::E0133,
+    "use of inline assembly is unsafe and requires unsafe function or block");
 }
 
 void
@@ -722,7 +716,7 @@ UnsafeChecker::visit (Function &function)
   if (is_unsafe_fn)
     unsafe_context.enter (function.get_mappings ().get_hirid ());
 
-  function.get_definition ()->accept_vis (*this);
+  function.get_definition ().accept_vis (*this);
 
   if (is_unsafe_fn)
     unsafe_context.exit ();
@@ -770,27 +764,27 @@ UnsafeChecker::visit (Union &)
 void
 UnsafeChecker::visit (ConstantItem &const_item)
 {
-  const_item.get_expr ()->accept_vis (*this);
+  const_item.get_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (StaticItem &static_item)
 {
-  static_item.get_expr ()->accept_vis (*this);
+  static_item.get_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (TraitItemFunc &item)
 {
-  if (item.has_block_defined ())
-    item.get_block_expr ()->accept_vis (*this);
+  if (item.has_definition ())
+    item.get_block_expr ().accept_vis (*this);
 }
 
 void
 UnsafeChecker::visit (TraitItemConst &item)
 {
   if (item.has_expr ())
-    item.get_expr ()->accept_vis (*this);
+    item.get_expr ().accept_vis (*this);
 }
 
 void
@@ -808,7 +802,23 @@ UnsafeChecker::visit (Trait &trait)
 void
 UnsafeChecker::visit (ImplBlock &impl)
 {
-  // FIXME: Handle unsafe impls
+  bool safe = !impl.is_unsafe ();
+  // Check for unsafe-only attributes on generics and lifetimes
+  if (safe)
+    for (auto &parm : impl.get_generic_params ())
+      {
+	for (auto o_attr : parm->get_outer_attrs ())
+	  {
+	    rust_assert (!o_attr.is_inner_attribute ());
+
+	    Rust::AST::SimplePath path = o_attr.get_path ();
+	    if (path == Values::Attributes::MAY_DANGLE)
+	      rust_error_at (
+		o_attr.get_locus (), ErrorCode::E0569,
+		"use of %<may_dangle%> is unsafe and requires unsafe impl");
+	  }
+      }
+
   for (auto &item : impl.get_impl_items ())
     item->accept_vis (*this);
 }
@@ -819,6 +829,10 @@ UnsafeChecker::visit (ExternalStaticItem &)
 
 void
 UnsafeChecker::visit (ExternalFunctionItem &)
+{}
+
+void
+UnsafeChecker::visit (ExternalTypeItem &)
 {}
 
 void
@@ -906,6 +920,10 @@ UnsafeChecker::visit (SlicePattern &)
 {}
 
 void
+UnsafeChecker::visit (AltPattern &)
+{}
+
+void
 UnsafeChecker::visit (EmptyStmt &)
 {}
 
@@ -913,19 +931,13 @@ void
 UnsafeChecker::visit (LetStmt &stmt)
 {
   if (stmt.has_init_expr ())
-    stmt.get_init_expr ()->accept_vis (*this);
+    stmt.get_init_expr ().accept_vis (*this);
 }
 
 void
-UnsafeChecker::visit (ExprStmtWithoutBlock &stmt)
+UnsafeChecker::visit (ExprStmt &stmt)
 {
-  stmt.get_expr ()->accept_vis (*this);
-}
-
-void
-UnsafeChecker::visit (ExprStmtWithBlock &stmt)
-{
-  stmt.get_expr ()->accept_vis (*this);
+  stmt.get_expr ().accept_vis (*this);
 }
 
 void
@@ -942,10 +954,6 @@ UnsafeChecker::visit (TraitObjectType &)
 
 void
 UnsafeChecker::visit (ParenthesisedType &)
-{}
-
-void
-UnsafeChecker::visit (ImplTraitTypeOneBound &)
 {}
 
 void

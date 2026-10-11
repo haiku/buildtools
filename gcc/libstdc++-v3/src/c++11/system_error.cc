@@ -1,6 +1,6 @@
 // <system_error> implementation file
 
-// Copyright (C) 2007-2023 Free Software Foundation, Inc.
+// Copyright (C) 2007-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -100,20 +100,21 @@ namespace
     std::size_t len = 60;
     string s;
     do
-      {
-	s.resize(len);
-	char* p = &s.front();
-	std::size_t n = len;
-	n = use_strerror_result(strerror_r(err, p, n), p, n, len);
-	s.resize(n);
-      }
+      s.__resize_and_overwrite(len, [err, &len](char* p, std::size_t n) {
+	*p = '\0';
+	return use_strerror_result(strerror_r(err, p, n), p, n, len);
+      });
     while (s.empty());
     return s;
   }
 #else
   string strerror_string(int err)
   {
-    return strerror(err); // XXX Not thread-safe.
+    auto str = strerror(err); // XXX Not thread-safe.
+    if (str) [[__likely__]]
+      return str;
+    // strerror should not return NULL, but some implementations do.
+    return "Unknown error";
   }
 #endif
 
@@ -160,22 +161,23 @@ namespace
 #if defined(_WIN32) && !defined(__CYGWIN__)
       char* buf = nullptr;
       auto len
-	= FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM
-			| FORMAT_MESSAGE_ALLOCATE_BUFFER,
-			nullptr,
-			i,
-			LANG_USER_DEFAULT,
-			reinterpret_cast<LPTSTR>(&buf),
-			0,
-			nullptr);
+	= FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM
+			 | FORMAT_MESSAGE_ALLOCATE_BUFFER
+			 | FORMAT_MESSAGE_IGNORE_INSERTS,
+			 nullptr,
+			 i,
+			 LANG_USER_DEFAULT,
+			 reinterpret_cast<LPTSTR>(&buf),
+			 0,
+			 nullptr);
       if (len > 0)
       {
 	struct deleter {
 	  void operator()(void* p) const { ::LocalFree(p); }
 	};
 	std::unique_ptr<char[], deleter> guard(buf);
-	if (len > 3 && !__builtin_memcmp(buf + len - 3, ".\r\n", 3)) [[likely]]
-	  len -= 3;
+	if (len > 2 && !__builtin_memcmp (buf + len - 2, "\r\n", 2)) [[likely]]
+	  len -= 2 + (buf[len - 3] == '.');
 	return string(buf, len);
       }
       return string("Unknown error code");

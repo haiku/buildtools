@@ -1,6 +1,6 @@
 /* Stub unwinding implementation.
 
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2025 Free Software Foundation, Inc.
    Contributed by Mentor Graphics
 
    This file is free software; you can redistribute it and/or modify it
@@ -23,6 +23,33 @@
    <http://www.gnu.org/licenses/>.  */
 
 #include "unwind.h"
+
+_Unwind_Reason_Code
+_Unwind_RaiseException(struct _Unwind_Exception *exc __attribute__ ((__unused__)))
+{
+  __builtin_abort ();
+  return 0;
+}
+
+void
+_Unwind_DeleteException (struct _Unwind_Exception *exc)
+{
+  if (exc->exception_cleanup)
+    (*exc->exception_cleanup) (_URC_FOREIGN_EXCEPTION_CAUGHT, exc);
+}
+
+void
+_Unwind_Resume (struct _Unwind_Exception *exc __attribute__ ((__unused__)))
+{
+  __builtin_abort ();
+}
+
+_Unwind_Reason_Code
+_Unwind_Resume_or_Rethrow (struct _Unwind_Exception *exc __attribute__ ((__unused__)))
+{
+  __builtin_abort ();
+  return 0;
+}
 
 _Unwind_Reason_Code
 _Unwind_Backtrace(_Unwind_Trace_Fn trace, void * trace_argument)

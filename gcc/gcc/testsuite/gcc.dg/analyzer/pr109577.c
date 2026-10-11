@@ -1,16 +1,20 @@
-void *malloc (unsigned long);
+/* C only: C++ exceptions cause a malloc leak after "safer" returns.
+   Therefore this test has been duplicated as
+   c-c++-common/analyzer/pr109577-noexcept.c  */
+
+void *malloc (__SIZE_TYPE__);
 
 double *
-unsafe (unsigned long n)
+unsafe (__SIZE_TYPE__ n)
 {
-  return malloc (n * sizeof (double));
+  return (double *) malloc (n * sizeof (double));
 }
 
 double *
-safer (unsigned long n)
+safer (__SIZE_TYPE__ n)
 {
-  unsigned long nbytes;
+  __SIZE_TYPE__ nbytes;
   if (__builtin_mul_overflow (n, sizeof (double), &nbytes))
     return 0;
-  return malloc (nbytes);
+  return (double *) malloc (nbytes); /* Exceptions enabled cause a leak here. */
 }

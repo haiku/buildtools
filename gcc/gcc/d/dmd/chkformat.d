@@ -1,12 +1,12 @@
 /**
  * Check the arguments to `printf` and `scanf` against the `format` string.
  *
- * Copyright:   Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 https://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/chkformat.d, _chkformat.d)
+ * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/compiler/src/dmd/chkformat.d, _chkformat.d)
  * Documentation:  https://dlang.org/phobos/dmd_chkformat.html
- * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/chkformat.d
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/compiler/src/dmd/chkformat.d
  */
 module dmd.chkformat;
 
@@ -15,12 +15,13 @@ import core.stdc.ctype : isdigit;
 
 import dmd.astenums;
 import dmd.cond;
-import dmd.errors;
+import dmd.errorsink;
 import dmd.expression;
 import dmd.globals;
 import dmd.identifier;
 import dmd.location;
 import dmd.mtype;
+import dmd.typesem;
 import dmd.target;
 
 
@@ -53,6 +54,7 @@ import dmd.target;
  *      format = format string
  *      args = arguments to match with format string
  *      isVa_list = if a "v" function (format check only)
+ *      eSink = where the error messages go
  *
  * Returns:
  *      `true` if errors occurred
@@ -60,7 +62,8 @@ import dmd.target;
  * C99 7.19.6.1
  * https://www.cplusplus.com/reference/cstdio/printf/
  */
-bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expression[] args, bool isVa_list)
+public
+bool checkPrintfFormat(Loc loc, scope const char[] format, scope Expression[] args, bool isVa_list, ErrorSink eSink)
 {
     //printf("checkPrintFormat('%.*s')\n", cast(int)format.length, format.ptr);
     size_t n;    // index in args
@@ -87,7 +90,7 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
         {
             // format check only
             if (fmt == Format.error)
-                deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
+                eSink.deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
             continue;
         }
 
@@ -96,7 +99,7 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
             if (n == args.length)
             {
                 if (args.length < (n + 1))
-                    deprecation(loc, "more format specifiers than %d arguments", cast(int)n);
+                    eSink.deprecation(loc, "more format specifiers than %d arguments", cast(int)n);
                 else
                     skip = true;
                 return null;
@@ -106,7 +109,7 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
 
         void errorMsg(const char* prefix, Expression arg, const char* texpect, Type tactual)
         {
-            deprecation(arg.loc, "%sargument `%s` for format specification `\"%.*s\"` must be `%s`, not `%s`",
+            eSink.deprecation(arg.loc, "%sargument `%s` for format specification `\"%.*s\"` must be `%s`, not `%s`",
                   prefix ? prefix : "", arg.toChars(), cast(int)slice.length, slice.ptr, texpect, tactual.toChars());
         }
 
@@ -171,12 +174,14 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
 
             case Format.lu:     // unsigned long int
             case Format.ld:     // long int
-                if (!(t.isintegral() && t.size() == c_longsize))
+                if (!(t.isIntegral() && t.size() == c_longsize))
                 {
                     if (fmt == Format.lu)
                         errorMsg(null, e, (c_longsize == 4 ? "uint" : "ulong"), t);
                     else
                         errorMsg(null, e, (c_longsize == 4 ? "int" : "long"), t);
+                    if (t.isIntegral() && t.size() != c_longsize)
+                        eSink.errorSupplemental(e.loc, "C `long` is %d bytes on your system", c_longsize);
                 }
                 break;
 
@@ -198,12 +203,12 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
                 break;
 
             case Format.zd:     // size_t
-                if (!(t.isintegral() && t.size() == ptrsize))
+                if (!(t.isIntegral() && t.size() == ptrsize))
                     errorMsg(null, e, "size_t", t);
                 break;
 
             case Format.td:     // ptrdiff_t
-                if (!(t.isintegral() && t.size() == ptrsize))
+                if (!(t.isIntegral() && t.size() == ptrsize))
                     errorMsg(null, e, "ptrdiff_t", t);
                 break;
 
@@ -224,12 +229,12 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
                 break;
 
             case Format.n:      // pointer to int
-                if (!(t.ty == Tpointer && tnext.ty == Tint32))
+                if (!(t.ty == Tpointer && tnext.ty == Tint32 && tnext.isMutable()))
                     errorMsg(null, e, "int*", t);
                 break;
 
             case Format.ln:     // pointer to long int
-                if (!(t.ty == Tpointer && tnext.isintegral() && tnext.size() == c_longsize))
+                if (!(t.ty == Tpointer && tnext.isIntegral() && tnext.size() == c_longsize))
                     errorMsg(null, e, (c_longsize == 4 ? "int*" : "long*"), t);
                 break;
 
@@ -254,12 +259,12 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
                 break;
 
             case Format.zn:     // pointer to size_t
-                if (!(t.ty == Tpointer && tnext.isintegral() && tnext.isunsigned() && tnext.size() == ptrsize))
+                if (!(t.ty == Tpointer && tnext.isIntegral() && tnext.isUnsigned() && tnext.size() == ptrsize))
                     errorMsg(null, e, "size_t*", t);
                 break;
 
             case Format.tn:     // pointer to ptrdiff_t
-                if (!(t.ty == Tpointer && tnext.isintegral() && !tnext.isunsigned() && tnext.size() == ptrsize))
+                if (!(t.ty == Tpointer && tnext.isIntegral() && !tnext.isUnsigned() && tnext.size() == ptrsize))
                     errorMsg(null, e, "ptrdiff_t*", t);
                 break;
 
@@ -284,7 +289,7 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
                 break;
 
             case Format.error:
-                deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
+                eSink.deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
                 break;
 
             case Format.GNU_m:
@@ -325,6 +330,7 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
  *      format = format string
  *      args = arguments to match with format string
  *      isVa_list = if a "v" function (format check only)
+ *      eSink = where the error messages go
  *
  * Returns:
  *      `true` if errors occurred
@@ -332,7 +338,8 @@ bool checkPrintfFormat(ref const Loc loc, scope const char[] format, scope Expre
  * C99 7.19.6.2
  * https://www.cplusplus.com/reference/cstdio/scanf/
  */
-bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expression[] args, bool isVa_list)
+public
+bool checkScanfFormat(Loc loc, scope const char[] format, scope Expression[] args, bool isVa_list, ErrorSink eSink)
 {
     size_t n = 0;
     for (size_t i = 0; i < format.length;)
@@ -355,7 +362,7 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
         {
             // format check only
             if (fmt == Format.error)
-                deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
+                eSink.deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
             continue;
         }
 
@@ -364,7 +371,7 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
             if (n == args.length)
             {
                 if (!asterisk)
-                    deprecation(loc, "more format specifiers than %d arguments", cast(int)n);
+                    eSink.deprecation(loc, "more format specifiers than %d arguments", cast(int)n);
                 return null;
             }
             return args[n++];
@@ -372,7 +379,7 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
 
         void errorMsg(const char* prefix, Expression arg, const char* texpect, Type tactual)
         {
-            deprecation(arg.loc, "%sargument `%s` for format specification `\"%.*s\"` must be `%s`, not `%s`",
+            eSink.deprecation(arg.loc, "%sargument `%s` for format specification `\"%.*s\"` must be `%s`, not `%s`",
                   prefix ? prefix : "", arg.toChars(), cast(int)slice.length, slice.ptr, texpect, tactual.toChars());
         }
 
@@ -407,7 +414,7 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
 
             case Format.ln:
             case Format.ld:     // pointer to long int
-                if (!(t.ty == Tpointer && tnext.isintegral() && !tnext.isunsigned() && tnext.size() == c_longsize))
+                if (!(t.ty == Tpointer && tnext.isIntegral() && !tnext.isUnsigned() && tnext.size() == c_longsize))
                     errorMsg(null, e, (c_longsize == 4 ? "int*" : "long*"), t);
                 break;
 
@@ -425,13 +432,13 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
 
             case Format.zn:
             case Format.zd:     // pointer to size_t
-                if (!(t.ty == Tpointer && tnext.isintegral() && tnext.isunsigned() && tnext.size() == ptrsize))
+                if (!(t.ty == Tpointer && tnext.isIntegral() && tnext.isUnsigned() && tnext.size() == ptrsize))
                     errorMsg(null, e, "size_t*", t);
                 break;
 
             case Format.tn:
             case Format.td:     // pointer to ptrdiff_t
-                if (!(t.ty == Tpointer && tnext.isintegral() && !tnext.isunsigned() && tnext.size() == ptrsize))
+                if (!(t.ty == Tpointer && tnext.isIntegral() && !tnext.isUnsigned() && tnext.size() == ptrsize))
                     errorMsg(null, e, "ptrdiff_t*", t);
                 break;
 
@@ -451,7 +458,7 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
                 break;
 
             case Format.lu:     // pointer to unsigned long int
-                if (!(t.ty == Tpointer && tnext.isintegral() && tnext.isunsigned() && tnext.size() == c_longsize))
+                if (!(t.ty == Tpointer && tnext.isIntegral() && tnext.isUnsigned() && tnext.size() == c_longsize))
                     errorMsg(null, e, (c_longsize == 4 ? "uint*" : "ulong*"), t);
                 break;
 
@@ -510,7 +517,7 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
                 break;
 
             case Format.error:
-                deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
+                eSink.deprecation(loc, "format specifier `\"%.*s\"` is invalid", cast(int)slice.length, slice.ptr);
                 break;
 
             case Format.GNU_m:
@@ -520,6 +527,8 @@ bool checkScanfFormat(ref const Loc loc, scope const char[] format, scope Expres
     }
     return false;
 }
+
+/*****************************************************************************************************/
 
 private:
 

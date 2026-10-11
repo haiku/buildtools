@@ -1,5 +1,5 @@
 /* Predicate aware uninitialized variable warning.
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2025 Free Software Foundation, Inc.
    Contributed by Xinliang David Li <davidxl@google.com>
 
 This file is part of GCC.
@@ -42,6 +42,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "domwalk.h"
 #include "tree-ssa-sccvn.h"
 #include "cfganal.h"
+#include "gcc-urlifier.h"
 
 /* This implements the pass that does predicate aware warning on uses of
    possibly uninitialized variables.  The pass first collects the set of
@@ -204,14 +205,29 @@ warn_uninit (opt_code opt, tree t, tree var, gimple *context,
     {
       var_def_stmt = SSA_NAME_DEF_STMT (t);
 
-      if (is_gimple_assign (var_def_stmt)
-	  && gimple_assign_rhs_code (var_def_stmt) == COMPLEX_EXPR)
+      if (gassign *ass = dyn_cast <gassign *> (var_def_stmt))
 	{
-	  tree v = gimple_assign_rhs1 (var_def_stmt);
-	  if (TREE_CODE (v) == SSA_NAME
-	      && has_undefined_value_p (v)
-	      && zerop (gimple_assign_rhs2 (var_def_stmt)))
-	    var = SSA_NAME_VAR (v);
+	  switch (gimple_assign_rhs_code (var_def_stmt))
+	    {
+	    case COMPLEX_EXPR:
+	      {
+		tree v = gimple_assign_rhs1 (ass);
+		if (TREE_CODE (v) == SSA_NAME
+		    && has_undefined_value_p (v)
+		    && zerop (gimple_assign_rhs2 (ass)))
+		  var = SSA_NAME_VAR (v);
+		break;
+	      }
+	    case SSA_NAME:
+	      {
+		tree v = gimple_assign_rhs1 (ass);
+		if (TREE_CODE (v) == SSA_NAME
+		    && SSA_NAME_VAR (v))
+		  var = SSA_NAME_VAR (v);
+		break;
+	      }
+	    default:;
+	    }
 	}
 
       if (gimple_call_internal_p (var_def_stmt, IFN_DEFERRED_INIT))
@@ -232,7 +248,7 @@ warn_uninit (opt_code opt, tree t, tree var, gimple *context,
 
 	  if (is_gimple_assign (context))
 	    {
-	      if (TREE_CODE (gimple_assign_lhs (context)) == VAR_DECL)
+	      if (VAR_P (gimple_assign_lhs (context)))
 		lhs_var = gimple_assign_lhs (context);
 	      else if (TREE_CODE (gimple_assign_lhs (context)) == SSA_NAME)
 		lhs_var = SSA_NAME_VAR (gimple_assign_lhs (context));
@@ -440,9 +456,10 @@ maybe_warn_read_write_only (tree fndecl, gimple *stmt, tree arg, tree ptr)
       const char* const access_str =
 	TREE_STRING_POINTER (access->to_external_string ());
 
+      auto_urlify_attributes sentinel;
       location_t parmloc = DECL_SOURCE_LOCATION (parm);
       inform (parmloc, "accessing argument %u of a function declared with "
-	      "attribute %<%s%>",
+	      "attribute %qs",
 	      argno + 1, access_str);
 
       break;
@@ -861,18 +878,19 @@ maybe_warn_pass_by_reference (gcall *stmt, wlimits &wlims)
 	  const char* const access_str =
 	    TREE_STRING_POINTER (access->to_external_string ());
 
+	  auto_urlify_attributes sentinel;
 	  if (fndecl)
 	    {
 	      location_t loc = DECL_SOURCE_LOCATION (fndecl);
 	      inform (loc, "in a call to %qD declared with "
-		      "attribute %<%s%> here", fndecl, access_str);
+		      "attribute %qs here", fndecl, access_str);
 	    }
 	  else
 	    {
 	      /* Handle calls through function pointers.  */
 	      location_t loc = gimple_location (stmt);
 	      inform (loc, "in a call to %qT declared with "
-		      "attribute %<%s%>", fntype, access_str);
+		      "attribute %qs", fntype, access_str);
 	    }
 	}
       else
@@ -1229,6 +1247,18 @@ find_uninit_use (gphi *phi, unsigned uninit_opnds, int *bb_to_rpo)
       if (is_gimple_debug (use_stmt))
 	continue;
 
+      /* Look through a single level of SSA name copies.  This is
+	 important for copies involving abnormals which we can't always
+	 proapgate out but which result in spurious unguarded uses.  */
+      use_operand_p use2_p;
+      gimple *use2_stmt;
+      if (gimple_assign_ssa_name_copy_p (use_stmt)
+	  && single_imm_use (gimple_assign_lhs (use_stmt), &use2_p, &use2_stmt))
+	{
+	  use_p = use2_p;
+	  use_stmt = use2_stmt;
+	}
+
       if (gphi *use_phi = dyn_cast<gphi *> (use_stmt))
 	{
 	  unsigned idx = PHI_ARG_INDEX_FROM_USE (use_p);
@@ -1262,9 +1292,9 @@ find_uninit_use (gphi *phi, unsigned uninit_opnds, int *bb_to_rpo)
 		       e->src->index, e->dest->index);
 	      print_gimple_stmt (dump_file, use_stmt, 0);
 	    }
-	  /* Found a phi use that is not guarded, mark the phi_result as
+	  /* Found a phi use that is not guarded, mark the use as
 	     possibly undefined.  */
-	  possibly_undefined_names->add (phi_result);
+	  possibly_undefined_names->add (USE_FROM_PTR (use_p));
 	}
       else
 	cands.safe_push (use_stmt);
@@ -1318,8 +1348,6 @@ warn_uninitialized_phi (gphi *phi, unsigned uninit_opnds, int *bb_to_rpo)
 
   unsigned phiarg_index = MASK_FIRST_SET_BIT (uninit_opnds);
   tree uninit_op = gimple_phi_arg_def (phi, phiarg_index);
-  if (SSA_NAME_VAR (uninit_op) == NULL_TREE)
-    return;
 
   location_t loc = UNKNOWN_LOCATION;
   if (gimple_phi_arg_has_location (phi, phiarg_index))

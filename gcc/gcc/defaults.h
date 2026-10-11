@@ -1,5 +1,5 @@
 /* Definitions of various defaults for tm.h macros.
-   Copyright (C) 1992-2023 Free Software Foundation, Inc.
+   Copyright (C) 1992-2025 Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@monkeys.com)
 
 This file is part of GCC.
@@ -150,7 +150,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #ifndef ASM_OUTPUT_FUNCTION_LABEL
 #define ASM_OUTPUT_FUNCTION_LABEL(FILE, NAME, DECL) \
-  ASM_OUTPUT_LABEL ((FILE), (NAME))
+  assemble_function_label_raw ((FILE), (NAME))
 #endif
 
 /* Output the definition of a compiler-generated label named NAME.  */
@@ -513,18 +513,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define WCHAR_TYPE_SIZE INT_TYPE_SIZE
 #endif
 
-#ifndef FLOAT_TYPE_SIZE
-#define FLOAT_TYPE_SIZE BITS_PER_WORD
-#endif
-
-#ifndef DOUBLE_TYPE_SIZE
-#define DOUBLE_TYPE_SIZE (BITS_PER_WORD * 2)
-#endif
-
-#ifndef LONG_DOUBLE_TYPE_SIZE
-#define LONG_DOUBLE_TYPE_SIZE (BITS_PER_WORD * 2)
-#endif
-
 #ifndef DECIMAL32_TYPE_SIZE
 #define DECIMAL32_TYPE_SIZE 32
 #endif
@@ -875,6 +863,20 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #else
 #define TARGET_SUPPORTS_ALIASES 0
 #endif
+#endif
+
+/* Indicate whether the target uses "target" attributes for function
+   multiversioning.  This is used to choose between the "target" and
+   "target_version" attributes when expanding a "target_clones" attribute, and
+   determine whether the "target" and "target_clones" attributes are mutually
+   exclusive.  */
+#ifndef TARGET_HAS_FMV_TARGET_ATTRIBUTE
+#define TARGET_HAS_FMV_TARGET_ATTRIBUTE 1
+#endif
+
+/* Select a attribute separator for function multiversioning.  */
+#ifndef TARGET_CLONES_ATTR_SEPARATOR
+#define TARGET_CLONES_ATTR_SEPARATOR ','
 #endif
 
 /* Select a format to encode pointers in exception handling data.  We

@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, for IBM RS/6000.
-   Copyright (C) 1992-2023 Free Software Foundation, Inc.
+   Copyright (C) 1992-2025 Free Software Foundation, Inc.
    Contributed by Richard Kenner (kenner@vlsi1.ultra.nyu.edu)
 
    This file is part of GCC.
@@ -28,11 +28,6 @@
 
 #ifndef RS6000_OPTS_H
 #include "config/rs6000/rs6000-opts.h"
-#endif
-
-/* 128-bit floating point precision values.  */
-#ifndef RS6000_MODES_H
-#include "config/rs6000/rs6000-modes.h"
 #endif
 
 /* Definitions for the object file format.  These are set at
@@ -103,13 +98,13 @@
 /* Common ASM definitions used by ASM_SPEC among the various targets for
    handling -mcpu=xxx switches.  There is a parallel list in driver-rs6000.cc to
    provide the default assembler options if the user uses -mcpu=native, so if
-   you make changes here, make them also there.  PR63177: Do not pass -mpower8
-   to the assembler if -mpower9-vector was also used.  */
+   you make changes here, make them also there.  */
 #define ASM_CPU_SPEC \
 "%{mcpu=native: %(asm_cpu_native); \
+  mcpu=power11: -mpower11; \
   mcpu=power10: -mpower10; \
   mcpu=power9: -mpower9; \
-  mcpu=power8|mcpu=powerpc64le: %{mpower9-vector: -mpower9;: -mpower8}; \
+  mcpu=power8|mcpu=powerpc64le: -mpower8; \
   mcpu=power7: -mpower7; \
   mcpu=power6x: -mpower6 %{!mvsx:%{!maltivec:-maltivec}}; \
   mcpu=power6: -mpower6 %{!mvsx:%{!maltivec:-maltivec}}; \
@@ -163,8 +158,7 @@
   mcpu=e5500: -me5500; \
   mcpu=e6500: -me6500; \
   mcpu=titan: -mtitan; \
-  !mcpu*: %{mpower9-vector: -mpower9; \
-	    mpower8-vector|mcrypto|mdirect-move|mhtm: -mpower8; \
+  !mcpu*: %{mcrypto|mdirect-move|mhtm: -mpower8; \
 	    mvsx: -mpower7; \
 	    mpowerpc64: -mppc64;: %(asm_default)}; \
   :%eMissing -mcpu option in ASM_CPU_SPEC?\n} \
@@ -467,27 +461,23 @@ extern int rs6000_vector_align[];
 #define TARGET_FCFIDUS	TARGET_POPCNTD
 #define TARGET_FCTIDUZ	TARGET_POPCNTD
 #define TARGET_FCTIWUZ	TARGET_POPCNTD
+/* Only powerpc64 and powerpc476 support fctid.  */
+#define TARGET_FCTID	(TARGET_POWERPC64 || rs6000_cpu == PROCESSOR_PPC476)
 #define TARGET_CTZ	TARGET_MODULO
 #define TARGET_EXTSWSLI	(TARGET_MODULO && TARGET_POWERPC64)
 #define TARGET_MADDLD	TARGET_MODULO
 
 /* TARGET_DIRECT_MOVE is redundant to TARGET_P8_VECTOR, so alias it to that.  */
 #define TARGET_DIRECT_MOVE	TARGET_P8_VECTOR
-#define TARGET_XSCVDPSPN	(TARGET_DIRECT_MOVE || TARGET_P8_VECTOR)
-#define TARGET_XSCVSPDPN	(TARGET_DIRECT_MOVE || TARGET_P8_VECTOR)
+#define TARGET_XSCVDPSPN	TARGET_P8_VECTOR
+#define TARGET_XSCVSPDPN	TARGET_P8_VECTOR
 #define TARGET_VADDUQM		(TARGET_P8_VECTOR && TARGET_POWERPC64)
-#define TARGET_DIRECT_MOVE_128	(TARGET_P9_VECTOR && TARGET_DIRECT_MOVE \
-				 && TARGET_POWERPC64)
-#define TARGET_VEXTRACTUB	(TARGET_P9_VECTOR && TARGET_DIRECT_MOVE \
-				 && TARGET_POWERPC64)
+#define TARGET_DIRECT_MOVE_128	(TARGET_P9_VECTOR && TARGET_DIRECT_MOVE_64BIT)
+#define TARGET_VEXTRACTUB	(TARGET_P9_VECTOR && TARGET_DIRECT_MOVE_64BIT)
 
 /* Whether we should avoid (SUBREG:SI (REG:SF) and (SUBREG:SF (REG:SI).  */
 #define TARGET_NO_SF_SUBREG	TARGET_DIRECT_MOVE_64BIT
 #define TARGET_ALLOW_SF_SUBREG	(!TARGET_DIRECT_MOVE_64BIT)
-
-/* This wants to be set for p8 and newer.  On p7, overlapping unaligned
-   loads are slow. */
-#define TARGET_EFFICIENT_OVERLAPPING_UNALIGNED TARGET_EFFICIENT_UNALIGNED_VSX
 
 /* Byte/char syncs were added as phased in for ISA 2.06B, but are not present
    in power7, so conditionalize them on p8 features.  TImode syncs need quad
@@ -563,7 +553,6 @@ extern int rs6000_vector_align[];
    the calculation in 64-bit GPRs and then is transfered to the vector
    registers.  */
 #define TARGET_DIRECT_MOVE_64BIT	(TARGET_DIRECT_MOVE		\
-					 && TARGET_P8_VECTOR		\
 					 && TARGET_POWERPC64)
 
 /* Inlining allows targets to define the meanings of bits in target_info
@@ -697,20 +686,6 @@ extern unsigned char rs6000_recip_bits[];
    words.  */
 #define LONG_LONG_TYPE_SIZE 64
 
-/* A C expression for the size in bits of the type `float' on the
-   target machine.  If you don't define this, the default is one
-   word.  */
-#define FLOAT_TYPE_SIZE 32
-
-/* A C expression for the size in bits of the type `double' on the
-   target machine.  If you don't define this, the default is two
-   words.  */
-#define DOUBLE_TYPE_SIZE 64
-
-/* A C expression for the size in bits of the type `long double' on the target
-   machine.  If you don't define this, the default is two words.  */
-#define LONG_DOUBLE_TYPE_SIZE rs6000_long_double_type_size
-
 /* Work around rs6000_long_double_type_size dependency in ada/targtyps.cc.  */
 #define WIDEST_HARDWARE_FP_SIZE 64
 
@@ -814,7 +789,7 @@ enum data_align { align_abi, align_opt, align_both };
 
 #define FIXED_REGISTERS  \
   {/* GPRs */					   \
-   0, 1, FIXED_R2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, FIXED_R13, 0, 0, \
+   0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, FIXED_R13, 0, 0, \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
    /* FPRs */					   \
    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, \
@@ -1007,6 +982,8 @@ enum data_align { align_abi, align_opt, align_both };
 #define ALTIVEC_OR_VSX_VECTOR_MODE(MODE)				\
   (ALTIVEC_VECTOR_MODE (MODE) || VSX_VECTOR_MODE (MODE)			\
    || (MODE) == V2DImode || (MODE) == V1TImode)
+
+#define TI_OR_PTI_MODE(mode) ((mode) == TImode || (mode) == PTImode)
 
 /* Post-reload, we can't use any new AltiVec registers, as we already
    emitted the vrsave mask.  */
@@ -1732,6 +1709,9 @@ typedef struct rs6000_args
    in one reasonably fast instruction.  */
 #define MOVE_MAX (! TARGET_POWERPC64 ? 4 : 8)
 #define MAX_MOVE_MAX 8
+#define MOVE_MAX_PIECES (TARGET_EFFICIENT_UNALIGNED_VSX \
+			 ? 16 : (TARGET_POWERPC64 ? 8 : 4))
+#define STORE_MAX_PIECES (TARGET_POWERPC64 ? 8 : 4)
 
 /* Nonzero if access to memory by bytes is no faster than for words.
    Also nonzero if doing byte operations (specifically shifts) in registers
@@ -2441,6 +2421,13 @@ typedef struct GTY(()) machine_function
      global entry.  It helps to control the patchable area before and after
      local entry.  */
   bool global_entry_emitted;
+  bool asm_redzone_clobber_seen;
+  /* With ELFv2 ABI dual entry points being adopted, generic framework
+     targetm.asm_out.print_patchable_function_entry would generate "after"
+     NOPs before local entry, which is wrong.  This flag is to stop it from
+     printing patch area before local entry, it is only useful when the
+     function requires dual entry points.  */
+  bool stop_patch_area_print;
 } machine_function;
 #endif
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -17,13 +17,11 @@
 // <http://www.gnu.org/licenses/>.
 
 #include "rust-hir-type-check-base.h"
-#include "rust-hir-type-check-item.h"
-#include "rust-hir-type-check-type.h"
 #include "rust-hir-type-check-expr.h"
-#include "rust-hir-type-check-implitem.h"
-#include "rust-coercion.h"
-#include "rust-unify.h"
-#include "rust-casts.h"
+#include "rust-hir-type-check-type.h"
+#include "rust-hir-trait-resolve.h"
+#include "rust-type-util.h"
+#include "rust-attribute-values.h"
 
 namespace Rust {
 namespace Resolver {
@@ -32,6 +30,36 @@ TypeCheckBase::TypeCheckBase ()
   : mappings (Analysis::Mappings::get ()), resolver (Resolver::get ()),
     context (TypeCheckContext::get ())
 {}
+
+void
+TypeCheckBase::ResolveGenericParams (
+  const std::vector<std::unique_ptr<HIR::GenericParam>> &generic_params,
+  std::vector<TyTy::SubstitutionParamMapping> &substitutions, bool is_foreign,
+  ABI abi)
+{
+  TypeCheckBase ctx;
+  ctx.resolve_generic_params (generic_params, substitutions, is_foreign, abi);
+}
+
+static void
+walk_types_to_constrain (std::set<HirId> &constrained_symbols,
+			 const TyTy::SubstitutionArgumentMappings &constraints)
+{
+  for (const auto &c : constraints.get_mappings ())
+    {
+      const TyTy::BaseType *arg = c.get_tyty ();
+      if (arg != nullptr)
+	{
+	  const TyTy::BaseType *p = arg->get_root ();
+	  constrained_symbols.insert (p->get_ty_ref ());
+	  if (p->has_substitutions_defined ())
+	    {
+	      walk_types_to_constrain (constrained_symbols,
+				       p->get_subst_argument_mappings ());
+	    }
+	}
+    }
+}
 
 bool
 TypeCheckBase::check_for_unconstrained (
@@ -48,34 +76,20 @@ TypeCheckBase::check_for_unconstrained (
     return check_result;
 
   std::set<HirId> symbols_to_constrain;
-  std::map<HirId, Location> symbol_to_location;
+  std::map<HirId, location_t> symbol_to_location;
   for (const auto &p : params_to_constrain)
     {
       HirId ref = p.get_param_ty ()->get_ref ();
       symbols_to_constrain.insert (ref);
       symbol_to_location.insert ({ref, p.get_param_locus ()});
+
+      rust_debug_loc (p.get_param_locus (), "XX constrain THIS");
     }
 
   // set up the set of constrained symbols
   std::set<HirId> constrained_symbols;
-  for (const auto &c : constraint_a.get_mappings ())
-    {
-      const TyTy::BaseType *arg = c.get_tyty ();
-      if (arg != nullptr)
-	{
-	  const TyTy::BaseType *p = arg->get_root ();
-	  constrained_symbols.insert (p->get_ty_ref ());
-	}
-    }
-  for (const auto &c : constraint_b.get_mappings ())
-    {
-      const TyTy::BaseType *arg = c.get_tyty ();
-      if (arg != nullptr)
-	{
-	  const TyTy::BaseType *p = arg->get_root ();
-	  constrained_symbols.insert (p->get_ty_ref ());
-	}
-    }
+  walk_types_to_constrain (constrained_symbols, constraint_a);
+  walk_types_to_constrain (constrained_symbols, constraint_b);
 
   const auto root = reference->get_root ();
   if (root->get_kind () == TyTy::TypeKind::PARAM)
@@ -91,7 +105,7 @@ TypeCheckBase::check_for_unconstrained (
       bool used = constrained_symbols.find (sym) != constrained_symbols.end ();
       if (!used)
 	{
-	  Location locus = symbol_to_location.at (sym);
+	  location_t locus = symbol_to_location.at (sym);
 	  rust_error_at (locus, "unconstrained type parameter");
 	  unconstrained = true;
 	}
@@ -105,7 +119,7 @@ TypeCheckBase::check_for_unconstrained (
 
 TyTy::BaseType *
 TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
-				HIR::Literal &literal, Location locus)
+				HIR::Literal &literal, location_t locus)
 {
   TyTy::BaseType *infered = nullptr;
   switch (literal.get_lit_type ())
@@ -169,6 +183,7 @@ TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
 	    infered
 	      = new TyTy::InferType (expr_mappings.get_hirid (),
 				     TyTy::InferType::InferTypeKind::INTEGRAL,
+				     TyTy::InferType::TypeHint::Default (),
 				     locus);
 	    break;
 	  }
@@ -193,6 +208,7 @@ TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
 	    infered
 	      = new TyTy::InferType (expr_mappings.get_hirid (),
 				     TyTy::InferType::InferTypeKind::FLOAT,
+				     TyTy::InferType::TypeHint::Default (),
 				     locus);
 	    break;
 	  }
@@ -225,7 +241,8 @@ TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
 
 	infered = new TyTy::ReferenceType (expr_mappings.get_hirid (),
 					   TyTy::TyVar (base->get_ref ()),
-					   Mutability::Imm);
+					   Mutability::Imm,
+					   TyTy::Region::make_static ());
       }
       break;
 
@@ -237,9 +254,9 @@ TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
 	auto ok = context->lookup_builtin ("u8", &u8);
 	rust_assert (ok);
 
-	auto crate_num = mappings->get_current_crate ();
+	auto crate_num = mappings.get_current_crate ();
 	Analysis::NodeMapping capacity_mapping (crate_num, UNKNOWN_NODEID,
-						mappings->get_next_hir_id (
+						mappings.get_next_hir_id (
 						  crate_num),
 						UNKNOWN_LOCAL_DEFID);
 
@@ -259,7 +276,7 @@ TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
 	context->insert_type (capacity_mapping, expected_ty);
 
 	Analysis::NodeMapping array_mapping (crate_num, UNKNOWN_NODEID,
-					     mappings->get_next_hir_id (
+					     mappings.get_next_hir_id (
 					       crate_num),
 					     UNKNOWN_LOCAL_DEFID);
 
@@ -271,12 +288,13 @@ TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
 
 	infered = new TyTy::ReferenceType (expr_mappings.get_hirid (),
 					   TyTy::TyVar (array->get_ref ()),
-					   Mutability::Imm);
+					   Mutability::Imm,
+					   TyTy::Region::make_static ());
       }
       break;
 
     default:
-      gcc_unreachable ();
+      rust_unreachable ();
       break;
     }
 
@@ -284,15 +302,25 @@ TypeCheckBase::resolve_literal (const Analysis::NodeMapping &expr_mappings,
 }
 
 TyTy::ADTType::ReprOptions
-TypeCheckBase::parse_repr_options (const AST::AttrVec &attrs, Location locus)
+TypeCheckBase::parse_repr_options (const AST::AttrVec &attrs, location_t locus)
 {
   TyTy::ADTType::ReprOptions repr;
   repr.pack = 0;
   repr.align = 0;
 
+  // FIXME handle repr types....
+  bool ok = context->lookup_builtin ("isize", &repr.repr);
+  rust_assert (ok);
+
   for (const auto &attr : attrs)
     {
-      bool is_repr = attr.get_path ().as_string ().compare ("repr") == 0;
+      bool is_repr = attr.get_path ().as_string () == Values::Attributes::REPR;
+      if (is_repr && !attr.has_attr_input ())
+	{
+	  rust_error_at (attr.get_locus (), "malformed %qs attribute", "repr");
+	  continue;
+	}
+
       if (is_repr)
 	{
 	  const AST::AttrInput &input = attr.get_attr_input ();
@@ -303,8 +331,22 @@ TypeCheckBase::parse_repr_options (const AST::AttrVec &attrs, Location locus)
 	  AST::AttrInputMetaItemContainer *meta_items
 	    = option.parse_to_meta_item ();
 
-	  const std::string inline_option
-	    = meta_items->get_items ().at (0)->as_string ();
+	  if (meta_items == nullptr)
+	    {
+	      rust_error_at (attr.get_locus (), "malformed %qs attribute",
+			     "repr");
+	      continue;
+	    }
+
+	  auto &items = meta_items->get_items ();
+	  if (items.size () == 0)
+	    {
+	      // nothing to do with this its empty
+	      delete meta_items;
+	      continue;
+	    }
+
+	  const std::string inline_option = items.at (0)->as_string ();
 
 	  // TODO: it would probably be better to make the MetaItems more aware
 	  // of constructs with nesting like #[repr(packed(2))] rather than
@@ -341,6 +383,8 @@ TypeCheckBase::parse_repr_options (const AST::AttrVec &attrs, Location locus)
 	  else if (is_align)
 	    repr.align = value;
 
+	  delete meta_items;
+
 	  // Multiple repr options must be specified with e.g. #[repr(C,
 	  // packed(2))].
 	  break;
@@ -350,119 +394,47 @@ TypeCheckBase::parse_repr_options (const AST::AttrVec &attrs, Location locus)
   return repr;
 }
 
-TyTy::BaseType *
-TypeCheckBase::unify_site (HirId id, TyTy::TyWithLocation lhs,
-			   TyTy::TyWithLocation rhs, Location unify_locus)
-{
-  TyTy::BaseType *expected = lhs.get_ty ();
-  TyTy::BaseType *expr = rhs.get_ty ();
-
-  rust_debug ("unify_site id={%u} expected={%s} expr={%s}", id,
-	      expected->debug_str ().c_str (), expr->debug_str ().c_str ());
-
-  return UnifyRules::Resolve (lhs, rhs, unify_locus, true /*commit*/,
-			      true /*emit_error*/);
-}
-
-TyTy::BaseType *
-TypeCheckBase::coercion_site (HirId id, TyTy::TyWithLocation lhs,
-			      TyTy::TyWithLocation rhs, Location locus)
-{
-  TyTy::BaseType *expected = lhs.get_ty ();
-  TyTy::BaseType *expr = rhs.get_ty ();
-
-  rust_debug ("coercion_site id={%u} expected={%s} expr={%s}", id,
-	      expected->debug_str ().c_str (), expr->debug_str ().c_str ());
-
-  auto context = TypeCheckContext::get ();
-  if (expected->get_kind () == TyTy::TypeKind::ERROR
-      || expr->get_kind () == TyTy::TypeKind::ERROR)
-    return expr;
-
-  // can we autoderef it?
-  auto result = TypeCoercionRules::Coerce (expr, expected, locus);
-
-  // the result needs to be unified
-  TyTy::BaseType *receiver = expr;
-  if (!result.is_error ())
-    {
-      receiver = result.tyty;
-    }
-
-  rust_debug ("coerce_default_unify(a={%s}, b={%s})",
-	      receiver->debug_str ().c_str (), expected->debug_str ().c_str ());
-  TyTy::BaseType *coerced
-    = unify_site (id, lhs, TyTy::TyWithLocation (receiver, rhs.get_locus ()),
-		  locus);
-  context->insert_autoderef_mappings (id, std::move (result.adjustments));
-  return coerced;
-}
-
-TyTy::BaseType *
-TypeCheckBase::cast_site (HirId id, TyTy::TyWithLocation from,
-			  TyTy::TyWithLocation to, Location cast_locus)
-{
-  rust_debug ("cast_site id={%u} from={%s} to={%s}", id,
-	      from.get_ty ()->debug_str ().c_str (),
-	      to.get_ty ()->debug_str ().c_str ());
-
-  auto context = TypeCheckContext::get ();
-  if (from.get_ty ()->get_kind () == TyTy::TypeKind::ERROR
-      || to.get_ty ()->get_kind () == TyTy::TypeKind::ERROR)
-    return to.get_ty ();
-
-  // do the cast
-  auto result = TypeCastRules::resolve (cast_locus, from, to);
-
-  // we assume error has already been emitted
-  if (result.is_error ())
-    return to.get_ty ();
-
-  // the result needs to be unified
-  TyTy::BaseType *casted_result = result.tyty;
-  rust_debug ("cast_default_unify(a={%s}, b={%s})",
-	      casted_result->debug_str ().c_str (),
-	      to.get_ty ()->debug_str ().c_str ());
-
-  TyTy::BaseType *casted
-    = unify_site (id, to,
-		  TyTy::TyWithLocation (casted_result, from.get_locus ()),
-		  cast_locus);
-  context->insert_cast_autoderef_mappings (id, std::move (result.adjustments));
-  return casted;
-}
-
 void
 TypeCheckBase::resolve_generic_params (
   const std::vector<std::unique_ptr<HIR::GenericParam>> &generic_params,
-  std::vector<TyTy::SubstitutionParamMapping> &substitutions)
+  std::vector<TyTy::SubstitutionParamMapping> &substitutions, bool is_foreign,
+  ABI abi)
 {
   for (auto &generic_param : generic_params)
     {
-      switch (generic_param.get ()->get_kind ())
+      switch (generic_param->get_kind ())
 	{
-	case HIR::GenericParam::GenericKind::LIFETIME:
-	  // FIXME: Skipping Lifetime completely until better
-	  // handling.
+	  case HIR::GenericParam::GenericKind::LIFETIME: {
+	    auto lifetime_param
+	      = static_cast<HIR::LifetimeParam &> (*generic_param);
+	    auto lifetime = lifetime_param.get_lifetime ();
+	    context->get_lifetime_resolver ().insert_mapping (
+	      context->intern_lifetime (lifetime));
+	  }
 	  break;
 
 	  case HIR::GenericParam::GenericKind::CONST: {
-	    auto param
-	      = static_cast<HIR::ConstGenericParam *> (generic_param.get ());
-	    auto specified_type
-	      = TypeCheckType::Resolve (param->get_type ().get ());
-
-	    if (param->has_default_expression ())
+	    if (is_foreign && abi != Rust::ABI::INTRINSIC)
 	      {
-		auto expr_type = TypeCheckExpr::Resolve (
-		  param->get_default_expression ().get ());
+		rust_error_at (generic_param->get_locus (), ErrorCode::E0044,
+			       "foreign items may not have const parameters");
+	      }
 
-		coercion_site (
-		  param->get_mappings ().get_hirid (),
-		  TyTy::TyWithLocation (specified_type),
-		  TyTy::TyWithLocation (
-		    expr_type, param->get_default_expression ()->get_locus ()),
-		  param->get_locus ());
+	    auto &param
+	      = static_cast<HIR::ConstGenericParam &> (*generic_param);
+	    auto specified_type = TypeCheckType::Resolve (param.get_type ());
+
+	    if (param.has_default_expression ())
+	      {
+		auto expr_type
+		  = TypeCheckExpr::Resolve (param.get_default_expression ());
+
+		coercion_site (param.get_mappings ().get_hirid (),
+			       TyTy::TyWithLocation (specified_type),
+			       TyTy::TyWithLocation (
+				 expr_type,
+				 param.get_default_expression ().get_locus ()),
+			       param.get_locus ());
 	      }
 
 	    context->insert_type (generic_param->get_mappings (),
@@ -471,16 +443,45 @@ TypeCheckBase::resolve_generic_params (
 	  break;
 
 	  case HIR::GenericParam::GenericKind::TYPE: {
-	    auto param_type
-	      = TypeResolveGenericParam::Resolve (generic_param.get ());
+	    if (is_foreign && abi != Rust::ABI::INTRINSIC)
+	      {
+		rust_error_at (generic_param->get_locus (), ErrorCode::E0044,
+			       "foreign items may not have type parameters");
+	      }
+
+	    auto param_type = TypeResolveGenericParam::Resolve (
+	      *generic_param, false /*resolve_trait_bounds*/);
 	    context->insert_type (generic_param->get_mappings (), param_type);
 
-	    substitutions.push_back (TyTy::SubstitutionParamMapping (
-	      static_cast<HIR::TypeParam &> (*generic_param), param_type));
+	    auto &param = static_cast<HIR::TypeParam &> (*generic_param);
+	    TyTy::SubstitutionParamMapping p (param, param_type);
+	    substitutions.push_back (p);
 	  }
 	  break;
 	}
     }
+
+  // now walk them to setup any specified type param bounds
+  for (auto &subst : substitutions)
+    {
+      auto pty = subst.get_param_ty ();
+      TypeResolveGenericParam::ApplyAnyTraitBounds (subst.get_generic_param (),
+						    pty);
+    }
+}
+
+TyTy::TypeBoundPredicate
+TypeCheckBase::get_marker_predicate (LangItem::Kind item_type, location_t locus)
+{
+  DefId item_id = mappings.get_lang_item (item_type, locus);
+  HIR::Item *item = mappings.lookup_defid (item_id).value ();
+  rust_assert (item->get_item_kind () == HIR::Item::ItemKind::Trait);
+
+  HIR::Trait &trait = *static_cast<HIR::Trait *> (item);
+  TraitReference *ref = TraitResolver::Resolve (trait);
+  rust_assert (ref != nullptr);
+
+  return TyTy::TypeBoundPredicate (*ref, BoundPolarity::RegularBound, locus);
 }
 
 } // namespace Resolver

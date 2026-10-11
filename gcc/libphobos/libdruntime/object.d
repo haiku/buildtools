@@ -65,7 +65,7 @@ alias ptrdiff_t = typeof(cast(void*)0 - cast(void*)0);
 alias sizediff_t = ptrdiff_t; // For backwards compatibility only.
 /**
  * Bottom type.
- * See $(DDSUBLINK spec/type, noreturn).
+ * See $(DDSUBLINK spec/type, noreturn, `noreturn`).
  */
 alias noreturn = typeof(*null);
 
@@ -289,8 +289,9 @@ if ((is(LHS : const Object) || is(LHS : const shared Object)) &&
         // If same exact type => one call to method opEquals
         if (typeid(lhs) is typeid(rhs) ||
             !__ctfe && typeid(lhs).opEquals(typeid(rhs)))
-                /* CTFE doesn't like typeid much. 'is' works, but opEquals doesn't
-                (issue 7147). But CTFE also guarantees that equal TypeInfos are
+                /* CTFE doesn't like typeid much. 'is' works, but opEquals doesn't:
+                https://issues.dlang.org/show_bug.cgi?id=7147
+                But CTFE also guarantees that equal TypeInfos are
                 always identical. So, no opEquals needed during CTFE. */
         {
             return true;
@@ -525,9 +526,16 @@ unittest
 
 private extern(C) void _d_setSameMutex(shared Object ownee, shared Object owner) nothrow;
 
+/** Makes ownee use owner's mutex.
+ * This will initialize owner's mutex if it hasn't been set yet.
+ * Params:
+ * ownee = object to change
+ * owner = source object
+ */
 void setSameMutex(shared Object ownee, shared Object owner)
 {
-    _d_setSameMutex(ownee, owner);
+    import core.atomic : atomicLoad;
+    _d_setSameMutex(atomicLoad(ownee), atomicLoad(owner));
 }
 
 @system unittest
@@ -640,7 +648,8 @@ class TypeInfo
      */
     size_t getHash(scope const void* p) @trusted nothrow const
     {
-        return hashOf(p);
+        // by default, do not assume anything about the type
+        return 0;
     }
 
     /// Compares two instances for equality.
@@ -746,7 +755,7 @@ class TypeInfo
 
     /** Return info used by the garbage collector to do precise collection.
      */
-    @property immutable(void)* rtInfo() nothrow pure const @safe @nogc { return rtinfoHasPointers; } // better safe than sorry
+    @property immutable(void)* rtInfo() nothrow pure const @trusted @nogc { return rtinfoHasPointers; } // better safe than sorry
 }
 
 @system unittest
@@ -982,7 +991,7 @@ class TypeInfo_Enum : TypeInfo
 }
 
 
-@safe unittest // issue 12233
+@safe unittest // https://issues.dlang.org/show_bug.cgi?id=12233
 {
     static assert(is(typeof(TypeInfo.init) == TypeInfo));
     assert(TypeInfo.init is null);
@@ -1315,8 +1324,16 @@ class TypeInfo_AssociativeArray : TypeInfo
     override @property inout(TypeInfo) next() nothrow pure inout { return value; }
     override @property uint flags() nothrow pure const { return 1; }
 
+    // TypeInfo entry is generated from the type of this template to help rt/aaA.d
+    static struct Entry(K, V)
+    {
+        K key;
+        V value;
+    }
+
     TypeInfo value;
     TypeInfo key;
+    TypeInfo entry;
 
     override @property size_t talign() nothrow pure const
     {
@@ -1637,10 +1654,10 @@ class TypeInfo_Class : TypeInfo
     string      name;           /// class name
     void*[]     vtbl;           /// virtual function pointer table
     Interface[] interfaces;     /// interfaces this class implements
-    TypeInfo_Class   base;           /// base class
+    TypeInfo_Class   base;      /// base class
     void*       destructor;
     void function(Object) classInvariant;
-    enum ClassFlags : uint
+    enum ClassFlags : ushort
     {
         isCOMclass = 0x1,
         noPointers = 0x2,
@@ -1651,14 +1668,18 @@ class TypeInfo_Class : TypeInfo
         isAbstract = 0x40,
         isCPPclass = 0x80,
         hasDtor = 0x100,
+        hasNameSig = 0x200,
     }
     ClassFlags m_flags;
-    void*       deallocator;
+    ushort     depth;           /// inheritance distance from Object
+    void*      deallocator;
     OffsetTypeInfo[] m_offTi;
     void function(Object) defaultConstructor;   // default Constructor
 
     immutable(void)* m_RTInfo;        // data for precise GC
     override @property immutable(void)* rtInfo() const { return m_RTInfo; }
+
+    uint[4] nameSig;            /// unique signature for `name`
 
     /**
      * Search all modules for TypeInfo_Class corresponding to classname.
@@ -2901,6 +2922,14 @@ void* aaLiteral(Key, Value)(Key[] keys, Value[] values) @trusted pure
     return _d_assocarrayliteralTX(typeid(Value[Key]), *cast(void[]*)&keys, *cast(void[]*)&values);
 }
 
+// Lower an Associative Array to a newaa struct for static initialization.
+auto _aaAsStruct(K, V)(V[K] aa) @safe
+{
+    import core.internal.newaa : makeAA;
+    assert(__ctfe);
+    return makeAA!(K, V)(aa);
+}
+
 alias AssociativeArray(Key, Value) = Value[Key];
 
 /***********************************
@@ -2908,23 +2937,42 @@ alias AssociativeArray(Key, Value) = Value[Key];
  * Params:
  *      aa =     The associative array.
  */
-void clear(Value, Key)(Value[Key] aa)
+void clear(Value, Key)(Value[Key] aa) @trusted
 {
     _aaClear(*cast(AA *) &aa);
 }
 
 /** ditto */
-void clear(Value, Key)(Value[Key]* aa)
+void clear(Value, Key)(Value[Key]* aa) @trusted
 {
     _aaClear(*cast(AA *) aa);
 }
 
 ///
-@system unittest
+@safe unittest
 {
     auto aa = ["k1": 2];
     aa.clear;
     assert("k1" !in aa);
+}
+
+// Issue 20559
+@system unittest
+{
+    static class Foo
+    {
+        int[string] aa;
+        alias aa this;
+    }
+
+    auto v = new Foo();
+    v["Hello World"] = 42;
+    v.clear;
+    assert("Hello World" !in v);
+
+    // Test for T*
+    static assert(!__traits(compiles, (&v).clear));
+    static assert( __traits(compiles, (*(&v)).clear));
 }
 
 /***********************************
@@ -3151,6 +3199,10 @@ auto byValue(T : V[K], K, V)(T* aa) pure nothrow @nogc
         sum += v;
 
     assert(sum == 3);
+
+    foreach (ref v; dict.byValue)
+        v++;
+    assert(dict == ["k1": 2, "k2": 3]);
 }
 
 /***********************************
@@ -3174,7 +3226,7 @@ auto byValue(T : V[K], K, V)(T* aa) pure nothrow @nogc
  *---
  *
  * Note that this is a low-level interface to iterating over the associative
- * array and is not compatible withth the
+ * array and is not compatible with the
  * $(LINK2 $(ROOT_DIR)phobos/std_typecons.html#.Tuple,`Tuple`) type in Phobos.
  * For compatibility with `Tuple`, use
  * $(LINK2 $(ROOT_DIR)phobos/std_array.html#.byPair,std.array.byPair) instead.
@@ -3238,8 +3290,11 @@ auto byKeyValue(T : V[K], K, V)(T* aa) pure nothrow @nogc
         assert(e.key[1] == e.value + '0');
         sum += e.value;
     }
-
     assert(sum == 3);
+
+    foreach (e; dict.byKeyValue)
+        e.value++;
+    assert(dict == ["k1": 2, "k2": 3]);
 }
 
 /***********************************
@@ -3411,8 +3466,8 @@ Value[] values(T : Value[Key], Value, Key)(T *aa) @property
 }
 
 /***********************************
- * Looks up key; if it exists returns corresponding value else evaluates and
- * returns defaultValue.
+ * If `key` is in `aa`, returns corresponding value; otherwise it evaluates and
+ * returns `defaultValue`.
  * Params:
  *      aa =     The associative array.
  *      key =    The key.
@@ -3441,8 +3496,8 @@ inout(V) get(K, V)(inout(V[K])* aa, K key, lazy inout(V) defaultValue)
 }
 
 /***********************************
- * Looks up key; if it exists returns corresponding value else evaluates
- * value, adds it to the associative array and returns it.
+ * If `key` is in `aa`, returns corresponding value; otherwise it evaluates
+ * `value`, adds it to the associative array and returns it.
  * Params:
  *      aa =     The associative array.
  *      key =    The key.
@@ -3574,7 +3629,7 @@ if (is(typeof(create()) : V) && (is(typeof(update(aa[K.init])) : V) || is(typeof
     @safe const:
         // stubs
         bool opEquals(S rhs) { assert(0); }
-        size_t toHash() { assert(0); }
+        size_t toHash() const { assert(0); }
     }
 
     int[string] aai;
@@ -3722,15 +3777,10 @@ template RTInfoImpl(size_t[] pointerBitmap)
     immutable size_t[pointerBitmap.length] RTInfoImpl = pointerBitmap[];
 }
 
-template NoPointersBitmapPayload(size_t N)
-{
-    enum size_t[N] NoPointersBitmapPayload = 0;
-}
-
 template RTInfo(T)
 {
     enum pointerBitmap = __traits(getPointerBitmap, T);
-    static if (pointerBitmap[1 .. $] == NoPointersBitmapPayload!(pointerBitmap.length - 1))
+    static if (pointerBitmap[1 .. $] == size_t[pointerBitmap.length - 1].init)
         enum RTInfo = rtinfoNoPointers;
     else
         enum RTInfo = RTInfoImpl!(pointerBitmap).ptr;
@@ -4194,8 +4244,11 @@ void destroy(bool initialize = true, T)(T obj) if (is(T == interface))
     assert(c.s == "S");         // `c.s` is back to its inital state, `"S"`
     assert(c.a.dtorCount == 1); // `c.a`'s destructor was called
     assert(c.a.x == 10);        // `c.a.x` is back to its inital state, `10`
+}
 
-    // check C++ classes work too!
+/// C++ classes work too
+@system unittest
+{
     extern (C++) class CPP
     {
         struct Agg
@@ -4246,6 +4299,34 @@ void destroy(bool initialize = true, T)(T obj) if (is(T == interface))
     assert(i == 0);           // `i` is back to its initial state `0`
 }
 
+/// Nested struct type
+@system unittest
+{
+    int dtorCount;
+    struct A
+    {
+        int i;
+        ~this()
+        {
+            dtorCount++; // capture local variable
+        }
+    }
+    A a = A(5);
+    destroy!false(a);
+    assert(dtorCount == 1);
+    assert(a.i == 5);
+
+    destroy(a);
+    assert(dtorCount == 2);
+    assert(a.i == 0);
+
+    // the context pointer is now null
+    // restore it so the dtor can run
+    import core.lifetime : emplace;
+    emplace(&a, A(0));
+    // dtor also called here
+}
+
 @system unittest
 {
     extern(C++)
@@ -4257,6 +4338,44 @@ void destroy(bool initialize = true, T)(T obj) if (is(T == interface))
 
     destroy!false(new C());
     destroy!true(new C());
+}
+
+@system unittest
+{
+    // class with an `alias this`
+    class A
+    {
+        static int dtorCount;
+        ~this()
+        {
+            dtorCount++;
+        }
+    }
+
+    class B
+    {
+        A a;
+        alias a this;
+        this()
+        {
+            a = new A;
+        }
+        static int dtorCount;
+        ~this()
+        {
+            dtorCount++;
+        }
+    }
+    auto b = new B;
+    assert(A.dtorCount == 0);
+    assert(B.dtorCount == 0);
+    destroy(b);
+    assert(A.dtorCount == 0);
+    assert(B.dtorCount == 1);
+
+    auto a = new A;
+    destroy(a);
+    assert(A.dtorCount == 1);
 }
 
 @system unittest
@@ -4472,6 +4591,43 @@ if (__traits(isStaticArray, T))
     }
 }
 
+// https://issues.dlang.org/show_bug.cgi?id=19218
+@system unittest
+{
+    static struct S
+    {
+        static dtorCount = 0;
+        ~this() { ++dtorCount; }
+    }
+
+    static interface I
+    {
+        ref S[3] getArray();
+        alias getArray this;
+    }
+
+    static class C : I
+    {
+        static dtorCount = 0;
+        ~this() { ++dtorCount; }
+
+        S[3] a;
+        alias a this;
+
+        ref S[3] getArray() { return a; }
+    }
+
+    C c = new C();
+    destroy(c);
+    assert(S.dtorCount == 3);
+    assert(C.dtorCount == 1);
+
+    I i = new C();
+    destroy(i);
+    assert(S.dtorCount == 6);
+    assert(C.dtorCount == 2);
+}
+
 /// ditto
 void destroy(bool initialize = true, T)(ref T obj)
     if (!is(T == struct) && !is(T == interface) && !is(T == class) && !__traits(isStaticArray, T))
@@ -4529,14 +4685,23 @@ public import core.internal.entrypoint : _d_cmain;
 
 public import core.internal.array.appending : _d_arrayappendT;
 version (D_ProfileGC)
+{
     public import core.internal.array.appending : _d_arrayappendTTrace;
-public import core.internal.array.appending : _d_arrayappendcTXImpl;
+    public import core.internal.array.appending : _d_arrayappendcTXTrace;
+    public import core.internal.array.concatenation : _d_arraycatnTXTrace;
+    public import core.lifetime : _d_newitemTTrace;
+    public import core.internal.array.construction : _d_newarrayTTrace;
+    public import core.internal.array.construction : _d_newarraymTXTrace;
+}
+public import core.internal.array.appending : _d_arrayappendcTX;
 public import core.internal.array.comparison : __cmp;
 public import core.internal.array.equality : __equals;
 public import core.internal.array.casting: __ArrayCast;
-public import core.internal.array.concatenation : _d_arraycatnTXImpl;
+public import core.internal.array.concatenation : _d_arraycatnTX;
 public import core.internal.array.construction : _d_arrayctor;
 public import core.internal.array.construction : _d_arraysetctor;
+public import core.internal.array.construction : _d_newarrayT;
+public import core.internal.array.construction : _d_newarraymTX;
 public import core.internal.array.arrayassign : _d_arrayassign_l;
 public import core.internal.array.arrayassign : _d_arrayassign_r;
 public import core.internal.array.arrayassign : _d_arraysetassign;
@@ -4557,6 +4722,7 @@ public import core.lifetime : _d_delstructImpl;
 public import core.lifetime : _d_newThrowable;
 public import core.lifetime : _d_newclassT;
 public import core.lifetime : _d_newclassTTrace;
+public import core.lifetime : _d_newitemT;
 
 public @trusted @nogc nothrow pure extern (C) void _d_delThrowable(scope Throwable);
 

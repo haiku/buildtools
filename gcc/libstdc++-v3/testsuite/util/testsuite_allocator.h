@@ -1,7 +1,7 @@
 // -*- C++ -*-
 // Testing allocator for the C++ library testsuite.
 //
-// Copyright (C) 2002-2023 Free Software Foundation, Inc.
+// Copyright (C) 2002-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -154,7 +154,7 @@ namespace __gnu_test
       tracker_allocator()
       { }
 
-      tracker_allocator(const tracker_allocator&)
+      tracker_allocator(const tracker_allocator& a) : Alloc(a)
       { }
 
       ~tracker_allocator()
@@ -718,6 +718,15 @@ namespace __gnu_test
     private:
       friend std::ptrdiff_t operator-(PointerBase l, PointerBase r)
       { return l.value - r.value; }
+
+      friend bool operator<(PointerBase l, PointerBase r)
+      { return l.value < r.value; }
+      friend bool operator>(PointerBase l, PointerBase r)
+      { return l.value > r.value; }
+      friend bool operator<=(PointerBase l, PointerBase r)
+      { return l.value <= r.value; }
+      friend bool operator>=(PointerBase l, PointerBase r)
+      { return l.value >= r.value; }
 
       Derived&
       derived() { return static_cast<Derived&>(*this); }

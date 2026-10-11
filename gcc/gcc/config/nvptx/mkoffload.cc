@@ -1,6 +1,6 @@
 /* Offload image generation tool for PTX.
 
-   Copyright (C) 2014-2023 Free Software Foundation, Inc.
+   Copyright (C) 2014-2025 Free Software Foundation, Inc.
 
    Contributed by Nathan Sidwell <nathan@codesourcery.com> and
    Bernd Schmidt <bernds@codesourcery.com>.
@@ -51,6 +51,7 @@ struct id_map
 };
 
 static id_map *func_ids, **funcs_tail = &func_ids;
+static id_map *ind_func_ids, **ind_funcs_tail = &ind_func_ids;
 static id_map *var_ids, **vars_tail = &var_ids;
 
 /* Files to unlink.  */
@@ -60,6 +61,7 @@ static const char *omp_requires_file;
 static const char *ptx_dumpbase;
 
 enum offload_abi offload_abi = OFFLOAD_ABI_UNSET;
+const char *offload_abi_host_opts = NULL;
 
 /* Delete tempfiles.  */
 
@@ -258,8 +260,10 @@ process (FILE *in, FILE *out, uint32_t omp_requires)
   unsigned ix;
   const char *sm_ver = NULL, *version = NULL;
   const char *sm_ver2 = NULL, *version2 = NULL;
-  size_t file_cnt = 0;
-  size_t *file_idx = XALLOCAVEC (size_t, len);
+  /* To reduce the number of reallocations for 'file_idx', guess 'file_cnt'
+     (very roughly...), based on 'len'.  */
+  const size_t file_cnt_guessed = 13 + len / 27720;
+  auto_vec<size_t> file_idx (file_cnt_guessed);
 
   fprintf (out, "#include <stdint.h>\n\n");
 
@@ -267,9 +271,10 @@ process (FILE *in, FILE *out, uint32_t omp_requires)
      terminated by a NUL.  */
   for (size_t i = 0; i != len;)
     {
+      file_idx.safe_push (i);
+
       char c;
       bool output_fn_ptr = false;
-      file_idx[file_cnt++] = i;
 
       fprintf (out, "static const char ptx_code_%u[] =\n\t\"", obj_count++);
       while ((c = input[i++]))
@@ -301,6 +306,11 @@ process (FILE *in, FILE *out, uint32_t omp_requires)
 		    {
 		      output_fn_ptr = true;
 		      record_id (input + i + 9, &funcs_tail);
+		    }
+		  else if (startswith (input + i, "IND_FUNC_MAP "))
+		    {
+		      output_fn_ptr = true;
+		      record_id (input + i + 13, &ind_funcs_tail);
 		    }
 		  else
 		    abort ();
@@ -341,6 +351,9 @@ process (FILE *in, FILE *out, uint32_t omp_requires)
 	  version2 = version;
 	}
     }
+
+  const size_t file_cnt = file_idx.length ();
+  gcc_checking_assert (file_cnt == obj_count);
 
   /* Create function-pointer array, required for reverse
      offload function-pointer lookup.  */
@@ -422,6 +435,77 @@ process (FILE *in, FILE *out, uint32_t omp_requires)
       fprintf (out, "};\\n\";\n\n");
     }
 
+  if (ind_func_ids)
+    {
+      const char needle[] = "// BEGIN GLOBAL FUNCTION DECL: ";
+
+      fprintf (out, "static const char ptx_code_%u[] =\n", obj_count++);
+      fprintf (out, "\t\".version ");
+      for (size_t i = 0; version[i] != '\0' && version[i] != '\n'; i++)
+	fputc (version[i], out);
+      fprintf (out, "\"\n\t\".target sm_");
+      for (size_t i = 0; sm_ver[i] != '\0' && sm_ver[i] != '\n'; i++)
+	fputc (sm_ver[i], out);
+      fprintf (out, "\"\n\t\".file 2 \\\"<dummy>\\\"\"\n");
+
+      /* WORKAROUND - see PR 108098
+	 It seems as if older CUDA JIT compiler optimizes the function pointers
+	 in offload_func_table to NULL, which can be prevented by adding a
+	 dummy procedure. With CUDA 11.1, it seems to work fine without
+	 workaround while CUDA 10.2 as some ancient version have need the
+	 workaround. Assuming CUDA 11.0 fixes it, emitting it could be
+	 restricted to 'if (sm_ver2[0] < 8 && version2[0] < 7)' as sm_80 and
+	 PTX ISA 7.0 are new in CUDA 11.0; for 11.1 it would be sm_86 and
+	 PTX ISA 7.1.  */
+      fprintf (out, "\n\t\".func __dummy$func2 ( );\"\n");
+      fprintf (out, "\t\".func __dummy$func2 ( )\"\n");
+      fprintf (out, "\t\"{\"\n");
+      fprintf (out, "\t\"}\"\n");
+
+      size_t fidx = 0;
+      for (id = ind_func_ids; id; id = id->next)
+	{
+	  fprintf (out, "\t\".extern ");
+	  const char *p = input + file_idx[fidx];
+	  while (true)
+	    {
+	      p = strstr (p, needle);
+	      if (!p)
+		{
+		  fidx++;
+		  if (fidx >= file_cnt)
+		    break;
+		  p = input + file_idx[fidx];
+		  continue;
+		}
+	      p += strlen (needle);
+	      if (!startswith (p, id->ptx_name))
+		continue;
+	      p += strlen (id->ptx_name);
+	      if (*p != '\n')
+		continue;
+	      p++;
+	      /* Skip over any directives.  */
+	      while (!startswith (p, ".func"))
+		while (*p++ != ' ');
+	      for (; *p != '\0' && *p != '\n'; p++)
+		fputc (*p, out);
+	      break;
+	    }
+	  fprintf (out, "\"\n");
+	  if (fidx == file_cnt)
+	    fatal_error (input_location,
+			 "Cannot find function declaration for %qs",
+			 id->ptx_name);
+	}
+
+      fprintf (out, "\t\".visible .global .align 8 .u64 "
+		    "$offload_ind_func_table[] = {");
+      for (comma = "", id = ind_func_ids; id; comma = ",", id = id->next)
+	fprintf (out, "%s\"\n\t\t\"%s", comma, id->ptx_name);
+      fprintf (out, "};\\n\";\n\n");
+    }
+
   /* Dump out array of pointers to ptx object strings.  */
   fprintf (out, "static const struct ptx_obj {\n"
 	   "  const char *code;\n"
@@ -447,6 +531,12 @@ process (FILE *in, FILE *out, uint32_t omp_requires)
 	     id->dim ? id->dim : "");
   fprintf (out, "\n};\n\n");
 
+  /* Dump out indirect function idents.  */
+  fprintf (out, "static const char *const ind_func_mappings[] = {");
+  for (comma = "", id = ind_func_ids; id; comma = ",", id = id->next)
+    fprintf (out, "%s\n\t\"%s\"", comma, id->ptx_name);
+  fprintf (out, "\n};\n\n");
+
   fprintf (out,
 	   "static const struct nvptx_data {\n"
 	   "  uintptr_t omp_requires_mask;\n"
@@ -456,12 +546,14 @@ process (FILE *in, FILE *out, uint32_t omp_requires)
 	   "  unsigned var_num;\n"
 	   "  const struct nvptx_fn *fn_names;\n"
 	   "  unsigned fn_num;\n"
+	   "  unsigned ind_fn_num;\n"
 	   "} nvptx_data = {\n"
 	   "  %d, ptx_objs, sizeof (ptx_objs) / sizeof (ptx_objs[0]),\n"
 	   "  var_mappings,"
 	   "  sizeof (var_mappings) / sizeof (var_mappings[0]),\n"
 	   "  func_mappings,"
-	   "  sizeof (func_mappings) / sizeof (func_mappings[0])\n"
+	   "  sizeof (func_mappings) / sizeof (func_mappings[0]),\n"
+	   "  sizeof (ind_func_mappings) / sizeof (ind_func_mappings[0])\n"
 	   "};\n\n", omp_requires);
 
   fprintf (out, "#ifdef __cplusplus\n"
@@ -522,17 +614,10 @@ compile_native (const char *infile, const char *outfile, const char *compiler,
   obstack_ptr_grow (&argv_obstack, ptx_dumpbase);
   obstack_ptr_grow (&argv_obstack, "-dumpbase-ext");
   obstack_ptr_grow (&argv_obstack, ".c");
-  switch (offload_abi)
-    {
-    case OFFLOAD_ABI_LP64:
-      obstack_ptr_grow (&argv_obstack, "-m64");
-      break;
-    case OFFLOAD_ABI_ILP32:
-      obstack_ptr_grow (&argv_obstack, "-m32");
-      break;
-    default:
-      gcc_unreachable ();
-    }
+  if (!offload_abi_host_opts)
+    fatal_error (input_location,
+		 "%<-foffload-abi-host-opts%> not specified.");
+  obstack_ptr_grow (&argv_obstack, offload_abi_host_opts);
   obstack_ptr_grow (&argv_obstack, infile);
   obstack_ptr_grow (&argv_obstack, "-c");
   obstack_ptr_grow (&argv_obstack, "-o");
@@ -553,7 +638,9 @@ main (int argc, char **argv)
   const char *outname = 0;
 
   progname = tool_name;
+  gcc_init_libintl ();
   diagnostic_initialize (global_dc, 0);
+  diagnostic_color_init (global_dc);
 
   if (atexit (mkoffload_cleanup) != 0)
     fatal_error (input_location, "atexit failed");
@@ -634,6 +721,15 @@ main (int argc, char **argv)
 			 "unrecognizable argument of option " STR);
 	}
 #undef STR
+      else if (startswith (argv[i], "-foffload-abi-host-opts="))
+	{
+	  if (offload_abi_host_opts)
+	    fatal_error (input_location,
+			 "%<-foffload-abi-host-opts%> specified "
+			 "multiple times");
+	  offload_abi_host_opts
+	    = argv[i] + strlen ("-foffload-abi-host-opts=");
+	}
       else if (strcmp (argv[i], "-fopenmp") == 0)
 	fopenmp = true;
       else if (strcmp (argv[i], "-fopenacc") == 0)
@@ -649,6 +745,19 @@ main (int argc, char **argv)
       else if (strcmp (argv[i], "-dumpbase") == 0
 	       && i + 1 < argc)
 	dumppfx = argv[++i];
+      /* Translate host into offloading libraries.  */
+      else if (strcmp (argv[i], "-l_GCC_gfortran") == 0
+	       || strcmp (argv[i], "-l_GCC_m") == 0
+	       || strcmp (argv[i], "-l_GCC_stdc++") == 0)
+	{
+	  /* Elide '_GCC_'.  */
+	  size_t i_dst = strlen ("-l");
+	  size_t i_src = strlen ("-l_GCC_");
+	  char c;
+	  do
+	    c = argv[i][i_dst++] = argv[i][i_src++];
+	  while (c != '\0');
+	}
     }
   if (!(fopenacc ^ fopenmp))
     fatal_error (input_location, "either %<-fopenacc%> or %<-fopenmp%> "
@@ -675,6 +784,9 @@ main (int argc, char **argv)
     }
   if (fopenmp)
     obstack_ptr_grow (&argv_obstack, "-mgomp");
+  /* The host code may contain exception handling constructs.
+     Handle these as good as we can.  */
+  obstack_ptr_grow (&argv_obstack, "-mfake-exceptions");
 
   for (int ix = 1; ix != argc; ix++)
     {

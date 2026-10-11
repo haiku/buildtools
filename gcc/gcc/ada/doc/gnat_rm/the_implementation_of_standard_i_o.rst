@@ -70,7 +70,7 @@ library streams facility; where
 *
   All files are opened using ``fopen``.
 *
-  All input/output operations use ``fread``/`fwrite`.
+  All input/output operations use ``fread``/``fwrite``.
 
 There is no internal buffering of any kind at the Ada library level. The only
 buffering is that provided at the system level in the implementation of the
@@ -127,8 +127,7 @@ The records of a Direct_IO file are simply written to the file in index
 sequence, with the first record starting at offset zero, and subsequent
 records following.  There is no control information of any kind.  For
 example, if 32-bit integers are being written, each record takes
-4-bytes, so the record at index ``K`` starts at offset
-(``K``-1)*4.
+4-bytes, so the record at index ``K`` starts at offset ``(K-1)*4``.
 
 There is no limit on the size of Direct_IO files, they are expanded as
 necessary to accommodate whatever records are written to the file.
@@ -895,7 +894,7 @@ One common use of file sharing in Ada 83 is the use of instantiations of
 Sequential_IO on the same file with different types, to achieve
 heterogeneous input-output.  Although this approach will work in GNAT if
 ``shared=yes`` is specified, it is preferable in Ada to use Stream_IO
-for this purpose (using the stream attributes)
+for this purpose (using the stream attributes).
 
 .. _Filenames_encoding:
 

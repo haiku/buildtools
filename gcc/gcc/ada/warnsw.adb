@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1999-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1999-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -92,21 +92,25 @@ package body Warnsw is
           'z' => X.Warn_On_Size_Alignment),
 
         '_' =>
-         ('b' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' |
-          'n' | 'o' | 's' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' =>
+         ('b' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'k' | 'm' |
+          'n' | 'o' | 't' | 'u' | 'v' | 'w' | 'x' | 'y' | 'z' =>
            No_Such_Warning,
 
           'a' => X.Warn_On_Anonymous_Allocators,
           'c' => X.Warn_On_Unknown_Compile_Time_Warning,
+          'j' => X.Warn_On_Non_Dispatching_Primitives,
+          'l' => X.Warn_On_Inherently_Limited_Type,
           'p' => X.Warn_On_Pedantic_Checks,
           'q' => X.Warn_On_Ignored_Equality,
-          'r' => X.Warn_On_Component_Order));
+          'r' => X.Warn_On_Component_Order,
+          's' => X.Warn_On_Ineffective_Predicate_Test));
 
    All_Warnings : constant Warnings_State := --  Warnings set by -gnatw.e
      (X.Elab_Info_Messages |
       X.Warning_Doc_Switch |
       X.Warn_On_Ada_2022_Compatibility |
       X.Warn_On_Elab_Access |
+      X.Warn_On_GNAT_Extension_Compatibility |
       X.No_Warn_On_Non_Local_Exception => False,
       others => True);
    --  Warning_Doc_Switch is not really a warning to be enabled, but controls
@@ -130,6 +134,7 @@ package body Warnsw is
       X.Warn_On_Biased_Representation       | -- -gnatw.b
       X.Warn_On_Constant                    | -- -gnatwk
       X.Warn_On_Export_Import               | -- -gnatwx
+      X.Warn_On_Ineffective_Predicate_Test  | -- -gnatw_s
       X.Warn_On_Late_Primitives             | -- -gnatw.j
       X.Warn_On_Modified_Unread             | -- -gnatwm
       X.Warn_On_No_Value_Assigned           | -- -gnatwv
@@ -188,6 +193,7 @@ package body Warnsw is
       --  These warnings are removed from the -gnatwa set
 
       Implementation_Unit_Warnings        := False;
+      Warn_On_Non_Dispatching_Primitives  := False;
       Warn_On_Non_Local_Exception         := False;
       No_Warn_On_Non_Local_Exception      := True;
       Warn_On_Reverse_Bit_Order           := False;

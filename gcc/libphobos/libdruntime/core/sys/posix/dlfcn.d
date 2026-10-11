@@ -160,6 +160,18 @@ version (CRuntime_Glibc)
         enum RTLD_LOCAL     = 0;
         enum RTLD_NODELETE  = 0x01000;
     }
+    else version (LoongArch64)
+    {
+        // http://sourceware.org/git/?p=glibc.git;a=blob;f=bits/dlfcn.h
+        enum RTLD_LAZY      = 0x00001;
+        enum RTLD_NOW       = 0x00002;
+        enum RTLD_BINDING_MASK = 0x3;
+        enum RTLD_NOLOAD    = 0x00004;
+        enum RTLD_DEEPBIND  = 0x00008;
+        enum RTLD_GLOBAL    = 0x00100;
+        enum RTLD_LOCAL     = 0;
+        enum RTLD_NODELETE  = 0x01000;
+    }
     else
         static assert(0, "unimplemented");
 
@@ -360,12 +372,20 @@ else version (Solaris)
 }
 else version (CRuntime_Bionic)
 {
-    enum
+    enum RTLD_LOCAL    = 0;
+    enum RTLD_LAZY     = 0x00001;
+    enum RTLD_NOLOAD   = 0x00004;
+    enum RTLD_NODELETE = 0x01000;
+
+    version (D_LP64)
     {
-        RTLD_NOW    = 0,
-        RTLD_LAZY   = 1,
-        RTLD_LOCAL  = 0,
-        RTLD_GLOBAL = 2
+        enum RTLD_NOW      = 0x00002;
+        enum RTLD_GLOBAL   = 0x00100;
+    }
+    else // NDK: 'LP32 is broken for historical reasons'
+    {
+        enum RTLD_NOW      = 0;
+        enum RTLD_GLOBAL   = 0x00002;
     }
 
     int          dladdr(const scope void*, Dl_info*);

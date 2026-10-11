@@ -2078,7 +2078,7 @@ struct ProperCompare
 /**
 
 Hook that reserves a special value as a "Not a Number" representative. For
-signed integrals, the reserved value is `T.min`. For signed integrals, the
+signed integrals, the reserved value is `T.min`. For unsigned integrals, the
 reserved value is `T.max`.
 
 The default value of a $(D Checked!(X, WithNaN)) is its NaN value, so care must
@@ -2129,16 +2129,16 @@ static:
         {
             // Not value convertible, only viable option is rhs fits within the
             // bounds of Lhs
-            static if (ProperCompare.hookOpCmp(Rhs.min, Lhs.min) < 0)
+            static if (ProperCompare.hookOpCmp!(Rhs, Lhs)(lhs: Rhs.min, rhs: Lhs.min) < 0)
             {
                 // Example: hookOpCast!short(int(42)), hookOpCast!uint(int(42))
-                if (ProperCompare.hookOpCmp(rhs, Lhs.min) < 0)
+                if (ProperCompare.hookOpCmp!(Rhs, Lhs)(lhs: rhs, rhs: Lhs.min) < 0)
                     return defaultValue!Lhs;
             }
-            static if (ProperCompare.hookOpCmp(Rhs.max, Lhs.max) > 0)
+            static if (ProperCompare.hookOpCmp!(Rhs, Lhs)(lhs: Rhs.max, rhs: Lhs.max) > 0)
             {
                 // Example: hookOpCast!int(uint(42))
-                if (ProperCompare.hookOpCmp(rhs, Lhs.max) > 0)
+                if (ProperCompare.hookOpCmp!(Rhs, Lhs)(lhs: rhs, rhs: Lhs.max) > 0)
                     return defaultValue!Lhs;
             }
             return cast(Lhs) rhs;
@@ -3362,12 +3362,14 @@ version (StdUnittest) private struct CountOverflows
     static struct Hook1
     {
         uint calls;
-        auto hookOpUnary(string op, T)(T value) if (op == "-")
+        auto hookOpUnary(string op, T)(T value)
+        if (op == "-")
         {
             ++calls;
             return T(42);
         }
-        auto hookOpUnary(string op, T)(T value) if (op == "~")
+        auto hookOpUnary(string op, T)(T value)
+        if (op == "~")
         {
             ++calls;
             return T(43);
@@ -3383,12 +3385,14 @@ version (StdUnittest) private struct CountOverflows
     static struct Hook2
     {
         uint calls;
-        void hookOpUnary(string op, T)(ref T value) if (op == "++")
+        void hookOpUnary(string op, T)(ref T value)
+        if (op == "++")
         {
             ++calls;
             --value;
         }
-        void hookOpUnary(string op, T)(ref T value) if (op == "--")
+        void hookOpUnary(string op, T)(ref T value)
+        if (op == "--")
         {
             ++calls;
             ++value;

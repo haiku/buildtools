@@ -2,12 +2,12 @@
 /**
  * Dynamic array implementation.
  *
- * Copyright:   Copyright (C) 1999-2023 by The D Language Foundation, All Rights Reserved
+ * Copyright:   Copyright (C) 1999-2025 by The D Language Foundation, All Rights Reserved
  * Authors:     $(LINK2 https://www.digitalmars.com, Walter Bright)
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/root/array.d, root/_array.d)
+ * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/compiler/src/dmd/root/array.d, root/_array.d)
  * Documentation:  https://dlang.org/phobos/dmd_root_array.html
- * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/root/array.d
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/compiler/src/dmd/root/array.d
  */
 
 module dmd.root.array;
@@ -52,7 +52,7 @@ public:
     ~this() pure nothrow
     {
         debug (stomp) memset(data.ptr, 0xFF, data.length);
-        if (data.ptr != &smallarray[0])
+        if (data.ptr && data.ptr != &smallarray[0])
             mem.xfree(data.ptr);
     }
     ///returns elements comma separated in []
@@ -249,6 +249,18 @@ public:
         memmove(data.ptr + index + 1, data.ptr + index, (length - index) * T.sizeof);
         data[index] = ptr;
         length++;
+    }
+
+    /// Insert 'count' copies of 'value' at 'index' position
+    void insert(size_t index, size_t count, T value) pure nothrow
+    {
+        if (count == 0)
+            return;
+        reserve(count);
+        if (length != index)
+            memmove(data.ptr + index + count, data.ptr + index, (length - index) * T.sizeof);
+        data[index .. index + count] = value;
+        length += count;
     }
 
     void setDim(size_t newdim) pure nothrow
@@ -458,6 +470,12 @@ unittest
     arrayA.insert(0, [7, 8]);
     arrayA.insert(arrayA.length, [0, 9]);
     assert(arrayA[] == [7, 8, 5, 1, 2, 6, 0, 9]);
+    arrayA.insert(4, 3, 8);
+    assert(arrayA[] == [7, 8, 5, 1, 8, 8, 8, 2, 6, 0, 9]);
+    arrayA.insert(0, 3, 8);
+    assert(arrayA[] == [8, 8, 8, 7, 8, 5, 1, 8, 8, 8, 2, 6, 0, 9]);
+    arrayA.insert(arrayA.length, 3, 8);
+    assert(arrayA[] == [8, 8, 8, 7, 8, 5, 1, 8, 8, 8, 2, 6, 0, 9, 8, 8, 8]);
 }
 
 /**

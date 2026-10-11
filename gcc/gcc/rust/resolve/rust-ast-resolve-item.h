@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -21,11 +21,7 @@
 
 #include "rust-ast-full-decls.h"
 #include "rust-ast-resolve-base.h"
-#include "rust-ast-full.h"
-#include "rust-ast-resolve-toplevel.h"
-#include "rust-ast-resolve-type.h"
-#include "rust-ast-resolve-pattern.h"
-#include "rust-ast-resolve-stmt.h"
+
 #include "config.h"
 
 namespace Rust {
@@ -36,12 +32,11 @@ class ResolveTraitItems : public ResolverBase
   using Rust::Resolver::ResolverBase::visit;
 
 public:
-  static void go (AST::TraitItem *item, const CanonicalPath &prefix,
+  static void go (AST::AssociatedItem *item, const CanonicalPath &prefix,
 		  const CanonicalPath &canonical_prefix);
 
+  void visit (AST::Function &type) override;
   void visit (AST::TraitItemType &type) override;
-  void visit (AST::TraitItemFunc &func) override;
-  void visit (AST::TraitItemMethod &func) override;
   void visit (AST::TraitItemConst &constant) override;
 
 private:
@@ -57,7 +52,7 @@ class ResolveItem : public ResolverBase
 public:
   using Rust::Resolver::ResolverBase::visit;
 
-  static void go (AST::Item *item, const CanonicalPath &prefix,
+  static void go (AST::Item &item, const CanonicalPath &prefix,
 		  const CanonicalPath &canonical_prefix);
 
   void visit (AST::TypeAlias &alias) override;
@@ -75,19 +70,16 @@ public:
   void visit (AST::ConstantItem &constant) override;
   void visit (AST::Function &function) override;
   void visit (AST::InherentImpl &impl_block) override;
-  void visit (AST::Method &method) override;
   void visit (AST::TraitImpl &impl_block) override;
   void visit (AST::Trait &trait) override;
   void visit (AST::ExternBlock &extern_block) override;
   void visit (AST::UseDeclaration &) override;
 
 protected:
-  void resolve_impl_item (AST::TraitImplItem *item, const CanonicalPath &prefix,
-			  const CanonicalPath &canonical_prefix);
-  void resolve_impl_item (AST::InherentImplItem *item,
+  void resolve_impl_item (AST::AssociatedItem &item,
 			  const CanonicalPath &prefix,
 			  const CanonicalPath &canonical_prefix);
-  void resolve_extern_item (AST::ExternalItem *item);
+  void resolve_extern_item (AST::ExternalItem &item);
 
   ResolveItem (const CanonicalPath &prefix,
 	       const CanonicalPath &canonical_prefix);
@@ -101,9 +93,7 @@ class ResolveImplItems : public ResolveItem
   using Rust::Resolver::ResolveItem::visit;
 
 public:
-  static void go (AST::InherentImplItem *item, const CanonicalPath &prefix,
-		  const CanonicalPath &canonical_prefix);
-  static void go (AST::TraitImplItem *item, const CanonicalPath &prefix,
+  static void go (AST::AssociatedItem &item, const CanonicalPath &prefix,
 		  const CanonicalPath &canonical_prefix);
 
   void visit (AST::TypeAlias &alias) override;
@@ -118,10 +108,10 @@ class ResolveExternItem : public ResolverBase
   using Rust::Resolver::ResolverBase::visit;
 
 public:
-  static void go (AST::ExternalItem *item, const CanonicalPath &prefix,
+  static void go (AST::ExternalItem &item, const CanonicalPath &prefix,
 		  const CanonicalPath &canonical_prefix);
 
-  void visit (AST::ExternalFunctionItem &function) override;
+  void visit (AST::Function &function) override;
   void visit (AST::ExternalStaticItem &item) override;
 
 private:
@@ -132,6 +122,29 @@ private:
 
   const CanonicalPath &prefix;
   const CanonicalPath &canonical_prefix;
+};
+
+class Import
+{
+public:
+  Import (AST::SimplePath path, bool is_glob, std::string name)
+    : path (path), is_glob_f (is_glob), name (name)
+  {}
+
+  AST::SimplePath &get_path () { return path; }
+
+  const AST::SimplePath &get_path () const { return path; }
+
+  bool is_glob () const { return is_glob_f; }
+
+  const std::string &get_name () const { return name; }
+
+  void add_prefix (AST::SimplePath prefix);
+
+private:
+  AST::SimplePath path;
+  bool is_glob_f;
+  std::string name;
 };
 
 } // namespace Resolver

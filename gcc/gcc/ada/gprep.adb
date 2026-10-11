@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2002-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 2002-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -228,7 +228,7 @@ package body GPrep is
       --  the deleted lines are not put as comment, we must output them as
       --  blank lines.
 
-      if Source_Ref_Pragma and (not Opt.Comment_Deleted_Lines) then
+      if Source_Ref_Pragma and not Opt.Comment_Deleted_Lines then
          Opt.Blank_Deleted_Lines := True;
       end if;
 
@@ -552,7 +552,7 @@ package body GPrep is
 
             Errutil.Finalize (Source_Type => "input");
 
-            OS_Exit (0);
+            OS_Exit (1);
 
          --  Otherwise, close the output file, and we are done
 

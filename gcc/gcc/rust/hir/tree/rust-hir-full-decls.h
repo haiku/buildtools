@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -37,22 +37,22 @@ class LifetimeParam;
 
 class TraitItem;
 class ImplItem;
-struct Crate;
+class Crate;
 class PathExpr;
 
 // rust-path.h
 class PathIdentSegment;
-struct GenericArgsBinding;
+class GenericArgsBinding;
 class GenericArgs;
 class PathExprSegment;
 class PathPattern;
 class PathInExpression;
 class TypePathSegment;
 class TypePathSegmentGeneric;
-struct TypePathFunction;
+class TypePathFunction;
 class TypePathSegmentFunction;
 class TypePath;
-struct QualifiedPathType;
+class QualifiedPathType;
 class QualifiedPathInExpression;
 class QualifiedPathInType;
 
@@ -111,15 +111,8 @@ class BaseLoopExpr;
 class LoopExpr;
 class WhileLoopExpr;
 class WhileLetLoopExpr;
-class ForLoopExpr;
 class IfExpr;
 class IfExprConseqElse;
-class IfExprConseqIf;
-class IfLetExpr;
-class IfExprConseqIfLet;
-class IfLetExprConseqElse;
-class IfLetExprConseqIf;
-class IfLetExprConseqIfLet;
 struct MatchArm;
 // class MatchCase;
 // class MatchCaseBlockExpr;
@@ -128,13 +121,16 @@ struct MatchCase;
 class MatchExpr;
 class AwaitExpr;
 class AsyncBlockExpr;
+class InlineAsmReg;
+class InlineAsmRegClass;
+struct AnonConst;
+class InlineAsmOperand;
+class InlineAsm;
 
 // rust-stmt.h
 class EmptyStmt;
 class LetStmt;
 class ExprStmt;
-class ExprStmtWithoutBlock;
-class ExprStmtWithBlock;
 
 // rust-item.h
 class TypeParam;
@@ -158,9 +154,9 @@ class UseDeclaration;
 class Function;
 class TypeAlias;
 class Struct;
-struct StructField;
+class StructField;
 class StructStruct;
-struct TupleField;
+class TupleField;
 class TupleStruct;
 class EnumItem;
 class EnumItemTuple;
@@ -170,7 +166,7 @@ class Enum;
 class Union;
 class ConstantItem;
 class StaticItem;
-struct TraitFunctionDecl;
+class TraitFunctionDecl;
 class TraitItemFunc;
 class TraitItemConst;
 class TraitItemType;
@@ -180,6 +176,7 @@ class ExternalItem;
 class ExternalStaticItem;
 struct NamedFunctionParam;
 class ExternalFunctionItem;
+class ExternalTypeItem;
 class ExternBlock;
 
 // rust-pattern.h
@@ -207,13 +204,13 @@ class TuplePatternItemsMultiple;
 class TuplePatternItemsRanged;
 class TuplePattern;
 class SlicePattern;
+class AltPattern;
 
 // rust-type.h
 class TraitBound;
 class ImplTraitType;
 class TraitObjectType;
 class ParenthesisedType;
-class ImplTraitTypeOneBound;
 class TupleType;
 class NeverType;
 class RawPointerType;

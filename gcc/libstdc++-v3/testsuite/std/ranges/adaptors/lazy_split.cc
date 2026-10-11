@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,8 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++2a" }
-// { dg-do run { target c++2a } }
+// { dg-do run { target c++20 } }
 
 #include <algorithm>
 #include <ranges>
@@ -233,6 +232,22 @@ test12()
   return true;
 }
 
+void
+test13()
+{
+  // PR libstdc++/119962 - __maybe_present_t misses initialization
+  constexpr decltype(views::lazy_split(views::single(0), 0).begin()) it;
+}
+
+void
+test14()
+{
+  // LWG 3599
+  auto p = views::iota(0) | views::take(1) | views::reverse;
+  auto r = views::single(42) | views::lazy_split(p);
+  auto f = r.front();
+}
+
 int
 main()
 {
@@ -248,4 +263,6 @@ main()
   test10();
   test11();
   static_assert(test12());
+  test13();
+  test14();
 }

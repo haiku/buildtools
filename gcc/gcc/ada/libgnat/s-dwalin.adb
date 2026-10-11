@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 2009-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 2009-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -45,6 +45,10 @@ with System.Storage_Elements;  use System.Storage_Elements;
 package body System.Dwarf_Lines is
 
    subtype Offset is Object_Reader.Offset;
+
+   function "-" (Left, Right : Address) return uint32;
+   pragma Import (Intrinsic, "-");
+   --  Return the difference between two addresses as an unsigned offset
 
    function Get_Load_Displacement (C : Dwarf_Context) return Storage_Offset;
    --  Return the displacement between the load address present in the binary
@@ -1542,7 +1546,7 @@ package body System.Dwarf_Lines is
                exit when Ar_Start = Null_Address and Ar_Len = 0;
 
                Len   := uint32 (Ar_Len);
-               Start := uint32 (Address'(Ar_Start - C.Low));
+               Start := uint32'(Ar_Start - C.Low);
 
                --  Search START in the array
 
@@ -1749,6 +1753,7 @@ package body System.Dwarf_Lines is
       Success      : Boolean;
       Done         : Boolean;
       S            : Object_Symbol;
+      Closest_S    : Object_Symbol := Null_Symbol;
 
    begin
       --  Initialize result
@@ -1762,7 +1767,7 @@ package body System.Dwarf_Lines is
 
       if C.Cache /= null then
          declare
-            Addr_Off : constant uint32 := uint32 (Address'(Addr - C.Low));
+            Off : constant uint32 := uint32'(Addr - C.Low);
 
             First, Last, Mid : Natural;
          begin
@@ -1772,17 +1777,17 @@ package body System.Dwarf_Lines is
 
             while First <= Last loop
                Mid := First + (Last - First) / 2;
-               if Addr_Off < C.Cache (Mid).First then
+               if Off < C.Cache (Mid).First then
                   Last := Mid - 1;
-               elsif Addr_Off >= C.Cache (Mid).First + C.Cache (Mid).Size then
+               elsif Off >= C.Cache (Mid).First + C.Cache (Mid).Size then
                   First := Mid + 1;
                else
                   exit;
                end if;
             end loop;
 
-            if Addr_Off >= C.Cache (Mid).First
-              and then Addr_Off < C.Cache (Mid).First + C.Cache (Mid).Size
+            if Off >= C.Cache (Mid).First
+              and then Off < C.Cache (Mid).First + C.Cache (Mid).Size
             then
                Line_Offset := Offset (C.Cache (Mid).Line);
                S := Read_Symbol (C.Obj.all, Offset (C.Cache (Mid).Sym));
@@ -1797,13 +1802,36 @@ package body System.Dwarf_Lines is
       else
          S := First_Symbol (C.Obj.all);
          while S /= Null_Symbol loop
-            if Spans (S, Addr_Int) then
+            if Format (C.Obj.all) = PECOFF
+              or else Format (C.Obj.all) = PECOFF_PLUS
+            then
+               --  Don't use the size of symbols from PECOFF files; it's
+               --  just a guess and can be unreliable. Instead, iterate
+               --  over the entire symbol table and use the symbol with the
+               --  highest address lower than Addr_Int.
+
+               if Closest_S = Null_Symbol
+                 or else (Closest_S.Value < S.Value
+                   and then S.Value <= Addr_Int)
+               then
+                  Closest_S := S;
+               end if;
+
+            elsif Spans (S, Addr_Int) then
                Subprg_Name := Object_Reader.Name (C.Obj.all, S);
                exit;
             end if;
 
             S := Next_Symbol (C.Obj.all, S);
          end loop;
+
+         if (Format (C.Obj.all) = PECOFF
+             or else Format (C.Obj.all) = PECOFF_PLUS)
+           and then Closest_S /= Null_Symbol
+         then
+            S := Closest_S;     --  for consistency with non-PECOFF
+            Subprg_Name := Object_Reader.Name (C.Obj.all, S);
+         end if;
 
          --  Search address in aranges table
 

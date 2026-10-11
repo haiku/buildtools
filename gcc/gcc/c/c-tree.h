@@ -1,5 +1,5 @@
 /* Definitions for C parsing and type checking.
-   Copyright (C) 1987-2023 Free Software Foundation, Inc.
+   Copyright (C) 1987-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -90,6 +90,24 @@ along with GCC; see the file COPYING3.  If not see
 #define C_DECL_BUILTIN_PROTOTYPE(EXP)		\
   DECL_LANG_FLAG_6 (FUNCTION_DECL_CHECK (EXP))
 
+/* For LABEL_DECLs marks canonical name of a loop.  */
+#define C_DECL_LOOP_NAME(EXP) DECL_LANG_FLAG_3 (LABEL_DECL_CHECK (EXP))
+
+/* For LABEL_DECLs marks canonical name of a switch.  During parsing of
+   ObjC foreach named loop both C_DECL_LOOP_NAME and C_DECL_SWITCH_NAME
+   are temporarily set.  */
+#define C_DECL_SWITCH_NAME(EXP) DECL_LANG_FLAG_5 (LABEL_DECL_CHECK (EXP))
+
+/* For LABEL_DECLs marks canonical name of a loop or switch being
+   valid for use in break identifier or continue identifier statements.  */
+#define C_DECL_LOOP_SWITCH_NAME_VALID(EXP) \
+  DECL_LANG_FLAG_6 (LABEL_DECL_CHECK (EXP))
+
+/* For LABEL_DECLs marks canonical loop or switch names which were actually
+   used in one or more break identifier or continue identifier statements.  */
+#define C_DECL_LOOP_SWITCH_NAME_USED(EXP) \
+  DECL_LANG_FLAG_8 (LABEL_DECL_CHECK (EXP))
+
 /* Record whether a decl was declared register.  This is strictly a
    front-end flag, whereas DECL_REGISTER is used for code generation;
    they may differ for structures with volatile fields.  */
@@ -109,7 +127,7 @@ along with GCC; see the file COPYING3.  If not see
 #define C_DECL_COMPOUND_LITERAL_P(DECL) \
   DECL_LANG_FLAG_5 (VAR_DECL_CHECK (DECL))
 
-/* Set on decls used as placeholders for a C2x underspecified object
+/* Set on decls used as placeholders for a C23 underspecified object
    definition.  */
 #define C_DECL_UNDERSPECIFIED(DECL) DECL_LANG_FLAG_7 (DECL)
 
@@ -269,8 +287,8 @@ enum c_storage_class {
 };
 
 /* A type specifier keyword "void", "_Bool", "char", "int", "float",
-   "double", "_Decimal32", "_Decimal64", "_Decimal128", "_Fract", "_Accum",
-   or none of these.  */
+   "double", "_Decimal32", "_Decimal64", "_Decimal128", "_Decimal64x",
+   "_Fract", "_Accum", "_BitInt", or none of these.  */
 enum c_typespec_keyword {
   cts_none,
   cts_void,
@@ -283,9 +301,11 @@ enum c_typespec_keyword {
   cts_dfloat32,
   cts_dfloat64,
   cts_dfloat128,
+  cts_dfloat64x,
   cts_floatn_nx,
   cts_fract,
   cts_accum,
+  cts_bitint,
   cts_auto_type
 };
 
@@ -366,11 +386,16 @@ struct c_declspecs {
      specifier, in bytes, or -1 if no such specifiers with nonzero
      alignment.  */
   int align_log;
-  /* For the __intN declspec, this stores the index into the int_n_* arrays.  */
-  int int_n_idx;
-  /* For the _FloatN and _FloatNx declspec, this stores the index into
-     the floatn_nx_types array.  */
-  int floatn_nx_idx;
+  union {
+    /* For the __intN declspec, this stores the index into the int_n_*
+       arrays.  */
+    int int_n_idx;
+    /* For the _FloatN and _FloatNx declspec, this stores the index into
+       the floatn_nx_types array.  */
+    int floatn_nx_idx;
+    /* For _BitInt(N) this stores the N.  */
+    int bitint_prec;
+  } u;
   /* The storage class specifier, or csc_none if none.  */
   enum c_storage_class storage_class;
   /* Any type specifier keyword used such as "int", not reflecting
@@ -445,13 +470,13 @@ struct c_declspecs {
      specified other than in a definition of that enum (if so, this is
      invalid unless it is an empty declaration "enum identifier
      enum-type-specifier;", but such an empty declaration is valid in
-     C2x when "enum identifier;" would not be).  */
+     C23 when "enum identifier;" would not be).  */
   BOOL_BITFIELD enum_type_specifier_ref_p : 1;
-  /* Whether "auto" was specified in C2X (or later) mode and means the
+  /* Whether "auto" was specified in C23 (or later) mode and means the
      type is to be deduced from an initializer, or would mean that if
      no type specifier appears later in these declaration
      specifiers.  */
-  BOOL_BITFIELD c2x_auto_p : 1;
+  BOOL_BITFIELD c23_auto_p : 1;
   /* Whether "constexpr" was specified.  */
   BOOL_BITFIELD constexpr_p : 1;
   /* The address space that the declaration belongs to.  */
@@ -501,6 +526,10 @@ struct c_arg_info {
   BOOL_BITFIELD had_vla_unspec : 1;
   /* True when the arguments are a (...) prototype.  */
   BOOL_BITFIELD no_named_args_stdarg_p : 1;
+  /* True when empty parentheses have been interpreted as (void) in C23 or
+     later.  This is only for use by -Wtraditional and is no longer needed if
+     -Wtraditional is removed.  */
+  BOOL_BITFIELD c23_empty_parens : 1;
 };
 
 /* A declarator.  */
@@ -590,6 +619,7 @@ enum c_inline_static_type {
 
 
 /* in c-parser.cc */
+struct c_tree_token_vec;
 extern void c_parse_init (void);
 extern bool c_keyword_starts_typename (enum rid keyword);
 
@@ -604,12 +634,15 @@ extern struct obstack parser_obstack;
    to IN_OMP_BLOCK if parsing OpenMP structured block and
    IN_OMP_FOR if parsing OpenMP loop.  If parsing a switch statement,
    this is bitwise ORed with IN_SWITCH_STMT, unless parsing an
-   iteration-statement, OpenMP block or loop within that switch.  */
+   iteration-statement, OpenMP block or loop within that switch.
+   If the innermost iteration/switch statement is named, IN_NAMED_STMT
+   is additionally bitwise ORed into it.  */
 #define IN_SWITCH_STMT		1
 #define IN_ITERATION_STMT	2
 #define IN_OMP_BLOCK		4
 #define IN_OMP_FOR		8
 #define IN_OBJC_FOREACH		16
+#define IN_NAMED_STMT		32
 extern unsigned char in_statement;
 
 extern bool switch_statement_break_seen_p;
@@ -620,6 +653,7 @@ extern unsigned int start_underspecified_init (location_t, tree);
 extern void finish_underspecified_init (tree, unsigned int);
 extern void push_scope (void);
 extern tree pop_scope (void);
+extern void c_mark_decl_jump_unsafe_in_current_scope ();
 extern void c_bindings_start_stmt_expr (struct c_spot_bindings *);
 extern void c_bindings_end_stmt_expr (struct c_spot_bindings *);
 
@@ -648,7 +682,8 @@ extern void finish_decl (tree, location_t, tree, tree, tree);
 extern tree finish_enum (tree, tree, tree);
 extern void finish_function (location_t = input_location);
 extern tree finish_struct (location_t, tree, tree, tree,
-			   class c_struct_parse_info *);
+			   class c_struct_parse_info *,
+			   tree *expr = NULL);
 extern tree c_simulate_enum_decl (location_t, const char *,
 				  vec<string_int_pair> *);
 extern tree c_simulate_record_decl (location_t, const char *,
@@ -656,7 +691,7 @@ extern tree c_simulate_record_decl (location_t, const char *,
 extern struct c_arg_info *build_arg_info (void);
 extern struct c_arg_info *get_parm_info (bool, tree);
 extern tree grokfield (location_t, struct c_declarator *,
-		       struct c_declspecs *, tree, tree *);
+		       struct c_declspecs *, tree, tree *, tree *);
 extern tree groktypename (struct c_type_name *, tree *, bool *);
 extern tree grokparm (const struct c_parm *, tree *);
 extern tree implicitly_declare (location_t, tree);
@@ -671,10 +706,11 @@ extern tree c_builtin_function (tree);
 extern tree c_builtin_function_ext_scope (tree);
 extern tree c_simulate_builtin_function_decl (tree);
 extern void c_warn_unused_attributes (tree);
-extern tree c_warn_type_attributes (tree);
+extern tree c_warn_type_attributes (tree, tree);
 extern void shadow_tag (const struct c_declspecs *);
 extern void shadow_tag_warned (const struct c_declspecs *, int);
-extern tree start_enum (location_t, struct c_enum_contents *, tree, tree);
+extern tree start_enum (location_t, struct c_enum_contents *, tree, tree,
+			bool potential_nesting_p);
 extern bool start_function (struct c_declspecs *, struct c_declarator *, tree);
 extern tree start_decl (struct c_declarator *, struct c_declspecs *, bool,
 			tree, bool = true, location_t * = NULL);
@@ -712,6 +748,10 @@ extern struct c_declspecs *declspecs_add_addrspace (location_t,
 extern struct c_declspecs *declspecs_add_alignas (location_t,
 						  struct c_declspecs *, tree);
 extern struct c_declspecs *finish_declspecs (struct c_declspecs *);
+extern size_t c_tree_size (enum tree_code);
+extern int c_get_loop_names (tree, bool, tree *);
+extern void c_release_loop_names (int);
+extern tree c_finish_bc_name (location_t, tree, bool);
 
 /* in c-objc-common.cc */
 extern bool c_objc_common_init (void);
@@ -720,12 +760,14 @@ extern bool c_warn_unused_global_decl (const_tree);
 extern void c_initialize_diagnostics (diagnostic_context *);
 extern bool c_var_mod_p (tree x, tree fn);
 extern alias_set_type c_get_alias_set (tree);
+extern int c_type_dwarf_attribute (const_tree, int);
 
 /* in c-typeck.cc */
 extern int in_alignof;
 extern int in_sizeof;
 extern int in_typeof;
 extern bool c_in_omp_for;
+extern bool c_omp_array_section_p;
 
 extern tree c_last_sizeof_arg;
 extern location_t c_last_sizeof_loc;
@@ -735,18 +777,32 @@ extern struct c_switch *c_switch_stack;
 extern bool null_pointer_constant_p (const_tree);
 
 
-inline
-bool c_type_variably_modified_p (tree t)
+inline bool
+c_type_variably_modified_p (tree t)
 {
   return error_mark_node != t && C_TYPE_VARIABLY_MODIFIED (t);
 }
 
+inline bool
+c_type_unspecified_p (tree t)
+{
+  return error_mark_node != t
+	 && C_TYPE_VARIABLE_SIZE (t) && TREE_CODE (t) == ARRAY_TYPE
+	 && TYPE_DOMAIN (t) && TYPE_MAX_VALUE (TYPE_DOMAIN (t))
+	 && TREE_CODE (TYPE_MAX_VALUE (TYPE_DOMAIN (t))) == COMPOUND_EXPR
+	 && integer_zerop (TREE_OPERAND (TYPE_MAX_VALUE (TYPE_DOMAIN (t)), 0))
+	 && integer_zerop (TREE_OPERAND (TYPE_MAX_VALUE (TYPE_DOMAIN (t)), 1));
+}
 
 extern bool char_type_p (tree);
-extern tree c_objc_common_truthvalue_conversion (location_t, tree);
+extern tree c_type_tag (const_tree t);
+extern tree c_objc_common_truthvalue_conversion (location_t, tree,
+						 tree = integer_type_node);
 extern tree require_complete_type (location_t, tree);
 extern bool same_translation_unit_p (const_tree, const_tree);
 extern int comptypes (tree, tree);
+extern bool comptypes_same_p (tree, tree);
+extern bool comptypes_equiv_p (tree, tree);
 extern int comptypes_check_different_types (tree, tree, bool *);
 extern int comptypes_check_enum_int (tree, tree, bool *);
 extern bool c_mark_addressable (tree, bool = false);
@@ -761,9 +817,12 @@ extern struct c_expr convert_lvalue_to_rvalue (location_t, struct c_expr,
 extern tree decl_constant_value_1 (tree, bool);
 extern void mark_exp_read (tree);
 extern tree composite_type (tree, tree);
+extern tree lookup_field (const_tree, tree);
 extern tree build_component_ref (location_t, tree, tree, location_t,
-				 location_t);
+				 location_t, bool = true);
+extern tree handle_counted_by_for_component_ref (location_t, tree);
 extern tree build_array_ref (location_t, tree, tree);
+extern tree build_omp_array_section (location_t, tree, tree, tree);
 extern tree build_external_ref (location_t, tree, bool, tree *);
 extern void pop_maybe_used (bool);
 extern struct c_expr c_expr_sizeof_expr (location_t, struct c_expr);
@@ -789,12 +848,13 @@ extern struct c_expr pop_init_level (location_t, int, struct obstack *,
 				     location_t);
 extern void set_init_index (location_t, tree, tree, struct obstack *);
 extern void set_init_label (location_t, tree, location_t, struct obstack *);
+unsigned c_maybe_optimize_large_byte_initializer (void);
 extern void process_init_element (location_t, struct c_expr, bool,
 				  struct obstack *);
 extern tree build_compound_literal (location_t, tree, tree, bool,
 				    unsigned int, struct c_declspecs *);
 extern void check_compound_literal_type (location_t, struct c_type_name *);
-extern tree c_start_switch (location_t, location_t, tree, bool);
+extern tree c_start_switch (location_t, location_t, tree, bool, tree);
 extern void c_finish_switch (tree, tree);
 extern tree build_asm_expr (location_t, tree, tree, tree, tree, tree, bool,
 			    bool);
@@ -809,8 +869,8 @@ extern tree c_begin_stmt_expr (void);
 extern tree c_finish_stmt_expr (location_t, tree);
 extern tree c_process_expr_stmt (location_t, tree);
 extern tree c_finish_expr_stmt (location_t, tree);
-extern tree c_finish_return (location_t, tree, tree);
-extern tree c_finish_bc_stmt (location_t, tree, bool);
+extern tree c_finish_return (location_t, tree, tree, bool = false);
+extern tree c_finish_bc_stmt (location_t, tree, bool, tree);
 extern tree c_finish_goto_label (location_t, tree);
 extern tree c_finish_goto_ptr (location_t, c_expr val);
 extern tree c_expr_to_decl (tree, bool *, bool *);
@@ -831,6 +891,14 @@ extern tree c_build_function_call_vec (location_t, const vec<location_t>&,
 				       tree, vec<tree, va_gc> *,
 				       vec<tree, va_gc> *);
 extern tree c_omp_clause_copy_ctor (tree, tree, tree);
+extern tree c_reconstruct_complex_type (tree, tree);
+extern tree c_type_canonical (tree);
+extern tree c_build_type_attribute_variant (tree ntype, tree attrs);
+extern tree c_build_pointer_type (tree type);
+extern tree c_build_array_type (tree type, tree domain);
+extern tree c_build_array_type_unspecified (tree type);
+extern tree c_build_function_type (tree type, tree args, bool no = false);
+extern tree c_build_pointer_type_for_mode (tree type, machine_mode mode, bool m);
 
 /* Set to 0 at beginning of a function definition, set to 1 if
    a return statement that specifies a return value is seen.  */
@@ -881,12 +949,16 @@ extern void c_bind (location_t, tree, bool);
 extern bool tag_exists_p (enum tree_code, tree);
 
 /* In c-errors.cc */
-extern bool pedwarn_c90 (location_t, int opt, const char *, ...)
+extern bool pedwarn_c90 (location_t, diagnostic_option_id, const char *, ...)
     ATTRIBUTE_GCC_DIAG(3,4);
-extern bool pedwarn_c99 (location_t, int opt, const char *, ...)
+extern bool pedwarn_c99 (location_t, diagnostic_option_id, const char *, ...)
     ATTRIBUTE_GCC_DIAG(3,4);
-extern bool pedwarn_c11 (location_t, int opt, const char *, ...)
+extern bool pedwarn_c11 (location_t, diagnostic_option_id, const char *, ...)
     ATTRIBUTE_GCC_DIAG(3,4);
+extern bool pedwarn_c23 (location_t, diagnostic_option_id, const char *, ...)
+    ATTRIBUTE_GCC_DIAG(3,4);
+extern void add_note_about_new_keyword (location_t loc,
+					tree keyword_id);
 
 extern void
 set_c_expr_source_range (c_expr *expr,
@@ -900,6 +972,8 @@ set_c_expr_source_range (c_expr *expr,
 extern vec<tree> incomplete_record_decls;
 
 extern const char *c_get_sarif_source_language (const char *filename);
+
+extern const struct scoped_attribute_specs std_attribute_table;
 
 #if CHECKING_P
 namespace selftest {

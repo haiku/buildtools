@@ -1,5 +1,5 @@
 # Top level -*- makefile -*- fragment for libgccjit.so.
-#   Copyright (C) 2013-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2013-2025 Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -40,7 +40,7 @@
 # into the jit rule, but that needs a little bit of work
 # to do the right thing within all.cross.
 
-LIBGCCJIT_VERSION_NUM = 0
+# LIBGCCJIT_VERSION_NUM is set in ../Makefile.in
 LIBGCCJIT_MINOR_NUM = 0
 LIBGCCJIT_RELEASE_NUM = 1
 
@@ -62,14 +62,14 @@ ifneq (,$(findstring darwin,$(host)))
 # options).  Fortunately, for Darwin we can safely hard-code the relevant
 # host options, since all usable linkers support them).
 
-LIBGCCJIT_CURRENT = 24
+LIBGCCJIT_CURRENT = 26
 LIBGCCJIT_REVISION = 0
-LIBGCCJIT_AGE = 24
+LIBGCCJIT_AGE = 26
 LIBGCCJIT_COMPAT = 0
 LIBGCCJIT_BASENAME = libgccjit
 
 LIBGCCJIT_SONAME = \
-  ${libdir}/$(LIBGCCJIT_BASENAME).$(LIBGCCJIT_VERSION_NUM).dylib
+  $(DARWIN_RPATH)/$(LIBGCCJIT_BASENAME).$(LIBGCCJIT_VERSION_NUM).dylib
 LIBGCCJIT_FILENAME = $(LIBGCCJIT_BASENAME).$(LIBGCCJIT_VERSION_NUM).dylib
 LIBGCCJIT_LINKER_NAME = $(LIBGCCJIT_BASENAME).dylib
 

@@ -1,7 +1,7 @@
 --
 -- m2-h.bnf grammar and associated actions for pass h.
 --
--- Copyright (C) 2001-2023 Free Software Foundation, Inc.
+-- Copyright (C) 2001-2025 Free Software Foundation, Inc.
 -- Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 --
 -- This file is part of GNU Modula-2.
@@ -23,7 +23,7 @@
 (* output from m2-h.bnf, automatically generated do not edit if these
    are the top two lines in the file.
 
-Copyright (C) 2001-2023 Free Software Foundation, Inc.
+Copyright (C) 2001-2025 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius.mulley@southwales.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -57,7 +57,7 @@ FROM P2SymBuild IMPORT BuildString, BuildNumber ;
 
 FROM M2Quads IMPORT PushT, PopT, PushTF, PopTF, PopNothing, Annotate,
                     PushTtok, PushTFtok, PopTtok, PopTFtok, OperandTok,
-                    PushTFntok, Top,
+                    PushTFntok, Top, DupFrame,
                     StartBuildDefFile, StartBuildModFile,
                     BuildModuleStart,
                     EndBuildFile,
@@ -102,7 +102,8 @@ FROM M2Quads IMPORT PushT, PopT, PushTF, PopTF, PopNothing, Annotate,
                     AddVarientRange, AddVarientEquality,
                     BuildDefaultFieldAlignment, BuildPragmaField,
                     CheckWithReference, DisplayStack, Annotate,
-                    IsAutoPushOn, PushAutoOff, PushAutoOn, PopAuto ;
+                    IsAutoPushOn, PushAutoOff, PushAutoOn, PopAuto,
+                    PushInConstExpression, PopInConstExpression ;
 
 FROM P3SymBuild IMPORT P3StartBuildProgModule,
                        P3EndBuildProgModule,
@@ -129,12 +130,12 @@ FROM SymbolTable IMPORT MakeGnuAsm, PutGnuAsmVolatile, PutGnuAsm, PutGnuAsmInput
                         PutGnuAsmOutput, PutGnuAsmTrash, PutGnuAsmVolatile,
                         MakeRegInterface,
                         PutRegInterface, GetRegInterface,
-                        GetSymName, GetType,
+                        GetSymName, GetType, GetCurrentModule,
                         NulSym,
                         StartScope, EndScope,
                         PutIncluded,
                         IsVarParam, IsProcedure, IsDefImp, IsModule,
-                        IsRecord, IsProcType,
+                        IsRecord, IsProcType, IsInnerModule, IsImported,
                         RequestSym,
                         GetSym, GetLocalSym ;
 
@@ -367,6 +368,68 @@ BEGIN
    Expect(realtok, stopset0, stopset1, stopset2)
 END Real ;
 
+
+(*
+   PushTFQualident - push the result of the Qualident
+                     to the stack.  It checks to see if init
+		     is a procedure or proc type and if so
+		     it does not push the return type.
+*)
+
+PROCEDURE PushTFQualident (tok, tokstart: CARDINAL;
+                           init: CARDINAL) ;
+BEGIN
+   IF tok#tokstart
+   THEN
+      tok := MakeVirtualTok (tokstart, tokstart, tok)
+   END ;
+   IF IsProcedure (init) OR IsProcType (init)
+   THEN
+      PushTtok (init, tok) ;
+      Annotate ("%1s(%1d)||qualident procedure/proctype") ;
+   ELSE
+      Annotate ("%1s(%1d)|%1s(%1d)||qualident|type") ;
+      PushTFtok (init, GetType (init), tok) ;
+   END
+END PushTFQualident ;
+
+
+(*
+   CheckModuleQualident - check to see if the beginning ident of the qualident is an
+                          imported module.
+*)
+
+PROCEDURE CheckModuleQualident (stopset0: SetOfStop0;
+                                stopset1: SetOfStop1;
+				stopset2: SetOfStop2) ;
+VAR
+   name         : Name ;
+   init,
+   nextLevel,
+   tok, tokstart: CARDINAL ;
+BEGIN
+   PopTtok (name, tokstart) ;
+   tok := tokstart ;
+   init := RequestSym (tok, name) ;
+   IF IsImported (GetCurrentModule (), init) AND (IsDefImp (init) OR IsModule (init))
+   THEN
+      WHILE IsDefImp (init) OR IsModule (init) DO
+         Expect (periodtok, stopset0, stopset1, stopset2 + SetOfStop2{identtok}) ;
+         StartScope (init) ;
+         Ident (stopset0, stopset1, stopset2) ;
+	 PopTtok (name, tok) ;
+         nextLevel := RequestSym (tok, name) ;
+         EndScope ;
+	 CheckCanBeImported (init, nextLevel) ;
+	 init := nextLevel
+      END ;
+      PushTFQualident (tok, tokstart, init) ;
+      PutIncluded (init)
+   ELSE
+      PushTFQualident (tok, tokstart, init)
+   END
+END CheckModuleQualident ;
+
 % module PHBuild end
 END PHBuild.
 % rules
@@ -421,6 +484,7 @@ token   'EXIT'            exittok
 token   'EXPORT'          exporttok
 token   'FINALLY'         finallytok
 token   'FOR'             fortok
+token   'FORWARD'         forwardtok
 token   'FROM'            fromtok
 token   'IF'              iftok
 token   'IMPLEMENTATION'  implementationtok
@@ -539,26 +603,10 @@ ImplementationOrProgramModule :=                                           % Pus
 Number := Integer | Real =:
 
 
-Qualident :=                                                               % VAR name: Name ;
-                                                                                 Type, Sym, tok: CARDINAL ; %
-             Ident
+Qualident := Ident
                                                                            % IF IsAutoPushOn()
                                                                              THEN
-                                                                                PopTtok(name, tok) ;
-                                                                                Sym := RequestSym (tok, name) ;
-                                                                                IF IsDefImp(Sym) OR IsModule(Sym)
-                                                                                THEN
-                                                                                   Expect(periodtok, stopset0, stopset1, stopset2 + SetOfStop2{identtok}) ;
-                                                                                   StartScope(Sym) ;
-                                                                                   Qualident(stopset0, stopset1, stopset2) ;
-                                                                                   (* should we test for lack of ident? *)
-                                                                                   PopTFtok(Sym, Type, tok) ;
-                                                                                   PushTFtok(Sym, Type, tok) ;
-                                                                                   EndScope ;
-                                                                                   PutIncluded(Sym)
-                                                                                ELSE
-                                                                                   PushTFtok(Sym, GetType(Sym), tok) ;
-                                                                                END
+     										CheckModuleQualident (stopset0, stopset1, stopset2)
                                                                              ELSE (* just parse qualident *) %
              { "." Ident }                                                 % END %
            =:
@@ -572,10 +620,12 @@ ConstantDeclaration :=                                                     % Pus
                      =:
 
 ConstExpression :=                                                         % VAR tokpos: CARDINAL ; %
+                                                                           % PushInConstExpression %
                                                                            % PushAutoOn %
                    SimpleConstExpr [ Relation                              % tokpos := GetTokenNo ()-1 %
                                               SimpleConstExpr              % BuildRelOp (tokpos) %
                                    ]                                       % PopAuto %
+                                                                           % PopInConstExpression %
                 =:
 
 Relation := "="                                                            % PushTtok(EqualTok, GetTokenNo() -1) %
@@ -652,27 +702,34 @@ ArraySetRecordValue := ComponentValue                                      % Bui
                                                            }
                      =:
 
-Constructor := '{'                                                         % BuildConstructorStart (GetTokenNo() -1) %
-                  [ ArraySetRecordValue ]                                  % BuildConstructorEnd (GetTokenNo())  %
+Constructor :=                                                             % VAR tokpos: CARDINAL ; %
+                                                                           % DisplayStack %
+               '{'                                                         % tokpos := GetTokenNo () -1 %
+                                                                           % BuildConstructorStart (tokpos) %
+                  [ ArraySetRecordValue ]                                  % BuildConstructorEnd (tokpos, GetTokenNo())  %
                '}' =:
 
-ConstSetOrQualidentOrFunction :=                                            % PushAutoOn %
+ConstSetOrQualidentOrFunction :=                                           % PushAutoOn %
+                                                                           % VAR tokpos: CARDINAL ; %
+                                                                           % tokpos := GetTokenNo () %
                                  (
                                     Qualident
                                     [ Constructor |
                                        ConstActualParameters               % BuildConstFunctionCall %
                                                                           ]
-                                      |                                    % BuildTypeForConstructor %
+                                      |                                    % BuildTypeForConstructor (tokpos) %
                                         Constructor
-                                 )                                          % PopAuto %
+                                 )                                         % PopAuto %
                                 =:
 
 ConstAttribute := "__ATTRIBUTE__" "__BUILTIN__" "(" "(" ConstAttributeExpression ")" ")" =:
 
 ConstAttributeExpression := Ident | "<" Qualident ',' Ident ">" =:
 
-ByteAlignment := '<*'                                                      % PushAutoOn %
-                      AttributeExpression                                  % BuildAlignment %
+ByteAlignment :=                                                           % VAR tokpos: CARDINAL ; %
+                 '<*'                                                      % PushAutoOn %
+                                                                           % tokpos := GetTokenNo () %
+                      AttributeExpression                                  % BuildAlignment (tokpos) %
                                           '*>'                             % PopAuto %
                =:
 
@@ -1077,14 +1134,23 @@ WithStatement := "WITH"
                  "END"
                =:
 
-ProcedureDeclaration := ProcedureHeading ";" ( ProcedureBlock              % PushAutoOn %
-                        Ident )                                            % EndBuildProcedure %
+ProcedureDeclaration :=                                                    % VAR top: CARDINAL ; %
+                                                                           % top := Top () %
+                        ProcedureHeading ";" PostProcedureHeading          % BlockAssert (top = Top ()) %
+                                                                  =:
+
+PostProcedureHeading := ProperProcedure | ForwardDeclaration =:
+
+ForwardDeclaration := "FORWARD"                                            % DupFrame %
+                                                                           % EndBuildProcedure %
+                    =:
+ProperProcedure := ProcedureBlock                                          % PushAutoOn %
+                                  Ident                                    % EndBuildProcedure %
                                                                            % PopAuto %
-                      =:
+                                         =:
 
 DefineBuiltinProcedure := [ "__ATTRIBUTE__" "__BUILTIN__" "(" "(" Ident ")" ")" |
-                            "__INLINE__" ]
-                       =:
+                            "__INLINE__" ] =:
 
 ProcedureHeading := "PROCEDURE"                                            % M2Error.DefaultProcedure %
                      DefineBuiltinProcedure                                % PushAutoOn %
@@ -1226,7 +1292,7 @@ NamedOperand := '[' Ident ']' =:
 
 AsmOperandName := [ NamedOperand ] =:
 
-AsmOperands  := ConstExpression ':' AsmList [ ':' AsmList [ ':' TrashList ] ]
+AsmOperands  := ConstExpression [ ':' AsmList [ ':' AsmList [ ':' TrashList ] ] ]
               =:
 
 AsmList      := [ AsmElement ] { ',' AsmElement } =:

@@ -106,7 +106,7 @@ private template createAccessors(
             enum RightShiftOp = ">>>=";
         }
 
-        static if (is(T == bool))
+        static if (is(T : bool))
         {
             enum createAccessors =
             // getter
@@ -164,8 +164,7 @@ private template createStorageAndFields(Ts...)
         alias StoreType = ulong;
     else
     {
-        import std.conv : to;
-        static assert(false, "Field widths must sum to 8, 16, 32, or 64, not " ~ to!string(Size));
+        static assert(false, "Field widths must sum to 8, 16, 32, or 64, not " ~ Size.stringof);
         alias StoreType = ulong; // just to avoid another error msg
     }
 
@@ -263,9 +262,9 @@ Implementation_details: `Bitfields` are internally stored in an
 `ubyte`, `ushort`, `uint` or `ulong` depending on the number of bits
 used. The bits are filled in the order given by the parameters,
 starting with the lowest significant bit. The name of the (private)
-variable used for saving the `bitfield` is created by a prefix `_bf`
-and concatenating all of the variable names, each preceded by an
-underscore.
+variable used for saving the `bitfield` is created by concatenating
+all of the variable names, each preceded by an underscore, and
+a suffix `_bf`.
 
 Params: T = A list of template parameters divided into chunks of 3
             items. Each chunk consists (in this order) of a type, a
@@ -279,10 +278,8 @@ See_Also: $(REF BitFlags, std,typecons)
 */
 string bitfields(T...)()
 {
-    import std.conv : to;
-
     static assert(T.length % 3 == 0,
-                  "Wrong number of arguments (" ~ to!string(T.length) ~ "): Must be a multiple of 3");
+                  "Wrong number of arguments (" ~ T.length.stringof ~ "): Must be a multiple of 3");
 
     static foreach (i, ARG; T)
     {
@@ -808,6 +805,7 @@ private struct FloatingPointRepresentation(T)
    Allows manipulating the fraction, exponent, and sign parts of a
    `float` separately. The definition is:
 
+$(RUNNABLE_EXAMPLE
 ----
 struct FloatRep
 {
@@ -822,6 +820,7 @@ struct FloatRep
     enum uint bias = 127, fractionBits = 23, exponentBits = 8, signBits = 1;
 }
 ----
+)
 */
 alias FloatRep = FloatingPointRepresentation!float;
 
@@ -877,6 +876,7 @@ alias FloatRep = FloatingPointRepresentation!float;
    Allows manipulating the fraction, exponent, and sign parts of a
    `double` separately. The definition is:
 
+$(RUNNABLE_EXAMPLE
 ----
 struct DoubleRep
 {
@@ -891,6 +891,7 @@ struct DoubleRep
     enum uint bias = 1023, signBits = 1, fractionBits = 52, exponentBits = 11;
 }
 ----
+)
 */
 alias DoubleRep = FloatingPointRepresentation!double;
 
@@ -1053,6 +1054,8 @@ public:
     of a type different than `size_t`, firstly because its length should
     be a multiple of `size_t.sizeof`, and secondly because how the bits
     are mapped:
+
+    $(RUNNABLE_EXAMPLE
     ---
     size_t[] source = [1, 2, 3, 3424234, 724398, 230947, 389492];
     enum sbits = size_t.sizeof * 8;
@@ -1063,6 +1066,7 @@ public:
         assert(ba[n] == nth_bit);
     }
     ---
+    )
     The least significant bit in any `size_t` unit is the starting bit of this
     unit, and the most significant bit is the last bit of this unit. Therefore,
     passing e.g. an array of `int`s may result in a different `BitArray`
@@ -1302,7 +1306,7 @@ public:
 
     /**
       Sets the bits of a slice of `BitArray` starting
-      at index `start` and ends at index ($D end - 1)
+      at index `start` and ends at index $(D end - 1)
       with the values specified by `val`.
      */
     void opSliceAssign(bool val, size_t start, size_t end) @nogc pure nothrow
@@ -1921,7 +1925,7 @@ public:
      * Support for unary operator ~ for `BitArray`.
      */
     BitArray opUnary(string op)() const pure nothrow
-        if (op == "~")
+    if (op == "~")
     {
         auto dim = this.dim;
 
@@ -1958,7 +1962,7 @@ public:
      * Support for binary bitwise operators for `BitArray`.
      */
     BitArray opBinary(string op)(const BitArray e2) const pure nothrow
-        if (op == "-" || op == "&" || op == "|" || op == "^")
+    if (op == "-" || op == "&" || op == "|" || op == "^")
     in
     {
         assert(e2.length == _len, "e2 must have the same length as this");
@@ -2060,7 +2064,7 @@ public:
      * Support for operator op= for `BitArray`.
      */
     BitArray opOpAssign(string op)(const BitArray e2) @nogc pure nothrow return scope
-        if (op == "-" || op == "&" || op == "|" || op == "^")
+    if (op == "-" || op == "&" || op == "|" || op == "^")
     in
     {
         assert(e2.length == _len, "e2 must have the same length as this");
@@ -2181,7 +2185,7 @@ public:
      * concatenation semantics are not followed)
      */
     BitArray opOpAssign(string op)(bool b) pure nothrow return scope
-        if (op == "~")
+    if (op == "~")
     {
         length = _len + 1;
         this[_len - 1] = b;
@@ -2211,7 +2215,7 @@ public:
      * ditto
      */
     BitArray opOpAssign(string op)(BitArray b) pure nothrow return scope
-        if (op == "~")
+    if (op == "~")
     {
         auto istart = _len;
         length = _len + b.length;
@@ -2245,7 +2249,7 @@ public:
      * Support for binary operator ~ for `BitArray`.
      */
     BitArray opBinary(string op)(bool b) const pure nothrow
-        if (op == "~")
+    if (op == "~")
     {
         BitArray r;
 
@@ -2257,7 +2261,7 @@ public:
 
     /** ditto */
     BitArray opBinaryRight(string op)(bool b) const pure nothrow
-        if (op == "~")
+    if (op == "~")
     {
         BitArray r;
 
@@ -2270,7 +2274,7 @@ public:
 
     /** ditto */
     BitArray opBinary(string op)(BitArray b) const pure nothrow
-        if (op == "~")
+    if (op == "~")
     {
         BitArray r;
 
@@ -2394,7 +2398,7 @@ public:
      * preserve bits past the end of the array.)
      */
     void opOpAssign(string op)(size_t nbits) @nogc pure nothrow
-        if (op == "<<")
+    if (op == "<<")
     {
         size_t wordsToShift = nbits / bitsPerSizeT;
         size_t bitsToShift = nbits % bitsPerSizeT;
@@ -2428,7 +2432,7 @@ public:
      * preserve bits past the end of the array.)
      */
     void opOpAssign(string op)(size_t nbits) @nogc pure nothrow
-        if (op == ">>")
+    if (op == ">>")
     {
         size_t wordsToShift = nbits / bitsPerSizeT;
         size_t bitsToShift = nbits % bitsPerSizeT;
@@ -2941,58 +2945,6 @@ if (isIntegral!T || isSomeChar!T || isBoolean!T)
 }
 
 
-private union EndianSwapper(T)
-if (canSwapEndianness!T)
-{
-    T value;
-    ubyte[T.sizeof] array;
-
-    static if (is(immutable FloatingPointTypeOf!(T) == immutable float))
-        uint  intValue;
-    else static if (is(immutable FloatingPointTypeOf!(T) == immutable double))
-        ulong intValue;
-
-}
-
-// Can't use EndianSwapper union during CTFE.
-private auto ctfeRead(T)(const ubyte[T.sizeof] array)
-if (__traits(isIntegral, T))
-{
-    Unqual!T result;
-    version (LittleEndian)
-        foreach_reverse (b; array)
-            result = cast(Unqual!T) ((result << 8) | b);
-    else
-        foreach (b; array)
-            result = cast(Unqual!T) ((result << 8) | b);
-    return cast(T) result;
-}
-
-// Can't use EndianSwapper union during CTFE.
-private auto ctfeBytes(T)(const T value)
-if (__traits(isIntegral, T))
-{
-    ubyte[T.sizeof] result;
-    Unqual!T tmp = value;
-    version (LittleEndian)
-    {
-        foreach (i; 0 .. T.sizeof)
-        {
-            result[i] = cast(ubyte) tmp;
-            tmp = cast(Unqual!T) (tmp >>> 8);
-        }
-    }
-    else
-    {
-        foreach_reverse (i; 0 .. T.sizeof)
-        {
-            result[i] = cast(ubyte) tmp;
-            tmp = cast(Unqual!T) (tmp >>> 8);
-        }
-    }
-    return result;
-}
-
 /++
     Converts the given value from the native endianness to big endian and
     returns it as a `ubyte[n]` where `n` is the size of the given type.
@@ -3006,13 +2958,21 @@ if (__traits(isIntegral, T))
     and therefore could vary from machine to machine (which could make it
     unusable if you tried to transfer it to another machine).
   +/
-auto nativeToBigEndian(T)(const T val) @safe pure nothrow @nogc
+auto nativeToBigEndian(T)(const T val) @trusted pure nothrow @nogc
 if (canSwapEndianness!T)
 {
-    version (LittleEndian)
-        return nativeToEndianImpl!true(val);
+    static if (isFloatOrDouble!T)
+        return nativeToBigEndian(*cast(const UnsignedOfSize!(T.sizeof)*) &val);
     else
-        return nativeToEndianImpl!false(val);
+    {
+        enum len = T.sizeof;
+        ubyte[len] retval;
+
+        static foreach (i; 0 .. len)
+            retval[i] = cast(ubyte)(val >> (len - i - 1) * 8);
+
+        return retval;
+    }
 }
 
 ///
@@ -3037,26 +2997,6 @@ if (canSwapEndianness!T)
     const double cd = 123.45;
     ubyte[8] swappedCD = nativeToBigEndian(cd);
     assert(cd == bigEndianToNative!double(swappedCD));
-}
-
-private auto nativeToEndianImpl(bool swap, T)(const T val) @safe pure nothrow @nogc
-if (__traits(isIntegral, T))
-{
-    if (!__ctfe)
-    {
-        static if (swap)
-            return EndianSwapper!T(swapEndian(val)).array;
-        else
-            return EndianSwapper!T(val).array;
-    }
-    else
-    {
-        // Can't use EndianSwapper in CTFE.
-        static if (swap)
-            return ctfeBytes(swapEndian(val));
-        else
-            return ctfeBytes(val);
-    }
 }
 
 @safe unittest
@@ -3145,13 +3085,25 @@ if (__traits(isIntegral, T))
     because the FPU will mess up any swapped floating point values. So, you
     can't actually have swapped floating point values as floating point values).
   +/
-T bigEndianToNative(T, size_t n)(ubyte[n] val) @safe pure nothrow @nogc
+T bigEndianToNative(T, size_t n)(ubyte[n] val) @trusted pure nothrow @nogc
 if (canSwapEndianness!T && n == T.sizeof)
 {
-    version (LittleEndian)
-        return endianToNativeImpl!(true, T, n)(val);
+    static if (isFloatOrDouble!T)
+    {
+        auto retval = bigEndianToNative!(UnsignedOfSize!(T.sizeof))(val);
+        return *cast(const T*) &retval;
+    }
     else
-        return endianToNativeImpl!(false, T, n)(val);
+    {
+        enum len = T.sizeof;
+        alias U = UnsignedOfSize!len;
+        U retval;
+
+        static foreach (i; 0 .. len)
+            retval |= (cast(U) val[i]) << (len - i - 1) * 8;
+
+        return cast(T) retval;
+    }
 }
 
 ///
@@ -3175,13 +3127,21 @@ if (canSwapEndianness!T && n == T.sizeof)
     because the FPU will mess up any swapped floating point values. So, you
     can't actually have swapped floating point values as floating point values).
   +/
-auto nativeToLittleEndian(T)(const T val) @safe pure nothrow @nogc
+auto nativeToLittleEndian(T)(const T val) @trusted pure nothrow @nogc
 if (canSwapEndianness!T)
 {
-    version (BigEndian)
-        return nativeToEndianImpl!true(val);
+    static if (isFloatOrDouble!T)
+        return nativeToLittleEndian(*cast(const UnsignedOfSize!(T.sizeof)*) &val);
     else
-        return nativeToEndianImpl!false(val);
+    {
+        enum len = T.sizeof;
+        ubyte[len] retval;
+
+        static foreach (i; 0 .. len)
+            retval[i] = cast(ubyte)(val >> i * 8);
+
+        return retval;
+    }
 }
 
 ///
@@ -3191,9 +3151,21 @@ if (canSwapEndianness!T)
     ubyte[4] swappedI = nativeToLittleEndian(i);
     assert(i == littleEndianToNative!int(swappedI));
 
+    float f = 123.45f;
+    ubyte[4] swappedF = nativeToLittleEndian(f);
+    assert(f == littleEndianToNative!float(swappedF));
+
+    const float cf = 123.45f;
+    ubyte[4] swappedCF = nativeToLittleEndian(cf);
+    assert(cf == littleEndianToNative!float(swappedCF));
+
     double d = 123.45;
     ubyte[8] swappedD = nativeToLittleEndian(d);
     assert(d == littleEndianToNative!double(swappedD));
+
+    const double cd = 123.45;
+    ubyte[8] swappedCD = nativeToLittleEndian(cd);
+    assert(cd == littleEndianToNative!double(swappedCD));
 }
 
 @safe unittest
@@ -3255,13 +3227,25 @@ if (canSwapEndianness!T)
     and therefore could vary from machine to machine (which could make it
     unusable if you tried to transfer it to another machine).
   +/
-T littleEndianToNative(T, size_t n)(ubyte[n] val) @safe pure nothrow @nogc
+T littleEndianToNative(T, size_t n)(ubyte[n] val) @trusted pure nothrow @nogc
 if (canSwapEndianness!T && n == T.sizeof)
 {
-    version (BigEndian)
-        return endianToNativeImpl!(true, T, n)(val);
+    static if (isFloatOrDouble!T)
+    {
+        auto retval = littleEndianToNative!(UnsignedOfSize!(T.sizeof))(val);
+        return *cast(const T*) &retval;
+    }
     else
-        return endianToNativeImpl!(false, T, n)(val);
+    {
+        enum len = T.sizeof;
+        alias U = UnsignedOfSize!len;
+        U retval;
+
+        static foreach (i; 0 .. len)
+            retval |= (cast(U) val[i]) << i * 8;
+
+        return cast(T) retval;
+    }
 }
 
 ///
@@ -3274,70 +3258,6 @@ if (canSwapEndianness!T && n == T.sizeof)
     dchar c = 'D';
     ubyte[4] swappedC = nativeToLittleEndian(c);
     assert(c == littleEndianToNative!dchar(swappedC));
-}
-
-private T endianToNativeImpl(bool swap, T, size_t n)(ubyte[n] val) @nogc nothrow pure @safe
-if (__traits(isIntegral, T) && n == T.sizeof)
-{
-    if (!__ctfe)
-    {
-        EndianSwapper!T es = { array: val };
-        static if (swap)
-            return swapEndian(es.value);
-        else
-            return es.value;
-    }
-    else
-    {
-        static if (swap)
-            return swapEndian(ctfeRead!T(val));
-        else
-            return ctfeRead!T(val);
-    }
-}
-
-private auto nativeToEndianImpl(bool swap, T)(const T val) @trusted pure nothrow @nogc
-if (isFloatOrDouble!T)
-{
-    if (!__ctfe)
-    {
-        EndianSwapper!T es = EndianSwapper!T(val);
-        static if (swap)
-            es.intValue = swapEndian(es.intValue);
-        return es.array;
-    }
-    else
-    {
-        static if (T.sizeof == 4)
-            uint intValue = *cast(const uint*) &val;
-        else static if (T.sizeof == 8)
-            ulong intValue = *cast(const ulong*) & val;
-        static if (swap)
-            intValue = swapEndian(intValue);
-        return ctfeBytes(intValue);
-    }
-}
-
-private auto endianToNativeImpl(bool swap, T, size_t n)(ubyte[n] val) @trusted pure nothrow @nogc
-if (isFloatOrDouble!T && n == T.sizeof)
-{
-    if (!__ctfe)
-    {
-        EndianSwapper!T es = { array: val };
-        static if (swap)
-            es.intValue = swapEndian(es.intValue);
-        return es.value;
-    }
-    else
-    {
-        static if (n == 4)
-            uint x = ctfeRead!uint(val);
-        else static if (n == 8)
-            ulong x = ctfeRead!ulong(val);
-        static if (swap)
-            x = swapEndian(x);
-        return *cast(T*) &x;
-    }
 }
 
 private template isFloatOrDouble(T)
@@ -3399,6 +3319,42 @@ private template canSwapEndianness(T)
         static assert(!canSwapEndianness!(shared(const T)));
         static assert(!canSwapEndianness!(shared(immutable T)));
     }
+}
+
+private template UnsignedOfSize(size_t n)
+{
+    static if (n == 8)
+        alias UnsignedOfSize = ulong;
+    else static if (n == 4)
+        alias UnsignedOfSize = uint;
+    else static if (n == 2)
+        alias UnsignedOfSize = ushort;
+    else static if (n == 1)
+        alias UnsignedOfSize = ubyte;
+    else
+        alias UnsignedOfSize = void;
+}
+
+@safe unittest
+{
+    static assert(is(UnsignedOfSize!(byte.sizeof) == ubyte));
+    static assert(is(UnsignedOfSize!(ubyte.sizeof) == ubyte));
+    static assert(is(UnsignedOfSize!(short.sizeof) == ushort));
+    static assert(is(UnsignedOfSize!(ushort.sizeof) == ushort));
+    static assert(is(UnsignedOfSize!(int.sizeof) == uint));
+    static assert(is(UnsignedOfSize!(uint.sizeof) == uint));
+    static assert(is(UnsignedOfSize!(long.sizeof) == ulong));
+    static assert(is(UnsignedOfSize!(ulong.sizeof) == ulong));
+
+    static assert(is(UnsignedOfSize!(bool.sizeof) == ubyte));
+    static assert(is(UnsignedOfSize!(char.sizeof) == ubyte));
+    static assert(is(UnsignedOfSize!(wchar.sizeof) == ushort));
+    static assert(is(UnsignedOfSize!(dchar.sizeof) == uint));
+
+    static assert(is(UnsignedOfSize!(float.sizeof) == uint));
+    static assert(is(UnsignedOfSize!(double.sizeof) == ulong));
+
+    static assert(is(UnsignedOfSize!10 == void));
 }
 
 /++
@@ -4719,4 +4675,25 @@ if (isIntegral!T)
     assert(bitsSet(1_000_000).equal([6, 9, 14, 16, 17, 18, 19]));
     foreach (i; 0 .. 63)
         assert(bitsSet(1UL << i).equal([i]));
+}
+
+// Fix https://issues.dlang.org/show_bug.cgi?id=24095
+@safe @nogc pure unittest
+{
+    enum Bar : bool
+    {
+        a,
+        b,
+    }
+
+    struct Foo
+    {
+        mixin(bitfields!(Bar, "bar", 1, ubyte, "", 7,));
+    }
+
+    Foo foo;
+    foo.bar = Bar.a;
+    assert(foo.bar == Bar.a);
+    foo.bar = Bar.b;
+    assert(foo.bar == Bar.b);
 }

@@ -1,5 +1,5 @@
 /* If-elseif-else to switch conversion pass
-   Copyright (C) 2020-2023 Free Software Foundation, Inc.
+   Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -54,6 +54,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "alloc-pool.h"
 #include "tree-switch-conversion.h"
 #include "tree-ssa-reassoc.h"
+#include "tree-ssa.h"
 
 using namespace tree_switch_conversion;
 
@@ -253,7 +254,7 @@ if_chain::is_beneficial ()
   else
     output.release ();
 
-  output = bit_test_cluster::find_bit_tests (filtered_clusters);
+  output = bit_test_cluster::find_bit_tests (filtered_clusters, 2);
   r = output.length () < filtered_clusters.length ();
   if (r)
     dump_clusters (&output, "BT can be built");
@@ -493,6 +494,8 @@ pass_if_to_switch::execute (function *fun)
 {
   auto_vec<if_chain *> all_candidates;
   hash_map<basic_block, condition_info *> conditions_in_bbs;
+
+  mark_ssa_maybe_undefs ();
 
   basic_block bb;
   FOR_EACH_BB_FN (bb, fun)

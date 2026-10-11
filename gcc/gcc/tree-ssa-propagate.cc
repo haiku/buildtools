@@ -1,5 +1,5 @@
 /* Generic SSA value propagation engine.
-   Copyright (C) 2004-2023 Free Software Foundation, Inc.
+   Copyright (C) 2004-2025 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
    This file is part of GCC.
@@ -38,6 +38,7 @@
 #include "cfgloop.h"
 #include "tree-cfgcleanup.h"
 #include "cfganal.h"
+#include "tree-ssa-dce.h"
 
 /* This file implements a generic value propagation engine based on
    the same propagation used by the SSA-CCP algorithm [1].
@@ -84,7 +85,7 @@
 	    Blocks are added to this list if their incoming edges are
 	    found executable.
 
-	SSA_EDGE_WORKLIST contains the list of statements that we 
+	SSA_EDGE_WORKLIST contains the list of statements that we
 	    need to revisit.
 
    5- Simulation terminates when all three work lists are drained.
@@ -527,10 +528,37 @@ struct prop_stats_d
   long num_const_prop;
   long num_copy_prop;
   long num_stmts_folded;
-  long num_dce;
 };
 
 static struct prop_stats_d prop_stats;
+
+// range_query default methods to drive from a value_of_expr() ranther than
+// range_of_expr.
+
+tree
+substitute_and_fold_engine::value_on_edge (edge, tree expr)
+{
+  return value_of_expr (expr);
+}
+
+tree
+substitute_and_fold_engine::value_of_stmt (gimple *stmt, tree name)
+{
+  if (!name)
+    name = gimple_get_lhs (stmt);
+
+  gcc_checking_assert (!name || name == gimple_get_lhs (stmt));
+
+  if (name)
+    return value_of_expr (name);
+  return NULL_TREE;
+}
+
+bool
+substitute_and_fold_engine::range_of_expr (vrange &, tree, gimple *)
+{
+  return false;
+}
 
 /* Replace USE references in statement STMT with the values stored in
    PROP_VALUE. Return true if at least one reference was replaced.  */
@@ -641,14 +669,14 @@ public:
           something_changed (false),
 	  substitute_and_fold_engine (engine)
     {
-      stmts_to_remove.create (0);
+      dceworklist = BITMAP_ALLOC (NULL);
       stmts_to_fixup.create (0);
       need_eh_cleanup = BITMAP_ALLOC (NULL);
       need_ab_cleanup = BITMAP_ALLOC (NULL);
     }
     ~substitute_and_fold_dom_walker ()
     {
-      stmts_to_remove.release ();
+      BITMAP_FREE (dceworklist);
       stmts_to_fixup.release ();
       BITMAP_FREE (need_eh_cleanup);
       BITMAP_FREE (need_ab_cleanup);
@@ -661,7 +689,7 @@ public:
     }
 
     bool something_changed;
-    vec<gimple *> stmts_to_remove;
+    bitmap dceworklist;
     vec<gimple *> stmts_to_fixup;
     bitmap need_eh_cleanup;
     bitmap need_ab_cleanup;
@@ -760,7 +788,11 @@ substitute_and_fold_dom_walker::before_dom_children (basic_block bb)
 		  print_generic_expr (dump_file, sprime);
 		  fprintf (dump_file, "\n");
 		}
-	      stmts_to_remove.safe_push (phi);
+	      bitmap_set_bit (dceworklist, SSA_NAME_VERSION (res));
+	      /* As this now constitutes a copy duplicate points-to
+		 and range info appropriately.  */
+	      if (TREE_CODE (sprime) == SSA_NAME)
+		maybe_duplicate_ssa_info_at_copy (res, sprime);
 	      continue;
 	    }
 	}
@@ -802,7 +834,11 @@ substitute_and_fold_dom_walker::before_dom_children (basic_block bb)
 		  print_generic_expr (dump_file, sprime);
 		  fprintf (dump_file, "\n");
 		}
-	      stmts_to_remove.safe_push (stmt);
+	      bitmap_set_bit (dceworklist, SSA_NAME_VERSION (lhs));
+	      /* As this now constitutes a copy duplicate points-to
+		 and range info appropriately.  */
+	      if (TREE_CODE (sprime) == SSA_NAME)
+		maybe_duplicate_ssa_info_at_copy (lhs, sprime);
 	      continue;
 	    }
 	}
@@ -828,13 +864,14 @@ substitute_and_fold_dom_walker::before_dom_children (basic_block bb)
       /* If we made a replacement, fold the statement.  */
       if (did_replace)
 	{
+	  update_stmt (stmt);
 	  fold_stmt (&i, follow_single_use_edges);
 	  stmt = gsi_stmt (i);
 	  gimple_set_modified (stmt, true);
 	}
       /* Also fold if we want to fold all statements.  */
       else if (substitute_and_fold_engine->fold_all_stmts
-	  && fold_stmt (&i, follow_single_use_edges))
+	       && fold_stmt (&i, follow_single_use_edges))
 	{
 	  did_replace = true;
 	  stmt = gsi_stmt (i);
@@ -970,30 +1007,7 @@ substitute_and_fold_engine::substitute_and_fold (basic_block block)
   substitute_and_fold_dom_walker walker (CDI_DOMINATORS, this);
   walker.walk (block ? block : ENTRY_BLOCK_PTR_FOR_FN (cfun));
 
-  /* We cannot remove stmts during the BB walk, especially not release
-     SSA names there as that destroys the lattice of our callers.
-     Remove stmts in reverse order to make debug stmt creation possible.  */
-  while (!walker.stmts_to_remove.is_empty ())
-    {
-      gimple *stmt = walker.stmts_to_remove.pop ();
-      if (dump_file && dump_flags & TDF_DETAILS)
-	{
-	  fprintf (dump_file, "Removing dead stmt ");
-	  print_gimple_stmt (dump_file, stmt, 0);
-	  fprintf (dump_file, "\n");
-	}
-      prop_stats.num_dce++;
-      gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
-      if (gimple_code (stmt) == GIMPLE_PHI)
-	remove_phi_node (&gsi, true);
-      else
-	{
-	  unlink_stmt_vdef (stmt);
-	  gsi_remove (&gsi, true);
-	  release_defs (stmt);
-	}
-    }
-
+  simple_dce_from_worklist (walker.dceworklist, walker.need_eh_cleanup);
   if (!bitmap_empty_p (walker.need_eh_cleanup))
     gimple_purge_all_dead_eh_edges (walker.need_eh_cleanup);
   if (!bitmap_empty_p (walker.need_ab_cleanup))
@@ -1006,6 +1020,8 @@ substitute_and_fold_engine::substitute_and_fold (basic_block block)
   while (!walker.stmts_to_fixup.is_empty ())
     {
       gimple *stmt = walker.stmts_to_fixup.pop ();
+      if (!gimple_bb (stmt))
+	continue;
       if (dump_file && dump_flags & TDF_DETAILS)
 	{
 	  fprintf (dump_file, "Fixing up noreturn call ");
@@ -1021,8 +1037,6 @@ substitute_and_fold_engine::substitute_and_fold (basic_block block)
 			    prop_stats.num_copy_prop);
   statistics_counter_event (cfun, "Statements folded",
 			    prop_stats.num_stmts_folded);
-  statistics_counter_event (cfun, "Statements deleted",
-			    prop_stats.num_dce);
 
   return walker.something_changed;
 }
@@ -1046,7 +1060,7 @@ may_propagate_copy (tree dest, tree orig, bool dest_not_abnormal_phi_edge_p)
       && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (orig)
       && SSA_NAME_IS_DEFAULT_DEF (orig)
       && (SSA_NAME_VAR (orig) == NULL_TREE
-	  || TREE_CODE (SSA_NAME_VAR (orig)) == VAR_DECL))
+	  || VAR_P (SSA_NAME_VAR (orig))))
     ;
   /* Otherwise if ORIG just flows in from an abnormal edge then the copy cannot
      be propagated.  */
@@ -1068,6 +1082,13 @@ may_propagate_copy (tree dest, tree orig, bool dest_not_abnormal_phi_edge_p)
   /* Generally propagating virtual operands is not ok as that may
      create overlapping life-ranges.  */
   if (TREE_CODE (dest) == SSA_NAME && virtual_operand_p (dest))
+    return false;
+
+  /* Keep lhs of [[gnu::musttail]] calls as is, those need to be still
+     tail callable.  */
+  if (TREE_CODE (dest) == SSA_NAME
+      && is_gimple_call (SSA_NAME_DEF_STMT (dest))
+      && gimple_call_must_tail_p (as_a <gcall *> (SSA_NAME_DEF_STMT (dest))))
     return false;
 
   /* Anything else is OK.  */

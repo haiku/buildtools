@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -22,9 +22,11 @@
 #include "rust-hir-map.h"
 #include "rust-ast-dump.h"
 #include "rust-abi.h"
+#include "rust-item.h"
 #include "rust-object-export.h"
 
 #include "md5.h"
+#include "rust-system.h"
 
 namespace Rust {
 namespace Metadata {
@@ -54,10 +56,8 @@ void
 ExportContext::emit_trait (const HIR::Trait &trait)
 {
   // lookup the AST node for this
-  AST::Item *item = nullptr;
-  bool ok
-    = mappings->lookup_ast_item (trait.get_mappings ().get_nodeid (), &item);
-  rust_assert (ok);
+  AST::Item *item
+    = mappings.lookup_ast_item (trait.get_mappings ().get_nodeid ()).value ();
 
   std::stringstream oss;
   AST::Dump dumper (oss);
@@ -70,9 +70,8 @@ void
 ExportContext::emit_function (const HIR::Function &fn)
 {
   // lookup the AST node for this
-  AST::Item *item = nullptr;
-  bool ok = mappings->lookup_ast_item (fn.get_mappings ().get_nodeid (), &item);
-  rust_assert (ok);
+  AST::Item *item
+    = mappings.lookup_ast_item (fn.get_mappings ().get_nodeid ()).value ();
 
   // is this a CFG macro or not
   if (item->is_marked_for_strip ())
@@ -91,42 +90,9 @@ ExportContext::emit_function (const HIR::Function &fn)
       // FIXME assert that this is actually an AST::Function
       AST::Function &function = static_cast<AST::Function &> (vis_item);
 
-      // we can emit an extern block with abi of "rust"
-      Identifier item_name = function.get_function_name ();
-
-      // always empty for extern linkage
-      AST::WhereClause where_clause = AST::WhereClause::create_empty ();
-      std::vector<std::unique_ptr<AST::GenericParam>> generic_params;
-
-      AST::Visibility vis = function.get_visibility ();
-      std::unique_ptr<AST::Type> return_type
-	= std::unique_ptr<AST::Type> (nullptr);
-      if (function.has_return_type ())
-	{
-	  return_type = function.get_return_type ()->clone_type ();
-	}
-
-      std::vector<AST::NamedFunctionParam> function_params;
-      for (AST::FunctionParam &param : function.get_function_params ())
-	{
-	  std::string name = param.get_pattern ()->as_string ();
-	  std::unique_ptr<AST::Type> param_type
-	    = param.get_type ()->clone_type ();
-
-	  AST::NamedFunctionParam p (name, std::move (param_type), {},
-				     param.get_locus ());
-	  function_params.push_back (std::move (p));
-	}
-
-      AST::ExternalItem *external_item = new AST::ExternalFunctionItem (
-	item_name, {} /* generic_params */, std::move (return_type),
-	where_clause, std::move (function_params), false /* has_variadics */,
-	{} /* variadic_outer_attrs */, vis, function.get_outer_attrs (),
-	function.get_locus ());
-
       std::vector<std::unique_ptr<AST::ExternalItem>> external_items;
-      external_items.push_back (
-	std::unique_ptr<AST::ExternalItem> (external_item));
+      external_items.push_back (std::unique_ptr<AST::ExternalItem> (
+	static_cast<AST::ExternalItem *> (&function)));
 
       AST::ExternBlock extern_block (get_string_from_abi (Rust::ABI::RUST),
 				     std::move (external_items),
@@ -141,6 +107,19 @@ ExportContext::emit_function (const HIR::Function &fn)
     }
 
   // store the dump
+  public_interface_buffer += oss.str ();
+}
+
+void
+ExportContext::emit_macro (NodeId macro)
+{
+  std::stringstream oss;
+  AST::Dump dumper (oss);
+
+  AST::Item *item = mappings.lookup_ast_item (macro).value ();
+
+  dumper.go (*item);
+
   public_interface_buffer += oss.str ();
 }
 
@@ -182,7 +161,7 @@ private:
 };
 
 PublicInterface::PublicInterface (HIR::Crate &crate)
-  : crate (crate), mappings (*Analysis::Mappings::get ()), context ()
+  : crate (crate), mappings (Analysis::Mappings::get ()), context ()
 {}
 
 void
@@ -205,7 +184,7 @@ void
 PublicInterface::gather_export_data ()
 {
   ExportVisItems visitor (context);
-  for (auto &item : crate.items)
+  for (auto &item : crate.get_items ())
     {
       bool is_vis_item = item->get_hir_kind () == HIR::Node::BaseKind::VIS_ITEM;
       if (!is_vis_item)
@@ -215,6 +194,9 @@ PublicInterface::gather_export_data ()
       if (is_crate_public (vis_item))
 	vis_item.accept_vis (visitor);
     }
+
+  for (const auto &macro : mappings.get_exported_macros ())
+    context.emit_macro (macro);
 }
 
 void
@@ -252,12 +234,12 @@ PublicInterface::write_to_path (const std::string &path) const
 {
   // validate path contains correct extension
   const std::string expected_file_name = expected_metadata_filename ();
-  const char *path_base_name = basename (path.c_str ());
+  const char *path_base_name = lbasename (path.c_str ());
   if (strcmp (path_base_name, expected_file_name.c_str ()) != 0)
     {
-      rust_error_at (Location (),
+      rust_error_at (UNDEF_LOCATION,
 		     "expected metadata-output path to have base file name of: "
-		     "%<%s%> got %<%s%>",
+		     "%qs got %qs",
 		     expected_file_name.c_str (), path_base_name);
       return;
     }
@@ -281,7 +263,8 @@ PublicInterface::write_to_path (const std::string &path) const
   FILE *nfd = fopen (path.c_str (), "wb");
   if (nfd == NULL)
     {
-      rust_error_at (Location (), "failed to open file %<%s%> for writing: %s",
+      rust_error_at (UNDEF_LOCATION,
+		     "failed to open file %qs for writing: %s",
 		     path.c_str (), xstrerror (errno));
       return;
     }
@@ -289,7 +272,7 @@ PublicInterface::write_to_path (const std::string &path) const
   // write data
   if (fwrite (kMagicHeader, sizeof (kMagicHeader), 1, nfd) < 1)
     {
-      rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+      rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		     path.c_str (), xstrerror (errno));
       fclose (nfd);
       return;
@@ -297,7 +280,7 @@ PublicInterface::write_to_path (const std::string &path) const
 
   if (fwrite (checksum, sizeof (checksum), 1, nfd) < 1)
     {
-      rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+      rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		     path.c_str (), xstrerror (errno));
       fclose (nfd);
       return;
@@ -305,7 +288,7 @@ PublicInterface::write_to_path (const std::string &path) const
 
   if (fwrite (kSzDelim, sizeof (kSzDelim), 1, nfd) < 1)
     {
-      rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+      rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		     path.c_str (), xstrerror (errno));
       fclose (nfd);
       return;
@@ -314,7 +297,7 @@ PublicInterface::write_to_path (const std::string &path) const
   if (fwrite (current_crate_name.c_str (), current_crate_name.size (), 1, nfd)
       < 1)
     {
-      rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+      rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		     path.c_str (), xstrerror (errno));
       fclose (nfd);
       return;
@@ -322,7 +305,7 @@ PublicInterface::write_to_path (const std::string &path) const
 
   if (fwrite (kSzDelim, sizeof (kSzDelim), 1, nfd) < 1)
     {
-      rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+      rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		     path.c_str (), xstrerror (errno));
       fclose (nfd);
       return;
@@ -330,7 +313,7 @@ PublicInterface::write_to_path (const std::string &path) const
 
   if (fwrite (size_buffer.c_str (), size_buffer.size (), 1, nfd) < 1)
     {
-      rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+      rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		     path.c_str (), xstrerror (errno));
       fclose (nfd);
       return;
@@ -338,7 +321,7 @@ PublicInterface::write_to_path (const std::string &path) const
 
   if (fwrite (kSzDelim, sizeof (kSzDelim), 1, nfd) < 1)
     {
-      rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+      rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		     path.c_str (), xstrerror (errno));
       fclose (nfd);
       return;
@@ -347,7 +330,7 @@ PublicInterface::write_to_path (const std::string &path) const
   if (!buf.empty ())
     if (fwrite (buf.c_str (), buf.size (), 1, nfd) < 1)
       {
-	rust_error_at (Location (), "failed to write to file %<%s%>: %s",
+	rust_error_at (UNDEF_LOCATION, "failed to write to file %qs: %s",
 		       path.c_str (), xstrerror (errno));
 	fclose (nfd);
 	return;
@@ -375,9 +358,9 @@ PublicInterface::is_crate_public (const HIR::VisItem &item)
 std::string
 PublicInterface::expected_metadata_filename ()
 {
-  auto mappings = Analysis::Mappings::get ();
+  auto &mappings = Analysis::Mappings::get ();
 
-  const std::string current_crate_name = mappings->get_current_crate_name ();
+  const std::string current_crate_name = mappings.get_current_crate_name ();
   return current_crate_name + extension_path;
 }
 

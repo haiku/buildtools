@@ -1,5 +1,5 @@
 /* Target-dependent costs for expmed.cc.
-   Copyright (C) 1987-2023 Free Software Foundation, Inc.
+   Copyright (C) 1987-2025 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -161,15 +161,14 @@ struct target_expmed {
   struct expmed_op_cheap x_sdiv_pow2_cheap;
   struct expmed_op_cheap x_smod_pow2_cheap;
 
-  /* Cost of various pieces of RTL.  Note that some of these are indexed by
-     shift count and some by mode.  */
+  /* Cost of various pieces of RTL.  */
   int x_zero_cost[2];
   struct expmed_op_costs x_add_cost;
   struct expmed_op_costs x_neg_cost;
-  struct expmed_op_costs x_shift_cost[MAX_BITS_PER_WORD];
-  struct expmed_op_costs x_shiftadd_cost[MAX_BITS_PER_WORD];
-  struct expmed_op_costs x_shiftsub0_cost[MAX_BITS_PER_WORD];
-  struct expmed_op_costs x_shiftsub1_cost[MAX_BITS_PER_WORD];
+  int x_shift_cost[2][NUM_MODE_IPV_INT][MAX_BITS_PER_WORD];
+  int x_shiftadd_cost[2][NUM_MODE_IPV_INT][MAX_BITS_PER_WORD];
+  int x_shiftsub0_cost[2][NUM_MODE_IPV_INT][MAX_BITS_PER_WORD];
+  int x_shiftsub1_cost[2][NUM_MODE_IPV_INT][MAX_BITS_PER_WORD];
   struct expmed_op_costs x_mul_cost;
   struct expmed_op_costs x_sdiv_cost;
   struct expmed_op_costs x_udiv_cost;
@@ -395,8 +394,8 @@ neg_cost (bool speed, machine_mode mode)
 inline int *
 shift_cost_ptr (bool speed, machine_mode mode, int bits)
 {
-  return expmed_op_cost_ptr (&this_target_expmed->x_shift_cost[bits],
-			     speed, mode);
+  int midx = expmed_mode_index (mode);
+  return &this_target_expmed->x_shift_cost[speed][midx][bits];
 }
 
 /* Set the COST of doing a shift in MODE by BITS when optimizing for SPEED.  */
@@ -421,8 +420,8 @@ shift_cost (bool speed, machine_mode mode, int bits)
 inline int *
 shiftadd_cost_ptr (bool speed, machine_mode mode, int bits)
 {
-  return expmed_op_cost_ptr (&this_target_expmed->x_shiftadd_cost[bits],
-			     speed, mode);
+  int midx = expmed_mode_index (mode);
+  return &this_target_expmed->x_shiftadd_cost[speed][midx][bits];
 }
 
 /* Set the COST of doing a shift in MODE by BITS followed by an add when
@@ -448,8 +447,8 @@ shiftadd_cost (bool speed, machine_mode mode, int bits)
 inline int *
 shiftsub0_cost_ptr (bool speed, machine_mode mode, int bits)
 {
-  return expmed_op_cost_ptr (&this_target_expmed->x_shiftsub0_cost[bits],
-			     speed, mode);
+  int midx = expmed_mode_index (mode);
+  return &this_target_expmed->x_shiftsub0_cost[speed][midx][bits];
 }
 
 /* Set the COST of doing a shift in MODE by BITS and then subtracting a
@@ -475,8 +474,8 @@ shiftsub0_cost (bool speed, machine_mode mode, int bits)
 inline int *
 shiftsub1_cost_ptr (bool speed, machine_mode mode, int bits)
 {
-  return expmed_op_cost_ptr (&this_target_expmed->x_shiftsub1_cost[bits],
-			     speed, mode);
+  int midx = expmed_mode_index (mode);
+  return &this_target_expmed->x_shiftsub1_cost[speed][midx][bits];
 }
 
 /* Set the COST of subtracting a shift in MODE by BITS from a value when
@@ -695,12 +694,13 @@ extern rtx emit_store_flag_force (rtx, enum rtx_code, rtx, rtx,
 
 extern void canonicalize_comparison (machine_mode, enum rtx_code *, rtx *);
 
-/* Choose a minimal N + 1 bit approximation to 1/D that can be used to
-   replace division by D, and put the least significant N bits of the result
-   in *MULTIPLIER_PTR and return the most significant bit.  */
+/* Choose a minimal N + 1 bit approximation to 2**K / D that can be used to
+   replace division by D, put the least significant N bits of the result in
+   *MULTIPLIER_PTR, the value K - N in *POST_SHIFT_PTR, and return the most
+   significant bit.  */
 extern unsigned HOST_WIDE_INT choose_multiplier (unsigned HOST_WIDE_INT, int,
 						 int, unsigned HOST_WIDE_INT *,
-						 int *, int *);
+						 int *);
 
 #ifdef TREE_CODE
 extern rtx expand_variable_shift (enum tree_code, machine_mode,
@@ -724,5 +724,8 @@ extern rtx extract_low_bits (machine_mode, machine_mode, rtx);
 extern rtx expand_mult (machine_mode, rtx, rtx, rtx, int, bool = false);
 extern rtx expand_mult_highpart_adjust (scalar_int_mode, rtx, rtx, rtx,
 					rtx, int);
+extern rtx expmed_mult_highpart_optab (scalar_int_mode, rtx, rtx, rtx,
+				       int, int);
+extern rtx expand_rotate_as_vec_perm (machine_mode, rtx, rtx, rtx);
 
 #endif  // EXPMED_H

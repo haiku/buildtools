@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1992-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1992-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -109,9 +109,21 @@ is
 
       procedure Lemma_Euclidean_Mod (Q, F, R : Big_Natural) with
         Pre  => F /= 0,
-        Post => (Q * F + R) mod F = R mod F;
+        Post => (Q * F + R) mod F = R mod F,
+        Subprogram_Variant => (Decreases => Q);
 
-      procedure Lemma_Euclidean_Mod (Q, F, R : Big_Natural) is null;
+      -------------------------
+      -- Lemma_Euclidean_Mod --
+      -------------------------
+
+      procedure Lemma_Euclidean_Mod (Q, F, R : Big_Natural) is
+      begin
+         if Q > 0 then
+            Lemma_Euclidean_Mod (Q - 1, F, R);
+         end if;
+      end Lemma_Euclidean_Mod;
+
+      --  Local variables
 
       Left  : constant Big_Natural := (X + Y) mod B;
       Right : constant Big_Natural := ((X mod B) + (Y mod B)) mod B;
@@ -137,14 +149,24 @@ is
    ----------------------
 
    procedure Lemma_Exp_Expand (A : Big_Integer; Exp : Natural) is
+
+      procedure Lemma_Exp_Distribution (Exp_1, Exp_2 : Natural) with
+        Pre  => Natural'Last - Exp_2 >= Exp_1,
+        Post => A ** (Exp_1 + Exp_2) = A ** (Exp_1) * A ** (Exp_2);
+
+      ----------------------------
+      -- Lemma_Exp_Distribution --
+      ----------------------------
+
+      procedure Lemma_Exp_Distribution (Exp_1, Exp_2 : Natural) is null;
+
    begin
       if Exp rem 2 = 0 then
          pragma Assert (Exp = Exp / 2 + Exp / 2);
       else
          pragma Assert (Exp = Exp / 2 + Exp / 2 + 1);
-         pragma Assert (A ** Exp = A ** (Exp / 2) * A ** (Exp / 2 + 1));
-         pragma Assert (A ** (Exp / 2 + 1) = A ** (Exp / 2) * A);
-         pragma Assert (A ** Exp = A ** (Exp / 2) * A ** (Exp / 2) * A);
+         Lemma_Exp_Distribution (Exp / 2, Exp / 2 + 1);
+         Lemma_Exp_Distribution (Exp / 2, 1);
       end if;
    end Lemma_Exp_Expand;
 
@@ -164,6 +186,9 @@ is
             Lemma_Mod_Mod (A, B);
             Lemma_Exp_Mod (A, Exp - 1, B);
             Lemma_Mult_Mod (A, A ** (Exp - 1), B);
+            pragma Assert
+              ((A mod B) * (A mod B) ** (Exp - 1) = (A mod B) ** Exp);
+            pragma Assert (A * A ** (Exp - 1) = A ** Exp);
             pragma Assert (Left = Right);
          end;
       end if;
@@ -190,6 +215,7 @@ is
             pragma Assert (Left = Right);
          else
             pragma Assert (Y mod B = 0);
+            pragma Assert (Y / B * B = Y);
             pragma Assert ((X * Y) mod B = (X * Y) - (X * Y) / B * B);
             pragma Assert
               ((X * Y) mod B = (X * Y) - (X * (Y / B) * B) / B * B);
@@ -237,7 +263,10 @@ is
         Post => Big (Mult (X, Y)) = (Big (X) * Big (Y)) mod M
           and then Big (Mult (X, Y)) < M;
 
-      procedure Lemma_Mult (X, Y : Unsigned) is null;
+      procedure Lemma_Mult (X, Y : Unsigned) is
+      begin
+         pragma Assert (Big (Mult (X, Y)) = (Big (X) * Big (Y)) mod M);
+      end Lemma_Mult;
 
       Rest : Big_Integer with Ghost;
       --  Ghost variable to hold Factor**Exp between Exp and Factor updates
@@ -309,6 +338,7 @@ is
             Lemma_Mod_Mod (Rest * Rest, Big (Modulus));
             Lemma_Mod_Ident (Big (Result), Big (Modulus));
             Lemma_Mult_Mod (Big (Result), Rest * Rest, Big (Modulus));
+            pragma Assert (Big (Factor) >= 0);
             Lemma_Mult_Mod (Big (Result), Big (Factor) ** Exp,
                                Big (Modulus));
             pragma Assert (Equal_Modulo

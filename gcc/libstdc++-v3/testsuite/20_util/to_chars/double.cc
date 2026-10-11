@@ -40,6 +40,7 @@
 #include <cstring>
 #include <limits>
 #include <optional>
+#include <cfloat>
 
 #include <testsuite_hooks.h>
 
@@ -1968,9 +1969,19 @@ inline constexpr double_to_chars_testcase double_to_chars_test_cases[] = {
     {1e125, chars_format::fixed,
         "9999999999999999248677616189928820425446708698348384614392259722252941999757930266031634937628176537515300"
         "5841365553228283904"},
+#if FLT_EVAL_METHOD >= 0 && FLT_EVAL_METHOD <= 1
+    // When long double is Intel extended and double constants are evaluated in precision of
+    // long double, this value is initialized to double(1e126L), which is 0x1.7a2ecc414a040p+418 due to
+    // double rounding of 0x1.7a2ecc414a03f7ff6p+418L first to 0x1.7a2ecc414a03f800p+418L and
+    // then to 0x1.7a2ecc414a040p+418, while when double constants are evaluated in precision of
+    // IEEE double, this is 0x1.7a2ecc414a03fp+418 which the test expects.  See PR110145.
     {1e126, chars_format::fixed,
         "9999999999999999248677616189928820425446708698348384614392259722252941999757930266031634937628176537515300"
         "58413655532282839040"},
+#endif
+    {0x1.7a2ecc414a03fp+418, chars_format::fixed,
+	"9999999999999999248677616189928820425446708698348384614392259722252941999757930266031634937628176537515300"
+	"58413655532282839040"},
     {1e127, chars_format::fixed,
         "9999999999999999549291066784979473595300225087383524118479625982517885450291174622154390152298057300868772"
         "377386949310916067328"},
@@ -2816,8 +2827,12 @@ inline constexpr double_to_chars_testcase double_to_chars_test_cases[] = {
     {0x1.a6c767640cd71p+879, chars_format::scientific, "6.6564021122018745e+264"},
 
     // Incorrectly handled by dtoa_milo() (Grisu2), which doesn't achieve shortest round-trip.
+#if FLT_EVAL_METHOD >= 0 && FLT_EVAL_METHOD <= 1
     {4.91e-6, chars_format::scientific, "4.91e-06"},
     {5.547e-6, chars_format::scientific, "5.547e-06"},
+#endif
+    {0x1.4981285e98e79p-18, chars_format::scientific, "4.91e-06"},
+    {0x1.7440bbff418b9p-18, chars_format::scientific, "5.547e-06"},
 
     // Test hexfloat corner cases.
     {0x1.728p+0, chars_format::hex, "1.728p+0"}, // instead of "2.e5p-1"
@@ -5537,10 +5552,16 @@ inline constexpr double_to_chars_testcase double_scientific_precision_to_chars_t
         "9."
         "9999999999999992486776161899288204254467086983483846143922597222529419997579302660316349376281765375153005"
         "841365553228283904e+124"},
+#if FLT_EVAL_METHOD >= 0 && FLT_EVAL_METHOD <= 1
     {1e+126, chars_format::scientific, 124,
         "9."
         "9999999999999992486776161899288204254467086983483846143922597222529419997579302660316349376281765375153005"
         "841365553228283904e+125"},
+#endif
+    {0x1.7a2ecc414a03fp+418, chars_format::scientific, 124,
+	"9."
+	"9999999999999992486776161899288204254467086983483846143922597222529419997579302660316349376281765375153005"
+	"841365553228283904e+125"},
     {1e+127, chars_format::scientific, 126,
         "9."
         "9999999999999995492910667849794735953002250873835241184796259825178854502911746221543901522980573008687723"
@@ -29579,9 +29600,14 @@ inline constexpr double_to_chars_testcase double_fixed_precision_to_chars_test_c
     {1e+125, chars_format::fixed, 0,
         "9999999999999999248677616189928820425446708698348384614392259722252941999757930266031634937628176537515300"
         "5841365553228283904"},
+#if FLT_EVAL_METHOD >= 0 && FLT_EVAL_METHOD <= 1
     {1e+126, chars_format::fixed, 0,
         "9999999999999999248677616189928820425446708698348384614392259722252941999757930266031634937628176537515300"
         "58413655532282839040"},
+#endif
+    {0x1.7a2ecc414a03fp+418, chars_format::fixed, 0,
+	"9999999999999999248677616189928820425446708698348384614392259722252941999757930266031634937628176537515300"
+	"58413655532282839040"},
     {1e+127, chars_format::fixed, 0,
         "9999999999999999549291066784979473595300225087383524118479625982517885450291174622154390152298057300868772"
         "377386949310916067328"},

@@ -447,19 +447,6 @@ private:
     assert(ptr.bar.val == 7);
 }
 
-// Used in Tuple.toString
-private template sharedToString(alias field)
-if (is(typeof(field) == shared))
-{
-    static immutable sharedToString = typeof(field).stringof;
-}
-
-private template sharedToString(alias field)
-if (!is(typeof(field) == shared))
-{
-    alias sharedToString = field;
-}
-
 private enum bool distinctFieldNames(names...) = __traits(compiles,
 {
     static foreach (__name; names)
@@ -559,6 +546,14 @@ private template isBuildableFrom(U)
     enum isBuildableFrom(T) = isBuildable!(T, U);
 }
 
+private enum hasCopyCtor(T) = __traits(hasCopyConstructor, T);
+
+// T is expected to be an instantiation of Tuple.
+private template noMemberHasCopyCtor(T)
+{
+    import std.meta : anySatisfy;
+    enum noMemberHasCopyCtor = !anySatisfy!(hasCopyCtor, T.Types);
+}
 
 /**
 _Tuple of values, for example $(D Tuple!(int, string)) is a record that
@@ -745,7 +740,8 @@ if (distinctFieldNames!(Specs))
          *               compatible with the target `Tuple`'s type.
          */
         this(U)(U another)
-        if (areBuildCompatibleTuples!(typeof(this), U))
+        if (areBuildCompatibleTuples!(typeof(this), U) &&
+            (noMemberHasCopyCtor!(typeof(this)) || !is(Unqual!U == Unqual!(typeof(this)))))
         {
             field[] = another.field[];
         }
@@ -971,24 +967,35 @@ if (distinctFieldNames!(Specs))
         {
             import std.algorithm.mutation : swap;
 
-            static if (is(R : Tuple!Types) && !__traits(isRef, rhs) && isTuple!R)
+            /*
+                This optimization caused compilation failures with no error message available:
+
+                > Error: unknown, please file report on issues.dlang.org
+                > std/sumtype.d(1262): Error: template instance `std.sumtype.SumType!(Flag, Tuple!(This*))` error instantiating
+            */
+            version (none)
             {
-                if (__ctfe)
+                static if (is(R == Tuple!Types) && !__traits(isRef, rhs) && isTuple!R)
                 {
-                    // Cannot use swap at compile time
-                    field[] = rhs.field[];
+                    if (__ctfe)
+                    {
+                        // Cannot use swap at compile time
+                        field[] = rhs.field[];
+                    }
+                    else
+                    {
+                        // Use swap-and-destroy to optimize rvalue assignment
+                        swap!(Tuple!Types)(this, rhs);
+                    }
                 }
                 else
                 {
-                    // Use swap-and-destroy to optimize rvalue assignment
-                    swap!(Tuple!Types)(this, rhs);
+                    // Do not swap; opAssign should be called on the fields.
+                    field[] = rhs.field[];
                 }
             }
-            else
-            {
-                // Do not swap; opAssign should be called on the fields.
-                field[] = rhs.field[];
-            }
+
+            field[] = rhs.field[];
             return this;
         }
 
@@ -1287,11 +1294,11 @@ if (distinctFieldNames!(Specs))
          * Returns:
          *     The string representation of this `Tuple`.
          */
-        string toString()() const
+        string toString()()
         {
             import std.array : appender;
             auto app = appender!string();
-            this.toString((const(char)[] chunk) => app ~= chunk);
+            toString((const(char)[] chunk) => app ~= chunk);
             return app.data;
         }
 
@@ -1313,14 +1320,14 @@ if (distinctFieldNames!(Specs))
          *     sink = A `char` accepting delegate
          *     fmt = A $(REF FormatSpec, std,format)
          */
-        void toString(DG)(scope DG sink) const
+        void toString(DG)(scope DG sink)
         {
             auto f = FormatSpec!char();
             toString(sink, f);
         }
 
         /// ditto
-        void toString(DG, Char)(scope DG sink, scope const ref FormatSpec!Char fmt) const
+        void toString(DG, Char)(scope DG sink, scope const ref FormatSpec!Char fmt)
         {
             import std.format : format, FormatException;
             import std.format.write : formattedWrite;
@@ -1335,20 +1342,12 @@ if (distinctFieldNames!(Specs))
                         {
                             sink(fmt.sep);
                         }
-                        // TODO: Change this once formattedWrite() works for shared objects.
-                        static if (is(Type == class) && is(Type == shared))
-                        {
-                            sink(Type.stringof);
-                        }
-                        else
-                        {
-                            formattedWrite(sink, fmt.nested, this.field[i]);
-                        }
+                        formattedWrite(sink, fmt.nested, this.field[i]);
                     }
                 }
                 else
                 {
-                    formattedWrite(sink, fmt.nested, staticMap!(sharedToString, this.expand));
+                    formattedWrite(sink, fmt.nested, this.expand);
                 }
             }
             else if (fmt.spec == 's')
@@ -1363,15 +1362,8 @@ if (distinctFieldNames!(Specs))
                     {
                         sink(separator);
                     }
-                    // TODO: Change this once format() works for shared objects.
-                    static if (is(Type == class) && is(Type == shared))
-                    {
-                        sink(Type.stringof);
-                    }
-                    else
-                    {
-                        sink(format!("%(%s%)")(only(field[i])));
-                    }
+                    // Among other things, using "only" causes string-fields to be inside quotes in the result
+                    sink.formattedWrite!("%(%s%)")(only(field[i]));
                 }
                 sink(footer);
             }
@@ -1655,6 +1647,42 @@ if (distinctFieldNames!(Specs))
     Tuple!(MyStruct) t;
 }
 
+// https://issues.dlang.org/show_bug.cgi?id=24465
+@safe unittest
+{
+    {
+        static struct S
+        {
+            this(ref return scope inout(S) rhs) scope @trusted inout pure nothrow {}
+        }
+
+        static void foo(Tuple!S)
+        {
+        }
+
+        Tuple!S t;
+        foo(t);
+
+        auto t2 = Tuple!S(t);
+    }
+
+    {
+        static struct S {}
+        Tuple!S t;
+        auto t2 = Tuple!S(t);
+
+        // This can't be done if Tuple has a copy constructor, because it's not
+        // allowed to have an rvalue constructor at that point, and the
+        // compiler doesn't to something intelligent like transform it into a
+        // move instead. However, it has been legal with Tuple for a while
+        // (maybe even since it was first added) when the type doesn't have a
+        // copy constructor, so this is testing to make sure that the fix to
+        // make copy constructors work doesn't mess up the rvalue constructor
+        // when none of the Tuple's members have copy constructors.
+        auto t3 = Tuple!S(Tuple!S.init);
+    }
+}
+
 /**
     Creates a copy of a $(LREF Tuple) with its fields in _reverse order.
 
@@ -1756,7 +1784,36 @@ private template ReverseTupleSpecs(T...)
         Tuple!(int, shared A) nosh;
         nosh[0] = 5;
         assert(nosh[0] == 5 && nosh[1] is null);
-        assert(nosh.to!string == "Tuple!(int, shared(A))(5, shared(A))");
+
+        assert(nosh.to!string == "Tuple!(int, shared(A))(5, null)");
+    }
+    {
+        // Shared, without fmt.sep
+        import std.format;
+        import std.algorithm.searching;
+        static class A {int i = 1;}
+        Tuple!(int, shared A) nosh;
+        nosh[0] = 5;
+        assert(nosh[0] == 5 && nosh[1] is null);
+
+        // needs trusted, because Object.toString() isn't @safe
+        auto f = ()@trusted => format!("%(%s, %s%)")(nosh);
+        assert(f() == "5, null");
+        nosh[1] = new shared A();
+        // Currently contains the mangled type name
+        // 5, const(std.typecons.__unittest_L1750_C7.A)
+        // This assert is not necessarily to prescribe this behaviour, only to signal if there is a breaking change.
+        // See https://github.com/dlang/phobos/issues/9811
+        auto s = f();
+        assert(s.canFind("__unittest_L"));
+        assert(s.endsWith(".A)"));
+    }
+    {
+        static struct A {}
+        Tuple!(int, shared A*) nosh;
+        nosh[0] = 5;
+        assert(nosh[0] == 5 && nosh[1] is null);
+        assert(nosh.to!string == "Tuple!(int, shared(A*))(5, null)");
     }
     {
         Tuple!(int, string) t;
@@ -1764,6 +1821,40 @@ private template ReverseTupleSpecs(T...)
         t[1] = "str";
         assert(t[0] == 10 && t[1] == "str");
         assert(t.to!string == `Tuple!(int, string)(10, "str")`, t.to!string);
+    }
+    /* https://github.com/dlang/phobos/issues/9811
+    * Note: This is just documenting current behaviour, dependent on `std.format` implementation
+    * details. None of this is defined in a spec or should be regarded as rigid.
+    */
+    {
+        static struct X
+        {
+            /** Usually, toString() should be const where possible.
+             * But as long as the tuple is also non-const, this will work
+             */
+            string toString()
+            {
+                return "toString non-const";
+            }
+        }
+        assert(tuple(X()).to!string == "Tuple!(X)(toString non-const)");
+        const t = tuple(X());
+        // This is an implementation detail of `format`
+        // if the tuple is const, than non-const toString will not be called
+        assert(t.to!string == "const(Tuple!(X))(const(X)())");
+
+        static struct X2
+        {
+            string toString() const /* const toString will work in more cases */
+            {
+                return "toString const";
+            }
+        }
+        assert(tuple(X2()).to!string == "Tuple!(X2)(toString const)");
+        const t2 = tuple(X2());
+        // This is an implementation detail of `format`
+        // if the tuple is const, than non-const toString will not be called
+        assert(t2.to!string == "const(Tuple!(X2))(toString const)");
     }
     {
         Tuple!(int, "a", double, "b") x;
@@ -2190,12 +2281,14 @@ template tuple(Names...)
             // e.g. Tuple!(int, "x", string, "y")
             template Interleave(A...)
             {
-                template and(B...) if (B.length == 1)
+                template and(B...)
+                if (B.length == 1)
                 {
                     alias and = AliasSeq!(A[0], B[0]);
                 }
 
-                template and(B...) if (B.length != 1)
+                template and(B...)
+                if (B.length != 1)
                 {
                     alias and = AliasSeq!(A[0], B[0],
                         Interleave!(A[1..$]).and!(B[1..$]));
@@ -2332,7 +2425,7 @@ break the soundness of D's type system and does not incur any of the
 risks usually associated with `cast`.
 
 Params:
-    T = An object, interface, array slice type, or associative array type.
+    T = Any type.
  */
 template Rebindable(T)
 if (is(T == class) || is(T == interface) || isDynamicArray!T || isAssociativeArray!T)
@@ -2395,15 +2488,155 @@ if (is(T == class) || is(T == interface) || isDynamicArray!T || isAssociativeArr
     static assert(!__traits(compiles, &r.get()));
 }
 
+/// ditto
+struct Rebindable(T)
+if (!is(T == class) && !is(T == interface) && !isDynamicArray!T && !isAssociativeArray!T)
+{
+private:
+    static if (isAssignable!(typeof(cast() T.init)))
+    {
+        enum useQualifierCast = true;
+
+        typeof(cast() T.init) data;
+    }
+    else
+    {
+        enum useQualifierCast = false;
+
+        align(T.alignof)
+        static struct Payload
+        {
+            static if (hasIndirections!T)
+            {
+                void[T.sizeof] data;
+            }
+            else
+            {
+                ubyte[T.sizeof] data;
+            }
+        }
+
+        Payload data;
+    }
+
+public:
+
+    static if (!__traits(compiles, { T value; }))
+    {
+        @disable this();
+    }
+
+    /**
+     * Constructs a `Rebindable` from a given value.
+     */
+    this(T value) @trusted
+    {
+        static if (useQualifierCast)
+        {
+            this.data = cast() value;
+        }
+        else
+        {
+            set(value);
+        }
+    }
+
+    /**
+     * Overwrites the currently stored value with `value`.
+     */
+    void opAssign(this This)(T value) @trusted
+    {
+        clear;
+        set(value);
+    }
+
+    /**
+     * Returns the value currently stored in the `Rebindable`.
+     */
+    T get(this This)() @property @trusted
+    {
+        static if (useQualifierCast)
+        {
+            return cast(T) this.data;
+        }
+        else
+        {
+            return *cast(T*) &this.data;
+        }
+    }
+
+    static if (!useQualifierCast)
+    {
+        ~this() @trusted
+        {
+            clear;
+        }
+    }
+
+    ///
+    alias get this;
+
+private:
+
+    void set(this This)(T value)
+    {
+        static if (useQualifierCast)
+        {
+            this.data = cast() value;
+        }
+        else
+        {
+            // As we're escaping a copy of `value`, deliberately leak a copy:
+            static union DontCallDestructor
+            {
+                T value;
+            }
+            DontCallDestructor copy = DontCallDestructor(value);
+            this.data = *cast(Payload*) &copy;
+        }
+    }
+
+    void clear(this This)()
+    {
+        // work around reinterpreting cast being impossible in CTFE
+        if (__ctfe)
+        {
+            return;
+        }
+
+        // call possible struct destructors
+        .destroy!(No.initialize)(*cast(T*) &this.data);
+    }
+}
+
+/// Using Rebindable in a generic algorithm:
 @safe unittest
 {
-    class CustomToHash
+    import std.range.primitives : front, popFront;
+
+    // simple version of std.algorithm.searching.maxElement
+    typeof(R.init.front) maxElement(R)(R r)
     {
-        override size_t toHash() const nothrow @trusted { return 42; }
+        auto max = rebindable(r.front);
+        r.popFront;
+        foreach (e; r)
+            if (e > max)
+                max = e; // Rebindable allows const-correct reassignment
+        return max;
     }
-    Rebindable!(immutable(CustomToHash)) a = new immutable CustomToHash();
-    assert(a.toHash() == 42, "Rebindable!A should offer toHash()"
-        ~ " by forwarding to A.toHash().");
+    struct S
+    {
+        char[] arr;
+        alias arr this; // for comparison
+    }
+    // can't convert to mutable
+    const S cs;
+    static assert(!__traits(compiles, { S s = cs; }));
+
+    alias CS = const S;
+    CS[] arr = [CS("harp"), CS("apple"), CS("pot")];
+    CS ms = maxElement(arr);
+    assert(ms.arr == "pot");
 }
 
 // https://issues.dlang.org/show_bug.cgi?id=18615
@@ -2453,6 +2686,34 @@ if (is(T == class) || is(T == interface) || isDynamicArray!T || isAssociativeArr
         ~ " comparable against Object itself and use Object.opEquals.");
 }
 
+///
+@system unittest
+{
+    static struct S
+    {
+        int* ptr;
+    }
+    S s = S(new int);
+
+    const cs = s;
+    // Can't assign s.ptr to cs.ptr
+    static assert(!__traits(compiles, {s = cs;}));
+
+    Rebindable!(const S) rs = s;
+    assert(rs.ptr is s.ptr);
+    // rs.ptr is const
+    static assert(!__traits(compiles, {rs.ptr = null;}));
+
+    // Can't assign s.ptr to rs.ptr
+    static assert(!__traits(compiles, {s = rs;}));
+
+    const S cs2 = rs;
+    // Rebind rs
+    rs = cs2;
+    rs = S();
+    assert(rs.ptr is null);
+}
+
 // https://issues.dlang.org/show_bug.cgi?id=18755
 @safe unittest
 {
@@ -2473,13 +2734,145 @@ if (is(T == class) || is(T == interface) || isDynamicArray!T || isAssociativeArr
     }));
 }
 
+@safe unittest
+{
+    class CustomToHash
+    {
+        override size_t toHash() const nothrow @trusted { return 42; }
+    }
+    Rebindable!(immutable(CustomToHash)) a = new immutable CustomToHash();
+    assert(a.toHash() == 42, "Rebindable!A should offer toHash()"
+        ~ " by forwarding to A.toHash().");
+}
+
+// Test Rebindable!immutable
+@safe unittest
+{
+    static struct S
+    {
+        int* ptr;
+    }
+    S s = S(new int);
+
+    Rebindable!(immutable S) ri = S(new int);
+    assert(ri.ptr !is null);
+    static assert(!__traits(compiles, {ri.ptr = null;}));
+
+    // ri is not compatible with mutable S
+    static assert(!__traits(compiles, {s = ri;}));
+    static assert(!__traits(compiles, {ri = s;}));
+
+    auto ri2 = ri;
+    assert(ri2.ptr == ri.ptr);
+
+    const S cs3 = ri;
+    static assert(!__traits(compiles, {ri = cs3;}));
+
+    immutable S si = ri;
+    // Rebind ri
+    ri = si;
+    ri = S();
+    assert(ri.ptr is null);
+
+    // Test RB!immutable -> RB!const
+    Rebindable!(const S) rc = ri;
+    assert(rc.ptr is null);
+    ri = S(new int);
+    rc = ri;
+    assert(rc.ptr !is null);
+
+    // test rebindable, opAssign
+    rc.destroy;
+    assert(rc.ptr is null);
+    rc = rebindable(cs3);
+    rc = rebindable(si);
+    assert(rc.ptr !is null);
+
+    ri.destroy;
+    assert(ri.ptr is null);
+    ri = rebindable(si);
+    assert(ri.ptr !is null);
+}
+
+// Test disabled default ctor
+@safe unittest
+{
+    static struct ND
+    {
+        int i;
+        @disable this();
+        this(int i) inout {this.i = i;}
+    }
+    static assert(!__traits(compiles, Rebindable!ND()));
+
+    Rebindable!(const ND) rb = const ND(1);
+    assert(rb.i == 1);
+    rb = immutable ND(2);
+    assert(rb.i == 2);
+    rb = rebindable(const ND(3));
+    assert(rb.i == 3);
+    static assert(!__traits(compiles, rb.i++));
+}
+
+// Test copying
+@safe unittest
+{
+    int del;
+    int post;
+    struct S
+    {
+        int* ptr;
+        int level;
+        this(this)
+        {
+            post++;
+            level++;
+        }
+        ~this()
+        {
+            del++;
+        }
+    }
+
+    // test ref count
+    {
+        Rebindable!S rc = S(new int);
+    }
+    assert(post == del - 1);
+}
+
+@safe unittest
+{
+    int del;
+    int post;
+    struct S
+    {
+        immutable int x;
+        int level;
+        this(this)
+        {
+            post++;
+            level++;
+        }
+        ~this()
+        {
+            del++;
+        }
+    }
+
+    // test ref count
+    {
+        Rebindable!S rc = S(0);
+    }
+    assert(post == del - 1);
+}
+
 /**
 Convenience function for creating a `Rebindable` using automatic type
 inference.
 
 Params:
-    obj = A reference to an object, interface, associative array, or an array slice
-          to initialize the `Rebindable` with.
+    obj = A reference to a value to initialize the `Rebindable` with.
 
 Returns:
     A newly constructed `Rebindable` initialized with the given reference.
@@ -2512,6 +2905,26 @@ if (is(T == class) || is(T == interface) || isDynamicArray!T || isAssociativeArr
 
     const c3 = c2.get;
     assert(c3.payload == 2);
+}
+
+/// ditto
+Rebindable!T rebindable(T)(T value)
+if (!is(T == class) && !is(T == interface) && !isDynamicArray!T && !isAssociativeArray!T
+    && !is(T : Rebindable!U, U))
+{
+    return Rebindable!T(value);
+}
+
+///
+@safe unittest
+{
+    immutable struct S
+    {
+        int[] array;
+    }
+    auto s1 = [3].idup.rebindable;
+    s1 = [4].idup.rebindable;
+    assert(s1 == [4]);
 }
 
 /**
@@ -2626,10 +3039,6 @@ Rebindable!T rebindable(T)(Rebindable!T obj)
         static assert(is(Rebindable!(T[]) == T[]));
     }
 
-    // https://issues.dlang.org/show_bug.cgi?id=12046
-    static assert(!__traits(compiles, Rebindable!(int[1])));
-    static assert(!__traits(compiles, Rebindable!(const int[1])));
-
     // Pull request 3341
     Rebindable!(immutable int[int]) pr3341 = [123:345];
     assert(pr3341[123] == 345);
@@ -2637,6 +3046,472 @@ Rebindable!T rebindable(T)(Rebindable!T obj)
     pr3341 = pr3341_aa;
     assert(pr3341[321] == 543);
     assert(rebindable(pr3341_aa)[321] == 543);
+}
+
+package(std) struct Rebindable2(T)
+{
+private:
+    static if (isAssignable!(typeof(cast() T.init)))
+    {
+        enum useQualifierCast = true;
+
+        typeof(cast() T.init) data;
+    }
+    else
+    {
+        enum useQualifierCast = false;
+
+        align(T.alignof)
+        static struct Payload
+        {
+            static if (hasIndirections!T)
+            {
+                void[T.sizeof] data;
+            }
+            else
+            {
+                ubyte[T.sizeof] data;
+            }
+        }
+
+        Payload data;
+    }
+
+public:
+
+    static if (!__traits(compiles, { T value; }))
+    {
+        @disable this();
+    }
+
+    /**
+     * Constructs a `Rebindable2` from a given value.
+     */
+    this(T value) @trusted
+    {
+        static if (useQualifierCast)
+        {
+            this.data = cast() value;
+        }
+        else
+        {
+            set(value);
+        }
+    }
+
+    /**
+     * Overwrites the currently stored value with `value`.
+     */
+    void opAssign(this This)(T value) @trusted
+    {
+        clear;
+        set(value);
+    }
+
+    /**
+     * Returns the value currently stored in the `Rebindable2`.
+     */
+    T get(this This)() @property @trusted
+    {
+        static if (useQualifierCast)
+        {
+            return cast(T) this.data;
+        }
+        else
+        {
+            return *cast(T*) &this.data;
+        }
+    }
+
+    /// Ditto
+    inout(T) get() inout @property @trusted
+    {
+        static if (useQualifierCast)
+        {
+            return cast(inout(T)) this.data;
+        }
+        else
+        {
+            return *cast(inout(T)*) &this.data;
+        }
+    }
+
+    static if (!useQualifierCast)
+    {
+        ~this() @trusted
+        {
+            clear;
+        }
+    }
+
+private:
+
+    void set(this This)(T value)
+    {
+        static if (useQualifierCast)
+        {
+            static if (hasElaborateAssign!T)
+            {
+                import core.lifetime : copyEmplace;
+                copyEmplace(cast() value, this.data);
+            }
+            else
+                this.data = cast() value;
+        }
+        else
+        {
+            import core.lifetime : copyEmplace;
+            copyEmplace(cast() value, cast() *cast(T*) &this.data);
+        }
+    }
+
+    void clear(this This)()
+    {
+        // work around reinterpreting cast being impossible in CTFE
+        if (__ctfe)
+        {
+            return;
+        }
+
+        // call possible struct destructors
+        static if (is(T == struct))
+        {
+            .destroy!(No.initialize)(*cast(T*) &this.data);
+        }
+    }
+}
+
+package(std) Rebindable2!T rebindable2(T)(T value)
+{
+    return Rebindable2!T(value);
+}
+
+// Verify that the destructor is called properly if there is one.
+@system unittest
+{
+    {
+        bool destroyed;
+
+        struct S
+        {
+            int i;
+
+            this(int i) @safe
+            {
+                this.i = i;
+            }
+
+            ~this() @safe
+            {
+                destroyed = true;
+            }
+        }
+
+        {
+            auto foo = rebindable2(S(42));
+
+            // Whether destruction has occurred here depends on whether the
+            // temporary gets moved or not, so we won't assume that it has or
+            // hasn't happened. What we care about here is that foo gets destroyed
+            // properly when it leaves the scope.
+            destroyed = false;
+        }
+        assert(destroyed);
+
+        {
+            auto foo = rebindable2(const S(42));
+            destroyed = false;
+        }
+        assert(destroyed);
+    }
+
+    // Test for double destruction with qualifer cast being used
+    {
+        static struct S
+        {
+            int i;
+            bool destroyed;
+
+            this(int i) @safe
+            {
+                this.i = i;
+            }
+
+            ~this() @safe
+            {
+                destroyed = true;
+            }
+
+            @safe invariant
+            {
+                assert(!destroyed);
+            }
+        }
+
+        {
+            auto foo = rebindable2(S(42));
+            assert(typeof(foo).useQualifierCast);
+            assert(foo.data.i == 42);
+            assert(!foo.data.destroyed);
+        }
+        {
+            auto foo = rebindable2(S(42));
+            destroy(foo);
+        }
+        {
+            auto foo = rebindable2(const S(42));
+            assert(typeof(foo).useQualifierCast);
+            assert(foo.data.i == 42);
+            assert(!foo.data.destroyed);
+        }
+        {
+            auto foo = rebindable2(const S(42));
+            destroy(foo);
+        }
+    }
+
+    // Test for double destruction without qualifer cast being used
+    {
+        static struct S
+        {
+            int i;
+            bool destroyed;
+
+            this(int i) @safe
+            {
+                this.i = i;
+            }
+
+            ~this() @safe
+            {
+                destroyed = true;
+            }
+
+            @disable ref S opAssign()(auto ref S rhs);
+
+            @safe invariant
+            {
+                assert(!destroyed);
+            }
+        }
+
+        {
+            auto foo = rebindable2(S(42));
+            assert(!typeof(foo).useQualifierCast);
+            assert((cast(S*)&(foo.data)).i == 42);
+            assert(!(cast(S*)&(foo.data)).destroyed);
+        }
+        {
+            auto foo = rebindable2(S(42));
+            destroy(foo);
+        }
+    }
+}
+
+// Verify that if there is an overloaded assignment operator, it's not assigned
+// to garbage.
+@safe unittest
+{
+    static struct S
+    {
+        int i;
+        bool destroyed;
+
+        this(int i) @safe
+        {
+            this.i = i;
+        }
+
+        ~this() @safe
+        {
+            destroyed = true;
+        }
+
+        ref opAssign()(auto ref S rhs)
+        {
+            assert(!this.destroyed);
+            this.i = rhs.i;
+            return this;
+        }
+    }
+
+    {
+        auto foo = rebindable2(S(42));
+        foo = S(99);
+        assert(foo.data.i == 99);
+    }
+    {
+        auto foo = rebindable2(S(42));
+        foo = const S(99);
+        assert(foo.data.i == 99);
+    }
+}
+
+// Verify that postblit or copy constructor is called properly if there is one.
+@system unittest
+{
+    // postblit with type qualifier cast
+    {
+        static struct S
+        {
+            int i;
+            static bool copied;
+
+            this(this) @safe
+            {
+                copied = true;
+            }
+        }
+
+        {
+            auto foo = rebindable2(S(42));
+
+            // Whether a copy has occurred here depends on whether the
+            // temporary gets moved or not, so we won't assume that it has or
+            // hasn't happened. What we care about here is that foo gets copied
+            // properly when we copy it below.
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+        }
+        {
+            auto foo = rebindable2(const S(42));
+            assert(typeof(foo).useQualifierCast);
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+        }
+    }
+
+    // copy constructor with type qualifier cast
+    {
+        static struct S
+        {
+            int i;
+            static bool copied;
+
+            this(ref inout S rhs) @safe inout
+            {
+                this.i = rhs.i;
+                copied = true;
+            }
+        }
+
+        {
+            auto foo = rebindable2(S(42));
+            assert(typeof(foo).useQualifierCast);
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+        }
+        {
+            auto foo = rebindable2(const S(42));
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+        }
+    }
+
+    // FIXME https://issues.dlang.org/show_bug.cgi?id=24829
+
+    // Making this work requires either reworking how the !useQualiferCast
+    // version works so that the compiler can correctly generate postblit
+    // constructors and copy constructors as appropriate, or an explicit
+    // postblit or copy constructor needs to be added for such cases, which
+    // gets pretty complicated if we want to correctly add the same attributes
+    // that T's postblit or copy constructor has.
+
+    /+
+    // postblit without type qualifier cast
+    {
+        static struct S
+        {
+            int* ptr;
+            static bool copied;
+
+            this(int i)
+            {
+                ptr = new int(i);
+            }
+
+            this(this) @safe
+            {
+                if (ptr !is null)
+                    ptr = new int(*ptr);
+                copied = true;
+            }
+
+            @disable ref S opAssign()(auto ref S rhs);
+        }
+
+        {
+            auto foo = rebindable2(S(42));
+            assert(!typeof(foo).useQualifierCast);
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+            assert(*(cast(S*)&(foo.data)).ptr == *(cast(S*)&(bar.data)).ptr);
+            assert((cast(S*)&(foo.data)).ptr !is (cast(S*)&(bar.data)).ptr);
+        }
+        {
+            auto foo = rebindable2(const S(42));
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+            assert(*(cast(S*)&(foo.data)).ptr == *(cast(S*)&(bar.data)).ptr);
+            assert((cast(S*)&(foo.data)).ptr !is (cast(S*)&(bar.data)).ptr);
+        }
+    }
+
+    // copy constructor without type qualifier cast
+    {
+        static struct S
+        {
+            int* ptr;
+            static bool copied;
+
+            this(int i)
+            {
+                ptr = new int(i);
+            }
+
+            this(ref inout S rhs) @safe inout
+            {
+                if (rhs.ptr !is null)
+                    ptr = new inout int(*rhs.ptr);
+                copied = true;
+            }
+
+            @disable ref S opAssign()(auto ref S rhs);
+        }
+
+        {
+            auto foo = rebindable2(S(42));
+            assert(!typeof(foo).useQualifierCast);
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+            assert(*(cast(S*)&(foo.data)).ptr == *(cast(S*)&(bar.data)).ptr);
+            assert((cast(S*)&(foo.data)).ptr !is (cast(S*)&(bar.data)).ptr);
+        }
+        {
+            auto foo = rebindable2(const S(42));
+            S.copied = false;
+
+            auto bar = foo;
+            assert(S.copied);
+            assert(*(cast(S*)&(foo.data)).ptr == *(cast(S*)&(bar.data)).ptr);
+            assert((cast(S*)&(foo.data)).ptr !is (cast(S*)&(bar.data)).ptr);
+        }
+    }
+    +/
 }
 
 /**
@@ -2806,11 +3681,19 @@ struct Nullable(T)
      * Params:
      *     value = The value to initialize this `Nullable` with.
      */
-    this(inout T value) inout
-    {
-        _value.payload = value;
-        _isNull = false;
-    }
+    static if (isCopyable!T)
+        this(inout T value) inout
+        {
+            _value.payload = value;
+            _isNull = false;
+        }
+    else
+        this(T value) inout
+        {
+            import std.algorithm.mutation : move;
+            _value.payload = move(value);
+            _isNull = false;
+        }
 
     static if (hasElaborateDestructor!T)
     {
@@ -2818,11 +3701,16 @@ struct Nullable(T)
         {
             if (!_isNull)
             {
-                destroy(_value.payload);
+                import std.traits : Unqual;
+                auto ptr = () @trusted { return cast(Unqual!T*) &_value.payload; }();
+                destroy!false(*ptr);
             }
         }
     }
 
+    static if (!isCopyable!T)
+        @disable this(this);
+    else
     static if (__traits(hasPostblit, T))
     {
         this(this)
@@ -3033,6 +3921,35 @@ struct Nullable(T)
     }
 
     /**
+     * Returns true if `this` has a value, otherwise false.
+     *
+     * Allows a `Nullable` to be used as the condition in an `if` statement:
+     *
+     * ---
+     * if (auto result = functionReturningNullable())
+     * {
+     *     doSomethingWith(result.get);
+     * }
+     * ---
+     */
+    bool opCast(T : bool)() const
+    {
+        return !isNull;
+    }
+
+    /// Prevents `opCast` from disabling built-in conversions.
+    auto ref T opCast(T, this This)()
+    if (is(This : T) || This.sizeof == T.sizeof)
+    {
+        static if (is(This : T))
+            // Convert implicitly
+            return this;
+        else
+            // Reinterpret
+            return *cast(T*) &this;
+    }
+
+    /**
      * Forces `this` to the null state.
      */
     void nullify()()
@@ -3061,22 +3978,18 @@ struct Nullable(T)
      * Params:
      *     value = A value of type `T` to assign to this `Nullable`.
      */
-    Nullable opAssign()(T value)
+    ref Nullable opAssign()(T value) return
     {
         import std.algorithm.mutation : moveEmplace, move;
-
-        // the lifetime of the value in copy shall be managed by
-        // this Nullable, so we must avoid calling its destructor.
-        auto copy = DontCallDestructorT(value);
 
         if (_isNull)
         {
             // trusted since payload is known to be uninitialized.
-            () @trusted { moveEmplace(copy.payload, _value.payload); }();
+            () @trusted { moveEmplace(value, _value.payload); }();
         }
         else
         {
-            move(copy.payload, _value.payload);
+            move(value, _value.payload);
         }
         _isNull = false;
         return this;
@@ -3154,12 +4067,14 @@ struct Nullable(T)
     alias back = front;
 
     /// ditto
+    static if (isCopyable!T)
     @property inout(typeof(this)) save() inout
     {
         return this;
     }
 
     /// ditto
+    static if (isCopyable!T)
     inout(typeof(this)) opIndex(size_t[2] dim) inout
     in (dim[0] <= length && dim[1] <= length && dim[1] >= dim[0])
     {
@@ -3638,16 +4553,12 @@ auto nullable(T)(T t)
 
     struct Test
     {
-        bool b;
-
-        nothrow invariant { assert(b == true); }
-
         SysTime _st;
 
         static bool destroyed;
 
         @disable this();
-        this(bool b) { this.b = b; }
+        this(int _dummy) {}
         ~this() @safe { destroyed = true; }
 
         // mustn't call opAssign on Test.init in Nullable!Test, because the invariant
@@ -3659,7 +4570,7 @@ auto nullable(T)(T t)
     {
         Nullable!Test nt;
 
-        nt = Test(true);
+        nt = Test(1);
 
         // destroy value
         Test.destroyed = false;
@@ -3862,6 +4773,57 @@ auto nullable(T)(T t)
     b.popFront();
     assert(!a.empty);
     assert(b.empty);
+}
+
+// https://issues.dlang.org/show_bug.cgi?id=24403
+@safe unittest
+{
+    static bool destroyed;
+    static struct S { ~this() { destroyed = true; } }
+
+    {
+        Nullable!S s = S.init;
+        destroyed = false;
+    }
+    assert(destroyed);
+
+    {
+        Nullable!(const S) s = S.init;
+        destroyed = false;
+    }
+    assert(destroyed);
+
+    {
+        Nullable!(immutable S) s = S.init;
+        destroyed = false;
+    }
+    assert(destroyed);
+
+    {
+        Nullable!(shared S) s = S.init;
+        destroyed = false;
+    }
+    assert(destroyed);
+}
+
+// https://issues.dlang.org/show_bug.cgi?id=22293
+@safe unittest
+{
+    Nullable!int empty;
+    Nullable!int full = 123;
+
+    assert(cast(bool) empty == false);
+    assert(cast(bool) full == true);
+
+    if (empty) assert(0);
+    if (!full) assert(0);
+}
+
+// check that opCast doesn't break unsafe casts
+@system unittest
+{
+    Nullable!(const(int*)) a;
+    auto result = cast(immutable(Nullable!(int*))) a;
 }
 
 /**
@@ -4549,7 +5511,7 @@ Params:
             non-release mode.
  */
     void opAssign()(T value)
-        if (isAssignable!T) //@@@9416@@@
+    if (isAssignable!T) //@@@9416@@@
     {
         enum message = "Called `opAssign' on null NullableRef!" ~ T.stringof ~ ".";
         assert(!isNull, message);
@@ -4884,15 +5846,17 @@ nothrow pure @safe unittest
     }
 }
 
-// / ditto
+/// ditto
 class NotImplementedError : Error
 {
+    ///
     this(string method) nothrow pure @safe
     {
         super(method ~ " is not implemented");
     }
 }
 
+///
 @system unittest
 {
     import std.exception : assertThrown;
@@ -6913,7 +7877,8 @@ Constructor that initializes the payload.
 
 Postcondition: `refCountedStore.isInitialized`
  */
-    this(A...)(auto ref A args) if (A.length > 0)
+    this(A...)(auto ref A args)
+    if (A.length > 0)
     out
     {
         assert(refCountedStore.isInitialized);
@@ -7090,11 +8055,11 @@ pure @system unittest
     foreach (MyRefCounted; AliasSeq!(SafeRefCounted, RefCounted))
     {
         MyRefCounted!int* p;
+        auto rc1 = MyRefCounted!int(5);
+        p = &rc1;
+        assert(rc1 == 5);
+        assert(rc1._refCounted._store._count == 1);
         {
-            auto rc1 = MyRefCounted!int(5);
-            p = &rc1;
-            assert(rc1 == 5);
-            assert(rc1._refCounted._store._count == 1);
             auto rc2 = rc1;
             assert(rc1._refCounted._store._count == 2);
             // Reference semantics
@@ -7105,6 +8070,8 @@ pure @system unittest
             rc1 = rc2;
             assert(rc1._refCounted._store._count == 2);
         }
+        // Artificially end scope of rc1 by calling ~this() explicitly
+        rc1.__xdtor();
         assert(p._refCounted._store == null);
 
         // [Safe]RefCounted as a member
@@ -7344,7 +8311,8 @@ template borrow(alias fun)
 {
     import std.functional : unaryFun;
 
-    auto ref borrow(RC)(RC refCount) if
+    auto ref borrow(RC)(RC refCount)
+    if
     (
         isInstanceOf!(SafeRefCounted, RC)
         && is(typeof(unaryFun!fun(refCount.refCountedPayload)))
@@ -7553,7 +8521,7 @@ mixin template Proxy(alias a)
         }
 
         bool opEquals(T)(T b)
-            if (is(ValueType : T) || is(typeof(a.opEquals(b))) || is(typeof(b.opEquals(a))))
+        if (is(ValueType : T) || is(typeof(a.opEquals(b))) || is(typeof(b.opEquals(a))))
         {
             static if (is(typeof(a.opEquals(b))))
                 return a.opEquals(b);
@@ -7577,7 +8545,7 @@ mixin template Proxy(alias a)
         }
 
         int opCmp(T)(auto ref const T b)
-            if (is(ValueType : T) || is(typeof(a.opCmp(b))) || is(typeof(b.opCmp(a))))
+        if (is(ValueType : T) || is(typeof(a.opCmp(b))) || is(typeof(b.opCmp(a))))
         {
             static if (is(typeof(a.opCmp(b))))
                 return a.opCmp(b);
@@ -7687,7 +8655,8 @@ mixin template Proxy(alias a)
         }
     }
 
-    auto ref opAssign     (this X, V      )(auto ref V v) if (!is(V == typeof(this))) { return a       = v; }
+    auto ref opAssign     (this X, V      )(auto ref V v)
+    if (!is(V == typeof(this))) { return a       = v; }
     auto ref opIndexAssign(this X, V, D...)(auto ref V v, auto ref D i)               { return a[i]    = v; }
     auto ref opSliceAssign(this X, V      )(auto ref V v)                             { return a[]     = v; }
     auto ref opSliceAssign(this X, V, B, E)(auto ref V v, auto ref B b, auto ref E e) { return a[b .. e] = v; }
@@ -9206,6 +10175,7 @@ Flag!"encryption".no).
 */
 struct Yes
 {
+    ///
     template opDispatch(string name)
     {
         enum opDispatch = Flag!name.yes;
@@ -9216,6 +10186,7 @@ struct Yes
 /// Ditto
 struct No
 {
+    ///
     template opDispatch(string name)
     {
         enum opDispatch = Flag!name.no;
@@ -9354,7 +10325,7 @@ public:
     }
 
     this(T...)(T flags)
-        if (allSatisfy!(isBaseEnumType, T))
+    if (allSatisfy!(isBaseEnumType, T))
     {
         this = flags;
     }
@@ -9365,19 +10336,19 @@ public:
     }
 
     Base opCast(B)() const
-        if (is(Base : B))
+    if (is(Base : B))
     {
         return mValue;
     }
 
     auto opUnary(string op)() const
-        if (op == "~")
+    if (op == "~")
     {
         return BitFlags(cast(E) cast(Base) ~mValue);
     }
 
     auto ref opAssign(T...)(T flags)
-        if (allSatisfy!(isBaseEnumType, T))
+    if (allSatisfy!(isBaseEnumType, T))
     {
         mValue = 0;
         foreach (E flag; flags)
@@ -9418,7 +10389,7 @@ public:
     }
 
     auto opBinary(string op)(BitFlags flags) const
-        if (op == "|" || op == "&")
+    if (op == "|" || op == "&")
     {
         BitFlags result = this;
         result.opOpAssign!op(flags);
@@ -9426,7 +10397,7 @@ public:
     }
 
     auto opBinary(string op)(E flag) const
-        if (op == "|" || op == "&")
+    if (op == "|" || op == "&")
     {
         BitFlags result = this;
         result.opOpAssign!op(flag);
@@ -9434,7 +10405,7 @@ public:
     }
 
     auto opBinaryRight(string op)(E flag) const
-        if (op == "|" || op == "&")
+    if (op == "|" || op == "&")
     {
         return opBinary!op(flag);
     }
@@ -10066,25 +11037,29 @@ struct Ternary
       $(TR $(TD `unknown`) $(TD `unknown`) $(TD) $(TD `unknown`) $(TD `unknown`) $(TD `unknown`))
     )
     */
-    Ternary opUnary(string s)() if (s == "~")
+    Ternary opUnary(string s)()
+    if (s == "~")
     {
         return make((386 >> value) & 6);
     }
 
     /// ditto
-    Ternary opBinary(string s)(Ternary rhs) if (s == "|")
+    Ternary opBinary(string s)(Ternary rhs)
+    if (s == "|")
     {
         return make((25_512 >> (value + rhs.value)) & 6);
     }
 
     /// ditto
-    Ternary opBinary(string s)(Ternary rhs) if (s == "&")
+    Ternary opBinary(string s)(Ternary rhs)
+    if (s == "&")
     {
         return make((26_144 >> (value + rhs.value)) & 6);
     }
 
     /// ditto
-    Ternary opBinary(string s)(Ternary rhs) if (s == "^")
+    Ternary opBinary(string s)(Ternary rhs)
+    if (s == "^")
     {
         return make((26_504 >> (value + rhs.value)) & 6);
     }
@@ -10224,6 +11199,21 @@ unittest
     assert(s2.get().b == 3);
 }
 
+// https://issues.dlang.org/show_bug.cgi?id=24318
+@system unittest
+{
+    static struct S
+    {
+        @disable this(this);
+        int i;
+    }
+
+    Nullable!S s = S(1);
+    assert(s.get().i == 1);
+    s = S(2);
+    assert(s.get().i == 2);
+}
+
 /// The old version of $(LREF SafeRefCounted), before $(LREF borrow) existed.
 /// Old code may be relying on `@safe`ty of some of the member functions which
 /// cannot be safe in the new scheme, and
@@ -10335,7 +11325,8 @@ struct RefCounted(T, RefCountedAutoInitialize autoInit =
         return _refCounted;
     }
 
-    this(A...)(auto ref A args) if (A.length > 0)
+    this(A...)(auto ref A args)
+    if (A.length > 0)
     out
     {
         assert(refCountedStore.isInitialized);
@@ -10375,19 +11366,22 @@ struct RefCounted(T, RefCountedAutoInitialize autoInit =
         swap(_refCounted._store, rhs._refCounted._store);
     }
 
-    void opAssign(T rhs)
+    static if (__traits(compiles, lvalueOf!T = T.init))
     {
-        import std.algorithm.mutation : move;
+        void opAssign(T rhs)
+        {
+            import std.algorithm.mutation : move;
 
-        static if (autoInit == RefCountedAutoInitialize.yes)
-        {
-            _refCounted.ensureInitialized();
+            static if (autoInit == RefCountedAutoInitialize.yes)
+            {
+                _refCounted.ensureInitialized();
+            }
+            else
+            {
+                assert(_refCounted.isInitialized);
+            }
+            move(rhs, _refCounted._store._payload);
         }
-        else
-        {
-            assert(_refCounted.isInitialized);
-        }
-        move(rhs, _refCounted._store._payload);
     }
 
     static if (autoInit == RefCountedAutoInitialize.yes)

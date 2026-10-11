@@ -12,43 +12,16 @@ TEST_OUTPUT:
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef CUSTOM_D_ARRAY_TYPE
-#define _d_dynamicArray CUSTOM_D_ARRAY_TYPE
-#else
-/// Represents a D [] array
-template<typename T>
-struct _d_dynamicArray final
-{
-    size_t length;
-    T *ptr;
-
-    _d_dynamicArray() : length(0), ptr(NULL) { }
-
-    _d_dynamicArray(size_t length_in, T *ptr_in)
-        : length(length_in), ptr(ptr_in) { }
-
-    T& operator[](const size_t idx) {
-        assert(idx < length);
-        return ptr[idx];
-    }
-
-    const T& operator[](const size_t idx) const {
-        assert(idx < length);
-        return ptr[idx];
-    }
-};
-#endif
-
 struct S final
 {
     int32_t i;
     int32_t get(int32_t , int32_t );
     static int32_t get();
     static const int32_t staticVar;
-    void useVars(int32_t pi = i, int32_t psv = staticVar);
+    void useVars(int32_t pi = i, int32_t psv = S::staticVar);
     struct Nested final
     {
-        void useStaticVar(int32_t i = staticVar);
+        void useStaticVar(int32_t i = S::staticVar);
         Nested()
         {
         }
@@ -159,7 +132,7 @@ extern int32_t(*f)(int32_t );
 
 extern void special(int32_t a = ptr->i, int32_t b = ptr->get(1, 2), int32_t j = (*f)(1));
 
-extern void variadic(int32_t _param_0, ...);
+extern void variadic(int32_t __param_0_, ...);
 ---
 +/
 

@@ -1,4 +1,3 @@
-// { dg-options "-std=gnu++20" }
 // { dg-do compile { target c++20 } }
 
 // Bug libstdc++/111511 - Incorrect ADL in std::to_array in GCC 11/12/13

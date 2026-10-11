@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -37,7 +37,7 @@ bool
 TraitItemReference::is_optional () const
 {
   return optional_flag;
-};
+}
 
 std::string
 TraitItemReference::get_identifier () const
@@ -57,7 +57,7 @@ TraitItemReference::get_hir_trait_item () const
   return hir_trait_item;
 }
 
-Location
+location_t
 TraitItemReference::get_locus () const
 {
   return locus;
@@ -94,7 +94,7 @@ TraitItemReference::get_tyty () const
       return get_error ();
     }
 
-  gcc_unreachable ();
+  rust_unreachable ();
   return get_error ();
 }
 
@@ -106,7 +106,7 @@ TraitItemReference::get_error () const
 
 TraitReference::TraitReference (
   const HIR::Trait *hir_trait_ref, std::vector<TraitItemReference> item_refs,
-  std::vector<const TraitReference *> super_traits,
+  std::vector<TyTy::TypeBoundPredicate> super_traits,
   std::vector<TyTy::SubstitutionParamMapping> substs)
   : hir_trait_ref (hir_trait_ref), item_refs (item_refs),
     super_traits (super_traits)
@@ -148,7 +148,7 @@ TraitReference::is_error () const
   return hir_trait_ref == nullptr;
 }
 
-Location
+location_t
 TraitReference::get_locus () const
 {
   return hir_trait_ref->get_locus ();
@@ -158,7 +158,7 @@ std::string
 TraitReference::get_name () const
 {
   rust_assert (!is_error ());
-  return hir_trait_ref->get_name ();
+  return hir_trait_ref->get_name ().as_string ();
 }
 
 std::string
@@ -263,7 +263,8 @@ TraitReference::lookup_hir_trait_item (const HIR::TraitItem &item,
 
 bool
 TraitReference::lookup_trait_item (const std::string &ident,
-				   const TraitItemReference **ref) const
+				   const TraitItemReference **ref,
+				   bool lookup_supers) const
 {
   for (auto &item : item_refs)
     {
@@ -274,10 +275,13 @@ TraitReference::lookup_trait_item (const std::string &ident,
 	}
     }
 
+  if (!lookup_supers)
+    return false;
+
   // lookup super traits
   for (const auto &super_trait : super_traits)
     {
-      bool found = super_trait->lookup_trait_item (ident, ref);
+      bool found = super_trait.get ()->lookup_trait_item (ident, ref);
       if (found)
 	return true;
     }
@@ -302,7 +306,7 @@ TraitReference::lookup_trait_item (const std::string &ident,
   for (const auto &super_trait : super_traits)
     {
       const TraitItemReference *res
-	= super_trait->lookup_trait_item (ident, type);
+	= super_trait.get ()->lookup_trait_item (ident, type);
       if (!res->is_error ())
 	return res;
     }
@@ -330,7 +334,7 @@ TraitReference::get_trait_items_and_supers (
     result.push_back (&item);
 
   for (const auto &super_trait : super_traits)
-    super_trait->get_trait_items_and_supers (result);
+    super_trait.get ()->get_trait_items_and_supers (result);
 }
 
 void
@@ -374,21 +378,21 @@ TraitReference::is_equal (const TraitReference &other) const
   return this_id == other_id;
 }
 
-const std::vector<const TraitReference *>
+std::vector<TyTy::TypeBoundPredicate>
 TraitReference::get_super_traits () const
 {
   return super_traits;
 }
 
 bool
-TraitReference::is_object_safe (bool emit_error, Location locus) const
+TraitReference::is_object_safe (bool emit_error, location_t locus) const
 {
   // https: // doc.rust-lang.org/reference/items/traits.html#object-safety
   std::vector<const TraitReference *> non_object_super_traits;
-  for (auto &item : super_traits)
+  for (auto &super_trait : super_traits)
     {
-      if (!item->is_object_safe (false, Location ()))
-	non_object_super_traits.push_back (item);
+      if (!super_trait.get ()->is_object_safe (false, UNDEF_LOCATION))
+	non_object_super_traits.push_back (super_trait.get ());
     }
 
   std::vector<const Resolver::TraitItemReference *> non_object_safe_items;
@@ -402,7 +406,7 @@ TraitReference::is_object_safe (bool emit_error, Location locus) const
     = non_object_super_traits.empty () && non_object_safe_items.empty ();
   if (emit_error && !is_safe)
     {
-      RichLocation r (locus);
+      rich_location r (line_table, locus);
       for (auto &item : non_object_super_traits)
 	r.add_range (item->get_locus ());
       for (auto &item : non_object_safe_items)
@@ -434,7 +438,7 @@ TraitReference::satisfies_bound (const TraitReference &reference) const
 
   for (const auto &super_trait : super_traits)
     {
-      if (super_trait->satisfies_bound (reference))
+      if (super_trait.get ()->satisfies_bound (reference))
 	return true;
     }
 
@@ -442,16 +446,18 @@ TraitReference::satisfies_bound (const TraitReference &reference) const
 }
 
 AssociatedImplTrait::AssociatedImplTrait (TraitReference *trait,
+					  TyTy::TypeBoundPredicate predicate,
 					  HIR::ImplBlock *impl,
 					  TyTy::BaseType *self,
 					  Resolver::TypeCheckContext *context)
-  : trait (trait), impl (impl), self (self), context (context)
+  : trait (trait), predicate (predicate), impl (impl), self (self),
+    context (context)
 {}
 
-TraitReference *
-AssociatedImplTrait::get_trait ()
+TyTy::TypeBoundPredicate &
+AssociatedImplTrait::get_predicate ()
 {
-  return trait;
+  return predicate;
 }
 
 HIR::ImplBlock *
@@ -465,6 +471,7 @@ AssociatedImplTrait::get_self ()
 {
   return self;
 }
+
 const TyTy::BaseType *
 AssociatedImplTrait::get_self () const
 {

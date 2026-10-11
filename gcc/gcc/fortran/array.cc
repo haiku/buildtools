@@ -1,5 +1,5 @@
 /* Array things
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2025 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -50,6 +50,9 @@ gfc_copy_array_ref (gfc_array_ref *src)
       dest->end[i] = gfc_copy_expr (src->end[i]);
       dest->stride[i] = gfc_copy_expr (src->stride[i]);
     }
+
+  dest->stat = gfc_copy_expr (src->stat);
+  dest->team = gfc_copy_expr (src->team);
 
   return dest;
 }
@@ -172,6 +175,76 @@ matched:
   return (saw_boz ? MATCH_ERROR : MATCH_YES);
 }
 
+/** Match one of TEAM=, TEAM_NUMBER= or STAT=.  */
+
+match
+match_team_or_stat (gfc_array_ref *ar)
+{
+  gfc_expr *tmp;
+  bool team_error = false;
+
+  if (gfc_match (" team = %e", &tmp) == MATCH_YES)
+    {
+      if (ar->team == NULL && ar->team_type == TEAM_UNSET)
+	{
+	  ar->team = tmp;
+	  ar->team_type = TEAM_TEAM;
+	}
+      else if (ar->team_type == TEAM_TEAM)
+	{
+	  gfc_error ("Duplicate TEAM= attribute in %C");
+	  return MATCH_ERROR;
+	}
+      else
+	team_error = true;
+    }
+  else if (gfc_match (" team_number = %e", &tmp) == MATCH_YES)
+    {
+      if (!gfc_notify_std (GFC_STD_F2018, "TEAM_NUMBER= not supported at %C"))
+	return MATCH_ERROR;
+      if (ar->team == NULL && ar->team_type == TEAM_UNSET)
+	{
+	  ar->team = tmp;
+	  ar->team_type = TEAM_NUMBER;
+	}
+      else if (ar->team_type == TEAM_NUMBER)
+	{
+	  gfc_error ("Duplicate TEAM_NUMBER= attribute in %C");
+	  return MATCH_ERROR;
+	}
+      else
+	team_error = true;
+    }
+  else if (gfc_match (" stat = %e", &tmp) == MATCH_YES)
+    {
+      if (ar->stat == NULL)
+	{
+	  if (gfc_is_coindexed (tmp))
+	    {
+	      gfc_error ("Expression in STAT= at %C must not be coindexed");
+	      gfc_free_expr (tmp);
+	      return MATCH_ERROR;
+	    }
+	  ar->stat = tmp;
+	}
+      else
+	{
+	  gfc_error ("Duplicate STAT= attribute in %C");
+	  return MATCH_ERROR;
+	}
+    }
+  else
+    return MATCH_NO;
+
+  if (ar->team && team_error)
+    {
+      gfc_error ("Only one of TEAM= or TEAM_NUMBER= may appear in a "
+		 "coarray reference at %C");
+      return MATCH_ERROR;
+    }
+
+  return MATCH_YES;
+}
 
 /* Match an array reference, whether it is the whole array or particular
    elements or a section.  If init is set, the reference has to consist
@@ -179,13 +252,10 @@ matched:
 
 match
 gfc_match_array_ref (gfc_array_ref *ar, gfc_array_spec *as, int init,
-		     int corank)
+		     int corank, bool coarray_only)
 {
   match m;
   bool matched_bracket = false;
-  gfc_expr *tmp;
-  bool stat_just_seen = false;
-  bool team_just_seen = false;
 
   memset (ar, '\0', sizeof (*ar));
 
@@ -198,11 +268,19 @@ gfc_match_array_ref (gfc_array_ref *ar, gfc_array_spec *as, int init,
        matched_bracket = true;
        goto coarray;
     }
+  else if (coarray_only && corank != 0)
+    goto coarray;
 
   if (gfc_match_char ('(') != MATCH_YES)
     {
       ar->type = AR_FULL;
       ar->dimen = 0;
+      if (corank != 0)
+	{
+	  for (int i = 0; i < GFC_MAX_DIMENSIONS; ++i)
+	    ar->dimen_type[i] = DIMEN_THIS_IMAGE;
+	  ar->codimen = corank;
+	}
       return MATCH_YES;
     }
 
@@ -237,8 +315,17 @@ gfc_match_array_ref (gfc_array_ref *ar, gfc_array_spec *as, int init,
 coarray:
   if (!matched_bracket && gfc_match_char ('[') != MATCH_YES)
     {
-      if (ar->dimen > 0)
-	return MATCH_YES;
+      int dim = coarray_only ? 0 : ar->dimen;
+      if (dim > 0 || coarray_only)
+	{
+	  if (corank != 0)
+	    {
+	      for (int i = dim; i < GFC_MAX_DIMENSIONS; ++i)
+		ar->dimen_type[i] = DIMEN_THIS_IMAGE;
+	      ar->codimen = corank;
+	    }
+	  return MATCH_YES;
+	}
       else
 	return MATCH_ERROR;
     }
@@ -255,57 +342,14 @@ coarray:
 	return MATCH_ERROR;
     }
 
-  ar->stat = NULL;
+  ar->team_type = TEAM_UNSET;
 
-  for (ar->codimen = 0; ar->codimen + ar->dimen < GFC_MAX_DIMENSIONS; ar->codimen++)
+  for (ar->codimen = 0; ar->codimen + ar->dimen < GFC_MAX_DIMENSIONS;
+       ar->codimen++)
     {
       m = match_subscript (ar, init, true);
       if (m == MATCH_ERROR)
 	return MATCH_ERROR;
-
-      team_just_seen = false;
-      stat_just_seen = false;
-      if (gfc_match (" , team = %e", &tmp) == MATCH_YES && ar->team == NULL)
-	{
-	  ar->team = tmp;
-	  team_just_seen = true;
-	}
-
-      if (ar->team && !team_just_seen)
-	{
-	  gfc_error ("TEAM= attribute in %C misplaced");
-	  return MATCH_ERROR;
-	}
-
-      if (gfc_match (" , stat = %e",&tmp) == MATCH_YES && ar->stat == NULL)
-	{
-	  ar->stat = tmp;
-	  stat_just_seen = true;
-	}
-
-      if (ar->stat && !stat_just_seen)
-	{
-	  gfc_error ("STAT= attribute in %C misplaced");
-	  return MATCH_ERROR;
-	}
-
-      if (gfc_match_char (']') == MATCH_YES)
-	{
-	  ar->codimen++;
-	  if (ar->codimen < corank)
-	    {
-	      gfc_error ("Too few codimensions at %C, expected %d not %d",
-			 corank, ar->codimen);
-	      return MATCH_ERROR;
-	    }
-	  if (ar->codimen > corank)
-	    {
-	      gfc_error ("Too many codimensions at %C, expected %d not %d",
-			 corank, ar->codimen);
-	      return MATCH_ERROR;
-	    }
-	  return MATCH_YES;
-	}
 
       if (gfc_match_char (',') != MATCH_YES)
 	{
@@ -313,7 +357,9 @@ coarray:
 	    gfc_error ("Unexpected %<*%> for codimension %d of %d at %C",
 		       ar->codimen + 1, corank);
 	  else
-	    gfc_error ("Invalid form of coarray reference at %C");
+	    {
+	      goto image_selector;
+	    }
 	  return MATCH_ERROR;
 	}
       else if (ar->dimen_type[ar->codimen + ar->dimen] == DIMEN_STAR)
@@ -322,6 +368,15 @@ coarray:
 		     ar->codimen + 1, corank);
 	  return MATCH_ERROR;
 	}
+
+      m = match_team_or_stat (ar);
+      if (m == MATCH_ERROR)
+	return MATCH_ERROR;
+      else if (m == MATCH_YES)
+	goto image_selector;
+
+      if (gfc_match_char (']') == MATCH_YES)
+	goto rank_check;
 
       if (ar->codimen >= corank)
 	{
@@ -335,6 +390,40 @@ coarray:
 	     GFC_MAX_DIMENSIONS);
   return MATCH_ERROR;
 
+image_selector:
+  for (;;)
+    {
+      m = match_team_or_stat (ar);
+      if (m == MATCH_ERROR)
+	return MATCH_ERROR;
+
+      if (gfc_match_char (']') == MATCH_YES)
+	goto rank_check;
+
+      if (gfc_match_char (',') != MATCH_YES)
+	{
+	  gfc_error ("Invalid form of coarray reference at %C");
+	  return MATCH_ERROR;
+	}
+    }
+
+  return MATCH_ERROR;
+
+rank_check:
+  ar->codimen++;
+  if (ar->codimen < corank)
+    {
+      gfc_error ("Too few codimensions at %C, expected %d not %d", corank,
+		 ar->codimen);
+      return MATCH_ERROR;
+    }
+  if (ar->codimen > corank)
+    {
+      gfc_error ("Too many codimensions at %C, expected %d not %d", corank,
+		 ar->codimen);
+      return MATCH_ERROR;
+    }
+  return MATCH_YES;
 }
 
 
@@ -381,6 +470,13 @@ resolve_array_bound (gfc_expr *e, int check_constant)
 {
   if (e == NULL)
     return true;
+
+  if (e->ts.type == BT_DERIVED || e->ts.type == BT_CLASS)
+    {
+      gfc_error ("Derived type or class expression for array bound at %L",
+		 &e->where);
+      return false;
+    }
 
   if (!gfc_resolve_expr (e)
       || !gfc_specification_expr (e))
@@ -852,7 +948,7 @@ gfc_set_array_spec (gfc_symbol *sym, gfc_array_spec *as, locus *error_loc)
 {
   int i;
   symbol_attribute *attr;
-  
+
   if (as == NULL)
     return true;
 
@@ -861,7 +957,7 @@ gfc_set_array_spec (gfc_symbol *sym, gfc_array_spec *as, locus *error_loc)
   attr = &sym->attr;
   if (gfc_submodule_procedure(attr))
     return true;
-  
+
   if (as->rank
       && !gfc_add_dimension (&sym->attr, sym->name, error_loc))
     return false;
@@ -994,7 +1090,7 @@ compare_bounds (gfc_expr *bound1, gfc_expr *bound2)
 /* Compares two array specifications.  They must be constant or deferred
    shape.  */
 
-int
+bool
 gfc_compare_array_spec (gfc_array_spec *as1, gfc_array_spec *as2)
 {
   int i;
@@ -1015,6 +1111,9 @@ gfc_compare_array_spec (gfc_array_spec *as1, gfc_array_spec *as2)
     return 1;
 
   if (as1->type != as2->type)
+    return 0;
+
+  if (as1->cotype != as2->cotype)
     return 0;
 
   if (as1->type == AS_EXPLICIT)
@@ -1039,7 +1138,7 @@ gfc_compare_array_spec (gfc_array_spec *as1, gfc_array_spec *as2)
    use the symbol as an implied-DO iterator.  Returns nonzero if a
    duplicate was found.  */
 
-static int
+static bool
 check_duplicate_iterator (gfc_constructor_base base, gfc_symbol *master)
 {
   gfc_constructor *c;
@@ -1370,7 +1469,7 @@ done:
     expr = gfc_get_array_expr (BT_UNKNOWN, 0, &where);
 
   expr->value.constructor = head;
-  if (expr->ts.u.cl)
+  if (expr->ts.type == BT_CHARACTER && expr->ts.u.cl)
     expr->ts.u.cl->length_from_typespec = seen_ts;
 
   *result = expr;
@@ -1982,7 +2081,7 @@ is_constant_element (gfc_expr *e)
    i=1,100000000) /) will take a while as* opposed to a more clever
    function that traverses the expression tree. FIXME.  */
 
-int
+bool
 gfc_constant_ac (gfc_expr *e)
 {
   expand_info expand_save;
@@ -2005,7 +2104,7 @@ gfc_constant_ac (gfc_expr *e)
 /* Returns nonzero if an array constructor has been completely
    expanded (no iterators) and zero if iterators are present.  */
 
-int
+bool
 gfc_expanded_ac (gfc_expr *e)
 {
   gfc_constructor *c;
@@ -2124,6 +2223,19 @@ resolve_array_list (gfc_constructor_base base)
 		     "polymorphic [F2008: C4106]", &c->expr->where);
 	  t = false;
 	}
+
+      /* F2018:C7114 The declared type of an ac-value shall not be abstract.  */
+      if (c->expr->ts.type == BT_CLASS
+	  && c->expr->ts.u.derived
+	  && c->expr->ts.u.derived->attr.abstract
+	  && CLASS_DATA (c->expr))
+	{
+	  gfc_error ("Array constructor value %qs at %L is of the ABSTRACT "
+		     "type %qs", c->expr->symtree->name, &c->expr->where,
+		     CLASS_DATA (c->expr)->ts.u.derived->name);
+	  t = false;
+	}
+
     }
 
   return t;
@@ -2212,9 +2324,9 @@ got_charlen:
 	    found_length = current_length;
 	  else if (found_length != current_length)
 	    {
-	      gfc_error ("Different CHARACTER lengths (%ld/%ld) in array"
-			 " constructor at %L", (long) found_length,
-			 (long) current_length, &p->expr->where);
+	      gfc_error ("Different CHARACTER lengths (%wd/%wd) in array"
+			 " constructor at %L", found_length,
+			 current_length, &p->expr->where);
 	      return false;
 	    }
 
@@ -2308,10 +2420,7 @@ gfc_copy_iterator (gfc_iterator *src)
   dest->start = gfc_copy_expr (src->start);
   dest->end = gfc_copy_expr (src->end);
   dest->step = gfc_copy_expr (src->step);
-  dest->unroll = src->unroll;
-  dest->ivdep = src->ivdep;
-  dest->vector = src->vector;
-  dest->novector = src->novector;
+  dest->annot = src->annot;
 
   return dest;
 }
@@ -2427,7 +2536,7 @@ gfc_ref_dimen_size (gfc_array_ref *ar, int dimen, mpz_t *result, mpz_t *end)
 	mpz_set_ui (stride, 1);
       else
 	{
-	  stride_expr = gfc_copy_expr(ar->stride[dimen]); 
+	  stride_expr = gfc_copy_expr(ar->stride[dimen]);
 
 	  if (!gfc_simplify_expr (stride_expr, 1)
 	     || stride_expr->expr_type != EXPR_CONSTANT

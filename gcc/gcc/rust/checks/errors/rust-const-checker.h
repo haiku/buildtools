@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -44,7 +44,7 @@ private:
   /**
    * Check that only const functions are called in const contexts
    */
-  void check_function_call (HirId fn_id, Location locus);
+  void check_function_call (HirId fn_id, location_t locus);
 
   /* All possible const contexts */
   enum class ConstGenericCtx
@@ -126,18 +126,13 @@ private:
   virtual void visit (LoopExpr &expr) override;
   virtual void visit (WhileLoopExpr &expr) override;
   virtual void visit (WhileLetLoopExpr &expr) override;
-  virtual void visit (ForLoopExpr &expr) override;
   virtual void visit (IfExpr &expr) override;
   virtual void visit (IfExprConseqElse &expr) override;
-  virtual void visit (IfExprConseqIf &expr) override;
-  virtual void visit (IfExprConseqIfLet &expr) override;
-  virtual void visit (IfLetExpr &expr) override;
-  virtual void visit (IfLetExprConseqElse &expr) override;
-  virtual void visit (IfLetExprConseqIf &expr) override;
-  virtual void visit (IfLetExprConseqIfLet &expr) override;
   virtual void visit (MatchExpr &expr) override;
   virtual void visit (AwaitExpr &expr) override;
   virtual void visit (AsyncBlockExpr &expr) override;
+  virtual void visit (InlineAsm &expr) override;
+
   virtual void visit (TypeParam &param) override;
   virtual void visit (ConstGenericParam &param) override;
   virtual void visit (LifetimeWhereClauseItem &item) override;
@@ -167,6 +162,7 @@ private:
   virtual void visit (ImplBlock &impl) override;
   virtual void visit (ExternalStaticItem &item) override;
   virtual void visit (ExternalFunctionItem &item) override;
+  virtual void visit (ExternalTypeItem &item) override;
   virtual void visit (ExternBlock &block) override;
   virtual void visit (LiteralPattern &pattern) override;
   virtual void visit (IdentifierPattern &pattern) override;
@@ -187,15 +183,14 @@ private:
   virtual void visit (TuplePatternItemsRanged &tuple_items) override;
   virtual void visit (TuplePattern &pattern) override;
   virtual void visit (SlicePattern &pattern) override;
+  virtual void visit (AltPattern &pattern) override;
   virtual void visit (EmptyStmt &stmt) override;
   virtual void visit (LetStmt &stmt) override;
-  virtual void visit (ExprStmtWithoutBlock &stmt) override;
-  virtual void visit (ExprStmtWithBlock &stmt) override;
+  virtual void visit (ExprStmt &stmt) override;
   virtual void visit (TraitBound &bound) override;
   virtual void visit (ImplTraitType &type) override;
   virtual void visit (TraitObjectType &type) override;
   virtual void visit (ParenthesisedType &type) override;
-  virtual void visit (ImplTraitTypeOneBound &type) override;
   virtual void visit (TupleType &type) override;
   virtual void visit (NeverType &type) override;
   virtual void visit (RawPointerType &type) override;

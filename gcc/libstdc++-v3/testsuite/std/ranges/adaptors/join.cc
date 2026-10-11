@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -15,8 +15,7 @@
 // with this library; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
 
-// { dg-options "-std=gnu++2a" }
-// { dg-do run { target c++2a } }
+// { dg-do run { target c++20 } }
 
 #include <algorithm>
 #include <array>
@@ -114,15 +113,15 @@ test06()
 
   // Verify that _Iterator<false> is implicitly convertible to _Iterator<true>.
   static_assert(!std::same_as<decltype(ranges::begin(v)),
-			      decltype(std::as_const(v).begin())>);
-  auto a = std::as_const(v).begin();
+			      decltype(ranges::cbegin(v))>);
+  auto a = std::cbegin(v);
   a = ranges::begin(v);
 
   // Verify that _Sentinel<false> is implicitly convertible to _Sentinel<true>.
   static_assert(!ranges::common_range<decltype(v)>);
   static_assert(!std::same_as<decltype(ranges::end(v)),
-			      decltype(std::as_const(v).end())>);
-  auto b = std::as_const(v).end();
+			      decltype(ranges::cend(v))>);
+  auto b = ranges::cend(v);
   b = ranges::end(v);
 }
 
@@ -234,6 +233,13 @@ test14()
   VERIFY( ranges::equal(v | views::join, (int[]){1, 2, 3}) );
 }
 
+void
+test15()
+{
+  // PR libstdc++/119962 - __maybe_present_t misses initialization
+  constexpr decltype(views::join(views::single(views::single(0))).begin()) it;
+}
+
 int
 main()
 {
@@ -251,4 +257,5 @@ main()
   test12();
   test13();
   test14();
+  test15();
 }

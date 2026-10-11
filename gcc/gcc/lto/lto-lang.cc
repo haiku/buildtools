@@ -1,5 +1,5 @@
 /* Language-dependent hooks for LTO.
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2025 Free Software Foundation, Inc.
    Contributed by CodeSourcery, Inc.
 
 This file is part of GCC.
@@ -60,6 +60,7 @@ static tree ignore_attribute (tree *, tree, tree, int, bool *);
 static tree handle_format_attribute (tree *, tree, tree, int, bool *);
 static tree handle_fnspec_attribute (tree *, tree, tree, int, bool *);
 static tree handle_format_arg_attribute (tree *, tree, tree, int, bool *);
+static tree handle_cold_attribute (tree *, tree, tree, int, bool *);
 
 /* Helper to define attribute exclusions.  */
 #define ATTR_EXCL(name, function, type, variable)	\
@@ -94,7 +95,7 @@ static const struct attribute_spec::exclusions attr_const_pure_exclusions[] =
 };
 
 /* Table of machine-independent attributes supported in GIMPLE.  */
-const struct attribute_spec lto_attribute_table[] =
+static const attribute_spec lto_gnu_attributes[] =
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
        affects_type_identity, handler, exclude } */
@@ -128,6 +129,8 @@ const struct attribute_spec lto_attribute_table[] =
 			      handle_sentinel_attribute, NULL },
   { "type generic",           0, 0, false, true, true, false,
 			      handle_type_generic_attribute, NULL },
+  { "cold",		      0, 0, false,  false, false, false,
+			      handle_cold_attribute, NULL },
   { "fn spec",	 	      1, 1, false, true, true, false,
 			      handle_fnspec_attribute, NULL },
   { "transaction_pure",	      0, 0, false, true, true, false,
@@ -135,14 +138,18 @@ const struct attribute_spec lto_attribute_table[] =
   /* For internal use only.  The leading '*' both prevents its usage in
      source code and signals that it may be overridden by machine tables.  */
   { "*tm regparm",            0, 0, false, true, true, false,
-			      ignore_attribute, NULL },
-  { NULL,                     0, 0, false, false, false, false, NULL, NULL }
+			      ignore_attribute, NULL }
+};
+
+static const scoped_attribute_specs lto_gnu_attribute_table =
+{
+  "gnu", { lto_gnu_attributes }
 };
 
 /* Give the specifications for the format attributes, used by C and all
    descendants.  */
 
-const struct attribute_spec lto_format_attribute_table[] =
+static const attribute_spec lto_format_attributes[] =
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
        affects_type_identity, handler, exclude } */
@@ -150,7 +157,17 @@ const struct attribute_spec lto_format_attribute_table[] =
 			      handle_format_attribute, NULL },
   { "format_arg",             1, 1, false, true,  true, false,
 			      handle_format_arg_attribute, NULL },
-  { NULL,                     0, 0, false, false, false, false, NULL, NULL }
+};
+
+static const scoped_attribute_specs lto_format_attribute_table =
+{
+  "gnu", { lto_format_attributes }
+};
+
+static const scoped_attribute_specs *const lto_attribute_table[] =
+{
+  &lto_gnu_attribute_table,
+  &lto_format_attribute_table
 };
 
 enum built_in_attribute
@@ -247,7 +264,8 @@ static GTY(()) tree signed_size_type_node;
 int flag_isoc94;
 int flag_isoc99;
 int flag_isoc11;
-int flag_isoc2x;
+int flag_isoc23;
+int flag_isoc2y;
 
 /* Attribute handlers.  */
 
@@ -488,7 +506,7 @@ handle_type_generic_attribute (tree *node, tree ARG_UNUSED (name),
 {
   /* Ensure we have a function type.  */
   gcc_assert (TREE_CODE (*node) == FUNCTION_TYPE);
-  
+
   /* Ensure we have a variadic function.  */
   gcc_assert (!prototype_p (*node) || stdarg_p (*node));
 
@@ -580,6 +598,16 @@ handle_fnspec_attribute (tree *node ATTRIBUTE_UNUSED, tree ARG_UNUSED (name),
   gcc_assert (args
 	      && TREE_CODE (TREE_VALUE (args)) == STRING_CST
 	      && !TREE_CHAIN (args));
+  return NULL_TREE;
+}
+
+/* Handle a "cold" attribute; arguments as in
+   struct attribute_spec.handler.  */
+
+static tree
+handle_cold_attribute (tree *, tree, tree, int, bool *)
+{
+  /* Nothing to be done here.  */
   return NULL_TREE;
 }
 
@@ -1050,7 +1078,7 @@ lto_type_for_mode (machine_mode mode, int unsigned_p)
   else if (GET_MODE_CLASS (mode) == MODE_VECTOR_BOOL
 	   && valid_vector_subparts_p (GET_MODE_NUNITS (mode)))
     {
-      unsigned int elem_bits = vector_element_size (GET_MODE_BITSIZE (mode),
+      unsigned int elem_bits = vector_element_size (GET_MODE_PRECISION (mode),
 						    GET_MODE_NUNITS (mode));
       tree bool_type = build_nonstandard_boolean_type (elem_bits);
       return build_vector_type_for_mode (bool_type, mode);
@@ -1463,10 +1491,8 @@ static void lto_init_ts (void)
 #define LANG_HOOKS_EH_PERSONALITY lto_eh_personality
 
 /* Attribute hooks.  */
-#undef LANG_HOOKS_COMMON_ATTRIBUTE_TABLE
-#define LANG_HOOKS_COMMON_ATTRIBUTE_TABLE lto_attribute_table
-#undef LANG_HOOKS_FORMAT_ATTRIBUTE_TABLE
-#define LANG_HOOKS_FORMAT_ATTRIBUTE_TABLE lto_format_attribute_table
+#undef LANG_HOOKS_ATTRIBUTE_TABLE
+#define LANG_HOOKS_ATTRIBUTE_TABLE lto_attribute_table
 
 #undef LANG_HOOKS_BEGIN_SECTION
 #define LANG_HOOKS_BEGIN_SECTION lto_obj_begin_section

@@ -1,5 +1,5 @@
 /* Gimple Represented as Polyhedra.
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
+   Copyright (C) 2006-2025 Free Software Foundation, Inc.
    Contributed by Sebastian Pop <sebastian.pop@inria.fr>.
 
 This file is part of GCC.
@@ -260,7 +260,7 @@ cached_scalar_evolution_in_region (const sese_l &region, loop_p loop,
   hstate.add_int (key.loop_num);
   inchash::add_expr (key.expr, hstate);
   key.hash = hstate.end ();
-  
+
   bool existed;
   tree &chrec = seir_cache->get_or_insert (key, &existed);
   if (!existed)
@@ -512,6 +512,8 @@ graphite_transform_loops (void)
 
   if (changed)
     {
+      /* FIXME: Graphite does not update profile meaningfully currently.  */
+      cfun->cfg->full_profile = false;
       cleanup_tree_cfg ();
       profile_status_for_fn (cfun) = PROFILE_ABSENT;
       release_recorded_exits (cfun);

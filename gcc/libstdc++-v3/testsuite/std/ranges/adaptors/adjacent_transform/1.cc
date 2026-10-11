@@ -1,4 +1,3 @@
-// { dg-options "-std=gnu++23" }
 // { dg-do run { target c++23 } }
 
 #include <ranges>
@@ -39,6 +38,9 @@ test01()
   auto v3 = y | views::adjacent_transform<3>([](auto... xs) { return ranges::max({xs...}); });
   VERIFY( ranges::size(v3) == 4 );
   VERIFY( ranges::equal(v3, (int[]){3, 4, 5, 6}) );
+
+  // LWG 3848 - adjacent_transform_view etc missing base accessor
+  v3.base();
 
   const auto v6 = y | views::adjacent_transform<6>([](auto...) { return 0; });
   VERIFY( ranges::equal(v6, (int[]){0}) );
@@ -97,10 +99,25 @@ test03()
   return true;
 }
 
+void
+test04()
+{
+  extern int x[5];
+  struct move_only {
+    move_only() { }
+    move_only(move_only&&) { }
+    int operator()(int i, int j) const { return i + j; }
+  };
+  // P2494R2 Relaxing range adaptors to allow for move only types
+  static_assert( requires { views::pairwise_transform(x, move_only{}); } );
+  static_assert( requires { x | views::pairwise_transform(move_only{}); } );
+}
+
 int
 main()
 {
   static_assert(test01());
   static_assert(test02());
   static_assert(test03());
+  test04();
 }

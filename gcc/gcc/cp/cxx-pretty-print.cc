@@ -1,5 +1,5 @@
 /* Implementation of subroutines for the GNU C++ pretty-printer.
-   Copyright (C) 2003-2023 Free Software Foundation, Inc.
+   Copyright (C) 2003-2025 Free Software Foundation, Inc.
    Contributed by Gabriel Dos Reis <gdr@integrable-solutions.net>
 
 This file is part of GCC.
@@ -24,6 +24,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "cp-tree.h"
 #include "cxx-pretty-print.h"
 #include "tree-pretty-print.h"
+#include "make-unique.h"
 
 static void pp_cxx_unqualified_id (cxx_pretty_printer *, tree);
 static void pp_cxx_nested_name_specifier (cxx_pretty_printer *, tree);
@@ -49,7 +50,7 @@ pp_cxx_nonconsecutive_character (cxx_pretty_printer *pp, int c)
   if (p != NULL && *p == c)
     pp_cxx_whitespace (pp);
   pp_character (pp, c);
-  pp->padding = pp_none;
+  pp->set_padding (pp_none);
 }
 
 #define pp_cxx_expression_list(PP, T)    \
@@ -65,7 +66,7 @@ void
 pp_cxx_colon_colon (cxx_pretty_printer *pp)
 {
   pp_colon_colon (pp);
-  pp->padding = pp_none;
+  pp->set_padding (pp_none);
 }
 
 void
@@ -84,7 +85,7 @@ void
 pp_cxx_separate_with (cxx_pretty_printer *pp, int c)
 {
   pp_separate_with (pp, c);
-  pp->padding = pp_none;
+  pp->set_padding (pp_none);
 }
 
 /* Expressions.  */
@@ -233,8 +234,12 @@ pp_cxx_template_keyword_if_needed (cxx_pretty_printer *pp, tree scope, tree t)
 }
 
 /* nested-name-specifier:
-      class-or-namespace-name :: nested-name-specifier(opt)
-      class-or-namespace-name :: template nested-name-specifier   */
+      ::
+      type-name ::
+      namespace-name ::
+      computed-type-specifier ::
+      nested-name-specifier identifier ::
+      nested-name-specifier template(opt) simple-template-id ::  */
 
 static void
 pp_cxx_nested_name_specifier (cxx_pretty_printer *pp, tree t)
@@ -251,7 +256,11 @@ pp_cxx_nested_name_specifier (cxx_pretty_printer *pp, tree t)
       tree scope = get_containing_scope (t);
       pp_cxx_nested_name_specifier (pp, scope);
       pp_cxx_template_keyword_if_needed (pp, scope, t);
-      pp_cxx_unqualified_id (pp, t);
+      /* This is a computed-type-specifier.  */
+      if (TREE_CODE (t) == PACK_INDEX_TYPE || TREE_CODE (t) == DECLTYPE_TYPE)
+	pp->type_id (t);
+      else
+	pp_cxx_unqualified_id (pp, t);
       pp_cxx_colon_colon (pp);
     }
 }
@@ -411,22 +420,24 @@ pp_cxx_userdef_literal (cxx_pretty_printer *pp, tree t)
      :: operator-function-id
      :: qualifier-id
      ( expression )
-     id-expression   
+     id-expression
 
    GNU Extensions:
      __builtin_va_arg ( assignment-expression , type-id )
      __builtin_offsetof ( type-id, offsetof-expression )
      __builtin_addressof ( expression )
 
-     __has_nothrow_assign ( type-id )   
+     __builtin_is_virtual_base_of ( type-id , type-id )
+
+     __has_nothrow_assign ( type-id )
      __has_nothrow_constructor ( type-id )
      __has_nothrow_copy ( type-id )
-     __has_trivial_assign ( type-id )   
+     __has_trivial_assign ( type-id )
      __has_trivial_constructor ( type-id )
      __has_trivial_copy ( type-id )
      __has_unique_object_representations ( type-id )
      __has_trivial_destructor ( type-id )
-     __has_virtual_destructor ( type-id )     
+     __has_virtual_destructor ( type-id )
      __is_abstract ( type-id )
      __is_base_of ( type-id , type-id )
      __is_class ( type-id )
@@ -553,7 +564,7 @@ cxx_pretty_printer::postfix_expression (tree t)
 	   instantiation time.  */
 	if (TREE_CODE (fun) != FUNCTION_DECL)
 	  ;
-	else if (DECL_NONSTATIC_MEMBER_FUNCTION_P (fun))
+	else if (DECL_OBJECT_MEMBER_FUNCTION_P (fun))
 	  {
 	    tree object = (code == AGGR_INIT_EXPR
 			   ? (AGGR_INIT_VIA_CTOR_P (t)
@@ -844,7 +855,12 @@ cxx_pretty_printer::unary_expression (tree t)
       /* Fall through  */
 
     case ALIGNOF_EXPR:
-      pp_cxx_ws_string (this, code == SIZEOF_EXPR ? "sizeof" : "__alignof__");
+      if (code == SIZEOF_EXPR)
+	pp_cxx_ws_string (this, "sizeof");
+      else if (ALIGNOF_EXPR_STD_P (t))
+	pp_cxx_ws_string (this, "alignof");
+      else
+	pp_cxx_ws_string (this, "__alignof__");
       pp_cxx_whitespace (this);
       if (TREE_CODE (t) == SIZEOF_EXPR && SIZEOF_EXPR_TYPE_P (t))
 	{
@@ -868,7 +884,7 @@ cxx_pretty_printer::unary_expression (tree t)
       pp_cxx_left_paren (this);
       type_id (TREE_OPERAND (t, 0));
       pp_cxx_right_paren (this);
-      break;      
+      break;
 
     case NOEXCEPT_EXPR:
       pp_cxx_ws_string (this, "noexcept");
@@ -1202,7 +1218,6 @@ cxx_pretty_printer::expression (tree t)
       assignment_expression (t);
       break;
 
-    case NON_DEPENDENT_EXPR:
     case MUST_NOT_THROW_EXPR:
       expression (TREE_OPERAND (t, 0));
       break;
@@ -1210,6 +1225,13 @@ cxx_pretty_printer::expression (tree t)
     case EXPR_PACK_EXPANSION:
       expression (PACK_EXPANSION_PATTERN (t));
       pp_cxx_ws_string (this, "...");
+      break;
+
+    case PACK_INDEX_EXPR:
+      expression (PACK_INDEX_PACK (t));
+      pp_cxx_left_bracket (this);
+      expression (PACK_INDEX_INDEX (t));
+      pp_cxx_right_bracket (this);
       break;
 
     case UNARY_LEFT_FOLD_EXPR:
@@ -1253,7 +1275,6 @@ cxx_pretty_printer::expression (tree t)
       break;
 
     case ATOMIC_CONSTR:
-    case CHECK_CONSTR:
     case CONJ_CONSTR:
     case DISJ_CONSTR:
       pp_cxx_constraint (this, t);
@@ -1338,7 +1359,7 @@ cxx_pretty_printer::declaration_specifiers (tree t)
 	 do not have a type-specifier in their return types.  */
       if (DECL_CONSTRUCTOR_P (t) || DECL_CONV_FN_P (t))
 	function_specifier (t);
-      else if (DECL_NONSTATIC_MEMBER_FUNCTION_P (t))
+      else if (DECL_IOBJ_MEMBER_FUNCTION_P (t))
 	declaration_specifiers (TREE_TYPE (TREE_TYPE (t)));
       else
         c_pretty_printer::declaration_specifiers (t);
@@ -1381,8 +1402,9 @@ cxx_pretty_printer::simple_type_specifier (tree t)
     case TEMPLATE_PARM_INDEX:
     case BOUND_TEMPLATE_TEMPLATE_PARM:
       pp_cxx_unqualified_id (this, t);
-      if (tree c = PLACEHOLDER_TYPE_CONSTRAINTS (t))
-        pp_cxx_constrained_type_spec (this, c);
+      if (TREE_CODE (t) == TEMPLATE_TYPE_PARM)
+	if (tree c = PLACEHOLDER_TYPE_CONSTRAINTS (t))
+	  pp_cxx_constrained_type_spec (this, c);
       break;
 
     case TYPENAME_TYPE:
@@ -1684,7 +1706,7 @@ cxx_pretty_printer::direct_declarator (tree t)
 	    /* A function parameter pack or non-type template
 	       parameter pack.  */
 	    pp_cxx_ws_string (this, "...");
-		      
+
 	  id_expression (DECL_NAME (t));
 	}
       abstract_declarator (TREE_TYPE (t));
@@ -1695,9 +1717,9 @@ cxx_pretty_printer::direct_declarator (tree t)
       expression (t);
       pp_cxx_parameter_declaration_clause (this, t);
 
-      if (DECL_NONSTATIC_MEMBER_FUNCTION_P (t))
+      if (DECL_IOBJ_MEMBER_FUNCTION_P (t))
 	{
-	  padding = pp_before;
+	  set_padding (pp_before);
 	  pp_cxx_cv_qualifier_seq (this, pp_cxx_implicit_parameter_type (t));
 	}
 
@@ -1854,7 +1876,7 @@ cxx_pretty_printer::direct_abstract_declarator (tree t)
       direct_abstract_declarator (TREE_TYPE (t));
       if (TREE_CODE (t) == METHOD_TYPE)
 	{
-	  padding = pp_before;
+	  set_padding (pp_before);
 	  pp_cxx_cv_qualifier_seq (this, class_of_this_parm (t));
 	}
       pp_cxx_exception_specification (this, t);
@@ -1910,6 +1932,13 @@ cxx_pretty_printer::type_id (tree t)
     case TYPE_PACK_EXPANSION:
       type_id (PACK_EXPANSION_PATTERN (t));
       pp_cxx_ws_string (this, "...");
+      break;
+
+    case PACK_INDEX_TYPE:
+      type_id (PACK_INDEX_PACK (t));
+      pp_cxx_left_bracket (this);
+      expression (PACK_INDEX_INDEX (t));
+      pp_cxx_right_bracket (this);
       break;
 
     case TYPE_ARGUMENT_PACK:
@@ -2273,7 +2302,7 @@ pp_cxx_template_parameter (cxx_pretty_printer *pp, tree t)
     {
     case TYPE_DECL:
       pp_cxx_ws_string (pp, "class");
-      if (TEMPLATE_TYPE_PARAMETER_PACK (TREE_TYPE (t)))
+      if (TEMPLATE_TYPE_PARAMETER_PACK (TREE_TYPE (parameter)))
 	pp_cxx_ws_string (pp, "...");
       if (DECL_NAME (parameter))
 	pp_cxx_tree_identifier (pp, DECL_NAME (parameter));
@@ -2328,8 +2357,8 @@ pp_cxx_constrained_type_spec (cxx_pretty_printer *pp, tree c)
       pp_cxx_ws_string(pp, "<unsatisfied-type-constraint>");
       return;
     }
-  tree t, a;
-  placeholder_extract_concept_and_args (c, t, a);
+  tree t = TREE_OPERAND (c, 0);
+  tree a = TREE_OPERAND (c, 1);
   pp->id_expression (t);
   pp_cxx_begin_template_argument_list (pp);
   pp_cxx_ws_string (pp, "<placeholder>");
@@ -2459,6 +2488,7 @@ cxx_pretty_printer::declaration (tree t)
       }
   else switch (TREE_CODE (t))
     {
+    case FIELD_DECL:
     case VAR_DECL:
     case TYPE_DECL:
       pp_cxx_simple_declaration (this, t);
@@ -2640,26 +2670,37 @@ pp_cxx_trait (cxx_pretty_printer *pp, tree t)
 #undef DEFTRAIT
     }
 
-  pp_cxx_left_paren (pp);
-  if (TYPE_P (type1))
-    pp->type_id (type1);
+  if (kind == CPTK_TYPE_PACK_ELEMENT)
+    {
+      pp_cxx_begin_template_argument_list (pp);
+      pp->expression (type1);
+    }
   else
-    pp->expression (type1);
+    {
+      pp_cxx_left_paren (pp);
+      if (TYPE_P (type1))
+	pp->type_id (type1);
+      else
+	pp->expression (type1);
+    }
   if (type2)
     {
-      if (TREE_CODE (type2) != TREE_LIST)
+      if (TREE_CODE (type2) != TREE_VEC)
 	{
 	  pp_cxx_separate_with (pp, ',');
 	  pp->type_id (type2);
 	}
       else
-	for (tree arg = type2; arg; arg = TREE_CHAIN (arg))
+	for (tree arg : tree_vec_range (type2))
 	  {
 	    pp_cxx_separate_with (pp, ',');
-	    pp->type_id (TREE_VALUE (arg));
+	    pp->type_id (arg);
 	  }
     }
-  pp_cxx_right_paren (pp);
+  if (kind == CPTK_TYPE_PACK_ELEMENT)
+    pp_cxx_end_template_argument_list (pp);
+  else
+    pp_cxx_right_paren (pp);
 }
 
 // requires-clause:
@@ -2669,7 +2710,7 @@ pp_cxx_requires_clause (cxx_pretty_printer *pp, tree t)
 {
   if (!t)
     return;
-  pp->padding = pp_before;
+  pp->set_padding (pp_before);
   pp_cxx_ws_string (pp, "requires");
   pp_space (pp);
   pp->expression (t);
@@ -2799,29 +2840,6 @@ pp_cxx_nested_requirement (cxx_pretty_printer *pp, tree t)
   pp_cxx_semicolon (pp);
 }
 
-void
-pp_cxx_check_constraint (cxx_pretty_printer *pp, tree t)
-{
-  tree decl = CHECK_CONSTR_CONCEPT (t);
-  tree tmpl = DECL_TI_TEMPLATE (decl);
-  tree args = CHECK_CONSTR_ARGS (t);
-  tree id = build_nt (TEMPLATE_ID_EXPR, tmpl, args);
-
-  if (TREE_CODE (decl) == CONCEPT_DECL)
-    pp->expression (id);
-  else if (VAR_P (decl))
-    pp->expression (id);
-  else if (TREE_CODE (decl) == FUNCTION_DECL)
-    {
-      tree call = build_vl_exp (CALL_EXPR, 2);
-      TREE_OPERAND (call, 0) = integer_two_node;
-      TREE_OPERAND (call, 1) = id;
-      pp->expression (call);
-    }
-  else
-    gcc_unreachable ();
-}
-
 /* Output the "[with ...]" clause for a parameter mapping of an atomic
    constraint.   */
 
@@ -2901,10 +2919,6 @@ pp_cxx_constraint (cxx_pretty_printer *pp, tree t)
       pp_cxx_atomic_constraint (pp, t);
       break;
 
-    case CHECK_CONSTR:
-      pp_cxx_check_constraint (pp, t);
-      break;
-
     case CONJ_CONSTR:
       pp_cxx_conjunction (pp, t);
       break;
@@ -2937,8 +2951,8 @@ cxx_pretty_printer::cxx_pretty_printer ()
 
 /* cxx_pretty_printer's implementation of pretty_printer::clone vfunc.  */
 
-pretty_printer *
+std::unique_ptr<pretty_printer>
 cxx_pretty_printer::clone () const
 {
-  return new cxx_pretty_printer (*this);
+  return ::make_unique<cxx_pretty_printer> (*this);
 }

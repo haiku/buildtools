@@ -1,14 +1,36 @@
-2024-05-21  Release Manager
+2026-06-12  Release Manager
 
-	* GCC 13.3.0 released.
+	* GCC 15.3.0 released.
 
-2023-07-27  Release Manager
+2025-08-08  Release Manager
 
-	* GCC 13.2.0 released.
+	* GCC 15.2.0 released.
 
-2023-04-26  Release Manager
+2025-04-25  Release Manager
 
-	* GCC 13.1.0 released.
+	* GCC 15.1.0 released.
+
+2024-05-07  Rainer Orth  <ro@CeBiTec.Uni-Bielefeld.DE>
+
+	* configure.ac (ax_lib_socket_nsl.m4): Don't sinclude.
+	(AX_LIB_SOCKET_NSL): Don't call.
+	(NETLIBS): Remove.
+	* configure: Regenerate.
+	* Makefile.in (NETLIBS): Remove.
+	(g++-mapper-server$(exeext)): Remove $(NETLIBS).
+
+2023-06-22  Marek Polacek  <polacek@redhat.com>
+
+	* configure.ac (--enable-host-bind-now): New check.
+	* configure: Regenerate.
+
+2023-06-15  Marek Polacek  <polacek@redhat.com>
+
+	* Makefile.in: Rename PIEFLAG to PICFLAG.  Set LD_PICFLAG.  Use it.
+	Use pic/libiberty.a if PICFLAG is set.
+	* configure.ac (--enable-default-pie): Set PICFLAG instead of PIEFLAG.
+	(--enable-host-pie): New check.
+	* configure: Regenerate.
 
 2023-03-31  Jonathan Wakely  <jwakely@redhat.com>
 
@@ -197,7 +219,7 @@
 	* server.cc: New.
 
 
-Copyright (C) 2020-2023 Free Software Foundation, Inc.
+Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

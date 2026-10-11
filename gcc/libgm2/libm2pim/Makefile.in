@@ -105,17 +105,21 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+@BUILD_PIMLIB_TRUE@@ENABLE_DARWIN_AT_RPATH_TRUE@am__append_1 = -nodefaultrpaths -Wl,-rpath,@loader_path/
 subdir = libm2pim
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
-am__aclocal_m4_deps = $(top_srcdir)/../libtool.m4 \
-	$(top_srcdir)/../ltoptions.m4 $(top_srcdir)/../ltsugar.m4 \
-	$(top_srcdir)/../ltversion.m4 $(top_srcdir)/../lt~obsolete.m4 \
-	$(top_srcdir)/../config/acx.m4 \
+am__aclocal_m4_deps = $(top_srcdir)/../config/acx.m4 \
 	$(top_srcdir)/../config/depstand.m4 \
 	$(top_srcdir)/../config/lead-dot.m4 \
 	$(top_srcdir)/../config/multi.m4 \
 	$(top_srcdir)/../config/no-executables.m4 \
-	$(top_srcdir)/../config/override.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/../config/override.m4 \
+	$(top_srcdir)/../libtool.m4 $(top_srcdir)/../ltoptions.m4 \
+	$(top_srcdir)/../ltsugar.m4 $(top_srcdir)/../ltversion.m4 \
+	$(top_srcdir)/../lt~obsolete.m4 $(top_srcdir)/acinclude.m4 \
+	$(top_srcdir)/../config/gc++filt.m4 \
+	$(top_srcdir)/../config/tls.m4 $(top_srcdir)/../config/gthr.m4 \
+	$(top_srcdir)/../config/cet.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am
@@ -165,12 +169,14 @@ libm2pim_la_LIBADD =
 @BUILD_PIMLIB_TRUE@	Builtins.lo MathLib0.lo M2EXCEPTION.lo \
 @BUILD_PIMLIB_TRUE@	RTExceptions.lo SMathLib0.lo RTint.lo \
 @BUILD_PIMLIB_TRUE@	Indexing.lo LMathLib0.lo LegacyReal.lo \
-@BUILD_PIMLIB_TRUE@	MemUtils.lo gdbif.lo GetOpt.lo OptLib.lo
+@BUILD_PIMLIB_TRUE@	MemUtils.lo gdbif.lo GetOpt.lo OptLib.lo \
+@BUILD_PIMLIB_TRUE@	ARRAYOFCHAR.lo CHAR.lo StringFileSysOp.lo \
+@BUILD_PIMLIB_TRUE@	String.lo FileSysOp.lo
 @BUILD_PIMLIB_TRUE@am_libm2pim_la_OBJECTS = $(am__objects_1) \
 @BUILD_PIMLIB_TRUE@	UnixArgs.lo Selective.lo sckt.lo errno.lo \
 @BUILD_PIMLIB_TRUE@	dtoa.lo ldtoa.lo termios.lo \
 @BUILD_PIMLIB_TRUE@	SysExceptions.lo libm2pim_la-target.lo \
-@BUILD_PIMLIB_TRUE@	wrapc.lo cgetopt.lo
+@BUILD_PIMLIB_TRUE@	wrapc.lo cgetopt.lo CFileSysOp.lo
 libm2pim_la_OBJECTS = $(am_libm2pim_la_OBJECTS)
 @BUILD_PIMLIB_TRUE@am_libm2pim_la_rpath = -rpath $(toolexeclibdir)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -259,6 +265,7 @@ ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AR = @AR@
+AS = @AS@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -287,6 +294,7 @@ ECHO_T = @ECHO_T@
 EGREP = @EGREP@
 EXEEXT = @EXEEXT@
 FGREP = @FGREP@
+GLIBCXX_LIBS = @GLIBCXX_LIBS@
 GM2_FOR_TARGET = @GM2_FOR_TARGET@
 GREP = @GREP@
 INSTALL = @INSTALL@
@@ -319,7 +327,6 @@ PACKAGE_TARNAME = @PACKAGE_TARNAME@
 PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
-PERL = @PERL@
 RANLIB = @RANLIB@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
@@ -355,6 +362,8 @@ enable_shared = @enable_shared@
 enable_static = @enable_static@
 exec_prefix = @exec_prefix@
 get_gcc_base_ver = @get_gcc_base_ver@
+glibcxx_builddir = @glibcxx_builddir@
+glibcxx_srcdir = @glibcxx_srcdir@
 host = @host@
 host_alias = @host_alias@
 host_cpu = @host_cpu@
@@ -397,6 +406,8 @@ toolexeclibdir = @toolexeclibdir@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
+toplevel_builddir = @toplevel_builddir@
+toplevel_srcdir = @toplevel_srcdir@
 SUFFIXES = .c .mod .def .o .obj .lo .a .la
 ACLOCAL_AMFLAGS = -I .. -I ../config
 
@@ -486,14 +497,20 @@ FLAGS_TO_PASS = $(AM_MAKEFLAGS)
 @BUILD_PIMLIB_TRUE@       Indexing.mod \
 @BUILD_PIMLIB_TRUE@       LMathLib0.mod LegacyReal.mod \
 @BUILD_PIMLIB_TRUE@       MemUtils.mod gdbif.mod \
-@BUILD_PIMLIB_TRUE@       GetOpt.mod OptLib.mod
+@BUILD_PIMLIB_TRUE@       GetOpt.mod OptLib.mod \
+@BUILD_PIMLIB_TRUE@       ARRAYOFCHAR.mod \
+@BUILD_PIMLIB_TRUE@       CHAR.mod \
+@BUILD_PIMLIB_TRUE@       StringFileSysOp.mod \
+@BUILD_PIMLIB_TRUE@       String.mod \
+@BUILD_PIMLIB_TRUE@       FileSysOp.mod
 
 
 # COROUTINES.mod has been removed as it is implemented in ../libm2iso.
 @BUILD_PIMLIB_TRUE@M2DEFS = Args.def   ASCII.def \
 @BUILD_PIMLIB_TRUE@         Assertion.def  Break.def \
 @BUILD_PIMLIB_TRUE@         Builtins.def  cbuiltin.def \
-@BUILD_PIMLIB_TRUE@         CmdArgs.def COROUTINES.def \
+@BUILD_PIMLIB_TRUE@         CmdArgs.def CFileSysOp.def \
+@BUILD_PIMLIB_TRUE@         COROUTINES.def \
 @BUILD_PIMLIB_TRUE@         cxxabi.def  Debug.def \
 @BUILD_PIMLIB_TRUE@         dtoa.def  DynamicStrings.def \
 @BUILD_PIMLIB_TRUE@         Environment.def  errno.def \
@@ -521,7 +538,12 @@ FLAGS_TO_PASS = $(AM_MAKEFLAGS)
 @BUILD_PIMLIB_TRUE@         termios.def  TimeString.def \
 @BUILD_PIMLIB_TRUE@         UnixArgs.def  wrapc.def  \
 @BUILD_PIMLIB_TRUE@         GetOpt.def OptLib.def \
-@BUILD_PIMLIB_TRUE@         cgetopt.def
+@BUILD_PIMLIB_TRUE@         cgetopt.def \
+@BUILD_PIMLIB_TRUE@         ARRAYOFCHAR.def \
+@BUILD_PIMLIB_TRUE@         CHAR.def \
+@BUILD_PIMLIB_TRUE@         StringFileSysOp.def \
+@BUILD_PIMLIB_TRUE@         String.def \
+@BUILD_PIMLIB_TRUE@         FileSysOp.def
 
 @BUILD_PIMLIB_TRUE@libm2pim_la_SOURCES = $(M2MODS) \
 @BUILD_PIMLIB_TRUE@                      UnixArgs.cc \
@@ -529,19 +551,26 @@ FLAGS_TO_PASS = $(AM_MAKEFLAGS)
 @BUILD_PIMLIB_TRUE@                      errno.cc dtoa.cc \
 @BUILD_PIMLIB_TRUE@                      ldtoa.cc termios.cc \
 @BUILD_PIMLIB_TRUE@                      SysExceptions.cc target.c \
-@BUILD_PIMLIB_TRUE@                      wrapc.cc cgetopt.cc
+@BUILD_PIMLIB_TRUE@                      wrapc.cc cgetopt.cc \
+@BUILD_PIMLIB_TRUE@                      CFileSysOp.cc
 
 @BUILD_PIMLIB_TRUE@libm2pimdir = libm2pim
 @BUILD_PIMLIB_TRUE@libm2pim_la_DEPENDENCIES = SYSTEM.def $(addsuffix .lo, $(basename $(libm2pim_la_SOURCES)))
-@BUILD_PIMLIB_TRUE@libm2pim_la_CFLAGS = -I. -I.. -I$(GM2_SRC)/gm2-libs -I$(GM2_SRC)/gm2-libs-iso -DBUILD_GM2_LIBS -I@srcdir@/../  -I@srcdir@/../libm2iso
+@BUILD_PIMLIB_TRUE@libm2pim_la_CFLAGS = \
+@BUILD_PIMLIB_TRUE@  -I. -I.. -I$(GM2_SRC)/gm2-libs -I$(GM2_SRC)/gm2-libs-iso \
+@BUILD_PIMLIB_TRUE@  -DBUILD_GM2_LIBS -I@srcdir@/../  -I@srcdir@/../libm2iso
+
 @BUILD_PIMLIB_TRUE@libm2pim_la_M2FLAGS = \
 @BUILD_PIMLIB_TRUE@  -fm2-pathname=m2pim -I. -I$(GM2_SRC)/gm2-libs \
 @BUILD_PIMLIB_TRUE@  -fm2-pathname=m2iso -I$(GM2_SRC)/gm2-libs-iso \
-@BUILD_PIMLIB_TRUE@  -fm2-g -g -Wcase-enum -Wreturn-type -fcase -fm2-prefix=m2pim
+@BUILD_PIMLIB_TRUE@  -fm2-g -g -Wcase-enum -Wreturn-type \
+@BUILD_PIMLIB_TRUE@  -fcase -fm2-prefix=m2pim
 
-@BUILD_PIMLIB_TRUE@@TARGET_DARWIN_FALSE@libm2pim_la_link_flags = 
-@BUILD_PIMLIB_TRUE@@TARGET_DARWIN_TRUE@libm2pim_la_link_flags = -Wl,-undefined,dynamic_lookup
-@BUILD_PIMLIB_TRUE@libm2pim_la_LINK = $(LINK) -version-info $(libtool_VERSION) $(libm2pim_la_link_flags)
+@BUILD_PIMLIB_TRUE@@TARGET_DARWIN_FALSE@libm2pim_la_link_flags =  \
+@BUILD_PIMLIB_TRUE@@TARGET_DARWIN_FALSE@	$(am__append_1)
+@BUILD_PIMLIB_TRUE@@TARGET_DARWIN_TRUE@libm2pim_la_link_flags = -Wl,-undefined,dynamic_lookup \
+@BUILD_PIMLIB_TRUE@@TARGET_DARWIN_TRUE@	$(am__append_1)
+@BUILD_PIMLIB_TRUE@libm2pim_la_LINK = $(LINK) -version-info $(libtool_VERSION) $(libm2pim_la_link_flags) -lm
 @BUILD_PIMLIB_TRUE@BUILT_SOURCES = SYSTEM.def
 @BUILD_PIMLIB_TRUE@CLEANFILES = SYSTEM.def
 @BUILD_PIMLIB_TRUE@M2LIBDIR = /m2/m2pim/
@@ -624,6 +653,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/CFileSysOp.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/Selective.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/SysExceptions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/UnixArgs.Plo@am__quote@
@@ -883,10 +913,13 @@ uninstall-am: uninstall-toolexeclibLTLIBRARIES
 @BUILD_PIMLIB_TRUE@             "$(GM2_FOR_TARGET)" $@
 
 @BUILD_PIMLIB_TRUE@.mod.lo: SYSTEM.def
-@BUILD_PIMLIB_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(GM2_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) $(LIBCFLAGS) $(libm2pim_la_M2FLAGS) $< -o $@
+@BUILD_PIMLIB_TRUE@	$(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+@BUILD_PIMLIB_TRUE@                   --mode=compile $(GM2_FOR_TARGET) \
+@BUILD_PIMLIB_TRUE@                   -c $(CFLAGS_FOR_TARGET) $(LIBCFLAGS) $(libm2pim_la_M2FLAGS) $< -o $@
 
 @BUILD_PIMLIB_TRUE@.cc.lo:
-@BUILD_PIMLIB_TRUE@	$(LIBTOOL) --tag=CXX --mode=compile $(CXX) -c -I$(srcdir) $(CXXFLAGS) $(LIBCFLAGS) $(libm2pim_la_CFLAGS) $< -o $@
+@BUILD_PIMLIB_TRUE@	$(LIBTOOL) --tag=CXX --mode=compile $(CXX) -c -I$(srcdir) \
+@BUILD_PIMLIB_TRUE@                   $(CXXFLAGS) $(LIBCFLAGS) $(libm2pim_la_CFLAGS) $< -o $@
 
 @BUILD_PIMLIB_TRUE@install-data-local: force
 @BUILD_PIMLIB_TRUE@	mkdir -p $(DESTDIR)$(inst_libdir)/$(M2LIBDIR)

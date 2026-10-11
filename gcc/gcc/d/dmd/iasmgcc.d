@@ -1,12 +1,12 @@
 /**
  * Inline assembler for the GCC D compiler.
  *
- *              Copyright (C) 2018-2023 by The D Language Foundation, All Rights Reserved
+ *              Copyright (C) 2018-2025 by The D Language Foundation, All Rights Reserved
  * Authors:     Iain Buclaw
  * License:     $(LINK2 https://www.boost.org/LICENSE_1_0.txt, Boost License 1.0)
- * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/src/dmd/iasmgcc.d, _iasmgcc.d)
+ * Source:      $(LINK2 https://github.com/dlang/dmd/blob/master/compiler/src/dmd/iasmgcc.d, _iasmgcc.d)
  * Documentation:  https://dlang.org/phobos/dmd_iasmgcc.html
- * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/src/dmd/iasmgcc.d
+ * Coverage:    https://codecov.io/gh/dlang/dmd/src/master/compiler/src/dmd/iasmgcc.d
  */
 
 module dmd.iasmgcc;
@@ -16,6 +16,7 @@ import core.stdc.string;
 import dmd.arraytypes;
 import dmd.astcodegen;
 import dmd.dscope;
+import dmd.dsymbol;
 import dmd.errors;
 import dmd.errorsink;
 import dmd.expression;
@@ -27,6 +28,118 @@ import dmd.parse;
 import dmd.tokens;
 import dmd.statement;
 import dmd.statementsem;
+
+/***********************************
+ * Parse and run semantic analysis on a GccAsmStatement.
+ * Params:
+ *      s  = gcc asm statement being parsed
+ *      sc = the scope where the asm statement is located
+ * Returns:
+ *      the completed gcc asm statement, or null if errors occurred
+ */
+public Statement gccAsmSemantic(GccAsmStatement s, Scope* sc)
+{
+    //printf("GccAsmStatement.semantic()\n");
+    const bool doUnittests = global.params.parsingUnittestsRequired();
+    scope p = new Parser!ASTCodegen(sc._module, ";", false, global.errorSink, &global.compileEnv, doUnittests);
+
+    // Make a safe copy of the token list before parsing.
+    Token* toklist = null;
+    Token **ptoklist = &toklist;
+
+    for (Token* token = s.tokens; token; token = token.next)
+    {
+        *ptoklist = p.allocateToken();
+        memcpy(*ptoklist, token, Token.sizeof);
+        ptoklist = &(*ptoklist).next;
+        *ptoklist = null;
+    }
+    p.token = *toklist;
+    p.baseLoc.startLine = s.loc.linnum;
+    p.linnum = s.loc.linnum;
+
+    // Parse the gcc asm statement.
+    const errors = global.errors;
+    s = p.parseGccAsm(s);
+    if (errors != global.errors)
+        return null;
+    s.stc = sc.stc;
+
+    // Fold the instruction template string.
+    s.insn = semanticString(sc, s.insn, "asm instruction template");
+
+    if (s.labels && s.outputargs)
+        error(s.loc, "extended asm statements with labels cannot have output constraints");
+
+    // Analyse all input and output operands.
+    if (s.args)
+    {
+        foreach (i; 0 .. s.args.length)
+        {
+            Expression e = (*s.args)[i];
+            e = e.expressionSemantic(sc);
+            // Check argument is a valid lvalue/rvalue.
+            if (i < s.outputargs)
+                e = e.modifiableLvalue(sc);
+            else if (e.checkValue())
+                e = ErrorExp.get();
+            (*s.args)[i] = e;
+
+            e = (*s.constraints)[i];
+            e = e.expressionSemantic(sc);
+            assert(e.op == EXP.string_ && (cast(StringExp) e).sz == 1);
+            (*s.constraints)[i] = e;
+        }
+    }
+
+    // Analyse all clobbers.
+    if (s.clobbers)
+    {
+        foreach (i; 0 .. s.clobbers.length)
+        {
+            Expression e = (*s.clobbers)[i];
+            e = e.expressionSemantic(sc);
+            assert(e.op == EXP.string_ && (cast(StringExp) e).sz == 1);
+            (*s.clobbers)[i] = e;
+        }
+    }
+
+    // Analyse all goto labels.
+    if (s.labels)
+    {
+        foreach (i; 0 .. s.labels.length)
+        {
+            Identifier ident = (*s.labels)[i];
+            GotoStatement gs = new GotoStatement(s.loc, ident);
+            if (!s.gotos)
+                s.gotos = new GotoStatements();
+            s.gotos.push(gs);
+            gs.statementSemantic(sc);
+        }
+    }
+
+    return s;
+}
+
+/***********************************
+ * Run semantic analysis on an CAsmDeclaration.
+ * Params:
+ *      ad  = asm declaration
+ *      sc = the scope where the asm declaration is located
+ */
+public void gccAsmSemantic(CAsmDeclaration ad, Scope* sc)
+{
+    import dmd.typesem : pointerTo;
+    ad.code = semanticString(sc, ad.code, "asm definition");
+    ad.code.type = ad.code.type.nextOf().pointerTo();
+
+    // Asm definition always needs emitting into the root module.
+    import dmd.dmodule : Module;
+    if (sc._module && sc._module.isRoot())
+        return;
+    if (Module m = Module.rootModule)
+        m.members.push(ad);
+}
 
 private:
 
@@ -142,9 +255,9 @@ Lerror:
  * Returns:
  *      array of parsed clobber expressions
  */
-Expressions *parseExtAsmClobbers(Parser)(Parser p)
+Expressions* parseExtAsmClobbers(Parser)(Parser p)
 {
-    Expressions *clobbers;
+    Expressions* clobbers;
 
     while (1)
     {
@@ -193,9 +306,9 @@ Lerror:
  * Returns:
  *      array of parsed goto labels
  */
-Identifiers *parseExtAsmGotoLabels(Parser)(Parser p)
+Identifiers* parseExtAsmGotoLabels(Parser)(Parser p)
 {
-    Identifiers *labels;
+    Identifiers* labels;
 
     while (1)
     {
@@ -291,96 +404,6 @@ Ldone:
     return s;
 }
 
-/***********************************
- * Parse and run semantic analysis on a GccAsmStatement.
- * Params:
- *      s  = gcc asm statement being parsed
- *      sc = the scope where the asm statement is located
- * Returns:
- *      the completed gcc asm statement, or null if errors occurred
- */
-extern (C++) public Statement gccAsmSemantic(GccAsmStatement s, Scope *sc)
-{
-    //printf("GccAsmStatement.semantic()\n");
-    scope p = new Parser!ASTCodegen(sc._module, ";", false, global.errorSink);
-
-    // Make a safe copy of the token list before parsing.
-    Token *toklist = null;
-    Token **ptoklist = &toklist;
-
-    for (Token *token = s.tokens; token; token = token.next)
-    {
-        *ptoklist = p.allocateToken();
-        memcpy(*ptoklist, token, Token.sizeof);
-        ptoklist = &(*ptoklist).next;
-        *ptoklist = null;
-    }
-    p.token = *toklist;
-    p.scanloc = s.loc;
-
-    // Parse the gcc asm statement.
-    const errors = global.errors;
-    s = p.parseGccAsm(s);
-    if (errors != global.errors)
-        return null;
-    s.stc = sc.stc;
-
-    // Fold the instruction template string.
-    s.insn = semanticString(sc, s.insn, "asm instruction template");
-
-    if (s.labels && s.outputargs)
-        s.error("extended asm statements with labels cannot have output constraints");
-
-    // Analyse all input and output operands.
-    if (s.args)
-    {
-        foreach (i; 0 .. s.args.length)
-        {
-            Expression e = (*s.args)[i];
-            e = e.expressionSemantic(sc);
-            // Check argument is a valid lvalue/rvalue.
-            if (i < s.outputargs)
-                e = e.modifiableLvalue(sc, null);
-            else if (e.checkValue())
-                e = ErrorExp.get();
-            (*s.args)[i] = e;
-
-            e = (*s.constraints)[i];
-            e = e.expressionSemantic(sc);
-            assert(e.op == EXP.string_ && (cast(StringExp) e).sz == 1);
-            (*s.constraints)[i] = e;
-        }
-    }
-
-    // Analyse all clobbers.
-    if (s.clobbers)
-    {
-        foreach (i; 0 .. s.clobbers.length)
-        {
-            Expression e = (*s.clobbers)[i];
-            e = e.expressionSemantic(sc);
-            assert(e.op == EXP.string_ && (cast(StringExp) e).sz == 1);
-            (*s.clobbers)[i] = e;
-        }
-    }
-
-    // Analyse all goto labels.
-    if (s.labels)
-    {
-        foreach (i; 0 .. s.labels.length)
-        {
-            Identifier ident = (*s.labels)[i];
-            GotoStatement gs = new GotoStatement(s.loc, ident);
-            if (!s.gotos)
-                s.gotos = new GotoStatements();
-            s.gotos.push(gs);
-            gs.statementSemantic(sc);
-        }
-    }
-
-    return s;
-}
-
 unittest
 {
     import dmd.mtype : TypeBasic;
@@ -388,7 +411,7 @@ unittest
     if (!global.errorSink)
         global.errorSink = new ErrorSinkCompiler;
 
-    uint errors = global.startGagging();
+    const errors = global.startGagging();
     scope(exit) global.endGagging(errors);
 
     // If this check fails, then Type._init() was called before reaching here,
@@ -410,7 +433,8 @@ unittest
     {
         const errors = global.errors;
         scope gas = new GccAsmStatement(Loc.initial, tokens);
-        scope p = new Parser!ASTCodegen(null, ";", false, global.errorSink);
+        const bool doUnittests = false;
+        scope p = new Parser!ASTCodegen(null, ";", false, global.errorSink, &global.compileEnv, doUnittests);
         p.token = *tokens;
         p.parseGccAsm(gas);
         return global.errors - errors;
@@ -420,7 +444,8 @@ unittest
     static void parseAsm(string input, bool expectError)
     {
         // Generate tokens from input test.
-        scope p = new Parser!ASTCodegen(null, input, false, global.errorSink);
+        const bool doUnittests = false;
+        scope p = new Parser!ASTCodegen(null, input, false, global.errorSink, &global.compileEnv, doUnittests);
         p.nextToken();
 
         Token* toklist = null;

@@ -1,5 +1,5 @@
 /* Basic block path solver.
-   Copyright (C) 2021-2023 Free Software Foundation, Inc.
+   Copyright (C) 2021-2025 Free Software Foundation, Inc.
    Contributed by Aldy Hernandez <aldyh@redhat.com>.
 
 This file is part of GCC.
@@ -40,30 +40,31 @@ path_range_query::path_range_query (gimple_ranger &ranger,
 				    const vec<basic_block> &path,
 				    const bitmap_head *dependencies,
 				    bool resolve)
-  : m_cache (new ssa_global_cache),
-    m_has_cache_entry (BITMAP_ALLOC (NULL)),
+  : m_cache (),
     m_ranger (ranger),
     m_resolve (resolve)
 {
-  m_oracle = new path_oracle (m_ranger.oracle ());
+  share_query (ranger);
+  // Override the relation oracle with a local path relation oracle.
+  m_relation = new path_oracle (&(m_ranger.relation ()));
 
   reset_path (path, dependencies);
 }
 
 path_range_query::path_range_query (gimple_ranger &ranger, bool resolve)
-  : m_cache (new ssa_global_cache),
-    m_has_cache_entry (BITMAP_ALLOC (NULL)),
+  : m_cache (),
     m_ranger (ranger),
     m_resolve (resolve)
 {
-  m_oracle = new path_oracle (m_ranger.oracle ());
+  share_query (ranger);
+  // Override the relation oracle with a local path relation oracle.
+  m_relation = new path_oracle (&(m_ranger.relation ()));
 }
 
 path_range_query::~path_range_query ()
 {
-  delete m_oracle;
-  BITMAP_FREE (m_has_cache_entry);
-  delete m_cache;
+  delete m_relation;
+  m_relation = NULL;
 }
 
 // Return TRUE if NAME is an exit dependency for the path.
@@ -75,15 +76,6 @@ path_range_query::exit_dependency_p (tree name)
 	  && bitmap_bit_p (m_exit_dependencies, SSA_NAME_VERSION (name)));
 }
 
-// Mark cache entry for NAME as unused.
-
-void
-path_range_query::clear_cache (tree name)
-{
-  unsigned v = SSA_NAME_VERSION (name);
-  bitmap_clear_bit (m_has_cache_entry, v);
-}
-
 // If NAME has a cache entry, return it in R, and return TRUE.
 
 inline bool
@@ -92,21 +84,7 @@ path_range_query::get_cache (vrange &r, tree name)
   if (!gimple_range_ssa_p (name))
     return get_global_range_query ()->range_of_expr (r, name);
 
-  unsigned v = SSA_NAME_VERSION (name);
-  if (bitmap_bit_p (m_has_cache_entry, v))
-    return m_cache->get_global_range (r, name);
-
-  return false;
-}
-
-// Set the cache entry for NAME to R.
-
-void
-path_range_query::set_cache (const vrange &r, tree name)
-{
-  unsigned v = SSA_NAME_VERSION (name);
-  bitmap_set_bit (m_has_cache_entry, v);
-  m_cache->set_global_range (name, r);
+  return m_cache.get_range (r, name);
 }
 
 void
@@ -130,7 +108,7 @@ path_range_query::dump (FILE *dump_file)
       fprintf (dump_file, "\n");
     }
 
-  m_cache->dump (dump_file);
+  m_cache.dump (dump_file);
 }
 
 void
@@ -174,7 +152,7 @@ path_range_query::internal_range_of_expr (vrange &r, tree name, gimple *stmt)
   if (m_resolve && defined_outside_path (name))
     {
       range_on_path_entry (r, name);
-      set_cache (r, name);
+      m_cache.set_range (name, r);
       return true;
     }
 
@@ -183,12 +161,12 @@ path_range_query::internal_range_of_expr (vrange &r, tree name, gimple *stmt)
     {
       if (TREE_CODE (name) == SSA_NAME)
 	{
-	  Value_Range glob (TREE_TYPE (name));
+	  value_range glob (TREE_TYPE (name));
 	  gimple_range_global (glob, name);
 	  r.intersect (glob);
 	}
 
-      set_cache (r, name);
+      m_cache.set_range (name, r);
       return true;
     }
 
@@ -225,7 +203,7 @@ path_range_query::reset_path (const vec<basic_block> &path,
   m_path = path.copy ();
   m_pos = m_path.length () - 1;
   m_undefined_path = false;
-  bitmap_clear (m_has_cache_entry);
+  m_cache.clear ();
 
   compute_ranges (dependencies);
 }
@@ -255,16 +233,16 @@ path_range_query::ssa_range_in_phi (vrange &r, gphi *phi)
       if (m_resolve && m_ranger.range_of_expr (r, name, phi))
 	return;
 
-      // Try to fold the phi exclusively with global or cached values.
+      // Try to fold the phi exclusively with global values.
       // This will get things like PHI <5(99), 6(88)>.  We do this by
       // calling range_of_expr with no context.
       unsigned nargs = gimple_phi_num_args (phi);
-      Value_Range arg_range (TREE_TYPE (name));
+      value_range arg_range (TREE_TYPE (name));
       r.set_undefined ();
       for (size_t i = 0; i < nargs; ++i)
 	{
 	  tree arg = gimple_phi_arg_def (phi, i);
-	  if (range_of_expr (arg_range, arg, /*stmt=*/NULL))
+	  if (m_ranger.range_of_expr (arg_range, arg, /*stmt=*/NULL))
 	    r.union_ (arg_range);
 	  else
 	    {
@@ -285,7 +263,7 @@ path_range_query::ssa_range_in_phi (vrange &r, gphi *phi)
     {
       if (m_resolve)
 	{
-	  Value_Range tmp (TREE_TYPE (name));
+	  value_range tmp (TREE_TYPE (name));
 	  // Using both the range on entry to the path, and the
 	  // range on this edge yields significantly better
 	  // results.
@@ -329,7 +307,7 @@ path_range_query::range_defined_in_block (vrange &r, tree name, basic_block bb)
     }
 
   if (bb && POINTER_TYPE_P (TREE_TYPE (name)))
-    m_ranger.m_cache.m_exit.maybe_adjust_range (r, name, bb);
+    infer_oracle ().maybe_adjust_range (r, name, bb);
 
   if (DEBUG_SOLVER && (bb || !r.varying_p ()))
     {
@@ -348,8 +326,6 @@ path_range_query::range_defined_in_block (vrange &r, tree name, basic_block bb)
 void
 path_range_query::compute_ranges_in_phis (basic_block bb)
 {
-  auto_bitmap phi_set;
-
   // PHIs must be resolved simultaneously on entry to the block
   // because any dependencies must be satisfied with values on entry.
   // Thus, we calculate all PHIs first, and then update the cache at
@@ -363,18 +339,10 @@ path_range_query::compute_ranges_in_phis (basic_block bb)
       if (!exit_dependency_p (name))
 	continue;
 
-      Value_Range r (TREE_TYPE (name));
+      value_range r (TREE_TYPE (name));
       if (range_defined_in_block (r, name, bb))
-	{
-	  unsigned v = SSA_NAME_VERSION (name);
-	  set_cache (r, name);
-	  bitmap_set_bit (phi_set, v);
-	  // Pretend we don't have a cache entry for this name until
-	  // we're done with all PHIs.
-	  bitmap_clear_bit (m_has_cache_entry, v);
-	}
+	m_cache.set_range (name, r);
     }
-  bitmap_ior_into (m_has_cache_entry, phi_set);
 }
 
 // Return TRUE if relations may be invalidated after crossing edge E.
@@ -408,7 +376,7 @@ path_range_query::compute_ranges_in_block (basic_block bb)
     {
       tree name = ssa_name (i);
       if (ssa_defined_in_bb (name, bb))
-	clear_cache (name);
+	m_cache.clear_range (name);
     }
 
   // Solve dependencies defined in this block, starting with the PHIs...
@@ -417,11 +385,11 @@ path_range_query::compute_ranges_in_block (basic_block bb)
   EXECUTE_IF_SET_IN_BITMAP (m_exit_dependencies, 0, i, bi)
     {
       tree name = ssa_name (i);
-      Value_Range r (TREE_TYPE (name));
+      value_range r (TREE_TYPE (name));
 
       if (gimple_code (SSA_NAME_DEF_STMT (name)) != GIMPLE_PHI
 	  && range_defined_in_block (r, name, bb))
-	set_cache (r, name);
+	m_cache.set_range (name, r);
     }
 
   if (at_exit ())
@@ -445,22 +413,21 @@ path_range_query::compute_ranges_in_block (basic_block bb)
       p->reset_path ();
     }
 
-  gori_compute &g = m_ranger.gori ();
-  bitmap exports = g.exports (bb);
+  bitmap exports = gori_ssa ()->exports (bb);
   EXECUTE_IF_AND_IN_BITMAP (m_exit_dependencies, exports, 0, i, bi)
     {
       tree name = ssa_name (i);
-      Value_Range r (TREE_TYPE (name));
-      if (g.outgoing_edge_range_p (r, e, name, *this))
+      value_range r (TREE_TYPE (name));
+      if (gori ().edge_range_p (r, e, name, *this))
 	{
-	  Value_Range cached_range (TREE_TYPE (name));
+	  value_range cached_range (TREE_TYPE (name));
 	  if (get_cache (cached_range, name))
 	    r.intersect (cached_range);
 
-	  set_cache (r, name);
+	  m_cache.set_range (name, r);
 	  if (DEBUG_SOLVER)
 	    {
-	      fprintf (dump_file, "outgoing_edge_range_p for ");
+	      fprintf (dump_file, "edge_range_p for ");
 	      print_generic_expr (dump_file, name, TDF_SLIM);
 	      fprintf (dump_file, " on edge %d->%d ",
 		       e->src->index, e->dest->index);
@@ -480,7 +447,7 @@ path_range_query::compute_ranges_in_block (basic_block bb)
 void
 path_range_query::adjust_for_non_null_uses (basic_block bb)
 {
-  int_range_max r;
+  prange r;
   bitmap_iterator bi;
   unsigned i;
 
@@ -499,8 +466,8 @@ path_range_query::adjust_for_non_null_uses (basic_block bb)
       else
 	r.set_varying (TREE_TYPE (name));
 
-      if (m_ranger.m_cache.m_exit.maybe_adjust_range (r, name, bb))
-	set_cache (r, name);
+      if (infer_oracle ().maybe_adjust_range (r, name, bb))
+	m_cache.set_range (name, r);
     }
 }
 
@@ -510,7 +477,7 @@ bool
 path_range_query::add_to_exit_dependencies (tree name, bitmap dependencies)
 {
   if (TREE_CODE (name) == SSA_NAME
-      && Value_Range::supports_type_p (TREE_TYPE (name)))
+      && value_range::supports_type_p (TREE_TYPE (name)))
     return bitmap_set_bit (dependencies, SSA_NAME_VERSION (name));
   return false;
 }
@@ -523,8 +490,7 @@ path_range_query::compute_exit_dependencies (bitmap dependencies)
 {
   // Start with the imports from the exit block...
   basic_block exit = m_path[0];
-  gori_compute &gori = m_ranger.gori ();
-  bitmap_copy (dependencies, gori.imports (exit));
+  bitmap_copy (dependencies, gori_ssa ()->imports (exit));
 
   auto_vec<tree> worklist (bitmap_count_bits (dependencies));
   bitmap_iterator bi;
@@ -572,7 +538,7 @@ path_range_query::compute_exit_dependencies (bitmap dependencies)
       {
 	basic_block bb = m_path[i];
 	tree name;
-	FOR_EACH_GORI_EXPORT_NAME (gori, bb, name)
+	FOR_EACH_GORI_EXPORT_NAME (gori_ssa (), bb, name)
 	  if (TREE_CODE (TREE_TYPE (name)) == BOOLEAN_TYPE)
 	    bitmap_set_bit (dependencies, SSA_NAME_VERSION (name));
       }
@@ -599,7 +565,7 @@ path_range_query::compute_ranges (const bitmap_head *dependencies)
   if (m_resolve)
     {
       path_oracle *p = get_path_oracle ();
-      p->reset_path (m_ranger.oracle ());
+      p->reset_path (&(m_ranger.relation ()));
     }
 
   if (DEBUG_SOLVER)
@@ -647,8 +613,7 @@ path_range_query::compute_ranges (const bitmap_head *dependencies)
 class jt_fur_source : public fur_depend
 {
 public:
-  jt_fur_source (gimple *s, path_range_query *, gori_compute *,
-		 const vec<basic_block> &);
+  jt_fur_source (gimple *s, path_range_query *, const vec<basic_block> &);
   relation_kind query_relation (tree op1, tree op2) override;
   void register_relation (gimple *, relation_kind, tree op1, tree op2) override;
   void register_relation (edge, relation_kind, tree op1, tree op2) override;
@@ -658,18 +623,12 @@ private:
 
 jt_fur_source::jt_fur_source (gimple *s,
 			      path_range_query *query,
-			      gori_compute *gori,
 			      const vec<basic_block> &path)
-  : fur_depend (s, gori, query)
+  : fur_depend (s, query)
 {
   gcc_checking_assert (!path.is_empty ());
 
   m_entry = path[path.length () - 1];
-
-  if (dom_info_available_p (CDI_DOMINATORS))
-    m_oracle = query->oracle ();
-  else
-    m_oracle = NULL;
 }
 
 // Ignore statement and register relation on entry to path.
@@ -677,8 +636,7 @@ jt_fur_source::jt_fur_source (gimple *s,
 void
 jt_fur_source::register_relation (gimple *, relation_kind k, tree op1, tree op2)
 {
-  if (m_oracle)
-    m_oracle->register_relation (m_entry, k, op1, op2);
+  m_query->relation ().record (m_entry, k, op1, op2);
 }
 
 // Ignore edge and register relation on entry to path.
@@ -686,20 +644,16 @@ jt_fur_source::register_relation (gimple *, relation_kind k, tree op1, tree op2)
 void
 jt_fur_source::register_relation (edge, relation_kind k, tree op1, tree op2)
 {
-  if (m_oracle)
-    m_oracle->register_relation (m_entry, k, op1, op2);
+  m_query->relation ().record (m_entry, k, op1, op2);
 }
 
 relation_kind
 jt_fur_source::query_relation (tree op1, tree op2)
 {
-  if (!m_oracle)
-    return VREL_VARYING;
-
   if (TREE_CODE (op1) != SSA_NAME || TREE_CODE (op2) != SSA_NAME)
     return VREL_VARYING;
 
-  return m_oracle->query_relation (m_entry, op1, op2);
+  return m_query->relation ().query (m_entry, op1, op2);
 }
 
 // Return the range of STMT at the end of the path being analyzed.
@@ -717,7 +671,7 @@ path_range_query::range_of_stmt (vrange &r, gimple *stmt, tree)
   if (m_resolve)
     {
       fold_using_range f;
-      jt_fur_source src (stmt, this, &m_ranger.gori (), m_path);
+      jt_fur_source src (stmt, this, m_path);
       if (!f.fold_stmt (r, stmt, src))
 	r.set_varying (type);
     }
@@ -753,7 +707,7 @@ path_range_query::maybe_register_phi_relation (gphi *phi, edge e)
     fprintf (dump_file, "maybe_register_phi_relation in bb%d:", bb->index);
 
   get_path_oracle ()->killing_def (result);
-  m_oracle->register_relation (entry_bb (), VREL_EQ, arg, result);
+  m_relation->record (entry_bb (), VREL_EQ, arg, result);
 }
 
 // Compute relations for each PHI in BB.  For example:
@@ -794,7 +748,7 @@ path_range_query::compute_phi_relations (basic_block bb, basic_block prev)
 void
 path_range_query::compute_outgoing_relations (basic_block bb, basic_block next)
 {
-  if (gcond *cond = safe_dyn_cast <gcond *> (last_stmt (bb)))
+  if (gcond *cond = safe_dyn_cast <gcond *> (*gsi_last_bb (bb)))
     {
       int_range<2> r;
       edge e0 = EDGE_SUCC (bb, 0);
@@ -807,7 +761,7 @@ path_range_query::compute_outgoing_relations (basic_block bb, basic_block next)
       else
 	gcc_unreachable ();
 
-      jt_fur_source src (NULL, this, &m_ranger.gori (), m_path);
+      jt_fur_source src (NULL, this, m_path);
       src.register_outgoing_edges (cond, r, e0, e1);
     }
 }

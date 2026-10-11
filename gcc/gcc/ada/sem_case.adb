@@ -6,7 +6,7 @@
 --                                                                          --
 --                                 B o d y                                  --
 --                                                                          --
---          Copyright (C) 1996-2023, Free Software Foundation, Inc.         --
+--          Copyright (C) 1996-2025, Free Software Foundation, Inc.         --
 --                                                                          --
 -- GNAT is free software;  you can  redistribute it  and/or modify it under --
 -- terms of the  GNU General Public License as published  by the Free Soft- --
@@ -58,9 +58,9 @@ with GNAT.Sets;
 package body Sem_Case is
 
    type Choice_Bounds is record
-     Lo   : Node_Id;
-     Hi   : Node_Id;
-     Node : Node_Id;
+      Lo   : Node_Id;
+      Hi   : Node_Id;
+      Node : Node_Id;
    end record;
    --  Represent one choice bounds entry with Lo and Hi values, Node points
    --  to the choice node itself.
@@ -1550,8 +1550,8 @@ package body Sem_Case is
             return Result;
          end Component_Bounds_Info;
 
-         Component_Bounds : constant Composite_Range_Info
-           := Component_Bounds_Info;
+         Component_Bounds : constant Composite_Range_Info :=
+           Component_Bounds_Info;
 
          package Case_Bindings is
 
@@ -2517,8 +2517,8 @@ package body Sem_Case is
 
                use Uint_Sets;
 
-               Result : constant Representative_Values_Array
-                 := (others => Uint_Sets.Create (Initial_Size => 32));
+               Result : constant Representative_Values_Array :=
+                 (others => Uint_Sets.Create (Initial_Size => 32));
 
                procedure Insert_Representative (Value : Uint; P : Part_Id);
                --  Insert the given Value into the representative values set
@@ -2563,8 +2563,8 @@ package body Sem_Case is
                return Result;
             end Representative_Values_Init;
 
-            Representative_Values : constant Representative_Values_Array
-              := Representative_Values_Init;
+            Representative_Values : constant Representative_Values_Array :=
+              Representative_Values_Init;
             --  We want to avoid looking at every point in the Cartesian
             --  product of all component values. Instead we select, for each
             --  component, a set of representative values and then look only
@@ -2664,8 +2664,8 @@ package body Sem_Case is
                   return Equal;
                else
                   declare
-                     Intersection : constant Value_Index_Set
-                       := Indexed (S1) and Indexed (S2);
+                     Intersection : constant Value_Index_Set :=
+                       Indexed (S1) and Indexed (S2);
                   begin
                      if (for all Flag of Intersection => not Flag) then
                         return Disjoint;
@@ -2752,7 +2752,7 @@ package body Sem_Case is
                procedure Test_Point_For_Match is
                   function In_Range (Val : Uint; Rang : Discrete_Range_Info)
                     return Boolean is
-                    ((Rang.Low <= Val) and then (Val <= Rang.High));
+                    (Rang.Low <= Val and then Val <= Rang.High);
                begin
                   pragma Assert (not Done);
                   Matches (Next_Index) :=
@@ -3429,8 +3429,8 @@ package body Sem_Case is
                      Others_Seen := True;
                   else
                      if Flag_Overlapping_Within_One_Alternative
-                        and then (Compare (Matches (Choice.Alternative),
-                                  Choice.Matches) /= Disjoint)
+                        and then Compare (Matches (Choice.Alternative),
+                                          Choice.Matches) /= Disjoint
                      then
                         Error_Msg_N
                           ("bad overlapping within one alternative", N);
@@ -3479,7 +3479,7 @@ package body Sem_Case is
                   Union (Target => Covered, Source => Matches (A1));
                end loop;
 
-               if (not Others_Seen) and then not Complement_Is_Empty (Covered)
+               if not Others_Seen and then not Complement_Is_Empty (Covered)
                then
                   Error_Msg_N ("not all values are covered", N);
                end if;
@@ -3590,7 +3590,7 @@ package body Sem_Case is
 
             --  Hold on, maybe it isn't a complete mess after all.
 
-            if Core_Extensions_Allowed and then Subtyp /= Any_Type then
+            if All_Extensions_Allowed and then Subtyp /= Any_Type then
                Check_Composite_Case_Selector;
                Check_Case_Pattern_Choices;
             end if;
@@ -3684,12 +3684,15 @@ package body Sem_Case is
                            --  Use of nonstatic predicate is an error
 
                            if not Is_Discrete_Type (E)
-                             or else not Has_Static_Predicate (E)
+                             or else (not Has_Static_Predicate (E)
+                                        and then
+                                      not Has_Static_Predicate_Aspect (E))
                              or else Has_Dynamic_Predicate_Aspect (E)
+                             or else Has_Ghost_Predicate_Aspect (E)
                            then
                               Bad_Predicated_Subtype_Use
-                                ("cannot use subtype& with non-static "
-                                 & "predicate as case alternative",
+                                ("cannot use subtype& with nonstatic "
+                                 & "predicate as choice in case alternative",
                                  Choice, E, Suggest_Static => True);
 
                            --  Static predicate case. The bounds are those of
@@ -3823,7 +3826,7 @@ package body Sem_Case is
               (Choice_Table,
                Bounds_Type,
                Subtyp,
-               Others_Present or else (Choice_Type = Universal_Integer),
+               Others_Present or else Choice_Type = Universal_Integer,
                N);
 
             --  If no others choice we are all done, otherwise we have one more
@@ -3873,7 +3876,7 @@ package body Sem_Case is
    function Is_Case_Choice_Pattern (Expr : Node_Id) return Boolean is
       E : Node_Id := Expr;
    begin
-      if not Core_Extensions_Allowed then
+      if not All_Extensions_Allowed then
          return False;
       end if;
 

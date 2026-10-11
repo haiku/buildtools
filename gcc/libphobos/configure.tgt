@@ -1,5 +1,5 @@
 # -*- shell-script -*-
-# Copyright (C) 2018-2023 Free Software Foundation, Inc.
+# Copyright (C) 2018-2025 Free Software Foundation, Inc.
 #
 # GCC is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,7 +36,10 @@ case "${target}" in
   arm*-*-linux*)
 	LIBPHOBOS_SUPPORTED=yes
 	;;
-  hppa-*-linux*)
+  hppa-*-linux* | hppa[12]*-*-linux*)
+	LIBPHOBOS_SUPPORTED=yes
+	;;
+  loongarch*-*-linux*)
 	LIBPHOBOS_SUPPORTED=yes
 	;;
   mips*-*-linux*)
@@ -44,6 +47,15 @@ case "${target}" in
 	;;
   power*-*-freebsd*)
 	LIBPHOBOS_SUPPORTED=yes
+	;;
+  powerpc64le-*linux*)
+	LIBPHOBOS_SUPPORTED=yes
+	case "$ac_configure_args" in
+	  *--with-long-double-format=ieee*)
+	    ;;
+	  *)
+	    LIBDRUNTIME_ONLY=yes
+	esac
 	;;
   power*-*-linux*)
 	LIBPHOBOS_SUPPORTED=yes
@@ -55,7 +67,7 @@ case "${target}" in
   s390*-linux*)
 	LIBPHOBOS_SUPPORTED=yes
 	;;
-  sparc*-*-solaris2.11*)
+  sparc64-*-linux* | sparc*-*-solaris2.11*)
 	LIBPHOBOS_SUPPORTED=yes
 	;;
   *-*-darwin9* | *-*-darwin1[01]*)

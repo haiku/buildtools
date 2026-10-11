@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Copyright (C) 2013-2023 Free Software Foundation, Inc.
+# Copyright (C) 2013-2025 Free Software Foundation, Inc.
 #
 # This script is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -83,6 +83,7 @@ class GenericFilter:
                 'gpl_v3.texi',
                 'fdl-1.3.xml',
                 'gpl-3.0.xml',
+                'gpl_v3_without_node.texi',
 
                 # Skip auto- and libtool-related files
                 'aclocal.m4',
@@ -556,6 +557,11 @@ class GCCFilter (GenericFilter):
         self.skip_files |= set ([
                 # Not part of GCC
                 'math-68881.h',
+
+                # Weird ways to compose copyright year
+                'GmcOptions.cc',
+                'gen-evolution.awk',
+                'gen-cxxapi-file.py',
                 ])
 
         self.skip_dirs |= set ([
@@ -582,6 +588,11 @@ class GCCFilter (GenericFilter):
 class TestsuiteFilter (GenericFilter):
     def __init__ (self):
         GenericFilter.__init__ (self)
+
+        self.skip_files |= set ([
+                # Weird ways to compose copyright year
+                'spec-example-4.sarif',
+                ])
 
         self.skip_extensions |= set ([
                 # Don't change the tests, which could be woend by anyone.
@@ -615,6 +626,12 @@ class TestsuiteFilter (GenericFilter):
 class LibCppFilter (GenericFilter):
     def __init__ (self):
         GenericFilter.__init__ (self)
+
+        self.skip_files |= set ([
+                # Generated file with the generated strings sometimes
+                # matching the regexps.
+                'uname2c.h',
+                ])
 
         self.skip_extensions |= set ([
                 # Maintained by the translation project.
@@ -775,6 +792,7 @@ class GCCCmdLine (CmdLine):
         self.add_dir ('libgfortran')
         # libgo is imported from upstream.
         self.add_dir ('libgomp')
+        self.add_dir ('libgrust')
         self.add_dir ('libiberty')
         self.add_dir ('libitm')
         self.add_dir ('libobjc')
@@ -802,6 +820,7 @@ class GCCCmdLine (CmdLine):
             'libgcc',
             'libgfortran',
             'libgomp',
+            'libgrust',
             'libiberty',
             'libitm',
             'libobjc',

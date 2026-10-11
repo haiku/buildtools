@@ -1,5 +1,5 @@
 /* Symbol table.
-   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+   Copyright (C) 2012-2025 Free Software Foundation, Inc.
    Contributed by Jan Hubicka
 
 This file is part of GCC.
@@ -331,7 +331,7 @@ symbol_table::change_decl_assembler_name (tree decl, tree name)
 			      && IDENTIFIER_TRANSPARENT_ALIAS
 				     (DECL_ASSEMBLER_NAME (alias->decl)));
 
-		  TREE_CHAIN (DECL_ASSEMBLER_NAME (alias->decl)) = 
+		  TREE_CHAIN (DECL_ASSEMBLER_NAME (alias->decl)) =
 		    ultimate_transparent_alias_target
 			 (DECL_ASSEMBLER_NAME (node->decl));
 		}
@@ -578,7 +578,7 @@ symtab_node::get_dump_name (bool asm_name_p) const
   unsigned l = strlen (fname);
 
   char *s = (char *)ggc_internal_cleared_alloc (l + EXTRA);
-  snprintf (s, l + EXTRA, "%s/%d", fname, order);
+  snprintf (s, l + EXTRA, "%s/%d", fname, m_uid);
 
   return s;
 }
@@ -989,10 +989,10 @@ symtab_node::dump_base (FILE *f)
 	     same_comdat_group->dump_asm_name ());
   if (next_sharing_asm_name)
     fprintf (f, "  next sharing asm name: %i\n",
-	     next_sharing_asm_name->order);
+	     next_sharing_asm_name->get_uid ());
   if (previous_sharing_asm_name)
     fprintf (f, "  previous sharing asm name: %i\n",
-	     previous_sharing_asm_name->order);
+	     previous_sharing_asm_name->get_uid ());
 
   if (address_taken)
     fprintf (f, "  Address is taken.\n");
@@ -1135,7 +1135,7 @@ symtab_node::verify_base (void)
       error ("node has invalid order %i", order);
       error_found = true;
     }
-   
+
   if (symtab->state != LTO_STREAMING)
     {
       hashed_node = symtab_node::get (decl);
@@ -2160,7 +2160,7 @@ symtab_node::get_partitioning_class (void)
   if (DECL_ABSTRACT_P (decl))
     return SYMBOL_EXTERNAL;
 
-  if (cnode && (cnode->inlined_to || cnode->declare_variant_alt))
+  if (cnode && cnode->inlined_to)
     return SYMBOL_DUPLICATE;
 
   /* Transparent aliases are always duplicated.  */
@@ -2207,10 +2207,11 @@ symtab_node::get_partitioning_class (void)
   return SYMBOL_PARTITION;
 }
 
-/* Return true when symbol is known to be non-zero.  */
+/* Return true when symbol is known to be non-zero, assume that
+   flag_delete_null_pointer_checks is equal to delete_null_pointer_checks.  */
 
 bool
-symtab_node::nonzero_address ()
+symtab_node::nonzero_address (bool delete_null_pointer_checks)
 {
   /* Weakrefs may be NULL when their target is not defined.  */
   if (alias && weakref)
@@ -2225,7 +2226,7 @@ symtab_node::nonzero_address ()
 	     target is used only via the alias.
 	     We may walk references and look for strong use, but we do not know
 	     if this strong use will survive to final binary, so be
-	     conservative here.  
+	     conservative here.
 	     ??? Maybe we could do the lookup during late optimization that
 	     could be useful to eliminate the NULL pointer checks in LTO
 	     programs.  */
@@ -2234,7 +2235,7 @@ symtab_node::nonzero_address ()
 	  if (target->resolution != LDPR_UNKNOWN
 	      && target->resolution != LDPR_UNDEF
 	      && !target->can_be_discarded_p ()
-	      && flag_delete_null_pointer_checks)
+	      && delete_null_pointer_checks)
 	    return true;
 	  return false;
 	}
@@ -2251,7 +2252,7 @@ symtab_node::nonzero_address ()
 
      When parsing, beware the cases when WEAK attribute is added later.  */
   if ((!DECL_WEAK (decl) || DECL_COMDAT (decl))
-      && flag_delete_null_pointer_checks)
+      && delete_null_pointer_checks)
     {
       refuse_visibility_changes = true;
       return true;
@@ -2262,7 +2263,7 @@ symtab_node::nonzero_address ()
      Play safe for flag_delete_null_pointer_checks where weak definition may
      be re-defined by NULL.  */
   if (definition && !DECL_EXTERNAL (decl)
-      && (flag_delete_null_pointer_checks || !DECL_WEAK (decl)))
+      && (delete_null_pointer_checks || !DECL_WEAK (decl)))
     {
       if (!DECL_WEAK (decl))
         refuse_visibility_changes = true;
@@ -2273,14 +2274,22 @@ symtab_node::nonzero_address ()
   if (resolution != LDPR_UNKNOWN
       && resolution != LDPR_UNDEF
       && !can_be_discarded_p ()
-      && flag_delete_null_pointer_checks)
+      && delete_null_pointer_checks)
     return true;
   return false;
 }
 
+/* Return true when symbol is known to be non-zero.  */
+
+bool
+symtab_node::nonzero_address ()
+{
+  return nonzero_address (flag_delete_null_pointer_checks);
+}
+
 /* Return 0 if symbol is known to have different address than S2,
    Return 1 if symbol is known to have same address as S2,
-   return -1 otherwise.  
+   return -1 otherwise.
 
    If MEMORY_ACCESSED is true, assume that both memory pointer to THIS
    and S2 is going to be accessed.  This eliminates the situations when
@@ -2355,7 +2364,7 @@ symtab_node::equal_address_to (symtab_node *s2, bool memory_accessed)
 
   /* If we have a non-interposable definition of at least one of the symbols
      and the other symbol is different, we know other unit cannot interpose
-     it to the first symbol; all aliases of the definition needs to be 
+     it to the first symbol; all aliases of the definition needs to be
      present in the current unit.  */
   if (((really_binds_local1 || really_binds_local2)
       /* If we have both definitions and they are different, we know they
@@ -2550,7 +2559,7 @@ symtab_node::definition_alignment ()
 
 /* Return symbol used to separate symbol name from suffix.  */
 
-char 
+char
 symbol_table::symbol_suffix_separator ()
 {
 #ifndef NO_DOT_IN_LABEL

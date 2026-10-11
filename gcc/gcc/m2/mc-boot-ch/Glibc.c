@@ -1,6 +1,6 @@
 /* Glibc.c provides access to some libc functions.
 
-Copyright (C) 2016-2023 Free Software Foundation, Inc.
+Copyright (C) 2016-2025 Free Software Foundation, Inc.
 Contributed by Gaius Mulley <gaius@glam.ac.uk>.
 
 This file is part of GNU Modula-2.
@@ -28,25 +28,128 @@ along with GNU Modula-2; see the file COPYING3.  If not see
 #define EXTERN
 #endif
 
-EXTERN
-int
-libc_read (int fd, void *a, int nbytes)
+#undef BUILD_MC_LIBC_TRACE
+
+#if defined(BUILD_MC_LIBC_TRACE)
+static bool initialzed_trace = false;
+static bool trace_on = false;
+
+static
+void
+check_init (void)
 {
-  return read (fd, a, nbytes);
+  if (! initialzed_trace)
+    {
+      initialzed_trace = true;
+      trace_on = ((getenv ("MC_LIBC_TRACE") != NULL));
+    }
+}
+#endif
+
+static
+void
+tracedb (const char *format, ...)
+{
+#if defined(BUILD_MC_LIBC_TRACE)
+  check_init ();
+  if (trace_on)
+    {
+      va_list arg;
+      va_start (arg, format);
+      {
+	vfprintf (stdout, format, arg);
+	fflush (stdout);
+      }
+      va_end (arg);
+    }
+#endif
+}
+
+static
+void
+tracedb_open (const void *p, int flags, int mode)
+{
+#if defined(BUILD_MC_LIBC_TRACE)
+  bool item_written = false;
+  tracedb ("libc_open (%s, flags = 0x%x = ", p, flags);
+
+  int bits = (flags & O_ACCMODE);
+  tracedb ("bits = 0x%x", bits);
+  if (bits == O_RDONLY)
+    {
+      tracedb ("O_RDONLY");
+      item_written = true;
+    }
+  if ((flags & O_WRONLY) != 0)
+    {
+      if (item_written)
+	tracedb (" | ");
+      tracedb ("O_WRONLY");
+      item_written = true;
+    }
+  if ((flags & O_RDWR) != 0)
+    {
+      if (item_written)
+	tracedb (" | ");
+      tracedb ("O_RDWR");
+      item_written = true;
+    }
+  tracedb (", 0x%x)\n", mode);
+#endif
+}
+
+static
+void
+tracedb_result (int result)
+{
+#if defined(BUILD_MC_LIBC_TRACE)
+  tracedb (" result = %d", result);
+  if (result == -1)
+    tracedb (", errno = %s", strerror (errno));
+  tracedb ("\n");
+#endif
+}
+
+static
+void
+tracedb_zresult (size_t result)
+{
+#if defined(BUILD_MC_LIBC_TRACE)
+  tracedb (" result = %zd", result);
+  if (result == -1)
+    tracedb (", errno = %s", strerror (errno));
+  tracedb ("\n");
+#endif
 }
 
 EXTERN
-int
-libc_write (int fd, void *a, int nbytes)
+size_t
+libc_read (int fd, void *a, size_t nbytes)
 {
-  return write (fd, a, nbytes);
+  tracedb ("libc_read (%d, %p, %zd)\n", fd, a, nbytes);
+  size_t result = read (fd, a, nbytes);
+  tracedb_zresult (result);
+  return result;
+}
+
+EXTERN
+size_t
+libc_write (int fd, void *a, size_t nbytes)
+{
+  tracedb ("libc_write (%d, %p, %zd)\n", fd, a, nbytes);
+  size_t result = write (fd, a, nbytes);
+  tracedb_zresult (result);
+  return result;
 }
 
 EXTERN
 int
 libc_close (int fd)
 {
-  return close (fd);
+  tracedb ("libc_close (%d)\n", fd);
+  int result = close (fd);
+  tracedb_result (result);
+  return result;
 }
 
 EXTERN
@@ -58,7 +161,7 @@ libc_exit (int code)
 
 EXTERN
 void
-libc_perror (char *s)
+libc_perror (const char *s, unsigned int length)
 {
   perror (s);
 }
@@ -71,7 +174,7 @@ libc_abort ()
 }
 
 EXTERN
-int
+size_t
 libc_strlen (char *s)
 {
   return strlen (s);
@@ -93,18 +196,18 @@ libc_localtime (time_t *epochtime)
 
 EXTERN
 int
-libc_printf (char *_format, unsigned int _format_high, ...)
+libc_printf (const char *_format, unsigned int _format_high, ...)
 {
   va_list arg;
   int done;
   char format[_format_high + 1];
   unsigned int i = 0;
   unsigned int j = 0;
-  char *c;
+  const char *c;
 
   do
     {
-      c = index (&_format[i], '\\');
+      c = index (&const_cast <char *> (_format)[i], '\\');
       if (c == NULL)
         strcpy (&format[j], &_format[i]);
       else
@@ -130,18 +233,18 @@ libc_printf (char *_format, unsigned int _format_high, ...)
 
 EXTERN
 int
-libc_snprintf (char *dest, size_t length, char *_format, unsigned int _format_high, ...)
+libc_snprintf (void *dest, size_t length, const char *_format, unsigned int _format_high, ...)
 {
   va_list arg;
   int done;
   char format[_format_high + 1];
   unsigned int i = 0;
   unsigned int j = 0;
-  char *c;
+  const char *c;
 
   do
     {
-      c = index (&_format[i], '\\');
+      c = index (&const_cast <char *> (_format)[i], '\\');
       if (c == NULL)
         strcpy (&format[j], &_format[i]);
       else
@@ -160,14 +263,14 @@ libc_snprintf (char *dest, size_t length, char *_format, unsigned int _format_hi
   while (c != NULL);
 
   va_start (arg, _format_high);
-  done = vsnprintf (dest, length, format, arg);
+  done = vsnprintf (reinterpret_cast<char *> (dest), length, format, arg);
   va_end (arg);
   return done;
 }
 
 EXTERN
 void *
-libc_malloc (unsigned int size)
+libc_malloc (size_t size)
 {
   return malloc (size);
 }
@@ -209,7 +312,7 @@ libc_system (char *command)
 
 EXTERN
 void *
-libc_memcpy (void *dest, void *src, int n)
+libc_memcpy (void *dest, void *src, size_t n)
 {
   return memcpy (dest, src, n);
 }
@@ -232,21 +335,30 @@ EXTERN
 int
 libc_creat (char *p, mode_t mode)
 {
-  return creat (p, mode);
+  tracedb ("libc_creat (%s, 0x%x)\n", p, mode);
+  int result = creat (p, mode);
+  tracedb_result (result);
+  return result;
 }
 
 EXTERN
 int
-libc_open (char *p, int flags, mode_t mode)
+libc_open (void *p, int flags, int mode)
 {
-  return open (p, flags, mode);
+  tracedb_open (p, flags, mode);
+  int result = open (reinterpret_cast <char *> (p), flags, mode);
+  tracedb_result (result);
+  return result;
 }
 
 EXTERN
 off_t
 libc_lseek (int fd, off_t offset, int whence)
 {
-  return lseek (fd, offset, whence);
+  tracedb ("libc_lseek (%s, %p, %d)\n", fd, offset, whence);
+  off_t result = lseek (fd, offset, whence);
+  tracedb_result (result);
+  return result;
 }
 
 EXTERN

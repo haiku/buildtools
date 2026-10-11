@@ -1,5 +1,5 @@
 /* real.cc - software floating point emulation.
-   Copyright (C) 1993-2023 Free Software Foundation, Inc.
+   Copyright (C) 1993-2025 Free Software Foundation, Inc.
    Contributed by Stephen L. Moshier (moshier@world.std.com).
    Re-written by Richard Henderson <rth@redhat.com>
 
@@ -101,7 +101,7 @@ static int do_compare (const REAL_VALUE_TYPE *, const REAL_VALUE_TYPE *, int);
 static void do_fix_trunc (REAL_VALUE_TYPE *, const REAL_VALUE_TYPE *);
 
 static unsigned long rtd_divmod (REAL_VALUE_TYPE *, REAL_VALUE_TYPE *);
-static void decimal_from_integer (REAL_VALUE_TYPE *);
+static void decimal_from_integer (REAL_VALUE_TYPE *, int);
 static void decimal_integer_string (char *, const REAL_VALUE_TYPE *,
 				    size_t);
 
@@ -1260,7 +1260,7 @@ real_isnan (const REAL_VALUE_TYPE *r)
   return (r->cl == rvc_nan);
 }
 
-/* Determine whether a floating-point value X is a signaling NaN.  */ 
+/* Determine whether a floating-point value X is a signaling NaN.  */
 bool real_issignaling_nan (const REAL_VALUE_TYPE *r)
 {
   return real_isnan (r) && r->signalling;
@@ -1477,7 +1477,7 @@ real_to_integer (const REAL_VALUE_TYPE *r)
 wide_int
 real_to_integer (const REAL_VALUE_TYPE *r, bool *fail, int precision)
 {
-  HOST_WIDE_INT val[2 * WIDE_INT_MAX_ELTS];
+  HOST_WIDE_INT valb[WIDE_INT_MAX_INL_ELTS], *val;
   int exp;
   int words, w;
   wide_int result;
@@ -1516,7 +1516,11 @@ real_to_integer (const REAL_VALUE_TYPE *r, bool *fail, int precision)
 	 is the smallest HWI-multiple that has at least PRECISION bits.
 	 This ensures that the top bit of the significand is in the
 	 top bit of the wide_int.  */
-      words = (precision + HOST_BITS_PER_WIDE_INT - 1) / HOST_BITS_PER_WIDE_INT;
+      words = ((precision + HOST_BITS_PER_WIDE_INT - 1)
+	       / HOST_BITS_PER_WIDE_INT);
+      val = valb;
+      if (UNLIKELY (words > WIDE_INT_MAX_INL_ELTS))
+	val = XALLOCAVEC (HOST_WIDE_INT, words);
       w = words * HOST_BITS_PER_WIDE_INT;
 
 #if (HOST_BITS_PER_WIDE_INT == HOST_BITS_PER_LONG)
@@ -2131,7 +2135,6 @@ real_from_string (REAL_VALUE_TYPE *r, const char *str)
     {
       /* Decimal floating point.  */
       const char *cstr = str;
-      mpfr_t m;
       bool inexact;
 
       while (*cstr == '0')
@@ -2148,21 +2151,15 @@ real_from_string (REAL_VALUE_TYPE *r, const char *str)
 	goto is_a_zero;
 
       /* Nonzero value, possibly overflowing or underflowing.  */
-      mpfr_init2 (m, SIGNIFICAND_BITS);
+      auto_mpfr m (SIGNIFICAND_BITS);
       inexact = mpfr_strtofr (m, str, NULL, 10, MPFR_RNDZ);
       /* The result should never be a NaN, and because the rounding is
 	 toward zero should never be an infinity.  */
       gcc_assert (!mpfr_nan_p (m) && !mpfr_inf_p (m));
       if (mpfr_zero_p (m) || mpfr_get_exp (m) < -MAX_EXP + 4)
-	{
-	  mpfr_clear (m);
-	  goto underflow;
-	}
+	goto underflow;
       else if (mpfr_get_exp (m) > MAX_EXP - 4)
-	{
-	  mpfr_clear (m);
-	  goto overflow;
-	}
+	goto overflow;
       else
 	{
 	  real_from_mpfr (r, m, NULL_TREE, MPFR_RNDZ);
@@ -2173,7 +2170,6 @@ real_from_string (REAL_VALUE_TYPE *r, const char *str)
 	  gcc_assert (r->cl == rvc_normal);
 	  /* Set a sticky bit if mpfr_strtofr was inexact.  */
 	  r->sig[0] |= inexact;
-	  mpfr_clear (m);
 	}
     }
 
@@ -2234,19 +2230,12 @@ real_from_integer (REAL_VALUE_TYPE *r, format_helper fmt,
     {
       unsigned int len = val_in.get_precision ();
       int i, j, e = 0;
-      int maxbitlen = MAX_BITSIZE_MODE_ANY_INT + HOST_BITS_PER_WIDE_INT;
       const unsigned int realmax = (SIGNIFICAND_BITS / HOST_BITS_PER_WIDE_INT
 				    * HOST_BITS_PER_WIDE_INT);
 
       memset (r, 0, sizeof (*r));
       r->cl = rvc_normal;
       r->sign = wi::neg_p (val_in, sgn);
-
-      /* We have to ensure we can negate the largest negative number.  */
-      wide_int val = wide_int::from (val_in, maxbitlen, sgn);
-
-      if (r->sign)
-	val = -val;
 
       /* Ensure a multiple of HOST_BITS_PER_WIDE_INT, ceiling, as elt
 	 won't work with precisions that are not a multiple of
@@ -2256,7 +2245,13 @@ real_from_integer (REAL_VALUE_TYPE *r, format_helper fmt,
       /* Ensure we can represent the largest negative number.  */
       len += 1;
 
-      len = len/HOST_BITS_PER_WIDE_INT * HOST_BITS_PER_WIDE_INT;
+      len = len / HOST_BITS_PER_WIDE_INT * HOST_BITS_PER_WIDE_INT;
+
+      /* We have to ensure we can negate the largest negative number.  */
+      wide_int val = wide_int::from (val_in, len, sgn);
+
+      if (r->sign)
+	val = -val;
 
       /* Cap the size to the size allowed by real.h.  */
       if (len > realmax)
@@ -2264,14 +2259,18 @@ real_from_integer (REAL_VALUE_TYPE *r, format_helper fmt,
 	  HOST_WIDE_INT cnt_l_z;
 	  cnt_l_z = wi::clz (val);
 
-	  if (maxbitlen - cnt_l_z > realmax)
+	  if (len - cnt_l_z > realmax)
 	    {
-	      e = maxbitlen - cnt_l_z - realmax;
+	      e = len - cnt_l_z - realmax;
 
 	      /* This value is too large, we must shift it right to
 		 preserve all the bits we can, and then bump the
-		 exponent up by that amount.  */
-	      val = wi::lrshift (val, e);
+		 exponent up by that amount, but or in 1 if any of
+		 the shifted out bits are non-zero.  */
+	      if (wide_int::from (val, e, UNSIGNED) != 0)
+		val = wi::set_bit (wi::lrshift (val, e), 0);
+	      else
+		val = wi::lrshift (val, e);
 	    }
 	  len = realmax;
 	}
@@ -2310,7 +2309,9 @@ real_from_integer (REAL_VALUE_TYPE *r, format_helper fmt,
     }
 
   if (fmt.decimal_p ())
-    decimal_from_integer (r);
+    /* We need at most one decimal digits for each 3 bits of input
+       precision.  */
+    decimal_from_integer (r, val_in.get_precision () / 3);
   if (fmt)
     real_convert (r, fmt, r);
 }
@@ -2365,12 +2366,21 @@ decimal_integer_string (char *str, const REAL_VALUE_TYPE *r_orig,
 /* Convert a real with an integral value to decimal float.  */
 
 static void
-decimal_from_integer (REAL_VALUE_TYPE *r)
+decimal_from_integer (REAL_VALUE_TYPE *r, int digits)
 {
   char str[256];
 
-  decimal_integer_string (str, r, sizeof (str) - 1);
-  decimal_real_from_string (r, str);
+  if (digits <= 256)
+    {
+      decimal_integer_string (str, r, sizeof (str) - 1);
+      decimal_real_from_string (r, str);
+    }
+  else
+    {
+      char *s = XALLOCAVEC (char, digits);
+      decimal_integer_string (s, r, digits - 1);
+      decimal_real_from_string (r, s);
+    }
 }
 
 /* Returns 10**2**N.  */
@@ -2474,12 +2484,30 @@ dconst_e_ptr (void)
      These constants need to be given to at least 160 bits precision.  */
   if (value.cl == rvc_zero)
     {
-      mpfr_t m;
-      mpfr_init2 (m, SIGNIFICAND_BITS);
+      auto_mpfr m (SIGNIFICAND_BITS);
       mpfr_set_ui (m, 1, MPFR_RNDN);
       mpfr_exp (m, m, MPFR_RNDN);
       real_from_mpfr (&value, m, NULL_TREE, MPFR_RNDN);
-      mpfr_clear (m);
+
+    }
+  return &value;
+}
+
+/* Returns the special REAL_VALUE_TYPE corresponding to 'pi'.  */
+
+const REAL_VALUE_TYPE *
+dconst_pi_ptr (void)
+{
+  static REAL_VALUE_TYPE value;
+
+  /* Initialize mathematical constants for constant folding builtins.
+     These constants need to be given to at least 160 bits precision.  */
+  if (value.cl == rvc_zero)
+    {
+      auto_mpfr m (SIGNIFICAND_BITS);
+      mpfr_set_si (m, -1, MPFR_RNDN);
+      mpfr_acos (m, m, MPFR_RNDN);
+      real_from_mpfr (&value, m, NULL_TREE, MPFR_RNDN);
 
     }
   return &value;
@@ -2517,11 +2545,9 @@ dconst_sqrt2_ptr (void)
      These constants need to be given to at least 160 bits precision.  */
   if (value.cl == rvc_zero)
     {
-      mpfr_t m;
-      mpfr_init2 (m, SIGNIFICAND_BITS);
+      auto_mpfr m (SIGNIFICAND_BITS);
       mpfr_sqrt_ui (m, 2, MPFR_RNDN);
       real_from_mpfr (&value, m, NULL_TREE, MPFR_RNDN);
-      mpfr_clear (m);
     }
   return &value;
 }
@@ -5426,6 +5452,22 @@ void
 get_max_float (const struct real_format *fmt, char *buf, size_t len,
 	       bool norm_max)
 {
+  if (fmt->b == 10)
+    {
+      char *p = buf;
+      for (int i = fmt->p; i; i--)
+	{
+	  *p++ = '9';
+	  if (i == fmt->p)
+	    *p++ = '.';
+	}
+      /* fmt->p plus 1, to account for the decimal point and fmt->emax
+	 minus 1 because the digits are nines, not 1.0.  */
+      sprintf (buf + fmt->p + 1, "E%d", fmt->emax - 1);
+      gcc_assert (strlen (buf) < len);
+      return;
+    }
+
   int i, n;
   char *p;
   bool is_ibm_extended = fmt->pnan < fmt->p;
@@ -5591,6 +5633,6 @@ build_sinatan_real (REAL_VALUE_TYPE * r, tree type)
   mpfr_sqrt (mpfr_c, mpfr_c, MPFR_RNDZ);
 
   real_from_mpfr (r, mpfr_c, fmt, MPFR_RNDZ);
-  
+
   mpfr_clears (mpfr_const1, mpfr_c, mpfr_maxval, NULL);
 }

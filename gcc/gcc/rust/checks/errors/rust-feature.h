@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -19,8 +19,8 @@
 #ifndef RUST_FEATURE_H
 #define RUST_FEATURE_H
 
-#include "rust-session-manager.h"
-#include "rust-optional.h"
+#include "rust-edition.h"
+#include "optional.h"
 
 namespace Rust {
 
@@ -39,24 +39,36 @@ public:
   {
     ASSOCIATED_TYPE_BOUNDS,
     INTRINSICS,
+    NEGATIVE_IMPLS,
     RUSTC_ATTRS,
     DECL_MACRO,
+    AUTO_TRAITS,
+    EXTERN_TYPES,
+    LANG_ITEMS,
+    NO_CORE,
+    BOX_SYNTAX,
+    DROPCK_EYEPATCH,
+    RAW_REF_OP,
+    EXCLUSIVE_RANGE_PATTERN,
+    PRELUDE_IMPORT,
+    MIN_SPECIALIZATION,
   };
 
   const std::string &as_string () { return m_name_str; }
   Name name () { return m_name; }
   const std::string &description () { return m_description; }
   State state () { return m_state; }
-  uint64_t issue () { return m_issue; }
+  tl::optional<unsigned> issue () { return m_issue; }
 
-  static Optional<Name> as_name (const std::string &name);
+  static tl::optional<Name> as_name (const std::string &name);
   static Feature create (Name name);
 
 private:
   Feature (Name name, State state, const char *name_str,
-	   const char *rustc_since, uint64_t issue_number,
-	   const Optional<CompileOptions::Edition> &edition,
-	   const char *description)
+	   const char *rustc_since,
+	   tl::optional<unsigned> issue_number = tl::nullopt,
+	   const tl::optional<Edition> &edition = tl::nullopt,
+	   const char *description = "")
     : m_state (state), m_name (name), m_name_str (name_str),
       m_rustc_since (rustc_since), m_issue (issue_number), edition (edition),
       m_description (description)
@@ -66,9 +78,9 @@ private:
   Name m_name;
   std::string m_name_str;
   std::string m_rustc_since;
-  uint64_t m_issue;
-  Optional<CompileOptions::Edition> edition;
-  std::string m_description;
+  tl::optional<unsigned> m_issue;
+  tl::optional<Edition> edition;
+  std::string m_description; // TODO: Switch to optional?
 
   static const std::map<std::string, Name> name_hash_map;
 };

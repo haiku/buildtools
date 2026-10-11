@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -20,6 +20,7 @@
 #define RUST_COMPILE_BLOCK
 
 #include "rust-compile-base.h"
+#include "rust-hir-visitor.h"
 
 namespace Rust {
 namespace Compile {
@@ -27,7 +28,7 @@ namespace Compile {
 class CompileBlock : private HIRCompileBase
 {
 public:
-  static tree compile (HIR::BlockExpr *expr, Context *ctx, Bvariable *result);
+  static tree compile (HIR::BlockExpr &expr, Context *ctx, Bvariable *result);
 
 protected:
   void visit (HIR::BlockExpr &expr);
@@ -52,7 +53,6 @@ public:
 
   void visit (HIR::IfExpr &expr) override;
   void visit (HIR::IfExprConseqElse &expr) override;
-  void visit (HIR::IfExprConseqIf &expr) override;
 
   // Empty visit for unused Expression HIR nodes.
   void visit (HIR::PathInExpression &) override {}
@@ -96,15 +96,10 @@ public:
   void visit (HIR::LoopExpr &) override {}
   void visit (HIR::WhileLoopExpr &) override {}
   void visit (HIR::WhileLetLoopExpr &) override {}
-  void visit (HIR::ForLoopExpr &) override {}
-  void visit (HIR::IfExprConseqIfLet &) override {}
-  void visit (HIR::IfLetExpr &) override {}
-  void visit (HIR::IfLetExprConseqElse &) override {}
-  void visit (HIR::IfLetExprConseqIf &) override {}
-  void visit (HIR::IfLetExprConseqIfLet &) override {}
   void visit (HIR::MatchExpr &) override {}
   void visit (HIR::AwaitExpr &) override {}
   void visit (HIR::AsyncBlockExpr &) override {}
+  void visit (HIR::InlineAsm &) override {}
 
 private:
   CompileConditionalBlocks (Context *ctx, Bvariable *result)
@@ -137,9 +132,9 @@ public:
     translated = CompileConditionalBlocks::compile (&expr, ctx, result);
   }
 
-  void visit (HIR::IfExprConseqIf &expr) override
+  void visit (HIR::BlockExpr &expr) override
   {
-    translated = CompileConditionalBlocks::compile (&expr, ctx, result);
+    translated = CompileBlock::compile (expr, ctx, result);
   }
 
   // Empty visit for unused Expression HIR nodes.
@@ -170,7 +165,6 @@ public:
   void visit (HIR::CallExpr &) override {}
   void visit (HIR::MethodCallExpr &) override {}
   void visit (HIR::FieldAccessExpr &) override {}
-  void visit (HIR::BlockExpr &) override {}
   void visit (HIR::ContinueExpr &) override {}
   void visit (HIR::BreakExpr &) override {}
   void visit (HIR::RangeFromToExpr &) override {}
@@ -184,15 +178,10 @@ public:
   void visit (HIR::LoopExpr &) override {}
   void visit (HIR::WhileLoopExpr &) override {}
   void visit (HIR::WhileLetLoopExpr &) override {}
-  void visit (HIR::ForLoopExpr &) override {}
-  void visit (HIR::IfExprConseqIfLet &) override {}
-  void visit (HIR::IfLetExpr &) override {}
-  void visit (HIR::IfLetExprConseqElse &) override {}
-  void visit (HIR::IfLetExprConseqIf &) override {}
-  void visit (HIR::IfLetExprConseqIfLet &) override {}
   void visit (HIR::MatchExpr &) override {}
   void visit (HIR::AwaitExpr &) override {}
   void visit (HIR::AsyncBlockExpr &) override {}
+  void visit (HIR::InlineAsm &) override {}
 
 private:
   CompileExprWithBlock (Context *ctx, Bvariable *result)

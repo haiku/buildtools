@@ -1,5 +1,5 @@
 # Top level -*- makefile -*- fragment for GNU C++.
-#   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2025 Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -55,7 +55,7 @@ c++.serial = cc1plus$(exeext)
 CFLAGS-cp/g++spec.o += $(DRIVER_DEFINES)
 
 CFLAGS-cp/module.o += -DHOST_MACHINE=\"$(host)\" \
-	-DTARGET_MACHINE=\"$(target)\"
+	-DTARGET_MACHINE=\"$(target)\" $(ZLIBINC)
 
 # In non-release builds, use a date-related module version.
 ifneq ($(DEVPHASE_c),)
@@ -143,7 +143,7 @@ cc1plus-checksum.cc : build/genchecksum$(build_exeext) checksum-options \
 cc1plus$(exeext): $(CXX_OBJS) cc1plus-checksum.o $(BACKEND) $(CODYLIB) $(LIBDEPS) $(c++.prev)
 	@$(call LINK_PROGRESS,$(INDEX.c++),start)
 	+$(LLINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) -o $@ \
-	      $(CXX_OBJS) cc1plus-checksum.o $(BACKEND) $(CODYLIB) $(NETLIBS) \
+	      $(CXX_OBJS) cc1plus-checksum.o $(BACKEND) $(CODYLIB) \
 		$(LIBS) $(BACKENDLIBS)
 	@$(call LINK_PROGRESS,$(INDEX.c++),end)
 
@@ -186,10 +186,35 @@ endif
 # This is the file that depends on the generated header file.
 cp/name-lookup.o: $(srcdir)/cp/std-name-hint.h
 
-cc1plus.fda: ../stage1-gcc/cc1plus$(exeext) ../prev-gcc/$(PERF_DATA)
-	$(CREATE_GCOV) -binary ../stage1-gcc/cc1plus$(exeext) -gcov cc1plus.fda -profile ../prev-gcc/$(PERF_DATA) -gcov_version 1
+components_in_prev = "bfd opcodes binutils fixincludes gas gcc gmp mpfr mpc isl gold intl ld libbacktrace libcpp libcody libdecnumber libiberty libiberty-linker-plugin libiconv zlib lto-plugin libctf libsframe"
+components_in_prev_target = "libstdc++-v3 libsanitizer libvtv libgcc libbacktrace libphobos zlib libgomp libatomic"
 
-#
+cc1plus.fda: create_fdas_for_cc1plus
+	$(PROFILE_MERGER) $(shell ls -ha cc1plus_*.fda) --output_file cc1plus.fda -gcov_version 2
+
+create_fdas_for_cc1plus: ../stage1-gcc/cc1plus$(exeext) ../prev-gcc/$(PERF_DATA)
+	for component_in_prev in "$(components_in_prev)"; do \
+	  perf_path=../prev-$$component_in_prev/$(PERF_DATA); \
+	  echo "Perf path:"; \
+	  echo $$perf_path; \
+	  if [ -f $$perf_path ]; then \
+	    profile_name=cc1plus_$$component_in_prev.fda; \
+	    $(CREATE_GCOV) -binary ../stage1-gcc/cc1plus$(exeext) -gcov $$profile_name -profile $$perf_path -gcov_version 2; \
+	  fi; \
+	done;
+
+	for component_in_prev_target in "$(components_in_prev_target)"; do \
+	  perf_path=../prev-$(TARGET_SUBDIR)/$$component_in_prev_target/$(PERF_DATA); \
+	  echo "Perf path:"; \
+	  echo $$perf_path; \
+	  if [ -f $$perf_path ]; then \
+	    profile_name=cc1plus_$$component_in_prev_target.fda; \
+	    $(CREATE_GCOV) -binary ../prev-gcc/cc1plus$(exeext) -gcov $$profile_name -profile $$perf_path -gcov_version 2; \
+	  fi; \
+	done;
+
+	$(STAMP) $@
+#
 # Build hooks:
 
 c++.all.cross: g++-cross$(exeext)
@@ -207,8 +232,9 @@ c++.srcinfo:
 c++.srcextra:
 
 c++.tags: force
-	cd $(srcdir)/cp; $(ETAGS) -o TAGS.sub *.cc *.h --language=none \
-	  --regex='/DEFTREECODE [(]\([A-Z_]+\)/\1/' cp-tree.def; \
+	cd $(srcdir)/cp; $(ETAGS) -o TAGS.sub *.cc *.h \
+	  ../../libcody/*.cc ../../c++tools/*.cc \
+	  --language=none --regex='/DEFTREECODE [(]\([A-Z_]+\)/\1/' cp-tree.def; \
 	$(ETAGS) --include TAGS.sub --include ../TAGS.sub
 
 c++.man: doc/g++.1
@@ -227,19 +253,19 @@ CPP_SELFTEST_FLAGS = -xc++ $(SELFTEST_FLAGS)
 
 # Run the C++ selftests
 s-selftest-c++: $(CPP_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS)
+	$(GCC_FOR_SELFTESTS) $(CPP_SELFTEST_FLAGS)
 	$(STAMP) $@
 
 # Convenience method for running C++ selftests under gdb:
 .PHONY: selftest-c++-gdb
 selftest-c++-gdb: $(CPP_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS) \
+	$(GCC_FOR_SELFTESTS) $(CPP_SELFTEST_FLAGS) \
 	  -wrapper gdb,--args
 
 # Convenience method for running C++ selftests under valgrind:
 .PHONY: selftest-c++-valgrind
 selftest-c++-valgrind: $(CPP_SELFTEST_DEPS)
-	$(GCC_FOR_TARGET) $(CPP_SELFTEST_FLAGS) \
+	$(GCC_FOR_SELFTESTS) $(CPP_SELFTEST_FLAGS) \
 	  -wrapper valgrind,--leak-check=full
 
 # 'make check' in gcc/ looks for check-c++, as do all toplevel C++-related
@@ -319,7 +345,7 @@ c++.install-plugin: installdirs
 # Install import library.
 ifeq ($(plugin_implib),yes)
 	$(mkinstalldirs) $(DESTDIR)$(plugin_resourcesdir)
-	$(INSTALL_DATA) cc1plus$(exeext).a $(DESTDIR)/$(plugin_resourcesdir)/cc1plus$(exeext).a
+	$(INSTALL_DATA) cc1plus$(exeext).a $(DESTDIR)$(plugin_resourcesdir)/cc1plus$(exeext).a
 endif
 
 c++.uninstall:
@@ -335,7 +361,7 @@ c++.mostlyclean:
 	-rm -f doc/g++.1
 	-rm -f cp/*$(objext)
 	-rm -f cp/*$(coverageexts)
-	-rm -f xg++$(exeext) g++-cross$(exeext) cc1plus$(exeext) cc1plus.fda
+	-rm -f xg++$(exeext) g++-cross$(exeext) cc1plus$(exeext) cc1plus*.fda
 c++.clean:
 c++.distclean:
 	-rm -f cp/config.status cp/Makefile

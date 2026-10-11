@@ -1,4 +1,4 @@
-/* { dg-do compile } */
+/* { dg-do compile { target { ! riscv_abi_e } } } */
 /* { dg-options "-march=rv32gc_xtheadbs" { target { rv32 } } } */
 /* { dg-options "-march=rv64gc_xtheadbs" { target { rv64 } } } */
 /* { dg-skip-if "" { *-*-* } { "-O0" } } */
@@ -10,4 +10,4 @@ foo1 (long i)
 }
 
 /* { dg-final { scan-assembler-times "th.tst\t" 1 } } */
-/* { dg-final { scan-assembler-not "andi" } } */
+/* { dg-final { scan-assembler-not {\mandi} } } */

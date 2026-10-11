@@ -1,9 +1,12 @@
-// { dg-options "-std=gnu++23" }
 // { dg-do run { target c++23 } }
 
 #include <algorithm>
 #include <testsuite_hooks.h>
 #include <testsuite_iterators.h>
+
+#if __cpp_lib_ranges_find_last != 202207L
+# error "Feature-test macro __cpp_lib_ranges_find_last has wrong value in <algorithm>"
+#endif
 
 namespace ranges = std::ranges;
 

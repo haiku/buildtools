@@ -1,5 +1,5 @@
 /* Default macros to initialize the lang_hooks data structure.
-   Copyright (C) 2001-2023 Free Software Foundation, Inc.
+   Copyright (C) 2001-2025 Free Software Foundation, Inc.
    Contributed by Alexandre Oliva  <aoliva@redhat.com>
 
 This file is part of GCC.
@@ -49,8 +49,9 @@ extern void lhd_print_tree_nothing (FILE *, tree, int);
 extern const char *lhd_decl_printable_name (tree, int);
 extern const char *lhd_dwarf_name (tree, int);
 extern int lhd_types_compatible_p (tree, tree);
-extern void lhd_print_error_function (diagnostic_context *,
-				      const char *, struct diagnostic_info *);
+extern void lhd_print_error_function (diagnostic_text_output_format &,
+				      const char *,
+				      const struct diagnostic_info *);
 extern void lhd_set_decl_assembler_name (tree decl);
 extern void lhd_overwrite_decl_assembler_name (tree decl, tree name);
 extern bool lhd_warn_unused_global_decl (const_tree);
@@ -85,6 +86,10 @@ extern enum omp_clause_defaultmap_kind lhd_omp_predetermined_mapping (tree);
 extern tree lhd_omp_assignment (tree, tree, tree);
 extern void lhd_omp_finish_clause (tree, gimple_seq *, bool);
 extern tree lhd_omp_array_size (tree, gimple_seq *);
+extern bool lhd_omp_deep_mapping_p (const gimple *, tree);
+extern tree lhd_omp_deep_mapping_cnt (const gimple *, tree, gimple_seq *);
+extern void lhd_omp_deep_mapping (const gimple *, tree, unsigned HOST_WIDE_INT,
+				  tree, tree, tree, tree, tree, gimple_seq *);
 struct gimplify_omp_ctx;
 extern void lhd_omp_firstprivatize_type_sizes (struct gimplify_omp_ctx *,
 					       tree);
@@ -153,9 +158,7 @@ extern const char *lhd_get_sarif_source_language (const char *);
 #define LANG_HOOKS_GET_SARIF_SOURCE_LANGUAGE lhd_get_sarif_source_language
 
 /* Attribute hooks.  */
-#define LANG_HOOKS_ATTRIBUTE_TABLE		NULL
-#define LANG_HOOKS_COMMON_ATTRIBUTE_TABLE	NULL
-#define LANG_HOOKS_FORMAT_ATTRIBUTE_TABLE	NULL
+#define LANG_HOOKS_ATTRIBUTE_TABLE
 
 /* Tree inlining hooks.  */
 #define LANG_HOOKS_TREE_INLINING_VAR_MOD_TYPE_P \
@@ -273,6 +276,9 @@ extern tree lhd_unit_size_without_reusable_padding (tree);
 #define LANG_HOOKS_OMP_CLAUSE_LINEAR_CTOR NULL
 #define LANG_HOOKS_OMP_CLAUSE_DTOR hook_tree_tree_tree_null
 #define LANG_HOOKS_OMP_FINISH_CLAUSE lhd_omp_finish_clause
+#define LANG_HOOKS_OMP_DEEP_MAPPING_P lhd_omp_deep_mapping_p
+#define LANG_HOOKS_OMP_DEEP_MAPPING_CNT lhd_omp_deep_mapping_cnt
+#define LANG_HOOKS_OMP_DEEP_MAPPING lhd_omp_deep_mapping
 #define LANG_HOOKS_OMP_ALLOCATABLE_P hook_bool_tree_false
 #define LANG_HOOKS_OMP_SCALAR_P lhd_omp_scalar_p
 #define LANG_HOOKS_OMP_SCALAR_TARGET_P hook_bool_tree_false
@@ -307,6 +313,9 @@ extern tree lhd_unit_size_without_reusable_padding (tree);
   LANG_HOOKS_OMP_CLAUSE_LINEAR_CTOR, \
   LANG_HOOKS_OMP_CLAUSE_DTOR, \
   LANG_HOOKS_OMP_FINISH_CLAUSE, \
+  LANG_HOOKS_OMP_DEEP_MAPPING_P, \
+  LANG_HOOKS_OMP_DEEP_MAPPING_CNT, \
+  LANG_HOOKS_OMP_DEEP_MAPPING, \
   LANG_HOOKS_OMP_ALLOCATABLE_P, \
   LANG_HOOKS_OMP_SCALAR_P, \
   LANG_HOOKS_OMP_SCALAR_TARGET_P, \
@@ -366,9 +375,7 @@ extern void lhd_end_section (void);
   LANG_HOOKS_TYPES_COMPATIBLE_P, \
   LANG_HOOKS_PRINT_ERROR_FUNCTION, \
   LANG_HOOKS_TO_TARGET_CHARSET, \
-  LANG_HOOKS_ATTRIBUTE_TABLE, \
-  LANG_HOOKS_COMMON_ATTRIBUTE_TABLE, \
-  LANG_HOOKS_FORMAT_ATTRIBUTE_TABLE, \
+  { LANG_HOOKS_ATTRIBUTE_TABLE }, \
   LANG_HOOKS_TREE_INLINING_INITIALIZER, \
   LANG_HOOKS_TREE_DUMP_INITIALIZER, \
   LANG_HOOKS_DECLS, \

@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 Free Software Foundation, Inc.
+// Copyright (C) 2020-2025 Free Software Foundation, Inc.
 
 // This file is part of GCC.
 
@@ -43,10 +43,10 @@ enum class ComparisonOperator
 {
   EQUAL,	    // std::cmp::PartialEq::eq
   NOT_EQUAL,	    // std::cmp::PartialEq::ne
-  GREATER_THAN,	    // std::cmp::PartialEq::gt
-  LESS_THAN,	    // std::cmp::PartialEq::lt
-  GREATER_OR_EQUAL, // std::cmp::PartialEq::ge
-  LESS_OR_EQUAL	    // std::cmp::PartialEq::le
+  GREATER_THAN,	    // std::cmp::PartialOrd::gt
+  LESS_THAN,	    // std::cmp::PartialOrd::lt
+  GREATER_OR_EQUAL, // std::cmp::PartialOrd::ge
+  LESS_OR_EQUAL	    // std::cmp::PartialOrd::le
 };
 
 enum class LazyBooleanOperator

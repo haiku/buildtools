@@ -2495,8 +2495,8 @@ extern (Windows) nothrow {
     alias NAMEENUMPROCW WINSTAENUMPROCW;
 }
 
-mixin DECLARE_HANDLE!("HDWP");
-mixin DECLARE_HANDLE!("HDEVNOTIFY");
+alias HDWP = HANDLE;
+alias HDEVNOTIFY = HANDLE;
 
 struct MENUGETOBJECTINFO {
     DWORD dwFlags;
@@ -3421,7 +3421,7 @@ align(4) LUID  luid;
     }
     alias BSMINFO* PBSMINFO;
 
-    alias TypeDef!(HANDLE) HRAWINPUT;
+    alias HANDLE HRAWINPUT;
 
     struct RAWINPUTHEADER {
         DWORD dwType;
@@ -3848,7 +3848,7 @@ int GetMenuStringA(HMENU, UINT, LPSTR, int, UINT);
 int GetMenuStringW(HMENU, UINT, LPWSTR, int, UINT);
 BOOL GetMessageA(LPMSG, HWND, UINT, UINT);
 BOOL GetMessageW(LPMSG, HWND, UINT, UINT);
-LONG GetMessageExtraInfo();
+LPARAM GetMessageExtraInfo();
 DWORD GetMessagePos();
 LONG GetMessageTime();
 
@@ -4155,7 +4155,7 @@ extern (C) {
 
 
 // These shouldn't be necessary for D.
-alias TypeDef!(char*) va_list_;
+alias char* va_list_;
 int wvsprintfA(LPSTR, LPCSTR, va_list_ arglist);
 int wvsprintfW(LPWSTR, LPCWSTR, va_list_ arglist);
 
