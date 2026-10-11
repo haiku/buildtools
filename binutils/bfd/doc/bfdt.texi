@@ -94,8 +94,8 @@ struct bfd
 #define BFD_TRADITIONAL_FORMAT    0x400
 
   /* This flag indicates that the BFD contents are actually cached
-     in memory.  If this is set, iostream points to a bfd_in_memory
-     struct.  */
+     in memory.  If this is set, iostream points to a malloc'd
+     bfd_in_memory struct.  */
 #define BFD_IN_MEMORY             0x800
 
   /* This BFD has been created by the linker and doesn't correspond
@@ -149,6 +149,20 @@ struct bfd
   /* The direction with which the BFD was opened.  */
   ENUM_BITFIELD (bfd_direction) direction : 2;
 
+  /* POSIX.1-2017 (IEEE Std 1003.1) says of fopen : "When a file is
+     opened with update mode ('+' as the second or third character in
+     the mode argument), both input and output may be performed on
+     the associated stream.  However, the application shall ensure
+     that output is not directly followed by input without an
+     intervening call to fflush() or to a file positioning function
+     (fseek(), fsetpos(), or rewind()), and input is not directly
+     followed by output without an intervening call to a file
+     positioning function, unless the input operation encounters
+     end-of-file."
+     This field tracks the last IO operation, so that bfd can insert
+     a seek when IO direction changes.  */
+  ENUM_BITFIELD (bfd_last_io) last_io : 2;
+
   /* Is the file descriptor being cached?  That is, can it be closed as
      needed, and re-opened when accessed later?  */
   unsigned int cacheable : 1;
@@ -197,12 +211,18 @@ struct bfd
   /* Set if this is a plugin output file.  */
   unsigned int lto_output : 1;
 
-  /* Set if this is a slim LTO object not loaded with a compiler plugin.  */
-  unsigned int lto_slim_object : 1;
-
   /* Do not attempt to modify this file.  Set when detecting errors
      that BFD is not prepared to handle for objcopy/strip.  */
   unsigned int read_only : 1;
+
+  /* LTO object type.  */
+  ENUM_BITFIELD (bfd_lto_object_type) lto_type : 3;
+
+  /* Set if this BFD is currently being processed by
+     bfd_check_format_matches.  This is checked by the cache to
+     avoid closing the BFD in this case.  This should only be
+     examined or modified while the BFD lock is held.  */
+  unsigned int in_format_matches : 1;
 
   /* Set to dummy BFD created when claimed by a compiler plug-in
      library.  */
@@ -227,6 +247,9 @@ struct bfd
 
   /* The last section on the section list.  */
   struct bfd_section *section_last;
+
+  /* The object-only section on the section list.  */
+  struct bfd_section *object_only_section;
 
   /* The number of sections.  */
   unsigned int section_count;
@@ -325,6 +348,9 @@ struct bfd
 
   /* For input BFDs, the build ID, if the object has one. */
   const struct bfd_build_id *build_id;
+
+  /* For input BFDs, mmapped entries. */
+  struct bfd_mmapped *mmapped;
 @};
 
 @end example
@@ -339,6 +365,8 @@ If that returns @code{bfd_error_system_call}, then check
 
 The easiest way to report a BFD error to the user is to
 use @code{bfd_perror}.
+
+The BFD error is thread-local.
 
 @subsection Type @code{bfd_error_type}
 The values returned by @code{bfd_get_error} are defined by the
@@ -421,7 +449,7 @@ by @var{message}, a colon, and a space.  It is followed by a newline.
 Primarily for error reporting, this function is like
 libiberty's xasprintf except that it can return NULL on no
 memory and the returned string should not be freed.  Uses a
-single malloc'd buffer managed by libbfd, _bfd_error_buf.
+thread-local malloc'd buffer managed by libbfd, _bfd_error_buf.
 Be aware that a call to this function frees the result of any
 previous call.  bfd_errmsg (bfd_error_on_input) also calls
 this function.
@@ -439,6 +467,21 @@ The BFD error handler acts like vprintf.
 typedef void (*bfd_error_handler_type) (const char *, va_list);
 
 @end example
+
+@example
+typedef int (*bfd_print_callback) (void *, const char *, ...);
+@end example
+@findex bfd_print_error
+@subsubsection @code{bfd_print_error}
+@deftypefn {Function} void bfd_print_error (bfd_print_callback print_func, void *stream, const char *fmt, va_list ap); 
+This formats FMT and AP according to BFD "printf" rules,
+sending the output to STREAM by repeated calls to PRINT_FUNC.
+PRINT_FUNC is a printf-like function; it does not need to
+implement the BFD printf format extensions.  This can be used
+in a callback that is set via bfd_set_error_handler to turn
+the error into ordinary output.
+
+@end deftypefn
 @findex _bfd_error_handler
 @subsubsection @code{_bfd_error_handler}
 @deftypefn {Function} void _bfd_error_handler (const char *fmt, ...) ATTRIBUTE_PRINTF_1; 
@@ -463,9 +506,18 @@ function.
 @end deftypefn
 @findex _bfd_set_error_handler_caching
 @subsubsection @code{_bfd_set_error_handler_caching}
-@deftypefn {Function} bfd_error_handler_type _bfd_set_error_handler_caching (bfd *); 
+@deftypefn {Function} struct per_xvec_messages *_bfd_set_error_handler_caching (struct per_xvec_messages *); 
 Set the BFD error handler function to one that stores messages
-to the per_xvec_warn array.  Returns the previous function.
+to the per_xvec_messages object.  Returns the previous object
+to which messages are stored.  Note that two sequential calls
+to this with a non-NULL argument will cause output to be
+dropped, rather than gathered.
+
+@end deftypefn
+@findex _bfd_restore_error_handler_caching
+@subsubsection @code{_bfd_restore_error_handler_caching}
+@deftypefn {Function} void _bfd_restore_error_handler_caching (struct per_xvec_messages *); 
+Reset the BFD error handler object to an earlier value.
 
 @end deftypefn
 @findex bfd_set_error_program_name
@@ -507,7 +559,7 @@ Set the BFD assert handler function.  Returns the previous
 function.
 
 @end deftypefn
-@node Initialization, Miscellaneous, Error reporting, BFD front end
+@node Initialization, Threading, Error reporting, BFD front end
 @findex bfd_init
 @subsubsection @code{bfd_init}
 @deftypefn {Function} unsigned int bfd_init (void); 
@@ -522,7 +574,67 @@ that the bfd library is configured as expected by users.
 @end example
 
 @end deftypefn
-@node Miscellaneous, Memory Usage, Initialization, BFD front end
+@node Threading, Miscellaneous, Initialization, BFD front end
+@section Threading
+BFD has limited support for thread-safety.  Most BFD globals
+are protected by locks, while the error-related globals are
+thread-local.  A given BFD cannot safely be used from two
+threads at the same time; it is up to the application to do
+any needed locking.  However, it is ok for different threads
+to work on different BFD objects at the same time.
+
+@subsection Thread functions.
+
+
+
+@example
+typedef bool (*bfd_lock_unlock_fn_type) (void *);
+@end example
+@findex _bfd_threading_enabled
+@subsubsection @code{_bfd_threading_enabled}
+@deftypefn {Function} bool _bfd_threading_enabled (void); 
+Return true if threading is enabled, false if not.
+
+@end deftypefn
+@findex bfd_thread_init
+@subsubsection @code{bfd_thread_init}
+@deftypefn {Function} bool bfd_thread_init (bfd_lock_unlock_fn_type lock, bfd_lock_unlock_fn_type unlock, void *data); 
+Initialize BFD threading.  The functions passed in will be
+used to lock and unlock global data structures.  This may only
+be called a single time in a given process.  Returns true on
+success and false on error.  On error, the caller should
+assume that BFD cannot be used by multiple threads.  DATA is
+passed verbatim to the lock and unlock functions.  The lock
+and unlock functions should return true on success, or set the
+BFD error and return false on failure.  Note also that the
+lock must be a recursive lock: BFD may attempt to acquire the
+lock when it is already held by the current thread.
+
+@end deftypefn
+@findex bfd_thread_cleanup
+@subsubsection @code{bfd_thread_cleanup}
+@deftypefn {Function} void bfd_thread_cleanup (void); 
+Clean up any thread-local state.  This should be called by a
+thread that uses any BFD functions, before the thread exits.
+It is fine to call this multiple times, or to call it and then
+later call BFD functions on the same thread again.
+
+@end deftypefn
+@findex bfd_lock
+@subsubsection @code{bfd_lock}
+@deftypefn {Function} bool bfd_lock (void); 
+Acquire the global BFD lock, if needed.  Returns true on
+success, false on error.
+
+@end deftypefn
+@findex bfd_unlock
+@subsubsection @code{bfd_unlock}
+@deftypefn {Function} bool bfd_unlock (void); 
+Release the global BFD lock, if needed.  Returns true on
+success, false on error.
+
+@end deftypefn
+@node Miscellaneous, Memory Usage, Threading, BFD front end
 @section Miscellaneous
 
 
@@ -552,15 +664,17 @@ The @var{syms} table is also needed for horrible internal magic
 reasons.
 
 @end deftypefn
-@findex bfd_set_reloc
-@subsubsection @code{bfd_set_reloc}
-@deftypefn {Function} void bfd_set_reloc (bfd *abfd, asection *sec, arelent **rel, unsigned int count); 
-Set the relocation pointer and count within
-section @var{sec} to the values @var{rel} and @var{count}.
-The argument @var{abfd} is ignored.
+@findex bfd_finalize_section_relocs
+@subsubsection @code{bfd_finalize_section_relocs}
+@deftypefn {Function} bool bfd_finalize_section_relocs (bfd *abfd, asection *sec, arelent **rel, unsigned int count); 
+Set the relocation pointer and count within section @var{sec}
+to the values @var{rel} and @var{count}, and take any other
+actions required at the conclusion of section relocation
+processing.
 @example
-#define bfd_set_reloc(abfd, asect, location, count) \
-       BFD_SEND (abfd, _bfd_set_reloc, (abfd, asect, location, count))
+#define bfd_finalize_section_relocs(abfd, asect, location, count) \
+       BFD_SEND (abfd, _bfd_finalize_section_relocs, \
+                 (abfd, asect, location, count))
 @end example
 
 @end deftypefn
@@ -645,17 +759,9 @@ This is specifically added for gdb-compile support.
 @findex bfd_scan_vma
 @subsubsection @code{bfd_scan_vma}
 @deftypefn {Function} bfd_vma bfd_scan_vma (const char *string, const char **end, int base); 
-Convert, like @code{strtoul}, a numerical expression
-@var{string} into a @code{bfd_vma} integer, and return that integer.
-(Though without as many bells and whistles as @code{strtoul}.)
-The expression is assumed to be unsigned (i.e., positive).
-If given a @var{base}, it is used as the base for conversion.
-A base of 0 causes the function to interpret the string
-in hex if a leading "0x" or "0X" is found, otherwise
-in octal if a leading zero is found, otherwise in decimal.
-
-If the value would overflow, the maximum @code{bfd_vma} value is
-returned.
+Convert, like @code{strtoul} or @code{stdtoull}depending on the size
+of a @code{bfd_vma}, a numerical expression @var{string} into a
+@code{bfd_vma} integer, and return that integer.
 
 @end deftypefn
 @findex bfd_copy_private_header_data
@@ -776,9 +882,6 @@ The following functions exist but have not yet been documented.
 #define bfd_lookup_section_flags(link_info, flag_info, section) \
        BFD_SEND (abfd, _bfd_lookup_section_flags, (link_info, flag_info, section))
 
-#define bfd_merge_sections(abfd, link_info) \
-       BFD_SEND (abfd, _bfd_merge_sections, (abfd, link_info))
-
 #define bfd_is_group_section(abfd, sec) \
        BFD_SEND (abfd, _bfd_is_group_section, (abfd, sec))
 
@@ -877,5 +980,11 @@ other such chars that would otherwise confuse the demangler.
 If passed a g++ v3 ABI mangled name, returns a buffer allocated
 with malloc holding the demangled name.  Returns NULL otherwise
 and on memory alloc failure.
+
+@end deftypefn
+@findex bfd_group_signature
+@subsubsection @code{bfd_group_signature}
+@deftypefn {Function} asymbol *bfd_group_signature (asection *group, asymbol **isympp); 
+Return a pointer to the symbol used as a signature for GROUP.
 
 @end deftypefn

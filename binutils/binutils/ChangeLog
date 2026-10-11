@@ -1,7 +1,183 @@
-2023-07-30  Nick Clifton  <nickc@redhat.com>
+2025-07-13  Nick Clifton  <nickc@redhat.com>
 
-	This is the 2.41 release.
+	* 2.45 Branch point.
+
+2025-01-19  Nick Clifton  <nickc@redhat.com>
+
+	* 2.44 Branch point.
+
+2024-07-20  Nick Clifton  <nickc@redhat.com>
+
+	* 2.43 branch point.
+
+2024-02-12  Frederic Cambus  <fred@statdns.com>
+
+	* readelf.c (get_segment_type): Handle PT_OPENBSD_SYSCALLS segment
+	type.
+
+2024-01-26  Nick Clifton  <nickc@redhat.com>
+
+	PR 31250
+	* objcopy.c (copy_archive): Improve the handling of archives that
+	contain elements with invalid pathnames.
+
+2024-01-15  Nick Clifton  <nickc@redhat.com>
+
+	* 2.42 branch point.
+
+2023-12-04  Tom Tromey  <tom@tromey.com>
+
+	* dwarf.c (display_debug_names): Handle empty .debug_names hash
+	table.  Name entries start at 1.
+
+2023-11-15  Arsen Arsenović  <arsen@aarsen.me>
+
+	* aclocal.m4: Regenerate.
 	* configure: Regenerate.
+	* po/Make-in ($(srcdir)/$(PACKAGE).pot): Output to a .pot
+	temporary file, to suppress xgettext checking charset names.
+
+2023-11-14  Nick Clifton  <nickc@redhat.com>
+
+	PR 31062
+	* objdump.c (decompressed_dumps): New local variable.
+	(usage): Mention the -z/--decompress option.
+	(long_options): Add --decompress.
+	(dump_section_header): Add "COMPRESSED" to the Flags field of any
+	compressed section.
+	(dump_section): Warn users when dumping a compressed section.
+	(display_any_bfd): Decompress the section if decompressed_dumps is
+	true.
+	(main): Handle the -z/--decompress option.
+	* NEWS: Mention the new feature.
+	* doc/binutils.texi: Document the new feature.
+	* testsuite/binutils-all/objdump.s: Update expected output.
+	* testsuite/binutils-all/objdump.exp: Add test of -Z -s.
+	* testsuite/binutils-all/objdump.Zs: New file.
+
+	* readelf.c (maybe_expand_or_relocate_section): New function.
+	Contains common code found in dump functions.  Adds a note message
+	if a compressed section is not being decompressed.
+	(dump_section_as_strings): Use new function.
+	(dump_section_as_bytes): Likewise.
+
+2023-11-10  Simon Marchi  <simon.marchi@efficios.com>
+
+	* readelf.c (decode_AMDGPU_machine_flags): Handle gfx1100,
+	gfx1101, gfx1102.
+
+2023-11-10  Vsevolod Alekseyev  <sevaa@sprynet.com>
+
+	PR 30880
+	* dwarf.c (read_and_display_attr_value): Fix loclist handling.
+	(display_loclists_list): Likewise.
+
+2023-10-24  Tom de Vries  <tdevries@suse.de>
+
+	* dwarf.c (display_gdb_index): Handle unknown name of main.
+
+2023-10-10  Tom de Vries  <tdevries@suse.de>
+
+	* dwarf.c (display_lang): New function, factored out of ...
+	(read_and_display_attr_value): ... here.
+	(display_gdb_index): Handle v9 .gdb_index.
+
+2023-10-05  A. Wilcox  <awilfox@adelielinux.org>w
+
+	PR 30916
+	* testsuite/binutils-all/addr2line.exp: Do not use PowerPC
+	specific options when working with a MUSL target.
+
+2023-10-02  Vsevolod Alekseyev  <sevaa@sprynet.com>
+
+	PR 29267
+	* dwarf.c (fetch_indexed_value): Delete.
+	(fetch_indexed_offset): Correct base address calculation.
+	(read_and_display_attr_value): Replace uses of fetch_indexed_value
+	with fetch_indexed_offset.
+
+2023-09-28  Frederic Cambus  <fred@statdns.com>
+
+	* readelf.c (get_segment_type): Handle PT_OPENBSD_NOBTCFI segment
+	type.
+
+2023-09-26  Nick Clifton  <nickc@redhat.com>
+
+	* testsuite/binutils-all/ar.exp: Remove assumption of the setting
+	of umask when creating test archive files.
+
+2023-09-25  Vsevolod Alekseyev  <sevaa@sprynet.com>
+
+	PR 30792
+	* dwarf.h (struct debug_info): Remove range_versions field.
+	* dwarf.c (fetch_indexed_offset): New function.
+	(read_and_display_attr_value): Use it for DW_FORM_rnglistx.
+	Remove code to initialise range_versions.
+	(skip_attribute): New function.
+	(read_bases): Read and reccord all range and address bases in a CU.
+	(process_debug_info): Call read_bases.
+	(display_debug_rnglists): Rename to display_debug_rnglists_unit_header
+	and only display the range list header information.
+	(display_debug_ranges): Adjust.
+
+2023-09-05  Nick Clifton  <nickc@redhat.com>
+
+	PR 30684
+	* readelf.c (extra_sym_info): New variable.
+	(section_name_valid): Also check for filedata being NULL.
+	(section_name_print): Delete.
+	(section_index_real): New function.  Returns true if the given
+	section index references a real section.
+	(print_symbol): Rename to print_sumbol_name.
+	(printable_section_name): Use a rotating array of static buffers
+	for the return string.
+	(printable_section_name_from_index): Merge code from
+	dump_relocations and get_symbol_index_type into here.
+	(long_option_values): Add OPTION_NO_EXTRA_SYM_INFO.
+	(options): Add "extra-sym-info" and "no-extra-sym-info".
+	(usage): Mention new options.
+	(parse_args): Parse new options.
+	(get_symbol_index_type): Delete.
+	(print_dynamic_symbol_size): Rename to print_symbol_size.
+	(print_dynamic_symbol): Rename to print_symbol.
+	(print_symbol_table_heading): New function.
+	(process_symbol_table): Use new function.
+	* doc/binutils.texi: Document the new option.
+	* NEWS: Mention the new feature.
+
+2023-08-23  Nick Clifton  <nickc@redhat.com>
+
+	PR 30781
+	* dwarf.h (debug_info): Add range_versions field.
+	* dwarf.c (read_and_display_attr_value): When recording a range
+	arribute also ecord the dwarf version number.
+	(is_range_list_for_this_section): New function.
+	(display_debug_ranges): Only show debug ranges whose version is
+	suitable for the secction being displayed.
+
+2023-07-30  Jose E. Marchesi  <jose.marchesi@oracle.com>
+
+	* readelf.c (get_machine_flags): Recognize and pretty print BPF
+	machine flags.
+
+2023-07-24  Johannes Schauer Marin Rodrigues  <josch@debian.org>
+
+	* doc/binutils.texi (objcopy): Document change in behaviour of
+	objcopy's --preserve-dates command line option.
+
+2023-07-09  Fangrui Song  <maskray@google.com>
+
+	PR 30592
+	* NEWS: Mention the new feature for objcopy.
+	* doc/binutils.texi: Mention "large".
+	* objcopy.c (parse_flags): Parse "large".
+	(check_new_section_flags): Error if "large" is used with a
+	non-x86-64 ELF target.
+	* testsuite/binutils-all/x86-64/large-sections.d: New.
+	* testsuite/binutils-all/x86-64/large-sections.s: New.
+	* testsuite/binutils-all/x86-64/large-sections-i386.d: New.
+	* testsuite/binutils-all/x86-64/large-sections-2.d: New.
+	* testsuite/binutils-all/x86-64/large-sections-2-x32.d: New.
 
 2023-07-03  Nick Clifton  <nickc@redhat.com>
 
@@ -2198,7 +2374,7 @@
 
 For older changes see ChangeLog-2020
 
-Copyright (C) 2021-2023 Free Software Foundation, Inc.
+Copyright (C) 2021-2026 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

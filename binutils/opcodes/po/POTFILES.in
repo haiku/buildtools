@@ -16,13 +16,8 @@ arc-opc.c
 arm-dis.c
 avr-dis.c
 bfin-dis.c
-bpf-asm.c
-bpf-desc.c
-bpf-desc.h
 bpf-dis.c
-bpf-ibld.c
 bpf-opc.c
-bpf-opc.h
 cgen-asm.c
 cgen-bitset.c
 cgen-dis.c
@@ -90,6 +85,8 @@ iq2000-dis.c
 iq2000-ibld.c
 iq2000-opc.c
 iq2000-opc.h
+kvx-dis.c
+kvx-opc.c
 lm32-asm.c
 lm32-desc.c
 lm32-desc.h
@@ -156,8 +153,6 @@ mt-opc.h
 nds32-asm.c
 nds32-dis.c
 nfp-dis.c
-nios2-dis.c
-nios2-opc.c
 ns32k-dis.c
 or1k-asm.c
 or1k-desc.c

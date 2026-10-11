@@ -24,6 +24,18 @@
    language is requested. */
 #undef ENABLE_NLS
 
+/* Define to 1 if you have the Mac OS X function
+   CFLocaleCopyPreferredLanguages in the CoreFoundation framework. */
+#undef HAVE_CFLOCALECOPYPREFERREDLANGUAGES
+
+/* Define to 1 if you have the Mac OS X function CFPreferencesCopyAppValue in
+   the CoreFoundation framework. */
+#undef HAVE_CFPREFERENCESCOPYAPPVALUE
+
+/* Define if the GNU dcgettext() function is already present or preinstalled.
+   */
+#undef HAVE_DCGETTEXT
+
 /* Define to 1 if you have the declaration of `asprintf', and to 0 if you
    don't. */
 #undef HAVE_DECL_ASPRINTF
@@ -62,6 +74,10 @@
 /* Define to 1 if you have the declaration of `strnlen', and to 0 if you
    don't. */
 #undef HAVE_DECL_STRNLEN
+
+/* Define to 1 if you have the declaration of `strtoull', and to 0 if you
+   don't. */
+#undef HAVE_DECL_STRTOULL
 
 /* Define to 1 if you have the declaration of `vasprintf', and to 0 if you
    don't. */
@@ -113,11 +129,17 @@
 /* Define to 1 if you have the `getrlimit' function. */
 #undef HAVE_GETRLIMIT
 
+/* Define if the GNU gettext() function is already present or preinstalled. */
+#undef HAVE_GETTEXT
+
 /* Define to 1 if you have the `getuid' function. */
 #undef HAVE_GETUID
 
 /* Define if your compiler supports hidden visibility. */
 #undef HAVE_HIDDEN
+
+/* Define if you have the iconv() function and it works. */
+#undef HAVE_ICONV
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
@@ -284,6 +306,9 @@
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
+
+/* If the compiler supports a TLS storage class, define it to that here */
+#undef TLS
 
 /* Name of host specific header file to include in trad-core.c. */
 #undef TRAD_HEADER

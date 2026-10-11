@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2026 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -26,6 +26,7 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include <semaphore.h>		/* sem_wait() */
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
@@ -74,6 +75,7 @@ static unsigned sync_key = COLLECTOR_TSD_INVALID_KEY;
 static long sync_threshold = -1; /* calibrate the value */
 static int init_thread_intf_started = 0;
 static int init_thread_intf_finished = 0;
+static Sync_packet spacket_0 = { .comm.tsize = sizeof ( Sync_packet) };
 
 #define CHCK_NREENTRANCE(x)     (!sync_native || !sync_mode || ((x) = collector_interface->getKey( sync_key )) == NULL || (*(x) != 0))
 #define RECHCK_NREENTRANCE(x)   (!sync_native || !sync_mode || ((x) = collector_interface->getKey( sync_key )) == NULL || (*(x) == 0))
@@ -135,15 +137,6 @@ static int (*__real_pthread_cond_timedwait_2_2_5) (pthread_cond_t *restrict cond
 static int (*__real_pthread_cond_timedwait_2_0) (pthread_cond_t *restrict cond,
 			pthread_mutex_t *restrict mutex,
 			const struct timespec *restrict abstime) = NULL;
-
-
-static void
-collector_memset (void *s, int c, size_t n)
-{
-  unsigned char *s1 = s;
-  while (n--)
-    *s1++ = (unsigned char) c;
-}
 
 void
 __collector_module_init (CollectorInterface *_collector_interface)
@@ -252,22 +245,28 @@ open_experiment (const char *exp)
   collector_interface->writeLog ("  <profdata fname=\"%s\"/>\n",
 				 module_interface.description);
   /* Record Sync_packet description */
-  Sync_packet *pp = NULL;
   collector_interface->writeLog ("  <profpckt kind=\"%d\" uname=\"Synchronization tracing data\">\n", SYNC_PCKT);
   collector_interface->writeLog ("    <field name=\"LWPID\" uname=\"Lightweight process id\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.lwp_id, sizeof (pp->comm.lwp_id) == 4 ? "INT32" : "INT64");
+		(int) offsetof (Sync_packet, comm.lwp_id),
+		fld_sizeof (Sync_packet, comm.lwp_id) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"THRID\" uname=\"Thread number\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.thr_id, sizeof (pp->comm.thr_id) == 4 ? "INT32" : "INT64");
+		(int) offsetof (Sync_packet, comm.thr_id),
+		fld_sizeof (Sync_packet, comm.thr_id) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"CPUID\" uname=\"CPU id\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.cpu_id, sizeof (pp->comm.cpu_id) == 4 ? "INT32" : "INT64");
+		(int) offsetof (Sync_packet, comm.cpu_id),
+		fld_sizeof (Sync_packet, comm.cpu_id) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"TSTAMP\" uname=\"High resolution timestamp\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.tstamp, sizeof (pp->comm.tstamp) == 4 ? "INT32" : "INT64");
+		(int) offsetof (Sync_packet, comm.tstamp),
+		fld_sizeof (Sync_packet, comm.tstamp) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"FRINFO\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.frinfo, sizeof (pp->comm.frinfo) == 4 ? "INT32" : "INT64");
+		(int) offsetof (Sync_packet, comm.frinfo),
+		fld_sizeof (Sync_packet, comm.frinfo) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"SRQST\" uname=\"Synchronization start time\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->requested, sizeof (pp->requested) == 4 ? "INT32" : "INT64");
+		(int) offsetof (Sync_packet, requested),
+		fld_sizeof (Sync_packet, requested) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"SOBJ\" uname=\"Synchronization object address\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->objp, sizeof (pp->objp) == 4 ? "INT32" : "INT64");
+		(int) offsetof (Sync_packet, objp),
+		fld_sizeof (Sync_packet, objp) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("  </profpckt>\n");
   collector_interface->writeLog ("</profile>\n");
 
@@ -561,9 +560,7 @@ __collector_jsync_end (hrtime_t reqt, void *object)
   hrtime_t grnt = gethrtime ();
   if (grnt - reqt >= sync_threshold)
     {
-      Sync_packet spacket;
-      collector_memset (&spacket, 0, sizeof (Sync_packet));
-      spacket.comm.tsize = sizeof (Sync_packet);
+      Sync_packet spacket = spacket_0;
       spacket.comm.tstamp = grnt;
       spacket.requested = reqt;
       spacket.objp = (intptr_t) object;
@@ -593,9 +590,7 @@ gprofng_pthread_mutex_lock (int (real_func) (pthread_mutex_t *),
   hrtime_t grnt = gethrtime ();
   if (grnt - reqt >= sync_threshold)
     {
-      Sync_packet spacket;
-      collector_memset (&spacket, 0, sizeof (Sync_packet));
-      spacket.comm.tsize = sizeof (Sync_packet);
+      Sync_packet spacket = spacket_0;
       spacket.comm.tstamp = grnt;
       spacket.requested = reqt;
       spacket.objp = (intptr_t) mp;
@@ -640,9 +635,7 @@ gprofng_pthread_cond_wait (int(real_func) (pthread_cond_t *, pthread_mutex_t *),
   hrtime_t grnt = gethrtime ();
   if (grnt - reqt >= sync_threshold)
     {
-      Sync_packet spacket;
-      collector_memset (&spacket, 0, sizeof (Sync_packet));
-      spacket.comm.tsize = sizeof (Sync_packet);
+      Sync_packet spacket = spacket_0;
       spacket.comm.tstamp = grnt;
       spacket.requested = reqt;
       spacket.objp = (intptr_t) mutex;
@@ -690,9 +683,7 @@ gprofng_pthread_cond_timedwait (int(real_func) (pthread_cond_t *,
   hrtime_t grnt = gethrtime ();
   if (grnt - reqt >= sync_threshold)
     {
-      Sync_packet spacket;
-      collector_memset (&spacket, 0, sizeof (Sync_packet));
-      spacket.comm.tsize = sizeof (Sync_packet);
+      Sync_packet spacket = spacket_0;
       spacket.comm.tstamp = grnt;
       spacket.requested = reqt;
       spacket.objp = (intptr_t) mutex;
@@ -739,9 +730,7 @@ gprofng_pthread_join (int(real_func) (pthread_t, void **),
   hrtime_t grnt = gethrtime ();
   if (grnt - reqt >= sync_threshold)
     {
-      Sync_packet spacket;
-      collector_memset (&spacket, 0, sizeof (Sync_packet));
-      spacket.comm.tsize = sizeof (Sync_packet);
+      Sync_packet spacket = spacket_0;
       spacket.comm.tstamp = grnt;
       spacket.requested = reqt;
       spacket.objp = (Vaddr_type) target_thread;
@@ -786,9 +775,7 @@ gprofng_sem_wait (int (real_func) (sem_t *), sem_t *sp)
   hrtime_t grnt = gethrtime ();
   if (grnt - reqt >= sync_threshold)
     {
-      Sync_packet spacket;
-      collector_memset (&spacket, 0, sizeof (Sync_packet));
-      spacket.comm.tsize = sizeof (Sync_packet);
+      Sync_packet spacket = spacket_0;
       spacket.comm.tstamp = grnt;
       spacket.requested = reqt;
       spacket.objp = (intptr_t) sp;

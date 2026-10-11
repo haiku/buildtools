@@ -8,7 +8,7 @@
 Disassembly of section .text:
 
 00000000.* <.text>:
-[ 	]+0:[ 	]+03400000[ 	]+nop[ 	]+
+[ 	]+0:[ 	]+03400000[ 	]+nop
 [ 	]+4:[ 	]+58000085[ 	]+beq[ 	]+\$a0,[ 	]+\$a1,[ 	]+0[ 	]+#[ 	]+0x4
 [ 	]+4:[ 	]+R_LARCH_B16[ 	]+.L1
 [ 	]+8:[ 	]+5c000085[ 	]+bne[ 	]+\$a0,[ 	]+\$a1,[ 	]+0[ 	]+#[ 	]+0x8
@@ -81,12 +81,16 @@ Disassembly of section .text:
 [ 	]+8c:[ 	]+R_LARCH_GOT64_HI12[ 	]+.L1
 [ 	]+90:[ 	]+14000004[ 	]+lu12i.w[ 	]+\$a0,[ 	]+0
 [ 	]+90:[ 	]+R_LARCH_TLS_LE_HI20[ 	]+TLSL1
+[ 	]+90:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
 [ 	]+94:[ 	]+03800085[ 	]+ori[ 	]+\$a1,[ 	]+\$a0,[ 	]+0x0
 [ 	]+94:[ 	]+R_LARCH_TLS_LE_LO12[ 	]+TLSL1
+[ 	]+94:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
 [ 	]+98:[ 	]+16000004[ 	]+lu32i.d[ 	]+\$a0,[ 	]+0
 [ 	]+98:[ 	]+R_LARCH_TLS_LE64_LO20[ 	]+TLSL1
+[ 	]+98:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
 [ 	]+9c:[ 	]+03000085[ 	]+lu52i.d[ 	]+\$a1,[ 	]+\$a0,[ 	]+0
 [ 	]+9c:[ 	]+R_LARCH_TLS_LE64_HI12[ 	]+TLSL1
+[ 	]+9c:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
 [ 	]+a0:[ 	]+58000085[ 	]+beq[ 	]+\$a0,[ 	]+\$a1,[ 	]+0[ 	]+#[ 	]+0xa0
 [ 	]+a0:[ 	]+R_LARCH_B16[ 	]+.L1\+0x8
 [ 	]+a4:[ 	]+5c000085[ 	]+bne[ 	]+\$a0,[ 	]+\$a1,[ 	]+0[ 	]+#[ 	]+0xa4
@@ -159,9 +163,31 @@ Disassembly of section .text:
 [ 	]+128:[ 	]+R_LARCH_GOT64_HI12[ 	]+.L1\+0x8
 [ 	]+12c:[ 	]+14000004[ 	]+lu12i.w[ 	]+\$a0,[ 	]+0
 [ 	]+12c:[ 	]+R_LARCH_TLS_LE_HI20[ 	]+TLSL1\+0x8
+[ 	]+12c:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
 [ 	]+130:[ 	]+03800085[ 	]+ori[ 	]+\$a1,[ 	]+\$a0,[ 	]+0x0
 [ 	]+130:[ 	]+R_LARCH_TLS_LE_LO12[ 	]+TLSL1\+0x8
+[ 	]+130:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
 [ 	]+134:[ 	]+16000004[ 	]+lu32i.d[ 	]+\$a0,[ 	]+0
 [ 	]+134:[ 	]+R_LARCH_TLS_LE64_LO20[ 	]+TLSL1\+0x8
+[ 	]+134:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
 [ 	]+138:[ 	]+03000085[ 	]+lu52i.d[ 	]+\$a1,[ 	]+\$a0,[ 	]+0
 [ 	]+138:[ 	]+R_LARCH_TLS_LE64_HI12[ 	]+TLSL1\+0x8
+[ 	]+138:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
+[ 	]+13c:[ 	]+14000004[ 	]+lu12i.w[ 	]+\$a0,[ 	]+0
+[ 	]+13c:[ 	]+R_LARCH_TLS_LE_HI20_R[ 	]+TLSL1
+[ 	]+13c:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
+[ 	]+140:[ 	]+001090a5[ 	]+add.d[ 	]+\$a1,[ 	]+\$a1,[ 	]+\$a0
+[ 	]+140:[ 	]+R_LARCH_TLS_LE_ADD_R[ 	]+TLSL1
+[ 	]+140:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
+[ 	]+144:[ 	]+29800085[ 	]+st.w[ 	]+\$a1,[ 	]+\$a0,[ 	]+0
+[ 	]+144:[ 	]+R_LARCH_TLS_LE_LO12_R[ 	]+TLSL1
+[ 	]+144:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
+[ 	]+148:[ 	]+14000004[ 	]+lu12i.w[ 	]+\$a0,[ 	]+0
+[ 	]+148:[ 	]+R_LARCH_TLS_LE_HI20_R[ 	]+TLSL1\+0x8
+[ 	]+148:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
+[ 	]+14c:[ 	]+001090a5[ 	]+add.d[ 	]+\$a1,[ 	]+\$a1,[ 	]+\$a0
+[ 	]+14c:[ 	]+R_LARCH_TLS_LE_ADD_R[ 	]+TLSL1\+0x8
+[ 	]+14c:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*
+[ 	]+150:[ 	]+29800085[ 	]+st.w[ 	]+\$a1,[ 	]+\$a0,[ 	]+0
+[ 	]+150:[ 	]+R_LARCH_TLS_LE_LO12_R[ 	]+TLSL1\+0x8
+[ 	]+150:[ 	]+R_LARCH_RELAX[ 	]+\*ABS\*

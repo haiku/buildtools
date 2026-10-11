@@ -1,6 +1,6 @@
 dnl Process this file with autoconf to produce a configure script.
 dnl
-dnl   Copyright (C) 2012-2023 Free Software Foundation, Inc.
+dnl   Copyright (C) 2012-2026 Free Software Foundation, Inc.
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@ dnl
 
 m4_include([../bfd/version.m4])
 m4_include([../config/debuginfod.m4])
-AC_INIT([binutils], BFD_VERSION)
+AC_INIT([binutils], [BFD_VERSION])
 AC_CONFIG_SRCDIR(ar.c)
 
 AC_CANONICAL_TARGET
@@ -28,8 +28,9 @@ AM_INIT_AUTOMAKE
 AM_SILENT_RULES([yes])
 
 AC_PROG_CC
-AC_GNU_SOURCE
 AC_USE_SYSTEM_EXTENSIONS
+
+AC_C_BIGENDIAN
 
 LT_INIT
 ACX_LARGEFILE
@@ -156,7 +157,6 @@ AM_PROG_LEX
 
 ALL_LINGUAS="bg ca da es fi fr hr id it ja pt ro ru rw sk sr sv tr uk vi zh_CN zh_TW"
 ZW_GNU_GETTEXT_SISTER_DIR
-AM_PO_SUBDIRS
 
 AM_MAINTAINER_MODE
 AM_CONDITIONAL(GENINSRC_NEVER, false)
@@ -197,13 +197,13 @@ AC_SUBST(DEMANGLER_NAME)
 AC_CHECK_HEADERS(fcntl.h inttypes.h stdint.h sys/file.h \
 		 sys/stat.h sys/time.h sys/types.h unistd.h)
 AC_HEADER_SYS_WAIT
-AC_FUNC_MMAP
+GCC_AC_FUNC_MMAP
 AC_CHECK_FUNCS(fseeko fseeko64 getc_unlocked mkdtemp mkstemp utimensat utimes)
 
 AC_MSG_CHECKING([for mbstate_t])
-AC_TRY_COMPILE([#include <wchar.h>],
-[mbstate_t teststate;],
-have_mbstate_t=yes, have_mbstate_t=no)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <wchar.h>]],
+[[mbstate_t teststate;]])],
+[have_mbstate_t=yes],[have_mbstate_t=no])
 AC_MSG_RESULT($have_mbstate_t)
 if test x"$have_mbstate_t" = xyes; then
   AC_DEFINE(HAVE_MBSTATE_T,1,[Define if mbstate_t exists in wchar.h.])
@@ -278,7 +278,7 @@ if test $bu_cv_header_utime_h = yes; then
   AC_DEFINE(HAVE_GOOD_UTIME_H, 1, [Does <utime.h> define struct utimbuf?])
 fi
 
-AC_CHECK_DECLS([asprintf, environ, getc_unlocked, stpcpy, strnlen])
+AC_CHECK_DECLS([environ, getc_unlocked, stpcpy, strnlen])
 
 # Link in zlib/zstd if we can.  This allows us to read compressed debug
 # sections.  This is used only by readelf.c (objdump uses bfd for
@@ -290,7 +290,7 @@ BFD_BINARY_FOPEN
 
 # Support for the msgpack C library.
 AC_ARG_WITH([msgpack],
-	    AC_HELP_STRING([--with-msgpack], [Enable msgpack support (auto/yes/no)]),
+	    AS_HELP_STRING([--with-msgpack], [Enable msgpack support (auto/yes/no)]),
 	    [],
 	    [with_msgpack=auto])
 
@@ -319,7 +319,6 @@ fi
 AC_CHECK_HEADER(iconv.h)
 AM_ICONV
 
-all_targets=false
 BUILD_SRCONV=
 BUILD_DLLTOOL=
 DLLTOOL_DEFS=
@@ -336,148 +335,143 @@ od_vectors=
 
 for targ in $target $canon_targets
 do
-    if test "x$targ" = "xall"; then
-        all_targets=true
+    case $targ in
+    all | *-*-hms*)
 	BUILD_SRCONV='$(SRCONV_PROG)'
-	BUILD_MISC="${BUILD_MISC} "'bin2c$(EXEEXT_FOR_BUILD)'
-	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
+	;;
+    esac
+
+    case $targ in
+    all | spu-*-*)
+	BUILD_MISC='bin2c$(EXEEXT_FOR_BUILD)'
+	;;
+    esac
+
+    case $targ in
+    powerpc*-*-linux* | powerpc*-*-elf* | powerpc*-*-eabi*)
+	BUILD_INSTALL_MISC=embedspu
+	;;
+    esac
+
+    case $targ in
+    mep-*)
+	OBJDUMP_DEFS="-DSKIP_ZEROES=256 -DSKIP_ZEROES_AT_END=0"
+	;;
+changequote(,)dnl
+    powerpc*-aix5.[01])
+	;;
+    powerpc*-aix[5-9].*)
+changequote([,])dnl
+	OBJDUMP_DEFS="-DAIX_WEAK_SUPPORT"
+	;;
+    esac
+
+    case $targ in
+    aarch64-*-mingw*)
 	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
 	if test -z "$DLLTOOL_DEFAULT"; then
-	  DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_I386"
+	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_AARCH64"
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_AARCH64"
+	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
+	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
+	BUILD_DLLWRAP='$(DLLWRAP_PROG)$(EXEEXT)'
+	;;
+    arm-wince-pe* | arm-*-wince | arm*-*-cegcc* | arm*-*-mingw32ce*)
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
+	if test -z "$DLLTOOL_DEFAULT"; then
+	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_ARM_WINCE"
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_ARM_WINCE -DDLLTOOL_ARM"
+	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
+	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
+	;;
+    arm-*-pe*)
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
+	if test -z "$DLLTOOL_DEFAULT"; then
+	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_ARM"
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_ARM"
+	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
+	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
+	;;
+changequote(,)dnl
+    i[3-7]86-*-pe* | i[3-7]86-*-cygwin* | i[3-7]86-*-mingw32** | all)
+changequote([,])dnl
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
+	if test -z "$DLLTOOL_DEFAULT"; then
+	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_I386"
 	fi
 	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_I386"
+	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
+	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
 	BUILD_DLLWRAP='$(DLLWRAP_PROG)$(EXEEXT)'
-	od_vectors="$od_vectors objdump_private_desc_xcoff objdump_private_desc_pe"
-    else
-	case $targ in
-	*-*-hms*) BUILD_SRCONV='$(SRCONV_PROG)' ;;
-	esac
-
-	case $targ in
-	aarch64-*-mingw*)
-	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
-	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_AARCH64"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_AARCH64"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
-	  BUILD_DLLWRAP='$(DLLWRAP_PROG)$(EXEEXT)'
-	  ;;
-	arm-wince-pe* | arm-*-wince | arm*-*-cegcc* | arm*-*-mingw32ce*)
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
-	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_ARM_WINCE"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_ARM_WINCE -DDLLTOOL_ARM"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
-	  ;;
-	arm-*-pe*)
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
-	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_ARM"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_ARM"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
-	  ;;
-	x86_64-*-mingw* | x86_64-*-cygwin*)
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
-	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_MX86_64"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_MX86_64"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
-	  BUILD_DLLWRAP='$(DLLWRAP_PROG)$(EXEEXT)'
-	  ;;
+	;;
 changequote(,)dnl
-	i[3-7]86-*-pe* | i[3-7]86-*-cygwin* | i[3-7]86-*-mingw32**)
+    i[3-7]86-*-interix)
 changequote([,])dnl
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)'
+	if test -z "$DLLTOOL_DEFAULT"; then
 	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_I386"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_I386"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
-	  BUILD_DLLWRAP='$(DLLWRAP_PROG)$(EXEEXT)'
-	  ;;
-changequote(,)dnl
-	i[3-7]86-*-interix)
-changequote([,])dnl
-	  BUILD_DLLTOOL='$(DLLTOOL_PROG)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
-	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_I386"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_I386"
-	  ;;
-changequote(,)dnl
-	powerpc*-aix5.[01])
-changequote([,])dnl
-	  ;;
-changequote(,)dnl
-	powerpc*-aix[5-9].*)
-changequote([,])dnl
-	  OBJDUMP_DEFS="-DAIX_WEAK_SUPPORT"
-	  ;;
-	powerpc*-*-linux* | powerpc*-*-elf* | powerpc*-*-eabi*)
-	  case "$BUILD_INSTALL_MISC" in
-	    *embedspu*) ;;
-	    *) BUILD_INSTALL_MISC="${BUILD_INSTALL_MISC} embedspu"
-	  esac
-	  ;;
-	sh*-*-pe)
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
-	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_SH"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_SH"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
-	  ;;
-	spu-*-*)
-	  BUILD_MISC="${BUILD_MISC} "'bin2c$(EXEEXT_FOR_BUILD)'
-	  ;;
-	mcore-*-pe)
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_I386"
+	;;
+    mcore-*-pe)
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
+	if test -z "$DLLTOOL_DEFAULT"; then
 	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_MCORE"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_MCORE"
-	  BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
-	  BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
-	  ;;
-	mcore-*-elf)
-  	  BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
-	  if test -z "$DLLTOOL_DEFAULT"; then
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_MCORE"
+	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
+	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
+	;;
+    mcore-*-elf)
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
+	if test -z "$DLLTOOL_DEFAULT"; then
 	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_MCORE_ELF"
-	  fi
-	  DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_MCORE_ELF"
-	  ;;
-  	mep-*)
-	  OBJDUMP_DEFS="-DSKIP_ZEROES=256 -DSKIP_ZEROES_AT_END=0"
-	  ;;
-	esac
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_MCORE_ELF"
+	;;
+    sh*-*-pe)
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
+	if test -z "$DLLTOOL_DEFAULT"; then
+	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_SH"
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_SH"
+	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
+	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
+	;;
+    x86_64-*-mingw* | x86_64-*-cygwin*)
+	BUILD_DLLTOOL='$(DLLTOOL_PROG)$(EXEEXT)'
+	if test -z "$DLLTOOL_DEFAULT"; then
+	    DLLTOOL_DEFAULT="-DDLLTOOL_DEFAULT_MX86_64"
+	fi
+	DLLTOOL_DEFS="$DLLTOOL_DEFS -DDLLTOOL_MX86_64"
+	BUILD_WINDRES='$(WINDRES_PROG)$(EXEEXT)'
+	BUILD_WINDMC='$(WINDMC_PROG)$(EXEEXT)'
+	BUILD_DLLWRAP='$(DLLWRAP_PROG)$(EXEEXT)'
+	;;
+    esac
 
-	# Add objdump private vectors.
-	case $targ in
-	avr-*-*)
-	  od_vectors="$od_vectors objdump_private_desc_elf32_avr"
-	  ;;
-	powerpc*-*-aix* | rs6000-*-aix*)
-	  od_vectors="$od_vectors objdump_private_desc_xcoff"
-	  ;;
-	*-*-pe* | *-*-cygwin* | *-*-mingw*)
-	  od_vectors="$od_vectors objdump_private_desc_pe"
-	  ;;
-        *-*-darwin*)
-	  od_vectors="$od_vectors objdump_private_desc_mach_o"
-	  ;;
-	esac
-    fi
+    # Add objdump private vectors.
+    case $targ in
+    all)
+	od_vectors="objdump_private_desc_elf32_avr objdump_private_desc_xcoff\
+		    objdump_private_desc_pe objdump_private_desc_mach_o"
+	;;
+    avr-*-*)
+	od_vectors="$od_vectors objdump_private_desc_elf32_avr"
+	;;
+    powerpc*-*-aix* | rs6000-*-aix*)
+	od_vectors="$od_vectors objdump_private_desc_xcoff"
+	;;
+    *-*-pe* | *-*-cygwin* | *-*-mingw* | *-*-interix*)
+	 od_vectors="$od_vectors objdump_private_desc_pe"
+	 ;;
+    *-*-darwin*)
+	od_vectors="$od_vectors objdump_private_desc_mach_o"
+	;;
+    esac
 done
 
 # Uniq objdump private vector, build objdump target ofiles.

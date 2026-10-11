@@ -1,5 +1,5 @@
 /* Routines to link ECOFF debugging information.
-   Copyright (C) 1993-2023 Free Software Foundation, Inc.
+   Copyright (C) 1993-2026 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support, <ian@cygnus.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -32,7 +32,18 @@
 #include "coff/ecoff.h"
 #include "libcoff.h"
 #include "libecoff.h"
-
+
+/* ECOFF uses two common sections.  One is the usual one, and the
+   other is for small objects.  All the small objects are kept
+   together, and then referenced via the gp pointer, which yields
+   faster assembler code.  This is what we use for the small common
+   section.  */
+static const asymbol ecoff_scom_symbol =
+  GLOBAL_SYM_INIT (SCOMMON, &_bfd_ecoff_scom_section);
+asection _bfd_ecoff_scom_section =
+  BFD_FAKE_SECTION (_bfd_ecoff_scom_section, &ecoff_scom_symbol,
+		    SCOMMON, 0, SEC_IS_COMMON | SEC_SMALL_DATA);
+
 /* Routines to swap auxiliary information in and out.  I am assuming
    that the auxiliary information format is always going to be target
    independent.  */
@@ -1460,7 +1471,7 @@ ecoff_write_symhdr (bfd *abfd,
     goto error_return;
 
   (*swap->swap_hdr_out) (abfd, symhdr, buff);
-  if (bfd_bwrite (buff, swap->external_hdr_size, abfd)
+  if (bfd_write (buff, swap->external_hdr_size, abfd)
       != swap->external_hdr_size)
     goto error_return;
 
@@ -1492,9 +1503,8 @@ bfd_ecoff_write_debug (bfd *abfd,
   BFD_ASSERT (symhdr->offset == 0				\
 	      || (bfd_vma) bfd_tell (abfd) == symhdr->offset);	\
   if (symhdr->count != 0					\
-      && bfd_bwrite (debug->ptr,				\
-		     (bfd_size_type) size * symhdr->count,	\
-		     abfd) != size * symhdr->count)		\
+      && bfd_write (debug->ptr, size * symhdr->count,		\
+		    abfd) != size * symhdr->count)		\
     return false;
 
   WRITE (line, cbLine, sizeof (unsigned char), cbLineOffset);
@@ -1502,8 +1512,7 @@ bfd_ecoff_write_debug (bfd *abfd,
   WRITE (external_pdr, ipdMax, swap->external_pdr_size, cbPdOffset);
   WRITE (external_sym, isymMax, swap->external_sym_size, cbSymOffset);
   WRITE (external_opt, ioptMax, swap->external_opt_size, cbOptOffset);
-  WRITE (external_aux, iauxMax, (bfd_size_type) sizeof (union aux_ext),
-	 cbAuxOffset);
+  WRITE (external_aux, iauxMax, sizeof (union aux_ext), cbAuxOffset);
   WRITE (ss, issMax, sizeof (char), cbSsOffset);
   WRITE (ssext, issExtMax, sizeof (char), cbSsExtOffset);
   WRITE (external_fdr, ifdMax, swap->external_fdr_size, cbFdOffset);
@@ -1524,23 +1533,21 @@ ecoff_write_shuffle (bfd *abfd,
 		     void * space)
 {
   struct shuffle *l;
-  unsigned long total;
+  size_t total;
 
   total = 0;
-  for (l = shuffle; l != (struct shuffle *) NULL; l = l->next)
+  for (l = shuffle; l != NULL; l = l->next)
     {
       if (! l->filep)
 	{
-	  if (bfd_bwrite (l->u.memory, (bfd_size_type) l->size, abfd)
-	      != l->size)
+	  if (bfd_write (l->u.memory, l->size, abfd) != l->size)
 	    return false;
 	}
       else
 	{
 	  if (bfd_seek (l->u.file.input_bfd, l->u.file.offset, SEEK_SET) != 0
-	      || bfd_bread (space, (bfd_size_type) l->size,
-			   l->u.file.input_bfd) != l->size
-	      || bfd_bwrite (space, (bfd_size_type) l->size, abfd) != l->size)
+	      || bfd_read (space, l->size, l->u.file.input_bfd) != l->size
+	      || bfd_write (space, l->size, abfd) != l->size)
 	    return false;
 	}
       total += l->size;
@@ -1548,15 +1555,15 @@ ecoff_write_shuffle (bfd *abfd,
 
   if ((total & (swap->debug_align - 1)) != 0)
     {
-      unsigned int i;
+      size_t i;
       bfd_byte *s;
 
       i = swap->debug_align - (total & (swap->debug_align - 1));
-      s = (bfd_byte *) bfd_zmalloc ((bfd_size_type) i);
+      s = bfd_zmalloc (i);
       if (s == NULL && i != 0)
 	return false;
 
-      if (bfd_bwrite (s, (bfd_size_type) i, abfd) != i)
+      if (bfd_write (s, i, abfd) != i)
 	{
 	  free (s);
 	  return false;
@@ -1611,36 +1618,34 @@ bfd_ecoff_write_accumulated_debug (void * handle,
       bfd_byte null;
       struct string_hash_entry *sh;
 
-      BFD_ASSERT (ainfo->ss == (struct shuffle *) NULL);
+      BFD_ASSERT (ainfo->ss == NULL);
       null = 0;
-      if (bfd_bwrite (&null, (bfd_size_type) 1, abfd) != 1)
+      if (bfd_write (&null, 1, abfd) != 1)
 	goto error_return;
       total = 1;
       BFD_ASSERT (ainfo->ss_hash == NULL || ainfo->ss_hash->val == 1);
-      for (sh = ainfo->ss_hash;
-	   sh != (struct string_hash_entry *) NULL;
-	   sh = sh->next)
+      for (sh = ainfo->ss_hash; sh != NULL; sh = sh->next)
 	{
 	  size_t len;
 
 	  len = strlen (sh->root.string);
 	  amt = len + 1;
-	  if (bfd_bwrite (sh->root.string, amt, abfd) != amt)
+	  if (bfd_write (sh->root.string, amt, abfd) != amt)
 	    goto error_return;
 	  total += len + 1;
 	}
 
       if ((total & (swap->debug_align - 1)) != 0)
 	{
-	  unsigned int i;
+	  size_t i;
 	  bfd_byte *s;
 
 	  i = swap->debug_align - (total & (swap->debug_align - 1));
-	  s = (bfd_byte *) bfd_zmalloc ((bfd_size_type) i);
+	  s = bfd_zmalloc (i);
 	  if (s == NULL && i != 0)
 	    goto error_return;
 
-	  if (bfd_bwrite (s, (bfd_size_type) i, abfd) != i)
+	  if (bfd_write (s, i, abfd) != i)
 	    {
 	      free (s);
 	      goto error_return;
@@ -1652,20 +1657,20 @@ bfd_ecoff_write_accumulated_debug (void * handle,
   /* The external strings and symbol are not converted over to using
      shuffles.  FIXME: They probably should be.  */
   amt = debug->symbolic_header.issExtMax;
-  if (amt != 0 && bfd_bwrite (debug->ssext, amt, abfd) != amt)
+  if (amt != 0 && bfd_write (debug->ssext, amt, abfd) != amt)
     goto error_return;
   if ((debug->symbolic_header.issExtMax & (swap->debug_align - 1)) != 0)
     {
-      unsigned int i;
+      size_t i;
       bfd_byte *s;
 
       i = (swap->debug_align
 	   - (debug->symbolic_header.issExtMax & (swap->debug_align - 1)));
-      s = (bfd_byte *) bfd_zmalloc ((bfd_size_type) i);
+      s = bfd_zmalloc (i);
       if (s == NULL && i != 0)
 	goto error_return;
 
-      if (bfd_bwrite (s, (bfd_size_type) i, abfd) != i)
+      if (bfd_write (s, i, abfd) != i)
 	{
 	  free (s);
 	  goto error_return;
@@ -1682,7 +1687,7 @@ bfd_ecoff_write_accumulated_debug (void * handle,
 		  == (bfd_vma) bfd_tell (abfd)));
 
   amt = debug->symbolic_header.iextMax * swap->external_ext_size;
-  if (amt != 0 && bfd_bwrite (debug->external_ext, amt, abfd) != amt)
+  if (amt != 0 && bfd_write (debug->external_ext, amt, abfd) != amt)
     goto error_return;
 
   free (space);
@@ -2050,7 +2055,7 @@ lookup_line (bfd *abfd,
       PDR pdr;
       unsigned char *line_ptr;
       unsigned char *line_end;
-      int lineno;
+      unsigned int lineno;
       /* This file uses ECOFF debugging information.  Each FDR has a
 	 list of procedure descriptors (PDR).  The address in the FDR
 	 is the absolute address of the first procedure.  The address
@@ -2198,16 +2203,14 @@ lookup_line (bfd *abfd,
 	  int delta;
 	  unsigned int count;
 
-	  delta = *line_ptr >> 4;
-	  if (delta >= 0x8)
-	    delta -= 0x10;
+	  delta = (*line_ptr >> 4) & 0xf;
+	  delta = (delta ^ 8) - 8;
 	  count = (*line_ptr & 0xf) + 1;
 	  ++line_ptr;
 	  if (delta == -8)
 	    {
-	      delta = (((line_ptr[0]) & 0xff) << 8) + ((line_ptr[1]) & 0xff);
-	      if (delta >= 0x8000)
-		delta -= 0x10000;
+	      delta = (((line_ptr[0]) & 0xff) << 8) | ((line_ptr[1]) & 0xff);
+	      delta = (delta ^ 0x8000) - 0x8000;
 	      line_ptr += 2;
 	    }
 	  lineno += delta;
@@ -2268,7 +2271,7 @@ lookup_line (bfd *abfd,
 						 + proc_sym.iss);
 	    }
 	}
-      if (lineno == ilineNil)
+      if (lineno == (unsigned) ilineNil)
 	lineno = 0;
       line_info->cache.line_num = lineno;
     }
@@ -2520,8 +2523,7 @@ ecoff_collect_shuffle (struct shuffle *l, bfd_byte *buff)
       else
 	{
 	  if (bfd_seek (l->u.file.input_bfd, l->u.file.offset, SEEK_SET) != 0
-	      || (bfd_bread (buff, (bfd_size_type) l->size, l->u.file.input_bfd)
-		  != l->size))
+	      || bfd_read (buff, l->size, l->u.file.input_bfd) != l->size)
 	    return false;
 	}
       buff += l->size;

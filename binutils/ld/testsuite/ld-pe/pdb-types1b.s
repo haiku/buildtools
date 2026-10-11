@@ -40,6 +40,12 @@
 .equ CV_PTR_NEAR32, 0xa
 .equ CV_PTR_64, 0xc
 
+.equ CV_PTR_MODE_PMEM, 0x40
+.equ CV_PTR_MODE_PMFUNC, 0x60
+
+.equ CV_PMTYPE_D_Single, 0x01
+.equ CV_PMTYPE_F_Single, 0x05
+
 .section ".debug$T", "rn"
 
 .long CV_SIGNATURE_C13
@@ -593,7 +599,7 @@
 
 /* Type 102a, virtual function table */
 .vftable1:
-.short .types_end - .vftable1 - 2
+.short .fieldlist12 - .vftable1 - 2
 .short LF_VFTABLE
 .long 0x1029 /* type */
 .long 0 /* base vftable */
@@ -605,6 +611,46 @@
 .asciz "AddRef"
 .asciz "Release"
 .vftable1_names_end:
+.byte 0xf1 /* padding */
+
+/* Type 102b, empty LF_FIELDLIST */
+.fieldlist12:
+.short .struct7 - .fieldlist12 - 2
+.short LF_FIELDLIST
+
+/* Type 102c, empty struct */
+.struct7:
+.short .ptr5 - .struct7 - 2
+.short LF_STRUCTURE
+.short 0 /* no. members */
+.short 0 /* property */
+.long 0x102b /* field list */
+.long 0 /* type derived from */
+.long 0 /* type of vshape table */
+.short 1 /* size */
+.asciz "empty_struct" /* name */
+.byte 0xf1 /* padding */
+
+/* Type 102d, pointer to member function method2 in struct foo */
+.ptr5:
+.short .ptr6 - .ptr5 - 2
+.short LF_POINTER
+.long 0x1010 /* base type */
+.long (8 << 13) | CV_PTR_MODE_PMFUNC | CV_PTR_64 /* attributes */
+.long 0x100c /* containing class */
+.short CV_PMTYPE_F_Single /* member function, single inheritance */
+.byte 0xf2 /* padding */
+.byte 0xf1 /* padding */
+
+/* Type 102e, pointer to member num in struct foo */
+.ptr6:
+.short .types_end - .ptr6 - 2
+.short LF_POINTER
+.long T_UINT4 /* base type */
+.long (8 << 13) | CV_PTR_MODE_PMEM | CV_PTR_64 /* attributes */
+.long 0x100c /* containing class */
+.short CV_PMTYPE_D_Single /* member data, single inheritance */
+.byte 0xf2 /* padding */
 .byte 0xf1 /* padding */
 
 .types_end:

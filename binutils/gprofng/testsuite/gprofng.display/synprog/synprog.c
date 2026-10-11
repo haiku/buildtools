@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2026 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -528,14 +528,14 @@ reapchildren ()
 int
 doabort (int k)
 {
-  char *nullptr = NULL;
+  char *p = NULL;
   char c;
 
   /* Log the event */
   wlog ("start of doabort", NULL);
 
   /* and dereference a NULL */
-  c = *nullptr;
+  c = *p;
 
   /* this should never be reached */
   return (int) c;

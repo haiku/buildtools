@@ -1,5 +1,6 @@
 #source: relax-max-align-gp.s
-#ld:
+#as: -march=rv64i
+#ld: -m[riscv_choose_lp64_emul]
 #objdump: -d
 
 .*:[ 	]+file format .*
@@ -7,8 +8,8 @@
 
 Disassembly of section .text:
 
-0+[0-9a-f]+ <_start>:
-.*:[ 	]+[0-9a-f]+[ 	]+add[ 	]+.*<gdata>
+0+[0-9a-f]+00 <_start>:
+.*:[ 	]+[0-9a-f]+[ 	]+addi[ 	]+.*<gdata>
 .*:[ 	]+[0-9a-f]+[ 	]+jal[ 	]+.*
 .*:[ 	]+[0-9a-f]+[ 	]+j[ 	]+.*
 .*:[ 	]+[0-9a-f]+[ 	]+nop
@@ -41,6 +42,32 @@ Disassembly of section .text:
 .*:[ 	]+[0-9a-f]+[ 	]+nop
 .*:[ 	]+[0-9a-f]+[ 	]+nop
 
-0+[0-9a-f]+ <func>:
+0+[0-9a-f]+80 <func>:
 .*:[ 	]+[0-9a-f]+[ 	]+ret
-[ 	]+...
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop
+.*:[ 	]+[0-9a-f]+[ 	]+nop

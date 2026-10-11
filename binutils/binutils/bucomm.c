@@ -1,5 +1,5 @@
 /* bucomm.c -- Bin Utils COMmon code.
-   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Copyright (C) 1991-2026 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -435,6 +435,7 @@ display_info (void)
   if (!arg.error)
     display_target_tables (&arg);
 
+  free (arg.info);
   return arg.error;
 }
 
@@ -499,7 +500,7 @@ template_in_dir (const char *path)
 #ifdef HAVE_DOS_BASED_FILE_SYSTEM
   {
     /* We could have foo/bar\\baz, or foo\\bar, or d:bar.  */
-    char *bslash = strrchr (path, '\\');
+    const char *bslash = strrchr (path, '\\');
 
     if (slash == NULL || (bslash != NULL && bslash > slash))
       slash = bslash;

@@ -1,5 +1,5 @@
 /* dllwrap.c -- wrapper for DLLTOOL and GCC to generate PE style DLLs
-   Copyright (C) 1998-2023 Free Software Foundation, Inc.
+   Copyright (C) 1998-2026 Free Software Foundation, Inc.
    Contributed by Mumit Khan (khan@xraylith.wisc.edu).
 
    This file is part of GNU Binutils.
@@ -186,9 +186,9 @@ look_for_prog (const char *progname, const char *prefix, int end_prefix)
 		 + strlen (EXECUTABLE_SUFFIX)
 #endif
 		 + 10);
-  strcpy (cmd, prefix);
+  memcpy (cmd, prefix, end_prefix);
 
-  sprintf (cmd + end_prefix, "%s", progname);
+  strcpy (cmd + end_prefix, progname);
 
   if (strchr (cmd, '/') != NULL)
     {

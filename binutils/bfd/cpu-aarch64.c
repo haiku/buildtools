@@ -1,5 +1,5 @@
 /* BFD support for AArch64.
-   Copyright (C) 2009-2023 Free Software Foundation, Inc.
+   Copyright (C) 2009-2026 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -73,7 +73,10 @@ processors[] =
   { bfd_mach_aarch64,	  "cortex-a65"	    },
   { bfd_mach_aarch64,	  "cortex-a65ae"    },
   { bfd_mach_aarch64,	  "cortex-a76ae"    },
-  { bfd_mach_aarch64,	  "cortex-a77"	    }
+  { bfd_mach_aarch64,	  "cortex-a77"	    },
+  { bfd_mach_aarch64,	  "cortex-a720"	    },
+  { bfd_mach_aarch64,     "cortex-x3"       },
+  { bfd_mach_aarch64,     "cortex-x4"       },
 };
 
 static bool
@@ -112,7 +115,7 @@ scan (const struct bfd_arch_info *info, const char *string)
 }
 
 /* Figure out if llp64 is default */
-#if DEFAULT_VECTOR == aarch64_pe_le_vec
+#if DEFAULT_VECTOR == aarch64_pe_le_vec || DEFAULT_VECTOR == aarch64_pe_bigobj_le_vec
 #define LLP64_DEFAULT true
 #define AARCH64_DEFAULT false
 #else

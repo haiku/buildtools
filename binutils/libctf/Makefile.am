@@ -1,6 +1,6 @@
 ## Process this file with automake to produce Makefile.in.
 #
-#   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2019-2026 Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,6 +20,11 @@
 ACLOCAL_AMFLAGS = -I .. -I ../config -I ../bfd
 
 AUTOMAKE_OPTIONS = dejagnu foreign info-in-builddir no-texinfo.tex
+
+# Suppress 'configure.ac: error: AM_GNU_GETTEXT used but SUBDIRS not defined'
+# from Automake, as libctf uses AM_GNU_GETTEXT (through
+# ZW_GNU_GETTEXT_SISTER_DIR) but has no po/ subdir (currently).
+SUBDIRS =
 
 # Variables that we might accumulate conditionally or in subdirs.
 info_TEXINFOS =

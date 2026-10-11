@@ -1,5 +1,5 @@
 /* Type handling functions.
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2026 Free Software Foundation, Inc.
 
    This file is part of libctf.
 
@@ -45,7 +45,7 @@ ctf_struct_member (ctf_dict_t *fp, ctf_lmember_t *dst, const ctf_type_t *tp,
     return -1;					/* errno is set for us.  */
 
   /* Already large.  */
-  if (tp->ctt_size == CTF_LSIZE_SENT)
+  if (tp->ctt_size >= CTF_LSTRUCT_THRESH)
     {
       ctf_lmember_t *lmp = (ctf_lmember_t *) vlen;
 
@@ -187,10 +187,21 @@ ctf_member_next (ctf_dict_t *fp, ctf_id_t type, ctf_next_t **it,
 	*membtype = memb.ctlm_type;
       offset = (unsigned long) CTF_LMEM_OFFSET (&memb);
 
-      if (membname[0] == 0
-	  && (ctf_type_kind (fp, memb.ctlm_type) == CTF_K_STRUCT
-	      || ctf_type_kind (fp, memb.ctlm_type) == CTF_K_UNION))
-	i->ctn_type = memb.ctlm_type;
+      if (membname[0] == 0)
+	{
+	  ctf_id_t resolved;
+
+	  if ((resolved = ctf_type_resolve (fp, memb.ctlm_type)) == CTF_ERR)
+	    {
+	      if (ctf_errno (fp) != ECTF_NONREPRESENTABLE)
+		return -1;			/* errno is set for us.  */
+	      resolved = memb.ctlm_type;
+	    }
+
+	  if (ctf_type_kind (fp, resolved) == CTF_K_STRUCT
+	      || ctf_type_kind (fp, resolved) == CTF_K_UNION)
+	    i->ctn_type = resolved;
+	}
       i->ctn_n++;
 
       /* The callers might want automatic recursive sub-struct traversal.  */
@@ -426,7 +437,7 @@ ctf_type_next (ctf_dict_t *fp, ctf_next_t **it, int *flag, int want_hidden)
   if (!i)
     {
       if ((i = ctf_next_create ()) == NULL)
-	return ctf_set_errno (fp, ENOMEM);
+	return ctf_set_typed_errno (fp, ENOMEM);
 
       i->cu.ctn_fp = fp;
       i->ctn_type = 1;
@@ -435,10 +446,10 @@ ctf_type_next (ctf_dict_t *fp, ctf_next_t **it, int *flag, int want_hidden)
     }
 
   if ((void (*) (void)) ctf_type_next != i->ctn_iter_fun)
-    return (ctf_set_errno (fp, ECTF_NEXT_WRONGFUN));
+    return (ctf_set_typed_errno (fp, ECTF_NEXT_WRONGFUN));
 
   if (fp != i->cu.ctn_fp)
-    return (ctf_set_errno (fp, ECTF_NEXT_WRONGFP));
+    return (ctf_set_typed_errno (fp, ECTF_NEXT_WRONGFP));
 
   while (i->ctn_type <= fp->ctf_typemax)
     {
@@ -456,7 +467,7 @@ ctf_type_next (ctf_dict_t *fp, ctf_next_t **it, int *flag, int want_hidden)
     }
   ctf_next_destroy (i);
   *it = NULL;
-  return ctf_set_errno (fp, ECTF_NEXT_END);
+  return ctf_set_typed_errno (fp, ECTF_NEXT_END);
 }
 
 /* Iterate over every variable in the given CTF dict, in arbitrary order.
@@ -492,53 +503,47 @@ ctf_id_t
 ctf_variable_next (ctf_dict_t *fp, ctf_next_t **it, const char **name)
 {
   ctf_next_t *i = *it;
+  ctf_id_t id;
 
   if ((fp->ctf_flags & LCTF_CHILD) && (fp->ctf_parent == NULL))
-    return (ctf_set_errno (fp, ECTF_NOPARENT));
+    return (ctf_set_typed_errno (fp, ECTF_NOPARENT));
 
   if (!i)
     {
       if ((i = ctf_next_create ()) == NULL)
-	return ctf_set_errno (fp, ENOMEM);
+	return ctf_set_typed_errno (fp, ENOMEM);
 
       i->cu.ctn_fp = fp;
       i->ctn_iter_fun = (void (*) (void)) ctf_variable_next;
-      if (fp->ctf_flags & LCTF_RDWR)
-	i->u.ctn_dvd = ctf_list_next (&fp->ctf_dvdefs);
+      i->u.ctn_dvd = ctf_list_next (&fp->ctf_dvdefs);
       *it = i;
     }
 
   if ((void (*) (void)) ctf_variable_next != i->ctn_iter_fun)
-    return (ctf_set_errno (fp, ECTF_NEXT_WRONGFUN));
+    return (ctf_set_typed_errno (fp, ECTF_NEXT_WRONGFUN));
 
   if (fp != i->cu.ctn_fp)
-    return (ctf_set_errno (fp, ECTF_NEXT_WRONGFP));
+    return (ctf_set_typed_errno (fp, ECTF_NEXT_WRONGFP));
 
-  if (!(fp->ctf_flags & LCTF_RDWR))
+  if (i->ctn_n < fp->ctf_nvars)
     {
-      if (i->ctn_n >= fp->ctf_nvars)
-	goto end_iter;
-
       *name = ctf_strptr (fp, fp->ctf_vars[i->ctn_n].ctv_name);
       return fp->ctf_vars[i->ctn_n++].ctv_type;
-    }
-  else
-    {
-      ctf_id_t id;
 
-      if (i->u.ctn_dvd == NULL)
-	goto end_iter;
-
-      *name = i->u.ctn_dvd->dvd_name;
-      id = i->u.ctn_dvd->dvd_type;
-      i->u.ctn_dvd = ctf_list_next (i->u.ctn_dvd);
-      return id;
     }
+
+  if (i->u.ctn_dvd == NULL)
+    goto end_iter;
+
+  *name = i->u.ctn_dvd->dvd_name;
+  id = i->u.ctn_dvd->dvd_type;
+  i->u.ctn_dvd = ctf_list_next (i->u.ctn_dvd);
+  return id;
 
  end_iter:
   ctf_next_destroy (i);
   *it = NULL;
-  return ctf_set_errno (fp, ECTF_NEXT_END);
+  return ctf_set_typed_errno (fp, ECTF_NEXT_END);
 }
 
 /* Follow a given type through the graph for TYPEDEF, VOLATILE, CONST, and
@@ -560,7 +565,7 @@ ctf_type_resolve (ctf_dict_t *fp, ctf_id_t type)
   const ctf_type_t *tp;
 
   if (type == 0)
-    return (ctf_set_errno (ofp, ECTF_NONREPRESENTABLE));
+    return (ctf_set_typed_errno (ofp, ECTF_NONREPRESENTABLE));
 
   while ((tp = ctf_lookup_by_id (&fp, type)) != NULL)
     {
@@ -575,18 +580,18 @@ ctf_type_resolve (ctf_dict_t *fp, ctf_id_t type)
 	    {
 	      ctf_err_warn (ofp, 0, ECTF_CORRUPT, _("type %lx cycle detected"),
 			    otype);
-	      return (ctf_set_errno (ofp, ECTF_CORRUPT));
+	      return (ctf_set_typed_errno (ofp, ECTF_CORRUPT));
 	    }
 	  prev = type;
 	  type = tp->ctt_type;
 	  break;
 	case CTF_K_UNKNOWN:
-	  return (ctf_set_errno (ofp, ECTF_NONREPRESENTABLE));
+	  return (ctf_set_typed_errno (ofp, ECTF_NONREPRESENTABLE));
 	default:
 	  return type;
 	}
       if (type == 0)
-	return (ctf_set_errno (ofp, ECTF_NONREPRESENTABLE));
+	return (ctf_set_typed_errno (ofp, ECTF_NONREPRESENTABLE));
     }
 
   return CTF_ERR;		/* errno is set for us.  */
@@ -600,21 +605,31 @@ ctf_type_resolve_unsliced (ctf_dict_t *fp, ctf_id_t type)
 {
   ctf_dict_t *ofp = fp;
   const ctf_type_t *tp;
+  ctf_id_t resolved_type;
 
   if ((type = ctf_type_resolve (fp, type)) == CTF_ERR)
-    return -1;
+    return CTF_ERR;
 
   if ((tp = ctf_lookup_by_id (&fp, type)) == NULL)
     return CTF_ERR;		/* errno is set for us.  */
+  resolved_type = type;
 
-  if ((LCTF_INFO_KIND (fp, tp->ctt_info)) == CTF_K_SLICE)
+  do
     {
-      ctf_id_t ret;
+      type = resolved_type;
 
-      if ((ret = ctf_type_reference (fp, type)) == CTF_ERR)
-	return (ctf_set_errno (ofp, ctf_errno (fp)));
-      return ret;
+      if ((LCTF_INFO_KIND (fp, tp->ctt_info)) == CTF_K_SLICE)
+	if ((type = ctf_type_reference (fp, type)) == CTF_ERR)
+	  return (ctf_set_typed_errno (ofp, ctf_errno (fp)));
+
+      if ((resolved_type = ctf_type_resolve (fp, type)) == CTF_ERR)
+	return CTF_ERR;
+
+      if ((tp = ctf_lookup_by_id (&fp, resolved_type)) == NULL)
+	return CTF_ERR;		/* errno is set for us.  */
     }
+  while (LCTF_INFO_KIND (fp, tp->ctt_info) == CTF_K_SLICE);
+
   return type;
 }
 
@@ -635,22 +650,8 @@ ctf_get_dict (ctf_dict_t *fp, ctf_id_t type)
 
 ctf_id_t ctf_lookup_by_rawname (ctf_dict_t *fp, int kind, const char *name)
 {
-  return ctf_lookup_by_rawhash (fp, ctf_name_table (fp, kind), name);
-}
-
-/* Look up a name in the given name table, in the appropriate hash given the
-   readability state of the dictionary.  The name is a raw, undecorated
-   identifier.  */
-
-ctf_id_t ctf_lookup_by_rawhash (ctf_dict_t *fp, ctf_names_t *np, const char *name)
-{
-  ctf_id_t id;
-
-  if (fp->ctf_flags & LCTF_RDWR)
-    id = (ctf_id_t) (uintptr_t) ctf_dynhash_lookup (np->ctn_writable, name);
-  else
-    id = ctf_hash_lookup_type (np->ctn_readonly, fp, name);
-  return id;
+  return (ctf_id_t) (uintptr_t)
+    ctf_dynhash_lookup (ctf_name_table (fp, kind), name);
 }
 
 /* Lookup the given type ID and return its name as a new dynamically-allocated
@@ -854,7 +855,7 @@ ctf_type_lname (ctf_dict_t *fp, ctf_id_t type, char *buf, size_t len)
   size_t slen;
 
   if (str == NULL)
-    return CTF_ERR;			/* errno is set for us.  */
+    return -1;			/* errno is set for us.  */
 
   slen = strlen (str);
   snprintf (buf, len, "%s", str);
@@ -1139,7 +1140,7 @@ ctf_type_reference (ctf_dict_t *fp, ctf_id_t type)
 	return sp->cts_type;
       }
     default:
-      return (ctf_set_errno (ofp, ECTF_NOTREF));
+      return (ctf_set_typed_errno (ofp, ECTF_NOTREF));
     }
 }
 
@@ -1164,15 +1165,15 @@ ctf_type_pointer (ctf_dict_t *fp, ctf_id_t type)
     return (LCTF_INDEX_TO_TYPE (fp, ntype, (fp->ctf_flags & LCTF_CHILD)));
 
   if ((type = ctf_type_resolve (fp, type)) == CTF_ERR)
-    return (ctf_set_errno (ofp, ECTF_NOTYPE));
+    return (ctf_set_typed_errno (ofp, ECTF_NOTYPE));
 
   if (ctf_lookup_by_id (&fp, type) == NULL)
-    return (ctf_set_errno (ofp, ECTF_NOTYPE));
+    return (ctf_set_typed_errno (ofp, ECTF_NOTYPE));
 
   if ((ntype = fp->ctf_ptrtab[LCTF_TYPE_TO_INDEX (fp, type)]) != 0)
     return (LCTF_INDEX_TO_TYPE (fp, ntype, (fp->ctf_flags & LCTF_CHILD)));
 
-  return (ctf_set_errno (ofp, ECTF_NOTYPE));
+  return (ctf_set_typed_errno (ofp, ECTF_NOTYPE));
 }
 
 /* Return the encoding for the specified INTEGER, FLOAT, or ENUM.  */
@@ -1416,16 +1417,24 @@ ctf_member_info (ctf_dict_t *fp, ctf_id_t type, const char *name,
     {
       ctf_lmember_t memb;
       const char *membname;
+      ctf_id_t resolved;
 
       if (ctf_struct_member (fp, &memb, tp, vlen, vbytes, i) < 0)
         return (ctf_set_errno (ofp, ctf_errno (fp)));
 
       membname = ctf_strptr (fp, memb.ctlm_name);
 
+      if ((resolved = ctf_type_resolve (fp, memb.ctlm_type)) == CTF_ERR)
+	{
+	  if (ctf_errno (fp) != ECTF_NONREPRESENTABLE)
+	    return (ctf_set_errno (ofp, ctf_errno (fp)));
+	  resolved = memb.ctlm_type;
+	}
+
       if (membname[0] == 0
-	  && (ctf_type_kind (fp, memb.ctlm_type) == CTF_K_STRUCT
-	      || ctf_type_kind (fp, memb.ctlm_type) == CTF_K_UNION)
-	  && (ctf_member_info (fp, memb.ctlm_type, name, mip) == 0))
+	  && (ctf_type_kind (fp, resolved) == CTF_K_STRUCT
+	      || ctf_type_kind (fp, resolved) == CTF_K_UNION)
+	  && (ctf_member_info (fp, resolved, name, mip) == 0))
 	{
 	  mip->ctm_offset += (unsigned long) CTF_LMEM_OFFSET (&memb);
 	  return 0;
@@ -1535,10 +1544,7 @@ ctf_enum_value (ctf_dict_t *fp, ctf_id_t type, const char *name, int *valp)
     return -1;			/* errno is set for us.  */
 
   if (LCTF_INFO_KIND (fp, tp->ctt_info) != CTF_K_ENUM)
-    {
-      (void) ctf_set_errno (ofp, ECTF_NOTENUM);
-      return -1;
-    }
+    return ctf_set_errno (ofp, ECTF_NOTENUM);
 
   ctf_get_ctt_size (fp, tp, NULL, &increment);
 
@@ -1557,8 +1563,7 @@ ctf_enum_value (ctf_dict_t *fp, ctf_id_t type, const char *name, int *valp)
 	}
     }
 
-  ctf_set_errno (ofp, ECTF_NOENUMNAM);
-  return -1;
+  return ctf_set_errno (ofp, ECTF_NOENUMNAM);
 }
 
 /* Given a type ID relating to a function type, return info on return types and
@@ -1650,7 +1655,7 @@ ctf_type_rvisit (ctf_dict_t *fp, ctf_id_t type, ctf_visit_f *func,
 {
   ctf_dict_t *ofp = fp;
   ctf_id_t otype = type;
-  const ctf_type_t *tp;
+  const ctf_type_t *tp = NULL;
   const ctf_dtdef_t *dtd;
   unsigned char *vlen;
   ssize_t size, increment, vbytes;

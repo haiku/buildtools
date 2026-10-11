@@ -1,4 +1,4 @@
-# Copyright (C) 2014-2023 Free Software Foundation, Inc.
+# Copyright (C) 2014-2026 Free Software Foundation, Inc.
 #
 # Copying and distribution of this file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -98,7 +98,7 @@ DTOR=" .dtors       ${CONSTRUCTING-0} :
   } > ROM"
 
 cat <<EOF
-/* Copyright (C) 2014-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2026 Free Software Foundation, Inc.
 
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
@@ -143,6 +143,7 @@ SECTIONS
   ${RELOCATING+${OTHER_GOT_SECTIONS}}
   ${RELOCATING+_edata = .;}
   ${RELOCATING+PROVIDE (edata = .);}
+  ${RELOCATING+. = ALIGN(ALIGNOF(NEXT_SECTION));}
   ${RELOCATING+__bss_start = .;}
   ${RELOCATING+${OTHER_BSS_SYMBOLS}}
   .bss     ${RELOCATING-0} :

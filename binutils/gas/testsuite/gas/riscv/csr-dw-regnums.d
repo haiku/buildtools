@@ -324,6 +324,10 @@ Contents of the .* section:
   DW_CFA_offset_extended_sf: r4888 \(mvienh\) at cfa\+3168
   DW_CFA_offset_extended_sf: r4889 \(mviph\) at cfa\+3172
   DW_CFA_offset_extended_sf: r4948 \(miph\) at cfa\+3408
+  DW_CFA_offset_extended_sf: r4897 \(mcyclecfg\) at cfa\+3204
+  DW_CFA_offset_extended_sf: r4898 \(minstretcfg\) at cfa\+3208
+  DW_CFA_offset_extended_sf: r5921 \(mcyclecfgh\) at cfa\+7300
+  DW_CFA_offset_extended_sf: r5922 \(minstretcfgh\) at cfa\+7304
   DW_CFA_offset_extended_sf: r4876 \(mstateen0\) at cfa\+3120
   DW_CFA_offset_extended_sf: r4877 \(mstateen1\) at cfa\+3124
   DW_CFA_offset_extended_sf: r4878 \(mstateen2\) at cfa\+3128
@@ -399,19 +403,12 @@ Contents of the .* section:
   DW_CFA_offset_extended_sf: r4445 \(stimecmph\) at cfa\+1396
   DW_CFA_offset_extended_sf: r4685 \(vstimecmp\) at cfa\+2356
   DW_CFA_offset_extended_sf: r4701 \(vstimecmph\) at cfa\+2420
-  DW_CFA_offset_extended_sf: r4163 \(utval\) at cfa\+268
-  DW_CFA_offset_extended_sf: r4419 \(stval\) at cfa\+1292
-  DW_CFA_offset_extended_sf: r4480 \(satp\) at cfa\+1536
-  DW_CFA_offset_extended_sf: r4931 \(mtval\) at cfa\+3340
-  DW_CFA_offset_extended_sf: r4896 \(mcountinhibit\) at cfa\+3200
-  DW_CFA_offset_extended_sf: r4992 \(mbase\) at cfa\+3584
-  DW_CFA_offset_extended_sf: r4993 \(mbound\) at cfa\+3588
-  DW_CFA_offset_extended_sf: r4994 \(mibase\) at cfa\+3592
-  DW_CFA_offset_extended_sf: r4995 \(mibound\) at cfa\+3596
-  DW_CFA_offset_extended_sf: r4996 \(mdbase\) at cfa\+3600
-  DW_CFA_offset_extended_sf: r4997 \(mdbound\) at cfa\+3604
-  DW_CFA_offset_extended_sf: r4897 \(mscounteren\) at cfa\+3204
-  DW_CFA_offset_extended_sf: r4898 \(mhcounteren\) at cfa\+3208
+  DW_CFA_offset_extended_sf: r4430 \(sctrctl\) at cfa\+1336
+  DW_CFA_offset_extended_sf: r4431 \(sctrstatus\) at cfa\+1340
+  DW_CFA_offset_extended_sf: r4447 \(sctrdepth\) at cfa\+1404
+  DW_CFA_offset_extended_sf: r4686 \(vsctrctl\) at cfa\+2360
+  DW_CFA_offset_extended_sf: r4942 \(mctrctl\) at cfa\+3384
+  DW_CFA_offset_extended_sf: r4113 \(ssp\) at cfa\+324
   DW_CFA_offset_extended: r4096 \(ustatus\) at cfa\+0
   DW_CFA_offset_extended_sf: r4100 \(uie\) at cfa\+16
   DW_CFA_offset_extended_sf: r4101 \(utvec\) at cfa\+20

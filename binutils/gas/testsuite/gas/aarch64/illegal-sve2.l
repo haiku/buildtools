@@ -55,14 +55,14 @@
 [^ :]+:[0-9]+: Error: operand mismatch -- `aesd z0\.b,z0\.s,z0\.b'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	aesd z0\.b, z0\.b, z0\.b
-[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `aesd z32\.b,z0\.b,z0\.b'
+[^ :]+:[0-9]+: Error: expected a register or register list at operand 1 -- `aesd z32\.b,z0\.b,z0\.b'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `aesd z0\.b,z0\.b,z32\.b'
 [^ :]+:[0-9]+: Warning: SVE `movprfx' compatible instruction expected -- `aese z0\.b,z0\.b,z0\.b'
 [^ :]+:[0-9]+: Error: operand 2 must be the same register as operand 1 -- `aese z0\.b,z1\.b,z0\.b'
 [^ :]+:[0-9]+: Error: operand mismatch -- `aese z0\.b,z0\.s,z0\.b'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	aese z0\.b, z0\.b, z0\.b
-[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `aese z32\.b,z0\.b,z0\.b'
+[^ :]+:[0-9]+: Error: expected a register or register list at operand 1 -- `aese z32\.b,z0\.b,z0\.b'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `aese z0\.b,z0\.b,z32\.b'
 [^ :]+:[0-9]+: Warning: SVE `movprfx' compatible instruction expected -- `aesimc z0\.b,z0\.b'
 [^ :]+:[0-9]+: Error: operand 2 must be the same register as operand 1 -- `aesimc z0\.b,z1\.b'
@@ -239,24 +239,24 @@
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `eortb z0\.s,z32\.s,z0\.s'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `eortb z0\.s,z0\.s,z32\.s'
 [^ :]+:[0-9]+: Error: syntax error in register list at operand 2 -- `ext z0\.b,{,},#0'
-[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `ext z0\.b,{z0\.b,z2\.b},#0'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ext z0\.h,{z0\.b,z1\.b},#0'
+[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `ext z0\.b,{ ?z0\.b,z2\.b ?},#0'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ext z0\.h,{ ?z0\.b,z1\.b ?},#0'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	ext z0\.b, {z0\.b-z1\.b}, #0
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `ext z0\.b,{z0\.h,z1\.b},#0'
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `ext z0\.b,{z0\.b,z1\.h},#0'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ext z0\.b,{z0\.h,z1\.h},#0'
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `ext z0\.b,{ ?z0\.h,z1\.b ?},#0'
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `ext z0\.b,{ ?z0\.b,z1\.h ?},#0'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ext z0\.b,{ ?z0\.h,z1\.h ?},#0'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	ext z0\.b, {z0\.b-z1\.b}, #0
-[^ :]+:[0-9]+: Error: expected a list of 2 registers at operand 2 -- `ext z0\.b,{z0\.b,z1\.b,z2\.b},#0'
-[^ :]+:[0-9]+: Error: expected a list of 2 registers at operand 2 -- `ext z0\.b,{z0\.b},#0'
+[^ :]+:[0-9]+: Error: expected a list of 2 registers at operand 2 -- `ext z0\.b,{ ?z0\.b,z1\.b,z2\.b ?},#0'
+[^ :]+:[0-9]+: Error: expected a list of 2 registers at operand 2 -- `ext z0\.b,{ ?z0\.b ?},#0'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `ext z0\.b,z0\.b,#0'
-[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `ext z0\.b,{z31\.b,z1\.b},#0'
-[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `ext z0\.b,{z0\.b,z31\.b},#0'
-[^ :]+:[0-9]+: Error: immediate value out of range 0 to 255 at operand 3 -- `ext z0\.b,{z0\.b,z1\.b},#256'
-[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `ext z32\.b,{z0\.b,z1\.b},#0'
-[^ :]+:[0-9]+: Error: operand 2 must be a list of SVE vector registers -- `ext z0\.b,{z31\.b,z32\.b},#0'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `ext z0\.b,{z32\.b,z33\.b},#0'
+[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `ext z0\.b,{ ?z31\.b,z1\.b ?},#0'
+[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `ext z0\.b,{ ?z0\.b,z31\.b ?},#0'
+[^ :]+:[0-9]+: Error: immediate value out of range 0 to 255 at operand 3 -- `ext z0\.b,{ ?z0\.b,z1\.b ?},#256'
+[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `ext z32\.b,{ ?z0\.b,z1\.b ?},#0'
+[^ :]+:[0-9]+: Error: operand 2 must be a list of SVE vector registers -- `ext z0\.b,{ ?z31\.b,z32\.b ?},#0'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `ext z0\.b,{ ?z32\.b,z33\.b ?},#0'
 [^ :]+:[0-9]+: Error: expected a register at operand 1 -- `faddp z32\.h,p0/m,z32\.h,z0\.h'
 [^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `faddp z0\.h,p8/m,z0\.h,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 4 -- `faddp z0\.h,p0/m,z0\.h,z32\.h'
@@ -280,18 +280,14 @@
 [^ :]+:[0-9]+: Error: operand mismatch -- `fcvtlt z0\.s,p0/m,z0\.s'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fcvtlt z0\.d, p0/m, z0\.s
-[^ :]+:[0-9]+: Error: operand mismatch -- `fcvtlt z0\.s,p0/z,z0\.h'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	fcvtlt z0\.s, p0/m, z0\.h
+[^ :]+:[0-9]+: Error: selected processor does not support `fcvtlt z0\.s,p0/z,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fcvtlt z32\.d,p0/m,z0\.s'
 [^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `fcvtlt z0\.d,p8/m,z0\.s'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `fcvtlt z0\.d,p0/m,z32\.s'
 [^ :]+:[0-9]+: Error: operand mismatch -- `fcvtlt z0\.d,p0/m,z0\.d'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fcvtlt z0\.d, p0/m, z0\.s
-[^ :]+:[0-9]+: Error: operand mismatch -- `fcvtlt z0\.d,p0/z,z0\.s'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	fcvtlt z0\.d, p0/m, z0\.s
+[^ :]+:[0-9]+: Error: selected processor does not support `fcvtlt z0\.d,p0/z,z0\.s'
 [^ :]+:[0-9]+: Warning: SVE `movprfx' compatible instruction expected -- `fcvtnt z0\.h,p0/m,z0\.s'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fcvtnt z32\.h,p0/m,z0\.s'
 [^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `fcvtnt z0\.h,p8/m,z0\.s'
@@ -299,27 +295,21 @@
 [^ :]+:[0-9]+: Error: operand mismatch -- `fcvtnt z0\.h,p0/m,z0\.h'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fcvtnt z0\.h, p0/m, z0\.s
-[^ :]+:[0-9]+: Error: operand mismatch -- `fcvtnt z0\.h,p0/z,z0\.s'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	fcvtnt z0\.h, p0/m, z0\.s
+[^ :]+:[0-9]+: Error: selected processor does not support `fcvtnt z0\.h,p0/z,z0\.s'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fcvtnt z32\.s,p0/m,z0\.d'
 [^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `fcvtnt z0\.s,p8/m,z0\.d'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `fcvtnt z0\.s,p0/m,z32\.d'
 [^ :]+:[0-9]+: Error: operand mismatch -- `fcvtnt z0\.s,p0/m,z0\.s'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fcvtnt z0\.s, p0/m, z0\.d
-[^ :]+:[0-9]+: Error: operand mismatch -- `fcvtnt z0\.s,p0/z,z0\.d'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	fcvtnt z0\.s, p0/m, z0\.d
+[^ :]+:[0-9]+: Error: selected processor does not support `fcvtnt z0\.s,p0/z,z0\.d'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fcvtx z32\.s,p0/m,z0\.d'
 [^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `fcvtx z0\.s,p8/m,z0\.d'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `fcvtx z0\.s,p0/m,z32\.d'
 [^ :]+:[0-9]+: Error: operand mismatch -- `fcvtx z0\.s,p0/m,z0\.s'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fcvtx z0\.s, p0/m, z0\.d
-[^ :]+:[0-9]+: Error: operand mismatch -- `fcvtx z0\.s,p0/z,z0\.d'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	fcvtx z0\.s, p0/m, z0\.d
+[^ :]+:[0-9]+: Error: selected processor does not support `fcvtx z0\.s,p0/z,z0\.d'
 [^ :]+:[0-9]+: Warning: register size not compatible with previous `movprfx' at operand 1 -- `fcvtx z0\.s,p0/m,z2\.d'
 [^ :]+:[0-9]+: Warning: SVE `movprfx' compatible instruction expected -- `fcvtxnt z0\.s,p0/m,z0\.d'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fcvtxnt z32\.s,p0/m,z0\.d'
@@ -328,9 +318,7 @@
 [^ :]+:[0-9]+: Error: operand mismatch -- `fcvtxnt z0\.s,p0/m,z0\.s'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fcvtxnt z0\.s, p0/m, z0\.d
-[^ :]+:[0-9]+: Error: operand mismatch -- `fcvtxnt z0\.s,p0/z,z0\.d'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	fcvtxnt z0\.s, p0/m, z0\.d
+[^ :]+:[0-9]+: Error: selected processor does not support `fcvtxnt z0\.s,p0/z,z0\.d'
 [^ :]+:[0-9]+: Error: operand mismatch -- `flogb z0\.b,p0/m,z0\.b'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	flogb z0\.h, p0/m, z0\.h
@@ -343,12 +331,7 @@
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
 [^ :]+:[0-9]+: Info:    	flogb z0\.s, p0/m, z0\.s
 [^ :]+:[0-9]+: Info:    	flogb z0\.d, p0/m, z0\.d
-[^ :]+:[0-9]+: Error: operand mismatch -- `flogb z0\.h,p0/z,z0\.h'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	flogb z0\.h, p0/m, z0\.h
-[^ :]+:[0-9]+: Info:    other valid variant\(s\):
-[^ :]+:[0-9]+: Info:    	flogb z0\.s, p0/m, z0\.s
-[^ :]+:[0-9]+: Info:    	flogb z0\.d, p0/m, z0\.d
+[^ :]+:[0-9]+: Error: selected processor does not support `flogb z0\.h,p0/z,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `flogb z32\.h,p0/m,z0\.h'
 [^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `flogb z0\.h,p8/m,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `flogb z0\.h,p0/m,z32\.h'
@@ -419,11 +402,11 @@
 [^ :]+:[0-9]+: Error: register element index out of range 0 to 7 at operand 3 -- `fmlalb z0\.s,z0\.h,z0\.h\[8\]'
 [^ :]+:[0-9]+: Error: z0-z7 expected at operand 3 -- `fmlalb z0\.s,z0\.h,z8\.h\[0\]'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `fmlalb z0\.s,z32\.h,z0\.h\[0\]'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fmlalb z32\.s,z0\.h,z0\.h\[0\]'
+[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `fmlalb z32\.s,z0\.h,z0\.h\[0\]'
 [^ :]+:[0-9]+: Error: operand mismatch -- `fmlalb z0\.h,z0\.h,z0\.h\[0\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fmlalb z0\.s, z0\.h, z0\.h\[0\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fmlalb z32\.s,z0\.h,z0\.h'
+[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `fmlalb z32\.s,z0\.h,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `fmlalb z0\.s,z32\.h,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `fmlalb z0\.s,z0\.h,z32\.h'
 [^ :]+:[0-9]+: Error: operand mismatch -- `fmlalb z0\.s,z0\.h,z0\.d'
@@ -432,11 +415,11 @@
 [^ :]+:[0-9]+: Error: register element index out of range 0 to 7 at operand 3 -- `fmlalt z0\.s,z0\.h,z0\.h\[8\]'
 [^ :]+:[0-9]+: Error: z0-z7 expected at operand 3 -- `fmlalt z0\.s,z0\.h,z8\.h\[0\]'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `fmlalt z0\.s,z32\.h,z0\.h\[0\]'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fmlalt z32\.s,z0\.h,z0\.h\[0\]'
+[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `fmlalt z32\.s,z0\.h,z0\.h\[0\]'
 [^ :]+:[0-9]+: Error: operand mismatch -- `fmlalt z0\.h,z0\.h,z0\.h\[0\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	fmlalt z0\.s, z0\.h, z0\.h\[0\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `fmlalt z32\.s,z0\.h,z0\.h'
+[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `fmlalt z32\.s,z0\.h,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `fmlalt z0\.s,z32\.h,z0\.h'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `fmlalt z0\.s,z0\.h,z32\.h'
 [^ :]+:[0-9]+: Error: operand mismatch -- `fmlalt z0\.s,z0\.h,z0\.d'
@@ -488,134 +471,134 @@
 [^ :]+:[0-9]+: Error: operand mismatch -- `histseg z0\.b,z0\.b,z0\.h'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	histseg z0\.b, z0\.b, z0\.b
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1b {z0\.d,z1\.d},p0/z,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1b { ?z0\.d,z1\.d ?},p0/z,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.d}, p0/z, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1b {z32\.d},p0/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1b {z0\.d},p8/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1b {z0\.d},p0/z,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1b {z0\.d},p0/z,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b {z0\.d},p0/z,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1b {z0\.d},p0/z,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b {z0\.d},p0/z,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b {z0\.s},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.d}, p0/z, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1b { ?z32\.d ?},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1b { ?z0\.d ?},p8/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1b { ?z0\.d ?},p0/z,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1b { ?z0\.d ?},p0/z,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b { ?z0\.d ?},p0/z,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1b { ?z0\.d ?},p0/z,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b { ?z0\.d ?},p0/z,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b { ?z0\.s ?},p0/z,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b {z0\.d},p0/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b { ?z0\.d ?},p0/z,\[z0\.s\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `ldnt1b {z0\.s,z1\.d},p0/z,\[z0\.s,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b {z0\.s},p0/m,\[z0\.s\]'
+[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `ldnt1b { ?z0\.s,z1\.d ?},p0/z,\[z0\.s,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1b { ?z0\.s ?},p0/m,\[z0\.s\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1b {z32\.s},p0/z,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1b {z0\.s},p8/z,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1b {z0\.s},p0/z,\[z32\.s\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1b {z0\.s},p0/z,\[z0\.s,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b {z0\.s},p0/z,\[z0\.s,x32\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b {z0\.s},p0/z,\[z0\.s,z0\.s\]'
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1d {z0\.d,z1\.d},p0/z,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1b {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1b { ?z32\.s ?},p0/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1b { ?z0\.s ?},p8/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1b { ?z0\.s ?},p0/z,\[z32\.s\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1b { ?z0\.s ?},p0/z,\[z0\.s,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b { ?z0\.s ?},p0/z,\[z0\.s,x32\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1b { ?z0\.s ?},p0/z,\[z0\.s,z0\.s\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1d { ?z0\.d,z1\.d ?},p0/z,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1d {z32\.d},p0/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1d {z0\.d},p8/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1d {z0\.d},p0/z,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1d {z0\.d},p0/z,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1d {z0\.d},p0/z,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1d {z0\.d},p0/z,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1d {z0\.d},p0/z,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d {z0\.s},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1d { ?z32\.d ?},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1d { ?z0\.d ?},p8/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1d { ?z0\.d ?},p0/z,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1d { ?z0\.d ?},p0/z,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1d { ?z0\.d ?},p0/z,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1d { ?z0\.d ?},p0/z,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1d { ?z0\.d ?},p0/z,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d { ?z0\.s ?},p0/z,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d {z0\.d},p0/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d\]
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d { ?z0\.d ?},p0/z,\[z0\.s\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d\]
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1d { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1h {z0\.d,z1\.d},p0/z,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1h {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1d {z0\.d}, p0/z, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1h { ?z0\.d,z1\.d ?},p0/z,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1h { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1h {z0\.d}, p0/z, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1h {z32\.d},p0/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1h {z0\.d},p8/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1h {z0\.d},p0/z,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1h {z0\.d},p0/z,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h {z0\.d},p0/z,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1h {z0\.d},p0/z,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h {z0\.d},p0/z,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1h {z0\.s},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1h {z0\.d}, p0/z, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1h { ?z32\.d ?},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1h { ?z0\.d ?},p8/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1h { ?z0\.d ?},p0/z,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1h { ?z0\.d ?},p0/z,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h { ?z0\.d ?},p0/z,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1h { ?z0\.d ?},p0/z,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h { ?z0\.d ?},p0/z,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1h { ?z0\.s ?},p0/z,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1h {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `ldnt1h {z0\.s,z1\.d},p0/z,\[z0\.s,x0\]'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1h {z32\.s},p0/z,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1h {z0\.s},p8/z,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1h {z0\.s},p0/z,\[z32\.s\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1h {z0\.s},p0/z,\[z0\.s,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h {z0\.s},p0/z,\[z0\.s,x32\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h {z0\.s},p0/z,\[z0\.s,z0\.s\]'
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1sb {z0\.d,z1\.d},p0/z,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1sb {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1h {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `ldnt1h { ?z0\.s,z1\.d ?},p0/z,\[z0\.s,x0\]'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1h { ?z32\.s ?},p0/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1h { ?z0\.s ?},p8/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1h { ?z0\.s ?},p0/z,\[z32\.s\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1h { ?z0\.s ?},p0/z,\[z0\.s,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h { ?z0\.s ?},p0/z,\[z0\.s,x32\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1h { ?z0\.s ?},p0/z,\[z0\.s,z0\.s\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1sb { ?z0\.d,z1\.d ?},p0/z,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1sb { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1sb {z0\.d}, p0/z, \[z0\.d, xzr\]
+[^ :]+:[0-9]+: Info:    	ldnt1sb {z0\.d}, p0/z, \[z0\.d\]
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
-[^ :]+:[0-9]+: Info:    	ldnt1sb {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1sb {z32\.d},p0/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1sb {z0\.d},p8/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1sb {z0\.d},p0/z,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1sb {z0\.d},p0/z,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sb {z0\.d},p0/z,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1sb {z0\.d},p0/z,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sb {z0\.d},p0/z,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1sh {z0\.d,z1\.d},p0/z,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1sh {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1sb {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1sb { ?z32\.d ?},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1sb { ?z0\.d ?},p8/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1sb { ?z0\.d ?},p0/z,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1sb { ?z0\.d ?},p0/z,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sb { ?z0\.d ?},p0/z,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1sb { ?z0\.d ?},p0/z,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sb { ?z0\.d ?},p0/z,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1sh { ?z0\.d,z1\.d ?},p0/z,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1sh { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.d}, p0/z, \[z0\.d, xzr\]
+[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.d}, p0/z, \[z0\.d\]
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
-[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1sh {z32\.d},p0/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1sh {z0\.d},p8/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1sh {z0\.d,z1\.d},p0/z,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1sh {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1sh { ?z32\.d ?},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1sh { ?z0\.d ?},p8/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1sh { ?z0\.d,z1\.d ?},p0/z,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1sh { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.d}, p0/z, \[z0\.d, xzr\]
+[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.d}, p0/z, \[z0\.d\]
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
-[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1sh {z32\.d},p0/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1sh {z0\.d},p8/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh {z0\.d},p0/z,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1w {z0\.d,z1\.d},p0/z,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1w {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1sh {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1sh { ?z32\.d ?},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1sh { ?z0\.d ?},p8/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1sh { ?z0\.d ?},p0/z,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `ldnt1w { ?z0\.d,z1\.d ?},p0/z,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1w { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1w {z0\.d}, p0/z, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1w {z32\.d},p0/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1w {z0\.d},p8/z,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1w {z0\.d},p0/z,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1w {z0\.d},p0/z,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w {z0\.d},p0/z,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1w {z0\.d},p0/z,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w {z0\.d},p0/z,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1w {z0\.s},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	ldnt1w {z0\.d}, p0/z, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1w { ?z32\.d ?},p0/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1w { ?z0\.d ?},p8/z,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1w { ?z0\.d ?},p0/z,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1w { ?z0\.d ?},p0/z,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w { ?z0\.d ?},p0/z,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `ldnt1w { ?z0\.d ?},p0/z,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w { ?z0\.d ?},p0/z,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `ldnt1w { ?z0\.s ?},p0/z,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	ldnt1w {z0\.s}, p0/z, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `ldnt1w {z0\.s,z1\.d},p0/z,\[z0\.s,x0\]'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1w {z32\.s},p0/z,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1w {z0\.s},p8/z,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1w {z0\.s},p0/z,\[z32\.s\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1w {z0\.s},p0/z,\[z0\.s,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w {z0\.s},p0/z,\[z0\.s,x32\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w {z0\.s},p0/z,\[z0\.s,z0\.s\]'
+[^ :]+:[0-9]+: Info:    	ldnt1w {z0\.s}, p0/z, \[z0\.s\]
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `ldnt1w { ?z0\.s,z1\.d ?},p0/z,\[z0\.s,x0\]'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `ldnt1w { ?z32\.s ?},p0/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `ldnt1w { ?z0\.s ?},p8/z,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `ldnt1w { ?z0\.s ?},p0/z,\[z32\.s\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `ldnt1w { ?z0\.s ?},p0/z,\[z0\.s,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w { ?z0\.s ?},p0/z,\[z0\.s,x32\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `ldnt1w { ?z0\.s ?},p0/z,\[z0\.s,z0\.s\]'
 [^ :]+:[0-9]+: Error: operand mismatch -- `match p0\.h,p0/z,z0\.b,z0\.b'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	match p0\.b, p0/z, z0\.b, z0\.b
@@ -1277,21 +1260,21 @@
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
 [^ :]+:[0-9]+: Info:    	smullt z0\.s, z0\.h, z0\.h
 [^ :]+:[0-9]+: Info:    	smullt z0\.d, z0\.s, z0\.s
-[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 3 -- `splice z0\.b,p0,{z0\.b,z2\.b}'
-[^ :]+:[0-9]+: Error: operand mismatch -- `splice z0\.h,p0,{z0\.b,z1\.b}'
+[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 3 -- `splice z0\.b,p0,{ ?z0\.b,z2\.b ?}'
+[^ :]+:[0-9]+: Error: operand mismatch -- `splice z0\.h,p0,{ ?z0\.b,z1\.b ?}'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	splice z0\.b, p0, {z0\.b-z1\.b}
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
 [^ :]+:[0-9]+: Info:    	splice z0\.h, p0, {z0\.h-z1\.h}
 [^ :]+:[0-9]+: Info:    	splice z0\.s, p0, {z0\.s-z1\.s}
 [^ :]+:[0-9]+: Info:    	splice z0\.d, p0, {z0\.d-z1\.d}
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 3 -- `splice z0\.b,p0,{z0\.h,z1\.b}'
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 3 -- `splice z0\.b,p0,{z0\.b,z1\.h}'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `splice z32\.b,p0,{z0\.b,z1\.b}'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `splice z0\.b,p8,{z0\.b,z1\.b}'
-[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 3 -- `splice z0\.b,p0,{z31\.b,z1\.b}'
-[^ :]+:[0-9]+: Error: operand 3 must be a list of SVE vector registers -- `splice z0\.b,p0,{z31\.b,z32\.b}'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `splice z0\.b,p0,{z32\.b,z1\.b}'
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 3 -- `splice z0\.b,p0,{ ?z0\.h,z1\.b ?}'
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 3 -- `splice z0\.b,p0,{ ?z0\.b,z1\.h ?}'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `splice z32\.b,p0,{ ?z0\.b,z1\.b ?}'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `splice z0\.b,p8,{ ?z0\.b,z1\.b ?}'
+[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 3 -- `splice z0\.b,p0,{ ?z31\.b,z1\.b ?}'
+[^ :]+:[0-9]+: Error: operand 3 must be a list of SVE vector registers -- `splice z0\.b,p0,{ ?z31\.b,z32\.b ?}'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `splice z0\.b,p0,{ ?z32\.b,z1\.b ?}'
 [^ :]+:[0-9]+: Error: expected a register at operand 1 -- `sqabs z32\.b,p0/m,z0\.b'
 [^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `sqabs z0\.b,p8/m,z0\.b'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `sqabs z0\.b,p0/m,z32\.b'
@@ -1302,13 +1285,7 @@
 [^ :]+:[0-9]+: Info:    	sqabs z0\.h, p0/m, z0\.h
 [^ :]+:[0-9]+: Info:    	sqabs z0\.s, p0/m, z0\.s
 [^ :]+:[0-9]+: Info:    	sqabs z0\.d, p0/m, z0\.d
-[^ :]+:[0-9]+: Error: operand mismatch -- `sqabs z0\.b,p0/z,z0\.b'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	sqabs z0\.b, p0/m, z0\.b
-[^ :]+:[0-9]+: Info:    other valid variant\(s\):
-[^ :]+:[0-9]+: Info:    	sqabs z0\.h, p0/m, z0\.h
-[^ :]+:[0-9]+: Info:    	sqabs z0\.s, p0/m, z0\.s
-[^ :]+:[0-9]+: Info:    	sqabs z0\.d, p0/m, z0\.d
+[^ :]+:[0-9]+: Error: selected processor does not support `sqabs z0\.b,p0/z,z0\.b'
 [^ :]+:[0-9]+: Error: expected a register at operand 1 -- `sqadd z32\.b,p0/m,z0\.b,z0\.b'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `sqadd z0\.b,p0/m,z32\.b,z0\.b'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 4 -- `sqadd z0\.b,p0/m,z0\.b,z32\.b'
@@ -1555,13 +1532,7 @@
 [^ :]+:[0-9]+: Info:    	sqneg z0\.h, p0/m, z0\.h
 [^ :]+:[0-9]+: Info:    	sqneg z0\.s, p0/m, z0\.s
 [^ :]+:[0-9]+: Info:    	sqneg z0\.d, p0/m, z0\.d
-[^ :]+:[0-9]+: Error: operand mismatch -- `sqneg z0\.b,p0/z,z0\.b'
-[^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	sqneg z0\.b, p0/m, z0\.b
-[^ :]+:[0-9]+: Info:    other valid variant\(s\):
-[^ :]+:[0-9]+: Info:    	sqneg z0\.h, p0/m, z0\.h
-[^ :]+:[0-9]+: Info:    	sqneg z0\.s, p0/m, z0\.s
-[^ :]+:[0-9]+: Info:    	sqneg z0\.d, p0/m, z0\.d
+[^ :]+:[0-9]+: Error: selected processor does not support `sqneg z0\.b,p0/z,z0\.b'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `sqrdcmlah z32\.h,z0\.h,z0\.h\[0\],#0'
 [^ :]+:[0-9]+: Error: expected an SVE vector register at operand 2 -- `sqrdcmlah z0\.h,z32\.h,z0\.h\[0\],#0'
 [^ :]+:[0-9]+: Error: z0-z7 expected at operand 3 -- `sqrdcmlah z0\.h,z0\.h,z8\.h\[0\],#0'
@@ -2216,83 +2187,83 @@
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
 [^ :]+:[0-9]+: Info:    	ssubwt z0\.s, z0\.s, z0\.h
 [^ :]+:[0-9]+: Info:    	ssubwt z0\.d, z0\.d, z0\.s
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1b {z0\.d,z1\.d},p0,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1b {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1b { ?z0\.d,z1\.d ?},p0,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1b { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1b {z0\.d}, p0, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1b {z32\.d},p0,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1b {z0\.d},p8,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1b {z0\.d},p0,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1b {z0\.d},p0,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b {z0\.d},p0,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1b {z0\.d},p0,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b {z0\.d},p0,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1b {z0\.s},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	stnt1b {z0\.d}, p0, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1b { ?z32\.d ?},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1b { ?z0\.d ?},p8,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1b { ?z0\.d ?},p0,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1b { ?z0\.d ?},p0,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b { ?z0\.d ?},p0,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1b { ?z0\.d ?},p0,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b { ?z0\.d ?},p0,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1b { ?z0\.s ?},p0,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1b {z0\.s}, p0, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `stnt1b {z0\.s,z1\.d},p0,\[z0\.s,x0\]'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1b {z32\.s},p0,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1b {z0\.s},p8,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1b {z0\.s},p0,\[z32\.s\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1b {z0\.s},p0,\[z0\.s,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b {z0\.s},p0,\[z0\.s,x32\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b {z0\.s},p0,\[z0\.s,z0\.s\]'
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1d {z0\.d,z1\.d},p0,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1d {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	stnt1b {z0\.s}, p0, \[z0\.s\]
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `stnt1b { ?z0\.s,z1\.d ?},p0,\[z0\.s,x0\]'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1b { ?z32\.s ?},p0,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1b { ?z0\.s ?},p8,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1b { ?z0\.s ?},p0,\[z32\.s\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1b { ?z0\.s ?},p0,\[z0\.s,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b { ?z0\.s ?},p0,\[z0\.s,x32\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1b { ?z0\.s ?},p0,\[z0\.s,z0\.s\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1d { ?z0\.d,z1\.d ?},p0,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1d { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1d {z0\.d}, p0, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1d {z32\.d},p0,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1d {z0\.d},p8,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1d {z0\.d},p0,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1d {z0\.d},p0,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1d {z0\.d},p0,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1d {z0\.d},p0,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1d {z0\.d},p0,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1d {z0\.s},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	stnt1d {z0\.d}, p0, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1d { ?z32\.d ?},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1d { ?z0\.d ?},p8,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1d { ?z0\.d ?},p0,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1d { ?z0\.d ?},p0,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1d { ?z0\.d ?},p0,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1d { ?z0\.d ?},p0,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1d { ?z0\.d ?},p0,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1d { ?z0\.s ?},p0,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1d {z0\.d}, p0, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1h {z0\.d,z1\.d},p0,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1h {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	stnt1d {z0\.d}, p0, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1h { ?z0\.d,z1\.d ?},p0,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1h { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1h {z0\.d}, p0, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1h {z32\.d},p0,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1h {z0\.d},p8,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1h {z0\.d},p0,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1h {z0\.d},p0,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h {z0\.d},p0,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1h {z0\.d},p0,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h {z0\.d},p0,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1h {z0\.s},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	stnt1h {z0\.d}, p0, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1h { ?z32\.d ?},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1h { ?z0\.d ?},p8,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1h { ?z0\.d ?},p0,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1h { ?z0\.d ?},p0,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h { ?z0\.d ?},p0,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1h { ?z0\.d ?},p0,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h { ?z0\.d ?},p0,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1h { ?z0\.s ?},p0,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1h {z0\.s}, p0, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `stnt1h {z0\.s,z1\.d},p0,\[z0\.s,x0\]'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1h {z32\.s},p0,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1h {z0\.s},p8,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1h {z0\.s},p0,\[z32\.s\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1h {z0\.s},p0,\[z0\.s,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h {z0\.s},p0,\[z0\.s,x32\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h {z0\.s},p0,\[z0\.s,z0\.s\]'
-[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1w {z0\.d,z1\.d},p0,\[z0\.d,x0\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1w {z0\.d},p0/m,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	stnt1h {z0\.s}, p0, \[z0\.s\]
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `stnt1h { ?z0\.s,z1\.d ?},p0,\[z0\.s,x0\]'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1h { ?z32\.s ?},p0,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1h { ?z0\.s ?},p8,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1h { ?z0\.s ?},p0,\[z32\.s\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1h { ?z0\.s ?},p0,\[z0\.s,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h { ?z0\.s ?},p0,\[z0\.s,x32\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1h { ?z0\.s ?},p0,\[z0\.s,z0\.s\]'
+[^ :]+:[0-9]+: Error: expected a single-register list at operand 1 -- `stnt1w { ?z0\.d,z1\.d ?},p0,\[z0\.d,x0\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1w { ?z0\.d ?},p0/m,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1w {z0\.d}, p0, \[z0\.d, xzr\]
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1w {z32\.d},p0,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1w {z0\.d},p8,\[z0\.d\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1w {z0\.d},p0,\[z32\.d\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1w {z0\.d},p0,\[z0\.d,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w {z0\.d},p0,\[z0\.d,x32\]'
-[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1w {z0\.d},p0,\[z0\.d,w16\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w {z0\.d},p0,\[z0\.d,z0\.d\]'
-[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1w {z0\.s},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Info:    	stnt1w {z0\.d}, p0, \[z0\.d\]
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1w { ?z32\.d ?},p0,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1w { ?z0\.d ?},p8,\[z0\.d\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1w { ?z0\.d ?},p0,\[z32\.d\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1w { ?z0\.d ?},p0,\[z0\.d,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w { ?z0\.d ?},p0,\[z0\.d,x32\]'
+[^ :]+:[0-9]+: Error: invalid use of 32-bit register offset at operand 3 -- `stnt1w { ?z0\.d ?},p0,\[z0\.d,w16\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w { ?z0\.d ?},p0,\[z0\.d,z0\.d\]'
+[^ :]+:[0-9]+: Error: operand mismatch -- `stnt1w { ?z0\.s ?},p0,\[z0\.d\]'
 [^ :]+:[0-9]+: Info:    did you mean this\?
-[^ :]+:[0-9]+: Info:    	stnt1w {z0\.s}, p0, \[z0\.s, xzr\]
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `stnt1w {z0\.s,z1\.d},p0,\[z0\.s,x0\]'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1w {z32\.s},p0,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1w {z0\.s},p8,\[z0\.s\]'
-[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1w {z0\.s},p0,\[z32\.s\]'
-[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1w {z0\.s},p0,\[z0\.s,sp\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w {z0\.s},p0,\[z0\.s,x32\]'
-[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w {z0\.s},p0,\[z0\.s,z0\.s\]'
+[^ :]+:[0-9]+: Info:    	stnt1w {z0\.s}, p0, \[z0\.s\]
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 1 -- `stnt1w { ?z0\.s,z1\.d ?},p0,\[z0\.s,x0\]'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 1 -- `stnt1w { ?z32\.s ?},p0,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: p0-p7 expected at operand 2 -- `stnt1w { ?z0\.s ?},p8,\[z0\.s\]'
+[^ :]+:[0-9]+: Error: invalid base register at operand 3 -- `stnt1w { ?z0\.s ?},p0,\[z32\.s\]'
+[^ :]+:[0-9]+: Error: invalid offset register at operand 3 -- `stnt1w { ?z0\.s ?},p0,\[z0\.s,sp\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w { ?z0\.s ?},p0,\[z0\.s,x32\]'
+[^ :]+:[0-9]+: Error: invalid addressing mode at operand 3 -- `stnt1w { ?z0\.s ?},p0,\[z0\.s,z0\.s\]'
 [^ :]+:[0-9]+: Error: operand mismatch -- `subhnb z0\.h,z0\.h,z0\.h'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	subhnb z0\.b, z0\.h, z0\.h
@@ -2330,21 +2301,21 @@
 [^ :]+:[0-9]+: Info:    	suqadd z0\.h, p0/m, z0\.h, z0\.h
 [^ :]+:[0-9]+: Info:    	suqadd z0\.s, p0/m, z0\.s, z0\.s
 [^ :]+:[0-9]+: Info:    	suqadd z0\.d, p0/m, z0\.d, z0\.d
-[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `tbl z32\.b,{z0\.b,z1\.b},z0\.b'
-[^ :]+:[0-9]+: Error: operand 2 must be a list of SVE vector registers -- `tbl z0\.b,{z31\.b,z32\.b},z0\.b'
-[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `tbl z0\.b,{z31\.b,z1\.b},z0\.b'
-[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `tbl z0\.b,{z0\.b,z1\.b},z32\.b'
-[^ :]+:[0-9]+: Error: operand mismatch -- `tbl z0\.b,{z0\.b,z1\.b},z0\.h'
+[^ :]+:[0-9]+: Error: expected a vector register at operand 1 -- `tbl z32\.b,{ ?z0\.b,z1\.b ?},z0\.b'
+[^ :]+:[0-9]+: Error: operand 2 must be a list of SVE vector registers -- `tbl z0\.b,{ ?z31\.b,z32\.b ?},z0\.b'
+[^ :]+:[0-9]+: Error: the register list must have a stride of 1 at operand 2 -- `tbl z0\.b,{ ?z31\.b,z1\.b ?},z0\.b'
+[^ :]+:[0-9]+: Error: expected an SVE vector register at operand 3 -- `tbl z0\.b,{ ?z0\.b,z1\.b ?},z32\.b'
+[^ :]+:[0-9]+: Error: operand mismatch -- `tbl z0\.b,{ ?z0\.b,z1\.b ?},z0\.h'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	tbl z0\.b, {z0\.b-z1\.b}, z0\.b
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):
 [^ :]+:[0-9]+: Info:    	tbl z0\.h, {z0\.h-z1\.h}, z0\.h
 [^ :]+:[0-9]+: Info:    	tbl z0\.s, {z0\.s-z1\.s}, z0\.s
 [^ :]+:[0-9]+: Info:    	tbl z0\.d, {z0\.d-z1\.d}, z0\.d
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `tbl z0\.b,{z0\.b,z1\.h},z0\.b'
-[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `tbl z0\.b,{z0\.h,z0\.b},z0\.b'
-[^ :]+:[0-9]+: Error: invalid register list at operand 2 -- `tbl z0\.h,{z0\.b,z0\.b},z0\.b'
-[^ :]+:[0-9]+: Error: operand mismatch -- `tbl z0\.h,{z0\.b,z1\.b},z0\.b'
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `tbl z0\.b,{ ?z0\.b,z1\.h ?},z0\.b'
+[^ :]+:[0-9]+: Error: type mismatch in vector register list at operand 2 -- `tbl z0\.b,{ ?z0\.h,z0\.b ?},z0\.b'
+[^ :]+:[0-9]+: Error: invalid register list at operand 2 -- `tbl z0\.h,{ ?z0\.b,z0\.b ?},z0\.b'
+[^ :]+:[0-9]+: Error: operand mismatch -- `tbl z0\.h,{ ?z0\.b,z1\.b ?},z0\.b'
 [^ :]+:[0-9]+: Info:    did you mean this\?
 [^ :]+:[0-9]+: Info:    	tbl z0\.b, {z0\.b-z1\.b}, z0\.b
 [^ :]+:[0-9]+: Info:    other valid variant\(s\):

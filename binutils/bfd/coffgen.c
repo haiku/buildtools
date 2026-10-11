@@ -1,5 +1,5 @@
 /* Support for the generic parts of COFF, for BFD.
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2026 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -42,7 +42,9 @@
 #include "libbfd.h"
 #include "coff/internal.h"
 #include "libcoff.h"
+#include "elf-bfd.h"
 #include "hashtab.h"
+#include "safe-ctype.h"
 
 /* Extract a long section name at STRINDEX and copy it to the bfd objstack.
    Return NULL in case of error.  */
@@ -284,16 +286,15 @@ make_a_section_from_file (bfd *abfd,
 void
 coff_object_cleanup (bfd *abfd)
 {
-  if (bfd_family_coff (abfd) && bfd_get_format (abfd) == bfd_object)
+  struct coff_tdata *td = coff_data (abfd);
+  if (td != NULL)
     {
-      struct coff_tdata *td = coff_data (abfd);
-      if (td != NULL)
-	{
-	  if (td->section_by_index)
-	    htab_delete (td->section_by_index);
-	  if (td->section_by_target_index)
-	    htab_delete (td->section_by_target_index);
-	}
+      if (td->section_by_index)
+	htab_delete (td->section_by_index);
+      if (td->section_by_target_index)
+	htab_delete (td->section_by_target_index);
+      if (obj_pe (abfd) && pe_data (abfd)->comdat_hash)
+	htab_delete (pe_data (abfd)->comdat_hash);
     }
 }
 
@@ -308,7 +309,6 @@ coff_real_object_p (bfd *abfd,
   flagword oflags = abfd->flags;
   bfd_vma ostart = bfd_get_start_address (abfd);
   void * tdata;
-  void * tdata_save;
   bfd_size_type readsize;	/* Length of file_info.  */
   unsigned int scnhsz;
   char *external_sections;
@@ -337,7 +337,6 @@ coff_real_object_p (bfd *abfd,
 
   /* Set up the tdata area.  ECOFF uses its own routine, and overrides
      abfd->flags.  */
-  tdata_save = abfd->tdata.any;
   tdata = bfd_coff_mkobject_hook (abfd, (void *) internal_f, (void *) internal_a);
   if (tdata == NULL)
     goto fail2;
@@ -376,7 +375,6 @@ coff_real_object_p (bfd *abfd,
   _bfd_coff_free_symbols (abfd);
   bfd_release (abfd, tdata);
  fail2:
-  abfd->tdata.any = tdata_save;
   abfd->flags = oflags;
   abfd->start_address = ostart;
   return NULL;
@@ -414,7 +412,7 @@ coff_object_p (bfd *abfd)
      aoutsz) in executables.  The bfd_coff_swap_aouthdr_in function
      expects this header to be aoutsz bytes in length, so we use that
      value in the call to bfd_alloc below.  But we must be careful to
-     only read in f_opthdr bytes in the call to bfd_bread.  We should
+     only read in f_opthdr bytes in the call to bfd_read.  We should
      also attempt to catch corrupt or non-COFF binaries with a strange
      value for f_opthdr.  */
   if (! bfd_coff_bad_format_hook (abfd, &internal_f)
@@ -598,12 +596,12 @@ _bfd_coff_internal_syment_name (bfd *abfd,
    value must be INTERNAL_RELOCS.  The function returns NULL on error.  */
 
 struct internal_reloc *
-_bfd_coff_read_internal_relocs (bfd *abfd,
-				asection *sec,
-				bool cache,
-				bfd_byte *external_relocs,
-				bool require_internal,
-				struct internal_reloc *internal_relocs)
+bfd_coff_read_internal_relocs (bfd *abfd,
+			       asection *sec,
+			       bool cache,
+			       bfd_byte *external_relocs,
+			       bool require_internal,
+			       struct internal_reloc *internal_relocs)
 {
   bfd_size_type relsz;
   bfd_byte *free_external = NULL;
@@ -638,7 +636,7 @@ _bfd_coff_read_internal_relocs (bfd *abfd,
     }
 
   if (bfd_seek (abfd, sec->rel_filepos, SEEK_SET) != 0
-      || bfd_bread (external_relocs, amt, abfd) != amt)
+      || bfd_read (external_relocs, amt, abfd) != amt)
     goto error_return;
 
   if (internal_relocs == NULL)
@@ -1152,7 +1150,7 @@ coff_write_symbol (bfd *abfd,
   if (!buf)
     return false;
   bfd_coff_swap_sym_out (abfd, &native->u.syment, buf);
-  if (bfd_bwrite (buf, symesz, abfd) != symesz)
+  if (bfd_write (buf, symesz, abfd) != symesz)
     return false;
   bfd_release (abfd, buf);
 
@@ -1182,7 +1180,7 @@ coff_write_symbol (bfd *abfd,
 				 type, n_sclass, (int) j,
 				 native->u.syment.n_numaux,
 				 buf);
-	  if (bfd_bwrite (buf, auxesz, abfd) != auxesz)
+	  if (bfd_write (buf, auxesz, abfd) != auxesz)
 	    return false;
 	}
       bfd_release (abfd, buf);
@@ -1261,9 +1259,17 @@ coff_write_alien_symbol (bfd *abfd,
     }
   else
     {
+      asection *isec = symbol->section;
+
       native->u.syment.n_scnum = output_section->target_index;
-      native->u.syment.n_value = (symbol->value
-				  + symbol->section->output_offset);
+      native->u.syment.n_value = symbol->value;
+
+      if (isec->sec_info_type == SEC_INFO_TYPE_MERGE
+	  && !(symbol->flags & (BSF_SECTION_SYM | BSF_MERGE_RESOLVED)))
+	native->u.syment.n_value =
+	  _bfd_merged_section_offset (abfd, &isec, symbol->value);
+
+      native->u.syment.n_value += isec->output_offset;
       if (! obj_pe (abfd))
 	native->u.syment.n_value += output_section->vma;
 
@@ -1274,9 +1280,24 @@ coff_write_alien_symbol (bfd *abfd,
 	if (c != (coff_symbol_type *) NULL)
 	  native->u.syment.n_flags = bfd_asymbol_bfd (&c->symbol)->flags;
       }
+
+      const elf_symbol_type *elfsym = elf_symbol_from (symbol);
+      if (elfsym
+	  && (symbol->flags & BSF_FUNCTION)
+	  && elfsym->internal_elf_sym.st_size)
+	{
+	  /* coff_data (abfd)->local_n_btshft is what ought to be used here,
+	     just that it's set only when reading in COFF objects.  */
+	  native->u.syment.n_type = DT_FCN << 4;
+	  native->u.syment.n_numaux = 1;
+	  native[1].u.auxent.x_sym.x_misc.x_fsize
+	    = elfsym->internal_elf_sym.st_size;
+	  /* FIXME .u.auxent.x_sym.x_fcnary.x_fcn.x_endndx would better also
+	     be set, which would require updating the field once the next
+	     function is seen.  */
+	}
     }
 
-  native->u.syment.n_type = 0;
   if (symbol->flags & BSF_FILE)
     native->u.syment.n_sclass = C_FILE;
   else if (symbol->flags & BSF_LOCAL)
@@ -1475,8 +1496,7 @@ coff_write_symbols (bfd *abfd)
 #else
  #error Change H_PUT_32
 #endif
-    if (bfd_bwrite ((void *) buffer, (bfd_size_type) sizeof (buffer), abfd)
-	!= sizeof (buffer))
+    if (bfd_write (buffer, sizeof (buffer), abfd) != sizeof (buffer))
       return false;
 
     if (! _bfd_stringtab_emit (abfd, strtab))
@@ -1535,8 +1555,7 @@ coff_write_linenumbers (bfd *abfd)
 		      out.l_lnno = 0;
 		      out.l_addr.l_symndx = l->u.offset;
 		      bfd_coff_swap_lineno_out (abfd, &out, buff);
-		      if (bfd_bwrite (buff, (bfd_size_type) linesz, abfd)
-			  != linesz)
+		      if (bfd_write (buff, linesz, abfd) != linesz)
 			return false;
 		      l++;
 		      while (l->line_number)
@@ -1544,8 +1563,7 @@ coff_write_linenumbers (bfd *abfd)
 			  out.l_lnno = l->line_number;
 			  out.l_addr.l_symndx = l->u.offset;
 			  bfd_coff_swap_lineno_out (abfd, &out, buff);
-			  if (bfd_bwrite (buff, (bfd_size_type) linesz, abfd)
-			      != linesz)
+			  if (bfd_write (buff, linesz, abfd) != linesz)
 			    return false;
 			  l++;
 			}
@@ -1759,8 +1777,7 @@ _bfd_coff_read_string_table (bfd *abfd)
   if (bfd_seek (abfd, pos + size, SEEK_SET) != 0)
     return NULL;
 
-  if (bfd_bread (extstrsize, (bfd_size_type) sizeof extstrsize, abfd)
-      != sizeof extstrsize)
+  if (bfd_read (extstrsize, sizeof extstrsize, abfd) != sizeof extstrsize)
     {
       if (bfd_get_error () != bfd_error_file_truncated)
 	return NULL;
@@ -1798,7 +1815,7 @@ _bfd_coff_read_string_table (bfd *abfd)
      they are zero.  */
   memset (strings, 0, STRING_SIZE_SIZE);
 
-  if (bfd_bread (strings + STRING_SIZE_SIZE, strsize - STRING_SIZE_SIZE, abfd)
+  if (bfd_read (strings + STRING_SIZE_SIZE, strsize - STRING_SIZE_SIZE, abfd)
       != strsize - STRING_SIZE_SIZE)
     {
       free (strings);
@@ -1848,8 +1865,6 @@ coff_get_normalized_symtab (bfd *abfd)
 {
   combined_entry_type *internal;
   combined_entry_type *internal_ptr;
-  combined_entry_type *symbol_ptr;
-  combined_entry_type *internal_end;
   size_t symesz;
   char *raw_src;
   char *raw_end;
@@ -1872,7 +1887,6 @@ coff_get_normalized_symtab (bfd *abfd)
   internal = (combined_entry_type *) bfd_zalloc (abfd, size);
   if (internal == NULL && size != 0)
     return NULL;
-  internal_end = internal + obj_raw_syment_count (abfd);
 
   raw_src = (char *) obj_coff_external_syms (abfd);
 
@@ -1892,48 +1906,32 @@ coff_get_normalized_symtab (bfd *abfd)
 
       bfd_coff_swap_sym_in (abfd, (void *) raw_src,
 			    (void *) & internal_ptr->u.syment);
-      symbol_ptr = internal_ptr;
       internal_ptr->is_sym = true;
+      combined_entry_type *sym = internal_ptr;
 
       /* PR 17512: Prevent buffer overrun.  */
-      if (symbol_ptr->u.syment.n_numaux > ((raw_end - 1) - raw_src) / symesz)
+      if (sym->u.syment.n_numaux > ((raw_end - 1) - raw_src) / symesz)
 	return NULL;
 
-      for (i = 0;
-	   i < symbol_ptr->u.syment.n_numaux;
-	   i++)
+      for (i = 0; i < sym->u.syment.n_numaux; i++)
 	{
 	  internal_ptr++;
 	  raw_src += symesz;
 
 	  bfd_coff_swap_aux_in (abfd, (void *) raw_src,
-				symbol_ptr->u.syment.n_type,
-				symbol_ptr->u.syment.n_sclass,
-				(int) i, symbol_ptr->u.syment.n_numaux,
+				sym->u.syment.n_type,
+				sym->u.syment.n_sclass,
+				(int) i, sym->u.syment.n_numaux,
 				&(internal_ptr->u.auxent));
 
 	  internal_ptr->is_sym = false;
-	  coff_pointerize_aux (abfd, internal, symbol_ptr, i, internal_ptr);
+	  coff_pointerize_aux (abfd, internal, sym, i, internal_ptr);
 	}
-    }
 
-  /* Free the raw symbols.  */
-  if (obj_coff_external_syms (abfd) != NULL
-      && ! obj_coff_keep_syms (abfd))
-    {
-      free (obj_coff_external_syms (abfd));
-      obj_coff_external_syms (abfd) = NULL;
-    }
-
-  for (internal_ptr = internal; internal_ptr < internal_end;
-       internal_ptr++)
-    {
-      BFD_ASSERT (internal_ptr->is_sym);
-
-      if (internal_ptr->u.syment.n_sclass == C_FILE
-	  && internal_ptr->u.syment.n_numaux > 0)
+      if (sym->u.syment.n_sclass == C_FILE
+	  && sym->u.syment.n_numaux > 0)
 	{
-	  combined_entry_type * aux = internal_ptr + 1;
+	  combined_entry_type * aux = sym + 1;
 
 	  /* Make a file symbol point to the name in the auxent, since
 	     the text ".file" is redundant.  */
@@ -1949,12 +1947,12 @@ coff_get_normalized_symtab (bfd *abfd)
 		    return NULL;
 		}
 
-	      if ((bfd_size_type)(aux->u.auxent.x_file.x_n.x_n.x_offset)
+	      if ((bfd_size_type) aux->u.auxent.x_file.x_n.x_n.x_offset
 		  >= obj_coff_strings_len (abfd))
-		internal_ptr->u.syment._n._n_n._n_offset =
-		  (uintptr_t) _("<corrupt>");
+		sym->u.syment._n._n_n._n_offset =
+		  (uintptr_t) bfd_symbol_error_name;
 	      else
-		internal_ptr->u.syment._n._n_n._n_offset =
+		sym->u.syment._n._n_n._n_offset =
 		  (uintptr_t) (string_table
 			       + aux->u.auxent.x_file.x_n.x_n.x_offset);
 	    }
@@ -1963,30 +1961,35 @@ coff_get_normalized_symtab (bfd *abfd)
 	      /* Ordinary short filename, put into memory anyway.  The
 		 Microsoft PE tools sometimes store a filename in
 		 multiple AUX entries.  */
-	      if (internal_ptr->u.syment.n_numaux > 1 && obj_pe (abfd))
-		internal_ptr->u.syment._n._n_n._n_offset =
-		  ((uintptr_t)
-		   copy_name (abfd,
-			      aux->u.auxent.x_file.x_n.x_fname,
-			      internal_ptr->u.syment.n_numaux * symesz));
+	      size_t len;
+	      char *src;
+	      if (sym->u.syment.n_numaux > 1 && obj_pe (abfd))
+		{
+		  len = sym->u.syment.n_numaux * symesz;
+		  src = raw_src - (len - symesz);
+		}
 	      else
-		internal_ptr->u.syment._n._n_n._n_offset =
-		  ((uintptr_t)
-		   copy_name (abfd,
-			      aux->u.auxent.x_file.x_n.x_fname,
-			      (size_t) bfd_coff_filnmlen (abfd)));
+		{
+		  len = bfd_coff_filnmlen (abfd);
+		  src = aux->u.auxent.x_file.x_n.x_fname;
+		}
+	      sym->u.syment._n._n_n._n_offset =
+		(uintptr_t) copy_name (abfd, src, len);
 	    }
 
 	  /* Normalize other strings available in C_FILE aux entries.  */
 	  if (!obj_pe (abfd))
-	    for (int numaux = 1; numaux < internal_ptr->u.syment.n_numaux; numaux++)
+	    for (int numaux = 1;
+		 numaux < sym->u.syment.n_numaux;
+		 numaux++)
 	      {
-		aux = internal_ptr + numaux + 1;
+		aux = sym + numaux + 1;
 		BFD_ASSERT (! aux->is_sym);
 
 		if (aux->u.auxent.x_file.x_n.x_n.x_zeroes == 0)
 		  {
-		    /* The string information is a long one, point into the string table.  */
+		    /* The string information is a long one, point
+		       into the string table.  */
 		    if (string_table == NULL)
 		      {
 			string_table = _bfd_coff_read_string_table (abfd);
@@ -1994,48 +1997,48 @@ coff_get_normalized_symtab (bfd *abfd)
 			  return NULL;
 		      }
 
-		    if ((bfd_size_type)(aux->u.auxent.x_file.x_n.x_n.x_offset)
+		    if ((bfd_size_type) aux->u.auxent.x_file.x_n.x_n.x_offset
 			>= obj_coff_strings_len (abfd))
 		      aux->u.auxent.x_file.x_n.x_n.x_offset =
-			(uintptr_t) _("<corrupt>");
+			(uintptr_t) bfd_symbol_error_name;
 		    else
 		      aux->u.auxent.x_file.x_n.x_n.x_offset =
 			(uintptr_t) (string_table
-				     + (aux->u.auxent.x_file.x_n.x_n.x_offset));
+				     + aux->u.auxent.x_file.x_n.x_n.x_offset);
 		  }
 		else
 		  aux->u.auxent.x_file.x_n.x_n.x_offset =
 		    ((uintptr_t)
 		     copy_name (abfd,
 				aux->u.auxent.x_file.x_n.x_fname,
-				(size_t) bfd_coff_filnmlen (abfd)));
+				bfd_coff_filnmlen (abfd)));
 	      }
 
 	}
       else
 	{
-	  if (internal_ptr->u.syment._n._n_n._n_zeroes != 0)
+	  if (sym->u.syment._n._n_n._n_zeroes != 0)
 	    {
 	      /* This is a "short" name.  Make it long.  */
-	      size_t i;
 	      char *newstring;
 
 	      /* Find the length of this string without walking into memory
 		 that isn't ours.  */
-	      for (i = 0; i < 8; ++i)
-		if (internal_ptr->u.syment._n._n_name[i] == '\0')
+	      for (i = 0; i < SYMNMLEN; ++i)
+		if (sym->u.syment._n._n_name[i] == '\0')
 		  break;
 
-	      newstring = (char *) bfd_zalloc (abfd, (bfd_size_type) (i + 1));
+	      newstring = bfd_alloc (abfd, i + 1);
 	      if (newstring == NULL)
 		return NULL;
-	      strncpy (newstring, internal_ptr->u.syment._n._n_name, i);
-	      internal_ptr->u.syment._n._n_n._n_offset = (uintptr_t) newstring;
-	      internal_ptr->u.syment._n._n_n._n_zeroes = 0;
+	      memcpy (newstring, sym->u.syment._n._n_name, i);
+	      newstring[i] = 0;
+	      sym->u.syment._n._n_n._n_offset = (uintptr_t) newstring;
+	      sym->u.syment._n._n_n._n_zeroes = 0;
 	    }
-	  else if (internal_ptr->u.syment._n._n_n._n_offset == 0)
-	    internal_ptr->u.syment._n._n_n._n_offset = (uintptr_t) "";
-	  else if (!bfd_coff_symname_in_debug (abfd, &internal_ptr->u.syment))
+	  else if (sym->u.syment._n._n_n._n_offset == 0)
+	    sym->u.syment._n._n_n._n_offset = (uintptr_t) "";
+	  else if (!bfd_coff_symname_in_debug (abfd, &sym->u.syment))
 	    {
 	      /* Long name already.  Point symbol at the string in the
 		 table.  */
@@ -2045,43 +2048,47 @@ coff_get_normalized_symtab (bfd *abfd)
 		  if (string_table == NULL)
 		    return NULL;
 		}
-	      if (internal_ptr->u.syment._n._n_n._n_offset >= obj_coff_strings_len (abfd)
-		  || string_table + internal_ptr->u.syment._n._n_n._n_offset < string_table)
-		internal_ptr->u.syment._n._n_n._n_offset =
-		  (uintptr_t) _("<corrupt>");
+	      if (sym->u.syment._n._n_n._n_offset >= obj_coff_strings_len (abfd))
+		sym->u.syment._n._n_n._n_offset =
+		  (uintptr_t) bfd_symbol_error_name;
 	      else
-		internal_ptr->u.syment._n._n_n._n_offset =
-		  ((uintptr_t) (string_table
-				+ internal_ptr->u.syment._n._n_n._n_offset));
+		sym->u.syment._n._n_n._n_offset =
+		  (uintptr_t) (string_table
+			       + sym->u.syment._n._n_n._n_offset);
 	    }
 	  else
 	    {
 	      /* Long name in debug section.  Very similar.  */
 	      if (debug_sec_data == NULL)
-		debug_sec_data = build_debug_section (abfd, & debug_sec);
-	      if (debug_sec_data != NULL)
 		{
-		  BFD_ASSERT (debug_sec != NULL);
-		  /* PR binutils/17512: Catch out of range offsets into the debug data.  */
-		  if (internal_ptr->u.syment._n._n_n._n_offset > debug_sec->size
-		      || debug_sec_data + internal_ptr->u.syment._n._n_n._n_offset < debug_sec_data)
-		    internal_ptr->u.syment._n._n_n._n_offset =
-		      (uintptr_t) _("<corrupt>");
-		  else
-		    internal_ptr->u.syment._n._n_n._n_offset =
-		      (uintptr_t) (debug_sec_data
-				   + internal_ptr->u.syment._n._n_n._n_offset);
+		  debug_sec_data = build_debug_section (abfd, &debug_sec);
+		  if (debug_sec_data == NULL)
+		    return NULL;
 		}
+	      /* PR binutils/17512: Catch out of range offsets into
+		 the debug data.  */
+	      if (sym->u.syment._n._n_n._n_offset >= debug_sec->size)
+		sym->u.syment._n._n_n._n_offset =
+		  (uintptr_t) bfd_symbol_error_name;
 	      else
-		internal_ptr->u.syment._n._n_n._n_offset = (uintptr_t) "";
+		sym->u.syment._n._n_n._n_offset =
+		  (uintptr_t) (debug_sec_data
+			       + sym->u.syment._n._n_n._n_offset);
 	    }
 	}
-      internal_ptr += internal_ptr->u.syment.n_numaux;
+    }
+
+  /* Free the raw symbols.  */
+  if (obj_coff_external_syms (abfd) != NULL
+      && ! obj_coff_keep_syms (abfd))
+    {
+      free (obj_coff_external_syms (abfd));
+      obj_coff_external_syms (abfd) = NULL;
     }
 
   obj_raw_syments (abfd) = internal;
   BFD_ASSERT (obj_raw_syment_count (abfd)
-	      == (unsigned int) (internal_ptr - internal));
+	      == (size_t) (internal_ptr - internal));
 
   return internal;
 }
@@ -2176,11 +2183,13 @@ coff_print_symbol (bfd *abfd,
 		   bfd_print_symbol_type how)
 {
   FILE * file = (FILE *) filep;
+  const char *symname = (symbol->name != bfd_symbol_error_name
+			 ? symbol->name : _("<corrupt>"));
 
   switch (how)
     {
     case bfd_print_symbol_name:
-      fprintf (file, "%s", symbol->name);
+      fprintf (file, "%s", symname);
       break;
 
     case bfd_print_symbol_more:
@@ -2204,7 +2213,7 @@ coff_print_symbol (bfd *abfd,
 	  if (combined < obj_raw_syments (abfd)
 	      || combined >= obj_raw_syments (abfd) + obj_raw_syment_count (abfd))
 	    {
-	      fprintf (file, _("<corrupt info> %s"), symbol->name);
+	      fprintf (file, _("<corrupt info> %s"), symname);
 	      break;
 	    }
 
@@ -2222,7 +2231,7 @@ coff_print_symbol (bfd *abfd,
 		   combined->u.syment.n_sclass,
 		   combined->u.syment.n_numaux);
 	  bfd_fprintf_vma (abfd, file, val);
-	  fprintf (file, " %s", symbol->name);
+	  fprintf (file, " %s", symname);
 
 	  for (aux = 0; aux < combined->u.syment.n_numaux; aux++)
 	    {
@@ -2312,7 +2321,9 @@ coff_print_symbol (bfd *abfd,
 
 	  if (l)
 	    {
-	      fprintf (file, "\n%s :", l->u.sym->name);
+	      fprintf (file, "\n%s :",
+		       l->u.sym->name != bfd_symbol_error_name
+		       ? l->u.sym->name : _("<corrupt>"));
 	      l++;
 	      while (l->line_number)
 		{
@@ -2332,7 +2343,7 @@ coff_print_symbol (bfd *abfd,
 		   symbol->section->name,
 		   coffsymbol (symbol)->native ? "n" : "g",
 		   coffsymbol (symbol)->lineno ? "l" : " ",
-		   symbol->name);
+		   symname);
 	}
     }
 }
@@ -2781,6 +2792,8 @@ _bfd_coff_section_already_linked (bfd *abfd,
     }
 
   already_linked_list = bfd_section_already_linked_table_lookup (key);
+  if (!already_linked_list)
+    goto bad;
 
   for (l = already_linked_list->entry; l != NULL; l = l->next)
     {
@@ -2808,7 +2821,10 @@ _bfd_coff_section_already_linked (bfd *abfd,
 
   /* This is the first section with this name.  Record it.  */
   if (!bfd_section_already_linked_table_insert (already_linked_list, sec))
-    info->callbacks->einfo (_("%F%P: already_linked_table: %E\n"));
+    {
+    bad:
+      info->callbacks->fatal (_("%P: already_linked_table: %E\n"));
+    }
   return false;
 }
 
@@ -2856,8 +2872,8 @@ init_reloc_cookie_rels (struct coff_reloc_cookie *cookie,
       return true;
     }
 
-  cookie->rels = _bfd_coff_read_internal_relocs (abfd, sec, false, NULL,
-						 0, NULL);
+  cookie->rels = bfd_coff_read_internal_relocs (abfd, sec, false, NULL,
+						false, NULL);
 
   if (cookie->rels == NULL)
     return false;
@@ -3113,6 +3129,19 @@ coff_gc_sweep_symbol (struct coff_link_hash_entry *h,
 typedef bool (*gc_sweep_hook_fn)
   (bfd *, struct bfd_link_info *, asection *, const struct internal_reloc *);
 
+static inline bool
+is_subsection (const char *str, const char *prefix)
+{
+  size_t n = strlen (prefix);
+  if (strncmp (str, prefix, n) != 0)
+    return false;
+  if (str[n] == 0)
+    return true;
+  else if (str[n] != '$')
+    return false;
+  return ISDIGIT (str[n + 1]) && str[n + 2] == 0;
+}
+
 static bool
 coff_gc_sweep (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 {
@@ -3134,6 +3163,7 @@ coff_gc_sweep (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 	  else if (startswith (o->name, ".idata")
 		   || startswith (o->name, ".pdata")
 		   || startswith (o->name, ".xdata")
+		   || is_subsection (o->name, ".didat")
 		   || startswith (o->name, ".rsrc"))
 	    o->gc_mark = 1;
 
@@ -3216,7 +3246,7 @@ _bfd_coff_gc_keep (struct bfd_link_info *info)
 /* Do mark and sweep of unused sections.  */
 
 bool
-bfd_coff_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
+_bfd_coff_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 {
   bfd *sub;
 
@@ -3266,7 +3296,7 @@ bfd_coff_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 /* Return name used to identify a comdat group.  */
 
 const char *
-bfd_coff_group_name (bfd *abfd, const asection *sec)
+_bfd_coff_group_name (bfd *abfd, const asection *sec)
 {
   struct coff_comdat_info *ci = bfd_coff_get_comdat_section (abfd, sec);
   if (ci != NULL)
@@ -3296,6 +3326,12 @@ _bfd_coff_free_cached_info (bfd *abfd)
 	  tdata->section_by_target_index = NULL;
 	}
 
+      if (obj_pe (abfd) && pe_data (abfd)->comdat_hash)
+	{
+	  htab_delete (pe_data (abfd)->comdat_hash);
+	  pe_data (abfd)->comdat_hash = NULL;
+	}
+
       _bfd_dwarf2_cleanup_debug_info (abfd, &tdata->dwarf2_find_line_info);
       _bfd_stab_cleanup (abfd, &tdata->line_info);
 
@@ -3303,8 +3339,17 @@ _bfd_coff_free_cached_info (bfd *abfd)
 	 Do not clear the keep_syms and keep_strings flags.
 	 These may have been set by pe_ILF_build_a_bfd() indicating
 	 that the syms and strings pointers are not to be freed.  */
-      if (!_bfd_coff_free_symbols (abfd))
-	return false;
+      _bfd_coff_free_symbols (abfd);
+
+      /* Free raw syms, and any other data bfd_alloc'd after raw syms
+	 are read.  */
+      if (!obj_coff_keep_raw_syms (abfd) && obj_raw_syments (abfd))
+	{
+	  bfd_release (abfd, obj_raw_syments (abfd));
+	  obj_raw_syments (abfd) = NULL;
+	  obj_symbols (abfd) = NULL;
+	  obj_convert (abfd) = NULL;
+	}
     }
 
   return _bfd_generic_bfd_free_cached_info (abfd);

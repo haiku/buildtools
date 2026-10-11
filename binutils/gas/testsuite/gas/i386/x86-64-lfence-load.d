@@ -1,4 +1,4 @@
-#as: -mlfence-after-load=yes
+#as: -mlfence-after-load=yes -march=+mpx
 #objdump: -dw
 #warning_output: lfence-load.e
 #name: x86-64 -mlfence-after-load=yes
@@ -35,11 +35,12 @@ Disassembly of section .text:
  +[a-f0-9]+:	0f 0d 4d 00          	prefetchw 0x0\(%rbp\)
  +[a-f0-9]+:	0f 18 3d 78 56 34 12 	prefetchit0 0x12345678\(%rip\)        # [0-9a-f]+ <_start\+0x[0-9a-f]+>
  +[a-f0-9]+:	0f 18 35 78 56 34 12 	prefetchit1 0x12345678\(%rip\)        # [0-9a-f]+ <_start\+0x[0-9a-f]+>
+ +[a-f0-9]+:	0f 18 65 00          	prefetchrst2 0x0\(%rbp\)
  +[a-f0-9]+:	0f a1                	pop    %fs
  +[a-f0-9]+:	0f ae e8             	lfence
  +[a-f0-9]+:	9d                   	popf
  +[a-f0-9]+:	0f ae e8             	lfence
- +[a-f0-9]+:	d7                   	xlat   %ds:\(%rbx\)
+ +[a-f0-9]+:	d7                   	xlat   \(%rbx\)
  +[a-f0-9]+:	0f ae e8             	lfence
  +[a-f0-9]+:	d9 55 00             	fsts   0x0\(%rbp\)
  +[a-f0-9]+:	d9 45 00             	flds   0x0\(%rbp\)
@@ -90,7 +91,7 @@ Disassembly of section .text:
  +[a-f0-9]+:	0f ae e8             	lfence
  +[a-f0-9]+:	58                   	pop    %rax
  +[a-f0-9]+:	0f ae e8             	lfence
- +[a-f0-9]+:	66 d1 11             	rclw   \(%rcx\)
+ +[a-f0-9]+:	66 d1 11             	rclw   \$1,\(%rcx\)
  +[a-f0-9]+:	0f ae e8             	lfence
  +[a-f0-9]+:	f7 01 01 00 00 00    	testl  \$0x1,\(%rcx\)
  +[a-f0-9]+:	0f ae e8             	lfence
@@ -108,17 +109,17 @@ Disassembly of section .text:
  +[a-f0-9]+:	0f ae e8             	lfence
  +[a-f0-9]+:	48 8d 04 40          	lea    \(%rax,%rax,2\),%rax
  +[a-f0-9]+:	c9                   	leave
- +[a-f0-9]+:	6e                   	outsb  %ds:\(%rsi\),\(%dx\)
+ +[a-f0-9]+:	6e                   	outsb  \(%rsi\),\(%dx\)
  +[a-f0-9]+:	0f ae e8             	lfence
- +[a-f0-9]+:	ac                   	lods   %ds:\(%rsi\),%al
+ +[a-f0-9]+:	ac                   	lods   \(%rsi\),%al
  +[a-f0-9]+:	0f ae e8             	lfence
- +[a-f0-9]+:	f3 a5                	rep movsl %ds:\(%rsi\),%es:\(%rdi\)
+ +[a-f0-9]+:	f3 a5                	rep movsl \(%rsi\),\(%rdi\)
  +[a-f0-9]+:	0f ae e8             	lfence
- +[a-f0-9]+:	f3 af                	repz scas %es:\(%rdi\),%eax
+ +[a-f0-9]+:	f3 af                	repz scas \(%rdi\),%eax
  +[a-f0-9]+:	0f ae e8             	lfence
- +[a-f0-9]+:	f3 a7                	repz cmpsl %es:\(%rdi\),%ds:\(%rsi\)
+ +[a-f0-9]+:	f3 a7                	repz cmpsl \(%rdi\),\(%rsi\)
  +[a-f0-9]+:	0f ae e8             	lfence
- +[a-f0-9]+:	f3 ad                	rep lods %ds:\(%rsi\),%eax
+ +[a-f0-9]+:	f3 ad                	rep lods \(%rsi\),%eax
  +[a-f0-9]+:	0f ae e8             	lfence
  +[a-f0-9]+:	41 83 03 01          	addl   \$0x1,\(%r11\)
  +[a-f0-9]+:	0f ae e8             	lfence

@@ -1,5 +1,5 @@
 /* BFD back-end for AMD 64 COFF files.
-   Copyright (C) 2006-2023 Free Software Foundation, Inc.
+   Copyright (C) 2006-2026 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -20,10 +20,6 @@
 
    Written by Kai Tietz, OneVision Software GmbH&CoKg.  */
 
-/* Note we have to make sure not to include headers twice.
-   Not all headers are wrapped in #ifdef guards, so we define
-   PEI_HEADERS to prevent double including here.  */
-#ifndef PEI_HEADERS
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
@@ -31,7 +27,6 @@
 #include "coff/internal.h"
 #include "libcoff.h"
 #include "libiberty.h"
-#endif
 
 #define BADMAG(x) AMD64BADMAG(x)
 
@@ -547,7 +542,8 @@ static reloc_howto_type howto_table[] =
       cache_ptr->addend = - coffsym->native->u.syment.n_value;	\
     else if (ptr && bfd_asymbol_bfd (ptr) == abfd		\
 	     && ptr->section != NULL)				\
-      cache_ptr->addend = - (ptr->section->vma + ptr->value);	\
+      cache_ptr->addend = - (ptr->section->vma			\
+			     + COFF_PE_ADDEND_BIAS (ptr));	\
     else							\
       cache_ptr->addend = 0;					\
     if (ptr && reloc.r_type < NUM_HOWTOS			\
@@ -931,6 +927,7 @@ const bfd_target
   15,				/* Ar_max_namelen.  */
   0,				/* match priority.  */
   TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
+  TARGET_MERGE_SECTIONS,
 
   bfd_getl64, bfd_getl_signed_64, bfd_putl64,
      bfd_getl32, bfd_getl_signed_32, bfd_putl32,
@@ -1004,6 +1001,7 @@ const bfd_target
   15,				/* Ar_max_namelen.  */
   0,				/* match priority.  */
   TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
+  TARGET_MERGE_SECTIONS,
 
   bfd_getl64, bfd_getl_signed_64, bfd_putl64,
      bfd_getl32, bfd_getl_signed_32, bfd_putl32,

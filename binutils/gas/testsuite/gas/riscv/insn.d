@@ -1,4 +1,4 @@
-#as: -march=rv32ifcv
+#as: -march=rv32ifcv_zvknha
 #objdump: -dr
 
 .*:[ 	]+file format .*
@@ -8,7 +8,7 @@ Disassembly of section .text:
 
 0+000 <target>:
 [^:]+:[ 	]+00c58533[ 	]+add[ 	]+a0,a1,a2
-[^:]+:[ 	]+00d58513[ 	]+add[ 	]+a0,a1,13
+[^:]+:[ 	]+00d58513[ 	]+addi[ 	]+a0,a1,13
 [^:]+:[ 	]+00a58567[ 	]+jalr[ 	]+a0,10\(a1\)
 [^:]+:[ 	]+00458503[ 	]+lb[ 	]+a0,4\(a1\)
 [^:]+:[ 	]+feb508e3[ 	]+beq[ 	]+a0,a1,0 \<target\>
@@ -22,8 +22,8 @@ Disassembly of section .text:
 [^:]+:[ 	]+fddff56f[ 	]+jal[ 	]+a0,0 \<target\>
 [^:]+: R_RISCV_JAL[	]+target
 [^:]+:[ 	]+852e[ 	]+mv[ 	]+a0,a1
-[^:]+:[ 	]+0511[ 	]+add[ 	]+a0,a0,4 # .*
-[^:]+:[ 	]+002c[ 	]+add[ 	]+a1,sp,8
+[^:]+:[ 	]+0511[ 	]+addi[ 	]+a0,a0,4 # .*
+[^:]+:[ 	]+002c[ 	]+addi[ 	]+a1,sp,8
 [^:]+:[ 	]+c0aa[ 	]+sw[ 	]+a0,64\(sp\)
 [^:]+:[ 	]+41a8[ 	]+lw[ 	]+a0,64\(a1\)
 [^:]+:[ 	]+c1a8[ 	]+sw[ 	]+a0,64\(a1\)
@@ -32,7 +32,7 @@ Disassembly of section .text:
 [^:]+:[ 	]+b7e9[ 	]+j[ 	]+0 \<target\>
 [^:]+: R_RISCV_RVC_JUMP[	]+target
 [^:]+:[ 	]+00c58533[ 	]+add[ 	]+a0,a1,a2
-[^:]+:[ 	]+00d58513[ 	]+add[ 	]+a0,a1,13
+[^:]+:[ 	]+00d58513[ 	]+addi[ 	]+a0,a1,13
 [^:]+:[ 	]+00a58567[ 	]+jalr[ 	]+a0,10\(a1\)
 [^:]+:[ 	]+00458503[ 	]+lb[ 	]+a0,4\(a1\)
 [^:]+:[ 	]+fab50ce3[ 	]+beq[ 	]+a0,a1,0 \<target\>
@@ -46,8 +46,8 @@ Disassembly of section .text:
 [^:]+:[ 	]+fa5ff56f[ 	]+jal[ 	]+a0,0 \<target\>
 [^:]+: R_RISCV_JAL[	]+target
 [^:]+:[ 	]+852e[ 	]+mv[ 	]+a0,a1
-[^:]+:[ 	]+0511[ 	]+add[ 	]+a0,a0,4 # .*
-[^:]+:[ 	]+002c[ 	]+add[ 	]+a1,sp,8
+[^:]+:[ 	]+0511[ 	]+addi[ 	]+a0,a0,4 # .*
+[^:]+:[ 	]+002c[ 	]+addi[ 	]+a1,sp,8
 [^:]+:[ 	]+c0aa[ 	]+sw[ 	]+a0,64\(sp\)
 [^:]+:[ 	]+41a8[ 	]+lw[ 	]+a0,64\(a1\)
 [^:]+:[ 	]+c1a8[ 	]+sw[ 	]+a0,64\(a1\)
@@ -114,3 +114,4 @@ Disassembly of section .text:
 [^:]+:[ 	]+607f 33cc 55aa cdef[ 	]+\.insn[ 	]+22, 0xfedcba98765432100123456789abcdef55aa33cc607f
 [^:]+:[ 	]+89ab 4567 0123 3210 ?
 [^:]+:[ 	]+7654 ba98 fedc ?
+[^:]+:[ 	]+ba862277[ 	]+vsha2ch\.vv[ 	]+v4,v8,v12

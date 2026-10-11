@@ -1,4 +1,4 @@
-@set UPDATED 3 July 2023
-@set UPDATED-MONTH July 2023
-@set EDITION 2.41
-@set VERSION 2.41
+@set UPDATED 25 January 2026
+@set UPDATED-MONTH January 2026
+@set EDITION 2.46.0
+@set VERSION 2.46.0

@@ -1,5 +1,5 @@
 # Expect script for TLS tests.
-#   Copyright (C) 2017-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2017-2026 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -23,7 +23,6 @@
 
 if { !([istarget *-*-linux*]
        || [istarget arm*-*-uclinuxfdpiceabi]
-       || [istarget *-*-nacl*]
        || [istarget *-*-gnu*]) || [istarget *ecoff] } then {
     return
 }
@@ -75,5 +74,5 @@ if [file exists tmpdir/pr22263-1] {
 	    "pr22263-1" \
 	    "" \
 	] \
-    ] ia64-*-* m68*-*-* nios2-*-* s390-*-* sh*-*-*
+    ] ia64-*-* m68*-*-* s390-*-* sh*-*-*
 }

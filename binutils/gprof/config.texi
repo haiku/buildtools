@@ -1,1 +1,2 @@
 @set top_srcdir .
+@set top_srcdir .

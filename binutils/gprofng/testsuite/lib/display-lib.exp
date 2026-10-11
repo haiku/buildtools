@@ -1,5 +1,5 @@
 # Support routines for display-testing machinery in gprofng testsuite.
-#   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+#   Copyright (C) 1994-2026 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -26,8 +26,8 @@ proc run_native_host_cmd { command } {
     verbose -log "$command"
     set run_output ""
     try {
-	send_log "% timeout $TEST_TIMEOUT sh -c '$command' 2>&1\n"
-	set run_output [exec "timeout" $TEST_TIMEOUT "sh" "-c" "$command" "2>&1"]
+	send_log "% timeout $TEST_TIMEOUT sh -c '$command' 2>@1\n"
+	set run_output [exec "timeout" $TEST_TIMEOUT "sh" "-c" "$command" "2>@1"]
 	set status 0
     } trap CHILDSTATUS {results options} {
 	set status [lindex [dict get $options -errorcode] 2]

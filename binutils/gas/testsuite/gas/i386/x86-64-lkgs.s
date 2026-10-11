@@ -1,6 +1,5 @@
 # Check 64bit LKGS instructions
 
-	.allow_index_reg
 	.text
 _start:
 	lkgs	%r12	 #LKGS
@@ -14,7 +13,6 @@ _start:
 .intel_syntax noprefix
 	lkgs	r12	 #LKGS
 	lkgs	r12w	 #LKGS
-	lkgsw	r12w	 #LKGS
 	lkgs	WORD PTR [rbp+r14*8+0x10000000]	 #LKGS
 	lkgs	WORD PTR [r9]	 #LKGS
 	lkgs	WORD PTR [rcx+254]	 #LKGS Disp32(fe000000)
