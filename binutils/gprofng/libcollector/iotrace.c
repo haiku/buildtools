@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2026 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -25,6 +25,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 // create() and others are defined in fcntl.h.
@@ -305,32 +306,42 @@ open_experiment (const char *exp)
   collector_interface->writeLog ("  <profdata fname=\"%s\"/>\n",
 				 module_interface.description);
   /* Record IOTrace_packet description */
-  IOTrace_packet *pp = NULL;
   collector_interface->writeLog ("  <profpckt kind=\"%d\" uname=\"IO tracing data\">\n", IOTRACE_PCKT);
   collector_interface->writeLog ("    <field name=\"LWPID\" uname=\"Lightweight process id\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.lwp_id, sizeof (pp->comm.lwp_id) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, comm.lwp_id),
+		fld_sizeof (IOTrace_packet, comm.lwp_id) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"THRID\" uname=\"Thread number\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.thr_id, sizeof (pp->comm.thr_id) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, comm.thr_id),
+		fld_sizeof (IOTrace_packet, comm.thr_id) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"CPUID\" uname=\"CPU id\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.cpu_id, sizeof (pp->comm.cpu_id) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, comm.cpu_id),
+		fld_sizeof (IOTrace_packet, comm.cpu_id) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"TSTAMP\" uname=\"High resolution timestamp\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.tstamp, sizeof (pp->comm.tstamp) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, comm.tstamp),
+		fld_sizeof (IOTrace_packet, comm.tstamp) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"FRINFO\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->comm.frinfo, sizeof (pp->comm.frinfo) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, comm.frinfo),
+		fld_sizeof (IOTrace_packet, comm.frinfo) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"IOTYPE\" uname=\"IO trace function type\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->iotype, sizeof (pp->iotype) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, iotype),
+		fld_sizeof (IOTrace_packet, iotype) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"IOFD\" uname=\"File descriptor\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->fd, sizeof (pp->fd) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, fd),
+		fld_sizeof (IOTrace_packet, fd) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"IONBYTE\" uname=\"Number of bytes\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->nbyte, sizeof (pp->nbyte) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, nbyte),
+		fld_sizeof (IOTrace_packet, nbyte) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"IORQST\" uname=\"Time of IO requested\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->requested, sizeof (pp->requested) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, requested),
+		fld_sizeof (IOTrace_packet, requested) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"IOOFD\" uname=\"Original file descriptor\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->ofd, sizeof (pp->ofd) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, ofd),
+		fld_sizeof (IOTrace_packet, ofd) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"IOFSTYPE\" uname=\"File system type\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->fstype, sizeof (pp->fstype) == 4 ? "INT32" : "INT64");
+		(int) offsetof (IOTrace_packet, fstype),
+		fld_sizeof (IOTrace_packet, fstype) == 4 ? "INT32" : "INT64");
   collector_interface->writeLog ("    <field name=\"IOFNAME\" uname=\"File name\" offset=\"%d\" type=\"%s\"/>\n",
-				 &pp->fname, "STRING");
+		(int) offsetof (IOTrace_packet, fname), "STRING");
   collector_interface->writeLog ("  </profpckt>\n");
   collector_interface->writeLog ("</profile>\n");
   return COL_ERROR_NONE;
@@ -1030,8 +1041,9 @@ gprofng_open64 (int(real_open64) (const char *, int, ...),
   }
 
 DCL_FUNC_VER (DCL_OPEN64, open64_2_2, open64@GLIBC_2.2)
+#if !defined(__USE_LARGEFILE64)
 DCL_OPEN64 (open64)
-
+#endif
 
 #define F_ERROR_ARG     0
 #define F_INT_ARG       1
@@ -1338,7 +1350,7 @@ mkstemp (char *template)
   unsigned pktSize;
   if (NULL_PTR (mkstemp))
     init_io_intf ();
-  if (CHCK_REENTRANCE (guard) || template == NULL)
+  if (CHCK_REENTRANCE (guard))
     return CALL_REAL (mkstemp)(template);
   PUSH_REENTRANCE (guard);
   hrtime_t reqt = gethrtime ();
@@ -1393,7 +1405,7 @@ mkstemps (char *template, int slen)
   unsigned pktSize;
   if (NULL_PTR (mkstemps))
     init_io_intf ();
-  if (CHCK_REENTRANCE (guard) || template == NULL)
+  if (CHCK_REENTRANCE (guard))
     return CALL_REAL (mkstemps)(template, slen);
   PUSH_REENTRANCE (guard);
   hrtime_t reqt = gethrtime ();
@@ -1473,7 +1485,7 @@ close (int fildes)
 
 /*------------------------------------------------------------- fopen */
 static FILE*
-gprofng_fopen (FILE*(real_fopen) (), const char *filename, const char *mode)
+gprofng_fopen (FILE*(real_fopen) (const char *, const char *), const char *filename, const char *mode)
 {
   int *guard;
   FILE *fp = NULL;
@@ -1547,7 +1559,7 @@ DCL_FOPEN (fopen)
 
 /*------------------------------------------------------------- fclose */
 static int
-gprofng_fclose (int(real_fclose) (), FILE *stream)
+gprofng_fclose (int(real_fclose) (FILE *), FILE *stream)
 {
   int *guard;
   int stat;
@@ -1633,7 +1645,7 @@ fflush (FILE *stream)
 
 /*------------------------------------------------------------- fdopen */
 static FILE*
-gprofng_fdopen (FILE*(real_fdopen) (), int fildes, const char *mode)
+gprofng_fdopen (FILE*(real_fdopen) (int, const char *), int fildes, const char *mode)
 {
   int *guard;
   FILE *fp = NULL;
@@ -2945,7 +2957,7 @@ DCL_FGETPOS (fgetpos)
 
 /*------------------------------------------------------------- fgetpos64 */
 static int
-gprofng_fgetpos64 (int(real_fgetpos64) (), FILE *stream, fpos64_t *pos)
+gprofng_fgetpos64 (int(real_fgetpos64) (FILE *, fpos64_t *), FILE *stream, fpos64_t *pos)
 {
   int *guard;
   int ret;
@@ -2989,8 +3001,9 @@ DCL_FUNC_VER (DCL_FGETPOS64, fgetpos64_2_17, fgetpos64@GLIBC_2.17)
 DCL_FUNC_VER (DCL_FGETPOS64, fgetpos64_2_2_5, fgetpos64@GLIBC_2.2.5)
 DCL_FUNC_VER (DCL_FGETPOS64, fgetpos64_2_2, fgetpos64@GLIBC_2.2)
 DCL_FUNC_VER (DCL_FGETPOS64, fgetpos64_2_1, fgetpos64@GLIBC_2.1)
+#if !defined(__USE_LARGEFILE64)
 DCL_FGETPOS64 (fgetpos64)
-
+#endif
 /*------------------------------------------------------------- fsetpos */
 static int
 gprofng_fsetpos (int(real_fsetpos) (FILE *, const fpos_t *),
@@ -3087,8 +3100,9 @@ DCL_FUNC_VER (DCL_FSETPOS64, fsetpos64_2_17, fsetpos64@GLIBC_2.17)
 DCL_FUNC_VER (DCL_FSETPOS64, fsetpos64_2_2_5, fsetpos64@GLIBC_2.2.5)
 DCL_FUNC_VER (DCL_FSETPOS64, fsetpos64_2_2, fsetpos64@GLIBC_2.2)
 DCL_FUNC_VER (DCL_FSETPOS64, fsetpos64_2_1, fsetpos64@GLIBC_2.1)
+#if !defined(__USE_LARGEFILE64)
 DCL_FSETPOS64 (fsetpos64)
-
+#endif
 /*------------------------------------------------------------- fsync */
 int
 fsync (int fildes)

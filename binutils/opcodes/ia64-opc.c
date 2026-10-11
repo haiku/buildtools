@@ -1,5 +1,5 @@
 /* ia64-opc.c -- Functions to access the compacted opcode table
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2026 Free Software Foundation, Inc.
    Written by Bob Manson of Cygnus Solutions, <manson@cygnus.com>
 
    This file is part of the GNU opcodes library.
@@ -66,7 +66,7 @@ const struct ia64_templ_desc ia64_templ_desc[16] =
 static void
 get_opc_prefix (const char **ptr, char *dest)
 {
-  char *c = strchr (*ptr, '.');
+  const char *c = strchr (*ptr, '.');
   if (c != NULL)
     {
       memcpy (dest, *ptr, c - *ptr);

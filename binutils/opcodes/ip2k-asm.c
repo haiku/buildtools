@@ -5,7 +5,7 @@
    THIS FILE IS MACHINE GENERATED WITH CGEN.
    - the resultant file is machine generated, cgen-asm.in isn't
 
-   Copyright (C) 1996-2023 Free Software Foundation, Inc.
+   Copyright (C) 1996-2026 Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -59,7 +59,7 @@ parse_fr (CGEN_CPU_DESC cd,
 {
   const char *errmsg;
   const char *old_strp;
-  char *afteroffset;
+  const char *afteroffset;
   enum cgen_parse_operand_result result_type;
   bfd_vma value;
   extern CGEN_KEYWORD ip2k_cgen_opval_register_names;

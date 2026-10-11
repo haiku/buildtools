@@ -1,5 +1,5 @@
 /* LoongArch opcode support.
-   Copyright (C) 2021-2023 Free Software Foundation, Inc.
+   Copyright (C) 2021-2026 Free Software Foundation, Inc.
    Contributed by Loongson Ltd.
 
    This file is part of the GNU opcodes library.
@@ -24,7 +24,8 @@
 
 struct loongarch_ASEs_option LARCH_opts =
 {
-  .relax = 1
+  .relax = 1,
+  .thin_add_sub = 0
 };
 
 size_t
@@ -41,7 +42,7 @@ const char *const loongarch_r_normal_name[32] =
   "$r24", "$r25", "$r26", "$r27", "$r28", "$r29", "$r30", "$r31",
 };
 
-const char *const loongarch_r_lp64_name[32] =
+const char *const loongarch_r_alias[32] =
 {
   "$zero", "$ra", "$tp", "$sp", "$a0", "$a1", "$a2", "$a3",
   "$a4",   "$a5", "$a6", "$a7", "$t0", "$t1", "$t2", "$t3",
@@ -49,7 +50,16 @@ const char *const loongarch_r_lp64_name[32] =
   "$s1",   "$s2", "$s3", "$s4", "$s5", "$s6", "$s7", "$s8",
 };
 
-const char *const loongarch_r_lp64_name_deprecated[32] =
+/* Add support for $s9.  */
+const char *const loongarch_r_alias_1[32] =
+{
+  "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "$s9", "",
+  "", "", "", "", "", "", "", "",
+};
+
+const char *const loongarch_r_alias_deprecated[32] =
 {
   "", "", "", "", "$v0", "$v1", "", "", "", "", "", "", "", "", "", "",
   "", "", "", "", "",    "$x",  "", "", "", "", "", "", "", "", "", "",
@@ -63,7 +73,7 @@ const char *const loongarch_f_normal_name[32] =
   "$f24", "$f25", "$f26", "$f27", "$f28", "$f29", "$f30", "$f31",
 };
 
-const char *const loongarch_f_lp64_name[32] =
+const char *const loongarch_f_alias[32] =
 {
   "$fa0", "$fa1", "$fa2",  "$fa3",  "$fa4",  "$fa5",  "$fa6",  "$fa7",
   "$ft0", "$ft1", "$ft2",  "$ft3",  "$ft4",  "$ft5",  "$ft6",  "$ft7",
@@ -71,7 +81,7 @@ const char *const loongarch_f_lp64_name[32] =
   "$fs0", "$fs1", "$fs2",  "$fs3",  "$fs4",  "$fs5",  "$fs6",  "$fs7",
 };
 
-const char *const loongarch_f_lp64_name_deprecated[32] =
+const char *const loongarch_f_alias_deprecated[32] =
 {
   "$fv0", "$fv1", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
   "",     "",     "", "", "", "", "", "", "", "", "", "", "", "", "", "",
@@ -116,6 +126,38 @@ const char *const loongarch_x_normal_name[32] =
   "$xr24", "$xr25", "$xr26", "$xr27", "$xr28", "$xr29", "$xr30", "$xr31",
 };
 
+const char *const loongarch_r_cfi_name[32] =
+{
+  "r0",  "r1",  "r2",  "r3",  "r4",  "r5",  "r6",  "r7",
+  "r8",  "r9",  "r10", "r11", "r12", "r13", "r14", "r15",
+  "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
+  "r24", "r25", "r26", "r27", "r28", "r29", "r30", "r31",
+};
+
+const char *const loongarch_r_cfi_name_alias[32] =
+{
+  "zero", "ra", "tp", "sp", "a0", "a1", "a2", "a3",
+  "a4",   "a5", "a6", "a7", "t0", "t1", "t2", "t3",
+  "t4",   "t5", "t6", "t7", "t8", "r21","fp", "s0",
+  "s1",   "s2", "s3", "s4", "s5", "s6", "s7", "s8",
+};
+
+const char *const loongarch_f_cfi_name[32] =
+{
+  "f0",  "f1",  "f2",  "f3",  "f4",  "f5",  "f6",  "f7",
+  "f8",  "f9",  "f10", "f11", "f12", "f13", "f14", "f15",
+  "f16", "f17", "f18", "f19", "f20", "f21", "f22", "f23",
+  "f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31",
+};
+
+const char *const loongarch_f_cfi_name_alias[32] =
+{
+  "fa0", "fa1", "fa2",  "fa3",  "fa4",  "fa5",  "fa6",  "fa7",
+  "ft0", "ft1", "ft2",  "ft3",  "ft4",  "ft5",  "ft6",  "ft7",
+  "ft8", "ft9", "ft10", "ft11", "ft12", "ft13", "ft14", "ft15",
+  "fs0", "fs1", "fs2",  "fs3",  "fs4",  "fs5",  "fs6",  "fs7",
+};
+
 /* Can not use xx_pa for abs.  */
 
 /* For LoongArch32 abs.  */
@@ -132,10 +174,11 @@ const char *const loongarch_x_normal_name[32] =
   &LARCH_opts.ase_lp64, 0
 
 #define INSN_LA_PCREL32		    \
-  "pcalau12i %1,%%pc_hi20(%2);"	    \
-  "addi.w %1,%1,%%pc_lo12(%2);",    \
+  "pcaddu12i %1,%%pcadd_hi20(%2);"  \
+  "addi.w %1,%1,%%pcadd_lo12(%2);", \
   &LARCH_opts.ase_ilp32,	    \
   &LARCH_opts.ase_lp64
+
 #define INSN_LA_PCREL64		    \
   "pcalau12i %1,%%pc_hi20(%2);"	    \
   "addi.d %1,%1,%%pc_lo12(%2);",    \
@@ -149,10 +192,11 @@ const char *const loongarch_x_normal_name[32] =
   &LARCH_opts.ase_lp64, 0
 
 #define INSN_LA_GOT32		    \
-  "pcalau12i %1,%%got_pc_hi20(%2);" \
-  "ld.w %1,%1,%%got_pc_lo12(%2);",  \
+  "pcaddu12i %1,%%got_pcadd_hi20(%2);" \
+  "ld.w %1,%1,%%got_pcadd_lo12(%2);", \
   &LARCH_opts.ase_ilp32,	    \
   &LARCH_opts.ase_lp64
+
 /* got32 abs.  */
 #define INSN_LA_GOT32_ABS	    \
   "lu12i.w %1,%%got_hi20(%2);"	    \
@@ -171,7 +215,7 @@ const char *const loongarch_x_normal_name[32] =
   "lu32i.d %1,%%got64_lo20(%2);"    \
   "lu52i.d %1,%1,%%got64_hi12(%2);" \
   "ld.d %1,%1,0",		    \
-  &LARCH_opts.ase_lp64,		    \
+  &LARCH_opts.ase_gabs,		    \
   &LARCH_opts.ase_gpcr
 /* got64 pic.  */
 #define INSN_LA_GOT64_LARGE_PCREL     \
@@ -198,10 +242,11 @@ const char *const loongarch_x_normal_name[32] =
   &LARCH_opts.ase_lp64, 0
 
 #define INSN_LA_TLS_IE32	    \
-  "pcalau12i %1,%%ie_pc_hi20(%2);"  \
-  "ld.w %1,%1,%%ie_pc_lo12(%2);",   \
+  "pcaddu12i %1,%%ie_pcadd_hi20(%2);" \
+  "ld.w %1,%1,%%ie_pcadd_lo12(%2);", \
   &LARCH_opts.ase_ilp32,	    \
   &LARCH_opts.ase_lp64
+
 /* For ie32 abs.  */
 #define INSN_LA_TLS_IE32_ABS	    \
   "lu12i.w %1,%%ie_hi20(%2);"	    \
@@ -229,15 +274,16 @@ const char *const loongarch_x_normal_name[32] =
   "lu32i.d %1,%%ie64_lo20(%2);"	    \
   "lu52i.d %1,%1,%%ie64_hi12(%2);"  \
   "ld.d %1,%1,0",		    \
-  &LARCH_opts.ase_lp64,		    \
+  &LARCH_opts.ase_gabs,		    \
   &LARCH_opts.ase_gpcr
 
 /* For LoongArch32/64 cmode=normal.  */
 #define INSN_LA_TLS_LD32	      \
-  "pcalau12i %1,%%ld_pc_hi20(%2);"    \
-  "addi.w %1,%1,%%got_pc_lo12(%2);",  \
+  "pcaddu12i %1,%%ld_pcadd_hi20(%2);" \
+  "addi.w %1,%1,%%ld_pcadd_lo12(%2);", \
   &LARCH_opts.ase_ilp32,	      \
   &LARCH_opts.ase_lp64
+
 #define INSN_LA_TLS_LD32_ABS	      \
   "lu12i.w %1,%%ld_hi20(%2);"	      \
   "ori %1,%1,%%got_lo12(%2);",	      \
@@ -260,14 +306,15 @@ const char *const loongarch_x_normal_name[32] =
   "ori %1,%1,%%got_lo12(%2);"	      \
   "lu32i.d %1,%%got64_lo20(%2);"      \
   "lu52i.d %1,%1,%%got64_hi12(%2);",  \
-  &LARCH_opts.ase_lp64,		      \
+  &LARCH_opts.ase_gabs,		      \
   &LARCH_opts.ase_gpcr
 
 #define INSN_LA_TLS_GD32	      \
-  "pcalau12i %1,%%gd_pc_hi20(%2);"    \
-  "addi.w %1,%1,%%got_pc_lo12(%2);",  \
+  "pcaddu12i %1,%%gd_pcadd_hi20(%2);" \
+  "addi.w %1,%1,%%gd_pcadd_lo12(%2);", \
   &LARCH_opts.ase_ilp32,	      \
   &LARCH_opts.ase_lp64
+
 #define INSN_LA_TLS_GD32_ABS	      \
   "lu12i.w %1,%%gd_hi20(%2);"	      \
   "ori %1,%1,%%got_lo12(%2);",	      \
@@ -290,9 +337,93 @@ const char *const loongarch_x_normal_name[32] =
   "ori %1,%1,%%got_lo12(%2);"	      \
   "lu32i.d %1,%%got64_lo20(%2);"      \
   "lu52i.d %1,%1,%%got64_hi12(%2);",  \
-  &LARCH_opts.ase_lp64,		      \
+  &LARCH_opts.ase_gabs,		      \
   &LARCH_opts.ase_gpcr
 
+#define INSN_LA_CALL_LA64 \
+  "call36 %1;", \
+  &LARCH_opts.ase_lp64, 0
+
+#define INSN_LA_CALL_LA32 \
+  "call30 %1;", \
+  &LARCH_opts.ase_ilp32, 0
+
+#define INSN_LA_TAIL_LA64 \
+  "tail36 %1,%2;", \
+  &LARCH_opts.ase_lp64, 0
+
+#define INSN_LA_TAIL_LA32 \
+  "tail30 %1,%2;", \
+  &LARCH_opts.ase_ilp32, 0
+
+#define INSN_LA_CALL36 \
+  "pcaddu18i $ra,%%call36(%1);" \
+  "jirl $ra,$ra,0;", \
+  0, 0
+
+#define INSN_LA_TAIL36 \
+  "pcaddu18i %1,%%call36(%2);" \
+  "jirl $zero,%1,0;", \
+  0, 0
+
+#define INSN_LA_CALL30 \
+  "pcaddu12i $ra,%%call30(%1);" \
+  "jirl $ra,$ra,0;", \
+  0, 0
+
+#define INSN_LA_TAIL30 \
+  "pcaddu12i %1,%%call30(%2);" \
+  "jirl $zero,%1,0;", \
+  0, 0
+
+/* For TLS_DESC32 pcrel.  */
+#define INSN_LA_TLS_DESC32		\
+  "pcaddu12i $r4,%%desc_pcadd_hi20(%2);" \
+  "addi.w $r4,$r4,%%desc_pcadd_lo12(%2);" \
+  "ld.w $r1,$r4,%%desc_ld(%2);"		\
+  "jirl $r1,$r1,%%desc_call(%2);",	\
+  &LARCH_opts.ase_ilp32,		\
+  &LARCH_opts.ase_lp64
+
+/* For TLS_DESC32 abs.  */
+#define INSN_LA_TLS_DESC32_ABS		\
+  "lu12i.w $r4,%%desc_hi20(%2);"	\
+  "ori $r4,$r4,%%desc_lo12(%2);"	\
+  "ld.w $r1,$r4,%%desc_ld(%2);"		\
+  "jirl $r1,$r1,%%desc_call(%2);",	\
+  &LARCH_opts.ase_gabs,			\
+  &LARCH_opts.ase_lp64
+
+/* For TLS_DESC64 pcrel.  */
+#define INSN_LA_TLS_DESC64		\
+  "pcalau12i $r4,%%desc_pc_hi20(%2);"	\
+  "addi.d $r4,$r4,%%desc_pc_lo12(%2);"	\
+  "ld.d $r1,$r4,%%desc_ld(%2);"		\
+  "jirl $r1,$r1,%%desc_call(%2);",	\
+  &LARCH_opts.ase_lp64, 0
+
+/* For TLS_DESC64 large pcrel.  */
+#define INSN_LA_TLS_DESC64_LARGE_PCREL	\
+  "pcalau12i $r4,%%desc_pc_hi20(%3);"	\
+  "addi.d %2,$r0,%%desc_pc_lo12(%3);"	\
+  "lu32i.d %2,%%desc64_pc_lo20(%3);"	\
+  "lu52i.d %2,%2,%%desc64_pc_hi12(%3);"	\
+  "add.d $r4,$r4,%2;"			\
+  "ld.d $r1,$r4,%%desc_ld(%3);"		\
+  "jirl $r1,$r1,%%desc_call(%3);",	\
+  &LARCH_opts.ase_lp64,			\
+  &LARCH_opts.ase_gabs
+
+/* For TLS_DESC64 large abs.  */
+#define INSN_LA_TLS_DESC64_LARGE_ABS	\
+  "lu12i.w $r4,%%desc_hi20(%2);"	\
+  "ori $r4,$r4,%%desc_lo12(%2);"	\
+  "lu32i.d $r4,%%desc64_lo20(%2);"	\
+  "lu52i.d $r4,$r4,%%desc64_hi12(%2);"	\
+  "ld.d $r1,$r4,%%desc_ld(%2);"		\
+  "jirl $r1,$r1,%%desc_call(%2);",	\
+  &LARCH_opts.ase_gabs,			\
+  &LARCH_opts.ase_gpcr
 
 static struct loongarch_opcode loongarch_macro_opcodes[] =
 {
@@ -318,35 +449,52 @@ static struct loongarch_opcode loongarch_macro_opcodes[] =
   { 0, 0, "la.pcrel",	"r,la",	  INSN_LA_PCREL32,		0 },
   { 0, 0, "la.pcrel",	"r,la",	  INSN_LA_PCREL64,		0 },
   { 0, 0, "la.pcrel",	"r,r,la", INSN_LA_PCREL64_LARGE,	0 },
-  { 0, 0, "la.got",	"r,la",	  INSN_LA_GOT32,		0 },
   { 0, 0, "la.got",	"r,la",	  INSN_LA_GOT32_ABS,		0 },
-  { 0, 0, "la.got",	"r,la",	  INSN_LA_GOT64,		0 },
+  { 0, 0, "la.got",	"r,la",	  INSN_LA_GOT32,		0 },
   { 0, 0, "la.got",	"r,la",	  INSN_LA_GOT64_LARGE_ABS,	0 },
+  { 0, 0, "la.got",	"r,la",	  INSN_LA_GOT64,		0 },
   { 0, 0, "la.got",	"r,r,la", INSN_LA_GOT64_LARGE_PCREL,	0 },
   { 0, 0, "la.tls.le",	"r,l",	  INSN_LA_TLS_LE,		0 },
   { 0, 0, "la.tls.le",	"r,l",	  INSN_LA_TLS_LE64_LARGE,	0 },
-  { 0, 0, "la.tls.ie",	"r,l",	  INSN_LA_TLS_IE32,		0 },
   { 0, 0, "la.tls.ie",	"r,l",	  INSN_LA_TLS_IE32_ABS,		0 },
-  { 0, 0, "la.tls.ie",	"r,l",	  INSN_LA_TLS_IE64,		0 },
+  { 0, 0, "la.tls.ie",	"r,l",	  INSN_LA_TLS_IE32,		0 },
   { 0, 0, "la.tls.ie",	"r,l",	  INSN_LA_TLS_IE64_LARGE_ABS,	0 },
+  { 0, 0, "la.tls.ie",	"r,l",	  INSN_LA_TLS_IE64,		0 },
   { 0, 0, "la.tls.ie",	"r,r,l",  INSN_LA_TLS_IE64_LARGE_PCREL,	0 },
-  { 0, 0, "la.tls.ld",	"r,l",	  INSN_LA_TLS_LD32,		0 },
   { 0, 0, "la.tls.ld",	"r,l",	  INSN_LA_TLS_LD32_ABS,		0 },
-  { 0, 0, "la.tls.ld",	"r,l",	  INSN_LA_TLS_LD64,		0 },
+  { 0, 0, "la.tls.ld",	"r,l",	  INSN_LA_TLS_LD32,		0 },
   { 0, 0, "la.tls.ld",	"r,l",	  INSN_LA_TLS_LD64_LARGE_ABS,	0 },
+  { 0, 0, "la.tls.ld",	"r,l",	  INSN_LA_TLS_LD64,		0 },
   { 0, 0, "la.tls.ld",	"r,r,l",  INSN_LA_TLS_LD64_LARGE_PCREL,	0 },
-  { 0, 0, "la.tls.gd",	"r,l",	  INSN_LA_TLS_GD32,		0 },
   { 0, 0, "la.tls.gd",	"r,l",	  INSN_LA_TLS_GD32_ABS,		0 },
-  { 0, 0, "la.tls.gd",	"r,l",	  INSN_LA_TLS_GD64,		0 },
+  { 0, 0, "la.tls.gd",	"r,l",	  INSN_LA_TLS_GD32,		0 },
   { 0, 0, "la.tls.gd",	"r,l",	  INSN_LA_TLS_GD64_LARGE_ABS,	0 },
+  { 0, 0, "la.tls.gd",	"r,l",	  INSN_LA_TLS_GD64,		0 },
   { 0, 0, "la.tls.gd",	"r,r,l",  INSN_LA_TLS_GD64_LARGE_PCREL,	0 },
-
+  { 0, 0, "call",	"la",	  INSN_LA_CALL_LA64,		0 },
+  { 0, 0, "call",	"la",	  INSN_LA_CALL_LA32,		0 },
+  { 0, 0, "tail",	"r,la",	  INSN_LA_TAIL_LA64,		0 },
+  { 0, 0, "tail",	"r,la",	  INSN_LA_TAIL_LA32,		0 },
+  { 0, 0, "call36",	"la",	  INSN_LA_CALL36,		0 },
+  { 0, 0, "tail36",	"r,la",	  INSN_LA_TAIL36,		0 },
+  { 0, 0, "call30",	"la",	  INSN_LA_CALL30,		0 },
+  { 0, 0, "tail30",	"r,la",	  INSN_LA_TAIL30,		0 },
+  { 0, 0, "pcaddi",	"r,la",	  "pcaddi %1, %%pcrel_20(%2)",	&LARCH_opts.ase_ilp32, 0, 0 },
+  { 0, 0, "la.tls.desc", "r,l",	  INSN_LA_TLS_DESC32_ABS,	0 },
+  { 0, 0, "la.tls.desc", "r,l",	  INSN_LA_TLS_DESC32,		0 },
+  { 0, 0, "la.tls.desc", "r,l",	  INSN_LA_TLS_DESC64_LARGE_ABS,	0 },
+  { 0, 0, "la.tls.desc", "r,l",	  INSN_LA_TLS_DESC64,		0 },
+  { 0, 0, "la.tls.desc", "r,r,l", INSN_LA_TLS_DESC64_LARGE_PCREL,0 },
+  { 0, 0, "ud",		 "u",	  "amswap.w $r%1,$r1,$r%1",	0, 0, 0 },
   { 0, 0, 0, 0, 0, 0, 0, 0 } /* Terminate the list.  */
 };
 
 static struct loongarch_opcode loongarch_alias_opcodes[] =
 {
   /* match,	mask,		name,		format,				macro,	include, exclude, pinfo.  */
+  { 0x00006000, 0xffffffe0,	"rdcntvl.w",	"r0:5",				0,	0, 0, INSN_DIS_ALIAS }, /* rdtimel.w rd, zero */
+  { 0x00006000, 0xfffffc1f,	"rdcntid.w",	"r5:5",				0,	0, 0, INSN_DIS_ALIAS }, /* rdtimel.w zero, rj */
+  { 0x00006400, 0xffffffe0,	"rdcntvh.w",	"r0:5",				0,	0, 0, INSN_DIS_ALIAS }, /* rdtimeh.w rd, zero */
   { 0x00150000,	0xfffffc00,	"move",		"r0:5,r5:5",			0,	0, 0, INSN_DIS_ALIAS }, /* or rd, rj, zero */
   { 0x02800000, 0xffc003e0,	"li.w",		"r0:5,s10:12",			0,	0, 0, INSN_DIS_ALIAS }, /* addi.w rd, zero, simm */
   { 0x02c00000, 0xffc003e0,	"li.d",		"r0:5,s10:12",			0,	0, 0, INSN_DIS_ALIAS }, /* addi.d rd, zero, simm */
@@ -359,6 +507,7 @@ static struct loongarch_opcode loongarch_alias_opcodes[] =
   { 0x60000000,	0xfc0003e0,	"bgtz",		"r0:5,sb10:16<<2",		0,	0, 0, INSN_DIS_ALIAS }, /* blt zero, rd, offset */
   { 0x64000000,	0xfc00001f,	"bgez",		"r5:5,sb10:16<<2",		0,	0, 0, INSN_DIS_ALIAS }, /* bge rj, zero, offset */
   { 0x64000000,	0xfc0003e0,	"blez",		"r0:5,sb10:16<<2",		0,	0, 0, INSN_DIS_ALIAS }, /* bge zero, rd, offset */
+  { 0x38600400,	0xfffffc00,	"ud",		"ru0:5,ru5:5",			0,	0, 0, INSN_DIS_ALIAS }, /* amswap.w rd, $r1, rj, rj==rd */
   { 0, 0, 0, 0, 0, 0, 0, 0 } /* Terminate the list.  */
 };
 
@@ -387,7 +536,10 @@ static struct loongarch_opcode loongarch_fix_opcodes[] =
   { 0x00005400, 0xfffffc00,	"bitrev.d",	"r0:5,r5:5",			0,			0,	0,	0 },
   { 0x00005800, 0xfffffc00,	"ext.w.h",	"r0:5,r5:5",			0,			0,	0,	0 },
   { 0x00005c00, 0xfffffc00,	"ext.w.b",	"r0:5,r5:5",			0,			0,	0,	0 },
+  { 0x0,	0x0,		"rdcntvl.w",	"r",				"rdtimel.w %1,$r0",	0,	0,	0 },
+  { 0x0,	0x0,		"rdcntid.w",	"r",				"rdtimel.w $r0,%1",	0,	0,	0 },
   { 0x00006000, 0xfffffc00,	"rdtimel.w",	"r0:5,r5:5",			0,			0,	0,	0 },
+  { 0x0,	0x0,		"rdcntvh.w",	"r",				"rdtimeh.w %1,$r0",	0,	0,	0 },
   { 0x00006400, 0xfffffc00,	"rdtimeh.w",	"r0:5,r5:5",			0,			0,	0,	0 },
   { 0x00006800, 0xfffffc00,	"rdtime.d",	"r0:5,r5:5",			0,			0,	0,	0 },
   { 0x00006c00, 0xfffffc00,	"cpucfg",	"r0:5,r5:5",			0,			0,	0,	0 },
@@ -398,7 +550,9 @@ static struct loongarch_opcode loongarch_fix_opcodes[] =
   { 0x00080000, 0xfffe0000,	"bytepick.w",	"r0:5,r5:5,r10:5,u15:2",	0,			0,	0,	0 },
   { 0x000c0000, 0xfffc0000,	"bytepick.d",	"r0:5,r5:5,r10:5,u15:3",	0,			0,	0,	0 },
   { 0x00100000, 0xffff8000,	"add.w",	"r0:5,r5:5,r10:5",		0,			0,	0,	0 },
+  { 0x00100000, 0xffff8000,	"add.w",	"r0:5,r5:5,r10:5,t",		0,			0,	0,	0 },
   { 0x00108000, 0xffff8000,	"add.d",	"r0:5,r5:5,r10:5",		0,			0,	0,	0 },
+  { 0x00108000, 0xffff8000,	"add.d",	"r0:5,r5:5,r10:5,t",		0,			0,	0,	0 },
   { 0x00110000, 0xffff8000,	"sub.w",	"r0:5,r5:5,r10:5",		0,			0,	0,	0 },
   { 0x00118000, 0xffff8000,	"sub.d",	"r0:5,r5:5,r10:5",		0,			0,	0,	0 },
   { 0x00120000, 0xffff8000,	"slt",		"r0:5,r5:5,r10:5",		0,			0,	0,	0 },
@@ -482,6 +636,8 @@ static struct loongarch_opcode loongarch_single_float_opcodes[] =
   { 0x01144400, 0xfffffc00,	"fsqrt.s",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x01145400, 0xfffffc00,	"frecip.s",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x01146400, 0xfffffc00,	"frsqrt.s",	"f0:5,f5:5",			0,			0,	0,	0 },
+  { 0x01147400, 0xfffffc00,	"frecipe.s",	"f0:5,f5:5",			0,			0,	0,	0 },
+  { 0x01148400, 0xfffffc00,	"frsqrte.s",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x01149400, 0xfffffc00,	"fmov.s",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x0114a400, 0xfffffc00,	"movgr2fr.w",	"f0:5,r5:5",			0,			0,	0,	0 },
   { 0x0114ac00, 0xfffffc00,	"movgr2frh.w",	"f0:5,r5:5",			0,			0,	0,	0 },
@@ -528,6 +684,8 @@ static struct loongarch_opcode loongarch_double_float_opcodes[] =
   { 0x01144800, 0xfffffc00,	"fsqrt.d",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x01145800, 0xfffffc00,	"frecip.d",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x01146800, 0xfffffc00,	"frsqrt.d",	"f0:5,f5:5",			0,			0,	0,	0 },
+  { 0x01147800, 0xfffffc00,	"frecipe.d",	"f0:5,f5:5",			0,			0,	0,	0 },
+  { 0x01148800, 0xfffffc00,	"frsqrte.d",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x01149800, 0xfffffc00,	"fmov.d",	"f0:5,f5:5",			0,			0,	0,	0 },
   { 0x0114a800, 0xfffffc00,	"movgr2fr.d",	"f0:5,r5:5",			0,			0,	0,	0 },
   { 0x0114b800, 0xfffffc00,	"movfr2gr.d",	"r0:5,f5:5",			0,			0,	0,	0 },
@@ -816,6 +974,48 @@ static struct loongarch_opcode loongarch_load_store_opcodes[] =
   { 0x38240000, 0xffff8000,	"ldx.hu",	"r0:5,r5:5,r10:5",		0,			0,	0,	0 },
   { 0x38280000, 0xffff8000,	"ldx.wu",	"r0:5,r5:5,r10:5",		0,			0,	0,	0 },
   { 0x382c0000, 0xffff8000,	"preldx",	"u0:5,r5:5,r10:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"sc.q",		"r,r,r,u0:0",			"sc.q %1,%2,%3",	0,	0,	0 },
+  { 0x38570000, 0xffff8000,	"sc.q",		"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"llacq.w",	"r,r,u0:0",			"llacq.w %1,%2",	0,	0,	0 },
+  { 0x38578000, 0xfffffc00,	"llacq.w",	"r0:5,r5:5",			0,			0,	0,	0 },
+  { 0x0,	0x0,		"screl.w",	"r,r,u0:0",			"screl.w %1,%2",	0,	0,	0 },
+  { 0x38578400, 0xfffffc00,	"screl.w",	"r0:5,r5:5",			0,			0,	0,	0 },
+  { 0x0,	0x0,		"llacq.d",	"r,r,u0:0",			"llacq.d %1,%2",	0,	0,	0 },
+  { 0x38578800, 0xfffffc00,	"llacq.d",	"r0:5,r5:5",			0,			0,	0,	0 },
+  { 0x0,	0x0,		"screl.d",	"r,r,u0:0",			"screl.d %1,%2",	0,	0,	0 },
+  { 0x38578c00, 0xfffffc00,	"screl.d",	"r0:5,r5:5",			0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas.b",	"r,r,r,u0:0",			"amcas.b %1,%2,%3",	0,	0,	0 },
+  { 0x38580000, 0xffff8000,	"amcas.b",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas.h",	"r,r,r,u0:0",			"amcas.h %1,%2,%3",	0,	0,	0 },
+  { 0x38588000, 0xffff8000,	"amcas.h",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas.w",	"r,r,r,u0:0",			"amcas.w %1,%2,%3",	0,	0,	0 },
+  { 0x38590000, 0xffff8000,	"amcas.w",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas.d",	"r,r,r,u0:0",			"amcas.d %1,%2,%3",	0,	0,	0 },
+  { 0x38598000, 0xffff8000,	"amcas.d",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas_db.b",	"r,r,r,u0:0",			"amcas_db.b %1,%2,%3",	0,	0,	0 },
+  { 0x385a0000, 0xffff8000,	"amcas_db.b",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas_db.h",	"r,r,r,u0:0",			"amcas_db.h %1,%2,%3",	0,	0,	0 },
+  { 0x385a8000, 0xffff8000,	"amcas_db.h",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas_db.w",	"r,r,r,u0:0",			"amcas_db.w %1,%2,%3",	0,	0,	0 },
+  { 0x385b0000, 0xffff8000,	"amcas_db.w",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amcas_db.d",	"r,r,r,u0:0",			"amcas_db.d %1,%2,%3",	0,	0,	0 },
+  { 0x385b8000, 0xffff8000,	"amcas_db.d",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amswap.b",	"r,r,r,u0:0",			"amswap.b %1,%2,%3",	0,	0,	0 },
+  { 0x385c0000, 0xffff8000,	"amswap.b",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amswap.h",	"r,r,r,u0:0",			"amswap.h %1,%2,%3",	0,	0,	0 },
+  { 0x385c8000, 0xffff8000,	"amswap.h",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amadd.b",	"r,r,r,u0:0",			"amadd.b %1,%2,%3",	0,	0,	0 },
+  { 0x385d0000, 0xffff8000,	"amadd.b",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amadd.h",	"r,r,r,u0:0",			"amadd.h %1,%2,%3",	0,	0,	0 },
+  { 0x385d8000, 0xffff8000,	"amadd.h",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amswap_db.b",	"r,r,r,u0:0",			"amswap_db.b %1,%2,%3",	0,	0,	0 },
+  { 0x385e0000, 0xffff8000,	"amswap_db.b",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amswap_db.h",	"r,r,r,u0:0",			"amswap_db.h %1,%2,%3",	0,	0,	0 },
+  { 0x385e8000, 0xffff8000,	"amswap_db.h",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amadd_db.b",	"r,r,r,u0:0",			"amadd_db.b %1,%2,%3",	0,	0,	0 },
+  { 0x385f0000, 0xffff8000,	"amadd_db.b",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
+  { 0x0,	0x0,		"amadd_db.h",	"r,r,r,u0:0",			"amadd_db.h %1,%2,%3",	0,	0,	0 },
+  { 0x385f8000, 0xffff8000,	"amadd_db.h",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
   { 0x0,	0x0,		"amswap.w",	"r,r,r,u0:0",			"amswap.w %1,%2,%3",	0,	0,	0 },
   { 0x38600000, 0xffff8000,	"amswap.w",	"r0:5,r10:5,r5:5",		0,			0,	0,	0 },
   { 0x0,	0x0,		"amswap.d",	"r,r,r,u0:0",			"amswap.d %1,%2,%3",	0,	0,	0 },
@@ -1382,6 +1582,10 @@ static struct loongarch_opcode loongarch_lsx_opcodes[] =
   { 0x729cf800, 0xfffffc00, "vfrecip.d",	"v0:5,v5:5",		0, 0, 0, 0},
   { 0x729d0400, 0xfffffc00, "vfrsqrt.s",	"v0:5,v5:5",		0, 0, 0, 0},
   { 0x729d0800, 0xfffffc00, "vfrsqrt.d",	"v0:5,v5:5",		0, 0, 0, 0},
+  { 0x729d1400, 0xfffffc00, "vfrecipe.s",	"v0:5,v5:5",		0, 0, 0, 0},
+  { 0x729d1800, 0xfffffc00, "vfrecipe.d",	"v0:5,v5:5",		0, 0, 0, 0},
+  { 0x729d2400, 0xfffffc00, "vfrsqrte.s",	"v0:5,v5:5",		0, 0, 0, 0},
+  { 0x729d2800, 0xfffffc00, "vfrsqrte.d",	"v0:5,v5:5",		0, 0, 0, 0},
   { 0x729d3400, 0xfffffc00, "vfrint.s",		"v0:5,v5:5",		0, 0, 0, 0},
   { 0x729d3800, 0xfffffc00, "vfrint.d",		"v0:5,v5:5",		0, 0, 0, 0},
   { 0x729d4400, 0xfffffc00, "vfrintrm.s",	"v0:5,v5:5",		0, 0, 0, 0},
@@ -2127,6 +2331,10 @@ static struct loongarch_opcode loongarch_lasx_opcodes[] =
   { 0x769cf800, 0xfffffc00, "xvfrecip.d",	"x0:5,x5:5",		0, 0, 0, 0},
   { 0x769d0400, 0xfffffc00, "xvfrsqrt.s",	"x0:5,x5:5",		0, 0, 0, 0},
   { 0x769d0800, 0xfffffc00, "xvfrsqrt.d",	"x0:5,x5:5",		0, 0, 0, 0},
+  { 0x769d1400, 0xfffffc00, "xvfrecipe.s",	"x0:5,x5:5",		0, 0, 0, 0},
+  { 0x769d1800, 0xfffffc00, "xvfrecipe.d",	"x0:5,x5:5",		0, 0, 0, 0},
+  { 0x769d2400, 0xfffffc00, "xvfrsqrte.s",	"x0:5,x5:5",		0, 0, 0, 0},
+  { 0x769d2800, 0xfffffc00, "xvfrsqrte.d",	"x0:5,x5:5",		0, 0, 0, 0},
   { 0x769d3400, 0xfffffc00, "xvfrint.s",	"x0:5,x5:5",		0, 0, 0, 0},
   { 0x769d3800, 0xfffffc00, "xvfrint.d",	"x0:5,x5:5",		0, 0, 0, 0},
   { 0x769d4400, 0xfffffc00, "xvfrintrm.s",	"x0:5,x5:5",		0, 0, 0, 0},

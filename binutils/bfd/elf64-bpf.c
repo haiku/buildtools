@@ -1,5 +1,5 @@
 /* Linux bpf specific support for 64-bit ELF
-   Copyright (C) 2019-2023 Free Software Foundation, Inc.
+   Copyright (C) 2019-2026 Free Software Foundation, Inc.
    Contributed by Oracle Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -88,7 +88,10 @@ bpf_reloc_type_lookup (bfd * abfd ATTRIBUTE_UNUSED,
     case BFD_RELOC_BPF_64:
       return &bpf_elf_howto_table[ (int) R_BPF_64_64_IDX];
     case BFD_RELOC_BPF_DISP32:
+    case BFD_RELOC_BPF_DISPCALL32:
       return &bpf_elf_howto_table[ (int) R_BPF_64_32_IDX];
+    case BFD_RELOC_BPF_DISP16:
+      return &bpf_elf_howto_table[ (int) R_BPF_GNU_64_16_IDX];
 
     default:
       /* Pacify gcc -Wall.  */
@@ -238,7 +241,8 @@ bpf_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
       if (sec != NULL && discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
-					 rel, 1, relend, howto, 0, contents);
+					 rel, 1, relend, R_BPF_NONE,
+					 howto, 0, contents);
 
       if (bfd_link_relocatable (info))
 	continue;
@@ -273,6 +277,7 @@ bpf_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
           }
 	case R_BPF_64_ABS64:
 	case R_BPF_64_ABS32:
+	case R_BPF_64_NODYLD32:
 	  {
 	    addend = bfd_get (howto->bitsize, input_bfd, where);
 	    relocation += addend;
@@ -381,14 +386,29 @@ elf64_bpf_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 
 static bfd_reloc_status_type
 bpf_elf_generic_reloc (bfd *abfd, arelent *reloc_entry, asymbol *symbol,
-		       void *data, asection *input_section,
-		       bfd *output_bfd ATTRIBUTE_UNUSED,
+		       void *data, asection *input_section, bfd *output_bfd,
 		       char **error_message ATTRIBUTE_UNUSED)
 {
 
   bfd_signed_vma relocation;
   bfd_reloc_status_type status;
   bfd_byte *where;
+
+  /* From bfd_elf_generic_reloc.  */
+  if (output_bfd != NULL
+      && (symbol->flags & BSF_SECTION_SYM) == 0
+      && (! reloc_entry->howto->partial_inplace
+	  || reloc_entry->addend == 0))
+    {
+      reloc_entry->address += input_section->output_offset;
+      return bfd_reloc_ok;
+    }
+
+  if (output_bfd == NULL
+      && !reloc_entry->howto->pc_relative
+      && (symbol->section->flags & SEC_DEBUGGING) != 0
+      && (input_section->flags & SEC_DEBUGGING) != 0)
+    reloc_entry->addend -= symbol->section->output_section->vma;
 
   /* Sanity check that the address is in range.  */
   bfd_size_type end = bfd_get_section_limit_octets (abfd, input_section);
@@ -403,17 +423,14 @@ bpf_elf_generic_reloc (bfd *abfd, arelent *reloc_entry, asymbol *symbol,
       || end - reloc_entry->address < reloc_size)
     return bfd_reloc_outofrange;
 
-  /*  Get the symbol value.  */
-  if (bfd_is_com_section (symbol->section))
-    relocation = 0;
-  else
-    relocation = symbol->value;
+  /* Behave similarly to bfd_install_relocation with install_addend set.
+     That is, just install the addend and do not include the value of
+     the symbol.  */
+  relocation = reloc_entry->addend;
 
   if (symbol->flags & BSF_SECTION_SYM)
     /* Relocation against a section symbol: add in the section base address.  */
     relocation += BASEADDR (symbol->section);
-
-  relocation += reloc_entry->addend;
 
   where = (bfd_byte *) data + reloc_entry->address;
 
@@ -445,8 +462,8 @@ bpf_elf_generic_reloc (bfd *abfd, arelent *reloc_entry, asymbol *symbol,
 	       where + reloc_entry->howto->bitpos / 8);
     }
 
-  reloc_entry->addend = relocation;
-  reloc_entry->address += input_section->output_offset;
+  if (output_bfd != NULL)
+    reloc_entry->address += input_section->output_offset;
 
   return bfd_reloc_ok;
 }

@@ -1,5 +1,5 @@
 /* Support for the generic parts of most COFF variants, for BFD.
-   Copyright (C) 1990-2023 Free Software Foundation, Inc.
+   Copyright (C) 1990-2026 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -352,6 +352,7 @@ CODE_FRAGMENT
 */
 
 #include "libiberty.h"
+#include <string.h>
 
 #ifdef COFF_WITH_PE
 #include "peicode.h"
@@ -852,41 +853,65 @@ styp_to_sec_flags (bfd *abfd,
 
 #else /* COFF_WITH_PE */
 
-static bool
-handle_COMDAT (bfd * abfd,
-	       flagword *sec_flags,
-	       void * hdr,
-	       const char *name,
-	       asection *section)
+static hashval_t
+comdat_hashf (const void *entry)
 {
-  struct internal_scnhdr *internal_s = (struct internal_scnhdr *) hdr;
+  const struct comdat_hash_entry *fe = entry;
+  return fe->target_index;
+}
+
+static int
+comdat_eqf (const void *e1, const void *e2)
+{
+  const struct comdat_hash_entry *fe1 = e1;
+  const struct comdat_hash_entry *fe2 = e2;
+  return fe1->target_index == fe2->target_index;
+}
+
+static void
+comdat_delf (void *ent)
+{
+  struct comdat_hash_entry *e = ent;
+  free (e->comdat_name);
+  free (e->symname);
+  free (e);
+}
+
+static struct comdat_hash_entry *
+find_flags (htab_t comdat_hash, int target_index)
+{
+  struct comdat_hash_entry needle;
+  needle.target_index = target_index;
+
+  return htab_find (comdat_hash, &needle);
+}
+
+static bool
+fill_comdat_hash (bfd *abfd)
+{
   bfd_byte *esymstart, *esym, *esymend;
-  int seen_state = 0;
-  char *target_name = NULL;
 
-  *sec_flags |= SEC_LINK_ONCE;
-
-  /* Unfortunately, the PE format stores essential information in
-     the symbol table, of all places.  We need to extract that
-     information now, so that objdump and the linker will know how
-     to handle the section without worrying about the symbols.  We
-     can't call slurp_symtab, because the linker doesn't want the
-     swapped symbols.  */
+  /* Unfortunately, the PE format stores essential information in the
+     symbol table, of all places.  We need to extract that information
+     now, so that objdump and the linker will know how to handle the
+     section without worrying about the symbols.  We can't call
+     slurp_symtab, because the linker doesn't want the swapped symbols.  */
 
   /* COMDAT sections are special.  The first symbol is the section
      symbol, which tells what kind of COMDAT section it is.  The
-     second symbol is the "comdat symbol" - the one with the
-     unique name.  GNU uses the section symbol for the unique
-     name; MS uses ".text" for every comdat section.  Sigh.  - DJ */
+     second symbol is the "comdat symbol" - the one with the unique
+     name.  GNU uses the section symbol for the unique name; MS uses
+     ".text" for every comdat section.  Sigh.  - DJ.  */
 
-  /* This is not mirrored in sec_to_styp_flags(), but there
-     doesn't seem to be a need to, either, and it would at best be
-     rather messy.  */
+  /* This is not mirrored in sec_to_styp_flags(), but there doesn't
+     seem to be a need to, either, and it would at best be rather messy.  */
 
   if (! _bfd_coff_get_external_symbols (abfd))
     return true;
 
-  esymstart = esym = (bfd_byte *) obj_coff_external_syms (abfd);
+  esymstart = esym = obj_coff_external_syms (abfd);
+  if (esym == NULL)
+    return true;
   esymend = esym + obj_raw_syment_count (abfd) * bfd_coff_symesz (abfd);
 
   for (struct internal_syment isym;
@@ -895,190 +920,149 @@ handle_COMDAT (bfd * abfd,
     {
       char buf[SYMNMLEN + 1];
       const char *symname;
+      flagword sec_flags = SEC_LINK_ONCE;
 
       bfd_coff_swap_sym_in (abfd, esym, &isym);
 
-      BFD_ASSERT (sizeof (internal_s->s_name) <= SYMNMLEN);
+      /* According to the MSVC documentation, the first TWO entries
+	 with the section # are both of interest to us.  The first one
+	 is the "section symbol" (section name).  The second is the
+	 comdat symbol name.  Here, we've found the first qualifying
+	 entry; we distinguish it from the second with a state flag.
 
-      if (isym.n_scnum == section->target_index)
+	 In the case of gas-generated (at least until that is fixed)
+	 .o files, it isn't necessarily the second one.  It may be
+	 some other later symbol.
+
+	 Since gas also doesn't follow MS conventions and emits the
+	 section similar to .text$<name>, where <something> is the
+	 name we're looking for, we distinguish the two as follows:
+
+	 If the section name is simply a section name (no $) we
+	 presume it's MS-generated, and look at precisely the second
+	 symbol for the comdat name.  If the section name has a $, we
+	 assume it's gas-generated, and look for <something> (whatever
+	 follows the $) as the comdat symbol.  */
+
+      /* All 3 branches use this.  */
+      symname = _bfd_coff_internal_syment_name (abfd, &isym, buf);
+
+      /* PR 17512 file: 078-11867-0.004  */
+      if (symname == NULL)
 	{
-	  /* According to the MSVC documentation, the first
-	     TWO entries with the section # are both of
-	     interest to us.  The first one is the "section
-	     symbol" (section name).  The second is the comdat
-	     symbol name.  Here, we've found the first
-	     qualifying entry; we distinguish it from the
-	     second with a state flag.
+	  _bfd_error_handler (_("%pB: unable to load COMDAT section name"),
+			      abfd);
+	  continue;
+	}
 
-	     In the case of gas-generated (at least until that
-	     is fixed) .o files, it isn't necessarily the
-	     second one.  It may be some other later symbol.
+      union internal_auxent aux;
 
-	     Since gas also doesn't follow MS conventions and
-	     emits the section similar to .text$<name>, where
-	     <something> is the name we're looking for, we
-	     distinguish the two as follows:
+      struct comdat_hash_entry needle;
+      needle.target_index = isym.n_scnum;
 
-	     If the section name is simply a section name (no
-	     $) we presume it's MS-generated, and look at
-	     precisely the second symbol for the comdat name.
-	     If the section name has a $, we assume it's
-	     gas-generated, and look for <something> (whatever
-	     follows the $) as the comdat symbol.  */
+      void **slot
+	= htab_find_slot (pe_data (abfd)->comdat_hash, &needle, INSERT);
+      if (slot == NULL)
+	return false;
 
-	  /* All 3 branches use this.  */
-	  symname = _bfd_coff_internal_syment_name (abfd, &isym, buf);
-
-	  /* PR 17512 file: 078-11867-0.004  */
-	  if (symname == NULL)
+      if (*slot == NULL)
+	{
+	  if (isym.n_numaux != 1)
+	    aux.x_scn.x_comdat = 0;
+	  else
 	    {
-	      _bfd_error_handler (_("%pB: unable to load COMDAT section name"),
-				  abfd);
-	      return false;
+	      /* PR 17512: file: e2cfe54f.  */
+	      if (esym + isym.n_numaux * bfd_coff_symesz (abfd) >= esymend)
+		{
+		  /* xgettext:c-format */
+		  _bfd_error_handler (_("%pB: warning: no symbol for"
+					" section '%s' found"),
+				      abfd, symname);
+		  continue;
+		}
+	      bfd_coff_swap_aux_in (abfd, (esym + bfd_coff_symesz (abfd)),
+				    isym.n_type, isym.n_sclass, 0,
+				    isym.n_numaux, &aux);
 	    }
 
-	  switch (seen_state)
+	  /* FIXME: Microsoft uses NODUPLICATES and ASSOCIATIVE, but
+	     gnu uses ANY and SAME_SIZE.  Unfortunately, gnu doesn't
+	     do the comdat symbols right.  So, until we can fix it to
+	     do the right thing, we are temporarily disabling comdats
+	     for the MS types (they're used in DLLs and C++, but we
+	     don't support *their* C++ libraries anyway - DJ.  */
+
+	  /* Cygwin does not follow the MS style, and uses ANY and
+	     SAME_SIZE where NODUPLICATES and ASSOCIATIVE should be
+	     used.  For Interix, we just do the right thing up
+	     front.  */
+
+	  switch (aux.x_scn.x_comdat)
 	    {
-	    case 0:
-	      {
-		/* The first time we've seen the symbol.  */
-		union internal_auxent aux;
-
-		/* If it isn't the stuff we're expecting, die;
-		   The MS documentation is vague, but it
-		   appears that the second entry serves BOTH
-		   as the comdat symbol and the defining
-		   symbol record (either C_STAT or C_EXT,
-		   possibly with an aux entry with debug
-		   information if it's a function.)  It
-		   appears the only way to find the second one
-		   is to count.  (On Intel, they appear to be
-		   adjacent, but on Alpha, they have been
-		   found separated.)
-
-		   Here, we think we've found the first one,
-		   but there's some checking we can do to be
-		   sure.  */
-
-		if (! ((isym.n_sclass == C_STAT
-			|| isym.n_sclass == C_EXT)
-		       && BTYPE (isym.n_type) == T_NULL
-		       && isym.n_value == 0))
-		  {
-		    /* Malformed input files can trigger this test.
-		       cf PR 21781.  */
-		    _bfd_error_handler (_("%pB: error: unexpected symbol '%s' in COMDAT section"),
-					abfd, symname);
-		    return false;
-		  }
-
-		/* FIXME LATER: MSVC generates section names
-		   like .text for comdats.  Gas generates
-		   names like .text$foo__Fv (in the case of a
-		   function).  See comment above for more.  */
-
-		if (isym.n_sclass == C_STAT && strcmp (name, symname) != 0)
-		  /* xgettext:c-format */
-		  _bfd_error_handler (_("%pB: warning: COMDAT symbol '%s'"
-					" does not match section name '%s'"),
-				      abfd, symname, name);
-
-		/* This is the section symbol.  */
-		seen_state = 1;
-		target_name = strchr (name, '$');
-		if (target_name != NULL)
-		  {
-		    /* Gas mode.  */
-		    seen_state = 2;
-		    /* Skip the `$'.  */
-		    target_name += 1;
-		  }
-
-		if (isym.n_numaux == 0)
-		  aux.x_scn.x_comdat = 0;
-		else
-		  {
-		    /* PR 17512: file: e2cfe54f.  */
-		    if (esym + bfd_coff_symesz (abfd) >= esymend)
-		      {
-			/* xgettext:c-format */
-			_bfd_error_handler (_("%pB: warning: no symbol for"
-					      " section '%s' found"),
-					    abfd, symname);
-			break;
-		      }
-		    bfd_coff_swap_aux_in (abfd, esym + bfd_coff_symesz (abfd),
-					  isym.n_type, isym.n_sclass,
-					  0, isym.n_numaux, &aux);
-		  }
-
-		/* FIXME: Microsoft uses NODUPLICATES and
-		   ASSOCIATIVE, but gnu uses ANY and
-		   SAME_SIZE.  Unfortunately, gnu doesn't do
-		   the comdat symbols right.  So, until we can
-		   fix it to do the right thing, we are
-		   temporarily disabling comdats for the MS
-		   types (they're used in DLLs and C++, but we
-		   don't support *their* C++ libraries anyway
-		   - DJ.  */
-
-		/* Cygwin does not follow the MS style, and
-		   uses ANY and SAME_SIZE where NODUPLICATES
-		   and ASSOCIATIVE should be used.  For
-		   Interix, we just do the right thing up
-		   front.  */
-
-		switch (aux.x_scn.x_comdat)
-		  {
-		  case IMAGE_COMDAT_SELECT_NODUPLICATES:
+	    case IMAGE_COMDAT_SELECT_NODUPLICATES:
 #ifdef STRICT_PE_FORMAT
-		    *sec_flags |= SEC_LINK_DUPLICATES_ONE_ONLY;
+	      sec_flags |= SEC_LINK_DUPLICATES_ONE_ONLY;
 #else
-		    *sec_flags &= ~SEC_LINK_ONCE;
+	      sec_flags &= ~SEC_LINK_ONCE;
 #endif
-		    break;
-
-		  case IMAGE_COMDAT_SELECT_ANY:
-		    *sec_flags |= SEC_LINK_DUPLICATES_DISCARD;
-		    break;
-
-		  case IMAGE_COMDAT_SELECT_SAME_SIZE:
-		    *sec_flags |= SEC_LINK_DUPLICATES_SAME_SIZE;
-		    break;
-
-		  case IMAGE_COMDAT_SELECT_EXACT_MATCH:
-		    /* Not yet fully implemented ??? */
-		    *sec_flags |= SEC_LINK_DUPLICATES_SAME_CONTENTS;
-		    break;
-
-		    /* debug$S gets this case; other
-		       implications ??? */
-
-		    /* There may be no symbol... we'll search
-		       the whole table... Is this the right
-		       place to play this game? Or should we do
-		       it when reading it in.  */
-		  case IMAGE_COMDAT_SELECT_ASSOCIATIVE:
-#ifdef STRICT_PE_FORMAT
-		    /* FIXME: This is not currently implemented.  */
-		    *sec_flags |= SEC_LINK_DUPLICATES_DISCARD;
-#else
-		    *sec_flags &= ~SEC_LINK_ONCE;
-#endif
-		    break;
-
-		  default:  /* 0 means "no symbol" */
-		    /* debug$F gets this case; other
-		       implications ??? */
-		    *sec_flags |= SEC_LINK_DUPLICATES_DISCARD;
-		    break;
-		  }
-	      }
 	      break;
 
-	    case 2:
+	    case IMAGE_COMDAT_SELECT_ANY:
+	      sec_flags |= SEC_LINK_DUPLICATES_DISCARD;
+	      break;
+
+	    case IMAGE_COMDAT_SELECT_SAME_SIZE:
+	      sec_flags |= SEC_LINK_DUPLICATES_SAME_SIZE;
+	      break;
+
+	    case IMAGE_COMDAT_SELECT_EXACT_MATCH:
+	      /* Not yet fully implemented ??? */
+	      sec_flags |= SEC_LINK_DUPLICATES_SAME_CONTENTS;
+	      break;
+
+	      /* debug$S gets this case; other implications ???  */
+
+	      /* There may be no symbol.  We'll search the whole
+		 table.  Is this the right place to play this game?
+		 Or should we do it when reading it in?  */
+	    case IMAGE_COMDAT_SELECT_ASSOCIATIVE:
+#ifdef STRICT_PE_FORMAT
+	      /* FIXME: This is not currently implemented.  */
+	      sec_flags |= SEC_LINK_DUPLICATES_DISCARD;
+#else
+	      sec_flags &= ~SEC_LINK_ONCE;
+#endif
+	      break;
+
+	    default:  /* 0 means "no symbol" */
+	      /* debug$F gets this case; other implications ???  */
+	      sec_flags |= SEC_LINK_DUPLICATES_DISCARD;
+	      break;
+	    }
+
+	  *slot = bfd_zmalloc (sizeof (struct comdat_hash_entry));
+	  if (*slot == NULL)
+	    return false;
+	  struct comdat_hash_entry *newentry = *slot;
+	  newentry->sec_flags = sec_flags;
+	  newentry->symname = bfd_strdup (symname);
+	  newentry->target_index = isym.n_scnum;
+	  newentry->isym = isym;
+	  newentry->comdat_symbol = -1;
+	}
+      else
+	{
+	  struct comdat_hash_entry *entry = *slot;
+
+	  if (entry->comdat_symbol != -1)
+	    continue;
+
+	  char *target_name = strchr (entry->symname, '$');
+	  if (target_name != NULL)
+	    {
 	      /* Gas mode: the first matching on partial name.  */
 
+	      target_name += 1;
 #ifndef TARGET_UNDERSCORE
 #define TARGET_UNDERSCORE 0
 #endif
@@ -1089,34 +1073,105 @@ handle_COMDAT (bfd * abfd,
 		  /* Not the name we're looking for */
 		  continue;
 		}
-	      /* Fall through.  */
-	    case 1:
-	      /* MSVC mode: the lexically second symbol (or
-		 drop through from the above).  */
-	      {
-		/* This must the second symbol with the
-		   section #.  It is the actual symbol name.
-		   Intel puts the two adjacent, but Alpha (at
-		   least) spreads them out.  */
-
-		struct coff_comdat_info *comdat;
-		size_t len = strlen (symname) + 1;
-
-		comdat = bfd_alloc (abfd, sizeof (*comdat) + len);
-		if (comdat == NULL)
-		  return false;
-
-		coff_section_data (abfd, section)->comdat = comdat;
-		comdat->symbol = (esym - esymstart) / bfd_coff_symesz (abfd);
-		char *newname = (char *) (comdat + 1);
-		comdat->name = newname;
-		memcpy (newname, symname, len);
-		return true;
-	      }
 	    }
+	  /* MSVC mode: the lexically second symbol (or drop through
+	     from the above).  */
+	  /* This must the second symbol with the section #.  It is
+	     the actual symbol name.  Intel puts the two adjacent, but
+	     Alpha (at least) spreads them out.  */
+
+	  entry->comdat_symbol = (esym - esymstart) / bfd_coff_symesz (abfd);
+	  entry->comdat_name = bfd_strdup (symname);
 	}
     }
 
+  return true;
+}
+
+static bool
+insert_coff_comdat_info (bfd *abfd, asection *section, const char *symname,
+			 long symbol)
+{
+  struct coff_comdat_info *comdat;
+  size_t len = strlen (symname) + 1;
+
+  comdat = bfd_alloc (abfd, sizeof (*comdat) + len);
+  if (comdat == NULL)
+    return false;
+
+  coff_section_data (abfd, section)->comdat = comdat;
+  comdat->symbol = symbol;
+  char *newname = (char *) (comdat + 1);
+  comdat->name = newname;
+  memcpy (newname, symname, len);
+  return true;
+}
+
+static bool
+handle_COMDAT (bfd *abfd, flagword *sec_flags, const char *name,
+	       asection *section)
+{
+  if (pe_data (abfd)->comdat_hash == NULL)
+    {
+      pe_data (abfd)->comdat_hash = htab_create (10, comdat_hashf, comdat_eqf,
+						 comdat_delf);
+      if (pe_data (abfd)->comdat_hash == NULL)
+	return false;
+    }
+
+  if (htab_elements (pe_data (abfd)->comdat_hash) == 0)
+    if (! fill_comdat_hash (abfd))
+      return false;
+
+  struct comdat_hash_entry *found
+    = find_flags (pe_data (abfd)->comdat_hash, section->target_index);
+  if (found != NULL)
+    {
+      struct internal_syment isym = found->isym;
+
+      /* If it isn't the stuff we're expecting, die;  The MS
+	 documentation is vague, but it appears that the second entry
+	 serves BOTH as the comdat symbol and the defining symbol
+	 record (either C_STAT or C_EXT, possibly with an aux entry
+	 with debug information if it's a function.)  It appears the
+	 only way to find the second one is to count.  (On Intel, they
+	 appear to be adjacent, but on Alpha, they have been found
+	 separated.)
+
+	 Here, we think we've found the first one, but there's some
+	 checking we can do to be sure.  */
+
+      if (! ((isym.n_sclass == C_STAT || isym.n_sclass == C_EXT)
+	     && BTYPE (isym.n_type) == T_NULL && isym.n_value == 0))
+	{
+	  /* Malformed input files can trigger this test.
+	     cf PR 21781.  */
+	  _bfd_error_handler
+	    (_("%pB: error: unexpected symbol '%s' in COMDAT section"),
+	     abfd, found->symname);
+	  return false;
+	}
+
+      /* FIXME LATER: MSVC generates section names like .text for
+	 comdats.  Gas generates names like .text$foo__Fv (in the case
+	 of a function).  See comment above for more.  */
+
+      if (isym.n_sclass == C_STAT && strcmp (name, found->symname) != 0)
+	/* xgettext:c-format */
+	_bfd_error_handler (_("%pB: warning: COMDAT symbol '%s'"
+			      " does not match section name '%s'"),
+			    abfd, found->symname, name);
+
+      if (found->comdat_symbol != -1)
+	{
+	  if (! insert_coff_comdat_info (abfd, section, found->comdat_name,
+					 found->comdat_symbol))
+	    return false;
+	}
+      *sec_flags = *sec_flags | found->sec_flags;
+      return true;
+    }
+  *sec_flags = *sec_flags | SEC_LINK_ONCE;
   return true;
 }
 
@@ -1268,7 +1323,7 @@ styp_to_sec_flags (bfd *abfd,
 	  break;
 	case IMAGE_SCN_LNK_COMDAT:
 	  /* COMDAT gets very special treatment.  */
-	  if (!handle_COMDAT (abfd, &sec_flags, hdr, name, section))
+	  if (!handle_COMDAT (abfd, &sec_flags, name, section))
 	    result = false;
 	  break;
 	default:
@@ -1291,6 +1346,11 @@ styp_to_sec_flags (bfd *abfd,
       && (startswith (name, ".sbss")
 	  || startswith (name, ".sdata")))
     sec_flags |= SEC_SMALL_DATA;
+
+  /* As there is no internal representation of the "discardable" flag,
+     reflect it by keeping SEC_ALLOC clear.  */
+  if (internal_s->s_flags & IMAGE_SCN_MEM_DISCARDABLE)
+    sec_flags &= ~SEC_ALLOC;
 
 #if defined (COFF_LONG_SECTION_NAMES) && defined (COFF_SUPPORT_GNU_LINKONCE)
   /* As a GNU extension, if the name begins with .gnu.linkonce, we
@@ -1372,7 +1432,7 @@ CODE_FRAGMENT
 .    (bfd *, void *, void *);
 .
 .  unsigned int (*_bfd_coff_swap_scnhdr_out)
-.    (bfd *, void *, void *);
+.    (bfd *, void *, void *, const asection *);
 .
 .  unsigned int _bfd_filhsz;
 .  unsigned int _bfd_aoutsz;
@@ -1463,11 +1523,6 @@ CODE_FRAGMENT
 .    (bfd *, struct bfd_link_info *, bfd *, asection *,
 .     struct internal_reloc *, bool *);
 .
-.  bool (*_bfd_coff_link_add_one_symbol)
-.    (struct bfd_link_info *, bfd *, const char *, flagword,
-.     asection *, bfd_vma, const char *, bool, bool,
-.     struct bfd_link_hash_entry **);
-.
 .  bool (*_bfd_coff_link_output_has_begun)
 .    (bfd *, struct coff_final_link_info *);
 .
@@ -1505,8 +1560,8 @@ INTERNAL
 .#define bfd_coff_swap_sym_out(abfd, i,o) \
 .  ((coff_backend_info (abfd)->_bfd_coff_swap_sym_out) (abfd, i, o))
 .
-.#define bfd_coff_swap_scnhdr_out(abfd, i,o) \
-.  ((coff_backend_info (abfd)->_bfd_coff_swap_scnhdr_out) (abfd, i, o))
+.#define bfd_coff_swap_scnhdr_out(abfd, i, o, sec) \
+.  ((coff_backend_info (abfd)->_bfd_coff_swap_scnhdr_out) (abfd, i, o, sec))
 .
 .#define bfd_coff_swap_filehdr_out(abfd, i,o) \
 .  ((coff_backend_info (abfd)->_bfd_coff_swap_filehdr_out) (abfd, i, o))
@@ -1606,10 +1661,6 @@ INTERNAL
 .#define bfd_coff_adjust_symndx(obfd, info, ibfd, sec, rel, adjustedp)\
 .  ((coff_backend_info (abfd)->_bfd_coff_adjust_symndx)\
 .   (obfd, info, ibfd, sec, rel, adjustedp))
-.#define bfd_coff_link_add_one_symbol(info, abfd, name, flags, section,\
-.				      value, string, cp, coll, hashp)\
-.  ((coff_backend_info (abfd)->_bfd_coff_link_add_one_symbol)\
-.   (info, abfd, name, flags, section, value, string, cp, coll, hashp))
 .
 .#define bfd_coff_link_output_has_begun(a,p) \
 .  ((coff_backend_info (a)->_bfd_coff_link_output_has_begun) (a, p))
@@ -1888,9 +1939,9 @@ coff_set_alignment_hook (bfd * abfd ATTRIBUTE_UNUSED,
       file_ptr oldpos = bfd_tell (abfd);
       bfd_size_type relsz = bfd_coff_relsz (abfd);
 
-      if (bfd_seek (abfd, (file_ptr) hdr->s_relptr, 0) != 0)
+      if (bfd_seek (abfd, hdr->s_relptr, 0) != 0)
 	return;
-      if (bfd_bread (& dst, relsz, abfd) != relsz)
+      if (bfd_read (& dst, relsz, abfd) != relsz)
 	return;
 
       bfd_coff_swap_reloc_in (abfd, &dst, &n);
@@ -1959,9 +2010,9 @@ coff_set_alignment_hook (bfd * abfd, asection * section, void * scnhdr)
       const file_ptr oldpos = bfd_tell (abfd);
       const bfd_size_type relsz = bfd_coff_relsz (abfd);
 
-      if (bfd_seek (abfd, (file_ptr) hdr->s_relptr, 0) != 0)
+      if (bfd_seek (abfd, hdr->s_relptr, 0) != 0)
 	return;
-      if (bfd_bread (& dst, relsz, abfd) != relsz)
+      if (bfd_read (& dst, relsz, abfd) != relsz)
 	return;
 
       bfd_coff_swap_reloc_in (abfd, &dst, &n);
@@ -2180,6 +2231,12 @@ coff_set_arch_mach_hook (bfd *abfd, void * filehdr)
     case LOONGARCH64MAGIC:
       arch = bfd_arch_loongarch;
       machine = internal_f->f_flags & F_LOONGARCH64_ARCHITECTURE_MASK;
+      break;
+#endif
+#ifdef RISCV64MAGIC
+    case RISCV64MAGIC:
+      arch = bfd_arch_riscv;
+      machine = bfd_mach_riscv64;
       break;
 #endif
 #ifdef Z80MAGIC
@@ -2557,8 +2614,8 @@ coff_write_relocs (bfd * abfd, int first_undef)
 	  /* Add one to count *this* reloc (grr).  */
 	  n.r_vaddr = s->reloc_count + 1;
 	  coff_swap_reloc_out (abfd, &n, &dst);
-	  if (bfd_bwrite (& dst, (bfd_size_type) bfd_coff_relsz (abfd),
-			  abfd) != bfd_coff_relsz (abfd))
+	  if (bfd_write (&dst, bfd_coff_relsz (abfd), abfd)
+	      != bfd_coff_relsz (abfd))
 	    return false;
 	}
 #endif
@@ -2650,8 +2707,8 @@ coff_write_relocs (bfd * abfd, int first_undef)
 #endif
 	  coff_swap_reloc_out (abfd, &n, &dst);
 
-	  if (bfd_bwrite (& dst, (bfd_size_type) bfd_coff_relsz (abfd),
-			 abfd) != bfd_coff_relsz (abfd))
+	  if (bfd_write (&dst, bfd_coff_relsz (abfd), abfd)
+	      != bfd_coff_relsz (abfd))
 	    return false;
 	}
 
@@ -2750,6 +2807,12 @@ coff_set_flags (bfd * abfd,
 #ifdef LOONGARCH64MAGIC
     case bfd_arch_loongarch:
       * magicp = LOONGARCH64MAGIC;
+      return true;
+#endif
+
+#ifdef RISCV64MAGIC
+    case bfd_arch_riscv:
+      * magicp = RISCV64MAGIC;
       return true;
 #endif
 
@@ -3176,8 +3239,9 @@ coff_compute_section_file_positions (bfd * abfd)
 	     created and not just improve performances with gdb.
 	  */
 
-	  if ((!strcmp (current->name, _TEXT)
-	       || !strcmp (current->name, _DATA))
+	  if ((current->flags & SEC_LOAD) != 0
+	      && (!strcmp (current->name, _TEXT)
+		  || !strcmp (current->name, _DATA))
 	      && (previous == NULL || strcmp(previous->name, _TDATA)))
 	    {
 	      bfd_vma align = 4096;
@@ -3190,7 +3254,8 @@ coff_compute_section_file_positions (bfd * abfd)
 		sofar += align + vma_off - sofar_off;
 	    }
 #endif
-	  if (previous != NULL)
+	  if (previous != NULL
+	      && (previous->flags & SEC_LOAD) != 0)
 	    previous->size += sofar - old_sofar;
 	}
 
@@ -3269,7 +3334,7 @@ coff_compute_section_file_positions (bfd * abfd)
 
       b = 0;
       if (bfd_seek (abfd, sofar - 1, SEEK_SET) != 0
-	  || bfd_bwrite (&b, (bfd_size_type) 1, abfd) != 1)
+	  || bfd_write (&b, 1, abfd) != 1)
 	return false;
     }
 
@@ -3293,7 +3358,7 @@ coff_read_word (bfd *abfd, unsigned int *value, unsigned int *pelength)
   unsigned char b[2];
   int status;
 
-  status = bfd_bread (b, (bfd_size_type) 2, abfd);
+  status = bfd_read (b, 2, abfd);
   if (status < 1)
     {
       *value = 0;
@@ -3369,7 +3434,7 @@ coff_compute_checksum (bfd *abfd, unsigned int *pelength)
       if (bfd_seek (abfd, filepos, SEEK_SET) != 0)
 	return 0;
 
-      buf_size = bfd_bread (buf, COFF_CHECKSUM_BUFFER_SIZE, abfd);
+      buf_size = bfd_read (buf, COFF_CHECKSUM_BUFFER_SIZE, abfd);
       cur_buf_size = buf_size;
       cur_buf = buf;
 
@@ -3409,7 +3474,8 @@ coff_apply_checksum (bfd *abfd)
     return false;
 
   checksum = 0;
-  bfd_bwrite (&checksum, (bfd_size_type) 4, abfd);
+  if (bfd_write (&checksum, 4, abfd) != 4)
+    return false;
 
   if (bfd_seek (abfd, peheader, SEEK_SET) != 0)
     return false;
@@ -3421,9 +3487,7 @@ coff_apply_checksum (bfd *abfd)
   if (bfd_seek (abfd, peheader + 0x58, SEEK_SET) != 0)
     return false;
 
-  bfd_bwrite (&checksum, (bfd_size_type) 4, abfd);
-
-  return true;
+  return bfd_write (&checksum, 4, abfd) == 4;
 }
 
 #endif /* COFF_IMAGE_WITH_PE */
@@ -3747,8 +3811,8 @@ coff_write_object_contents (bfd * abfd)
 	  SCNHDR buff;
 	  bfd_size_type amt = bfd_coff_scnhsz (abfd);
 
-	  if (bfd_coff_swap_scnhdr_out (abfd, &section, &buff) == 0
-	      || bfd_bwrite (& buff, amt, abfd) != amt)
+	  if (bfd_coff_swap_scnhdr_out (abfd, &section, &buff, current) == 0
+	      || bfd_write (& buff, amt, abfd) != amt)
 	    return false;
 	}
 
@@ -3873,8 +3937,8 @@ coff_write_object_contents (bfd * abfd)
 	  scnhdr.s_nlnno = current->target_index;
 	  scnhdr.s_flags = STYP_OVRFLO;
 	  amt = bfd_coff_scnhsz (abfd);
-	  if (bfd_coff_swap_scnhdr_out (abfd, &scnhdr, &buff) == 0
-	      || bfd_bwrite (& buff, amt, abfd) != amt)
+	  if (bfd_coff_swap_scnhdr_out (abfd, &scnhdr, &buff, current) == 0
+	      || bfd_write (& buff, amt, abfd) != amt)
 	    return false;
 	}
     }
@@ -3883,16 +3947,28 @@ coff_write_object_contents (bfd * abfd)
 
 #if defined (COFF_GO32_EXE) || defined (COFF_GO32)
   /* Pad section headers.  */
-  if ((abfd->flags & EXEC_P) && abfd->sections != NULL)
+  if ((abfd->flags & EXEC_P) != 0)
     {
-      file_ptr cur_ptr = scn_base
-			 + abfd->section_count * bfd_coff_scnhsz (abfd);
-      long fill_size = (abfd->sections->filepos - cur_ptr);
-      bfd_byte *b = bfd_zmalloc (fill_size);
-      if (b)
+      asection *s = abfd->sections;
+      while (s != NULL && s->filepos == 0)
+	s = s->next;
+      if (s != NULL)
 	{
-	  bfd_bwrite (b, fill_size, abfd);
-	  free (b);
+	  file_ptr cur_ptr
+	    = scn_base + abfd->section_count * bfd_coff_scnhsz (abfd);
+	  file_ptr fill_size = s->filepos - cur_ptr;
+	  if (fill_size > 0)
+	    {
+	      bfd_byte *b = bfd_zmalloc (fill_size);
+	      if (!b)
+		return false;
+	      if (bfd_write (b, fill_size, abfd) != (ufile_ptr) fill_size)
+		{
+		  free (b);
+		  return false;
+		}
+	      free (b);
+	    }
 	}
     }
 #endif
@@ -3936,7 +4012,7 @@ coff_write_object_contents (bfd * abfd)
     internal_f.f_flags |= IMAGE_FILE_LARGE_ADDRESS_AWARE;
 #endif
 
-#if !defined(COFF_WITH_pex64) && !defined(COFF_WITH_peAArch64) && !defined(COFF_WITH_peLoongArch64)
+#if !defined(COFF_WITH_pex64) && !defined(COFF_WITH_peAArch64) && !defined(COFF_WITH_peLoongArch64) && !defined (COFF_WITH_peRiscV64)
 #ifdef COFF_WITH_PE
   internal_f.f_flags |= IMAGE_FILE_32BIT_MACHINE;
 #else
@@ -3991,6 +4067,11 @@ coff_write_object_contents (bfd * abfd)
 #endif
 
 #if defined(LOONGARCH64)
+#define __A_MAGIC_SET__
+    internal_a.magic = ZMAGIC;
+#endif
+
+#if defined(RISCV64)
 #define __A_MAGIC_SET__
     internal_a.magic = ZMAGIC;
 #endif
@@ -4230,7 +4311,7 @@ coff_write_object_contents (bfd * abfd)
 #endif
 
   /* Now write header.  */
-  if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0)
+  if (bfd_seek (abfd, 0, SEEK_SET) != 0)
     return false;
 
   {
@@ -4242,7 +4323,7 @@ coff_write_object_contents (bfd * abfd)
       return false;
 
     bfd_coff_swap_filehdr_out (abfd, & internal_f, buff);
-    amount = bfd_bwrite (buff, amount, abfd);
+    amount = bfd_write (buff, amount, abfd);
 
     free (buff);
 
@@ -4262,7 +4343,7 @@ coff_write_object_contents (bfd * abfd)
 	return false;
 
       coff_swap_aouthdr_out (abfd, & internal_a, buff);
-      amount = bfd_bwrite (buff, amount, abfd);
+      amount = bfd_write (buff, amount, abfd);
 
       free (buff);
 
@@ -4287,7 +4368,7 @@ coff_write_object_contents (bfd * abfd)
 	size = bfd_coff_aoutsz (abfd);
       else
 	size = SMALL_AOUTSZ;
-      if (bfd_bwrite (& buff, (bfd_size_type) size, abfd) != size)
+      if (bfd_write (&buff, size, abfd) != size)
 	return false;
     }
 #endif
@@ -4360,7 +4441,7 @@ coff_set_section_contents (bfd * abfd,
   if (count == 0)
     return true;
 
-  return bfd_bwrite (location, count, abfd) == count;
+  return bfd_write (location, count, abfd) == count;
 }
 
 static void *
@@ -4695,7 +4776,7 @@ coff_slurp_symbol_table (bfd * abfd)
 #endif
 #ifdef RS6000COFF_C
 	    case C_HIDEXT:
-#if ! defined _AIX52 && ! defined AIX_WEAK_SUPPORT
+#ifndef AIX_WEAK_SUPPORT
 	    case C_AIX_WEAKEXT:
 #endif
 #endif
@@ -5021,7 +5102,7 @@ coff_classify_symbol (bfd *abfd,
 #endif
 #ifdef RS6000COFF_C
     case C_HIDEXT:
-#if ! defined _AIX52 && ! defined AIX_WEAK_SUPPORT
+#ifndef AIX_WEAK_SUPPORT
     case C_AIX_WEAKEXT:
 #endif
 #endif
@@ -5138,6 +5219,12 @@ SUBSUBSECTION
 	final-linked object.  See @code{CALC_ADDEND}.
 */
 
+#ifdef COFF_WITH_PE
+#define COFF_PE_ADDEND_BIAS(ptr) 0 /* Symbol value not stored in raw data.  */
+#else
+#define COFF_PE_ADDEND_BIAS(ptr) ((ptr)->value)
+#endif
+
 #ifndef CALC_ADDEND
 #define CALC_ADDEND(abfd, ptr, reloc, cache_ptr)		\
   {								\
@@ -5154,7 +5241,8 @@ SUBSUBSECTION
       cache_ptr->addend = 0;					\
     else if (ptr && bfd_asymbol_bfd (ptr) == abfd		\
 	     && ptr->section != NULL)				\
-      cache_ptr->addend = - (ptr->section->vma + ptr->value);	\
+      cache_ptr->addend = - (ptr->section->vma			\
+			     + COFF_PE_ADDEND_BIAS (ptr));	\
     else							\
       cache_ptr->addend = 0;					\
   }
@@ -5223,7 +5311,7 @@ coff_slurp_reloc_table (bfd * abfd, sec_ptr asect, asymbol ** symbols)
 		/* xgettext:c-format */
 		(_("%pB: warning: illegal symbol index %ld in relocs"),
 		 abfd, dst.r_symndx);
-	      cache_ptr->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
+	      cache_ptr->sym_ptr_ptr = &bfd_abs_section_ptr->symbol;
 	      ptr = NULL;
 	    }
 	  else
@@ -5235,7 +5323,7 @@ coff_slurp_reloc_table (bfd * abfd, sec_ptr asect, asymbol ** symbols)
 	}
       else
 	{
-	  cache_ptr->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
+	  cache_ptr->sym_ptr_ptr = &bfd_abs_section_ptr->symbol;
 	  ptr = NULL;
 	}
 
@@ -5257,7 +5345,7 @@ coff_slurp_reloc_table (bfd * abfd, sec_ptr asect, asymbol ** symbols)
       RTYPE2HOWTO (cache_ptr, &dst);
 #endif	/* RELOC_PROCESSING */
 
-      if (cache_ptr->howto == NULL)
+      if (cache_ptr->howto == NULL || cache_ptr->howto->name == NULL)
 	{
 	  _bfd_error_handler
 	    /* xgettext:c-format */
@@ -5343,8 +5431,8 @@ coff_canonicalize_reloc (bfd * abfd,
   return section->reloc_count;
 }
 
-#ifndef coff_set_reloc
-#define coff_set_reloc _bfd_generic_set_reloc
+#ifndef coff_finalize_section_relocs
+#define coff_finalize_section_relocs _bfd_generic_finalize_section_relocs
 #endif
 
 #ifndef coff_reloc16_estimate
@@ -5421,10 +5509,6 @@ dummy_reloc16_extra_cases (bfd *abfd ATTRIBUTE_UNUSED,
 
 #ifndef coff_adjust_symndx
 #define coff_adjust_symndx NULL
-#endif
-
-#ifndef coff_link_add_one_symbol
-#define coff_link_add_one_symbol _bfd_generic_link_add_one_symbol
 #endif
 
 #ifndef coff_link_output_has_begun
@@ -5525,7 +5609,7 @@ static const bfd_coff_backend_data bfd_coff_std_swap_table ATTRIBUTE_UNUSED =
   coff_print_aux, coff_reloc16_extra_cases, coff_reloc16_estimate,
   coff_classify_symbol, coff_compute_section_file_positions,
   coff_start_final_link, coff_relocate_section, coff_rtype_to_howto,
-  coff_adjust_symndx, coff_link_add_one_symbol,
+  coff_adjust_symndx,
   coff_link_output_has_begun, coff_final_link_postscript,
   bfd_pe_print_pdata
 };
@@ -5566,7 +5650,7 @@ static const bfd_coff_backend_data ticoff0_swap_table =
   coff_print_aux, coff_reloc16_extra_cases, coff_reloc16_estimate,
   coff_classify_symbol, coff_compute_section_file_positions,
   coff_start_final_link, coff_relocate_section, coff_rtype_to_howto,
-  coff_adjust_symndx, coff_link_add_one_symbol,
+  coff_adjust_symndx,
   coff_link_output_has_begun, coff_final_link_postscript,
   bfd_pe_print_pdata
 };
@@ -5608,7 +5692,7 @@ static const bfd_coff_backend_data ticoff1_swap_table =
   coff_print_aux, coff_reloc16_extra_cases, coff_reloc16_estimate,
   coff_classify_symbol, coff_compute_section_file_positions,
   coff_start_final_link, coff_relocate_section, coff_rtype_to_howto,
-  coff_adjust_symndx, coff_link_add_one_symbol,
+  coff_adjust_symndx,
   coff_link_output_has_begun, coff_final_link_postscript,
   bfd_pe_print_pdata	/* huh */
 };
@@ -5740,8 +5824,8 @@ coff_bigobj_swap_aux_in (bfd *abfd,
 			 void * ext1,
 			 int type,
 			 int in_class,
-			 int indx,
-			 int numaux,
+			 int indx ATTRIBUTE_UNUSED,
+			 int numaux ATTRIBUTE_UNUSED,
 			 void * in1)
 {
   AUXENT_BIGOBJ *ext = (AUXENT_BIGOBJ *) ext1;
@@ -5753,14 +5837,7 @@ coff_bigobj_swap_aux_in (bfd *abfd,
   switch (in_class)
     {
     case C_FILE:
-      if (numaux > 1)
-	{
-	  if (indx == 0)
-	    memcpy (in->x_file.x_n.x_fname, ext->File.Name,
-		    numaux * sizeof (AUXENT_BIGOBJ));
-	}
-      else
-	memcpy (in->x_file.x_n.x_fname, ext->File.Name, sizeof (ext->File.Name));
+      memcpy (in->x_file.x_n.x_fname, ext->File.Name, sizeof (ext->File.Name));
       break;
 
     case C_STAT:
@@ -5858,7 +5935,7 @@ static const bfd_coff_backend_data bigobj_swap_table =
   coff_print_aux, coff_reloc16_extra_cases, coff_reloc16_estimate,
   coff_classify_symbol, coff_compute_section_file_positions,
   coff_start_final_link, coff_relocate_section, coff_rtype_to_howto,
-  coff_adjust_symndx, coff_link_add_one_symbol,
+  coff_adjust_symndx,
   coff_link_output_has_begun, coff_final_link_postscript,
   bfd_pe_print_pdata	/* huh */
 };
@@ -5940,15 +6017,11 @@ static const bfd_coff_backend_data bigobj_swap_table =
 #endif
 
 #ifndef coff_bfd_gc_sections
-#define coff_bfd_gc_sections		    bfd_coff_gc_sections
+#define coff_bfd_gc_sections		    _bfd_coff_gc_sections
 #endif
 
 #ifndef coff_bfd_lookup_section_flags
 #define coff_bfd_lookup_section_flags	    bfd_generic_lookup_section_flags
-#endif
-
-#ifndef coff_bfd_merge_sections
-#define coff_bfd_merge_sections		    bfd_generic_merge_sections
 #endif
 
 #ifndef coff_bfd_is_group_section
@@ -5956,7 +6029,7 @@ static const bfd_coff_backend_data bigobj_swap_table =
 #endif
 
 #ifndef coff_bfd_group_name
-#define coff_bfd_group_name		    bfd_coff_group_name
+#define coff_bfd_group_name		    _bfd_coff_group_name
 #endif
 
 #ifndef coff_bfd_discard_group
@@ -5980,6 +6053,13 @@ static const bfd_coff_backend_data bigobj_swap_table =
 #define coff_bfd_define_start_stop	    bfd_generic_define_start_stop
 #endif
 
+#ifdef COFF_WITH_PE
+#define PE_EXTRA_S_FLAGS (SEC_CODE | SEC_DATA | SEC_READONLY | SEC_LINK_ONCE \
+			  | SEC_LINK_DUPLICATES)
+#else
+#define PE_EXTRA_S_FLAGS 0
+#endif
+
 #define CREATE_BIG_COFF_TARGET_VEC(VAR, NAME, EXTRA_O_FLAGS, EXTRA_S_FLAGS, UNDER, ALTERNATIVE, SWAP_TABLE)	\
 const bfd_target VAR =							\
 {									\
@@ -5991,12 +6071,14 @@ const bfd_target VAR =							\
   (HAS_RELOC | EXEC_P | HAS_LINENO | HAS_DEBUG |			\
    HAS_SYMS | HAS_LOCALS | WP_TEXT | EXTRA_O_FLAGS),			\
   /* section flags */							\
-  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC | EXTRA_S_FLAGS),\
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC | EXTRA_S_FLAGS  \
+   | PE_EXTRA_S_FLAGS),                                                 \
   UNDER,			/* Leading symbol underscore.  */	\
   '/',				/* AR_pad_char.  */			\
   15,				/* AR_max_namelen.  */			\
   0,				/* match priority.  */			\
   TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */ \
+  TARGET_MERGE_SECTIONS,						\
 									\
   /* Data conversion functions.  */					\
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,				\
@@ -6053,17 +6135,19 @@ const bfd_target VAR =							\
   (HAS_RELOC | EXEC_P | HAS_LINENO | HAS_DEBUG |			\
    HAS_SYMS | HAS_LOCALS | WP_TEXT | EXTRA_O_FLAGS),			\
   /* section flags */							\
-  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC | EXTRA_S_FLAGS),\
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC | EXTRA_S_FLAGS  \
+   | PE_EXTRA_S_FLAGS),                                                 \
   UNDER,			/* Leading symbol underscore.  */	\
   '/',				/* AR_pad_char.  */			\
   15,				/* AR_max_namelen.  */			\
   0,				/* match priority.  */			\
   TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */ \
+  TARGET_MERGE_SECTIONS,						\
 									\
   /* Data conversion functions.  */					\
-  bfd_getb64, bfd_getb_signed_64, bfd_putb64,				\
-  bfd_getb32, bfd_getb_signed_32, bfd_putb32,				\
-  bfd_getb16, bfd_getb_signed_16, bfd_putb16,				\
+  bfd_getl64, bfd_getl_signed_64, bfd_putl64,				\
+  bfd_getl32, bfd_getl_signed_32, bfd_putl32,				\
+  bfd_getl16, bfd_getl_signed_16, bfd_putl16,				\
 									\
   /* Header conversion functions.  */					\
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,				\
@@ -6115,12 +6199,14 @@ const bfd_target VAR =							\
   (HAS_RELOC | EXEC_P | HAS_LINENO | HAS_DEBUG |			\
    HAS_SYMS | HAS_LOCALS | WP_TEXT | EXTRA_O_FLAGS),			\
 	/* section flags */						\
-  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC | EXTRA_S_FLAGS),\
+  (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC | EXTRA_S_FLAGS  \
+   | PE_EXTRA_S_FLAGS),                                                 \
   UNDER,			/* Leading symbol underscore.  */	\
   '/',				/* AR_pad_char.  */			\
   15,				/* AR_max_namelen.  */			\
   0,				/* match priority.  */			\
   TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */ \
+  TARGET_MERGE_SECTIONS,						\
 									\
   /* Data conversion functions.  */					\
   bfd_getl64, bfd_getl_signed_64, bfd_putl64,				\

@@ -1,5 +1,5 @@
 /* Declarations for Intel 80386 opcode table
-   Copyright (C) 2007-2023 Free Software Foundation, Inc.
+   Copyright (C) 2007-2026 Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -26,7 +26,7 @@
 
 /* Position of cpu flags bitfiled.  */
 
-enum
+enum i386_cpu
 {
   /* i186 or better required */
   Cpu186 = 0,
@@ -52,10 +52,6 @@ enum
   CpuSYSCALL,
   /* Floating point support required */
   Cpu8087,
-  /* i287 support required */
-  Cpu287,
-  /* i387 support required */
-  Cpu387,
   /* i686 and floating point support required */
   Cpu687,
   /* SSE3 and floating point support required */
@@ -66,14 +62,20 @@ enum
   CpuSSE,
   /* SSE2 support required */
   CpuSSE2,
-  /* 3dnow! support required */
-  Cpu3dnow,
-  /* 3dnow! Extensions support required */
-  Cpu3dnowA,
   /* SSE3 support required */
   CpuSSE3,
   /* VIA PadLock required */
   CpuPadLock,
+  /* Zhaoxin PadLock RNG2 required */
+  CpuPadLockRNG2,
+  /* Zhaoxin PadLock PHE2 required */
+  CpuPadLockPHE2,
+  /* Zhaoxin PadLock XMODX required */
+  CpuPadLockXMODX,
+  /* Zhaoxin GMI SM2 required */
+  CpuGMISM2,
+  /* Zhaoxin GMI CCS required */
+  CpuGMICCS,
   /* AMD Secure Virtual Machine Ext-s required */
   CpuSVME,
   /* VMX Instructions required */
@@ -94,12 +96,8 @@ enum
   CpuSSE4_1,
   /* SSE4.2 support required */
   CpuSSE4_2,
-  /* AVX support required */
-  CpuAVX,
   /* AVX2 support required */
   CpuAVX2,
-  /* Intel AVX-512 Foundation Instructions support required */
-  CpuAVX512F,
   /* Intel AVX-512 Conflict Detection Instructions support required */
   CpuAVX512CD,
   /* Intel AVX-512 Exponential and Reciprocal Instructions support
@@ -107,8 +105,6 @@ enum
   CpuAVX512ER,
   /* Intel AVX-512 Prefetch Instructions support required */
   CpuAVX512PF,
-  /* Intel AVX-512 VL Instructions support required.  */
-  CpuAVX512VL,
   /* Intel AVX-512 DQ Instructions support required.  */
   CpuAVX512DQ,
   /* Intel AVX-512 BW Instructions support required.  */
@@ -121,8 +117,8 @@ enum
   CpuXsaveopt,
   /* AES support required */
   CpuAES,
-  /* PCLMUL support required */
-  CpuPCLMUL,
+  /* PCLMULQDQ support required */
+  CpuPCLMULQDQ,
   /* FMA support required */
   CpuFMA,
   /* FMA4 support required */
@@ -153,8 +149,6 @@ enum
   CpuF16C,
   /* Intel BMI2 support required */
   CpuBMI2,
-  /* HLE support required */
-  CpuHLE,
   /* RTM support required */
   CpuRTM,
   /* INVPCID Instructions required */
@@ -163,8 +157,6 @@ enum
   CpuVMFUNC,
   /* Intel MPX Instructions required  */
   CpuMPX,
-  /* 64bit support available, used by -march= in assembler.  */
-  CpuLM,
   /* RDRSEED instruction required.  */
   CpuRDSEED,
   /* Multi-presisionn add-carry instructions are required.  */
@@ -175,6 +167,12 @@ enum
   CpuSMAP,
   /* SHA instructions required.  */
   CpuSHA,
+  /* SHA512 instructions required.  */
+  CpuSHA512,
+  /* SM3 instructions required.  */
+  CpuSM3,
+  /* SM4 instructions required.  */
+  CpuSM4,
   /* CLFLUSHOPT instruction required */
   CpuClflushOpt,
   /* XSAVES/XRSTORS instruction required */
@@ -207,6 +205,8 @@ enum
   CpuAVX512_BF16,
   /* Intel AVX-512 VP2INTERSECT Instructions support required.  */
   CpuAVX512_VP2INTERSECT,
+  /* AMD AVX-512 BMM Instructions support required.  */
+  CpuAVX512_BMM,
   /* TDX Instructions support required.  */
   CpuTDX,
   /* Intel AVX VNNI Instructions support required.  */
@@ -219,6 +219,8 @@ enum
   CpuAVX_IFMA,
   /* Intel AVX VNNI-INT8 Instructions support required.  */
   CpuAVX_VNNI_INT8,
+  /* Intel AVX VNNI-INT16 Instructions support required.  */
+  CpuAVX_VNNI_INT16,
   /* Intel CMPccXADD instructions support required.  */
   CpuCMPCCXADD,
   /* Intel WRMSRNS Instructions support required */
@@ -233,6 +235,12 @@ enum
   CpuFRED,
   /* lkgs instruction required */
   CpuLKGS,
+  /* Intel USER_MSR Instruction support required.  */
+  CpuUSER_MSR,
+  /* Intel MSR_IMM Instructions support required.  */
+  CpuMSR_IMM,
+  /* Intel MOVRS Instructions support required.  */
+  CpuMOVRS,
   /* mwaitx instruction required */
   CpuMWAITX,
   /* Clzero instruction required */
@@ -254,6 +262,14 @@ enum
   CpuAMX_FP16,
   /* AMX-COMPLEX instructions required.  */
   CpuAMX_COMPLEX,
+  /* AMX-TF32 Instructions support required.  */
+  CpuAMX_TF32,
+  /* AMX-FP8 instructions required */
+  CpuAMX_FP8,
+  /* AMX-MOVRS Instructions support required.  */
+  CpuAMX_MOVRS,
+  /* AMX-AVX512 Instructions support required.  */
+  CpuAMX_AVX512,
   /* AMX-TILE instructions required */
   CpuAMX_TILE,
   /* GFNI instructions required */
@@ -266,6 +282,8 @@ enum
   CpuWBNOINVD,
   /* PCONFIG instructions required */
   CpuPCONFIG,
+  /* PBNDKB instructions required.  */
+  CpuPBNDKB,
   /* WAITPKG instructions required */
   CpuWAITPKG,
   /* UINTR instructions required */
@@ -302,13 +320,48 @@ enum
   CpuSNP,
   /* RMPQUERY instruction required */
   CpuRMPQUERY,
+  /* RMPREAD instruction required */
+  CpuRMPREAD,
+  /* Intel APX New Conditional Instructions support required.  */
+  CpuAPX_NCI,
+  /* Intel APX Non-Destructive Destination support required.  */
+  CpuAPX_NDD,
+  /* Intel APX No-Flags-update support required.  */
+  CpuAPX_NF,
 
-  /* NOTE: These last three items need to remain last and in this order. */
+  /* NOTE: These items, which can be combined with other ISA flags above, need
+     to remain second to last and in sync with CPU_FLAGS_COMMON. */
 
+  /* i287 support required */
+  Cpu287,
+  CpuAttrEnums = Cpu287,
+  /* i387 support required */
+  Cpu387,
+  /* 3dnow! support required */
+  Cpu3dnow,
+  /* 3dnow! Extensions support required */
+  Cpu3dnowA,
   /* 64bit support required  */
   Cpu64,
+  /* AVX support required */
+  CpuAVX,
+  /* HLE support required */
+  CpuHLE,
+  /* Intel AVX-512 Foundation Instructions support required */
+  CpuAVX512F,
+  /* Intel AVX-512 VL Instructions support required.  */
+  CpuAVX512VL,
+  /* Intel APX_F Instructions support required.  */
+  CpuAPX_F,
+  /* Intel AVX10.2 Instructions support required.  */
+  CpuAVX10_2,
+  /* Intel AMX-TRANSPOSE Instructions support required.  */
+  CpuAMX_TRANSPOSE,
   /* Not supported in the 64bit mode  */
   CpuNo64,
+
+  /* NOTE: This item needs to remain last. */
+
   /* The last bitfield in i386_cpu_flags.  */
   CpuMax = CpuNo64
 };
@@ -318,9 +371,45 @@ enum
 #define CpuNumOfBits \
   (CpuNumOfUints * sizeof (unsigned int) * CHAR_BIT)
 
-/* If you get a compiler error for zero width of the unused field,
-   comment it out.  */
+#define CpuIsaBits 8
+#define CpuAttrNumOfUints \
+  ((CpuIsaBits + CpuMax - CpuAttrEnums) / sizeof (unsigned int) / CHAR_BIT + 1)
+#define CpuAttrNumOfBits \
+  (CpuAttrNumOfUints * sizeof (unsigned int) * CHAR_BIT)
+
+/* If you get a compiler error for zero width of an unused field,
+   comment the respective one out.  */
 #define CpuUnused	(CpuMax + 1)
+#define CpuAttrUnused	(CpuIsaBits + CpuMax + 1 - CpuAttrEnums)
+
+#define CPU_FLAGS_COMMON \
+      unsigned int cpu287:1, \
+		   cpu387:1, \
+		   cpu3dnow:1, \
+		   cpu3dnowa:1, \
+		   cpu64:1, \
+		   cpuavx:1, \
+		   cpuhle:1, \
+		   cpuavx512f:1, \
+		   cpuavx512vl:1, \
+		   cpuapx_f:1, \
+		   cpuavx10_2:1, \
+		   cpuamx_transpose:1, \
+      /* NOTE: This field needs to remain last. */ \
+		   cpuno64:1
+
+typedef union i386_cpu_attr
+{
+  struct
+    {
+      unsigned int isa:CpuIsaBits;
+      CPU_FLAGS_COMMON;
+#ifdef CpuAttrUnused
+      unsigned int unused:(CpuAttrNumOfBits - CpuAttrUnused);
+#endif
+    } bitfield;
+  unsigned int array[CpuAttrNumOfUints];
+} i386_cpu_attr;
 
 /* We can check if an instruction is available with array instead
    of bitfield. */
@@ -340,17 +429,18 @@ typedef union i386_cpu_flags
       unsigned int cpunop:1;
       unsigned int cpusyscall:1;
       unsigned int cpu8087:1;
-      unsigned int cpu287:1;
-      unsigned int cpu387:1;
       unsigned int cpu687:1;
       unsigned int cpufisttp:1;
       unsigned int cpummx:1;
       unsigned int cpusse:1;
       unsigned int cpusse2:1;
-      unsigned int cpua3dnow:1;
-      unsigned int cpua3dnowa:1;
       unsigned int cpusse3:1;
       unsigned int cpupadlock:1;
+      unsigned int cpupadlockrng2:1;
+      unsigned int cpupadlockphe2:1;
+      unsigned int cpupadlockxmodx:1;
+      unsigned int cpugmism2:1;
+      unsigned int cpugmiccs:1;
       unsigned int cpusvme:1;
       unsigned int cpuvmx:1;
       unsigned int cpusmx:1;
@@ -361,20 +451,17 @@ typedef union i386_cpu_flags
       unsigned int cpumonitor:1;
       unsigned int cpusse4_1:1;
       unsigned int cpusse4_2:1;
-      unsigned int cpuavx:1;
       unsigned int cpuavx2:1;
-      unsigned int cpuavx512f:1;
       unsigned int cpuavx512cd:1;
       unsigned int cpuavx512er:1;
       unsigned int cpuavx512pf:1;
-      unsigned int cpuavx512vl:1;
       unsigned int cpuavx512dq:1;
       unsigned int cpuavx512bw:1;
       unsigned int cpuiamcu:1;
       unsigned int cpuxsave:1;
       unsigned int cpuxsaveopt:1;
       unsigned int cpuaes:1;
-      unsigned int cpupclmul:1;
+      unsigned int cpupclmulqdq:1;
       unsigned int cpufma:1;
       unsigned int cpufma4:1;
       unsigned int cpuxop:1;
@@ -390,17 +477,18 @@ typedef union i386_cpu_flags
       unsigned int cpurdrnd:1;
       unsigned int cpuf16c:1;
       unsigned int cpubmi2:1;
-      unsigned int cpuhle:1;
       unsigned int cpurtm:1;
       unsigned int cpuinvpcid:1;
       unsigned int cpuvmfunc:1;
       unsigned int cpumpx:1;
-      unsigned int cpulm:1;
       unsigned int cpurdseed:1;
       unsigned int cpuadx:1;
       unsigned int cpuprfchw:1;
       unsigned int cpusmap:1;
       unsigned int cpusha:1;
+      unsigned int cpusha512:1;
+      unsigned int cpusm3:1;
+      unsigned int cpusm4:1;
       unsigned int cpuclflushopt:1;
       unsigned int cpuxsaves:1;
       unsigned int cpuxsavec:1;
@@ -417,12 +505,14 @@ typedef union i386_cpu_flags
       unsigned int cpuavx512_bitalg:1;
       unsigned int cpuavx512_bf16:1;
       unsigned int cpuavx512_vp2intersect:1;
+      unsigned int cpuavx512_bmm:1;
       unsigned int cputdx:1;
       unsigned int cpuavx_vnni:1;
       unsigned int cpuavx512_fp16:1;
       unsigned int cpuprefetchi:1;
       unsigned int cpuavx_ifma:1;
       unsigned int cpuavx_vnni_int8:1;
+      unsigned int cpuavx_vnni_int16:1;
       unsigned int cpucmpccxadd:1;
       unsigned int cpuwrmsrns:1;
       unsigned int cpumsrlist:1;
@@ -430,6 +520,9 @@ typedef union i386_cpu_flags
       unsigned int cpurao_int:1;
       unsigned int cpufred:1;
       unsigned int cpulkgs:1;
+      unsigned int cpuuser_msr:1;
+      unsigned int cpumsr_imm:1;
+      unsigned int cpumovrs:1;
       unsigned int cpumwaitx:1;
       unsigned int cpuclzero:1;
       unsigned int cpuospke:1;
@@ -441,12 +534,17 @@ typedef union i386_cpu_flags
       unsigned int cpuamx_bf16:1;
       unsigned int cpuamx_fp16:1;
       unsigned int cpuamx_complex:1;
+      unsigned int cpuamx_tf32:1;
+      unsigned int cpuamx_fp8:1;
+      unsigned int cpuamx_movrs:1;
+      unsigned int cpuamx_avx512:1;
       unsigned int cpuamx_tile:1;
       unsigned int cpugfni:1;
       unsigned int cpuvaes:1;
       unsigned int cpuvpclmulqdq:1;
       unsigned int cpuwbnoinvd:1;
       unsigned int cpupconfig:1;
+      unsigned int cpupbndkb:1;
       unsigned int cpuwaitpkg:1;
       unsigned int cpuuintr:1;
       unsigned int cpucldemote:1;
@@ -465,9 +563,11 @@ typedef union i386_cpu_flags
       unsigned int cputlbsync:1;
       unsigned int cpusnp:1;
       unsigned int cpurmpquery:1;
-      /* NOTE: These last three fields need to remain last and in this order. */
-      unsigned int cpu64:1;
-      unsigned int cpuno64:1;
+      unsigned int cpurmpread:1;
+      unsigned int cpuapx_nci:1;
+      unsigned int cpuapx_ndd:1;
+      unsigned int cpuapx_nf:1;
+      CPU_FLAGS_COMMON;
 #ifdef CpuUnused
       unsigned int unused:(CpuNumOfBits - CpuUnused);
 #endif
@@ -520,19 +620,27 @@ enum
 #define UGH 3
   /* An implicit xmm0 as the first operand */
 #define IMPLICIT_1ST_XMM0 4
-  /* The second operand must be a vector register, {x,y,z}mmN, where N is a multiple of 4.
-     It implicitly denotes the register group of {x,y,z}mmN - {x,y,z}mm(N + 3).
+  /* One of the operands denotes a sequence of registers, with insn-dependent
+     constraint on the first register number.  It implicitly denotes e.g. the
+     register group of {x,y,z}mmN - {x,y,z}mm(N + 3), in which case N ought to
+     be a multiple of 4.
    */
-#define IMPLICIT_QUAD_GROUP 5
-  /* Two source operands are swapped.  */
-#define SWAP_SOURCES 6
+#define IMPLICIT_GROUP 5
   /* Default mask isn't allowed.  */
-#define NO_DEFAULT_MASK 7
+#define NO_DEFAULT_MASK 6
   /* Address prefix changes register operand */
-#define ADDR_PREFIX_OP_REG 8
+#define ADDR_PREFIX_OP_REG 7
   /* Instrucion requires that destination must be distinct from source
      registers.  */
-#define DISTINCT_DEST 9
+#define DISTINCT_DEST 8
+  /* Instruction updates stack pointer implicitly.  */
+#define IMPLICIT_STACK_OP 9
+  /* Instruction zeroes upper part of register.  */
+#define ZERO_UPPER 10
+  /* Instruction support SCC.  */
+#define SCC 11
+  /* Instruction requires EVEX.NF to be 1.  */
+#define EVEX_NF 12
   OperandConstraint,
   /* instruction ignores operand size prefix and in Intel mode ignores
      mnemonic size suffix check.  */
@@ -567,13 +675,14 @@ enum
   BNDPrefixOk,
 #define PrefixNone		0
 #define PrefixRep		1
-#define PrefixHLERelease	2 /* Okay with an XRELEASE (0xf3) prefix. */
-#define PrefixNoTrack		3
+#define PrefixRepe		2
+#define PrefixHLERelease	3 /* Okay with an XRELEASE (0xf3) prefix. */
+#define PrefixNoTrack		4
   /* Prefixes implying "LOCK okay" must come after Lock. All others have
      to come before.  */
-#define PrefixLock		4
-#define PrefixHLELock		5 /* Okay with a LOCK prefix.  */
-#define PrefixHLEAny		6 /* Okay with or without a LOCK prefix.  */
+#define PrefixLock		5
+#define PrefixHLELock		6 /* Okay with a LOCK prefix.  */
+#define PrefixHLEAny		7 /* Okay with or without a LOCK prefix.  */
   PrefixOk,
   /* opcode is a prefix */
   IsPrefix,
@@ -591,9 +700,14 @@ enum
 #define VEXScalar	3
   Vex,
   /* How to encode VEX.vvvv:
-     0: VEX.vvvv must be 1111b.
-     1: VEX.vvvv encodes one of the register operands.
+     1: VEX.vvvv encodes the src1 register operand.
+     2: VEX.vvvv encodes the src2 register operand.
+     3: VEX.vvvv encodes the dest register operand.
    */
+#define VexVVVV_SRC1   1
+#define VexVVVV_SRC2   2
+#define VexVVVV_DST    3
+
   VexVVVV,
   /* How the VEX.W bit is used:
      0: Set by the REX.W bit.
@@ -676,12 +790,15 @@ enum
   /* Support encoding optimization.  */
   Optimize,
 
-  /* AT&T mnemonic.  */
-  ATTMnemonic,
-  /* AT&T syntax.  */
-  ATTSyntax,
-  /* Intel syntax.  */
-  IntelSyntax,
+  /* Language dialect.  NOTE: Order matters!  */
+#define INTEL_SYNTAX 1
+#define ATT_SYNTAX   2
+#define ATT_MNEMONIC 3
+  Dialect,
+
+  /* Mnemonic suffix permitted in Intel syntax.  */
+  IntelSuffix,
+
   /* ISA64: Don't change the order without other code adjustments.
 	0: Common to AMD64 and Intel64.
 	1: AMD64.
@@ -692,6 +809,17 @@ enum
 #define INTEL64		2
 #define INTEL64ONLY	3
   ISA64,
+
+  /* egprs (r16-r31) on instruction illegal. We also use it to judge
+     whether the instruction supports pseudo-prefix {rex2}.  */
+  NoEgpr,
+
+  /* No CSPAZO flags update indication.  */
+  NF,
+
+  /* Instrucion requires REX2 prefix.  */
+  Rex2,
+
   /* The last bitfield in i386_opcode_modifier.  */
   Opcode_Modifier_Num
 };
@@ -722,7 +850,7 @@ typedef struct i386_opcode_modifier
   unsigned int immext:1;
   unsigned int norex64:1;
   unsigned int vex:2;
-  unsigned int vexvvvv:1;
+  unsigned int vexvvvv:2;
   unsigned int vexw:2;
   unsigned int opcodeprefix:2;
   unsigned int sib:3;
@@ -734,10 +862,12 @@ typedef struct i386_opcode_modifier
   unsigned int sae:1;
   unsigned int disp8memshift:3;
   unsigned int optimize:1;
-  unsigned int attmnemonic:1;
-  unsigned int attsyntax:1;
-  unsigned int intelsyntax:1;
+  unsigned int dialect:2;
+  unsigned int intelsuffix:1;
   unsigned int isa64:2;
+  unsigned int noegpr:1;
+  unsigned int nf:1;
+  unsigned int rex2:1;
 } i386_opcode_modifier;
 
 /* Operand classes.  */
@@ -746,8 +876,9 @@ typedef struct i386_opcode_modifier
 enum operand_class
 {
   ClassNone,
-  Reg, /* GPRs and FP regs, distinguished by operand size */
+  Reg, /* GPRs, distinguished by operand size */
   SReg, /* Segment register */
+  RegFP, /* FP regs */
   RegCR, /* Control register */
   RegDR, /* Debug register */
   RegTR, /* Test register */
@@ -908,13 +1039,15 @@ typedef struct insn_template
   /* opcode space */
   unsigned int opcode_space:4;
   /* Opcode encoding space (values chosen to be usable directly in
-     VEX/XOP mmmmm and EVEX mm fields):
+     VEX/XOP mmmmm and EVEX mmm fields):
      0: Base opcode space.
      1: 0F opcode prefix / space.
      2: 0F38 opcode prefix / space.
      3: 0F3A opcode prefix / space.
-     5: EVEXMAP5 opcode prefix / space.
-     6: EVEXMAP6 opcode prefix / space.
+     4: MAP4 opcode prefix / space.
+     5: MAP5 opcode prefix / space.
+     6: MAP6 opcode prefix / space.
+     7: MAP7 opcode prefix / space.
      8: XOP 08 opcode space.
      9: XOP 09 opcode space.
      A: XOP 0A opcode space.
@@ -923,8 +1056,10 @@ typedef struct insn_template
 #define SPACE_0F	1
 #define SPACE_0F38	2
 #define SPACE_0F3A	3
-#define SPACE_EVEXMAP5	5
-#define SPACE_EVEXMAP6	6
+#define SPACE_MAP4	4
+#define SPACE_MAP5	5
+#define SPACE_MAP6	6
+#define SPACE_MAP7	7
 #define SPACE_XOP08	8
 #define SPACE_XOP09	9
 #define SPACE_XOP0A	0xA
@@ -950,15 +1085,18 @@ typedef struct insn_template
 #define Prefix_VEX3		6	/* {vex3} */
 #define Prefix_EVEX		7	/* {evex} */
 #define Prefix_REX		8	/* {rex} */
-#define Prefix_NoOptimize	9	/* {nooptimize} */
+#define Prefix_REX2		9	/* {rex2} */
+#define Prefix_NoOptimize	10	/* {nooptimize} */
+#define Prefix_NF		11	/* {nf} */
+#define Prefix_NoImm8s		12	/* {noimm8s} */
 
   /* the bits in opcode_modifier are used to generate the final opcode from
      the base_opcode.  These bits also are used to detect alternate forms of
      the same instruction */
   i386_opcode_modifier opcode_modifier;
 
-  /* cpu feature flags */
-  i386_cpu_flags cpu_flags;
+  /* cpu feature attributes */
+  i386_cpu_attr cpu, cpu_any;
 
   /* operand_types[i] describes the type of operand i.  This is made
      by OR'ing together all of the possible type masks.  (e.g.
@@ -977,13 +1115,14 @@ typedef struct
 #define RegRex	    0x1  /* Extended register.  */
 #define RegRex64    0x2  /* Extended 8 bit register.  */
 #define RegVRex	    0x4  /* Extended vector register.  */
+#define RegRex2	    0x8  /* Extended GPRs R16–R31 register.  */
   unsigned char reg_num;
 #define RegIP	((unsigned char ) ~0)
 /* EIZ and RIZ are fake index registers.  */
 #define RegIZ	(RegIP - 1)
 /* FLAT is a fake segment register (Intel mode).  */
 #define RegFlat     ((unsigned char) ~0)
-  signed char dw2_regnum[2];
-#define Dw2Inval (-1)
+  unsigned char dw2_regnum[2];
+#define Dw2Inval 0xff
 }
 reg_entry;

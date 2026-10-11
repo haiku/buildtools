@@ -12,7 +12,6 @@ archive64.c
 archures.c
 bfd.c
 bfdio.c
-bfdwin.c
 binary.c
 cache.c
 cf-i386lynx.c
@@ -69,6 +68,7 @@ cpu-ia64.c
 cpu-iamcu.c
 cpu-ip2k.c
 cpu-iq2000.c
+cpu-kvx.c
 cpu-lm32.c
 cpu-loongarch.c
 cpu-m10200.c
@@ -92,7 +92,6 @@ cpu-msp430.c
 cpu-mt.c
 cpu-nds32.c
 cpu-nfp.c
-cpu-nios2.c
 cpu-ns32k.c
 cpu-or1k.c
 cpu-pdp11.c
@@ -133,6 +132,7 @@ ecoff.c
 ecofflink.c
 ecoffswap.h
 elf-attrs.c
+elf-attrs.h
 elf-bfd.h
 elf-eh-frame.c
 elf-hppa.h
@@ -141,8 +141,6 @@ elf-linker-x86.h
 elf-linux-core.h
 elf-m10200.c
 elf-m10300.c
-elf-nacl.c
-elf-nacl.h
 elf-properties.c
 elf-s390.h
 elf-sframe.c
@@ -199,8 +197,6 @@ elf32-msp430.c
 elf32-mt.c
 elf32-nds32.c
 elf32-nds32.h
-elf32-nios2.c
-elf32-nios2.h
 elf32-or1k.c
 elf32-pj.c
 elf32-ppc.c
@@ -261,6 +257,7 @@ elfxx-aarch64.c
 elfxx-aarch64.h
 elfxx-ia64.c
 elfxx-ia64.h
+elfxx-kvx.c
 elfxx-loongarch.c
 elfxx-loongarch.h
 elfxx-mips.c
@@ -272,12 +269,12 @@ elfxx-sparc.h
 elfxx-tilegx.c
 elfxx-tilegx.h
 elfxx-x86.c
-elfxx-x86.c
 elfxx-x86.h
 format.c
 genlink.h
 go32stub.h
 hash.c
+hidden.h
 hpux-core.c
 i386aout.c
 i386bsd.c
@@ -329,6 +326,7 @@ pei-i386.c
 pei-ia64.c
 pei-loongarch64.c
 pei-mcore.c
+pei-riscv64.c
 pei-sh.c
 pei-x86_64.c
 peicode.h

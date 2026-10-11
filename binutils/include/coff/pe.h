@@ -1,6 +1,6 @@
 /* pe.h  -  PE COFF header information
 
-   Copyright (C) 1999-2023 Free Software Foundation, Inc.
+   Copyright (C) 1999-2026 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -156,6 +156,8 @@
 #define IMAGE_FILE_MACHINE_R10000            0x0168
 #define IMAGE_FILE_MACHINE_R3000             0x0162
 #define IMAGE_FILE_MACHINE_R4000             0x0166
+#define IMAGE_FILE_MACHINE_RISCV32           0x5032
+#define IMAGE_FILE_MACHINE_RISCV64           0x5064
 #define IMAGE_FILE_MACHINE_SH3               0x01a2
 #define IMAGE_FILE_MACHINE_SH3DSP            0x01a3
 #define IMAGE_FILE_MACHINE_SH3E              0x01a4
@@ -218,7 +220,7 @@ struct external_PEI_filehdr
   char e_oeminfo[2];		/* OEM information; e_oemid specific, 0x0.  */
   char e_res2[10][2];		/* Reserved words, all 0x0.  */
   char e_lfanew[4];		/* File address of new exe header, usually 0x80.  */
-  char dos_message[16][4];	/* Other stuff, always follow DOS header.  */
+  char dos_message[64];		/* Other stuff, always follow DOS header.  */
 
   /* Note: additional bytes may be inserted before the signature.  Use
    the e_lfanew field to find the actual location of the NT signature.  */
@@ -262,7 +264,7 @@ typedef struct
   char  MinorImageVersion[2];
   char  MajorSubsystemVersion[2];
   char  MinorSubsystemVersion[2];
-  char  Reserved1[4];
+  char  Win32Version[4];
   char  SizeOfImage[4];
   char  SizeOfHeaders[4];
   char  CheckSum[4];
@@ -301,7 +303,7 @@ typedef struct
   char  MinorImageVersion[2];
   char  MajorSubsystemVersion[2];
   char  MinorSubsystemVersion[2];
-  char  Reserved1[4];
+  char  Win32Version[4];
   char  SizeOfImage[4];
   char  SizeOfHeaders[4];
   char  CheckSum[4];
@@ -336,6 +338,7 @@ typedef struct
 #define IMPORT_NAME		1
 #define IMPORT_NAME_NOPREFIX	2
 #define IMPORT_NAME_UNDECORATE	3
+#define IMPORT_NAME_EXPORTAS	4
 
 /* Weak external characteristics.  */
 #define IMAGE_WEAK_EXTERN_SEARCH_NOLIBRARY	1

@@ -1,5 +1,5 @@
 /* BFD back-end for LoongArch64 COFF files.
-   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+   Copyright (C) 2022-2026 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -18,15 +18,10 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-
-#ifndef COFF_WITH_peLoongArch64
-#define COFF_WITH_peLoongArch64
+#ifndef COFF_WITH_PE
+#error non-PE COFF unsupported
 #endif
 
-/* Note we have to make sure not to include headers twice.
-   Not all headers are wrapped in #ifdef guards, so we define
-   PEI_HEADERS to prevent double including here.  */
-#ifndef PEI_HEADERS
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
@@ -35,9 +30,6 @@
 #include "coff/pe.h"
 #include "libcoff.h"
 #include "libiberty.h"
-#endif
-
-#include "libcoff.h"
 
 /* The page size is a guess based on ELF.  */
 
@@ -123,6 +115,7 @@ const bfd_target
   15,				/* Ar_max_namelen.  */
   0,				/* match priority.  */
   TARGET_KEEP_UNUSED_SECTION_SYMBOLS, /* keep unused section symbols.  */
+  TARGET_MERGE_SECTIONS,
 
      /* Data conversion functions.  */
      bfd_getl64, bfd_getl_signed_64, bfd_putl64,

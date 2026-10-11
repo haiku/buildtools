@@ -1,4 +1,4 @@
-#   Copyright (C) 2018-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2018-2026 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,8 @@ set dot ""
 set exe [exeext]
 
 # powerpc64 function symbols are on descriptors rather than code.
-if [istarget powerpc64-*-*] {
+# MUSL uses the ELFv2 ABI for PowerPC, so the problem does not apply there.
+if { [istarget powerpc64-*-*] && ![istarget powerpc64-*-musl] } {
     set opts --synthetic
     set dot {\.}
 }

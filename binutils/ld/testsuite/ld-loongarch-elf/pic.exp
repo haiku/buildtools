@@ -1,5 +1,5 @@
 # Expect script for LoongArch ELF linker tests
-#   Copyright (C) 2022-2023 Free Software Foundation, Inc.
+#   Copyright (C) 2022-2026 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -93,17 +93,6 @@ set link_tests [list \
     "nopic-global" \
   ] \
   [list \
-    "$testname readelf -s/-r nopic-global-so" \
-    "-L./tmpdir -lnopic-global -L/usr/lib -lc" "" \
-    "" \
-    {nopic-global.s} \
-      [list \
-	[list readelf -s nopic-global-so.sd] \
-	[list readelf -r nopic-global-so.rd] \
-      ] \
-    "nopic-global-so" \
-  ] \
-  [list \
     "$testname readelf -s/-x nopic-weak-global" \
     "-T pic.ld" "" \
     "" \
@@ -114,28 +103,48 @@ set link_tests [list \
       ] \
     "nopic-weak-global" \
   ] \
+]
+
+# Since the c library path may be different in different
+# Distributions, the test program can link to the c library
+# using the gcc instead of ld to avoid system impact.
+run_ld_link_tests $link_tests
+
+
+if [istarget "loongarch64-*-*"] {
+set link_tests_libc [list \
+  [list \
+    "$testname readelf -s/-r nopic-global-so" \
+    "-Wl,--no-as-needed" "" \
+    {nopic-global.s} \
+    {{readelf {-s} nopic-global-so.sd} \
+     {readelf {-r} nopic-global-so.rd}} \
+    "nopic-global-so" \
+    "" "-L./tmpdir -lnopic-global" \
+  ] \
   [list \
     "$testname readelf -s/-x nopic-weak-global-so" \
-    "-L./tmpdir -lnopic-global -L/usr/lib -lc" "" \
-    "" \
+    "-Wl,--no-as-needed" "" \
     {nopic-weak-global.s} \
-      [list \
-	[list readelf -s nopic-weak-global-so.sd] \
-	[list readelf -r nopic-weak-global-so.rd] \
-      ] \
+    {{readelf {-s} nopic-weak-global-so.sd} \
+     {readelf {-r} nopic-weak-global-so.rd}} \
     "nopic-weak-global-so" \
+    "" "-L./tmpdir -lnopic-global" \
   ] \
 ]
 
+
 #  0:name
-#  1:ld/ar leading options, placed before object files
-#  2:ld/ar trailing options, placed after object files
-#  3:assembler options
-#  4:filenames of assembler files
-#  5:list of actions, options and expected outputs.
-#  6:name of output file
-#  7:compiler flags (optional)
-run_ld_link_tests $link_tests
+#  1:leading ld or ar options
+#  2:compile options
+#  3:filenames of source files
+#  4:action and options.
+#  5:name of output file
+#  6:language (optional)
+#  7:trailing ld options (optional), placed after object files
+run_cc_link_tests $link_tests_libc
+
+
 
 set testname "nopic link exec test"
 
@@ -163,10 +172,11 @@ set link_exec_tests [list \
   ] \
   [list \
     "$testname" \
-    "-L./tmpdir -lnopic-global -lc -Wl,-rpath=./tmpdir -no-pie" "" \
+    "-Wl,--no-as-needed" "" \
     { nopic-global.s }   \
     "nopic-global-so" \
-    "nopic-global.out" \
+    "nopic-global.out" "" "" "" \
+    "-L./tmpdir -lnopic-global -lc -Wl,-rpath=./tmpdir -no-pie" \
   ] \
   [list \
     "$testname" \
@@ -177,10 +187,11 @@ set link_exec_tests [list \
   ] \
   [list \
     "$testname" \
-    "-L./tmpdir -lnopic-global -lc -Wl,-rpath=./tmpdir -no-pie" "" \
+    "-Wl,--no-as-needed" "" \
     { nopic-weak-global.s }   \
     "nopic-weak-global-so" \
-    "nopic-weak-global.out" \
+    "nopic-weak-global.out" "" "" "" \
+    "-L./tmpdir -lnopic-global -lc -Wl,-rpath=./tmpdir -no-pie" \
   ] \
 ]
 
@@ -197,6 +208,6 @@ set link_exec_tests [list \
 #   8:linker warning (optional)
 #   9:ld trailing options, placed after object files (optional)
 run_ld_link_exec_tests $link_exec_tests
-
+}
 
 #set verbose  old_verbose

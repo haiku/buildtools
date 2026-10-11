@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2026 Free Software Foundation, Inc.
    Contributed by Loongson Ltd.
 
    This file is part of GNU Binutils.
@@ -38,7 +38,8 @@ RELOC_NUMBER (R_LARCH_TLS_DTPREL64, 9)
 RELOC_NUMBER (R_LARCH_TLS_TPREL32, 10)
 RELOC_NUMBER (R_LARCH_TLS_TPREL64, 11)
 RELOC_NUMBER (R_LARCH_IRELATIVE, 12)
-
+RELOC_NUMBER (R_LARCH_TLS_DESC32, 13)
+RELOC_NUMBER (R_LARCH_TLS_DESC64, 14)
 /* Reserved for future relocs that the dynamic linker must understand.  */
 
 /* Used by the static linker for relocating .text.  */
@@ -250,6 +251,78 @@ RELOC_NUMBER (R_LARCH_ADD_ULEB128, 107)
 RELOC_NUMBER (R_LARCH_SUB_ULEB128, 108)
 
 RELOC_NUMBER (R_LARCH_64_PCREL, 109)
+
+RELOC_NUMBER (R_LARCH_CALL36, 110)
+
+/* TLS_DESC PCREL.  */
+RELOC_NUMBER (R_LARCH_TLS_DESC_PC_HI20, 111)
+RELOC_NUMBER (R_LARCH_TLS_DESC_PC_LO12, 112)
+
+/* TLS_DESC LARGE PCREL.  */
+RELOC_NUMBER (R_LARCH_TLS_DESC64_PC_LO20, 113)
+RELOC_NUMBER (R_LARCH_TLS_DESC64_PC_HI12, 114)
+
+/* TLS_DESC ABS.  */
+RELOC_NUMBER (R_LARCH_TLS_DESC_HI20, 115)
+RELOC_NUMBER (R_LARCH_TLS_DESC_LO12, 116)
+
+/* TLSDESC LARGE ABS.  */
+RELOC_NUMBER (R_LARCH_TLS_DESC64_LO20, 117)
+RELOC_NUMBER (R_LARCH_TLS_DESC64_HI12, 118)
+
+RELOC_NUMBER (R_LARCH_TLS_DESC_LD, 119)
+RELOC_NUMBER (R_LARCH_TLS_DESC_CALL, 120)
+
+/* TLS-LE-LUI
+   lu12i.w rd,%le_hi20_r (sym).  */
+RELOC_NUMBER (R_LARCH_TLS_LE_HI20_R, 121)
+
+/* TLS-LE-ADD
+   add.d   rd,rj,rk,%le_add_r (sym).  */
+RELOC_NUMBER (R_LARCH_TLS_LE_ADD_R, 122)
+
+/* TLS-LE-ST
+   st.w/addi.w/ld.w rd,rj,%le_lo12_r (sym).  */
+RELOC_NUMBER (R_LARCH_TLS_LE_LO12_R, 123)
+
+RELOC_NUMBER (R_LARCH_TLS_LD_PCREL20_S2, 124)
+RELOC_NUMBER (R_LARCH_TLS_GD_PCREL20_S2, 125)
+RELOC_NUMBER (R_LARCH_TLS_DESC_PCREL20_S2, 126)
+
+/* LA32R medium call
+   pcaddu12i + jirl
+   %call30(sym).  */
+RELOC_NUMBER (R_LARCH_CALL30, 127)
+
+/* LA32R PCREL: pcaddu12i, %pcadd_hi20(sym).  */
+RELOC_NUMBER (R_LARCH_PCADD_HI20, 128)
+/* LA32R PCREL: addi.w/ld.[bhw], %pcadd_lo12(sym).  */
+RELOC_NUMBER (R_LARCH_PCADD_LO12, 129)
+
+/* LA32R GOT: pcaddu12i, %got_pcadd_hi20(sym).  */
+RELOC_NUMBER (R_LARCH_GOT_PCADD_HI20, 130)
+/* LA32R GOT: ld.w, %got_pcadd_lo12(sym).  */
+RELOC_NUMBER (R_LARCH_GOT_PCADD_LO12, 131)
+
+/* LA32R TLS IE: pcaddu12i, %ie_pcadd_hi20(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_IE_PCADD_HI20, 132)
+/* LA32R TLS IE: ld.w, %ie_pcadd_lo12(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_IE_PCADD_LO12, 133)
+
+/* LA32R TLS LD: pcaddu12i, %ld_pcadd_hi20(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_LD_PCADD_HI20, 134)
+/* LA32R TLS LD: addi.w, %ld_pcadd_lo12(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_LD_PCADD_LO12, 135)
+
+/* LA32R TLS GD: pcaddu12i, %gd_pcadd_hi20(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_GD_PCADD_HI20, 136)
+/* LA32R TLS GD: addi.w, %gd_pcadd_lo12(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_GD_PCADD_LO12, 137)
+
+/* LA32R TLS DESC: pcaddu12i, %desc_pcadd_hi20(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_DESC_PCADD_HI20, 138)
+/* LA32R TLS DESC: addi.w, %desc_pcadd_lo12(sym).  */
+RELOC_NUMBER (R_LARCH_TLS_DESC_PCADD_LO12, 139)
 
 END_RELOC_NUMBERS (R_LARCH_count)
 

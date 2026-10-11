@@ -1,4 +1,4 @@
-/* Copyright (C) 2021-2023 Free Software Foundation, Inc.
+/* Copyright (C) 2021-2026 Free Software Foundation, Inc.
    Contributed by Oracle.
 
    This file is part of GNU Binutils.
@@ -40,8 +40,8 @@ static void s_inline_code (int);
 void ext_inline_code (int);
 
 #ifndef NO_INLINE
-void xinline_code () __attribute__ ((always_inline));
-void s_inline_code () __attribute__ ((always_inline));
+void xinline_code (int) __attribute__ ((always_inline));
+void s_inline_code (int) __attribute__ ((always_inline));
 #endif
 
 #include "inc_inline.h"

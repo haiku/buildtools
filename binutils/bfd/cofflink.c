@@ -1,5 +1,5 @@
 /* COFF specific linker code.
-   Copyright (C) 1994-2023 Free Software Foundation, Inc.
+   Copyright (C) 1994-2026 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -27,6 +27,7 @@
 #include "libbfd.h"
 #include "coff/internal.h"
 #include "libcoff.h"
+#include "elf-bfd.h"
 #include "safe-ctype.h"
 
 static bool coff_link_add_object_symbols (bfd *, struct bfd_link_info *);
@@ -445,7 +446,7 @@ coff_link_add_symbols (bfd *abfd,
 
 	  if (addit)
 	    {
-	      if (! (bfd_coff_link_add_one_symbol
+	      if (! (_bfd_generic_link_add_one_symbol
 		     (info, abfd, name, flags, section, value,
 		      (const char *) NULL, copy, false,
 		      (struct bfd_link_hash_entry **) sym_hash)))
@@ -583,23 +584,11 @@ coff_link_add_symbols (bfd *abfd,
 		    || (stab->name[5] == '.' && ISDIGIT (stab->name[6]))))
 	    {
 	      struct coff_link_hash_table *table;
-	      struct coff_section_tdata *secdata
-		= coff_section_data (abfd, stab);
-
-	      if (secdata == NULL)
-		{
-		  amt = sizeof (struct coff_section_tdata);
-		  stab->used_by_bfd = bfd_zalloc (abfd, amt);
-		  if (stab->used_by_bfd == NULL)
-		    goto error_return;
-		  secdata = coff_section_data (abfd, stab);
-		}
 
 	      table = coff_hash_table (info);
 
 	      if (! _bfd_link_section_stabs (abfd, &table->stab_info,
 					     stab, stabstr,
-					     &secdata->stab_info,
 					     &string_offset))
 		goto error_return;
 	    }
@@ -931,13 +920,51 @@ _bfd_coff_final_link (bfd *abfd,
 	      bfd_vma written = 0;
 	      bool rewrite = false;
 
-	      if (! (sym->flags & BSF_LOCAL)
-		  || (sym->flags & (BSF_SECTION_SYM | BSF_DEBUGGING_RELOC
-				    | BSF_THREAD_LOCAL | BSF_RELC | BSF_SRELC
-				    | BSF_SYNTHETIC))
+	      if ((sym->flags & (BSF_SECTION_SYM | BSF_DEBUGGING_RELOC
+				 | BSF_THREAD_LOCAL | BSF_RELC | BSF_SRELC
+				 | BSF_SYNTHETIC))
 		  || ((sym->flags & BSF_DEBUGGING)
 		      && ! (sym->flags & BSF_FILE)))
 		continue;
+
+	      if (! (sym->flags & BSF_LOCAL))
+		{
+		  /* For ELF symbols try to represent their function-ness and
+		     size, if available.  */
+		  if (! (sym->flags & BSF_FUNCTION))
+		    continue;
+
+		  const elf_symbol_type *elfsym = elf_symbol_from (sym);
+		  if (!elfsym)
+		    continue;
+
+		  struct coff_link_hash_entry *hent
+		    = (struct coff_link_hash_entry *) bfd_hash_lookup
+			(&info->hash->table, bfd_asymbol_name (sym),
+			 false, false);
+		  if (!hent)
+		    continue;
+
+		  /* coff_data (abfd)->local_n_btshft is what ought to be used
+		     here, just that it's set only when reading in COFF
+		     objects.  */
+		  hent->type = DT_FCN << 4;
+		  if (!elfsym->internal_elf_sym.st_size)
+		    continue;
+
+		  hent->aux = bfd_zalloc (abfd, sizeof (*hent->aux));
+		  if (!hent->aux)
+		    continue;
+
+		  hent->numaux = 1;
+		  hent->aux->x_sym.x_misc.x_fsize
+		    = elfsym->internal_elf_sym.st_size;
+		  /* FIXME ->x_sym.x_fcnary.x_fcn.x_endndx would better
+		     also be set, yet that would likely need to happen
+		     elsewhere anyway.  */
+
+		  continue;
+		}
 
 	      /* See if we are discarding symbols with this name.  */
 	      if ((flaginfo.info->strip == strip_some
@@ -978,7 +1005,7 @@ _bfd_coff_final_link (bfd *abfd,
 
 	      if (rewrite
 		  && (bfd_seek (abfd, pos, SEEK_SET) != 0
-		      || bfd_bwrite (flaginfo.outsyms, symesz, abfd) != symesz))
+		      || bfd_write (flaginfo.outsyms, symesz, abfd) != symesz))
 		goto error_return;
 
 	      obj_raw_syment_count (abfd) += written;
@@ -1023,7 +1050,7 @@ _bfd_coff_final_link (bfd *abfd,
 
       pos = obj_sym_filepos (abfd) + flaginfo.last_file_index * symesz;
       if (bfd_seek (abfd, pos, SEEK_SET) != 0
-	  || bfd_bwrite (flaginfo.outsyms, symesz, abfd) != symesz)
+	  || bfd_write (flaginfo.outsyms, symesz, abfd) != symesz)
 	return false;
     }
 
@@ -1096,13 +1123,13 @@ _bfd_coff_final_link (bfd *abfd,
 	      memset (&incount, 0, sizeof (incount));
 	      incount.r_vaddr = o->reloc_count + 1;
 	      bfd_coff_swap_reloc_out (abfd, &incount, excount);
-	      if (bfd_bwrite (excount, relsz, abfd) != relsz)
+	      if (bfd_write (excount, relsz, abfd) != relsz)
 		/* We'll leak, but it's an error anyway. */
 		goto error_return;
 	      free (excount);
 	    }
-	  if (bfd_bwrite (external_relocs,
-			  (bfd_size_type) relsz * o->reloc_count, abfd)
+	  if (bfd_write (external_relocs,
+			 (bfd_size_type) relsz * o->reloc_count, abfd)
 	      != (bfd_size_type) relsz * o->reloc_count)
 	    goto error_return;
 	}
@@ -1149,8 +1176,7 @@ _bfd_coff_final_link (bfd *abfd,
  #error Change H_PUT_32 above
 #endif
 
-      if (bfd_bwrite (strbuf, (bfd_size_type) STRING_SIZE_SIZE, abfd)
-	  != STRING_SIZE_SIZE)
+      if (bfd_write (strbuf, STRING_SIZE_SIZE, abfd) != STRING_SIZE_SIZE)
 	return false;
 
       if (! _bfd_stringtab_emit (abfd, flaginfo.strtab))
@@ -1351,7 +1377,7 @@ mark_relocs (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 	continue;
 
       /* Read in the relocs.  */
-      internal_relocs = _bfd_coff_read_internal_relocs
+      internal_relocs = bfd_coff_read_internal_relocs
 	(input_bfd, a, false,
 	 flaginfo->external_relocs,
 	 bfd_link_relocatable (flaginfo->info),
@@ -1619,7 +1645,8 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 	  /* Ignore fake names invented by compiler; treat them all as
 	     the same name.  */
 	  if (*name == '~' || *name == '.' || *name == '$'
-	      || (*name == bfd_get_symbol_leading_char (input_bfd)
+	      || (*name
+		  && *name == bfd_get_symbol_leading_char (input_bfd)
 		  && (name[1] == '~' || name[1] == '.' || name[1] == '$')))
 	    name = "";
 
@@ -1877,7 +1904,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 		      pos = obj_sym_filepos (output_bfd);
 		      pos += flaginfo->last_file_index * osymesz;
 		      if (bfd_seek (output_bfd, pos, SEEK_SET) != 0
-			  || bfd_bwrite (outsym, osymesz, output_bfd) != osymesz)
+			  || bfd_write (outsym, osymesz, output_bfd) != osymesz)
 			return false;
 		    }
 		}
@@ -2119,7 +2146,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 			      pos = obj_sym_filepos (output_bfd);
 			      pos += flaginfo->last_bf_index * osymesz;
 			      if (bfd_seek (output_bfd, pos, SEEK_SET) != 0
-				  || (bfd_bwrite (outsym, osymesz, output_bfd)
+				  || (bfd_write (outsym, osymesz, output_bfd)
 				      != osymesz))
 				return false;
 			    }
@@ -2185,7 +2212,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 	    continue;
 
 	  if (bfd_seek (input_bfd, o->line_filepos, SEEK_SET) != 0
-	      || bfd_bread (flaginfo->linenos, linesz * o->lineno_count,
+	      || bfd_read (flaginfo->linenos, linesz * o->lineno_count,
 			   input_bfd) != linesz * o->lineno_count)
 	    return false;
 
@@ -2275,7 +2302,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 	  pos += o->output_section->lineno_count * linesz;
 	  amt = oeline - flaginfo->linenos;
 	  if (bfd_seek (output_bfd, pos, SEEK_SET) != 0
-	      || bfd_bwrite (flaginfo->linenos, amt, output_bfd) != amt)
+	      || bfd_write (flaginfo->linenos, amt, output_bfd) != amt)
 	    return false;
 
 	  o->output_section->lineno_count += amt / linesz;
@@ -2305,7 +2332,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
       pos = obj_sym_filepos (output_bfd) + syment_base * osymesz;
       amt = outsym - flaginfo->outsyms;
       if (bfd_seek (output_bfd, pos, SEEK_SET) != 0
-	  || bfd_bwrite (flaginfo->outsyms, amt, output_bfd) != amt)
+	  || bfd_write (flaginfo->outsyms, amt, output_bfd) != amt)
 	return false;
 
       BFD_ASSERT ((obj_raw_syment_count (output_bfd)
@@ -2364,7 +2391,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 
 	  /* Read in the relocs.  */
 	  target_index = o->output_section->target_index;
-	  internal_relocs = (_bfd_coff_read_internal_relocs
+	  internal_relocs = (bfd_coff_read_internal_relocs
 			     (input_bfd, o, false, flaginfo->external_relocs,
 			      bfd_link_relocatable (flaginfo->info),
 			      (bfd_link_relocatable (flaginfo->info)
@@ -2502,7 +2529,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 	}
 
       /* Write out the modified section contents.  */
-      if (secdata == NULL || secdata->stab_info == NULL)
+      if (o->sec_info_type != SEC_INFO_TYPE_STABS)
 	{
 	  file_ptr loc = (o->output_offset
 			  * bfd_octets_per_byte (output_bfd, o));
@@ -2514,7 +2541,7 @@ _bfd_coff_link_input_bfd (struct coff_final_link_info *flaginfo, bfd *input_bfd)
 	{
 	  if (! (_bfd_write_section_stabs
 		 (output_bfd, &coff_hash_table (flaginfo->info)->stab_info,
-		  o, &secdata->stab_info, contents)))
+		  o, contents)))
 	    return false;
 	}
     }
@@ -2581,13 +2608,18 @@ _bfd_coff_write_global_sym (struct bfd_hash_entry *bh, void *data)
       {
 	asection *sec;
 
-	sec = h->root.u.def.section->output_section;
+	sec = h->root.u.def.section;
+	isym.n_value = h->root.u.def.value;
+	if (sec->sec_info_type == SEC_INFO_TYPE_MERGE)
+	  isym.n_value =
+	    _bfd_merged_section_offset (output_bfd, &sec, isym.n_value);
+	isym.n_value += sec->output_offset;
+
+	sec = sec->output_section;
 	if (bfd_is_abs_section (sec))
 	  isym.n_scnum = N_ABS;
 	else
 	  isym.n_scnum = sec->target_index;
-	isym.n_value = (h->root.u.def.value
-			+ h->root.u.def.section->output_offset);
 	if (! obj_pe (flaginfo->output_bfd))
 	  isym.n_value += sec->vma;
 #ifdef BFD64
@@ -2670,7 +2702,7 @@ _bfd_coff_write_global_sym (struct bfd_hash_entry *bh, void *data)
   pos = obj_sym_filepos (output_bfd);
   pos += obj_raw_syment_count (output_bfd) * symesz;
   if (bfd_seek (output_bfd, pos, SEEK_SET) != 0
-      || bfd_bwrite (flaginfo->outsyms, symesz, output_bfd) != symesz)
+      || bfd_write (flaginfo->outsyms, symesz, output_bfd) != symesz)
     {
       flaginfo->failed = true;
       return false;
@@ -2735,7 +2767,7 @@ _bfd_coff_write_global_sym (struct bfd_hash_entry *bh, void *data)
       bfd_coff_swap_aux_out (output_bfd, auxp, isym.n_type,
 			     isym.n_sclass, (int) i, isym.n_numaux,
 			     flaginfo->outsyms);
-      if (bfd_bwrite (flaginfo->outsyms, symesz, output_bfd) != symesz)
+      if (bfd_write (flaginfo->outsyms, symesz, output_bfd) != symesz)
 	{
 	  flaginfo->failed = true;
 	  return false;

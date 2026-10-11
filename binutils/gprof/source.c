@@ -1,6 +1,6 @@
 /* source.c - Keep track of source files.
 
-   Copyright (C) 2000-2023 Free Software Foundation, Inc.
+   Copyright (C) 2000-2026 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -18,7 +18,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
    02110-1301, USA.  */
-
+
 #include "gprof.h"
 #include "libiberty.h"
 #include "filenames.h"
@@ -98,7 +98,8 @@ annotate_source (Source_File *sf, unsigned int max_width,
   bool new_line;
   char buf[8192];
   char *fname;
-  char *annotation, *name_only;
+  char *annotation;
+  const char *name_only;
   FILE *ifp, *ofp;
   Search_List_Elem *sle = src_search_list.head;
 
@@ -126,7 +127,7 @@ annotate_source (Source_File *sf, unsigned int max_width,
 	  name_only = strrchr (sf->name, '/');
 #ifdef HAVE_DOS_BASED_FILE_SYSTEM
 	  {
-	    char *bslash = strrchr (sf->name, '\\');
+	    const char *bslash = strrchr (sf->name, '\\');
 	    if (name_only == NULL || (bslash != NULL && bslash > name_only))
 	      name_only = bslash;
 	    if (name_only == NULL && sf->name[0] != '\0' && sf->name[1] == ':')
@@ -183,7 +184,7 @@ annotate_source (Source_File *sf, unsigned int max_width,
       filename = strrchr (sf->name, '/');
 #ifdef HAVE_DOS_BASED_FILE_SYSTEM
 	{
-	  char *bslash = strrchr (sf->name, '\\');
+	  const char *bslash = strrchr (sf->name, '\\');
 	  if (filename == NULL || (bslash != NULL && bslash > filename))
 	    filename = bslash;
 	  if (filename == NULL && sf->name[0] != '\0' && sf->name[1] == ':')

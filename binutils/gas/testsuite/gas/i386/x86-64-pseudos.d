@@ -1,4 +1,4 @@
-#as: -O0
+#as: -O0 -march=+mpx
 #objdump: -drw
 #name: x86-64 pseudo prefixes
 
@@ -137,6 +137,48 @@ Disassembly of section .text:
  +[a-f0-9]+:	33 07                	xor    \(%rdi\),%eax
  +[a-f0-9]+:	31 07                	xor    %eax,\(%rdi\)
  +[a-f0-9]+:	33 07                	xor    \(%rdi\),%eax
+ +[a-f0-9]+:	62 44 fc 10 01 38    	add    %r31,\(%r8\),%r16
+ +[a-f0-9]+:	62 44 fc 10 03 38    	add    \(%r8\),%r31,%r16
+ +[a-f0-9]+:	62 44 fc 10 01 38    	add    %r31,\(%r8\),%r16
+ +[a-f0-9]+:	62 44 fc 10 03 38    	add    \(%r8\),%r31,%r16
+ +[a-f0-9]+:	62 54 6c 10 29 38    	sub    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 2b 38    	sub    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 29 38    	sub    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 2b 38    	sub    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 19 38    	sbb    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 1b 38    	sbb    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 19 38    	sbb    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 1b 38    	sbb    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 21 38    	and    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 23 38    	and    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 21 38    	and    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 23 38    	and    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 09 38    	or     %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 0b 38    	or     \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 09 38    	or     %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 0b 38    	or     \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 31 38    	xor    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 33 38    	xor    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 31 38    	xor    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 33 38    	xor    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 11 38    	adc    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 13 38    	adc    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 54 6c 10 11 38    	adc    %r15d,\(%r8\),%r18d
+ +[a-f0-9]+:	62 54 6c 10 13 38    	adc    \(%r8\),%r15d,%r18d
+ +[a-f0-9]+:	62 44 fc 10 01 f8    	add    %r31,%r8,%r16
+ +[a-f0-9]+:	62 5c fc 10 03 c7    	add    %r31,%r8,%r16
+ +[a-f0-9]+:	62 7c 6c 10 28 f9    	sub    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 c4 6c 10 2a cf    	sub    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 7c 6c 10 18 f9    	sbb    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 c4 6c 10 1a cf    	sbb    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 7c 6c 10 20 f9    	and    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 c4 6c 10 22 cf    	and    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 7c 6c 10 08 f9    	or     %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 c4 6c 10 0a cf    	or     %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 7c 6c 10 30 f9    	xor    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 c4 6c 10 32 cf    	xor    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 7c 6c 10 10 f9    	adc    %r15b,%r17b,%r18b
+ +[a-f0-9]+:	62 c4 6c 10 12 cf    	adc    %r15b,%r17b,%r18b
  +[a-f0-9]+:	b0 12                	mov    \$0x12,%al
  +[a-f0-9]+:	b8 45 03 00 00       	mov    \$0x345,%eax
  +[a-f0-9]+:	b0 12                	mov    \$0x12,%al
@@ -404,6 +446,18 @@ Disassembly of section .text:
  +[a-f0-9]+:	41 0f 28 10          	movaps \(%r8\),%xmm2
  +[a-f0-9]+:	40 0f 38 01 01       	rex phaddw \(%rcx\),%mm0
  +[a-f0-9]+:	41 0f 38 01 00       	phaddw \(%r8\),%mm0
+ +[a-f0-9]+:	88 c4                	mov    %al,%ah
+ +[a-f0-9]+:	d5 00 d3 e0          	{rex2 0x0} shl %cl,%eax
+ +[a-f0-9]+:	d5 00 38 ca          	{rex2 0x0} cmp %cl,%dl
+ +[a-f0-9]+:	d5 00 b3 01          	{rex2 0x0} mov \$(0x)?1,%bl
+ +[a-f0-9]+:	d5 00 89 c3          	{rex2 0x0} mov %eax,%ebx
+ +[a-f0-9]+:	d5 01 89 c6          	{rex2 0x1} mov %eax,%r14d
+ +[a-f0-9]+:	d5 01 89 00          	{rex2 0x1} mov %eax,\(%r8\)
+ +[a-f0-9]+:	d5 80 28 d7          	{rex2 0x80} movaps %xmm7,%xmm2
+ +[a-f0-9]+:	d5 84 28 e7          	{rex2 0x84} movaps %xmm7,%xmm12
+ +[a-f0-9]+:	d5 80 28 11          	{rex2 0x80} movaps \(%rcx\),%xmm2
+ +[a-f0-9]+:	d5 81 28 10          	{rex2 0x81} movaps \(%r8\),%xmm2
+ +[a-f0-9]+:	d5 80 d5 f0          	{rex2 0x80} pmullw %mm0,%mm6
  +[a-f0-9]+:	8a 45 00             	mov    0x0\(%rbp\),%al
  +[a-f0-9]+:	8a 45 00             	mov    0x0\(%rbp\),%al
  +[a-f0-9]+:	8a 85 00 00 00 00    	mov    0x0\(%rbp\),%al
@@ -458,6 +512,15 @@ Disassembly of section .text:
  +[a-f0-9]+:	41 0f 28 10          	movaps \(%r8\),%xmm2
  +[a-f0-9]+:	40 0f 38 01 01       	rex phaddw \(%rcx\),%mm0
  +[a-f0-9]+:	41 0f 38 01 00       	phaddw \(%r8\),%mm0
+ +[a-f0-9]+:	88 c4                	mov    %al,%ah
+ +[a-f0-9]+:	d5 00 89 c3          	{rex2 0x0} mov %eax,%ebx
+ +[a-f0-9]+:	d5 01 89 c6          	{rex2 0x1} mov %eax,%r14d
+ +[a-f0-9]+:	d5 01 89 00          	{rex2 0x1} mov %eax,\(%r8\)
+ +[a-f0-9]+:	d5 80 28 d7          	{rex2 0x80} movaps %xmm7,%xmm2
+ +[a-f0-9]+:	d5 84 28 e7          	{rex2 0x84} movaps %xmm7,%xmm12
+ +[a-f0-9]+:	d5 80 28 11          	{rex2 0x80} movaps \(%rcx\),%xmm2
+ +[a-f0-9]+:	d5 81 28 10          	{rex2 0x81} movaps \(%r8\),%xmm2
+ +[a-f0-9]+:	d5 80 d5 f0          	{rex2 0x80} pmullw %mm0,%mm6
  +[a-f0-9]+:	8a 45 00             	mov    0x0\(%rbp\),%al
  +[a-f0-9]+:	8a 45 00             	mov    0x0\(%rbp\),%al
  +[a-f0-9]+:	8a 85 00 00 00 00    	mov    0x0\(%rbp\),%al
@@ -470,4 +533,37 @@ Disassembly of section .text:
  +[a-f0-9]+:	41 8a 45 00          	mov    0x0\(%r13\),%al
  +[a-f0-9]+:	67 41 8a 45 00       	mov    0x0\(%r13d\),%al
  +[a-f0-9]+:	67 41 8a 85 00 00 00 00 	mov    0x0\(%r13d\),%al
+ +[a-f0-9]+:	40 8a c1             	rex mov %cl,%al
+ +[a-f0-9]+:	48 81 03 00 00 00 00 	addq   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	48 81 03 ff 00 00 00 	addq   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	81 03 00 00 00 00    	addl   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	81 03 ff 00 00 00    	addl   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	66 81 03 00 00       	addw   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	66 81 03 ff 00       	addw   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	80 03 00             	addb   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	80 03 ff             	addb   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	48 81 c3 00 00 00 00 	add    \$0x0,%rbx
+ +[a-f0-9]+:	48 81 c3 ff 00 00 00 	add    \$0xff,%rbx
+ +[a-f0-9]+:	81 c3 00 00 00 00    	add    \$0x0,%ebx
+ +[a-f0-9]+:	81 c3 ff 00 00 00    	add    \$0xff,%ebx
+ +[a-f0-9]+:	66 81 c3 00 00       	add    \$0x0,%bx
+ +[a-f0-9]+:	66 81 c3 ff 00       	add    \$0xff,%bx
+ +[a-f0-9]+:	80 c3 00             	add    \$0x0,%bl
+ +[a-f0-9]+:	80 c3 ff             	add    \$0xff,%bl
+ +[a-f0-9]+:	48 c7 03 00 00 00 00 	movq   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	48 c7 03 ff 00 00 00 	movq   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	c7 03 00 00 00 00    	movl   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	c7 03 ff 00 00 00    	movl   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	66 c7 03 00 00       	movw   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	66 c7 03 ff 00       	movw   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	c6 03 00             	movb   \$0x0,\(%rbx\)
+ +[a-f0-9]+:	c6 03 ff             	movb   \$0xff,\(%rbx\)
+ +[a-f0-9]+:	bb 00 00 00 00       	mov    \$0x0,%ebx
+ +[a-f0-9]+:	bb ff 00 00 00       	mov    \$0xff,%ebx
+ +[a-f0-9]+:	66 bb 00 00          	mov    \$0x0,%bx
+ +[a-f0-9]+:	66 bb ff 00          	mov    \$0xff,%bx
+ +[a-f0-9]+:	b3 00                	mov    \$0x0,%bl
+ +[a-f0-9]+:	b3 ff                	mov    \$0xff,%bl
+ +[a-f0-9]+:	48 c1 c3 ff          	rol    \$0xff,%rbx
+ +[a-f0-9]+:	c1 c3 ff             	rol    \$0xff,%ebx
 #pass
